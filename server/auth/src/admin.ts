@@ -15,7 +15,7 @@ export interface AdminDeps {
   pendingLevel: string;
   keys: Promise<Keys>;
   now: () => number;
-  readJson: (req: Request) => Promise<Record<string, unknown>>;
+  readJson: (req: Request, max?: number) => Promise<Record<string, unknown>>;
   authenticate: (req: Request) => Promise<Principal | null>;
   limit: (action: Action, req: Request, account: string | null) => Promise<() => Promise<void>>;
   hasValidDevice: (req: Request, client: ClientInfo, user: { id: string; device_epoch: number }) => Promise<boolean>;
@@ -761,7 +761,8 @@ export function createAdmin(d: AdminDeps) {
   function extra(route: NonNullable<ApprovalConfig["routes"]>[number]): Handler {
     return async (req, client) => {
       const admin = await guard(req, client, route.write);
-      const body = route.method === "GET" || req.headers.get("Content-Type") === null ? null : await d.readJson(req);
+      // A route may allow a larger body than the default (its own `maxBodyBytes`), read only after the guard.
+      const body = route.method === "GET" || req.headers.get("Content-Type") === null ? null : await d.readJson(req, route.maxBodyBytes);
       return route.handler(req, {
         admin,
         body,

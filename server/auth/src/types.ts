@@ -190,6 +190,8 @@ export interface AdminRoute {
   path: string;
   /** Writes need a sudo token (re-entered password within 5 minutes) and are audited by the caller. */
   write: boolean;
+  /** Largest JSON body this route accepts (default 8 KB); read only after the admin guard passed. */
+  maxBodyBytes?: number;
   handler: (
     req: Request,
     ctx: {
