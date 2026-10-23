@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy - verSHion shared pool</title>
+<meta name="description" content="Privacy Policy for the verSHion shared question pool (invite-only pilot).">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="draft-banner">DRAFT for review — not legal advice. Invite-only pilot.</div>
+<header class="site">
+<nav class="site" aria-label="Legal pages">
+<ul>
+<li><a href="index.html">Legal home</a></li>
+<li><a href="terms.html">Terms</a></li>
+<li><a href="privacy.html" aria-current="page">Privacy</a></li>
+<li><a href="copyright.html">Copyright</a></li>
+<li><a href="acceptable-use.html">Acceptable use</a></li>
+</ul>
+</nav>
+</header>
+<main>
+<h1>Privacy Policy</h1>
+<p class="meta">verSHion shared question pool. Last updated: 2026-10-22 (draft).</p>
+
+<p class="summary">In short: we collect the minimum needed to run an invite-only pool for teachers: your email, name, a password hash, sign-in session data and what you publish. We do not sell it, show ads, or track you with third-party scripts. There are no student accounts, and student data must never be uploaded.</p>
+
+<h2 id="who">1. Who is responsible</h2>
+<p><span class="ph">[OPERATOR NAME]</span> (&ldquo;we&rdquo;) runs the pool as an individual. Contact: <span class="ph">[CONTACT EMAIL]</span>. This policy covers the pool only. The verSHion app keeps your banks and exams on your own device unless you choose to publish.</p>
+
+<h2 id="collect">2. What we collect and why</h2>
+<table>
+<thead><tr><th scope="col">Information</th><th scope="col">Why</th></tr></thead>
+<tbody>
+<tr><td>Email address, display name, school, and your statement that you are an adult school employee</td><td>To create the account, decide whether to approve it, and mail you verification, reset and moderation messages.</td></tr>
+<tr><td>Password, stored only as an Argon2id hash (never the password itself)</td><td>To sign you in securely.</td></tr>
+<tr><td>Sign-in sessions: session and device tokens (stored hashed), creation and expiry times, and the browser or app identifier (user-agent)</td><td>To keep you signed in, let you see and revoke sessions, and detect stolen sessions.</td></tr>
+<tr><td>Rate-limit counters. Your IP address is used to count requests, but the counters are keyed by a one-way HMAC, so the table holds no raw IP or email.</td><td>To stop password guessing and abuse. <span class="confirm">[CONFIRM: Cloudflare&rsquo;s own request logs/analytics for the Worker and Pages, and their retention]</span></td></tr>
+<tr><td>Content you publish: banks, questions, answers, explanations, titles, tags, images, licence choice, the time you accepted the attestation</td><td>To run the pool and show attribution and licences.</td></tr>
+<tr><td>Pool activity: which items you viewed or imported, your reports and appeals, and daily usage counts</td><td>To record attribution and licence evidence when you later publish, to count imports, to enforce limits, and to review reports fairly.</td></tr>
+<tr><td>Copyright and moderation records: notices, counter-notices (names, addresses, phone numbers, signatures), strikes, and an audit log of admin actions</td><td>To handle copyright claims and keep a record of moderation decisions.</td></tr>
+</tbody>
+</table>
+<p>We do not collect payment details, location, contacts, or advertising identifiers. We do not use cookies for tracking. The web app uses one cookie to keep you signed in (a refresh token) and one to recognise your device; both are strictly for sign-in security. These legal pages use no scripts, no analytics and no external fonts.</p>
+
+<h2 id="see">3. Who can see what</h2>
+<ul>
+<li><strong>Other approved teachers</strong> see items you make public: the content as published, your display name, the licence, and the attribution chain. They never see your email or school.</li>
+<li><strong>Hidden keys.</strong> If you publish with &ldquo;hide key&rdquo;, other teachers receive only a version without answers, explanations or figures; the full version is stored separately and served only to you. Items published without hide key show answers to every approved teacher who can see them.</li>
+<li><strong>Unlisted items</strong> (published but not made public) are visible only to you.</li>
+<li><strong>The administrator</strong> (the operator, and any admin the operator appoints) can see account details, the approval queue, reports, and the full version of any item, including hidden keys, in order to moderate. Admin actions are logged.</li>
+<li><strong>Your display name</strong> is copied into the copies other teachers import and their attribution chains. Those copies live on other people&rsquo;s devices, and we cannot reach them.</li>
+<li><strong>Reports.</strong> A report goes to the administrator. The reporter is told only that the report will be reviewed.</li>
+</ul>
+
+<h2 id="no-sale">4. No sale, no ads</h2>
+<p>We do not sell or rent personal information, do not show advertising, and do not use your content or data to train AI models. We share information only with the service providers below, or when the law requires it or to protect someone&rsquo;s safety.</p>
+
+<h2 id="processors">5. Service providers</h2>
+<ul>
+<li><strong>Cloudflare</strong> hosts the service: Workers (the application), D1 (the database), R2 (stored question files and images) and Pages (these static pages). Cloudflare processes data on our behalf, including connection data such as IP addresses.</li>
+<li><strong>Email provider:</strong> <span class="ph">[CONFIRM: Resend or Cloudflare Email]</span> sends verification, reset, approval and moderation emails. It sees your email address and the message.</li>
+</ul>
+<p>Data may be processed in the United States and other countries where those providers operate. <span class="confirm">[CONFIRM: any data-location settings]</span></p>
+
+<h2 id="retention">6. How long we keep things</h2>
+<table>
+<thead><tr><th scope="col">What</th><th scope="col">How long</th></tr></thead>
+<tbody>
+<tr><td>Sign-up never confirmed</td><td>Purged after 7 days.</td></tr>
+<tr><td>Sign-in sessions</td><td>Refresh tokens last 30 days; access tokens 15 minutes. Revoked at once on logout, reset or suspension.</td></tr>
+<tr><td>Rate-limit counters</td><td>Short-lived; they expire. Counters tied to your account are deleted when you delete it.</td></tr>
+<tr><td>Items you delete</td><td>Hidden at once; you can undo for 14 days; then permanently purged.</td></tr>
+<tr><td>Copyright takedowns</td><td>Item bodies are held in a restricted quarantine for 30 days after you are notified, then purged if there is no counter-notice.</td></tr>
+<tr><td>Student-data removals</td><td>Deleted immediately when confirmed; the author can appeal for 14 days.</td></tr>
+<tr><td>Images an import served</td><td>Kept for the importer for 30 days after import.</td></tr>
+<tr><td>Copyright and moderation records, audit log</td><td>Kept for 3 years. After an account is erased, they are kept under pseudonymous ids only, and free-text notes about the person are removed.</td></tr>
+<tr><td>Database backups</td><td>The database supports point-in-time restore for up to 30 days, so deleted data can survive in backups for up to that long <span class="confirm">[CONFIRM: backup window]</span>.</td></tr>
+</tbody>
+</table>
+
+<h2 id="deleting">7. Deleting your account, and what remains</h2>
+<p>You can delete your account from the app (you re-enter your password). It stops working at once. You can also ask us at <span class="ph">[CONTACT EMAIL]</span>. Before deleting, you can export your own data: in the app, under account settings, use the Export button to download a JSON file with your account profile fields, your items and their publishes (versions), your imports list, the reports you filed, any notices you sent or received, and your publish attestations. Or email us and we will send it. <span class="confirm">[CONFIRM when shipped]</span></p>
+<p><strong>Removed immediately:</strong> your email, name, profile and password hash; all sessions and device tokens; free-text you wrote (report notes, appeal notes, independence statements); the name, address, phone and signature in any counter-notice you filed; and your preferences.</p>
+<p><strong>Your shared items:</strong> you can choose, before deleting, whether to keep them (shown as by &ldquo;deleted teacher&rdquo;) or have them removed. If you make no choice, items that other teachers have already imported are kept without your name, and the rest are hidden and purged after 14 days. Once purged they cannot be restored. A returning person who signs up again with the same email is a new account; the old items are not re-attached.</p>
+<p><strong>What remains:</strong></p>
+<ul>
+<li>A bare account record with no personal data, so identifiers stay consistent. A one-way hash of your email address is kept for 14 days and then deleted.</li>
+<li>Copies other teachers already imported stay on their devices under the licence they were made with. We cannot recall them. After you delete your account, your name shows as &ldquo;deleted teacher&rdquo; on others&rsquo; copies and in their attribution chains (the change is applied in batches, so it may take a short while). The licence and credit to the original work still apply.</li>
+<li>Pseudonymous records under an opaque account id: import counts (so counts do not drop), audit-log entries of security and moderation actions (with free-text notes removed), and content fingerprints (keyed hashes, not readable text) that record who published a question first, which is how we protect original authors and attribution.</li>
+<li>Copyright records (notices, strikes) as required to keep a complete record. Counter-notice personal fields are removed, but ids and dates remain.</li>
+<li>Backups, until they expire (see above).</li>
+</ul>
+
+<h2 id="students">8. Student data</h2>
+<p>The pool is built for questions, answers, explanations and figures only. <strong>Do not upload student personal information</strong>: names, grades, scores, work samples, photos, ID numbers, or anything that identifies a student. Educators must not upload education records or anything protected by student-privacy law such as FERPA. We do not need and do not want this data, and the app has no student fields.</p>
+<p>If student data does appear:</p>
+<ul>
+<li>Any approved teacher can report it. One report from an established account hides the item at once and alerts us.</li>
+<li>If a publish matches text we have already confirmed to be student data, it is held for review, and the author is told it is &ldquo;held for review&rdquo;.</li>
+<li>If we confirm it, the item is deleted immediately, matching images and text are blocked from being re-uploaded, and people who imported it are asked to delete their copies. The author can appeal for 14 days.</li>
+<li>If we reject the report, the item is restored.</li>
+</ul>
+<p>If you believe student data was published, report it in the app or email <span class="ph">[CONTACT EMAIL]</span>.</p>
+
+<h2 id="images">9. Images</h2>
+<p>Images you publish are re-encoded on your device and checked again on our server. They must be a single still PNG, JPEG, GIF or WebP (up to 2 MB and 4096 &times; 4096 pixels). Camera data, location data and comments are removed, and animated images keep only their first frame. Images are stored in private Cloudflare R2 storage and are served only to people allowed to see the item. We do not scan images for viruses.</p>
+
+<h2 id="children">10. Children</h2>
+<p>The pool is for adults who work in schools. There are no student accounts, and children may not sign up. If we learn that an account belongs to a child, we will delete it.</p>
+
+<h2 id="security">11. Security</h2>
+<p>Passwords are stored as Argon2id hashes, tokens and invite codes are stored hashed, sign-in is rate-limited, and nothing is cached in shared browsers. No online service is perfectly secure. If a breach affects your personal information we will tell you as the law requires.</p>
+
+<h2 id="rights">12. Your choices and rights</h2>
+<p>You can see and correct your profile, download your account data, delete your account, and ask us questions or make requests at <span class="ph">[CONTACT EMAIL]</span>. <span class="confirm">[CONFIRM: with counsel, any state-law rights language (for example California) that applies to the operator]</span></p>
+
+<h2 id="changes">13. Changes</h2>
+<p>If this policy changes in a way that matters, we will tell you by email or in the app. The date at the top shows the latest version.</p>
+
+<h2 id="contact">14. Contact</h2>
+<address>
+<span class="ph">[OPERATOR NAME]</span><br>
+Email: <span class="ph">[CONTACT EMAIL]</span>
+</address>
+</main>
+<footer class="site">
+<p>verSHion shared question pool. Invite-only pilot. <a href="index.html">Legal home</a></p>
+</footer>
+</body>
+</html>
