@@ -180,6 +180,12 @@ pub struct Draft {
     pub explanation: Option<String>,
     /// Figure-engine origin of `image` (None for attached/imported pictures).
     pub figure: Option<crate::model::FigureSpec>,
+    /// The question was imported without its answer key (and has not been keyed yet): its
+    /// True/False values are placeholders, shown unset until the teacher picks one.
+    pub keyless: bool,
+    /// The True/False answers the teacher picked in this edit (`None` = the question, `Some(i)` =
+    /// part `i`): picking counts as entering the key even when it equals the placeholder.
+    pub tf_keyed: Vec<Option<usize>>,
 }
 
 impl Draft {
@@ -198,6 +204,8 @@ impl Draft {
             image: None,
             explanation: None,
             figure: None,
+            keyless: false,
+            tf_keyed: Vec::new(),
         }
     }
 
@@ -214,6 +222,8 @@ impl Draft {
             image: q.image.clone(),
             explanation: q.explanation.clone(),
             figure: q.figure.clone(),
+            keyless: crate::model::is_keyless(q),
+            tf_keyed: Vec::new(),
         }
     }
 
@@ -439,7 +449,9 @@ impl Draft {
         let explanation = match self.explanation.as_deref() {
             // A question imported without its key keeps the "no answer key" marker until the
             // teacher has entered a key: editing the marker away does not make one up.
-            _ if existing.is_some_and(|q| crate::model::is_keyless(q) && !crate::model::rekeyed(q, &kind)) => Some(crate::model::KEYLESS_SENTINEL.to_string()),
+            _ if existing.is_some_and(|q| crate::model::is_keyless(q) && !crate::model::rekeyed_with(q, &kind, &|at| self.tf_keyed.contains(&at))) => {
+                Some(crate::model::KEYLESS_SENTINEL.to_string())
+            }
             Some(s) if s.trim() == crate::model::KEYLESS_SENTINEL => None,
             Some(s) if !s.trim().is_empty() => Some(s.trim().to_string()),
             _ => None,
@@ -860,10 +872,15 @@ fn left_col(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f
         }
         Kind::Tf { correct } => {
             label(ui, "Correct answer  -  click the circle");
+            // An imported question without its key shows no answer until the teacher picks one.
+            let unset = draft.keyless && !draft.tf_keyed.contains(&None);
             for (val, name) in [(true, "True"), (false, "False")] {
                 ui.horizontal(|ui| {
-                    if kit::check_circle(ui, *correct == val).clicked() {
+                    if kit::check_circle(ui, !unset && *correct == val).clicked() {
                         *correct = val;
+                        if !draft.tf_keyed.contains(&None) {
+                            draft.tf_keyed.push(None);
+                        }
                     }
                     ui.add_space(4.0);
                     ui.label(theme::text(name).size(13.5));
@@ -878,7 +895,7 @@ fn left_col(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f
         }
         Kind::Multipart { parts } => {
             label(ui, "Parts");
-            multipart_editor(ui, &eq, parts, w);
+            multipart_editor(ui, &eq, parts, w, draft.keyless, &mut draft.tf_keyed);
         }
     }
 }
@@ -1163,7 +1180,7 @@ fn blank_editor(ui: &mut Ui, eq: &EqCtx, draft: &mut Draft, w: f32) {
 }
 
 /// Multipart: each part has a stem, a kind selector and an expanded editor below.
-fn multipart_editor(ui: &mut Ui, eq: &EqCtx, parts: &mut Vec<Part>, w: f32) {
+fn multipart_editor(ui: &mut Ui, eq: &EqCtx, parts: &mut Vec<Part>, w: f32, keyless: bool, tf_keyed: &mut Vec<Option<usize>>) {
     let mut remove: Option<usize> = None;
     for i in 0..parts.len() {
         let cur = match &parts[i].kind {
@@ -1203,10 +1220,14 @@ fn multipart_editor(ui: &mut Ui, eq: &EqCtx, parts: &mut Vec<Part>, w: f32) {
                 match &mut parts[i].kind {
                     PartKind::Mc { answers } => mc_editor(ui, eq, answers, 6, iw, &|j| EqField::PartMc(i, j)),
                     PartKind::Tf { correct } => {
+                        let unset = keyless && !tf_keyed.contains(&Some(i));
                         for (val, name) in [(true, "True"), (false, "False")] {
                             ui.horizontal(|ui| {
-                                if kit::check_circle(ui, *correct == val).clicked() {
+                                if kit::check_circle(ui, !unset && *correct == val).clicked() {
                                     *correct = val;
+                                    if !tf_keyed.contains(&Some(i)) {
+                                        tf_keyed.push(Some(i));
+                                    }
                                 }
                                 ui.add_space(4.0);
                                 ui.label(theme::text(name).size(13.0));
@@ -1354,6 +1375,27 @@ mod tests {
         d.kind = Kind::Tf { correct: true };
         assert_eq!(d.build_question(Some(&q)).explanation.as_deref(), Some("Because it is a star."));
         d.explanation = Some(crate::model::KEYLESS_SENTINEL.into());
+        assert_eq!(d.build_question(Some(&q)).explanation, None);
+    }
+
+    #[test]
+    fn picking_false_keys_a_keyless_true_false() {
+        let mut q = sample_question();
+        q.kind = Kind::Tf { correct: false };
+        q.explanation = Some(crate::model::KEYLESS_SENTINEL.into());
+        let mut d = Draft::from_question("b".into(), &q);
+        assert!(d.keyless, "shown unset");
+        // Not picked: the placeholder false is not a key.
+        d.explanation = Some("Why.".into());
+        assert_eq!(d.build_question(Some(&q)).explanation.as_deref(), Some(crate::model::KEYLESS_SENTINEL));
+        // The teacher clicks False (the placeholder's value): that is the key, one click.
+        d.tf_keyed.push(None);
+        assert_eq!(d.build_question(Some(&q)).explanation.as_deref(), Some("Why."));
+        // A part: the same.
+        q.kind = Kind::Multipart { parts: vec![Part { stem: "p".into(), kind: PartKind::Tf { correct: false } }] };
+        let mut d = Draft::from_question("b".into(), &q);
+        assert_eq!(d.build_question(Some(&q)).explanation.as_deref(), Some(crate::model::KEYLESS_SENTINEL));
+        d.tf_keyed.push(Some(0));
         assert_eq!(d.build_question(Some(&q)).explanation, None);
     }
 

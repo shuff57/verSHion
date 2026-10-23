@@ -1466,6 +1466,18 @@ impl crate::App {
                 });
                 ui.add_space(12.0);
 
+                // --- Sharing account (optional; the Account window does nothing until opened) ---
+                pageshell::card(ui, |ui| {
+                    pageshell::heading(ui, "Sharing account");
+                    ui.add_space(4.0);
+                    ui.label(theme::muted("Optional. An account lets you share questions with other teachers. Everything else works without one."));
+                    ui.add_space(10.0);
+                    if pageshell::outline(ui, "Open account…").clicked() {
+                        app.account.open();
+                    }
+                });
+                ui.add_space(12.0);
+
                 // --- AI conversion ---
                 pageshell::card(ui, |ui| {
                     pageshell::heading(ui, "AI conversion");

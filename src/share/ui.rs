@@ -17,6 +17,8 @@ use crate::{kit, theme};
 pub struct AccountUi {
     pub model: AccountModel,
     repaint_set: bool,
+    /// Open but not drawn: the publish flow is only looking the sign-in up.
+    quiet: bool,
 }
 
 /// Field ids whose egui edit state is dropped once the field is empty, so no copy of a password
@@ -25,11 +27,40 @@ const SECRET_FIELDS: [&str; 3] = ["share_pw", "share_pw2", "share_paste"];
 
 impl AccountUi {
     pub fn open(&mut self) {
+        self.quiet = false;
         self.model.open();
     }
 
     pub fn is_open(&self) -> bool {
         self.model.open
+    }
+
+    /// Opens the account logic without drawing the window, so the publish flow can find out whether
+    /// someone is signed in (one request for a saved session, none otherwise). No-op when open.
+    pub fn open_quiet(&mut self) {
+        if !self.model.open {
+            self.model.open();
+            self.quiet = true;
+        }
+    }
+
+    /// Shows the window if it was only open in the background (or opens it).
+    pub fn reveal(&mut self) {
+        self.quiet = false;
+        self.model.open();
+    }
+
+    /// Closes a background-only window; a window the person can see is left alone.
+    pub fn close_quiet(&mut self) {
+        if self.quiet {
+            self.quiet = false;
+            self.model.close();
+        }
+    }
+
+    /// The window is on screen.
+    pub fn visible(&self) -> bool {
+        self.model.open && !self.quiet
     }
 
     pub fn open_link(&mut self, link: api::Link) {
@@ -51,6 +82,9 @@ impl AccountUi {
         if let Some(at) = self.model.poller.next_at() {
             ctx.request_repaint_after(at.saturating_duration_since(now));
         }
+        if self.quiet {
+            return;
+        }
         let mut close = false;
         let modal = egui::Modal::new(egui::Id::new("share_account"))
             .frame(kit::card().inner_margin(Margin::same(22)))
@@ -61,6 +95,7 @@ impl AccountUi {
                 });
             });
         if close || modal.should_close() {
+            self.quiet = false;
             self.model.close();
         }
         for id in SECRET_FIELDS {
@@ -554,7 +589,14 @@ fn status_page(ui: &mut Ui, m: &mut AccountModel) {
         if kit::ghost_button(ui, "Check now").clicked() {
             m.check_now();
         }
+        if matches!(me.status, Status::Approved) && kit::primary_button(ui, "Browse shared questions").clicked() {
+            super::browse_ui::request(ui.ctx(), super::browse_ui::BrowseRequest::Browse);
+        }
+        if matches!(me.status, Status::Approved) && kit::ghost_button(ui, "My shared items").clicked() {
+            super::mine_ui::request(ui.ctx(), super::mine_ui::MineRequest::List);
+        }
     });
+    legal_row(ui, &super::ShareSettings::legal_base());
     ui.add_space(10.0);
     ui.separator();
     ui.checkbox(&mut m.forms.forget_device, "Forget this device too (on a shared computer)");
@@ -574,6 +616,26 @@ fn status_page(ui: &mut Ui, m: &mut AccountModel) {
     if kit::danger_text_button(ui, "Delete account…").clicked() {
         m.go(Page::Delete);
     }
+}
+
+/// The draft legal pages, as links when a server address is configured and as names when not.
+fn legal_row(ui: &mut Ui, base: &str) {
+    ui.add_space(6.0);
+    ui.horizontal_wrapped(|ui| {
+        ui.label(theme::muted("Legal (drafts):").size(12.0));
+        for (name, file) in super::mine_text::LEGAL_PAGES {
+            match super::mine_text::legal_url(base, file) {
+                Some(u) => {
+                    if ui.add(egui::Button::new(theme::accent(name).size(12.0)).frame(false)).clicked() {
+                        crate::platform::open_url(&u);
+                    }
+                }
+                None => {
+                    ui.label(theme::muted(name).size(12.0));
+                }
+            }
+        }
+    });
 }
 
 fn status_text(s: &Status) -> (&'static str, &'static str) {

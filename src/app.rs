@@ -111,6 +111,12 @@ pub struct App {
     pub figs: figuresui::FigUi,
     /// Shared-pool Account window (`share`). Closed until opened; until then it does no I/O.
     pub account: crate::share::AccountUi,
+    /// Shared-pool "Share to pool…" window. Closed until a bank or exam asks for it (`share::publish_ui`).
+    pub publish: crate::share::PublishUi,
+    /// Shared-pool browser, import and update checks. Closed until asked for (`share::browse_ui`).
+    pub browse: crate::share::BrowseUi,
+    /// Shared-pool "My shared items" window. Closed until asked for (`share::mine_ui`).
+    pub mine: crate::share::MineUi,
     /// QA hook: scripted input (VERSHION_SCRIPT), see `raw_input_hook`.
     pub qa_steps: Vec<String>,
     /// QA hook: VERSHION_SHOT=<file.png> saves a screenshot of this window's own contents and exits.
@@ -189,6 +195,9 @@ impl App {
             import_name: String::new(),
             figs: Default::default(),
             account: Default::default(),
+            publish: Default::default(),
+            browse: Default::default(),
+            mine: Default::default(),
             qa_shot: crate::env_var("VERSHION_SHOT").ok().map(|p| (p, 0)),
             qa_steps: crate::env_var("VERSHION_SCRIPT")
                 .map(|v| v.split(';').map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect())
@@ -414,7 +423,13 @@ impl App {
         self.handle_shortcuts(&ctx);
         // Sidebar + active screen + shell overlays (import dialog, help, toasts).
         self.draw_screen(&ctx);
-        // The Account window, over whatever screen is open; returns at once while closed.
+        // The "Share to pool…" window (looks the sign-in up through the Account window), then the
+        // Account window, over whatever screen is open; both return at once while closed.
+        self.publish.show(&ctx, &mut self.account);
+        if self.browse.show(&ctx, &mut self.account, &mut self.store.banks) {
+            self.store.save_banks();
+        }
+        self.mine.show(&ctx, &mut self.account, &self.store.banks);
         self.account.show(&ctx);
     }
 }

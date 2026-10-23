@@ -121,7 +121,16 @@ impl Backend for FsBackend {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
-        std::fs::write(&path, bytes).map_err(|e| e.to_string())
+        // Written beside the final name and renamed into place, so a crash or a full disk never
+        // leaves a half-written picture under its real (content) name.
+        let mut tmp = path.clone().into_os_string();
+        tmp.push(".part");
+        let tmp = PathBuf::from(tmp);
+        let done = std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, &path));
+        if done.is_err() {
+            let _ = std::fs::remove_file(&tmp);
+        }
+        done.map_err(|e| e.to_string())
     }
 
     fn list(&self, sub: &str) -> Vec<String> {
@@ -195,18 +204,173 @@ pub fn load_json<T: DeserializeOwned>(name: &str) -> Option<T> {
     serde_json::from_slice(&bytes).ok()
 }
 
-/// Stores image bytes under media/<sha256><ext> and returns the ImageRef.
+/// Most bytes a picture may have before it is even looked at.
+pub const MAX_IMAGE_BYTES: usize = 32 * 1024 * 1024;
+/// Widest or tallest source picture that is decoded at all (a flood guard; checked from the header).
+pub const MAX_SOURCE_SIDE: u32 = 16384;
+/// Most pixels a source picture may have (64 Mpix is about 256 MB as RGBA).
+pub const MAX_SOURCE_PIXELS: u64 = 64_000_000;
+/// A stored picture is scaled down until neither side is longer than this (the pool's cap).
+pub const MAX_STORED_SIDE: u32 = 4096;
+
+/// Stores a picture under media/<sha256 of the stored bytes>.webp and returns the ImageRef.
+///
+/// Everything is checked before anything is written (see [`prepare_image`]); a refused picture
+/// leaves nothing in `media/`. Older stores keep working: their `.png`/`.jpg`/`.gif` files are
+/// still read by name.
 pub fn put_image(bytes: &[u8]) -> Result<crate::model::ImageRef, String> {
-    use sha2::Digest;
-    let hash = sha2::Sha256::digest(bytes);
-    let hex = format!("{hash:x}");
-    let ext = sniff_ext(bytes);
-    let file = format!("media/{hex}{ext}");
-    if !with_backend(|b| b.exists(&file)) {
-        with_backend(|b| b.write(&file, bytes))?;
+    with_backend(|b| put_image_in(b, bytes))
+}
+
+/// [`put_image`] against a given backend.
+pub fn put_image_in(backend: &dyn Backend, bytes: &[u8]) -> Result<crate::model::ImageRef, String> {
+    let img = prepare_image(bytes)?;
+    let file = format!("media/{}.webp", sha_hex(&img.bytes));
+    if !backend.exists(&file) {
+        backend.write(&file, &img.bytes)?;
     }
-    let (w, h) = imagesize(bytes).ok_or("unreadable image")?;
-    Ok(crate::model::ImageRef { file, width: w, height: h })
+    Ok(crate::model::ImageRef { file, width: img.width, height: img.height })
+}
+
+/// Puts back a picture from a bank file under the name it had there (`media/<sha256><ext>` of
+/// exactly these bytes), so pictures exported by older builds, whose names are the hash of a PNG
+/// or JPEG, still match their questions. The bytes get the same checks as any picture and are
+/// kept as they are; returns false (nothing written) if they fail or do not match the name.
+pub fn restore_image(file: &str, bytes: &[u8]) -> bool {
+    with_backend(|b| restore_image_in(b, file, bytes))
+}
+
+pub fn restore_image_in(backend: &dyn Backend, file: &str, bytes: &[u8]) -> bool {
+    let Some(rest) = file.strip_prefix("media/") else { return false };
+    let Some((stem, ext)) = rest.split_once('.') else { return false };
+    if stem != sha_hex(bytes) || format!(".{ext}") != sniff_ext(bytes) || prepare_image(bytes).is_err() {
+        return false;
+    }
+    backend.exists(file) || backend.write(file, bytes).is_ok()
+}
+
+fn sha_hex(bytes: &[u8]) -> String {
+    use sha2::Digest;
+    format!("{:x}", sha2::Sha256::digest(bytes))
+}
+
+/// A picture that passed every check, in the form that is stored.
+pub struct PreparedImage {
+    pub bytes: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Validates a picture and returns what would be stored, touching no storage:
+/// - the bytes must start with the magic of PNG, JPEG, GIF, WebP or BMP (a name or extension
+///   never counts), and the decoder for *that* format must accept them, so a file whose magic
+///   says one thing and whose body is another is refused;
+/// - size, width, height and pixel count are capped before the pixels are decoded;
+/// - the picture is decoded in full (a truncated or corrupt file fails here, not later), with
+///   its EXIF orientation applied; an animated GIF or WebP contributes its first frame;
+/// - the result is lossless WebP (no EXIF, ICC or comments), scaled down to fit
+///   [`MAX_STORED_SIDE`]. A still WebP that carries only picture data is kept byte for byte.
+pub fn prepare_image(bytes: &[u8]) -> Result<PreparedImage, String> {
+    use image::{ImageDecoder, ImageFormat};
+    if bytes.is_empty() {
+        return Err("empty image".into());
+    }
+    if bytes.len() > MAX_IMAGE_BYTES {
+        return Err(format!("image is larger than {} MB", MAX_IMAGE_BYTES / 1024 / 1024));
+    }
+    let format = match sniff_format(bytes) {
+        Some(f) => f,
+        None => return Err("not a PNG, JPEG, GIF, WebP or BMP picture".into()),
+    };
+    let limits = || {
+        let mut l = image::Limits::default();
+        l.max_image_width = Some(MAX_SOURCE_SIDE);
+        l.max_image_height = Some(MAX_SOURCE_SIDE);
+        l.max_alloc = Some(512 * 1024 * 1024);
+        l
+    };
+    let open = || {
+        let mut r = image::ImageReader::with_format(std::io::Cursor::new(bytes), format);
+        r.limits(limits());
+        r.into_decoder().map_err(|e| format!("unreadable image: {e}"))
+    };
+    let mut decoder = open()?;
+    let (w, h) = decoder.dimensions();
+    if w == 0 || h == 0 || w > MAX_SOURCE_SIDE || h > MAX_SOURCE_SIDE || u64::from(w) * u64::from(h) > MAX_SOURCE_PIXELS {
+        return Err(format!("image is too large ({w}x{h})"));
+    }
+    let orientation = decoder.orientation().unwrap_or(image::metadata::Orientation::NoTransforms);
+    let mut img = image::DynamicImage::from_decoder(decoder).map_err(|e| format!("unreadable image: {e}"))?;
+    img.apply_orientation(orientation);
+    if format == ImageFormat::WebP && webp_is_plain_still(bytes) && img.width().max(img.height()) <= MAX_STORED_SIDE {
+        return Ok(PreparedImage { bytes: bytes.to_vec(), width: img.width(), height: img.height() });
+    }
+    if img.width().max(img.height()) > MAX_STORED_SIDE {
+        img = img.resize(MAX_STORED_SIDE, MAX_STORED_SIDE, image::imageops::FilterType::Lanczos3);
+    }
+    let (w, h) = (img.width(), img.height());
+    let (raw, color) = if img.color().has_alpha() {
+        (img.to_rgba8().into_raw(), image::ExtendedColorType::Rgba8)
+    } else {
+        (img.to_rgb8().into_raw(), image::ExtendedColorType::Rgb8)
+    };
+    let mut out = Vec::new();
+    image::codecs::webp::WebPEncoder::new_lossless(&mut out)
+        .encode(&raw, w, h, color)
+        .map_err(|e| format!("could not store image: {e}"))?;
+    Ok(PreparedImage { bytes: out, width: w, height: h })
+}
+
+fn sniff_format(bytes: &[u8]) -> Option<image::ImageFormat> {
+    use image::ImageFormat as F;
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some(F::Png)
+    } else if bytes.starts_with(b"\xff\xd8\xff") {
+        Some(F::Jpeg)
+    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        Some(F::Gif)
+    } else if is_webp(bytes) {
+        Some(F::WebP)
+    } else if bytes.starts_with(b"BM") {
+        Some(F::Bmp)
+    } else {
+        None
+    }
+}
+
+/// `RIFF`, a size that matches the file, and `WEBP` at byte 8 (any other RIFF, e.g. WAV, is not).
+fn is_webp(b: &[u8]) -> bool {
+    b.len() >= 20 && &b[0..4] == b"RIFF" && &b[8..12] == b"WEBP" && {
+        let riff = u32::from_le_bytes([b[4], b[5], b[6], b[7]]) as usize;
+        riff + 8 == b.len() || riff + 8 + (riff & 1) == b.len()
+    }
+}
+
+/// True for a WebP whose chunks are only picture data: `VP8 `/`VP8L`/`ALPH`, or `VP8X` with the
+/// animation, ICC, EXIF and XMP flags clear. Anything else is re-encoded.
+fn webp_is_plain_still(b: &[u8]) -> bool {
+    let mut i = 12;
+    let mut n = 0;
+    while i + 8 <= b.len() {
+        let tag = &b[i..i + 4];
+        let len = u32::from_le_bytes([b[i + 4], b[i + 5], b[i + 6], b[i + 7]]) as usize;
+        match tag {
+            b"VP8X" => {
+                // flags: ICC 0x20, alpha 0x10, EXIF 0x08, XMP 0x04, animation 0x02
+                if len < 10 || i + 9 > b.len() || b[i + 8] & 0x2e != 0 {
+                    return false;
+                }
+            }
+            b"VP8 " | b"VP8L" | b"ALPH" => {}
+            _ => return false,
+        }
+        n += 1;
+        i = match i.checked_add(8 + len + (len & 1)) {
+            Some(v) => v,
+            None => return false,
+        };
+    }
+    n > 0 && i == b.len()
 }
 
 /// Reads a stored media file (`ImageRef.file`) through the backend.
@@ -275,42 +439,17 @@ pub fn media_path(image: &crate::model::ImageRef) -> PathBuf {
     store_dir().join(&image.file)
 }
 
+/// The file extension for a picture's bytes (names are by content, never by what a file was
+/// called). Reads old stores' files too, so `.tiff` stays for them. A RIFF file is `.webp` only
+/// when `WEBP` is at byte 8.
 pub fn sniff_ext(bytes: &[u8]) -> &'static str {
     if bytes.starts_with(b"\x89PNG") { ".png" }
     else if bytes.starts_with(b"\xff\xd8") { ".jpg" }
     else if bytes.starts_with(b"GIF8") { ".gif" }
     else if bytes.starts_with(&[0x49, 0x49, 0x2a]) || bytes.starts_with(&[0x4d, 0x4d, 0x00]) { ".tiff" }
-    else if bytes.starts_with(b"RIFF") { ".webp" }
+    else if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" { ".webp" }
+    else if bytes.starts_with(b"BM") { ".bmp" }
     else { ".bin" }
-}
-
-fn imagesize(bytes: &[u8]) -> Option<(u32, u32)> {
-    // PNG
-    if bytes.starts_with(b"\x89PNG") && bytes.len() >= 24 {
-        let be = |b: &[u8]| u32::from_be_bytes([b[0], b[1], b[2], b[3]]);
-        return Some((be(&bytes[16..20]), be(&bytes[20..24])));
-    }
-    // GIF
-    if bytes.starts_with(b"GIF8") && bytes.len() >= 10 {
-        let le = |b: &[u8]| u32::from(u16::from_le_bytes([b[0], b[1]]));
-        return Some((le(&bytes[6..8]), le(&bytes[8..10])));
-    }
-    // JPEG SOF scan
-    if bytes.starts_with(b"\xff\xd8") {
-        let mut i = 2;
-        while i + 9 < bytes.len() {
-            if bytes[i] != 0xff { i += 1; continue; }
-            let marker = bytes[i + 1];
-            if (0xc0..=0xc3).contains(&marker) {
-                let h = u16::from_be_bytes([bytes[i + 5], bytes[i + 6]]) as u32;
-                let w = u16::from_be_bytes([bytes[i + 7], bytes[i + 8]]) as u32;
-                return Some((w, h));
-            }
-            let len = u16::from_be_bytes([bytes[i + 2], bytes[i + 3]]) as usize;
-            i += 2 + len;
-        }
-    }
-    None
 }
 
 /// One shared Store the whole app reads and mutates. Saves the affected file on every mutation.
@@ -360,5 +499,176 @@ impl Store {
 
     pub fn question_mut(&mut self, bank_id: &Id, question_id: &Id) -> Option<&mut Question> {
         self.bank_mut(bank_id)?.questions.iter_mut().find(|q| q.id == *question_id)
+    }
+}
+#[cfg(test)]
+mod image_tests {
+    use super::*;
+    use std::cell::RefCell;
+    use std::collections::BTreeMap;
+
+    #[derive(Default)]
+    struct Mem(RefCell<BTreeMap<String, Vec<u8>>>);
+    impl Backend for Mem {
+        fn read_doc(&self, n: &str) -> Option<Vec<u8>> { self.0.borrow().get(n).cloned() }
+        fn write_doc(&self, n: &str, b: &[u8]) -> Result<(), String> { self.0.borrow_mut().insert(n.into(), b.to_vec()); Ok(()) }
+        fn exists(&self, r: &str) -> bool { self.0.borrow().contains_key(r) }
+        fn read(&self, r: &str) -> Option<Vec<u8>> { self.0.borrow().get(r).cloned() }
+        fn write(&self, r: &str, b: &[u8]) -> Result<(), String> { self.0.borrow_mut().insert(r.into(), b.to_vec()); Ok(()) }
+        fn list(&self, _: &str) -> Vec<String> { self.0.borrow().keys().cloned().collect() }
+        fn label(&self) -> String { "mem".into() }
+    }
+    impl Mem { fn n(&self) -> usize { self.0.borrow().len() } }
+
+    fn pic(w: u32, h: u32, f: image::ImageFormat) -> Vec<u8> {
+        let img = image::RgbImage::from_fn(w, h, |x, y| image::Rgb([(x * 7) as u8, (y * 5) as u8, 90]));
+        let mut out = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgb8(img).write_to(&mut out, f).unwrap();
+        out.into_inner()
+    }
+
+    #[test]
+    fn each_format_is_stored_as_webp() {
+        for f in [image::ImageFormat::Png, image::ImageFormat::Jpeg, image::ImageFormat::Gif, image::ImageFormat::WebP, image::ImageFormat::Bmp] {
+            let m = Mem::default();
+            let r = put_image_in(&m, &pic(37, 21, f)).unwrap_or_else(|e| panic!("{f:?}: {e}"));
+            assert!(r.file.starts_with("media/") && r.file.ends_with(".webp"), "{f:?}: {}", r.file);
+            assert_eq!((r.width, r.height), (37, 21));
+            let stored = m.read(&r.file).unwrap();
+            assert!(is_webp(&stored) && sniff_ext(&stored) == ".webp");
+            assert_eq!(r.file, format!("media/{}.webp", sha_hex(&stored)));
+            assert_eq!(m.n(), 1);
+            // same picture again: same name, nothing new
+            assert_eq!(put_image_in(&m, &pic(37, 21, f)).unwrap().file, r.file);
+            assert_eq!(m.n(), 1);
+        }
+    }
+
+    #[test]
+    fn a_plain_webp_is_kept_byte_for_byte() {
+        let m = Mem::default();
+        let w = pic(10, 10, image::ImageFormat::WebP);
+        let r = put_image_in(&m, &w).unwrap();
+        assert_eq!(m.read(&r.file).unwrap(), w);
+    }
+
+    #[test]
+    fn refused_pictures_write_nothing() {
+        let m = Mem::default();
+        let png = pic(20, 20, image::ImageFormat::Png);
+        let mut wav = b"RIFF".to_vec();
+        wav.extend(40u32.to_le_bytes());
+        wav.extend(b"WAVEfmt ");
+        wav.extend([0u8; 40]);
+        let mut bad_magic_body = pic(20, 20, image::ImageFormat::Jpeg);
+        bad_magic_body.splice(0..8, b"\x89PNG\r\n\x1a\n".iter().copied()); // PNG magic, JPEG body
+        let mut svg = b"<svg xmlns='http://www.w3.org/2000/svg'/>".to_vec();
+        svg.resize(200, b' ');
+        let cases: Vec<(&str, Vec<u8>)> = vec![
+            ("empty", vec![]),
+            ("text", b"hello world, not a picture".to_vec()),
+            ("svg", svg),
+            ("wav", wav),
+            ("truncated header", png[..12].to_vec()),
+            ("truncated body", png[..png.len() / 2].to_vec()),
+            ("magic does not match body", bad_magic_body),
+            ("tiff", b"II*\0\x08\0\0\0\0\0".to_vec()),
+            ("too many bytes", vec![0x89; MAX_IMAGE_BYTES + 1]),
+        ];
+        for (name, bytes) in cases {
+            assert!(put_image_in(&m, &bytes).is_err(), "{name} was accepted");
+            assert_eq!(m.n(), 0, "{name} left a file behind");
+        }
+    }
+
+    #[test]
+    fn dimension_caps_are_checked_from_the_header() {
+        // 20000x1 is a 20 KB-ish PNG that would decode fine but is over the side cap.
+        let wide = pic(MAX_SOURCE_SIDE + 1, 1, image::ImageFormat::Png);
+        let m = Mem::default();
+        let e = put_image_in(&m, &wide).unwrap_err();
+        assert!(e.contains("large") || e.contains("limit") || e.contains("unreadable"), "{e}");
+        assert_eq!(m.n(), 0);
+    }
+
+    #[test]
+    fn big_pictures_are_scaled_to_the_stored_cap() {
+        let m = Mem::default();
+        let r = put_image_in(&m, &pic(MAX_STORED_SIDE * 2, 100, image::ImageFormat::Png)).unwrap();
+        assert_eq!(r.width, MAX_STORED_SIDE);
+        assert_eq!(r.height, 50);
+    }
+
+    #[test]
+    fn exif_orientation_is_applied_and_metadata_dropped() {
+        // A JPEG with an APP1 EXIF segment (orientation 6 = rotate 90) and a comment.
+        let base = pic(30, 10, image::ImageFormat::Jpeg);
+        let exif: Vec<u8> = {
+            let mut t = b"Exif\0\0MM\0\x2a\0\0\0\x08\0\x01\x01\x12\0\x03\0\0\0\x01\0\x06\0\0\0\0\0\0".to_vec();
+            let mut seg = vec![0xff, 0xe1];
+            seg.extend(((t.len() + 2) as u16).to_be_bytes());
+            seg.append(&mut t);
+            seg
+        };
+        let mut jpg = base[..2].to_vec();
+        jpg.extend(exif);
+        jpg.extend(&base[2..]);
+        let m = Mem::default();
+        let r = put_image_in(&m, &jpg).unwrap();
+        assert_eq!((r.width, r.height), (10, 30), "orientation not applied");
+        let stored = m.read(&r.file).unwrap();
+        assert!(!stored.windows(4).any(|w| w == b"EXIF") && !stored.windows(4).any(|w| w == b"ICCP"));
+    }
+
+    #[test]
+    fn alpha_survives() {
+        let img = image::RgbaImage::from_fn(8, 8, |x, _| image::Rgba([10, 20, 30, if x < 4 { 0 } else { 255 }]));
+        let mut png = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(img).write_to(&mut png, image::ImageFormat::Png).unwrap();
+        let m = Mem::default();
+        let r = put_image_in(&m, &png.into_inner()).unwrap();
+        let back = image::load_from_memory(&m.read(&r.file).unwrap()).unwrap().to_rgba8();
+        assert_eq!(back.get_pixel(0, 0)[3], 0);
+        assert_eq!(back.get_pixel(7, 0)[3], 255);
+    }
+
+    #[test]
+    fn sniff_ext_wants_webp_at_byte_8() {
+        assert_eq!(sniff_ext(b"RIFF\x24\0\0\0WAVEfmt "), ".bin");
+        assert_eq!(sniff_ext(b"RIFF\x24\0\0\0WEBPVP8L"), ".webp");
+        assert_eq!(sniff_ext(b"RIFF"), ".bin");
+        assert_eq!(sniff_ext(b"\x89PNG\r\n"), ".png");
+        assert_eq!(sniff_ext(b"\xff\xd8\xff\xe0"), ".jpg");
+        assert_eq!(sniff_ext(b"GIF89a"), ".gif");
+    }
+
+    #[test]
+    fn old_exports_restore_under_their_old_names() {
+        let png = pic(12, 12, image::ImageFormat::Png);
+        let name = format!("media/{}.png", sha_hex(&png));
+        let m = Mem::default();
+        assert!(restore_image_in(&m, &name, &png));
+        assert_eq!(m.read(&name).unwrap(), png); // still readable by the old name
+        // wrong name, wrong extension, corrupt bytes, path tricks: refused, nothing written
+        let m = Mem::default();
+        assert!(!restore_image_in(&m, "media/deadbeef.png", &png));
+        assert!(!restore_image_in(&m, &format!("media/{}.jpg", sha_hex(&png)), &png));
+        assert!(!restore_image_in(&m, "../x.png", &png));
+        let bad = png[..png.len() / 2].to_vec();
+        assert!(!restore_image_in(&m, &format!("media/{}.png", sha_hex(&bad)), &bad));
+        assert_eq!(m.n(), 0);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn fs_backend_leaves_no_partial_files() {
+        let dir = std::env::temp_dir().join(format!("vershion-img-{}-{}", std::process::id(), now()));
+        let b = FsBackend::new(&dir);
+        assert!(put_image_in(&b, b"not an image").is_err());
+        assert!(!dir.join("media").exists() || std::fs::read_dir(dir.join("media")).unwrap().next().is_none());
+        let r = put_image_in(&b, &pic(9, 9, image::ImageFormat::Png)).unwrap();
+        let names = b.list("media");
+        assert_eq!(names, vec![r.file.trim_start_matches("media/").to_string()], "{names:?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

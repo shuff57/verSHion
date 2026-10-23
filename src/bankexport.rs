@@ -505,8 +505,9 @@ pub fn restore_media(json: &[u8]) -> usize {
         if crate::store::media_exists(&want) {
             continue;
         }
-        // put_image names the file by its content, the same name it had when exported.
-        if crate::store::put_image(&bytes).is_ok_and(|img| img.file == *file) {
+        // The picture goes back under the name it was exported with (the hash of these bytes),
+        // after the same checks as any picture; older exports name PNG/JPEG/GIF files.
+        if crate::store::restore_image(file, &bytes) {
             n += 1;
         }
     }

@@ -1193,6 +1193,12 @@ fn draw_menus(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, st: &mut Ed
         if ui.button("Export history").clicked() {
             app.history_open = true;
         }
+        if ui.add_enabled(!dirty, egui::Button::new("Share to pool…")).on_disabled_hover_text("Save the exam first: the saved version is what is shared").clicked() {
+            let r = app.store.exams.iter().find(|e| e.id == *exam_id).map(|e| crate::share::publish_ui::share_exam(ui.ctx(), e, &app.store.banks));
+            if let Some(Err(e)) = r {
+                app.toast_err(e);
+            }
+        }
         ui.add_space(4.0);
         if ui
             .add(egui::Button::new(egui::RichText::new("Delete exam").color(theme::bad())))

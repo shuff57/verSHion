@@ -703,6 +703,18 @@ impl App {
                 if !questions.is_empty() && crate::pageshell::outline(ui, "Export").on_hover_text("Preview and download the bank file (PDF, answers included) or its JSON").clicked() {
                     open_bank_export(ctx, bank_id);
                 }
+                if !questions.is_empty() && crate::pageshell::outline(ui, "Share to pool…").on_hover_text("Share this bank with other teachers (needs a sharing account)").clicked() {
+                    let r = self.store.bank(bank_id).map(|b| crate::share::publish_ui::share_bank(ctx, b));
+                    if let Some(Err(e)) = r {
+                        self.toast_err(e);
+                    }
+                }
+                if crate::pageshell::outline(ui, "From pool…").on_hover_text("Find questions other teachers shared and copy them into this bank (needs a sharing account)").clicked() {
+                    self.browse.open_for_bank(bank_id);
+                }
+                if self.browse.has_update(bank_id) && crate::pageshell::outline(ui, "Update from pool…").on_hover_text("The pool has a newer version of something imported into this bank. Nothing changes until you choose.").clicked() {
+                    self.browse.open_update(bank_id);
+                }
                 if crate::pageshell::outline(ui, "Import").on_hover_text("Import files or pasted questions into this bank").clicked() {
                     crate::importui::open_import_modal(ctx, bank_id);
                 }

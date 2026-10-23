@@ -4,6 +4,7 @@
 
 fn main() {
     println!("cargo:rerun-if-env-changed=VERSHION_POOL_URL");
+    println!("cargo:rerun-if-env-changed=VERSHION_LEGAL_URL");
     println!("cargo:rerun-if-changed=build.rs");
     let Ok(raw) = std::env::var("VERSHION_POOL_URL") else { return };
     if raw.is_empty() {
