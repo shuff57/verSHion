@@ -2575,7 +2575,8 @@ impl Workspace {
                     if (chem_fig && matches!(def.id, "titration-curve" | "heating-cooling-curve" | "mass-spectrum")) || (skin && def.id == "punnett-square") || (skin && def.id != "composite-shape" && figures::rows_for(def.id).is_some()) {
                         // the reference's flat first section is a card of its own, the collapsible ones a second
                         chem_shell::split_cards(ui, |ui| {
-                            ui.spacing_mut().item_spacing.y = 6.0;
+                            // the shell's rows sit 8 px apart in every card, as in the math page's single card
+                            ui.spacing_mut().item_spacing.y = if shell { 8.0 } else { 6.0 };
                             content(ui);
                         });
                     } else {
