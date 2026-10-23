@@ -21,7 +21,7 @@ async function setup() {
 function idRoutes(id: string, sha: string, base: string) {
   return [
     ["GET", `/items/${id}`, {}],
-    ["PUT", `/items/${id}`, { body: framed({ publish_id: publishId(), base_publish_id: base, hide_key: false, license: "CC0-1.0", attestation: { accepted: true, text_rev: "2026-10-19" }, meta: {} }, bankPayload([genQuestion(rng(1), "Tf", 0)])), contentType: PUBLISH_CONTENT_TYPE }],
+    ["PUT", `/items/${id}`, { body: framed({ publish_id: publishId(), base_publish_id: base, hide_key: false, license: "CC0-1.0", attestation: { accepted: true, text_rev: "2026-10-19" }, attest: { own_work: true, terms_version: "2026-10-22" }, meta: {} }, bankPayload([genQuestion(rng(1), "Tf", 0)])), contentType: PUBLISH_CONTENT_TYPE }],
     ["PATCH", `/items/${id}`, { json: { visibility: "unlisted" } }],
     ["DELETE", `/items/${id}`, {}],
     ["POST", `/items/${id}/undelete`, {}],

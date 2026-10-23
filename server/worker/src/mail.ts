@@ -47,7 +47,7 @@ function render(env: MailEnv, m: MailMessage): { subject: string; text: string }
     case "application_approved":
       return {
         subject: "Your verSHion account was approved",
-        text: "Your account has been approved. You can now publish to and browse the shared pool, and join circles.",
+        text: "Your account has been approved. You can now publish to and browse the shared pool.",
       };
     case "application_rejected":
       return {

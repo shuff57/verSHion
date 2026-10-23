@@ -26,7 +26,7 @@ test("meta is checked: licence chosen, attestation ticked, public never circle-o
   const w = new World();
   const a = w.user();
   const payload = plainBank();
-  const base = { publish_id: publishId(), hide_key: false, license: "CC-BY-4.0", attestation: { accepted: true, text_rev: "2026-10-19" }, visibility: "public", meta: {} };
+  const base = { publish_id: publishId(), hide_key: false, license: "CC-BY-4.0", attestation: { accepted: true, text_rev: "2026-10-19" }, attest: { own_work: true, terms_version: "2026-10-22" }, visibility: "public", meta: {} };
   const send = (meta: Record<string, unknown>, ct = PUBLISH_CONTENT_TYPE) => w.json("POST", "/items", { user: a, body: framed(meta, payload), contentType: ct });
   assert.equal((await send({ ...base, license: undefined })).body.field, "license");
   assert.equal((await send({ ...base, license: "GPL-3.0" })).body.field, "license");
@@ -86,7 +86,7 @@ test("idempotent publish_id: a retry replays, a different body or another author
   const first = await publish(w, a, payload, { publishId: id });
   assert.equal(first.status, 201);
   // The app retries with the same id and the same bytes (the meta is identical: same order of keys).
-  const meta = { publish_id: id, hide_key: false, license: "CC-BY-4.0", attestation: { accepted: true, text_rev: "2026-10-19" }, labels: [], order_acks: [], image_ok: [], meta: { title: "Unit test", subject: "Biology", course: "", grade: "", tags: [], standards: [] }, visibility: "public" };
+  const meta = { publish_id: id, hide_key: false, license: "CC-BY-4.0", attestation: { accepted: true, text_rev: "2026-10-19" }, attest: { own_work: true, terms_version: "2026-10-22" }, labels: [], order_acks: [], image_ok: [], meta: { title: "Unit test", subject: "Biology", course: "", grade: "", tags: [], standards: [] }, visibility: "public" };
   const again = await w.json("POST", "/items", { user: a, body: framed(meta, payload), contentType: PUBLISH_CONTENT_TYPE });
   assert.equal(again.status, 200);
   assert.equal(again.body.replayed, true);
@@ -189,9 +189,10 @@ test("blob rules: hash recomputed, format sniffed, same answer whether or not it
   assert.equal((await w.json("PUT", `/blobs/${"0".repeat(64)}`, { user: a, body: img })).body.error, "hash_mismatch");
   assert.equal((await w.json("PUT", `/blobs/NOTHEX`, { user: a, body: img })).status, 400);
   const svg = new TextEncoder().encode(`<svg xmlns="http://www.w3.org/2000/svg"/>`);
-  assert.deepEqual((await upload(w, a, svg)).body, { error: "image_refused", reason: "format" });
+  // One neutral answer for every refused image (round 6: never a distinct signal for a privacy block).
+  assert.deepEqual((await upload(w, a, svg)).body, { error: "image_refused", reason: "not_accepted" });
   const withText = png(4, 4, 1, [chunk("tEXt", new TextEncoder().encode("Comment\0secret"))]);
-  assert.equal((await upload(w, a, withText)).body.reason, "png_chunk");
+  assert.equal((await upload(w, a, withText)).body.reason, "not_accepted");
   const big = new Uint8Array(2 * MB + 1);
   assert.equal((await w.json("PUT", `/blobs/${"1".repeat(64)}`, { user: a, body: big, headers: { "Content-Length": String(big.length) } })).status, 413);
   const first = await w.text("PUT", `/blobs/${sha}`, { user: a, body: img });
@@ -303,11 +304,12 @@ test("burst rate limits: per account and per IP, before any work; refused hits a
   assert.equal(r.status, 429);
   assert.ok(Number(r.headers.get("Retry-After")) > 0);
   assert.equal((await w.call("GET", "/items/mine", { user: b, ip: "10.9.9.9" })).status, 200, "another account from the same IP is fine");
-  for (let i = 0; i < 1200; i++) assert.equal((await w.call("GET", "/items/mine", { user: w.user(), ip: "10.7.7.7" })).status, 200);
+  // Round 9: 20 account-shares per address (6,000 per 5 minutes).
+  for (let i = 0; i < 6000; i++) assert.equal((await w.call("GET", "/items/mine", { user: w.user(), ip: "10.7.7.7" })).status, 200);
   assert.equal((await w.call("GET", "/items/mine", { user: w.user(), ip: "10.7.7.7" })).status, 429, "per IP");
   assert.equal((await w.call("GET", "/items/mine", { user: a, ip: null })).status, 403, "no client IP: refused, never pooled");
   // Keys are HMACs in the auth package's scheme (purged with the account), never raw ids or IPs.
-  assert.ok([...store.counts.keys()].every((k) => /^[ai]:[A-Za-z0-9_-]{43}:pool:(read:)?\d+$/.test(k) && !k.includes(a.id) && !k.includes("10.")));
+  assert.ok([...store.counts.keys()].every((k) => /^[ai]:[A-Za-z0-9_-]{43}:pool:(i:[A-Za-z0-9_-]{43}:pool:)?(read:)?\d+$/.test(k) && !k.includes(a.id) && !k.includes("10.")));
 });
 
 test("licences: the hard check against your own imports, chains with 'modified', the soft check is silent", async () => {
@@ -329,10 +331,8 @@ test("licences: the hard check against your own imports, chains with 'modified',
     error: "license_incompatible",
     positions: [0, 1],
     allowed: ["CC-BY-SA-4.0"],
-    per_question: [
-      { pos: 0, allowed: ["CC-BY-SA-4.0"] },
-      { pos: 1, allowed: ["CC-BY-SA-4.0"] },
-    ],
+    // Each position names the items that bind it (round 7 M4).
+    per_question: [0, 1].map((pos) => ({ pos, allowed: ["CC-BY-SA-4.0"], bound_by: [{ item_id: srcId, title: "Unit test", author_name: "Ms. A" }] })),
   });
   // Changing the key does not escape the check (match_hash ignores the key).
   const edited = JSON.parse(copy);

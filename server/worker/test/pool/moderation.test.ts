@@ -33,7 +33,8 @@ test("author delete: hidden at once, undo within 14 days, then purged (bodies, r
   const mine = await w.json<{ items: { state: string; undo_until: number }[] }>("GET", "/items/mine", { user: a });
   assert.deepEqual([mine.body.items[0]!.state, mine.body.items[0]!.undo_until], ["deleted", del.body.undo_until]);
   const v = await w.json<{ items: { status: string; reason: string }[] }>("POST", "/items/versions", { user: b, json: { ids: [id] } });
-  assert.deepEqual(v.body.items[0], { id, status: "removed", reason: "deleted" });
+  // Still reversible (round 8): "under_review" with the date it becomes final.
+  assert.deepEqual(v.body.items[0], { id, status: "under_review", reason: "deleted", until: del.body.undo_until });
   // Someone else cannot undo it.
   assert.equal((await w.json("POST", `/items/${id}/undelete`, { user: b })).status, 404);
   assert.equal((await w.json("POST", `/items/${id}/undelete`, { user: a })).status, 200);
@@ -83,6 +84,7 @@ test("reports: one open per reporter and reason, 3 distinct teachers hold, stude
   assert.equal(w.q(`SELECT * FROM reports WHERE resolved_at IS NULL`).length, 0);
   // Student data: ONE report hides it and mails the admin immediately.
   const e = w.user();
+  w.history(e);
   await w.json("POST", `/items/${id}/report`, { user: e, json: { reason: "student_data" } });
   assert.equal(await seen(w, b, id), false);
   assert.equal(w.notices.filter((n) => n.kind === "student_data_report").length, 1);
@@ -97,30 +99,35 @@ test("reports: one open per reporter and reason, 3 distinct teachers hold, stude
   assert.equal((await w.json("POST", `/items/${other2.body.item_id as string}/report`, { user: f, json: { reason: "other" } })).status, 429);
 });
 
-test("student data confirmed: purged immediately, image hashes blocklisted, importers told 'privacy', a re-upload is held", async () => {
+test("student data confirmed: removed at once and quarantined for 14 days, image hashes blocklisted, importers told 'under_review', a text re-upload is held (round 8)", async () => {
   const { w, a, b, admin, img, id } = await setup();
   await w.json("POST", `/items/${id}/import`, { user: b });
+  w.history(b);
   await w.json("POST", `/items/${id}/report`, { user: b, json: { reason: "student_data" } });
   assert.equal((await w.purge(admin, id)).status, 200);
   assert.equal(w.r2.keys("items/").length, 0);
-  assert.equal(w.r2.keys("blobs/").length, 0, "no quarantine: the bytes are gone now");
+  assert.ok(w.r2.keys("quarantine/").length > 0, "quarantined for the grace window (round 7 M2)");
+  assert.equal((await w.call("GET", `/items/${id}/blobs/${img.sha}`, { user: b })).status, 404, "served to nobody at once");
   assert.deepEqual(w.q(`SELECT kind, hash FROM privacy_blocks WHERE kind = 'blob'`), [{ kind: "blob", hash: img.sha }]);
-  assert.equal(w.q(`SELECT * FROM privacy_blocks WHERE kind = 'match'`).length, 2, "the question text is blocked too");
+  assert.equal(w.q(`SELECT DISTINCT qhash FROM privacy_blocks WHERE kind = 'match'`).length, 2, "the question text is blocked too (by question; round 12: each by its keys)");
   assert.equal(w.q(`SELECT * FROM blocked_hashes`).length, 0, "kept apart from DMCA blocks");
   const v = await w.json<{ items: unknown[] }>("POST", "/items/versions", { user: b, json: { ids: [id] } });
-  assert.deepEqual(v.body.items[0], { id, status: "removed", reason: "privacy" });
-  // A re-upload of the same bytes is refused, with the neutral answer any refused image gets.
+  assert.deepEqual(v.body.items[0], { id, status: "under_review", reason: "privacy" }, "the client keeps its copy during the grace window");
+  // Round 16 (critic21d 5): a re-upload of the same bytes is ACCEPTED like any well-formed image (a
+  // refusal would confirm the block), but the bytes are never stored again.
   const again = await upload(w, a, png(6, 6, 4));
-  assert.deepEqual([again.status, again.body.error, again.body.reason], [422, "image_refused", "not_accepted"]);
-  // The purged item's own question text published again: accepted, but held for review.
+  assert.deepEqual([again.status, again.body.width, again.body.height], [201, 6, 6]);
+  assert.ok(w.r2.keys("quarantine/upload/").length === 1, "a same-size stand-in, never the bytes");
+  // The purged item's own question text published again: accepted, held for review (round 8 I6a: the
+  // publisher holds that text verbatim already), and one privacy_text_match flag for the admin.
   const r21 = rng(21);
   genQuestion(r21, "Mc", 0, { sha: img.sha, ext: "png" });
   const re = await publish(w, a, bankPayload([genQuestion(r21, "Short", 1)]));
   assert.equal(re.status, 201);
   assert.equal("held" in re.body, false, "the publish result says nothing (no blocklist oracle)");
-  assert.equal(await seen(w, b, re.body.item_id as string), false);
   const mine = await w.json<{ items: { id: string; state: string }[] }>("GET", "/items/mine", { user: a });
   assert.equal(mine.body.items.find((x) => x.id === re.body.item_id)!.state, "held_for_review");
+  assert.equal(w.q(`SELECT * FROM admin_flags WHERE kind = 'privacy_text_match' AND item_id = ?`, re.body.item_id).length, 1);
 });
 
 test("DMCA: takedown disables at once and quarantines bodies; counter-notice; put-back after 10 business days; strikes and blocklist lifted", async () => {
@@ -143,7 +150,7 @@ test("DMCA: takedown disables at once and quarantines bodies; counter-notice; pu
   const mine = await w.json<{ items: { state: string; counter_notice: string }[] }>("GET", "/items/mine", { user: a });
   assert.deepEqual([mine.body.items[0]!.state, mine.body.items[0]!.counter_notice], ["taken_down", "available"]);
   const v = await w.json<{ items: unknown[] }>("POST", "/items/versions", { user: b, json: { ids: [id] } });
-  assert.deepEqual(v.body.items[0], { id, status: "removed", reason: "takedown" });
+  assert.deepEqual(v.body.items[0], { id, status: "under_review", reason: "takedown" }, "in quarantine: still reversible (round 8)");
   assert.equal(w.q(`SELECT * FROM strikes WHERE voided_at IS NULL`).length, 1);
   assert.ok(w.q(`SELECT * FROM blocked_hashes WHERE lifted_at IS NULL`).length >= 2);
   // The admin can still read the full form from quarantine.
@@ -200,15 +207,25 @@ test("DMCA: without a counter-notice the quarantine is purged after 30 days; a c
   const rep2 = await w.pool.daily();
   assert.equal(rep2.restored, 0);
   assert.equal(rep2.purged, 0, "kept disabled until resolved");
-  // A third upheld strike in 12 months flags the account for suspension.
+  // A strike counts only once UPHELD (round 6): a third takedown flags nothing at takedown time.
+  const flags = () => w.q(`SELECT * FROM admin_flags WHERE kind = 'repeat_infringer' AND user_id = ?`, a.id).length;
   const three = await publish(w, a, bankPayload([genQuestion(r, "Short", 0)]));
   await w.takedown(admin, await notice(), three.body.item_id as string);
-  assert.equal(w.q(`SELECT * FROM admin_flags WHERE kind = 'repeat_infringer' AND user_id = ?`, a.id).length, 1);
-  assert.equal(w.notices.filter((n) => n.kind === "repeat_infringer").length, 1);
-  // Withdrawal puts everything under the notice back.
+  assert.equal(flags(), 0, "not upheld yet");
+  w.advance(31 * DAY);
+  await w.pool.daily();
+  assert.equal(flags(), 0, "two upheld, one still in court");
+  // Withdrawal puts everything under the notice back (that strike is voided).
   const withdrawn = await w.admin<{ restored: number }>(admin, "POST", "/admin/dmca/withdraw", { notice_id: w.q<{ notice_id: string }>(`SELECT notice_id FROM dmca_actions WHERE id = ?`, t2.body.action_id)[0]!.notice_id });
   assert.equal(withdrawn.body.restored, 1);
   assert.equal(await seen(w, w.user(), two.body.item_id as string), true);
+  // A third UPHELD strike in 12 months flags the account for suspension.
+  const four = await publish(w, a, bankPayload([genQuestion(r, "Mc", 0)]));
+  await w.takedown(admin, await notice(), four.body.item_id as string);
+  w.advance(31 * DAY);
+  await w.pool.daily();
+  assert.equal(flags(), 1);
+  assert.equal(w.notices.filter((n) => n.kind === "repeat_infringer").length, 1);
 });
 
 test("admin removal (14 days) and holds; limits are admin-settable per user or site-wide; every write is audited", async () => {
@@ -241,8 +258,9 @@ test("account deletion: items removed and purged in 14 days, reports anonymised,
   await w.db.batch(onDeleteContent(w.db, a.id, w.clock));
   await w.db.batch(onDeleteContent(w.db, b.id, w.clock));
   assert.deepEqual(w.q(`SELECT removed_reason, purge_after FROM items`), [{ removed_reason: "account_deleted", purge_after: w.clock + 14 * DAY }]);
-  assert.deepEqual(w.q(`SELECT reporter_id, note FROM reports`), [{ reporter_id: null, note: "hmm" }]);
-  assert.equal(w.q<{ note: string | null }>(`SELECT note FROM pool_audit WHERE id = 'n1'`)[0]!.note, null);
+  assert.deepEqual(w.q(`SELECT reporter_id, note FROM reports`), [{ reporter_id: null, note: null }], "kept anonymised, its free text gone (round 8)");
+  // (Round 23, critic30b T1: an ADMIN's note is evidence and stays; its personal data is scrubbed when written.)
+  assert.equal(w.q<{ note: string | null }>(`SELECT note FROM pool_audit WHERE id = 'n1'`)[0]!.note, "about b");
   assert.equal(w.q(`SELECT * FROM pending_blobs`).length, 0);
   w.advance(14 * DAY + 1);
   assert.equal((await w.pool.daily()).purged, 1);

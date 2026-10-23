@@ -1,10 +1,12 @@
 // Test harness for the pool: D1 over node:sqlite (SQLite is what D1 runs), an in-memory R2, a stub
 // authenticate that reads the account's CURRENT trust from D1 (like the auth package), and the REAL
 // share-core production wasm package (server/share-core/pkg).
+import { POOL_TERMS_VERSION } from "../../src/pool/license.ts";
 import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { deflateSync } from "node:zlib";
 import { createPool, makeCore, type Pool, type ShareCoreExports } from "../../src/pool/index.ts";
+import type { Core } from "../../src/pool/core.ts";
 import type { PoolNotice } from "../../src/pool/shared.ts";
 import { PUBLISH_CONTENT_TYPE } from "../../src/pool/shared.ts";
 
@@ -13,7 +15,9 @@ const pkg = `${here}../share-core/pkg/`;
 
 export const shareCore = (await import(`${pkg}share_core.js`)) as ShareCoreExports & { initSync(o: { module: Uint8Array }): unknown };
 shareCore.initSync({ module: readFileSync(`${pkg}share_core_bg.wasm`) });
-export const core = makeCore(shareCore);
+/** A fixed test hash key (production derives it from the POOL_HASH_KEY secret by HKDF). */
+export const TEST_HASH_KEY = "5e".repeat(32);
+export const core = makeCore(shareCore, { hashKey: TEST_HASH_KEY });
 export const enc = (s: string) => new TextEncoder().encode(s);
 
 // ---- D1 --------------------------------------------------------------------------------------------
@@ -27,13 +31,14 @@ export function freshDb(): DatabaseSync {
 const D1_MAX_PARAMS = 100;
 
 /** D1's surface over node:sqlite: ?NNN parameters, first/all/run, RETURNING, atomic batch. */
-export function d1(db: DatabaseSync, stats = { statements: 0 }): D1Database {
+export function d1(db: DatabaseSync, stats: { statements: number; log?: (sql: string, args: unknown[]) => void } = { statements: 0 }): D1Database {
   const exec = (sql: string, args: unknown[], mode: "first" | "all" | "run") => {
     if (args.length > D1_MAX_PARAMS) throw new Error(`D1: too many bound parameters (${args.length})`);
     for (const a of args) if (a === undefined) throw new Error(`D1: undefined bound in ${sql.slice(0, 80)}`);
     stats.statements++;
     const st = db.prepare(sql);
     const vals = args.map((a) => (typeof a === "boolean" ? (a ? 1 : 0) : a)) as never[];
+    stats.log?.(sql, vals);
     if (mode === "first") {
       const r = st.get(...vals);
       return r ? { ...r } : null;
@@ -155,27 +160,51 @@ export class CountingStore {
 }
 
 export class World {
-  sql = freshDb();
-  stats = { statements: 0 };
-  db = d1(this.sql, this.stats);
-  r2 = new MemR2();
+  sql: DatabaseSync;
+  stats: { statements: number; log?: (sql: string, args: unknown[]) => void } = { statements: 0 };
+  db: D1Database;
+  r2: MemR2;
   clock = Date.UTC(2026, 9, 20, 12, 0, 0);
   notices: PoolNotice[] = [];
+  /** Runs once, just before the next serve is recorded (round 20 F2 interleavings). */
+  beforeServe?: () => Promise<void>;
   pending: Promise<unknown>[] = [];
   tokens = new Map<string, string>();
   pool: Pool;
   private n = 0;
 
-  constructor(o: { rateStore?: CountingStore; bodyDeadlineMs?: number } = {}) {
+  /** Users without any pool history (round 8: an instant student-data hold needs a reporter with some). */
+  bare = false;
+
+  constructor(o: { rateStore?: CountingStore; bodyDeadlineMs?: number; readIdleMs?: number; readLifetimeMs?: number; affectedList?: number; heavyQueueMs?: number; bareUsers?: boolean; core?: Core; rewriteBatch?: number; rewriteBatches?: number; sql?: DatabaseSync; r2?: MemR2; backfillItems?: number; searchCandidates?: number; unitKeysMax?: number; privacyBandRowsMax?: number } = {}) {
+    this.sql = o.sql ?? freshDb();
+    this.r2 = o.r2 ?? new MemR2();
+    this.db = d1(this.sql, this.stats);
+    this.bare = o.bareUsers ?? false;
     this.pool = createPool({
       db: this.db,
       r2: this.r2 as unknown as R2Bucket,
-      core,
+      core: o.core ?? core,
       secret: SECRET,
       allowedOrigins: [ORIGIN],
       now: () => this.clock,
       rateStore: o.rateStore ?? allow,
       bodyDeadlineMs: o.bodyDeadlineMs,
+      readIdleMs: o.readIdleMs,
+      readLifetimeMs: o.readLifetimeMs,
+      heavyQueueMs: o.heavyQueueMs,
+      affectedList: o.affectedList,
+      rewriteBatch: o.rewriteBatch,
+      backfillItems: o.backfillItems,
+      searchCandidates: o.searchCandidates,
+      unitKeysMax: o.unitKeysMax,
+      privacyBandRowsMax: o.privacyBandRowsMax,
+      beforeServe: async () => {
+        const f = this.beforeServe;
+        this.beforeServe = undefined;
+        await f?.();
+      },
+      rewriteBatches: o.rewriteBatches,
       ipBucket: (ip) => ip,
       // Like the auth package: the token's session must be live and trust is read from D1 now.
       authenticate: async (req) => {
@@ -183,7 +212,7 @@ export class World {
         const id = m ? this.tokens.get(m[1]!) : undefined;
         if (!id) return null;
         const u = this.sql.prepare(`SELECT trust FROM users WHERE id = ? AND deleted_at IS NULL AND suspended_at IS NULL`).get(id) as { trust: string } | undefined;
-        return u ? { userId: id, sessionFamily: "f", trust: u.trust } : null;
+        return u ? { userId: id, sessionFamily: `fam-${id}`, trust: u.trust } : null;
       },
       notify: async (n) => void this.notices.push(n),
       background: (p) => void this.pending.push(p),
@@ -225,7 +254,7 @@ export class World {
     if (!res) throw new Error(`no route: ${method} ${path}`);
     // Drain a streamed body as a client would (it releases the isolate's read reservation).
     const bytes = new Uint8Array(await res.arrayBuffer());
-    return new Response(res.status === 204 ? null : bytes, { status: res.status, headers: res.headers });
+    return new Response(res.status === 204 || res.status === 304 || method === "HEAD" ? null : bytes, { status: res.status, headers: res.headers });
   }
 
   /** A request and its body as text (status + text, for the leak sweep). */
@@ -262,16 +291,38 @@ export class World {
 
   /** A privacy purge as an admin does it: preview, then confirm with the preview's token. */
   async purge<T = Record<string, unknown>>(admin: User, itemId: string, sel: Record<string, unknown> = {}) {
-    const p = await this.admin<Record<string, unknown>>(admin, "POST", "/admin/pool/purge-preview", { item_id: itemId, ...sel });
+    // Round 10: no default selection; like an admin, tick what the preview suggests unless told what to tick.
+    let s = sel;
+    if (s.questions === undefined && s.images === undefined) {
+      const p0 = await this.admin<{ match?: { pos: number; suggested?: boolean }[]; blob?: { sha256: string; suggested?: boolean }[] }>(admin, "POST", "/admin/pool/purge-preview", { item_id: itemId });
+      if (p0.status !== 200) return p0 as unknown as { status: number; body: T; text: string };
+      s = { ...sel, questions: (p0.body.match ?? []).filter((m) => m.suggested).map((m) => m.pos), images: (p0.body.blob ?? []).filter((b) => b.suggested).map((b) => b.sha256) };
+    }
+    const p = await this.admin<Record<string, unknown>>(admin, "POST", "/admin/pool/purge-preview", { item_id: itemId, ...s });
     if (p.status !== 200) return p as unknown as { status: number; body: T; text: string };
-    return this.admin<T>(admin, "POST", "/admin/pool/purge", { item_id: itemId, ...sel, confirm_preview: p.body.confirm_preview });
+    return this.admin<T>(admin, "POST", "/admin/pool/purge", { item_id: itemId, ...s, confirm_preview: p.body.confirm_preview });
   }
 
   /** A DMCA takedown as an admin does it: preview, then confirm with the preview's token. */
   async takedown<T = Record<string, unknown>>(admin: User, noticeId: unknown, itemId: unknown, extra: Record<string, unknown> = {}) {
-    const p = await this.admin<Record<string, unknown>>(admin, "POST", "/admin/dmca/takedown-preview", { item_id: itemId, ...extra });
+    const p = await this.admin<Record<string, unknown>>(admin, "POST", "/admin/dmca/takedown-preview", { notice_id: noticeId, item_id: itemId, ...extra });
     if (p.status !== 200) return p as unknown as { status: number; body: T; text: string };
     return this.admin<T>(admin, "POST", "/admin/dmca/takedown", { notice_id: noticeId, item_id: itemId, ...extra, confirm_preview: p.body.confirm_preview });
+  }
+
+  /** hold-copies as an admin does it: preview, then confirm with the preview's token. */
+  async holdCopies<T = Record<string, unknown>>(admin: User, actionId: unknown, extra: Record<string, unknown> = {}) {
+    const p = await this.admin<Record<string, unknown>>(admin, "POST", "/admin/dmca/hold-copies-preview", { action_id: actionId, ...extra });
+    if (p.status !== 200) return p as unknown as { status: number; body: T; text: string };
+    return this.admin<T>(admin, "POST", "/admin/dmca/hold-copies", { action_id: actionId, ...extra, confirm_preview: p.body.confirm_preview });
+  }
+
+  /** Gives a user some pool history (round 8: an instant student-data hold needs a reporter with some). */
+  history(...us: User[]) {
+    for (const u of us)
+      this.sql
+        .prepare(`INSERT OR IGNORE INTO imports (user_id, item_id, publish_id, version, form, license, author_id, at, kind) VALUES (?, ?, 'history', 1, 'full', 'CC-BY-4.0', 'nobody', 0, 'import')`)
+        .run(u.id, "f".repeat(32));
   }
 
   q<T = Record<string, unknown>>(sql: string, ...args: unknown[]): T[] {
@@ -306,6 +357,14 @@ export interface PublishOpts {
   orderAcks?: unknown[];
   /** Decide labels and acknowledge preserved orders the way the app would (default true). */
   auto?: boolean;
+  /** Items the author attests independence of (their reads are not evidence for this publish). */
+  independent?: string[];
+  /** The author's statement for an independence claim. */
+  statement?: string;
+  /** Questions whose low-risk formatting findings the author acknowledges. */
+  ackFormatting?: number[];
+  /** Round 23: the publishing-terms affirmation (default: the current terms, own work; null: none). */
+  attest?: Record<string, unknown> | null;
 }
 
 /** The label decisions an author would make (strip where allowed), computed client-side with share-core. */
@@ -321,10 +380,13 @@ export async function publish(w: World, user: User, payload: string, o: PublishO
     hide_key: hide,
     license: o.license ?? "CC-BY-4.0",
     attestation: { accepted: true, text_rev: "2026-10-19" },
+    ...(o.attest === null ? {} : { attest: o.attest ?? { own_work: true, terms_version: POOL_TERMS_VERSION } }),
     labels: o.labels ?? (hide && o.auto !== false ? decideLabels(payload) : []),
     order_acks: o.orderAcks ?? [],
     image_ok: o.imageOk ?? [],
+    ...(o.ackFormatting ? { ack_formatting: o.ackFormatting } : {}),
     meta: o.meta ?? { title: "Unit test", subject: "Biology", course: "", grade: "", tags: [], standards: [] },
+    ...(o.independent ? { independent_of: { items: o.independent, accepted: true, statement: o.statement ?? "I wrote these questions myself, from my own lesson notes." } } : {}),
   };
   if (itemId === null) meta.visibility = o.visibility ?? "public";
   else meta.base_publish_id = o.base ?? null;
@@ -387,7 +449,15 @@ export function genQuestion(r: Rng, kind: string, i: number, image?: { sha: stri
   const mc = (n: number, labelled: boolean) => {
     const texts = uniq(n, "choice");
     const correct = r.int(n);
-    return texts.map((t, j) => ({ text: labelled ? `${String.fromCharCode(65 + j)}. ${t}` : t, correct: j === correct || (r.bool(0.15) && j !== 0), locked: r.bool(0.1) }));
+    const out = texts.map((t, j) => ({ text: labelled ? `${String.fromCharCode(65 + j)}. ${t}` : t, correct: j === correct || (r.bool(0.15) && j !== 0), locked: r.bool(0.1) }));
+    // share-core round 6 refuses a locked set that gives the key away (`locked_key`: exactly the
+    // correct ones, or a correct one with at most one other): only wrong choices are ever locked.
+    for (const x of out) if (x.correct) x.locked = false;
+    // share-core round 8: nor may the MOVABLE set narrow to the key (all correct ones plus at most two).
+    const movable = out.filter((x) => !x.locked).length;
+    const nCorrect = out.filter((x) => x.correct).length;
+    if (out.some((x) => x.locked) && movable <= nCorrect + 2) for (const x of out) x.locked = false;
+    return out;
   };
   switch (kind) {
     case "Mc":

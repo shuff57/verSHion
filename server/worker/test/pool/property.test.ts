@@ -149,7 +149,7 @@ test(`no non-author read path contains an answer key (${SEEDS} seeded worlds, re
         "put other",
         await w.text("PUT", `/items/${item.id}`, {
           user: v,
-          body: framed({ publish_id: publishId(), base_publish_id: item.publishId, hide_key: true, license: "CC-BY-4.0", attestation: { accepted: true, text_rev: "2026-10-19" }, labels: [], meta: {} }, JSON.stringify(stripped)),
+          body: framed({ publish_id: publishId(), base_publish_id: item.publishId, hide_key: true, license: "CC-BY-4.0", attestation: { accepted: true, text_rev: "2026-10-19" }, attest: { own_work: true, terms_version: "2026-10-22" }, labels: [], meta: {} }, JSON.stringify(stripped)),
           contentType: PUBLISH_CONTENT_TYPE,
         }),
       );
@@ -214,8 +214,12 @@ test("guessed keys get identical answers: the hard check is no key oracle", asyn
       answers.push(`${res.status} ${JSON.stringify(res.body)}`);
     }
   assert.ok(answers.length >= 4);
-  assert.ok(answers.every((x) => x === answers[0]), `every guess answered alike:\n${answers.join("\n")}`);
-  assert.match(answers[0]!, /^422 .*license_incompatible.*"positions":\[0,1\]/);
+  // Round 9: filling in keys is an adaptation of an IMPORTED stripped serve: hard evidence. Every
+  // guess is answered alike (refused, naming the source), whatever the hidden key is.
+  // (possible_duplicate_of names B's own earlier guess after the first: B's own items, not a key fact.)
+  const shape = answers.map((x) => x.replace(/"possible_duplicate_of":("[0-9a-f]{32}"|null)/, '"possible_duplicate_of":"<own>"').replace(/"[0-9a-f]{32}"/g, '"<id>"').replace(/"[A-Za-z0-9_-]{22}"/g, '"<pid>"'));
+  assert.ok(shape.every((x) => x === shape[0]), `every guess answered alike:\n${shape.join("\n")}`);
+  assert.match(answers[0]!, /^422 /);
 });
 
 /** A served payload with every per-publish random choice removed: ids, times, and the shuffle order. */

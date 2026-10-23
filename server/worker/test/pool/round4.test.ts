@@ -153,14 +153,18 @@ test("E3: a privacy purge never holds innocent items through a common question; 
   const admin = w.user("admin"), att = w.user(), rep = w.user(), out = w.user();
   const { common, items } = await common3(w);
   const bait = await publish(w, att, bankOf([common, tf("Jamie Smith (period 3, ID 448812) failed the quiz.", true)]));
+  w.history(rep);
   await w.json("POST", `/items/${bait.body.item_id}/report`, { user: rep, json: { reason: "student_data" } });
   const pv = await w.admin<any>(admin, "POST", "/admin/pool/purge-preview", { item_id: bait.body.item_id });
-  assert.deepEqual(pv.body.match.map((m: Q) => [m.pos, m.other_authors, m.selected]), [[0, 3, false], [1, 0, true]]);
-  assert.deepEqual(pv.body.affected, []);
+  // Round 10: nothing is selected by default; what only this item has is suggested.
+  assert.deepEqual(pv.body.match.map((m: Q) => [m.pos, m.other_authors, m.selected, m.suggested]), [[0, 3, false, false], [1, 0, false, true]]);
+  const pv1 = await w.admin<any>(admin, "POST", "/admin/pool/purge-preview", { item_id: bait.body.item_id, questions: [1] });
+  assert.deepEqual(pv1.body.affected, []);
   // The confirm needs the preview's token, for exactly that plan.
-  assert.equal((await w.admin(admin, "POST", "/admin/pool/purge", { item_id: bait.body.item_id })).status, 428);
-  assert.equal((await w.admin(admin, "POST", "/admin/pool/purge", { item_id: bait.body.item_id, questions: [0, 1], confirm_preview: pv.body.confirm_preview })).status, 428, "a different selection than previewed");
-  assert.equal((await w.admin(admin, "POST", "/admin/pool/purge", { item_id: bait.body.item_id, confirm_preview: pv.body.confirm_preview })).status, 200);
+  assert.equal((await w.admin(admin, "POST", "/admin/pool/purge", { item_id: bait.body.item_id, questions: [1] })).status, 428);
+  assert.equal((await w.admin(admin, "POST", "/admin/pool/purge", { item_id: bait.body.item_id, questions: [0, 1], confirm_preview: pv1.body.confirm_preview })).status, 428, "a different selection than previewed");
+  assert.equal((await w.admin(admin, "POST", "/admin/pool/purge", { item_id: bait.body.item_id, confirm_preview: pv.body.confirm_preview })).status, 400, "nothing ticked");
+  assert.equal((await w.admin(admin, "POST", "/admin/pool/purge", { item_id: bait.body.item_id, questions: [1], confirm_preview: pv1.body.confirm_preview })).status, 200);
   for (const id of items) assert.equal(await status(w, out, id), 200);
   const later = await publish(w, w.user(), bankOf([common]));
   assert.deepEqual(holds(w, later.body.item_id as string), []);
@@ -173,6 +177,7 @@ test("s10: an admin may select a shared question explicitly; the preview shows w
   const common = tf("Water is made of hydrogen and oxygen.", true);
   const xz = (await publish(w, Z!, bankOf([common, tf("Z other", true)]))).body;
   const xa = (await publish(w, A!, bankOf([tf("Student Maria Lopez in room 12 failed the test.", true), common]))).body;
+  w.history(R!);
   await w.json("POST", `/items/${xa.item_id}/report`, { user: R!, json: { reason: "student_data" } });
   const pv = await w.admin<any>(adm, "POST", "/admin/pool/purge-preview", { item_id: xa.item_id, questions: [0, 1] });
   assert.deepEqual(pv.body.affected.map((x: Q) => x.item_id), [xz.item_id]);
@@ -189,7 +194,7 @@ test("s10: an admin may select a shared question explicitly; the preview shows w
   assert.deepEqual(holds(w, (await publish(w, Y!, bankOf([common]))).body.item_id as string), []);
   // The PII question stays blocked.
   const again = await publish(w, Y!, bankOf([tf("Student Maria Lopez in room 12 failed the test.", true)]));
-  assert.deepEqual(holds(w, again.body.item_id as string), [{ reason: "student_data", source: "privacy" }]);
+  assert.equal(w.q(`SELECT * FROM admin_flags WHERE kind = 'privacy_text_match' AND item_id = ?`, again.body.item_id).length, 1, "the admin queue, not a publish-time hold (round 7)");
   assert.ok(w.q(`SELECT * FROM pool_audit WHERE action = 'privacy.unblock'`).length === 1);
 });
 
@@ -205,7 +210,7 @@ test("s7/D2: takedown copies need lineage; independent items are not copies; per
   const td = await w.takedown<any>(adm, await notice(w, adm), xa.item_id, { questions: [0], block_days: 30 });
   assert.equal(td.status, 200);
   assert.deepEqual(td.body.copies.map((x: Q) => x.item_id), [xb.item_id]);
-  await w.admin(adm, "POST", "/admin/dmca/hold-copies", { action_id: td.body.action_id });
+  assert.deepEqual((await w.holdCopies<any>(adm, td.body.action_id)).body.held, [xb.item_id]);
   const h2 = await w.admin<any>(adm, "POST", "/admin/pool/hold", { item_id: xb.item_id, note: "separate review" });
   assert.equal(h2.body.changed, true, "a manual hold is its own row");
   const z2 = await repub(w, Z!, xz, [common, tf("Z's own other question, fixed.", false)]);
@@ -217,7 +222,7 @@ test("s7/D2: takedown copies need lineage; independent items are not copies; per
   const re = await publish(w, C!, bankOf([tf("Distinctive question by A about photosynthesis rates.", true)]));
   assert.deepEqual(holds(w, re.body.item_id as string), [{ reason: "blocklist", source: `dmca:${td.body.action_id}` }]);
   const ub = await w.admin<any>(adm, "POST", "/admin/dmca/unblock", { action_id: td.body.action_id, note: "settled" });
-  assert.deepEqual([ub.body.lifted, ub.body.released], [1, 1]);
+  assert.deepEqual([ub.body.lifted, ub.body.released], [2, 1], "one question's two keys (exact and normalised, round 12 M6)");
   assert.deepEqual(holds(w, re.body.item_id as string), []);
   // ... or until it expires (block_days).
   const w2 = new World();
@@ -240,11 +245,13 @@ test("s8/D2: privacy follows copies: importers of a held copy are told 'privacy'
   const xb = (await publish(w, B!, bankOf(copyOf(await imp(w, B!, xa.item_id as string))))).body;
   await imp(w, C!, xb.item_id as string);
   await imp(w, D!, xa.item_id as string);
+  w.history(C!);
   await w.json("POST", `/items/${xa.item_id}/report`, { user: C!, json: { reason: "student_data" } });
   assert.equal((await w.purge(adm, xa.item_id as string)).status, 200);
   const v = async (u: User, id: unknown) => (await w.json<any>("POST", "/items/versions", { user: u, json: { ids: [id] } })).body.items[0];
-  assert.deepEqual(await v(D!, xa.item_id), { id: xa.item_id, status: "removed", reason: "privacy" });
-  assert.deepEqual(await v(C!, xb.item_id), { id: xb.item_id, status: "removed", reason: "privacy" });
+  // Within the grace window the decision can still be reversed: "under_review", keep the copy (round 7 M2).
+  assert.deepEqual(await v(D!, xa.item_id), { id: xa.item_id, status: "under_review", reason: "privacy" });
+  assert.deepEqual(await v(C!, xb.item_id), { id: xb.item_id, status: "under_review", reason: "held" }, "a held copy says only 'held' (round 12)");
   assert.equal((await w.call("GET", `/items/${xb.item_id}/blobs/${up.sha}`, { user: B! })).status, 404, "served to nobody at once");
   w.advance(15 * DAY);
   await w.pool.daily();
@@ -283,15 +290,19 @@ test("D1: one heavy publish per isolate with a bounded queue; one publish per ac
 
 // ---- non-blocking --------------------------------------------------------------------------------------
 
-test("E4: appeals: one flag and one audit row a day per item, a daily cap, short notes", async () => {
+test("E4 (round 10): appeals: one flag and one audit row per hold or removal (no daily rollover), a daily cap, short notes", async () => {
   const w = new World();
   const a = w.user(), r1 = w.user();
   const p = await publish(w, a, bankPayload([genQuestion(rng(1), "Tf", 0)]));
+  w.history(r1);
   await w.json("POST", `/items/${p.body.item_id}/report`, { user: r1, json: { reason: "student_data" } });
   const codes: number[] = [];
   for (let i = 0; i < 15; i++) codes.push((await w.json("POST", `/items/${p.body.item_id}/appeal`, { user: a, json: { note: "please review" } })).status);
-  assert.equal(codes.filter((s) => s === 202).length, 10);
-  assert.equal(codes.filter((s) => s === 429).length, 5);
+  // One open appeal per hold: repeats are told it is with the admin and spend nothing.
+  assert.equal(codes.filter((s) => s === 202).length, 15);
+  w.advance(DAY);
+  assert.equal((await w.json("POST", `/items/${p.body.item_id}/appeal`, { user: a, json: { note: "again tomorrow" } })).status, 202);
+  assert.equal(w.q(`SELECT * FROM admin_flags WHERE kind = 'appeal'`).length, 1, "the next UTC day raises no second flag");
   assert.equal(w.q(`SELECT * FROM pool_audit WHERE action = 'item.appeal'`).length, 1);
   assert.equal((await w.json("POST", `/items/${p.body.item_id}/appeal`, { user: a, json: { note: "x".repeat(600) } })).status, 400);
 });
@@ -304,7 +315,8 @@ test("reads record their evidence once per (account, publish), never again on re
   assert.equal(w.q(`SELECT * FROM imports WHERE user_id = ?`, b.id).length, 1);
   assert.equal(w.q(`SELECT * FROM import_questions WHERE user_id = ?`, b.id).length, 50, "50 questions, written once, not 5 x 50");
   const g = await get(w, b, big.body.item_id as string);
-  assert.equal((await publish(w, b, JSON.stringify(g.body.payload), { license: "CC0-1.0" })).body.error, "license_incompatible");
+  const p = await publish(w, b, JSON.stringify(g.body.payload), { license: "CC0-1.0" });
+  assert.deepEqual([p.status, p.body.allowed], [422, ["CC-BY-NC-4.0"]], "a verbatim copy of a read binds (round 9 J1)");
 });
 
 test("instant holds: a site-wide daily cap (then the admin is flagged) and none from brand-new accounts", async () => {
@@ -313,14 +325,19 @@ test("instant holds: a site-wide daily cap (then the admin is flagged) and none 
   w.sql.prepare(`INSERT INTO pool_limits (user_id, metric, value, updated_at, updated_by) VALUES ('*', 'instant_holds_global', 1, 0, 'x')`).run();
   const items = [];
   for (let i = 0; i < 3; i++) items.push((await publish(w, a, bankOf([tf(`Question number ${i} about tides.`, true)]))).body.item_id as string);
-  await w.json("POST", `/items/${items[0]}/report`, { user: w.user(), json: { reason: "student_data" } });
-  await w.json("POST", `/items/${items[1]}/report`, { user: w.user(), json: { reason: "student_data" } });
+  const reporter_85142 = w.user();
+  w.history(reporter_85142);
+  await w.json("POST", `/items/${items[0]}/report`, { user: reporter_85142, json: { reason: "student_data" } });
+  const reporter_40277 = w.user();
+  w.history(reporter_40277);
+  await w.json("POST", `/items/${items[1]}/report`, { user: reporter_40277, json: { reason: "student_data" } });
   assert.equal(holds(w, items[0]!).length, 1);
   assert.equal(holds(w, items[1]!).length, 0, "the cap was reached: it waits for the admin");
   assert.equal(w.q(`SELECT * FROM admin_flags WHERE kind = 'instant_hold_cap'`).length, 1);
   const young = w.user();
   w.sql.prepare(`UPDATE users SET created_at = ? WHERE id = ?`).run(w.clock, young.id);
   w.sql.prepare(`DELETE FROM pool_limits`).run();
+  w.history(young);
   await w.json("POST", `/items/${items[2]}/report`, { user: young, json: { reason: "student_data" } });
   assert.equal(holds(w, items[2]!).length, 0, "a week-old account cannot hide items instantly");
 });
