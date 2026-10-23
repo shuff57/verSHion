@@ -64,10 +64,16 @@ pub fn data_control(ui: &mut Ui, fig: &str, pd: &ParamDef, columns: usize, label
     let note_id = id.with("note");
     let note: String = ctx.data(|d| d.get_temp(note_id)).unwrap_or_default();
     let count = data::summary(set.as_deref().unwrap_or(&text), columns);
-    ui.label(theme::muted(if note.is_empty() { count } else { format!("{count} · {note}") }).size(11.5));
+    let skin = theme::chem_skin();
+    ui.label(theme::muted(if note.is_empty() { count } else { format!("{count} · {note}") }).size(if skin { 13.0 } else { 11.5 }));
 
+    // the app's shell sets these as its 40 px action buttons
+    let btn = |ui: &mut Ui, text: &str, enabled: bool| if skin { super::chem_shell::shell_button(ui, text, enabled) } else { ui.add_enabled(enabled, Button::new(text).small()) };
     ui.horizontal_wrapped(|ui| {
-        if ui.add(Button::new("Open CSV…").small()).on_hover_text("Read numbers from a CSV or text file").clicked() {
+        if skin {
+            ui.spacing_mut().item_spacing = egui::vec2(8.0, 8.0);
+        }
+        if btn(ui, "Open CSV…", true).on_hover_text("Read numbers from a CSV or text file").clicked() {
             let msg = match crate::platform::pick_file("CSV or text", &["csv", "tsv", "txt"]) {
                 None => String::new(),
                 Some(path) => match crate::platform::read(&path) {
@@ -84,7 +90,7 @@ pub fn data_control(ui: &mut Ui, fig: &str, pd: &ParamDef, columns: usize, label
             };
             ctx.data_mut(|d| d.insert_temp(note_id, msg));
         }
-        let gen_btn = ui.add(Button::new("Generate…").small()).on_hover_text("Make sample data from a seed");
+        let gen_btn = btn(ui, "Generate…", true).on_hover_text("Make sample data from a seed");
         egui::Popup::menu(&gen_btn).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
             ui.set_min_width(230.0);
             let gid = id.with("gen");
@@ -145,7 +151,7 @@ pub fn data_control(ui: &mut Ui, fig: &str, pd: &ParamDef, columns: usize, label
             }
             ui.ctx().data_mut(|d| d.insert_temp(gid, g));
         });
-        if ui.add_enabled(!text.is_empty(), Button::new("Clear").small()).clicked() {
+        if btn(ui, "Clear", !text.is_empty()).clicked() {
             set = Some(String::new());
             ctx.data_mut(|d| d.insert_temp(note_id, String::new()));
         }

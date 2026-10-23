@@ -944,16 +944,44 @@ pub fn outline_button(ui: &mut Ui, text: &str, enabled: bool) -> egui::Response 
 
 /// A small outlined blue button that hugs its text ("Random").
 pub fn outline_chip(ui: &mut Ui, text: &str) -> egui::Response {
+    // the app's shell sets every secondary action as its 40 px button with 12 px corners
+    let shell = theme::keep_theme();
     let b = egui::Button::new(RichText::new(text).family(theme::bold_family()).size(14.4).color(blue_text()))
         .fill(theme::card())
         .stroke(Stroke::new(1.0, pill_border()))
-        .corner_radius(CornerRadius::same(8))
-        .min_size(Vec2::new(0.0, 35.0));
-    ui.scope(|ui| {
-        ui.spacing_mut().button_padding = Vec2::new(14.0, 3.0);
-        ui.add(b)
-    })
-    .inner
+        .corner_radius(CornerRadius::same(if shell { 12 } else { 8 }))
+        .min_size(Vec2::new(0.0, if shell { 40.0 } else { 35.0 }));
+    // padding set on the row itself, not in a scope: a scoped button would not wrap in a wrapping row
+    let old = ui.spacing().button_padding;
+    ui.spacing_mut().button_padding = if shell { Vec2::new(16.0, 4.0) } else { Vec2::new(14.0, 3.0) };
+    let r = ui.add(b);
+    ui.spacing_mut().button_padding = old;
+    r
+}
+
+/// The app shell's secondary action ("+ Resistor", "Edit lines", "Open CSV…"): a 40 px outlined
+/// button with 12 px corners and bold accent text, a leading "+ " drawn as the plus icon. Its
+/// accessible label stays the text as given.
+pub fn shell_button(ui: &mut Ui, text: &str, enabled: bool) -> egui::Response {
+    let col = blue_text();
+    let fmt = |font: egui::FontId| egui::TextFormat { font_id: font, color: col, valign: Align::Center, ..Default::default() };
+    let mut job = egui::text::LayoutJob::default();
+    let body = match text.strip_prefix("+ ") {
+        Some(rest) => {
+            job.append(ph::PLUS, 0.0, fmt(theme::icon_font(15.0)));
+            rest
+        }
+        None => text,
+    };
+    job.append(body, if body.len() < text.len() { 7.0 } else { 0.0 }, fmt(egui::FontId::new(14.4, theme::bold_family())));
+    let b = egui::Button::new(job).fill(theme::card()).stroke(Stroke::new(1.0, pill_border())).corner_radius(CornerRadius::same(12)).min_size(Vec2::new(0.0, 40.0));
+    // padding set on the row itself, not in a scope: a scoped button would not wrap in a wrapping row
+    let old = ui.spacing().button_padding;
+    ui.spacing_mut().button_padding = Vec2::new(16.0, 4.0);
+    let r = ui.add_enabled(enabled, b);
+    ui.spacing_mut().button_padding = old;
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, text));
+    if enabled { r.on_hover_cursor(egui::CursorIcon::PointingHand) } else { r }
 }
 
 /// `outline_chip` with a leading Lucide icon (16 px, 14 px in from the edge, 7 px before the text).
@@ -1358,6 +1386,10 @@ impl Workspace {
 /// The biology page's checkbox: an 18 px rounded square, filled blue with a white tick when on,
 /// then the option in the page's 600 weight.
 pub fn bio_checkbox(ui: &mut Ui, on: &mut bool, label: &str) -> egui::Response {
+    if theme::keep_theme() {
+        // the app's shell sets every checkbox alike
+        return super::shell_checkbox(ui, true, on, label);
+    }
     let galley = ui.painter().layout_no_wrap(label.to_string(), egui::FontId::new(14.4, theme::semibold_family()), theme::ink());
     let (rect, mut resp) = ui.allocate_exact_size(Vec2::new(16.8 + 8.0 + galley.size().x, 17.0), Sense::click());
     if resp.clicked() {
@@ -1402,6 +1434,10 @@ pub fn phys_checkbox(ui: &mut Ui, on: &mut bool, label: &str) -> egui::Response 
 
 /// The population page's "Fit the axes" box: a 17 px square 4 px in from the card edge, its label 12 px on.
 pub fn fit_checkbox(ui: &mut Ui, on: &mut bool, label: &str) -> egui::Response {
+    if theme::keep_theme() {
+        // the app's shell sets every checkbox alike
+        return super::shell_checkbox(ui, true, on, label);
+    }
     let galley = ui.painter().layout_no_wrap(label.to_string(), egui::FontId::new(14.4, theme::semibold_family()), theme::ink());
     let (rect, mut resp) = ui.allocate_exact_size(Vec2::new(4.0 + 17.0 + 11.0 + galley.size().x, 28.5), Sense::click());
     if resp.clicked() {
@@ -1425,6 +1461,9 @@ pub fn fit_checkbox(ui: &mut Ui, on: &mut bool, label: &str) -> egui::Response {
 
 /// The biology page's "Fit now" button: a 76 x 28.5 px white pill with a pale blue border and bold blue text.
 pub fn fit_now_button(ui: &mut Ui) -> egui::Response {
+    if theme::keep_theme() {
+        return shell_button(ui, "Fit now", true);
+    }
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(76.0, 28.5), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Fit now"));
     let p = ui.painter();
