@@ -16,15 +16,15 @@
         ],
         "pairs": [
           {
-            "left": "Dog",
-            "right": ""
-          },
-          {
             "left": "Cat",
             "right": ""
           },
           {
             "left": "Frog",
+            "right": ""
+          },
+          {
+            "left": "Dog",
             "right": ""
           }
         ]

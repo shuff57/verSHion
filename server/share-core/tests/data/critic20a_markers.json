@@ -1,0 +1,12252 @@
+[
+{
+"id": "m0000",
+"cat": "decoration",
+"name": "math_bold_sans/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "𝗡𝗮𝗶𝗿𝗼𝗯𝗶",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0001",
+"cat": "decoration",
+"name": "math_bold_sans/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "𝗝𝗼𝗵𝗮𝗻𝗻 𝗦𝗲𝗯𝗮𝘀𝘁𝗶𝗮𝗻 𝗕𝗮𝗰𝗵",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0002",
+"cat": "decoration",
+"name": "math_italic/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "𝑁𝑎𝑖𝑟𝑜𝑏𝑖",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0003",
+"cat": "decoration",
+"name": "math_italic/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "𝐽𝑜ℎ𝑎𝑛𝑛 𝑆𝑒𝑏𝑎𝑠𝑡𝑖𝑎𝑛 𝐵𝑎𝑐ℎ",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0004",
+"cat": "decoration",
+"name": "math_monospace/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "𝙽𝚊𝚒𝚛𝚘𝚋𝚒",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0005",
+"cat": "decoration",
+"name": "math_monospace/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "𝙹𝚘𝚑𝚊𝚗𝚗 𝚂𝚎𝚋𝚊𝚜𝚝𝚒𝚊𝚗 𝙱𝚊𝚌𝚑",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0006",
+"cat": "decoration",
+"name": "fullwidth/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Ｎａｉｒｏｂｉ",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0007",
+"cat": "decoration",
+"name": "fullwidth/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Ｊｏｈａｎｎ Ｓｅｂａｓｔｉａｎ Ｂａｃｈ",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0008",
+"cat": "decoration",
+"name": "combining_underline/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "N̲a̲i̲r̲o̲b̲i̲",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0009",
+"cat": "decoration",
+"name": "combining_underline/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "J̲o̲h̲a̲n̲n̲ ̲S̲e̲b̲a̲s̲t̲i̲a̲n̲ ̲B̲a̲c̲h̲",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0010",
+"cat": "decoration",
+"name": "combining_overline/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "N̅a̅i̅r̅o̅b̅i̅",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0011",
+"cat": "decoration",
+"name": "combining_overline/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "J̅o̅h̅a̅n̅n̅ ̅S̅e̅b̅a̅s̅t̅i̅a̅n̅ ̅B̅a̅c̅h̅",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0012",
+"cat": "decoration",
+"name": "combining_dot_below_first/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Ṇairobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0013",
+"cat": "decoration",
+"name": "combining_dot_below_first/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "J̣ohann Sebastian Bach",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0014",
+"cat": "decoration",
+"name": "letter_spaced/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "N a i r o b i",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0015",
+"cat": "decoration",
+"name": "letter_spaced/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "J o h a n n   S e b a s t i a n   B a c h",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0016",
+"cat": "decoration",
+"name": "nbsp_padded/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": " Nairobi ",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0017",
+"cat": "decoration",
+"name": "nbsp_padded/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": " Johann Sebastian Bach ",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0018",
+"cat": "decoration",
+"name": "ideographic_space_end/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi　",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0019",
+"cat": "decoration",
+"name": "ideographic_space_end/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach　",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0020",
+"cat": "decoration",
+"name": "trailing_period/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi.",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0021",
+"cat": "decoration",
+"name": "trailing_period/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach.",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0022",
+"cat": "decoration",
+"name": "trailing_ellipsis/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi…",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0023",
+"cat": "decoration",
+"name": "trailing_ellipsis/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach…",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0024",
+"cat": "decoration",
+"name": "quoted_guillemets/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "«Nairobi»",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0025",
+"cat": "decoration",
+"name": "quoted_guillemets/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "«Johann Sebastian Bach»",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0026",
+"cat": "decoration",
+"name": "quoted_curly/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "“Nairobi”",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0027",
+"cat": "decoration",
+"name": "quoted_curly/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "“Johann Sebastian Bach”",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0028",
+"cat": "decoration",
+"name": "angle_wrapped/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "⟨Nairobi⟩",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0029",
+"cat": "decoration",
+"name": "angle_wrapped/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "⟨Johann Sebastian Bach⟩",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0030",
+"cat": "decoration",
+"name": "lenticular/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "【Nairobi】",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0031",
+"cat": "decoration",
+"name": "lenticular/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "【Johann Sebastian Bach】",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0032",
+"cat": "decoration",
+"name": "emoji_check_vs/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi ✔️",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0033",
+"cat": "decoration",
+"name": "emoji_check_vs/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach ✔️",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0034",
+"cat": "decoration",
+"name": "ballot_box_x/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "☒ Nairobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0035",
+"cat": "decoration",
+"name": "ballot_box_x/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "☒ Johann Sebastian Bach",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0036",
+"cat": "decoration",
+"name": "radio_filled/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "◉ Nairobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0037",
+"cat": "decoration",
+"name": "radio_filled/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "◉ Johann Sebastian Bach",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0038",
+"cat": "decoration",
+"name": "arrow_left/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi ⟵",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0039",
+"cat": "decoration",
+"name": "arrow_left/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach ⟵",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0040",
+"cat": "decoration",
+"name": "pointing_finger/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "☞ Nairobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0041",
+"cat": "decoration",
+"name": "pointing_finger/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "☞ Johann Sebastian Bach",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0042",
+"cat": "decoration",
+"name": "thumbs_up/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi 👍",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0043",
+"cat": "decoration",
+"name": "thumbs_up/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach 👍",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0044",
+"cat": "decoration",
+"name": "sparkles/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "✨Nairobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0045",
+"cat": "decoration",
+"name": "sparkles/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "✨Johann Sebastian Bach",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0046",
+"cat": "decoration",
+"name": "keycap_one/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi 1️⃣",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0047",
+"cat": "decoration",
+"name": "keycap_one/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach 1️⃣",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0048",
+"cat": "decoration",
+"name": "superscript_star/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi⃰",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0049",
+"cat": "decoration",
+"name": "superscript_star/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach⃰",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0050",
+"cat": "decoration",
+"name": "dagger/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi†",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0051",
+"cat": "decoration",
+"name": "dagger/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach†",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0052",
+"cat": "decoration",
+"name": "asterisk_operator/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi ∗",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0053",
+"cat": "decoration",
+"name": "asterisk_operator/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach ∗",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0054",
+"cat": "decoration",
+"name": "html_strong/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "<strong>Nairobi</strong>",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0055",
+"cat": "decoration",
+"name": "html_strong/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "<strong>Johann Sebastian Bach</strong>",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0056",
+"cat": "decoration",
+"name": "html_mark/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "<mark>Nairobi</mark>",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0057",
+"cat": "decoration",
+"name": "html_mark/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "<mark>Johann Sebastian Bach</mark>",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0058",
+"cat": "decoration",
+"name": "html_span_style/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "<span style=\"color:green\">Nairobi</span>",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0059",
+"cat": "decoration",
+"name": "html_span_style/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "<span style=\"color:green\">Johann Sebastian Bach</span>",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0060",
+"cat": "decoration",
+"name": "md_bold_underscore/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "__Nairobi__",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0061",
+"cat": "decoration",
+"name": "md_bold_underscore/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "__Johann Sebastian Bach__",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0062",
+"cat": "decoration",
+"name": "md_inline_code_only_key/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "`Nairobi`",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0063",
+"cat": "decoration",
+"name": "latex_textbf/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "\\textbf{Nairobi}",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0064",
+"cat": "decoration",
+"name": "latex_textbf/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "\\textbf{Johann Sebastian Bach}",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0065",
+"cat": "decoration",
+"name": "latex_underline/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "\\underline{Nairobi}",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0066",
+"cat": "decoration",
+"name": "latex_underline/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "\\underline{Johann Sebastian Bach}",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0067",
+"cat": "decoration",
+"name": "bbcode_u/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "[u]Nairobi[/u]",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0068",
+"cat": "decoration",
+"name": "bbcode_u/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "[u]Johann Sebastian Bach[/u]",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0069",
+"cat": "decoration",
+"name": "uppercase/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "NAIROBI",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0070",
+"cat": "decoration",
+"name": "uppercase/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "JOHANN SEBASTIAN BACH",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0071",
+"cat": "decoration",
+"name": "score_100/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi (100%)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0072",
+"cat": "decoration",
+"name": "score_100/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach (100%)",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0073",
+"cat": "decoration",
+"name": "points_1/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi [1 pt]",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0074",
+"cat": "decoration",
+"name": "points_1/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach [1 pt]",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0075",
+"cat": "decoration",
+"name": "plus_one/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi +1",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0076",
+"cat": "decoration",
+"name": "plus_one/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach +1",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0077",
+"cat": "decoration",
+"name": "equals_prefix/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "=Nairobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0078",
+"cat": "decoration",
+"name": "equals_prefix/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "=Johann Sebastian Bach",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0079",
+"cat": "decoration",
+"name": "gift_weight/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "%100%Nairobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0080",
+"cat": "decoration",
+"name": "gift_weight/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "%100%Johann Sebastian Bach",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0081",
+"cat": "decoration",
+"name": "trailing_hash_feedback/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi # well done",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0082",
+"cat": "decoration",
+"name": "trailing_hash_feedback/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach # well done",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0083",
+"cat": "decoration",
+"name": "zwsp_between_letters/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "N​a​i​r​o​b​i",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0084",
+"cat": "decoration",
+"name": "zwsp_between_letters/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "J​o​h​a​n​n​ ​S​e​b​a​s​t​i​a​n​ ​B​a​c​h",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0085",
+"cat": "decoration",
+"name": "rlm_end/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi‏",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0086",
+"cat": "decoration",
+"name": "rlm_end/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach‏",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0087",
+"cat": "decoration",
+"name": "word_joiner_end/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi⁠",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0088",
+"cat": "decoration",
+"name": "word_joiner_end/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach⁠",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0089",
+"cat": "decoration",
+"name": "cyrillic_a/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nаirobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0090",
+"cat": "decoration",
+"name": "cyrillic_a/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johаnn Sebastian Bach",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0091",
+"cat": "decoration",
+"name": "greek_omicron/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairοbi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0092",
+"cat": "decoration",
+"name": "greek_omicron/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Jοhann Sebastian Bach",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0093",
+"cat": "decoration",
+"name": "dotless_i_all/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Naırobı",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0094",
+"cat": "decoration",
+"name": "dotless_i_all/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastıan Bach",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0095",
+"cat": "decoration",
+"name": "circled_letters_first/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Ⓝairobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0096",
+"cat": "decoration",
+"name": "circled_letters_first/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Ⓙohann Sebastian Bach",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0097",
+"cat": "decoration",
+"name": "small_caps/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nᴀɪʀᴏʙɪ",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0098",
+"cat": "decoration",
+"name": "small_caps/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Jᴏʜᴀɴɴ Sᴇʙᴀꜱᴛɪᴀɴ Bᴀᴄʜ",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0099",
+"cat": "decoration",
+"name": "trailing_colon_ok/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi : OK",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0100",
+"cat": "decoration",
+"name": "trailing_colon_ok/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach : OK",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0101",
+"cat": "decoration",
+"name": "dash_yes/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi — yes",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0102",
+"cat": "decoration",
+"name": "dash_yes/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach — yes",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0103",
+"cat": "decoration",
+"name": "suffix_ans/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi (ans)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0104",
+"cat": "decoration",
+"name": "suffix_ans/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach (ans)",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0105",
+"cat": "decoration",
+"name": "prefix_key/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "KEY Nairobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0106",
+"cat": "decoration",
+"name": "prefix_key/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "KEY Johann Sebastian Bach",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0107",
+"cat": "decoration",
+"name": "trailing_semicolon/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi;",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0108",
+"cat": "decoration",
+"name": "trailing_semicolon/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach;",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0109",
+"cat": "decoration",
+"name": "double_exclaim/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi!!",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0110",
+"cat": "decoration",
+"name": "double_exclaim/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach!!",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0111",
+"cat": "decoration",
+"name": "trailing_tilde/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi ~",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0112",
+"cat": "decoration",
+"name": "trailing_tilde/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach ~",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0113",
+"cat": "decoration",
+"name": "smiley/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi :)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0114",
+"cat": "decoration",
+"name": "smiley/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Johann Sebastian Bach :)",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0115",
+"cat": "decoration",
+"name": "bullet_prefix_only_key/b0",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "• Nairobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0116",
+"cat": "decoration",
+"name": "bullet_prefix_only_key/b2",
+"expect": "refuse",
+"q": {
+"stem": "Who composed the Brandenburg Concertos?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "• Johann Sebastian Bach",
+"correct": true,
+"locked": false
+},
+{
+"text": "George Frideric Handel",
+"correct": false,
+"locked": false
+},
+{
+"text": "Antonio Vivaldi",
+"correct": false,
+"locked": false
+},
+{
+"text": "Georg Philipp Telemann",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0117",
+"cat": "key_word",
+"name": "richtig",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (richtig)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0118",
+"cat": "key_word",
+"name": "vrai",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (vrai)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0119",
+"cat": "key_word",
+"name": "correcto",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (correcto)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0120",
+"cat": "key_word",
+"name": "corretta",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (corretta)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0121",
+"cat": "key_word",
+"name": "correta",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (correta)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0122",
+"cat": "key_word",
+"name": "juist",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (juist)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0123",
+"cat": "key_word",
+"name": "rätt",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (rätt)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0124",
+"cat": "key_word",
+"name": "riktig",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (riktig)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0125",
+"cat": "key_word",
+"name": "korrekt",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (korrekt)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0126",
+"cat": "key_word",
+"name": "oikein",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (oikein)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0127",
+"cat": "key_word",
+"name": "poprawna",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (poprawna)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0128",
+"cat": "key_word",
+"name": "správně",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (správně)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0129",
+"cat": "key_word",
+"name": "správne",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (správne)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0130",
+"cat": "key_word",
+"name": "helyes",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (helyes)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0131",
+"cat": "key_word",
+"name": "corect",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (corect)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0132",
+"cat": "key_word",
+"name": "σωστό",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (σωστό)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0133",
+"cat": "key_word",
+"name": "верно",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (верно)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0134",
+"cat": "key_word",
+"name": "правильно",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (правильно)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0135",
+"cat": "key_word",
+"name": "вірно",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (вірно)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0136",
+"cat": "key_word",
+"name": "доғру",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (доғру)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0137",
+"cat": "key_word",
+"name": "doğru",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (doğru)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0138",
+"cat": "key_word",
+"name": "صحيح",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (صحيح)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0139",
+"cat": "key_word",
+"name": "נכון",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (נכון)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0140",
+"cat": "key_word",
+"name": "درست",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (درست)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0141",
+"cat": "key_word",
+"name": "सही",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (सही)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0142",
+"cat": "key_word",
+"name": "সঠিক",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (সঠিক)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0143",
+"cat": "key_word",
+"name": "சரி",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (சரி)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0144",
+"cat": "key_word",
+"name": "ถูก",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (ถูก)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0145",
+"cat": "key_word",
+"name": "đúng",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (đúng)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0146",
+"cat": "key_word",
+"name": "benar",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (benar)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0147",
+"cat": "key_word",
+"name": "betul",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (betul)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0148",
+"cat": "key_word",
+"name": "tama",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (tama)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0149",
+"cat": "key_word",
+"name": "sahihi",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (sahihi)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0150",
+"cat": "key_word",
+"name": "ትክክል",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (ትክክል)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0151",
+"cat": "key_word",
+"name": "正确",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (正确)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0152",
+"cat": "key_word",
+"name": "正確",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (正確)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0153",
+"cat": "key_word",
+"name": "正解",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (正解)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0154",
+"cat": "key_word",
+"name": "정답",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (정답)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0155",
+"cat": "key_word",
+"name": "სწორი",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (სწორი)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0156",
+"cat": "key_word",
+"name": "ճիշտ",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (ճիշտ)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0157",
+"cat": "key_word",
+"name": "cywir",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (cywir)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0158",
+"cat": "key_word",
+"name": "ceart",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (ceart)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0159",
+"cat": "key_word",
+"name": "zuzena",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (zuzena)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0160",
+"cat": "key_word",
+"name": "rétt",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (rétt)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0161",
+"cat": "key_word",
+"name": "pareizi",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (pareizi)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0162",
+"cat": "key_word",
+"name": "teisingai",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (teisingai)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0163",
+"cat": "key_word",
+"name": "õige",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (õige)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0164",
+"cat": "key_word",
+"name": "дұрыс",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (дұрыс)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0165",
+"cat": "key_word",
+"name": "зөв",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (зөв)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0166",
+"cat": "key_word",
+"name": "גערעכט",
+"expect": "refuse",
+"q": {
+"stem": "Which gas do plants absorb for photosynthesis?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Carbon dioxide (גערעכט)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Oxygen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nitrogen",
+"correct": false,
+"locked": false
+},
+{
+"text": "Helium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0167",
+"cat": "wrong_word",
+"name": "falsch",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (falsch)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (falsch)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (falsch)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0168",
+"cat": "wrong_word",
+"name": "faux",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (faux)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (faux)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (faux)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0169",
+"cat": "wrong_word",
+"name": "incorrecto",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (incorrecto)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (incorrecto)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (incorrecto)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0170",
+"cat": "wrong_word",
+"name": "sbagliato",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (sbagliato)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (sbagliato)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (sbagliato)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0171",
+"cat": "wrong_word",
+"name": "errado",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (errado)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (errado)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (errado)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0172",
+"cat": "wrong_word",
+"name": "onjuist",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (onjuist)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (onjuist)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (onjuist)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0173",
+"cat": "wrong_word",
+"name": "fel",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (fel)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (fel)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (fel)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0174",
+"cat": "wrong_word",
+"name": "feil",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (feil)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (feil)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (feil)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0175",
+"cat": "wrong_word",
+"name": "forkert",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (forkert)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (forkert)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (forkert)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0176",
+"cat": "wrong_word",
+"name": "väärin",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (väärin)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (väärin)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (väärin)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0177",
+"cat": "wrong_word",
+"name": "błędna",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (błędna)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (błędna)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (błędna)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0178",
+"cat": "wrong_word",
+"name": "špatně",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (špatně)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (špatně)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (špatně)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0179",
+"cat": "wrong_word",
+"name": "nesprávne",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (nesprávne)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (nesprávne)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (nesprávne)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0180",
+"cat": "wrong_word",
+"name": "hibás",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (hibás)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (hibás)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (hibás)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0181",
+"cat": "wrong_word",
+"name": "greșit",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (greșit)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (greșit)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (greșit)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0182",
+"cat": "wrong_word",
+"name": "λάθος",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (λάθος)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (λάθος)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (λάθος)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0183",
+"cat": "wrong_word",
+"name": "неверно",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (неверно)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (неверно)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (неверно)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0184",
+"cat": "wrong_word",
+"name": "невірно",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (невірно)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (невірно)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (невірно)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0185",
+"cat": "wrong_word",
+"name": "yanlış",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (yanlış)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (yanlış)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (yanlış)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0186",
+"cat": "wrong_word",
+"name": "خطأ",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (خطأ)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (خطأ)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (خطأ)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0187",
+"cat": "wrong_word",
+"name": "שגוי",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (שגוי)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (שגוי)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (שגוי)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0188",
+"cat": "wrong_word",
+"name": "نادرست",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (نادرست)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (نادرست)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (نادرست)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0189",
+"cat": "wrong_word",
+"name": "गलत",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (गलत)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (गलत)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (गलत)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0190",
+"cat": "wrong_word",
+"name": "ভুল",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (ভুল)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (ভুল)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (ভুল)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0191",
+"cat": "wrong_word",
+"name": "தவறு",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (தவறு)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (தவறு)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (தவறு)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0192",
+"cat": "wrong_word",
+"name": "ผิด",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (ผิด)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (ผิด)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (ผิด)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0193",
+"cat": "wrong_word",
+"name": "sai",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (sai)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (sai)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (sai)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0194",
+"cat": "wrong_word",
+"name": "salah",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (salah)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (salah)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (salah)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0195",
+"cat": "wrong_word",
+"name": "mali",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (mali)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (mali)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (mali)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0196",
+"cat": "wrong_word",
+"name": "si sahihi",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (si sahihi)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (si sahihi)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (si sahihi)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0197",
+"cat": "wrong_word",
+"name": "ስህተት",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (ስህተት)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (ስህተት)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (ስህተት)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0198",
+"cat": "wrong_word",
+"name": "错误",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (错误)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (错误)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (错误)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0199",
+"cat": "wrong_word",
+"name": "錯誤",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (錯誤)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (錯誤)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (錯誤)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0200",
+"cat": "wrong_word",
+"name": "不正解",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (不正解)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (不正解)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (不正解)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0201",
+"cat": "wrong_word",
+"name": "오답",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (오답)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (오답)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (오답)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0202",
+"cat": "wrong_word",
+"name": "არასწორი",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (არასწორი)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (არასწორი)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (არასწორი)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0203",
+"cat": "wrong_word",
+"name": "սխալ",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (սխալ)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (սխալ)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (սխալ)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0204",
+"cat": "wrong_word",
+"name": "anghywir",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (anghywir)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (anghywir)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (anghywir)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0205",
+"cat": "wrong_word",
+"name": "mícheart",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (mícheart)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (mícheart)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (mícheart)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0206",
+"cat": "wrong_word",
+"name": "okerra",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (okerra)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (okerra)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (okerra)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0207",
+"cat": "wrong_word",
+"name": "rangt",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (rangt)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (rangt)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (rangt)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0208",
+"cat": "wrong_word",
+"name": "nepareizi",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (nepareizi)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (nepareizi)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (nepareizi)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0209",
+"cat": "wrong_word",
+"name": "neteisingai",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (neteisingai)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (neteisingai)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (neteisingai)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0210",
+"cat": "wrong_word",
+"name": "vale",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (vale)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (vale)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (vale)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0211",
+"cat": "wrong_word",
+"name": "қате",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (қате)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (қате)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (қате)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0212",
+"cat": "wrong_word",
+"name": "буруу",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (буруу)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (буруу)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (буруу)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0213",
+"cat": "wrong_word",
+"name": "פֿאַלש",
+"expect": "refuse",
+"q": {
+"stem": "Which drug class does metformin belong to?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Biguanides",
+"correct": true,
+"locked": false
+},
+{
+"text": "Sulfonylureas (פֿאַלש)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Statins (פֿאַלש)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thiazides (פֿאַלש)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0214",
+"cat": "stem",
+"name": "tf_aiken_letter",
+"expect": "refuse",
+"q": {
+"stem": "Moodle supports images:\nA) True\nB) False\nANSWER: A",
+"kind": {
+"Tf": {
+"correct": true
+}
+}
+}
+},
+{
+"id": "m0215",
+"cat": "stem",
+"name": "tf_answer_true",
+"expect": "refuse",
+"q": {
+"stem": "Moodle supports images.\nAnswer: True",
+"kind": {
+"Tf": {
+"correct": true
+}
+}
+}
+},
+{
+"id": "m0216",
+"cat": "stem",
+"name": "tf_answer_false_lower",
+"expect": "refuse",
+"q": {
+"stem": "Moodle is written in Java. answer: false",
+"kind": {
+"Tf": {
+"correct": false
+}
+}
+}
+},
+{
+"id": "m0217",
+"cat": "stem",
+"name": "tf_trailing_F",
+"expect": "refuse",
+"q": {
+"stem": "Moodle is written in Java. (F)",
+"kind": {
+"Tf": {
+"correct": false
+}
+}
+}
+},
+{
+"id": "m0218",
+"cat": "stem",
+"name": "tf_trailing_falsch",
+"expect": "refuse",
+"q": {
+"stem": "Moodle ist in Java geschrieben. (falsch)",
+"kind": {
+"Tf": {
+"correct": false
+}
+}
+}
+},
+{
+"id": "m0219",
+"cat": "stem",
+"name": "tf_trailing_vrai",
+"expect": "refuse",
+"q": {
+"stem": "L'eau bout à 100 °C. (vrai)",
+"kind": {
+"Tf": {
+"correct": true
+}
+}
+}
+},
+{
+"id": "m0220",
+"cat": "stem",
+"name": "tf_trailing_check",
+"expect": "refuse",
+"q": {
+"stem": "Water boils at 100 °C at sea level. ✓",
+"kind": {
+"Tf": {
+"correct": true
+}
+}
+}
+},
+{
+"id": "m0221",
+"cat": "stem",
+"name": "tf_trailing_cross",
+"expect": "refuse",
+"q": {
+"stem": "The Sun orbits the Earth. ✗",
+"kind": {
+"Tf": {
+"correct": false
+}
+}
+}
+},
+{
+"id": "m0222",
+"cat": "stem",
+"name": "tf_zh_answer",
+"expect": "refuse",
+"q": {
+"stem": "水在海平面100°C沸腾。（对）",
+"kind": {
+"Tf": {
+"correct": true
+}
+}
+}
+},
+{
+"id": "m0223",
+"cat": "stem",
+"name": "tf_ja_maru",
+"expect": "refuse",
+"q": {
+"stem": "水は100°Cで沸騰する。（○）",
+"kind": {
+"Tf": {
+"correct": true
+}
+}
+}
+},
+{
+"id": "m0224",
+"cat": "stem",
+"name": "tf_ja_batsu",
+"expect": "refuse",
+"q": {
+"stem": "太陽は地球の周りを回る。（×）",
+"kind": {
+"Tf": {
+"correct": false
+}
+}
+}
+},
+{
+"id": "m0225",
+"cat": "stem",
+"name": "tf_es_respuesta",
+"expect": "refuse",
+"q": {
+"stem": "El agua hierve a 100 °C.\nRespuesta: Verdadero",
+"kind": {
+"Tf": {
+"correct": true
+}
+}
+}
+},
+{
+"id": "m0226",
+"cat": "stem",
+"name": "tf_ru_otvet",
+"expect": "refuse",
+"q": {
+"stem": "Вода кипит при 100 °C.\nОтвет: верно",
+"kind": {
+"Tf": {
+"correct": true
+}
+}
+}
+},
+{
+"id": "m0227",
+"cat": "stem",
+"name": "short_answer_line",
+"expect": "refuse",
+"q": {
+"stem": "Name the process plants use to make sugar.\nAnswer: photosynthesis",
+"kind": {
+"Short": {
+"sample": "photosynthesis"
+}
+}
+}
+},
+{
+"id": "m0228",
+"cat": "stem",
+"name": "short_solution_line",
+"expect": "refuse",
+"q": {
+"stem": "Solve 2x = 6.\nSolution: x = 3",
+"kind": {
+"Short": {
+"sample": "x = 3"
+}
+}
+}
+},
+{
+"id": "m0229",
+"cat": "stem",
+"name": "blank_answer_line",
+"expect": "refuse",
+"q": {
+"stem": "The chemical symbol for gold is ____.\nAnswer: Au",
+"kind": {
+"Blank": {
+"accept": [
+[
+"Au"
+]
+]
+}
+}
+}
+},
+{
+"id": "m0230",
+"cat": "stem",
+"name": "blank_bracketed_key",
+"expect": "refuse",
+"q": {
+"stem": "The chemical symbol for gold is ____ (Au).",
+"kind": {
+"Blank": {
+"accept": [
+[
+"Au"
+]
+]
+}
+}
+}
+},
+{
+"id": "m0231",
+"cat": "stem",
+"name": "blank_gift_inline",
+"expect": "refuse",
+"q": {
+"stem": "The chemical symbol for gold is ____ {=Au}.",
+"kind": {
+"Blank": {
+"accept": [
+[
+"Au"
+]
+]
+}
+}
+}
+},
+{
+"id": "m0232",
+"cat": "stem",
+"name": "mc_answer_letter_lower",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya? (ans: a)",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0233",
+"cat": "stem",
+"name": "mc_answer_text",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?\nCorrect answer: Nairobi",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0234",
+"cat": "stem",
+"name": "mc_key_paren_text",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya? [Nairobi]",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0235",
+"cat": "stem",
+"name": "mc_answer_is",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya? The answer is Nairobi.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0236",
+"cat": "stem",
+"name": "mc_de_loesung",
+"expect": "refuse",
+"q": {
+"stem": "Welche Stadt ist die Hauptstadt Kenias?\nLösung: Nairobi",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0237",
+"cat": "stem",
+"name": "mc_fr_reponse_b",
+"expect": "refuse",
+"q": {
+"stem": "Quelle est la capitale du Kenya ?\nRéponse : B",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nairobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0238",
+"cat": "stem",
+"name": "mc_ar_answer",
+"expect": "refuse",
+"q": {
+"stem": "ما عاصمة كينيا؟\nالإجابة: نيروبي",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "نيروبي",
+"correct": true,
+"locked": false
+},
+{
+"text": "مومباسا",
+"correct": false,
+"locked": false
+},
+{
+"text": "كيسومو",
+"correct": false,
+"locked": false
+},
+{
+"text": "ناكورو",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0239",
+"cat": "stem",
+"name": "mc_ko_answer",
+"expect": "refuse",
+"q": {
+"stem": "케냐의 수도는 어디입니까?\n정답: 나이로비",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "나이로비",
+"correct": true,
+"locked": false
+},
+{
+"text": "몸바사",
+"correct": false,
+"locked": false
+},
+{
+"text": "키수무",
+"correct": false,
+"locked": false
+},
+{
+"text": "나쿠루",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0240",
+"cat": "stem",
+"name": "mc_ja_kotae",
+"expect": "refuse",
+"q": {
+"stem": "ケニアの首都はどこですか。\n答え：ナイロビ",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "ナイロビ",
+"correct": true,
+"locked": false
+},
+{
+"text": "モンバサ",
+"correct": false,
+"locked": false
+},
+{
+"text": "キスム",
+"correct": false,
+"locked": false
+},
+{
+"text": "ナクル",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0241",
+"cat": "stem",
+"name": "mc_answer_number",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya? Answer: 1",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0242",
+"cat": "stem",
+"name": "mc_answer_letter_nl",
+"expect": "refuse",
+"q": {
+"stem": "Wat is de hoofdstad van Kenia?\nAntwoord: A",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0243",
+"cat": "stem",
+"name": "mc_cloze_mc",
+"expect": "refuse",
+"q": {
+"stem": "The capital of Kenya is {1:MC:=Nairobi~Mombasa}.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0244",
+"cat": "stem",
+"name": "multipart_part_answer",
+"expect": "refuse",
+"q": {
+"stem": "Kenya.",
+"kind": {
+"Multipart": {
+"parts": [
+{
+"stem": "Its capital is Nairobi. ANSWER: TRUE",
+"kind": {
+"Tf": {
+"correct": true
+}
+}
+},
+{
+"stem": "Name its largest lake.",
+"kind": {
+"Short": {
+"sample": "Lake Victoria"
+}
+}
+}
+]
+}
+}
+}
+},
+{
+"id": "m0245",
+"cat": "stem",
+"name": "multipart_part_letter",
+"expect": "refuse",
+"q": {
+"stem": "Kenya.",
+"kind": {
+"Multipart": {
+"parts": [
+{
+"stem": "Which is the capital? Answer: C",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nairobi",
+"correct": true,
+"locked": false
+}
+]
+}
+}
+},
+{
+"stem": "Kenya is in Africa.",
+"kind": {
+"Tf": {
+"correct": true
+}
+}
+}
+]
+}
+}
+}
+},
+{
+"id": "m0246",
+"cat": "stem",
+"name": "multipart_stem_key",
+"expect": "refuse",
+"q": {
+"stem": "Kenya. (Answers: 1-C, 2-T)",
+"kind": {
+"Multipart": {
+"parts": [
+{
+"stem": "Which is the capital?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nairobi",
+"correct": true,
+"locked": false
+}
+]
+}
+}
+},
+{
+"stem": "Kenya is in Africa.",
+"kind": {
+"Tf": {
+"correct": true
+}
+}
+}
+]
+}
+}
+}
+},
+{
+"id": "m0247",
+"cat": "stem",
+"name": "tf_sample_key_in_topic",
+"expect": "refuse",
+"q": {
+"stem": "Kenya's capital is Nairobi.",
+"topics": [
+"answer: true"
+],
+"kind": {
+"Tf": {
+"correct": true
+}
+}
+}
+},
+{
+"id": "m0248",
+"cat": "stem",
+"name": "mc_topic_names_key",
+"expect": "refuse",
+"q": {
+"stem": "Which organelle produces most of the cell's ATP?",
+"topics": [
+"Mitochondrion"
+],
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Mitochondrion",
+"correct": true,
+"locked": false
+},
+{
+"text": "Ribosome",
+"correct": false,
+"locked": false
+},
+{
+"text": "Golgi apparatus",
+"correct": false,
+"locked": false
+},
+{
+"text": "Lysosome",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0249",
+"cat": "stem",
+"name": "mc_points_label",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya? (A is correct)",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0250",
+"cat": "matching",
+"name": "left_paren_right",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Kenya (Nairobi)",
+"right": "Nairobi"
+},
+{
+"left": "Peru (Lima)",
+"right": "Lima"
+},
+{
+"left": "Japan (Tokyo)",
+"right": "Tokyo"
+},
+{
+"left": "Egypt (Cairo)",
+"right": "Cairo"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0251",
+"cat": "matching",
+"name": "left_dash_right",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Kenya – Nairobi",
+"right": "Nairobi"
+},
+{
+"left": "Peru – Lima",
+"right": "Lima"
+},
+{
+"left": "Japan – Tokyo",
+"right": "Tokyo"
+},
+{
+"left": "Egypt – Cairo",
+"right": "Cairo"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0252",
+"cat": "matching",
+"name": "left_colon_right",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Kenya: Nairobi",
+"right": "Nairobi"
+},
+{
+"left": "Peru: Lima",
+"right": "Lima"
+},
+{
+"left": "Japan: Tokyo",
+"right": "Tokyo"
+},
+{
+"left": "Egypt: Cairo",
+"right": "Cairo"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0253",
+"cat": "matching",
+"name": "right_names_left",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Kenya",
+"right": "Nairobi, capital of Kenya"
+},
+{
+"left": "Peru",
+"right": "Lima, capital of Peru"
+},
+{
+"left": "Japan",
+"right": "Tokyo, capital of Japan"
+},
+{
+"left": "Egypt",
+"right": "Cairo, capital of Egypt"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0254",
+"cat": "matching",
+"name": "right_paren_left",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Kenya",
+"right": "Nairobi (Kenya)"
+},
+{
+"left": "Peru",
+"right": "Lima (Peru)"
+},
+{
+"left": "Japan",
+"right": "Tokyo (Japan)"
+},
+{
+"left": "Egypt",
+"right": "Cairo (Egypt)"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0255",
+"cat": "matching",
+"name": "shared_superscript",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Kenya¹",
+"right": "Nairobi¹"
+},
+{
+"left": "Peru²",
+"right": "Lima²"
+},
+{
+"left": "Japan³",
+"right": "Tokyo³"
+},
+{
+"left": "Egypt⁴",
+"right": "Cairo⁴"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0256",
+"cat": "matching",
+"name": "shared_circled",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "① Kenya",
+"right": "Nairobi ①"
+},
+{
+"left": "② Peru",
+"right": "Lima ②"
+},
+{
+"left": "③ Japan",
+"right": "Tokyo ③"
+},
+{
+"left": "④ Egypt",
+"right": "Cairo ④"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0257",
+"cat": "matching",
+"name": "shared_emoji",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "🔴 Kenya",
+"right": "🔴 Nairobi"
+},
+{
+"left": "🟢 Peru",
+"right": "🟢 Lima"
+},
+{
+"left": "🔵 Japan",
+"right": "🔵 Tokyo"
+},
+{
+"left": "🟡 Egypt",
+"right": "🟡 Cairo"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0258",
+"cat": "matching",
+"name": "shared_flag",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "🇰🇪 Kenya",
+"right": "🇰🇪 Nairobi"
+},
+{
+"left": "🇵🇪 Peru",
+"right": "🇵🇪 Lima"
+},
+{
+"left": "🇯🇵 Japan",
+"right": "🇯🇵 Tokyo"
+},
+{
+"left": "🇪🇬 Egypt",
+"right": "🇪🇬 Cairo"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0259",
+"cat": "matching",
+"name": "shared_iso",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Kenya (KE)",
+"right": "Nairobi (KE)"
+},
+{
+"left": "Peru (PE)",
+"right": "Lima (PE)"
+},
+{
+"left": "Japan (JP)",
+"right": "Tokyo (JP)"
+},
+{
+"left": "Egypt (EG)",
+"right": "Cairo (EG)"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0260",
+"cat": "matching",
+"name": "shared_iso_lower_hyphen",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Kenya-ke",
+"right": "Nairobi-ke"
+},
+{
+"left": "Peru-pe",
+"right": "Lima-pe"
+},
+{
+"left": "Japan-jp",
+"right": "Tokyo-jp"
+},
+{
+"left": "Egypt-eg",
+"right": "Cairo-eg"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0261",
+"cat": "matching",
+"name": "shared_number_hash",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Kenya #1",
+"right": "Nairobi #1"
+},
+{
+"left": "Peru #2",
+"right": "Lima #2"
+},
+{
+"left": "Japan #3",
+"right": "Tokyo #3"
+},
+{
+"left": "Egypt #4",
+"right": "Cairo #4"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0262",
+"cat": "matching",
+"name": "shared_roman",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "I. Kenya",
+"right": "Nairobi (I)"
+},
+{
+"left": "II. Peru",
+"right": "Lima (II)"
+},
+{
+"left": "III. Japan",
+"right": "Tokyo (III)"
+},
+{
+"left": "IV. Egypt",
+"right": "Cairo (IV)"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0263",
+"cat": "matching",
+"name": "shared_greek",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Kenyaα",
+"right": "Nairobi α"
+},
+{
+"left": "Peruβ",
+"right": "Lima β"
+},
+{
+"left": "Japanγ",
+"right": "Tokyo γ"
+},
+{
+"left": "Egyptδ",
+"right": "Cairo δ"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0264",
+"cat": "matching",
+"name": "right_initial_of_left",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Kenya",
+"right": "Nairobi K"
+},
+{
+"left": "Peru",
+"right": "Lima P"
+},
+{
+"left": "Japan",
+"right": "Tokyo J"
+},
+{
+"left": "Egypt",
+"right": "Cairo E"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0265",
+"cat": "matching",
+"name": "right_label_counting",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Kenya",
+"right": "a) Nairobi"
+},
+{
+"left": "Peru",
+"right": "b) Lima"
+},
+{
+"left": "Japan",
+"right": "c) Tokyo"
+},
+{
+"left": "Egypt",
+"right": "d) Cairo"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0266",
+"cat": "matching",
+"name": "distractors_tagged",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Kenya",
+"right": "Nairobi"
+},
+{
+"left": "Peru",
+"right": "Lima"
+},
+{
+"left": "Japan",
+"right": "Tokyo"
+},
+{
+"left": "Egypt",
+"right": "Cairo"
+}
+],
+"distractors": [
+"Lagos (distractor)",
+"Accra (distractor)"
+]
+}
+}
+}
+},
+{
+"id": "m0267",
+"cat": "matching",
+"name": "paired_rights_bold",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Kenya",
+"right": "**Nairobi**"
+},
+{
+"left": "Peru",
+"right": "**Lima**"
+},
+{
+"left": "Japan",
+"right": "**Tokyo**"
+},
+{
+"left": "Egypt",
+"right": "**Cairo**"
+}
+],
+"distractors": [
+"Lagos",
+"Accra"
+]
+}
+}
+}
+},
+{
+"id": "m0268",
+"cat": "matching",
+"name": "paired_rights_trailing_period",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Kenya",
+"right": "Nairobi."
+},
+{
+"left": "Peru",
+"right": "Lima."
+},
+{
+"left": "Japan",
+"right": "Tokyo."
+},
+{
+"left": "Egypt",
+"right": "Cairo."
+}
+],
+"distractors": [
+"Lagos",
+"Accra"
+]
+}
+}
+}
+},
+{
+"id": "m0269",
+"cat": "matching",
+"name": "left_fullwidth_digit_right_digit",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Kenya １",
+"right": "Nairobi 1"
+},
+{
+"left": "Peru ２",
+"right": "Lima 2"
+},
+{
+"left": "Japan ３",
+"right": "Tokyo 3"
+},
+{
+"left": "Egypt ４",
+"right": "Cairo 4"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0270",
+"cat": "matching",
+"name": "left_subscript_right_digit",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Kenya₁",
+"right": "Nairobi 1"
+},
+{
+"left": "Peru₂",
+"right": "Lima 2"
+},
+{
+"left": "Japan₃",
+"right": "Tokyo 3"
+},
+{
+"left": "Egypt₄",
+"right": "Cairo 4"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0271",
+"cat": "matching",
+"name": "left_bracket_word",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Kenya [red]",
+"right": "Nairobi [red]"
+},
+{
+"left": "Peru [green]",
+"right": "Lima [green]"
+},
+{
+"left": "Japan [blue]",
+"right": "Tokyo [blue]"
+},
+{
+"left": "Egypt [gold]",
+"right": "Cairo [gold]"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0272",
+"cat": "matching",
+"name": "left_cjk_bracket_tag",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Kenya【甲】",
+"right": "Nairobi【甲】"
+},
+{
+"left": "Peru【乙】",
+"right": "Lima【乙】"
+},
+{
+"left": "Japan【丙】",
+"right": "Tokyo【丙】"
+},
+{
+"left": "Egypt【丁】",
+"right": "Cairo【丁】"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0273",
+"cat": "matching",
+"name": "same_first_letter_pairs",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Kenya",
+"right": "Kisumu"
+},
+{
+"left": "Peru",
+"right": "Piura"
+},
+{
+"left": "Japan",
+"right": "Juba"
+},
+{
+"left": "Egypt",
+"right": "Esna"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0274",
+"cat": "matching",
+"name": "left_names_right_ar",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "كينيا (نيروبي)",
+"right": "نيروبي"
+},
+{
+"left": "بيرو (ليما)",
+"right": "ليما"
+},
+{
+"left": "اليابان (طوكيو)",
+"right": "طوكيو"
+},
+{
+"left": "مصر (القاهرة)",
+"right": "القاهرة"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0275",
+"cat": "matching",
+"name": "left_names_right_zh",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "肯尼亚（内罗毕）",
+"right": "内罗毕"
+},
+{
+"left": "秘鲁（利马）",
+"right": "利马"
+},
+{
+"left": "日本（东京）",
+"right": "东京"
+},
+{
+"left": "埃及（开罗）",
+"right": "开罗"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0276",
+"cat": "matching",
+"name": "right_contains_left_ja",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "ケニア",
+"right": "ケニアの首都ナイロビ"
+},
+{
+"left": "ペルー",
+"right": "ペルーの首都リマ"
+},
+{
+"left": "日本",
+"right": "日本の首都東京"
+},
+{
+"left": "エジプト",
+"right": "エジプトの首都カイロ"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0277",
+"cat": "matching",
+"name": "shared_colour_word_end",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Kenya (blue)",
+"right": "Nairobi (blue)"
+},
+{
+"left": "Peru (red)",
+"right": "Lima (red)"
+},
+{
+"left": "Japan (green)",
+"right": "Tokyo (green)"
+},
+{
+"left": "Egypt (amber)",
+"right": "Cairo (amber)"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0278",
+"cat": "matching",
+"name": "shared_dingbat_digit",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "❶ Kenya",
+"right": "➀ Nairobi"
+},
+{
+"left": "❷ Peru",
+"right": "➁ Lima"
+},
+{
+"left": "❸ Japan",
+"right": "➂ Tokyo"
+},
+{
+"left": "❹ Egypt",
+"right": "➃ Cairo"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0279",
+"cat": "matching",
+"name": "shared_keycap",
+"expect": "refuse",
+"q": {
+"stem": "Match each country with its capital.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Kenya 1️⃣",
+"right": "Nairobi 1️⃣"
+},
+{
+"left": "Peru 2️⃣",
+"right": "Lima 2️⃣"
+},
+{
+"left": "Japan 3️⃣",
+"right": "Tokyo 3️⃣"
+},
+{
+"left": "Egypt 4️⃣",
+"right": "Cairo 4️⃣"
+}
+],
+"distractors": [
+"Lagos"
+]
+}
+}
+}
+},
+{
+"id": "m0280",
+"cat": "lock",
+"name": "key_locked_alone",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi",
+"correct": true,
+"locked": true
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0281",
+"cat": "lock",
+"name": "key_locked_with_one",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi",
+"correct": true,
+"locked": true
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": true
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+},
+{
+"text": "Eldoret",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0282",
+"cat": "lock",
+"name": "key_movable_with_one",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": true
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": true
+},
+{
+"text": "Eldoret",
+"correct": false,
+"locked": true
+}
+]
+}
+}
+}
+},
+{
+"id": "m0283",
+"cat": "lock",
+"name": "multi_keys_locked",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi",
+"correct": true,
+"locked": true
+},
+{
+"text": "Mombasa",
+"correct": true,
+"locked": true
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+},
+{
+"text": "Eldoret",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0284",
+"cat": "lock",
+"name": "key_locked_plus_none",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi",
+"correct": true,
+"locked": true
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+},
+{
+"text": "None of the above",
+"correct": false,
+"locked": true
+}
+]
+}
+}
+}
+},
+{
+"id": "m0285",
+"cat": "lock",
+"name": "key_locked_plus_idk",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nairobi",
+"correct": true,
+"locked": true
+},
+{
+"text": "I don't know",
+"correct": false,
+"locked": true
+}
+]
+}
+}
+}
+},
+{
+"id": "m0286",
+"cat": "lock",
+"name": "key_locked_es",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nairobi",
+"correct": true,
+"locked": true
+},
+{
+"text": "Ninguna de las anteriores",
+"correct": false,
+"locked": true
+}
+]
+}
+}
+}
+},
+{
+"id": "m0287",
+"cat": "lock",
+"name": "key_movable_with_two_locked_rest",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Mombasa",
+"correct": false,
+"locked": true
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": true
+},
+{
+"text": "Nairobi",
+"correct": true,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": true
+},
+{
+"text": "Eldoret",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thika",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0288",
+"cat": "lock",
+"name": "key_locked_with_two",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi",
+"correct": true,
+"locked": true
+},
+{
+"text": "Mombasa",
+"correct": false,
+"locked": true
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": true
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+},
+{
+"text": "Eldoret",
+"correct": false,
+"locked": false
+},
+{
+"text": "Thika",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0289",
+"cat": "lock",
+"name": "key_locked_in_middle",
+"expect": "refuse",
+"q": {
+"stem": "Which city is the capital of Kenya?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nairobi",
+"correct": true,
+"locked": true
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0290",
+"cat": "lock",
+"name": "multipart_part_key_locked",
+"expect": "refuse",
+"q": {
+"stem": "Kenya.",
+"kind": {
+"Multipart": {
+"parts": [
+{
+"stem": "Which is the capital?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Mombasa",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nairobi",
+"correct": true,
+"locked": true
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+]
+}
+}
+}
+},
+{
+"id": "m0291",
+"cat": "freeze",
+"name": "hepatitis_a_and_b",
+"expect": "pass",
+"q": {
+"stem": "Which vaccine is given at birth in many countries?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Hepatitis B",
+"correct": true,
+"locked": false
+},
+{
+"text": "Hepatitis A and B",
+"correct": false,
+"locked": false
+},
+{
+"text": "Measles",
+"correct": false,
+"locked": false
+},
+{
+"text": "Polio",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0292",
+"cat": "freeze",
+"name": "vitamins_b_and_c",
+"expect": "pass",
+"q": {
+"stem": "Which vitamin is fat-soluble?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Vitamin D",
+"correct": true,
+"locked": false
+},
+{
+"text": "Vitamins B and C",
+"correct": false,
+"locked": false
+},
+{
+"text": "Vitamin B12",
+"correct": false,
+"locked": false
+},
+{
+"text": "Folic acid",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0293",
+"cat": "freeze",
+"name": "blood_group",
+"expect": "pass",
+"q": {
+"stem": "Which blood group is the universal donor?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "O negative",
+"correct": true,
+"locked": false
+},
+{
+"text": "Groups A and B",
+"correct": false,
+"locked": false
+},
+{
+"text": "AB positive",
+"correct": false,
+"locked": false
+},
+{
+"text": "B positive",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0294",
+"cat": "freeze",
+"name": "type_a_b",
+"expect": "pass",
+"q": {
+"stem": "Which personality type is linked to hostility in early research?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Type A",
+"correct": true,
+"locked": false
+},
+{
+"text": "Type B",
+"correct": false,
+"locked": false
+},
+{
+"text": "Types A and B equally",
+"correct": false,
+"locked": false
+},
+{
+"text": "Type D",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0295",
+"cat": "freeze",
+"name": "plan_a_or_b",
+"expect": "pass",
+"q": {
+"stem": "Which is a contingency in project planning?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "A fallback schedule",
+"correct": true,
+"locked": false
+},
+{
+"text": "Plan A or B",
+"correct": false,
+"locked": false
+},
+{
+"text": "The critical path",
+"correct": false,
+"locked": false
+},
+{
+"text": "A Gantt chart",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0296",
+"cat": "freeze",
+"name": "points_ab_stem_defined",
+"expect": "pass",
+"q": {
+"stem": "Points A(1, 2) and B(5, 2) are given. What is the length of segment AB?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "4",
+"correct": true,
+"locked": false
+},
+{
+"text": "The distance from A to B is 3",
+"correct": false,
+"locked": false
+},
+{
+"text": "5",
+"correct": false,
+"locked": false
+},
+{
+"text": "2",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0297",
+"cat": "freeze",
+"name": "grades",
+"expect": "pass",
+"q": {
+"stem": "Which grade band is the highest in the UK A-level system?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "A*",
+"correct": true,
+"locked": false
+},
+{
+"text": "A and B",
+"correct": false,
+"locked": false
+},
+{
+"text": "C",
+"correct": false,
+"locked": false
+},
+{
+"text": "E",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0298",
+"cat": "freeze",
+"name": "music_keys",
+"expect": "pass",
+"q": {
+"stem": "Which key has no sharps or flats?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "C major",
+"correct": true,
+"locked": false
+},
+{
+"text": "A and B minor",
+"correct": false,
+"locked": false
+},
+{
+"text": "G major",
+"correct": false,
+"locked": false
+},
+{
+"text": "F major",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0299",
+"cat": "freeze",
+"name": "dna_a_t",
+"expect": "pass",
+"q": {
+"stem": "Which pair is a correct DNA base pair?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "A–T",
+"correct": true,
+"locked": false
+},
+{
+"text": "A–C",
+"correct": false,
+"locked": false
+},
+{
+"text": "G–T",
+"correct": false,
+"locked": false
+},
+{
+"text": "C–A",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0300",
+"cat": "freeze",
+"name": "hplc_columns",
+"expect": "pass",
+"q": {
+"stem": "Which column is used for reverse-phase HPLC?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "C18",
+"correct": true,
+"locked": false
+},
+{
+"text": "Column A and C",
+"correct": false,
+"locked": false
+},
+{
+"text": "Silica",
+"correct": false,
+"locked": false
+},
+{
+"text": "Cyano",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0301",
+"cat": "freeze",
+"name": "chords_c_and_g",
+"expect": "pass",
+"q": {
+"stem": "Which chord contains the notes C, E and G?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "C major",
+"correct": true,
+"locked": false
+},
+{
+"text": "C and G minor",
+"correct": false,
+"locked": false
+},
+{
+"text": "E minor",
+"correct": false,
+"locked": false
+},
+{
+"text": "A minor",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0302",
+"cat": "freeze",
+"name": "both_hemispheres",
+"expect": "pass",
+"q": {
+"stem": "Where is Ecuador?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Both hemispheres (north and south)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Northern hemisphere only",
+"correct": false,
+"locked": false
+},
+{
+"text": "Southern hemisphere only",
+"correct": false,
+"locked": false
+},
+{
+"text": "Neither",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0303",
+"cat": "freeze",
+"name": "de_a_und_b",
+"expect": "pass",
+"q": {
+"stem": "Welche Impfung wird bei der Geburt gegeben?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Hepatitis B",
+"correct": true,
+"locked": false
+},
+{
+"text": "Hepatitis A und B",
+"correct": false,
+"locked": false
+},
+{
+"text": "Masern",
+"correct": false,
+"locked": false
+},
+{
+"text": "Polio",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0304",
+"cat": "freeze",
+"name": "es_a_y_b",
+"expect": "pass",
+"q": {
+"stem": "¿Qué vacuna se aplica al nacer?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Hepatitis B",
+"correct": true,
+"locked": false
+},
+{
+"text": "Hepatitis A y B",
+"correct": false,
+"locked": false
+},
+{
+"text": "Sarampión",
+"correct": false,
+"locked": false
+},
+{
+"text": "Polio",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0305",
+"cat": "freeze",
+"name": "ru_a_i_b",
+"expect": "pass",
+"q": {
+"stem": "Какую прививку делают при рождении?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Гепатит B",
+"correct": true,
+"locked": false
+},
+{
+"text": "Гепатит A и B",
+"correct": false,
+"locked": false
+},
+{
+"text": "Корь",
+"correct": false,
+"locked": false
+},
+{
+"text": "Полиомиелит",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0306",
+"cat": "freeze",
+"name": "all_true_statement",
+"expect": "pass",
+"q": {
+"stem": "Which statement about mammals is true?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "All of them have hair at some stage",
+"correct": true,
+"locked": false
+},
+{
+"text": "All lay eggs",
+"correct": false,
+"locked": false
+},
+{
+"text": "None have lungs",
+"correct": false,
+"locked": false
+},
+{
+"text": "All live on land",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0307",
+"cat": "freeze",
+"name": "none_content",
+"expect": "pass",
+"q": {
+"stem": "What is the charge of a neutron?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "None (it is neutral)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Positive",
+"correct": false,
+"locked": false
+},
+{
+"text": "Negative",
+"correct": false,
+"locked": false
+},
+{
+"text": "It varies",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0308",
+"cat": "freeze",
+"name": "a_b_c_genes",
+"expect": "pass",
+"q": {
+"stem": "In the ABO system, which alleles are codominant?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "A and B",
+"correct": true,
+"locked": false
+},
+{
+"text": "A and O",
+"correct": false,
+"locked": false
+},
+{
+"text": "B and O",
+"correct": false,
+"locked": false
+},
+{
+"text": "O only",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0309",
+"cat": "freeze",
+"name": "roman_ii_content",
+"expect": "pass",
+"q": {
+"stem": "Which world war ended in 1945?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "World War II",
+"correct": true,
+"locked": false
+},
+{
+"text": "World War I",
+"correct": false,
+"locked": false
+},
+{
+"text": "The Korean War",
+"correct": false,
+"locked": false
+},
+{
+"text": "The Cold War",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0310",
+"cat": "freeze",
+"name": "letters_vowel",
+"expect": "pass",
+"q": {
+"stem": "Which letter is a vowel?",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "E",
+"correct": true,
+"locked": false
+},
+{
+"text": "B",
+"correct": false,
+"locked": false
+},
+{
+"text": "C",
+"correct": false,
+"locked": false
+},
+{
+"text": "D",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0311",
+"cat": "control",
+"name": "all_bold",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "**Nairobi**",
+"correct": true,
+"locked": false
+},
+{
+"text": "**Mombasa**",
+"correct": false,
+"locked": false
+},
+{
+"text": "**Kisumu**",
+"correct": false,
+"locked": false
+},
+{
+"text": "**Nakuru**",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0312",
+"cat": "control",
+"name": "two_bold",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "**Nairobi**",
+"correct": true,
+"locked": false
+},
+{
+"text": "**Mombasa**",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0313",
+"cat": "control",
+"name": "all_periods",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Nairobi.",
+"correct": true,
+"locked": false
+},
+{
+"text": "Mombasa.",
+"correct": false,
+"locked": false
+},
+{
+"text": "Kisumu.",
+"correct": false,
+"locked": false
+},
+{
+"text": "Nakuru.",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0314",
+"cat": "control",
+"name": "all_quoted",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "“Nairobi”",
+"correct": true,
+"locked": false
+},
+{
+"text": "“Mombasa”",
+"correct": false,
+"locked": false
+},
+{
+"text": "“Kisumu”",
+"correct": false,
+"locked": false
+},
+{
+"text": "“Nakuru”",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0315",
+"cat": "control",
+"name": "units_all",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "9.8 m/s²",
+"correct": true,
+"locked": false
+},
+{
+"text": "9.8 m/s",
+"correct": false,
+"locked": false
+},
+{
+"text": "98 m/s²",
+"correct": false,
+"locked": false
+},
+{
+"text": "1.6 m/s²",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0316",
+"cat": "control",
+"name": "si_units_named",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "newton (N)",
+"correct": true,
+"locked": false
+},
+{
+"text": "joule (J)",
+"correct": false,
+"locked": false
+},
+{
+"text": "watt (W)",
+"correct": false,
+"locked": false
+},
+{
+"text": "pascal (Pa)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0317",
+"cat": "control",
+"name": "roman_all_cranial",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Vagus (X)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Facial (VII)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Trigeminal (V)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Optic (II)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0318",
+"cat": "control",
+"name": "credit_right",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Credit (right)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Debit (left)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Both sides",
+"correct": false,
+"locked": false
+},
+{
+"text": "Neither side",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0319",
+"cat": "control",
+"name": "turn_right",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Turn right",
+"correct": true,
+"locked": false
+},
+{
+"text": "Turn left",
+"correct": false,
+"locked": false
+},
+{
+"text": "Go straight",
+"correct": false,
+"locked": false
+},
+{
+"text": "Reverse",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0320",
+"cat": "control",
+"name": "left_correct",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Left ventricle",
+"correct": true,
+"locked": false
+},
+{
+"text": "Right ventricle",
+"correct": false,
+"locked": false
+},
+{
+"text": "Left atrium",
+"correct": false,
+"locked": false
+},
+{
+"text": "Right atrium",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0321",
+"cat": "control",
+"name": "ok_word_content",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "OK Corral",
+"correct": true,
+"locked": false
+},
+{
+"text": "Little Bighorn",
+"correct": false,
+"locked": false
+},
+{
+"text": "Wounded Knee",
+"correct": false,
+"locked": false
+},
+{
+"text": "Sand Creek",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0322",
+"cat": "control",
+"name": "yes_content",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Yes, Minister",
+"correct": true,
+"locked": false
+},
+{
+"text": "Fawlty Towers",
+"correct": false,
+"locked": false
+},
+{
+"text": "Blackadder",
+"correct": false,
+"locked": false
+},
+{
+"text": "The Office",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0323",
+"cat": "control",
+"name": "true_content",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "True Grit",
+"correct": true,
+"locked": false
+},
+{
+"text": "Rio Bravo",
+"correct": false,
+"locked": false
+},
+{
+"text": "El Dorado",
+"correct": false,
+"locked": false
+},
+{
+"text": "Big Jake",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0324",
+"cat": "control",
+"name": "star_content",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Star Wars (1977)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Alien (1979)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Jaws (1975)",
+"correct": false,
+"locked": false
+},
+{
+"text": "Rocky (1976)",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0325",
+"cat": "control",
+"name": "check_content",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Check (chess)",
+"correct": true,
+"locked": false
+},
+{
+"text": "Gambit",
+"correct": false,
+"locked": false
+},
+{
+"text": "Fork",
+"correct": false,
+"locked": false
+},
+{
+"text": "Pin",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0326",
+"cat": "control",
+"name": "x_content",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Malcolm X",
+"correct": true,
+"locked": false
+},
+{
+"text": "Martin Luther King Jr.",
+"correct": false,
+"locked": false
+},
+{
+"text": "Rosa Parks",
+"correct": false,
+"locked": false
+},
+{
+"text": "John Lewis",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0327",
+"cat": "control",
+"name": "correct_word_content",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Politically correct",
+"correct": true,
+"locked": false
+},
+{
+"text": "Politically active",
+"correct": false,
+"locked": false
+},
+{
+"text": "Politically neutral",
+"correct": false,
+"locked": false
+},
+{
+"text": "Politically aware",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0328",
+"cat": "control",
+"name": "ja_maru_content",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "丸ノ内線",
+"correct": true,
+"locked": false
+},
+{
+"text": "銀座線",
+"correct": false,
+"locked": false
+},
+{
+"text": "日比谷線",
+"correct": false,
+"locked": false
+},
+{
+"text": "東西線",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0329",
+"cat": "control",
+"name": "ar_rtl",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "الرباط",
+"correct": true,
+"locked": false
+},
+{
+"text": "الدار البيضاء",
+"correct": false,
+"locked": false
+},
+{
+"text": "فاس",
+"correct": false,
+"locked": false
+},
+{
+"text": "مراكش",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0330",
+"cat": "control",
+"name": "he_rtl",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "ירושלים",
+"correct": true,
+"locked": false
+},
+{
+"text": "תל אביב",
+"correct": false,
+"locked": false
+},
+{
+"text": "חיפה",
+"correct": false,
+"locked": false
+},
+{
+"text": "אילת",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0331",
+"cat": "control",
+"name": "code_semicolons",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "int x = 0;",
+"correct": true,
+"locked": false
+},
+{
+"text": "int x == 0;",
+"correct": false,
+"locked": false
+},
+{
+"text": "x := 0;",
+"correct": false,
+"locked": false
+},
+{
+"text": "let x = 0;",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0332",
+"cat": "control",
+"name": "latex_all",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "$\\frac{1}{2}$",
+"correct": true,
+"locked": false
+},
+{
+"text": "$\\frac{1}{3}$",
+"correct": false,
+"locked": false
+},
+{
+"text": "$\\frac{2}{3}$",
+"correct": false,
+"locked": false
+},
+{
+"text": "$1$",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0333",
+"cat": "control",
+"name": "sharp_flat",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "F♯",
+"correct": true,
+"locked": false
+},
+{
+"text": "G♭",
+"correct": false,
+"locked": false
+},
+{
+"text": "F",
+"correct": false,
+"locked": false
+},
+{
+"text": "G",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0334",
+"cat": "control",
+"name": "chem_charges",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Na⁺",
+"correct": true,
+"locked": false
+},
+{
+"text": "Cl⁻",
+"correct": false,
+"locked": false
+},
+{
+"text": "Mg²⁺",
+"correct": false,
+"locked": false
+},
+{
+"text": "O²⁻",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0335",
+"cat": "control",
+"name": "dash_content",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Rhône–Alpes",
+"correct": true,
+"locked": false
+},
+{
+"text": "Provence",
+"correct": false,
+"locked": false
+},
+{
+"text": "Bretagne",
+"correct": false,
+"locked": false
+},
+{
+"text": "Normandie",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0336",
+"cat": "control",
+"name": "wrong_word_content",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "The Wrong Trousers",
+"correct": true,
+"locked": false
+},
+{
+"text": "A Close Shave",
+"correct": false,
+"locked": false
+},
+{
+"text": "A Grand Day Out",
+"correct": false,
+"locked": false
+},
+{
+"text": "Curse of the Were-Rabbit",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0337",
+"cat": "control",
+"name": "abbrev",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Martin Luther King Jr.",
+"correct": true,
+"locked": false
+},
+{
+"text": "Malcolm X",
+"correct": false,
+"locked": false
+},
+{
+"text": "Rosa Parks",
+"correct": false,
+"locked": false
+},
+{
+"text": "Medgar Evers",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0338",
+"cat": "control",
+"name": "mixed_case_code",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "NULL",
+"correct": true,
+"locked": false
+},
+{
+"text": "null",
+"correct": false,
+"locked": false
+},
+{
+"text": "None",
+"correct": false,
+"locked": false
+},
+{
+"text": "nil",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0339",
+"cat": "control",
+"name": "emoji_all",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "🍎 Apple",
+"correct": true,
+"locked": false
+},
+{
+"text": "🍌 Banana",
+"correct": false,
+"locked": false
+},
+{
+"text": "🍇 Grapes",
+"correct": false,
+"locked": false
+},
+{
+"text": "🍊 Orange",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0340",
+"cat": "control",
+"name": "degree_all",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "0 °C",
+"correct": true,
+"locked": false
+},
+{
+"text": "32 °C",
+"correct": false,
+"locked": false
+},
+{
+"text": "100 °C",
+"correct": false,
+"locked": false
+},
+{
+"text": "−273.15 °C",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0341",
+"cat": "control",
+"name": "percent_all",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "25%",
+"correct": true,
+"locked": false
+},
+{
+"text": "30%",
+"correct": false,
+"locked": false
+},
+{
+"text": "20%",
+"correct": false,
+"locked": false
+},
+{
+"text": "15%",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0342",
+"cat": "control",
+"name": "music_roman",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "ii°",
+"correct": true,
+"locked": false
+},
+{
+"text": "II",
+"correct": false,
+"locked": false
+},
+{
+"text": "iii",
+"correct": false,
+"locked": false
+},
+{
+"text": "V7",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0343",
+"cat": "control",
+"name": "law_section",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "§ 823 BGB",
+"correct": true,
+"locked": false
+},
+{
+"text": "§ 433 BGB",
+"correct": false,
+"locked": false
+},
+{
+"text": "§ 242 StGB",
+"correct": false,
+"locked": false
+},
+{
+"text": "Art. 1 GG",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0344",
+"cat": "control",
+"name": "vitamin_list",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Vitamins A, D, E and K",
+"correct": true,
+"locked": false
+},
+{
+"text": "Vitamins B and C",
+"correct": false,
+"locked": false
+},
+{
+"text": "Vitamin C only",
+"correct": false,
+"locked": false
+},
+{
+"text": "Vitamins B1 and B12",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0345",
+"cat": "control",
+"name": "initials",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "E. M. Forster",
+"correct": true,
+"locked": false
+},
+{
+"text": "T. S. Eliot",
+"correct": false,
+"locked": false
+},
+{
+"text": "H. G. Wells",
+"correct": false,
+"locked": false
+},
+{
+"text": "D. H. Lawrence",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0346",
+"cat": "control",
+"name": "chess_moves",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Qxf7#",
+"correct": true,
+"locked": false
+},
+{
+"text": "Qxe5+",
+"correct": false,
+"locked": false
+},
+{
+"text": "Bxf7+",
+"correct": false,
+"locked": false
+},
+{
+"text": "d4",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0347",
+"cat": "control",
+"name": "python_none",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "1 == 1.0",
+"correct": true,
+"locked": false
+},
+{
+"text": "'a' in 'cat'",
+"correct": true,
+"locked": false
+},
+{
+"text": "[] == None",
+"correct": false,
+"locked": false
+},
+{
+"text": "0 is None",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0348",
+"cat": "control",
+"name": "greek_letters",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "α decay",
+"correct": true,
+"locked": false
+},
+{
+"text": "β decay",
+"correct": false,
+"locked": false
+},
+{
+"text": "γ decay",
+"correct": false,
+"locked": false
+},
+{
+"text": "δ decay",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0349",
+"cat": "control",
+"name": "ipa",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "/θ/",
+"correct": true,
+"locked": false
+},
+{
+"text": "/ð/",
+"correct": false,
+"locked": false
+},
+{
+"text": "/s/",
+"correct": false,
+"locked": false
+},
+{
+"text": "/z/",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0350",
+"cat": "control",
+"name": "fr_spacing",
+"expect": "pass",
+"q": {
+"stem": "Choose the best answer.",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "Pourquoi ?",
+"correct": true,
+"locked": false
+},
+{
+"text": "Comment ?",
+"correct": false,
+"locked": false
+},
+{
+"text": "Quand ?",
+"correct": false,
+"locked": false
+},
+{
+"text": "Où ?",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+}
+},
+{
+"id": "m0351",
+"cat": "control_matching",
+"name": "java_output",
+"expect": "pass",
+"q": {
+"stem": "Match the items.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "System.out.println(0);",
+"right": "0"
+},
+{
+"left": "System.out.println(0.0);",
+"right": "0.0"
+}
+],
+"distractors": [
+"NULL"
+]
+}
+}
+}
+},
+{
+"id": "m0352",
+"cat": "control_matching",
+"name": "si_symbols",
+"expect": "pass",
+"q": {
+"stem": "Match the items.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "ampere (A)",
+"right": "current"
+},
+{
+"left": "volt (V)",
+"right": "potential difference"
+},
+{
+"left": "ohm (Ω)",
+"right": "resistance"
+}
+],
+"distractors": [
+"charge"
+]
+}
+}
+}
+},
+{
+"id": "m0353",
+"cat": "control_matching",
+"name": "element_symbols",
+"expect": "pass",
+"q": {
+"stem": "Match the items.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Iron",
+"right": "Fe"
+},
+{
+"left": "Gold",
+"right": "Au"
+},
+{
+"left": "Silver",
+"right": "Ag"
+}
+],
+"distractors": [
+"Sn"
+]
+}
+}
+}
+},
+{
+"id": "m0354",
+"cat": "control_matching",
+"name": "steps",
+"expect": "pass",
+"q": {
+"stem": "Match the items.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Step 1",
+"right": "SYN"
+},
+{
+"left": "Step 2",
+"right": "SYN-ACK"
+},
+{
+"left": "Step 3",
+"right": "ACK"
+}
+],
+"distractors": []
+}
+}
+}
+},
+{
+"id": "m0355",
+"cat": "control_matching",
+"name": "years",
+"expect": "pass",
+"q": {
+"stem": "Match the items.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Magna Carta",
+"right": "1215"
+},
+{
+"left": "Fall of Constantinople",
+"right": "1453"
+},
+{
+"left": "French Revolution",
+"right": "1789"
+}
+],
+"distractors": [
+"1066"
+]
+}
+}
+}
+},
+{
+"id": "m0356",
+"cat": "control_matching",
+"name": "translations_same_initial",
+"expect": "pass",
+"q": {
+"stem": "Match the items.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Hund",
+"right": "dog"
+},
+{
+"left": "Katze",
+"right": "cat"
+},
+{
+"left": "Maus",
+"right": "mouse"
+}
+],
+"distractors": [
+"horse"
+]
+}
+}
+}
+},
+{
+"id": "m0357",
+"cat": "control_matching",
+"name": "math_exponent",
+"expect": "pass",
+"q": {
+"stem": "Match the items.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "x²",
+"right": "parabola"
+},
+{
+"left": "x³",
+"right": "cubic"
+},
+{
+"left": "1/x",
+"right": "hyperbola"
+}
+],
+"distractors": [
+"line"
+]
+}
+}
+}
+},
+{
+"id": "m0358",
+"cat": "control_matching",
+"name": "music_tempo",
+"expect": "pass",
+"q": {
+"stem": "Match the items.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Largo",
+"right": "very slow"
+},
+{
+"left": "Allegro",
+"right": "fast"
+},
+{
+"left": "Andante",
+"right": "walking pace"
+}
+],
+"distractors": [
+"very loud"
+]
+}
+}
+}
+},
+{
+"id": "m0359",
+"cat": "control_matching",
+"name": "shared_number_maths",
+"expect": "pass",
+"q": {
+"stem": "Match the items.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "2 + 2",
+"right": "4"
+},
+{
+"left": "3 × 3",
+"right": "9"
+},
+{
+"left": "10 − 4",
+"right": "6"
+}
+],
+"distractors": [
+"5"
+]
+}
+}
+}
+},
+{
+"id": "m0360",
+"cat": "control_matching",
+"name": "isotopes",
+"expect": "pass",
+"q": {
+"stem": "Match the items.",
+"kind": {
+"Matching": {
+"pairs": [
+{
+"left": "Carbon-14",
+"right": "radiocarbon dating"
+},
+{
+"left": "Uranium-235",
+"right": "nuclear fission"
+},
+{
+"left": "Iodine-131",
+"right": "thyroid treatment"
+}
+],
+"distractors": [
+"smoke detectors"
+]
+}
+}
+}
+}
+]

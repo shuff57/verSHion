@@ -109,6 +109,24 @@ impl Gen {
             let t = ["Both A and B", "All of the above", "None of these", "I and II only"][self.rng.below(4)];
             v.push(Answer { text: t.into(), correct: false, locked: self.coin() });
         }
+        // Correct flags that formatting alone would give away are refused by strip (tested in
+        // round5); re-draw them here so these properties exercise the rest.
+        let mut tries = 0;
+        while [LabelChoice::Keep, LabelChoice::Strip].iter().any(|d| !share_core::strip::mc_format_flags(&v, Some(*d)).is_empty()) {
+            tries += 1;
+            for a in v.iter_mut() {
+                a.correct = if tries > 20 { true } else { self.coin() };
+            }
+        }
+        // Locks that narrow the key are refused (locked_key, tested in round6/round8): the
+        // correct choices are never locked here, and locks that would leave the key among at
+        // most two more movable choices are dropped.
+        v.iter_mut().filter(|a| a.correct).for_each(|a| a.locked = false);
+        let correct = v.iter().filter(|a| a.correct).count();
+        let movable = v.iter().filter(|a| !a.locked).count();
+        if correct > 0 && movable < v.len() && movable <= correct + 2 {
+            v.iter_mut().for_each(|a| a.locked = false);
+        }
         (v, labels >= 2)
     }
     fn part(&mut self) -> Part {
@@ -229,6 +247,7 @@ impl Gen {
             keep_order: false,
             origin,
             published,
+            rekeyed: false,
         };
         (q, image_ok)
     }
@@ -298,8 +317,8 @@ fn check_question(orig: &Question, s: &Question, case: usize, labels: &QuestionL
         // Labels: removed exactly when Strip was decided (and allowed), as the preview said.
         let texts: Vec<&str> = a.iter().map(|x| x.text.as_str()).collect();
         let mut aa: Vec<String> = match (share_core::labels::analyze(&texts), decision) {
-            (Some(an), Some(LabelChoice::Strip)) => an.previews(&texts).into_iter().map(|c| c.after).collect(),
-            _ => texts.iter().map(|t| t.to_string()).collect(),
+            (Some(an), Some(LabelChoice::Strip)) => an.previews(&texts).into_iter().map(|c| share_core::format::served_text(&c.after)).collect(),
+            _ => texts.iter().map(|t| share_core::format::served_text(t)).collect(),
         };
         if kept(part) {
             // Order preserved (labels kept, sibling references, too few unlocked): nothing moved.
@@ -312,7 +331,13 @@ fn check_question(orig: &Question, s: &Question, case: usize, labels: &QuestionL
         (Kind::Mc { answers: a }, Kind::Mc { answers: b }) => mc(a, b, None),
         (Kind::Tf { .. }, Kind::Tf { correct }) => assert!(!correct),
         (Kind::Matching { pairs: p, distractors: d }, Kind::Matching { pairs: sp, distractors: sd }) => {
-            assert_eq!(p.iter().map(|x| &x.left).collect::<Vec<_>>(), sp.iter().map(|x| &x.left).collect::<Vec<_>>());
+            // Round 8: the left items are shuffled too (same items).
+            // (Served in the served normalisation, round 9.)
+            let mut l1: Vec<String> = p.iter().map(|x| share_core::format::served_text(&x.left)).collect();
+            let mut l2: Vec<String> = sp.iter().map(|x| x.left.clone()).collect();
+            l1.sort();
+            l2.sort();
+            assert_eq!(l1, l2, "case {case}: left items");
             assert!(sp.iter().all(|x| x.right.is_empty()), "case {case}: a right side survived");
             let want: BTreeSet<&String> = p.iter().map(|x| &x.right).chain(d.iter()).collect();
             let got: BTreeSet<&String> = sd.iter().collect();
@@ -327,7 +352,7 @@ fn check_question(orig: &Question, s: &Question, case: usize, labels: &QuestionL
         (Kind::Multipart { parts: a }, Kind::Multipart { parts: b }) => {
             assert_eq!(a.len(), b.len());
             for (pi, (x, y)) in a.iter().zip(b).enumerate() {
-                assert_eq!(x.stem, y.stem);
+                assert_eq!(share_core::format::served_text(&x.stem), y.stem);
                 match (&x.kind, &y.kind) {
                     (PartKind::Mc { answers: a }, PartKind::Mc { answers: b }) => mc(a, b, Some(pi)),
                     (PartKind::Tf { .. }, PartKind::Tf { correct }) => assert!(!correct),
@@ -386,10 +411,10 @@ fn no_key_marker_survives_strip_and_hashes_are_key_blind() {
             .collect();
         // Undecided findings are refused.
         if !labels.is_empty() {
-            let e = strip_with_seed(v.payload.clone(), &StripOptions { image_ok: image_ok.clone(), labels: vec![] }, seed(1)).unwrap_err();
+            let e = strip_with_seed(v.payload.clone(), &StripOptions { image_ok: image_ok.clone(), labels: vec![], ..Default::default() }, seed(1)).unwrap_err();
             assert!(e.iter().all(|e| e.code == "labels_need_decision"), "case {case}: {e:?}");
         }
-        let so = StripOptions { image_ok: image_ok.clone(), labels: labels.clone() };
+        let so = StripOptions { image_ok: image_ok.clone(), labels: labels.clone(), ..Default::default() };
         let s = strip_with_seed(v.payload.clone(), &so, seed(case as u8)).unwrap();
         let out = s.payload.to_json();
         assert_eq!(out, canonical_json(&s.payload.to_value()), "case {case}: canonical writer");
@@ -541,7 +566,7 @@ fn keyless_inputs_never_carry_key_material() {
         let mut g = Gen::new(case + 1_000_000);
         let (mut q, _) = g.question(0);
         // Make it a clean keyless question first (what strip serves, localised or not).
-        let s = strip_question(&q, false, &decide_q(&q), &mut ShuffleRng::from_seed(seed(case as u8))).unwrap();
+        let s = strip_question(&q, false, &decide_q(&q), &mut ShuffleRng::from_seed(seed(case as u8))).unwrap_or_else(|e| panic!("{e:?} {:?}", q.kind));
         q = if g.coin() { share_core::import::localize(&s) } else { s };
         q.image = None;
         let clean = Payload { schema_version: 2, body: Body::Question(q.clone()) }.to_json();
@@ -565,9 +590,10 @@ fn keyless_inputs_never_carry_key_material() {
                 *sample = "k".into();
                 "keyless_key_material"
             }
+            // A right side on a keyless Matching is its pairing (round 5: refused, blank or not).
             Kind::Matching { pairs, .. } => {
-                pairs[0].right = " ".into();
-                "blank_text"
+                pairs[0].right = if case % 2 == 0 { " ".into() } else { "Paris".into() };
+                "keyless_key_material"
             }
             Kind::Multipart { parts } => match &mut parts[0].kind {
                 PartKind::Mc { answers } => {

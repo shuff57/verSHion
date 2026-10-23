@@ -128,15 +128,15 @@
             ],
             "pairs": [
               {
+                "left": "Chloroplast",
+                "right": ""
+              },
+              {
                 "left": "Mitochondrion",
                 "right": ""
               },
               {
                 "left": "Ribosome",
-                "right": ""
-              },
-              {
-                "left": "Chloroplast",
                 "right": ""
               }
             ]
@@ -206,7 +206,7 @@
                       {
                         "correct": false,
                         "locked": false,
-                        "text": "negative"
+                        "text": "maximum"
                       },
                       {
                         "correct": false,
@@ -216,7 +216,7 @@
                       {
                         "correct": false,
                         "locked": false,
-                        "text": "maximum"
+                        "text": "negative"
                       }
                     ]
                   }

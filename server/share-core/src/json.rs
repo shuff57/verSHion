@@ -1,7 +1,11 @@
 //! Strict, schema-directed JSON reading for untrusted payloads (ASVS 5.0 1.5.2, 1.5.3, 2.4.1).
 //!
-//! * **Duplicate keys are refused.** `serde_json::Value` and JavaScript's `JSON.parse` keep the
-//!   last of two equal keys, other parsers the first; refusing them leaves nothing to disagree on.
+//! * **Duplicate keys are refused where they are read**: a key the schema names, at any level, and
+//!   any key of figure `params`. `serde_json::Value` and JavaScript's `JSON.parse` keep the last of
+//!   two equal keys, other parsers the first; refusing them leaves nothing to disagree on. Keys the
+//!   schema does not name (and everything inside them) are skipped unread, duplicates included:
+//!   nothing of them reaches the output (which is re-serialised, never the input passed through),
+//!   so there is nothing to disagree on, and remembering their names would cost memory per key.
 //! * **Unknown keys are never stored.** The reader follows a [`Shape`] (the payload schema): a key
 //!   the shape does not name is skipped without allocating, and its object is marked `dropped` so
 //!   the validator can report it (by path, never by name).
@@ -552,7 +556,7 @@ pub static QUESTION: Shape = obj! {
     "difficulty" => &Shape::Scalar, "topics" => &Shape::Arr(Cap::Topics, &Shape::Scalar),
     "image" => &IMAGE, "explanation" => &Shape::Scalar, "figure" => &FIGURE,
     "created" => &Shape::Scalar, "modified" => &Shape::Scalar,
-    "keyless" => &Shape::Scalar, "keep_order" => &Shape::Scalar, "origin" => &ORIGIN, "published" => &PUBLISHED,
+    "keyless" => &Shape::Scalar, "keep_order" => &Shape::Scalar, "rekeyed" => &Shape::Scalar, "origin" => &ORIGIN, "published" => &PUBLISHED,
 };
 static DETAILS: Shape = obj! { "description" => &Shape::Scalar, "author" => &Shape::Scalar, "license_name" => &Shape::Scalar, "license_url" => &Shape::Scalar };
 static BANK: Shape = obj! {

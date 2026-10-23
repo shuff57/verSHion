@@ -151,6 +151,11 @@ pub struct Question {
     #[serde(default, skip_serializing_if = "Option::is_none")] pub origin: Option<Origin>,
     /// v2: the author's publish record.
     #[serde(default, skip_serializing_if = "Option::is_none")] pub published: Option<Published>,
+    /// v2: the teacher entered a key into this copy, which was imported keyless (`origin.form` is
+    /// `stripped`). Without it such a copy is refused for publishing when it still holds a
+    /// True/False placeholder (`placeholder_key`): a lost `keyless` flag and sentinel must not turn
+    /// the placeholder `false` into a published key.
+    #[serde(default, skip_serializing_if = "is_false")] pub rekeyed: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

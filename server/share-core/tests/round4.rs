@@ -3,7 +3,8 @@
 mod common;
 use common::*;
 use serde_json::{Value, json};
-use share_core::labels::{SiblingRef, decoration, key_in_formatting, sibling_ref};
+use share_core::format::features as look;
+use share_core::labels::{SiblingRef, key_in_formatting, refers_to_siblings, sibling_ref};
 use share_core::wasm::*;
 use share_core::*;
 
@@ -83,7 +84,18 @@ fn sibling_reference_forms() {
         "A+B", "A/B", "Both A and B.", "A and B both", "A and/or B", "A + B", "All but C", "1 and 2", "I and II", "Both", "Neither",
         "The previous two answers", "The first two", "Both (a) and (b)", "B", "(c)", "Ambas", "a y b", "a et b", "A und B",
     ] {
-        assert_eq!(sibling_ref(t), Some(SiblingRef::Labels), "{t}");
+        // Lists of lowercase letters or numbers alone ("a and c", "1 and 2") are Weak: references
+        // where the set says so (round 5, `refers_to_siblings`).
+        assert!(matches!(sibling_ref(t), Some(SiblingRef::Labels | SiblingRef::Weak)), "{t}");
+        // Round 8: letters name choices only as their labels: the labels the choices carry, or
+        // (unlabelled) the capitals A, B, C... a renderer shows. Lowercase, bracketed and Roman
+        // forms with unlabelled choices name the stem's items.
+        // (Last of five: a reference never names its own position.)
+        assert!(refers_to_siblings(&[("a) Mitochondria", false), ("b) Ribosome", false), ("c) Golgi", false), ("d) Nucleus", false), (t, false)]), "{t}");
+        let implicit = !t.chars().any(|c| c.is_ascii_lowercase() && t.split(|x: char| !x.is_alphanumeric()).any(|w| w.len() == 1 && w.chars().all(|x| x.is_ascii_lowercase()))) && !t.contains("I and II") && !t.contains("(c)");
+        if implicit {
+            assert!(refers_to_siblings(&[("Mitochondria", false), ("Ribosome", false), ("Golgi", false), ("Nucleus", false), (t, false)]), "{t}");
+        }
     }
     for t in [
         "All above", "None of above", "All of them", "None of the others", "All the options", "All of the choices above", "All of the previous",
@@ -128,13 +140,14 @@ fn author_keep_order_and_the_served_order_report() {
     let o = j(&strip_ok(p.as_bytes(), ""));
     assert_eq!(served(&o), (0..6).map(|i| format!("step {i}")).collect::<Vec<_>>());
     assert_eq!(o["order_reasons"][0]["reason"], "author_keep_order");
-    assert_eq!(o["served_orders"], json!([]));
+    assert!(o.get("author_only").is_none(), "author data travels separately");
+    assert_eq!(j(&strip_author_data_json())["served_orders"], json!([]));
     // v1 cannot carry it: refused rather than silently shuffled.
     assert_eq!(j(&validate_json(q_payload_v1(&q).as_bytes(), ""))["errors"][0]["code"], "v2_field_in_v1");
     // Without it the question is shuffled, and the report says how: order[k] = author index at k.
     q.keep_order = false;
     let o = j(&strip_seed_ok(q_payload(&q).as_bytes(), &[4; 32], ""));
-    let order: Vec<usize> = serde_json::from_value(o["served_orders"][0]["order"].clone()).unwrap();
+    let order: Vec<usize> = serde_json::from_value(j(&strip_author_data_json())["served_orders"][0]["order"].clone()).unwrap();
     let texts = served(&o);
     for (k, &from) in order.iter().enumerate() {
         assert_eq!(texts[k], format!("step {from}"));
@@ -142,7 +155,8 @@ fn author_keep_order_and_the_served_order_report() {
     // A matching word bank is reported too (indices into the author's right column).
     let m = question("m", Kind::Matching { pairs: (0..4).map(|i| Pair { left: format!("l{i}"), right: format!("r{i}") }).collect(), distractors: vec!["d".into()] });
     let o = j(&strip_seed_ok(q_payload(&m).as_bytes(), &[4; 32], ""));
-    let r = &o["served_orders"][0];
+    let ad = j(&strip_author_data_json());
+    let r = &ad["served_orders"][0];
     assert_eq!(r["matching"], true);
     let col = ["r0", "r1", "r2", "r3", "d"];
     let bank: Vec<String> = serde_json::from_value(o["payload"]["question"]["kind"]["Matching"]["distractors"].clone()).unwrap();
@@ -183,8 +197,8 @@ fn formatting_cannot_carry_the_key() {
         let o = j(&strip_ok(mcq(&t, &[c], &[], "Hottest?").as_bytes(), ""));
         assert_eq!(o["ok"], true, "{t:?}: {o}");
     }
-    assert_eq!(decoration("**x**"), decoration("**y**"));
-    assert_ne!(decoration("x (correct)"), decoration("x"));
+    assert_eq!(look("**x**"), look("**y**"));
+    assert_ne!(look("x (correct)"), look("x"));
     assert!(key_in_formatting(&[("a", true), ("b", false)]).is_empty());
 }
 

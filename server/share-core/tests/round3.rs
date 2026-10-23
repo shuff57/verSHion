@@ -83,11 +83,18 @@ fn offsets_for_javascript() {
 // ---- labels (critic A, critic B labels.mjs) ---------------------------------------------------------
 
 #[test]
+fn ratios_and_ranges_are_not_labels() {
+    // Round 6: "1: 2", "1 - 2 hours", "3 / 4" are numbers, not labels: no finding at all.
+    for texts in [vec!["1: 2", "2: 3", "3: 4", "4: 5"], vec!["1 : 2", "2 : 3", "3 : 4"], vec!["1 - 2 hours", "2 - 3 hours", "3 - 4 hours"], vec!["1 / 2", "2 / 3", "3 / 4"]] {
+        assert!(share_core::labels::analyze(&texts).is_none(), "{texts:?}");
+    }
+}
+
+#[test]
 fn real_text_is_never_stripped_silently() {
     for (name, texts) in [
         ("organisms", vec!["A. thaliana", "B. subtilis", "C. elegans", "D. melanogaster"]),
         ("roman_statements", vec!["I. only", "II. only", "III. only", "I. and II. only"]),
-        ("ratios", vec!["1: 2", "2: 3", "3: 4", "4: 5"]),
         ("grams", vec!["2. 5 grams", "3. 5 grams"]),
         ("steps", vec!["1. Boil", "2. Stir", "3. Serve"]),
         ("ab_answers", vec!["A.", "B.", "C."]),
@@ -102,6 +109,14 @@ fn real_text_is_never_stripped_silently() {
         // Keep: text untouched, and (the labels are 1, 2, 3...) nothing moves.
         let r = j(&strip_ok(p.as_bytes(), r#"{"labels":[{"question":0,"choice":"keep"}]}"#));
         let out: Vec<&str> = r["payload"]["question"]["kind"]["Mc"]["answers"].as_array().unwrap().iter().map(|a| a["text"].as_str().unwrap()).collect();
+        // Round 8: "I. and II. only" names the stem's statements, not choices: these shuffle.
+        if name == "roman_statements" {
+            let (mut a, mut b) = (out.clone(), texts.clone());
+            a.sort();
+            b.sort();
+            assert_eq!(a, b, "{name}: Keep preserves the text");
+            continue;
+        }
         assert_eq!(out, texts, "{name}: Keep preserves the text and the order");
         // Kept labels that number the choices, or (the fourth statement) choices naming others.
         let reason = r["order_reasons"][0]["reason"].as_str().unwrap();
@@ -148,7 +163,9 @@ fn label_forms_that_leaked_the_order_are_found() {
         // Keep: the order is not shuffled (the labels reveal it).
         let r = j(&strip_ok(p.as_bytes(), r#"{"labels":[{"question":0,"choice":"keep"}]}"#));
         let out: Vec<&str> = r["payload"]["question"]["kind"]["Mc"]["answers"].as_array().unwrap().iter().map(|a| a["text"].as_str().unwrap()).collect();
-        assert_eq!(out, texts, "{texts:?}");
+        // (Round 6: served as students see it, spacing normalised: "A)\tVenus" is "A) Venus".)
+        let want: Vec<String> = texts.iter().map(|t| share_core::format::served_text(t)).collect();
+        assert_eq!(out, want, "{texts:?}");
         assert_eq!(r["needs_order_ack"], json!([{"question": 0}]), "{texts:?}");
     }
 }
@@ -180,7 +197,7 @@ fn hashes_never_strip_labels_on_their_own() {
     let v = ok(&p);
     for choice in [LabelChoice::Strip, LabelChoice::Keep] {
         let labels = vec![LabelDecision { question: 0, part: None, choice }];
-        let s = strip_with_seed(v.payload.clone(), &StripOptions { image_ok: vec![], labels: labels.clone() }, seed(4)).unwrap();
+        let s = strip_with_seed(v.payload.clone(), &StripOptions { image_ok: vec![], labels: labels.clone(), ..Default::default() }, seed(4)).unwrap();
         assert_eq!(match_hash_with(only_question(&v.payload), &question_labels(&labels, 0)), match_hash(only_question(&s.payload)), "{choice:?}");
     }
 }
@@ -244,9 +261,11 @@ fn localize_adds_no_placeholder_key() {
 fn keyless_matching_rules() {
     // Whitespace-only rights (fuzz crash_71593 / crash_130974) and duplicate word-bank items.
     for (name, pairs, d, code) in [
-        ("space_right", vec![("a", " "), ("b", "")], vec!["X", "Y"], "blank_text"),
+        // (Round 5: any right side on a keyless question is its pairing: key material.)
+        ("space_right", vec![("a", " "), ("b", "")], vec!["X", "Y"], "keyless_key_material"),
         ("dup_bank", vec![("a", ""), ("b", "")], vec!["X", "X"], "duplicate_choice"),
-        ("bank_repeats_right", vec![("a", "X"), ("b", "")], vec!["X", "Y"], "duplicate_choice"),
+        ("dup_bank_lookalike", vec![("a", ""), ("b", "")], vec!["X", "X "], "duplicate_choice"),
+        ("bank_repeats_right", vec![("a", "X"), ("b", "")], vec!["X", "Y"], "keyless_key_material"),
     ] {
         let mut m = q(json!({"Matching":{"pairs": pairs.iter().map(|(a,b)| json!({"left":a,"right":b})).collect::<Vec<_>>(), "distractors": d}}), "m");
         m["keyless"] = json!(true);
@@ -293,7 +312,7 @@ fn keyless_questions_carry_no_key() {
                 assert_eq!(match_hash(&strip_without_shuffle(q, &QuestionLabels::new())), match_hash(q));
             }
             let labels = decide_all(&v.payload, LabelChoice::Strip);
-            if let Ok(s) = strip(v.payload.clone(), &StripOptions { image_ok: vec![], labels: labels.clone() }) {
+            if let Ok(s) = strip(v.payload.clone(), &StripOptions { image_ok: vec![], labels: labels.clone(), ..Default::default() }) {
                 let back = validate(&s.payload.to_json(), &Limits::default(), &Structural);
                 assert!(back.is_ok(), "stripped output not re-validatable: {:?}", back.err());
                 for (i, (a, q)) in v.payload.questions().iter().zip(s.payload.questions()).enumerate() {
@@ -507,11 +526,11 @@ fn native_entry_points_cap_and_refuse_on_their_own() {
     let p = json!({"schema_version":1,"bank":{"id":"b","name":"n","created":0,"modified":0,"questions": qs}}).to_string();
     assert_eq!(validate(&p, &Limits::default(), &Structural).unwrap_err().len(), share_core::validate::MAX_ERRORS);
     let v = ok(&q_payload(&question("s", Kind::Tf { correct: true })));
-    let e = strip_with_seed(v.payload.clone(), &StripOptions { image_ok: vec![5; 10_000], labels: vec![] }, seed(1)).unwrap_err();
+    let e = strip_with_seed(v.payload.clone(), &StripOptions { image_ok: vec![5; 10_000], labels: vec![], ..Default::default() }, seed(1)).unwrap_err();
     assert_eq!(e.len(), share_core::validate::MAX_ERRORS);
     // Strip where it is not allowed is refused by strip itself, not only by the publish check.
     let v = ok(&q_payload(&question("s", Kind::Mc { answers: vec![answer("I. only", true), answer("II. only", false), answer("III. only", false)] })));
-    let e = strip_with_seed(v.payload, &StripOptions { image_ok: vec![], labels: vec![LabelDecision { question: 0, part: None, choice: LabelChoice::Strip }] }, seed(1)).unwrap_err();
+    let e = strip_with_seed(v.payload, &StripOptions { image_ok: vec![], labels: vec![LabelDecision { question: 0, part: None, choice: LabelChoice::Strip }], ..Default::default() }, seed(1)).unwrap_err();
     assert_eq!(e[0].code, "labels_strip_refused");
     // The importer's column skips whitespace-only items.
     let pairs = vec![Pair { left: "a".into(), right: " ".into() }, Pair { left: "b".into(), right: "X".into() }];

@@ -181,7 +181,9 @@ fn matching_stripped_contract_and_rekey() {
         distractors.extend((0..47).map(|i| format!("X{i}")));
     }
     let out = j(&validate_json(q_payload(&claim).as_bytes(), ""));
-    assert_eq!(out["errors"][0]["code"], "too_many");
+    let codes: Vec<&str> = out["errors"].as_array().unwrap().iter().map(|e| e["code"].as_str().unwrap()).collect();
+    // (Round 5: its right sides are also refused as key material on a keyless question.)
+    assert!(codes.contains(&"too_many") && codes.contains(&"keyless_key_material"), "{out}");
 }
 
 // ---- p.mjs / p2.mjs: hash ----------------------------------------------------------------------------
@@ -209,8 +211,8 @@ fn hash_pairs() {
     // The biology choices look like labels but are not order-revealing: the author keeps them,
     // nothing is removed, and the question is still shuffled.
     let bio = qj("Which is Gram-negative?", json!({"Mc":{"answers":[{"text":"E. coli","correct":true},{"text":"S. aureus"},{"text":"B. subtilis"}]}}), 1);
-    assert_eq!(j(&strip_ok(bio.as_bytes(), ""))["errors"][0]["code"], "labels_need_decision");
-    let s = j(&strip_ok(bio.as_bytes(), r#"{"labels":[{"question":0,"choice":"keep"}]}"#));
+    // (Round 11: no label finding at all, no decision needed.)
+    let s = j(&strip_ok(bio.as_bytes(), ""));
     let mut texts: Vec<&str> = s["payload"]["question"]["kind"]["Mc"]["answers"].as_array().unwrap().iter().map(|a| a["text"].as_str().unwrap()).collect();
     texts.sort();
     assert_eq!(texts, ["B. subtilis", "E. coli", "S. aureus"]);
@@ -316,11 +318,15 @@ fn slow_paths_stay_fast() {
     let out = strip_ok(p.as_bytes(), &json!({ "labels": keep }).to_string());
     assert!(out.contains("\"ok\":true"), "{}", &out[..300.min(out.len())]);
     // Release: about 0.4 s on the build machine; unoptimised builds are ~50x slower at NFC.
-    let bound = if cfg!(debug_assertions) { 90.0 } else { 15.0 }; // generous: the mutation runs share the machine
+    // Round 5: about 3.6 s release (the sibling-reference and formatting checks per choice); debug ~120 s.
+    let bound = if cfg!(debug_assertions) { 240.0 } else { 15.0 }; // generous: the mutation runs share the machine
     assert!(t.elapsed().as_secs_f64() < bound, "{:?}", t.elapsed());
     // NFC of a 4 MB run of combining marks or of an expanding character: refused before any of it is built.
     let s = format!("a{}", "\u{0301}\u{0316}".repeat(1_000_000));
     let t = Instant::now();
+    // (Round 5: a field over 4x its limit is refused before any character work.)
+    assert_eq!(j(&validate_json(qj(&s, tf(), 1).as_bytes(), ""))["errors"][0]["code"], "too_long");
+    let s = format!("a{}", "\u{0301}\u{0316}".repeat(1_000));
     assert_eq!(j(&validate_json(qj(&s, tf(), 1).as_bytes(), ""))["errors"][0]["code"], "mark_run");
     let s = "\u{1D160}".repeat(1_000_000);
     assert_eq!(j(&validate_json(qj(&s, tf(), 1).as_bytes(), ""))["errors"][0]["code"], "too_long");

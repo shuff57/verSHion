@@ -177,6 +177,24 @@ pub fn full_hash(q: &Question) -> String {
     sha256_hex(out.as_bytes())
 }
 
+/// `full_hash` keyed with a server secret (HMAC-SHA256 over the same canonical form, hex): what
+/// the wasm `full_hash` export returns. Unkeyed, the hash of an author's full question is a key
+/// oracle (hash each candidate key and compare); keyed, only the holder of the secret can compare.
+pub fn full_hash_keyed(q: &Question, key: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut k = [0u8; 64];
+    if key.len() > 64 {
+        k[..32].copy_from_slice(&Sha256::digest(key));
+    } else {
+        k[..key.len()].copy_from_slice(key);
+    }
+    let mut msg = String::from("vershion/question/v1\n");
+    write_question(q, &mut msg);
+    let inner = Sha256::new().chain_update(k.map(|b| b ^ 0x36)).chain_update(msg.as_bytes()).finalize();
+    let outer = Sha256::new().chain_update(k.map(|b| b ^ 0x5c)).chain_update(inner).finalize();
+    outer.iter().map(|b| format!("{b:02x}")).collect()
+}
+
 /// The spec's `served_sha256`: `full_hash` of whichever form was served.
 pub fn served_hash(q: &Question) -> String {
     full_hash(q)
@@ -420,6 +438,10 @@ pub fn write_question(q: &Question, out: &mut String) {
     if let Some(p) = &q.published {
         k_("published", &mut f, out);
         published_(p, out);
+    }
+    if q.rekeyed {
+        k_("rekeyed", &mut f, out);
+        out.push_str("true");
     }
     k_("stem", &mut f, out);
     s_(&q.stem, out);
