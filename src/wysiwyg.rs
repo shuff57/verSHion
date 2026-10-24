@@ -37,6 +37,11 @@ fn clen(s: &str) -> usize {
     s.chars().count()
 }
 
+/// The linear text between the `$`s of the `$..$` at char `start`, `len` chars long ("" for `$$`).
+pub fn inner_content(s: &str, start: usize, len: usize) -> String {
+    if len <= 2 { String::new() } else { slice(s, start + 1..start + len - 1) }
+}
+
 /// Chars `r` of `s`.
 pub fn slice(s: &str, r: Range<usize>) -> String {
     s.chars().skip(r.start).take(r.end.saturating_sub(r.start)).collect()
@@ -512,6 +517,12 @@ pub struct Ana {
 
 /// Roles of `text`'s chars; `math_ok` says whether a `$..$` content typesets.
 pub fn analyze(text: &str, math_ok: &dyn Fn(&str) -> bool) -> Ana {
+    analyze_with(text, math_ok, None)
+}
+
+/// [`analyze`], with the chars `forced` (a `$..$`, possibly the empty `$$`) taken as a math atom
+/// whatever the parser and `math_ok` say: the equation being edited in place is always an atom.
+pub fn analyze_with(text: &str, math_ok: &dyn Fn(&str) -> bool, forced: Option<Range<usize>>) -> Ana {
     let ch: Vec<char> = text.chars().collect();
     let mut role = vec![Role::Text { b: false, i: false, sub: false, sup: false, s: false }; ch.len()];
     let mut link = vec![false; ch.len()];
@@ -543,6 +554,13 @@ pub fn analyze(text: &str, math_ok: &dyn Fn(&str) -> bool) -> Ana {
             role[base] = Role::Newline;
             base += 1;
         }
+    }
+    if let Some(f) = forced.filter(|f| f.start + 2 <= f.end && f.end <= ch.len()) {
+        atoms.retain(|a| a.end <= f.start || f.end <= a.start);
+        role[f.clone()].fill(Role::Text { b: false, i: false, sub: false, sup: false, s: false });
+        link[f.clone()].fill(false);
+        code[f.clone()].fill(false);
+        atoms.push(Atom { start: f.start, end: f.end, kind: AtomKind::Math(ch[f.start + 1..f.end - 1].iter().collect()) });
     }
     for (n, m) in blank_starts(text).into_iter().enumerate() {
         if role[m..m + 3].iter().all(|r| matches!(r, Role::Text { sub: false, sup: false, .. })) && !atoms.iter().any(|a| a.start < m + 3 && m < a.end) {
@@ -2233,14 +2251,6 @@ pub fn slash_apply(stem: &str, slash: usize, caret: usize, cmd: Slash, blanks: b
 // The widget
 // =====================================================================================
 
-/// Where an equation should be inserted or which one should be edited.
-#[derive(Clone, Debug, PartialEq)]
-pub struct EqAsk {
-    pub caret: usize,
-    pub span: Option<Range<usize>>,
-    pub initial: String,
-}
-
 pub struct Opts<'a> {
     pub size: f32,
     pub width: f32,
@@ -2259,7 +2269,8 @@ pub struct Opts<'a> {
 
 pub struct Out {
     pub changed: bool,
-    pub eq: Option<EqAsk>,
+    /// An equation of this field is being edited in place (it has the keyboard, not the text).
+    pub math: bool,
     pub rect: Rect,
     pub focused: bool,
     /// The caret (global) of the last focused unit, for an external insert.
@@ -2268,7 +2279,7 @@ pub struct Out {
 
 impl Default for Out {
     fn default() -> Self {
-        Out { changed: false, eq: None, rect: Rect::NOTHING, focused: false, caret: None }
+        Out { changed: false, math: false, rect: Rect::NOTHING, focused: false, caret: None }
     }
 }
 
@@ -2325,6 +2336,10 @@ struct Mem {
     /// A blank was just made: its "put it back" offer stays hidden while the caret rests there.
     quiet: bool,
     quiet_p: Option<usize>,
+    /// An equation edit to start at the end of this frame (mathedit.rs).
+    math_req: Option<mathedit::Start>,
+    /// An outside caller (the sigma button) asked for an equation at the remembered selection.
+    math_ext: bool,
 }
 
 /// The link popover: the selection it was opened on (global chars), its unit, the address
@@ -2409,14 +2424,26 @@ fn math_ok_ui(ctx: &egui::Context, size: f32) -> impl Fn(&str) -> bool + '_ {
 }
 
 /// Width, reserved height and (for math) baseline of atom `a`.
-fn atom_box(ui: &Ui, a: &Atom, st: &Sty, blank_label: &dyn Fn(usize) -> Option<String>) -> (f32, f32, f32) {
+/// Scale (<= 1) that makes a formula `w` wide fit a line of `wrap` points. A formula wider than
+/// its field is shrunk to fit (never clipped): wrapping one inside a line of text is not possible
+/// in this text model (one reserved slot per formula), so phase 4 can revisit it.
+pub(super) fn fit_scale(w: f32, wrap: f32, size: f32) -> f32 {
+    if !wrap.is_finite() || w <= 0.0 { return 1.0; }
+    ((wrap * 0.92 - size * mathedit::SLOT_EXTRA_EM - 2.0) / w).clamp(0.3, 1.0)
+}
+
+fn atom_box(ui: &Ui, a: &Atom, st: &Sty, blank_label: &dyn Fn(usize) -> Option<String>, wrap: f32) -> (f32, f32, f32) {
     let main = FontId::new(st.size, st.family.clone());
     let (asc, l) = metrics(ui, &main);
     match &a.kind {
+        // the empty equation being edited: room for its placeholder
+        AtomKind::Math(c) if c.is_empty() => (st.size * mathedit::EMPTY_SLOT_EM, l + 2.0, asc),
         AtomKind::Math(c) => {
             let Some((_, sz, b)) = crate::equation::math_image(ui.ctx(), c, st.size, f32::INFINITY) else { return (st.size, l, 0.0) };
+            let k = fit_scale(sz.x, wrap, st.size);
+            let (sz, b) = (sz * k, b * k);
             let h = 2.0 * (b - asc + 0.5 * l).max(sz.y - b + asc - 0.5 * l).max(0.5 * l);
-            (sz.x + st.size * 0.24, h + 2.0, b)
+            (sz.x + st.size * mathedit::SLOT_EXTRA_EM, h + 2.0, b)
         }
         AtomKind::Blank(n) => match blank_label(*n) {
             Some(t) => {
@@ -2429,7 +2456,9 @@ fn atom_box(ui: &Ui, a: &Atom, st: &Sty, blank_label: &dyn Fn(usize) -> Option<S
 }
 
 /// The layout job for a unit's text.
-fn build_job(ui: &Ui, text: &str, wrap: f32, st: &Sty, ana: &Ana, blank_label: &dyn Fn(usize) -> Option<String>) -> LayoutJob {
+/// `fwrap`: the width a formula may fill before it wraps at its operators (the unit's width; the
+/// layouter's own `wrap` is not used, it is not the same on every call).
+fn build_job(ui: &Ui, text: &str, wrap: f32, fwrap: f32, st: &Sty, ana: &Ana, blank_label: &dyn Fn(usize) -> Option<String>) -> LayoutJob {
     let main = FontId::new(st.size, st.family.clone());
     let (asc, l) = metrics(ui, &main);
     let small = st.size * 0.68;
@@ -2443,7 +2472,7 @@ fn build_job(ui: &Ui, text: &str, wrap: f32, st: &Sty, ana: &Ana, blank_label: &
         };
         TextFormat { font_id: font, color, italics, line_height: Some(lh.max(1.0)), valign: Align::Center, ..Default::default() }
     };
-    let boxes: Vec<(f32, f32, f32)> = ana.atoms.iter().map(|a| atom_box(ui, a, st, blank_label)).collect();
+    let boxes: Vec<(f32, f32, f32)> = ana.atoms.iter().map(|a| atom_box(ui, a, st, blank_label, fwrap)).collect();
     let mut job = LayoutJob::default();
     job.wrap.max_width = wrap;
     job.keep_trailing_whitespace = true;
@@ -2541,9 +2570,11 @@ fn show_unit(ui: &mut Ui, uid: UiId, text: &mut String, width: f32, st: &Sty, hi
         Some(if ans.is_empty() { format!("Blank {}", blank_base + n + 1) } else { ans })
     };
     let st2 = st.clone();
+    // the equation being edited in this unit is an atom whatever its text says (mathedit.rs)
+    let forced = mathedit::forced_for(uid);
     let mut lay = |ui: &Ui, buf: &dyn TextBuffer, wrap: f32| -> Arc<Galley> {
-        let ana = analyze(buf.as_str(), &math_ok_ui(ui.ctx(), st2.size));
-        let job = build_job(ui, buf.as_str(), wrap, &st2, &ana, &label);
+        let ana = analyze_with(buf.as_str(), &math_ok_ui(ui.ctx(), st2.size), forced.clone());
+        let job = build_job(ui, buf.as_str(), wrap, width, &st2, &ana, &label);
         ui.fonts_mut(|f| f.layout_job(job))
     };
     let mut te = TextEdit::multiline(text)
@@ -2562,10 +2593,12 @@ fn show_unit(ui: &mut Ui, uid: UiId, text: &mut String, width: f32, st: &Sty, hi
         te = te.hint_text(RichText::new(hint.to_string()).size(st.size));
     }
     let out = te.show(ui);
-    let ana = analyze(text, &math_ok_ui(&ctx, st.size));
+    let ana = analyze_with(text, &math_ok_ui(&ctx, st.size), forced.clone());
     let origin = out.galley_pos - Vec2::new(out.galley.rect.left(), 0.0);
     // paint atoms into their reserved slots
-    let painter = ui.painter_at(out.text_clip_rect.expand(4.0));
+    // (clip to the whole field, not the galley: a formula that wrapped to a row of its own has a
+    // reserved width the galley's own rect does not include)
+    let painter = ui.painter_at(out.text_clip_rect.union(out.response.rect).expand(4.0));
     let resp = &out.response.response;
     let hover = resp.hover_pos();
     let mut clicked_atom = None;
@@ -2576,6 +2609,7 @@ fn show_unit(ui: &mut Ui, uid: UiId, text: &mut String, width: f32, st: &Sty, hi
         usize::from(x.index)..usize::from(y.index)
     });
     let focused = ui.memory(|m| m.has_focus(uid));
+    let pressed = ui.input(|i| i.pointer.primary_pressed());
     let dbg = crate::env_var("VERSHION_WYS_DEBUG").is_ok();
     if dbg && !ana.atoms.is_empty() {
         eprintln!("wys unit {:?}: galley {:?} clip {:?} width {width} rows {:?}", text.chars().take(30).collect::<String>(), out.galley.rect, out.text_clip_rect, out.galley.rows.iter().map(|r| (r.pos, r.row.size)).collect::<Vec<_>>());
@@ -2590,19 +2624,40 @@ fn show_unit(ui: &mut Ui, uid: UiId, text: &mut String, width: f32, st: &Sty, hi
         if hovered {
             ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
         }
-        if resp.clicked() && hovered {
+        // A press on a formula starts editing it at once (mathedit.rs); a blank acts on release.
+        let is_math = matches!(a.kind, AtomKind::Math(_));
+        let editing = forced.as_ref().is_some_and(|f| f.start == a.start);
+        if hovered && !editing && ((is_math && pressed) || (!is_math && resp.clicked())) {
             clicked_atom = Some(a.clone());
         }
         let base_y = r.top() + asc + 0.5 * (r.height() - l);
+        if editing || clicked_atom.as_ref().is_some_and(|c| c.start == a.start && is_math) {
+            mathedit::report(mathedit::Slot { unit: uid, local_start: a.start, rect: r, base_y, line_left: origin.x, avail: width });
+        }
+        if editing {
+            // the equation editor paints it (mathedit.rs)
+            continue;
+        }
         match &a.kind {
             AtomKind::Math(c) => {
                 if hovered || selected {
                     painter.rect_filled(r.expand2(Vec2::new(0.0, -1.0)), 5.0, theme::accent_faded());
                 }
                 if let Some((tex, sz, b)) = crate::equation::math_image(&ctx, c, st.size, f32::INFINITY) {
-                    let x = r.left() + (r.width() - sz.x) / 2.0;
+                    let k = fit_scale(sz.x, width, st.size);
+                    let (sz, b) = (sz * k, b * k);
+                    // (anchored at the slot's left: a wrapped formula's slot can be a row that broke
+                    // inside the atom, and then its width is not the formula's)
+                    let x = r.left() + st.size * mathedit::SLOT_EXTRA_EM * 0.5;
                     let y = (base_y - b).clamp(r.top(), (r.bottom() - sz.y).max(r.top()));
                     painter.image(tex, Rect::from_min_size(Pos2::new(x, y), sz), Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), st.color);
+                    if k <= 0.3 && sz.x > width * 0.92 {
+                        // still wider than the field at the smallest readable size: say so
+                        // (click it to see and edit all of it) instead of cutting it silently
+                        let edge = out.response.rect.right() - 2.0;
+                        painter.rect_filled(Rect::from_min_max(Pos2::new(edge - st.size * 1.2, y), Pos2::new(edge, y + sz.y.max(st.size))), 3.0, theme::card());
+                        painter.text(Pos2::new(edge - 2.0, y), egui::Align2::RIGHT_TOP, "…", FontId::new(st.size, st.family.clone()), theme::accent_col());
+                    }
                 }
             }
             AtomKind::Blank(n) => match label(*n) {
@@ -2651,6 +2706,11 @@ fn take_key(ui: &Ui, mods: Modifiers, key: Key) -> bool {
             false
         }
     })
+}
+
+/// Is `key` pressed this frame with no modifier at all (by the event's own modifiers)?
+fn key_plain(ui: &Ui, key: Key) -> bool {
+    ui.input(|i| i.events.iter().any(|e| matches!(e, Event::Key { key: k, pressed: true, modifiers, .. } if *k == key && modifiers.matches_exact(Modifiers::NONE))))
 }
 
 fn key_down(ui: &Ui, key: Key) -> bool {
@@ -2928,9 +2988,26 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
         return out;
     }
 
+    // ----- an equation being edited in place (mathedit.rs) -----
+    // It ends before anything is laid out when the user pressed outside it (the press then does
+    // its normal job), or when it went stale or the text no longer holds it.
+    mathedit::begin_frame();
+    let mut me = mathedit::take(id);
+    if let Some(e) = me.take() {
+        let pressed_outside = ui.input(|i| i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| e.rect.is_some_and(|r| !r.contains(p))));
+        if e.stale(&ctx) || pressed_outside || !mathedit::valid(stem, &e) {
+            mathedit::end(&ctx, &mut m, stem, e, mathedit::Leave::Click, o.blanks.as_deref().map(|v| v.as_slice()), ui.input(|i| i.time), &mut out);
+        } else {
+            me = Some(e);
+        }
+    }
     let mut d = doc(stem, o.structured);
     let mut ids = unit_ids(id, &d);
     // ----- focus wanted by the last edit -----
+    if me.is_some() {
+        m.want = None;
+        m.retry = None;
+    }
     if m.want.is_none()
         && let Some((w, n)) = m.retry.take()
         && n < 6
@@ -3027,7 +3104,7 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
                         m.slash = None;
                         if let Some(done) = slash_apply(stem, sl.at, gc, it.cmd, has_blanks) {
                             if let Some(g) = done.eq_at {
-                                out.eq = Some(EqAsk { caret: g, span: None, initial: String::new() });
+                                m.math_req = Some(mathedit::Start::Insert { at: g..g, initial: String::new() });
                             }
                             change = Some(done.change);
                         }
@@ -3121,8 +3198,30 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
                 set_cursor(&ctx, uid, q, q + 1);
             }
         }
+        // Math atoms (mathedit.rs): Enter on a selected formula, or an arrow key at its edge,
+        // edits it in place.
+        if act.is_none() && change.is_none() && m.math_req.is_none() && u.virt.is_none() {
+            let g = |l: usize| d.global(&u, l);
+            let start_edit = |a: &Atom, edge: mathedit::Edge| mathedit::Start::Edit { start: g(a.start), len: a.end - a.start, edge };
+            // (the key event's own modifiers, not the frame's: a quick Shift+Arrow can end the
+            // frame with Shift already up)
+            if la != lc && key_plain(ui, Key::Enter) {
+                if let Some(k) = mathedit::selected_formula(&ana, la.min(lc), la.max(lc)) {
+                    take_key(ui, Modifiers::NONE, Key::Enter);
+                    m.math_req = Some(start_edit(&ana.atoms[k], mathedit::Edge::Right));
+                }
+            } else if single {
+                let right = key_plain(ui, Key::ArrowRight);
+                if right || key_plain(ui, Key::ArrowLeft) {
+                    if let Some((k, edge)) = mathedit::entry(&ana, lc, right) {
+                        take_key(ui, Modifiers::NONE, if right { Key::ArrowRight } else { Key::ArrowLeft });
+                        m.math_req = Some(start_edit(&ana.atoms[k], edge));
+                    }
+                }
+            }
+        }
         // Enter
-        if act.is_none() && change.is_none() && (take_key(ui, Modifiers::NONE, Key::Enter) || take_key(ui, Modifiers::SHIFT, Key::Enter)) {
+        if act.is_none() && change.is_none() && m.math_req.is_none() && (take_key(ui, Modifiers::NONE, Key::Enter) || take_key(ui, Modifiers::SHIFT, Key::Enter)) {
             match u.kind {
                 UKind::Cell { .. } => {
                     // leave the table: a new paragraph line after it (or the one already there)
@@ -3165,7 +3264,7 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
             }
         }
         // Arrows across unit edges
-        if act.is_none() && change.is_none() && m.want.is_none() && single && !ui.input(|i| i.modifiers.shift || i.modifiers.command || i.modifiers.alt) {
+        if act.is_none() && change.is_none() && m.want.is_none() && m.math_req.is_none() && single && !ui.input(|i| i.modifiers.shift || i.modifiers.command || i.modifiers.alt) {
             let flat = d.flat();
             let go = |k: usize, end: bool| -> Want {
                 let nu = d.unit(flat[k]);
@@ -3230,7 +3329,8 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
             if o.structured {
                 m.slash = Some(SlashSt { at: d.global(&u, lc), hi: 0, tab: None });
             } else {
-                out.eq = Some(EqAsk { caret: d.global(&u, lc), span: None, initial: String::new() });
+                let g = d.global(&u, lc);
+                m.math_req = Some(mathedit::Start::Insert { at: g..g, initial: String::new() });
             }
         }
     }
@@ -3260,7 +3360,7 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
         m.want = Some(Want { anchor: c.anchor, caret: c.caret, virt: c.virt });
         out.changed = true;
     };
-    let run_act = |a: Act, m: &mut Mem, stem: &mut String, d: &Doc, blanks_rows: &mut Option<Vec<String>>, out: &mut Out| -> Option<Change> {
+    let run_act = |a: Act, m: &mut Mem, stem: &mut String, d: &Doc, blanks_rows: &mut Option<Vec<String>>, _out: &mut Out| -> Option<Change> {
         let sel = m.sel?;
         let fi = m.sel_unit.filter(|&k| k < d.flat().len()).or_else(|| d.find(sel.1, None))?;
         let at = d.flat()[fi];
@@ -3293,7 +3393,7 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
             Act::Equation => {
                 let (lo, hi) = (la.min(lb), la.max(lb));
                 let g = |l: usize| d.global(&u, l);
-                out.eq = Some(if lo < hi {
+                m.math_req = Some(if lo < hi {
                     let words = slice(&text, lo..hi);
                     let plain: String = decode_line(&words.replace('\n', " ")).0.iter().map(|it| match it {
                         Item::Ch { c, .. } => c.to_string(),
@@ -3301,9 +3401,9 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
                         Item::Atom(r) if r.starts_with('`') => r.trim_matches('`').to_string(),
                         Item::Atom(r) => r.trim_matches('$').to_string(),
                     }).collect();
-                    EqAsk { caret: g(lo), span: Some(g(lo)..g(hi)), initial: plain }
+                    mathedit::Start::Insert { at: g(lo)..g(hi), initial: plain }
                 } else {
-                    EqAsk { caret: g(lb), span: None, initial: String::new() }
+                    mathedit::Start::Insert { at: g(lb)..g(lb), initial: String::new() }
                 });
                 None
             }
@@ -3380,6 +3480,15 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
             _ => None,
         };
     }
+    if std::mem::take(&mut m.math_ext) && me.is_none() {
+        // the sigma button of the field: the remembered selection, else the end of the text
+        if m.sel.is_none() {
+            let n = clen(stem);
+            m.sel = Some((n, n));
+            m.sel_unit = None;
+        }
+        act = act.or(Some(Act::Equation));
+    }
     if let Some(a) = act.take() {
         match a {
             Act::Undo => do_undo(false, &mut m, stem, &mut blanks_rows, &mut out),
@@ -3446,6 +3555,11 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
     let active = focused.is_some() || m.active;
     let mut table_bar: Option<(usize, Act)> = None;
     let flat = d.flat();
+    if let Some(e) = &me
+        && let Some((fi, r)) = mathedit::unit_of(&d, e)
+    {
+        mathedit::set_forced(ids[fi], r);
+    }
     let rows_ro = blanks_rows.clone();
     let mut div_act: Option<usize> = None;
     let mut side_act: Option<(usize, SOp)> = None;
@@ -3610,7 +3724,7 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
                     for (j, u) in bl.units.iter().enumerate() {
                         let t = slice(stem, u.start..u.end);
                         let a = analyze(&t, &math_ok_ui(&ctx, st.size));
-                        let job = build_job(ui, &t, f32::INFINITY, &st, &a, &|n| {
+                        let job = build_job(ui, &t, f32::INFINITY, f32::INFINITY, &st, &a, &|n| {
                             let rows = rows_ro.as_deref()?;
                             Some(rows.get(blank_base(u.start) + n).cloned().unwrap_or_default().split(" OR ").next().unwrap_or("").to_string() + "  Blank 0")
                         });
@@ -3892,7 +4006,7 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
             m.slash = None;
             if let Some(done) = slash_apply(stem, sl.at, sel.1, cmd, has_blanks) {
                 if let Some(g) = done.eq_at {
-                    out.eq = Some(EqAsk { caret: g, span: None, initial: String::new() });
+                    m.math_req = Some(mathedit::Start::Insert { at: g..g, initial: String::new() });
                 }
                 commit(&mut m, stem, done.change, None, &mut blanks_rows, &mut out);
             }
@@ -3925,9 +4039,15 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
     if let Some((k, a)) = clicked {
         let u = d.unit(flat[k]).clone();
         match a.kind {
-            AtomKind::Math(c) => {
+            AtomKind::Math(_) => {
+                // a press on a formula edits it where it stands (mathedit.rs)
                 let g0 = d.global(&u, 0);
-                out.eq = Some(EqAsk { caret: g0 + a.start, span: Some(g0 + a.start..g0 + a.end), initial: c });
+                // the caret goes to the side of the formula that was pressed
+                let edge = mathedit::slot()
+                    .filter(|sl| sl.local_start == a.start)
+                    .zip(ui.input(|i| i.pointer.interact_pos()))
+                    .map_or(mathedit::Edge::Right, |(sl, p)| if p.x < sl.rect.center().x { mathedit::Edge::Left } else { mathedit::Edge::Right });
+                m.math_req = Some(mathedit::Start::Edit { start: g0 + a.start, len: a.end - a.start, edge });
             }
             AtomKind::Blank(_) => {
                 set_cursor(&ctx, ids[k], a.start, a.end);
@@ -4190,6 +4310,54 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
             m.want = Some(Want { anchor: g, caret: g, virt: None });
         }
     }
+    // ----- start, draw and end the equation edited in place (mathedit.rs) -----
+    let mut math_fresh = false;
+    if let Some(req) = m.math_req.take() {
+        let inserted = matches!(req, mathedit::Start::Insert { .. });
+        if let Some(old) = me.take() {
+            mathedit::end(&ctx, &mut m, stem, old, mathedit::Leave::Click, blanks_rows.as_deref(), now, &mut out);
+        }
+        me = mathedit::begin(&ctx, stem, req, o.size, &mut m, &mut out);
+        math_fresh = inserted && me.is_some();
+    }
+    if let Some(mut e) = me.take() {
+        mathedit::mark_active(&ctx);
+        out.math = true;
+        // the slot the layout gave it this frame (none the frame it was inserted in)
+        let slot = mathedit::slot().filter(|sl| !math_fresh && mathedit::unit_of(&d, &e).is_some_and(|(fi, r)| sl.unit == ids[fi] && sl.local_start == r.start));
+        let mut left: Option<mathedit::Leave> = None;
+        if let Some(slot) = slot {
+            let r = e.show(ui, slot, o.size, st.color, stem);
+            if let Some((s2, n)) = r.write {
+                *stem = s2;
+                e.len = n;
+                out.changed = true;
+            }
+            left = r.leave;
+            match left {
+                Some(mathedit::Leave::Enter) => {
+                    take_key(ui, Modifiers::NONE, Key::Enter);
+                }
+                Some(mathedit::Leave::Exit(mathedit::Edge::Left)) => {
+                    take_key(ui, Modifiers::NONE, Key::ArrowLeft);
+                }
+                Some(mathedit::Leave::Exit(mathedit::Edge::Right)) => {
+                    take_key(ui, Modifiers::NONE, Key::ArrowRight);
+                }
+                _ => {}
+            }
+        } else {
+            ctx.request_repaint();
+        }
+        match left {
+            Some(how) => mathedit::end(&ctx, &mut m, stem, e, how, blanks_rows.as_deref(), now, &mut out),
+            None => me = Some(e),
+        }
+    }
+    let math_open = me.is_some();
+    if let Some(e) = me {
+        mathedit::put(id, e);
+    }
     if let (Some(b), Some(r)) = (o.blanks.as_deref_mut(), blanks_rows) {
         *b = r;
     }
@@ -4197,7 +4365,7 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
     let body = Rect::from_min_max(top, Pos2::new(top.x + o.width, ui.min_rect().bottom()));
     let bg_click = ui.input(|i| i.pointer.primary_clicked() && i.pointer.interact_pos().is_some_and(|p| body.contains(p)));
     let over_bar = m.float_rect.is_some_and(|r| ui.input(|i| i.pointer.interact_pos().is_some_and(|p| r.contains(p)))) || over_slash || slash_pick.is_some();
-    if bg_click && !over_bar && m.want.is_none() && bar_act.is_none() && float_act.is_none() && !ids.iter().any(|u| ctx.memory(|mm| mm.has_focus(*u))) {
+    if bg_click && !math_open && !over_bar && m.want.is_none() && bar_act.is_none() && float_act.is_none() && !ids.iter().any(|u| ctx.memory(|mm| mm.has_focus(*u))) {
         let flat = d.flat();
         if let Some(&last) = flat.iter().rev().find(|f| d.unit(**f).virt.is_none()) {
             let u = d.unit(last);
@@ -4304,6 +4472,19 @@ pub fn focus_end(ctx: &egui::Context, id: UiId, nchars: usize) {
     ctx.request_repaint();
 }
 
+/// The field's sigma button: edit an equation in place at the remembered selection (the
+/// selected text becomes the equation) or, with none, at the end of the text.
+pub fn request_equation(ctx: &egui::Context, id: UiId) {
+    ctx.data_mut(|d| d.get_temp_mut_or_default::<Mem>(id).math_ext = true);
+    ctx.request_repaint();
+}
+
+/// Edit the existing `$..$` at chars `span` of the editor `id`'s text in place.
+pub fn edit_equation(ctx: &egui::Context, id: UiId, span: Range<usize>) {
+    ctx.data_mut(|d| d.get_temp_mut_or_default::<Mem>(id).math_req = Some(mathedit::Start::Edit { start: span.start, len: span.end - span.start, edge: mathedit::Edge::Right }));
+    ctx.request_repaint();
+}
+
 /// Record a change made outside the editor (the equation dialog) for undo, and put the caret
 /// at `caret` next frame.
 pub fn record_external(ctx: &egui::Context, id: UiId, old: &str, caret: usize, blanks: Option<&[String]>) {
@@ -4317,6 +4498,31 @@ pub fn record_external(ctx: &egui::Context, id: UiId, old: &str, caret: usize, b
 
 mod blockops;
 pub use blockops::*;
+mod mathedit;
+pub use mathedit::active_recently as math_active;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod fit_tests {
+    use super::fit_scale;
+
+    #[test]
+    fn a_formula_that_fits_is_not_scaled() {
+        assert_eq!(fit_scale(100.0, 500.0, 15.0), 1.0);
+        assert_eq!(fit_scale(100.0, f32::INFINITY, 15.0), 1.0);
+    }
+
+    #[test]
+    fn a_wide_formula_is_shrunk_inside_the_line_never_beyond_it() {
+        let k = fit_scale(1000.0, 500.0, 15.0);
+        assert!(k < 1.0 && k >= 0.3);
+        assert!(1000.0 * k + 15.0 * 0.24 <= 500.0, "scaled formula plus its padding fits the line");
+    }
+
+    #[test]
+    fn the_shrink_has_a_readable_floor() {
+        assert_eq!(fit_scale(100000.0, 500.0, 15.0), 0.3);
+    }
+}

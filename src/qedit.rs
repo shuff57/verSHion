@@ -188,9 +188,6 @@ struct Temp {
     blank_texts: Option<Vec<String>>,
     /// Draft text of the "add topic" field.
     topics_text: String,
-    /// The open equation request (set by a sigma button, the word-initial '/' key or a click on
-    /// a rendered equation chip); the equation panel reads and clears it.
-    eq_req: Option<EqReq>,
     /// The field that had the keyboard focus while this frame drew (read as `focus_last` next frame).
     focus_now: Option<EqField>,
     /// The field that had focus last frame: keys are routed from it before the field sees them.
@@ -201,6 +198,8 @@ struct Temp {
     focus_add: Option<EqField>,
     /// The control that had focus last frame (a change scrolls it into view).
     ring_id: Option<UiId>,
+    /// Ctrl+Enter was pressed in a formula: save once it has been committed.
+    save_after: bool,
     /// The confirm bar has already taken focus for its current question.
     confirm_focused: u8,
 }
@@ -219,22 +218,6 @@ enum EqField {
     PartMc(usize, usize),
     PartShort(usize),
     Explanation,
-}
-
-/// An equation edit in progress: where it goes and what it starts as.
-#[derive(Clone, Debug)]
-struct EqReq {
-    field: EqField,
-    /// Char index to insert at (new equation).
-    caret: usize,
-    /// Char range of the `$..$` being replaced (editing an existing one).
-    span: Option<std::ops::Range<usize>>,
-    /// Linear content to prefill.
-    initial: String,
-    /// Screen point the panel opens from (the field or equation chip that asked).
-    anchor: Pos2,
-    /// Frame the request was made in; the opening click must not close the panel.
-    frame: u64,
 }
 
 /// Context-memory key for the per-draft editor state.
@@ -294,13 +277,6 @@ impl EqCtx {
     /// True once (and clears) when the Add button named by `anchor` should take focus now.
     fn take_add(&self, anchor: &EqField) -> bool {
         self.temp(|t| if t.focus_add.as_ref() == Some(anchor) { t.focus_add = None; true } else { false })
-    }
-
-    fn request(&self, field: EqField, caret: usize, span: Option<std::ops::Range<usize>>, initial: String, anchor: Pos2) {
-        let frame = self.ctx.cumulative_frame_nr();
-        self.ctx.data_mut(|d| {
-            d.get_temp_mut_or_default::<Temp>(self.key).eq_req = Some(EqReq { field, caret, span, initial, anchor, frame });
-        });
     }
 }
 
@@ -1036,8 +1012,8 @@ fn picture_box(ui: &mut Ui, alt: &str, size: f32) {
     ui.add_space(4.0);
 }
 
-/// Rendered preview of a field that holds markup or equations; clicking an equation opens it
-/// for editing.
+/// Rendered preview of a field that holds markup or equations; clicking an equation edits it in
+/// the field above.
 fn eq_preview(ui: &mut Ui, eq: &EqCtx, field: EqField, text: &str, indent: f32, size: f32) {
     if !renders_rich(text) {
         return;
@@ -1067,7 +1043,9 @@ fn eq_preview(ui: &mut Ui, eq: &EqCtx, field: EqField, text: &str, indent: f32, 
         });
     });
     if let Some((h, r)) = hit {
-        eq.request(field, 0, Some(h.span), h.content, r.left_bottom());
+        // (the preview is not where the equation is edited: the field above it is)
+        let _ = r;
+        crate::wysiwyg::edit_equation(&eq.ctx, field_editor_id(eq.key, &field), h.span);
     }
     ui.add_space(2.0);
 }
@@ -1108,10 +1086,8 @@ fn wys_field(ui: &mut Ui, eq: &EqCtx, field: EqField, text: &mut String, w: f32,
     mark_field(ui, eq, &field, &out, r);
     let c = if sigma_top { Pos2::new(r.right() - 17.0, r.top() + 15.0) } else { Pos2::new(r.right() - 17.0, r.center().y) };
     if sigma_button(ui, eq, &field, c, 22.0).clicked() {
-        eq.request(field.clone(), out.caret.unwrap_or(text.chars().count()), None, String::new(), r.left_bottom());
-    }
-    if let Some(a) = &out.eq {
-        eq.request(field.clone(), a.caret, a.span.clone(), a.initial.clone(), r.left_bottom());
+        // edited in place at the caret (or around the selection), no dialog
+        crate::wysiwyg::request_equation(&eq.ctx, id);
     }
     if has_picture(text) {
         eq_preview(ui, eq, field, text, 0.0, 13.0);
@@ -1122,7 +1098,7 @@ fn wys_field(ui: &mut Ui, eq: &EqCtx, field: EqField, text: &mut String, w: f32,
 /// After a field drew: draw its focus ring, remember it for key routing, scroll it into view if
 /// it was just added.
 fn mark_field(ui: &mut Ui, eq: &EqCtx, field: &EqField, out: &crate::wysiwyg::Out, r: Rect) {
-    if out.focused {
+    if out.focused || out.math {
         ui.painter().rect_stroke(r, CornerRadius::same(kit::R_FIELD), Stroke::new(1.5, theme::accent_col()), StrokeKind::Inside);
     }
     let reveal = eq.temp(|t| {
@@ -1227,12 +1203,18 @@ pub fn draw_modal(
         t.focus_last = t.focus_now.take();
     });
     let mut action = QAction::None;
-    // While the equation panel is open it owns the keyboard and the outside click.
-    let eq_open = ctx.data(|d| d.get_temp::<Temp>(key).and_then(|t| t.eq_req).is_some());
+    // While an equation is edited in place it owns Esc, Ctrl+Enter and the outside click.
+    let eq_open = crate::wysiwyg::math_active(ctx);
     let mut want_close = false;
+    // Ctrl+Enter inside a formula commits the formula (the formula editor sees the Enter) and saves
+    // on the next frame, so it is still one press.
+    let save_after = ctx.data_mut(|d| std::mem::take(&mut d.get_temp_mut_or_default::<Temp>(key).save_after));
+    if eq_open && ctx.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Key { key: Key::Enter, pressed: true, modifiers, .. } if modifiers.command))) {
+        ctx.data_mut(|d| d.get_temp_mut_or_default::<Temp>(key).save_after = true);
+    }
     if !eq_open
         && draft.confirm.is_none()
-        && ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::Enter)))
+        && (ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::Enter))) || save_after)
         && draft.validate().is_empty()
     {
         action = QAction::Done;
@@ -1301,6 +1283,10 @@ pub fn draw_modal(
 /// A visible ring on whichever control has keyboard focus (text fields draw their own), and a
 /// scroll to bring a control that just took focus into view.
 fn focus_ring(ctx: &egui::Context, key: UiId) {
+    // (a formula edited in place marks itself: the field's own ring, the caret in the formula)
+    if crate::wysiwyg::math_active(ctx) {
+        return;
+    }
     let Some(id) = ctx.memory(|m| m.focused()) else { return };
     let Some(resp) = ctx.read_response(id) else { return };
     let (text_field, changed) = ctx.data_mut(|d| {
@@ -1638,13 +1624,9 @@ fn left_col(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f
     if let Some(m) = mirror {
         ctx.data_mut(|d| d.get_temp_mut_or_default::<Temp>(key).blank_texts = Some(m));
     }
-    if let Some(a) = out.eq {
-        eq.request(EqField::Stem, a.caret, a.span, a.initial, fr.response.rect.left_bottom());
-    }
     if has_picture(&draft.stem) {
         stem_preview(ui, &eq, &draft.stem, w);
     }
-    equation_panel(ctx, draft, key);
     ui.add_space(12.0);
 
     // Per-kind answers.
@@ -2594,206 +2576,5 @@ mod tests {
         assert_eq!(t.chars().skip(*at).take(run.chars().count()).collect::<String>(), *run);
         assert!(!has_picture("a [pictures] b"));
         assert!(!renders_rich("Number of charge clouds: 4"));
-    }
-}
-
-// ---------- equation panel (opened by the sigma button, a word-initial '/', or a click on a chip) ----------
-
-thread_local! {
-    /// The one equation editor on screen (created when a request appears, dropped when it closes).
-    static EQ_PANEL: std::cell::RefCell<Option<crate::equation::EquationEditor>> = const { std::cell::RefCell::new(None) };
-}
-
-/// The text of `f` inside the draft (the Blank rows live in the context-memory mirror instead).
-fn field_text<'a>(draft: &'a mut Draft, f: &EqField) -> Option<&'a mut String> {
-    match f {
-        EqField::Stem => Some(&mut draft.stem),
-        EqField::Mc(i) => match &mut draft.kind {
-            Kind::Mc { answers } => answers.get_mut(*i).map(|a| &mut a.text),
-            _ => None,
-        },
-        EqField::MatchL(i) => match &mut draft.kind {
-            Kind::Matching { pairs, .. } => pairs.get_mut(*i).map(|p| &mut p.left),
-            _ => None,
-        },
-        EqField::MatchR(i) => match &mut draft.kind {
-            Kind::Matching { pairs, .. } => pairs.get_mut(*i).map(|p| &mut p.right),
-            _ => None,
-        },
-        EqField::Distractor(i) => match &mut draft.kind {
-            Kind::Matching { distractors, .. } => distractors.get_mut(*i),
-            _ => None,
-        },
-        EqField::Short => match &mut draft.kind {
-            Kind::Short { sample } => Some(sample),
-            _ => None,
-        },
-        EqField::PartStem(i) => match &mut draft.kind {
-            Kind::Multipart { parts } => parts.get_mut(*i).map(|p| &mut p.stem),
-            _ => None,
-        },
-        EqField::PartMc(i, j) => match &mut draft.kind {
-            Kind::Multipart { parts } => match parts.get_mut(*i).map(|p| &mut p.kind) {
-                Some(PartKind::Mc { answers }) => answers.get_mut(*j).map(|a| &mut a.text),
-                _ => None,
-            },
-            _ => None,
-        },
-        EqField::PartShort(i) => match &mut draft.kind {
-            Kind::Multipart { parts } => match parts.get_mut(*i).map(|p| &mut p.kind) {
-                Some(PartKind::Short { sample }) => Some(sample),
-                _ => None,
-            },
-            _ => None,
-        },
-        EqField::Explanation => Some(draft.explanation.get_or_insert_with(String::new)),
-        EqField::Blank(_) => None,
-    }
-}
-
-/// Splice `$linear$` into the requested field (replacing the clicked equation, if any).
-fn apply_equation(ctx: &egui::Context, draft: &mut Draft, key: UiId, req: &EqReq, linear: &str) {
-    let wrapped = crate::equation::wrap_math(linear);
-    let at = req.span.as_ref().map_or(req.caret, |r| r.start);
-    let caret = at + wrapped.chars().count();
-    let id = field_editor_id(key, &req.field);
-    if let EqField::Blank(i) = req.field {
-        ctx.data_mut(|d| {
-            if let Some(t) = d.get_temp_mut_or_default::<Temp>(key).blank_texts.as_mut().and_then(|v| v.get_mut(i)) {
-                let old = t.clone();
-                *t = crate::equation::splice(t, req.span.clone(), req.caret, &wrapped);
-                crate::wysiwyg::record_external(ctx, id, &old, caret, None);
-            }
-        });
-    } else {
-        let is_blank = matches!(draft.kind, Kind::Blank { .. });
-        let rows = (req.field == EqField::Stem && is_blank).then(|| blank_mirror(ctx, key, draft));
-        if let Some(t) = field_text(draft, &req.field) {
-            let old = t.clone();
-            *t = crate::equation::splice(t, req.span.clone(), req.caret, &wrapped);
-            let new = t.clone();
-            crate::wysiwyg::record_external(ctx, id, &old, caret, rows.as_deref());
-            if let Some(r) = rows {
-                let r = crate::wysiwyg::remap_blanks(&old, &new, &r);
-                ctx.data_mut(|d| d.get_temp_mut_or_default::<Temp>(key).blank_texts = Some(r));
-            }
-        }
-    }
-}
-
-/// The panel's estimated height, used to decide whether it opens below or above the field.
-const PANEL_HEIGHT: f32 = 250.0;
-
-/// Where the equation panel opens: at `anchor`, moved above/left when it would run off the
-/// screen, and always kept inside `screen` with an 8 px margin.
-fn panel_pos(anchor: Pos2, size: Vec2, screen: Rect) -> Pos2 {
-    const M: f32 = 8.0;
-    let min_x = screen.left() + M;
-    let min_y = screen.top() + M;
-    let max_x = (screen.right() - size.x - M).max(min_x);
-    let max_y = (screen.bottom() - size.y - M).max(min_y);
-    let x = if anchor.x > max_x { anchor.x - size.x } else { anchor.x };
-    let y = if anchor.y > max_y { anchor.y - size.y } else { anchor.y };
-    Pos2::new(x.clamp(min_x, max_x), y.clamp(min_y, max_y))
-}
-
-/// Shows the equation editor in a panel anchored to the field that asked for it, and splices
-/// the finished `$linear$` into that field at the remembered caret (or over the equation being
-/// edited).
-fn equation_panel(ctx: &egui::Context, draft: &mut Draft, key: UiId) {
-    let Some(req) = ctx.data_mut(|d| d.get_temp_mut_or_default::<Temp>(key).eq_req.clone()) else {
-        return;
-    };
-    let mut verdict: Option<bool> = None; // Some(true) = insert, Some(false) = cancel
-    let linear = EQ_PANEL.with(|p| {
-        let mut slot = p.borrow_mut();
-        let ed = slot.get_or_insert_with(|| {
-            crate::equation::EquationEditor::with_linear(&req.initial)
-                .id_salt("vershion_equation_panel")
-                .font_size(26.0)
-                .canvas_height(110.0)
-                .auto_focus(true)
-        });
-        let editing = req.span.is_some();
-        let screen = ctx.content_rect();
-        let w = 640.0_f32.min((screen.width() - 16.0).max(320.0));
-        let pos = panel_pos(req.anchor, Vec2::new(w, PANEL_HEIGHT), screen);
-        let area = egui::Area::new(UiId::new("qedit_equation_panel"))
-            .order(egui::Order::Foreground)
-            .fixed_pos(pos)
-            .constrain(true)
-            .show(ctx, |ui| {
-                egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    ui.set_width(w);
-                    kit::small_caps(ui, if editing { "Edit equation" } else { "Insert equation" });
-                    ui.add_space(2.0);
-                    ui.label(
-                        theme::muted("Type it the way you would say it: 1/2, sqrt(x), x^2, pi. Enter inserts, Esc cancels.").size(12.0),
-                    );
-                    ui.add_space(8.0);
-                    let r = ed.show(ui);
-                    if r.committed {
-                        verdict = Some(true);
-                    } else if r.cancelled {
-                        verdict = Some(false);
-                    }
-                    ui.add_space(10.0);
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if kit::primary_button(ui, if editing { "Update equation" } else { "Insert equation" }).clicked() {
-                            verdict = Some(true);
-                        }
-                        if kit::ghost_button(ui, "Cancel").clicked() {
-                            verdict = Some(false);
-                        }
-                    });
-                });
-            });
-        // A press outside closes it, but the press that opened it does not.
-        if ctx.cumulative_frame_nr() > req.frame {
-            if let Some(p) = ctx.input(|i| i.pointer.interact_pos().filter(|_| i.pointer.any_pressed())) {
-                if !area.response.rect.contains(p) {
-                    verdict = Some(false);
-                }
-            }
-        }
-        ed.linear()
-    });
-    if let Some(insert) = verdict {
-        if insert && !linear.trim().is_empty() {
-            apply_equation(ctx, draft, key, &req, linear.trim());
-        }
-        EQ_PANEL.with(|p| *p.borrow_mut() = None);
-        ctx.data_mut(|d| d.get_temp_mut_or_default::<Temp>(key).eq_req = None);
-    }
-}
-
-#[cfg(test)]
-mod panel_pos_tests {
-    use super::panel_pos;
-    use egui::{Pos2, Rect, Vec2};
-
-    fn screen() -> Rect {
-        Rect::from_min_size(Pos2::new(0.0, 0.0), Vec2::new(1000.0, 800.0))
-    }
-
-    #[test]
-    fn roomy_panel_stays_at_the_anchor() {
-        assert_eq!(panel_pos(Pos2::new(100.0, 120.0), Vec2::new(640.0, 250.0), screen()), Pos2::new(100.0, 120.0));
-    }
-
-    #[test]
-    fn panel_flips_left_and_up_near_the_edges() {
-        assert_eq!(panel_pos(Pos2::new(900.0, 700.0), Vec2::new(640.0, 250.0), screen()), Pos2::new(260.0, 450.0));
-    }
-
-    #[test]
-    fn panel_is_kept_inside_a_small_screen() {
-        let tiny = Rect::from_min_size(Pos2::new(0.0, 0.0), Vec2::new(300.0, 200.0));
-        assert_eq!(panel_pos(Pos2::new(280.0, 190.0), Vec2::new(640.0, 250.0), tiny), Pos2::new(8.0, 8.0));
-    }
-
-    #[test]
-    fn negative_anchor_is_clamped() {
-        assert_eq!(panel_pos(Pos2::new(-50.0, -20.0), Vec2::new(640.0, 250.0), screen()), Pos2::new(8.0, 8.0));
     }
 }

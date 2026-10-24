@@ -18,7 +18,7 @@ use equashion_layout::{DEFAULT_FAMILY, FontDb, Rgb, layout_equation, layout_equa
 
 use crate::theme;
 
-pub use equashion_egui::{EditorResponse, EquationEditor};
+pub use equashion_egui::{EditorResponse, EquationEditor, Edge};
 
 fn fonts() -> Arc<FontDb> {
     equashion_egui::bundled_fonts()
