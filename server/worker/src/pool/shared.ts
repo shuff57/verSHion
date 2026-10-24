@@ -472,6 +472,8 @@ export const DEFAULT_LIMITS = {
   /** Membership rows an account may hold, former ones included (they live until their circle is purged):
    *  round 33, the bound of what the public publish check reads per publish. */
   circle_memberships_total: 100,
+  /** Ownership offers an owner may make a day (round 35: each is audited; an identical open offer is free). */
+  circle_transfer_offers: 10,
   /** Active members per circle (site-wide value, '*'). */
   circle_members: 50,
   /** Banks per circle, removed ones included until purged ('*'). */

@@ -149,6 +149,106 @@ shows the ids. A real rotation would need an offline migration that re-hashes ev
 the full bodies (impossible for purged items); none is provided. Treat the key as permanent: keep it as
 a wrangler secret AND an offline backup; losing it loses the pool's identity data.
 
+**Round 35 (circles after critic 42, `docs/critic-reports/2026-10-24-circles-round34-critic42.md`).** No migration.
+Tests: `test/pool/round35.test.ts` (3, each failed on round 34's code).
+
+* **The owner finds removed banks whatever their author's standing (B1).** Round 34's standing rule hid an erased
+  author's removed banks (`keep_on_delete: false`) and a suspended author's removed banks from the owner's circle page,
+  while they still counted toward the circle's caps for 14 days. A REMOVED bank is now listed to the owner and its
+  author whatever the author's standing; a live bank still needs its author in good standing (and no hold, but to its
+  author). A removed bank that is held, or whose author is not in good standing, is listed without its text (`title`,
+  `subject`, `course`, `grade`, `author_name` null, `hidden: true`, as F1's generic hit): the owner gets the id to
+  purge (`POST .../purge`) or restore it, nothing a hold hides. The activity list follows the same rule.
+* **Ownership offers are capped (B2).** 10 offers a day per account (`circle_transfer_offers`, `429 daily_limit`); the
+  same open offer to the same member again changes nothing, writes nothing and is not charged; a cancel writes only
+  when it removes an offer (so cancels are bounded by offers). Offer and cancel audit rows are keyed by the account
+  (`item_id` NULL, the circle in `detail.circle_id`), not by the circle, so they never enter the activity list's scan
+  of the circle's rows (the test counts that range before and after a day's capped offers and cancels: unchanged; an
+  accepted transfer adds its one activity row).
+* **Nitpicks.** No SQL comment inside a fragment other statements embed (`CODE_USABLE_SQL`); the accept binds the
+  taker's id instead of writing it into the SQL; the export's `transfer_offers` lists open offers only.
+* **Documented, not fixed (critic 42 variants).** (1) A succession in an owner-closed circle ignores `circles_owned`
+  like an open one: a member owning five can hold a sixth for up to 14 days (leaving hands it on to the next member).
+  (2) When nobody in good standing is left, an open circle closes (`last_member_gone`) and is purged on day 14 with its
+  banks; a suspended member restored inside those days cannot reopen it (an owner-closed circle does come back: the
+  daily net hands it on after the restore). (3) Members can infer a suspension: every bank of one author vanishes at
+  once (`heads` says `under_review`, the publish check's hit is generic), which a hold of one bank does not show.
+  (4) The owner learns a member's standing: an offer to a suspended or no longer approved member is `409
+  member_unavailable`, and a succession silently skips them. (5) A member who holds a question's text can tell a held or
+  suspended author's bank (generic hit, null ids) from a removed bank, a closed circle or a former membership (ids, no
+  names); the refusal is the same. (6) An offer made before the owner's suspension stays acceptable for its 7 days (a
+  suspended owner can still pass the circle on, also to an accomplice); there is no way for a member to block offers (a
+  declined offer can be made again, now within the daily 10). (7) Demoting the member offered the circle to viewer
+  does not drop the offer (an accept makes them owner); the owner can cancel. (8) An offer whose offerer's erasure is
+  in flight can still be accepted; the erasure then leaves one owner and no offer row (correct outcome). (9) The daily
+  net's `OWNERLESS_CLOSED_SQL` walks every unpurged closed circle by the purge index before its `owner_closed` filter;
+  bounded by the closes of 14 days. The activity line of an accepted transfer has the offerer as its actor
+  ("ownership_transferred" by the old owner to the new one).
+
+**Round 34 (circles phase A after critics 41a and 41b, `docs/critic-reports/2026-10-24-circles-phaseA-*-critic41*`).**
+Migration `0109_pool_round34.sql` (one new table, `circle_transfers`: a pending ownership offer per circle; nothing
+else changes). Tests: `test/pool/round34.test.ts` (6, each failed on round 33's code), plus an erasure-race scenario
+for the accept in round 32 (32-10).
+
+* **An owner who closes a circle, then leaves or is erased, hands it on (critic41a 4).** Succession now also runs for
+  an owner-closed circle inside its undo window; the circle stays closed and the successor may reopen it before the
+  14 days end. The owner invariant the tests check covers such circles too.
+* **Standing (critic41b F2).** The simplest safe rule, the public pool's: content and authority follow the account's
+  standing (approved `teacher`/`admin`, not suspended, not erased). Succession picks only members in good standing
+  (an open circle with no owner and nobody in good standing left closes, `last_member_gone`); an offer goes only to
+  a member in good standing (`409 member_unavailable`); a code admits nobody while its issuer is not in good
+  standing (it works again on restore); a bank whose author is not in good standing (suspended, or no longer
+  approved) is not served: hidden from every member like a held bank (circle page, read 404, image 404, `heads`
+  `under_review`, activity title, publish-check names) until the account is restored. An erased author's bank kept
+  anonymised (D15) is served as before. A suspended OWNER stays the owner (a suspension is reversible): nothing is
+  handed on; the circle keeps working for its members, no new member joins by the owner's codes, and the admin can
+  close it. 
+* **The publish check names only what the caller can see now (critic41b F1).** A hit names the bank and circle only
+  for an active member of the open circle and a live, unheld bank whose author is in good standing; a held bank (or
+  a suspended author's) gives a generic hit (`circle_id`, `circle_name`, `bank_id`, `bank_title` all null,
+  `may_claim_independence: false`); otherwise (a former member, a removed bank, a closed circle) the ids, to name in an
+  independence statement, without names. The position is refused all the same.
+* **The owner's delete of a bank its author removed (critic41b F6)** makes it the owner's removal (`owner_removed`):
+  the author can no longer undo it; the undo window is not extended.
+* **Ownership is offered, never forced (critic41b F3).** `POST /circles/:cid/transfer` makes an offer (a new one
+  replaces the pending one); the member accepts with `POST /circles/:cid/transfer/accept` within 7 days, while the
+  offerer is still the active owner, the circle is open and the member is still in it. The taker's `circles_owned`
+  cap is checked in the accept's step-down statement (two accepts at once cannot pass it; tested at every statement
+  boundary). Either side drops it with `POST /circles/:cid/transfer/cancel`. An offer goes when it is accepted,
+  declined, cancelled or replaced, when the offerer or the target leaves (or the target is removed), when either
+  account is erased (and the daily resweep), when the circle is purged, and daily once expired. `GET /circles/:cid`
+  shows `pending_transfer {to_user_id, to_name, expires_at}` to the owner and the member offered it (null to everyone
+  else); `GET /circles` shows `ownership_offered_until` per circle to the member offered it. Audited
+  `circle.transfer_offer`, `circle.transfer` (the accept, with the offerer as actor) and `circle.transfer_cancel`
+  (round 35: offers and cancels keyed by the account, not the circle);
+  members' activity shows the accepted transfer. The export lists open offers made or received (`transfer_offers`).
+* **Wording (critic41a 2).** The `circles_owned` refusal says a closed circle still counts for 14 days.
+* **Still documented, not fixed.** (critic41b F4) Membership rows of circles one left stay while the circle exists,
+  and an account alone can reach the 100-row cap in about 20 days (create five a day, leave each), then cannot
+  create or join until those circles are purged; there is no "forget this circle" (it would shrink the publish check
+  for that account); an admin can raise `circle_memberships_total` per account. (F5) The owner's immediate purge of a
+  removed bank deletes its first-sender records at once: an owner can remove and purge a member's bank, resend its
+  text as their own, and become its "first sender" (the member's own public publish is then refused); before round 33
+  this took 14 days; every step is audited (the purge is not in the members' activity list). (F7) A member in good
+  standing hides any other member's bank at once with one student-data report (3 a day), and the site-wide 50 a day
+  instant-hold budget and the 20 an hour privacy mail budget are shared with the public pool (about 17 cooperating
+  approved accounts could use them up for a day). (F8) The account export's circle section has no LIMIT or
+  reservation (one account's `versions_sent` grows up to 100 rows a day); purged banks leave tombstone rows forever;
+  `GET /admin/pool/circle` lists every tombstone and membership row of a circle without a LIMIT; the activity page
+  still reads non-activity audit rows between events. (critic41a) Succession ignores `circles_owned` (it cannot refuse):
+  cooperating accounts can park more than five circles on one member (each leaver's 100 rows and the member's 20
+  memberships bound it). A demotion or a removal lasts until the owner shares a code issued after it with that member.
+  The owner purge's claim and its purge are two steps: if the purge fails, the bank can no longer be restored and the
+  daily cron finishes it (the request answers 500). (critic41b smaller) A failed offer accept answers `circles_limit`
+  with the member's own count (the round-33 transfer told the OWNER another member's count: gone with the offer);
+  `heads` tells a member `removed` with `until` for a bank the circle page hides from them; the export gives former
+  members the circle's current name; code-versus-removal order is by wall clock (`left_at >= created_at`), so two owner
+  requests a few milliseconds apart may order the other way; a hold placed in the milliseconds between the purge's
+  selection and its run is lost; `circle-release` dismisses the reports it releases (which starts the reporter's 30-day
+  instant-hold throttle); the app must keep joining a button after the preview (a deep link that auto-joins would let
+  anyone fill someone's membership caps); closes are counted through the actor's audit index; the publish check is at
+  most 2 x 1,000 hashes x 100 circles = 200,000 index seeks per publish or preview.
+
 **Round 33 (circles phase A after critics 40a and 40b, `docs/critic-reports/2026-10-24-circles-phaseA-*`).** No migration
 change (one new limit, `circle_memberships_total`). Every fix has a test in
 `test/pool/round33.test.ts` (10) that failed on round 32's code.
@@ -182,9 +282,8 @@ change (one new limit, `circle_memberships_total`). Every fix has a test in
   names (the next send after the case prunes it). V3: `POST .../banks/:bid/purge` (owner) purges a removed bank at
   once, so an insider's flood stops counting toward the caps and records the same day (removed banks still count
   until purged: excluding them would let deleted bodies pile up in R2 for 14 days without any cap).
-* **Known limits of circles (documented, not fixed).** (critic40a) An owner who closes a circle and then leaves,
-  or is erased inside the undo window, leaves it closed with no owner: it is purged at day 14 (succession runs
-  only for open circles). A member's independence statement is refused while she can read the bank, but passes
+* **Known limits of circles (documented, not fixed).** (critic40a) [Fixed in round 34: an owner who closed a
+  circle and then left or was erased left it ownerless.] A member's independence statement is refused while she can read the bank, but passes
   once she has left (audited and flagged, as for former members). A purge deletes the bank's first-sender
   records, so a later copier becomes the "first sender" of that text and the true author's public publish may be
   refused. An author who left cannot withdraw her bank (the owner can); an author demoted to viewer may still
@@ -240,7 +339,9 @@ rows, cap crossings use `cap`, circle independence statements `independent_claim
   | `POST /circles/:cid/leave` | member | an owner leaving hands the circle on (below) |
   | `POST /circles/:cid/members/remove` | owner | `{user_id}` (not yourself: 400); immediate; re-joining needs a code issued AFTER the removal (round 33) |
   | `POST /circles/:cid/members/role` | owner | `{user_id, role: editor\|viewer}` -> `{ok, changed}` |
-  | `POST /circles/:cid/transfer` | owner | `{user_id}` of an active member: they own it, the old owner is an editor |
+  | `POST /circles/:cid/transfer` | owner | `{user_id}` of an active member in good standing: an OFFER (round 34) -> `202 {ok, pending: {to_user_id, to_name, expires_at}}`; a new offer replaces the pending one, the same open offer again changes nothing; `409 member_unavailable`; 10 offers a day (`429 daily_limit {metric: "circle_transfer_offers"}`, round 35) |
+  | `POST /circles/:cid/transfer/accept` | the member offered it | within 7 days, while the offerer is still the active owner -> `200 {ok, role: "owner"}` (the old owner becomes an editor, their codes are revoked); `409 no_pending_transfer`; `422 circles_limit {metric: "circles_owned"}` |
+  | `POST /circles/:cid/transfer/cancel` | owner, or the member offered it | withdraws / declines -> `200 {ok, cancelled}` |
   | `POST /circles/:cid/banks` | owner, editor | publish format (`application/vnd.vershion.publish`, meta below) -> `201 {circle_id, bank_id, version: 1, version_id, qids, added, changed, removed}` |
   | `PUT /circles/:cid/banks/:bid` | the bank's author, while owner or editor | the next version: meta `base_version` -> `200 {...}`; `409 conflict {head_version, head_at, head_by}` (nothing stored) |
   | `GET` / `HEAD /circles/:cid/banks/:bid` | member (held: author only) | streamed `{circle, bank: {id, title, subject, course, grade, license, version_license, author_name, is_author, version, version_id, question_count, has_images, committed_at, committed_by, held?}, origins, payload}`; `ETag`, `If-None-Match` -> 304; viewing and copying are this one read; counts toward `item_reads`; `409 bank_removed`, `409 circle_closed` |
@@ -296,7 +397,7 @@ rows, cap crossings use `cap`, circle independence statements `independent_claim
   site-wide `instant_holds_global` shared with the public pool) hides the bank from every member but its
   author at once; other reasons hide it at `report_threshold` (3) distinct members. The admin is mailed ids
   only (`circle_report`).
-* **Erasure (plan 8.1/8.2).** `deleteContentStatements` adds 14 statements (before `pool_prefs` goes): the
+* **Erasure (plan 8.1/8.2).** `deleteContentStatements` adds 16 statements since round 34 (before `pool_prefs` goes): the
   account's active memberships step down (audited), succession and closes, banks it authored are kept
   anonymised ("deleted teacher") unless it chose `keep_on_delete: false` (removed, purged after 14 days),
   version messages and report notes go (reports lose their reporter), codes it created are revoked (notes
@@ -1379,7 +1480,7 @@ Rollback: restore the export or Time Travel; 0104 has no down migration.
 | Admin flags | one per kind per publish (a count and the first 5). Per account, kind and day (round 9 K3): 20 rows, then the kind folds into ONE aggregated row with a count (never dropped); integrity kinds (independence claims, licence flags, blocklist, privacy matches, origin suspicions) are never folded, and `origin_unverified` always folds; no burst of one kind can silence another. Publishes that end up held by a content block: at most 20 per account a day (429 `daily_limit` `held_publishes`); the queue (`GET /admin/pool/flags?limit&cursor`) is most severe first, then newest, paged; student-data report mails have their own hourly budget (20), re-publishes of blocked text another (5), everything else another (5) |
 | Tags | 200 distinct tags and topics per item (more is an error) |
 | Images | PNG, JPEG, GIF, WebP; one still image, 1..4096 px a side, 2 MB; an import holds the images it served for the importer for 30 days |
-| Circles (rounds 32-33) | per account: 5 owned (a transfer counts; a succession does not), 20 memberships, 100 membership rows former ones included (`circle_memberships_total`: they live until their circle is purged; the bound of the publish check), 5 created / 50 codes / 10 failed codes / 100 versions sent a day; per circle (site-wide values): 50 members, 10 open codes, 100 banks, 200 MB (kept versions, images per version), 5,000 questions across current versions, 50,000 question records; codes 1-50 uses, 1-30 days (7); 20 versions kept a bank |
+| Circles (rounds 32-35) | per account: 5 owned (an accepted transfer counts, a closed circle counts for its 14 days; a succession does not), 10 ownership offers a day, 20 memberships, 100 membership rows former ones included (`circle_memberships_total`: they live until their circle is purged; the bound of the publish check), 5 created / 50 codes / 10 failed codes / 100 versions sent a day; per circle (site-wide values): 50 members, 10 open codes, 100 banks, 200 MB (kept versions, images per version), 5,000 questions across current versions, 50,000 question records; codes 1-50 uses, 1-30 days (7); 20 versions kept a bank |
 
 **The licence rule (rounds 9 and 10).** Critics pulled opposite ways (never lock an honest teacher
 out; never let a copy carry a wrong public badge; more imports must never widen what is allowed).

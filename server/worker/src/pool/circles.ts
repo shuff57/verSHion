@@ -121,6 +121,14 @@ export const OWNED_SQL = (me: string) =>
 /** Circles `me` is an active member of (closed ones included until purged or left). */
 export const MEMBERSHIPS_SQL = (me: string) =>
   `(SELECT COUNT(*) FROM circle_members mm JOIN circles mc ON mc.id = mm.circle_id WHERE mm.user_id = ${me} AND mm.left_at IS NULL AND mc.purged_at IS NULL)`;
+/** Round 34 (critic41b F2): the account `uid` (SQL) is in good standing: approved, not suspended, not erased. */
+export const IN_STANDING_SQL = (uid: string) =>
+  `EXISTS (SELECT 1 FROM users su WHERE su.id = ${uid} AND su.trust IN ('teacher', 'admin') AND su.suspended_at IS NULL AND su.deleted_at IS NULL)`;
+/** Round 34: bank row `b`'s content follows its author's standing (as public items do): served only while the author
+ *  is in good standing, or erased with the bank kept anonymised (D15). A suspended author's banks are hidden like
+ *  held ones until the account is restored. */
+export const AUTHOR_OK_SQL = (b: string) =>
+  `EXISTS (SELECT 1 FROM users au WHERE au.id = ${b}.author_id AND au.trust IN ('teacher', 'admin') AND au.suspended_at IS NULL AND (au.deleted_at IS NULL OR ${b}.anonymized = 1))`;
 /** Membership rows of `me`, former ones included (rows live until their circle is purged): the cap that
  *  bounds what the public publish check reads (round 33). */
 export const MEMBERSHIP_ROWS_SQL = (me: string) => `(SELECT COUNT(*) FROM circle_members rm WHERE rm.user_id = ${me})`;
@@ -131,7 +139,10 @@ export const MEMBERSHIP_ROWS_SQL = (me: string) => `(SELECT COUNT(*) FROM circle
  */
 export const CODE_USABLE_SQL = (i: string, me: string) =>
   `(NOT EXISTS (SELECT 1 FROM circle_members rr WHERE rr.circle_id = ${i}.circle_id AND rr.user_id = ${me} AND rr.left_reason = 'removed' AND rr.left_at >= ${i}.created_at)
-    AND EXISTS (SELECT 1 FROM circle_members io WHERE io.circle_id = ${i}.circle_id AND io.user_id = ${i}.created_by AND io.role = 'owner' AND io.left_at IS NULL))`;
+    AND EXISTS (SELECT 1 FROM circle_members io WHERE io.circle_id = ${i}.circle_id AND io.user_id = ${i}.created_by AND io.role = 'owner' AND io.left_at IS NULL)
+    AND ${IN_STANDING_SQL(`${i}.created_by`)})`;
+// (round 34: the last line, the issuer in good standing: a suspended owner's codes admit nobody. Round 35: no SQL
+// comment inside a fragment other statements embed.)
 /** The role `me` (re)joins with by code `i`: a member who left (or was demoted, then left) after the code was
  *  issued comes back at most as the role held when leaving; a newer code gives its own role. */
 export const JOIN_ROLE_SQL = (i: string, me: string) =>
@@ -144,9 +155,10 @@ export const OPEN_INVITES_SQL = (cid: string, now: string) =>
 
 /**
  * Ownership succession (decision 3, D14, D18; plan 6.3) for every circle in `scope` (a SQL subquery of
- * circle ids) that is OPEN and has no active owner: the active editor with the smallest join_seq becomes
- * owner; where there is still none, the active viewer with the smallest join_seq; a circle with no active
- * member left closes ('last_member_gone', purged after `purgeAt`). Each pick is one statement whose
+ * circle ids) that is OPEN, or closed by its owner and still inside the undo window (round 34: it stays
+ * closed, the successor may reopen it), and has no active owner: the active editor in good standing with
+ * the smallest join_seq becomes owner; where there is still none, such a viewer; an open circle with no
+ * member in good standing left closes ('last_member_gone', purged after `purgeAt`). Each pick is one statement whose
  * condition is "no active owner", so a rerun (erasure_finish, the daily resweep) finds exactly what is
  * left to do, and the partial unique index allows one active owner. Audited (system) for the activity
  * list. `now` and `purgeAt` are parameter references.
@@ -154,9 +166,12 @@ export const OPEN_INVITES_SQL = (cid: string, now: string) =>
 export function successionStatements(db: D1Database, scope: string, binds: unknown[], now: string, purgeAt: string): D1PreparedStatement[] {
   // (Each statement binds exactly the parameters it uses: D1 refuses extra bindings.)
   const prep = (sql: string) => db.prepare(sql).bind(...binds.slice(0, Math.max(0, ...[...sql.matchAll(/\?(\d+)/g)].map((x) => Number(x[1])))));
-  const needs = `c.id IN (${scope}) AND c.closed_at IS NULL AND c.purged_at IS NULL
+  // (Round 34: also an owner-closed circle inside its undo window, which stays closed: the successor may reopen it;
+  // and only members in good standing are picked, critic41a 4, critic41b F2.)
+  const needs = `c.id IN (${scope}) AND c.purged_at IS NULL AND (c.closed_at IS NULL OR (c.close_reason = 'owner_closed' AND c.undo_until > ${now}))
       AND NOT EXISTS (SELECT 1 FROM circle_members o WHERE o.circle_id = c.id AND o.role = 'owner' AND o.left_at IS NULL)`;
-  const pick = (role: string, col: string) => `(SELECT m.${col} FROM circle_members m WHERE m.circle_id = c.id AND m.left_at IS NULL AND m.role = '${role}' ORDER BY m.join_seq LIMIT 1)`;
+  const pick = (role: string, col: string) =>
+    `(SELECT m.${col} FROM circle_members m WHERE m.circle_id = c.id AND m.left_at IS NULL AND m.role = '${role}' AND ${IN_STANDING_SQL("m.user_id")} ORDER BY m.join_seq LIMIT 1)`;
   const step = (role: "editor" | "viewer") => [
     prep(
       `INSERT INTO pool_audit (id, at, actor_id, actor_kind, action, item_id, target_user_id, detail)
@@ -165,7 +180,10 @@ export function successionStatements(db: D1Database, scope: string, binds: unkno
     ),
     prep(`UPDATE circle_members SET role = 'owner' WHERE rowid IN (SELECT ${pick(role, "rowid")} FROM circles c WHERE ${needs})`),
   ];
-  const empty = `id IN (${scope}) AND closed_at IS NULL AND purged_at IS NULL AND NOT EXISTS (SELECT 1 FROM circle_members o WHERE o.circle_id = circles.id AND o.left_at IS NULL)`;
+  // (an open circle with no owner and no member in good standing left closes)
+  const empty = `id IN (${scope}) AND closed_at IS NULL AND purged_at IS NULL
+      AND NOT EXISTS (SELECT 1 FROM circle_members o WHERE o.circle_id = circles.id AND o.role = 'owner' AND o.left_at IS NULL)
+      AND NOT EXISTS (SELECT 1 FROM circle_members o WHERE o.circle_id = circles.id AND o.left_at IS NULL AND ${IN_STANDING_SQL("o.user_id")})`;
   return [
     ...step("editor"),
     ...step("viewer"),
@@ -271,12 +289,15 @@ export const circleCodeHash = (normalised: string): Promise<string> => sha256Hex
 
 // ---- POST /circles, GET /circles --------------------------------------------------------------------------
 
+/** Round 34 (critic41a 2): the circles_owned refusal says a closed circle still counts for 14 days. */
+export const ownedMessage = (cap: number, mine: boolean) =>
+  `${mine ? "You own" : "That would make"} ${cap}${mine ? "" : "+"} circles, the most one account may own. A closed circle still counts for 14 days, until it is purged; you can also pass one on.`;
 async function capsOf(c: Ctx, me: string) {
   return { owned: await limitOf(c, me, "circles_owned"), memberships: await limitOf(c, me, "circle_memberships"), rows: await limitOf(c, me, "circle_memberships_total") };
 }
 async function limitError(c: Ctx, me: string, caps: { owned: number; memberships: number; rows: number }, owning: boolean): Promise<PoolError> {
   const r = await c.db.prepare(`SELECT ${OWNED_SQL("?1")} AS owned, ${MEMBERSHIPS_SQL("?1")} AS memberships, ${MEMBERSHIP_ROWS_SQL("?1")} AS rows_`).bind(me).first<{ owned: number; memberships: number; rows_: number }>();
-  if (owning && (r?.owned ?? 0) >= caps.owned) return new PoolError(422, "circles_limit", { metric: "circles_owned", used: r?.owned ?? 0, limit: caps.owned, message: `You own ${caps.owned} circles, the most allowed. Close one or pass it on first.` });
+  if (owning && (r?.owned ?? 0) >= caps.owned) return new PoolError(422, "circles_limit", { metric: "circles_owned", used: r?.owned ?? 0, limit: caps.owned, message: ownedMessage(caps.owned, true) });
   if ((r?.memberships ?? 0) >= caps.memberships)
     return new PoolError(422, "circles_limit", { metric: "circle_memberships", used: r?.memberships ?? 0, limit: caps.memberships, message: `You are in ${caps.memberships} circles, the most allowed. Leave one first.` });
   return new PoolError(422, "circles_limit", {
@@ -323,12 +344,13 @@ export async function listCircles(c: Ctx, p: PoolPrincipal): Promise<Response> {
     .prepare(
       `SELECT ci.id, ci.name, m.role, m.joined_at, ci.closed_at, ci.close_reason, ci.undo_until, ci.updated_at,
               ${MEMBERS_SQL("ci.id")} AS members,
-              (SELECT COUNT(*) FROM circle_banks b WHERE b.circle_id = ci.id AND b.purged_at IS NULL AND b.removed_at IS NULL AND b.head_version > 0) AS banks
+              (SELECT COUNT(*) FROM circle_banks b WHERE b.circle_id = ci.id AND b.purged_at IS NULL AND b.removed_at IS NULL AND b.head_version > 0) AS banks,
+              (SELECT t.expires_at FROM circle_transfers t WHERE t.circle_id = ci.id AND t.to_user = ?1 AND t.expires_at > ?2) AS ownership_offered_until
          FROM circle_members m JOIN circles ci ON ci.id = m.circle_id
         WHERE m.user_id = ?1 AND m.left_at IS NULL AND ci.purged_at IS NULL
         ORDER BY m.joined_at DESC, ci.id`,
     )
-    .bind(me)
+    .bind(me, c.now())
     .all<Record<string, unknown>>();
   return json(200, { circles: rows.results });
 }
@@ -349,40 +371,58 @@ export async function getCircle(c: Ctx, p: PoolPrincipal, cid: string): Promise<
     .prepare(
       `SELECT b.id, b.title, b.subject, b.course, b.grade, b.license, b.head_version, b.question_count, b.has_images, b.created_at, b.updated_at,
               b.author_id, b.anonymized, b.removed_at, b.removed_reason, b.purge_after, u.display_name, u.deleted_at,
-              EXISTS (SELECT 1 FROM circle_holds h WHERE h.bank_id = b.id) AS held
+              EXISTS (SELECT 1 FROM circle_holds h WHERE h.bank_id = b.id) AS held, ${AUTHOR_OK_SQL("b")} AS author_ok
          FROM circle_banks b LEFT JOIN users u ON u.id = b.author_id
         WHERE b.circle_id = ?1 AND b.purged_at IS NULL AND b.head_version > 0 ORDER BY b.created_at, b.id`,
     )
     .bind(cid)
-    .all<Record<string, unknown> & { id: string; author_id: string; anonymized: number; removed_at: number | null; removed_reason: string | null; purge_after: number | null; held: number; display_name: string | null; deleted_at: number | null }>();
+    .all<Record<string, unknown> & { id: string; author_id: string; anonymized: number; removed_at: number | null; removed_reason: string | null; purge_after: number | null; held: number; author_ok: number; display_name: string | null; deleted_at: number | null }>();
   const owner = m.role === "owner";
+  // (round 34: the pending ownership offer, to the owner and to the member offered it)
+  const tr = await c.db
+    .prepare(`SELECT t.from_user, t.to_user, t.expires_at, u.display_name, u.deleted_at FROM circle_transfers t LEFT JOIN users u ON u.id = t.to_user WHERE t.circle_id = ?1 AND t.expires_at > ?2`)
+    .bind(cid, c.now())
+    .first<{ from_user: string; to_user: string; expires_at: number; display_name: string | null; deleted_at: number | null }>();
+  const pending = tr && (owner || tr.to_user === me) ? { to_user_id: tr.to_user, to_name: nameOf(tr.display_name, tr.deleted_at), expires_at: tr.expires_at } : null;
   const shown = banks.results
     .filter((b) => {
       const mine = b.author_id === me;
+      // Round 35 (critic42 B1): a REMOVED bank is listed to the owner and its author whatever the author's standing
+      // (an erased or suspended author's removed banks still count toward the caps until purged: the owner must
+      // find them to purge them); a live one only when its author is in good standing and it is not held (but to
+      // its author).
       if (b.removed_at !== null) return mine || owner;
+      if (b.author_ok !== 1) return false;
       return b.held === 0 || mine;
     })
-    .map((b) => ({
-      id: b.id,
-      title: b.title,
-      subject: b.subject,
-      course: b.course,
-      grade: b.grade,
-      license: b.license,
-      author_name: b.anonymized === 1 ? DELETED_NAME : nameOf(b.display_name, b.deleted_at),
-      is_author: b.author_id === me,
-      head_version: b.head_version,
-      question_count: b.question_count,
-      has_images: b.has_images === 1,
-      created_at: b.created_at,
-      updated_at: b.updated_at,
-      ...(b.held === 1 ? { held: true } : {}),
-      ...(b.removed_at !== null ? { removed: { reason: b.removed_reason, undo_until: b.removed_reason === "author_removed" || b.removed_reason === "owner_removed" ? b.purge_after : null } } : {}),
-    }));
+    .map((b) => {
+      const mine = b.author_id === me;
+      // (a removed bank that is held, or whose author is not in good standing, is listed without its text: F1's
+      // generic presentation; the owner gets the id to purge or restore it, nothing a hold hides)
+      const masked = !mine && (b.held === 1 || b.author_ok !== 1);
+      return {
+        id: b.id,
+        title: masked ? null : b.title,
+        subject: masked ? null : b.subject,
+        course: masked ? null : b.course,
+        grade: masked ? null : b.grade,
+        license: b.license,
+        author_name: masked ? null : b.anonymized === 1 ? DELETED_NAME : nameOf(b.display_name, b.deleted_at),
+        is_author: mine,
+        head_version: b.head_version,
+        question_count: b.question_count,
+        has_images: b.has_images === 1,
+        created_at: b.created_at,
+        updated_at: b.updated_at,
+        ...(masked ? { hidden: true } : b.held === 1 ? { held: true } : {}),
+        ...(b.removed_at !== null ? { removed: { reason: b.removed_reason, undo_until: b.removed_reason === "author_removed" || b.removed_reason === "owner_removed" ? b.purge_after : null } } : {}),
+      };
+    });
   return json(200, {
     circle: { id: m.id, name: m.name, description: m.description, role: m.role, joined_at: m.joined_at, created_at: m.created_at, updated_at: m.updated_at, closed_at: m.closed_at, close_reason: m.close_reason, undo_until: m.undo_until },
     members: members.results.map((x) => ({ user_id: x.user_id, display_name: nameOf(x.display_name, x.deleted_at), role: x.role, joined_at: x.joined_at, is_me: x.user_id === me })),
     banks: shown,
+    pending_transfer: pending,
   });
 }
 
@@ -683,6 +723,8 @@ export async function leaveCircle(c: Ctx, p: PoolPrincipal, cid: string): Promis
     c.db.prepare(`UPDATE circle_members SET left_at = ?3, left_reason = 'left' WHERE circle_id = ?1 AND user_id = ?2 AND left_at IS NULL AND ${ALIVE_SQL("?2")}`).bind(cid, me, now),
     // (round 33: codes never outlive their issuer's owner role)
     revokeCodesOf(c.db, cid, me, now, `EXISTS (SELECT 1 FROM circle_members lm WHERE lm.circle_id = ?1 AND lm.user_id = ?2 AND lm.left_at = ?3)`),
+    // (round 34: an ownership offer from or to the leaver goes)
+    c.db.prepare(`DELETE FROM circle_transfers WHERE circle_id = ?1 AND (from_user = ?2 OR to_user = ?2) AND EXISTS (SELECT 1 FROM circle_members lm WHERE lm.circle_id = ?1 AND lm.user_id = ?2 AND lm.left_at = ?3)`).bind(cid, me, now),
     ...successionStatements(c.db, `SELECT ?1`, [cid, now, now + CIRCLE_UNDO_MS], "?2", "?3"),
   ]);
   if ((res[1]!.meta.changes ?? 0) !== 1) {
@@ -711,6 +753,7 @@ export async function removeMember(c: Ctx, req: Request, p: PoolPrincipal, cid: 
       .bind(cid, me, who, now),
     audit(c.db, { actorId: me, actorKind: "user", action: "circle.member_remove", itemId: cid, targetUserId: who }, now, `changes() = 1`),
     revokeCodesOf(c.db, cid, who, now, `EXISTS (SELECT 1 FROM circle_members rm2 WHERE rm2.circle_id = ?1 AND rm2.user_id = ?2 AND rm2.left_reason = 'removed' AND rm2.left_at = ?3)`),
+    c.db.prepare(`DELETE FROM circle_transfers WHERE circle_id = ?1 AND to_user = ?2 AND EXISTS (SELECT 1 FROM circle_members rm3 WHERE rm3.circle_id = ?1 AND rm3.user_id = ?2 AND rm3.left_reason = 'removed' AND rm3.left_at = ?3)`).bind(cid, who, now),
   ]);
   if ((upd!.meta.changes ?? 0) !== 1) {
     await throwIfErased(c, me);
@@ -751,49 +794,115 @@ export async function setRole(c: Ctx, req: Request, p: PoolPrincipal, cid: strin
   return json(200, { ok: true, changed: true });
 }
 
-/** POST /circles/:cid/transfer {user_id} (owner): they become owner, the old owner an editor. */
-export async function transferOwnership(c: Ctx, req: Request, p: PoolPrincipal, cid: string): Promise<Response> {
+/** How long an ownership offer stays open (round 34). */
+export const TRANSFER_OFFER_MS = 7 * DAY_MS;
+
+/**
+ * POST /circles/:cid/transfer {user_id} (owner): OFFERS the circle to an active member in good standing
+ * (round 34, critic41b F3: ownership is never forced on anyone). Nothing changes until they accept within 7
+ * days (POST .../transfer/accept); a new offer replaces the pending one. -> 202 {ok, pending: {to_user_id,
+ * to_name, expires_at}}; 409 member_unavailable for a suspended or no longer approved member.
+ */
+export async function offerTransfer(c: Ctx, req: Request, p: PoolPrincipal, cid: string): Promise<Response> {
   const me = p.userId;
   const m = await circleOrMiss(c, cid, me);
   const b = await readJson(req, `u:${me}`, { deadlineMs: c.deps.bodyDeadlineMs });
   requireOpen(m);
   requireRole(m, "owner");
   const who = userIdOf(b.user_id);
-  if (who === me) return json(200, { ok: true, changed: false });
+  if (who === me) throw bad("user_id", { message: "You already own this circle." });
   const now = c.now();
-  // Round 33 (critic40a B3): the new owner's circles_owned cap, in the step-down statement itself (two
-  // transfers to one member at once cannot both pass it).
-  const ownedCap = await limitOf(c, who, "circles_owned");
-  // The old owner steps down only if the new one is an active member (same statement), then the new one
-  // steps up (changes() = 1, and no other active owner): one atomic batch, so the circle is never left
-  // without an owner, and the partial unique index refuses two.
+  const pendingOf = async (to: string, expires: number) => {
+    const u = await c.db.prepare(`SELECT display_name, deleted_at FROM users WHERE id = ?1`).bind(to).first<{ display_name: string | null; deleted_at: number | null }>();
+    return { to_user_id: to, to_name: nameOf(u?.display_name, u ? u.deleted_at : 1), expires_at: expires };
+  };
+  // Round 35 (critic42 B2): the same open offer again changes nothing and writes nothing (it is not charged).
+  const open = await c.db.prepare(`SELECT from_user, to_user, expires_at FROM circle_transfers WHERE circle_id = ?1 AND expires_at > ?2`).bind(cid, now).first<{ from_user: string; to_user: string; expires_at: number }>();
+  if (open && open.from_user === me && open.to_user === who) return json(202, { ok: true, pending: await pendingOf(who, open.expires_at) });
+  // ... and offers are a daily allowance (cancels write only when they remove an offer, so they are bounded by it).
+  await requireDaily(c, me, "circle_transfer_offers");
+  const until = now + TRANSFER_OFFER_MS;
+  const [ins] = await c.db.batch([
+    c.db
+      .prepare(
+        `INSERT INTO circle_transfers (circle_id, from_user, to_user, created_at, expires_at) SELECT ?1, ?2, ?3, ?4, ?5
+          WHERE ${OPEN_SQL("?1")} AND ${ACTIVE_SQL("?1", "?2", ["owner"])} AND ${ALIVE_SQL("?2")}
+            AND EXISTS (SELECT 1 FROM circle_members t WHERE t.circle_id = ?1 AND t.user_id = ?3 AND t.left_at IS NULL AND t.role <> 'owner') AND ${IN_STANDING_SQL("?3")}
+         ON CONFLICT (circle_id) DO UPDATE SET from_user = excluded.from_user, to_user = excluded.to_user, created_at = excluded.created_at, expires_at = excluded.expires_at`,
+      )
+      .bind(cid, me, who, now, until),
+    // (round 35: keyed by the account, the circle in the detail: offers and cancels are not members' activity and
+    // stay out of the activity list's scan of the circle's rows)
+    audit(c.db, { actorId: me, actorKind: "user", action: "circle.transfer_offer", itemId: null, targetUserId: who, detail: { circle_id: cid } }, now, `changes() = 1`),
+  ]);
+  if ((ins!.meta.changes ?? 0) !== 1) {
+    await giveDaily(c, me, "circle_transfer_offers");
+    await throwIfErased(c, me);
+    if (!(await c.db.prepare(`SELECT 1 AS x FROM circle_members WHERE circle_id = ?1 AND user_id = ?2 AND left_at IS NULL`).bind(cid, who).first())) throw notFound();
+    if (!(await c.db.prepare(`SELECT ${IN_STANDING_SQL("?1")} AS ok`).bind(who).first<{ ok: number }>())?.ok)
+      throw new PoolError(409, "member_unavailable", { message: "That member's account cannot take over a circle now." });
+    await explain(c, cid, me, ["owner"]);
+  }
+  return json(202, { ok: true, pending: await pendingOf(who, until) });
+}
+
+/**
+ * POST /circles/:cid/transfer/accept (the member offered the circle): takes over while the offer is open (not
+ * expired, its offerer still the active owner, the circle open). The taker's circles_owned cap is checked in
+ * the step-down statement itself, so two accepts at once cannot pass it. The old owner becomes an editor and
+ * their open codes are revoked. -> 200 {ok, role: "owner"}; 409 no_pending_transfer; 422 circles_limit.
+ */
+export async function acceptTransfer(c: Ctx, p: PoolPrincipal, cid: string): Promise<Response> {
+  const me = p.userId;
+  const m = await circleOrMiss(c, cid, me);
+  requireOpen(m);
+  const now = c.now();
+  const none = () => new PoolError(409, "no_pending_transfer", { message: "There is no open offer of this circle to you." });
+  const t = await c.db.prepare(`SELECT from_user FROM circle_transfers WHERE circle_id = ?1 AND to_user = ?2 AND expires_at > ?3`).bind(cid, me, now).first<{ from_user: string }>();
+  if (!t || m.role === "owner") throw none();
+  const cap = await limitOf(c, me, "circles_owned");
+  // (round 35: the taker bound, never interpolated)
+  const isOwner = (p: string) => `EXISTS (SELECT 1 FROM circle_members nw WHERE nw.circle_id = ?1 AND nw.user_id = ${p} AND nw.role = 'owner' AND nw.left_at IS NULL)`;
   const res = await c.db.batch([
     c.db
       .prepare(
-        `UPDATE circle_members SET role = 'editor' WHERE circle_id = ?1 AND user_id = ?2 AND role = 'owner' AND left_at IS NULL AND ${ALIVE_SQL("?2")} AND ${OPEN_SQL("?1")}
-           AND EXISTS (SELECT 1 FROM circle_members t WHERE t.circle_id = ?1 AND t.user_id = ?3 AND t.left_at IS NULL AND t.role <> 'owner')
-           AND ${OWNED_SQL("?3")} < ?4`,
+        `UPDATE circle_members SET role = 'editor' WHERE circle_id = ?1 AND user_id = ?3 AND role = 'owner' AND left_at IS NULL AND ${OPEN_SQL("?1")}
+           AND EXISTS (SELECT 1 FROM circle_transfers tr WHERE tr.circle_id = ?1 AND tr.from_user = ?3 AND tr.to_user = ?2 AND tr.expires_at > ?4)
+           AND EXISTS (SELECT 1 FROM circle_members tm WHERE tm.circle_id = ?1 AND tm.user_id = ?2 AND tm.left_at IS NULL AND tm.role <> 'owner')
+           AND ${ALIVE_SQL("?2")} AND ${OWNED_SQL("?2")} < ?5`,
       )
-      .bind(cid, me, who, ownedCap),
+      .bind(cid, me, t.from_user, now, cap),
     c.db
       .prepare(
         `UPDATE circle_members SET role = 'owner' WHERE circle_id = ?1 AND user_id = ?2 AND left_at IS NULL AND changes() = 1
            AND NOT EXISTS (SELECT 1 FROM circle_members o WHERE o.circle_id = ?1 AND o.role = 'owner' AND o.left_at IS NULL)`,
       )
-      .bind(cid, who),
-    audit(c.db, { actorId: me, actorKind: "user", action: "circle.transfer", itemId: cid, targetUserId: who }, now, `changes() = 1`),
-    // (round 33: the old owner's open codes go with the role)
-    revokeCodesOf(c.db, cid, me, now, `EXISTS (SELECT 1 FROM circle_members nw WHERE nw.circle_id = ?1 AND nw.user_id = '${who}' AND nw.role = 'owner' AND nw.left_at IS NULL)`),
+      .bind(cid, me),
+    audit(c.db, { actorId: t.from_user, actorKind: "user", action: "circle.transfer", itemId: cid, targetUserId: me, detail: { accepted: true } }, now, `changes() = 1`),
+    // (the old owner's open codes go with the role, round 33; the offer is used)
+    c.db.prepare(`UPDATE circle_invites SET revoked_at = ?3, revoked_by = ?2 WHERE circle_id = ?1 AND created_by = ?2 AND revoked_at IS NULL AND ${isOwner("?4")}`).bind(cid, t.from_user, now, me),
+    c.db.prepare(`DELETE FROM circle_transfers WHERE circle_id = ?1 AND ${isOwner("?2")}`).bind(cid, me),
   ]);
   if ((res[1]!.meta.changes ?? 0) !== 1) {
     await throwIfErased(c, me);
-    if (!(await c.db.prepare(`SELECT 1 AS x FROM circle_members WHERE circle_id = ?1 AND user_id = ?2 AND left_at IS NULL`).bind(cid, who).first())) throw notFound();
-    const owned = (await c.db.prepare(`SELECT ${OWNED_SQL("?1")} AS n`).bind(who).first<{ n: number }>())?.n ?? 0;
-    if (owned >= ownedCap)
-      throw new PoolError(422, "circles_limit", { metric: "circles_owned", used: owned, limit: ownedCap, message: `That member already owns ${ownedCap} circles, the most allowed.` });
-    await explain(c, cid, me, ["owner"]);
+    const owned = (await c.db.prepare(`SELECT ${OWNED_SQL("?1")} AS n`).bind(me).first<{ n: number }>())?.n ?? 0;
+    if (owned >= cap) throw new PoolError(422, "circles_limit", { metric: "circles_owned", used: owned, limit: cap, message: ownedMessage(cap, true) });
+    throw none();
   }
-  return json(200, { ok: true, changed: true });
+  return json(200, { ok: true, role: "owner" });
+}
+
+/** POST /circles/:cid/transfer/cancel: the owner withdraws the pending offer, or the member offered it declines. */
+export async function cancelTransfer(c: Ctx, p: PoolPrincipal, cid: string): Promise<Response> {
+  const me = p.userId;
+  await circleOrMiss(c, cid, me);
+  const now = c.now();
+  const [del] = await c.db.batch([
+    c.db.prepare(`DELETE FROM circle_transfers WHERE circle_id = ?1 AND (to_user = ?2 OR ${ACTIVE_SQL("?1", "?2", ["owner"])}) AND ${ALIVE_SQL("?2")}`).bind(cid, me),
+    audit(c.db, { actorId: me, actorKind: "user", action: "circle.transfer_cancel", itemId: null, targetUserId: me, detail: { circle_id: cid } }, now, `changes() = 1`),
+  ]);
+  if ((del!.meta.changes ?? 0) === 0) await throwIfErased(c, me);
+  return json(200, { ok: true, cancelled: (del!.meta.changes ?? 0) === 1 });
 }
 
 // ---- activity (D8) ------------------------------------------------------------------------------------------
@@ -850,12 +959,15 @@ export async function activity(c: Ctx, p: PoolPrincipal, cid: string, url: URL):
   if (bankIds.length)
     for (const t of (
       await c.db
-        .prepare(`SELECT b.id, b.title, b.author_id, b.removed_at, EXISTS (SELECT 1 FROM circle_holds h WHERE h.bank_id = b.id) AS held FROM circle_banks b WHERE b.id IN (SELECT value FROM json_each(?1)) AND b.circle_id = ?2 AND b.purged_at IS NULL`)
+        .prepare(
+          `SELECT b.id, b.title, b.author_id, b.removed_at, EXISTS (SELECT 1 FROM circle_holds h WHERE h.bank_id = b.id) AS held, ${AUTHOR_OK_SQL("b")} AS author_ok
+             FROM circle_banks b WHERE b.id IN (SELECT value FROM json_each(?1)) AND b.circle_id = ?2 AND b.purged_at IS NULL`,
+        )
         .bind(JSON.stringify(bankIds), cid)
-        .all<{ id: string; title: string; author_id: string; removed_at: number | null; held: number }>()
+        .all<{ id: string; title: string; author_id: string; removed_at: number | null; held: number; author_ok: number }>()
     ).results) {
       const mine = t.author_id === me;
-      if (mine || (t.held === 0 && (t.removed_at === null || m.role === "owner"))) titles.set(t.id, t.title);
+      if (t.author_ok === 1 && (mine || (t.held === 0 && (t.removed_at === null || m.role === "owner")))) titles.set(t.id, t.title);
     }
   const last = page[page.length - 1];
   return json(200, {
@@ -892,7 +1004,7 @@ export async function heads(c: Ctx, req: Request, p: PoolPrincipal): Promise<Res
     .prepare(
       `SELECT j.value AS id, b.author_id, b.head_version, b.head_version_id, b.updated_at, b.removed_at, b.removed_reason, b.purge_after, b.license,
               ci.closed_at, v.committed_at, v.committer_id, cu.display_name AS cn, cu.deleted_at AS cd,
-              EXISTS (SELECT 1 FROM circle_holds h WHERE h.bank_id = b.id) AS held
+              EXISTS (SELECT 1 FROM circle_holds h WHERE h.bank_id = b.id) AS held, ${AUTHOR_OK_SQL("b")} AS author_ok
          FROM json_each(?2) j
          CROSS JOIN circle_banks b ON b.id = j.value AND b.purged_at IS NULL AND b.head_version > 0
          JOIN circles ci ON ci.id = b.circle_id AND ci.purged_at IS NULL
@@ -901,14 +1013,14 @@ export async function heads(c: Ctx, req: Request, p: PoolPrincipal): Promise<Res
          LEFT JOIN users cu ON cu.id = v.committer_id`,
     )
     .bind(me, JSON.stringify(uniq))
-    .all<{ id: string; author_id: string; head_version: number; head_version_id: string; updated_at: number; removed_at: number | null; removed_reason: string | null; purge_after: number | null; license: string; closed_at: number | null; committed_at: number | null; committer_id: string | null; cn: string | null; cd: number | null; held: number }>();
+    .all<{ id: string; author_id: string; head_version: number; head_version_id: string; updated_at: number; removed_at: number | null; removed_reason: string | null; purge_after: number | null; license: string; closed_at: number | null; committed_at: number | null; committer_id: string | null; cn: string | null; cd: number | null; held: number; author_ok: number }>();
   const by = new Map(rows.results.map((r) => [r.id, r]));
   return json(200, {
     banks: (ids as string[]).map((id) => {
       const r = by.get(id);
       if (!r || r.closed_at !== null) return { bank_id: id, status: "unavailable" };
       if (r.removed_at !== null) return { bank_id: id, status: "removed", ...(r.removed_reason === "author_removed" || r.removed_reason === "owner_removed" ? { until: r.purge_after } : {}) };
-      if (r.held === 1 && r.author_id !== me) return { bank_id: id, status: "under_review" };
+      if ((r.held === 1 && r.author_id !== me) || r.author_ok !== 1) return { bank_id: id, status: "under_review" };
       return { bank_id: id, status: "current", version: r.head_version, version_id: r.head_version_id, license: r.license, at: r.committed_at ?? r.updated_at, by: r.committer_id === null ? null : nameOf(r.cn, r.cd) };
     }),
   });
@@ -936,9 +1048,12 @@ interface BankRow {
   removed_reason: string | null;
   purge_after: number | null;
   held: number;
+  /** Round 34: the author is in good standing (or erased with the bank kept anonymised). */
+  author_ok: number;
 }
 const BANK_COLS = `b.id, b.circle_id, b.author_id, b.title, b.subject, b.course, b.grade, b.license, b.head_version, b.head_version_id, b.question_count, b.has_images, b.anonymized,
-  b.created_at, b.updated_at, b.removed_at, b.removed_reason, b.purge_after, EXISTS (SELECT 1 FROM circle_holds h WHERE h.bank_id = b.id) AS held`;
+  b.created_at, b.updated_at, b.removed_at, b.removed_reason, b.purge_after, EXISTS (SELECT 1 FROM circle_holds h WHERE h.bank_id = b.id) AS held,
+  ${AUTHOR_OK_SQL("b")} AS author_ok`;
 
 /** The bank of circle `cid`, iff the caller is an active member (a counted 404 otherwise). Not yet checked: open, removed, held. */
 export async function bankOrMiss(c: Ctx, cid: string, bid: string, me: string): Promise<{ m: Membership; b: BankRow }> {
@@ -956,7 +1071,7 @@ export async function bankOrMiss(c: Ctx, cid: string, bid: string, me: string): 
 async function readable(c: Ctx, m: Membership, b: BankRow, me: string): Promise<void> {
   requireOpen(m);
   if (b.removed_at !== null) throw new PoolError(409, "bank_removed", { reason: b.removed_reason, undo_until: b.removed_reason === "author_removed" || b.removed_reason === "owner_removed" ? b.purge_after : null });
-  if (b.held === 1 && b.author_id !== me) {
+  if ((b.held === 1 && b.author_id !== me) || b.author_ok !== 1) {
     await countMiss(c, me, "item_miss");
     throw notFound();
   }
@@ -1045,7 +1160,7 @@ export async function getBankBlob(c: Ctx, p: PoolPrincipal, cid: string, bid: st
          JOIN circle_version_blobs vb ON vb.version_id = v.id AND vb.sha256 = ?3
          JOIN blobs bl ON bl.sha256 = vb.sha256
         WHERE b.id = ?1 AND b.circle_id = ?2 AND b.purged_at IS NULL AND b.removed_at IS NULL
-          AND (b.author_id = ?4 OR NOT EXISTS (SELECT 1 FROM circle_holds h WHERE h.bank_id = b.id))
+          AND (b.author_id = ?4 OR NOT EXISTS (SELECT 1 FROM circle_holds h WHERE h.bank_id = b.id)) AND ${AUTHOR_OK_SQL("b")}
           -- an image confirmed as student data is served to nobody, from anywhere (as the public pool)
           AND NOT EXISTS (SELECT 1 FROM privacy_blocks pb WHERE pb.kind = 'blob' AND pb.hash = ?3) AND bl.privacy_purged_at IS NULL
         LIMIT 1`,
@@ -1104,6 +1219,21 @@ export async function deleteBank(c: Ctx, p: PoolPrincipal, cid: string, bid: str
   const author = b.author_id === me;
   if (!author && m.role !== "owner") throw new PoolError(403, "circle_role_required", { needed: "owner", role: m.role });
   if (b.removed_at !== null) {
+    // Round 34 (critic41b F6): the owner's delete of a bank its author removed makes it the owner's removal (the
+    // author can no longer undo it); the window is not extended.
+    if (b.removed_reason === "author_removed" && m.role === "owner" && !author) {
+      const now = c.now();
+      const [up] = await c.db.batch([
+        c.db
+          .prepare(
+            `UPDATE circle_banks SET removed_reason = 'owner_removed', updated_at = ?4 WHERE id = ?1 AND circle_id = ?2 AND removed_reason = 'author_removed' AND purged_at IS NULL
+               AND ${ACTIVE_SQL("?2", "?3", ["owner"])} AND ${ALIVE_SQL("?3")}`,
+          )
+          .bind(bid, cid, me, now),
+        audit(c.db, { actorId: me, actorKind: "user", action: "circle.bank_remove", itemId: cid, targetUserId: me, detail: { bank_id: bid } }, now, `changes() = 1`),
+      ]);
+      if ((up!.meta.changes ?? 0) !== 1) await throwIfErased(c, me);
+    }
     if (b.removed_reason === "author_removed" || b.removed_reason === "owner_removed") return json(200, { ok: true, undo_until: b.purge_after });
     throw new PoolError(409, "under_moderation");
   }
@@ -1280,6 +1410,9 @@ export function circleErasureStatements(db: D1Database, userId: string, now: num
     db.prepare(`UPDATE circle_versions SET message = NULL WHERE committer_id = ?1 AND message IS NOT NULL`).bind(userId),
     db.prepare(`UPDATE circle_reports SET note = NULL, reporter_id = NULL WHERE reporter_id = ?1`).bind(userId),
     db.prepare(`UPDATE circle_invites SET revoked_at = COALESCE(revoked_at, ?2), note = NULL WHERE created_by = ?1 AND (revoked_at IS NULL OR note IS NOT NULL)`).bind(userId, now),
+    // (round 34: ownership offers from or to the account)
+    db.prepare(`DELETE FROM circle_transfers WHERE from_user = ?1`).bind(userId),
+    db.prepare(`DELETE FROM circle_transfers WHERE to_user = ?1`).bind(userId),
     db.prepare(`DELETE FROM circle_members WHERE user_id = ?1`).bind(userId),
   ];
 }
@@ -1289,6 +1422,10 @@ export const RESWEEP_CIRCLES = 50;
 /** The safety net's pick (one indexed walk of the open circles a day, each probed by the one-owner index). */
 export const OWNERLESS_SQL = `SELECT c2.id FROM circles c2 INDEXED BY circles_open WHERE c2.closed_at IS NULL AND c2.purged_at IS NULL
   AND NOT EXISTS (SELECT 1 FROM circle_members o2 WHERE o2.circle_id = c2.id AND o2.role = 'owner' AND o2.left_at IS NULL) LIMIT ${RESWEEP_CIRCLES}`;
+/** Round 34: owner-closed circles inside their undo window without an owner (by the purge index; ?1 = now). */
+export const OWNERLESS_CLOSED_SQL = `SELECT c3.id FROM circles c3 INDEXED BY circles_purge WHERE c3.purge_after IS NOT NULL AND c3.purged_at IS NULL
+  AND c3.close_reason = 'owner_closed' AND c3.undo_until > ?1
+  AND NOT EXISTS (SELECT 1 FROM circle_members o3 WHERE o3.circle_id = c3.id AND o3.role = 'owner' AND o3.left_at IS NULL) LIMIT ${RESWEEP_CIRCLES}`;
 
 /**
  * The daily erasure_resweep's circle part (plan 8.2): every circle table a request already in flight could
@@ -1312,6 +1449,8 @@ export function circleResweepStatements(db: D1Database, now: number, ownerless: 
     db.prepare(`UPDATE circle_versions SET message = NULL WHERE committer_id IN (${done}) AND message IS NOT NULL`),
     db.prepare(`UPDATE circle_reports SET note = NULL, reporter_id = NULL WHERE reporter_id IN (${done})`),
     db.prepare(`UPDATE circle_invites SET revoked_at = COALESCE(revoked_at, ?1), note = NULL WHERE created_by IN (${done}) AND (revoked_at IS NULL OR note IS NOT NULL)`).bind(now),
+    db.prepare(`DELETE FROM circle_transfers WHERE from_user IN (${done})`),
+    db.prepare(`DELETE FROM circle_transfers WHERE to_user IN (${done})`),
     db.prepare(`DELETE FROM circle_members WHERE user_id IN (${done})`),
   ];
 }
@@ -1402,6 +1541,8 @@ const OPEN_REPORT_CIRCLE = (ci: string) =>
 /** Daily: removed banks and closed circles past purge_after (never one with an open report or a hold), in bounded batches. */
 export async function purgeCircles(c: Ctx): Promise<{ banks: number; circles: number }> {
   const now = c.now();
+  // (round 34: expired ownership offers)
+  await c.db.prepare(`DELETE FROM circle_transfers WHERE expires_at <= ?1`).bind(now).run();
   let banks = 0;
   const due = await c.db
     .prepare(
@@ -1427,6 +1568,7 @@ export async function purgeCircles(c: Ctx): Promise<{ banks: number; circles: nu
     for (const b of bs.results) await purgeBank(c, b.id, ci.id, "circle_closed");
     await c.db.batch([
       c.db.prepare(`DELETE FROM circle_invites WHERE circle_id = ?1`).bind(ci.id),
+      c.db.prepare(`DELETE FROM circle_transfers WHERE circle_id = ?1`).bind(ci.id),
       c.db.prepare(`DELETE FROM circle_members WHERE circle_id = ?1`).bind(ci.id),
       c.db.prepare(`UPDATE circles SET purged_at = ?2, name = NULL, description = NULL, purge_after = NULL, undo_until = NULL, qkeys = 0 WHERE id = ?1 AND closed_at IS NOT NULL AND purged_at IS NULL`).bind(ci.id, now),
       audit(c.db, { actorKind: "system", action: "circle.purge", itemId: ci.id }, now),
@@ -1450,5 +1592,12 @@ export async function exportCircles(c: Ctx, me: string): Promise<Record<string, 
     versions_sent: await q(`SELECT circle_id, bank_id, version, committed_at, message, license FROM circle_versions WHERE committer_id = ?1 AND status <> 'staging' ORDER BY committed_at`),
     banks_authored: await q(`SELECT circle_id, id AS bank_id, title, license, head_version, created_at, removed_at FROM circle_banks WHERE author_id = ?1 AND purged_at IS NULL ORDER BY created_at`),
     reports: await q(`SELECT circle_id, bank_id, reason, note, at, resolved_at, action FROM circle_reports WHERE reporter_id = ?1 ORDER BY at`),
+    // (round 34: ownership offers it made or received and that are still open)
+    transfer_offers: (
+      await c.db
+        .prepare(`SELECT circle_id, from_user = ?1 AS offered_by_me, to_user = ?1 AS offered_to_me, created_at, expires_at FROM circle_transfers WHERE (from_user = ?1 OR to_user = ?1) AND expires_at > ?2 ORDER BY created_at`)
+        .bind(me, c.now())
+        .all()
+    ).results,
   };
 }

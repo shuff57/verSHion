@@ -274,7 +274,10 @@ test("32-3: only the owner removes (never themself), changes roles and transfers
   assert.equal((await w.json<any>("POST", `/circles/${cid}/members/role`, { user: B!, json: { user_id: C!.id, role: "viewer" } })).status, 403);
   // Transfer: the new owner, the old one an editor; exactly one owner.
   assert.equal((await w.json<any>("POST", `/circles/${cid}/transfer`, { user: A!, json: { user_id: "1".repeat(8) + "-0000-4000-8000-" + "9".repeat(12) } })).status, 404);
-  assert.equal((await w.json<any>("POST", `/circles/${cid}/transfer`, { user: A!, json: { user_id: D!.id } })).status, 200);
+  // (round 34: an offer the member accepts)
+  assert.equal((await w.json<any>("POST", `/circles/${cid}/transfer`, { user: A!, json: { user_id: D!.id } })).status, 202);
+  assert.deepEqual(owners(w, cid), [A!.id], "nothing before the accept");
+  assert.equal((await w.json<any>("POST", `/circles/${cid}/transfer/accept`, { user: D! })).status, 200);
   assert.deepEqual(owners(w, cid), [D!.id]);
   assert.equal(active(w, cid).find((x) => x.user_id === A!.id)!.role, "editor");
   assert.equal((await w.json<any>("POST", `/circles/${cid}/transfer`, { user: A!, json: { user_id: C!.id } })).status, 403, "no longer the owner");
@@ -726,10 +729,12 @@ function instrument(w: World, boundary: (k: number) => Promise<void>) {
 }
 /** Every open circle with an active member has exactly one active owner; no circle has two. */
 function ownerInvariant(w: World, label: string) {
-  for (const c of w.q<any>(`SELECT id, closed_at FROM circles WHERE purged_at IS NULL`)) {
+  for (const c of w.q<any>(`SELECT id, closed_at, close_reason, undo_until FROM circles WHERE purged_at IS NULL`)) {
     const o = owners(w, c.id).length;
     assert.ok(o <= 1, `${label}: ${o} owners`);
-    if (c.closed_at === null && active(w, c.id).length > 0) assert.equal(o, 1, `${label}: an open circle with members has no owner`);
+    // (round 34: an owner-closed circle inside its undo window keeps an owner too)
+    const handedOn = c.closed_at === null || (c.close_reason === "owner_closed" && c.undo_until > w.clock);
+    if (handedOn && active(w, c.id).length > 0) assert.equal(o, 1, `${label}: an open (or owner-closed) circle with members has no owner`);
   }
 }
 const ZNAME = "Zorgon Quixote";
@@ -869,6 +874,15 @@ const RACES: RaceScenario[] = [
     },
   },
   {
+    name: "32 race POST /circles/:cid/transfer/accept (Z takes over Ann's circle, round 34)",
+    async build() {
+      const { w, A, B, Z } = await raceWorld();
+      const cid = await circleWith(w, A, [[B, "viewer"], [Z, "editor"]]);
+      assert.equal((await w.json("POST", `/circles/${cid}/transfer`, { user: A, json: { user_id: Z.id } })).status, 202);
+      return { w, Z, req: () => w.json("POST", `/circles/${cid}/transfer/accept`, { user: Z }), check: (w2) => assert.equal(w2.q(`SELECT 1 FROM circle_transfers`).length, 0) };
+    },
+  },
+  {
     name: "32 race POST /circles/:cid/members/role (Z, the owner)",
     async build() {
       const { w, A, B, Z } = await raceWorld();
@@ -955,7 +969,9 @@ test("32-11 (oracle): random sequences of create, code, join, leave, remove, rol
     const owned = (u: string) => circles.filter((c) => c.members.get(u)?.role === "owner").length;
     const memberships = (u: string) => circles.filter((c) => c.members.has(u)).length;
     const succession = (c: MCircle) => {
-      if (c.closed !== null || [...c.members.values()].some((m) => m.role === "owner")) return;
+      // (round 34: an owner-closed circle inside its undo window is handed on too, and stays closed)
+      const ownerClosed = c.closed === "owner_closed" && (c.undoUntil ?? 0) > w.clock;
+      if ((c.closed !== null && !ownerClosed) || [...c.members.values()].some((m) => m.role === "owner")) return;
       for (const role of ["editor", "viewer"]) {
         const pick = [...c.members.entries()].filter(([, m]) => m.role === role).sort((a, b) => a[1].seq - b[1].seq)[0];
         if (pick) {
@@ -964,6 +980,7 @@ test("32-11 (oracle): random sequences of create, code, join, leave, remove, rol
           return;
         }
       }
+      if (ownerClosed) return;
       c.closed = "last_member_gone";
       c.undoUntil = null;
       c.purgeAfter = w.clock + 14 * DAY;
@@ -1088,16 +1105,21 @@ test("32-11 (oracle): random sequences of create, code, join, leave, remove, rol
         else if (c.closed) assert.equal(res.status, 409, label);
         else if (mine.role !== "owner") assert.equal(res.status, 403, label);
         else if (!tm || t === me) assert.ok(res.status === 404 || res.status === 400 || (op === 7 && res.status === 200), `${label}: ${res.status}`);
-        else if (op === 7 && owned(t) >= 5) assert.deepEqual([res.status, res.body.metric], [422, "circles_owned"], label);
-        else {
-          assert.equal(res.status, 200, `${label} ${path}: ${JSON.stringify(res.body)}`);
-          if (op === 5) depart(c, t, "removed");
-          else if (op === 6) tm.role = role;
+        else if (op === 7) {
+          // Round 34: an offer (202), then the member's accept (the cap is checked there).
+          assert.equal(res.status, 202, `${label} offer: ${JSON.stringify(res.body)}`);
+          const acc = await w.json<any>("POST", `/circles/${c.id}/transfer/accept`, { user: byId(t) });
+          if (owned(t) >= 5) assert.deepEqual([acc.status, acc.body.metric], [422, "circles_owned"], label);
           else {
+            assert.equal(acc.status, 200, `${label} accept: ${JSON.stringify(acc.body)}`);
             mine.role = "editor";
             tm.role = "owner";
             revokeBy(c, me);
           }
+        } else {
+          assert.equal(res.status, 200, `${label} ${path}: ${JSON.stringify(res.body)}`);
+          if (op === 5) depart(c, t, "removed");
+          else tm.role = role;
         }
       } else if (op === 8) {
         const closing = r.bool(0.6);
@@ -1390,7 +1412,7 @@ test("32-13: migration 0108 on a database at 0107 with rows: no existing table, 
   await src.json("POST", `/items/${a.item_id}/report`, { user: B, json: { reason: "other", note: "n" } });
   const dir = new URL("../../migrations/", import.meta.url).pathname;
   const files = readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();
-  assert.equal(files.at(-1), "0108_pool_round32.sql");
+  assert.ok(files.includes("0108_pool_round32.sql"));
   const old = new DatabaseSync(":memory:");
   for (const f of files.filter((f) => f < "0108")) old.exec(readFileSync(dir + f, "utf8"));
   old.exec("PRAGMA foreign_keys = OFF");
@@ -1413,6 +1435,8 @@ test("32-13: migration 0108 on a database at 0107 with rows: no existing table, 
   for (const t of ["circles", "circle_members", "circle_invites", "circle_banks", "circle_versions", "circle_version_blobs", "circle_qkeys", "circle_reports", "circle_holds"]) assert.ok(added.includes(t), t);
   assert.ok(added.every((n) => /^(sqlite_autoindex_)?circle/.test(n)), added.join());
   assert.throws(() => old.exec(readFileSync(dir + "0108_pool_round32.sql", "utf8")), /already exists/, "a second run stops at once");
+  // (and every later migration, as a deployment applies them: round 34's 0109)
+  for (const f of files.filter((f) => f > "0108_pool_round32.sql")) old.exec(readFileSync(dir + f, "utf8"));
   // The migrated database under the Worker: circles work, the public pool is unchanged.
   const w = new World({ sql: old, r2: src.r2 });
   for (const [k, v] of src.tokens) w.tokens.set(k, v);

@@ -23,6 +23,7 @@
 //   publisher, who is or was a member. A publisher who never joined a circle costs one indexed probe.
 import { cleanText } from "../../../auth/src/validate.ts";
 import { ID_RE, limitOf, PoolError, reserveBytes, type Ctx } from "./shared.ts";
+import { ACTIVE_SQL, AUTHOR_OK_SQL } from "./circles.ts";
 
 export interface CircleClaim {
   banks: string[];
@@ -155,12 +156,21 @@ export async function checkCircleMaterial(c: Ctx, me: string, hashesAt: string[]
   if (refused.length === 0) return { claimed: [...claimed] };
   await ask(refused.slice(0, 100).flatMap((i) => hashesAt[i]!));
   const banks = [...new Set(refused.map((i) => hitAt[i]!.bank))];
+  // Round 34 (critic41b F1): a hit names the bank and circle only when the publisher can see that bank now (an
+  // active member of the open circle, the bank live, not held, its author in good standing); a held bank (or a
+  // suspended author's) gives a generic hit: no ids, no names (a hold exists to hide that title); otherwise
+  // (a former member, a removed bank, a closed circle) the ids, to name in a statement, without names.
   const names = new Map(
     (
       await c.db
-        .prepare(`SELECT b.id, b.title, ci.id AS circle_id, ci.name FROM circle_banks b JOIN circles ci ON ci.id = b.circle_id WHERE b.id IN (SELECT value FROM json_each(?1))`)
-        .bind(JSON.stringify(banks.slice(0, 100)))
-        .all<{ id: string; title: string; circle_id: string; name: string | null }>()
+        .prepare(
+          `SELECT b.id, b.title, ci.id AS circle_id, ci.name,
+                  (EXISTS (SELECT 1 FROM circle_holds h WHERE h.bank_id = b.id) OR NOT ${AUTHOR_OK_SQL("b")}) AS hidden,
+                  (b.removed_at IS NULL AND b.purged_at IS NULL AND ci.closed_at IS NULL AND ${ACTIVE_SQL("ci.id", "?2")}) AS visible
+             FROM circle_banks b JOIN circles ci ON ci.id = b.circle_id WHERE b.id IN (SELECT value FROM json_each(?1))`,
+        )
+        .bind(JSON.stringify(banks.slice(0, 100)), me)
+        .all<{ id: string; title: string; circle_id: string; name: string | null; hidden: number; visible: number }>()
     ).results.map((r) => [r.id, r]),
   );
   throw new PoolError(422, "circle_material", {
@@ -168,7 +178,9 @@ export async function checkCircleMaterial(c: Ctx, me: string, hashesAt: string[]
     hits: refused.slice(0, 100).map((i) => {
       const h = hitAt[i]!;
       const nm = names.get(h.bank);
-      return { pos: i, circle_id: h.circle, circle_name: nm?.name ?? null, bank_id: h.bank, bank_title: nm?.title ?? null, may_claim_independence: mayClaim(i) };
+      if (!nm || nm.hidden === 1) return { pos: i, circle_id: null, circle_name: null, bank_id: null, bank_title: null, may_claim_independence: false };
+      const shown = nm.visible === 1;
+      return { pos: i, circle_id: h.circle, circle_name: shown ? nm.name : null, bank_id: h.bank, bank_title: shown ? nm.title : null, may_claim_independence: mayClaim(i) };
     }),
     message: "Some questions were first shared by another member of a circle. They cannot be shared publicly from here.",
   });

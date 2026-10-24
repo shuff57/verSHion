@@ -96,7 +96,8 @@ test("33-2: codes never outlive their issuer's owner role: a transfer, a leave a
   const lst = await w.json<any>("GET", `/circles/${cid}/invites`, { user: A! });
   assert.ok(lst.body.invites.every((i: Q) => i.created_by === A!.id && i.created_by_name === "Ann"), JSON.stringify(lst.body.invites[0]));
   // Transfer: A's open codes are revoked in the same batch.
-  assert.equal((await w.json("POST", `/circles/${cid}/transfer`, { user: A!, json: { user_id: B!.id } })).status, 200);
+  assert.equal((await w.json("POST", `/circles/${cid}/transfer`, { user: A!, json: { user_id: B!.id } })).status, 202);
+  assert.equal((await w.json("POST", `/circles/${cid}/transfer/accept`, { user: B! })).status, 200, "(round 34: accepted)");
   assert.deepEqual((await join(w, S!, big)).body.error, "circle_invite_invalid", "the former owner's code no longer works");
   assert.ok(w.q<any>(`SELECT revoked_at FROM circle_invites WHERE created_by = ?`, A!.id).every((x) => x.revoked_at !== null));
   // Leave: the leaving owner's codes are revoked (succession hands the circle on).
@@ -124,8 +125,11 @@ test("33-3: circles_owned (5) holds through a transfer, checked in the transfer'
   for (const c of [c1, c2]) assert.equal((await join(w, Y!, await code(w, c === c1 ? X1! : X2!, c, "editor"))).status, 200);
   // Y owns 4: the first transfer is fine, the second would make 6.
   w.advance(DAY);
-  assert.equal((await w.json("POST", `/circles/${c1}/transfer`, { user: X1!, json: { user_id: Y!.id } })).status, 200);
-  const r = await w.json<any>("POST", `/circles/${c2}/transfer`, { user: X2!, json: { user_id: Y!.id } });
+  // (round 34: offers, then the member's accepts; the cap is checked at the accept)
+  assert.equal((await w.json("POST", `/circles/${c1}/transfer`, { user: X1!, json: { user_id: Y!.id } })).status, 202);
+  assert.equal((await w.json("POST", `/circles/${c2}/transfer`, { user: X2!, json: { user_id: Y!.id } })).status, 202);
+  assert.equal((await w.json("POST", `/circles/${c1}/transfer/accept`, { user: Y! })).status, 200);
+  const r = await w.json<any>("POST", `/circles/${c2}/transfer/accept`, { user: Y! });
   assert.deepEqual([r.status, r.body.error, r.body.metric, r.body.used, r.body.limit], [422, "circles_limit", "circles_owned", 5, 5]);
   assert.deepEqual(owners(w, c2), [X2!.id], "nothing changed");
   // Interleaved: the second transfer runs inside the first one's request, at each of its statement boundaries.
@@ -135,6 +139,7 @@ test("33-3: circles_owned (5) holds through a transfer, checked in the transfer'
     for (let i = 0; i < 4; i++) await circle(w2, Y2!, `Y${i}`);
     const d1 = await circle(w2, A1!, "A1"), d2 = await circle(w2, A2!, "A2");
     for (const [c, o] of [[d1, A1!], [d2, A2!]] as const) await join(w2, Y2!, await code(w2, o, c, "editor"));
+    for (const [c, o] of [[d1, A1!], [d2, A2!]] as const) await w2.json("POST", `/circles/${c}/transfer`, { user: o, json: { user_id: Y2!.id } });
     const db = w2.db as any;
     const prep = db.prepare.bind(db), batch = db.batch.bind(db);
     let n = 0, inner = false;
@@ -142,7 +147,7 @@ test("33-3: circles_owned (5) holds through a transfer, checked in the transfer'
       if (inner) return;
       if (n++ === k) {
         inner = true;
-        await w2.json("POST", `/circles/${d2}/transfer`, { user: A2!, json: { user_id: Y2!.id } });
+        await w2.json("POST", `/circles/${d2}/transfer/accept`, { user: Y2! });
         inner = false;
       }
     };
@@ -155,7 +160,7 @@ test("33-3: circles_owned (5) holds through a transfer, checked in the transfer'
     db.prepare = (sql: string) => wrap(prep(sql));
     db.batch = async (ss: unknown[]) => (await hit(), batch(ss));
     try {
-      await w2.json("POST", `/circles/${d1}/transfer`, { user: A1!, json: { user_id: Y2!.id } });
+      await w2.json("POST", `/circles/${d1}/transfer/accept`, { user: Y2! });
     } finally {
       db.prepare = prep;
       db.batch = batch;

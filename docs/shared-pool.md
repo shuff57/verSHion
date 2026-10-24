@@ -36,8 +36,10 @@ joined by code, banks shared into a circle for members to view and copy, the aut
 versions, caps, erasure and succession, purges, the admin's audited access, and one check at public publish
 that keeps material first sent into a circle by someone else out of the public pool. Circle content stays out
 of this document's licence engine (no served rows, no authorship records). Routes, decisions and limits:
-`server/worker/README.md` "Round 32" and "Round 33" (fixes after two critics: re-joining after a removal,
-codes that outlive their issuer's owner role, caps through transfers, holds and purges; its documented limits).
+`server/worker/README.md` "Round 32", "Round 33" (fixes after two critics: re-joining after a removal,
+codes that outlive their issuer's owner role, caps through transfers, holds and purges) "Round 34" (ownership is
+an offer the member accepts, succession of owner-closed circles, accounts not in good standing) and "Round 35" (removed
+banks stay findable by the owner, offers capped a day; the documented limits).
 There is no client yet; the owner's "no circles at the first launch"
 stands until the app ships them.
 

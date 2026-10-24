@@ -2,7 +2,7 @@
 import { holdPrivacyBatch, PREVIEW_MS } from "./blocking.ts";
 import { appealsDue, finishQuarantines, gcBlobs, ghostUpholds, privacyFinish, putbackFinish, releaseRestoredHolds, repeatInfringerSweep, OPEN_APPEAL_SQL, purgeItem, QUARANTINE_MS, restore, retryOrphans } from "./moderation.ts";
 import { usedUnserved } from "./served.ts";
-import { circleResweepStatements, discardCircleStaging, OWNERLESS_SQL, pruneCircleVersions, purgeCircles } from "./circles.ts";
+import { circleResweepStatements, discardCircleStaging, OWNERLESS_CLOSED_SQL, OWNERLESS_SQL, pruneCircleVersions, purgeCircles } from "./circles.ts";
 import { deleteContentStatements } from "./index.ts";
 import { offerSync, deletePublishStatements, discardQidsStatement, fold, licenceRekey, searchKey, servedWords, stemBackfill, titleSearch } from "./publish.ts";
 import { bodyTokens, unitKeysOf, fieldKeys, keyfreeHash, nearHash, nearKfHash, normSkeletonKey, partKeysOf, stemBands, stemKey, stemTokens } from "./provenance.ts";
@@ -189,7 +189,11 @@ export async function daily(c: Ctx): Promise<DailyReport> {
     const stragglers = await c.db.prepare(`SELECT DISTINCT user_id FROM imports WHERE user_id IN (${done}) LIMIT 50`).all<{ user_id: string }>();
     const now = c.now();
     // (round 32: open circles left without an owner, the circle part's safety net)
-    const ownerless = (await c.db.prepare(OWNERLESS_SQL).all<{ id: string }>()).results.map((x) => x.id);
+    const ownerless = [
+      ...(await c.db.prepare(OWNERLESS_SQL).all<{ id: string }>()).results.map((x) => x.id),
+      // (round 34: and owner-closed circles inside their undo window)
+      ...(await c.db.prepare(OWNERLESS_CLOSED_SQL).bind(now).all<{ id: string }>()).results.map((x) => x.id),
+    ];
     await c.db.batch([
       ...stragglers.results.map((r) => c.db.prepare(`UPDATE imports SET user_id = ?2 WHERE user_id = ?1`).bind(r.user_id, `deleted:${crypto.randomUUID().replaceAll("-", "")}`)),
       // (the key_leak flag's quoted text goes before the reports lose their reporter)

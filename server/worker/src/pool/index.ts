@@ -11,7 +11,7 @@ import { publish } from "./publish.ts";
 import { exportAccount } from "./export.ts";
 import { INVITE_FREE_PATHS, redeemInvite, requireInvite } from "./invites.ts";
 import { getBlob, getItem, importItem, list, mine, versions } from "./read.ts";
-import { activity, circleErasureStatements, closeCircle, createCircle, createInvite, deleteBank, getBank, getBankBlob, getCircle, heads, joinCircle, joinPreview, leaveCircle, listCircles, listInvites, patchBank, patchCircle, purgeBankNow, removeMember, reopenCircle, reportBank, revokeInvite, setRole, transferOwnership, undeleteBank } from "./circles.ts";
+import { activity, circleErasureStatements, closeCircle, createCircle, createInvite, deleteBank, getBank, getBankBlob, getCircle, heads, joinCircle, joinPreview, leaveCircle, listCircles, listInvites, patchBank, patchCircle, purgeBankNow, removeMember, reopenCircle, reportBank, revokeInvite, setRole, undeleteBank, offerTransfer, acceptTransfer, cancelTransfer } from "./circles.ts";
 import { sendVersion } from "./circlesend.ts";
 import { ALIVE_SQL, assertPoolKey, unauthorized, errKind, json, makeCtx, PoolError, rateLimit, readJson, type Ctx, type PoolDeps, type PoolPrincipal } from "./shared.ts";
 
@@ -90,7 +90,10 @@ const ROUTES: { re: RegExp; methods: Record<string, Route> }[] = [
   { re: /^\/circles\/([0-9a-f]{32})\/leave$/, methods: { POST: (c, _r, p, m) => leaveCircle(c, p, m[1]!) } },
   { re: /^\/circles\/([0-9a-f]{32})\/members\/remove$/, methods: { POST: (c, r, p, m) => removeMember(c, r, p, m[1]!) } },
   { re: /^\/circles\/([0-9a-f]{32})\/members\/role$/, methods: { POST: (c, r, p, m) => setRole(c, r, p, m[1]!) } },
-  { re: /^\/circles\/([0-9a-f]{32})\/transfer$/, methods: { POST: (c, r, p, m) => transferOwnership(c, r, p, m[1]!) } },
+  // (Round 34: a transfer is an offer the member accepts within 7 days.)
+  { re: /^\/circles\/([0-9a-f]{32})\/transfer$/, methods: { POST: (c, r, p, m) => offerTransfer(c, r, p, m[1]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/transfer\/accept$/, methods: { POST: (c, _r, p, m) => acceptTransfer(c, p, m[1]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/transfer\/cancel$/, methods: { POST: (c, _r, p, m) => cancelTransfer(c, p, m[1]!) } },
   { re: /^\/circles\/([0-9a-f]{32})\/banks$/, methods: { POST: (c, r, p, m) => sendVersion(c, r, p, m[1]!, null) } },
   {
     re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})$/,
