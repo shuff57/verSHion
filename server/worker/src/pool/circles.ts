@@ -134,6 +134,12 @@ export const IN_STANDING_SQL = (uid: string) =>
 /** Round 34: bank row `b`'s content follows its author's standing (as public items do): served only while the author
  *  is in good standing, or erased with the bank kept anonymised (D15). A suspended author's banks are hidden like
  *  held ones until the account is restored. */
+/**
+ * Round 39 (critic 46a M1): a hold that freezes a bank (its pruning, trim and purge, and, round 40, hides it from its
+ * owner): a report's or an administrator's, kept as evidence. A student-data hold a send raised (`privacy`,
+ * `privacy_near`) does not: the matching version is withheld, which is what protects the data.
+ */
+export const BLOCKING_HOLD_SQL = (bid: string) => `EXISTS (SELECT 1 FROM circle_holds xh WHERE xh.bank_id = ${bid} AND xh.source NOT IN ('privacy', 'privacy_near'))`;
 export const AUTHOR_OK_SQL = (b: string) =>
   `EXISTS (SELECT 1 FROM users au WHERE au.id = ${b}.author_id AND au.trust IN ('teacher', 'admin') AND au.suspended_at IS NULL AND (au.deleted_at IS NULL OR ${b}.anonymized = 1))`;
 /** Membership rows of `me`, former ones included (rows live until their circle is purged): the cap that
@@ -378,12 +384,12 @@ export async function getCircle(c: Ctx, p: PoolPrincipal, cid: string): Promise<
     .prepare(
       `SELECT b.id, b.title, b.subject, b.course, b.grade, b.license, b.head_version, b.question_count, b.has_images, b.created_at, b.updated_at,
               b.author_id, b.anonymized, b.removed_at, b.removed_reason, b.purge_after, u.display_name, u.deleted_at,
-              EXISTS (SELECT 1 FROM circle_holds h WHERE h.bank_id = b.id) AS held, ${AUTHOR_OK_SQL("b")} AS author_ok
+              EXISTS (SELECT 1 FROM circle_holds h WHERE h.bank_id = b.id) AS held, ${BLOCKING_HOLD_SQL("b.id")} AS blocking, ${AUTHOR_OK_SQL("b")} AS author_ok
          FROM circle_banks b LEFT JOIN users u ON u.id = b.author_id
         WHERE b.circle_id = ?1 AND b.purged_at IS NULL AND b.head_version > 0 ORDER BY b.created_at, b.id`,
     )
     .bind(cid)
-    .all<Record<string, unknown> & { id: string; author_id: string; anonymized: number; removed_at: number | null; removed_reason: string | null; purge_after: number | null; held: number; author_ok: number; display_name: string | null; deleted_at: number | null }>();
+    .all<Record<string, unknown> & { id: string; author_id: string; anonymized: number; removed_at: number | null; removed_reason: string | null; purge_after: number | null; held: number; blocking: number; author_ok: number; display_name: string | null; deleted_at: number | null }>();
   const owner = m.role === "owner";
   // (round 34: the pending ownership offer, to the owner and to the member offered it)
   const tr = await c.db
@@ -400,13 +406,15 @@ export async function getCircle(c: Ctx, p: PoolPrincipal, cid: string): Promise<
       // its author).
       if (b.removed_at !== null) return mine || owner;
       if (b.author_ok !== 1) return false;
-      return b.held === 0 || mine;
+      // (round 40, critic 47a V1: a bank held only for student data is listed to the owner too, who can repair it)
+      return b.held === 0 || mine || (owner && b.blocking === 0);
     })
     .map((b) => {
       const mine = b.author_id === me;
       // (a removed bank that is held, or whose author is not in good standing, is listed without its text: F1's
-      // generic presentation; the owner gets the id to purge or restore it, nothing a hold hides)
-      const masked = !mine && (b.held === 1 || b.author_ok !== 1);
+      // generic presentation; the owner gets the id to purge or restore it, nothing a hold hides; round 40: a bank
+      // held only for student data shows the owner its listing, which never comes from a withheld version)
+      const masked = !mine && (b.author_ok !== 1 || (b.held === 1 && !(owner && b.blocking === 0)));
       return {
         id: b.id,
         title: masked ? null : b.title,
@@ -941,6 +949,8 @@ const ACTIVITY: Record<string, string> = {
   "circle.edit": "renamed",
   "circle.bank_add": "bank_shared",
   "circle.version": "version_sent",
+  "circle.rollback": "rolled_back",
+  "circle.versions_trimmed": "versions_trimmed",
   "circle.bank_remove": "bank_removed",
   "circle.bank_undelete": "bank_restored",
   "circle.bank_license": "license_changed",
@@ -979,14 +989,15 @@ export async function activity(c: Ctx, p: PoolPrincipal, cid: string, url: URL):
     for (const t of (
       await c.db
         .prepare(
-          `SELECT b.id, b.title, b.author_id, b.removed_at, EXISTS (SELECT 1 FROM circle_holds h WHERE h.bank_id = b.id) AS held, ${AUTHOR_OK_SQL("b")} AS author_ok
+          `SELECT b.id, b.title, b.author_id, b.removed_at, EXISTS (SELECT 1 FROM circle_holds h WHERE h.bank_id = b.id) AS held, ${BLOCKING_HOLD_SQL("b.id")} AS blocking, ${AUTHOR_OK_SQL("b")} AS author_ok
              FROM circle_banks b WHERE b.id IN (SELECT value FROM json_each(?1)) AND b.circle_id = ?2 AND b.purged_at IS NULL`,
         )
         .bind(JSON.stringify(bankIds), cid)
-        .all<{ id: string; title: string; author_id: string; removed_at: number | null; held: number; author_ok: number }>()
+        .all<{ id: string; title: string; author_id: string; removed_at: number | null; held: number; blocking: number; author_ok: number }>()
     ).results) {
       const mine = t.author_id === me;
-      if (t.author_ok === 1 && (mine || (t.held === 0 && (t.removed_at === null || m.role === "owner")))) titles.set(t.id, t.title);
+      const ownerSees = m.role === "owner" && t.blocking === 0;
+      if (t.author_ok === 1 && (mine || ((t.held === 0 || ownerSees) && (t.removed_at === null || m.role === "owner")))) titles.set(t.id, t.title);
     }
   const last = page[page.length - 1];
   return json(200, {
@@ -1000,6 +1011,8 @@ export async function activity(c: Ctx, p: PoolPrincipal, cid: string, url: URL):
         ...(typeof d.role === "string" ? { role: d.role } : {}),
         ...(typeof d.bank_id === "string" ? { bank_id: d.bank_id, bank_title: titles.get(d.bank_id) ?? null } : {}),
         ...(typeof d.version === "number" ? { version: d.version } : {}),
+        ...(typeof d.rollback_of === "number" ? { rollback_of: d.rollback_of } : {}),
+        ...(typeof d.merged_from === "number" ? { merged_from: d.merged_from } : {}),
         ...(typeof d.license === "string" ? { license: d.license } : {}),
       };
     }),
@@ -1021,7 +1034,7 @@ export async function heads(c: Ctx, req: Request, p: PoolPrincipal): Promise<Res
   // membership by key, the head by key.
   const rows = await c.db
     .prepare(
-      `SELECT j.value AS id, b.author_id, b.head_version, b.head_version_id, b.updated_at, b.removed_at, b.removed_reason, b.purge_after, b.license,
+      `SELECT j.value AS id, b.author_id, b.head_version, b.head_version_id, b.updated_at, b.removed_at, b.removed_reason, b.purge_after, b.license, m.role, ${BLOCKING_HOLD_SQL("b.id")} AS blocking,
               ci.closed_at, v.committed_at, v.committer_id, cu.display_name AS cn, cu.deleted_at AS cd,
               EXISTS (SELECT 1 FROM circle_holds h WHERE h.bank_id = b.id) AS held, ${AUTHOR_OK_SQL("b")} AS author_ok
          FROM json_each(?2) j
@@ -1032,14 +1045,14 @@ export async function heads(c: Ctx, req: Request, p: PoolPrincipal): Promise<Res
          LEFT JOIN users cu ON cu.id = v.committer_id`,
     )
     .bind(me, JSON.stringify(uniq))
-    .all<{ id: string; author_id: string; head_version: number; head_version_id: string; updated_at: number; removed_at: number | null; removed_reason: string | null; purge_after: number | null; license: string; closed_at: number | null; committed_at: number | null; committer_id: string | null; cn: string | null; cd: number | null; held: number; author_ok: number }>();
+    .all<{ id: string; author_id: string; head_version: number; head_version_id: string; updated_at: number; removed_at: number | null; removed_reason: string | null; purge_after: number | null; license: string; role: string; blocking: number; closed_at: number | null; committed_at: number | null; committer_id: string | null; cn: string | null; cd: number | null; held: number; author_ok: number }>();
   const by = new Map(rows.results.map((r) => [r.id, r]));
   return json(200, {
     banks: (ids as string[]).map((id) => {
       const r = by.get(id);
       if (!r || r.closed_at !== null) return { bank_id: id, status: "unavailable" };
       if (r.removed_at !== null) return { bank_id: id, status: "removed", ...(r.removed_reason === "author_removed" || r.removed_reason === "owner_removed" ? { until: r.purge_after } : {}) };
-      if ((r.held === 1 && r.author_id !== me) || r.author_ok !== 1) return { bank_id: id, status: "under_review" };
+      if ((r.held === 1 && r.author_id !== me && !(r.role === "owner" && r.blocking === 0)) || r.author_ok !== 1) return { bank_id: id, status: "under_review" };
       return { bank_id: id, status: "current", version: r.head_version, version_id: r.head_version_id, license: r.license, at: r.committed_at ?? r.updated_at, by: nameOf(r.cn, r.committer_id === null ? 1 : r.cd) };
     }),
   });
@@ -1047,7 +1060,7 @@ export async function heads(c: Ctx, req: Request, p: PoolPrincipal): Promise<Res
 
 // ---- bank reads ------------------------------------------------------------------------------------------------
 
-interface BankRow {
+export interface BankRow {
   id: string;
   circle_id: string;
   author_id: string;
@@ -1067,11 +1080,13 @@ interface BankRow {
   removed_reason: string | null;
   purge_after: number | null;
   held: number;
+  /** Round 40: a report's or an admin's hold (not only a student-data hold a send raised). */
+  blocking: number;
   /** Round 34: the author is in good standing (or erased with the bank kept anonymised). */
   author_ok: number;
 }
 const BANK_COLS = `b.id, b.circle_id, b.author_id, b.title, b.subject, b.course, b.grade, b.license, b.head_version, b.head_version_id, b.question_count, b.has_images, b.anonymized,
-  b.created_at, b.updated_at, b.removed_at, b.removed_reason, b.purge_after, EXISTS (SELECT 1 FROM circle_holds h WHERE h.bank_id = b.id) AS held,
+  b.created_at, b.updated_at, b.removed_at, b.removed_reason, b.purge_after, EXISTS (SELECT 1 FROM circle_holds h WHERE h.bank_id = b.id) AS held, ${BLOCKING_HOLD_SQL("b.id")} AS blocking,
   ${AUTHOR_OK_SQL("b")} AS author_ok`;
 
 /** The bank of circle `cid`, iff the caller is an active member (a counted 404 otherwise). Not yet checked: open, removed, held. */
@@ -1087,32 +1102,46 @@ export async function bankOrMiss(c: Ctx, cid: string, bid: string, me: string): 
   return { m, b };
 }
 /** A member may READ the bank: the circle open, the bank not removed, not held (unless theirs). */
-async function readable(c: Ctx, m: Membership, b: BankRow, me: string): Promise<void> {
+export async function requireReadable(c: Ctx, m: Membership, b: BankRow, me: string): Promise<void> {
   requireOpen(m);
   if (b.removed_at !== null) throw new PoolError(409, "bank_removed", { reason: b.removed_reason, undo_until: b.removed_reason === "author_removed" || b.removed_reason === "owner_removed" ? b.purge_after : null });
-  if ((b.held === 1 && b.author_id !== me) || b.author_ok !== 1) {
+  // (round 40, critic 47a V1: the owner reads and acts on a bank held only for student data, as its author does;
+  // the withheld version itself stays unreadable to both)
+  if ((b.held === 1 && b.author_id !== me && !(m.role === "owner" && b.blocking === 0)) || b.author_ok !== 1) {
     await countMiss(c, me, "item_miss");
     throw notFound();
   }
 }
 
-/** GET / HEAD /circles/:cid/banks/:bid: the head version, streamed. Viewing and copying are the same read (the copy is made on the device). */
-export async function getBank(c: Ctx, req: Request, p: PoolPrincipal, cid: string, bid: string, headOnly = false): Promise<Response> {
+/**
+ * GET / HEAD /circles/:cid/banks/:bid: the head version, streamed. Viewing and copying are the same read (the copy is made on the device).
+ * Round 37: GET .../versions/:n (`version` set) is a KEPT version the same way (the merge base); one pruned
+ * (D16) is `404 version_not_retained {oldest_kept}`, one that never existed `404 not_found`.
+ */
+export async function getBank(c: Ctx, req: Request, p: PoolPrincipal, cid: string, bid: string, headOnly = false, version: number | null = null): Promise<Response> {
   const me = p.userId;
   const { m, b } = await bankOrMiss(c, cid, bid, me);
-  await readable(c, m, b, me);
+  await requireReadable(c, m, b, me);
+  if (version !== null && (version < 1 || version > b.head_version)) {
+    await countMiss(c, me, "item_miss");
+    throw notFound();
+  }
   // Circle reads count toward the one read budget (D10).
   await requireDaily(c, me, "item_reads");
   const release = readHold(c, req, me);
   try {
     const v = await c.db
       .prepare(
-        `SELECT v.id, v.version, v.full_key, v.committed_at, v.license, v.origins, u.display_name, u.deleted_at FROM circle_versions v LEFT JOIN users u ON u.id = v.committer_id
-          WHERE v.id = ?1 AND v.bank_id = ?2 AND v.status = 'current'`,
+        `SELECT v.id, v.version, v.full_key, v.committed_at, v.license, v.origins, v.message, v.rollback_of, v.merged_from, v.withheld_at, u.display_name, u.deleted_at FROM circle_versions v LEFT JOIN users u ON u.id = v.committer_id
+          WHERE ${version === null ? "v.id = ?1 AND v.bank_id = ?2 AND v.status = 'current'" : "v.bank_id = ?2 AND v.version = ?3 AND v.status IN ('current', 'previous') AND v.full_key <> ''"}`,
       )
-      .bind(b.head_version_id, bid)
-      .first<{ id: string; version: number; full_key: string; committed_at: number; license: string; origins: string | null; display_name: string | null; deleted_at: number | null }>();
+      .bind(...(version === null ? [b.head_version_id, bid] : [null, bid, version]))
+      .first<{ id: string; version: number; full_key: string; committed_at: number; license: string; origins: string | null; message: string | null; rollback_of: number | null; merged_from: number | null; withheld_at: number | null; display_name: string | null; deleted_at: number | null }>();
+    if (!v && version !== null) throw await notRetained(c, bid, b.head_version);
     if (!v) throw notFound();
+    // Round 38 (critics 45a/45b B1): a version that matched confirmed student data is served to no member (its
+    // author included) until an administrator releases it, whichever version is the head now.
+    if (v.withheld_at !== null) throw withheldError();
     const head = {
       circle: { id: m.id, name: m.name, role: m.role },
       bank: {
@@ -1127,13 +1156,19 @@ export async function getBank(c: Ctx, req: Request, p: PoolPrincipal, cid: strin
         is_author: b.author_id === me,
         version: v.version,
         version_id: v.id,
+        // (round 37: the head, so a read of an older version says how far behind it is)
+        head_version: b.head_version,
         question_count: b.question_count,
         has_images: b.has_images === 1,
         committed_at: v.committed_at,
         committed_by: nameOf(v.display_name, v.deleted_at),
+        message: text(v.message),
+        // (round 37: present only when they apply; no circle response carries a null outside its listed fields)
+        ...(v.rollback_of !== null ? { rollback_of: v.rollback_of } : {}),
+        ...(v.merged_from !== null ? { merged_from: v.merged_from } : {}),
         ...(b.held === 1 ? { held: true } : {}),
       },
-      origins: v.origins ? (JSON.parse(v.origins) as unknown[]) : [],
+      origins: await originsForRead(c, v.origins),
     };
     const h = JSON.stringify(head);
     release.grow(READ_HEAD_COST * h.length);
@@ -1154,6 +1189,63 @@ export async function getBank(c: Ctx, req: Request, p: PoolPrincipal, cid: strin
     throw e;
   }
 }
+/**
+ * Which versions of a bank are kept in full (D16), as members need it (round 38, critic 45a variant 1):
+ * `oldest_kept`, where the contiguous run of kept versions that ends at the head starts (every version from it
+ * to the head is kept; a line's `withheld` says which of them no member may read), and `pinned_versions`, older
+ * versions kept outside that run (a report or a hold keeps them; at most 50 listed). Reads the kept versions only,
+ * by the (bank_id, status) index (the (bank_id, version) one would walk every pruned version first).
+ */
+export async function keptInfo(c: Ctx, bid: string, head: number): Promise<{ oldest_kept: number | null; pinned_versions: number[] }> {
+  // Round 39 (critic 46a variant 8): READABLE versions only (kept in full and not withheld): a withheld version breaks
+  // the run, and the run starts from the newest readable version (a withheld head is not "kept" for members).
+  const kept = new Set(
+    (
+      await c.db
+        .prepare(`SELECT version FROM circle_versions INDEXED BY circle_versions_bank WHERE bank_id = ?1 AND status IN ('current', 'previous') AND full_key <> '' AND withheld_at IS NULL`)
+        .bind(bid)
+        .all<{ version: number }>()
+    ).results.map((r) => r.version),
+  );
+  if (kept.size === 0) return { oldest_kept: null, pinned_versions: [] };
+  let start = Math.min(head, Math.max(...kept));
+  while (!kept.has(start)) start--;
+  while (kept.has(start - 1)) start--;
+  return { oldest_kept: start, pinned_versions: [...kept].filter((v) => v < start).sort((a, b) => a - b).slice(0, 50) };
+}
+/** `404 version_not_retained {oldest_kept, pinned_versions}`. */
+export async function notRetained(c: Ctx, bid: string, head: number): Promise<PoolError> {
+  return new PoolError(404, "version_not_retained", { ...(await keptInfo(c, bid, head)), message: "This version is no longer kept (a bank keeps its last 20 versions in full)." });
+}
+/** Round 38: `404 version_withheld` (a version that matched confirmed student data; an administrator may release it). */
+export const withheldError = () =>
+  new PoolError(404, "version_withheld", { message: "This version is withheld: it held text an administrator confirmed as student data. Only an administrator can release it." });
+
+/**
+ * Round 37: a version's recorded origins (public material, checked at send) with their authors' names read
+ * NOW (a name is never stored with a circle version: an erased public author shows as "deleted teacher").
+ * Bounded by the version's questions; each item by its key.
+ */
+export async function originsForRead(c: Ctx, json: string | null): Promise<{ pos: number; item_id: string; qid: string | null; version: number | null; license: string; author_name: string }[]> {
+  if (!json) return [];
+  let rows: { pos: number; item_id: string; qid?: string | null; version?: number | null; license: string }[];
+  try {
+    rows = JSON.parse(json) as typeof rows;
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+  const names = new Map(
+    (
+      await c.db
+        .prepare(`SELECT i.id, i.anonymized, u.display_name, u.deleted_at FROM json_each(?1) j CROSS JOIN items i ON i.id = j.value LEFT JOIN users u ON u.id = i.author_id`)
+        .bind(JSON.stringify([...new Set(rows.map((r) => r.item_id))]))
+        .all<{ id: string; anonymized: number; display_name: string | null; deleted_at: number | null }>()
+    ).results.map((r) => [r.id, r.anonymized === 1 ? DELETED_NAME : nameOf(r.display_name, r.deleted_at)]),
+  );
+  return rows.map((r) => ({ pos: r.pos, item_id: r.item_id, qid: r.qid ?? null, version: r.version ?? null, license: r.license, author_name: names.get(r.item_id) ?? DELETED_NAME }));
+}
+
 async function authorName(c: Ctx, id: string): Promise<string> {
   const u = await c.db.prepare(`SELECT display_name, deleted_at FROM users WHERE id = ?1`).bind(id).first<{ display_name: string | null; deleted_at: number | null }>();
   return nameOf(u?.display_name, u ? u.deleted_at : 1);
@@ -1175,11 +1267,11 @@ export async function getBankBlob(c: Ctx, p: PoolPrincipal, cid: string, bid: st
   const row = await c.db
     .prepare(
       `SELECT bl.content_type FROM circle_banks b
-         JOIN circle_versions v ON v.bank_id = b.id AND v.status IN ('current', 'previous')
+         JOIN circle_versions v ON v.bank_id = b.id AND v.status IN ('current', 'previous') AND v.withheld_at IS NULL
          JOIN circle_version_blobs vb ON vb.version_id = v.id AND vb.sha256 = ?3
          JOIN blobs bl ON bl.sha256 = vb.sha256
         WHERE b.id = ?1 AND b.circle_id = ?2 AND b.purged_at IS NULL AND b.removed_at IS NULL
-          AND (b.author_id = ?4 OR NOT EXISTS (SELECT 1 FROM circle_holds h WHERE h.bank_id = b.id)) AND ${AUTHOR_OK_SQL("b")}
+          AND (b.author_id = ?4 OR NOT EXISTS (SELECT 1 FROM circle_holds h WHERE h.bank_id = b.id) OR (NOT ${BLOCKING_HOLD_SQL("b.id")} AND ${ACTIVE_SQL("b.circle_id", "?4", ["owner"])})) AND ${AUTHOR_OK_SQL("b")}
           -- an image confirmed as student data is served to nobody, from anywhere (as the public pool)
           AND NOT EXISTS (SELECT 1 FROM privacy_blocks pb WHERE pb.kind = 'blob' AND pb.hash = ?3) AND bl.privacy_purged_at IS NULL
         LIMIT 1`,
@@ -1212,6 +1304,8 @@ export async function patchBank(c: Ctx, req: Request, p: PoolPrincipal, cid: str
   const body = await readJson(req, `u:${me}`, { deadlineMs: c.deps.bodyDeadlineMs });
   requireOpen(m);
   if (b.author_id !== me) throw new PoolError(403, "circle_role_required", { needed: "author", role: m.role });
+  // Round 38 (critic 45a variant 3): the author while an editor (or the owner): a demoted author no longer changes it.
+  if (m.role !== "owner" && m.role !== "editor") throw new PoolError(403, "circle_role_required", { needed: "editor", role: m.role });
   if (b.removed_at !== null) throw new PoolError(409, "bank_removed", { reason: b.removed_reason });
   const lic = body.license;
   if (!isLicense(lic)) throw bad("license", { allowed: LICENSES });
@@ -1223,8 +1317,9 @@ export async function patchBank(c: Ctx, req: Request, p: PoolPrincipal, cid: str
   const now = c.now();
   const [upd] = await c.db.batch([
     c.db
-      .prepare(`UPDATE circle_banks SET license = ?4, updated_at = ?5 WHERE id = ?1 AND circle_id = ?2 AND author_id = ?3 AND removed_at IS NULL AND ${OPEN_SQL("?2")} AND ${ACTIVE_SQL("?2", "?3")} AND ${ALIVE_SQL("?3")}`)
-      .bind(bid, cid, me, lic, now),
+      // (round 39, critic 46b V7: a compare-and-set on the head whose origins were checked above)
+      .prepare(`UPDATE circle_banks SET license = ?4, updated_at = ?5 WHERE id = ?1 AND circle_id = ?2 AND author_id = ?3 AND head_version_id IS ?6 AND removed_at IS NULL AND ${OPEN_SQL("?2")} AND ${ACTIVE_SQL("?2", "?3", ["owner", "editor"])} AND ${ALIVE_SQL("?3")}`)
+      .bind(bid, cid, me, lic, now, b.head_version_id),
     audit(c.db, { actorId: me, actorKind: "user", action: "circle.bank_license", itemId: cid, targetUserId: me, detail: { bank_id: bid, license: lic } }, now, `changes() = 1`),
   ]);
   if ((upd!.meta.changes ?? 0) !== 1) await explain(c, cid, me);
@@ -1323,6 +1418,12 @@ export async function purgeBankNow(c: Ctx, p: PoolPrincipal, cid: string, bid: s
     .run();
   if ((claim.meta.changes ?? 0) !== 1) {
     await throwIfErased(c, me);
+    // (round 41: a report or an admin's hold is moderation; an open student-data flag alone is a review to wait for)
+    const why = await c.db
+      .prepare(`SELECT (EXISTS (SELECT 1 FROM circle_reports r WHERE r.bank_id = ?1 AND r.resolved_at IS NULL) OR ${BLOCKING_HOLD_SQL("?1")}) AS moderated, ${OPEN_FLAG_BANK("?1")} AS flagged`)
+      .bind(bid)
+      .first<{ moderated: number; flagged: number }>();
+    if (why && why.moderated === 0 && why.flagged === 1) throw pendingReview();
     throw new PoolError(409, "under_moderation", { message: "This bank is under review by an administrator." });
   }
   await purgeBank(c, bid, cid, "owner_purge", me);
@@ -1343,7 +1444,7 @@ export async function reportBank(c: Ctx, req: Request, p: PoolPrincipal, cid: st
   const reason = body.reason;
   if (typeof reason !== "string" || !(CIRCLE_REPORT_REASONS as readonly string[]).includes(reason)) throw bad("reason", { allowed: CIRCLE_REPORT_REASONS });
   const note = optText(body.note, 1000, "note");
-  await readable(c, m, b, me);
+  await requireReadable(c, m, b, me);
   if (b.author_id === me) throw new PoolError(400, "own_item");
   await requireDaily(c, me, "reports");
   const now = c.now();
@@ -1551,11 +1652,19 @@ async function purgeBank(c: Ctx, bid: string, cid: string, why: string, actor: s
 
 /** An open report or a hold keeps a bank (and its circle) until the admin has decided (the evidence stays;
  *  round 33, critic40a B4: a hold delays the purge as it does for items). */
+// (round 40, critic 47a V1: a student-data hold a send raised does not keep a bank from its purge: the purge deletes
+// the withheld text, which is the outcome that hold is for; the admin's flag stays with ids and positions)
+// Round 41 (critic 48 V1): ... but not before the administrator has judged it: while a student-data flag on the bank
+// is open, its withheld text (the admin's evidence, a near-rewording may be a false positive) is not purged.
+const OPEN_FLAG_BANK = (b: string) => `EXISTS (SELECT 1 FROM admin_flags pf WHERE pf.kind = 'privacy_text_match' AND pf.item_id = ${b} AND pf.resolved_at IS NULL)`;
 const OPEN_REPORT_BANK = (b: string) =>
-  `(EXISTS (SELECT 1 FROM circle_reports r WHERE r.bank_id = ${b} AND r.resolved_at IS NULL) OR EXISTS (SELECT 1 FROM circle_holds hh WHERE hh.bank_id = ${b}))`;
+  `(EXISTS (SELECT 1 FROM circle_reports r WHERE r.bank_id = ${b} AND r.resolved_at IS NULL) OR ${BLOCKING_HOLD_SQL(b)} OR ${OPEN_FLAG_BANK(b)})`;
 const OPEN_REPORT_CIRCLE = (ci: string) =>
   `(EXISTS (SELECT 1 FROM circle_reports r WHERE r.circle_id = ${ci} AND r.resolved_at IS NULL)
-    OR EXISTS (SELECT 1 FROM circle_banks hb JOIN circle_holds hh ON hh.bank_id = hb.id WHERE hb.circle_id = ${ci} AND hb.purged_at IS NULL))`;
+    OR EXISTS (SELECT 1 FROM circle_banks hb JOIN circle_holds hh ON hh.bank_id = hb.id WHERE hb.circle_id = ${ci} AND hb.purged_at IS NULL AND hh.source NOT IN ('privacy', 'privacy_near'))
+    OR EXISTS (SELECT 1 FROM circle_banks fb WHERE fb.circle_id = ${ci} AND fb.purged_at IS NULL AND ${OPEN_FLAG_BANK("fb.id")}))`;
+const pendingReview = () =>
+  new PoolError(409, "pending_review", { message: "An administrator is reviewing a version of this bank for student data; it can be purged once that review is done." });
 
 /** Daily: removed banks and closed circles past purge_after (never one with an open report or a hold), in bounded batches. */
 export async function purgeCircles(c: Ctx): Promise<{ banks: number; circles: number }> {

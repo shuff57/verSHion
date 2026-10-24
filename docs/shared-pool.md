@@ -40,7 +40,19 @@ of this document's licence engine (no served rows, no authorship records). Route
 codes that outlive their issuer's owner role, caps through transfers, holds and purges) "Round 34" (ownership is
 an offer the member accepts, succession of owner-closed circles, accounts not in good standing) "Round 35" (removed
 banks stay findable by the owner, offers capped a day) and "Round 36" (no null text in circle responses, `closed_by`;
-the documented limits).
+the documented limits). **Phase B backend (round 37):** shared editing on the server: editors send versions against a
+base (409 with the true head, nothing stored), a history and the last 20 versions kept in full, merge-initiate with a
+30-minute token that records "merged from", rollback by the owner or the bank's author (D17), a confirm for versions
+that drop more than half a bank, and the public publish's confirmed-student-data check on every send and rollback
+(a match holds the bank, never refuses); `server/worker/README.md` "Round 37". Round 38 (after critics 45a/45b): a
+version that matched confirmed student data stays withheld from every member until an administrator releases that
+version; the byte cap counts what a commit prunes and an owner can trim a bank's older versions; a repeated question
+keeps its origin; README "Round 38". Round 39 (critics 46a/46b): a bank held for student data can still be fixed at
+the byte cap, a withheld version's title never lists the bank, lost sends record their R2 orphans, and an editor cannot
+graft or impose a public item's credit; README "Round 39". Round 40 (critic 47a): an author's adapted copy of a credited
+question keeps the credit wherever it sits, the owner can repair or purge a bank held for student data, and the admin
+mail says to release the matching version; README "Round 40". Round 41 (critic 48): a bank with an open student-data
+flag is not purged until the admin decides; README "Round 41".
 There is no client yet; the owner's "no circles at the first launch"
 stands until the app ships them.
 

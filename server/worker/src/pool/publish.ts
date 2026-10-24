@@ -13,6 +13,7 @@ import { EXT } from "./image.ts";
 import { allowedForBank, ATTEST_STATEMENT, ATTEST_TEXT_REVS, POOL_TERMS_VERSION, decideLicence, grantOptions, isLicense, LICENSES, mayRepublish, reliedLicence, unitAllows, type License, type LicenceUnit } from "./license.ts";
 import { subjectFor, subjectParam } from "./visible.ts";
 import { checkCircleMaterial, readCircleClaim } from "./circlecheck.ts";
+import { privacyNearPositions } from "./privacynear.ts";
 import { rightfulExempts, SERVED_FORM, servedBlobsOf, upstreamCarried } from "./served.ts";
 import {
   authorContext,
@@ -91,6 +92,7 @@ import {
   USAGE_SQL,
   VISIBLE_TO_OTHERS,
   type Ctx,
+  type HeavySlots,
   type PoolPrincipal,
   anonChain,
   qKeyEq,
@@ -100,7 +102,6 @@ import {
   errKind,
   keyedBands,
   keyedBody,
-  keyedOne,
   keyedSet,
 } from "./shared.ts";
 
@@ -801,7 +802,7 @@ export async function publish(c: Ctx, req: Request, p: PoolPrincipal, pathItemId
     await refresh();
     const res = await publishOnce(c, p, pathItemId, heavy, read, dry, async () => {
       // The heavy phase: one per isolate, and its measured peak reserved against the byte budget.
-      heavy.release = await acquireHeavy(c.deps.heavyQueueMs ?? HEAVY_QUEUE_WAIT_MS, refresh);
+      heavy.release = await acquireHeavy(c.deps.heavyQueueMs ?? HEAVY_QUEUE_WAIT_MS, refresh, c.deps.heavySlots);
       // Round 16 (critic21d 1): a payload of many tiny values costs more to parse than its bytes say:
       // reserved by its value count when that is more (at most share-core's value limit).
       const scan = read.payload ? scanJson(read.payload) : null;
@@ -892,8 +893,8 @@ export async function refreshAccountLock(c: Ctx, me: string, token: string): Pro
 export const HEAVY_CONCURRENCY = 1;
 /** Publishes allowed to wait for it; beyond that, 503 with Retry-After. */
 export const HEAVY_QUEUE_MAX = 4;
-let heavyActive = 0;
-const heavyQueue: (() => void)[] = [];
+/** The isolate's heavy slot (round 37: a test gives a second simulated isolate its own, PoolDeps.heavySlots). */
+const ISOLATE_HEAVY: HeavySlots = { active: 0, queue: [] };
 
 /** How long a publish may wait for the heavy slot (then 503 busy). */
 export const HEAVY_QUEUE_WAIT_MS = 20_000;
@@ -903,8 +904,9 @@ export const HEAVY_QUEUE_WAIT_MS = 20_000;
  * few seconds meanwhile so the account lock lives exactly as long as the request; returns the
  * release (idempotent).
  */
-export async function acquireHeavy(waitMs = HEAVY_QUEUE_WAIT_MS, beat: () => Promise<void> = async () => {}): Promise<() => void> {
-  if (heavyActive >= HEAVY_CONCURRENCY) {
+export async function acquireHeavy(waitMs = HEAVY_QUEUE_WAIT_MS, beat: () => Promise<void> = async () => {}, slots: HeavySlots = ISOLATE_HEAVY): Promise<() => void> {
+  const heavyQueue = slots.queue;
+  if (slots.active >= HEAVY_CONCURRENCY) {
     if (heavyQueue.length >= HEAVY_QUEUE_MAX) throw new PoolError(503, "busy", { message: "The server is busy with large publishes; try again shortly." }, { "Retry-After": "10" });
     let wake!: () => void;
     const turn = new Promise<void>((r) => (wake = r));
@@ -923,19 +925,19 @@ export async function acquireHeavy(waitMs = HEAVY_QUEUE_WAIT_MS, beat: () => Pro
       const k = heavyQueue.indexOf(wake);
       if (k >= 0) heavyQueue.splice(k, 1);
       // Woken in the same instant as the timeout: pass the free slot on.
-      else if (heavyActive < HEAVY_CONCURRENCY) heavyQueue.shift()?.();
+      else if (slots.active < HEAVY_CONCURRENCY) heavyQueue.shift()?.();
       throw e;
     } finally {
       clearInterval(hb);
       if (timer) clearTimeout(timer);
     }
   }
-  heavyActive++;
+  slots.active++;
   let done = false;
   return () => {
     if (done) return;
     done = true;
-    heavyActive--;
+    slots.active--;
     heavyQueue.shift()?.();
   };
 }
@@ -2582,46 +2584,25 @@ __OUTER__
   // Round 12 M6: a near-rewording of confirmed student-data text (MinHash bands of the blocked stems,
   // token Jaccard >= FUZZY_JACCARD) is flagged for the admin. Not held (the exact and normalised keys
   // hold), and nothing about it reaches the publisher.
-  const privacyNear: number[] = [];
-  {
+  // (Round 37: the check itself is privacynear.ts, shared with a circle send.)
+  const privacyNear = await privacyNearPositions(
+    c,
     // Every stem of a position: its own and its Multipart parts' (round 16 B5).
-    const stemsAt = (i: number) => [{ tokens: tokens[i]!, bands: bands[i]! }, ...partStems[i]!];
-    // (Round 22 B2: privacy rows keep keyed bands and keyed token sets only.)
-    const rawBands = [...new Set(mh.flatMap((_, i) => stemsAt(i).flatMap((s) => s.bands)))];
-    const kOf = new Map(await Promise.all(rawBands.map(async (b) => [b, await keyedOne("b:", b, skMemo)] as const)));
-    const allBands = rawBands.map((b) => kOf.get(b)!);
-    const kToks = new Map<string[], string[]>();
-    for (const i of mh.keys()) for (const s of stemsAt(i)) kToks.set(s.tokens, await keyedSet(s.tokens, skMemo));
-    if (allBands.length > 0) {
-      const pb = await c.db
-        .prepare(`SELECT DISTINCT band, qhash, tokens FROM privacy_bands WHERE band IN (SELECT value FROM json_each(?1)) LIMIT ${(c.deps.privacyBandRowsMax ?? PRIVACY_BAND_ROWS_MAX) + 1}`)
-        .bind(JSON.stringify(allBands))
-        .all<{ band: string; qhash: string; tokens: string | null }>();
-      if (pb.results.length > 0) {
-        // Positions an exact or normalised key already blocks are held (and flagged) at commit.
-        const exact = new Set(
-          (
-            await c.db
-              .prepare(`SELECT hash FROM privacy_blocks WHERE kind = 'match' AND hash IN (SELECT value FROM json_each(?1))`)
-              .bind(JSON.stringify(blockKeys))
-              .all<{ hash: string }>()
-          ).results.map((x) => x.hash),
-        );
-        const keysAt = (i: number) => [mh[i]!, bkNorm[i]!, bkStem[i]!, bkFull[i]!, bkFields[i]!.expl, bkFields[i]!.ans, ...partKeys[i]!.map((x) => x.key)];
-        mh.forEach((_, i) => {
-          if (keysAt(i).some((k) => k !== null && exact.has(k))) return;
-          // Round 20 (F1): past the allowance every question sharing a band is flagged (fail closed).
-          const cut = pb.results.length > (c.deps.privacyBandRowsMax ?? PRIVACY_BAND_ROWS_MAX);
-          const near = stemsAt(i).some((s) => {
-            const set = new Set(s.bands.map((b) => kOf.get(b)!));
-            // (Rounds 21-22 E1/B2: the bands keep a keyed sketch, never words; a band with none matches on the band.)
-            return pb.results.some((x) => set.has(x.band) && (cut || x.tokens === null || jaccard(kToks.get(s.tokens)!, JSON.parse(x.tokens) as string[]) >= FUZZY_JACCARD));
-          });
-          if (near) privacyNear.push(i);
-        });
-      }
-    }
-  }
+    mh.map((_, i) => [{ tokens: tokens[i]!, bands: bands[i]! }, ...partStems[i]!]),
+    mh.map((_, i) => [mh[i]!, bkNorm[i]!, bkStem[i]!, bkFull[i]!, bkFields[i]!.expl, bkFields[i]!.ans, ...partKeys[i]!.map((x) => x.key)]),
+    // Positions an exact or normalised key already blocks are held (and flagged) at commit.
+    async () =>
+      new Set(
+        (
+          await c.db
+            .prepare(`SELECT hash FROM privacy_blocks WHERE kind = 'match' AND hash IN (SELECT value FROM json_each(?1))`)
+            .bind(JSON.stringify(blockKeys))
+            .all<{ hash: string }>()
+        ).results.map((x) => x.hash),
+      ),
+    skMemo,
+    c.deps.privacyBandRowsMax ?? PRIVACY_BAND_ROWS_MAX,
+  );
   // (Round 21: a cut of the author's own near-rewordings is flagged too.)
   for (const k of ownCut) if (!overflowed.includes(k)) overflowed.push(k);
   // ONE flag per kind per publish (round 8 I6b): a count and the first few, never one per question.

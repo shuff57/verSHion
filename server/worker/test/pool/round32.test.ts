@@ -63,7 +63,9 @@ async function send(w: World, u: User, cid: string, payload: string, o: SendOpts
     ...(o.attest === null ? {} : { attest: o.attest ?? { own_work: true, terms_version: POOL_TERMS_VERSION } }),
     ...(o.message ? { message: o.message } : {}),
     meta: o.meta ?? { title: "Unit 2 quiz", subject: "Math", course: "", grade: "", tags: [], standards: [] },
-    ...(o.bid ? { base_version: o.base ?? null } : {}),
+    // (round 37: a version dropping more than half of the head needs confirm_large_change; these phase A
+    // tests replace whole banks freely, round37.test.ts tests the rule)
+    ...(o.bid ? { base_version: o.base ?? null, confirm_large_change: true } : {}),
     ...(o.extra ?? {}),
   };
   return w.json<any>(o.bid ? "PUT" : "POST", o.bid ? `/circles/${cid}/banks/${o.bid}` : `/circles/${cid}/banks`, { user: u, body: framed(meta, payload), contentType: PUB });
@@ -303,7 +305,7 @@ test("32-3: only the owner removes (never themself), changes roles and transfers
 
 // ---- 4. banks: share, read, republish, images, history ------------------------------------------------------
 
-test("32-4: owners and editors share a bank (viewers cannot); every member reads it (stream, ETag, 304, HEAD; one read budget); the author's republish is a compare-and-set on base_version (409 with the true head; commit_id replays; another body under it is refused); qids stay; counts; non-authors cannot send", async () => {
+test("32-4: owners and editors share a bank (viewers cannot); every member reads it (stream, ETag, 304, HEAD; one read budget); the author's republish is a compare-and-set on base_version (409 with the true head; commit_id replays; another body under it is refused); qids stay; counts; viewers cannot send", async () => {
   const w = new World();
   const [A, B, V, X] = ["Ann", "Bob", "Vic", "Xena"].map((n) => w.user("teacher", n));
   const cid = await circleWith(w, A!, [[B!, "editor"], [V!, "viewer"]]);
@@ -354,8 +356,9 @@ test("32-4: owners and editors share a bank (viewers cannot); every member reads
   const stale = await send(w, A!, cid, bankOf(qs2), { bid, base: 1 });
   assert.deepEqual([stale.status, stale.body.error, stale.body.head_version, stale.body.head_by], [409, "conflict", 2, "Ann"]);
   assert.equal(w.q(`SELECT 1 FROM circle_versions WHERE bank_id = ?`, bid).length, 2);
-  // Phase A: only the author sends versions of her bank (an editor gets 403).
-  assert.equal((await send(w, B!, cid, bankOf(qs2), { bid, base: 2 })).body.needed, "author");
+  // Phase A: only the author sent versions of her bank. Round 37 (phase B): editors and the owner do too
+  // (round37.test.ts); a viewer never.
+  assert.equal((await send(w, V!, cid, bankOf(qs2), { bid, base: 2 })).body.error, "circle_role_required");
   // History rows: versions linear, the previous one kept.
   assert.deepEqual(w.q<any>(`SELECT version, status, message FROM circle_versions WHERE bank_id = ? ORDER BY version`, bid).map((x) => [x.version, x.status, x.message]), [[1, "previous", "First draft"], [2, "current", null]]);
   // The bank in the circle page; the activity list (names, no technical data).

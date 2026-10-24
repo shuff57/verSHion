@@ -39,7 +39,7 @@ async function code(w: World, owner: User, cid: string, role: "editor" | "viewer
 }
 const join = (w: World, u: User, c: string) => w.json<any>("POST", "/circles/join", { user: u, json: { code: c } });
 async function send(w: World, u: User, cid: string, payload: string, o: { bid?: string; base?: number } = {}) {
-  const meta: Q = { commit_id: publishId(), license: "circle-only", attest: { own_work: true, terms_version: POOL_TERMS_VERSION }, meta: { title: "Unit 2 quiz", subject: "Math", course: "", grade: "", tags: [], standards: [] }, ...(o.bid ? { base_version: o.base } : {}) };
+  const meta: Q = { commit_id: publishId(), license: "circle-only", attest: { own_work: true, terms_version: POOL_TERMS_VERSION }, meta: { title: "Unit 2 quiz", subject: "Math", course: "", grade: "", tags: [], standards: [] }, ...(o.bid ? { base_version: o.base, confirm_large_change: true } : {}) }; // (round 37: see round32's send)
   return w.json<any>(o.bid ? "PUT" : "POST", o.bid ? `/circles/${cid}/banks/${o.bid}` : `/circles/${cid}/banks`, { user: u, body: framed(meta, payload), contentType: PUB });
 }
 const owners = (w: World, cid: string) => w.q<{ user_id: string }>(`SELECT user_id FROM circle_members WHERE circle_id = ? AND role = 'owner' AND left_at IS NULL`, cid).map((x) => x.user_id);

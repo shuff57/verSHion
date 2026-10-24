@@ -7,7 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 import { deflateSync } from "node:zlib";
 import { createPool, makeCore, type Pool, type ShareCoreExports } from "../../src/pool/index.ts";
 import type { Core } from "../../src/pool/core.ts";
-import type { PoolNotice } from "../../src/pool/shared.ts";
+import type { HeavySlots, PoolNotice } from "../../src/pool/shared.ts";
 import { PUBLISH_CONTENT_TYPE } from "../../src/pool/shared.ts";
 
 const here = new URL("../..", import.meta.url).pathname;
@@ -176,7 +176,7 @@ export class World {
   /** Users without any pool history (round 8: an instant student-data hold needs a reporter with some). */
   bare = false;
 
-  constructor(o: { rateStore?: CountingStore; bodyDeadlineMs?: number; readIdleMs?: number; readLifetimeMs?: number; affectedList?: number; heavyQueueMs?: number; bareUsers?: boolean; core?: Core; rewriteBatch?: number; rewriteBatches?: number; sql?: DatabaseSync; r2?: MemR2; backfillItems?: number; searchCandidates?: number; unitKeysMax?: number; privacyBandRowsMax?: number } = {}) {
+  constructor(o: { rateStore?: CountingStore; bodyDeadlineMs?: number; readIdleMs?: number; readLifetimeMs?: number; affectedList?: number; heavyQueueMs?: number; bareUsers?: boolean; core?: Core; rewriteBatch?: number; rewriteBatches?: number; sql?: DatabaseSync; r2?: MemR2; backfillItems?: number; searchCandidates?: number; unitKeysMax?: number; privacyBandRowsMax?: number; heavySlots?: HeavySlots } = {}) {
     this.sql = o.sql ?? freshDb();
     this.r2 = o.r2 ?? new MemR2();
     this.db = d1(this.sql, this.stats);
@@ -199,6 +199,7 @@ export class World {
       searchCandidates: o.searchCandidates,
       unitKeysMax: o.unitKeysMax,
       privacyBandRowsMax: o.privacyBandRowsMax,
+      heavySlots: o.heavySlots,
       beforeServe: async () => {
         const f = this.beforeServe;
         this.beforeServe = undefined;

@@ -24,7 +24,8 @@ export type PoolNotice =
   | { kind: "counter_notice"; actionId: string; complainantContact: string; restoreNotBefore: number }
   | { kind: "cap"; userId: string; metric: string }
   | { kind: "repeat_infringer"; userId: string; strikes: number }
-  | { kind: "privacy_text_match"; itemId: string; held: boolean }
+  /** (Round 37: `circleId` set: a circle send or rollback; `itemId` is then the circle bank's id.) */
+  | { kind: "privacy_text_match"; itemId: string; held: boolean; circleId?: string; version?: number }
   | { kind: "cron_failure"; stage: string }
   /** Round 21: share-core trapped more than WASM_TRAPS_PER_HOUR times in an hour. */
   | { kind: "wasm_trap"; traps: number }
@@ -65,6 +66,8 @@ export interface PoolDeps {
   heavyQueueMs?: number;
   /** Affected items a block plan lists (default 500; more needs confirm_large). Lowered by tests. */
   affectedList?: number;
+  /** Tests only (round 37): a simulated second isolate's own heavy slot (default: this isolate's). */
+  heavySlots?: HeavySlots;
   /** Student-data band rows one publish compares (default PRIVACY_BAND_ROWS_MAX; lowered by tests). */
   privacyBandRowsMax?: number;
   /** Distinct unit keys one publish may have (default UNIT_KEYS_MAX; lowered by tests). */
@@ -82,13 +85,19 @@ export interface PoolDeps {
   background?: (p: Promise<unknown>) => void;
 }
 
+/** One isolate's heavy-work slot and its queue (publish.ts acquireHeavy). */
+export interface HeavySlots {
+  active: number;
+  queue: (() => void)[];
+}
+
 export interface Ctx {
   db: D1Database;
   r2: R2Bucket;
   core: Core;
   now: () => number;
   deps: PoolDeps;
-  keys: Promise<{ limit: CryptoKey; cursor: CryptoKey; preview: CryptoKey }>;
+  keys: Promise<{ limit: CryptoKey; cursor: CryptoKey; preview: CryptoKey; merge: CryptoKey }>;
   store: RateLimitStore;
 }
 
@@ -465,6 +474,8 @@ export const DEFAULT_LIMITS = {
   circle_join_tries: 10,
   /** Versions an account may send to circle banks a day. */
   circle_commits: 100,
+  /** Round 37 (D10): rollbacks of circle banks an account may make a day (not counted in circle_commits). */
+  circle_rollbacks: 20,
   /** Circles an account may own at once (an owner-closed circle counts until purged or reopened). */
   circles_owned: 5,
   /** Circles an account may be an active member of at once. */
@@ -713,7 +724,20 @@ export async function alertBudgeted(c: Ctx, n: PoolNotice): Promise<void> {
   // so no flood of one kind ever swallows another.
   // (Round 18: key_leak notices have their own author budget, never sharing copy_held's.)
   // (Round 32: a circle's student-data report shares the public pool's privacy-report budget.)
-  const channel = n.kind === "student_data_report" || (n.kind === "circle_report" && n.reason === "student_data") ? "privacy_report" : n.kind === "privacy_text_match" ? "privacy_match" : n.kind === "copy_held" ? "authors" : n.kind === "key_leak_report" ? "authors_key_leak" : n.kind;
+  // (Round 38, critic 45b variant 3: a circle's student-data match has its own budget, so circle sends cannot starve
+  // the public pool's publish alerts, nor they it.)
+  const channel =
+    n.kind === "student_data_report" || (n.kind === "circle_report" && n.reason === "student_data")
+      ? "privacy_report"
+      : n.kind === "privacy_text_match"
+        ? n.circleId
+          ? "circle_privacy_match"
+          : "privacy_match"
+        : n.kind === "copy_held"
+          ? "authors"
+          : n.kind === "key_leak_report"
+            ? "authors_key_leak"
+            : n.kind;
   const budget = channel === "privacy_report" ? PRIVACY_ALERTS_PER_HOUR : channel === "authors" || channel === "authors_key_leak" ? AUTHOR_NOTICES_PER_HOUR : ALERTS_PER_HOUR;
   const row = await c.db
     .prepare(`INSERT INTO pool_alert_budget (hour, channel, sent) VALUES (?1, ?2, 1) ON CONFLICT (hour, channel) DO UPDATE SET sent = sent + 1 RETURNING sent`)
@@ -893,7 +917,15 @@ export function makeCtx(d: PoolDeps, r2: R2Bucket): Ctx {
         false,
         ["sign", "verify"],
       );
-      return { limit: k.limit, cursor, preview };
+      // Round 37: circle merge tokens (their own purpose too).
+      const merge = await crypto.subtle.deriveKey(
+        { name: "HKDF", hash: "SHA-256", salt: utf8("vershion-pool/v1"), info: utf8("circle-merge") },
+        ikm,
+        { name: "HMAC", hash: "SHA-256", length: 256 },
+        false,
+        ["sign", "verify"],
+      );
+      return { limit: k.limit, cursor, preview, merge };
     })(),
   };
 }

@@ -29,6 +29,18 @@ export function poolNotifier(env: MailEnv & { DB: D1Database }) {
       case "cap":
         return sendTo(env, "admins", `verSHion: an account reached its daily ${n.metric} limit`, `Account ${n.userId} reached its daily ${n.metric} limit. See the pool flags.`);
       case "privacy_text_match":
+        // Round 37: a circle send or rollback (ids only; circle content is opened through the audited admin route).
+        if (n.circleId)
+          return sendTo(
+            env,
+            "admins",
+            "verSHion: a circle bank matches confirmed student-data text",
+            // (round 40, critic 47a V2: the version is withheld until released BY VERSION; a bank-wide release does not)
+            // (round 41, critic 48: a notice queued before round 40 has no version: the flag's detail names it)
+            n.version !== undefined
+              ? `Version ${n.version} of bank ${n.itemId} in circle ${n.circleId} has question text that matches (or rewords) a confirmed student-data block. That version is withheld from every member; while it is the newest version the bank is hidden from the circle but for its author and owner, who can roll it back or replace it. Until you decide, the bank cannot be purged. See the pool flags (privacy_text_match); open it with GET /admin/pool/circle-bank?id=${n.itemId}&version=${n.version}&basis=privacy (audited). If it is a false positive, release THAT version: POST /admin/pool/circle-release {"bank_id": "${n.itemId}", "version": ${n.version}, "note": "..."}. A bank-wide release (without "version") lifts the bank's holds but leaves the version withheld.`
+              : `A version of bank ${n.itemId} in circle ${n.circleId} has question text that matches (or rewords) a confirmed student-data block; that version is withheld from every member and the bank cannot be purged until you decide. The privacy_text_match flag in the pool flags names the version: open it with GET /admin/pool/circle-bank (id, that version, basis=privacy; audited), and if it is a false positive release that version with POST /admin/pool/circle-release {bank_id, version, note}. A bank-wide release (without a version) leaves it withheld.`,
+          );
         // Round 12: the text says what happened. An exact or normalised match is held at publish (its
         // publisher sees only "held for review"); a near-rewording is only flagged and stays live.
         return sendTo(

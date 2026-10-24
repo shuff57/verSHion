@@ -8,7 +8,8 @@
 // metadata views included. Writes need a reason of 10 or more characters.
 import type { AdminRoute } from "../../../auth/src/index.js";
 import { cleanText } from "../../../auth/src/validate.ts";
-import { CIRCLE_UNDO_MS } from "./circles.ts";
+import { CIRCLE_UNDO_MS, keptInfo } from "./circles.ts";
+import { LISTING_REFRESH_SQL } from "./circlesend.ts";
 import { readHold, streamedPayload } from "./read.ts";
 import { audit, ID_RE, json, PoolError, READ_HEAD_COST, type Ctx } from "./shared.ts";
 
@@ -24,9 +25,13 @@ function reasonOf(v: unknown): string {
   return s;
 }
 
-/** SQL: a student-data block matches a question (key-free hash) or an image of bank `?1`. */
+/** SQL: a student-data block matches a question (key-free hash) or an image of bank `?1`; or (round 37) a
+ *  send's own check matched it (by any block key, the near-rewording included): the bank holds a privacy
+ *  hold, or a privacy_text_match flag names it. */
 const PRIVACY_MATCH_SQL = `(EXISTS (SELECT 1 FROM circle_qkeys k JOIN privacy_blocks pb ON pb.kind = 'match' AND pb.hash = k.match_hash WHERE k.bank_id = ?1)
-  OR EXISTS (SELECT 1 FROM circle_versions v JOIN circle_version_blobs vb ON vb.version_id = v.id JOIN privacy_blocks pb ON pb.kind = 'blob' AND pb.hash = vb.sha256 WHERE v.bank_id = ?1))`;
+  OR EXISTS (SELECT 1 FROM circle_versions v JOIN circle_version_blobs vb ON vb.version_id = v.id JOIN privacy_blocks pb ON pb.kind = 'blob' AND pb.hash = vb.sha256 WHERE v.bank_id = ?1)
+  OR EXISTS (SELECT 1 FROM circle_holds ph WHERE ph.bank_id = ?1 AND ph.source IN ('privacy', 'privacy_near'))
+  OR EXISTS (SELECT 1 FROM admin_flags af WHERE af.kind = 'privacy_text_match' AND af.item_id = ?1))`;
 
 export function circleAdminRoutes(C: () => Ctx): AdminRoute[] {
   return [
@@ -147,8 +152,7 @@ export function circleAdminRoutes(C: () => Ctx): AdminRoute[] {
           .bind(bid, want)
           .first<{ id: string; version: number; status: string; full_key: string; committer_id: string; committed_at: number; message: string | null; license: string }>();
         if (!v || (v.status !== "current" && v.status !== "previous") || v.full_key === "") {
-          const oldest = await c.db.prepare(`SELECT MIN(version) AS v FROM circle_versions WHERE bank_id = ?1 AND status IN ('current', 'previous')`).bind(bid).first<{ v: number | null }>();
-          return json(404, { error: "version_not_retained", oldest_kept: oldest?.v ?? null });
+          return json(404, { error: "version_not_retained", ...(await keptInfo(c, bid, b.head_version)) });
         }
         const detail = { bank_id: bid, version: v.version, basis, ...(noticeId ? { notice_id: noticeId } : {}) };
         await c.db.batch([
@@ -194,16 +198,48 @@ export function circleAdminRoutes(C: () => Ctx): AdminRoute[] {
       method: "POST",
       path: "/admin/pool/circle-release",
       write: true,
-      // {bank_id, note}: every hold of the bank goes and its open reports are dismissed.
+      // {bank_id, note}: every hold of the bank goes and its open reports are dismissed (a version withheld for
+      // student data stays withheld). Round 38: {bank_id, version, note} releases THAT withheld version instead
+      // (readable to members again, its student-data flag resolved; if it is the head, the bank's privacy hold goes).
       handler: async (_req, h) => {
         const c = C();
         const bid = idOf(h.body?.bank_id, "bank_id");
         const n = reasonOf(h.body?.note);
         const b = await c.db.prepare(`SELECT circle_id FROM circle_banks WHERE id = ?1`).bind(bid).first<{ circle_id: string }>();
         if (!b) return json(404, { error: "not_found" });
+        if (h.body?.version !== undefined) {
+          const v = h.body.version;
+          if (typeof v !== "number" || !Number.isInteger(v) || v < 1) throw new PoolError(400, "invalid_request", { field: "version" });
+          const [up] = await c.db.batch([
+            c.db.prepare(`UPDATE circle_versions SET withheld_at = NULL WHERE bank_id = ?1 AND version = ?2 AND withheld_at IS NOT NULL`).bind(bid, v),
+            c.db
+              .prepare(`UPDATE admin_flags SET resolved_at = ?3, resolved_by = ?4 WHERE kind = 'privacy_text_match' AND resolved_at IS NULL AND publish_id = (SELECT id FROM circle_versions WHERE bank_id = ?1 AND version = ?2) AND changes() = 1`)
+              .bind(bid, v, h.now, h.admin.userId),
+            c.db
+              .prepare(
+                `DELETE FROM circle_holds WHERE bank_id = ?1 AND source IN ('privacy', 'privacy_near') AND EXISTS (SELECT 1 FROM circle_banks hb WHERE hb.id = ?1 AND hb.head_version = ?2)
+                   AND EXISTS (SELECT 1 FROM circle_versions hv WHERE hv.bank_id = ?1 AND hv.version = ?2 AND hv.withheld_at IS NULL)`,
+              )
+              .bind(bid, v),
+            // (round 39: the bank's listing again from its newest version that is not withheld, which may be this one now)
+            c.db.prepare(LISTING_REFRESH_SQL(`EXISTS (SELECT 1 FROM circle_versions rv WHERE rv.bank_id = ?1 AND rv.version = ?2 AND rv.withheld_at IS NULL)`)).bind(bid, v),
+            audit(c.db, { actorId: h.admin.userId, actorKind: "admin", action: "circle.admin_version_release", itemId: b.circle_id, detail: { bank_id: bid, version: v }, note: n }, h.now),
+            h.audit({ action: "pool.circle_version_release", targetId: bid, note: n, detail: { version: v } }),
+          ]);
+          if ((up!.meta.changes ?? 0) !== 1) return json(409, { error: "not_withheld", message: "That version is not withheld." });
+          return json(200, { ok: true, released_version: v });
+        }
         const [del, rep] = await c.db.batch([
           c.db.prepare(`DELETE FROM circle_holds WHERE bank_id = ?1`).bind(bid),
           c.db.prepare(`UPDATE circle_reports SET resolved_at = ?2, resolved_by = ?3, action = 'dismissed' WHERE bank_id = ?1 AND resolved_at IS NULL`).bind(bid, h.now, h.admin.userId),
+          // (round 37: and the student-data matches a send raised for it: the admin has decided; round 38: except
+          // those of versions still withheld, which a version release resolves)
+          c.db
+            .prepare(
+              `UPDATE admin_flags SET resolved_at = ?2, resolved_by = ?3 WHERE kind = 'privacy_text_match' AND item_id = ?1 AND resolved_at IS NULL
+                 AND NOT EXISTS (SELECT 1 FROM circle_versions wv WHERE wv.id = admin_flags.publish_id AND wv.withheld_at IS NOT NULL)`,
+            )
+            .bind(bid, h.now, h.admin.userId),
           audit(c.db, { actorId: h.admin.userId, actorKind: "admin", action: "circle.admin_release", itemId: b.circle_id, detail: { bank_id: bid }, note: n }, h.now),
           h.audit({ action: "pool.circle_release", targetId: bid, note: n }),
         ]);
@@ -232,6 +268,7 @@ export function circleAdminRoutes(C: () => Ctx): AdminRoute[] {
           audit(c.db, { actorId: h.admin.userId, actorKind: "admin", action: "circle.admin_bank_remove", itemId: b.circle_id, detail: { bank_id: bid }, note: n }, h.now),
           // (round 33: the admin decided: its holds go with the decision, so the purge follows in 14 days)
           c.db.prepare(`DELETE FROM circle_holds WHERE bank_id = ?1 AND EXISTS (SELECT 1 FROM circle_banks WHERE id = ?1 AND removed_reason = 'admin')`).bind(bid),
+          c.db.prepare(`UPDATE admin_flags SET resolved_at = ?2, resolved_by = ?3 WHERE kind = 'privacy_text_match' AND item_id = ?1 AND resolved_at IS NULL AND EXISTS (SELECT 1 FROM circle_banks WHERE id = ?1 AND removed_reason = 'admin')`).bind(bid, h.now, h.admin.userId),
           h.audit({ action: "pool.circle_remove", targetId: bid, note: n }),
         ]);
         return (upd!.meta.changes ?? 0) === 1 ? json(200, { ok: true }) : json(409, { error: "not_removable" });
@@ -254,6 +291,13 @@ export function circleAdminRoutes(C: () => Ctx): AdminRoute[] {
           audit(c.db, { actorId: h.admin.userId, actorKind: "admin", action: "circle.admin_close", itemId: cid, note: n }, h.now),
           // (round 33: and the holds of its banks: the admin's close is the decision on all of it)
           c.db.prepare(`DELETE FROM circle_holds WHERE bank_id IN (SELECT id FROM circle_banks WHERE circle_id = ?1) AND EXISTS (SELECT 1 FROM circles WHERE id = ?1 AND close_reason = 'admin')`).bind(cid),
+          // (round 41: and its banks' student-data flags, so the circle's purge follows in 14 days)
+          c.db
+            .prepare(
+              `UPDATE admin_flags SET resolved_at = ?2, resolved_by = ?3 WHERE kind = 'privacy_text_match' AND resolved_at IS NULL AND item_id IN (SELECT id FROM circle_banks WHERE circle_id = ?1)
+                 AND EXISTS (SELECT 1 FROM circles WHERE id = ?1 AND close_reason = 'admin')`,
+            )
+            .bind(cid, h.now, h.admin.userId),
           h.audit({ action: "pool.circle_close", targetId: cid, note: n }),
         ]);
         return (upd!.meta.changes ?? 0) === 1 ? json(200, { ok: true, purge_after: h.now + CIRCLE_UNDO_MS }) : json(409, { error: "not_closable" });

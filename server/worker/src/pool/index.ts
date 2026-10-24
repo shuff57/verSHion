@@ -12,7 +12,8 @@ import { exportAccount } from "./export.ts";
 import { INVITE_FREE_PATHS, redeemInvite, requireInvite } from "./invites.ts";
 import { getBlob, getItem, importItem, list, mine, versions } from "./read.ts";
 import { activity, circleErasureStatements, closeCircle, createCircle, createInvite, deleteBank, getBank, getBankBlob, getCircle, heads, joinCircle, joinPreview, leaveCircle, listCircles, listInvites, patchBank, patchCircle, purgeBankNow, removeMember, reopenCircle, reportBank, revokeInvite, setRole, undeleteBank, offerTransfer, acceptTransfer, cancelTransfer } from "./circles.ts";
-import { sendVersion } from "./circlesend.ts";
+import { rollbackBank, sendVersion } from "./circlesend.ts";
+import { getVersion, history, mergeInitiate, trimVersions } from "./circleversions.ts";
 import { ALIVE_SQL, assertPoolKey, unauthorized, errKind, json, makeCtx, PoolError, rateLimit, readJson, type Ctx, type PoolDeps, type PoolPrincipal } from "./shared.ts";
 
 /** GET/PUT /items/prefs {keep_on_delete}: what happens to my shared items if I delete my account. */
@@ -109,6 +110,13 @@ const ROUTES: { re: RegExp; methods: Record<string, Route> }[] = [
   { re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})\/report$/, methods: { POST: (c, r, p, m) => reportBank(c, r, p, m[1]!, m[2]!) } },
   { re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})\/purge$/, methods: { POST: (c, _r, p, m) => purgeBankNow(c, p, m[1]!, m[2]!) } },
   { re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})\/blobs\/([^/]{1,80})$/, methods: { GET: (c, _r, p, m) => getBankBlob(c, p, m[1]!, m[2]!, m[3]!) } },
+  // Round 37: circles phase B (circleversions.ts, circlesend.ts): history, kept versions, merge-initiate, rollback.
+  { re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})\/versions$/, methods: { GET: (c, _r, p, m, u) => history(c, p, m[1]!, m[2]!, u) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})\/versions\/(0|[1-9][0-9]{0,9})$/, methods: { GET: (c, r, p, m) => getVersion(c, r, p, m[1]!, m[2]!, m[3]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})\/merge$/, methods: { POST: (c, r, p, m) => mergeInitiate(c, r, p, m[1]!, m[2]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})\/rollback$/, methods: { POST: (c, r, p, m) => rollbackBank(c, r, p, m[1]!, m[2]!) } },
+  // Round 38: the owner (or the bank's author) trims a bank's older versions (a full circle's way back).
+  { re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})\/trim$/, methods: { POST: (c, r, p, m) => trimVersions(c, r, p, m[1]!, m[2]!) } },
 ];
 
 export interface Pool {

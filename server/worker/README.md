@@ -149,6 +149,289 @@ shows the ids. A real rotation would need an offline migration that re-hashes ev
 the full bodies (impossible for purged items); none is provided. Treat the key as permanent: keep it as
 a wrangler secret AND an offline backup; losing it loses the pool's identity data.
 
+**Round 41 (circles phase B after critic 48, no blocker; `docs/critic-reports/2026-10-24-circles-round40-critic48.md`).**
+Migration `0110_pool_round38.sql` edited in place again (still uncommitted). Tests: `test/pool/round41.test.ts` (4,
+each failed on round 40's code).
+
+* **48 V1, the admin's evidence is not purged before the admin looks.** While a `privacy_text_match` flag on a bank is
+  open (the admin has not released, resolved or removed it), the owner's `POST .../purge` answers `409 pending_review
+  {message}` ("An administrator is reviewing a version of this bank for student data; it can be purged once that review
+  is done."), and the daily purge of a removed bank, or of a closed circle holding such a bank, waits like it does for
+  a hold or an open report. The owner can still roll back, send a clean version and trim (a trim keeps the flagged
+  version), so the bank is usable meanwhile. The admin's version release, the generic flag resolve, a circle-remove and
+  (new) an admin circle-close resolve the flags and let the purge follow; the mail says the bank cannot be purged until
+  the admin decides.
+* **48 nitpick, a notice without a version.** A student-data notice queued before round 40 (no `version`) renders no
+  `version=` link and no `"version": 0`; it points the admin at the flag, which names the version.
+* **48 V4, 0110 on a database with a withheld head.** The backfill records a listing only for a current version that
+  is not withheld, and a bank whose current version is withheld gets its listing blanked (on a fresh database neither
+  case exists; it covers a database that ran an earlier edit of 0110). 41-4 runs 0110 on a populated 0109 database and
+  on one with a withheld head.
+* **Documented, not changed.** The owner of a bank held for student data learns who sent the withheld version, when,
+  its counts and that it was withheld (as members do once the hold lifts; no text) (48 V2). A sender who edited a
+  question in place can be probed once by an exact guess (`changed: 0` versus `1`): it needs the whole question and
+  each probe is a committed version compared against the guess afterwards (48 V3). A declared origin on a NEW question
+  is not checked against the public item's text: an editor can credit any visible public item (and so bind the licence)
+  until the author removes that question (48 V5; round 39's rule ignores it only on questions the head already holds).
+
+**Round 40 (circles phase B after critic 47a; critic 47b found no blocker; `docs/critic-reports/2026-10-24-circles-phaseB-product-critic47a.md`).**
+No new migration (`0110` unchanged since round 39). Tests: `test/pool/round40.test.ts` (6, each failed on round 39's
+code; the critic's `or`, `left` and `mig` scripts were rerun).
+
+* **47a B1, a credit no longer depends on where a copy sits.** When a qid is sent more than once, the occurrence that
+  keeps it is the one whose content is unchanged from the head (keyed content hash; the first occurrence if none is),
+  not simply the first in the list. The bank's AUTHOR's copies of a credited question, exact or adapted, all carry its
+  recorded origin, so "duplicate, adapt the copy, drop the original" keeps the credit and the licence bound in either
+  order (an adaptation edited in place keeps it too). A non-author's copy carries it only as an exact copy (round 39),
+  now in either order: an editor's adapted copy is a new, uncredited question, so once the author drops the original
+  the bank is free of that origin (documented: an editor's adaptation of a credited question is credited only if the
+  author re-declares it; dropping a credited question and re-adding it later is a new question too).
+* **47a V1, the owner can recover a bank held for student data.** A bank whose only holds are student-data holds a
+  send raised is no longer hidden from the circle's OWNER: it is listed to the owner (with its listing, which never
+  comes from a withheld version), and the owner reads its readable versions, rolls it back, sends a clean version or
+  trims it, as its author can (the withheld version stays unreadable to both; the update check and the activity list
+  follow). Such a hold no longer keeps a removed bank from its purge (the owner's purge-now and the daily purge): the
+  purge deletes the withheld text, which is what that hold is for; the admin's flag stays (ids, positions). This
+  covers an author who left, was suspended (remove and purge) or was erased with the bank kept. A report's or an
+  administrator's hold still hides the bank from the owner and still stops trim and purge.
+* **47a V2, the admin mail names the version.** The circle student-data mail says which version matched, links
+  `circle-bank?...&version=n&basis=privacy`, and says to release THAT version with `{bank_id, version, note}`, noting
+  that a bank-wide release leaves the version withheld (`PoolNotice` `privacy_text_match` gains `version`).
+* **47a V3, a rollback to a version from before 0110.** Such a version has no recorded listing; its title is now its
+  own bank name from its stored body (the bank's current subject, course and grade are kept). The app sends the bank
+  name as `bank.name`; if a client's `meta.title` differed from it, that older title is not recoverable (it was never
+  stored per version).
+* **47b V2, the listing refresh reads the history once.** One row-value `UPDATE ... SET (title, subject, course, grade)`
+  with a single search of the bank's versions instead of four.
+* **README.** The round 37 and round 38 lines that said a rollback keeps the bank's listing now say it restores the
+  target's (round 39).
+* **Documented, not changed.** A title is last-writer-wins on every send (an editor merging from an old copy can rename
+  the bank back; a rollback restores it) (47a V4). The bank's author (while an editor) or the owner can trim away every
+  co-editor's merge base with `keep: 1` (recorded as `versions_trimmed`) (47a V5). A rollback to a version sent before
+  a block was confirmed makes a new, withheld version (47a V6, 46b V3). The account export lists versions sent without
+  their bodies, as the plan says; with phase B a circle can be the only place that content lives (for counsel, D9)
+  (47a V8). The nitpicks (a version release of a pruned version answers 200; the 413 names the owner's trim even to an
+  editor who cannot trim that bank; a retry of a `commit_id` from before a purge re-creates the bank) stand.
+
+**Round 39 (circles phase B after critics 46a and 46b, `docs/critic-reports/2026-10-24-circles-phaseB-{product-critic46a,security-critic46b}.md`).**
+Migration `0110_pool_round38.sql` (uncommitted, so edited rather than a new `0111`) now also adds
+`circle_versions.listing` (JSON `{title, subject, course, grade}`; NULL for versions sent before it) and fills it for
+each bank's current version from the bank row. Tests: `test/pool/round39.test.ts` (8, each failed on round 38's
+code; the critics' scripts were rerun); round 38's 38-6 now sends an EXACT copy (a changed copy no longer carries
+the credit, 39-4).
+
+* **46a M1, a held bank at the byte cap can be repaired.** A student-data hold a send raised (`circle_holds` source
+  `privacy` / `privacy_near`) no longer freezes pruning: the matching version is withheld, which is what protects the
+  data. Only a report's or an administrator's hold (any other source: evidence for the admin) still stops the
+  commit's prune, the cap's `PRUNABLE_SQL` (the same predicate, `BLOCKING_HOLD_SQL`) and a trim (`409
+  under_moderation`). So at the cap the author's clean version of the same size, a rollback and a trim all go
+  through on a held bank. (A fix that is larger than what the commit prunes is still `413`, and the trim the message
+  names now works on such a bank.)
+* **46b N1, a withheld version never names the bank.** Every version records its own listing fields; in the same
+  commit batch the bank's `title`, `subject`, `course` and `grade` are set from its NEWEST VERSION THAT IS NOT WITHHELD
+  (blank when there is none), and an admin's version release refreshes them the same way. A rollback records its
+  target's listing (a version from before round 39: the bank's current one), so a rollback to v1 lists v1's title. The
+  circle page, the head read, the activity list and the update check never show a withheld version's title, after a
+  rollback, a clean version or a bank-wide release.
+* **46b N2, lost commits record their orphans.** A commit that loses its compare-and-set, and an abandoned attempt a
+  retry with the same `commit_id` discards, insert their two R2 keys into `r2_orphans` in the same batch that deletes
+  the staging row (as the hourly `discardCircleStaging` does), so a failed R2 delete is retried hourly.
+* **46b V1, no grafted or imposed credit.** A repeated `published.qid` carries a recorded origin only as an EXACT copy
+  (the same key-free match hash; a changed copy is a new question with no credit). An origin a NON-author declares on a
+  question the head already holds (its qid kept) is ignored, so an editor cannot put a public item's credit and
+  licence bound on the author's own question; an editor's declared origin on a NEW question is recorded (credit and
+  bound). The first occurrence of a qid keeps its recorded origin even when edited (an adaptation keeps its
+  attribution); an editor who rewrites a credited question completely while keeping its qid leaves the credit on it
+  (the author removes the question or rolls back).
+* **Variants fixed.** A trim keeps a withheld version while its `privacy_text_match` flag is open (the admin's
+  evidence; the commit's own prune still drops it past the 20); once the flag is resolved (version release or the
+  generic resolve) the next trim prunes it, and resolving a flag never makes the version readable (46a v3).
+  `oldest_kept` and `pinned_versions` count readable versions only: the run starts at the newest version that is kept
+  and not withheld, a withheld version breaks it, and `pinned_versions` lists readable versions older than the run
+  (kept by a report or a hold, or beyond a withheld version) (46a v8). A send's meta, its `commit_id` replay, the head
+  and licence check and the merge token are handled before the heavy slot and its reservation, so a stale send or a
+  replay costs a lookup (the head is read again after the slot) (46b V6). The licence change is a compare-and-set on
+  the head whose origins it checked (`409 conflict` if a version landed meanwhile) (46b V7). A commit or trim deletes
+  the image rows of the versions IT pruned only (by the prune index), not of every pruned version of the bank (46b V4).
+  A rollback extends the account's pending hold on the images it copies, as a send does (46b V9).
+* **Documented, not changed.** A withheld head still hides the author's whole bank from every other member (owner
+  included) until a clean version or an admin acts, and the sender cannot read or fix it (46a v1; 45a 4). After a
+  bank-wide release the bank is listed while its head answers `version_withheld`; the admin releases the version with
+  `{version}` (46a v2). A released text is not an allow-list: sending it again withholds the new version (46a v4).
+  Editors cannot merge with a withheld head (their send needs `base_version` = the head, from the history or a 409)
+  (46a v5). `held`/`withheld` in a send's answer tell its sender that the text matched (as a public publish's "held for
+  review"; capped by D10) (46a v6). `rollback_of` may name a version the same commit pruned (46a v7). A block confirmed
+  after a version was sent is not retroactive: that version stays readable (the admin finds it by `basis=privacy`); a
+  rollback copy of it is withheld (46b V3). A held bank never prunes, so `BYTES_SQL` and `keptInfo` read its unpruned
+  versions (46b V5). The daily prune stage deletes at most 500 bodies a day (46b V8). `basis=privacy` does not expire
+  (46b V10). A withheld line still shows who sent it, when, its counts and licence (46b V11). The nitpicks (trim
+  answers 404 to a non-author owner of a held bank and `pruned: 0` when nothing qualifies; a copy placed before its
+  original takes the qid) stand.
+
+**Round 38 (circles phase B after critics 45a and 45b, `docs/critic-reports/2026-10-24-circles-phaseB-{product-critic45a,security-critic45b}.md`).**
+Migration `0110_pool_round38.sql`: one column, `circle_versions.withheld_at` (`ALTER TABLE ... ADD COLUMN`, no rebuild,
+no existing row changes; the next is `0111`). A column rather than the admin flag because flags are resolved by
+other paths (the generic flag resolve, an erased author's flags), which must never re-open student data. Tests:
+`test/pool/round38.test.ts` (12, each failed on round 37's code; the critics' repro scripts were rerun after the
+fix); round 37's 37-5, 37-7, 37-9 and 37-13 follow the new rules (merge order, withheld versions, the kept-versions
+query).
+
+* **B1, student data is withheld per version (both critics).** Round 37 held the BANK while its head matched confirmed
+  student data, and the next clean version lifted that hold, after which `GET .../versions/:n` served the matching
+  version to every member. Now the commit that matches (exactly or as a near-rewording) also marks THAT version
+  `withheld_at`, and no later version clears it. A withheld version is served to no member, its author included,
+  whichever version is the head: `GET .../versions/:n` and the head read answer `404 version_withheld {message}`; a
+  rollback to it is `404 version_withheld`; a merge from it has `base_kept: false`; the bank's image route serves no
+  image only it uses; its history (and merge `between`) line is `withheld: true, kept: false, message: ""`. The bank
+  hold works as before (hidden while the head matches; a clean version or a rollback lifts it). A withheld version
+  is pruned like any other once 20 newer ones exist (D16; the trim below too). Only an administrator releases it:
+  `POST /admin/pool/circle-release {bank_id, version, note}` (audited `circle.admin_version_release`; its
+  `privacy_text_match` flag is resolved; if it is the head, the bank's privacy hold goes too; `409 not_withheld`
+  otherwise). A bank-wide release (`{bank_id, note}`) lifts holds and dismisses reports but releases no version and
+  leaves those versions' flags open; `circle-remove` hides everything. The admin still opens a withheld version on
+  `basis=privacy`.
+* **B2, the byte cap counts what the commit prunes (45a).** The compare-and-set checked `circle_bytes` before the
+  same batch pruned the version past the 20, so at steady state (sum of 20 versions near the cap; one bank with five
+  2 MB images is 10 MB a version) the 21st version and every rollback were refused for good. The cap is now checked
+  net of the versions that commit prunes (`PRUNABLE_SQL`: past the 20, not held, not named by an open report), and
+  the prune runs before the commit's own holds so it prunes exactly that. A circle that is really full gets room
+  back with a new route: `POST /circles/:cid/banks/:bid/trim {keep: 1-19}` (the owner, or the bank's author while an
+  editor, D17's rights): versions older than the newest `keep` are pruned now (history lines stay, bodies stop
+  counting at once, the daily stage deletes them; never while the bank is held, never one an open report names;
+  `409 under_moderation` on a held bank) -> `{ok, pruned, oldest_kept, pinned_versions}`; activity
+  `versions_trimmed`. The `413 quota_exceeded` message now says that ("every kept version of every bank counts,
+  with its images. The owner (or a bank's author) can trim a bank's older versions, or remove a bank and purge it")
+  and its `used` is net of what the commit would prune. Images are charged per kept version (D3), so a circle's
+  editing room is about `circle_bytes / 20` of distinct content.
+* **B3, a repeated `published.qid` is a copy (45a).** Both occurrences used to get new qids (the original counted as
+  removed, its recorded origin and the licence bound lost). Now the first keeps the qid (and its origin); each later
+  one is a new question that carries the same recorded origin. The large-change guard counts by the kept qids.
+* **Variant 1 (45b), origins by text.** An origin the head recorded also follows a question sent WITHOUT its qid when
+  its key-free match hash equals that question's (the head index's `m`, versions from round 37 on), so an editor
+  re-sending the text without its qid no longer frees the author to relicense it. A reworded copy is not matched
+  (the server checks declared and recorded origins only, plan 7).
+* **Variant 1 (45a), what is kept.** Every response that said `oldest_kept` (history, merge-initiate, `404
+  version_not_retained`, trim, the admin's) now also has `pinned_versions`: `oldest_kept` is where the contiguous run
+  of kept versions that ends at the head starts, `pinned_versions` lists older versions a report or a hold keeps (at
+  most 50). A line's `kept` (and merge's `base_kept`) stay the per-version truth.
+* **Smaller fixes.** Merge-initiate's `between` is the FIRST 50 versions after the base, oldest first (45a variant 6). A
+  demoted author no longer changes the licence: `PATCH .../banks/:bid` needs the author while an editor or owner
+  (`403 circle_role_required {needed: "editor"}`, 45a variant 3). A rollback reserves memory by the body's value
+  count when that is more than its bytes, as a send does (45b variant 4). A circle's student-data mail has its own
+  hourly budget (`circle_privacy_match`), so it and the public pool's publish alerts cannot starve each other (45b
+  variant 3).
+* **Documented, not changed.**
+  * The licence stays the author's: once the author is removed or erased, nobody changes it (45a 2). An editor's
+    student-data version hides the author's whole bank while it is the head and only the admin is mailed (45a 4;
+    45b 6: an editor holding text that matches a confirmed block can hold a bank). While a bank is held nothing is
+    pruned or trimmed, so its bytes grow (45a 5). A send whose head index is missing in R2 skips the large-change guard
+    and carries no origins (45a 7). A rollback restores the body, qids, images and origins (and, since round 39, its
+    target's title, subject, course and grade) (45a 8). A replay answers the first answer's `held`/`withheld` (45a 9). The daily caps
+    (100 sends, 20 rollbacks) are per account across all circles (45a 10). Dropping a public question frees the
+    licence bound; a rollback to a version holding it is refused (`license_incompatible`) if the licence changed
+    meanwhile (45a 11).
+  * `merged_from` is the sender's claim (the token proves a merge was started at that head, not what was merged), and a
+    token can be used for more sends at the same head until it moves or expires (45b 2). Circle sends and rollbacks
+    share the isolate's one heavy slot (queue 4) with public publishes (45b 5). A rollback charges a full copy, net of
+    what it prunes (45b 7). `origins` read the public item's author name live whatever the item's moderation state
+    (45b 8). History and merge-initiate are metered by the rate limiter, not `item_reads` (45b 9).
+  * Nitpicks: a `commit_id` of another account answers `409 commit_id_conflict` (ids are random); merge-initiate from
+    the head is `400`; a version number past the head counts as an id miss; `oldest_kept` is computed on every history
+    page (about 20 rows).
+
+**Round 37 (circles, phase B: shared editing; `docs/circles-plan.md` 4, 6.2, 13.2; D16, D17).** No migration (the
+phase B columns `base_version`, `merged_from`, `rollback_of` and the `circle_holds` source were already in `0108`; the
+next is still `0110`). Code: `src/pool/circleversions.ts` (history, kept versions, merge-initiate and its token),
+`circlesend.ts` (editors' sends, the large-change confirm, the student-data check, rollback; one commit shared by a
+send and a rollback), `privacynear.ts` (the near-rewording check, moved unchanged out of `publish.ts` so both use it).
+Tests: `test/pool/round37.test.ts` (17, each failed on round 36's code); `round32`/`round33`'s send helpers now send
+`confirm_large_change` (their phase A tests replace whole banks), and 32-4 checks a viewer instead of a non-author.
+
+* **What phase A already had** (`circlesend.ts`, round 32): POST (a new bank) and PUT (the next version) in the publish
+  format, the compare-and-set on `base_version` inside the commit batch with every circle cap (`409 conflict
+  {head_version, head_at, head_by}`, nothing stored), idempotency by `commit_id` (replay / `commit_id_conflict` /
+  `publish_in_progress`), qids kept through `published.qid`, `added`/`changed`/`removed` per qid, images, declared
+  public origins and the licence they allow, the account lock, the heavy slot and the byte reservation, staging + R2 +
+  one batch, the D16 prune (never while held or a report names the version) and the hourly/daily cleanup. Phase B
+  extends that path rather than adding another.
+* **Editors send (plan 4.1).** PUT is open to the owner and every editor for any bank they may read (a held bank, or
+  one whose author is not in good standing: its author only, others `404`; a removed bank `409 bank_removed`), checked
+  again in the compare-and-set. The licence stays the author's (D19): an editor sends with the bank's licence, any other
+  is `422 license_author_only {license}` (also in the commit, so a licence change racing the send cannot be
+  bypassed). A send that waited for the heavy slot re-reads the head first.
+* **Large changes.** A version that drops more than half of the head's questions (by qid; questions sent without
+  their `published.qid` are new ones) needs `confirm_large_change: true`, else `428 confirm_large_required {removed,
+  total, message}` (exactly half passes). Also on rollback.
+* **History and kept versions.** `GET /circles/:cid/banks/:bid/versions?before=<n>` (a member who may read the bank):
+  `{bank_id, head_version, oldest_kept, versions: [{version, version_id, by, at, message, added, changed, removed,
+  question_count, license, kept, rollback_of?, merged_from?}], next_before}`, newest first, 50 a page (`?before=`
+  the last line's version; `400` on a bad cursor). `by` is a display name or "deleted teacher"; `message` "" when none.
+  `GET .../versions/:n` streams a KEPT version exactly like the head read (same shape; `bank.version` is `n`,
+  `bank.head_version` the head, plus `bank.message`, `bank.rollback_of?`, `bank.merged_from?`; counts toward
+  `item_reads`; ETag/304); a pruned one is `404 version_not_retained {oldest_kept, message}`, one that never existed
+  (0, past the head) `404 not_found`. The head read gains the same `head_version`, `message`, `rollback_of?`,
+  `merged_from?`. Fields that do not apply are absent, never null.
+* **Merge-initiate.** `POST .../merge {base_version}` (owner, editor; `1 <= base < head`, else `400 {field,
+  head_version}`) -> `{bank_id, base_version, base_kept, oldest_kept, head_version, head_version_id, head_at, head_by,
+  between: [history lines base+1..head, at most 50; round 38: the FIRST 50 after the base, oldest first], between_total, merge_token,
+  merge_token_expires_at}`. Nothing is stored or locked. The token is an HMAC (its own HKDF purpose, `circle-merge`)
+  over `[expiry (30 min), account, bank, base, head]`. A PUT with `merge_token` must be based on that head, by that
+  account, for that bank, unexpired, else `422 merge_token_invalid {message}`; the version then records
+  `merged_from: base` (history, activity, result). A bare `merged_from` without the token is `400`; with it, it must
+  match. When `base_kept` is false the app falls back to its two-way review (plan 4.1).
+* **Rollback (D17).** `POST .../rollback {to_version, base_version, commit_id, message?, confirm_large_change?}` (the
+  owner, or the bank's author while an editor; others `403 circle_role_required {needed: "owner"}`): a NEW version
+  `base_version + 1` whose body, index, images and recorded origins are copied from kept version `to_version`
+  (`rollback_of`), with the same compare-and-set and caps. `to_version >= base_version` is `400 {field: to_version}`;
+  a stale base `409 conflict`; a pruned target `404 version_not_retained {oldest_kept}`; idempotent by `commit_id`
+  (replay / `commit_id_conflict`); the bank keeps its licence (the copied origins must allow it, else `422
+  license_incompatible`); its listing fields are the target's since round 39 (round 37 kept the bank's). 20 a day per account (`circle_rollbacks`, D10; not counted in `circle_commits`);
+  a replay, a conflict, a 428 or a 503 gives the day's count back (sends too). Answer `200 {circle_id, bank_id,
+  version, version_id, qids, added, changed, removed, rollback_of, held}`; activity `rolled_back {version,
+  rollback_of}`. It is publish-sized work (account lock, heavy slot, 16x the body, and since round 38 its value count as a send's), because the copied body is
+  checked for student data (below).
+* **The confirmed-student-data check on every send and rollback (plan 13.2).** The public publish's check, on the
+  version's questions (a circle bank is never stripped, so the served form is the full one): the same block keys
+  (key-free match hash, normalised skeleton, stem, full content, explanation, answer, each Multipart part's) and
+  images against `privacy_blocks`, and the same near-rewording check (`privacynear.ts`). A match never refuses (that
+  would confirm the block): the commit batch re-checks the exact keys against the blocks as they are then (no gap)
+  and holds the bank (`circle_holds` `student_data` / `privacy`, or `privacy_near` for a rewording), so it is hidden
+  from every member but its author; a later version without it lifts that hold (an admin's or a report's hold stays). Round 38: the matching VERSION stays withheld from everyone until an administrator releases it (below).
+  One `privacy_text_match` flag per matching version (`item_id` the bank, `publish_id` the version, detail circle,
+  version, positions and counts only) and an admin mail (circle wording); `POST /admin/pool/circle-release` and
+  `circle-remove` resolve those flags; the admin's `basis=privacy` now also accepts the bank's privacy hold or flag.
+  Every send and rollback answers `held` (the bank is hidden from members now). The index of each version keeps the
+  key-free match hashes (`m`) so a rollback needs no share-core run (an older version's are computed again).
+* **Public material across editors.** An origin recorded for a question (declared at a send, checked then) now
+  follows its qid into every later version (an editor's copy has no origin fields) and into a rollback, so the
+  licence bound and the credits survive editors' versions. Versions no longer store the public author's name;
+  `origins[].author_name` is read at each read ("deleted teacher" once that author is erased).
+* **Tombstones (brief item 1).** Already blank since round 32: a purge sets `title`, `subject`, `course`, `grade` to
+  "" (the columns are `NOT NULL`, so "" rather than NULL; nulling them would need a table rebuild for no gain) and
+  deletes every version, image row, record, hold and R2 object; 37-8 checks no table keeps the text.
+* **Cost (workerd, miniflare `meta.rows_read`, a circle at the caps: 100 banks x 20 kept versions).** History page
+  131 rows (the same with 60 or 1,000 versions in the bank), head read 11, kept-version read 12, a pruned version's
+  404 34, merge-initiate 37-130. The oldest-kept lookup is forced onto `circle_versions_bank` (`INDEXED BY`): on the
+  `(bank_id, version)` index it walked every pruned version first (37-13 failed on it; the admin's circle-bank route
+  used the same statement and now calls the same helper). A send of 990 questions reads about 21,600 rows (10,600
+  in reads, 11,000 in the batch; 250 questions: 7,000), linear: the quota sum (2,100), the record probe (1,000) and
+  the student-data keys (about 8 rows a question, twice: the scan and the in-commit re-check). A rollback of the same
+  bank about 19,800. 37-13 checks every new read by index with its plan and flat timing from 60 to 1,000 versions;
+  37-10 sends, reads, merges and rolls back a 1,000-question 3.8 MB bank with nothing left reserved.
+* **Concurrency.** 37-2 runs a second send in a SECOND simulated isolate (its own heavy slot, `PoolDeps.heavySlots`,
+  tests only) at every statement boundary of the first: exactly one wins each time, the loser gets the true head and
+  leaves no row or object. 37-12: seven accounts sending at once in one isolate get one heavy slot, four waiting and
+  the rest `503 busy` (Retry-After, the day's send given back, nothing staged, locked or reserved); five editors
+  sending version 2 of one bank at once: exactly one 200. 37-9 runs two seeded sequences of 110 sends, stale sends,
+  rollbacks, merges, prunes and an erasure against a model (linear versions, bodies, 409 heads, D17 rights, the 20
+  kept). 37-11 erases the sender before every statement boundary of an editor's send, a merged send, an author's
+  rollback and an owner's rollback (nothing but a normal erasure's residue, no staging row, no lock, versions linear).
+* **Known limits.** A merge token can be replayed until it expires by the same account against the same head, which
+  only records the same `merged_from` once (the head moves). An admin's release of a privacy hold does not stop the
+  next version holding the same text again (the public pool's 90-day release memory is not applied to circles; the
+  admin releases again or removes it). A send whose head index is missing in R2 skips the large-change guard (it
+  cannot tell which questions were kept). `between` lists at most 50 versions (`between_total` says how many).
+
 **Round 36 (circles after integration critic 44, `docs/critic-reports/2026-10-24-circles-phaseA-integration-critic44.md`).**
 No migration. Tests: `test/pool/round36.test.ts` (2, each failed on round 35's code).
 
@@ -361,7 +644,7 @@ rows, cap crossings use `cap`, circle independence statements `independent_claim
   | `GET /circles/:cid` | member (a closed circle too: `200` with its closed state) | `{circle: {id, name, description ("" when none), role, joined_at, created_at, updated_at, closed_at, close_reason, closed_by, undo_until}, members: [{user_id, display_name, role, joined_at, is_me}], banks: [{id, title, subject, course, grade, license, author_name, is_author, head_version, question_count, has_images, created_at, updated_at, held?, removed?: {reason, undo_until}}]}`; removed banks only to the owner and author, held ones only to the author |
   | `PATCH /circles/:cid` | owner | `{name?, description?}` |
   | `DELETE /circles/:cid`, `POST .../reopen` | owner | close: `{ok, undo_until}` (14 days; members get `409 circle_closed {reason, undo_until}` at once); reopen inside it |
-  | `GET /circles/:cid/activity?before=` | member | `{activity: [{at, what, by, member, role?, bank_id?, bank_title?, version?, license?}], next_before}`, 50 a page; `what` is `created, joined, left, removed, role_changed, ownership_transferred, ownership_passed_on, closed, reopened, renamed, bank_shared, version_sent, bank_removed, bank_restored, license_changed`; never codes, reports or admin opens |
+  | `GET /circles/:cid/activity?before=` | member | `{activity: [{at, what, by, member, role?, bank_id?, bank_title?, version?, license?}], next_before}`, 50 a page; `what` is `created, joined, left, removed, role_changed, ownership_transferred, ownership_passed_on, closed, reopened, renamed, bank_shared, version_sent, rolled_back, bank_removed, bank_restored, license_changed` (round 37: `rollback_of?`, `merged_from?`); never codes, reports or admin opens |
   | `POST /circles/:cid/invites` | owner | `{role: editor\|viewer, max_uses? 1-50 (1), expires_in_days? 1-30 (7), note? (<=200)}` -> `201 {invite_id, code, role, max_uses, expires_at, note, shown_once}`; 10 open codes a circle (`circle_open_invites`), 50 a day (`circle_invites`) |
   | `GET /circles/:cid/invites?after=` | owner | `{invites: [{invite_id, role, created_at, created_by, created_by_name, max_uses, uses, expires_at, revoked_at, note, state}], next_cursor}`; never the code, never who typed a wrong one |
   | `POST /circles/:cid/invites/revoke` | owner | `{invite_id}`; `409 already_revoked` |
@@ -374,7 +657,12 @@ rows, cap crossings use `cap`, circle independence statements `independent_claim
   | `POST /circles/:cid/transfer/accept` | the member offered it | within 7 days, while the offerer is still the active owner -> `200 {ok, role: "owner"}` (the old owner becomes an editor, their codes are revoked); `409 no_pending_transfer`; `422 circles_limit {metric: "circles_owned"}` |
   | `POST /circles/:cid/transfer/cancel` | owner, or the member offered it | withdraws / declines -> `200 {ok, cancelled}` |
   | `POST /circles/:cid/banks` | owner, editor | publish format (`application/vnd.vershion.publish`, meta below) -> `201 {circle_id, bank_id, version: 1, version_id, qids, added, changed, removed}` |
-  | `PUT /circles/:cid/banks/:bid` | the bank's author, while owner or editor | the next version: meta `base_version` -> `200 {...}`; `409 conflict {head_version, head_at, head_by}` (nothing stored) |
+  | `PUT /circles/:cid/banks/:bid` | owner, editor (round 37; phase A: the bank's author) | the next version: meta `base_version`, `merge_token?`, `confirm_large_change?` -> `200 {..., held, merged_from?}`; `409 conflict {head_version, head_at, head_by}` (nothing stored); `428 confirm_large_required {removed, total}`; `422 license_author_only {license}`; `422 merge_token_invalid` |
+  | `GET /circles/:cid/banks/:bid/versions?before=` | member who may read the bank | the history, 50 a page (round 37) |
+  | `GET /circles/:cid/banks/:bid/versions/:n` | member who may read the bank | a kept version, streamed like the head; `404 version_not_retained {oldest_kept}` (round 37) |
+  | `POST /circles/:cid/banks/:bid/merge` | owner, editor | `{base_version}` -> head, `base_kept`, versions between, `merge_token` (30 min) (round 37) |
+  | `POST /circles/:cid/banks/:bid/rollback` | owner; the bank's author while an editor (D17) | `{to_version, base_version, commit_id, message?, confirm_large_change?}` -> `200 {..., rollback_of, held, withheld}`; 20 a day (round 37); `404 version_withheld` (round 38) |
+  | `POST /circles/:cid/banks/:bid/trim` | owner; the bank's author while an editor | `{keep: 1-19}` -> `{ok, pruned, oldest_kept, pinned_versions}` (round 38; round 39: a student-data hold does not stop it, a withheld version with an open flag is kept) |
   | `GET` / `HEAD /circles/:cid/banks/:bid` | member (held: author only) | streamed `{circle, bank: {id, title, subject, course, grade, license, version_license, author_name, is_author, version, version_id, question_count, has_images, committed_at, committed_by, held?}, origins, payload}`; `ETag`, `If-None-Match` -> 304; viewing and copying are this one read; counts toward `item_reads`; `409 bank_removed`, `409 circle_closed` |
   | `GET /circles/:cid/banks/:bid/blobs/:sha256` | member who may read the bank | an image a kept version uses (never a student-data-blocked one) |
   | `POST /circles/heads` | teacher | `{bank_ids}` (<= 200) -> `{banks: [{bank_id, status: current, version, version_id, license, at, by} \| {status: removed, until?} \| {status: under_review} \| {status: unavailable}]}`; one `item_reads` |
