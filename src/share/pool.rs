@@ -109,6 +109,8 @@ pub enum LocalProblem {
     BlobHashMismatch,
     /// The server's answer could not be split into head and payload.
     BadItemShape,
+    /// The circle's version holds questions this build of the app can not read (made by a newer one).
+    NewerQuestions,
 }
 
 impl LocalProblem {
@@ -134,6 +136,7 @@ impl LocalProblem {
             LocalProblem::BadField(f) => format!("The {f} is not valid."),
             LocalProblem::BlobHashMismatch => "The picture that came back is not the one that was asked for. Nothing was saved.".into(),
             LocalProblem::BadItemShape => "The server sent an item the app does not understand.".into(),
+            LocalProblem::NewerQuestions => "This bank has questions made by a newer verSHion that this one can not read. Update the app, then try again. Nothing was changed.".into(),
         }
     }
 }
@@ -320,6 +323,16 @@ pub enum RefusalKind {
     BankRemoved,
     /// 404 `version_not_retained` (phase B).
     VersionNotRetained,
+    /// 404 `version_withheld`: a version that held confirmed student data; only an administrator releases it.
+    VersionWithheld,
+    /// 409 `conflict` on a circle bank: someone sent first.
+    CircleConflict { head_version: Option<u64>, head_at: Option<i64>, head_by: Option<String> },
+    /// 428 `confirm_large_required`: the version drops more than half of the bank's questions.
+    ConfirmLarge { removed: u64, total: u64 },
+    /// 422 `license_author_only`: only the bank's author chooses its licence.
+    LicenseAuthorOnly { license: Option<String> },
+    /// 422 `merge_token_invalid`.
+    MergeTokenInvalid,
     /// 422 `circle_questions_limit`.
     CircleQuestionsLimit(LimitInfo),
     /// 413 `circle_records_full`.
@@ -371,6 +384,7 @@ impl RefusalKind {
             (_, "schema_upgrade_required") => RefusalKind::SchemaUpgradeRequired { message: message.unwrap_or_default() },
             (_, "kind_mismatch") => RefusalKind::KindMismatch,
             (_, "too_many_tags") => RefusalKind::TooManyTags { limit: u64_of(j, "limit").unwrap_or(0) },
+            (409, "conflict") if j.get("head_version").is_some() => RefusalKind::CircleConflict { head_version: u64_of(j, "head_version"), head_at: j.get("head_at").and_then(Value::as_i64), head_by: str_of(j, "head_by") },
             (409, "conflict") => RefusalKind::Conflict { current_version: u64_of(j, "current_version"), current_publish_id: str_of(j, "current_publish_id") },
             (_, "publish_id_conflict") => RefusalKind::PublishIdConflict,
             (_, "publish_in_progress") => RefusalKind::PublishInProgress,
@@ -387,6 +401,10 @@ impl RefusalKind {
             (_, "circle_closed") => RefusalKind::CircleClosed { undo_until: j.get("undo_until").and_then(Value::as_i64), reason: j.get("reason").and_then(Value::as_str).map(str::to_string) },
             (_, "bank_removed") => RefusalKind::BankRemoved,
             (_, "version_not_retained") => RefusalKind::VersionNotRetained,
+            (_, "version_withheld") => RefusalKind::VersionWithheld,
+            (_, "confirm_large_required") => RefusalKind::ConfirmLarge { removed: u64_of(j, "removed").unwrap_or(0), total: u64_of(j, "total").unwrap_or(0) },
+            (_, "license_author_only") => RefusalKind::LicenseAuthorOnly { license: str_of(j, "license") },
+            (_, "merge_token_invalid") => RefusalKind::MergeTokenInvalid,
             (_, "circle_questions_limit") => RefusalKind::CircleQuestionsLimit(limit_of(j)),
             (_, "circle_records_full") => RefusalKind::CircleRecordsFull,
             (_, "already_revoked") => RefusalKind::AlreadyRevoked,
@@ -427,7 +445,7 @@ impl Refusal {
     pub fn message(&self) -> String {
         let wait = || super::api::wait_text(self.detail.retry_after);
         match &self.kind {
-            RefusalKind::InvalidPayload(_) => "The pool can not take this as it is. The problems are listed below.".into(),
+            RefusalKind::InvalidPayload(_) => "The pool can not take this as it is. Nothing was sent.".into(),
             RefusalKind::LabelsNeedDecision(_) => "Some answer choices start with letter labels (A, B, C ...). Choose whether to strip them or keep them.".into(),
             RefusalKind::OrderAckRequired(_) => "The order of some choices has to stay fixed. Confirm that students will see them in this order.".into(),
             RefusalKind::LicenseIncompatible(l) => l.message.clone().unwrap_or_else(|| {
@@ -481,10 +499,15 @@ impl Refusal {
                 _ => "This circle is closed.".into(),
             },
             RefusalKind::BankRemoved => "This bank was removed from the circle.".into(),
-            RefusalKind::VersionNotRetained => "That older version is no longer kept.".into(),
+            RefusalKind::VersionNotRetained => "That version is no longer kept. A circle bank keeps its last 20 versions in full.".into(),
+            RefusalKind::VersionWithheld => "This version is hidden while it is reviewed. Only an administrator can release it.".into(),
+            RefusalKind::CircleConflict { .. } => "Someone else sent changes first. Get the latest changes and merge them, then send again.".into(),
+            RefusalKind::ConfirmLarge { removed, total } => format!("This version removes {removed} of the bank's {total} questions. Send it anyway only if that is what you meant."),
+            RefusalKind::LicenseAuthorOnly { .. } => "Only the bank's author chooses its licence. Your changes go with the bank's own licence.".into(),
+            RefusalKind::MergeTokenInvalid => "This merge is out of date. Get the latest changes and merge again, then send.".into(),
             RefusalKind::CircleQuestionsLimit(l) => format!("A circle holds at most {} questions across its banks; this would make {}.", l.limit, l.used + l.needed),
             RefusalKind::CircleRecordsFull => "This circle has recorded as many different questions as it can keep. Remove a bank first.".into(),
-            RefusalKind::CircleStorageFull(l) => format!("This circle's storage is full ({} of {} used). Remove a bank or leave out large pictures.", mb(l.used as usize), mb(l.limit as usize)),
+            RefusalKind::CircleStorageFull(l) => format!("This circle's storage is full ({} of {} used). Ask the owner (or the bank's author) to trim the older versions of a bank, remove a bank, or leave out large pictures.", mb(l.used as usize), mb(l.limit as usize)),
             RefusalKind::AlreadyRevoked => "That code was already withdrawn.".into(),
             RefusalKind::CommitIdConflict => "This send was already used for different content. Start it again.".into(),
             RefusalKind::CircleMaterial(m) => m.message(),
@@ -518,6 +541,7 @@ impl Refusal {
 /// that still says what happened. Covers every code the routes the app calls can return.
 pub fn other_message(status: u16, code: &str, wait: String) -> String {
     let m = match code {
+        "pending_review" => "An administrator is still reviewing this bank for student information. It can be deleted for good once that review is done. You can leave it removed until then.",
         "member_unavailable" => "That member's account can not take on the circle right now. Choose someone else.",
         "no_pending_transfer" => "There is no ownership offer to answer any more. It may have been withdrawn, taken back, or it expired.",
         "unauthorized" => "Your sign-in ended. Sign in again in the Account window.",
@@ -577,6 +601,8 @@ fn metric_text(m: Option<&str>) -> String {
         Some("circle_commits") => " for sending banks to circles".into(),
         Some("circle_closes") => " for closing circles".into(),
         Some("circle_reports") => " for reports about circle banks".into(),
+        Some("circle_rollbacks") => " for restoring older versions of circle banks".into(),
+        Some("circle_transfer_offers") => " for offering a circle to someone".into(),
         _ => String::new(),
     }
 }

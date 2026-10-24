@@ -416,6 +416,44 @@ fn ours_delta(base: &BaseQuestion, o: &Question) -> Delta {
     }
 }
 
+/// Whether the bank's question differs from what it was when last in step with the circle.
+pub fn ours_changed(base: &BaseQuestion, q: &Question) -> bool {
+    ours_delta(base, q).any()
+}
+
+/// The text a two-way review shows where the earlier version is not known.
+pub const NOT_KEPT: &str = "(the earlier version is not kept)";
+
+/// Two-way fallback for a circle bank whose base version is gone: every linked question that both
+/// sides have is treated as changed on both sides, so a difference is a conflict the person
+/// decides, never an overwrite. A question the circle no longer has is offered for removal.
+pub fn unknown_base(bank: &QuestionBank, links: &[(String, String)], theirs: &[Theirs]) -> Vec<BaseQuestion> {
+    let mut out = Vec::new();
+    for (local, qid) in links {
+        let Some(q) = bank.questions.iter().find(|q| q.id == *local) else {
+            // Deleted here: the circle's question counts as unchanged since, so it stays deleted
+            // (the review lists it as "deleted by you") instead of coming back as "new".
+            if let Some(t) = theirs.iter().find(|t| t.qid == *qid) {
+                let mut b = base_of(&t.q, qid, &t.fp, t.sha.clone());
+                b.local_id = local.clone();
+                out.push(b);
+            }
+            continue;
+        };
+        let mut b = base_of(q, qid, "", None);
+        if theirs.iter().any(|t| t.qid == *qid) {
+            b.snap.stem = NOT_KEPT.to_string();
+            b.snap.points = Some(-1.0);
+            b.snap.topics = vec![NOT_KEPT.to_string()];
+            b.snap.explanation = Some(NOT_KEPT.to_string());
+            b.snap.image = theirs.iter().find(|t| t.qid == *qid).and_then(|t| t.sha.clone()).filter(|_| q.image.is_some());
+            b.local_image = q.image.as_ref().map(|i| i.file.clone());
+        }
+        out.push(b);
+    }
+    out
+}
+
 fn theirs_delta(base: &BaseQuestion, t: &Theirs) -> Delta {
     let b = &base.snap;
     let tk = is_keyless(&t.q);
@@ -689,7 +727,8 @@ pub fn apply_merge(bank: &mut QuestionBank, plan: &MergePlan, fetched: &[Theirs]
             }
         }
     }
-    b.modified = now.max(b.modified);
+    // `now` is milliseconds; a bank's time is in seconds, like everywhere else in the app.
+    b.modified = (now / 1000).max(b.modified);
     *bank = b;
     Ok((out, new_base))
 }

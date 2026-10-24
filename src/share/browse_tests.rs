@@ -918,10 +918,23 @@ fn the_name_of_a_new_bank_is_cleaned_and_limited() {
 }
 
 #[test]
+fn apply_import_writes_seconds_into_a_bank_not_milliseconds() {
+    let q = |s: &str| serde_json::from_value::<Question>(mc(s, true)).unwrap();
+    let head: ItemHead = serde_json::from_value(head("full", false, 4)).unwrap();
+    let imp = Imported { head, info: ImportInfo::default(), questions: vec![q("a")], fingerprints: vec!["f".into()], pictures: 0, pictures_missing: 0, keyless: false, at_ms: 1_792_864_237_304, theirs: vec![] };
+    let mut banks = Vec::new();
+    let a = apply_import(&mut banks, &Dest::New, "x", &imp).unwrap();
+    assert_eq!((banks[0].created, banks[0].modified), (1_792_864_237, 1_792_864_237), "the app keeps bank times in seconds");
+    banks[0].modified = 1_700_000_000;
+    apply_import(&mut banks, &Dest::Existing(a.bank_id), "", &imp).unwrap();
+    assert_eq!(banks[0].modified, 1_792_864_237);
+}
+
+#[test]
 fn apply_import_is_pure_and_checks_its_destination() {
     let q = |s: &str| serde_json::from_value::<Question>(mc(s, true)).unwrap();
     let head: ItemHead = serde_json::from_value(head("full", false, 4)).unwrap();
-    let imp = Imported { head, info: ImportInfo::default(), questions: vec![q("a")], fingerprints: vec!["f".into()], pictures: 0, pictures_missing: 0, keyless: false, at_ms: 99, theirs: vec![] };
+    let imp = Imported { head, info: ImportInfo::default(), questions: vec![q("a")], fingerprints: vec!["f".into()], pictures: 0, pictures_missing: 0, keyless: false, at_ms: 99_000, theirs: vec![] };
     let mut banks = vec![local_bank("b1", "Mine", &["x"])];
     assert!(apply_import(&mut banks, &Dest::Existing("nope".into()), "", &imp).is_err());
     assert_eq!(banks[0].questions.len(), 1);

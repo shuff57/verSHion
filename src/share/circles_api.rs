@@ -23,7 +23,7 @@ pub const MESSAGE_MAX: usize = 500;
 /// `POST /circles/heads` takes at most this many banks.
 pub const MAX_HEADS: usize = 200;
 
-fn check_id(id: &str) -> Result<(), PoolError> {
+pub(super) fn check_id(id: &str) -> Result<(), PoolError> {
     if is_item_id(id) { Ok(()) } else { Err(LocalProblem::BadId(id.to_string()).into()) }
 }
 
@@ -210,7 +210,7 @@ pub struct BankRemoved {
 }
 
 /// A text the pool may send as `null` (a masked bank): read as empty.
-fn null_text<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+pub(super) fn null_text<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error> {
     Ok(Option::<String>::deserialize(d)?.unwrap_or_default())
 }
 
@@ -458,6 +458,12 @@ pub struct SentBank {
     pub changed: u32,
     pub removed: u32,
     pub replayed: bool,
+    /// The bank is hidden from the circle while it is looked at (a hold).
+    pub held: bool,
+    /// This very version is withheld (it held text taken for student data).
+    pub withheld: bool,
+    pub merged_from: Option<u64>,
+    pub rollback_of: Option<u64>,
 }
 
 /// What a person types to send a bank to a circle.
@@ -470,11 +476,16 @@ pub struct CircleSend {
     pub meta: ItemMeta,
     pub payload: Vec<u8>,
     pub attestation: bool,
+    /// A send over an existing bank: the version it was made from (compare-and-set).
+    pub base_version: Option<u64>,
+    /// From "Get latest and merge": the token and the version that was merged in.
+    pub merge: Option<(String, u64)>,
+    pub confirm_large: bool,
 }
 
 impl CircleSend {
     pub fn new(payload: Vec<u8>, license: License, meta: ItemMeta) -> CircleSend {
-        CircleSend { commit_id: new_publish_id(), license, message: String::new(), meta, payload, attestation: true }
+        CircleSend { commit_id: new_publish_id(), license, message: String::new(), meta, payload, attestation: true, base_version: None, merge: None, confirm_large: false }
     }
 
     pub fn meta_json(&self) -> Result<String, LocalProblem> {
@@ -491,6 +502,16 @@ impl CircleSend {
         }
         if !msg.is_empty() {
             m.insert("message".into(), json!(msg));
+        }
+        if let Some(b) = self.base_version {
+            m.insert("base_version".into(), json!(b));
+        }
+        if let Some((token, from)) = &self.merge {
+            m.insert("merge_token".into(), json!(token));
+            m.insert("merged_from".into(), json!(from));
+        }
+        if self.confirm_large {
+            m.insert("confirm_large_change".into(), json!(true));
         }
         m.insert("meta".into(), self.meta_value());
         Ok(Value::Object(m).to_string())

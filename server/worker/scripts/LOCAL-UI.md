@@ -28,7 +28,7 @@ Other commands:
 | `rig approve EMAIL` | Approves the account as a teacher and gives it pool access without an invite code. |
 | `rig approve EMAIL --teacher-only` | Approves the account but gives no pool access. It still needs an invite code. |
 | `rig invite` | Prints a new single-use invite code. |
-| `rig seed` | Adds 3 sample shared items and a circle with 2 banks from a throwaway account `b@example.test`, and prints 2 circle invite codes (see below). Run again, it adds only what is missing and prints 2 fresh codes. |
+| `rig seed` | Adds 3 sample shared items and a circle with 2 banks (the first one at 3 versions, for the history and merge) from a throwaway account `b@example.test`, and prints 2 circle invite codes (see below). Run again, it adds only what is missing and prints 2 fresh codes. |
 | `rig stop` | Stops the server. Accounts and items are kept for next time. |
 | `rig reset` | Stops the server and deletes `.wrangler-ui/`, so the next start is empty. |
 

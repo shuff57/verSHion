@@ -668,8 +668,9 @@ pub fn apply_import(banks: &mut Vec<QuestionBank>, dest: &Dest, new_name: &str, 
                 id: crate::model::new_id(),
                 name: name.clone(),
                 questions: imp.questions.clone(),
-                created: imp.at_ms,
-                modified: imp.at_ms,
+                // The app keeps bank times in seconds (the editors write seconds); `at_ms` is milliseconds.
+                created: imp.at_ms / 1000,
+                modified: imp.at_ms / 1000,
                 details: BankDetails {
                     description: line,
                     author: text::author(&item.author_name),
@@ -684,7 +685,7 @@ pub fn apply_import(banks: &mut Vec<QuestionBank>, dest: &Dest, new_name: &str, 
         Dest::Existing(id) => {
             let bank = banks.iter_mut().find(|b| b.id == *id).ok_or_else(|| "The bank you chose is not there any more. Choose another, or make a new one.".to_string())?;
             bank.questions.extend(imp.questions.iter().cloned());
-            bank.modified = imp.at_ms.max(bank.modified);
+            bank.modified = (imp.at_ms / 1000).max(bank.modified);
             if bank.details.is_empty() && bank.questions.len() == imp.questions.len() {
                 bank.details = BankDetails {
                     description: line,
@@ -1902,6 +1903,16 @@ impl BrowseModel {
             changed = true;
         }
         if changed {
+            let _ = self.save_log();
+        }
+    }
+
+    /// A working copy moved on (a send or a merge): the list of imports follows.
+    pub fn set_circle_version(&mut self, item_id: &str, bank_id: &str, version: u64) {
+        self.ensure_log();
+        if let Some(r) = self.imported.iter_mut().find(|r| r.item_id == item_id && r.bank_id == bank_id && r.circle.is_some()) {
+            r.version = version;
+            r.newer = r.newer.take().filter(|n| n.version > version);
             let _ = self.save_log();
         }
     }

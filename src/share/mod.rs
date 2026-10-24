@@ -36,7 +36,11 @@ pub mod api;
 pub mod browse;
 pub mod browse_text;
 pub mod browse_ui;
+pub mod circle_edit;
+pub mod circle_edit_ui;
+pub mod circle_links;
 pub mod circle_send;
+pub mod circle_versions_api;
 pub mod circles;
 pub mod circles_api;
 pub mod circles_text;
@@ -73,6 +77,8 @@ mod publish_tests;
 mod shared_tests;
 #[cfg(test)]
 mod circles_tests;
+#[cfg(test)]
+mod circle_edit_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

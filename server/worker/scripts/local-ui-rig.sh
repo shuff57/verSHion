@@ -9,7 +9,7 @@
 #   scripts/local-ui-rig.sh approve EMAIL         # trust -> teacher, plus a pre-gate invite redemption
 #   scripts/local-ui-rig.sh approve EMAIL --teacher-only   # trust -> teacher, the invite still needed
 #   scripts/local-ui-rig.sh invite                # prints one fresh single-use invite code
-#   scripts/local-ui-rig.sh seed                  # 3 sample shared items and a circle (2 banks, 2 codes) from a throwaway b@example.test
+#   scripts/local-ui-rig.sh seed                  # 3 sample shared items and a circle (2 banks, the first at 3 versions, 2 codes) from a throwaway b@example.test
 #   scripts/local-ui-rig.sh log                   # follow the dev server output
 #   scripts/local-ui-rig.sh stop
 #   scripts/local-ui-rig.sh reset                 # stop, then delete server/worker/.wrangler-ui

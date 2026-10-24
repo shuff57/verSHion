@@ -24,15 +24,15 @@ pub enum Outcome {
     ShowImported,
 }
 
-fn line(ui: &mut Ui, s: impl Into<String>) {
+pub(super) fn line(ui: &mut Ui, s: impl Into<String>) {
     ui.add(egui::Label::new(theme::muted(s.into()).size(12.5)).wrap());
 }
 
-fn back_link(ui: &mut Ui, label: &str) -> bool {
+pub(super) fn back_link(ui: &mut Ui, label: &str) -> bool {
     ui.add(egui::Button::new(theme::accent(label).size(12.5)).frame(false)).clicked()
 }
 
-fn problem_box(ui: &mut Ui, p: &Problem, wait: Option<std::time::Duration>, retry: &mut bool, account: &mut bool) {
+pub(super) fn problem_box(ui: &mut Ui, p: &Problem, wait: Option<std::time::Duration>, retry: &mut bool, account: &mut bool) {
     warn_box(ui, &p.message);
     if !p.retry && !p.account {
         return;
@@ -50,13 +50,13 @@ fn problem_box(ui: &mut Ui, p: &Problem, wait: Option<std::time::Duration>, retr
     }
 }
 
-fn wait_of(m: &CirclesModel, p: &Problem) -> Option<std::time::Duration> {
+pub(super) fn wait_of(m: &CirclesModel, p: &Problem) -> Option<std::time::Duration> {
     let at = p.retry_at?;
     let now = m.now_instant();
     (at > now).then(|| at - now)
 }
 
-fn section<R>(ui: &mut Ui, title: &str, f: impl FnOnce(&mut Ui) -> R) -> R {
+pub(super) fn section<R>(ui: &mut Ui, title: &str, f: impl FnOnce(&mut Ui) -> R) -> R {
     let r = kit::card()
         .inner_margin(Margin::same(12))
         .show(ui, |ui| {
@@ -72,7 +72,7 @@ fn section<R>(ui: &mut Ui, title: &str, f: impl FnOnce(&mut Ui) -> R) -> R {
 
 /// A pill that a wrapping row moves to the next line whole (a framed `kit::pill` would be squeezed
 /// into the row's cursor and stretched to the row's height).
-fn pill(ui: &mut Ui, label: &str, fill: egui::Color32, fg: egui::Color32) {
+pub(super) fn pill(ui: &mut Ui, label: &str, fill: egui::Color32, fg: egui::Color32) {
     super::shared_ui::step_pill(ui, label, fill, fg);
 }
 
@@ -85,7 +85,7 @@ fn role_pill(ui: &mut Ui, r: Role) {
 }
 
 /// A wrapping row of text and pills at text height (a plain row is a button's height, 34 px).
-fn text_row<R>(ui: &mut Ui, f: impl FnOnce(&mut Ui) -> R) -> R {
+pub(super) fn text_row<R>(ui: &mut Ui, f: impl FnOnce(&mut Ui) -> R) -> R {
     ui.scope(|ui| {
         ui.spacing_mut().interact_size.y = 18.0;
         ui.spacing_mut().item_spacing.x = 8.0;
@@ -95,7 +95,7 @@ fn text_row<R>(ui: &mut Ui, f: impl FnOnce(&mut Ui) -> R) -> R {
 }
 
 /// One line in two tones: `main` in the text colour, then `sep` and `quiet` muted. Wraps as one label.
-fn two_tone(ui: &mut Ui, main: &str, sep: &str, quiet: &str) {
+pub(super) fn two_tone(ui: &mut Ui, main: &str, sep: &str, quiet: &str) {
     let mut job = egui::text::LayoutJob::default();
     let style = ui.style().clone();
     theme::text(main).size(12.5).append_to(&mut job, &style, egui::FontSelection::Default, egui::Align::Center);
@@ -158,6 +158,9 @@ pub(super) fn body_of(ui: &mut Ui, m: &mut CirclesModel) -> Outcome {
     let mut out = Outcome::None;
     if let Some(n) = m.notice.clone() {
         banner(ui, &n);
+    }
+    if super::circle_edit_ui::draw(ui, m) {
+        return out;
     }
     match m.screen {
         Screen::Gate => gate(ui, m),
@@ -499,6 +502,7 @@ fn circle_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
     let mut cancel_purge = false;
     let confirming_purge = m.circle.as_ref().and_then(|c| c.confirm_purge.clone());
     let mut add = false;
+    let badges: std::collections::HashMap<String, String> = d.banks.iter().filter_map(|b| super::circle_edit_ui::bank_badge(m, &d.circle.id, &b.id).map(|t| (b.id.clone(), t))).collect();
     section(ui, "Banks", |ui| {
         if m.allowed(Action::AddBank) {
             add = kit::primary_button(ui, "Add a bank...").clicked();
@@ -537,6 +541,9 @@ fn circle_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
                     }
                     line(ui, bits.join(" - "));
                     line(ui, format!("{}. {}", license_name(&b.license), text::reshare_line(&b.license)));
+                    if let Some(bd) = badges.get(&b.id) {
+                        ui.add(egui::Label::new(theme::accent(bd).size(12.5)).wrap());
+                    }
                     if b.is_held() {
                         ui.add(egui::Label::new(theme::accent(text::HELD_BANK).size(12.5)).wrap());
                     }
@@ -590,6 +597,7 @@ fn circle_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
         return;
     }
 
+    super::circle_edit_ui::working_copies(ui, m, &d.circle.id);
     members_section(ui, m, &d);
     if role == Role::Owner && !closed {
         codes_section(ui, m);
@@ -944,6 +952,7 @@ fn bank_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
     ui.add_space(4.0);
     let now = m.now_ms();
     let (mut retry, mut account) = (false, false);
+    let Some((bank_cid, bank_bid)) = m.bank.as_ref().map(|b| (b.cid.clone(), b.bid.clone())) else { return };
     let Some(b) = m.bank.as_ref() else { return };
     match &b.load {
         BankLoad::Loading => {
@@ -963,6 +972,9 @@ fn bank_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
             if account {
                 m.request_open_account();
             }
+            let (cid, bid) = (bank_cid.clone(), bank_bid.clone());
+            let title = m.circle.as_ref().and_then(|c| c.detail.as_ref()).and_then(|d| d.banks.iter().find(|x| x.id == bid).map(|x| x.title.clone())).unwrap_or_default();
+            super::circle_edit_ui::bank_section(ui, m, &cid, &bid, &api::plain(&title));
             return;
         }
         BankLoad::Ready(_) => {}
@@ -995,21 +1007,37 @@ fn bank_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
 
     // The actions.
     let can_copy = m.bank_allowed(BankAction::Copy);
-    let (mut begin_copy, mut get_copy, mut cancel_copy, mut go_imported) = (false, false, false, false);
+    // A second working copy would take the link from the first one: while this computer has a
+    // working copy of the bank (still in the banks), only a plain copy is offered here.
+    let linked = m.edit.link_for_bank(&bank_cid, &bank_bid).map(|l| !m.edit.status(&l.local_bank_id).is_some_and(|s| s.missing));
+    let has_working = linked == Some(true);
+    let can_work = m.can_make_working_copy() && !has_working;
+    let (mut begin_copy, mut get_copy, mut cancel_copy, mut go_imported, mut work_copy) = (false, false, false, false, false);
     section(ui, "Get a copy", |ui| {
         let Some(b) = m.bank.as_mut() else { return };
         match &mut b.copy {
             CopyPanel::Closed => {
-                para(ui, text::COPY_LINE);
-                ui.add_enabled_ui(can_copy, |ui| begin_copy = kit::primary_button(ui, "Get a copy...").clicked());
+                para(ui, if can_work { text::WORKING_COPY_LINE } else { text::COPY_LINE });
+                if has_working {
+                    line(ui, text::HAS_WORKING_COPY);
+                }
+                ui.add_enabled_ui(can_copy, |ui| begin_copy = kit::primary_button(ui, if can_work { "Make a working copy..." } else { "Get a copy..." }).clicked());
             }
             CopyPanel::Choosing { name } => {
-                para(ui, text::COPY_LINE);
+                para(ui, if can_work { text::WORKING_COPY_LINE } else { text::COPY_LINE });
+                if has_working {
+                    line(ui, text::HAS_WORKING_COPY);
+                }
                 ui.label(theme::strong("Name of your copy").size(12.5));
                 ui.add(egui::TextEdit::singleline(name).id(egui::Id::new("circle_copy_name")).desired_width(f32::INFINITY));
                 ui.add_space(6.0);
                 ui.horizontal_wrapped(|ui| {
-                    get_copy = kit::primary_button(ui, "Get the copy").clicked();
+                    if can_work {
+                        work_copy = kit::primary_button(ui, "Make the working copy").clicked();
+                        get_copy = kit::ghost_button(ui, "Get a plain copy instead").clicked();
+                    } else {
+                        get_copy = kit::primary_button(ui, "Get the copy").clicked();
+                    }
                     cancel_copy = kit::ghost_button(ui, "Cancel").clicked();
                 });
             }
@@ -1025,6 +1053,9 @@ fn bank_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
                     para(ui, &format!("{} of {} pictures could not be fetched; those questions are shown without them.", done.pictures_missing, done.pictures));
                 }
                 para(ui, "It also appears under \"Things I imported\", where verSHion tells you if the circle sends a newer version. Your copy is never changed for you.");
+                if linked.is_some() {
+                    line(ui, text::WORKING_COPY_DONE);
+                }
                 go_imported = link(ui, "See it under Things I imported");
             }
             CopyPanel::Failed(p) => {
@@ -1036,6 +1067,9 @@ fn bank_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
     if get_copy {
         m.get_copy();
     }
+    if work_copy {
+        m.make_working_copy();
+    }
     if cancel_copy {
         m.cancel_copy();
     }
@@ -1045,6 +1079,9 @@ fn bank_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
     if go_imported {
         *out = Outcome::ShowImported;
     }
+
+    let cid_now = m.bank.as_ref().map(|b| b.cid.clone()).unwrap_or_default();
+    super::circle_edit_ui::bank_section(ui, m, &cid_now, &head.id, &api::plain(&head.title));
 
     // Author's setting, remove, report.
     bank_admin(ui, m, &head.license);

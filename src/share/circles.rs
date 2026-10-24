@@ -30,13 +30,16 @@ use web_time::Instant;
 
 use super::api::{self, ApiError};
 use super::browse::{
-    Applied, CircleOrigin, Dest, ImageSink, Imported, Problem, SharedImages, StoreImages, apply_import, now_ms, theirs_of,
+    Applied, CircleOrigin, Dest, ImageSink, Imported, Problem, SharedImages, StoreImages, apply_import, now_ms,
 };
+use super::circle_edit::{CircleEditModel, Perm};
+use super::circle_links::{CircleLink, LinkLog};
 use super::circles_api::*;
 use super::circles_text as text;
 use super::model::{Notice, Runner};
-use super::pool::{ImportInfo, ItemHead, ItemView, License, Pool, PoolError, RefusalKind, RetryPolicy, Served, StudentView, is_sha256};
+use super::pool::{ImportInfo, ItemHead, ItemView, License, Pool, PoolError, RefusalKind, RetryPolicy, Served, StoreMedia, StudentView, is_sha256};
 use super::publish::{AccountSnapshot, Gate, SharedSession};
+use super::browse::StoreRestore;
 use super::secret::Secret;
 use crate::model::{ImageRef, Question, QuestionBank};
 
@@ -522,7 +525,7 @@ fn run_work(session: SharedSession, images: SharedImages, retry: RetryPolicy, wo
 
 /// The bank as the pool sent it, in the shape of this app: pictures fetched from the circle and
 /// stored here, new ids for every question.
-async fn copy_bank(pool: &Pool<'_>, images: &(dyn ImageSink + Send + Sync), doc: &BankDoc) -> Result<Imported, PoolError> {
+pub(super) async fn copy_bank(pool: &Pool<'_>, images: &(dyn ImageSink + Send + Sync), doc: &BankDoc) -> Result<Imported, PoolError> {
     let b = &doc.bank;
     let license = if b.version_license.is_empty() { b.license.clone() } else { b.version_license.clone() };
     let item = ItemView {
@@ -546,9 +549,13 @@ async fn copy_bank(pool: &Pool<'_>, images: &(dyn ImageSink + Send + Sync), doc:
     };
     let head = ItemHead { item, questions: Vec::new(), license_check: None };
     let at_ms = now_ms();
-    let mut theirs = theirs_of(&doc.payload, &head, at_ms);
+    let mut theirs = super::circle_links::circle_theirs(&doc.payload, at_ms);
     if theirs.is_empty() {
         return Err(PoolError::Local(super::pool::LocalProblem::BadItemShape));
+    }
+    // A question this build can not read would be dropped from the copy, and then from the circle on the next send.
+    if super::circle_links::payload_question_count(&doc.payload) > theirs.len() {
+        return Err(PoolError::Local(super::pool::LocalProblem::NewerQuestions));
     }
     let mut stored: std::collections::HashMap<String, Option<ImageRef>> = Default::default();
     let (mut pictures, mut missing) = (0usize, 0usize);
@@ -589,6 +596,8 @@ struct ReadyCopy {
     imp: Box<Imported>,
     name: String,
     circle: CircleOrigin,
+    /// A working copy: the head it was made from (the link is made from it).
+    working: Option<BankHead>,
 }
 
 pub struct CirclesModel {
@@ -602,6 +611,8 @@ pub struct CirclesModel {
     pub join: JoinState,
     pub create: CreateForm,
     pub bank: Option<BankView>,
+    /// Working copies: send my changes, get the latest and merge, the history.
+    pub edit: CircleEditModel,
     /// The pool answered `invite_required` (the Shared page then asks for the pool's invite code).
     pub invite_required: bool,
     open_account: bool,
@@ -617,6 +628,7 @@ pub struct CirclesModel {
     heads_done: bool,
     heads: Option<Vec<HeadEntry>>,
     copy_name: Option<String>,
+    copy_seed: Option<BankHead>,
     joining_name: Option<String>,
     clock: Option<i64>,
     now: Option<Instant>,
@@ -643,6 +655,7 @@ impl CirclesModel {
             join: JoinState::default(),
             create: CreateForm::default(),
             bank: None,
+            edit: CircleEditModel::new(runner, images.clone(), Arc::new(StoreMedia), Arc::new(StoreRestore), LinkLog::Store),
             invite_required: false,
             open_account: false,
             resume: Screen::List,
@@ -657,6 +670,7 @@ impl CirclesModel {
             heads_done: false,
             heads: None,
             copy_name: None,
+            copy_seed: None,
             joining_name: None,
             clock: None,
             now: None,
@@ -666,10 +680,12 @@ impl CirclesModel {
 
     pub fn with_retry(mut self, retry: RetryPolicy) -> CirclesModel {
         self.retry = retry;
+        self.edit.set_retry(retry);
         self
     }
 
     pub fn set_repaint(&mut self, f: Arc<dyn Fn() + Send + Sync>) {
+        self.edit.set_repaint(f.clone());
         self.repaint = Some(f);
     }
 
@@ -682,7 +698,7 @@ impl CirclesModel {
     }
 
     pub fn busy(&self) -> bool {
-        !self.jobs.is_empty()
+        !self.jobs.is_empty() || self.edit.busy()
     }
 
     /// A change is on its way (the page should not be left in the middle of it).
@@ -698,6 +714,7 @@ impl CirclesModel {
 
     fn reset(&mut self, screen: Screen) {
         self.cancel_all();
+        self.edit.close();
         self.open = true;
         self.notice = None;
         self.list = ListState::default();
@@ -750,6 +767,7 @@ impl CirclesModel {
     pub fn close(&mut self) {
         self.open = false;
         self.cancel_all();
+        self.edit.close();
         self.wipe_secrets();
         self.ready = None;
     }
@@ -785,6 +803,18 @@ impl CirclesModel {
         self.now = Some(now);
         self.apply_snapshot(snap);
         self.drain();
+        self.edit.frame(now, snap);
+        if self.edit.take_signed_out() {
+            self.gate = Gate::SignedOut;
+            if self.screen != Screen::Gate {
+                self.resume = if self.screen == Screen::Bank { Screen::Circle } else { self.screen };
+            }
+            self.screen = Screen::Gate;
+            self.notice = Some(Notice::Info("Your session ended. Sign in again; where you were is kept, and nothing was lost.".into()));
+        }
+        if self.edit.invite_required {
+            self.invite_required = true;
+        }
         self.auto();
     }
 
@@ -1179,9 +1209,11 @@ impl CirclesModel {
             Ok(imp) => {
                 let circle_name = self.circle.as_ref().and_then(|c| c.detail.as_ref()).map(|d| api::plain(&d.circle.name)).or_else(|| self.list.items.iter().find(|i| i.id == key.0).map(|i| api::plain(&i.name))).unwrap_or_default();
                 let wanted = self.copy_name.take().unwrap_or_default();
-                self.ready = Some(ReadyCopy { imp, name: wanted, circle: CircleOrigin { circle_id: key.0, circle_name } });
+                let working = self.copy_seed.take();
+                self.ready = Some(ReadyCopy { imp, name: wanted, circle: CircleOrigin { circle_id: key.0, circle_name }, working });
             }
             Err(e) => {
+                self.copy_seed = None;
                 let name = self.copy_name.take().unwrap_or_default();
                 match self.problem_of(&e) {
                     Some(p) => {
@@ -1239,6 +1271,7 @@ impl CirclesModel {
 
     fn on_heads(&mut self, r: Result<Vec<HeadEntry>, PoolError>) {
         if let Ok(h) = r {
+            self.edit.apply_heads(&h);
             self.heads = Some(h);
         } else if let Err(e) = r {
             // A failed quiet check is not shown; the sign-in ending is handled.
@@ -1295,6 +1328,15 @@ impl CirclesModel {
                             // A 404 here is usually the member or code that is gone, not the circle: the page is read
                             // again, and a circle that is really gone shows from that read.
                             p.message = "That is not there any more (it may have just changed). The page was refreshed.".into();
+                        }
+                        // The page shows several banks: say which one an administrator is still reviewing.
+                        if let (Act::PurgeBank { bid, .. }, PoolError::Refused(r)) = (&a, &e)
+                            && r.detail.code == "pending_review"
+                        {
+                            let title = self.circle.as_ref().and_then(|c| c.detail.as_ref()).and_then(|d| d.banks.iter().find(|b| b.id == *bid)).map(|b| super::publish_text::shown(&b.title)).filter(|t| !t.is_empty());
+                            if let Some(t) = title {
+                                p.message = format!("An administrator is still reviewing \"{t}\" for student information. It can be deleted for good once that review is done. You can leave it removed until then.");
+                            }
                         }
                         let stale = matches!(status, Some(403 | 404 | 409));
                         if let Some(c) = &mut self.circle {
@@ -1886,6 +1928,27 @@ impl CirclesModel {
 
     /// "Get a copy": fetches the pictures and makes the bank on this device.
     pub fn get_copy(&mut self) {
+        self.start_copy(false);
+    }
+
+    /// "Make a working copy": the same copy, and the bank stays linked to the circle bank, so
+    /// changes can be sent back and the circle's newer versions merged in.
+    pub fn make_working_copy(&mut self) {
+        if self.role().can_add_banks() {
+            self.start_copy(true);
+        }
+    }
+
+    /// Whether "Make a working copy" is offered for the bank on screen.
+    pub fn can_make_working_copy(&self) -> bool {
+        self.bank_allowed(BankAction::Copy) && self.role().can_add_banks()
+    }
+
+    fn role(&self) -> Role {
+        self.circle.as_ref().map(|c| c.role()).unwrap_or(Role::Viewer)
+    }
+
+    fn start_copy(&mut self, working: bool) {
         if !self.bank_allowed(BankAction::Copy) {
             return;
         }
@@ -1893,9 +1956,24 @@ impl CirclesModel {
         let (CopyPanel::Choosing { name }, BankLoad::Ready(l)) = (&b.copy, &b.load) else { return };
         let name = name.trim().to_string();
         let doc = Box::new(l.doc.clone());
+        let seed = working.then(|| l.doc.bank.clone());
         self.copy_name = Some(name.clone());
-        if self.launch(Work::Copy(doc, name)) && let Some(b) = &mut self.bank {
-            b.copy = CopyPanel::Working;
+        self.copy_seed = seed;
+        if self.launch(Work::Copy(doc, name)) {
+            if let Some(b) = &mut self.bank {
+                b.copy = CopyPanel::Working;
+            }
+        } else {
+            self.copy_seed = None;
+        }
+    }
+
+    /// What the person may do with a bank of this circle, for the working-copy screens.
+    pub fn perm_for(&self, cid: &str, bid: &str) -> Perm {
+        let d = self.circle.as_ref().filter(|c| c.id == cid).and_then(|c| c.detail.as_ref());
+        match d {
+            Some(d) => Perm { role: d.circle.role(), is_author: d.banks.iter().find(|b| b.id == bid).is_some_and(|b| b.is_author), closed: d.circle.closed() },
+            None => Perm { role: Role::Viewer, is_author: false, closed: false },
         }
     }
 
@@ -2017,6 +2095,17 @@ impl CirclesModel {
     /// Puts a finished copy into the banks and records it like an import. Returns true when `banks`
     /// changed (the caller then saves them). Does nothing when nothing is waiting.
     pub fn sync(&mut self, banks: &mut Vec<QuestionBank>, browse: &mut super::browse::BrowseModel) -> bool {
+        let mut changed = self.sync_copy(banks, browse);
+        if self.open {
+            changed |= self.edit.sync(banks);
+            for a in self.edit.take_advanced() {
+                browse.set_circle_version(&a.circle_bank_id, &a.local_bank_id, a.version);
+            }
+        }
+        changed
+    }
+
+    fn sync_copy(&mut self, banks: &mut Vec<QuestionBank>, browse: &mut super::browse::BrowseModel) -> bool {
         let Some(r) = self.ready.take() else { return false };
         let name = if r.name.trim().is_empty() { api::plain(&r.imp.head.item.title) } else { r.name.clone() };
         let applied: Result<Applied, String> = apply_import(banks, &Dest::New, &name, &r.imp);
@@ -2027,12 +2116,29 @@ impl CirclesModel {
                     let it = &r.imp.head.item;
                     b.details.description = format!("From the circle \"{}\": \"{}\" by {}, version {}.", r.circle.circle_name, api::plain(&it.title), super::browse_text::author(&it.author_name), it.version);
                 }
-                let saved = browse.record_circle_copy(&r.imp, &a, r.circle);
+                let saved = browse.record_circle_copy(&r.imp, &a, r.circle.clone());
+                let mut link_note = None;
+                if r.working.is_some() && r.imp.pictures_missing > 0 {
+                    // Sending from a copy that lost pictures would remove them from the circle for everyone.
+                    link_note = Some(format!("{} of {} pictures could not be fetched, so this copy is a plain copy and is not linked to the circle bank. Make the working copy again when the pictures can be fetched", r.imp.pictures_missing, r.imp.pictures));
+                } else if let Some(head) = &r.working {
+                    let base = r.imp.theirs.iter().map(|t| super::merge::base_of(&t.q, &t.qid, &t.fp, t.sha.clone())).collect();
+                    let mut link = CircleLink::from_head(&r.circle.circle_id, &r.circle.circle_name, head, &a.bank_id, base, r.imp.at_ms);
+                    if let Some(b) = banks.iter().find(|b| b.id == a.bank_id) {
+                        link.mark_bank(b);
+                    }
+                    if let Err(m) = self.edit.add_link(link) {
+                        link_note = Some(m);
+                    }
+                }
                 if let Some(b) = &mut self.bank {
                     b.copy = CopyPanel::Done(CopyDone { bank_name: a.bank_name.clone(), added: a.added, pictures: r.imp.pictures, pictures_missing: r.imp.pictures_missing, version: r.imp.head.item.version });
                 }
                 if let Err(m) = saved {
                     self.notice = Some(Notice::Error(format!("The questions were added, but the list of copies could not be saved ({m}). Updates will not be noticed for this one.")));
+                }
+                if let Some(m) = link_note {
+                    self.notice = Some(Notice::Error(if m.contains("not linked") { format!("The questions were added, but {m}.") } else { format!("The questions were added, but the link to the circle bank could not be saved ({m}). Changes can not be sent from this copy.") }));
                 }
                 true
             }

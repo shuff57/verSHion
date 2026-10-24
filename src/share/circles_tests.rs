@@ -22,29 +22,29 @@ use super::publish::{AccountSnapshot, Gate, LogIo, PublishModel, ShareSource, St
 use super::transport::{LocalFuture, Method, Request, Response};
 use crate::model::{ImageRef, QuestionBank};
 
-const CID: &str = "0123456789abcdef0123456789abcdef";
-const BID: &str = "fedcba9876543210fedcba9876543210";
-const NOW: i64 = 1_760_000_000_000;
-const DAY: i64 = 86_400_000;
+pub(super) const CID: &str = "0123456789abcdef0123456789abcdef";
+pub(super) const BID: &str = "fedcba9876543210fedcba9876543210";
+pub(super) const NOW: i64 = 1_760_000_000_000;
+pub(super) const DAY: i64 = 86_400_000;
 const CODE: &str = "C-ABCDEFGHJKMNPQRSTVWXYZ0";
 
 // ---- a scripted session -------------------------------------------------------------------------------------
 
 #[derive(Clone, Debug)]
-struct Sent {
-    method: Method,
-    path: String,
-    body: Vec<u8>,
+pub(super) struct Sent {
+    pub(super) method: Method,
+    pub(super) path: String,
+    pub(super) body: Vec<u8>,
 }
 
 impl Sent {
-    fn json(&self) -> Value {
+    pub(super) fn json(&self) -> Value {
         serde_json::from_slice(&self.body).unwrap_or(Value::Null)
     }
 }
 
 #[derive(Default)]
-struct Script {
+pub(super) struct Script {
     replies: Mutex<VecDeque<Result<Response, ApiError>>>,
     seen: Mutex<Vec<Sent>>,
     /// Replies by `"Method /path"`: used before the general queue.
@@ -55,51 +55,51 @@ struct Script {
 }
 
 impl Script {
-    fn new() -> Arc<Script> {
+    pub(super) fn new() -> Arc<Script> {
         Arc::new(Script::default())
     }
-    fn say(&self, status: u16, body: Value) -> &Self {
+    pub(super) fn say(&self, status: u16, body: Value) -> &Self {
         self.replies.lock().unwrap().push_back(Ok(Response::new(status, &body.to_string())));
         self
     }
     /// Queues a reply for one route (`m` is `Get`, `Post`, `Patch` or `Delete`).
-    fn on(&self, m: &str, path: &str, status: u16, body: Value) -> &Self {
+    pub(super) fn on(&self, m: &str, path: &str, status: u16, body: Value) -> &Self {
         self.routes.lock().unwrap().entry(format!("{m} {path}")).or_default().push_back(Response::new(status, &body.to_string()));
         self
     }
     /// The same under the circle's own path.
-    fn act(&self, m: &str, suffix: &str, status: u16, body: Value) -> &Self {
+    pub(super) fn act(&self, m: &str, suffix: &str, status: u16, body: Value) -> &Self {
         self.on(m, &format!("/circles/{CID}{suffix}"), status, body)
     }
-    fn keep(&self, m: &str, path: &str, status: u16, body: Value) -> &Self {
+    pub(super) fn keep(&self, m: &str, path: &str, status: u16, body: Value) -> &Self {
         self.sticky.lock().unwrap().insert(format!("{m} {path}"), (status, body.to_string()));
         self
     }
-    fn keep_raw(&self, m: &str, path: &str, body: Vec<u8>) -> &Self {
+    pub(super) fn keep_raw(&self, m: &str, path: &str, body: Vec<u8>) -> &Self {
         self.sticky.lock().unwrap().insert(format!("{m} {path}"), (200, String::from_utf8(body).unwrap()));
         self
     }
-    fn say_bytes(&self, bytes: Vec<u8>) -> &Self {
+    pub(super) fn say_bytes(&self, bytes: Vec<u8>) -> &Self {
         let mut r = Response::new(200, "");
         r.bytes = bytes;
         self.replies.lock().unwrap().push_back(Ok(r));
         self
     }
-    fn fail(&self, e: ApiError) -> &Self {
+    pub(super) fn fail(&self, e: ApiError) -> &Self {
         self.replies.lock().unwrap().push_back(Err(e));
         self
     }
-    fn seen(&self) -> Vec<Sent> {
+    pub(super) fn seen(&self) -> Vec<Sent> {
         self.seen.lock().unwrap().clone()
     }
-    fn paths(&self) -> Vec<String> {
+    pub(super) fn paths(&self) -> Vec<String> {
         self.seen().iter().map(|s| format!("{:?} {}", s.method, s.path)).collect()
     }
-    fn last(&self) -> Sent {
+    pub(super) fn last(&self) -> Sent {
         self.seen().last().cloned().expect("a request")
     }
     #[allow(dead_code)]
-    fn hold(&self) -> Sender<()> {
+    pub(super) fn hold(&self) -> Sender<()> {
         let (tx, rx) = channel();
         *self.gate.lock().unwrap() = Some(rx);
         tx
@@ -129,13 +129,17 @@ impl PoolSession for Script {
                 return q;
             }
             let kept = self.sticky.lock().unwrap().get(&key).cloned();
-            kept.map(|(st, b)| Ok(Response::new(st, &b))).unwrap_or_else(|| panic!("no scripted reply for {key}"))
+            kept.map(|(st, b)| {
+                let mut r = Response::new(st, &b);
+                r.bytes = b.clone().into_bytes();
+                Ok(r)
+            }).unwrap_or_else(|| panic!("no scripted reply for {key}"))
         })
     }
 }
 
 #[derive(Default)]
-struct Mem(Mutex<Vec<Vec<u8>>>);
+pub(super) struct Mem(Mutex<Vec<Vec<u8>>>);
 
 impl ImageSink for Mem {
     fn put(&self, bytes: &[u8]) -> Result<ImageRef, String> {
@@ -146,27 +150,27 @@ impl ImageSink for Mem {
 
 // ---- fixtures ---------------------------------------------------------------------------------------------------
 
-fn now() -> Instant {
+pub(super) fn now() -> Instant {
     Instant::now()
 }
 
-fn ready(s: &Arc<Script>) -> AccountSnapshot {
+pub(super) fn ready(s: &Arc<Script>) -> AccountSnapshot {
     AccountSnapshot::ready(s.clone())
 }
 
-fn model() -> CirclesModel {
+pub(super) fn model() -> CirclesModel {
     let mut m = CirclesModel::new(Runner::Inline, Arc::new(Mem::default())).with_retry(RetryPolicy::none());
     m.set_clock(NOW);
     m
 }
 
-fn summary(role: &str, extra: Value) -> Value {
+pub(super) fn summary(role: &str, extra: Value) -> Value {
     let mut v = json!({"id": CID, "name": "Biology team", "role": role, "joined_at": NOW - DAY, "closed_at": null, "updated_at": NOW, "members": 3, "banks": 1});
     merge(&mut v, extra);
     v
 }
 
-fn merge(v: &mut Value, extra: Value) {
+pub(super) fn merge(v: &mut Value, extra: Value) {
     if let (Some(o), Some(e)) = (v.as_object_mut(), extra.as_object()) {
         for (k, x) in e {
             o.insert(k.clone(), x.clone());
@@ -174,7 +178,7 @@ fn merge(v: &mut Value, extra: Value) {
     }
 }
 
-fn detail(role: &str, extra: Value) -> Value {
+pub(super) fn detail(role: &str, extra: Value) -> Value {
     let mut v = json!({
         "circle": {"id": CID, "name": "Biology team", "description": "Unit banks", "role": role, "joined_at": NOW - DAY, "created_at": NOW - 5 * DAY, "updated_at": NOW, "closed_at": null},
         "members": [
@@ -190,7 +194,7 @@ fn detail(role: &str, extra: Value) -> Value {
 }
 
 /// The list, then the circle page (and for an owner its invites; for everyone the activity).
-fn open_circle(role: &str, extra: Value) -> (CirclesModel, Arc<Script>) {
+pub(super) fn open_circle(role: &str, extra: Value) -> (CirclesModel, Arc<Script>) {
     let s = Script::new();
     s.keep("Get", "/circles", 200, json!({"circles": [summary(role, json!({}))]}));
     s.keep("Get", &format!("/circles/{CID}"), 200, detail(role, extra));
@@ -210,11 +214,11 @@ fn problem(m: &CirclesModel) -> String {
     m.circle.as_ref().and_then(|c| c.act_problem.as_ref()).map(|p| p.message.clone()).unwrap_or_default()
 }
 
-fn err(code: &str) -> Value {
+pub(super) fn err(code: &str) -> Value {
     json!({"error": code})
 }
 
-fn bank_body(stems: &[&str]) -> Vec<u8> {
+pub(super) fn bank_body(stems: &[&str]) -> Vec<u8> {
     let qs: Vec<Value> = stems
         .iter()
         .map(|s| json!({"id": format!("src-{s}"), "stem": s, "kind": {"Mc": {"answers": [{"text": "A", "correct": true}, {"text": "B", "correct": false}]}}, "points": 1.0, "difficulty": null, "created": 5, "modified": 6, "keyless": false}))
@@ -946,7 +950,7 @@ fn a_hit_that_can_not_be_lifted_or_has_no_names_offers_no_statement() {
 
 // ---- smoke frames -------------------------------------------------------------------------------------------------
 
-fn frame(ctx: &egui::Context, width: f32, f: &mut dyn FnMut(&mut egui::Ui)) {
+pub(super) fn frame(ctx: &egui::Context, width: f32, f: &mut dyn FnMut(&mut egui::Ui)) {
     let input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 900.0))), time: Some(0.0), ..Default::default() };
     let out = ctx.run_ui(input, |ui| {
         egui::CentralPanel::default().show(ui, |ui| f(ui));
@@ -1121,7 +1125,7 @@ fn masked_bank(reason: &str, undo: Value) -> Value {
            "created_at": NOW - DAY, "updated_at": NOW - DAY, "hidden": true, "removed": {"reason": reason, "undo_until": undo}})
 }
 
-fn removed_bank(reason: &str, is_author: bool, undo: Value) -> Value {
+pub(super) fn removed_bank(reason: &str, is_author: bool, undo: Value) -> Value {
     json!({"id": BID, "title": "Cells", "subject": "Biology", "license": "CC-BY-4.0", "author_name": "Mr Keesler", "is_author": is_author, "head_version": 1, "question_count": 2,
            "created_at": NOW - DAY, "updated_at": NOW - DAY, "removed": {"reason": reason, "undo_until": undo}})
 }
@@ -1188,7 +1192,9 @@ fn c43_b3_a_session_that_ends_mid_action_frees_create_copy_and_report() {
     assert!(m.notice.is_some(), "the person is told");
 
     let (mut m, s) = open_circle("viewer", json!({}));
-    s.keep_raw("Get", &format!("/circles/{CID}/banks/{BID}"), bank_body(&["First", "Second"]));
+    // A picture, so that the copy has something to fetch (and the session can end while it does).
+    let with_picture = String::from_utf8(bank_body(&["First", "Second"])).unwrap().replacen("\"keyless\":false", &format!("\"image\":{{\"file\":\"media/{}.png\",\"height\":2,\"width\":2}},\"keyless\":false", "ab".repeat(32)), 1);
+    s.keep_raw("Get", &format!("/circles/{CID}/banks/{BID}"), with_picture.into_bytes());
     m.open_bank(BID);
     m.frame(now(), &ready(&s));
     m.frame(now(), &ready(&s));

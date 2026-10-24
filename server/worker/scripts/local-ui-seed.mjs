@@ -243,6 +243,53 @@ async function sendToCircle(token, cid, it) {
   return call("POST", `/circles/${cid}/banks`, { token, body: Buffer.from(JSON.stringify(meta) + "\n" + payload), headers: { "Content-Type": PUBLISH_CONTENT_TYPE } });
 }
 
+
+/**
+ * Brings "Linear equations starter" to three versions (so the history, a merge and "N new versions"
+ * can be tried): version 2 rewords one question and adds one, version 3 rewords another. Each goes
+ * over the head the way the app's "Send my changes" does (published.qid keeps each question's id).
+ */
+async function ensureThreeVersions(token, cid, bid) {
+  for (let guard = 0; guard < 3; guard++) {
+    const doc = await call("GET", `/circles/${cid}/banks/${bid}`, { token });
+    if (doc.status !== 200 || !doc.data?.payload?.bank) die(`reading the circle bank ${bid} refused: ${why(doc)}`);
+    const head = doc.data.bank ?? {};
+    const version = head.version ?? 1;
+    if (version >= 3) return version;
+    const bank = doc.data.payload.bank;
+    const vs = await call("GET", `/circles/${cid}/banks/${bid}/versions`, { token });
+    const line = (vs.data?.versions ?? []).find((v) => v.version === version);
+    if (!line?.version_id) die(`reading the history of ${bid} refused: ${why(vs)}`);
+    const qs = bank.questions.map((x) => ({ ...x, published: { item_id: bid, qid: x.id, publish_id: line.version_id, version } }));
+    let message;
+    if (version === 1) {
+      qs[2].stem = "Solve 2x - 4 = 10. Show each step.";
+      const extra = JSON.parse(JSON.stringify(qs[1]));
+      delete extra.published;
+      extra.id = "seedcircle-extra";
+      extra.stem = "Solve 5x = 35.";
+      qs.push(extra);
+      message = "Reworded question 3 and added one more.";
+    } else {
+      qs[0].stem = "Solve x + 7 = 12 for x.";
+      message = "Clearer wording on question 1.";
+    }
+    const meta = {
+      commit_id: randomBytes(16).toString("base64url"),
+      license: head.license ?? "CC-BY-4.0",
+      attest: { own_work: true, terms_version: TERMS_VERSION },
+      base_version: version,
+      message,
+      meta: { title: head.title ?? "Linear equations starter", subject: head.subject ?? "Mathematics", grade: head.grade ?? "8", tags: ["algebra", "equations"] },
+    };
+    const payload = JSON.stringify({ schema_version: 2, bank: { ...bank, questions: qs } });
+    const r = await call("PUT", `/circles/${cid}/banks/${bid}`, { token, body: Buffer.from(JSON.stringify(meta) + "\n" + payload), headers: { "Content-Type": PUBLISH_CONTENT_TYPE } });
+    if (r.status !== 200 && r.status !== 201) die(`sending version ${version + 1} of ${bid} refused: ${why(r)} ${JSON.stringify(r.data?.errors ?? r.data?.message ?? "")}`);
+    console.log(`Sent version ${r.data.version} of "${meta.meta.title}": ${message}`);
+  }
+  return 3;
+}
+
 /** The circle (made if missing), its two banks (sent if missing), and two fresh codes, printed. */
 async function seedCircle(token) {
   const list = await call("GET", "/circles", { token });
@@ -271,6 +318,9 @@ async function seedCircle(token) {
     if ((r.status !== 200 && r.status !== 201) || !r.data?.bank_id) die(`sending "${it.meta.title}" to the circle refused: ${why(r)} ${JSON.stringify(r.data?.errors ?? r.data?.message ?? "")}`);
     console.log(`Sent ${r.data.bank_id}  ${it.meta.title}  (version ${r.data.version}, ${it.license}, ${it.payload.bank.questions.length} questions)`);
   }
+
+  const starter = ((await call("GET", `/circles/${cid}`, { token })).data?.banks ?? []).find((b) => !b.removed && b.is_author && b.title === CIRCLE_BANKS[0].meta.title);
+  if (starter) await ensureThreeVersions(token, cid, starter.id);
 
   // Codes are shown only when made, so earlier unused seed codes are withdrawn and two new ones made.
   const inv = await call("GET", `/circles/${cid}/invites`, { token });

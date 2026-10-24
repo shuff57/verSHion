@@ -479,7 +479,7 @@ fn a_formatting_refusal_keeps_the_served_text_reasons_hints_and_what_can_be_ackn
     o.acknowledge_formatting(&p.acknowledgeable_questions());
     o.acknowledge_formatting(&[5]);
     assert_eq!(o.ack_formatting, vec![5]);
-    assert!(e.message().contains("listed below"));
+    assert!(e.message().contains("Nothing was sent"));
 }
 
 #[test]
