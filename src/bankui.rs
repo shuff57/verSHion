@@ -1140,9 +1140,7 @@ impl App {
         let open_qid: Option<String> = self.qedit.as_ref().and_then(|d| d.qid.clone());
         let new_open = self.qedit.as_ref().is_some_and(|d| d.qid.is_none());
 
-        // Scroll the newly opened card into view once.
         let open_marker = open_qid.clone().or(new_open.then(|| "<new>".to_string()));
-        let scroll_now = open_marker.is_some() && st.last_open != open_marker;
         if st.last_open != open_marker {
             with_state(ctx, key, |s: &mut BankEditState| s.last_open = open_marker.clone());
         }
@@ -1153,10 +1151,6 @@ impl App {
         let cols = if list { 1 } else if avail >= 820.0 { 3 } else if avail >= 540.0 { 2 } else { 1 };
         let cw = ((avail - gap * (cols as f32 - 1.0)) / cols as f32).floor();
 
-        if new_open {
-            draw_card(ui, self, ctx, key, bank_id, avail, None, 0, list, &topics, scroll_now);
-            ui.add_space(gap);
-        }
         if questions.is_empty() && !new_open {
             ui.add_space(24.0);
             ui.vertical_centered(|ui| {
@@ -1170,16 +1164,10 @@ impl App {
 
         let mut pending: Vec<usize> = Vec::new();
         for &i in &order {
-            let is_open = open_qid.as_deref() == Some(questions[i].id.as_str());
-            if is_open {
+            // The question being edited keeps its place in the list; the editor is a modal.
+            pending.push(i);
+            if pending.len() == cols {
                 flush_row(ui, self, ctx, key, bank_id, &questions, &mut pending, cw, gap, list, &topics);
-                draw_card(ui, self, ctx, key, bank_id, avail, Some(&questions[i]), i + 1, list, &topics, scroll_now);
-                ui.add_space(if list { 6.0 } else { gap });
-            } else {
-                pending.push(i);
-                if pending.len() == cols {
-                    flush_row(ui, self, ctx, key, bank_id, &questions, &mut pending, cw, gap, list, &topics);
-                }
             }
         }
         flush_row(ui, self, ctx, key, bank_id, &questions, &mut pending, cw, gap, list, &topics);
@@ -1189,13 +1177,33 @@ impl App {
             ui.vertical_centered(|ui| {
                 ui.label(
                     theme::muted(format!(
-                        "Showing {} of {} · open a card to edit it here, press Done to fold it back up",
+                        "Showing {} of {} · click a card to edit it",
                         order.len(),
                         questions.len()
                     ))
                     .size(12.0),
                 );
             });
+        }
+
+        self.question_modal(ctx, key, bank_id, &topics);
+    }
+
+    /// The question editor: a modal over the list. Applies Save, Cancel and Delete.
+    fn question_modal(&mut self, ctx: &egui::Context, key: UiId, bank_id: &str, pool: &[String]) {
+        let Some(mut d) = self.qedit.take() else { return };
+        let mut textures = std::mem::take(&mut self.textures);
+        let action = qedit::draw_modal(ctx, &mut d, pool, &mut textures);
+        self.textures = textures;
+        match action {
+            qedit::QAction::Done => self.commit_draft(d),
+            qedit::QAction::Cancel => {}
+            qedit::QAction::Delete => {
+                if let Some(qid) = d.qid.clone() {
+                    delete_question(self, ctx, key, bank_id, &qid);
+                }
+            }
+            qedit::QAction::None => self.qedit = Some(d),
         }
     }
 }
@@ -2378,11 +2386,14 @@ fn draw_card(
     q: Option<&Question>,
     n: usize,
     list: bool,
-    pool: &[String],
+    _pool: &[String],
     scroll_to: bool,
 ) {
-    let open = match q {
-        None => true,
+    // Editing happens in a modal over the list, so a card never expands in place; the one being
+    // edited keeps its shape and gets an accent outline.
+    let open = false;
+    let editing = match q {
+        None => false,
         Some(q) => app.qedit.as_ref().and_then(|d| d.qid.as_deref()) == Some(q.id.as_str()),
     };
     let mut toggled = false;
@@ -2393,7 +2404,7 @@ fn draw_card(
     let mut copy_rect: Option<Rect> = None;
 
     let frame = kit::card()
-        .stroke(Stroke::new(1.0, if open { theme::accent_col() } else { theme::border() }));
+        .stroke(Stroke::new(1.0, if editing { theme::accent_col() } else { theme::border() }));
     let out = frame.show(ui, |ui| {
         ui.set_width(width - 2.0);
 
@@ -2513,33 +2524,6 @@ fn draw_card(
         }
         if open && scroll_to {
             hr.scroll_to_me(Some(Align::TOP));
-        }
-
-        // ----- expanded editor body -----
-        if open {
-            let y = ui.cursor().top();
-            ui.painter().hline(ui.max_rect().x_range(), y, Stroke::new(1.0, theme::rule()));
-            let mut action = qedit::QAction::None;
-            let mut draft = app.qedit.take();
-            if let Some(d) = draft.as_mut() {
-                Frame::new()
-                    .inner_margin(Margin { left: 16, right: 16, top: 14, bottom: 12 })
-                    .show(ui, |ui| {
-                        let mut textures = std::mem::take(&mut app.textures);
-                        action = qedit::draw_inline(ui, d, pool, &mut textures);
-                        app.textures = textures;
-                    });
-            }
-            match (action, draft) {
-                (qedit::QAction::Done, Some(d)) => app.commit_draft(d),
-                (qedit::QAction::Cancel, _) => {}
-                (qedit::QAction::Delete, Some(d)) => {
-                    if let Some(qid) = d.qid.clone() {
-                        delete_question(app, ctx, key, bank_id, &qid);
-                    }
-                }
-                (_, d) => app.qedit = d,
-            }
         }
     });
 

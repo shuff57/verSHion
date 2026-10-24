@@ -1,8 +1,8 @@
 //! Question editor (V4): the `Draft` state the bank screen opens, validation, and the
-//! in-place two-column editor that a question card expands into (left: stem + answers
-//! with tappable correct-circles; right: type, points, difficulty, topics, explanation,
-//! image). Supports all six kinds (MC/MA, True/False, Matching, Fill in the blank,
-//! Short answer, Multipart). `bankui` owns the card/grid; this module owns the body.
+//! centered modal editor drawn over the bank list (one column: a metadata strip for type,
+//! difficulty, topics and points, then the stem, the per-type answers with tappable
+//! correct-circles, and collapsible explanation and image sections). Supports all six kinds (MC/MA, True/False, Matching, Fill in the blank,
+//! Short answer, Multipart). `bankui` owns the list underneath; this module owns the modal.
 
 use std::collections::HashMap;
 
@@ -186,6 +186,58 @@ pub struct Draft {
     /// The True/False answers the teacher picked in this edit (`None` = the question, `Some(i)` =
     /// part `i`): picking counts as entering the key even when it equals the placeholder.
     pub tf_keyed: Vec<Option<usize>>,
+    /// Fingerprint of the saved content, taken once the first frame has settled; the editor is
+    /// "dirty" when the content no longer matches it. Not part of any saved data.
+    baseline: Option<String>,
+    /// A pending confirm step shown in the modal footer.
+    confirm: Option<Confirm>,
+    /// The modal has skipped its opening frame.
+    armed: bool,
+}
+
+/// A question the footer asks before it acts.
+#[derive(Clone, Debug, PartialEq)]
+enum Confirm {
+    /// Esc / Cancel / click outside with unsaved changes.
+    Discard,
+    /// Delete pressed.
+    Delete,
+    /// Type chip pressed while the current type holds answers that the switch would drop.
+    Switch(QKind),
+}
+
+/// What Esc, Cancel or a click outside does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CloseStep {
+    /// Nothing changed: close now.
+    CloseNow,
+    /// Unsaved changes: ask discard or keep editing.
+    AskDiscard,
+}
+
+/// Esc / Cancel decision from the dirty flag.
+pub fn close_step(dirty: bool) -> CloseStep {
+    if dirty { CloseStep::AskDiscard } else { CloseStep::CloseNow }
+}
+
+/// The empty content of a freshly chosen type.
+fn default_kind(k: QKind) -> Kind {
+    match k {
+        QKind::Mc => Kind::Mc { answers: empty_answers(4) },
+        QKind::Tf => Kind::Tf { correct: true },
+        QKind::Matching => Kind::Matching {
+            pairs: (0..2).map(|_| Pair { left: String::new(), right: String::new() }).collect(),
+            distractors: vec![String::new()],
+        },
+        QKind::Blank => Kind::Blank { accept: vec![vec![String::new()]] },
+        QKind::Short => Kind::Short { sample: String::new() },
+        QKind::Multipart => Kind::Multipart {
+            parts: vec![
+                Part { stem: String::new(), kind: PartKind::Tf { correct: true } },
+                Part { stem: String::new(), kind: PartKind::Mc { answers: empty_answers(3) } },
+            ],
+        },
+    }
 }
 
 impl Draft {
@@ -206,6 +258,9 @@ impl Draft {
             figure: None,
             keyless: false,
             tf_keyed: Vec::new(),
+            baseline: None,
+            confirm: None,
+            armed: false,
         }
     }
 
@@ -224,6 +279,9 @@ impl Draft {
             figure: q.figure.clone(),
             keyless: crate::model::is_keyless(q),
             tf_keyed: Vec::new(),
+            baseline: None,
+            confirm: None,
+            armed: false,
         }
     }
 
@@ -241,41 +299,31 @@ impl Draft {
         if self.kind.qkind() == k {
             return;
         }
-        self.kind = match k {
-            QKind::Mc => Kind::Mc {
-                answers: empty_answers(4),
-            },
-            QKind::Tf => Kind::Tf { correct: true },
-            QKind::Matching => Kind::Matching {
-                pairs: (0..2)
-                    .map(|_| Pair {
-                        left: String::new(),
-                        right: String::new(),
-                    })
-                    .collect(),
-                distractors: vec![String::new()],
-            },
-            QKind::Blank => Kind::Blank {
-                accept: vec![vec![String::new()]],
-            },
-            QKind::Short => Kind::Short {
-                sample: String::new(),
-            },
-            QKind::Multipart => Kind::Multipart {
-                parts: vec![
-                    Part {
-                        stem: String::new(),
-                        kind: PartKind::Tf { correct: true },
-                    },
-                    Part {
-                        stem: String::new(),
-                        kind: PartKind::Mc {
-                            answers: empty_answers(3),
-                        },
-                    },
-                ],
-            },
-        };
+        self.kind = default_kind(k);
+    }
+
+    /// Everything the editor can change, as one comparable string.
+    fn fingerprint(&self) -> String {
+        format!(
+            "{:?}",
+            (
+                &self.stem, &self.kind, self.points, self.difficulty, &self.topics, &self.image,
+                &self.explanation, &self.figure, self.keyless, &self.tf_keyed,
+            )
+        )
+    }
+
+    /// True when the content differs from what the editor opened with.
+    pub fn is_dirty(&self) -> bool {
+        self.baseline.as_deref().is_some_and(|b| b != self.fingerprint())
+    }
+
+    /// True when switching type would drop typed answers (the stem always carries over).
+    pub fn kind_has_content(&self) -> bool {
+        if matches!(self.kind, Kind::Tf { .. }) {
+            return false;
+        }
+        format!("{:?}", self.kind) != format!("{:?}", default_kind(self.qkind()))
     }
 
     /// How the points edit field shows the current points ("3", "3.5", empty for none).
@@ -741,95 +789,332 @@ impl App {
     }
 }
 
-/// Draws the expanded editor body (two columns + footer) for `draft`. Call inside the
-/// open question card; the caller applies the returned action. `topic_pool` is the
-/// bank's existing topics (offered as one-tap suggestions).
-pub fn draw_inline(
-    ui: &mut Ui,
+/// Widest the modal gets; it shrinks on narrow windows.
+const MODAL_W: f32 = 720.0;
+/// Space the modal's header, footer and frame take from the window height.
+const MODAL_CHROME: f32 = 230.0;
+
+/// Draws the question editor as a centered modal over whatever is underneath (the bank list
+/// stays where it is). One column: header, a scrolling body (metadata strip, stem, answers,
+/// collapsible Explanation and Image) of fixed height, and a footer of fixed height. The caller
+/// applies the returned action. `topic_pool` is the bank's existing topics (offered as one-tap
+/// suggestions).
+pub fn draw_modal(
+    ctx: &egui::Context,
     draft: &mut Draft,
     topic_pool: &[String],
     textures: &mut HashMap<String, egui::TextureHandle>,
 ) -> QAction {
-    let ctx = ui.ctx().clone();
     let key = temp_key(&draft.bank_id, draft.qid.as_ref());
-    let mut action = QAction::None;
-    // Esc cancels when no text field has focus; Ctrl/Cmd+Enter saves a valid draft. While the
-    // equation panel is open it owns the keyboard.
-    let eq_open = ctx.data(|d| d.get_temp::<Temp>(key).and_then(|t| t.eq_req).is_some());
-    if !eq_open && !ctx.egui_wants_keyboard_input() && ctx.input(|i| i.key_pressed(Key::Escape)) {
-        action = QAction::Cancel;
+    let first_frame = draft.baseline.is_none();
+    if !draft.armed {
+        // Opening happens on a click that is still live this frame, often right over the stem:
+        // draw from the next frame, or the editor would take that click as a press in the text
+        // and pop the floating toolbar over a blank.
+        draft.armed = true;
+        ctx.request_repaint();
+        return QAction::None;
     }
+    let mut action = QAction::None;
+    // While the equation panel is open it owns the keyboard and the outside click.
+    let eq_open = ctx.data(|d| d.get_temp::<Temp>(key).and_then(|t| t.eq_req).is_some());
+    let mut want_close = false;
     if !eq_open
+        && draft.confirm.is_none()
         && ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::Enter)))
         && draft.validate().is_empty()
     {
         action = QAction::Done;
     }
 
-    let total = ui.available_width();
-    let gap = 24.0;
-    let narrow = total < 640.0;
-    let (left_w, right_w) = if narrow {
-        (total, total)
-    } else {
-        let l = ((total - gap) * 0.6).floor();
-        (l, total - gap - l)
-    };
+    let screen = ctx.content_rect();
+    let w = MODAL_W.min((screen.width() - 56.0).max(280.0));
+    let body_h = (screen.height() - MODAL_CHROME).clamp(180.0, 640.0);
 
-    if narrow {
-        ui.vertical(|ui| {
-            left_col(ui, &ctx, draft, key, left_w);
-            ui.add_space(10.0);
-            right_col(ui, &ctx, draft, key, right_w, topic_pool, textures);
+    let frame = kit::card().inner_margin(Margin::symmetric(22, 16)).shadow(egui::Shadow {
+        offset: [0, 6],
+        blur: 24,
+        spread: 0,
+        color: Color32::from_black_alpha(60),
+    });
+    let modal = egui::Modal::new(UiId::new("qedit_modal")).frame(frame).show(ctx, |ui| {
+        ui.set_width(w);
+        // Header.
+        ui.horizontal(|ui| {
+            kit::type_pill(ui, type_tag(draft.qkind()));
+            ui.label(theme::serif(if draft.is_edit() { "Edit question" } else { "New question" }).size(18.0));
         });
-    } else {
-        ui.horizontal_top(|ui| {
-            ui.spacing_mut().item_spacing.x = 0.0;
-            ui.allocate_ui_with_layout(Vec2::new(left_w, 0.0), Layout::top_down(Align::Min), |ui| {
-                ui.set_width(left_w);
-                left_col(ui, &ctx, draft, key, left_w);
-            });
-            ui.add_space(gap);
-            ui.allocate_ui_with_layout(Vec2::new(right_w, 0.0), Layout::top_down(Align::Min), |ui| {
-                ui.set_width(right_w);
-                right_col(ui, &ctx, draft, key, right_w, topic_pool, textures);
-            });
-        });
-    }
-
-    // Footer: Delete (danger text), save note, Cancel, Done.
-    ui.add_space(6.0);
-    let y = ui.cursor().top();
-    ui.painter().hline(ui.max_rect().x_range(), y, Stroke::new(1.0, theme::rule()));
-    ui.add_space(8.0);
-    let errs = draft.validate();
-    if !errs.is_empty() {
-        for e in &errs {
-            red(ui, e);
-        }
-        ui.add_space(4.0);
-    }
-    ui.horizontal(|ui| {
-        if kit::danger_text_button(ui, "Delete").clicked() {
-            action = QAction::Delete;
-        }
         ui.add_space(8.0);
-        ui.label(theme::muted("Changes save when you press Done.").size(12.0));
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            let done = ui.add_enabled_ui(errs.is_empty(), |ui| kit::primary_button(ui, "Done")).inner;
-            if done.clicked() {
-                action = QAction::Done;
+        // Scrolling body of fixed height, so the modal never changes size under the cursor.
+        egui::ScrollArea::vertical()
+            .id_salt(key.with("body_scroll"))
+            .min_scrolled_height(body_h)
+            .max_height(body_h)
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                let bw = (w - 16.0).max(240.0);
+                ui.set_width(bw);
+                meta_strip(ui, ctx, draft, key, bw, topic_pool);
+                ui.add_space(14.0);
+                body(ui, ctx, draft, key, bw, textures);
+            });
+        ui.add_space(8.0);
+        let y = ui.cursor().top();
+        ui.painter().hline(ui.max_rect().x_range(), y, Stroke::new(1.0, theme::rule()));
+        ui.add_space(8.0);
+        footer(ui, draft, &mut action, &mut want_close);
+    });
+
+    if first_frame {
+        // Taken after the first frame, so the fields' own normalising does not count as an edit.
+        draft.baseline = Some(draft.fingerprint());
+    }
+    // Esc and a click outside behave like Cancel (the equation panel keeps its own Esc).
+    if !eq_open && (modal.backdrop_response.clicked() || ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape))) {
+        want_close = true;
+    }
+    if want_close && action == QAction::None {
+        if draft.confirm.is_some() {
+            draft.confirm = None; // Esc on a prompt means keep editing
+        } else {
+            match close_step(draft.is_dirty()) {
+                CloseStep::CloseNow => action = QAction::Cancel,
+                CloseStep::AskDiscard => draft.confirm = Some(Confirm::Discard),
             }
-            let cancel = ui.add(
-                Button::new(RichText::new("Cancel").family(theme::bold_family()).color(theme::muted_col()))
-                    .frame(false),
-            );
-            if cancel.clicked() {
-                action = QAction::Cancel;
+        }
+    }
+    action
+}
+
+/// The footer: a fixed-height validation line, then one fixed-height button row that turns into
+/// a confirm bar of the same height, so nothing moves when it changes.
+fn footer(ui: &mut Ui, draft: &mut Draft, action: &mut QAction, want_close: &mut bool) {
+    let errs = draft.validate();
+    // Validation reads in a reserved line: the first problem, plus a count of the rest.
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 18.0), Sense::hover());
+    if let Some(first) = errs.first() {
+        let more = if errs.len() > 1 { format!("  (+{} more)", errs.len() - 1) } else { String::new() };
+        let p = ui.painter().with_clip_rect(rect);
+        p.text(
+            rect.left_center(),
+            egui::Align2::LEFT_CENTER,
+            format!("{first}{more}"),
+            kit::ui_font(12.0),
+            theme::bad(),
+        );
+    }
+    ui.add_space(4.0);
+    let confirm = draft.confirm.clone();
+    ui.horizontal(|ui| {
+        ui.set_min_height(36.0);
+        match confirm {
+            None => {
+                if draft.is_edit() && kit::danger_text_button(ui, "Delete").clicked() {
+                    draft.confirm = Some(Confirm::Delete);
+                }
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let save = ui.add_enabled_ui(errs.is_empty(), |ui| kit::primary_button(ui, "Save")).inner;
+                    if save.clicked() {
+                        *action = QAction::Done;
+                    }
+                    if kit::ghost_button(ui, "Cancel").clicked() {
+                        *want_close = true;
+                    }
+                    ui.label(theme::muted("Ctrl/Cmd+Enter saves").size(11.5));
+                });
+            }
+            Some(c) => {
+                let (msg, keep, go) = match &c {
+                    Confirm::Discard => ("Discard your unsaved changes?".to_string(), "Keep editing", "Discard"),
+                    Confirm::Delete => ("Delete this question?".to_string(), "Keep it", "Delete"),
+                    Confirm::Switch(k) => (
+                        format!("Switching to {} drops the answers entered for this type. The question text is kept.", type_tag(*k)),
+                        "Keep type",
+                        "Switch",
+                    ),
+                };
+                ui.label(RichText::new(msg).size(12.5).color(theme::ink()));
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let yes = ui.add(
+                        Button::new(RichText::new(go).family(theme::bold_family()).color(theme::on_accent_col()))
+                            .fill(theme::bad())
+                            .stroke(Stroke::NONE)
+                            .corner_radius(CornerRadius::same(255))
+                            .min_size(Vec2::new(0.0, 34.0)),
+                    );
+                    if yes.clicked() {
+                        match c {
+                            Confirm::Discard => *action = QAction::Cancel,
+                            Confirm::Delete => *action = QAction::Delete,
+                            Confirm::Switch(k) => {
+                                draft.set_kind(k);
+                                draft.confirm = None;
+                                let key = temp_key(&draft.bank_id, draft.qid.as_ref());
+                                ui.ctx().data_mut(|d| d.remove_temp::<Temp>(key));
+                            }
+                        }
+                    }
+                    if kit::ghost_button(ui, keep).clicked() {
+                        draft.confirm = None;
+                    }
+                });
+            }
+        }
+    });
+}
+
+/// One label/value row of the metadata strip.
+fn meta_row(ui: &mut Ui, name: &str, add: impl FnOnce(&mut Ui)) {
+    ui.horizontal_top(|ui| {
+        ui.spacing_mut().item_spacing.x = 8.0;
+        ui.allocate_ui_with_layout(Vec2::new(78.0, 28.0), Layout::left_to_right(Align::Center), |ui| {
+            kit::small_caps(ui, name);
+        });
+        ui.vertical(add);
+    });
+}
+
+/// Type, Difficulty, Topics and Points as label/value rows above the question.
+fn meta_strip(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f32, topic_pool: &[String]) {
+    let vw = (w - 86.0).max(120.0);
+    meta_row(ui, "TYPE", |ui| {
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = Vec2::new(4.0, 4.0);
+            for (k, tag) in KINDS {
+                if kit::chip_toggle(ui, tag, draft.qkind() == k).clicked() && draft.qkind() != k {
+                    if draft.kind_has_content() {
+                        draft.confirm = Some(Confirm::Switch(k));
+                    } else {
+                        draft.set_kind(k);
+                        ctx.data_mut(|d| d.remove_temp::<Temp>(key));
+                    }
+                }
             }
         });
     });
-    action
+    meta_row(ui, "DIFFICULTY", |ui| {
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = Vec2::new(4.0, 4.0);
+            for (d, name) in [(Difficulty::Low, "Easy"), (Difficulty::Medium, "Medium"), (Difficulty::High, "Hard")] {
+                let on = draft.difficulty == Some(d);
+                if kit::chip_toggle(ui, name, on).clicked() {
+                    draft.difficulty = if on { None } else { Some(d) };
+                }
+            }
+        });
+    });
+    meta_row(ui, "TOPICS", |ui| topics_value(ui, ctx, draft, key, vw, topic_pool));
+    meta_row(ui, "POINTS", |ui| {
+        let mut pt = draft.points_text();
+        if field_line(ui, &mut pt, 96.0, "none").changed() {
+            draft.set_points_text(&pt);
+        }
+    });
+}
+
+/// Topic chips and the add field share one wrapping row, so adding the first chip never changes
+/// the row's height. Suggestions drop down below the field as an overlay (they never push or
+/// overlap-reflow later rows) and exist only while a topic is being typed.
+fn topics_value(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f32, topic_pool: &[String]) {
+    let mut txt = ctx.data_mut(|d| d.get_temp_mut_or_default::<Temp>(key).topics_text.clone());
+    let mut field: Option<egui::Response> = None;
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = Vec2::new(4.0, 4.0);
+        ui.set_min_height(34.0);
+        for t in draft.topics.clone() {
+            if kit::chip_toggle(ui, &format!("{t}  x"), true).on_hover_text("Remove topic").clicked() {
+                draft.topics.retain(|x| x != &t);
+            }
+        }
+        field = Some(field_line(ui, &mut txt, w.min(260.0), "+ add topic (press Enter)"));
+    });
+    let r = field.expect("field drawn");
+    // Autocomplete: the bank's topics matching what is typed (prefix first); Enter takes
+    // the existing spelling when the typed text names a topic already in the bank.
+    let sugg = crate::bankops::suggest_topics(topic_pool, &txt, &draft.topics, 8);
+    let commit = r.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) && !txt.trim().is_empty();
+    if commit {
+        let t = crate::bankops::canonical_topic(topic_pool, &txt);
+        if !draft.topics.contains(&t) {
+            draft.topics.push(t);
+        }
+        txt.clear();
+        r.request_focus();
+    }
+    let typed = txt.trim().to_string();
+    let mut picked: Option<String> = None;
+    // A press on a chip takes focus off the field, so the popup also stays while the pointer is on it.
+    let pop_id = key.with("topic_suggest_rect");
+    let on_pop = ctx
+        .data(|d| d.get_temp::<Option<Rect>>(pop_id).flatten())
+        .is_some_and(|pr| ctx.input(|i| i.pointer.hover_pos().or(i.pointer.interact_pos()).is_some_and(|p| pr.contains(p))));
+    let mut pop_rect: Option<Rect> = None;
+    if !typed.is_empty() && (r.has_focus() || on_pop) {
+        let exists = topic_pool.iter().any(|p| p.trim().eq_ignore_ascii_case(&typed));
+        let area = egui::Area::new(key.with("topic_suggest"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(r.rect.left_bottom() + Vec2::new(0.0, 2.0))
+            .show(ctx, |ui| {
+                Frame::popup(ui.style()).show(ui, |ui| {
+                    ui.set_max_width(w.min(420.0));
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(4.0, 4.0);
+                        ui.label(theme::muted(topic_hint(exists, !sugg.is_empty())).size(11.0));
+                        for t in &sugg {
+                            if kit::chip_toggle(ui, t, false).clicked() {
+                                picked = Some(t.clone());
+                            }
+                        }
+                    });
+                });
+            });
+        pop_rect = Some(area.response.rect);
+    }
+    ctx.data_mut(|d| d.insert_temp(pop_id, pop_rect));
+    if let Some(t) = picked {
+        if !draft.topics.contains(&t) {
+            draft.topics.push(t);
+        }
+        txt.clear();
+    }
+    ctx.data_mut(|d| d.get_temp_mut_or_default::<Temp>(key).topics_text = txt);
+}
+
+/// The one-line hint over the topic suggestions.
+fn topic_hint(exists: bool, has_matches: bool) -> &'static str {
+    if exists {
+        "Enter adds this topic."
+    } else if !has_matches {
+        "Enter adds a new topic."
+    } else {
+        "Matching:"
+    }
+}
+
+/// Stem, per-type answers, then the collapsible Explanation and Image sections.
+fn body(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f32, textures: &mut HashMap<String, egui::TextureHandle>) {
+    left_col(ui, ctx, draft, key, w);
+    ui.add_space(14.0);
+    let has_expl = draft.explanation.as_deref().is_some_and(|e| !e.trim().is_empty());
+    egui::CollapsingHeader::new(RichText::new("Explanation (optional)").family(theme::bold_family()).size(13.0))
+        .id_salt(key.with("expl_section"))
+        .default_open(has_expl)
+        .show(ui, |ui| {
+            let mut explanation = draft.explanation.clone().unwrap_or_default();
+            // the WYSIWYG field (bold/italic/strike/scripts/math show as they print on the key)
+            let eq = EqCtx { ctx: ctx.clone(), key };
+            eq_multi(ui, &eq, EqField::Explanation, &mut explanation, w - 20.0, 2, "Shown with the answer key");
+            draft.explanation = match explanation.trim() {
+                "" => None,
+                _ => Some(explanation),
+            };
+        });
+    let has_img = draft.image.is_some() || draft.figure.is_some();
+    egui::CollapsingHeader::new(RichText::new("Image").family(theme::bold_family()).size(13.0))
+        .id_salt(key.with("image_section"))
+        .default_open(has_img)
+        .show(ui, |ui| draw_image_row(ui, draft, textures));
+    ui.add_space(6.0);
 }
 
 fn left_col(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f32) {
@@ -898,132 +1183,6 @@ fn left_col(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f
             multipart_editor(ui, &eq, parts, w, draft.keyless, &mut draft.tf_keyed);
         }
     }
-}
-
-fn right_col(
-    ui: &mut Ui,
-    ctx: &egui::Context,
-    draft: &mut Draft,
-    key: UiId,
-    w: f32,
-    topic_pool: &[String],
-    textures: &mut HashMap<String, egui::TextureHandle>,
-) {
-    // Type.
-    label(ui, "Type");
-    ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing = Vec2::new(4.0, 4.0);
-        for (k, tag) in KINDS {
-            if kit::chip_toggle(ui, tag, draft.qkind() == k).clicked() && draft.qkind() != k {
-                draft.set_kind(k);
-                ctx.data_mut(|d| d.remove_temp::<Temp>(key));
-            }
-        }
-    });
-    ui.add_space(12.0);
-
-    // Points + difficulty.
-    let half = ((w - 10.0) / 2.0).floor();
-    ui.horizontal_top(|ui| {
-        ui.spacing_mut().item_spacing.x = 10.0;
-        ui.allocate_ui_with_layout(Vec2::new(half, 0.0), Layout::top_down(Align::Min), |ui| {
-            ui.set_width(half);
-            label(ui, "Points");
-            let mut pt = draft.points_text();
-            if field_line(ui, &mut pt, half, "none").changed() {
-                draft.set_points_text(&pt);
-            }
-        });
-        ui.allocate_ui_with_layout(Vec2::new(w - half - 10.0, 0.0), Layout::top_down(Align::Min), |ui| {
-            ui.set_width(w - half - 10.0);
-            label(ui, "Difficulty");
-            ui.horizontal_wrapped(|ui| {
-                ui.spacing_mut().item_spacing = Vec2::new(4.0, 4.0);
-                for (d, name) in [
-                    (Difficulty::Low, "Easy"),
-                    (Difficulty::Medium, "Medium"),
-                    (Difficulty::High, "Hard"),
-                ] {
-                    let on = draft.difficulty == Some(d);
-                    if kit::chip_toggle(ui, name, on).clicked() {
-                        draft.difficulty = if on { None } else { Some(d) };
-                    }
-                }
-            });
-        });
-    });
-    ui.add_space(12.0);
-
-    // Topics: removable chips, add field, suggestions.
-    label(ui, "Topics");
-    ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing = Vec2::new(4.0, 4.0);
-        for t in draft.topics.clone() {
-            if kit::chip_toggle(ui, &format!("{t}  x"), true)
-                .on_hover_text("Remove topic")
-                .clicked()
-            {
-                draft.topics.retain(|x| x != &t);
-            }
-        }
-    });
-    let mut txt = ctx.data_mut(|d| d.get_temp_mut_or_default::<Temp>(key).topics_text.clone());
-    let r = field_line(ui, &mut txt, w, "+ add topic (press Enter)");
-    // Autocomplete: the bank's topics matching what is typed (prefix first); Enter takes
-    // the existing spelling when the typed text names a topic already in the bank.
-    let sugg = crate::bankops::suggest_topics(topic_pool, &txt, &draft.topics, 8);
-    let commit = r.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) && !txt.trim().is_empty();
-    if commit {
-        let t = crate::bankops::canonical_topic(topic_pool, &txt);
-        if !draft.topics.contains(&t) {
-            draft.topics.push(t);
-        }
-        txt.clear();
-        r.request_focus();
-    }
-    let typed = txt.trim().to_string();
-    let mut picked: Option<String> = None;
-    if !sugg.is_empty() || !typed.is_empty() {
-        ui.add_space(4.0);
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing = Vec2::new(4.0, 4.0);
-            if !typed.is_empty() {
-                let exists = topic_pool.iter().any(|p| p.trim().eq_ignore_ascii_case(&typed));
-                ui.label(
-                    theme::muted(if exists { "Enter adds this topic." } else if sugg.is_empty() { "Enter adds a new topic." } else { "Matching:" })
-                        .size(11.0),
-                );
-            }
-            for t in &sugg {
-                if kit::chip_toggle(ui, t, false).clicked() {
-                    picked = Some(t.clone());
-                }
-            }
-        });
-    }
-    if let Some(t) = picked {
-        if !draft.topics.contains(&t) {
-            draft.topics.push(t);
-        }
-        txt.clear();
-    }
-    ctx.data_mut(|d| d.get_temp_mut_or_default::<Temp>(key).topics_text = txt);
-    ui.add_space(12.0);
-
-    // Explanation.
-    label(ui, "Explanation (optional)");
-    let mut explanation = draft.explanation.clone().unwrap_or_default();
-    // the WYSIWYG field (bold/italic/strike/scripts/math show as they print on the key)
-    let eq = EqCtx { ctx: ctx.clone(), key };
-    eq_multi(ui, &eq, EqField::Explanation, &mut explanation, w, 2, "Shown with the answer key");
-    draft.explanation = match explanation.trim() {
-        "" => None,
-        _ => Some(explanation),
-    };
-    ui.add_space(12.0);
-
-    label(ui, "Image");
-    draw_image_row(ui, draft, textures);
 }
 
 /// Multiple choice / multiple answer. Each row: tappable correct circle (one ticked =
@@ -1491,6 +1650,78 @@ mod tests {
         }
         d.set_kind(QKind::Mc);
         assert!(matches!(&d.kind, Kind::Mc { answers } if answers.len() == 4));
+    }
+
+    #[test]
+    fn topic_hint_reads_by_state() {
+        assert_eq!(topic_hint(true, true), "Enter adds this topic.");
+        assert_eq!(topic_hint(false, false), "Enter adds a new topic.");
+        assert_eq!(topic_hint(false, true), "Matching:");
+    }
+
+    #[test]
+    fn close_step_asks_only_when_dirty() {
+        assert_eq!(close_step(false), CloseStep::CloseNow);
+        assert_eq!(close_step(true), CloseStep::AskDiscard);
+    }
+
+    #[test]
+    fn dirty_tracks_edits_against_the_baseline() {
+        let mut d = Draft::new("bank".to_string());
+        assert!(!d.is_dirty(), "no baseline yet means not dirty");
+        d.baseline = Some(d.fingerprint());
+        assert!(!d.is_dirty());
+        d.stem.push('x');
+        assert!(d.is_dirty());
+        d.stem.pop();
+        assert!(!d.is_dirty(), "undoing the edit by hand is clean again");
+        d.set_points_text("2");
+        assert!(d.is_dirty());
+        d.set_points_text("");
+        d.topics.push("t".into());
+        assert!(d.is_dirty());
+        d.topics.clear();
+        if let Kind::Mc { answers } = &mut d.kind {
+            answers[0].correct = true;
+        }
+        assert!(d.is_dirty());
+    }
+
+    #[test]
+    fn type_switch_warns_only_when_answers_would_be_lost() {
+        let mut d = Draft::new("bank".to_string());
+        d.stem = "stem only".into();
+        assert!(!d.kind_has_content(), "empty default answers lose nothing");
+        if let Kind::Mc { answers } = &mut d.kind {
+            answers[1].text = "four".into();
+        }
+        assert!(d.kind_has_content());
+        d.set_kind(QKind::Tf);
+        assert!(!d.kind_has_content(), "true/false has nothing to lose");
+        d.set_kind(QKind::Short);
+        assert!(!d.kind_has_content());
+        if let Kind::Short { sample } = &mut d.kind {
+            *sample = "model".into();
+        }
+        assert!(d.kind_has_content());
+        d.set_kind(QKind::Blank);
+        assert!(!d.kind_has_content());
+        d.set_kind(QKind::Multipart);
+        if let Kind::Multipart { parts } = &mut d.kind {
+            parts[0].stem = "a".into();
+        }
+        assert!(d.kind_has_content());
+    }
+
+    #[test]
+    fn dirty_ignores_nothing_that_is_saved() {
+        let q = sample_question();
+        let mut d = Draft::from_question("bank".to_string(), &q);
+        d.baseline = Some(d.fingerprint());
+        d.explanation = Some("why".into());
+        assert!(d.is_dirty());
+        d.explanation = q.explanation.clone();
+        assert!(!d.is_dirty());
     }
 
     #[test]
