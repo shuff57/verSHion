@@ -73,6 +73,9 @@ pub const POOL_TERMS_VERSION: &str = "2026-10-22";
 pub const ATTEST_STATEMENT: &str = "I confirm this content is my own original work, or I have the right to share it under the licence I chose. It is not copied from a published source (textbooks, publisher test banks, exam boards, paid worksheets) without permission.";
 /// The publish body's type.
 pub const PUBLISH_CONTENT_TYPE: &str = "application/vnd.vershion.publish";
+/// What the person sees when the pool wants an invite code first (round 28).
+pub const INVITE_REQUIRED_TEXT: &str = "The shared pool needs an invite code. Open the Account window, find \"Invite code\" and enter the code an admin gave you. Everything else in verSHion keeps working.";
+
 /// A report note is cut to the Worker's 1000 characters.
 pub const MAX_REPORT_NOTE: usize = 1000;
 
@@ -297,6 +300,10 @@ pub enum RefusalKind {
     PoolNotConfigured,
     /// 403 `account_not_approved`.
     NotApproved { message: Option<String> },
+    /// 403 `invite_required`: an approved teacher who has not redeemed an invite code (round 28).
+    InviteRequired,
+    /// 422 `invite_invalid`: unknown, expired, withdrawn or used-up code (all the same answer).
+    InviteInvalid,
     /// 404. An item the person may not see is a 404 as well.
     NotFound,
     /// 400 `own_item`: an author can not report their own item.
@@ -358,6 +365,8 @@ impl RefusalKind {
             (_, "busy") => RefusalKind::Busy,
             (_, "pool_not_configured") => RefusalKind::PoolNotConfigured,
             (_, "account_not_approved") => RefusalKind::NotApproved { message },
+            (_, "invite_required") => RefusalKind::InviteRequired,
+            (_, "invite_invalid") => RefusalKind::InviteInvalid,
             (_, "own_item") => RefusalKind::OwnItem,
             (_, "counter_notice_incomplete") => RefusalKind::CounterNoticeIncomplete {
                 missing: j.get("missing").and_then(Value::as_array).map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default(),
@@ -409,6 +418,11 @@ impl Refusal {
                 None => "That is too big for the pool.".into(),
             },
             RefusalKind::SharedQuestionsLimit(l) => format!("You can share up to {} questions in all; this would make {}.", l.limit, l.used + l.needed),
+            RefusalKind::InviteRequired => INVITE_REQUIRED_TEXT.into(),
+            RefusalKind::InviteInvalid => "This invite code is not valid: it may have expired, been used up or been withdrawn. Check that you typed it right, or ask an admin for a new one.".into(),
+            RefusalKind::DailyLimit { metric } if metric.as_deref() == Some("invite_tries") => {
+                format!("You have tried as many invite codes today as the pool allows. Try again {}.", wait())
+            }
             RefusalKind::DailyLimit { metric } if metric.as_deref() == Some("key_leak_reports") => {
                 format!("You can report a leaked answer key once per item a month, and five a day. Try again {}.", wait())
             }
@@ -420,6 +434,7 @@ impl Refusal {
             RefusalKind::OwnItem => "You can not report your own item.".into(),
             RefusalKind::CounterNoticeIncomplete { missing } => format!("The notice is incomplete: {}.", missing.join(", ")),
             RefusalKind::InvalidRequest { field } => match field.as_deref() {
+                Some("code") => "That does not look like an invite code. It has 24 letters and digits, usually shown in groups of four.".into(),
                 Some("reason") => "This item shows its answer key, so it can not be reported as a key leak. Report a wrong answer instead.".into(),
                 Some(f) => format!("The server did not accept the {}.", f.replace('_', " ")),
                 None => "The server did not accept that request.".into(),
@@ -2084,6 +2099,13 @@ pub struct MineList {
     pub next_cursor: Option<String>,
 }
 
+/// The answer to a redemption.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct InviteAck {
+    /// The account already held a redemption: nothing was used up.
+    pub already: bool,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Prefs {
     /// What happens to my shared items when I delete my account; `None`: no choice made yet.
@@ -2102,6 +2124,18 @@ impl<'a> Pool<'a> {
             out.extend(r.get("items").and_then(Value::as_array).into_iter().flatten().filter_map(version_entry));
         }
         Ok(out)
+    }
+
+    /// `POST /me/invite {code}`: redeems an admin's invite code. Open to a pending account. The code
+    /// is sent as typed (the Worker ignores case, spaces and hyphens) and is kept nowhere. A second
+    /// redemption is `already`, not an error.
+    pub async fn redeem_invite(&self, code: &str) -> Result<InviteAck, PoolError> {
+        let c = code.trim();
+        if c.is_empty() || c.chars().count() > 100 || c.chars().any(char::is_control) {
+            return Err(LocalProblem::BadField("invite code").into());
+        }
+        let r: Value = parse(&self.call(&Call::new(Method::Post, "/me/invite").json(&json!({ "code": c })).not_safe()).await?)?;
+        Ok(InviteAck { already: r.get("already").and_then(Value::as_bool).unwrap_or(false) })
     }
 
     /// `GET /items/mine`.

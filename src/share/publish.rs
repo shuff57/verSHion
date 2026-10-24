@@ -1406,7 +1406,7 @@ impl PublishModel {
                         self.fix = Some(Fix::Gone { message: e.message() });
                         self.step = Step::Fix;
                     }
-                    RefusalKind::NotApproved { .. } => {
+                    RefusalKind::NotApproved { .. } | RefusalKind::InviteRequired => {
                         self.fail(e.message(), None, None, false);
                         if let Some(f) = &mut self.failure {
                             f.account = true;

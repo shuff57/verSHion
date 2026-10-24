@@ -19,6 +19,8 @@ pub struct AccountUi {
     repaint_set: bool,
     /// Open but not drawn: the publish flow is only looking the sign-in up.
     quiet: bool,
+    /// The "Invite code" section of the status page.
+    pub invite: super::invite::InviteModel,
 }
 
 /// Field ids whose egui edit state is dropped once the field is empty, so no copy of a password
@@ -74,11 +76,19 @@ impl AccountUi {
         }
         if !self.repaint_set {
             let c = ctx.clone();
-            self.model.set_repaint(Arc::new(move || c.request_repaint()));
+            self.model.set_repaint(Arc::new({
+                let c = c.clone();
+                move || c.request_repaint()
+            }));
+            self.invite.set_repaint(Arc::new(move || c.request_repaint()));
             self.repaint_set = true;
         }
         let now = Instant::now();
         self.model.frame(now);
+        self.invite.frame(now);
+        if self.invite.busy() || self.invite.wait().is_some() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(500));
+        }
         if let Some(at) = self.model.poller.next_at() {
             ctx.request_repaint_after(at.saturating_duration_since(now));
         }
@@ -97,6 +107,7 @@ impl AccountUi {
         if close || modal.should_close() {
             self.quiet = false;
             self.model.close();
+            self.invite.reset();
         }
         for id in SECRET_FIELDS {
             let empty = match id {
@@ -164,6 +175,10 @@ impl AccountUi {
             Page::Status => status_page(ui, m),
             Page::Delete => delete_page(ui, m),
         });
+        if m.page == Page::Status && m.me.as_ref().is_some_and(|me| matches!(me.status, Status::Pending | Status::Approved)) {
+            let session: Option<super::publish::SharedSession> = m.client().map(|c| c.clone() as super::publish::SharedSession);
+            invite_section(ui, &mut self.invite, session, !m.busy());
+        }
         if credentials && !m.trusted && !m.base_url().is_empty() {
             trust_modal(ui.ctx(), m);
         }
@@ -636,6 +651,42 @@ fn legal_row(ui: &mut Ui, base: &str) {
             }
         }
     });
+}
+
+/// Type the code an admin gave you, press Redeem. Open to a pending account too.
+pub(super) fn invite_section(ui: &mut Ui, inv: &mut super::invite::InviteModel, session: Option<super::publish::SharedSession>, idle: bool) {
+    use super::invite::InviteState;
+    ui.add_space(10.0);
+    ui.separator();
+    ui.label(theme::strong("Invite code").size(13.5));
+    if let InviteState::Redeemed { already } = &inv.state {
+        ui.label(theme::text(if *already { "Redeemed (this account already had a code)." } else { "Redeemed. You can use the shared pool." }).size(12.5));
+        return;
+    }
+    para(ui, "The shared pool is invite-only. Enter the code an admin gave you (24 letters and digits, usually in groups of four). It is sent once and not kept.");
+    let busy = inv.busy();
+    ui.add_enabled_ui(!busy && idle, |ui| {
+        ui.add(egui::TextEdit::singleline(&mut inv.code).id(egui::Id::new("share_invite")).hint_text("XXXX-XXXX-XXXX-XXXX-XXXX-XXXX").desired_width(f32::INFINITY));
+    });
+    if let InviteState::Failed(p) = &inv.state {
+        ui.add(egui::Label::new(RichText::new(api::plain(&p.message)).color(theme::bad()).size(12.5)).wrap());
+        if let Some(w) = inv.wait() {
+            para(ui, &format!("You can try again in about {} seconds.", w.as_secs().max(1)));
+        }
+    }
+    ui.horizontal(|ui| {
+        ui.add_enabled_ui(inv.can_redeem() && idle, |ui| {
+            if kit::primary_button(ui, "Redeem").clicked() {
+                inv.redeem(session);
+            }
+        });
+        if busy {
+            ui.spinner();
+        }
+    });
+    if inv.code.is_empty() {
+        ui.ctx().data_mut(|d| d.remove::<egui::text_edit::TextEditState>(egui::Id::new("share_invite")));
+    }
 }
 
 fn status_text(s: &Status) -> (&'static str, &'static str) {

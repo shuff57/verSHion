@@ -987,7 +987,7 @@ impl BrowseModel {
             PoolError::Refused(r) => {
                 let wait = r.detail.retry_after.filter(|s| *s > 0).map(|s| now + Duration::from_secs(s));
                 match &r.kind {
-                    RefusalKind::NotApproved { .. } => p.account = true,
+                    RefusalKind::NotApproved { .. } | RefusalKind::InviteRequired => p.account = true,
                     RefusalKind::DailyLimit { .. } | RefusalKind::RateLimited | RefusalKind::TooManyOpenReads | RefusalKind::TooManyUploads | RefusalKind::Busy => {
                         p.retry = true;
                         p.retry_at = wait;

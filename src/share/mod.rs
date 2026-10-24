@@ -36,6 +36,7 @@ pub mod browse;
 pub mod browse_text;
 pub mod browse_ui;
 pub mod client;
+pub mod invite;
 pub mod merge;
 pub mod mine;
 pub mod mine_text;
@@ -52,6 +53,8 @@ pub mod vault;
 
 #[cfg(test)]
 mod browse_tests;
+#[cfg(test)]
+mod invite_tests;
 #[cfg(test)]
 mod mine_tests;
 #[cfg(test)]

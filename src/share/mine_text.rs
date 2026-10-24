@@ -47,7 +47,13 @@ pub fn explain(it: &MineItem, now_ms: i64) -> String {
         },
         ItemState::TakenDown => match it.counter_notice.as_deref() {
             Some("received") => "A copyright notice took this item down. You have sent a counter-notice; it was forwarded to the person who complained. If they do not file a court action, the item is restored after 10 business days.".into(),
-            Some("available") => "A copyright notice took this item down. If you believe it was a mistake you can send a counter-notice (below). It is forwarded to the person who complained, with the details you give.".into(),
+            Some("available") => {
+                let until = match it.counter_notice_by.filter(|b| *b > now_ms) {
+                    Some(b) => format!(" You can do this until {}.", date(b)),
+                    None => String::new(),
+                };
+                format!("A copyright notice took this item down. If you believe it was a mistake you can send a counter-notice (below). It is forwarded to the person who complained, with the details you give.{until}")
+            }
             _ => "A copyright notice took this item down and the counter-notice window has closed. Nothing more can be done from here.".into(),
         },
         ItemState::TakedownPending => {

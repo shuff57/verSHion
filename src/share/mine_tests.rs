@@ -1114,3 +1114,11 @@ fn the_legal_base_is_its_own_setting_and_never_the_api_address() {
     let (m, _) = plain_model();
     assert!(m.legal_links().iter().all(|(_, u)| u.is_none()));
 }
+
+#[test]
+fn a_taken_down_item_shows_until_when_a_counter_notice_can_be_sent() {
+    let it = mine_item("taken_down", json!({"counter_notice": "available", "counter_notice_by": NOW + 5 * DAY}));
+    assert!(text::explain(&it, NOW).contains(&format!("until {}", text::date(NOW + 5 * DAY))));
+    let none = mine_item("taken_down", json!({"counter_notice": "available"}));
+    assert!(!text::explain(&none, NOW).contains("until"));
+}

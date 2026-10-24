@@ -123,3 +123,12 @@ Code: `src/share/mine.rs` (model), `mine_text.rs` (wording, legal page names), `
 - Rounds 30-31: quadratic D1 statements rewritten (author_stems insert, stem backfill, near-copy lookup, licenceRekey); migration 0107 adds one index. Next migration 0108.
 - Staging (vershion-pool-staging, migrations 0102-0107 applied, workers_dev back to false): final 2-account run, 8x201 + 8x200 + 4x503 busy (all retried OK) + 2x409, 0x500, 0 D1_ERROR, 0x1102. D1 insights: author_stems insert 1,002 rows/8 ms (was 7.87M/5.9 s), duplicate lookup 3,000 rows/5 ms (was 21M/26.5 s). 72 MiB budget kept. Largest remaining D1 cost: evidence lookup (~2 s per publish); evidenceChunk is still quadratic when a bank repeats one question (36M rows) - not fixed.
 - Worker suite 507/507, typecheck clean at this point. Rounds 28-31 are NOT committed unless a later line says so.
+
+### Invite code (client)
+
+Code: `src/share/invite.rs` (model), `invite_tests.rs`; `Pool::redeem_invite` and `RefusalKind::{InviteRequired, InviteInvalid}` in `pool.rs`; the section is drawn by `ui.rs` (`invite_section`, inside the Account window's status page, for pending and approved accounts; `AccountUi.invite` holds the model).
+- Redeem: `POST /me/invite {code}` (open to a pending account). 200 shows "Redeemed" (or "this account already had a code"); 422 `invite_invalid`, 400 (field `code`), 429 `daily_limit` `invite_tries` (10 a day) and a lost session each show plain words; a 429 shows the wait from `Retry-After` and disables the button until it is over.
+- The code lives only in the text box: sent once, cleared as soon as the pool accepts it, blank in `Debug`, never written to disk or logged. A refused code stays in the box so a typo can be fixed; closing the Account window clears it.
+- `403 invite_required` from any pool call (publish, browse, import, my shared items) becomes one message ("The shared pool needs an invite code. Open the Account window, find "Invite code"...") with the existing "Open account..." button, which shows the Account window with the section. Nothing is sent from those windows.
+- `/items/mine`'s `counter_notice_by` is now shown on taken-down items ("You can do this until <date>").
+- Not run: a visual check of the section; no real server.
