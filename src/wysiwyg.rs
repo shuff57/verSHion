@@ -189,6 +189,17 @@ impl Doc {
         }) {
             return Some(i);
         }
+        // On a `---` divider line (just typed): the text after it, so what is typed next goes
+        // below the rule, not above it.
+        if let Some(b) = self.blocks.iter().find(|b| b.kind == BlockKind::Divider && b.lines.start < self.line_start.len() && self.line_start[b.lines.start] <= g && g <= self.line_end(b.lines.start)) {
+            let after = flat.iter().position(|&f| {
+                let u = self.unit(f);
+                u.virt.is_none() && u.start > self.line_end(b.lines.start)
+            });
+            if let Some(i) = after.or_else(|| flat.iter().position(|&f| self.unit(f).virt == Some(Virt::After))) {
+                return Some(i);
+            }
+        }
         // In a prefix or separator: the nearest real unit.
         flat.iter()
             .enumerate()
@@ -2340,6 +2351,118 @@ struct Mem {
     math_req: Option<mathedit::Start>,
     /// An outside caller (the sigma button) asked for an equation at the remembered selection.
     math_ext: bool,
+    /// The whole field is selected (Ctrl+A over several units).
+    all: bool,
+    /// Undo snapshots pushed so far, and how many the cross-field order (`UndoOrder`) has seen.
+    pushes: u64,
+    pushes_seen: u64,
+    /// Another field's Ctrl+Z / Ctrl+Shift+Z landed here (true: redo): run it on the next frame.
+    undo_req: Option<bool>,
+    /// (block, unit) of the last real unit as of the last frame (where `focus_end` puts the focus).
+    last_end: Option<(usize, usize)>,
+    /// The editing session this memory belongs to (see [`new_session`]).
+    session: u64,
+    /// The focused unit is a table cell (Tab walks cells there).
+    in_cell: bool,
+    /// Hash of the text as this editor left it last frame: a different text now was changed from
+    /// outside (a type switch), and the undo history before it no longer applies.
+    seen: Option<u64>,
+}
+
+/// Which editor made each undo step, newest last, so Ctrl+Z walks back through stem and answers in
+/// the order they were typed. Shared by every editor of the context; each keeps its own snapshots.
+#[derive(Clone, Default)]
+struct UndoOrder {
+    undo: Vec<UiId>,
+    redo: Vec<UiId>,
+    /// Frame each editor was last drawn in (a field that vanished is not routed to).
+    seen: std::collections::HashMap<UiId, u64>,
+}
+
+impl UndoOrder {
+    /// The editor the next undo (redo) belongs to; entries of editors that are gone are dropped.
+    fn pick(&mut self, redo: bool, frame: u64) -> Option<UiId> {
+        let list = if redo { &mut self.redo } else { &mut self.undo };
+        while let Some(&t) = list.last() {
+            if self.seen.get(&t).is_some_and(|f| f + 4 >= frame) {
+                return Some(t);
+            }
+            list.pop();
+        }
+        None
+    }
+
+    /// `id` undid (`redo == false`) or redid a step.
+    fn moved(&mut self, id: UiId, redo: bool) {
+        let (from, to) = if redo { (&mut self.redo, &mut self.undo) } else { (&mut self.undo, &mut self.redo) };
+        if let Some(p) = from.iter().rposition(|x| *x == id) {
+            from.remove(p);
+        }
+        to.push(id);
+    }
+
+    /// Every step of `id` (its text was changed from outside, its history is void).
+    fn drop_all(&mut self, id: UiId) {
+        self.undo.retain(|x| *x != id);
+        self.redo.retain(|x| *x != id);
+    }
+
+    /// `id` had nothing to undo (redo) although the order said so: forget the entry.
+    fn forget(&mut self, id: UiId, redo: bool) {
+        let from = if redo { &mut self.redo } else { &mut self.undo };
+        if let Some(p) = from.iter().rposition(|x| *x == id) {
+            from.remove(p);
+        }
+    }
+}
+
+fn session_key() -> UiId {
+    UiId::new("wys_session")
+}
+
+fn current_session(ctx: &egui::Context) -> u64 {
+    ctx.data(|d| d.get_temp::<u64>(session_key())).unwrap_or(0)
+}
+
+/// Start a new editing session (a question editor opens or closes): every editor's undo and
+/// redo history, and the cross-field undo order, are dropped, so Ctrl+Z can never reach text from
+/// an earlier session.
+pub fn new_session(ctx: &egui::Context) {
+    ctx.data_mut(|d| {
+        let n = d.get_temp::<u64>(session_key()).unwrap_or(0) + 1;
+        d.insert_temp(session_key(), n);
+        d.insert_temp(UiId::new("wys_undo_order"), UndoOrder::default());
+    });
+}
+
+fn with_order<R>(ctx: &egui::Context, f: impl FnOnce(&mut UndoOrder) -> R) -> R {
+    ctx.data_mut(|d| f(d.get_temp_mut_or_default::<UndoOrder>(UiId::new("wys_undo_order"))))
+}
+
+/// End of an editor's frame: tell the order about the snapshots it pushed and that it is alive.
+fn text_hash(s: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    s.hash(&mut h);
+    h.finish()
+}
+
+fn sync_order(ctx: &egui::Context, id: UiId, m: &mut Mem, stem: &str) {
+    m.seen = Some(text_hash(stem));
+    let frame = ctx.cumulative_frame_nr();
+    let new = m.pushes - m.pushes_seen;
+    m.pushes_seen = m.pushes;
+    with_order(ctx, |o| {
+        o.seen.insert(id, frame);
+        if new > 0 {
+            o.undo.extend(std::iter::repeat_n(id, new as usize));
+            o.redo.clear();
+            let n = o.undo.len();
+            if n > 400 {
+                o.undo.drain(..n - 400);
+            }
+        }
+    });
 }
 
 /// The link popover: the selection it was opened on (global chars), its unit, the address
@@ -2404,6 +2527,11 @@ struct Sty {
 }
 
 thread_local! {
+    /// The whole field is selected this frame: every unit paints its text as selected.
+    static SELALL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+thread_local! {
     static METRICS: std::cell::RefCell<std::collections::HashMap<(String, u32), (f32, f32)>> = Default::default();
 }
 
@@ -2417,6 +2545,11 @@ fn metrics(ui: &Ui, font: &FontId) -> (f32, f32) {
     let m = g.rows.first().map_or((font.size * 0.8, font.size * 1.2), |r| (r.row.glyphs.first().map_or(font.size * 0.8, |gl| gl.pos.y), r.row.size.y));
     METRICS.with(|c| c.borrow_mut().insert(key, m));
     m
+}
+
+/// The selection fill: the accent at a level that reads on the field in light and dark.
+fn sel_color() -> Color32 {
+    theme::accent_col().gamma_multiply(0.42)
 }
 
 fn math_ok_ui(ctx: &egui::Context, size: f32) -> impl Fn(&str) -> bool + '_ {
@@ -2592,7 +2725,11 @@ fn show_unit(ui: &mut Ui, uid: UiId, text: &mut String, width: f32, st: &Sty, hi
     if !hint.is_empty() {
         te = te.hint_text(RichText::new(hint.to_string()).size(st.size));
     }
+    // a clearly visible selection in both themes (the theme's own is faint on the field colour)
+    let old_sel = ui.visuals().selection.bg_fill;
+    ui.visuals_mut().selection.bg_fill = sel_color();
     let out = te.show(ui);
+    ui.visuals_mut().selection.bg_fill = old_sel;
     let ana = analyze_with(text, &math_ok_ui(&ctx, st.size), forced.clone());
     let origin = out.galley_pos - Vec2::new(out.galley.rect.left(), 0.0);
     // paint atoms into their reserved slots
@@ -2613,6 +2750,13 @@ fn show_unit(ui: &mut Ui, uid: UiId, text: &mut String, width: f32, st: &Sty, hi
     let dbg = crate::env_var("VERSHION_WYS_DEBUG").is_ok();
     if dbg && !ana.atoms.is_empty() {
         eprintln!("wys unit {:?}: galley {:?} clip {:?} width {width} rows {:?}", text.chars().take(30).collect::<String>(), out.galley.rect, out.text_clip_rect, out.galley.rows.iter().map(|r| (r.pos, r.row.size)).collect::<Vec<_>>());
+    }
+    let all_sel = SELALL.with(|c| c.get());
+    if all_sel {
+        for row in &out.galley.rows {
+            let rr = Rect::from_min_size(origin + row.pos.to_vec2(), Vec2::new(row.row.size.x.max(6.0), row.row.size.y));
+            painter.rect_filled(rr, 2.0, sel_color());
+        }
     }
     for a in &ana.atoms {
         let r = atom_rect(&out.galley, origin, a);
@@ -2641,7 +2785,7 @@ fn show_unit(ui: &mut Ui, uid: UiId, text: &mut String, width: f32, st: &Sty, hi
         match &a.kind {
             AtomKind::Math(c) => {
                 if hovered || selected {
-                    painter.rect_filled(r.expand2(Vec2::new(0.0, -1.0)), 5.0, theme::accent_faded());
+                    painter.rect_filled(r.expand2(Vec2::new(0.0, -1.0)), 5.0, if selected { sel_color() } else { theme::accent_faded() });
                 }
                 if let Some((tex, sz, b)) = crate::equation::math_image(&ctx, c, st.size, f32::INFINITY) {
                     let k = fit_scale(sz.x, width, st.size);
@@ -2689,6 +2833,27 @@ fn show_unit(ui: &mut Ui, uid: UiId, text: &mut String, width: f32, st: &Sty, hi
         }
     }
     UnitShow { out, ana, origin, clicked_atom }
+}
+
+/// Shift, Control, Alt and Super themselves (the browser sends them as key events).
+fn is_modifier_key(k: Key) -> bool {
+    matches!(k, Key::ShiftLeft | Key::ShiftRight | Key::ControlLeft | Key::ControlRight | Key::AltLeft | Key::AltRight | Key::SuperLeft | Key::SuperRight)
+}
+
+/// A key press that edits or moves on its own: Enter, Backspace, Delete, Tab, Escape, the
+/// navigation keys, or any key with Ctrl, Alt or Cmd held. (A typed character is its Text event.)
+fn is_edit_key(k: Key, m: &Modifiers) -> bool {
+    if is_modifier_key(k) {
+        return false;
+    }
+    m.command
+        || m.ctrl
+        || m.alt
+        || m.mac_cmd
+        || matches!(
+            k,
+            Key::Enter | Key::Backspace | Key::Delete | Key::Tab | Key::Escape | Key::ArrowLeft | Key::ArrowRight | Key::ArrowUp | Key::ArrowDown | Key::Home | Key::End | Key::PageUp | Key::PageDown | Key::Insert
+        )
 }
 
 /// Remove and report a key press (logical or physical key) with exactly these modifiers.
@@ -2840,17 +3005,54 @@ const RAIL_W: f32 = 34.0;
 /// Height of a table's control row (above the grid).
 const TABLE_BAR_H: f32 = 24.0;
 
-/// Where the floating toolbar goes for selection rect `sel`: above it, unless that would cover
-/// the fixed toolbar (`fixed`) or leave the window, then below it. `size`: the bar's size last
-/// frame (estimated before it was first drawn).
-fn float_place(sel: Rect, size: Option<Vec2>, fixed: Option<Rect>, screen: Rect) -> (Pos2, egui::Align2) {
+/// Where the floating toolbar goes for selection rect `sel`. It never covers the fixed toolbar
+/// (`fixed`) and, when there is room, none of the text either: in the margin to the right of the
+/// field, level with the selection. With no room there it goes above, below or flush with the
+/// window's right edge, whichever hides the least (text `lines` as (top, bottom), anything outside
+/// the `field` counted double, the right edge at half since only the end of a row is under it);
+/// above wins a tie. `size`: the
+/// bar's size last frame (estimated before it was first drawn).
+fn float_place(sel: Rect, size: Option<Vec2>, fixed: Option<Rect>, screen: Rect, field: Rect, lines: &[(f32, f32)]) -> (Pos2, egui::Align2) {
     let sz = size.unwrap_or(Vec2::new(300.0, 36.0));
+    // what a bar at `r` would hide: text lines of the field, and (counted double) anything outside
+    // the field above or below it (labels, the next control)
+    let covered = |r: Rect| -> f32 {
+        let text: f32 = lines.iter().map(|&(t, b)| (r.bottom().min(b) - r.top().max(t)).max(0.0)).sum();
+        // (the first 20 px past the field are only the gap before the next control)
+        let outside = ((r.bottom() - field.bottom()).max(0.0) - 20.0).max(0.0) + ((field.top() - r.top()).max(0.0) - 20.0).max(0.0);
+        text + 2.0 * outside
+    };
+    // the margin, level with the selection
+    let x = field.right() + 10.0;
+    let beside = Rect::from_center_size(Pos2::new(x + sz.x / 2.0, sel.center().y), sz);
+    if x + sz.x <= screen.right() && beside.top() >= screen.top() && beside.bottom() <= screen.bottom() && !fixed.is_some_and(|f| f.intersects(beside)) {
+        return (Pos2::new(x, sel.center().y), egui::Align2::LEFT_CENTER);
+    }
     let above = Rect::from_min_size(Pos2::new(sel.left(), sel.top() - 6.0 - sz.y), sz);
-    let blocked = fixed.is_some_and(|f| f.intersects(above)) || above.top() < screen.top();
-    if blocked {
-        (Pos2::new(sel.left(), sel.bottom() + 6.0), egui::Align2::LEFT_TOP)
-    } else {
-        (Pos2::new(sel.left(), sel.top() - 6.0), egui::Align2::LEFT_BOTTOM)
+    let below = Rect::from_min_size(Pos2::new(sel.left(), sel.bottom() + 6.0), sz);
+    // flush with the window's right edge, its top or its bottom level with the selection's row
+    // (clear of the left of the text)
+    let ex = (screen.right() - sz.x - 8.0).max(screen.left());
+    let ey = |y: f32| y.clamp(screen.top(), (screen.bottom() - sz.y).max(screen.top()));
+    let edge_down = Rect::from_min_size(Pos2::new(ex, ey(sel.top())), sz);
+    let edge_up = Rect::from_min_size(Pos2::new(ex, ey(sel.bottom() - sz.y)), sz);
+    let blocked = |r: Rect| fixed.is_some_and(|f| f.intersects(r)) || r.top() < screen.top() || r.bottom() > screen.bottom() || (r.left() < sel.right() + 4.0 && r.intersects(sel));
+    let mut best: Option<(f32, u8)> = None;
+    for (k, (r, cost)) in [(above, covered(above)), (below, covered(below)), (edge_down, 0.5 * covered(edge_down)), (edge_up, 0.5 * covered(edge_up))].into_iter().enumerate() {
+        if blocked(r) {
+            continue;
+        }
+        if best.is_none_or(|(c, _)| cost < c - 0.01) {
+            best = Some((cost, k as u8));
+        }
+    }
+    match best.map(|b| b.1) {
+        Some(0) => (Pos2::new(sel.left(), sel.top() - 6.0), egui::Align2::LEFT_BOTTOM),
+        Some(2) => (Pos2::new(ex, edge_down.top()), egui::Align2::LEFT_TOP),
+        Some(3) => (Pos2::new(ex, edge_up.bottom()), egui::Align2::LEFT_BOTTOM),
+        Some(1) => (Pos2::new(sel.left(), sel.bottom() + 6.0), egui::Align2::LEFT_TOP),
+        // nothing is clear of the fixed toolbar: below the selection
+        _ => (Pos2::new(sel.left(), sel.bottom() + 6.0), egui::Align2::LEFT_TOP),
     }
 }
 
@@ -2927,9 +3129,107 @@ fn run_unblank(stem: &str, d: &Doc, u: &Unit, text: &str, la: usize, lb: usize, 
 }
 
 /// Draw the editor for `stem` and apply what the user does to it.
+/// Keys held back from an earlier frame, with the pass that held them back.
+#[derive(Clone, Default)]
+struct Held {
+    pass: u64,
+    events: Vec<Event>,
+}
+
+fn held_key() -> UiId {
+    UiId::new("wys_held_events")
+}
+
+/// Put the events held back by the last frame in front of this frame's (once per frame).
+fn release_held(ctx: &egui::Context) {
+    let pass = ctx.cumulative_pass_nr();
+    let held = ctx.data_mut(|d| match d.get_temp::<Held>(held_key()) {
+        Some(h) if h.pass != pass => {
+            d.remove::<Held>(held_key());
+            Some(h)
+        }
+        _ => None,
+    });
+    if let Some(h) = held {
+        ctx.input_mut(|i| {
+            let mut ev = h.events;
+            ev.append(&mut i.events);
+            i.events = ev;
+        });
+    }
+}
+
+/// A frame applies either a run of typed text or ONE key press: the editor works out a key against
+/// the text as it stands, so a key that arrives in the same frame as a character before it (a fast
+/// typist, a key-repeat burst) would be worked out against the text from before that character.
+/// What comes after the first such key is held back and replayed, in order, on the next frame.
+fn hold_back(ctx: &egui::Context) {
+    let held = ctx.input_mut(|i| {
+        let (mut text, mut key) = (false, false);
+        let mut at = None;
+        for (n, e) in i.events.iter().enumerate() {
+            match e {
+                // (a modifier going down, or a typed character's own key event: its Text event
+                // carries it, so the pair stays together)
+                Event::Key { key: k, pressed: true, modifiers, .. } if !is_edit_key(*k, modifiers) => {}
+                Event::Key { pressed: true, .. } => {
+                    if text || key {
+                        at = Some(n);
+                        break;
+                    }
+                    key = true;
+                }
+                Event::Text(_) | Event::Paste(_) => {
+                    if key {
+                        at = Some(n);
+                        break;
+                    }
+                    text = true;
+                }
+                _ => {}
+            }
+        }
+        at.map(|n| i.events.split_off(n))
+    });
+    if let Some(mut events) = held {
+        let pass = ctx.cumulative_pass_nr();
+        ctx.data_mut(|d| {
+            // (an earlier split of this same frame holds back what came later: it goes after these)
+            if let Some(h) = d.get_temp::<Held>(held_key()).filter(|h| h.pass == pass) {
+                events.extend(h.events);
+            }
+            d.insert_temp(held_key(), Held { pass, events });
+        });
+        ctx.request_repaint();
+    }
+}
+
+/// For a form that routes keys itself (Tab, Enter and the rest on its answer rows) before its
+/// editors draw: replay what the last frame held back, and hold back what must wait for the text
+/// typed before it. Call once at the start of the frame's keyboard handling.
+pub fn frame_keys(ctx: &egui::Context) {
+    release_held(ctx);
+    hold_back(ctx);
+}
+
 pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
     let ctx = ui.ctx().clone();
+    release_held(&ctx);
     let mut m: Mem = ctx.data_mut(|d| d.get_temp::<Mem>(id)).unwrap_or_default();
+    let session = current_session(&ctx);
+    if m.session != session {
+        // a field of an earlier editing session: undo history, selection and the rest start over
+        // (a focus request made for this session is kept)
+        m = Mem { want: m.want.take(), retry: m.retry.take(), session, ..Default::default() };
+    }
+    if m.seen.is_some_and(|h| h != text_hash(stem)) {
+        // the text was replaced from outside this editor (a type switch turning blanks back into
+        // text, say): Ctrl+Z must not step back through what no longer matches it
+        m.undo.clear();
+        m.redo.clear();
+        m.pushes_seen = m.pushes;
+        with_order(&ctx, |o| o.drop_all(id));
+    }
     let mut out = Out::default();
     let st = Sty { size: o.size, color: theme::text_col(), family: theme::serif_family(), bold: theme::serif_bold_family(), blank_w: o.size * 4.5, center: false };
     let has_blanks = o.blanks.is_some();
@@ -2984,6 +3284,7 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
             crate::equation::rich_ui(ui, &stem.replace('\r', ""), &o2);
         }
         out.rect = Rect::from_min_max(top, ui.min_rect().max);
+        sync_order(&ctx, id, &mut m, stem);
         ctx.data_mut(|d| d.insert_temp(id, m));
         return out;
     }
@@ -3036,6 +3337,9 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
         }
     }
     let mut focused = ids.iter().position(|u| ctx.memory(|mm| mm.has_focus(*u)));
+    if focused.is_none() || me.is_some() {
+        m.all = false;
+    }
     let now = ui.input(|i| i.time);
 
     // ----- what the toolbar reflects -----
@@ -3072,6 +3376,10 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
     };
 
     // ----- keyboard (before any TextEdit sees it) -----
+    m.in_cell = focused.is_some_and(|fi| matches!(d.unit(d.flat()[fi]).kind, UKind::Cell { .. }));
+    if focused.is_some() {
+        hold_back(&ctx);
+    }
     let mut change: Option<Change> = None;
     let mut act: Option<Act> = None;
     if let Some(fi) = focused {
@@ -3084,6 +3392,96 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
         let ana = analyze(&text, &math_ok_ui(&ctx, st.size));
         let cmd = Modifiers::COMMAND;
         let cs = Modifiers::COMMAND | Modifiers::SHIFT;
+        // The whole field selected (Ctrl+A over several units, `Mem::all`). The editor owns the keys:
+        // a unit's own selection cannot span units, so the delete, type, paste, copy and cut a
+        // whole-field selection stands for are done on the markup here.
+        let multi = d.flat().iter().filter(|f| d.unit(**f).virt.is_none()).count() > 1;
+        if !m.all && multi && take_key(ui, cmd, Key::A) {
+            m.all = true;
+            m.slash = None;
+            m.pending = None;
+        } else if m.all {
+            let mut replace: Option<String> = None;
+            let mut collapse: Option<bool> = None;
+            let mut copy = false;
+            let mut keep = true;
+            ui.input_mut(|i| {
+                let mut rest = Vec::with_capacity(i.events.len());
+                for e in std::mem::take(&mut i.events) {
+                    match &e {
+                        Event::Key { key, pressed: true, modifiers, .. } => {
+                            let plain = !modifiers.command && !modifiers.alt && !modifiers.ctrl && !modifiers.mac_cmd;
+                            // (the browser may report the chord as ctrl without `command`)
+                            let chord = modifiers.command || modifiers.ctrl || modifiers.mac_cmd;
+                            match key {
+                                // a modifier going down is not an edit (Ctrl arrives before the C of Ctrl+C)
+                                k if is_modifier_key(*k) => rest.push(e),
+                                Key::Backspace | Key::Delete if plain => replace = nav::all_apply(replace.take(), nav::AllOp::Clear),
+                                Key::Enter if plain => replace = nav::all_apply(replace.take(), nav::AllOp::Newline),
+                                Key::ArrowLeft | Key::ArrowUp | Key::Home if plain || modifiers.shift => collapse = Some(false),
+                                Key::ArrowRight | Key::ArrowDown | Key::End if plain || modifiers.shift => collapse = Some(true),
+                                Key::A if chord => {}
+                                Key::C if chord => copy = true,
+                                Key::X if chord => {
+                                    copy = true;
+                                    replace = nav::all_apply(replace.take(), nav::AllOp::Clear);
+                                }
+                                // (a letter or digit: its Text event is handled below)
+                                _ if plain && !matches!(key, Key::Escape | Key::Tab) => {}
+                                _ => {
+                                    keep = false;
+                                    rest.push(e);
+                                }
+                            }
+                        }
+                        Event::Text(s) => {
+                            let t: String = s.chars().filter(|c| !c.is_control()).collect();
+                            if !t.is_empty() {
+                                replace = nav::all_apply(replace.take(), nav::AllOp::Type(t));
+                            }
+                        }
+                        Event::Paste(s) => replace = nav::all_apply(replace.take(), nav::AllOp::Type(s.replace("\r\n", "\n").replace('\r', "\n"))),
+                        Event::Copy => copy = true,
+                        Event::Cut => {
+                            copy = true;
+                            replace = nav::all_apply(replace.take(), nav::AllOp::Clear);
+                        }
+                        Event::PointerButton { pressed: true, .. } => {
+                            keep = false;
+                            rest.push(e);
+                        }
+                        _ => rest.push(e),
+                    }
+                }
+                i.events = rest;
+            });
+            if copy {
+                ctx.copy_text(stem.clone());
+            }
+            if let Some(t) = replace {
+                let n = clen(&t);
+                m.all = false;
+                if t != *stem {
+                    change = Some(Change::at(t, n));
+                } else {
+                    m.want = Some(Want { anchor: n, caret: n, virt: None });
+                }
+            } else if let Some(end) = collapse {
+                m.all = false;
+                let g = if end { d.len } else { 0 };
+                m.want = Some(Want { anchor: g, caret: g, virt: None });
+            } else if !keep {
+                m.all = false;
+            }
+        }
+        // Ctrl+Home / Ctrl+End: the start / end of the whole field, not of the focused block
+        if multi && !m.all {
+            let to_start = take_key(ui, cmd, Key::Home);
+            if to_start || take_key(ui, cmd, Key::End) {
+                let g = if to_start { 0 } else { d.len };
+                m.want = Some(Want { anchor: g, caret: g, virt: None });
+            }
+        }
         // slash menu keys
         if let Some(sl) = m.slash {
             let gc = d.global(&u, lc);
@@ -3131,9 +3529,9 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
             act = Some(Act::Code);
         } else if o.structured && task_state(&text).is_some() && matches!(u.kind, UKind::Item { .. }) && take_key(ui, cmd, Key::Enter) {
             act = Some(Act::Task);
-        } else if o.structured && matches!(u.kind, UKind::Item { list, .. } if list != ListKind::Quote) && take_key(ui, Modifiers::SHIFT, Key::Tab) {
+        } else if o.structured && matches!(u.kind, UKind::Item { list, .. } if list != ListKind::Quote) && (take_key(ui, cmd, Key::OpenBracket) || (!o.lock_tab && take_key(ui, Modifiers::SHIFT, Key::Tab))) {
             act = Some(Act::Indent(false));
-        } else if o.structured && matches!(u.kind, UKind::Item { list, .. } if list != ListKind::Quote) && take_key(ui, Modifiers::NONE, Key::Tab) {
+        } else if o.structured && matches!(u.kind, UKind::Item { list, .. } if list != ListKind::Quote) && (take_key(ui, cmd, Key::CloseBracket) || (!o.lock_tab && take_key(ui, Modifiers::NONE, Key::Tab))) {
             act = Some(Act::Indent(true));
         } else if o.structured && u.virt.is_none() && take_key(ui, Modifiers::ALT, Key::ArrowUp) {
             act = Some(Act::Move(true));
@@ -3196,6 +3594,22 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
                 set_cursor(&ctx, uid, a.start, a.end);
             } else if q != lc {
                 set_cursor(&ctx, uid, q, q + 1);
+            }
+        }
+        // Shift+Left / Shift+Right extend the selection one visible spot per press, an atom whole
+        // (nav.rs); egui would select the raw `$` and collapsed marker chars one by one.
+        if act.is_none() && change.is_none() && m.math_req.is_none() && !m.all {
+            let (mut a, mut c) = (la, lc);
+            let mut moved = false;
+            for (key, dir) in [(Key::ArrowLeft, -1), (Key::ArrowRight, 1)] {
+                while take_key(ui, Modifiers::SHIFT, key) {
+                    (a, c) = nav::extend(&ana, a, c, dir);
+                    moved = true;
+                }
+            }
+            if moved {
+                set_cursor(&ctx, uid, a, c);
+                ctx.request_repaint();
             }
         }
         // Math atoms (mathedit.rs): Enter on a selected formula, or an arrow key at its edge,
@@ -3312,7 +3726,14 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
                     Event::Text(s) if is_cell && s.contains('|') => *s = s.replace('|', "∣"),
                     _ => {}
                 }
+                // control characters are never text (one would lock the field in the raw view)
+                match e {
+                    Event::Text(s) => s.retain(|c| !c.is_control()),
+                    Event::Paste(s) => s.retain(|c| c == '\n' || !c.is_control()),
+                    _ => {}
+                }
             }
+            i.events.retain(|e| !matches!(e, Event::Text(s) if s.is_empty()));
             // '/' at the start of a word opens the slash menu (stems) or the equation editor
             // (one-line fields); mid-word it stays a literal '/'
             if let Some(p) = i.events.iter().position(|e| matches!(e, Event::Text(s) if s == "/")) {
@@ -3333,6 +3754,10 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
                 m.math_req = Some(mathedit::Start::Insert { at: g..g, initial: String::new() });
             }
         }
+    }
+
+    if let Some(redo) = m.undo_req.take() {
+        act = Some(if redo { Act::Redo } else { Act::Undo });
     }
 
     // ----- apply a keyboard edit now so this frame draws it -----
@@ -3452,9 +3877,36 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
             Act::Undo | Act::Redo | Act::Markup => None,
         }
     };
+    // Ctrl+Z belongs to the field that made the newest step: when that is another field of the
+    // form, it is told to undo (and to take the focus) on its next frame.
+    let route = |redo: bool| -> bool {
+        let frame = ctx.cumulative_frame_nr();
+        match with_order(&ctx, |o| o.pick(redo, frame)) {
+            Some(t) if t != id => {
+                ctx.data_mut(|dd| dd.get_temp_mut_or_default::<Mem>(t).undo_req = Some(redo));
+                ctx.request_repaint();
+                true
+            }
+            _ => false,
+        }
+    };
     let do_undo = |redo: bool, m: &mut Mem, stem: &mut String, blanks_rows: &mut Option<Vec<String>>, out: &mut Out| {
         let (from, to) = if redo { (&mut m.redo, &mut m.undo) } else { (&mut m.undo, &mut m.redo) };
-        if let Some(s) = from.pop() {
+        if from.is_empty() {
+            with_order(&ctx, |o| o.forget(id, redo));
+        } else {
+            with_order(&ctx, |o| o.moved(id, redo));
+        }
+        // (a step that would change nothing is skipped: it is not an undo the user can see)
+        let mut next = from.pop();
+        while let Some(s) = &next {
+            if s.stem == *stem && s.blanks.as_ref().is_none_or(|b| blanks_rows.as_ref() == Some(b)) && !from.is_empty() {
+                next = from.pop();
+            } else {
+                break;
+            }
+        }
+        if let Some(s) = next {
             to.push(Snap { stem: stem.clone(), caret: m.sel.map_or(0, |x| x.1), blanks: blanks_rows.clone() });
             *stem = s.stem;
             if let (Some(r), Some(b)) = (blanks_rows.as_mut(), s.blanks) {
@@ -3491,6 +3943,8 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
     }
     if let Some(a) = act.take() {
         match a {
+            Act::Undo if route(false) => {}
+            Act::Redo if route(true) => {}
             Act::Undo => do_undo(false, &mut m, stem, &mut blanks_rows, &mut out),
             Act::Redo => do_undo(true, &mut m, stem, &mut blanks_rows, &mut out),
             a => change = change.or_else(|| run_act(a, &mut m, stem, &d, &mut blanks_rows, &mut out)),
@@ -3561,6 +4015,7 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
         mathedit::set_forced(ids[fi], r);
     }
     let rows_ro = blanks_rows.clone();
+    SELALL.with(|c| c.set(m.all));
     let mut div_act: Option<usize> = None;
     let mut side_act: Option<(usize, SOp)> = None;
     let mut task_click: Option<usize> = None;
@@ -3580,11 +4035,9 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
                     let k = fidx(0);
                     let uf = Some(k) == focused;
                     if u.virt.is_some() && !(active || uf) {
-                        // keep the room of the "add text above" line, so the first click (which
-                        // shows it) does not move the text under the pointer
-                        if u.virt == Some(Virt::Before) {
-                            ui.add_space(metrics(ui, &FontId::new(st.size, st.family.clone())).1);
-                        }
+                        // keep the room of the "add text above / below" line, so the first click
+                        // (which shows it) does not move anything under the pointer
+                        ui.add_space(metrics(ui, &FontId::new(st.size, st.family.clone())).1);
                         return;
                     }
                     let mut t = slice(stem, u.start..u.end);
@@ -3628,7 +4081,7 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
                         let r = ui.horizontal_top(|ui| {
                             ui.add_space(indent);
                             // (Tab nests a bullet or numbered item, so egui must not move focus on it)
-                            show_unit(ui, ids[k], &mut t, width - indent, &st, "", blank_base(u.start), rows_ro.as_deref(), *kind != ListKind::Quote)
+                            show_unit(ui, ids[k], &mut t, width - indent, &st, "", blank_base(u.start), rows_ro.as_deref(), o.lock_tab || *kind != ListKind::Quote)
                         });
                         let sh = r.inner;
                         let rr = sh.out.response.response.rect;
@@ -3788,7 +4241,7 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
                     let mut t = slice(stem, u.start..u.end);
                     let hs = Sty { size: st.size * crate::richtext::heading_scale(*level), family: st.bold.clone(), center: bl.center.is_some(), ..st.clone() };
                     ui.add_space(st.size * 0.1);
-                    let sh = show_unit(ui, ids[k], &mut t, width, &hs, "Heading", blank_base(u.start), rows_ro.as_deref(), false);
+                    let sh = show_unit(ui, ids[k], &mut t, width, &hs, "Heading", blank_base(u.start), rows_ro.as_deref(), o.lock_tab);
                     let rr = sh.out.response.response.rect;
                     line_ys.borrow_mut().insert(bl.lines.start, (rr.top(), rr.bottom()));
                     after_unit(&ctx, &mut m, k, ids[k], &sh, &t, stem, u, &mut edit, &mut clicked, &mut sel_rect);
@@ -4025,7 +4478,8 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
     // where it was while the pointer is on it, or its buttons could never be clicked.
     let float_at = sel_rect.or(if float_keep { m.float_sel } else { None });
     if let Some(sr) = float_at.filter(|_| focused.is_some() || float_keep) {
-        let (at, pivot) = float_place(sr, m.float_rect.map(|r| r.size()), fixed_bar, crate::theme::area_or(ui.ctx().content_rect()));
+        let ys: Vec<(f32, f32)> = line_ys.borrow().values().copied().collect();
+        let (at, pivot) = float_place(sr, m.float_rect.map(|r| r.size()), fixed_bar, crate::theme::area_or(ui.ctx().content_rect()), Rect::from_min_max(top, Pos2::new(top.x + o.width, ui.min_rect().bottom())), &ys);
         let (a, r) = float_bar(ui, id, at, pivot, here, has_blanks, o.structured);
         float_act = a;
         m.float_rect = Some(r);
@@ -4152,8 +4606,8 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
             let cy = y0 + row_h / 2.0;
             let plus_r = Rect::from_center_size(Pos2::new(x0 + 8.0, cy), Vec2::new(15.0, 18.0));
             let grip_r = Rect::from_center_size(Pos2::new(x0 + 23.0, cy), Vec2::new(13.0, 18.0));
-            let pr = ui.interact(plus_r, id.with("wys_rail_plus"), egui::Sense::click());
-            let gr = ui.interact(grip_r, id.with("wys_rail_grip"), egui::Sense::click_and_drag());
+            let pr = ui.interact(plus_r, id.with("wys_rail_plus"), egui::Sense::CLICK);
+            let gr = ui.interact(grip_r, id.with("wys_rail_grip"), egui::Sense::CLICK | egui::Sense::DRAG);
             pr.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Add a block below"));
             gr.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Move this block (drag, or Alt+Up / Alt+Down)"));
             let pr = pr.on_hover_text("Add a block below (or type / at the start of a line)");
@@ -4243,6 +4697,8 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
     // ----- apply this frame's typing / toolbar action -----
     if let Some(a) = bar_act.or(float_act) {
         match a {
+            Act::Undo if route(false) => {}
+            Act::Redo if route(true) => {}
             Act::Undo => do_undo(false, &mut m, stem, &mut blanks_rows, &mut out),
             Act::Redo => do_undo(true, &mut m, stem, &mut blanks_rows, &mut out),
             Act::Markup => m.markup = true,
@@ -4379,9 +4835,11 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
         ctx.request_repaint();
     }
     m.active = focused.is_some() || m.float_rect.is_some();
+    m.last_end = d.flat().into_iter().rev().find(|&f| d.unit(f).virt.is_none());
     out.focused = focused.is_some();
     out.caret = m.sel.map(|s| s.1);
     out.rect = Rect::from_min_max(top, Pos2::new(top.x + o.width, ui.min_rect().bottom().max(top.y + o.size)));
+    sync_order(&ctx, id, &mut m, stem);
     ctx.data_mut(|dd| dd.insert_temp(id, m));
     out
 }
@@ -4427,6 +4885,14 @@ fn after_unit(ctx: &egui::Context, m: &mut Mem, k: usize, uid: UiId, sh: &UnitSh
         let r0 = g.pos_from_cursor(CCursor::new(CharIndex::from(p))).translate(sh.origin.to_vec2());
         *sel_rect = Some(r0);
     }
+    // a selection never ends inside an atom and never holds only collapsed markup (nav.rs)
+    if text == old && p != s {
+        let (a, c) = nav::snap_range(&sh.ana, s, p);
+        if (a, c) != (s, p) {
+            set_cursor(ctx, uid, a, c);
+            ctx.request_repaint();
+        }
+    }
     // caret snapping (navigation only; typing leaves the caret where it typed)
     let prev = m.prev.filter(|(id, _)| *id == uid).map(|(_, c)| c);
     if text == old && p == s && prev != Some(p) {
@@ -4445,6 +4911,7 @@ fn after_unit(ctx: &egui::Context, m: &mut Mem, k: usize, uid: UiId, sh: &UnitSh
 fn push_undo(m: &mut Mem, stem: &str, caret: usize, blanks: Option<&[String]>, now: f64, unit: Option<UiId>, typing: bool) {
     let coalesce = typing && m.last_unit == unit && unit.is_some() && now - m.last_push < 1.2 && !m.undo.is_empty();
     if !coalesce {
+        m.pushes += 1;
         m.undo.push(Snap { stem: stem.to_string(), caret, blanks: blanks.map(|b| b.to_vec()) });
         if m.undo.len() > 200 {
             m.undo.remove(0);
@@ -4453,6 +4920,11 @@ fn push_undo(m: &mut Mem, stem: &str, caret: usize, blanks: Option<&[String]>, n
     m.last_push = now;
     m.last_unit = if typing { unit } else { None };
     m.redo.clear();
+}
+
+/// Is the focused unit of editor `id` a table cell (where Tab walks the cells, not out of the field)?
+pub fn tab_is_local(ctx: &egui::Context, id: UiId) -> bool {
+    ctx.data(|d| d.get_temp::<Mem>(id)).is_some_and(|m| m.in_cell)
 }
 
 /// True when `stem` is only plain paragraphs (no list, table, heading or group), so Tab has no
@@ -4464,11 +4936,17 @@ pub fn is_plain(stem: &str) -> bool {
 /// Put the caret at the end of the editor `id`'s text (`nchars` chars) next frame and focus it.
 /// Used to walk answer rows with the keyboard and to focus a new row.
 pub fn focus_end(ctx: &egui::Context, id: UiId, nchars: usize) {
-    ctx.data_mut(|d| {
+    let last = ctx.data_mut(|d| {
         let m = d.get_temp_mut_or_default::<Mem>(id);
         m.want = Some(Want { anchor: nchars, caret: nchars, virt: None });
         m.retry = None;
+        m.last_end
     });
+    // Take the focus now, not when this editor next draws: a key typed right after Tab arrives in a
+    // frame that draws the field that had the focus first, and that field would take the key.
+    if let Some((b, u)) = last {
+        ctx.memory_mut(|mm| mm.request_focus(id.with(("wys_unit", b, u))));
+    }
     ctx.request_repaint();
 }
 
@@ -4500,6 +4978,7 @@ mod blockops;
 pub use blockops::*;
 mod mathedit;
 pub use mathedit::active_recently as math_active;
+mod nav;
 
 #[cfg(test)]
 mod tests;
