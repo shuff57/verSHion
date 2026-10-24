@@ -38,8 +38,9 @@ that keeps material first sent into a circle by someone else out of the public p
 of this document's licence engine (no served rows, no authorship records). Routes, decisions and limits:
 `server/worker/README.md` "Round 32", "Round 33" (fixes after two critics: re-joining after a removal,
 codes that outlive their issuer's owner role, caps through transfers, holds and purges) "Round 34" (ownership is
-an offer the member accepts, succession of owner-closed circles, accounts not in good standing) and "Round 35" (removed
-banks stay findable by the owner, offers capped a day; the documented limits).
+an offer the member accepts, succession of owner-closed circles, accounts not in good standing) "Round 35" (removed
+banks stay findable by the owner, offers capped a day) and "Round 36" (no null text in circle responses, `closed_by`;
+the documented limits).
 There is no client yet; the owner's "no circles at the first launch"
 stands until the app ships them.
 

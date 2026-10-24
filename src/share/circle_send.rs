@@ -227,7 +227,7 @@ impl CircleSendModel {
                         p.retry_at = wait;
                     }
                     RefusalKind::NotFound => p.message = "That circle is not available to you any more. It may have been closed, or you may have left it. Choose another.".into(),
-                    RefusalKind::CircleClosed { .. } => p.message = "That circle was closed by its owner. Choose another.".into(),
+                    RefusalKind::CircleClosed { .. } => p.message = "That circle is closed. Choose another.".into(),
                     RefusalKind::Conflict { .. } => {
                         p.message = "Something changed at the same moment. Try again.".into();
                         p.retry = true;

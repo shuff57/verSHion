@@ -254,9 +254,10 @@ fn list_page(ui: &mut Ui, m: &mut CirclesModel) {
                 ui.add_space(2.0);
                 line(ui, format!("{}, {}", text::members_text(c.members), text::banks_text(c.banks)));
                 if c.closed() {
+                    let who = if c.closed_by_owner() { "The owner closed it." } else { "It was closed by an administrator, or because nobody was left." };
                     line(ui, match c.undo_until {
-                        Some(u) if u > now => format!("The owner closed it. Everyone loses access {}.", text::until(u, now)),
-                        _ => "The owner closed it. It will be deleted soon.".to_string(),
+                        Some(u) if u > now => format!("{who} Everyone loses access {}.", text::until(u, now)),
+                        _ => format!("{who} It will be deleted soon."),
                     });
                 }
             });
@@ -467,7 +468,8 @@ fn circle_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
             Some(u) if u > now => format!("Everyone loses access {}.", text::until(u, now)),
             _ => "It will be deleted soon.".to_string(),
         };
-        warn_box(ui, &format!("The owner closed this circle. {when} Copies on computers stay."));
+        let who = if d.circle.closed_by_owner() { "The owner closed this circle." } else { "This circle was closed by an administrator, or because nobody was left in it. It can not be reopened here." };
+        warn_box(ui, &format!("{who} {when} Copies on computers stay."));
         if m.allowed(Action::Reopen) {
             if kit::primary_button(ui, "Reopen the circle").clicked() {
                 m.reopen();

@@ -149,6 +149,37 @@ shows the ids. A real rotation would need an offline migration that re-hashes ev
 the full bodies (impossible for purged items); none is provided. Treat the key as permanent: keep it as
 a wrangler secret AND an offline backup; losing it loses the pool's identity data.
 
+**Round 36 (circles after integration critic 44, `docs/critic-reports/2026-10-24-circles-phaseA-integration-critic44.md`).**
+No migration. Tests: `test/pool/round36.test.ts` (2, each failed on round 35's code).
+
+* **No null text in circle responses (B1).** A circle created or edited without a description stored and answered
+  `description: null`; the app reads it as a plain string, so nobody could open that circle. Storage is unchanged
+  (NULL still means "none"); every circle response now answers missing text as `""`: the circle's `description` and
+  `name` (create, `GET /circles`, `GET /circles/:cid`, `PATCH`), a code's `note` (create and list), and in the export
+  `circle_name`, a code's `note`, a version's `message` and a report's `note`. `POST /circles/heads` answers `by`
+  "deleted teacher" rather than null. The create answer now also has `close_reason`, `closed_by` and `undo_until` (all
+  null), as the list has. The test walks the JSON of every circle route a member, owner or code holder calls (create,
+  detail, list, edit, codes, preview, join, send, read, heads, report, offer, activity, the export's circles section,
+  a closed circle) and allows null only where it is documented:
+  * timestamps and states: `closed_at`, `close_reason`, `closed_by`, `undo_until`, `revoked_at`, `removed_at`,
+    `left_at`, `left_reason`, `resolved_at`, a report's `action`, a removed bank's `until`, `ownership_offered_until`;
+  * `pending_transfer` (null: no open offer) and the paging cursors `next_cursor` / `next_before` (null: no more pages);
+  * an activity line's `by` (a system action: a succession, a close by the last member), `member` (a circle-wide
+    action) and `bank_title` (a bank the viewer may not see);
+  * a hidden bank's `title`, `subject`, `course`, `grade` and `author_name` (`hidden: true`, round 35);
+  * the publish check's `circle_material` hits: `circle_id`, `bank_id` (a held or suspended author's bank),
+    `circle_name`, `bank_title` (a bank the publisher cannot see now), round 34.
+* **Who closed a circle (critic 44 variant 2).** `GET /circles` and `GET /circles/:cid` add `closed_by`: `"owner"`,
+  `"admin"` or `"last_member"` (null while open; the same fact as `close_reason`, as words). Only `"owner"` inside
+  `undo_until` can be reopened, by the owner.
+* **Variants not fixed here (client side or documented):** the client's silent parse fallbacks (variant 1), circle
+  sends never declaring an origin (3), the keyless refusal's hide-key advice on a circle send (4), share-core codes
+  without wording (5), short statements passing the publish check by design (6), the memberships-total and offer-limit
+  wording (7, 8), the purge button on a held removed bank (10), the hidden-bank wording for an erased author (11), and
+  no idempotency on create (13) are the app's or already documented; the README route table now matches the worker on
+  variant 12's points: an offer to a non-member is `404 not_found`, restoring a purged bank is `404`, and `GET
+  /circles/:cid` of a closed circle is `200` with its closed state.
+
 **Round 35 (circles after critic 42, `docs/critic-reports/2026-10-24-circles-round34-critic42.md`).** No migration.
 Tests: `test/pool/round35.test.ts` (3, each failed on round 34's code).
 
@@ -326,8 +357,8 @@ rows, cap crossings use `cap`, circle independence statements `independent_claim
   | Route | Who | Body / answer |
   |---|---|---|
   | `POST /circles` | teacher | `{name (1-80), description? (<=1000)}` -> `201 {circle}`; caps: `circles_owned` 5, `circle_memberships` 20 (`422 circles_limit {metric, used, limit}`), `circle_creates` 5 a day |
-  | `GET /circles` | teacher | `{circles: [{id, name, role, joined_at, closed_at, close_reason, undo_until, updated_at, members, banks}]}` (active memberships; closed ones until purged or left) |
-  | `GET /circles/:cid` | member | `{circle: {id, name, description, role, joined_at, created_at, updated_at, closed_at, close_reason, undo_until}, members: [{user_id, display_name, role, joined_at, is_me}], banks: [{id, title, subject, course, grade, license, author_name, is_author, head_version, question_count, has_images, created_at, updated_at, held?, removed?: {reason, undo_until}}]}`; removed banks only to the owner and author, held ones only to the author |
+  | `GET /circles` | teacher | `{circles: [{id, name, role, joined_at, closed_at, close_reason, closed_by, undo_until, updated_at, members, banks, ownership_offered_until}]}` (active memberships; closed ones until purged or left) |
+  | `GET /circles/:cid` | member (a closed circle too: `200` with its closed state) | `{circle: {id, name, description ("" when none), role, joined_at, created_at, updated_at, closed_at, close_reason, closed_by, undo_until}, members: [{user_id, display_name, role, joined_at, is_me}], banks: [{id, title, subject, course, grade, license, author_name, is_author, head_version, question_count, has_images, created_at, updated_at, held?, removed?: {reason, undo_until}}]}`; removed banks only to the owner and author, held ones only to the author |
   | `PATCH /circles/:cid` | owner | `{name?, description?}` |
   | `DELETE /circles/:cid`, `POST .../reopen` | owner | close: `{ok, undo_until}` (14 days; members get `409 circle_closed {reason, undo_until}` at once); reopen inside it |
   | `GET /circles/:cid/activity?before=` | member | `{activity: [{at, what, by, member, role?, bank_id?, bank_title?, version?, license?}], next_before}`, 50 a page; `what` is `created, joined, left, removed, role_changed, ownership_transferred, ownership_passed_on, closed, reopened, renamed, bank_shared, version_sent, bank_removed, bank_restored, license_changed`; never codes, reports or admin opens |
@@ -339,7 +370,7 @@ rows, cap crossings use `cap`, circle independence statements `independent_claim
   | `POST /circles/:cid/leave` | member | an owner leaving hands the circle on (below) |
   | `POST /circles/:cid/members/remove` | owner | `{user_id}` (not yourself: 400); immediate; re-joining needs a code issued AFTER the removal (round 33) |
   | `POST /circles/:cid/members/role` | owner | `{user_id, role: editor\|viewer}` -> `{ok, changed}` |
-  | `POST /circles/:cid/transfer` | owner | `{user_id}` of an active member in good standing: an OFFER (round 34) -> `202 {ok, pending: {to_user_id, to_name, expires_at}}`; a new offer replaces the pending one, the same open offer again changes nothing; `409 member_unavailable`; 10 offers a day (`429 daily_limit {metric: "circle_transfer_offers"}`, round 35) |
+  | `POST /circles/:cid/transfer` | owner | `{user_id}` of an active member in good standing: an OFFER (round 34) -> `202 {ok, pending: {to_user_id, to_name, expires_at}}`; a new offer replaces the pending one, the same open offer again changes nothing; `409 member_unavailable`; `404 not_found` for a non-member; 10 offers a day (`429 daily_limit {metric: "circle_transfer_offers"}`, round 35) |
   | `POST /circles/:cid/transfer/accept` | the member offered it | within 7 days, while the offerer is still the active owner -> `200 {ok, role: "owner"}` (the old owner becomes an editor, their codes are revoked); `409 no_pending_transfer`; `422 circles_limit {metric: "circles_owned"}` |
   | `POST /circles/:cid/transfer/cancel` | owner, or the member offered it | withdraws / declines -> `200 {ok, cancelled}` |
   | `POST /circles/:cid/banks` | owner, editor | publish format (`application/vnd.vershion.publish`, meta below) -> `201 {circle_id, bank_id, version: 1, version_id, qids, added, changed, removed}` |

@@ -902,10 +902,11 @@ impl CirclesModel {
                         p.retry_at = wait;
                     }
                     RefusalKind::NotFound => p.message = "That circle or bank is not available to you any more. It may have been closed, or you may have left it or been removed.".into(),
-                    RefusalKind::CircleClosed { undo_until } => {
+                    RefusalKind::CircleClosed { undo_until, reason } => {
+                        let owner = !matches!(reason.as_deref(), Some("admin" | "last_member_gone"));
                         p.message = match undo_until {
-                            Some(u) if *u > self.now_ms() => format!("This circle was closed by its owner. The owner can still reopen it {}.", text::until(*u, self.now_ms())),
-                            _ => "This circle was closed by its owner.".into(),
+                            Some(u) if owner && *u > self.now_ms() => format!("This circle is closed. The owner can still reopen it {}.", text::until(*u, self.now_ms())),
+                            _ => e.message(),
                         }
                     }
                     RefusalKind::ModerationState { message } => {
@@ -1455,6 +1456,10 @@ impl CirclesModel {
 
     /// May the person do this in the circle that is open? The buttons ask this.
     pub fn allowed(&self, a: Action) -> bool {
+        // An administrator's close (or an empty circle's) can not be undone by the owner.
+        if a == Action::Reopen && self.circle.as_ref().and_then(|c| c.detail.as_ref()).is_some_and(|d| !d.circle.closed_by_owner()) {
+            return false;
+        }
         self.permitted(a)
     }
 
@@ -1751,7 +1756,7 @@ impl CirclesModel {
 
     pub fn reopen(&mut self) {
         let Some(cid) = self.cid() else { return };
-        if self.permitted(Action::Reopen) {
+        if self.allowed(Action::Reopen) {
             self.launch(Work::Act(Act::Reopen(cid)));
         }
     }

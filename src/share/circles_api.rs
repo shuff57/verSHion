@@ -114,12 +114,17 @@ impl Role {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 #[serde(default)]
 pub struct CircleSummary {
+    #[serde(deserialize_with = "null_text")]
     pub id: String,
+    #[serde(deserialize_with = "null_text")]
     pub name: String,
+    #[serde(deserialize_with = "null_text")]
     pub role: String,
     pub joined_at: i64,
     pub closed_at: Option<i64>,
     pub close_reason: Option<String>,
+    /// `owner`, `admin` or `last_member` (round 36; absent before).
+    pub closed_by: Option<String>,
     pub undo_until: Option<i64>,
     pub updated_at: i64,
     pub members: u32,
@@ -129,6 +134,9 @@ pub struct CircleSummary {
 }
 
 impl CircleSummary {
+    pub fn closed_by_owner(&self) -> bool {
+        closed_by_owner(&self.close_reason, &self.closed_by)
+    }
     pub fn role(&self) -> Role {
         Role::parse(&self.role)
     }
@@ -140,19 +148,32 @@ impl CircleSummary {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 #[serde(default)]
 pub struct CircleInfo {
+    #[serde(deserialize_with = "null_text")]
     pub id: String,
+    #[serde(deserialize_with = "null_text")]
     pub name: String,
+    #[serde(deserialize_with = "null_text")]
     pub description: String,
+    #[serde(deserialize_with = "null_text")]
     pub role: String,
     pub joined_at: i64,
     pub created_at: i64,
     pub updated_at: i64,
     pub closed_at: Option<i64>,
     pub close_reason: Option<String>,
+    pub closed_by: Option<String>,
     pub undo_until: Option<i64>,
 }
 
+/// Closed by the owner (the only close the owner can undo), as far as the pool says.
+fn closed_by_owner(reason: &Option<String>, by: &Option<String>) -> bool {
+    !(matches!(by.as_deref(), Some("admin" | "last_member")) || matches!(reason.as_deref(), Some("admin" | "last_member_gone")))
+}
+
 impl CircleInfo {
+    pub fn closed_by_owner(&self) -> bool {
+        closed_by_owner(&self.close_reason, &self.closed_by)
+    }
     pub fn role(&self) -> Role {
         Role::parse(&self.role)
     }
@@ -164,8 +185,11 @@ impl CircleInfo {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 #[serde(default)]
 pub struct Member {
+    #[serde(deserialize_with = "null_text")]
     pub user_id: String,
+    #[serde(deserialize_with = "null_text")]
     pub display_name: String,
+    #[serde(deserialize_with = "null_text")]
     pub role: String,
     pub joined_at: i64,
     pub is_me: bool,
@@ -193,6 +217,7 @@ fn null_text<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error>
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 #[serde(default)]
 pub struct BankEntry {
+    #[serde(deserialize_with = "null_text")]
     pub id: String,
     #[serde(deserialize_with = "null_text")]
     pub title: String,
@@ -202,6 +227,7 @@ pub struct BankEntry {
     pub course: String,
     #[serde(deserialize_with = "null_text")]
     pub grade: String,
+    #[serde(deserialize_with = "null_text")]
     pub license: String,
     #[serde(deserialize_with = "null_text")]
     pub author_name: String,
@@ -238,7 +264,9 @@ pub struct CircleDetail {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 #[serde(default)]
 pub struct PendingTransfer {
+    #[serde(deserialize_with = "null_text")]
     pub to_user_id: String,
+    #[serde(deserialize_with = "null_text")]
     pub to_name: String,
     pub expires_at: i64,
 }
@@ -246,10 +274,14 @@ pub struct PendingTransfer {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 #[serde(default)]
 pub struct Invite {
+    #[serde(deserialize_with = "null_text")]
     pub invite_id: String,
+    #[serde(deserialize_with = "null_text")]
     pub role: String,
     pub created_at: i64,
+    #[serde(deserialize_with = "null_text")]
     pub created_by: String,
+    #[serde(deserialize_with = "null_text")]
     pub created_by_name: String,
     pub max_uses: u32,
     pub uses: u32,
@@ -257,6 +289,7 @@ pub struct Invite {
     pub revoked_at: Option<i64>,
     pub note: Option<String>,
     /// `active`, `expired`, `used_up` or `revoked`.
+    #[serde(deserialize_with = "null_text")]
     pub state: String,
 }
 
@@ -295,8 +328,11 @@ impl std::fmt::Debug for InviteCreated {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 #[serde(default)]
 pub struct PreviewCircle {
+    #[serde(deserialize_with = "null_text")]
     pub id: String,
+    #[serde(deserialize_with = "null_text")]
     pub name: String,
+    #[serde(deserialize_with = "null_text")]
     pub owner_name: String,
     pub members: u32,
 }
@@ -305,6 +341,7 @@ pub struct PreviewCircle {
 #[serde(default)]
 pub struct JoinPreview {
     pub circle: PreviewCircle,
+    #[serde(deserialize_with = "null_text")]
     pub role: String,
     pub already_member: bool,
 }
@@ -318,7 +355,9 @@ impl JoinPreview {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 #[serde(default)]
 pub struct Joined {
+    #[serde(deserialize_with = "null_text")]
     pub circle_id: String,
+    #[serde(deserialize_with = "null_text")]
     pub role: String,
     pub already: bool,
 }
@@ -327,6 +366,7 @@ pub struct Joined {
 #[serde(default)]
 pub struct ActivityEntry {
     pub at: i64,
+    #[serde(deserialize_with = "null_text")]
     pub what: String,
     pub by: Option<String>,
     pub member: Option<String>,
@@ -347,16 +387,25 @@ pub struct ActivityPage {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 #[serde(default)]
 pub struct BankHead {
+    #[serde(deserialize_with = "null_text")]
     pub id: String,
+    #[serde(deserialize_with = "null_text")]
     pub title: String,
+    #[serde(deserialize_with = "null_text")]
     pub subject: String,
+    #[serde(deserialize_with = "null_text")]
     pub course: String,
+    #[serde(deserialize_with = "null_text")]
     pub grade: String,
+    #[serde(deserialize_with = "null_text")]
     pub license: String,
+    #[serde(deserialize_with = "null_text")]
     pub version_license: String,
+    #[serde(deserialize_with = "null_text")]
     pub author_name: String,
     pub is_author: bool,
     pub version: u64,
+    #[serde(deserialize_with = "null_text")]
     pub version_id: String,
     pub question_count: u32,
     pub has_images: bool,
@@ -397,9 +446,12 @@ pub struct HeadEntry {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 #[serde(default)]
 pub struct SentBank {
+    #[serde(deserialize_with = "null_text")]
     pub circle_id: String,
+    #[serde(deserialize_with = "null_text")]
     pub bank_id: String,
     pub version: u64,
+    #[serde(deserialize_with = "null_text")]
     pub version_id: String,
     pub qids: Vec<String>,
     pub added: u32,
@@ -494,7 +546,18 @@ impl<'a> Pool<'a> {
     /// `GET /circles`.
     pub async fn circles(&self) -> Result<Vec<CircleSummary>, PoolError> {
         let v: Value = parse(&self.call(&Call::new(Method::Get, "/circles")).await?)?;
-        Ok(serde_json::from_value(v.get("circles").cloned().unwrap_or(Value::Null)).unwrap_or_default())
+        // One row the app can not read is left out; if none can be read the reply is refused.
+        let rows = match v.get("circles") {
+            None | Some(Value::Null) => Vec::new(),
+            Some(Value::Array(a)) => a.clone(),
+            Some(_) => return Err(ApiError::BadReply("the circle list is not a list".into()).into()),
+        };
+        let total = rows.len();
+        let good: Vec<CircleSummary> = rows.into_iter().filter_map(|r| serde_json::from_value(r).ok()).filter(|c: &CircleSummary| !c.id.is_empty()).collect();
+        if total > 0 && good.is_empty() {
+            return Err(ApiError::BadReply("none of the circles could be read".into()).into());
+        }
+        Ok(good)
     }
 
     /// `POST /circles`: the creator becomes the owner.
@@ -505,7 +568,11 @@ impl<'a> Pool<'a> {
             body["description"] = json!(d);
         }
         let v: Value = parse(&self.call(&Call::new(Method::Post, "/circles").json(&body).not_safe()).await?)?;
-        Ok(serde_json::from_value(v.get("circle").cloned().unwrap_or(v)).unwrap_or_default())
+        let c: CircleInfo = serde_json::from_value(v.get("circle").cloned().unwrap_or(v)).map_err(|e| ApiError::BadReply(e.to_string()))?;
+        if !is_item_id(&c.id) {
+            return Err(ApiError::BadReply("the new circle has no id".into()).into());
+        }
+        Ok(c)
     }
 
     /// `GET /circles/:cid`.
@@ -553,7 +620,7 @@ impl<'a> Pool<'a> {
             path.push_str(&format!("?before={b}"));
         }
         let v: Value = parse(&self.call(&Call::new(Method::Get, path)).await?)?;
-        let entries = serde_json::from_value(v.get("activity").cloned().unwrap_or(Value::Null)).unwrap_or_default();
+        let entries = list_of(&v, "activity")?;
         let next_before = match v.get("next_before") {
             Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
             Some(Value::Number(n)) => Some(n.to_string()),
@@ -602,7 +669,7 @@ impl<'a> Pool<'a> {
             path.push_str(&format!("?after={a}"));
         }
         let v: Value = parse(&self.call(&Call::new(Method::Get, path)).await?)?;
-        let invites = serde_json::from_value(v.get("invites").cloned().unwrap_or(Value::Null)).unwrap_or_default();
+        let invites = list_of(&v, "invites")?;
         let next_cursor = match v.get("next_cursor") {
             Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
             Some(Value::Number(n)) => Some(n.to_string()),
@@ -665,7 +732,10 @@ impl<'a> Pool<'a> {
         check_id(cid)?;
         check_user(user_id)?;
         let v: Value = parse(&self.call(&Call::new(Method::Post, format!("/circles/{cid}/transfer")).json(&json!({ "user_id": user_id })).not_safe()).await?)?;
-        Ok(serde_json::from_value(v.get("pending").cloned().unwrap_or(Value::Null)).unwrap_or_default())
+        match v.get("pending") {
+            None | Some(Value::Null) => Ok(PendingTransfer::default()),
+            Some(p) => Ok(serde_json::from_value(p.clone()).map_err(|e| ApiError::BadReply(e.to_string()))?),
+        }
     }
 
     /// `POST /circles/:cid/transfer/accept`: the offered member takes the circle.
@@ -824,6 +894,15 @@ impl<'a> Pool<'a> {
                 Err(e) => return Err(e),
             }
         }
+    }
+}
+
+/// A list the pool sends under `key`: absent or null is empty; anything the app can not read is refused
+/// (never shown as an empty list).
+fn list_of<T: serde::de::DeserializeOwned>(v: &Value, key: &str) -> Result<Vec<T>, PoolError> {
+    match v.get(key) {
+        None | Some(Value::Null) => Ok(Vec::new()),
+        Some(x) => Ok(serde_json::from_value(x.clone()).map_err(|e| ApiError::BadReply(format!("{key}: {e}")))?),
     }
 }
 

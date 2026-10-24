@@ -315,7 +315,7 @@ pub enum RefusalKind {
     /// 422 `circles_limit`: `circles_owned`, `circle_memberships`, `circle_banks`, `circle_open_invites`...
     CirclesLimit { metric: Option<String>, used: u64, limit: u64 },
     /// 409 `circle_closed`: the owner closed it; `undo_until` is when the owner can no longer reopen it.
-    CircleClosed { undo_until: Option<i64> },
+    CircleClosed { undo_until: Option<i64>, reason: Option<String> },
     /// 409 `bank_removed`.
     BankRemoved,
     /// 404 `version_not_retained` (phase B).
@@ -384,7 +384,7 @@ impl RefusalKind {
             (_, "circle_invite_invalid") => RefusalKind::CircleInviteInvalid,
             (_, "circle_full") => RefusalKind::CircleFull { limit: u64_of(j, "limit") },
             (_, "circles_limit") => RefusalKind::CirclesLimit { metric: str_of(j, "metric"), used: u64_of(j, "used").unwrap_or(0), limit: u64_of(j, "limit").unwrap_or(0) },
-            (_, "circle_closed") => RefusalKind::CircleClosed { undo_until: j.get("undo_until").and_then(Value::as_i64) },
+            (_, "circle_closed") => RefusalKind::CircleClosed { undo_until: j.get("undo_until").and_then(Value::as_i64), reason: j.get("reason").and_then(Value::as_str).map(str::to_string) },
             (_, "bank_removed") => RefusalKind::BankRemoved,
             (_, "version_not_retained") => RefusalKind::VersionNotRetained,
             (_, "circle_questions_limit") => RefusalKind::CircleQuestionsLimit(limit_of(j)),
@@ -474,7 +474,12 @@ impl Refusal {
                 Some("circle_open_invites") => format!("This circle already has {used} open codes ({limit} at most). Withdraw one you no longer need."),
                 _ => "You have reached a limit on circles.".into(),
             },
-            RefusalKind::CircleClosed { .. } => "This circle was closed by its owner.".into(),
+            RefusalKind::CircleClosed { reason, .. } => match reason.as_deref() {
+                Some("admin") => "An administrator closed this circle. It can not be reopened here.".into(),
+                Some("last_member_gone") => "This circle closed because nobody was left in it.".into(),
+                Some("owner") => "This circle was closed by its owner.".into(),
+                _ => "This circle is closed.".into(),
+            },
             RefusalKind::BankRemoved => "This bank was removed from the circle.".into(),
             RefusalKind::VersionNotRetained => "That older version is no longer kept.".into(),
             RefusalKind::CircleQuestionsLimit(l) => format!("A circle holds at most {} questions across its banks; this would make {}.", l.limit, l.used + l.needed),

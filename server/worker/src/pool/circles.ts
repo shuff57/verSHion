@@ -101,6 +101,13 @@ function userIdOf(v: unknown): string {
 }
 export const nameOf = (display: string | null | undefined, deletedAt: number | null | undefined): string => (deletedAt !== null && deletedAt !== undefined ? DELETED_NAME : display ?? DELETED_NAME);
 
+/** Round 36 (critic44 B1): a circle response answers missing text as "", never null (the app reads plain strings). */
+export const text = (v: string | null | undefined): string => v ?? "";
+/** Round 36 (critic44 variant 2): who closed a circle, from its close reason (null while open). */
+export const closedBy = (reason: string | null): "owner" | "admin" | "last_member" | null =>
+  reason === "owner_closed" ? "owner" : reason === "admin" ? "admin" : reason === "last_member_gone" ? "last_member" : null;
+const CLOSED_BY_SQL = (r: string) => `CASE ${r} WHEN 'owner_closed' THEN 'owner' WHEN 'admin' THEN 'admin' WHEN 'last_member_gone' THEN 'last_member' END`;
+
 /** The next pool_seq value (orders joins and versions without clock ties). */
 export async function nextSeq(c: Ctx): Promise<number> {
   const r = await c.db.prepare(`UPDATE pool_seq SET n = n + 1 WHERE id = 1 RETURNING n`).first<{ n: number }>();
@@ -334,7 +341,7 @@ export async function createCircle(c: Ctx, req: Request, p: PoolPrincipal): Prom
     await giveDaily(c, me, "circle_creates"); // (not a create)
     throw await limitError(c, me, caps, true);
   }
-  return json(201, { circle: { id, name, description, role: "owner", created_at: now, updated_at: now, members: 1, banks: 0, closed_at: null } });
+  return json(201, { circle: { id, name, description: text(description), role: "owner", created_at: now, updated_at: now, members: 1, banks: 0, closed_at: null, close_reason: null, closed_by: null, undo_until: null } });
 }
 
 export async function listCircles(c: Ctx, p: PoolPrincipal): Promise<Response> {
@@ -342,7 +349,7 @@ export async function listCircles(c: Ctx, p: PoolPrincipal): Promise<Response> {
   // At most circle_memberships rows; members and banks counted by index (not stored, so they cannot drift).
   const rows = await c.db
     .prepare(
-      `SELECT ci.id, ci.name, m.role, m.joined_at, ci.closed_at, ci.close_reason, ci.undo_until, ci.updated_at,
+      `SELECT ci.id, COALESCE(ci.name, '') AS name, m.role, m.joined_at, ci.closed_at, ci.close_reason, ${CLOSED_BY_SQL("ci.close_reason")} AS closed_by, ci.undo_until, ci.updated_at,
               ${MEMBERS_SQL("ci.id")} AS members,
               (SELECT COUNT(*) FROM circle_banks b WHERE b.circle_id = ci.id AND b.purged_at IS NULL AND b.removed_at IS NULL AND b.head_version > 0) AS banks,
               (SELECT t.expires_at FROM circle_transfers t WHERE t.circle_id = ci.id AND t.to_user = ?1 AND t.expires_at > ?2) AS ownership_offered_until
@@ -419,7 +426,19 @@ export async function getCircle(c: Ctx, p: PoolPrincipal, cid: string): Promise<
       };
     });
   return json(200, {
-    circle: { id: m.id, name: m.name, description: m.description, role: m.role, joined_at: m.joined_at, created_at: m.created_at, updated_at: m.updated_at, closed_at: m.closed_at, close_reason: m.close_reason, undo_until: m.undo_until },
+    circle: {
+      id: m.id,
+      name: text(m.name),
+      description: text(m.description),
+      role: m.role,
+      joined_at: m.joined_at,
+      created_at: m.created_at,
+      updated_at: m.updated_at,
+      closed_at: m.closed_at,
+      close_reason: m.close_reason,
+      closed_by: closedBy(m.close_reason),
+      undo_until: m.undo_until,
+    },
     members: members.results.map((x) => ({ user_id: x.user_id, display_name: nameOf(x.display_name, x.deleted_at), role: x.role, joined_at: x.joined_at, is_me: x.user_id === me })),
     banks: shown,
     pending_transfer: pending,
@@ -443,7 +462,7 @@ export async function patchCircle(c: Ctx, req: Request, p: PoolPrincipal, cid: s
     audit(c.db, { actorId: me, actorKind: "user", action: "circle.edit", itemId: cid, targetUserId: me }, now, `changes() = 1`),
   ]);
   if ((upd!.meta.changes ?? 0) !== 1) await explain(c, cid, me, ["owner"]);
-  return json(200, { ok: true, name, description });
+  return json(200, { ok: true, name, description: text(description) });
 }
 
 /** DELETE /circles/:cid (owner): closed at once for everyone, 14 days to undo, then purged (D7). */
@@ -536,7 +555,7 @@ export async function createInvite(c: Ctx, req: Request, p: PoolPrincipal, cid: 
     if ((n?.n ?? 0) >= cap) throw new PoolError(422, "circles_limit", { metric: "circle_open_invites", used: n?.n ?? 0, limit: cap, message: `This circle has ${cap} open codes. Withdraw one first.` });
     await explain(c, cid, me, ["owner"]);
   }
-  return json(201, { invite_id: id, code, role, max_uses: maxUses, expires_at: expiresAt, note, shown_once: true });
+  return json(201, { invite_id: id, code, role, max_uses: maxUses, expires_at: expiresAt, note: text(note), shown_once: true });
 }
 
 /** GET /circles/:cid/invites (owner): newest first, paged by `after` (= the last one's created_at:id). Never who typed a wrong code. */
@@ -547,7 +566,7 @@ export async function listInvites(c: Ctx, p: PoolPrincipal, cid: string, url: UR
   const cur = /^(\d{1,16}):([0-9a-f]{32})$/.exec(url.searchParams.get("after") ?? "");
   const rows = await c.db
     .prepare(
-      `SELECT i.id AS invite_id, i.role, i.created_at, i.max_uses, i.uses, i.expires_at, i.revoked_at, i.note, i.created_by, u.display_name AS cn, u.deleted_at AS cd,
+      `SELECT i.id AS invite_id, i.role, i.created_at, i.max_uses, i.uses, i.expires_at, i.revoked_at, COALESCE(i.note, '') AS note, i.created_by, u.display_name AS cn, u.deleted_at AS cd,
               CASE WHEN i.revoked_at IS NOT NULL THEN 'revoked' WHEN i.uses >= i.max_uses THEN 'used_up' WHEN i.expires_at <= ?2 THEN 'expired' ELSE 'active' END AS state
          FROM circle_invites i LEFT JOIN users u ON u.id = i.created_by
         WHERE i.circle_id = ?1 AND (?3 IS NULL OR i.created_at < ?3 OR (i.created_at = ?3 AND i.id < ?4)) ORDER BY i.created_at DESC, i.id DESC LIMIT ?5`,
@@ -1021,7 +1040,7 @@ export async function heads(c: Ctx, req: Request, p: PoolPrincipal): Promise<Res
       if (!r || r.closed_at !== null) return { bank_id: id, status: "unavailable" };
       if (r.removed_at !== null) return { bank_id: id, status: "removed", ...(r.removed_reason === "author_removed" || r.removed_reason === "owner_removed" ? { until: r.purge_after } : {}) };
       if ((r.held === 1 && r.author_id !== me) || r.author_ok !== 1) return { bank_id: id, status: "under_review" };
-      return { bank_id: id, status: "current", version: r.head_version, version_id: r.head_version_id, license: r.license, at: r.committed_at ?? r.updated_at, by: r.committer_id === null ? null : nameOf(r.cn, r.cd) };
+      return { bank_id: id, status: "current", version: r.head_version, version_id: r.head_version_id, license: r.license, at: r.committed_at ?? r.updated_at, by: nameOf(r.cn, r.committer_id === null ? 1 : r.cd) };
     }),
   });
 }
@@ -1585,13 +1604,13 @@ export async function exportCircles(c: Ctx, me: string): Promise<Record<string, 
   const q = async <T>(sql: string) => (await c.db.prepare(sql).bind(me).all<T>()).results;
   return {
     memberships: await q(
-      `SELECT m.circle_id, ci.name AS circle_name, m.role, m.joined_at, m.left_at, m.left_reason FROM circle_members m JOIN circles ci ON ci.id = m.circle_id WHERE m.user_id = ?1 ORDER BY m.joined_at`,
+      `SELECT m.circle_id, COALESCE(ci.name, '') AS circle_name, m.role, m.joined_at, m.left_at, m.left_reason FROM circle_members m JOIN circles ci ON ci.id = m.circle_id WHERE m.user_id = ?1 ORDER BY m.joined_at`,
     ),
-    owned: await q(`SELECT m.circle_id, ci.name AS circle_name, ci.created_at, ci.closed_at FROM circle_members m JOIN circles ci ON ci.id = m.circle_id WHERE m.user_id = ?1 AND m.role = 'owner' AND m.left_at IS NULL ORDER BY ci.created_at`),
-    invites_created: await q(`SELECT id AS invite_id, circle_id, role, created_at, max_uses, uses, expires_at, revoked_at, note FROM circle_invites WHERE created_by = ?1 ORDER BY created_at`),
-    versions_sent: await q(`SELECT circle_id, bank_id, version, committed_at, message, license FROM circle_versions WHERE committer_id = ?1 AND status <> 'staging' ORDER BY committed_at`),
+    owned: await q(`SELECT m.circle_id, COALESCE(ci.name, '') AS circle_name, ci.created_at, ci.closed_at FROM circle_members m JOIN circles ci ON ci.id = m.circle_id WHERE m.user_id = ?1 AND m.role = 'owner' AND m.left_at IS NULL ORDER BY ci.created_at`),
+    invites_created: await q(`SELECT id AS invite_id, circle_id, role, created_at, max_uses, uses, expires_at, revoked_at, COALESCE(note, '') AS note FROM circle_invites WHERE created_by = ?1 ORDER BY created_at`),
+    versions_sent: await q(`SELECT circle_id, bank_id, version, committed_at, COALESCE(message, '') AS message, license FROM circle_versions WHERE committer_id = ?1 AND status <> 'staging' ORDER BY committed_at`),
     banks_authored: await q(`SELECT circle_id, id AS bank_id, title, license, head_version, created_at, removed_at FROM circle_banks WHERE author_id = ?1 AND purged_at IS NULL ORDER BY created_at`),
-    reports: await q(`SELECT circle_id, bank_id, reason, note, at, resolved_at, action FROM circle_reports WHERE reporter_id = ?1 ORDER BY at`),
+    reports: await q(`SELECT circle_id, bank_id, reason, COALESCE(note, '') AS note, at, resolved_at, action FROM circle_reports WHERE reporter_id = ?1 ORDER BY at`),
     // (round 34: ownership offers it made or received and that are still open)
     transfer_offers: (
       await c.db

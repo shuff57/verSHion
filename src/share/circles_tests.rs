@@ -1359,3 +1359,120 @@ fn c43_the_hidden_bank_page_and_cards_draw_wide_and_narrow() {
         });
     }
 }
+
+// ---- critic 44 ---------------------------------------------------------------------------------------------------
+
+#[test]
+fn c44_a_circle_without_a_description_is_created_and_opens() {
+    let s = Script::new();
+    s.keep("Get", "/circles", 200, json!({"circles": []}));
+    let mut m = model();
+    m.open_list();
+    m.frame(now(), &ready(&s));
+    m.start_create();
+    m.create.name = "No description".into();
+    // exactly what the pool answers (description null)
+    s.on("Post", "/circles", 201, json!({"circle": {"banks": 0, "closed_at": null, "created_at": NOW, "description": null, "id": CID, "members": 1, "name": "No description", "role": "owner", "updated_at": NOW}}));
+    let mut d = detail("owner", json!({}));
+    d["circle"]["description"] = Value::Null;
+    s.keep("Get", &format!("/circles/{CID}"), 200, d);
+    s.keep("Get", &format!("/circles/{CID}/invites"), 200, json!({"invites": [], "next_cursor": null}));
+    s.keep("Get", &format!("/circles/{CID}/activity"), 200, json!({"activity": [], "next_before": null}));
+    m.create_circle();
+    for _ in 0..4 {
+        m.frame(now(), &ready(&s));
+    }
+    assert_eq!(m.screen, Screen::Circle);
+    let c = m.circle.as_ref().unwrap();
+    assert_eq!(c.id, CID);
+    assert!(c.detail.is_some(), "{:?}", c.problem.as_ref().map(|p| &p.message));
+}
+
+#[test]
+fn c44_every_text_the_pool_may_send_as_null_reads_as_empty() {
+    let mut d = detail("owner", json!({}));
+    d["circle"]["name"] = Value::Null;
+    d["circle"]["description"] = Value::Null;
+    d["circle"]["role"] = Value::Null;
+    d["members"][1]["display_name"] = Value::Null;
+    d["banks"][0]["license"] = Value::Null;
+    d["banks"][0]["title"] = Value::Null;
+    d["pending_transfer"] = json!({"to_user_id": "u-ed", "to_name": null, "expires_at": NOW + DAY});
+    let s = Script::new();
+    s.on("Get", &format!("/circles/{CID}"), 200, d);
+    let got = super::transport::block_on(async { Pool::new(s.as_ref()).circle(CID).await }).expect("a null text is read as empty");
+    assert!(got.circle.description.is_empty() && got.members[1].display_name.is_empty() && got.pending_transfer.unwrap().to_name.is_empty());
+    // list, invites, activity, preview, join
+    let s = Script::new();
+    s.on("Get", "/circles", 200, json!({"circles": [summary("owner", json!({"name": null}))]}));
+    assert_eq!(super::transport::block_on(async { Pool::new(s.as_ref()).circles().await }).unwrap().len(), 1);
+    s.act("Get", "/invites", 200, json!({"invites": [{"invite_id": "i", "role": "viewer", "created_by": null, "created_by_name": null, "note": null, "state": null, "expires_at": 1}], "next_cursor": null}));
+    assert_eq!(super::transport::block_on(async { Pool::new(s.as_ref()).invites(CID, None).await }).unwrap().invites.len(), 1);
+    s.act("Get", "/activity", 200, json!({"activity": [{"at": 1, "what": null, "by": null}], "next_before": null}));
+    assert_eq!(super::transport::block_on(async { Pool::new(s.as_ref()).circle_activity(CID, None).await }).unwrap().entries.len(), 1);
+    s.on("Post", "/circles/join/preview", 200, json!({"circle": {"id": CID, "name": null, "owner_name": null, "members": 2}, "role": null, "already_member": false}));
+    assert!(super::transport::block_on(async { Pool::new(s.as_ref()).join_preview("C-ABCDEFGHJKMNPQRSTVWXYZ01").await }).is_ok());
+}
+
+#[test]
+fn c44_a_reply_the_app_cannot_read_is_never_shown_as_empty() {
+    let s = Script::new();
+    // one bad row among good ones: the good ones stay
+    s.on("Get", "/circles", 200, json!({"circles": [summary("owner", json!({})), {"id": CID, "members": "many"}]}));
+    assert_eq!(super::transport::block_on(async { Pool::new(s.as_ref()).circles().await }).unwrap().len(), 1);
+    // all bad: refused, not "you are in no circle"
+    s.on("Get", "/circles", 200, json!({"circles": [{"id": CID, "members": "many"}]}));
+    assert!(super::transport::block_on(async { Pool::new(s.as_ref()).circles().await }).is_err());
+    s.on("Get", "/circles", 200, json!({"circles": "nope"}));
+    assert!(super::transport::block_on(async { Pool::new(s.as_ref()).circles().await }).is_err());
+    // a create that comes back without an id
+    s.on("Post", "/circles", 201, json!({"circle": {"name": "x"}}));
+    assert!(super::transport::block_on(async { Pool::new(s.as_ref()).create_circle("x", "").await }).is_err());
+    s.on("Post", "/circles", 201, json!({"circle": {"id": CID, "name": 5}}));
+    assert!(super::transport::block_on(async { Pool::new(s.as_ref()).create_circle("x", "").await }).is_err());
+    // offers, invites, activity
+    s.act("Post", "/transfer", 202, json!({"ok": true, "pending": {"to_user_id": "u", "expires_at": "soon"}}));
+    assert!(super::transport::block_on(async { Pool::new(s.as_ref()).offer_ownership(CID, "u").await }).is_err());
+    s.act("Get", "/invites", 200, json!({"invites": [{"invite_id": 7}]}));
+    assert!(super::transport::block_on(async { Pool::new(s.as_ref()).invites(CID, None).await }).is_err());
+    s.act("Get", "/activity", 200, json!({"activity": [{"at": "x"}]}));
+    assert!(super::transport::block_on(async { Pool::new(s.as_ref()).circle_activity(CID, None).await }).is_err());
+}
+
+#[test]
+fn c44_an_admin_closed_circle_is_not_the_owners_to_reopen() {
+    for extra in [json!({"close_reason": "admin"}), json!({"closed_by": "admin", "close_reason": null}), json!({"closed_by": "last_member"}), json!({"close_reason": "last_member_gone"})] {
+        let mut circle = json!({"id": CID, "name": "Biology team", "description": "", "role": "owner", "joined_at": NOW - DAY, "created_at": NOW - 5 * DAY, "updated_at": NOW, "closed_at": NOW, "undo_until": null});
+        merge(&mut circle, extra.clone());
+        let (m, _) = open_circle("owner", json!({"circle": circle}));
+        assert!(!m.allowed(Action::Reopen), "{extra}");
+    }
+    // an owner close (and a pool that does not say) stays reopenable
+    for extra in [json!({"close_reason": "owner"}), json!({"close_reason": null})] {
+        let mut circle = json!({"id": CID, "name": "Biology team", "description": "", "role": "owner", "joined_at": NOW - DAY, "created_at": NOW - 5 * DAY, "updated_at": NOW, "closed_at": NOW, "undo_until": NOW + DAY});
+        merge(&mut circle, extra.clone());
+        let (m, _) = open_circle("owner", json!({"circle": circle}));
+        assert!(m.allowed(Action::Reopen), "{extra}");
+    }
+    // the refusal says who closed it
+    let (mut m, s) = open_circle("owner", json!({}));
+    s.act("Post", "/members/remove", 409, json!({"error": "circle_closed", "reason": "admin"}));
+    m.ask_remove("u-view");
+    m.remove_member();
+    m.frame(now(), &ready(&s));
+    assert!(problem(&m).contains("administrator") && !problem(&m).contains("owner"), "{}", problem(&m));
+}
+
+#[test]
+fn c44_raw_publish_codes_have_plain_wording_and_a_circle_send_gives_no_hide_key_advice() {
+    use super::pool::Issue;
+    use super::publish_text as pt;
+    for code in ["bad_url", "bad_license", "bad_id", "bad_figure_id", "bad_hash", "bad_form", "ambiguous_kind", "unknown_kind"] {
+        let t = pt::generic_code_text(code, None);
+        assert!(!t.contains(code) && !t.contains("refused it"), "{code}: {t}");
+    }
+    let i: Issue = serde_json::from_value(json!({"code": "keyless_needs_hide_key", "path": "bank.questions[0]"})).unwrap();
+    assert!(pt::issue_text(&i, false).contains("hide the key"));
+    let c = pt::issue_text_circle(&i, false);
+    assert!(!c.contains("hide the key") && c.contains("set the answers"), "{c}");
+}

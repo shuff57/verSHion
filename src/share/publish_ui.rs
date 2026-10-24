@@ -980,7 +980,7 @@ fn circle_page(ui: &mut Ui, m: &mut PublishModel) {
             let p = p.clone();
             para(ui, "The pool checked these questions and needs you to change the items below. Nothing was shared.");
             for i in p.issues.iter().take(30) {
-                let t = text::issue_text(i, false);
+                let t = text::issue_text_circle(i, false);
                 egui::Frame::new().fill(theme::error_wash()).corner_radius(8).inner_margin(Margin::same(8)).show(ui, |ui| {
                     ui.set_min_width(ui.available_width());
                     ui.add(egui::Label::new(RichText::new(t).color(theme::bad()).size(12.5)).wrap());

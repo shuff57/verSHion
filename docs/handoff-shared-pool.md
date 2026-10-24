@@ -200,3 +200,9 @@ Limits still open (critic 43, L1-L14):
 - L12 `heads` covers at most 200 copies.
 - L13 A copy completes with missing pictures if blob fetches fail; no "fetch pictures again".
 - L14 Test fixtures use invented HTTP statuses for some codes (only the code is matched).
+
+### Circles client: critic 44 follow-up
+
+Fixed: a circle with a blank description (the pool sends `description: null`) opens; every plain text field of every circle answer reads `null` as empty (`null_text`); `circles()` skips a row it can not read and refuses the reply only when none can be read, `create_circle` refuses an answer without a valid id, and `offer_ownership`, invites and activity refuse a reply they can not read (shown as an error with Try again, never as an empty list); an admin-closed or emptied circle is worded as such and offers no Reopen (reads `closed_by`, round 36, else `close_reason`); `bad_url`, `bad_license`, `bad_id`, `bad_figure_id`, `bad_hash`, `bad_form`, `ambiguous_kind`, `unknown_kind` have plain wording on both publish paths; a circle send gives no "hide the key" advice for a keyless imported question.
+
+Still open (critic 44): a circle send declares no origin, so the pool's licence-chain check never runs on a send, and the four-licence picker could not satisfy a refusal that lists NC licences (L10); short questions (D13 `isShort`) are not matched against circle text; `circle_transfer_offers` has no daily-limit wording; a held-then-removed bank still shows "Delete for good now" (the pool refuses with `under_moderation`); a bank hidden because its author was erased says "Hidden while a review is open"; `account_not_approved` without a `message` falls back to a generic line; the client cannot send version 2 of a bank (phase B).

@@ -145,6 +145,14 @@ pub fn reason_text(reason: &str) -> String {
 }
 
 /// What a finding means, for the person who has to fix or acknowledge it.
+/// The same for a send to a circle, which has no "hide the key" choice.
+pub fn issue_text_circle(i: &Issue, single: bool) -> String {
+    if i.code == "keyless_needs_hide_key" {
+        return format!("{}: this copy came from a version shared without its key; set the answers yourself", where_text(&i.path, single));
+    }
+    issue_text(i, single)
+}
+
 pub fn issue_text(i: &Issue, single: bool) -> String {
     let at = where_text(&i.path, single);
     let what: String = match i.code.as_str() {
@@ -196,6 +204,12 @@ pub fn generic_code_text(code: &str, limit: Option<u64>) -> String {
         "scan_budget" => "this text is too long or too repetitive to check; split it".into(),
         "normalized_too_large" => "this text is too large once cleaned up".into(),
         "no_questions" => "there are no questions to share".into(),
+        "bad_url" => "this web address is not valid (it must start with https://)".into(),
+        "bad_license" => "this licence is not one the pool knows".into(),
+        "bad_id" | "bad_figure_id" => "this has an identifier the pool can not take; remake the item".into(),
+        "bad_hash" => "a picture or figure reference is damaged; remake it".into(),
+        "bad_form" => "this question is in a form the pool does not take".into(),
+        "ambiguous_kind" | "unknown_kind" => "this question is of a kind the pool does not take".into(),
         c => format!("the pool refused it ({})", api::plain(c)),
     }
 }
