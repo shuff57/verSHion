@@ -3961,7 +3961,7 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
                         if ls.existing && ui.button("Remove").on_hover_text("Keep the text, drop the link").clicked() {
                             link_act = Some(Act::LinkRemove);
                         }
-                        if ui.button("Cancel").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+                        if ui.button("Cancel").clicked() || ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape)) {
                             keep = false;
                         }
                     });
