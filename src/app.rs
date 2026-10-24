@@ -48,6 +48,7 @@ pub enum Screen {
     Imports,
     Figures,
     Settings,
+    Shared,
     BankEdit(Id),
     ExamEdit(Id),
 }
@@ -117,6 +118,8 @@ pub struct App {
     pub browse: crate::share::BrowseUi,
     /// Shared-pool "My shared items" window. Closed until asked for (`share::mine_ui`).
     pub mine: crate::share::MineUi,
+    /// Shared-pool "Shared" page (a left-nav screen hosting the browser, my items and the account).
+    pub shared: crate::share::SharedUi,
     /// QA hook: scripted input (VERSHION_SCRIPT), see `raw_input_hook`.
     pub qa_steps: Vec<String>,
     /// QA hook: VERSHION_SHOT=<file.png> saves a screenshot of this window's own contents and exits.
@@ -194,7 +197,8 @@ impl App {
             ai_hint: String::new(),
             import_name: String::new(),
             figs: Default::default(),
-            account: Default::default(),
+            account: crate::share::AccountUi::in_page(),
+            shared: Default::default(),
             publish: Default::default(),
             browse: Default::default(),
             mine: Default::default(),
@@ -220,6 +224,27 @@ impl App {
                 "imports" => Screen::Imports,
                 "figures" => Screen::Figures,
                 "settings" => Screen::Settings,
+                // The Shared page, optionally on a tab: "shared", "shared:browse|mine|imported|reports|settings",
+                // "shared:choose" (the "Share to pool…" chooser open).
+                s if s == "shared" || s.starts_with("shared:") => {
+                    use crate::share::shared::Tab;
+                    match s.trim_start_matches("shared").trim_start_matches(':') {
+                        "mine" => app.shared.model.goto(Tab::Mine),
+                        "imported" => app.shared.model.goto(Tab::Imported),
+                        "reports" => app.shared.model.goto(Tab::Reports),
+                        "settings" => app.shared.model.goto(Tab::Settings),
+                        "choose" => app.shared.model.choosing = true,
+                        _ => app.shared.model.goto(Tab::Browse),
+                    }
+                    Screen::Shared
+                }
+                // The "Share to pool..." window for the first bank, over the Banks page.
+                "publish" => {
+                    if let Some(b) = app.store.banks.first() {
+                        let _ = crate::share::publish_ui::share_bank(ctx, b);
+                    }
+                    Screen::Banks
+                }
                 // The Account window over Settings (QA entry until Settings has its own button).
                 "account" => {
                     app.account.open();
@@ -431,6 +456,9 @@ impl App {
         }
         self.mine.show(&ctx, &mut self.account, &self.store.banks);
         self.account.show(&ctx);
+        if crate::share::shared_ui::take_goto(&ctx, &mut self.shared, &mut self.account) {
+            self.screen = Screen::Shared;
+        }
     }
 }
 

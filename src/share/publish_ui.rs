@@ -99,7 +99,11 @@ impl PublishUi {
             .frame(kit::card().inner_margin(Margin::same(22)))
             .show(ctx, |ui| {
                 ui.set_width(600.0_f32.min(ctx.content_rect().width() - 60.0).max(280.0));
-                egui::ScrollArea::vertical().max_height(ctx.content_rect().height() - 110.0).show(ui, |ui| {
+                // A modal's area offers only last frame's size, so a plain scroll area keeps the height
+                // of the first page it showed (one line while the account is checked) and the form
+                // under it can not be seen. The minimum lets it grow to its content, up to the cap.
+                let tall = ctx.content_rect().height() - 110.0;
+                egui::ScrollArea::vertical().max_height(tall).min_scrolled_height(tall).show(ui, |ui| {
                     close = page(ui, &mut self.model);
                 });
             });
@@ -277,9 +281,11 @@ fn options_page(ui: &mut Ui, m: &mut PublishModel) {
     heading(ui, "Listing");
     field(ui, "Title", &mut m.form.title, "pub_title", "What teachers will see in the list");
     field(ui, "Subject", &mut m.form.subject, "pub_subject", "For example Biology");
-    ui.horizontal(|ui| {
-        ui.vertical(|ui| field(ui, "Course", &mut m.form.course, "pub_course", "Optional"));
-        ui.vertical(|ui| field(ui, "Grade", &mut m.form.grade, "pub_grade", "Optional"));
+    // Two equal columns: in a plain row the first field took the whole width and squeezed Grade
+    // into a column one letter wide.
+    ui.columns(2, |c| {
+        field(&mut c[0], "Course", &mut m.form.course, "pub_course", "Optional");
+        field(&mut c[1], "Grade", &mut m.form.grade, "pub_grade", "Optional");
     });
     field(ui, "Tags (separated by commas)", &mut m.form.tags, "pub_tags", "cells, mitosis");
     field(ui, "Standards (separated by commas)", &mut m.form.standards, "pub_standards", "Optional");
@@ -303,8 +309,13 @@ fn options_page(ui: &mut Ui, m: &mut PublishModel) {
             continue;
         }
         let mut cur = m.form.license;
-        ui.radio_value(&mut cur, Some(info.license), info.name);
-        ui.indent(("lic", info.name), |ui| ui.add(egui::Label::new(theme::muted(info.line).size(12.0)).wrap()));
+        // Each licence's line sits under its own button, not halfway to the next one.
+        ui.scope(|ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            ui.radio_value(&mut cur, Some(info.license), info.name);
+            ui.indent(("lic", info.name), |ui| ui.add(egui::Label::new(theme::muted(info.line).size(12.0)).wrap()));
+        });
+        ui.add_space(4.0);
         m.form.license = cur;
     }
     para(ui, text::PERMANENT_LINE);
@@ -869,5 +880,5 @@ fn done_page(ui: &mut Ui, m: &mut PublishModel) {
         super::mine_ui::request(ui.ctx(), super::mine_ui::MineRequest::Item(r.item_id.clone()));
         m.close();
     }
-    para(ui, "You can update this item later by choosing Share to pool... on the same bank again.");
+    para(ui, "You can update this item later by choosing Share to pool… in the same bank's Share menu.");
 }

@@ -74,14 +74,24 @@ impl MineUi {
     /// Draws the window when open; returns at once (no I/O at all) when closed. `banks` are the
     /// local banks, for "Share again...".
     pub fn show(&mut self, ctx: &egui::Context, account: &mut AccountUi, banks: &[QuestionBank]) {
+        let mut opened_now = false;
         if let Some(Some(r)) = ctx.data_mut(|d| d.remove_temp::<Option<MineRequest>>(pending_id())) {
+            let tab = if matches!(r, MineRequest::Data) { super::shared::Tab::Settings } else { super::shared::Tab::Mine };
             match r {
                 MineRequest::List => self.model.open_list(),
                 MineRequest::Item(id) => self.model.open_item(&id),
                 MineRequest::Data => self.model.open_account_page(),
             }
+            if account.page_mode {
+                super::shared_ui::goto(ctx, tab);
+                opened_now = true;
+            }
         }
         if !self.model.open {
+            return;
+        }
+        if account.page_mode && !opened_now && !super::shared_ui::is_drawn(ctx) {
+            self.model.close();
             return;
         }
         if !self.repaint_set {
@@ -126,12 +136,16 @@ impl MineUi {
         if self.model.busy() {
             ctx.request_repaint_after(std::time::Duration::from_millis(500));
         }
+        if account.page_mode {
+            return;
+        }
         let mut close = false;
         let modal = egui::Modal::new(egui::Id::new("share_mine"))
             .frame(kit::card().inner_margin(Margin::same(22)))
             .show(ctx, |ui| {
                 ui.set_width(680.0_f32.min(ctx.content_rect().width() - 60.0).max(280.0));
-                egui::ScrollArea::vertical().max_height(ctx.content_rect().height() - 110.0).show(ui, |ui| {
+                let tall = ctx.content_rect().height() - 110.0; // grows past last frame's size: see publish_ui
+                egui::ScrollArea::vertical().max_height(tall).min_scrolled_height(tall).show(ui, |ui| {
                     close = page(ui, &mut self.model);
                 });
             });
@@ -201,6 +215,21 @@ pub(super) fn page(ui: &mut Ui, m: &mut MineModel) -> bool {
     close
 }
 
+/// "Items I shared" as a tab of the Shared page: the list, and one item's page over it.
+pub(super) fn items_body(ui: &mut Ui, m: &mut MineModel) {
+    if m.screen == Screen::Account {
+        m.close_account_screen();
+    }
+    if let Some(n) = m.notice.clone() {
+        banner(ui, &n);
+    }
+    match m.screen {
+        Screen::Gate => gate_page(ui, m),
+        Screen::List | Screen::Account => list_body(ui, m),
+        Screen::Detail => detail_page(ui, m),
+    }
+}
+
 fn gate_page(ui: &mut Ui, m: &mut MineModel) {
     let mut open_account = false;
     match m.gate.clone() {
@@ -251,6 +280,15 @@ fn state_pill(ui: &mut Ui, it: &MineItem) {
 }
 
 fn list_page(ui: &mut Ui, m: &mut MineModel) {
+    list_body(ui, m);
+    ui.add_space(8.0);
+    ui.separator();
+    if kit::ghost_button(ui, "My data, account and legal pages").clicked() {
+        m.open_account_screen();
+    }
+}
+
+pub(super) fn list_body(ui: &mut Ui, m: &mut MineModel) {
     para(ui, "Everything you have shared to the pool, and what you can do with each item.");
     let mut reload = false;
     if let Some(p) = m.list.problem.clone() {
@@ -319,12 +357,8 @@ fn list_page(ui: &mut Ui, m: &mut MineModel) {
         m.reload();
     }
     ui.add_space(8.0);
-    ui.separator();
     if m.list.storage.limit > 0 {
         line(ui, format!("Space used on the pool: {} of {}.", text::bytes_text(m.list.storage.used as usize), text::bytes_text(m.list.storage.limit as usize)));
-    }
-    if kit::ghost_button(ui, "My data, account and legal pages").clicked() {
-        m.open_account_screen();
     }
 }
 
@@ -527,6 +561,12 @@ fn account_page(ui: &mut Ui, m: &mut MineModel) {
         m.close_account_screen();
         return;
     }
+    settings_body(ui, m, true);
+}
+
+/// Download my data, account deletion, strikes and (with `legal`) the legal pages: the Settings
+/// tab, which leaves the legal pages to the Shared page's own card.
+pub(super) fn settings_body(ui: &mut Ui, m: &mut MineModel, legal: bool) {
     heading(ui, "Download my data");
     body(ui, text::EXPORT_BLURB);
     ui.add_space(4.0);
@@ -597,14 +637,31 @@ fn account_page(ui: &mut Ui, m: &mut MineModel) {
     heading(ui, "Reports and strikes");
     line(ui, text::STRIKES_LINE);
 
-    heading(ui, "Legal pages (drafts)");
-    legal_links(ui, m);
+    if legal {
+        heading(ui, "Legal pages (drafts)");
+        legal_links(ui, m);
+    }
 }
 
 /// The four legal pages: links when a server is configured, the names alone when not.
 pub(super) fn legal_links(ui: &mut Ui, m: &MineModel) {
     for (name, url) in m.legal_links() {
         match url {
+            Some(u) => {
+                if link(ui, name) {
+                    crate::platform::open_url(&u);
+                }
+            }
+            None => line(ui, name),
+        }
+    }
+    para(ui, text::DRAFT_LEGAL);
+}
+
+/// The legal pages for the Shared page: links when a legal address is set, names when not.
+pub(super) fn legal_links_for(ui: &mut Ui, base: &str) {
+    for (name, file) in text::LEGAL_PAGES {
+        match text::legal_url(base, file) {
             Some(u) => {
                 if link(ui, name) {
                     crate::platform::open_url(&u);

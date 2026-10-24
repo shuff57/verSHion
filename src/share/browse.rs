@@ -703,6 +703,8 @@ pub struct BrowseModel {
     pub item: Option<ItemState>,
     /// A problem with the last update check (quiet: shown on the Imported tab only).
     pub check_problem: Option<Problem>,
+    /// The pool answered `invite_required` (the Shared page then asks for the code).
+    pub invite_required: bool,
     /// The local banks, for the destination chooser (refreshed by `sync`).
     pub banks: Vec<BankInfo>,
     /// The bank the person came from: the import's default destination.
@@ -747,6 +749,7 @@ impl BrowseModel {
             results: Results::default(),
             item: None,
             check_problem: None,
+            invite_required: false,
             banks: Vec::new(),
             default_bank: None,
             open_account: false,
@@ -987,7 +990,11 @@ impl BrowseModel {
             PoolError::Refused(r) => {
                 let wait = r.detail.retry_after.filter(|s| *s > 0).map(|s| now + Duration::from_secs(s));
                 match &r.kind {
-                    RefusalKind::NotApproved { .. } | RefusalKind::InviteRequired => p.account = true,
+                    RefusalKind::NotApproved { .. } => p.account = true,
+                    RefusalKind::InviteRequired => {
+                        p.account = true;
+                        self.invite_required = true;
+                    }
                     RefusalKind::DailyLimit { .. } | RefusalKind::RateLimited | RefusalKind::TooManyOpenReads | RefusalKind::TooManyUploads | RefusalKind::Busy => {
                         p.retry = true;
                         p.retry_at = wait;

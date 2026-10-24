@@ -101,7 +101,7 @@ pub fn explain(it: &MineItem, now_ms: i64) -> String {
     }
 }
 
-pub const NO_ITEMS: &str = "You have not shared anything yet. Choose Share to pool... on a bank or an exam to start.";
+pub const NO_ITEMS: &str = "You have not shared anything yet. Choose Share to pool… to share a bank or an exam.";
 
 pub const STRIKES_LINE: &str = "How strikes work: only a strike an admin has upheld counts. Three upheld strikes within twelve months are \
      flagged for an admin to review the account; nothing is suspended automatically. verSHion does not show a count, because the pool \

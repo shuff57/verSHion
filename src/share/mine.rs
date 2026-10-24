@@ -480,6 +480,8 @@ pub struct MineModel {
     pub panel: Panel,
     /// The last action's failure, shown on the detail screen.
     pub problem: Option<Problem>,
+    /// The pool answered `invite_required` (the Shared page then asks for the code).
+    pub invite_required: bool,
     pub appeal_note: String,
     pub counter: CounterForm,
     pub export: ExportState,
@@ -523,6 +525,7 @@ impl MineModel {
             selected: None,
             panel: Panel::None,
             problem: None,
+            invite_required: false,
             appeal_note: String::new(),
             counter: CounterForm::default(),
             export: ExportState::Idle,
@@ -742,7 +745,11 @@ impl MineModel {
             PoolError::Refused(r) => {
                 let wait = r.detail.retry_after.filter(|s| *s > 0).map(|s| now + Duration::from_secs(s));
                 match &r.kind {
-                    RefusalKind::NotApproved { .. } | RefusalKind::InviteRequired => p.account = true,
+                    RefusalKind::NotApproved { .. } => p.account = true,
+                    RefusalKind::InviteRequired => {
+                        p.account = true;
+                        self.invite_required = true;
+                    }
                     RefusalKind::DailyLimit { metric } => {
                         p.retry = true;
                         p.retry_at = wait;
@@ -1246,14 +1253,14 @@ impl MineModel {
         match self.republish_plan(&id) {
             Republish::Source(k) => {
                 self.republish = Some(k);
-                self.notice = Some(Notice::Info("The Share to pool window opens with this bank. Sharing it again replaces this item with a new version.".into()));
+                self.notice = Some(Notice::Info("The Share to pool… window opens with this bank. Sharing it again replaces this item with a new version.".into()));
             }
             Republish::Exam => {
-                self.notice = Some(Notice::Info("This was shared from an exam. Open that exam and choose Share to pool... in its File menu; it will update this item.".into()));
+                self.notice = Some(Notice::Info("This was shared from an exam. Open that exam and choose Share to pool… in its File menu; it will update this item.".into()));
             }
             Republish::Unknown => {
                 self.notice = Some(Notice::Info(
-                    "This device has no record of sharing this item. Open the bank it came from, on the computer you shared it from, and choose Share to pool....".into(),
+                    "This device has no record of sharing this item. Open the bank it came from, on the computer you shared it from, and choose Share to pool… in its Share menu.".into(),
                 ));
             }
         }

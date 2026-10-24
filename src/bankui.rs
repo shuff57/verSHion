@@ -611,6 +611,140 @@ impl App {
         draw_bank_export(self, &ctx);
     }
 
+    /// The bank's actions. `ltr`: drawn left to right in a wrapping row of their own (a narrow
+    /// window), each moving to the next line whole; otherwise added to a right-to-left row beside
+    /// the name. The pool's three actions share one "Share" menu. Returns the actions' width
+    /// with all of them on one line.
+    fn bank_toolbar(&mut self, ui: &mut Ui, ctx: &egui::Context, key: UiId, bank_id: &Id, questions: &[Question], ltr: bool) -> f32 {
+        #[derive(Clone, Copy)]
+        enum Tool {
+            More,
+            Details,
+            Popover,
+            Import,
+            Share,
+            Export,
+            Add,
+        }
+        let update = self.browse.has_update(bank_id);
+        let share_label = if update {
+            format!("Share (update) {}", egui_phosphor::regular::CARET_DOWN)
+        } else {
+            format!("Share {}", egui_phosphor::regular::CARET_DOWN)
+        };
+        let mut tools = vec![Tool::More, Tool::Details, Tool::Popover, Tool::Import, Tool::Share];
+        if !questions.is_empty() {
+            tools.push(Tool::Export);
+        }
+        tools.push(Tool::Add);
+        if !ltr {
+            tools.reverse();
+        }
+        let gap = ui.spacing().item_spacing.x;
+        let mut width = 0.0;
+        let mut first = true;
+        for t in tools {
+            if ltr && !first {
+                // pageshell buttons are laid out where the cursor is: start the next line first.
+                let label = match t {
+                    Tool::More => "…",
+                    Tool::Details => "Details",
+                    Tool::Popover => "Pop-over",
+                    Tool::Import => "Import",
+                    Tool::Share => share_label.as_str(),
+                    Tool::Export => "Export",
+                    Tool::Add => "Add question",
+                };
+                if crate::pageshell::button_width(ui, label) > ui.max_rect().right() - ui.cursor().min.x {
+                    ui.end_row();
+                }
+            }
+            first = false;
+            let r = match t {
+                Tool::Add => {
+                    let r = crate::pageshell::primary(ui, "Add question");
+                    if r.clicked() {
+                        self.qedit = Some(qedit::Draft::new(bank_id.clone()));
+                    }
+                    r
+                }
+                Tool::Export => {
+                    let r = crate::pageshell::outline(ui, "Export").on_hover_text("Preview and download the bank file (PDF, answers included) or its JSON");
+                    if r.clicked() {
+                        open_bank_export(ctx, bank_id);
+                    }
+                    r
+                }
+                Tool::Share => {
+                    let r = crate::pageshell::outline(ui, &share_label).on_hover_text(if update {
+                        "Share this bank with other teachers, or copy in questions they shared. The pool has a newer version of something imported here."
+                    } else {
+                        "Share this bank with other teachers, or copy in questions they shared (needs a sharing account)"
+                    });
+                    egui::Popup::menu(&r).show(|ui| {
+                        ui.set_min_width(190.0);
+                        // Nothing to share in an empty bank.
+                        if !questions.is_empty() && ui.button(crate::share::shared::SHARE_ACTION).on_hover_text("Share this bank with other teachers (needs a sharing account)").clicked() {
+                            let res = self.store.bank(bank_id).map(|b| crate::share::publish_ui::share_bank(ctx, b));
+                            if let Some(Err(e)) = res {
+                                self.toast_err(e);
+                            }
+                            ui.close();
+                        }
+                        if ui.button("From pool…").on_hover_text("Find questions other teachers shared and copy them into this bank (needs a sharing account)").clicked() {
+                            self.browse.open_for_bank(bank_id);
+                            ui.close();
+                        }
+                        // Only when the pool has something newer.
+                        if update && ui.button("Update from pool…").on_hover_text("The pool has a newer version of something imported into this bank. Nothing changes until you choose.").clicked() {
+                            self.browse.open_update(bank_id);
+                            ui.close();
+                        }
+                    });
+                    r
+                }
+                Tool::Import => {
+                    let r = crate::pageshell::outline(ui, "Import").on_hover_text("Import files or pasted questions into this bank");
+                    if r.clicked() {
+                        crate::importui::open_import_modal(ctx, bank_id);
+                    }
+                    r
+                }
+                Tool::Popover => {
+                    let r = crate::pageshell::outline(ui, "Pop-over").on_hover_text("Open this bank in its own window");
+                    if r.clicked() {
+                        open_popover(ctx, bank_id);
+                    }
+                    r
+                }
+                Tool::Details => {
+                    let r = crate::pageshell::outline(ui, "Details").on_hover_text("Description, author and license");
+                    if r.clicked() {
+                        let d = self.store.bank(bank_id).map(|b| b.details.clone()).unwrap_or_default();
+                        with_state(ctx, key, |s: &mut BankEditState| s.details = Some(d));
+                    }
+                    r
+                }
+                // (Details has its own button next to this menu; the menu keeps what has none.)
+                Tool::More => ui
+                    .menu_button(RichText::new("…").size(16.0).color(theme::muted_col()), |ui| {
+                        ui.set_min_width(170.0);
+                        let tidy = ui
+                            .add_enabled(!questions.is_empty(), Button::new("Tidy stems…"))
+                            .on_hover_text("Clean up stems from older imports: tables of blanks, line breaks, spacing. Shows a preview first.");
+                        if tidy.clicked() {
+                            open_tidy(self, ctx, key, bank_id);
+                            ui.close();
+                        }
+                    })
+                    .response
+                    .on_hover_text("More bank actions"),
+            };
+            width += r.rect.width() + gap;
+        }
+        width - gap
+    }
+
     fn bank_edit_body(&mut self, ui: &mut Ui, ctx: &egui::Context, key: UiId, bank_id: &Id) {
         let (bank_name, questions, modified) = match self.store.bank(bank_id) {
             Some(b) => (b.name.clone(), b.questions.clone(), b.modified),
@@ -621,9 +755,21 @@ impl App {
         // Header: breadcrumb, serif name + subtitle, actions.
         crumb_row(ui, self, Some(&bank_name));
         ui.add_space(2.0);
+        // The actions sit beside the name when both fit, else on their own row under it. Their
+        // width is last frame's (all on one line), so a long name never runs under them.
+        let tools_key = key.with("toolbar_w");
+        let tools_w = ctx.data(|d| d.get_temp::<f32>(tools_key)).unwrap_or(640.0);
+        let avail = ui.available_width();
+        let beside = avail - tools_w - 24.0;
+        // The whole name (and its rename pencil) must fit beside them, or it would be cut off.
+        let name_need = ui.fonts_mut(|f| f.layout_no_wrap(bank_name.clone(), egui::FontId::new(34.0, theme::serif_family()), theme::ink()).size().x) + 48.0;
+        let one_row = beside >= name_need.max(300.0);
+        let mut drawn_w = None;
         ui.horizontal(|ui| {
-            let name_w = (ui.available_width() - 340.0).clamp(220.0, 680.0);
+            // On a row of its own the name may use the whole width.
+            let name_w = if one_row { beside.min(680.0) } else { avail }.max(160.0);
             ui.vertical(|ui| {
+                ui.set_max_width(if one_row { beside } else { avail });
                 let mut name_buf = bank_name.clone();
                 let name_font = egui::FontId::new(34.0, theme::serif_family());
                 // The name field hugs its text so the rename pencil sits right after it.
@@ -696,50 +842,25 @@ impl App {
                     }
                 });
             });
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if crate::pageshell::primary(ui, "Add question").clicked() {
-                    self.qedit = Some(qedit::Draft::new(bank_id.clone()));
-                }
-                if !questions.is_empty() && crate::pageshell::outline(ui, "Export").on_hover_text("Preview and download the bank file (PDF, answers included) or its JSON").clicked() {
-                    open_bank_export(ctx, bank_id);
-                }
-                if !questions.is_empty() && crate::pageshell::outline(ui, "Share to pool…").on_hover_text("Share this bank with other teachers (needs a sharing account)").clicked() {
-                    let r = self.store.bank(bank_id).map(|b| crate::share::publish_ui::share_bank(ctx, b));
-                    if let Some(Err(e)) = r {
-                        self.toast_err(e);
-                    }
-                }
-                if crate::pageshell::outline(ui, "From pool…").on_hover_text("Find questions other teachers shared and copy them into this bank (needs a sharing account)").clicked() {
-                    self.browse.open_for_bank(bank_id);
-                }
-                if self.browse.has_update(bank_id) && crate::pageshell::outline(ui, "Update from pool…").on_hover_text("The pool has a newer version of something imported into this bank. Nothing changes until you choose.").clicked() {
-                    self.browse.open_update(bank_id);
-                }
-                if crate::pageshell::outline(ui, "Import").on_hover_text("Import files or pasted questions into this bank").clicked() {
-                    crate::importui::open_import_modal(ctx, bank_id);
-                }
-                if crate::pageshell::outline(ui, "Pop-over").on_hover_text("Open this bank in its own window").clicked() {
-                    open_popover(ctx, bank_id);
-                }
-                if crate::pageshell::outline(ui, "Details").on_hover_text("Description, author and license").clicked() {
-                    let d = self.store.bank(bank_id).map(|b| b.details.clone()).unwrap_or_default();
-                    with_state(ctx, key, |s: &mut BankEditState| s.details = Some(d));
-                }
-                // (Details has its own button next to this menu; the menu keeps what has none.)
-                ui.menu_button(RichText::new("…").size(16.0).color(theme::muted_col()), |ui| {
-                    ui.set_min_width(170.0);
-                    let tidy = ui
-                        .add_enabled(!questions.is_empty(), Button::new("Tidy stems…"))
-                        .on_hover_text("Clean up stems from older imports: tables of blanks, line breaks, spacing. Shows a preview first.");
-                    if tidy.clicked() {
-                        open_tidy(self, ctx, key, bank_id);
-                        ui.close();
-                    }
-                })
-                .response
-                .on_hover_text("More bank actions");
-            });
+            if one_row {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    drawn_w = Some(self.bank_toolbar(ui, ctx, key, bank_id, &questions, false));
+                });
+            }
         });
+        if !one_row {
+            ui.add_space(8.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                drawn_w = Some(self.bank_toolbar(ui, ctx, key, bank_id, &questions, true));
+            });
+        }
+        if let Some(w) = drawn_w
+            && (w - tools_w).abs() > 0.5
+        {
+            ctx.data_mut(|d| d.insert_temp(tools_key, w));
+            ctx.request_repaint();
+        }
         let desc = self.store.bank(bank_id).map(|b| b.details.description.trim().to_string()).unwrap_or_default();
         if !desc.is_empty() {
             ui.add_space(2.0);

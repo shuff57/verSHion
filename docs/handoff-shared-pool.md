@@ -132,3 +132,41 @@ Code: `src/share/invite.rs` (model), `invite_tests.rs`; `Pool::redeem_invite` an
 - `403 invite_required` from any pool call (publish, browse, import, my shared items) becomes one message ("The shared pool needs an invite code. Open the Account window, find "Invite code"...") with the existing "Open account..." button, which shows the Account window with the section. Nothing is sent from those windows.
 - `/items/mine`'s `counter_notice_by` is now shown on taken-down items ("You can do this until <date>").
 - Not run: a visual check of the section; no real server.
+
+## Shared page (client design note)
+
+A top-level "Shared" item in the left nav (`Screen::Shared`) replaces the three floating windows
+(browse, my items, account) as the place people use the pool. The bank/exam "Share to pool...",
+"From pool...", "Update from pool..." buttons and Settings > Sharing account stay as shortcuts: they
+ask for a tab (`shared_ui::goto`) and the app switches to the page. In the app `AccountUi::in_page()`
+never draws its window. The publish flow stays a window (reached from "Share something...").
+
+Code: `share/shared.rs` (tab and guided-step state machine, no egui), `share/shared_ui.rs` (draw only,
+page-shell cards), existing models and their jobs unchanged; `browse_ui::tab_body`, `mine_ui::items_body`
+and `settings_body`, `AccountUi::draw_section` / `draw_invite` draw the old pages inside page cards.
+
+Guided steps (one card at a time, "Step n of 5" strip): 1 Sign in or create an account (the existing
+account forms), 2 Confirm your email, 3 Waiting for approval (re-checked by the account poller; an
+invite code can already be entered), 4 Enter your invite code (shown when a pool call answered
+`invite_required`; ends when the code is redeemed), 5 Browse (the tabs). Notes instead of steps: Checking
+("Checking your account..."), no server in this build ("Sharing is not set up in this build"),
+development build without a server (the server box, dev only), offline ("Could not reach the pool",
+Try again), blocked account (rejected, revoked, suspended: the reviewer's reason as plain text).
+Release builds never show a server address box.
+
+Tabs: Browse the pool (search, filters, cards, item page, import with preview, update, merge, report);
+Items I shared (list with version, licence, status, update, unshare, takedown and counter-notice with
+the date); Things I imported (origin, "update available" count on the tab, merge); Reports and appeals;
+My sharing settings (account details, invite code, data download, delete account, legal links).
+Reports: the pool has no "reports I sent" list, so the tab explains that and lists the user's own items
+that need attention (held, removed, taken down) with a button to their page, where appeals live.
+
+Empty, loading and error text (all server strings via `api::plain`): "Nothing shared yet" with a
+"Share something..." button; "Nothing has been shared publicly yet." / "Nothing matches that search.";
+"Searching the pool..." and "Loading your items..." with a spinner; failures show the existing problem
+box with Try again; "You have no banks or exams yet..." in the chooser.
+
+Narrow windows: the page is one scroll column capped at 960 px; tabs and the step strip wrap; the item
+cards keep their own wrapping.
+
+Not verified: nobody has looked at these pages on a real screen (only headless smoke frames).

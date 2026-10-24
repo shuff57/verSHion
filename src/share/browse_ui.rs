@@ -79,15 +79,27 @@ impl BrowseUi {
     /// Draws the window when open; returns at once (no I/O at all) when closed. Returns true when
     /// `banks` changed (an import finished): the caller then saves them.
     pub fn show(&mut self, ctx: &egui::Context, account: &mut AccountUi, banks: &mut Vec<QuestionBank>) -> bool {
+        let mut opened_now = false;
         if let Some(Some(r)) = ctx.data_mut(|d| d.remove_temp::<Option<BrowseRequest>>(pending_id())) {
+            let tab = if matches!(r, BrowseRequest::Imported | BrowseRequest::Update(_)) { super::shared::Tab::Imported } else { super::shared::Tab::Browse };
             match r {
                 BrowseRequest::Browse => self.model.open_browse(),
                 BrowseRequest::ForBank(id) => self.model.open_for_bank(&id),
                 BrowseRequest::Imported => self.model.open_imported(),
                 BrowseRequest::Update(id) => self.model.open_update(&id),
             }
+            // In the app the browser is a tab of the Shared page: go there.
+            if account.page_mode {
+                super::shared_ui::goto(ctx, tab);
+                opened_now = true;
+            }
         }
         if !self.model.open {
+            return false;
+        }
+        if account.page_mode && !opened_now && !super::shared_ui::is_drawn(ctx) {
+            // The Shared page was left: nothing keeps running behind it.
+            self.model.close();
             return false;
         }
         if !self.repaint_set {
@@ -114,12 +126,16 @@ impl BrowseUi {
         if self.model.busy() {
             ctx.request_repaint_after(std::time::Duration::from_millis(500));
         }
+        if account.page_mode {
+            return changed;
+        }
         let mut close = false;
         let modal = egui::Modal::new(egui::Id::new("share_browse"))
             .frame(kit::card().inner_margin(Margin::same(22)))
             .show(ctx, |ui| {
                 ui.set_width(760.0_f32.min(ctx.content_rect().width() - 60.0).max(280.0));
-                egui::ScrollArea::vertical().max_height(ctx.content_rect().height() - 110.0).show(ui, |ui| {
+                let tall = ctx.content_rect().height() - 110.0; // grows past last frame's size: see publish_ui
+                egui::ScrollArea::vertical().max_height(tall).min_scrolled_height(tall).show(ui, |ui| {
                     close = page(ui, &mut self.model);
                 });
             });
@@ -261,6 +277,23 @@ fn browse_page(ui: &mut Ui, m: &mut BrowseModel) {
     match m.tab {
         Tab::Search => search_tab(ui, m),
         Tab::Imported => imported_tab(ui, m),
+    }
+}
+
+/// The browser as a tab of the Shared page: `tab` is the page's tab (search or imported). An open
+/// item (or its update, merge and report pages) covers the tab until "Back".
+pub(super) fn tab_body(ui: &mut Ui, m: &mut BrowseModel, tab: Tab) {
+    m.tab = tab;
+    if let Some(n) = m.notice.clone() {
+        banner(ui, &n);
+    }
+    match m.screen {
+        Screen::Gate => gate_page(ui, m),
+        Screen::Item => item_page(ui, m),
+        Screen::Browse => match tab {
+            Tab::Search => search_tab(ui, m),
+            Tab::Imported => imported_tab(ui, m),
+        },
     }
 }
 
@@ -668,7 +701,16 @@ fn credits(ui: &mut Ui, l: &Loaded) {
 
 // ---- import --------------------------------------------------------------------------------------------------------------------
 
+/// Set by Import... and Merge...: the panel they open starts below the item's questions, out of
+/// sight, so the next frame scrolls it to the top of the view.
+fn reveal_import_id() -> egui::Id {
+    egui::Id::new("browse_reveal_import")
+}
+
 fn import_section(ui: &mut Ui, m: &mut BrowseModel, l: &Loaded) {
+    if ui.ctx().data_mut(|d| d.remove_temp::<bool>(reveal_import_id())).unwrap_or(false) {
+        ui.scroll_to_cursor(Some(egui::Align::Min));
+    }
     if m.item.as_ref().is_some_and(|i| i.merge.is_some()) {
         merge_section(ui, m);
         return;
@@ -693,12 +735,14 @@ fn import_section(ui: &mut Ui, m: &mut BrowseModel, l: &Loaded) {
                 ui.add_enabled_ui(can, |ui| {
                     if kit::primary_button(ui, if updating { "Add as a new bank..." } else { "Import..." }).clicked() {
                         m.begin_import();
+                        ui.ctx().data_mut(|d| d.insert_temp(reveal_import_id(), true));
                     }
                 });
                 if updating {
                     ui.add_enabled_ui(merge_block.is_none(), |ui| {
                         if kit::ghost_button(ui, "Merge into this bank...").clicked() {
                             m.begin_merge();
+                            ui.ctx().data_mut(|d| d.insert_temp(reveal_import_id(), true));
                         }
                     });
                 }
@@ -852,10 +896,15 @@ fn report_page(ui: &mut Ui, m: &mut BrowseModel) {
             ui.add_enabled_ui(!sending, |ui| {
                 for c in ReportChoice::ALL.into_iter().filter(|c| *c != ReportChoice::KeyLeak || m.key_leak_offered()) {
                     let (name, help) = text::report_reason(c);
-                    if ui.radio(pick == Some(c), name).clicked() {
-                        pick = Some(c);
-                    }
-                    ui.label(theme::muted(format!("      {help}")).size(11.5));
+                    // Each reason's line sits under its own button, not halfway to the next one.
+                    ui.scope(|ui| {
+                        ui.spacing_mut().item_spacing.y = 0.0;
+                        if ui.radio(pick == Some(c), name).clicked() {
+                            pick = Some(c);
+                        }
+                        ui.label(theme::muted(format!("      {help}")).size(11.5));
+                    });
+                    ui.add_space(4.0);
                 }
             });
             if pick != choice && let Some(c) = pick {
