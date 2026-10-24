@@ -53,7 +53,7 @@ launch; 200 MB and 5,000 shared questions per teacher; 3 upheld strikes in 12 mo
 
 ## 3. Decisions needed
 
-Each has a recommendation. None is decided.
+Each has a recommendation. **2026-10-23: the owner accepted every recommendation below (D1-D19) as decided, by multiple choice. Any of them can be reopened.** Anything that involves counsel (D1 moderation policy, D9, D13 re-sharing of Creative Commons material) is decided as a design but still needs a lawyer's review before circles are used outside the invite-only pilot.
 
 | # | Question | Recommendation |
 |---|---|---|
