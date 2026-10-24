@@ -2253,6 +2253,8 @@ pub struct Opts<'a> {
     pub blanks: Option<&'a mut Vec<String>>,
     /// The fixed formatting toolbar above the text.
     pub toolbar: bool,
+    /// Tab belongs to the caller (it walks answer rows): egui must not move focus or insert a tab.
+    pub lock_tab: bool,
 }
 
 pub struct Out {
@@ -2320,6 +2322,9 @@ struct Mem {
     link: Option<LinkSt>,
     /// The top-level block whose rail grip is being dragged.
     drag: Option<usize>,
+    /// A blank was just made: its "put it back" offer stays hidden while the caret rests there.
+    quiet: bool,
+    quiet_p: Option<usize>,
 }
 
 /// The link popover: the selection it was opened on (global chars), its unit, the address
@@ -3305,6 +3310,7 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
             Act::Blank if here_blank(&text, la, lb) => run_unblank(stem, d, &u, &text, la, lb, blanks_rows),
             Act::Blank => {
                 let (t, caret, bs, word) = make_blank(&text, la, lb)?;
+                m.quiet = true;
                 let s = apply_unit(stem, &u, &t);
                 let g0 = if u.virt.is_some() { d.global(&u, 0) } else { u.start };
                 Some(Change { stem: s, anchor: g0 + caret, caret: g0 + caret, virt: u.virt, blank: Some((g0 + bs, word)), keep: None })
@@ -3475,7 +3481,7 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
                         None => "",
                     };
                     let cst = Sty { center: bl.center.is_some(), ..st.clone() };
-                    let sh = show_unit(ui, ids[k], &mut t, width, &cst, hint, blank_base(u.start), rows_ro.as_deref(), false);
+                    let sh = show_unit(ui, ids[k], &mut t, width, &cst, hint, blank_base(u.start), rows_ro.as_deref(), o.lock_tab);
                     // where each source line starts on screen (the rail lines up with them)
                     for l in bl.lines.clone() {
                         let la = d.line_start[l].saturating_sub(u.start);
@@ -4238,7 +4244,17 @@ fn after_unit(ctx: &egui::Context, m: &mut Mem, k: usize, uid: UiId, sh: &UnitSh
         let r0 = g.pos_from_cursor(CCursor::new(CharIndex::from(lo))).translate(sh.origin.to_vec2());
         let r1 = g.pos_from_cursor(CCursor::new(CharIndex::from(hi))).translate(sh.origin.to_vec2());
         *sel_rect = Some(Rect::from_min_max(Pos2::new(r0.min.x.min(r1.min.x), r0.min.y.min(r1.min.y)), Pos2::new(r0.max.x.max(r1.max.x), r1.max.y)));
-    } else if sh.ana.atoms.iter().any(|a| matches!(a.kind, AtomKind::Blank(_)) && (a.start == p || a.end == p)) && text == old {
+    } else if sh.ana.atoms.iter().any(|a| matches!(a.kind, AtomKind::Blank(_)) && (a.start == p || a.end == p)) && text == old && {
+        // a blank just made: no offer until the caret moves
+        if m.quiet {
+            m.quiet = false;
+            m.quiet_p = Some(p);
+        }
+        if m.quiet_p.is_some() && m.quiet_p != Some(p) {
+            m.quiet_p = None;
+        }
+        m.quiet_p.is_none()
+    } {
         // caret beside a blank: offer Unblank
         let r0 = g.pos_from_cursor(CCursor::new(CharIndex::from(p))).translate(sh.origin.to_vec2());
         *sel_rect = Some(r0);
@@ -4269,6 +4285,23 @@ fn push_undo(m: &mut Mem, stem: &str, caret: usize, blanks: Option<&[String]>, n
     m.last_push = now;
     m.last_unit = if typing { unit } else { None };
     m.redo.clear();
+}
+
+/// True when `stem` is only plain paragraphs (no list, table, heading or group), so Tab has no
+/// editing meaning in it and a form may use it to move between fields.
+pub fn is_plain(stem: &str) -> bool {
+    doc(stem, true).blocks.iter().all(|b| matches!(b.kind, BlockKind::Flow))
+}
+
+/// Put the caret at the end of the editor `id`'s text (`nchars` chars) next frame and focus it.
+/// Used to walk answer rows with the keyboard and to focus a new row.
+pub fn focus_end(ctx: &egui::Context, id: UiId, nchars: usize) {
+    ctx.data_mut(|d| {
+        let m = d.get_temp_mut_or_default::<Mem>(id);
+        m.want = Some(Want { anchor: nchars, caret: nchars, virt: None });
+        m.retry = None;
+    });
+    ctx.request_repaint();
 }
 
 /// Record a change made outside the editor (the equation dialog) for undo, and put the caret

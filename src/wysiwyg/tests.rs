@@ -1212,3 +1212,11 @@ fn moving_blocks_keeps_every_block_intact() {
     let (p2, _) = plus_op("a", 0).unwrap();
     assert_eq!(p2.stem, "a\n\n/");
 }
+
+#[test]
+fn plain_stems_leave_tab_to_the_form() {
+    assert!(is_plain("What is 2+2?"));
+    assert!(is_plain("a\n\nb"));
+    assert!(!is_plain("- one\n- two"));
+    assert!(!is_plain("1. one\n2. two"));
+}

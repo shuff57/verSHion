@@ -697,8 +697,25 @@ impl App {
                 });
             });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if crate::pageshell::primary(ui, "Add question").clicked() {
-                    self.qedit = Some(qedit::Draft::new(bank_id.clone()));
+                {
+                    let r = crate::pageshell::primary(ui, "Add question");
+                    // the type is chosen first; the editor opens already set to it
+                    // keyboard: Enter on the focused Add opens it, arrows and Enter pick, 1-6 pick directly
+                    let opened_now = r.clicked();
+                    egui::Popup::menu(&r).show(|ui| {
+                        ui.set_min_width(190.0);
+                        for (n, k) in crate::bankops::KINDS.into_iter().enumerate() {
+                            let hot = [egui::Key::Num1, egui::Key::Num2, egui::Key::Num3, egui::Key::Num4, egui::Key::Num5, egui::Key::Num6][n];
+                            let b = ui.button(format!("{}   {}", n + 1, k.label()));
+                            if n == 0 && opened_now {
+                                b.request_focus();
+                            }
+                            if b.clicked() || ui.input(|i| i.key_pressed(hot)) {
+                                self.qedit = Some(qedit::Draft::new_of(bank_id.clone(), k));
+                                ui.close();
+                            }
+                        }
+                    });
                 }
                 if !questions.is_empty() && crate::pageshell::outline(ui, "Export").on_hover_text("Preview and download the bank file (PDF, answers included) or its JSON").clicked() {
                     open_bank_export(ctx, bank_id);
