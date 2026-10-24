@@ -250,7 +250,7 @@ test("F1: past the source allowance the copies kept are the EARLIEST, so the ori
 });
 
 test("F1 lint (rounds 20-21): every LIMIT, slice or take on a decision path is an existence check, a bounded batch that resumes, a page with a cursor, a display list, or a cap that refuses, flags or carries what it leaves out", () => {
-  const files = ["publish.ts", "provenance.ts", "blocking.ts", "moderation.ts", "licensecheck.ts", "read.ts", "admin.ts", "cron.ts", "shared.ts", "served.ts", "visible.ts", "license.ts"];
+  const files = ["publish.ts", "provenance.ts", "blocking.ts", "moderation.ts", "licensecheck.ts", "read.ts", "admin.ts", "cron.ts", "shared.ts", "served.ts", "visible.ts", "license.ts", "invites.ts"];
   // Each allowed form, with why it is safe.
   const allow: [RegExp, string][] = [
     [/LIMIT 1\b(?!\d)/, "existence / the earliest one"],
@@ -272,6 +272,7 @@ test("F1 lint (rounds 20-21): every LIMIT, slice or take on a decision path is a
     [/LIMIT \$\{LICENCE_REKEY_ROWS\}/, "licence re-key batch: only MAPPABLE rows enter it, so nothing can block the queue; it resumes next run"],
     [/LIMIT \$\{STEM_BACKFILL_PUBLISHES\}|LIMIT \$\{STEM_BACKFILL_AUTHORS\}/, "stem backfill: a bounded batch of legacy records; the next run continues, nothing is decided by it"],
     [/ORDER BY p\.publish_id LIMIT 5`/, "key verification: up to five readable bodies (an existence probe), never a decision cut"],
+    [/LIMIT \$\{RETENTION_ACTIONS\}`|LIMIT \$\{RETENTION_ROWS\}/, "round 28 retention: bounded deletes of records past 3 years, oldest first; the rest resume next day, nothing is decided by them"],
     [/terms_version\)\.slice\(0, 40\)/, "the attested terms version, truncated for storage (compared exactly first)"],
     [/ORDER BY a\.disabled_at DESC LIMIT 100`,$/, "the author's pending ghost takedowns listed (display)"],
     [/\.slice\(17\)|\.slice\(0, -1\)|\.slice\(0, 32\)|\.slice\(5\)|\.slice\(i, i \+ n\)|\.slice\(off, off \+ chunk\)|\.slice\(0, 4096\)/, "string and chunk slicing, no cut"],

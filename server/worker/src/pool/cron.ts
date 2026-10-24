@@ -217,6 +217,8 @@ export async function daily(c: Ctx): Promise<DailyReport> {
       c.db.prepare(`DELETE FROM pool_limits WHERE user_id IN (${done})`),
       c.db.prepare(`DELETE FROM pending_blobs WHERE uploader_id IN (${done})`),
       c.db.prepare(`DELETE FROM pool_locks WHERE user_id IN (${done})`),
+      // (round 28: POST /me/invite writes under the caller's id)
+      c.db.prepare(`DELETE FROM pool_invite_redemptions WHERE user_id IN (${done})`),
       c.db.prepare(`DELETE FROM served WHERE reader_id IN (${done})`),
       c.db.prepare(`DELETE FROM author_contents WHERE author_id IN (${done})`),
       c.db.prepare(`DELETE FROM author_firsts WHERE author_id IN (${done})`),
@@ -310,6 +312,8 @@ export async function daily(c: Ctx): Promise<DailyReport> {
     }
     return n;
   });
+  // Round 28 (owner): audit and takedown records older than 3 years go (bounded; resumed next day).
+  await stage(c, "retention", undefined, () => retention(c));
   await stage(c, "cleanup", undefined, async () =>
     void (await c.db.batch([
       c.db.prepare(`DELETE FROM usage_daily WHERE day < ?1`).bind(Math.floor(now / DAY_MS) - 2),
@@ -342,6 +346,117 @@ async function privacyBytes(c: Ctx, now: number): Promise<void> {
   }
 }
 
+// ---- retention (round 28) ---------------------------------------------------------------------------
+
+/**
+ * Round 28 (owner decision, docs/shared-pool.md "Retention"): audit and takedown records are kept 3
+ * years. 1,096 days is never less than three calendar years. Migration 0106's pool_audit trigger refuses
+ * to delete a younger row by the DATABASE's clock, and the delete below carries the same floor, so a
+ * skewed application clock can neither delete early nor make the stage fail.
+ */
+export const RETENTION_MS = 1096 * DAY_MS;
+/** Takedown actions removed (with their own rows) per daily run; the rest resume the next day. */
+export const RETENTION_ACTIONS = 100;
+/** Rows of one table (audit rows, notices, an action's block and upstream rows) removed per daily run. */
+export const RETENTION_ROWS = 5000;
+const DB_RETENTION_FLOOR_SQL = `(CAST(strftime('%s', 'now') AS INTEGER) * 1000 - ${RETENTION_MS})`;
+
+/**
+ * SQL condition: the takedown action `a` is a record past retention (`cut` = now - RETENTION_MS, `now`:
+ * SQL parameter references). It is CLOSED (put back, withdrawn, reversed, or upheld and purged), with no
+ * uphold or put-back still finishing; NOTHING about it is newer than the cutoff (its own dates, its
+ * counter-notice, strike, exempt authors, hold releases, the DMCA audit rows of its item); and nothing
+ * still DEPENDS on it: no re-upload block of it in force (the upstream exemption snapshot,
+ * dmca_upstream_keys, and its exempt authors matter exactly while one is), no copy it holds, no open
+ * appeal or unresolved takedown flag (counter-notice, copies) on its item.
+ */
+const RETAINABLE_ACTION_SQL = (a: string, cut: string, now: string) => `(
+  (${a}.restored_at IS NOT NULL OR ${a}.purged_at IS NOT NULL) AND ${a}.uphold_pending = 0
+  AND ${a}.disabled_at < ${cut} AND COALESCE(${a}.author_notified_at, 0) < ${cut} AND COALESCE(${a}.restored_at, 0) < ${cut}
+  AND COALESCE(${a}.purged_at, 0) < ${cut} AND COALESCE(${a}.court_action_at, 0) < ${cut}
+  AND NOT EXISTS (SELECT 1 FROM dmca_counter_notices rcn WHERE rcn.action_id = ${a}.id AND rcn.received_at >= ${cut})
+  AND NOT EXISTS (SELECT 1 FROM strikes rs WHERE rs.action_id = ${a}.id AND (COALESCE(rs.upheld_at, 0) >= ${cut} OR COALESCE(rs.voided_at, 0) >= ${cut}))
+  AND NOT EXISTS (SELECT 1 FROM dmca_exempt rx WHERE rx.action_id = ${a}.id AND rx.at >= ${cut})
+  AND NOT EXISTS (SELECT 1 FROM hold_releases rhr WHERE rhr.source = 'dmca:' || ${a}.id AND rhr.at >= ${cut})
+  AND NOT EXISTS (SELECT 1 FROM pool_audit rpa WHERE rpa.item_id = ${a}.item_id AND rpa.at >= ${cut} AND rpa.action LIKE 'dmca.%')
+  AND NOT EXISTS (SELECT 1 FROM blocked_hashes rbh WHERE rbh.action_id = ${a}.id AND rbh.lifted_at IS NULL AND (rbh.expires_at IS NULL OR rbh.expires_at > ${now}))
+  AND NOT EXISTS (SELECT 1 FROM item_holds rh WHERE rh.source = 'dmca:' || ${a}.id)
+  AND NOT EXISTS (SELECT 1 FROM admin_flags rf WHERE rf.item_id = ${a}.item_id AND rf.resolved_at IS NULL AND rf.kind IN ('appeal', 'counter_notice', 'dmca_copy'))
+  -- (a put-back whose finish is still pending: putbackFinish's own predicate)
+  AND NOT (${a}.restored_at IS NOT NULL
+           AND EXISTS (SELECT 1 FROM items ri WHERE ri.id = ${a}.item_id AND ri.removed_reason = 'takedown' AND (ri.purged_at IS NULL OR ri.purged_at < ${a}.disabled_at))
+           AND NOT EXISTS (SELECT 1 FROM dmca_actions rb WHERE rb.item_id = ${a}.item_id AND rb.disabled_at > ${a}.disabled_at)))`;
+
+/**
+ * Round 28: the daily retention stage. Bounded and idempotent, oldest first; what one run leaves, the
+ * next continues. In order:
+ * 1. Takedown actions past retention (RETAINABLE_ACTION_SQL), with their counter-notice, strike, exempt
+ *    authors, hold releases, (inactive) re-upload block rows and upstream snapshot. Every statement
+ *    re-checks the condition inside the one batch, so an action that changed since it was picked (an
+ *    admin's reversal) is left whole; an action goes only once its block and snapshot rows are all gone.
+ * 2. DMCA notices received before the cutoff that no takedown action still names and that are not
+ *    `open` (an open notice can still be acted on: withdraw it to let it go).
+ * 3. pool_audit rows older than the cutoff (and the database's own floor), except the trail of an item
+ *    that still has a takedown record kept, a hold (under review) or an open appeal, and rows naming a
+ *    takedown action or notice still kept.
+ * Never touched: void_items (evidence voids are live licensing state, not records), admin flags, the
+ * outbox, auth_audit (the auth package's table).
+ */
+export async function retention(c: Ctx): Promise<{ actions: number; notices: number; audit: number }> {
+  const now = c.now();
+  const cut = now - RETENTION_MS;
+  const due = await c.db
+    .prepare(`SELECT a.id FROM dmca_actions a WHERE ${RETAINABLE_ACTION_SQL("a", "?1", "?2")} ORDER BY a.disabled_at, a.id LIMIT ${RETENTION_ACTIONS}`)
+    .bind(cut, now)
+    .all<{ id: string }>();
+  let actions = 0;
+  if (due.results.length > 0) {
+    const ids = JSON.stringify(due.results.map((r) => r.id));
+    const pick = `SELECT ra.id FROM dmca_actions ra WHERE ra.id IN (SELECT value FROM json_each(?1)) AND ${RETAINABLE_ACTION_SQL("ra", "?2", "?3")}`;
+    const st = (sql: string) => c.db.prepare(sql).bind(ids, cut, now);
+    const res = await c.db.batch([
+      // (WITHOUT ROWID: deleted by its key, a bounded page of it)
+      st(`DELETE FROM dmca_upstream_keys WHERE (action_id, item_id, key) IN (SELECT action_id, item_id, key FROM dmca_upstream_keys WHERE action_id IN (${pick}) LIMIT ${RETENTION_ROWS})`),
+      st(`DELETE FROM blocked_hashes WHERE rowid IN (SELECT rowid FROM blocked_hashes WHERE action_id IN (${pick}) LIMIT ${RETENTION_ROWS})`),
+      st(`DELETE FROM dmca_exempt WHERE action_id IN (${pick})`),
+      st(`DELETE FROM hold_releases WHERE source IN (SELECT 'dmca:' || id FROM (${pick}))`),
+      st(`DELETE FROM dmca_counter_notices WHERE action_id IN (${pick})`),
+      st(`DELETE FROM strikes WHERE action_id IN (${pick})`),
+      st(
+        `DELETE FROM dmca_actions WHERE id IN (${pick})
+           AND NOT EXISTS (SELECT 1 FROM dmca_upstream_keys k WHERE k.action_id = dmca_actions.id)
+           AND NOT EXISTS (SELECT 1 FROM blocked_hashes b WHERE b.action_id = dmca_actions.id)`,
+      ),
+    ]);
+    actions = res[res.length - 1]!.meta.changes ?? 0;
+  }
+  const notices = (
+    await c.db
+      .prepare(
+        `DELETE FROM dmca_notices WHERE id IN (SELECT n.id FROM dmca_notices n WHERE n.received_at < ?1 AND n.status <> 'open'
+            AND NOT EXISTS (SELECT 1 FROM dmca_actions a WHERE a.notice_id = n.id) ORDER BY n.received_at LIMIT ${RETENTION_ROWS})`,
+      )
+      .bind(cut)
+      .run()
+  ).meta.changes ?? 0;
+  // (the CASE keeps json_valid ahead of the extraction: an unparsable detail is never read)
+  const names = (table: string, field: string) =>
+    `EXISTS (SELECT 1 FROM ${table} x WHERE x.id = CASE WHEN json_valid(p.detail) THEN p.detail ->> '$.${field}' END)`;
+  const audit = (
+    await c.db
+      .prepare(
+        `DELETE FROM pool_audit WHERE rowid IN (SELECT p.rowid FROM pool_audit p WHERE p.at < ?1 AND p.at < ${DB_RETENTION_FLOOR_SQL}
+            AND NOT (p.item_id IS NOT NULL AND (EXISTS (SELECT 1 FROM dmca_actions a WHERE a.item_id = p.item_id)
+                                                OR EXISTS (SELECT 1 FROM item_holds h WHERE h.item_id = p.item_id)
+                                                OR ${OPEN_APPEAL_SQL("p.item_id")}))
+            AND NOT ${names("dmca_actions", "action_id")} AND NOT ${names("dmca_notices", "notice_id")}
+          ORDER BY p.at LIMIT ${RETENTION_ROWS})`,
+      )
+      .bind(cut)
+      .run()
+  ).meta.changes ?? 0;
+  return { actions, notices, audit };
+}
 
 /** Rows per batch and batches per cron run for account deletions' chain rewrites (round 11). */
 export const REWRITE_BATCH = 500;

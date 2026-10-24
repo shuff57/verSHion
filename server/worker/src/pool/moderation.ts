@@ -45,6 +45,12 @@ export const UNDO_MS = 14 * DAY_MS;
 /** Privacy-blocked image bytes stay (served to nobody) this long before they are deleted. */
 export const PRIVACY_BYTES_GRACE_MS = 14 * DAY_MS;
 export const QUARANTINE_MS = 30 * DAY_MS;
+/**
+ * Round 28: whether a takedown's counter-notice window is open: the author was notified less than
+ * QUARANTINE_MS ago. The same rule as the counter-notice route's SQL (`author_notified_at > now -
+ * QUARANTINE_MS`), for GET /items/mine; the daily cron upholds from `author_notified_at <= now - QUARANTINE_MS`.
+ */
+export const counterWindowOpen = (notifiedAt: number | null, now: number): boolean => notifiedAt !== null && notifiedAt > now - QUARANTINE_MS;
 /** An open appeal stops the purge (round 9 J5); the admin is reminded after this long ... */
 export const APPEAL_REMINDER_MS = 7 * DAY_MS;
 /** ... and an appeal still unanswered after this long RESTORES the item (never a silent purge). */

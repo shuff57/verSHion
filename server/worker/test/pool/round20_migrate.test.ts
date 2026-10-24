@@ -24,6 +24,7 @@ function migrated(o: { before0103?: (db: DatabaseSync) => void; before0104?: (db
   o.before0104?.(db);
   db.exec(readFileSync(`${here}migrations/0104_pool_round12.sql`, "utf8"));
   db.exec(readFileSync(`${here}migrations/0105_pool_round24.sql`, "utf8"));
+  db.exec(readFileSync(`${here}migrations/0106_pool_round28.sql`, "utf8"));
   const r2 = new MemR2();
   for (const [k, b64, ct] of JSON.parse(fx("m7_0102_r2.json")) as [string, string, string | null][]) r2.objects.set(k, { bytes: new Uint8Array(Buffer.from(b64, "base64")), ...(ct ? { contentType: ct } : {}) });
   const w = new World({ sql: db, r2, backfillItems: 50 });

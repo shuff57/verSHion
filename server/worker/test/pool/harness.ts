@@ -223,12 +223,18 @@ export class World {
     this.clock += ms;
   }
 
-  user(trust = "teacher", name?: string): User {
+  /**
+   * An account. Round 28: like an account that existed when migration 0106 ran, it holds a redemption
+   * with no invite (the gate's grandfathering), unless `invited: false` (a new account that must redeem
+   * an admin's invite code first).
+   */
+  user(trust = "teacher", name?: string, o: { invited?: boolean } = {}): User {
     const i = ++this.n;
     const id = `${String(i).padStart(8, "0")}-0000-4000-8000-${String(i).padStart(12, "0")}`;
     this.sql
       .prepare(`INSERT INTO users (id, email, email_verified_at, pw_hash, display_name, trust, created_at) VALUES (?, ?, 1, 'x', ?, ?, 1)`)
       .run(id, `u${i}@school.example.org`, name ?? `Teacher ${i}`, trust);
+    if (o.invited !== false) this.sql.prepare(`INSERT INTO pool_invite_redemptions (user_id, invite_id, at) VALUES (?, NULL, 0)`).run(id);
     const token = `tok-${i}-${Math.random().toString(36).slice(2)}`;
     this.tokens.set(token, id);
     return { id, token, name: name ?? `Teacher ${i}` };

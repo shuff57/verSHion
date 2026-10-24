@@ -419,7 +419,15 @@ export function makeCore(m0: ShareCoreExports, cfg: CoreConfig = { hashKey: null
     const v = validated(out, r);
     const arr = <T>(k: string) => (Array.isArray(r[k]) ? (r[k] as T[]) : []);
     const s: Stripped = {
-      ...v,
+      // (Round 29: v's fields one by one. A spread calls v's `json` getter and kept a decoded copy of the
+      // whole stripped body for the rest of the publish, against "only the bytes are kept" above.)
+      ok: true,
+      get json() {
+        return v.json;
+      },
+      bytes: v.bytes,
+      payload: v.payload,
+      dropped: v.dropped,
       matchHashes: arr<string>("match_hashes"),
       strippedHashes: arr<string>("stripped_hashes"),
       needsOrderAck: arr<Pos>("needs_order_ack"),

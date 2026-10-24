@@ -131,14 +131,14 @@ export interface PositionFacts {
  * first, then the same question, identical, imported, earliest). Credits (round 9 J6) and chain
  * licences are aggregated in SQL too, so neither depends on the size of the bank.
  */
-export async function evidence(c: Ctx, me: string, subjects: (SubjectParam & PositionFacts)[], o: { mine?: string[]; independent?: string[] } = {}): Promise<Evidence> {
+export async function evidence(c: Ctx, me: string, subjects: (SubjectParam & PositionFacts)[], o: { mine?: string[]; independent?: string[]; reserve?: Reserver } = {}): Promise<Evidence> {
   // Round 11 P2: D1 results count against the isolate budget. The query is per position, so a big
   // bank is read EVIDENCE_CHUNK positions at a time, each chunk's worst-case result reserved first.
   const out: Evidence = { byPos: new Map(), overflow: new Map(), credits: new Map(), cut: new Map() };
   const chunk = Math.max(1, Math.floor(EVIDENCE_RESERVE / (EVIDENCE_ROW_BYTES * (EVIDENCE_PER_POSITION + 1))));
   for (let off = 0; off < subjects.length; off += chunk) {
     const part = subjects.slice(off, off + chunk);
-    const release = reserveBytes(part.length * EVIDENCE_ROW_BYTES * (EVIDENCE_PER_POSITION + 1));
+    const release = (o.reserve ?? reserveBytes)(part.length * EVIDENCE_ROW_BYTES * (EVIDENCE_PER_POSITION + 1));
     try {
       const e = await evidenceChunk(c, me, part, o);
       for (const [k, v] of e.byPos) out.byPos.set(k + off, v.map((h) => ({ ...h, pos: h.pos + off })));
@@ -889,12 +889,13 @@ export async function fuzzyHits(
   c: Ctx,
   me: string,
   pos: { pos: number; mh: string; tokens: string[]; bands: string[]; first: number | null; nfull?: string | null; nbare?: string | null; noexpl?: boolean; body?: string[] }[],
-  o: { mine: string[]; independent: string[]; exact?: number[] },
+  o: { mine: string[]; independent: string[]; exact?: number[]; reserve?: Reserver },
 ): Promise<{ hits: ImportHit[]; capped: boolean; cut: Map<number, FuzzyCut>; stemOnly: Set<number> }> {
   const want = pos.filter((p) => p.bands.length > 0);
   if (want.length === 0) return { hits: [], capped: false, cut: new Map(), stemOnly: new Set() };
-  // The worst-case result (one row per candidate pair, its tokens and licences) is reserved first.
-  const release = reserveBytes(Math.min(want.length * FUZZY_PER_POSITION, FUZZY_PAIRS_MAX) * FUZZY_ROW_BYTES);
+  // The worst-case result (one row per candidate pair, its tokens and licences) is reserved first
+  // (round 29: a publish lends what its heavy phase reserved and no longer uses: shared.ts lender).
+  const release = (o.reserve ?? reserveBytes)(Math.min(want.length * FUZZY_PER_POSITION, FUZZY_PAIRS_MAX) * FUZZY_ROW_BYTES);
   try {
     return await fuzzyQuery(c, me, want, o);
   } finally {
@@ -934,6 +935,41 @@ export const lacksAdded = (
   (!added(loose?.ans, p.ans) || ans == null || ans !== p.ans);
 const addsNothing = (p: { expl?: string | null; ans?: string | null }, expl: string | null, ans: string | null) =>
   (p.expl == null || p.expl === expl) && (p.ans == null || p.ans === ans);
+/**
+ * Her durable stem records sharing a keyed band with each position (ownFuzzyFirst): one row per
+ * (position, content), the first FUZZY_PAIRS_MAX in (pos, qhash, bk_expl, bk_ans) order.
+ */
+export const OWN_STEMS_SQL = `WITH b AS MATERIALIZED (SELECT CAST(j.value ->> '$.pos' AS INTEGER) AS pos, bv.value AS band FROM json_each(?2) j, json_each(j.value -> '$.bands') bv)
+         SELECT b.pos, s.first_seq, s.tok_sk, s.body_sk, s.bk_expl, s.bk_ans, s.bk_expl_full FROM b CROSS JOIN author_stems s ON s.author_id = ?1 AND s.band = b.band
+          GROUP BY b.pos, s.qhash, s.bk_expl, s.bk_ans LIMIT ?3`;
+/**
+ * Round 30 (staging D1 insights): the positions OWN_STEMS_SQL can answer for, so it never joins the
+ * rest. Its rows are cut at FUZZY_PAIRS_MAX in position order, and a position has at least as many rows
+ * as its busiest band has records (one band holds a content at most once: the primary key), so once
+ * those counts add up to FUZZY_PAIRS_MAX no later position can reach the result. Without this, a bank of
+ * like stems ("Match each term...") republished joined every position with every record of her common
+ * bands: 5.7 million rows and 9.8 s for 990 questions on workerd's SQLite, growing with the square of the
+ * bank (now 41,000 rows, both queries). The result is the same
+ * (round30.test.ts compares it with the full join): the kept positions' rows are joined in the same
+ * order. Each band's count stops at FUZZY_PAIRS_MAX, so this reads at most that many rows per band.
+ */
+export async function ownStemsWindow<T extends { pos: number; bands: string[] }>(c: Ctx, me: string, kb: T[]): Promise<T[]> {
+  const bands = [...new Set(kb.flatMap((x) => x.bands))];
+  if (bands.length === 0) return kb;
+  const r = await c.db
+    .prepare(`SELECT j.value AS band, (SELECT COUNT(*) FROM (SELECT 1 FROM author_stems s WHERE s.author_id = ?1 AND s.band = j.value LIMIT ?3)) AS n FROM json_each(?2) j`)
+    .bind(me, JSON.stringify(bands), FUZZY_PAIRS_MAX)
+    .all<{ band: string; n: number }>();
+  const n = new Map(r.results.map((x) => [x.band, x.n]));
+  const least = new Map<number, number>();
+  for (const x of kb) least.set(x.pos, Math.max(least.get(x.pos) ?? 0, ...x.bands.map((b) => n.get(b) ?? 0)));
+  let total = 0;
+  for (const [pos, m] of [...least].sort((a, b) => a[0] - b[0])) {
+    total += m;
+    if (total >= FUZZY_PAIRS_MAX) return kb.filter((y) => y.pos <= pos);
+  }
+  return kb;
+}
 export async function ownFuzzyFirst(
   c: Ctx,
   me: string,
@@ -943,11 +979,12 @@ export async function ownFuzzyFirst(
   // later one adds an explanation or answer to it. Used only against a candidate source that lacks
   // what she added (her earlier version predates that source just as much); never for binding.
   loose?: Map<number, { seq: number; expl: string | null; ans: string | null }>,
+  reserve: Reserver = reserveBytes,
 ): Promise<Map<number, number>> {
   const out = new Map<number, number>();
   const want = pos.filter((p) => p.bands.length > 0);
   if (want.length === 0) return out;
-  const release = reserveBytes(Math.min(want.length * FUZZY_PER_POSITION, FUZZY_PAIRS_MAX) * FUZZY_ROW_BYTES);
+  const release = reserve(Math.min(want.length * FUZZY_PER_POSITION, FUZZY_PAIRS_MAX) * FUZZY_ROW_BYTES);
   try {
     const r = await c.db
       .prepare(
@@ -1000,12 +1037,8 @@ export async function ownFuzzyFirst(
     const rest = want.filter((p) => p.bodyToks);
     const kb = await Promise.all(rest.map(async (p) => ({ pos: p.pos, bands: await Promise.all(p.bands.map((b) => keyedOne("b:", b, memo))) })));
     const d = rest.length === 0 ? { results: [] as { pos: number; first_seq: number; tok_sk: string; body_sk: string | null; bk_expl: string | null; bk_ans: string | null; bk_expl_full: string | null }[] } : await c.db
-      .prepare(
-        `WITH b AS MATERIALIZED (SELECT CAST(j.value ->> '$.pos' AS INTEGER) AS pos, bv.value AS band FROM json_each(?2) j, json_each(j.value -> '$.bands') bv)
-         SELECT b.pos, s.first_seq, s.tok_sk, s.body_sk, s.bk_expl, s.bk_ans, s.bk_expl_full FROM b CROSS JOIN author_stems s ON s.author_id = ?1 AND s.band = b.band
-          GROUP BY b.pos, s.qhash, s.bk_expl, s.bk_ans LIMIT ?3`,
-      )
-      .bind(me, JSON.stringify(kb), FUZZY_PAIRS_MAX)
+      .prepare(OWN_STEMS_SQL)
+      .bind(me, JSON.stringify(await ownStemsWindow(c, me, kb)), FUZZY_PAIRS_MAX)
       .all<{ pos: number; first_seq: number; tok_sk: string; body_sk: string | null; bk_expl: string | null; bk_ans: string | null; bk_expl_full: string | null }>();
     for (const x of d.results) {
       const p0 = byPos.get(x.pos)!;
@@ -1042,12 +1075,13 @@ export async function publicNearEarlier(
   c: Ctx,
   me: string,
   pos: { pos: number; tokens: string[]; bands: string[]; qkind: string; first: number | null; body?: string[]; looseFirst?: number | null; looseExpl?: string | null; looseAns?: string | null; expl?: string | null; ans?: string | null }[],
+  reserve: Reserver = reserveBytes,
 ): Promise<{ near: Map<number, { item_id: string; qid: string; version: number; license: string; author_name: string }>; cut: Set<number> }> {
   const out = new Map<number, { item_id: string; qid: string; version: number; license: string; author_name: string; seq: number }>();
   const cut = new Set<number>();
   const want = pos.filter((p) => p.bands.length > 0);
   if (want.length === 0) return { near: out, cut };
-  const release = reserveBytes(Math.min(want.length * FUZZY_PER_POSITION, FUZZY_PAIRS_MAX) * FUZZY_ROW_BYTES);
+  const release = reserve(Math.min(want.length * FUZZY_PER_POSITION, FUZZY_PAIRS_MAX) * FUZZY_ROW_BYTES);
   try {
     const r = await c.db
       .prepare(
@@ -1102,6 +1136,8 @@ export async function publicNearEarlier(
 
 /** Bytes one aggregated fuzzy row may take (at most 64 stem tokens, licences, chain). */
 export const FUZZY_ROW_BYTES = 8 * 1024;
+/** Reserves a worst case against the isolate budget and returns its release (reserveBytes, or a publish's lender). */
+export type Reserver = (n: number) => () => void;
 
 async function fuzzyQuery(
   c: Ctx,

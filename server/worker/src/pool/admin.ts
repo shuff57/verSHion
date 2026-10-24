@@ -8,6 +8,7 @@ import { blockPlan, checkPreview, holdSnapshot, checkToken, PREVIEW_MS, previewT
 import { currentServesBlob, itemServesBlob, servedBlobsOf } from "./served.ts";
 import { keyLeakQualifies, voidEvidence } from "./moderation.ts";
 import { readHold, streamedPayload } from "./read.ts";
+import { inviteAdminRoutes } from "./invites.ts";
 import { adminUnremove, decideAppeal, LINEAGE_COPIES_MAX, lineageCopies, purgeHeldCopies, rightfulCheck, privacyPurge, privacyRestore, purgeItem, restore, reverseUphold, takedown, UNDO_MS, upholdTakedown } from "./moderation.ts";
 
 const HOLD_REASONS = ["reports", "student_data", "blocklist", "admin"] as const;
@@ -842,6 +843,8 @@ export function poolAdminRoutes(ctx: () => Ctx | null): AdminRoute[] {
         return json(200, { ok: true, restored: acts.results.length });
       },
     },
+    // Round 28 (owner): invite codes (issue, list, revoke).
+    ...inviteAdminRoutes(C),
   ];
   return routes.map(wrap);
 }

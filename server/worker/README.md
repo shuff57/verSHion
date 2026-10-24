@@ -27,8 +27,10 @@ their next reads; round 12 added a SQL backfill of sequence numbers, first publi
 for rows that predate it) and `0104_pool_round12.sql` (round 12: content-based authorship records,
 block keys, hold releases, privacy bands, search indexes, `items.fold_rev`). What SQL cannot derive
 (exact Unicode folds, search words, normalised block keys, body hashes) the hourly cron recomputes
-from the stored bodies for every item with `fold_rev = 0`, ten items a run (`backfill`). Add
-`0106_...` for the next change (0105 is the round 24-26 migration).
+from the stored bodies for every item with `fold_rev = 0`, ten items a run (`backfill`).
+`0105_pool_round24.sql` is the round 24-26 migration, `0106_pool_round28.sql` round 28's (retention
+trigger and indexes, invite codes) and `0107_pool_round30.sql` round 30's (one index; round 31 needed
+none). Add `0108_...` for the next change.
 
 `POOL_HASH_KEY` keys share-core's `full_hash` (HMAC-SHA256; an unkeyed hash of a hidden-key question
 is a guessable oracle of its key). The Worker derives the key per purpose by HKDF-SHA256 (salt
@@ -118,7 +120,7 @@ does not move for changes they are not served (a hidden key correction).
 
 R2 bucket binding `POOL` (`wrangler r2 bucket create vershion-pool`; private, never public or
 presigned). Migrations `0102_pool.sql` and `0103_pool_rounds_6_11.sql`. Every route needs `teacher` or
-`admin`; anything an account may not see is a 404. share-core is reached only through
+`admin` (and, round 28, a teacher also needs a redeemed invite code); anything an account may not see is a 404. share-core is reached only through
 `src/pool/core.ts`.
 
 **share-core adapter (round 11, share-core round 6).** `core.ts` is the one place that knows the
@@ -146,6 +148,292 @@ pool_key_mismatch`, changing nothing, with one admin alert. Plain reads continue
 shows the ids. A real rotation would need an offline migration that re-hashes every stored row from
 the full bodies (impossible for purged items); none is provided. Treat the key as permanent: keep it as
 a wrangler secret AND an offline backup; losing it loses the pool's identity data.
+
+**Round 31 (shared near hashes: the earlier-publication lookup and the licence re-key).** No migration
+(the existing near-hash and primary-key indexes suffice); the next is still `0108`. Staging's D1 insights
+after round 30: the earlier-publication lookup (`publish.ts`, "duplicate / near-copy") averaged 26.5 s and
+21.0 million rows a run (27 runs), with 500 `D1_ERROR`s on concurrent big publishes, when two teachers
+published the same 990-question bank. Reproduced on workerd's SQLite (miniflare D1) with two near-identical
+990-question banks by different accounts (plus two other banks, 3,960 questions in all): its plan was
+always the index plan (MULTI-INDEX OR over the five near-hash indexes, with and without `ANALYZE` /
+`PRAGMA optimize` statistics, node and workerd alike), so the cost was not a lost index but FAN-OUT. Every
+position followed each of its near hashes to every question holding it; a hash many questions share
+made it positions x questions. Rows read at 990 (old: the round-30 form; the pre-round-30 form read as
+much or more, 15.7 million already with each question ten times):
+
+  | Two near-identical banks of 990 | Round 30 | Round 31 (firsts + lookup) |
+  |---|---|---|
+  | every question different | 30,678 (15 ms) | 89,046 + 11,871 (24 ms) |
+  | 990 copies of one question | 22,549,230 (6.9 s) | 56,463 + 10,890 (19 ms) |
+  | one stem and choices, 990 explanations | 26,465,670 (9.3 s) | 71,301 + 23,747 (29 ms) |
+
+  (If staging's insights entry still shows `iq.publish_id IN (SELECT x.publish_id ...`, it is the
+  pre-round-30 statement, 9.9-41 million rows for a copy of a public bank; `iq.rowid IN (SELECT x.rowid
+  ...` is round 30's.)
+* **Two statements per chunk of 1,000 positions.** `EARLIER_FIRSTS_SQL` takes the chunk's DISTINCT near
+  hashes and, for each, the questions it finds in the lookup's own sense (one column at a time, each by its
+  index, forced with `INDEXED BY`; `near_full` and `near_bare_full` only on a shown publish), on an item
+  visible to others by another author (`VISIBLE_TO_OTHERS`, the same joins), and returns, per hash, the
+  FIRST in the lookup's order (`seq, publish_id, lineage_seq, rowid`), and the first among those carrying
+  each explanation key and each answer key a position of the chunk has. `earlierCandidates` gives each
+  position those few rowids (`$.c`), and `EARLIER_SQL` runs the old test, unchanged, on them only.
+* **Why the answer is the same.** A source counts when its `seq` is below her first, or, when it lacks what
+  she added (explanation or answer key), below her looser first; her looser first is never later than her
+  first (`minFirst`), NULL counts as "no bound". So: the first question of all her hashes is the answer if it
+  counts; if it does not, no later question lacking her additions can count either (none has a smaller
+  seq), and the answer is the first one carrying her added explanation or answer key, if it counts. Both
+  are among the candidates; the position-independent conditions (the hash test, visibility, another
+  author) are the same in both statements, so "first" means the same thing. Ties keep round 30's order.
+* The plain case reads about three times round 30's rows (each hash's questions are read once with their
+  item, publish and author, where round 30 read only the matching rowids), still linear.
+* **`licence_rekey` (hourly).** Its batch was selected by testing EVERY `q:` row of `content_licences`
+  and `item_offer` against every question of its item, every hour, though at rest none is mappable. It now
+  finds the rows from the questions' side: each retained (and ghost) question's served content is looked up
+  as the row's key (`'q:'` or `'Q:'` + content, which is what `LIKE 'q:%'` and `substr(ckey, 3)` matched)
+  on the primary keys, which lead with `(item_id, ckey)`. Same rows, same batch order, same mapping
+  (the per-row `map` lookup is unchanged). Rows read per run with one republished 990-question bank and a
+  hidden one (workerd): at rest 4,914,361 + 4,914,361 + 2,950,202 + 2,958,121 (6.4 s) -> 11,885 + 11,885 +
+  11,885 + 19,804 (27 ms). While old-style rows remain (5,940 licence rows, 1,980 offer rows): 5.6 + 5.4 +
+  6.0 + 5.6 million ->
+  0.53 + 0.37 + 3.0 + 2.0 million: the unchanged per-row `map` walks its item's questions for each of the
+  (at most `LICENCE_REKEY_ROWS`) rows a run takes, only until the catch-up is done.
+* **Swept, NOT changed (reported).** With banks that hold one question many times, two more statements
+  read rows growing with the square of the bank (workerd, 250 -> 990): the evidence query
+  (`evidenceChunk`, `provenance.ts`), 2,327,358 -> 36,299,724 rows (15.1 s over its 32 chunks) when a
+  teacher imports such a bank (`mayRepublishAs`) and again when she publishes her copy, 3.9 million on the
+  author's own republish; and the served-units query (`publish.ts`, `servedOuter`), 64,260 -> 987,040
+  (75 ms). Every position reads every served row with its match hash or unit key. Nothing else on the
+  publish path grows past 4.5x for 4x the bank but two probes under 8,000 rows; the band-capped fuzzy
+  lookups remain the heaviest linear ones (about 2.1 million rows).
+* Tests: `test/pool/round31.test.ts` (6); the old statements are in `test/pool/oracles.ts` (round 30's
+  test now takes the old lookup from there). (a1) every lookup of random pools (few templates, banks
+  holding a question twice, hidden and shown, republishes, imports, erased authors with anonymised kept
+  items, holds) answers as the round-30 and round-29 forms, compared when it runs (83 lookups, 320
+  positions with her own first, 79 with a looser first); (a2) a directed case where the answer is a source
+  behind the first one (it carries her added explanation); (a3) the licence re-key against the old
+  statements over four runs (live and ghost content, hidden and shown, `Q:` keys, unmappable and canonical
+  rows, past the 1,000-row batch); (a4) 80 adversarial rounds of random near hashes across all five
+  columns, keys, seq and lineage ties, own, held and anonymised rows, and every first / looser-first /
+  added-key combination; (b) two teachers' near-identical banks at 250 and 990 (every explanation
+  different, and all one question): rows visited 1,998 -> 7,918 and 1,750 -> 6,930 (round 30's 250,499 ->
+  3,922,379 and 374,252 -> 5,877,632), each near-hash column by its index, each candidate by rowid,
+  answers as round 30's, time about 4x; (b2) the re-key's plan reads no `q:` row it does not look up by
+  key (the old statements scanned them). Mutations of the new code (no explanation-key candidates, no
+  author or visibility filter, no shown-only rule, another tie order, no `Q:` keys, no ghosts) each fail
+  a test.
+
+**Round 30 (publish-time rows read: linear in the bank).** Migration `0107_pool_round30.sql` (one index;
+next is `0108`). Staging's D1 insights showed max-size publishes (about 990 questions) taking 20-60 s, and
+two at once failing with `500 D1_ERROR`: two statements read rows growing with the SQUARE of the bank.
+Every publish-time statement was then checked the same way, on workerd's own SQLite (miniflare D1,
+`meta.rows_read`) with the staging repro's banks, 990 x 50-pair Matching and 1,000 x 26-choice Mc, at 250
+and 990 questions, published, republished, copied by a teacher who never read it, and backfilled. Five
+statements had the shape; behaviour is unchanged (the old statements are the oracle in `round30.test.ts`).
+Rows read at 250 -> 990 questions, old vs new (workerd SQLite, the same database for both):
+
+  | Statement | Old | New |
+  |---|---|---|
+  | `author_stems` INSERT at publish (`publish.ts`) | 506,251 -> 7,865,551 (2.1 s) | 4,501 -> 17,821 (74 ms) |
+  | `author_stems` INSERT in `stemBackfillAuthor` | 502,252 -> 7,849,712 | 2,252 -> 8,912 |
+  | `stemBackfillAuthor` / `stemBackfill` candidate SELECT | 68,429 -> 1,158,989 | 1,007 -> 3,966 |
+  | `ownFuzzyFirst` durable stem lookup (a republish) | 452,262 -> 5,699,585 (9.8 s) | 31,289 -> 40,800 (47 ms) |
+  | earlier-publication lookup (`publish.ts`, a copy) | 638,416 -> 9,852,396 (4.5 s) | 12,948 -> 50,439 (22 ms) |
+
+* **The stem record INSERTs** joined every question and band with EVERY entry of the bound array (the
+  stem record `?4`, or the backfill's explanation keys `?3`) and matched the position afterwards
+  (990 x 8 bands x 990). They now read the question's own entry by position (`?4 ->> '$[pos].e'`; the
+  record's entry i is `{p: i, e}`, and the `p` check is kept). The loop order (question, then band) and
+  the GROUP BY are unchanged, so rows reach the upsert in the same order. The path lookup walks the
+  array's entries (JSONB has no index), a few milliseconds at the 1,000-question limit; not rows read.
+* **The backfill's candidate SELECT** probed `author_stems` by `(author_id, qhash)`, which the primary key
+  `(author_id, band, qhash, ...)` cannot seek: every probe walked all of the author's records. Index
+  `author_stems_qhash (author_id, qhash, bk_expl_full)`, covering: without `bk_expl_full` SQLite keeps the
+  primary key's `author_id` prefix rather than look rows up in a WITHOUT ROWID table. Same SQL.
+* **`ownFuzzyFirst`'s durable lookup** joins each position's keyed bands with her `author_stems` and keeps
+  the first `FUZZY_PAIRS_MAX` (2,000) rows in (position, content) order. A bank of like stems ("Match each
+  term...") republished joined every position with every record of the common bands. `ownStemsWindow`
+  (`provenance.ts`) first counts each band's records (capped at 2,000, one query): a position has at least
+  as many rows as its busiest band has records, so once those counts add up to 2,000 no later position can
+  reach the result, and only the positions up to there are joined. Same SQL (`OWN_STEMS_SQL`), same rows
+  in the same order; below the cut every position is joined as before.
+* **The earlier-publication lookup** (a near copy of a VISIBLE question by another author, published
+  before hers) took as candidates every question of every publish holding a match (`iq.publish_id IN`),
+  so a copy of a 990-question public bank walked each matching publish per question (41.2 million rows,
+  17.6 s, with four publishes holding the bank; the table's 9.9 million is with two). Its candidates are
+  now the matching questions themselves (`iq.rowid IN`, by the near-hash indexes): a question passing its
+  test matches by one of those hashes, so the set is the same. Ties on `seq` (a bank holding a question twice) were broken by the old scan
+  order, publish then `item_questions_publish_lineage`; the ORDER BY now spells that out (`seq, publish_id,
+  lineage_seq, rowid`), so the same question is named (checked on node and on workerd: identical plans
+  for the old form, identical answers).
+* Checked and left as they are (every statement of the session above, as it ran, on workerd's SQLite): the
+  evidence query (`evidenceChunk`, linear: 26,898 -> 107,094 rows for a copier who imported); `fuzzyQuery`
+  and `publicNearEarlier`, bounded per band by `FUZZY_BAND_MAX` and `PUB_BAND_MAX` (a bank of like stems:
+  at most about 2.2 million rows at either size, a band past its cap skipped; under 0.15 s), now the heaviest
+  publish-time statements; nothing else grows past 4.5x for 4x the bank but the privacy band probe (2,440
+  rows at 990: one seek per distinct band). Rows read per phase at 990 after this round: first publish
+  205,095; republish 4.0 million; a teacher's copy 2.1 million (43.2 million before).
+* **Not publish-time, NOT changed (reported):** the hourly `licence_rekey` (`licenceRekey`, round 25)
+  tests every `q:%` row of `content_licences` and `item_offer` for mappability by walking all the questions
+  of its item, every run, whether or not the row is already canonical: four statements of about 5.9
+  million rows each (2.3-2.7 s each) per hour with one 990-question bank in the pool, growing with the
+  square of the bank.
+* Tests: `test/pool/round30.test.ts` (5). (a1) the old and new INSERTs give the same `author_stems` on
+  random banks (every kind, duplicates, a reordered and edited republish, aged records, the legacy
+  backfill at the hourly cron); (a2) adversarial item rows and arguments (duplicate contents and bands,
+  NULL and '' keys, short and long arrays, an item that is not current, an erased author); (a3) her durable
+  lookup over the kept positions against the full join, hot, sparse and tight band regimes, with the cut
+  reached and not; (a4) the earlier-publication lookup against the publish-driven form, ties included;
+  (b) the 990 x 50 Matching and 1,000 x 26 Mc session at 250 and 990: no statement walks a whole bound
+  array, an author's whole stem record, or (over the bank's positions) a whole publish per row
+  (EXPLAIN QUERY PLAN of every statement; the old forms are caught), the index changes no answer, her
+  durable lookup visits 16,394 -> 26,396 rows (the full join 431,620 -> 5,662,944), and each rewritten
+  statement's time grows about 1.3-7x for 4x the bank (best of 5; 12x allowed, 8x with
+  `POOL_STRICT_TIMING=1`; a statement under 25 ms at 990 passes).
+
+**Round 29 (publish memory: the fuzzy lookup inside the publish's own reservation).** No migration, no
+limit changed (`ISOLATE_BYTES_BUDGET` stays 72 MB, `PUBLISH_COST_PER_BYTE` 16, the lookups' worst cases
+as before).
+* **The bug (measured on deployed staging).** A hidden-key Matching bank of 3.81 MB (990 questions x 50
+  pairs) was refused `503 busy` on an IDLE isolate after about 8 s of CPU. The publish holds its body
+  (1x, readBody) and 15x for the heavy phase (16x: 61 MB for this bank) until it ends; its evidence query
+  (8 MB) and its fuzzy lookups (`FUZZY_PAIRS_MAX` 2,000 rows x `FUZZY_ROW_BYTES` 8 KB = 15.6 MB, reserved
+  only when a stem has 4+ words, so it has MinHash bands) were reserved ON TOP: 61 + 15.6 = 76.6 MB > 72 MB.
+* **Why not simply run the lookups inside the 16x.** Measured (node, `--expose-gc`, live heap plus
+  buffers at the lookups): both payload trees (the full and the stripped form) were still alive there,
+  so 47 MB of the 61 MB was in use (with the test harness's 3.8 MB copy of the request), 13.5 MB to
+  spare against the lookup's 15.6 MB worst case. Running the lookup inside the reservation as it was would
+  have under-reserved. Nor may the reservation simply shrink after the heavy phase: staging builds the
+  large insert statements again (measured in node: live memory rose by 15 MB at the question inserts of
+  a served-body-keeping republish of this bank), so the 16x is kept until the end.
+* **The fix: serialise, then lend.** (1) The payload trees, the full form's question list and the sketch
+  memo (a pure cache) are dropped BEFORE the evidence and fuzzy lookups (the few facts staging needs are
+  taken first: kinds, images, tags, bank name; `src/pool/publish.ts`). The previous stripped body of a
+  hidden republish that keeps its served form is now read in its own function (`reuseServed`), so its
+  text and parsed tree are gone once it returns, and the share-core adapter no longer keeps a decoded copy
+  of the stripped JSON (`core.ts`: the spread of `validated` called its `json` getter). (2) The four
+  lookups (evidence, own fuzzy, fuzzy, public near) take a `reserve` function: in a publish it is
+  `lender(heavy - postHeavyBytes(...))` (`src/pool/shared.ts`), which borrows first from the part of the
+  heavy reservation the publish provably no longer uses and reserves only the rest from the isolate (503
+  `busy` as before). A borrow never frees isolate budget to anyone else (the heavy reservation stays
+  whole) and is returned when its lookup ends; a refused reservation borrows nothing.
+* **`postHeavyBytes`, the upper bound of what a publish holds during its lookups:** the bodies it will
+  store (full + stripped + a reused stripped body, exact bytes; the request body keeps its own
+  reservation) + 16x the meta's bytes + 12 KB a question + 224 bytes a stem/choice/part-stem word
+  (`stemTokens`, `bodyTokens`; at most 64 a text) + 8 bytes a character of those words (two-byte strings
+  included) + 2 KB a Multipart part. Fitted on node measurements (no pointer compression, so above
+  workerd) of eleven publishes, fresh and served-body-keeping republishes: Matching 990 x 50, Mc 1,000 x
+  26 with every word distinct, 440 x 64 long words, 1,000 tiny Tf, 1,000 Short, 180 x 50 Multipart parts.
+  Every measured holding is at least 20% below the bound (the closest: 1,000 tiny Tf republished, 10.9
+  MB live against 14.2 MB; the Matching republish 38 against 46.5 MB). When the bound is above the heavy
+  reservation (many small questions, many distinct words), nothing is lent and the lookups reserve from
+  the isolate exactly as before.
+* **The repro bank now** (3,996,278 bytes, 74,250 words): heavy 57.2 MB, bound 38.8 MB, so 18.4 MB to
+  lend, which covers the fuzzy worst case (15.6 MB) and an evidence query (8 MB) in turn. Peak reserved
+  61.0 MB (the request body + the heavy 15x) instead of 76.6; measured live at its lookups 26-28 MB
+  (node, with the request body). A served-body-keeping republish of it peaks at 62.8 MB reserved.
+* **True peak against the 72 MB.** The budget's arithmetic is unchanged: 128 MB - 30 MB wasm - 20 MB
+  baseline leaves 78 MB, 72 committed. Every byte a publish uses during its lookups is still covered by
+  a reservation (its own, measured at least 20% above in node) and the lookups' worst cases are still
+  reserved in full (borrowed or new); the borrowed part is memory the dropped trees actually freed, not
+  headroom. What is still an estimate, as before round 29: the heavy phase's 16x (measured 62 MB on a
+  3.9 MB Mc bank) and node-only numbers (workerd reports no isolate memory). Measured in node, a publish
+  of 1,000 Mc questions whose every word is distinct holds more after its heavy phase (38 MB at 2.96 MB of
+  body) than 16x its body, before and after this round; its bound is above its reservation, so nothing
+  is lent to it. A 180-question bank of 50 Multipart parts each, every part stem 63 distinct words (3.8
+  MB), is still refused `503 busy` on an idle isolate, as before (its bound lends nothing).
+* Tests: `test/pool/round29.test.ts` (7): the 3.81 MB Matching bank is accepted on an idle isolate with
+  its fuzzy lookups run and nothing reserved past 16x its body (it failed with 503 with lending disabled);
+  two such publishes at once: one 201, the other shed `503 busy` by the byte budget (not the heavy queue),
+  the budget never passed, zero after; with the rest of the budget taken by another request mid-publish it
+  still completes on its own reservation; a publish with nothing to lend (1,000 small questions) is still
+  refused 503 when the isolate is full, and accepted when idle; a refusal after the lookups (too many
+  tags at staging) releases everything; the lender's arithmetic; the adapter keeps no decoded copy.
+
+**Round 28 (owner decisions).** Three changes; migration `0106_pool_round28.sql` (next is `0107`).
+* **Retention: audit and takedown records are kept 3 years** (`retention`, a daily cron stage,
+  src/pool/cron.ts). 3 years is `RETENTION_MS` = 1,096 days (never less than three calendar years).
+  Bounded and idempotent, oldest first: at most `RETENTION_ACTIONS` (100) takedown actions and
+  `RETENTION_ROWS` (5,000) rows per table a run; the rest resume the next day. In order:
+  * A takedown action goes, with its counter-notice, strike, exempt authors, hold releases, re-upload
+    block rows and upstream snapshot (`dmca_upstream_keys`), when it is CLOSED (put back, withdrawn,
+    reversed, or upheld and purged; no uphold or put-back still finishing), NOTHING about it is newer
+    than the cutoff (its own dates, counter-notice, strike, exemptions, hold releases, the `dmca.*` audit
+    rows of its item), and nothing still DEPENDS on it: no re-upload block of it in force (a 10-year
+    `block_days` block keeps its action and upstream snapshot, so the original's exemption holds for as
+    long as the block does), no copy it holds, no open appeal and no unresolved `counter_notice` or
+    `dmca_copy` flag on its item (resolve the flag to let retention proceed). Each delete re-checks this
+    inside one batch, so an action an admin reverses meanwhile is left whole.
+  * A DMCA notice received before the cutoff goes once no action names it, unless it is still `open`
+    (it can still be acted on; withdraw it to let it go).
+  * A `pool_audit` row older than the cutoff goes, except the trail of an item that still has a
+    takedown record kept, a hold (under review) or an open appeal, and rows naming a kept action or
+    notice. The `pool_audit_no_delete` trigger now allows a DELETE only of a row older than 1,096 days
+    by the DATABASE's clock (`strftime('%s','now')`), and the stage's DELETE carries the same floor:
+    a skewed application clock can neither delete a younger row nor fail the stage. Updates stay
+    refused as before.
+  * Never touched: `void_items` (an upheld takedown's evidence void is live licensing state, not a
+    record), admin flags, the outbox, and `auth_audit` (the auth package's table; NOT purged at 3 years:
+    that needs a change in the auth package, not made here). The erasure resweep is unchanged and runs
+    as before (it scrubs a kept record's counter-notice of an erased author; retention later deletes it).
+  * Documented limits: the independence-claim "already claimed" check reads the account's audit rows
+    (src/pool/publish.ts), so a claim re-made after its first is past retention counts as fresh for the
+    30-day `independent_repeat` count; the audit stage re-reads kept old rows (held items, kept records)
+    each day, bounded by the `at` index range.
+* **Invite codes: pool use needs a redeemed admin-issued code** (src/pool/invites.ts). Integration
+  point, chosen as the least invasive: the gate sits in the POOL, beside the approval gate, not in
+  sign-up. The auth package's sign-up answers the same whether or not an address exists and keeps
+  nothing a registrant typed past confirmation (the mailbox owner re-enters the profile), so a code
+  checked or used up at sign-up could be burned by whoever typed someone else's address, and a refusal
+  for a bad code would be a new differing answer; the auth package is generic and stays unchanged. So
+  sign-up, confirmation and approval work exactly as before, and an account needs BOTH the admin's
+  approval (trust `teacher`) and an invite redemption. Every pool route answers `403 invite_required`
+  (with a message) to a teacher without one; admins are exempt; `GET /me/export` stays open (the
+  account's own data); `POST /me/invite {code}` is open to `pending` accounts too, so an applicant
+  redeems right after confirming and the admin can check before approving (`GET /admin/pool/invites?user_id=`;
+  the auth package's queue does not show it). Approving an account without a code is still possible; it
+  then cannot use the pool until it redeems one.
+  * Codes: 120 random bits as 24 Crockford base32 characters, shown as `XXXX-XXXX-XXXX-XXXX-XXXX-XXXX`
+    ONCE in the issue answer; only the SHA-256 of the normalised form is stored (`pool_invites.code_hash`;
+    neither audit row has the code). Typed codes ignore case, spaces and hyphens and read I/L as 1 and
+    O as 0. Single use by default, `max_uses` 1 to 1,000, optional `expires_in_days` 1 to 365,
+    revocable; a revocation stops further redemptions and never undoes one (use revoke-teacher or
+    suspend for an account). One redemption per account (`pool_invite_redemptions`); a second answers
+    `{ok, already: true}` and uses nothing. Every refusal of a code (unknown, expired, revoked, used up)
+    is the same `422 invite_invalid`; a malformed code is `400 invalid_request`. Attempts are a daily
+    allowance (`invite_tries`, 10). The use is taken in one batch with the redemption and its audit,
+    only while the code is good, the account holds no redemption and stands (`ALIVE_SQL`), so a race for
+    a last use has one winner and an erased account writes nothing (401).
+  * Existing approved accounts keep working: migration 0106 gives every account that is `teacher` or
+    `admin` (not deleted) when it runs a redemption with `invite_id` NULL ("grandfathered"). Applying 0106
+    is when the gate starts: accounts pending then, and accounts approved later, need a code. An admin
+    later demoted to teacher keeps a grandfathered row only if they had one.
+  * Erasure deletes the account's redemption (the invite keeps its use count); the erasure resweep does
+    too. A request still authenticated after the erasure is a 401 at the gate, never a 403.
+  * Admin routes (audited in `pool_audit` and `auth_audit`, never with the code): `POST /admin/pool/invites
+    {max_uses?, expires_in_days?, note?}` -> `201 {invite_id, code, max_uses, expires_at, note,
+    shown_once}`; `GET /admin/pool/invites` (newest first, `?after=` cursor, each with `state`
+    `active | expired | used_up | revoked` and `uses`), `?id=` (one invite and who redeemed it), `?user_id=`
+    (that account's redemption, `grandfathered` when it predates the gate, or null); `POST
+    /admin/pool/invites/revoke {invite_id, note?}` (409 `already_revoked`, 404).
+* **Counter-notice window in `GET /items/mine`** (spec appendix 14). The counter-notice route already
+  refused after the window (`409 window_closed`, `author_notified_at > now - 30 days` in the same
+  statement that takes the notice); `/items/mine` offered `counter_notice: "available"` for any open
+  action. It now uses the route's own rule (`counterWindowOpen`, src/pool/moderation.ts): a taken-down
+  item says `available` only inside the window, with `counter_notice_by` (the window's end, exclusive),
+  and `closed` from that instant on, whether or not the daily cron has upheld it yet; a ghost takedown
+  (`takedown_pending`) also carries `counter_notice` (`available | received | closed`) besides
+  `counter_notice_by` and `counter_notice_sent`.
+* Tests: `test/pool/round28.test.ts` (12). Retention: closed records of every kind (withdrawn, upheld,
+  put back after a counter-notice) and their audit trail go after 3 years while a block in force, an
+  open counter-notice flag, a hold, an open notice and everything younger stay; the upstream original's
+  republish stays exempt while its block is in force (and a stranger's re-upload held); the bounds and
+  the order; the trigger by the database's clock and a skewed application clock; retention together
+  with the erasure resweep. Invites: the gate, hashed storage (every table scanned for the code), loose
+  typing, audit, single use / cap / expiry / revocation, the race for a last use, the daily allowance,
+  pending accounts, the 0106 grandfathering, erasure and the round-27 401. Window: both boundaries for a
+  live and a ghost takedown, with no cron run between. `test/pool/harness.ts`'s `user()` gives each
+  account a grandfathered redemption (`invited: false` for a new one); the migration tests apply 0106;
+  the LIMIT lint covers invites.ts and the retention batches.
 
 **Round 26 (critic moodle-33c).** Three blockers in the round-25 work, and one starvation fix.
 * The upstream exemption covers only what the upstream CARRIED when the action was made (B-1). The
@@ -802,7 +1090,8 @@ them (the cron backfill recomputes block keys and body hashes only for `fold_rev
 | `PATCH /items/:id` | author | `{visibility}`; `public` refused while the licence is `circle-only` |
 | `DELETE /items/:id`, `POST /items/:id/undelete` | author | hidden at once, undo for 14 days, then purged |
 | `GET /items?scope=&subject=&kind=&tag=&standard=&license=&q=&cursor=&limit=` | teacher | newest created first (a republish never moves an item across a cursor), subject and `q` case-insensitive in every script (stored NFKC + lower-case folds): (round 12) every word of `q` starts a word of the title, the subject, a tag or the question text **as served to non-authors** (`served_words`, built from the stripped form when the key is hidden and keyed on the public publish; the full form is never indexed). A `q` or `tag` walk starts from its index (the longest query word; at most 5,000 candidate publishes, `SEARCH_CANDIDATES`), never from the whole pool; `license=` filters by licence; each result carries `license_check`; signed cursor, max 50, no totals |
-| `GET /items/mine` | teacher | own items with state (`live`, `held_for_review`, `needs_reupload`, `deleted`, `taken_down`, `removed_privacy` (listed with a notice and `appeal` for 14 days), ...) and storage used |
+| `GET /items/mine` | teacher | own items with state (`live`, `held_for_review`, `needs_reupload`, `deleted`, `taken_down`, `removed_privacy` (listed with a notice and `appeal` for 14 days), ...) and storage used; a takedown's `counter_notice` is `available` (with `counter_notice_by`) only inside its 30-day window (round 28) |
+| `POST /me/invite` | pending or teacher | `{code}`: redeem an admin's invite code (round 28); every other pool route but `GET /me/export` answers a teacher without one `403 invite_required` |
 | `GET /items/:id`, `HEAD /items/:id` | visible | served form + per-question provenance (`served_sha256`, `match_hash`, `chain`), streamed, with `Content-Length` and an `ETag` (a hash of the head, which names only the public publish id: a hidden-only republish does not change it); `If-None-Match` gives 304; HEAD and 304 record nothing |
 | `POST /items/:id/import` | visible | same, recorded (author: own full copy, not recorded) |
 | `POST /items/versions` | teacher | `{ids}` (<=200) -> `current` / `newer` (with `license` and `license_version`, which moves on any licence change) / `under_review` (student data within its 14-day grace: keep the copy) / `removed` / `unavailable` |
@@ -816,7 +1105,8 @@ Admin routes (behind the admin guard; ids in the body or query, because the guar
 paths): `GET /admin/pool/reports`, `GET /admin/pool/flags`, `GET /admin/pool/item?id=`,
 `POST /admin/pool/hold|release|dismiss|remove|unremove|purge-preview|purge|privacy-restore|purge-held-copies|appeal-decision|unblock|evidence|resolve-flag`, `PUT /admin/pool/limits`, `GET /admin/dmca/notices|actions|counter-notices`,
 `POST /admin/dmca/notices|takedown-preview|takedown|court-action|resolve|hold-copies-preview|hold-copies|release-copies|unblock|exempt|withdraw`, `GET /admin/dmca/copies?action_id=` (`resolve {action_id, outcome:
-"restore"|"remove"}` ends a court action).
+"restore"|"remove"}` ends a court action), and (round 28) `GET|POST /admin/pool/invites`,
+`POST /admin/pool/invites/revoke`.
 
 - **Confirms:** purge, takedown and hold-copies quote the `confirm_preview` token of their preview. A
   token binds the admin, the selection, the affected items and the action's parameters (`notice_id`,
@@ -868,12 +1158,12 @@ Rollback: restore the export or Time Travel; 0104 has no down migration.
 | Limit | Default |
 |---|---|
 | Publish body | 4 MB payload + 1 MB meta (`maxPublishBytes` in the pool deps); publishes are parsed one at a time per isolate (4 more may wait at most 20 s, then 503 `busy`) and one at a time per account (409 `publish_in_progress`) |
-| Memory per isolate | 72 MB committed to requests at once (`ISOLATE_BYTES_BUDGET`; round 9: 128 MB - 30 MB for the share-core wasm memory - about 20 MB of runtime baseline leaves 78 MB with no headroom, so 72 MB until a staging measurement on the final share-core build). The wasm memory is one instance shared by publishes and Argon2 login hashing and never shrinks: measured 20.7 MB after a 3.9 MB Mc bank, 21.4 MB after a 3.8 MB Matching bank, 20.4 MB after one Argon2 hash (a publish after it reuses that memory); the critic measured 29.4 MB on a Matching bank, so 30 MB is budgeted. A publish reserves 16x its body for the heavy phase (measured: about 62 MB of JS heap and buffers, wasm excluded, server-side for a 3.9 MB hidden-key bank); a read reserves 1 MB plus 3x its JSON head; beyond it, 503 `busy` |
+| Memory per isolate | 72 MB committed to requests at once (`ISOLATE_BYTES_BUDGET`; round 9: 128 MB - 30 MB for the share-core wasm memory - about 20 MB of runtime baseline leaves 78 MB with no headroom, so 72 MB until a staging measurement on the final share-core build). The wasm memory is one instance shared by publishes and Argon2 login hashing and never shrinks: measured 20.7 MB after a 3.9 MB Mc bank, 21.4 MB after a 3.8 MB Matching bank, 20.4 MB after one Argon2 hash (a publish after it reuses that memory); the critic measured 29.4 MB on a Matching bank, so 30 MB is budgeted. A publish reserves 16x its body (1x as it arrives, 15x for the heavy phase; measured: about 62 MB of JS heap and buffers, wasm excluded, server-side for a 3.9 MB hidden-key bank) and holds it to the end; its evidence (8 MB a query) and fuzzy (up to 15.6 MB) lookups run after its payload trees are freed and first borrow the part of that reservation it no longer uses (round 29: the heavy 15x minus `postHeavyBytes`), reserving only the rest (a 3.81 MB Matching bank now peaks at 61 MB, was 76.6); a read reserves 1 MB plus 3x its JSON head; beyond it, 503 `busy` |
 | Request bodies | One reader for every route: the pool's publish, upload and JSON routes, and every body the auth package reads (account routes and admin routes, pre-read in `src/pool/preread.ts`). `Content-Length` required (411) and exact (400 `length_mismatch`); bytes are reserved as they ARRIVE (a stalled body holds only what it sent); read within 15 s (408); at most 4 bodies and 8 MB at once per account (429 `too_many_uploads`). A request with a valid bearer token of a teacher or admin is authenticated first and read under its account: it is never refused because of unauthenticated load (if authentication itself fails, the body is read under the isolate budget, not the unauthenticated pools). Any other body (no token, a bad one, a pending or unverified account) is read under the unauthenticated budgets (round 9 K2): 2 MB in all, in three pools (sign-in: login, refresh, reauth, 1 MB, bodies at most 2 KB; sign-up 512 KB; everything else 1 MB), within 2 s (so 8 KB must arrive at that rate), at most 2 at once per IPv6 /64, 4 per /56, 8 per /48 and 16 per /32, or 4 per IPv4 address and 8 per IPv4 /24 (round 10). A client that goes away mid-body gets a clean 400 `body_aborted`. JSON bodies at most 64 KB, auth bodies 8 KB, an admin's bodies on admin routes 256 KB (round 10 M-8: read after authentication and, in the auth package, after its admin guard: a generic per-route `maxBodyBytes`), images 2 MB (the day's uploads and bytes are charged before the body is read). The auth package's own reader also stops at 8 KB without buffering more. A test fails on any direct request-body read outside the two readers |
 | Streamed reads | Isolate-local caps (each isolate counts its own): 4 unfinished per account, 2 per account on one address, 8 per address (429 `too_many_open_reads`, "retry in a moment"); a stream nobody pulls from for 10 s is cancelled; at 60 s a stream still moving at 20 KB/s or more continues up to 300 s, a slower one is cut |
 | Storage per account | 200 MB (`storage_bytes`); deleted-but-not-purged bytes have their own 200 MB (`removed_bytes`) |
 | Shared questions per account | 5,000 (`shared_questions`), in-flight publishes included |
-| Daily per account | 50 publishes, 300 refused publishes (reserved before the work), 100 imports, 2,000 item reads, 500 browse pages, 500 uploads and 200 MB, 100 id misses, 100 blob misses, 20 reports, 10 appeals |
+| Daily per account | 50 publishes, 300 refused publishes (reserved before the work), 100 imports, 2,000 item reads, 500 browse pages, 500 uploads and 200 MB, 100 id misses, 100 blob misses, 20 reports, 10 appeals, 10 invite-code tries (round 28) |
 | Per IP | 6,000 requests / 5 min (20 account-shares: a school's teachers behind one NAT), counted only for requests that passed their account's own limit (300 / 5 min); 50,000 reads / day, at most 10,000 of them (20%) from one account; refused requests are given back |
 | Reports | 3 distinct teachers hold an item; a student-data report holds at once, at most 3 a day per reporter, 50 a day site-wide (`instant_holds_global`), never from accounts younger than 7 days nor from accounts with no pool history (an import or a published item); the admin's report list shows each reporter's history (reports, dismissed, imports, items, since) |
 | Blocks | privacy and DMCA blocks cover only the questions and images the admin designated after a preview. A privacy block selects NOTHING by default (round 10): the admin ticks what holds student data (400 `selection_required` otherwise); the preview marks `suggested` what no other author has on their own (any item, any state; copies that trace to the item do not count); a DMCA block skips a question or image used by 3+ other authors (`block_common_k`); either can be selected explicitly; DMCA blocks expire after `block_days` (default 60); both can be lifted (`/admin/pool/unblock` with `hash` or `sha256`, `/admin/dmca/unblock`) |
@@ -1165,7 +1455,8 @@ attacker's, different, or absent, and checks that everything a non-author observ
   any heavy work, and reads stream (the admin item view too); one isolate commits at most 72 MB to
   requests (503 `busy` beyond). Large D1 reads reserve their worst case first (round 11): the
   evidence query 8 MB per query (31 positions at a time), the fuzzy lookup 8 KB per candidate pair (at
-  most 16 MB). Object-dense banks (26-choice Mc, 4x8 Multipart, 50-pair Matching, 1,000 questions)
+  most 16 MB); in a publish they first borrow what its heavy reservation no longer covers (round 29).
+  Object-dense banks (26-choice Mc, 4x8 Multipart, 50-pair Matching, 1,000 questions)
   peak at 13-28 MB of live JS heap against 23-32 MB reserved (critic eK, node, `--expose-gc`).
   Measured in node only (workerd does not report isolate memory).
 - **Fuzzy lookup bounds** (round 11 P2): one aggregated SQL statement per publish; a MinHash band

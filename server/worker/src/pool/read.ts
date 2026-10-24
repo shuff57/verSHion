@@ -2,7 +2,7 @@
 // form; anyone else gets the stripped form of a hide_key publish and the full form otherwise. Every
 // non-author read joins items.current_publish_id and the author's standing (VISIBLE_TO_OTHERS).
 // full_sha256 / full_content / full_key never leave this module for a non-author of a hide_key publish.
-import { QUARANTINE_MS } from "./moderation.ts";
+import { counterWindowOpen, QUARANTINE_MS } from "./moderation.ts";
 import { allowedForBank, decideLicence, isLicense, LICENSES } from "./license.ts";
 import { authorContext, evidence, isHard, unitOf, voidInfo, type ChainLink } from "./provenance.ts";
 import { collapseChain, fold, searchKey } from "./publish.ts";
@@ -683,14 +683,20 @@ export async function mine(c: Ctx, p: PoolPrincipal, after: string | null = null
               (EXISTS (SELECT 1 FROM item_holds h WHERE h.item_id = i.id AND h.source = 'key_leak') AND NOT EXISTS (SELECT 1 FROM item_holds h WHERE h.item_id = i.id AND h.source <> 'key_leak')) AS key_leak,
               (SELECT COUNT(DISTINCT im.user_id) FROM imports im WHERE im.item_id = i.id AND im.user_id <> i.author_id AND im.kind = 'import') AS import_count,
               (SELECT a.id FROM dmca_actions a WHERE a.item_id = i.id AND a.restored_at IS NULL AND a.purged_at IS NULL ORDER BY a.disabled_at DESC LIMIT 1) AS action_id,
-              (SELECT a.counter_notice_id FROM dmca_actions a WHERE a.item_id = i.id AND a.restored_at IS NULL AND a.purged_at IS NULL ORDER BY a.disabled_at DESC LIMIT 1) AS counter_notice_id
+              (SELECT a.counter_notice_id FROM dmca_actions a WHERE a.item_id = i.id AND a.restored_at IS NULL AND a.purged_at IS NULL ORDER BY a.disabled_at DESC LIMIT 1) AS counter_notice_id,
+              (SELECT a.author_notified_at FROM dmca_actions a WHERE a.item_id = i.id AND a.restored_at IS NULL AND a.purged_at IS NULL ORDER BY a.disabled_at DESC LIMIT 1) AS notified_at
          FROM items i WHERE i.author_id = ?1 AND (i.purged_at IS NULL OR (i.removed_reason = 'privacy' AND i.removed_at > ?2))
           AND (?3 IS NULL OR i.updated_at < ?3 OR (i.updated_at = ?3 AND i.id < ?4))
         ORDER BY i.updated_at DESC, i.id DESC LIMIT ${MINE_PAGE}`,
     )
     .bind(me, c.now() - PRIVACY_APPEAL_MS, cur ? Number(cur[1]) : null, cur ? cur[2] : "")
-    .all<{ id: string; kind: string; title: string; subject: string; version: number; visibility: string; license: string; hide_key: number; question_count: number; committed_at: number | null; removed_at: number | null; removed_reason: string | null; purge_after: number | null; current_publish_id: string | null; held: number; needs_reupload: number; key_leak: number; import_count: number; action_id: string | null; counter_notice_id: string | null }>();
+    .all<{ id: string; kind: string; title: string; subject: string; version: number; visibility: string; license: string; hide_key: number; question_count: number; committed_at: number | null; removed_at: number | null; removed_reason: string | null; purge_after: number | null; current_publish_id: string | null; held: number; needs_reupload: number; key_leak: number; import_count: number; action_id: string | null; counter_notice_id: string | null; notified_at: number | null }>();
   const now = c.now();
+  // Round 28 (owner; spec appendix 14): the counter-notice is offered only inside its 30-day window, by
+  // the SAME rule POST /items/:id/counter-notice applies (author_notified_at > now - QUARANTINE_MS), and
+  // the window's end is given; past it the answer is "closed" (the POST refuses 409 window_closed).
+  const counterState = (counterId: string | null, actionId: string | null, notified: number | null) =>
+    counterId !== null ? "received" : actionId !== null && counterWindowOpen(notified, now) ? "available" : "closed";
   // Round 10: a hold an ADMIN placed on an existing item (a confirmed student-data purge or a
   // takedown holding its copies) says what it is about and which questions; a hold placed by a
   // publish's own content check keeps the neutral notice (no block-membership oracle).
@@ -733,7 +739,8 @@ export async function mine(c: Ctx, p: PoolPrincipal, after: string | null = null
         if (r.purge_after !== null && r.purge_after > now) extra.undo_until = r.purge_after;
       } else if (r.removed_reason === "takedown") {
         state = "taken_down"; // "taken down after a copyright notice", with the counter-notice form
-        extra.counter_notice = r.counter_notice_id !== null ? "received" : r.action_id !== null ? "available" : "closed";
+        extra.counter_notice = counterState(r.counter_notice_id, r.action_id, r.notified_at);
+        if (extra.counter_notice === "available") extra.counter_notice_by = r.notified_at! + QUARANTINE_MS;
       } else if (r.removed_reason === "privacy") {
         // Purged at once (no quarantine for student data); shown to its author while it can be appealed.
         state = "removed_privacy";
@@ -787,8 +794,16 @@ export async function mine(c: Ctx, p: PoolPrincipal, after: string | null = null
                 ORDER BY a.disabled_at DESC LIMIT 100`,
             )
             .bind(me)
-            .all<{ id: string; action_id: string; n: number; counter_notice_id: string | null }>()
-        ).results.map((x) => ({ id: x.id, state: "takedown_pending", action_id: x.action_id, counter_notice_sent: x.counter_notice_id !== null, counter_notice_by: x.n + QUARANTINE_MS }))
+            .all<{ id: string; action_id: string; n: number | null; counter_notice_id: string | null }>()
+        ).results.map((x) => ({
+          id: x.id,
+          state: "takedown_pending",
+          action_id: x.action_id,
+          counter_notice_sent: x.counter_notice_id !== null,
+          // (round 28: the server says whether the form is offered, by the POST's own rule)
+          counter_notice: counterState(x.counter_notice_id, x.action_id, x.n),
+          ...(x.n !== null ? { counter_notice_by: x.n + QUARANTINE_MS } : {}),
+        }))
       : [];
   return json(200, {
     items: [...ghostTd, ...items],

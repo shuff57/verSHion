@@ -82,6 +82,7 @@ import {
   isPublishType,
   PUBLISH_COST_PER_BYTE,
   reserveBytes,
+  lender,
   requireDaily,
   sha256Hex,
   SHARED_SQL,
@@ -320,24 +321,32 @@ export async function licenceRekey(c: Ctx): Promise<number> {
        AND (CASE WHEN gp.hide_key = 1 THEN gq.stripped_content ELSE gq.full_content END) = substr(${a}.ckey, 3)
        AND (CASE WHEN gp.hide_key = 1 THEN gq.near_stripped ELSE gq.near_full END) IS NOT NULL
     LIMIT 1)`;
-  // The same lookup as a predicate: only rows it can map enter the bounded batch.
-  const mappable = (a: string) => `EXISTS (SELECT 1 FROM item_questions q JOIN item_publishes p ON p.publish_id = q.publish_id
-      WHERE p.item_id = ${a}.item_id
-        AND (CASE WHEN p.hide_key = 1 THEN q.stripped_content ELSE q.full_content END) = substr(${a}.ckey, 3)
-        AND (CASE WHEN p.hide_key = 1 THEN q.near_stripped ELSE q.near_full END) IS NOT NULL
-     UNION ALL
-     SELECT 1 FROM ghost_questions gq JOIN ghost_publishes gp ON gp.publish_id = gq.publish_id
-      WHERE gp.item_id = ${a}.item_id
-        AND (CASE WHEN gp.hide_key = 1 THEN gq.stripped_content ELSE gq.full_content END) = substr(${a}.ckey, 3)
-        AND (CASE WHEN gp.hide_key = 1 THEN gq.near_stripped ELSE gq.near_full END) IS NOT NULL)`;
+  // Only rows it can map enter the bounded batch: a `q:` row (LIKE: any case) whose rest is the content
+  // of a question of its item, live or ghost, with a near hash. Round 31 (staging D1 insights): found
+  // from the questions' side, each content looked up by its row's key (the primary keys lead with
+  // item_id, ckey), instead of testing every `q:` row of the pool against every question of its item
+  // every hour (about 5.9 million rows a statement with one 990-question bank: rows x questions).
+  const mappableRows = (t: string, cols: string) => `
+      SELECT ${cols} FROM item_questions q CROSS JOIN item_publishes p ON p.publish_id = q.publish_id
+             CROSS JOIN ${t} x ON x.item_id = p.item_id
+               AND x.ckey IN ('q:' || (CASE WHEN p.hide_key = 1 THEN q.stripped_content ELSE q.full_content END), 'Q:' || (CASE WHEN p.hide_key = 1 THEN q.stripped_content ELSE q.full_content END))
+       WHERE (CASE WHEN p.hide_key = 1 THEN q.near_stripped ELSE q.near_full END) IS NOT NULL
+      UNION
+      SELECT ${cols} FROM ghost_questions gq CROSS JOIN ghost_publishes gp ON gp.publish_id = gq.publish_id
+             CROSS JOIN ${t} x ON x.item_id = gp.item_id
+               AND x.ckey IN ('q:' || (CASE WHEN gp.hide_key = 1 THEN gq.stripped_content ELSE gq.full_content END), 'Q:' || (CASE WHEN gp.hide_key = 1 THEN gq.stripped_content ELSE gq.full_content END))
+       WHERE (CASE WHEN gp.hide_key = 1 THEN gq.near_stripped ELSE gq.near_full END) IS NOT NULL`;
+  const batchCl = `SELECT rowid, * FROM content_licences cx WHERE cx.rowid IN (${mappableRows("content_licences", "x.rowid")})
+                ORDER BY cx.rowid LIMIT ${LICENCE_REKEY_ROWS}`;
+  const batchOffer = `SELECT item_id, ckey FROM (${mappableRows("item_offer", "x.item_id, x.ckey")})
+                                  ORDER BY item_id, ckey LIMIT ${LICENCE_REKEY_ROWS}`;
   const m = map("cl");
   const mo = map("o");
   const results = await c.db.batch([
     c.db.prepare(
       `INSERT INTO content_licences (item_id, ckey, license, from_at, until_at)
        SELECT cl.item_id, ${m}, cl.license, cl.from_at, cl.until_at
-         FROM (SELECT * FROM content_licences cx WHERE cx.ckey LIKE 'q:%' AND ${mappable("cx")}
-                ORDER BY cx.rowid LIMIT ${LICENCE_REKEY_ROWS}) cl
+         FROM (${batchCl}) cl
         WHERE ${m} IS NOT NULL AND ${m} <> cl.ckey
        ON CONFLICT (item_id, ckey, license) DO UPDATE SET
          from_at = MIN(content_licences.from_at, excluded.from_at),
@@ -346,22 +355,16 @@ export async function licenceRekey(c: Ctx): Promise<number> {
     ),
     c.db.prepare(
       `DELETE FROM content_licences WHERE rowid IN (
-         SELECT cl.rowid FROM (SELECT rowid, item_id, ckey FROM content_licences cx
-                                WHERE cx.ckey LIKE 'q:%' AND ${mappable("cx")}
-                                ORDER BY cx.rowid LIMIT ${LICENCE_REKEY_ROWS}) cl
+         SELECT cl.rowid FROM (${batchCl}) cl
           WHERE ${m} IS NOT NULL AND ${m} <> cl.ckey)`,
     ),
     c.db.prepare(
-      `WITH todo AS MATERIALIZED (SELECT item_id, ckey FROM item_offer ox
-                                  WHERE ox.ckey LIKE 'q:%' AND ${mappable("ox")}
-                                  ORDER BY ox.item_id, ox.ckey LIMIT ${LICENCE_REKEY_ROWS})
+      `WITH todo AS MATERIALIZED (${batchOffer})
        INSERT OR IGNORE INTO item_offer (item_id, ckey)
        SELECT o.item_id, ${mo} FROM todo o WHERE ${mo} IS NOT NULL AND ${mo} <> o.ckey`,
     ),
     c.db.prepare(
-      `WITH todo AS MATERIALIZED (SELECT item_id, ckey FROM item_offer ox
-                                  WHERE ox.ckey LIKE 'q:%' AND ${mappable("ox")}
-                                  ORDER BY ox.item_id, ox.ckey LIMIT ${LICENCE_REKEY_ROWS})
+      `WITH todo AS MATERIALIZED (${batchOffer})
        DELETE FROM item_offer WHERE EXISTS (
          SELECT 1 FROM todo o WHERE o.item_id = item_offer.item_id AND o.ckey = item_offer.ckey AND ${mo} IS NOT NULL AND ${mo} <> o.ckey)`,
     ),
@@ -447,10 +450,13 @@ export async function stemBackfillAuthor(c: Ctx, author: string): Promise<number
     }
     await c.db
       .prepare(
+        // (Round 30: the question's own entry of ?3 is read by its position, `?3 ->> '$[pos]'`, the same
+        // value json_each's row with that key gave; the cross join over every entry read the whole array
+        // once per question and band, quadratic in the bank size.)
         `INSERT INTO author_stems (author_id, band, qhash, tok_sk, body_sk, bk_expl, bk_ans, bk_expl_full, first_seq)
-         SELECT ?1, kb.value, q.match_hash, q.tok_sk, q.body_sk, COALESCE(q.bk_expl, ''), COALESCE(q.bk_ans, ''), j.value, q.seq
-           FROM item_questions q CROSS JOIN json_each(COALESCE(q.kbands, '[]')) kb CROSS JOIN json_each(?3) j
-          WHERE q.publish_id = ?2 AND q.tok_sk IS NOT NULL AND CAST(j.key AS INTEGER) = q.pos AND j.value IS NOT NULL
+         SELECT ?1, kb.value, q.match_hash, q.tok_sk, q.body_sk, COALESCE(q.bk_expl, ''), COALESCE(q.bk_ans, ''), ?3 ->> ('$[' || q.pos || ']'), q.seq
+           FROM item_questions q CROSS JOIN json_each(COALESCE(q.kbands, '[]')) kb
+          WHERE q.publish_id = ?2 AND q.tok_sk IS NOT NULL AND (?3 ->> ('$[' || q.pos || ']')) IS NOT NULL
             -- (round 26, security critic 34d: the SELECT above skipped an erased author, but the R2 body
             -- read can outlive an erasure that commits mid-flight; re-check in the INSERT itself, so the
             -- guard and the write are one statement.)
@@ -487,6 +493,89 @@ export async function stemBackfill(c: Ctx): Promise<number> {
   let n = 0;
   for (const x of authors.results) n += await stemBackfillAuthor(c, x.a);
   return n;
+}
+/**
+ * Round 31 (staging D1 insights): the earlier-publication lookup (round 14 B3, in publishPrepare) in two
+ * steps, so no near hash is followed more than once per chunk.
+ *
+ * EARLIER_FIRSTS_SQL (?1 the publisher, ?2 the chunk's distinct near hashes, ?3 / ?4 the pairs hash +
+ * U+001F + her explanation key / answer key): for each hash, the questions it finds in the served sense
+ * (the lookup's own column test, one column at a time, each by its index), on an item visible to others
+ * by another author, and of those the FIRST in the lookup's order (seq, publish, lineage index, rowid):
+ * overall, and among those with each asked-for explanation key, and each asked-for answer key.
+ *
+ * EARLIER_SQL then runs the lookup's own test on each position's candidates (`$.c`) only. Why that is the
+ * same answer: a position's question counts when `seq` is below her first (F) or, for a source that lacks
+ * what she added, below her looser first L (minFirst: L <= F; NULL passes). So the first question overall
+ * is the answer if it passes; if it fails, every later one lacking her additions fails too (its seq is no
+ * smaller, L <= F), and the answer is the first one sharing her added explanation or answer key, if it
+ * passes. Both are among the candidates. Before, every position walked every question with any of its
+ * hashes: two 990-question banks of one stem with different explanations read 26.5 million rows here.
+ */
+const EARLIER_MATCH: [string, string][] = [
+  ["near_full", "p.hide_key = 0 AND "],
+  ["near_bare_full", "p.hide_key = 0 AND "],
+  ["near_stripped", ""],
+  ["near_bare_stripped", ""],
+  ["near_kf", ""],
+];
+export const EARLIER_FIRSTS_SQL = `WITH vals AS MATERIALIZED (SELECT DISTINCT value AS hv FROM json_each(?2)),
+     cand AS MATERIALIZED (${EARLIER_MATCH.map(
+       ([col, hide]) => `
+       SELECT v.hv, iq.rowid AS rid, iq.seq, iq.publish_id, iq.lineage_seq, iq.bk_expl, iq.bk_ans
+         FROM vals v CROSS JOIN item_questions iq INDEXED BY item_questions_${col} ON iq.${col} = v.hv
+              CROSS JOIN item_publishes p ON p.publish_id = iq.publish_id CROSS JOIN items i ON i.public_publish_id = iq.publish_id CROSS JOIN users u ON u.id = i.author_id
+        WHERE ${hide}i.author_id <> ?1 AND ${VISIBLE_TO_OTHERS}`,
+     ).join("\n       UNION ALL")}),
+     ranked AS MATERIALIZED (SELECT hv, rid, bk_expl, bk_ans,
+                                    ROW_NUMBER() OVER (PARTITION BY hv ORDER BY seq, publish_id, lineage_seq, rid) AS r0,
+                                    ROW_NUMBER() OVER (PARTITION BY hv, bk_expl ORDER BY seq, publish_id, lineage_seq, rid) AS re,
+                                    ROW_NUMBER() OVER (PARTITION BY hv, bk_ans ORDER BY seq, publish_id, lineage_seq, rid) AS ra FROM cand)
+SELECT hv, rid, bk_expl, bk_ans, r0 = 1 AS f0, re = 1 AS fe, ra = 1 AS fa FROM ranked
+ WHERE r0 = 1 OR (re = 1 AND hv || char(31) || bk_expl IN (SELECT value FROM json_each(?3))) OR (ra = 1 AND hv || char(31) || bk_ans IN (SELECT value FROM json_each(?4)))`;
+export const EARLIER_SQL = `SELECT CAST(j.value ->> '$.i' AS INTEGER) AS pos,
+                  (SELECT json_object('item_id', i.id, 'qid', iq.qid, 'version', i.public_version, 'license', i.license, 'author_name', COALESCE(u.display_name, 'deleted teacher'))
+                     FROM item_questions iq JOIN item_publishes p ON p.publish_id = iq.publish_id JOIN items i ON i.public_publish_id = iq.publish_id JOIN users u ON u.id = i.author_id
+                    WHERE iq.rowid IN (SELECT value FROM json_each(j.value -> '$.c'))
+                      AND ((p.hide_key = 0 AND (iq.near_full IN (SELECT value FROM json_each(j.value -> '$.n')) OR iq.near_bare_full IN (SELECT value FROM json_each(j.value -> '$.n'))))
+                           OR iq.near_stripped IN (SELECT value FROM json_each(j.value -> '$.n')) OR iq.near_bare_stripped IN (SELECT value FROM json_each(j.value -> '$.n'))
+                           OR iq.near_kf IN (SELECT value FROM json_each(j.value -> '$.n')))
+                      AND i.author_id <> ?1 AND ${VISIBLE_TO_OTHERS}
+                      -- (round 26 B-2: against a source that lacks her added explanation or answer, her earliest
+                      -- own version without them counts. Critic 34c: PER FIELD, only what her later version
+                      -- ADDED to her earlier one must be absent from the source; a field she did not add is
+                      -- hers either way, and requiring the source to differ there wrongly kept the strict
+                      -- first for Short/Blank, whose sample or answer is usually unchanged.)
+                      AND COALESCE(iq.seq < CAST(CASE
+                             WHEN ((j.value ->> '$.expl') IS NULL OR (j.value ->> '$.expl') = ''
+                                    OR ((j.value ->> '$.lexpl') IS NOT NULL AND (j.value ->> '$.lexpl') <> '' AND (j.value ->> '$.lexpl') IS (j.value ->> '$.expl'))
+                                    OR iq.bk_expl IS NULL OR iq.bk_expl IS NOT (j.value ->> '$.expl'))
+                               AND ((j.value ->> '$.ans') IS NULL OR (j.value ->> '$.ans') = ''
+                                    OR ((j.value ->> '$.lans') IS NOT NULL AND (j.value ->> '$.lans') <> '' AND (j.value ->> '$.lans') IS (j.value ->> '$.ans'))
+                                    OR iq.bk_ans IS NULL OR iq.bk_ans IS NOT (j.value ->> '$.ans'))
+                             THEN COALESCE(j.value ->> '$.loose', j.value ->> '$.first') ELSE j.value ->> '$.first' END AS INTEGER), 1)
+                    ORDER BY iq.seq, iq.publish_id, iq.lineage_seq, iq.rowid LIMIT 1) AS m
+             FROM json_each(?2) j`;
+const US = "\u001f";
+/** Each position's candidates (`c`): the first question of each of its hashes, and the first sharing its explanation or answer key. */
+export async function earlierCandidates<T extends { n: string[]; expl: string | null; ans: string | null }>(c: Ctx, me: string, want: T[]): Promise<(T & { c: number[] })[]> {
+  const vals = [...new Set(want.flatMap((x) => x.n))];
+  if (vals.length === 0) return want.map((x) => ({ ...x, c: [] }));
+  const pairs = (k: "expl" | "ans") => JSON.stringify([...new Set(want.flatMap((x) => (x[k] ? x.n.map((h) => h + US + x[k]) : [])))]);
+  const r = await c.db
+    .prepare(EARLIER_FIRSTS_SQL)
+    .bind(me, JSON.stringify(vals), pairs("expl"), pairs("ans"))
+    .all<{ hv: string; rid: number; bk_expl: string | null; bk_ans: string | null; f0: number; fe: number; fa: number }>();
+  const first = new Map<string, number>();
+  for (const x of r.results) {
+    if (x.f0) first.set(x.hv, x.rid);
+    if (x.fe && x.bk_expl !== null) first.set(`e${US}${x.hv}${US}${x.bk_expl}`, x.rid);
+    if (x.fa && x.bk_ans !== null) first.set(`a${US}${x.hv}${US}${x.bk_ans}`, x.rid);
+  }
+  return want.map((x) => ({
+    ...x,
+    c: [...new Set(x.n.flatMap((h) => [first.get(h), x.expl ? first.get(`e${US}${h}${US}${x.expl}`) : undefined, x.ans ? first.get(`a${US}${h}${US}${x.ans}`) : undefined]))].filter((y): y is number => y !== undefined),
+  }));
 }
 const OUTER_SQL = `         SELECT o.pos, o.key, o.kind, o.hidden, o.stem_only, i.id AS item_id, MIN(o.qid) AS qid,
                 CASE WHEN MAX(s.kind = 'import') = 1 THEN 'import' ELSE 'view' END AS ev_kind,
@@ -693,7 +782,8 @@ export async function publish(c: Ctx, req: Request, p: PoolPrincipal, pathItemId
     await throwIfErased(c, me); // (round 27: the guarded lock insert wrote nothing because the account is erased)
     throw new PoolError(409, "publish_in_progress", { message: "Another publish from this account is still running." }, { "Retry-After": "5" });
   }
-  const heavy = { release: () => {} };
+  // The heavy slot, and (round 29) the bytes the heavy phase reserved (its lookups borrow the unused part).
+  const heavy = { release: () => {}, bytes: 0 };
   const budget: (() => void)[] = [];
   const refresh = () => refreshAccountLock(c, me, lock);
   try {
@@ -714,7 +804,9 @@ export async function publish(c: Ctx, req: Request, p: PoolPrincipal, pathItemId
       // Round 16 (critic21d 1): a payload of many tiny values costs more to parse than its bytes say:
       // reserved by its value count when that is more (at most share-core's value limit).
       const scan = read.payload ? scanJson(read.payload) : null;
-      budget.push(reserveBytes(Math.max(declared * (PUBLISH_COST_PER_BYTE - 1), (scan?.values ?? 0) * PARSE_BYTES_PER_VALUE * 2)));
+      const want = Math.max(declared * (PUBLISH_COST_PER_BYTE - 1), (scan?.values ?? 0) * PARSE_BYTES_PER_VALUE * 2);
+      budget.push(reserveBytes(want));
+      heavy.bytes = want;
       await refresh();
     }, refresh);
     await refund();
@@ -727,6 +819,62 @@ export async function publish(c: Ctx, req: Request, p: PoolPrincipal, pathItemId
     for (const r of budget) r();
     await releaseAccountLock(c, me, lock);
   }
+}
+
+/**
+ * Round 29: an upper bound of what a publish still holds once its payload trees are dropped, during
+ * its evidence and fuzzy lookups (README "Round 29"):
+ * - the bodies it will store (full, stripped, a reused stripped body): exact bytes. The request body
+ *   keeps its own reservation (readBody);
+ * - the meta's parsed tree, costed per byte as the heavy phase costs it;
+ * - per question: its hashes, keys and the D1 rows read for it (author context, the previous
+ *   publish's row in a republish);
+ * - per stem / choice / part-stem word (stemTokens, bodyTokens: at most 64 a text): the word, its
+ *   keyed sketch and, in a republish, its copies in the previous rows; plus its characters (two-byte
+ *   strings included);
+ * - per Multipart part: its keys and bands.
+ * Fitted on node measurements (--expose-gc; node has no pointer compression, so workerd holds less)
+ * of fresh publishes and served-body-keeping republishes of eleven bank shapes (Matching 990 x 50,
+ * Mc 1,000 x 26 with every word distinct, 440 x 64 long words, 1,000 tiny Tf, Short, 180 x 50
+ * Multipart parts): every measured holding is at least 20% below the bound.
+ */
+export const POST_HEAVY_BYTES_PER_QUESTION = 12 * 1024;
+export const POST_HEAVY_BYTES_PER_WORD = 224;
+export const POST_HEAVY_BYTES_PER_WORD_CHAR = 8;
+export const POST_HEAVY_BYTES_PER_PART = 2 * 1024;
+export function postHeavyBytes(o: { bodies: number; metaBytes: number; questions: number; parts: number; words: number; wordChars: number }): number {
+  return (
+    o.bodies +
+    o.metaBytes * PUBLISH_COST_PER_BYTE +
+    o.questions * POST_HEAVY_BYTES_PER_QUESTION +
+    o.words * POST_HEAVY_BYTES_PER_WORD +
+    o.wordChars * POST_HEAVY_BYTES_PER_WORD_CHAR +
+    o.parts * POST_HEAVY_BYTES_PER_PART
+  );
+}
+
+type Reused = { bytes: Uint8Array; hashes: string[]; contents: string[]; near: (string | null)[]; bare: (string | null)[]; servedOrders: unknown[] };
+/**
+ * A hidden republish whose served form is unchanged (HOLD-1): the previous stripped body, its rows'
+ * served facts and the author's served orders remapped onto it; null when it cannot be kept. (Round 29:
+ * its own function, so the previous body's text and parsed tree are gone once it returns, before the
+ * publish's evidence and fuzzy lookups.)
+ */
+async function reuseServed(c: Ctx, baseOf: string, qids: string[], st: Stripped, orderAcks: Pos[]): Promise<Reused | null> {
+  const prevQ = await c.db
+    .prepare(`SELECT qid, stripped_sha256, stripped_content, near_stripped, near_bare_stripped FROM item_questions WHERE publish_id = ?1 ORDER BY pos`)
+    .bind(baseOf)
+    .all<{ qid: string; stripped_sha256: string; stripped_content: string; near_stripped: string | null; near_bare_stripped: string | null }>();
+  const prevKey = (await c.db.prepare(`SELECT stripped_key FROM item_publishes WHERE publish_id = ?1`).bind(baseOf).first<{ stripped_key: string | null }>())?.stripped_key;
+  if (!prevKey || prevQ.results.length !== qids.length || !prevQ.results.every((q, k) => q.qid === qids[k])) return null;
+  const o = await c.r2.get(prevKey);
+  if (!o) return null;
+  const text = await o.text(); // r2-object: the previous stripped body
+  const prevBody = JSON.parse(text) as PayloadJson;
+  // The author's key review must describe the body served (round 14: remapped onto it).
+  const so = sameServed(prevBody, st.payload, st.servedOrders, [...orderAcks, ...(st.orderReasons as unknown[])]) ? remapServedOrders(prevBody, st.payload, st.servedOrders) : null;
+  if (!so) return null;
+  return { bytes: enc.encode(text), hashes: prevQ.results.map((q) => q.stripped_sha256), contents: prevQ.results.map((q) => q.stripped_content), near: prevQ.results.map((q) => q.near_stripped), bare: prevQ.results.map((q) => q.near_bare_stripped), servedOrders: so };
 }
 
 /** How long a publish body may take to arrive. */
@@ -815,7 +963,7 @@ async function publishOnce(
   c: Ctx,
   p: PoolPrincipal,
   pathItemId: string | null,
-  heavy: { release: () => void },
+  heavy: { release: () => void; bytes: number },
   read: { raw: Uint8Array; meta: Record<string, unknown>; payload: Uint8Array },
   dry: boolean,
   enterHeavy: () => Promise<void>,
@@ -842,6 +990,8 @@ async function publishOnce(
   }
   await assertNotMigrating(c);
   await enterHeavy();
+  // (Round 29: the meta's parsed tree lives as long as the publish: see postHeavyBytes.)
+  const metaBytes = read.raw.length - read.payload.length;
   const rawMeta = read.meta;
   let payload: Uint8Array | null = read.payload;
   const m = readMeta(rawMeta, isNew);
@@ -1054,24 +1204,7 @@ async function publishOnce(
   // A hidden republish whose served form is unchanged (a key correction, an explanation edit) keeps
   // the previous stripped body byte for byte and the public version: nothing a non-author sees,
   // not even the shuffle or a "newer" notice, reveals that something hidden changed (HOLD-1).
-  let reused: { bytes: Uint8Array; hashes: string[]; contents: string[]; near: (string | null)[]; bare: (string | null)[]; servedOrders: unknown[] } | null = null;
-  if (st && prevHidden && baseOf) {
-    const prevQ = await c.db
-      .prepare(`SELECT qid, stripped_sha256, stripped_content, near_stripped, near_bare_stripped FROM item_questions WHERE publish_id = ?1 ORDER BY pos`)
-      .bind(baseOf)
-      .all<{ qid: string; stripped_sha256: string; stripped_content: string; near_stripped: string | null; near_bare_stripped: string | null }>();
-    const prevKey = (await c.db.prepare(`SELECT stripped_key FROM item_publishes WHERE publish_id = ?1`).bind(baseOf).first<{ stripped_key: string | null }>())?.stripped_key;
-    if (prevKey && prevQ.results.length === qids.length && prevQ.results.every((q, k) => q.qid === qids[k])) {
-      const o = await c.r2.get(prevKey);
-      if (o) {
-        const text = await o.text(); // r2-object: the previous stripped body
-        const prevBody = JSON.parse(text) as PayloadJson;
-        // The author's key review must describe the body served (round 14: remapped onto it).
-        const so = sameServed(prevBody, st.payload, st.servedOrders, [...m.orderAcks, ...(st.orderReasons as unknown[])]) ? remapServedOrders(prevBody, st.payload, st.servedOrders) : null;
-        if (so) reused = { bytes: enc.encode(text), hashes: prevQ.results.map((q) => q.stripped_sha256), contents: prevQ.results.map((q) => q.stripped_content), near: prevQ.results.map((q) => q.near_stripped), bare: prevQ.results.map((q) => q.near_bare_stripped), servedOrders: so };
-      }
-    }
-  }
+  const reused = st && prevHidden && baseOf ? await reuseServed(c, baseOf, qids, st, m.orderAcks) : null;
   const publicVersion = isNew ? 1 : reused ? prevPublic.version : prevPublic.version + 1;
   const publicAt = reused ? prevPublic.at : null; // null: this commit's time
   const fullQs = questionsOf(full.payload);
@@ -1220,6 +1353,53 @@ async function publishOnce(
   const shortQ = servedQs.map((q) => isShort(q));
   // Round 14 (B5): 40 words or fewer as served (stem, choices, columns, served answers, explanation).
   const short40 = servedQs.map((q) => (servedWordCount(q) <= 40 ? 1 : 0));
+  // Round 18 (U3/U6) text units, from the payload trees (used below with the evidence): see "Texts".
+  const words = (s: unknown) => (typeof s === "string" ? normText(s).split(" ").filter(Boolean).length : 0);
+  const textKeysOf = async (q: QuestionJson): Promise<string[]> => {
+    const x = q as unknown as { explanation?: unknown; kind?: { Short?: { sample?: unknown }; Multipart?: { parts?: Record<string, any>[] } } };
+    const texts: unknown[] = [x.explanation, x.kind?.Short?.sample];
+    for (const p0 of x.kind?.Multipart?.parts ?? []) texts.push(p0?.explanation, p0?.kind?.Short?.sample);
+    const long = texts.filter((t): t is string => typeof t === "string" && words(t) >= LIFT_WORDS);
+    return [...new Set((await Promise.all(long.map((t) => textFieldKeys(t)))).flat())];
+  };
+  const servedText = await Promise.all(servedQs.map(textKeysOf));
+  const hiddenText = st ? (await Promise.all(fullQs.map(textKeysOf))).map((ks, i) => ks.filter((k) => !servedText[i]!.includes(k))) : servedQs.map(() => [] as string[]);
+  const imgAt = servedQs.map((q) => imgOf(q));
+  // ---- round 29: the payload trees go BEFORE the D1-heavy phase ----------------------------------
+  // The evidence and fuzzy lookups below reserve their worst-case D1 results (8 MB per evidence query,
+  // up to 16 MB per fuzzy lookup). They were reserved ON TOP of this publish's whole heavy-phase
+  // reservation, while both payload trees were still alive: measured (node, --expose-gc) on a 3.8 MB
+  // hidden-key Matching bank (990 x 50 pairs), 47 MB of the publish's 61 MB was then live, so the
+  // lookup's 16 MB did not fit in what was left, and on top of it the 61 + 16 MB passed the 72 MB
+  // budget on an idle isolate. So the few facts needed later are taken now, the trees (and the
+  // sketch memo, a pure cache) are dropped, and the lookups BORROW the part of the heavy reservation
+  // the publish provably no longer uses (`lend`, below): the reservation minus postHeavyBytes, an
+  // upper bound of what it still holds (README "Round 29"). The rest of a lookup's worst case is
+  // reserved from the isolate as before. The heavy reservation itself is kept whole until the end:
+  // staging builds large statements again.
+  const servedKind = servedQs.map((q) => kindTag(q));
+  const fullImg = fullQs.map((q) => imgOf(q));
+  const kindsMask = fullQs.reduce((acc, q) => acc | (KIND_BITS[kindTag(q)] ?? 0), 0);
+  const hasImages = servedQs.some((q) => q.image) ? 1 : 0;
+  const lite = fullQs.map((q) => ({ kind: kindTag(q), difficulty: typeof q.difficulty === "string" ? q.difficulty : null, topics: (q.topics ?? []) as string[] }));
+  const bankName = full.payload.bank ? String(full.payload.bank.name ?? "") : "";
+  const schemaVersion = full.payload.schema_version;
+  const strippedShas = st ? [...new Set(questionsOf(st.payload).map(imgOf).filter((x): x is string => x !== null))] : [];
+  const fullTags = tagsOf(meta.tags, fullQs);
+  let parts = 0, wordCount = 0, wordChars = 0;
+  const countWords = (ts: readonly string[]) => {
+    wordCount += ts.length;
+    for (const t of ts) wordChars += t.length;
+  };
+  tokens.forEach(countWords);
+  bodyToks.forEach(countWords);
+  for (const ps of partStems) for (const p of ps) (parts++, countWords(p.tokens));
+  (full as { payload: unknown }).payload = null;
+  if (st) (st as { payload: unknown }).payload = null;
+  fullQs.length = 0;
+  servedQs.length = 0;
+  skMemo.clear();
+  const lend = lender(heavy.bytes - postHeavyBytes({ bodies: full.bytes.length + (st ? st.bytes.length : 0) + (reused ? reused.bytes.length : 0), metaBytes, questions: n, parts, words: wordCount, wordChars }));
   const params = subjects.map((sj, i) => ({
     ...subjectParam(sj, mh[i]!, refsOf(i)),
     first: firstOf(i),
@@ -1231,7 +1411,7 @@ async function publishOnce(
     keywork: keywork[i]!,
     short40: short40[i]!,
   }));
-  const ev = await evidence(c, me, params, { mine: [...actx.mine], independent: m.independent });
+  const ev = await evidence(c, me, params, { mine: [...actx.mine], independent: m.independent, reserve: lend });
   // Round 16 (B6, B7) and round 17 (critic22c M1-M6): material a question uses besides itself is a
   // licence unit of its own: an explanation or Short model answer of LIFT_WORDS+ words ("text": its
   // explanation / answer keys, either field), its image ("image": exact bytes, or the same decoded
@@ -1247,17 +1427,7 @@ async function publishOnce(
   // Texts (round 18 U3/U6): the explanation and Short model answer of the question AND of each of its
   // parts, LIFT_WORDS+ words. Built from the SERVED form (key-free when the key is hidden); a hidden
   // publish's hidden-only texts are units too, but only privately (below).
-  const words = (s: unknown) => (typeof s === "string" ? normText(s).split(" ").filter(Boolean).length : 0);
-  const textKeysOf = async (q: QuestionJson): Promise<string[]> => {
-    const x = q as unknown as { explanation?: unknown; kind?: { Short?: { sample?: unknown }; Multipart?: { parts?: Record<string, any>[] } } };
-    const texts: unknown[] = [x.explanation, x.kind?.Short?.sample];
-    for (const p0 of x.kind?.Multipart?.parts ?? []) texts.push(p0?.explanation, p0?.kind?.Short?.sample);
-    const long = texts.filter((t): t is string => typeof t === "string" && words(t) >= LIFT_WORDS);
-    return [...new Set((await Promise.all(long.map((t) => textFieldKeys(t)))).flat())];
-  };
-  const servedText = await Promise.all(servedQs.map(textKeysOf));
-  const hiddenText = st ? (await Promise.all(fullQs.map(textKeysOf))).map((ks, i) => ks.filter((k) => !servedText[i]!.includes(k))) : servedQs.map(() => [] as string[]);
-  const imgAt = servedQs.map((q) => imgOf(q));
+  // (Round 29: servedText, hiddenText and imgAt are taken above, before the payload trees go.)
   const pixelOf = new Map<string, string>();
   {
     const shasServed = [...new Set(imgAt.filter((x): x is string => x !== null))];
@@ -1266,7 +1436,7 @@ async function publishOnce(
         pixelOf.set(r0.sha256, r0.pixel_hash);
   }
   type UnitKind = "text" | "image" | "part";
-  const unitsAt: { key: string; kind: UnitKind; part?: number; hidden?: boolean; stemOnly?: boolean }[][] = servedQs.map((_, i) => [
+  const unitsAt: { key: string; kind: UnitKind; part?: number; hidden?: boolean; stemOnly?: boolean }[][] = imgAt.map((_, i) => [
     ...servedText[i]!.map((key) => ({ key, kind: "text" as const })),
     ...hiddenText[i]!.map((key) => ({ key, kind: "text" as const, hidden: true })),
     ...(imgAt[i] ? [{ key: imgAt[i]!, kind: "image" as const }, ...(pixelOf.has(imgAt[i]!) ? [{ key: pixelOf.get(imgAt[i]!)!, kind: "image" as const }] : [])] : []),
@@ -1531,7 +1701,7 @@ __OUTER__
   // The author's own near-rewordings published before (round 11 P1): a later fuzzy source is no origin.
   const ownCut = new Set<number>();
   const ownLoose = new Map<number, { seq: number; expl: string | null; ans: string | null }>();
-  const ownFuzzy = await ownFuzzyFirst(c, me, mh.map((_, i) => ({ pos: i, tokens: tokens[i]!, bands: bands[i]!, body: body[i]!, bodyToks: bodyToks[i]!, expl: bkFields[i]!.expl, ans: bkFields[i]!.ans })), ownCut, ownLoose);
+  const ownFuzzy = await ownFuzzyFirst(c, me, mh.map((_, i) => ({ pos: i, tokens: tokens[i]!, bands: bands[i]!, body: body[i]!, bodyToks: bodyToks[i]!, expl: bkFields[i]!.expl, ans: bkFields[i]!.ans })), ownCut, ownLoose, lend);
   // For fuzzy sources and origin_suspect: also the qid's lineage and the author's own near-rewordings.
   const fuzzyFirst = (i: number) => {
     const xs = [firstOf(i), lineage[i] ?? undefined, ownFuzzy.get(i)].filter((x): x is number => typeof x === "number" && x > 0);
@@ -1549,7 +1719,7 @@ __OUTER__
     me,
     mh.map((h, i) => ({ pos: i, mh: h, tokens: tokens[i]!, bands: bands[i]!, first: firstNoLineage(i), nfull: subjects[i]!.near, nbare: subjects[i]!.nearBare, noexpl: subjects[i]!.noExpl, body: bodyToks[i]! })),
     // (Round 21: never for a question with a source matched on itself; independence lifts near-only ones.)
-    { mine: [...actx.mine], independent: m.independent, exact: [...ev.byPos].filter(([, l]) => l.length > 0).map(([k]) => k) },
+    { mine: [...actx.mine], independent: m.independent, exact: [...ev.byPos].filter(([, l]) => l.length > 0).map(([k]) => k), reserve: lend },
   );
   const fuzzyPos = new Set<number>();
   // Past the fuzzy caps: every question that had candidates is flagged for the admin (conservative).
@@ -1723,7 +1893,7 @@ __OUTER__
       const mayClaim =
         claimed &&
         (l.kind === "part"
-          ? l.stemOnly || (l.evKind === "view" && servedWordCount(servedQs[i]!) <= 40)
+          ? l.stemOnly || (l.evKind === "view" && short40[i] === 1)
           : l.evKind === "view" && (attributed || (l.kind === "image" && l.uploadedFirst)));
       if (mayClaim) {
         if (!known) entry.chain = [...entry.chain, { ...link, possible_source: true }];
@@ -1822,35 +1992,12 @@ __OUTER__
       .map((d0, i) => ({ i, n: mine(i), first: earlyFirst(i), loose: looseFirst(i), expl: bkFields[i]!.expl, ans: bkFields[i]!.ans, lexpl: ownLoose.get(i)?.expl ?? null, lans: ownLoose.get(i)?.ans ?? null }))
       .filter((x) => derived[x.i]!.chain.length === 0 && !shortQ[x.i] && !actx.common.has(mh[x.i]!) && x.n.length > 0);
     // (Round 21: every question, in chunks, never only the first 1,000.)
+    // Round 30: candidates are QUESTIONS, never whole publishes. Round 31: each near hash is followed once
+    // per chunk (EARLIER_FIRSTS_SQL), and a position's test runs on its few candidates (EARLIER_SQL).
     for (const wch of chunks(want, 1000)) {
       const r = await c.db
-        .prepare(
-          `SELECT CAST(j.value ->> '$.i' AS INTEGER) AS pos,
-                  (SELECT json_object('item_id', i.id, 'qid', iq.qid, 'version', i.public_version, 'license', i.license, 'author_name', COALESCE(u.display_name, 'deleted teacher'))
-                     FROM item_questions iq JOIN item_publishes p ON p.publish_id = iq.publish_id JOIN items i ON i.public_publish_id = iq.publish_id JOIN users u ON u.id = i.author_id
-                    WHERE iq.publish_id IN (SELECT x.publish_id FROM json_each(j.value -> '$.n') n, item_questions x
-                                             WHERE x.near_full = n.value OR x.near_stripped = n.value OR x.near_kf = n.value OR x.near_bare_full = n.value OR x.near_bare_stripped = n.value)
-                      AND ((p.hide_key = 0 AND (iq.near_full IN (SELECT value FROM json_each(j.value -> '$.n')) OR iq.near_bare_full IN (SELECT value FROM json_each(j.value -> '$.n'))))
-                           OR iq.near_stripped IN (SELECT value FROM json_each(j.value -> '$.n')) OR iq.near_bare_stripped IN (SELECT value FROM json_each(j.value -> '$.n'))
-                           OR iq.near_kf IN (SELECT value FROM json_each(j.value -> '$.n')))
-                      AND i.author_id <> ?1 AND ${VISIBLE_TO_OTHERS}
-                      -- (round 26 B-2: against a source that lacks her added explanation or answer, her earliest
-                      -- own version without them counts. Critic 34c: PER FIELD, only what her later version
-                      -- ADDED to her earlier one must be absent from the source; a field she did not add is
-                      -- hers either way, and requiring the source to differ there wrongly kept the strict
-                      -- first for Short/Blank, whose sample or answer is usually unchanged.)
-                      AND COALESCE(iq.seq < CAST(CASE
-                             WHEN ((j.value ->> '$.expl') IS NULL OR (j.value ->> '$.expl') = ''
-                                    OR ((j.value ->> '$.lexpl') IS NOT NULL AND (j.value ->> '$.lexpl') <> '' AND (j.value ->> '$.lexpl') IS (j.value ->> '$.expl'))
-                                    OR iq.bk_expl IS NULL OR iq.bk_expl IS NOT (j.value ->> '$.expl'))
-                               AND ((j.value ->> '$.ans') IS NULL OR (j.value ->> '$.ans') = ''
-                                    OR ((j.value ->> '$.lans') IS NOT NULL AND (j.value ->> '$.lans') <> '' AND (j.value ->> '$.lans') IS (j.value ->> '$.ans'))
-                                    OR iq.bk_ans IS NULL OR iq.bk_ans IS NOT (j.value ->> '$.ans'))
-                             THEN COALESCE(j.value ->> '$.loose', j.value ->> '$.first') ELSE j.value ->> '$.first' END AS INTEGER), 1)
-                    ORDER BY iq.seq LIMIT 1) AS m
-             FROM json_each(?2) j`,
-        )
-        .bind(me, JSON.stringify(wch))
+        .prepare(EARLIER_SQL)
+        .bind(me, JSON.stringify(await earlierCandidates(c, me, wch)))
         .all<{ pos: number; m: string | null }>();
       for (const x of r.results) {
         if (!x.m) continue;
@@ -1865,7 +2012,7 @@ __OUTER__
       // ... and a near-rewording of a served stem of the same kind (one added sentence, a changed
       // choice, a distractor more or less): credited the same way, marked as modified.
       const left = want.filter((x) => derived[x.i]!.chain.length === 0);
-      const near = await publicNearEarlier(c, me, left.map((x) => ({ pos: x.i, tokens: tokens[x.i]!, bands: bands[x.i]!, qkind: kindTag(servedQs[x.i]!), first: x.first ?? null, body: bodyToks[x.i]!, looseFirst: x.loose ?? null, looseExpl: x.lexpl, looseAns: x.lans, expl: x.expl, ans: x.ans })));
+      const near = await publicNearEarlier(c, me, left.map((x) => ({ pos: x.i, tokens: tokens[x.i]!, bands: bands[x.i]!, qkind: servedKind[x.i]!, first: x.first ?? null, body: bodyToks[x.i]!, looseFirst: x.loose ?? null, looseExpl: x.lexpl, looseAns: x.lans, expl: x.expl, ans: x.ans })), lend);
       // (Round 21 B-4: a question whose earlier candidates were cut is flagged; the earliest examined credited.)
       for (const k of near.cut) if (!overflowed.includes(k)) overflowed.push(k);
       for (const [pos, l] of near.near) {
@@ -1988,7 +2135,7 @@ __OUTER__
   // author's own items with the same questions (a held item deleted and published again, critic X5).
   // Images only in the full form of a hidden publish are never checked against blocks: a hit on
   // material nobody else is served must not create state its author can see (round 5 E4).
-  const servedShas = [...new Set(servedQs.map(imgOf).filter((x): x is string => x !== null))];
+  const servedShas = [...new Set(imgAt.filter((x): x is string => x !== null))];
   // An image whose privacy block's grace window ended (bytes possibly gone) is usable only where it
   // is NOT served, and only by an author who already uses it there: no served use, and no other
   // caller, can depend on whether its bytes were kept (round 6 F1).
@@ -2014,7 +2161,7 @@ __OUTER__
     );
     const gone = purgedServed.filter((s) => !stillBlocked.has(s) && (served.has(s) || !ownUnserved.has(s)));
     for (const s of purgedServed) if (!gone.includes(s) && !stillBlocked.has(s) && !(await c.r2.head(`blobs/${s}`))) gone.push(s);
-    if (gone.length > 0) throw new PoolError(422, "blob_missing", { reason: "reupload", positions: fullQs.map((q, i) => (gone.includes(imgOf(q) ?? "") ? i : -1)).filter((i) => i >= 0).slice(0, 100) });
+    if (gone.length > 0) throw new PoolError(422, "blob_missing", { reason: "reupload", positions: fullImg.map((s, i) => (gone.includes(s ?? "") ? i : -1)).filter((i) => i >= 0).slice(0, 100) });
   }
   const blocked = await c.db
     .prepare(
@@ -2058,18 +2205,8 @@ __OUTER__
   }
 
   // ---- stage ---------------------------------------------------------------------------------------
-  const kindsMask = fullQs.reduce((acc, q) => acc | (KIND_BITS[kindTag(q)] ?? 0), 0);
-  const hasImages = servedQs.some((q) => q.image) ? 1 : 0;
-  // Everything later needs only these: the payload trees (tens of MB for a 4 MB bank) go now, and
-  // the isolate's heavy slot is handed to the next publish.
-  const lite = fullQs.map((q) => ({ kind: kindTag(q), difficulty: typeof q.difficulty === "string" ? q.difficulty : null, topics: (q.topics ?? []) as string[] }));
-  const bankName = full.payload.bank ? String(full.payload.bank.name ?? "") : "";
-  const schemaVersion = full.payload.schema_version;
-  const strippedShas = st ? [...new Set(questionsOf(st.payload).map(imgOf).filter((x): x is string => x !== null))] : [];
-  const fullTags = tagsOf(meta.tags, fullQs);
-  (full as { payload: unknown }).payload = null;
-  if (st) (st as { payload: unknown }).payload = null;
-  fullQs.length = 0;
+  // (The payload trees went before the evidence lookups, round 29.) The isolate's heavy slot is handed
+  // to the next publish.
   heavy.release();
   await refresh();
   const fullKey = `items/${itemId}/${newId()}.json`;
@@ -2558,13 +2695,16 @@ __OUTER__
       .bind(itemId, m.publishId, me, now, m.attest!.termsVersion),
     // Round 23 (critic30a B3): the author's durable KEYED record of each stem (its keyed bands, keyed
     // token and body sets, first seq), so her own earlier versions stay hers after retention or purge.
+    // Round 30 (staging D1 insights): the question's own entry of ?4 is read by its position (entry i is
+    // `{p: i, e}`, stemRecord above); the cross join over every entry, matched on `p` afterwards, read
+    // 7.9 million rows for a 990-question bank. The `p` check keeps the old join's meaning.
     c.db
       .prepare(
         `INSERT INTO author_stems (author_id, band, qhash, tok_sk, body_sk, bk_expl, bk_ans, bk_expl_full, first_seq)
-         SELECT ?3, kb.value, iq.match_hash, iq.tok_sk, iq.body_sk, COALESCE(iq.bk_expl, ''), COALESCE(iq.bk_ans, ''), COALESCE(j.value ->> '$.e', ''), MIN(iq.seq)
-           FROM item_questions iq CROSS JOIN json_each(COALESCE(iq.kbands, '[]')) kb CROSS JOIN json_each(?4) j
-          WHERE iq.publish_id = ?2 AND iq.tok_sk IS NOT NULL AND CAST(j.value ->> '$.p' AS INTEGER) = iq.pos AND ${guard("?1", "?2")}
-          GROUP BY kb.value, iq.match_hash, iq.bk_expl, iq.bk_ans, j.value ->> '$.e'
+         SELECT ?3, kb.value, iq.match_hash, iq.tok_sk, iq.body_sk, COALESCE(iq.bk_expl, ''), COALESCE(iq.bk_ans, ''), COALESCE(?4 ->> ('$[' || iq.pos || '].e'), ''), MIN(iq.seq)
+           FROM item_questions iq CROSS JOIN json_each(COALESCE(iq.kbands, '[]')) kb
+          WHERE iq.publish_id = ?2 AND iq.tok_sk IS NOT NULL AND CAST(?4 ->> ('$[' || iq.pos || '].p') AS INTEGER) = iq.pos AND ${guard("?1", "?2")}
+          GROUP BY kb.value, iq.match_hash, iq.bk_expl, iq.bk_ans, ?4 ->> ('$[' || iq.pos || '].e')
          ON CONFLICT (author_id, band, qhash, bk_expl, bk_ans) DO UPDATE SET
            first_seq = MIN(first_seq, excluded.first_seq),
            bk_expl_full = COALESCE(author_stems.bk_expl_full, excluded.bk_expl_full)`,

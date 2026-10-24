@@ -42,7 +42,7 @@ compiled to wasm for the publish gate, content hashes and Argon2id.
 |---|---|---|
 | `unverified` | Email not confirmed, or password and profile not yet set by the mailbox owner | Nothing; cannot log in. Purged after 7 days. |
 | `pending` | Email confirmed, awaiting approval (or approval withdrawn) | See status and any rejection reason, re-apply (7-day cooldown), log out, delete the account, `GET /me/export` (profile only). Pool routes answer `403 account_not_approved`. |
-| `teacher` | Admin-approved | Browse, publish, import, report, appeal, counter-notice, export own data. |
+| `teacher` | Admin-approved (and, to use the pool, holding a redeemed invite code; round 28) | Browse, publish, import, report, appeal, counter-notice, export own data. |
 | `admin` | Made only by the bootstrap script | All of the above plus queue, suspension, moderation and DMCA routes. |
 
 (`src/index.ts` `TRUST`; `src/pool/index.ts`.)
@@ -52,8 +52,18 @@ staff-domain addresses). A "staff domain" is only a label in the queue. The rule
 address itself is on the school's staff directory (`directory`), or the school office confirmed the person through
 a contact **the admin** started (`school_confirmed`). A name on a staff list is never enough (an unconfirmed
 assumption in the owner's note). Sign-up collects email, password, display name, school and an adult-school-employee
-statement. "Invite-only pilot" is an operating policy: no technical invite gate was found in the code
-(UNCONFIRMED); sign-up is open and admin approval is the gate.
+statement.
+
+**Invite codes (round 28).** The pool is invite-only: besides admin approval, an account must redeem an invite code an
+admin issued (`POST /admin/pool/invites`; 24 characters shown once, stored only as a SHA-256 hash; single use by default
+or up to 1,000 uses, optional expiry up to 365 days, revocable; issue, redemption and revocation are audited, never with
+the code). The gate sits in the pool, not in sign-up: sign-up stays open and answers the same for every address (the
+auth package is unchanged, and a code consumed at sign-up could be burned by whoever typed someone else's address). An
+account redeems with `POST /me/invite {code}`, also while `pending`, so the admin can check it before approving
+(`GET /admin/pool/invites?user_id=`). Until then every pool route but `GET /me/export` answers `403 invite_required`;
+admins are exempt. Every account already `teacher` or `admin` when migration 0106 ran is grandfathered. A bad, expired,
+revoked or used-up code is `422 invite_invalid`; 10 tries a day. Revoking a code stops further redemptions only.
+Erasure deletes the account's redemption.
 
 A rejection has a reason (shown to the applicant) and a note (never shown); an approval records evidence kind and
 notes. Admins can bulk-reject up to 50, revoke a teacher back to `pending`, or suspend. Application mails to admins
@@ -168,11 +178,16 @@ byte-order mark or a second top-level value are refused before parsing.
 **Per account, per day unless noted** (`DEFAULT_LIMITS`; admin-adjustable by `PUT /admin/pool/limits`): storage 200 MB
 (removed-not-yet-purged bytes another 200 MB); 5,000 shared questions; 50 publishes, 300 refused publishes, 200 dry runs;
 100 imports (20,000 distinct items ever; 200,000 distinct publishes ever read); 2,000 item reads, 500 browse pages; 500
-uploads and 200 MB; 100 blob misses, 100 id misses; 20 reports, 10 appeals, 3 exports; 20 held publishes; 500,000
-authorship records. Bursts: 300 requests per 5 minutes per account; 6,000 per 5 minutes per address; 50,000 reads a day per
+uploads and 200 MB; 100 blob misses, 100 id misses; 20 reports, 10 appeals, 3 exports; 20 held publishes; 10 invite-code
+tries; 500,000 authorship records. Bursts: 300 requests per 5 minutes per account; 6,000 per 5 minutes per address; 50,000 reads a day per
 address, at most 10,000 from one account. One heavy publish parse per isolate (4 may queue up to 20 seconds, then
 `503 busy`) and one per account (`409 publish_in_progress`); 72 MB committed to requests per isolate (UNCONFIRMED in real
-workerd). Bodies: `Content-Length` required, read within 15 seconds, at most 4 bodies/8 MB at once per account; JSON 64 KB,
+workerd). A publish reserves 16x its body to the end; its evidence and fuzzy lookups run after its payload trees are freed and
+borrow the part of that reservation it no longer uses (round 29: a 3.81 MB hidden-key Matching bank peaks at 61 MB, was refused at
+76.6 MB on an idle isolate). Publish-time statements read rows linear in the bank (round 30: five read rows growing with its
+square, up to 9.9 million rows and 10 s each at 990 questions on workerd's SQLite; round 31: the earlier-publication lookup when
+many questions share a near hash, 26.5 million, and the hourly licence re-key), except two when a bank repeats one question many
+times: the evidence and served-units queries (36 and 1 million rows at 990; Worker README "Round 31"). Bodies: `Content-Length` required, read within 15 seconds, at most 4 bodies/8 MB at once per account; JSON 64 KB,
 auth 8 KB, admin 256 KB. Caps always refuse; none silently skips a check.
 
 ---
@@ -272,7 +287,8 @@ Publishing, Done; refusals land in Fix (hard findings, acknowledgements, label a
 the server listed. A lost publish keeps its `publish_id`. The last publish of a bank is remembered in `share-published.json`.
 
 **My shared items** (`src/share/mine.rs`, `actions_for`): live public (make private, delete, share again); live unlisted (make
-public, delete, share again); deleted within 14 days (undo); taken down (counter-notice while `counter_notice: available`);
+public, delete, share again); deleted within 14 days (undo); taken down (counter-notice while `counter_notice: available`, which
+the server now says only inside the 30-day window, with `counter_notice_by`; round 28);
 takedown pending (counter-notice until the window ends, once); removed/privacy-removed (appeal while offered); needs re-upload or
 key-leak review (share again, delete); held (appeal when offered; share again when a hold names questions). Also the
 counter-notice form (nothing prefilled; cleared on send; signature must repeat the typed name, enforced by the app only),
@@ -316,7 +332,9 @@ quarantined until an admin decides. Other removals auto-restore after 60 unanswe
    recorded as **pending**.
 4. *30-day window* from the author being notified. A counter-notice (`POST /items/:id/counter-notice`: signature, material
    description, name, address, phone, three ticks: perjury statement, consent to jurisdiction, accept service) is taken only while
-   the action is open; incomplete is `400`, late `409 window_closed`.
+   the action is open; incomplete is `400`, late `409 window_closed`. `GET /items/mine` offers it (`counter_notice:
+   "available"`, with the window's end in `counter_notice_by`) by the same rule, so from the instant the route refuses the
+   item says `closed`, before the daily cron has upheld anything (round 28; a ghost takedown carries the same field).
 5. *Counter-notice received:* forwarded to the complainant at once (mail if the contact is an email, else the admin forwards it).
    The daily cron restores the item (bodies back, blocks and holds lifted, strike voided) no sooner than the start of the 10th US
    business day after receipt (weekends and federal holidays skipped; the 14th is the stored outer bound), unless the admin records
@@ -367,8 +385,15 @@ tokens revoked; the user row stays as a tombstone with an HMAC of the email for 
 - *Kept:* the bare tombstone; import counts under one anonymous key; audit rows with opaque ids; DMCA and moderation records; kept
   anonymised items; backups until they expire (D1 Time Travel, 30 days). A name typed into a kept item's title or tags is content and
   not scrubbed.
-- *Retention:* the owner decided audit and takedown records are kept **3 years**, pseudonymous after erasure. UNCONFIRMED in code: no
-  job deleting them was found (appendix 4).
+- *Retention (round 28):* audit and takedown records are kept **3 years** (1,096 days), pseudonymous after erasure, then the daily
+  cron's `retention` stage deletes them, oldest first and bounded (100 takedown actions and 5,000 rows per table a run). A takedown
+  action goes with its counter-notice, strike, exempt authors, block rows and upstream snapshot once it is closed (put back,
+  withdrawn, reversed or upheld) and nothing about it is newer than 3 years, unless something still needs it: a re-upload block in
+  force (and with it the upstream original's exemption), a copy it holds, an open appeal, or an unresolved counter-notice or
+  copies flag on its item. A notice goes once no action names it (an `open` notice stays until withdrawn). A `pool_audit` row goes
+  unless its item still has a kept takedown record, a hold or an open appeal, or it names a kept action or notice; the table
+  stays append-only for its first 1,096 days by the database's own clock. Evidence voids (`void_items`) are licensing state and
+  stay. Not purged: the auth package's `auth_audit` (it would need an auth package change).
 - *In-flight-request guard (round 27):* a request authenticated just before an erasure keeps running, so every write it could make
   under the caller's id is conditioned in the same statement or batch on the account not being erased (`ALIVE_SQL`); a skipped write
   answers 401. The daily `erasure_resweep` re-cleans every table such a request could touch, and `erasure_finish` reruns a failed
@@ -453,8 +478,10 @@ another key fails closed with `503 pool_key_mismatch` and one admin alert (reads
 answer `503 pool_not_configured`. Keep it as a wrangler secret and an offline copy. `GET /admin/pool/key` shows the ids.
 
 **Migrations.** `0001-0005` (auth, copied by `scripts/sync-migrations.sh`; `npm test` fails on drift), `0100_staff_domains`,
-`0101_notice_budget`, `0102_pool`, `0103_pool_rounds_6_11`, `0104_pool_round12`, `0105_pool_round24`. A committed migration is never
-edited; the next is `0106`. Before applying `0104` to a database with data, export it (D1 Time Travel keeps 30 days); it has no down
+`0101_notice_budget`, `0102_pool`, `0103_pool_rounds_6_11`, `0104_pool_round12`, `0105_pool_round24`, `0106_pool_round28` (retention
+trigger and indexes, invite codes; applying it starts the invite gate and grandfathers every account approved then),
+`0107_pool_round30` (index `author_stems_qhash`; no data change; round 31 needed none). A committed migration is never edited;
+the next is `0108`. Before applying `0104` to a database with data, export it (D1 Time Travel keeps 30 days); it has no down
 migration.
 
 **Cron** (`17 * * * *`; the 04:xx UTC run adds the daily stages). Hourly: `staged`, `pending`, `gc`, `reconcile`, `r2_orphans`,
@@ -462,14 +489,14 @@ migration.
 `wasm_traps`, plus the sign-up notice summary. Daily (also auth `purgeExpired` and `reviewReminders`): `putbacks`, `ghost_upholds`,
 `restored_holds`, `content_licences_gc`, `putback_finish`, `repeat_infringers`, `quarantine_expiry`, `erasure_finish`,
 `erasure_resweep`, `account_deleted`, `appeals`, `privacy_bytes`, `ghost_gc`, `purges` (batches of 200, up to 50 batches or 20 s),
-`cleanup`, plus the hourly stages again. Stages are isolated; a failure is flagged and retried.
+`retention` (round 28), `cleanup`, plus the hourly stages again. Stages are isolated; a failure is flagged and retried.
 
 **Verification.** Run from the component directory.
 
 | Component | Commands | Result (re-run 2026-10-23) |
 |---|---|---|
 | share-core | `cargo test --release` (the amplification sweep can flake under load: rerun alone); `cargo clippy --release --all-targets`, also with `--target wasm32-unknown-unknown`; `bash scripts/check-wasm-exports.sh`; `node tests/node/check.mjs`; at the repo root `cargo test --release --test share_core_fixtures` | cargo 309 passed, 0 failed, 1 ignored; node check 506/506; fixtures 8/8. clippy and export check not re-run (UNCONFIRMED) |
-| Worker | `npm test`, `npm run typecheck` (editor diagnostics on test files are stale) | `npm test` 477/477, 0 failed. typecheck not re-run |
+| Worker | `npm test`, `npm run typecheck` (editor diagnostics on test files are stale) | `npm test` 507/507, 0 failed (round 28: 477 plus `round28.test.ts`'s 12; round 29: plus `round29.test.ts`'s 7; round 30: plus `round30.test.ts`'s 5; round 31: plus `round31.test.ts`'s 6); typecheck clean |
 | Auth | `npm test`, `tsc` | 224/224 across 18 files. tsc not re-run |
 | Client | `cargo test --lib share::` and the library suite | not re-run; brief says 1,038 library tests, with two figuresui tests failing in the owner's files (UNCONFIRMED, appendix 18) |
 
@@ -518,8 +545,10 @@ is a blocker only if it is a new class; on 2026-10-23 the owner approved one mor
    owner first); the `"___"` blank-count mismatch between `src/ditto.rs` and share-core; Anki `{{cN::x}}` import as a blank; the
    publish-review text for "deleted teacher"; a "Shared" badge on bank pages; a picture preview before import; image decode and
    re-encode in share-core; a visual check of every window (only headless frames were run).
-10. **Policy gaps found while writing:** a 3-year retention job (appendix 4); a strike count for authors (decision pending); an end date
-    for a live takedown's counter-notice window in `/items/mine` (appendix 14).
+10. **Policy gaps found while writing:** a strike count for authors (decision pending). (The 3-year retention job and the
+    counter-notice window in `/items/mine` were added in round 28; the auth package's `auth_audit` is still kept indefinitely.)
+    **Client (round 28):** the app needs an invite-code entry (`POST /me/invite`, also while pending) and a reading of
+    `403 invite_required`; it may show `counter_notice_by` for a taken-down item.
 11. A whole-phase critic pass after the above, then a final run of all suites on the final build.
 
 ---
@@ -538,8 +567,9 @@ Each item names the disagreeing sources and the one this spec follows (the code 
 3. **Circles and `circle-only`.** Owner: no circles at launch; the draft Terms list five licences. Code keeps the wire licence
    `circle-only` (offered as "All rights reserved" for unlisted items) and the approval mail says the person can "join circles"
    (`server/worker/src/mail.ts`). The mail text is stale.
-4. **3-year retention.** Owner decision and the draft Privacy page say audit and takedown records are kept 3 years. No code in
-   `server/worker/src` or `server/auth/src` deletes them at 3 years. UNCONFIRMED: they are kept indefinitely.
+4. **3-year retention.** Owner decision and the draft Privacy page say audit and takedown records are kept 3 years. Resolved in
+   round 28 for the pool's records (the `retention` cron stage, section 7); the auth package's `auth_audit` is still kept
+   indefinitely.
 5. **Ratings, favourites, search service.** The old spec decided a separate FTS5 database, circles, ratings and favourites; none exist
    (search is a word index in the main database). The draft Privacy page still mentions "favourited or rated" and deleting "ratings and
    favourites"; the draft needs trimming.
@@ -553,14 +583,14 @@ Each item names the disagreeing sources and the one this spec follows (the code 
 10. **Handoff status lines.** The handoff's "Rust client" bullet and "Remaining work 1" say the UI is not started (and "180 tests"); its
     later sections describe the publish, browse, merge and My-shared-items slices as built. It also gives 464, 466 and 477 for the
     backend in different places. The 477 matches the run below.
-11. **Next migration.** Worker README "Setup": "Add `0105_...` for the next change", but `0105_pool_round24.sql` exists. Next is `0106`.
+11. **Next migration.** Worker README "Setup": "Add `0105_...` for the next change", but `0105_pool_round24.sql` exists. Fixed in
+    round 28: `0106_pool_round28.sql` exists and the next is `0107`.
 12. **Publish retention.** Old spec: current plus one previous. Code (README round 12 A1): current, previous, and the publish non-authors
     are served (`public_publish_id`).
 13. **Honest-teacher exit rule.** Owner rule: 0 hard refusals on honest corpora; final critics measured about 1.2 to 3.2 percent honest
     hard refusals, each with a workable path, and the owner then approved shipping with documented limits.
-14. **Counter-notice availability.** `GET /items/mine` reports `counter_notice: available` whenever an unresolved action exists, without
-    checking the 30-day window (`read.ts`); the window is enforced at `POST` (`409 window_closed`). The app may offer a button the server
-    then refuses (UNCONFIRMED how soon after day 30).
+14. **Counter-notice availability.** Resolved in round 28: `GET /items/mine` says `available` (with `counter_notice_by`) only inside
+    the 30-day window, by the rule the `POST` refuses with (`409 window_closed`).
 15. **Section names cited elsewhere.** Both READMEs, code comments and the legal README cite old-spec sections by name ("Sharing model",
     "Blob rules", "Trust levels", "Limits", "Takedown"). Those now point at the history copy. A citation sweep is pending.
 16. **Refresh-token lifetime.** Legal drafts say 30 days; auth is 30 days sliding with a 90-day family maximum.

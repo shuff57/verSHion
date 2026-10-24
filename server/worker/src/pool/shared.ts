@@ -452,6 +452,8 @@ export const DEFAULT_LIMITS = {
   /** Durable authorship records an account keeps (rounds 18-19): only NEW records count; never a
    *  republish adding nothing new, never a fix of a held item. */
   author_records: 500_000,
+  /** Invite-code redemption attempts per account per day (round 28, POST /me/invite). */
+  invite_tries: 10,
 } as const;
 export type Metric = keyof typeof DEFAULT_LIMITS;
 export const METRICS = Object.keys(DEFAULT_LIMITS) as Metric[];
@@ -557,6 +559,29 @@ export function reserveBytes(n: number): () => void {
     if (done) return;
     done = true;
     bytesInFlight -= n;
+  };
+}
+/**
+ * Round 29: a reserver like reserveBytes for one request's transient worst cases (its D1 results) that
+ * first borrows from `spare`: bytes the request already holds reserved and provably no longer uses
+ * (a publish's heavy-phase reservation once its payload trees are gone). Only the rest is reserved
+ * from the isolate budget (503 busy as reserveBytes). A borrow is returned with its release
+ * (idempotent), so borrows never add up past `spare`; the holder must keep its own reservation until
+ * every borrow is released.
+ */
+export function lender(spare: number): (n: number) => () => void {
+  let free = Math.max(0, Math.floor(spare));
+  return (n: number) => {
+    const borrow = Math.min(free, n);
+    const rest = reserveBytes(n - borrow);
+    free -= borrow;
+    let done = false;
+    return () => {
+      if (done) return;
+      done = true;
+      free += borrow;
+      rest();
+    };
   };
 }
 export function bytesReserved(): number {

@@ -9,6 +9,7 @@ import { daily, hourly } from "./cron.ts";
 import { appeal, counterNotice, deleteItem, patchItem, report, undeleteItem } from "./moderation.ts";
 import { publish } from "./publish.ts";
 import { exportAccount } from "./export.ts";
+import { INVITE_FREE_PATHS, redeemInvite, requireInvite } from "./invites.ts";
 import { getBlob, getItem, importItem, list, mine, versions } from "./read.ts";
 import { ALIVE_SQL, assertPoolKey, unauthorized, errKind, json, makeCtx, PoolError, rateLimit, readJson, type Ctx, type PoolDeps, type PoolPrincipal } from "./shared.ts";
 
@@ -68,6 +69,8 @@ const ROUTES: { re: RegExp; methods: Record<string, Route> }[] = [
   { re: /^\/blobs\/([^/]{1,80})$/, methods: { PUT: (c, r, p, m) => putBlob(c, r, p, m[1]!) } },
   // Round 23 (owner): the account's own export (pending accounts get their profile only).
   { re: /^\/me\/export$/, methods: { GET: (c, r, p) => exportAccount(c, r, p) } },
+  // Round 28 (owner): redeem an admin-issued invite code (pending accounts too; invites.ts).
+  { re: /^\/me\/invite$/, methods: { POST: (c, r, p) => redeemInvite(c, r, p) } },
 ];
 
 export interface Pool {
@@ -107,11 +110,15 @@ export function createPool(d: PoolDeps): Pool {
       // Round 16 (critic21d 8): every authenticated request is counted first, approved or not, so a
       // pending account cannot send unlimited requests (each one a D1 read of its trust).
       await rateLimit(ctx, req, p.userId, req.method === "GET" || req.method === "HEAD" || /\/(import|versions)$/.test(url.pathname));
-      // pending and unverified accounts (and anything else) cannot use the pool at all.
-      if (!POOL_TRUST.has(p.trust) && !(url.pathname === "/me/export" && p.trust === "pending"))
+      // pending and unverified accounts (and anything else) cannot use the pool at all (a pending account
+      // may export its profile and, round 28, redeem an invite code while it waits).
+      if (!POOL_TRUST.has(p.trust) && !(INVITE_FREE_PATHS.has(url.pathname) && p.trust === "pending"))
         throw new PoolError(403, "account_not_approved", {
           message: p.trust === "pending" ? "Your account is waiting for approval. The shared pool opens once an admin approves it." : "This account cannot use the shared pool.",
         });
+      // Round 28 (owner): an approved account also needs a redeemed invite code (admins are exempt; the
+      // export and the redemption itself are open). invites.ts says why the gate sits here.
+      if (p.trust !== "admin" && !INVITE_FREE_PATHS.has(url.pathname)) await requireInvite(ctx, p.userId);
       // Round 23 (critic30a B1): no write under a key other than the pool's own (reads continue).
       // Round 24: POST /items/versions is a bulk READ (it returns item metadata, never a hash): it
       // continues under a mismatch like any GET, as "plain reads continue" promises.
@@ -177,6 +184,8 @@ export function deleteContentStatements(db: D1Database, userId: string, now: num
     // (Round 27: the account's publish lock row goes too; the cron's erasure_resweep repeats all of this
     // for anything a request that was already running wrote after this batch.)
     db.prepare(`DELETE FROM pool_locks WHERE user_id = ?1`).bind(userId),
+    // (Round 28: its invite redemption goes; the invite keeps its use count.)
+    db.prepare(`DELETE FROM pool_invite_redemptions WHERE user_id = ?1`).bind(userId),
     // (Round 23, critic30b T1: what the account typed, and system notes about it; an admin's note is
     // evidence and stays, its personal data scrubbed when written.)
     db.prepare(`UPDATE pool_audit SET note = NULL WHERE target_user_id = ?1 AND note IS NOT NULL AND actor_kind <> 'admin'`).bind(userId),
