@@ -1,15 +1,21 @@
-// Seeds the LOCAL UI rig's pool (http://localhost:18791 only) with three sample shared items,
-// published by a throwaway account b@example.test through the real API, the way the app does it:
-// sign-up -> confirm with the link from the rig's mail log -> sign in -> approve ->
-// POST /items (schema v2 bank, label decisions computed with share-core, attestation, licence).
+// Seeds the LOCAL UI rig's pool (http://localhost:18791 only) with three sample shared items and
+// one circle, made by a throwaway account b@example.test through the real API, the way the app
+// does it: sign-up -> confirm with the link from the rig's mail log -> sign in -> approve ->
+// POST /items (schema v2 bank, label decisions computed with share-core, attestation, licence),
+// then POST /circles ("Maths department"), two banks sent into it (POST /circles/:id/banks, the
+// same publish body with an own-work attestation and a licence) and two invite codes (one editor,
+// one viewer), which are printed. Circle codes are not passwords: they are meant to be given out.
 //
-// Run it through `scripts/local-ui-rig.sh seed`, which first checks that b@example.test does not
-// exist yet (a second run says so and stops). This script also refuses if the address already has
-// a confirm link in the mail log.
+// Run it through `scripts/local-ui-rig.sh seed`. A first run (no b@example.test yet) does all of
+// the above. Later runs (`--existing`, passed by the rig script) publish no public items again:
+// they sign B in through the forgot-password link in the mail log (with a new random password),
+// make the circle and its banks only if they are missing, withdraw the unused codes an earlier
+// seed made and print two fresh ones. A first run refuses if the address already has a confirm
+// link in the mail log.
 //
 // The password is generated here and held only in this process: never printed, written, logged or
-// passed on. Tokens (confirm link, access, refresh, device) likewise stay in memory. Nobody can sign
-// in as B afterwards; the session is signed out at the end.
+// passed on. Tokens (confirm or reset link, access, refresh, device) likewise stay in memory.
+// Nobody can sign in as B afterwards; the session is signed out at the end.
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -57,18 +63,19 @@ function rig(...args) {
   const p = spawnSync(RIG, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   return { code: p.status, out: p.stdout ?? "", err: p.stderr ?? "" };
 }
-/** The token of the newest confirm link for EMAIL in the mail log, or null. Kept in memory only. */
-function confirmToken() {
+/** The token of the newest `kind` link ("confirm" or "reset") for EMAIL in the mail log, or null. Kept in memory only. */
+function linkToken(kind) {
   const r = rig("links", EMAIL);
   const lines = r.out.split("\n");
   for (let i = 0; i < lines.length; i++) {
-    if (/^confirm\s/.test(lines[i])) {
+    if (new RegExp(`^${kind}\\s`).test(lines[i])) {
       const m = /#token=([A-Za-z0-9_\-.]+)/.exec(lines[i + 1] ?? "");
       if (m) return m[1];
     }
   }
   return null;
 }
+const confirmToken = () => linkToken("confirm");
 
 // ---- the sample banks ----------------------------------------------------------------------------
 const T = 1792800000000;
@@ -146,6 +153,50 @@ const ITEMS = [
   },
 ];
 
+// ---- the circle -----------------------------------------------------------------------------------
+const CIRCLE = {
+  name: "Maths department",
+  description: "Local test circle made by 'rig seed': two banks from Sample Teacher B, to open, copy and add to.",
+};
+/** Written on the codes this script makes, so a later run can withdraw the ones nobody used. */
+const CODE_NOTE = "rig seed";
+const CIRCLE_BANKS = [
+  {
+    license: "CC-BY-4.0",
+    message: "First version, for the start of the unit.",
+    meta: { title: "Linear equations starter", subject: "Mathematics", grade: "8", tags: ["algebra", "equations"] },
+    payload: bank("seedcircle1", "Linear equations starter", "Six warm-up questions on solving one- and two-step linear equations.", [
+      q("Solve x + 7 = 12.", mc("x = 5", "x = 19", "x = -5", "x = 7")),
+      q("Solve 3x = 21.", mc("x = 7", "x = 18", "x = 24", "x = 63")),
+      q("Solve 2x - 4 = 10.", mc("x = 7", "x = 3", "x = 12", "x = 14")),
+      q("Which value of y makes y / 4 = 3 true?", mc("12", "7", "3/4", "1")),
+      q("x = 2 is a solution of 5x - 1 = 9.", { Tf: { correct: true } }),
+      q("Explain the first step you would take to solve 4(x + 1) = 20, and why.", {
+        Short: { sample: "Divide both sides by 4 (or expand the bracket), so that x + 1 = 5; then subtract 1 to get x = 4." },
+      }, { points: 2 }),
+    ]),
+  },
+  {
+    license: "circle-only",
+    meta: { title: "Angles exit ticket", subject: "Mathematics", grade: "7", tags: ["geometry", "angles"] },
+    payload: bank("seedcircle2", "Angles exit ticket", "Four questions on angle facts, kept inside the circle (members may not share it publicly).", [
+      q("Two angles on a straight line are 110 degrees and x. What is x?", mc("70 degrees", "110 degrees", "250 degrees", "90 degrees")),
+      q("The angles of a triangle are 50, 60 and x degrees. What is x?", mc("70 degrees", "80 degrees", "110 degrees", "60 degrees")),
+      q("Match each angle with its type.", {
+        Matching: {
+          pairs: [
+            { left: "35 degrees", right: "Acute" },
+            { left: "90 degrees", right: "Right" },
+            { left: "140 degrees", right: "Obtuse" },
+          ],
+          distractors: ["Straight"],
+        },
+      }, { points: 3 }),
+      q("Vertically opposite angles are always equal.", { Tf: { correct: true } }),
+    ]),
+  },
+];
+
 /** The label decisions the app would make (strip where allowed), from share-core. */
 function decideLabels(payload) {
   const f = JSON.parse(shareCore.label_findings(new TextEncoder().encode(payload), ""));
@@ -179,16 +230,116 @@ async function publish(token, it) {
   return r;
 }
 
+/** A circle bank's first version, as the app's "Share to a circle" sends it. */
+async function sendToCircle(token, cid, it) {
+  const payload = JSON.stringify(it.payload);
+  const meta = {
+    commit_id: randomBytes(16).toString("base64url"),
+    license: it.license,
+    attest: { own_work: true, terms_version: TERMS_VERSION },
+    ...(it.message ? { message: it.message } : {}),
+    meta: it.meta,
+  };
+  return call("POST", `/circles/${cid}/banks`, { token, body: Buffer.from(JSON.stringify(meta) + "\n" + payload), headers: { "Content-Type": PUBLISH_CONTENT_TYPE } });
+}
+
+/** The circle (made if missing), its two banks (sent if missing), and two fresh codes, printed. */
+async function seedCircle(token) {
+  const list = await call("GET", "/circles", { token });
+  if (list.status !== 200) die(`GET /circles refused: ${why(list)}`);
+  let circle = (list.data?.circles ?? []).find((c) => c.name === CIRCLE.name && c.role === "owner" && c.closed_at == null);
+  if (circle) {
+    const n = (k, one) => `${k} ${one}${k === 1 ? "" : "s"}`;
+    console.log(`Circle "${CIRCLE.name}" already exists (${circle.id}, ${n(circle.members, "member")}, ${n(circle.banks, "bank")}).`);
+  } else {
+    const r = await call("POST", "/circles", { token, json: CIRCLE });
+    if (r.status !== 201 || !r.data?.circle?.id) die(`creating the circle refused: ${why(r)} ${r.data?.message ?? ""}`);
+    circle = r.data.circle;
+    console.log(`Created circle "${CIRCLE.name}" (${circle.id}).`);
+  }
+  const cid = circle.id;
+
+  const detail = await call("GET", `/circles/${cid}`, { token });
+  if (detail.status !== 200) die(`GET /circles/${cid} refused: ${why(detail)}`);
+  const have = new Set((detail.data?.banks ?? []).filter((b) => !b.removed && b.is_author).map((b) => b.title));
+  for (const it of CIRCLE_BANKS) {
+    if (have.has(it.meta.title)) {
+      console.log(`Circle bank "${it.meta.title}" already there.`);
+      continue;
+    }
+    const r = await sendToCircle(token, cid, it);
+    if ((r.status !== 200 && r.status !== 201) || !r.data?.bank_id) die(`sending "${it.meta.title}" to the circle refused: ${why(r)} ${JSON.stringify(r.data?.errors ?? r.data?.message ?? "")}`);
+    console.log(`Sent ${r.data.bank_id}  ${it.meta.title}  (version ${r.data.version}, ${it.license}, ${it.payload.bank.questions.length} questions)`);
+  }
+
+  // Codes are shown only when made, so earlier unused seed codes are withdrawn and two new ones made.
+  const inv = await call("GET", `/circles/${cid}/invites`, { token });
+  if (inv.status !== 200) die(`GET /circles/${cid}/invites refused: ${why(inv)}`);
+  let withdrawn = 0;
+  for (const i of inv.data?.invites ?? []) {
+    if (i.state !== "active" || i.note !== CODE_NOTE) continue;
+    const r = await call("POST", `/circles/${cid}/invites/revoke`, { token, json: { invite_id: i.invite_id } });
+    if (r.status !== 200) die(`withdrawing an old seed code refused: ${why(r)}`);
+    withdrawn++;
+  }
+  if (withdrawn > 0) console.log(`Withdrew ${withdrawn} unused code${withdrawn === 1 ? "" : "s"} from an earlier seed.`);
+  const codes = {};
+  for (const role of ["editor", "viewer"]) {
+    const r = await call("POST", `/circles/${cid}/invites`, { token, json: { role, note: CODE_NOTE } });
+    if (r.status !== 201 || !r.data?.code) die(`making the ${role} code refused: ${why(r)} ${r.data?.message ?? ""}`);
+    codes[role] = r.data;
+  }
+  const after = await call("GET", `/circles/${cid}`, { token });
+  const banks = (after.data?.banks ?? []).filter((b) => !b.removed);
+  console.log(`GET /circles/${cid}: ${after.status}, ${after.data?.members?.length ?? "?"} member(s), ${banks.length} bank(s): ${banks.map((b) => `"${b.title}" (${b.license})`).join(", ")}.`);
+  const days = (ms) => Math.round((ms - Date.now()) / 86_400_000);
+  console.log("");
+  console.log(`Invite codes for the circle "${CIRCLE.name}" (each works once, for ${days(codes.editor.expires_at)} days):`);
+  console.log(`  editor (can add banks):          ${codes.editor.code}`);
+  console.log(`  viewer (can only look and copy): ${codes.viewer.code}`);
+  console.log("Redeem one as a@example.test in the app: Shared, Circles tab, Enter a code..., paste it, Look up, Join.");
+  console.log("These codes are not passwords. 'rig seed' again withdraws them (if unused) and prints new ones.");
+}
+
 // ---- the run -------------------------------------------------------------------------------------
+const existing = process.argv[2] === "--existing";
 const up = await fetch(BASE + "/").then(
   () => true,
   () => false,
 );
 if (!up) die(`nothing answers on ${BASE}: run 'scripts/local-ui-rig.sh start' first`);
-if (confirmToken() !== null) die(`${EMAIL} already has a confirm link in the mail log: it was seeded before (or signed up by hand). Nothing done.`);
 
 const password = randomBytes(24).toString("base64url"); // in this process only
 const profile = { display_name: "Sample Teacher B", school: "Example Middle School", adult_school_employee: true };
+
+if (existing) {
+  // B was seeded before and its password was never kept: take the account back the way its owner
+  // would, with a reset link from the mail log, and a new random password held only here.
+  const before = linkToken("reset");
+  const fg = await call("POST", "/auth/forgot", { json: { email: EMAIL } });
+  if (fg.status !== 202) die(`forgot-password refused: ${why(fg)}`);
+  let rtoken = null;
+  for (let i = 0; i < 40 && rtoken === null; i++) {
+    const t = linkToken("reset");
+    if (t !== null && t !== before) rtoken = t;
+    else await sleep(250);
+  }
+  if (rtoken === null) die(`no new reset link for ${EMAIL} in the mail log. One goes out at most every 2 minutes (10 an hour): run 'rig seed' again in two minutes.`);
+  const rs = await call("POST", "/auth/reset", { json: { token: rtoken, password } });
+  rtoken = null;
+  if (rs.status !== 200) die(`reset refused: ${why(rs)}`);
+  const device = rs.data?.device_token ?? null;
+  const li = await call("POST", "/auth/login", { json: { email: EMAIL, password }, headers: device ? { "X-Device-Token": device } : {} });
+  if (li.status !== 200 || !li.data?.access_token) die(`sign-in refused: ${why(li)}`);
+  if (li.data.user?.trust !== "teacher") die(`${EMAIL} is ${li.data.user?.trust}, not an approved teacher: run 'rig approve ${EMAIL}' (or 'rig reset')`);
+  console.log(`Signed in as ${EMAIL} with a reset link from the mail log (the public items are not published again).`);
+  await seedCircle(li.data.access_token);
+  const out = await call("POST", "/auth/logout", { json: { refresh_token: li.data.refresh_token, forget_device: true }, token: li.data.access_token });
+  console.log(`Signed out: ${out.status}.`);
+  process.exit(0);
+}
+
+if (confirmToken() !== null) die(`${EMAIL} already has a confirm link in the mail log: it was seeded before (or signed up by hand). Nothing done.`);
 
 // Like the app's sign-up page: address, password and profile; the confirm step sets them again.
 const su = await call("POST", "/auth/signup", { json: { email: EMAIL, password, ...profile } });
@@ -242,6 +393,8 @@ const mineItems = mine.data?.items ?? [];
 console.log(`GET /items: ${pub.status}, ${listed.length} of the ${made.length} new items listed publicly.`);
 console.log(`GET /items/mine: ${mine.status}, ${mineItems.length} items for ${EMAIL}:`);
 for (const x of mineItems) console.log(`  ${x.id}  ${x.title}  visibility=${x.visibility} hide_key=${x.hide_key} license=${x.license} questions=${x.question_count}`);
+
+await seedCircle(token);
 
 // End the session and forget the password; B is not signed into again.
 const out = await call("POST", "/auth/logout", { json: { refresh_token: session.refresh_token, forget_device: true }, token });

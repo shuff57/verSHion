@@ -138,7 +138,7 @@ impl LocalProblem {
     }
 }
 
-fn mb(n: usize) -> String {
+pub(super) fn mb(n: usize) -> String {
     super::transport::size_text(n)
 }
 
@@ -306,6 +306,32 @@ pub enum RefusalKind {
     InviteInvalid,
     /// 404. An item the person may not see is a 404 as well.
     NotFound,
+    /// 403 `circle_role_required`: the circle's owner (or an editor) is needed for this.
+    CircleRoleRequired { needed: Option<String> },
+    /// 422 `circle_invite_invalid`: unknown, expired, used up, withdrawn or no longer usable (all the same).
+    CircleInviteInvalid,
+    /// 409 `circle_full`.
+    CircleFull { limit: Option<u64> },
+    /// 422 `circles_limit`: `circles_owned`, `circle_memberships`, `circle_banks`, `circle_open_invites`...
+    CirclesLimit { metric: Option<String>, used: u64, limit: u64 },
+    /// 409 `circle_closed`: the owner closed it; `undo_until` is when the owner can no longer reopen it.
+    CircleClosed { undo_until: Option<i64> },
+    /// 409 `bank_removed`.
+    BankRemoved,
+    /// 404 `version_not_retained` (phase B).
+    VersionNotRetained,
+    /// 422 `circle_questions_limit`.
+    CircleQuestionsLimit(LimitInfo),
+    /// 413 `circle_records_full`.
+    CircleRecordsFull,
+    /// 413 `quota_exceeded` with `scope: "circle"`: the circle's own storage.
+    CircleStorageFull(LimitInfo),
+    /// 409 `already_revoked`.
+    AlreadyRevoked,
+    /// 409 `commit_id_conflict`: the send id was used for different content.
+    CommitIdConflict,
+    /// 422 `circle_material` on a public publish: text first shared inside a circle.
+    CircleMaterial(Box<CircleMaterial>),
     /// 400 `own_item`: an author can not report their own item.
     OwnItem,
     /// 400 `counter_notice_incomplete`.
@@ -315,16 +341,16 @@ pub enum RefusalKind {
     Other,
 }
 
-fn str_of(v: &Value, k: &str) -> Option<String> {
+pub(super) fn str_of(v: &Value, k: &str) -> Option<String> {
     v.get(k).and_then(Value::as_str).map(str::to_string)
 }
-fn u64_of(v: &Value, k: &str) -> Option<u64> {
+pub(super) fn u64_of(v: &Value, k: &str) -> Option<u64> {
     v.get(k).and_then(Value::as_u64)
 }
 fn limit_of(v: &Value) -> LimitInfo {
     LimitInfo { used: u64_of(v, "used").unwrap_or(0), needed: u64_of(v, "needed").unwrap_or(0), limit: u64_of(v, "limit").unwrap_or(0) }
 }
-fn usizes(v: &Value, k: &str) -> Vec<usize> {
+pub(super) fn usizes(v: &Value, k: &str) -> Vec<usize> {
     v.get(k).and_then(Value::as_array).map(|a| a.iter().filter_map(|x| x.as_u64().map(|n| n as usize)).collect()).unwrap_or_default()
 }
 
@@ -349,10 +375,23 @@ impl RefusalKind {
             (_, "publish_id_conflict") => RefusalKind::PublishIdConflict,
             (_, "publish_in_progress") => RefusalKind::PublishInProgress,
             (_, "item_removed") => RefusalKind::ItemRemoved { purged: j.get("purged").and_then(Value::as_bool).unwrap_or(false), message },
-            (_, "under_moderation" | "already_removed" | "nothing_to_appeal" | "decided" | "window_closed" | "notice_not_actionable") => {
+            (_, "under_moderation" | "already_removed" | "nothing_to_appeal" | "decided" | "window_closed" | "notice_not_actionable" | "bank_not_removed") => {
                 RefusalKind::ModerationState { message }
             }
+            (_, "quota_exceeded") if str_of(j, "scope").as_deref() == Some("circle") => RefusalKind::CircleStorageFull(limit_of(j)),
             (_, "quota_exceeded") => RefusalKind::QuotaExceeded(limit_of(j)),
+            (_, "circle_role_required") => RefusalKind::CircleRoleRequired { needed: str_of(j, "needed") },
+            (_, "circle_invite_invalid") => RefusalKind::CircleInviteInvalid,
+            (_, "circle_full") => RefusalKind::CircleFull { limit: u64_of(j, "limit") },
+            (_, "circles_limit") => RefusalKind::CirclesLimit { metric: str_of(j, "metric"), used: u64_of(j, "used").unwrap_or(0), limit: u64_of(j, "limit").unwrap_or(0) },
+            (_, "circle_closed") => RefusalKind::CircleClosed { undo_until: j.get("undo_until").and_then(Value::as_i64) },
+            (_, "bank_removed") => RefusalKind::BankRemoved,
+            (_, "version_not_retained") => RefusalKind::VersionNotRetained,
+            (_, "circle_questions_limit") => RefusalKind::CircleQuestionsLimit(limit_of(j)),
+            (_, "circle_records_full") => RefusalKind::CircleRecordsFull,
+            (_, "already_revoked") => RefusalKind::AlreadyRevoked,
+            (_, "commit_id_conflict") => RefusalKind::CommitIdConflict,
+            (_, "circle_material") => RefusalKind::CircleMaterial(Box::new(CircleMaterial::from_json(j))),
             (_, "removed_storage_exceeded") => {
                 RefusalKind::RemovedStorageExceeded { used: u64_of(j, "used").unwrap_or(0), limit: u64_of(j, "limit").unwrap_or(0), message }
             }
@@ -418,6 +457,32 @@ impl Refusal {
                 None => "That is too big for the pool.".into(),
             },
             RefusalKind::SharedQuestionsLimit(l) => format!("You can share up to {} questions in all; this would make {}.", l.limit, l.used + l.needed),
+            RefusalKind::CircleRoleRequired { needed } => match needed.as_deref() {
+                Some("owner") => "Only the circle's owner can do that.".into(),
+                Some("editor") => "You can only look at this circle's banks. The owner can let you add banks by changing your role to editor.".into(),
+                _ => "Your role in this circle does not allow that.".into(),
+            },
+            RefusalKind::CircleInviteInvalid => "This circle code does not work. It may have expired, been used up or been withdrawn, or it may have been mistyped. Ask the circle's owner for a new one.".into(),
+            RefusalKind::CircleFull { limit } => match limit {
+                Some(l) => format!("This circle already has {l} members, the most it can have."),
+                None => "This circle is full.".into(),
+            },
+            RefusalKind::CirclesLimit { metric, used, limit } => match metric.as_deref() {
+                Some("circles_owned") => format!("You already own {used} circles, the most one account can own ({limit}). A circle you closed still counts for 14 days. Hand one to another member, or wait until a closed one is gone."),
+                Some("circle_memberships") | Some("circle_memberships_total") => format!("You are already in {used} circles, the most one account can be in ({limit}). Leave one first."),
+                Some("circle_banks") => format!("This circle already has {used} banks, the most it can hold ({limit}). Remove one first."),
+                Some("circle_open_invites") => format!("This circle already has {used} open codes ({limit} at most). Withdraw one you no longer need."),
+                _ => "You have reached a limit on circles.".into(),
+            },
+            RefusalKind::CircleClosed { .. } => "This circle was closed by its owner.".into(),
+            RefusalKind::BankRemoved => "This bank was removed from the circle.".into(),
+            RefusalKind::VersionNotRetained => "That older version is no longer kept.".into(),
+            RefusalKind::CircleQuestionsLimit(l) => format!("A circle holds at most {} questions across its banks; this would make {}.", l.limit, l.used + l.needed),
+            RefusalKind::CircleRecordsFull => "This circle has recorded as many different questions as it can keep. Remove a bank first.".into(),
+            RefusalKind::CircleStorageFull(l) => format!("This circle's storage is full ({} of {} used). Remove a bank or leave out large pictures.", mb(l.used as usize), mb(l.limit as usize)),
+            RefusalKind::AlreadyRevoked => "That code was already withdrawn.".into(),
+            RefusalKind::CommitIdConflict => "This send was already used for different content. Start it again.".into(),
+            RefusalKind::CircleMaterial(m) => m.message(),
             RefusalKind::InviteRequired => INVITE_REQUIRED_TEXT.into(),
             RefusalKind::InviteInvalid => "This invite code is not valid: it may have expired, been used up or been withdrawn. Check that you typed it right, or ask an admin for a new one.".into(),
             RefusalKind::DailyLimit { metric } if metric.as_deref() == Some("invite_tries") => {
@@ -448,6 +513,8 @@ impl Refusal {
 /// that still says what happened. Covers every code the routes the app calls can return.
 pub fn other_message(status: u16, code: &str, wait: String) -> String {
     let m = match code {
+        "member_unavailable" => "That member's account can not take on the circle right now. Choose someone else.",
+        "no_pending_transfer" => "There is no ownership offer to answer any more. It may have been withdrawn, taken back, or it expired.",
         "unauthorized" => "Your sign-in ended. Sign in again in the Account window.",
         "reauth_required" => "Sign in again to do this: it needs a sign-in from the last 24 hours.",
         "invalid_json" | "body_aborted" | "length_mismatch" | "length_required" | "unsupported_media_type" => {
@@ -499,7 +566,80 @@ fn metric_text(m: Option<&str>) -> String {
         Some("appeals") => " for appeals".into(),
         Some("blob_uploads" | "blob_bytes") => " for picture uploads".into(),
         Some("held_publishes") => " for publishes that were held for review".into(),
+        Some("circle_creates") => " for creating circles".into(),
+        Some("circle_invites") => " for making circle codes".into(),
+        Some("circle_join_tries") => " for circle codes that did not work".into(),
+        Some("circle_commits") => " for sending banks to circles".into(),
+        Some("circle_closes") => " for closing circles".into(),
+        Some("circle_reports") => " for reports about circle banks".into(),
         _ => String::new(),
+    }
+}
+
+// ---- circles: text first shared inside a circle (D13) -------------------------------------------------
+
+/// One question the pool found first shared by another member of a circle.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CircleHit {
+    /// 0-based question index in what was being published.
+    pub pos: usize,
+    pub circle_id: String,
+    pub circle_name: Option<String>,
+    pub bank_id: String,
+    pub bank_title: Option<String>,
+    /// A written statement that the questions are the author's own can lift the refusal.
+    pub may_claim_independence: bool,
+}
+
+/// 422 `circle_material`: questions that were first shared by another member of a circle can not
+/// be shared publicly from here.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CircleMaterial {
+    pub positions: Vec<usize>,
+    pub hits: Vec<CircleHit>,
+}
+
+impl CircleMaterial {
+    pub fn from_json(j: &Value) -> CircleMaterial {
+        let hits = j
+            .get("hits")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .map(|h| CircleHit {
+                        pos: u64_of(h, "pos").unwrap_or(0) as usize,
+                        circle_id: str_of(h, "circle_id").unwrap_or_default(),
+                        circle_name: str_of(h, "circle_name"),
+                        bank_id: str_of(h, "bank_id").unwrap_or_default(),
+                        bank_title: str_of(h, "bank_title"),
+                        may_claim_independence: h.get("may_claim_independence").and_then(Value::as_bool).unwrap_or(false),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        CircleMaterial { positions: usizes(j, "positions"), hits }
+    }
+
+    /// The banks the hits name, once each, in order.
+    pub fn banks(&self) -> Vec<&CircleHit> {
+        let mut seen: Vec<&str> = Vec::new();
+        let mut out = Vec::new();
+        for h in &self.hits {
+            if !seen.contains(&h.bank_id.as_str()) {
+                seen.push(&h.bank_id);
+                out.push(h);
+            }
+        }
+        out
+    }
+
+    /// Every named bank allows a written statement.
+    pub fn all_may_claim(&self) -> bool {
+        !self.hits.is_empty() && self.hits.iter().all(|h| h.may_claim_independence)
+    }
+
+    pub fn message(&self) -> String {
+        "Some of these questions were first shared by another member of a circle you are or were in. They can not be shared publicly from here.".into()
     }
 }
 
@@ -889,33 +1029,33 @@ impl MediaSource for HashMap<String, Vec<u8>> {
 
 // ---- the call plumbing ---------------------------------------------------------------------------
 
-enum Body {
+pub(super) enum Body {
     None,
     Json(String),
     Bytes { data: Vec<u8>, content_type: String },
 }
 
-struct Call {
-    method: Method,
-    path: String,
-    body: Body,
-    headers: Vec<(String, String)>,
-    binary: bool,
-    max_response: Option<usize>,
-    timeout: Option<Duration>,
+pub(super) struct Call {
+    pub(super) method: Method,
+    pub(super) path: String,
+    pub(super) body: Body,
+    pub(super) headers: Vec<(String, String)>,
+    pub(super) binary: bool,
+    pub(super) max_response: Option<usize>,
+    pub(super) timeout: Option<Duration>,
     /// Repeating it changes nothing the person would notice.
-    safe: bool,
+    pub(super) safe: bool,
 }
 
 impl Call {
-    fn new(method: Method, path: impl Into<String>) -> Call {
+    pub(super) fn new(method: Method, path: impl Into<String>) -> Call {
         Call { method, path: path.into(), body: Body::None, headers: Vec::new(), binary: false, max_response: None, timeout: None, safe: true }
     }
-    fn json(mut self, v: &Value) -> Call {
+    pub(super) fn json(mut self, v: &Value) -> Call {
         self.body = Body::Json(v.to_string());
         self
     }
-    fn not_safe(mut self) -> Call {
+    pub(super) fn not_safe(mut self) -> Call {
         self.safe = false;
         self
     }
@@ -936,7 +1076,7 @@ impl Call {
     }
 }
 
-fn parse<T: DeserializeOwned>(r: &Response) -> Result<T, PoolError> {
+pub(super) fn parse<T: DeserializeOwned>(r: &Response) -> Result<T, PoolError> {
     serde_json::from_str(r.body.expose()).map_err(|e| PoolError::Api(ApiError::BadReply(format!("{e}"))))
 }
 
@@ -956,7 +1096,7 @@ impl<'a> Pool<'a> {
     }
 
     /// One call with retries. Returns a 2xx (or 304) answer; anything else is an error.
-    async fn call(&self, c: &Call) -> Result<Response, PoolError> {
+    pub(super) async fn call(&self, c: &Call) -> Result<Response, PoolError> {
         let url = route_url(&self.session.base(), &c.path).ok_or(PoolError::Api(ApiError::NotConfigured))?;
         let build = || c.request(&url);
         let mut attempt = 0u32;
@@ -1086,6 +1226,13 @@ pub struct IndependentOf {
     pub statement: String,
 }
 
+/// The independence statement for questions the pool found in circle banks.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CircleIndependent {
+    pub banks: Vec<String>,
+    pub statement: String,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct PublishOptions {
     /// Serve students the keyless form (the key stays with the author).
@@ -1100,6 +1247,9 @@ pub struct PublishOptions {
     /// Question indices whose picture "does not reveal the answer".
     pub image_ok: Vec<usize>,
     pub independent_of: Option<IndependentOf>,
+    /// "I wrote these questions myself" for the circle banks the pool named (`circle_material`): the
+    /// bank ids and the author's own words (10 characters at least).
+    pub circle_independent_of: Option<CircleIndependent>,
     pub meta: ItemMeta,
     /// The accepted attestation text (`ATTEST_TEXT_REV`). The person ticks it; this records which.
     pub attestation_rev: String,
@@ -1116,6 +1266,7 @@ impl PublishOptions {
             ack_formatting: Vec::new(),
             image_ok: Vec::new(),
             independent_of: None,
+            circle_independent_of: None,
             meta: ItemMeta::default(),
             attestation_rev: ATTEST_TEXT_REV.to_string(),
         }
@@ -1240,6 +1391,15 @@ impl PublishRequest {
                 return Err(LocalProblem::IndependenceClaim("Say in a sentence why these questions are your own work (at least 10 characters)."));
             }
             m.insert("independent_of".into(), json!({ "items": ind.items, "accepted": true, "statement": ind.statement.trim() }));
+        }
+        if let Some(ci) = &o.circle_independent_of {
+            if ci.banks.is_empty() || ci.banks.len() > 50 || !ci.banks.iter().all(|b| is_item_id(b)) {
+                return Err(LocalProblem::IndependenceClaim("Name the circle banks your questions are independent of."));
+            }
+            if ci.statement.trim().chars().count() < 10 {
+                return Err(LocalProblem::IndependenceClaim("Say in a sentence why these questions are your own work (at least 10 characters)."));
+            }
+            m.insert("circle_independent_of".into(), json!({ "banks": ci.banks, "accepted": true, "statement": ci.statement.trim() }));
         }
         let s = Value::Object(m).to_string();
         if s.len() > MAX_META {
@@ -1476,7 +1636,7 @@ impl<'a> Pool<'a> {
         parse(&self.call(&c).await?)
     }
 
-    async fn upload(&self, imgs: &[(ImageUse, Vec<u8>)], progress: &mut dyn FnMut(PublishProgress)) -> Result<(), PoolError> {
+    pub(super) async fn upload(&self, imgs: &[(ImageUse, Vec<u8>)], progress: &mut dyn FnMut(PublishProgress)) -> Result<(), PoolError> {
         for (i, (u, bytes)) in imgs.iter().enumerate() {
             progress(PublishProgress::UploadingImage { done: i, total: imgs.len(), file: u.file.clone() });
             self.put_blob(&u.sha256, bytes).await?;

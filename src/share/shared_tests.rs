@@ -62,7 +62,7 @@ fn tabs_switch_and_the_invite_flag_follows_the_pool() {
     assert_eq!(m.guide(&Gate::Ready, Page::Status, false), Guide::NeedsInvite);
     m.note_redeemed();
     assert_eq!(m.guide(&Gate::Ready, Page::Status, false), Guide::Ready);
-    assert_eq!(Tab::ALL.len(), 5);
+    assert_eq!(Tab::ALL.len(), 6);
     assert!(Tab::ALL.iter().all(|t| !t.label().is_empty()));
 }
 
@@ -122,13 +122,17 @@ fn smoke_frames_of_every_guided_state_at_wide_and_narrow_widths() {
         // sharing off in this build
         let mut a = account(false);
         let (mut s, mut b, mut m) = (SharedUi::default(), Default::default(), Default::default());
-        frame(&ctx, width, &mut |ui| s.draw(ui, &mut a, &mut b, &mut m, &[], &[]));
+        frame(&ctx, width, &mut |ui| {
+            s.draw(ui, &mut a, &mut b, &mut m, &mut Vec::new(), &[]);
+        });
         // a configured account that has not signed in
         let mut a = account(true);
         let (mut s, mut b, mut m): (SharedUi, super::BrowseUi, super::MineUi) = (SharedUi::default(), Default::default(), Default::default());
         for page in [Page::SignIn, Page::SignUp, Page::Forgot, Page::CheckEmail(MailKind::Verify), Page::Confirm] {
             a.model.page = page;
-            frame(&ctx, width, &mut |ui| s.draw(ui, &mut a, &mut b, &mut m, &[], &[]));
+            frame(&ctx, width, &mut |ui| {
+            s.draw(ui, &mut a, &mut b, &mut m, &mut Vec::new(), &[]);
+        });
         }
         // the cards for every note and step, directly
         for g in [Guide::Checking, Guide::NotSetUp, Guide::Offline, Guide::Waiting, Guide::Blocked(rejected()), Guide::NeedsInvite] {
@@ -148,7 +152,7 @@ fn the_tab_row_and_the_step_pills_wrap_inside_a_narrow_page() {
         let mut s = SharedUi::default();
         let mut right = 0.0f32;
         frame(&ctx, width, &mut |ui| {
-            s.tabs(ui, &mut a, &mut b, &mut m, &[], &[]);
+            s.tabs(ui, &mut a, &mut b, &mut m, &mut Vec::new(), &[]);
             right = right.max(ui.min_rect().right());
         });
         assert!(right <= width + 0.5, "tabs reach {right} in a {width} wide page");
@@ -165,15 +169,19 @@ fn the_tab_row_and_the_step_pills_wrap_inside_a_narrow_page() {
 fn smoke_frames_of_every_tab_body() {
     let ctx = ctx();
     let mut a = account(true);
-    let banks = vec![];
+    let mut banks = vec![];
     for width in [1000.0, 420.0] {
         let (mut b, mut m): (super::BrowseUi, super::MineUi) = Default::default();
         let mut s = SharedUi::default();
         for t in Tab::ALL {
             s.model.goto(t);
-            frame(&ctx, width, &mut |ui| s.tabs(ui, &mut a, &mut b, &mut m, &banks, &[]));
+            frame(&ctx, width, &mut |ui| {
+                s.tabs(ui, &mut a, &mut b, &mut m, &mut banks, &[]);
+            });
         }
         s.model.toggle_chooser();
-        frame(&ctx, width, &mut |ui| s.tabs(ui, &mut a, &mut b, &mut m, &banks, &[]));
+        frame(&ctx, width, &mut |ui| {
+                s.tabs(ui, &mut a, &mut b, &mut m, &mut banks, &[]);
+            });
     }
 }

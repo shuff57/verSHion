@@ -1073,6 +1073,7 @@ fn report_problems_are_worded_and_a_report_is_never_resent_by_itself() {
 
 fn record(item: &str, bank: &str, version: u64) -> ImportedRecord {
     ImportedRecord {
+        circle: None,
         item_id: item.into(),
         bank_id: bank.into(),
         bank_name: "Mine".into(),

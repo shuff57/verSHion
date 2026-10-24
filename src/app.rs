@@ -225,7 +225,8 @@ impl App {
                 "figures" => Screen::Figures,
                 "settings" => Screen::Settings,
                 // The Shared page, optionally on a tab: "shared", "shared:browse|mine|imported|reports|settings",
-                // "shared:choose" (the "Share to pool…" chooser open).
+                // "shared:choose" (the "Share to pool…" chooser open). Circles: "shared:circles",
+                // "shared:circles:join", "shared:circles:create", "shared:circle:<circle id>[:<bank id>]".
                 s if s == "shared" || s.starts_with("shared:") => {
                     use crate::share::shared::Tab;
                     match s.trim_start_matches("shared").trim_start_matches(':') {
@@ -234,9 +235,35 @@ impl App {
                         "reports" => app.shared.model.goto(Tab::Reports),
                         "settings" => app.shared.model.goto(Tab::Settings),
                         "choose" => app.shared.model.choosing = true,
+                        "circles" => app.shared.model.goto(Tab::Circles),
+                        "circles:join" => {
+                            app.shared.model.goto(Tab::Circles);
+                            app.shared.circles.open_join("");
+                        }
+                        "circles:create" => {
+                            app.shared.model.goto(Tab::Circles);
+                            app.shared.circles.open_create();
+                        }
+                        c if c.starts_with("circle:") => {
+                            app.shared.model.goto(Tab::Circles);
+                            match c["circle:".len()..].split_once(':') {
+                                Some((cid, bid)) => app.shared.circles.open_bank_at(cid, bid),
+                                None => app.shared.circles.open_circle_at(&c["circle:".len()..]),
+                            }
+                        }
                         _ => app.shared.model.goto(Tab::Browse),
                     }
                     Screen::Shared
+                }
+                // The "Share to pool..." window for the first bank with "One of my circles" chosen
+                // ("publish:circle"), or a given circle preselected ("publish:circle:<circle id>").
+                s if s == "publish:circle" || s.starts_with("publish:circle:") => {
+                    if let Some(b) = app.store.banks.first()
+                        && let Ok(src) = crate::share::publish::ShareSource::from_bank(b)
+                    {
+                        crate::share::publish_ui::request_for_circle(ctx, src, s.trim_start_matches("publish:circle").trim_start_matches(':'));
+                    }
+                    Screen::Banks
                 }
                 // The "Share to pool..." window for the first bank, over the Banks page.
                 "publish" => {

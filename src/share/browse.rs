@@ -99,6 +99,18 @@ pub struct ImportedRecord {
     /// updated as a new bank.
     #[serde(default)]
     pub base: Vec<BaseQuestion>,
+    /// Set when this is a copy of a bank in one of the person's circles (then `item_id` is the
+    /// circle bank's id, and the public pool is never asked about it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub circle: Option<CircleOrigin>,
+}
+
+/// Which circle a copied bank came from.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct CircleOrigin {
+    pub circle_id: String,
+    #[serde(default)]
+    pub circle_name: String,
 }
 
 impl ImportedRecord {
@@ -1442,6 +1454,7 @@ impl BrowseModel {
             checked_at: imp.at_ms,
             note: None,
             base: merge::bounded(imp.theirs.iter().map(|t| merge::base_of(&t.q, &t.qid, &t.fp, t.sha.clone())).collect()),
+            circle: None,
         };
         // A bank that gets a second import of the same item keeps both lists of questions.
         let mut rec = rec;
@@ -1843,7 +1856,7 @@ impl BrowseModel {
     /// Asks the pool where each imported item stands (one request for up to 200 items).
     pub fn check_updates(&mut self) {
         self.ensure_log();
-        let mut ids: Vec<String> = self.imported.iter().map(|r| r.item_id.clone()).collect();
+        let mut ids: Vec<String> = self.imported.iter().filter(|r| r.circle.is_none()).map(|r| r.item_id.clone()).collect();
         ids.sort();
         ids.dedup();
         if ids.is_empty() {
@@ -1855,6 +1868,70 @@ impl BrowseModel {
 
     pub fn checking(&self) -> bool {
         self.running(JobKind::Versions)
+    }
+
+    /// The circle banks that were copied (each once), for the circles page to ask about.
+    pub fn circle_bank_ids(&mut self) -> Vec<String> {
+        self.ensure_log();
+        let mut ids: Vec<String> = self.imported.iter().filter(|r| r.circle.is_some()).map(|r| r.item_id.clone()).collect();
+        ids.sort();
+        ids.dedup();
+        ids.truncate(super::circles_api::MAX_HEADS);
+        ids
+    }
+
+    /// Notes what the circles page learned about the banks copied from circles: a newer version, or
+    /// that the bank can not be shown any more (the copy is unaffected).
+    pub fn apply_circle_heads(&mut self, entries: &[super::circles_api::HeadEntry]) {
+        use super::circles_api::HeadState;
+        self.ensure_log();
+        let now = now_ms();
+        let mut changed = false;
+        for r in self.imported.iter_mut().filter(|r| r.circle.is_some()) {
+            let Some(e) = entries.iter().find(|e| e.bank_id == r.item_id) else { continue };
+            r.checked_at = now;
+            r.status = None;
+            match &e.state {
+                HeadState::Current { version, license, .. } => {
+                    r.newer = (*version > r.version).then(|| NewerInfo { version: *version, license: license.clone(), license_version: None });
+                }
+                HeadState::Removed { .. } => r.status = Some("removed".into()),
+                HeadState::UnderReview => r.status = Some("under_review".into()),
+                HeadState::Unavailable => r.status = Some("unavailable".into()),
+            }
+            changed = true;
+        }
+        if changed {
+            let _ = self.save_log();
+        }
+    }
+
+    /// Records a copy of a circle bank like an import, so it shows under "Things I imported".
+    pub fn record_circle_copy(&mut self, imp: &Imported, applied: &Applied, circle: CircleOrigin) -> Result<(), String> {
+        self.ensure_log();
+        let item = &imp.head.item;
+        let license = if imp.info.license.is_empty() { item.license.clone() } else { imp.info.license.clone() };
+        let rec = ImportedRecord {
+            item_id: item.id.clone(),
+            bank_id: applied.bank_id.clone(),
+            bank_name: applied.bank_name.clone(),
+            version: item.version,
+            license,
+            title: api::plain(&item.title),
+            author: text::author(&item.author_name),
+            imported_at: imp.at_ms,
+            question_ids: imp.questions.iter().map(|q| q.id.clone()).collect(),
+            fingerprints: imp.fingerprints.clone(),
+            newer: None,
+            status: None,
+            checked_at: imp.at_ms,
+            note: None,
+            base: merge::bounded(imp.theirs.iter().map(|t| merge::base_of(&t.q, &t.qid, &t.fp, t.sha.clone())).collect()),
+            circle: Some(circle),
+        };
+        self.imported.retain(|r| !(r.item_id == rec.item_id && r.bank_id == rec.bank_id));
+        self.imported.push(rec);
+        self.save_log()
     }
 
     fn on_versions(&mut self, r: Result<Vec<VersionEntry>, PoolError>) {

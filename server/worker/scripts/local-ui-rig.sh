@@ -9,7 +9,7 @@
 #   scripts/local-ui-rig.sh approve EMAIL         # trust -> teacher, plus a pre-gate invite redemption
 #   scripts/local-ui-rig.sh approve EMAIL --teacher-only   # trust -> teacher, the invite still needed
 #   scripts/local-ui-rig.sh invite                # prints one fresh single-use invite code
-#   scripts/local-ui-rig.sh seed                  # 3 sample shared items from a throwaway b@example.test
+#   scripts/local-ui-rig.sh seed                  # 3 sample shared items and a circle (2 banks, 2 codes) from a throwaway b@example.test
 #   scripts/local-ui-rig.sh log                   # follow the dev server output
 #   scripts/local-ui-rig.sh stop
 #   scripts/local-ui-rig.sh reset                 # stop, then delete server/worker/.wrangler-ui
@@ -237,14 +237,17 @@ cmd_seed() {
   need_dir
   rig_pid >/dev/null || die "not running: '$0 start' first"
   local seed_email=b@example.test out n
-  # Idempotent: an existing b@example.test (seeded before, or made by hand) is left alone.
+  # Idempotent: an existing b@example.test (seeded before, or made by hand) publishes nothing public
+  # again; the seed script only adds the circle and its banks if they are missing, and prints fresh
+  # circle codes (see local-ui-seed.mjs).
   out=$(d1 execute "$DB" --json --command "SELECT COUNT(*) AS n FROM users WHERE email = '$seed_email'")
   n=$(printf '%s' "$out" | jq -r '.[0].results[0].n')
   [[ "$n" =~ ^[0-9]+$ ]] || die "could not read the local D1"
   if [ "$n" != "0" ]; then
     out=$(d1 execute "$DB" --json --command "SELECT COUNT(*) AS n FROM items i JOIN users u ON u.id = i.author_id WHERE u.email = '$seed_email' AND i.removed_at IS NULL")
-    echo "$seed_email already exists ($(printf '%s' "$out" | jq -r '.[0].results[0].n') items): already seeded, nothing done. ('$0 reset' starts over.)"
-    return 0
+    echo "$seed_email already exists ($(printf '%s' "$out" | jq -r '.[0].results[0].n') public items): those are left alone. ('$0 reset' starts over.)"
+    node "$here/scripts/local-ui-seed.mjs" --existing
+    return
   fi
   node "$here/scripts/local-ui-seed.mjs"
 }

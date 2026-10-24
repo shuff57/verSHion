@@ -398,8 +398,7 @@ fn card(ui: &mut Ui, it: &ListItem) -> bool {
             ui.vertical(|ui| {
                 ui.add(egui::Label::new(theme::strong(text::shown(&it.title)).size(14.0)).wrap());
                 let mut bits = Vec::new();
-                for s in [&it.subject, &it.course, &it.grade] {
-                    let p = api::plain(s);
+                for p in [api::plain(&it.subject), api::plain(&it.course), super::circles_text::grade_text(&it.grade)] {
                     if !p.is_empty() {
                         bits.push(p);
                     }
@@ -458,6 +457,7 @@ fn imported_tab(ui: &mut Ui, m: &mut BrowseModel) {
     para(ui, "A newer version is never put in your bank automatically. Choosing Update adds it as a new bank; your own bank is not touched.");
     let mut update: Option<ImportedRecord> = None;
     let mut view: Option<ImportedRecord> = None;
+    let mut in_circle: Option<(String, String)> = None;
     for r in recs.iter().rev() {
         kit::card().inner_margin(Margin::same(10)).show(ui, |ui| {
             ui.set_min_width(ui.available_width());
@@ -465,6 +465,10 @@ fn imported_tab(ui: &mut Ui, m: &mut BrowseModel) {
                 ui.vertical(|ui| {
                     ui.add(egui::Label::new(theme::strong(text::shown(&r.title)).size(14.0)).wrap());
                     line(ui, format!("In the bank \"{}\" - version {} - {} - by {}", text::shown(&r.bank_name), r.version, text::license_name(&r.license), text::author(&r.author)));
+                    if let Some(c) = &r.circle {
+                        let name = api::plain(&c.circle_name);
+                        line(ui, if name.is_empty() { "A copy from one of your circles. Nothing you change here goes back to the circle.".to_string() } else { format!("A copy from the circle \"{name}\". Nothing you change here goes back to the circle.") });
+                    }
                     if let Some(n) = &r.newer {
                         let lic = match &n.license {
                             Some(l) if *l != r.license => format!(" under {}", text::license_name(l)),
@@ -483,7 +487,12 @@ fn imported_tab(ui: &mut Ui, m: &mut BrowseModel) {
                     }
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if r.has_update() {
+                    if let Some(c) = &r.circle {
+                        let label = if r.has_update() { "See the new version" } else { "Open in the circle" };
+                        if kit::ghost_button(ui, label).clicked() {
+                            in_circle = Some((c.circle_id.clone(), r.item_id.clone()));
+                        }
+                    } else if r.has_update() {
                         if kit::primary_button(ui, "Update...").clicked() {
                             update = Some(r.clone());
                         }
@@ -494,6 +503,9 @@ fn imported_tab(ui: &mut Ui, m: &mut BrowseModel) {
             });
         });
         ui.add_space(4.0);
+    }
+    if let Some((cid, bid)) = in_circle {
+        super::shared_ui::open_circle(ui.ctx(), &cid, Some(&bid));
     }
     if let Some(r) = update {
         m.start_update(&r);
@@ -564,8 +576,7 @@ fn loaded_page(ui: &mut Ui, m: &mut BrowseModel, l: &Loaded) {
     if !d.is_empty() {
         bits.push(format!("updated {d}"));
     }
-    for s in [&it.subject, &it.course, &it.grade] {
-        let p = api::plain(s);
+    for p in [api::plain(&it.subject), api::plain(&it.course), super::circles_text::grade_text(&it.grade)] {
         if !p.is_empty() {
             bits.push(p);
         }

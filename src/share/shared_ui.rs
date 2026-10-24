@@ -12,6 +12,8 @@
 use egui::Ui;
 
 use super::browse_ui::BrowseUi;
+use super::circles::CirclesModel;
+use super::circles_ui::Outcome;
 use super::mine_ui::MineUi;
 use super::publish::{Gate, ShareSource, snapshot_of};
 use super::shared::{Guide, SHARE_ACTION, STEPS, SharedModel, Tab};
@@ -25,10 +27,25 @@ pub struct SharedUi {
     pub model: SharedModel,
     /// A line shown under the tabs (why the "Share to pool…" chooser could not start).
     pub notice: Option<String>,
+    /// Circles (the tab's own model: it does no I/O until the tab or a circle copy needs it).
+    pub circles: CirclesModel,
+    /// "Add a bank" on a circle's page: the chooser then sends to this circle.
+    pub share_target: Option<String>,
+    repaint_set: bool,
 }
 
 fn goto_id() -> egui::Id {
     egui::Id::new("share_shared_goto")
+}
+
+fn circle_goto_id() -> egui::Id {
+    egui::Id::new("share_shared_circle_goto")
+}
+
+/// Asks for the Shared page on the Circles tab, at a circle (and one of its banks).
+pub fn open_circle(ctx: &egui::Context, circle_id: &str, bank_id: Option<&str>) {
+    ctx.data_mut(|d| d.insert_temp(circle_goto_id(), Some((circle_id.to_string(), bank_id.map(str::to_string)))));
+    ctx.request_repaint();
 }
 
 fn drawn_id() -> egui::Id {
@@ -45,6 +62,10 @@ pub fn goto(ctx: &egui::Context, tab: Tab) {
 /// being asked for): the app then switches the screen. Reads and clears the request.
 pub fn take_goto(ctx: &egui::Context, shared: &mut SharedUi, account: &mut AccountUi) -> bool {
     let mut go = false;
+    if ctx.data(|d| d.get_temp::<Option<(String, Option<String>)>>(circle_goto_id())).flatten().is_some() {
+        shared.model.goto(Tab::Circles);
+        go = true;
+    }
     if let Some(Some(tab)) = ctx.data_mut(|d| d.remove_temp::<Option<Tab>>(goto_id())) {
         shared.model.goto(tab);
         go = true;
@@ -73,7 +94,9 @@ impl crate::App {
     pub fn draw_shared(&mut self, ctx: &egui::Context) {
         crate::screens::shell_frame(self, ctx, true, |app, ui| {
             let crate::App { shared, account, browse, mine, store, .. } = app;
-            shared.draw(ui, account, browse, mine, &store.banks, &store.exams);
+            if shared.draw(ui, account, browse, mine, &mut store.banks, &store.exams) {
+                store.save_banks();
+            }
         });
     }
 }
@@ -81,7 +104,9 @@ impl crate::App {
 impl SharedUi {
     /// The page body inside the app's shell. Models the page hosts are opened here when a tab
     /// needs them and left alone otherwise.
-    pub fn draw(&mut self, ui: &mut Ui, account: &mut AccountUi, browse: &mut BrowseUi, mine: &mut MineUi, banks: &[QuestionBank], exams: &[Exam]) {
+    /// Returns true when the banks changed (a copy was made): the caller saves them.
+    pub fn draw(&mut self, ui: &mut Ui, account: &mut AccountUi, browse: &mut BrowseUi, mine: &mut MineUi, banks: &mut Vec<QuestionBank>, exams: &[Exam]) -> bool {
+        let mut changed = false;
         mark_drawn(ui.ctx());
         account.pin();
         let snap = snapshot_of(&account.model);
@@ -93,8 +118,10 @@ impl SharedUi {
             mine.model.invite_required = false;
             browse.model.close();
             mine.model.close();
+            self.circles.invite_required = false;
+            self.circles.close();
         }
-        if browse.model.invite_required || mine.model.invite_required {
+        if browse.model.invite_required || mine.model.invite_required || self.circles.invite_required {
             self.model.note_invite_required();
         }
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
@@ -123,7 +150,7 @@ impl SharedUi {
             }
             ui.add_space(14.0);
             match guide {
-                Guide::Ready => self.tabs(ui, account, browse, mine, banks, exams),
+                Guide::Ready => changed |= self.tabs(ui, account, browse, mine, banks, exams),
                 g => self.guide_card(ui, &g, account),
             }
             ui.add_space(12.0);
@@ -134,6 +161,7 @@ impl SharedUi {
             });
             ui.add_space(20.0);
         });
+        changed
     }
 
     // ---- guided steps ----------------------------------------------------------------------------------
@@ -173,9 +201,43 @@ impl SharedUi {
 
     // ---- the tabs ------------------------------------------------------------------------------------------
 
-    pub(super) fn tabs(&mut self, ui: &mut Ui, account: &mut AccountUi, browse: &mut BrowseUi, mine: &mut MineUi, banks: &[QuestionBank], exams: &[Exam]) {
+    /// The tabs. Returns true when a circle copy changed the banks.
+    pub(super) fn tabs(&mut self, ui: &mut Ui, account: &mut AccountUi, browse: &mut BrowseUi, mine: &mut MineUi, banks: &mut Vec<QuestionBank>, exams: &[Exam]) -> bool {
+        // Circles first: a request to open a circle or bank, the model's frame, copies and badges.
+        let snap = snapshot_of(&account.model);
+        if !self.repaint_set {
+            let c = ui.ctx().clone();
+            self.circles.set_repaint(std::sync::Arc::new(move || c.request_repaint()));
+            self.repaint_set = true;
+        }
+        if let Some(Some((cid, bid))) = ui.ctx().data_mut(|d| d.remove_temp::<Option<(String, Option<String>)>>(circle_goto_id())) {
+            self.model.goto(Tab::Circles);
+            match bid {
+                Some(b) => self.circles.open_bank_at(&cid, &b),
+                None => self.circles.open_circle_at(&cid),
+            }
+        }
+        let copies = browse.model.circle_bank_ids();
+        if !self.circles.open && (self.model.tab == Tab::Circles || !copies.is_empty()) {
+            self.circles.open_list();
+        }
+        self.circles.frame(web_time::Instant::now(), &snap);
+        if self.circles.open {
+            self.circles.want_heads(copies);
+            if let Some(h) = self.circles.take_heads() {
+                browse.model.apply_circle_heads(&h);
+            }
+            if self.circles.busy() {
+                ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
+            }
+        }
+        if self.circles.take_open_account() {
+            account.reveal();
+        }
+        let changed = self.circles.sync(banks, &mut browse.model);
         // Keep the hosted models running only for the tab that needs them.
         match self.model.tab {
+            Tab::Circles => {}
             Tab::Browse => {
                 if !browse.model.open {
                     browse.model.open_browse();
@@ -232,6 +294,14 @@ impl SharedUi {
                     }
                 }
             }
+            Tab::Circles => match super::circles_ui::body_of(ui, &mut self.circles) {
+                Outcome::None => {}
+                Outcome::ShareToCircle(cid) => {
+                    self.share_target = Some(cid);
+                    self.model.choosing = true;
+                }
+                Outcome::ShowImported => self.model.goto(Tab::Imported),
+            },
             Tab::Reports => reports_body(ui, mine, &mut self.model),
             Tab::Settings => {
                 pageshell::heading(ui, "My sharing settings");
@@ -244,6 +314,7 @@ impl SharedUi {
                 super::mine_ui::settings_body(ui, &mut mine.model, false);
             }
         });
+        changed
     }
 
     /// The page's action: opens (or closes) the "What do you want to share?" chooser.
@@ -256,7 +327,7 @@ impl SharedUi {
     /// Pick a bank or an exam: the publish window opens for it.
     fn chooser(&mut self, ui: &mut Ui, banks: &[QuestionBank], exams: &[Exam]) {
         pageshell::card(ui, |ui| {
-            pageshell::heading(ui, "What do you want to share?");
+            pageshell::heading(ui, if self.share_target.is_some() { "Which bank do you want to add to the circle?" } else { "What do you want to share?" });
             ui.add_space(4.0);
             if banks.is_empty() && exams.is_empty() {
                 ui.add(egui::Label::new(theme::muted("You have no banks or exams yet. Make a bank on the Banks page, add some questions, then come back.").size(13.0)).wrap());
@@ -293,7 +364,10 @@ impl SharedUi {
     fn start(&mut self, ui: &Ui, src: Result<ShareSource, String>) {
         match src {
             Ok(s) => {
-                super::publish_ui::request(ui.ctx(), s);
+                match self.share_target.take() {
+                    Some(cid) => super::publish_ui::request_for_circle(ui.ctx(), s, &cid),
+                    None => super::publish_ui::request(ui.ctx(), s),
+                }
                 self.model.choosing = false;
                 self.notice = None;
             }
@@ -324,7 +398,7 @@ fn steps_strip(ui: &mut Ui, now: u8) {
 
 /// `kit::pill`'s look, allocated in one piece so a wrapping row moves it to the next line whole
 /// (a framed pill is laid out where the row's cursor is and squeezed there instead).
-fn step_pill(ui: &mut Ui, label: &str, fill: egui::Color32, fg: egui::Color32) {
+pub(super) fn step_pill(ui: &mut Ui, label: &str, fill: egui::Color32, fg: egui::Color32) {
     let text = egui::RichText::new(label).family(theme::bold_family()).size(11.0).color(fg);
     let galley = egui::WidgetText::from(text).into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, egui::TextStyle::Body);
     let (rect, _) = ui.allocate_exact_size(galley.size() + egui::vec2(18.0, 4.0), egui::Sense::hover());

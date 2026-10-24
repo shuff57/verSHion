@@ -40,6 +40,16 @@ pub fn request(ctx: &egui::Context, source: ShareSource) {
     ctx.request_repaint();
 }
 
+fn pending_circle_id() -> egui::Id {
+    egui::Id::new("share_publish_request_circle")
+}
+
+/// Asks for the publish window for this source with a circle as the destination.
+pub fn request_for_circle(ctx: &egui::Context, source: ShareSource, circle_id: &str) {
+    ctx.data_mut(|d| d.insert_temp(pending_circle_id(), Some(circle_id.to_string())));
+    request(ctx, source);
+}
+
 /// "Share to pool..." on a bank. Returns the sentence to show when there is nothing to share.
 pub fn share_bank(ctx: &egui::Context, bank: &QuestionBank) -> Result<(), String> {
     request(ctx, ShareSource::from_bank(bank)?);
@@ -66,6 +76,9 @@ impl PublishUi {
     pub fn show(&mut self, ctx: &egui::Context, account: &mut AccountUi) {
         if let Some(Some(src)) = ctx.data_mut(|d| d.remove_temp::<Option<ShareSource>>(pending_id())) {
             self.model.start(src);
+            if let Some(Some(cid)) = ctx.data_mut(|d| d.remove_temp::<Option<String>>(pending_circle_id())) {
+                self.model.circle.activate(Some(cid));
+            }
         }
         if !self.model.open {
             return;
@@ -162,6 +175,7 @@ pub(super) fn field(ui: &mut Ui, label: &str, value: &mut String, id: &str, hint
 fn title(model: &PublishModel) -> &'static str {
     match model.step {
         Step::Gate => "Share to the pool",
+        Step::Options if model.circle.active => "Share to a circle",
         Step::Options => "Share to the pool",
         Step::Checking => "Checking...",
         Step::Review => "This is what students will see",
@@ -178,7 +192,8 @@ pub(super) fn page(ui: &mut Ui, m: &mut PublishModel) -> bool {
     ui.horizontal(|ui| {
         ui.label(theme::serif(title(m)).size(24.0));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if m.step != Step::Publishing && kit::ghost_button(ui, if m.step == Step::Done { "Done" } else { "Close" }).clicked() {
+            let finished = m.step == Step::Done || (m.circle.active && matches!(m.circle.stage, super::circle_send::SendStage::Done(_)));
+            if m.step != Step::Publishing && !m.circle.busy() && kit::ghost_button(ui, if finished { "Done" } else { "Close" }).clicked() {
                 close = true;
             }
             if m.busy() {
@@ -195,6 +210,7 @@ pub(super) fn page(ui: &mut Ui, m: &mut PublishModel) -> bool {
     }
     match m.step {
         Step::Gate => gate_page(ui, m),
+        Step::Options if m.circle.active => circle_page(ui, m),
         Step::Options => options_page(ui, m),
         Step::Checking | Step::Publishing => busy_page(ui, m),
         Step::Review => review_page(ui, m),
@@ -260,7 +276,25 @@ fn gate_page(ui: &mut Ui, m: &mut PublishModel) {
 
 // ---- options ------------------------------------------------------------------------------------------
 
+/// "Where to?": the public pool or one of the person's circles.
+fn destination(ui: &mut Ui, m: &mut PublishModel) {
+    heading(ui, "Where do you want to share it?");
+    let mut to_circle = m.circle.active;
+    ui.add_enabled_ui(!m.circle.busy(), |ui| {
+        ui.radio_value(&mut to_circle, false, "The public pool: other teachers can find it and copy it");
+        ui.radio_value(&mut to_circle, true, "One of my circles: only its members can see it");
+    });
+    if to_circle != m.circle.active {
+        if to_circle {
+            m.circle.activate(None);
+        } else {
+            m.circle.deactivate();
+        }
+    }
+}
+
 fn options_page(ui: &mut Ui, m: &mut PublishModel) {
+    destination(ui, m);
     if let Some(s) = &m.source
         && s.missing > 0
     {
@@ -594,6 +628,7 @@ fn fix_page(ui: &mut Ui, m: &mut PublishModel) {
                 m.back_to_options();
             }
         }
+        Some(Fix::CircleMaterial(c)) => circle_material_fix(ui, m, &c),
         Some(Fix::Gone { message }) => {
             body(ui, &message);
             para(ui, "You can share these questions again as a new item.");
@@ -881,4 +916,255 @@ fn done_page(ui: &mut Ui, m: &mut PublishModel) {
         m.close();
     }
     para(ui, "You can update this item later by choosing Share to pool… in the same bank's Share menu.");
+}
+
+// ---- the circle destination ------------------------------------------------------------------------------------
+
+fn circle_page(ui: &mut Ui, m: &mut PublishModel) {
+    use super::circle_send::{CIRCLE_ONLY_LINE, CircleList, KEYS_NOTE, NEW_BANK_NOTE, RESHARE_NOTE, Refused, SendStage};
+    // (once it is in the circle there is no destination left to choose)
+    if !matches!(m.circle.stage, SendStage::Done(_)) {
+        destination(ui, m);
+    }
+    if m.circle.busy() || matches!(m.circle.stage, SendStage::Sending(_)) {
+        let t = match &m.circle.stage {
+            SendStage::Sending(Some(p)) => progress_text(&Some(p.clone()), true).replace("the pool", "the circle"),
+            _ => "Sending to the circle...".into(),
+        };
+        ui.horizontal(|ui| {
+            ui.spinner();
+            ui.label(theme::text(t));
+        });
+        return;
+    }
+    match &m.circle.stage {
+        SendStage::Done(info) => {
+            let info = (**info).clone();
+            body(ui, &format!("\"{}\" is now in the circle \"{}\".", text::shown(&info.title), api::plain(&info.circle_name)));
+            para(ui, &format!("{} question{} added. Its members can open it and get a copy; the answer keys are visible to them.", info.sent.added, if info.sent.added == 1 { "" } else { "s" }));
+            if info.sent.replayed {
+                para(ui, "The pool already had this send, so nothing was added twice.");
+            }
+            if kit::primary_button(ui, "Open the circle").clicked() {
+                crate::share::shared_ui::open_circle(ui.ctx(), &info.circle_id, Some(&info.sent.bank_id));
+                m.close();
+            }
+            return;
+        }
+        SendStage::Failed(p) => {
+            let p = p.clone();
+            warn_box(ui, &p.message);
+            let (mut retry, mut back, mut account) = (false, false, false);
+            ui.horizontal_wrapped(|ui| {
+                if p.retry {
+                    ui.add_enabled_ui(p.retry_at.is_none_or(|t| t <= Instant::now()), |ui| retry = kit::primary_button(ui, "Try again").clicked());
+                }
+                if p.account {
+                    account = kit::ghost_button(ui, "Open account...").clicked();
+                }
+                back = kit::ghost_button(ui, "Back to options").clicked();
+            });
+            if account {
+                m.request_open_account();
+            }
+            if retry {
+                m.circle.back_to_editing();
+                m.send_to_circle();
+            }
+            if back {
+                m.circle.back_to_editing();
+            }
+            return;
+        }
+        SendStage::Refused(Refused::Payload(p)) => {
+            let p = p.clone();
+            para(ui, "The pool checked these questions and needs you to change the items below. Nothing was shared.");
+            for i in p.issues.iter().take(30) {
+                let t = text::issue_text(i, false);
+                egui::Frame::new().fill(theme::error_wash()).corner_radius(8).inner_margin(Margin::same(8)).show(ui, |ui| {
+                    ui.set_min_width(ui.available_width());
+                    ui.add(egui::Label::new(RichText::new(t).color(theme::bad()).size(12.5)).wrap());
+                    if let Some(h) = &i.hint {
+                        ui.add(egui::Label::new(theme::text(api::plain(h)).size(12.0)).wrap());
+                    }
+                });
+                ui.add_space(3.0);
+            }
+            if p.issues.len() > 30 {
+                para(ui, &format!("... and {} more.", p.issues.len() - 30));
+            }
+            para(ui, "Close this window, change the questions, then share again.");
+            if kit::ghost_button(ui, "Back to options").clicked() {
+                m.circle.back_to_editing();
+            }
+            return;
+        }
+        SendStage::Refused(Refused::License(l)) => {
+            let l = l.clone();
+            body(ui, &l.message.as_deref().map(text::shown).unwrap_or_else(|| "The licence you chose is not allowed for material these questions are built on.".into()));
+            let usable: Vec<License> = l.allowed.iter().filter_map(|a| License::parse(a)).collect();
+            if usable.is_empty() {
+                para(ui, "No single licence works for all of these questions. Split the bank into separate banks.");
+            } else {
+                para(ui, "Pick a licence that every question allows:");
+                ui.horizontal_wrapped(|ui| {
+                    for lic in usable {
+                        if kit::ghost_button(ui, text::license_info(lic).name).clicked() {
+                            m.circle.choose_allowed(lic);
+                        }
+                    }
+                });
+            }
+            if kit::ghost_button(ui, "Back to options").clicked() {
+                m.circle.back_to_editing();
+            }
+            return;
+        }
+        SendStage::Editing | SendStage::Sending(_) => {}
+    }
+
+    // Which circle.
+    heading(ui, "Which circle?");
+    let mut retry_list = false;
+    match &m.circle.list {
+        CircleList::Idle | CircleList::Loading => {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(theme::muted("Looking up your circles..."));
+            });
+        }
+        CircleList::Failed(p) => {
+            warn_box(ui, &p.message);
+            retry_list = kit::ghost_button(ui, "Try again").clicked();
+        }
+        CircleList::Ready(_) => {
+            let choices: Vec<(String, String, super::circles_api::Role)> = m.circle.choices().iter().map(|c| (c.id.clone(), api::plain(&c.name), c.role())).collect();
+            if choices.is_empty() {
+                body(ui, "You are not in a circle you can add banks to.");
+                para(ui, "Make a circle, or ask its owner to make you an editor. Circles are in Shared, under Circles.");
+                if kit::ghost_button(ui, "Open Circles").clicked() {
+                    crate::share::shared_ui::goto(ui.ctx(), crate::share::shared::Tab::Circles);
+                    m.close();
+                }
+            } else {
+                let mut cur = m.circle.chosen.clone();
+                for (id, name, role) in &choices {
+                    ui.radio_value(&mut cur, Some(id.clone()), format!("{name}  ({})", role.name()));
+                }
+                if cur != m.circle.chosen
+                    && let Some(id) = cur
+                {
+                    m.circle.choose(&id);
+                }
+            }
+        }
+    }
+    if retry_list {
+        m.circle.retry_list();
+    }
+    if m.circle.choices().is_empty() && matches!(m.circle.list, CircleList::Ready(_)) {
+        return;
+    }
+
+    heading(ui, "Listing");
+    field(ui, "Title", &mut m.form.title, "pub_title", "What the members will see in the list");
+    field(ui, "Subject", &mut m.form.subject, "pub_subject", "For example Biology");
+    ui.columns(2, |c| {
+        field(&mut c[0], "Course", &mut m.form.course, "pub_course", "Optional");
+        field(&mut c[1], "Grade", &mut m.form.grade, "pub_grade", "Optional");
+    });
+    field(ui, "Tags (separated by commas)", &mut m.form.tags, "pub_tags", "cells, mitosis");
+
+    heading(ui, "Licence (you choose; nothing is preselected)");
+    for info in text::LICENSES.iter() {
+        let mut cur = m.circle.license;
+        ui.scope(|ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            ui.radio_value(&mut cur, Some(info.license), info.name);
+            // (the public list's line for "All rights reserved" is about unlisted items, not circles)
+            let line = if info.license == License::CircleOnly { CIRCLE_ONLY_LINE } else { info.line };
+            ui.indent(("circ_lic", info.name), |ui| ui.add(egui::Label::new(theme::muted(line).size(12.0)).wrap()));
+        });
+        ui.add_space(4.0);
+        m.circle.license = cur;
+    }
+    para(ui, RESHARE_NOTE);
+
+    heading(ui, "Answer keys");
+    warn_box(ui, KEYS_NOTE);
+
+    heading(ui, "A note for the circle (optional)");
+    ui.add(egui::TextEdit::multiline(&mut m.circle.message).id(egui::Id::new("circle_send_message")).desired_rows(2).desired_width(f32::INFINITY));
+    para(ui, NEW_BANK_NOTE);
+
+    heading(ui, "Your confirmation");
+    kit::card().inner_margin(Margin::same(12)).show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
+        ui.add(egui::Label::new(theme::text(ATTEST_STATEMENT).size(12.5)).wrap());
+        ui.add_space(6.0);
+        ui.checkbox(&mut m.circle.attest, "Yes, I confirm this");
+    });
+    ui.add_space(10.0);
+    let why = m.circle.blocker();
+    let mut go = false;
+    ui.add_enabled_ui(why.is_none(), |ui| go = kit::primary_button(ui, "Share to the circle").clicked());
+    if let Some(w) = why {
+        para(ui, w);
+    }
+    if go {
+        m.send_to_circle();
+    }
+}
+
+/// "Question 3 was", "Questions 1 and 2 were", "Questions 1, 2 and 5 were" (1-based numbers).
+fn questions_were(positions: &[usize]) -> String {
+    match positions {
+        [one] => format!("Question {one} was"),
+        [rest @ .., last] => format!("Questions {} and {last} were", rest.iter().map(usize::to_string).collect::<Vec<_>>().join(", ")),
+        [] => "Some questions were".to_string(),
+    }
+}
+
+/// D13: questions first shared by another member of a circle.
+fn circle_material_fix(ui: &mut Ui, m: &mut PublishModel, c: &super::pool::CircleMaterial) {
+    body(ui, "Some of these questions can not be shared publicly from here.");
+    para(ui, "They were first shared by another member of a circle you are in, or were in. Nothing was shared.");
+    for b in c.banks() {
+        let positions: Vec<usize> = c.hits.iter().filter(|h| h.bank_id == b.bank_id).map(|h| h.pos + 1).collect();
+        let list = questions_were(&positions);
+        if b.bank_id.is_empty() {
+            ui.add(egui::Label::new(theme::text(format!("{list} first shared by another member of a circle. The pool does not say which bank.")).size(13.0)).wrap());
+            ui.add_space(3.0);
+            continue;
+        }
+        let bank = b.bank_title.as_deref().map(api::plain).filter(|t| !t.is_empty()).map(|t| format!("the circle bank \"{t}\"")).unwrap_or_else(|| "a circle bank".into());
+        let circle = b.circle_name.as_deref().map(api::plain).filter(|t| !t.is_empty()).map(|t| format!(" ({t})")).unwrap_or_default();
+        ui.add(egui::Label::new(theme::text(format!("{list} first shared by another member, in {bank}{circle}.")).size(13.0)).wrap());
+        ui.add_space(3.0);
+    }
+    if c.positions.len() > c.hits.len() {
+        let more = c.positions.len() - c.hits.len();
+        para(ui, &if more == 1 { "1 more question is affected but not listed.".to_string() } else { format!("{more} more questions are affected but not listed.") });
+    }
+    heading(ui, "What you can do");
+    para(ui, "Take those questions out of what you share, or share the bank to the circle instead of the public pool.");
+    let may = c.hits.iter().any(|h| h.may_claim_independence);
+    heading(ui, "Or: I wrote these myself");
+    if may {
+        para(ui, "Only if the questions are really your own work, written without copying the circle's bank. Your words are kept and an administrator may read them. If the circle's bank is private to the circle and you can still read it, this will not be accepted for an exact copy of it.");
+        field(ui, "In a sentence: why these are your own work", &mut m.form.circle_independent_statement, "pub_circle_ind_stmt", "At least 10 characters");
+    } else {
+        para(ui, "A written statement can not lift this for these questions: they match a circle bank you can still read. Remove them, or ask the circle's owner to share the bank publicly under a Creative Commons licence.");
+    }
+    let (mut claim, mut back) = (false, false);
+    ui.horizontal_wrapped(|ui| {
+        ui.add_enabled_ui(may, |ui| claim = kit::ghost_button(ui, "Send this statement and check again").clicked());
+        back = kit::ghost_button(ui, "Back to options").clicked();
+    });
+    if claim {
+        m.claim_circle_independence();
+    }
+    if back {
+        m.back_to_options();
+    }
 }

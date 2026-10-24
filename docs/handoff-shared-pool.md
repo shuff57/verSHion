@@ -170,3 +170,33 @@ Narrow windows: the page is one scroll column capped at 960 px; tabs and the ste
 cards keep their own wrapping.
 
 Not verified: nobody has looked at these pages on a real screen (only headless smoke frames).
+
+## Circles, phase A client (src/share/circles*.rs, circle_send.rs)
+
+- **Where it lives.** A sixth tab, "Circles", on the Shared page (`Tab::Circles`). `CirclesModel` (all logic, job threads, no I/O while closed) is hosted by `SharedUi`; `circles_ui.rs` only draws. `circles_api.rs` holds the routes of rounds 32-34, `circles_text.rs` the wording.
+- **Pages.** List (with "You were offered ownership" badge), create, join (a pasted link or sentence is searched for the code; the code is looked up first, nothing is used until "Join"), circle page (members and roles, codes shown once, activity, closed banner with the 14-day undo), bank page (view, "Get a copy", report, licence, remove/restore).
+- **Ownership (round 34).** "Offer ownership..." sends an offer (202); the owner sees "Ownership offer pending" with "Withdraw the offer"; the offered member sees "You were offered ownership" with Accept and Decline (`transfer/accept`, `transfer/cancel`). Unlisted codes `member_unavailable`, `no_pending_transfer` and the `circles_owned` wording (closed circles count for 14 days) have plain-English messages.
+- **Get a copy** makes a new local bank with `apply_import` and records it in the import log with `circle: Some(CircleOrigin)`, so it shows under "Things I imported" with "Open in the circle". Public update checks skip circle records; update badges come from `POST /circles/heads`.
+- **Share to circle.** A "Where do you want to share it?" choice in the publish window. No preview step; the licence is chosen (nothing preselected), the own-work box is ticked, the answer-key warning is shown. The same `commit_id` is kept on a retry.
+- **D13.** A public publish refused with `circle_material` opens a "Needs your decision" page naming the circle banks (or a generic line when the pool hides names); when every hit allows it, a written statement (10+ characters) is sent as `circle_independent_of`.
+- **Limits of phase A.** Each circle share creates a new bank (no versioned resend or merge, no live co-editing: phase B).
+- **Checked against the local rig (current worker, migrations 0108/0109).** `rig seed` now also makes the circle "Maths department" (2 banks, editor and viewer codes; see server/worker/scripts/LOCAL-UI.md). Live in the app as a@example.test: the empty list, create and join pages, code look-up and joining with the seeded editor code, the circle page, both bank pages, and the Share-to-circle choice. Owner views, codes, offers, closed banners, copy, report, send results and D13 were drawn over live data with forced states only (no actions sent). Layout pass: whole pills in wrapping rows, buttons under the text in narrow cards, members' actions on their own row, compact code and activity lines; a new code is no longer split twice (`code_groups`). Hooks: `VERSHION_SCREEN=shared:circles[:join|:create]`, `shared:circle:<id>[:<bank id>]`, `publish:circle[:<id>]`.
+
+### Circles client: critic 43 follow-up
+
+Fixed: B1 (masked banks with null texts and `hidden: true` read and shown as "Hidden while a review is open"), B2 (restore only for author_removed/owner_removed with time left, author only for their own removal; failures shown on the circle page), B3 (a session that ends mid-action frees Create, Copy and Report), B4 (no screen promises public re-sharing; phase C), B5 (a 404 on a member or code refreshes the page instead of leaving the circle), B6 (Try again repeats the action; 403/404/409 refresh the page), B7 (one change at a time in the model). Also: "Grade 8" on circle and Browse cards, "Remove it" in the danger style, owner "Delete for good now" (`POST .../purge`, not for admin/privacy/takedown removals).
+
+Limits still open (critic 43, L1-L14):
+- L2 A copy keeps the circle and author in its description only; upstream credits in `origins` are not copied into the local bank.
+- L3 `CircleMaterial::banks()` keeps the first hit's `may_claim_independence` per bank; the server decides per position.
+- L4 Some server `message` texts (moderation, removed, not approved, schema, licence) reach the screen outside `api::plain` on the circle-send path.
+- L5 "closed by its owner" is worded for every close; admin and last-member closes also show Reopen to the owner (the server refuses).
+- L6 `circle_memberships_total` says "Leave one first", but leaving does not lower it.
+- L7 `POST /circles` and `POST .../invites` have no idempotency key: a lost answer plus "Try again" can make a second circle or code; a send edited after a lost answer makes a second bank.
+- L8 `share_target` is not cleared when the chooser closes; a later "Share to pool..." can open with the circle heading.
+- L9 Invites and activity load failures have no retry button; long `retry_after` waits are shown in seconds.
+- L10 The licence picker offers four of six licences (NC variants cannot be chosen or shown as current).
+- L11 The pasted code lives in plain `String`s (`JoinState` Debug, job messages) and is not zeroized.
+- L12 `heads` covers at most 200 copies.
+- L13 A copy completes with missing pictures if blob fetches fail; no "fetch pictures again".
+- L14 Test fixtures use invented HTTP statuses for some codes (only the code is matched).

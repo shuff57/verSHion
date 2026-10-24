@@ -37,6 +37,7 @@ use web_time::Instant;
 
 use super::api::{self, ApiError, Status};
 use super::model::{AccountModel, Notice, Page, Runner, ServerMode};
+use super::circle_send::CircleSendModel;
 use super::pool::{
     BlobOrder, ImageUse, IndependentOf, ItemMeta, License, LabelChoice, LicenseRefusal, MediaSource, PayloadRefusal, Pool, PoolError,
     PoolSession, Pos, PreviewResult, PublishOptions, PublishProgress, PublishRequest, PublishResult, PublishTarget, RefusalKind, RetryPolicy,
@@ -371,6 +372,11 @@ pub struct Form {
     /// "Update the item I shared before" (when there is one) rather than a new item.
     pub update_existing: bool,
     pub claim_independent: bool,
+    /// "I wrote these myself" for questions the pool found in circle banks (`circle_material`).
+    pub claim_circle_independent: bool,
+    pub circle_independent_statement: String,
+    /// The circle banks the refusal named (ids), for the statement.
+    pub circle_banks: Vec<String>,
     /// Item ids or links of items only looked at, whitespace or comma separated.
     pub independent_items: String,
     pub independent_statement: String,
@@ -396,6 +402,9 @@ impl Form {
             reviewed: false,
             update_existing: record,
             claim_independent: false,
+            claim_circle_independent: false,
+            circle_independent_statement: String::new(),
+            circle_banks: Vec::new(),
             independent_items: String::new(),
             independent_statement: String::new(),
             labels: BTreeMap::new(),
@@ -504,6 +513,8 @@ pub enum Fix {
     Conflict { current_version: Option<u64>, current_publish_id: Option<String> },
     /// The item was deleted for good (or can not be republished over): publish as a new item.
     Gone { message: String },
+    /// Questions first shared by another member of a circle (D13).
+    CircleMaterial(Box<super::pool::CircleMaterial>),
 }
 
 /// What is left to do in a payload refusal.
@@ -583,6 +594,8 @@ pub struct PublishModel {
     pub failure: Option<Failure>,
     pub done: Option<Done>,
     pub progress: Option<PublishProgress>,
+    /// The second destination: one of the person's circles.
+    pub circle: CircleSendModel,
     pub gate: Gate,
     /// The Account window should be shown (the person pressed "Open account").
     open_account: bool,
@@ -625,6 +638,7 @@ impl PublishModel {
             failure: None,
             done: None,
             progress: None,
+            circle: CircleSendModel::default(),
             gate: Gate::Checking,
             open_account: false,
             asked_account: false,
@@ -659,7 +673,7 @@ impl PublishModel {
     }
 
     pub fn busy(&self) -> bool {
-        self.job.is_some()
+        self.job.is_some() || self.circle.busy()
     }
 
     /// Opens the window for a bank or exam. Reads the record of an earlier publish of it (one small
@@ -676,6 +690,7 @@ impl PublishModel {
             }
         }
         self.record = record;
+        self.circle.reset();
         self.source = Some(source);
         self.target = self.target_for_form();
         self.notice = None;
@@ -691,6 +706,12 @@ impl PublishModel {
         self.resume = Step::Options;
         self.step = Step::Gate;
         self.open = true;
+    }
+
+    /// Opens the window for a source with a circle as the destination ("Add a bank" on a circle's page).
+    pub fn start_for_circle(&mut self, source: ShareSource, circle_id: Option<String>) {
+        self.start(source);
+        self.circle.activate(circle_id);
     }
 
     pub fn close(&mut self) {
@@ -744,6 +765,16 @@ impl PublishModel {
         self.now = Some(now);
         self.apply_snapshot(snap);
         self.drain(now);
+        if self.circle.active || self.circle.busy() {
+            let (session, runner, retry, media, repaint) = (self.session.clone(), self.runner, self.retry, self.media.clone(), self.repaint.clone());
+            self.circle.frame(now, session.as_ref(), runner, retry, &media, repaint);
+            if self.circle.take_signed_out() {
+                self.gate = Gate::SignedOut;
+                self.resume = Step::Options;
+                self.step = Step::Gate;
+                self.notice = Some(Notice::Info("Your session ended. Sign in again; what you entered is kept.".into()));
+            }
+        }
     }
 
     fn apply_snapshot(&mut self, snap: &AccountSnapshot) {
@@ -819,6 +850,15 @@ impl PublishModel {
                 return Err("Say in a sentence why these questions are your own work (at least 10 characters).".into());
             }
             o.independent_of = Some(IndependentOf { items, statement: f.independent_statement.trim().to_string() });
+        }
+        if f.claim_circle_independent {
+            if f.circle_banks.is_empty() {
+                return Err("There are no circle banks to name.".into());
+            }
+            if f.circle_independent_statement.trim().chars().count() < 10 {
+                return Err("Say in a sentence why these questions are your own work (at least 10 characters).".into());
+            }
+            o.circle_independent_of = Some(super::pool::CircleIndependent { banks: f.circle_banks.clone(), statement: f.circle_independent_statement.trim().to_string() });
         }
         Ok(o)
     }
@@ -903,6 +943,54 @@ impl PublishModel {
                 None
             }
         }
+    }
+
+    /// The listing of the form, checked, for a circle (no licence rules of the public pool).
+    fn circle_meta(&self) -> Result<ItemMeta, String> {
+        let f = &self.form;
+        let title = f.title.trim();
+        if title.is_empty() {
+            return Err("Give it a title.".into());
+        }
+        if title.chars().count() > TITLE_MAX {
+            return Err(format!("The title is too long (at most {TITLE_MAX} characters)."));
+        }
+        for (name, v) in [("subject", &f.subject), ("course", &f.course), ("grade", &f.grade)] {
+            if v.trim().chars().count() > META_MAX {
+                return Err(format!("The {name} is too long (at most {META_MAX} characters)."));
+            }
+        }
+        Ok(ItemMeta { title: title.to_string(), subject: f.subject.trim().to_string(), course: f.course.trim().to_string(), grade: f.grade.trim().to_string(), tags: split_list(&f.tags), standards: split_list(&f.standards) })
+    }
+
+    /// The button of the circle destination: sends the bank to the chosen circle.
+    pub fn send_to_circle(&mut self) {
+        if self.job.is_some() || !self.circle.active {
+            return;
+        }
+        if self.gate != Gate::Ready {
+            self.notice = Some(Notice::Error("Sign in with an approved account first.".into()));
+            return;
+        }
+        let Some(session) = self.session.clone() else {
+            self.notice = Some(Notice::Error("Sign in with an approved account first.".into()));
+            return;
+        };
+        if let Some(why) = self.circle.blocker() {
+            self.notice = Some(Notice::Error(why.into()));
+            return;
+        }
+        let meta = match self.circle_meta() {
+            Ok(m) => m,
+            Err(e) => {
+                self.notice = Some(Notice::Error(e));
+                return;
+            }
+        };
+        let Some(source) = self.source.clone() else { return };
+        self.notice = None;
+        let (runner, retry, media, repaint) = (self.runner, self.retry, self.media.clone(), self.repaint.clone());
+        self.circle.send(&source, meta, &session, runner, retry, &media, repaint);
     }
 
     /// "Check what students will see": the dry run. Sends the pictures privately first when the
@@ -1151,6 +1239,23 @@ impl PublishModel {
         self.check();
     }
 
+    /// The circle refusal's way out: the statement goes with the next check.
+    pub fn claim_circle_independence(&mut self) {
+        let Some(Fix::CircleMaterial(c)) = &self.fix else { return };
+        if !c.hits.iter().any(|h| h.may_claim_independence) {
+            return;
+        }
+        self.form.circle_banks = c.banks().iter().filter(|h| !h.bank_id.is_empty() && h.may_claim_independence).map(|h| h.bank_id.clone()).collect();
+        self.form.claim_circle_independent = true;
+        if let Err(e) = self.options() {
+            self.form.claim_circle_independent = false;
+            self.notice = Some(Notice::Error(e));
+            return;
+        }
+        self.fix = None;
+        self.check();
+    }
+
     /// After the person decided what the refusal asked: ask again.
     pub fn recheck(&mut self) {
         if !self.todo().done() {
@@ -1381,6 +1486,12 @@ impl PublishModel {
                     }
                     RefusalKind::LicenseIncompatible(l) => {
                         self.fix = Some(Fix::License(l.clone()));
+                        self.step = Step::Fix;
+                    }
+                    RefusalKind::CircleMaterial(c) => {
+                        // A statement that was sent and was not enough is not sent again by itself.
+                        self.form.claim_circle_independent = false;
+                        self.fix = Some(Fix::CircleMaterial(c.clone()));
                         self.step = Step::Fix;
                     }
                     RefusalKind::LicenseNotPublic => {

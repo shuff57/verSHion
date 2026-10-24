@@ -23,6 +23,8 @@ use super::publish::Gate;
 pub enum Tab {
     /// Search the pool.
     Browse,
+    /// Circles: small private groups of teachers who share banks with each other.
+    Circles,
     /// Items I shared.
     Mine,
     /// Things I imported.
@@ -34,11 +36,12 @@ pub enum Tab {
 }
 
 impl Tab {
-    pub const ALL: [Tab; 5] = [Tab::Browse, Tab::Mine, Tab::Imported, Tab::Reports, Tab::Settings];
+    pub const ALL: [Tab; 6] = [Tab::Browse, Tab::Circles, Tab::Mine, Tab::Imported, Tab::Reports, Tab::Settings];
 
     pub fn label(self) -> &'static str {
         match self {
             Tab::Browse => "Browse the pool",
+            Tab::Circles => "Circles",
             Tab::Mine => "Items I shared",
             Tab::Imported => "Things I imported",
             Tab::Reports => "Reports and appeals",
