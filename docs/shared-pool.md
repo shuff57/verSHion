@@ -30,6 +30,17 @@ that server. Debug builds, or the never-to-ship feature `pool-custom-server`, le
 At launch there are no circles, ratings, favourites or separate search service: only **public** items and
 **unlisted** items. Unlisted means private: published (so it can be republished) but readable only by its author.
 
+**Circles (backend phase A, round 32; not at the first launch).** The Worker now has the server side of
+circles as planned in `docs/circles-plan.md` (decisions D1-D19): small private groups of approved teachers
+joined by code, banks shared into a circle for members to view and copy, the author's own republish as
+versions, caps, erasure and succession, purges, the admin's audited access, and one check at public publish
+that keeps material first sent into a circle by someone else out of the public pool. Circle content stays out
+of this document's licence engine (no served rows, no authorship records). Routes, decisions and limits:
+`server/worker/README.md` "Round 32" and "Round 33" (fixes after two critics: re-joining after a removal,
+codes that outlive their issuer's owner role, caps through transfers, holds and purges; its documented limits).
+There is no client yet; the owner's "no circles at the first launch"
+stands until the app ships them.
+
 Stack: a Cloudflare Worker (TypeScript) with D1 (`vershion-pool`), a private R2 bucket `POOL` (bodies under
 `items/`, takedown quarantine under `quarantine/`, images under `blobs/`), and the Rust crate `server/share-core`
 compiled to wasm for the publish gate, content hashes and Argon2id.
@@ -565,8 +576,9 @@ Each item names the disagreeing sources and the one this spec follows (the code 
    qualification, flag and two-reporter hold (rounds 17/18, `moderation.ts`). The app's button never reaches that path; an `other`
    report needs three teachers. The client needs a change.
 3. **Circles and `circle-only`.** Owner: no circles at launch; the draft Terms list five licences. Code keeps the wire licence
-   `circle-only` (offered as "All rights reserved" for unlisted items) and the approval mail says the person can "join circles"
-   (`server/worker/src/mail.ts`). The mail text is stale.
+   `circle-only` (offered as "All rights reserved" for unlisted items; since round 32 also a circle bank's "members may not
+   re-share", D19) and the approval mail says the person can "join circles" (`server/worker/src/mail.ts`). The circles backend
+   (phase A) exists since round 32; the Terms and Privacy drafts do not describe circles yet (plan section 11, D9).
 4. **3-year retention.** Owner decision and the draft Privacy page say audit and takedown records are kept 3 years. Resolved in
    round 28 for the pool's records (the `retention` cron stage, section 7); the auth package's `auth_audit` is still kept
    indefinitely.

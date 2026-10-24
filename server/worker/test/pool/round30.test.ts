@@ -126,7 +126,7 @@ test("30 (a1): the publish's stem record INSERT and the backfill INSERT give the
     // Bob's own bank (another author's records beside Ann's).
     assert.equal((await publish(w, B, bankOf(randomBank(r, 1 + r.int(20), "b")), { hideKey: r.bool() })).status, 201);
     // Ann's records age: some lose the full explanation key, some get a later first_seq (the upsert's MIN and COALESCE matter).
-    w.sql.prepare(`UPDATE author_stems SET bk_expl_full = CASE WHEN abs(random()) % 3 = 0 THEN NULL ELSE bk_expl_full END, first_seq = first_seq + abs(random()) % 3`).run();
+    w.sql.prepare(`UPDATE author_stems SET bk_expl_full = CASE WHEN (unicode(substr(qhash, 1, 1)) + ${seed}) % 3 = 0 THEN NULL ELSE bk_expl_full END, first_seq = first_seq + (unicode(substr(qhash, 2, 1)) + ${seed}) % 3`).run();
     w.advance(60_000);
     // A reordered, partly edited republish: positions move, so every question's own entry is another one.
     const re = shuffle(r, qs).map((x, i) => (r.bool(0.3) ? { ...x, stem: `${x.stem} (edited ${i})` } : x));
@@ -140,8 +140,8 @@ test("30 (a1): the publish's stem record INSERT and the backfill INSERT give the
       compared++;
     }
     // The legacy backfill (records without the full explanation key, or missing) at the hourly cron.
-    w.sql.exec(`UPDATE author_stems SET bk_expl_full = NULL WHERE abs(random()) % 2 = 0`);
-    w.sql.exec(`DELETE FROM author_stems WHERE abs(random()) % 4 = 0`);
+    w.sql.exec(`UPDATE author_stems SET bk_expl_full = NULL WHERE (unicode(substr(qhash, 3, 1)) + ${seed}) % 2 = 0 OR qhash = (SELECT min(qhash) FROM author_stems)`);
+    w.sql.exec(`DELETE FROM author_stems WHERE (unicode(substr(qhash, 4, 1)) + ${seed}) % 4 = 0 AND qhash <> (SELECT min(qhash) FROM author_stems)`);
     const bfCaps = capture(w, (s) => IS_BACKFILL_STEMS.test(s));
     w.advance(3600_000);
     await w.pool.hourly();

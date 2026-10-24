@@ -336,7 +336,8 @@ test("account deletion: one anonymous key per account (import counts stay right)
   const ic0 = (await mine(w, A, a.item_id)).import_count;
   w.sql.prepare(`UPDATE users SET display_name = NULL, email = NULL, pw_hash = NULL, pw_params = NULL, profile = NULL, deleted_at = ? WHERE id = ?`).run(w.clock, D.id);
   const stmts = deleteContentStatements(w.db, D.id, w.clock);
-  assert.ok(stmts.length < 40, `a bounded number of statements (${stmts.length}), none per row`);
+  // (Round 32: the circle steps add a fixed 15; still a constant, none per row.)
+  assert.ok(stmts.length < 60, `a bounded number of statements (${stmts.length}), none per row`);
   await w.db.batch(stmts);
   assert.equal((await mine(w, A, a.item_id)).import_count, ic0, "the serves of one account count once");
   const named = () => w.q<{ n: number }>(`SELECT COUNT(*) AS n FROM item_questions WHERE instr(chain_json, '"Dana"') > 0`)[0]!.n;

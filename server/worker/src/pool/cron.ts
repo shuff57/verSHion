@@ -2,6 +2,7 @@
 import { holdPrivacyBatch, PREVIEW_MS } from "./blocking.ts";
 import { appealsDue, finishQuarantines, gcBlobs, ghostUpholds, privacyFinish, putbackFinish, releaseRestoredHolds, repeatInfringerSweep, OPEN_APPEAL_SQL, purgeItem, QUARANTINE_MS, restore, retryOrphans } from "./moderation.ts";
 import { usedUnserved } from "./served.ts";
+import { circleResweepStatements, discardCircleStaging, OWNERLESS_SQL, pruneCircleVersions, purgeCircles } from "./circles.ts";
 import { deleteContentStatements } from "./index.ts";
 import { offerSync, deletePublishStatements, discardQidsStatement, fold, licenceRekey, searchKey, servedWords, stemBackfill, titleSearch } from "./publish.ts";
 import { bodyTokens, unitKeysOf, fieldKeys, keyfreeHash, nearHash, nearKfHash, normSkeletonKey, partKeysOf, stemBands, stemKey, stemTokens } from "./provenance.ts";
@@ -48,6 +49,8 @@ export async function hourly(c: Ctx): Promise<HourlyReport> {
   const pending = await stage(c, "pending", 0, async () => (await c.db.prepare(`DELETE FROM pending_blobs WHERE until < ?1`).bind(now - HOUR_MS).run()).meta.changes ?? 0);
   const blobs = await stage(c, "gc", 0, () => gcBlobs(c));
   const missing = await stage(c, "reconcile", 0, () => reconcile(c, now));
+  // Round 32: circle sends that never committed (staging rows and their R2 objects).
+  await stage(c, "circle_staged", 0, () => discardCircleStaging(c));
   await stage(c, "r2_orphans", 0, () => retryOrphans(c));
   // Round 23 (critic30b F2/F3): notices written with their action, sent until sent.
   await stage(c, "outbox", 0, () => flushOutbox(c));
@@ -185,6 +188,8 @@ export async function daily(c: Ctx): Promise<DailyReport> {
     // batch does (their counts stay, the account's id does not).
     const stragglers = await c.db.prepare(`SELECT DISTINCT user_id FROM imports WHERE user_id IN (${done}) LIMIT 50`).all<{ user_id: string }>();
     const now = c.now();
+    // (round 32: open circles left without an owner, the circle part's safety net)
+    const ownerless = (await c.db.prepare(OWNERLESS_SQL).all<{ id: string }>()).results.map((x) => x.id);
     await c.db.batch([
       ...stragglers.results.map((r) => c.db.prepare(`UPDATE imports SET user_id = ?2 WHERE user_id = ?1`).bind(r.user_id, `deleted:${crypto.randomUUID().replaceAll("-", "")}`)),
       // (the key_leak flag's quoted text goes before the reports lose their reporter)
@@ -226,6 +231,9 @@ export async function daily(c: Ctx): Promise<DailyReport> {
       c.db.prepare(`DELETE FROM stem_bands WHERE user_id IN (${done}) OR user_id IN (SELECT 'own:' || user_id FROM erasure_done)`),
       c.db.prepare(`DELETE FROM carried_keys WHERE author_id IN (${done})`),
       c.db.prepare(`DELETE FROM blob_uploads WHERE uploader_id IN (${done})`),
+      // (round 32: every circle table a request in flight could have written under the id, and open
+      // circles left without an owner)
+      ...circleResweepStatements(c.db, now, ownerless),
     ]);
   });
   // An account deletion whose content hook failed after the tombstone committed: caught up here.
@@ -312,6 +320,10 @@ export async function daily(c: Ctx): Promise<DailyReport> {
     }
     return n;
   });
+  // Round 32: circles. Pruned versions' bodies (D16), then removed banks and closed circles past their
+  // 14 days (never one with an open report).
+  await stage(c, "circle_prune", 0, () => pruneCircleVersions(c));
+  await stage(c, "circle_purges", undefined, () => purgeCircles(c));
   // Round 28 (owner): audit and takedown records older than 3 years go (bounded; resumed next day).
   await stage(c, "retention", undefined, () => retention(c));
   await stage(c, "cleanup", undefined, async () =>
@@ -448,7 +460,11 @@ export async function retention(c: Ctx): Promise<{ actions: number; notices: num
         `DELETE FROM pool_audit WHERE rowid IN (SELECT p.rowid FROM pool_audit p WHERE p.at < ?1 AND p.at < ${DB_RETENTION_FLOOR_SQL}
             AND NOT (p.item_id IS NOT NULL AND (EXISTS (SELECT 1 FROM dmca_actions a WHERE a.item_id = p.item_id)
                                                 OR EXISTS (SELECT 1 FROM item_holds h WHERE h.item_id = p.item_id)
-                                                OR ${OPEN_APPEAL_SQL("p.item_id")}))
+                                                OR ${OPEN_APPEAL_SQL("p.item_id")}
+                                                -- (round 32: a circle's trail while a case about it is open: a
+                                                -- hold on one of its banks, or an unresolved report)
+                                                OR EXISTS (SELECT 1 FROM circle_reports cr WHERE cr.circle_id = p.item_id AND cr.resolved_at IS NULL)
+                                                OR EXISTS (SELECT 1 FROM circle_banks cb JOIN circle_holds ch ON ch.bank_id = cb.id WHERE cb.circle_id = p.item_id)))
             AND NOT ${names("dmca_actions", "action_id")} AND NOT ${names("dmca_notices", "notice_id")}
           ORDER BY p.at LIMIT ${RETENTION_ROWS})`,
       )

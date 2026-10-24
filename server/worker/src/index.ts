@@ -161,7 +161,7 @@ async function handleFetch(req: Request, env: Env, ctx: ExecutionContext): Promi
   const pre = a.preflight(req, POOL_METHODS);
   if (pre) return pre;
   // No hash key (POOL_HASH_KEY missing or too short): the pool refuses, never hashes unkeyed.
-  if (hashKey === null && /^\/(items|blobs)(\/|$)/.test(new URL(req.url).pathname))
+  if (hashKey === null && /^\/(items|blobs|circles)(\/|$)/.test(new URL(req.url).pathname))
     return a.withCors(req, poolJson(503, { error: "pool_not_configured" }));
   const pooled = await pool.handle(req);
   if (pooled) return a.withCors(req, pooled);

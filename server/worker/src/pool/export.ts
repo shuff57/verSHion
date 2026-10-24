@@ -14,6 +14,7 @@ import {
   type Ctx,
   type PoolPrincipal,
 } from "./shared.ts";
+import { exportCircles } from "./circles.ts";
 
 /** A whole export above `whole` bytes of item bodies goes out as a manifest and parts of at most `part` (tests lower them). */
 export const EXPORT_LIMITS = { whole: 8 * 1024 * 1024, part: 4 * 1024 * 1024 };
@@ -297,6 +298,9 @@ export async function exportAccount(
     sessions: await q(
       `SELECT created_at, auth_at, expires_at, revoked_at, user_agent FROM sessions WHERE user_id = ?1 ORDER BY created_at`,
     ),
+    // Round 32 (circles, plan 6.5): memberships, circles owned, codes created (never the codes), versions
+    // sent (no bodies), banks authored, reports filed.
+    circles: await exportCircles(c, me),
   };
   await c.db.batch([
     audit(

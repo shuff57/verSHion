@@ -5,7 +5,7 @@
 // the per-account caps): it is never refused because of unauthenticated traffic. Anything else (no
 // token, a bad one, a pending or unverified account) is read under the small unauthenticated
 // budgets (round 9 K2): a 2 s deadline, nested per-address caps, and separate pools for sign-in and
-// sign-up so other unauthenticated traffic cannot starve them. Pool routes (/items, /blobs) are
+// sign-up so other unauthenticated traffic cannot starve them. Pool routes (/items, /blobs, /circles) are
 // skipped: they read their own bodies after their own authentication.
 import { json, PoolError, readBody, type UnauthPool } from "./shared.ts";
 
@@ -53,7 +53,7 @@ export async function preReadBody(
   _ipBucket?: (ip: string) => string,
 ): Promise<Request | Response> {
   const path = new URL(req.url).pathname;
-  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS" || /^\/(items|blobs)(\/|$)/.test(path)) return req;
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS" || /^\/(items|blobs|circles)(\/|$)/.test(path)) return req;
   try {
     const ip = (req.headers.get("CF-Connecting-IP") ?? "").trim();
     const bearer = /^Bearer \S+$/.test(req.headers.get("Authorization") ?? "");

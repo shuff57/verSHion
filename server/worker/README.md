@@ -149,6 +149,214 @@ shows the ids. A real rotation would need an offline migration that re-hashes ev
 the full bodies (impossible for purged items); none is provided. Treat the key as permanent: keep it as
 a wrangler secret AND an offline backup; losing it loses the pool's identity data.
 
+**Round 33 (circles phase A after critics 40a and 40b, `docs/critic-reports/2026-10-24-circles-phaseA-*`).** No migration
+change (one new limit, `circle_memberships_total`). Every fix has a test in
+`test/pool/round33.test.ts` (10) that failed on round 32's code.
+
+* **Re-joining (B1, both critics).** A member the owner REMOVED can come back only with a code issued after the
+  removal (`code.created_at > left_at`); an older code is the same `422 circle_invite_invalid` as any bad code
+  (preview too). A member who LEFT (or was demoted, then left) rejoins with a code issued before leaving at most
+  in the role held when leaving (a viewer stays a viewer); a code issued after leaving gives its own role.
+  Checked in the join's own UPDATE (`CODE_USABLE_SQL`, `JOIN_ROLE_SQL`, `circles.ts`).
+* **Codes die with their issuer's owner role (B2).** A leave, a transfer and a removal revoke the account's open
+  codes of that circle in the same batch (an erasure already did); and the join refuses any code whose issuer is
+  not the circle's active owner now. The owner's list names each code's issuer (`created_by`, `created_by_name`).
+* **circles_owned through a transfer (B3).** The target's cap is in the transfer's step-down statement:
+  `422 circles_limit {metric: "circles_owned", used, limit}`; two transfers to one member at once cannot both pass
+  (tested at every statement boundary). A succession (an owner leaving or erased) cannot refuse and ignores the cap.
+* **A hold delays the purge (B4).** A bank with a hold, or a closed circle with a held bank, is not purged until
+  the admin releases it (as an open report already did). An admin `circle-remove` deletes that bank's holds and
+  `circle-close` those of the circle's banks: the admin's decision lets the 14 days run.
+* **Undelete (B5).** The owner's removal is undone by the owner only; the author's own by the author or the owner.
+* **The publish check is bounded (B6).** One result row per hash that has a hit (the earliest sender, chosen in
+  SQL by a window), not one per (hash, membership); the circles considered are the publisher's memberships that
+  hold records, active first then the most recently left, at most `circle_memberships_total` (100), which joins
+  and creates now enforce on membership ROWS, former ones included (a former member re-joining reuses its row:
+  never refused by it). Each statement's results are reserved first (`CIRCLE_CHECK_ROW_BYTES` = 512 a hash).
+  Rows read on workerd, 1,000 distinct hashes, every circle holding records: 20 memberships 43,061; 500 and
+  2,000 memberships 208,501 and 213,001 (round 32's form: 507,500 and 2,024,000 rows and as many result rows).
+* **Send memory (B7).** A send reserves `max(15 x body, values x 96 x 2)`, the publish's formula (a dense 760 KB
+  payload of 190,000 values now reserves 36.5 MB, was 12.2 MB).
+* **Fixed variants.** V1: the activity list shows a bank's title only to who may see the bank (held: its author;
+  removed: the owner and its author). V2: no version is pruned while its bank is held, nor one an open report
+  names (the next send after the case prunes it). V3: `POST .../banks/:bid/purge` (owner) purges a removed bank at
+  once, so an insider's flood stops counting toward the caps and records the same day (removed banks still count
+  until purged: excluding them would let deleted bodies pile up in R2 for 14 days without any cap).
+* **Known limits of circles (documented, not fixed).** (critic40a) An owner who closes a circle and then leaves,
+  or is erased inside the undo window, leaves it closed with no owner: it is purged at day 14 (succession runs
+  only for open circles). A member's independence statement is refused while she can read the bank, but passes
+  once she has left (audited and flagged, as for former members). A purge deletes the bank's first-sender
+  records, so a later copier becomes the "first sender" of that text and the true author's public publish may be
+  refused. An author who left cannot withdraw her bank (the owner can); an author demoted to viewer may still
+  change its licence but not send. An open report or a hold keeps a bank and its closed circle without time
+  limit (also a report whose reporter was erased): the admin queue must be worked. "Get a copy" is the view
+  read: there is no list of who holds a copy to notify after a hold. Resolved circle reports and purged-circle
+  tombstones are not retention-deleted. The legal pages do not describe circles yet (D9). An erased author's
+  kept bank gets no new version until phase B. A purge backlog resumes the next day (each step idempotent). The
+  activity list shows an erased member as "left". (critic40b) The activity query reads non-activity audit rows
+  (codes, reports, admin opens) between events, bounded by what members write. Student-data blocks do not hold or
+  purge circle banks automatically: they give the admin a basis to open, and the image route refuses blocked
+  images. The admin's `basis` is checked for existence (any report ever filed on the bank, any recorded notice),
+  not for relevance: accountability (every open audited), not access control. On erasure with no choice made,
+  circle banks are kept anonymised (D15), the opposite of the public pool's default for items nobody imported:
+  confirm with the owner. A member may publish another member's question from a CC-licensed circle bank with an
+  independence statement (audited, flagged; the credited route is phase C). Circle student-data report mails
+  share the public pool's hourly privacy budget (20). One account may own 5 circles of 200 MB each (D3: not
+  charged to anyone). Every member sees members' account ids (the routes take them). Closes are counted from the
+  audit by actor; a removed member's in-flight leave answers 404; a valid code's preview is not counted; `heads`
+  counts no misses; a version's message is stored and exported but not shown in phase A.
+
+**Round 32 (circles, phase A: `docs/circles-plan.md`, decisions D1-D19).** Migration `0108_pool_round32.sql`
+(new tables and indexes only; no existing table, index, trigger or row changes; the next is `0109`). Code:
+`src/pool/circles.ts` (circles, members, codes, reads, reports, erasure, cron stages, export),
+`circlesend.ts` (sending a version), `circlecheck.ts` (the public publish check, D13), `circleadmin.ts`
+(admin routes). Phase A: circles, codes, banks shared into a circle for members to view and copy, and the
+bank AUTHOR's own republish as versions; editors' shared editing, history pages, merge and rollback are
+phase B. No admin flag kind was added (no `admin_flags` rebuild): circle cases are open `circle_reports`
+rows, cap crossings use `cap`, circle independence statements `independent_claim` / `independent_repeat`.
+
+* **Rules every circle route keeps.** They sit in the pool's route table, so a live session, `teacher` /
+  `admin` trust, the round-28 invite gate, the rate limits and (writes) the pool-key check apply. A circle
+  or bank the caller is not an ACTIVE member of is a counted `404 not_found` (former members included;
+  admins are not members). Inside a circle a missing role is `403 circle_role_required {needed, role}`.
+  Every write is guarded in the same statement or batch by `ALIVE_SQL`. Ids in the patterns are 32 hex
+  characters. `/circles` bodies skip the auth package's 8 KB pre-read (`preread.ts`, `src/index.ts`), like
+  `/items` and `/blobs`.
+* **Routes** (JSON unless said; errors in the usual envelope):
+
+  | Route | Who | Body / answer |
+  |---|---|---|
+  | `POST /circles` | teacher | `{name (1-80), description? (<=1000)}` -> `201 {circle}`; caps: `circles_owned` 5, `circle_memberships` 20 (`422 circles_limit {metric, used, limit}`), `circle_creates` 5 a day |
+  | `GET /circles` | teacher | `{circles: [{id, name, role, joined_at, closed_at, close_reason, undo_until, updated_at, members, banks}]}` (active memberships; closed ones until purged or left) |
+  | `GET /circles/:cid` | member | `{circle: {id, name, description, role, joined_at, created_at, updated_at, closed_at, close_reason, undo_until}, members: [{user_id, display_name, role, joined_at, is_me}], banks: [{id, title, subject, course, grade, license, author_name, is_author, head_version, question_count, has_images, created_at, updated_at, held?, removed?: {reason, undo_until}}]}`; removed banks only to the owner and author, held ones only to the author |
+  | `PATCH /circles/:cid` | owner | `{name?, description?}` |
+  | `DELETE /circles/:cid`, `POST .../reopen` | owner | close: `{ok, undo_until}` (14 days; members get `409 circle_closed {reason, undo_until}` at once); reopen inside it |
+  | `GET /circles/:cid/activity?before=` | member | `{activity: [{at, what, by, member, role?, bank_id?, bank_title?, version?, license?}], next_before}`, 50 a page; `what` is `created, joined, left, removed, role_changed, ownership_transferred, ownership_passed_on, closed, reopened, renamed, bank_shared, version_sent, bank_removed, bank_restored, license_changed`; never codes, reports or admin opens |
+  | `POST /circles/:cid/invites` | owner | `{role: editor\|viewer, max_uses? 1-50 (1), expires_in_days? 1-30 (7), note? (<=200)}` -> `201 {invite_id, code, role, max_uses, expires_at, note, shown_once}`; 10 open codes a circle (`circle_open_invites`), 50 a day (`circle_invites`) |
+  | `GET /circles/:cid/invites?after=` | owner | `{invites: [{invite_id, role, created_at, created_by, created_by_name, max_uses, uses, expires_at, revoked_at, note, state}], next_cursor}`; never the code, never who typed a wrong one |
+  | `POST /circles/:cid/invites/revoke` | owner | `{invite_id}`; `409 already_revoked` |
+  | `POST /circles/join/preview` | teacher | `{code}` -> `{circle: {id, name, owner_name, members}, role, already_member}`; uses nothing |
+  | `POST /circles/join` | teacher | `{code}` -> `{ok, circle_id, role}` or `{ok, already: true, ...}`; every bad code `422 circle_invite_invalid`; `409 circle_full {limit}`; 10 FAILED codes a day (`circle_join_tries`, 429) |
+  | `POST /circles/:cid/leave` | member | an owner leaving hands the circle on (below) |
+  | `POST /circles/:cid/members/remove` | owner | `{user_id}` (not yourself: 400); immediate; re-joining needs a code issued AFTER the removal (round 33) |
+  | `POST /circles/:cid/members/role` | owner | `{user_id, role: editor\|viewer}` -> `{ok, changed}` |
+  | `POST /circles/:cid/transfer` | owner | `{user_id}` of an active member: they own it, the old owner is an editor |
+  | `POST /circles/:cid/banks` | owner, editor | publish format (`application/vnd.vershion.publish`, meta below) -> `201 {circle_id, bank_id, version: 1, version_id, qids, added, changed, removed}` |
+  | `PUT /circles/:cid/banks/:bid` | the bank's author, while owner or editor | the next version: meta `base_version` -> `200 {...}`; `409 conflict {head_version, head_at, head_by}` (nothing stored) |
+  | `GET` / `HEAD /circles/:cid/banks/:bid` | member (held: author only) | streamed `{circle, bank: {id, title, subject, course, grade, license, version_license, author_name, is_author, version, version_id, question_count, has_images, committed_at, committed_by, held?}, origins, payload}`; `ETag`, `If-None-Match` -> 304; viewing and copying are this one read; counts toward `item_reads`; `409 bank_removed`, `409 circle_closed` |
+  | `GET /circles/:cid/banks/:bid/blobs/:sha256` | member who may read the bank | an image a kept version uses (never a student-data-blocked one) |
+  | `POST /circles/heads` | teacher | `{bank_ids}` (<= 200) -> `{banks: [{bank_id, status: current, version, version_id, license, at, by} \| {status: removed, until?} \| {status: under_review} \| {status: unavailable}]}`; one `item_reads` |
+  | `PATCH /circles/:cid/banks/:bid` | the bank's author | `{license}` (D19: `circle-only` = members may not re-share); bounded by the head's declared public origins (`422 license_incompatible {allowed}`); earlier versions keep theirs |
+  | `DELETE .../banks/:bid`, `POST .../undelete` | owner, the bank's author (D17) | 14 days to undo, then purged; the owner's removal is undone by the owner only, the author's own by either (round 33) |
+  | `POST .../banks/:bid/purge` | owner | a removed bank (by its author, the owner or an erasure) purged now, so it stops counting toward the circle's caps; never under an admin removal, a hold or an open report (`409 under_moderation`; `409 bank_not_removed`); not undoable (round 33) |
+  | `POST .../banks/:bid/report` | member, not the author | `{reason: student_data\|copyright\|inappropriate\|other, note?}` -> `202` always |
+
+* **Sending a version.** Meta: `commit_id` (22-64 base64url characters: the idempotency key; a retry with
+  the same id and body replays the first answer with `replayed: true`, another body or bank is `409
+  commit_id_conflict`), `license` (required, any of the six), `attest {own_work: true, terms_version}` on
+  every send (`422 attestation_required`, D1), `message?` (<= 500), `meta {title, subject, course, grade,
+  tags, standards}` (share-core's metadata check), `base_version` (PUT only). The payload must be a bank
+  (1-1,000 questions: share-core). A question keeps its qid when it carries `published.qid` of the head
+  (the index), otherwise it gets a new one; `added` / `changed` / `removed` are per qid (keyed content
+  hashes). Images: verified, and the sender's (pending, in one of her publishes) or already in the bank's
+  kept versions; the sender's pending hold is extended to the commit. A question whose DECLARED `origin`
+  names a public item the sender can see binds the bank's licence to what that origin allows
+  (`422 license_incompatible {positions, allowed}`; `circle-only` only from CC0); the checked origins are
+  stored with the version and served as `origins` (credits), the body's own `origin` is dropped. The send
+  holds the account's publish lock (`409 publish_in_progress` against a publish), the heavy slot and 16x its
+  body. Order: staging row (ALIVE-guarded), R2 body and index under `circles/<cid>/<bid>/<vid>`, then one
+  batch: the compare-and-set (the circle open, the role, the author, the head, and every circle cap in the
+  same statement), then everything else conditioned on "this version is the head". A lost commit deletes its
+  staging row and objects; an abandoned one is collected hourly. Caps (site-wide `'*'` values, admin
+  adjustable): `circle_banks` 100 (removed banks count until purged), `circle_bytes` 200 MB (every kept
+  version's body + index + its images, charged per version, never to a person: `413 quota_exceeded {scope:
+  "circle", used, needed, limit}`), `circle_questions` 5,000 across current versions (`422
+  circle_questions_limit`; not counted toward `shared_questions`), `circle_records` 50,000 key-free
+  question records (`413 circle_records_full`), `circle_commits` 100 sends a day. D16: the last 20 versions
+  of a bank are kept; older ones become `pruned` at the commit (their image rows go then, their R2 objects
+  with the daily `circle_prune` stage), their history rows stay.
+* **The public publish check (D13, `circlecheck.ts`).** On every `/items` publish and preview (public or
+  unlisted: an unlisted item can be made public later without a new publish), after share-core: the
+  DISTINCT key-free hashes (full and served form) are looked up in `circle_qkeys` for every circle the
+  publisher is or was in, one covering-index seek per (hash, circle) for its earliest sender. A position
+  passes when that sender is the publisher, when her own public publish of the text came first
+  (`author_firsts`), when it is a short statement (`isShort`), or when her meta's `circle_independent_of
+  {banks, accepted: true, statement (10+)}` names the bank and no circle-only bank she can still read holds
+  the text first sent by someone else (audited in the publish's audit detail, flagged `independent_claim`;
+  with public claims, the third in 30 days flags `independent_repeat`). Otherwise `422 circle_material
+  {positions, hits: [{pos, circle_id, circle_name, bank_id, bank_title, may_claim_independence}] (first 100),
+  message}`. A publisher who was never in a circle costs one indexed probe.
+* **Ownership (decision 3, D14, D18).** An owner leaving, erased, or found missing by the resweep: in each
+  OPEN circle with no active owner, the active editor with the smallest `join_seq` (pool_seq at joining)
+  becomes owner, else the smallest-`join_seq` viewer; with no active member left the circle closes
+  (`last_member_gone`, purged after 14 days, no undo). Each step is one statement whose condition is "no
+  active owner"; a partial unique index allows one active owner. Audited as `circle.owner_succession`.
+* **Reports and holds (D1).** A student-data report from an established member (approved 7+ days, in the
+  circle 1+ day, no dismissed student-data report in 30 days, at most 3 such holds a day, under the
+  site-wide `instant_holds_global` shared with the public pool) hides the bank from every member but its
+  author at once; other reasons hide it at `report_threshold` (3) distinct members. The admin is mailed ids
+  only (`circle_report`).
+* **Erasure (plan 8.1/8.2).** `deleteContentStatements` adds 14 statements (before `pool_prefs` goes): the
+  account's active memberships step down (audited), succession and closes, banks it authored are kept
+  anonymised ("deleted teacher") unless it chose `keep_on_delete: false` (removed, purged after 14 days),
+  version messages and report notes go (reports lose their reporter), codes it created are revoked (notes
+  go), its membership rows are deleted. Versions it sent keep their opaque committer id. The daily
+  `erasure_resweep` repeats all of it for anything a request in flight wrote, and repairs up to 50 open
+  circles without an owner (one indexed walk of the open circles a day).
+* **Cron.** Hourly `circle_staged` (sends that never committed). Daily `circle_prune` (pruned versions'
+  R2 objects, 500 a run) and `circle_purges` (removed banks and closed circles past `purge_after`, never one
+  with an open report: R2 bodies and indexes, versions, image rows, records, holds, codes, members; bank and
+  circle rows stay as tombstones without typed text). The blob GC never deletes an image a kept circle
+  version lists (`circle_version_blobs`). `retention` keeps a circle's audit trail while one of its banks is
+  held or a report about it is open.
+* **Admin (D1, plan 6.4).** `GET /admin/pool/circle-reports?after=` (the queue), `GET /admin/pool/circles?after=&user_id=`,
+  `GET /admin/pool/circle?id=` (metadata, members past and present, banks with holds and reports, codes'
+  states: audited `circle.admin_open`), `GET /admin/pool/circle-bank?id=&version=&basis=report|notice|privacy[&notice_id=]`
+  (a kept version's body, streamed; only on a basis: a report on the bank, a recorded DMCA notice, or a
+  student-data block matching one of its questions or images, else `403 basis_required`; audited
+  `circle.admin_view` in both audits), and writes with a reason of 10+ characters: `circle-hold {bank_id,
+  note}`, `circle-release` (all holds go, open reports dismissed), `circle-remove` (purged after 14 days),
+  `circle-close {circle_id, note}` (no owner undo).
+* **Export.** `GET /me/export` gains `circles {memberships, owned, invites_created (no codes),
+  versions_sent (no bodies), banks_authored, reports}`.
+* **Choices made in this round where the plan left one (UNCONFIRMED items).** Circle codes are `C-` and 24
+  Crockford characters (120 bits), SHA-256 of the normalised form with a `circle:` prefix; "10 failed join
+  codes" counts only failures (a try is charged first and given back for a good code); a member typing a
+  spent code of her own circle is told `already`. An owner-closed circle counts toward the owner's
+  `circles_owned` and every member's `circle_memberships` until purged or left (caps never fail open); a
+  reopen does not re-check members' caps. A removed bank counts toward the circle's caps until purged (so an
+  undelete needs no cap check). Per-circle caps use the site-wide value only. "Established member" (D1)
+  = approved 7+ days and in the circle 1+ day. D11: the fifth owner close in 30 days raises a `cap` flag
+  (`circle_closes`). An open circle report (any reason) delays the circle's and bank's purge. The
+  independence statement never covers a text a circle-only bank she can still READ holds (the plan's
+  UNCONFIRMED "exact copy" rule taken as written: the check is exact on the key-free hash). Circle names
+  and descriptions stay when their creator is erased (they are the circle's). The wire field is `license`
+  (as everywhere else), not `licence`. ETag of a bank read is a hash of the head (it changes with the
+  version and with the licence or author name), not the bare version id. The privacy byte purge deletes a
+  confirmed student-data image even when a circle uses it (members are "others"); the circle's blob route
+  refuses such images. Version pruning (D16) is done at the author's republish already (phase A sends can
+  otherwise fill the circle's quota with old versions).
+* **Rows read** (workerd SQLite, miniflare D1 `meta.rows_read`, statements captured from the node harness and
+  replayed on a copy of the database; plan 9.1's estimates in brackets): my circles list 214 -> 3,099 for 5
+  -> 20 circles of 13 -> 50 members and 25 -> 100 banks [about 3,000]; the circle page 76 + 40 -> 301 + 151
+  [about 250]; `heads` of 200 banks 1,200; a bank read 6 rows whatever its size [3 lookups]; a send's quota sum
+  1,981 with 99 banks x 20 kept versions [about 2,000] and record probe 2 per distinct question (500 -> 1,980);
+  the public check with 20 circles and one circle's 100 banks all holding every hash: 10,540 -> 41,620 rows
+  for 250 -> 990 distinct questions (2 per seek; a join on the primary key would read 29,750 -> 117,810), 82
+  for a bank repeating one question 990 times, its "readable bank" probe at most 18,120 (bounded to claimed
+  and reported positions); the erasure batch of an account owning 20 full circles 2,695 rows in all.
+* Tests: `test/pool/round32.test.ts` (17 `test()` calls, 25 tests: the 32-10 loop registers 9): create, caps and 404s on every circle route (32-1); codes (32-2);
+  members, roles, transfer, succession (32-3); banks, reads, ETag, republish CAS, replay, `commit_id`
+  conflicts, activity, nothing in browse or `/items/versions` (32-4); images, the GC, pruning (32-5); every
+  cap in the commit (32-6); close, undo, purge, reports, holds, licence, origins, admin basis and audit,
+  export (32-7); the publish check (32-8); erasure and succession, reruns, resweep (32-9); round-27 style
+  erasure races before every statement boundary of nine requests, checked BEFORE the cron (the guard in the
+  write) and after (32-10), and the last member erased while a code is used (32-10b); a random-sequence
+  oracle against a model, 450 steps (32-11); plans and time at the caps (32-12a-c); 0108 on a populated
+  database (32-13); pre-read, blocked images (32-14); admin list and close, the D11 flag, retention (32-15).
+  Three earlier tests changed: round 11's erasure statement bound (< 60: the circle steps add a fixed 15),
+  and rounds 16 and 20's migration lists now apply 0107 and 0108 (a publish needs the circle tables).
+
 **Round 31 (shared near hashes: the earlier-publication lookup and the licence re-key).** No migration
 (the existing near-hash and primary-key indexes suffice); the next is still `0108`. Staging's D1 insights
 after round 30: the earlier-publication lookup (`publish.ts`, "duplicate / near-copy") averaged 26.5 s and
@@ -1171,6 +1379,7 @@ Rollback: restore the export or Time Travel; 0104 has no down migration.
 | Admin flags | one per kind per publish (a count and the first 5). Per account, kind and day (round 9 K3): 20 rows, then the kind folds into ONE aggregated row with a count (never dropped); integrity kinds (independence claims, licence flags, blocklist, privacy matches, origin suspicions) are never folded, and `origin_unverified` always folds; no burst of one kind can silence another. Publishes that end up held by a content block: at most 20 per account a day (429 `daily_limit` `held_publishes`); the queue (`GET /admin/pool/flags?limit&cursor`) is most severe first, then newest, paged; student-data report mails have their own hourly budget (20), re-publishes of blocked text another (5), everything else another (5) |
 | Tags | 200 distinct tags and topics per item (more is an error) |
 | Images | PNG, JPEG, GIF, WebP; one still image, 1..4096 px a side, 2 MB; an import holds the images it served for the importer for 30 days |
+| Circles (rounds 32-33) | per account: 5 owned (a transfer counts; a succession does not), 20 memberships, 100 membership rows former ones included (`circle_memberships_total`: they live until their circle is purged; the bound of the publish check), 5 created / 50 codes / 10 failed codes / 100 versions sent a day; per circle (site-wide values): 50 members, 10 open codes, 100 banks, 200 MB (kept versions, images per version), 5,000 questions across current versions, 50,000 question records; codes 1-50 uses, 1-30 days (7); 20 versions kept a bank |
 
 **The licence rule (rounds 9 and 10).** Critics pulled opposite ways (never lock an honest teacher
 out; never let a copy carry a wrong public badge; more imports must never widen what is allowed).

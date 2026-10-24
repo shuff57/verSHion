@@ -18,7 +18,8 @@ function migrated(before?: (db: DatabaseSync) => void): { w: World; ann: User; t
   for (const f of readdirSync(`${here}migrations`).filter((x) => x.endsWith(".sql") && x < "0103").sort()) db.exec(readFileSync(`${here}migrations/${f}`, "utf8"));
   db.exec(fx("m7_0102_dump.sql"));
   before?.(db);
-  for (const f of ["0103_pool_rounds_6_11.sql", "0104_pool_round12.sql", "0105_pool_round24.sql", "0106_pool_round28.sql"]) db.exec(readFileSync(`${here}migrations/${f}`, "utf8"));
+  // (Round 32: and every later migration, 0107 and 0108 (circles), as a deployment applies them.)
+  for (const f of ["0103_pool_rounds_6_11.sql", "0104_pool_round12.sql", "0105_pool_round24.sql", "0106_pool_round28.sql", "0107_pool_round30.sql", "0108_pool_round32.sql"]) db.exec(readFileSync(`${here}migrations/${f}`, "utf8"));
   const r2 = new MemR2();
   for (const [k, b64, ct] of JSON.parse(fx("m7_0102_r2.json")) as [string, string, string | null][]) r2.objects.set(k, { bytes: new Uint8Array(Buffer.from(b64, "base64")), ...(ct ? { contentType: ct } : {}) });
   const meta = JSON.parse(fx("m7_0102_meta.json"));

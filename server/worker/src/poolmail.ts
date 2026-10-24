@@ -59,6 +59,14 @@ export function poolNotifier(env: MailEnv & { DB: D1Database }) {
         if (!u?.email) return;
         return sendPlain(env, u.email, "verSHion: a teacher reported a visible answer hint", `A teacher who uses your shared item ${n.itemId} reported that what students see gives the hidden answer key away. Please check the question text and choices, fix them and republish. If two teachers report it, the item is held for review until you do.`);
       }
+      case "circle_report":
+        // Round 32: ids only (circle content is opened by an admin only through the audited admin route).
+        return sendTo(
+          env,
+          "admins",
+          n.reason === "student_data" ? `verSHion: student data reported in a circle${n.held ? " (bank hidden)" : ""}` : "verSHion: a circle bank was reported",
+          `Bank ${n.bankId} in circle ${n.circleId} was reported (${n.reason}, report ${n.reportId}).${n.held ? " It is hidden from the circle until you review it." : ""} See GET /admin/pool/circle-reports; opening its content is audited.`,
+        );
       case "repeat_infringer":
         return sendTo(env, "everyone", "verSHion: repeat-infringer threshold reached", `Account ${n.userId} has ${n.strikes} upheld copyright strikes in 12 months. Under the repeat-infringer policy, suspend it with /admin/suspend.`);
     }

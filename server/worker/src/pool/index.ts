@@ -11,6 +11,8 @@ import { publish } from "./publish.ts";
 import { exportAccount } from "./export.ts";
 import { INVITE_FREE_PATHS, redeemInvite, requireInvite } from "./invites.ts";
 import { getBlob, getItem, importItem, list, mine, versions } from "./read.ts";
+import { activity, circleErasureStatements, closeCircle, createCircle, createInvite, deleteBank, getBank, getBankBlob, getCircle, heads, joinCircle, joinPreview, leaveCircle, listCircles, listInvites, patchBank, patchCircle, purgeBankNow, removeMember, reopenCircle, reportBank, revokeInvite, setRole, transferOwnership, undeleteBank } from "./circles.ts";
+import { sendVersion } from "./circlesend.ts";
 import { ALIVE_SQL, assertPoolKey, unauthorized, errKind, json, makeCtx, PoolError, rateLimit, readJson, type Ctx, type PoolDeps, type PoolPrincipal } from "./shared.ts";
 
 /** GET/PUT /items/prefs {keep_on_delete}: what happens to my shared items if I delete my account. */
@@ -71,6 +73,39 @@ const ROUTES: { re: RegExp; methods: Record<string, Route> }[] = [
   { re: /^\/me\/export$/, methods: { GET: (c, r, p) => exportAccount(c, r, p) } },
   // Round 28 (owner): redeem an admin-issued invite code (pending accounts too; invites.ts).
   { re: /^\/me\/invite$/, methods: { POST: (c, r, p) => redeemInvite(c, r, p) } },
+  // Round 32: circles, phase A (circles.ts, circlesend.ts). Circle and bank ids are 32 hex characters
+  // in the patterns, so /circles/join and /circles/heads can never be read as a circle id.
+  { re: /^\/circles$/, methods: { GET: (c, _r, p) => listCircles(c, p), POST: (c, r, p) => createCircle(c, r, p) } },
+  { re: /^\/circles\/join\/preview$/, methods: { POST: (c, r, p) => joinPreview(c, r, p) } },
+  { re: /^\/circles\/join$/, methods: { POST: (c, r, p) => joinCircle(c, r, p) } },
+  { re: /^\/circles\/heads$/, methods: { POST: (c, r, p) => heads(c, r, p) } },
+  {
+    re: /^\/circles\/([0-9a-f]{32})$/,
+    methods: { GET: (c, _r, p, m) => getCircle(c, p, m[1]!), PATCH: (c, r, p, m) => patchCircle(c, r, p, m[1]!), DELETE: (c, _r, p, m) => closeCircle(c, p, m[1]!) },
+  },
+  { re: /^\/circles\/([0-9a-f]{32})\/reopen$/, methods: { POST: (c, _r, p, m) => reopenCircle(c, p, m[1]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/activity$/, methods: { GET: (c, _r, p, m, u) => activity(c, p, m[1]!, u) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/invites$/, methods: { GET: (c, _r, p, m, u) => listInvites(c, p, m[1]!, u), POST: (c, r, p, m) => createInvite(c, r, p, m[1]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/invites\/revoke$/, methods: { POST: (c, r, p, m) => revokeInvite(c, r, p, m[1]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/leave$/, methods: { POST: (c, _r, p, m) => leaveCircle(c, p, m[1]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/members\/remove$/, methods: { POST: (c, r, p, m) => removeMember(c, r, p, m[1]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/members\/role$/, methods: { POST: (c, r, p, m) => setRole(c, r, p, m[1]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/transfer$/, methods: { POST: (c, r, p, m) => transferOwnership(c, r, p, m[1]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/banks$/, methods: { POST: (c, r, p, m) => sendVersion(c, r, p, m[1]!, null) } },
+  {
+    re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})$/,
+    methods: {
+      GET: (c, r, p, m) => getBank(c, r, p, m[1]!, m[2]!),
+      HEAD: (c, r, p, m) => getBank(c, r, p, m[1]!, m[2]!, true),
+      PUT: (c, r, p, m) => sendVersion(c, r, p, m[1]!, m[2]!),
+      PATCH: (c, r, p, m) => patchBank(c, r, p, m[1]!, m[2]!),
+      DELETE: (c, _r, p, m) => deleteBank(c, p, m[1]!, m[2]!),
+    },
+  },
+  { re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})\/undelete$/, methods: { POST: (c, _r, p, m) => undeleteBank(c, p, m[1]!, m[2]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})\/report$/, methods: { POST: (c, r, p, m) => reportBank(c, r, p, m[1]!, m[2]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})\/purge$/, methods: { POST: (c, _r, p, m) => purgeBankNow(c, p, m[1]!, m[2]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})\/blobs\/([^/]{1,80})$/, methods: { GET: (c, _r, p, m) => getBankBlob(c, p, m[1]!, m[2]!, m[3]!) } },
 ];
 
 export interface Pool {
@@ -109,7 +144,7 @@ export function createPool(d: PoolDeps): Pool {
       if (!p) throw new PoolError(401, "unauthorized", {}, { "WWW-Authenticate": 'Bearer error="invalid_token"' });
       // Round 16 (critic21d 8): every authenticated request is counted first, approved or not, so a
       // pending account cannot send unlimited requests (each one a D1 read of its trust).
-      await rateLimit(ctx, req, p.userId, req.method === "GET" || req.method === "HEAD" || /\/(import|versions)$/.test(url.pathname));
+      await rateLimit(ctx, req, p.userId, req.method === "GET" || req.method === "HEAD" || /\/(import|versions)$/.test(url.pathname) || url.pathname === "/circles/heads");
       // pending and unverified accounts (and anything else) cannot use the pool at all (a pending account
       // may export its profile and, round 28, redeem an invite code while it waits).
       if (!POOL_TRUST.has(p.trust) && !(INVITE_FREE_PATHS.has(url.pathname) && p.trust === "pending"))
@@ -122,7 +157,8 @@ export function createPool(d: PoolDeps): Pool {
       // Round 23 (critic30a B1): no write under a key other than the pool's own (reads continue).
       // Round 24: POST /items/versions is a bulk READ (it returns item metadata, never a hash): it
       // continues under a mismatch like any GET, as "plain reads continue" promises.
-      if (req.method !== "GET" && req.method !== "HEAD" && url.pathname !== "/items/versions") await assertPoolKey(ctx);
+      // (Round 32: POST /circles/heads is a bulk read too.)
+      if (req.method !== "GET" && req.method !== "HEAD" && url.pathname !== "/items/versions" && url.pathname !== "/circles/heads") await assertPoolKey(ctx);
       return await h(ctx, req, p, route.re.exec(url.pathname)!, url);
     } catch (e) {
       if (e instanceof PoolError) return json(e.status, { error: e.code, ...e.extra }, e.headers);
@@ -186,6 +222,9 @@ export function deleteContentStatements(db: D1Database, userId: string, now: num
     db.prepare(`DELETE FROM pool_locks WHERE user_id = ?1`).bind(userId),
     // (Round 28: its invite redemption goes; the invite keeps its use count.)
     db.prepare(`DELETE FROM pool_invite_redemptions WHERE user_id = ?1`).bind(userId),
+    // Round 32 (circles, plan 8.1): step down, hand on or close, banks kept anonymised or removed (its
+    // keep_on_delete choice, read before pool_prefs goes below), messages and notes, codes, memberships.
+    ...circleErasureStatements(db, userId, now),
     // (Round 23, critic30b T1: what the account typed, and system notes about it; an admin's note is
     // evidence and stays, its personal data scrubbed when written.)
     db.prepare(`UPDATE pool_audit SET note = NULL WHERE target_user_id = ?1 AND note IS NOT NULL AND actor_kind <> 'admin'`).bind(userId),

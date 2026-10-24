@@ -481,6 +481,8 @@ export async function gcBlobs(c: Ctx, only?: string[]): Promise<number> {
          SELECT b.sha256 FROM blobs b
           WHERE (?1 IS NULL OR b.sha256 IN (SELECT value FROM json_each(?1)))
             AND NOT EXISTS (SELECT 1 FROM item_blobs ib WHERE ib.sha256 = b.sha256)
+            -- (round 32: nor one a kept circle version uses: circle images are in the same store)
+            AND NOT EXISTS (SELECT 1 FROM circle_version_blobs cvb WHERE cvb.sha256 = b.sha256)
             AND NOT EXISTS (SELECT 1 FROM pending_blobs pb WHERE pb.sha256 = b.sha256 AND pb.until >= ?2)
           LIMIT 500)
        RETURNING sha256`,

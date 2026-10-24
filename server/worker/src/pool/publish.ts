@@ -12,6 +12,7 @@ import { canonical, isFail, kindTag, questionsOf, type Fail, type LabelDecision,
 import { EXT } from "./image.ts";
 import { allowedForBank, ATTEST_STATEMENT, ATTEST_TEXT_REVS, POOL_TERMS_VERSION, decideLicence, grantOptions, isLicense, LICENSES, mayRepublish, reliedLicence, unitAllows, type License, type LicenceUnit } from "./license.ts";
 import { subjectFor, subjectParam } from "./visible.ts";
+import { checkCircleMaterial, readCircleClaim } from "./circlecheck.ts";
 import { rightfulExempts, SERVED_FORM, servedBlobsOf, upstreamCarried } from "./served.ts";
 import {
   authorContext,
@@ -881,7 +882,7 @@ async function reuseServed(c: Ctx, baseOf: string, qids: string[], st: Stripped,
 export const BODY_DEADLINE_MS = 15_000;
 
 /** Keeps the account lock alive while this request is (round 5 E7): refreshed at every phase. */
-async function refreshAccountLock(c: Ctx, me: string, token: string): Promise<void> {
+export async function refreshAccountLock(c: Ctx, me: string, token: string): Promise<void> {
   await c.db.prepare(`UPDATE pool_locks SET until = ?3 WHERE user_id = ?1 AND token = ?2`).bind(me, token, c.now() + ACCOUNT_LOCK_MS).run();
 }
 
@@ -941,7 +942,7 @@ export async function acquireHeavy(waitMs = HEAVY_QUEUE_WAIT_MS, beat: () => Pro
 
 export const ACCOUNT_LOCK_MS = 60_000;
 
-async function acquireAccountLock(c: Ctx, me: string): Promise<string | null> {
+export async function acquireAccountLock(c: Ctx, me: string): Promise<string | null> {
   const token = newId();
   const now = c.now();
   const r = await c.db
@@ -955,7 +956,7 @@ async function acquireAccountLock(c: Ctx, me: string): Promise<string | null> {
   return r?.token === token ? token : null;
 }
 
-async function releaseAccountLock(c: Ctx, me: string, token: string): Promise<void> {
+export async function releaseAccountLock(c: Ctx, me: string, token: string): Promise<void> {
   await c.db.prepare(`DELETE FROM pool_locks WHERE user_id = ?1 AND token = ?2`).bind(me, token).run();
 }
 
@@ -995,6 +996,8 @@ async function publishOnce(
   const rawMeta = read.meta;
   let payload: Uint8Array | null = read.payload;
   const m = readMeta(rawMeta, isNew);
+  // (Round 32: a circle independence statement, checked with the circle material below.)
+  const circleClaim = readCircleClaim(rawMeta);
   // Round 23 (owner): a publish or republish needs the teacher's affirmation of the current terms
   // (recorded with the publish; not verified). A preview does not.
   if (!dry && !(m.attest?.ownWork === true && m.attest.termsVersion === POOL_TERMS_VERSION))
@@ -1351,6 +1354,9 @@ async function publishOnce(
   const firstOf = (i: number) => ownCf.get(i) ?? null;
   // A short statement (round 10 M-5): Tf, Short or Blank with a stem of at most SHORT_WORDS words.
   const shortQ = servedQs.map((q) => isShort(q));
+  // Round 32 (circles, D13): material first sent into a circle by someone else stays out of the pool
+  // (every form's key-free hash; dry runs too). circlecheck.ts says when a position passes.
+  const circleClaimed = (await checkCircleMaterial(c, me, mh.map((h, i) => [h, prep.matchHashes[i]!]), shortQ, circleClaim)).claimed;
   // Round 14 (B5): 40 words or fewer as served (stem, choices, columns, served answers, explanation).
   const short40 = servedQs.map((q) => (servedWordCount(q) <= 40 ? 1 : 0));
   // Round 18 (U3/U6) text units, from the payload trees (used below with the evidence): see "Texts".
@@ -2545,6 +2551,34 @@ __OUTER__
         .bind(me, now - 30 * DAY_MS)
         .first<{ n: number }>())?.n ?? 0)
     : 0;
+  // Round 32: circle independence statements count with these (distinct banks named in 30 days); a bank
+  // the account named before is not a new claim.
+  const circleStatement = circleClaimed.length ? circleClaim!.statement : null;
+  const priorCircleClaims = circleClaimed.length
+    ? await (async () => {
+        const before = new Set(
+          (
+            await c.db
+              .prepare(
+                `SELECT DISTINCT v.value AS id FROM pool_audit a, json_each(json_extract(a.detail, '$.circle_independent_of')) v
+                  WHERE a.actor_id = ?1 AND a.action IN ('item.publish', 'item.republish') AND json_extract(a.detail, '$.circle_independent_of') IS NOT NULL`,
+              )
+              .bind(me)
+              .all<{ id: string }>()
+          ).results.map((x) => x.id),
+        );
+        if (!circleClaimed.some((x) => !before.has(x))) return 0;
+        return (
+          (await c.db
+            .prepare(
+              `SELECT COUNT(DISTINCT v.value) AS n FROM pool_audit a, json_each(json_extract(a.detail, '$.circle_independent_of')) v
+                WHERE a.actor_id = ?1 AND a.action IN ('item.publish', 'item.republish') AND a.at > ?2 AND json_extract(a.detail, '$.circle_independent_of') IS NOT NULL`,
+            )
+            .bind(me, now - 30 * DAY_MS)
+            .first<{ n: number }>())?.n ?? 0
+        );
+      })()
+    : 0;
   // Round 12 M6: a near-rewording of confirmed student-data text (MinHash bands of the blocked stems,
   // token Jaccard >= FUZZY_JACCARD) is flagged for the admin. Not held (the exact and normalised keys
   // hold), and nothing about it reaches the publisher.
@@ -2593,7 +2627,8 @@ __OUTER__
   // ONE flag per kind per publish (round 8 I6b): a count and the first few, never one per question.
   const few = <T,>(xs: T[]) => ({ count: xs.length, first: xs.slice(0, FLAG_DETAIL_MAX) });
   const flagsAll = [
-    ...(priorClaims >= 2 ? [{ kind: "independent_repeat", detail: JSON.stringify({ claims_in_30_days: priorClaims + 1 }) }] : []),
+    ...(priorClaims + priorCircleClaims >= 2 ? [{ kind: "independent_repeat", detail: JSON.stringify({ claims_in_30_days: priorClaims + priorCircleClaims + 1 }) }] : []),
+    ...(circleClaimed.length > 0 ? [{ kind: "independent_claim", detail: JSON.stringify({ circle_banks: few(circleClaimed), statement: circleStatement }) }] : []),
     ...(softOnly.length > 0 || soft.results.length > 0 ? [{ kind: "license_soft", detail: JSON.stringify({ positions: few(softOnly), matches_items: few(soft.results.map((r) => r.id)), license: m.license }) }] : []),
     ...(conflicts.length > 0 ? [{ kind: "license_conflict", detail: JSON.stringify({ positions: few(conflicts), license: m.license }) }] : []),
     ...(grandfathered.length > 0 ? [{ kind: "license_grandfathered", detail: JSON.stringify({ positions: few(grandfathered), license: m.license }) }] : []),
@@ -2846,7 +2881,7 @@ __OUTER__
   stmts.push(
     audit(
       c.db,
-      { actorId: me, actorKind: "user", action: isNew ? "item.publish" : "item.republish", itemId, targetUserId: me, detail: { publish_id: m.publishId, version, license: m.license, hide_key: m.hideKey, ...(m.independent.length ? { independent_of: m.independent } : {}) }, note: m.statement },
+      { actorId: me, actorKind: "user", action: isNew ? "item.publish" : "item.republish", itemId, targetUserId: me, detail: { publish_id: m.publishId, version, license: m.license, hide_key: m.hideKey, ...(m.independent.length ? { independent_of: m.independent } : {}), ...(circleClaimed.length ? { circle_independent_of: circleClaimed } : {}) }, note: circleStatement === null ? m.statement : [m.statement, circleStatement].filter((x) => x !== null).join(" / ") },
       now,
       guard(`'${itemId}'`, `'${m.publishId}'`), // both match [A-Za-z0-9_-]+
     ),

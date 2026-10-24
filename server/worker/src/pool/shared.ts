@@ -33,7 +33,9 @@ export type PoolNotice =
   /** Round 11: the author of a copy an admin action held (ids only; the reason class, never the matched text). */
   | { kind: "copy_held"; itemId: string; authorId: string; cause: "student_data" | "copyright" }
   /** Round 17: an importer reported that an item's served text gives its hidden key away. */
-  | { kind: "key_leak_report"; itemId: string; authorId: string };
+  | { kind: "key_leak_report"; itemId: string; authorId: string }
+  /** Round 32: a member reported a circle bank (ids only; `held`: it is hidden from the circle now). */
+  | { kind: "circle_report"; circleId: string; bankId: string; reportId: string; reason: string; held: boolean };
 
 export interface PoolDeps {
   db: D1Database;
@@ -454,6 +456,34 @@ export const DEFAULT_LIMITS = {
   author_records: 500_000,
   /** Invite-code redemption attempts per account per day (round 28, POST /me/invite). */
   invite_tries: 10,
+  // ---- circles (round 32, docs/circles-plan.md D2-D4, D10) ----
+  /** Circles an account may create a day. */
+  circle_creates: 5,
+  /** Circle invite codes an account may issue a day. */
+  circle_invites: 50,
+  /** FAILED circle codes (join and its preview) an account may type a day. */
+  circle_join_tries: 10,
+  /** Versions an account may send to circle banks a day. */
+  circle_commits: 100,
+  /** Circles an account may own at once (an owner-closed circle counts until purged or reopened). */
+  circles_owned: 5,
+  /** Circles an account may be an active member of at once. */
+  circle_memberships: 20,
+  /** Membership rows an account may hold, former ones included (they live until their circle is purged):
+   *  round 33, the bound of what the public publish check reads per publish. */
+  circle_memberships_total: 100,
+  /** Active members per circle (site-wide value, '*'). */
+  circle_members: 50,
+  /** Banks per circle, removed ones included until purged ('*'). */
+  circle_banks: 100,
+  /** Bytes per circle: every kept version's body, index and images ('*', D3: not charged to anyone). */
+  circle_bytes: 200 * MB,
+  /** Questions across a circle's current versions ('*', D4: not counted toward shared_questions). */
+  circle_questions: 5000,
+  /** Open (usable) invite codes per circle ('*'). */
+  circle_open_invites: 10,
+  /** Rows a circle keeps for the public re-share check (circle_qkeys, '*'). */
+  circle_records: 50_000,
 } as const;
 export type Metric = keyof typeof DEFAULT_LIMITS;
 export const METRICS = Object.keys(DEFAULT_LIMITS) as Metric[];
@@ -680,7 +710,8 @@ export async function alertBudgeted(c: Ctx, n: PoolNotice): Promise<void> {
   // Round 12: one hourly budget per notice kind (the old channel names kept for the stored rows),
   // so no flood of one kind ever swallows another.
   // (Round 18: key_leak notices have their own author budget, never sharing copy_held's.)
-  const channel = n.kind === "student_data_report" ? "privacy_report" : n.kind === "privacy_text_match" ? "privacy_match" : n.kind === "copy_held" ? "authors" : n.kind === "key_leak_report" ? "authors_key_leak" : n.kind;
+  // (Round 32: a circle's student-data report shares the public pool's privacy-report budget.)
+  const channel = n.kind === "student_data_report" || (n.kind === "circle_report" && n.reason === "student_data") ? "privacy_report" : n.kind === "privacy_text_match" ? "privacy_match" : n.kind === "copy_held" ? "authors" : n.kind === "key_leak_report" ? "authors_key_leak" : n.kind;
   const budget = channel === "privacy_report" ? PRIVACY_ALERTS_PER_HOUR : channel === "authors" || channel === "authors_key_leak" ? AUTHOR_NOTICES_PER_HOUR : ALERTS_PER_HOUR;
   const row = await c.db
     .prepare(`INSERT INTO pool_alert_budget (hour, channel, sent) VALUES (?1, ?2, 1) ON CONFLICT (hour, channel) DO UPDATE SET sent = sent + 1 RETURNING sent`)
