@@ -9,12 +9,14 @@
 #   scripts/local-ui-rig.sh approve EMAIL         # trust -> teacher, plus a pre-gate invite redemption
 #   scripts/local-ui-rig.sh approve EMAIL --teacher-only   # trust -> teacher, the invite still needed
 #   scripts/local-ui-rig.sh invite                # prints one fresh single-use invite code
+#   scripts/local-ui-rig.sh seed                  # 3 sample shared items from a throwaway b@example.test
 #   scripts/local-ui-rig.sh log                   # follow the dev server output
 #   scripts/local-ui-rig.sh stop
 #   scripts/local-ui-rig.sh reset                 # stop, then delete server/worker/.wrangler-ui
 #
 # Port 18791 only (devtools on 18792). It refuses to start if either is taken and never stops any
-# process it did not start. Passwords never pass through this script: they are typed in the app.
+# process it did not start. Passwords never pass through this script: they are typed in the app
+# (seed's throwaway password is made and kept inside its node process, see local-ui-seed.mjs).
 set -euo pipefail
 
 PORT=18791
@@ -231,6 +233,22 @@ JS
   echo "Single-use invite code: $code"
 }
 
+cmd_seed() {
+  need_dir
+  rig_pid >/dev/null || die "not running: '$0 start' first"
+  local seed_email=b@example.test out n
+  # Idempotent: an existing b@example.test (seeded before, or made by hand) is left alone.
+  out=$(d1 execute "$DB" --json --command "SELECT COUNT(*) AS n FROM users WHERE email = '$seed_email'")
+  n=$(printf '%s' "$out" | jq -r '.[0].results[0].n')
+  [[ "$n" =~ ^[0-9]+$ ]] || die "could not read the local D1"
+  if [ "$n" != "0" ]; then
+    out=$(d1 execute "$DB" --json --command "SELECT COUNT(*) AS n FROM items i JOIN users u ON u.id = i.author_id WHERE u.email = '$seed_email' AND i.removed_at IS NULL")
+    echo "$seed_email already exists ($(printf '%s' "$out" | jq -r '.[0].results[0].n') items): already seeded, nothing done. ('$0 reset' starts over.)"
+    return 0
+  fi
+  node "$here/scripts/local-ui-seed.mjs"
+}
+
 cmd_log() {
   need_dir
   exec tail -n 50 -f "$log"
@@ -244,9 +262,10 @@ case "${1:-}" in
   links) cmd_links "${2:-}" ;;
   approve) cmd_approve "${2:-}" "${3:-}" ;;
   invite) cmd_invite ;;
+  seed) cmd_seed ;;
   log) cmd_log ;;
   *)
-    sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac

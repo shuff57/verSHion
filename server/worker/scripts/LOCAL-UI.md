@@ -28,39 +28,54 @@ Other commands:
 | `rig approve EMAIL` | Approves the account as a teacher and gives it pool access without an invite code. |
 | `rig approve EMAIL --teacher-only` | Approves the account but gives no pool access. It still needs an invite code. |
 | `rig invite` | Prints a new single-use invite code. |
+| `rig seed` | Adds 3 sample shared items from a throwaway account `b@example.test` (see below). Says so and does nothing if that account already exists. |
 | `rig stop` | Stops the server. Accounts and items are kept for next time. |
 | `rig reset` | Stops the server and deletes `.wrangler-ui/`, so the next start is empty. |
 
 The script never sees a password. You type passwords only into the app.
 
-## 2. Launch the app and point it at the local server
+### Sample items (`rig seed`)
 
-Use a debug build. Only debug builds let you type a server address.
+`rig seed` fills an empty pool with three public items, so Browse and Import have something to
+show. It goes through the real API, as the app would: it signs up `b@example.test`, confirms it
+with the link from the mail log, signs in, runs `rig approve b@example.test`, and publishes:
+
+1. **Fractions and percentages quick check** (Mathematics): 8 multiple-choice questions, answer
+   key hidden.
+2. **Cells and energy review** (Science): multiple choice, one Matching and one Short answer
+   question, answer key hidden.
+3. **World capitals warm-up** (Geography): 5 questions, answer key shown.
+
+All three are licensed CC BY 4.0. The script then lists the items and signs out. The account's
+password is made up inside the script and never shown or saved, so nobody can sign in as
+`b@example.test`. Use other addresses for your own test accounts. Running `rig seed` again does
+nothing; `rig reset` empties everything.
+
+## 2. Launch the app against the local server
+
+Build and run a debug build with the local address built in:
 
 ```sh
 cd <repo root>
-cargo run
+VERSHION_POOL_URL=http://localhost:18791 cargo run --bin vershion
 ```
 
-To open the app with the Account window already showing, run
-`VERSHION_SCREEN=account cargo run` instead.
+The app then talks only to `http://localhost:18791`. There is no server address box and no
+"Send your password to this server?" question. To open the app with the Account window already
+showing, add `VERSHION_SCREEN=account` in front of the command.
 
-1. Go to **Settings** in the left navigation. Under **Sharing account**, click **Open account…**.
-   A red **DEVELOPMENT BUILD: custom server** banner is expected.
-2. In **Server address**, type `http://localhost:18791` and click **Save**.
-3. The window asks **Send your password to this server?** with `localhost:18791` shown. Click
-   **Yes, it is my school's server**.
+Go to **Settings** in the left navigation. Under **Sharing account**, click **Open account…**.
 
 ## 3. Account A: sign up, confirm, approve
 
 1. Click **Create an account**. Fill in a made-up address (for example `a@example.test`; nothing
-   is actually sent to it), a password of at least 10 characters typed twice, a display name, a
-   school, and tick **I am an adult employee of a school**. Click **Create account**.
+   is actually sent to it), a password of at least 10 characters, a display name and a school,
+   tick **I am an adult employee of a school**, and click **Create account**.
 2. The window changes to **Check your email**. In a terminal, run
    `scripts/local-ui-rig.sh links a@example.test` and copy the URL on the `confirm` line.
 3. Paste it into **Link or code from the email** and click **Continue**.
-4. On **Finish your account**, type the password again (twice), fill in the name and school, tick
-   the box, and click **Confirm**.
+4. On **Finish your account**, set the password (typed twice), the name and the school, tick the
+   box, and click **Confirm**. These replace what was typed at sign-up.
 5. Sign in with the address and password. The window should show **Waiting for approval**, with
    an **Invite code** section below it.
 6. Run `scripts/local-ui-rig.sh approve a@example.test`, then click **Check now**. The window
@@ -71,19 +86,20 @@ To open the app with the Account window already showing, run
 Account B runs in a second copy of the app with its own empty data folder:
 
 ```sh
-VERSHION_STORE_DIR=/tmp/vershion-b cargo run
+VERSHION_STORE_DIR=/tmp/vershion-b VERSHION_POOL_URL=http://localhost:18791 cargo run --bin vershion
 ```
 
-Enter the server address and confirm it again, as in step 2. If running two copies at once is
-awkward, you can sign A out and sign B in within one app instead.
+If running two copies at once is awkward, you can sign A out and sign B in within one app instead.
+`rig seed` already uses `b@example.test`, so give your B another address, for example
+`b2@example.test`, and use that address in the commands below.
 
 Account B is the one to use for the invite-code tests:
 
-1. Sign up as `b@example.test`, confirm with `rig links b@example.test`, and sign in, as in step 3.
+1. Sign up as `b2@example.test`, confirm with `rig links b2@example.test`, and sign in, as in step 3.
 2. **Before approval:** run `rig invite` and type the code into **Invite code**, then click
    **Redeem**. It should say **Redeemed. You can use the shared pool.** The status should still be
    **Waiting for approval**.
-3. Run `rig approve b@example.test` (B already has a redemption, so this only approves it), then
+3. Run `rig approve b2@example.test` (B already has a redemption, so this only approves it), then
    click **Check now**.
 
 To test the code **after** approval, use a third account C. Approve it with
