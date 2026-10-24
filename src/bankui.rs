@@ -1079,6 +1079,9 @@ impl App {
         let mut textures = std::mem::take(&mut self.textures);
         let action = qedit::draw_modal(ctx, &mut d, pool, &mut textures);
         self.textures = textures;
+        if !matches!(action, qedit::QAction::None) {
+            crate::wysiwyg::new_session(ctx);
+        }
         match action {
             qedit::QAction::Done => self.commit_draft(d),
             qedit::QAction::Cancel => {}

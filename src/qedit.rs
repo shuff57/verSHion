@@ -198,6 +198,8 @@ struct Temp {
     focus_add: Option<EqField>,
     /// The control that had focus last frame (a change scrolls it into view).
     ring_id: Option<UiId>,
+    /// The control the body last scrolled to (so a control taking focus is always brought into view).
+    scrolled_id: Option<UiId>,
     /// Ctrl+Enter was pressed in a formula: save once it has been committed.
     save_after: bool,
     /// The confirm bar has already taken focus for its current question.
@@ -1186,12 +1188,16 @@ pub fn draw_modal(
     textures: &mut HashMap<String, egui::TextureHandle>,
 ) -> QAction {
     let key = temp_key(&draft.bank_id, draft.qid.as_ref());
+    // keys of one frame reach the fields one press at a time, in order, against the text as it is
+    crate::wysiwyg::frame_keys(ctx);
     let first_frame = draft.baseline.is_none();
     if !draft.armed {
         // Opening happens on a click that is still live this frame, often right over the stem:
         // draw from the next frame, or the editor would take that click as a press in the text
         // and pop the floating toolbar over a blank.
         draft.armed = true;
+        // a new editing session: no undo history of an earlier question reaches this one
+        crate::wysiwyg::new_session(ctx);
         // The stem takes the keyboard from the first frame the editor shows.
         EqCtx { ctx: ctx.clone(), key }.focus(&EqField::Stem, draft.stem.chars().count());
         ctx.request_repaint();
@@ -1250,6 +1256,18 @@ pub fn draw_modal(
                 meta_strip(ui, ctx, draft, key, bw, topic_pool);
                 ui.add_space(14.0);
                 body(ui, ctx, draft, key, bw, textures);
+                // a control that just took focus (Tab, Shift+Tab, a click) is always brought into view
+                // (text fields scroll themselves to the caret)
+                if let Some(id) = ctx.memory(|m| m.focused())
+                    && ctx.data_mut(|d| {
+                        let t = d.get_temp_mut_or_default::<Temp>(key);
+                        t.focus_now.is_none() && std::mem::replace(&mut t.scrolled_id, Some(id)) != Some(id)
+                    })
+                    && let Some(r) = ctx.read_response(id)
+                    && r.rect.is_positive()
+                {
+                    ui.scroll_to_rect(r.rect.expand(8.0), None);
+                }
             });
         ui.add_space(8.0);
         let y = ui.cursor().top();
@@ -1597,17 +1615,28 @@ fn left_col(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f
     let hint = if is_blank { blank_hint.as_str() } else { "Write the question..." };
     let inner = (w - 26.0).max(60.0);
     let sid = field_editor_id(key, &EqField::Stem);
-    // Tab leaves the stem for the first answer field, unless the stem is a list or table (Tab
-    // indents there). Enter keeps adding lines.
+    // Tab always leaves the stem for the first answer's text field and Shift+Tab goes back one
+    // control; Enter keeps adding lines. (Inside a table Tab walks the cells. A list item is
+    // nested with Ctrl+] and un-nested with Ctrl+[.)
     let first = first_field(&draft.kind, mirror.as_deref());
-    let tab_to_answers = first.is_some() && crate::wysiwyg::is_plain(&draft.stem);
-    if tab_to_answers && eq.last_focus() == Some(EqField::Stem) {
-        let tab = ctx.input_mut(|i| {
-            let p = i.events.iter().position(|e| matches!(e, egui::Event::Key { key: Key::Tab, pressed: true, modifiers, .. } if modifiers.matches_exact(Modifiers::NONE)));
-            p.map(|p| i.events.remove(p)).is_some()
+    let tab_to_answers = first.is_some();
+    if tab_to_answers && eq.last_focus() == Some(EqField::Stem) && !crate::wysiwyg::tab_is_local(ctx, sid) {
+        let (tab, back) = ctx.input_mut(|i| {
+            let find = |i: &egui::InputState, m: Modifiers| i.events.iter().position(|e| matches!(e, egui::Event::Key { key: Key::Tab, pressed: true, modifiers, .. } if modifiers.matches_exact(m)));
+            let t = find(i, Modifiers::NONE);
+            if let Some(p) = t {
+                i.events.remove(p);
+            }
+            let b = find(i, Modifiers::SHIFT);
+            if let Some(p) = b {
+                i.events.remove(p);
+            }
+            (t.is_some(), b.is_some())
         });
         if tab && let Some((f, n)) = &first {
             eq.focus(f, *n);
+        } else if back {
+            ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::Previous));
         }
     }
     let fr = field_frame(Margin::symmetric(12, 8)).show(ui, |ui| {
@@ -2298,6 +2327,130 @@ mod tests {
         assert_eq!(first_field(&default_kind(QKind::Matching), None), Some((EqField::MatchL(0), 0)));
         assert_eq!(first_field(&default_kind(QKind::Short), None), Some((EqField::Short, 0)));
         assert_eq!(first_field(&default_kind(QKind::Blank), Some(&["red".to_string()])), Some((EqField::Blank(0), 3)));
+    }
+
+    /// Frames of the real modal, headless: Tab from the stem lands in the first answer's TEXT
+    /// field whatever the stem holds, and what is typed next lands there (never lost).
+    #[test]
+    fn tab_from_any_stem_reaches_the_first_answer_and_the_next_text_lands_there() {
+        use egui::{Event, Pos2, RawInput, Rect};
+        for stem in ["plain words", "**bold** text", "- a\n- b", "1. a\n2. b", "> quoted", "# Head\nbody", "x $x^2$ y", "- a\n\ntail"] {
+            let ctx = egui::Context::default();
+            crate::theme::setup(&ctx);
+            let mut d = Draft::new("b".to_string());
+            d.stem = stem.to_string();
+            let mut tex = HashMap::new();
+            let mut t = 0.0;
+            let mut frame = |d: &mut Draft, events: Vec<Event>| {
+                let mut input = RawInput::default();
+                input.screen_rect = Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 900.0)));
+                input.time = Some(t);
+                input.events = events;
+                t += 0.05;
+                let o = ctx.run_ui(input, |ui| {
+                    let _ = ui;
+                    draw_modal(&ctx, d, &[], &mut tex);
+                });
+                o.drop_without_applying_deltas();
+            };
+            for _ in 0..8 {
+                frame(&mut d, vec![]);
+            }
+            let tab = Event::Key { key: Key::Tab, physical_key: Some(Key::Tab), pressed: true, repeat: false, modifiers: Modifiers::NONE };
+            frame(&mut d, vec![tab]);
+            for _ in 0..4 {
+                frame(&mut d, vec![]);
+            }
+            frame(&mut d, vec![Event::Text("zz".into())]);
+            for _ in 0..4 {
+                frame(&mut d, vec![]);
+            }
+            let Kind::Mc { answers } = &d.kind else { panic!() };
+            assert_eq!(answers[0].text, "zz", "stem {stem:?}");
+            assert_eq!(d.stem, stem, "the stem is untouched by the Tab and the text after it");
+        }
+    }
+
+    /// The real modal, headless: Make Blank then Undo leaves no answer row of the blank behind.
+    #[test]
+    fn undo_of_make_blank_in_the_modal_removes_the_answer() {
+        use egui::{Event, Pos2, RawInput, Rect};
+        let ctx = egui::Context::default();
+        crate::theme::setup(&ctx);
+        let mut d = Draft::new("b".to_string());
+        d.kind = default_kind(QKind::Blank);
+        d.stem = "the quick fox".to_string();
+        let mut tex = HashMap::new();
+        let mut t = 0.0;
+        let mut frame = |d: &mut Draft, events: Vec<Event>| {
+            let mut input = RawInput::default();
+            input.screen_rect = Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 900.0)));
+            input.time = Some(t);
+            input.events = events;
+            t += 0.05;
+            let o = ctx.run_ui(input, |_ui| {
+                draw_modal(&ctx, d, &[], &mut tex);
+            });
+            o.drop_without_applying_deltas();
+        };
+        let key = |k: Key, m: Modifiers| Event::Key { key: k, physical_key: Some(k), pressed: true, repeat: false, modifiers: m };
+        for _ in 0..8 {
+            frame(&mut d, vec![]);
+        }
+        frame(&mut d, vec![key(Key::End, Modifiers::NONE)]);
+        for _ in 0..3 {
+            frame(&mut d, vec![key(Key::ArrowLeft, Modifiers::SHIFT)]);
+            frame(&mut d, vec![]);
+        }
+        frame(&mut d, vec![key(Key::K, Modifiers::COMMAND | Modifiers::SHIFT)]);
+        for _ in 0..4 {
+            frame(&mut d, vec![]);
+        }
+        assert_eq!(d.stem, "the quick ___");
+        let Kind::Blank { accept } = &d.kind else { panic!() };
+        assert_eq!(accept, &vec![vec!["fox".to_string()]]);
+        frame(&mut d, vec![key(Key::Z, Modifiers::COMMAND)]);
+        for _ in 0..4 {
+            frame(&mut d, vec![]);
+        }
+        assert_eq!(d.stem, "the quick fox");
+        let Kind::Blank { accept } = &d.kind else { panic!() };
+        assert!(accept.iter().all(|a| a.iter().all(|x| x.is_empty())), "no answer left over: {accept:?}");
+    }
+
+    /// Keys that arrive together in one frame reach the fields in order: text, Tab, text puts the
+    /// first text in the stem and the second in the first answer; text, Enter, text in an answer
+    /// row ends that row and starts the next with the second text.
+    #[test]
+    fn keys_of_one_frame_reach_the_modals_fields_in_order() {
+        use egui::{Event, Pos2, RawInput, Rect};
+        let ctx = egui::Context::default();
+        crate::theme::setup(&ctx);
+        let mut d = Draft::new("b".to_string());
+        let mut tex = HashMap::new();
+        let mut t = 0.0;
+        let mut frame = |d: &mut Draft, events: Vec<Event>| {
+            let mut input = RawInput::default();
+            input.screen_rect = Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1280.0, 900.0)));
+            input.time = Some(t);
+            input.events = events;
+            t += 0.05;
+            let o = ctx.run_ui(input, |_ui| {
+                draw_modal(&ctx, d, &[], &mut tex);
+            });
+            o.drop_without_applying_deltas();
+        };
+        let key = |k: Key| Event::Key { key: k, physical_key: Some(k), pressed: true, repeat: false, modifiers: Modifiers::NONE };
+        for _ in 0..8 {
+            frame(&mut d, vec![]);
+        }
+        frame(&mut d, vec![Event::Text("ab".into()), key(Key::Tab), Event::Text("cd".into()), key(Key::Enter), Event::Text("ef".into())]);
+        for _ in 0..14 {
+            frame(&mut d, vec![]);
+        }
+        assert_eq!(d.stem, "ab");
+        let Kind::Mc { answers } = &d.kind else { panic!() };
+        assert_eq!((answers[0].text.as_str(), answers[1].text.as_str()), ("cd", "ef"), "{answers:?}");
     }
 
     #[test]

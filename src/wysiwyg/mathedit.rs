@@ -394,6 +394,13 @@ impl MathEdit {
         }
         // Next frame's outside-click area: the slot and the canvas.
         self.rect = Some(slot.rect.union(r.rect).expand(3.0));
+        // a formula being edited is marked, so it is clear a click opened it (the caret blinks)
+        ui.painter().rect_stroke(
+            slot.rect.expand2(egui::vec2(-1.0, -1.0)),
+            egui::CornerRadius::same(5),
+            egui::Stroke::new(1.5, crate::theme::accent_col().gamma_multiply(0.8)),
+            egui::StrokeKind::Inside,
+        );
 
         let mut write = None;
         if r.changed && writable(&now) && now != self.linear_in_text(stem) {

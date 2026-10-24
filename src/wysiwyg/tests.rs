@@ -610,20 +610,48 @@ fn floating_bar_never_covers_the_fixed_toolbar() {
     let screen = Rect::from_min_size(Pos2::ZERO, Vec2::new(1440.0, 900.0));
     let fixed = Rect::from_min_max(Pos2::new(380.0, 138.0), Pos2::new(820.0, 172.0));
     let size = Some(Vec2::new(280.0, 34.0));
-    // selection on the first line, right under the fixed toolbar: the bar goes below it
+    let sz = size.unwrap();
+    let rect_of = |at: Pos2, pivot: egui::Align2| -> Rect {
+        let min = Pos2::new(at.x, match pivot {
+            egui::Align2::LEFT_TOP => at.y,
+            egui::Align2::LEFT_CENTER => at.y - sz.y / 2.0,
+            _ => at.y - sz.y,
+        });
+        Rect::from_min_size(min, sz)
+    };
+    // a field with text lines 20 px apart from y = 180, 700 px wide from x = 380
+    let lines: Vec<(f32, f32)> = (0..10).map(|i| (180.0 + 22.0 * i as f32, 198.0 + 22.0 * i as f32)).collect();
+    let field = Rect::from_min_max(Pos2::new(380.0, 170.0), Pos2::new(1080.0, 420.0));
+    let narrow_field = Rect::from_min_max(Pos2::new(380.0, 170.0), Pos2::new(620.0, 420.0));
+    // room in the margin: the bar sits beside the field, level with the selection, over no line
     let sel = Rect::from_min_max(Pos2::new(382.0, 186.0), Pos2::new(430.0, 204.0));
-    let (at, pivot) = float_place(sel, size, Some(fixed), screen);
-    assert_eq!(pivot, egui::Align2::LEFT_TOP);
-    let bar = Rect::from_min_size(at, size.unwrap());
-    assert!(!bar.intersects(fixed) && bar.top() > sel.bottom());
-    // further down there is room above
+    let (at, pivot) = float_place(sel, size, Some(fixed), screen, field, &lines);
+    let bar = rect_of(at, pivot);
+    assert!(!bar.intersects(fixed) && bar.left() > field.right(), "{bar:?}");
+    // no room in the margin (narrow window): above or below, never over the fixed toolbar
+    let narrow = Rect::from_min_size(Pos2::ZERO, Vec2::new(640.0, 900.0));
+    let (at, pivot) = float_place(sel, size, Some(fixed), narrow, narrow_field, &lines);
+    let bar = rect_of(at, pivot);
+    assert!(!bar.intersects(fixed) && bar.right() <= 640.0 + 1.0 || pivot == egui::Align2::LEFT_TOP, "{bar:?}");
+    assert!(!bar.intersects(fixed));
+    // in the middle of the text with no margin: above (ties go above), clear of the fixed toolbar
     let sel = Rect::from_min_max(Pos2::new(382.0, 300.0), Pos2::new(430.0, 318.0));
-    let (at, pivot) = float_place(sel, size, Some(fixed), screen);
+    let (_, pivot) = float_place(sel, size, Some(fixed), narrow, narrow_field, &lines);
     assert_eq!(pivot, egui::Align2::LEFT_BOTTOM);
-    assert!(at.y < sel.top());
-    // no fixed toolbar (answer fields): above unless that leaves the window
+    // under the last line there is free space below: the bar goes there, over no text
+    let last = Rect::from_min_max(Pos2::new(382.0, 380.0), Pos2::new(430.0, 398.0));
+    let tall_field = Rect::from_min_max(Pos2::new(380.0, 170.0), Pos2::new(620.0, 520.0));
+    let (at, pivot) = float_place(last, size, None, narrow, tall_field, &lines);
+    assert_eq!(pivot, egui::Align2::LEFT_TOP);
+    assert!(rect_of(at, pivot).top() >= 398.0);
+    // but below the field's own bottom edge is another control's place: above then (over text)
+    let short_field = Rect::from_min_max(Pos2::new(380.0, 170.0), Pos2::new(620.0, 380.0));
+    let (_, pivot) = float_place(last, size, None, narrow, short_field, &lines);
+    assert_eq!(pivot, egui::Align2::LEFT_BOTTOM);
+    // no fixed toolbar and no room above the window: below
     let sel = Rect::from_min_max(Pos2::new(10.0, 12.0), Pos2::new(40.0, 30.0));
-    assert_eq!(float_place(sel, size, None, screen).1, egui::Align2::LEFT_TOP);
+    let top_field = Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(620.0, 200.0));
+    assert_eq!(float_place(sel, size, None, narrow, top_field, &[]).1, egui::Align2::LEFT_TOP);
 }
 
 // ----- round 6: headings, dividers, side by side, slash menu -----
@@ -1219,4 +1247,97 @@ fn plain_stems_leave_tab_to_the_form() {
     assert!(is_plain("a\n\nb"));
     assert!(!is_plain("- one\n- two"));
     assert!(!is_plain("1. one\n2. two"));
+}
+
+// ---- phase 4: markup -> model -> markup is the identity over a corpus of every construct ----
+
+/// One stem per construct of `docs/stem-format.md`, plus mixtures and edge shapes.
+pub(super) const CORPUS: &[&str] = &[
+    "",
+    "plain",
+    "two\nlines\n\nand a gap",
+    "**bold** *italic* ~~strike~~ `code` _{2} ^{3} [link](https://example.com) $x^2$ ___",
+    "- one\n- two\n  - nested\n- three",
+    "1. first\n2. second\n3. third",
+    "- \u{2610} todo\n- \u{2611} done",
+    "> a quote\n> continued",
+    "head | tail\n---|---\n1 | 2\n3 | ___",
+    "# Title\n## Sub\n### Third\ntext",
+    "above\n---\nbelow",
+    "::: side\nleft **b**\n- l1\n::: next\nright $a+b$\n:::",
+    "::: center\ncentred\n## head\n:::",
+    "starts with a list\n- x",
+    "- ends with a list",
+    "text then a table\na | b\n--- | ---\nc | d",
+    "Fill: ___ and ___ then $\\frac{1}{2}$ with $x$$y$ adjacent",
+    "lone $ dollar and a * star and ~~ tildes and `tick",
+    "unicode \u{00e9}\u{00e8} \u{03c0} \u{2211} \u{1f600}",
+    "line with trailing space \nnext",
+    "  indented para\n\ttabbed",
+    "$a$ $b$\n$c$",
+    "[x](ftp://nope) [y] (https://spaced.com) **unclosed",
+    "1. a\n- b\n> c\n# d\n---\n| e |",
+];
+
+/// Every string value of a JSON document (stems, answers, explanations...).
+fn json_strings(v: &serde_json::Value, out: &mut Vec<String>) {
+    match v {
+        serde_json::Value::String(s) => out.push(s.clone()),
+        serde_json::Value::Array(a) => a.iter().for_each(|x| json_strings(x, out)),
+        serde_json::Value::Object(o) => o.values().for_each(|x| json_strings(x, out)),
+        _ => {}
+    }
+}
+
+/// The corpus plus every string of the two fixture question banks.
+pub(super) fn full_corpus() -> Vec<String> {
+    let mut v: Vec<String> = CORPUS.iter().map(|s| s.to_string()).collect();
+    for src in [include_str!("../../tests/fixtures/ch4_bank.json"), include_str!("../../tests/fixtures/ch4_old_bank.json")] {
+        let j: serde_json::Value = serde_json::from_str(src).expect("fixture parses");
+        json_strings(&j, &mut v);
+    }
+    v
+}
+
+#[test]
+fn corpus_units_reassemble_and_every_unit_text_applies_back_unchanged() {
+    for s in full_corpus() {
+        for structured in [true, false] {
+            let d = doc(&s, structured);
+            assert_eq!(reassemble(&s, &d), s, "units of {s:?}");
+            // writing each unit's own text back never changes the stem
+            for f in d.flat() {
+                let u = d.unit(f);
+                let t = slice(&s, u.start..u.end);
+                let back = match u.kind {
+                    UKind::Flow => apply_flow(&s, &d, u, &t),
+                    _ => apply_unit(&s, u, &t),
+                };
+                assert_eq!(back, s, "unit {u:?} of {s:?}");
+            }
+        }
+    }
+}
+
+#[test]
+fn corpus_stems_the_visual_editor_opens_read_back_exactly() {
+    let mut opened = 0;
+    for s in full_corpus() {
+        if check(&s).is_ok() {
+            opened += 1;
+        }
+    }
+    // (the editor shows the markup instead of refusing: almost everything opens visually)
+    assert!(opened >= full_corpus().len() - 2, "{opened} of {} open", full_corpus().len());
+}
+
+#[test]
+fn corpus_inline_decode_encode_is_the_identity_per_line() {
+    for s in full_corpus() {
+        for line in s.split('\n') {
+            let (items, _) = decode_line(line);
+            let (back, _) = encode_line(&items);
+            assert_eq!(richtext::inline(&back), richtext::inline(line), "line {line:?}");
+        }
+    }
 }
