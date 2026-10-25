@@ -2853,9 +2853,9 @@ impl Workspace {
         });
     }
 
-    /// Whether the open figure has a `show_answers` switch (so "Student + key" applies).
+    /// Whether the open figure has a `show_answers` switch or a mapped hide control (so "Student + key" applies).
     fn has_answers(&self) -> bool {
-        self.sel.is_some_and(|i| figures::hides_answers(&(reg()[i].params)()))
+        self.sel.is_some_and(|i| figures::has_answer_pair(&reg()[i]))
     }
 
     /// Saves the student copy where the user chooses and the answer key beside it

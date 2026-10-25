@@ -1,6 +1,6 @@
 //! Mechanics figures: free-body diagram, vector diagram, inclined plane, pulley, projectile motion.
 use super::common::*;
-use crate::figures::{FigureDef, ParamDef, Params, Subject};
+use crate::figures::{answers_param, FigureDef, ParamDef, Params, Subject, SHOW_ANSWERS};
 
 fn colr(on: bool, i: usize) -> &'static str { if on { PAL[i % PAL.len()] } else { INK } }
 
@@ -272,6 +272,7 @@ fn vector_params() -> Vec<ParamDef> {
     v.push(ParamDef::bool("bold", "Bold arrows and big labels, with room for them on the grid", false));
     v.push(ParamDef::bool("mirror", "Mirror (flip left to right)", false));
     v.push(ParamDef::bool("color", "Color (for slides)", false));
+    v.push(answers_param().hint("Off keeps the vectors and hides the resultant, its angle mark and the components, for students to find"));
     v
 }
 
@@ -380,6 +381,7 @@ fn vector_render(p: &Params) -> String {
     let (w, h) = (480.0, 360.0);
     let mut g = G::new(w, h, p.b("mirror"));
     g.halo = true;
+    let answers = p.b(SHOW_ANSWERS);
     let col = p.b("color");
     let (vcol, ccol) = if col { ("#7c3aed", "#a78bfa") } else { (INK, "#6b7280") };
     if col { g.tcol = "#7c3aed"; }
@@ -407,7 +409,7 @@ fn vector_render(p: &Params) -> String {
     }
     let lab = |i: usize| lab_mode(p, VK[i][4], VMODE[i][0]);
     // components of the resultant (of vector 1 when there is no resultant)
-    if p.b("components") && n >= 1 {
+    if answers && p.b("components") && n >= 1 {
         let (o, c, r) = (pxy((0.0, 0.0)), pxy((res.0, 0.0)), pxy(res));
         if res.0.abs() > 0.01 { g.dash_arrow(o.0, o.1, c.0, c.1, ccol, 2.2); }
         if res.1.abs() > 0.01 { g.dash_arrow(c.0, c.1, r.0, r.1, ccol, 2.2); }
@@ -432,14 +434,14 @@ fn vector_render(p: &Params) -> String {
         let _ = l;
         g.label_at(vlabs[i].0, vlabs[i].1, fs, &lab(i), ITALIC);
     }
-    if p.b("resultant") && n >= 2 {
+    if answers && p.b("resultant") && n >= 2 {
         let (a, b) = (pxy((0.0, 0.0)), pxy(res));
         styled_arrow(&mut g, p.s("res_style"), a, b, vcol, vsw);
         let (dx, dy) = (b.0 - a.0, b.1 - a.1);
         let _ = (dx, dy);
         g.label_at(rlab.0, rlab.1, fs, &lab_mode(p, "res_lab", "res_lab_mode"), ITALIC);
     }
-    if p.b("mark_angle") && n >= 1 {
+    if answers && p.b("mark_angle") && n >= 1 {
         let ang = res.1.atan2(res.0).to_degrees().rem_euclid(360.0);
         let o = pxy((0.0, 0.0));
         let r = (u * 1.1).clamp(22.0, 40.0);

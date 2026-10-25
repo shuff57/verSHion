@@ -385,7 +385,7 @@ static FIG_45: [RefSection; 4] = [
 
 static FIG_46: [RefSection; 4] = [
     s("Vectors", &["n"], "Drawn to scale, head to tail, in order. One grid square is a magnitude of 1."),
-    s("Resultant", &["resultant", "res_style", "res_lab_mode", "res_lab", "mark_angle", "ang_lab_mode", "ang_lab", "components"], "From the first tail to the last tip: 5 squares at 36.9°."),
+    s("Resultant", &["resultant", "res_style", "res_lab_mode", "res_lab", "mark_angle", "ang_lab_mode", "ang_lab", "components", "show_answers"], "From the first tail to the last tip: 5 squares at 36.9°. Turn off Show answers for a student copy: the resultant, its angle mark and the components are hidden and the vectors stay."),
     s("Grid and axes", &["grid", "axes", "bold"], ""),
     s("Figure", &["mirror", "color"], ""),
 ];

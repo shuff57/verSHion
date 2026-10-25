@@ -331,15 +331,125 @@ pub fn hides_answers(defs: &[ParamDef]) -> bool {
     defs.iter().any(|d| d.key == SHOW_ANSWERS && matches!(d.kind, Kind::Bool))
 }
 
-/// The figure drawn twice: `(student, key)`, answers hidden then shown. None when the figure has
-/// no `show_answers` switch. Every other param is left as the user set it.
-pub fn answer_pair(def: &FigureDef, p: &Params) -> Option<(String, String)> {
-    if !hides_answers(&(def.params)()) {
-        return None;
+/// A value in an [`AnswerRule`].
+#[derive(Clone, Copy, Debug)]
+pub enum AV {
+    B(bool),
+    S(&'static str),
+}
+
+impl AV {
+    fn is(self, v: Option<&Value>) -> bool {
+        match (self, v) {
+            (AV::B(a), Some(Value::B(b))) => a == *b,
+            (AV::S(a), Some(Value::S(b))) => a == b,
+            _ => false,
+        }
     }
+    fn set(self, p: &mut Params, k: &str) {
+        match self {
+            AV::B(b) => p.set_b(k, b),
+            AV::S(s) => p.set_s(k, s),
+        }
+    }
+}
+
+/// One edit of an existing per-figure hide control: set `param` to the value, but only while it
+/// currently holds one of the listed values (an empty list means always).
+pub type AnswerEdit = (&'static str, &'static [AV], AV);
+
+/// How a figure that hides its answers through its own params (not `show_answers`) makes its
+/// student and key copies. Both start from the params as the user set them; the student edits hide
+/// the answer, the key edits show it. Saved param meanings are untouched.
+#[derive(Clone, Copy, Debug)]
+pub struct AnswerRule {
+    pub student: &'static [AnswerEdit],
+    pub key: &'static [AnswerEdit],
+}
+
+const ANSWER: AnswerRule = AnswerRule { student: &[("answer", &[], AV::B(false))], key: &[("answer", &[], AV::B(true))] };
+
+/// The per-figure table behind `answer_pair` for figures without a `show_answers` switch. The
+/// reading, spectrum and chart figures use their `answer` switch (default off: print the answer
+/// under the figure); the rest map the controls that blank the working.
+pub fn answer_rule(id: &str) -> Option<AnswerRule> {
+    Some(match id {
+        "spring-scale" | "micropipette-reading" | "gel-electrophoresis" | "volume-reading" | "volume-by-displacement"
+        | "gas-syringe" | "length-reading" | "mass-reading" | "temperature-reading" | "ph-reading" | "titration-curve"
+        | "lewis-structures" | "line-spectrum" | "photoelectron-spectrum" | "mass-spectrum" | "ruler-reading" => ANSWER,
+        "pedigree" => AnswerRule {
+            student: &[("answer", &[], AV::B(false)), ("genotypes", &[AV::S("Answers")], AV::S("Blanks"))],
+            key: &[("answer", &[], AV::B(true)), ("genotypes", &[AV::S("Blanks")], AV::S("Answers"))],
+        },
+        "orbital-diagram" => AnswerRule {
+            student: &[("answer", &[], AV::B(false)), ("blank", &[], AV::B(true)), ("config_blank", &[], AV::B(true))],
+            key: &[("answer", &[], AV::B(true)), ("blank", &[], AV::B(false)), ("config_blank", &[], AV::B(false))],
+        },
+        "bohr-model" => AnswerRule {
+            student: &[
+                ("empty", &[], AV::B(true)),
+                ("nucleus", &[AV::S("Symbol"), AV::S("Protons and neutrons"), AV::S("Balls")], AV::S("Blank")),
+            ],
+            key: &[("empty", &[], AV::B(false)), ("nucleus", &[AV::S("Blank")], AV::S("Symbol"))],
+        },
+        "punnett-square" => AnswerRule {
+            student: &[
+                ("filled", &[], AV::B(false)),
+                ("geno_ratio_style", &[AV::S("Shown")], AV::S("Blank line")),
+                ("pheno_ratio_style", &[AV::S("Shown")], AV::S("Blank line")),
+            ],
+            key: &[
+                ("filled", &[], AV::B(true)),
+                ("cells", &[AV::S("Blank"), AV::S("Some blank")], AV::S("Filled in")),
+                ("blank_parents", &[], AV::B(false)),
+                ("blank_gametes", &[], AV::B(false)),
+                ("geno_ratio_style", &[AV::S("Blank line")], AV::S("Shown")),
+                ("pheno_ratio_style", &[AV::S("Blank line")], AV::S("Shown")),
+            ],
+        },
+        "population-growth" => AnswerRule { student: &[("blank", &[], AV::B(true))], key: &[("blank", &[], AV::B(false))] },
+        "heating-cooling-curve" => AnswerRule {
+            student: &[
+                ("seg_labels", &[AV::S("States")], AV::S("Blank lines")),
+                ("temp_labels", &[AV::S("Temperatures"), AV::S("m.p. and b.p.")], AV::S("Blank lines")),
+            ],
+            key: &[("seg_labels", &[AV::S("Blank lines")], AV::S("States")), ("temp_labels", &[AV::S("Blank lines")], AV::S("Temperatures"))],
+        },
+        _ => return None,
+    })
+}
+
+fn apply_edits(p: &mut Params, edits: &[AnswerEdit]) {
+    for (k, from, to) in edits {
+        if from.is_empty() || from.iter().any(|f| f.is(p.0.get(*k))) {
+            to.set(p, k);
+        }
+    }
+}
+
+/// Whether "Student + key" applies to the figure: it has the `show_answers` switch or a row in
+/// [`answer_rule`] (and every param that row edits exists).
+pub fn has_answer_pair(def: &FigureDef) -> bool {
+    let defs = (def.params)();
+    hides_answers(&defs) || answer_rule(def.id).is_some_and(|r| r.student.iter().chain(r.key).all(|(k, _, _)| defs.iter().any(|d| d.key == *k)))
+}
+
+/// The figure drawn twice: `(student, key)`, answers hidden then shown. None when the figure has
+/// neither a `show_answers` switch nor a mapped hide control. Every other param is left as the
+/// user set it.
+pub fn answer_pair(def: &FigureDef, p: &Params) -> Option<(String, String)> {
     let (mut student, mut key) = (p.clone(), p.clone());
-    student.set_b(SHOW_ANSWERS, false);
-    key.set_b(SHOW_ANSWERS, true);
+    if hides_answers(&(def.params)()) {
+        student.set_b(SHOW_ANSWERS, false);
+        key.set_b(SHOW_ANSWERS, true);
+    } else {
+        if !has_answer_pair(def) {
+            return None;
+        }
+        let rule = answer_rule(def.id)?;
+        apply_edits(&mut student, rule.student);
+        apply_edits(&mut key, rule.key);
+    }
     Some(((def.render)(&student), (def.render)(&key)))
 }
 
@@ -977,5 +1087,148 @@ mod tests {
         assert_eq!(key_path(Path::new("/x/ledger-student.png")), Path::new("/x/ledger-key.png"));
         assert_eq!(key_path(Path::new("/x/quiz1.svg")), Path::new("/x/quiz1-key.svg"));
         assert_eq!(key_path(Path::new("/x/plain")), Path::new("/x/plain-key"));
+    }
+}
+#[cfg(test)]
+mod answer_rule_tests {
+    use super::*;
+
+    /// The text of every `<text>` element with its inner tags removed.
+    fn plain(svg: &str) -> String {
+        let mut all = Vec::new();
+        for t in svg.split("<text").skip(1) {
+            let Some((_, rest)) = t.split_once('>') else { continue };
+            let body = rest.split("</text>").next().unwrap_or("");
+            let (mut out, mut in_tag) = (String::new(), false);
+            for c in body.chars() {
+                match c {
+                    '<' => in_tag = true,
+                    '>' => in_tag = false,
+                    _ if !in_tag => out.push(c),
+                    _ => {}
+                }
+            }
+            all.push(out);
+        }
+        all.join(" | ")
+    }
+
+    fn fig(id: &str) -> FigureDef {
+        registry().into_iter().find(|d| d.id == id).unwrap_or_else(|| panic!("no figure {id}"))
+    }
+
+    fn params(id: &str, over: &[(&str, &str)]) -> Params {
+        let mut p = Params::defaults(&(fig(id).params)());
+        for (k, v) in over {
+            p.set_s(k, v);
+        }
+        p
+    }
+
+    /// (figure, string params to set, text only the key shows)
+    const CASES: &[(&str, &[(&str, &str)], &str)] = &[
+        ("spring-scale", &[], "Force: 3.47 N"),
+        ("micropipette-reading", &[], "Reading: 12.5"),
+        ("gel-electrophoresis", &[], "Crime scene matches Suspect 2"),
+        ("volume-reading", &[], "Reading: 43.6 mL"),
+        ("volume-by-displacement", &[], "Object: 2.00 mL"),
+        ("gas-syringe", &[], "Volume of gas: 43.6"),
+        ("length-reading", &[], "Length: 4.37 cm"),
+        ("mass-reading", &[], "Mass: 24.73 g"),
+        ("temperature-reading", &[], "Temperature: 23.4"),
+        ("ph-reading", &[], "pH: 4.62"),
+        ("titration-curve", &[], "Equivalence point: 25 mL, pH 8.73"),
+        ("lewis-structures", &[("question", "Skeleton")], "Answer"),
+        ("line-spectrum", &[("strips", "Hydrogen; Helium; Sodium; Unknown = Hydrogen + Sodium")], "Unknown: hydrogen and sodium"),
+        ("photoelectron-spectrum", &[], "1s\u{b2} 2s\u{b2} 2p\u{b2}"),
+        ("mass-spectrum", &[], "relative atomic mass 35.45"),
+        ("ruler-reading", &[], "Length: 4.37 cm"),
+        ("pedigree", &[], "Autosomal recessive inheritance"),
+        ("orbital-diagram", &[], "C: 1s"),
+        ("bohr-model", &[], "C"),
+        ("punnett-square", &[], "Genotype ratio: 1 TT : 2 Tt : 1 tt"),
+        ("population-growth", &[], "Carrying capacity (K)"),
+        ("heating-cooling-curve", &[], "Solid + liquid"),
+    ];
+
+    #[test]
+    fn mapped_figures_give_a_student_and_a_key_that_differ() {
+        for (id, over, snippet) in CASES {
+            let def = fig(id);
+            assert!(has_answer_pair(&def), "{id}: the Student + key button needs to show");
+            let (student, key) = answer_pair(&def, &params(id, over)).unwrap_or_else(|| panic!("{id}: answer_pair is None"));
+            assert_ne!(student, key, "{id}: student and key are the same");
+            let (ps, pk) = (plain(&student), plain(&key));
+            assert!(pk.contains(snippet), "{id}: key lacks {snippet:?}: {pk}");
+            if *id != "bohr-model" {
+                assert!(!ps.contains(snippet), "{id}: student shows {snippet:?}: {ps}");
+            } else {
+                assert!(ps.is_empty(), "bohr-model: the student nucleus is blank: {ps}");
+            }
+        }
+    }
+
+    #[test]
+    fn every_rule_names_a_real_figure_and_real_params() {
+        let ids: std::collections::HashSet<&str> = CASES.iter().map(|c| c.0).collect();
+        for d in registry() {
+            let Some(rule) = answer_rule(d.id) else { continue };
+            assert!(ids.contains(d.id), "{}: mapped but not tested", d.id);
+            assert!(!hides_answers(&(d.params)()), "{}: has show_answers and a rule", d.id);
+            let defs = (d.params)();
+            for (k, _, _) in rule.student.iter().chain(rule.key) {
+                assert!(defs.iter().any(|x| x.key == *k), "{}: no param {k}", d.id);
+            }
+        }
+        for id in &ids {
+            assert!(answer_rule(id).is_some() || hides_answers(&(fig(id).params)()), "{id}");
+        }
+    }
+
+    #[test]
+    fn rules_keep_the_users_other_params_and_only_swap_what_they_hide() {
+        // a pedigree set to Blanks stays blank in the student copy and is answered in the key
+        let def = fig("pedigree");
+        let mut p = params("pedigree", &[("genotypes", "Blanks")]);
+        let (student, key) = answer_pair(&def, &p).unwrap();
+        p.set_s("genotypes", "Answers");
+        let (_, key_answers) = answer_pair(&def, &p).unwrap();
+        assert_eq!(key, key_answers);
+        assert_ne!(student, key);
+        // genotypes switched off stay off in both copies
+        let p = params("pedigree", &[("genotypes", "None")]);
+        let (s, k) = answer_pair(&def, &p).unwrap();
+        let mut off = p.clone();
+        off.set_b("answer", false);
+        assert_eq!(s, (def.render)(&off));
+        off.set_b("answer", true);
+        assert_eq!(k, (def.render)(&off));
+        // the heating curve keeps a label set the user turned off
+        let def = fig("heating-cooling-curve");
+        let p = params("heating-cooling-curve", &[("seg_labels", "None")]);
+        let (s, _) = answer_pair(&def, &p).unwrap();
+        assert!(!plain(&s).contains("Solid"));
+    }
+
+    #[test]
+    fn vector_diagram_hides_the_resultant_only_when_asked() {
+        let def = fig("vector-diagram");
+        let defs = (def.params)();
+        assert!(hides_answers(&defs));
+        // the new switch opens on: today's picture
+        let on = Params::defaults(&defs);
+        assert!(on.b(SHOW_ANSWERS));
+        let mut p = on.clone();
+        p.set_i("n", 2);
+        p.set_b("mark_angle", true);
+        p.set_b("components", true);
+        let (student, key) = answer_pair(&def, &p).unwrap();
+        assert_eq!(key, (def.render)(&p));
+        let (ps, pk) = (plain(&student), plain(&key));
+        for t in ["Rx", "Ry", "R", "\u{3b8}"] {
+            assert!(pk.split(" | ").any(|x| x == t), "key lacks {t}");
+            assert!(!ps.split(" | ").any(|x| x == t), "student shows {t}");
+        }
+        assert!(ps.contains('A') && ps.contains('B'), "the given vectors stay: {ps}");
     }
 }
