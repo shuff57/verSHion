@@ -54,12 +54,116 @@ impl Doc {
         let pts = [(x2, y2), (bx - uy * hl * 0.4, by + ux * hl * 0.4), (bx + uy * hl * 0.4, by - ux * hl * 0.4)];
         self.poly(&pts, color, color, 0.5)
     }
+    /// Arrow like [`Doc::arrow`] with options: a dash array for the shaft (empty = solid) and a
+    /// second head at the start (`both`). With `""` and `false` the output equals `arrow`.
+    /// Draws nothing for a non-finite coordinate.
+    pub fn arrow_with(&mut self, x1: f64, y1: f64, x2: f64, y2: f64, color: &str, sw: f64, dash: &str, both: bool) -> &mut Self {
+        if ![x1, y1, x2, y2, sw].iter().all(|v| v.is_finite()) { return self; }
+        if dash.is_empty() && !both { return self.arrow(x1, y1, x2, y2, color, sw); }
+        let (dx, dy) = (x2 - x1, y2 - y1);
+        let len = (dx * dx + dy * dy).sqrt().max(1e-6);
+        let (ux, uy) = (dx / len, dy / len);
+        let hl = (sw * 4.0).max(9.0);
+        let (bx, by) = (x2 - ux * hl, y2 - uy * hl);
+        let (ax, ay) = if both { (x1 + ux * hl, y1 + uy * hl) } else { (x1, y1) };
+        if dash.is_empty() {
+            self.line(ax, ay, bx, by, color, sw);
+        } else {
+            let _ = write!(self.body, r#"<line x1="{ax:.2}" y1="{ay:.2}" x2="{bx:.2}" y2="{by:.2}" stroke="{color}" stroke-width="{sw}" stroke-dasharray="{dash}" stroke-linecap="round"/>"#);
+        }
+        self.poly(&[(x2, y2), (bx - uy * hl * 0.4, by + ux * hl * 0.4), (bx + uy * hl * 0.4, by - ux * hl * 0.4)], color, color, 0.5);
+        if both {
+            self.poly(&[(x1, y1), (ax + uy * hl * 0.4, ay - ux * hl * 0.4), (ax - uy * hl * 0.4, ay + ux * hl * 0.4)], color, color, 0.5);
+        }
+        self
+    }
+    /// The minor arc of radius `r` about `v` between the unit directions `u` and `w` (screen
+    /// coordinates), stroked with no fill. Nothing for a bad radius, a non-finite or zero
+    /// direction, or equal directions.
+    pub fn arc_dirs(&mut self, v: (f64, f64), u: (f64, f64), w: (f64, f64), r: f64, stroke: &str, sw: f64) -> &mut Self {
+        let ok = [v.0, v.1, u.0, u.1, w.0, w.1, r].iter().all(|x| x.is_finite()) && r > 0.0;
+        let cross = u.0 * w.1 - u.1 * w.0;
+        if !ok || (u.0 == w.0 && u.1 == w.1) || (cross == 0.0 && u.0 * w.0 + u.1 * w.1 > 0.0) { return self; }
+        let p1 = (v.0 + u.0 * r, v.1 + u.1 * r);
+        let p2 = (v.0 + w.0 * r, v.1 + w.1 * r);
+        let sweep = if cross > 0.0 { 1 } else { 0 };
+        self.path(&format!("M{:.2},{:.2} A{r:.2},{r:.2} 0 0 {sweep} {:.2},{:.2}", p1.0, p1.1, p2.0, p2.1), "none", stroke, sw)
+    }
+    /// Stroked arc about (`cx`,`cy`) of radius `r` from `a0` to `a1` degrees (y-up, counter-clockwise
+    /// on screen when `a1 > a0`, clockwise otherwise). Spans of 360 or more are clamped to a
+    /// nearly full turn. Nothing for equal angles, a non-positive radius or non-finite input.
+    pub fn arc(&mut self, cx: f64, cy: f64, r: f64, a0: f64, a1: f64, stroke: &str, sw: f64) -> &mut Self {
+        match arc_geom(cx, cy, r, a0, a1) {
+            Some((p0, p1, large, sweep)) => self.path(&format!("M{:.2},{:.2} A{r:.2},{r:.2} 0 {large} {sweep} {:.2},{:.2}", p0.0, p0.1, p1.0, p1.1), "none", stroke, sw),
+            None => self,
+        }
+    }
+    /// Filled wedge (pie slice) about (`cx`,`cy`): centre, out to `a0`, round to `a1`, back.
+    /// Angles as in [`Doc::arc`]. Nothing for degenerate input.
+    pub fn sector(&mut self, cx: f64, cy: f64, r: f64, a0: f64, a1: f64, fill: &str, stroke: &str, sw: f64) -> &mut Self {
+        match arc_geom(cx, cy, r, a0, a1) {
+            Some((p0, p1, large, sweep)) => self.path(&format!("M{cx:.2},{cy:.2} L{:.2},{:.2} A{r:.2},{r:.2} 0 {large} {sweep} {:.2},{:.2}Z", p0.0, p0.1, p1.0, p1.1), fill, stroke, sw),
+            None => self,
+        }
+    }
+    /// Angle mark at vertex `v` between rays at `a0` and `a1` degrees (y-up): an arc of radius
+    /// `r`, `ticks` extra concentric arcs (0..=3, 4 px apart) and an optional label on the
+    /// bisector beyond the arcs. Nothing for degenerate input.
+    pub fn angle_mark(&mut self, v: (f64, f64), a0: f64, a1: f64, r: f64, label: Option<&str>, ticks: u8, stroke: &str, sw: f64) -> &mut Self {
+        if arc_geom(v.0, v.1, r, a0, a1).is_none() { return self; }
+        let n = ticks.min(3) as usize;
+        for k in 0..=n { self.arc(v.0, v.1, r + 4.0 * k as f64, a0, a1, stroke, sw); }
+        if let Some(t) = label.filter(|t| !t.is_empty()) {
+            let mid = ((a0 + a1) / 2.0).to_radians();
+            let lr = r + 4.0 * n as f64 + 10.0;
+            self.text(v.0 + lr * mid.cos(), v.1 - lr * mid.sin() + 4.0, 12.0, "middle", t);
+        }
+        self
+    }
+    /// Square corner mark at `v` with arms of `size` px along the unit directions `u` and `w`.
+    /// Nothing for non-finite input or a non-positive size.
+    pub fn right_angle(&mut self, v: (f64, f64), u: (f64, f64), w: (f64, f64), size: f64, stroke: &str, sw: f64) -> &mut Self {
+        if ![v.0, v.1, u.0, u.1, w.0, w.1, size].iter().all(|x| x.is_finite()) || size <= 0.0 { return self; }
+        let p1 = (v.0 + u.0 * size, v.1 + u.1 * size);
+        let p3 = (v.0 + w.0 * size, v.1 + w.1 * size);
+        let p2 = (p1.0 + w.0 * size, p1.1 + w.1 * size);
+        self.polyline(&[p1, p2, p3], stroke, sw)
+    }
+    /// Dimension line from (x1,y1) to (x2,y2): the line, a perpendicular tick (4 px each side)
+    /// at both ends and `label` centred above its middle (size `size`). Nothing for non-finite
+    /// input or equal end points.
+    pub fn dim_line(&mut self, x1: f64, y1: f64, x2: f64, y2: f64, label: &str, size: f64, stroke: &str, sw: f64) -> &mut Self {
+        if ![x1, y1, x2, y2, size, sw].iter().all(|v| v.is_finite()) { return self; }
+        let (dx, dy) = (x2 - x1, y2 - y1);
+        let len = (dx * dx + dy * dy).sqrt();
+        if len < 1e-9 { return self; }
+        let (nx, ny) = (-dy / len, dx / len);
+        self.line(x1, y1, x2, y2, stroke, sw);
+        for (x, y) in [(x1, y1), (x2, y2)] { self.line(x - nx * 4.0, y - ny * 4.0, x + nx * 4.0, y + ny * 4.0, stroke, sw); }
+        if !label.is_empty() {
+            let s = if ny <= 0.0 { 1.0 } else { -1.0 };
+            let off = size * 0.6 + 4.0;
+            self.text((x1 + x2) / 2.0 + nx * s * off, (y1 + y2) / 2.0 + ny * s * off + size * 0.35, size, "middle", label);
+        }
+        self
+    }
     pub fn finish(&self) -> String {
         format!(
             r##"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}"><rect width="100%" height="100%" fill="#fff"/>{b}</svg>"##,
             w = self.w, h = self.h, b = self.body
         )
     }
+}
+
+/// Endpoints and flags of the arc about (`cx`,`cy`) from `a0` to `a1` degrees (y-up), as
+/// (start, end, large-arc flag, sweep flag); None for non-finite input, `r <= 0` or equal angles.
+fn arc_geom(cx: f64, cy: f64, r: f64, a0: f64, a1: f64) -> Option<((f64, f64), (f64, f64), u8, u8)> {
+    if ![cx, cy, r, a0, a1].iter().all(|v| v.is_finite()) || r <= 0.0 { return None; }
+    let mut span = a1 - a0;
+    if span == 0.0 { return None; }
+    if span.abs() >= 360.0 { span = 359.99 * span.signum(); }
+    let pt = |a: f64| (cx + r * a.to_radians().cos(), cy - r * a.to_radians().sin());
+    Some((pt(a0), pt(a0 + span), (span.abs() > 180.0) as u8, (span < 0.0) as u8))
 }
 
 /// The reference's L/M/S label-size toggle: text size factor for a `label_size` choice
@@ -219,5 +323,105 @@ mod tests {
             if px[0] < 128 { dark += 1; }
         }
         assert!(dark > 50, "hatching actually drew ({dark} dark pixels)");
+    }
+}
+
+#[cfg(test)]
+mod geometry_tests {
+    use super::*;
+    fn body(d: &Doc) -> String { d.finish() }
+
+    #[test]
+    fn arc_endpoints_and_flags() {
+        let mut d = Doc::new(100.0, 100.0);
+        d.arc(50.0, 50.0, 10.0, 0.0, 90.0, "#000", 1.0);
+        assert!(body(&d).contains(r#"d="M60.00,50.00 A10.00,10.00 0 0 0 50.00,40.00""#), "{}", body(&d));
+        let mut d = Doc::new(100.0, 100.0);
+        d.arc(50.0, 50.0, 10.0, 0.0, 270.0, "#000", 1.0);
+        assert!(body(&d).contains(" 0 1 0 50.00,60.00"));
+        let mut d = Doc::new(100.0, 100.0);
+        d.arc(50.0, 50.0, 10.0, 90.0, 0.0, "#000", 1.0);
+        assert!(body(&d).contains("M50.00,40.00 A10.00,10.00 0 0 1 60.00,50.00"));
+    }
+
+    #[test]
+    fn arc_dirs_matches_the_cross_sign_rule() {
+        let mut d = Doc::new(10.0, 10.0);
+        d.arc_dirs((0.0, 0.0), (1.0, 0.0), (0.0, 1.0), 5.0, "#000", 1.0);
+        assert!(body(&d).contains("M5.00,0.00 A5.00,5.00 0 0 1 0.00,5.00"));
+    }
+
+    #[test]
+    fn sector_is_closed_with_centre() {
+        let mut d = Doc::new(100.0, 100.0);
+        d.sector(50.0, 50.0, 10.0, 0.0, 90.0, "#ddd", "#000", 1.0);
+        assert!(body(&d).contains("M50.00,50.00 L60.00,50.00 A10.00,10.00 0 0 0 50.00,40.00Z"));
+    }
+
+    #[test]
+    fn right_angle_corner() {
+        let mut d = Doc::new(100.0, 100.0);
+        d.right_angle((10.0, 10.0), (1.0, 0.0), (0.0, 1.0), 5.0, "#000", 1.0);
+        assert!(body(&d).contains(r#"points="15.00,10.00 15.00,15.00 10.00,15.00""#));
+    }
+
+    #[test]
+    fn angle_mark_ticks_and_label() {
+        let mut d = Doc::new(100.0, 100.0);
+        d.angle_mark((50.0, 50.0), 0.0, 60.0, 20.0, Some("60"), 2, "#000", 1.0);
+        let s = body(&d);
+        assert_eq!(s.matches("<path").count(), 3);
+        assert!(s.contains(">60</text>"));
+    }
+
+    #[test]
+    fn arrow_variants() {
+        let mut a = Doc::new(10.0, 10.0);
+        a.arrow(0.0, 0.0, 50.0, 0.0, "#000", 2.0);
+        let mut b = Doc::new(10.0, 10.0);
+        b.arrow_with(0.0, 0.0, 50.0, 0.0, "#000", 2.0, "", false);
+        assert_eq!(a.finish(), b.finish());
+        let mut c = Doc::new(10.0, 10.0);
+        c.arrow_with(0.0, 0.0, 50.0, 0.0, "#000", 2.0, "4 3", true);
+        let s = c.finish();
+        assert!(s.contains("stroke-dasharray=\"4 3\"") && s.matches("<polygon").count() == 2);
+    }
+
+    #[test]
+    fn dim_line_has_ticks_and_label() {
+        let mut d = Doc::new(100.0, 100.0);
+        d.dim_line(10.0, 50.0, 90.0, 50.0, "8 cm", 12.0, "#000", 1.0);
+        let s = body(&d);
+        assert_eq!(s.matches("<line").count(), 3);
+        assert!(s.contains(">8 cm</text>") && s.contains(r#"x="50.00""#));
+    }
+
+    #[test]
+    fn degenerate_input_draws_nothing() {
+        let empty = Doc::new(10.0, 10.0).finish();
+        let mut d = Doc::new(10.0, 10.0);
+        for r in [0.0, -3.0, f64::NAN, f64::INFINITY] {
+            d.arc(5.0, 5.0, r, 0.0, 90.0, "#000", 1.0);
+            d.sector(5.0, 5.0, r, 0.0, 90.0, "#ccc", "#000", 1.0);
+            d.angle_mark((5.0, 5.0), 0.0, 90.0, r, Some("x"), 1, "#000", 1.0);
+            d.arc_dirs((5.0, 5.0), (1.0, 0.0), (0.0, 1.0), r, "#000", 1.0);
+        }
+        d.arc(5.0, 5.0, 3.0, 30.0, 30.0, "#000", 1.0);
+        d.arc(5.0, 5.0, 3.0, f64::NAN, 30.0, "#000", 1.0);
+        d.sector(5.0, 5.0, 3.0, 45.0, 45.0, "#ccc", "#000", 1.0);
+        d.arc_dirs((5.0, 5.0), (1.0, 0.0), (1.0, 0.0), 3.0, "#000", 1.0);
+        d.right_angle((1.0, 1.0), (f64::NAN, 0.0), (0.0, 1.0), 4.0, "#000", 1.0);
+        d.right_angle((1.0, 1.0), (1.0, 0.0), (0.0, 1.0), -4.0, "#000", 1.0);
+        d.dim_line(1.0, 1.0, 1.0, 1.0, "a", 12.0, "#000", 1.0);
+        d.dim_line(f64::NAN, 1.0, 4.0, 1.0, "a", 12.0, "#000", 1.0);
+        d.arrow_with(f64::NAN, 0.0, 1.0, 1.0, "#000", 1.0, "3 3", true);
+        assert_eq!(d.finish(), empty);
+    }
+
+    #[test]
+    fn full_turn_is_clamped_not_degenerate() {
+        let mut d = Doc::new(10.0, 10.0);
+        d.arc(5.0, 5.0, 3.0, 0.0, 720.0, "#000", 1.0);
+        assert!(d.finish().contains(" 0 1 0 "));
     }
 }

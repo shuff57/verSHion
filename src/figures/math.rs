@@ -112,20 +112,12 @@ impl Map {
 
 /// Right-angle square at vertex v (screen), arms toward da and db.
 fn square_mark(doc: &mut Doc, v: Pt, da: Pt, db: Pt, size: f64) {
-    let (u, w) = (unit_v(v, da), unit_v(v, db));
-    let p1 = (v.0 + u.0 * size, v.1 + u.1 * size);
-    let p3 = (v.0 + w.0 * size, v.1 + w.1 * size);
-    let p2 = (p1.0 + w.0 * size, p1.1 + w.1 * size);
-    doc.polyline(&[p1, p2, p3], INK, 1.2);
+    doc.right_angle(v, unit_v(v, da), unit_v(v, db), size, INK, 1.2);
 }
 
 /// Arc of radius r at v between unit directions u and w (screen), interior (short) way.
 fn arc(doc: &mut Doc, v: Pt, u: Pt, w: Pt, r: f64) {
-    let p1 = (v.0 + u.0 * r, v.1 + u.1 * r);
-    let p2 = (v.0 + w.0 * r, v.1 + w.1 * r);
-    let cross = u.0 * w.1 - u.1 * w.0;
-    let sweep = if cross > 0.0 { 1 } else { 0 };
-    doc.path(&format!("M{:.2},{:.2} A{r:.2},{r:.2} 0 0 {sweep} {:.2},{:.2}", p1.0, p1.1, p2.0, p2.1), "none", INK, 1.3);
+    doc.arc_dirs(v, u, w, r, INK, 1.3);
 }
 
 fn new_doc(w: f64, h: f64) -> Doc { Doc::new(w, h) }
@@ -3185,10 +3177,7 @@ fn sector(d: &mut Doc, c: Pt, a0: f64, a1: f64, r: f64, text: &str, right: bool,
     let span = a1 - a0;
     if right && (span - 90.0).abs() < 0.3 {
         let (u, w) = (dir(a0), dir(a1));
-        let s = r * 0.55;
-        let p1 = (c.0 + u.0 * s, c.1 + u.1 * s);
-        let p3 = (c.0 + w.0 * s, c.1 + w.1 * s);
-        d.polyline(&[p1, (p1.0 + w.0 * s, p1.1 + w.1 * s), p3], INK, 1.3);
+        d.right_angle(c, u, w, r * 0.55, INK, 1.3);
     } else {
         let n = 24;
         let pts: Vec<Pt> = (0..=n).map(|i| { let a = a0 + span * i as f64 / n as f64; let q = dir(a); (c.0 + q.0 * r, c.1 + q.1 * r) }).collect();
