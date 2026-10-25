@@ -145,15 +145,6 @@ pub fn has_title(p: &crate::figures::Params) -> bool {
     match p.s("title_mode") { "None" => false, "Blank line" => true, _ => !p.s("title").trim().is_empty() }
 }
 
-/// Nice tick step (1, 2, 5 x 10^k) giving roughly `target` ticks over `range`.
-pub fn nice_step(range: f64, target: f64) -> f64 {
-    let raw = (range / target).max(1e-9);
-    let mag = 10f64.powf(raw.log10().floor());
-    let f = raw / mag;
-    let m = if f <= 1.0 { 1.0 } else if f <= 2.0 { 2.0 } else if f <= 5.0 { 5.0 } else { 10.0 };
-    m * mag
-}
-
 pub fn fmt_num(v: f64) -> String {
     if (v - v.round()).abs() < 1e-9 { format!("{}", v.round() as i64) } else {
         let s = format!("{:.2}", v);

@@ -1,6 +1,7 @@
 //! Population growth and predator-prey generators.
 use super::plot::*;
 use super::*;
+use crate::figures::axes::{nice_step_with, Rule};
 
 const NPTS: usize = 401;
 
@@ -310,7 +311,7 @@ pub fn growth_render(p: &Params) -> String {
         if matches!(pk, Panel::TimeN) && has_k { ymax = ymax.max(k); }
         if matches!(pk, Panel::NRate | Panel::NPer) && has_k { xmax_n = xmax_n.max(k); }
         let ycap = |ymax: f64, ymin: f64| -> (f64, f64, f64) {
-            let step = nice_step((ymax - ymin) * 1.05, 10.0);
+            let step = nice_step_with((ymax - ymin) * 1.05, 10.0, Rule::Nearest);
             let top = ((ymax * 1.05) / step).ceil() * step;
             let bot = if ymin < -1e-9 { (ymin * 1.05 / step).floor() * step } else { 0.0 };
             (bot, top.max(step), step)
@@ -319,26 +320,26 @@ pub fn growth_render(p: &Params) -> String {
         let (mut xlo, x1, xs);
         if fit {
             let xrange = if is_time { tspan } else { xmax_n.max(1e-6) };
-            xs = nice_step(xrange, 20.0);
+            xs = nice_step_with(xrange, 20.0, Rule::Nearest);
             x1 = (xrange / xs - 1e-9).ceil() * xs;
             xlo = 0.0;
         } else {
             let xr = if is_time { p.f("x_max").max(1e-6) } else { p.f("x_max").max(1e-6) };
             xlo = p.f("x_min");
             if xlo >= xr { xlo = 0.0; }
-            xs = if p.f("x_step") > 0.0 && (xr - xlo) / p.f("x_step") <= 200.0 { p.f("x_step") } else { nice_step(xr - xlo, 20.0) };
+            xs = if p.f("x_step") > 0.0 && (xr - xlo) / p.f("x_step") <= 200.0 { p.f("x_step") } else { nice_step_with(xr - xlo, 20.0, Rule::Nearest) };
             x1 = xlo + ((xr - xlo) / xs - 1e-9).ceil() * xs;
         }
         if !fit && pi == 0 {
             let top_v = p.f("y_max").max(1e-6);
             let lo = if p.f("y_min") < top_v { p.f("y_min") } else { 0.0 };
-            ys = if p.f("y_step") > 0.0 && (top_v - lo) / p.f("y_step") <= 200.0 { p.f("y_step") } else { nice_step(top_v - lo, 10.0) };
+            ys = if p.f("y_step") > 0.0 && (top_v - lo) / p.f("y_step") <= 200.0 { p.f("y_step") } else { nice_step_with(top_v - lo, 10.0, Rule::Nearest) };
             yb = lo;
             yt = lo + ((top_v - lo) / ys - 1e-9).ceil() * ys;
         }
         if !fit && pi == 1 && p.f("y2_max") > 0.0 {
             let top_v = p.f("y2_max");
-            ys = if p.f("y2_step") > 0.0 && (top_v - yb) / p.f("y2_step") <= 200.0 { p.f("y2_step") } else { nice_step(top_v - yb, 10.0) };
+            ys = if p.f("y2_step") > 0.0 && (top_v - yb) / p.f("y2_step") <= 200.0 { p.f("y2_step") } else { nice_step_with(top_v - yb, 10.0, Rule::Nearest) };
             yt = yb + ((top_v - yb) / ys - 1e-9).ceil() * ys;
         }
         if yt <= yb { yt = yb + ys; }
@@ -1087,18 +1088,18 @@ pub fn pp_render(p: &Params) -> String {
     // y range helper: (from, to, step)
     let yrange = |vmax: f64| -> (f64, f64, f64) {
         if p.b("y_fit") || !p.0.contains_key("y_fit") {
-            let ys = nice_step(vmax * 1.05, 10.0);
+            let ys = nice_step_with(vmax * 1.05, 10.0, Rule::Nearest);
             (0.0, ((vmax * 1.05) / ys).ceil().max(1.0) * ys, ys)
         } else {
             let (lo, hi) = (p.f("y_min"), p.f("y_max").max(p.f("y_min") + 1e-6));
-            let st = if p.f("y_step") > 0.0 && (hi - lo) / p.f("y_step") <= 200.0 { p.f("y_step") } else { nice_step(hi - lo, 10.0) };
+            let st = if p.f("y_step") > 0.0 && (hi - lo) / p.f("y_step") <= 200.0 { p.f("y_step") } else { nice_step_with(hi - lo, 10.0, Rule::Nearest) };
             (lo, lo + ((hi - lo) / st - 1e-9).ceil() * st, st)
         }
     };
 
     // the reference's graph paper: 32 px squares, a 640 px plot, margins sized to the numbers
     let vmax0 = if phase { maxpred } else { match (show_prey, show_pred) { (true, true) if !right => maxprey.max(maxpred), (true, _) => maxprey, _ => maxpred } };
-    let (yb0, yt0, ys0) = if phase { let ys = nice_step(maxpred * 1.05, 10.0); (0.0, ((maxpred * 1.05) / ys).ceil() * ys, ys) } else { yrange(vmax0) };
+    let (yb0, yt0, ys0) = if phase { let ys = nice_step_with(maxpred * 1.05, 10.0, Rule::Nearest); (0.0, ((maxpred * 1.05) / ys).ceil() * ys, ys) } else { yrange(vmax0) };
     let ah = (((yt0 - yb0) / ys0).round().max(1.0) * 32.0).clamp(160.0, 480.0);
     let ychars = y_label_chars(yb0, yt0, ys0, numbers_every(p.s("y_numbers")));
     let (ax_x, aw) = (ref_left(ychars), 640.0f64);
@@ -1115,11 +1116,11 @@ pub fn pp_render(p: &Params) -> String {
         let vmax = match (show_prey, show_pred) { (true, true) if !right => maxprey.max(maxpred), (true, _) => maxprey, _ => maxpred };
         let (yb, yt, ys) = yrange(vmax);
         let (xlo, x1, xs) = if p.b("x_fit") || !p.0.contains_key("x_fit") {
-            let xs = nice_step(tshow, 20.0);
+            let xs = nice_step_with(tshow, 20.0, Rule::Nearest);
             (0.0, (tshow / xs - 1e-9).ceil() * xs, xs)
         } else {
             let (lo, hi) = (p.f("x_min"), p.f("x_max").max(p.f("x_min") + 1e-6));
-            let st = if p.f("x_step") > 0.0 && (hi - lo) / p.f("x_step") <= 200.0 { p.f("x_step") } else { nice_step(hi - lo, 20.0) };
+            let st = if p.f("x_step") > 0.0 && (hi - lo) / p.f("x_step") <= 200.0 { p.f("x_step") } else { nice_step_with(hi - lo, 20.0, Rule::Nearest) };
             (lo, lo + ((hi - lo) / st - 1e-9).ceil() * st, st)
         };
         let a = Axes { x: ax_x, y: top, w: aw, h: ah, x0: xlo, x1, y0: yb, y1: yt, xs, ys };
@@ -1137,7 +1138,7 @@ pub fn pp_render(p: &Params) -> String {
         let ap = if right {
             let (_, pt, _) = yrange(maxpred);
             let ny = ((a.y1 - a.y0) / a.ys).round().max(1.0);
-            let pstep = nice_step(pt, ny);
+            let pstep = nice_step_with(pt, ny, Rule::Nearest);
             let ap = Axes { x: ax_x, y: top, w: aw, h: ah, x0: xlo, x1, y0: 0.0, y1: pstep * ny, xs, ys: pstep };
             let ey = o.ynum.unwrap_or(((ny) / 12.0).ceil().max(1.0) as i64);
             let mut maxl = 1usize;
@@ -1266,8 +1267,8 @@ pub fn pp_render(p: &Params) -> String {
     } else {
         let xmax = maxprey;
         let ymax = maxpred;
-        let xs = nice_step(xmax * 1.05, 10.0);
-        let ys = nice_step(ymax * 1.05, 10.0);
+        let xs = nice_step_with(xmax * 1.05, 10.0, Rule::Nearest);
+        let ys = nice_step_with(ymax * 1.05, 10.0, Rule::Nearest);
         let a = Axes { x: ax_x, y: top, w: aw, h: ah, x0: 0.0, x1: ((xmax * 1.05) / xs).ceil() * xs, y0: 0.0, y1: ((ymax * 1.05) / ys).ceil() * ys, xs, ys };
         let xt = if p.s("x_title").trim().is_empty() { format!("{prey} (number)") } else { p.s("x_title").trim().to_string() };
         let yt = if p.s("y_title").trim().is_empty() { format!("{pred} (number)") } else { ytitle.clone() };

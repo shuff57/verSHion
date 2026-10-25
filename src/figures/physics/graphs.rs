@@ -1,4 +1,5 @@
 //! Graph-style figures: motion graphs and waves.
+use crate::figures::axes::{nice_step_with, Rule};
 use super::common::*;
 use crate::figures::{FigureDef, ParamDef, Params, Subject};
 use std::f64::consts::PI;
@@ -122,11 +123,11 @@ pub(super) fn motion_axes(p: &Params, segs: &[Seg], which: u8, (ox, oy, w, h): (
         for t in [s.t0, (s.t0 + s.t1) / 2.0, s.t1] { let y = ser(s, t); lo = lo.min(y); hi = hi.max(y); }
     }
     if hi - lo < 1e-9 { hi = 1.0; }
-    let mut ystep = nice_step(hi - lo, 7.0);
+    let mut ystep = nice_step_with(hi - lo, 7.0, Rule::Floor);
     let (mut ymin, mut ymax) = ((lo / ystep).floor() * ystep, (hi / ystep).ceil() * ystep);
     if which == 2 { ymin -= ystep; ymax += ystep; }
     // whole seconds for everyday durations, like the reference
-    let mut xstep = if (4.0..=20.0).contains(&tmax) { 1.0 } else { nice_step(tmax, 12.0) };
+    let mut xstep = if (4.0..=20.0).contains(&tmax) { 1.0 } else { nice_step_with(tmax, 12.0, Rule::Floor) };
     let mut xmin = 0.0;
     let mut xmax = (tmax / xstep).ceil() * xstep;
     if p.b("ranges") {
@@ -327,9 +328,9 @@ pub(super) fn wave_layout(p: &Params) -> WLay {
     let (a, wl) = (p.f("amp").max(0.001), p.f("wl").max(0.001));
     let cyc = p.f("cycles").clamp(0.5, 8.0);
     let span = wl * cyc;
-    let fx = (0.0, span, nice_step(span, 20.0));
+    let fx = (0.0, span, nice_step_with(span, 20.0, Rule::Floor));
     let (xmin, xmax, xstep) = if p.b("xaxis_fit") { fx } else { axis_range(p.f("xmin"), p.f("xmax"), p.f("xstep"), fx) };
-    let ys = nice_step(2.0 * a, 8.0);
+    let ys = nice_step_with(2.0 * a, 8.0, Rule::Floor);
     let ym = ((a / ys) + 1.5).ceil() * ys;
     let fy = (-ym, ym, ys);
     let (ymin, ymax, ystep) = if p.b("yaxis_fit") { fy } else { axis_range(p.f("ymin"), p.f("ymax"), p.f("ystep"), fy) };

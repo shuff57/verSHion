@@ -211,15 +211,6 @@ pub(crate) fn dashed(d: &mut Doc, pts: &[(f64, f64)], stroke: &str, sw: f64, das
     ));
 }
 
-/// 1-2-5 step giving roughly `n` divisions of `range`.
-pub(crate) fn nice_step(range: f64, n: f64) -> f64 {
-    let raw = (range / n).max(1e-12);
-    let p = 10f64.powf(raw.log10().floor());
-    let f = raw / p;
-    let m = if f <= 1.5 { 1.0 } else if f <= 3.0 { 2.0 } else if f <= 7.0 { 5.0 } else { 10.0 };
-    m * p
-}
-
 pub(crate) fn fnum(v: f64) -> String {
     if (v - v.round()).abs() < 1e-9 {
         return format!("{}", v.round() as i64);

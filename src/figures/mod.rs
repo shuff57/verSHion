@@ -20,6 +20,7 @@ pub mod biology;
 pub mod cards;
 #[cfg(test)]
 mod census;
+pub mod axes;
 pub mod chart;
 pub mod chemistry;
 pub mod composite;

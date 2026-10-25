@@ -2,6 +2,7 @@
 //! Entry point: `pub fn defs() -> Vec<FigureDef>`.
 use super::svg::Doc;
 use super::*;
+use crate::figures::axes::{nice_step_with, Rule};
 use std::f64::consts::PI;
 
 const INK: &str = "#111827";
@@ -4388,12 +4389,6 @@ pub(super) fn five_number(data: &[f64]) -> [f64; 5] {
     let (lo, hi) = (&v[..n / 2], &v[(n + 1) / 2..]);
     [v[0], median(lo), median(&v), median(hi), v[n - 1]]
 }
-pub(super) fn nice_step(range: f64) -> f64 {
-    let raw = range / 8.0;
-    let mag = 10f64.powf(raw.log10().floor());
-    for f in [1.0, 2.0, 5.0, 10.0] { if raw <= f * mag { return f * mag; } }
-    10.0 * mag
-}
 
 /// (data key, summary key, name key) of the up-to-four data sets.
 pub(super) const BOX_SETS: [(&str, &str, &str); 4] = [("data", "summary", "name1"), ("data2", "summary2", "name2"), ("data3", "summary3", "name3"), ("data4", "summary4", "name4")];
@@ -4491,7 +4486,7 @@ pub(super) fn box_geom(p: &Params) -> Option<BoxG> {
     let (amin, amax, step) = if blank && p.b("auto") {
         (0.0, 10.0, 1.0)
     } else if p.b("auto") {
-        let st = nice_step((hi - lo).max(1e-6));
+        let st = nice_step_with((hi - lo).max(1e-6), 8.0, Rule::Plain);
         ((lo / st).floor() * st - if lo % st == 0.0 { st } else { 0.0 }, (hi / st).ceil() * st + if hi % st == 0.0 { st } else { 0.0 }, st)
     } else { (p.f("axis_min"), p.f("axis_max").max(p.f("axis_min") + 1e-3), p.f("axis_step").max(1e-3)) };
     let named = sets.iter().any(|(i, _, _)| !p.s(BOX_SETS[*i].2).is_empty());

@@ -33,20 +33,7 @@ impl Frame {
 /// A tick position and its label.
 pub type Tick = (f64, String);
 
-/// A step of 1, 2 or 5 times a power of ten that puts about `target` intervals across `range`.
-pub fn nice_step(range: f64, target: f64) -> f64 {
-    let raw = (range / target.max(1.0)).abs();
-    if !(raw.is_finite() && raw > 0.0) {
-        return 1.0;
-    }
-    let mag = 10f64.powf(raw.log10().floor());
-    for f in [1.0, 2.0, 5.0, 10.0] {
-        if raw <= f * mag + 1e-12 {
-            return f * mag;
-        }
-    }
-    10.0 * mag
-}
+pub use super::axes::nice_step;
 
 /// A number as short axis text (no trailing zeros, a true minus sign).
 pub fn fmt(v: f64) -> String {
