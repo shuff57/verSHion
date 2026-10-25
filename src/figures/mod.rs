@@ -237,6 +237,12 @@ impl Params {
 /// Optional interaction layer for a figure: draggable handles over the rendered preview.
 /// Dispatch lives in `interact::handles_for` (keeps `FigureDef` literals untouched).
 impl FigureDef {
+    /// The figure's SVG as every consumer (preview, thumbnails, PNG/SVG export, the agent, the
+    /// census) should get it: `render` plus the accessible `role="img"`, `<title>` (the figure's
+    /// title) and `<desc>` (its blurb, one line). Nothing else differs from `render`.
+    pub fn svg(&self, p: &Params) -> String {
+        svg::annotate(&(self.render)(p), self.title, self.blurb)
+    }
     pub fn handles(&self, p: &Params, size: (f64, f64)) -> Vec<interact::Handle> {
         interact::handles_for(self.id, p, size)
     }

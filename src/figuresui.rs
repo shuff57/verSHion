@@ -260,7 +260,7 @@ fn thumb_for(ctx: &egui::Context, def: &FigureDef, p: &Params, scale: f32, budge
     }
     *budget -= 1;
     THUMB_RENDERS.with(|c| c.set(c.get() + 1));
-    let tex = figures::to_png(&(def.render)(p), scale)
+    let tex = figures::to_png(&def.svg(p), scale)
         .ok()
         .and_then(|png| texture(ctx, format!("testparrot:thumb:{key}"), &png));
     THUMBS.with(|t| t.borrow_mut().insert(key, tex.clone()));
@@ -282,7 +282,7 @@ pub(crate) fn thumb_fit(ctx: &egui::Context, def: &FigureDef, p: &Params, bw: f3
     *budget -= 1;
     THUMB_RENDERS.with(|c| c.set(c.get() + 1));
     // crisp hairlines turn into solid 1 px bars at thumbnail scale; the browser smooths them to fine grey
-    let svg = (def.render)(p).replace(r#"shape-rendering="crispEdges""#, "");
+    let svg = def.svg(p).replace(r#"shape-rendering="crispEdges""#, "");
     let tex = (|| {
         let mut opt = resvg::usvg::Options::default();
         opt.fontdb = figures::fontdb();
@@ -420,7 +420,7 @@ fn help_fab(ctx: &egui::Context) {
 /// The gallery's PNG button: the example as a 2x PNG on white, through a save dialog.
 fn export_example_png(def: &FigureDef, e: &figures::Example) -> Act {
     let p = example_params(def, e);
-    let png = match figures::to_png(&(def.render)(&p), 2.0).and_then(|b| flatten_white(&b)) {
+    let png = match figures::to_png(&def.svg(&p), 2.0).and_then(|b| flatten_white(&b)) {
         Ok(b) => b,
         Err(err) => return Act::Toast(format!("Couldn't render the example: {err}"), true),
     };
@@ -787,7 +787,7 @@ impl Workspace {
             return Ok(Output { png: imp.png.clone(), svg: imp.svg.clone(), spec: None });
         }
         let def = &reg()[self.sel.ok_or("no figure selected")?];
-        let svg = (def.render)(&self.params);
+        let svg = def.svg(&self.params);
         let png = flatten_white(&figures::to_png(&svg, 2.0)?)?;
         Ok(Output { png, svg: Some(svg), spec: Some(spec_for(def.id, &self.params)) })
     }
@@ -1150,7 +1150,7 @@ impl Workspace {
                     }
                 };
                 if first || rescale || self.live || t0.elapsed() >= DEBOUNCE {
-                    let svg = (def.render)(&self.params);
+                    let svg = def.svg(&self.params);
                     self.canvas = figures::svg_size(&svg);
                     let scale = fit(want, self.canvas);
                     match figures::to_rgba_at(&svg, scale, self.want_phase) {

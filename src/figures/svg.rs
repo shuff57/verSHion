@@ -1,14 +1,16 @@
 //! Tiny SVG builder shared by all generators.
 use std::fmt::Write;
 
-pub struct Doc { w: f64, h: f64, body: String }
+pub struct Doc { w: f64, h: f64, body: String, label: Option<(String, String)> }
 
 pub fn esc(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
 }
 
 impl Doc {
-    pub fn new(w: f64, h: f64) -> Self { Doc { w, h, body: String::new() } }
+    pub fn new(w: f64, h: f64) -> Self { Doc { w, h, body: String::new(), label: None } }
+    /// Accessible name and description for the finished SVG (`role="img"`, `<title>`, `<desc>`).
+    pub fn describe(&mut self, title: &str, desc: &str) -> &mut Self { self.label = Some((title.to_string(), desc.to_string())); self }
     pub fn raw(&mut self, s: &str) -> &mut Self { self.body.push_str(s); self }
     /// Shared `<defs>` (the print patterns of [`Fills`]); drawn before everything that uses them.
     pub fn defs(&mut self, s: &str) -> &mut Self { if !s.is_empty() { let _ = write!(self.body, "<defs>{s}</defs>"); } self }
@@ -148,11 +150,36 @@ impl Doc {
         self
     }
     pub fn finish(&self) -> String {
-        format!(
+        let svg = format!(
             r##"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}"><rect width="100%" height="100%" fill="#fff"/>{b}</svg>"##,
             w = self.w, h = self.h, b = self.body
-        )
+        );
+        match &self.label {
+            Some((t, d)) => annotate(&svg, t, d),
+            None => svg,
+        }
     }
+}
+
+/// Makes a finished SVG accessible: `role="img"` on the root tag and `<title>` / `<desc>` as its
+/// first children (XML-escaped; an empty text is left out). Anything else is untouched. An SVG
+/// that already carries a role or starts with its own `<title>` keeps it; text that does not
+/// start with an `<svg` tag is returned as is.
+pub fn annotate(svg: &str, title: &str, desc: &str) -> String {
+    let Some(open) = svg.find("<svg") else { return svg.to_string() };
+    let Some(close) = svg[open..].find('>').map(|i| open + i) else { return svg.to_string() };
+    if svg[open..close].ends_with('/') { return svg.to_string(); }
+    let mut out = String::with_capacity(svg.len() + 120);
+    out.push_str(&svg[..close]);
+    if !svg[open..close].contains(" role=") { out.push_str(r#" role="img""#); }
+    out.push('>');
+    let rest = &svg[close + 1..];
+    if !rest.starts_with("<title") {
+        if !title.is_empty() { out.push_str(&format!("<title>{}</title>", esc(title))); }
+        if !desc.is_empty() { out.push_str(&format!("<desc>{}</desc>", esc(desc))); }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Endpoints and flags of the arc about (`cx`,`cy`) from `a0` to `a1` degrees (y-up), as
@@ -226,6 +253,23 @@ pub fn style_param() -> super::ParamDef {
     super::ParamDef::choice("style", "Style", &["Colour", "Print"], "Colour").hint("Print swaps colour fills for hatching that survives a black-and-white copy")
 }
 
+/// The Okabe-Ito colour-blind-safe palette (black, orange, sky blue, bluish green, yellow, blue,
+/// vermillion, reddish purple). Opt-in: no existing figure uses it unless it adopts
+/// [`palette_param`]; the default series colours are unchanged.
+pub const OKABE_ITO: [&str; 8] = ["#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7"];
+
+/// The `palette` param for figures that adopt the colour-blind-safe series colours later.
+/// Not part of any figure's params yet, so saved params and defaults are unaffected.
+pub fn palette_param() -> super::ParamDef {
+    super::ParamDef::choice("palette", "Colours", &["Standard", "Colour-blind safe"], "Standard").hint("Colour-blind safe uses the Okabe-Ito palette for the series colours")
+}
+
+/// Series `i` (wraps after eight) of the Okabe-Ito palette when `p` chose it, else None so the
+/// caller keeps its own colour.
+pub fn palette_colour(p: &super::Params, i: usize) -> Option<&'static str> {
+    (p.s("palette") == "Colour-blind safe").then(|| OKABE_ITO[i % 8])
+}
+
 const SERIES_COLOURS: [&str; 6] = ["#4f7cd4", "#e0803c", "#4aa36b", "#c9494f", "#8a62c4", "#d6b23a"];
 
 /// Fills for series 0, 1, 2 ... in the figure's chosen style. Call [`Fills::defs`] once (through
@@ -273,6 +317,64 @@ impl Fills {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn annotate_adds_role_title_desc_and_escapes() {
+        let svg = Doc::new(10.0, 10.0).finish();
+        let a = annotate(&svg, "A & B <c>", "x > y");
+        assert!(a.starts_with(r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10" role="img"><title>A &amp; B &lt;c&gt;</title><desc>x &gt; y</desc><rect"#), "{a}");
+        assert_eq!(annotate(&a, "other", "other"), a, "idempotent");
+        let mut d = Doc::new(10.0, 10.0);
+        d.describe("T", "D");
+        assert_eq!(d.finish(), annotate(&svg, "T", "D"));
+        assert_eq!(annotate("not svg", "t", "d"), "not svg");
+        assert!(!annotate(&svg, "", "").contains("<title"));
+    }
+
+    #[test]
+    fn title_and_desc_draw_nothing() {
+        let mut d = Doc::new(80.0, 40.0);
+        d.rect(5.0, 5.0, 30.0, 20.0, "#4f7cd4", "#000", 1.0).text(10.0, 35.0, 12.0, "start", "Hi");
+        let plain = d.finish();
+        let tagged = annotate(&plain, "Visible title text", "Visible description text");
+        let a = super::super::to_png(&plain, 2.0).unwrap();
+        let b = super::super::to_png(&tagged, 2.0).unwrap();
+        let (ia, ib) = (image::load_from_memory(&a).unwrap().to_rgba8(), image::load_from_memory(&b).unwrap().to_rgba8());
+        assert_eq!(ia.dimensions(), ib.dimensions());
+        assert!(ia.as_raw() == ib.as_raw(), "title/desc must not change a pixel");
+    }
+
+    fn lum(hex: &str) -> f64 {
+        let c = |i: usize| {
+            let v = u8::from_str_radix(&hex[1 + 2 * i..3 + 2 * i], 16).unwrap() as f64 / 255.0;
+            if v <= 0.03928 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
+        };
+        0.2126 * c(0) + 0.7152 * c(1) + 0.0722 * c(2)
+    }
+
+    #[test]
+    fn okabe_ito_is_distinct_and_contrast_is_documented() {
+        let set: std::collections::BTreeSet<_> = OKABE_ITO.iter().map(|c| c.to_lowercase()).collect();
+        assert_eq!(set.len(), 8, "eight distinct colours");
+        // contrast against white: Okabe-Ito was designed for mutual distinguishability, not for
+        // 3:1 on white, so the light hues (orange 2.3, sky blue 2.3, yellow 1.3) fall short
+        // and need an outline or label when used as thin marks; the others pass.
+        let ratio = |c: &str| 1.05 / (lum(c) + 0.05);
+        let failing: Vec<&str> = OKABE_ITO.iter().copied().filter(|c| ratio(c) < 3.0).collect();
+        assert_eq!(failing, ["#E69F00", "#56B4E9", "#F0E442"], "{:?}", OKABE_ITO.iter().map(|c| (*c, ratio(c))).collect::<Vec<_>>());
+        for c in ["#000000", "#009E73", "#0072B2", "#D55E00", "#CC79A7"] { assert!(ratio(c) >= 3.0, "{c}"); }
+    }
+
+    #[test]
+    fn palette_param_is_opt_in() {
+        let mut p = super::super::Params::defaults(&[palette_param()]);
+        assert_eq!(palette_colour(&p, 0), None);
+        p.set_s("palette", "Colour-blind safe");
+        assert_eq!(palette_colour(&p, 9), Some("#E69F00"));
+        let none = super::super::Params::defaults(&[]);
+        assert_eq!(palette_colour(&none, 0), None);
+        assert_eq!(style_param().key, "style");
+    }
 
     #[test]
     fn scale_text_scales_sizes_and_offsets_only() {

@@ -64,7 +64,7 @@ fn render(def: &FigureDef, params: &Value) -> Result<(FigureSpec, Vec<u8>), Stri
     }
     // params_from_spec coerces by declared kind, drops unknown keys, clamps to ranges.
     let p = crate::figures::spec::params_from_spec(def, &spec);
-    let png = figures::to_png(&(def.render)(&p), 2.0)?;
+    let png = figures::to_png(&def.svg(&p), 2.0)?;
     let png = crate::figures::spec::flatten_white(&png)?;
     Ok((crate::figures::spec::spec_for(def.id, &p), png))
 }

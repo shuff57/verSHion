@@ -23,7 +23,7 @@ fn census_dump() {
         let defs = (d.params)();
         let base = Params::defaults(&defs);
         let mut case = |tag: String, p: &Params| {
-            put(&dir, format!("{}__{tag}", d.id), &(d.render)(p));
+            put(&dir, format!("{}__{tag}", d.id), &d.svg(p));
             n += 1;
         };
         case("defaults".into(), &base);
@@ -75,7 +75,7 @@ fn census_dump() {
         let d = registry().into_iter().find(|d| d.id == "composite-shape").unwrap();
         let mut p = Params::defaults(&(d.params)());
         p.set_s("spec", math::preset_spec(name).unwrap_or(""));
-        put(&dir, format!("composite-shape__preset_{name}"), &(d.render)(&p));
+        put(&dir, format!("composite-shape__preset_{name}"), &d.svg(&p));
         n += 1;
     }
     eprintln!("census: {n} renders in {}", dir.display());
