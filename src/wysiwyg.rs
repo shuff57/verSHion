@@ -2325,6 +2325,8 @@ struct Mem {
     last_unit: Option<UiId>,
     markup: bool,
     float_rect: Option<Rect>,
+    /// Where the focused-only toolbar drew last frame (it floats over the label row above the field).
+    slot_rect: Option<Rect>,
     /// The selection rect the floating toolbar was last placed for.
     float_sel: Option<Rect>,
     /// (block, row, col) of the last focused table cell.
@@ -4022,10 +4024,34 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
     let mut bar_act = None;
     let mut fixed_bar: Option<Rect> = None;
     if o.toolbar {
-        let y0 = ui.cursor().top();
-        bar_act = toolbar(ui, here, has_blanks, false, o.structured);
-        fixed_bar = Some(Rect::from_min_max(Pos2::new(top.x, y0), Pos2::new(top.x + o.width, ui.cursor().top())));
-        ui.add_space(4.0);
+        // The formatting bar exists only while the field is in use, and it floats over the row above
+        // the field (the caller keeps that row free), so showing it moves nothing.
+        let show = focused.is_some() || m.active;
+        // (scrolled out of its container, the field has no bar floating loose over the window)
+        if show && top.y - 12.0 - 36.0 >= ui.clip_rect().top() {
+            let at = Pos2::new(top.x + o.width + 12.0, top.y - 12.0);
+            let r = egui::Area::new(id.with("wys_slot_bar"))
+                .order(egui::Order::Foreground)
+                .fixed_pos(at)
+                .pivot(egui::Align2::RIGHT_BOTTOM)
+                .show(ui.ctx(), |ui| {
+                    Frame::new()
+                        .fill(theme::card())
+                        .stroke(Stroke::new(1.0, theme::border()))
+                        .corner_radius(CornerRadius::same(9))
+                        .inner_margin(egui::Margin::symmetric(4, 2))
+                        .show(ui, |ui| {
+                            ui.set_max_width(o.width + 16.0);
+                            toolbar(ui, here, has_blanks, false, o.structured)
+                        })
+                        .inner
+                });
+            bar_act = r.inner;
+            m.slot_rect = Some(r.response.rect);
+        } else {
+            m.slot_rect = None;
+        }
+        fixed_bar = m.slot_rect;
     }
 
     // ----- the blocks -----
@@ -4511,7 +4537,7 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
     // focus on a click elsewhere), so on that frame no unit reports a selection: the bar stays
     // where it was while the pointer is on it, or its buttons could never be clicked.
     let float_at = sel_rect.or(if float_keep { m.float_sel } else { None });
-    if let Some(sr) = float_at.filter(|_| focused.is_some() || float_keep) {
+    if let Some(sr) = float_at.filter(|_| !o.toolbar && (focused.is_some() || float_keep)) {
         let ys: Vec<(f32, f32)> = line_ys.borrow().values().copied().collect();
         let (at, pivot) = float_place(sr, m.float_rect.map(|r| r.size()), fixed_bar, crate::theme::area_or(ui.ctx().content_rect()), Rect::from_min_max(top, Pos2::new(top.x + o.width, ui.min_rect().bottom())), &ys);
         let (a, r) = float_bar(ui, id, at, pivot, here, has_blanks, o.structured);
@@ -4868,7 +4894,8 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
     } else if m.retry.is_some() {
         ctx.request_repaint();
     }
-    m.active = focused.is_some() || m.float_rect.is_some();
+    let on_slot = m.slot_rect.is_some_and(|r| ui.input(|i| i.pointer.interact_pos().or(i.pointer.hover_pos()).is_some_and(|p| r.expand(4.0).contains(p))));
+    m.active = focused.is_some() || m.float_rect.is_some() || on_slot;
     m.last_end = d.flat().into_iter().rev().find(|&f| d.unit(f).virt.is_none());
     out.focused = focused.is_some();
     out.caret = m.sel.map(|s| s.1);

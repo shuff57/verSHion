@@ -1205,9 +1205,34 @@ fn eq_multi(ui: &mut Ui, eq: &EqCtx, field: EqField, text: &mut String, w: f32, 
     wys_field(ui, eq, field, text, w, hint, true, true, 13.5, true, false);
 }
 
+/// A section label: sentence case, readable, bold.
 fn label(ui: &mut Ui, text: &str) {
-    kit::small_caps(ui, text);
-    ui.add_space(3.0);
+    ui.label(RichText::new(text).family(theme::bold_family()).size(13.5).color(theme::ink()));
+    ui.add_space(6.0);
+}
+
+/// A section label with a quiet one-line hint beside it.
+fn label_hint(ui: &mut Ui, text: &str, hint: &str) {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 8.0;
+        ui.label(RichText::new(text).family(theme::bold_family()).size(13.5).color(theme::ink()));
+        ui.label(theme::muted(hint).size(11.5));
+    });
+    ui.add_space(6.0);
+}
+
+/// A section label in a row of its own, `h` tall and sitting on its bottom: the formatting bar
+/// floats over the right end of that row while its field is in use.
+fn label_row(ui: &mut Ui, text: &str, h: f32) {
+    ui.allocate_ui_with_layout(Vec2::new(ui.available_width(), h), Layout::left_to_right(Align::Max), |ui| {
+        ui.label(RichText::new(text).family(theme::bold_family()).size(13.5).color(theme::ink()));
+    });
+}
+
+/// A small muted caption over a control of the metadata strip.
+fn meta_label(ui: &mut Ui, text: &str) {
+    ui.label(RichText::new(text).family(theme::bold_family()).size(11.5).color(theme::muted_col()));
+    ui.add_space(2.0);
 }
 
 // ---------- the in-place editor ----------
@@ -1349,7 +1374,7 @@ pub fn draw_modal(
                 let bw = (w - 16.0).max(240.0);
                 ui.set_width(bw);
                 meta_strip(ui, ctx, draft, key, bw, topic_pool);
-                ui.add_space(14.0);
+                ui.add_space(6.0);
                 body(ui, ctx, draft, key, bw, textures);
                 // a control that just took focus (Tab, Shift+Tab, a click) is always brought into view
                 // (text fields scroll themselves to the caret)
@@ -1425,6 +1450,14 @@ fn focus_ring(ctx: &egui::Context, key: UiId) {
     }
 }
 
+/// The quiet keyboard hint in the footer.
+fn save_hint(k: QKind) -> &'static str {
+    match k {
+        QKind::Mc | QKind::Multipart => "Enter adds a row  ·  Alt+Enter marks correct  ·  Ctrl/Cmd+Enter saves",
+        _ => "Ctrl/Cmd+Enter saves",
+    }
+}
+
 /// The footer: a fixed-height validation line, then one fixed-height button row that turns into
 /// a confirm bar of the same height, so nothing moves when it changes.
 fn footer(ui: &mut Ui, draft: &mut Draft, action: &mut QAction, want_close: &mut bool) {
@@ -1469,7 +1502,7 @@ fn footer(ui: &mut Ui, draft: &mut Draft, action: &mut QAction, want_close: &mut
                     if kit::ghost_button(ui, "Cancel").clicked() {
                         *want_close = true;
                     }
-                    ui.label(theme::muted("Ctrl/Cmd+Enter saves").size(11.5));
+                    ui.label(theme::muted(save_hint(draft.qkind())).size(11.5));
                 });
             }
             Some(c) => {
@@ -1538,54 +1571,65 @@ fn footer(ui: &mut Ui, draft: &mut Draft, action: &mut QAction, want_close: &mut
     });
 }
 
-/// One label/value row of the metadata strip.
-fn meta_row(ui: &mut Ui, name: &str, add: impl FnOnce(&mut Ui)) {
-    ui.horizontal_top(|ui| {
-        ui.spacing_mut().item_spacing.x = 8.0;
-        ui.allocate_ui_with_layout(Vec2::new(78.0, 28.0), Layout::left_to_right(Align::Center), |ui| {
-            kit::small_caps(ui, name);
-        });
-        ui.vertical(add);
-    });
-}
-
-/// Type, Difficulty, Topics and Points as label/value rows above the question.
+/// Type, Difficulty, Points and Topics as one compact strip: a first row of three small labelled
+/// controls and a second of Topics. Each cell is a caption over its control.
 fn meta_strip(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f32, topic_pool: &[String]) {
-    let vw = (w - 86.0).max(120.0);
-    meta_row(ui, "TYPE", |ui| {
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing = Vec2::new(4.0, 4.0);
-            for (k, tag) in KINDS {
-                if kit::chip_toggle(ui, tag, draft.qkind() == k).on_hover_text(k.label()).clicked() && draft.qkind() != k {
-                    if draft.switch_plan(k).needs_confirm() {
-                        draft.confirm = Some(Confirm::Switch(k));
-                    } else {
-                        draft.switch_to(k, None);
-                        ctx.data_mut(|d| d.remove_temp::<Temp>(key));
-                        EqCtx { ctx: ctx.clone(), key }.focus(&EqField::Stem, draft.stem.chars().count());
+    ui.horizontal_top(|ui| {
+        ui.spacing_mut().item_spacing.x = 18.0;
+        ui.vertical(|ui| {
+            meta_label(ui, "Type");
+            let cur = draft.qkind();
+            let mut pick: Option<QKind> = None;
+            egui::ComboBox::from_id_salt(key.with("type_combo"))
+                .width(168.0)
+                .selected_text(RichText::new(format!("{}  {}", type_tag(cur), cur.label())).size(13.0))
+                .show_ui(ui, |ui| {
+                    for (k, tag) in KINDS {
+                        if ui.selectable_label(cur == k, format!("{tag}  {}", k.label())).clicked() && cur != k {
+                            pick = Some(k);
+                        }
                     }
+                });
+            if let Some(k) = pick {
+                if draft.switch_plan(k).needs_confirm() {
+                    draft.confirm = Some(Confirm::Switch(k));
+                } else {
+                    draft.switch_to(k, None);
+                    ctx.data_mut(|d| d.remove_temp::<Temp>(key));
+                    EqCtx { ctx: ctx.clone(), key }.focus(&EqField::Stem, draft.stem.chars().count());
                 }
             }
         });
-    });
-    meta_row(ui, "DIFFICULTY", |ui| {
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing = Vec2::new(4.0, 4.0);
-            for (d, name) in [(Difficulty::Low, "Easy"), (Difficulty::Medium, "Medium"), (Difficulty::High, "Hard")] {
-                let on = draft.difficulty == Some(d);
-                if kit::chip_toggle(ui, name, on).clicked() {
-                    draft.difficulty = if on { None } else { Some(d) };
-                }
+        ui.vertical(|ui| {
+            meta_label(ui, "Difficulty");
+            Frame::new().stroke(Stroke::new(1.0, theme::border())).corner_radius(CornerRadius::same(8)).inner_margin(Margin::same(2)).show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    for (d, name) in [(Difficulty::Low, "Easy"), (Difficulty::Medium, "Medium"), (Difficulty::High, "Hard")] {
+                        let on = draft.difficulty == Some(d);
+                        let b = egui::Button::new(RichText::new(name).size(12.5).color(if on { theme::accent_col() } else { theme::text_col() }))
+                            .fill(if on { theme::accent_faded() } else { Color32::TRANSPARENT })
+                            .stroke(Stroke::NONE)
+                            .corner_radius(CornerRadius::same(6))
+                            .min_size(Vec2::new(54.0, 22.0));
+                        if ui.add(b).on_hover_text(if on { "Click again to clear" } else { "Set difficulty" }).clicked() {
+                            draft.difficulty = if on { None } else { Some(d) };
+                        }
+                    }
+                });
+            });
+        });
+        ui.vertical(|ui| {
+            meta_label(ui, "Points");
+            let mut pt = draft.points_text();
+            if field_line(ui, &mut pt, 76.0, "none").changed() {
+                draft.set_points_text(&pt);
             }
         });
     });
-    meta_row(ui, "TOPICS", |ui| topics_value(ui, ctx, draft, key, vw, topic_pool));
-    meta_row(ui, "POINTS", |ui| {
-        let mut pt = draft.points_text();
-        if field_line(ui, &mut pt, 96.0, "none").changed() {
-            draft.set_points_text(&pt);
-        }
-    });
+    ui.add_space(6.0);
+    meta_label(ui, "Topics");
+    topics_value(ui, ctx, draft, key, w, topic_pool);
 }
 
 /// Topic chips and the add field share one wrapping row, so adding the first chip never changes
@@ -1670,7 +1714,7 @@ fn topic_hint(exists: bool, has_matches: bool) -> &'static str {
 /// Stem, per-type answers, then the collapsible Explanation and Image sections.
 fn body(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f32, textures: &mut HashMap<String, egui::TextureHandle>) {
     left_col(ui, ctx, draft, key, w);
-    ui.add_space(14.0);
+    ui.add_space(20.0);
     let has_expl = draft.explanation.as_deref().is_some_and(|e| !e.trim().is_empty());
     egui::CollapsingHeader::new(RichText::new("Explanation (optional)").family(theme::bold_family()).size(13.0))
         .id_salt(key.with("expl_section"))
@@ -1710,7 +1754,7 @@ fn left_col(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f
     use crate::qcheck::Where;
     // Stem with the equation hook.
     let eq = EqCtx { ctx: ctx.clone(), key };
-    label(ui, "Question");
+    label_row(ui, "Question", 36.0);
     let is_blank = matches!(draft.kind, Kind::Blank { .. });
     let mut mirror = is_blank.then(|| blank_mirror(ctx, key, draft));
     let blank_hint = format!("Write the sentence, then {BLANK_HOW}...");
@@ -1748,6 +1792,8 @@ fn left_col(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f
     }
     let fr = field_frame(Margin::symmetric(12, 8)).show(ui, |ui| {
         ui.set_width(inner);
+        // room to write: three lines, not a slit
+        ui.set_min_height(56.0);
         crate::wysiwyg::editor(
             ui,
             sid,
@@ -1765,18 +1811,20 @@ fn left_col(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f
     }
     // (a reserved line: a warning appears here without moving anything)
     eq.warn_line(ui, w, |a| matches!(a, Where::Stem | Where::Blanks));
-    ui.add_space(6.0);
+    ui.add_space(4.0);
 
     // Per-kind answers.
     let stem_len = chars(&draft.stem);
     match &mut draft.kind {
         Kind::Mc { answers } => {
-            label(ui, "Answers  -  click the circle or press Alt+Enter to mark correct; Enter adds a row");
+            label(ui, "Answers");
             mc_editor(ui, &eq, answers, usize::MAX, w, &|i| EqField::Mc(i), (EqField::Stem, stem_len));
             eq.warn_line(ui, w, |a| matches!(a, Where::Answers));
         }
         Kind::Tf { correct } => {
-            label(ui, "Correct answer  -  click the circle");
+            label(ui, "Correct answer");
+            // An imported question without its key shows no answer until the teacher picks one.
+            let unset = draft.keyless && !draft.tf_keyed.contains(&None);
             for (val, name) in [(true, "True"), (false, "False")] {
                 ui.horizontal(|ui| {
                     if kit::check_circle(ui, *correct == val).clicked() {
@@ -1856,59 +1904,48 @@ fn mc_editor(ui: &mut Ui, eq: &EqCtx, answers: &mut Vec<Answer>, max: usize, w: 
         }
     }
     let n = answers.len();
-    let ctrl_w = 4.0 * 24.0 + 4.0 * 6.0;
-    let field_w = (w - 22.0 - 6.0 - ctrl_w).max(120.0);
+    // the field takes the row's full width; its controls sit inside it, over the end of the text
+    let field_w = (w - 22.0 - 6.0 + 8.0).max(120.0);
     for i in 0..n {
         let locked = answers[i].locked;
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 6.0;
             let start = ui.cursor().min;
-            if kit::check_circle(ui, answers[i].correct).clicked() {
+            if kit::check_circle(ui, answers[i].correct).on_hover_text(if answers[i].correct { "Correct (Alt+Enter to change)" } else { "Mark correct (Alt+Enter)" }).clicked() {
                 answers[i].correct = !answers[i].correct;
             }
             let out = eq_line(ui, eq, fld(i), &mut answers[i].text, field_w, "Answer");
             if answers[i].text.trim().is_empty() && !out.focused {
                 eq.warn_in(ui, out.rect, crate::qcheck::Where::Answer(i));
             }
-            if out.focused && chars(&answers[i].text) < 24 {
-                // where the user is looking: the key that marks this row correct
-                ui.painter().text(
-                    Pos2::new(start.x + 22.0 + 6.0 + field_w - 40.0, out.rect.center().y),
-                    egui::Align2::RIGHT_CENTER,
-                    if answers[i].correct { "Alt+Enter = not correct" } else { "Alt+Enter = correct" },
-                    kit::ui_font(11.0),
-                    theme::muted_col(),
-                );
-            }
-            // controls on hover or focus; the width stays reserved so the row never reflows
-            let row = Rect::from_min_max(start, Pos2::new(start.x + w, ui.min_rect().bottom().max(start.y + 24.0)));
+            // controls on hover or focus, inside the field and left of its sigma: nothing moves
+            let row = Rect::from_min_max(Pos2::new(start.x + 28.0, out.rect.top() - 6.0), Pos2::new(start.x + 28.0 + field_w - 8.0, out.rect.bottom() + 6.0));
             let show = out.focused || ui.rect_contains_pointer(row);
-            if let Some(r) = row_btn(ui, Ico::Up, false, show) {
-                if r.on_hover_text("Move up (Alt+Up)").clicked() && i > 0 {
-                    move_up = Some(i);
-                }
-            }
-            if let Some(r) = row_btn(ui, Ico::Down, false, show) {
-                if r.on_hover_text("Move down (Alt+Down)").clicked() && i + 1 < n {
-                    move_up = Some(i + 1);
-                }
-            }
-            if let Some(r) = row_btn(ui, Ico::Lock, locked, show) {
-                if r.on_hover_text("Lock answer position (never shuffled)").clicked() {
-                    answers[i].locked = !locked;
-                }
-            }
-            if n > 2 {
-                if let Some(r) = row_btn(ui, Ico::Close, false, show) {
-                    if r.on_hover_text("Remove (Backspace in an empty row)").clicked() {
+            let right = row.right() - 36.0;
+            if show {
+                let bw = if n > 2 { 4.0 * 24.0 + 3.0 * 2.0 } else { 3.0 * 24.0 + 2.0 * 2.0 };
+                let bar = Rect::from_min_max(Pos2::new(right - bw - 4.0, row.center().y - 14.0), Pos2::new(right + 2.0, row.center().y + 14.0));
+                ui.painter().rect_filled(bar, CornerRadius::same(8), theme::field());
+                ui.scope_builder(egui::UiBuilder::new().max_rect(bar.shrink2(Vec2::new(4.0, 2.0))).layout(Layout::left_to_right(Align::Center)), |ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    if icon_btn(ui, Ico::Up, false).on_hover_text("Move up (Alt+Up)").clicked() && i > 0 {
+                        move_up = Some(i);
+                    }
+                    if icon_btn(ui, Ico::Down, false).on_hover_text("Move down (Alt+Down)").clicked() && i + 1 < n {
+                        move_up = Some(i + 1);
+                    }
+                    if icon_btn(ui, Ico::Lock, locked).on_hover_text("Lock answer position (never shuffled)").clicked() {
+                        answers[i].locked = !locked;
+                    }
+                    if n > 2 && icon_btn(ui, Ico::Close, false).on_hover_text("Remove (Backspace in an empty row)").clicked() {
                         to_remove = Some(i);
                     }
-                }
-            } else {
-                ui.add_space(24.0);
+                });
+            } else if locked {
+                ui.painter().text(Pos2::new(right - 8.0, row.center().y), egui::Align2::CENTER_CENTER, egui_phosphor::regular::LOCK_SIMPLE, theme::icon_font(14.0), theme::accent_col().gamma_multiply(0.6));
             }
         });
-        ui.add_space(2.0);
+        ui.add_space(4.0);
     }
     if let Some(i) = to_remove {
         answers.remove(i);
@@ -1996,7 +2033,7 @@ fn matching_editor(ui: &mut Ui, eq: &EqCtx, pairs: &mut Vec<Pair>, distractors: 
             }
         }
     }
-    label(ui, "Pairs  -  left item, right item");
+    label_hint(ui, "Pairs", "left item, right item");
     let ctrl = 24.0;
     let fw = ((w - 20.0 - ctrl - 3.0 * 6.0) / 2.0).max(80.0);
     for i in 0..pairs.len() {
@@ -2043,7 +2080,7 @@ fn matching_editor(ui: &mut Ui, eq: &EqCtx, pairs: &mut Vec<Pair>, distractors: 
     }
 
     ui.add_space(8.0);
-    label(ui, "Distractors  -  extra right-side items");
+    label_hint(ui, "Distractors", "extra right-side items");
     for i in 0..distractors.len() {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 6.0;
@@ -2121,7 +2158,7 @@ fn blank_editor(ui: &mut Ui, eq: &EqCtx, draft: &mut Draft, w: f32) {
         }
     }
     for i in 0..blanks {
-        label(ui, &format!("Blank {}  -  accepted answers, separate alternatives with OR", i + 1));
+        label_hint(ui, &format!("Blank {}", i + 1), "accepted answers, separate alternatives with OR");
         let out = eq_line(ui, eq, EqField::Blank(i), &mut texts[i], w, "e.g. 1 OR one");
         if texts[i].trim().is_empty() && !out.focused {
             eq.warn_in(ui, out.rect, crate::qcheck::Where::Blank(i));
