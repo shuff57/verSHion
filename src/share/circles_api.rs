@@ -485,8 +485,9 @@ pub struct BankDoc {
 /// Where one bank stands for the person who has a copy.
 #[derive(Clone, Debug, PartialEq)]
 pub enum HeadState {
-    /// The newest version, when it was sent and by whom.
-    Current { version: u64, license: Option<String>, at: Option<i64>, by: Option<String> },
+    /// The newest version, when it was sent and by whom. `hide_key` (round 52, critic 62 I5): whether the bank hides
+    /// its answer keys from viewers (`None`: the pool did not say).
+    Current { version: u64, license: Option<String>, at: Option<i64>, by: Option<String>, hide_key: Option<bool> },
     Removed { until: Option<i64> },
     UnderReview,
     /// Left, removed, or the circle closed.
@@ -520,6 +521,10 @@ pub struct SentBank {
     pub withheld: bool,
     pub merged_from: Option<u64>,
     pub rollback_of: Option<u64>,
+    /// Phase C: the bank hides its answer keys from viewers, and this version's viewers' copy was made with the
+    /// send's decisions (pictures not in its `image_ok` are left out of it).
+    #[serde(deserialize_with = "null_bool")]
+    pub keys_hidden: bool,
 }
 
 /// The pool mailed an invitation (`202` of `POST /circles/:cid/invites/email`). Never the code, never the
@@ -618,6 +623,11 @@ pub struct HideKeyResult {
     pub figures_removed: usize,
     /// Turning hiding off made these versions readable again.
     pub restored: Vec<u64>,
+    /// The questions whose picture the viewers' copy left out (the pool's `images_removed`, 0-based).
+    pub removed_pictures: Vec<usize>,
+    /// Filled in by the app, not the pool: the left-out pictures the person did not choose to drop (kept on the
+    /// picture step, or never listed there). Said plainly.
+    pub left_out_unasked: Vec<usize>,
 }
 
 /// What "Delete for good now" did (`POST .../purge`).
@@ -886,16 +896,21 @@ impl<'a> Pool<'a> {
         Ok(sent)
     }
 
-    /// `PATCH /circles/:cid/banks/:bid {hide_key, labels?, order_acks?, ack_formatting?, image_ok?}`: hides the
-    /// answer keys from the circle's viewers (or shows them again). Decisions go only with `on`. Every try
-    /// that does work counts toward a daily limit, refused ones too: never repeated by itself.
-    pub async fn set_hide_key(&self, cid: &str, bid: &str, on: bool, d: &StripDecisions) -> Result<HideKeyResult, PoolError> {
+    /// `PATCH /circles/:cid/banks/:bid {hide_key, labels?, order_acks?, ack_formatting?, image_ok?, base_version?}`:
+    /// hides the answer keys from the circle's viewers (or shows them again). Decisions go only with `on`. `base` is
+    /// the version they were made on (they are by position): another head is `409 conflict` and nothing changes
+    /// (round 52, critic 62 B1). Every try that does work counts toward a daily limit, refused ones too: never
+    /// repeated by itself.
+    pub async fn set_hide_key(&self, cid: &str, bid: &str, on: bool, d: &StripDecisions, base: Option<u64>) -> Result<HideKeyResult, PoolError> {
         check_id(cid)?;
         check_id(bid)?;
         let mut m = serde_json::Map::new();
         m.insert("hide_key".into(), json!(on));
         if on {
             d.put(&mut m);
+        }
+        if let Some(b) = base {
+            m.insert("base_version".into(), json!(b));
         }
         let mut c = Call::new(Method::Patch, format!("/circles/{cid}/banks/{bid}")).json(&Value::Object(m)).not_safe();
         c.timeout = Some(Duration::from_secs(120));
@@ -912,6 +927,8 @@ impl<'a> Pool<'a> {
             images_removed: n("images_removed"),
             figures_removed: n("figures_removed"),
             restored: v.get("restored").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_u64).collect()).unwrap_or_default(),
+            removed_pictures: v.get("images_removed").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_u64).filter_map(|x| usize::try_from(x).ok()).collect()).unwrap_or_default(),
+            left_out_unasked: Vec::new(),
         })
     }
 
@@ -1043,7 +1060,7 @@ impl<'a> Pool<'a> {
             .filter_map(|e| {
                 let bank_id = obj_str(e, "bank_id")?;
                 let state = match e.get("status").and_then(Value::as_str)? {
-                    "current" => HeadState::Current { version: u64_of(e, "version").unwrap_or(0), license: obj_str(e, "license"), at: e.get("at").and_then(Value::as_i64), by: obj_str(e, "by") },
+                    "current" => HeadState::Current { version: u64_of(e, "version").unwrap_or(0), license: obj_str(e, "license"), at: e.get("at").and_then(Value::as_i64), by: obj_str(e, "by"), hide_key: e.get("hide_key").and_then(Value::as_bool) },
                     "removed" => HeadState::Removed { until: e.get("until").and_then(Value::as_i64) },
                     "under_review" => HeadState::UnderReview,
                     _ => HeadState::Unavailable,

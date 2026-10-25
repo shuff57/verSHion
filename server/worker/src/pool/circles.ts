@@ -1058,7 +1058,7 @@ export async function activity(c: Ctx, p: PoolPrincipal, cid: string, url: URL):
 
 // ---- POST /circles/heads ------------------------------------------------------------------------------------
 
-/** {bank_ids} (up to HEADS_MAX): per id the head (version, when, who), `removed`, `under_review` or `unavailable`. */
+/** {bank_ids} (up to HEADS_MAX): per id the head (version, when, who, licence, round 52: `hide_key`), `removed`, `under_review` or `unavailable`. */
 export async function heads(c: Ctx, req: Request, p: PoolPrincipal): Promise<Response> {
   const me = p.userId;
   const b = await readOptionalJson(req, `u:${me}`, c.deps.bodyDeadlineMs);
@@ -1070,7 +1070,7 @@ export async function heads(c: Ctx, req: Request, p: PoolPrincipal): Promise<Res
   // membership by key, the head by key.
   const rows = await c.db
     .prepare(
-      `SELECT j.value AS id, b.author_id, b.head_version, b.head_version_id, b.updated_at, b.removed_at, b.removed_reason, b.purge_after, b.license, m.role, ${BLOCKING_HOLD_SQL("b.id")} AS blocking,
+      `SELECT j.value AS id, b.author_id, b.head_version, b.head_version_id, b.updated_at, b.removed_at, b.removed_reason, b.purge_after, b.license, b.hide_key, m.role, ${BLOCKING_HOLD_SQL("b.id")} AS blocking,
               ci.closed_at, v.committed_at, v.committer_id, cu.display_name AS cn, cu.deleted_at AS cd,
               EXISTS (SELECT 1 FROM circle_holds h WHERE h.bank_id = b.id) AS held, ${AUTHOR_OK_SQL("b")} AS author_ok
          FROM json_each(?2) j
@@ -1081,7 +1081,7 @@ export async function heads(c: Ctx, req: Request, p: PoolPrincipal): Promise<Res
          LEFT JOIN users cu ON cu.id = v.committer_id`,
     )
     .bind(me, JSON.stringify(uniq))
-    .all<{ id: string; author_id: string; head_version: number; head_version_id: string; updated_at: number; removed_at: number | null; removed_reason: string | null; purge_after: number | null; license: string; role: string; blocking: number; closed_at: number | null; committed_at: number | null; committer_id: string | null; cn: string | null; cd: number | null; held: number; author_ok: number }>();
+    .all<{ id: string; author_id: string; head_version: number; head_version_id: string; updated_at: number; removed_at: number | null; removed_reason: string | null; purge_after: number | null; license: string; hide_key: number; role: string; blocking: number; closed_at: number | null; committed_at: number | null; committer_id: string | null; cn: string | null; cd: number | null; held: number; author_ok: number }>();
   const by = new Map(rows.results.map((r) => [r.id, r]));
   return json(200, {
     banks: (ids as string[]).map((id) => {
@@ -1089,7 +1089,9 @@ export async function heads(c: Ctx, req: Request, p: PoolPrincipal): Promise<Res
       if (!r || r.closed_at !== null) return { bank_id: id, status: "unavailable" };
       if (r.removed_at !== null) return { bank_id: id, status: "removed", ...(r.removed_reason === "author_removed" || r.removed_reason === "owner_removed" ? { until: r.purge_after } : {}) };
       if ((r.held === 1 && r.author_id !== me && !(r.role === "owner" && r.blocking === 0)) || r.author_ok !== 1) return { bank_id: id, status: "under_review" };
-      return { bank_id: id, status: "current", version: r.head_version, version_id: r.head_version_id, license: r.license, at: r.committed_at ?? r.updated_at, by: nameOf(r.cn, r.committer_id === null ? 1 : r.cd) };
+      // (round 52, critic 62 I5: whether its viewers read it without the answer keys, as the circle page and the bank's
+      // read tell every member who reads the bank; the app asks about pictures before a send to one that does)
+      return { bank_id: id, status: "current", version: r.head_version, version_id: r.head_version_id, license: r.license, at: r.committed_at ?? r.updated_at, by: nameOf(r.cn, r.committer_id === null ? 1 : r.cd), hide_key: r.hide_key === 1 };
     }),
   });
 }
@@ -1383,13 +1385,16 @@ export async function patchBank(c: Ctx, req: Request, p: PoolPrincipal, cid: str
   if (m.role !== "owner" && b.author_id !== me) throw new PoolError(403, "circle_role_required", { needed: OWNER_OR_AUTHOR, role: m.role });
   // (round 43: the strip decisions of a 1,000-question bank can pass the 64 KB of a plain JSON body: a send's meta size)
   const body = await readJson(req, `u:${me}`, { deadlineMs: c.deps.bodyDeadlineMs, max: PATCH_BODY_MAX });
-  for (const k of Object.keys(body)) if (k !== "license" && k !== "hide_key" && !(DECISION_FIELDS as readonly string[]).includes(k)) throw bad(k);
+  for (const k of Object.keys(body)) if (k !== "license" && k !== "hide_key" && k !== "base_version" && !(DECISION_FIELDS as readonly string[]).includes(k)) throw bad(k);
   if (body.hide_key !== undefined) {
     if (body.license !== undefined) throw bad("license", { message: "Change the licence and the answer-key setting one at a time." });
     if (typeof body.hide_key !== "boolean") throw bad("hide_key");
     if (body.hide_key === false) for (const k of DECISION_FIELDS) if (body[k] !== undefined) throw bad(k, { message: "Strip decisions go with hide_key: true." });
-    return patchHideKey(c, m, b, me, cid, bid, body.hide_key, readStripDecisions(body));
+    // Round 52 (critic 62 B1, critic 57): the version the decisions were made on (they are by position).
+    if (body.base_version !== undefined && !isVersionNo(body.base_version)) throw bad("base_version");
+    return patchHideKey(c, m, b, me, cid, bid, body.hide_key, readStripDecisions(body), (body.base_version as number | undefined) ?? null);
   }
+  if (body.base_version !== undefined) throw bad("base_version", { message: "base_version goes with hide_key." });
   for (const k of DECISION_FIELDS) if (body[k] !== undefined) throw bad(k, { message: "Strip decisions go with hide_key: true." });
   if (body.license === undefined) throw bad("license", { allowed: LICENSES });
   requireOpen(m);
@@ -1418,6 +1423,8 @@ export async function patchBank(c: Ctx, req: Request, p: PoolPrincipal, cid: str
 
 /** A PATCH body's size at most (round 43: strip decisions; the size of a send's meta). */
 const PATCH_BODY_MAX = 1024 * 1024;
+/** Round 52: a version number as a send's `base_version` is one. */
+const isVersionNo = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 2 ** 31;
 /** Round 46: older versions with no decisions recorded that a PATCH turning hidden keys on checks too, at most (by their stored bytes, and in number). */
 export const HIDE_OLDER_BYTES = 4 * 1024 * 1024;
 export const HIDE_OLDER_MAX = 19;
@@ -1457,11 +1464,17 @@ async function chargeHideChange(c: Ctx, me: string): Promise<void> {
  * toward circle_send_flags and keep the evidence bound, as a send's (critic 54b N1).
  * Round 50 (critic 60): only a copyright match an answer-key PATCH raised is released that way (never a student-data
  * match, never a student-data hold), and an `on` answers `held` / `withheld` only for a head THIS PATCH withheld.
+ * Round 52 (critic 62 B1, critic 57): `base` (the body's `base_version`, the version the decisions were made on): a
+ * head that is not it is `409 conflict {head_version}`, as a lost batch is, before any decision is checked or
+ * applied and before anything is charged; hiding on's batch compares and sets the head checked here, so a version that
+ * arrives after the check is the same conflict (hiding off strips nothing: its pin is the check). Hiding on again with other decisions (the app's "Change picture
+ * choices") is a change like any other: re-stripped, recorded, counted.
  */
-async function patchHideKey(c: Ctx, m: Membership, b: BankRow, me: string, cid: string, bid: string, on: boolean, d: StripDecisions): Promise<Response> {
+async function patchHideKey(c: Ctx, m: Membership, b: BankRow, me: string, cid: string, bid: string, on: boolean, d: StripDecisions, base: number | null = null): Promise<Response> {
   requireOpen(m);
   if (!(m.role === "owner" || (b.author_id === me && m.role === "editor"))) throw new PoolError(403, "circle_role_required", { needed: OWNER_OR_AUTHOR, role: m.role });
   await requireReadable(c, m, b, me);
+  if (base !== null && base !== b.head_version) throw new PoolError(409, "conflict", { head_version: b.head_version, message: "A new version arrived meanwhile; do it again for the new version." });
   if (!on && b.hide_key === 0) return json(200, { ok: true, hide_key: false, unchanged: true });
   // Round 48 (critic 55b B1): a decision for a question the head does not have is refused before any work.
   const outside = (field: string, xs: number[]) => {

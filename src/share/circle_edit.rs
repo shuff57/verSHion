@@ -35,7 +35,7 @@ use super::browse::{Imported, Problem, SharedImages, SharedRestore, StoreImages,
 use super::circle_links::*;
 use super::circle_versions_api::*;
 use super::circles_api::*;
-use super::circle_hide::{Decisions, decision_refusal};
+use super::circle_hide::{Decisions, Pictures, decision_refusal, left_out_unasked};
 use super::circles_text as text;
 use super::merge::{self, BaseQuestion, Choice, MergeOutcome, MergePlan};
 use super::model::Runner;
@@ -87,6 +87,17 @@ pub struct Sent {
     /// This version is hidden: it held text taken for student information.
     pub withheld: bool,
     pub merged_from: Option<u64>,
+    /// The bank hides its answer keys: pictures the viewers' copy left out that the person did not choose to
+    /// drop (question positions).
+    pub left_out_unasked: Vec<usize>,
+    /// The bank hides its answer keys but this computer did not know it, so the picture step was not shown: the
+    /// pictures the viewers' copy left out (critic 62 I5).
+    pub not_asked: Vec<usize>,
+    /// The picture step was shown, but the bank no longer hides its answer keys: viewers get the version in full. The
+    /// pictures the person chose to drop (critic 62 I1).
+    pub hiding_stopped: Option<Vec<usize>>,
+    /// The next send to the bank asks about pictures (it is known to hide its keys now).
+    pub ask_next: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -115,6 +126,9 @@ pub enum SendStage {
     Keyless { positions: Vec<usize>, kinds: Vec<String> },
     /// The bank hides its answer keys from viewers and the pool needs decisions for the viewers' copy.
     Decide(Box<Decisions>),
+    /// The bank hides its answer keys from viewers and the version has pictures: which ones viewers keep.
+    /// Nothing was sent yet.
+    Pictures(Box<Pictures>),
 }
 
 #[derive(Debug)]
@@ -145,6 +159,9 @@ pub struct SendView {
     pub decisions_for: Option<String>,
     /// The sha256 of the payload last sent from this page.
     pub sent_payload: Option<String>,
+    /// The picture step's choices (for the payload whose sha256 they carry): kept and dropped. The kept ones go in
+    /// `decisions.image_ok`; these say what the person chose, for the answer.
+    pub picked: Option<Box<Pictures>>,
 }
 
 #[derive(Debug)]
@@ -551,6 +568,13 @@ async fn fetch_for_apply(pool: &Pool<'_>, images: &SharedImages, cid: &str, bid:
 struct Inflight {
     link: CircleLink,
     bank: QuestionBank,
+    /// The questions of the payload sent that have a picture, those whose picture the send kept for viewers
+    /// (`image_ok`), and those the person chose to drop on the picture step.
+    pictures: Vec<usize>,
+    image_ok: Vec<usize>,
+    dropped: Vec<usize>,
+    /// The picture step was shown for this content (the person was told the bank hides its keys).
+    asked: bool,
 }
 
 struct Carry {
@@ -601,6 +625,9 @@ pub struct CircleEditModel {
     forget_ask: Option<String>,
     /// "Treat this copy as in step": done by `sync`, which has the banks.
     cmd_rebase: bool,
+    /// Circle banks known to hide their answer keys from viewers (`true`) or not, as last read (the circle page,
+    /// a bank's read, a change of the setting, a send's answer). A send to one asks about pictures first.
+    hiding: HashMap<String, bool>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -652,6 +679,7 @@ impl CircleEditModel {
             unreadable: None,
             forget_ask: None,
             cmd_rebase: false,
+            hiding: HashMap::new(),
         }
     }
 
@@ -736,6 +764,8 @@ impl CircleEditModel {
         self.last_act = None;
         self.merge_note = None;
         self.forget_ask = None;
+        // (read for the account: read again with the circle page)
+        self.hiding.clear();
     }
 
     // ---- the links -----------------------------------------------------------------------------------------
@@ -1053,6 +1083,7 @@ impl CircleEditModel {
             decisions: StripDecisions::default(),
             decisions_for: None,
             sent_payload: None,
+            picked: None,
         }));
         // The counts are filled in by `sync`. The bank's licence is asked of the pool now: a send
         // goes with the licence the pool has, never with the one this device saw at copy time.
@@ -1089,6 +1120,14 @@ impl CircleEditModel {
                     HeadState::Current { license: Some(l), .. } => License::parse(l),
                     _ => None,
                 });
+                // (critic 62 I5) Whether the bank hides its keys, as the pool says now: the picture step is shown,
+                // or not, from this rather than from an older read. Not said: what was known stays.
+                if let Some(h) = entries.iter().find(|e| e.bank_id == bid).and_then(|e| match &e.state {
+                    HeadState::Current { hide_key, .. } => *hide_key,
+                    _ => None,
+                }) {
+                    self.note_hiding(bid, h);
+                }
                 let link = self.links.iter().find(|l| l.circle_id == cid && l.circle_bank_id == bid).cloned();
                 match (theirs, link) {
                     (Some(l), Some(mut link)) => {
@@ -1226,6 +1265,47 @@ impl CircleEditModel {
         }
     }
 
+    /// What this computer last heard about whether a circle bank hides its answer keys from viewers.
+    pub fn note_hiding(&mut self, bid: &str, on: bool) {
+        self.hiding.insert(bid.to_string(), on);
+    }
+
+    /// The bank is known to hide its answer keys (a send to it asks about pictures first). Not known: no step,
+    /// and the answer to the send says what viewers miss.
+    pub fn hides_keys(&self, bid: &str) -> bool {
+        self.hiding.get(bid).copied().unwrap_or(false)
+    }
+
+    /// "Keep it for viewers" / "Drop it" on the picture step of a send.
+    pub fn send_keep_picture(&mut self, question: usize, yes: bool) {
+        if let EditView::Send(v) = &mut self.view
+            && let SendStage::Pictures(p) = &mut v.stage
+        {
+            p.set_keep(question, yes);
+        }
+    }
+
+    /// "Send" on the picture step: the send goes with the questions whose picture is kept (`image_ok`), for the
+    /// content the step was made for (changed content is asked again).
+    pub fn send_with_pictures(&mut self) {
+        let acting = self.acting();
+        let EditView::Send(v) = &mut self.view else { return };
+        let SendStage::Pictures(p) = &v.stage else { return };
+        if acting || !v.attest {
+            return;
+        }
+        let p = p.clone();
+        if v.decisions_for.as_deref() != Some(p.payload_sha.as_str()) {
+            v.decisions = StripDecisions::default();
+        }
+        v.decisions.image_ok = p.image_ok();
+        v.decisions_for = Some(p.payload_sha.clone());
+        v.picked = Some(p);
+        v.stage = SendStage::Working(None);
+        self.last_act = Some(ActAgain::Send);
+        self.cmd_send = true;
+    }
+
     /// "Send with these decisions": everything the pool listed is decided; the send goes again with them.
     pub fn send_with_decisions(&mut self) {
         let acting = self.acting();
@@ -1251,6 +1331,7 @@ impl CircleEditModel {
             v.stage = SendStage::Editing;
             v.decisions = StripDecisions::default();
             v.decisions_for = None;
+            v.picked = None;
         }
     }
 
@@ -1270,6 +1351,10 @@ impl CircleEditModel {
     }
 
     fn do_send(&mut self, banks: &[QuestionBank]) {
+        let hiding = match &self.view {
+            EditView::Send(v) => self.hides_keys(&v.bid),
+            _ => return,
+        };
         let EditView::Send(v) = &mut self.view else { return };
         let Some(link) = self.links.iter().find(|l| l.local_bank_id == v.local_id).cloned() else {
             v.stage = SendStage::Failed(Problem { message: "This working copy is not in the list any more.".into(), retry: false, retry_at: None, account: false });
@@ -1316,6 +1401,24 @@ impl CircleEditModel {
             v.decisions = StripDecisions::default();
             v.decisions_for = None;
         }
+        // A bank that hides its keys: which pictures viewers keep is asked first (the pool never asks: it leaves
+        // out every picture not in `image_ok`). Asked again for changed content.
+        if v.picked.as_ref().is_some_and(|p| p.payload_sha != payload_sha) {
+            v.picked = None;
+            v.decisions.image_ok.clear();
+        }
+        let pictures = Pictures::of_payload(&payload);
+        if hiding
+            && v.picked.is_none()
+            && let Some(p) = pictures.clone()
+        {
+            v.stage = SendStage::Pictures(Box::new(p));
+            return;
+        }
+        let shown: Vec<usize> = pictures.map(|p| p.list.iter().map(|x| x.question).collect()).unwrap_or_default();
+        let asked = v.picked.is_some();
+        let dropped = v.picked.as_ref().map(|p| p.dropped()).unwrap_or_default();
+        let image_ok = v.decisions.image_ok.clone();
         v.sent_payload = Some(payload_sha);
         let mut req = CircleSend::new(payload, license, link.meta());
         req.message = v.message.trim().to_string();
@@ -1335,7 +1438,7 @@ impl CircleEditModel {
         let (cid, bid) = (link.circle_id.clone(), link.circle_bank_id.clone());
         let bank = bank.clone();
         if self.launch(Work::Send { cid, bid, req: Box::new(req) }) {
-            self.inflight = Some(Inflight { link, bank });
+            self.inflight = Some(Inflight { link, bank, pictures: shown, image_ok, dropped, asked });
         } else if let EditView::Send(v) = &mut self.view {
             v.stage = SendStage::Failed(Problem { message: "Not signed in to the pool. Open the account window and sign in.".into(), retry: true, retry_at: None, account: true });
         }
@@ -1354,6 +1457,12 @@ impl CircleEditModel {
                 v.licence = LicenceState::Known(l);
             }
         }
+        // (the answer says whether the bank hides its keys: the next send asks about pictures, or not)
+        if let Ok(sent) = &r
+            && sent.version > 0
+        {
+            self.note_hiding(bid, sent.keys_hidden);
+        }
         if !self.here(cid, bid) || !matches!(self.view, EditView::Send(_)) {
             // The person left: a send that went through still moves the link on.
             if let (Ok(sent), Some(i)) = (&r, &inflight) {
@@ -1367,8 +1476,23 @@ impl CircleEditModel {
                 if let Some(i) = &inflight {
                     self.finish_send(i, &sent);
                 }
+                // The viewers' copy left out every picture not in `image_ok` (share-core's strip): said when the person
+                // did not choose that: kept and then dropped by a restart, or never asked (critic 62 I5: this computer did
+                // not know the bank hides its keys). And a step shown for a bank that no longer hides them: viewers get
+                // everything, the pictures the person chose to drop too (critic 62 I1).
+                let (mut left_out, mut not_asked, mut hiding_stopped) = (Vec::new(), Vec::new(), None);
+                if let Some(i) = &inflight {
+                    let removed: Vec<usize> = i.pictures.iter().copied().filter(|q| !i.image_ok.contains(q)).collect();
+                    match (sent.keys_hidden, i.asked) {
+                        (true, true) => left_out = left_out_unasked(&i.dropped, &removed),
+                        (true, false) => not_asked = removed,
+                        (false, true) if sent.version > 0 => hiding_stopped = Some(i.dropped.clone()),
+                        _ => {}
+                    }
+                }
+                let ask_next = self.hides_keys(bid);
                 if let EditView::Send(v) = &mut self.view {
-                    v.stage = SendStage::Done(Box::new(Sent { version: sent.version, added: sent.added, changed: sent.changed, removed: sent.removed, replayed: sent.replayed, held: sent.held, withheld: sent.withheld, merged_from }));
+                    v.stage = SendStage::Done(Box::new(Sent { version: sent.version, added: sent.added, changed: sent.changed, removed: sent.removed, replayed: sent.replayed, held: sent.held, withheld: sent.withheld, merged_from, left_out_unasked: left_out, not_asked, hiding_stopped, ask_next }));
                 }
             }
             Err(e) => {
@@ -1401,8 +1525,12 @@ impl CircleEditModel {
                             self.pending_send = None;
                             Some(SendStage::Keyless { positions: positions.clone(), kinds: kinds.clone() })
                         }
-                        RefusalKind::HideKeyChanged { .. } => {
-                            // Nothing was stored; the same send goes again (with decisions if the pool asks for them).
+                        RefusalKind::HideKeyChanged { hide_key, .. } => {
+                            // Nothing was stored; the same send goes again (with decisions if the pool asks for them,
+                            // and the picture step first when the keys are hidden now).
+                            if let Some(h) = hide_key {
+                                self.note_hiding(bid, *h);
+                            }
                             Some(SendStage::Refused { message: e.message(), merge_again: false })
                         }
                         RefusalKind::AttestationRequired => {
@@ -2186,7 +2314,17 @@ impl CircleEditModel {
         match self.last_act {
             Some(ActAgain::Send) => {
                 if matches!(&self.view, EditView::Send(v) if matches!(v.stage, SendStage::Failed(_))) {
+                    // (the pictures kept go again: the pool never asks about them, so they would be lost)
+                    let keep = match &mut self.view {
+                        EditView::Send(v) => v.picked.take().map(|p| (p, std::mem::take(&mut v.decisions.image_ok), v.decisions_for.clone())),
+                        _ => None,
+                    };
                     self.back_to_note();
+                    if let (EditView::Send(v), Some((p, image_ok, Some(sha)))) = (&mut self.view, keep) {
+                        v.decisions.image_ok = image_ok;
+                        v.decisions_for = Some(sha);
+                        v.picked = Some(p);
+                    }
                     self.send();
                 }
             }
@@ -2307,6 +2445,11 @@ pub fn sent_lines(s: &Sent, can_fix: bool) -> Vec<String> {
         out.push(format!("It records that you merged in the changes made since version {m}."));
     }
     out.extend(hidden_lines(s.held, s.withheld, can_fix));
+    out.extend(super::circles_text::pictures_left_out_line(&s.left_out_unasked));
+    out.extend(super::circles_text::pictures_not_asked_line(&s.not_asked, s.ask_next));
+    if let Some(d) = &s.hiding_stopped {
+        out.push(super::circles_text::hiding_stopped_line(d));
+    }
     out
 }
 

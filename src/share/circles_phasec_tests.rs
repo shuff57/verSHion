@@ -411,8 +411,24 @@ fn hide(m: &CirclesModel) -> &HideStage {
     &m.bank.as_ref().unwrap().hide
 }
 
+/// The PATCH bodies, without the version each is pinned to (see `pins`).
 fn patches(s: &Arc<Script>) -> Vec<Value> {
-    s.seen().into_iter().filter(|x| x.method == Method::Patch).map(|x| x.json()).collect()
+    s.seen()
+        .into_iter()
+        .filter(|x| x.method == Method::Patch)
+        .map(|x| {
+            let mut v = x.json();
+            if let Some(o) = v.as_object_mut() {
+                o.remove("base_version");
+            }
+            v
+        })
+        .collect()
+}
+
+/// The version each PATCH was pinned to (`base_version`, critic 62 B1), in order.
+fn pins(s: &Arc<Script>) -> Vec<Option<u64>> {
+    s.seen().into_iter().filter(|x| x.method == Method::Patch).map(|x| x.json().get("base_version").and_then(Value::as_u64)).collect()
 }
 
 fn patch(s: &Arc<Script>, status: u16, body: Value) {
@@ -1473,4 +1489,640 @@ fn c61_m3_a_turn_off_that_left_the_bank_held_does_not_say_viewers_see_the_keys_a
     let free = super::circles_text::hide_result_lines(&r, false);
     assert!(free[0].starts_with("Viewers see the answer keys again"), "{free:?}");
     assert!(free.iter().all(|l| l != super::circles_text::HIDE_OFF_STILL_HELD));
+}
+
+// ---- "keep this picture": the picture step before hiding is turned on ---------------------------------------------
+
+/// A bank head as served whose questions at `pics` have a picture.
+fn pictured_head(stems: &[&str], pics: &[usize]) -> Vec<u8> {
+    let mut v: Value = serde_json::from_slice(&head_body(json!({"has_images": !pics.is_empty()}), stems, false)).unwrap();
+    for &i in pics {
+        v["payload"]["bank"]["questions"][i]["image"] = json!({"file": format!("media/{}.png", format!("{i:x}").repeat(64).chars().take(64).collect::<String>()), "width": 4, "height": 4});
+    }
+    v.to_string().into_bytes()
+}
+
+/// The owner's bank page, the head (version 2) with pictures at `pics`.
+fn open_pictured_bank(pics: &[usize]) -> (CirclesModel, Arc<Script>) {
+    let (mut m, s) = open_circle("owner", json!({"banks": [bank_row(false, json!(false))]}));
+    s.keep_raw("Get", &format!("/circles/{CID}/banks/{BID}"), pictured_head(&["First", "Second", "Third"], pics));
+    s.keep("Post", "/circles/heads", 200, heads_reply(2));
+    m.open_bank(BID);
+    for _ in 0..3 {
+        m.frame(now(), &ready(&s));
+    }
+    (m, s)
+}
+
+fn pictures_step(m: &CirclesModel) -> &super::circle_hide::Pictures {
+    match hide(m) {
+        HideStage::Pictures(p) => p,
+        other => panic!("not the picture step: {other:?}"),
+    }
+}
+
+fn ok_hidden(removed: &[usize], kept: &[usize]) -> Value {
+    json!({"ok": true, "hide_key": true, "held": false, "withheld": false, "labels_removed": [], "images_kept": kept, "images_removed": removed, "figures_removed": [], "order_reasons": []})
+}
+
+#[test]
+fn pictures_the_model_lists_each_picture_by_question_and_keeps_none_by_default() {
+    use super::circle_hide::{Pictures, left_out_unasked};
+    let payload = json!({"schema_version": 2, "bank": {"questions": [
+        {"stem": "First line\nsecond line", "image": {"file": format!("media/{}.png", "a".repeat(64))}},
+        {"stem": "No picture"},
+        {"stem": "Third", "image": null},
+        {"stem": "Fourth", "image": {"file": format!("media/{}.webp", "b".repeat(64))}}
+    ]}})
+    .to_string();
+    let mut p = Pictures::of_payload(payload.as_bytes()).expect("two pictures");
+    assert_eq!(p.list.iter().map(|x| x.question).collect::<Vec<_>>(), vec![0, 3]);
+    assert_eq!(p.list[0].stem, "First line", "one line to tell it apart");
+    assert!(p.image_ok().is_empty() && p.dropped() == vec![0, 3], "dropped unless kept");
+    p.set_keep(3, true);
+    p.set_keep(1, true); // no picture there: ignored
+    p.set_keep(9, true);
+    assert_eq!(p.image_ok(), vec![3]);
+    assert_eq!(p.dropped(), vec![0]);
+    assert!(p.kept(3) && !p.kept(0));
+    p.set_keep(3, false);
+    assert!(p.image_ok().is_empty());
+    assert_eq!(p.payload_sha, super::pool::sha256_hex(payload.as_bytes()));
+    assert!(Pictures::of_payload(json!({"schema_version": 2, "bank": {"questions": [{"stem": "x"}]}}).to_string().as_bytes()).is_none(), "no pictures: no step");
+    assert!(Pictures::of_payload(b"not json").is_none());
+    // what the pool left out that the person did not choose to drop (kept ones, or ones never listed)
+    assert_eq!(left_out_unasked(&[0], &[0, 3, 5]), vec![3, 5]);
+    assert!(left_out_unasked(&[0, 3], &[3, 0]).is_empty());
+}
+
+#[test]
+fn pictures_a_bank_with_pictures_asks_which_to_keep_before_hiding() {
+    let (mut m, s) = open_pictured_bank(&[0, 2]);
+    m.ask_hide(true);
+    patch(&s, 200, ok_hidden(&[0], &[2]));
+    m.confirm_hide();
+    m.frame(now(), &ready(&s));
+    assert!(patches(&s).is_empty(), "nothing goes before the pictures are decided");
+    let p = pictures_step(&m);
+    assert_eq!(p.list.iter().map(|x| x.question).collect::<Vec<_>>(), vec![0, 2]);
+    assert!(p.image_ok().is_empty(), "every picture is dropped unless kept");
+    m.hide_keep_picture(2, true);
+    m.hide_keep_picture(1, true); // question 2 has no picture
+    m.send_hide_pictures();
+    m.send_hide_pictures();
+    m.frame(now(), &ready(&s));
+    assert_eq!(patches(&s), vec![json!({"hide_key": true, "image_ok": [2]})], "one request, with the question numbers whose picture is kept");
+    let HideStage::Done(r) = hide(&m) else { panic!("{:?}", hide(&m)) };
+    assert_eq!(r.removed_pictures, vec![0]);
+    assert!(r.left_out_unasked.is_empty());
+    let lines = super::circles_text::hide_result_lines(r, false).join(" ");
+    assert!(lines.contains("1 picture was left out") && lines.contains("1 picture was kept") && !lines.contains("did not choose"), "{lines}");
+    // no picture kept: no image_ok at all
+    let (mut m, s) = open_pictured_bank(&[1]);
+    m.ask_hide(true);
+    patch(&s, 200, ok_hidden(&[1], &[]));
+    m.confirm_hide();
+    m.send_hide_pictures();
+    m.frame(now(), &ready(&s));
+    assert_eq!(patches(&s), vec![json!({"hide_key": true})]);
+    let HideStage::Done(r) = hide(&m) else { panic!("{:?}", hide(&m)) };
+    assert!(r.left_out_unasked.is_empty(), "the person chose to drop it");
+}
+
+#[test]
+fn pictures_a_bank_without_pictures_skips_the_step() {
+    let (mut m, s) = open_pictured_bank(&[]);
+    m.ask_hide(true);
+    patch(&s, 200, ok_hidden(&[], &[]));
+    m.confirm_hide();
+    assert!(!matches!(hide(&m), HideStage::Pictures(_)));
+    m.frame(now(), &ready(&s));
+    assert_eq!(patches(&s), vec![json!({"hide_key": true})]);
+    // turning hiding off never asks about pictures
+    let (mut m, s) = open_pictured_bank(&[0]);
+    if let Some(BankLoad::Ready(l)) = m.bank.as_mut().map(|b| &mut b.load) {
+        l.doc.bank.hide_key = true;
+    }
+    m.ask_hide(false);
+    patch(&s, 200, json!({"ok": true, "hide_key": false}));
+    m.confirm_hide();
+    assert!(matches!(hide(&m), HideStage::Working { on: false, .. }), "{:?}", hide(&m));
+    m.frame(now(), &ready(&s));
+    assert_eq!(patches(&s), vec![json!({"hide_key": false})]);
+}
+
+#[test]
+fn pictures_kept_go_with_every_later_step_of_the_pool() {
+    let (mut m, s) = open_pictured_bank(&[0, 2]);
+    m.ask_hide(true);
+    m.confirm_hide();
+    m.hide_keep_picture(0, true);
+    patch(&s, 422, json!({"error": "labels_need_decision", "errors": [{"code": "labels_need_decision", "path": "bank.questions[1]"}], "label_findings": [{"question": 1, "strip_allowed": true}]}));
+    m.send_hide_pictures();
+    m.frame(now(), &ready(&s));
+    let HideStage::Decide(_) = hide(&m) else { panic!("{:?}", hide(&m)) };
+    m.hide_decide_label(Pos::question(1), LabelChoice::Strip);
+    patch(&s, 200, ok_hidden(&[2], &[0]));
+    m.send_hide_decisions();
+    m.frame(now(), &ready(&s));
+    assert_eq!(patches(&s)[1], json!({"hide_key": true, "labels": [{"question": 1, "choice": "strip"}], "image_ok": [0]}));
+    let HideStage::Done(r) = hide(&m) else { panic!("{:?}", hide(&m)) };
+    assert!(r.left_out_unasked.is_empty());
+}
+
+#[test]
+fn pictures_left_out_that_the_person_did_not_choose_to_drop_are_said_plainly() {
+    let (mut m, s) = open_pictured_bank(&[0, 2]);
+    m.ask_hide(true);
+    m.confirm_hide();
+    m.hide_keep_picture(2, true);
+    // the pool left out the kept picture, and one the step never listed
+    patch(&s, 200, ok_hidden(&[0, 1, 2], &[]));
+    m.send_hide_pictures();
+    m.frame(now(), &ready(&s));
+    let HideStage::Done(r) = hide(&m) else { panic!("{:?}", hide(&m)) };
+    assert_eq!(r.left_out_unasked, vec![1, 2]);
+    let lines = super::circles_text::hide_result_lines(r, false).join(" ");
+    assert!(lines.contains("questions 2 and 3") && lines.contains("did not choose to drop") && !lines.contains('_'), "{lines}");
+    let one = HideKeyResult { hide_key: true, images_removed: 1, removed_pictures: vec![2], left_out_unasked: vec![2], ..Default::default() };
+    let lines = super::circles_text::hide_result_lines(&one, false).join(" ");
+    assert!(lines.contains("question 3") && lines.contains("did not choose to drop it"), "{lines}");
+}
+
+#[test]
+fn pictures_a_restart_drops_the_kept_pictures_and_says_so() {
+    let (mut m, s) = open_pictured_bank(&[0, 2]);
+    m.ask_hide(true);
+    m.confirm_hide();
+    m.hide_keep_picture(2, true);
+    patch(&s, 422, json!({"error": "labels_need_decision", "errors": [], "label_findings": [{"question": 1, "strip_allowed": true}]}));
+    m.send_hide_pictures();
+    m.frame(now(), &ready(&s));
+    m.hide_decide_label(Pos::question(1), LabelChoice::Strip);
+    patch(&s, 422, json!({"error": "labels_need_decision", "errors": [{"code": "labels_unused", "path": "labels[question=1]"}], "label_findings": [{"question": 0, "strip_allowed": true}]}));
+    m.send_hide_decisions();
+    m.frame(now(), &ready(&s));
+    let HideStage::Decide(d) = hide(&m) else { panic!("{:?}", hide(&m)) };
+    assert!(d.restarted && d.pictures_dropped);
+    assert!(d.decisions().image_ok.is_empty(), "a kept picture is by position: it does not go after a restart");
+    let t = page_text(&mut m);
+    assert!(t.contains("pictures you chose to keep"), "{t}");
+    m.hide_decide_label(Pos::question(0), LabelChoice::Strip);
+    patch(&s, 200, ok_hidden(&[0, 2], &[]));
+    m.send_hide_decisions();
+    m.frame(now(), &ready(&s));
+    assert_eq!(patches(&s)[2], json!({"hide_key": true, "labels": [{"question": 0, "choice": "strip"}]}));
+    let HideStage::Done(r) = hide(&m) else { panic!("{:?}", hide(&m)) };
+    assert_eq!(r.left_out_unasked, vec![2], "the kept picture that was left out is said");
+}
+
+#[test]
+fn pictures_a_new_head_drops_the_choices() {
+    let (mut m, s) = open_pictured_bank(&[0, 2]);
+    m.ask_hide(true);
+    m.confirm_hide();
+    m.hide_keep_picture(2, true);
+    s.on("Post", "/circles/heads", 200, heads_reply(3));
+    m.send_hide_pictures();
+    m.frame(now(), &ready(&s));
+    assert!(patches(&s).is_empty(), "nothing goes for a version the choices were not made for");
+    let HideStage::Failed { problem, back, .. } = hide(&m) else { panic!("{:?}", hide(&m)) };
+    assert!(back.is_none() && problem.message.contains("new version") && problem.message.contains("dropped"), "{}", problem.message);
+    assert!(m.bank.as_ref().unwrap().picked.is_none());
+    m.frame(now(), &ready(&s));
+    m.frame(now(), &ready(&s));
+    m.ask_hide(true);
+    m.confirm_hide();
+    assert!(pictures_step(&m).image_ok().is_empty(), "asked again from the start");
+    // a conflict answered by the pool drops them too
+    let (mut m, s) = open_pictured_bank(&[0, 2]);
+    m.ask_hide(true);
+    m.confirm_hide();
+    m.hide_keep_picture(0, true);
+    patch(&s, 409, json!({"error": "conflict", "head_version": 3}));
+    m.send_hide_pictures();
+    m.frame(now(), &ready(&s));
+    assert!(matches!(hide(&m), HideStage::Failed { .. }) && m.bank.as_ref().unwrap().picked.is_none());
+}
+
+#[test]
+fn pictures_any_other_failure_keeps_the_choices_and_try_again_sends_them() {
+    for case in ["busy", "timeout"] {
+        let (mut m, s) = open_pictured_bank(&[0, 2]);
+        m.ask_hide(true);
+        m.confirm_hide();
+        m.hide_keep_picture(2, true);
+        if case == "busy" {
+            patch(&s, 503, json!({"error": "busy"}));
+        } else {
+            s.on("Post", "/circles/heads", 200, heads_reply(2));
+            s.fail(ApiError::Offline("The request timed out.".into()));
+        }
+        m.send_hide_pictures();
+        m.frame(now(), &ready(&s));
+        let HideStage::Failed { problem, .. } = hide(&m) else { panic!("{case}: {:?}", hide(&m)) };
+        assert!(problem.retry, "{case}");
+        let n = patches(&s).len();
+        patch(&s, 200, ok_hidden(&[0], &[2]));
+        m.retry_hide();
+        m.frame(now(), &ready(&s));
+        let p = patches(&s);
+        assert_eq!(p.len(), n + 1, "{case}");
+        assert_eq!(p[n], json!({"hide_key": true, "image_ok": [2]}), "{case}: Try again goes with the pictures kept");
+        let HideStage::Done(r) = hide(&m) else { panic!("{case}: {:?}", hide(&m)) };
+        assert!(r.left_out_unasked.is_empty(), "{case}");
+    }
+}
+
+#[test]
+fn pictures_a_sign_in_that_ends_goes_back_to_the_step_with_the_choices() {
+    let (mut m, s) = open_pictured_bank(&[0, 2]);
+    m.ask_hide(true);
+    m.confirm_hide();
+    m.hide_keep_picture(2, true);
+    s.fail(ApiError::SignedOut);
+    m.send_hide_pictures();
+    m.frame(now(), &ready(&s));
+    let p = pictures_step(&m);
+    assert_eq!(p.image_ok(), vec![2], "nothing happened, and the choice is still there");
+}
+
+#[test]
+fn pictures_cancel_and_another_account_forget_the_choices() {
+    let (mut m, s) = open_pictured_bank(&[0, 2]);
+    m.ask_hide(true);
+    m.confirm_hide();
+    m.hide_keep_picture(2, true);
+    m.cancel_hide();
+    assert!(matches!(hide(&m), HideStage::Idle));
+    m.ask_hide(true);
+    m.confirm_hide();
+    assert!(pictures_step(&m).image_ok().is_empty());
+    m.hide_keep_picture(0, true);
+    m.frame(now(), &ready_as(&s, "olga"));
+    assert!(matches!(hide(&m), HideStage::Pictures(_)), "the same account: still on the step");
+    let s2 = viewer_session();
+    for _ in 0..3 {
+        m.frame(now(), &ready_as(&s2, "vic"));
+    }
+    assert!(m.bank.is_none(), "another account starts at the list");
+    let _ = s;
+}
+
+#[test]
+fn pictures_the_circle_page_and_the_bank_read_tell_the_working_copies_which_banks_hide_keys() {
+    let (m, _) = open_circle("editor", json!({"banks": [bank_row(false, json!(true))]}));
+    assert!(m.edit.hides_keys(BID), "from the circle page");
+    let (m, _) = open_circle("editor", json!({"banks": [bank_row(false, json!(false))]}));
+    assert!(!m.edit.hides_keys(BID));
+    let (mut m, s) = open_pictured_bank(&[0]);
+    assert!(!m.edit.hides_keys(BID));
+    m.ask_hide(true);
+    m.confirm_hide();
+    patch(&s, 200, ok_hidden(&[0], &[]));
+    m.send_hide_pictures();
+    m.frame(now(), &ready(&s));
+    assert!(m.edit.hides_keys(BID), "after turning hiding on");
+}
+
+#[test]
+fn pictures_the_step_draws_at_three_widths_light_and_dark() {
+    let ctx = egui::Context::default();
+    for dark in [false, true] {
+        crate::theme::set_dark(dark, Some(&ctx));
+        crate::theme::setup(&ctx);
+        for width in [1280.0, 760.0, 420.0] {
+            let (mut m, s) = open_pictured_bank(&[0, 2]);
+            m.ask_hide(true);
+            frame(&ctx, width, &mut |ui| {
+                super::circles_ui::body_of(ui, &mut m);
+            });
+            m.confirm_hide();
+            m.hide_keep_picture(2, true);
+            frame(&ctx, width, &mut |ui| {
+                super::circles_ui::body_of(ui, &mut m);
+            });
+            patch(&s, 200, ok_hidden(&[0, 2], &[]));
+            m.send_hide_pictures();
+            m.frame(now(), &ready(&s));
+            frame(&ctx, width, &mut |ui| {
+                super::circles_ui::body_of(ui, &mut m);
+            });
+        }
+    }
+    crate::theme::set_dark(false, Some(&ctx));
+    let (mut m, _s) = open_pictured_bank(&[0, 2]);
+    m.ask_hide(true);
+    m.confirm_hide();
+    let t = page_text(&mut m);
+    for want in ["Keep it for viewers", "Drop it", "Question 1", "Question 3", "does not show an answer or a hint", "Hide the keys"] {
+        assert!(t.contains(want), "{want}: {t}");
+    }
+    assert!(!t.contains("Question 2\n"), "only questions with a picture are listed: {t}");
+}
+
+// ---- critic 62: the picture step pinned, changed later, and its buttons wired -------------------------------------
+
+/// Clicks the `nth` (0-based) drawn text that reads exactly `label` in what `draw` draws `width` wide: frames to lay
+/// it out, then one with a press and release on it. False when there is no such text.
+pub(super) fn click_text(ctx: &egui::Context, width: f32, label: &str, nth: usize, draw: &mut dyn FnMut(&mut egui::Ui)) -> bool {
+    let screen = Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 8000.0)));
+    let mut at = None;
+    // (egui's clock never goes back across calls on one context)
+    let t0 = ctx.input(|i| i.time);
+    for i in 1..3 {
+        let out = ctx.run_ui(egui::RawInput { screen_rect: screen, time: Some(t0 + i as f64 * 0.05), ..Default::default() }, |ui| {
+            egui::CentralPanel::default().show(ui, |ui| draw(ui));
+        });
+        let hits: Vec<egui::Pos2> = out
+            .shapes
+            .iter()
+            .filter_map(|s| match &s.shape {
+                egui::epaint::Shape::Text(t) if t.galley.text() == label => Some(t.galley.rect.translate(t.pos.to_vec2()).center()),
+                _ => None,
+            })
+            .collect();
+        at = hits.get(nth).copied();
+        out.drop_without_applying_deltas();
+    }
+    let Some(p) = at else { return false };
+    let press = |pressed| egui::Event::PointerButton { pos: p, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE };
+    let input = egui::RawInput { screen_rect: screen, time: Some(t0 + 0.2), events: vec![egui::Event::PointerMoved(p), press(true), press(false)], ..Default::default() };
+    let out = ctx.run_ui(input, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| draw(ui));
+    });
+    out.drop_without_applying_deltas();
+    true
+}
+
+/// A bank head as served at `version`, `extra` merged into its `bank`, whose questions at `pics` have a picture.
+fn pictured_head_at(version: u64, extra: Value, stems: &[&str], pics: &[usize]) -> Vec<u8> {
+    let mut x = json!({"has_images": !pics.is_empty(), "version": version, "version_id": format!("v{version}")});
+    merge(&mut x, extra);
+    let mut v: Value = serde_json::from_slice(&head_body(x, stems, false)).unwrap();
+    for &i in pics {
+        v["payload"]["bank"]["questions"][i]["image"] = json!({"file": format!("media/{}.png", format!("{i:x}").repeat(64).chars().take(64).collect::<String>()), "width": 4, "height": 4});
+    }
+    v.to_string().into_bytes()
+}
+
+/// The owner's bank page of a bank that hides its keys (the owner reads it in full), version 2, pictures at `pics`.
+fn open_hiding_pictured_bank(pics: &[usize]) -> (CirclesModel, Arc<Script>) {
+    let (mut m, s) = open_circle("owner", json!({"banks": [bank_row(false, json!(true))]}));
+    s.keep_raw("Get", &format!("/circles/{CID}/banks/{BID}"), pictured_head_at(2, json!({"hide_key": true}), &["First", "Second", "Third"], pics));
+    s.keep("Post", "/circles/heads", 200, heads_reply(2));
+    m.open_bank(BID);
+    for _ in 0..3 {
+        m.frame(now(), &ready(&s));
+    }
+    (m, s)
+}
+
+#[test]
+fn c62_b1_every_change_to_hiding_on_is_pinned_to_the_version_its_choices_were_made_on() {
+    // the picture step
+    let (mut m, s) = open_pictured_bank(&[0, 2]);
+    m.ask_hide(true);
+    m.confirm_hide();
+    m.hide_keep_picture(2, true);
+    patch(&s, 200, ok_hidden(&[0], &[2]));
+    m.send_hide_pictures();
+    m.frame(now(), &ready(&s));
+    assert_eq!(s.seen().into_iter().filter(|x| x.method == Method::Patch).map(|x| x.json()).collect::<Vec<_>>(), vec![json!({"hide_key": true, "image_ok": [2], "base_version": 2})]);
+    // no pictures, then the pool's decisions: every try pinned to version 2
+    let (mut m, s) = open_bank_as("owner", false, json!({}), false);
+    m.ask_hide(true);
+    patch(&s, 422, json!({"error": "labels_need_decision", "errors": [], "label_findings": [{"question": 1, "strip_allowed": true}]}));
+    m.confirm_hide();
+    m.frame(now(), &ready(&s));
+    m.hide_decide_label(Pos::question(1), LabelChoice::Strip);
+    patch(&s, 200, json!({"ok": true, "hide_key": true}));
+    m.send_hide_decisions();
+    m.frame(now(), &ready(&s));
+    assert_eq!(pins(&s), vec![Some(2), Some(2)]);
+    // turning hiding off is not pinned (it strips nothing)
+    let (mut m, s) = open_bank_as("owner", false, json!({"hide_key": true}), false);
+    m.ask_hide(false);
+    patch(&s, 200, json!({"ok": true, "hide_key": false}));
+    m.confirm_hide();
+    m.frame(now(), &ready(&s));
+    assert_eq!(pins(&s), vec![None]);
+}
+
+#[test]
+fn c62_b1_a_conflict_from_the_pinned_change_drops_every_choice_and_the_step_starts_again_for_the_new_version() {
+    let (mut m, s) = open_pictured_bank(&[0, 2]);
+    m.ask_hide(true);
+    m.confirm_hide();
+    m.hide_keep_picture(0, true);
+    // the head read right before still says version 2; the pool, pinned, says a newer one arrived since (a new
+    // first question with a picture, read again after)
+    s.on("Post", "/circles/heads", 200, heads_reply(2));
+    patch(&s, 409, json!({"error": "conflict", "head_version": 3, "message": "A new version arrived meanwhile; do it again for the new version."}));
+    s.keep_raw("Get", &format!("/circles/{CID}/banks/{BID}"), pictured_head_at(3, json!({}), &["New", "First", "Second", "Third"], &[0, 1, 3]));
+    s.keep("Post", "/circles/heads", 200, heads_reply(3));
+    m.send_hide_pictures();
+    m.frame(now(), &ready(&s));
+    assert_eq!(pins(&s), vec![Some(2)]);
+    let HideStage::Failed { problem, back, .. } = hide(&m) else { panic!("{:?}", hide(&m)) };
+    assert!(back.is_none() && !problem.retry, "{problem:?}");
+    let msg = problem.message.clone();
+    assert!(msg.contains("new version") && msg.contains("nothing was changed") && msg.contains("picture") && msg.contains("dropped") && !msg.contains('_'), "{msg}");
+    assert!(m.bank.as_ref().unwrap().picked.is_none());
+    for _ in 0..3 {
+        m.frame(now(), &ready(&s));
+    }
+    let t = page_text(&mut m);
+    assert!(t.contains(&msg) && t.contains("press the switch again"), "said on the page, once the bank is read again: {t}");
+    // the step again, for version 3, from nothing
+    m.ask_hide(true);
+    m.confirm_hide();
+    let p = pictures_step(&m);
+    assert_eq!((p.head, p.list.iter().map(|x| x.question).collect::<Vec<_>>()), (Some(3), vec![0, 1, 3]));
+    assert!(p.image_ok().is_empty());
+    patch(&s, 200, ok_hidden(&[0, 1, 3], &[]));
+    m.send_hide_pictures();
+    m.frame(now(), &ready(&s));
+    assert_eq!(pins(&s), vec![Some(2), Some(3)]);
+}
+
+#[test]
+fn c62_i4_a_reread_while_on_the_step_keeps_it_pinned_to_the_version_it_listed() {
+    let (mut m, s) = open_pictured_bank(&[0, 2]);
+    m.ask_hide(true);
+    m.confirm_hide();
+    m.hide_keep_picture(2, true);
+    // the page reads the bank again (a licence change, say) while the step is open: version 3 now
+    s.keep_raw("Get", &format!("/circles/{CID}/banks/{BID}"), pictured_head_at(3, json!({}), &["New", "First", "Second", "Third"], &[0, 1, 3]));
+    s.keep("Post", "/circles/heads", 200, heads_reply(3));
+    m.bank.as_mut().unwrap().load = BankLoad::Loading;
+    for _ in 0..3 {
+        m.frame(now(), &ready(&s));
+    }
+    assert!(matches!(m.bank.as_ref().map(|b| &b.load), Some(BankLoad::Ready(l)) if l.doc.bank.version == 3));
+    assert_eq!(pictures_step(&m).head, Some(2), "the step is still the one listed for version 2");
+    m.send_hide_pictures();
+    m.frame(now(), &ready(&s));
+    assert!(patches(&s).is_empty(), "the choices were made for version 2: nothing goes");
+    let HideStage::Failed { problem, .. } = hide(&m) else { panic!("{:?}", hide(&m)) };
+    assert!(problem.message.contains("dropped"), "{}", problem.message);
+}
+
+#[test]
+fn c62_i4_the_bank_read_alone_tells_the_working_copies_the_bank_hides_its_keys() {
+    // the circle page said it does not; the bank's own read says it does
+    let (mut m, s) = open_circle("editor", json!({"banks": [bank_row(false, json!(false))]}));
+    assert!(!m.edit.hides_keys(BID));
+    s.keep_raw("Get", &format!("/circles/{CID}/banks/{BID}"), head_body(json!({"hide_key": true}), &["First"], false));
+    s.keep("Post", "/circles/heads", 200, heads_reply(2));
+    m.open_bank(BID);
+    for _ in 0..3 {
+        m.frame(now(), &ready(&s));
+    }
+    assert!(matches!(m.bank.as_ref().map(|b| &b.load), Some(BankLoad::Ready(_))));
+    assert!(m.edit.hides_keys(BID));
+}
+
+#[test]
+fn c62_i4_each_keep_and_drop_button_names_the_question_it_is_drawn_for_at_420() {
+    use super::circle_hide_ui::{PictureAct, pictures};
+    let img = |c: char| json!({"file": format!("media/{}.png", c.to_string().repeat(64)), "width": 4, "height": 4});
+    let payload = json!({"schema_version": 2, "bank": {"questions": [
+        {"stem": "Zero"}, {"stem": "One", "image": img('a')}, {"stem": "Two", "image": img('b')},
+        {"stem": "Three"}, {"stem": "Four"}, {"stem": "Five", "image": img('c')}
+    ]}})
+    .to_string();
+    let mut p = super::circle_hide::Pictures::of_payload(payload.as_bytes()).unwrap();
+    assert_eq!(p.list.iter().map(|x| x.question).collect::<Vec<_>>(), vec![1, 2, 5]);
+    let ctx = egui::Context::default();
+    crate::theme::setup(&ctx);
+    for (nth, q) in [1usize, 2, 5].into_iter().enumerate() {
+        for yes in [true, false] {
+            let mut got = PictureAct::None;
+            let label = if yes { super::circles_text::PICTURE_KEEP } else { super::circles_text::PICTURE_DROP };
+            assert!(click_text(&ctx, 420.0, label, nth, &mut |ui| {
+                let a = pictures(ui, &p, "Choose.", "Hide the keys", true, false);
+                if a != PictureAct::None {
+                    got = a;
+                }
+            }));
+            assert_eq!(got, PictureAct::Keep(q, yes), "{label} under question {}", q + 1);
+            p.set_keep(q, yes);
+        }
+    }
+}
+
+#[test]
+fn c62_i4_on_the_bank_page_keep_then_drop_leaves_the_picture_out() {
+    let (mut m, s) = open_pictured_bank(&[0, 2]);
+    m.ask_hide(true);
+    m.confirm_hide();
+    let ctx = egui::Context::default();
+    crate::theme::setup(&ctx);
+    assert!(click_text(&ctx, 420.0, super::circles_text::PICTURE_KEEP, 1, &mut |ui| {
+        super::circles_ui::body_of(ui, &mut m);
+    }));
+    assert_eq!(pictures_step(&m).image_ok(), vec![2]);
+    assert!(click_text(&ctx, 420.0, super::circles_text::PICTURE_DROP, 1, &mut |ui| {
+        super::circles_ui::body_of(ui, &mut m);
+    }));
+    assert!(pictures_step(&m).image_ok().is_empty(), "Drop it un-keeps it");
+    assert!(click_text(&ctx, 420.0, super::circles_text::PICTURE_KEEP, 0, &mut |ui| {
+        super::circles_ui::body_of(ui, &mut m);
+    }));
+    patch(&s, 200, ok_hidden(&[2], &[0]));
+    assert!(click_text(&ctx, 420.0, "Hide the keys", 0, &mut |ui| {
+        super::circles_ui::body_of(ui, &mut m);
+    }));
+    m.frame(now(), &ready(&s));
+    assert_eq!(patches(&s), vec![json!({"hide_key": true, "image_ok": [0]})]);
+}
+
+#[test]
+fn c62_minor_one_hide_the_keys_button_and_the_tries_line_only_where_a_press_counts() {
+    let count = |t: &str, w: &str| t.lines().filter(|l| *l == w).count();
+    let (mut m, _s) = open_pictured_bank(&[0, 2]);
+    m.ask_hide(true);
+    let t = page_text(&mut m);
+    assert_eq!(count(&t, "Hide the keys"), 0, "the confirmation only leads to the picture step: {t}");
+    assert_eq!(count(&t, "Next"), 1, "{t}");
+    assert!(!t.contains("Each press counts"), "that press costs nothing: {t}");
+    m.confirm_hide();
+    let t = page_text(&mut m);
+    assert_eq!(count(&t, "Hide the keys"), 1, "{t}");
+    assert!(t.contains("Each press counts"), "{t}");
+    // no pictures: the confirmation's press is the change itself
+    let (mut m, _s) = open_bank_as("owner", false, json!({}), false);
+    m.ask_hide(true);
+    let t = page_text(&mut m);
+    assert_eq!(count(&t, "Hide the keys"), 1, "{t}");
+    assert!(t.contains("Each press counts"), "{t}");
+}
+
+#[test]
+fn c62_i2_with_the_keys_hidden_the_owner_can_change_which_pictures_viewers_get() {
+    let (mut m, s) = open_hiding_pictured_bank(&[0, 2]);
+    assert!(m.can_change_pictures());
+    let t = page_text(&mut m);
+    assert!(t.contains("Change picture choices"), "{t}");
+    m.change_pictures();
+    let p = pictures_step(&m);
+    assert_eq!((p.head, p.image_ok()), (Some(2), vec![]), "the step again, every picture dropped until kept");
+    let t = page_text(&mut m);
+    assert!(t.contains("Save picture choices") && !t.lines().any(|l| l == "Hide the keys"), "{t}");
+    assert!(t.contains("Each press counts") && t.contains("counts as a change of the answer-key setting"), "{t}");
+    m.hide_keep_picture(0, true);
+    patch(&s, 200, ok_hidden(&[2], &[0]));
+    m.send_hide_pictures();
+    m.frame(now(), &ready(&s));
+    assert_eq!(patches(&s), vec![json!({"hide_key": true, "image_ok": [0]})]);
+    assert_eq!(pins(&s), vec![Some(2)]);
+    let HideStage::Done(r) = hide(&m) else { panic!("{:?}", hide(&m)) };
+    assert!(r.hide_key && r.left_out_unasked.is_empty());
+    for _ in 0..3 {
+        m.frame(now(), &ready(&s));
+    }
+    // a kept picture dropped again: no image_ok, and the result says it is left out
+    m.change_pictures();
+    assert!(pictures_step(&m).image_ok().is_empty());
+    patch(&s, 200, ok_hidden(&[0, 2], &[]));
+    m.send_hide_pictures();
+    m.frame(now(), &ready(&s));
+    assert_eq!(patches(&s)[1], json!({"hide_key": true}));
+    let HideStage::Done(r) = hide(&m) else { panic!("{:?}", hide(&m)) };
+    let lines = super::circles_text::hide_result_lines(r, false).join(" ");
+    assert!(lines.contains("2 pictures were left out") && !lines.contains("did not choose"), "{lines}");
+    // past the day's changes: said in the same words as the step's ("a change of the answer-key setting")
+    for _ in 0..3 {
+        m.frame(now(), &ready(&s));
+    }
+    m.change_pictures();
+    patch(&s, 429, json!({"error": "daily_limit", "metric": "circle_hide_changes", "message": "You have changed answer-key settings as many times as you may today. Try again tomorrow."}));
+    m.send_hide_pictures();
+    m.frame(now(), &ready(&s));
+    let HideStage::Failed { problem, .. } = hide(&m) else { panic!("{:?}", hide(&m)) };
+    assert!(problem.message.contains("changed answer-key settings as many times as the pool allows today"), "{}", problem.message);
+}
+
+#[test]
+fn c62_i2_change_picture_choices_is_only_offered_where_it_can_be_used() {
+    // hiding off: the switch is the way in
+    let (mut m, _s) = open_pictured_bank(&[0]);
+    assert!(!m.can_change_pictures());
+    m.change_pictures();
+    assert!(matches!(hide(&m), HideStage::Idle));
+    // no pictures
+    let (m, _s) = open_hiding_pictured_bank(&[]);
+    assert!(!m.can_change_pictures());
+    // a viewer (served without keys) and an editor who is not the author
+    let (m, _s) = open_bank_as("viewer", false, json!({"hide_key": true, "keys_hidden": true}), false);
+    assert!(!m.can_change_pictures());
+    let (mut m, _s) = open_bank_as("editor", false, json!({"hide_key": true}), false);
+    assert!(!m.can_change_pictures());
+    assert!(!page_text(&mut m).contains("Change picture choices"));
+    // cancel leaves it as it was
+    let (mut m, s) = open_hiding_pictured_bank(&[0]);
+    m.change_pictures();
+    m.cancel_hide();
+    assert!(matches!(hide(&m), HideStage::Idle) && patches(&s).is_empty());
 }

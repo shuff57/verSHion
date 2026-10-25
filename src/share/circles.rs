@@ -33,7 +33,7 @@ use super::browse::{
     Applied, CircleOrigin, Dest, ImageSink, Imported, Problem, SharedImages, StoreImages, apply_import, now_ms,
 };
 use super::circle_edit::{CircleEditModel, Perm};
-use super::circle_hide::{Decisions, decision_refusal};
+use super::circle_hide::{Decisions, Pictures, decision_refusal, left_out_unasked};
 use super::circle_links::{CircleLink, LinkLog};
 use super::circles_api::*;
 use super::circles_text as text;
@@ -352,6 +352,9 @@ pub enum HideStage {
     Working { on: bool, back: Option<Box<Decisions>> },
     /// The pool listed what it needs decided for the viewers' copy (or what has to be changed first).
     Decide(Box<Decisions>),
+    /// Before hiding is turned on, when the newest version has pictures: which ones viewers keep. Nothing was
+    /// sent yet.
+    Pictures(Box<Pictures>),
     Done(HideKeyResult),
     /// A refusal or an error: said, and "Try again" asks once more (`on` is what was asked for). `back` is
     /// the decisions page the change came from: kept unless the bank changed, and sent again by "Try again".
@@ -374,6 +377,12 @@ pub struct BankView {
     pub withheld_head: bool,
     /// That refusal said turning hiding off would release it (`hide_off_releases`, critic 59 B1).
     pub hide_off_releases: bool,
+    /// The picture step's choices for the change on its way (what was kept and dropped, for which version):
+    /// sent again by "Try again", and compared with what the pool left out.
+    pub picked: Option<Box<Pictures>>,
+    /// The picture step (and what follows it) is "Change picture choices" on a bank that already hides its keys
+    /// (critic 62 I2), not turning hiding on.
+    pub pictures_change: bool,
 }
 
 // ---- jobs -------------------------------------------------------------------------------------------------------
@@ -553,9 +562,9 @@ async fn do_act(pool: &Pool<'_>, a: &Act) -> Result<ActDone, PoolError> {
         Act::PurgeBank { cid, bid } => ActDone::Purged(pool.purge_circle_bank(cid, bid).await?),
         Act::EmailInvite { cid, email, role } => ActDone::Emailed(Box::new(pool.email_invite(cid, email, *role).await?)),
         Act::HideKey { cid, bid, on, decisions, base } => {
-            // (critic 57 B1) The decisions are by position and the PATCH strips whatever the head is when it
-            // arrives: the head is read right before, and a moved one sends nothing. (A short race is left until
-            // the pool takes a `base_version` on this PATCH.)
+            // (critic 57 B1) The decisions are by position: the head is read right before, and a moved one sends
+            // nothing. (critic 62 B1) The PATCH is pinned to that version too (`base_version`): one that arrives
+            // after this read is the pool's `409 conflict`, and nothing changes.
             if let Some(base) = base {
                 let heads = pool.circle_heads(std::slice::from_ref(bid)).await?;
                 let same = heads.iter().any(|h| h.bank_id == *bid && matches!(h.state, HeadState::Current { version, .. } if version == *base));
@@ -563,7 +572,7 @@ async fn do_act(pool: &Pool<'_>, a: &Act) -> Result<ActDone, PoolError> {
                     return Ok(ActDone::HideHeadMoved);
                 }
             }
-            ActDone::Hidden(Box::new(pool.set_hide_key(cid, bid, *on, decisions).await?))
+            ActDone::Hidden(Box::new(pool.set_hide_key(cid, bid, *on, decisions, *base).await?))
         }
         Act::Report { cid, bid, reason, note } => {
             pool.report_circle_bank(cid, bid, reason.wire(), note).await?;
@@ -1292,6 +1301,10 @@ impl CirclesModel {
         }
         match r {
             Ok(d) => {
+                // (the working copies' sends ask about pictures first for a bank that hides its keys)
+                for b in &d.banks {
+                    self.edit.note_hiding(&b.id, b.hide_key);
+                }
                 if let Some(c) = &mut self.circle {
                     c.detail = Some(d);
                     c.problem = None;
@@ -1395,6 +1408,7 @@ impl CirclesModel {
                 // A viewer of a bank that hides its keys is served the viewers' form (phase C).
                 let form = if doc.bank.keys_hidden { Served::Stripped } else { Served::Full };
                 let view = StudentView::from_payload(&doc.payload, form).map_err(|e| e.message());
+                self.edit.note_hiding(&bid, doc.bank.hide_key || doc.bank.keys_hidden);
                 if let Some(b) = &mut self.bank {
                     b.load = BankLoad::Ready(Box::new(BankLoaded { doc, view }));
                     b.withheld_head = false;
@@ -1519,10 +1533,16 @@ impl CirclesModel {
                         }
                         Act::HideKey { .. } => {
                             if let Some(b) = &mut self.bank {
-                                b.hide = match std::mem::take(&mut b.hide) {
+                                let next = match std::mem::take(&mut b.hide) {
                                     HideStage::Working { back: Some(d), .. } => HideStage::Decide(d),
+                                    // (from the picture step: back to it, the choices as they were)
+                                    HideStage::Working { on: true, back: None } => b.picked.clone().map_or(HideStage::Idle, HideStage::Pictures),
                                     _ => HideStage::Idle,
                                 };
+                                if matches!(next, HideStage::Idle) {
+                                    b.picked = None;
+                                }
+                                b.hide = next;
                             }
                         }
                         Act::Report { .. } => {
@@ -1598,8 +1618,11 @@ impl CirclesModel {
                         // (critic 57 I2) The decisions made stay for "Try again", unless the bank changed under them.
                         let mut keep = true;
                         match e.kind() {
+                            // (critic 62 B1: the PATCH is pinned to the version its choices were made on; a newer one
+                            // is this conflict, and every choice made goes, the pictures' too)
                             Some(RefusalKind::CircleConflict { .. } | RefusalKind::Conflict { .. }) => {
-                                p.message = "A new version of this bank arrived meanwhile, so nothing was changed. The bank was read again: press the switch again for the new version.".into();
+                                let (pictures, change) = self.bank.as_ref().map_or((false, false), |b| (b.picked.is_some(), b.pictures_change));
+                                p.message = text::hide_moved_message(has_decisions(decisions), pictures, change);
                                 reread = true;
                                 keep = false;
                             }
@@ -1622,6 +1645,10 @@ impl CirclesModel {
                                 HideStage::Working { back, .. } if keep => back,
                                 _ => None,
                             };
+                            // (the picture step's choices go with the decisions: kept for "Try again", or dropped)
+                            if !keep {
+                                b.picked = None;
+                            }
                             b.hide = HideStage::Failed { on: *on, problem: p, back };
                             if reread {
                                 b.load = BankLoad::Loading;
@@ -1805,22 +1832,25 @@ impl CirclesModel {
             }
             (Act::HideKey { on, decisions, .. }, ActDone::HideHeadMoved) => {
                 // (critic 57 B1) Nothing was sent. What was decided was for the older version, so it goes.
-                let message = if decisions.is_empty() {
-                    "A new version of this bank arrived meanwhile, so nothing was changed. The bank was read again: press the switch again for the new version."
-                } else {
-                    "A new version of this bank arrived while you were deciding, so nothing was changed and your decisions were dropped (they were for the older version). The bank was read again: press the switch again for the new version."
-                };
+                let (pictures, change) = self.bank.as_ref().map_or((false, false), |b| (b.picked.is_some(), b.pictures_change));
+                let message = text::hide_moved_message(has_decisions(&decisions), pictures, change);
                 if let Some(b) = &mut self.bank {
-                    b.hide = HideStage::Failed { on, problem: Problem { message: message.into(), retry: false, retry_at: None, account: false }, back: None };
+                    b.hide = HideStage::Failed { on, problem: Problem { message, retry: false, retry_at: None, account: false }, back: None };
                     b.load = BankLoad::Loading;
+                    b.picked = None;
                 }
                 if let Some(c) = &mut self.circle {
                     c.detail = None;
                 }
             }
-            (Act::HideKey { .. }, ActDone::Hidden(r)) => {
+            (Act::HideKey { bid, .. }, ActDone::Hidden(r)) => {
+                let mut r = *r;
+                self.edit.note_hiding(&bid, r.hide_key);
                 if let Some(b) = &mut self.bank {
-                    b.hide = HideStage::Done(*r);
+                    // What the pool left out that the person did not choose to drop (kept, or never listed).
+                    let dropped = b.picked.take().filter(|_| b.bid == bid).map(|p| p.dropped()).unwrap_or_default();
+                    r.left_out_unasked = left_out_unasked(&dropped, &r.removed_pictures);
+                    b.hide = HideStage::Done(r);
                     // The bank and the circle page are read again (the setting, a hold).
                     b.load = BankLoad::Loading;
                 }
@@ -1847,8 +1877,13 @@ impl CirclesModel {
     }
 }
 
+/// Decisions other than the pictures kept (labels, orders, formatting checks).
+fn has_decisions(d: &StripDecisions) -> bool {
+    !(d.labels.is_empty() && d.order_acks.is_empty() && d.ack_formatting.is_empty())
+}
+
 fn new_bank_view(cid: &str, bid: &str) -> BankView {
-    BankView { cid: cid.to_string(), bid: bid.to_string(), load: BankLoad::Loading, copy: CopyPanel::Closed, report: None, act_problem: None, confirm_remove: false, license_choice: None, hide: HideStage::Idle, withheld_head: false, hide_off_releases: false }
+    BankView { cid: cid.to_string(), bid: bid.to_string(), load: BankLoad::Loading, copy: CopyPanel::Closed, report: None, act_problem: None, confirm_remove: false, license_choice: None, hide: HideStage::Idle, withheld_head: false, hide_off_releases: false, picked: None, pictures_change: false }
 }
 
 // ---- what the screens ask for ----------------------------------------------------------------------------
@@ -2517,6 +2552,8 @@ impl CirclesModel {
             && matches!(b.hide, HideStage::Idle | HideStage::Done(_) | HideStage::Failed { .. })
         {
             b.hide = HideStage::Confirm { on };
+            b.picked = None;
+            b.pictures_change = false;
         }
     }
 
@@ -2526,6 +2563,8 @@ impl CirclesModel {
             && !matches!(b.hide, HideStage::Working { .. })
         {
             b.hide = HideStage::Idle;
+            b.picked = None;
+            b.pictures_change = false;
         }
     }
 
@@ -2542,18 +2581,74 @@ impl CirclesModel {
                 b.hide = HideStage::Decide(d);
                 self.send_hide_decisions();
             }
+            // (the change went from the picture step: it goes again with the pictures kept)
+            None if on && b.picked.is_some() => {
+                b.hide = b.picked.clone().map_or(HideStage::Idle, HideStage::Pictures);
+                self.send_hide_pictures();
+            }
             _ => self.ask_hide(on),
         }
     }
 
-    /// "Yes": the change goes to the pool (with no decisions yet: the pool lists what it needs).
+    /// "Yes": the change goes to the pool (with no decisions yet: the pool lists what it needs). Turning hiding on
+    /// over a newest version with pictures asks first which ones viewers keep (the pool never asks: it leaves out
+    /// every picture not kept).
     pub fn confirm_hide(&mut self) {
         let on = match self.bank.as_ref().map(|b| &b.hide) {
             Some(HideStage::Confirm { on }) => *on,
             _ => return,
         };
         let base = if on { self.read_version() } else { None };
+        if on
+            && self.hide_change_allowed(true)
+            && let Some(mut p) = self.head_pictures()
+        {
+            p.head = base;
+            if let Some(b) = &mut self.bank {
+                b.hide = HideStage::Pictures(Box::new(p));
+            }
+            return;
+        }
         self.start_hide(on, StripDecisions::default(), base, None);
+    }
+
+    /// Turning hiding on asks about pictures after the confirmation (the newest version read has some): its button
+    /// only leads to the picture step, and costs no try.
+    pub fn hide_pictures_follow(&self) -> bool {
+        matches!(self.bank.as_ref().map(|b| &b.hide), Some(HideStage::Confirm { on: true })) && self.hide_change_allowed(true) && self.head_pictures().is_some()
+    }
+
+    /// "Change picture choices" is offered (critic 62 I2): the keys are hidden, the person may change the setting,
+    /// the newest version read in full has pictures, and nothing else is going on.
+    pub fn can_change_pictures(&self) -> bool {
+        self.hide_allowed()
+            && self.hide_key_on()
+            && matches!(self.bank.as_ref().map(|b| &b.hide), Some(HideStage::Idle | HideStage::Done(_) | HideStage::Failed { .. }))
+            && self.head_pictures().is_some()
+    }
+
+    /// "Change picture choices": the picture step again for the newest version read, pinned to it. What was chosen
+    /// before is not known here, so every picture starts as dropped; saving sends hiding on again with the new choices.
+    pub fn change_pictures(&mut self) {
+        if !self.can_change_pictures() {
+            return;
+        }
+        let base = self.read_version();
+        let Some(mut p) = self.head_pictures() else { return };
+        p.head = base;
+        if let Some(b) = &mut self.bank {
+            b.hide = HideStage::Pictures(Box::new(p));
+            b.picked = None;
+            b.pictures_change = true;
+        }
+    }
+
+    /// The pictures of the version this page read in full (none: no picture step).
+    fn head_pictures(&self) -> Option<Pictures> {
+        match self.bank.as_ref().map(|b| &b.load) {
+            Some(BankLoad::Ready(l)) if !l.doc.bank.keys_hidden => Pictures::of_payload(&l.doc.payload),
+            _ => None,
+        }
     }
 
     /// The version of the bank as this page read it.
@@ -2606,6 +2701,33 @@ impl CirclesModel {
         if let Some(d) = self.decisions_mut() {
             d.set_formatting(question, yes);
         }
+    }
+
+    /// "Keep it for viewers" / "Drop it" on the picture step.
+    pub fn hide_keep_picture(&mut self, question: usize, yes: bool) {
+        if let Some(HideStage::Pictures(p)) = self.bank.as_mut().map(|b| &mut b.hide) {
+            p.set_keep(question, yes);
+        }
+    }
+
+    /// "Hide the keys" on the picture step: the change goes with the questions whose picture is kept (`image_ok`),
+    /// for the version the list was made from (the head is read right before, as for the decisions).
+    pub fn send_hide_pictures(&mut self) {
+        if self.running(JobKind::Act) {
+            return;
+        }
+        let Some(p) = (match self.bank.as_ref().map(|b| &b.hide) {
+            Some(HideStage::Pictures(p)) => Some(p.clone()),
+            _ => None,
+        }) else {
+            return;
+        };
+        let decisions = StripDecisions { image_ok: p.image_ok(), ..StripDecisions::default() };
+        let base = p.head.or_else(|| self.read_version());
+        if let Some(b) = &mut self.bank {
+            b.picked = Some(p);
+        }
+        self.start_hide(true, decisions, base, None);
     }
 
     /// "Hide the keys with these decisions": only when everything listed is decided.

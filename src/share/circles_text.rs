@@ -47,13 +47,84 @@ pub const COPY_NO_KEYS_DONE: &str = "This copy has no answer keys. Each question
 pub const HIDE_SECTION: &str = "Answer keys for viewers";
 pub const HIDE_OFF_LINE: &str = "Everyone in this circle sees the answer keys, viewers too.";
 pub const HIDE_ON_LINE: &str = "Viewers get this bank without its answer keys. Editors and the owner still see everything, and can edit it as before.";
-pub const HIDE_ON_ASK: &str = "Viewers will get every version of this bank without the correct answers, the explanations and the pictures, and with the choices shuffled. Editors and the owner keep seeing the full bank. The pool first checks the viewers' copy; it may ask you to decide about letter labels (A, B, C ...) or choice orders.";
+pub const HIDE_ON_ASK: &str = "Viewers will get every version of this bank without the correct answers, the explanations and the pictures, and with the choices shuffled. Editors and the owner keep seeing the full bank. If the newest version has pictures, you choose next which of them viewers may keep. The pool first checks the viewers' copy; it may ask you to decide about letter labels (A, B, C ...) or choice orders.";
 pub const HIDE_OFF_ASK: &str = "Viewers will see the answer keys again, in every version of this bank.";
 /// The bank page when the newest version of a bank that hides its keys is held back and the pool said turning
 /// hiding off releases it (critic 58 B2, critic 59 B1).
 pub const HIDE_HELD_HEAD: &str = "The newest version of this bank is held back while an administrator reviews it, so it can not be opened. It was held back when the answer keys were hidden from viewers: turning hiding off makes it readable again.";
 /// Hiding was turned off and the bank, read again, still has its newest version held back (critic 60 B2).
 pub const HIDE_OFF_STILL_HELD: &str = "Turning hiding off did not release the newest version. It is still held back, and only an administrator can release it.";
+/// The picture step (before hiding is turned on, and before a send to a bank that hides its keys).
+pub const PICTURES_HEADING: &str = "Pictures";
+pub const PICTURES_HELP: &str = "Viewers get a picture only if you keep it for them. A picture you keep is shown to viewers as it is, so keep it only if it does not show an answer or a hint.";
+pub const PICTURES_BANK_INTRO: &str = "The newest version of this bank has pictures. Choose for each one whether viewers get it. Nothing has changed yet.";
+pub const PICTURES_SEND_INTRO: &str = "This bank hides its answer keys from viewers, so the pool makes a viewers' copy of what you send. Choose for each picture whether viewers get it. Nothing was sent yet; your changes are still on this computer.";
+pub const PICTURE_KEEP: &str = "Keep it for viewers";
+pub const PICTURE_DROP: &str = "Drop it";
+/// The confirmation's button when the picture step comes next (critic 62 minor: one "Hide the keys", on the step).
+pub const HIDE_NEXT: &str = "Next";
+/// While the keys are hidden: choosing again which pictures viewers get (critic 62 I2). The app does not know what
+/// was chosen before, so every picture starts as dropped; each save is a change of the setting for the day's count.
+pub const PICTURES_CHANGE: &str = "Change picture choices";
+pub const PICTURES_SAVE: &str = "Save picture choices";
+pub const PICTURES_CHANGE_INTRO: &str = "Choose again for each picture of the newest version whether viewers get it. Every picture starts as dropped here, whatever was chosen before. Nothing has changed yet. Saving new choices counts as a change of the answer-key setting, and there is a daily number of those.";
+pub const PICTURES_CHANGE_DECIDE: &str = "Before the new picture choices can be saved, the pool needs these decisions about the copy viewers will get. Nothing has changed yet.";
+
+/// A new version arrived before a change of the setting went through (the head read right before it moved, or the
+/// pool's `409 conflict` on the PATCH pinned to the version, critic 62 B1): nothing changed, and whatever was decided
+/// for the older version is dropped. `change`: it came from "Change picture choices".
+pub fn hide_moved_message(decisions: bool, pictures: bool, change: bool) -> String {
+    let again = if change { "press Change picture choices again to choose for the new version" } else { "press the switch again for the new version" };
+    let dropped = match (decisions, pictures) {
+        (true, true) => " Your decisions and picture choices were dropped: they were for the older version.",
+        (true, false) => " Your decisions were dropped: they were for the older version.",
+        (false, true) => " Your picture choices were dropped: they were for the older version.",
+        (false, false) => "",
+    };
+    format!("A new version of this bank arrived meanwhile, so nothing was changed.{dropped} The bank was read again: {again}.")
+}
+
+/// "questions 2 and 4" (0-based positions in, numbers out).
+pub fn question_numbers(qs: &[usize]) -> String {
+    let n: Vec<String> = qs.iter().map(|q| (q + 1).to_string()).collect();
+    match n.split_last() {
+        Some((last, rest)) if !rest.is_empty() => format!("questions {} and {last}", rest.join(", ")),
+        Some((last, _)) => format!("question {last}"),
+        None => String::new(),
+    }
+}
+
+/// A send to a bank this computer did not know hides its answer keys: the step was not shown, and the viewers' copy
+/// left out these pictures (critic 62 I5). `ask_next`: the next send asks (the bank is known to hide them now).
+pub fn pictures_not_asked_line(qs: &[usize], ask_next: bool) -> Option<String> {
+    let next = if ask_next { " Send again to choose which pictures viewers get." } else { "" };
+    match qs.len() {
+        0 => None,
+        1 => Some(format!("The picture of {} was left out of the viewers' copy. You were not asked about it: this computer did not know the bank hides its answer keys.{next}", question_numbers(qs))),
+        _ => Some(format!("The pictures of {} were left out of the viewers' copy. You were not asked about them: this computer did not know the bank hides its answer keys.{next}", question_numbers(qs))),
+    }
+}
+
+/// A send made on the picture step, to a bank that turned out not to hide its answer keys any more: viewers get the
+/// version in full (critic 62 I1). `dropped`: the pictures the person chose to drop.
+pub fn hiding_stopped_line(dropped: &[usize]) -> String {
+    let also = match dropped.len() {
+        0 => String::new(),
+        1 => format!(", the picture of {} that you chose to drop too", question_numbers(dropped)),
+        _ => format!(", the pictures of {} that you chose to drop too", question_numbers(dropped)),
+    };
+    format!("This bank no longer hides its answer keys from viewers, so viewers get this version in full: its answer keys and every picture{also}.")
+}
+
+/// Pictures the viewers' copy left out that the person did not choose to drop, in one plain sentence.
+pub fn pictures_left_out_line(qs: &[usize]) -> Option<String> {
+    match qs.len() {
+        0 => None,
+        1 => Some(format!("The picture of {} was left out of the viewers' copy, although you did not choose to drop it. Viewers do not see it.", question_numbers(qs))),
+        _ => Some(format!("The pictures of {} were left out of the viewers' copy, although you did not choose to drop them. Viewers do not see them.", question_numbers(qs))),
+    }
+}
+
 pub const HIDE_TRIES: &str = "Each press counts toward a daily number of tries, also when the pool asks for decisions, so decide everything listed before you press again.";
 
 pub const LICENSE_SETTING_NOTE: &str = "This is the licence you attach to the bank. Not yet: sharing a circle bank's questions publicly is not available in this version, whatever the licence. A later version may let members do it for Creative Commons banks. Earlier versions keep the licence they were shared under.";
@@ -266,6 +337,9 @@ pub fn hide_result_lines(r: &HideKeyResult, head_held: bool) -> Vec<String> {
     if r.labels_removed > 0 {
         bits.push(n(r.labels_removed, "set of letter labels was stripped", "sets of letter labels were stripped"));
     }
+    if r.images_kept > 0 {
+        bits.push(n(r.images_kept, "picture was kept", "pictures were kept"));
+    }
     if r.images_removed > 0 {
         bits.push(n(r.images_removed, "picture was left out", "pictures were left out"));
     }
@@ -275,6 +349,7 @@ pub fn hide_result_lines(r: &HideKeyResult, head_held: bool) -> Vec<String> {
     if !bits.is_empty() {
         out.push(format!("In the viewers' copy: {}.", bits.join(", ")));
     }
+    out.extend(pictures_left_out_line(&r.left_out_unasked));
     if r.withheld || r.held {
         // (critic 60 B1: whether turning hiding off makes it readable again is the pool's to say, on the bank's read:
         // HIDE_HELD_HEAD says it only then)

@@ -156,9 +156,37 @@ privacy, terms or moderation wording beyond the fixed invitation mail. Migration
 anywhere yet, `0111`, `0113` and `0114` edited in place in rounds 46 and 48; the next is `0116`). Tests:
 `test/pool/round42.test.ts` (7), `round43.test.ts` (8), `round44.test.ts` (9), `round45.test.ts` (4), `round46.test.ts`
 (12), `round47.test.ts` (10), `round48.test.ts` (10), `round49.test.ts` (3), `round50.test.ts` (4), `round51.test.ts`
-(4); every file failed on the code before its round (45-3 is a guard that already passes after round 44: it fails on
-round 41's code; 51-4 pins a rule round 50's code already keeps). Suite 676 (with `d1-like-limit.test.ts`). Rounds
-46-51 changed parts of rounds 42-50: where a line below says otherwise, the later round is what the code does.
+(4), `round52.test.ts` (4); every file failed on the code before its round (45-3 is a guard that already passes after
+round 44: it fails on round 41's code; 51-4 pins a rule round 50's code already keeps). Suite 680 (with
+`d1-like-limit.test.ts`). Rounds 46-52 changed parts of rounds 42-51: where a line below says otherwise, the later round
+is what the code does.
+
+**Round 52 (the app's picture step, critic 62, `docs/critic-reports/2026-10-25-circles-phaseC-pictures-critic62.md`).**
+No migration. Tests: `test/pool/round52.test.ts` (4, each failed on round 51's code: 52-1 to 52-3 on the refused
+`base_version`, 52-4 on the missing field). No earlier test pinned the old `400 invalid_request field base_version`.
+
+* **62 B1, the answer-key PATCH is pinned to a version.** `PATCH .../banks/:bid` takes `base_version` (an integer
+  version, as a send's) with `hide_key` (true or false; refused with `license` or alone: `400 field base_version`). A
+  head that is not that version is `409 conflict {head_version, message}`, the shape a lost batch already answers,
+  before any decision is checked (a position past the head's count is the conflict, not a `400` for that field) and
+  before anything is charged (no try, no change). Hiding on's batch compares and sets the head that was checked, so a
+  version arriving after the check is the same conflict; hiding off strips nothing and is pinned by the check only.
+  Without `base_version` nothing changed. This closes critic 62 c62-1 (a version sent between the author's look and
+  the PATCH got her `image_ok` positions and kept a picture she never saw) and is critic 57's suggestion. 52-1, 52-2.
+* **62 I2, choosing again which pictures viewers get.** Already accepted (round 43/46): `hide_key: true` again with
+  other decisions re-strips the head, records them (`circle.bank_strip_decisions`, no activity line), and counts toward
+  `circle_hide_changes` (20 a day; the same decisions again are `unchanged` and free; past the cap `429 daily_limit`).
+  Now pinned too. 52-3.
+* **62 I5, `POST /circles/heads` says `hide_key`.** Each bank it reports as `current` carries `hide_key` (boolean),
+  for every member who reads it there (the circle page and the bank's read already tell every member); a `removed`,
+  `under_review` or `unavailable` entry does not (a member who left reads only `unavailable`). 52-4.
+* The app (client, same round): the bank page's hide PATCH sends `base_version` (the version the decisions and picture
+  choices were made on; none for turning hiding off); a `409 conflict` drops every choice, pictures included, says so,
+  and the bank is read again for the step to start over. The send page notes `hide_key` from its own `heads` check
+  before the picture step, and the result line says plainly when the person was not asked about a picture (and that
+  sending again lets them choose), or when a send made on the picture step went to a bank that no longer hides its
+  keys (viewers get it in full, the dropped pictures too). While the keys are hidden, the owner or author can
+  "Change picture choices" (every picture starts as dropped; pinned; counts as an answer-key change).
 
 **Round 51 (phase C final critic 61, `docs/critic-reports/2026-10-25-circles-phaseC-final-critic61.md`).** No
 migration. Tests: `test/pool/round51.test.ts` (4; 51-1 and 51-2 failed on round 50's code every run; 51-3 failed
@@ -1167,8 +1195,8 @@ rows, cap crossings use `cap`, circle independence statements `independent_claim
   | `POST /circles/:cid/banks/:bid/trim` | owner; the bank's author while an editor | `{keep: 1-19}` -> `{ok, pruned, oldest_kept, pinned_versions}` (round 38; round 39: a student-data hold does not stop it, a withheld version with an open flag is kept) |
   | `GET` / `HEAD /circles/:cid/banks/:bid` | member (held: author only) | streamed `{circle, bank: {id, title, subject, course, grade, license, version_license, author_name, is_author, version, version_id, question_count, has_images, committed_at, committed_by, held?}, origins, payload}`; `ETag`, `If-None-Match` -> 304; viewing and copying are this one read; counts toward `item_reads`; `409 bank_removed`, `409 circle_closed` |
   | `GET /circles/:cid/banks/:bid/blobs/:sha256` | member who may read the bank | an image a kept version uses (never a student-data-blocked one) |
-  | `POST /circles/heads` | teacher | `{bank_ids}` (<= 200) -> `{banks: [{bank_id, status: current, version, version_id, license, at, by} \| {status: removed, until?} \| {status: under_review} \| {status: unavailable}]}`; one `item_reads` |
-  | `PATCH /circles/:cid/banks/:bid` | the bank's author | `{license}` (D19: `circle-only` = members may not re-share); bounded by the head's declared public origins (`422 license_incompatible {allowed}`); earlier versions keep theirs. Round 43: or `{hide_key, labels?, order_acks?, ack_formatting?, image_ok?}` (the author while an editor or the owner, or the circle's owner): viewers read the stripped form |
+  | `POST /circles/heads` | teacher | `{bank_ids}` (<= 200) -> `{banks: [{bank_id, status: current, version, version_id, license, at, by, hide_key (round 52)} \| {status: removed, until?} \| {status: under_review} \| {status: unavailable}]}`; one `item_reads` |
+  | `PATCH /circles/:cid/banks/:bid` | the bank's author | `{license}` (D19: `circle-only` = members may not re-share); bounded by the head's declared public origins (`422 license_incompatible {allowed}`); earlier versions keep theirs. Round 43: or `{hide_key, labels?, order_acks?, ack_formatting?, image_ok?}` (the author while an editor or the owner, or the circle's owner): viewers read the stripped form; round 52: `base_version?` pins it (`409 conflict {head_version}` on another head, nothing changed) |
   | `DELETE .../banks/:bid`, `POST .../undelete` | owner, the bank's author (D17) | 14 days to undo, then purged; the owner's removal is undone by the owner only, the author's own by either (round 33) |
   | `POST .../banks/:bid/purge` | owner | a removed bank (by its author, the owner or an erasure) purged now, so it stops counting toward the circle's caps; never under an admin removal, a hold or an open report (`409 under_moderation`; `409 bank_not_removed`); not undoable (round 33); round 48: while only an administrator's review of a flagged version is pending, `200 {ok, purged_partial: true, pending_review: true, evidence_kept, message}` (the rest pruned, the purge claimed, finished once the flags are decided or their evidence captured) |
   | `POST .../banks/:bid/report` | member, not the author | `{reason: student_data\|copyright\|inappropriate\|other, note?}` -> `202` always |

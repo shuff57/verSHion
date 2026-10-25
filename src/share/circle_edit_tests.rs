@@ -254,7 +254,7 @@ fn a_missing_local_bank_is_noticed_and_can_be_forgotten() {
 fn the_quiet_check_marks_a_copy_that_is_behind() {
     let mut r = Rig::new(&[(QA, "One")]);
     assert_eq!(r.link().behind(), 0);
-    r.m.apply_heads(&[HeadEntry { bank_id: BID.into(), state: HeadState::Current { version: 4, license: None, at: Some(NOW), by: Some("Ms Frizzle".into()) } }]);
+    r.m.apply_heads(&[HeadEntry { bank_id: BID.into(), state: HeadState::Current { version: 4, license: None, at: Some(NOW), by: Some("Ms Frizzle".into()), hide_key: None } }]);
     let l = r.link();
     assert_eq!(l.behind(), 3);
     assert_eq!(behind_line(l.behind()), "3 new versions in the circle");
@@ -333,7 +333,7 @@ fn a_lost_answer_is_retried_with_the_same_commit_id_and_a_changed_note_starts_ov
     assert_eq!(puts.len(), 2);
     assert_eq!(body_parts(&puts[0]).0["commit_id"], body_parts(&puts[1]).0["commit_id"]);
     assert!(matches!(r.send_stage(), SendStage::Done(s) if s.replayed));
-    let lines = sent_lines(&SentInfo { version: 2, added: 0, changed: 1, removed: 0, replayed: true, held: false, withheld: false, merged_from: None }, true);
+    let lines = sent_lines(&SentInfo { version: 2, added: 0, changed: 1, removed: 0, replayed: true, held: false, withheld: false, merged_from: None, left_out_unasked: Vec::new(), not_asked: Vec::new(), hiding_stopped: None, ask_next: false }, true);
     assert!(lines.iter().any(|l| l.contains("nothing was sent twice")));
 
     // Another try with a different note is another send.
@@ -675,7 +675,7 @@ fn a_copy_that_is_up_to_date_says_so() {
 fn a_hidden_newest_version_can_not_be_merged_but_can_be_sent_over() {
     let mut r = Rig::new(&[(QA, "One")]);
     r.edit_stem(0, "One, reworded");
-    r.m.apply_heads(&[HeadEntry { bank_id: BID.into(), state: HeadState::Current { version: 3, license: None, at: None, by: None } }]);
+    r.m.apply_heads(&[HeadEntry { bank_id: BID.into(), state: HeadState::Current { version: 3, license: None, at: None, by: None, hide_key: None } }]);
     r.s.on("Post", &format!("{}/merge", bank_path()), 200, merge_start_json(1, 3, true));
     r.s.keep("Get", &bank_path(), 404, json!({"error": "version_withheld", "message": "raw words"}));
     r.m.open_merge(LOCAL, editor());
@@ -1287,7 +1287,7 @@ fn every_working_copy_screen_and_state_draws_wide_and_narrow() {
     let t = draw_all(&mut r, &ctx);
     assert!(!t.contains("invalid_request"), "{t}");
     let mut r = Rig::new(&[(QA, "One")]);
-    r.m.apply_heads(&[HeadEntry { bank_id: BID.into(), state: HeadState::Current { version: 3, license: None, at: None, by: None } }]);
+    r.m.apply_heads(&[HeadEntry { bank_id: BID.into(), state: HeadState::Current { version: 3, license: None, at: None, by: None, hide_key: None } }]);
     r.s.on("Post", &format!("{}/merge", bank_path()), 200, merge_start_json(1, 3, true));
     r.s.keep("Get", &bank_path(), 404, json!({"error": "version_withheld"}));
     r.m.open_merge(LOCAL, editor());
@@ -1612,7 +1612,7 @@ fn a_restore_that_comes_back_hidden_does_not_say_done() {
 
 #[test]
 fn hidden_advice_is_for_whoever_can_fix_it() {
-    let s = SentInfo { version: 2, added: 0, changed: 1, removed: 0, replayed: false, held: true, withheld: true, merged_from: None };
+    let s = SentInfo { version: 2, added: 0, changed: 1, removed: 0, replayed: false, held: true, withheld: true, merged_from: None, left_out_unasked: Vec::new(), not_asked: Vec::new(), hiding_stopped: None, ask_next: false };
     let author = sent_lines(&s, true).join(" ");
     let editor = sent_lines(&s, false).join(" ");
     assert!(author.contains("Change the questions") && !author.contains("student"), "{author}");
@@ -2446,4 +2446,378 @@ fn c61_the_same_account_back_retries_a_lost_restore_with_its_commit_id_and_anoth
         let same = posts[0].json()["commit_id"] == posts[1].json()["commit_id"];
         assert_eq!(same, !another, "another: {another}");
     }
+}
+
+// ---- "keep this picture" on a send to a bank that hides its keys --------------------------------------------------
+
+const PIC: &[u8] = b"a tiny picture";
+
+/// A working copy whose question 2 (position 1) has a picture, its bytes on this computer and the pool taking them.
+fn pictured_rig(hiding: Option<bool>) -> Rig {
+    let s = Script::new();
+    let log = LinkLog::memory();
+    let restores = Arc::new(MemRestore::default());
+    let sha = sha256_hex(PIC);
+    let file = format!("media/{sha}.png");
+    let media: SharedMedia = Arc::new(HashMap::from([(file.clone(), PIC.to_vec())]));
+    s.keep("Post", "/circles/heads", 200, heads_json("CC-BY-4.0", 1));
+    s.keep("Put", &format!("/blobs/{sha}"), 200, json!({"sha256": sha, "size": PIC.len(), "width": 4, "height": 4}));
+    let mut m = CircleEditModel::new(Runner::Inline, Arc::new(Mem::default()), media, restores.clone(), log.clone()).with_retry(RetryPolicy::none());
+    m.set_clock(NOW);
+    let (mut bank, link) = linked(&[(QA, "One"), (QB, "Two")]);
+    bank.questions[1].image = Some(crate::model::ImageRef { file, width: 4, height: 4 });
+    bank.questions[1].stem = "Two, with a picture".into();
+    bank.modified += 1;
+    m.add_link(link).unwrap();
+    if let Some(h) = hiding {
+        m.note_hiding(BID, h);
+    }
+    let mut r = Rig { m, s, log, restores, banks: vec![bank] };
+    r.frame();
+    r
+}
+
+/// The sends of the bank (not the pictures' uploads, which are PUTs too).
+fn sends(r: &Rig) -> Vec<Sent> {
+    r.puts().into_iter().filter(|x| x.path == bank_path()).collect()
+}
+
+fn sent_hidden(version: u64) -> Value {
+    json!({"circle_id": CID, "bank_id": BID, "version": version, "version_id": hex(version), "qids": [QA, QB], "added": 0, "changed": 1, "removed": 0, "keys_hidden": true})
+}
+
+fn picture_stage(r: &Rig) -> &super::circle_hide::Pictures {
+    match r.send_stage() {
+        SendStage::Pictures(p) => p,
+        other => panic!("not the picture step: {other:?}"),
+    }
+}
+
+#[test]
+fn pictures_a_send_to_a_hiding_bank_asks_which_pictures_viewers_get() {
+    let mut r = pictured_rig(Some(true));
+    r.open_send(editor());
+    r.m.send();
+    r.turn();
+    assert!(sends(&r).is_empty(), "nothing is sent before the pictures are decided");
+    let p = picture_stage(&r);
+    assert_eq!(p.list.iter().map(|x| x.question).collect::<Vec<_>>(), vec![1]);
+    assert!(p.image_ok().is_empty());
+    r.m.send_keep_picture(1, true);
+    r.m.send_keep_picture(0, true); // no picture there
+    r.s.on("Put", &bank_path(), 201, sent_hidden(2));
+    r.m.send_with_pictures();
+    r.m.send_with_pictures();
+    r.turn();
+    let puts = sends(&r);
+    assert_eq!(puts.len(), 1, "one send");
+    assert_eq!(body_parts(&puts[0]).0["image_ok"], json!([1]));
+    let SendStage::Done(d) = r.send_stage() else { panic!("{:?}", r.send_stage()) };
+    assert!(d.left_out_unasked.is_empty());
+    // none kept: no image_ok, and the dropped picture is not said as a surprise
+    let mut r = pictured_rig(Some(true));
+    r.open_send(editor());
+    r.m.send();
+    r.turn();
+    r.s.on("Put", &bank_path(), 201, sent_hidden(2));
+    r.m.send_with_pictures();
+    r.turn();
+    assert!(body_parts(&sends(&r)[0]).0.get("image_ok").is_none());
+    let SendStage::Done(d) = r.send_stage() else { panic!("{:?}", r.send_stage()) };
+    assert!(d.left_out_unasked.is_empty());
+}
+
+#[test]
+fn pictures_no_step_for_a_bank_that_shows_its_keys_or_a_bank_without_pictures() {
+    let mut r = pictured_rig(Some(false));
+    r.open_send(editor());
+    r.s.on("Put", &bank_path(), 201, sent_ok(2, &[QA, QB]));
+    r.m.send();
+    r.turn();
+    assert_eq!(sends(&r).len(), 1, "sent straight away");
+    assert!(body_parts(&sends(&r)[0]).0.get("image_ok").is_none());
+    assert!(matches!(r.send_stage(), SendStage::Done(_)));
+    let mut r = Rig::new(&[(QA, "One"), (QB, "Two")]);
+    r.m.note_hiding(BID, true);
+    r.edit_stem(0, "One, reworded");
+    r.open_send(editor());
+    r.s.on("Put", &bank_path(), 201, sent_hidden(2));
+    r.m.send();
+    r.turn();
+    assert_eq!(sends(&r).len(), 1, "no pictures: no step");
+}
+
+#[test]
+fn pictures_kept_go_with_the_pools_decisions_too() {
+    let mut r = pictured_rig(Some(true));
+    r.open_send(editor());
+    r.m.send();
+    r.turn();
+    r.m.send_keep_picture(1, true);
+    r.s.on("Put", &bank_path(), 422, json!({"error": "labels_need_decision", "errors": [], "label_findings": [{"question": 0, "strip_allowed": true}]}));
+    r.m.send_with_pictures();
+    r.turn();
+    assert_eq!(body_parts(&sends(&r)[0]).0["image_ok"], json!([1]));
+    let SendStage::Decide(_) = r.send_stage() else { panic!("{:?}", r.send_stage()) };
+    r.m.send_decide_label(Pos::question(0), LabelChoice::Strip);
+    r.s.on("Put", &bank_path(), 201, sent_hidden(2));
+    r.m.send_with_decisions();
+    r.turn();
+    let (meta, _) = body_parts(&sends(&r)[1]);
+    assert_eq!(meta["labels"], json!([{"question": 0, "choice": "strip"}]));
+    assert_eq!(meta["image_ok"], json!([1]), "the pictures kept go again");
+    let SendStage::Done(d) = r.send_stage() else { panic!("{:?}", r.send_stage()) };
+    assert!(d.left_out_unasked.is_empty());
+}
+
+#[test]
+fn pictures_changed_content_is_asked_again() {
+    let mut r = pictured_rig(Some(true));
+    r.open_send(editor());
+    r.m.send();
+    r.turn();
+    r.m.send_keep_picture(1, true);
+    // (a sign-in that ends keeps the choice: see below) then the bank is changed
+    r.s.fail(ApiError::SignedOut);
+    r.m.send_with_pictures();
+    r.turn();
+    assert!(matches!(r.send_stage(), SendStage::Editing));
+    r.edit_stem(1, "Two, rewritten");
+    r.m.send();
+    r.turn();
+    assert_eq!(sends(&r).len(), 0, "the signed-out try never reached the pool");
+    let p = picture_stage(&r);
+    assert!(p.image_ok().is_empty(), "asked again, from nothing, for the changed content");
+    assert_eq!(p.list[0].stem, "Two, rewritten");
+    // back to the note drops them, as it drops the other decisions
+    let mut r = pictured_rig(Some(true));
+    r.open_send(editor());
+    r.m.send();
+    r.turn();
+    r.m.send_keep_picture(1, true);
+    r.m.back_to_note();
+    r.m.send();
+    r.turn();
+    assert!(picture_stage(&r).image_ok().is_empty());
+}
+
+#[test]
+fn pictures_a_failure_keeps_the_choices_and_try_again_sends_them() {
+    let mut r = pictured_rig(Some(true));
+    r.open_send(editor());
+    r.m.send();
+    r.turn();
+    r.m.send_keep_picture(1, true);
+    r.s.on("Put", &bank_path(), 503, json!({"error": "busy"}));
+    r.m.send_with_pictures();
+    r.turn();
+    let SendStage::Failed(p) = r.send_stage() else { panic!("{:?}", r.send_stage()) };
+    assert!(p.retry);
+    r.s.on("Put", &bank_path(), 201, sent_hidden(2));
+    r.m.retry_act();
+    r.turn();
+    let puts = sends(&r);
+    assert_eq!(puts.len(), 2, "Try again sends, without asking again");
+    assert_eq!(body_parts(&puts[1]).0["image_ok"], json!([1]));
+    assert!(matches!(r.send_stage(), SendStage::Done(_)));
+}
+
+#[test]
+fn pictures_a_sign_in_that_ends_keeps_the_choices() {
+    let mut r = pictured_rig(Some(true));
+    r.open_send(editor());
+    r.m.send();
+    r.turn();
+    r.m.send_keep_picture(1, true);
+    r.s.fail(ApiError::SignedOut);
+    r.m.send_with_pictures();
+    r.turn();
+    assert!(matches!(r.send_stage(), SendStage::Editing), "{:?}", r.send_stage());
+    r.s.on("Put", &bank_path(), 201, sent_hidden(2));
+    r.m.send();
+    r.turn();
+    let puts = sends(&r);
+    assert_eq!(body_parts(puts.last().unwrap()).0["image_ok"], json!([1]), "not asked again: the choice is kept");
+}
+
+#[test]
+fn pictures_a_restart_drops_the_kept_pictures_and_the_result_says_so() {
+    let mut r = pictured_rig(Some(true));
+    r.open_send(editor());
+    r.m.send();
+    r.turn();
+    r.m.send_keep_picture(1, true);
+    r.s.on("Put", &bank_path(), 422, json!({"error": "labels_need_decision", "errors": [], "label_findings": [{"question": 0, "strip_allowed": true}]}));
+    r.m.send_with_pictures();
+    r.turn();
+    r.m.send_decide_label(Pos::question(0), LabelChoice::Keep);
+    r.s.on("Put", &bank_path(), 422, json!({"error": "labels_need_decision", "errors": [{"code": "labels_unused", "path": "labels[question=0]"}], "label_findings": [{"question": 1, "strip_allowed": true}]}));
+    r.m.send_with_decisions();
+    r.turn();
+    let SendStage::Decide(d) = r.send_stage() else { panic!("{:?}", r.send_stage()) };
+    assert!(d.restarted && d.pictures_dropped && d.decisions().image_ok.is_empty());
+    r.m.send_decide_label(Pos::question(1), LabelChoice::Strip);
+    r.s.on("Put", &bank_path(), 201, sent_hidden(2));
+    r.m.send_with_decisions();
+    r.turn();
+    let (meta, _) = body_parts(sends(&r).last().unwrap());
+    assert!(meta.get("image_ok").is_none(), "{meta}");
+    let SendStage::Done(d) = r.send_stage() else { panic!("{:?}", r.send_stage()) };
+    assert_eq!(d.left_out_unasked, vec![1]);
+    let t = sent_lines(d, false).join(" ");
+    assert!(t.contains("question 2") && t.contains("did not choose to drop"), "{t}");
+}
+
+#[test]
+fn pictures_a_bank_not_known_to_hide_keys_says_after_the_send_what_viewers_miss_and_asks_next_time() {
+    let mut r = pictured_rig(None);
+    r.open_send(editor());
+    r.s.on("Put", &bank_path(), 201, sent_hidden(2));
+    r.m.send();
+    r.turn();
+    assert_eq!(sends(&r).len(), 1, "not known to hide its keys: no step");
+    let SendStage::Done(d) = r.send_stage() else { panic!("{:?}", r.send_stage()) };
+    // (critic 62 I5: the person was never asked, so the line says that, and how to choose)
+    assert_eq!((d.left_out_unasked.clone(), d.not_asked.clone()), (vec![], vec![1]), "the pool hid the keys and left the picture out");
+    let t = sent_lines(d, false).join(" ");
+    assert!(t.contains("question 2") && t.contains("You were not asked") && t.contains("did not know the bank hides its answer keys") && t.contains("Send again to choose which pictures viewers get") && !t.contains("did not choose to drop") && !t.contains('_'), "{t}");
+    assert!(r.m.hides_keys(BID), "the answer says the bank hides its keys");
+    // the next send asks
+    r.m.close();
+    r.edit_stem(0, "One, again");
+    r.open_send(editor());
+    r.m.send();
+    r.turn();
+    let _ = picture_stage(&r);
+    // a hide_key_changed refusal says so too
+    let mut r = pictured_rig(None);
+    r.open_send(editor());
+    r.s.on("Put", &bank_path(), 409, json!({"error": "hide_key_changed", "hide_key": true, "head_version": 1}));
+    r.m.send();
+    r.turn();
+    assert!(r.m.hides_keys(BID));
+    r.m.back_to_note();
+    r.m.send();
+    r.turn();
+    let _ = picture_stage(&r);
+    // a send answered without keys_hidden: the bank shows its keys now, and the person who chose to drop the picture
+    // is told plainly that viewers get it, keys and all (critic 62 I1: this was silent)
+    let mut r = pictured_rig(Some(true));
+    r.open_send(editor());
+    r.m.send();
+    r.turn();
+    r.s.on("Put", &bank_path(), 201, sent_ok(2, &[QA, QB]));
+    r.m.send_with_pictures();
+    r.turn();
+    let SendStage::Done(d) = r.send_stage() else { panic!("{:?}", r.send_stage()) };
+    assert!(d.left_out_unasked.is_empty() && d.not_asked.is_empty());
+    assert_eq!(d.hiding_stopped, Some(vec![1]));
+    let t = sent_lines(d, false).join(" ");
+    assert!(t.contains("no longer hides its answer keys") && t.contains("answer keys and every picture") && t.contains("question 2") && t.contains("chose to drop") && !t.contains('_'), "{t}");
+    assert!(!r.m.hides_keys(BID));
+    // the step was not shown (the bank was not known to hide its keys) and it still does not: nothing to say
+    let mut r = pictured_rig(Some(false));
+    r.open_send(editor());
+    r.s.on("Put", &bank_path(), 201, sent_ok(2, &[QA, QB]));
+    r.m.send();
+    r.turn();
+    let SendStage::Done(d) = r.send_stage() else { panic!("{:?}", r.send_stage()) };
+    assert_eq!((d.hiding_stopped.clone(), d.not_asked.clone(), d.left_out_unasked.clone()), (None, vec![], vec![]));
+    assert_eq!(sent_lines(d, false).len(), 1, "{:?}", sent_lines(d, false));
+}
+
+/// The pool's `POST /circles/heads` answer for the bank, saying whether it hides its keys (critic 62 I5).
+fn heads_hiding(hide: bool) -> Value {
+    let mut h = heads_json("CC-BY-4.0", 1);
+    h["banks"][0]["hide_key"] = json!(hide);
+    h
+}
+
+#[test]
+fn c62_i5_the_send_pages_own_check_of_the_bank_says_whether_it_hides_its_keys_before_anything_is_sent() {
+    // not known here, but the pool's check when the page opens says it hides them: the step comes first
+    let mut r = pictured_rig(None);
+    r.s.keep("Post", "/circles/heads", 200, heads_hiding(true));
+    r.open_send(editor());
+    assert!(r.m.hides_keys(BID));
+    r.m.send();
+    r.turn();
+    assert!(sends(&r).is_empty(), "nothing is sent before the pictures are decided");
+    let _ = picture_stage(&r);
+    // believed to hide them (an old read), but the pool says it no longer does: no step, nothing promised
+    let mut r = pictured_rig(Some(true));
+    r.s.keep("Post", "/circles/heads", 200, heads_hiding(false));
+    r.open_send(editor());
+    assert!(!r.m.hides_keys(BID));
+    r.s.on("Put", &bank_path(), 201, sent_ok(2, &[QA, QB]));
+    r.m.send();
+    r.turn();
+    assert_eq!(sends(&r).len(), 1);
+    assert!(matches!(r.send_stage(), SendStage::Done(d) if d.hiding_stopped.is_none()));
+    // a check that does not say keeps what was known
+    let mut r = pictured_rig(Some(true));
+    r.open_send(editor());
+    assert!(r.m.hides_keys(BID));
+}
+
+/// Clicks the `nth` text `label` on the send page as the Circles tab draws it, 420 wide.
+fn click_send_page(r: &mut Rig, ctx: &egui::Context, label: &str, nth: usize) -> bool {
+    let mut cm = model();
+    std::mem::swap(&mut cm.edit, &mut r.m);
+    let hit = super::circles_phasec_tests::click_text(ctx, 420.0, label, nth, &mut |ui| {
+        super::circles_ui::body_of(ui, &mut cm);
+    });
+    std::mem::swap(&mut cm.edit, &mut r.m);
+    hit
+}
+
+#[test]
+fn c62_i4_on_the_send_page_keep_then_drop_sends_no_picture() {
+    let mut r = pictured_rig(Some(true));
+    r.open_send(editor());
+    r.m.send();
+    r.turn();
+    let ctx = egui::Context::default();
+    crate::theme::setup(&ctx);
+    assert!(click_send_page(&mut r, &ctx, super::circles_text::PICTURE_KEEP, 0));
+    assert_eq!(picture_stage(&r).image_ok(), vec![1]);
+    assert!(click_send_page(&mut r, &ctx, super::circles_text::PICTURE_DROP, 0));
+    assert!(picture_stage(&r).image_ok().is_empty(), "Drop it un-keeps it");
+    r.s.on("Put", &bank_path(), 201, sent_hidden(2));
+    assert!(click_send_page(&mut r, &ctx, "Send", 0));
+    r.turn();
+    let puts = sends(&r);
+    assert_eq!(puts.len(), 1);
+    assert!(body_parts(&puts[0]).0.get("image_ok").is_none(), "{}", body_parts(&puts[0]).0);
+}
+
+#[test]
+fn pictures_another_account_forgets_what_was_known_and_chosen() {
+    let mut r = pictured_rig(Some(true));
+    r.open_send(editor());
+    r.m.send();
+    r.turn();
+    r.m.send_keep_picture(1, true);
+    r.m.forget_account(true);
+    assert!(matches!(r.m.view, EditView::Closed));
+    assert!(!r.m.hides_keys(BID));
+}
+
+#[test]
+fn pictures_the_send_step_draws_wide_and_narrow() {
+    let mut r = pictured_rig(Some(true));
+    r.open_send(editor());
+    r.m.send();
+    r.turn();
+    r.m.send_keep_picture(1, true);
+    let ctx = egui::Context::default();
+    for dark in [false, true] {
+        crate::theme::set_dark(dark, Some(&ctx));
+        crate::theme::setup(&ctx);
+        let t = draw_all(&mut r, &ctx);
+        for want in ["Keep it for viewers", "Drop it", "Question 2", "Two, with a picture", "does not show an answer or a hint", "Send"] {
+            assert!(t.contains(want), "{want}: {t}");
+        }
+    }
+    crate::theme::set_dark(false, Some(&ctx));
 }

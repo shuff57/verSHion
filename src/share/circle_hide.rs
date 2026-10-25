@@ -15,11 +15,108 @@
 //!   sent, maybe for questions that are others now.
 //! - A finding that can not be acknowledged has to be changed in the question itself; nothing is sent
 //!   while one is left.
+//!
+//! Pictures are not asked about by the pool: its strip leaves out every picture whose question is not in
+//! `image_ok`, and says so only afterwards (`images_removed`). So [`Pictures`] is the app's own step, before
+//! the first request: each picture dropped unless the person keeps it, its choices kept and dropped as the
+//! decisions are (a restart drops kept pictures too), and anything left out that the person did not choose to
+//! drop is said after the answer ([`left_out_unasked`]).
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde_json::Value;
+
+use super::api;
 use super::circles_api::StripDecisions;
-use super::pool::{Issue, LabelChoice, LabelDecision, LabelFinding, PayloadRefusal, Pos, RefusalKind};
+use super::pool::{Issue, LabelChoice, LabelDecision, LabelFinding, PayloadRefusal, Pos, RefusalKind, sha256_hex};
+
+// ---- "keep this picture": the step before the keys are hidden, or before a send to a bank that hides them ----------
+
+/// One picture of the bank, as the picture step lists it. There is no thumbnail (the share screens draw no
+/// images): the question's number and its first line tell it apart.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Picture {
+    /// The question's position in the bank (0-based): what the pool's `image_ok` names. A question has at most
+    /// one picture, so this is one decision per picture.
+    pub question: usize,
+    /// The question's first line, plain.
+    pub stem: String,
+}
+
+/// The picture step. The pool never asks about pictures: the viewers' copy leaves out every picture whose
+/// question is not in `image_ok` (share-core's strip). So the app asks first, and a picture is dropped unless the
+/// person keeps it. Only listed pictures can be kept.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Pictures {
+    pub list: Vec<Picture>,
+    kept: BTreeSet<usize>,
+    /// The bank version the list was made from (the bank page: checked right before the change goes).
+    pub head: Option<u64>,
+    /// The sha256 of the payload the list was made from (a send: the choices go only with that content).
+    pub payload_sha: String,
+}
+
+impl Pictures {
+    /// The pictures of a bank (or of a single question) as sent or served. `None` when it has none: the step
+    /// is skipped.
+    pub fn of_payload(payload: &[u8]) -> Option<Pictures> {
+        let v: Value = serde_json::from_slice(payload).ok()?;
+        let questions: Vec<&Value> = match (v.pointer("/bank/questions").and_then(Value::as_array), v.get("question")) {
+            (Some(qs), _) => qs.iter().collect(),
+            (None, Some(q)) => vec![q],
+            _ => return None,
+        };
+        let list: Vec<Picture> = questions
+            .iter()
+            .enumerate()
+            // (what the strip reads: a question's `image`, whatever its file name)
+            .filter(|(_, q)| q.pointer("/image/file").and_then(Value::as_str).is_some_and(|f| !f.is_empty()))
+            .map(|(question, q)| {
+                let raw = q.get("stem").and_then(Value::as_str).unwrap_or("");
+                let first = raw.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+                let first = api::plain(first);
+                let stem = if first.chars().count() > 120 { format!("{}...", first.chars().take(117).collect::<String>().trim_end()) } else { first };
+                Picture { question, stem }
+            })
+            .collect();
+        (!list.is_empty()).then(|| Pictures { list, kept: BTreeSet::new(), head: None, payload_sha: sha256_hex(payload) })
+    }
+
+    pub fn kept(&self, question: usize) -> bool {
+        self.kept.contains(&question)
+    }
+
+    /// "Keep it for viewers" (`yes`) or "Drop it", for a listed picture. Anything else is ignored.
+    pub fn set_keep(&mut self, question: usize, yes: bool) {
+        if !self.list.iter().any(|p| p.question == question) {
+            return;
+        }
+        if yes {
+            self.kept.insert(question);
+        } else {
+            self.kept.remove(&question);
+        }
+    }
+
+    /// The questions whose picture viewers keep (the pool's `image_ok`), in order.
+    pub fn image_ok(&self) -> Vec<usize> {
+        self.kept.iter().copied().collect()
+    }
+
+    /// The listed pictures the person chose to drop.
+    pub fn dropped(&self) -> Vec<usize> {
+        self.list.iter().map(|p| p.question).filter(|q| !self.kept.contains(q)).collect()
+    }
+}
+
+/// The pictures the pool left out (`removed`, question positions) that the person did not choose to drop
+/// (`dropped`): ones they kept, and ones the step never listed. Said plainly after the change.
+pub fn left_out_unasked(dropped: &[usize], removed: &[usize]) -> Vec<usize> {
+    let mut out: Vec<usize> = removed.iter().copied().filter(|q| !dropped.contains(q)).collect();
+    out.sort_unstable();
+    out.dedup();
+    out
+}
 
 /// The person's decisions for one refusal of the pool, on top of what earlier steps decided.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -33,6 +130,8 @@ pub struct Decisions {
     /// The pool said a decision named a question that no longer has letter labels: the bank changed, and
     /// everything decided before (labels, checks, orders) is dropped.
     pub restarted: bool,
+    /// That restart dropped pictures the person had kept for viewers (they are left out now).
+    pub pictures_dropped: bool,
     /// Questions where the pool refused Keep (keeping the letters would give the answer away) or Strip.
     no_keep: BTreeSet<usize>,
     no_strip: BTreeSet<usize>,
@@ -73,6 +172,8 @@ impl Decisions {
         // (critic 56a V5: `labels_unused` means a label decision named a question without labels: the bank
         // changed under the earlier steps; their label decisions are dropped and asked again)
         let restarted = refusal.issues.iter().any(|i| matches!(i.code.as_str(), "labels_unused" | "labels_out_of_range" | "labels_duplicate"));
+        // (a kept picture is by position too: it goes with the rest, and the page says so)
+        let pictures_dropped = restarted && !carried.image_ok.is_empty();
         let refused = |code: &str| refusal.issues.iter().filter(|i| i.code == code).filter_map(Issue::question_index).collect::<BTreeSet<usize>>();
         let (no_keep, no_strip) = (refused("labels_keep_refused"), refused("labels_strip_refused"));
         // (critic 57 B1) The decisions are by position: once the bank changed under them, an "I checked" or an
@@ -80,7 +181,7 @@ impl Decisions {
         let mut carried = if restarted { StripDecisions::default() } else { carried };
         // A refused choice is asked again.
         carried.labels.retain(|l| !(no_keep.contains(&l.question) && l.choice == LabelChoice::Keep) && !(no_strip.contains(&l.question) && l.choice == LabelChoice::Strip));
-        Decisions { refusal, labels: BTreeMap::new(), orders: BTreeSet::new(), formatting: BTreeSet::new(), carried, restarted, no_keep, no_strip, head: None }
+        Decisions { refusal, labels: BTreeMap::new(), orders: BTreeSet::new(), formatting: BTreeSet::new(), carried, restarted, pictures_dropped, no_keep, no_strip, head: None }
     }
 
     /// Whether this choice may be made for a finding (the pool allows it, and did not refuse it).

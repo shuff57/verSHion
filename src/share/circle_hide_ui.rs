@@ -5,7 +5,7 @@
 use egui::{Margin, RichText, Ui};
 
 use super::api;
-use super::circle_hide::Decisions;
+use super::circle_hide::{Decisions, Pictures};
 use super::circles_text as ctext;
 use super::pool::{LabelChoice, Pos};
 use super::publish_text as text;
@@ -59,7 +59,8 @@ pub(super) fn decisions(ui: &mut Ui, d: &Decisions, intro: &str, fix: &str, send
     let p = &d.refusal;
     para(ui, intro);
     if d.restarted {
-        warn_box(ui, "The bank changed while you were deciding, so all your earlier decisions were dropped. Decide again below.");
+        let pics = if d.pictures_dropped { " The pictures you chose to keep were dropped too, so viewers will not get them." } else { "" };
+        warn_box(ui, &format!("The bank changed while you were deciding, so all your earlier decisions were dropped. Decide again below.{pics}"));
     }
     // 1. things that must change in the questions
     let hard = d.hard();
@@ -170,6 +171,71 @@ pub(super) fn decisions(ui: &mut Ui, d: &Decisions, intro: &str, fix: &str, send
         }
         if kit::ghost_button(ui, "Cancel").clicked() {
             act = DecideAct::Cancel;
+        }
+        if busy {
+            ui.spinner();
+        }
+    });
+    act
+}
+
+/// What the person did on the picture step.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) enum PictureAct {
+    None,
+    /// "Keep it for viewers" (`true`) or "Drop it" for the picture of a question.
+    Keep(usize, bool),
+    Send,
+    Cancel,
+}
+
+/// The picture step: each picture of the bank (by its question: the share screens draw no thumbnails), kept for
+/// viewers or dropped, dropped until the person keeps it. `intro` says what this is for; `send` names the button;
+/// `tries` adds the line about the day's tries (the bank page); `busy` greys the button.
+pub(super) fn pictures(ui: &mut Ui, p: &Pictures, intro: &str, send: &str, tries: bool, busy: bool) -> PictureAct {
+    let mut act = PictureAct::None;
+    para(ui, intro);
+    heading(ui, ctext::PICTURES_HEADING);
+    para(ui, ctext::PICTURES_HELP);
+    for pic in &p.list {
+        kit::card().inner_margin(Margin::same(8)).show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.label(theme::strong(text::question_label(pic.question, false)).size(12.5));
+            if !pic.stem.is_empty() {
+                ui.add(egui::Label::new(theme::muted(text::shown(&pic.stem)).size(12.0)).wrap());
+            }
+            let kept = p.kept(pic.question);
+            ui.horizontal_wrapped(|ui| {
+                if ui.selectable_label(kept, ctext::PICTURE_KEEP).clicked() && !kept {
+                    act = PictureAct::Keep(pic.question, true);
+                }
+                if ui.selectable_label(!kept, ctext::PICTURE_DROP).clicked() && kept {
+                    act = PictureAct::Keep(pic.question, false);
+                }
+            });
+        });
+        ui.add_space(3.0);
+    }
+    ui.add_space(6.0);
+    let n = p.image_ok().len();
+    let total = p.list.len();
+    para(ui, &match (n, total) {
+        (0, 1) => "The picture will be left out for viewers.".to_string(),
+        (0, _) => format!("All {total} pictures will be left out for viewers."),
+        (1, 1) => "Viewers will get the picture.".to_string(),
+        _ if n == total => format!("Viewers will get all {total} pictures."),
+        _ => format!("Viewers will get {n} of the {total} pictures; the others are left out."),
+    });
+    if tries {
+        ui.add(egui::Label::new(theme::muted(ctext::HIDE_TRIES).size(12.0)).wrap());
+    }
+    ui.add_space(4.0);
+    ui.horizontal_wrapped(|ui| {
+        if ui.add_enabled(!busy, |ui: &mut Ui| kit::primary_button(ui, send)).clicked() {
+            act = PictureAct::Send;
+        }
+        if kit::ghost_button(ui, "Cancel").clicked() {
+            act = PictureAct::Cancel;
         }
         if busy {
             ui.spinner();

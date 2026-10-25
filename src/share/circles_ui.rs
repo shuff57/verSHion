@@ -1300,6 +1300,10 @@ fn hide_section(ui: &mut Ui, m: &mut CirclesModel) {
     // only when the pool said it releases the version: critic 59 B1)
     let offer_off = m.hide_off_offered();
     let allowed = m.hide_allowed() || m.hide_switch_on_held_head();
+    // (critic 62 I2: with the keys hidden, which pictures viewers get can be chosen again; minor: when the picture
+    // step follows the confirmation, its button only leads there and costs no try)
+    let offer_pictures = m.can_change_pictures();
+    let pictures_next = m.hide_pictures_follow();
     let Some(b) = m.bank.as_ref() else { return };
     // (the bank read again after the change: its newest version still held back, critic 60 B2)
     let head_held = b.withheld_head && matches!(b.load, BankLoad::Failed(_));
@@ -1316,6 +1320,8 @@ fn hide_section(ui: &mut Ui, m: &mut CirclesModel) {
         Cancel,
         Retry,
         Decide(super::circle_hide_ui::DecideAct),
+        Pictures(super::circle_hide_ui::PictureAct),
+        ChangePictures,
     }
     let mut d = Do::None;
     let mut account = false;
@@ -1333,14 +1339,27 @@ fn hide_section(ui: &mut Ui, m: &mut CirclesModel) {
         if offer_off && idle && on && kit::primary_button(ui, "Turn hiding off").clicked() {
             d = Do::Ask(false);
         }
+        if offer_pictures && kit::ghost_button(ui, text::PICTURES_CHANGE).clicked() {
+            d = Do::ChangePictures;
+        }
+        let change = b.pictures_change;
         match &b.hide {
             HideStage::Idle => {}
             HideStage::Confirm { on: to } => {
                 body(ui, if *to { text::HIDE_ON_ASK } else { text::HIDE_OFF_ASK });
-                line(ui, text::HIDE_TRIES);
+                if !pictures_next {
+                    line(ui, text::HIDE_TRIES);
+                }
                 ui.add_space(4.0);
                 ui.horizontal_wrapped(|ui| {
-                    if kit::primary_button(ui, if *to { "Hide the keys" } else { "Show the keys again" }).clicked() {
+                    let label = if pictures_next {
+                        text::HIDE_NEXT
+                    } else if *to {
+                        "Hide the keys"
+                    } else {
+                        "Show the keys again"
+                    };
+                    if kit::primary_button(ui, label).clicked() {
                         d = Do::Confirm;
                     }
                     if kit::ghost_button(ui, "Cancel").clicked() {
@@ -1350,7 +1369,7 @@ fn hide_section(ui: &mut Ui, m: &mut CirclesModel) {
             }
             HideStage::Working { on: to, back } => {
                 if let Some(dd) = back {
-                    let _ = super::circle_hide_ui::decisions(ui, dd, "Sending your decisions...", "", "Hide the keys", true);
+                    let _ = super::circle_hide_ui::decisions(ui, dd, "Sending your decisions...", "", if change { text::PICTURES_SAVE } else { "Hide the keys" }, true);
                 } else {
                     ui.horizontal(|ui| {
                         ui.spinner();
@@ -1362,13 +1381,20 @@ fn hide_section(ui: &mut Ui, m: &mut CirclesModel) {
                 let a = super::circle_hide_ui::decisions(
                     ui,
                     dd,
-                    "Before the keys can be hidden, the pool needs these decisions about the copy viewers will get. Nothing has changed yet.",
+                    if change { text::PICTURES_CHANGE_DECIDE } else { "Before the keys can be hidden, the pool needs these decisions about the copy viewers will get. Nothing has changed yet." },
                     "Change the questions in a working copy and send a new version, then try again.",
-                    "Hide the keys",
+                    if change { text::PICTURES_SAVE } else { "Hide the keys" },
                     false,
                 );
                 if a != super::circle_hide_ui::DecideAct::None {
                     d = Do::Decide(a);
+                }
+            }
+            HideStage::Pictures(p) => {
+                let (intro, send) = if change { (text::PICTURES_CHANGE_INTRO, text::PICTURES_SAVE) } else { (text::PICTURES_BANK_INTRO, "Hide the keys") };
+                let a = super::circle_hide_ui::pictures(ui, p, intro, send, true, false);
+                if a != super::circle_hide_ui::PictureAct::None {
+                    d = Do::Pictures(a);
                 }
             }
             HideStage::Done(r) => {
@@ -1408,7 +1434,7 @@ fn hide_section(ui: &mut Ui, m: &mut CirclesModel) {
     if account {
         m.request_open_account();
     }
-    use super::circle_hide_ui::DecideAct;
+    use super::circle_hide_ui::{DecideAct, PictureAct};
     match d {
         Do::None => {}
         Do::Ask(to) => m.ask_hide(to),
@@ -1422,6 +1448,11 @@ fn hide_section(ui: &mut Ui, m: &mut CirclesModel) {
         Do::Decide(DecideAct::Send) => m.send_hide_decisions(),
         Do::Decide(DecideAct::Cancel) => m.cancel_hide(),
         Do::Decide(DecideAct::None) => {}
+        Do::Pictures(PictureAct::Keep(q, yes)) => m.hide_keep_picture(q, yes),
+        Do::Pictures(PictureAct::Send) => m.send_hide_pictures(),
+        Do::Pictures(PictureAct::Cancel) => m.cancel_hide(),
+        Do::Pictures(PictureAct::None) => {}
+        Do::ChangePictures => m.change_pictures(),
     }
 }
 

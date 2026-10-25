@@ -66,6 +66,7 @@ enum SendAct {
     Note,
     Licence,
     Decide(super::circle_hide_ui::DecideAct),
+    Pictures(super::circle_hide_ui::PictureAct),
 }
 
 fn send_page(ui: &mut Ui, e: &mut CircleEditModel, now: i64) {
@@ -217,6 +218,15 @@ fn send_page(ui: &mut Ui, e: &mut CircleEditModel, now: i64) {
                 }
                 return finish_send(ui, e, act, msg, account);
             }
+            SendStage::Pictures(p) => {
+                let busy = e.acting();
+                match super::circle_hide_ui::pictures(ui, p, text::PICTURES_SEND_INTRO, "Send", false, busy) {
+                    super::circle_hide_ui::PictureAct::None => {}
+                    super::circle_hide_ui::PictureAct::Cancel => act = SendAct::Note,
+                    other => act = SendAct::Pictures(other),
+                }
+                return finish_send(ui, e, act, msg, account);
+            }
             SendStage::Conflict(c) => {
                 warn_box(ui, "Someone else sent changes first, so nothing was sent and nothing was overwritten.");
                 para(ui, &conflict_line(c, now));
@@ -340,6 +350,14 @@ fn finish_send(_ui: &mut Ui, e: &mut CircleEditModel, act: SendAct, msg: String,
                 DecideAct::Formatting(q, y) => e.send_set_formatting(q, y),
                 DecideAct::Send => e.send_with_decisions(),
                 DecideAct::Cancel | DecideAct::None => {}
+            }
+        }
+        SendAct::Pictures(a) => {
+            use super::circle_hide_ui::PictureAct;
+            match a {
+                PictureAct::Keep(q, yes) => e.send_keep_picture(q, yes),
+                PictureAct::Send => e.send_with_pictures(),
+                PictureAct::Cancel | PictureAct::None => {}
             }
         }
         SendAct::Merge => {
