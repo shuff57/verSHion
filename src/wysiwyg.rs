@@ -2363,7 +2363,7 @@ struct Mem {
     /// The editing session this memory belongs to (see [`new_session`]).
     session: u64,
     /// The focused unit is a table cell (Tab walks cells there).
-    in_cell: bool,
+    in_cell: (bool, bool),
     /// Hash of the text as this editor left it last frame: a different text now was changed from
     /// outside (a type switch), and the undo history before it no longer applies.
     seen: Option<u64>,
@@ -3005,8 +3005,8 @@ const RAIL_W: f32 = 34.0;
 /// Height of a table's control row (above the grid).
 const TABLE_BAR_H: f32 = 24.0;
 
-/// Where the floating toolbar goes for selection rect `sel`. It never covers the fixed toolbar
-/// (`fixed`) and, when there is room, none of the text either: in the margin to the right of the
+/// Where the floating toolbar goes for selection rect `sel`. When there is room it covers neither the
+/// fixed toolbar (`fixed`) nor any text: in the margin to the right of the
 /// field, level with the selection. With no room there it goes above, below or flush with the
 /// window's right edge, whichever hides the least (text `lines` as (top, bottom), anything outside
 /// the `field` counted double, the right edge at half since only the end of a row is under it);
@@ -3036,9 +3036,22 @@ fn float_place(sel: Rect, size: Option<Vec2>, fixed: Option<Rect>, screen: Rect,
     let ey = |y: f32| y.clamp(screen.top(), (screen.bottom() - sz.y).max(screen.top()));
     let edge_down = Rect::from_min_size(Pos2::new(ex, ey(sel.top())), sz);
     let edge_up = Rect::from_min_size(Pos2::new(ex, ey(sel.bottom() - sz.y)), sz);
-    let blocked = |r: Rect| fixed.is_some_and(|f| f.intersects(r)) || r.top() < screen.top() || r.bottom() > screen.bottom() || (r.left() < sel.right() + 4.0 && r.intersects(sel));
+    let blocked = |r: Rect| r.top() < screen.top() || r.bottom() > screen.bottom() || (r.left() < sel.right() + 4.0 && r.intersects(sel));
+    // The fixed toolbar holds the same buttons, so a bar laid over it loses the reader nothing; it
+    // still costs something (half a pixel per pixel covered), and less than hiding text does. A top
+    // line selection at a narrow width therefore puts the bar over the fixed toolbar, not over the
+    // lines below it.
+    let over_fixed = |r: Rect| fixed.map_or(0.0, |f| 0.5 * (r.intersect(f).height().max(0.0)));
     let mut best: Option<(f32, u8)> = None;
-    for (k, (r, cost)) in [(above, covered(above)), (below, covered(below)), (edge_down, 0.5 * covered(edge_down)), (edge_up, 0.5 * covered(edge_up))].into_iter().enumerate() {
+    for (k, (r, cost)) in [
+        (above, covered(above) + over_fixed(above)),
+        (below, covered(below) + over_fixed(below)),
+        (edge_down, 0.5 * covered(edge_down) + over_fixed(edge_down)),
+        (edge_up, 0.5 * covered(edge_up) + over_fixed(edge_up)),
+    ]
+    .into_iter()
+    .enumerate()
+    {
         if blocked(r) {
             continue;
         }
@@ -3159,12 +3172,32 @@ fn release_held(ctx: &egui::Context) {
     }
 }
 
+/// egui marks a key press `repeat` when that key is still down from an earlier press, and a burst of
+/// presses that arrives in one frame (a fast typist, a test driver) has no release between them, so
+/// every press after the first looks like a held key's auto-repeat. A press that begins the burst
+/// as a fresh press (`repeat == false`) makes the later presses of the same key in the frame fresh
+/// presses too: they are replayed one per frame, and "Backspace in an empty row removes it" must
+/// see them as presses. A held key (every press of the frame already `repeat`) is left alone.
+fn unrepeat_burst(events: &mut [Event]) {
+    let mut fresh: Vec<Key> = Vec::new();
+    for e in events.iter_mut() {
+        if let Event::Key { key, pressed: true, repeat, .. } = e {
+            if !*repeat {
+                fresh.push(*key);
+            } else if fresh.contains(key) {
+                *repeat = false;
+            }
+        }
+    }
+}
+
 /// A frame applies either a run of typed text or ONE key press: the editor works out a key against
 /// the text as it stands, so a key that arrives in the same frame as a character before it (a fast
 /// typist, a key-repeat burst) would be worked out against the text from before that character.
 /// What comes after the first such key is held back and replayed, in order, on the next frame.
 fn hold_back(ctx: &egui::Context) {
     let held = ctx.input_mut(|i| {
+        unrepeat_burst(&mut i.events);
         let (mut text, mut key) = (false, false);
         let mut at = None;
         for (n, e) in i.events.iter().enumerate() {
@@ -3376,7 +3409,22 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
     };
 
     // ----- keyboard (before any TextEdit sees it) -----
-    m.in_cell = focused.is_some_and(|fi| matches!(d.unit(d.flat()[fi]).kind, UKind::Cell { .. }));
+    // Tab / Shift+Tab walk table cells, except past the last cell (Tab) or before the first
+    // (Shift+Tab): there they leave the table, and the form around the editor moves the focus.
+    m.in_cell = focused.map_or((false, false), |fi| {
+        let at = d.flat()[fi];
+        match d.unit(at).kind {
+            UKind::Cell { row, col, .. } => {
+                let bl = &d.blocks[at.0];
+                let k = match bl.kind {
+                    BlockKind::Table { ncols, .. } => row * ncols + col,
+                    _ => 0,
+                };
+                (k > 0, k + 1 < bl.units.len())
+            }
+            _ => (false, false),
+        }
+    });
     if focused.is_some() {
         hold_back(&ctx);
     }
@@ -3650,31 +3698,17 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
                 _ => change = enter_op(stem, &d, fi, la, lc, o.newlines),
             }
         }
-        // Tab between cells
+        // Tab between cells; Tab in the last cell (Shift+Tab in the first) leaves the table
         if let UKind::Cell { row, col, .. } = u.kind {
-            let back = take_key(ui, Modifiers::SHIFT, Key::Tab);
-            let fwd = !back && take_key(ui, Modifiers::NONE, Key::Tab);
+            let bl = &d.blocks[at.0];
+            let BlockKind::Table { ncols, .. } = bl.kind else { unreachable!() };
+            let k = row * ncols + col;
+            let back = k > 0 && take_key(ui, Modifiers::SHIFT, Key::Tab);
+            let fwd = !back && k + 1 < bl.units.len() && take_key(ui, Modifiers::NONE, Key::Tab);
             if back || fwd {
-                let bl = &d.blocks[at.0];
-                let BlockKind::Table { ncols, .. } = bl.kind else { unreachable!() };
-                let k = row * ncols + col;
-                if fwd && k + 1 >= bl.units.len() {
-                    change = table_op(stem, &d, at.0, row, col, TOp::RowBelow).map(|mut c| {
-                        // land in the first cell of the new row
-                        let nd = doc(&c.stem, true);
-                        if let Some(nb) = nd.blocks.iter().find(|b| b.lines.start == bl.lines.start)
-                            && let Some(nu) = nb.units.get((row + 1) * ncols)
-                        {
-                            c.anchor = nu.start;
-                            c.caret = nu.end;
-                        }
-                        c
-                    });
-                } else {
-                    let nk = if fwd { k + 1 } else { k.saturating_sub(1) };
-                    let nu = &bl.units[nk];
-                    m.want = Some(Want { anchor: nu.start, caret: nu.end, virt: None });
-                }
+                let nk = if fwd { k + 1 } else { k - 1 };
+                let nu = &bl.units[nk];
+                m.want = Some(Want { anchor: nu.start, caret: nu.end, virt: None });
             }
         }
         // Arrows across unit edges
@@ -4161,7 +4195,7 @@ pub fn editor(ui: &mut Ui, id: UiId, stem: &mut String, mut o: Opts) -> Out {
                         };
                         ui.spacing_mut().button_padding = Vec2::new(5.0, 1.0);
                         tb(ui, "+Row↑", "Insert a row above", false, true, TOp::RowAbove);
-                        tb(ui, "+Row↓", "Insert a row below (also Tab in the last cell)", false, true, TOp::RowBelow);
+                        tb(ui, "+Row↓", "Insert a row below", false, true, TOp::RowBelow);
                         tb(ui, "+Col←", "Insert a column to the left", false, true, TOp::ColLeft);
                         tb(ui, "+Col→", "Insert a column to the right", false, true, TOp::ColRight);
                         tb(ui, "−Row", "Delete this row", false, rows > 2, TOp::DelRow);
@@ -4922,9 +4956,10 @@ fn push_undo(m: &mut Mem, stem: &str, caret: usize, blanks: Option<&[String]>, n
     m.redo.clear();
 }
 
-/// Is the focused unit of editor `id` a table cell (where Tab walks the cells, not out of the field)?
-pub fn tab_is_local(ctx: &egui::Context, id: UiId) -> bool {
-    ctx.data(|d| d.get_temp::<Mem>(id)).is_some_and(|m| m.in_cell)
+/// Is the focused unit of editor `id` a table cell that keeps the Tab (`back`: Shift+Tab)? Tab walks
+/// the cells; in the last cell (Shift+Tab: the first) it leaves the table instead.
+pub fn tab_is_local(ctx: &egui::Context, id: UiId, back: bool) -> bool {
+    ctx.data(|d| d.get_temp::<Mem>(id)).is_some_and(|m| if back { m.in_cell.0 } else { m.in_cell.1 })
 }
 
 /// True when `stem` is only plain paragraphs (no list, table, heading or group), so Tab has no

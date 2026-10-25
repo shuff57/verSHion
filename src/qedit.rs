@@ -50,7 +50,7 @@ pub const BLANK_HOW: &str = "select a word in the question and press ___ Blank o
 
 /// Number of "___" blanks in a Fill-in-the-blank stem.
 fn blank_count(stem: &str) -> usize {
-    stem.matches("___").count()
+    crate::qcheck::blank_count(stem)
 }
 
 /// Splits one editor row ("red OR dark red") into accepted alternatives.
@@ -204,6 +204,12 @@ struct Temp {
     save_after: bool,
     /// The confirm bar has already taken focus for its current question.
     confirm_focused: u8,
+    /// What is missing, as far as it is shown inline now (see `refresh_issues`).
+    issues: Vec<crate::qcheck::Issue>,
+    /// Fields the focus has left at least once in this session (their warnings may show).
+    left: Vec<EqField>,
+    /// The field the focus was in at the start of the last frame.
+    focus_seen: Option<EqField>,
 }
 
 /// Which text field an equation is being spliced into.
@@ -281,6 +287,93 @@ impl EqCtx {
         self.temp(|t| if t.focus_add.as_ref() == Some(anchor) { t.focus_add = None; true } else { false })
     }
 }
+
+/// Whether field `f` is part of where issue `at` is shown.
+fn in_region(at: crate::qcheck::Where, f: &EqField) -> bool {
+    use crate::qcheck::Where as W;
+    match (at, f) {
+        (W::Stem, EqField::Stem) => true,
+        (W::Blanks, EqField::Stem | EqField::Blank(_)) => true,
+        (W::Answers, EqField::Mc(_) | EqField::Short) => true,
+        (W::Answer(i), EqField::Mc(j)) => i == *j,
+        (W::Pairs, EqField::MatchL(_) | EqField::MatchR(_) | EqField::Distractor(_)) => true,
+        (W::Pair(i), EqField::MatchL(j) | EqField::MatchR(j)) => i == *j,
+        (W::Blank(i), EqField::Blank(j)) => i == *j,
+        (W::Parts, EqField::PartStem(_) | EqField::PartMc(..) | EqField::PartShort(_)) => true,
+        (W::Part(i), EqField::PartStem(j) | EqField::PartMc(j, _) | EqField::PartShort(j)) => i == *j,
+        _ => false,
+    }
+}
+
+/// An issue is shown inline once the teacher has been in its field and moved on (or at once for a
+/// question that is being edited), and never while the caret is in that field: nothing nags
+/// while the answer is being typed.
+fn issue_shown(is_edit: bool, left: &[EqField], focus: Option<&EqField>, at: crate::qcheck::Where) -> bool {
+    if focus.is_some_and(|f| in_region(at, f)) {
+        return false;
+    }
+    // (a blank's row and a part are on screen the whole time, so their gaps show at once, visited or not)
+    is_edit || matches!(at, crate::qcheck::Where::Blank(_) | crate::qcheck::Where::Part(_)) || left.iter().any(|f| in_region(at, f))
+}
+
+/// Works out, once per frame, which issues the fields draw. An empty draft shows none.
+fn refresh_issues(ctx: &egui::Context, key: UiId, draft: &Draft) {
+    let all = if draft.is_empty_draft() { Vec::new() } else { draft.issues() };
+    ctx.data_mut(|d| {
+        let t = d.get_temp_mut_or_default::<Temp>(key);
+        if let Some(old) = t.focus_seen.take().filter(|o| t.focus_last.as_ref() != Some(o)) {
+            if !t.left.contains(&old) {
+                t.left.push(old);
+            }
+        }
+        t.focus_seen = t.focus_last.clone();
+        let (left, focus) = (t.left.clone(), t.focus_last.clone());
+        let short = matches!(draft.kind, Kind::Short { .. });
+        t.issues = all
+            .into_iter()
+            // (the model answer box is on screen the whole time: its gap shows at once too)
+            .filter(|i| issue_shown(draft.is_edit() || (short && i.at == crate::qcheck::Where::Answers), &left, focus.as_ref(), i.at))
+            .collect();
+    });
+}
+
+/// Amber for a warning (a draft is not an error), readable on light and dark.
+fn warn_col(ui: &Ui) -> Color32 {
+    if ui.visuals().dark_mode { Color32::from_rgb(235, 175, 90) } else { Color32::from_rgb(166, 90, 0) }
+}
+
+impl EqCtx {
+    /// The shown messages for the places `pred` picks, in order.
+    fn warns(&self, pred: impl Fn(crate::qcheck::Where) -> bool) -> Vec<String> {
+        self.temp(|t| t.issues.iter().filter(|i| pred(i.at)).map(|i| i.msg.clone()).collect())
+    }
+
+    /// One reserved line (it is always there, so a warning never moves a field) under a field or
+    /// list: the first message, plus a count of the rest.
+    fn warn_line(&self, ui: &mut Ui, w: f32, pred: impl Fn(crate::qcheck::Where) -> bool) {
+        let msgs = self.warns(pred);
+        let (rect, _) = ui.allocate_exact_size(Vec2::new(w, WARN_H), Sense::hover());
+        if let Some(first) = msgs.first() {
+            let more = if msgs.len() > 1 { format!("  (+{} more)", msgs.len() - 1) } else { String::new() };
+            ui.painter().with_clip_rect(rect).text(rect.left_center(), egui::Align2::LEFT_CENTER, format!("{first}{more}"), kit::ui_font(11.5), warn_col(ui));
+        }
+    }
+
+    /// Row-level warning drawn inside an empty field, at its right end (no height of its own).
+    fn warn_in(&self, ui: &Ui, field: Rect, at: crate::qcheck::Where) {
+        if let Some(m) = self.warns(|w| w == at).first() {
+            ui.painter().text(Pos2::new(field.right() - 10.0, field.center().y), egui::Align2::RIGHT_CENTER, m, kit::ui_font(11.5), warn_col(ui));
+        }
+    }
+}
+
+/// 'Saves as a draft: 2 things to fix' (`saved`: 'Saved as a draft: ...').
+pub fn draft_summary(n: usize, saved: bool) -> String {
+    format!("{} as a draft: {n} {} to fix", if saved { "Saved" } else { "Saves" }, if n == 1 { "thing" } else { "things" })
+}
+
+/// Height of the reserved warning line under a field.
+const WARN_H: f32 = 16.0;
 
 // ---------- the draft ----------
 
@@ -458,74 +551,51 @@ impl Draft {
         self.points = if t.is_empty() { None } else { t.parse().ok() };
     }
 
-    /// Everything the Save button refuses to write without.
-    pub fn validate(&self) -> Vec<String> {
-        let mut errs = Vec::new();
-        if self.stem.trim().is_empty() {
-            errs.push("Add a question stem.".to_string());
-        }
-        match &self.kind {
-            Kind::Mc { answers } => {
-                let filled = answers.iter().filter(|a| !a.text.trim().is_empty()).count();
-                if filled < 2 {
-                    errs.push("Add at least two answer choices.".to_string());
+    /// What is missing from this draft, as the editor holds it (see `qcheck`). Saving never waits
+    /// for any of it: a question with gaps is saved as a draft. The same rules gate the exam and
+    /// the pool, through `qcheck::check_question` on the stored question.
+    pub fn issues(&self) -> Vec<crate::qcheck::Issue> {
+        use crate::qcheck::{Issue, Severity, Where};
+        // (the rows of a Fill question beyond its blanks are not saved)
+        let kind = match &self.kind {
+            Kind::Blank { accept } => Kind::Blank { accept: accept.iter().take(blank_count(&self.stem)).cloned().collect() },
+            k => k.clone(),
+        };
+        let mut v = crate::qcheck::check(&self.stem, &kind);
+        // A question imported without its key: a True/False nobody has picked yet is no key.
+        if self.keyless {
+            let unset = |at: Option<usize>| !self.tf_keyed.contains(&at);
+            match &self.kind {
+                Kind::Tf { .. } if unset(None) => {
+                    v.push(Issue { at: Where::Answers, severity: Severity::Fix, msg: "Pick True or False".to_string(), key: true });
                 }
-                if !answers
-                    .iter()
-                    .any(|a| a.correct && !a.text.trim().is_empty())
-                {
-                    errs.push("Mark at least one correct answer.".to_string());
-                }
-            }
-            Kind::Tf { .. } => {}
-            Kind::Matching { pairs, .. } => {
-                let filled = pairs
-                    .iter()
-                    .filter(|p| !p.left.trim().is_empty() && !p.right.trim().is_empty())
-                    .count();
-                if filled < 2 {
-                    errs.push("Add at least two matching pairs (both sides filled).".to_string());
-                }
-            }
-            Kind::Blank { accept } => {
-                if blank_count(&self.stem) == 0 {
-                    errs.push(format!("Add a blank: {BLANK_HOW}."));
-                }
-                for (i, row) in accept.iter().enumerate().take(blank_count(&self.stem)) {
-                    if row.iter().all(|a| a.trim().is_empty()) {
-                        errs.push(format!("Blank {} needs at least one accepted answer.", i + 1));
-                    }
-                }
-            }
-            Kind::Short { .. } => {}
-            Kind::Multipart { parts } => {
-                if parts.is_empty() {
-                    errs.push("Add at least one part.".to_string());
-                }
-                for (i, p) in parts.iter().enumerate() {
-                    if p.stem.trim().is_empty() {
-                        errs.push(format!("Part {} needs its own stem.", i + 1));
-                    }
-                    if let PartKind::Mc { answers } = &p.kind {
-                        let filled = answers
-                            .iter()
-                            .filter(|a| !a.text.trim().is_empty())
-                            .count();
-                        if filled >= 2
-                            && !answers
-                                .iter()
-                                .any(|a| a.correct && !a.text.trim().is_empty())
-                        {
-                            errs.push(format!(
-                                "Part {} needs at least one correct answer.",
-                                i + 1
-                            ));
+                Kind::Multipart { parts } => {
+                    for (i, p) in parts.iter().enumerate() {
+                        if matches!(p.kind, PartKind::Tf { .. }) && unset(Some(i)) {
+                            v.push(Issue { at: Where::Part(i), severity: Severity::Fix, msg: format!("Part {} needs True or False picked", i + 1), key: true });
                         }
                     }
                 }
+                _ => {}
             }
         }
-        errs
+        v
+    }
+
+    /// The messages of what must be fixed before the question can go on an exam or be shared.
+    pub fn validate(&self) -> Vec<String> {
+        self.issues().into_iter().filter(|i| i.severity == crate::qcheck::Severity::Fix).map(|i| i.msg).collect()
+    }
+
+    /// A question with nothing in it: no stem and nothing typed into any answer. That is the one
+    /// thing Save refuses; anything else saves, as a draft when it has gaps.
+    pub fn is_empty_draft(&self) -> bool {
+        self.stem.trim().is_empty() && content_items(&self.kind).is_empty()
+    }
+
+    /// Save is on unless the draft is empty.
+    pub fn can_save(&self) -> bool {
+        !self.is_empty_draft()
     }
 
     /// Builds the stored `Question`: strings trimmed, empties dropped, order kept.
@@ -547,9 +617,10 @@ impl Draft {
             },
             Kind::Tf { correct } => Kind::Tf { correct: *correct },
             Kind::Matching { pairs, distractors } => Kind::Matching {
+                // (a pair with one side typed is kept as typed: a draft loses nothing the teacher wrote)
                 pairs: pairs
                     .iter()
-                    .filter(|p| !p.left.trim().is_empty() && !p.right.trim().is_empty())
+                    .filter(|p| !p.left.trim().is_empty() || !p.right.trim().is_empty())
                     .map(|p| Pair {
                         left: p.left.trim().to_string(),
                         right: p.right.trim().to_string(),
@@ -1144,7 +1215,7 @@ fn label(ui: &mut Ui, text: &str) {
 // ---------- the in-place editor ----------
 
 impl App {
-    /// Writes a validated draft into the store (new or edit) and toasts.
+    /// Writes the draft into the store (new or edit) and toasts. An unfinished one saves as a draft.
     pub(crate) fn commit_draft(&mut self, draft: Draft) {
         let existing = draft
             .qid
@@ -1153,6 +1224,7 @@ impl App {
             .cloned();
         let q = draft.build_question(existing.as_ref());
         let t = q.modified;
+        let fixes = crate::qcheck::blockers(&q).len();
         if let Some(bank) = self.store.bank_mut(&draft.bank_id) {
             match draft.qid.as_ref() {
                 Some(qid) => {
@@ -1169,7 +1241,11 @@ impl App {
             bank.modified = t;
         }
         self.store.save_banks();
-        self.toast("Question saved");
+        if fixes > 0 {
+            self.toast(draft_summary(fixes, true));
+        } else {
+            self.toast("Question saved");
+        }
     }
 }
 
@@ -1200,6 +1276,10 @@ pub fn draw_modal(
         draft.armed = true;
         // a new editing session: no undo history of an earlier question reaches this one
         crate::wysiwyg::new_session(ctx);
+        // Nor does any of its scratch state: the memory is keyed by bank and question id, which every
+        // NEW question shares (`qid` is None), so the blank answer rows of a discarded Fill question
+        // would otherwise show up as 'Blank 1' of the next new one.
+        ctx.data_mut(|d| d.remove_temp::<Temp>(key));
         // The stem takes the keyboard from the first frame the editor shows.
         EqCtx { ctx: ctx.clone(), key }.focus(&EqField::Stem, draft.stem.chars().count());
         ctx.request_repaint();
@@ -1210,7 +1290,17 @@ pub fn draw_modal(
         let t = d.get_temp_mut_or_default::<Temp>(key);
         t.focus_last = t.focus_now.take();
     });
+    refresh_issues(ctx, key, draft);
     let mut action = QAction::None;
+    // The discard prompt answers an Enter that follows the Esc in the same burst: the bar's button
+    // only takes the focus a frame or two after it shows, and until then the stem would have the
+    // Enter (a new line in the text about to be discarded).
+    if draft.confirm == Some(Confirm::Discard)
+        && ctx.data_mut(|d| d.get_temp_mut_or_default::<Temp>(key).confirm_focused) <= 2
+        && ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Enter))
+    {
+        action = QAction::Cancel;
+    }
     // While an equation is edited in place it owns Esc, Ctrl+Enter and the outside click.
     let eq_open = crate::wysiwyg::math_active(ctx);
     let mut want_close = false;
@@ -1223,7 +1313,7 @@ pub fn draw_modal(
     if !eq_open
         && draft.confirm.is_none()
         && (ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::Enter))) || save_after)
-        && draft.validate().is_empty()
+        && draft.can_save()
     {
         action = QAction::Done;
     }
@@ -1247,11 +1337,16 @@ pub fn draw_modal(
         });
         ui.add_space(8.0);
         // Scrolling body of fixed height, so the modal never changes size under the cursor.
-        egui::ScrollArea::vertical()
+        let mut scroll = egui::ScrollArea::vertical()
             .id_salt(key.with("body_scroll"))
             .min_scrolled_height(body_h)
             .max_height(body_h)
-            .auto_shrink([false, false])
+            .auto_shrink([false, false]);
+        if first_frame {
+            // a modal opens at the top, whatever an earlier session scrolled this id to
+            scroll = scroll.vertical_scroll_offset(0.0);
+        }
+        let scrolled = scroll
             .show(ui, |ui| {
                 let bw = (w - 16.0).max(240.0);
                 ui.set_width(bw);
@@ -1267,13 +1362,21 @@ pub fn draw_modal(
                     })
                     && let Some(r) = ctx.read_response(id)
                     && r.rect.is_positive()
+                    // (a control of the footer, like the confirm bar's button, is not in this body:
+                    // scrolling to it would jump the content under the cursor)
+                    && ctx.data(|d| d.get_temp::<f32>(UiId::new("qedit_footer_top"))).is_none_or(|top| r.rect.top() < top)
                 {
                     ui.scroll_to_rect(r.rect.expand(8.0), None);
                 }
             });
+        #[cfg(test)]
+        ctx.data_mut(|d| d.insert_temp(UiId::new("qedit_test_scroll_id"), scrolled.id));
+        #[cfg(not(test))]
+        let _ = scrolled;
         ui.add_space(8.0);
         let y = ui.cursor().top();
         ui.painter().hline(ui.max_rect().x_range(), y, Stroke::new(1.0, theme::rule()));
+        ctx.data_mut(|d| d.insert_temp(UiId::new("qedit_footer_top"), y));
         ui.add_space(8.0);
         footer(ui, draft, &mut action, &mut want_close);
     });
@@ -1327,10 +1430,13 @@ fn focus_ring(ctx: &egui::Context, key: UiId) {
 /// The footer: a fixed-height validation line, then one fixed-height button row that turns into
 /// a confirm bar of the same height, so nothing moves when it changes.
 fn footer(ui: &mut Ui, draft: &mut Draft, action: &mut QAction, want_close: &mut bool) {
-    let errs = draft.validate();
-    // Validation reads in a reserved line: the first problem, plus a count of the rest. While a
-    // type switch waits for a yes, the line says exactly what it drops and keeps.
+    let fixes = draft.validate();
+    let can_save = draft.can_save();
+    // The line says what saving will do. While a type switch waits for a yes, it says exactly what
+    // the switch drops and keeps. Saving is never refused for gaps: they are warned about inline,
+    // and the question saves as a draft that cannot go on an exam until they are fixed.
     let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 18.0), Sense::hover());
+    let shown = ui.ctx().data_mut(|d| !d.get_temp_mut_or_default::<Temp>(temp_key(&draft.bank_id, draft.qid.as_ref())).issues.is_empty());
     if let Some(Confirm::Switch(k)) = &draft.confirm {
         let p = draft.switch_plan(*k);
         let mut msg = p.summary();
@@ -1338,16 +1444,11 @@ fn footer(ui: &mut Ui, draft: &mut Draft, action: &mut QAction, want_close: &mut
             msg.push_str(" The answer key is not carried: pick True or False.");
         }
         ui.painter().with_clip_rect(rect).text(rect.left_center(), egui::Align2::LEFT_CENTER, msg, kit::ui_font(12.0), theme::ink());
-    } else if let Some(first) = errs.first() {
-        let more = if errs.len() > 1 { format!("  (+{} more)", errs.len() - 1) } else { String::new() };
+    } else if !can_save {
+        ui.painter().with_clip_rect(rect).text(rect.left_center(), egui::Align2::LEFT_CENTER, "Nothing to save yet: write the question or an answer.", kit::ui_font(12.0), theme::muted_col());
+    } else if shown && !fixes.is_empty() {
         let p = ui.painter().with_clip_rect(rect);
-        p.text(
-            rect.left_center(),
-            egui::Align2::LEFT_CENTER,
-            format!("{first}{more}"),
-            kit::ui_font(12.0),
-            theme::bad(),
-        );
+        p.text(rect.left_center(), egui::Align2::LEFT_CENTER, draft_summary(fixes.len(), false), kit::ui_font(12.0), warn_col(ui));
     }
     ui.add_space(4.0);
     let confirm = draft.confirm.clone();
@@ -1363,7 +1464,7 @@ fn footer(ui: &mut Ui, draft: &mut Draft, action: &mut QAction, want_close: &mut
                     draft.confirm = Some(Confirm::Delete);
                 }
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    let save = ui.add_enabled_ui(errs.is_empty(), |ui| kit::primary_button(ui, "Save")).inner;
+                    let save = ui.add_enabled_ui(can_save, |ui| kit::primary_button(ui, "Save")).inner;
                     if save.clicked() {
                         *action = QAction::Done;
                     }
@@ -1608,6 +1709,7 @@ fn first_field(kind: &Kind, blank_rows: Option<&[String]>) -> Option<(EqField, u
 }
 
 fn left_col(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f32) {
+    use crate::qcheck::Where;
     // Stem with the equation hook.
     let eq = EqCtx { ctx: ctx.clone(), key };
     label(ui, "Question");
@@ -1622,16 +1724,21 @@ fn left_col(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f
     // nested with Ctrl+] and un-nested with Ctrl+[.)
     let first = first_field(&draft.kind, mirror.as_deref());
     let tab_to_answers = first.is_some();
-    if tab_to_answers && eq.last_focus() == Some(EqField::Stem) && !crate::wysiwyg::tab_is_local(ctx, sid) {
+    if tab_to_answers && eq.last_focus() == Some(EqField::Stem) {
+        let (keep_fwd, keep_back) = (crate::wysiwyg::tab_is_local(ctx, sid, false), crate::wysiwyg::tab_is_local(ctx, sid, true));
         let (tab, back) = ctx.input_mut(|i| {
             let find = |i: &egui::InputState, m: Modifiers| i.events.iter().position(|e| matches!(e, egui::Event::Key { key: Key::Tab, pressed: true, modifiers, .. } if modifiers.matches_exact(m)));
-            let t = find(i, Modifiers::NONE);
-            if let Some(p) = t {
+            let mut t = find(i, Modifiers::NONE);
+            if let Some(p) = t.filter(|_| !keep_fwd) {
                 i.events.remove(p);
+            } else {
+                t = None;
             }
-            let b = find(i, Modifiers::SHIFT);
-            if let Some(p) = b {
+            let mut b = find(i, Modifiers::SHIFT);
+            if let Some(p) = b.filter(|_| !keep_back) {
                 i.events.remove(p);
+            } else {
+                b = None;
             }
             (t.is_some(), b.is_some())
         });
@@ -1658,7 +1765,9 @@ fn left_col(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f
     if has_picture(&draft.stem) {
         stem_preview(ui, &eq, &draft.stem, w);
     }
-    ui.add_space(12.0);
+    // (a reserved line: a warning appears here without moving anything)
+    eq.warn_line(ui, w, |a| matches!(a, Where::Stem | Where::Blanks));
+    ui.add_space(6.0);
 
     // Per-kind answers.
     let stem_len = chars(&draft.stem);
@@ -1666,6 +1775,7 @@ fn left_col(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f
         Kind::Mc { answers } => {
             label(ui, "Answers  -  click the circle or press Alt+Enter to mark correct; Enter adds a row");
             mc_editor(ui, &eq, answers, usize::MAX, w, &|i| EqField::Mc(i), (EqField::Stem, stem_len));
+            eq.warn_line(ui, w, |a| matches!(a, Where::Answers));
         }
         Kind::Tf { correct } => {
             label(ui, "Correct answer  -  click the circle");
@@ -1683,16 +1793,22 @@ fn left_col(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f
                     ui.label(theme::text(name).size(13.5));
                 });
             }
+            eq.warn_line(ui, w, |a| matches!(a, Where::Answers));
         }
-        Kind::Matching { pairs, distractors } => matching_editor(ui, &eq, pairs, distractors, w, stem_len),
+        Kind::Matching { pairs, distractors } => {
+            matching_editor(ui, &eq, pairs, distractors, w, stem_len);
+            eq.warn_line(ui, w, |a| matches!(a, Where::Pairs));
+        }
         Kind::Blank { .. } => blank_editor(ui, &eq, draft, w),
         Kind::Short { sample } => {
             label(ui, "Model answer");
             eq_multi(ui, &eq, EqField::Short, sample, w, 3, "What a good answer looks like...");
+            eq.warn_line(ui, w, |a| matches!(a, Where::Answers));
         }
         Kind::Multipart { parts } => {
             label(ui, "Parts");
             multipart_editor(ui, &eq, parts, w, draft.keyless, &mut draft.tf_keyed);
+            eq.warn_line(ui, w, |a| matches!(a, Where::Parts));
         }
     }
 }
@@ -1758,6 +1874,9 @@ fn mc_editor(ui: &mut Ui, eq: &EqCtx, answers: &mut Vec<Answer>, max: usize, w: 
                 answers[i].correct = !answers[i].correct;
             }
             let out = eq_line(ui, eq, fld(i), &mut answers[i].text, field_w, "Answer");
+            if answers[i].text.trim().is_empty() && !out.focused {
+                eq.warn_in(ui, out.rect, crate::qcheck::Where::Answer(i));
+            }
             if out.focused && chars(&answers[i].text) < 24 {
                 // where the user is looking: the key that marks this row correct
                 ui.painter().text(
@@ -1900,6 +2019,14 @@ fn matching_editor(ui: &mut Ui, eq: &EqCtx, pairs: &mut Vec<Pair>, distractors: 
             ui.painter().line_segment([c + Vec2::new(5.0, 0.0), c + Vec2::new(2.0, -3.0)], s);
             ui.painter().line_segment([c + Vec2::new(5.0, 0.0), c + Vec2::new(2.0, 3.0)], s);
             let b = eq_line(ui, eq, EqField::MatchR(i), &mut pairs[i].right, fw, "Right");
+            // (the empty side of a half-filled pair says so)
+            let (l_empty, r_empty) = (pairs[i].left.trim().is_empty(), pairs[i].right.trim().is_empty());
+            if l_empty != r_empty {
+                let (r, focused) = if l_empty { (a.rect, a.focused) } else { (b.rect, b.focused) };
+                if !focused {
+                    eq.warn_in(ui, r, crate::qcheck::Where::Pair(i));
+                }
+            }
             let row = Rect::from_min_max(start, Pos2::new(start.x + w, ui.min_rect().bottom().max(start.y + 24.0)));
             let show = a.focused || b.focused || ui.rect_contains_pointer(row);
             if let Some(r) = row_btn(ui, Ico::Close, false, show) {
@@ -2002,7 +2129,10 @@ fn blank_editor(ui: &mut Ui, eq: &EqCtx, draft: &mut Draft, w: f32) {
     }
     for i in 0..blanks {
         label(ui, &format!("Blank {}  -  accepted answers, separate alternatives with OR", i + 1));
-        eq_line(ui, eq, EqField::Blank(i), &mut texts[i], w, "e.g. 1 OR one");
+        let out = eq_line(ui, eq, EqField::Blank(i), &mut texts[i], w, "e.g. 1 OR one");
+        if texts[i].trim().is_empty() && !out.focused {
+            eq.warn_in(ui, out.rect, crate::qcheck::Where::Blank(i));
+        }
         ui.add_space(4.0);
     }
     // Mirror -> draft; the text the user types stays in the mirror.
@@ -2072,6 +2202,8 @@ fn multipart_editor(ui: &mut Ui, eq: &EqCtx, parts: &mut Vec<Part>, w: f32, keyl
                     }
                 }
             });
+            // (each part's own reserved warning line, at the part)
+            eq.warn_line(ui, w, |a| a == crate::qcheck::Where::Part(i));
         });
     }
     if let Some(i) = remove {
@@ -2193,6 +2325,7 @@ mod tests {
     }
 
     use super::*;
+    use egui::Event;
 
     #[test]
     fn the_keyless_marker_cannot_be_edited_away() {
@@ -2483,6 +2616,439 @@ mod tests {
         assert_eq!(d.stem, "ab");
         let Kind::Mc { answers } = &d.kind else { panic!() };
         assert_eq!((answers[0].text.as_str(), answers[1].text.as_str()), ("cd", "ef"), "{answers:?}");
+    }
+
+    /// A headless modal: frames of the real `draw_modal` with scripted input.
+    struct Modal {
+        ctx: egui::Context,
+        tex: HashMap<String, egui::TextureHandle>,
+        t: f64,
+        pub w: f32,
+        pub h: f32,
+    }
+
+    impl Modal {
+        fn new() -> Modal {
+            let ctx = egui::Context::default();
+            crate::theme::setup(&ctx);
+            Modal { ctx, tex: HashMap::new(), t: 0.0, w: 1280.0, h: 900.0 }
+        }
+        fn frame(&mut self, d: &mut Draft, events: Vec<egui::Event>) -> QAction {
+            let mut input = egui::RawInput::default();
+            input.screen_rect = Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(self.w, self.h)));
+            input.time = Some(self.t);
+            input.events = events;
+            self.t += 0.05;
+            let mut act = QAction::None;
+            let o = self.ctx.run_ui(input, |_ui| {
+                let a = draw_modal(&self.ctx, d, &[], &mut self.tex);
+                if a != QAction::None {
+                    act = a;
+                }
+            });
+            o.drop_without_applying_deltas();
+            act
+        }
+        fn settle(&mut self, d: &mut Draft, n: usize) -> QAction {
+            let mut act = QAction::None;
+            for _ in 0..n {
+                let a = self.frame(d, vec![]);
+                if a != QAction::None {
+                    act = a;
+                }
+            }
+            act
+        }
+    }
+
+    fn press(k: Key) -> egui::Event {
+        egui::Event::Key { key: k, physical_key: Some(k), pressed: true, repeat: false, modifiers: Modifiers::NONE }
+    }
+
+    /// A burst of Backspaces in ONE frame in an answer row deletes the text and then the empty
+    /// row too, exactly as the same keys spread over several frames do.
+    #[test]
+    fn a_backspace_burst_in_one_frame_removes_the_emptied_answer_row() {
+        for (typed, presses) in [("b", 2usize), ("abcd", 5), ("ab", 3)] {
+            let mut m = Modal::new();
+            let mut d = Draft::new("b".to_string());
+            m.settle(&mut d, 8);
+            m.frame(&mut d, vec![Event::Text("q".into()), press(Key::Tab)]);
+            m.settle(&mut d, 6);
+            m.frame(&mut d, vec![Event::Text("a".into()), press(Key::Enter), Event::Text(typed.into())]);
+            m.settle(&mut d, 10);
+            let Kind::Mc { answers } = &d.kind else { panic!() };
+            assert_eq!(answers[1].text, typed);
+            let before = answers.len();
+            m.frame(&mut d, (0..presses).map(|_| press(Key::Backspace)).collect());
+            m.settle(&mut d, 30);
+            let Kind::Mc { answers } = &d.kind else { panic!() };
+            assert_eq!(answers.len(), before - 1, "{typed:?} x{presses}: the emptied row goes: {answers:?}");
+            assert_eq!(answers[1].text, "", "(the next row is the old third, empty)");
+        }
+    }
+
+    /// A draft opened after another one never inherits its scratch state: a new Fill question
+    /// after a discarded one shows empty blank rows (the temp memory is keyed by bank and question
+    /// id, which every new question shares).
+    #[test]
+    fn a_new_draft_never_inherits_the_previous_drafts_temp_state() {
+        let mut m = Modal::new();
+        let mut d = Draft::new_of("b".to_string(), QKind::Blank);
+        d.stem = "the quick three".to_string();
+        m.settle(&mut d, 8);
+        let k = Modifiers::SHIFT;
+        let shift = |key: Key| Event::Key { key, physical_key: Some(key), pressed: true, repeat: false, modifiers: k };
+        m.frame(&mut d, vec![press(Key::End)]);
+        for _ in 0..5 {
+            m.frame(&mut d, vec![shift(Key::ArrowLeft)]);
+            m.frame(&mut d, vec![]);
+        }
+        m.frame(&mut d, vec![Event::Key { key: Key::K, physical_key: Some(Key::K), pressed: true, repeat: false, modifiers: Modifiers::COMMAND | Modifiers::SHIFT }]);
+        m.settle(&mut d, 6);
+        assert_eq!(d.stem, "the quick ___");
+        let key = temp_key("b", None);
+        let held = |m: &Modal| m.ctx.data_mut(|dd| dd.get_temp_mut_or_default::<Temp>(key).blank_texts.clone());
+        assert_eq!(held(&m).unwrap_or_default(), vec!["three".to_string()], "the first draft kept its blank text");
+        // discarded; a new Fill question opens in the same context
+        let mut d2 = Draft::new_of("b".to_string(), QKind::Blank);
+        m.settle(&mut d2, 8);
+        let t2 = held(&m).unwrap_or_default();
+        assert!(t2.iter().all(|r| r.is_empty()), "no text of the earlier draft: {t2:?}");
+        let Kind::Blank { accept } = &d2.kind else { panic!() };
+        assert!(accept.iter().flatten().all(|a| a.is_empty()), "{accept:?}");
+        assert!(d2.stem.is_empty());
+    }
+
+    /// Escape then Enter in one burst: the discard prompt takes the Enter and discards.
+    #[test]
+    fn esc_then_enter_in_one_burst_discards() {
+        let mut m = Modal::new();
+        let mut d = Draft::new("b".to_string());
+        m.settle(&mut d, 8);
+        m.frame(&mut d, vec![Event::Text("typed".into())]);
+        m.settle(&mut d, 6);
+        assert!(d.is_dirty());
+        let mut act = m.frame(&mut d, vec![press(Key::Escape), press(Key::Enter)]);
+        for _ in 0..10 {
+            if act != QAction::None {
+                break;
+            }
+            act = m.frame(&mut d, vec![]);
+        }
+        assert_eq!(act, QAction::Cancel);
+        assert_eq!(d.stem, "typed", "the Enter did not become a new line");
+    }
+
+    /// Esc alone only asks; Esc again keeps editing.
+    #[test]
+    fn esc_alone_asks_and_does_not_discard() {
+        let mut m = Modal::new();
+        let mut d = Draft::new("b".to_string());
+        m.settle(&mut d, 8);
+        m.frame(&mut d, vec![Event::Text("typed".into())]);
+        m.settle(&mut d, 6);
+        assert_eq!(m.frame(&mut d, vec![press(Key::Escape)]), QAction::None);
+        assert_eq!(m.settle(&mut d, 10), QAction::None);
+        assert_eq!(d.confirm, Some(Confirm::Discard));
+    }
+
+    /// The modal opens at the top even when an earlier session scrolled the same body.
+    #[test]
+    fn the_modal_opens_scrolled_to_the_top() {
+        use egui::containers::scroll_area::State;
+        let mut m = Modal::new();
+        let mut d = Draft::new("b".to_string());
+        m.settle(&mut d, 8);
+        let sid: UiId = m.ctx.data(|dd| dd.get_temp(UiId::new("qedit_test_scroll_id"))).unwrap();
+        m.ctx.data_mut(|dd| {
+            let mut st = State::default();
+            st.offset = egui::vec2(0.0, 21.0);
+            dd.insert_persisted(sid, st);
+        });
+        // a new session of the same question id
+        let mut d2 = Draft::new("b".to_string());
+        m.settle(&mut d2, 8);
+        let off = State::load(&m.ctx, sid).map_or(0.0, |s| s.offset.y);
+        assert!(off < 1.0, "scrolled {off} px on open");
+    }
+
+    /// A confirm bar (type switch, discard, delete) lives in the fixed footer: showing it never
+    /// scrolls the body, so nothing jumps under the cursor.
+    #[test]
+    fn a_confirm_bar_never_scrolls_the_modal_body() {
+        use egui::containers::scroll_area::State;
+        for c in [Confirm::Switch(QKind::Tf), Confirm::Discard, Confirm::Delete] {
+            let mut m = Modal::new();
+            let mut d = Draft::new("b".to_string());
+            d.stem = "Which is prime".to_string();
+            d.kind = Kind::Mc { answers: (0..9).map(|i| Answer { text: format!("a{i}"), correct: i == 1, locked: false }).collect() };
+            m.settle(&mut d, 8);
+            let sid: UiId = m.ctx.data(|dd| dd.get_temp(UiId::new("qedit_test_scroll_id"))).unwrap();
+            d.confirm = Some(c.clone());
+            m.settle(&mut d, 12);
+            let off = State::load(&m.ctx, sid).map_or(0.0, |s| s.offset.y);
+            assert!(off < 1.0, "{c:?}: the body scrolled {off} px when the confirm bar showed");
+        }
+    }
+
+    /// Tab in the LAST cell of a table in the stem leaves the table for the first answer (no row is
+    /// added); Tab in an earlier cell walks to the next cell.
+    #[test]
+    fn tab_in_the_last_table_cell_leaves_the_table() {
+        let table = "| a | b |\n| --- | --- |\n| c | d |";
+        let mut m = Modal::new();
+        let mut d = Draft::new("b".to_string());
+        d.stem = table.to_string();
+        m.settle(&mut d, 10); // focus lands at the end of the stem: the last cell
+        m.frame(&mut d, vec![press(Key::Tab)]);
+        m.settle(&mut d, 6);
+        m.frame(&mut d, vec![Event::Text("zz".into())]);
+        m.settle(&mut d, 6);
+        assert_eq!(d.stem, table, "no row was added and nothing was typed into the table");
+        let Kind::Mc { answers } = &d.kind else { panic!() };
+        assert_eq!(answers[0].text, "zz");
+    }
+
+    #[test]
+    fn tab_in_an_earlier_table_cell_walks_to_the_next_cell() {
+        let table = "| a | b |\n| --- | --- |\n| c | d |";
+        let mut m = Modal::new();
+        let mut d = Draft::new("b".to_string());
+        d.stem = table.to_string();
+        m.settle(&mut d, 10);
+        m.frame(&mut d, vec![Event::Key { key: Key::Home, physical_key: Some(Key::Home), pressed: true, repeat: false, modifiers: Modifiers::COMMAND }]);
+        m.settle(&mut d, 6);
+        m.frame(&mut d, vec![press(Key::Tab)]);
+        m.settle(&mut d, 6);
+        m.frame(&mut d, vec![Event::Text("X".into())]);
+        m.settle(&mut d, 6);
+        assert_eq!(d.stem, "| a | X |\n| --- | --- |\n| c | d |", "the next cell (its text selected) took the X");
+        let Kind::Mc { answers } = &d.kind else { panic!() };
+        assert_eq!(answers[0].text, "");
+    }
+
+    fn pair(l: &str, r: &str) -> Pair {
+        Pair { left: l.to_string(), right: r.to_string() }
+    }
+
+    fn msgs_of(d: &Draft) -> Vec<String> {
+        d.issues().into_iter().map(|i| i.msg).collect()
+    }
+
+    /// Every kind: what is missing is named, and saving it stores exactly what was entered.
+    #[test]
+    fn an_incomplete_draft_of_every_kind_names_its_gaps_and_saves_as_entered() {
+        // multiple choice, no correct answer
+        let mut d = Draft::new("b".to_string());
+        d.stem = "Pick".to_string();
+        d.kind = mc(&[("x", false), ("y", false), ("", false), ("", false)]);
+        assert_eq!(msgs_of(&d), ["Mark one answer correct"]);
+        let q = d.build_question(None);
+        let Kind::Mc { answers } = &q.kind else { panic!() };
+        assert_eq!(answers.iter().map(|a| (a.text.as_str(), a.correct)).collect::<Vec<_>>(), [("x", false), ("y", false)], "no key was invented");
+        assert!(!crate::model::is_keyless(&q), "a draft is not marked as an import");
+        assert!(crate::qcheck::key_missing(&q));
+        // true/false: nothing to fix without a stem
+        let mut d = Draft::new_of("b".to_string(), QKind::Tf);
+        d.stem = "Sky is blue".to_string();
+        assert!(d.issues().is_empty());
+        d.stem.clear();
+        assert_eq!(msgs_of(&d), ["Add a question stem"]);
+        // matching: a half-filled pair is kept as typed
+        let mut d = Draft::new_of("b".to_string(), QKind::Matching);
+        d.stem = "Match".to_string();
+        d.kind = Kind::Matching { pairs: vec![pair("a", "1"), pair("b", "")], distractors: vec![String::new()] };
+        let m = msgs_of(&d);
+        assert_eq!(m, ["Pair 2 has no match on the right", "Add at least two matching pairs (both sides filled)"]);
+        let Kind::Matching { pairs, .. } = d.build_question(None).kind else { panic!() };
+        assert_eq!((pairs.len(), pairs[1].left.as_str(), pairs[1].right.as_str()), (2, "b", ""), "the typed left item is not dropped");
+        // fill in the blank: a blank without an answer, and blanks that do not match
+        let mut d = Draft::new_of("b".to_string(), QKind::Blank);
+        d.stem = "Fill ___ and ___".to_string();
+        d.kind = Kind::Blank { accept: vec![vec!["one".to_string()], vec![]] };
+        assert_eq!(msgs_of(&d), ["Blank 2 has no accepted answer"]);
+        d.kind = Kind::Blank { accept: vec![vec!["one".to_string()]] };
+        assert!(msgs_of(&d).contains(&"Blanks and answers do not match".to_string()), "{:?}", msgs_of(&d));
+        let Kind::Blank { accept } = d.build_question(None).kind else { panic!() };
+        assert_eq!(accept, vec![vec!["one".to_string()]], "saved as entered");
+        // short answer: only the stem can block; no model answer is a note, and it saves
+        let mut d = Draft::new_of("b".to_string(), QKind::Short);
+        d.stem = "Explain".to_string();
+        assert_eq!(msgs_of(&d), ["No model answer: the key will be blank"]);
+        assert!(d.validate().is_empty());
+        // multipart
+        let mut d = Draft::new_of("b".to_string(), QKind::Multipart);
+        d.stem = "Parts".to_string();
+        if let Kind::Multipart { parts } = &mut d.kind {
+            parts[1].stem = "second".to_string();
+            parts[1].kind = PartKind::Mc { answers: vec![Answer { text: "x".into(), correct: false, locked: false }, Answer { text: "y".into(), correct: false, locked: false }] };
+        }
+        assert_eq!(msgs_of(&d), ["Part 1 needs its own stem", "Part 2 needs a correct answer"]);
+        assert_eq!(d.build_question(None).stem, "Parts");
+    }
+
+    /// Save is never refused for gaps, only for a draft with nothing in it.
+    #[test]
+    fn save_is_refused_only_for_a_draft_with_nothing_in_it() {
+        let mut d = Draft::new("b".to_string());
+        assert!(!d.can_save() && d.is_empty_draft());
+        d.stem = "   ".to_string();
+        assert!(!d.can_save(), "spaces are nothing");
+        d.stem = "A stem and nothing else".to_string();
+        assert!(d.can_save());
+        d.stem.clear();
+        if let Kind::Mc { answers } = &mut d.kind {
+            answers[2].text = "just an answer".to_string();
+        }
+        assert!(d.can_save(), "an answer alone is something");
+        for k in crate::bankops::KINDS {
+            assert!(!Draft::new_of("b".to_string(), k).can_save(), "{k:?} untouched");
+        }
+    }
+
+    /// In the real modal, Ctrl+Enter saves an incomplete draft (it used to wait for a clean one) and
+    /// does nothing for an empty one.
+    #[test]
+    fn ctrl_enter_saves_an_incomplete_draft_but_not_an_empty_one() {
+        let ctrl_enter = Event::Key { key: Key::Enter, physical_key: Some(Key::Enter), pressed: true, repeat: false, modifiers: Modifiers::COMMAND };
+        let mut m = Modal::new();
+        let mut empty = Draft::new("b".to_string());
+        m.settle(&mut empty, 8);
+        let mut act = m.frame(&mut empty, vec![ctrl_enter.clone()]);
+        act = if act == QAction::None { m.settle(&mut empty, 6) } else { act };
+        assert_eq!(act, QAction::None);
+        let mut m = Modal::new();
+        let mut d = Draft::new("b".to_string());
+        m.settle(&mut d, 8);
+        m.frame(&mut d, vec![Event::Text("only a stem".into())]);
+        m.settle(&mut d, 6);
+        assert!(!d.validate().is_empty());
+        let mut act = m.frame(&mut d, vec![ctrl_enter]);
+        if act == QAction::None {
+            act = m.settle(&mut d, 6);
+        }
+        assert_eq!(act, QAction::Done);
+    }
+
+    /// The inline warnings wait until the teacher has been in the field and left it (or the question
+    /// is an existing one), and an empty draft shows none.
+    #[test]
+    fn warnings_wait_for_the_field_to_be_left() {
+        let mut m = Modal::new();
+        let mut d = Draft::new("b".to_string());
+        m.settle(&mut d, 8);
+        let shown = |m: &Modal, d: &Draft| m.ctx.data_mut(|dd| dd.get_temp_mut_or_default::<Temp>(temp_key(&d.bank_id, d.qid.as_ref())).issues.len());
+        assert_eq!(shown(&m, &d), 0, "an empty draft shows nothing");
+        m.frame(&mut d, vec![Event::Text("stem".into())]);
+        m.settle(&mut d, 6);
+        assert_eq!(shown(&m, &d), 0, "still typing in the stem");
+        m.frame(&mut d, vec![press(Key::Tab)]);
+        m.settle(&mut d, 6);
+        m.frame(&mut d, vec![Event::Text("x".into()), press(Key::Enter), Event::Text("y".into())]);
+        m.settle(&mut d, 12);
+        assert_eq!(shown(&m, &d), 0, "typing in the answers: nothing nags yet");
+        // leave the answers for the stem
+        for _ in 0..2 {
+            m.frame(&mut d, vec![Event::Key { key: Key::Tab, physical_key: Some(Key::Tab), pressed: true, repeat: false, modifiers: Modifiers::SHIFT }]);
+            m.settle(&mut d, 4);
+        }
+        let first = d.issues();
+        assert!(first.iter().any(|i| i.msg == "Mark one answer correct"));
+        let now = m.ctx.data_mut(|dd| dd.get_temp_mut_or_default::<Temp>(temp_key("b", None)).issues.clone());
+        assert!(now.iter().any(|i| i.msg == "Mark one answer correct"), "shown once the answers were left: {now:?}");
+        // an existing question shows its gaps at once
+        let mut q = sample_question();
+        q.kind = mc(&[("x", false), ("y", false)]);
+        let mut e = Draft::from_question("b".into(), &q);
+        let mut m = Modal::new();
+        m.settle(&mut e, 10);
+        let now = m.ctx.data_mut(|dd| dd.get_temp_mut_or_default::<Temp>(temp_key("b", Some(&"q1".to_string()))).issues.clone());
+        assert!(now.iter().any(|i| i.msg == "Mark one answer correct"), "{now:?}");
+    }
+
+    /// Gaps in fields that are on screen the whole time show at once, visited or not: a blank never
+    /// clicked into, a Short with no model answer, and each incomplete part at its own part.
+    #[test]
+    fn unvisited_blanks_short_and_parts_warn_at_their_own_field() {
+        let shown = |m: &Modal, d: &Draft| m.ctx.data_mut(|dd| dd.get_temp_mut_or_default::<Temp>(temp_key(&d.bank_id, d.qid.as_ref())).issues.clone());
+        // Fill with two blanks, the second never visited (Make Blank filled the first)
+        let mut d = Draft::new_of("b".to_string(), QKind::Blank);
+        d.stem = "One ___ and two ___".to_string();
+        d.kind = Kind::Blank { accept: vec![vec!["one".to_string()], vec![]] };
+        let mut m = Modal::new();
+        m.settle(&mut d, 8);
+        m.frame(&mut d, vec![Event::Text("x".into())]); // typing in the stem, not in a blank
+        m.settle(&mut d, 6);
+        let v = shown(&m, &d);
+        assert!(v.iter().any(|i| i.at == crate::qcheck::Where::Blank(1) && i.msg == "Blank 2 has no accepted answer"), "{v:?}");
+        // Short with a stem and no model answer
+        let mut d = Draft::new_of("b".to_string(), QKind::Short);
+        d.stem = "Explain".to_string();
+        let mut m = Modal::new();
+        m.settle(&mut d, 8);
+        m.frame(&mut d, vec![Event::Text("x".into())]);
+        m.settle(&mut d, 6);
+        let v = shown(&m, &d);
+        assert!(v.iter().any(|i| i.msg == "No model answer: the key will be blank"), "{v:?}");
+        // Multipart with two incomplete parts: each warning is addressed to its own part
+        let mut d = Draft::new_of("b".to_string(), QKind::Multipart);
+        d.stem = "Parts".to_string();
+        if let Kind::Multipart { parts } = &mut d.kind {
+            parts[0].stem = "first".into();
+            parts[0].kind = PartKind::Mc { answers: vec![] };
+            parts[1].stem = "second".into();
+            parts[1].kind = PartKind::Mc { answers: vec![Answer { text: "x".into(), correct: false, locked: false }] };
+        }
+        // (a new draft, no part visited)
+        let mut m = Modal::new();
+        m.settle(&mut d, 10);
+        m.frame(&mut d, vec![Event::Text("x".into())]);
+        m.settle(&mut d, 6);
+        let v = shown(&m, &d);
+        for i in 0..2 {
+            assert!(v.iter().any(|x| x.at == crate::qcheck::Where::Part(i) && x.severity == crate::qcheck::Severity::Fix), "part {i}: {v:?}");
+        }
+    }
+
+    /// An imported keyless question stays keyless through an edit that does not key it, and is
+    /// flagged; a keyless True/False nobody has picked is flagged in the editor.
+    #[test]
+    fn a_keyless_import_stays_keyless_and_flagged() {
+        let mut q = sample_question();
+        q.kind = mc(&[("x", false), ("y", false)]);
+        q.explanation = Some(crate::model::KEYLESS_SENTINEL.to_string());
+        let mut d = Draft::from_question("b".into(), &q);
+        assert!(d.keyless);
+        assert_eq!(msgs_of(&d), ["Mark one answer correct"]);
+        d.stem = "Edited stem".to_string();
+        let out = d.build_question(Some(&q));
+        assert!(crate::model::is_keyless(&out), "still marked as imported without a key");
+        assert!(crate::qcheck::key_missing(&out));
+        assert!(matches!(&out.kind, Kind::Mc { answers } if answers.iter().all(|a| !a.correct)), "no key was made up");
+        assert_eq!(crate::qcheck::blockers(&out).len(), 1);
+        // keyed in the editor: the marker goes and the question is complete
+        if let Kind::Mc { answers } = &mut d.kind {
+            answers[0].correct = true;
+        }
+        let keyed = d.build_question(Some(&q));
+        assert!(!crate::model::is_keyless(&keyed) && crate::qcheck::blockers(&keyed).is_empty());
+        // true/false
+        let t = tf_question(true, false);
+        let mut dt = Draft::from_question("b".into(), &t);
+        assert_eq!(msgs_of(&dt), ["Pick True or False"]);
+        let saved = dt.build_question(Some(&t));
+        assert!(crate::model::is_keyless(&saved) && crate::qcheck::key_missing(&saved));
+        dt.tf_keyed.push(None);
+        assert!(dt.issues().is_empty());
+    }
+
+    /// Saving an incomplete question stores it, names it a draft in the toast, and a complete one
+    /// does not.
+    #[test]
+    fn the_save_toast_says_when_it_saved_a_draft() {
+        assert_eq!(draft_summary(2, true), "Saved as a draft: 2 things to fix");
+        assert_eq!(draft_summary(1, false), "Saves as a draft: 1 thing to fix");
     }
 
     #[test]

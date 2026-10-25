@@ -314,6 +314,43 @@ fn a_real_bank_and_exam_become_sources() {
     assert!(ShareSource::from_exam(&Exam { id: "e2".into(), name: "Empty".into(), ..Default::default() }, &[bank]).is_err());
 }
 
+/// The publish gate: a question with a gap (every kind) stops a bank or exam from being shared, with a
+/// sentence that names the question and what is missing; fixed, it goes; a question imported
+/// without its key is left to the pool's own `hide_key` rule.
+#[test]
+fn a_draft_can_not_be_shared_and_a_fixed_one_can() {
+    use crate::model::*;
+    let q = |id: &str, stem: &str, kind: Kind| Question { id: id.into(), stem: stem.into(), kind, points: None, difficulty: None, topics: vec![], image: None, explanation: None, figure: None, created: 1, modified: 1 };
+    let a = |t: &str, c: bool| Answer { text: t.into(), correct: c, locked: false };
+    let ok = q("ok", "Fine", Kind::Tf { correct: true });
+    let drafts = [
+        (q("mc", "Pick", Kind::Mc { answers: vec![a("x", false), a("y", false)] }), "Mark one answer correct"),
+        (q("tf", "  ", Kind::Tf { correct: false }), "Add a question stem"),
+        (q("ma", "Match", Kind::Matching { pairs: vec![Pair { left: "a".into(), right: "1".into() }, Pair { left: "b".into(), right: String::new() }], distractors: vec![] }), "Pair 2 has no match on the right"),
+        (q("bl", "Fill ___", Kind::Blank { accept: vec![vec![]] }), "Blank 1 has no accepted answer"),
+        (q("sh", "", Kind::Short { sample: "s".into() }), "Add a question stem"),
+        (q("mp", "Parts", Kind::Multipart { parts: vec![Part { stem: "p".into(), kind: PartKind::Mc { answers: vec![a("x", false), a("y", false)] } }] }), "Part 1 needs a correct answer"),
+    ];
+    for (d, missing) in drafts {
+        let bank = QuestionBank { id: "b".into(), name: "B".into(), questions: vec![ok.clone(), d.clone()], created: 1, modified: 1, details: Default::default() };
+        let e = ShareSource::from_bank(&bank).err().unwrap_or_else(|| panic!("{} was shared", d.id));
+        assert!(e.contains("Question 2") && e.contains("can not be shared") && e.contains(missing), "{e}");
+        let mut exam = Exam { id: "e".into(), name: "E".into(), ..Default::default() };
+        exam.items = vec![ExamItem::new("b", "ok"), ExamItem::new("b", d.id.clone())];
+        let e = ShareSource::from_exam(&exam, std::slice::from_ref(&bank)).err().unwrap_or_else(|| panic!("{} was shared in an exam", d.id));
+        assert!(e.contains("Question 2") && e.contains(missing), "{e}");
+    }
+    // fixed
+    let fixed = q("mc", "Pick", Kind::Mc { answers: vec![a("x", true), a("y", false)] });
+    let bank = QuestionBank { id: "b".into(), name: "B".into(), questions: vec![ok.clone(), fixed], created: 1, modified: 1, details: Default::default() };
+    assert!(ShareSource::from_bank(&bank).is_ok());
+    // imported without its key: not stopped by the missing key (the pool hides it)
+    let mut keyless = q("k", "Pick", Kind::Mc { answers: vec![a("x", false), a("y", false)] });
+    keyless.explanation = Some(KEYLESS_SENTINEL.to_string());
+    let bank = QuestionBank { id: "b".into(), name: "B".into(), questions: vec![keyless], created: 1, modified: 1, details: Default::default() };
+    assert!(ShareSource::from_bank(&bank).is_ok());
+}
+
 #[test]
 fn the_publish_log_remembers_and_forgets_by_source() {
     let log = LogIo::memory();
