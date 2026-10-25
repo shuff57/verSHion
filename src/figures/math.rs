@@ -2540,6 +2540,94 @@ fn eval_cs(cs: &[char], x: f64, y: Option<f64>, deg: bool) -> Option<f64> {
 }
 pub(super) fn eval(expr: &str, x: f64) -> Option<f64> { eval_full(expr, x, None, false) }
 
+/// Domain restriction of an implicit row, `, x > 0, y < 3` (any mix, applied to each point).
+#[derive(Default)]
+struct ImpDom { x: Vec<Vec<Interval>>, y: Vec<Vec<Interval>> }
+impl ImpDom {
+    fn parse(dom: Option<&str>) -> ImpDom {
+        let mut out = ImpDom::default();
+        let Some(mut rest) = dom.map(|s| s.to_lowercase().replace(" and ", ",")) else { return out };
+        loop {
+            let (a, b) = split_domain(&rest);
+            let a = a.trim().to_string();
+            if !a.is_empty() {
+                if a.contains('y') { out.y.push(parse_ineq(&a.replace('y', "x"))); } else { out.x.push(parse_ineq(&a)); }
+            }
+            match b { Some(t) => rest = t.to_string(), None => break }
+        }
+        out
+    }
+    fn is_empty(&self) -> bool { self.x.is_empty() && self.y.is_empty() }
+    fn has(ivs: &[Interval], v: f64, eps: f64) -> bool {
+        ivs.iter().any(|iv| if eps > 0.0 { v >= iv.lo - eps && v <= iv.hi + eps } else { (v > iv.lo || (iv.lo_c && v >= iv.lo)) && (v < iv.hi || (iv.hi_c && v <= iv.hi)) })
+    }
+    /// Every typed restriction holds at (x, y); `eps` > 0 treats the limits as closed (for end dots).
+    fn ok(&self, x: f64, y: f64, eps: f64) -> bool {
+        self.x.iter().all(|c| Self::has(c, x, eps)) && self.y.iter().all(|c| Self::has(c, y, eps))
+    }
+    /// (is_x, value, closed) of every finite limit.
+    fn limits(&self) -> Vec<(bool, f64, bool)> {
+        let mut v = vec![];
+        for (is_x, cs) in [(true, &self.x), (false, &self.y)] {
+            for c in cs { for iv in c { for (b, cl) in [(iv.lo, iv.lo_c), (iv.hi, iv.hi_c)] { if b.is_finite() { v.push((is_x, b, cl)); } } } }
+        }
+        v
+    }
+}
+
+/// A label's text with a white halo so it stays readable over a gridline or a curve.
+fn math_text_halo(d: &mut Doc, x: f64, y: f64, size: f64, s: &str) {
+    d.raw(&format!(r##"<text x="{x:.2}" y="{:.2}" font-size="{size}" text-anchor="start" font-family="{SERIF}" fill="#000" stroke="#fff" stroke-width="6" stroke-linejoin="round" paint-order="stroke">{}</text>"##, y + size * 0.34, math_tspans(s)));
+}
+
+/// Rough size of a 15 px serif label, for keeping labels apart.
+fn label_w(s: &str) -> f64 { 7.2 * s.chars().filter(|c| !matches!(c, '^' | '*' | ' ')).count() as f64 + 6.0 }
+
+fn rect_hit(r: &[f64; 4], a: &[f64; 4]) -> bool { r[0] < a[2] && a[0] < r[2] && r[1] < a[3] && a[1] < r[3] }
+fn rect_has_point(r: &[f64; 4], p: Pt) -> bool { p.0 >= r[0] && p.0 <= r[2] && p.1 >= r[1] && p.1 <= r[3] }
+
+/// How many obstacles a label rectangle runs into (curves are sampled every <= 3 px).
+fn label_conflicts(r: &[f64; 4], curves: &[Vec<Pt>], rects: &[[f64; 4]]) -> usize {
+    let mut n = rects.iter().filter(|a| rect_hit(r, a)).count() * 50;
+    let g = [r[0] - 2.0, r[1] - 2.0, r[2] + 2.0, r[3] + 2.0];
+    for c in curves {
+        for w in c.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            // segment bounding box first
+            if a.0.max(b.0) < g[0] || a.0.min(b.0) > g[2] || a.1.max(b.1) < g[1] || a.1.min(b.1) > g[3] { continue; }
+            let len = (b.0 - a.0).hypot(b.1 - a.1);
+            let k = (len / 3.0).ceil().max(1.0) as usize;
+            if (0..=k).any(|i| { let t = i as f64 / k as f64; rect_has_point(&g, (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t)) }) { n += 1; break; }
+        }
+    }
+    n
+}
+
+/// Picks where to write a label: tries the candidate anchors in order, each at four offsets, and
+/// takes the first spot free of curves, other labels and point labels (else the least crowded).
+/// `bounds` is the plot rectangle; returns the text start.
+fn pick_label_spot(cands: &[(Pt, f64)], w: f64, curves: &[Vec<Pt>], rects: &[[f64; 4]], bounds: [f64; 4]) -> Option<(f64, f64, [f64; 4])> {
+    let mut order: Vec<usize> = (0..cands.len()).collect();
+    order.sort_by(|&a, &b| cands[a].1.partial_cmp(&cands[b].1).unwrap_or(std::cmp::Ordering::Equal));
+    // keep candidates at least 22 px apart so the search covers the whole curve
+    let mut chosen: Vec<Pt> = vec![];
+    let mut best: Option<(usize, f64, f64, [f64; 4])> = None;
+    for &i in &order {
+        let a = cands[i].0;
+        if chosen.iter().any(|c| (c.0 - a.0).hypot(c.1 - a.1) < 22.0) { continue; }
+        chosen.push(a);
+        if chosen.len() > 60 { break; }
+        for (ox, oy) in [(8.0, -12.0), (-w - 8.0, -12.0), (8.0, 14.0), (-w - 8.0, 14.0)] {
+            let r = [a.0 + ox, a.1 + oy - 9.0, a.0 + ox + w, a.1 + oy + 9.0];
+            let inside = r[0] >= bounds[0] + 2.0 && r[2] <= bounds[2] - 2.0 && r[1] >= bounds[1] + 2.0 && r[3] <= bounds[3] - 2.0;
+            let n = label_conflicts(&r, curves, rects) + if inside { 0 } else { 100 };
+            if n == 0 { return Some((r[0], a.1 + oy, r)); }
+            if best.as_ref().map_or(true, |b| n < b.0) { best = Some((n, r[0], a.1 + oy, r)); }
+        }
+    }
+    best.map(|(_, x, y, r)| (x, y, r))
+}
+
 /// At most this many non-linear implicit rows are drawn per figure (bounds the sampling work).
 const IMPLICIT_MAX: usize = 4;
 /// Drops points that lie within 0.04 px of the line through their neighbours.
@@ -2575,7 +2663,7 @@ fn coordinate_grid_params() -> Vec<ParamDef> {
         ParamDef::text("xlabel", "x-axis label (at the arrow; empty = none)", "x"),
         ParamDef::text("ylabel", "y-axis label (at the arrow; empty = none)", "y"),
         ParamDef::text("title", "Title", ""),
-        ParamDef::long("equations", "Equations, one per ; - y = 2x + 1; 2x + 3y = 6; x = 4; y > x - 2; -2 < x <= 3; y = x + 2, x < 1 (piece with a domain)", "y = 2x + 1"),
+        ParamDef::long("equations", "Equations, one per ; - y = 2x + 1; 2x + 3y = 6; x = 4; y > x - 2; -2 < x <= 3; y = x + 2, x < 1 (piece with a domain); x^2 + y^2 = 25 (circle or any conic, x^2 + y^2 < 25 shades it, x^2 + y^2 = 25, y > 0 keeps the top half)", "y = 2x + 1"),
         ParamDef::bool("eq_labels", "Write each equation on its line", false),
         ParamDef::long("points", "Points - A(1, 2), B(-3, 4)  or  (2,3) A; (-1,4) B", ""),
         ParamDef::color("eq1_color", "Equation 1 colour", &SWATCHES, "#1f5fbf"),
@@ -2649,7 +2737,7 @@ fn pi_label(v: f64) -> String {
 fn every_n(s: &str) -> i64 { match s { "Every 2nd line" => 2, "Every 5th line" => 5, "Every 10th line" => 10, "No numbers" => 0, _ => 1 } }
 
 /// One typed row of the Equations box.
-enum Row { Func(String), Vert(f64), Implicit(String), Ineq { rhs: String, above: bool, strict: bool }, Band(Vec<Interval>) }
+enum Row { Func(String), Vert(f64), Implicit(String), ImplicitIneq { e: String, positive: bool, strict: bool }, Ineq { rhs: String, above: bool, strict: bool }, Band(Vec<Interval>) }
 /// Splits "y = x + 2, x < 1" into (main, domain) at the first comma outside brackets.
 fn split_domain(s: &str) -> (&str, Option<&str>) {
     let mut depth = 0i32;
@@ -2668,9 +2756,11 @@ fn parse_row(main: &str) -> Option<Row> {
         let (l, r) = (lower[..pos].trim(), lower[pos + len..].trim());
         let strict = !op.contains('=');
         let gt = op.starts_with('>');
-        return if l == "y" { Some(Row::Ineq { rhs: r.to_string(), above: gt, strict }) }
-            else if r == "y" { Some(Row::Ineq { rhs: l.to_string(), above: !gt, strict }) }
-            else { None };
+        // y < f(x) (no y on the other side) shades above or below the curve; anything else with a y
+        // (x^2 + y^2 < 25, y > x + y^2) is shaded from the sampled sign of left - right
+        return if l == "y" && !r.contains('y') { Some(Row::Ineq { rhs: r.to_string(), above: gt, strict }) }
+            else if r == "y" && !l.contains('y') { Some(Row::Ineq { rhs: l.to_string(), above: !gt, strict }) }
+            else { Some(Row::ImplicitIneq { e: format!("({l})-({r})"), positive: gt, strict }) };
     }
     match lower.find('=') {
         Some(i) => {
@@ -2686,10 +2776,11 @@ fn parse_row(main: &str) -> Option<Row> {
 }
 
 /// True when a typed row is a conic or other implicit curve (not a line in y), which has no drag handles.
-pub(super) fn is_curve_row(raw: &str, x0: f64, x1: f64, y0: f64, y1: f64) -> bool {
+pub(super) fn is_curve_row(raw: &str, x0: f64, x1: f64, y0: f64, y1: f64, deg: bool) -> bool {
     let (main, _) = split_domain(raw.trim());
     match parse_row(main) {
-        Some(Row::Implicit(e)) => { let cs = norm_expr(&e); !implicit::linear_in_y(&|x, y| eval_cs(&cs, x, Some(y), false), x0, x1, y0, y1) }
+        Some(Row::Implicit(e)) => { let cs = norm_expr(&e); !implicit::linear_in_y(&|x, y| eval_cs(&cs, x, Some(y), deg), x0, x1, y0, y1) }
+        Some(Row::ImplicitIneq { .. }) => true,
         _ => false,
     }
 }
@@ -2809,6 +2900,22 @@ fn coordinate_grid_render(p: &Params) -> String {
     let hatch = p.s("shading") == "Hatching";
     let span_y = y1 - y0;
     let mut implicit_used = 0;
+    // what a label must keep clear of: curves drawn so far (px), other labels, the axes, point labels
+    let mut obst: Vec<Vec<Pt>> = vec![];
+    let mut placed: Vec<[f64; 4]> = vec![];
+    let mut notes: Vec<String> = vec![];
+    if y0 <= 0.0 && y1 >= 0.0 { placed.push([ml, sy(0.0) - 9.0, ml + pw, sy(0.0) + 24.0]); }
+    if x0 <= 0.0 && x1 >= 0.0 { placed.push([sx(0.0) - 28.0, mt, sx(0.0) + 9.0, mt + ph]); }
+    for seg in p.s("points").split(';') {
+        let mut at = 0;
+        while let Some(a) = seg[at..].find('(') {
+            let a = at + a;
+            let Some(b) = seg[a..].find(')').map(|b| a + b) else { break };
+            let n = nums(&seg[a + 1..b]);
+            if n.len() == 2 { placed.push([sx(n[0]) - 7.0, sy(n[1]) - 24.0, sx(n[0]) + 90.0, sy(n[1]) + 8.0]); }
+            at = b + 1;
+        }
+    }
     for (ci, raw_row) in p.s("equations").split(';').enumerate() {
         let raw_row = raw_row.trim();
         if raw_row.is_empty() { continue; }
@@ -2851,10 +2958,20 @@ fn coordinate_grid_render(p: &Params) -> String {
             (runs, asym)
         };
         let mut label_at: Option<(f64, f64)> = None;
+        let mut imp_label: Option<(f64, f64)> = None;
+        let imp: Option<(&str, Option<(bool, bool)>)> = match &row {
+            Row::Implicit(e) => {
+                let cs = norm_expr(e);
+                (e.len() > 200 || !implicit::linear_in_y(&|x, y| eval_cs(&cs, x, Some(y), deg), x0, x1, y0, y1)).then_some((e.as_str(), None))
+            }
+            Row::ImplicitIneq { e, positive, strict } => Some((e.as_str(), Some((*positive, *strict)))),
+            _ => None,
+        };
         match &row {
             Row::Vert(v) => {
                 let (ya, yb) = if dom_iv.is_empty() { (y0 - span_y, y1 + span_y) } else { (dom_iv[0].lo.max(y0 - span_y), dom_iv[0].hi.min(y1 + span_y)) };
                 d.line(sx(*v), sy(ya), sx(*v), sy(yb), col, lw);
+                obst.push(vec![(sx(*v), sy(ya)), (sx(*v), sy(yb))]);
                 label_at = Some((*v, y0 + span_y * 0.9));
                 if p.b("endpoints") {
                     for iv in &dom_iv { for (b, c) in [(iv.lo, iv.lo_c), (iv.hi, iv.hi_c)] { if b.is_finite() { d.circle(sx(*v), sy(b), 5.0, if c { col } else { "#fff" }, col, 2.0); } } }
@@ -2869,35 +2986,102 @@ fn coordinate_grid_render(p: &Params) -> String {
                     }
                 }
             }
-            // F(x, y) = G(x, y) that is not a straight line in y: circles, ellipses, hyperbolas, x = y^2 ...
-            Row::Implicit(e) if !implicit::linear_in_y(&|x, y| eval_cs(&norm_expr(e), x, Some(y), deg), x0, x1, y0, y1) => {
-                if implicit_used < IMPLICIT_MAX {
-                    implicit_used += 1;
+            // F(x, y) = G(x, y) that is not a straight line in y (circles, ellipses, hyperbolas, x = y^2 ...), or an
+            // inequality whose boundary is such a curve: sampled once, drawn as chained polylines, shaded by cell
+            _ if imp.is_some() => {
+                let (e, ineq) = imp.unwrap();
+                let too_long = e.len() > 200 || { let (mut dp, mut mx) = (0i32, 0i32); for c in e.chars() { if c == '(' { dp += 1; mx = mx.max(dp); } else if c == ')' { dp -= 1; } } mx > 30 };
+                if too_long {
+                    notes.push(format!("Equation {} is too long to draw", ci + 1));
+                } else if implicit_used >= IMPLICIT_MAX {
+                    let n = format!("Only {IMPLICIT_MAX} curves are drawn");
+                    if !notes.contains(&n) { notes.push(n); }
+                } else {
                     let cs = norm_expr(e);
+                    let f = |x: f64, y: f64| eval_cs(&cs, x, Some(y), deg);
                     let cells = |len: f64| ((len / 2.0).ceil().max(16.0) as usize).min(implicit::MAX_CELLS);
-                    let lines = implicit::contour(&|x, y| eval_cs(&cs, x, Some(y), deg), x0, x1, y0, y1, cells(pw), cells(ph));
-                    let mut best: Option<((f64, f64), f64)> = None;
-                    let xl = x0 + (x1 - x0) * (0.55 + 0.08 * (ci % 3) as f64);
-                    for l in &lines {
-                        // split the chain where the typed domain excludes it, thin points that add nothing
-                        let mut run: Vec<Pt> = vec![];
-                        let mut flush = |run: &mut Vec<Pt>, d: &mut Doc| {
-                            if run.len() > 1 { d.polyline(&thin_polyline(run), col, lw); }
-                            run.clear();
-                        };
-                        for &(x, y) in l {
-                            if !in_dom(x) { flush(&mut run, &mut d); continue; }
-                            run.push((sx(x), sy(y)));
-                            // label spot: inside the window, near the label column, upper half preferred
-                            let (fx, fy) = ((x - x0) / (x1 - x0), (y - y0) / span_y);
-                            if (0.06..0.94).contains(&fx) && (0.06..0.94).contains(&fy) {
-                                let score = (x - xl).abs() / (x1 - x0) + if fy < 0.5 { 0.3 } else { 0.0 };
-                                if best.map_or(true, |(_, b)| score < b) { best = Some(((x, y), score)); }
+                    if let Some(grid) = implicit::sample(&f, x0, x1, y0, y1, cells(pw), cells(ph)) {
+                        let idom = ImpDom::parse(dom);
+                        let mut drew = false;
+                        if !grid.any_valid() {
+                            notes.push(format!("Cannot read: {}", main.trim()));
+                        } else {
+                            // shading of F > 0 or F < 0 (one path; whole cells merged into rectangles)
+                            if let Some((positive, _)) = ineq {
+                                let polys = grid.fill(positive, &|x, y| idom.ok(x, y, 0.0));
+                                if !polys.is_empty() {
+                                    let mut dd = String::new();
+                                    for poly in &polys {
+                                        for (k, &(x, y)) in poly.iter().enumerate() { dd.push_str(&format!("{}{:.1} {:.1} ", if k == 0 { "M" } else { "L" }, sx(x), sy(y))); }
+                                        dd.push('Z');
+                                    }
+                                    d.raw(&format!(r##"<path d="{dd}" fill="{fill}" fill-opacity="{fill_op}" stroke="none"/>"##));
+                                    drew = true;
+                                }
+                            }
+                            let strict_dash = matches!(ineq, Some((_, true)));
+                            let chains = grid.contour(&f);
+                            let xl = x0 + (x1 - x0) * (0.55 + 0.08 * (ci % 3) as f64);
+                            let mut cands: Vec<(Pt, f64)> = vec![];
+                            let mut mine: Vec<Vec<Pt>> = vec![];
+                            for l in &chains {
+                                // the part of the chain the typed domain keeps, cut exactly at the limit
+                                let mut run: Vec<Pt> = vec![];
+                                let mut runs: Vec<Vec<Pt>> = vec![];
+                                let mut prev: Option<(f64, f64)> = None;
+                                for &(x, y) in l {
+                                    let okp = idom.ok(x, y, 0.0);
+                                    if let Some((px, py)) = prev {
+                                        if idom.ok(px, py, 0.0) != okp {
+                                            let (mut lo, mut hi) = (0.0f64, 1.0f64);
+                                            for _ in 0..24 { let m = 0.5 * (lo + hi); if idom.ok(px + (x - px) * m, py + (y - py) * m, 0.0) == !okp { lo = m; } else { hi = m; } }
+                                            let t = if okp { hi } else { lo };
+                                            let cut = (sx(px + (x - px) * t), sy(py + (y - py) * t));
+                                            if okp { run = vec![cut]; } else { run.push(cut); runs.push(std::mem::take(&mut run)); }
+                                        }
+                                    }
+                                    if okp {
+                                        run.push((sx(x), sy(y)));
+                                        let (fx, fy) = ((x - x0) / (x1 - x0), (y - y0) / span_y);
+                                        if (0.03..0.97).contains(&fx) && (0.03..0.97).contains(&fy) {
+                                            let central = (0.06..0.94).contains(&fx) && (0.06..0.94).contains(&fy);
+                                            cands.push(((sx(x), sy(y)), (x - xl).abs() / (x1 - x0) + if fy < 0.5 { 0.3 } else { 0.0 } + if central { 0.0 } else { 1.0 }));
+                                        }
+                                    }
+                                    prev = Some((x, y));
+                                }
+                                if run.len() > 1 { runs.push(run); }
+                                for r in runs {
+                                    if r.len() < 2 { continue; }
+                                    let pts = thin_polyline(&r);
+                                    if strict_dash { dpoly(&mut d, &pts, col, lw, "9 6"); } else { d.polyline(&pts, col, lw); }
+                                    mine.push(pts);
+                                    drew = true;
+                                }
+                                // open or closed dots where the domain cuts the curve
+                                if p.b("endpoints") && !idom.is_empty() {
+                                    for w in l.windows(2) {
+                                        for (is_x, b, cl) in idom.limits() {
+                                            let (ca, cb) = if is_x { (w[0].0, w[1].0) } else { (w[0].1, w[1].1) };
+                                            if (ca - b) * (cb - b) < 0.0 || (ca == b && cb != b) {
+                                                let t = (b - ca) / (cb - ca);
+                                                let (qx, qy) = (w[0].0 + (w[1].0 - w[0].0) * t, w[0].1 + (w[1].1 - w[0].1) * t);
+                                                if idom.ok(qx, qy, 1e-9 * (1.0 + b.abs())) { d.circle(sx(qx), sy(qy), 5.0, if cl { col } else { "#fff" }, col, 2.0); }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            obst.extend(mine);
+                            if drew {
+                                implicit_used += 1;
+                                if p.b("eq_labels") {
+                                    let w = label_w(raw_row);
+                                    imp_label = pick_label_spot(&cands, w, &obst, &placed, [ml, mt, ml + pw, mt + ph]).map(|(x, y, r)| { placed.push(r); (x, y) });
+                                }
                             }
                         }
-                        flush(&mut run, &mut d);
                     }
-                    label_at = best.map(|(pt, _)| pt);
                 }
             }
             _ => {
@@ -2945,6 +3129,7 @@ fn coordinate_grid_render(p: &Params) -> String {
                 for r in &runs {
                     let pts: Vec<Pt> = r.iter().map(|(x, y)| (sx(*x), sy(y.clamp(y0 - span_y, y1 + span_y)))).collect();
                     if strict { dpoly(&mut d, &pts, col, lw, "9 6"); } else { d.polyline(&pts, col, lw); }
+                    obst.push(pts);
                 }
                 if p.b("asymptotes") {
                     for a in &asym { dline(&mut d, (sx(*a), mt), (sx(*a), mt + ph), col, 1.4, "2 4"); }
@@ -2966,8 +3151,17 @@ fn coordinate_grid_render(p: &Params) -> String {
         }
         d.raw("</g>");
         if p.b("eq_labels") {
-            if let Some((lx, ly)) = label_at { math_text(&mut d, sx(lx) + 8.0, sy(ly) - 12.0, 15.0, "start", raw_row, false); }
+            if let Some((tx, ty)) = imp_label { math_text_halo(&mut d, tx, ty, 15.0, raw_row); }
+            else if let Some((lx, ly)) = label_at {
+                math_text(&mut d, sx(lx) + 8.0, sy(ly) - 12.0, 15.0, "start", raw_row, false);
+                placed.push([sx(lx) + 8.0, sy(ly) - 21.0, sx(lx) + 8.0 + label_w(raw_row), sy(ly) - 3.0]);
+            }
         }
+    }
+    // short notes for rows that could not be drawn, inside the plot's lower left
+    for (k, n) in notes.iter().enumerate() {
+        let y = mt + ph - 10.0 - 16.0 * k as f64;
+        d.raw(&format!(r##"<text x="{:.2}" y="{y:.2}" font-size="12" font-style="italic" font-family="{SERIF}" fill="#444" stroke="#fff" stroke-width="3" stroke-linejoin="round" paint-order="stroke">{}</text>"##, ml + 8.0, math_tspans(n)));
     }
     // points: "A(1, 2), B(-3, 4)" or the older "(2,3) A; (-1,4) B"
     let pcol = colp(p, "pt_color", INK);
@@ -5474,7 +5668,7 @@ pub fn rows(id: &str) -> Option<super::RowsCard> {
         "coordinate-grid" => RowsCard {
             title: "Equations",
             help: "One per row: y = 2x + 1; 2x + 3y = 6; x = 4; y > x - 2; -2 < x <= 3; y = x + 2, x < 1 (a piece with a domain). Circles and conics work too: x^2 + y^2 = 25; (x-2)^2 + (y+1)^2 = 9; x^2/16 + y^2/9 = 1; x^2/9 - y^2/4 = 1; x = y^2.",
-            hint: "y = 2x + 1",
+            hint: "y = 2x + 1   or   x^2 + y^2 = 25",
             add_label: "Add equation",
             source: RowsSource::Joined { key: "equations", sep: ";", color_keys: vec!["eq1_color", "eq2_color", "eq3_color", "eq4_color"] },
         },
@@ -5695,10 +5889,11 @@ mod tests {
     fn q(eq: &str) -> Vec<(&'static str, Value)> {
         vec![("xmin", Value::F(-10.0)), ("xmax", Value::F(10.0)), ("ymin", Value::F(-10.0)), ("ymax", Value::F(10.0)), ("equations", Value::S(eq.to_string()))]
     }
-    fn curve_lines(svg: &str) -> Vec<Vec<(f64, f64)>> {
+    fn curve_lines(svg: &str) -> Vec<Vec<(f64, f64)>> { curve_lines_min(svg, 20) }
+    fn curve_lines_min(svg: &str, min: usize) -> Vec<Vec<(f64, f64)>> {
         svg.split("<polyline points=\"").skip(1).filter_map(|t| t.split('"').next()).map(|pts| {
             pts.split(' ').filter_map(|c| { let (a, b) = c.split_once(',')?; Some((a.parse().ok()?, b.parse().ok()?)) }).collect::<Vec<(f64, f64)>>()
-        }).filter(|l: &Vec<(f64, f64)>| l.len() > 20).collect()
+        }).filter(|l: &Vec<(f64, f64)>| l.len() > min).collect()
     }
 
     #[test]
@@ -5745,21 +5940,201 @@ mod tests {
         assert!(ms < limit, "took {ms} ms");
     }
 
+    fn grid_layout_of(set: &[(&str, Value)]) -> GridL {
+        let d = defs().into_iter().find(|d| d.id == "coordinate-grid").unwrap();
+        let mut p = Params::defaults(&(d.params)());
+        for (k, v) in set { p.0.insert(k.to_string(), v.clone()); }
+        grid_layout(&p)
+    }
+    /// (text x, text y, content) of every halo label.
+    fn halo_labels(svg: &str) -> Vec<(f64, f64, String)> {
+        svg.split("<text ").skip(1).filter(|t| t.contains("paint-order") && t.contains("font-size=\"15\"")).filter_map(|t| {
+            let num = |k: &str| -> Option<f64> { let i = t.find(&format!("{k}=\""))? + k.len() + 2; t[i..].split('"').next()?.parse().ok() };
+            let body = t.split_once('>')?.1.split("</text").next()?.to_string();
+            Some((num("x")?, num("y")?, body))
+        }).collect()
+    }
+
     #[test]
     fn conic_rows_keep_label_domain_and_colour() {
         let mut set = q("x^2 + y^2 = 25, x > 0");
         set.push(("eq_labels", Value::B(true)));
         let svg = grid_svg(&set);
         assert!(svg.contains("#1f5fbf"), "equation colour slot");
-        assert!(svg.contains("x^2 + y^2 = 25") || svg.contains("x"), "label");
+        let labels = halo_labels(&svg);
+        assert_eq!(labels.len(), 1, "one label with a halo");
+        assert!(labels[0].2.contains("25"), "label text {}", labels[0].2);
         // the domain keeps only the right half: no point left of the y axis
         let ls = curve_lines(&svg);
         assert!(!ls.is_empty());
-        let left = 38.8 + 240.0;
-        for l in &ls { for &(x, _) in l { assert!(x >= left - 3.0, "domain ignored"); } }
+        let g = grid_layout_of(&q(""));
+        let cx = g.ml + 10.0 * g.ux;
+        for l in &ls { for &(x, _) in l { assert!(x >= cx - 0.5, "domain ignored"); } }
     }
 
-    /// Writes the three new examples to $VERSHION_PNG_DIR for a visual check.
+    #[test]
+    fn y_domains_and_mixed_domains_apply_to_conics() {
+        let g = grid_layout_of(&q(""));
+        let (cx, cy) = (g.ml + 10.0 * g.ux, g.mt + 10.0 * g.uy);
+        // y > 0: the top half (smaller pixel y)
+        let ls = curve_lines(&grid_svg(&q("x^2 + y^2 = 25, y > 0")));
+        assert_eq!(ls.len(), 1);
+        for &(_, y) in &ls[0] { assert!(y <= cy + 0.5, "lower half drawn"); }
+        assert!(ls[0].iter().any(|p| p.0 < cx - 3.0 * g.ux) && ls[0].iter().any(|p| p.0 > cx + 3.0 * g.ux), "both sides of the top half");
+        // x = y^2, y > 0: one branch only (the upper half of the parabola)
+        let ls = curve_lines(&grid_svg(&q("x = y^2, y > 0")));
+        assert_eq!(ls.len(), 1);
+        for &(_, y) in &ls[0] { assert!(y <= cy + 0.5); }
+        // x > 0 and y > 0, as separate pieces or with "and": the quarter arc
+        for eq in ["x^2 + y^2 = 25, x > 0, y > 0", "x^2 + y^2 = 25, x > 0 and y > 0"] {
+            let ls = curve_lines(&grid_svg(&q(eq)));
+            assert_eq!(ls.len(), 1, "{eq}");
+            for &(x, y) in &ls[0] { assert!(x >= cx - 0.5 && y <= cy + 0.5, "{eq}: outside the quadrant"); }
+        }
+        // the arc ends at the limit (within a pixel), not a cell short
+        let ls = curve_lines(&grid_svg(&q("x^2 + y^2 = 25, y > 0")));
+        let lowest = ls[0].iter().map(|p| p.1).fold(f64::MIN, f64::max);
+        assert!((lowest - cy).abs() < 1.0, "arc stops {} px from the axis", (lowest - cy).abs());
+    }
+
+    #[test]
+    fn domain_cuts_get_open_and_closed_dots() {
+        let count = |svg: &str, fill: &str| svg.matches(&format!("fill=\"{fill}\" stroke=\"#1f5fbf\" stroke-width=\"2\"")).count();
+        let open = grid_svg(&q("x^2 + y^2 = 25, y > 0"));
+        assert_eq!(count(&open, "#fff"), 2, "two open dots");
+        let closed = grid_svg(&q("x^2 + y^2 = 25, y >= 0"));
+        assert_eq!(count(&closed, "#1f5fbf"), 2, "two closed dots");
+        let mut off = q("x^2 + y^2 = 25, y > 0");
+        off.push(("endpoints", Value::B(false)));
+        assert_eq!(count(&grid_svg(&off), "#fff"), 0, "endpoints switch");
+    }
+
+    #[test]
+    fn inequalities_with_a_curved_boundary_are_shaded() {
+        let g = grid_layout_of(&q(""));
+        let area_of = |svg: &str| -> f64 {
+            // the shading path: M x y L x y ... Z, many subpaths
+            let i = svg.find("<path d=\"M").expect("a shading path");
+            let d = svg[i + 9..].split('"').next().unwrap();
+            let mut total = 0.0;
+            for sub in d.split('Z').filter(|t| !t.trim().is_empty()) {
+                let nums: Vec<f64> = sub.split(|c: char| c == 'M' || c == 'L' || c == ' ').filter_map(|t| t.parse().ok()).collect();
+                let pts: Vec<(f64, f64)> = nums.chunks(2).map(|c| (c[0], c[1])).collect();
+                total += (0..pts.len()).map(|i| { let (a, b) = (pts[i], pts[(i + 1) % pts.len()]); a.0 * b.1 - b.0 * a.1 }).sum::<f64>().abs() / 2.0;
+            }
+            total
+        };
+        let disc = std::f64::consts::PI * 25.0 * g.ux * g.uy;
+        let strict = grid_svg(&q("x^2 + y^2 < 25"));
+        assert!((area_of(&strict) - disc).abs() < 0.02 * disc, "shaded {} vs {disc}", area_of(&strict));
+        assert!(strict.contains("stroke-dasharray=\"9 6\""), "strict: dashed boundary");
+        let solid = grid_svg(&q("x^2 + y^2 <= 25"));
+        assert!(!solid.contains("stroke-dasharray=\"9 6\""), "non-strict: solid boundary");
+        // outside: the window minus the disc
+        let out = grid_svg(&q("x^2 + y^2 > 25"));
+        assert!((area_of(&out) - (g.pw * g.ph - disc)).abs() < 0.02 * g.pw * g.ph);
+        // ellipse, hatching, and the old explicit ineq path is untouched
+        assert!(grid_svg(&q("x^2/9 + y^2/4 <= 1")).contains("fill-opacity=\"0.18\""));
+        let mut h = q("x^2 + y^2 < 25");
+        h.push(("shading", Value::S("Hatching".into())));
+        assert!(grid_svg(&h).contains("url(#sh0)"));
+        assert!(grid_svg(&q("y > x^2")).contains("<polygon"), "explicit y > f(x) still a polygon, not the cell path");
+    }
+
+    #[test]
+    fn curve_budget_notes_and_unreadable_rows_are_visible() {
+        let five = grid_svg(&q("x^2+y^2=1; x^2+y^2=4; x^2+y^2=9; x^2+y^2=16; x^2+y^2=25"));
+        assert!(five.contains("Only 4 curves are drawn"));
+        // rows that draw nothing do not use the budget
+        let empties = grid_svg(&q("x^2+y^2=-1; x^2+y^2=-2; x^2+y^2=-3; x^2+y^2=-4; x^2+y^2=25"));
+        assert!(!empties.contains("Only 4 curves"));
+        assert_eq!(curve_lines(&empties).len(), 1);
+        assert!(grid_svg(&q("x^2 + y^2 = abc")).contains("Cannot read"));
+        // a pathological row is refused with a note, quickly
+        let long = format!("x^2 + y^2 = {}", "1+".repeat(150) + "1");
+        assert!(grid_svg(&q(&long)).contains("too long"));
+        let deep = format!("x^2 + y^2 = {}1{}", "(".repeat(40), ")".repeat(40));
+        assert!(grid_svg(&q(&deep)).contains("too long"));
+    }
+
+    #[test]
+    fn degenerate_rows_now_draw_and_lines_keep_the_old_path() {
+        // x^2 = 4: two vertical lines; (x-1)(y+2) = 0: the vertical line is no longer lost
+        assert_eq!(curve_lines_min(&grid_svg(&q("x^2 = 4")), 1).len(), 2);
+        let g = grid_layout_of(&q(""));
+        let ls = curve_lines_min(&grid_svg(&q("(x-1)(y+2) = 0")), 1);
+        let sx1 = g.ml + 11.0 * g.ux;
+        assert!(ls.iter().flatten().any(|p| (p.0 - sx1).abs() < 2.0 && p.1 < g.mt + 6.0), "vertical line x = 1 reaches the top");
+        assert!(ls.iter().flatten().any(|p| (p.0 - sx1).abs() < 2.0 && p.1 > g.mt + g.ph - 6.0), "and the bottom");
+        // linear and explicit rows are still one polyline each
+        for eq in ["2x + 3y = 6", "y/x = 2", "2y = x", "y = 2x + 1", "x = 4"] {
+            let svg = grid_svg(&q(eq));
+            assert!(svg.contains("<polyline") || svg.contains("<line"), "{eq}");
+            assert!(!svg.contains("<path d=\"M"), "{eq}: not the cell path");
+        }
+    }
+
+    #[test]
+    fn labels_on_conics_have_a_halo_and_do_not_collide() {
+        // two tangent circles, a hyperbola with its asymptotes, with labels on
+        for eq in ["x^2 + y^2 = 25; (x-8)^2 + y^2 = 9; (x+8)^2 + y^2 = 9", "x^2/9 - y^2/4 = 1; y = 2x/3; y = -2x/3", "x^2 + y^2 = 4; x^2 + y^2 = 9; x^2 + y^2 = 16; x^2 + y^2 = 25"] {
+            let mut set = q(eq);
+            set.push(("eq_labels", Value::B(true)));
+            set.push(("points", Value::S("A(1, 1), B(-2, 3)".into())));
+            let svg = grid_svg(&set);
+            let ls = halo_labels(&svg);
+            assert!(!ls.is_empty(), "{eq}: labels with a halo");
+            let rect = |l: &(f64, f64, String)| [l.0, l.1 - 9.0, l.0 + 7.2 * l.2.matches("<tspan").count().max(1) as f64 * 0.0 + 30.0, l.1 + 9.0];
+            for (i, a) in ls.iter().enumerate() { for b in &ls[i + 1..] {
+                assert!(!rect_hit(&rect(a), &rect(b)), "{eq}: labels collide: {:?} {:?}", (a.0, a.1), (b.0, b.1));
+            } }
+        }
+        // a curve with no point in the central 6-94%: still labelled (a circle mostly off the window)
+        let mut set = q("(x-12)^2 + y^2 = 9");
+        set.push(("eq_labels", Value::B(true)));
+        assert_eq!(halo_labels(&grid_svg(&set)).len(), 1, "edge-only curve is labelled");
+    }
+
+    #[test]
+    fn label_spot_search_avoids_obstacles_and_falls_back() {
+        let bounds = [0.0, 0.0, 400.0, 400.0];
+        let cands = vec![((100.0, 100.0), 0.0), ((200.0, 200.0), 1.0), ((300.0, 300.0), 2.0)];
+        // free: first candidate, right and above
+        let (x, y, _) = pick_label_spot(&cands, 60.0, &[], &[], bounds).unwrap();
+        assert_eq!((x, y), (108.0, 88.0));
+        // a label already there: moves on without overlapping it
+        let block = [[100.0, 70.0, 175.0, 120.0]];
+        let (_, _, r) = pick_label_spot(&cands, 60.0, &[], &block, bounds).unwrap();
+        assert!(!rect_hit(&r, &block[0]));
+        // a curve through the rectangle blocks it
+        let curve = vec![vec![(90.0, 88.0), (190.0, 88.0)]];
+        let (_, _, r) = pick_label_spot(&cands, 60.0, &curve, &[], bounds).unwrap();
+        assert!(label_conflicts(&r, &curve, &[]) == 0);
+        // nothing free: still returns the least crowded spot, never None
+        let all = [[-1000.0, -1000.0, 1000.0, 1000.0]];
+        assert!(pick_label_spot(&cands, 60.0, &[], &all, bounds).is_some());
+        assert!(pick_label_spot(&[], 60.0, &[], &[], bounds).is_none());
+    }
+
+    #[test]
+    fn saved_figure_params_are_clamped_on_load() {
+        let d = defs().into_iter().find(|d| d.id == "coordinate-grid").unwrap();
+        let p = crate::figures::params_from_json(&d, &serde_json::json!({"xmin": 1e300, "xmax": -1e300, "xstep": 1e-300, "equations": "x^2 + y^2 = 25"}));
+        assert!(p.f("xmin") <= 1000.0 && p.f("xmax") >= -1000.0 && p.f("xstep") >= 0.05);
+        let _ = (d.render)(&p);
+    }
+
+    #[test]
+    fn handles_skip_conic_rows_with_the_real_degree_flag() {
+        assert!(is_curve_row("x^2 + y^2 = 25", -10.0, 10.0, -10.0, 10.0, false));
+        assert!(is_curve_row("x^2 + y^2 < 25", -10.0, 10.0, -10.0, 10.0, true));
+        assert!(!is_curve_row("2x + 3y = 6", -10.0, 10.0, -10.0, 10.0, false));
+        assert!(!is_curve_row("y = 2x + 1", -10.0, 10.0, -10.0, 10.0, true));
+        // sin(y) = x in degrees over -360..360 is not a line, but over a plain window it is only samples; both are curves
+        assert!(is_curve_row("sin(y) = x", -360.0, 360.0, -360.0, 360.0, true));
+    }
+
+    /// Writes the new examples and the review cases to $VERSHION_PNG_DIR for a visual check.
     #[test]
     #[ignore]
     fn conic_example_pngs() {
@@ -5774,6 +6149,24 @@ mod tests {
                 p.0.insert("eq_labels".into(), Value::B(lab));
                 std::fs::write(format!("{dir}/conic-{i}-{tag}.png"), to_png(&(d.render)(&p), 1.5).unwrap()).unwrap();
             }
+        }
+        let cases: [(&str, &str, bool); 8] = [
+            ("ineq-circle", "x^2 + y^2 < 25", true),
+            ("ineq-ellipse-hatch", "x^2/9 + y^2/4 <= 1; y > x^2 - 6", true),
+            ("tangent-labels", "x^2 + y^2 = 25; (x-8)^2 + y^2 = 9; (x+8)^2 + y^2 = 9", true),
+            ("hyperbola-labels", "x^2/9 - y^2/4 = 1; y = 2x/3; y = -2x/3", true),
+            ("tan", "tan(y) = x", false),
+            ("x2-4", "x^2 = 4; (x-1)(y+2) = 0", false),
+            ("half-circle", "x^2 + y^2 = 25, y > 0; x = y^2, y > 0, x < 9", true),
+            ("five", "x^2+y^2=1; x^2+y^2=4; x^2+y^2=9; x^2+y^2=16; x^2+y^2=25; x^2+y^2 = abc", false),
+        ];
+        for (tag, eq, lab) in cases {
+            let mut p = Params::defaults(&(d.params)());
+            for (k, v) in q(eq) { p.0.insert(k.to_string(), v); }
+            p.0.insert("eq_labels".into(), Value::B(lab));
+            if tag.contains("hatch") { p.0.insert("shading".into(), Value::S("Hatching".into())); }
+            p.0.insert("points".into(), Value::S(if tag == "tangent-labels" { "P(5, 0), Q(-5, 0)".into() } else { String::new() }));
+            std::fs::write(format!("{dir}/{tag}.png"), to_png(&(d.render)(&p), 1.2).unwrap()).unwrap();
         }
     }
 

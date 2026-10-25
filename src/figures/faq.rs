@@ -895,7 +895,7 @@ const COORDINATE_GRID: &[Faq] = &[
     },
     Faq {
         q: "Can I graph a circle, ellipse or hyperbola?",
-        a: "Yes. Type the equation as it is written, such as x^2 + y^2 = 25, (x-2)^2 + (y+1)^2 = 9, x^2/16 + y^2/9 = 1, x^2/9 - y^2/4 = 1 or x = y^2. Any equation in x and y that is not a straight line is drawn as a smooth curve; one that has no points in the window, like x^2 + y^2 = -1, draws nothing.",
+        a: "Yes. Type the equation as it is written, such as x^2 + y^2 = 25, (x-2)^2 + (y+1)^2 = 9, x^2/16 + y^2/9 = 1, x^2/9 - y^2/4 = 1 or x = y^2. Any equation in x and y that is not a straight line is drawn as a smooth curve; one that has no points in the window, like x^2 + y^2 = -1, draws nothing. Use < or > (x^2 + y^2 < 25) to shade the inside or outside, and add a limit after a comma (x^2 + y^2 = 25, y > 0) to keep part of a curve; at most four curves are drawn at once.",
     },
     Faq {
         q: "How should the x-axis be scaled for trig graphs?",

@@ -78,7 +78,7 @@ fn grid(p: &Params) -> Vec<Handle> {
         let eq = eq.trim();
         // inequalities and pieces with a domain have no drag handles (rewriting would drop them)
         if eq.is_empty() || eq.contains(['<', '>', ',', '\u{2264}', '\u{2265}']) { continue; }
-        if super::math::is_curve_row(eq, g.x0, g.x1, g.y0, g.y1) { continue; }
+        if super::math::is_curve_row(eq, g.x0, g.x1, g.y0, g.y1, p.s("xunits") == "Degrees") { continue; }
         let (lhs, rhs) = match eq.find('=') { Some(i) => (eq[..i].trim().to_lowercase(), eq[i + 1..].trim().to_string()), None => ("y".to_string(), eq.to_string()) };
         if lhs == "x" {
             if let Some(v) = eval(&rhs, 0.0).filter(|v| v.is_finite()) {

@@ -748,6 +748,8 @@ pub fn params_from_json(def: &FigureDef, over: &serde_json::Value) -> Params {
             _ => {}
         }
     }
+    // like the UI: clamp to each control's range before anything renders from it
+    p.normalize(&(def.params)(), false);
     p
 }
 
