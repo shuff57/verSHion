@@ -606,7 +606,7 @@ fn strikethrough_roundtrips_through_the_editor_model() {
 }
 
 #[test]
-fn floating_bar_never_covers_the_fixed_toolbar() {
+fn floating_bar_keeps_clear_of_text_and_covers_the_fixed_toolbar_only_before_text() {
     let screen = Rect::from_min_size(Pos2::ZERO, Vec2::new(1440.0, 900.0));
     let fixed = Rect::from_min_max(Pos2::new(380.0, 138.0), Pos2::new(820.0, 172.0));
     let size = Some(Vec2::new(280.0, 34.0));
@@ -628,12 +628,18 @@ fn floating_bar_never_covers_the_fixed_toolbar() {
     let (at, pivot) = float_place(sel, size, Some(fixed), screen, field, &lines);
     let bar = rect_of(at, pivot);
     assert!(!bar.intersects(fixed) && bar.left() > field.right(), "{bar:?}");
-    // no room in the margin (narrow window): above or below, never over the fixed toolbar
+    // no room in the margin (narrow window), a top-line selection: the bar goes ABOVE it, over the
+    // fixed toolbar (which holds the same buttons), not below it over the text of the next lines
     let narrow = Rect::from_min_size(Pos2::ZERO, Vec2::new(640.0, 900.0));
     let (at, pivot) = float_place(sel, size, Some(fixed), narrow, narrow_field, &lines);
     let bar = rect_of(at, pivot);
-    assert!(!bar.intersects(fixed) && bar.right() <= 640.0 + 1.0 || pivot == egui::Align2::LEFT_TOP, "{bar:?}");
-    assert!(!bar.intersects(fixed));
+    assert_eq!(pivot, egui::Align2::LEFT_BOTTOM, "{bar:?}");
+    let hidden: f32 = lines.iter().map(|&(t, b)| (bar.bottom().min(b) - bar.top().max(t)).max(0.0)).sum();
+    assert_eq!(hidden, 0.0, "no line of text is hidden: {bar:?}");
+    // with room in the margin it still stays clear of the fixed toolbar (checked above); and with
+    // no fixed toolbar over the line the same selection gets the same place
+    let (_, p) = float_place(sel, size, None, narrow, narrow_field, &lines);
+    assert_eq!(p, egui::Align2::LEFT_BOTTOM);
     // in the middle of the text with no margin: above (ties go above), clear of the fixed toolbar
     let sel = Rect::from_min_max(Pos2::new(382.0, 300.0), Pos2::new(430.0, 318.0));
     let (_, pivot) = float_place(sel, size, Some(fixed), narrow, narrow_field, &lines);
@@ -652,6 +658,20 @@ fn floating_bar_never_covers_the_fixed_toolbar() {
     let sel = Rect::from_min_max(Pos2::new(10.0, 12.0), Pos2::new(40.0, 30.0));
     let top_field = Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(620.0, 200.0));
     assert_eq!(float_place(sel, size, None, narrow, top_field, &[]).1, egui::Align2::LEFT_TOP);
+}
+
+/// The 640 px repro: a top-line selection of three full-width lines. Below the selection the bar hid
+/// lines 2 and 3; above it only lays over the fixed toolbar.
+#[test]
+fn a_top_line_selection_at_640_does_not_hide_the_next_lines() {
+    let screen = Rect::from_min_size(Pos2::ZERO, Vec2::new(640.0, 900.0));
+    let fixed = Rect::from_min_max(Pos2::new(41.0, 325.0), Pos2::new(557.0, 357.0));
+    let field = Rect::from_min_max(Pos2::new(28.0, 316.0), Pos2::new(596.0, 458.0));
+    let lines = [(371.0, 390.0), (391.0, 410.0), (431.0, 450.0)];
+    let sel = Rect::from_min_max(Pos2::new(75.0, 371.0), Pos2::new(584.0, 390.0));
+    let size = Some(Vec2::new(432.0, 40.0));
+    let (at, pivot) = float_place(sel, size, Some(fixed), screen, field, &lines);
+    assert_eq!(pivot, egui::Align2::LEFT_BOTTOM, "{at:?}");
 }
 
 // ----- round 6: headings, dividers, side by side, slash menu -----

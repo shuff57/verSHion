@@ -1562,7 +1562,7 @@ fn draw_bank_export(app: &mut App, ctx: &egui::Context) {
                 Ok(_) => {
                     Frame::new().fill(theme::field()).corner_radius(CornerRadius::same(8)).inner_margin(Margin::same(10)).show(ui, |ui| {
                         ui.set_width(ui.available_width());
-                        egui::ScrollArea::vertical().id_salt("bank_export_preview").max_height((screen.height() - 260.0).max(240.0)).auto_shrink([false, false]).show(ui, |ui| {
+                        egui::ScrollArea::vertical().id_salt("bank_export_preview").max_height((screen.height() - 320.0).max(240.0)).auto_shrink([false, false]).show(ui, |ui| {
                             ui.vertical_centered(|ui| {
                                 for t in &c.pages {
                                     let sz = t.size_vec2();
@@ -1585,7 +1585,7 @@ fn draw_bank_export(app: &mut App, ctx: &egui::Context) {
         });
         ui.add_space(8.0);
         ui.separator();
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             if crate::pageshell::outline(ui, "Save CSV file…").on_hover_text("One row per question, for Excel, Sheets or Numbers").clicked() {
                 save_csv = true;
             }
@@ -1598,6 +1598,9 @@ fn draw_bank_export(app: &mut App, ctx: &egui::Context) {
             if crate::pageshell::outline(ui, "Save JSON file…").on_hover_text("The bank as a question-bank JSON file (for other apps and backups)").clicked() {
                 save_json = true;
             }
+        });
+        // (its own row: with the four file buttons beside them the two ended up on top of each other)
+        ui.horizontal(|ui| {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let ok = BANK_EXPORT.with(|c| c.borrow().as_ref().is_some_and(|c| c.pdf.is_ok()));
                 if ui.add_enabled_ui(ok, |ui| crate::pageshell::primary(ui, "Download PDF")).inner.clicked() {
@@ -2051,6 +2054,19 @@ fn paint_chevron(ui: &mut Ui, open: bool) {
     ui.painter().line_segment([c + Vec2::new(0.0, b), c + Vec2::new(4.5, a)], s);
 }
 
+/// "Draft" / "No correct answer" on a card whose question is not finished (see `qcheck`):
+/// it can be edited and saved, but not put on an exam or shared. The tooltip says what is missing.
+fn draft_chip(ui: &mut Ui, q: &Question) {
+    if let Some((label, tip)) = crate::qcheck::chip(q) {
+        let (fg, bg) = if ui.visuals().dark_mode {
+            (Color32::from_rgb(235, 175, 90), Color32::from_rgba_unmultiplied(235, 175, 90, 36))
+        } else {
+            (Color32::from_rgb(140, 78, 0), Color32::from_rgba_unmultiplied(196, 120, 20, 40))
+        };
+        kit::pill(ui, label, bg, fg).on_hover_text(tip);
+    }
+}
+
 fn meta_chip(ui: &mut Ui, text: &str) {
     kit::pill(ui, text, theme::field(), theme::text_col());
 }
@@ -2172,16 +2188,22 @@ fn card_full_question(ui: &mut Ui, app: &mut App, q: &Question, size: f32) {
     use crate::model::{Kind, PartKind};
     let rich = Rich::new(size, theme::ink());
     let mut picture = q.image.clone();
+    if q.stem.trim().is_empty() {
+        // a draft saved before its question was written
+        ui.label(theme::muted("(no question text)").size(size));
+    }
     card_rich(ui, app, &q.stem, &rich, &mut picture);
     if let Some(img) = picture.take() {
         card_image(ui, app, &img);
     }
     let small = size - 1.0;
+    let keyless = crate::model::is_keyless(q);
     let tf = |ui: &mut Ui, correct: bool, indent: f32| {
         ui.horizontal(|ui| {
             ui.add_space(indent);
             for (v, label) in [(true, "True"), (false, "False")] {
-                let on = v == correct;
+                // (an imported question without its key has no right answer to tick)
+                let on = !keyless && v == correct;
                 let t = RichText::new(if on { format!("{label} ✓") } else { label.to_string() }).size(size);
                 ui.label(if on { t.color(theme::green()).family(theme::bold_family()) } else { t.color(theme::text_col()) });
                 ui.add_space(10.0);
@@ -2308,6 +2330,7 @@ fn draw_card(
                     ui.spacing_mut().item_spacing.x = 10.0;
                     ui.allocate_ui(Vec2::new(54.0, 18.0), |ui| kit::type_pill(ui, qedit::type_tag(kind)));
                     ui.label(RichText::new(format!("Q{n}")).family(theme::bold_family()).size(11.5).color(theme::muted_col()));
+                    draft_chip(ui, q);
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         paint_chevron(ui, false);
                         copy_rect = Some(copy_icon(ui));
@@ -2341,8 +2364,9 @@ fn draw_card(
                     ui.spacing_mut().item_spacing.x = 8.0;
                     kit::type_pill(ui, qedit::type_tag(kind));
                     match q {
-                        Some(_) => {
+                        Some(q) => {
                             ui.label(RichText::new(format!("Q{n}")).family(theme::bold_family()).size(11.5).color(theme::muted_col()));
+                            draft_chip(ui, q);
                         }
                         None => {
                             ui.label(theme::serif("New question").size(15.0));
@@ -3051,9 +3075,18 @@ fn popover_card(ui: &mut Ui, q: &Question, n: usize, ps: &mut PopoverState, exam
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             if exam_id.is_some() {
-                let label = if in_exam { "Add again" } else { "Add to exam" };
-                if crate::pageshell::outline(ui, label).clicked() {
-                    *add = Some(q.id.clone());
+                let fixes = crate::qcheck::gate_blockers(q);
+                if fixes.is_empty() {
+                    let label = if in_exam { "Add again" } else { "Add to exam" };
+                    if crate::pageshell::outline(ui, label).clicked() {
+                        *add = Some(q.id.clone());
+                    }
+                } else {
+                    // a draft can not go on an exam: say what is missing, and the button opens it
+                    if crate::pageshell::outline(ui, "Finish this draft").on_hover_text("It can not be added to an exam until it is finished").clicked() {
+                        *edit = Some(q.id.clone());
+                    }
+                    ui.label(RichText::new(format!("Draft: {}", crate::qcheck::describe(&fixes))).size(11.5).color(if ui.visuals().dark_mode { Color32::from_rgb(235, 175, 90) } else { Color32::from_rgb(140, 78, 0) }));
                 }
             }
             if ui.add(Button::new(theme::accent("Copy text").size(12.0)).frame(false)).on_hover_text("Copy the question (with its answer lines) to paste anywhere").clicked() {
@@ -3296,6 +3329,8 @@ pub fn draw_popover(app: &mut App, ctx: &egui::Context) {
             }
         }
     }
+    // (the card offers no Add for a draft; this keeps any other route from adding one)
+    let add = add.filter(|qid| bank.questions.iter().find(|q| q.id == *qid).is_some_and(|q| crate::qcheck::gate_blockers(q).is_empty()));
     if let (Some(qid), Some(eid)) = (add, exam_id.as_ref()) {
         if let Some(before) = app.store.exam(eid).map(|e| e.items.clone()) {
             app.undo.push(before);

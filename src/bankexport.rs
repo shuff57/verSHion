@@ -80,7 +80,7 @@ fn block(title: &str, body: &str) -> String {
 fn bank_q(q: &Question, number: u32, image: Option<DocImage>) -> DocQ {
     // Imported from the pool without its key: the placeholder values (all-false choices, empty
     // matches, a `false` True/False) are not a key and are never printed as one.
-    let keyless = crate::model::is_keyless(q);
+    let keyless = crate::qcheck::key_missing(q);
     let none = crate::model::KEY_NOT_PROVIDED;
     let mut text = q.stem.trim_end().to_string();
     let mut parts: Vec<String> = vec![meta_line(q)];
@@ -178,7 +178,7 @@ pub fn bank_csv(bank: &QuestionBank) -> String {
             kind_title(q.kind.qkind()).to_string(),
             q.points.map(num_str).unwrap_or_default(),
             question_cell(q),
-            if crate::model::is_keyless(q) { crate::model::KEY_NOT_PROVIDED.to_string() } else { answer_cell(&q.kind) },
+            if crate::qcheck::key_missing(q) { crate::model::KEY_NOT_PROVIDED.to_string() } else { answer_cell(&q.kind) },
             choices_cell(&q.kind),
             q.explanation.as_deref().unwrap_or("").trim().to_string(),
             q.topics.iter().map(|t| t.trim()).filter(|t| !t.is_empty()).collect::<Vec<_>>().join(", "),
@@ -283,7 +283,7 @@ pub fn bank_aiken(bank: &QuestionBank) -> (String, usize) {
             skipped += 1;
             continue;
         };
-        if crate::model::is_keyless(q) {
+        if crate::qcheck::key_missing(q) {
             // The format is a key: a question with none cannot be written.
             skipped += 1;
             continue;
@@ -316,7 +316,7 @@ pub fn bank_blackboard(bank: &QuestionBank) -> (String, usize) {
     let mut pad = 0;
     let mut skipped = 0;
     for q in &bank.questions {
-        if crate::model::is_keyless(q) {
+        if crate::qcheck::key_missing(q) {
             skipped += 1;
             continue;
         }
@@ -336,7 +336,7 @@ pub fn bank_blackboard(bank: &QuestionBank) -> (String, usize) {
     }
     let mut rows = Vec::new();
     for q in &bank.questions {
-        if crate::model::is_keyless(q) {
+        if crate::qcheck::key_missing(q) {
             continue; // counted in the first pass
         }
         let (kind, correct, wrong): (&str, String, Vec<String>) = match &q.kind {
@@ -728,6 +728,31 @@ pub fn embedded_data(pdf: &[u8]) -> Option<Vec<u8>> {
 mod tests {
     use super::*;
     use crate::formats::make_question;
+
+    /// A draft (a gap in its key) exports as 'Key not provided' in every bank format and is skipped
+    /// by the key-only ones; nothing panics for any kind, and no wrong key is written.
+    #[test]
+    fn drafts_export_without_a_key() {
+        let a = |t: &str| crate::model::Answer { text: t.into(), correct: false, locked: false };
+        let mc = make_question("Pick".into(), Kind::Mc { answers: vec![a("x"), a("y")] });
+        let bl = make_question("Fill ___ and ___".into(), Kind::Blank { accept: vec![vec!["one".into()], vec![]] });
+        let ma = make_question("Match".into(), Kind::Matching { pairs: vec![crate::model::Pair { left: "a".into(), right: "1".into() }, crate::model::Pair { left: "b".into(), right: String::new() }], distractors: vec![] });
+        let mp = make_question("Parts".into(), Kind::Multipart { parts: vec![Part { stem: "a. x".into(), kind: PartKind::Mc { answers: vec![a("p"), a("q")] } }] });
+        let tf = make_question("".into(), Kind::Tf { correct: true });
+        let sh = make_question("Explain".into(), Kind::Short { sample: String::new() });
+        let bank = QuestionBank { id: "b".into(), name: "n".into(), questions: vec![mc.clone(), bl.clone(), ma.clone(), mp.clone(), tf, sh], created: 0, modified: 0, details: Default::default() };
+        for q in [&mc, &bl, &ma, &mp] {
+            let d = bank_q(q, 1, None);
+            assert_eq!(d.key_text, crate::model::KEY_NOT_PROVIDED, "{:?}", q.kind);
+            assert!(!d.text.join("\n").contains("(Correct answer)"));
+        }
+        let csv = bank_csv(&bank);
+        assert_eq!(csv.matches(crate::model::KEY_NOT_PROVIDED).count(), 4, "{csv}");
+        let (aiken, skipped) = bank_aiken(&bank);
+        assert!(aiken.is_empty() && skipped == 6, "{aiken:?} {skipped}");
+        let (_, skipped) = bank_blackboard(&bank);
+        assert!(skipped >= 4);
+    }
 
     /// A keyless (pool-imported) question: its placeholder values never print as a key.
     #[test]
