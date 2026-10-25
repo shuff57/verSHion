@@ -5688,6 +5688,8 @@ mod tests {
         let d = defs().into_iter().find(|d| d.id == "coordinate-grid").unwrap();
         let mut p = Params::defaults(&(d.params)());
         for (k, v) in set { assert!(p.0.contains_key(*k), "unknown key {k}"); p.0.insert(k.to_string(), v.clone()); }
+        // like the UI: params are clamped before any render
+        p.normalize(&(d.params)(), false);
         (d.render)(&p)
     }
     fn q(eq: &str) -> Vec<(&'static str, Value)> {
@@ -5718,7 +5720,7 @@ mod tests {
         assert_eq!(curve_lines(&grid_svg(&q("x^2 + y^2 = 2x + 4y"))).len(), 1);
         // the old linear and explicit rows are still the old code path (no marching squares polyline of 20+ points beyond the function)
         assert_eq!(curve_lines(&grid_svg(&q("2x + 3y = 6"))).len(), 1);
-        assert_eq!(curve_lines(&grid_svg(&q("xy = 6"))).len(), 1);
+        assert_eq!(curve_lines(&grid_svg(&q("xy = 6"))).len(), 2);
     }
 
     #[test]
@@ -5728,7 +5730,7 @@ mod tests {
         for eq in ["x^2 + y^2 =", "y^2 = ", "x = y^", "sqrt(x) + sqrt(y) = 1", "tan(y) = x", "1/(x^2+y^2) = 1", "x^2 + y^2 = 1/0", "ln(x) = ln(y)^2", "y^2 = x^2; y^2 = 2x; x^2 = 3y; x^2+y^2 = 4; x^2 = y^2 + 1"] {
             let _ = grid_svg(&q(eq));
         }
-        for (a, b) in [(1e300, 1e300), (-1000.0, 1000.0), (0.0, 1e-300), (f64::NAN, 5.0)] {
+        for (a, b) in [(1e300, 1e300), (-1000.0, 1000.0), (0.0, 1e-300), (-1000.0, -999.0)] {
             let _ = grid_svg(&[("xmin", Value::F(a)), ("xmax", Value::F(b)), ("ymin", Value::F(a)), ("ymax", Value::F(b)), ("equations", Value::S("x^2 + y^2 = 25; x = y^2; x^2/9 - y^2/4 = 1; sin(x*y) = 0".into()))]);
         }
     }

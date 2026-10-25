@@ -890,12 +890,8 @@ const COORDINATE_GRID: &[Faq] = &[
         a: "Start at the origin, move 3 units along the x-axis (right), then 2 units parallel to the y-axis (down). The first number is always x and the second is y.",
     },
     Faq {
-        q: "How are holes and asymptotes shown on a graph?",
-        a: "A hole is a single missing point, drawn as an open circle. An asymptote is a line the curve approaches but never reaches, usually drawn dotted or dashed.",
-    },
-    Faq {
-        q: "How is a piecewise function graphed?",
-        a: "Graph each piece only over its own interval. A closed dot marks an endpoint that is included (≤ or ≥) and an open dot one that is not (< or >).",
+        q: "How are holes, asymptotes and piecewise functions shown?",
+        a: "A hole is a single missing point, drawn as an open circle. An asymptote is a line the curve approaches but never reaches, usually drawn dotted or dashed. A piecewise function is graphed one piece at a time over its own interval: a closed dot marks an endpoint that is included (≤ or ≥) and an open dot one that is not (< or >).",
     },
     Faq {
         q: "Can I graph a circle, ellipse or hyperbola?",
