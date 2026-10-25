@@ -54,7 +54,7 @@ fn counts(a: u32, c: u32, r: u32) -> String {
 
 // ---- send my changes ------------------------------------------------------------------------------------------
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq)]
 enum SendAct {
     None,
     Back,
@@ -65,6 +65,7 @@ enum SendAct {
     Merge,
     Note,
     Licence,
+    Decide(super::circle_hide_ui::DecideAct),
 }
 
 fn send_page(ui: &mut Ui, e: &mut CircleEditModel, now: i64) {
@@ -186,6 +187,36 @@ fn send_page(ui: &mut Ui, e: &mut CircleEditModel, now: i64) {
                 }
                 return finish_send(ui, e, act, msg, account);
             }
+            SendStage::Keyless { positions, kinds } => {
+                warn_box(ui, &super::pool::keyless_text(positions, kinds));
+                para(ui, "Your changes are still on this computer.");
+                ui.horizontal_wrapped(|ui| {
+                    if kit::ghost_button(ui, "Back to the note").clicked() {
+                        act = SendAct::Note;
+                    }
+                    if kit::ghost_button(ui, "Cancel").clicked() {
+                        act = SendAct::Back;
+                    }
+                });
+                return finish_send(ui, e, act, msg, account);
+            }
+            SendStage::Decide(d) => {
+                let busy = e.acting();
+                let a = super::circle_hide_ui::decisions(
+                    ui,
+                    d,
+                    "This bank hides its answer keys from viewers, so the pool makes a viewers' copy of what you send. It needs these decisions first. Nothing was sent yet; your changes are still on this computer.",
+                    "Change these questions in your bank, then send again.",
+                    "Send with these decisions",
+                    busy,
+                );
+                match a {
+                    super::circle_hide_ui::DecideAct::None => {}
+                    super::circle_hide_ui::DecideAct::Cancel => act = SendAct::Note,
+                    other => act = SendAct::Decide(other),
+                }
+                return finish_send(ui, e, act, msg, account);
+            }
             SendStage::Conflict(c) => {
                 warn_box(ui, "Someone else sent changes first, so nothing was sent and nothing was overwritten.");
                 para(ui, &conflict_line(c, now));
@@ -300,6 +331,17 @@ fn finish_send(_ui: &mut Ui, e: &mut CircleEditModel, act: SendAct, msg: String,
         SendAct::CancelLarge => e.cancel_large_send(),
         SendAct::Note => e.back_to_note(),
         SendAct::Licence => e.retry_licence(),
+        SendAct::Decide(a) => {
+            use super::circle_hide_ui::DecideAct;
+            match a {
+                DecideAct::Label(at, c) => e.send_decide_label(at, c),
+                DecideAct::Order(at, y) => e.send_set_order(at, y),
+                DecideAct::AllOrders => e.send_all_orders(),
+                DecideAct::Formatting(q, y) => e.send_set_formatting(q, y),
+                DecideAct::Send => e.send_with_decisions(),
+                DecideAct::Cancel | DecideAct::None => {}
+            }
+        }
         SendAct::Merge => {
             let (local, perm) = match &e.view {
                 EditView::Send(v) => (v.local_id.clone(), v.perm),
@@ -754,7 +796,10 @@ fn history_page(ui: &mut Ui, e: &mut CircleEditModel, now: i64) {
                 if let Some(m) = l.merged_from {
                     line(ui, format!("Includes a merge of the changes made since version {m}."));
                 }
-                let can_look = l.kept && !l.withheld;
+                if h.closed_to_me(l) {
+                    line(ui, "This version has no copy without answer keys, so you can not open it.");
+                }
+                let can_look = h.can_look(l);
                 // One panel at a time: no restore offered while the trim panel is open.
                 let can_restore = h.perm.can_rewind() && can_look && l.version < h.head_version && h.restore.is_none() && h.trim.is_none();
                 if can_look || can_restore {
@@ -848,7 +893,7 @@ fn restore_panel(ui: &mut Ui, r: &RestoreAsk, act: &mut HistAct) {
 fn trim_panel(ui: &mut Ui, t: &TrimAsk, act: &mut HistAct) {
     section(ui, "Trim old versions", |ui| match &t.stage {
         TrimStage::Editing => {
-            para(ui, "Keep only the newest versions in full. The older ones stay listed in the history, but their content is deleted, so they can not be opened or restored. This frees room if the circle's storage is full.");
+            para(ui, "Keep only the newest versions in full. The older ones stay listed in the history, but their content is deleted, so they can not be opened or restored. This frees room if the circle's storage is full. Versions kept for an administrator's review are not deleted by a trim.");
             let mut keep = t.keep;
             ui.horizontal(|ui| {
                 ui.label(theme::text("Keep the newest"));
@@ -885,7 +930,13 @@ fn trim_panel(ui: &mut Ui, t: &TrimAsk, act: &mut HistAct) {
             });
         }
         TrimStage::Done(d) => {
-            body(ui, &if d.pruned == 0 { "Nothing was deleted: no older version could be trimmed (one may be kept for a review).".to_string() } else { format!("Done. The content of {} older version{} was deleted.", d.pruned, if d.pruned == 1 { "" } else { "s" }) });
+            for (i, l) in trim_lines(d).iter().enumerate() {
+                if i == 0 {
+                    body(ui, l);
+                } else {
+                    para(ui, l);
+                }
+            }
             if kit::primary_button(ui, "Close").clicked() {
                 *act = HistAct::TrimDone;
             }
@@ -955,7 +1006,7 @@ fn version_page(ui: &mut Ui, e: &mut CircleEditModel, now: i64) {
             }
             VersionLoad::Ready(b) => {
                 ui.add(egui::Label::new(theme::strong(api::plain(&b.title)).size(14.0)).wrap());
-                para(ui, text::ANSWER_KEYS_NOTE);
+                para(ui, if b.keys_hidden { text::KEYS_HIDDEN_VIEWER } else if b.hide_key { text::ANSWER_KEYS_HIDDEN_NOTE } else { text::ANSWER_KEYS_NOTE });
                 if b.questions.is_empty() {
                     body(ui, "No questions could be shown for this version.");
                 }

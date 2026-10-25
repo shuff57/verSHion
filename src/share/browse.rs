@@ -41,7 +41,7 @@ use super::pool::{
     Ack, BrowsePage, BrowseQuery, ImportInfo, ItemDoc, ItemHead, ListItem, Pool, PoolError, RefusalKind, RetryPolicy, Scope, Served, StudentView, VersionEntry,
     VersionState, is_item_id, is_sha256,
 };
-use super::publish::{AccountSnapshot, Gate, SharedSession};
+use super::publish::{AccountSnapshot, AccountTurn, AccountWatch, Gate, SharedSession};
 use crate::model::{BankDetails, ImageRef, Question, QuestionBank};
 
 pub const IMPORTED_DOC: &str = "share-imported.json";
@@ -741,6 +741,8 @@ pub struct BrowseModel {
     checked_this_open: bool,
     now: Option<Instant>,
     repaint: Option<Arc<dyn Fn() + Send + Sync>>,
+    /// Who the results and the item open belong to (critic 61 I3).
+    watch: AccountWatch,
 }
 
 impl Default for BrowseModel {
@@ -784,6 +786,7 @@ impl BrowseModel {
             checked_this_open: false,
             now: None,
             repaint: None,
+            watch: AccountWatch::default(),
         }
     }
 
@@ -935,9 +938,33 @@ impl BrowseModel {
             return;
         }
         self.now = Some(now);
+        self.note_account(snap);
         self.apply_snapshot(snap);
         self.drain(now);
         self.auto(now);
+    }
+
+    /// The account's state, every frame, the window open or not (critic 61 I3): what was read for one account is
+    /// never shown to another. A sign-out keeps the place and what was loaded (the same account comes back to it).
+    /// Another account signing in gets none of it: the results (they can hold the first account's own items), the
+    /// item open (with its report and a merge under review), the search typed, and the jobs reading for the first
+    /// account (an import on its way is dropped, as closing the window drops it: nothing is added to the banks). It
+    /// starts again at the browser.
+    pub fn note_account(&mut self, snap: &AccountSnapshot) {
+        if self.watch.note(snap) != AccountTurn::Another {
+            return;
+        }
+        self.cancel_all();
+        self.pending_update = None;
+        self.results = Results::default();
+        self.form = SearchForm::default();
+        self.item = None;
+        self.check_problem = None;
+        self.notice = None;
+        self.invite_required = false;
+        self.checked_this_open = false;
+        self.resume = Screen::Browse;
+        self.screen = Screen::Gate;
     }
 
     fn apply_snapshot(&mut self, snap: &AccountSnapshot) {

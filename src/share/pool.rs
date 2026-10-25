@@ -351,6 +351,21 @@ pub enum RefusalKind {
     CounterNoticeIncomplete { missing: Vec<String> },
     /// 400 `invalid_request` with the field the Worker named.
     InvalidRequest { field: Option<String> },
+    /// 422 `invite_not_sent` (circles phase C, round 46): no invitation was mailed and nothing was made.
+    /// `reason`: `address_limit` (that mailbox had its mails for the day) or `not_deliverable`.
+    InviteNotSent { reason: Option<String> },
+    /// 429 `hourly_limit` (round 46/47): `metric` is `circle_email_invites_hourly`,
+    /// `circle_email_inviter_domain_hourly` (with `limit`) or `circle_email_domain_hourly`.
+    HourlyLimit { metric: Option<String>, limit: Option<u64> },
+    /// 409 `keys_hidden_unavailable`: a viewer of a bank that hides its answer keys asked for a version
+    /// that can not be shown without them.
+    KeysHiddenUnavailable,
+    /// 409 `hide_key_changed`: the bank's answer-key setting changed while a send or a restore was on its
+    /// way. Nothing was stored: send again.
+    HideKeyChanged { hide_key: Option<bool>, head_version: Option<u64> },
+    /// 422 `keyless_question`: questions copied without their answer keys can not be sent to a circle.
+    /// `positions` are 0-based; `kinds` is each one's question kind (`Short`, `Mc`, ...).
+    KeylessQuestion { positions: Vec<usize>, kinds: Vec<String> },
     Other,
 }
 
@@ -428,6 +443,11 @@ impl RefusalKind {
             (_, "counter_notice_incomplete") => RefusalKind::CounterNoticeIncomplete {
                 missing: j.get("missing").and_then(Value::as_array).map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default(),
             },
+            (_, "invite_not_sent") => RefusalKind::InviteNotSent { reason: str_of(j, "reason") },
+            (_, "hourly_limit") => RefusalKind::HourlyLimit { metric: str_of(j, "metric"), limit: u64_of(j, "limit") },
+            (_, "keys_hidden_unavailable") => RefusalKind::KeysHiddenUnavailable,
+            (_, "hide_key_changed") => RefusalKind::HideKeyChanged { hide_key: j.get("hide_key").and_then(Value::as_bool), head_version: u64_of(j, "head_version") },
+            (_, "keyless_question") => RefusalKind::KeylessQuestion { positions: usizes(j, "positions"), kinds: strings(j, "kinds") },
             (400, "invalid_request") => RefusalKind::InvalidRequest { field: d.field.clone() },
             (404, _) => RefusalKind::NotFound,
             _ => RefusalKind::Other,
@@ -477,6 +497,7 @@ impl Refusal {
             RefusalKind::SharedQuestionsLimit(l) => format!("You can share up to {} questions in all; this would make {}.", l.limit, l.used + l.needed),
             RefusalKind::CircleRoleRequired { needed } => match needed.as_deref() {
                 Some("owner") => "Only the circle's owner can do that.".into(),
+                Some("owner_or_author") => "Only the circle's owner, or the bank's author while an editor, can do that.".into(),
                 Some("editor") => "You can only look at this circle's banks. The owner can let you add banks by changing your role to editor.".into(),
                 _ => "Your role in this circle does not allow that.".into(),
             },
@@ -490,6 +511,9 @@ impl Refusal {
                 Some("circle_memberships") | Some("circle_memberships_total") => format!("You are already in {used} circles, the most one account can be in ({limit}). Leave one first."),
                 Some("circle_banks") => format!("This circle already has {used} banks, the most it can hold ({limit}). Remove one first."),
                 Some("circle_open_invites") => format!("This circle already has {used} open codes ({limit} at most). Withdraw one you no longer need."),
+                Some("circle_open_email_invites") => format!(
+                    "This circle already has {used} emailed invitations that have not been used yet ({limit} at most). More can be sent as people join, as invitations expire after 7 days, or when you withdraw one you no longer need."
+                ),
                 _ => "You have reached a limit on circles.".into(),
             },
             RefusalKind::CircleClosed { reason, .. } => match reason.as_deref() {
@@ -499,6 +523,10 @@ impl Refusal {
                 _ => "This circle is closed.".into(),
             },
             RefusalKind::BankRemoved => "This bank was removed from the circle.".into(),
+            // (round 48: a withheld version whose text was let go: only the record of what matched is kept)
+            RefusalKind::VersionNotRetained if self.detail.json.get("review_copy").and_then(Value::as_str) == Some("hashes_only") || self.detail.json.get("withheld").and_then(Value::as_bool) == Some(true) => {
+                "That version was held back for an administrator's review, and its text is no longer kept: only a record of what matched is kept, for the administrator. It can not be opened.".into()
+            }
             RefusalKind::VersionNotRetained => "That version is no longer kept. A circle bank keeps its last 20 versions in full.".into(),
             RefusalKind::VersionWithheld => "This version is hidden while it is reviewed. Only an administrator can release it.".into(),
             RefusalKind::CircleConflict { .. } => "Someone else sent changes first. Get the latest changes and merge them, then send again.".into(),
@@ -507,7 +535,7 @@ impl Refusal {
             RefusalKind::MergeTokenInvalid => "This merge is out of date. Get the latest changes and merge again, then send.".into(),
             RefusalKind::CircleQuestionsLimit(l) => format!("A circle holds at most {} questions across its banks; this would make {}.", l.limit, l.used + l.needed),
             RefusalKind::CircleRecordsFull => "This circle has recorded as many different questions as it can keep. Remove a bank first.".into(),
-            RefusalKind::CircleStorageFull(l) => format!("This circle's storage is full ({} of {} used). Ask the owner (or the bank's author) to trim the older versions of a bank, remove a bank, or leave out large pictures.", mb(l.used as usize), mb(l.limit as usize)),
+            RefusalKind::CircleStorageFull(l) => circle_storage_text(l),
             RefusalKind::AlreadyRevoked => "That code was already withdrawn.".into(),
             RefusalKind::CommitIdConflict => "This send was already used for different content. Start it again.".into(),
             RefusalKind::CircleMaterial(m) => m.message(),
@@ -519,6 +547,20 @@ impl Refusal {
             RefusalKind::DailyLimit { metric } if metric.as_deref() == Some("key_leak_reports") => {
                 format!("You can report a leaked answer key once per item a month, and five a day. Try again {}.", wait())
             }
+            RefusalKind::DailyLimit { metric } if metric.as_deref() == Some("circle_hide_attempts") => format!(
+                "You have tried to change answer-key settings as many times as the pool allows today. Every try counts, also the ones where the pool asked for decisions. Try again {}.",
+                wait()
+            ),
+            RefusalKind::DailyLimit { metric } if metric.as_deref() == Some("circle_hide_changes") => {
+                format!("You have changed answer-key settings as many times as the pool allows today. Try again {}.", wait())
+            }
+            RefusalKind::DailyLimit { metric } if metric.as_deref() == Some("circle_hidden_reads") => format!(
+                "You have opened banks whose answer keys are hidden as many times as the pool allows today (each one is prepared for you without its keys). Try again {}.",
+                wait()
+            ),
+            RefusalKind::DailyLimit { metric } if metric.as_deref() == Some("circle_email_invites") => {
+                format!("You have emailed as many circle invitations today as the pool allows. Try again {}, or make a code and give it to the person yourself.", wait())
+            }
             RefusalKind::DailyLimit { metric } => format!("You have reached today's limit{}. It resets {}.", metric_text(metric.as_deref()), wait()),
             RefusalKind::RateLimited | RefusalKind::TooManyOpenReads | RefusalKind::TooManyUploads => format!("Too many requests. Try again {}.", wait()),
             RefusalKind::Busy => "The server is busy. Try again in a moment.".into(),
@@ -529,9 +571,30 @@ impl Refusal {
             RefusalKind::InvalidRequest { field } => match field.as_deref() {
                 Some("code") => "That does not look like an invite code. It has 24 letters and digits, usually shown in groups of four.".into(),
                 Some("reason") => "This item shows its answer key, so it can not be reported as a key leak. Report a wrong answer instead.".into(),
-                Some(f) => format!("The server did not accept the {}.", f.replace('_', " ")),
+                Some("email") => "That is not an email address the pool can send to. Check it for a typo.".into(),
+                Some("before") => "The list could not be continued from where it was, so it starts again from the newest.".into(),
+                Some(f) => format!("The server did not accept the {}.", super::api::plain(&f.replace('_', " "))),
                 None => "The server did not accept that request.".into(),
             },
+            RefusalKind::InviteNotSent { reason } => match reason.as_deref() {
+                Some("address_limit") => "No invitation was sent: this address has had as many circle invitations today as it may get (from anyone). Try again tomorrow, or make a code and give it to the person yourself.".into(),
+                Some("not_deliverable") => "No invitation was sent: the pool can not send mail to this address. Check it for a typo, or make a code and give it to the person yourself.".into(),
+                _ => "No invitation was sent. Check the address, or make a code and give it to the person yourself.".into(),
+            },
+            RefusalKind::HourlyLimit { metric, limit } => match metric.as_deref() {
+                Some("circle_email_inviter_domain_hourly") => format!(
+                    "You have sent as many invitations to addresses at this mail domain (for example one school) as you may in an hour{}. The others can go {}: nothing is lost, invite them then.",
+                    limit.map(|l| format!(" ({l})")).unwrap_or_default(),
+                    wait()
+                ),
+                Some("circle_email_domain_hourly") => format!("There have been too many invitations to addresses at this mail domain in the last hour, from everyone. Try again {}.", wait()),
+                Some("circle_email_invites_hourly") => format!("You have sent as many circle invitations as you may this hour. Try again {}.", wait()),
+                _ => format!("That has been done as many times as the pool allows in an hour. Try again {}.", wait()),
+            },
+            RefusalKind::KeysHiddenUnavailable => "The answer keys of this bank are hidden from viewers, and this version can not be shown without them. Ask the bank's author or the circle's owner.".into(),
+            RefusalKind::HideKeyChanged { hide_key: Some(true), .. } => "The bank's answer keys were hidden from viewers while this was on its way, so nothing was stored. Send it again; the pool may ask how the viewers' copy should look.".into(),
+            RefusalKind::HideKeyChanged { .. } => "The bank's answer-key setting changed while this was on its way, so nothing was stored. Send it again.".into(),
+            RefusalKind::KeylessQuestion { positions, kinds } => keyless_text(positions, kinds),
             RefusalKind::Other => other_message(self.detail.status, &self.detail.code, wait()),
         }
     }
@@ -541,7 +604,7 @@ impl Refusal {
 /// that still says what happened. Covers every code the routes the app calls can return.
 pub fn other_message(status: u16, code: &str, wait: String) -> String {
     let m = match code {
-        "pending_review" => "An administrator is still reviewing this bank for student information. It can be deleted for good once that review is done. You can leave it removed until then.",
+        "pending_review" => "An administrator is still reviewing a version of this bank. It can be deleted for good once that review is done. You can leave it removed until then.",
         "member_unavailable" => "That member's account can not take on the circle right now. Choose someone else.",
         "no_pending_transfer" => "There is no ownership offer to answer any more. It may have been withdrawn, taken back, or it expired.",
         "unauthorized" => "Your sign-in ended. Sign in again in the Account window.",
@@ -603,8 +666,63 @@ fn metric_text(m: Option<&str>) -> String {
         Some("circle_reports") => " for reports about circle banks".into(),
         Some("circle_rollbacks") => " for restoring older versions of circle banks".into(),
         Some("circle_transfer_offers") => " for offering a circle to someone".into(),
+        Some("circle_email_invites") => " for emailed circle invitations".into(),
+        Some("circle_hide_attempts") => " for tries at changing answer-key settings".into(),
+        Some("circle_hide_changes") => " for changing answer-key settings".into(),
+        Some("circle_hidden_reads") => " for opening banks whose answer keys are hidden".into(),
         _ => String::new(),
     }
+}
+
+/// The circle's own storage is full (413 `quota_exceeded`, `scope: circle`): what really frees space.
+/// Versions kept for an administrator's review still count, and only an administrator can free them
+/// (critic 56a V1); trimming and deleting free the rest.
+pub fn circle_storage_text(l: &LimitInfo) -> String {
+    format!(
+        "This circle's storage is full ({} of {} used). The owner, or a bank's author, can free space by trimming the older versions of a bank (History of versions, then Trim old versions), or by removing a bank and deleting it for good. Versions kept for an administrator's review still count until an administrator has dealt with them; only an administrator can free that space. Smaller pictures also help.",
+        mb(l.used as usize),
+        mb(l.limit as usize)
+    )
+}
+
+/// "question 3", "questions 1, 2 and 4", "questions 1, 2, 3 ... and 9 more" (from 0-based positions).
+pub fn question_numbers(positions: &[usize]) -> String {
+    let mut ns: Vec<usize> = positions.iter().map(|p| p + 1).collect();
+    ns.sort_unstable();
+    ns.dedup();
+    match ns.len() {
+        0 => "some questions".into(),
+        1 => format!("question {}", ns[0]),
+        n if n <= 8 => {
+            let (last, rest) = ns.split_last().expect("not empty");
+            format!("questions {} and {last}", rest.iter().map(usize::to_string).collect::<Vec<_>>().join(", "))
+        }
+        n => format!("questions {} ... and {} more", ns[..6].iter().map(usize::to_string).collect::<Vec<_>>().join(", "), n - 6),
+    }
+}
+
+/// 422 `keyless_question` in plain words: which questions, and what each kind needs (round 48: a short answer or
+/// essay has no correct answer to mark, only a sample answer to type).
+pub fn keyless_text(positions: &[usize], kinds: &[String]) -> String {
+    let short = kinds.iter().filter(|k| k.as_str() == "Short").count();
+    let fix = if kinds.is_empty() {
+        "give each of them its answer"
+    } else if short == kinds.len() {
+        "type a sample answer for each of them"
+    } else if short == 0 {
+        "mark the correct answer of each of them"
+    } else {
+        "give each of them its answer (mark the correct one, or type a sample answer)"
+    };
+    let one = positions.iter().collect::<std::collections::BTreeSet<_>>().len() == 1;
+    format!(
+        "In this copy, {} {} no answer {}: {} copied without {} (for example from a bank whose keys are hidden from viewers). The circle keeps the full questions with their keys, so nothing was sent. Read the full bank as an editor (make a new working copy from the circle and make your changes there), or {fix}.",
+        question_numbers(positions),
+        if one { "has" } else { "have" },
+        if one { "key" } else { "keys" },
+        if one { "it was" } else { "they were" },
+        if one { "it" } else { "them" },
+    )
 }
 
 // ---- circles: text first shared inside a circle (D13) -------------------------------------------------

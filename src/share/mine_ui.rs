@@ -74,6 +74,8 @@ impl MineUi {
     /// Draws the window when open; returns at once (no I/O at all) when closed. `banks` are the
     /// local banks, for "Share again...".
     pub fn show(&mut self, ctx: &egui::Context, account: &mut AccountUi, banks: &[QuestionBank]) {
+        // (critic 61 I3: told of a sign-out or another account every frame, the window open or not)
+        self.model.note_account(&snapshot_of(&account.model));
         let mut opened_now = false;
         if let Some(Some(r)) = ctx.data_mut(|d| d.remove_temp::<Option<MineRequest>>(pending_id())) {
             let tab = if matches!(r, MineRequest::Data) { super::shared::Tab::Settings } else { super::shared::Tab::Mine };

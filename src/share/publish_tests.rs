@@ -1525,3 +1525,53 @@ fn a_new_copy_and_a_record_without_ids_send_no_links_and_odd_ids_are_never_sent(
     let text = serde_json::to_string(&rec).unwrap();
     assert!(!text.contains("Alpha") && !text.contains("correct"));
 }
+
+// ---- critic 61 I3: what the pool told one account is never shown to the next -------------------------------------
+
+fn as_account(s: &Arc<Script>, email: &str) -> AccountSnapshot {
+    AccountSnapshot { account: Some(format!("https://pool.test\n{email}")), ..ready(s) }
+}
+
+#[test]
+fn c61_another_account_gets_none_of_the_first_accounts_check_or_done_screen() {
+    // A checked the bank (the pool's answer is on the review step).
+    let s = Script::new();
+    let mut m = at_review(&s);
+    m.frame(now(), &as_account(&s, "ada@school.org"));
+    assert!(m.preview.is_some());
+    m.frame(now(), &AccountSnapshot::of_gate(Gate::SignedOut));
+    let s2 = Script::new();
+    for _ in 0..2 {
+        m.frame(now(), &as_account(&s2, "bob@school.org"));
+    }
+    assert!(m.preview.is_none() && m.done.is_none() && m.failure.is_none());
+    assert_eq!(m.step, Step::Options, "B starts at the options (the form is this computer's, kept)");
+    assert_eq!(m.form.license, Some(License::CcBy));
+    assert!(s2.seen().is_empty());
+    // A published (the done screen names A's new item); B signs in straight after.
+    let s = Script::new();
+    let log = LogIo::memory();
+    let mut m = published_once(&s, &log);
+    m.frame(now(), &as_account(&s, "ada@school.org"));
+    assert!(m.done.is_some());
+    let s2 = Script::new();
+    for _ in 0..2 {
+        m.frame(now(), &as_account(&s2, "bob@school.org"));
+    }
+    assert!(m.done.is_none());
+    assert_eq!(m.step, Step::Options);
+    assert!(log.find("bank:b1").is_some(), "this computer's record of the publish is kept");
+}
+
+#[test]
+fn c61_the_same_account_signed_in_again_keeps_its_check() {
+    let s = Script::new();
+    let mut m = at_review(&s);
+    let a = as_account(&s, "ada@school.org");
+    m.frame(now(), &a);
+    m.frame(now(), &AccountSnapshot::of_gate(Gate::SignedOut));
+    assert_eq!(m.step, Step::Gate);
+    m.frame(now(), &a);
+    assert_eq!(m.step, Step::Review);
+    assert!(m.preview.is_some());
+}

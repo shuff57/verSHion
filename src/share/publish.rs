@@ -311,14 +311,55 @@ pub struct AccountSnapshot {
     pub session: Option<SharedSession>,
     /// The Account window is open (shown or quiet).
     pub account_open: bool,
+    /// Who is signed in (the pool's address and the account's email), when known: a page that keeps what it read
+    /// drops it when this changes (critic 60 I1). Never shown and never sent.
+    pub account: Option<String>,
+}
+
+/// What changed about who is signed in, as a page that keeps what it read sees it (critic 61 I3).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AccountTurn {
+    /// Nothing that matters here.
+    Same,
+    /// A sign-out was seen (once each time).
+    SignedOut,
+    /// Another account than the last one seen signed in.
+    Another,
+}
+
+/// The last account a page saw signed in (`AccountSnapshot::account`), so it can tell a sign-out and another account
+/// signing in from the same account coming back (critic 61 I3, as `CirclesModel::note_account` does for critic 60 I1).
+#[derive(Clone, Debug, Default)]
+pub struct AccountWatch {
+    account: Option<String>,
+    out: bool,
+}
+
+impl AccountWatch {
+    pub fn note(&mut self, snap: &AccountSnapshot) -> AccountTurn {
+        match &snap.gate {
+            Gate::Ready => {
+                self.out = false;
+                let Some(a) = &snap.account else { return AccountTurn::Same };
+                let another = self.account.as_ref().is_some_and(|p| p != a);
+                self.account = Some(a.clone());
+                if another { AccountTurn::Another } else { AccountTurn::Same }
+            }
+            Gate::SignedOut if !self.out => {
+                self.out = true;
+                AccountTurn::SignedOut
+            }
+            _ => AccountTurn::Same,
+        }
+    }
 }
 
 impl AccountSnapshot {
     pub fn ready(session: SharedSession) -> AccountSnapshot {
-        AccountSnapshot { gate: Gate::Ready, session: Some(session), account_open: false }
+        AccountSnapshot { gate: Gate::Ready, session: Some(session), account_open: false, account: None }
     }
     pub fn of_gate(gate: Gate) -> AccountSnapshot {
-        AccountSnapshot { gate, session: None, account_open: false }
+        AccountSnapshot { gate, session: None, account_open: false, account: None }
     }
 }
 
@@ -346,7 +387,8 @@ pub fn snapshot_of(m: &AccountModel) -> AccountSnapshot {
             _ => Gate::SignedOut,
         }
     };
-    AccountSnapshot { gate, session, account_open: m.open }
+    let account = m.me.as_ref().map(|me| format!("{}\n{}", session.as_ref().map(|s| s.base()).unwrap_or_default(), me.email));
+    AccountSnapshot { gate, session, account_open: m.open, account }
 }
 
 // ---- the form -----------------------------------------------------------------------------------------
@@ -616,6 +658,10 @@ pub struct PublishModel {
     log: LogIo,
     now: Option<Instant>,
     repaint: Option<Arc<dyn Fn() + Send + Sync>>,
+    /// Who the check, the done screen and the circles belong to (critic 61 I3), and whether another account signed
+    /// in while a publish or a send was on its way (forgotten once it ends).
+    watch: AccountWatch,
+    forget_pending: bool,
 }
 
 impl Default for PublishModel {
@@ -655,6 +701,8 @@ impl PublishModel {
             log,
             now: None,
             repaint: None,
+            watch: AccountWatch::default(),
+            forget_pending: false,
         }
     }
 
@@ -763,6 +811,12 @@ impl PublishModel {
             return;
         }
         self.now = Some(now);
+        if self.watch.note(snap) == AccountTurn::Another {
+            self.forget_pending = true;
+        }
+        if self.forget_pending && !self.busy() {
+            self.forget_account();
+        }
         self.apply_snapshot(snap);
         self.drain(now);
         if self.circle.active || self.circle.busy() {
@@ -775,6 +829,36 @@ impl PublishModel {
                 self.notice = Some(Notice::Info("Your session ended. Sign in again; what you entered is kept.".into()));
             }
         }
+        // (a publish or a send that was on its way when another account signed in has ended: its answer, this
+        // computer's record of it, is kept; nothing it showed stays)
+        if self.forget_pending && !self.busy() {
+            self.forget_account();
+        }
+    }
+
+    /// Another account signed in (critic 61 I3): nothing the pool told the first one stays: the check and its
+    /// findings, a failure, the done screen (it names the first account's item), the pictures it sent, the circles
+    /// it may add to. The form (this computer's bank and what was chosen for it) and the record of an earlier
+    /// publish are kept; it starts again at the options. A sign-out keeps everything (the same account comes back
+    /// to it). A publish or a send on its way finishes first (`frame`).
+    fn forget_account(&mut self) {
+        self.forget_pending = false;
+        self.notice = None;
+        self.preview = None;
+        self.fix = None;
+        self.failure = None;
+        self.done = None;
+        self.progress = None;
+        self.prepared = None;
+        self.images_sent = false;
+        self.form.reviewed = false;
+        let active = self.circle.active;
+        self.circle.reset();
+        if active {
+            self.circle.activate(None);
+        }
+        self.resume = Step::Options;
+        self.step = Step::Gate;
     }
 
     fn apply_snapshot(&mut self, snap: &AccountSnapshot) {

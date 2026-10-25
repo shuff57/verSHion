@@ -229,7 +229,7 @@ fn nothing_is_asked_until_the_account_is_ready_and_then_the_list_loads_once() {
     let (mut m, _) = plain_model();
     m.open_list();
     assert_eq!(m.screen, Screen::Gate);
-    m.frame(now(), &AccountSnapshot { gate: Gate::SignedOut, session: None, account_open: false });
+    m.frame(now(), &AccountSnapshot { gate: Gate::SignedOut, session: None, account_open: false, account: None });
     assert!(s.seen().is_empty());
     assert_eq!(m.screen, Screen::Gate);
     m.frame(now(), &ready(&s));
@@ -246,7 +246,7 @@ fn not_approved_and_signed_out_stop_at_the_gate_without_a_request() {
     let s = Script::new();
     let (mut m, _) = plain_model();
     m.open_list();
-    m.frame(now(), &AccountSnapshot { gate: Gate::NotApproved(Status::Pending), session: None, account_open: false });
+    m.frame(now(), &AccountSnapshot { gate: Gate::NotApproved(Status::Pending), session: None, account_open: false, account: None });
     assert_eq!(m.screen, Screen::Gate);
     assert!(s.seen().is_empty());
 }
@@ -1022,7 +1022,7 @@ fn every_screen_and_state_draws_without_panicking() {
     for gate in [Gate::Checking, Gate::NotSetUp, Gate::NoServer, Gate::SignedOut, Gate::Unreachable, Gate::NotApproved(Status::Pending)] {
         let (mut m, _) = plain_model();
         m.open_list();
-        m.frame(now(), &AccountSnapshot { gate, session: None, account_open: false });
+        m.frame(now(), &AccountSnapshot { gate, session: None, account_open: false, account: None });
         assert!(!draw(&ctx, &mut m));
     }
 
@@ -1121,4 +1121,107 @@ fn a_taken_down_item_shows_until_when_a_counter_notice_can_be_sent() {
     assert!(text::explain(&it, NOW).contains(&format!("until {}", text::date(NOW + 5 * DAY))));
     let none = mine_item("taken_down", json!({"counter_notice": "available"}));
     assert!(!text::explain(&none, NOW).contains("until"));
+}
+
+// ---- critic 61 I3: what one account read or typed is never shown to the next ---------------------------------
+
+fn as_account(s: &Arc<Script>, email: &str) -> AccountSnapshot {
+    AccountSnapshot { account: Some(format!("https://pool.test\n{email}")), ..ready(s) }
+}
+
+fn signed_out() -> AccountSnapshot {
+    AccountSnapshot { gate: Gate::SignedOut, session: None, account_open: true, account: None }
+}
+
+#[test]
+fn c61_another_account_after_a_sign_out_gets_nothing_of_the_first_accounts_download_counter_notice_or_list() {
+    // A (seen signed in as Ada, or with no address known): the data download fetched and not saved, a counter-notice typed.
+    for known in [true, false] {
+        let (mut m, s, sink) = on_account_page();
+        let a = if known { as_account(&s, "ada@school.org") } else { ready(&s) };
+        m.frame(now(), &a);
+        s.say_bytes(export_body(json!({"profile": {"display_name": "Ada", "email": "ada@school.org"}, "bodies": {}})));
+        m.start_export();
+        m.frame(now(), &a);
+        assert!(m.export_ready());
+        m.counter.name = "Ada Lovelace".into();
+        m.counter.address = "12 Analytical St".into();
+        m.counter.phone = "555-0100".into();
+        m.appeal_note = "Please look again".into();
+        // A signs out on the Shared page (MineUi::show keeps framing the model there), then B signs in.
+        m.frame(now(), &signed_out());
+        assert!(!m.export_ready(), "the download goes with the sign-out");
+        assert!(m.counter.name.is_empty() && m.counter.address.is_empty() && m.counter.phone.is_empty() && m.appeal_note.is_empty());
+        let s2 = Script::new();
+        s2.say(200, mine(vec![item(ID2, "live", json!({"title": "Bob's bank"}))], None));
+        let b = as_account(&s2, "bob@school.org");
+        for _ in 0..3 {
+            m.frame(now(), &b);
+        }
+        assert!(!m.export_ready());
+        assert!(m.counter.name.is_empty());
+        assert!(matches!(m.export, ExportState::Idle));
+        assert_eq!(s2.paths(), vec!["Get /items/mine"], "B's own list is read with B's session");
+        assert_eq!(m.list.items.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(), vec![ID2]);
+        m.save_export();
+        assert!(sink.written.lock().unwrap().is_empty(), "nothing of A's can be saved by B");
+    }
+}
+
+#[test]
+fn c61_another_account_straight_after_reads_its_own_list_and_starts_at_the_list() {
+    let (mut m, s, _) = opened(vec![item(ID, "removed", json!({"title": "Ada's held bank"}))]);
+    m.frame(now(), &as_account(&s, "ada@school.org"));
+    assert_eq!(m.screen, Screen::Detail);
+    m.appealed.insert(ID.into(), "The admin will review your item.".into());
+    // No sign-out seen (the Account window was closed): the next account is told apart by its address.
+    let s2 = Script::new();
+    s2.say(200, mine(vec![], None));
+    let b = as_account(&s2, "bob@school.org");
+    m.frame(now(), &AccountSnapshot { gate: Gate::Checking, session: None, account_open: false, account: None });
+    for _ in 0..3 {
+        m.frame(now(), &b);
+    }
+    assert!(m.list.items.is_empty(), "{:?}", m.list.items.iter().map(|i| i.title.clone()).collect::<Vec<_>>());
+    assert_eq!(m.screen, Screen::List);
+    assert!(m.selected.is_none() && m.selected_item().is_none());
+    assert!(m.appealed.is_empty());
+    assert_eq!(s2.paths(), vec!["Get /items/mine"]);
+}
+
+#[test]
+fn c61_a_closed_window_forgets_the_first_account_too() {
+    let (mut m, s, _) = opened(vec![item(ID, "removed", json!({"title": "Ada's held bank"}))]);
+    m.frame(now(), &as_account(&s, "ada@school.org"));
+    m.appealed.insert(ID.into(), "answered".into());
+    m.close();
+    let s2 = Script::new();
+    m.note_account(&as_account(&s2, "bob@school.org"));
+    assert!(!m.open, "still closed");
+    assert!(m.list.items.is_empty() && m.selected.is_none() && m.appealed.is_empty());
+    assert!(s2.seen().is_empty());
+    // Opened by B at the data page: it stays there (the account was noted while closed).
+    s2.say(200, mine(vec![], None));
+    m.open_account_page();
+    m.frame(now(), &as_account(&s2, "bob@school.org"));
+    m.frame(now(), &as_account(&s2, "bob@school.org"));
+    assert_eq!(m.screen, Screen::Account);
+}
+
+#[test]
+fn c61_the_same_account_signed_in_again_keeps_its_place_and_reads_again() {
+    let (mut m, s, _) = opened(vec![item(ID, "live", json!({})), item(ID2, "live", json!({}))]);
+    let a = as_account(&s, "ada@school.org");
+    m.frame(now(), &a);
+    assert_eq!(m.screen, Screen::Detail);
+    m.frame(now(), &signed_out());
+    assert_eq!(m.screen, Screen::Gate);
+    assert!(m.list.items.is_empty(), "nothing read stays while signed out");
+    s.say(200, mine(vec![item(ID, "live", json!({})), item(ID2, "live", json!({}))], None));
+    for _ in 0..3 {
+        m.frame(now(), &a);
+    }
+    assert_eq!(m.screen, Screen::Detail, "back where the person was");
+    assert_eq!(m.selected.as_deref(), Some(ID));
+    assert_eq!(s.paths().iter().filter(|p| p.as_str() == "Get /items/mine").count(), 2, "read again for the same account");
 }

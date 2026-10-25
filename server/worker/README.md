@@ -155,9 +155,90 @@ review first): the public re-share route with origin credit, the DMCA takedown m
 privacy, terms or moderation wording beyond the fixed invitation mail. Migrations `0111`-`0115` (new, nothing applied
 anywhere yet, `0111`, `0113` and `0114` edited in place in rounds 46 and 48; the next is `0116`). Tests:
 `test/pool/round42.test.ts` (7), `round43.test.ts` (8), `round44.test.ts` (9), `round45.test.ts` (4), `round46.test.ts`
-(12), `round47.test.ts` (10), `round48.test.ts` (10); every file failed on the code before its round (45-3 is a guard
-that already passes after round 44: it fails on round 41's code). Suite 662. Rounds 46-48 changed parts of rounds
-42-47: where a line below says otherwise, the later round is what the code does.
+(12), `round47.test.ts` (10), `round48.test.ts` (10), `round49.test.ts` (3), `round50.test.ts` (4), `round51.test.ts`
+(4); every file failed on the code before its round (45-3 is a guard that already passes after round 44: it fails on
+round 41's code; 51-4 pins a rule round 50's code already keeps). Suite 676 (with `d1-like-limit.test.ts`). Rounds
+46-51 changed parts of rounds 42-50: where a line below says otherwise, the later round is what the code does.
+
+**Round 51 (phase C final critic 61, `docs/critic-reports/2026-10-25-circles-phaseC-final-critic61.md`).** No
+migration. Tests: `test/pool/round51.test.ts` (4; 51-1 and 51-2 failed on round 50's code every run; 51-3 failed
+when both PATCHes scanned before either batch ran, as they did when it ran on its own, and can pass on round 50's code
+when they run one after the other; 51-4 pins the decided rule below and passes on round 50's code).
+
+* **61 I1, decided by the owner: allowed, for the owner and the author-editor only.** `hide_off_releases` and
+  hide-off's `restored` stay as round 50 made them, and so they tell the circle's owner and the bank's author while an
+  editor which kind of match withheld a version an answer-key change withheld (`true`, and a version in `restored`,
+  mean a copyright match and nothing else). That is an accepted exception to the round 44 rule for those two people
+  only. Nobody else is told or can tell the two apart: another editor (the one who sent the version too), a
+  viewer, an author demoted to viewer and a removed member get no field and the same answer for both kinds (a held
+  bank is `404 not_found` to them). 51-4. The round 49 and round 44 bullets below say so.
+* **61 I2, the owner's read no longer takes the heavy slot unbounded.** The full-form check behind `hide_off_releases`
+  (round 50) runs only when the isolate's heavy slot is free at once (`tryHeavy`, `withStoredFull(..., {now: true})`):
+  a read never waits for the slot and never takes a place in its queue, so it answers at once and can not fill the
+  queue and turn another teacher's publish away with `503 busy`. A busy slot says false (nothing is promised; the app
+  still keeps the switch on a held head). Each check that runs is one of the reader's `circle_hide_checks` today (new
+  limit, 60; one that could not run is given back); past it the field says false without a check. Reads that check
+  nothing (not a candidate, a bank that does not hide its keys, any other member) are not charged. Hide-off's own
+  check is unchanged (it waits for the slot as before, on the hide budgets). 51-1, 51-2.
+* **61 M1, part: of two hide-on PATCHes at once, only one says it withheld the head.** `withheld` (and `held`, and
+  the held-publish charge) now also need the batch's own withhold UPDATE to have changed the row; the PATCH whose batch
+  ran second answers `withheld: false, held: false`. Not changed (noted): its batch may still add a `blocklist` flag
+  with no positions (counted toward its sender's `circle_send_flags`) and record its decisions on the withheld head
+  (its viewers' form was scanned clean, so no key is served from them). 51-3.
+* The app (client, same round): critic 61 I3, the account-switch rule of critic 60 I1 now holds on the whole Shared
+  page and in the publish window, not only in Circles: "My shared items" (the list, the item open, the data download,
+  the counter-notice and appeal drafts) drops everything on a sign-out and keeps the place for the same account;
+  another account starts at the list. The browser, the publish window (its check, done screen, pictures sent and
+  circles) and the invite step drop what the last account was told when another signs in. Critic 61 I4: a send
+  already on its way when the account signs out (or the page is left) still moves this computer's link on when it
+  answers, and the same account signed in again retries a lost send or restore with the same commit id. Critic 61 M3:
+  after a turn-off that left the bank held, the headline is "Turning hiding off did not release the newest version
+  ...", not "Viewers see the answer keys again".
+
+**Round 50 (phase C final critic 60, `docs/critic-reports/2026-10-25-circles-phaseC-final-critic60.md`).** No
+migration. Tests: `test/pool/round50.test.ts` (4, each failed on round 49's code); 49-3's last line now expects false
+(it asserted the false promise of 60 B2: its version's full text is the taken-down text, and hide-off releases nothing).
+
+* **60 B2, only what turning hiding off can release counts.** `hideOffCandidates` (the versions hide-off checks, and so
+  `hide_off_releases`) now takes a version only when its open send flags are all copyright matches an answer-key PATCH
+  raised (`blocklist`, `via: "hide_key"`), and never the head while the bank has a student-data hold. A student-data
+  match never counts, even one an answer-key PATCH raised: turning hiding off does not change what the full form holds.
+  The field is also true only when the version's full form is clean now, checked as hide-off checks it (the version's
+  own sender's exemptions); a check that can not run (busy) says false. Hide-off's batch re-checks the same rule and
+  lifts only the `blocklist` hold, never a student-data one. So "the field says true, hiding goes off, nothing is
+  released, hiding goes on again, the field says true again" no longer happens. 50-1 (critic 60's c60-1), 50-2, 50-3.
+* **60 B1, the hide-on answer says what that PATCH did.** `PATCH {hide_key: true}` answers `withheld: true` (and
+  `held: true`) only when this PATCH withheld the head (a head members could read, scanned by it); a head withheld
+  before it (a send's match, an earlier PATCH) answers `held: false, withheld: false`. Whether turning hiding off
+  would release it is the read's `hide_off_releases`. 50-4.
+* The app (client, same round): its hide-on result no longer says "Turning hiding off makes it readable again" (the
+  bank page says it only when the pool's field is true); after a turn-off whose bank read still finds the newest
+  version held back, it says so ("Turning hiding off did not release the newest version. It is still held back, and
+  only an administrator can release it.") and keeps the switch to turn hiding on again. Critic 60 I1: the Circles
+  pages drop everything read for an account when it signs out (where the person was is kept and read again for the
+  same account) or when another account signs in (which starts at the list).
+
+**Round 49 (phase C client critic 59, `docs/critic-reports/2026-10-25-circles-phaseC-client-critic59.md`).** No
+migration. Tests: `test/pool/round49.test.ts` (3, each failed on round 48's code at the new field).
+
+* **59 B1, the app can tell whether turning hiding off releases a withheld version.** A read of a withheld version
+  (`GET .../banks/:bid` and `GET .../versions/:n`) by the circle's owner or the bank's author while an editor (who may
+  change the answer-key setting) answers `404 version_withheld {hide_off_releases, message}`. `hide_off_releases` is
+  true only when the bank hides its keys and the version is one hide-off checks (`hideOffCandidates`: at least one open
+  send flag on it says `via: "hide_key"`, every open send flag on it does, kept in full, within `HIDE_OLDER_MAX + 1`
+  and `HIDE_OLDER_BYTES`, newest first). A send's withhold (its flags have no `via`), a version withheld past the day's
+  flags (no flag), and any bank that does not hide its keys say false. Nobody else is told (another editor, a viewer,
+  an author demoted to viewer: the field is absent). The full form is not re-scanned on the read: hide-off still checks
+  it and `restored` says what it released. It names no reason in words. Round 50 then narrowed the field to copyright
+  matches an answer-key change raised (60 B2), so since then it (and `restored`) does tell the owner and the bank's
+  author while an editor which kind withheld such a version; round 51 (critic 61 I1, the owner's decision) accepts
+  that as the one exception to the round 44 rule, for those two only: every other member still gets no field and the
+  same answer for both kinds. 49-1, 49-3, 51-4.
+* **Hiding can be turned on again on a withheld head.** The critic's scenario (a send to a hiding bank withheld by a
+  copyright match, hiding turned off: `restored` absent) leaves the head withheld with `hide_off_releases: false`; a
+  PATCH `{hide_key: true}` then succeeds (no strip of a head nobody reads; the head keeps the decisions its send
+  recorded), and once an administrator releases the head a viewer is served its viewers' form, never the keys. 49-2.
+  The app keeps the switch on a withheld head both ways and offers "Turn hiding off" only when the field is true.
 
 **Round 48 (phase C after critics 55a and 55b, `docs/critic-reports/2026-10-25-circles-phaseC-{product-critic55a,security-critic55b}.md`).**
 Migration `0115_pool_round48.sql` (`circle_invites.email_key` and its partial index); `0114` edited in place (not applied
@@ -446,7 +527,9 @@ rebuilds `circle_holds` to add the reason `copyright` (its CHECK list; rows copi
   version. The send answers `held: true, withheld: true`, exactly as for student data.
 * **No oracle beyond the student-data one.** Every member-visible response is identical for a copyright match and a
   student-data match (the send's answer, the 404, the history line, the circle page, `heads`, the purge refusal;
-  44-2 compares them). The two member-facing messages that named student data now name no reason:
+  44-2 compares them). Round 51 (the owner's decision on critic 61 I1): one exception, for the circle's owner and the
+  bank's author while an editor only: `hide_off_releases` and hide-off's `restored` tell them whether an answer-key
+  change's withhold was a copyright match (see "Round 49" and "Round 51"); nobody else can tell the two apart (51-4). The two member-facing messages that named student data now name no reason:
   `version_withheld` "This version is withheld until an administrator has reviewed it. Only an administrator can
   release it." and `pending_review` "An administrator is reviewing a version of this bank; it can be purged once that
   review is done." (wording for the owner to approve). The public path tells a publisher only "held for review" after
@@ -698,8 +781,8 @@ query).
   student data, and the next clean version lifted that hold, after which `GET .../versions/:n` served the matching
   version to every member. Now the commit that matches (exactly or as a near-rewording) also marks THAT version
   `withheld_at`, and no later version clears it. A withheld version is served to no member, its author included,
-  whichever version is the head: `GET .../versions/:n` and the head read answer `404 version_withheld {message}`; a
-  rollback to it is `404 version_withheld`; a merge from it has `base_kept: false`; the bank's image route serves no
+  whichever version is the head: `GET .../versions/:n` and the head read answer `404 version_withheld {message}`
+  (round 49: and `hide_off_releases`); a rollback to it is `404 version_withheld`; a merge from it has `base_kept: false`; the bank's image route serves no
   image only it uses; its history (and merge `between`) line is `withheld: true, kept: false, message: ""`. The bank
   hold works as before (hidden while the head matches; a clean version or a rollback lifts it). A withheld version
   is pruned like any other once 20 newer ones exist (D16; the trim below too). Only an administrator releases it:
@@ -1078,7 +1161,7 @@ rows, cap crossings use `cap`, circle independence statements `independent_claim
   | `POST /circles/:cid/banks` | owner, editor | publish format (`application/vnd.vershion.publish`, meta below) -> `201 {circle_id, bank_id, version: 1, version_id, qids, added, changed, removed}` |
   | `PUT /circles/:cid/banks/:bid` | owner, editor (round 37; phase A: the bank's author) | the next version: meta `base_version`, `merge_token?`, `confirm_large_change?` -> `200 {..., held, merged_from?}`; `409 conflict {head_version, head_at, head_by}` (nothing stored); `428 confirm_large_required {removed, total}`; `422 license_author_only {license}`; `422 merge_token_invalid` |
   | `GET /circles/:cid/banks/:bid/versions?before=` | member who may read the bank | the history, 50 a page (round 37) |
-  | `GET /circles/:cid/banks/:bid/versions/:n` | member who may read the bank | a kept version, streamed like the head; `404 version_not_retained {oldest_kept}` (round 37) |
+  | `GET /circles/:cid/banks/:bid/versions/:n` | member who may read the bank | a kept version, streamed like the head; `404 version_not_retained {oldest_kept}` (round 37); a withheld one (or head) `404 version_withheld {message}`, with `hide_off_releases` for the owner and the bank's author while an editor (round 49) |
   | `POST /circles/:cid/banks/:bid/merge` | owner, editor | `{base_version}` -> head, `base_kept`, versions between, `merge_token` (30 min) (round 37) |
   | `POST /circles/:cid/banks/:bid/rollback` | owner; the bank's author while an editor (D17) | `{to_version, base_version, commit_id, message?, confirm_large_change?}` -> `200 {..., rollback_of, held, withheld}`; 20 a day (round 37); `404 version_withheld` (round 38) |
   | `POST /circles/:cid/banks/:bid/trim` | owner; the bank's author while an editor | `{keep: 1-19}` -> `{ok, pruned, oldest_kept, pinned_versions}` (round 38; round 39: a student-data hold does not stop it, a withheld version with an open flag is kept) |
@@ -2568,3 +2651,14 @@ npm run typecheck
 ```
 
 The auth flows themselves are tested in `../auth` (`npm test` there).
+
+**D1's LIKE/GLOB pattern limit (critic 58 B1).** D1 refuses a LIKE or GLOB pattern longer than 50 bytes
+("LIKE or GLOB pattern too complex"), each time the operator is evaluated on a row, whether the pattern is a literal,
+a bound parameter or built with `||`. node:sqlite allows 50000, so the account-deletion batch's
+`channel LIKE 'circle_email_domain:%:' || ?1` (58 bytes with a 36-character id) passed every test and failed on D1
+for every account (and in the cron's `erasure_finish` each day). That statement now compares
+`substr(channel, 1, 20)` and the id after the hmac exactly, with no LIKE. The harness's `d1()` overrides `like()` and
+`glob()` so a pattern over 50 bytes inside a D1 statement throws D1's error (the test's own `w.q` queries are not
+limited), and `test/pool/d1-like-limit.test.ts` scans `src/` and `migrations/`: every LIKE/GLOB pattern must be one
+SQL string literal of at most 50 bytes. Match a prefix of a value you bind with `substr(col, 1, n) = ?` or an
+equality or range comparison, not `LIKE ? || '%'`.

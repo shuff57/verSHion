@@ -2260,3 +2260,66 @@ fn a_newer_version_with_nothing_different_is_recognised_and_not_offered_again() 
     assert!(saved[0].newer.is_none(), "so the update badge goes away");
     assert!(!saved[0].has_update());
 }
+
+// ---- critic 61 I3: what one account read is never shown to the next --------------------------------------------
+
+fn as_account(s: &Arc<Script>, email: &str) -> AccountSnapshot {
+    AccountSnapshot { account: Some(format!("https://pool.test\n{email}")), ..ready(s) }
+}
+
+#[test]
+fn c61_another_account_gets_none_of_the_first_accounts_results_item_or_search() {
+    for sign_out_seen in [true, false] {
+        let s = Script::new();
+        // A's results hold A's own item (a held one only its author is shown), and A has one open.
+        let (mut m, _, _) = browsing(&s, vec![list_item(ID, "Ada's held bank")], None);
+        m.frame(now(), &as_account(&s, "ada@school.org"));
+        let mut banks = vec![];
+        viewing(&mut m, &s, stripped_item(&["a"]), &mut banks);
+        m.form.q = "ada's search".into();
+        if sign_out_seen {
+            m.frame(now(), &AccountSnapshot::of_gate(Gate::SignedOut));
+        } else {
+            m.frame(now(), &AccountSnapshot::of_gate(Gate::Checking));
+        }
+        let s2 = Script::new();
+        s2.say(200, page(vec![list_item(ID2, "Bob's search result")], None));
+        let b = as_account(&s2, "bob@school.org");
+        for _ in 0..3 {
+            m.frame(now(), &b);
+        }
+        assert!(m.item.is_none(), "A's item is gone");
+        assert_eq!(m.screen, Screen::Browse);
+        assert!(m.form.q.is_empty(), "A's search words are gone");
+        assert_eq!(m.results.items.iter().map(|i| i.title.clone()).collect::<Vec<_>>(), vec!["Bob's search result".to_string()]);
+        assert_eq!(s2.seen().len(), 1, "B's own search, with B's session");
+    }
+}
+
+#[test]
+fn c61_a_closed_browser_forgets_the_first_account_too() {
+    let s = Script::new();
+    let (mut m, _, _) = browsing(&s, vec![list_item(ID, "Ada's held bank")], None);
+    m.frame(now(), &as_account(&s, "ada@school.org"));
+    m.close();
+    let s2 = Script::new();
+    m.note_account(&as_account(&s2, "bob@school.org"));
+    assert!(!m.open);
+    assert!(m.results.items.is_empty() && !m.results.loaded);
+    assert!(s2.seen().is_empty());
+}
+
+#[test]
+fn c61_the_same_account_signed_in_again_keeps_its_item() {
+    let s = Script::new();
+    let (mut m, _, _) = browsing(&s, vec![list_item(ID, "Cells")], None);
+    let a = as_account(&s, "ada@school.org");
+    m.frame(now(), &a);
+    let mut banks = vec![];
+    viewing(&mut m, &s, stripped_item(&["a"]), &mut banks);
+    m.frame(now(), &AccountSnapshot::of_gate(Gate::SignedOut));
+    assert_eq!(m.screen, Screen::Gate);
+    m.frame(now(), &a);
+    assert_eq!(m.screen, Screen::Item);
+    assert!(m.loaded().is_some());
+}

@@ -38,6 +38,8 @@ pub mod browse_text;
 pub mod browse_ui;
 pub mod circle_edit;
 pub mod circle_edit_ui;
+pub mod circle_hide;
+pub mod circle_hide_ui;
 pub mod circle_links;
 pub mod circle_send;
 pub mod circle_versions_api;
@@ -79,6 +81,8 @@ mod shared_tests;
 mod circles_tests;
 #[cfg(test)]
 mod circle_edit_tests;
+#[cfg(test)]
+mod circles_phasec_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

@@ -442,7 +442,8 @@ fn held_and_withheld_results_are_said_in_plain_words() {
     let SendStage::Done(s) = r.send_stage() else { panic!() };
     assert!(s.held && s.withheld);
     let all = sent_lines(s, true).join(" ");
-    assert!(all.contains("hidden while it is reviewed") && all.contains("student information"));
+    // (phase C, round 44: the pool does not say why a version is held back; the words stay generic)
+    assert!(all.contains("held back") && all.contains("administrator") && !all.contains("student"), "{all}");
     assert!(!all.contains("withheld:") && !all.contains("held:"));
 }
 
@@ -1614,8 +1615,8 @@ fn hidden_advice_is_for_whoever_can_fix_it() {
     let s = SentInfo { version: 2, added: 0, changed: 1, removed: 0, replayed: false, held: true, withheld: true, merged_from: None };
     let author = sent_lines(&s, true).join(" ");
     let editor = sent_lines(&s, false).join(" ");
-    assert!(author.contains("Take the student information out"));
-    assert!(!editor.contains("Take the student information out") && editor.contains("author or the circle's owner"), "{editor}");
+    assert!(author.contains("Change the questions") && !author.contains("student"), "{author}");
+    assert!(!editor.contains("Change the questions") && editor.contains("author or the circle's owner") && !editor.contains("student"), "{editor}");
 }
 
 #[test]
@@ -2067,4 +2068,382 @@ fn r4_the_same_circle_bank_is_one_link_when_the_file_is_read_again() {
     assert_eq!(m.links().len(), 1, "one link per circle bank");
     assert_eq!(m.links()[0].local_bank_id, LOCAL, "the one added meanwhile wins");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ---- phase C: sends to a bank that hides its keys, keyless copies, evidence kept --------------------------------
+
+#[test]
+fn c_a_copy_without_keys_is_never_sent_and_says_what_to_do() {
+    let mut r = Rig::new(&[(QA, "One"), (QB, "Two")]);
+    r.banks[0].questions[1].explanation = Some(crate::model::KEYLESS_SENTINEL.into());
+    r.banks[0].modified += 1;
+    r.open_send(editor());
+    r.m.send();
+    r.turn();
+    assert!(r.puts().is_empty(), "nothing goes to the circle");
+    let SendStage::Keyless { positions, kinds } = r.send_stage() else { panic!("{:?}", r.send_stage()) };
+    assert_eq!((positions.clone(), kinds.clone()), (vec![1], vec!["Mc".to_string()]));
+    let t = keyless_text(positions, kinds);
+    assert!(t.contains("question 2") && t.contains("mark the correct answer") && t.contains("editor"), "{t}");
+    r.m.back_to_note();
+    assert!(matches!(r.send_stage(), SendStage::Editing));
+}
+
+#[test]
+fn c_the_pools_keyless_refusal_is_said_with_its_questions() {
+    let mut r = Rig::new(&[(QA, "One"), (QB, "Two")]);
+    r.edit_stem(0, "One, reworded");
+    r.open_send(editor());
+    r.s.on("Put", &bank_path(), 422, json!({"error": "keyless_question", "positions": [0, 1], "kinds": ["Short", "Tf"], "message": "RAWSERVER"}));
+    r.m.send();
+    r.turn();
+    let SendStage::Keyless { positions, kinds } = r.send_stage() else { panic!("{:?}", r.send_stage()) };
+    let t = keyless_text(positions, kinds);
+    assert!(t.contains("questions 1 and 2") && t.contains("sample answer") && !t.contains("RAWSERVER"), "{t}");
+}
+
+#[test]
+fn c_a_setting_changed_meanwhile_is_sent_again_with_nothing_stored() {
+    let mut r = Rig::new(&[(QA, "One")]);
+    r.edit_stem(0, "One, reworded");
+    r.open_send(editor());
+    r.s.on("Put", &bank_path(), 409, json!({"error": "hide_key_changed", "hide_key": true, "head_version": 1, "message": "RAWSERVER"}));
+    r.m.send();
+    r.turn();
+    let SendStage::Refused { message, merge_again } = r.send_stage() else { panic!("{:?}", r.send_stage()) };
+    assert!(!merge_again, "not a merge: the head did not move");
+    assert!(message.contains("nothing was stored") && message.contains("Send it again") && !message.contains("RAWSERVER"), "{message}");
+    assert_eq!(r.link().base_version, 1, "the link did not move");
+    r.m.back_to_note();
+    r.s.on("Put", &bank_path(), 201, sent_ok(2, &[QA]));
+    r.m.send();
+    r.turn();
+    assert_eq!(r.puts().len(), 2);
+    assert!(matches!(r.send_stage(), SendStage::Done(_)));
+}
+
+#[test]
+fn c_a_send_to_a_hiding_bank_asks_for_decisions_and_carries_them() {
+    let mut r = Rig::new(&[(QA, "One"), (QB, "Two")]);
+    r.edit_stem(0, "One, reworded");
+    r.open_send(editor());
+    r.s.on("Put", &bank_path(), 422, json!({"error": "labels_need_decision", "errors": [{"code": "labels_need_decision", "path": "bank.questions[1]"}], "label_findings": [{"question": 1, "strip_allowed": true, "choices": [{"before": "A) x", "after": "x"}]}]}));
+    r.m.send();
+    r.turn();
+    let first_id = body_parts(&r.puts()[0]).0["commit_id"].clone();
+    assert!(body_parts(&r.puts()[0]).0.get("labels").is_none());
+    let SendStage::Decide(d) = r.send_stage() else { panic!("{:?}", r.send_stage()) };
+    assert!(!d.ready());
+    r.m.send_with_decisions();
+    r.turn();
+    assert_eq!(r.puts().len(), 1, "nothing goes while a decision is open");
+    r.m.send_decide_label(Pos::question(1), LabelChoice::Strip);
+    r.s.on("Put", &bank_path(), 201, json!({"circle_id": CID, "bank_id": BID, "version": 2, "version_id": hex(2), "qids": [QA, QB], "added": 0, "changed": 1, "removed": 0, "keys_hidden": true}));
+    r.m.send_with_decisions();
+    r.m.send_with_decisions();
+    r.turn();
+    let puts = r.puts();
+    assert_eq!(puts.len(), 2, "one more send, not two");
+    let (meta, _) = body_parts(&puts[1]);
+    assert_eq!(meta["labels"], json!([{"question": 1, "choice": "strip"}]));
+    assert_ne!(meta["commit_id"], first_id, "different content, a new send id");
+    assert!(matches!(r.send_stage(), SendStage::Done(_)));
+}
+
+#[test]
+fn c_a_viewer_is_not_offered_again_a_version_without_a_viewers_copy() {
+    // (critic 58 I3: in a bank that hides its keys, a version from before hiding may have no viewers' copy and a
+    // "Look at it" on it was a dead end; the history line does not say which, so each refusal is kept. Critic 59 I1:
+    // per version only: which versions have a viewers' copy is not ordered, an older one may well have one)
+    let mut r = Rig::new(&[(QA, "One")]);
+    r.s.on("Get", &format!("{}/versions", bank_path()), 200, page(3, &[3, 2, 1], None));
+    r.m.open_history(CID, BID, "Cells", viewer());
+    r.turn();
+    let gets = |r: &Rig, n: u64| r.s.seen().iter().filter(|x| x.method == Method::Get && x.path == format!("{}/versions/{n}", bank_path())).count();
+    r.s.on("Get", &format!("{}/versions/2", bank_path()), 409, json!({"error": "keys_hidden_unavailable", "message": "RAWSERVER"}));
+    r.m.view_version(2);
+    r.turn();
+    assert_eq!(gets(&r, 2), 1);
+    r.m.back();
+    let h = r.history();
+    assert!(!h.can_look(&h.lines[1]), "version 2 has no viewers' copy");
+    assert!(h.can_look(&h.lines[0]) && h.can_look(&h.lines[2]), "the newest and the older one still open");
+    let ctx = egui::Context::default();
+    crate::theme::setup(&ctx);
+    let t = draw_all(&mut r, &ctx);
+    let closed = "This version has no copy without answer keys, so you can not open it.";
+    assert!(t.contains(closed), "{t}");
+    for card in t.split("\nVersion ").skip(1) {
+        assert_eq!(card.contains(closed), card.starts_with("2\n"), "on version 2 only: {card}");
+    }
+    assert!(!t.contains("viewers can not open it") && !t.contains("RAWSERVER"), "{t}");
+    r.m.view_version(2);
+    r.turn();
+    assert!(matches!(r.m.view, EditView::History(_)));
+    assert_eq!(gets(&r, 2), 1, "no second dead end");
+    // the older version is still offered; refused too, it is closed on its own, and the newest stays open
+    r.s.on("Get", &format!("{}/versions/1", bank_path()), 409, json!({"error": "keys_hidden_unavailable"}));
+    r.m.view_version(1);
+    assert!(matches!(r.m.view, EditView::Version(_)), "version 1 is still offered");
+    r.turn();
+    r.m.back();
+    let h = r.history();
+    assert!(!h.can_look(&h.lines[1]) && !h.can_look(&h.lines[2]) && h.can_look(&h.lines[0]));
+    assert_eq!(gets(&r, 1), 1);
+    r.s.on("Get", &format!("{}/versions/3", bank_path()), 200, json!({"error": "x"}));
+    r.m.view_version(3);
+    assert!(matches!(r.m.view, EditView::Version(_)), "the newest is still offered");
+}
+
+#[test]
+fn c_send_decisions_go_only_with_the_content_they_were_made_for() {
+    // (critic 57 I1: a decision about question 2 went out after question 2 was rewritten into another question)
+    let setup = || {
+        let mut r = Rig::new(&[(QA, "One"), (QB, "Two")]);
+        r.edit_stem(0, "One, reworded");
+        r.open_send(editor());
+        r.s.on("Put", &bank_path(), 422, json!({"error": "labels_need_decision", "errors": [{"code": "labels_need_decision", "path": "labels[question=1]"}], "label_findings": [{"question": 1, "strip_allowed": true}]}));
+        r.m.send();
+        r.turn();
+        r.m.send_decide_label(Pos::question(1), LabelChoice::Keep);
+        r.s.on("Put", &bank_path(), 409, json!({"error": "hide_key_changed", "hide_key": true, "head_version": 1, "message": "x"}));
+        r.m.send_with_decisions();
+        r.turn();
+        assert_eq!(body_parts(r.puts().last().unwrap()).0["labels"], json!([{"question": 1, "choice": "keep"}]));
+        assert!(matches!(r.send_stage(), SendStage::Refused { .. }));
+        r
+    };
+    let ok = || json!({"circle_id": CID, "bank_id": BID, "version": 2, "version_id": hex(2), "qids": [QA, QB], "added": 0, "changed": 2, "removed": 0, "keys_hidden": true});
+    // the bank is changed, then sent again straight from the refusal: the decisions do not go
+    let mut r = setup();
+    r.edit_stem(1, "A different question now");
+    r.s.on("Put", &bank_path(), 201, ok());
+    r.m.send();
+    r.turn();
+    let (meta, _) = body_parts(r.puts().last().unwrap());
+    assert!(meta.get("labels").is_none(), "a decision made for the old question 2 went with the new one: {meta}");
+    // the same content sent again keeps them (nothing was decided for anything else)
+    let mut r = setup();
+    r.s.on("Put", &bank_path(), 201, ok());
+    r.m.send();
+    r.turn();
+    assert_eq!(body_parts(r.puts().last().unwrap()).0["labels"], json!([{"question": 1, "choice": "keep"}]));
+    // back to the note (where the bank may be changed) drops them, whether or not it was changed
+    let mut r = setup();
+    r.m.back_to_note();
+    r.edit_stem(1, "A different question now");
+    r.s.on("Put", &bank_path(), 201, ok());
+    r.m.send();
+    r.turn();
+    assert!(body_parts(r.puts().last().unwrap()).0.get("labels").is_none());
+    let mut r = setup();
+    r.m.back_to_note();
+    r.s.on("Put", &bank_path(), 201, ok());
+    r.m.send();
+    r.turn();
+    assert!(body_parts(r.puts().last().unwrap()).0.get("labels").is_none());
+}
+
+#[test]
+fn c_a_restore_meeting_a_changed_setting_is_plain() {
+    let mut r = Rig::new(&[(QA, "One")]);
+    r.s.on("Get", &format!("{}/versions", bank_path()), 200, page(3, &[3, 2, 1], None));
+    r.m.open_history(CID, BID, "Cells", owner());
+    r.turn();
+    r.m.ask_restore(1);
+    r.s.on("Post", &format!("{}/rollback", bank_path()), 409, json!({"error": "hide_key_changed", "hide_key": true, "head_version": 3, "message": "RAWSERVER send"}));
+    r.m.confirm_restore(false);
+    r.turn();
+    let Some(RestoreStage::Failed(p)) = r.history().restore.as_ref().map(|x| &x.stage) else { panic!() };
+    assert!(p.message.contains("Restore again") && !p.message.contains("RAWSERVER"), "{}", p.message);
+}
+
+#[test]
+fn c_a_trim_says_what_it_could_not_delete() {
+    let mut r = Rig::new(&[(QA, "One")]);
+    r.s.on("Get", &format!("{}/versions", bank_path()), 200, page(9, &[9, 8], None));
+    r.m.open_history(CID, BID, "Cells", owner());
+    r.turn();
+    r.m.open_trim();
+    r.m.set_trim_keep(1);
+    r.m.ask_trim();
+    r.s.on("Post", &format!("{}/trim", bank_path()), 200, json!({"ok": true, "pruned": 3, "evidence_kept": 5, "oldest_kept": 9, "pinned_versions": [1, 2, 3, 4, 5]}));
+    r.s.on("Get", &format!("{}/versions", bank_path()), 200, page(9, &[9], None));
+    r.m.confirm_trim();
+    r.turn();
+    let Some(TrimStage::Done(t)) = r.history().trim.as_ref().map(|x| &x.stage) else { panic!() };
+    assert_eq!(t.evidence_kept, 5);
+    let lines = trim_lines(t).join(" ");
+    assert!(lines.contains("3 older versions") && lines.contains("5 versions") && lines.contains("only an administrator"), "{lines}");
+    // an answer without the count reads the pinned list; a null oldest is no oldest
+    let s = Script::new();
+    s.on("Post", &format!("{}/trim", bank_path()), 200, json!({"ok": true, "pruned": 0, "oldest_kept": null, "pinned_versions": [2]}));
+    let t = super::transport::block_on(async { Pool::new(s.as_ref()).trim_circle_bank(CID, BID, 1).await }).unwrap();
+    assert_eq!((t.evidence_kept, t.oldest_kept), (1, None));
+    assert!(trim_lines(&t)[0].starts_with("Nothing was deleted"));
+}
+
+#[test]
+fn c_a_review_copy_kept_as_fingerprints_is_said_so_and_never_as_trimmed() {
+    let line = |v: Value| serde_json::from_value::<super::circle_versions_api::VersionLine>(v).unwrap();
+    let l = line(json!({"version": 4, "by": "Mr Keesler", "at": NOW, "kept": false, "withheld": true, "review_copy": "hashes_only"}));
+    let f = version_flags(&l, &[]);
+    assert!(f.contains(&"Kept for review as fingerprints only") && !f.contains(&"No longer kept"), "{f:?}");
+    let l = line(json!({"version": 4, "kept": false, "withheld": true, "review_copy": "full"}));
+    assert_eq!(version_flags(&l, &[]), vec!["Hidden while it is reviewed"]);
+    // nulls are read as nothing, line by line
+    let l = line(json!({"version": 4, "kept": null, "withheld": null, "review_copy": null, "by": null, "message": null}));
+    assert!(!l.kept && !l.withheld && !l.fingerprints_only());
+    let s = Script::new();
+    s.on("Get", &format!("{}/versions", bank_path()), 200, json!({"bank_id": BID, "head_version": 4, "versions": [{"version": 4, "kept": null, "withheld": true, "review_copy": "hashes_only"}], "next_before": null}));
+    let p = super::transport::block_on(async { Pool::new(s.as_ref()).circle_versions(CID, BID, None).await }).expect("a null flag does not refuse the page");
+    assert!(p.versions[0].fingerprints_only());
+}
+
+#[test]
+fn c_the_new_send_states_draw_wide_and_narrow() {
+    let ctx = egui::Context::default();
+    crate::theme::setup(&ctx);
+    let mut r = Rig::new(&[(QA, "One"), (QB, "Two")]);
+    r.edit_stem(0, "One, reworded");
+    r.open_send(editor());
+    r.s.on("Put", &bank_path(), 422, json!({"error": "keyless_question", "positions": [0, 1], "kinds": ["Short", "Mc"]}));
+    r.m.send();
+    r.turn();
+    let t = draw_all(&mut r, &ctx);
+    assert!(t.contains("no answer keys") && t.contains("Back to the note"), "{t}");
+    r.m.back_to_note();
+    r.s.on("Put", &bank_path(), 422, json!({"error": "order_ack_required", "errors": [{"code": "order_ack_required", "path": "bank.questions[0]"}], "needs_order_ack": [{"question": 0}, {"question": 1}], "order_reasons": [{"question": 0, "reason": "few_unlocked"}]}));
+    r.m.send();
+    r.turn();
+    let t = draw_all(&mut r, &ctx);
+    assert!(t.contains("hides its answer keys") && t.contains("Send with these decisions") && t.contains("Confirm all"), "{t}");
+    // the history with a fingerprints-only line and a trim that kept evidence
+    let mut r = Rig::new(&[(QA, "One")]);
+    r.s.on("Get", &format!("{}/versions", bank_path()), 200, json!({"bank_id": BID, "head_version": 3, "oldest_kept": 2, "pinned_versions": [2], "versions": [
+        {"version": 3, "by": "Mr Keesler", "at": NOW, "kept": true, "withheld": false},
+        {"version": 2, "by": "Mr Keesler", "at": NOW - DAY, "kept": false, "withheld": true, "review_copy": "hashes_only"},
+        {"version": 1, "by": "Ms Frizzle", "at": NOW - 2 * DAY, "kept": false, "withheld": false}
+    ], "next_before": null}));
+    r.m.open_history(CID, BID, "Cells", owner());
+    r.turn();
+    let t = draw_all(&mut r, &ctx);
+    assert!(t.contains("fingerprints only"), "{t}");
+    r.m.open_trim();
+    r.m.ask_trim();
+    r.s.on("Post", &format!("{}/trim", bank_path()), 200, json!({"ok": true, "pruned": 0, "evidence_kept": 1, "pinned_versions": [2]}));
+    r.s.keep("Get", &format!("{}/versions", bank_path()), 200, page(3, &[3], None));
+    r.m.confirm_trim();
+    r.turn();
+    let t = draw_all(&mut r, &ctx);
+    assert!(t.contains("only an administrator can free that space"), "{t}");
+}
+
+#[test]
+fn c_a_viewers_look_at_a_version_says_the_keys_are_hidden() {
+    let mut r = Rig::new(&[(QA, "One")]);
+    r.s.on("Get", &format!("{}/versions", bank_path()), 200, page(2, &[2, 1], None));
+    r.m.open_history(CID, BID, "Cells", viewer());
+    r.turn();
+    let raw = String::from_utf8(served(1, &[(QA, "One")])).unwrap().replacen("\"held\"", "\"x\"", 1).replacen("\"version\":1,", "\"version\":1,\"hide_key\":true,\"keys_hidden\":true,", 1);
+    r.s.keep_raw("Get", &format!("{}/versions/1", bank_path()), raw.into_bytes());
+    r.m.view_version(1);
+    r.turn();
+    let EditView::Version(v) = &r.m.view else { panic!() };
+    let VersionLoad::Ready(b) = &v.load else { panic!("{:?}", v.load) };
+    assert!(b.keys_hidden && b.hide_key);
+    // a viewer refused a version without recorded decisions reads it in plain words
+    let mut r = Rig::new(&[(QA, "One")]);
+    r.s.on("Get", &format!("{}/versions", bank_path()), 200, page(2, &[2, 1], None));
+    r.m.open_history(CID, BID, "Cells", viewer());
+    r.turn();
+    r.s.on("Get", &format!("{}/versions/1", bank_path()), 409, json!({"error": "keys_hidden_unavailable", "message": "RAWSERVER"}));
+    r.m.view_version(1);
+    r.turn();
+    let EditView::Version(v) = &r.m.view else { panic!() };
+    let VersionLoad::Failed(p) = &v.load else { panic!("{:?}", v.load) };
+    assert!(p.message.contains("can not be shown without them") && !p.message.contains("RAWSERVER"), "{}", p.message);
+}
+
+// ---- critic 61 I4: a sign-out (or another account) while a send or a restore is on its way ----
+
+#[test]
+fn c61_a_send_that_went_through_before_a_sign_out_still_moves_the_link_on() {
+    for another in [false, true] {
+        let mut r = Rig::new(&[(QA, "One"), (QB, "Two")]);
+        r.edit_stem(0, "One, reworded");
+        r.open_send(editor());
+        r.turn();
+        r.s.on("Put", &bank_path(), 201, sent_ok(2, &[QA, QB]));
+        r.m.send();
+        r.frame();
+        let _ = r.m.sync(&mut r.banks); // the PUT goes out here (the pool commits version 2); its answer is not read yet
+        assert_eq!(r.puts().len(), 1, "the send reached the pool");
+        // The person signs out (or another account signs in) before the answer is read.
+        r.m.forget_account(another);
+        assert!(matches!(r.m.view, EditView::Closed), "the screens close");
+        r.turns(2);
+        assert_eq!(r.link().base_version, 2, "the send that went through moved this computer's link on (another: {another})");
+        assert_eq!(r.m.status(LOCAL).map(|s| s.changes.total()), Some(0), "nothing shows as unsent");
+        assert!(r.m.notice.is_none());
+        // Nothing is sent again.
+        r.open_send(editor());
+        r.turns(2);
+        assert_eq!(r.puts().len(), 1);
+    }
+}
+
+#[test]
+fn c61_the_same_account_back_retries_a_lost_send_with_its_commit_id_and_another_account_does_not() {
+    for another in [false, true] {
+        let mut r = Rig::new(&[(QA, "One")]);
+        r.edit_stem(0, "One, reworded");
+        r.open_send(editor());
+        r.turn();
+        r.s.on("Post", "/circles/heads", 200, heads_json("CC-BY-4.0", 1));
+        r.s.fail(ApiError::SignedOut);
+        r.m.send();
+        r.frame();
+        let _ = r.m.sync(&mut r.banks); // the PUT went out; its answer (the sign-in ended) is not read yet
+        r.m.forget_account(another);
+        r.turns(2);
+        assert_eq!(r.link().base_version, 1);
+        r.open_send(editor());
+        r.turn();
+        r.s.on("Put", &bank_path(), 201, sent_ok(2, &[QA]));
+        r.m.send();
+        r.turns(2);
+        let puts = r.puts();
+        assert_eq!(puts.len(), 2);
+        let same = body_parts(&puts[0]).0["commit_id"] == body_parts(&puts[1]).0["commit_id"];
+        assert_eq!(same, !another, "the same account retries the same commit (the pool replays it); another account sends its own");
+        assert_eq!(r.link().base_version, 2);
+    }
+}
+
+#[test]
+fn c61_the_same_account_back_retries_a_lost_restore_with_its_commit_id_and_another_account_does_not() {
+    for another in [false, true] {
+        let mut r = Rig::new(&[(QA, "One")]);
+        r.s.on("Get", &format!("{}/versions", bank_path()), 200, page(3, &[3, 2, 1], None));
+        r.m.open_history(CID, BID, "Cells", owner());
+        r.turn();
+        r.m.ask_restore(1);
+        r.s.fail(ApiError::SignedOut);
+        r.m.confirm_restore(false); // the POST went out; its answer is not read yet
+        r.m.forget_account(another);
+        r.turns(2);
+        r.s.on("Get", &format!("{}/versions", bank_path()), 200, page(3, &[3, 2, 1], None));
+        r.m.open_history(CID, BID, "Cells", owner());
+        r.turn();
+        r.m.ask_restore(1);
+        r.s.on("Post", &format!("{}/rollback", bank_path()), 200, json!({"circle_id": CID, "bank_id": BID, "version": 4, "version_id": hex(4), "qids": [QA], "added": 0, "changed": 1, "removed": 0, "rollback_of": 1}));
+        r.s.on("Get", &format!("{}/versions", bank_path()), 200, page(4, &[4, 3, 2, 1], None));
+        r.m.confirm_restore(false);
+        r.turn();
+        let posts: Vec<_> = r.s.seen().into_iter().filter(|x| x.path.ends_with("/rollback")).collect();
+        assert_eq!(posts.len(), 2);
+        let same = posts[0].json()["commit_id"] == posts[1].json()["commit_id"];
+        assert_eq!(same, !another, "another: {another}");
+    }
 }

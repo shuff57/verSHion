@@ -38,7 +38,7 @@ use super::browse::{Problem, now_ms};
 use super::mine_text as text;
 use super::model::{Notice, Runner};
 use super::pool::{Ack, CounterNotice, CounterNoticeAck, ItemState, MineItem, MineList, Pool, PoolError, RefusalKind, RetryPolicy, Storage, Visibility, is_item_id};
-use super::publish::{AccountSnapshot, Gate, LogIo, PublishedRecord, SharedSession};
+use super::publish::{AccountSnapshot, AccountTurn, AccountWatch, Gate, LogIo, PublishedRecord, SharedSession};
 
 const NOTE_MAX: usize = 500;
 /// The most parts of an export that are fetched (the Worker makes one per 4 MB of stored text).
@@ -505,6 +505,8 @@ pub struct MineModel {
     clock: Option<i64>,
     now: Option<Instant>,
     repaint: Option<Arc<dyn Fn() + Send + Sync>>,
+    /// Who the list, the download and the drafts belong to (critic 61 I3).
+    watch: AccountWatch,
 }
 
 impl Default for MineModel {
@@ -547,6 +549,7 @@ impl MineModel {
             clock: None,
             now: None,
             repaint: None,
+            watch: AccountWatch::default(),
         }
     }
 
@@ -681,9 +684,38 @@ impl MineModel {
             return;
         }
         self.now = Some(now);
+        self.note_account(snap);
         self.apply_snapshot(snap);
         self.drain();
         self.auto();
+    }
+
+    /// The account's state, every frame, the window open or not (critic 61 I3, as the Circles page does for critic
+    /// 60 I1): what was read or typed for one account is never shown to another. Signed out: the list, the item open,
+    /// the data download, the counter-notice and appeal drafts and the appeals' answers go, and the jobs reading or
+    /// acting for the account (their late answers go nowhere); where the person was is kept, and read again when the
+    /// same account signs in. Another account signing in starts at the list.
+    pub fn note_account(&mut self, snap: &AccountSnapshot) {
+        match self.watch.note(snap) {
+            AccountTurn::Same => {}
+            AccountTurn::SignedOut => {
+                let at = if self.screen == Screen::Gate { self.resume } else { self.screen };
+                let selected = self.selected.clone().filter(|_| at == Screen::Detail);
+                self.forget_reads(if at == Screen::Detail { Screen::List } else { at });
+                // (the list opens the item again once it has it: `auto`)
+                self.selected = selected;
+            }
+            AccountTurn::Another => self.forget_reads(Screen::List),
+        }
+    }
+
+    /// Everything read or typed for the account goes; `resume` is where to start again (the window stays as it was).
+    fn forget_reads(&mut self, resume: Screen) {
+        let open = self.open;
+        self.open_window(resume);
+        self.open = open;
+        self.appealed.clear();
+        self.invite_required = false;
     }
 
     fn apply_snapshot(&mut self, snap: &AccountSnapshot) {

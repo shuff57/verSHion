@@ -59,7 +59,10 @@ ordinary single-use code; no address is looked up or stored, only an HMAC for a 
 from VIEWERS (`PATCH .../banks/:bid {hide_key}`: viewers read every version as share-core's stripped form, checked by
 the key-hint gate with decisions recorded per version, refused rather than ever served whole; editors and the owner
 read the full text); circle sends and rollbacks are checked against the public pool's copyright re-upload blocks (a
-match is withheld and held exactly like a student-data match, so members cannot tell the two apart); and the activity
+match is withheld and held exactly like a student-data match, so members cannot tell the two apart; round 51, the
+owner's decision on critic 61 I1: the one exception is the circle's owner and the bank's author while an editor, whom
+`hide_off_releases` and hide-off's `restored` tell whether an answer-key change's withhold was a copyright match;
+nobody else can tell, see the worker README "Round 51"); and the activity
 list gains the new kinds and an id-based cursor. Round 46 (critics 53a/53b): a keyless copy is never accepted as a
 circle version; the per-address cap counts one mailbox once (Gmail dots, aliases, +tags, IDN) and the hourly mail budget
 has per-inviter and per-domain shares; the inviter is told whether a mail went; the mail names no circle and no person;

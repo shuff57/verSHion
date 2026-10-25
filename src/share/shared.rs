@@ -17,7 +17,8 @@
 
 use super::api::Status;
 use super::model::Page;
-use super::publish::Gate;
+use super::invite::InviteModel;
+use super::publish::{AccountSnapshot, AccountTurn, AccountWatch, Gate};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Tab {
@@ -154,15 +155,31 @@ pub struct SharedModel {
     pub invite_needed: bool,
     /// The "Share to pool…" chooser is open.
     pub choosing: bool,
+    /// Who `invite_needed` and the invite step's result belong to (critic 61 I3).
+    watch: AccountWatch,
 }
 
 impl Default for SharedModel {
     fn default() -> Self {
-        SharedModel { tab: Tab::Browse, invite_needed: false, choosing: false }
+        SharedModel { tab: Tab::Browse, invite_needed: false, choosing: false, watch: AccountWatch::default() }
     }
 }
 
 impl SharedModel {
+    /// The account's state, every frame of the Shared page (critic 61 I3): a code typed in the invite box and its
+    /// result go with a sign-out (`InviteModel::reset`); another account signing in is also not taken to need a code
+    /// because the last one did (its own pool calls say so if it does).
+    pub fn note_account(&mut self, snap: &AccountSnapshot, invite: &mut InviteModel) {
+        match self.watch.note(snap) {
+            AccountTurn::Same => {}
+            AccountTurn::SignedOut => invite.reset(),
+            AccountTurn::Another => {
+                invite.reset();
+                self.invite_needed = false;
+            }
+        }
+    }
+
     pub fn goto(&mut self, tab: Tab) {
         self.tab = tab;
         self.choosing = false;

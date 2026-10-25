@@ -79,6 +79,8 @@ impl BrowseUi {
     /// Draws the window when open; returns at once (no I/O at all) when closed. Returns true when
     /// `banks` changed (an import finished): the caller then saves them.
     pub fn show(&mut self, ctx: &egui::Context, account: &mut AccountUi, banks: &mut Vec<QuestionBank>) -> bool {
+        // (critic 61 I3: told of another account every frame, the window open or not)
+        self.model.note_account(&snapshot_of(&account.model));
         let mut opened_now = false;
         if let Some(Some(r)) = ctx.data_mut(|d| d.remove_temp::<Option<BrowseRequest>>(pending_id())) {
             let tab = if matches!(r, BrowseRequest::Imported | BrowseRequest::Update(_)) { super::shared::Tab::Imported } else { super::shared::Tab::Browse };

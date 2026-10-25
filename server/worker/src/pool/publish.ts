@@ -943,6 +943,22 @@ export async function acquireHeavy(waitMs = HEAVY_QUEUE_WAIT_MS, beat: () => Pro
   };
 }
 
+/**
+ * Round 51 (critic 61 I2): the isolate's heavy-work slot if it is free NOW, else null. It never waits and never takes
+ * a place in the queue (so it can never turn a publish away): for work a read may skip when the server is busy.
+ */
+export function tryHeavy(slots: HeavySlots = ISOLATE_HEAVY): (() => void) | null {
+  if (slots.active >= HEAVY_CONCURRENCY || slots.queue.length > 0) return null;
+  slots.active++;
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    slots.active--;
+    slots.queue.shift()?.();
+  };
+}
+
 export const ACCOUNT_LOCK_MS = 60_000;
 
 export async function acquireAccountLock(c: Ctx, me: string): Promise<string | null> {

@@ -29,9 +29,41 @@ export function freshDb(): DatabaseSync {
 }
 
 const D1_MAX_PARAMS = 100;
+/** D1's SQLITE_LIMIT_LIKE_PATTERN_LENGTH (developers.cloudflare.com/d1/platform/limits); node:sqlite's default is 50000. */
+export const D1_MAX_LIKE_PATTERN_BYTES = 50;
 
-/** D1's surface over node:sqlite: ?NNN parameters, first/all/run, RETURNING, atomic batch. */
+// D1 refuses a LIKE or GLOB whose pattern is longer than 50 bytes ("LIKE or GLOB pattern too complex"), whether the
+// pattern is a literal, a bound parameter or built by `||`, each time the operator is evaluated (critic 58 B1: the
+// account-deletion batch failed on D1 for every account and passed here). node:sqlite cannot lower the limit, so
+// like() and glob() are overridden on every database d1() wraps: inside a D1 statement a pattern over the limit throws
+// D1's error; otherwise the call is answered by SQLite's own operator on a side connection, unchanged.
+const likeOracle = new DatabaseSync(":memory:");
+const oracle = {
+  like2: likeOracle.prepare("SELECT ?2 LIKE ?1 AS r"),
+  like3: likeOracle.prepare("SELECT ?2 LIKE ?1 ESCAPE ?3 AS r"),
+  glob2: likeOracle.prepare("SELECT ?2 GLOB ?1 AS r"),
+};
+const guarded = new WeakSet<DatabaseSync>();
+let inD1 = 0;
+const patternBytes = (p: unknown): number =>
+  p === null ? 0 : p instanceof Uint8Array ? p.byteLength : typeof p === "string" ? Buffer.byteLength(p, "utf8") : String(p).length;
+const checkPattern = (op: "LIKE" | "GLOB", p: unknown) => {
+  if (inD1 > 0 && patternBytes(p) > D1_MAX_LIKE_PATTERN_BYTES)
+    throw new Error(`D1: LIKE or GLOB pattern too complex: SQLITE_ERROR (${op} pattern of ${patternBytes(p)} bytes, D1 allows ${D1_MAX_LIKE_PATTERN_BYTES})`);
+};
+const answer = (st: ReturnType<DatabaseSync["prepare"]>, args: unknown[]) => (st.get(...(args as never[])) as { r: number | null }).r;
+function guardLike(db: DatabaseSync) {
+  if (guarded.has(db)) return;
+  guarded.add(db);
+  const o = { deterministic: true, useBigIntArguments: true };
+  db.function("like", o, (p: unknown, v: unknown) => (checkPattern("LIKE", p), answer(oracle.like2, [p, v])));
+  db.function("like", o, (p: unknown, v: unknown, e: unknown) => (checkPattern("LIKE", p), answer(oracle.like3, [p, v, e])));
+  db.function("glob", o, (p: unknown, v: unknown) => (checkPattern("GLOB", p), answer(oracle.glob2, [p, v])));
+}
+
+/** D1's surface over node:sqlite: ?NNN parameters, first/all/run, RETURNING, atomic batch, D1's LIKE/GLOB pattern limit. */
 export function d1(db: DatabaseSync, stats: { statements: number; log?: (sql: string, args: unknown[]) => void } = { statements: 0 }): D1Database {
+  guardLike(db);
   const exec = (sql: string, args: unknown[], mode: "first" | "all" | "run") => {
     if (args.length > D1_MAX_PARAMS) throw new Error(`D1: too many bound parameters (${args.length})`);
     for (const a of args) if (a === undefined) throw new Error(`D1: undefined bound in ${sql.slice(0, 80)}`);
@@ -39,16 +71,21 @@ export function d1(db: DatabaseSync, stats: { statements: number; log?: (sql: st
     const st = db.prepare(sql);
     const vals = args.map((a) => (typeof a === "boolean" ? (a ? 1 : 0) : a)) as never[];
     stats.log?.(sql, vals);
-    if (mode === "first") {
-      const r = st.get(...vals);
-      return r ? { ...r } : null;
+    inD1++;
+    try {
+      if (mode === "first") {
+        const r = st.get(...vals);
+        return r ? { ...r } : null;
+      }
+      if (mode === "all" || /\bRETURNING\b/i.test(sql) || /^\s*(SELECT|WITH)\b/i.test(sql)) {
+        const rows = st.all(...vals).map((x) => ({ ...x }));
+        return { results: rows, success: true, meta: { changes: /^\s*(SELECT|WITH)\b/i.test(sql) ? 0 : rows.length } };
+      }
+      const r = st.run(...vals);
+      return { results: [], success: true, meta: { changes: Number(r.changes) } };
+    } finally {
+      inD1--;
     }
-    if (mode === "all" || /\bRETURNING\b/i.test(sql) || /^\s*(SELECT|WITH)\b/i.test(sql)) {
-      const rows = st.all(...vals).map((x) => ({ ...x }));
-      return { results: rows, success: true, meta: { changes: /^\s*(SELECT|WITH)\b/i.test(sql) ? 0 : rows.length } };
-    }
-    const r = st.run(...vals);
-    return { results: [], success: true, meta: { changes: Number(r.changes) } };
   };
   const stmt = (sql: string, args: unknown[] = []): unknown => ({
     sql,

@@ -365,12 +365,18 @@ pub fn payload_question_count(payload: &[u8]) -> usize {
 /// A circle bank's questions in this app's shape (pictures left for the caller). The circle's id for
 /// a question is the `id` it was served with; it stays the same across versions.
 pub fn circle_theirs(payload: &[u8], at_ms: i64) -> Vec<Theirs> {
+    circle_theirs_as(payload, at_ms, false)
+}
+
+/// The same for a read in the viewers' form (`keys_hidden`, phase C): every question is marked as having
+/// no key, whether or not the question says so itself.
+pub fn circle_theirs_as(payload: &[u8], at_ms: i64, keys_hidden: bool) -> Vec<Theirs> {
     let ids: Vec<String> = serde_json::from_slice::<Value>(payload)
         .ok()
         .and_then(|v| v.pointer("/bank/questions").and_then(Value::as_array).map(|qs| qs.iter().map(|q| q.get("id").and_then(Value::as_str).unwrap_or("").to_string()).collect()))
         .unwrap_or_default();
-    // A circle bank is served whole: nothing in it is hidden.
-    let head = ItemHead { item: ItemView { form: "full".into(), ..ItemView::default() }, ..ItemHead::default() };
+    // A circle bank is served whole, unless it is the viewers' form of a bank that hides its keys.
+    let head = ItemHead { item: ItemView { form: if keys_hidden { "stripped" } else { "full" }.into(), ..ItemView::default() }, ..ItemHead::default() };
     let mut theirs = theirs_of(payload, &head, at_ms);
     for t in &mut theirs {
         if let Some(id) = ids.get(t.index).filter(|i| is_item_id(i)) {

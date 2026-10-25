@@ -210,6 +210,10 @@ pub fn generic_code_text(code: &str, limit: Option<u64>) -> String {
         "bad_hash" => "a picture or figure reference is damaged; remake it".into(),
         "bad_form" => "this question is in a form the pool does not take".into(),
         "ambiguous_kind" | "unknown_kind" => "this question is of a kind the pool does not take".into(),
+        "labels_need_decision" => "choose whether to strip or keep the letter labels".into(),
+        "labels_unused" | "labels_out_of_range" | "labels_duplicate" => "a decision about letter labels no longer fits the bank (it changed); decide again".into(),
+        "labels_strip_refused" => "these letters can not be stripped; keep them".into(),
+        "order_ack_required" => "confirm that this order of choices may be shown".into(),
         c => format!("the pool refused it ({})", api::plain(c)),
     }
 }

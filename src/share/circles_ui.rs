@@ -155,6 +155,31 @@ fn with_action(ui: &mut Ui, action: Option<(&str, bool)>, body: impl FnOnce(&mut
 
 /// The Circles tab body. `banks` are the person's own banks (not used yet; kept for "add a bank").
 pub(super) fn body_of(ui: &mut Ui, m: &mut CirclesModel) -> Outcome {
+    let out = body_inner(ui, m);
+    forget_cleared_fields(ui.ctx(), m);
+    out
+}
+
+/// The text fields that hold an address or an invitation code. Their egui edit state (with its undo
+/// history) is dropped once the field is empty, so Ctrl+Z can not bring a cleared value back (critic 57 I3,
+/// as `ui.rs` does for the password fields).
+const SECRET_FIELDS: [&str; 2] = ["circle_email_address", "circle_code_text"];
+
+/// Drops the edit state of an emptied (or closed) address or code field. Called every frame the Shared page
+/// is drawn, whichever tab shows.
+pub(super) fn forget_cleared_fields(ctx: &egui::Context, m: &CirclesModel) {
+    for id in SECRET_FIELDS {
+        let empty = match id {
+            "circle_email_address" => !matches!(&m.panel, Panel::Email(f) if !f.address.is_empty()),
+            _ => m.join.text.is_empty(),
+        };
+        if empty {
+            ctx.data_mut(|d| d.remove::<egui::text_edit::TextEditState>(egui::Id::new(id)));
+        }
+    }
+}
+
+fn body_inner(ui: &mut Ui, m: &mut CirclesModel) -> Outcome {
     let mut out = Outcome::None;
     if let Some(n) = m.notice.clone() {
         banner(ui, &n);
@@ -516,8 +541,10 @@ fn circle_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
             kit::card().inner_margin(Margin::same(8)).show(ui, |ui| {
                 ui.set_min_width(ui.available_width());
                 let now_ms = m.now_ms();
-                let can_restore = bank_can(role, closed, b, BankAction::Restore) && b.removed.as_ref().and_then(|r| r.undo_until).is_some_and(|u| u > now_ms);
-                let can_purge = bank_can(role, closed, b, BankAction::Purge);
+                // (round 48: after a partial "Delete for good now" nothing can be brought back or deleted again from here)
+                let claimed = m.purge_claimed.get(&b.id).copied();
+                let can_restore = claimed.is_none() && bank_can(role, closed, b, BankAction::Restore) && b.removed.as_ref().and_then(|r| r.undo_until).is_some_and(|u| u > now_ms);
+                let can_purge = claimed.is_none() && bank_can(role, closed, b, BankAction::Purge);
                 let action = match &b.removed {
                     Some(_) if can_restore => Some(("Bring it back", false)),
                     Some(_) => None,
@@ -528,7 +555,9 @@ fn circle_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
                         ui.add(egui::Label::new(theme::strong(text::HIDDEN_BANK_TITLE).size(13.5)).wrap());
                         line(ui, text::HIDDEN_BANK_LINE.to_string());
                         line(ui, format!("version {} - {}", b.head_version, text::questions_text(b.question_count)));
-                        if let Some(r) = &b.removed {
+                        if let Some(n) = claimed {
+                            line(ui, text::purge_pending_line(n));
+                        } else if let Some(r) = &b.removed {
                             line(ui, format!("Removed from the circle. {}", text::undo_line(r.undo_until, now)));
                         }
                         return;
@@ -544,10 +573,15 @@ fn circle_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
                     if let Some(bd) = badges.get(&b.id) {
                         ui.add(egui::Label::new(theme::accent(bd).size(12.5)).wrap());
                     }
+                    if b.hide_key && b.removed.is_none() {
+                        line(ui, if role.can_add_banks() { "Answer keys hidden from viewers." } else { "Answer keys hidden for viewers: you get it without them." });
+                    }
                     if b.is_held() {
                         ui.add(egui::Label::new(theme::accent(text::HELD_BANK).size(12.5)).wrap());
                     }
-                    if let Some(r) = &b.removed {
+                    if let Some(n) = claimed {
+                        line(ui, text::purge_pending_line(n));
+                    } else if let Some(r) = &b.removed {
                         line(ui, format!("Removed from the circle. {}", text::undo_line(r.undo_until, now)));
                     }
                 });
@@ -639,8 +673,13 @@ fn panels(ui: &mut Ui, m: &mut CirclesModel) {
         Remove,
         Transfer,
         Rename,
+        SendEmail,
+        AnotherEmail,
     }
     let mut d = Do::None;
+    let email_blocker = m.email_blocker();
+    let now_i = m.now_instant();
+    let mut account = false;
     let kind = std::mem::discriminant(&m.panel);
     let _ = kind;
     let names: (String, String) = match &m.panel {
@@ -679,6 +718,81 @@ fn panels(ui: &mut Ui, m: &mut CirclesModel) {
                     }
                     if busy {
                         ui.spinner();
+                    }
+                });
+            });
+        }
+        Panel::Email(f) => {
+            section(ui, "Invite a teacher by email", |ui| {
+                if let Some(sent) = &f.sent {
+                    let label = api::plain(&sent.address_label);
+                    let who = if label.is_empty() { "the address".to_string() } else { label };
+                    body(ui, &format!("Invitation sent to {who}, as {}.", role_phrase(sent.role())));
+                    if sent.resent {
+                        para(ui, text::EMAIL_RESENT);
+                    }
+                    if let Some(x) = sent.expires_at.filter(|x| *x > 0) {
+                        // (the date, as the mail gives it: "expires in 6 days" reads wrong for a 7-day code)
+                        line(ui, format!("The code in it works once, until {} (UTC).", api::date_text(x)));
+                    }
+                    line(ui, text::EMAIL_NEEDS_ACCOUNT);
+                    ui.add_space(6.0);
+                    ui.horizontal_wrapped(|ui| {
+                        if kit::primary_button(ui, "Invite someone else").clicked() {
+                            d = Do::AnotherEmail;
+                        }
+                        if kit::ghost_button(ui, "Done").clicked() {
+                            d = Do::Cancel;
+                        }
+                    });
+                    return;
+                }
+                para(ui, text::EMAIL_HELP);
+                ui.label(theme::strong("Their email address").size(12.5));
+                ui.add_enabled_ui(!f.working, |ui| {
+                    ui.add(egui::TextEdit::singleline(&mut f.address).id(egui::Id::new("circle_email_address")).hint_text("name@school.org").desired_width(f32::INFINITY));
+                });
+                ui.add_space(4.0);
+                ui.label(theme::strong("What can they do?").size(12.5));
+                ui.add_enabled_ui(!f.working, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.selectable_value(&mut f.role, Role::Editor, "Can add banks");
+                        ui.selectable_value(&mut f.role, Role::Viewer, "Can only look and copy");
+                    });
+                });
+                ui.add_space(4.0);
+                para(ui, text::EMAIL_NEEDS_ACCOUNT);
+                line(ui, text::EMAIL_PRIVACY);
+                line(ui, text::EMAIL_PACE);
+                ui.add_space(4.0);
+                // (the form's own button is the way to try again: no second "Try again" next to it; whether it waits
+                // is the model's `email_blocker`, which holds a per-domain wait to that domain only)
+                if let Some(p) = &f.problem {
+                    warn_box(ui, &p.message);
+                    if let Some(w) = p.retry_at.filter(|at| *at > now_i).map(|at| at - now_i) {
+                        let mins = w.as_secs().div_ceil(60);
+                        let when = if mins <= 1 { "in about a minute".to_string() } else { format!("in about {mins} minutes") };
+                        line(ui, if f.problem_domain.is_some() { format!("Addresses at that mail domain can be invited again {when}.") } else { format!("You can send it again {when}.") });
+                    }
+                    if p.account && kit::ghost_button(ui, "Open account...").clicked() {
+                        account = true;
+                    }
+                }
+                if let Some(b) = email_blocker.filter(|_| !f.address.trim().is_empty() && !f.working) {
+                    line(ui, b);
+                }
+                ui.horizontal_wrapped(|ui| {
+                    ui.add_enabled_ui(email_blocker.is_none() && !busy, |ui| {
+                        if kit::primary_button(ui, "Send the invitation").clicked() {
+                            d = Do::SendEmail;
+                        }
+                    });
+                    if ui.add_enabled(!f.working, |ui: &mut Ui| kit::ghost_button(ui, "Cancel")).clicked() {
+                        d = Do::Cancel;
+                    }
+                    if f.working {
+                        ui.spinner();
+                        ui.label(theme::muted("Sending the invitation..."));
                     }
                 });
             });
@@ -792,6 +906,11 @@ fn panels(ui: &mut Ui, m: &mut CirclesModel) {
         Do::Remove => m.remove_member(),
         Do::Transfer => m.offer_ownership(),
         Do::Rename => m.rename(),
+        Do::SendEmail => m.send_email_invite(),
+        Do::AnotherEmail => m.another_email(),
+    }
+    if account {
+        m.request_open_account();
     }
 }
 
@@ -843,9 +962,24 @@ fn members_section(ui: &mut Ui, m: &mut CirclesModel, d: &super::circles_api::Ci
     }
 }
 
-/// One code, without its state (shown first, in the text colour): "can add banks - 0 of 1 used - ...".
-fn invite_line(i: &Invite, now: i64) -> String {
-    let mut bits = vec![text::role_choice_name(i.role()).to_lowercase(), format!("{} of {} used", i.uses, i.max_uses)];
+/// One code or emailed invitation, without its state (shown first, in the text colour):
+/// "code - can add banks - 0 of 1 used - ..." or "emailed to j***@school.org - can add banks - sent 2 hours ago - ...".
+pub(super) fn invite_line(i: &Invite, now: i64) -> String {
+    let mut bits = Vec::new();
+    if i.emailed() {
+        let l = api::plain(&i.address_label);
+        bits.push(if l.is_empty() { "emailed".to_string() } else { format!("emailed to {l}") });
+    } else {
+        bits.push("code".to_string());
+    }
+    bits.push(text::role_choice_name(i.role()).to_lowercase());
+    if !i.emailed() {
+        bits.push(format!("{} of {} used", i.uses, i.max_uses));
+    }
+    let ago = text::ago(i.created_at, now);
+    if !ago.is_empty() {
+        bits.push(format!("{} {ago}", if i.emailed() { "sent" } else { "made" }));
+    }
     if i.active() {
         bits.push(format!("expires {}", text::until(i.expires_at, now)));
     }
@@ -866,10 +1000,14 @@ fn codes_section(ui: &mut Ui, m: &mut CirclesModel) {
     let problem = c.invites_problem.clone();
     let more = c.invites_next.is_some();
     let mut make = false;
+    let mut email = false;
     let mut withdraw: Option<String> = None;
     let mut more_clicked = false;
-    section(ui, "Codes", |ui| {
-        make = kit::primary_button(ui, "Make a code...").clicked();
+    section(ui, "Codes and invitations", |ui| {
+        ui.horizontal_wrapped(|ui| {
+            make = kit::primary_button(ui, "Make a code...").clicked();
+            email = kit::ghost_button(ui, "Invite by email...").clicked();
+        });
         ui.add_space(4.0);
         if let Some(p) = &problem {
             warn_box(ui, &p.message);
@@ -884,7 +1022,7 @@ fn codes_section(ui: &mut Ui, m: &mut CirclesModel) {
             None => {}
             Some(l) if l.is_empty() => para(ui, text::NO_CODES),
             Some(l) => {
-                para(ui, "The codes themselves are never shown again. Withdraw one to stop it working.");
+                para(ui, "The codes themselves are never shown again, and the addresses of emailed invitations are never kept. Withdraw one to stop it working.");
                 for i in l {
                     text_row(ui, |ui| {
                         two_tone(ui, text::state_label(&i.state), " - ", &invite_line(i, now));
@@ -902,6 +1040,9 @@ fn codes_section(ui: &mut Ui, m: &mut CirclesModel) {
     });
     if make {
         m.begin_code();
+    }
+    if email {
+        m.begin_email();
     }
     if let Some(i) = withdraw {
         m.withdraw_code(&i);
@@ -963,9 +1104,22 @@ fn bank_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
             return;
         }
         BankLoad::Failed(p) => {
-            let p = p.clone();
-            let w = wait_of(m, &p);
-            problem_box(ui, &p, w, &mut retry, &mut account);
+            if m.hide_off_offered() {
+                // (critic 58 B2) Hiding the keys held the newest version back: the switch stays, with the way out.
+                warn_box(ui, text::HIDE_HELD_HEAD);
+                ui.add_space(4.0);
+                hide_section(ui, m);
+            } else {
+                let p = p.clone();
+                let w = wait_of(m, &p);
+                problem_box(ui, &p, w, &mut retry, &mut account);
+                // (critic 59 B1) Held back for another reason: the switch stays, both ways, and nothing says
+                // turning hiding off would help.
+                if m.hide_switch_on_held_head() {
+                    ui.add_space(4.0);
+                    hide_section(ui, m);
+                }
+            }
             if retry {
                 m.retry_bank();
             }
@@ -997,7 +1151,14 @@ fn bank_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
     }
     line(ui, bits.join(" - "));
     ui.add_space(4.0);
-    para(ui, text::ANSWER_KEYS_NOTE);
+    if head.keys_hidden {
+        // A viewer of a bank that hides its keys: said plainly, before anything else.
+        keys_banner(ui, text::KEYS_HIDDEN_VIEWER);
+    } else if head.hide_key {
+        para(ui, text::ANSWER_KEYS_HIDDEN_NOTE);
+    } else {
+        para(ui, text::ANSWER_KEYS_NOTE);
+    }
     if head.is_author && !matches!(head.held, serde_json::Value::Null | serde_json::Value::Bool(false)) {
         warn_box(ui, text::HELD_BANK);
     }
@@ -1018,6 +1179,9 @@ fn bank_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
         match &mut b.copy {
             CopyPanel::Closed => {
                 para(ui, if can_work { text::WORKING_COPY_LINE } else { text::COPY_LINE });
+                if head.keys_hidden {
+                    para(ui, text::COPY_NO_KEYS);
+                }
                 if has_working {
                     line(ui, text::HAS_WORKING_COPY);
                 }
@@ -1025,6 +1189,9 @@ fn bank_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
             }
             CopyPanel::Choosing { name } => {
                 para(ui, if can_work { text::WORKING_COPY_LINE } else { text::COPY_LINE });
+                if head.keys_hidden {
+                    para(ui, text::COPY_NO_KEYS);
+                }
                 if has_working {
                     line(ui, text::HAS_WORKING_COPY);
                 }
@@ -1052,8 +1219,12 @@ fn bank_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
                 if done.pictures_missing > 0 {
                     para(ui, &format!("{} of {} pictures could not be fetched; those questions are shown without them.", done.pictures_missing, done.pictures));
                 }
+                if head.keys_hidden {
+                    para(ui, text::COPY_NO_KEYS_DONE);
+                }
                 para(ui, "It also appears under \"Things I imported\", where verSHion tells you if the circle sends a newer version. Your copy is never changed for you.");
-                if linked.is_some() {
+                // (a copy of the viewers' form is never the working copy, whatever this computer holds)
+                if linked.is_some() && !head.keys_hidden {
                     line(ui, text::WORKING_COPY_DONE);
                 }
                 go_imported = link(ui, "See it under Things I imported");
@@ -1079,6 +1250,8 @@ fn bank_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
     if go_imported {
         *out = Outcome::ShowImported;
     }
+
+    hide_section(ui, m);
 
     let cid_now = m.bank.as_ref().map(|b| b.cid.clone()).unwrap_or_default();
     super::circle_edit_ui::bank_section(ui, m, &cid_now, &head.id, &api::plain(&head.title));
@@ -1107,6 +1280,148 @@ fn bank_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
                 para(ui, &format!("... and {} more questions.", v.questions.len() - 100));
             }
         }
+    }
+}
+
+/// A plain, quiet banner in the accent wash (not an error).
+fn keys_banner(ui: &mut Ui, s: &str) {
+    egui::Frame::new().fill(theme::accent_faded()).corner_radius(8).inner_margin(Margin::same(10)).show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
+        ui.add(egui::Label::new(theme::strong("Answer keys hidden").size(13.0)).wrap());
+        ui.add(egui::Label::new(theme::text(s).size(12.5)).wrap());
+    });
+    ui.add_space(6.0);
+}
+
+/// "Answer keys for viewers": the switch for the bank's author (while an editor) or the circle's owner, the
+/// confirmation, the decisions the pool asks for, and what it did.
+fn hide_section(ui: &mut Ui, m: &mut CirclesModel) {
+    // (on a bank whose newest version hiding held back, turning it off is offered as the way out: critic 58 B2;
+    // only when the pool said it releases the version: critic 59 B1)
+    let offer_off = m.hide_off_offered();
+    let allowed = m.hide_allowed() || m.hide_switch_on_held_head();
+    let Some(b) = m.bank.as_ref() else { return };
+    // (the bank read again after the change: its newest version still held back, critic 60 B2)
+    let head_held = b.withheld_head && matches!(b.load, BankLoad::Failed(_));
+    if !allowed && matches!(b.hide, HideStage::Idle) {
+        return;
+    }
+    let on = m.hide_key_on();
+    let now_i = m.now_instant();
+    #[derive(PartialEq)]
+    enum Do {
+        None,
+        Ask(bool),
+        Confirm,
+        Cancel,
+        Retry,
+        Decide(super::circle_hide_ui::DecideAct),
+    }
+    let mut d = Do::None;
+    let mut account = false;
+    section(ui, text::HIDE_SECTION, |ui| {
+        let Some(b) = m.bank.as_ref() else { return };
+        let idle = matches!(b.hide, HideStage::Idle | HideStage::Done(_) | HideStage::Failed { .. });
+        let mut want = on;
+        ui.add_enabled_ui(idle && allowed, |ui| {
+            if ui.checkbox(&mut want, "Hide answer keys from viewers").changed() {
+                d = Do::Ask(want);
+            }
+        });
+        line(ui, if on { text::HIDE_ON_LINE } else { text::HIDE_OFF_LINE });
+        ui.add_space(4.0);
+        if offer_off && idle && on && kit::primary_button(ui, "Turn hiding off").clicked() {
+            d = Do::Ask(false);
+        }
+        match &b.hide {
+            HideStage::Idle => {}
+            HideStage::Confirm { on: to } => {
+                body(ui, if *to { text::HIDE_ON_ASK } else { text::HIDE_OFF_ASK });
+                line(ui, text::HIDE_TRIES);
+                ui.add_space(4.0);
+                ui.horizontal_wrapped(|ui| {
+                    if kit::primary_button(ui, if *to { "Hide the keys" } else { "Show the keys again" }).clicked() {
+                        d = Do::Confirm;
+                    }
+                    if kit::ghost_button(ui, "Cancel").clicked() {
+                        d = Do::Cancel;
+                    }
+                });
+            }
+            HideStage::Working { on: to, back } => {
+                if let Some(dd) = back {
+                    let _ = super::circle_hide_ui::decisions(ui, dd, "Sending your decisions...", "", "Hide the keys", true);
+                } else {
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label(theme::muted(if *to { "Checking the viewers' copy..." } else { "Showing the keys again..." }));
+                    });
+                }
+            }
+            HideStage::Decide(dd) => {
+                let a = super::circle_hide_ui::decisions(
+                    ui,
+                    dd,
+                    "Before the keys can be hidden, the pool needs these decisions about the copy viewers will get. Nothing has changed yet.",
+                    "Change the questions in a working copy and send a new version, then try again.",
+                    "Hide the keys",
+                    false,
+                );
+                if a != super::circle_hide_ui::DecideAct::None {
+                    d = Do::Decide(a);
+                }
+            }
+            HideStage::Done(r) => {
+                for (i, l) in text::hide_result_lines(r, head_held).iter().enumerate() {
+                    if i == 0 {
+                        body(ui, l);
+                    } else {
+                        para(ui, l);
+                    }
+                }
+                if kit::ghost_button(ui, "Close").clicked() {
+                    d = Do::Cancel;
+                }
+            }
+            HideStage::Failed { problem, .. } => {
+                // (the buttons in one row: "Try again" next to "Close", not stacked)
+                let w = problem.retry_at.filter(|at| *at > now_i).map(|at| at - now_i);
+                warn_box(ui, &problem.message);
+                ui.horizontal_wrapped(|ui| {
+                    if problem.retry && ui.add_enabled(w.is_none(), |ui: &mut Ui| kit::primary_button(ui, "Try again")).clicked() {
+                        d = Do::Retry;
+                    }
+                    if problem.account && kit::ghost_button(ui, "Open account...").clicked() {
+                        account = true;
+                    }
+                    if kit::ghost_button(ui, "Close").clicked() {
+                        d = Do::Cancel;
+                    }
+                });
+                if let Some(w) = w {
+                    let mins = w.as_secs().div_ceil(60);
+                    line(ui, if mins <= 90 { format!("You can try again in about {mins} minutes.") } else { format!("You can try again in about {} hours.", mins.div_ceil(60)) });
+                }
+            }
+        }
+    });
+    if account {
+        m.request_open_account();
+    }
+    use super::circle_hide_ui::DecideAct;
+    match d {
+        Do::None => {}
+        Do::Ask(to) => m.ask_hide(to),
+        Do::Confirm => m.confirm_hide(),
+        Do::Cancel => m.cancel_hide(),
+        Do::Retry => m.retry_hide(),
+        Do::Decide(DecideAct::Label(at, c)) => m.hide_decide_label(at, c),
+        Do::Decide(DecideAct::Order(at, y)) => m.hide_set_order(at, y),
+        Do::Decide(DecideAct::AllOrders) => m.hide_all_orders(),
+        Do::Decide(DecideAct::Formatting(q, y)) => m.hide_set_formatting(q, y),
+        Do::Decide(DecideAct::Send) => m.send_hide_decisions(),
+        Do::Decide(DecideAct::Cancel) => m.cancel_hide(),
+        Do::Decide(DecideAct::None) => {}
     }
 }
 

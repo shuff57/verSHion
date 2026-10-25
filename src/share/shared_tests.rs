@@ -185,3 +185,27 @@ fn smoke_frames_of_every_tab_body() {
             });
     }
 }
+
+// ---- critic 61 I3: the invite step and another account ----------------------------------------------------------
+
+#[test]
+fn c61_the_invite_box_and_its_result_do_not_carry_over_to_another_account() {
+    use super::invite::{InviteModel, InviteState};
+    use super::publish::AccountSnapshot;
+    let snap = |email: &str| AccountSnapshot { account: Some(format!("https://pool.test\n{email}")), ..AccountSnapshot::of_gate(Gate::Ready) };
+    // A redeemed a code; the pool asked A for one before.
+    let mut m = SharedModel::default();
+    let mut inv = InviteModel::new(Runner::Inline);
+    m.note_account(&snap("ada@school.org"), &mut inv);
+    inv.state = InviteState::Redeemed { already: false };
+    m.note_invite_required();
+    m.note_account(&snap("ada@school.org"), &mut inv);
+    assert!(inv.redeemed() && m.invite_needed, "the same account keeps it");
+    // B signs in straight after: A's redemption does not count for B, and B is not told it needs a code.
+    m.note_account(&snap("bob@school.org"), &mut inv);
+    assert!(!inv.redeemed() && !m.invite_needed);
+    // A code typed and not sent goes with a sign-out.
+    inv.code = "ABCD-EFGH".into();
+    m.note_account(&AccountSnapshot::of_gate(Gate::SignedOut), &mut inv);
+    assert!(inv.code.is_empty());
+}

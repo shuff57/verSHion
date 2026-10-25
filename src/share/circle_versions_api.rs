@@ -48,11 +48,24 @@ pub struct VersionLine {
     #[serde(deserialize_with = "null_text")]
     pub license: String,
     /// Its body is still kept (can be looked at and restored).
+    #[serde(deserialize_with = "null_num")]
     pub kept: bool,
-    /// It held text taken for student data: hidden until an administrator releases it.
+    /// Held back for an administrator's review: hidden until an administrator releases it (the pool
+    /// does not say why: student data and a copyright match look the same).
+    #[serde(deserialize_with = "null_num")]
     pub withheld: bool,
     pub rollback_of: Option<u64>,
     pub merged_from: Option<u64>,
+    /// Round 48, a withheld version only: `full` (its text is still kept for the review) or `hashes_only`
+    /// (only a record of what matched is kept, as fingerprints, for the administrator).
+    pub review_copy: Option<String>,
+}
+
+impl VersionLine {
+    /// Kept for the review as fingerprints only: its text is gone.
+    pub fn fingerprints_only(&self) -> bool {
+        self.withheld && self.review_copy.as_deref() == Some("hashes_only")
+    }
 }
 
 /// A page of the history, newest first.
@@ -89,6 +102,8 @@ pub struct Trimmed {
     pub pruned: u64,
     pub oldest_kept: Option<u64>,
     pub pinned_versions: Vec<u64>,
+    /// Versions kept for an administrator's review (round 47/48): a trim can not delete them.
+    pub evidence_kept: u64,
 }
 
 fn list_of<T: serde::de::DeserializeOwned>(v: &Value, key: &str) -> Result<Vec<T>, PoolError> {
@@ -247,6 +262,8 @@ impl<'a> Pool<'a> {
             return Err(LocalProblem::BadField("keep").into());
         }
         let v: Value = parse(&self.call(&Call::new(Method::Post, format!("/circles/{cid}/banks/{bid}/trim")).json(&json!({ "keep": keep })).not_safe()).await?)?;
-        Ok(Trimmed { pruned: v.get("pruned").and_then(Value::as_u64).unwrap_or(0), oldest_kept: v.get("oldest_kept").and_then(Value::as_u64), pinned_versions: u64s(&v, "pinned_versions") })
+        let pinned_versions = u64s(&v, "pinned_versions");
+        let evidence_kept = v.get("evidence_kept").and_then(Value::as_u64).unwrap_or(pinned_versions.len() as u64);
+        Ok(Trimmed { pruned: v.get("pruned").and_then(Value::as_u64).unwrap_or(0), oldest_kept: v.get("oldest_kept").and_then(Value::as_u64), pinned_versions, evidence_kept })
     }
 }

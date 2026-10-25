@@ -50,6 +50,7 @@ import {
   alertBudgeted,
   SHA_RE,
   sha256Hex,
+  takeDaily,
   throwIfErased,
   type Ctx,
   type PoolPrincipal,
@@ -1189,7 +1190,9 @@ export async function getBank(c: Ctx, req: Request, p: PoolPrincipal, cid: strin
     if (!v) throw notFound();
     // Round 38 (critics 45a/45b B1): a version that matched confirmed student data is served to no member (its
     // author included) until an administrator releases it, whichever version is the head now.
-    if (v.withheld_at !== null) throw withheldError();
+    // Round 49 (critic 59 B1): the circle's owner and the bank's author while an editor (who may change the answer-key
+    // setting) are told whether turning hiding off would release this version; nobody else is.
+    if (v.withheld_at !== null) throw withheldError(m.role === "owner" || (b.author_id === me && m.role === "editor") ? { hide_off_releases: b.hide_key === 1 && (await hideOffReleases(c, me, bid, v.id)) } : {});
     // Round 43 (D12): a VIEWER of a bank that hides its keys is served share-core's stripped form of this version
     // (circlehide.ts); the owner and editors the full text. Editors' version messages are not shown with it.
     const hidden = b.hide_key === 1 && m.role === "viewer";
@@ -1282,8 +1285,11 @@ export async function notRetained(c: Ctx, bid: string, head: number): Promise<Po
   return new PoolError(404, "version_not_retained", { ...(await keptInfo(c, bid, head)), message: "This version is no longer kept (a bank keeps its last 20 versions in full)." });
 }
 /** Round 38: `404 version_withheld` (a version that matched confirmed student data, round 44: or a copyright re-upload
- *  block; an administrator may release it). The words name no reason, so members cannot tell one from the other. */
-export const withheldError = () => new PoolError(404, "version_withheld", { message: "This version is withheld until an administrator has reviewed it. Only an administrator can release it." });
+ *  block; an administrator may release it). The words name no reason, so members cannot tell one from the other.
+ *  Round 49 (critic 59 B1): `extra` is `{hide_off_releases}` on a bank read by a member who may change the answer-key
+ *  setting (see hideOffReleases). */
+export const withheldError = (extra: Record<string, unknown> = {}) =>
+  new PoolError(404, "version_withheld", { ...extra, message: "This version is withheld until an administrator has reviewed it. Only an administrator can release it." });
 
 /**
  * Round 37: a version's recorded origins (public material, checked at send) with their authors' names read
@@ -1449,6 +1455,8 @@ async function chargeHideChange(c: Ctx, me: string): Promise<void> {
  * clean is readable again, its flags resolved, and the bank's hold lifted when it is the head (`restored`: their
  * versions); checked newest first within the same bounds, and again inside the batch. The flags a PATCH raises count
  * toward circle_send_flags and keep the evidence bound, as a send's (critic 54b N1).
+ * Round 50 (critic 60): only a copyright match an answer-key PATCH raised is released that way (never a student-data
+ * match, never a student-data hold), and an `on` answers `held` / `withheld` only for a head THIS PATCH withheld.
  */
 async function patchHideKey(c: Ctx, m: Membership, b: BankRow, me: string, cid: string, bid: string, on: boolean, d: StripDecisions): Promise<Response> {
   requireOpen(m);
@@ -1501,34 +1509,81 @@ async function patchHideKey(c: Ctx, m: Membership, b: BankRow, me: string, cid: 
 /** Round 48 (critic 55a): the role hint of the routes the circle's owner or the bank's author (while an editor) may use. */
 export const OWNER_OR_AUTHOR = "owner_or_author";
 
-/** SQL: no open send flag on version `v` but those an answer-key PATCH raised (round 47). */
+/** SQL: no open send flag on version `v` but the copyright matches an answer-key PATCH raised (round 47; round 50,
+ *  critic 60 B2: a student-data flag never, even one an answer-key PATCH raised: turning hiding off does not change
+ *  what the full form holds, so it never releases one). */
 const ONLY_HIDE_FLAGS = (v: string) =>
-  `NOT EXISTS (SELECT 1 FROM admin_flags xf WHERE xf.publish_id = ${v} AND xf.kind IN ${SEND_FLAG_KINDS} AND xf.resolved_at IS NULL AND (xf.detail ->> '$.via') IS NOT 'hide_key')`;
+  `NOT EXISTS (SELECT 1 FROM admin_flags xf WHERE xf.publish_id = ${v} AND xf.kind IN ${SEND_FLAG_KINDS} AND xf.resolved_at IS NULL AND (xf.kind IS NOT 'blocklist' OR (xf.detail ->> '$.via') IS NOT 'hide_key'))`;
 
-/** Round 43/47: PATCH {hide_key: false} after the checks and the charge (see patchHideKey). */
-async function hideOff(c: Ctx, me: string, cid: string, bid: string): Promise<Record<string, unknown>> {
-  const now = c.now();
-  const rights = `(${ACTIVE_SQL("?2", "?3", ["owner"])} OR (circle_banks.author_id = ?3 AND ${ACTIVE_SQL("?2", "?3", ["editor"])}))`;
+type HideOffCandidate = { id: string; version: number; full_key: string; bytes: number; committer_id: string };
+
+/**
+ * Round 47/49: the withheld versions turning hiding off checks for release: withheld only by an answer-key PATCH's
+ * copyright match (round 50: at least one open `blocklist` flag says `via: hide_key`, and no other open send flag is
+ * on it), kept in full, newest first, within HIDE_OLDER_MAX + 1 and HIDE_OLDER_BYTES. Each is released when its full
+ * form is clean (fullFormClean). Round 50 (critic 60 B2): a head is never one while the bank has a student-data hold.
+ */
+async function hideOffCandidates(c: Ctx, bid: string): Promise<HideOffCandidate[]> {
   const cands = (
     await c.db
       .prepare(
         `SELECT v.id, v.version, v.full_key, v.bytes, v.committer_id FROM circle_versions v INDEXED BY circle_versions_bank
           WHERE v.bank_id = ?1 AND v.status IN ('current', 'previous') AND v.full_key <> '' AND v.withheld_at IS NOT NULL
-            AND EXISTS (SELECT 1 FROM admin_flags hf WHERE hf.publish_id = v.id AND hf.kind IN ${SEND_FLAG_KINDS} AND hf.resolved_at IS NULL AND hf.detail ->> '$.via' = 'hide_key')
+            AND EXISTS (SELECT 1 FROM admin_flags hf WHERE hf.publish_id = v.id AND hf.kind = 'blocklist' AND hf.resolved_at IS NULL AND hf.detail ->> '$.via' = 'hide_key')
             AND ${ONLY_HIDE_FLAGS("v.id")}
+            AND NOT (v.status = 'current' AND EXISTS (SELECT 1 FROM circle_holds ph WHERE ph.bank_id = ?1 AND ph.source IN ('privacy', 'privacy_near')))
           ORDER BY v.version DESC LIMIT ?2`,
       )
       .bind(bid, HIDE_OLDER_MAX + 1)
-      .all<{ id: string; version: number; full_key: string; bytes: number; committer_id: string }>()
+      .all<HideOffCandidate>()
   ).results;
-  const clean: { id: string; keys: string; shas: string; by: string }[] = [];
+  const out: typeof cands = [];
   let budget = HIDE_OLDER_BYTES;
   for (const v of cands) {
     if (v.bytes > budget) break;
     budget -= v.bytes;
-    // (round 48, critic 55b V7: the version's own sender's exemptions, as at its send)
-    const sc = await withStoredFull(c, v.full_key, (qs, mh) => privacyScan(c, [{ qs, mh, imgAt: imagesAt(qs) }], v.committer_id));
-    if (sc && sc.exact.length + sc.near.length + sc.copyright.length === 0) clean.push({ id: v.id, keys: JSON.stringify(sc.keys), shas: JSON.stringify(sc.shas), by: v.committer_id });
+    out.push(v);
+  }
+  return out;
+}
+
+/** Round 47/50: candidate `v`'s full form checked as hide-off checks it (the version's own sender's exemptions, as at
+ *  its send: round 48, critic 55b V7): its scan when nothing matches, else null. Round 51: `now` as withStoredFull's. */
+async function fullFormClean(c: Ctx, v: HideOffCandidate, now = false): Promise<Scan | null> {
+  const sc = await withStoredFull(c, v.full_key, (qs, mh) => privacyScan(c, [{ qs, mh, imgAt: imagesAt(qs) }], v.committer_id), { now });
+  return sc && sc.exact.length + sc.near.length + sc.copyright.length === 0 ? sc : null;
+}
+
+/**
+ * Round 49 (critic 59 B1): would turning hiding off release version `vid`? It is one of hideOffCandidates (so a send's
+ * flag on it, a student-data flag, a cap past the day's flags, or a version past the bound says false) and, round 50
+ * (critic 60 B2), its full form is clean now, as hide-off checks it (a block on the full text too says false). A check
+ * that can not run now says false: nothing is promised. The caller checks that the bank hides its keys.
+ * Round 51 (critic 61 I2): the check is publish-sized work on a read, so it runs only when the isolate's heavy slot is
+ * free at once (the read never waits or queues for it, so it can not hold a read up or turn a publish away: busy says
+ * false), and each check that runs is one of the reader's `circle_hide_checks` today (past it: false, no check; one
+ * that could not run is given back). Hide-off itself checks again, on its own budget.
+ */
+async function hideOffReleases(c: Ctx, me: string, bid: string, vid: string): Promise<boolean> {
+  const v = (await hideOffCandidates(c, bid)).find((x) => x.id === vid);
+  if (!v) return false;
+  if (!(await takeDaily(c, me, "circle_hide_checks"))) return false;
+  try {
+    return (await fullFormClean(c, v, true)) !== null;
+  } catch {
+    await giveDaily(c, me, "circle_hide_checks").catch(() => {});
+    return false;
+  }
+}
+
+/** Round 43/47: PATCH {hide_key: false} after the checks and the charge (see patchHideKey). */
+async function hideOff(c: Ctx, me: string, cid: string, bid: string): Promise<Record<string, unknown>> {
+  const now = c.now();
+  const rights = `(${ACTIVE_SQL("?2", "?3", ["owner"])} OR (circle_banks.author_id = ?3 AND ${ACTIVE_SQL("?2", "?3", ["editor"])}))`;
+  const clean: { id: string; keys: string; shas: string; by: string }[] = [];
+  for (const v of await hideOffCandidates(c, bid)) {
+    const sc = await fullFormClean(c, v);
+    if (sc) clean.push({ id: v.id, keys: JSON.stringify(sc.keys), shas: JSON.stringify(sc.shas), by: v.committer_id });
   }
   const aid = newId();
   const won = `EXISTS (SELECT 1 FROM pool_audit wa WHERE wa.id = '${aid}')`;
@@ -1547,9 +1602,10 @@ async function hideOff(c: Ctx, me: string, cid: string, bid: string): Promise<Re
       c.db
         .prepare(
           `UPDATE circle_versions SET withheld_at = NULL, strip_opts = NULL WHERE id = ?1 AND withheld_at IS NOT NULL AND ${won} AND ${ONLY_HIDE_FLAGS("?1")}
+             AND NOT (status = 'current' AND EXISTS (SELECT 1 FROM circle_holds ph WHERE ph.bank_id = ?6 AND ph.source IN ('privacy', 'privacy_near')))
              AND NOT ${PRIVACY_SQL("?2", "?3")} AND NOT ${COPYRIGHT_SQL("?2", "?3", "?4", "?5")}`,
         )
-        .bind(v.id, v.keys, v.shas, now, v.by),
+        .bind(v.id, v.keys, v.shas, now, v.by, bid),
       c.db
         .prepare(
           `UPDATE admin_flags SET resolved_at = ?2, resolved_by = ?3, detail = json_set(detail, '$.resolved_via', 'hide_key_off')
@@ -1558,7 +1614,8 @@ async function hideOff(c: Ctx, me: string, cid: string, bid: string): Promise<Re
         .bind(v.id, now, me),
       c.db
         .prepare(
-          `DELETE FROM circle_holds WHERE bank_id = ?1 AND source IN ${SEND_HOLD_SOURCES} AND ${won}
+          // (round 50, critic 60 B2: the copyright hold only; a student-data hold is never lifted here)
+          `DELETE FROM circle_holds WHERE bank_id = ?1 AND source = 'blocklist' AND ${won}
              AND EXISTS (SELECT 1 FROM circle_banks hb JOIN circle_versions hv ON hv.id = hb.head_version_id WHERE hb.id = ?1 AND hv.id = ?2 AND hv.withheld_at IS NULL)`,
         )
         .bind(bid, v.id),
@@ -1666,10 +1723,13 @@ async function hideOn(
     c.db.prepare(`UPDATE circles SET qkeys = qkeys + changes() WHERE id = ?1 AND ${won}`).bind(cid),
   ];
   const hs = headScan as Scan | null;
+  // (round 51, critic 61 M1: the statement that withholds the head, so the answer says whether THIS batch did it)
+  let withholdAt = -1;
   if (hs && head) {
     // The viewers' form of the head, as a send's commit checks it (the exact keys again here: no gap).
     const kj = JSON.stringify(hs.keys);
     const sj = JSON.stringify(hs.shas);
+    withholdAt = stmts.length + 3;
     stmts.push(
       c.db.prepare(`INSERT OR IGNORE INTO circle_holds (bank_id, reason, source, at, by) SELECT ?1, 'student_data', 'privacy', ?4, NULL WHERE ${won} AND ${PRIVACY_SQL("?2", "?3")}`).bind(bid, kj, sj, now),
       c.db.prepare(`INSERT OR IGNORE INTO circle_holds (bank_id, reason, source, at, by) SELECT ?1, 'student_data', 'privacy_near', ?3, NULL WHERE ?2 > 0 AND ${won}`).bind(bid, hs.near.length, now),
@@ -1756,10 +1816,16 @@ async function hideOn(
     if (f.kind === "privacy_text_match") await alertBudgeted(c, { kind: "privacy_text_match", itemId: bid, circleId: cid, version, held: true });
     else await alertBudgeted(c, { kind: "circle_copyright_match", itemId: bid, circleId: cid, version });
   }
-  const cPositions = (out!.withheld === 1 ? (hs?.copyright.length ?? 0) : 0) + toWithhold.reduce((a, v) => a + v.scan.copyright.length, 0);
+  // Round 50 (critic 60 B1): `withheld` and `held` say what THIS PATCH did: it withheld the head (only a head it
+  // scanned, one members could read), and the bank's hold came with it. A head withheld before (a send's match, an
+  // earlier PATCH) is not scanned and is not reported: a GET says whether turning hiding off would release it.
+  // Round 51 (critic 61 M1): and only when this batch's withhold changed the row: of two PATCHes that scanned the head
+  // at once, the one that came second (the head already withheld) says false and is not charged for it.
+  const withheldNow = hs !== null && out!.withheld === 1 && withholdAt >= 0 && (res[withholdAt]?.meta.changes ?? 0) === 1;
+  const cPositions = (withheldNow ? (hs?.copyright.length ?? 0) : 0) + toWithhold.reduce((a, v) => a + v.scan.copyright.length, 0);
   if (cPositions > 0) await chargeHeldPublishes(c, me, cPositions);
   if (out!.capnew === 1) await alertBudgeted(c, { kind: "cap", userId: me, metric: "circle_send_flags" });
-  return { ok: true, hide_key: true, held: out!.held === 1, withheld: out!.withheld === 1, ...report };
+  return { ok: true, hide_key: true, held: withheldNow && out!.held === 1, withheld: withheldNow, ...report };
 }
 
 /** DELETE /circles/:cid/banks/:bid (owner or the bank's author, D17): hidden at once, 14 days to undo, then purged. */
@@ -2015,8 +2081,12 @@ export function circleErasureStatements(db: D1Database, userId: string, now: num
       .bind(userId, now),
     // (round 46: its hourly invitation count, the one row that names it)
     db.prepare(`DELETE FROM pool_alert_budget WHERE channel = 'circle_email_inviter:' || ?1`).bind(userId),
-    // (round 48, critic 55b V4: and its share of each domain's hour, `circle_email_domain:<hmac>:<user id>`)
-    db.prepare(`DELETE FROM pool_alert_budget WHERE channel LIKE 'circle_email_domain:%:' || ?1`).bind(userId),
+    // (round 48, critic 55b V4: and its share of each domain's hour, `circle_email_domain:<hmac>:<user id>`.
+    // Critic 58 B1: no LIKE here. `LIKE 'circle_email_domain:%:' || ?1` is a 58-byte pattern, over D1's 50, and failed
+    // the whole batch for every account; the prefix and the id after the hmac are compared exactly, as the resweep reads them.)
+    db
+      .prepare(`DELETE FROM pool_alert_budget WHERE substr(channel, 1, 20) = 'circle_email_domain:' AND substr(channel, 21 + instr(substr(channel, 21), ':')) = ?1`)
+      .bind(userId),
     // (round 34: ownership offers from or to the account)
     db.prepare(`DELETE FROM circle_transfers WHERE from_user = ?1`).bind(userId),
     db.prepare(`DELETE FROM circle_transfers WHERE to_user = ?1`).bind(userId),

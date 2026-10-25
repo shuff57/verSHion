@@ -35,6 +35,7 @@ use super::browse::{Imported, Problem, SharedImages, SharedRestore, StoreImages,
 use super::circle_links::*;
 use super::circle_versions_api::*;
 use super::circles_api::*;
+use super::circle_hide::{Decisions, decision_refusal};
 use super::circles_text as text;
 use super::merge::{self, BaseQuestion, Choice, MergeOutcome, MergePlan};
 use super::model::Runner;
@@ -109,6 +110,11 @@ pub enum SendStage {
     Payload(Box<PayloadRefusal>),
     /// A refusal with its own words and a way on (the licence, the merge token).
     Refused { message: String, merge_again: bool },
+    /// Questions copied without their answer keys (phase C, `keyless_question`): nothing was sent.
+    /// `positions` are 0-based; `kinds` is each one's kind (`Short` needs a sample answer).
+    Keyless { positions: Vec<usize>, kinds: Vec<String> },
+    /// The bank hides its answer keys from viewers and the pool needs decisions for the viewers' copy.
+    Decide(Box<Decisions>),
 }
 
 #[derive(Debug)]
@@ -133,6 +139,12 @@ pub struct SendView {
     pub licence: LicenceState,
     /// The hidden newest version this send goes over, and the readable versions it replaces.
     pub replaces: Vec<VersionLine>,
+    /// For a bank that hides its answer keys: the decisions for its viewers' copy, made on this page.
+    pub decisions: StripDecisions,
+    /// The sha256 of the payload `decisions` were made for: they go only with that content (critic 57 I1).
+    pub decisions_for: Option<String>,
+    /// The sha256 of the payload last sent from this page.
+    pub sent_payload: Option<String>,
 }
 
 #[derive(Debug)]
@@ -285,6 +297,22 @@ pub struct HistoryView {
     pub problem: Option<Problem>,
     pub restore: Option<RestoreAsk>,
     pub trim: Option<TrimAsk>,
+    /// The versions the pool would not show without their answer keys (`keys_hidden_unavailable`: a viewer,
+    /// and a version with no viewers' copy). Each is not offered again: the history line does not say which
+    /// versions have a viewers' copy (critic 58 I3), and that is per version, not ordered (critic 59 I1).
+    pub keys_closed: std::collections::BTreeSet<u64>,
+}
+
+impl HistoryView {
+    /// "Look at it" is offered for this line.
+    pub fn can_look(&self, l: &VersionLine) -> bool {
+        l.kept && !l.withheld && !self.closed_to_me(l)
+    }
+
+    /// A version the pool would not show this person without its answer keys (learnt from its own refusal).
+    pub fn closed_to_me(&self, l: &VersionLine) -> bool {
+        self.keys_closed.contains(&l.version)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -300,6 +328,9 @@ pub struct VersionBody {
     pub title: String,
     pub license: String,
     pub questions: Vec<QuestionLine>,
+    /// Phase C: the bank hides its answer keys from viewers, and this read is (or is not) the viewers' form.
+    pub hide_key: bool,
+    pub keys_hidden: bool,
 }
 
 #[derive(Debug)]
@@ -671,13 +702,40 @@ impl CircleEditModel {
         std::mem::take(&mut self.advanced)
     }
 
+    /// The screens close and their jobs go, except a send already on its way (critic 61 I4): its answer only moves
+    /// this computer's link on (see `on_sent`: "a send that went through still moves the link on"), so the link is
+    /// never left behind a version the person sent, and their next send is not refused as a conflict with it.
     pub fn close(&mut self) {
-        self.jobs.clear();
+        let sending = self.inflight.is_some();
+        self.jobs.retain(|j| sending && j.kind == JobKind::Act);
+        if self.jobs.is_empty() {
+            self.inflight = None;
+        }
         self.view = EditView::Closed;
         self.history_stash = None;
         self.cmd_send = false;
         self.applying = None;
         self.carry = None;
+    }
+
+    /// The account signed out or another signed in (`another`, critic 60 I1): the screens close (a history goes with
+    /// the versions refused to that account), and nothing that account was told or asked for stays. The working-copy
+    /// links on this computer are kept, and so is a send already on its way (see `close`). Critic 61 I4: after a
+    /// sign-out the commit ids of the last send and restore are kept too, so the same account, signed in again,
+    /// retries a send or a restore whose answer it never read as the same commit (the pool replays it, nothing is
+    /// doubled); another account starts its own.
+    pub fn forget_account(&mut self, another: bool) {
+        self.close();
+        self.notice = None;
+        self.invite_required = false;
+        if another {
+            self.pending_send = None;
+            self.pending_restore = None;
+        }
+        self.signed_out = false;
+        self.last_act = None;
+        self.merge_note = None;
+        self.forget_ask = None;
     }
 
     // ---- the links -----------------------------------------------------------------------------------------
@@ -992,6 +1050,9 @@ impl CircleEditModel {
             attest: false,
             licence: LicenceState::Checking,
             replaces: Vec::new(),
+            decisions: StripDecisions::default(),
+            decisions_for: None,
+            sent_payload: None,
         }));
         // The counts are filled in by `sync`. The bank's licence is asked of the pool now: a send
         // goes with the licence the pool has, never with the one this device saw at copy time.
@@ -1131,12 +1192,65 @@ impl CircleEditModel {
         }
     }
 
-    /// After "Failed" or a refusal: back to the note, nothing lost.
+    fn send_decisions_mut(&mut self) -> Option<&mut Decisions> {
+        match &mut self.view {
+            EditView::Send(v) => match &mut v.stage {
+                SendStage::Decide(d) => Some(d),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    pub fn send_decide_label(&mut self, at: super::pool::Pos, c: super::pool::LabelChoice) {
+        if let Some(d) = self.send_decisions_mut() {
+            d.decide_label(at, c);
+        }
+    }
+
+    pub fn send_set_order(&mut self, at: super::pool::Pos, yes: bool) {
+        if let Some(d) = self.send_decisions_mut() {
+            d.set_order(at, yes);
+        }
+    }
+
+    pub fn send_all_orders(&mut self) {
+        if let Some(d) = self.send_decisions_mut() {
+            d.ack_all_orders();
+        }
+    }
+
+    pub fn send_set_formatting(&mut self, question: usize, yes: bool) {
+        if let Some(d) = self.send_decisions_mut() {
+            d.set_formatting(question, yes);
+        }
+    }
+
+    /// "Send with these decisions": everything the pool listed is decided; the send goes again with them.
+    pub fn send_with_decisions(&mut self) {
+        let acting = self.acting();
+        let EditView::Send(v) = &mut self.view else { return };
+        let SendStage::Decide(d) = &v.stage else { return };
+        if !d.ready() || acting || !v.attest {
+            return;
+        }
+        v.decisions = d.decisions();
+        // (the pool listed these findings for the content just sent)
+        v.decisions_for = v.sent_payload.clone();
+        v.stage = SendStage::Working(None);
+        self.last_act = Some(ActAgain::Send);
+        self.cmd_send = true;
+    }
+
+    /// After "Failed" or a refusal: back to the note, nothing lost but the viewers' copy decisions: the bank
+    /// may be changed from there, and they were made for its content as it was (critic 57 I1).
     pub fn back_to_note(&mut self) {
         if let EditView::Send(v) = &mut self.view
             && !matches!(v.stage, SendStage::Working(_))
         {
             v.stage = SendStage::Editing;
+            v.decisions = StripDecisions::default();
+            v.decisions_for = None;
         }
     }
 
@@ -1182,6 +1296,12 @@ impl CircleEditModel {
             fail(v, "This copy no longer matches where it was last in step with the circle. Get the latest changes and merge first. Nothing was sent.");
             return;
         }
+        // Questions copied without their keys can not go to a circle (phase C): said here, nothing is sent.
+        let keyless: Vec<(usize, String)> = bank.questions.iter().enumerate().filter(|(_, q)| crate::model::is_keyless(q)).map(|(i, q)| (i, kind_tag(&q.kind).to_string())).collect();
+        if !keyless.is_empty() {
+            v.stage = SendStage::Keyless { positions: keyless.iter().map(|k| k.0).collect(), kinds: keyless.into_iter().map(|k| k.1).collect() };
+            return;
+        }
         let payload = match payload_of(&link, bank) {
             Ok(p) => p,
             Err(m) => {
@@ -1190,16 +1310,24 @@ impl CircleEditModel {
             }
         };
         let base = v.base_override.unwrap_or(link.base_version);
+        // (critic 57 I1) The decisions are by position: they go only with the content they were made for.
+        let payload_sha = sha256_hex(&payload);
+        if v.decisions_for.as_deref() != Some(payload_sha.as_str()) {
+            v.decisions = StripDecisions::default();
+            v.decisions_for = None;
+        }
+        v.sent_payload = Some(payload_sha);
         let mut req = CircleSend::new(payload, license, link.meta());
         req.message = v.message.trim().to_string();
         req.base_version = Some(base);
         req.confirm_large = v.confirm_large;
         req.attestation = true;
+        req.decisions = v.decisions.clone();
         if let Some(c) = self.carry.as_ref().filter(|c| c.local_id == v.local_id && c.head == base) {
             req.merge = Some((c.token.clone(), c.from));
         }
         // The same commit id while nothing the server reads changed: a lost answer is retried, not doubled.
-        let print = format!("{}|{}|{base}|{}|{}|{}|{:?}|{}", link.circle_id, link.circle_bank_id, license.as_str(), req.message, req.confirm_large, req.merge, sha256_hex(&req.payload));
+        let print = format!("{}|{}|{base}|{}|{}|{}|{:?}|{:?}|{}", link.circle_id, link.circle_bank_id, license.as_str(), req.message, req.confirm_large, req.merge, req.decisions, sha256_hex(&req.payload));
         match &self.pending_send {
             Some((p, id)) if *p == print => req.commit_id = id.clone(),
             _ => self.pending_send = Some((print, req.commit_id.clone())),
@@ -1259,9 +1387,23 @@ impl CircleEditModel {
                             Some(SendStage::Conflict(ConflictInfo { head_version: *head_version, head_at: *head_at, head_by: head_by.clone() }))
                         }
                         RefusalKind::ConfirmLarge { removed, total } => Some(SendStage::Large { removed: *removed, total: *total }),
+                        // A bank that hides its answer keys: the pool asks how the viewers' copy is made.
+                        k if decision_refusal(k).is_some() => {
+                            self.pending_send = None;
+                            let carried = if let EditView::Send(v) = &self.view { v.decisions.clone() } else { StripDecisions::default() };
+                            decision_refusal(k).map(|p| SendStage::Decide(Box::new(Decisions::new(p.clone(), carried))))
+                        }
                         RefusalKind::InvalidPayload(p) | RefusalKind::LabelsNeedDecision(p) | RefusalKind::OrderAckRequired(p) => {
                             self.pending_send = None;
                             Some(SendStage::Payload(p.clone()))
+                        }
+                        RefusalKind::KeylessQuestion { positions, kinds } => {
+                            self.pending_send = None;
+                            Some(SendStage::Keyless { positions: positions.clone(), kinds: kinds.clone() })
+                        }
+                        RefusalKind::HideKeyChanged { .. } => {
+                            // Nothing was stored; the same send goes again (with decisions if the pool asks for them).
+                            Some(SendStage::Refused { message: e.message(), merge_again: false })
                         }
                         RefusalKind::AttestationRequired => {
                             Some(SendStage::Failed(Problem { message: e.message(), retry: false, retry_at: None, account: false }))
@@ -1694,6 +1836,7 @@ impl CircleEditModel {
             problem: None,
             restore: None,
             trim: None,
+            keys_closed: Default::default(),
         }));
         self.load_history(None);
     }
@@ -1785,7 +1928,7 @@ impl CircleEditModel {
     pub fn view_version(&mut self, n: u64) {
         let EditView::History(h) = &self.view else { return };
         let line = h.lines.iter().find(|l| l.version == n).cloned();
-        if !line.as_ref().is_some_and(|l| l.kept && !l.withheld) {
+        if !line.as_ref().is_some_and(|l| h.can_look(l)) {
             return;
         }
         let (cid, bid) = (h.cid.clone(), h.bid.clone());
@@ -1803,8 +1946,14 @@ impl CircleEditModel {
         if !matches!(&self.view, EditView::Version(v) if v.cid == cid && v.bid == bid && v.n == n) {
             return;
         }
+        // (critic 58 I3) No viewers' copy of this version: it is not offered again (critic 59 I1: only it).
+        if matches!(r.as_ref().err().and_then(PoolError::kind), Some(RefusalKind::KeysHiddenUnavailable))
+            && let Some(h) = self.history_stash.as_mut()
+        {
+            h.keys_closed.insert(n);
+        }
         let load = match r {
-            Ok(doc) => VersionLoad::Ready(Box::new(VersionBody { title: doc.bank.title.clone(), license: if doc.bank.version_license.is_empty() { doc.bank.license.clone() } else { doc.bank.version_license.clone() }, questions: question_lines(&doc.payload) })),
+            Ok(doc) => VersionLoad::Ready(Box::new(VersionBody { title: doc.bank.title.clone(), license: if doc.bank.version_license.is_empty() { doc.bank.license.clone() } else { doc.bank.version_license.clone() }, questions: question_lines(&doc.payload), hide_key: doc.bank.hide_key, keys_hidden: doc.bank.keys_hidden })),
             Err(e) => match self.problem_of(&e) {
                 Some(p) => VersionLoad::Failed(p),
                 None => VersionLoad::Failed(Problem { message: "Your session ended. Sign in again, then press Try again.".into(), retry: true, retry_at: None, account: false }),
@@ -1907,6 +2056,11 @@ impl CircleEditModel {
                 PoolError::Refused(rf) if matches!(rf.kind, RefusalKind::CommitIdConflict) => {
                     self.pending_restore = None;
                     Some(RestoreStage::Failed(Problem { message: "This restore was already used for something else. Press Restore again to start it again.".into(), retry: true, retry_at: None, account: false }))
+                }
+                PoolError::Refused(rf) if matches!(rf.kind, RefusalKind::HideKeyChanged { .. }) => {
+                    // (round 48: nothing was stored; a restore says "restore again", not "send again")
+                    self.pending_restore = None;
+                    Some(RestoreStage::Failed(Problem { message: "The bank's answer-key setting changed while this was on its way, so nothing was stored. Press Restore again.".into(), retry: true, retry_at: None, account: false }))
                 }
                 _ => self.problem_of(&e).map(RestoreStage::Failed),
             },
@@ -2123,12 +2277,14 @@ fn question_lines(payload: &[u8]) -> Vec<QuestionLine> {
 /// What to do about a hidden version or a held bank: the bank's author and the owner can fix it;
 /// anyone else has to ask them (the bank is not even listed for an editor while it is held).
 fn hidden_lines(held: bool, withheld: bool, can_fix: bool) -> Vec<String> {
+    // (round 44: the pool does not say why a version is held back, student information or a copyright match, and the
+    // app does not guess)
     let mut out = Vec::new();
     if withheld {
         out.push(if can_fix {
-            "This version is hidden while it is reviewed: it held text that looks like student information, so nobody can open it until an administrator releases it. Take the student information out of the questions and send again.".to_string()
+            "This version is held back while an administrator reviews it: something in it matched what the pool checks for, so nobody can open it until an administrator releases it. Change the questions that may be the cause and send a clean version.".to_string()
         } else {
-            "This version is hidden while it is reviewed: it held text that looks like student information, so nobody can open it until an administrator releases it. Only the bank's author or the circle's owner can send a clean version. Ask one of them.".to_string()
+            "This version is held back while an administrator reviews it: something in it matched what the pool checks for, so nobody can open it until an administrator releases it. Only the bank's author or the circle's owner can send a clean version. Ask one of them.".to_string()
         });
     }
     if held {
@@ -2161,7 +2317,7 @@ pub fn restore_lines(version: u64, to: u64, held: bool, withheld: bool, can_fix:
         // A restore sends nothing from this computer: "take it out and send again" would point at the
         // wrong questions, so the advice names what a restore can do instead.
         if withheld && can_fix {
-            out.push(format!("It is hidden while it is reviewed: version {to} held text that looks like student information, so nobody can open the new version until an administrator releases it. To give the circle a clean newest version, restore a different version, or send a clean one from a working copy."));
+            out.push(format!("It is held back while an administrator reviews it: something in version {to} matched what the pool checks for, so nobody can open the new version until an administrator releases it. To give the circle a clean newest version, restore a different version, or send a clean one from a working copy."));
             out.extend(hidden_lines(held, false, can_fix));
             return out;
         }
@@ -2169,6 +2325,41 @@ pub fn restore_lines(version: u64, to: u64, held: bool, withheld: bool, can_fix:
         return out;
     }
     vec![format!("Done. Version {version} is now the circle's newest, with the content of version {to}."), "Everyone with a working copy sees it as a new version, and merges it in when they choose.".into()]
+}
+
+/// What a trim did, in words: how many versions went, and the ones it could not delete (kept for an
+/// administrator's review: only an administrator frees that space).
+pub fn trim_lines(t: &Trimmed) -> Vec<String> {
+    let mut out = vec![match t.pruned {
+        0 => "Nothing was deleted: no older version could be trimmed.".to_string(),
+        1 => "Done. The content of 1 older version was deleted.".to_string(),
+        n => format!("Done. The content of {n} older versions was deleted."),
+    }];
+    let kept = t.evidence_kept.max(t.pinned_versions.len() as u64);
+    if kept > 0 {
+        let which = if t.pinned_versions.is_empty() { String::new() } else { format!(" ({})", t.pinned_versions.iter().map(|v| format!("version {v}")).collect::<Vec<_>>().join(", ")) };
+        out.push(format!(
+            "{}{which} {} kept while an administrator reviews {}. A trim can not delete {}: only an administrator can free that space.",
+            if kept == 1 { "1 version".to_string() } else { format!("{kept} versions") },
+            if kept == 1 { "is" } else { "are" },
+            if kept == 1 { "it" } else { "them" },
+            if kept == 1 { "it" } else { "them" },
+        ));
+    }
+    out
+}
+
+/// The tag of a question's kind, as the pool names it (`Mc`, `Tf`, `Short`, ...).
+fn kind_tag(k: &crate::model::Kind) -> &'static str {
+    use crate::model::Kind;
+    match k {
+        Kind::Mc { .. } => "Mc",
+        Kind::Tf { .. } => "Tf",
+        Kind::Matching { .. } => "Matching",
+        Kind::Blank { .. } => "Blank",
+        Kind::Short { .. } => "Short",
+        Kind::Multipart { .. } => "Multipart",
+    }
 }
 
 /// "N new versions" for a working copy that is behind.
@@ -2179,7 +2370,11 @@ pub fn behind_line(n: u64) -> String {
 /// What a version line says about itself.
 pub fn version_flags(l: &VersionLine, pinned: &[u64]) -> Vec<&'static str> {
     let mut v = Vec::new();
-    if l.withheld {
+    // (critic 56a V7: a withheld line is said as withheld, never as "trimmed", whatever `kept` says)
+    if l.fingerprints_only() {
+        v.push("Hidden while it is reviewed");
+        v.push("Kept for review as fingerprints only");
+    } else if l.withheld {
         v.push("Hidden while it is reviewed");
     } else if !l.kept {
         v.push("No longer kept");

@@ -2,7 +2,7 @@
 //! the caller; the sentences here are the app's own.
 
 use super::api;
-use super::circles_api::{ActivityEntry, Role};
+use super::circles_api::{ActivityEntry, HideKeyResult, Role};
 
 pub const EMPTY_LIST_TITLE: &str = "You are not in any circle yet";
 pub const EMPTY_LIST_HELP: &str = "A circle is a small private group of teachers who share banks with each other. Create one, or enter a code someone gave you.";
@@ -13,7 +13,7 @@ pub const EMPTY_ACTIVITY: &str = "Nothing has happened in this circle yet.";
 pub const NO_CODES: &str = "No codes yet. Make one to invite another teacher.";
 
 pub const CODE_SHOWN_ONCE: &str = "Anyone with this code can join until it expires or is used up. It is shown only now: copy it before you close this.";
-pub const CODE_PASTE_HELP: &str = "Paste the code (or the message you were sent). Nothing is used up until you press Join.";
+pub const CODE_PASTE_HELP: &str = "Paste the code, or the link or the whole message from an invitation email. Nothing is used up until you press Join.";
 pub const ANSWER_KEYS_NOTE: &str = "The questions are shown here without their answers. Everyone in this circle can see the answer keys: they come with every copy.";
 pub const COPY_LINE: &str = "A copy is private to you and made on this computer. The circle's bank is not changed, and nothing you change in your copy goes back to it.";
 pub const WORKING_COPY_LINE: &str = "A working copy stays linked to the circle's bank. It is private to you and on this computer, and the circle is changed only when you press Send. You can also get the newer versions others send, and merge them in when you choose.";
@@ -30,6 +30,32 @@ pub const HIDDEN_BANK_TITLE: &str = "Hidden while a review is open";
 pub const HIDDEN_BANK_LINE: &str = "Its title and author are not shown while it is reviewed, or while its author's account is.";
 pub const PURGE_BANK: &str = "This deletes the bank for good now, instead of after its 14 days. It can not be brought back.";
 pub const HELD_BANK: &str = "This bank is on hold while the pool's reviewers look at it. Only you can see it; the other members cannot until it is cleared.";
+// ---- phase C: invite by email ----------------------------------------------------------------------------------
+
+pub const EMAIL_HELP: &str = "verSHion mails the teacher an invitation with a code that works once, for 7 days. The mail is a fixed text: it does not name you or the circle (the app shows both before they join).";
+pub const EMAIL_NEEDS_ACCOUNT: &str = "To join, they need a verSHion account that an administrator has approved and that has redeemed an invite code for the shared pool. Until then the code can not be used.";
+pub const EMAIL_PRIVACY: &str = "The address is not kept: it is used for this one mail and cleared from this form once it is sent. The list below shows only a masked label (like j***@school.org) so you can tell invitations apart.";
+pub const EMAIL_PACE: &str = "Invitations go out at a steady pace. If you invite many colleagues at one school, some may have to wait for the next hour; the app says so, and nothing is lost.";
+pub const EMAIL_RESENT: &str = "This address already had an open invitation from this circle: a new code was mailed, and the earlier one no longer works.";
+
+// ---- phase C: answer keys hidden from viewers ----------------------------------------------------------------------
+
+pub const ANSWER_KEYS_HIDDEN_NOTE: &str = "The questions are shown here without their answers. This bank hides its answer keys from viewers: editors and the owner see the full bank; viewers get it without the correct answers and explanations.";
+pub const KEYS_HIDDEN_VIEWER: &str = "The answer keys are hidden for viewers. You see these questions without their correct answers and explanations, and pictures may be left out. The bank's author or the circle's owner can show them again.";
+pub const COPY_NO_KEYS: &str = "Your copy will have no answer keys: the questions arrive marked \"No answer key\", and you add the answers yourself before printing a key. It is a plain copy, not linked to the circle.";
+pub const COPY_NO_KEYS_DONE: &str = "This copy has no answer keys. Each question is marked \"No answer key\"; add the answers yourself before you print a key.";
+pub const HIDE_SECTION: &str = "Answer keys for viewers";
+pub const HIDE_OFF_LINE: &str = "Everyone in this circle sees the answer keys, viewers too.";
+pub const HIDE_ON_LINE: &str = "Viewers get this bank without its answer keys. Editors and the owner still see everything, and can edit it as before.";
+pub const HIDE_ON_ASK: &str = "Viewers will get every version of this bank without the correct answers, the explanations and the pictures, and with the choices shuffled. Editors and the owner keep seeing the full bank. The pool first checks the viewers' copy; it may ask you to decide about letter labels (A, B, C ...) or choice orders.";
+pub const HIDE_OFF_ASK: &str = "Viewers will see the answer keys again, in every version of this bank.";
+/// The bank page when the newest version of a bank that hides its keys is held back and the pool said turning
+/// hiding off releases it (critic 58 B2, critic 59 B1).
+pub const HIDE_HELD_HEAD: &str = "The newest version of this bank is held back while an administrator reviews it, so it can not be opened. It was held back when the answer keys were hidden from viewers: turning hiding off makes it readable again.";
+/// Hiding was turned off and the bank, read again, still has its newest version held back (critic 60 B2).
+pub const HIDE_OFF_STILL_HELD: &str = "Turning hiding off did not release the newest version. It is still held back, and only an administrator can release it.";
+pub const HIDE_TRIES: &str = "Each press counts toward a daily number of tries, also when the pool asks for decisions, so decide everything listed before you press again.";
+
 pub const LICENSE_SETTING_NOTE: &str = "This is the licence you attach to the bank. Not yet: sharing a circle bank's questions publicly is not available in this version, whatever the licence. A later version may let members do it for Creative Commons banks. Earlier versions keep the licence they were shared under.";
 
 /// A role on a pill: "Owner", "Editor", "Viewer".
@@ -137,6 +163,13 @@ pub fn activity_line(e: &ActivityEntry) -> String {
         "bank_removed" => format!("{by} removed {title}."),
         "bank_restored" => format!("{by} brought back {title}."),
         "license_changed" => format!("{by} changed the re-share setting of {title}."),
+        "email_invited" => format!("{by} emailed an invitation to join as {}.", if role == "member" { "a member" } else { role }),
+        "hide_key_changed" => match e.hide_key {
+            Some(false) => format!("{by} showed the answer keys of {title} to viewers again."),
+            _ => format!("{by} hid the answer keys of {title} from viewers."),
+        },
+        "rolled_back" => format!("{by} restored an older version of {title}{}.", e.rollback_of.map(|v| format!(" (version {v})")).unwrap_or_default()),
+        "versions_trimmed" => format!("{by} trimmed the older versions of {title}."),
         _ => format!("{by} did something this version of verSHion does not know about."),
     }
 }
@@ -180,6 +213,80 @@ pub fn undo_line(until_ms: Option<i64>, now: i64) -> String {
     match until_ms {
         Some(u) if u > now => format!("It can be brought back for another {}.", remaining(u, now)),
         Some(_) => "The time to undo has passed.".into(),
+        None => String::new(),
+    }
+}
+
+/// "Delete for good now" done only in part (round 48): honest about what is left and that Undo is gone.
+pub fn purge_partial_line(evidence_kept: u64) -> String {
+    let kept = match evidence_kept {
+        0 => "Some versions are".to_string(),
+        1 => "1 version is".to_string(),
+        n => format!("{n} versions are"),
+    };
+    format!("Mostly deleted. {kept} kept while an administrator reviews them; everything else in the bank was deleted now. Undo is no longer possible, and the rest is deleted once the review is done.")
+}
+
+/// The line on a removed bank's card after a partial purge.
+pub fn purge_pending_line(evidence_kept: u64) -> String {
+    let kept = match evidence_kept {
+        0 => "Some versions are".to_string(),
+        1 => "1 version is".to_string(),
+        n => format!("{n} versions are"),
+    };
+    format!("Mostly deleted: {kept} kept while an administrator reviews them. It can not be brought back; the rest is deleted once the review is done.")
+}
+
+/// What kind of invitation a line of the owner's list is.
+pub fn invite_kind(emailed: bool) -> &'static str {
+    if emailed { "Emailed" } else { "Code" }
+}
+
+/// What a change of the answer-key setting did, in words (the first line is the headline).
+pub fn hide_result_lines(r: &HideKeyResult, head_held: bool) -> Vec<String> {
+    let mut out = Vec::new();
+    if r.unchanged {
+        out.push(if r.hide_key { "Nothing changed: the answer keys were already hidden from viewers, with these decisions.".into() } else { "Nothing changed: viewers already see the answer keys.".into() });
+        return out;
+    }
+    if !r.hide_key {
+        // (critic 59 B1 item 4, critic 60 B2: the bank read again after the change, its newest version still held
+        // back; critic 61 M3: then viewers see nothing of the bank, so that is the headline, not "they see the keys")
+        out.push(if head_held { HIDE_OFF_STILL_HELD.into() } else { "Viewers see the answer keys again, in every version of this bank.".into() });
+        match r.restored.len() {
+            0 => {}
+            1 => out.push(format!("Version {} had been held back when the keys were hidden; it can be read again.", r.restored[0])),
+            _ => out.push(format!("Versions {} had been held back when the keys were hidden; they can be read again.", list_versions(&r.restored))),
+        }
+        return out;
+    }
+    out.push("The answer keys are now hidden from viewers. They get every version without the correct answers and explanations; editors and the owner still see everything.".into());
+    let mut bits = Vec::new();
+    let n = |k: usize, one: &str, many: &str| if k == 1 { format!("1 {one}") } else { format!("{k} {many}") };
+    if r.labels_removed > 0 {
+        bits.push(n(r.labels_removed, "set of letter labels was stripped", "sets of letter labels were stripped"));
+    }
+    if r.images_removed > 0 {
+        bits.push(n(r.images_removed, "picture was left out", "pictures were left out"));
+    }
+    if r.figures_removed > 0 {
+        bits.push(n(r.figures_removed, "figure was left out", "figures were left out"));
+    }
+    if !bits.is_empty() {
+        out.push(format!("In the viewers' copy: {}.", bits.join(", ")));
+    }
+    if r.withheld || r.held {
+        // (critic 60 B1: whether turning hiding off makes it readable again is the pool's to say, on the bank's read:
+        // HIDE_HELD_HEAD says it only then)
+        out.push("The viewers' copy matched something the pool checks for, so the newest version is held back and the bank is hidden from the circle while an administrator reviews it. The questions are safe.".into());
+    }
+    out
+}
+
+fn list_versions(vs: &[u64]) -> String {
+    match vs.split_last() {
+        Some((last, rest)) if !rest.is_empty() => format!("{} and {last}", rest.iter().map(u64::to_string).collect::<Vec<_>>().join(", ")),
+        Some((last, _)) => last.to_string(),
         None => String::new(),
     }
 }

@@ -537,6 +537,10 @@ export const DEFAULT_LIMITS = {
   /** Round 43 (D12): reads a VIEWER may make a day of banks that hide their keys (each a strip, publish-sized work;
    *  besides item_reads; a 304 is not one). */
   circle_hidden_reads: 100,
+  /** Round 51 (critic 61 I2): full-form checks the reads of the circle's owner and the bank's author (while an editor)
+   *  may run a day to say whether turning hiding off would release a withheld version (`hide_off_releases`, each
+   *  publish-sized work); past it the field says false without a check. */
+  circle_hide_checks: 60,
 } as const;
 export type Metric = keyof typeof DEFAULT_LIMITS;
 export const METRICS = Object.keys(DEFAULT_LIMITS) as Metric[];

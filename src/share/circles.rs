@@ -33,6 +33,7 @@ use super::browse::{
     Applied, CircleOrigin, Dest, ImageSink, Imported, Problem, SharedImages, StoreImages, apply_import, now_ms,
 };
 use super::circle_edit::{CircleEditModel, Perm};
+use super::circle_hide::{Decisions, decision_refusal};
 use super::circle_links::{CircleLink, LinkLog};
 use super::circles_api::*;
 use super::circles_text as text;
@@ -80,6 +81,9 @@ pub enum BankAction {
     SetLicense,
     /// The owner deletes a removed bank for good, now.
     Purge,
+    /// Hide the answer keys from the circle's viewers, or show them again (phase C, D12): the bank's author
+    /// while an editor, or the circle's owner.
+    HideKeys,
 }
 
 /// What a member may do with one bank. `circle_role` is the person's role in the circle.
@@ -100,6 +104,7 @@ pub fn bank_can(circle_role: Role, closed: bool, b: &BankEntry, a: BankAction) -
             removed && !closed && circle_role == Role::Owner && !matches!(reason, "admin" | "privacy" | "takedown")
         }
         BankAction::SetLicense => !removed && !closed && b.is_author,
+        BankAction::HideKeys => !removed && !closed && (circle_role == Role::Owner || (b.is_author && circle_role == Role::Editor)),
     }
 }
 
@@ -137,11 +142,50 @@ impl Default for CodeForm {
     }
 }
 
+/// "Invite by email" (phase C, D5). The address lives only in this form: it is sent once, wiped as soon as
+/// the pool took it and when the panel closes, never written anywhere, never in `Debug`.
+pub struct EmailForm {
+    pub address: String,
+    pub role: Role,
+    pub working: bool,
+    pub problem: Option<Problem>,
+    /// The mail domain (never the address) a per-domain hourly limit in `problem` is for: its wait holds
+    /// back only addresses at that domain (critic 57 I4).
+    pub problem_domain: Option<String>,
+    /// What the last invitation did: the pool's masked label, never the address.
+    pub sent: Option<EmailInviteSent>,
+}
+
+impl Default for EmailForm {
+    fn default() -> Self {
+        EmailForm { address: String::new(), role: Role::Editor, working: false, problem: None, problem_domain: None, sent: None }
+    }
+}
+
+/// The mail domain of an address, in lower case ("pvhs.org").
+fn mail_domain(address: &str) -> Option<String> {
+    address.trim().rsplit_once('@').map(|(_, d)| d.trim_end_matches('.').to_ascii_lowercase()).filter(|d| !d.is_empty())
+}
+
+impl std::fmt::Debug for EmailForm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "EmailForm(role: {:?}, working: {}, address: <{} characters>)", self.role, self.working, self.address.chars().count())
+    }
+}
+
+impl Drop for EmailForm {
+    fn drop(&mut self) {
+        zeroize::Zeroize::zeroize(&mut self.address);
+    }
+}
+
 #[derive(Debug, Default)]
 pub enum Panel {
     #[default]
     None,
     NewCode(CodeForm),
+    /// Invite a teacher by email.
+    Email(EmailForm),
     /// A code was just made: shown once.
     Code(Box<InviteCreated>),
     ConfirmLeave,
@@ -190,10 +234,22 @@ pub enum JoinStage {
     Done { name: String, role: Role, already: bool, circle_id: String },
 }
 
-#[derive(Debug)]
 pub struct JoinState {
+    /// What was pasted (a code, a link from an invitation mail, a message): never in `Debug`.
     pub text: String,
     pub stage: JoinStage,
+}
+
+impl std::fmt::Debug for JoinState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "JoinState(<{} characters>, {:?})", self.text.chars().count(), self.stage)
+    }
+}
+
+impl Drop for JoinState {
+    fn drop(&mut self) {
+        zeroize::Zeroize::zeroize(&mut self.text);
+    }
 }
 
 impl Default for JoinState {
@@ -285,6 +341,23 @@ pub struct ReportForm {
     pub state: ReportState,
 }
 
+/// "Hide answer keys from viewers" on a bank's page (the author while an editor, or the owner).
+#[derive(Debug, Default)]
+pub enum HideStage {
+    #[default]
+    Idle,
+    /// The person pressed the switch: what it means, then Yes.
+    Confirm { on: bool },
+    /// The change is on its way. `back` is the decisions page it came from (kept when the sign-in ends).
+    Working { on: bool, back: Option<Box<Decisions>> },
+    /// The pool listed what it needs decided for the viewers' copy (or what has to be changed first).
+    Decide(Box<Decisions>),
+    Done(HideKeyResult),
+    /// A refusal or an error: said, and "Try again" asks once more (`on` is what was asked for). `back` is
+    /// the decisions page the change came from: kept unless the bank changed, and sent again by "Try again".
+    Failed { on: bool, problem: Problem, back: Option<Box<Decisions>> },
+}
+
 #[derive(Debug)]
 pub struct BankView {
     pub cid: String,
@@ -296,6 +369,11 @@ pub struct BankView {
     pub confirm_remove: bool,
     /// The licence the author is about to set.
     pub license_choice: Option<License>,
+    pub hide: HideStage,
+    /// The last read of the bank failed because its newest version is held back for review (`version_withheld`).
+    pub withheld_head: bool,
+    /// That refusal said turning hiding off would release it (`hide_off_releases`, critic 59 B1).
+    pub hide_off_releases: bool,
 }
 
 // ---- jobs -------------------------------------------------------------------------------------------------------
@@ -319,6 +397,11 @@ enum Act {
     RestoreBank { cid: String, bid: String },
     PurgeBank { cid: String, bid: String },
     Report { cid: String, bid: String, reason: ReportReasonChoice, note: String },
+    /// The address is a [`Secret`]: never in `Debug`, wiped when the act is dropped, never kept for "Try again".
+    EmailInvite { cid: String, email: Secret, role: Role },
+    /// `base`: the bank version the change (and its decisions) is for. The head is read right before the
+    /// PATCH, which names no version, and nothing is sent when the head is another one (critic 57 B1).
+    HideKey { cid: String, bid: String, on: bool, decisions: StripDecisions, base: Option<u64> },
 }
 
 enum ActDone {
@@ -328,6 +411,11 @@ enum ActDone {
     Code(Box<InviteCreated>),
     RoleSet(bool),
     BankRemoved(Option<i64>),
+    Emailed(Box<EmailInviteSent>),
+    Hidden(Box<HideKeyResult>),
+    /// The head was not the version the change was for: nothing was sent.
+    HideHeadMoved,
+    Purged(Purged),
 }
 
 #[derive(Clone)]
@@ -462,9 +550,20 @@ async fn do_act(pool: &Pool<'_>, a: &Act) -> Result<ActDone, PoolError> {
             pool.restore_circle_bank(cid, bid).await?;
             ActDone::Done
         }
-        Act::PurgeBank { cid, bid } => {
-            pool.purge_circle_bank(cid, bid).await?;
-            ActDone::Done
+        Act::PurgeBank { cid, bid } => ActDone::Purged(pool.purge_circle_bank(cid, bid).await?),
+        Act::EmailInvite { cid, email, role } => ActDone::Emailed(Box::new(pool.email_invite(cid, email, *role).await?)),
+        Act::HideKey { cid, bid, on, decisions, base } => {
+            // (critic 57 B1) The decisions are by position and the PATCH strips whatever the head is when it
+            // arrives: the head is read right before, and a moved one sends nothing. (A short race is left until
+            // the pool takes a `base_version` on this PATCH.)
+            if let Some(base) = base {
+                let heads = pool.circle_heads(std::slice::from_ref(bid)).await?;
+                let same = heads.iter().any(|h| h.bank_id == *bid && matches!(h.state, HeadState::Current { version, .. } if version == *base));
+                if !same {
+                    return Ok(ActDone::HideHeadMoved);
+                }
+            }
+            ActDone::Hidden(Box::new(pool.set_hide_key(cid, bid, *on, decisions).await?))
         }
         Act::Report { cid, bid, reason, note } => {
             pool.report_circle_bank(cid, bid, reason.wire(), note).await?;
@@ -549,7 +648,8 @@ pub(super) async fn copy_bank(pool: &Pool<'_>, images: &(dyn ImageSink + Send + 
     };
     let head = ItemHead { item, questions: Vec::new(), license_check: None };
     let at_ms = now_ms();
-    let mut theirs = super::circle_links::circle_theirs(&doc.payload, at_ms);
+    // (critic 57) the viewers' form marks every question as keyless, flag or not
+    let mut theirs = super::circle_links::circle_theirs_as(&doc.payload, at_ms, b.keys_hidden);
     if theirs.is_empty() {
         return Err(PoolError::Local(super::pool::LocalProblem::BadItemShape));
     }
@@ -586,7 +686,9 @@ pub(super) async fn copy_bank(pool: &Pool<'_>, images: &(dyn ImageSink + Send + 
     let questions: Vec<Question> = theirs.iter().map(|t| t.q.clone()).collect();
     let fingerprints = theirs.iter().map(|t| t.fp.clone()).collect();
     let info = ImportInfo { license, ..ImportInfo::default() };
-    Ok(Imported { head, info, questions, fingerprints, pictures, pictures_missing: missing, keyless: false, at_ms, theirs })
+    // A viewer's copy of a bank that hides its keys (phase C): its questions arrive without keys and are marked so.
+    let keyless = b.keys_hidden || questions.iter().any(crate::model::is_keyless);
+    Ok(Imported { head, info, questions, fingerprints, pictures, pictures_missing: missing, keyless, at_ms, theirs })
 }
 
 // ---- the model ----------------------------------------------------------------------------------------------------------
@@ -615,6 +717,10 @@ pub struct CirclesModel {
     pub edit: CircleEditModel,
     /// The pool answered `invite_required` (the Shared page then asks for the pool's invite code).
     pub invite_required: bool,
+    /// Removed banks whose "Delete for good now" was only partly done (round 48): versions an
+    /// administrator is still reviewing are kept, the rest is gone and nothing can be brought back. The
+    /// pool's circle page does not say so, so it is remembered here (bank id -> versions kept).
+    pub purge_claimed: std::collections::HashMap<String, u64>,
     open_account: bool,
     resume: Screen,
     session: Option<SharedSession>,
@@ -633,6 +739,9 @@ pub struct CirclesModel {
     clock: Option<i64>,
     now: Option<Instant>,
     repaint: Option<Arc<dyn Fn() + Send + Sync>>,
+    /// The account what is loaded here was read for (critic 60 I1), and whether it has signed out since.
+    account: Option<String>,
+    account_out: bool,
 }
 
 impl Default for CirclesModel {
@@ -657,6 +766,7 @@ impl CirclesModel {
             bank: None,
             edit: CircleEditModel::new(runner, images.clone(), Arc::new(StoreMedia), Arc::new(StoreRestore), LinkLog::Store),
             invite_required: false,
+            purge_claimed: Default::default(),
             open_account: false,
             resume: Screen::List,
             session: None,
@@ -675,6 +785,8 @@ impl CirclesModel {
             clock: None,
             now: None,
             repaint: None,
+            account: None,
+            account_out: false,
         }
     }
 
@@ -776,10 +888,10 @@ impl CirclesModel {
         self.jobs.clear();
     }
 
-    /// Nothing typed or shown once stays behind.
+    /// Nothing typed or shown once stays behind (a code, a pasted link, an address).
     fn wipe_secrets(&mut self) {
         self.join = JoinState::default();
-        if matches!(self.panel, Panel::Code(_)) {
+        if matches!(self.panel, Panel::Code(_) | Panel::Email(_)) {
             self.panel = Panel::None;
         }
     }
@@ -818,7 +930,73 @@ impl CirclesModel {
         self.auto();
     }
 
+    /// The account's state, every frame of the Shared page, the tabs shown or not (the tabs are not drawn while
+    /// signed out, so `frame` never sees a sign-out). Critic 60 I1: what was read for one account is never shown to
+    /// another. Signed out: everything read goes (a bank's page and its hiding state, the circle's page with its
+    /// members and invitations, the history and the versions refused); where the person was is kept, and read again
+    /// when the same account signs in. Another account signing in starts at the list.
+    pub fn note_account(&mut self, snap: &AccountSnapshot) {
+        match (&snap.gate, &snap.account) {
+            (Gate::Ready, Some(a)) => {
+                if self.account.as_ref().is_some_and(|p| p != a) {
+                    self.forget_account();
+                }
+                self.account = Some(a.clone());
+                self.account_out = false;
+            }
+            (Gate::SignedOut, _) if self.account.is_some() && !self.account_out => {
+                self.forget_loaded();
+                self.account_out = true;
+            }
+            _ => {}
+        }
+    }
+
+    /// What was read for the account, and the account's own jobs and answers, go; `keep` says where to start again;
+    /// `another`: another account signed in (not only a sign-out).
+    fn forget_reads(&mut self, keep: Screen, another: bool) {
+        let (open, cid, bid) = (self.open, self.circle.as_ref().map(|c| c.id.clone()), self.bank.as_ref().map(|b| b.bid.clone()));
+        self.reset(Screen::List);
+        self.edit.forget_account(another);
+        match (keep, cid, bid) {
+            (Screen::Bank, Some(c), Some(b)) => {
+                self.circle = Some(CircleView { id: c.clone(), ..CircleView::default() });
+                self.bank = Some(new_bank_view(&c, &b));
+                self.resume = Screen::Bank;
+            }
+            (Screen::Circle | Screen::Bank, Some(c), _) => {
+                self.circle = Some(CircleView { id: c, ..CircleView::default() });
+                self.resume = Screen::Circle;
+            }
+            (Screen::Join | Screen::Create, ..) => self.resume = keep,
+            _ => {}
+        }
+        self.open = open;
+        self.ready = None;
+        self.last_act = None;
+        self.heads_wanted = None;
+        self.heads = None;
+        self.copy_name = None;
+        self.copy_seed = None;
+        self.joining_name = None;
+        self.purge_claimed.clear();
+        self.invite_required = false;
+    }
+
+    /// Signed out: nothing read stays, where the person was is kept (see note_account).
+    fn forget_loaded(&mut self) {
+        let at = if self.screen == Screen::Gate { self.resume } else { self.screen };
+        self.forget_reads(at, false);
+        self.gate = Gate::SignedOut;
+    }
+
+    /// Another account signed in: it starts at the list (see note_account).
+    fn forget_account(&mut self) {
+        self.forget_reads(Screen::List, true);
+    }
+
     fn apply_snapshot(&mut self, snap: &AccountSnapshot) {
+        self.note_account(snap);
         self.session = snap.session.clone();
         self.gate = snap.gate.clone();
         if self.screen == Screen::Gate {
@@ -927,10 +1105,13 @@ impl CirclesModel {
                             p.message = "You have tried as many circle codes today as the pool allows. Try again tomorrow, or ask the owner to check the code.".into();
                         }
                     }
-                    RefusalKind::RateLimited | RefusalKind::TooManyOpenReads | RefusalKind::TooManyUploads | RefusalKind::Busy => {
+                    RefusalKind::RateLimited | RefusalKind::TooManyOpenReads | RefusalKind::TooManyUploads | RefusalKind::Busy | RefusalKind::HourlyLimit { .. } => {
                         p.retry = true;
                         p.retry_at = wait;
                     }
+                    // (a `409 conflict` without a head: something changed at the same moment; "republish" is the
+                    // public pool's word, not a circle's)
+                    RefusalKind::Conflict { .. } => p.message = "Something changed at the same moment. Reload the page and try again.".into(),
                     RefusalKind::NotFound => p.message = "That circle or bank is not available to you any more. It may have been closed, or you may have left it or been removed.".into(),
                     RefusalKind::CircleClosed { undo_until, reason } => {
                         let owner = !matches!(reason.as_deref(), Some("admin" | "last_member_gone"));
@@ -952,6 +1133,7 @@ impl CirclesModel {
                             Some("expires_in_days") => "Choose how long the code works, from 1 to 30 days.".into(),
                             Some("note") => "The note can be at most 200 characters.".into(),
                             Some("user_id") => "The pool did not recognise that member. Reload the circle.".into(),
+                            Some("email") => "That is not an email address the pool can send to. Check it for a typo.".into(),
                             Some(f) => format!("The pool did not accept the {}. Nothing was changed.", f.replace('_', " ")),
                             None => "The pool did not accept that. Nothing was changed.".into(),
                         }
@@ -985,7 +1167,8 @@ impl CirclesModel {
             return false;
         }
         if let Work::Act(a) = &work {
-            self.last_act = Some(a.clone());
+            // An emailed invitation is never sent again by "Try again": its address is not kept.
+            self.last_act = if matches!(a, Act::EmailInvite { .. }) { None } else { Some(a.clone()) };
         }
         self.jobs.retain(|j| j.kind != kind);
         let (tx, rx) = channel::<JobMsg>();
@@ -1060,6 +1243,20 @@ impl CirclesModel {
                     }
                 }
                 _ => {
+                    // A change that lost its answer frees what was waiting for it.
+                    if let Panel::Email(f) = &mut self.panel
+                        && f.working
+                    {
+                        f.working = false;
+                        f.problem = Some(p.clone());
+                        f.problem_domain = None;
+                    }
+                    if let Some(b) = &mut self.bank
+                        && matches!(b.hide, HideStage::Working { .. })
+                        && let HideStage::Working { on, back } = std::mem::take(&mut b.hide)
+                    {
+                        b.hide = HideStage::Failed { on, problem: p.clone(), back };
+                    }
                     if let Some(c) = &mut self.circle {
                         c.act_problem = Some(p);
                     }
@@ -1163,6 +1360,19 @@ impl CirclesModel {
                 }
             }
             Err(e) => {
+                // A cursor the pool does not take (round 45: `400 invalid_request {field: "before"}`), or one this
+                // app could not send: the list starts again from the newest line.
+                let bad_cursor = !first
+                    && (matches!(e.kind(), Some(RefusalKind::InvalidRequest { field: Some(f) }) if f == "before") || matches!(e, PoolError::Local(super::pool::LocalProblem::BadField("cursor"))));
+                if bad_cursor {
+                    if let Some(c) = &mut self.circle {
+                        c.activity.clear();
+                        c.activity_next = None;
+                        c.activity_loaded = false;
+                        c.activity_problem = None;
+                    }
+                    return;
+                }
                 if let Some(p) = self.problem_of(&e)
                     && let Some(c) = &mut self.circle
                 {
@@ -1182,19 +1392,28 @@ impl CirclesModel {
         }
         match r {
             Ok(doc) => {
-                let view = StudentView::from_payload(&doc.payload, Served::Full).map_err(|e| e.message());
+                // A viewer of a bank that hides its keys is served the viewers' form (phase C).
+                let form = if doc.bank.keys_hidden { Served::Stripped } else { Served::Full };
+                let view = StudentView::from_payload(&doc.payload, form).map_err(|e| e.message());
                 if let Some(b) = &mut self.bank {
                     b.load = BankLoad::Ready(Box::new(BankLoaded { doc, view }));
+                    b.withheld_head = false;
+                    b.hide_off_releases = false;
                 }
             }
             Err(e) => {
                 let removed = matches!(e.kind(), Some(RefusalKind::BankRemoved));
+                let withheld = matches!(e.kind(), Some(RefusalKind::VersionWithheld));
+                // (critic 59 B1) Only the pool knows whether turning hiding off releases the version.
+                let releases = withheld && matches!(&e, PoolError::Refused(r) if r.detail.json.get("hide_off_releases").and_then(serde_json::Value::as_bool) == Some(true));
                 if let Some(mut p) = self.problem_of(&e) {
                     if removed {
                         p.message = "This bank was removed from the circle. If you or the circle's owner removed it, it can be brought back for 14 days from the circle's page.".into();
                     }
                     if let Some(b) = &mut self.bank {
                         b.load = BankLoad::Failed(p);
+                        b.withheld_head = withheld;
+                        b.hide_off_releases = releases;
                     }
                 }
             }
@@ -1292,6 +1511,20 @@ impl CirclesModel {
                     // The sign-in ended: nothing happened, and the buttons that were waiting are free again.
                     match &a {
                         Act::Create { .. } => self.create.working = false,
+                        Act::EmailInvite { .. } => {
+                            // (the address stays in the form, so it can be sent once signed in again)
+                            if let Panel::Email(f) = &mut self.panel {
+                                f.working = false;
+                            }
+                        }
+                        Act::HideKey { .. } => {
+                            if let Some(b) = &mut self.bank {
+                                b.hide = match std::mem::take(&mut b.hide) {
+                                    HideStage::Working { back: Some(d), .. } => HideStage::Decide(d),
+                                    _ => HideStage::Idle,
+                                };
+                            }
+                        }
                         Act::Report { .. } => {
                             if let Some(f) = self.bank.as_mut().and_then(|b| b.report.as_mut()) {
                                 f.state = ReportState::Editing;
@@ -1311,6 +1544,92 @@ impl CirclesModel {
                         }
                         self.create.working = false;
                         self.create.problem = Some(p);
+                    }
+                    Act::EmailInvite { email, .. } => {
+                        // Said in the form, which stays open with the address (to fix a typo); the page is not read
+                        // again, so the form is not lost.
+                        // (critic 57 I4) A limit the pool keeps per mail domain waits for that domain only.
+                        let domain = match e.kind() {
+                            Some(RefusalKind::HourlyLimit { metric: Some(m), .. }) if matches!(m.as_str(), "circle_email_inviter_domain_hourly" | "circle_email_domain_hourly") => mail_domain(email.expose()),
+                            _ => None,
+                        };
+                        match e.kind() {
+                            Some(RefusalKind::Conflict { .. } | RefusalKind::CircleConflict { .. }) => {
+                                p.message = "That invitation changed at the same moment (it was used, withdrawn or it expired). Nothing was sent: invite the address again.".into();
+                            }
+                            Some(RefusalKind::Busy) => {
+                                p.message = "Too many invitations are being sent right now, by everyone. Nothing was sent. Try again later.".into();
+                            }
+                            Some(RefusalKind::InviteNotSent { .. } | RefusalKind::CircleFull { .. } | RefusalKind::CirclesLimit { .. }) => p.retry = false,
+                            Some(RefusalKind::NotFound) => p.message = "This circle is not available to you any more. Nothing was sent.".into(),
+                            Some(RefusalKind::InvalidRequest { field }) => {
+                                p.message = match field.as_deref() {
+                                    Some("email") => "That is not an email address the pool can send to. Check it for a typo. Nothing was sent.".into(),
+                                    Some("role") => "Choose whether the person can add banks or can only look and copy.".into(),
+                                    _ => "The pool did not accept that invitation. Nothing was sent.".into(),
+                                }
+                            }
+                            _ => {}
+                        }
+                        let stale = matches!(e.kind(), Some(RefusalKind::Conflict { .. } | RefusalKind::CircleConflict { .. } | RefusalKind::CircleRoleRequired { .. }));
+                        if let Panel::Email(f) = &mut self.panel {
+                            f.working = false;
+                            f.problem = Some(p);
+                            f.problem_domain = domain;
+                        }
+                        if let Some(c) = &mut self.circle
+                            && stale
+                        {
+                            c.invites = None;
+                        }
+                    }
+                    Act::HideKey { decisions, on, base, .. } => {
+                        let asks = if let PoolError::Refused(r) = &e { decision_refusal(&r.kind).cloned() } else { None };
+                        if let Some(pr) = asks {
+                            // The pool lists what it needs decided for the viewers' copy: the guided page.
+                            if let Some(b) = &mut self.bank {
+                                let mut d = Decisions::new(pr, decisions.clone());
+                                d.head = *base;
+                                b.hide = HideStage::Decide(Box::new(d));
+                            }
+                            return;
+                        }
+                        let mut reread = false;
+                        // (critic 57 I2) The decisions made stay for "Try again", unless the bank changed under them.
+                        let mut keep = true;
+                        match e.kind() {
+                            Some(RefusalKind::CircleConflict { .. } | RefusalKind::Conflict { .. }) => {
+                                p.message = "A new version of this bank arrived meanwhile, so nothing was changed. The bank was read again: press the switch again for the new version.".into();
+                                reread = true;
+                                keep = false;
+                            }
+                            Some(RefusalKind::InvalidRequest { field: Some(f) }) if matches!(f.as_str(), "labels" | "order_acks" | "ack_formatting" | "image_ok") => {
+                                p.message = "The bank changed meanwhile (its newest version is not the one the decisions were for), so nothing was changed. The bank was read again: start again.".into();
+                                reread = true;
+                                keep = false;
+                            }
+                            Some(RefusalKind::InvalidRequest { .. }) => p.message = "The pool did not accept that request. Nothing was changed.".into(),
+                            Some(RefusalKind::BankRemoved | RefusalKind::NotFound | RefusalKind::CircleRoleRequired { .. } | RefusalKind::CircleClosed { .. }) => reread = true,
+                            _ => {}
+                        }
+                        if let PoolError::Api(ApiError::Offline(why)) = &e {
+                            // A lost answer can not say "nothing changed": the change may have been made.
+                            let kept = if decisions.is_empty() { "" } else { " Your decisions are kept." };
+                            p.message = format!("{why} The answer did not arrive, so it is not known whether the setting changed. Try again to find out.{kept}");
+                        }
+                        if let Some(b) = &mut self.bank {
+                            let back = match std::mem::take(&mut b.hide) {
+                                HideStage::Working { back, .. } if keep => back,
+                                _ => None,
+                            };
+                            b.hide = HideStage::Failed { on: *on, problem: p, back };
+                            if reread {
+                                b.load = BankLoad::Loading;
+                            }
+                        }
+                        if reread && let Some(c) = &mut self.circle {
+                            c.detail = None;
+                        }
                     }
                     Act::SetLicense { .. } | Act::RemoveBank { .. } | Act::Report { .. } if self.bank.is_some() => {
                         if let Some(b) = &mut self.bank {
@@ -1335,8 +1654,12 @@ impl CirclesModel {
                         {
                             let title = self.circle.as_ref().and_then(|c| c.detail.as_ref()).and_then(|d| d.banks.iter().find(|b| b.id == *bid)).map(|b| super::publish_text::shown(&b.title)).filter(|t| !t.is_empty());
                             if let Some(t) = title {
-                                p.message = format!("An administrator is still reviewing \"{t}\" for student information. It can be deleted for good once that review is done. You can leave it removed until then.");
+                                p.message = format!("An administrator is still reviewing a version of \"{t}\". It can be deleted for good once that review is done. You can leave it removed until then.");
                             }
+                        }
+                        // After a purge was claimed (round 48) the bank can not be brought back.
+                        if let (Act::RestoreBank { .. }, Some(RefusalKind::BankRemoved)) = (&a, e.kind()) {
+                            p.message = "This bank can no longer be brought back: deleting it for good has already started.".into();
                         }
                         let stale = matches!(status, Some(403 | 404 | 409));
                         if let Some(c) = &mut self.circle {
@@ -1451,13 +1774,60 @@ impl CirclesModel {
                 let u = undo.unwrap_or(self.now_ms() + 14 * 86_400_000);
                 self.notice = Some(Notice::Info(format!("The bank was removed from the circle. It can be brought back {}.", text::until(u, self.now_ms()))));
             }
-            (Act::PurgeBank { .. }, _) => {
+            (Act::PurgeBank { bid, .. }, done) => {
                 if let Some(c) = &mut self.circle {
                     c.detail = None;
                     c.activity_loaded = false;
                     c.act_problem = None;
                 }
-                self.notice = Some(Notice::Info("The bank was deleted for good.".into()));
+                match done {
+                    ActDone::Purged(p) if p.partial => {
+                        self.notice = Some(Notice::Info(text::purge_partial_line(p.evidence_kept)));
+                        self.purge_claimed.insert(bid, p.evidence_kept);
+                    }
+                    _ => self.notice = Some(Notice::Info("The bank was deleted for good.".into())),
+                }
+            }
+            (Act::EmailInvite { .. }, ActDone::Emailed(sent)) => {
+                if let Panel::Email(f) = &mut self.panel {
+                    // The pool has it now: the address is not kept a moment longer.
+                    zeroize::Zeroize::zeroize(&mut f.address);
+                    f.working = false;
+                    f.problem = None;
+                    f.problem_domain = None;
+                    f.sent = Some(*sent);
+                }
+                if let Some(c) = &mut self.circle {
+                    c.invites = None;
+                    c.act_problem = None;
+                    c.activity_loaded = false;
+                }
+            }
+            (Act::HideKey { on, decisions, .. }, ActDone::HideHeadMoved) => {
+                // (critic 57 B1) Nothing was sent. What was decided was for the older version, so it goes.
+                let message = if decisions.is_empty() {
+                    "A new version of this bank arrived meanwhile, so nothing was changed. The bank was read again: press the switch again for the new version."
+                } else {
+                    "A new version of this bank arrived while you were deciding, so nothing was changed and your decisions were dropped (they were for the older version). The bank was read again: press the switch again for the new version."
+                };
+                if let Some(b) = &mut self.bank {
+                    b.hide = HideStage::Failed { on, problem: Problem { message: message.into(), retry: false, retry_at: None, account: false }, back: None };
+                    b.load = BankLoad::Loading;
+                }
+                if let Some(c) = &mut self.circle {
+                    c.detail = None;
+                }
+            }
+            (Act::HideKey { .. }, ActDone::Hidden(r)) => {
+                if let Some(b) = &mut self.bank {
+                    b.hide = HideStage::Done(*r);
+                    // The bank and the circle page are read again (the setting, a hold).
+                    b.load = BankLoad::Loading;
+                }
+                if let Some(c) = &mut self.circle {
+                    c.detail = None;
+                    c.activity_loaded = false;
+                }
             }
             (Act::RestoreBank { .. }, _) => {
                 if let Some(c) = &mut self.circle {
@@ -1478,7 +1848,7 @@ impl CirclesModel {
 }
 
 fn new_bank_view(cid: &str, bid: &str) -> BankView {
-    BankView { cid: cid.to_string(), bid: bid.to_string(), load: BankLoad::Loading, copy: CopyPanel::Closed, report: None, act_problem: None, confirm_remove: false, license_choice: None }
+    BankView { cid: cid.to_string(), bid: bid.to_string(), load: BankLoad::Loading, copy: CopyPanel::Closed, report: None, act_problem: None, confirm_remove: false, license_choice: None, hide: HideStage::Idle, withheld_head: false, hide_off_releases: false }
 }
 
 // ---- what the screens ask for ----------------------------------------------------------------------------
@@ -1754,6 +2124,74 @@ impl CirclesModel {
         }
     }
 
+    // ---- invite by email (phase C, D5) ------------------------------------------------------------------------
+
+    /// "Invite by email...": the owner's form (the address, the role).
+    pub fn begin_email(&mut self) {
+        if self.permitted(Action::MakeCode) {
+            self.panel = Panel::Email(EmailForm::default());
+        }
+    }
+
+    /// Why "Send the invitation" can not be pressed, or `None`.
+    pub fn email_blocker(&self) -> Option<&'static str> {
+        let Panel::Email(f) = &self.panel else { return Some("Open the invitation form first.") };
+        if f.working {
+            return Some("Sending the invitation...");
+        }
+        if self.running(JobKind::Act) {
+            return Some("Wait for the current step to finish.");
+        }
+        if let Some(p) = email_problem(&f.address) {
+            return Some(p);
+        }
+        // An hourly limit's wait (critic 57 I4): one kept per mail domain holds back only that domain.
+        if f.problem.as_ref().and_then(|p| p.retry_at).is_some_and(|at| at > self.now_instant()) {
+            match &f.problem_domain {
+                Some(d) if mail_domain(&f.address).as_deref() == Some(d.as_str()) => {
+                    return Some("Addresses at this mail domain have to wait for the time shown above. You can invite someone with an address at another mail domain now.");
+                }
+                Some(_) => {}
+                None => return Some("Wait for the time shown above, then send it."),
+            }
+        }
+        None
+    }
+
+    /// Sends the invitation: the address goes to the pool once. It is wiped from the form as soon as the pool
+    /// took it; on a refusal it stays (to fix a typo) until the form is closed.
+    pub fn send_email_invite(&mut self) {
+        let Some(cid) = self.cid() else { return };
+        if !self.permitted(Action::MakeCode) || self.email_blocker().is_some() {
+            return;
+        }
+        let Panel::Email(f) = &self.panel else { return };
+        if f.role == Role::Owner {
+            return;
+        }
+        let a = Act::EmailInvite { cid, email: Secret::new(f.address.trim()), role: f.role };
+        if self.launch(Work::Act(a))
+            && let Panel::Email(f) = &mut self.panel
+        {
+            f.working = true;
+            f.problem = None;
+            f.problem_domain = None;
+            f.sent = None;
+        }
+    }
+
+    /// "Invite someone else": an empty form with the same role (the last result goes).
+    pub fn another_email(&mut self) {
+        if let Panel::Email(f) = &mut self.panel
+            && !f.working
+        {
+            zeroize::Zeroize::zeroize(&mut f.address);
+            f.problem = None;
+            f.problem_domain = None;
+            f.sent = None;
+        }
+    }
+
     pub fn more_invites(&mut self) {
         let Some(c) = &self.circle else { return };
         if let Some(next) = c.invites_next.clone() {
@@ -1934,14 +2372,28 @@ impl CirclesModel {
     /// "Make a working copy": the same copy, and the bank stays linked to the circle bank, so
     /// changes can be sent back and the circle's newer versions merged in.
     pub fn make_working_copy(&mut self) {
-        if self.role().can_add_banks() {
+        if self.can_make_working_copy() {
             self.start_copy(true);
         }
     }
 
-    /// Whether "Make a working copy" is offered for the bank on screen.
+    /// Whether "Make a working copy" is offered for the bank on screen. Never for the viewers' form of a
+    /// bank that hides its keys: a copy without keys can not be sent back (`keyless_question`).
     pub fn can_make_working_copy(&self) -> bool {
-        self.bank_allowed(BankAction::Copy) && self.role().can_add_banks()
+        self.bank_allowed(BankAction::Copy) && self.role().can_add_banks() && !self.keys_hidden_here()
+    }
+
+    /// The bank on screen was served without its answer keys (the person reads it as a viewer).
+    pub fn keys_hidden_here(&self) -> bool {
+        matches!(self.bank.as_ref().map(|b| &b.load), Some(BankLoad::Ready(l)) if l.doc.bank.keys_hidden)
+    }
+
+    /// The bank on screen hides its answer keys from viewers (every member is told).
+    pub fn hides_keys_here(&self) -> bool {
+        match self.bank.as_ref().map(|b| &b.load) {
+            Some(BankLoad::Ready(l)) => l.doc.bank.hide_key || l.doc.bank.keys_hidden,
+            _ => self.bank_entry().is_some_and(|e| e.hide_key),
+        }
     }
 
     fn role(&self) -> Role {
@@ -1949,7 +2401,7 @@ impl CirclesModel {
     }
 
     fn start_copy(&mut self, working: bool) {
-        if !self.bank_allowed(BankAction::Copy) {
+        if !self.bank_allowed(BankAction::Copy) || (working && self.keys_hidden_here()) {
             return;
         }
         let Some(b) = &mut self.bank else { return };
@@ -2021,6 +2473,160 @@ impl CirclesModel {
         self.launch(Work::Act(a));
     }
 
+    // ---- hide answer keys from viewers (phase C, D12) ---------------------------------------------------------
+
+    /// The switch is offered: the bank's author while an editor, or the circle's owner, on a bank read in full.
+    pub fn hide_allowed(&self) -> bool {
+        self.bank_allowed(BankAction::HideKeys) && matches!(self.bank.as_ref().map(|b| &b.load), Some(BankLoad::Ready(_))) && !self.keys_hidden_here()
+    }
+
+    /// The setting as last read, or as the change just made left it (until the bank is read again).
+    pub fn hide_key_on(&self) -> bool {
+        match self.bank.as_ref().map(|b| &b.hide) {
+            Some(HideStage::Done(r)) => r.hide_key,
+            _ => self.hides_keys_here(),
+        }
+    }
+
+    /// The newest version is held back for review, so the bank can not be read, and the person may change the
+    /// setting: the switch stays, both ways, so hiding can always be turned on again (critic 59 B1).
+    pub fn hide_switch_on_held_head(&self) -> bool {
+        let Some(b) = &self.bank else { return false };
+        b.withheld_head && matches!(b.load, BankLoad::Failed(_)) && self.bank_allowed(BankAction::HideKeys)
+    }
+
+    /// The bank hides its keys, its newest version is held back for review, and the pool said turning hiding
+    /// off releases it (`hide_off_releases`: only an answer-key change held it back): "Turn hiding off" is
+    /// offered there (critic 58 B2, critic 59 B1). For the people who may change the setting only.
+    pub fn hide_off_offered(&self) -> bool {
+        let Some(b) = &self.bank else { return false };
+        b.hide_off_releases && self.hide_key_on() && self.hide_switch_on_held_head()
+    }
+
+    /// Whether this change of the setting may be asked for now (on a held-back head: only to the other setting).
+    fn hide_change_allowed(&self, on: bool) -> bool {
+        self.hide_allowed() || (self.hide_switch_on_held_head() && on != self.hide_key_on())
+    }
+
+    /// The switch was pressed: asks first, saying what it means.
+    pub fn ask_hide(&mut self, on: bool) {
+        if !self.hide_change_allowed(on) {
+            return;
+        }
+        if let Some(b) = &mut self.bank
+            && matches!(b.hide, HideStage::Idle | HideStage::Done(_) | HideStage::Failed { .. })
+        {
+            b.hide = HideStage::Confirm { on };
+        }
+    }
+
+    /// Leaves the confirmation, the decisions page or a result: nothing is sent.
+    pub fn cancel_hide(&mut self) {
+        if let Some(b) = &mut self.bank
+            && !matches!(b.hide, HideStage::Working { .. })
+        {
+            b.hide = HideStage::Idle;
+        }
+    }
+
+    /// "Try again" after a failure: the decisions made go again when they were kept (critic 57 I2), else it
+    /// asks once more (each try counts toward the day's tries).
+    pub fn retry_hide(&mut self) {
+        let Some(b) = &mut self.bank else { return };
+        if !matches!(b.hide, HideStage::Failed { .. }) {
+            return;
+        }
+        let HideStage::Failed { on, back, .. } = std::mem::take(&mut b.hide) else { return };
+        match back {
+            Some(d) if on => {
+                b.hide = HideStage::Decide(d);
+                self.send_hide_decisions();
+            }
+            _ => self.ask_hide(on),
+        }
+    }
+
+    /// "Yes": the change goes to the pool (with no decisions yet: the pool lists what it needs).
+    pub fn confirm_hide(&mut self) {
+        let on = match self.bank.as_ref().map(|b| &b.hide) {
+            Some(HideStage::Confirm { on }) => *on,
+            _ => return,
+        };
+        let base = if on { self.read_version() } else { None };
+        self.start_hide(on, StripDecisions::default(), base, None);
+    }
+
+    /// The version of the bank as this page read it.
+    fn read_version(&self) -> Option<u64> {
+        match self.bank.as_ref().map(|b| &b.load) {
+            Some(BankLoad::Ready(l)) => Some(l.doc.bank.version),
+            _ => None,
+        }
+    }
+
+    fn start_hide(&mut self, on: bool, decisions: StripDecisions, base: Option<u64>, back: Option<Box<Decisions>>) {
+        if !self.hide_change_allowed(on) {
+            return;
+        }
+        let Some(b) = &self.bank else { return };
+        let a = Act::HideKey { cid: b.cid.clone(), bid: b.bid.clone(), on, decisions, base };
+        if self.launch(Work::Act(a))
+            && let Some(b) = &mut self.bank
+        {
+            b.hide = HideStage::Working { on, back };
+        }
+    }
+
+    fn decisions_mut(&mut self) -> Option<&mut Decisions> {
+        match self.bank.as_mut().map(|b| &mut b.hide) {
+            Some(HideStage::Decide(d)) => Some(d),
+            _ => None,
+        }
+    }
+
+    pub fn hide_decide_label(&mut self, at: super::pool::Pos, c: super::pool::LabelChoice) {
+        if let Some(d) = self.decisions_mut() {
+            d.decide_label(at, c);
+        }
+    }
+
+    pub fn hide_set_order(&mut self, at: super::pool::Pos, yes: bool) {
+        if let Some(d) = self.decisions_mut() {
+            d.set_order(at, yes);
+        }
+    }
+
+    pub fn hide_all_orders(&mut self) {
+        if let Some(d) = self.decisions_mut() {
+            d.ack_all_orders();
+        }
+    }
+
+    pub fn hide_set_formatting(&mut self, question: usize, yes: bool) {
+        if let Some(d) = self.decisions_mut() {
+            d.set_formatting(question, yes);
+        }
+    }
+
+    /// "Hide the keys with these decisions": only when everything listed is decided.
+    pub fn send_hide_decisions(&mut self) {
+        let Some(b) = &mut self.bank else { return };
+        let HideStage::Decide(d) = std::mem::take(&mut b.hide) else { return };
+        if !d.ready() || self.running(JobKind::Act) {
+            if let Some(b) = &mut self.bank {
+                b.hide = HideStage::Decide(d);
+            }
+            return;
+        }
+        let decisions = d.decisions();
+        // (critic 57 B1) Checked against the version the page was made for, right before sending.
+        let base = d.head.or_else(|| self.read_version());
+        if let Some(b) = &mut self.bank {
+            b.hide = HideStage::Decide(d.clone());
+        }
+        self.start_hide(true, decisions, base, Some(d));
+    }
+
     pub fn ask_remove_bank(&mut self) {
         if self.bank_allowed(BankAction::Remove)
             && let Some(b) = &mut self.bank
@@ -2050,6 +2656,9 @@ impl CirclesModel {
     /// Brings back a removed bank from the circle's page.
     pub fn restore_bank(&mut self, bid: &str) {
         let Some(cid) = self.cid() else { return };
+        if self.purge_claimed.contains_key(bid) {
+            return;
+        }
         let now = self.now_ms();
         let ok = self.circle.as_ref().and_then(|c| c.detail.as_ref()).is_some_and(|d| d.banks.iter().any(|e| e.id == bid && bank_can(d.circle.role(), d.circle.closed(), e, BankAction::Restore) && e.removed.as_ref().and_then(|r| r.undo_until).is_some_and(|u| u > now)));
         if ok {
@@ -2060,6 +2669,9 @@ impl CirclesModel {
     /// The owner deletes a removed bank for good, now (the page asks first).
     pub fn purge_bank(&mut self, bid: &str) {
         let Some(cid) = self.cid() else { return };
+        if self.purge_claimed.contains_key(bid) {
+            return;
+        }
         let ok = self.circle.as_ref().and_then(|c| c.detail.as_ref()).is_some_and(|d| d.banks.iter().any(|e| e.id == bid && bank_can(d.circle.role(), d.circle.closed(), e, BankAction::Purge)));
         if ok {
             if let Some(c) = &mut self.circle {

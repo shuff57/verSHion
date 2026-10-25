@@ -108,8 +108,17 @@ impl SharedUi {
     pub fn draw(&mut self, ui: &mut Ui, account: &mut AccountUi, browse: &mut BrowseUi, mine: &mut MineUi, banks: &mut Vec<QuestionBank>, exams: &[Exam]) -> bool {
         let mut changed = false;
         mark_drawn(ui.ctx());
+        // (an address or code field the Circles tab emptied or closed leaves no undo history, whichever tab shows)
+        super::circles_ui::forget_cleared_fields(ui.ctx(), &self.circles);
         account.pin();
         let snap = snapshot_of(&account.model);
+        // (critic 60 I1: the tabs are drawn only while signed in, so the Circles page is told of a sign-out, or of
+        // another account, here; what it read for one account is never shown to the next)
+        self.circles.note_account(&snap);
+        // (critic 61 I3: the same for the other tabs and the invite step, before anything of theirs is drawn)
+        mine.model.note_account(&snap);
+        browse.model.note_account(&snap);
+        self.model.note_account(&snap, &mut account.invite);
         let guide = self.model.guide(&snap.gate, account.model.page, account.invite.redeemed());
         // An invite code taken: the tabs ask again.
         if account.invite.redeemed() && self.model.invite_needed {

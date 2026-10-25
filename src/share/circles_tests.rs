@@ -67,6 +67,13 @@ impl Script {
         self.routes.lock().unwrap().entry(format!("{m} {path}")).or_default().push_back(Response::new(status, &body.to_string()));
         self
     }
+    /// A queued reply for one route that also says how long to wait (`Retry-After`, in seconds).
+    pub(super) fn on_wait(&self, m: &str, path: &str, status: u16, body: Value, secs: u64) -> &Self {
+        let mut r = Response::new(status, &body.to_string());
+        r.retry_after = Some(secs);
+        self.routes.lock().unwrap().entry(format!("{m} {path}")).or_default().push_back(r);
+        self
+    }
     /// The same under the circle's own path.
     pub(super) fn act(&self, m: &str, suffix: &str, status: u16, body: Value) -> &Self {
         self.on(m, &format!("/circles/{CID}{suffix}"), status, body)
@@ -158,8 +165,21 @@ pub(super) fn ready(s: &Arc<Script>) -> AccountSnapshot {
     AccountSnapshot::ready(s.clone())
 }
 
+/// A restore point kept in memory (tests never write the app's real data folder).
+pub(super) struct NoDiskRestore;
+
+impl super::browse::RestoreSink for NoDiskRestore {
+    fn save(&self, banks: &[QuestionBank]) -> Result<String, String> {
+        Ok(format!("memory ({} banks)", banks.len()))
+    }
+}
+
+/// The circles model with its working-copy links, pictures and restore points in memory: a test run never
+/// reads or writes `share-circles.json` (or a backup) in the app's real data folder.
 pub(super) fn model() -> CirclesModel {
     let mut m = CirclesModel::new(Runner::Inline, Arc::new(Mem::default())).with_retry(RetryPolicy::none());
+    let media: super::publish::SharedMedia = Arc::new(HashMap::<String, Vec<u8>>::new());
+    m.edit = super::circle_edit::CircleEditModel::new(Runner::Inline, Arc::new(Mem::default()), media, Arc::new(NoDiskRestore), super::circle_links::LinkLog::memory()).with_retry(RetryPolicy::none());
     m.set_clock(NOW);
     m
 }
@@ -248,7 +268,7 @@ fn nothing_is_asked_until_signed_in_and_then_the_list_loads_once() {
     s.say(200, json!({"circles": [summary("editor", json!({}))]}));
     let mut m = model();
     m.open_list();
-    m.frame(now(), &AccountSnapshot { gate: Gate::SignedOut, session: None, account_open: false });
+    m.frame(now(), &AccountSnapshot { gate: Gate::SignedOut, session: None, account_open: false, account: None });
     assert!(s.seen().is_empty());
     assert_eq!(m.screen, Screen::Gate);
     for _ in 0..3 {
@@ -1481,4 +1501,30 @@ fn c44_raw_publish_codes_have_plain_wording_and_a_circle_send_gives_no_hide_key_
     assert!(pt::issue_text(&i, false).contains("hide the key"));
     let c = pt::issue_text_circle(&i, false);
     assert!(!c.contains("hide the key") && c.contains("set the answers"), "{c}");
+}
+
+// ---- critic 61 I3: the publish window and another account ------------------------------------------------------
+
+fn as_account(s: &Arc<Script>, email: &str) -> AccountSnapshot {
+    AccountSnapshot { account: Some(format!("https://pool.test\n{email}")), ..ready(s) }
+}
+
+#[test]
+fn c61_another_account_in_the_publish_window_gets_its_own_circles_not_the_first_accounts() {
+    let s = Script::new();
+    let mut p = to_circle_ready(&s, "editor");
+    p.frame(now(), &as_account(&s, "ada@school.org"));
+    p.circle.choose(CID);
+    assert!(!p.circle.choices().is_empty());
+    let s2 = Script::new();
+    s2.keep("Get", "/circles", 200, json!({"circles": []}));
+    let b = as_account(&s2, "bob@school.org");
+    for _ in 0..3 {
+        p.frame(now(), &b);
+    }
+    assert!(p.circle.choices().is_empty(), "A's circles are not offered to B");
+    assert!(p.circle.chosen.is_none());
+    assert!(p.circle.active, "the destination the person picked stays a circle");
+    assert_eq!(s2.paths(), vec!["Get /circles"], "B's own circles, read with B's session");
+    assert_eq!(p.step, Step::Options);
 }

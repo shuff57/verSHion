@@ -24,7 +24,7 @@
 //   text they come from, so a viewer's copy published publicly meets the same check.
 import { PARSE_BYTES_PER_VALUE, scanJson } from "./jsonscan.ts";
 import { isFail, questionsOf, type Fail, type LabelDecision, type PayloadJson, type Pos, type QuestionJson, type Stripped } from "./core.ts";
-import { acquireHeavy, HEAVY_QUEUE_WAIT_MS } from "./publish.ts";
+import { acquireHeavy, HEAVY_QUEUE_WAIT_MS, tryHeavy } from "./publish.ts";
 import { giveDaily, PoolError, PUBLISH_COST_PER_BYTE, requireDaily, reserveBytes, type Ctx } from "./shared.ts";
 
 /** The author's strip decisions for one version (share-core's options; the publish's meta fields). */
@@ -246,10 +246,12 @@ export async function strippedForViewer(c: Ctx, me: string, fullKey: string, str
 /**
  * Round 47 (critic 54a variant 1): a stored body's FULL form (its questions, key-free match hashes and images), handed
  * to `use` under the isolate's heavy slot and a send's reservation for it, as stripStored does; null when the body is
- * gone or share-core refuses it.
+ * gone or share-core refuses it. Round 51 (critic 61 I2): `o.now` takes the slot only when it is free at once (never
+ * waiting or queueing for it: `503 busy` when it is not), for a read that may do without the work.
  */
-export async function withStoredFull<T>(c: Ctx, key: string, use: (qs: QuestionJson[], mh: string[]) => Promise<T>): Promise<T | null> {
-  const heavy = await acquireHeavy(c.deps.heavyQueueMs ?? HEAVY_QUEUE_WAIT_MS, async () => {}, c.deps.heavySlots);
+export async function withStoredFull<T>(c: Ctx, key: string, use: (qs: QuestionJson[], mh: string[]) => Promise<T>, o: { now?: boolean } = {}): Promise<T | null> {
+  const heavy = o.now ? tryHeavy(c.deps.heavySlots) : await acquireHeavy(c.deps.heavyQueueMs ?? HEAVY_QUEUE_WAIT_MS, async () => {}, c.deps.heavySlots);
+  if (!heavy) throw new PoolError(503, "busy", { message: "The server is busy with large publishes; try again shortly." }, { "Retry-After": "10" });
   const held: (() => void)[] = [heavy];
   try {
     const obj = await c.r2.get(key);

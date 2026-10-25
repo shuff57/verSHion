@@ -29,7 +29,25 @@ pub(super) fn check_id(id: &str) -> Result<(), PoolError> {
 
 /// A circle code as someone may paste it: `C-` and 24 letters and digits in groups, or a link or a
 /// sentence holding one. Returns the code in its plain form, or `None`.
+///
+/// A mailed invitation (phase C, round 42) holds the code in a link's fragment:
+/// `https://<app>/circles/join#code=C-ABCD-...`. That part is read first, so nothing else in a link (its
+/// host or its path) can be taken for the code; a `-` written as `%2D` is read as a dash.
 pub fn code_in(s: &str) -> Option<String> {
+    let lower = s.to_ascii_lowercase();
+    for key in ["#code=", "?code=", "&code="] {
+        if let Some(i) = lower.find(key) {
+            let rest: String = s[i + key.len()..].chars().take(200).collect();
+            let rest = rest.replace("%2D", "-").replace("%2d", "-").replace("%20", " ");
+            if let Some(c) = scan_code(&rest) {
+                return Some(c);
+            }
+        }
+    }
+    scan_code(s)
+}
+
+fn scan_code(s: &str) -> Option<String> {
     // Look for "C-" followed by 24 Crockford characters, with spaces, dashes and underscores between.
     let up: Vec<char> = s.chars().collect();
     let mut i = 0;
@@ -214,6 +232,16 @@ pub(super) fn null_text<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String
     Ok(Option::<String>::deserialize(d)?.unwrap_or_default())
 }
 
+/// A number the pool may send as `null`: read as 0.
+pub(super) fn null_int<'de, D: serde::Deserializer<'de>, T: Default + Deserialize<'de>>(d: D) -> Result<T, D::Error> {
+    Ok(Option::<T>::deserialize(d)?.unwrap_or_default())
+}
+
+/// A flag the pool may send as `null`: read as false.
+pub(super) fn null_bool<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+    Ok(Option::<bool>::deserialize(d)?.unwrap_or_default())
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 #[serde(default)]
 pub struct BankEntry {
@@ -243,6 +271,9 @@ pub struct BankEntry {
     /// Only the author sees a held bank; the value says nothing more than "held".
     pub held: Value,
     pub removed: Option<BankRemoved>,
+    /// Phase C (D12): its viewers read it without the answer keys.
+    #[serde(deserialize_with = "null_bool")]
+    pub hide_key: bool,
 }
 
 impl BankEntry {
@@ -278,24 +309,39 @@ pub struct Invite {
     pub invite_id: String,
     #[serde(deserialize_with = "null_text")]
     pub role: String,
+    #[serde(deserialize_with = "null_int")]
     pub created_at: i64,
     #[serde(deserialize_with = "null_text")]
     pub created_by: String,
     #[serde(deserialize_with = "null_text")]
     pub created_by_name: String,
+    #[serde(deserialize_with = "null_int")]
     pub max_uses: u32,
+    #[serde(deserialize_with = "null_int")]
     pub uses: u32,
+    #[serde(deserialize_with = "null_int")]
     pub expires_at: i64,
     pub revoked_at: Option<i64>,
     pub note: Option<String>,
     /// `active`, `expired`, `used_up` or `revoked`.
     #[serde(deserialize_with = "null_text")]
     pub state: String,
+    /// `code` or `email` (phase C, round 42; absent before: a code).
+    #[serde(deserialize_with = "null_text")]
+    pub kind: String,
+    /// An emailed invitation's masked address, as the pool made it ("j***@school.org", " #2" when the
+    /// circle already has that label). Never the address itself; empty for a code.
+    #[serde(deserialize_with = "null_text")]
+    pub address_label: String,
 }
 
 impl Invite {
     pub fn active(&self) -> bool {
         self.state == "active"
+    }
+    /// Mailed by the pool (an emailed invitation), not a code the owner passed on.
+    pub fn emailed(&self) -> bool {
+        self.kind == "email"
     }
     pub fn role(&self) -> Role {
         Role::parse(&self.role)
@@ -375,6 +421,10 @@ pub struct ActivityEntry {
     pub bank_title: Option<String>,
     pub version: Option<u64>,
     pub license: Option<String>,
+    /// `hide_key_changed` (phase C): whether the keys are now hidden from viewers.
+    pub hide_key: Option<bool>,
+    /// `rolled_back`: the version whose content was restored.
+    pub rollback_of: Option<u64>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -412,6 +462,12 @@ pub struct BankHead {
     pub committed_at: i64,
     pub committed_by: Option<String>,
     pub held: Value,
+    /// Phase C (D12): the bank hides its answer keys from viewers (told to every member).
+    #[serde(deserialize_with = "null_bool")]
+    pub hide_key: bool,
+    /// This read is the viewers' form: no answer keys, no explanations (`keyless` questions).
+    #[serde(deserialize_with = "null_bool")]
+    pub keys_hidden: bool,
 }
 
 /// A bank as read: the head, the questions exactly as the server stored them, where they came from
@@ -466,6 +522,114 @@ pub struct SentBank {
     pub rollback_of: Option<u64>,
 }
 
+/// The pool mailed an invitation (`202` of `POST /circles/:cid/invites/email`). Never the code, never the
+/// address: only the masked label the pool made.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+#[serde(default)]
+pub struct EmailInviteSent {
+    #[serde(deserialize_with = "null_text")]
+    pub invite_id: String,
+    #[serde(deserialize_with = "null_text")]
+    pub role: String,
+    pub expires_at: Option<i64>,
+    #[serde(deserialize_with = "null_bool")]
+    pub emailed: bool,
+    #[serde(deserialize_with = "null_text")]
+    pub address_label: String,
+    /// The address already had an open invitation from this circle: a new code was mailed and the
+    /// earlier one stopped working (round 48).
+    #[serde(deserialize_with = "null_bool")]
+    pub resent: bool,
+}
+
+impl EmailInviteSent {
+    pub fn role(&self) -> Role {
+        Role::parse(&self.role)
+    }
+}
+
+/// The longest address the pool takes.
+pub const EMAIL_MAX: usize = 254;
+
+/// What is wrong with a typed address before anything is sent (the pool checks it again), or `None`.
+pub fn email_problem(s: &str) -> Option<&'static str> {
+    let t = s.trim();
+    if t.is_empty() {
+        return Some("Type the email address of the teacher you want to invite.");
+    }
+    if t.chars().count() > EMAIL_MAX {
+        return Some("That address is too long.");
+    }
+    if t.chars().any(|c| c.is_whitespace() || c.is_control()) || t.contains(',') || t.contains(';') {
+        return Some("Type one address only, with no spaces.");
+    }
+    match t.rsplit_once('@') {
+        Some((local, domain)) if !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.') => None,
+        _ => Some("That does not look like an email address (name@school.org)."),
+    }
+}
+
+/// The author's decisions for the viewers' copy of a bank that hides its answer keys (the publish's
+/// fields: `labels`, `order_acks`, `ack_formatting`, `image_ok`). Only what the pool listed is ever
+/// decided: a decision for a question it did not name is refused and costs one of the day's tries.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct StripDecisions {
+    pub labels: Vec<LabelDecision>,
+    pub order_acks: Vec<Pos>,
+    pub ack_formatting: Vec<usize>,
+    pub image_ok: Vec<usize>,
+}
+
+impl StripDecisions {
+    pub fn is_empty(&self) -> bool {
+        self.labels.is_empty() && self.order_acks.is_empty() && self.ack_formatting.is_empty() && self.image_ok.is_empty()
+    }
+
+    /// Writes the non-empty fields into a request body or a send's meta.
+    pub fn put(&self, m: &mut serde_json::Map<String, Value>) {
+        if !self.labels.is_empty() {
+            m.insert("labels".into(), json!(self.labels));
+        }
+        if !self.order_acks.is_empty() {
+            m.insert("order_acks".into(), json!(self.order_acks));
+        }
+        if !self.ack_formatting.is_empty() {
+            m.insert("ack_formatting".into(), json!(self.ack_formatting));
+        }
+        if !self.image_ok.is_empty() {
+            m.insert("image_ok".into(), json!(self.image_ok));
+        }
+    }
+}
+
+/// What a change of the answer-key setting did (`PATCH .../banks/:bid {hide_key}`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct HideKeyResult {
+    pub hide_key: bool,
+    /// It was already so: nothing changed and nothing was counted.
+    pub unchanged: bool,
+    /// The viewers' form matched the pool's checks: the bank is hidden from the circle while it is reviewed.
+    pub held: bool,
+    /// The newest version itself is held back for an administrator's review.
+    pub withheld: bool,
+    pub labels_removed: usize,
+    pub images_kept: usize,
+    pub images_removed: usize,
+    pub figures_removed: usize,
+    /// Turning hiding off made these versions readable again.
+    pub restored: Vec<u64>,
+}
+
+/// What "Delete for good now" did (`POST .../purge`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Purged {
+    /// Round 48: everything but the versions an administrator is still reviewing was deleted now; the bank
+    /// can no longer be brought back and the rest goes once the review is done.
+    pub partial: bool,
+    /// How many versions are kept for that review.
+    pub evidence_kept: u64,
+}
+
 /// What a person types to send a bank to a circle.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CircleSend {
@@ -481,11 +645,14 @@ pub struct CircleSend {
     /// From "Get latest and merge": the token and the version that was merged in.
     pub merge: Option<(String, u64)>,
     pub confirm_large: bool,
+    /// Phase C: for a bank that hides its answer keys, how the viewers' copy is made (the pool asks
+    /// for these with `labels_need_decision` / `order_ack_required`).
+    pub decisions: StripDecisions,
 }
 
 impl CircleSend {
     pub fn new(payload: Vec<u8>, license: License, meta: ItemMeta) -> CircleSend {
-        CircleSend { commit_id: new_publish_id(), license, message: String::new(), meta, payload, attestation: true, base_version: None, merge: None, confirm_large: false }
+        CircleSend { commit_id: new_publish_id(), license, message: String::new(), meta, payload, attestation: true, base_version: None, merge: None, confirm_large: false, decisions: StripDecisions::default() }
     }
 
     pub fn meta_json(&self) -> Result<String, LocalProblem> {
@@ -513,6 +680,7 @@ impl CircleSend {
         if self.confirm_large {
             m.insert("confirm_large_change".into(), json!(true));
         }
+        self.decisions.put(&mut m);
         m.insert("meta".into(), self.meta_value());
         Ok(Value::Object(m).to_string())
     }
@@ -630,15 +798,17 @@ impl<'a> Pool<'a> {
         Ok(())
     }
 
-    /// `GET /circles/:cid/activity`.
+    /// `GET /circles/:cid/activity`. The cursor is the pool's `next_before`, opaque (round 45:
+    /// `<time>:<id>`): it is passed back as given, encoded for the address. One the pool does not take is
+    /// `400 invalid_request {field: "before"}` (the caller starts the list again).
     pub async fn circle_activity(&self, cid: &str, before: Option<&str>) -> Result<ActivityPage, PoolError> {
         check_id(cid)?;
         let mut path = format!("/circles/{cid}/activity");
         if let Some(b) = before.filter(|b| !b.is_empty()) {
-            if !b.bytes().all(|c| c.is_ascii_alphanumeric() || b"-_.:".contains(&c)) || b.len() > 100 {
+            if b.chars().count() > 200 || b.chars().any(char::is_control) {
                 return Err(LocalProblem::BadField("cursor").into());
             }
-            path.push_str(&format!("?before={b}"));
+            path.push_str(&format!("?before={}", query_escape(b)));
         }
         let v: Value = parse(&self.call(&Call::new(Method::Get, path)).await?)?;
         let entries = list_of(&v, "activity")?;
@@ -697,6 +867,52 @@ impl<'a> Pool<'a> {
             _ => None,
         };
         Ok(InvitePage { invites, next_cursor })
+    }
+
+    /// `POST /circles/:cid/invites/email {email, role}` (the owner, phase C): the pool makes a single-use
+    /// code and mails it from a fixed text. The address is sent once and kept by nobody: the answer has
+    /// only a masked label. Not repeated by itself (a second call mails again).
+    pub async fn email_invite(&self, cid: &str, email: &Secret, role: Role) -> Result<EmailInviteSent, PoolError> {
+        check_id(cid)?;
+        if role == Role::Owner {
+            return Err(LocalProblem::BadField("role").into());
+        }
+        if email_problem(email.expose()).is_some() {
+            return Err(LocalProblem::BadField("email address").into());
+        }
+        let body = json!({ "email": email.expose().trim(), "role": role.as_str() });
+        let v: Value = parse(&self.call(&Call::new(Method::Post, format!("/circles/{cid}/invites/email")).json(&body).not_safe()).await?)?;
+        let sent: EmailInviteSent = serde_json::from_value(v).map_err(|e| ApiError::BadReply(e.to_string()))?;
+        Ok(sent)
+    }
+
+    /// `PATCH /circles/:cid/banks/:bid {hide_key, labels?, order_acks?, ack_formatting?, image_ok?}`: hides the
+    /// answer keys from the circle's viewers (or shows them again). Decisions go only with `on`. Every try
+    /// that does work counts toward a daily limit, refused ones too: never repeated by itself.
+    pub async fn set_hide_key(&self, cid: &str, bid: &str, on: bool, d: &StripDecisions) -> Result<HideKeyResult, PoolError> {
+        check_id(cid)?;
+        check_id(bid)?;
+        let mut m = serde_json::Map::new();
+        m.insert("hide_key".into(), json!(on));
+        if on {
+            d.put(&mut m);
+        }
+        let mut c = Call::new(Method::Patch, format!("/circles/{cid}/banks/{bid}")).json(&Value::Object(m)).not_safe();
+        c.timeout = Some(Duration::from_secs(120));
+        let v: Value = self.call(&c).await?.json();
+        let n = |k: &str| v.get(k).and_then(Value::as_array).map_or(0, Vec::len);
+        let b = |k: &str| v.get(k).and_then(Value::as_bool).unwrap_or(false);
+        Ok(HideKeyResult {
+            hide_key: v.get("hide_key").and_then(Value::as_bool).unwrap_or(on),
+            unchanged: b("unchanged"),
+            held: b("held"),
+            withheld: b("withheld"),
+            labels_removed: n("labels_removed"),
+            images_kept: n("images_kept"),
+            images_removed: n("images_removed"),
+            figures_removed: n("figures_removed"),
+            restored: v.get("restored").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_u64).collect()).unwrap_or_default(),
+        })
     }
 
     /// `POST /circles/:cid/invites/revoke`.
@@ -853,12 +1069,17 @@ impl<'a> Pool<'a> {
         Ok(v.get("undo_until").and_then(Value::as_i64))
     }
 
-    /// `POST /circles/:cid/banks/:bid/purge`: the owner deletes a removed bank for good, now.
-    pub async fn purge_circle_bank(&self, cid: &str, bid: &str) -> Result<(), PoolError> {
+    /// `POST /circles/:cid/banks/:bid/purge`: the owner deletes a removed bank for good, now. Round 48: when an
+    /// administrator is still reviewing a version, everything else goes now and the answer says so
+    /// (`purged_partial`, `evidence_kept`); the bank can no longer be brought back.
+    pub async fn purge_circle_bank(&self, cid: &str, bid: &str) -> Result<Purged, PoolError> {
         check_id(cid)?;
         check_id(bid)?;
-        self.call(&Call::new(Method::Post, format!("/circles/{cid}/banks/{bid}/purge")).not_safe()).await?;
-        Ok(())
+        let r = self.call(&Call::new(Method::Post, format!("/circles/{cid}/banks/{bid}/purge")).not_safe()).await?;
+        // A 200 is work done whatever its body says: an answer that can not be read is a plain purge.
+        let v: Value = r.json();
+        let flag = |k: &str| v.get(k).and_then(Value::as_bool) == Some(true);
+        Ok(Purged { partial: flag("purged_partial") || flag("pending_review"), evidence_kept: v.get("evidence_kept").and_then(Value::as_u64).unwrap_or(0) })
     }
 
     /// `POST /circles/:cid/banks/:bid/undelete`.
@@ -925,6 +1146,19 @@ fn list_of<T: serde::de::DeserializeOwned>(v: &Value, key: &str) -> Result<Vec<T
         None | Some(Value::Null) => Ok(Vec::new()),
         Some(x) => Ok(serde_json::from_value(x.clone()).map_err(|e| ApiError::BadReply(format!("{key}: {e}")))?),
     }
+}
+
+/// A query value as given, with everything outside letters, digits and `-_.~:` percent-encoded.
+fn query_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        if b.is_ascii_alphanumeric() || b"-_.~:".contains(&b) {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{b:02X}"));
+        }
+    }
+    out
 }
 
 fn check_user(id: &str) -> Result<(), PoolError> {
