@@ -320,8 +320,26 @@ mod tests {
         println!("drag handles probed: {total}");
     }
 
-    /// Figures with nothing sensible to drag. Anything else must expose at least one handle.
-    const NO_HANDLES: &[&str] = &[];
+    /// Figures with nothing sensible to drag (sorted). A new figure must expose handles or be added
+    /// here deliberately; a figure that gains handles must be removed (the test checks both ways).
+    const NO_HANDLES: &[&str] = &[
+        "accounting-equation", "ad-as", "bank-reconciliation", "block-diagram", "body-map", "boolean-table",
+        "brain-regions", "break-even", "cash-flow-statement", "cause-effect", "chi-square-table",
+        "circle-of-fifths", "circular-flow", "climate-graph", "colour-wheel", "confidence-interval",
+        "cost-curves", "court-layout", "data-structure", "depreciation-schedule", "discrete-distribution",
+        "dot-plot", "earth-cycles", "earth-layers", "elasticity", "er-diagram", "experiment-flow",
+        "family-tree", "financial-statement", "flowchart", "food-plate", "free-body", "gear-train",
+        "graph-diagram", "grid-reference", "guitar-chords", "heart-zones", "histogram", "hr-diagram",
+        "journal-entry", "kirchhoff-loops", "loan-amortisation", "logic-circuit", "lorenz", "map-scale",
+        "marketing-funnel", "maslow", "monopoly", "moon-seasons", "music-staff", "network-topology",
+        "normal-curve", "number-base", "org-chart", "organiser", "orthographic", "perspective-grid",
+        "piano-keyboard", "plate-boundaries", "plot-arc", "population-pyramid", "ppf", "probability-tree",
+        "rc-curve", "recursion-tree", "rejection-region", "residual-plot", "rhythm-counting",
+        "sampling-distribution", "scatterplot", "sentence-diagram", "sorting-passes", "state-machine",
+        "stem-and-leaf", "strata", "structure-chart", "supply-demand", "swot", "t-account", "time-value",
+        "timeline", "topo-contours", "trace-table", "tree-diagram", "trial-balance", "two-way-table",
+        "venn-diagram",
+    ];
 
     #[test]
     fn handle_coverage_report() {
@@ -331,10 +349,18 @@ mod tests {
             let size = svg_size(&(d.render)(&p));
             let n = d.handles(&p, size).len();
             println!("HANDLES {} {}", d.id, n);
-            if n == 0 && !NO_HANDLES.contains(&d.id) {
+            if n == 0 {
                 missing.push(d.id);
             }
         }
+        missing.sort();
         println!("without handles: {missing:?}");
+        let mut listed = NO_HANDLES.to_vec();
+        listed.sort();
+        assert_eq!(NO_HANDLES, &listed[..], "NO_HANDLES must be sorted");
+        let new: Vec<&&str> = missing.iter().filter(|m| !NO_HANDLES.contains(m)).collect();
+        let stale: Vec<&&str> = NO_HANDLES.iter().filter(|m| !missing.contains(m)).collect();
+        assert!(new.is_empty(), "figures without drag handles not in NO_HANDLES: {new:?}");
+        assert!(stale.is_empty(), "NO_HANDLES lists figures that now have handles (remove them): {stale:?}");
     }
 }

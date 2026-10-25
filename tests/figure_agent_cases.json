@@ -417,5 +417,413 @@
         ]
       }
     ]
+  },
+  {
+    "name": "population-growth-j-curve",
+    "level": "easy",
+    "request": "A population growth graph showing exponential (J-curve) growth with no limit.",
+    "ids": [
+      "population-growth"
+    ],
+    "checks": [
+      {
+        "key": "growth",
+        "eq": "Exponential (J-curve)"
+      }
+    ]
+  },
+  {
+    "name": "pedigree-x-linked-recessive",
+    "level": "param",
+    "request": "A four-generation pedigree for an X-linked recessive trait.",
+    "ids": [
+      "pedigree"
+    ],
+    "checks": [
+      {
+        "key": "inherit",
+        "eq": "X-linked recessive"
+      },
+      {
+        "key": "gens",
+        "eq": 4
+      }
+    ]
+  },
+  {
+    "name": "histogram-bin-width-5",
+    "level": "param",
+    "request": "A histogram of the scores 52, 58, 61, 63, 65, 66, 68, 70 with bins 5 wide starting at 50.",
+    "ids": [
+      "histogram"
+    ],
+    "checks": [
+      {
+        "key": "data",
+        "contains": "52, 58, 61"
+      },
+      {
+        "key": "auto_bins",
+        "eq": false
+      },
+      {
+        "key": "bin_width",
+        "eq": 5
+      },
+      {
+        "key": "bin_start",
+        "eq": 50
+      }
+    ]
+  },
+  {
+    "name": "normal-curve-above-130",
+    "level": "param",
+    "request": "A normal curve with mean 100 and standard deviation 15 with the area above 130 shaded.",
+    "ids": [
+      "normal-curve"
+    ],
+    "checks": [
+      {
+        "key": "mean",
+        "eq": 100
+      },
+      {
+        "key": "sd",
+        "eq": 15
+      },
+      {
+        "key": "region",
+        "eq": "Above"
+      },
+      {
+        "key": "a",
+        "eq": 130
+      }
+    ]
+  },
+  {
+    "name": "number-base-binary-to-decimal",
+    "level": "easy",
+    "request": "A table converting the binary numbers 1010, 1111 and 10001 to decimal and hexadecimal.",
+    "ids": [
+      "number-base"
+    ],
+    "checks": [
+      {
+        "key": "given",
+        "eq": "Binary"
+      },
+      {
+        "key": "values",
+        "contains": "1010"
+      }
+    ]
+  },
+  {
+    "name": "boolean-table-karnaugh",
+    "level": "param",
+    "request": "A Karnaugh map for the expression Q = A AND NOT B.",
+    "ids": [
+      "boolean-table"
+    ],
+    "checks": [
+      {
+        "key": "expr",
+        "contains": "A AND NOT B"
+      },
+      {
+        "key": "show",
+        "eq": "Karnaugh map"
+      }
+    ]
+  },
+  {
+    "name": "t-account-cash-sales",
+    "level": "easy",
+    "request": "A T-account for Cash showing a debit of 500 for sales and a credit of 200 for rent.",
+    "ids": [
+      "t-account"
+    ],
+    "checks": [
+      {
+        "key": "spec",
+        "contains": "Cash"
+      }
+    ]
+  },
+  {
+    "name": "accounting-equation-pounds",
+    "level": "param",
+    "request": "The accounting equation table in pounds for an owner investing 5000 in cash.",
+    "ids": [
+      "accounting-equation"
+    ],
+    "checks": [
+      {
+        "key": "currency",
+        "eq": "£"
+      },
+      {
+        "key": "spec",
+        "contains": "5000"
+      }
+    ]
+  },
+  {
+    "name": "supply-demand-price-ceiling",
+    "level": "param",
+    "request": "A supply and demand graph with a price ceiling at 40.",
+    "ids": [
+      "supply-demand"
+    ],
+    "checks": [
+      {
+        "key": "control",
+        "eq": "Price ceiling"
+      },
+      {
+        "key": "control_at",
+        "eq": 40
+      }
+    ]
+  },
+  {
+    "name": "ppf-constant-cost",
+    "level": "easy",
+    "request": "A production possibilities frontier with a straight line for constant opportunity cost.",
+    "ids": [
+      "ppf"
+    ],
+    "checks": [
+      {
+        "key": "shape",
+        "eq": "Straight line (constant cost)"
+      }
+    ]
+  },
+  {
+    "name": "strata-tilted",
+    "level": "easy",
+    "request": "A cross-section of rock strata with tilted layers.",
+    "ids": [
+      "strata"
+    ],
+    "checks": [
+      {
+        "key": "structure",
+        "eq": "Tilted layers"
+      }
+    ]
+  },
+  {
+    "name": "moon-seasons-seasons",
+    "level": "easy",
+    "request": "A diagram of Earth's seasons for the northern hemisphere.",
+    "ids": [
+      "moon-seasons"
+    ],
+    "checks": [
+      {
+        "key": "mode",
+        "eq": "Seasons"
+      },
+      {
+        "key": "hemisphere",
+        "eq": "Northern hemisphere"
+      }
+    ]
+  },
+  {
+    "name": "map-scale-1-25000",
+    "level": "param",
+    "request": "A map scale exercise at 1:25000 with the map distances 4.2 cm and 7.5 cm.",
+    "ids": [
+      "map-scale"
+    ],
+    "checks": [
+      {
+        "key": "ratio",
+        "eq": 25000
+      },
+      {
+        "key": "lengths",
+        "contains": "4.2"
+      }
+    ]
+  },
+  {
+    "name": "climate-graph-cairo",
+    "level": "easy",
+    "request": "A climate graph for Cairo, Egypt.",
+    "ids": [
+      "climate-graph"
+    ],
+    "checks": [
+      {
+        "key": "place",
+        "contains": "Cairo"
+      }
+    ]
+  },
+  {
+    "name": "music-staff-bass-clef",
+    "level": "easy",
+    "request": "A bass clef staff with the notes C3, E3 and G3 as quarter notes.",
+    "ids": [
+      "music-staff"
+    ],
+    "checks": [
+      {
+        "key": "clef",
+        "eq": "Bass"
+      },
+      {
+        "key": "notes",
+        "contains": "C3"
+      }
+    ]
+  },
+  {
+    "name": "piano-g-major-triad",
+    "level": "param",
+    "request": "A piano keyboard showing the G major triad.",
+    "ids": [
+      "piano-keyboard"
+    ],
+    "checks": [
+      {
+        "key": "mode",
+        "eq": "Major triad"
+      },
+      {
+        "key": "root",
+        "eq": "G"
+      }
+    ]
+  },
+  {
+    "name": "break-even-5000-25-10",
+    "level": "param",
+    "request": "A break-even chart with fixed costs of 5000, a selling price of 25 and a variable cost of 10 per unit.",
+    "ids": [
+      "break-even"
+    ],
+    "checks": [
+      {
+        "key": "fixed",
+        "eq": 5000
+      },
+      {
+        "key": "price",
+        "eq": 25
+      },
+      {
+        "key": "variable",
+        "eq": 10
+      }
+    ]
+  },
+  {
+    "name": "time-value-future-5pct",
+    "level": "param",
+    "request": "A time value of money diagram for future value at 5 percent interest.",
+    "ids": [
+      "time-value"
+    ],
+    "checks": [
+      {
+        "key": "rate",
+        "eq": 5
+      },
+      {
+        "key": "mode",
+        "eq": "Future value"
+      }
+    ]
+  },
+  {
+    "name": "timeline-hide-event-names",
+    "level": "easy",
+    "request": "A history timeline with the event names hidden so students fill them in.",
+    "ids": [
+      "timeline"
+    ],
+    "checks": [
+      {
+        "key": "hide",
+        "eq": "Event names"
+      }
+    ]
+  },
+  {
+    "name": "plot-arc-fairy-tale",
+    "level": "easy",
+    "request": "A plot arc for the story of Cinderella.",
+    "ids": [
+      "plot-arc"
+    ],
+    "checks": [
+      {
+        "key": "events",
+        "contains": "Cinderella"
+      }
+    ]
+  },
+  {
+    "name": "heart-zones-age-40",
+    "level": "easy",
+    "request": "Target heart rate zones for a 40 year old.",
+    "ids": [
+      "heart-zones"
+    ],
+    "checks": [
+      {
+        "key": "age",
+        "eq": 40
+      }
+    ]
+  },
+  {
+    "name": "food-plate-no-dairy",
+    "level": "param",
+    "request": "A healthy plate diagram without the dairy circle.",
+    "ids": [
+      "food-plate"
+    ],
+    "checks": [
+      {
+        "key": "dairy",
+        "eq": false
+      }
+    ]
+  },
+  {
+    "name": "colour-wheel-triadic",
+    "level": "easy",
+    "request": "A colour wheel showing a triadic colour scheme.",
+    "ids": [
+      "colour-wheel"
+    ],
+    "checks": [
+      {
+        "key": "scheme",
+        "eq": "Triadic"
+      }
+    ]
+  },
+  {
+    "name": "maslow-esteem-level",
+    "level": "easy",
+    "request": "Maslow's hierarchy of needs with the esteem level included.",
+    "ids": [
+      "maslow"
+    ],
+    "checks": [
+      {
+        "key": "levels",
+        "contains": "Esteem"
+      }
+    ]
   }
 ]
