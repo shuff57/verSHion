@@ -2868,7 +2868,7 @@ impl Workspace {
         };
         let (ext, label) = if svg { ("svg", "SVG") } else { ("png", "PNG") };
         let bytes = |s: &str| -> Result<Vec<u8>, String> {
-            if svg { Ok(s.as_bytes().to_vec()) } else { flatten_white(&figures::to_png(s, 2.0)?) }
+            if svg { Ok(figures::svg::annotate(s, def.title, def.blurb).into_bytes()) } else { flatten_white(&figures::to_png(s, 2.0)?) }
         };
         let (sb, kb) = match (bytes(&student), bytes(&key)) {
             (Ok(a), Ok(b)) => (a, b),
