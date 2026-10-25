@@ -218,7 +218,9 @@ impl Params {
         for d in defs {
             let Some(cur) = self.0.get(d.key).cloned() else { continue };
             let new = match (&d.kind, cur) {
-                (Kind::Float { min, max, step }, Value::F(v)) => {
+                // a JSON integer stored into a Float control is read as that number (and clamped like one)
+                (Kind::Float { min, max, step }, v @ (Value::F(_) | Value::I(_))) => {
+                    let v = match v { Value::F(v) => v, Value::I(i) => i as f64, _ => unreachable!() };
                     let mut v = if v.is_nan() { *min } else { v };
                     if snap && *step > 0.0 {
                         v = min + ((v - min) / step).round() * step;
@@ -645,6 +647,9 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
 
 /// Values worked out from the typed ones, as (value_key, text) pairs shown grey in empty boxes
 /// and on "Measure" label buttons.
+/// Editor-only problems with the typed equations of a coordinate grid (never drawn into the figure).
+pub fn grid_warnings(p: &Params) -> Vec<String> { math::grid_warnings(p) }
+
 pub fn computed_for(id: &str, p: &Params) -> Vec<(&'static str, String)> {
     math::computed(id, p)
 }

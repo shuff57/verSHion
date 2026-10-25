@@ -2558,6 +2558,23 @@ impl Workspace {
                         }
                     }
                 }
+                // equations the figure could not draw (unreadable, too many, outside the window): shown here, never in the SVG
+                if fig == "coordinate-grid" {
+                    use std::hash::{Hash, Hasher};
+                    let mut h = std::collections::hash_map::DefaultHasher::new();
+                    for k in ["equations", "xmin", "xmax", "ymin", "ymax", "xunits", "square", "xstep", "ystep"] { format!("{:?}", self.params.0.get(k)).hash(&mut h); }
+                    let key = h.finish();
+                    let wid = ui.make_persistent_id(("grid_warn", fig));
+                    let cached: Option<(u64, Vec<String>)> = ui.data(|d| d.get_temp(wid));
+                    let warns = match cached {
+                        Some((k, w)) if k == key => w,
+                        _ => { let w = figures::grid_warnings(&self.params); ui.data_mut(|d| d.insert_temp(wid, (key, w.clone()))); w }
+                    };
+                    for w in warns {
+                        ui.add_space(2.0);
+                        ui.label(RichText::new(w).color(theme::red()).size(11.5));
+                    }
+                }
             });
         ui.data_mut(|d| d.insert_temp(extra_id, extra));
         if skin {
