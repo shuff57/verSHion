@@ -156,10 +156,47 @@ privacy, terms or moderation wording beyond the fixed invitation mail. Migration
 anywhere yet, `0111`, `0113` and `0114` edited in place in rounds 46 and 48; the next is `0116`). Tests:
 `test/pool/round42.test.ts` (7), `round43.test.ts` (8), `round44.test.ts` (9), `round45.test.ts` (4), `round46.test.ts`
 (12), `round47.test.ts` (10), `round48.test.ts` (10), `round49.test.ts` (3), `round50.test.ts` (4), `round51.test.ts`
-(4), `round52.test.ts` (4); every file failed on the code before its round (45-3 is a guard that already passes after
-round 44: it fails on round 41's code; 51-4 pins a rule round 50's code already keeps). Suite 680 (with
-`d1-like-limit.test.ts`). Rounds 46-52 changed parts of rounds 42-51: where a line below says otherwise, the later round
-is what the code does.
+(4), `round52.test.ts` (4), `round53.test.ts` (6); every file failed on the code before its round (45-3 is a guard that
+already passes after round 44: it fails on round 41's code; 51-4 pins a rule round 50's code already keeps). Suite 686
+(with `d1-like-limit.test.ts`). Rounds 46-53 changed parts of rounds 42-52: where a line below says otherwise, the later
+round is what the code does. The circle route table under "Round 32" is current through round 53.
+
+**Round 53 (carried-over backend items: critic 56a's nitpicks and V5, critic 61 M1's note, the staging run's hide-on
+nit).** No migration. Tests: `test/pool/round53.test.ts` (6, each failed on round 52's code: 53-1 and 53-2 joined with
+the code read, 53-3 to 53-5 wrote a second activity line, change, flag or decisions, 53-6 found no `labels_unused` in
+the README's PATCH row). Changed on purpose: 51-3's second PATCH now answers `unchanged: true` (no `withheld`/`held`).
+
+* **The join is pinned to the code it read.** `POST /circles/join`'s use of the invite compares and sets its
+  `code_hash` and `role` as the lookup read them (with everything it already checked). An email invite rotated
+  (round 48: a new code, role, issuer and expiry on the same row) or given another role between the join's lookup and
+  its write is not redeemed: the old code is `422 circle_invite_invalid` like any dead code (a failed try), nothing
+  is used, nobody joins; the new code joins with its own role. (No route changes a code's role alone; the role is in
+  the compare all the same.) 53-1 (the rotation lands just before the join's batch), 53-2.
+* **Two hide-on PATCHes at once change the setting once.** Hiding on's batch also compares and sets the bank's
+  `hide_key` and the head's recorded decisions (`strip_opts`, the stored JSON) as the PATCH read them; the `base_version`
+  check (round 52) and the head compare are unchanged. Of two PATCHes that read the same state, the one whose batch
+  runs second writes nothing (no activity line, no flag, no withhold, no decisions on the head, no held-publish charge;
+  its change is given back, its attempt stays counted as work done). It answers `200 {ok, hide_key: true, unchanged:
+  true}` when the bank now hides its keys as it asked (the same decisions, or a head it could not strip now, such as
+  one the first withheld), else `409 conflict {message}` (other decisions were recorded, or hiding was turned off,
+  meanwhile: do it again). This closes the staging nit (both answered as changes, two activity lines, two changes
+  counted) and critic 61 M1's note (the second could add a `blocklist` flag with no positions and record its decisions
+  on the withheld head). 53-3, 53-4, 53-5.
+* **`labels_unused`, documented (critic 56a V5).** It is share-core's code for a label decision naming a question or
+  part that has no label finding (`decision_errors`; the public publish uses it too). Dropping it would need a
+  share-core change, and the app already reads it (`src/share/circle_hide.rs`, critic 57), so the README now says it:
+  the PATCH row lists every `errors[].code` of `422 labels_need_decision`, `labels_unused` among them, and that a
+  client sends decisions only for what `label_findings` names. Such a PATCH is an attempt, not a change. 53-6.
+* **README (critics 56a and 56b nitpicks).** The `0113` line under "Round 48" is corrected (only its index has `IF NOT
+  EXISTS`). The circle route table and the admin list under "Round 32" are brought up to round 53: invites
+  (`kind`, `address_label`, `state`, rotation's `resent` and `message`, the hourly and daily metrics,
+  `circle_open_email_invites`), sends and rollbacks (`held`, `withheld`, `keys_hidden`, `keyless_question`,
+  `hide_key_changed`), history (`review_copy`), reads (`hide_key`, `keys_hidden`, `hide_off_releases`,
+  `keys_hidden_unavailable`, `circle_hidden_reads`), trim (`evidence_kept`), the PATCH's answers and errors, `heads`'
+  `hide_key`, and the admin's `basis=copyright`, `circle-release {version}`, `circle-evidence-captured` and the
+  unblock's circle fields.
+* **Not done (carried on).** The `cap` flag's semantics (critic 56a V2: a resolved cap flag keeps collecting versions
+  and an unblock no longer reads it) and a purge-pending marker on a removed bank's row (critic 56a V4) are unchanged.
 
 **Round 52 (the app's picture step, critic 62, `docs/critic-reports/2026-10-25-circles-phaseC-pictures-critic62.md`).**
 No migration. Tests: `test/pool/round52.test.ts` (4, each failed on round 51's code: 52-1 to 52-3 on the refused
@@ -212,7 +249,8 @@ when they run one after the other; 51-4 pins the decided rule below and passes o
   the held-publish charge) now also need the batch's own withhold UPDATE to have changed the row; the PATCH whose batch
   ran second answers `withheld: false, held: false`. Not changed (noted): its batch may still add a `blocklist` flag
   with no positions (counted toward its sender's `circle_send_flags`) and record its decisions on the withheld head
-  (its viewers' form was scanned clean, so no key is served from them). 51-3.
+  (its viewers' form was scanned clean, so no key is served from them). 51-3. (Round 53: no longer; that PATCH writes
+  nothing and answers `unchanged: true`.)
 * The app (client, same round): critic 61 I3, the account-switch rule of critic 60 I1 now holds on the whole Shared
   page and in the publish window, not only in Circles: "My shared items" (the list, the item open, the data download,
   the counter-notice and appeal drafts) drops everything on a sign-out and keeps the place for the same account;
@@ -271,8 +309,9 @@ migration. Tests: `test/pool/round49.test.ts` (3, each failed on round 48's code
 **Round 48 (phase C after critics 55a and 55b, `docs/critic-reports/2026-10-25-circles-phaseC-{product-critic55a,security-critic55b}.md`).**
 Migration `0115_pool_round48.sql` (`circle_invites.email_key` and its partial index); `0114` edited in place (not applied
 anywhere): `IF NOT EXISTS`, the index is now `(circle_id, status) WHERE withheld_at IS NOT NULL AND full_key <> ''` (55b
-V6: pruned rows leave it); `0111` and `0113` got `IF NOT EXISTS` on their `CREATE TABLE`/`CREATE INDEX` (an `ADD COLUMN`
-cannot have it). Tests: `test/pool/round48.test.ts` (10, each failed on round 47's code; the critics' `h1`, `a2`, `a3`,
+V6: pruned rows leave it); `0111` got `IF NOT EXISTS` on its `CREATE TABLE` and `CREATE INDEX`, `0113` on its `CREATE
+INDEX` only (an `ADD COLUMN` cannot have it; round 53, critic 56a nitpick: `0113`'s `CREATE TABLE circle_holds_r44` has
+none, and a rerun still runs because that rebuild table is renamed to `circle_holds` at its end). Tests: `test/pool/round48.test.ts` (10, each failed on round 47's code; the critics' `h1`, `a2`, `a3`,
 `u1`, `r1`, `e1`, `i1` scripts were rerun and show the fixes; `a3`, `u1`, `e1` stop later on routes or expectations of
 their own). Earlier tests changed where the behaviour changed on purpose: 40-3, 41-1, 44-7, 47-3 (purge-now that waits
 for a review is `200 {purged_partial, pending_review}`), 42-3 and 46-2 (a second invite to one mailbox in one circle
@@ -1170,33 +1209,33 @@ rows, cap crossings use `cap`, circle independence statements `independent_claim
   |---|---|---|
   | `POST /circles` | teacher | `{name (1-80), description? (<=1000)}` -> `201 {circle}`; caps: `circles_owned` 5, `circle_memberships` 20 (`422 circles_limit {metric, used, limit}`), `circle_creates` 5 a day |
   | `GET /circles` | teacher | `{circles: [{id, name, role, joined_at, closed_at, close_reason, closed_by, undo_until, updated_at, members, banks, ownership_offered_until}]}` (active memberships; closed ones until purged or left) |
-  | `GET /circles/:cid` | member (a closed circle too: `200` with its closed state) | `{circle: {id, name, description ("" when none), role, joined_at, created_at, updated_at, closed_at, close_reason, closed_by, undo_until}, members: [{user_id, display_name, role, joined_at, is_me}], banks: [{id, title, subject, course, grade, license, author_name, is_author, head_version, question_count, has_images, created_at, updated_at, held?, removed?: {reason, undo_until}}]}`; removed banks only to the owner and author, held ones only to the author |
+  | `GET /circles/:cid` | member (a closed circle too: `200` with its closed state) | `{circle: {id, name, description ("" when none), role, joined_at, created_at, updated_at, closed_at, close_reason, closed_by, undo_until}, members: [{user_id, display_name, role, joined_at, is_me}], banks: [{id, title, subject, course, grade, license, author_name, is_author, head_version, question_count, has_images, hide_key (round 43), created_at, updated_at, held? \| hidden?, removed?: {reason, undo_until}}]}`; removed banks only to the owner and author, held ones only to the author (round 40: and to the owner while its holds are only a send's student-data or copyright holds; a removed bank listed to the owner is `hidden: true`, without its text, when it is otherwise held or its author is not in good standing) |
   | `PATCH /circles/:cid` | owner | `{name?, description?}` |
   | `DELETE /circles/:cid`, `POST .../reopen` | owner | close: `{ok, undo_until}` (14 days; members get `409 circle_closed {reason, undo_until}` at once); reopen inside it |
   | `GET /circles/:cid/activity?before=` | member | `{activity: [{at, what, by, member, role?, bank_id?, bank_title?, version?, license?}], next_before}`, 50 a page; `what` is `created, joined, left, removed, role_changed, ownership_transferred, ownership_passed_on, closed, reopened, renamed, bank_shared, version_sent, rolled_back, bank_removed, bank_restored, license_changed` (round 37: `rollback_of?`, `merged_from?`; round 45: `email_invited`, `hide_key_changed` with `hide_key`; the cursor is `<at>:<id>`, a bad one 400); never codes, reports or admin opens |
   | `POST /circles/:cid/invites` | owner | `{role: editor\|viewer, max_uses? 1-50 (1), expires_in_days? 1-30 (7), note? (<=200)}` -> `201 {invite_id, code, role, max_uses, expires_at, note, shown_once}`; 10 open codes a circle (`circle_open_invites`; round 47: plain codes only, email invites have `circle_open_email_invites` 40), 50 a day (`circle_invites`) |
-  | `GET /circles/:cid/invites?after=` | owner | `{invites: [{invite_id, role, created_at, created_by, created_by_name, max_uses, uses, expires_at, revoked_at, note, state}], next_cursor}`; never the code, never who typed a wrong one |
-  | `POST /circles/:cid/invites/revoke` | owner | `{invite_id}`; `409 already_revoked` |
-  | `POST /circles/:cid/invites/email` | owner | `{email, role}` -> `202 {ok, invite_id, kind: "email", role, max_uses: 1, expires_at, emailed: true, address_label}` or `422 invite_not_sent {emailed: false, reason: address_limit\|not_deliverable}` (nothing made); `429 hourly_limit`; `409 circle_full`; the server mails a fixed text holding a single-use code (rounds 42, 46) |
+  | `GET /circles/:cid/invites?after=` | owner | `{invites: [{invite_id, kind: code\|email (round 42), address_label ("" for a code; "j***@gmail.com", "... #2": round 46/47), role, created_at (a rotation resets it), created_by, created_by_name, max_uses, uses, expires_at, revoked_at, note, state: active\|used_up\|expired\|revoked}], next_cursor}`; never the code, never who typed a wrong one |
+  | `POST /circles/:cid/invites/revoke` | owner | `{invite_id}` (an email invite too); `409 already_revoked` |
+  | `POST /circles/:cid/invites/email` | owner | `{email, role}` only -> `202 {ok, invite_id, kind: "email", role, max_uses: 1, expires_at, emailed: true, address_label}`; an open email invite to the same mailbox in the circle is rotated (round 48): the same `invite_id` and label, a new code, role and expiry, `resent: true, message`. `400 invalid_request {field: email\|role\|<any other key>}`; `422 invite_not_sent {emailed: false, reason: address_limit\|not_deliverable, message}` (nothing made); `422 circles_limit {metric: "circle_open_email_invites", used, limit}`; `409 circle_full {limit}`; `409 conflict` (a rotation lost to a use, a revoke or the expiry); `429 hourly_limit {metric: circle_email_invites_hourly\|circle_email_inviter_domain_hourly (with limit)\|circle_email_domain_hourly}` and `429 daily_limit {metric: circle_email_invites\|circle_invites}`, with Retry-After; `503 busy` (the service's hour). The server mails a fixed text holding a single-use code (rounds 42, 46) |
   | `POST /circles/join/preview` | teacher | `{code}` -> `{circle: {id, name, owner_name, members}, role, already_member}`; uses nothing |
-  | `POST /circles/join` | teacher | `{code}` -> `{ok, circle_id, role}` or `{ok, already: true, ...}`; every bad code `422 circle_invite_invalid`; `409 circle_full {limit}`; 10 FAILED codes a day (`circle_join_tries`, 429) |
+  | `POST /circles/join` | teacher | `{code}` -> `{ok, circle_id, role}` or `{ok, already: true, ...}`; every bad code `422 circle_invite_invalid` (a rotated email invite's old code too, also when the rotation lands between the join's read and its write: round 53); `409 circle_full {limit}`; `422 circles_limit`; 10 FAILED codes a day (`circle_join_tries`, 429) |
   | `POST /circles/:cid/leave` | member | an owner leaving hands the circle on (below) |
   | `POST /circles/:cid/members/remove` | owner | `{user_id}` (not yourself: 400); immediate; re-joining needs a code issued AFTER the removal (round 33) |
   | `POST /circles/:cid/members/role` | owner | `{user_id, role: editor\|viewer}` -> `{ok, changed}` |
   | `POST /circles/:cid/transfer` | owner | `{user_id}` of an active member in good standing: an OFFER (round 34) -> `202 {ok, pending: {to_user_id, to_name, expires_at}}`; a new offer replaces the pending one, the same open offer again changes nothing; `409 member_unavailable`; `404 not_found` for a non-member; 10 offers a day (`429 daily_limit {metric: "circle_transfer_offers"}`, round 35) |
   | `POST /circles/:cid/transfer/accept` | the member offered it | within 7 days, while the offerer is still the active owner -> `200 {ok, role: "owner"}` (the old owner becomes an editor, their codes are revoked); `409 no_pending_transfer`; `422 circles_limit {metric: "circles_owned"}` |
   | `POST /circles/:cid/transfer/cancel` | owner, or the member offered it | withdraws / declines -> `200 {ok, cancelled}` |
-  | `POST /circles/:cid/banks` | owner, editor | publish format (`application/vnd.vershion.publish`, meta below) -> `201 {circle_id, bank_id, version: 1, version_id, qids, added, changed, removed}` |
-  | `PUT /circles/:cid/banks/:bid` | owner, editor (round 37; phase A: the bank's author) | the next version: meta `base_version`, `merge_token?`, `confirm_large_change?` -> `200 {..., held, merged_from?}`; `409 conflict {head_version, head_at, head_by}` (nothing stored); `428 confirm_large_required {removed, total}`; `422 license_author_only {license}`; `422 merge_token_invalid` |
-  | `GET /circles/:cid/banks/:bid/versions?before=` | member who may read the bank | the history, 50 a page (round 37) |
-  | `GET /circles/:cid/banks/:bid/versions/:n` | member who may read the bank | a kept version, streamed like the head; `404 version_not_retained {oldest_kept}` (round 37); a withheld one (or head) `404 version_withheld {message}`, with `hide_off_releases` for the owner and the bank's author while an editor (round 49) |
+  | `POST /circles/:cid/banks` | owner, editor | publish format (`application/vnd.vershion.publish`, meta below; round 43: `hide_key?` and its strip decisions `labels?, order_acks?, ack_formatting?, image_ok?`) -> `201 {circle_id, bank_id, version: 1, version_id, qids, added, changed, removed, held, withheld, keys_hidden?}`; `422 keyless_question {positions, kinds, message}` (rounds 46-48); with `hide_key` the share-core refusals of the PATCH below; `413 quota_exceeded {scope: "circle", used, needed, limit}`; `422 circles_limit {metric: "circle_banks"}` |
+  | `PUT /circles/:cid/banks/:bid` | owner, editor (round 37; phase A: the bank's author) | the next version: meta `base_version`, `merge_token?`, `confirm_large_change?` (and the strip decisions while the bank hides its keys; `hide_key` itself is `400 {field: "hide_key"}`) -> `200 {..., held, withheld, merged_from?, keys_hidden?}`; `409 conflict {head_version, head_at, head_by}` (nothing stored); `409 hide_key_changed {hide_key, head_version, message}` (the setting changed meanwhile, nothing stored: send again, round 48); `422 keyless_question`; `428 confirm_large_required {removed, total}`; `422 license_author_only {license}`; `422 merge_token_invalid` |
+  | `GET /circles/:cid/banks/:bid/versions?before=` | member who may read the bank | the history, 50 a page (round 37): `versions: [{version, version_id, by, at, message, added, changed, removed, question_count, license, kept, withheld, review_copy?: "full"\|"hashes_only" (only when withheld, round 48), rollback_of?, merged_from?}]` |
+  | `GET /circles/:cid/banks/:bid/versions/:n` | member who may read the bank | a kept version, streamed like the head; `404 version_not_retained {oldest_kept, pinned_versions}` (round 37/38), a withheld one pruned `{..., withheld: true, review_copy: "hashes_only", message}` (round 48); a withheld one (or head) `404 version_withheld {message}`, with `hide_off_releases` for the owner and the bank's author while an editor (round 49); viewers of a bank that hides its keys as the head below |
   | `POST /circles/:cid/banks/:bid/merge` | owner, editor | `{base_version}` -> head, `base_kept`, versions between, `merge_token` (30 min) (round 37) |
-  | `POST /circles/:cid/banks/:bid/rollback` | owner; the bank's author while an editor (D17) | `{to_version, base_version, commit_id, message?, confirm_large_change?}` -> `200 {..., rollback_of, held, withheld}`; 20 a day (round 37); `404 version_withheld` (round 38) |
-  | `POST /circles/:cid/banks/:bid/trim` | owner; the bank's author while an editor | `{keep: 1-19}` -> `{ok, pruned, oldest_kept, pinned_versions}` (round 38; round 39: a student-data hold does not stop it, a withheld version with an open flag is kept) |
-  | `GET` / `HEAD /circles/:cid/banks/:bid` | member (held: author only) | streamed `{circle, bank: {id, title, subject, course, grade, license, version_license, author_name, is_author, version, version_id, question_count, has_images, committed_at, committed_by, held?}, origins, payload}`; `ETag`, `If-None-Match` -> 304; viewing and copying are this one read; counts toward `item_reads`; `409 bank_removed`, `409 circle_closed` |
+  | `POST /circles/:cid/banks/:bid/rollback` | owner; the bank's author while an editor (D17) | `{to_version, base_version, commit_id, message?, confirm_large_change?}` -> `200 {..., rollback_of, held, withheld}`; 20 a day (round 37); `404 version_withheld` (round 38); `409 hide_key_changed` (round 48); `403 circle_role_required {needed: "owner_or_author"}` |
+  | `POST /circles/:cid/banks/:bid/trim` | owner; the bank's author while an editor | `{keep: 1-19}` -> `{ok, pruned, evidence_kept, oldest_kept, pinned_versions}` (round 38; round 39: a student-data hold does not stop it, a withheld version with an open flag is kept; round 47: `evidence_kept`; round 48: `pinned_versions` lists that evidence too); `400 invalid_request {field: "keep", min, max}`; `403 circle_role_required {needed: "owner_or_author"}` |
+  | `GET` / `HEAD /circles/:cid/banks/:bid` | member (held: author only) | streamed `{circle, bank: {id, title, subject, course, grade, license, version_license, author_name, is_author, version, version_id, head_version, question_count, has_images, committed_at, committed_by, message, hide_key, keys_hidden?, rollback_of?, merged_from?, held?}, origins, payload}`; `ETag`, `If-None-Match` -> 304; viewing and copying are this one read; counts toward `item_reads`; `409 bank_removed`, `409 circle_closed`; `404 version_withheld {message, hide_off_releases?}` (round 49). A viewer of a bank that hides its keys (round 43) reads share-core's stripped form (`keys_hidden: true`, no message), counted toward `circle_hidden_reads` (`429 daily_limit {metric: "circle_hidden_reads"}`); a version without recorded decisions, or one the strip refuses, is `409 keys_hidden_unavailable {message}` (round 46); `503 busy` |
   | `GET /circles/:cid/banks/:bid/blobs/:sha256` | member who may read the bank | an image a kept version uses (never a student-data-blocked one) |
   | `POST /circles/heads` | teacher | `{bank_ids}` (<= 200) -> `{banks: [{bank_id, status: current, version, version_id, license, at, by, hide_key (round 52)} \| {status: removed, until?} \| {status: under_review} \| {status: unavailable}]}`; one `item_reads` |
-  | `PATCH /circles/:cid/banks/:bid` | the bank's author | `{license}` (D19: `circle-only` = members may not re-share); bounded by the head's declared public origins (`422 license_incompatible {allowed}`); earlier versions keep theirs. Round 43: or `{hide_key, labels?, order_acks?, ack_formatting?, image_ok?}` (the author while an editor or the owner, or the circle's owner): viewers read the stripped form; round 52: `base_version?` pins it (`409 conflict {head_version}` on another head, nothing changed) |
+  | `PATCH /circles/:cid/banks/:bid` | the bank's author | `{license}` (D19: `circle-only` = members may not re-share); bounded by the head's declared public origins (`422 license_incompatible {allowed}`); earlier versions keep theirs. Round 43: or `{hide_key, labels?, order_acks?, ack_formatting?, image_ok?}` (the author while an editor or the owner, or the circle's owner; anyone else `403 circle_role_required {needed: "owner_or_author", role}` before the body is read): viewers read the stripped form; round 52: `base_version?` pins it (`409 conflict {head_version}` on another head, nothing changed). On: `200 {ok, hide_key: true, held, withheld, labels_removed, images_kept, images_removed, figures_removed, order_reasons}` (a head nobody reads is not stripped: no report fields); off: `200 {ok, hide_key: false, restored?: [versions]}` (round 47); the same setting again, or (round 53) the second of two PATCHes at once that asked for what the first set: `200 {ok, hide_key, unchanged: true}` (no activity line, no change counted). Refusals of the strip (share-core's, as a hidden-key publish's; nothing changes): `422 labels_need_decision {errors, label_findings}`, where `errors[].code` is `labels_need_decision`, `labels_strip_refused`, `labels_keep_refused`, `labels_out_of_range`, `labels_duplicate`, or `labels_unused` (a decision for a question or part that has no label finding: send decisions only for what `label_findings` names), with any `key_in_formatting` entries; `422 order_ack_required {errors, needs_order_ack, order_reasons}`; `422 invalid_payload {errors: [{code: "key_in_formatting", path, reason, ack_allowed, author_only, hint}], formatting_findings?}`. `400 invalid_request {field}` (a position past the head's count adds `message`, round 48); `409 conflict {message}` (round 53: another PATCH changed the setting or recorded other decisions meanwhile); `409 bank_removed`; `413 circle_records_full`; `429 daily_limit {metric: circle_hide_attempts\|circle_hide_changes}` with Retry-After (round 48: every PATCH that does work is an attempt, refused ones included); `503 busy` |
   | `DELETE .../banks/:bid`, `POST .../undelete` | owner, the bank's author (D17) | 14 days to undo, then purged; the owner's removal is undone by the owner only, the author's own by either (round 33) |
   | `POST .../banks/:bid/purge` | owner | a removed bank (by its author, the owner or an erasure) purged now, so it stops counting toward the circle's caps; never under an admin removal, a hold or an open report (`409 under_moderation`; `409 bank_not_removed`); not undoable (round 33); round 48: while only an administrator's review of a flagged version is pending, `200 {ok, purged_partial: true, pending_review: true, evidence_kept, message}` (the rest pruned, the purge claimed, finished once the flags are decided or their evidence captured) |
   | `POST .../banks/:bid/report` | member, not the author | `{reason: student_data\|copyright\|inappropriate\|other, note?}` -> `202` always |
@@ -1261,12 +1300,17 @@ rows, cap crossings use `cap`, circle independence statements `independent_claim
   held or a report about it is open.
 * **Admin (D1, plan 6.4).** `GET /admin/pool/circle-reports?after=` (the queue), `GET /admin/pool/circles?after=&user_id=`,
   `GET /admin/pool/circle?id=` (metadata, members past and present, banks with holds and reports, codes'
-  states: audited `circle.admin_open`), `GET /admin/pool/circle-bank?id=&version=&basis=report|notice|privacy[&notice_id=]`
-  (a kept version's body, streamed; only on a basis: a report on the bank, a recorded DMCA notice, or a
-  student-data block matching one of its questions or images, else `403 basis_required`; audited
-  `circle.admin_view` in both audits), and writes with a reason of 10+ characters: `circle-hold {bank_id,
-  note}`, `circle-release` (all holds go, open reports dismissed), `circle-remove` (purged after 14 days),
-  `circle-close {circle_id, note}` (no owner undo).
+  states: audited `circle.admin_open`), `GET /admin/pool/circle-bank?id=&version=&basis=report|notice|privacy|copyright[&notice_id=]`
+  (a kept version's body, streamed; only on a basis: a report on the bank, a recorded DMCA notice, a
+  student-data block matching one of its questions or images, or (round 44) a copyright re-upload block or
+  hold, else `403 basis_required`; audited `circle.admin_view` in both audits; round 47: an evidence version
+  the bound pruned is `404 version_not_retained {oldest_kept, pinned_versions, evidence_pruned: true, message,
+  flags}`), and writes with a reason of 10+ characters: `circle-hold {bank_id, note}`, `circle-release
+  {bank_id, version?, note}` (all holds go, open reports dismissed; with `version`, that version's send holds
+  and flags), `circle-remove` (purged after 14 days), `circle-close {circle_id, note}` (no owner undo), and
+  (round 48) `circle-evidence-captured {bank_id, version?, note}` (sudo, audited; `{ok, flags}`, 0 when
+  nothing matches: the flags stay open for the decision and pin nothing). `/admin/dmca/unblock` takes
+  `release_circle_versions` (round 46/47/48) and answers `circle_flags_lifted`, `circle_versions_released`.
 * **Export.** `GET /me/export` gains `circles {memberships, owned, invites_created (no codes),
   versions_sent (no bodies), banks_authored, reports}`.
 * **Choices made in this round where the plan left one (UNCONFIRMED items).** Circle codes are `C-` and 24

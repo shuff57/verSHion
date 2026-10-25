@@ -147,7 +147,9 @@ test("51-3 (critic 61 M1): two hide-on PATCHes at once on one head: only the one
   assert.equal(strip.status, 200, JSON.stringify(strip.body));
   assert.equal(keep.status, 200, JSON.stringify(keep.body));
   assert.deepEqual([strip.body.withheld, strip.body.held], [true, true], JSON.stringify(strip.body));
-  assert.deepEqual([keep.body.withheld, keep.body.held], [false, false], JSON.stringify(keep.body));
+  // (round 53: the batch that ran second lost its compare-and-set on the setting; the head it read is withheld now, so
+  // it is the same setting again: `unchanged`, with no withheld/held fields)
+  assert.deepEqual([keep.body.withheld, keep.body.held, keep.body.unchanged], [undefined, undefined, true], JSON.stringify(keep.body));
   // The head is withheld, once.
   assert.equal(w.q<any>(`SELECT v.withheld_at IS NOT NULL AS w FROM circle_versions v JOIN circle_banks b ON b.head_version_id = v.id WHERE b.id = ?`, bid)[0].w, 1);
 });

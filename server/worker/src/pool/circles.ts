@@ -642,6 +642,9 @@ interface CodeRow {
   circle_id: string;
   /** The role this caller would (re)join with (JOIN_ROLE_SQL). */
   role: "editor" | "viewer";
+  /** Round 53: the invite's own code hash and role as read, which the join's write compares and sets. */
+  code_hash: string;
+  invite_role: string;
   created_at: number;
   valid: number;
   member: number;
@@ -658,7 +661,7 @@ async function lookupCode(c: Ctx, me: string, raw: unknown): Promise<{ code: Cod
   await requireDaily(c, me, "circle_join_tries");
   const row = await c.db
     .prepare(
-      `SELECT i.id, i.circle_id, ${JOIN_ROLE_SQL("i", "?3")} AS role, i.created_at,
+      `SELECT i.id, i.circle_id, ${JOIN_ROLE_SQL("i", "?3")} AS role, i.code_hash, i.role AS invite_role, i.created_at,
               (i.revoked_at IS NULL AND i.expires_at > ?2 AND i.uses < i.max_uses AND ci.closed_at IS NULL AND ci.purged_at IS NULL AND ${CODE_USABLE_SQL("i", "?3")}) AS valid,
               ${ACTIVE_SQL("i.circle_id", "?3")} AS member
          FROM circle_invites i JOIN circles ci ON ci.id = i.circle_id WHERE i.code_hash = ?1 AND ci.purged_at IS NULL`,
@@ -705,17 +708,19 @@ export async function joinCircle(c: Ctx, req: Request, p: PoolPrincipal): Promis
   const seq = await nextSeq(c);
   // One batch: the use is taken only while the code is good, the circle open and not full, the caller
   // under the membership cap, not already a member, and not erased (ALIVE_SQL); the membership (a new
-  // row, or the old row of a former member reused) and its audit follow it by changes().
+  // row, or the old row of a former member reused) and its audit follow it by changes(). Round 53: and only while the
+  // invite still has the code and the role that were read (an email invite rotated meanwhile has a new code, role,
+  // issuer and expiry on the same row: the old code is dead, and the role read is no longer the invite's).
   const [use] = await c.db.batch([
     c.db
       .prepare(
         `UPDATE circle_invites SET uses = uses + 1
-          WHERE id = ?1 AND revoked_at IS NULL AND expires_at > ?3 AND uses < max_uses AND ${OPEN_SQL("?2")} AND ${ALIVE_SQL("?4")}
+          WHERE id = ?1 AND code_hash = ?8 AND role = ?9 AND revoked_at IS NULL AND expires_at > ?3 AND uses < max_uses AND ${OPEN_SQL("?2")} AND ${ALIVE_SQL("?4")}
             AND NOT ${ACTIVE_SQL("?2", "?4")} AND ${MEMBERS_SQL("?2")} < ?5 AND ${MEMBERSHIPS_SQL("?4")} < ?6
             AND (${MEMBERSHIP_ROWS_SQL("?4")} < ?7 OR EXISTS (SELECT 1 FROM circle_members fr WHERE fr.circle_id = ?2 AND fr.user_id = ?4))
             AND ${CODE_USABLE_SQL("circle_invites", "?4")}`,
       )
-      .bind(code.id, code.circle_id, now, me, membersCap, caps.memberships, caps.rows),
+      .bind(code.id, code.circle_id, now, me, membersCap, caps.memberships, caps.rows, code.code_hash, code.invite_role),
     // (Round 33: a former member's row is reused; the role is the code's, capped at the role held when
     // leaving if the code was issued before that: JOIN_ROLE_SQL, evaluated on the row as it was.)
     c.db
@@ -1722,10 +1727,13 @@ async function hideOn(
   const stmts: D1PreparedStatement[] = [
     c.db
       .prepare(
+        // (round 53: and the setting and the head's recorded decisions as this PATCH read them, so of two PATCHes that
+        // read the same state only the first batch changes it: the second is `unchanged` or a conflict, below)
         `UPDATE circle_banks SET hide_key = 1, updated_at = ?4 WHERE id = ?1 AND circle_id = ?2 AND head_version_id IS ?5 AND removed_at IS NULL AND purged_at IS NULL
+           AND hide_key = ?8 AND (SELECT sv.strip_opts FROM circle_versions sv WHERE sv.id = ?5) IS ?9
            AND ${OPEN_SQL("?2")} AND ${rights} AND ${ALIVE_SQL("?3")} AND (SELECT qkeys FROM circles WHERE id = ?2) + ?6 <= ?7`,
       )
-      .bind(bid, cid, me, now, b.head_version_id, fresh, records),
+      .bind(bid, cid, me, now, b.head_version_id, fresh, records, b.hide_key, head?.strip_opts ?? null),
     // (an activity line when it is turned on; recording new decisions for a bank that already hides its keys is not
     // one; its id marks this PATCH as the one that won for every later statement of the batch)
     c.db
@@ -1811,13 +1819,24 @@ async function hideOn(
   if (!out || out.won !== 1) {
     await throwIfErased(c, me);
     const s = await c.db
-      .prepare(`SELECT b.head_version, b.head_version_id, b.removed_at, b.removed_reason, ci.qkeys FROM circle_banks b JOIN circles ci ON ci.id = b.circle_id WHERE b.id = ?1`)
+      .prepare(
+        `SELECT b.head_version, b.head_version_id, b.removed_at, b.removed_reason, b.hide_key, ci.qkeys, v.strip_opts, (v.withheld_at IS NULL AND v.full_key <> '') AS readable
+           FROM circle_banks b JOIN circles ci ON ci.id = b.circle_id LEFT JOIN circle_versions v ON v.id = b.head_version_id WHERE b.id = ?1`,
+      )
       .bind(bid)
-      .first<{ head_version: number; head_version_id: string | null; removed_at: number | null; removed_reason: string | null; qkeys: number }>();
+      .first<{ head_version: number; head_version_id: string | null; removed_at: number | null; removed_reason: string | null; hide_key: number; qkeys: number; strip_opts: string | null; readable: number | null }>();
     if (s && s.removed_at !== null) throw new PoolError(409, "bank_removed", { reason: s.removed_reason });
     // (round 48, critic 55a V2: with the head it lost to, as a send's conflict)
     if (s && s.head_version_id !== b.head_version_id)
       throw new PoolError(409, "conflict", { head_version: s.head_version, message: "A new version arrived meanwhile; do it again for the new version." });
+    // Round 53: another PATCH changed the setting or the head's decisions after this one read them. When the bank now
+    // hides its keys as this PATCH asked (the decisions it would have recorded, or a head it could not strip now), it is
+    // the same setting again: `unchanged`, with nothing written, no activity line and no change counted. Else a conflict.
+    if (s && (s.hide_key !== b.hide_key || s.strip_opts !== (head?.strip_opts ?? null))) {
+      if (s.hide_key === 1 && (s.readable !== 1 || (stripOpts !== null && s.strip_opts !== null && sameDecisions(decisionsOf(s.strip_opts), decisionsOf(stripOpts)))))
+        return { ok: true, hide_key: true, unchanged: true };
+      await explain(c, cid, me);
+    }
     if (s && s.qkeys + fresh > records) throw new PoolError(413, "circle_records_full", { used: s.qkeys, needed: fresh, limit: records, message: "This circle has recorded as many different questions as it can keep." });
     await explain(c, cid, me);
   }
