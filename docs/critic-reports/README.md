@@ -49,3 +49,12 @@ ephemeral. The mechanisms they found are encoded in:
 
 These files are historical records. Do not edit them to match later behaviour; add a
 new report instead.
+
+## Circles (2026-10-24 and later)
+
+Circles phases A to C reports live beside the shared-pool ones, named `*-circles-*`. In order:
+phase A critics, phase B backend 45a to 47b and critic48, phase B client 49, 51, 52 and
+integration 50, the phase B staging run, phase C backend 53a to 56b, phase C client critic57,
+integration critic58, re-review critic59, final critics 60 and 61, pictures critic62, and the
+phase C staging run (2026-10-25). They are historical records; add a new report instead of
+editing one.
