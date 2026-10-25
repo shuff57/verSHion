@@ -13,6 +13,7 @@ import { INVITE_FREE_PATHS, redeemInvite, requireInvite } from "./invites.ts";
 import { getBlob, getItem, importItem, list, mine, versions } from "./read.ts";
 import { activity, circleErasureStatements, closeCircle, createCircle, createInvite, deleteBank, getBank, getBankBlob, getCircle, heads, joinCircle, joinPreview, leaveCircle, listCircles, listInvites, patchBank, patchCircle, purgeBankNow, removeMember, reopenCircle, reportBank, revokeInvite, setRole, undeleteBank, offerTransfer, acceptTransfer, cancelTransfer } from "./circles.ts";
 import { rollbackBank, sendVersion } from "./circlesend.ts";
+import { emailInvite } from "./circlemail.ts";
 import { getVersion, history, mergeInitiate, trimVersions } from "./circleversions.ts";
 import { ALIVE_SQL, assertPoolKey, unauthorized, errKind, json, makeCtx, PoolError, rateLimit, readJson, type Ctx, type PoolDeps, type PoolPrincipal } from "./shared.ts";
 
@@ -88,6 +89,8 @@ const ROUTES: { re: RegExp; methods: Record<string, Route> }[] = [
   { re: /^\/circles\/([0-9a-f]{32})\/activity$/, methods: { GET: (c, _r, p, m, u) => activity(c, p, m[1]!, u) } },
   { re: /^\/circles\/([0-9a-f]{32})\/invites$/, methods: { GET: (c, _r, p, m, u) => listInvites(c, p, m[1]!, u), POST: (c, r, p, m) => createInvite(c, r, p, m[1]!) } },
   { re: /^\/circles\/([0-9a-f]{32})\/invites\/revoke$/, methods: { POST: (c, r, p, m) => revokeInvite(c, r, p, m[1]!) } },
+  // Round 42 (phase C, D5): an invite mailed by the server (circlemail.ts).
+  { re: /^\/circles\/([0-9a-f]{32})\/invites\/email$/, methods: { POST: (c, r, p, m) => emailInvite(c, r, p, m[1]!) } },
   { re: /^\/circles\/([0-9a-f]{32})\/leave$/, methods: { POST: (c, _r, p, m) => leaveCircle(c, p, m[1]!) } },
   { re: /^\/circles\/([0-9a-f]{32})\/members\/remove$/, methods: { POST: (c, r, p, m) => removeMember(c, r, p, m[1]!) } },
   { re: /^\/circles\/([0-9a-f]{32})\/members\/role$/, methods: { POST: (c, r, p, m) => setRole(c, r, p, m[1]!) } },

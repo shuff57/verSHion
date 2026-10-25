@@ -1,8 +1,35 @@
 // Mail for pool notices. Ids only: no item text goes into a mail.
 import { sendPlain, sendTo, type MailEnv } from "./mail.ts";
+import { isDeliverable } from "./pool/circlemail.ts";
 import type { PoolNotice } from "./pool/shared.ts";
 
 const EMAIL = /^[^\s@"(),:;<>[\]\\]{1,64}@[a-z0-9.-]{1,253}\.[a-z]{2,63}$/i;
+
+/** Round 42: the circle invitation's fixed subject (no person's text ever goes into a header). */
+export const CIRCLE_INVITE_SUBJECT = "verSHion: you are invited to a circle";
+const CIRCLE_CODE = /^C(-[0-9A-Z]{4}){6}$/;
+
+/**
+ * Round 42 (D5): the circle invitation, a FIXED text. Round 46 (critics 53a variant 7, 53b V1): it carries no text any
+ * person chose, not even the circle's name (the app shows the circle and its owner before anyone joins), and it says
+ * what joining needs (an approved account that redeemed the pool's invite code) and when the code expires, to the
+ * minute. The code, and a link holding it in the fragment (never sent to a server). Owner-approved wording: README
+ * "Round 46".
+ */
+export function circleInviteText(appUrl: string | undefined, n: Extract<PoolNotice, { kind: "circle_email_invite" }>): string {
+  const as = n.role === "editor" ? "an editor" : "a viewer";
+  const when = new Date(n.expiresAt).toISOString().slice(0, 16).replace("T", " ");
+  const link = appUrl ? `\nOr open this link:\n${appUrl.replace(/\/+$/, "")}/circles/join#code=${n.code}\n` : "";
+  return (
+    `You are invited to join a circle on verSHion as ${as}. A circle is a small private group of teachers who share question banks. ` +
+    `The app shows you the circle's name and its owner before you join.\n\n` +
+    `To join, you need a verSHion account that an administrator has approved and that has redeemed an invite code for the shared pool. ` +
+    `If you do not have one, this code cannot be used yet.\n\n` +
+    `In verSHion, open Shared, then Circles, then "Join a circle with a code", and enter this code:\n\n` +
+    `${n.code}\n${link}\n` +
+    `The code works once and expires on ${when} UTC. If you did not expect this invitation, ignore this mail: nothing happens unless the code is used.`
+  );
+}
 
 export function poolNotifier(env: MailEnv & { DB: D1Database }) {
   return async (n: PoolNotice): Promise<void> => {
@@ -79,6 +106,21 @@ export function poolNotifier(env: MailEnv & { DB: D1Database }) {
           n.reason === "student_data" ? `verSHion: student data reported in a circle${n.held ? " (bank hidden)" : ""}` : "verSHion: a circle bank was reported",
           `Bank ${n.bankId} in circle ${n.circleId} was reported (${n.reason}, report ${n.reportId}).${n.held ? " It is hidden from the circle until you review it." : ""} See GET /admin/pool/circle-reports; opening its content is audited.`,
         );
+      case "circle_copyright_match":
+        // Round 44: ids only (circle content is opened through the audited admin route, basis=copyright).
+        return sendTo(
+          env,
+          "admins",
+          "verSHion: a circle bank matches a copyright re-upload block",
+          `Version ${n.version} of bank ${n.itemId} in circle ${n.circleId} holds material a takedown's re-upload block covers. That version is withheld from every member; while it is the newest version the bank is hidden from the circle but for its author and owner, who can roll it back or replace it. Until you decide, the bank cannot be purged. See the pool flags (blocklist); open it with GET /admin/pool/circle-bank?id=${n.itemId}&version=${n.version}&basis=copyright (audited). If the sender may share it, release THAT version: POST /admin/pool/circle-release {"bank_id": "${n.itemId}", "version": ${n.version}, "note": "..."}. A bank-wide release (without "version") lifts the bank's holds but leaves the version withheld.`,
+        );
+      case "circle_email_invite": {
+        // (round 42: one recipient, as the pool checked it, and a code of the circle-code shape; anything else is
+        // never mailed)
+        const to = n.to;
+        if (!isDeliverable(to) || !CIRCLE_CODE.test(n.code)) return;
+        return sendPlain(env, to, CIRCLE_INVITE_SUBJECT, circleInviteText(env.APP_URL, n));
+      }
       case "repeat_infringer":
         return sendTo(env, "everyone", "verSHion: repeat-infringer threshold reached", `Account ${n.userId} has ${n.strikes} upheld copyright strikes in 12 months. Under the repeat-infringer policy, suspend it with /admin/suspend.`);
     }

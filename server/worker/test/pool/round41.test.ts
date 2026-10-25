@@ -65,7 +65,9 @@ test("41-1 (48 V1): while a student-data flag on the bank is open, the owner's p
   assert.equal(w.q<any>(`SELECT status FROM circle_versions WHERE bank_id = ? AND version = 2`, bid)[0].status, "previous", "the flagged version survives the trim");
   assert.equal((await w.json("DELETE", `/circles/${cid}/banks/${bid}`, { user: O })).status, 200);
   const pg = await purgeNow(w, O, cid, bid);
-  assert.deepEqual([pg.status, pg.body.error], [409, "pending_review"], JSON.stringify(pg.body));
+  // (round 48, critics 55a V5 / 55b V10: it frees everything else and claims the purge, so it is answered as done: 200
+  // purged_partial, pending_review; it was a 409 that had committed)
+  assert.deepEqual([pg.status, pg.body.purged_partial, pg.body.pending_review], [200, true, true], JSON.stringify(pg.body));
   assert.match(pg.body.message, /administrator/);
   assert.equal((await w.admin(adm, "GET", "/admin/pool/circle-bank", null, `?id=${bid}&version=2&basis=privacy`)).status, 200, "the admin can still judge it");
   // The admin releases the version the mail names: the flag is resolved, the purge goes through.

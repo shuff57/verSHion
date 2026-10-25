@@ -149,7 +149,9 @@ test("40-3 (47a V1): a bank held only for student data (its author gone or not):
     const { w, adm, O, A, cid, bid } = await heldBank();
     w.sql.prepare(`UPDATE users SET suspended_at = ? WHERE id = ?`).run(w.clock, A.id);
     assert.equal((await w.json("DELETE", `/circles/${cid}/banks/${bid}`, { user: O })).status, 200);
-    assert.equal((await w.json<any>("POST", `/circles/${cid}/banks/${bid}/purge`, { user: O })).body.error, "pending_review");
+    // (round 48, critics 55a V5 / 55b V10: the purge-now that waits for the review is answered as the work it does: 200
+    // purged_partial, pending_review)
+    assert.equal((await w.json<any>("POST", `/circles/${cid}/banks/${bid}/purge`, { user: O })).body.pending_review, true);
     const flag = w.q<any>(`SELECT id FROM admin_flags WHERE kind = 'privacy_text_match' AND item_id = ? AND resolved_at IS NULL`, bid)[0].id;
     assert.equal((await w.admin(adm, "POST", "/admin/pool/resolve-flag", { flag_id: flag })).status, 200);
     const pg = await w.json<any>("POST", `/circles/${cid}/banks/${bid}/purge`, { user: O });

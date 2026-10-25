@@ -333,7 +333,7 @@ test("37-6: rollback (owner or the bank's author, D17) makes a NEW version equal
   r = await send(w, E!, cid, keep(v1qids, stemsOf(4, "v3")), { bid, base: 2 });
   const c1 = publishId();
   const denied = await rollback(w, E!, cid, bid, { to_version: 1, base_version: 3 });
-  assert.deepEqual([denied.status, denied.body.error, denied.body.needed], [403, "circle_role_required", "owner"], "an editor who is not the author cannot (D17)");
+  assert.deepEqual([denied.status, denied.body.error, denied.body.needed], [403, "circle_role_required", "owner_or_author"], "an editor who is not the author cannot (D17; round 48: one role hint)");
   const done = await rollback(w, A!, cid, bid, { to_version: 1, base_version: 3, commit_id: c1, message: "back to the original" });
   assert.deepEqual([done.status, done.body.version, done.body.rollback_of, done.body.changed, done.body.added, done.body.removed, done.body.held], [200, 4, 1, 4, 0, 0, false], JSON.stringify(done.body));
   assert.deepEqual(done.body.qids, v1qids, "the same questions, the same qids");
@@ -376,7 +376,7 @@ test("37-6: rollback (owner or the bank's author, D17) makes a NEW version equal
   assert.equal((await send(w, O!, cid, ["The owner's own version?"], { bid, base: hv + 1, confirm: true })).status, 200);
   // A demoted author can no longer roll back (D17: the author while an editor).
   assert.equal((await w.json("POST", `/circles/${cid}/members/role`, { user: O!, json: { user_id: A!.id, role: "viewer" } })).status, 200);
-  assert.equal((await rollback(w, A!, cid, bid, { to_version: hv, base_version: hv + 2 })).body.needed, "owner");
+  assert.equal((await rollback(w, A!, cid, bid, { to_version: hv, base_version: hv + 2 })).body.needed, "owner_or_author");
 });
 
 // ---- 7. the confirmed-student-data check on sends ---------------------------------------------------------------------
@@ -530,7 +530,7 @@ test("37-9: oracle: random sends, stale sends, rollbacks, merges, prunes and an 
         const target = model[to - 1]!;
         const removed = headV.qids.filter((x) => !target.qids.includes(x)).length;
         if (erased && u === Z) assert.equal(res.status, 401, label);
-        else if (!may) assert.deepEqual([res.status, res.body.needed], [403, "owner"], label);
+        else if (!may) assert.deepEqual([res.status, res.body.needed], [403, "owner_or_author"], label);
         else if (base !== head()) assert.deepEqual([res.status, res.body.head_version], [409, head()], label);
         else if (to <= head() - 20) assert.deepEqual([res.status, res.body.error, res.body.oldest_kept], [404, "version_not_retained", head() - 19], label);
         else if (!confirm && removed * 2 > headV.qids.length) assert.deepEqual([res.status, res.body.removed, res.body.total], [428, removed, headV.qids.length], label);

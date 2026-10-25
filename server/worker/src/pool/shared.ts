@@ -36,7 +36,15 @@ export type PoolNotice =
   /** Round 17: an importer reported that an item's served text gives its hidden key away. */
   | { kind: "key_leak_report"; itemId: string; authorId: string }
   /** Round 32: a member reported a circle bank (ids only; `held`: it is hidden from the circle now). */
-  | { kind: "circle_report"; circleId: string; bankId: string; reportId: string; reason: string; held: boolean };
+  | { kind: "circle_report"; circleId: string; bankId: string; reportId: string; reason: string; held: boolean }
+  /**
+   * Round 42 (D5): an email invite. The ONLY place the address and the code exist: sent at once in the background,
+   * never stored (no outbox), never logged by the pool. The mail is a fixed text (poolmail.ts) with no text a person
+   * chose (round 46: not even the circle's name).
+   */
+  | { kind: "circle_email_invite"; to: string; code: string; role: "editor" | "viewer"; expiresAt: number }
+  /** Round 44: a circle send or rollback matched a copyright re-upload block (ids only; `itemId` is the circle bank). */
+  | { kind: "circle_copyright_match"; itemId: string; circleId: string; version: number };
 
 export interface PoolDeps {
   db: D1Database;
@@ -97,7 +105,7 @@ export interface Ctx {
   core: Core;
   now: () => number;
   deps: PoolDeps;
-  keys: Promise<{ limit: CryptoKey; cursor: CryptoKey; preview: CryptoKey; merge: CryptoKey }>;
+  keys: Promise<{ limit: CryptoKey; cursor: CryptoKey; preview: CryptoKey; merge: CryptoKey; email: CryptoKey }>;
   store: RateLimitStore;
 }
 
@@ -493,10 +501,42 @@ export const DEFAULT_LIMITS = {
   circle_bytes: 200 * MB,
   /** Questions across a circle's current versions ('*', D4: not counted toward shared_questions). */
   circle_questions: 5000,
-  /** Open (usable) invite codes per circle ('*'). */
+  /** Open (usable) invite codes per circle ('*'). Round 47: plain codes only (email invites have their own, below). */
   circle_open_invites: 10,
   /** Rows a circle keeps for the public re-share check (circle_qkeys, '*'). */
   circle_records: 50_000,
+  // ---- circles, phase C (round 42, D5: email invites) ----
+  /** Email invites an account may send a day (each is also one of its circle_invites). Round 47 (critic 54a variant 2:
+   *  a department invited at once): 40, was 20. */
+  circle_email_invites: 40,
+  /** Invitation mails one address may receive a day, from every circle and inviter ('*'); past it the invite is
+   *  made and answered as usual, but not mailed (no oracle, no mail-bombing). */
+  circle_email_address: 3,
+  /** Invitation mails the whole service sends an hour ('*'); past it 503 busy. Round 46: its last fifth only for
+   *  inviters who sent fewer than EMAIL_SMALL_INVITER this hour. */
+  circle_email_hourly: 100,
+  /** Round 46 (critic 53b B1): invitation mails one account may send an hour (429 hourly_limit). Round 47: 30, was 10. */
+  circle_email_invites_hourly: 30,
+  /** Round 46: invitation mails to one domain an hour, from everyone ('*'). Round 47 (critics 54a variant 3, 54b V1): one
+   *  inviter at most circle_email_inviter_domain_hourly of them, its last fifth only for inviters who mailed that domain
+   *  fewer than EMAIL_SMALL_INVITER times this hour; past either, 429 hourly_limit in plain words (no longer 503 busy). */
+  circle_email_domain_hourly: 30,
+  /** Round 47: invitation mails one account may send to one domain an hour (its share of circle_email_domain_hourly). */
+  circle_email_inviter_domain_hourly: 10,
+  /** Round 47 (critic 54a variant 2): open (usable) email invites per circle ('*'), besides its circle_open_invites codes. */
+  circle_open_email_invites: 40,
+  /** Round 47 (critic 54b N1): admin flags (student data, copyright) one account's sends, rollbacks and answer-key
+   *  changes may raise in one circle a day; past it the version is withheld all the same, without a flag (so it is not
+   *  kept as evidence), and the administrator is told once (a `cap` flag). */
+  circle_send_flags: 5,
+  /** Round 46 (critic 53b V4): changes of a bank's answer-key setting an account may make a day. */
+  circle_hide_changes: 20,
+  /** Round 48 (critic 55b B1): answer-key PATCHes that do work (a strip, a check) an account may make a day, refused
+   *  ones included (the app's two or three steps per bank fit: 12 banks are 36). */
+  circle_hide_attempts: 60,
+  /** Round 43 (D12): reads a VIEWER may make a day of banks that hide their keys (each a strip, publish-sized work;
+   *  besides item_reads; a 304 is not one). */
+  circle_hidden_reads: 100,
 } as const;
 export type Metric = keyof typeof DEFAULT_LIMITS;
 export const METRICS = Object.keys(DEFAULT_LIMITS) as Metric[];
@@ -925,9 +965,22 @@ export function makeCtx(d: PoolDeps, r2: R2Bucket): Ctx {
         false,
         ["sign", "verify"],
       );
-      return { limit: k.limit, cursor, preview, merge };
+      // Round 42 (D5): the HMAC of an invited address (the per-address cap), its own purpose.
+      const email = await crypto.subtle.deriveKey(
+        { name: "HKDF", hash: "SHA-256", salt: utf8("vershion-pool/v1"), info: utf8("circle-invite-email") },
+        ikm,
+        { name: "HMAC", hash: "SHA-256", length: 256 },
+        false,
+        ["sign", "verify"],
+      );
+      return { limit: k.limit, cursor, preview, merge, email };
     })(),
   };
+}
+
+/** An HMAC (base64url) under one of the pool's derived keys (each its own HKDF purpose). */
+export async function hmacOf(c: Ctx, purpose: "email", data: string): Promise<string> {
+  return hmac((await c.keys)[purpose], data);
 }
 
 // ---- cursors ---------------------------------------------------------------------------------------

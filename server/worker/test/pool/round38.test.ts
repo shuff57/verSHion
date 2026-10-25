@@ -106,9 +106,13 @@ test("38-1 (B1): an editor's version holding confirmed student data stays withhe
   await assertWithheld(w, cid, bid, 2, [V!], A!, "three versions later");
   // ... and the history's oldest_kept/pinned do not count it as available.
   assert.equal((await version(w, V!, cid, bid, 1)).status, 200);
-  // Pruned like any version once 20 newer ones exist (D16).
+  // Pruned like any version once 20 newer ones exist (D16) and (round 46, critic 53b V7) its admin flag is resolved:
+  // while the flag is open it is the admin's evidence and stays, withheld.
   for (let i = 0; i < 18; i++) base = (await send(w, A!, cid, [CLEAN, `Later ${i}?`], { bid, base, confirm: true })).body.version;
   assert.equal(base, 24);
+  assert.deepEqual([(await version(w, V!, cid, bid, 2)).body.error, w.q<any>(`SELECT status FROM circle_versions WHERE bank_id = ? AND version = 2`, bid)[0].status], ["version_withheld", "previous"]);
+  w.sql.prepare(`UPDATE admin_flags SET resolved_at = ? WHERE kind = 'privacy_text_match' AND item_id = ?`).run(w.clock, bid);
+  base = (await send(w, A!, cid, [CLEAN, "After the decision?"], { bid, base, confirm: true })).body.version;
   assert.deepEqual([(await version(w, V!, cid, bid, 2)).body.error, w.q<any>(`SELECT status FROM circle_versions WHERE bank_id = ? AND version = 2`, bid)[0].status], ["version_not_retained", "pruned"]);
 });
 

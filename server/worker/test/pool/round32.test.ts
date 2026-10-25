@@ -465,7 +465,8 @@ test("32-7: an owner close is undoable for 14 days, then everything is purged (R
   const a = await share(w, A!, cid, bankOf(withQs(2, "Ann")), { message: "Ann's PRIVATE-MESSAGE" });
   const b = await share(w, B!, cid, bankOf(withQs(2, "Bob")));
   // Licence (D19): the author only; earlier versions keep theirs.
-  assert.equal((await w.json<any>("PATCH", `/circles/${cid}/banks/${a.bid}`, { user: B!, json: { license: "CC-BY-4.0" } })).body.needed, "author");
+  // (round 48: the route's one role hint, refused before the body is read; the licence itself stays the author's)
+  assert.equal((await w.json<any>("PATCH", `/circles/${cid}/banks/${a.bid}`, { user: B!, json: { license: "CC-BY-4.0" } })).body.needed, "owner_or_author");
   assert.equal((await w.json<any>("PATCH", `/circles/${cid}/banks/${a.bid}`, { user: A!, json: { license: "CC-BY-4.0" } })).status, 200);
   assert.equal(w.q<any>(`SELECT license FROM circle_versions WHERE id = ?`, a.vid)[0].license, "circle-only", "the version keeps its own licence");
   // A bank holding a public item's question under CC-BY-SA must stay CC-BY-SA (declared origins).

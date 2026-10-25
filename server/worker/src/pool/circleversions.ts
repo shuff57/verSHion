@@ -9,9 +9,9 @@
 // the account, the bank, the base and the head). Nothing is stored and nothing is locked; the token only
 // lets the next send (based on that head) record "merged from the base" in the history.
 import { b64url, fromB64url, hmac, timingSafeEqual, utf8 } from "../../../auth/src/crypto.ts";
-import { ACTIVE_SQL, BLOCKING_HOLD_SQL, bankOrMiss, getBank, KEPT_VERSIONS, keptInfo, nameOf, OPEN_SQL, requireOpen, requireReadable, requireRole, text } from "./circles.ts";
+import { ACTIVE_SQL, BLOCKING_HOLD_SQL, bankOrMiss, getBank, KEPT_VERSIONS, keptInfo, nameOf, OPEN_SQL, OWNER_OR_AUTHOR, requireOpen, requireReadable, requireRole, SEND_FLAG_KINDS, text } from "./circles.ts";
 import { ALIVE_SQL, audit, json, PoolError, readJson, throwIfErased, type Ctx, type PoolPrincipal } from "./shared.ts";
-import { PRUNED_NOW_SQL } from "./circlesend.ts";
+import { PINNED_EVIDENCE_SQL, PRUNED_NOW_SQL } from "./circlesend.ts";
 
 /** History lines a page. */
 export const HISTORY_PAGE = 50;
@@ -43,12 +43,13 @@ const LINE_COLS = `v.version, v.id, v.committed_at, v.message, v.added, v.change
 const available = (r: { status: string; full_key: string; withheld_at: number | null }) => (r.status === "current" || r.status === "previous") && r.full_key !== "" && r.withheld_at === null;
 /** One history line as members see it: who (a name, "deleted teacher" once erased), when, the message and counts; no ids of people.
  *  Round 38: a withheld version (it held confirmed student data) is `withheld: true`, `kept: false`, and its message is not shown. */
-const lineOf = (r: Line) => ({
+// (round 43, D12: and to a viewer of a bank that hides its keys no message is shown: editors write them, nothing checks them)
+const lineOf = (r: Line, hideText = false) => ({
   version: r.version,
   version_id: r.id,
   by: nameOf(r.display_name, r.deleted_at),
   at: r.committed_at,
-  message: r.withheld_at !== null ? "" : text(r.message),
+  message: r.withheld_at !== null || hideText ? "" : text(r.message),
   added: r.added,
   changed: r.changed,
   removed: r.removed,
@@ -56,6 +57,9 @@ const lineOf = (r: Line) => ({
   license: r.license,
   kept: available(r),
   withheld: r.withheld_at !== null,
+  // (round 48, critic 55a V4: a withheld version's text is kept for the review ("full") or no longer ("hashes_only":
+  // only the record of what matched is kept, for the administrator))
+  ...(r.withheld_at !== null ? { review_copy: (r.status === "current" || r.status === "previous") && r.full_key !== "" ? "full" : "hashes_only" } : {}),
   ...(r.rollback_of !== null ? { rollback_of: r.rollback_of } : {}),
   ...(r.merged_from !== null ? { merged_from: r.merged_from } : {}),
 });
@@ -78,7 +82,7 @@ export async function history(c: Ctx, p: PoolPrincipal, cid: string, bid: string
     bank_id: bid,
     head_version: b.head_version,
     ...(await keptInfo(c, bid, b.head_version)),
-    versions: page.map(lineOf),
+    versions: page.map((r) => lineOf(r, b.hide_key === 1 && m.role === "viewer")),
     next_before: rows.results.length > HISTORY_PAGE && last ? last.version : null,
   });
 }
@@ -119,7 +123,7 @@ export async function mergeInitiate(c: Ctx, req: Request, p: PoolPrincipal, cid:
     head_version_id: b.head_version_id,
     head_at: top?.committed_at ?? b.updated_at,
     head_by: top ? nameOf(top.display_name, top.deleted_at) : nameOf(null, 1),
-    between: rows.results.map(lineOf),
+    between: rows.results.map((r) => lineOf(r)),
     between_total: head - base,
     merge_token: tok.token,
     merge_token_expires_at: tok.exp,
@@ -169,7 +173,7 @@ export async function trimVersions(c: Ctx, req: Request, p: PoolPrincipal, cid: 
   const body = await readJson(req, `u:${me}`, { deadlineMs: c.deps.bodyDeadlineMs });
   await requireReadable(c, m, b, me);
   requireOpen(m);
-  if (!(m.role === "owner" || (b.author_id === me && m.role === "editor"))) throw new PoolError(403, "circle_role_required", { needed: "owner", role: m.role });
+  if (!(m.role === "owner" || (b.author_id === me && m.role === "editor"))) throw new PoolError(403, "circle_role_required", { needed: OWNER_OR_AUTHOR, role: m.role });
   const keep = body.keep;
   if (typeof keep !== "number" || !Number.isInteger(keep) || keep < 1 || keep >= KEPT_VERSIONS) throw new PoolError(400, "invalid_request", { field: "keep", min: 1, max: KEPT_VERSIONS - 1 });
   // (round 39, critic 46a M1: a student-data hold a send raised does not stop a trim, a report's or an admin's does)
@@ -187,7 +191,9 @@ export async function trimVersions(c: Ctx, req: Request, p: PoolPrincipal, cid: 
             AND NOT ${BLOCKING_HOLD_SQL("?1")}
             AND NOT EXISTS (SELECT 1 FROM circle_reports pr WHERE pr.bank_id = ?1 AND pr.resolved_at IS NULL AND pr.version = circle_versions.version)
             -- (round 39, critic 46a variant 3: a withheld version stays while its student-data flag is open: the admin's evidence)
-            AND NOT (circle_versions.withheld_at IS NOT NULL AND EXISTS (SELECT 1 FROM admin_flags tf WHERE tf.publish_id = circle_versions.id AND tf.kind = 'privacy_text_match' AND tf.resolved_at IS NULL))`,
+            -- (round 44: and a copyright match's flag the same way)
+            -- (round 48: unless the administrator has marked its evidence captured)
+            AND NOT ${PINNED_EVIDENCE_SQL("circle_versions")}`,
       )
       .bind(bid, cid, keep, now, me),
     audit(c.db, { actorId: me, actorKind: "user", action: "circle.versions_trimmed", itemId: cid, targetUserId: me, detail: { bank_id: bid, keep } }, now, `changes() > 0`),
@@ -196,5 +202,17 @@ export async function trimVersions(c: Ctx, req: Request, p: PoolPrincipal, cid: 
   const pruned = res[0]!.meta.changes ?? 0;
   if (pruned === 0) await throwIfErased(c, me);
   const head = (await c.db.prepare(`SELECT head_version FROM circle_banks WHERE id = ?1`).bind(bid).first<{ head_version: number }>())?.head_version ?? b.head_version;
-  return json(200, { ok: true, pruned, ...(await keptInfo(c, bid, head)) });
+  // (round 47, critic 54b nitpick: the versions kept for the administrator's review are said, by number only: at most
+  // EVIDENCE_PER_BANK a bank, round 47's bound; they go once the administrator has decided)
+  const evidence = (
+    await c.db
+      .prepare(`SELECT ev.version FROM circle_versions ev INDEXED BY circle_versions_bank WHERE ev.bank_id = ?1 AND ev.status IN ('current', 'previous') AND ev.full_key <> '' AND ${PINNED_EVIDENCE_SQL("ev")} ORDER BY ev.version`)
+      .bind(bid)
+      .all<{ version: number }>()
+  ).results.map((r) => r.version);
+  // (round 48, critics 55a V4 / 55b nitpick: the versions kept for the review are listed with the others kept outside
+  // the run, `pinned_versions`, as many as `evidence_kept`)
+  const ki = await keptInfo(c, bid, head);
+  const pinned = [...new Set([...ki.pinned_versions, ...evidence])].sort((a, b2) => a - b2);
+  return json(200, { ok: true, pruned, evidence_kept: evidence.length, ...ki, pinned_versions: pinned });
 }

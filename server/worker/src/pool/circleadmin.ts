@@ -8,8 +8,9 @@
 // metadata views included. Writes need a reason of 10 or more characters.
 import type { AdminRoute } from "../../../auth/src/index.js";
 import { cleanText } from "../../../auth/src/validate.ts";
-import { CIRCLE_UNDO_MS, keptInfo } from "./circles.ts";
-import { LISTING_REFRESH_SQL } from "./circlesend.ts";
+import { BLOCKING_HOLD_SQL, CIRCLE_UNDO_MS, keptInfo, SEND_FLAG_KINDS, SEND_HOLD_SOURCES } from "./circles.ts";
+import { imagesAt, LISTING_REFRESH_SQL, PRIVACY_SQL, privacyScan } from "./circlesend.ts";
+import { withStoredFull } from "./circlehide.ts";
 import { readHold, streamedPayload } from "./read.ts";
 import { audit, ID_RE, json, PoolError, READ_HEAD_COST, type Ctx } from "./shared.ts";
 
@@ -32,6 +33,98 @@ const PRIVACY_MATCH_SQL = `(EXISTS (SELECT 1 FROM circle_qkeys k JOIN privacy_bl
   OR EXISTS (SELECT 1 FROM circle_versions v JOIN circle_version_blobs vb ON vb.version_id = v.id JOIN privacy_blocks pb ON pb.kind = 'blob' AND pb.hash = vb.sha256 WHERE v.bank_id = ?1)
   OR EXISTS (SELECT 1 FROM circle_holds ph WHERE ph.bank_id = ?1 AND ph.source IN ('privacy', 'privacy_near'))
   OR EXISTS (SELECT 1 FROM admin_flags af WHERE af.kind = 'privacy_text_match' AND af.item_id = ?1))`;
+
+/** Round 44: a copyright re-upload block matches bank `?1`: a send's check held it (its hold or its `blocklist` flag), or
+ *  an active block holds the key-free hash of a question it held. Round 46 (critic 53b V8): "active" as at a send (not
+ *  lifted, not expired, `?2` now). The sender's exemptions are not applied here (a bank's versions have several
+ *  senders); this only lets an administrator OPEN the bank, audited. */
+const COPYRIGHT_MATCH_SQL = `(EXISTS (SELECT 1 FROM circle_holds ch WHERE ch.bank_id = ?1 AND ch.source = 'blocklist')
+  OR EXISTS (SELECT 1 FROM admin_flags cf WHERE cf.kind = 'blocklist' AND cf.item_id = ?1)
+  OR EXISTS (SELECT 1 FROM circle_qkeys k JOIN blocked_hashes bh ON bh.kind = 'match' AND bh.hash = k.match_hash WHERE k.bank_id = ?1 AND bh.lifted_at IS NULL AND (bh.expires_at IS NULL OR bh.expires_at > ?2)))`;
+
+/**
+ * Round 47 (critic 54b N2): SQL, version `?1` of bank `?2` was withheld for copyright only: its own questions and images
+ * (block keys `?4`, image hashes `?5`, from a check of its body just made) match no confirmed student data now, no
+ * report or administrator holds the bank, no report is open on it, and every open send flag on the version is a
+ * `blocklist` flag whose takedowns are all lifted or expired (`?3` now).
+ */
+const COPYRIGHT_ONLY_SQL = `(NOT ${PRIVACY_SQL("?4", "?5")}
+  AND NOT ${BLOCKING_HOLD_SQL("?2")}
+  AND NOT EXISTS (SELECT 1 FROM circle_reports cr WHERE cr.bank_id = ?2 AND cr.resolved_at IS NULL)
+  AND NOT EXISTS (SELECT 1 FROM admin_flags of WHERE of.publish_id = ?1 AND of.kind IN ${SEND_FLAG_KINDS} AND of.resolved_at IS NULL
+                    AND (of.kind <> 'blocklist' OR NOT json_valid(of.detail)
+                         OR EXISTS (SELECT 1 FROM json_each(of.detail, '$.actions') a JOIN blocked_hashes bh ON bh.action_id = a.value WHERE bh.lifted_at IS NULL AND (bh.expires_at IS NULL OR bh.expires_at > ?3)))))`;
+
+/**
+ * Round 46 (critic 53a variant 2): after an administrator lifts a takedown's re-upload blocks (/admin/dmca/unblock),
+ * the open `blocklist` flags of circle versions that only that takedown's (or other now inactive) blocks held are
+ * marked `block_lifted: true`; with `release` their versions are released in the same call (readable again, the flag
+ * resolved, a head's copyright hold lifted, the listing refreshed), never one also withheld for student data (its
+ * `privacy_text_match` flag open: that stays for a version release). Returns the counts. Audited per version.
+ */
+export async function circleUnblock(c: Ctx, actionId: string, release: boolean, adminId: string, now: number): Promise<{ lifted: number; released: number }> {
+  const cand = (
+    await c.db
+      .prepare(
+        `SELECT f.id, f.item_id AS bank_id, f.publish_id AS version_id FROM admin_flags f
+          WHERE f.kind = 'blocklist' AND f.resolved_at IS NULL AND json_valid(f.detail) AND f.detail ->> '$.circle_id' IS NOT NULL
+            AND EXISTS (SELECT 1 FROM json_each(f.detail, '$.actions') a WHERE a.value = ?1)
+            AND NOT EXISTS (SELECT 1 FROM json_each(f.detail, '$.actions') a JOIN blocked_hashes bh ON bh.action_id = a.value WHERE bh.lifted_at IS NULL AND (bh.expires_at IS NULL OR bh.expires_at > ?2))`,
+      )
+      .bind(actionId, now)
+      .all<{ id: string; bank_id: string; version_id: string }>()
+  ).results;
+  // Round 48 (critics 55a V3, 55b V3): versions withheld past the sender's day of flags, named on their bank's cap flag
+  // (CAP_FLAG_SQL) with the takedowns that matched them: the same rule (every takedown of the entry lifted or expired,
+  // no student data), released the same way.
+  const caps = (
+    await c.db
+      .prepare(
+        `SELECT f.id, f.item_id AS bank_id, json_extract(v.value, '$.version_id') AS version_id FROM admin_flags f, json_each(f.detail, '$.versions') v
+          WHERE f.kind = 'cap' AND f.resolved_at IS NULL AND json_valid(f.detail) AND f.detail ->> '$.metric' = 'circle_send_flags'
+            AND json_extract(v.value, '$.student_data') = 0
+            AND EXISTS (SELECT 1 FROM json_each(v.value, '$.actions') a WHERE a.value = ?1)
+            AND NOT EXISTS (SELECT 1 FROM json_each(v.value, '$.actions') a JOIN blocked_hashes bh ON bh.action_id = a.value WHERE bh.lifted_at IS NULL AND (bh.expires_at IS NULL OR bh.expires_at > ?2))`,
+      )
+      .bind(actionId, now)
+      .all<{ id: string; bank_id: string; version_id: string }>()
+  ).results;
+  if (cand.length === 0 && caps.length === 0) return { lifted: 0, released: 0 };
+  await c.db
+    .prepare(`UPDATE admin_flags SET detail = json_set(detail, '$.block_lifted', json('true')) WHERE id IN (SELECT value FROM json_each(?1))`)
+    .bind(JSON.stringify([...new Set([...cand, ...caps].map((x) => x.id))]))
+    .run();
+  let released = 0;
+  if (release)
+    for (const f of [...cand.map((x) => ({ ...x, flag: true })), ...caps.map((x) => ({ ...x, flag: false }))].slice(0, UNBLOCK_RELEASE_MAX)) {
+      // (round 47, critic 54b N2: only a version the lifted takedown alone withheld. Its body is checked again now, as a
+      // send's is: confirmed student data (exact or a near rewording) or another active block keeps it withheld for the
+      // administrator's own release; so does a body that is gone or unreadable)
+      const v = await c.db.prepare(`SELECT full_key, committer_id FROM circle_versions WHERE id = ?1 AND withheld_at IS NOT NULL AND full_key <> ''`).bind(f.version_id).first<{ full_key: string; committer_id: string }>();
+      if (!v) continue;
+      const sc = await withStoredFull(c, v.full_key, (qs, mh) => privacyScan(c, [{ qs, mh, imgAt: imagesAt(qs) }], v.committer_id));
+      if (!sc || sc.exact.length + sc.near.length + sc.copyright.length > 0) continue;
+      const res = await c.db.batch([
+        c.db.prepare(`UPDATE circle_versions SET withheld_at = NULL WHERE id = ?1 AND withheld_at IS NOT NULL AND ${COPYRIGHT_ONLY_SQL}`).bind(f.version_id, f.bank_id, now, JSON.stringify(sc.keys), JSON.stringify(sc.shas)),
+        audit(c.db, { actorId: adminId, actorKind: "admin", action: "circle.admin_version_release", itemId: null, detail: { bank_id: f.bank_id, version_id: f.version_id, via: "unblock", action_id: actionId, ...(f.flag ? {} : { past_flags: true }) } }, now, `changes() = 1`),
+        ...(f.flag
+          ? [c.db.prepare(`UPDATE admin_flags SET resolved_at = ?2, resolved_by = ?3 WHERE id = ?1 AND resolved_at IS NULL AND EXISTS (SELECT 1 FROM circle_versions v WHERE v.id = ?4 AND v.withheld_at IS NULL)`).bind(f.id, now, adminId, f.version_id)]
+          : []),
+        c.db
+          .prepare(
+            `DELETE FROM circle_holds WHERE bank_id = ?1 AND source = 'blocklist'
+               AND EXISTS (SELECT 1 FROM circle_banks b JOIN circle_versions v ON v.id = b.head_version_id WHERE b.id = ?1 AND v.id = ?2 AND v.withheld_at IS NULL)`,
+          )
+          .bind(f.bank_id, f.version_id),
+        c.db.prepare(LISTING_REFRESH_SQL(`EXISTS (SELECT 1 FROM circle_versions rv WHERE rv.id = ?2 AND rv.withheld_at IS NULL)`)).bind(f.bank_id, f.version_id),
+      ]);
+      if ((res[0]!.meta.changes ?? 0) === 1) released++;
+    }
+  return { lifted: cand.length, released };
+}
+
+/** Round 47: the versions one unblock releases at most (each is a body check); the rest keep their `block_lifted` flags. */
+export const UNBLOCK_RELEASE_MAX = 50;
 
 export function circleAdminRoutes(C: () => Ctx): AdminRoute[] {
   return [
@@ -124,8 +217,8 @@ export function circleAdminRoutes(C: () => Ctx): AdminRoute[] {
       method: "GET",
       path: "/admin/pool/circle-bank",
       write: false,
-      // ?id=<bank>&version=<n, default the head>&basis=report|notice|privacy[&notice_id=]: a kept version's
-      // body, streamed under a read reservation. Audited (D1).
+      // ?id=<bank>&version=<n, default the head>&basis=report|notice|privacy|copyright[&notice_id=]: a kept version's
+      // body, streamed under a read reservation. Audited (D1). (Round 44: `copyright`, a re-upload block matched it.)
       handler: async (req, h) => {
         const c = C();
         const u = new URL(req.url).searchParams;
@@ -141,9 +234,11 @@ export function circleAdminRoutes(C: () => Ctx): AdminRoute[] {
               ? await c.db.prepare(`SELECT 1 AS x FROM dmca_notices WHERE id = ?1`).bind((noticeId = idOf(u.get("notice_id"), "notice_id"))).first()
               : basis === "privacy"
                 ? await c.db.prepare(`SELECT 1 AS x WHERE ${PRIVACY_MATCH_SQL}`).bind(bid).first()
-                : null;
-        if (basis !== "report" && basis !== "notice" && basis !== "privacy") throw new PoolError(400, "invalid_request", { field: "basis", allowed: ["report", "notice", "privacy"] });
-        if (!ok) return json(403, { error: "basis_required", message: "Circle content is opened only when a member reported it, a recorded copyright notice names it, or a student-data block matches it." });
+                : basis === "copyright"
+                  ? await c.db.prepare(`SELECT 1 AS x WHERE ${COPYRIGHT_MATCH_SQL}`).bind(bid, h.now).first()
+                  : null;
+        if (basis !== "report" && basis !== "notice" && basis !== "privacy" && basis !== "copyright") throw new PoolError(400, "invalid_request", { field: "basis", allowed: ["report", "notice", "privacy", "copyright"] });
+        if (!ok) return json(403, { error: "basis_required", message: "Circle content is opened only when a member reported it, a recorded copyright notice names it, a copyright re-upload block or a student-data block matches it." });
         const vArg = u.get("version");
         const want = vArg === null ? b.head_version : /^[1-9][0-9]{0,8}$/.test(vArg) ? Number(vArg) : NaN;
         if (Number.isNaN(want)) throw new PoolError(400, "invalid_request", { field: "version" });
@@ -152,7 +247,26 @@ export function circleAdminRoutes(C: () => Ctx): AdminRoute[] {
           .bind(bid, want)
           .first<{ id: string; version: number; status: string; full_key: string; committer_id: string; committed_at: number; message: string | null; license: string }>();
         if (!v || (v.status !== "current" && v.status !== "previous") || v.full_key === "") {
-          return json(404, { error: "version_not_retained", ...(await keptInfo(c, bid, b.head_version)) });
+          // (round 47, critic 54b N1: evidence past the bound was pruned; what its flags recorded is what is left of it)
+          const ev = v
+            ? (
+                await c.db
+                  .prepare(`SELECT id, kind, at, resolved_at, detail FROM admin_flags WHERE publish_id = ?1 AND kind IN ${SEND_FLAG_KINDS} AND json_valid(detail) AND detail ->> '$.evidence_pruned' = 1 ORDER BY at, id LIMIT 10`)
+                  .bind(v.id)
+                  .all<{ id: string; kind: string; at: number; resolved_at: number | null; detail: string }>()
+              ).results
+            : [];
+          return json(404, {
+            error: "version_not_retained",
+            ...(await keptInfo(c, bid, b.head_version)),
+            ...(ev.length > 0
+              ? {
+                  evidence_pruned: true,
+                  message: "This version's text was deleted to keep the circle's storage bounded (only the newest flagged versions are kept); its flags keep the positions, the matching block hashes and the takedowns.",
+                  flags: ev.map((f) => ({ flag_id: f.id, kind: f.kind, at: f.at, resolved_at: f.resolved_at, detail: JSON.parse(f.detail) as unknown })),
+                }
+              : {}),
+          });
         }
         const detail = { bank_id: bid, version: v.version, basis, ...(noticeId ? { notice_id: noticeId } : {}) };
         await c.db.batch([
@@ -173,6 +287,36 @@ export function circleAdminRoutes(C: () => Ctx): AdminRoute[] {
           release();
           throw e;
         }
+      },
+    },
+    {
+      method: "POST",
+      path: "/admin/pool/circle-evidence-captured",
+      write: true,
+      // Round 48 (critic 55b B2): {bank_id, version?, note}: the administrator has what the review of the bank's open
+      // student-data and copyright flags needs (the case file). Each such flag stays open for the decision, with its
+      // positions, hashes and takedowns, and is marked `evidence_captured`; it no longer keeps its version's body or
+      // the bank from a trim, a prune or a purge (the owner's purge-now then purges the bank).
+      handler: async (_req, h) => {
+        const c = C();
+        const bid = idOf(h.body?.bank_id, "bank_id");
+        const n = reasonOf(h.body?.note);
+        const vArg = h.body?.version;
+        if (vArg !== undefined && !(typeof vArg === "number" && Number.isInteger(vArg) && vArg >= 1)) throw new PoolError(400, "invalid_request", { field: "version" });
+        const b = await c.db.prepare(`SELECT circle_id FROM circle_banks WHERE id = ?1`).bind(bid).first<{ circle_id: string }>();
+        if (!b) return json(404, { error: "not_found" });
+        const [upd] = await c.db.batch([
+          c.db
+            .prepare(
+              `UPDATE admin_flags SET detail = json_set(detail, '$.evidence_captured', json('true'), '$.evidence_captured_at', ?2, '$.evidence_captured_by', ?3)
+                WHERE item_id = ?1 AND kind IN ${SEND_FLAG_KINDS} AND resolved_at IS NULL AND json_valid(detail) AND COALESCE(detail ->> '$.evidence_captured', 0) = 0
+                  AND (?4 IS NULL OR detail ->> '$.version' = ?4)`,
+            )
+            .bind(bid, h.now, h.admin.userId, vArg ?? null),
+          audit(c.db, { actorId: h.admin.userId, actorKind: "admin", action: "circle.admin_evidence_captured", itemId: b.circle_id, detail: { bank_id: bid, ...(vArg !== undefined ? { version: vArg } : {}) }, note: n }, h.now),
+          h.audit({ action: "pool.circle_evidence_captured", targetId: bid, note: n }),
+        ]);
+        return json(200, { ok: true, flags: upd!.meta.changes ?? 0 });
       },
     },
     {
@@ -213,11 +357,12 @@ export function circleAdminRoutes(C: () => Ctx): AdminRoute[] {
           const [up] = await c.db.batch([
             c.db.prepare(`UPDATE circle_versions SET withheld_at = NULL WHERE bank_id = ?1 AND version = ?2 AND withheld_at IS NOT NULL`).bind(bid, v),
             c.db
-              .prepare(`UPDATE admin_flags SET resolved_at = ?3, resolved_by = ?4 WHERE kind = 'privacy_text_match' AND resolved_at IS NULL AND publish_id = (SELECT id FROM circle_versions WHERE bank_id = ?1 AND version = ?2) AND changes() = 1`)
+              // (round 44: its copyright match's flag too)
+              .prepare(`UPDATE admin_flags SET resolved_at = ?3, resolved_by = ?4 WHERE kind IN ${SEND_FLAG_KINDS} AND resolved_at IS NULL AND publish_id = (SELECT id FROM circle_versions WHERE bank_id = ?1 AND version = ?2) AND changes() = 1`)
               .bind(bid, v, h.now, h.admin.userId),
             c.db
               .prepare(
-                `DELETE FROM circle_holds WHERE bank_id = ?1 AND source IN ('privacy', 'privacy_near') AND EXISTS (SELECT 1 FROM circle_banks hb WHERE hb.id = ?1 AND hb.head_version = ?2)
+                `DELETE FROM circle_holds WHERE bank_id = ?1 AND source IN ${SEND_HOLD_SOURCES} AND EXISTS (SELECT 1 FROM circle_banks hb WHERE hb.id = ?1 AND hb.head_version = ?2)
                    AND EXISTS (SELECT 1 FROM circle_versions hv WHERE hv.bank_id = ?1 AND hv.version = ?2 AND hv.withheld_at IS NULL)`,
               )
               .bind(bid, v),
@@ -236,7 +381,7 @@ export function circleAdminRoutes(C: () => Ctx): AdminRoute[] {
           // those of versions still withheld, which a version release resolves)
           c.db
             .prepare(
-              `UPDATE admin_flags SET resolved_at = ?2, resolved_by = ?3 WHERE kind = 'privacy_text_match' AND item_id = ?1 AND resolved_at IS NULL
+              `UPDATE admin_flags SET resolved_at = ?2, resolved_by = ?3 WHERE kind IN ${SEND_FLAG_KINDS} AND item_id = ?1 AND resolved_at IS NULL
                  AND NOT EXISTS (SELECT 1 FROM circle_versions wv WHERE wv.id = admin_flags.publish_id AND wv.withheld_at IS NOT NULL)`,
             )
             .bind(bid, h.now, h.admin.userId),
@@ -268,7 +413,7 @@ export function circleAdminRoutes(C: () => Ctx): AdminRoute[] {
           audit(c.db, { actorId: h.admin.userId, actorKind: "admin", action: "circle.admin_bank_remove", itemId: b.circle_id, detail: { bank_id: bid }, note: n }, h.now),
           // (round 33: the admin decided: its holds go with the decision, so the purge follows in 14 days)
           c.db.prepare(`DELETE FROM circle_holds WHERE bank_id = ?1 AND EXISTS (SELECT 1 FROM circle_banks WHERE id = ?1 AND removed_reason = 'admin')`).bind(bid),
-          c.db.prepare(`UPDATE admin_flags SET resolved_at = ?2, resolved_by = ?3 WHERE kind = 'privacy_text_match' AND item_id = ?1 AND resolved_at IS NULL AND EXISTS (SELECT 1 FROM circle_banks WHERE id = ?1 AND removed_reason = 'admin')`).bind(bid, h.now, h.admin.userId),
+          c.db.prepare(`UPDATE admin_flags SET resolved_at = ?2, resolved_by = ?3 WHERE kind IN ${SEND_FLAG_KINDS} AND item_id = ?1 AND resolved_at IS NULL AND EXISTS (SELECT 1 FROM circle_banks WHERE id = ?1 AND removed_reason = 'admin')`).bind(bid, h.now, h.admin.userId),
           h.audit({ action: "pool.circle_remove", targetId: bid, note: n }),
         ]);
         return (upd!.meta.changes ?? 0) === 1 ? json(200, { ok: true }) : json(409, { error: "not_removable" });
@@ -294,7 +439,7 @@ export function circleAdminRoutes(C: () => Ctx): AdminRoute[] {
           // (round 41: and its banks' student-data flags, so the circle's purge follows in 14 days)
           c.db
             .prepare(
-              `UPDATE admin_flags SET resolved_at = ?2, resolved_by = ?3 WHERE kind = 'privacy_text_match' AND resolved_at IS NULL AND item_id IN (SELECT id FROM circle_banks WHERE circle_id = ?1)
+              `UPDATE admin_flags SET resolved_at = ?2, resolved_by = ?3 WHERE kind IN ${SEND_FLAG_KINDS} AND resolved_at IS NULL AND item_id IN (SELECT id FROM circle_banks WHERE circle_id = ?1)
                  AND EXISTS (SELECT 1 FROM circles WHERE id = ?1 AND close_reason = 'admin')`,
             )
             .bind(cid, h.now, h.admin.userId),

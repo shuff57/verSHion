@@ -52,7 +52,31 @@ the byte cap, a withheld version's title never lists the bank, lost sends record
 graft or impose a public item's credit; README "Round 39". Round 40 (critic 47a): an author's adapted copy of a credited
 question keeps the credit wherever it sits, the owner can repair or purge a bank held for student data, and the admin
 mail says to release the matching version; README "Round 40". Round 41 (critic 48): a bank with an open student-data
-flag is not purged until the admin decides; README "Round 41".
+flag is not purged until the admin decides; README "Round 41". **Phase C backend, safe parts (rounds 42-48, migrations
+0111-0115):** the owner invites by email (`POST /circles/:cid/invites/email`: the server mails a fixed text holding an
+ordinary single-use code; no address is looked up or stored, only an HMAC for a 3-a-day per-address cap; 40 a day and
+30 an hour per inviter since round 47; the mail text awaits the owner's approval); a bank's author or the circle's owner can hide the answer keys
+from VIEWERS (`PATCH .../banks/:bid {hide_key}`: viewers read every version as share-core's stripped form, checked by
+the key-hint gate with decisions recorded per version, refused rather than ever served whole; editors and the owner
+read the full text); circle sends and rollbacks are checked against the public pool's copyright re-upload blocks (a
+match is withheld and held exactly like a student-data match, so members cannot tell the two apart); and the activity
+list gains the new kinds and an id-based cursor. Round 46 (critics 53a/53b): a keyless copy is never accepted as a
+circle version; the per-address cap counts one mailbox once (Gmail dots, aliases, +tags, IDN) and the hourly mail budget
+has per-inviter and per-domain shares; the inviter is told whether a mail went; the mail names no circle and no person;
+what viewers of a bank that hides its keys are served is checked against student-data and copyright blocks too, and
+viewers read only versions whose served form was checked. Round 47 (critics 54a/54b): the keyless guard uses
+share-core's own rule (the app's sentinel explanation counts, not only the flag); only answer-key changes that change
+something count toward the day's 20; the withheld versions kept as the administrator's evidence are bounded (5 a bank,
+20 a circle, a quarter of its bytes; older ones keep only their flags' positions, hashes and takedowns) and one account
+raises at most 5 such flags a day in a circle, so an owner can always free a circle's storage; an unblock releases a
+circle version only when the lifted takedown was its only reason; one inviter has at most 10 of a mail domain's 30
+invitations an hour, said in plain words. Round 48 (critics 55a/55b): answer-key PATCHes that do work count toward
+60 attempts a day, refusals included; the evidence bound follows the hold and report rules and ranks per sender; the
+administrator can mark a flag's evidence captured (it stays open but pins nothing), after which the owner purges the
+bank; purge-now that waits for a review answers what it did (200, purged_partial); versions withheld past a sender's
+flags are named on a bank-level cap flag and released by an unblock; a second email invite to one address rotates the
+first; a hide_key change during a send is its own 409. Not built until counsel has reviewed them: the public re-share
+route and the takedown machine for circle banks. README "Circles phase C" and "Round 42"-"Round 48".
 There is no client yet; the owner's "no circles at the first launch"
 stands until the app ships them.
 
@@ -463,7 +487,8 @@ The gate does not promise to catch deliberate obfuscation. Grouped from the READ
 - Several identical sources are all credited, oldest first. A sock's copy of an accomplice's infringing item can shield the accomplice
   from hold-copies; the admin then needs a second notice.
 - A determined prober can learn whether a guess matches a block from its own item's held state; the bound is the held cap and admin
-  visibility. A short-question copier can claim independence (public and flagged). An author who deletes, purges and re-adds her
+  visibility (round 44: a circle send shows the same held state at once, for copyright and student-data blocks alike, and its
+  matches count toward the same held cap). A short-question copier can claim independence (public and flagged). An author who deletes, purges and re-adds her
   original as a NEW item has no derivation record (the exempt-authors list is the path).
 - The licence-history re-key can widen a window across a gap between two offers; a never-served hidden reshuffle no longer retained is
   unrecoverable for pre-0105 rows. An edited word in a copied explanation, an explanation split across fields, a re-encoded non-PNG

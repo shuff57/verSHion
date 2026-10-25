@@ -335,6 +335,11 @@ export async function daily(c: Ctx): Promise<DailyReport> {
       c.db.prepare(`DELETE FROM usage_daily WHERE day < ?1`).bind(Math.floor(now / DAY_MS) - 2),
       c.db.prepare(`DELETE FROM pool_alert_budget WHERE hour < ?1`).bind(Math.floor(now / HOUR_MS) - 48),
       c.db.prepare(`DELETE FROM preview_tokens_used WHERE at < ?1`).bind(now - PREVIEW_MS),
+      // (round 42: the per-address invitation counts, an HMAC of each address, kept at most two days)
+      c.db.prepare(`DELETE FROM circle_email_sends WHERE day < ?1`).bind(Math.floor(now / DAY_MS) - 1),
+      // (round 46: the masked address of an email invite, once the invite is 30 days past its expiry; bounded a run)
+      // (round 48: with its address key, kept with the label)
+      c.db.prepare(`UPDATE circle_invites SET email_label = NULL, email_key = NULL WHERE id IN (SELECT id FROM circle_invites INDEXED BY circle_invites_label WHERE email_label IS NOT NULL AND expires_at < ?1 LIMIT 500)`).bind(now - 30 * DAY_MS),
     ])),
   );
   return { purged, restored, quarantineExpired };

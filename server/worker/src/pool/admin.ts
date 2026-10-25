@@ -9,7 +9,7 @@ import { currentServesBlob, itemServesBlob, servedBlobsOf } from "./served.ts";
 import { keyLeakQualifies, voidEvidence } from "./moderation.ts";
 import { readHold, streamedPayload } from "./read.ts";
 import { inviteAdminRoutes } from "./invites.ts";
-import { circleAdminRoutes } from "./circleadmin.ts";
+import { circleAdminRoutes, circleUnblock } from "./circleadmin.ts";
 import { adminUnremove, decideAppeal, LINEAGE_COPIES_MAX, lineageCopies, purgeHeldCopies, rightfulCheck, privacyPurge, privacyRestore, purgeItem, restore, reverseUphold, takedown, UNDO_MS, upholdTakedown } from "./moderation.ts";
 
 const HOLD_REASONS = ["reports", "student_data", "blocklist", "admin"] as const;
@@ -441,12 +441,19 @@ export function poolAdminRoutes(ctx: () => Ctx | null): AdminRoute[] {
         const hash = h.body?.hash;
         if (hash !== undefined && (typeof hash !== "string" || !BLOCK_KEY_RE.test(hash))) throw new PoolError(400, "invalid_request", { field: "hash" });
         const n = note(h.body?.note);
+        // (round 46: `release_circle_versions: true` also releases the circle versions only this takedown's blocks held)
+        const releaseCircles = h.body?.release_circle_versions;
+        if (releaseCircles !== undefined && typeof releaseCircles !== "boolean") throw new PoolError(400, "invalid_request", { field: "release_circle_versions" });
         const [upd] = await c.db.batch([
           c.db.prepare(`UPDATE blocked_hashes SET lifted_at = ?2 WHERE action_id = ?1 AND lifted_at IS NULL AND (?3 IS NULL OR hash = ?3 OR qhash = ?3)`).bind(aid, h.now, hash ?? null),
           audit(c.db, { actorId: h.admin.userId, actorKind: "admin", action: "dmca.unblock", detail: { action_id: aid, hash: hash ?? "all" }, note: n }, h.now, `changes() > 0`),
           h.audit({ action: "pool.dmca_unblock", targetId: aid, note: n }),
         ]);
-        return json(200, { ok: true, lifted: upd!.meta.changes ?? 0, released: await releaseOrphanHolds(c, `dmca:${aid}`, "blocklist") });
+        const released = await releaseOrphanHolds(c, `dmca:${aid}`, "blocklist");
+        // Round 46 (critic 53a variant 2): circle versions this takedown's blocks withheld are marked "block lifted"
+        // on their flags, and released here when asked.
+        const circ = await circleUnblock(c, aid, releaseCircles === true, h.admin.userId, h.now);
+        return json(200, { ok: true, lifted: upd!.meta.changes ?? 0, released, circle_flags_lifted: circ.lifted, circle_versions_released: circ.released });
       },
     },
     {

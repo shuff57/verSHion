@@ -149,6 +149,424 @@ shows the ids. A real rotation would need an offline migration that re-hashes ev
 the full bodies (impossible for purged items); none is provided. Treat the key as permanent: keep it as
 a wrangler secret AND an offline backup; losing it loses the pool's identity data.
 
+**Circles phase C, safe parts (rounds 42-45; `docs/circles-plan.md` 13.3, D5, D8, D12).** Owner-approved scope: email
+invites, hiding keys from viewers, copyright re-upload checks on sends, the activity list. NOT built (owner: lawyer
+review first): the public re-share route with origin credit, the DMCA takedown machine for circle banks, any new
+privacy, terms or moderation wording beyond the fixed invitation mail. Migrations `0111`-`0115` (new, nothing applied
+anywhere yet, `0111`, `0113` and `0114` edited in place in rounds 46 and 48; the next is `0116`). Tests:
+`test/pool/round42.test.ts` (7), `round43.test.ts` (8), `round44.test.ts` (9), `round45.test.ts` (4), `round46.test.ts`
+(12), `round47.test.ts` (10), `round48.test.ts` (10); every file failed on the code before its round (45-3 is a guard
+that already passes after round 44: it fails on round 41's code). Suite 662. Rounds 46-48 changed parts of rounds
+42-47: where a line below says otherwise, the later round is what the code does.
+
+**Round 48 (phase C after critics 55a and 55b, `docs/critic-reports/2026-10-25-circles-phaseC-{product-critic55a,security-critic55b}.md`).**
+Migration `0115_pool_round48.sql` (`circle_invites.email_key` and its partial index); `0114` edited in place (not applied
+anywhere): `IF NOT EXISTS`, the index is now `(circle_id, status) WHERE withheld_at IS NOT NULL AND full_key <> ''` (55b
+V6: pruned rows leave it); `0111` and `0113` got `IF NOT EXISTS` on their `CREATE TABLE`/`CREATE INDEX` (an `ADD COLUMN`
+cannot have it). Tests: `test/pool/round48.test.ts` (10, each failed on round 47's code; the critics' `h1`, `a2`, `a3`,
+`u1`, `r1`, `e1`, `i1` scripts were rerun and show the fixes; `a3`, `u1`, `e1` stop later on routes or expectations of
+their own). Earlier tests changed where the behaviour changed on purpose: 40-3, 41-1, 44-7, 47-3 (purge-now that waits
+for a review is `200 {purged_partial, pending_review}`), 42-3 and 46-2 (a second invite to one mailbox in one circle
+rotates the first: one invite row), 47-6 (the inviter's own share of a domain has its own metric; "mail domain"), 47-10
+(`409 hide_key_changed`), 32-1x and 37-x (role hint `owner_or_author` on the bank PATCH, trim and rollback).
+
+* **55b B1, answer-key attempts are counted.** Every PATCH `{hide_key}` that does work (a strip of the head, checks of
+  older versions, a restore) counts toward `circle_hide_attempts` (60 a day), refused ones included, and is not given
+  back (a `503 busy` aside); past it `429 daily_limit {metric: "circle_hide_attempts"}` "You have tried to change
+  answer-key settings as many times as you may today. Try again tomorrow." The day's 20 changes (`circle_hide_changes`)
+  still count only what changed something. Refused before any work and not counted: a member without the right, the
+  same setting again, a malformed decision (400), a decision for a question the head does not have (`400
+  invalid_request {field}`). The app's two or three steps per bank fit (twelve banks are 36). 48-1.
+* **55b B2, the evidence bound follows the hold rules and ranks per sender.** `evidenceBound` never prunes (nor counts)
+  a version of a bank a report or an administrator holds, nor one an open report names (48-2: the administrator's hold
+  keeps version 1 through a 7th flagged send). Heads are outside it. Each sender's newest 2 flagged versions in a bank
+  and newest 5 in the circle are protected from everyone else's; the rest fill what is left of 5 a bank and 20 a
+  circle, newest first, within a quarter of `circle_bytes` (48-3: one account's 40 flagged versions across five banks
+  leave another member's older evidence in place, the circle keeps at most 20).
+* **The owner's remedy, and the rule that cannot destroy what a pending flag needs.** A flag pins its version's body
+  until the administrator decides it OR marks its evidence captured: `POST /admin/pool/circle-evidence-captured
+  {bank_id, version?, note}` (sudo, audited; answers `{ok, flags}`). A captured flag stays open for the decision with
+  its positions, hashes and takedowns (`evidence_captured`, `_at`, `_by` in its detail) and pins nothing: trim, the
+  window, the bound and purge-now treat its version as any other, and the daily purge no longer waits for it. Purge-now
+  of a removed bank whose only obstacle is an uncaptured flag is answered as the work it does (55a V5, 55b V10): `200
+  {ok, purged_partial: true, pending_review: true, evidence_kept, message}` (every version but the pinned evidence is
+  pruned, the purge is claimed, undelete is `409 bank_removed`); once every flag is decided or captured, purge-now
+  purges the bank (`200 {ok}`). So a circle full of flagged withheld heads is freed by the owner's remove and
+  purge-now as soon as the administrator has captured the evidence, without waiting for the decision. 48-4.
+* **Limits fixed.**
+  * The keyless message fits the questions it names (55a V1): `422 keyless_question {positions, kinds, message}`;
+    `kinds` is each position's question kind; a `Short` (short answer or essay) is asked for a sample answer, others
+    for the correct answer, and every message says to get the full bank again now that the sender can edit. A keyless
+    `Short` is NOT accepted: a stripped copy cannot tell an essay from a keyed short answer (both `sample: ""`) and its
+    explanation is the sentinel, so accepting it would lose the author's text (share-core has no essay kind). 48-5.
+  * A send or rollback that loses only because `hide_key` changed meanwhile is `409 hide_key_changed {hide_key,
+    head_version, message}` (send again; with decisions when hiding is now on), not a merge `conflict`. The PATCH's own
+    lost race is `409 conflict {head_version, message}` (55a V2). 48-6.
+  * Versions withheld past the sender's `circle_send_flags` are named on a bank-level `cap` flag (55a V3, 55b V3): one
+    per bank, sender and day (`item_id` the bank, `user_id` the sender), its detail `{metric: "circle_send_flags",
+    circle_id, bank_id, versions: [{version, version_id, actions, student_data}]}`; the admin mail goes when it is made.
+    `/admin/dmca/unblock {release_circle_versions}` releases those versions by the same rule as flagged ones (every
+    takedown of the entry lifted or expired, no student data, the body re-checked) and marks the cap flag
+    `block_lifted`. The author's answer is the same `held`/`withheld` as for a flagged withhold. 48-7.
+  * Pruned evidence is said as such (55a V4): a history line of a withheld version has `review_copy: "full"` (its text
+    is still kept) or `"hashes_only"` (only the record of what matched is kept, for the administrator); reading such a
+    version is `404 version_not_retained {withheld: true, review_copy: "hashes_only", message}`. Trim's
+    `pinned_versions` now lists the evidence it keeps too, as many as `evidence_kept`. 48-8.
+  * An email invite to an address that has an open (unused, unrevoked, unexpired) email invite in the circle rotates it
+    (55a V6): a new code is mailed, the old one dies, the invite keeps its id and label, takes the new role and expiry:
+    `202 {..., resent: true, message}`. Found by `email_key`, an HMAC of the circle and the mailbox (its own HKDF purpose),
+    nulled with the label (inviter's erasure, the daily cron). A rotation counts as a mail (the day's and the hour's
+    counts, the mailbox's 3) but not as a new code. 48-9.
+  * Neutral words for a mail domain's hour: the inviter's own share is `429 hourly_limit {metric:
+    "circle_email_inviter_domain_hourly", limit}` "You have sent as many invitations to addresses at this mail domain
+    as you may in an hour (10). Try again in an hour."; the domain's hour is `{metric: "circle_email_domain_hourly"}`
+    "There have been too many invitations to addresses at this mail domain in the last hour. Try again in an hour."
+  * Erasure deletes the inviter's hourly domain counters (`circle_email_domain:<hmac>:<user id>`), in the erasure and
+    the resweep (55b V4). 48-10.
+  * One role hint (55a V7): `403 circle_role_required {needed: "owner_or_author"}` on the bank PATCH (before the body
+    is read), the answer-key PATCH, trim and rollback. The licence change itself stays `needed: "author"` for an owner
+    who is not the author. 48-10.
+  * Hide-off re-checks a version with its own sender's exemptions (55b V7).
+* **Documented, not changed.** 30 refused PATCHes still take 15 s of the heavy slot (55b B1's measure); the attempts cap
+  bounds it at 60 a day per account (about 30 s), not per request. A withheld HEAD is never pruned by the bound; the
+  owner's way out is a clean version, a rollback, or remove plus purge-now (the head kept until the flag is decided or
+  captured). The per-sender protection lets several hostile accounts keep 2 a bank and 5 a circle each (bounded by the
+  circle's members and their daily flags). A version withheld past the day's flags is not evidence (no flag pins it):
+  trim and the window prune it; its record is the cap flag's entry and `circle_qkeys`. The cap flag's entries list grows
+  with a sender's sends of a day (at most `circle_commits`). An unblock still checks at most 50 versions. The keyless
+  guard's extra validation (55b V5) and a promoted viewer's need to re-read the full bank stay as they are; the client
+  should re-import the full head when a viewer is promoted. A hide-on PATCH charges the PATCHer's held-publish count and
+  flags under the PATCHer's id for older versions others sent (55b V11). The address limit is answered before anything is
+  charged (55b V9, known). `APP_URL` in `wrangler.toml` is still the placeholder (55a V6): no staging mail before the
+  client's join route and a real `APP_URL` exist.
+
+**Round 47 (phase C after critics 54a and 54b, `docs/critic-reports/2026-10-25-circles-phaseC-{product-critic54a,security-critic54b}.md`).**
+Migration `0114_pool_round47.sql` (one partial index, `circle_versions_withheld`). Tests: `test/pool/round47.test.ts`
+(10; each failed on round 46's code, rechecked by putting the old line back for 47-5 and 47-10; the critics' `t1`-`t6`,
+`pin`, `rel`, `m1`, `kl`, `kl2`, `rb`, `cpu` scripts were rerun and show the fixes). Earlier tests changed where the
+behaviour changed on purpose: 42-3 (the account's own daily limit set to 20 for its 20-a-day part, the default is 40
+now; the open-codes part counts email invites by their own cap), 46-3 (the account's own hourly limit set to 10, the
+default is 30 now; a full domain is `429 hourly_limit`, no longer `503 busy`), 44-1 (a flag's detail also has
+`hashes`).
+
+* **54a B1, the keyless guard asks share-core.** A send (new bank or next version, `hide_key` on or off) is refused
+  with `422 keyless_question {positions, message}` when share-core's own publish check without `hide_key`
+  (`validate_for_publish`) names a question `keyless_needs_hide_key` (its `keyless` flag OR the sentinel explanation the
+  app stores in place of it, `KEYLESS_SENTINEL`, wire.rs) or `placeholder_key` (a stripped copy's True/False `false`,
+  `origin.form = "stripped"` and not `rekeyed`). It runs on the payload as sent (the client's `origin` is still on it);
+  when that payload is refused for something else (a field the send drops, such as a malformed `origin`), it runs again
+  on the form the send stores, so nothing hides the sentinel. No share-core change: the rule is share-core's, not a copy
+  of it; the test reads the sentinel from `wire.rs` (it fails if the two drift). 47-1: a viewer promoted to editor sends
+  her copy as the app holds it (sentinel, no flag): refused, the keys stay.
+* **54a B2, refused answer-key PATCHes are free.** The day's count (`circle_hide_changes`, 20) is taken before the work,
+  so concurrent PATCHes cannot pass the cap, and given back for every answer but a 200 that changed something: a
+  `labels_need_decision` or `order_ack_required` step, any 4xx/5xx, a lost compare-and-set. 47-2: twelve banks through
+  the app's three steps count twelve. At the cap a PATCH is `429` even if it would have been refused for its decisions.
+* **54b N1, the evidence a circle keeps is bounded, and the owner can always free the rest.**
+  * Of the withheld versions whose flag is open (the administrator's evidence, round 46), only the newest 5 of a bank
+    and 20 of a circle, within a quarter of `circle_bytes` (the newest always), keep their bodies (`evidenceBound`, in
+    every commit and every answer-key PATCH that can add evidence). An older one is pruned like a version past the 20
+    (body, index and images go, the history line stays) and its flags get `evidence_pruned: true` (and
+    `evidence_pruned_at`); they keep what they recorded: the positions, the takedowns (`actions`) and, new, the block
+    hashes that matched (`hashes`, at most 20). A head is never pruned by the bound (see below). The admin's open of a
+    pruned version (`GET /admin/pool/circle-bank`) is `404 version_not_retained` with `evidence_pruned: true`, a message
+    and the flags' details.
+  * One account raises at most `circle_send_flags` (5) student-data or copyright flags a day in one circle (sends,
+    rollbacks, answer-key PATCHes; the flag's `user_id` is the sender). Past it the version is withheld and the bank held
+    all the same, without a flag (so it is not kept as evidence and the window prunes it), the matches still count
+    toward the held-publish budget, and the administrator gets one `cap` flag a day (`metric: circle_send_flags`).
+  * Trim answers `evidence_kept` (versions it keeps for the administrator). Purge-now of a removed bank whose only
+    obstacle is an open flag still answers `409 pending_review` (round 48: `200 {purged_partial, pending_review}`), and
+    now also claims the purge (the bank can no longer be
+    restored; the daily purge takes it once the review is done) and prunes every version but the evidence at once
+    (`evidence_kept` in the answer). So the evidence a circle holds is at most a quarter of its bytes plus its withheld
+    heads, and everything else is the owner's to free. 47-3: 61 blocked sends by one editor keep 5 flags and at most 25
+    versions, a clean fix fits, trim keeps the head and 5, purge-now leaves only the evidence; 47-4: 5 banks x 6 flags
+    keep at most 5 a bank and 20 in the circle, the rest marked.
+  * The round-38/41 guarantees stand: a withheld version is never served to members; within the bound the admin opens
+    it (47-3), trim keeps it, purge-now and the daily purge wait for its flag (41-1, 44-7).
+* **54b N2, an unblock releases only what the takedown alone withheld.** With `release_circle_versions`, a version is
+  released only when its body, checked again now as a send's is (student data exact and near, every active copyright
+  block), is clean, no report or administrator holds the bank, no report is open on it, and every open send flag on it
+  is a `blocklist` flag whose takedowns are all lifted or expired; else it keeps its `block_lifted` flag for the
+  administrator's own `circle-release`. At most 50 versions are checked per unblock. 47-5.
+* **Variants.**
+  * Bulk invites (54a variant 2): `circle_email_invites` 40 a day (was 20), `circle_email_invites_hourly` 30 (was 10);
+    open email invites have their own cap, `circle_open_email_invites` 40 a circle (`422 circles_limit {metric:
+    "circle_open_email_invites"}`, a message that says invitations free up as people join or as they expire), apart
+    from the circle's 10 plain codes (`circle_open_invites` now counts plain codes only); 3 mails a day per address stays.
+  * A domain's hour (54a variant 3, 54b V1): one inviter has at most `circle_email_inviter_domain_hourly` (10) of a
+    domain's 30, and the domain's last fifth goes only to inviters who mailed that domain fewer than 3 times this hour.
+    Past either: `429 hourly_limit {metric: "circle_email_domain_hourly"}` "There have been too many invitations to this
+    mail provider in the last hour. Try again in an hour." (Retry-After; it was a `503 busy` that read as an outage). So
+    a teacher inviting 15 colleagues at one school sends 10 this hour and 5 the next; three heavy inviters on gmail.com
+    leave a light one room (47-6).
+  * Masked labels (54a variant 4, 54b V5): a one-character local part is not shown (`***@pvhs.example`); a label the
+    circle already has gets ` #2`, ` #3`... (stored, listed and answered as made).
+  * A viewer's hidden-read that serves nothing (409 `keys_hidden_unavailable`, 404, an error) gives its count back (54a
+    variant 8).
+  * Turning hiding off undoes what turning it on withheld (54a variant 1): a version withheld only by an answer-key PATCH
+    (every open flag on it has `via: "hide_key"`) whose full form is clean now (checked as a send's, and again inside the
+    batch) is readable again, its recorded decisions dropped (turning hiding on again checks it afresh), its flags
+    resolved (`resolved_via: "hide_key_off"`, `resolved_by` the PATCHer), and when it is the head the bank's send holds
+    go. The answer adds `restored: [versions]` when there are any. Bounded like the PATCH's older pass (newest first, 20
+    versions, 4 MB). A version withheld past the day's flags (no flag) is not found this way (47-9).
+  * A rollback compares `hide_key` at its commit, as a send does: turned on meanwhile, `409 conflict`, nothing stored
+    (54b V9, 47-10).
+* **Documented, not changed.** The answer-key PATCH's CPU (54b V8): the head and older versions within 4 MB of bodies are
+  stripped and checked; the critics' 1,000-question bank with 10 versions (6.5 MB) took 1.4 s (4.7 s on the critic's
+  run) of wall time in node, under the isolate's heavy slot, at most 20 changes an account a day; most of it is older
+  versions that need label decisions and stay unrecorded. Not bounded further. A withheld HEAD is kept while it is the
+  head, whatever the bound (one per bank; the owner sends a clean version, rolls back, or removes and purges the bank).
+  An unblock's student-data check of a body is exact keys, images and near rewordings; a bank's other versions are not
+  looked at (54b V6's 50-takedown truncation of `actions` stays). A purge-now answered `pending_review` cannot be undone.
+  The pinned versions' `full_key` stays until the daily stage deletes their objects, as for every prune (the cap counts
+  only kept versions at once).
+
+**Round 46 (phase C after critics 53a and 53b, `docs/critic-reports/2026-10-25-circles-phaseC-{product-critic53a,security-critic53b}.md`).**
+Migration `0111` edited in place (not applied anywhere): `circle_invites.email_label` and an index for its clean-up.
+Tests: `test/pool/round46.test.ts` (12, each failed on round 45's code; the critics' `s4`, `e1`, `e3`, `c1`, `c2`, `s3`,
+`p2` repros were rerun and now show the fixes). Earlier tests changed where the behaviour changed on purpose: 42-1 (the
+answer's keys, the masked label is stored), 42-2 (the label differs per address), 42-3 (the fourth mail to a mailbox is
+`422 invite_not_sent`, nothing made; the inviter's hourly cap raised for its 20-a-day part), 42-4 (a domain in another
+script is an IDN, mailed in punycode), 42-6 (no circle name in the mail), 38-1 (a withheld version with an open flag
+is pruned only after the flag is decided).
+
+* **53a B1, keyless copies never become circle versions.** Any question with `keyless: true` (a copy made without
+  the answer keys, such as a viewer's copy of a bank that hides its keys) is refused on every send, new bank or next
+  version, whatever `hide_key` is: `422 keyless_question {positions, message}` ("These questions were copied without
+  their answer keys, so they cannot be sent to the circle: the circle keeps the full questions with their keys. Set
+  the correct answers first, or get a full copy from an editor."), nothing stored. (Round 43 let one through on a
+  bank that hides its keys and the head lost its keys.)
+* **53b B1, one mailbox is one address, and the hour cannot be spent by one inviter.** The address is read in NFKC
+  (full-width letters are ASCII), an IDN domain in punycode, trailing dots dropped. The per-address cap counts the
+  MAILBOX (`emailCapKey`): a `+tag` dropped (from the first `+`), Gmail's dots ignored and googlemail.com read as
+  gmail.com. The hour's mail budget: `circle_email_invites_hourly` 10 per inviter (`429 hourly_limit {metric,
+  message}`, Retry-After to the hour), `circle_email_domain_hourly` 30 per domain from everyone (an HMAC of the domain
+  as the counter's key), `circle_email_hourly` 100 for the service of which the last fifth goes only to inviters who
+  sent fewer than 3 this hour (`503 busy`). Only mails that go use the hour. 46-3: five accounts x 20 invites to
+  dot-variants of one Gmail mailbox mail it 3 times; a legitimate teacher's invite in that hour goes.
+* **53b B2, viewers' forms are checked.** For a bank that hides its keys the student-data and copyright checks run
+  on the form its VIEWERS are served too (each position's keys and stems are the union of the full and the stripped
+  form's), on every send, every rollback (the target stripped with its recorded decisions) and the PATCH that hides the
+  keys (the head stripped with the decisions sent). A match withholds and holds exactly as a send's match (round 37/44):
+  the PATCH answers `held` and `withheld`, flags (`via: "hide_key"` in the detail) and mails the admin, and counts toward
+  the held-publish budget. The PATCH also strips and checks OLDER kept versions with no decisions recorded (newest first,
+  at most 19 and 4 MB of stored bodies): one that passes records its (empty) decisions, one that matches is withheld and
+  flagged (no bank hold: it is not the head). A viewer now reads ONLY versions with recorded decisions (whose served form
+  was checked): any other is `409 keys_hidden_unavailable` before anything is stripped (a HEAD and a 304 too).
+* **The invitation mail** (53a variant 7, 53b V1) carries no text any person chose: no circle name, no inviter (the
+  app's join preview shows both). It says what joining needs and gives the expiry to the minute. **Exact text, for the
+  owner to approve** (subject `verSHion: you are invited to a circle`):
+
+  > You are invited to join a circle on verSHion as an editor. A circle is a small private group of teachers who share
+  > question banks. The app shows you the circle's name and its owner before you join.
+  >
+  > To join, you need a verSHion account that an administrator has approved and that has redeemed an invite code for
+  > the shared pool. If you do not have one, this code cannot be used yet.
+  >
+  > In verSHion, open Shared, then Circles, then "Join a circle with a code", and enter this code:
+  >
+  > C-ABCD-EFGH-JKMN-PQRS-TVWX-YZ01
+  >
+  > Or open this link:
+  > https://app.example.org/circles/join#code=C-ABCD-EFGH-JKMN-PQRS-TVWX-YZ01
+  >
+  > The code works once and expires on 2026-10-31 12:00 UTC. If you did not expect this invitation, ignore this mail:
+  > nothing happens unless the code is used.
+
+* **The inviter is told whether a mail went** (53a variant 1, 53b V2). `202 {..., emailed: true, address_label}`, or
+  `422 invite_not_sent {emailed: false, reason, message}` with nothing made and the day's counts given back: `reason:
+  "address_limit"` (that mailbox had its 3 mails today, from anyone) or `"not_deliverable"` (an address this service's
+  mailer does not send to: a top-level domain that is not letters). Both depend only on the address and today's mails
+  to it, never on accounts. A provider failure after the 202 is not known to the request (logged; the owner can revoke
+  and send a code by hand).
+* **Smaller fixes.** The owner's list (`GET .../invites`) and the export show `address_label` ("j***@gmail.com",
+  made at invite time; nulled with the inviter's erasure and by the daily cron 30 days after the invite expired) (53a
+  variant 2). An invite to a full circle is `409 circle_full` before anything is made (53a variant 3). A failed write
+  gives the day's counts and the hour's slots back (53b nitpick). The hide_key PATCH: a member who is neither the
+  circle's owner nor the bank's author is refused before the body is read (53b nitpick); the same setting again (for
+  on: the decisions the head already recorded, or a withheld head) is `200 {unchanged: true}` with no audit line and no
+  charge; every change counts toward `circle_hide_changes` (20 a day, `429 daily_limit` with a message) (53b V4). The
+  hidden-read cap's 429 has a message (53a nitpick). A viewer's ETag also covers the version's recorded decisions, so
+  re-recorded decisions change it (53a variant 3, 53b V6). A withheld version whose student-data or copyright flag is
+  open is no longer pruned by a commit (nor counted as room the commit frees: `PINNED_EVIDENCE_SQL` in the prune and in
+  `PRUNABLE_SQL` alike); once the flag is decided, the next commit prunes it (53b V7). The admin's `basis=copyright`
+  ignores expired blocks, as a send does (53b V8; the sender's exemptions are not applied there: a bank has several
+  senders, and the basis only lets an admin open it, audited). `/admin/dmca/unblock` marks the open `blocklist` flags of
+  circle versions that only lifted or expired blocks held `block_lifted: true` and, with `release_circle_versions:
+  true`, releases those versions in the same call (readable again, flag resolved, a head's copyright hold lifted,
+  listing refreshed; never a version whose student-data flag is open); the answer adds `circle_flags_lifted` and
+  `circle_versions_released` (53a copyright variant 2). Each `blocklist` flag now names the takedowns that matched
+  (`actions`). The activity cursor must be a line of this circle at the time it names, else `400` (53b nitpick).
+* **Documented, not changed.** A held sender is not told which positions matched: the public path tells a publisher
+  only "held for review" for a content check's hold (positions only for an administrator's hold-copies), so circles do
+  the same; the admin's flag has them (53a copyright variant 1). An existing member's invitation is mailed and its code
+  stays open until used or revoked (53a variant 4). An owner who leaves or passes the circle on revokes her pending
+  email codes (round 33) and the mail names nobody, so the new owner re-invites (53a variant 5). A viewer's served order
+  is a fresh shuffle at each read under one ETag: a client compares versions by ETag, never by the bytes (53a hide-key
+  2). Recorded decisions cannot be read back; a send to a bank that hides its keys supplies its own each time, and an
+  editor's decisions replace the author's for that version (positional; 53a hide-key 4). Older versions past the PATCH's
+  bound, or refused without decisions, stay refused to viewers; a PATCH that would record what the head already has is
+  a no-op and checks nothing older (53a hide-key 5). Many viewers of one circle can keep an isolate's heavy slot busy
+  (each bounded per account; 53b V5). A local part like `a..b` passes the address rule (the provider may bounce it).
+  A version release (`circle-release {version}`) clears every send hold and flag of that version, student-data and
+  copyright alike (53b V8). An address whose local part starts with `+` counts as the domain's "empty" mailbox (one
+  cap for all such addresses). The HMAC rows and the masked labels can outlive their clean-up in D1 backups (plan 8.1).
+
+**Round 45 (phase C: the activity list, D8).** No migration.
+
+* **Kinds for the new events.** `email_invited` (`by` the inviter, `member: null`, `role`; never an address or an id)
+  and `hide_key_changed` (`by`, `bank_id`, `bank_title`, `hide_key: true|false`). Recording new strip decisions for a
+  bank that already hides its keys is audited as `circle.bank_strip_decisions`, not an activity line.
+* **Stable pages.** The cursor is now `<at>:<audit row id>` (the row's PERMANENT id; round 32's was `<at>:<rowid>`,
+  a service-wide row number every member could read). The written order within one millisecond is kept: the row's
+  `rowid` is looked up by its id, by key. A later page seeks its start in the `(item_id, at)` index (rows read do not
+  grow with the page's depth). Every line that existed at the first page comes exactly once, whatever is written
+  meanwhile; a malformed `before` is `400 invalid_request {field: "before"}` (it used to be page one again). The app
+  treats `next_before` as opaque, so nothing changes for it.
+* **No withheld title, erased actors.** Lines carry the bank's listing, which never comes from a withheld version
+  (student data, round 39; copyright, round 44); an erased actor or member is "deleted teacher" on every line.
+
+**Round 44 (phase C: copyright re-upload block checks on sends, plan 13.3).** Migration `0113_pool_round44.sql`
+rebuilds `circle_holds` to add the reason `copyright` (its CHECK list; rows copied as they are, index made again).
+
+* **The check.** Every send and rollback checks the version's block keys (the same keys as the student-data check:
+  key-free match hash, normalised skeleton, stem, full content, explanation, answer, each Multipart part's) and its
+  images against the public pool's re-upload blocks (`blocked_hashes`), by the public path's rules: an active
+  (not lifted, not expired) block of a takedown; never one the admin exempted the sender from (`dmca_exempt`); never
+  the rightful item's own material for its author, or for an account it was served to while visible (an import
+  record; `served.ts rightfulExempts`, with no publish provenance since circle versions have none). Scanned before the
+  commit (positions for the flag) and decided again inside the commit batch (a block confirmed meanwhile still
+  holds: no gap).
+* **A match never refuses (mirrors the public path and the student-data check).** The version is withheld from every
+  member (`withheld_at`), the bank is held while it is the head (`circle_holds` reason `copyright`, source
+  `blocklist`; a non-blocking hold like a student-data one: the owner and the author still see and repair the bank,
+  prune and trim go on), a later version without the material lifts the hold, only the administrator releases the
+  version. The send answers `held: true, withheld: true`, exactly as for student data.
+* **No oracle beyond the student-data one.** Every member-visible response is identical for a copyright match and a
+  student-data match (the send's answer, the 404, the history line, the circle page, `heads`, the purge refusal;
+  44-2 compares them). The two member-facing messages that named student data now name no reason:
+  `version_withheld` "This version is withheld until an administrator has reviewed it. Only an administrator can
+  release it." and `pending_review` "An administrator is reviewing a version of this bank; it can be purged once that
+  review is done." (wording for the owner to approve). The public path tells a publisher only "held for review" after
+  the fact; a circle sender learns the same, at once (the round 37 `held` oracle, documented in round 39, now also
+  covers the copyright block list, no richer).
+* **The probe budget.** The matching questions count toward the account's `held_publishes` (the public path's daily
+  budget, shared by publishes and sends); past `HELD_PUBLISHES_PER_DAY` (20) the admin gets a `cap` flag.
+* **The admin.** One `blocklist` flag per matching version (`item_id` the bank, `publish_id` the version, detail
+  `{circle_id, version, positions, rollback_of?}`, no text) and a mail (`circle_copyright_match`, its own hourly budget,
+  ids only, the open and release calls). `GET /admin/pool/circle-bank?...&basis=copyright` (a `blocklist` hold or flag,
+  or an active block on one of its key-free hashes). `circle-release {bank_id, version}`, the bank-wide release,
+  `circle-remove` and `circle-close` treat the `blocklist` flag as they treat `privacy_text_match`; the purge (owner's
+  and daily) and the trim wait for it the same way (round 41).
+* **Documented, not changed.** Not retroactive: a version sent before a takedown stays readable (a rollback copy of
+  it is withheld). An unblock (`/admin/dmca/unblock`) does not release circle versions or holds (the public path
+  releases orphaned item holds; a circle version keeps no block keys to re-check): the flag stays in the admin's queue.
+  The public path's 90-day release memory is not applied to circles (as for student data). Past the held-publish
+  budget the public path puts a persisting `probe_cap` hold on the publisher's own item; a circle bank may be someone
+  else's, so circles only flag the admin. The exemptions' "served" branch reads import records only.
+
+**Round 43 (phase C: hide keys from viewers, D12).** Migration `0112_pool_round43.sql`: `circle_banks.hide_key`
+(0/1) and `circle_versions.strip_opts` (JSON `{labels, order_acks, ack_formatting, image_ok, image_shas}`).
+
+* **Who sets it.** `PATCH /circles/:cid/banks/:bid {hide_key: true|false, labels?, order_acks?, ack_formatting?,
+  image_ok?}` by the bank's author while an editor or the owner, or by the circle's owner (else `403
+  circle_role_required {needed: "owner"}`; a non-member 404). One setting per request (`license` and `hide_key`
+  together: 400; decisions only with `hide_key: true`). A new bank may also say `hide_key: true` (with its decisions)
+  in its first send's meta; a PUT's meta may not carry `hide_key` (400). The licence stays the author's.
+* **What viewers get.** A VIEWER (the role at read time; a demoted author too) reads EVERY version of such a bank (the
+  head, `versions/:n`, a copy) as share-core's stripped form: the public pool's strip and key-hint gate, never a rule
+  of the Worker's (every `correct` false, True/False false, blanks' accepted answers emptied, samples blank, Matching
+  rights in a shuffled word bank, explanations and figures removed, images only where `image_ok` keeps them, labels as
+  decided, `keyless: true`; the qids stay). Owner and editors read the full text; the stored bodies never change.
+  `bank.hide_key` (every member) and `bank.keys_hidden: true` (a stripped answer) in the head; `hide_key` per bank on
+  the circle page. Version messages are blank to viewers of such a bank (head and history: editors write them and
+  nothing checks them). The bank's image route serves a viewer only images a kept, readable version's stripped form
+  keeps (`strip_opts.image_shas`).
+* **Decisions, per version.** Turning it on strips the HEAD with the decisions sent (refusals exactly as a hidden-key
+  publish's, to the caller: `422 invalid_payload | labels_need_decision | order_ack_required` with `errors`,
+  `label_findings`, `needs_order_ack`, `order_reasons`, `order_preview`, `formatting_findings`; nothing changes) and
+  records them with it; `200 {ok, hide_key: true, labels_removed, images_kept, images_removed, figures_removed,
+  order_reasons}` (a withheld head is not stripped: `{ok, hide_key: true}`). Turning it on again records new
+  decisions for the head. Every send to such a bank passes the gate with its own meta decisions (the same field names
+  as a publish's) or stores nothing; it answers `keys_hidden: true`. A rollback copies its target's decisions. What is
+  recorded is what the strip used (a decision per label finding, the frozen orders, the images kept, acknowledgements
+  of existing questions), so it is bounded by the bank, not by the request.
+* **Fail closed.** At each viewer read the version is stripped with the decisions it recorded (round 46: a version with
+  none recorded is refused to viewers, and the PATCH records them for older versions it can check). A version
+  the gate refuses that way (sent before the flag with an undecided label or a key in its text; a rollback to one) is
+  `409 keys_hidden_unavailable {message}` to viewers, no text, no findings; editors still read it; the author or owner
+  re-records decisions for the head with the PATCH.
+* **Cost.** A viewer read is publish-sized work: the isolate's heavy slot (shared; 503 busy past its queue, the read
+  is given back), a send's reservation for the stored body (`max(15 x bytes, values x 96 x 2)`), the read's own
+  reservation of the stripped bytes until they are streamed, `item_reads` and a new daily cap `circle_hidden_reads`
+  (100). If-None-Match strips nothing and is not counted; a viewer's HEAD has no `Content-Length` (it is not known
+  without stripping); the ETag differs from an editor's. Nothing is cached: each read strips again (a fresh uniform
+  shuffle, share-core's own seed; the author-only served orders are dropped at once). Measured in node: a
+  990-question 450 KB bank, 150-200 ms and 10 statements a viewer read; a send of it with the gate 506 ms.
+* **D13.** Where a label stripped for viewers changes a question's key-free match hash, that served-form hash joins
+  `circle_qkeys` under the FIRST sender of the full text (copied from its record; one primary-key probe per position),
+  counted in `circle_records`: a viewer's copy published publicly is refused `circle_material`, its first sender
+  passes. (Without it a viewer's labels-stripped copy published as new: 43-7.)
+* **Documented, not changed.** The bank's listing title is the author's (`meta.title`), not run through the key-hint
+  gate, as a public item's title is not. The circle's history counts (`added`/`changed`/`removed`) still tell a viewer
+  that some question changed. A rollback to a version without decisions leaves viewers refused until the PATCH. There
+  is no "what viewers will see" preview route (the PATCH answers the strip's report only).
+
+**Round 42 (phase C: email invites, D5).** Migration `0111_pool_round42.sql`: `circle_invites.kind` (`code` |
+`email`) and `circle_email_sends (addr, day, n)`.
+
+* **Route.** `POST /circles/:cid/invites/email {email, role: editor|viewer}` (the owner: only owners issue codes, and a
+  code dies with its issuer's owner role, round 33; there is no editor invite right to give). `202 {ok, invite_id,
+  kind: "email", role, max_uses: 1, expires_at}`, never the code or the address. The server makes an ordinary
+  single-use circle code (7 days; only its hash stored, as any code) and mails it; the join is the usual `POST
+  /circles/join` with every gate. Any other body field is `400 {field}` (the inviter adds no text to the mail); a bad
+  address is `400 {field: "email"}` (printable ASCII only, trimmed, lower-cased, the auth package's address rule:
+  no line break, space, comma list or look-alike letter can reach a header).
+* **No oracle.** Nobody's address is ever looked up: the answer, the statements run and the mail are the same for any
+  address (42-2 compares them).
+* **Caps.** `circle_email_invites` 20 a day per inviter (`429 daily_limit`), and the code caps it also counts toward
+  (`circle_invites` 50 a day, the circle's 10 open codes `422 circles_limit`); `circle_email_hourly` 100 mails an hour
+  for the whole service (`503 busy` with Retry-After to the hour, nothing kept, the day's counts given back);
+  `circle_email_address` 3 mails a day per address across every circle and inviter. (Round 46: past it the inviter is
+  told, `422 invite_not_sent {reason: "address_limit"}`, nothing made; the cap counts the mailbox; per-inviter and
+  per-domain hourly caps; see "Round 46". Round 47: 40 a day, 30 an hour, 40 open email invites a circle apart from its
+  10 codes, one inviter's share of a domain; see "Round 47".)
+* **Only an HMAC.** The per-address count keeps `HMAC(circle-invite-email/v1:<cap key>)` under its own HKDF purpose of
+  AUTH_SECRET (`circle-invite-email`), one row per address and day, deleted by the daily cron after two days. The
+  address and the code exist only in the in-memory notice handed to the mailer (no outbox, no audit, no log line);
+  42-1 sweeps every table for them.
+* **The mail** (`poolmail.ts circleInviteText`, MAIL_MODE log in 42-6): a fixed subject, one recipient, nothing about
+  the inviter, the code and a link holding it in the fragment (`APP_URL/circles/join#code=...`, left out without
+  APP_URL). A bad address or code shape is never mailed. Round 42's text quoted the circle name; **round 46 replaced it
+  (no circle name at all): the text to approve is in "Round 46".** Round 42's text, for the record:
+
+  > You are invited to join the circle "Algebra team" on verSHion as an editor. A circle is a small private group of
+  > teachers who share question banks.
+  >
+  > To join, you need an approved verSHion account. In verSHion, open Shared, then Circles, then "Join with a code",
+  > and enter this code:
+  >
+  > C-ABCD-EFGH-JKMN-PQRS-TVWX-YZ01
+  >
+  > Or open this link:
+  > https://app.example.org/circles/join#code=C-ABCD-EFGH-JKMN-PQRS-TVWX-YZ01
+  >
+  > The code works once and expires on 2026-10-31 (UTC). If you did not expect this invitation, ignore this mail:
+  > nothing happens unless the code is used.
+
+* **Erasure (plan 8.1).** No mail for an erased or suspended inviter: a suspended account is not let in, and the write
+  is guarded by ALIVE_SQL and the inviter's standing in the same statement (a request in flight at the erasure writes
+  and mails nothing, 42-5). The inviter's erasure revokes its email invites with its other codes. Nothing can match an
+  invite to an address afterwards (nothing holds one).
+* **The owner's list.** `GET /circles/:cid/invites` adds `kind` per code; an email invite is revoked with the usual
+  `POST .../invites/revoke`. The export's `invites_created` adds `kind`. Activity: `email_invited` (round 45).
+* **Decisions for the owner.** The code is not bound to the address (a forwarded mail works, like a forwarded code).
+  There is no opt-out list (it would keep addresses). The circle name in the mail can carry a URL-like text the owner
+  typed (80 characters, plain text). The web app must recognise `/circles/join#code=` (or the link line can go). The
+  silent per-address suppression means an inviter is not told a mail was not sent.
+
 **Round 41 (circles phase B after critic 48, no blocker; `docs/critic-reports/2026-10-24-circles-round40-critic48.md`).**
 Migration `0110_pool_round38.sql` edited in place again (still uncommitted). Tests: `test/pool/round41.test.ts` (4,
 each failed on round 40's code).
@@ -644,10 +1062,11 @@ rows, cap crossings use `cap`, circle independence statements `independent_claim
   | `GET /circles/:cid` | member (a closed circle too: `200` with its closed state) | `{circle: {id, name, description ("" when none), role, joined_at, created_at, updated_at, closed_at, close_reason, closed_by, undo_until}, members: [{user_id, display_name, role, joined_at, is_me}], banks: [{id, title, subject, course, grade, license, author_name, is_author, head_version, question_count, has_images, created_at, updated_at, held?, removed?: {reason, undo_until}}]}`; removed banks only to the owner and author, held ones only to the author |
   | `PATCH /circles/:cid` | owner | `{name?, description?}` |
   | `DELETE /circles/:cid`, `POST .../reopen` | owner | close: `{ok, undo_until}` (14 days; members get `409 circle_closed {reason, undo_until}` at once); reopen inside it |
-  | `GET /circles/:cid/activity?before=` | member | `{activity: [{at, what, by, member, role?, bank_id?, bank_title?, version?, license?}], next_before}`, 50 a page; `what` is `created, joined, left, removed, role_changed, ownership_transferred, ownership_passed_on, closed, reopened, renamed, bank_shared, version_sent, rolled_back, bank_removed, bank_restored, license_changed` (round 37: `rollback_of?`, `merged_from?`); never codes, reports or admin opens |
-  | `POST /circles/:cid/invites` | owner | `{role: editor\|viewer, max_uses? 1-50 (1), expires_in_days? 1-30 (7), note? (<=200)}` -> `201 {invite_id, code, role, max_uses, expires_at, note, shown_once}`; 10 open codes a circle (`circle_open_invites`), 50 a day (`circle_invites`) |
+  | `GET /circles/:cid/activity?before=` | member | `{activity: [{at, what, by, member, role?, bank_id?, bank_title?, version?, license?}], next_before}`, 50 a page; `what` is `created, joined, left, removed, role_changed, ownership_transferred, ownership_passed_on, closed, reopened, renamed, bank_shared, version_sent, rolled_back, bank_removed, bank_restored, license_changed` (round 37: `rollback_of?`, `merged_from?`; round 45: `email_invited`, `hide_key_changed` with `hide_key`; the cursor is `<at>:<id>`, a bad one 400); never codes, reports or admin opens |
+  | `POST /circles/:cid/invites` | owner | `{role: editor\|viewer, max_uses? 1-50 (1), expires_in_days? 1-30 (7), note? (<=200)}` -> `201 {invite_id, code, role, max_uses, expires_at, note, shown_once}`; 10 open codes a circle (`circle_open_invites`; round 47: plain codes only, email invites have `circle_open_email_invites` 40), 50 a day (`circle_invites`) |
   | `GET /circles/:cid/invites?after=` | owner | `{invites: [{invite_id, role, created_at, created_by, created_by_name, max_uses, uses, expires_at, revoked_at, note, state}], next_cursor}`; never the code, never who typed a wrong one |
   | `POST /circles/:cid/invites/revoke` | owner | `{invite_id}`; `409 already_revoked` |
+  | `POST /circles/:cid/invites/email` | owner | `{email, role}` -> `202 {ok, invite_id, kind: "email", role, max_uses: 1, expires_at, emailed: true, address_label}` or `422 invite_not_sent {emailed: false, reason: address_limit\|not_deliverable}` (nothing made); `429 hourly_limit`; `409 circle_full`; the server mails a fixed text holding a single-use code (rounds 42, 46) |
   | `POST /circles/join/preview` | teacher | `{code}` -> `{circle: {id, name, owner_name, members}, role, already_member}`; uses nothing |
   | `POST /circles/join` | teacher | `{code}` -> `{ok, circle_id, role}` or `{ok, already: true, ...}`; every bad code `422 circle_invite_invalid`; `409 circle_full {limit}`; 10 FAILED codes a day (`circle_join_tries`, 429) |
   | `POST /circles/:cid/leave` | member | an owner leaving hands the circle on (below) |
@@ -666,9 +1085,9 @@ rows, cap crossings use `cap`, circle independence statements `independent_claim
   | `GET` / `HEAD /circles/:cid/banks/:bid` | member (held: author only) | streamed `{circle, bank: {id, title, subject, course, grade, license, version_license, author_name, is_author, version, version_id, question_count, has_images, committed_at, committed_by, held?}, origins, payload}`; `ETag`, `If-None-Match` -> 304; viewing and copying are this one read; counts toward `item_reads`; `409 bank_removed`, `409 circle_closed` |
   | `GET /circles/:cid/banks/:bid/blobs/:sha256` | member who may read the bank | an image a kept version uses (never a student-data-blocked one) |
   | `POST /circles/heads` | teacher | `{bank_ids}` (<= 200) -> `{banks: [{bank_id, status: current, version, version_id, license, at, by} \| {status: removed, until?} \| {status: under_review} \| {status: unavailable}]}`; one `item_reads` |
-  | `PATCH /circles/:cid/banks/:bid` | the bank's author | `{license}` (D19: `circle-only` = members may not re-share); bounded by the head's declared public origins (`422 license_incompatible {allowed}`); earlier versions keep theirs |
+  | `PATCH /circles/:cid/banks/:bid` | the bank's author | `{license}` (D19: `circle-only` = members may not re-share); bounded by the head's declared public origins (`422 license_incompatible {allowed}`); earlier versions keep theirs. Round 43: or `{hide_key, labels?, order_acks?, ack_formatting?, image_ok?}` (the author while an editor or the owner, or the circle's owner): viewers read the stripped form |
   | `DELETE .../banks/:bid`, `POST .../undelete` | owner, the bank's author (D17) | 14 days to undo, then purged; the owner's removal is undone by the owner only, the author's own by either (round 33) |
-  | `POST .../banks/:bid/purge` | owner | a removed bank (by its author, the owner or an erasure) purged now, so it stops counting toward the circle's caps; never under an admin removal, a hold or an open report (`409 under_moderation`; `409 bank_not_removed`); not undoable (round 33) |
+  | `POST .../banks/:bid/purge` | owner | a removed bank (by its author, the owner or an erasure) purged now, so it stops counting toward the circle's caps; never under an admin removal, a hold or an open report (`409 under_moderation`; `409 bank_not_removed`); not undoable (round 33); round 48: while only an administrator's review of a flagged version is pending, `200 {ok, purged_partial: true, pending_review: true, evidence_kept, message}` (the rest pruned, the purge claimed, finished once the flags are decided or their evidence captured) |
   | `POST .../banks/:bid/report` | member, not the author | `{reason: student_data\|copyright\|inappropriate\|other, note?}` -> `202` always |
 
 * **Sending a version.** Meta: `commit_id` (22-64 base64url characters: the idempotency key; a retry with

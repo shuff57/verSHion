@@ -219,7 +219,8 @@ function readMeta(m: Record<string, unknown>, isNew: boolean): PublishMeta {
   };
 }
 
-function invalid(f: Fail, status = 422): PoolError {
+/** A share-core refusal as the publishing author sees it (round 43: also a circle send to a bank that hides its keys). */
+export function invalid(f: Fail, status = 422): PoolError {
   const extra: Record<string, unknown> = { errors: f.errors };
   if (f.label_findings) extra.label_findings = f.label_findings;
   if (f.needs_order_ack) extra.needs_order_ack = f.needs_order_ack;
