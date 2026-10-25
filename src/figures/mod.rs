@@ -37,6 +37,7 @@ pub mod logic;
 pub mod math;
 pub mod math_geo;
 pub mod math_plot;
+pub mod implicit;
 pub mod physics;
 pub mod sections;
 pub mod share;

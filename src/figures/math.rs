@@ -2501,6 +2501,8 @@ impl<'a> Ev<'a> {
                 if !known.contains(&name.as_str()) {
                     // implicit product of a known prefix, e.g. "xsin(x)" is rare; give up cleanly
                     if name.starts_with('x') { self.i = st + 1; return Some(self.x); }
+                    // the same for a run starting with y ("yx", "y2" is not reached): only meaningful in implicit rows
+                    if name.starts_with('y') && self.y.is_some() { self.i = st + 1; return self.y; }
                     return None;
                 }
                 let a = self.arg()?;
@@ -2527,13 +2529,34 @@ fn norm_expr(expr: &str) -> Vec<char> {
     out.chars().collect()
 }
 fn eval_full(expr: &str, x: f64, y: Option<f64>, deg: bool) -> Option<f64> {
-    let cs = norm_expr(expr);
-    let mut e = Ev { s: &cs, i: 0, x, y, deg };
+    eval_cs(&norm_expr(expr), x, y, deg)
+}
+/// `eval_full` on an already normalised expression (the implicit-curve sampler calls this ~10^5 times).
+fn eval_cs(cs: &[char], x: f64, y: Option<f64>, deg: bool) -> Option<f64> {
+    let mut e = Ev { s: cs, i: 0, x, y, deg };
     let v = e.expr()?;
     e.ws();
     if e.i == cs.len() { Some(v) } else { None }
 }
 pub(super) fn eval(expr: &str, x: f64) -> Option<f64> { eval_full(expr, x, None, false) }
+
+/// At most this many non-linear implicit rows are drawn per figure (bounds the sampling work).
+const IMPLICIT_MAX: usize = 4;
+/// Drops points that lie within 0.04 px of the line through their neighbours.
+fn thin_polyline(p: &[Pt]) -> Vec<Pt> {
+    if p.len() < 3 { return p.to_vec(); }
+    let mut out = vec![p[0]];
+    for i in 1..p.len() - 1 {
+        let a = *out.last().unwrap();
+        let (b, c) = (p[i], p[i + 1]);
+        let (dx, dy) = (c.0 - a.0, c.1 - a.1);
+        let len = dx.hypot(dy);
+        let dist = if len < 1e-9 { (b.0 - a.0).hypot(b.1 - a.1) } else { ((b.0 - a.0) * dy - (b.1 - a.1) * dx).abs() / len };
+        if dist > 0.04 { out.push(b); }
+    }
+    out.push(p[p.len() - 1]);
+    out
+}
 
 const NUM_EVERY_LINE: [&str; 5] = ["Every line", "Every 2nd line", "Every 5th line", "Every 10th line", "No numbers"];
 
@@ -2652,12 +2675,22 @@ fn parse_row(main: &str) -> Option<Row> {
     match lower.find('=') {
         Some(i) => {
             let (l, r) = (lower[..i].trim(), lower[i + 1..].trim());
-            if l == "x" { eval(r, 0.0).map(Row::Vert) }
-            else if l == "y" || l == "f(x)" { Some(Row::Func(r.to_string())) }
-            else if r == "y" { Some(Row::Func(l.to_string())) }
+            // x = 4 is a vertical line; x = y^2 (a y on the right, or anything eval cannot read) is implicit
+            if l == "x" { Some(eval(r, 0.0).map(Row::Vert).unwrap_or_else(|| Row::Implicit(format!("({l})-({r})")))) }
+            else if (l == "y" || l == "f(x)") && !r.contains('y') { Some(Row::Func(r.to_string())) }
+            else if r == "y" && !l.contains('y') { Some(Row::Func(l.to_string())) }
             else { Some(Row::Implicit(format!("({l})-({r})"))) }
         }
         None => Some(Row::Func(lower.trim().to_string())),
+    }
+}
+
+/// True when a typed row is a conic or other implicit curve (not a line in y), which has no drag handles.
+pub(super) fn is_curve_row(raw: &str, x0: f64, x1: f64, y0: f64, y1: f64) -> bool {
+    let (main, _) = split_domain(raw.trim());
+    match parse_row(main) {
+        Some(Row::Implicit(e)) => { let cs = norm_expr(&e); !implicit::linear_in_y(&|x, y| eval_cs(&cs, x, Some(y), false), x0, x1, y0, y1) }
+        _ => false,
     }
 }
 
@@ -2775,6 +2808,7 @@ fn coordinate_grid_render(p: &Params) -> String {
     let lw = match p.s("line_width") { "Thin" => 1.6, "Thick" => 3.6, _ => 2.6 };
     let hatch = p.s("shading") == "Hatching";
     let span_y = y1 - y0;
+    let mut implicit_used = 0;
     for (ci, raw_row) in p.s("equations").split(';').enumerate() {
         let raw_row = raw_row.trim();
         if raw_row.is_empty() { continue; }
@@ -2833,6 +2867,37 @@ fn coordinate_grid_render(p: &Params) -> String {
                     for (e, c) in [(iv.lo, iv.lo_c), (iv.hi, iv.hi_c)] {
                         if e.is_finite() { dline(&mut d, (sx(e), mt), (sx(e), mt + ph), col, lw, if c { "none" } else { "9 6" }); }
                     }
+                }
+            }
+            // F(x, y) = G(x, y) that is not a straight line in y: circles, ellipses, hyperbolas, x = y^2 ...
+            Row::Implicit(e) if !implicit::linear_in_y(&|x, y| eval_cs(&norm_expr(e), x, Some(y), deg), x0, x1, y0, y1) => {
+                if implicit_used < IMPLICIT_MAX {
+                    implicit_used += 1;
+                    let cs = norm_expr(e);
+                    let cells = |len: f64| ((len / 2.0).ceil().max(16.0) as usize).min(implicit::MAX_CELLS);
+                    let lines = implicit::contour(&|x, y| eval_cs(&cs, x, Some(y), deg), x0, x1, y0, y1, cells(pw), cells(ph));
+                    let mut best: Option<((f64, f64), f64)> = None;
+                    let xl = x0 + (x1 - x0) * (0.55 + 0.08 * (ci % 3) as f64);
+                    for l in &lines {
+                        // split the chain where the typed domain excludes it, thin points that add nothing
+                        let mut run: Vec<Pt> = vec![];
+                        let mut flush = |run: &mut Vec<Pt>, d: &mut Doc| {
+                            if run.len() > 1 { d.polyline(&thin_polyline(run), col, lw); }
+                            run.clear();
+                        };
+                        for &(x, y) in l {
+                            if !in_dom(x) { flush(&mut run, &mut d); continue; }
+                            run.push((sx(x), sy(y)));
+                            // label spot: inside the window, near the label column, upper half preferred
+                            let (fx, fy) = ((x - x0) / (x1 - x0), (y - y0) / span_y);
+                            if (0.06..0.94).contains(&fx) && (0.06..0.94).contains(&fy) {
+                                let score = (x - xl).abs() / (x1 - x0) + if fy < 0.5 { 0.3 } else { 0.0 };
+                                if best.map_or(true, |(_, b)| score < b) { best = Some(((x, y), score)); }
+                            }
+                        }
+                        flush(&mut run, &mut d);
+                    }
+                    label_at = best.map(|(pt, _)| pt);
                 }
             }
             _ => {
@@ -4331,6 +4396,9 @@ fn examples_b_plots(id: &str) -> Option<Vec<super::Example>> {
             ex("Graphs of y = 2\u{2e3} and y = log\u{2082} x, reflected in y = x", with(q4("y = 2^x; y = log_2(x); y = x"), vec![("xmin", F(-6.0)), ("xmax", F(6.0)), ("ymin", F(-6.0)), ("ymax", F(6.0))])),
             ex("Rational function with a hole and dotted asymptotes", with(q4("y = (x^2 - 1)/((x - 1)(x + 3))"), vec![("asymptotes", B(true))])),
             ex("System of linear inequalities: y > x \u{2212} 2 and y \u{2264} \u{2212}x + 3", with(q4("y > x - 2; y <= -x + 3"), vec![("shading", s("Hatching"))])),
+            ex("Circle with centre (2, \u{2212}1) and radius 3: (x \u{2212} 2)\u{b2} + (y + 1)\u{b2} = 9", with(q4("(x-2)^2 + (y+1)^2 = 9"), vec![("xmin", F(-6.0)), ("xmax", F(8.0)), ("ymin", F(-7.0)), ("ymax", F(7.0)), ("points", s("C(2, -1)"))])),
+            ex("Ellipse x\u{b2}/16 + y\u{b2}/9 = 1", with(q4("x^2/16 + y^2/9 = 1"), vec![("xmin", F(-6.0)), ("xmax", F(6.0)), ("ymin", F(-5.0)), ("ymax", F(5.0))])),
+            ex("Hyperbola x\u{b2}/9 \u{2212} y\u{b2}/4 = 1 with its asymptotes y = \u{b1}2x/3", with(q4("x^2/9 - y^2/4 = 1; y = 2x/3; y = -2x/3"), vec![("xmin", F(-8.0)), ("xmax", F(8.0)), ("ymin", F(-6.0)), ("ymax", F(6.0))])),
         ],
         "number-line" => vec![
             ex("Graphing the inequality x \u{2265} \u{2212}2 on a number line", vec![("inequality", s("x >= -2"))]),
@@ -5405,7 +5473,7 @@ pub fn rows(id: &str) -> Option<super::RowsCard> {
     Some(match id {
         "coordinate-grid" => RowsCard {
             title: "Equations",
-            help: "One per row: y = 2x + 1; 2x + 3y = 6; x = 4; y > x - 2; -2 < x <= 3; y = x + 2, x < 1 (a piece with a domain).",
+            help: "One per row: y = 2x + 1; 2x + 3y = 6; x = 4; y > x - 2; -2 < x <= 3; y = x + 2, x < 1 (a piece with a domain). Circles and conics work too: x^2 + y^2 = 25; (x-2)^2 + (y+1)^2 = 9; x^2/16 + y^2/9 = 1; x^2/9 - y^2/4 = 1; x = y^2.",
             hint: "y = 2x + 1",
             add_label: "Add equation",
             source: RowsSource::Joined { key: "equations", sep: ";", color_keys: vec!["eq1_color", "eq2_color", "eq3_color", "eq4_color"] },
@@ -5615,6 +5683,97 @@ mod solid_fill_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn grid_svg(set: &[(&str, Value)]) -> String {
+        let d = defs().into_iter().find(|d| d.id == "coordinate-grid").unwrap();
+        let mut p = Params::defaults(&(d.params)());
+        for (k, v) in set { assert!(p.0.contains_key(*k), "unknown key {k}"); p.0.insert(k.to_string(), v.clone()); }
+        (d.render)(&p)
+    }
+    fn q(eq: &str) -> Vec<(&'static str, Value)> {
+        vec![("xmin", Value::F(-10.0)), ("xmax", Value::F(10.0)), ("ymin", Value::F(-10.0)), ("ymax", Value::F(10.0)), ("equations", Value::S(eq.to_string()))]
+    }
+    fn curve_lines(svg: &str) -> Vec<Vec<(f64, f64)>> {
+        svg.split("<polyline points=\"").skip(1).filter_map(|t| t.split('"').next()).map(|pts| {
+            pts.split(' ').filter_map(|c| { let (a, b) = c.split_once(',')?; Some((a.parse().ok()?, b.parse().ok()?)) }).collect::<Vec<(f64, f64)>>()
+        }).filter(|l: &Vec<(f64, f64)>| l.len() > 20).collect()
+    }
+
+    #[test]
+    fn conic_rows_draw_smooth_curves() {
+        // circle: every drawn point within 1 px of the true radius (24 px a unit at 20 units / 480 px)
+        let svg = grid_svg(&q("x^2 + y^2 = 25"));
+        let ls = curve_lines(&svg);
+        assert_eq!(ls.len(), 1, "one closed circle");
+        let g = grid_layout(&{ let d = defs().into_iter().find(|d| d.id == "coordinate-grid").unwrap(); let mut p = Params::defaults(&(d.params)()); for (k, v) in q("") { p.0.insert(k.to_string(), v); } p });
+        let (cx, cy) = (g.ml + 10.0 * g.ux, g.mt + 10.0 * g.uy);
+        for &(x, y) in &ls[0] { assert!(((x - cx).hypot(y - cy) - 5.0 * g.ux).abs() < 1.0, "off the circle"); }
+        // shifted circle, ellipse, x = y^2, y^2 = x, hyperbola (two branches)
+        assert_eq!(curve_lines(&grid_svg(&q("(x-2)^2 + (y+1)^2 = 9"))).len(), 1);
+        assert_eq!(curve_lines(&grid_svg(&q("x^2/16 + y^2/9 = 1"))).len(), 1);
+        assert_eq!(curve_lines(&grid_svg(&q("x = y^2"))).len(), 1);
+        assert_eq!(curve_lines(&grid_svg(&q("y^2 = x"))).len(), 1);
+        assert_eq!(curve_lines(&grid_svg(&q("x^2/9 - y^2/4 = 1"))).len(), 2);
+        // general F = G
+        assert_eq!(curve_lines(&grid_svg(&q("x^2 + y^2 = 2x + 4y"))).len(), 1);
+        // the old linear and explicit rows are still the old code path (no marching squares polyline of 20+ points beyond the function)
+        assert_eq!(curve_lines(&grid_svg(&q("2x + 3y = 6"))).len(), 1);
+        assert_eq!(curve_lines(&grid_svg(&q("xy = 6"))).len(), 1);
+    }
+
+    #[test]
+    fn empty_conics_and_odd_windows_do_not_panic() {
+        let svg = grid_svg(&q("x^2 + y^2 = -1"));
+        assert!(curve_lines(&svg).is_empty());
+        for eq in ["x^2 + y^2 =", "y^2 = ", "x = y^", "sqrt(x) + sqrt(y) = 1", "tan(y) = x", "1/(x^2+y^2) = 1", "x^2 + y^2 = 1/0", "ln(x) = ln(y)^2", "y^2 = x^2; y^2 = 2x; x^2 = 3y; x^2+y^2 = 4; x^2 = y^2 + 1"] {
+            let _ = grid_svg(&q(eq));
+        }
+        for (a, b) in [(1e300, 1e300), (-1000.0, 1000.0), (0.0, 1e-300), (f64::NAN, 5.0)] {
+            let _ = grid_svg(&[("xmin", Value::F(a)), ("xmax", Value::F(b)), ("ymin", Value::F(a)), ("ymax", Value::F(b)), ("equations", Value::S("x^2 + y^2 = 25; x = y^2; x^2/9 - y^2/4 = 1; sin(x*y) = 0".into()))]);
+        }
+    }
+
+    #[test]
+    fn conic_rendering_is_time_bounded() {
+        let t = std::time::Instant::now();
+        let svg = grid_svg(&q("x^2 + y^2 = 25; x^2/16 + y^2/9 = 1; x^2/9 - y^2/4 = 1; sin(x) * cos(y) = x * y / 50; x^2 + y^2 = 1"));
+        assert!(!curve_lines(&svg).is_empty());
+        let ms = t.elapsed().as_millis();
+        let limit = if cfg!(debug_assertions) { 20_000 } else { 1_000 };
+        assert!(ms < limit, "took {ms} ms");
+    }
+
+    #[test]
+    fn conic_rows_keep_label_domain_and_colour() {
+        let mut set = q("x^2 + y^2 = 25, x > 0");
+        set.push(("eq_labels", Value::B(true)));
+        let svg = grid_svg(&set);
+        assert!(svg.contains("#1f5fbf"), "equation colour slot");
+        assert!(svg.contains("x^2 + y^2 = 25") || svg.contains("x"), "label");
+        // the domain keeps only the right half: no point left of the y axis
+        let ls = curve_lines(&svg);
+        assert!(!ls.is_empty());
+        let left = 38.8 + 240.0;
+        for l in &ls { for &(x, _) in l { assert!(x >= left - 3.0, "domain ignored"); } }
+    }
+
+    /// Writes the three new examples to $VERSHION_PNG_DIR for a visual check.
+    #[test]
+    #[ignore]
+    fn conic_example_pngs() {
+        let Ok(dir) = std::env::var("VERSHION_PNG_DIR") else { return };
+        let _ = std::fs::create_dir_all(&dir);
+        let exs = examples_b_plots("coordinate-grid").unwrap();
+        let d = defs().into_iter().find(|d| d.id == "coordinate-grid").unwrap();
+        for (i, e) in exs.iter().enumerate().skip(10) {
+            let mut p = Params::defaults(&(d.params)());
+            for (k, v) in &e.params { p.0.insert(k.to_string(), v.clone()); }
+            for (tag, lab) in [("plain", false), ("labels", true)] {
+                p.0.insert("eq_labels".into(), Value::B(lab));
+                std::fs::write(format!("{dir}/conic-{i}-{tag}.png"), to_png(&(d.render)(&p), 1.5).unwrap()).unwrap();
+            }
+        }
+    }
 
     fn run(id: &str, tag: &str, set: &[(&str, Value)]) {
         let d = defs().into_iter().find(|d| d.id == id).unwrap();

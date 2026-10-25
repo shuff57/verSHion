@@ -898,6 +898,10 @@ const COORDINATE_GRID: &[Faq] = &[
         a: "Graph each piece only over its own interval. A closed dot marks an endpoint that is included (≤ or ≥) and an open dot one that is not (< or >).",
     },
     Faq {
+        q: "Can I graph a circle, ellipse or hyperbola?",
+        a: "Yes. Type the equation as it is written, such as x^2 + y^2 = 25, (x-2)^2 + (y+1)^2 = 9, x^2/16 + y^2/9 = 1, x^2/9 - y^2/4 = 1 or x = y^2. Any equation in x and y that is not a straight line is drawn as a smooth curve; one that has no points in the window, like x^2 + y^2 = -1, draws nothing.",
+    },
+    Faq {
         q: "How should the x-axis be scaled for trig graphs?",
         a: "Use multiples of π, such as steps of π/2 or π/4, when working in radians, or steps of 90° or 30° in degrees. That puts key points like peaks and zeros on gridlines.",
     },
