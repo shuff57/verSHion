@@ -2562,7 +2562,7 @@ impl Workspace {
                 if fig == "coordinate-grid" {
                     use std::hash::{Hash, Hasher};
                     let mut h = std::collections::hash_map::DefaultHasher::new();
-                    for k in ["equations", "xmin", "xmax", "ymin", "ymax", "xunits", "square", "xstep", "ystep"] { format!("{:?}", self.params.0.get(k)).hash(&mut h); }
+                    for k in ["equations", "xmin", "xmax", "ymin", "ymax", "xunits", "square", "xstep", "ystep", "show_notes", "style", "show_answers", "eq_labels", "points", "numbers", "grid", "label_size", "asymptotes", "endpoints"] { format!("{:?}", self.params.0.get(k)).hash(&mut h); }
                     let key = h.finish();
                     let wid = ui.make_persistent_id(("grid_warn", fig));
                     let cached: Option<(u64, Vec<String>)> = ui.data(|d| d.get_temp(wid));
@@ -2570,9 +2570,21 @@ impl Workspace {
                         Some((k, w)) if k == key => w,
                         _ => { let w = figures::grid_warnings(&self.params); ui.data_mut(|d| d.insert_temp(wid, (key, w.clone()))); w }
                     };
-                    for w in warns {
-                        ui.add_space(2.0);
-                        ui.label(RichText::new(w).color(theme::red()).size(11.5));
+                    if !warns.is_empty() {
+                        // a framed box, so a row that was not drawn is not missed
+                        ui.add_space(4.0);
+                        Frame::new()
+                            .fill(egui::Color32::from_rgba_unmultiplied(200, 50, 50, 22))
+                            .stroke(Stroke::new(1.0, theme::red()))
+                            .corner_radius(CornerRadius::same(6))
+                            .inner_margin(Margin::same(8))
+                            .show(ui, |ui| {
+                                ui.label(RichText::new("Not drawn as typed").color(theme::red()).strong().size(12.5));
+                                for w in warns {
+                                    ui.add_space(2.0);
+                                    ui.label(RichText::new(w).color(theme::red()).size(12.0));
+                                }
+                            });
                     }
                 }
             });

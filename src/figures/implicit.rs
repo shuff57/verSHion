@@ -99,6 +99,27 @@ pub fn sample(f: &dyn Fn(f64, f64) -> Option<f64>, x0: f64, x1: f64, y0: f64, y1
 /// to F ~ 0; across a pole F only grows toward it, so the search ends with a huge |F| and the
 /// crossing is rejected. Returns None for a pole, a jump, or an unreadable value.
 fn refine(f: &dyn Fn(f64, f64) -> Option<f64>, huge: f64, pa: (f64, f64), fa: f64, pb: (f64, f64), fb: f64) -> Option<(f64, f64)> {
+    if let Some(q) = refine_root(f, huge, pa, fa, pb, fb) { return Some(q); }
+    // a pole in the edge hides a real root beside it (the tail of a tan curve runs along its asymptote): look at the
+    // edge in pieces, and keep the first piece whose sign change is a root
+    const PIECES: usize = 24;
+    let at = |t: f64| (pa.0 + (pb.0 - pa.0) * t, pa.1 + (pb.1 - pa.1) * t);
+    let mut prev: Option<(f64, f64)> = Some((0.0, fa));
+    for k in 1..=PIECES {
+        let t = k as f64 / PIECES as f64;
+        let q = at(t);
+        let cur = if k == PIECES { Some(fb) } else { f(q.0, q.1).filter(|v| v.is_finite() && v.abs() < huge) };
+        if let (Some((t0, f0)), Some(f1)) = (prev, cur) {
+            if (f0 >= 0.0) != (f1 >= 0.0) {
+                if let Some(r) = refine_root(f, huge, at(t0), f0, q, f1) { return Some(r); }
+            }
+        }
+        prev = cur.map(|v| (t, v));
+    }
+    None
+}
+
+fn refine_root(f: &dyn Fn(f64, f64) -> Option<f64>, huge: f64, pa: (f64, f64), fa: f64, pb: (f64, f64), fb: f64) -> Option<(f64, f64)> {
     if fa == 0.0 { return Some(pa); }
     if fb == 0.0 { return Some(pb); }
     let at = |t: f64| (pa.0 + (pb.0 - pa.0) * t, pa.1 + (pb.1 - pa.1) * t);
@@ -186,11 +207,17 @@ impl Grid {
         };
         let mut adj: BTreeMap<u64, Vec<u64>> = BTreeMap::new();
         let mut pos: HashMap<u64, (f64, f64)> = HashMap::new();
+        let mut orphans: Vec<(f64, f64)> = vec![];
         let mut link = |a: (u64, Option<(f64, f64)>), b: (u64, Option<(f64, f64)>)| {
-            if let (Some(pa), Some(pb)) = (a.1, b.1) {
-                pos.insert(a.0, pa); pos.insert(b.0, pb);
-                adj.entry(a.0).or_default().push(b.0);
-                adj.entry(b.0).or_default().push(a.0);
+            match (a.1, b.1) {
+                (Some(pa), Some(pb)) => {
+                    pos.insert(a.0, pa); pos.insert(b.0, pb);
+                    adj.entry(a.0).or_default().push(b.0);
+                    adj.entry(b.0).or_default().push(a.0);
+                }
+                // one end of the segment was a root and the other a pole: the root still starts a curve
+                (Some(p), None) | (None, Some(p)) => orphans.push(p),
+                _ => {}
             }
         };
         for j in 0..ny {
@@ -238,15 +265,41 @@ impl Grid {
         for s in starts { if !seen.contains(&s) { let l = walk(s, &mut seen); if l.len() > 1 { out.push(l); } } }
         let rest: Vec<u64> = adj.keys().copied().collect();
         for s in rest { if !seen.contains(&s) { let l = walk(s, &mut seen); if l.len() > 1 { out.push(l); } } }
+        // a root whose partner crossing was a pole starts a curve of its own, followed both ways from there
+        {
+            let flat: Vec<(f64, f64)> = out.iter().flatten().copied().collect();
+            let near_chain = |p: (f64, f64)| flat.iter().any(|q| ((q.0 - p.0) / self.dx).hypot((q.1 - p.1) / self.dy) < 2.5);
+            let mut done: Vec<(f64, f64)> = vec![];
+            for o in orphans {
+                if near_chain(o) || done.iter().any(|q| ((q.0 - o.0) / self.dx).hypot((q.1 - o.1) / self.dy) < 2.5) { continue; }
+                let e = 1e-3;
+                let (u0, u1) = (o.0 / self.dx, o.1 / self.dy);
+                let ev = |a: f64, b: f64| f(a * self.dx, b * self.dy).filter(|v| v.is_finite() && v.abs() < self.huge);
+                let (Some(gx), Some(gy)) = (ev(u0 + e, u1).zip(ev(u0 - e, u1)).map(|(a, b)| (a - b) / (2.0 * e)), ev(u0, u1 + e).zip(ev(u0, u1 - e)).map(|(a, b)| (a - b) / (2.0 * e))) else { continue };
+                let n = gx.hypot(gy);
+                if !(n > 0.0 && n.is_finite()) { continue; }
+                let t = (-gy / n, gx / n);
+                let toward_a = (o.0 - t.0 * 0.5 * self.dx, o.1 - t.1 * 0.5 * self.dy);
+                let toward_b = (o.0 + t.0 * 0.5 * self.dx, o.1 + t.1 * 0.5 * self.dy);
+                let fwd = self.trace_on(f, o, toward_a);
+                let back = self.trace_on(f, o, toward_b);
+                if fwd.len() + back.len() < 2 { continue; }
+                let mut chain: Vec<(f64, f64)> = back.into_iter().rev().collect();
+                chain.push(o);
+                chain.extend(fwd);
+                done.push(o);
+                out.push(chain);
+            }
+        }
         // an open chain that stopped inside the window (beside a pole, say) is followed on to the edge
         for l in out.iter_mut() {
             if l.len() < 3 || l.first() == l.last() { continue; }
             let n = l.len();
-            if !self.near_border(l[n - 1]) {
+            if !self.on_edge(l[n - 1]) {
                 let ext = self.trace_on(f, l[n - 1], l[n.saturating_sub(4)]);
                 l.extend(ext);
             }
-            if !self.near_border(l[0]) {
+            if !self.on_edge(l[0]) {
                 let ext = self.trace_on(f, l[0], l[3.min(l.len() - 1)]);
                 let mut head: Vec<(f64, f64)> = ext.into_iter().rev().collect();
                 head.extend(l.iter().copied());
@@ -315,9 +368,134 @@ impl Grid {
         out
     }
 
-    fn near_border(&self, p: (f64, f64)) -> bool {
+    /// On the window's edge (to a thousandth of a cell): a chain end there has left the window and needs no tracing.
+    fn on_edge(&self, p: (f64, f64)) -> bool {
         let (xmax, ymax) = (self.x0 + self.dx * self.nx as f64, self.y0 + self.dy * self.ny as f64);
-        p.0 <= self.x0 + 2.5 * self.dx || p.0 >= xmax - 2.5 * self.dx || p.1 <= self.y0 + 2.5 * self.dy || p.1 >= ymax - 2.5 * self.dy
+        let (ex, ey) = (1e-3 * self.dx, 1e-3 * self.dy);
+        p.0 <= self.x0 + ex || p.0 >= xmax - ex || p.1 <= self.y0 + ey || p.1 >= ymax - ey
+    }
+
+    /// Where F touches zero without changing sign (a squared or repeated factor): a minimum of |F|
+    /// along a row or a column of the grid that is zero to rounding. Points near an already drawn
+    /// curve are dropped; the rest are chained nearest-first into polylines.
+    pub fn ridge_chains(&self, f: &dyn Fn(f64, f64) -> Option<f64>, existing: &[Vec<(f64, f64)>]) -> Vec<Vec<(f64, f64)>> {
+        let mut mags: Vec<f64> = self.v.iter().filter(|t| !t.is_nan()).step_by(5).map(|t| t.abs()).collect();
+        if mags.len() < 9 { return vec![]; }
+        let m = mags.len() / 2;
+        let med = *mags.select_nth_unstable_by(m, |a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)).1;
+        if !(med > 0.0) { return vec![]; }
+        let (thr, acc) = (0.05 * med, 1e-8 * med);
+        let zeros = self.v.iter().filter(|t| !t.is_nan() && t.abs() <= acc).count();
+        if zeros * 4 > self.v.len() { return vec![]; }
+        // golden-section minimum of |g| on [a, b]
+        let minimise = |g: &dyn Fn(f64) -> Option<f64>, mut a: f64, mut b: f64| -> Option<(f64, f64)> {
+            let r = 0.618_033_988_75;
+            let (mut c, mut d) = (b - r * (b - a), a + r * (b - a));
+            let (mut fc, mut fd) = (g(c)?.abs(), g(d)?.abs());
+            for _ in 0..60 {
+                if fc < fd { b = d; d = c; fd = fc; c = b - r * (b - a); fc = g(c)?.abs(); } else { a = c; c = d; fc = fd; d = a + r * (b - a); fd = g(d)?.abs(); }
+            }
+            let x = 0.5 * (a + b);
+            Some((x, g(x)?.abs()))
+        };
+        let mut pts: Vec<(f64, f64)> = vec![];
+        let mut tried = 0;
+        for j in 0..=self.ny {
+            for i in 1..self.nx {
+                let (l, c, r) = (self.at(i - 1, j), self.at(i, j), self.at(i + 1, j));
+                if l.is_nan() || c.is_nan() || r.is_nan() || c.abs() > thr || c.abs() > l.abs() || c.abs() > r.abs() || (c.abs() == l.abs() && c.abs() == r.abs()) { continue; }
+                tried += 1;
+                if tried > 6000 { return vec![]; }
+                let y = self.py(j);
+                if let Some((x, v)) = minimise(&|x| f(x, y), self.px(i - 1), self.px(i + 1)) { if v <= acc { pts.push((x, y)); } }
+            }
+        }
+        for i in 0..=self.nx {
+            for j in 1..self.ny {
+                let (l, c, r) = (self.at(i, j - 1), self.at(i, j), self.at(i, j + 1));
+                if l.is_nan() || c.is_nan() || r.is_nan() || c.abs() > thr || c.abs() > l.abs() || c.abs() > r.abs() || (c.abs() == l.abs() && c.abs() == r.abs()) { continue; }
+                tried += 1;
+                if tried > 6000 { return vec![]; }
+                let x = self.px(i);
+                if let Some((y, v)) = minimise(&|y| f(x, y), self.py(j - 1), self.py(j + 1)) { if v <= acc { pts.push((x, y)); } }
+            }
+        }
+        if pts.is_empty() { return vec![]; }
+        // buckets of two cells, in cell units
+        let u = |p: (f64, f64)| (p.0 / self.dx, p.1 / self.dy);
+        let key = |p: (f64, f64)| { let q = u(p); ((q.0 / 2.0).floor() as i64, (q.1 / 2.0).floor() as i64) };
+        let near = |buckets: &HashMap<(i64, i64), Vec<usize>>, all: &[(f64, f64)], p: (f64, f64), r: f64, skip: &dyn Fn(usize) -> bool| -> Option<usize> {
+            let (kx, ky) = key(p);
+            let mut best: Option<(f64, usize)> = None;
+            for ax in -2..=2 { for ay in -2..=2 {
+                if let Some(v) = buckets.get(&(kx + ax, ky + ay)) { for &n in v {
+                    if skip(n) { continue; }
+                    let (a, b) = (u(all[n]), u(p));
+                    let dd = (a.0 - b.0).hypot(a.1 - b.1);
+                    if dd <= r && best.map_or(true, |t| dd < t.0) { best = Some((dd, n)); }
+                } }
+            } }
+            best.map(|t| t.1)
+        };
+        // drop what the contour already drew
+        // (a chain of a point or two, from a node that sits exactly on a zero, is not a drawn curve)
+        let flat: Vec<(f64, f64)> = existing.iter().filter(|c| { let (xs, ys): (Vec<f64>, Vec<f64>) = c.iter().copied().unzip(); let ext = |v: &[f64]| v.iter().cloned().fold(f64::NEG_INFINITY, f64::max) - v.iter().cloned().fold(f64::INFINITY, f64::min); ext(&xs) > 4.0 * self.dx || ext(&ys) > 4.0 * self.dy }).flatten().copied().collect();
+        let mut eb: HashMap<(i64, i64), Vec<usize>> = HashMap::new();
+        for (n, p) in flat.iter().enumerate() { eb.entry(key(*p)).or_default().push(n); }
+        pts.retain(|p| near(&eb, &flat, *p, 1.6, &|_| false).is_none());
+        if pts.is_empty() || pts.len() > 8000 { return vec![]; }
+        let mut pb: HashMap<(i64, i64), Vec<usize>> = HashMap::new();
+        for (n, p) in pts.iter().enumerate() { pb.entry(key(*p)).or_default().push(n); }
+        let mut used = vec![false; pts.len()];
+        let mut chains = vec![];
+        for s0 in 0..pts.len() {
+            if used[s0] { continue; }
+            used[s0] = true;
+            let mut sides: [Vec<(f64, f64)>; 2] = [vec![], vec![]];
+            for side in 0..2 {
+                let mut cur = pts[s0];
+                loop {
+                    // the nearest unused point within 2.6 cells; points within half a cell are the same point
+                    let Some(n) = near(&pb, &pts, cur, 2.6, &|n| used[n]) else { break };
+                    used[n] = true;
+                    let (a, b) = (u(pts[n]), u(cur));
+                    if (a.0 - b.0).hypot(a.1 - b.1) < 0.5 { continue; }
+                    sides[side].push(pts[n]);
+                    cur = pts[n];
+                }
+            }
+            let mut chain: Vec<(f64, f64)> = sides[1].iter().rev().copied().collect();
+            chain.push(pts[s0]);
+            chain.extend(sides[0].iter().copied());
+            chains.push(chain);
+        }
+        // chains whose ends meet (the walk stopped where two neighbours were equally near) are one chain
+        let gap = |a: (f64, f64), b: (f64, f64)| { let (p, q) = (u(a), u(b)); (p.0 - q.0).hypot(p.1 - q.1) };
+        'again: loop {
+            for i in 0..chains.len() {
+                for j in 0..chains.len() {
+                    if i == j { continue; }
+                    let (ai, aj) = (chains[i][chains[i].len() - 1], chains[j][0]);
+                    if gap(ai, aj) < 3.2 {
+                        let tail = chains.remove(j);
+                        let i2 = if j < i { i - 1 } else { i };
+                        chains[i2].extend(tail);
+                        continue 'again;
+                    }
+                }
+                // a chain whose end meets the other chain's end: reverse that one and join
+                for j in 0..chains.len() {
+                    if i == j { continue; }
+                    let (ai, aj) = (chains[i][chains[i].len() - 1], chains[j][chains[j].len() - 1]);
+                    if gap(ai, aj) < 3.2 {
+                        chains[j].reverse();
+                        continue 'again;
+                    }
+                }
+            }
+            break;
+        }
+        chains
     }
 
     /// A double root that is one point, or a straight line in any direction, when F never changes
@@ -591,5 +769,87 @@ mod tests {
         assert!(g(&|x, y| Some((x - 1.0).powi(2) * (y - 2.0).powi(2))).is_none(), "two crossing lines are not one");
         assert!(g(&|x, y| Some((x * x + y * y - 25.0).powi(2))).is_none(), "a double ring is not drawn");
         assert!(g(&|x, y| Some(x * x + y * y + 1.0)).is_none());
+    }
+
+    /// Distance, in cells, from (x, y) to the nearest drawn polyline segment.
+    fn cells_to(lines: &[Vec<(f64, f64)>], x: f64, y: f64, dx: f64, dy: f64) -> f64 {
+        let mut best = f64::INFINITY;
+        for l in lines {
+            for w in l.windows(2) {
+                let (a, b) = ((w[0].0 / dx, w[0].1 / dy), (w[1].0 / dx, w[1].1 / dy));
+                let p = (x / dx, y / dy);
+                let (vx, vy) = (b.0 - a.0, b.1 - a.1);
+                let len2 = vx * vx + vy * vy;
+                let t = if len2 > 0.0 { (((p.0 - a.0) * vx + (p.1 - a.1) * vy) / len2).clamp(0.0, 1.0) } else { 0.0 };
+                best = best.min((p.0 - a.0 - t * vx).hypot(p.1 - a.1 - t * vy));
+            }
+        }
+        best
+    }
+
+    /// The wide windows of a plot only ~48 px tall: the flat tails of tan, cot and sec curves run all the way
+    /// to the edge, at most 1% of the true points are more than 2 cells (2.4 px) from the drawing, none more than 6.
+    #[test]
+    fn tails_reach_the_window_edge_in_wide_flat_windows() {
+        use std::f64::consts::PI;
+        let tan_ys = |x: f64| (-40..=40).map(|k| x.atan() + k as f64 * PI).collect::<Vec<_>>();
+        let sec_ys = |x: f64| if x.abs() < 1.0 { vec![] } else { let a = (1.0 / x).acos(); (-20..=20).flat_map(|k| [a + 2.0 * k as f64 * PI, -a + 2.0 * k as f64 * PI]).collect() };
+        type Fx = Box<dyn Fn(f64, f64) -> Option<f64>>;
+        let cases: Vec<(&str, Fx, Box<dyn Fn(f64) -> Vec<f64>>)> = vec![
+            ("x = tan(y)", Box::new(|x, y| Some(x - y.tan())), Box::new(tan_ys)),
+            ("tan(y) = x", Box::new(|x, y| Some(y.tan() - x)), Box::new(tan_ys)),
+            ("x = sec(y)", Box::new(|x, y| Some(x - 1.0 / y.cos())), Box::new(sec_ys)),
+        ];
+        for (name, f, ys) in &cases {
+            for &(xa, xb, ya, yb) in &[(-50.0, 50.0, -5.0, 5.0), (-100.0, 100.0, -5.0, 5.0), (-50.0, 50.0, -3.0, 3.0), (-20.0, 20.0, -5.0, 5.0), (-100.0, 100.0, -100.0, 100.0)] {
+                let sizes: Vec<(usize, usize)> = if yb - ya > 50.0 { vec![(400, 400)] } else { vec![(400, 40), (400, 25), (400, 50)] };
+                for (nx, ny) in sizes {
+                    let (dx, dy) = ((xb - xa) / nx as f64, (yb - ya) / ny as f64);
+                    let lines = contour(&**f, xa, xb, ya, yb, nx, ny);
+                    let (mut total, mut far, mut worst) = (0, 0, 0.0f64);
+                    let mut bad: Vec<(f64, f64, f64)> = vec![];
+                    let mut x = xa + 3.0 * dx;
+                    while x < xb - 3.0 * dx {
+                        for t in ys(x) {
+                            if t > ya + 0.5 * dy && t < yb - 0.5 * dy {
+                                total += 1;
+                                let d = cells_to(&lines, x, t, dx, dy);
+                                worst = worst.max(d);
+                                if d > 2.0 { far += 1; if bad.len() < 6 { bad.push((x, t, d)); } }
+                            }
+                        }
+                        x += (xb - xa) / if yb - ya > 50.0 { 120.0 } else { 997.0 };
+                    }
+                    assert!(total > 0);
+                    assert!(far as f64 <= 0.01 * total as f64, "{name}: {far} of {total} true points are over 2 cells off ({bad:?}), window {xa}..{xb} x {ya}..{yb}, {nx}x{ny}");
+                    assert!(worst <= 6.0, "{name}: a true point is {worst} cells off, window {xa}..{xb} x {ya}..{yb}, {nx}x{ny}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn squared_factors_draw_their_zero_sets() {
+        let n = |f: &dyn Fn(f64, f64) -> Option<f64>| { let g = sample(f, -10.0, 10.0, -10.0, 10.0, 400, 400).unwrap(); let c = g.contour(f); g.ridge_chains(f, &c) };
+        // a line pair: both lines
+        let r = n(&|x, y| Some((x - 1.0).powi(2) * (y - 2.0).powi(2)));
+        let near = |r: &Vec<Vec<(f64, f64)>>, p: (f64, f64)| r.iter().flatten().any(|q| (q.0 - p.0).hypot(q.1 - p.1) < 0.08);
+        for p in [(1.0, -9.0), (1.0, 9.0), (-9.0, 2.0), (9.0, 2.0)] { assert!(near(&r, p), "line point {p:?}"); }
+        // a squared circle
+        let r = n(&|x, y| Some((x * x + y * y - 25.0).powi(2)));
+        let on = r.iter().flatten().filter(|q| (q.0.hypot(q.1) - 5.0).abs() < 0.03).count();
+        assert!(on > 200 && on == r.iter().flatten().count(), "{on} of {}", r.iter().flatten().count());
+        assert_eq!(r.len(), 1, "the ring is one chain: {:?}", r.iter().map(|c| (c.len(), c[0], c[c.len() - 1])).collect::<Vec<_>>());
+        // a squared pair of parallel lines, and crossing diagonals
+        let r = n(&|x, y| Some((x * x - 1.0).powi(2) + 0.0 * y));
+        assert!(near(&r, (1.0, 4.0)) && near(&r, (-1.0, -4.0)), "{} chains, {} points, first {:?}", r.len(), r.iter().flatten().count(), r.iter().flatten().take(3).collect::<Vec<_>>());
+        let r = n(&|x, y| Some((x - y).powi(2) * (x + y).powi(2)));
+        assert!(near(&r, (5.0, 5.0)) && near(&r, (5.0, -5.0)));
+        let r = n(&|x, y| Some(-(x * x + y * y - 4.0).powi(2)));
+        assert_eq!(r.len(), 1, "{:?}", r.iter().map(|c| (c.len(), c[0], c[c.len() - 1])).collect::<Vec<_>>());
+        // nothing for a plain circle, whose curve the contour already has
+        assert!(n(&|x, y| Some(x * x + y * y - 25.0)).is_empty());
+        // nothing for a function that is simply never zero
+        assert!(n(&|x, y| Some(x * x + y * y + 1.0)).is_empty());
     }
 }

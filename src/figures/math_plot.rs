@@ -122,6 +122,7 @@ fn grid(p: &Params) -> Vec<Handle> {
     }
     // Points.
     for (pi, seg) in p.s("points").split(';').enumerate() {
+        if pi >= super::math::MAX_POINTS || hs.len() >= 2 * super::math::MAX_POINTS { break; }
         let seg = seg.trim();
         if let (Some(a), Some(b)) = (seg.find('('), seg.find(')')) {
             let n = nums(&seg[a + 1..b]);

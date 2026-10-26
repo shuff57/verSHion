@@ -891,7 +891,7 @@ const COORDINATE_GRID: &[Faq] = &[
     },
     Faq {
         q: "How are holes, asymptotes and piecewise functions shown?",
-        a: "A hole is a single missing point, drawn as an open circle. An asymptote is a line the curve approaches but never reaches, usually drawn dotted or dashed. A piecewise function is graphed one piece at a time over its own interval: a closed dot marks an endpoint that is included (≤ or ≥) and an open dot one that is not (< or >). To change how a row is drawn, end it with dashed, dotted, dash-dot or solid, such as y = 2x/3 dashed (for an asymptote). In the Print style every row gets its own dash pattern in black, and shaded regions are hatched, so the curves can be told apart on a black-and-white copy.",
+        a: "A hole is a single missing point, drawn as an open circle. An asymptote is a line the curve approaches but never reaches, usually drawn dotted or dashed. A piecewise function is graphed one piece at a time over its own interval: a closed dot marks an endpoint that is included (≤ or ≥) and an open dot one that is not (< or >). To change how a row is drawn, end it with dashed, dotted, dash-dot or solid, such as y = 2x/3 dashed (for an asymptote). In the Print style everything is neutral grey: a solid line is an included boundary or an ordinary curve, a dashed line is only an excluded (< or >) boundary, and different curves are told apart by line weight, grey level and the equation written beside each one. A fine dotted line is kept for asymptotes only, and shaded regions get a sparse light hatch under the gridlines.",
     },
     Faq {
         q: "Can I graph a circle, ellipse or hyperbola?",
