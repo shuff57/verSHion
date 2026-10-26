@@ -1099,6 +1099,8 @@ mod tests {
                     match pd.kind {
                         Kind::Float { .. } => { over.insert(pd.key.to_string(), serde_json::json!(ext)); }
                         Kind::Int { .. } => { over.insert(pd.key.to_string(), serde_json::json!(if ext > 1e100 { i64::MAX } else if ext < -1e100 { i64::MIN } else { ext as i64 })); }
+                        // (and every text control gets a long, odd string: brackets, unicode, markup, an unreadable number)
+                        Kind::Text | Kind::Long | Kind::List => { over.insert(pd.key.to_string(), serde_json::json!("((((x^2 + y^2 = 1e400; \u{e9}\u{4e2d}<>&\"' 99999999999999999999 ,;\n".repeat(30))); }
                         _ => {}
                     }
                 }
@@ -1106,7 +1108,7 @@ mod tests {
                 let t0 = thread_cpu_ms();
                 let svg = (d.render)(&p);
                 if let (Some(a), Some(b)) = (t0, thread_cpu_ms()) { assert!(b - a < 12_000, "{} with every number {ext}: {} ms of CPU", d.id, b - a); }
-                assert!(svg.contains("<svg"), "{} with every number {ext}", d.id);
+                assert!(svg.contains("<svg") && svg.len() > 200 && ["<rect", "<line", "<path", "<circle", "<polyline", "<text", "<polygon", "<ellipse"].iter().any(|t| svg.contains(t)), "{} with every number {ext}: a trivial svg of {} bytes", d.id, svg.len());
             }
         }
     }

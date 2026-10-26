@@ -2576,7 +2576,7 @@ impl Workspace {
                             .corner_radius(CornerRadius::same(6))
                             .inner_margin(Margin::same(8))
                             .show(ui, |ui| {
-                                ui.label(RichText::new("Not drawn as typed").color(theme::red()).strong().size(12.5));
+                                ui.label(RichText::new("Notes").color(theme::red()).strong().size(12.5));
                                 for w in warns {
                                     ui.add_space(2.0);
                                     ui.label(RichText::new(w).color(theme::red()).size(12.0));
