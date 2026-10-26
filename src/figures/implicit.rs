@@ -68,8 +68,11 @@ pub fn linear_in_y(f: &dyn Fn(f64, f64) -> Option<f64>, x0: f64, x1: f64, y0: f6
     true
 }
 
+/// What a sign-free curve (F >= 0 everywhere) reduces to.
+pub enum Touch { Line(Vec<(f64, f64)>), Point((f64, f64)) }
+
 /// The sampled values of F on the window grid; corners with a non-finite or huge value are NaN.
-pub struct Grid { pub nx: usize, pub ny: usize, pub x0: f64, pub y0: f64, pub dx: f64, pub dy: f64, v: Vec<f64> }
+pub struct Grid { pub nx: usize, pub ny: usize, pub x0: f64, pub y0: f64, pub dx: f64, pub dy: f64, v: Vec<f64>, huge: f64 }
 
 pub fn sample(f: &dyn Fn(f64, f64) -> Option<f64>, x0: f64, x1: f64, y0: f64, y1: f64, nx: usize, ny: usize) -> Option<Grid> {
     let (nx, ny) = (nx.clamp(1, MAX_CELLS), ny.clamp(1, MAX_CELLS));
@@ -80,17 +83,22 @@ pub fn sample(f: &dyn Fn(f64, f64) -> Option<f64>, x0: f64, x1: f64, y0: f64, y1
     let mut v = vec![f64::NAN; w * (ny + 1)];
     for j in 0..=ny {
         for i in 0..=nx {
-            if let Some(val) = f(x0 + dx * i as f64, y0 + dy * j as f64).filter(|t| ok(*t)) { v[j * w + i] = val; }
+            if let Some(val) = f(x0 + dx * i as f64, y0 + dy * j as f64).filter(|t| t.is_finite()) { v[j * w + i] = val; }
         }
     }
-    Some(Grid { nx, ny, x0, y0, dx, dy, v })
+    // "huge" is relative to the typical size of F (a circle of radius 1e9 has F ~ 1e18 everywhere)
+    let mut mags: Vec<f64> = v.iter().filter(|t| !t.is_nan()).step_by(7).map(|t| t.abs()).collect();
+    let median = if mags.is_empty() { 1.0 } else { let m = mags.len() / 2; *mags.select_nth_unstable_by(m, |a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)).1 };
+    let huge = HUGE * median.max(1.0);
+    for t in v.iter_mut() { if !t.is_nan() && t.abs() >= huge { *t = f64::NAN; } }
+    Some(Grid { nx, ny, x0, y0, dx, dy, v, huge })
 }
 
 /// The root of F on the segment pa-pb, whose end values fa and fb differ in sign, found by a
 /// safeguarded false-position search (bisection every third step). A real simple root converges
 /// to F ~ 0; across a pole F only grows toward it, so the search ends with a huge |F| and the
 /// crossing is rejected. Returns None for a pole, a jump, or an unreadable value.
-fn refine(f: &dyn Fn(f64, f64) -> Option<f64>, pa: (f64, f64), fa: f64, pb: (f64, f64), fb: f64) -> Option<(f64, f64)> {
+fn refine(f: &dyn Fn(f64, f64) -> Option<f64>, huge: f64, pa: (f64, f64), fa: f64, pb: (f64, f64), fb: f64) -> Option<(f64, f64)> {
     if fa == 0.0 { return Some(pa); }
     if fb == 0.0 { return Some(pb); }
     let at = |t: f64| (pa.0 + (pb.0 - pa.0) * t, pa.1 + (pb.1 - pa.1) * t);
@@ -102,7 +110,7 @@ fn refine(f: &dyn Fn(f64, f64) -> Option<f64>, pa: (f64, f64), fa: f64, pb: (f64
         if !t.is_finite() || t <= lo || t >= hi || it % 3 == 2 { t = 0.5 * (lo + hi); }
         let q = at(t);
         let fv = f(q.0, q.1)?;
-        if !ok(fv) { return None; }
+        if !fv.is_finite() || fv.abs() >= huge { return None; }
         if fv.abs() < best.0 { best = (fv.abs(), q); }
         if fv == 0.0 { return Some(q); }
         if (fv > 0.0) == lo_pos {
@@ -173,7 +181,7 @@ impl Grid {
         let mut vertex = |kind: u64, i: usize, j: usize| -> Option<(f64, f64)> {
             *verts.entry(key(kind, i, j)).or_insert_with(|| {
                 let (i2, j2) = if kind == 0 { (i + 1, j) } else { (i, j + 1) };
-                refine(f, (self.px(i), self.py(j)), at(i, j), (self.px(i2), self.py(j2)), at(i2, j2))
+                refine(f, self.huge, (self.px(i), self.py(j)), at(i, j), (self.px(i2), self.py(j2)), at(i2, j2))
             })
         };
         let mut adj: BTreeMap<u64, Vec<u64>> = BTreeMap::new();
@@ -230,7 +238,118 @@ impl Grid {
         for s in starts { if !seen.contains(&s) { let l = walk(s, &mut seen); if l.len() > 1 { out.push(l); } } }
         let rest: Vec<u64> = adj.keys().copied().collect();
         for s in rest { if !seen.contains(&s) { let l = walk(s, &mut seen); if l.len() > 1 { out.push(l); } } }
+        // an open chain that stopped inside the window (beside a pole, say) is followed on to the edge
+        for l in out.iter_mut() {
+            if l.len() < 3 || l.first() == l.last() { continue; }
+            let n = l.len();
+            if !self.near_border(l[n - 1]) {
+                let ext = self.trace_on(f, l[n - 1], l[n.saturating_sub(4)]);
+                l.extend(ext);
+            }
+            if !self.near_border(l[0]) {
+                let ext = self.trace_on(f, l[0], l[3.min(l.len() - 1)]);
+                let mut head: Vec<(f64, f64)> = ext.into_iter().rev().collect();
+                head.extend(l.iter().copied());
+                *l = head;
+            }
+        }
         out
+    }
+
+    /// Walks the curve on from the end of an open chain that stopped inside the window (a crossing
+    /// beside a pole is rejected, so a tail that runs along an asymptote loses its last cells):
+    /// predictor along the tangent, Newton correction onto F = 0, until it leaves the window or
+    /// the curve cannot be followed (an unreadable value, a jump, a turn it cannot make).
+    fn trace_on(&self, f: &dyn Fn(f64, f64) -> Option<f64>, from: (f64, f64), toward: (f64, f64)) -> Vec<(f64, f64)> {
+        let (dx, dy) = (self.dx, self.dy);
+        let (xmax, ymax) = (self.x0 + dx * self.nx as f64, self.y0 + dy * self.ny as f64);
+        // work in cell units so a flat tail and a steep one step alike
+        let mut u = (from.0 / dx, from.1 / dy);
+        let mut d = ((from.0 - toward.0) / dx, (from.1 - toward.1) / dy);
+        let n = d.0.hypot(d.1);
+        if !(n > 0.0 && n.is_finite()) { return vec![]; }
+        d = (d.0 / n, d.1 / n);
+        let eval = |u: (f64, f64)| f(u.0 * dx, u.1 * dy).filter(|v| v.is_finite() && v.abs() < self.huge);
+        let grad = |u: (f64, f64)| -> Option<(f64, f64)> {
+            let e = 1e-3;
+            let gx = (eval((u.0 + e, u.1))? - eval((u.0 - e, u.1))?) / (2.0 * e);
+            let gy = (eval((u.0, u.1 + e))? - eval((u.0, u.1 - e))?) / (2.0 * e);
+            Some((gx, gy))
+        };
+        let mut out = vec![];
+        for _ in 0..4000 {
+            let mut q = (u.0 + 0.7 * d.0, u.1 + 0.7 * d.1);
+            let mut g = (0.0, 0.0);
+            let mut converged = false;
+            for _ in 0..8 {
+                let (Some(fv), Some(gg)) = (eval(q), grad(q)) else { return out };
+                g = gg;
+                let g2 = g.0 * g.0 + g.1 * g.1;
+                if !(g2 > 0.0 && g2.is_finite()) { return out; }
+                let step = (-fv * g.0 / g2, -fv * g.1 / g2);
+                q = (q.0 + step.0, q.1 + step.1);
+                if step.0.hypot(step.1) < 1e-6 { converged = true; break; }
+            }
+            if !converged || (q.0 - u.0).hypot(q.1 - u.1) > 1.5 { return out; }
+            let p = (q.0 * dx, q.1 * dy);
+            if p.0 < self.x0 || p.0 > xmax || p.1 < self.y0 || p.1 > ymax {
+                // clip at the window edge
+                let a = (u.0 * dx, u.1 * dy);
+                let t = [(self.x0, 0usize), (xmax, 0), (self.y0, 1), (ymax, 1)].iter().filter_map(|&(b, ax)| {
+                    let (pa, pb) = if ax == 0 { (a.0, p.0) } else { (a.1, p.1) };
+                    ((pa - b) * (pb - b) < 0.0).then(|| (b - pa) / (pb - pa))
+                }).fold(1.0f64, f64::min);
+                out.push((a.0 + (p.0 - a.0) * t, a.1 + (p.1 - a.1) * t));
+                return out;
+            }
+            // the new tangent, keeping the direction of travel
+            let mut t = (-g.1, g.0);
+            let tn = t.0.hypot(t.1);
+            t = (t.0 / tn, t.1 / tn);
+            if t.0 * d.0 + t.1 * d.1 < 0.0 { t = (-t.0, -t.1); }
+            if t.0 * d.0 + t.1 * d.1 < 0.3 { return out; }
+            d = t;
+            u = q;
+            out.push(p);
+        }
+        out
+    }
+
+    fn near_border(&self, p: (f64, f64)) -> bool {
+        let (xmax, ymax) = (self.x0 + self.dx * self.nx as f64, self.y0 + self.dy * self.ny as f64);
+        p.0 <= self.x0 + 2.5 * self.dx || p.0 >= xmax - 2.5 * self.dx || p.1 <= self.y0 + 2.5 * self.dy || p.1 >= ymax - 2.5 * self.dy
+    }
+
+    /// A double root that is one point, or a straight line in any direction, when F never changes
+    /// sign but is exactly (or nearly) zero at grid nodes. Other touching curves are not drawn.
+    pub fn touching_curve(&self) -> Option<Touch> {
+        if let Some(l) = self.touching_line() { return Some(Touch::Line(l)); }
+        if self.crossings() > 0 { return None; }
+        let vals: Vec<f64> = self.v.iter().copied().filter(|t| !t.is_nan()).collect();
+        if vals.len() < 9 { return None; }
+        let (mn, mx) = vals.iter().fold((f64::INFINITY, 0.0f64), |(a, b), t| (a.min(t.abs()), b.max(t.abs())));
+        if mx == 0.0 || mn > 1e-4 * mx { return None; }
+        let lim = if mn == 0.0 { 0.0 } else { 3.0 * mn };
+        let mut pts: Vec<(f64, f64)> = vec![];
+        for j in 0..=self.ny { for i in 0..=self.nx {
+            let v = self.at(i, j);
+            if !v.is_nan() && v.abs() <= lim { pts.push((self.px(i) / self.dx, self.py(j) / self.dy)); }
+        } }
+        if pts.is_empty() || pts.len() > 4000 { return None; }
+        let n = pts.len() as f64;
+        let c = (pts.iter().map(|p| p.0).sum::<f64>() / n, pts.iter().map(|p| p.1).sum::<f64>() / n);
+        let spread = pts.iter().map(|p| (p.0 - c.0).hypot(p.1 - c.1)).fold(0.0, f64::max);
+        if spread <= 2.0 { return Some(Touch::Point((c.0 * self.dx, c.1 * self.dy))); }
+        // principal direction; every node within a cell of the line
+        let (mut sxx, mut sxy, mut syy) = (0.0, 0.0, 0.0);
+        for p in &pts { let (a, b) = (p.0 - c.0, p.1 - c.1); sxx += a * a; sxy += a * b; syy += b * b; }
+        let th = 0.5 * (2.0 * sxy).atan2(sxx - syy);
+        let dir = (th.cos(), th.sin());
+        let resid = pts.iter().map(|p| ((p.0 - c.0) * dir.1 - (p.1 - c.1) * dir.0).abs()).fold(0.0, f64::max);
+        if resid > 1.0 { return None; }
+        let (lo, hi) = pts.iter().map(|p| (p.0 - c.0) * dir.0 + (p.1 - c.1) * dir.1).fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), t| (a.min(t), b.max(t)));
+        let pt = |t: f64| ((c.0 + dir.0 * t) * self.dx, (c.1 + dir.1 * t) * self.dy);
+        Some(Touch::Line(vec![pt(lo), pt(hi)]))
     }
 
     /// Polygons (model coordinates, all counter-clockwise, so one path unions them) covering
@@ -399,7 +518,7 @@ mod tests {
     /// window (away from the edge) has a drawn point near it.
     fn sweep(name: &str, f: &dyn Fn(f64, f64) -> Option<f64>, ys: &dyn Fn(f64) -> Vec<f64>, wins: &[(f64, f64, f64, f64)], skip_x: &dyn Fn(f64) -> bool, gap: &dyn Fn(f64) -> f64) {
         for &(xa, xb, ya, yb) in wins {
-            for (nx, ny) in [(240usize, 240usize), (200, 200), (137, 211), (97, 61), (400, 160), (160, 400)] {
+            for (nx, ny) in [(240usize, 240usize), (200, 200), (137, 211), (97, 61), (400, 160), (160, 400), (400, 40), (400, 25), (300, 60)] {
                 let (dx, dy) = ((xb - xa) / nx as f64, (yb - ya) / ny as f64);
                 let lines = contour(f, xa, xb, ya, yb, nx, ny);
                 for l in &lines { for &(x, y) in l {
@@ -408,10 +527,11 @@ mod tests {
                 } }
                 // completeness: each whole x with a true y well inside the window (when a cell is finer than
                 // the 0.2 rad between a pole and the end of the flat tail; coarser cells cannot see it)
-                let mut x = if dy > 0.2 { f64::INFINITY } else { (xa + 2.0 * dx).ceil() };
+                // (cells taller than ~0.45 rad cannot resolve a branch at all: only the no-false-point check applies)
+                let mut x = if dy > 0.45 { f64::INFINITY } else { (xa + 2.0 * dx).ceil() };
                 while x < xb - 2.0 * dx {
                     // a tail closer to its pole than 1.5 cells shares a cell with the pole: below the grid's resolution
-                    if !skip_x(x) && gap(x) > 1.5 * dy {
+                    if !skip_x(x) && gap(x) > 1.5 * dy.min(0.05) {
                         for t in ys(x) {
                             if t > ya + 3.0 * dy && t < yb - 3.0 * dy {
                                 let hit = lines.iter().flatten().any(|&(px, py)| (px - x).abs() <= 2.5 * dx && (py - t).abs() <= 3.0 * dy);
@@ -432,7 +552,7 @@ mod tests {
         let tan2_ys = |x: f64| (-24..=24).map(|k| (x.atan() + k as f64 * PI) / 2.0).collect::<Vec<_>>();
         let cot_ys = |x: f64| (-12..=12).map(|k| (1.0 / x).atan() + k as f64 * PI).collect::<Vec<_>>();
         let sec_ys = |x: f64| if x.abs() < 1.0 { vec![] } else { let a = (1.0 / x).acos(); (-6..=6).flat_map(|k| [a + 2.0 * k as f64 * PI, -a + 2.0 * k as f64 * PI]).collect() };
-        let wins = [(-5.0, 5.0, -15.0, 15.0), (-5.0, 7.0, -5.0, 7.0), (-50.0, 50.0, -5.0, 5.0), (-25.0, 25.0, -5.0, 5.0), (-3.0, 3.0, -3.0, 3.0), (-10.0, 10.0, -10.0, 10.0)];
+        let wins = [(-5.0, 5.0, -15.0, 15.0), (-5.0, 7.0, -5.0, 7.0), (-50.0, 50.0, -5.0, 5.0), (-25.0, 25.0, -5.0, 5.0), (-3.0, 3.0, -3.0, 3.0), (-10.0, 10.0, -10.0, 10.0), (-100.0, 100.0, -5.0, 5.0), (-100.0, 100.0, -10.0, 10.0)];
         let g_tan = |x: f64| PI / 2.0 - x.abs().atan();
         sweep("x = tan(y)", &|x, y| Some(x - y.tan()), &tan_ys, &wins, &|_| false, &g_tan);
         sweep("tan(y) = x", &|x, y| Some(y.tan() - x), &tan_ys, &wins, &|_| false, &g_tan);
@@ -455,5 +575,21 @@ mod tests {
         // a circle is not mistaken for a double root, a positive-only bowl is not a line
         let g = sample(&|x, y| Some(x * x + y * y + 1.0), -10.0, 10.0, -10.0, 10.0, 100, 100).unwrap();
         assert!(g.touching_line().is_none());
+    }
+
+    #[test]
+    fn huge_radii_scale_with_the_window_and_touching_curves_reduce_to_lines_and_points() {
+        for (r, w) in [(1e12f64, 1.2e12f64), (1e9, 1.2e9), (1e6, 1.2e6), (1e12, 1.2e6)] {
+            let f = move |x: f64, y: f64| Some(x * x + y * y - r * r);
+            let l = contour(&f, -w, w, -w, w, 240, 240);
+            // inside the window: one loop at radius r; a window smaller than the circle has no curve
+            if r < w { assert_eq!(l.len(), 1, "r {r} window {w}"); for &(x, y) in &l[0] { assert!((x.hypot(y) / r - 1.0).abs() < 1e-3); } } else { assert!(l.is_empty()); }
+        }
+        let g = |f: &dyn Fn(f64, f64) -> Option<f64>| sample(f, -10.0, 10.0, -10.0, 10.0, 240, 240).unwrap().touching_curve();
+        match g(&|x, y| Some((x + y) * (x + y))) { Some(Touch::Line(l)) => { assert_eq!(l.len(), 2); for (x, y) in l { assert!((x + y).abs() < 0.1); } } _ => panic!("(x+y)^2 is a line") }
+        match g(&|x, y| Some((x - 3.0).powi(2) + (y + 2.0).powi(2))) { Some(Touch::Point((x, y))) => assert!((x - 3.0).abs() < 0.1 && (y + 2.0).abs() < 0.1), _ => panic!("a point") }
+        assert!(g(&|x, y| Some((x - 1.0).powi(2) * (y - 2.0).powi(2))).is_none(), "two crossing lines are not one");
+        assert!(g(&|x, y| Some((x * x + y * y - 25.0).powi(2))).is_none(), "a double ring is not drawn");
+        assert!(g(&|x, y| Some(x * x + y * y + 1.0)).is_none());
     }
 }

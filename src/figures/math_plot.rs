@@ -76,6 +76,8 @@ fn grid(p: &Params) -> Vec<Handle> {
     // Equations.
     for (ci, eq) in p.s("equations").split(';').enumerate() {
         let eq = eq.trim();
+        // only the rows the figure draws get handles, and no more than 120 handles in all
+        if ci >= super::math::MAX_ROWS || hs.len() >= 120 { break; }
         // inequalities and pieces with a domain have no drag handles (rewriting would drop them)
         if eq.is_empty() || eq.contains(['<', '>', ',', '\u{2264}', '\u{2265}']) { continue; }
         if super::math::is_curve_row(eq, g.x0, g.x1, g.y0, g.y1, p.s("xunits") == "Degrees") { continue; }

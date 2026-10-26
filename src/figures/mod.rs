@@ -229,6 +229,8 @@ impl Params {
                     Value::F(v.clamp(*min, *max))
                 }
                 (Kind::Int { min, max }, Value::I(v)) => Value::I(v.clamp(*min, *max)),
+                // a fractional number stored into an Int control is rounded, then clamped like one (NaN becomes the minimum)
+                (Kind::Int { min, max }, Value::F(v)) => Value::I(if v.is_nan() { *min } else { (v.round().clamp(i64::MIN as f64, i64::MAX as f64) as i64).clamp(*min, *max) }),
                 (Kind::Choice(opts), Value::S(v)) if !opts.contains(&v.as_str()) => d.default.clone(),
                 (_, v) => v,
             };
@@ -939,6 +941,30 @@ mod group_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// A number of the wrong type or size stored into any control is brought into that control's range
+    /// (Int controls given a float, Float controls given an integer, NaN, absurd magnitudes), for every figure.
+    #[test]
+    fn absurd_numbers_are_clamped_for_every_control() {
+        for d in registry() {
+            let defs = (d.params)();
+            for v in [Value::F(1e30), Value::F(-1e30), Value::F(f64::NAN), Value::F(2.5), Value::I(i64::MAX), Value::I(i64::MIN)] {
+                let mut p = Params::defaults(&defs);
+                for def in &defs {
+                    if matches!(def.kind, Kind::Int { .. } | Kind::Float { .. }) { p.0.insert(def.key.to_string(), v.clone()); }
+                }
+                p.normalize(&defs, false);
+                for def in &defs {
+                    match (&def.kind, p.0.get(def.key)) {
+                        (Kind::Int { min, max }, Some(Value::I(i))) => assert!(i >= min && i <= max, "{} {} {i}", d.id, def.key),
+                        (Kind::Int { .. }, other) => panic!("{} {}: an Int control holds {other:?}", d.id, def.key),
+                        (Kind::Float { min, max, .. }, Some(Value::F(f))) => assert!(*f >= *min && *f <= *max, "{} {} {f}", d.id, def.key),
+                        (Kind::Float { .. }, other) => panic!("{} {}: a Float control holds {other:?}", d.id, def.key),
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
     /// Every registered figure must render with default params into a rasterizable SVG.
     /// The reference cross-lists five generators on a second subject site.
     #[test]
