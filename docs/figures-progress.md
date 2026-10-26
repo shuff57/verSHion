@@ -22,6 +22,26 @@ grid. Existing census files for every other figure, and for the older coordinate
 - The Colour grid is near-black for a plain figure and a grey-blue beside a conic, for the same census reason.
 - Windows squeezed by Square cells (wider or taller than 6 to 1) keep every number and gridline; the editor says so.
 
+## Tick numbers (round 8)
+
+- A number keeps its own tick along its axis (at most a 3 px nudge, and at most 15% of the number spacing). To clear a curve or another
+  number it moves only perpendicular to the axis: further out in 4 px steps (up to 16) or across the axis. A number that left its row
+  by more than 8 px gets a 0.8 px grey leader from the tick.
+- When no spot is free of everything, the nearest spot clear of other numbers is used and its white plate is painted over the curve for
+  that digit (`data-plate="over"`). There is no cap on these. They show up where a curve runs along an axis for a long stretch (the top
+  and bottom of a circle beside the y numbers, hyperbola vertices on the x-axis), as a visible local break in the curve.
+- `data-plate="over"` can appear in any figure drawn in Print (and any figure with a conic), not only conics: the census has them only in
+  the new conic examples ex11 to ex17; no earlier census file changed.
+- The number search is local (64 px cells) with a budget of 2 million checks, past which numbers keep their standard places. Square
+  windows with thousands of numbers (x +-1000 by y +-1, 40 circles at +-100000 by +-1, x +-1e6 by y +-10) render in well under 2 s of CPU;
+  they took 7 to 19 s after round 7.
+- Major gridlines use a stride that divides the number stride, so every numbered tick has a line. Minor lines are left out when they
+  would be closer than 3 px, whatever the major stride.
+- Origin zero: below and left of the origin when free, else a row lower, else below right. In hyperbolas with the vertex at 1 (ex12,
+  ex16) the y "-1" fills the lower left, so the 0 sits below right with about 12 px before the x "1": it reads "0  1", not "10".
+- Plain Colour figures without a conic or Print keep the legacy places (census), so an origin 0 can still touch a neighbouring number
+  there in some small windows. Only Print and conic figures are rearranged.
+
 ## Leftover minors
 
 - Strict double-root inequalities (y^2 > 0, abs(x) > 0, (y-1)^2 > 0) tint the whole window without the dashed excluded line or an axis
@@ -30,3 +50,6 @@ grid. Existing census files for every other figure, and for the older coordinate
 - White number plates leave small notches in the tint near the origin.
 - Notes written on the figure use a different font from the figure's numbers.
 - A Print-only default for equation labels when several curves are drawn was not added (rows differ by weight and tone only).
+- A circle or ellipse with a vertex on an axis number row (x^2 + y^2 = 25 at +-10) loses a short stretch of curve under the y "5" and "-5" plates.
+- A number moved by the free-spot search while its over-plate fallback is used gets no leader.
+- Plain Colour windows still use the legacy number places, so the new displacement tests cover Colour only where a conic is present.
