@@ -883,7 +883,7 @@ const COORDINATE_GRID: &[Faq] = &[
     },
     Faq {
         q: "How is an inequality shown on a coordinate grid?",
-        a: "Graph its boundary line, dashed for < or > and solid for ≤ or ≥, then shade the side that makes the inequality true. For a system, the solution is where all the shaded regions overlap.",
+        a: "Graph its boundary line, dashed for < or > and solid for ≤ or ≥, then shade the side that makes the inequality true. For a system, the solution is where all the shaded regions overlap; when one of the inequalities is a circle, ellipse or other curve, the grid shades only that common part, in one tint with an outline. A chain such as 4 < x^2 + y^2 < 25 shades the ring between two circles.",
     },
     Faq {
         q: "How do you plot a point like (3, −2)?",
@@ -891,11 +891,11 @@ const COORDINATE_GRID: &[Faq] = &[
     },
     Faq {
         q: "How are holes, asymptotes and piecewise functions shown?",
-        a: "A hole is a single missing point, drawn as an open circle. An asymptote is a line the curve approaches but never reaches, usually drawn dotted or dashed. A piecewise function is graphed one piece at a time over its own interval: a closed dot marks an endpoint that is included (≤ or ≥) and an open dot one that is not (< or >).",
+        a: "A hole is a single missing point, drawn as an open circle. An asymptote is a line the curve approaches but never reaches, usually drawn dotted or dashed. A piecewise function is graphed one piece at a time over its own interval: a closed dot marks an endpoint that is included (≤ or ≥) and an open dot one that is not (< or >). To change how a row is drawn, end it with dashed, dotted, dash-dot or solid, such as y = 2x/3 dashed (for an asymptote). In the Print style every row gets its own dash pattern in black, and shaded regions are hatched, so the curves can be told apart on a black-and-white copy.",
     },
     Faq {
         q: "Can I graph a circle, ellipse or hyperbola?",
-        a: "Yes. Type the equation as it is written, such as x^2 + y^2 = 25, (x-2)^2 + (y+1)^2 = 9, x^2/16 + y^2/9 = 1, x^2/9 - y^2/4 = 1 or x = y^2. Any equation in x and y that is not a straight line is drawn as a smooth curve; one that has no points in the window, like x^2 + y^2 = -1, draws nothing. Use < or > (x^2 + y^2 < 25) to shade the inside or outside, and add a limit after a comma (x^2 + y^2 = 25, y > 0) to keep part of a curve; at most four curves are drawn at once.",
+        a: "Yes. Type the equation as it is written, such as x^2 + y^2 = 25, (x-2)^2 + (y+1)^2 = 9, x^2/16 + y^2/9 = 1, x^2/9 - y^2/4 = 1 or x = y^2. Any equation in x and y that is not a straight line is drawn as a smooth curve; one that has no points in the window, like x^2 + y^2 = -1, draws nothing. Use < or > (x^2 + y^2 < 25) to shade the inside or outside, and add a limit after a comma (x^2 + y^2 = 25, y > 0) to keep part of a curve; at most four curves are drawn at once, and a curve that never enters the window is skipped. The red notes under the equations name the row with a problem (Row 2: Cannot read) so a typo is easy to find; tick Write notes on the figure to print them on it. Each equation gets a label on a white plate beside its curve, with a short leader line when the space is crowded; switch Show answers off for a student copy without the labels and the shading.",
     },
     Faq {
         q: "How should the x-axis be scaled for trig graphs?",
