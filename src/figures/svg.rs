@@ -12,6 +12,10 @@ impl Doc {
     /// Accessible name and description for the finished SVG (`role="img"`, `<title>`, `<desc>`).
     pub fn describe(&mut self, title: &str, desc: &str) -> &mut Self { self.label = Some((title.to_string(), desc.to_string())); self }
     pub fn raw(&mut self, s: &str) -> &mut Self { self.body.push_str(s); self }
+    /// Length of the body so far; with [`Doc::cut`] it lifts a stretch of drawing out to be placed elsewhere.
+    pub fn len(&self) -> usize { self.body.len() }
+    /// Removes and returns everything drawn since `from`.
+    pub fn cut(&mut self, from: usize) -> String { self.body.split_off(from) }
     /// Shared `<defs>` (the print patterns of [`Fills`]); drawn before everything that uses them.
     pub fn defs(&mut self, s: &str) -> &mut Self { if !s.is_empty() { let _ = write!(self.body, "<defs>{s}</defs>"); } self }
     pub fn line(&mut self, x1: f64, y1: f64, x2: f64, y2: f64, stroke: &str, sw: f64) -> &mut Self {

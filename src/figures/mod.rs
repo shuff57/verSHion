@@ -1079,6 +1079,38 @@ mod tests {
         }
     }
 
+    /// CPU time this thread has used, in ms (Linux; 10 ms steps), so a slow render is measured without the load of the other tests.
+    fn thread_cpu_ms() -> Option<u128> {
+        let s = std::fs::read_to_string("/proc/thread-self/stat").ok()?;
+        let f: Vec<&str> = s[s.rfind(')')? + 2..].split(' ').collect();
+        let (u, k): (u128, u128) = (f.get(11)?.parse().ok()?, f.get(12)?.parse().ok()?);
+        Some((u + k) * 10)
+    }
+
+    /// Every figure, with every number control set to an extreme the way a corrupt or hostile saved spec could (through the load
+    /// path, which clamps to each control's range): none panics, none renders for more than 12 s of CPU, and each still draws SVG.
+    #[test]
+    fn every_figure_survives_extreme_numbers_through_the_load_path() {
+        for d in registry() {
+            let defs = (d.params)();
+            for ext in [1e300, -1e300, 1e-300, 0.0, -1.0, 1e9] {
+                let mut over = serde_json::Map::new();
+                for pd in &defs {
+                    match pd.kind {
+                        Kind::Float { .. } => { over.insert(pd.key.to_string(), serde_json::json!(ext)); }
+                        Kind::Int { .. } => { over.insert(pd.key.to_string(), serde_json::json!(if ext > 1e100 { i64::MAX } else if ext < -1e100 { i64::MIN } else { ext as i64 })); }
+                        _ => {}
+                    }
+                }
+                let p = params_from_json(&d, &serde_json::Value::Object(over));
+                let t0 = thread_cpu_ms();
+                let svg = (d.render)(&p);
+                if let (Some(a), Some(b)) = (t0, thread_cpu_ms()) { assert!(b - a < 12_000, "{} with every number {ext}: {} ms of CPU", d.id, b - a); }
+                assert!(svg.contains("<svg"), "{} with every number {ext}", d.id);
+            }
+        }
+    }
+
     #[test]
     fn labels_follow_the_reference_choices() {
         let d = registry().into_iter().find(|d| d.id == "titration-curve").unwrap();
