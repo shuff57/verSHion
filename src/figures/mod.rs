@@ -652,6 +652,23 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
 /// Editor-only problems with the typed equations of a coordinate grid (never drawn into the figure).
 pub fn grid_warnings(p: &Params) -> Vec<String> { math::grid_warnings(p) }
 
+/// A hash of every parameter (names and values, no formatting): the key under which the editor caches what a figure
+/// says about its inputs. Any control a note could depend on is included, because all of them are.
+pub fn params_key(p: &Params) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    for (k, v) in &p.0 {
+        k.hash(&mut h);
+        match v {
+            Value::F(x) => { 0u8.hash(&mut h); x.to_bits().hash(&mut h); }
+            Value::I(x) => { 1u8.hash(&mut h); x.hash(&mut h); }
+            Value::B(x) => { 2u8.hash(&mut h); x.hash(&mut h); }
+            Value::S(x) => { 3u8.hash(&mut h); x.hash(&mut h); }
+        }
+    }
+    h.finish()
+}
+
 pub fn computed_for(id: &str, p: &Params) -> Vec<(&'static str, String)> {
     math::computed(id, p)
 }

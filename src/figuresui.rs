@@ -2560,10 +2560,7 @@ impl Workspace {
                 }
                 // equations the figure could not draw (unreadable, too many, outside the window): shown here, never in the SVG
                 if fig == "coordinate-grid" {
-                    use std::hash::{Hash, Hasher};
-                    let mut h = std::collections::hash_map::DefaultHasher::new();
-                    for k in ["equations", "xmin", "xmax", "ymin", "ymax", "xunits", "square", "xstep", "ystep", "show_notes", "style", "show_answers", "eq_labels", "points", "numbers", "grid", "label_size", "asymptotes", "endpoints"] { format!("{:?}", self.params.0.get(k)).hash(&mut h); }
-                    let key = h.finish();
+                    let key = figures::params_key(&self.params);
                     let wid = ui.make_persistent_id(("grid_warn", fig));
                     let cached: Option<(u64, Vec<String>)> = ui.data(|d| d.get_temp(wid));
                     let warns = match cached {

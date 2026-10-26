@@ -175,12 +175,17 @@ fn census_diff_reports_changed_added_removed() {
 /// real chroma (the series colours) is far outside this.
 const NEUTRAL_SPREAD: i32 = 24;
 
-fn neutral(ch: &[i32]) -> bool {
-    ch.iter().max().unwrap() - ch.iter().min().unwrap() <= NEUTRAL_SPREAD
+fn neutral(ch: &[i32], spread: i32) -> bool {
+    ch.iter().max().unwrap() - ch.iter().min().unwrap() <= spread
 }
 
 /// Is this paint value black, white, (near-)grey, none or a pattern reference?
 fn paint_is_grey(v: &str) -> bool {
+    paint_is_grey_within(v, NEUTRAL_SPREAD)
+}
+
+/// [`paint_is_grey`] with the channels allowed `spread` apart (0 = exactly neutral).
+fn paint_is_grey_within(v: &str, spread: i32) -> bool {
     let v = v.trim().to_ascii_lowercase();
     if v.is_empty() || v.starts_with("url(") || matches!(v.as_str(), "none" | "transparent" | "currentcolor" | "inherit" | "context-fill" | "context-stroke") {
         return true;
@@ -195,12 +200,12 @@ fn paint_is_grey(v: &str) -> bool {
             6 | 8 => (0..3).map(|i| (d[2 * i] * 16 + d[2 * i + 1]) as i32).collect(),
             _ => return false,
         };
-        return neutral(&ch);
+        return neutral(&ch, spread);
     }
     if let Some(args) = v.strip_prefix("rgb(").or_else(|| v.strip_prefix("rgba(")) {
         let nums: Vec<&str> = args.trim_end_matches(')').split([',', ' ', '/']).filter(|s| !s.is_empty()).collect();
         let ch: Vec<i32> = nums.iter().take(3).filter_map(|n| n.trim_end_matches('%').parse::<f64>().ok()).map(|x| x as i32).collect();
-        return ch.len() == 3 && neutral(&ch);
+        return ch.len() == 3 && neutral(&ch, spread);
     }
     matches!(
         v.as_str(),
@@ -211,6 +216,10 @@ fn paint_is_grey(v: &str) -> bool {
 /// Every colour-bearing value (fill, stroke, stop-color, flood-color; as attribute or CSS) that is
 /// not grey, black, white, none or a `url(#...)` reference, deduplicated.
 fn non_grey_paints(svg: &str) -> Vec<String> {
+    non_grey_paints_within(svg, NEUTRAL_SPREAD)
+}
+
+fn non_grey_paints_within(svg: &str, spread: i32) -> Vec<String> {
     let mut bad: Vec<String> = Vec::new();
     for prop in ["fill", "stroke", "stop-color", "flood-color"] {
         for (pat, ends) in [(format!("{prop}=\""), '"'), (format!("{prop}:"), ';')] {
@@ -224,7 +233,7 @@ fn non_grey_paints(svg: &str) -> Vec<String> {
                 }
                 let end = rest.find([ends, '"', '}']).unwrap_or(rest.len());
                 let val = rest[..end].trim();
-                if !paint_is_grey(val) && !bad.iter().any(|b| b == val) {
+                if !paint_is_grey_within(val, spread) && !bad.iter().any(|b| b == val) {
                     bad.push(val.to_string());
                 }
             }
@@ -270,4 +279,45 @@ fn print_style_is_grey_only() {
     assert!(checked > 0);
     let known: Vec<String> = KNOWN_PRINT_OFFENDERS.iter().map(|s| s.to_string()).collect();
     assert_eq!(offenders, known, "figures whose Print style emits colour must equal KNOWN_PRINT_OFFENDERS");
+}
+
+/// The coordinate grid is held to exactly neutral greys (spread 0) in Print, over every example and over the states
+/// that change its inks: the answer layer off and on, labels, notes, both shadings, every grid weight, minor lines, asymptotes.
+#[test]
+fn print_style_coordinate_grid_is_exactly_neutral_in_every_example_and_state() {
+    let d = registry().into_iter().find(|d| d.id == "coordinate-grid").unwrap();
+    let defs = (d.params)();
+    let mut checked = 0;
+    let mut bad: Vec<String> = Vec::new();
+    for (i, e) in examples_for(d.id).iter().enumerate() {
+        let mut base = Params::defaults(&defs);
+        for (k, v) in &e.params {
+            base.0.insert(k.to_string(), v.clone());
+        }
+        base.normalize(&defs, false);
+        base.set_s("style", "Print");
+        let states: Vec<Vec<(&str, Value)>> = vec![
+            vec![],
+            vec![("show_answers", Value::B(false))],
+            vec![("eq_labels", Value::B(true)), ("show_notes", Value::B(true))],
+            vec![("shading", Value::S("Hatching".into())), ("asymptotes", Value::B(true))],
+            vec![("grid", Value::S("Light".into())), ("minor", Value::I(4))],
+            vec![("grid", Value::S("Bold".into())), ("minor", Value::I(2)), ("eq_labels", Value::B(true))],
+            vec![("grid", Value::S("None".into())), ("pt_label", Value::S("Letter and coordinates".into()))],
+        ];
+        for (si, st) in states.iter().enumerate() {
+            let mut p = base.clone();
+            for (k, v) in st {
+                p.0.insert(k.to_string(), v.clone());
+            }
+            let svg = d.svg(&p);
+            let b = non_grey_paints_within(&svg, 0);
+            checked += 1;
+            if !b.is_empty() {
+                bad.push(format!("example {i} state {si}: {b:?}"));
+            }
+        }
+    }
+    assert!(checked >= 7 * 18, "only {checked} cases");
+    assert!(bad.is_empty(), "Print colours that are not exactly grey: {bad:?}");
 }
