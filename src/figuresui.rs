@@ -2559,7 +2559,7 @@ impl Workspace {
                     }
                 }
                 // equations the figure could not draw (unreadable, too many, outside the window): shown here, never in the SVG
-                if fig == "coordinate-grid" || fig == "circle" {
+                if fig == "coordinate-grid" || fig == "circle" || fig == "right-triangle-trig" {
                     let key = figures::params_key(&self.params);
                     let wid = ui.make_persistent_id(("grid_warn", fig));
                     let cached: Option<(u64, Vec<String>)> = ui.data(|d| d.get_temp(wid));

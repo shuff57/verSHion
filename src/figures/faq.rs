@@ -51,6 +51,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "triangle" => TRIANGLE,
         "rectangle" => RECTANGLE,
         "circle" => CIRCLE,
+        "right-triangle-trig" => RIGHT_TRIANGLE_TRIG,
         "parallelogram" => PARALLELOGRAM,
         "trapezoid" => TRAPEZOID,
         "kite" => KITE,
@@ -3219,5 +3220,32 @@ const CIRCLE: &[Faq] = &[
     Faq {
         q: "Why is the inscribed angle sometimes not half the central angle?",
         a: "An inscribed angle is half the arc it cuts off. Point C on the major arc gives half the central angle; if you drag C onto the minor arc it cuts off the other arc, and the angle becomes 180 degrees minus that half.",
+    },
+];
+
+const RIGHT_TRIANGLE_TRIG: &[Faq] = &[
+    Faq {
+        q: "Which side is opposite and which is adjacent?",
+        a: "It depends on the marked angle theta. The opposite side faces theta and does not touch it, the adjacent side touches theta (besides the hypotenuse), and the hypotenuse is always the longest side, across from the right angle. Change 'Theta is at vertex' to A or B to make the other acute angle theta: the opposite and adjacent sides swap and so do the ratios.",
+    },
+    Faq {
+        q: "What do SOH, CAH and TOA mean?",
+        a: "Sine is Opposite over Hypotenuse, Cosine is Adjacent over Hypotenuse, Tangent is Opposite over Adjacent. Turn on 'Show the SOH CAH TOA hint' to print the three lines under the readout; it is off by default so it does not give a method away.",
+    },
+    Faq {
+        q: "How do I make a worksheet and its answer key?",
+        a: "Each of the three sides, theta, sin, cos and tan is Given, Ask or Hidden. Given is printed on both copies, Ask is a blank line on the student copy and the value on the key, Hidden is not shown. Turn Show answers off for the student copy; Student + key exports both. The Notes box warns when the Given values do not fix the triangle.",
+    },
+    Faq {
+        q: "How do I ask for a missing side or for an angle?",
+        a: "For a missing side, set 'The triangle is set by' to an angle and a side (for example Angle and adjacent), give both as Given and set the other sides to Ask: the key shows the sides worked out with sin, cos or tan. For an angle, give two sides (Two legs, or Leg and hypotenuse) and set the angle to Ask: the key shows the inverse trig, for example arctan(7/10) = 34.99 degrees.",
+    },
+    Faq {
+        q: "Why is the angle kept between 10 and 80 degrees?",
+        a: "Outside that range the triangle is too thin to label, so the angle is kept in it and the sides adjust (a Notes line says so). The values on the key are always worked out from the triangle that is drawn. Decimal places set the rounding of every value; ratios are worked out from the exact sides, not from the rounded ones.",
+    },
+    Faq {
+        q: "Can I drag the triangle?",
+        a: "Drag the far vertex (the one that is not the right angle and not theta) to change the angle in whole degrees. The picture is always fitted to the same size; the numbers follow, and the value you typed for the first side stays.",
     },
 ];

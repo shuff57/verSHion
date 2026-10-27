@@ -35,6 +35,7 @@ pub mod labels;
 pub mod layout;
 pub mod logic;
 pub mod circle;
+pub mod trig;
 pub mod math;
 pub mod math_geo;
 pub mod math_plot;
@@ -484,6 +485,7 @@ pub fn registry() -> Vec<FigureDef> {
     v.extend(chemistry::defs());
     v.extend(math::defs());
     v.extend(circle::defs());
+    v.extend(trig::defs());
     v.extend(stats::defs());
     v.extend(computing::defs());
     v.extend(accounting::defs());
@@ -660,7 +662,7 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
 pub fn grid_warnings(p: &Params) -> Vec<String> { math::grid_warnings(p) }
 /// Editor-only notes for the figures that have them (what could not be drawn as asked).
 pub fn notes_for(id: &str, p: &Params) -> Vec<String> {
-    match id { "coordinate-grid" => math::grid_warnings(p), "circle" => circle::warnings(p), _ => vec![] }
+    match id { "coordinate-grid" => math::grid_warnings(p), "circle" => circle::warnings(p), "right-triangle-trig" => trig::warnings(p), _ => vec![] }
 }
 
 /// A hash of every parameter (names and values, no formatting): the key under which the editor caches what a figure
@@ -746,6 +748,7 @@ pub fn examples_for(id: &str) -> Vec<Example> {
         .or_else(|| chemistry::examples(id))
         .or_else(|| math::examples(id))
         .or_else(|| circle::examples(id))
+        .or_else(|| trig::examples(id))
         .or_else(|| stats::examples(id))
         .or_else(|| computing::examples(id))
         .or_else(|| electric::examples(id))

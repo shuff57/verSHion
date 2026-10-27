@@ -214,6 +214,8 @@ residual-plot__defaults 27e35e6a92629c17
 residual-plot__start 27e35e6a92629c17
 rhythm-counting__defaults c1c620ae3e27b02a
 rhythm-counting__start c1c620ae3e27b02a
+right-triangle-trig__defaults c6921410c90a85b2
+right-triangle-trig__start c6921410c90a85b2
 ruler-reading__defaults 3f6161466de39320
 ruler-reading__start 3740bf21470e8d6b
 sampling-distribution__defaults 0ce8cab36065a2f8
