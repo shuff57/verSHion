@@ -11,8 +11,6 @@ grid. Existing census files for every other figure, and for the older coordinate
 
 ## Known limits
 
-- A dashed closed curve can show a short seam where its dash pattern restarts (for instance where a dashed circle meets a dashed line);
-  fixing it means scaling the dash array, which would change the literal `9 6` that several tests and exports rely on.
 - A tick number beside a curve stays on its tick and is drawn over the curve with a thin 2 px white halo (`data-plate="over"`).
 - tan(x) at +-1000 has a period under 2 px and is aliased by any sampler; it is checked only to +-200.
 - A wide window with Square cells on is only warned about, not relaxed.
@@ -39,11 +37,18 @@ In a figure with a conic or implicit row, or in Print (a plain Colour figure kee
   lines under 4 px are left out.
 - The digit boxes are estimates (about 0.75 px of side bearing), so the tests allow 3 px of overlap between the boxes of two numbers.
 
-## Phase 1.1 final state (round 9)
+## Phase 1.1 final state (round 12)
 
-Conics and implicit curves draw on coordinate-grid in Colour and Print, with asymptotes, strict and dashed boundaries, shading, notes
-and the examples ex10 to ex17. Tick numbers stay on their ticks, never overprint, and never erase a curve. The tests cover the number
-rules over many windows and styles, and the render cost of windows with thousands of numbers.
+- Plain Colour figures (no conic row, not Print) are identical to the figures before the conic work: same numbers, same gridlines
+  (every line, every minor line), in any window. The 2100-line safety cap and thinning of numbers that literally touch are the only
+  differences.
+- Print and conic figures: numbers on their own ticks, a thin halo over curves, thinning from number spacing only (gap under 1 px
+  between measured text boxes), and an x number at the x-row/y-column corner dropped below its row (clear of the y numbers) when
+  a spot exists. Where the y rows are under about 21 px apart (Square windows taller or wider than about 13 by 13) no spot exists
+  between the y numbers, and the x axis is thinned evenly instead (editor note); a circle of radius 5 then loses its x intercepts.
+- Print grid is a hairline-weight 1.4 px grey: it drops out of a bitonal copy below 66%; the Bold option is the remedy. Windows of
+  +-50 and +-1000 are drawn with every Nth line (6 px minimum) in Print and with conics; plain Colour draws every line.
+- The `data-axis` attribute on tick numbers appears in the exported SVG (harmless).
 
 ## Leftover minors
 
