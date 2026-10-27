@@ -2559,13 +2559,13 @@ impl Workspace {
                     }
                 }
                 // equations the figure could not draw (unreadable, too many, outside the window): shown here, never in the SVG
-                if fig == "coordinate-grid" {
+                if fig == "coordinate-grid" || fig == "circle" {
                     let key = figures::params_key(&self.params);
                     let wid = ui.make_persistent_id(("grid_warn", fig));
                     let cached: Option<(u64, Vec<String>)> = ui.data(|d| d.get_temp(wid));
                     let warns = match cached {
                         Some((k, w)) if k == key => w,
-                        _ => { let w = figures::grid_warnings(&self.params); ui.data_mut(|d| d.insert_temp(wid, (key, w.clone()))); w }
+                        _ => { let w = figures::notes_for(fig, &self.params); ui.data_mut(|d| d.insert_temp(wid, (key, w.clone()))); w }
                     };
                     if !warns.is_empty() {
                         // a framed box, so a row that was not drawn is not missed

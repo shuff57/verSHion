@@ -219,7 +219,7 @@ pub(super) fn non_grey_paints(svg: &str) -> Vec<String> {
     non_grey_paints_within(svg, NEUTRAL_SPREAD)
 }
 
-fn non_grey_paints_within(svg: &str, spread: i32) -> Vec<String> {
+pub(super) fn non_grey_paints_within(svg: &str, spread: i32) -> Vec<String> {
     let mut bad: Vec<String> = Vec::new();
     for prop in ["fill", "stroke", "stop-color", "flood-color"] {
         for (pat, ends) in [(format!("{prop}=\""), '"'), (format!("{prop}:"), ';')] {

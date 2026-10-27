@@ -3198,15 +3198,23 @@ const CHI_SQUARE_TABLE: &[Faq] = &[
 const CIRCLE: &[Faq] = &[
     Faq {
         q: "Is the circle drawn to scale?",
-        a: "The circle is always drawn the same size; the radius is a number to read, and every measure is worked out from it. The angles and points are drawn exactly where you put them.",
+        a: "The circle is always drawn the same size; the radius is a number to read, and every measure is worked out from it. The points are drawn exactly where you put them, and a dragged point snaps to whole degrees and to the familiar angles (30, 45, 60, 90 and so on).",
     },
     Faq {
         q: "How do I make a worksheet and its answer key?",
-        a: "Turn Show answers off for the student copy: the radius and the angle between the radii stay, and every computed value (diameter, circumference, area, arc, sector, chord, inscribed angle) becomes a blank. Student + key exports both.",
+        a: "Every value in the Measures section is Given, Ask or Hidden. Given is printed on both copies, Ask is a blank line on the student copy and the value on the key, Hidden is not shown. Turn Show answers off for the student copy; Student + key exports both.",
+    },
+    Faq {
+        q: "How do I ask 'find the angle AOB' or 'find the radius'?",
+        a: "Set Central angle to Ask (and the radius to Given, or Hidden if the circumference is the given), then turn on the readout row you want. For the radius, set Radius to Ask and give the circumference instead. The key shows the worked value.",
+    },
+    Faq {
+        q: "Why do the right-angle marks give the answer away?",
+        a: "The marks at the tangent, at the chord's midpoint and at the angle in a semicircle show a 90 degree angle. Set Right-angle marks to Key only to hide them on the student copy, or Hide to leave them off.",
     },
     Faq {
         q: "Which arc and sector are measured?",
-        a: "Arc AB and Sector choose the minor or the major one, and the arc length and sector area follow that choice (the minor arc when neither is chosen). The central angle is the angle between the two radii, never more than 180 degrees.",
+        a: "Arc AB and Sector are separate choices (None, Minor or Major); the arc length follows Arc AB and the sector area follows Sector, each the minor one when it is None. The central angle is the angle between the two radii, never more than 180 degrees.",
     },
     Faq {
         q: "Why is the inscribed angle sometimes not half the central angle?",

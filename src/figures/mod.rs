@@ -653,6 +653,10 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
 /// and on "Measure" label buttons.
 /// Editor-only problems with the typed equations of a coordinate grid (never drawn into the figure).
 pub fn grid_warnings(p: &Params) -> Vec<String> { math::grid_warnings(p) }
+/// Editor-only notes for the figures that have them (what could not be drawn as asked).
+pub fn notes_for(id: &str, p: &Params) -> Vec<String> {
+    match id { "coordinate-grid" => math::grid_warnings(p), "circle" => circle::warnings(p), _ => vec![] }
+}
 
 /// A hash of every parameter (names and values, no formatting): the key under which the editor caches what a figure
 /// says about its inputs. Any control a note could depend on is included, because all of them are.
