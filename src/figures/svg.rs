@@ -3,8 +3,12 @@ use std::fmt::Write;
 
 pub struct Doc { w: f64, h: f64, body: String, label: Option<(String, String)> }
 
+/// XML-escapes text, dropping characters XML 1.0 cannot carry (control characters, U+FFFE, U+FFFF): one in a label would make the
+/// whole SVG unreadable.
 pub fn esc(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+    let ok = |c: char| matches!(c, '\t' | '\n' | '\r' | '\u{20}'..='\u{D7FF}' | '\u{E000}'..='\u{FFFD}' | '\u{10000}'..='\u{10FFFF}');
+    if s.chars().all(ok) { return s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;"); }
+    s.chars().filter(|c| ok(*c)).collect::<String>().replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
 }
 
 impl Doc {

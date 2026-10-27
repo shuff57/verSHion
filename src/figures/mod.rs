@@ -121,6 +121,9 @@ impl ParamDef {
 /// Labels that carry the user's own words (the predator-prey page names the animals: "Hares at
 /// the start", "Average lynx"). None when the key's label is fixed.
 pub fn dynamic_label(fig: &str, key: &str, p: &Params) -> Option<String> {
+    if fig == "circle" {
+        return circle::control_label(key, p);
+    }
     if fig != "predator-prey" {
         return None;
     }
@@ -233,6 +236,8 @@ impl Params {
                 // a fractional number stored into an Int control is rounded, then clamped like one (NaN becomes the minimum)
                 (Kind::Int { min, max }, Value::F(v)) => Value::I(if v.is_nan() { *min } else { (v.round().clamp(i64::MIN as f64, i64::MAX as f64) as i64).clamp(*min, *max) }),
                 (Kind::Choice(opts), Value::S(v)) if !opts.contains(&v.as_str()) => d.default.clone(),
+                // a short text control keeps a short text (a hostile link cannot make it large)
+                (Kind::Text, Value::S(v)) if v.chars().count() > 500 => Value::S(v.chars().take(500).collect()),
                 (_, v) => v,
             };
             self.0.insert(d.key.to_string(), new);
@@ -770,6 +775,11 @@ pub fn start_params(def: &FigureDef) -> Params {
 /// (used by the headless figure hooks).
 pub fn params_from_json(def: &FigureDef, over: &serde_json::Value) -> Params {
     let mut p = start_params(def);
+    // the circle's editor notes say when a loaded radius was out of range (it is clamped just below)
+    if def.id == "circle" {
+        let r = over.get("radius").and_then(|v| v.as_f64());
+        if r.is_some_and(|r| !r.is_finite() || !(0.1..=10000.0).contains(&r)) { p.set_b("clamped_radius", true); }
+    }
     for (k, v) in over.as_object().into_iter().flatten() {
         match v {
             serde_json::Value::Bool(b) => p.set_b(k, *b),

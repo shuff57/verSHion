@@ -3198,23 +3198,23 @@ const CHI_SQUARE_TABLE: &[Faq] = &[
 const CIRCLE: &[Faq] = &[
     Faq {
         q: "Is the circle drawn to scale?",
-        a: "The circle is always drawn the same size; the radius is a number to read, and every measure is worked out from it. The points are drawn exactly where you put them, and a dragged point snaps to whole degrees and to the familiar angles (30, 45, 60, 90 and so on).",
+        a: "The circle is always drawn the same size; the radius is a number to read, and every measure is worked out from it. The points are drawn exactly where you put them. Dragging point B moves the central angle, which snaps to whole degrees and to the familiar angles (30, 45, 60, 90 and so on); typed values are exact.",
     },
     Faq {
         q: "How do I make a worksheet and its answer key?",
-        a: "Every value in the Measures section is Given, Ask or Hidden. Given is printed on both copies, Ask is a blank line on the student copy and the value on the key, Hidden is not shown. Turn Show answers off for the student copy; Student + key exports both.",
+        a: "Every value in the Measures section is Given, Ask or Hidden. Given is printed on both copies, Ask is a blank line on the student copy and the value on the key, Hidden is not shown. A Given value must also be on the sheet (its row, or the part that labels it); the Notes box warns when it is not. Turn Show answers off for the student copy; Student + key exports both.",
     },
     Faq {
-        q: "How do I ask 'find the angle AOB' or 'find the radius'?",
-        a: "Set Central angle to Ask (and the radius to Given, or Hidden if the circumference is the given), then turn on the readout row you want. For the radius, set Radius to Ask and give the circumference instead. The key shows the worked value.",
+        q: "How do I ask 'find the angle AOB', 'find the radius' or 'find OM'?",
+        a: "Set that value to Ask and give what it is worked out from. For the angle, set Central angle to Ask and give the chord or the radius and arc. For the radius, set Radius to Ask and set Circumference (or Area) to Given. For OM, give the radius and the chord (or AM), turn on the bisector, and set OM to Ask. The key shows the worked value.",
     },
     Faq {
         q: "Why do the right-angle marks give the answer away?",
-        a: "The marks at the tangent, at the chord's midpoint and at the angle in a semicircle show a 90 degree angle. Set Right-angle marks to Key only to hide them on the student copy, or Hide to leave them off.",
+        a: "The marks at the tangent, at the chord's midpoint and at the angle in a semicircle show a 90 degree angle. Set Right-angle marks to Key only to hide them on the student copy, or Hide to leave them off. To ask for the angle itself, set Tangent-radius angle to Ask.",
     },
     Faq {
-        q: "Which arc and sector are measured?",
-        a: "Arc AB and Sector are separate choices (None, Minor or Major); the arc length follows Arc AB and the sector area follows Sector, each the minor one when it is None. The central angle is the angle between the two radii, never more than 180 degrees.",
+        q: "Which arc and sector are measured, and why is the central angle at most 180 degrees?",
+        a: "Arc AB and Sector are separate choices (None, Minor or Major); the arc length follows Arc AB and the sector area follows Sector, each the minor one when it is None. The angle between the two radii is shown as the smaller one, so it is never more than 180 degrees. To show a reflex angle, set the central angle by number, give it over 180 and choose a Major arc or sector.",
     },
     Faq {
         q: "Why is the inscribed angle sometimes not half the central angle?",
