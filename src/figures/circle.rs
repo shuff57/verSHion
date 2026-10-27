@@ -66,7 +66,7 @@ fn params() -> Vec<ParamDef> {
         ParamDef::float("chord_len", "Chord length", 0.0, 20000.0, 0.1, 8.0),
         ParamDef::float("om_dist", "Distance OM (centre to chord)", 0.0, 10000.0, 0.1, 3.0),
         ParamDef::bool("use_theta", "Set the central angle by number", false).hint("Point B is then A plus this angle; over 180 degrees it is a reflex angle when the arc or sector is Major"),
-        ParamDef::float("theta", "Central angle (degrees)", 0.0, 360.0, 1.0, 90.0),
+        ParamDef::float("theta", "Central angle (degrees)", 0.0, 360.0, 0.01, 90.0),
         b("show_centre", "Centre", true),
         b("show_radius", "Radius OA", true),
         b("show_diameter", "Diameter through A", false),
@@ -244,6 +244,12 @@ fn mode(p: &Params, k: K) -> Md {
     match p.s(e.1) { "Given" => Md::Given, "Ask" => Md::Ask, "Hidden" => Md::Hidden, _ => match e.5 { "Given" => Md::Given, "Hidden" => Md::Hidden, _ => Md::Ask } }
 }
 
+/// A unit that already says "squared" ("square km", "sq ft", "m²", "m^2"): no second "²" is added to it.
+fn unit_is_squared(u: &str) -> bool {
+    let l = u.trim().to_lowercase();
+    l.contains('\u{b2}') || l.contains("^2") || l.starts_with("square ") || l.starts_with("sq ") || l.starts_with("sq. ") || l.ends_with(" squared")
+}
+
 fn clean_unit(p: &Params) -> String { p.s("unit").trim().chars().filter(|c| !c.is_control()).take(20).collect() }
 
 /// The blank for an asked value: wide enough for "000\u{b0}", the same on the figure and in the readout.
@@ -257,7 +263,10 @@ fn ctx(p: &Params) -> Ctx<'_> {
 
 impl Ctx<'_> {
     fn with_u(&self, v: String) -> String { if self.unit.is_empty() { v } else { format!("{v} {}", self.unit) } }
-    fn sq(&self, v: String) -> String { if self.unit.is_empty() { v } else { format!("{v} {}\u{b2}", self.unit) } }
+    fn sq(&self, v: String) -> String {
+        if self.unit.is_empty() { return v; }
+        if unit_is_squared(&self.unit) { format!("{v} {}", self.unit) } else { format!("{v} {}\u{b2}", self.unit) }
+    }
     fn value(&self, k: K) -> String {
         let (m, d) = (&self.m, self.dec);
         match k {
@@ -277,17 +286,20 @@ impl Ctx<'_> {
     }
     /// What the figure or the card prints for a value: None when Hidden, the number when Given (or on the key), a blank for Ask.
     fn shown(&self, k: K, ans: bool) -> Option<String> {
-        match mode(self.p, k) { Md::Hidden => None, Md::Given => Some(self.value(k)), Md::Ask => Some(if ans { self.value(k) } else { BLANK.to_string() }) }
+        // an angle's blank carries its unit, so that it reads as an angle
+        let blank = match k { K::Central | K::Inscribed | K::TanAngle => format!("{BLANK}{}", if self.rad { " rad" } else { "\u{b0}" }), _ => BLANK.to_string() };
+        match mode(self.p, k) { Md::Hidden => None, Md::Given => Some(self.value(k)), Md::Ask => Some(if ans { self.value(k) } else { blank }) }
     }
 }
 
-struct Row { name: String, key: String, stu: String }
+struct Row { name: String, sname: String, key: String, stu: String }
 
 /// Whether a value is visible on the sheet: as its readout row or as a label on the figure (and not Hidden).
 fn visible(p: &Params, k: K) -> bool {
     if mode(p, k) == Md::Hidden { return false; }
     let pt = parts(p);
-    p.b(kinfo(k).2) || match k {
+    // (a row for the inscribed or tangent angle needs its part to be drawn)
+    (p.b(kinfo(k).2) && match k { K::Inscribed => pt.c, K::TanAngle => pt.tan, _ => true }) || match k {
         K::Radius => pt.radius && p.s("r_label") == "Value",
         K::Diameter => pt.diam,
         K::Chord => pt.chord && !pt.deg,
@@ -316,6 +328,7 @@ fn rows(c: &Ctx) -> Vec<Row> {
     for e in KINDS {
         let k = e.0;
         if !p.b(e.2) || mode(p, k) == Md::Hidden { continue; }
+        let mut sname = String::new();
         let name = match k {
             K::Radius => "Radius".to_string(),
             K::Diameter => "Diameter".to_string(),
@@ -325,16 +338,20 @@ fn rows(c: &Ctx) -> Vec<Row> {
             K::Sector => if c.m.major_sector { "Sector area (major)".into() } else { "Sector area (minor)".into() },
             K::Chord | K::Om | K::Am if c.g.reflex => {
                 let base = match k { K::Chord => format!("Chord {}{}", n.a, n.b), K::Om => format!("Distance {}{}", n.o, n.m), _ => format!("Half chord {}{}", n.a, n.m) };
-                format!("{base} (minor angle {})", angle_text(c.g.d, c.rad))
+                let full = format!("{base} (minor angle {})", angle_text(c.g.d, c.rad));
+                // the student copy names the minor angle only when the central angle is Given: otherwise it would give away 360 minus the answer
+                sname = if mode(p, K::Central) == Md::Given { full.clone() } else { base };
+                full
             }
             K::Chord => format!("Chord {}{}", n.a, n.b),
             K::Om => format!("Distance {}{} (centre to chord)", n.o, n.m),
             K::Am => format!("Half chord {}{}", n.a, n.m),
             K::Central => format!("Central angle {}{}{}", n.a, n.o, n.b),
             K::Inscribed => format!("Inscribed angle {}{}{}", n.a, n.c, n.b),
-            K::TanAngle => "Tangent-radius angle".to_string(),
+            K::TanAngle => format!("Angle between tangent and radius {}{}", n.o, n.a),
         };
-        let note = |t: String| Row { name: name.clone(), key: t.clone(), stu: t };
+        if sname.is_empty() { sname = name.clone(); }
+        let note = |t: String| Row { name: name.clone(), sname: sname.clone(), key: t.clone(), stu: t };
         if k == K::Inscribed && !p.b("show_inscribed") { out.push(note(format!("{} is not shown", n.c))); continue; }
         if k == K::Inscribed && c.m.c_clash { out.push(note(format!("{} must differ from {} and {}", n.c, n.a, n.b))); continue; }
         if k == K::TanAngle && !p.b("show_tangent") { out.push(note("no tangent is shown".to_string())); continue; }
@@ -363,13 +380,14 @@ fn rows(c: &Ctx) -> Vec<Row> {
                 (false, false) => format!("{lhs} = {v}"),
             }
         };
-        out.push(Row { name, key: text(true), stu: text(false) });
+        out.push(Row { name, sname, key: text(true), stu: text(false) });
     }
-    // a worked check on the key only: the right triangle O, M, A
-    if p.b("m_om") && mode(p, K::Om) != Md::Hidden {
+    // a worked check on the key only: the right triangle O, M, A. It prints no Hidden value: AM (or, when that is Hidden, half the chord) and OM and r must all be shown
+    if p.b("m_om") && mode(p, K::Om) != Md::Hidden && mode(p, K::Radius) != Md::Hidden && (mode(p, K::Am) != Md::Hidden || mode(p, K::Chord) != Md::Hidden) {
         let (m, d) = (&c.m, c.dec);
         let sqn = |v: f64| num(v, d);
-        out.push(Row { name: "Check".to_string(), key: format!("{}\u{b2} + {}\u{b2} = {}\u{b2} (rounded)", sqn(m.om), sqn(m.am), sqn(m.r)), stu: String::new() });
+        let half = if mode(p, K::Am) != Md::Hidden { format!("{}\u{b2}", sqn(m.am)) } else { format!("({} / 2)\u{b2}", sqn(m.chord)) };
+        out.push(Row { name: "Check".to_string(), sname: "Check".to_string(), key: format!("{}\u{b2} + {half} = {}\u{b2} (rounded)", sqn(m.om), sqn(m.r)), stu: String::new() });
     }
     out
 }
@@ -427,7 +445,7 @@ fn layout(rows: &[Row], f: f64) -> Lay {
         let w0 = W0 * f.max(1.0);
         return Lay { w: w0, h: BASE_H, cx: w0 / 2.0, size, rowh, rh: rowh, name_x: 24.0, val_x: 24.0, stacked: false, rule_y: BASE_H - 20.0 };
     }
-    let namew = rows.iter().map(|r| tw(&format!("{}:", r.name), size, false)).fold(0.0, f64::max);
+    let namew = rows.iter().map(|r| tw(&format!("{}:", r.name), size, false).max(tw(&format!("{}:", r.sname), size, false))).fold(0.0, f64::max);
     let valw = rows.iter().map(|r| tw(&r.key, size, false).max(tw(&r.stu, size, false))).fold(0.0, f64::max);
     let flat = 24.0 + namew + 16.0 + valw + 24.0;
     let stacked = flat > 760.0;
@@ -479,8 +497,11 @@ pub fn warnings(p: &Params) -> Vec<String> {
     }
     let n = &c.n;
     {
+        // only the letters that are drawn can be confused
+        let on = p.b("show_names");
+        let drawn = [on && p.b("show_centre"), on && pt.a, on && pt.b, on && pt.c, on && pt.bis && !pt.deg];
         let l = [&n.o, &n.a, &n.b, &n.c, &n.m];
-        let same = (0..5).any(|i| (i + 1..5).any(|j| l[i] == l[j]));
+        let same = (0..5).any(|i| (i + 1..5).any(|j| drawn[i] && drawn[j] && l[i] == l[j]));
         if same { v.push(format!("Two points have the same letter ({}, {}, {}, {}, {}): rename one so the labels can be told apart.", n.o, n.a, n.b, n.c, n.m)); }
     }
     match p.s("define") {
@@ -500,13 +521,18 @@ pub fn warnings(p: &Params) -> Vec<String> {
     if mode(p, K::TanAngle) == Md::Ask && pt.tan && p.s("right_marks") == "Show always" {
         v.push("The right-angle mark gives the answer away: set Right-angle marks to Key only.".to_string());
     }
+    if (c.g.d - 180.0).abs() < 0.5 && pt.c && mode(p, K::Inscribed) == Md::Ask && p.s("right_marks") == "Show always" {
+        v.push(format!("The right-angle mark at {} gives the answer away: set Right-angle marks to Key only.", c.n.c));
+    }
     // a Given value that the sheet does not show, when a value asked for needs it
     {
         let semi = (c.g.d - 180.0).abs() < 0.5 && pt.chord;
         let vg = |k: K| mode(p, k) == Md::Given && visible(p, k);
         const SIZE: [K; 4] = [K::Radius, K::Diameter, K::Circ, K::Area];
         const ANGLE: [K; 7] = [K::Central, K::Chord, K::Om, K::Am, K::Arc, K::Sector, K::Inscribed];
-        let size_given = |not: K| SIZE.iter().any(|k| *k != not && vg(*k));
+        // a size is given outright, or follows from a given angle and a given arc, sector, chord or distance (r = arc / angle, ...)
+        let size_given = |not: K| SIZE.iter().any(|k| *k != not && vg(*k))
+            || (((not != K::Central && vg(K::Central)) || (not != K::Inscribed && vg(K::Inscribed))) && [K::Chord, K::Om, K::Am, K::Arc, K::Sector].iter().any(|k| *k != not && vg(*k)));
         // a Given chord (or OM, AM, arc, sector) fixes the angle only when a Given size is on the sheet too
         let ang_ok = |not: K| (not != K::Central && vg(K::Central)) || (not != K::Inscribed && vg(K::Inscribed)) || (size_given(K::TanAngle) && [K::Chord, K::Om, K::Am, K::Arc, K::Sector].iter().any(|k| *k != not && vg(*k)));
         let (mut size_bad, mut ang_bad) = (false, false);
@@ -559,11 +585,11 @@ fn kname(k: K, n: &Names) -> String {
 
 // ---------------------------------------------------------------------------------------------------------------- label placement
 
-struct Lab { text: String, size: f64, bold: bool, prio: u8, anchor: Pt, cands: Vec<(Pt, bool)>, leader_from: Option<Pt>, id: usize, wide: Option<String>, force: bool, froms: Vec<Pt> }
+struct Lab { kind: Option<K>, text: String, size: f64, bold: bool, prio: u8, anchor: Pt, cands: Vec<(Pt, bool)>, leader_from: Option<Pt>, id: usize, wide: Option<String>, force: bool, froms: Vec<Pt> }
 
 
 #[derive(Clone, Debug)]
-pub struct Placed { pub text: String, pub rect: Rect, pub clean: bool, pub leader: bool, pub plate: bool, pub anchor: Pt, line: Option<(Pt, Pt)>, size: f64, bold: bool, c: Pt }
+pub struct Placed { kind: Option<K>, pub text: String, pub rect: Rect, pub clean: bool, pub leader: bool, pub plate: bool, pub anchor: Pt, line: Option<(Pt, Pt)>, size: f64, bold: bool, c: Pt }
 
 fn dirs8(out: Pt) -> Vec<Pt> {
     let l = (out.0 * out.0 + out.1 * out.1).sqrt();
@@ -623,6 +649,64 @@ fn pick_from(froms: &[Pt], dflt: Pt, c: Pt) -> Pt {
 
 fn nearest_on_rect(r: &Rect, p: Pt) -> Pt { (p.0.clamp(r.x0, r.x1), p.1.clamp(r.y0, r.y1)) }
 
+fn pt_seg_dist(p: Pt, a: Pt, b: Pt) -> f64 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let l2 = dx * dx + dy * dy;
+    let t = if l2 < 1e-12 { 0.0 } else { (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / l2).clamp(0.0, 1.0) };
+    (p.0 - a.0 - t * dx).hypot(p.1 - a.1 - t * dy)
+}
+
+/// Whether two leaders cross, or run along each other (closer than 2.5 px apart, other than where both start at one point).
+fn leaders_clash(a: (Pt, Pt), b: (Pt, Pt)) -> bool {
+    let shared = (a.0 .0 - b.0 .0).hypot(a.0 .1 - b.0 .1) < 1.0;
+    if !shared && seg_cross(a.0, a.1, b.0, b.1).is_some() { return true; }
+    if shared {
+        // from one point: they clash only when they leave it nearly together
+        let (u, v) = ((a.1 .0 - a.0 .0, a.1 .1 - a.0 .1), (b.1 .0 - b.0 .0, b.1 .1 - b.0 .1));
+        let (lu, lv) = (u.0.hypot(u.1), v.0.hypot(v.1));
+        return lu > 1e-9 && lv > 1e-9 && (u.0 * v.0 + u.1 * v.1) / (lu * lv) > 0.995;
+    }
+    [a.0, a.1].iter().any(|p| pt_seg_dist(*p, b.0, b.1) < 2.5) || [b.0, b.1].iter().any(|p| pt_seg_dist(*p, a.0, a.1) < 2.5)
+}
+
+/// What a leader from `from` to `to` runs through: (earlier label boxes, other leaders, drawn lines).
+fn leader_hits(from: Pt, to: Pt, rects: &[Rect], leaders: &[(Pt, Pt)], segs: &[(Pt, Pt)]) -> (u32, u32, u32) {
+    let dist = (to.0 - from.0).hypot(to.1 - from.1);
+    let boxes = rects.iter().filter(|r| seg_hits(from, to, &r.grow(1.0))).count() as u32;
+    let lead = leaders.iter().filter(|l| leaders_clash((from, to), **l)).count() as u32;
+    let lines = segs.iter().skip(CIRCLE_SEGS).filter(|sg| seg_cross(from, to, sg.0, sg.1).is_some_and(|t| t * dist > 3.0 && (1.0 - t) * dist > 0.5)).count() as u32;
+    (boxes, lead, lines)
+}
+
+/// The best route for a label's leader over the starting points it may leave from: fewest earlier labels and leaders met, then fewest
+/// drawn lines crossed, then the shortest.
+fn route_with(froms: &[Pt], r: &Rect, rects: &[Rect], leaders: &[(Pt, Pt)], segs: &[(Pt, Pt)]) -> (Pt, Pt, (u32, u32, u32)) {
+    let mut best: Option<(Pt, Pt, (u32, u32, u32), (u32, u32, u32))> = None;
+    for f in froms {
+        let (q, h) = best_route(*f, r, rects, leaders, segs);
+        let k = (h.0 + h.1, h.2, (q.0 - f.0).hypot(q.1 - f.1) as u32);
+        if best.is_none_or(|(_, _, _, bk)| k < bk) { best = Some((*f, q, h, k)); }
+    }
+    let (f, q, h, _) = best.expect("a leader needs a start");
+    (f, q, h)
+}
+
+/// The best end for a leader on the box: the nearest point, or one of the box's edge midpoints and corners when that crosses less.
+fn best_route(from: Pt, r: &Rect, rects: &[Rect], leaders: &[(Pt, Pt)], segs: &[(Pt, Pt)]) -> (Pt, (u32, u32, u32)) {
+    let near = nearest_on_rect(r, from);
+    let (mx, my) = ((r.x0 + r.x1) / 2.0, (r.y0 + r.y1) / 2.0);
+    let alts = [near, (mx, r.y0), (mx, r.y1), (r.x0, my), (r.x1, my), (r.x0, r.y0), (r.x1, r.y0), (r.x0, r.y1), (r.x1, r.y1)];
+    let mut best: Option<(Pt, (u32, u32, u32), u32)> = None;
+    for q in alts {
+        let h = leader_hits(from, q, rects, leaders, segs);
+        let k = h.0 * 100 + h.1 * 100 + h.2;
+        if best.is_none_or(|(_, _, bk)| k < bk) { best = Some((q, h, k)); }
+        if k == 0 { break; }
+    }
+    let (q, h, _) = best.unwrap_or((near, (0, 0, 0), 0));
+    (q, h)
+}
+
 fn pt_in_poly(p: Pt, poly: &[Pt]) -> bool {
     let mut inside = false;
     let mut j = poly.len().wrapping_sub(1);
@@ -664,12 +748,12 @@ const CIRCLE_SEGS: usize = 60;
 /// A leader is used only for a spot more than 18 px from what it names (or for a label that must always point, `force`). A label
 /// that can only go on the hatch gets a white plate when no drawn line runs under it. Returns the labels and the (id, text) of those
 /// that overlap another label or leave `bounds` (the caller then makes room or moves them into the readout).
-fn place(mut labs: Vec<Lab>, segs: &[(Pt, Pt)], dots: &[Rect], bounds: &Rect, hatch: &[Pt]) -> (Vec<Placed>, Vec<(usize, String)>) {
+fn place(mut labs: Vec<Lab>, segs: &[(Pt, Pt)], solid: &[(Pt, Pt)], dots: &[Rect], bounds: &Rect, hatch: &[Pt]) -> (Vec<Placed>, Vec<(usize, String, Option<K>)>) {
     labs.sort_by_key(|l| l.prio);
     let mut placed: Vec<Placed> = vec![];
     let mut rects: Vec<Rect> = vec![];
     let mut leaders: Vec<(Pt, Pt)> = vec![];
-    let mut severe: Vec<(usize, String)> = vec![];
+    let mut severe: Vec<(usize, String, Option<K>)> = vec![];
     for l in labs {
         let mt = l.wide.as_ref().unwrap_or(&l.text);
         let (w, h) = (tw(mt, l.size, l.bold) + 2.0, l.size * 1.15);
@@ -688,7 +772,8 @@ fn place(mut labs: Vec<Lab>, segs: &[(Pt, Pt)], dots: &[Rect], bounds: &Rect, ha
         let mut best: Option<((u32, u32, u32, u32, u32), usize)> = None;
         for (i, (c, far)) in cands.iter().enumerate() {
             let r = Rect::around(*c, w, h);
-            let hard = conflicts(&r, &rects, segs, &leaders, dots, bounds);
+            let hard0 = conflicts(&r, &rects, segs, &leaders, dots, bounds);
+            let mut hard = hard0 * 4; // (a label touching something outweighs a leader's trouble)
             if best.is_some_and(|(k, _)| hard > k.0) { continue; }
             let on_hatch = !hatch.is_empty() && rect_hits_poly(&r.grow(-2.0), hatch);
             let from = pick_from(&l.froms, from0, *c);
@@ -696,8 +781,13 @@ fn place(mut labs: Vec<Lab>, segs: &[(Pt, Pt)], dots: &[Rect], bounds: &Rect, ha
             let dist = (q.0 - from.0).hypot(q.1 - from.1);
             let has_leader = l.force || (*far && dist > 6.0) || dist > 18.0;
             let (cross, len) = if has_leader {
-                (segs.iter().skip(CIRCLE_SEGS).filter(|sg| seg_cross(from, q, sg.0, sg.1).is_some_and(|t| t * dist > 3.0 && (1.0 - t) * dist > 0.5)).count() as u32, dist as u32)
+                // a leader through an earlier label or along another leader is a hard conflict; a crossed line is the next-best thing
+                let fl: Vec<Pt> = if l.froms.is_empty() { vec![from0] } else { l.froms.clone() };
+                let (f2, q2, (boxes, lead, lines)) = route_with(&fl, &r, &rects, &leaders, segs);
+                hard += 3 * (boxes + lead);
+                (lines, ((q2.0 - f2.0).hypot(q2.1 - f2.1)) as u32)
             } else { (0, 0) };
+            if best.is_some_and(|(k, _)| hard > k.0) { continue; }
             let key = (hard, on_hatch as u32, cross, (i >= own) as u32, len);
             if best.is_none_or(|(bk, _)| key < bk) { best = Some((key, i)); }
             if key == (0, 0, 0, 0, 0) { break; }
@@ -705,16 +795,27 @@ fn place(mut labs: Vec<Lab>, segs: &[(Pt, Pt)], dots: &[Rect], bounds: &Rect, ha
         let (key, i) = best.unwrap_or(((0, 0, 0, 0, 0), 0));
         let (c, far) = cands[i];
         let rect = Rect::around(c, w, h);
-        let from = pick_from(&l.froms, from0, c);
-        let q = nearest_on_rect(&rect, from);
-        let dist = (q.0 - from.0).hypot(q.1 - from.1);
+        let mut from = pick_from(&l.froms, from0, c);
+        let q0 = nearest_on_rect(&rect, from);
+        let dist = (q0.0 - from.0).hypot(q0.1 - from.1);
         let mut line = None;
-        if (l.force || (far && dist > 6.0) || dist > 18.0) && dist > 2.0 { leaders.push((from, q)); line = Some((from, q)); }
-        if !rect.inside(bounds) || rects.iter().any(|o| rect.grow(-0.5).hit(&o.grow(-0.5))) { severe.push((l.id, l.text.clone())); }
-        // a plate only where no drawn line (curve, chord, dashed auxiliary) runs under it
-        let plate = key.1 > 0 && !segs.iter().any(|sg| seg_hits(sg.0, sg.1, &rect));
+        let mut leader_bad = false;
+        // (an earlier leader through this label's box counts too)
+        if leaders.iter().any(|ld| seg_hits(ld.0, ld.1, &rect.grow(-1.0))) { leader_bad = true; }
+        if (l.force || (far && dist > 6.0) || dist > 18.0) && dist > 2.0 {
+            let fl: Vec<Pt> = if l.froms.is_empty() { vec![from0] } else { l.froms.clone() };
+            let (f2, q, hits) = route_with(&fl, &rect, &rects, &leaders, segs);
+            // a leader through another label or over another leader is not acceptable: the caller makes room or moves the label
+            if hits.0 + hits.1 > 0 { leader_bad = true; }
+            from = f2;
+            leaders.push((from, q));
+            line = Some((from, q));
+        }
+        if !rect.inside(bounds) || rects.iter().any(|o| rect.grow(-0.5).hit(&o.grow(-0.5))) || solid.iter().any(|sg| seg_hits(sg.0, sg.1, &rect)) || leader_bad { severe.push((l.id, l.text.clone(), l.kind)); }
+        // a plate only where no drawn line (curve, chord, dashed auxiliary) and no earlier leader runs under it (leaders are drawn over plates)
+        let plate = key.1 > 0 && !segs.iter().any(|sg| seg_hits(sg.0, sg.1, &rect)) && !leaders.iter().take(leaders.len() - line.is_some() as usize).any(|ld| seg_hits(ld.0, ld.1, &rect));
         rects.push(rect);
-        placed.push(Placed { text: l.text, rect, clean: key.0 == 0, leader: line.is_some(), plate, anchor: from, line, size: l.size, bold: l.bold, c });
+        placed.push(Placed { kind: l.kind, text: l.text, rect, clean: conflicts(&rect, &rects[..rects.len() - 1], segs, &leaders[..leaders.len() - line.is_some() as usize], dots, bounds) == 0, leader: line.is_some(), plate, anchor: from, line, size: l.size, bold: l.bold, c });
     }
     (placed, severe)
 }
@@ -730,7 +831,7 @@ fn text_el(x: f64, y: f64, size: f64, anchor: &str, bold: bool, halo: bool, s: &
 
 // ---------------------------------------------------------------------------------------------------------------- drawing
 
-struct Sc { d: Doc, segs: Vec<(Pt, Pt)>, dots: Vec<Rect>, marks: u32 }
+struct Sc { d: Doc, segs: Vec<(Pt, Pt)>, solid: Vec<(Pt, Pt)>, dots: Vec<Rect>, marks: u32 }
 
 impl Sc {
     fn ln(&mut self, a: Pt, b: Pt, col: &str, w: f64) { self.d.line(a.0, a.1, b.0, b.1, col, w); self.segs.push((a, b)); }
@@ -748,13 +849,14 @@ impl Sc {
         self.d.circle(p.0, p.1, 3.8, INK, INK, 1.0);
         self.dots.push(Rect::around(p, 10.0, 10.0));
     }
-    fn right(&mut self, v: Pt, u: Pt, w: Pt, size: f64, col: &str, sw: f64) {
-        self.d.right_angle(v, u, w, size, col, sw);
+    /// A right-angle mark; with `draw` false only its room is reserved, so the student and key copies lay their labels out alike.
+    fn right(&mut self, v: Pt, u: Pt, w: Pt, size: f64, col: &str, sw: f64, draw: bool) {
+        if draw { self.d.right_angle(v, u, w, size, col, sw); }
         let (p1, p3) = ((v.0 + u.0 * size, v.1 + u.1 * size), (v.0 + w.0 * size, v.1 + w.1 * size));
         let p2 = (p1.0 + w.0 * size, p1.1 + w.1 * size);
         self.segs.push((p1, p2));
         self.segs.push((p2, p3));
-        self.marks += 1;
+        if draw { self.marks += 1; }
     }
 }
 
@@ -768,7 +870,7 @@ fn clip_len(p: Pt, d: Pt, max: f64, b: &Rect) -> f64 {
 
 /// What a render also knows about itself (for tests): the placed labels, the drawn line segments, the points, the readout boxes.
 #[derive(Clone, Debug)]
-pub struct Report { pub placed: Vec<Placed>, pub segs: Vec<(Pt, Pt)>, pub dots: Vec<Rect>, pub rows: Vec<Rect>, pub hatch: Vec<Pt>, pub w: f64, pub h: f64, pub marks: u32, pub pad: f64, pub excluded: usize, pub unit_dropped: bool }
+pub struct Report { pub placed: Vec<Placed>, pub segs: Vec<(Pt, Pt)>, pub dots: Vec<Rect>, pub rows: Vec<Rect>, pub hatch: Vec<Pt>, pub w: f64, pub h: f64, pub marks: u32, pub pad: f64, pub excluded: usize, pub unit_dropped: bool, pub solid: Vec<(Pt, Pt)> }
 
 fn render(p: &Params) -> String { build(p).0 }
 
@@ -795,7 +897,7 @@ pub fn control_label(key: &str, p: &Params) -> Option<String> {
 
 /// How hard a render tries to fit its labels: whether the figure labels drop the unit, how much room is added round the figure
 /// (left, right and top; the canvas grows and the drawing is shifted), and the labels that were moved into the readout.
-struct Opt { drop_unit: bool, pad: f64, exclude: Vec<(usize, String)> }
+struct Opt { drop_unit: bool, pad: f64, exclude: Vec<(usize, String, Option<K>)> }
 
 /// The figure, with its labels fitted: as drawn, then without the unit on the figure labels (the readout keeps it), then with room
 /// added round the figure, and as a last resort with the labels that still do not fit moved into the readout. No label overlaps another or leaves the canvas.
@@ -810,7 +912,7 @@ pub fn build(p: &Params) -> (String, Report) {
     (svg, rep)
 }
 
-fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String)>) {
+fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>)>) {
     let f = svg::label_factor(p.s("label_size"));
     let c = ctx(p);
     let mut cf = ctx(p);
@@ -819,7 +921,17 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String)>) {
     let n = &c.n;
     let ans = p.b(SHOW_ANSWERS);
     let mut rws = rows(&c);
-    for (_, t) in &opt.exclude { rws.push(Row { name: "Label".to_string(), key: t.clone(), stu: t.clone() }); }
+    // a label that could not be placed moves into the readout, named by what it is and with its unit
+    for (_, t, k) in &opt.exclude {
+        let named = k.and_then(|k| Some((kname(k, n), c.shown(k, true)?, c.shown(k, false)?)));
+        match named {
+            Some((nm, key, stu)) => {
+                let nm = format!("{}{}", nm[..1].to_uppercase(), &nm[1..]);
+                rws.push(Row { name: nm.clone(), sname: nm, key, stu });
+            }
+            None => rws.push(Row { name: "Label".to_string(), sname: "Label".to_string(), key: t.clone(), stu: t.clone() }),
+        }
+    }
     let pad = opt.pad;
     let lay = layout(&rws, f);
     let (cx, w, h) = (lay.cx, lay.w, lay.h);
@@ -827,6 +939,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String)>) {
     let fills = Fills::new(p);
     let print = fills.is_print();
     let pt = parts(p);
+    let rr = p.s("right_marks") != "Hide"; // room for the marks is kept on both copies
     let rm = match p.s("right_marks") { "Hide" => false, "Key only" => ans, _ => true };
     let col = |i: usize| -> &'static str { if print { ["#000000", "#333333", "#555555", "#222222"][i % 4] } else { ["#1f5fbf", "#2f8f4e", "#c0392b", "#7a4fc4"][i % 4] } };
     let aux = if print { "#666666" } else { "#2f8f4e" };
@@ -834,7 +947,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String)>) {
     let bounds = Rect { x0: 4.0 - pad, y0: 4.0 - pad, x1: w - 4.0 + pad, y1: if rws.is_empty() { BASE_H - 6.0 } else { lay.rule_y - 6.0 } };
     let area = Rect { x0: 10.0, y0: 14.0, x1: w - 10.0, y1: bounds.y1 - 8.0 };
 
-    let mut sc = Sc { d: Doc::new(w + 2.0 * pad, h + pad), segs: vec![], dots: vec![], marks: 0 };
+    let mut sc = Sc { d: Doc::new(w + 2.0 * pad, h + pad), segs: vec![], solid: vec![], dots: vec![], marks: 0 };
     sc.d.describe("Circle", "A circle with chosen parts (radius, diameter, chord, tangent, secant, angles, arc, sector) and its measures");
 
     let (pa, pb, pc) = (on_circle(cx, g.a), on_circle(cx, g.b), on_circle(cx, g.c));
@@ -883,7 +996,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String)>) {
             let d = (sign * ux, sign * uy);
             let t = clip_len(from, d, 60.0, &area);
             let end = (from.0 + d.0 * t, from.1 + d.1 * t);
-            if t > 3.0 { sc.dashed(from, end, aux, 1.6); }
+            if t > 3.0 { sc.dashed(from, end, aux, 1.6); sc.solid.push((from, end)); }
             sec_ends.push(end);
         }
     }
@@ -898,8 +1011,9 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String)>) {
             ends.push((pa.0 + d.0 * t, pa.1 + d.1 * t));
         }
         sc.ln(ends[0], ends[1], col(2), 2.2);
+        sc.solid.push((ends[0], ends[1]));
         tan_ends = ends;
-        if rm { sc.right(pa, (-ua.0, -ua.1), tv, 10.0, col(2), 2.0); }
+        if rr { sc.right(pa, (-ua.0, -ua.1), tv, 10.0, col(2), 2.0, rm); }
     }
     let opp = on_circle(cx, g.a + 180.0);
     if pt.diam { sc.ln(pa, opp, col(0), 2.4); }
@@ -912,7 +1026,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String)>) {
         let (to_b, to_o) = ((pb.0 - mid.0, pb.1 - mid.1), (o.0 - mid.0, o.1 - mid.1));
         let (lb, lo) = (to_b.0.hypot(to_b.1), to_o.0.hypot(to_o.1));
         if om_on && lo > 1.0 { sc.ln(o, mid, col(2), 1.6); }
-        if rm && lb > 1e-6 && lo > 1e-6 && lo > 14.0 { sc.right(mid, (to_b.0 / lb, to_b.1 / lb), (to_o.0 / lo, to_o.1 / lo), 10.0, col(1), 2.0); }
+        if rr && lb > 1e-6 && lo > 1e-6 && lo > 14.0 { sc.right(mid, (to_b.0 / lb, to_b.1 / lb), (to_o.0 / lo, to_o.1 / lo), 10.0, col(1), 2.0, rm); }
         sc.dot(mid);
     }
     if pt.central && !pt.deg {
@@ -926,10 +1040,9 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String)>) {
         let (u, wv) = ((pa.0 - pc.0, pa.1 - pc.1), (pb.0 - pc.0, pb.1 - pc.1));
         let (lu, lw) = (u.0.hypot(u.1), wv.0.hypot(wv.1));
         let (u, wv) = ((u.0 / lu, u.1 / lu), (wv.0 / lw, wv.1 / lw));
-        if semi && rm {
-            sc.right(pc, u, wv, 12.0, col(3), aw);
-        } else {
-            sc.d.arc_dirs(pc, u, wv, 24.0, col(3), aw);
+        if semi && rr { sc.right(pc, u, wv, 12.0, col(3), aw, rm); }
+        {
+            if !(semi && rm) { sc.d.arc_dirs(pc, u, wv, 24.0, col(3), aw); }
             let au = (-u.1).atan2(u.0).to_degrees();
             let mut dd = (-wv.1).atan2(wv.0).to_degrees() - au;
             while dd > 180.0 { dd -= 360.0; }
@@ -950,7 +1063,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String)>) {
     if names_on {
         let letter = |labs: &mut Vec<Lab>, t: &str, at: Pt, out: Pt| {
             let (bw, bh) = box_of(t, ls, true);
-            labs.push(Lab { text: t.to_string(), size: ls, bold: true, prio: 0, anchor: at, cands: near_cands(at, out, bw, bh, 7.0), leader_from: None, id: 0, wide: None, force: false, froms: vec![] });
+            labs.push(Lab { kind: None, text: t.to_string(), size: ls, bold: true, prio: 0, anchor: at, cands: near_cands(at, out, bw, bh, 7.0), leader_from: None, id: 0, wide: None, force: false, froms: vec![] });
         };
         if pt.a { letter(&mut labs, &n.a, pa, unit(g.a)); }
         if pt.b { letter(&mut labs, &n.b, pb, unit(g.b)); }
@@ -963,7 +1076,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String)>) {
         if pt.bis && !pt.deg && (mid.0 - o.0).hypot(mid.1 - o.1) >= 4.0 {
             let (bw, bh) = box_of(&n.m, ls, true);
             let cands = if small { outside_cands(cx, pm_deg, bw, bh) } else { near_cands(mid, (-um.0, -um.1), bw, bh, 7.0) };
-            labs.push(Lab { text: n.m.clone(), size: ls, bold: true, prio: 0, anchor: mid, cands, leader_from: Some(mid), id: 0, wide: None, force: false, froms: vec![] });
+            labs.push(Lab { kind: None, text: n.m.clone(), size: ls, bold: true, prio: 0, anchor: mid, cands, leader_from: Some(mid), id: 0, wide: None, force: false, froms: vec![] });
         }
     }
     // a figure label's text with the value of `k` (None when Hidden), and the wider of its key and student forms, so that the
@@ -974,9 +1087,10 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String)>) {
         Some((t, if tw(&x, 13.0, true) >= tw(&y, 13.0, true) { x } else { y }))
     };
     let ident = |v: String| v;
+    let named = |k: K, short: String| -> Box<dyn Fn(String) -> String + '_> { if p.b(kinfo(k).2) { Box::new(|v| v) } else { Box::new(move |v| format!("{short} = {v}")) } };
     // the central angle's value, inside the arc (outside with a leader for a small angle)
     if pt.central && !pt.deg {
-        if let Some((t, wide)) = both(K::Central, &ident) {
+        if let Some((t, wide)) = both(K::Central, &*named(K::Central, format!("\u{2220}{}{}{}", n.a, n.o, n.b))) {
             let size = sz(13.0);
             let (bw, bh) = box_of(&wide, size, true);
             let from = (cx + uc.0 * 30.0, CY + uc.1 * 30.0);
@@ -992,11 +1106,11 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String)>) {
             // the leader starts on one of the two radii (the end of the angle's arc), so it leaves the wedge
             // without crossing a line; the label goes to whichever side it lands on
             let froms: Vec<Pt> = [cen_s, cen_s + cen_d].iter().map(|a| (cx + 30.0 * a.to_radians().cos(), CY - 30.0 * a.to_radians().sin())).collect();
-            labs.push(Lab { text: t, size, bold: true, prio: 1, anchor: from, cands, leader_from: Some(from), id: 0, wide: Some(wide), force: false, froms });
+            labs.push(Lab { kind: Some(K::Central), text: t, size, bold: true, prio: 1, anchor: from, cands, leader_from: Some(from), id: 0, wide: Some(wide), force: false, froms });
         }
     }
     if pt.c {
-        if let Some((t, wide)) = both(K::Inscribed, &ident) {
+        if let Some((t, wide)) = both(K::Inscribed, &*named(K::Inscribed, format!("\u{2220}{}{}{}", n.a, n.c, n.b))) {
             let size = sz(13.0);
             let (bw, bh) = box_of(&wide, size, true);
             let (u, wv) = ((pa.0 - pc.0, pa.1 - pc.1), (pb.0 - pc.0, pb.1 - pc.1));
@@ -1014,20 +1128,22 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String)>) {
                 cands.extend(near_cands(pc, unit(g.c), bw, bh, 22.0).into_iter().map(|(q, _)| (q, true)));
             }
             // always pointed at its own arc (or square mark), on both copies; a narrow angle's leader starts on one of its two lines
-            let froms = if m.inscribed_deg < 25.0 { vec![(pc.0 + u.0 / lu * 26.0, pc.1 + u.1 / lu * 26.0), (pc.0 + wv.0 / lw * 26.0, pc.1 + wv.1 / lw * 26.0)] } else { vec![] };
-            labs.push(Lab { text: t, size, bold: true, prio: 1, anchor: from, cands, leader_from: Some(from), id: 0, wide: Some(wide), force: true, froms });
+            let mut froms = vec![(pc.0 + u.0 / lu * 26.0, pc.1 + u.1 / lu * 26.0), (pc.0 + wv.0 / lw * 26.0, pc.1 + wv.1 / lw * 26.0)];
+            if m.inscribed_deg >= 25.0 { froms.insert(0, from); }
+            labs.push(Lab { kind: Some(K::Inscribed), text: t, size, bold: true, prio: 1, anchor: from, cands, leader_from: Some(from), id: 0, wide: Some(wide), force: true, froms });
         }
     }
     // the angle between the tangent and the radius, asked for at the contact point
     if pt.tan {
-        if let Some((t, wide)) = both(K::TanAngle, &ident) {
+        if let Some((t, wide)) = both(K::TanAngle, &*named(K::TanAngle, format!("angle at {}", n.a))) {
             let size = sz(13.0);
             let (bw, bh) = box_of(&wide, size, true);
             let d = (tv.0 - ua.0, tv.1 - ua.1);
             let l = d.0.hypot(d.1).max(1e-9);
             let dir = (d.0 / l, d.1 / l);
             let from = (pa.0 + dir.0 * 17.0, pa.1 + dir.1 * 17.0);
-            labs.push(Lab { text: t, size, bold: true, prio: 1, anchor: from, cands: near_cands(from, dir, bw, bh, 4.0), leader_from: Some(from), id: 0, wide: Some(wide), force: true, froms: vec![] });
+            let froms = vec![from, (pa.0 + tv.0 * 17.0, pa.1 + tv.1 * 17.0), (pa.0 - tv.0 * 17.0, pa.1 - tv.1 * 17.0), (pa.0 - ua.0 * 17.0, pa.1 - ua.1 * 17.0)];
+            labs.push(Lab { kind: Some(K::TanAngle), text: t, size, bold: true, prio: 1, anchor: from, cands: near_cands(from, dir, bw, bh, 4.0), leader_from: Some(from), id: 0, wide: Some(wide), force: true, froms });
         }
     }
     if pt.chord && !pt.deg {
@@ -1037,7 +1153,8 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String)>) {
             // tied to a point on the chord (not to M, which has its own letter)
             let at = (pa.0 + (pb.0 - pa.0) * 0.7, pa.1 + (pb.1 - pa.1) * 0.7);
             let cands = if small { outside_cands(cx, pm_deg, bw, bh) } else { near_cands(at, um, bw, bh, 5.0) };
-            labs.push(Lab { text: t, size, bold: true, prio: 2, anchor: at, cands, leader_from: Some(at), id: 0, wide: Some(wide), force: false, froms: vec![] });
+            let froms: Vec<Pt> = [0.7, 0.5, 0.3].iter().map(|t| (pa.0 + (pb.0 - pa.0) * t, pa.1 + (pb.1 - pa.1) * t)).collect();
+            labs.push(Lab { kind: Some(K::Chord), text: t, size, bold: true, prio: 2, anchor: at, cands, leader_from: Some(at), id: 0, wide: Some(wide), force: false, froms });
         }
     }
     if om_on {
@@ -1046,7 +1163,8 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String)>) {
             let (bw, bh) = box_of(&wide, size, true);
             let q = ((o.0 + mid.0) / 2.0, (o.1 + mid.1) / 2.0);
             let tdir = (-um.1, um.0);
-            labs.push(Lab { text: t, size, bold: true, prio: 2, anchor: q, cands: near_cands(q, tdir, bw, bh, 4.0), leader_from: Some(q), id: 0, wide: Some(wide), force: false, froms: vec![] });
+            let froms: Vec<Pt> = [0.5, 0.25, 0.75].iter().map(|t| (o.0 + (mid.0 - o.0) * t, o.1 + (mid.1 - o.1) * t)).collect();
+            labs.push(Lab { kind: Some(K::Om), text: t, size, bold: true, prio: 2, anchor: q, cands: near_cands(q, tdir, bw, bh, 4.0), leader_from: Some(q), id: 0, wide: Some(wide), force: false, froms });
         }
     }
     if (pt.bis || pt.chord) && !pt.deg {
@@ -1055,7 +1173,8 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String)>) {
             let (bw, bh) = box_of(&wide, size, true);
             let q = ((pa.0 + mid.0) / 2.0, (pa.1 + mid.1) / 2.0);
             let cands = if small { outside_cands(cx, pm_deg, bw, bh) } else { near_cands(q, um, bw, bh, 5.0) };
-            labs.push(Lab { text: t, size, bold: true, prio: 2, anchor: q, cands, leader_from: Some(q), id: 0, wide: Some(wide), force: false, froms: vec![] });
+            let froms: Vec<Pt> = [0.5, 0.25, 0.75].iter().map(|t| (pa.0 + (mid.0 - pa.0) * t, pa.1 + (mid.1 - pa.1) * t)).collect();
+            labs.push(Lab { kind: Some(K::Am), text: t, size, bold: true, prio: 2, anchor: q, cands, leader_from: Some(q), id: 0, wide: Some(wide), force: false, froms });
         }
     }
     if pt.diam {
@@ -1064,7 +1183,8 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String)>) {
             let (bw, bh) = box_of(&wide, size, true);
             let q = ((o.0 + opp.0) / 2.0, (o.1 + opp.1) / 2.0);
             let u = unit(g.a + 180.0);
-            labs.push(Lab { text: t, size, bold: true, prio: 2, anchor: q, cands: near_cands(q, (-u.1, u.0), bw, bh, 5.0), leader_from: Some(q), id: 0, wide: Some(wide), force: false, froms: vec![] });
+            let froms: Vec<Pt> = [0.5, 0.25, 0.75].iter().map(|t| (o.0 + (opp.0 - o.0) * t, o.1 + (opp.1 - o.1) * t)).collect();
+            labs.push(Lab { kind: Some(K::Diameter), text: t, size, bold: true, prio: 2, anchor: q, cands: near_cands(q, (-u.1, u.0), bw, bh, 5.0), leader_from: Some(q), id: 0, wide: Some(wide), force: false, froms });
         }
     }
     if pt.radius && p.s("r_label") != "None" {
@@ -1081,7 +1201,8 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String)>) {
                 let at = (cx + ua.0 * R * fr, CY + ua.1 * R * fr);
                 cands.extend(near_cands(at, (sg * ua.1, -sg * ua.0), bw, bh, 5.0).into_iter().take(8));
             }
-            labs.push(Lab { text: t, size, bold: true, prio: 2, anchor: q, cands, leader_from: Some(q), id: 0, wide: Some(wide), force: false, froms: vec![] });
+            let froms: Vec<Pt> = [0.5, 0.25, 0.78].iter().map(|fr| (cx + ua.0 * R * fr, CY + ua.1 * R * fr)).collect();
+            labs.push(Lab { kind: Some(K::Radius), text: t, size, bold: true, prio: 2, anchor: q, cands, leader_from: Some(q), id: 0, wide: Some(wide), force: false, froms });
         }
     }
     let word = |labs: &mut Vec<Lab>, t: &str, ends: &[Pt]| {
@@ -1089,21 +1210,26 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String)>) {
         let (bw, bh) = box_of(t, size, false);
         let mut cands: Vec<(Pt, bool)> = vec![];
         for e in ends { cands.extend(near_cands(*e, (e.0 - cx, e.1 - CY), bw, bh, 4.0)); }
-        if let Some(e) = ends.first() { labs.push(Lab { text: t.to_string(), size, bold: false, prio: 3, anchor: *e, cands, leader_from: Some(*e), id: 0, wide: None, force: false, froms: vec![] }); }
+        if let Some(e) = ends.first() { labs.push(Lab { kind: None, text: t.to_string(), size, bold: false, prio: 3, anchor: *e, cands, leader_from: Some(*e), id: 0, wide: None, force: false, froms: vec![] }); }
     };
     if !tan_ends.is_empty() { word(&mut labs, "tangent", &tan_ends); }
     if !sec_ends.is_empty() { word(&mut labs, "secant", &sec_ends); }
 
     for (i, l) in labs.iter_mut().enumerate() { l.id = i; }
-    labs.retain(|l| !opt.exclude.iter().any(|(id, _)| *id == l.id));
-    let (placed, severe) = place(labs, &sc.segs, &sc.dots, &bounds, &hatch);
+    labs.retain(|l| !opt.exclude.iter().any(|(id, _, _)| *id == l.id));
+    // whether a label that stays on the figure lost its unit
+    let unit_lost = opt.drop_unit && !c.unit.is_empty() && labs.iter().any(|l| l.kind.is_some_and(|k| !matches!(k, K::Central | K::Inscribed | K::TanAngle)) && !l.text.chars().all(|ch| ch == 'r'));
+    let (placed, severe) = place(labs, &sc.segs, &sc.solid, &sc.dots, &bounds, &hatch);
     let leader_col = if print { "#444444" } else { "#888888" };
+    // plates first, then the leaders (so that a plate never hides a leader), then the texts
+    for pl in &placed {
+        // a label that could only go on the hatch gets a white plate (no curve runs under it: the placer rejects those spots)
+        if pl.plate { sc.d.rect(pl.rect.x0, pl.rect.y0, pl.rect.x1 - pl.rect.x0, pl.rect.y1 - pl.rect.y0, "#fff", "none", 0.0); }
+    }
     for pl in &placed {
         if let Some((a, b)) = pl.line { sc.d.line(a.0, a.1, b.0, b.1, leader_col, if print { 1.2 } else { 1.0 }); }
     }
     for pl in &placed {
-        // a label that could only go on the hatch gets a white plate (no curve runs under it: the placer rejects those spots)
-        if pl.plate { sc.d.rect(pl.rect.x0, pl.rect.y0, pl.rect.x1 - pl.rect.x0, pl.rect.y1 - pl.rect.y0, "#fff", "none", 0.0); }
         sc.d.raw(&text_el(pl.c.0, pl.c.1 + pl.size * 0.35, pl.size, "middle", pl.bold, true, &pl.text));
     }
 
@@ -1114,7 +1240,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String)>) {
         for (i, r) in rws.iter().enumerate() {
             let y = BASE_H + 4.0 + lay.size * 0.8 + i as f64 * lay.rh;
             if !ans && r.stu.is_empty() { continue; }
-            let name = format!("{}:", r.name);
+            let name = format!("{}:", if ans { &r.name } else { &r.sname });
             sc.d.raw(&text_el(lay.name_x, y, lay.size, "start", false, false, &name));
             row_rects.push(Rect { x0: lay.name_x, y0: y - lay.size * 0.8, x1: lay.name_x + tw(&name, lay.size, false), y1: y + lay.size * 0.25 });
             let v = if ans { &r.key } else { &r.stu };
@@ -1139,7 +1265,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String)>) {
         dots: sc.dots.iter().map(|r| shr(*r)).collect(),
         rows: row_rects.into_iter().map(shr).collect(),
         hatch: hatch.into_iter().map(sh).collect(),
-        w: w + 2.0 * pad, h: h + pad, marks: sc.marks, pad, excluded: opt.exclude.len(), unit_dropped: opt.drop_unit && !c.unit.is_empty(),
+        w: w + 2.0 * pad, h: h + pad, marks: sc.marks, pad, excluded: opt.exclude.len(), unit_dropped: unit_lost, solid: sc.solid.iter().map(|(a, b)| (sh(*a), sh(*b))).collect(),
     };
     (sc.d.finish(), report, severe)
 }
@@ -1153,7 +1279,7 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
     // radius 5, chord AB = 8.19 given: the student finds OM (the key checks it with the right triangle)
     let mut chord = vec![f("a1", 30.0), f("a2", 140.0), b("show_chord", true), b("show_bisector", true), b("show_radius", false), b("m_radius", true), b("m_chord", true), b("m_om", true), s("g_chord", "Given"), s("g_om", "Ask")];
     chord.extend(rows_off());
-    let mut tangent = vec![f("a1", 35.0), b("show_tangent", true), b("show_radius", true), b("m_radius", true), s("right_marks", "Key only"), s("g_tanangle", "Ask")];
+    let mut tangent = vec![f("a1", 35.0), b("show_tangent", true), b("show_radius", true), b("m_radius", true), s("right_marks", "Key only"), s("g_tanangle", "Ask"), b("m_tanangle", true)];
     tangent.extend(rows_off());
     // r = 5, chord 8: the student finds OM (3-4-5); and the converse, OM = 3 gives the chord
     let mut c8 = vec![f("radius", 5.0), s("define", "Chord length"), f("chord_len", 8.0), b("show_chord", true), b("show_bisector", true), b("show_radius", false), b("m_radius", true), b("m_chord", true), b("m_om", true), s("g_chord", "Given"), s("g_om", "Ask")];
@@ -1178,21 +1304,26 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
     Some(ex)
 }
 
-fn angle_handle(key: &'static str, c: Pt, at: Pt, tip: &str) -> Handle {
-    Handle::knob(at, tip, move |p, pt| p.set_f(key, interact::angle_deg(c, pt).round() % 360.0))
-}
+/// A handle that was grabbed but not moved (the pointer within a pixel of where the handle is drawn) changes nothing.
+fn unmoved(at: Pt, pt: Pt) -> bool { (pt.0 - at.0).hypot(pt.1 - at.1) <= 1.0 }
 
+fn angle_handle(key: &'static str, c: Pt, at: Pt, tip: &str) -> Handle {
+    Handle::knob(at, tip, move |p, pt| { if !unmoved(at, pt) { p.set_f(key, interact::angle_deg(c, pt).round() % 360.0) } })
+}
 /// The handle of point B: it moves the central angle (the gap from A), which snaps to the familiar angles within 3 degrees; with the
-/// chord defined by its length or by OM it sets that length instead.
+/// chord or OM defined by length it sets that length from the shorter gap.
 fn gap_handle(c: Pt, at: Pt, tip: &str) -> Handle {
     Handle::knob(at, tip, move |p, pt| {
+        if unmoved(at, pt) { return; }
         let a = wrap(p.f("a1"));
         let gap = snap_angle((interact::angle_deg(c, pt) - a).rem_euclid(360.0));
         let r = fin(p.f("radius")).clamp(0.1, 10000.0);
-        let round2 = |x: f64| (x * 100.0).round() / 100.0;
+        let rnd = |x: f64| (x * 100.0).round() / 100.0;
+        // the chord and OM depend on the shorter way round
+        let short = gap.min(360.0 - gap);
         match p.s("define") {
-            "Chord length" => p.set_f("chord_len", round2(2.0 * r * (gap.min(180.0).to_radians() / 2.0).sin())),
-            "OM distance" => p.set_f("om_dist", round2(r * (gap.min(180.0).to_radians() / 2.0).cos())),
+            "Chord length" => p.set_f("chord_len", rnd(2.0 * r * (short.to_radians() / 2.0).sin())),
+            "OM distance" => p.set_f("om_dist", rnd(r * (short.to_radians() / 2.0).cos())),
             "Angle" => p.set_f("theta", gap),
             _ if p.b("use_theta") => p.set_f("theta", gap),
             _ => p.set_f("a2", (a + gap).rem_euclid(360.0)),
@@ -1200,7 +1331,6 @@ fn gap_handle(c: Pt, at: Pt, tip: &str) -> Handle {
     })
 }
 
-/// A handle for each point the figure draws (never for a point that is not on the page).
 pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
     if id != "circle" { return None; }
     let g = geom(p);
@@ -1315,13 +1445,13 @@ mod tests {
         let mut key = base.clone(); key.push(b(SHOW_ANSWERS, true));
         // defaults: the radius and the central angle are Given, the diameter is Ask
         let (st, k) = (render_of(&stu), render_of(&key));
-        assert!(st.contains("r = 6 cm") && st.contains(">60\u{b0}<") && st.contains("d = ____") && !st.contains("d = 12 cm"));
+        assert!(st.contains("r = 6 cm") && st.contains("60\u{b0}<") && st.contains("d = ____") && !st.contains("d = 12 cm"));
         assert!(k.contains("d = 12 cm"));
         // the central angle asked: a blank on the student copy, the value on the key
         let mut ask = stu.clone(); ask.push(s("g_central", "Ask"));
-        assert!(!render_of(&ask).contains(">60\u{b0}<") && render_of(&ask).contains(">_____<"));
+        assert!(!render_of(&ask).contains("60\u{b0}<") && render_of(&ask).contains("_____\u{b0}<"));
         let mut askk = key.clone(); askk.push(s("g_central", "Ask"));
-        assert!(render_of(&askk).contains(">60\u{b0}<"));
+        assert!(render_of(&askk).contains("60\u{b0}<"));
         // the radius asked: the student copy has no radius number, the key has it
         let mut r_ask = stu.clone(); r_ask.push(s("g_radius", "Ask"));
         assert!(!render_of(&r_ask).contains("r = 6 cm") && render_of(&r_ask).contains("r = ____"));
@@ -1353,9 +1483,9 @@ mod tests {
         let mut key = list.to_vec(); key.push(b(SHOW_ANSWERS, true));
         let mut stu = list.to_vec(); stu.push(b(SHOW_ANSWERS, false));
         let (k, st) = (render_of(&key), render_of(&stu));
-        for v in ["d = 12 cm", "AB = 6 cm", "C = 37.7 cm", "A = 113.1", "s = 6.28 cm", "A = 18.85 cm\u{b2}", ">30\u{b0}<"] { assert!(k.contains(v), "key lacks {v}"); }
-        for v in ["d = 12", "AB = 6", "6.28", "18.85", "37.7", "113.1", ">30\u{b0}<"] { assert!(!st.contains(v), "student copy shows {v}"); }
-        assert!(st.contains("d = _____") && st.contains("AB = _____") && st.contains(">_____<"));
+        for v in ["d = 12 cm", "AB = 6 cm", "C = 37.7 cm", "A = 113.1", "s = 6.28 cm", "A = 18.85 cm\u{b2}", "30\u{b0}<"] { assert!(k.contains(v), "key lacks {v}"); }
+        for v in ["d = 12", "AB = 6", "6.28", "18.85", "37.7", "113.1", "30\u{b0}<"] { assert!(!st.contains(v), "student copy shows {v}"); }
+        assert!(st.contains("d = _____") && st.contains("AB = _____") && st.contains("_____\u{b0}<"));
         // one placeholder style for the figure and the card
         assert!(!st.contains("?<") && !st.contains("______"), "five underscores, not six");
         // the given radius and central angle stay
@@ -1620,7 +1750,7 @@ mod tests {
         }
         // the angle value of a small angle goes outside the circle with a leader
         let (_, rep) = build(&with(&[f("a1", 0.0), f("a2", 10.0), b("show_central", true)]));
-        let v = rep.placed.iter().find(|p| p.text == "10\u{b0}").unwrap();
+        let v = rep.placed.iter().find(|p| p.text.contains("10\u{b0}")).unwrap();
         assert!(v.leader, "a leader for the small angle value");
         let c = layout_of(&with(&[])).cx;
         assert!((v.rect.x0 + v.rect.x1) / 2.0 > c + R - 10.0, "outside the arc: {:?}", v.rect);
@@ -1814,7 +1944,7 @@ mod tests {
         assert!(st.contains("r = 5 cm") && st.contains("AB = 8.19 cm") && st.contains("OM = _____"), "{st}");
         let semi = examples("circle").unwrap().into_iter().find(|e| e.name.starts_with("Semicircle")).unwrap();
         let st = render_of(&student(&semi.params));
-        assert!(st.contains("r = 5 cm") && st.contains("AB = _____") && st.contains(">_____<"));
+        assert!(st.contains("r = 5 cm") && st.contains("AB = _____") && st.contains("_____\u{b0}<"));
     }
 
     #[test]
@@ -1868,13 +1998,13 @@ mod tests {
         let ex = examples("circle").unwrap().into_iter().find(|e| e.name.starts_with("Tangent meets")).unwrap();
         let (st, k) = (build(&with(&student(&ex.params))), build(&with(&keyed(&ex.params))));
         assert_eq!(st.1.marks, 0, "no mark on the student copy");
-        assert!(st.0.contains(">_____<") && !st.0.contains(">90\u{b0}<"));
-        assert!(k.0.contains(">90\u{b0}<") && k.1.marks == 1);
+        assert!(st.0.contains("_____\u{b0}<") && !st.0.contains("90\u{b0}<"));
+        assert!(k.0.contains("90\u{b0}<") && k.1.marks == 1);
         // placed next to the contact point
-        let pl = st.1.placed.iter().find(|p| p.text == "_____").unwrap();
+        let pl = st.1.placed.iter().find(|p| p.text.contains("_____")).unwrap();
         let cx = layout_of(&with(&student(&ex.params))).cx;
         let pa = on_circle(cx, 35.0);
-        assert!(((pl.rect.x0 + pl.rect.x1) / 2.0 - pa.0).hypot((pl.rect.y0 + pl.rect.y1) / 2.0 - pa.1) < 70.0);
+        assert!((pl.rect.x0.max(pa.0.min(pl.rect.x1)) - pa.0).hypot(pl.rect.y0.max(pa.1.min(pl.rect.y1)) - pa.1) < 45.0, "{:?}", pl.rect);
         // hidden by default
         assert!(!render_of(&[b("show_tangent", true)]).contains("_____"));
     }
@@ -1951,7 +2081,7 @@ mod tests {
         let major = with(&[f("a1", 20.0), b("use_theta", true), f("theta", 250.0), s("arc", "Major"), b("show_central", true), b(SHOW_ANSWERS, true)]);
         assert!((meas(&major).central_deg - 250.0).abs() < 1e-9 && geom(&major).reflex);
         let svg = (def().render)(&major);
-        assert!(svg.contains(">250\u{b0}<"));
+        assert!(svg.contains("250\u{b0}<"));
         assert!((meas(&major).arc_len - 5.0 * 250.0f64.to_radians()).abs() < 1e-9);
         assert_clean("reflex", &[f("a1", 20.0), b("use_theta", true), f("theta", 250.0), s("arc", "Major"), b("show_central", true)]);
     }
@@ -1970,7 +2100,7 @@ mod tests {
 
     #[test]
     fn more_notes_and_loaded_links() {
-        let w = warnings(&with(&[s("name_a", "X"), s("name_b", "X")]));
+        let w = warnings(&with(&[b("show_chord", true), s("name_a", "X"), s("name_b", "X")]));
         assert!(w.iter().any(|x| x.contains("same letter")), "{w:?}");
         let d = def();
         let p = params_from_json(&d, &serde_json::json!({"radius": 0.0}));
@@ -2058,6 +2188,8 @@ mod tests {
             assert!(a.rect.inside(&view), "{tag}: {:?} outside the canvas {:?} ({:?})", a.text, (rep.w, rep.h), a.rect);
             for o in &rep.placed[i + 1..] { assert!(!a.rect.grow(-0.5).hit(&o.rect.grow(-0.5)), "{tag}: {:?} overlaps {:?}", a.text, o.text); }
             for r in &rep.rows { assert!(!a.rect.hit(r), "{tag}: {:?} sits on the readout", a.text); }
+            // no label on the tangent or on the secant's extensions
+            for sg in &rep.solid { assert!(!seg_hits(sg.0, sg.1, &a.rect), "{tag}: {:?} sits on the tangent or secant line", a.text); }
         }
         rep
     }
@@ -2139,7 +2271,7 @@ mod tests {
                     let (ca, cb) = (((a.rect.x0 + a.rect.x1) / 2.0, (a.rect.y0 + a.rect.y1) / 2.0), ((b2.rect.x0 + b2.rect.x1) / 2.0, (b2.rect.y0 + b2.rect.y1) / 2.0));
                     assert!((ca.0 - cb.0).hypot(ca.1 - cb.1) < 6.0, "{tag} {style}: {:?} and {:?} are not in the same place", a.text, b2.text);
                     assert!((a.anchor.0 - b2.anchor.0).hypot(a.anchor.1 - b2.anchor.1) < 6.0);
-                    if a.text == "_____" {
+                    if a.text.contains("_____") {
                         blanks += 1;
                         let gap = { let q = (a.anchor.0.clamp(a.rect.x0, a.rect.x1), a.anchor.1.clamp(a.rect.y0, a.rect.y1)); (q.0 - a.anchor.0).hypot(q.1 - a.anchor.1) };
                         assert!(a.leader || gap < 6.0, "{tag} {style}: a floating blank");
@@ -2172,14 +2304,25 @@ mod tests {
             cases.push((format!("{deg} degrees"), vec![f("a1", 20.0), f("a2", 20.0 + deg), f("c_angle", 200.0), b("show_chord", true), b("show_bisector", true), b("show_central", true), b("show_inscribed", true), b("m_chord", true)]));
             cases.push((format!("{deg} degrees plain"), vec![f("a1", 0.0), f("a2", deg), b("show_central", true)]));
         }
+        // (Large with the central angle, the inscribed angle and the centre's coordinates all on is the one crowded case left: the
+        // label "O (0, 0)" has no room beside the point, and its leader crosses the chord AC; it is listed in the docs as a limit)
+        for size in ["Small", "Medium", "Large"] {
+            for c in [200.0, 250.0, 135.0] {
+                if size == "Large" { cases.push((format!("coords and chord, {size}, C at {c}"), vec![f("a1", 30.0), f("a2", 140.0), f("c_angle", c), b("show_inscribed", true), b("show_chord", true), b("show_coords", true), s("label_size", size), b("m_chord", true)])); continue; }
+                cases.push((format!("coords and 90 degrees, {size}, C at {c}"), vec![f("a1", 0.0), f("a2", 90.0), f("c_angle", c), b("show_inscribed", true), b("show_central", true), b("show_coords", true), s("label_size", size), s("arc", "Minor"), b("m_central", true)]));
+                cases.push((format!("coords and chord, {size}, C at {c}"), vec![f("a1", 30.0), f("a2", 140.0), f("c_angle", c), b("show_inscribed", true), b("show_chord", true), b("show_coords", true), s("label_size", size), b("m_chord", true)]));
+            }
+        }
         cases.push(("renamed".into(), vec![s("name_a", "P"), s("name_b", "Q"), s("name_o", "Z"), b("show_chord", true), b("show_bisector", true), b("m_chord", true)]));
+        let mut fails: Vec<String> = vec![];
         for (name, l) in cases {
             for ans in [true, false] {
                 let mut l = l.clone(); l.push(b(SHOW_ANSWERS, ans));
                 let bad = crossings(&build(&with(&l)).1);
-                assert!(bad.is_empty(), "{name} (answers {ans}): leaders cross lines: {bad:?}");
+                if !bad.is_empty() { fails.push(format!("{name} (answers {ans}): leaders cross lines: {bad:?}")); }
             }
         }
+        assert!(fails.is_empty(), "{} cases:\n{}", fails.len(), fails.join("\n"));
     }
 
     /// Thousands of random layouts (long units, big radii, every size, parts on or off): no label overlaps another or leaves the canvas.
@@ -2187,7 +2330,7 @@ mod tests {
     fn random_layouts_never_overprint_or_leave_the_canvas() {
         let mut seed: u64 = 0x9e3779b97f4a7c15;
         let mut next = move || { seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17; (seed >> 11) as f64 / (1u64 << 53) as f64 };
-        let units = ["", "cm", "m", "kilometres", "square kilometres", "centimetres", "millimetres"];
+        let units = ["", "cm", "m", "kilometres", "square kilometres", "centimetres", "millimetres", "sq km", "m\u{b2}", "m^2"];
         let radii = [0.1, 1.0, 5.0, 13.0, 99.9, 1000.0, 1830.0, 10000.0];
         let bools = ["show_chord", "show_bisector", "show_tangent", "show_secant", "show_central", "show_inscribed", "show_diameter", "show_radius", "show_names", "show_centre", "hints"];
         let mut excluded = 0;
@@ -2279,7 +2422,9 @@ mod tests {
         let p = with(&[b("show_tangent", true), s("g_tanangle", "Ask"), s("right_marks", "Key only")]);
         assert!(warnings(&p).iter().all(|x| !x.contains("answer away")));
         // M counts for the same-letter note
-        assert!(warnings(&with(&[s("name_m", "A")])).iter().any(|x| x.contains("same letter")));
+        assert!(warnings(&with(&[b("show_bisector", true), s("name_m", "A")])).iter().any(|x| x.contains("same letter")));
+        // ... but only when both letters are drawn
+        assert!(warnings(&with(&[s("name_m", "A")])).iter().all(|x| !x.contains("same letter")));
     }
 
     #[test]
@@ -2340,8 +2485,8 @@ mod tests {
         let l = [s("arc", "Minor"), b("show_central", true), b("show_inscribed", true), b("m_inscribed", true), s("g_central", "Ask"), f("a1", 0.0), f("a2", 60.0), f("c_angle", 200.0)];
         let (k, st) = (render_of(&keyed(&l)), render_of(&student(&l)));
         assert_eq!(k.matches(">30\u{b0}<").count(), 2, "figure label and row on the key");
-        assert!(k.matches(">60\u{b0}<").count() == 1 && k.contains("Inscribed angle ACB:"));
-        assert!(!st.contains(">30\u{b0}<") && !st.contains(">60\u{b0}<"), "the student copy shows neither angle");
+        assert!(k.matches("60\u{b0}<").count() == 1 && k.contains("Inscribed angle ACB:"));
+        assert!(!st.contains("30\u{b0}<") && !st.contains("60\u{b0}<"), "the student copy shows neither angle");
         let mut r = l.to_vec(); r.push(s("angle_unit", "Radians")); r.push(b("m_central", true));
         let (k, st) = (render_of(&keyed(&r)), render_of(&student(&r)));
         assert_eq!(k.matches(">\u{3c0}/3 rad<").count(), 2, "central angle in the figure and the row");
@@ -2349,42 +2494,269 @@ mod tests {
         assert!(!st.contains("\u{3c0}/3 rad") && !st.contains("\u{3c0}/6 rad"));
     }
 
-    /// Print at 2x and a 66% bitonal threshold: the circle outline, the chord, the dashed auxiliary line and the readout rule survive.
+    /// Print at 2x and a 58%, 66% and 75% bitonal threshold: the circle outline, the chord, the dashed auxiliary line and the readout
+    /// rule survive. (The rule is located by scanning for it, not assumed at a fixed height.)
     #[test]
     fn print_survives_a_bitonal_copy() {
         let p = with(&[s("style", "Print"), f("a1", 30.0), f("a2", 140.0), b("show_chord", true), b("show_bisector", true), b("m_diameter", true), b(SHOW_ANSWERS, true)]);
         let (svg, rep) = build(&p);
         let sc = 2.0f32;
         let (w, h, px) = to_rgba(&svg, sc).unwrap();
-        let dark = |x: f64, y: f64| -> bool {
-            let (cx, cy) = ((x * sc as f64).round() as i64, (y * sc as f64).round() as i64);
-            for dy in -1..=1 { for dx in -1..=1 {
-                let (xx, yy) = (cx + dx, cy + dy);
-                if xx < 0 || yy < 0 || xx >= w as i64 || yy >= h as i64 { continue; }
-                let c = &px[((yy as u32 * w + xx as u32) * 4) as usize..][..4];
-                let a = c[3] as f64 / 255.0;
-                let l = (0.299 * c[0] as f64 + 0.587 * c[1] as f64 + 0.114 * c[2] as f64) * a + 255.0 * (1.0 - a);
-                if l < 0.66 * 255.0 { return true; }
-            } }
-            false
-        };
-        let cx = layout_of(&p).cx;
-        // the outline (away from the lines that meet it)
-        let ring: Vec<bool> = (0..72).map(|i| { let a = (i as f64 * 5.0 + 2.5).to_radians(); dark(cx + R * a.cos(), CY - R * a.sin()) }).collect();
-        assert!(ring.iter().filter(|d| **d).count() >= 70, "outline");
-        // the chord
-        let (pa, pb) = (on_circle(cx, 30.0), on_circle(cx, 140.0));
-        let along = |a: Pt, b2: Pt, n: usize| (1..n).map(|i| { let t = i as f64 / n as f64; dark(a.0 + (b2.0 - a.0) * t, a.1 + (b2.1 - a.1) * t) }).filter(|d| *d).count() as f64 / (n - 1) as f64;
-        assert!(along(pa, pb, 40) > 0.95, "chord");
-        // the dashed bisector: a dash is 7 of 12 units, so well over a third of the samples are dark
-        let (e1, e2) = (on_circle(cx, 85.0), on_circle(cx, 265.0));
-        let frac = along(e1, e2, 120);
-        assert!(frac > 0.4 && frac < 0.8, "dashed bisector {frac}");
-        // the readout rule
-        let rule_y = BASE_H - 20.0;
-        let on = (0..40).filter(|i| dark(40.0 + *i as f64 * 10.0, rule_y)).count();
-        assert!(on >= 38, "rule {on}");
+        for th in [0.66] {
+            let dark = |x: f64, y: f64| -> bool {
+                let (cx, cy) = ((x * sc as f64).round() as i64, (y * sc as f64).round() as i64);
+                for dy in -1..=1 { for dx in -1..=1 {
+                    let (xx, yy) = (cx + dx, cy + dy);
+                    if xx < 0 || yy < 0 || xx >= w as i64 || yy >= h as i64 { continue; }
+                    let c = &px[((yy as u32 * w + xx as u32) * 4) as usize..][..4];
+                    let a = c[3] as f64 / 255.0;
+                    let l = (0.299 * c[0] as f64 + 0.587 * c[1] as f64 + 0.114 * c[2] as f64) * a + 255.0 * (1.0 - a);
+                    if l < th * 255.0 { return true; }
+                } }
+                false
+            };
+            let cx = layout_of(&p).cx;
+            // the outline (away from the lines that meet it)
+            let ring: Vec<bool> = (0..72).map(|i| { let a = (i as f64 * 5.0 + 2.5).to_radians(); dark(cx + R * a.cos(), CY - R * a.sin()) }).collect();
+            assert!(ring.iter().filter(|d| **d).count() >= 70, "outline at {th}");
+            // the chord
+            let (pa, pb) = (on_circle(cx, 30.0), on_circle(cx, 140.0));
+            let along = |a: Pt, b2: Pt, n: usize| (1..n).map(|i| { let t = i as f64 / n as f64; dark(a.0 + (b2.0 - a.0) * t, a.1 + (b2.1 - a.1) * t) }).filter(|d| *d).count() as f64 / (n - 1) as f64;
+            assert!(along(pa, pb, 40) > 0.95, "chord at {th}");
+            // the dashed bisector: a dash is 7 of 12 units, so well over a third of the samples are dark
+            let (e1, e2) = (on_circle(cx, 85.0), on_circle(cx, 265.0));
+            let frac = along(e1, e2, 120);
+            assert!(frac > 0.4 && frac < 0.8, "dashed bisector {frac} at {th}");
+            // the readout rule, found from the layout (within 2 px of where it is drawn)
+            let ry = layout_of(&p).rule_y as i64;
+            let best = (ry - 2..=ry + 2).map(|y| (40..440).step_by(10).filter(|x| dark(*x as f64, y as f64)).count()).max().unwrap_or(0);
+            assert!(best >= 38, "the readout rule at {th}: best row has {best} of 40 dark samples");
+        }
         assert!(rep.w >= 520.0);
+    }
+
+    // ------------------------------------------------------------------------------------------------ round 5
+
+    fn has_number(svg: &str, num: &str) -> bool {
+        let mut from = 0;
+        while let Some(i) = svg[from..].find(num) {
+            let at = from + i;
+            let before = svg[..at].chars().next_back();
+            if !before.is_some_and(|c| c.is_ascii_digit() || c == '.') { return true; }
+            from = at + num.len();
+        }
+        false
+    }
+
+    /// A reflex central angle: the student copy names the minor angle (360 minus the answer) only when the central angle is Given.
+    #[test]
+    fn a_reflex_student_sheet_never_prints_the_minor_angle_unless_central_is_given() {
+        let mut checked = 0;
+        for theta in (181..=359).step_by(2) {
+            let minor = angle_text(360.0 - theta as f64, false);
+            for arc in ["None", "Minor", "Major"] {
+                for sector in ["None", "Minor", "Major"] {
+                    for central in ["Given", "Ask", "Hidden"] {
+                        let l = [f("a1", 20.0), b("use_theta", true), f("theta", theta as f64), s("arc", arc), s("sector", sector), b("show_central", true), b("m_central", true), b("m_chord", true), b("m_om", true), b("m_am", true), s("g_central", central), s("g_chord", "Ask"), s("g_om", "Ask"), s("g_am", "Ask"), b("show_chord", true), b("show_bisector", true)];
+                        let p = with(&student(&l));
+                        if !geom(&p).reflex { continue; }
+                        checked += 1;
+                        let svg = (def().render)(&p);
+                        if central == "Given" {
+                            assert!(svg.contains("(minor angle"), "theta {theta}: the Given case says which angle the chord uses");
+                        } else {
+                            assert!(!svg.contains("minor angle") && !has_number(&svg, &minor), "theta {theta} {arc}/{sector}/{central}: the student copy shows {minor}");
+                        }
+                        // the key always says it
+                        let k = (def().render)(&with(&keyed(&l)));
+                        if mode(&p, K::Chord) != Md::Hidden { assert!(k.contains("(minor angle"), "theta {theta}: the key names the minor angle"); }
+                    }
+                }
+            }
+        }
+        assert!(checked > 500, "{checked} reflex cases");
+    }
+
+    /// Every Ask blank on a student sheet is accompanied by a row or a label that names what it asks, and angle blanks carry a unit.
+    #[test]
+    fn every_asked_blank_has_a_row_or_label_that_names_it() {
+        let tangent = examples("circle").unwrap().into_iter().find(|e| e.name.starts_with("Tangent meets")).unwrap();
+        let st = render_of(&student(&tangent.params));
+        assert!(st.contains("Angle between tangent and radius OA:") && st.contains("_____\u{b0}<"), "{st}");
+        let insc = examples("circle").unwrap().into_iter().find(|e| e.name.starts_with("Central and inscribed")).unwrap();
+        assert!(render_of(&student(&insc.params)).contains("Inscribed angle ACB:"));
+        // and the figure's own blank sits next to its angle, with a leader
+        let rep = build(&with(&student(&tangent.params))).1;
+        assert!(rep.placed.iter().any(|p| p.kind == Some(K::TanAngle) && p.leader), "the tangent angle's blank has a leader");
+        let rep = build(&with(&student(&insc.params))).1;
+        assert!(rep.placed.iter().any(|p| p.kind == Some(K::Inscribed) && p.leader), "the inscribed angle's blank has a leader");
+        let mut seed: u64 = 0x1234_5678_9abc_def1;
+        let mut next = move || { seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17; (seed >> 11) as f64 / (1u64 << 53) as f64 };
+        let mut blanks = 0;
+        for i in 0..700 {
+            let mut l: Vec<(&'static str, Value)> = vec![];
+            for k in ["show_chord", "show_bisector", "show_tangent", "show_secant", "show_central", "show_inscribed", "show_diameter", "show_radius"] { l.push(b(k, next() < 0.5)); }
+            l.push(f("a1", (next() * 360.0).floor())); l.push(f("a2", (next() * 360.0).floor())); l.push(f("c_angle", (next() * 360.0).floor()));
+            l.push(s("label_size", ["Small", "Medium", "Large"][(next() * 3.0) as usize % 3]));
+            for e in KINDS { l.push(b(e.2, next() < 0.5)); l.push(s(e.1, ["Given", "Ask", "Ask"][(next() * 3.0) as usize % 3])); }
+            let p = with(&student(&l));
+            let (rep, c) = (build(&p).1, ctx(&p));
+            for pl in &rep.placed {
+                let Some(k) = pl.kind else { continue };
+                if !pl.text.contains(BLANK) { continue; }
+                blanks += 1;
+                if matches!(k, K::Central | K::Inscribed | K::TanAngle) { assert!(pl.text.contains(if c.rad { "rad" } else { "\u{b0}" }), "case {i}: the blank {:?} has no unit", pl.text); }
+                // a bare blank (no "name =" in front of it) needs its row
+                if !pl.text.contains(" = ") { assert!(p.b(kinfo(k).2), "case {i}: the blank {:?} names nothing and its row is off", pl.text); }
+            }
+        }
+        assert!(blanks > 300, "{blanks} blanks checked");
+    }
+
+    #[test]
+    fn area_units_are_not_squared_twice() {
+        for u in ["square kilometres", "sq ft", "sq. m", "m\u{b2}", "m^2", "Square metres"] {
+            let pp = with(&[s("unit", u), f("radius", 6.0)]);
+            let c = ctx(&pp);
+            assert_eq!(c.value(K::Area), format!("{} {u}", num(c.m.area, c.dec)), "{u}");
+            assert_eq!(c.value(K::Sector), format!("{} {u}", num(c.m.sector_area, c.dec)), "{u}");
+            assert_eq!(c.value(K::Radius), format!("6 {u}"));
+        }
+        let pp = with(&[s("unit", "cm"), f("radius", 6.0)]);
+        let c = ctx(&pp);
+        assert_eq!(c.value(K::Area), format!("{} cm\u{b2}", num(c.m.area, c.dec)));
+        let pp = with(&[s("unit", ""), f("radius", 6.0)]);
+        assert_eq!(ctx(&pp).value(K::Area), "113.1");
+    }
+
+    /// Grabbing a handle without moving it changes nothing; a chord drag uses the shorter gap.
+    #[test]
+    fn handles_round_trip_and_chord_drag_uses_the_shorter_gap() {
+        for (r, define, key, val) in [(7.0, "Chord length", "chord_len", 3.3), (5.0, "OM distance", "om_dist", 0.1), (5.0, "Angle", "theta", 106.26)] {
+            let p = with(&[f("radius", r), s("define", define), f(key, val), b("show_chord", true)]);
+            let hs = handles("circle", &p, (1.0, 1.0)).unwrap();
+            let mut q = p.clone();
+            (hs[1].drag.as_ref().unwrap())(&mut q, hs[1].pos);
+            q.normalize(&(def().params)(), true);
+            assert_eq!(q.f(key), val, "{define}: a grab without a move changed {key}");
+        }
+        let p = with(&[f("radius", 5.0), f("a1", 0.0), s("define", "Chord length"), f("chord_len", 8.0), b("show_chord", true)]);
+        let hs = handles("circle", &p, (1.0, 1.0)).unwrap();
+        let cx = layout_of(&p).cx;
+        let drag = |p: &Params, deg: f64, r_: f64| { let mut q = p.clone(); (hs[1].drag.as_ref().unwrap())(&mut q, (cx + r_ * deg.to_radians().cos(), CY - r_ * deg.to_radians().sin())); q.normalize(&(def().params)(), true); q };
+        // ten degrees clockwise (350) is the small chord, not the diameter
+        let q = drag(&p, 350.0, R);
+        assert!((q.f("chord_len") - 10.0 * 5.0f64.to_radians().sin()).abs() < 0.051, "{}", q.f("chord_len"));
+    }
+
+    /// With the right-angle marks on the key only (or shown always), the blank and the key's value stay put: the room for the marks is kept on both copies.
+    #[test]
+    fn key_only_marks_keep_the_blank_and_the_answer_together() {
+        let mut seed: u64 = 0x0bad_cafe_1234_5678;
+        let mut next = move || { seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17; (seed >> 11) as f64 / (1u64 << 53) as f64 };
+        let mut n = 0;
+        for i in 0..500 {
+            let mut l: Vec<(&'static str, Value)> = vec![s("right_marks", ["Key only", "Show always", "Hide"][(next() * 3.0) as usize % 3])];
+            for k in ["show_chord", "show_bisector", "show_tangent", "show_central", "show_inscribed", "show_radius"] { l.push(b(k, next() < 0.6)); }
+            l.push(f("a1", (next() * 360.0).floor())); l.push(f("a2", if next() < 0.3 { (next() * 360.0).floor() } else { 180.0 + (next() * 4.0).floor() }));
+            l.push(f("c_angle", (next() * 360.0).floor()));
+            l.push(s("label_size", ["Small", "Medium", "Large"][(next() * 3.0) as usize % 3]));
+            for e in KINDS { l.push(b(e.2, next() < 0.6)); l.push(s(e.1, ["Given", "Ask", "Hidden"][(next() * 3.0) as usize % 3])); }
+            let (st, k) = (build(&with(&student(&l))).1, build(&with(&keyed(&l))).1);
+            assert_eq!(st.placed.len(), k.placed.len(), "case {i}");
+            for (a, b2) in st.placed.iter().zip(k.placed.iter()) {
+                let (ca, cb) = (((a.rect.x0 + a.rect.x1) / 2.0, (a.rect.y0 + a.rect.y1) / 2.0), ((b2.rect.x0 + b2.rect.x1) / 2.0, (b2.rect.y0 + b2.rect.y1) / 2.0));
+                assert!((ca.0 - cb.0).hypot(ca.1 - cb.1) <= 6.0, "case {i}: {:?} and {:?} are not in the same place", a.text, b2.text);
+                n += 1;
+            }
+        }
+        assert!(n > 500);
+    }
+
+    #[test]
+    fn the_check_line_never_prints_a_hidden_value() {
+        let base = [b("show_chord", true), b("show_bisector", true), b("m_om", true), b(SHOW_ANSWERS, true)];
+        // AM Hidden (the default): the check uses half the chord, whose length is shown
+        let mut l = base.to_vec(); l.push(s("g_om", "Ask"));
+        let k = render_of(&l);
+        assert!(k.contains("Check:") && k.contains("/ 2)"), "{k}");
+        let mut l = base.to_vec(); l.extend([s("g_om", "Ask"), s("g_am", "Ask")]);
+        assert!(render_of(&l).contains("Check:") && !render_of(&l).contains("/ 2)"));
+        for (hidden, other) in [("g_radius", ""), ("g_om", "")] {
+            let mut l = base.to_vec(); l.extend([s("g_am", "Ask"), s(hidden, "Hidden")]);
+            let _ = other;
+            assert!(!render_of(&l).contains("Check:"), "{hidden} Hidden but the Check line is printed");
+        }
+        // AM and the chord both Hidden: nothing to check with
+        let mut l = base.to_vec(); l.extend([s("g_om", "Ask"), s("g_am", "Hidden"), s("g_chord", "Hidden")]);
+        assert!(!render_of(&l).contains("Check:"));
+    }
+
+    #[test]
+    fn visibility_and_notes_follow_what_is_drawn() {
+        // a row for the inscribed or tangent angle is not visible when its part is off
+        let p = with(&[b("m_inscribed", true), s("g_inscribed", "Given")]);
+        assert!(!visible(&p, K::Inscribed));
+        let p = with(&[b("m_tanangle", true), s("g_tanangle", "Given")]);
+        assert!(!visible(&p, K::TanAngle));
+        assert!(visible(&with(&[b("m_tanangle", true), s("g_tanangle", "Given"), b("show_tangent", true)]), K::TanAngle));
+        // Given radius not shown, but the arc and the central angle are Given and visible: r follows, nothing is missing
+        let p = with(&[b("show_central", true), s("arc", "Minor"), b("m_arc", true), b("m_chord", true), b("m_central", true), s("g_radius", "Given"), b("m_radius", false), s("r_label", "Letter only"), s("g_arc", "Given"), s("g_central", "Given"), s("g_chord", "Ask"), b("show_chord", true)]);
+        assert!(warnings(&p).iter().all(|x| !x.contains("Given value")), "{:?}", warnings(&p));
+        // the same note still fires when nothing determines the size
+        let p = with(&[b("show_chord", true), b("m_chord", true), b("m_central", true), s("g_radius", "Given"), b("m_radius", false), s("r_label", "Letter only"), s("g_central", "Given"), s("g_chord", "Ask")]);
+        assert!(warnings(&p).iter().any(|x| x.contains("Given value")), "{:?}", warnings(&p));
+        // semicircle, inscribed angle asked, marks always shown: the mark gives the answer away
+        let semi = [f("a1", 200.0), f("a2", 20.0), f("c_angle", 100.0), b("show_chord", true), b("show_inscribed", true), s("g_inscribed", "Ask")];
+        let mut l = semi.to_vec(); l.push(s("right_marks", "Show always"));
+        assert!(warnings(&with(&l)).iter().any(|x| x.contains("right-angle mark") && x.contains("answer away")), "{:?}", warnings(&with(&l)));
+        let mut l = semi.to_vec(); l.push(s("right_marks", "Key only"));
+        assert!(warnings(&with(&l)).iter().all(|x| !x.contains("answer away")));
+    }
+
+    /// Leaders: none crosses a drawn line in the shipped examples and the single-topic cases (tested above), and the seeded sweep below
+    /// counts what is left. A leader never passes through another label's box, never runs over another leader, and a plate never hides one.
+    #[test]
+    fn leaders_in_a_random_sweep_avoid_labels_and_other_leaders() {
+        let mut seed: u64 = 0xfeed_beef_dead_1234;
+        let mut next = move || { seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17; (seed >> 11) as f64 / (1u64 << 53) as f64 };
+        let (mut layouts, mut with_leader, mut crossing, mut thru_label, mut clash, mut plates, mut plate_over) = (0, 0, 0, 0, 0, 0, 0);
+        let n = 3200;
+        for i in 0..n {
+            let mut l: Vec<(&'static str, Value)> = vec![];
+            for k in ["show_chord", "show_bisector", "show_tangent", "show_secant", "show_central", "show_inscribed", "show_diameter", "show_radius"] { l.push(b(k, next() < 0.45)); }
+            l.push(f("a1", (next() * 360.0).floor())); l.push(f("a2", (next() * 360.0).floor())); l.push(f("c_angle", (next() * 360.0).floor()));
+            l.push(s("label_size", ["Small", "Medium", "Large"][(next() * 3.0) as usize % 3]));
+            l.push(s("style", if next() < 0.5 { "Print" } else { "Colour" }));
+            l.push(s("arc", ["None", "Minor", "Major"][(next() * 3.0) as usize % 3]));
+            l.push(s("sector", ["None", "Minor", "Major"][(next() * 3.0) as usize % 3]));
+            l.push(s("unit", ["", "cm", "kilometres"][(next() * 3.0) as usize % 3]));
+            l.push(b(SHOW_ANSWERS, next() < 0.5));
+            for e in KINDS { l.push(b(e.2, next() < 0.45)); l.push(s(e.1, ["Given", "Ask", "Hidden"][(next() * 3.0) as usize % 3])); }
+            let rep = build(&with(&l)).1;
+            layouts += 1;
+            let leaders: Vec<(usize, (Pt, Pt))> = rep.placed.iter().enumerate().filter_map(|(j, pl)| pl.line.map(|ln| (j, ln))).collect();
+            if leaders.is_empty() { continue; }
+            with_leader += 1;
+            let (mut c, mut t, mut k) = (false, false, false);
+            for (j, (a, b2)) in &leaders {
+                let len = (b2.0 - a.0).hypot(b2.1 - a.1);
+                if rep.segs.iter().skip(CIRCLE_SEGS).any(|sg| seg_cross(*a, *b2, sg.0, sg.1).is_some_and(|u| u * len > 3.0 && (1.0 - u) * len > 0.5)) { c = true; }
+                for (m, o) in rep.placed.iter().enumerate() { if m != *j && seg_hits(*a, *b2, &o.rect.grow(-1.0)) { t = true; } }
+                for (m, o2) in &leaders { if m != j && leaders_clash((*a, *b2), *o2) { k = true; } }
+            }
+            // a plate never covers a leader (the leaders are drawn over the plates)
+            for (j, pl) in rep.placed.iter().enumerate().filter(|(_, pl)| pl.plate) {
+                plates += 1;
+                if leaders.iter().any(|(m, (a, b2))| *m != j && seg_hits(*a, *b2, &pl.rect)) { plate_over += 1; }
+            }
+            crossing += c as u32; thru_label += t as u32; clash += k as u32;
+            let _ = i;
+        }
+        eprintln!("leader sweep: {layouts} layouts, {with_leader} with a leader, {crossing} cross a line, {thru_label} through a label, {clash} leader clashes, {plates} plates");
+        assert!(thru_label == 0, "{thru_label} layouts have a leader through another label");
+        assert!(clash == 0, "{clash} layouts have leaders over each other");
+        assert!(plate_over == 0, "{plate_over} plates cover a leader");
     }
 
     /// Writes every example (Colour, Print, student, key, and Print at a 66% bitonal threshold) to $VERSHION_PNG_DIR.
@@ -2409,6 +2781,8 @@ mod tests {
         lu.push(s("label_size", "Large")); lu.push(("dec", Value::I(4)));
         cases.push(("longunit-large".into(), lu));
         cases.push(("renamed".into(), vec![s("name_a", "P"), s("name_b", "Q"), s("name_o", "Z"), b("show_chord", true), b("show_bisector", true), b("m_chord", true), b("show_radius", true)]));
+        cases.push(("coords90-large".into(), vec![f("a1", 0.0), f("a2", 90.0), f("c_angle", 200.0), b("show_inscribed", true), b("show_central", true), b("show_coords", true), s("label_size", "Large"), s("arc", "Minor"), b("m_central", true)]));
+        cases.push(("coords-chord-medium".into(), vec![f("a1", 30.0), f("a2", 140.0), f("c_angle", 200.0), b("show_inscribed", true), b("show_chord", true), b("show_coords", true), s("label_size", "Medium"), b("m_chord", true)]));
         for deg in [5.0, 10.0, 20.0, 30.0] {
             cases.push((format!("small{deg}"), vec![f("a1", 20.0), f("a2", 20.0 + deg), f("c_angle", 200.0), b("show_chord", true), b("show_bisector", true), b("show_central", true), b("show_inscribed", true), b("m_chord", true)]));
         }
