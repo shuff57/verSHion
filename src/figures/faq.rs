@@ -3238,7 +3238,7 @@ const RIGHT_TRIANGLE_TRIG: &[Faq] = &[
     },
     Faq {
         q: "How do I ask for a missing side or for an angle?",
-        a: "For a missing side, set 'The triangle is set by' to an angle and a side (for example Angle and adjacent), give both as Given and set the other sides to Ask: the key shows the sides worked out with sin, cos or tan. For an angle, give two sides (Two legs, or Leg and hypotenuse) and set the angle to Ask: the key shows the inverse trig, for example arctan(7/10) = 34.99 degrees.",
+        a: "For a missing side, set 'The triangle is set by' to an angle and a side (for example Angle and adjacent), give both as Given and set the other sides to Ask: the key shows the sides worked out with sin, cos or tan. For an angle, give two sides (Two legs, or Leg and hypotenuse) and set the angle to Ask: the key shows the inverse trig, for example arctan(7/10) = 35 degrees to one decimal place.",
     },
     Faq {
         q: "Why is the angle kept between 10 and 80 degrees?",

@@ -85,7 +85,7 @@ pub fn solve(p: &Params) -> Sol {
     let len = |k: &str, d: f64| fin(p.f(k), 0.1, 10000.0, d);
     let (o, a, h) = (len("opp_len", 3.0), len("adj_len", 4.0), len("hyp_len", 5.0));
     let tin = fin(p.f("theta"), TH_MIN, TH_MAX, 30.0);
-    let cl = |t: f64| (t.clamp(TH_MIN, TH_MAX), t < TH_MIN || t > TH_MAX);
+    let cl = |t: f64| (t.clamp(TH_MIN, TH_MAX), t < TH_MIN - 1e-6 || t > TH_MAX + 1e-6);
     let st = |t: f64| (t.to_radians().sin(), t.to_radians().cos(), t.to_radians().tan());
     let (opp, adj, hyp, th, clamped) = match p.s("define") {
         "Leg and hypotenuse" => {
@@ -146,6 +146,10 @@ impl Ctx {
         }
     }
     fn n(&self, x: f64) -> String { num(x, self.dec) }
+    /// A ratio is always printed with at least two decimals (0.6 is not 1).
+    fn nr(&self, x: f64) -> String { num(x, self.dec.max(2)) }
+    /// The sides a ratio is made of.
+    fn ratio_sides(v: V) -> [V; 2] { match v { V::Sin => [V::Opp, V::Hyp], V::Cos => [V::Adj, V::Hyp], _ => [V::Opp, V::Adj] } }
     fn side_name(&self, v: V) -> &'static str {
         if self.words {
             match v { V::Opp => "opposite", V::Adj => "adjacent", _ => "hypotenuse" }
@@ -165,11 +169,11 @@ impl Ctx {
     fn ratio_rhs(&self, v: V) -> String {
         let s = &self.s;
         let (a, b) = match v { V::Sin => (s.opp, s.hyp), V::Cos => (s.adj, s.hyp), _ => (s.opp, s.adj) };
-        format!("{}/{} = {}", self.n(a), self.n(b), self.n(self.value(v)))
+        format!("{}/{} = {}", self.n(a), self.n(b), self.nr(self.value(v)))
     }
     /// Every text that would give the value away: the number itself and, for a ratio, its fraction.
     fn tokens(&self, v: V) -> Vec<String> {
-        let mut t = vec![self.n(self.value(v))];
+        let mut t = vec![if matches!(v, V::Sin | V::Cos | V::Tan) { self.nr(self.value(v)) } else { self.n(self.value(v)) }];
         if matches!(v, V::Sin | V::Cos | V::Tan) { t.push(self.ratio_rhs(v).split(" = ").next().unwrap_or("").to_string()); }
         t
     }
@@ -188,7 +192,16 @@ fn rows(c: &Ctx, hint: bool) -> Vec<Row> {
         } else {
             (format!("{name} = {}", c.ratio_rhs(v)), format!("{name} = {BLANK}"))
         };
-        let stu = if md == Md::Ask { blank } else if v == V::Theta { format!("{name} = {}\u{b0}", c.n(c.s.th)) } else { key.clone() };
+        let stu = if md == Md::Ask {
+            blank
+        } else if v == V::Theta {
+            format!("{name} = {}\u{b0}", c.n(c.s.th))
+        } else if Ctx::ratio_sides(v).iter().all(|x| c.md(*x) == Md::Given) {
+            key.clone()
+        } else {
+            // the fraction would print a side that is Ask or Hidden: the student copy shows the decimal only
+            format!("{name} = {}", c.nr(c.value(v)))
+        };
         out.push(Row { key, stu });
     }
     out
@@ -212,6 +225,13 @@ pub fn warnings(p: &Params) -> Vec<String> {
     let mut w = vec![];
     if solve(p).clamped {
         w.push(format!("The angle was kept between {TH_MIN} and {TH_MAX} degrees so the picture stays readable; the sides were adjusted to match."));
+    }
+    if p.s("define").starts_with("Angle") && (p.f("theta") <= TH_MIN + 1e-9 || p.f("theta") >= TH_MAX - 1e-9) {
+        w.push(format!("Theta is limited to between {TH_MIN} and {TH_MAX} degrees; a typed value outside that range is held at the limit."));
+    }
+    let c = ctx(p);
+    if [V::Sin, V::Cos, V::Tan].iter().any(|v| c.md(*v) == Md::Given && Ctx::ratio_sides(*v).iter().any(|x| c.md(*x) != Md::Given)) {
+        w.push("A Given sin, cos or tan uses a side that is not Given, so the student copy prints its decimal without the fraction of the lengths.".to_string());
     }
     let (given, asks) = sheet_values(p);
     if asks > 0 && given == 0 {
@@ -276,11 +296,20 @@ fn vertex_cands(vx: Pt, dir: Pt, w: f64, h: f64) -> Vec<Pt> {
     v
 }
 
-fn theta_cands(t: Pt, bis: Pt, r_arc: f64, w: f64, h: f64) -> Vec<Pt> {
+/// Inside the angle along its bisector first, then just outside either ray beside the arc's end, then further round the vertex.
+fn theta_cands(t: Pt, bis: Pt, rays: [Pt; 2], r_arc: f64, w: f64, h: f64) -> Vec<Pt> {
     let mut v = vec![];
-    for j in 0..16 {
-        let d = r_arc + 9.0 + 8.0 * j as f64;
+    for j in 0..4 {
+        let d = r_arc + 9.0 + 6.0 * j as f64;
         v.push((t.0 + bis.0 * d, t.1 + bis.1 * d));
+    }
+    for d in [r_arc, r_arc * 0.7, r_arc + 8.0, r_arc + 16.0, r_arc + 28.0] {
+        for u in rays {
+            let mut n = (-u.1, u.0);
+            if n.0 * bis.0 + n.1 * bis.1 > 0.0 { n = (-n.0, -n.1); }
+            let off = half_ext(n, w, h) + 2.0;
+            v.push((t.0 + u.0 * d + n.0 * off, t.1 + u.1 * d + n.1 * off));
+        }
     }
     for k in [0.0, 6.0, 14.0, 24.0, 40.0, 70.0, 110.0, 170.0, 260.0] {
         for d in COMPASS { let off = half_ext(d, w, h) + 6.0 + k; v.push((t.0 + d.0 * off, t.1 + d.1 * off)); }
@@ -302,6 +331,8 @@ pub struct Report {
     pub c: Pt,
     pub o: Pt,
     pub rows: Vec<Rect>,
+    /// Points along theta's arc (figure coordinates).
+    pub arc: Vec<Pt>,
 }
 
 pub fn build(p: &Params) -> (String, Report) {
@@ -338,7 +369,7 @@ pub fn build(p: &Params) -> (String, Report) {
     segs.push((r2, r3));
 
     // theta's arc at T, between the side T-C and the hypotenuse T-O
-    let r_arc = (0.3 * dist(t, pc).min(dist(t, o))).clamp(16.0, 38.0);
+    let r_arc = (0.3 * dist(t, pc).min(dist(t, o))).clamp(22.0, 38.0);
     let ang = |from: Pt, to: Pt| (-(to.1 - from.1)).atan2(to.0 - from.0).to_degrees();
     let (a_c, a_o) = (ang(t, pc), ang(t, o));
     let dlt = (a_o - a_c + 540.0).rem_euclid(360.0) - 180.0;
@@ -352,7 +383,7 @@ pub fn build(p: &Params) -> (String, Report) {
     let mut placed: Vec<Rect> = vec![];
     let mut labels: Vec<(String, Rect)> = vec![];
     let mut texts = String::new();
-    let mut put = |name: &str, key: &str, stu: &str, size: f64, bold: bool, cands: &dyn Fn(f64, f64) -> Vec<Pt>, segs: &[(Pt, Pt)], fill: &str| {
+    let mut put = |name: &str, key: &str, stu: &str, size: f64, bold: bool, cands: &dyn Fn(f64, f64) -> Vec<Pt>, segs: &[(Pt, Pt)], fill: &str| -> (Pt, Rect) {
         let (w, h) = (tw(key, size, bold).max(tw(stu, size, bold)) + 4.0, size * 1.2);
         let cs = cands(w, h);
         let ctr = place(&cs, w, h, &placed, segs);
@@ -361,8 +392,25 @@ pub fn build(p: &Params) -> (String, Report) {
         labels.push((name.to_string(), r));
         let shown = if ans { key } else { stu };
         texts.push_str(&text_el(ctr.0, ctr.1 + size * 0.35, size, "middle", bold, true, fill, shown));
+        (ctr, r)
     };
     let vs = 17.0 * f;
+    // theta first, so it is the label nearest its arc
+    let rays = [unit_of(t, pc), unit_of(t, o)];
+    let (tc, tr) = put("theta", "\u{3b8}", "\u{3b8}", vs, true, &|w, h| theta_cands(t, bis, rays, r_arc, w, h), &segs, "#000");
+    let da = (ang(t, tc) - a_c + 540.0).rem_euclid(360.0) - 180.0;
+    if !(da * dlt.signum() >= 0.0 && da.abs() <= dlt.abs()) {
+        // outside the angle: a short leader from the label to the arc's nearer end
+        let r = tr;
+        let ends = [at(a_c), at(a_c + dlt)];
+        let e = if dist(ends[0], tc) < dist(ends[1], tc) { ends[0] } else { ends[1] };
+        let from = (e.0.clamp(r.x0, r.x1), e.1.clamp(r.y0, r.y1));
+        if dist(from, e) > 3.0 {
+            let col = if print { "#666666" } else { "#7a4fc4" };
+            fig.line(from.0, from.1, e.0, e.1, col, 1.0);
+            segs.push((from, e));
+        }
+    }
     if p.b("show_names") {
         let cen = ((pa.0 + pb.0 + pc.0) / 3.0, (pa.1 + pb.1 + pc.1) / 3.0);
         for (nm, v) in [("A", pa), ("B", pb), ("C", pc)] {
@@ -370,7 +418,6 @@ pub fn build(p: &Params) -> (String, Report) {
             put(nm, nm, nm, vs, true, &|w, h| vertex_cands(v, dir, w, h), &segs, "#000");
         }
     }
-    put("theta", "\u{3b8}", "\u{3b8}", vs, true, &|w, h| theta_cands(t, bis, r_arc, w, h), &segs, "#000");
     let ss = 15.0 * f;
     let hyp_n = (-(pc.1 - pb.1) / 1.0, -(pb.0 - pa.0)); // up-left of the hypotenuse
     let hn = { let l = hyp_n.0.hypot(hyp_n.1).max(1e-9); (hyp_n.0 / l, hyp_n.1 / l) };
@@ -388,9 +435,10 @@ pub fn build(p: &Params) -> (String, Report) {
     let rws = rows(&c, p.b("soh"));
     let rs_size = 16.0 * f;
     let hs_size = 13.0 * f;
-    let hint = p.b("soh").then_some(["SOH  sin \u{3b8} = opposite / hypotenuse", "CAH  cos \u{3b8} = adjacent / hypotenuse", "TOA  tan \u{3b8} = opposite / adjacent"]);
+    let (no, na, nh) = (c.side_name(V::Opp), c.side_name(V::Adj), c.side_name(V::Hyp));
+    let hint = p.b("soh").then_some([format!("SOH  sin \u{3b8} = {no} / {nh}"), format!("CAH  cos \u{3b8} = {na} / {nh}"), format!("TOA  tan \u{3b8} = {no} / {na}")]);
     let row_w = rws.iter().map(|r| tw(&r.key, rs_size, false).max(tw(&r.stu, rs_size, false))).fold(0.0, f64::max);
-    let hint_w = hint.map_or(0.0, |h| h.iter().map(|l| tw(l, hs_size, false)).fold(0.0, f64::max));
+    let hint_w = hint.as_ref().map_or(0.0, |h| h.iter().map(|l| tw(l, hs_size, false)).fold(0.0, f64::max));
     let (fw, fh) = (bb.x1 - bb.x0, bb.y1 - bb.y0);
     let w = (fw.max(row_w).max(hint_w).max(340.0) + 2.0 * MARGIN).ceil();
     let has_readout = !rws.is_empty() || hint.is_some();
@@ -415,7 +463,7 @@ pub fn build(p: &Params) -> (String, Report) {
             d.raw(&text_el(x, y + rowh * 0.7, rs_size, "start", false, false, "#000", shown));
             y += rowh;
         }
-        if let Some(lines) = hint {
+        if let Some(lines) = &hint {
             y += 6.0;
             for l in lines {
                 d.raw(&text_el(x, y + hs_size, hs_size, "start", false, false, "#333333", l));
@@ -425,7 +473,7 @@ pub fn build(p: &Params) -> (String, Report) {
     }
     let sh = (dx, dy);
     let fin_pt = |q: Pt| (q.0 + dx, q.1 + dy);
-    let rep = Report { labels, segs, w, h, shift: sh, t: fin_pt(t), c: fin_pt(pc), o: fin_pt(o), rows: row_rects };
+    let rep = Report { labels, segs, w, h, shift: sh, t: fin_pt(t), c: fin_pt(pc), o: fin_pt(o), rows: row_rects, arc: (0..=12).map(|i| at(a_c + dlt * i as f64 / 12.0)).collect() };
     (d.finish(), rep)
 }
 
@@ -444,11 +492,10 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
         ex("5-12-13: the other acute angle is theta", vec![s("define", "Leg and hypotenuse"), f("opp_len", 5.0), f("hyp_len", 13.0), s("theta_at", "B")], ["Given", "Ask", "Given", "Hidden", "Ask", "Ask", "Ask"]),
         ex("30-60-90: hypotenuse 10", vec![s("define", "Angle and hypotenuse"), f("theta", 30.0), f("hyp_len", 10.0)], ["Ask", "Ask", "Given", "Given", "Ask", "Ask", "Ask"]),
         ex("Find the missing side: angle 35 and adjacent 12", vec![s("define", "Angle and adjacent"), f("theta", 35.0), f("adj_len", 12.0), b("soh", true)], ["Ask", "Given", "Ask", "Given", "Hidden", "Hidden", "Hidden"]),
+        ex("Given sin: find the hypotenuse, the other leg and the rest", vec![s("define", "Leg and hypotenuse"), f("opp_len", 7.0), f("hyp_len", 25.0)], ["Given", "Ask", "Ask", "Ask", "Given", "Ask", "Ask"]),
         ex("Find the angle from two sides (inverse tangent)", vec![s("define", "Two legs"), f("opp_len", 7.0), f("adj_len", 10.0), b("soh", true), ("dec", Value::I(1)), s("side_labels", "Words")], ["Given", "Given", "Hidden", "Ask", "Hidden", "Hidden", "Ask"]),
     ])
 }
-
-fn round2(x: f64) -> f64 { (x * 100.0).round() / 100.0 }
 
 pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
     if id != ID { return None; }
@@ -463,8 +510,8 @@ pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
         let th = th.clamp(TH_MIN, TH_MAX);
         let cur = solve(p);
         match p.s("define") {
-            "Two legs" => p.set_f("adj_len", round2(cur.opp / th.to_radians().tan()).clamp(0.1, 10000.0)),
-            "Leg and hypotenuse" => p.set_f("hyp_len", round2(cur.opp / th.to_radians().sin()).clamp(0.1, 10000.0)),
+            "Two legs" => p.set_f("adj_len", (cur.opp / th.to_radians().tan()).clamp(0.1, 10000.0)),
+            "Leg and hypotenuse" => p.set_f("hyp_len", (cur.opp / th.to_radians().sin()).clamp(0.1, 10000.0)),
             _ => p.set_f("theta", th),
         }
     })])
@@ -576,7 +623,7 @@ mod tests {
         let t = texts(&(def().render)(&p));
         assert!(t.contains("\u{3b8} = 35\u{b0}") && t.contains("tan \u{3b8} = 7/10 = 0.7"), "{t}");
         let p0 = with(&[("dec", Value::I(0)), b(SHOW_ANSWERS, true)]);
-        assert!(texts(&(def().render)(&p0)).contains("sin \u{3b8} = 3/5 = 1"), "{}", texts(&(def().render)(&p0)));
+        assert!(texts(&(def().render)(&p0)).contains("sin \u{3b8} = 3/5 = 0.6"), "{}", texts(&(def().render)(&p0)));
         // Ask on the angle with the hint on: the key names the inverse function
         let h = texts(&render_of(&[b("soh", true), b(SHOW_ANSWERS, true)]));
         assert!(h.contains("arctan(3/4) = 36.87\u{b0}") && h.contains("SOH") && h.contains("CAH") && h.contains("TOA"), "{h}");
@@ -597,11 +644,9 @@ mod tests {
             let mut key = list.clone();
             key.push(b(SHOW_ANSWERS, true));
             let (st, kt) = (texts(&render_of(&stu)), texts(&render_of(&key)));
-            let given: Vec<String> = VALS.iter().filter(|e| c.md(e.0) == Md::Given).flat_map(|e| c.tokens(e.0)).collect();
             for e in VALS.iter().filter(|e| c.md(e.0) == Md::Ask) {
                 for tok in c.tokens(e.0) {
                     assert!(has_tok(&kt, &tok), "{name}: the key lacks {tok}\n{kt}");
-                    if given.contains(&tok) { continue; }
                     assert!(!has_tok(&st, &tok), "{name}: the student copy shows {tok} ({:?})\n{st}", e.0);
                     checked += 1;
                 }
@@ -625,7 +670,7 @@ mod tests {
             assert!(asks > 0, "{name}");
             assert!(given >= 1, "{name}: asks for {asks} values and gives none");
             assert!(determined(&p), "{name}: the Given values do not fix the triangle");
-            assert!(warnings(&p).is_empty(), "{name}: {:?}", warnings(&p));
+            assert!(warnings(&p).iter().all(|w| w.contains("Given sin, cos or tan")), "{name}: {:?}", warnings(&p));
             // a Given value is on the student sheet
             let t = texts(&render_of(&[list.clone(), vec![b(SHOW_ANSWERS, false)]].concat()));
             let c = ctx(&p);
@@ -634,7 +679,7 @@ mod tests {
         }
         // the shipped set covers the required setups
         let names: String = all_examples().iter().map(|e| e.0.clone()).collect::<Vec<_>>().join("|");
-        for k in ["3-4-5", "5-12-13", "30-60-90", "missing side"] { assert!(names.contains(k), "{k}"); }
+        for k in ["3-4-5", "5-12-13", "30-60-90", "missing side", "Given sin"] { assert!(names.contains(k), "{k}"); }
         // and the warnings fire for an unsolvable sheet
         let bad = with(&[s("g_opp", "Ask"), s("g_adj", "Ask")]);
         assert!(!warnings(&bad).is_empty());
@@ -836,6 +881,9 @@ mod tests {
         for (i, (_, l)) in all_examples().into_iter().enumerate() { cases.push((format!("ex{i}"), l)); }
         cases.push(("letters".into(), vec![s("side_labels", "Letters"), s("theta_at", "B"), b("soh", true)]));
         cases.push(("thin10".into(), vec![s("define", "Angle and adjacent"), f("theta", 10.0), f("adj_len", 20.0), s("label_size", "Large")]));
+        for (th, at) in [(15.0, "A"), (20.0, "A"), (10.0, "B"), (15.0, "B"), (20.0, "B")] {
+            cases.push((format!("small{th}{at}"), vec![s("define", "Angle and adjacent"), f("theta", th), f("adj_len", 20.0), s("theta_at", at)]));
+        }
         cases.push(("steep80".into(), vec![s("define", "Angle and adjacent"), f("theta", 80.0), f("adj_len", 2.0), s("theta_at", "B")]));
         cases.push(("long".into(), vec![s("unit", "centimetres"), s("label_size", "Large"), b("soh", true), f("opp_len", 1234.5), f("adj_len", 2345.6)]));
         for (tag, list) in cases {
@@ -852,4 +900,94 @@ mod tests {
             }
         }
     }
+    /// A Given sin, cos or tan prints its fraction of the lengths on the student copy only when every side it uses is Given.
+    #[test]
+    fn a_given_ratio_never_prints_a_hidden_side() {
+        let modes = ["Given", "Ask", "Hidden"];
+        let mut n = 0;
+        for (opp, hyp) in [(7.0, 7.3), (3.0, 5.0), (5.0, 13.0)] {
+            for mo in modes { for ma in modes { for mh in modes {
+                for ratio in ["g_sin", "g_cos", "g_tan"] {
+                    let l = vec![s("define", "Leg and hypotenuse"), f("opp_len", opp), f("hyp_len", hyp), s("g_opp", mo), s("g_adj", ma), s("g_hyp", mh), s("g_sin", "Hidden"), s("g_cos", "Hidden"), s("g_tan", "Hidden"), s(ratio, "Given"), s("g_theta", "Hidden"), b(SHOW_ANSWERS, false)];
+                    let p = with(&l);
+                    let c = ctx(&p);
+                    let v = match ratio { "g_sin" => V::Sin, "g_cos" => V::Cos, _ => V::Tan };
+                    let t = texts(&render_of(&l));
+                    let row = t.lines().find(|x| x.starts_with(&format!("{} ", ["sin", "cos", "tan"][[V::Sin, V::Cos, V::Tan].iter().position(|y| *y == v).unwrap()]))).unwrap_or("").to_string();
+                    let all = Ctx::ratio_sides(v).iter().all(|x| c.md(*x) == Md::Given);
+                    assert_eq!(row.contains('/'), all, "{opp} {hyp} {mo} {ma} {mh} {ratio}: {row:?}");
+                    for sv in [V::Opp, V::Adj, V::Hyp] {
+                        if c.md(sv) != Md::Given && Ctx::ratio_sides(v).contains(&sv) { assert!(!has_tok(&row, &c.n(c.value(sv))) || row.contains(&c.nr(c.value(v))) && !row.contains('/'), "{row:?} shows {sv:?}"); }
+                    }
+                    let warned = warnings(&p).iter().any(|w| w.contains("Given sin, cos or tan"));
+                    assert_eq!(warned, !all, "{opp} {hyp} {mo} {ma} {mh} {ratio}");
+                    n += 1;
+                }
+            } } }
+        }
+        assert_eq!(n, 243);
+        // the key still shows the fraction
+        let k = texts(&render_of(&[s("define", "Leg and hypotenuse"), f("opp_len", 7.0), f("hyp_len", 7.3), s("g_sin", "Given"), s("g_hyp", "Ask"), b(SHOW_ANSWERS, true)]));
+        assert!(k.contains("sin \u{3b8} = 7/7.3 = 0.96"), "{k}");
+    }
+
+    fn rect_dist(r: &Rect, q: Pt) -> f64 {
+        let (dx, dy) = ((r.x0 - q.0).max(0.0).max(q.0 - r.x1), (r.y0 - q.1).max(0.0).max(q.1 - r.y1));
+        dx.hypot(dy)
+    }
+
+    /// At small angles theta stays within 24 px of its arc and no other label is nearer to it.
+    #[test]
+    fn theta_stays_beside_its_arc_at_small_angles() {
+        for th in [10.0, 12.0, 15.0, 20.0] {
+            for at in ["A", "B"] {
+                for size in ["Small", "Medium", "Large"] {
+                    let (_, r) = build(&with(&[s("define", "Angle and adjacent"), f("theta", th), f("adj_len", 20.0), s("theta_at", at), s("label_size", size)]));
+                    let near = |rc: &Rect| r.arc.iter().map(|q| rect_dist(rc, *q)).fold(f64::MAX, f64::min);
+                    let tr = r.labels.iter().find(|l| l.0 == "theta").unwrap().1;
+                    let dt = near(&tr);
+                    assert!(dt <= 24.0, "{th} {at} {size}: theta is {dt} px from its arc");
+                    for (nm, rc) in &r.labels { if nm != "theta" { assert!(near(rc) >= dt - 1e-9, "{th} {at} {size}: {nm} is nearer the arc ({}) than theta ({dt})", near(rc)); } }
+                    let (a, e) = (r.arc[0], r.arc[12]);
+                    assert!(dist(a, e) > 3.5, "{th}: the arc is a bump ({})", dist(a, e));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_handle_keeps_precision_and_the_limits_raise_no_false_note() {
+        for define in ["Two legs", "Leg and hypotenuse"] {
+            for target in [10.0f64, 80.0, 45.0] {
+                let p = with(&[s("define", define), f("opp_len", 3.0), f("adj_len", 4.0), f("hyp_len", 5.0)]);
+                let r = build(&p).1;
+                let drag = handles(ID, &p, (0.0, 0.0)).unwrap()[0].drag.clone().unwrap();
+                let mut q = p.clone();
+                let d = 100.0;
+                drag(&mut q, (r.t.0 + d * target.to_radians().cos(), r.t.1 - d * target.to_radians().sin()));
+                let sl = solve(&q);
+                assert!((sl.th - target).abs() < 1e-6 && !sl.clamped, "{define} {target}: {sl:?}");
+                assert!(warnings(&q).iter().all(|w| !w.contains("kept between")));
+            }
+        }
+        // a pointer within a pixel of the handle changes nothing
+        let p = with(&[]);
+        let r = build(&p).1;
+        let drag = handles(ID, &p, (0.0, 0.0)).unwrap()[0].drag.clone().unwrap();
+        let mut q = p.clone();
+        drag(&mut q, (r.o.0 + 0.7, r.o.1 - 0.6));
+        assert_eq!(params_key(&q), params_key(&p));
+    }
+
+    #[test]
+    fn the_hint_follows_the_letters_and_a_typed_theta_at_the_limit_is_noted() {
+        let t = texts(&render_of(&[s("side_labels", "Letters"), b("soh", true)]));
+        assert!(t.contains("SOH  sin \u{3b8} = a / c") && t.contains("CAH  cos \u{3b8} = b / c") && t.contains("TOA  tan \u{3b8} = a / b"), "{t}");
+        let t = texts(&render_of(&[s("side_labels", "Letters"), s("theta_at", "B"), b("soh", true)]));
+        assert!(t.contains("SOH  sin \u{3b8} = b / c") && t.contains("TOA  tan \u{3b8} = b / a"), "{t}");
+        let p = params_from_json(&def(), &serde_json::json!({"define": "Angle and adjacent", "theta": 3.0}));
+        assert!(warnings(&p).iter().any(|w| w.contains("Theta is limited")), "{:?}", warnings(&p));
+        assert!(!warnings(&with(&[s("define", "Angle and adjacent"), f("theta", 35.0)])).iter().any(|w| w.contains("Theta is limited")));
+    }
+
 }
