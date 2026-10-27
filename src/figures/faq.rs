@@ -50,6 +50,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "number-line" => NUMBER_LINE,
         "triangle" => TRIANGLE,
         "rectangle" => RECTANGLE,
+        "circle" => CIRCLE,
         "parallelogram" => PARALLELOGRAM,
         "trapezoid" => TRAPEZOID,
         "kite" => KITE,
@@ -3191,5 +3192,24 @@ const CHI_SQUARE_TABLE: &[Faq] = &[
     Faq {
         q: "What if an expected count is small?",
         a: "The key warns when the smallest expected count is below 5, since the chi-square approximation is then unreliable.",
+    },
+];
+
+const CIRCLE: &[Faq] = &[
+    Faq {
+        q: "Is the circle drawn to scale?",
+        a: "The circle is always drawn the same size; the radius is a number to read, and every measure is worked out from it. The angles and points are drawn exactly where you put them.",
+    },
+    Faq {
+        q: "How do I make a worksheet and its answer key?",
+        a: "Turn Show answers off for the student copy: the radius and the angle between the radii stay, and every computed value (diameter, circumference, area, arc, sector, chord, inscribed angle) becomes a blank. Student + key exports both.",
+    },
+    Faq {
+        q: "Which arc and sector are measured?",
+        a: "Arc AB and Sector choose the minor or the major one, and the arc length and sector area follow that choice (the minor arc when neither is chosen). The central angle is the angle between the two radii, never more than 180 degrees.",
+    },
+    Faq {
+        q: "Why is the inscribed angle sometimes not half the central angle?",
+        a: "An inscribed angle is half the arc it cuts off. Point C on the major arc gives half the central angle; if you drag C onto the minor arc it cuts off the other arc, and the angle becomes 180 degrees minus that half.",
     },
 ];

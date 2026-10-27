@@ -215,7 +215,7 @@ fn paint_is_grey_within(v: &str, spread: i32) -> bool {
 
 /// Every colour-bearing value (fill, stroke, stop-color, flood-color; as attribute or CSS) that is
 /// not grey, black, white, none or a `url(#...)` reference, deduplicated.
-fn non_grey_paints(svg: &str) -> Vec<String> {
+pub(super) fn non_grey_paints(svg: &str) -> Vec<String> {
     non_grey_paints_within(svg, NEUTRAL_SPREAD)
 }
 

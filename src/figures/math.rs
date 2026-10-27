@@ -6845,7 +6845,7 @@ pub fn chips(id: &str) -> Option<super::ChipsCard> {
 }
 
 pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<interact::Handle>> {
-    super::math_plot::handles(id, p, size).or_else(|| super::math_geo::handles(id, p, size))
+    super::math_plot::handles(id, p, size).or_else(|| super::math_geo::handles(id, p, size)).or_else(|| super::circle::handles(id, p, size))
 }
 
 /// Solids' "Shading" choice: Tinted (the shaded faces drawn so far) or White, the reference's

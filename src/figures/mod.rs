@@ -34,6 +34,7 @@ pub mod items;
 pub mod labels;
 pub mod layout;
 pub mod logic;
+pub mod circle;
 pub mod math;
 pub mod math_geo;
 pub mod math_plot;
@@ -477,6 +478,7 @@ pub fn registry() -> Vec<FigureDef> {
     v.extend(biology::defs());
     v.extend(chemistry::defs());
     v.extend(math::defs());
+    v.extend(circle::defs());
     v.extend(stats::defs());
     v.extend(computing::defs());
     v.extend(accounting::defs());
@@ -732,6 +734,7 @@ pub fn examples_for(id: &str) -> Vec<Example> {
         .or_else(|| biology::examples(id))
         .or_else(|| chemistry::examples(id))
         .or_else(|| math::examples(id))
+        .or_else(|| circle::examples(id))
         .or_else(|| stats::examples(id))
         .or_else(|| computing::examples(id))
         .or_else(|| electric::examples(id))
