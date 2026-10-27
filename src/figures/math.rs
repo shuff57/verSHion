@@ -3538,20 +3538,23 @@ fn coordinate_grid_build(p: &Params, notes: &mut Vec<String>) -> String {
                     let spot = cands.iter().find(|(_, cx, cy, ca)| { let r = box_of(*cx, *cy, ca, t); r[0] > 2.0 && r[2] < w - 2.0 && r[1] > 2.0 && r[3] < h - 2.0 && !clash_nums(&r) });
                     match spot {
                         Some((_, cx, cy, ca)) => { let over = on_curve(&box_of(*cx, *cy, ca, t)); put.push((*cx, *cy, *ca, over, None)); }
-                        None => put.push((*x, *y, *an, on_curve(&nominal[i]), None)),
+                        // nowhere to go without touching another number: this number is left out (never two numbers on top of each other)
+                        None => put.push((f64::NAN, *y, *an, false, None)),
                     }
                 }
             }
             let l = put.len() - 1;
-            cur[i] = box_of(put[l].0, put[l].1, put[l].2, t);
+            cur[i] = if put[l].0.is_nan() { [-1e9; 4] } else { box_of(put[l].0, put[l].1, put[l].2, t) };
         }
         let halo = if print { 5 } else { 4 };
         for ((_, _, _, t, _), (x, y, anchor, over, leader)) in items.iter().zip(&put) {
-            if let (Some((a, b, c, e)), true) = (leader, mode != 1) { d.line(*a, *b, *c, *e, "#6b7280", 0.8); }
+            if x.is_nan() { continue; }
+            if let (Some((a, b, c, e)), true) = (leader, mode != 1) { d.line(*a, *b, *c, *e, "#808080", 0.8); }
             let paint = match (mode, *over) {
                 (1, true) => continue,
                 (1, false) => format!(r##"fill="#fff" stroke="#fff" stroke-width="{halo}" stroke-linejoin="round""##),
-                (2, true) => format!(r##"fill="#111827" stroke="#fff" stroke-width="{}" paint-order="stroke" stroke-linejoin="round" data-num="1" data-plate="over""##, halo + 2),
+                // (a number over a curve gets only a thin halo: the curve is never erased, and a small circle keeps its whole outline)
+                (2, true) => r##"fill="#111827" stroke="#fff" stroke-width="2" paint-order="stroke" stroke-linejoin="round" data-num="1" data-plate="over""##.to_string(),
                 (2, false) => r##"fill="#111827" data-num="1""##.to_string(),
                 _ => format!(r##"fill="#111827" stroke="#fff" stroke-width="{halo}" paint-order="stroke" stroke-linejoin="round""##),
             };
@@ -8442,6 +8445,9 @@ mod tests {
             let axy = g.mt + g.ph - (0.0 - g.y0) * g.uy;
             let axx = g.ml + (0.0 - g.x0) * g.ux;
             let bx = number_boxes(&svg);
+            // (a figure of several circles crosses the axes at many numbers: four circles can cover up to 16 of them)
+            let cap = if name.matches("x^2").count() > 2 { 16 } else { 8 };
+            assert!(bx.iter().filter(|b| b.5).count() <= cap, "{name}: more than {cap} numbers over a curve");
             for (a, b, t, bt, txt, over) in &bx {
                 let v: f64 = txt.replace('\u{2212}', "-").parse().unwrap_or(f64::NAN);
                 if txt == "0" || v.is_nan() { continue; }
@@ -8475,8 +8481,53 @@ mod tests {
         }
         for (eq, extra) in cases {
             let (ms, _) = timed(&eq, &extra);
-            assert!(ms < 2000, "{eq:?} {extra:?}: {ms} ms of CPU");
+            let limit = if cfg!(debug_assertions) { 20_000 } else { 2_000 };
+            assert!(ms < limit, "{eq:?} {extra:?}: {ms} ms of CPU");
         }
+    }
+
+    /// Small circles keep their whole outline: no white plate covers any part of a curve (a number over a curve has only a thin halo).
+    #[test]
+    fn small_circles_are_not_chopped_by_number_plates() {
+        let cw = |t: &str| t.chars().map(|c| match c { '-' | '\u{2212}' => 4.7, '.' | ',' => 3.9, c if c.is_ascii_digit() => 7.8, _ => 9.0 }).sum::<f64>();
+        let rows = ["x^2 + y^2 = 1", "x^2 + y^2 = 4", "x^2 + y^2 = 9", "x^2 + y^2 = 1; x^2 + y^2 = 4; x^2 + y^2 = 9; x^2 + y^2 = 16", "x^2 + y^2 = 25"];
+        for style in ["Colour", "Print"] { for r in rows {
+            let mut set = q(r);
+            for (k, v) in [("xmin", -10.0), ("xmax", 10.0), ("ymin", -10.0), ("ymax", 10.0)] { set.push((k, Value::F(v))); }
+            set.push(("style", Value::S(style.into())));
+            let svg = grid_svg(&set);
+            let near = Near::new(&curve_lines_min(&svg, 1));
+            for t in svg.split("<text ").skip(1) {
+                let tag = t.split('>').next().unwrap();
+                if !(tag.contains("fill=\"#fff\"") && tag.contains("stroke=\"#fff\"")) || !tag.contains("font-size=\"14\"") { continue; }
+                let attr = |k: &str| tag.split(&format!("{k}=\"")).nth(1).and_then(|r| r.split('"').next()).map(|s| s.to_string());
+                let (x, y): (f64, f64) = (attr("x").unwrap().parse().unwrap(), attr("y").unwrap().parse().unwrap());
+                let w = cw(t.split('>').nth(1).unwrap().split('<').next().unwrap());
+                let (a, b) = match attr("text-anchor").unwrap().as_str() { "end" => (x - w, x), "start" => (x, x + w), _ => (x - w / 2.0, x + w / 2.0) };
+                for i in 0..=((b - a) as usize) { for j in 0..=11usize {
+                    let pt = (a + i as f64, y - 10.0 + j as f64);
+                    assert!(near.dist(pt) > 0.5, "{style} {r}: a white plate covers the curve at {pt:?}");
+                } }
+            }
+        } }
+    }
+
+    /// No two tick numbers overprint, in any window shape (tall, wide, squeezed), for the conics in both styles.
+    #[test]
+    fn tick_numbers_never_overprint_in_any_window_shape() {
+        let rows = ["x^2 + y^2 = 25", "x^2 - y^2 = 1", "x^2/16 + y^2/9 = 1"];
+        let halves = [2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 15.0, 20.0, 30.0];
+        for style in ["Colour", "Print"] { for square in [true, false] { for r in rows { for hx in halves { for hy in halves {
+            let mut set = q(r);
+            for (k, v) in [("xmin", -hx), ("xmax", hx), ("ymin", -hy), ("ymax", hy)] { set.push((k, Value::F(v))); }
+            set.push(("style", Value::S(style.into())));
+            set.push(("square", Value::B(square)));
+            let bx = number_boxes(&grid_svg(&set));
+            for i in 0..bx.len() { for j in i + 1..bx.len() {
+                let (p, r2) = (&bx[i], &bx[j]);
+                assert!(!(p.0 < r2.1 && r2.0 < p.1 && p.2 < r2.3 && r2.2 < p.3), "{style} {r} x+-{hx} y+-{hy} square {square}: \"{}\" and \"{}\" overlap", p.4, r2.4);
+            } }
+        } } } } }
     }
 
     /// Every numbered tick has a gridline under it, however the grid was thinned; minor lines closer than 3 px are left out.
@@ -8629,6 +8680,11 @@ mod tests {
             ("r8-c1000", "x^2 + y^2 = 640000", vec![("xmin", Value::F(-1000.0)), ("xmax", Value::F(1000.0)), ("ymin", Value::F(-1000.0)), ("ymax", Value::F(1000.0))]),
             ("r8-c1000-print", "x^2 + y^2 = 640000", vec![("xmin", Value::F(-1000.0)), ("xmax", Value::F(1000.0)), ("ymin", Value::F(-1000.0)), ("ymax", Value::F(1000.0)), ("style", Value::S("Print".into()))]),
             ("r8-h1000", "x^2/640000 - y^2/160000 = 1", vec![("xmin", Value::F(-1000.0)), ("xmax", Value::F(1000.0)), ("ymin", Value::F(-1000.0)), ("ymax", Value::F(1000.0))]),
+            ("r9-unit10", "x^2 + y^2 = 1", vec![("xmin", Value::F(-10.0)), ("xmax", Value::F(10.0)), ("ymin", Value::F(-10.0)), ("ymax", Value::F(10.0))]),
+            ("r9-unit10-print", "x^2 + y^2 = 1", vec![("xmin", Value::F(-10.0)), ("xmax", Value::F(10.0)), ("ymin", Value::F(-10.0)), ("ymax", Value::F(10.0)), ("style", Value::S("Print".into()))]),
+            ("r9-conc10", "x^2 + y^2 = 1; x^2 + y^2 = 4; x^2 + y^2 = 9; x^2 + y^2 = 16", vec![("xmin", Value::F(-10.0)), ("xmax", Value::F(10.0)), ("ymin", Value::F(-10.0)), ("ymax", Value::F(10.0))]),
+            ("r9-tall", "x^2 + y^2 = 25", vec![("xmin", Value::F(-5.0)), ("xmax", Value::F(5.0)), ("ymin", Value::F(-15.0)), ("ymax", Value::F(15.0))]),
+            ("r9-tall-print", "x^2 + y^2 = 25", vec![("xmin", Value::F(-5.0)), ("xmax", Value::F(5.0)), ("ymin", Value::F(-15.0)), ("ymax", Value::F(15.0)), ("style", Value::S("Print".into()))]),
             ("wide-1000", "y = x", vec![("xmin", Value::F(-1000.0)), ("xmax", Value::F(1000.0)), ("ymin", Value::F(-1000.0)), ("ymax", Value::F(1000.0))]),
         ];
         for (tag, eq, set) in extra {

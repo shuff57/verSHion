@@ -27,8 +27,9 @@ grid. Existing census files for every other figure, and for the older coordinate
 - A number keeps its own tick along its axis (at most a 3 px nudge, and at most 15% of the number spacing). To clear a curve or another
   number it moves only perpendicular to the axis: further out in 4 px steps (up to 16) or across the axis. A number that left its row
   by more than 8 px gets a 0.8 px grey leader from the tick.
-- When no spot is free of everything, the nearest spot clear of other numbers is used and its white plate is painted over the curve for
-  that digit (`data-plate="over"`). There is no cap on these. They show up where a curve runs along an axis for a long stretch (the top
+- When no spot is free of everything, the nearest spot clear of other numbers is used and the digit is drawn over the curve with only a thin
+  2 px halo, marked `data-plate="over"` (round 9: no white plate ever covers a curve, so small circles keep their whole outline). A
+  number with no spot clear of other numbers is left out, so no two numbers ever overprint (tall narrow windows, squeezed windows). They show up where a curve runs along an axis for a long stretch (the top
   and bottom of a circle beside the y numbers, hyperbola vertices on the x-axis), as a visible local break in the curve.
 - `data-plate="over"` can appear in any figure drawn in Print (and any figure with a conic), not only conics: the census has them only in
   the new conic examples ex11 to ex17; no earlier census file changed.
@@ -42,14 +43,24 @@ grid. Existing census files for every other figure, and for the older coordinate
 - Plain Colour figures without a conic or Print keep the legacy places (census), so an origin 0 can still touch a neighbouring number
   there in some small windows. Only Print and conic figures are rearranged.
 
+## Phase 1.1 final state (round 9)
+
+Conics and implicit curves draw on coordinate-grid in Colour and Print, with asymptotes, strict and dashed boundaries, shading, notes
+and the examples ex10 to ex17. Tick numbers stay on their ticks, never overprint, and never erase a curve. The tests cover the number
+rules over many windows and styles, and the render cost of windows with thousands of numbers.
+
 ## Leftover minors
 
+- Only 4 curves are drawn per figure (IMPLICIT_MAX); the cap was not raised because existing tests assert the "Only 4 curves" warning
+  and each curve costs a full sample.
+- Numbers on a tick that sits on a curve (x = 1 on the unit circle, the top of a circle beside the y numbers) are drawn over it with a
+  thin halo, so the curve shows through the digit edge. A small circle's tick numbers are not moved outside it.
+- A number may be left out in a very tall or squeezed window when no spot is clear of the other numbers; its gridline stays.
 - Strict double-root inequalities (y^2 > 0, abs(x) > 0, (y-1)^2 > 0) tint the whole window without the dashed excluded line or an axis
   cut, and `x^2 > 0; y^2 > 0` says "No part of this curve is inside the window" while still tinting.
 - (x-y)^2 = 0 and x^2 + 2xy + y^2 = 0 stop about 1.2 px short of the window edge.
-- White number plates leave small notches in the tint near the origin.
 - Notes written on the figure use a different font from the figure's numbers.
 - A Print-only default for equation labels when several curves are drawn was not added (rows differ by weight and tone only).
-- A circle or ellipse with a vertex on an axis number row (x^2 + y^2 = 25 at +-10) loses a short stretch of curve under the y "5" and "-5" plates.
-- A number moved by the free-spot search while its over-plate fallback is used gets no leader.
-- Plain Colour windows still use the legacy number places, so the new displacement tests cover Colour only where a conic is present.
+- A number moved to an over-halo spot gets no leader.
+- Plain Colour windows (no conic, not Print) still use the legacy number places, so an origin 0 can touch a neighbour there in some windows.
+- In a tall narrow window the equation label can sit over the y numbers.
