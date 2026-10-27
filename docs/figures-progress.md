@@ -5,7 +5,7 @@
 Equations in x and y that are not straight lines (circles, ellipses, hyperbolas, x = y^2, xy = 4, chained and system inequalities) are
 sampled by marching squares and drawn as smooth polylines, with a single tint (a hatch in Print) for the common solution of several
 inequalities, dashes only for excluded boundaries, asymptotes recognised by geometry and drawn fine and dotted, curve labels placed
-with leaders, tick numbers kept clear of curves, and editor-side notes for rows that cannot be drawn as typed. Print is built for
+with leaders, tick numbers on their own ticks, and editor-side notes for rows that cannot be drawn as typed. Print is built for
 photocopies (dark grid at 1.4 px, hatch survives a bitonal copy, rows at least 1.8 times the grid). Wide windows thin their numbers and
 grid. Existing census files for every other figure, and for the older coordinate-grid cases, are byte-identical.
 
@@ -13,38 +13,31 @@ grid. Existing census files for every other figure, and for the older coordinate
 
 - A dashed closed curve can show a short seam where its dash pattern restarts (for instance where a dashed circle meets a dashed line);
   fixing it means scaling the dash array, which would change the literal `9 6` that several tests and exports rely on.
-- Where no free spot exists for a tick number beside a curve, the number stays and is drawn over the curve with a thin 2 px white halo
-  (marked `data-plate="over"`); no white plate ever covers a curve.
+- A tick number beside a curve stays on its tick and is drawn over the curve with a thin 2 px white halo (`data-plate="over"`).
 - tan(x) at +-1000 has a period under 2 px and is aliased by any sampler; it is checked only to +-200.
 - A wide window with Square cells on is only warned about, not relaxed.
 - Plain Colour windows (no conic, not Print) keep the number placement of the earlier figures, so the origin 0 can sit 2 px from a
   neighbouring -1; changing it would alter existing census files. Colour/Print and conic windows resolve every collision.
 - The Colour grid is near-black for a plain figure and a grey-blue beside a conic, for the same census reason.
-- In a window with curves or in Print, when two numbers of one axis, or an x number and a y number, cannot be kept apart, that whole
-  axis is thinned evenly (every 2nd, 5th, 10th ... number, the same either side of 0) and the editor says so. A plain Colour window
-  keeps its legacy numbers. Every numbered tick keeps its gridline.
+- Thinning of tick numbers follows the spacing rule under "Tick numbers"; a plain Colour window keeps its legacy numbers.
 
-## Tick numbers (round 8)
+## Tick numbers (round 11: one simple rule)
 
-- A number keeps its own tick along its axis (at most a 3 px nudge, and at most 15% of the number spacing). To clear a curve or another
-  number it moves only perpendicular to the axis: further out in 4 px steps (up to 16) or across the axis. A number that left its row
-  by more than 8 px gets a 0.8 px grey leader from the tick.
-- When no spot is free of everything, the nearest spot clear of other numbers is used and the digit is drawn over the curve with only a thin
-  2 px halo, marked `data-plate="over"` (round 9: no white plate ever covers a curve, so small circles keep their whole outline). No two numbers
-  overprint: an axis whose numbers cannot be kept apart is thinned evenly (past the 2,000,000-check budget below, numbers keep their
-  standard places and this is not guaranteed). They show up where a curve runs along an axis for a long stretch (the top
-  and bottom of a circle beside the y numbers, hyperbola vertices on the x-axis), as a visible local break in the curve.
-- `data-plate="over"` can appear in any figure drawn in Print (and any figure with a conic), not only conics: the census has them only in
-  the new conic examples ex11 to ex17; no earlier census file changed.
-- The number search is local (64 px cells) with a budget of 2 million checks, past which numbers keep their standard places. Square
-  windows with thousands of numbers (x +-1000 by y +-1, 40 circles at +-100000 by +-1, x +-1e6 by y +-10) render in well under 2 s of CPU;
-  they took 7 to 19 s after round 7.
-- Major gridlines use a stride that divides the number stride, so every numbered tick has a line. Minor lines are left out when they
-  would be closer than 3 px, whatever the major stride.
-- Origin zero: below and left of the origin when free, else a row lower, else below right. In hyperbolas with the vertex at 1 (ex12,
-  ex16) the y "-1" fills the lower left, so the 0 sits below right with about 12 px before the x "1": it reads "0  1", not "10".
-- Plain Colour figures without a conic or Print keep the legacy places (census), so an origin 0 can still touch a neighbouring number
-  there in some small windows. Only Print and conic figures are rearranged.
+In a figure with a conic or implicit row, or in Print (a plain Colour figure keeps its earlier layout, for census identity):
+
+- Every number sits at its own tick in the standard row (x numbers under the x-axis, y numbers left of the y-axis). Nothing is moved,
+  flipped across an axis, or led back to its tick; there are no leader lines for numbers.
+- A number whose box touches a curve gets a thin 2 px white halo (`data-plate="over"`), so the curve is only interrupted by the halo.
+  No white plate covers a curve. Numbers clear of curves keep the white plate under the curves that clears the gridlines.
+- Thinning comes from spacing only: the x axis shows every Nth number when two neighbours would be less than 4 px apart (text widths
+  measured, minus signs included), the y axis when rows are under 16 px apart; N from 2, 5, 10, 20 ... , the same either side of 0,
+  each axis on its own. One more case: in a squeezed window the x "-1" can land on the y "-1" under the y axis (about 20 px or less per
+  unit on both axes); then the x axis is thinned by the same list. That can drop an x intercept (circle r = 5 at x +-5 loses the x "5").
+- The editor notes "Some axis numbers were thinned ..." exactly when an axis shows fewer numbers than the step asked for.
+- Origin zero: below left of the origin, else below right, left out only if neither fits.
+- Major gridlines closer than 6 px are drawn every Nth line (N divides the number stride, so every numbered tick has a line); minor
+  lines under 4 px are left out.
+- The digit boxes are estimates (about 0.75 px of side bearing), so the tests allow 3 px of overlap between the boxes of two numbers.
 
 ## Phase 1.1 final state (round 9)
 
@@ -56,8 +49,7 @@ rules over many windows and styles, and the render cost of windows with thousand
 
 - Only 4 curves are drawn per figure (IMPLICIT_MAX); the cap was not raised because existing tests assert the "Only 4 curves" warning
   and each curve costs a full sample.
-- Numbers on a tick that sits on a curve (x = 1 on the unit circle, the top of a circle beside the y numbers) are drawn over it with a
-  thin halo, so the curve shows through the digit edge. A small circle's tick numbers are not moved outside it.
+- Numbers on a tick that sits on a curve (x = 1 on the unit circle) are drawn over it with a thin halo; they are not moved outside a small circle.
 - Numbers in a very tall or wide window are thinned evenly (note in the editor); only the origin 0 can still be left out alone.
 - Print asymptotes are 1.6 px, dash 7 5, #666666; they survive a 58 to 75% bitonal copy. The thin default Print grid drops out below
   66% bitonal; the Bold grid option is the remedy.
@@ -69,6 +61,5 @@ rules over many windows and styles, and the render cost of windows with thousand
 - (x-y)^2 = 0 and x^2 + 2xy + y^2 = 0 stop about 1.2 px short of the window edge.
 - Notes written on the figure use a different font from the figure's numbers.
 - A Print-only default for equation labels when several curves are drawn was not added (rows differ by weight and tone only).
-- A number moved to an over-halo spot gets no leader.
 - Plain Colour windows (no conic, not Print) still use the legacy number places, so an origin 0 can touch a neighbour there in some windows.
 - In a tall narrow window the equation label can sit over the y numbers.
