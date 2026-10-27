@@ -13,14 +13,16 @@ grid. Existing census files for every other figure, and for the older coordinate
 
 - A dashed closed curve can show a short seam where its dash pattern restarts (for instance where a dashed circle meets a dashed line);
   fixing it means scaling the dash array, which would change the literal `9 6` that several tests and exports rely on.
-- Where no free spot exists for a tick number beside a curve, the number stays and its white plate is painted over the curve for that
-  digit alone (a marked, tiny break in the curve).
+- Where no free spot exists for a tick number beside a curve, the number stays and is drawn over the curve with a thin 2 px white halo
+  (marked `data-plate="over"`); no white plate ever covers a curve.
 - tan(x) at +-1000 has a period under 2 px and is aliased by any sampler; it is checked only to +-200.
 - A wide window with Square cells on is only warned about, not relaxed.
 - Plain Colour windows (no conic, not Print) keep the number placement of the earlier figures, so the origin 0 can sit 2 px from a
   neighbouring -1; changing it would alter existing census files. Colour/Print and conic windows resolve every collision.
 - The Colour grid is near-black for a plain figure and a grey-blue beside a conic, for the same census reason.
-- Windows squeezed by Square cells (wider or taller than 6 to 1) keep every number and gridline; the editor says so.
+- In a window with curves or in Print, when two numbers of one axis, or an x number and a y number, cannot be kept apart, that whole
+  axis is thinned evenly (every 2nd, 5th, 10th ... number, the same either side of 0) and the editor says so. A plain Colour window
+  keeps its legacy numbers. Every numbered tick keeps its gridline.
 
 ## Tick numbers (round 8)
 
@@ -28,8 +30,9 @@ grid. Existing census files for every other figure, and for the older coordinate
   number it moves only perpendicular to the axis: further out in 4 px steps (up to 16) or across the axis. A number that left its row
   by more than 8 px gets a 0.8 px grey leader from the tick.
 - When no spot is free of everything, the nearest spot clear of other numbers is used and the digit is drawn over the curve with only a thin
-  2 px halo, marked `data-plate="over"` (round 9: no white plate ever covers a curve, so small circles keep their whole outline). A
-  number with no spot clear of other numbers is left out, so no two numbers ever overprint (tall narrow windows, squeezed windows). They show up where a curve runs along an axis for a long stretch (the top
+  2 px halo, marked `data-plate="over"` (round 9: no white plate ever covers a curve, so small circles keep their whole outline). No two numbers
+  overprint: an axis whose numbers cannot be kept apart is thinned evenly (past the 2,000,000-check budget below, numbers keep their
+  standard places and this is not guaranteed). They show up where a curve runs along an axis for a long stretch (the top
   and bottom of a circle beside the y numbers, hyperbola vertices on the x-axis), as a visible local break in the curve.
 - `data-plate="over"` can appear in any figure drawn in Print (and any figure with a conic), not only conics: the census has them only in
   the new conic examples ex11 to ex17; no earlier census file changed.
@@ -55,7 +58,12 @@ rules over many windows and styles, and the render cost of windows with thousand
   and each curve costs a full sample.
 - Numbers on a tick that sits on a curve (x = 1 on the unit circle, the top of a circle beside the y numbers) are drawn over it with a
   thin halo, so the curve shows through the digit edge. A small circle's tick numbers are not moved outside it.
-- A number may be left out in a very tall or squeezed window when no spot is clear of the other numbers; its gridline stays.
+- Numbers in a very tall or wide window are thinned evenly (note in the editor); only the origin 0 can still be left out alone.
+- Print asymptotes are 1.6 px, dash 7 5, #666666; they survive a 58 to 75% bitonal copy. The thin default Print grid drops out below
+  66% bitonal; the Bold grid option is the remedy.
+- An equation label can sit over an x number in a very wide window.
+- The annulus inner dashed circle blurs into the hatch at 50 to 58% bitonal.
+- Equal-scale (Square) wide windows are only warned about.
 - Strict double-root inequalities (y^2 > 0, abs(x) > 0, (y-1)^2 > 0) tint the whole window without the dashed excluded line or an axis
   cut, and `x^2 > 0; y^2 > 0` says "No part of this curve is inside the window" while still tinting.
 - (x-y)^2 = 0 and x^2 + 2xy + y^2 = 0 stop about 1.2 px short of the window edge.
