@@ -207,6 +207,14 @@ fn field_label(field: &str) -> &'static str {
 }
 
 /// "in 3 minutes" / "in about 2 hours" / "later".
+/// (round 17, critic 95 minor 5) The longest a server's `Retry-After` is waited for: two days.
+pub const MAX_WAIT_SECS: u64 = 2 * 86_400;
+
+/// `now` plus a server's `Retry-After` (seconds), at most [`MAX_WAIT_SECS`]: a huge value never overflows the clock.
+pub fn later(now: web_time::Instant, secs: u64) -> web_time::Instant {
+    now.checked_add(std::time::Duration::from_secs(secs.min(MAX_WAIT_SECS))).unwrap_or(now)
+}
+
 pub fn wait_text(secs: Option<u64>) -> String {
     match secs {
         None | Some(0) => "later".into(),

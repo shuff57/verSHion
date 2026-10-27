@@ -24,7 +24,6 @@
 
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
-use std::time::Duration;
 
 use web_time::Instant;
 
@@ -1365,7 +1364,7 @@ impl CirclesModel {
             PoolError::Api(_) => p.retry = true,
             PoolError::Local(_) => {}
             PoolError::Refused(r) => {
-                let wait = r.detail.retry_after.filter(|s| *s > 0).map(|s| now + Duration::from_secs(s));
+                let wait = r.detail.retry_after.filter(|s| *s > 0).map(|s| super::api::later(now, s));
                 match &r.kind {
                     RefusalKind::NotApproved { .. } => p.account = true,
                     RefusalKind::InviteRequired => {

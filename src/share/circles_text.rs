@@ -36,6 +36,8 @@ const CIRCLE_INVITE_REQUIRED: &str = "Your verSHion account needs an invite code
 /// verSHion's server (that is [`circle_words`], for what the server did).
 pub fn merge_words(note: &str) -> String {
     note.replace("The pool dropped this question", "The circle removed this question")
+        // (round 19, critic 100 minor 12) a circle screen's verb is Get latest
+        .replace("start the merge again", "press Get latest again")
         .replace("The pool's", "The circle's")
         .replace("the pool's", "the circle's")
         .replace("The pool", "The circle")
@@ -84,6 +86,213 @@ pub fn difficulty_caveat(n: u64) -> String {
     format!("This copy has no record of the difficulties in version {n}, so a change to a difficulty can't be counted here.")
 }
 
+/// (round 15, critics 91 I2 and I4) A copy an earlier build linked, while the circle's version it last matched is read: the
+/// strip, and the circle page's bank row. Nothing is sent from it meanwhile.
+pub const CHECKING: &str = "Checking the circle...";
+/// (round 16, critic 94 m2 and m3) In the words of the strip's offline line, the same on the strip (with Try again) and the
+/// circle page's bank row.
+pub const CANT_CHECK: &str = "Couldn't check the circle just now, so nothing can be sent from this bank yet.";
+/// (round 15, critic 91 I4) That version can't be read: sending waits for a read that works.
+pub const SEND_WAITS: &str = "Sending is turned off until the circle can be checked.";
+/// (round 17, critic 96 I1) The circle's difficulty was put into her bank after the circle's version was first read: the badge
+/// says it until she dismisses it on the strip.
+pub const NEWS_BADGE: &str = "difficulty updated";
+/// The button that puts her difficulty back on one question.
+pub const PUT_MINE_BACK: &str = "Put mine back";
+/// (round 18, critic 98 minor 6) What Dismiss does, beside it.
+pub const NEWS_DISMISS: &str = "Dismiss hides this list. Your bank stays as it is.";
+
+/// (round 17, critic 96 I1) The strip's words over the list: that hers was replaced, why, and what she can do. (round 18, critic 98
+/// minor 7) In words that fit a question the circle gives no difficulty, and "press Put mine back" only where a row offers it.
+pub fn news_head(version: u64, n: usize, offered: bool, settled: bool) -> String {
+    let qs = if n == 1 { "1 question".to_string() } else { format!("{n} questions") };
+    // (round 19, critic 100 minor 5) once each is sent or changed since, it no longer reads as news
+    if settled {
+        return format!("Earlier, verSHion gave {qs} the circle's difficulty from its version {version}. Nothing here is waiting for you.");
+    }
+    let then = if offered { " To keep yours on a question, press Put mine back: it becomes a change you have not sent yet." } else { "" };
+    format!("verSHion gave {qs} the circle's difficulty from its version {version}, in place of yours. An earlier version of the app had not kept the circle's difficulties in this copy.{then}")
+}
+
+/// "Easy", "Medium", "Hard", or "none".
+pub fn difficulty_word(d: Option<crate::model::Difficulty>) -> &'static str {
+    use crate::model::Difficulty;
+    match d {
+        Some(Difficulty::Low) => "Easy",
+        Some(Difficulty::Medium) => "Medium",
+        Some(Difficulty::High) => "Hard",
+        None => "none",
+    }
+}
+
+/// (round 18, critic 98 minors 6 and 7) A difficulty in the news list: "Easy", or "no difficulty" (never "none"), its words kept
+/// together (a non-breaking space).
+pub fn news_word(d: Option<crate::model::Difficulty>) -> &'static str {
+    if d.is_none() { "no\u{a0}difficulty" } else { difficulty_word(d) }
+}
+
+/// One question of the list: "Question 2, "Simplify 3(x + 2)": Easy -> Hard" (`n`: its place in the bank, from 1; `None`:
+/// no longer in the bank). (round 18, critic 98 I1) As it stands now: hers back (not sent yet, or sent), or changed since. "Easy
+/// -> Hard" is never split over two lines.
+pub fn news_row(n: Option<usize>, title: &str, before: Option<crate::model::Difficulty>, after: Option<crate::model::Difficulty>, state: super::circle_links::NewsState) -> String {
+    use super::circle_links::NewsState;
+    let which = match n {
+        Some(n) if title.is_empty() => format!("Question {n}"),
+        Some(n) => format!("Question {n}, \"{title}\""),
+        None => "A question no longer in this bank".to_string(),
+    };
+    let moved = format!("{}\u{a0}->\u{a0}{}", news_word(before), news_word(after));
+    match state {
+        // (round 20, critic 100 minor 4) the circle's value too: what was put back, and what it replaced
+        NewsState::Back => format!("{which}: yours ({}) is back, not sent yet; the circle's is {}", news_word(before), news_word(after)),
+        NewsState::Sent => format!("{which}: yours ({}) was sent", news_word(before)),
+        // (round 20, critic 100 minor 3) why no button, and what she can still do by hand
+        NewsState::Changed(now) => format!("{which}: {moved}, changed since (now {}); set it by hand if you want yours", news_word(now)),
+        NewsState::Kept => format!("{which}: {moved}. This copy has moved on, so it can't be put back; set it by hand if you want yours"),
+        NewsState::Replaced | NewsState::Gone => format!("{which}: {moved}"),
+    }
+}
+
+/// (round 20, critic 100 minor 4) "Put all of mine back" asks before it changes `n` questions at once.
+pub fn put_all_ask(n: usize) -> String {
+    let qs = if n == 1 { "question".to_string() } else { format!("{n} questions") };
+    format!("Put yours back on {qs}? They become changes you have not sent yet.")
+}
+
+/// (round 17, critic 96 minor 4) What could not be saved, in plain words (never the system's own error text).
+pub fn save_problem(raw: &str) -> &'static str {
+    let r = raw.to_lowercase();
+    if ["no space", "disk is full", "disk full", "os error 28", "os error 112", "quota"].iter().any(|k| r.contains(k)) {
+        "the disk is full"
+    } else if ["permission denied", "access is denied", "os error 13", "os error 5)", "read-only", "os error 30"].iter().any(|k| r.contains(k)) {
+        "verSHion isn't allowed to write to its data folder"
+    } else if ["locked", "another process", "os error 32", "os error 33"].iter().any(|k| r.contains(k)) {
+        "another program is using the file"
+    } else {
+        "the file couldn't be written"
+    }
+}
+
+/// (round 18, critic 98 minor 2) What she can do about what could not be saved. (round 19, critic 100 I2) One thing she can act on,
+/// whatever the cause.
+pub fn save_remedy(raw: &str) -> &'static str {
+    let _ = raw;
+    SAVE_ADVICE
+}
+/// (round 19, critic 100 I2) The advice for a file that can't be written.
+pub const SAVE_ADVICE: &str = "Keep verSHion open and press Try again; if it keeps failing, free some disk space.";
+
+/// (round 16, critic 93 I1; round 17) The safety copy of the banks could not be saved before the circle's difficulty went in.
+pub fn safety_copy_not_saved(raw: &str) -> String {
+    format!("verSHion couldn't save a safety copy of your banks first ({}), so the circle's difficulty isn't in this bank yet. {}", save_problem(raw), save_remedy(raw))
+}
+/// (round 18, critic 97 m6) The list of shared banks could not be saved before the circle's difficulty went in.
+pub fn links_not_saved(raw: &str) -> String {
+    format!("verSHion couldn't save the list of shared banks first ({}), so the circle's difficulty isn't in this bank yet. {}", save_problem(raw), save_remedy(raw))
+}
+/// The same for the banks file itself. (round 18, critic 98 minor 2) Then her own edits are not saved to disk either: said, with
+/// what she can do.
+pub fn banks_not_saved(raw: &str) -> String {
+    format!("verSHion couldn't save your banks ({}), so the circle's difficulty isn't in this bank yet, and your own edits aren't saved either. {}", save_problem(raw), save_remedy(raw))
+}
+/// (round 18, critic 97 m3) "Put mine back" whose banks could not be saved: nothing changed, and the button stays. (round 19, critic
+/// 100 I2) Said on the strip in the warning colour until a save works.
+pub fn put_back_not_saved(raw: &str) -> String {
+    format!("Your difficulty couldn't be put back, and your own edits aren't saved either: verSHion couldn't save your banks ({}). {}", save_problem(raw), save_remedy(raw))
+}
+/// (round 19, critic 100 I2) That line on the strip, with the tries that failed.
+pub fn unsaved_line(line: &str, tries: u32) -> String {
+    if tries <= 1 { line.to_string() } else { format!("{line} Tried {tries} times; still not saved.") }
+}
+/// The strip while that is so: why, that nothing changed, and (critic 96 minor 4) that Try again tried.
+pub fn held_line(why: &str, tries: u32) -> String {
+    let again = if tries <= 1 { "verSHion tries again every minute.".to_string() } else { format!("Tried {tries} times; it still couldn't be saved. verSHion keeps trying every minute.") };
+    format!("{why} Nothing in the bank changed, and nothing can be sent from it until this is saved. {again}")
+}
+/// The badge while that is so.
+pub const HELD_BADGE: &str = "couldn't save";
+/// (round 17, critic 95 minor 1) Get latest waiting for it: the review is made once the bank has the circle's difficulty.
+pub fn merge_waits_held(why: &str) -> String {
+    // (round 19) this page has no Try again
+    let why = why.replace(SAVE_ADVICE, "Keep verSHion open; if it keeps failing, free some disk space.");
+    format!("{why} The review is made once it is saved; verSHion tries again every minute. You can wait here or press Cancel.")
+}
+
+/// (round 16, critic 94 m1; round 17, critic 96 minor 1) The version the copy last matched can't be read and nothing newer is
+/// there: why sending is off, and what she can do.
+pub fn not_kept_line(n: u64) -> String {
+    cant_read_line(n, super::circle_edit::Unread::NotKept, false)
+}
+/// (round 18, critic 98 minor 3) The same by why it can't be read (`newest`: that version is the circle's newest, said once, never
+/// beside "version N is the latest"). Held back for review: waiting is enough.
+pub fn cant_read_line(n: u64, why: super::circle_edit::Unread, newest: bool) -> String {
+    use super::circle_edit::Unread;
+    let which = if newest { format!("Your copy last matched version {n}, the circle's newest version") } else { format!("Your copy last matched version {n}") };
+    match why {
+        // (round 19, critic 100 minor 1) never "the circle's newest version" beside "no longer keeps it"
+        Unread::NotKept => format!("Your copy last matched version {n}, but the circle no longer keeps it, so verSHion can't tell which difficulties you changed, and sending is turned off."),
+        Unread::Withheld => format!("{which}, which is held back while an administrator reviews it, so verSHion can't read its difficulties yet, and sending is turned off. Waiting is enough: once it is released, verSHion reads it and sending comes back on."),
+        Unread::Other => format!("{which}, but verSHion couldn't read it, so it can't tell which difficulties you changed, and sending is turned off."),
+    }
+}
+/// (round 19, critic 100 I1) Where Check now is the big button: what it does.
+pub const CHECK_NOW_DOES: &str = "Check now asks the circle again.";
+/// (round 19, critic 100 I1) While the check she asked for runs.
+pub const CHECKING_NOW: &str = "Checking...";
+/// (round 19, critic 100 I1) The check she asked for found nothing new (`ago`: "just now", "1 minute ago").
+pub fn checked_same(ago: &str) -> String {
+    format!("Checked {ago}: still the same.")
+}
+/// What she can do about it.
+pub fn cant_read_ways(why: super::circle_edit::Unread) -> &'static str {
+    if why == super::circle_edit::Unread::Withheld { WITHHELD_WAYS } else { NOT_KEPT_WAYS }
+}
+/// The circle page's row of such a copy.
+pub const NOT_KEPT_ROW: &str = "The circle no longer keeps the version it last matched, so sending is turned off. Its page in My Banks says what you can do.";
+/// (round 18, critic 98 minor 3) The same, by why.
+pub fn cant_read_row(why: super::circle_edit::Unread) -> &'static str {
+    match why {
+        super::circle_edit::Unread::NotKept => NOT_KEPT_ROW,
+        super::circle_edit::Unread::Withheld => "The version it last matched is held back while an administrator reviews it, so sending is turned off until then. Its page in My Banks says what you can do.",
+        super::circle_edit::Unread::Other => "verSHion couldn't read the version it last matched, so sending is turned off. Its page in My Banks says what you can do.",
+    }
+}
+pub const NOT_KEPT_WAYS: &str = "You can use your bank as it is: your next send then makes the circle's newest version match it, difficulties included. Or wait until someone in the circle sends a newer version, then get it.";
+pub const WITHHELD_WAYS: &str = "Or you can use your bank as it is: your next send then makes the circle's newest version match it, difficulties included.";
+/// (round 18, critic 98 minor 3) The circle's newest version held back for review, the one she matched not readable: the review
+/// ending helps.
+pub const REVIEW_HELPS: &str = "Once the review is done, you can get the newest version, and sending works again.";
+/// (round 16, critic 93 minor 4; round 17, critic 96 minor 3) The daily limit on reading banks: the circle page's row. (round 18,
+/// critic 98 minor 1) It is the account's (it counts every circle and the public pool), never the circle's.
+pub const READ_LIMIT: &str = "Your daily limit for reading banks has been reached, so this bank can't be checked until it resets. Nothing can be sent from it until then.";
+/// The same on the strip, with when it resets (as verSHion's server said).
+pub fn read_limit(left_secs: Option<u64>) -> String {
+    let when = api::wait_text(left_secs);
+    format!("Your daily limit for reading banks has been reached. It resets {when}; verSHion checks this bank then. Until it does, nothing can be sent from this bank.")
+}
+/// The same on the Get latest page (no Try again: it would meet the same limit).
+pub fn read_limit_page(retry_after: Option<u64>) -> String {
+    format!("Your daily limit for reading banks has been reached. It resets {}; Get latest works again then. Nothing in your bank changed.", api::wait_text(retry_after))
+}
+/// (round 16, critic 93 I1) The read succeeded, but the circle's difficulty could not be put into the bank: the circle page's row.
+pub const DIFFICULTY_HELD: &str = "The circle's difficulty couldn't be saved to this bank yet, so nothing can be sent from it.";
+
+/// (round 17, critic 96 I2) "Use my bank as it is": the page's title, what it does, and the Send page after it.
+pub const AS_IS_TITLE: &str = "Use my bank as it is";
+pub const AS_IS_TEXT: &str = "Nothing in this bank changes now. Your next send makes the circle's newest version match this bank, difficulties included. Anything others sent that this bank doesn't have will no longer be in the newest version; it stays in the circle's history, where it can be restored.";
+pub const AS_IS_DROPPED: &str = "That includes the difficulty colleagues gave questions in the circle that an earlier version of the app left out of your copy: your bank's difficulty replaces it.";
+pub const AS_IS_DONE: &str = "Nothing in your bank changed.";
+/// The line the bank's strip keeps after it.
+pub const AS_IS_RESULT: &str = "Your bank is now used as it is: your next send makes the circle's newest version match it, difficulties included.";
+/// (round 18, critic 98 minor 5) with what it overwrites, again
+pub const AS_IS_SEND_LINE: &str = "You chose to use your bank as it is: this send makes the circle's newest version match it, difficulties included. Anything others sent that this bank doesn't have will no longer be in the newest version; it stays in the circle's history, where it can be restored.";
+/// (round 16, critic 94 m2) Get latest waiting more than `BASE_WAIT` for a read that is only slow.
+pub const STILL_CHECKING: &str = "Still checking the circle... You can wait here or press Cancel.";
+/// (critic 91 minor) Get latest waiting for that read when it has taken a while.
+/// (round 16, critic 94 m2, m7) Only for a read that failed before (one that is only slow says `STILL_CHECKING`); the page says
+/// under it that nothing in the bank changes.
+pub const CHECKING_LONG: &str = "Checking the circle... Couldn't check it just now; verSHion keeps trying. You can wait here or press Cancel.";
+
 /// (critic 88 I2) A copy with no record at all of the version it last matched: the strip and the Send page say the same.
 pub const NO_RECORD: &str = "Your copy has no record of what it looked like when it last matched the circle, so the changes can't be counted here.";
 
@@ -117,10 +326,35 @@ pub const COPY_LINE: &str = "A copy is private to you and made on this computer.
 pub const WORKING_COPY_LINE: &str = "A working copy stays linked to the circle's bank. It is private to you and on this computer, and the circle is changed only when you press Send. You can also get the newer versions others send, and merge them in when you choose.";
 pub const HAS_WORKING_COPY: &str = "You already have a working copy of this bank (see Versions, below), so this makes a plain copy that is not linked to the circle.";
 pub const WORKING_COPY_DONE: &str = "Your working copy is under Versions, below: send your changes from there, or get the circle's newer versions.";
-pub const LEAVE_MEMBER: &str = "You will lose access to this circle's banks. Copies you already made stay on your computer. You can come back with a new code.";
+pub const LEAVE_MEMBER: &str = "You will lose access to this circle's banks. You can come back with a new code.";
+/// (critic 92 I2) What leaving does to the banks in My Banks, in My Banks words.
+pub const LEAVE_MY_BANKS: &str = "Banks you added to My Banks stay there and keep working as your own, but they stop getting newer versions, and changes in them can no longer be sent to the circle.";
+
+/// (critic 92 I2) A bank of this circle in My Banks with changes not sent yet (`None`: they can't be counted), on the leave panel.
+/// (round 16, critic 93 minor 3) `waiting`: the copy waits for the circle to be checked, so Send is not offered: it is named
+/// with that, never "Send it first" (with its count only where its strip says one).
+pub fn leave_unsent(name: &str, n: Option<usize>, waiting: bool) -> String {
+    // (round 17, critic 96 minors 1 and 2) never "stay until then": the bank's page says why and what she can do
+    if waiting {
+        return match n {
+            Some(1) => format!("\"{name}\" has 1 unsent change that can't be sent yet. Its page in My Banks says why and what you can do."),
+            Some(n) => format!("\"{name}\" has {n} unsent changes that can't be sent yet. Its page in My Banks says why and what you can do."),
+            None => format!("\"{name}\" may have changes that are not sent, and they can't be sent yet. Its page in My Banks says why and what you can do."),
+        };
+    }
+    match n {
+        Some(1) => format!("\"{name}\" has 1 unsent change. Send it first if the circle should have it."),
+        Some(n) => format!("\"{name}\" has {n} unsent changes. Send them first if the circle should have them."),
+        None => format!("\"{name}\" may have changes that are not sent (they can't be counted here). Send them first if the circle should have them."),
+    }
+}
 pub const LEAVE_OWNER: &str = "You own this circle. If you leave, it passes to the member who has been here longest (an editor first). If nobody else is in it, the circle closes.";
-pub const CLOSE_CIRCLE: &str = "Everyone loses access in 14 days. Copies on their computers stay. Until then you can reopen it.";
-pub const REMOVE_BANK: &str = "The bank disappears for everyone in the circle. You can bring it back for 14 days; after that it is deleted. Copies people made stay with them.";
+/// (round 16, critic 94 m6) In My Banks words, with what becomes of changes not sent (her own are named under it).
+pub const CLOSE_CIRCLE: &str = "Everyone loses access in 14 days. Until then you can reopen it. Banks people added to My Banks stay there and keep working as their own, but changes not sent by then can no longer be sent to the circle.";
+/// (round 18, critic 98 minor 9) The heading of that question in Bank settings.
+pub const REMOVE_BANK_HEAD: &str = "Remove this bank from the circle?";
+pub const REMOVE_BANK: &str = "The bank disappears for everyone in the circle. You can bring it back for 14 days; after that it is deleted. Anyone who added it to My Banks keeps it there as their own bank, but changes they have not sent can no longer be sent to the circle.";
+pub const REMOVE_MEMBER: &str = "They lose access at once. Banks they added to My Banks stay there as their own, but changes they have not sent can no longer be sent to the circle. They can only come back with a code you make after this.";
 pub const REPORT_THANKS: &str = "Thank you. Your report goes to the people who run verSHion. The author is not told who sent it.";
 pub const TRANSFER_NOTE: &str = "This is an offer: they have 7 days to accept. Until they do you stay the owner. If they accept, they become the owner and you become an editor.";
 pub const NOT_REACHED: &str = "Could not reach verSHion's server.";
@@ -131,7 +365,7 @@ pub const HELD_BANK: &str = "This bank is on hold while verSHion's reviewers loo
 // ---- phase C: invite by email ----------------------------------------------------------------------------------
 
 pub const EMAIL_HELP: &str = "verSHion mails the teacher an invitation with a code that works once, for 7 days. The mail is a fixed text: it does not name you or the circle (the app shows both before they join).";
-pub const EMAIL_NEEDS_ACCOUNT: &str = "To join, they need a verSHion account that an administrator has approved and that has redeemed its account invite code. Until then the circle's code in the mail can not be used.";
+pub const EMAIL_NEEDS_ACCOUNT: &str = "To join, they need a verSHion account that an administrator has approved, with its invite code entered. Until then the circle's code in the mail can't be used.";
 pub const EMAIL_PRIVACY: &str = "The address is not kept: it is used for this one mail and cleared from this form once it is sent. The list below shows only a masked label (like j***@school.org) so you can tell invitations apart.";
 pub const EMAIL_PACE: &str = "Invitations go out at a steady pace. If you invite many colleagues at one school, some may have to wait for the next hour; the app says so, and nothing is lost.";
 pub const EMAIL_RESENT: &str = "This address already had an open invitation from this circle: a new code was mailed, and the earlier one no longer works.";
@@ -278,8 +512,27 @@ pub fn ago(ms: i64, now: i64) -> String {
         }
         _ => {
             let d = s / 86_400;
-            if d == 1 { "yesterday".into() } else if d < 60 { format!("{d} days ago") } else { api::date_text(ms) }
+            if d == 1 { "yesterday".into() } else if d < 60 { format!("{d} days ago") } else { date(ms) }
         }
+    }
+}
+
+/// (round 17, critic 96 minor 8) A day as every circle screen says it: "Oct 8, 2025" (nothing for no time).
+pub fn date(ms: i64) -> String {
+    if ms <= 0 { String::new() } else { crate::bankui::fmt_date(ms.div_euclid(1000)) }
+}
+
+/// (round 16, critic 94 m9) When something was, as the bank's page says it ("2 days ago", or "Oct 8, 2025" after a month):
+/// the page's `bankui::rel_time`, from `now` instead of the clock.
+pub fn as_on_page(ms: i64, now: i64) -> String {
+    let d = ((now - ms) / 1000).max(0);
+    let plural = |n: i64, unit: &str| format!("{n} {unit}{} ago", if n == 1 { "" } else { "s" });
+    match d {
+        0..=59 => "just now".into(),
+        60..=3599 => plural(d / 60, "minute"),
+        3600..=86_399 => plural(d / 3600, "hour"),
+        _ if d < 30 * 86_400 => plural(d / 86_400, "day"),
+        _ => crate::bankui::fmt_date(ms.div_euclid(1000)),
     }
 }
 
@@ -462,4 +715,9 @@ fn list_versions(vs: &[u64]) -> String {
         Some((last, _)) => last.to_string(),
         None => String::new(),
     }
+}
+
+/// (round 18, critic 98 minor 10) The invite-by-email panel: the code's last day, as every circle screen says dates.
+pub fn code_until(ms: i64) -> String {
+    format!("The code in it works once, until {}.", date(ms))
 }

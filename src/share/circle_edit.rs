@@ -322,6 +322,8 @@ pub struct MergeView {
     pub title: String,
     pub perm: Perm,
     pub phase: MergePhase,
+    /// (round 17, critic 96 I2) Opened by "Use my bank as it is...": the page is titled for it, and "No, go back" leaves it.
+    pub as_is: bool,
 }
 
 #[derive(Debug)]
@@ -451,6 +453,78 @@ pub struct LinkStatus {
     pub bank_name: String,
     /// (critic 85 I1) The link's base kept no difficulty for some question when this was worked out.
     unknown: bool,
+    /// (round 15) What `changes_since` counted for the bank as it is (`changes` says it as the link stands now).
+    raw: ChangeCount,
+    /// (round 15, critics 91 I2 and I4) A link an earlier build wrote whose difficulties the circle has not told yet: where its
+    /// read stands. Until it has succeeded nothing is sent and nothing is said to be up to date. `None`: nothing awaited.
+    pub learning: Option<Learning>,
+    /// (round 17, critic 96 minor 4) `Learning::Held`: why, in plain words, and how many tries failed in a row.
+    pub held: Option<(String, u32)>,
+    /// (round 17, critic 96 minor 3) `Learning::Limited`: how long until the circle's daily limit resets, as it said (seconds).
+    pub limit_left: Option<u64>,
+    /// (round 18, critic 98 minor 3) `Learning::NotKept`: why the version can't be read.
+    pub unread: Option<Unread>,
+    /// (round 19, critic 100 I2) The banks file could not be written for a change she asked for here: what the strip says, and the
+    /// tries that failed. Her own edits are not saved either until a save works.
+    pub unsaved: Option<(String, u32)>,
+    /// (round 19, critic 100 minor 5) The link has difficulty news with something left for her to do (see `news_settled`).
+    pub news: bool,
+}
+
+/// (round 18, critic 98 minor 3) Why the circle's version a copy last matched can't be read (`Learning::NotKept`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Unread {
+    /// The circle no longer keeps it.
+    NotKept,
+    /// It is held back while an administrator reviews it: waiting is enough.
+    Withheld,
+    /// Its reply could not be read (or was not that version).
+    Other,
+}
+
+/// (round 15) Where the read of a link's base version stands, while the copy waits for it (see `LinkStatus::learning`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Learning {
+    /// It is on its way, or about to be asked.
+    Checking,
+    /// The circle could not be reached: asked again after `BASE_RETRY`, or at once on Try again.
+    CantReach,
+    /// The circle would not show that version (no longer kept, held back, a reply that can't be read): the difficulties are
+    /// not known. Asked again later (see `BASE_UNREADABLE_RETRY`), or at once on Check now.
+    NotKept,
+    /// (round 16, critic 93 minor 4) The circle refused the read for today (its daily limit): asked again when it said.
+    Limited,
+    /// (round 16, critic 93 I1) The read succeeded, but the circle's ratings could not be put into the bank (its restore point
+    /// or the banks file could not be saved): tried again after `BASE_RETRY`, or at once on Try again.
+    Held,
+}
+
+/// (round 15) A link an earlier build wrote whose difficulties the circle has not told yet, from a copy that sends: its base
+/// version is to be read, and until that has succeeded nothing is sent from it and its count is never complete.
+pub fn awaits_read(l: &CircleLink) -> bool {
+    needs_difficulty_read(l) && !l.gone() && !l.seen.removed && l.can_send() && l.role() != Some(Role::Viewer)
+}
+
+/// (round 15, critic 91 I1) A question whose difficulty a link an earlier build wrote just took from the circle: its bank, its
+/// id, and its difficulty before and after.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Inherited {
+    pub local: String,
+    pub qid: String,
+    pub before: Option<crate::model::Difficulty>,
+    pub after: Option<crate::model::Difficulty>,
+}
+
+/// (round 15, critic 91 I1) The question editor open on such a question is told, as the topic dialog tells it of a topic
+/// renamed: a draft still at the old difficulty takes the circle's, so that Done does not write the old one back. One whose
+/// difficulty the person changed in the editor keeps hers.
+pub fn refresh_draft(draft: Option<&mut crate::qedit::Draft>, moved: &[Inherited]) {
+    let Some(d) = draft else { return };
+    for i in moved {
+        if d.bank_id == i.local && d.qid.as_deref() == Some(i.qid.as_str()) && d.difficulty == i.before {
+            d.difficulty = i.after;
+        }
+    }
 }
 
 /// Where the open screen was asked for (phase D1): a bank's page in My Banks draws it in place of the questions,
@@ -854,6 +928,9 @@ pub struct CircleEditModel {
     account_ask: bool,
     /// The card whose "Forget this link" was pressed once.
     forget_ask: Option<String>,
+    /// (round 20, critic 100 minor 4) The bank whose "Put all of mine back" was pressed once: the news asks before it changes
+    /// several questions at once.
+    put_all_ask: Option<String>,
     /// "Treat this copy as in step": done by `sync`, which has the banks.
     cmd_rebase: bool,
     /// Circle banks known to hide their answer keys from viewers (`true`) or not, as last read (the circle page,
@@ -914,12 +991,48 @@ pub struct CircleEditModel {
     /// (critic 87 B1) The circle's versions read to learn the difficulties a base an earlier build wrote kept none of, by
     /// (circle, bank, version): each is read once (see `read_bases`).
     base_reads: HashMap<(String, String, u64), BaseRead>,
-    /// (critic 87 B1) The base version being read now.
+    /// (critic 87 B1) The base version being read now (meaningful only while a `Base` job runs), and (critic 91 minor) when it
+    /// was asked.
     base_asked: Option<(String, String, u64)>,
+    base_since: Option<Instant>,
     /// (critic 89 m2) The base version the open Get latest reads itself to learn its difficulties (the quiet read is then not
     /// asked beside it).
     merge_base: Option<(String, String, u64)>,
+    /// (round 15, critic 91 I1) Questions whose difficulty was just taken from the circle, for the open question editor (see
+    /// [`refresh_draft`]); taken by the page after each pass.
+    inherited: Vec<Inherited>,
+    /// (round 16, critic 93 I1 and minor 1) Where the banks are saved when the circle's ratings are put into one: before the
+    /// links file says it was done (`None`: the banks file of the store the links file is in).
+    bank_saver: Option<BankSaver>,
+    /// (round 16, critic 93 I1) Banks whose difficulties from the circle could not be written (the restore point or the banks
+    /// file could not be saved): tried again after `BASE_RETRY` (or at once on Try again). (round 17) With why, how many tries
+    /// failed, and the restore point already saved for the bank as it was (not saved again while it stays the same).
+    inherit_held: HashMap<String, Held>,
+    /// (round 17, critic 95 minor 3; round 18, critic 97 m4; round 19, critic 99 m5) The print of all the banks a safety copy was
+    /// last made of before the circle's difficulty went in: not made again while they stay the same, whatever the number of banks
+    /// held. (Base questions a bank lacked at the read are kept on its link: `CircleLink::missing_at_read`.)
+    safety_copy_for: Option<String>,
+    /// (round 18, critic 97 m6) The links file could not be written at this time: it is written again a little later.
+    links_unsaved: Option<Instant>,
+    /// (round 19, critic 100 I2) The banks file could not be written when she asked for a change ("Put mine back"): so her own
+    /// edits are not saved either. By bank: what the strip says, and the tries that failed. Said until a save works.
+    banks_unsaved: HashMap<String, (String, u32)>,
+    /// (round 19, critic 100 I2) "Try again" on such a bank: all the banks are written at the next pass.
+    banks_again: bool,
 }
+
+/// (round 16, critic 93 I1; round 17) The circle's difficulties could not be written into a bank: when that was last tried
+/// (`None`: Try again was pressed, tried at the next pass), why in plain words, and the tries that failed in a row. (round 19,
+/// critic 99 m5: the safety copy already made is the model's, see `safety_copy_for`.)
+#[derive(Clone, Debug)]
+struct Held {
+    at: Option<Instant>,
+    why: String,
+    tries: u32,
+}
+
+/// (round 16, critic 93 minor 1) Saves all the banks; tests give one that records or fails.
+pub type BankSaver = Arc<dyn Fn(&[QuestionBank]) -> Result<(), String> + Send + Sync>;
 
 /// (critic 87 B1) How the read of a link's base version went, when it taught nothing (one that did is recorded on the link
 /// itself: see `CircleLink::difficulty_read`).
@@ -927,9 +1040,12 @@ pub struct CircleEditModel {
 enum BaseRead {
     /// It can't be read (no longer kept, hidden, not the version asked for, a reply that can't be read): (critic 89 m4) asked
     /// again after `BASE_UNREADABLE_RETRY`, or as soon as the circle's state of the bank (as the link last saw it) changes.
-    Unreadable(Instant, String),
-    /// The circle could not be asked (signed out, offline, a problem of its own): asked again after `BASE_RETRY`.
-    NotReached(Instant),
+    Unreadable(Instant, String, Unread),
+    /// The circle could not be asked (signed out, offline, a problem of its own): asked again after `BASE_RETRY`. (round 16,
+    /// critic 94 m2) How many times in a row: the first is asked again after `BASE_FIRST_RETRY`, and is not said yet.
+    NotReached(Instant, u32),
+    /// (round 16, critic 93 minor 4) The circle's daily limit: asked again at the time given.
+    Limited(Instant),
 }
 
 /// (critic 89 m4) The circle's state of a bank as the link last saw it: its newest version, whether it is held back or
@@ -940,6 +1056,14 @@ fn circle_state(l: &CircleLink) -> String {
 
 /// (critic 87 B1) How long a read of a base version that could not reach the circle waits before it is tried again.
 pub const BASE_RETRY: Duration = Duration::from_secs(60);
+
+/// (round 16, critic 94 m2) How long a read that could not reach the circle the first time waits before it is asked again
+/// (meanwhile the copy is still said to be checking: a page just opened does not say at once that it can't check).
+pub const BASE_FIRST_RETRY: Duration = Duration::from_secs(5);
+
+/// (critic 91 minor) How long Get latest waits for the quiet read of its base version before it says that the circle can't be
+/// reached just now (it goes on waiting: the read is still on its way).
+pub const BASE_WAIT: Duration = Duration::from_secs(15);
 
 /// (critic 89 m4) How long a base version the circle would not show (no longer kept, held back, a reply that could not be
 /// read) waits before it is asked again; sooner when the circle's state of the bank changes.
@@ -1033,6 +1157,7 @@ impl CircleEditModel {
             read_again: false,
             account_ask: false,
             forget_ask: None,
+            put_all_ask: None,
             cmd_rebase: false,
             hiding: HashMap::new(),
             host: None,
@@ -1056,8 +1181,28 @@ impl CircleEditModel {
             me_name: None,
             base_reads: HashMap::new(),
             base_asked: None,
+            base_since: None,
             merge_base: None,
+            inherited: Vec::new(),
+            bank_saver: None,
+            inherit_held: HashMap::new(),
+            safety_copy_for: None,
+            links_unsaved: None,
+            banks_unsaved: HashMap::new(),
+            banks_again: false,
         }
+    }
+
+    /// (round 16) Where the banks are saved when the circle's ratings are put into one (see `bank_saver`).
+    pub fn with_bank_saver(mut self, f: BankSaver) -> CircleEditModel {
+        self.bank_saver = Some(f);
+        self
+    }
+
+    /// (round 15, critic 91 I1) The questions whose difficulty was taken from the circle since the last call (see
+    /// [`refresh_draft`]).
+    pub fn take_inherited(&mut self) -> Vec<Inherited> {
+        std::mem::take(&mut self.inherited)
     }
 
     pub fn with_retry(mut self, retry: RetryPolicy) -> CircleEditModel {
@@ -1106,6 +1251,15 @@ impl CircleEditModel {
         self.links.iter().find(|l| l.local_bank_id == m.local_id).is_some_and(|l| needs_difficulty_read(l) && self.quiet_read_of(&(l.circle_id.clone(), l.circle_bank_id.clone(), l.base_version)))
     }
 
+    /// (round 17, critic 95 minor 1) The open Get latest has what it needs, but its bank still waits for the circle's
+    /// difficulties to be put into it (they could not be saved yet: held). (A bank no longer here is not waited for: the
+    /// review says so.)
+    fn merge_waits_for_difficulty(&self) -> bool {
+        let EditView::Merge(m) = &self.view else { return false };
+        // (round 19, critic 99 m7) a held pass for a question put back after the read too
+        matches!(m.phase, MergePhase::Ready(_)) && self.inherit_held.contains_key(&m.local_id) && self.links.iter().any(|l| l.local_bank_id == m.local_id)
+    }
+
     /// (critic 87 B1, critic 89 m2) What the open Get latest read of its bank's base version (when it read it to learn the
     /// difficulties) is learnt before the review is made; one it could not read is not asked again quietly until later.
     fn learn_from_fetch(&mut self) {
@@ -1122,7 +1276,7 @@ impl CircleEditModel {
         match read {
             Some(theirs) => self.learn_base(&key.0, &key.1, key.2, &theirs),
             None if asked => {
-                let state = self.unreadable_now(&key.0, &key.1);
+                let state = self.unreadable_now(&key.0, &key.1, Unread::NotKept);
                 self.base_reads.insert(key, state);
             }
             None => {}
@@ -1597,9 +1751,8 @@ impl CircleEditModel {
         // (critic 89 m2) and a quiet read of a base version on its way: dropped here, it would be asked again beside the one
         // still running at the server
         self.jobs.retain(|j| matches!(j.kind, JobKind::Act | JobKind::Base));
-        if !self.running(JobKind::Act) {
-            self.inflight = None;
-        }
+        // (round 15, survivors x_close_inflight and c93 m24) what a send carried is read only by its own answer (`on_sent` takes
+        // it) or its lost job (`fail_kind`), and every send sets it first: one left here is never read, so nothing is dropped
         self.view = EditView::Closed;
         self.history_stash = None;
         self.cmd_send = false;
@@ -1632,7 +1785,6 @@ impl CircleEditModel {
             // asked with the earlier account's sign-in is not this one's
             self.base_reads.clear();
             self.jobs.retain(|j| j.kind != JobKind::Base);
-            self.base_asked = None;
             // (critic 69 I1, critic 71) this account's turn: a send, restore or trim the first account asked for is
             // not told to this one, and nothing the first one was told stays. (A sign-out keeps the results: the same
             // account signing in again sees them.)
@@ -1657,6 +1809,7 @@ impl CircleEditModel {
         self.last_act = None;
         self.merge_note = None;
         self.forget_ask = None;
+        self.put_all_ask = None;
         // (read for the account: read again with the circle page)
         self.hiding.clear();
     }
@@ -1729,6 +1882,41 @@ impl CircleEditModel {
         if found { self.statuses.get(&bank.id).cloned() } else { None }
     }
 
+    /// (critic 92 I2) The banks in My Banks linked to circle `cid`, that the person can send from, with changes not sent yet as
+    /// their counts last said: the bank's name, and how many (`None`: they can't be counted). For the leave panel.
+    pub fn unsent_in(&mut self, cid: &str) -> Vec<(String, Option<usize>, bool)> {
+        self.unsent_of(cid, None)
+    }
+
+    /// (round 16, critic 94 m6) [`unsent_in`](Self::unsent_in) for one circle bank (removing it).
+    pub fn unsent_of_bank(&mut self, cid: &str, bid: &str) -> Vec<(String, Option<usize>, bool)> {
+        self.unsent_of(cid, Some(bid))
+    }
+
+    fn unsent_of(&mut self, cid: &str, bid: Option<&str>) -> Vec<(String, Option<usize>, bool)> {
+        self.ensure();
+        let sendable = |l: &CircleLink| l.circle_id == cid && bid.is_none_or(|b| l.circle_bank_id == b) && l.can_send() && super::bank_links::role_of(l).can_add_banks();
+        self.links
+            .iter()
+            .filter(|l| sendable(l))
+            .filter_map(|l| {
+                let s = self.statuses.get(&l.local_bank_id).filter(|s| !s.missing)?;
+                let n = s.changes.total();
+                // (round 16, critic 93 minor 3, q93_4) a copy waiting for the circle to be checked can't be sent now: named
+                // whatever is counted, with its count only where its strip says one ("not kept")
+                if let Some(w) = s.learning {
+                    let n = (w == Learning::NotKept && s.changes.partial() && n > 0).then_some(n);
+                    return Some((super::api::plain(&s.bank_name), n, true));
+                }
+                match (s.changes.known || s.changes.partial(), n) {
+                    (true, 0) => None,
+                    (true, n) => Some((super::api::plain(&s.bank_name), Some(n), false)),
+                    (false, _) => Some((super::api::plain(&s.bank_name), None, false)),
+                }
+            })
+            .collect()
+    }
+
     /// (critic 88 I2) The version the copy last matched, as its link says.
     pub fn base_version_of(&self, local_id: &str) -> Option<u64> {
         self.links.iter().find(|l| l.local_bank_id == local_id).map(|l| l.base_version)
@@ -1777,6 +1965,12 @@ impl CircleEditModel {
 
     fn copy_is_stale(&self, local_id: &str) -> bool {
         self.statuses.get(local_id).is_some_and(|s| s.stale)
+    }
+
+    /// (round 16, critic 94 m1) The copy waits for the circle's version it last matched, which the circle would not show:
+    /// "Use my bank as it is" is the way to send from it before someone sends a newer version.
+    pub fn cant_be_read(&self, local_id: &str) -> bool {
+        self.statuses.get(local_id).is_some_and(|s| s.learning == Some(Learning::NotKept))
     }
 
     pub fn status(&self, local_id: &str) -> Option<&LinkStatus> {
@@ -1867,8 +2061,29 @@ impl CircleEditModel {
         if r.is_ok() {
             // (critic 71) every link in memory is in the file now: "could not be saved" is no longer so
             self.results.drop_kind(ResultKind::Check);
+            self.links_unsaved = None;
+        } else {
+            // (round 18, critic 97 m6) written again a little later (see `links_again`)
+            self.links_unsaved = Some(self.now.unwrap_or_else(Instant::now));
         }
         r
+    }
+
+    /// (round 18, critic 97 m6) A links file that could not be written is written again `BASE_FIRST_RETRY` after the last try, so
+    /// that what the links say (a pass done, its news) reaches the file once it can.
+    fn links_again(&mut self) {
+        let now = self.now.unwrap_or_else(Instant::now);
+        if self.links_unsaved.is_some_and(|at| now.saturating_duration_since(at) >= BASE_FIRST_RETRY) {
+            let _ = self.save();
+        }
+    }
+
+    /// (round 18, critic 97 m6) Changes one link with `f` and saves the list now, saying whether it could be saved (the change
+    /// stays in memory either way, and is written again later).
+    fn save_link_now(&mut self, local_id: &str, f: impl FnOnce(&mut CircleLink)) -> Result<(), String> {
+        let Some(l) = self.links.iter_mut().find(|l| l.local_bank_id == local_id) else { return Ok(()) };
+        f(l);
+        self.save()
     }
 
     fn replace_link(&mut self, link: CircleLink) {
@@ -1947,18 +2162,62 @@ impl CircleEditModel {
         }
         let now = self.now.unwrap_or_else(Instant::now);
         let merging = if let EditView::Merge(m) = &self.view { Some(m.local_id.as_str()) } else { None };
+        // (critic 91 minor) by this account's role: one another account on this computer saw is not asked by
+        let me = super::bank_links::account_tag(self.account.as_deref());
         let next = self
             .links
             .iter()
-            .filter(|l| needs_difficulty_read(l) && !l.gone() && !l.seen.removed && l.can_send() && l.role() != Some(Role::Viewer) && merging != Some(l.local_bank_id.as_str()))
+            .filter(|l| awaits_read(l) && (l.role_seen_by.is_none() || l.role_seen_by == me) && merging != Some(l.local_bank_id.as_str()))
             .find(|l| self.base_read_due(l, now))
             .map(|l| (l.circle_id.clone(), l.circle_bank_id.clone(), l.base_version));
         if let Some((cid, bid, n)) = next {
             // (a read dropped on its way by another screen is asked again at the next frame; see `drain` for one whose thread
             // died)
             self.base_asked = Some((cid.clone(), bid.clone(), n));
+            self.base_since = Some(now);
             self.launch(Work::BaseRead { cid, bid, n });
         }
+    }
+
+    /// (round 15) "Try again" or "Check now" on a copy waiting for the read of its base version: it is asked at the next frame.
+    pub fn read_base_again(&mut self, local: &str) {
+        // (round 16) and difficulties that could not be written into the bank are tried again at once (round 17, critic 96
+        // minor 4: the hold stays, so that a try that fails again is said to have been tried again)
+        if let Some(h) = self.inherit_held.get_mut(local) {
+            h.at = None;
+        }
+        // (round 19, critic 100 I2) and the banks are written again
+        if self.banks_unsaved.contains_key(local) {
+            self.banks_again = true;
+        }
+        if let Some(l) = self.links.iter().find(|l| l.local_bank_id == local) {
+            let key = (l.circle_id.clone(), l.circle_bank_id.clone(), l.base_version);
+            self.base_reads.remove(&key);
+        }
+    }
+
+    /// (critic 91 minor) What the open Get latest says while it waits for the quiet read of its base version: that it is
+    /// checking, and after `BASE_WAIT` that the circle can't be reached just now. `None` when it is not waiting for it.
+    pub fn merge_wait_note(&self) -> Option<String> {
+        // (round 17, critic 95 minor 1) the bank waits for the circle's difficulties: said with why and what happens next
+        if self.merge_waits_for_difficulty() {
+            let local = if let EditView::Merge(m) = &self.view { m.local_id.as_str() } else { "" };
+            return self.inherit_held.get(local).map(|h| text::merge_waits_held(&h.why));
+        }
+        if !matches!(&self.view, EditView::Merge(m) if matches!(m.phase, MergePhase::Ready(_))) || !self.merge_waits_for_base() {
+            return None;
+        }
+        let now = self.now.unwrap_or_else(Instant::now);
+        let long = self.base_since.is_some_and(|t| now.saturating_duration_since(t) >= BASE_WAIT);
+        // (round 16, critic 94 m2) "couldn't check" only for a read that failed before; one that is only slow is still checking
+        let local = if let EditView::Merge(m) = &self.view { m.local_id.as_str() } else { "" };
+        let failed = self.links.iter().find(|l| l.local_bank_id == local).is_some_and(|l| matches!(self.base_reads.get(&(l.circle_id.clone(), l.circle_bank_id.clone(), l.base_version)), Some(BaseRead::NotReached(..))));
+        Some(match (long, failed) {
+            (false, _) => text::CHECKING,
+            (true, false) => text::STILL_CHECKING,
+            (true, true) => text::CHECKING_LONG,
+        }
+        .to_string())
     }
 
     /// (critic 89 m4) This link's base version may be asked for now: never asked, or what stopped the last read may have passed
@@ -1967,14 +2226,16 @@ impl CircleEditModel {
     fn base_read_due(&self, l: &CircleLink, now: Instant) -> bool {
         match self.base_reads.get(&(l.circle_id.clone(), l.circle_bank_id.clone(), l.base_version)) {
             None => true,
-            Some(BaseRead::NotReached(at)) => now.saturating_duration_since(*at) >= BASE_RETRY,
-            Some(BaseRead::Unreadable(at, seen)) => now.saturating_duration_since(*at) >= BASE_UNREADABLE_RETRY || *seen != circle_state(l),
+            Some(BaseRead::NotReached(at, tries)) => now.saturating_duration_since(*at) >= if *tries <= 1 { BASE_FIRST_RETRY } else { BASE_RETRY },
+            Some(BaseRead::Limited(until)) => now >= *until,
+            Some(BaseRead::Unreadable(at, seen, _)) => now.saturating_duration_since(*at) >= BASE_UNREADABLE_RETRY || *seen != circle_state(l),
         }
     }
 
     fn on_base_read(&mut self, cid: &str, bid: &str, n: u64, r: Result<BankDoc, PoolError>) {
+        // (`base_asked` says which read is on its way only while a Base job runs: every reader asks `running(JobKind::Base)`
+        // first and every launch sets it again, so clearing it here or not is the same (survivors b_asked_kept, c93 m23))
         let key = (cid.to_string(), bid.to_string(), n);
-        self.base_asked = None;
         let state = match r {
             // (only the version asked for: survivor c2)
             Ok(doc) if doc.bank.version == n => {
@@ -1983,22 +2244,41 @@ impl CircleEditModel {
                 self.learn_base(cid, bid, n, &theirs);
                 return;
             }
-            Err(e) if not_reached(&e) => BaseRead::NotReached(self.now.unwrap_or_else(Instant::now)),
-            _ => self.unreadable_now(cid, bid),
+            // (round 16, critic 93 minor 4) the circle's daily limit is not "can't reach": waited out as it says
+            Err(PoolError::Refused(r)) if matches!(r.kind, RefusalKind::DailyLimit { .. }) => {
+                // (round 17, critic 95 minor 5) a huge Retry-After is capped, never an overflow
+                let secs = r.detail.retry_after.filter(|s| *s > 0).unwrap_or(BASE_UNREADABLE_RETRY.as_secs()).min(api::MAX_WAIT_SECS);
+                BaseRead::Limited(api::later(self.now.unwrap_or_else(Instant::now), secs))
+            }
+            Err(e) if not_reached(&e) => self.not_reached_now(&key),
+            // (round 18, critic 98 minor 3) said by why: no longer kept, held back for review, or a reply that can't be read
+            Err(PoolError::Refused(r)) if matches!(r.kind, RefusalKind::VersionNotRetained) => self.unreadable_now(cid, bid, Unread::NotKept),
+            Err(PoolError::Refused(r)) if matches!(r.kind, RefusalKind::VersionWithheld) => self.unreadable_now(cid, bid, Unread::Withheld),
+            _ => self.unreadable_now(cid, bid, Unread::Other),
         };
         self.base_reads.insert(key, state);
     }
 
+    /// (round 16, critic 94 m2) The read of this base version could not reach the circle (once more in a row).
+    fn not_reached_now(&self, key: &(String, String, u64)) -> BaseRead {
+        let tries = match self.base_reads.get(key) {
+            Some(BaseRead::NotReached(_, n)) => n.saturating_add(1),
+            _ => 1,
+        };
+        BaseRead::NotReached(self.now.unwrap_or_else(Instant::now), tries)
+    }
+
     /// (critic 89 m4) A base version of this circle bank can't be read now, as the circle's state of it is.
-    fn unreadable_now(&self, cid: &str, bid: &str) -> BaseRead {
+    fn unreadable_now(&self, cid: &str, bid: &str, why: Unread) -> BaseRead {
         let seen = self.links.iter().find(|l| l.circle_id == cid && l.circle_bank_id == bid).map(circle_state).unwrap_or_default();
-        BaseRead::Unreadable(self.now.unwrap_or_else(Instant::now), seen)
+        BaseRead::Unreadable(self.now.unwrap_or_else(Instant::now), seen, why)
     }
 
     /// (critic 87 B1) The link of this circle bank, still at version `n`, learns its base's difficulties from that version.
     /// (critic 89 m1) Its count is worked out again (what it learnt may change it, also where it still knows not all).
     fn learn_base(&mut self, cid: &str, bid: &str, n: u64, theirs: &[merge::Theirs]) {
-        let Some(local) = self.links.iter().find(|l| l.circle_id == cid && l.circle_bank_id == bid && l.base_version == n).map(|l| l.local_bank_id.clone()) else { return };
+        // (round 16, critic 93 I2) only while it is awaited: "Use my bank as it is" settled it, whatever arrives after
+        let Some(local) = self.links.iter().find(|l| l.circle_id == cid && l.circle_bank_id == bid && l.base_version == n && needs_difficulty_read(l)).map(|l| l.local_bank_id.clone()) else { return };
         self.update_link(&local, |l| learn_difficulty(l, theirs));
         self.recount(&local);
     }
@@ -2011,24 +2291,346 @@ impl CircleEditModel {
         }
     }
 
-    /// (the owner's decision, critic 90 I1) A copy whose difficulties were just learnt inherits the circle's rating where it
-    /// has none and the teacher did not edit the question since (see `inherit_difficulty`). Not her edit: the question's and
-    /// the bank's own times are kept. Kept to do until a pass finds nothing left (a pass whose bank was not saved does it
-    /// again). Returns true when a bank changed (the caller saves the banks).
+    /// (the owner's rule; round 15) A copy whose difficulties were just learnt takes the circle's difficulty for each question
+    /// the version has (see `inherit_difficulty`). The bank's time moves on (a preview made from it is made again), and a send
+    /// whose answer could not be read is not said to have changes after it for this. (critic 91 I1) What moved is kept for the
+    /// open question editor (see [`refresh_draft`]). Returns true when a bank changed (the caller saves the banks).
+    ///
+    /// (round 16, critic 93 I1, critic 94 O1) Recoverable: a restore point is saved before any rating is replaced, as a merge's,
+    /// and the strip says once what was taken from which version; a rating she already pressed Send for is kept (see
+    /// `inherit_difficulty`). (critic 93 minor 1) The banks file is written first, and only then does the links file say it
+    /// was done: if either can't be saved nothing changes, Send waits, and it is tried again (see `inherit_held`). (critic 93
+    /// minor 2) A base question the bank did not have then (deleted before the read) takes the circle's rating when it is
+    /// put back.
     fn inherit_pending(&mut self, banks: &mut [QuestionBank]) -> bool {
-        let pending: Vec<String> = self.links.iter().filter(|l| l.inherit).map(|l| l.local_bank_id.clone()).collect();
+        let now = self.now.unwrap_or_else(Instant::now);
+        // a base version moved on (a send, a merge): what was missing then is no longer the circle's
+        let mut dropped = false;
+        for l in self.links.iter_mut().filter(|l| l.missing_at_read.as_ref().is_some_and(|(n, _)| *n != l.base_version)) {
+            l.missing_at_read = None;
+            dropped = true;
+        }
+        if dropped {
+            let _ = self.save();
+        }
+        let mut work: Vec<(String, Option<Vec<String>>)> = self.links.iter().filter(|l| l.inherit).map(|l| (l.local_bank_id.clone(), None)).collect();
+        for l in self.links.iter().filter(|l| !l.inherit) {
+            let Some((_, ids)) = &l.missing_at_read else { continue };
+            let Some(bank) = banks.iter().find(|b| b.id == l.local_bank_id) else { continue };
+            let back: Vec<String> = ids.iter().filter(|id| bank.questions.iter().any(|q| &q.id == *id)).cloned().collect();
+            if !back.is_empty() {
+                work.push((l.local_bank_id.clone(), Some(back)));
+            }
+        }
+        // (round 18, critic 97 m1) a hold with nothing left to try (its question deleted again, the copy moved on) goes
+        self.inherit_held.retain(|local, _| work.iter().any(|(l, _)| l == local));
         let mut changed = false;
-        for local in pending {
-            let Some(bank) = banks.iter_mut().find(|b| b.id == local) else { continue };
-            let Some(link) = self.links.iter().find(|l| l.local_bank_id == local) else { continue };
-            if inherit_difficulty(link, bank) == 0 {
-                self.update_link(&local, |l| std::mem::take(&mut l.inherit));
+        for (local, only) in work {
+            if self.inherit_held.get(&local).is_some_and(|h| h.at.is_some_and(|at| now.saturating_duration_since(at) < BASE_RETRY)) {
                 continue;
             }
+            let Some(pos) = banks.iter().position(|b| b.id == local) else { continue };
+            // (a copy: the link is changed in the list as the pass goes)
+            let Some(link) = self.links.iter().find(|l| l.local_bank_id == local).cloned() else { continue };
+            // (round 17, critic 95 minor 2) signed out (no account known yet after a restart), her send record is hers to keep;
+            // (round 18, critic 97 m5) one whose account is not the one this link was last seen by may be another account's: the
+            // pass waits for a sign-in to tell
+            let record = match &self.account {
+                None => match link.sent_record.as_ref() {
+                    Some(r) if !r.by.is_empty() && link.role_seen_by.as_deref() != Some(r.by.as_str()) => continue,
+                    r => r.cloned(),
+                },
+                Some(_) => self.record_mine(&link).cloned(),
+            };
+            let mut bank = banks[pos].clone();
+            let moved = inherit_difficulty(&link, &mut bank, record.as_ref(), only.as_deref());
+            let version = link.base_version;
+            // (round 17, critic 95 I1) the bank as this first pass finds it, kept on the link if the pass can't be saved; (round 18,
+            // critic 97 m1) for a question put back after the read too, as the first pass for it finds it
+            let at_read: Option<Vec<AtRead>> = match &only {
+                None => link.at_read.is_none().then(|| link.base.iter().filter_map(|b| banks[pos].questions.iter().find(|q| q.id == b.local_id)).map(|q| AtRead { id: q.id.clone(), difficulty: q.difficulty }).collect()),
+                Some(back) => {
+                    let mut have = link.at_read.clone().unwrap_or_default();
+                    let known = have.len();
+                    for q in banks[pos].questions.iter().filter(|q| back.contains(&q.id)) {
+                        if !have.iter().any(|a| a.id == q.id) {
+                            have.push(AtRead { id: q.id.clone(), difficulty: q.difficulty });
+                        }
+                    }
+                    (have.len() > known).then_some(have)
+                }
+            };
+            if only.is_none() {
+                // (the bank as the read found it: a base question it lacks may be put back) (round 19, critic 99 m4) kept on the link,
+                // in the file
+                let missing: Vec<String> = link.base.iter().filter(|b| b.snap.difficulty.is_some() && !banks[pos].questions.iter().any(|q| q.id == b.local_id)).map(|b| b.local_id.clone()).collect();
+                let now_missing = (!missing.is_empty() && !link.stale_for(&banks[pos])).then_some((version, missing));
+                if let Some(l) = self.links.iter_mut().find(|l| l.local_bank_id == local)
+                    && l.missing_at_read != now_missing
+                {
+                    l.missing_at_read = now_missing;
+                    let _ = self.save();
+                }
+            }
+            // (round 18, critic 97 m1) a question put back is no longer waited for only once its pass worked: a held one is tried
+            // again. Returns whether the link changed.
+            let done_back = |l: &mut CircleLink| -> bool {
+                let Some(back) = &only else { return false };
+                let Some((_, ids)) = l.missing_at_read.as_mut() else { return false };
+                let n = ids.len();
+                ids.retain(|id| !back.contains(id));
+                let changed = ids.len() != n;
+                if ids.is_empty() {
+                    l.missing_at_read = None;
+                }
+                changed
+            };
+            // (round 18, critic 97 m6) a pass that already ran (its banks file written, its links file not: written again after a
+            // restart) is told by the bank as the read found it: what it gave the circle's difficulty is in the news again. (round 19,
+            // critic 99 m6) Only where that write may have happened (the links file said the banks file was next, and no try of it
+            // failed since): a question she set to the circle's difficulty herself during a hold is her choice, never the app's
+            let ran = link.pass_times.is_some() && !self.inherit_held.contains_key(&local);
+            let already = if ran { inherited_before(&link, &banks[pos]) } else { Vec::new() };
+            // (round 19, critic 99 m2) such a pass is done: what differs from the circle's now was put back by her since (Put mine
+            // back, or her own edit), and is never taken again; it is listed as hers, back
+            if only.is_none() && !already.is_empty() {
+                self.update_link(&local, |l| {
+                    // (round 19, critic 99 m3) an unclear send's time moves with the pass, as it did in the session that ran it
+                    if let Some((before, after)) = l.pass_times {
+                        if let Some(u) = l.sent_unread.as_mut().filter(|u| u.modified == before) {
+                            u.modified = after;
+                        }
+                        if let Some(r) = l.sent_record.as_mut().filter(|r| r.modified == before) {
+                            r.modified = after;
+                        }
+                    }
+                    l.inherit = false;
+                    l.at_read = None;
+                    l.pass_times = None;
+                    add_news(l, version, &already);
+                    add_news_back(l, version, &moved);
+                    true
+                });
+                continue;
+            }
+            if moved.is_empty() {
+                self.inherit_held.remove(&local);
+                self.update_link(&local, |l| {
+                    let was = done_back(l) | (l.inherit || l.at_read.is_some() || l.pass_times.is_some() || !already.is_empty());
+                    l.inherit = false;
+                    l.at_read = None;
+                    l.pass_times = None;
+                    add_news(l, version, &already);
+                    was
+                });
+                continue;
+            }
+            let before = bank.modified;
+            // Seconds, like every editor writes.
+            bank.modified = (self.now_ms() / 1000).max(before.saturating_add(1));
+            let after = bank.modified;
+            // (round 18, critic 97 m6) the bank as the read found it goes into the links file before the banks file changes: if the
+            // links file can't be written after the pass, a restart runs it again over what she has not changed since. (round 19,
+            // critic 99 m1) At every try, with the times of this write: a retry never writes the banks file while the links file is
+            // not in step with it, and holds instead
+            if let Err(m) = self.save_link_now(&local, |l| {
+                if let Some(a) = at_read {
+                    l.at_read = Some(a);
+                }
+                l.pass_times = Some((before, after));
+            }) {
+                self.hold_inherit(&local, now, text::links_not_saved(&m));
+                continue;
+            }
+            // the restore point first, as a merge's: if it can't be saved, nothing changes. (round 17, critic 95 minor 3) One
+            // already saved for the banks as they are now is not saved again while the banks file can't be written; (round 18,
+            // critic 97 m4) all the banks: work on another bank during the hold makes a new one
+            // (round 19, critic 99 m5) one for the whole model, whatever the number of banks held
+            let print = print_all(banks);
+            if self.safety_copy_for.as_deref() != Some(print.as_str()) {
+                if let Err(m) = self.restore.save_named(banks, "difficulty") {
+                    self.hold_inherit(&local, now, text::safety_copy_not_saved(&m));
+                    continue;
+                }
+                self.safety_copy_for = Some(print);
+            }
+            let mut next = banks.to_vec();
+            next[pos] = bank;
+            // then the banks file, and only then the links file
+            if let Err(m) = self.save_banks(&next) {
+                self.hold_inherit(&local, now, text::banks_not_saved(&m));
+                continue;
+            }
+            banks[pos] = next.swap_remove(pos);
+            self.banks_saved();
+            self.inherit_held.remove(&local);
+            let moved_news = moved.clone();
+            self.update_link(&local, |l| {
+                done_back(l);
+                if let Some(u) = l.sent_unread.as_mut().filter(|u| u.modified == before) {
+                    u.modified = after;
+                }
+                if let Some(r) = l.sent_record.as_mut().filter(|r| r.modified == before) {
+                    r.modified = after;
+                }
+                l.inherit = false;
+                l.at_read = None;
+                l.pass_times = None;
+                // (round 17, critic 96 I1) kept until she dismisses it: what replaced what
+                add_news(l, version, &already);
+                add_news(l, version, &moved_news);
+                true
+            });
+            // (the line that said it could not be saved is out of date)
+            if let Some(b) = self.result_bank_of_local(&local) {
+                self.results.drop_of(&b, ResultKind::Ratings);
+            }
             changed = true;
-            self.recount(&local);
+            self.inherited.extend(moved.into_iter().map(|(qid, before, after)| Inherited { local: local.clone(), qid, before, after }));
         }
         changed
+    }
+
+    /// (round 16, critic 93 I1) The circle's difficulties could not be written into this bank: nothing changed; said on its
+    /// strip and badge (round 17: in plain words, with the tries), and tried again after `BASE_RETRY` (Send waits meanwhile: see
+    /// `Learning::Held`). (round 19, critic 99 m2) The links file no longer says the banks file has the pass (written quietly; one
+    /// that can't be is written again later).
+    fn hold_inherit(&mut self, local: &str, now: Instant, why: String) {
+        let h = self.inherit_held.entry(local.to_string()).or_insert(Held { at: None, why: String::new(), tries: 0 });
+        h.at = Some(now);
+        h.why = why;
+        h.tries = h.tries.saturating_add(1);
+        if let Some(l) = self.links.iter_mut().find(|l| l.local_bank_id == local)
+            && l.pass_times.take().is_some()
+        {
+            let _ = self.save();
+        }
+        self.statuses.remove(local);
+    }
+
+    /// (round 17, critic 96 I1) "Put mine back" on one question of the difficulty news: her difficulty before the circle's
+    /// replaced it comes back as an ordinary change she has not sent (the bank's time moves on; the open question editor is
+    /// told). Returns true when the bank changed (the caller saves the banks).
+    pub fn put_mine_back(&mut self, banks: &mut [QuestionBank], local: &str, qid: &str) -> bool {
+        self.put_back_these(banks, local, &[qid.to_string()])
+    }
+
+    /// (round 18, critic 98 minor 6) "Put all of mine back": every question of the news that still offers it, in one save.
+    pub fn put_all_mine_back(&mut self, banks: &mut [QuestionBank], local: &str) -> bool {
+        let Some(link) = self.links.iter().find(|l| l.local_bank_id == local) else { return false };
+        let Some(bank) = banks.iter().find(|b| b.id == local) else { return false };
+        let ids: Vec<String> = link.difficulty_news.as_ref().map(|n| n.questions.iter().filter(|i| news_state(link, i, bank) == NewsState::Replaced).map(|i| i.id.clone()).collect()).unwrap_or_default();
+        self.put_back_these(banks, local, &ids)
+    }
+
+    /// Her difficulty before the circle's, back on each of `ids` that still offers it (see `news_state`). (round 18, critic 97 m3) The
+    /// banks file is written first; only then does the links file say it was put back. If the banks can't be saved nothing changes,
+    /// the button stays, and the strip says why.
+    fn put_back_these(&mut self, banks: &mut [QuestionBank], local: &str, ids: &[String]) -> bool {
+        let Some(link) = self.links.iter().find(|l| l.local_bank_id == local) else { return false };
+        let Some(pos) = banks.iter().position(|b| b.id == local) else { return false };
+        // (round 18, critic 98 I1) only while the question still has the circle's difficulty from the read and the copy is still at
+        // that version: never over her newer choice or a colleague's newer difficulty
+        let items: Vec<NewsItem> = link.difficulty_news.as_ref().map(|n| n.questions.iter().filter(|i| ids.contains(&i.id) && news_state(link, i, &banks[pos]) == NewsState::Replaced).cloned().collect()).unwrap_or_default();
+        if items.is_empty() {
+            return false;
+        }
+        let mut next = banks.to_vec();
+        let bank = &mut next[pos];
+        let mut moved = Vec::new();
+        for item in &items {
+            if let Some(q) = bank.questions.iter_mut().find(|q| q.id == item.id) {
+                moved.push(Inherited { local: local.to_string(), qid: item.id.clone(), before: q.difficulty, after: item.before });
+                q.difficulty = item.before;
+            }
+        }
+        let prev = bank.modified;
+        // Seconds, like every editor writes.
+        bank.modified = (self.now_ms() / 1000).max(prev.saturating_add(1));
+        let result = self.result_bank_of_local(local);
+        if let Err(m) = self.save_banks(&next) {
+            // (round 19, critic 100 I2) her own edits aren't saved either: said on the strip in the warning colour until a save
+            // works (never a line she can dismiss)
+            self.not_saved(local, text::put_back_not_saved(&m));
+            return false;
+        }
+        banks[pos] = next.swap_remove(pos);
+        self.banks_saved();
+        if let Some(b) = result {
+            self.results.drop_of(&b, ResultKind::Ratings);
+        }
+        self.update_link(local, |l| {
+            if let Some(n) = l.difficulty_news.as_mut() {
+                for q in n.questions.iter_mut().filter(|q| items.iter().any(|i| i.id == q.id)) {
+                    q.put_back = true;
+                }
+            }
+            true
+        });
+        self.inherited.extend(moved);
+        self.statuses.remove(local);
+        true
+    }
+
+    /// (round 18, critic 98 I1) Each link's difficulty news, against its bank as it is: a question changed since is noted for good
+    /// (saved with the links).
+    fn settle_all_news(&mut self, banks: &[QuestionBank]) {
+        // (in place: a link is not copied every frame for this)
+        let mut changed = false;
+        for l in self.links.iter_mut().filter(|l| l.difficulty_news.is_some()) {
+            if let Some(bank) = banks.iter().find(|b| b.id == l.local_bank_id) {
+                changed |= settle_news(l, bank);
+            }
+        }
+        // (one that can't be saved now is written again later: see `links_again`)
+        if changed {
+            let _ = self.save();
+        }
+    }
+
+    /// (round 17, critic 96 I1) "Dismiss" on the difficulty news: it goes from the badge and the strip.
+    pub fn dismiss_news(&mut self, local: &str) {
+        self.update_link(local, |l| l.difficulty_news.take().is_some());
+    }
+
+    /// (round 19, critic 100 I2) The banks file could not be written for a change she asked for on `local`'s page: said there (with
+    /// the tries) until a save works.
+    fn not_saved(&mut self, local: &str, line: String) {
+        let e = self.banks_unsaved.entry(local.to_string()).or_insert((String::new(), 0));
+        e.0 = line;
+        e.1 = e.1.saturating_add(1);
+        self.statuses.remove(local);
+    }
+
+    /// (round 19, critic 100 I2) The banks file was written: her edits are saved again.
+    fn banks_saved(&mut self) {
+        for local in std::mem::take(&mut self.banks_unsaved).into_keys() {
+            self.statuses.remove(&local);
+        }
+    }
+
+    /// (round 19, critic 100 I2) "Try again" after the banks file could not be written: all the banks, written now.
+    fn banks_again(&mut self, banks: &[QuestionBank]) {
+        if !std::mem::take(&mut self.banks_again) || self.banks_unsaved.is_empty() {
+            return;
+        }
+        match self.save_banks(banks) {
+            Ok(()) => self.banks_saved(),
+            Err(_) => {
+                for (local, (_, tries)) in self.banks_unsaved.iter_mut() {
+                    *tries = tries.saturating_add(1);
+                    self.statuses.remove(local);
+                }
+            }
+        }
+    }
+
+    /// (round 16, critic 93 minor 1) All the banks, saved now (see `bank_saver`).
+    fn save_banks(&self, banks: &[QuestionBank]) -> Result<(), String> {
+        match &self.bank_saver {
+            Some(f) => f(banks),
+            None => self.log.save_banks(banks),
+        }
     }
 
     /// (critic 73 minor 4, critic 77 minor 3) The account signed in, when the snapshot says (the Banks list learns it too,
@@ -2088,7 +2690,7 @@ impl CircleEditModel {
             PoolError::Api(_) => p.retry = true,
             PoolError::Local(_) => {}
             PoolError::Refused(r) => {
-                let wait = r.detail.retry_after.filter(|s| *s > 0).map(|s| now + Duration::from_secs(s));
+                let wait = r.detail.retry_after.filter(|s| *s > 0).map(|s| api::later(now, s));
                 match &r.kind {
                     RefusalKind::NotApproved { .. } => p.account = true,
                     RefusalKind::InviteRequired => {
@@ -2101,6 +2703,13 @@ impl CircleEditModel {
                         match metric.as_deref() {
                             Some("circle_rollbacks") => p.message = "You have restored as many older versions today as verSHion allows. Try again tomorrow.".into(),
                             Some("circle_commits") => p.message = "You have sent as many versions to circles today as verSHion allows. Your changes are still on this device. Try again tomorrow.".into(),
+                            // (round 17, critic 96 minor 3) reading the circle's banks: the circle's limit, when it resets, and
+                            // no Try again (it would meet the same limit)
+                            Some("item_reads") => {
+                                p.message = text::read_limit_page(r.detail.retry_after);
+                                p.retry = false;
+                                p.retry_at = None;
+                            }
                             _ => {}
                         }
                     }
@@ -2118,7 +2727,7 @@ impl CircleEditModel {
                             Some("message") => "The note can be at most 500 characters.".into(),
                             Some("keep") => "Choose how many versions to keep, from 1 to 19.".into(),
                             Some("to_version") => "Choose an older version than the newest one.".into(),
-                            Some("merge_token" | "merged_from") => "This merge is out of date. Get the latest changes and merge again, then send.".into(),
+                            Some("merge_token" | "merged_from") => "What you got is out of date. Get latest again, then send.".into(),
                             Some("commit_id") => "That send could not be identified. Start it again.".into(),
                             Some("license") => "Choose a licence for this bank.".into(),
                             Some(f) => format!("verSHion did not accept the {}. Nothing was changed.", f.replace('_', " ")),
@@ -2237,7 +2846,8 @@ impl CircleEditModel {
             // (critic 87 B1) the quiet read of a base version: asked again later, nothing said
             if k == JobKind::Base {
                 if let Some(key) = self.base_asked.take() {
-                    self.base_reads.insert(key, BaseRead::NotReached(self.now.unwrap_or_else(Instant::now)));
+                    let state = self.not_reached_now(&key);
+                    self.base_reads.insert(key, state);
                 }
                 continue;
             }
@@ -2337,8 +2947,9 @@ impl CircleEditModel {
     pub fn open_send(&mut self, local_id: &str, perm: Perm) -> bool {
         self.ensure();
         let Some(l) = self.links.iter().find(|l| l.local_bank_id == local_id).cloned() else { return false };
-        // (phase D1) A copy that follows the circle (a viewer's, or the viewers' form) never sends.
-        if !l.can_send() || self.wait_for_act() {
+        // (phase D1) A copy that follows the circle (a viewer's, or the viewers' form) never sends; (round 15, critic 91 I2) nor
+        // one whose difficulties the circle has not told yet.
+        if !l.can_send() || awaits_read(&l) || l.inherit || self.wait_for_act() {
             return false;
         }
         self.leave_view();
@@ -2490,7 +3101,7 @@ impl CircleEditModel {
             LicenceState::Known(_) => {}
         }
         if self.copy_is_stale(&v.local_id) {
-            return Some("This bank no longer matches what it last had from the circle (a saved copy of your banks may have been put back). Get the latest first.");
+            return Some("This bank no longer matches what it last had from the circle (a safety copy of your banks may have been put back). Get the latest first.");
         }
         if !v.attest {
             return Some("Tick the box that says this is your own work.");
@@ -2947,7 +3558,7 @@ impl CircleEditModel {
                         }
                         RefusalKind::MergeTokenInvalid => {
                             self.carry = None;
-                            Some(SendStage::Refused { message: "This merge is out of date. Get the latest changes and merge again, then send.".into(), merge_again: true })
+                            Some(SendStage::Refused { message: "What you got is out of date. Get latest again, then send.".into(), merge_again: true })
                         }
                         RefusalKind::CommitIdConflict => {
                             self.pending_send = None;
@@ -3181,12 +3792,12 @@ impl CircleEditModel {
         // (critic 89 m2) a quiet read of a base version on its way is kept: when it is this bank's, the review waits for it
         // and the base version is not read a second time beside it
         self.jobs.retain(|j| j.kind == JobKind::Base);
-        self.view = EditView::Merge(Box::new(MergeView { local_id: l.local_bank_id.clone(), cid: l.circle_id.clone(), bid: l.circle_bank_id.clone(), title: api::plain(&l.title), perm, phase: MergePhase::Fetching }));
+        self.view = EditView::Merge(Box::new(MergeView { local_id: l.local_bank_id.clone(), cid: l.circle_id.clone(), bid: l.circle_bank_id.clone(), title: api::plain(&l.title), perm, phase: MergePhase::Fetching, as_is: false }));
         self.rebase_next = false;
         // (critic 87 B1) also read for a base whose difficulties are to be learnt: the review learns them from it
         let key = (l.circle_id.clone(), l.circle_bank_id.clone(), l.base_version);
         // (critic 89 m4) not one the circle would not show a moment ago (a reply that can't be read, a version no longer kept)
-        let refused = matches!(self.base_reads.get(&key), Some(BaseRead::Unreadable(..))) && !self.base_read_due(&l, self.now.unwrap_or_else(Instant::now));
+        let refused = matches!(self.base_reads.get(&key), Some(BaseRead::Unreadable(..) | BaseRead::Limited(..))) && !self.base_read_due(&l, self.now.unwrap_or_else(Instant::now));
         let learn = needs_difficulty_read(&l) && !self.quiet_read_of(&key) && !refused;
         self.merge_base = learn.then_some(key);
         let need_base = l.base.is_empty() || learn;
@@ -3210,9 +3821,51 @@ impl CircleEditModel {
     /// question "treat this copy as in step?" is asked at once. When it has something newer, the merge review
     /// comes instead (it puts the copy in step itself). Returns true when the page opened.
     pub fn open_merge_to_rebase(&mut self, local_id: &str, perm: Perm) -> bool {
+        // (round 17, critic 96 I2 and minor 1) A copy whose version can't be read any more (not one put back from a saved
+        // copy): the question is asked at once, nothing needs reading for it (also while the circle's newest version is held
+        // back for review). Whatever is newer in the circle is met by the next send, as for any copy.
+        if perm.can_send() && self.cant_be_read(local_id) && !self.copy_is_stale(local_id) {
+            let Some(l) = self.links.iter().find(|l| l.local_bank_id == local_id).cloned() else { return false };
+            if self.wait_for_act() {
+                return false;
+            }
+            self.leave_view();
+            self.jobs.retain(|j| j.kind == JobKind::Base);
+            self.rebase_next = false;
+            self.view = EditView::Merge(Box::new(MergeView { local_id: l.local_bank_id, cid: l.circle_id, bid: l.circle_bank_id, title: api::plain(&l.title), perm, phase: MergePhase::StaleUpToDate { ask: Some(StaleAsk::Rebase) }, as_is: true }));
+            return true;
+        }
         let opened = self.open_merge(local_id, perm);
         self.rebase_next = opened && perm.can_send();
+        if let EditView::Merge(m) = &mut self.view {
+            m.as_is = opened;
+        }
         opened
+    }
+
+    /// (round 17, critic 96 I2) The open page is "Use my bank as it is": asked (its question on screen), or opened for it and
+    /// still reading. Its title says so.
+    pub fn asking_as_is(&self) -> bool {
+        match &self.view {
+            EditView::Merge(m) => matches!(m.phase, MergePhase::StaleUpToDate { ask: Some(StaleAsk::Rebase) }) || (m.as_is && matches!(m.phase, MergePhase::Fetching | MergePhase::Ready(_) | MergePhase::UpToDate)),
+            _ => false,
+        }
+    }
+
+    /// (round 17, critic 96 I2) The open page was opened by "Use my bank as it is..." (its words after the confirmation).
+    pub fn opened_as_is(&self) -> bool {
+        matches!(&self.view, EditView::Merge(m) if m.as_is)
+    }
+
+    /// (round 17, critic 96 I2) The copy's difficulties were never read from the circle (an earlier build linked it): "Use my
+    /// bank as it is" also overwrites the difficulties colleagues gave there.
+    pub fn never_read(&self, local_id: &str) -> bool {
+        self.links.iter().find(|l| l.local_bank_id == local_id).is_some_and(|l| l.difficulty_read.is_none())
+    }
+
+    /// (round 17, critic 96 I2) "Use my bank as it is" was confirmed for this copy: its Send page says what the send does.
+    pub fn sends_as_is(&self, local_id: &str) -> bool {
+        self.links.iter().find(|l| l.local_bank_id == local_id).is_some_and(|l| l.as_is)
     }
 
     /// "Try again" on a failed fetch.
@@ -3238,11 +3891,11 @@ impl CircleEditModel {
                 let replaces: Vec<VersionLine> = start.between.iter().filter(|l| !l.withheld && l.version < start.head_version).cloned().collect();
                 MergePhase::HeadWithheld { head_version: Some(start.head_version).filter(|h| *h > 0), replaces }
             }
-            Ok(Fetch::Moved) => MergePhase::Failed(Problem { message: "Someone sent changes while this was loading. Press Try again to start the merge over.".into(), retry: true, retry_at: None, account: false }),
+            Ok(Fetch::Moved) => MergePhase::Failed(Problem { message: "Someone sent changes while this was loading. Press Try again to start over.".into(), retry: true, retry_at: None, account: false }),
             Ok(Fetch::UpToDate) => {
                 let local = if let EditView::Merge(m) = &self.view { m.local_id.clone() } else { String::new() };
                 self.caught_up(&local);
-                if self.copy_is_stale(&local) { MergePhase::StaleUpToDate { ask: std::mem::take(&mut self.rebase_next).then_some(StaleAsk::Rebase) } } else { MergePhase::UpToDate }
+                if self.copy_is_stale(&local) || self.cant_be_read(&local) { MergePhase::StaleUpToDate { ask: std::mem::take(&mut self.rebase_next).then_some(StaleAsk::Rebase) } } else { MergePhase::UpToDate }
             }
             Err(e) => {
                 let kind = if let PoolError::Refused(r) = &e { Some(r.kind.clone()) } else { None };
@@ -3252,7 +3905,7 @@ impl CircleEditModel {
                         // The copy is already at the newest version.
                         let local = if let EditView::Merge(m) = &self.view { m.local_id.clone() } else { String::new() };
                         self.caught_up(&local);
-                        if self.copy_is_stale(&local) { MergePhase::StaleUpToDate { ask: std::mem::take(&mut self.rebase_next).then_some(StaleAsk::Rebase) } } else { MergePhase::UpToDate }
+                        if self.copy_is_stale(&local) || self.cant_be_read(&local) { MergePhase::StaleUpToDate { ask: std::mem::take(&mut self.rebase_next).then_some(StaleAsk::Rebase) } } else { MergePhase::UpToDate }
                     }
                     _ => match self.problem_of(&e) {
                         Some(p) => MergePhase::Failed(p),
@@ -3269,6 +3922,10 @@ impl CircleEditModel {
         // (asked once, for this fetch only)
         self.rebase_next = false;
         if let EditView::Merge(m) = &mut self.view {
+            // (round 17) opened for "Use my bank as it is", but there is nothing to decide: an ordinary Get latest page
+            if !matches!(phase, MergePhase::StaleUpToDate { .. }) {
+                m.as_is = false;
+            }
             m.phase = phase;
         }
     }
@@ -3299,7 +3956,7 @@ impl CircleEditModel {
             return;
         };
         let Some(bank) = banks.iter().find(|b| b.id == link.local_bank_id) else {
-            m.phase = MergePhase::Blocked("The bank is not on this device any more, so there is nothing to merge into.".into());
+            m.phase = MergePhase::Blocked("The bank is not on this device any more, so there is nothing to bring changes into.".into());
             return;
         };
         // (critic 63 B1) The viewers' form never goes into a copy that has its answer keys: nothing is reviewed.
@@ -3455,7 +4112,7 @@ impl CircleEditModel {
             && let MergePhase::Applying(r) = std::mem::replace(&mut m.phase, MergePhase::Fetching)
         {
             let mut r = r;
-            r.problem = Some("Not signed in. Sign in, then press Apply merge again.".into());
+            r.problem = Some("Not signed in. Sign in, then press Apply changes again.".into());
             m.phase = MergePhase::Review(r);
         }
     }
@@ -3472,6 +4129,11 @@ impl CircleEditModel {
     }
 
     pub fn cancel_stale_ask(&mut self) {
+        // (round 17) "No, go back" on the page opened for "Use my bank as it is": back to the bank
+        if matches!(&self.view, EditView::Merge(m) if m.as_is && matches!(m.phase, MergePhase::StaleUpToDate { ask: Some(StaleAsk::Rebase) })) {
+            self.cancel_merge();
+            return;
+        }
         if let EditView::Merge(m) = &mut self.view
             && let MergePhase::StaleUpToDate { ask } = &mut m.phase
         {
@@ -3509,6 +4171,19 @@ impl CircleEditModel {
         self.forget_ask.as_deref() == Some(local_id)
     }
 
+    /// (round 20, critic 100 minor 4) First press of "Put all of mine back": the news asks, and changes nothing yet.
+    pub fn ask_put_all(&mut self, local_id: &str) {
+        self.put_all_ask = Some(local_id.to_string());
+    }
+
+    pub fn cancel_put_all(&mut self) {
+        self.put_all_ask = None;
+    }
+
+    pub fn put_all_asked(&self, local_id: &str) -> bool {
+        self.put_all_ask.as_deref() == Some(local_id)
+    }
+
     /// Second click: only for the link that was asked about.
     pub fn confirm_forget(&mut self, local_id: &str) {
         if self.forget_asked(local_id) {
@@ -3522,13 +4197,37 @@ impl CircleEditModel {
         let local = m.local_id.clone();
         let (Some(bank), Some(mut link)) = (banks.iter().find(|b| b.id == local), self.links.iter().find(|l| l.local_bank_id == local).cloned()) else { return };
         link.mark_bank(bank);
+        // (round 16, critic 93 I2) she declared the bank as it is to be what the next send sends: a read still awaited (on its
+        // way, or asked again later) is settled here, so nothing it brings changes the bank, whichever arrives first. What the
+        // circle's version rated stays unknown (critic 87 B1: never the bank's rating taken for the circle's), so a change to
+        // a difficulty is said not to be counted, and Get latest asks about a differing one.
+        if needs_difficulty_read(&link) || link.inherit {
+            // (round 17, critic 95 I2) a base an earlier build wrote (the round 12 build filled it from the bank) is not the
+            // circle's: its difficulties are not known, as for a phase C link, so the strip, Get latest and Send agree
+            if link.difficulty_read.is_none() {
+                for b in &mut link.base {
+                    b.snap.difficulty = None;
+                }
+            }
+            link.difficulty_read = Some(link.base_version);
+            link.inherit = false;
+        }
+        link.at_read = None;
+        link.pass_times = None;
+        // (round 17, critic 96 I2) the next send makes the circle's newest version match the bank: its Send page says so
+        link.as_is = true;
+        self.inherit_held.remove(&local);
+        link.missing_at_read = None;
         self.statuses.remove(&local);
         self.replace_link(link);
         if let EditView::Merge(m) = &mut self.view {
             m.phase = MergePhase::UpToDate;
+            // (round 17) the page says what was done
+            m.as_is = true;
         }
         if let Some(b) = self.result_bank_of_local(&local) {
-            self.say(b, ResultKind::GetLatest, "Your bank is now used as it is, as matching the circle's newest version. It was not changed; the next send sends it as it is.");
+            // (round 17, critic 96 I2) in the words of its page: what the next send does
+            self.say(b, ResultKind::GetLatest, text::AS_IS_RESULT);
         }
     }
 
@@ -3557,7 +4256,7 @@ impl CircleEditModel {
         }
         match r {
             Ok(ApplyRead::Doc(imp)) => self.applying = Some(imp),
-            Ok(ApplyRead::Moved) => self.back_to_review("The circle has a different newest version now than the one you reviewed. Nothing was applied. Cancel and start the merge again.".into()),
+            Ok(ApplyRead::Moved) => self.back_to_review("The circle has a different newest version now than the one you reviewed. Nothing was applied. Cancel and press Get latest again.".into()),
             Ok(ApplyRead::KeysHidden) => {
                 // (critic 67 M2) a copy made from the viewers' form has no keys to keep: it is told what happened
                 let keyless = self.links.iter().any(|l| l.circle_id == cid && l.circle_bank_id == bid && l.viewers_form);
@@ -3565,7 +4264,7 @@ impl CircleEditModel {
             }
             Err(e) => match self.problem_of(&e) {
                 Some(p) => self.back_to_review(p.message),
-                None => self.back_to_review("Your session ended. Sign in again, then press Apply merge. Nothing was changed.".into()),
+                None => self.back_to_review("Your session ended. Sign in again, then press Apply changes. Nothing was changed.".into()),
             },
         }
     }
@@ -3584,7 +4283,7 @@ impl CircleEditModel {
             return false;
         };
         if imp.head.item.version != rev.plan.new_version {
-            back(m, rev, "The circle has a different newest version now than the one you reviewed. Nothing was applied. Cancel and start the merge again.".into());
+            back(m, rev, "The circle has a different newest version now than the one you reviewed. Nothing was applied. Cancel and press Get latest again.".into());
             return false;
         }
         let Some(pos) = banks.iter().position(|b| b.id == local_id) else {
@@ -3593,13 +4292,13 @@ impl CircleEditModel {
         };
         if imp.pictures_missing > 0 {
             let n = imp.pictures_missing;
-            back(m, rev, format!("{n} picture{} of the circle's newest version could not be fetched. Nothing was applied, so no picture is lost. Press Apply merge to try again.", if n == 1 { "" } else { "s" }));
+            back(m, rev, format!("{n} picture{} of the circle's newest version could not be fetched. Nothing was applied, so no picture is lost. Press Apply changes to try again.", if n == 1 { "" } else { "s" }));
             return false;
         }
         if print_of(&banks[pos]) != rev.ours_print {
             // Edited here after the review was built: the review is made again from the bank as it is now.
             let r = *rev;
-            self.merge_note = Some("Your bank changed while you were reviewing, so nothing was applied. This is the review again, with your latest changes. Check it, then press Apply merge.".into());
+            self.merge_note = Some("Your bank changed while you were reviewing, so nothing was applied. This is the review again, with your latest changes. Check it, then press Apply changes.".into());
             m.phase = MergePhase::Ready(r.fetched);
             return false;
         }
@@ -3643,9 +4342,14 @@ impl CircleEditModel {
         link.base_version = imp.head.item.version;
         link.base_version_id = imp.head.item.publish_id.clone();
         link.head_seen = link.head_seen.max(link.base_version);
-        // (critic 89 I1) the base is the circle's version as merged: its difficulties are known as written
+        // (critic 89 I1) the base is the circle's version as merged: its difficulties are known as written, and (round 16) none
+        // is left to take (one that could not be written before is the merge's to decide)
         link.difficulty_read = Some(0);
         link.inherit = false;
+        link.at_read = None;
+        link.pass_times = None;
+        link.missing_at_read = None;
+        link.as_is = false;
         // (critic 63 I3) Read in full: the answer keys came with it, so the copy no longer follows the viewers' form.
         if !rev.fetched.head.bank.keys_hidden {
             link.viewers_form = false;
@@ -4197,6 +4901,10 @@ impl CircleEditModel {
     /// merge. Returns true when a bank changed (the caller saves the banks).
     pub fn sync(&mut self, banks: &mut [QuestionBank]) -> bool {
         self.ensure();
+        // (round 18, critic 97 m6) a links file that could not be written is written again
+        self.links_again();
+        // (round 19, critic 100 I2) and the banks file, when she pressed Try again after it could not be written
+        self.banks_again(banks);
         // (critic 89 m2) a review waits for the quiet read of its base version on its way
         let review = matches!(&self.view, EditView::Merge(m) if matches!(m.phase, MergePhase::Ready(_))) && !self.merge_waits_for_base();
         if review {
@@ -4204,6 +4912,11 @@ impl CircleEditModel {
         }
         // (the owner's decision, critic 90 I1) before anything is counted or reviewed
         let inherited = self.inherit_pending(banks);
+        // (round 18, critic 98 I1) what changed since in the difficulty news is noted for good
+        self.settle_all_news(banks);
+        // (round 17, critic 95 minor 1) nor is a review built while the circle's difficulties wait to be put into the bank (it
+        // would call the circle's difficulty hers): it is built once they are in
+        let review = review && !self.merge_waits_for_difficulty();
         self.refresh_statuses(banks);
         if let EditView::Send(v) = &mut self.view
             && let Some(s) = self.statuses.get(&v.local_id)
@@ -4244,11 +4957,58 @@ impl CircleEditModel {
         let name = bank.map(|b| b.name.clone()).unwrap_or_default();
         let unknown = difficulty_unknown(l);
         let fresh = self.statuses.get(&l.local_bank_id).is_some_and(|s| s.key == key && s.missing == bank.is_none() && s.stale == stale && s.bank_name == name && s.unknown == unknown);
-        if fresh {
-            return;
+        if !fresh {
+            let raw = bank.map(|b| changes_since(l, b)).unwrap_or_default();
+            self.statuses.insert(l.local_bank_id.clone(), LinkStatus { key, raw, changes: raw, missing: bank.is_none(), stale, bank_name: name, unknown, learning: None, held: None, limit_left: None, unread: None, unsaved: None, news: false });
         }
-        let changes = bank.map(|b| changes_since(l, b)).unwrap_or_default();
-        self.statuses.insert(l.local_bank_id.clone(), LinkStatus { key, changes, missing: bank.is_none(), stale, bank_name: name, unknown });
+        let learning = self.learning_of(l);
+        let unread = learning.is_some();
+        if let Some(s) = self.statuses.get_mut(&l.local_bank_id) {
+            s.changes = s.raw;
+            // (round 15, critic 91 I4) until the read has succeeded, a change to a difficulty may be missing from the count
+            if unread && s.changes.known {
+                s.changes.known = false;
+                s.changes.difficulty = true;
+            }
+            s.learning = learning;
+            s.held = (learning == Some(Learning::Held)).then(|| self.inherit_held.get(&l.local_bank_id).map(|h| (h.why.clone(), h.tries))).flatten();
+            s.unsaved = self.banks_unsaved.get(&l.local_bank_id).cloned();
+            // (round 19, critic 100 minor 5) the news, while something of it is left for her to do
+            s.news = l.difficulty_news.is_some() && bank.is_some_and(|b| !super::circle_links::news_settled(l, b));
+            let now = self.now.unwrap_or_else(Instant::now);
+            let read = self.base_reads.get(&(l.circle_id.clone(), l.circle_bank_id.clone(), l.base_version));
+            s.limit_left = match read {
+                Some(BaseRead::Limited(until)) if learning == Some(Learning::Limited) => Some(until.saturating_duration_since(now).as_secs().max(1)),
+                _ => None,
+            };
+            s.unread = match read {
+                Some(BaseRead::Unreadable(_, _, why)) if learning == Some(Learning::NotKept) => Some(*why),
+                _ => None,
+            };
+        }
+    }
+
+    /// (round 15) Where the read of this link's base version stands, while the copy waits for it.
+    fn learning_of(&self, l: &CircleLink) -> Option<Learning> {
+        if !awaits_read(l) {
+            // (round 18, critic 97 m1) a held pass for a question put back after the read waits too (Send waits for it)
+            if self.inherit_held.contains_key(&l.local_bank_id) {
+                return Some(Learning::Held);
+            }
+            // (round 16, critic 93 I1) read, but the circle's ratings are not in the bank yet: Send waits for them
+            return l.inherit.then_some(Learning::Checking);
+        }
+        let key = (l.circle_id.clone(), l.circle_bank_id.clone(), l.base_version);
+        if self.quiet_read_of(&key) {
+            return Some(Learning::Checking);
+        }
+        Some(match self.base_reads.get(&key) {
+            None => Learning::Checking,
+            // (round 16, critic 94 m2) one failure is not said yet: it is asked again within seconds
+            Some(BaseRead::NotReached(_, tries)) => if *tries <= 1 { Learning::Checking } else { Learning::CantReach },
+            Some(BaseRead::Unreadable(..)) => Learning::NotKept,
+            Some(BaseRead::Limited(..)) => Learning::Limited,
+        })
     }
 }
 
@@ -4263,6 +5023,47 @@ fn went_through(l: &mut CircleLink) -> bool {
 /// What the bank's questions are right now, to notice an edit made while a review was open.
 fn print_of(bank: &QuestionBank) -> String {
     bank_print(bank)
+}
+
+/// (round 18, critic 97 m4) What all the banks are right now: a safety copy of them is made again once any of them changed.
+fn print_all(banks: &[QuestionBank]) -> String {
+    sha256_hex(&serde_json::to_vec(banks).unwrap_or_default())
+}
+
+/// (round 17, critic 96 I1) The difficulty news on `l` after a pass of the read of `version`: each question it moved, before ->
+/// after (one already listed takes the new "after", and is no longer put back or changed since).
+fn add_news(l: &mut CircleLink, version: u64, moved: &[(String, Option<crate::model::Difficulty>, Option<crate::model::Difficulty>)]) {
+    if moved.is_empty() {
+        return;
+    }
+    let news = l.difficulty_news.get_or_insert_with(Default::default);
+    news.version = version;
+    for (id, was, now) in moved {
+        match news.questions.iter_mut().find(|n| &n.id == id) {
+            Some(n) => {
+                n.after = *now;
+                n.put_back = false;
+                n.changed = false;
+            }
+            None => news.questions.push(NewsItem { id: id.clone(), before: *was, after: *now, put_back: false, changed: false }),
+        }
+    }
+}
+
+/// (round 19, critic 99 m2) Questions a pass gave the circle's difficulty, that she put back since (each her difficulty, then the
+/// circle's): listed as put back.
+fn add_news_back(l: &mut CircleLink, version: u64, back: &[(String, Option<crate::model::Difficulty>, Option<crate::model::Difficulty>)]) {
+    if back.is_empty() {
+        return;
+    }
+    let news = l.difficulty_news.get_or_insert_with(Default::default);
+    news.version = version;
+    for (id, mine, circle) in back {
+        match news.questions.iter_mut().find(|n| &n.id == id) {
+            Some(n) => n.put_back = true,
+            None => news.questions.push(NewsItem { id: id.clone(), before: *mine, after: *circle, put_back: true, changed: false }),
+        }
+    }
 }
 
 fn pairs(l: &CircleLink) -> Vec<(String, String)> {
@@ -4424,7 +5225,7 @@ pub fn sent_lines(s: &Sent, can_fix: bool) -> Vec<String> {
         out.push("This send had already gone through; nothing was sent twice.".into());
     }
     if let Some(m) = s.merged_from {
-        out.push(format!("It records that you merged in the changes made since version {m}."));
+        out.push(format!("It records that you took in the changes made since version {m}."));
     }
     out.extend(hidden_lines(s.held, s.withheld, can_fix));
     out.extend(super::circles_text::pictures_left_out_line(&s.left_out_unasked));

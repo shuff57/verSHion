@@ -350,7 +350,7 @@ fn c78_i3_a_circle_screen_says_the_account_needs_its_own_invite_code_not_that_th
 fn c78_i3_the_email_invite_help_says_the_account_code_and_the_circles_code_apart() {
     assert_eq!(
         super::circles_text::EMAIL_NEEDS_ACCOUNT,
-        "To join, they need a verSHion account that an administrator has approved and that has redeemed its account invite code. Until then the circle's code in the mail can not be used."
+        "To join, they need a verSHion account that an administrator has approved, with its invite code entered. Until then the circle's code in the mail can't be used."
     );
 }
 

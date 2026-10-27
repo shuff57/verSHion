@@ -770,7 +770,7 @@ fn c72_i1_the_merge_reviews_notes_say_the_circle_changed_the_question_never_the_
         ("The pool dropped this question. You changed it, so it is kept unless you remove it.", "The circle removed this question. You changed it, so it is kept unless you remove it."),
         ("You and the pool made the same change.", "You and the circle made the same change."),
         ("The pool changed this question and you entered its answer key. The pool's wording is taken and your key is kept.", "The circle changed this question and you entered its answer key. The circle's wording is taken and your key is kept."),
-        ("The pool's version changed while you were reviewing. Nothing was applied; start the merge again.", "The circle's version changed while you were reviewing. Nothing was applied; start the merge again."),
+        ("The pool's version changed while you were reviewing. Nothing was applied; start the merge again.", "The circle's version changed while you were reviewing. Nothing was applied; press Get latest again."),
         ("The pool's version is missing a question that was reviewed.", "The circle's version is missing a question that was reviewed."),
     ];
     for (from, want) in cases {

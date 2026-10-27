@@ -101,10 +101,12 @@ impl crate::App {
     /// The Shared screen.
     pub fn draw_shared(&mut self, ctx: &egui::Context) {
         crate::screens::shell_frame(self, ctx, true, |app, ui| {
-            let crate::App { shared, account, browse, mine, store, .. } = app;
+            let crate::App { shared, account, browse, mine, store, qedit, .. } = app;
             if shared.draw(ui, account, browse, mine, &mut store.banks, &store.exams) {
                 store.save_banks();
             }
+            // (round 15, critic 91 I1) a difficulty just taken from the circle reaches the open question editor
+            super::circle_edit::refresh_draft(qedit.as_mut(), &shared.circles.edit.take_inherited());
         });
         // (phase D1) "Open in My Banks": the bank's page, where its strip says where it stands.
         if let Some(id) = self.shared.open_bank.take()

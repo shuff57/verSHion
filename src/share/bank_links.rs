@@ -65,36 +65,115 @@ pub fn badge_of_sent(l: &CircleLink, status: Option<&LinkStatus>, sent_unread: O
     let sendable = l.can_send() && role_of(l).can_add_banks();
     let unread = sent_unread.is_some() && sendable;
     let since = sent_unread == Some(true) && sendable;
+    // (round 15, critic 91 I2) before the circle's version is read nothing is counted; (round 16, q93_4) except where the strip
+    // counts it too: the version can't be read ("not kept")
+    let learning = status.is_some_and(|s| s.learning.is_some_and(|w| w != super::circle_edit::Learning::NotKept)) && sendable;
     // (critic 88 I2) what is counted, also while a change to a difficulty can't be
-    let unsent = status.filter(|s| sendable && !unread && (s.changes.known || s.changes.partial())).map_or(0, |s| s.changes.total());
+    let unsent = status.filter(|s| sendable && !unread && !learning && (s.changes.known || s.changes.partial())).map_or(0, |s| s.changes.total());
     let uncounted = status.is_some_and(|s| sendable && !unread && !s.changes.known);
+    // (round 17, critic 96 minor 4) the circle's difficulty could not be saved into the bank
+    // (round 19, critic 100 I2) or the banks file could not be written for a change she asked for
+    let held = status.is_some_and(|s| (s.learning == Some(super::circle_edit::Learning::Held) && sendable) || s.unsaved.is_some());
+    // (round 18, critic 98 minor 8) the circle's version is still to be checked
+    let waits = learning && !held;
     let note = if l.seen.circle_closed {
         Some("circle closed".to_string())
-    } else if l.gone() {
-        Some("no longer in the circle".to_string())
+    // (round 20, critic 100 minor 11) removed is said as removed: `gone` is true for it too, so it is asked first
     } else if l.seen.removed {
         Some("removed from the circle".to_string())
-    } else if (l.behind() > 0 || unread) && !keys_kept(l) {
-        // (critic 65 minor) only where the strip offers Get latest: a copy that keeps its keys is not offered it
-        Some(if unsent > 0 {
-            format!("newer version · {unsent} unsent")
-        } else if since {
-            "newer version · unsent changes".to_string()
-        } else {
-            "newer version".to_string()
-        })
-    } else if unsent > 0 {
-        Some(plural(unsent, "unsent change", "unsent changes"))
+    } else if l.gone() {
+        Some("no longer in the circle".to_string())
     } else {
-        uncounted.then(|| "changes not counted".to_string())
+        // (round 18, critic 98 I2, critic 97 m8) each state the strip says, side by side: the news never hides "newer version"
+        // or the unsent changes
+        let mut parts: Vec<String> = Vec::new();
+        // (round 19, critic 100 minor 2) a bank put back from a safety copy says so (its badge is in the warning colour)
+        if status.is_some_and(|s| s.stale) {
+            parts.push(PUT_BACK_NOTE.to_string());
+        }
+        if held {
+            parts.push(super::circles_text::HELD_BADGE.to_string());
+        }
+        // (critic 65 minor) only where the strip offers Get latest: a copy that keeps its keys is not offered it
+        let behind = (l.behind() > 0 || unread) && !keys_kept(l);
+        if behind {
+            parts.push("newer version".to_string());
+        }
+        // (round 17, critic 96 I1) until she dismisses it on the bank's strip; (round 19, critic 100 minor 5) or nothing of it is
+        // left for her to do
+        if l.difficulty_news.is_some() && status.is_none_or(|s| s.news) {
+            parts.push(super::circles_text::NEWS_BADGE.to_string());
+        }
+        if unsent > 0 {
+            parts.push(if parts.is_empty() { plural(unsent, "unsent change", "unsent changes") } else { format!("{unsent} unsent") });
+        } else if since && behind {
+            parts.push("unsent changes".to_string());
+        } else if uncounted && parts.is_empty() {
+            // (round 18, critic 98 minor 8) while the circle's version is checked, said so; "not counted" only where it can't be
+            parts.push(if waits { WAITING_NOTE } else { "changes not counted" }.to_string());
+        }
+        (!parts.is_empty()).then(|| parts.join(" · "))
     };
     Badge { circle: circle_name(l), note }
+}
+
+/// (round 18, critic 98 I2) The badge's note in short words, for a narrow row ("newer · difficulty updated · 1 unsent").
+pub fn short_note(note: &str) -> String {
+    note.split(" · ")
+        .map(|p| match p {
+            "newer version" => "newer".to_string(),
+            "unsent changes" => "unsent".to_string(),
+            "changes not counted" => "not counted".to_string(),
+            WAITING_NOTE => "waiting".to_string(),
+            "no longer in the circle" => "left".to_string(),
+            PUT_BACK_NOTE => "put back".to_string(),
+            "removed from the circle" => "removed".to_string(),
+            // (round 20, critic 100 minor 11) the one part with no short form yet: at 420 it alone was never shortened
+            super::circles_text::NEWS_BADGE => "difficulty".to_string(),
+            p => match p.strip_suffix(" unsent changes").or_else(|| p.strip_suffix(" unsent change")) {
+                Some(n) => format!("{n} unsent"),
+                None => p.to_string(),
+            },
+        })
+        .collect::<Vec<_>>()
+        .join(" · ")
+}
+
+/// (round 17, critic 96 minor 6) The unsent changes the badge counts (`None`: not counted), for the strip to say the same.
+fn badge_unsent(l: &CircleLink, status: Option<&LinkStatus>, sent_unread: bool) -> Option<usize> {
+    let sendable = l.can_send() && role_of(l).can_add_banks();
+    let s = status.filter(|_| sendable && !sent_unread)?;
+    let learning = s.learning.is_some_and(|w| w != super::circle_edit::Learning::NotKept);
+    if !learning && (s.changes.known || s.changes.partial()) && s.changes.total() > 0 {
+        return Some(s.changes.total());
+    }
+    if s.changes.known { Some(0) } else { None }
 }
 
 /// The badge's state is a warning (the copy can no longer be sent): drawn in the warning colour.
 pub fn badge_warns(l: &CircleLink) -> bool {
     l.gone() || l.seen.removed
 }
+
+/// (round 17, critic 96 minor 4) [`badge_warns`], and also while the circle's difficulty can't be saved into the bank; (round 18,
+/// critic 98 minor 4) or the version the copy last matched can't be read (sending is off).
+pub fn badge_warns_with(l: &CircleLink, status: Option<&LinkStatus>) -> bool {
+    // (round 19, critic 100 I2) and while her edits can't be saved
+    badge_warns(l) || status.is_some_and(|s| sending_off(s) || s.unsaved.is_some())
+}
+
+/// (round 18, critic 98 minor 4) Sending is off for a reason she has to act on or wait out: the circle's difficulty can't be saved
+/// into the bank, the version the copy last matched can't be read, or the bank was put back from a safety copy.
+pub fn sending_off(s: &LinkStatus) -> bool {
+    use super::circle_edit::Learning;
+    s.stale || matches!(s.learning, Some(Learning::Held | Learning::NotKept))
+}
+
+/// (round 18, critic 98 minor 8) The badge while the circle's version is checked. (round 20, critic 100 minor 11) plain words, not
+/// "waiting for the circle check".
+pub const WAITING_NOTE: &str = "circle not checked yet";
+/// (round 19, critic 100 minor 2) The badge of a bank put back from a safety copy.
+pub const PUT_BACK_NOTE: &str = "put back from a safety copy";
 
 // ---- the strip ------------------------------------------------------------------------------------------------------
 
@@ -140,6 +219,8 @@ pub enum StripButton {
     TreatInStep,
     Unlink,
     AddFullCopy,
+    /// (round 15, critic 91 I4) The circle's version a copy waits for could not be read: asked again now.
+    CheckNow,
 }
 
 impl StripButton {
@@ -153,6 +234,7 @@ impl StripButton {
             StripButton::TreatInStep => "Use my bank as it is...",
             StripButton::Unlink => "Unlink...",
             StripButton::AddFullCopy => "Add a full copy...",
+            StripButton::CheckNow => "Check now",
         }
     }
 }
@@ -169,6 +251,8 @@ pub struct StripView {
     /// The "..." menu offers the bank's history (it can be read) and the circle's page (it can be opened).
     pub menu_history: bool,
     pub menu_circle_page: bool,
+    /// (round 17, critic 96 minor 3) The "..." menu offers Check now (not while it would meet the circle's daily limit).
+    pub menu_check: bool,
 }
 
 pub struct StripInput<'a> {
@@ -210,17 +294,14 @@ pub fn keys_kept(l: &CircleLink) -> bool {
     !l.viewers_form && l.seen.hide_key && role_of(l) == Role::Viewer
 }
 
-/// "3 Nov": the day a removed bank can be brought back until.
+/// "Nov 3, 2026": the day a removed bank can be brought back until. (round 17, critic 96 minor 8: dates in one form)
 pub fn day_month(ms: i64) -> String {
-    const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    let (_, m, d) = crate::time::civil_from_days(ms.div_euclid(86_400_000));
-    format!("{d} {}", MONTHS[(m.clamp(1, 12) - 1) as usize])
+    day_month_year(ms)
 }
 
-/// "25 Oct 2026".
+/// "Oct 25, 2026", as the bank's page says dates.
 pub fn day_month_year(ms: i64) -> String {
-    let (y, _, _) = crate::time::civil_from_days(ms.div_euclid(86_400_000));
-    format!("{} {y}", day_month(ms))
+    crate::bankui::fmt_date(ms.div_euclid(1000))
 }
 
 /// The strip for one linked bank: every state of the plan's table (section 4.2) except "kept back" (phase D3).
@@ -228,19 +309,51 @@ pub fn day_month_year(ms: i64) -> String {
 /// page does not jump (critic 64 I9); a link never checked yet says it is checking.
 pub fn strip_view(i: &StripInput) -> StripView {
     if i.check == Check::Checking && i.link.role_seen_at.is_none() {
-        return StripView { line: format!("Shared with {}. Checking for a newer version...", circle_name(i.link)), buttons: Vec::new(), busy: true, warn: false, menu_history: true, menu_circle_page: true };
+        return StripView { line: format!("Shared with {}. Checking for a newer version...", circle_name(i.link)), buttons: Vec::new(), busy: true, warn: false, menu_history: true, menu_circle_page: true, menu_check: true };
     }
     let mut v = strip_view_known(i);
     v.busy |= i.check == Check::Checking;
     v
 }
 
+/// (round 15, critic 91 I2) Before the circle's version is read for a copy an earlier build linked, whatever else the strip
+/// says, Send is not offered.
 fn strip_view_known(i: &StripInput) -> StripView {
+    let mut v = strip_view_inner(i);
+    let learning = i.status.and_then(|s| s.learning);
+    if learning.is_some() && v.buttons.contains(&StripButton::Send) {
+        v.buttons.retain(|b| *b != StripButton::Send);
+        // (round 16, critic 94 m4) and why, where the line does not say it (round 17, critic 96 minor 1: for a version that
+        // can't be read, never "until the circle can be checked": no check would change it)
+        let why = if learning == Some(super::circle_edit::Learning::NotKept) {
+            super::circles_text::cant_read_line(i.link.base_version, i.status.and_then(|s| s.unread).unwrap_or(super::circle_edit::Unread::NotKept), false)
+        } else {
+            super::circles_text::SEND_WAITS.to_string()
+        };
+        if !v.line.contains(&why) {
+            v.line = format!("{} {why}", v.line);
+        }
+    }
+    // (round 19, critic 100 I2) the banks file could not be written for a change she asked for: her own edits are not saved either.
+    // Said in the warning colour, never "up to date", with Try again first, until a save works.
+    if let Some((line, tries)) = i.status.and_then(|s| s.unsaved.as_ref()) {
+        v.warn = true;
+        v.line = format!("{} {}", v.line.replace(UP_TO_DATE, ""), super::circles_text::unsaved_line(line, *tries));
+        v.buttons.retain(|b| *b != StripButton::TryAgain);
+        v.buttons.insert(0, StripButton::TryAgain);
+    }
+    v
+}
+
+/// The strip's words for a copy in step with the circle.
+const UP_TO_DATE: &str = " Your copy is up to date.";
+
+fn strip_view_inner(i: &StripInput) -> StripView {
     use StripButton::*;
     let l = i.link;
     let name = circle_name(l);
-    let view = |line: String, buttons: Vec<StripButton>| StripView { line, buttons, busy: false, warn: false, menu_history: true, menu_circle_page: true };
-    let warn = |line: String, buttons: Vec<StripButton>| StripView { line, buttons, busy: false, warn: true, menu_history: true, menu_circle_page: true };
+    let view = |line: String, buttons: Vec<StripButton>| StripView { line, buttons, busy: false, warn: false, menu_history: true, menu_circle_page: true, menu_check: true };
+    let warn = |line: String, buttons: Vec<StripButton>| StripView { line, buttons, busy: false, warn: true, menu_history: true, menu_circle_page: true, menu_check: true };
     let can_send = l.can_send() && role_of(l).can_add_banks();
     let changes = i.status.map(|s| s.changes).unwrap_or_default();
     let stale = i.status.is_some_and(|s| s.stale);
@@ -255,7 +368,7 @@ fn strip_view_known(i: &StripInput) -> StripView {
     // colour, as the bank works as a normal bank. Unlink is a small button, never the big one (critic 64 I4). The
     // menu offers nothing that would fail: the bank's history can not be read, nor the circle's page by someone no
     // longer in it.
-    let own_bank = |line: String, circle_page: bool| StripView { line: format!("{line} You can keep using it as your own bank."), buttons: vec![Unlink], busy: false, warn: false, menu_history: false, menu_circle_page: circle_page };
+    let own_bank = |line: String, circle_page: bool| StripView { line: format!("{line} You can keep using it as your own bank."), buttons: vec![Unlink], busy: false, warn: false, menu_history: false, menu_circle_page: circle_page, menu_check: true };
     if l.gone() {
         let line = if l.seen.circle_closed { format!("The circle {name} was closed. Your copy stays; it can't be sent.") } else { format!("You are no longer in {name}. Your copy stays; it can't be sent.") };
         return own_bank(line, l.role_seen.as_deref() != Some(ROLE_NONE));
@@ -268,12 +381,23 @@ fn strip_view_known(i: &StripInput) -> StripView {
         return own_bank(line, true);
     }
     if i.sign_in == SignIn::Out {
-        let when = l.role_seen_at.or(l.head_seen_at).map(|at| super::circles_text::ago(at, i.now_ms)).filter(|s| !s.is_empty());
-        let line = match when {
-            Some(w) => format!("Shared with {name}. Version {head} when last checked, {w}. Sign in to send or get newer versions."),
-            None => format!("Shared with {name}. Version {head} when last checked. Sign in to send or get newer versions."),
+        // (round 16, critic 94 m9) the date as the bank's page says dates; (round 17, critic 96 minor 6) the version she has and
+        // the unsent changes exactly as the badge says them
+        let when = l.role_seen_at.or(l.head_seen_at).filter(|at| *at > 0).map(|at| super::circles_text::as_on_page(at, i.now_ms));
+        let checked = match when {
+            Some(w) => format!("Version {head} when last checked, {w}"),
+            None => format!("Version {head} when last checked"),
         };
-        return view(line, vec![OpenAccount]);
+        let yours = if l.behind() > 0 { format!("; you have version {}.", l.base_version) } else { ".".to_string() };
+        let waits = i.status.is_some_and(|s| s.learning.is_some_and(|w| !matches!(w, super::circle_edit::Learning::NotKept | super::circle_edit::Learning::Held)));
+        let have = match badge_unsent(l, i.status, i.sent_unread) {
+            Some(n) if n > 0 => format!(" You have {}.", plural(n, "unsent change", "unsent changes")),
+            // (round 18, critic 98 minor 8) as the badge says it
+            None if waits => " Your changes are counted once verSHion can check the circle.".to_string(),
+            None => " Changes you made are not counted here.".to_string(),
+            Some(_) => String::new(),
+        };
+        return view(format!("Shared with {name}. {checked}{yours}{have} Sign in to send or get newer versions."), vec![OpenAccount]);
     }
     if i.check == Check::Offline {
         // (critic 64 I7, polish 3) said quietly: the bank works as usual
@@ -285,11 +409,11 @@ fn strip_view_known(i: &StripInput) -> StripView {
             b.push(TreatInStep);
         }
         b.push(Unlink);
-        return warn(format!("This bank was put back from a saved copy, so verSHion can't tell what you changed since version {}.", l.base_version), b);
+        return warn(format!("This bank was put back from a safety copy, so verSHion can't tell what you changed since version {}.", l.base_version), b);
     }
     if let Some(a) = &i.act {
         // (critic 69 I1) the circle's newest version may be changing: never "up to date" meanwhile
-        return StripView { line: format!("Shared with {name}. {a}"), buttons: Vec::new(), busy: true, warn: false, menu_history: true, menu_circle_page: true };
+        return StripView { line: format!("Shared with {name}. {a}"), buttons: Vec::new(), busy: true, warn: false, menu_history: true, menu_circle_page: true, menu_check: true };
     }
     if i.sent_unread && can_send {
         // (critic 74 I1) the changes went in a version this copy has not caught up with: never counted as unsent;
@@ -300,6 +424,14 @@ fn strip_view_known(i: &StripInput) -> StripView {
         return view(format!("Shared with {name}. Your changes were sent. Get the latest so that this copy has the version they made."), vec![GetLatest, History]);
     }
     if l.seen.under_review {
+        // (round 17, critic 96 minor 1) a copy whose version can't be read is not left with nothing to press
+        if can_send && i.status.is_some_and(|s| s.learning == Some(super::circle_edit::Learning::NotKept)) {
+            use super::circles_text as t;
+            // (round 18, critic 98 minors 3 and 4) waiting for the review helps; the safe action first
+            let why = i.status.and_then(|s| s.unread).unwrap_or(super::circle_edit::Unread::NotKept);
+            // (round 19, critic 100 minor 2) sending is off: in the warning colour, as the badge and the circle page's row
+            return warn(format!("Shared with {name}. The circle's newest version is held back for review. {} {} {} {}", t::cant_read_line(l.base_version, why, false), t::REVIEW_HELPS, t::cant_read_ways(why), t::CHECK_NOW_DOES), vec![CheckNow, TreatInStep]);
+        }
         // (critic 66 minor 3) Send only with something to send: with nothing, it would only replace the circle's version
         let something = !changes.known || changes.total() > 0;
         return view(format!("Shared with {name}. The circle's newest version is held back for review. You can keep working here."), if can_send && something { vec![Send] } else { Vec::new() });
@@ -322,7 +454,7 @@ fn strip_view_known(i: &StripInput) -> StripView {
     }
     // (critic 73 minor 1) a restore or trim with no answer may still land: the version known is "when last checked"
     let latest = if i.unsure { format!("Version {head} when last checked.") } else { format!("Version {head} is the latest.") };
-    let up_to_date = if i.unsure { "" } else { " Your copy is up to date." };
+    let up_to_date = if i.unsure { "" } else { UP_TO_DATE };
     // (critic 63 I3, critic 64 I2) A viewer's copy, the person an editor now: the copy is never changed in place.
     if full_copy_offered(l, role_of(l)) {
         let first = format!("Shared with {name}. {latest}");
@@ -340,12 +472,62 @@ fn strip_view_known(i: &StripInput) -> StripView {
         return view(format!("{first}{up_to_date}"), vec![History]);
     }
     let first = format!("Shared with {name}. {latest}");
+    // (round 15, critics 91 I2 and I4) a copy an earlier build linked, the circle's version it last matched not read yet
+    if let Some(learning) = i.status.and_then(|s| s.learning) {
+        use super::circle_edit::Learning;
+        use super::circles_text as t;
+        return match learning {
+            Learning::Checking => StripView { line: format!("Shared with {name}. {}", t::CHECKING), buttons: if behind { vec![GetLatest, History] } else { vec![History] }, busy: true, warn: false, menu_history: true, menu_circle_page: true, menu_check: true },
+            Learning::CantReach => view(format!("Shared with {name}. {}", t::CANT_CHECK), if behind { vec![TryAgain, GetLatest, History] } else { vec![TryAgain, History] }),
+            // (round 16, critic 93 minor 4) no Try again: it would meet the same limit; (round 17, critic 96 minor 3) nor Get latest
+            // or Check now (the "..." menu too), and the newer version the badge names is said here as well
+            Learning::Limited => {
+                let have = if behind { format!(" You have version {}.", l.base_version) } else { String::new() };
+                let mut v = view(format!("{first}{have} {}", t::read_limit(i.status.and_then(|s| s.limit_left))), vec![History]);
+                v.menu_check = false;
+                v
+            }
+            // (round 16, critic 93 I1; round 17, critic 96 minor 4) why, in plain words, in the warning colour, and the tries
+            Learning::Held => {
+                let (why, tries) = i.status.and_then(|s| s.held.clone()).unwrap_or_else(|| (t::banks_not_saved(""), 1));
+                warn(format!("Shared with {name}. {}", t::held_line(&why, tries)), vec![TryAgain, History])
+            }
+            Learning::NotKept => {
+                let n = if changes.known || changes.partial() { changes.total() } else { 0 };
+                let have = match (behind, n > 0) {
+                    (true, true) => format!(" You have version {} and {}.", l.base_version, plural(n, "unsent change", "unsent changes")),
+                    (true, false) => format!(" You have version {}.", l.base_version),
+                    (false, true) => format!(" You have {}.", plural(n, "unsent change", "unsent changes")),
+                    (false, false) => String::new(),
+                };
+                // (round 16, critic 94 m1; round 17, critic 96 minor 1) plainly what she can do, that first: Check now (in the
+                // "..." menu) would only find a newer version someone sent
+                // (round 19, critic 100 minor 2) sending is off: in the warning colour, as the badge and the circle page's row
+                if behind {
+                    warn(format!("{first}{have} {} Get the latest first, then send.", t::difficulty_caveat(l.base_version)), vec![GetLatest, History])
+                } else {
+                    // (round 18, critic 98 minor 3) never "version 3 is the latest" beside "can't be read": said once, by why; (minor
+                    // 4) the safe action is the big button, "Use my bank as it is..." a plain one after it
+                    let why = i.status.and_then(|s| s.unread).unwrap_or(super::circle_edit::Unread::NotKept);
+                    // (round 19, critic 100 I1) and what Check now does
+                    warn(format!("Shared with {name}.{have} {} {} {}", t::cant_read_line(l.base_version, why, true), t::cant_read_ways(why), t::CHECK_NOW_DOES), vec![CheckNow, TreatInStep, History])
+                }
+            }
+        };
+    }
     if !changes.known {
         // (critic 88 I2) What is counted is said, with why a change to a difficulty may be missing from it, as the Send page
         // says it; a copy with no record at all says that. (critic 66 minor 5) Get latest only when there is something newer
         // to get, and then first, with the version the copy has (Q10).
         let n = if changes.partial() { changes.total() } else { 0 };
-        let why = if changes.partial() { super::circles_text::difficulty_caveat(l.base_version) } else { super::circles_text::NO_RECORD.to_string() };
+        // (round 18, critic 98 minor 5) after "Use my bank as it is" the next send includes the difficulties: nothing contradicts it
+        let why = if changes.partial() && l.as_is {
+            String::new()
+        } else if changes.partial() {
+            super::circles_text::difficulty_caveat(l.base_version)
+        } else {
+            super::circles_text::NO_RECORD.to_string()
+        };
         let have = match (behind, n > 0) {
             (true, true) => format!(" You have version {} and {}.", l.base_version, plural(n, "unsent change", "unsent changes")),
             (true, false) => format!(" You have version {}.", l.base_version),
@@ -353,7 +535,8 @@ fn strip_view_known(i: &StripInput) -> StripView {
             (false, false) => String::new(),
         };
         let then = if behind { " Get the latest first, then send." } else { "" };
-        return view(format!("{first}{have} {why}{then}"), if behind { vec![GetLatest, Send, History] } else { vec![Send, History] });
+        let why = if why.is_empty() { String::new() } else { format!(" {why}") };
+        return view(format!("{first}{have}{why}{then}"), if behind { vec![GetLatest, Send, History] } else { vec![Send, History] });
     }
     let n = changes.total();
     match (behind, n > 0) {
@@ -386,7 +569,7 @@ pub fn unlink_ask(unsent: Option<usize>, can_send: bool, sending: bool) -> Strin
 
 /// The links file is there but could not be read: no bank can be told apart, so every bank page says it.
 pub fn unreadable_view() -> StripView {
-    StripView { line: "The list of shared banks couldn't be read. Nothing was changed.".into(), buttons: vec![StripButton::TryAgain], busy: false, warn: true, menu_history: true, menu_circle_page: true }
+    StripView { line: "The list of shared banks couldn't be read. Nothing was changed.".into(), buttons: vec![StripButton::TryAgain], busy: false, warn: true, menu_history: true, menu_circle_page: true, menu_check: true }
 }
 
 // ---- adding and copying -------------------------------------------------------------------------------------------
@@ -581,6 +764,11 @@ pub struct BankLinks {
     /// Links whose circle page was read to learn whether the person is the bank's author, once since this account
     /// signed in (or since "Check now"): a bank the page does not list is not asked about every 10 minutes.
     author_asked: std::collections::HashSet<String>,
+    /// (round 19, critic 100 I1) "Check now" pressed: when, and what the strip said then. Until it is answered the strip says it is
+    /// checking; then, if nothing changed, that it checked and found the same (for `CHECK_EVERY`).
+    pressed: HashMap<String, (Instant, String)>,
+    /// The strip's line as last worked out, by bank (before the words above are added).
+    lines: HashMap<String, String>,
 }
 
 impl Default for BankLinks {
@@ -592,7 +780,7 @@ impl Default for BankLinks {
 impl BankLinks {
     /// Does no I/O.
     pub fn new(runner: Runner) -> BankLinks {
-        BankLinks { runner, retry: RetryPolicy::default(), repaint: None, last: HashMap::new(), state: HashMap::new(), jobs: Vec::new(), asked: Default::default(), signed_out: false, out: false, rechecked: Default::default(), author_asked: Default::default() }
+        BankLinks { runner, retry: RetryPolicy::default(), repaint: None, last: HashMap::new(), state: HashMap::new(), jobs: Vec::new(), asked: Default::default(), signed_out: false, out: false, rechecked: Default::default(), author_asked: Default::default(), pressed: HashMap::new(), lines: HashMap::new() }
     }
 
     pub fn set_retry(&mut self, retry: RetryPolicy) {
@@ -621,6 +809,7 @@ impl BankLinks {
         self.out = false;
         self.rechecked.clear();
         self.author_asked.clear();
+        self.pressed.clear();
     }
 
     /// The person joined the circle (again): its links are checked again at once, also a copy the circle had said
@@ -667,6 +856,34 @@ impl BankLinks {
         self.asked.insert(local.to_string());
         if self.state.get(local) == Some(&Check::Offline) {
             self.state.remove(local);
+        }
+    }
+
+    /// (round 19, critic 100 I1) "Check now" pressed on the strip: checked at once, and the strip says how it went.
+    pub fn check_now_pressed(&mut self, local: &str, now: Instant) {
+        self.check_now(local);
+        let line = self.lines.get(local).cloned().unwrap_or_default();
+        self.pressed.insert(local.to_string(), (now, line));
+    }
+
+    /// (round 19, critic 100 I1) The words the strip adds for a "Check now" she pressed: checking, then what it found.
+    fn said_pressed(&mut self, local: &str, v: &mut StripView, waiting: bool, now: Instant, now_ms: i64) {
+        self.lines.insert(local.to_string(), v.line.clone());
+        let Some((at, before)) = self.pressed.get(local).cloned() else { return };
+        let age = now.saturating_duration_since(at);
+        if age >= CHECK_EVERY {
+            self.pressed.remove(local);
+        } else if waiting {
+            if !v.line.contains("Checking") {
+                v.line = format!("{} {}", v.line, super::circles_text::CHECKING_NOW);
+            }
+            v.busy = true;
+        } else if v.line == before {
+            let ago = super::circles_text::ago(now_ms.saturating_sub(age.as_millis() as i64).max(1), now_ms);
+            v.line = format!("{} {}", v.line, super::circles_text::checked_same(&ago));
+        } else {
+            // (something changed: the strip says the new result)
+            self.pressed.remove(local);
         }
     }
 
@@ -792,11 +1009,47 @@ impl BankLinks {
         let act = edit.act_line(&bank.id);
         let unread = edit.sent_unread_of(bank);
         let (sent_unread, changed_since, unsure) = (unread.is_some(), unread == Some(true), edit.unsure(&bank.id));
-        edit.with_link(&bank.id, |l| strip_view(&StripInput { link: l, status: Some(&status), check, sign_in, now_ms, act, sent_unread, changed_since, unsure }))
+        let waiting = check == Check::Checking || status.learning == Some(super::circle_edit::Learning::Checking);
+        let mut v = edit.with_link(&bank.id, |l| strip_view(&StripInput { link: l, status: Some(&status), check, sign_in, now_ms, act, sent_unread, changed_since, unsure }))?;
+        self.said_pressed(&bank.id, &mut v, waiting, now, now_ms);
+        Some(v)
     }
 
     /// The last check's state for a bank (tests, the page's spinner).
     pub fn check_of(&self, local: &str) -> Check {
         self.state.get(local).cloned().unwrap_or_default()
+    }
+}
+
+/// (round 19, critic 100 minor 2) What a badge's note means, part by part, and (`warns`) why it is in the warning colour (shown when the
+/// pointer rests on it).
+pub fn note_hint_for(note: &str, warns: bool) -> Option<String> {
+    let parts: Vec<&str> = note.split(" · ").collect();
+    let mut out: Vec<&str> = Vec::new();
+    if parts.iter().any(|p| *p == PUT_BACK_NOTE || *p == "put back") {
+        out.push("This bank was put back from a safety copy. Its page says what you can do.");
+    }
+    if parts.iter().any(|p| *p == "newer version" || *p == "newer") {
+        out.push("The circle has a newer version than this copy. Get latest on the bank's page brings it in.");
+    }
+    if let Some(h) = note_hint(note) {
+        out.push(h);
+    }
+    if warns && out.is_empty() {
+        out.push("Sending is turned off for this bank for now. Its page says why.");
+    }
+    (!out.is_empty()).then(|| out.join(" "))
+}
+
+/// (round 18, critic 98 minor 8) What a badge's note means, where its words are short (shown when the pointer rests on it).
+pub fn note_hint(note: &str) -> Option<&'static str> {
+    if note.contains("changes not counted") {
+        Some("verSHion can't count the changes in this copy since it last matched the circle. Its page says why.")
+    } else if note.contains(WAITING_NOTE) {
+        Some("verSHion counts the changes once it has checked the circle's version this copy last matched.")
+    } else if note.contains(super::circles_text::NEWS_BADGE) {
+        Some("The circle's difficulty was put into some questions. Its page lists them.")
+    } else {
+        None
     }
 }

@@ -1590,7 +1590,7 @@ impl PublishModel {
                 }
             }
             PoolError::Refused(r) => {
-                let wait = r.detail.retry_after.filter(|s| *s > 0).map(|s| now + Duration::from_secs(s));
+                let wait = r.detail.retry_after.filter(|s| *s > 0).map(|s| super::api::later(now, s));
                 match &r.kind {
                     RefusalKind::InvalidPayload(p) | RefusalKind::LabelsNeedDecision(p) | RefusalKind::OrderAckRequired(p) => {
                         self.on_payload_refusal(p);

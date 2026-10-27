@@ -167,7 +167,7 @@ pub fn problem_of(e: &PoolError, now: Instant) -> Problem {
         PoolError::Refused(r) => {
             if matches!(r.kind, RefusalKind::DailyLimit { .. } | RefusalKind::RateLimited | RefusalKind::Busy) {
                 p.retry = true;
-                p.retry_at = r.detail.retry_after.filter(|s| *s > 0).map(|s| now + Duration::from_secs(s));
+                p.retry_at = r.detail.retry_after.filter(|s| *s > 0).map(|s| super::api::later(now, s));
             }
         }
     }

@@ -26,6 +26,13 @@ pub(super) fn draw(ui: &mut Ui, m: &mut CirclesModel) -> bool {
 }
 
 /// The open screen (send, get latest, history, a version), wherever it was asked for.
+/// (round 20, critic 100 minor 8) The page title of "Use my bank as it is" and of "Get latest": the circle's title on both, never
+/// her bank's own name on one page and the circle's on the next.
+pub(super) fn merge_title(asking_as_is: bool, circle_title: &str) -> String {
+    let title = if asking_as_is { text::AS_IS_TITLE } else { "Get latest" };
+    format!("{title}: \"{circle_title}\"")
+}
+
 pub(super) fn draw_page(ui: &mut Ui, m: &mut CirclesModel) {
     let now = m.now_ms();
     // (critic 71 I1) the History, or one of its versions, is in front of the person this frame
@@ -115,12 +122,15 @@ fn send_page(ui: &mut Ui, e: &mut CircleEditModel, now: i64) {
                 Some(c) if c.known => line(ui, format!("Since your copy last matched the circle: {}.", counts(c.added as u32, c.changed as u32, c.removed as u32))),
                 // (critic 88 I2) counted but for a difficulty: what is counted, and why a difficulty may be missing (the
                 // strip says the same)
+                // (round 18, critic 98 minor 5) after "Use my bank as it is" the send includes the difficulties: nothing contradicts it
+                Some(c) if c.partial() && e.sends_as_is(&v.local_id) => line(ui, format!("Since your copy last matched the circle: {}.", counts(c.added as u32, c.changed as u32, c.removed as u32))),
                 Some(c) if c.partial() => line(ui, format!("Since your copy last matched the circle: {}. {}", counts(c.added as u32, c.changed as u32, c.removed as u32), text::difficulty_caveat(e.base_version_of(&v.local_id).unwrap_or(0)))),
                 Some(_) => line(ui, format!("{} The circle works them out when you send.", text::NO_RECORD)),
                 None => line(ui, "Counting what changed..."),
             }
             if matches!(v.stage, SendStage::Editing) {
-                line(ui, "This adds a new version to the circle's bank. The older versions stay in the history, and you can restore one later.");
+                // (round 19, critic 100 minor 9) "restore one later" only to someone who can (the owner, the bank's author)
+                line(ui, if v.perm.can_rewind() { "This adds a new version to the circle's bank. The older versions stay in the history, and you can restore one later." } else { "This adds a new version to the circle's bank. The older versions stay in the history." });
             }
             // (critic 78 I2) The earlier send went through but its answer could not be read: the counts still include it.
             if matches!(v.stage, SendStage::Editing) && e.earlier_send(&v.local_id) == Some(true) && !e.status(&v.local_id).is_some_and(|s| s.stale) {
@@ -131,16 +141,20 @@ fn send_page(ui: &mut Ui, e: &mut CircleEditModel, now: i64) {
             }
             // A stale copy can not be sent: say so at the top, with the way on, not only under a greyed Send.
             if matches!(v.stage, SendStage::Editing) && e.status(&v.local_id).is_some_and(|s| s.stale) {
-                warn_box(ui, "The bank on this computer is older than the record of it (a saved copy of your banks may have been put back), so it can't be sent yet. Get the latest first; the counts above may be wrong until then.");
+                warn_box(ui, "The bank on this computer is older than the record of it (a safety copy of your banks may have been put back), so it can't be sent yet. Get the latest first; the counts above may be wrong until then.");
                 if kit::primary_button(ui, "Get latest").clicked() {
                     act = SendAct::Merge;
                 }
             }
             if v.merged {
-                para(ui, "This send goes with the merge you just made, so the history shows that you merged in the circle's newer changes.");
+                para(ui, "This send follows the Get latest you just did, so the history shows that you took in the circle's newer changes.");
+            }
+            // (round 17, critic 96 I2) what "Use my bank as it is" said, in one line
+            if matches!(v.stage, SendStage::Editing) && e.sends_as_is(&v.local_id) {
+                para(ui, text::AS_IS_SEND_LINE);
             }
             if let Some(b) = v.base_override {
-                warn_box(ui, &format!("The circle's newest version ({b}) is hidden while it is reviewed, so it could not be merged. This sends your version on top of it and REPLACES what the circle has now. The hidden version, and anything you did not merge, stay in the history."));
+                warn_box(ui, &format!("The circle's newest version ({b}) is hidden while it is reviewed, so it could not be brought in. This sends your version on top of it and replaces what the circle has now. The hidden version, and anything you did not take in, stay in the history."));
                 // The same heading as on the merge page, so the list reads as what is replaced.
                 if !v.replaces.is_empty() {
                     ui.label(theme::strong("Versions that would be replaced").size(12.5));
@@ -266,7 +280,7 @@ fn send_page(ui: &mut Ui, e: &mut CircleEditModel, now: i64) {
                 // (critic 80 I2) and never "your earlier send" beside a colleague's name
                 let (head, then) = match e.conflict_own(&v.local_id, c) {
                     Some(went) => own_conflict_page(went),
-                    None => ("Someone else sent changes first, so nothing was sent and nothing was overwritten.", "Get their changes and merge them with yours, then send. You decide what happens to every question you both changed."),
+                    None => ("Someone else sent changes first, so nothing was sent and nothing was overwritten.", "Get latest to bring their changes in beside yours, then send. You decide what happens to every question you both changed."),
                 };
                 warn_box(ui, head);
                 para(ui, &conflict_line(c, now));
@@ -459,8 +473,9 @@ fn choice_label(row: &Row, c: Choice) -> &'static str {
         (RowKind::OursChanged, Choice::Take) => "Take the circle's version",
         (RowKind::OursChanged, _) => "Keep mine",
         (RowKind::Conflict, Choice::Ours) => "Keep mine",
-        (RowKind::Conflict, Choice::Theirs) if row.carry_key => "Use the circle's version, keeping my answer key",
-        (RowKind::Conflict, Choice::Theirs) => "Use the circle's version",
+        // (critic 92 I3) one wording on every card
+        (RowKind::Conflict, Choice::Theirs) if row.carry_key => "Take the circle's version, keeping my answer key",
+        (RowKind::Conflict, Choice::Theirs) => "Take the circle's version",
         (RowKind::Conflict, _) => "Keep both (the circle's is added as a second question)",
         (RowKind::NewInTheirs, Choice::Add) => "Add it to my bank",
         (RowKind::NewInTheirs, _) => "Do not add it",
@@ -496,7 +511,7 @@ fn merge_page(ui: &mut Ui, e: &mut CircleEditModel) {
             act = MergeAct::Cancel;
         }
         ui.add_space(4.0);
-        ui.add(egui::Label::new(theme::serif(format!("Get latest: \"{}\"", v.title)).size(20.0)).wrap());
+        ui.add(egui::Label::new(theme::serif(merge_title(e.asking_as_is(), &v.title)).size(20.0)).wrap());
         ui.add_space(4.0);
         let leave = |ui: &mut Ui, act: &mut MergeAct, label: &str| {
             if kit::ghost_button(ui, label).clicked() {
@@ -505,9 +520,11 @@ fn merge_page(ui: &mut Ui, e: &mut CircleEditModel) {
         };
         match &v.phase {
             MergePhase::Fetching | MergePhase::Ready(_) => {
-                ui.horizontal(|ui| {
+                // (critic 91 minor) waiting for the read of the version the copy last matched: said, and why when it takes long
+                let wait = e.merge_wait_note();
+                text_row(ui, |ui| {
                     ui.spinner();
-                    ui.label(theme::muted("Looking at what changed in the circle..."));
+                    ui.add(egui::Label::new(theme::muted(wait.as_deref().unwrap_or("Looking at what changed in the circle..."))).wrap());
                 });
                 para(ui, "Nothing in your bank changes yet.");
                 leave(ui, &mut act, "Cancel");
@@ -518,7 +535,7 @@ fn merge_page(ui: &mut Ui, e: &mut CircleEditModel) {
                     ui.spinner();
                     ui.label(theme::text("Fetching the circle's newest version and its pictures..."));
                 });
-                para(ui, "Your bank is changed only when this has arrived and a copy of your banks has been saved. If it fails, nothing changes.");
+                para(ui, "Your bank is changed only when this has arrived and a safety copy of your banks has been saved. If it fails, nothing changes.");
                 leave(ui, &mut act, "Cancel");
             }
             MergePhase::Applied(d) => {
@@ -529,8 +546,8 @@ fn merge_page(ui: &mut Ui, e: &mut CircleEditModel) {
                     line(ui, format!("{} taken from the circle, {} kept as yours, {} added, {} removed, {} kept as a second copy.", o.taken, o.kept, o.added, o.removed, o.both));
                     ui.add_space(4.0);
                     ui.label(theme::strong("Your way back").size(12.5));
-                    ui.add(egui::Label::new(theme::text(format!("A copy of all your banks from just before the merge is saved at {}", api::plain(&d.restore))).size(12.0)).wrap());
-                    line(ui, "To go back, close verSHion and copy that file over banks.json in the same folder.");
+                    ui.add(egui::Label::new(theme::text(format!("A safety copy of all your banks from just before this change is saved at {}", api::plain(&d.restore))).size(12.0)).wrap());
+                    line(ui, "If you need to go back, that file has all your banks as they were just before.");
                 });
                 ui.add_space(6.0);
                 if (d.changes.total() > 0 || !d.changes.known) && !can_send {
@@ -554,13 +571,39 @@ fn merge_page(ui: &mut Ui, e: &mut CircleEditModel) {
                     }
                 }
             }
+            // (round 17, critic 96 I2) after "Use my bank as it is", what was done (the line above says what the send does)
+            MergePhase::UpToDate if v.as_is => {
+                body(ui, text::AS_IS_DONE);
+                leave(ui, &mut act, "Back");
+            }
             MergePhase::UpToDate => {
                 body(ui, "You already have the circle's newest version. There is nothing to get.");
                 leave(ui, &mut act, "Back");
             }
+            // (round 17, critic 96 I2) the question of "Use my bank as it is", in its own words: what the next send does, and the
+            // difficulties it overwrites where they were never read
+            MergePhase::StaleUpToDate { ask: Some(StaleAsk::Rebase) } => {
+                para(ui, text::AS_IS_TEXT);
+                if e.never_read(&v.local_id) {
+                    para(ui, text::AS_IS_DROPPED);
+                }
+                ui.horizontal_wrapped(|ui| {
+                    if ui.add_enabled(can_send, |ui: &mut Ui| kit::danger_text_button(ui, "Yes, use it as it is")).clicked() {
+                        act = MergeAct::Rebase;
+                    }
+                    if kit::ghost_button(ui, "No, go back").clicked() {
+                        act = MergeAct::CancelAsk;
+                    }
+                });
+            }
             MergePhase::StaleUpToDate { ask } => {
                 body(ui, "The circle has nothing newer than the version your copy last matched.");
-                warn_box(ui, "But the bank on this computer is older than the record of it: a saved copy of your banks may have been put back. Sending is blocked until you decide.");
+                // (round 16, critic 94 m1) or that version can't be read any more (the copy was linked by an earlier build)
+                if e.cant_be_read(&v.local_id) {
+                    warn_box(ui, "But that version can't be read any more, so verSHion can't tell which difficulties you changed since. Sending is blocked until you decide.");
+                } else {
+                    warn_box(ui, "But the bank on this computer is older than the record of it: a safety copy of your banks may have been put back. Sending is blocked until you decide.");
+                }
                 match ask {
                     None => {
                         para(ui, "If the bank as it is now is what you want the circle to have, use it as it is: nothing in the bank changes, and the next send sends it as it is, replacing the circle's questions with yours. Or unlink it: the bank stays, but it is no longer connected to the circle.");
@@ -574,17 +617,8 @@ fn merge_page(ui: &mut Ui, e: &mut CircleEditModel) {
                             leave(ui, &mut act, "Back");
                         });
                     }
-                    Some(StaleAsk::Rebase) => {
-                        warn_box(ui, "Are you sure? The next send will make the circle's newest version match THIS bank. If this bank is older than the circle's work (for example a saved copy was put back), other people's changes will no longer be in the newest version. They stay in the history, where they can be restored.");
-                        ui.horizontal_wrapped(|ui| {
-                            if ui.add_enabled(can_send, |ui: &mut Ui| kit::danger_text_button(ui, "Yes, use it as it is")).clicked() {
-                                act = MergeAct::Rebase;
-                            }
-                            if kit::ghost_button(ui, "No, go back").clicked() {
-                                act = MergeAct::CancelAsk;
-                            }
-                        });
-                    }
+                    // (asked on its own page, above)
+                    Some(StaleAsk::Rebase) => {}
                     Some(StaleAsk::Forget) => {
                         warn_box(ui, "Are you sure? The bank stays on this computer as it is, but it is no longer connected to the circle. Adding the circle's bank again later makes a new bank; this one stays unconnected.");
                         ui.horizontal_wrapped(|ui| {
@@ -600,10 +634,10 @@ fn merge_page(ui: &mut Ui, e: &mut CircleEditModel) {
             }
             MergePhase::HeadWithheld { head_version, replaces } => {
                 match head_version {
-                    Some(h) => warn_box(ui, &format!("The circle's newest version ({h}) is hidden while it is reviewed, so it can not be merged. It stays in the history.")),
-                    None => warn_box(ui, "The circle's newest version is hidden while it is reviewed, so it can not be merged. It stays in the history."),
+                    Some(h) => warn_box(ui, &format!("The circle's newest version ({h}) is hidden while it is reviewed, so it can't be brought in. It stays in the history.")),
+                    None => warn_box(ui, "The circle's newest version is hidden while it is reviewed, so it can't be brought in. It stays in the history."),
                 }
-                para(ui, "You can still send your version on top of it. That REPLACES what the circle has now with your bank: changes other people sent, and that you have not merged, will no longer be in the newest version. They stay in the history, where they can be restored. Only do it if your bank is what the circle should have.");
+                para(ui, "You can still send your version on top of it. That replaces what the circle has now with your bank: changes other people sent that your bank doesn't have will no longer be in the newest version. They stay in the history, where they can be restored. Only do it if your bank is what the circle should have.");
                 if !replaces.is_empty() {
                     ui.label(theme::strong("Versions that would be replaced").size(12.5));
                     for l in replaces.iter().take(10) {
@@ -656,7 +690,7 @@ fn merge_page(ui: &mut Ui, e: &mut CircleEditModel) {
 
 fn review(ui: &mut Ui, e: &CircleEditModel, r: &Review, act: &mut MergeAct) {
     let plan: &MergePlan = &r.plan;
-    para(ui, &format!("Your copy matches version {}. The circle has version {}. Nothing has been changed yet. Go through the questions below, then press Apply merge. Cancel leaves everything as it is. A copy of your banks is saved just before anything is written.", plan.old_version, plan.new_version));
+    para(ui, &format!("Your copy matches version {}. The circle has version {}. Nothing has been changed yet. Go through the questions below, then press Apply changes. Cancel leaves everything as it is. A copy of your banks is saved just before anything is written.", plan.old_version, plan.new_version));
     if !r.start.between.is_empty() {
         ui.label(theme::strong("What was sent since").size(12.5));
         for l in &r.start.between {
@@ -683,7 +717,7 @@ fn review(ui: &mut Ui, e: &CircleEditModel, r: &Review, act: &mut MergeAct) {
         para(ui, &text::own_unreadable_line(n));
     }
     if r.fallback {
-        warn_box(ui, "The version your copy was made from is no longer kept, and this copy has no record of it, so this merge can only compare yours with the circle's newest version. Every question where the two differ is shown as a conflict for you to decide. Nothing is decided for you.");
+        warn_box(ui, "The version your copy was made from is no longer kept, and this copy has no record of it, so this can only compare yours with the circle's newest version. Every question where the two differ is shown as a conflict for you to decide. Nothing is decided for you.");
     }
     let counts_row = [RowKind::Conflict, RowKind::TheirsChanged, RowKind::OursChanged, RowKind::NewInTheirs, RowKind::RemovedInTheirs, RowKind::RemovedLocally, RowKind::Unchanged];
     // (critic 86 I1) a decision only because this computer has no record of a difficulty is counted apart, never as a
@@ -696,7 +730,7 @@ fn review(ui: &mut Ui, e: &CircleEditModel, r: &Review, act: &mut MergeAct) {
     }
     line(ui, summary.join(" - "));
     if plan.unlinked > 0 {
-        para(ui, &format!("{} question{} in this bank {} yours alone (not in the circle's bank yet), so the merge leaves {} as {} {}.", plan.unlinked, if plan.unlinked == 1 { "" } else { "s" }, if plan.unlinked == 1 { "is" } else { "are" }, if plan.unlinked == 1 { "it" } else { "them" }, if plan.unlinked == 1 { "it" } else { "they" }, if plan.unlinked == 1 { "is" } else { "are" }));
+        para(ui, &format!("{} question{} in this bank {} yours alone (not in the circle's bank yet), so Get latest leaves {} as {} {}.", plan.unlinked, if plan.unlinked == 1 { "" } else { "s" }, if plan.unlinked == 1 { "is" } else { "are" }, if plan.unlinked == 1 { "it" } else { "them" }, if plan.unlinked == 1 { "it" } else { "they" }, if plan.unlinked == 1 { "is" } else { "are" }));
     }
     if plan.matched > 0 {
         para(ui, &text::same_added_line(plan.matched));
@@ -771,14 +805,14 @@ fn review(ui: &mut Ui, e: &CircleEditModel, r: &Review, act: &mut MergeAct) {
         // (critic 86 I1, critic 85 m1) a question whose difficulty is not recorded here, or one new in the circle that may
         // be the person's own, is not a conflict where both changed
         let what = if plan.rows.iter().filter(|r| r.needs_decision()).all(|r| r.kind == RowKind::Conflict && !r.unrecorded) { "conflict" } else { "question" };
-        para(ui, &format!("{} {what}{} still need{} a decision before the merge can be applied.", undecided, if undecided == 1 { "" } else { "s" }, if undecided == 1 { "s" } else { "" }));
+        para(ui, &format!("{} {what}{} still need{} a decision before the changes can be applied.", undecided, if undecided == 1 { "" } else { "s" }, if undecided == 1 { "s" } else { "" }));
     }
     // Why Apply merge did not go through: next to the button that was pressed, not above a long review.
     if let Some(p) = &r.problem {
         warn_box(ui, p);
     }
     ui.horizontal(|ui| {
-        if ui.add_enabled(e.can_apply_merge(), |ui: &mut Ui| kit::primary_button(ui, "Apply merge")).clicked() {
+        if ui.add_enabled(e.can_apply_merge(), |ui: &mut Ui| kit::primary_button(ui, "Apply changes")).clicked() {
             *act = MergeAct::Apply;
         }
         if kit::ghost_button(ui, "Cancel").clicked() {
@@ -893,7 +927,7 @@ fn history_page(ui: &mut Ui, e: &mut CircleEditModel, now: i64) {
                     line(ui, format!("Restored the content of version {r}."));
                 }
                 if let Some(m) = l.merged_from {
-                    line(ui, format!("Includes a merge of the changes made since version {m}."));
+                    line(ui, format!("Includes the circle's changes made since version {m}."));
                 }
                 if h.closed_to_me(l) {
                     line(ui, "This version has no copy without answer keys, so you can not open it.");
@@ -1159,16 +1193,32 @@ fn version_page(ui: &mut Ui, e: &mut CircleEditModel, now: i64) {
 pub(super) fn standing(l: &CircleLink, st: Option<&LinkStatus>, removed: bool, role: super::circles_api::Role) -> Vec<String> {
     let mut v = Vec::new();
     if removed {
-        v.push("This bank was removed from the circle, so nothing can be sent to it or merged from it. The owner or the bank's author may be able to bring it back.".to_string());
+        v.push("This bank was removed from the circle, so nothing can be sent to it or got from it. The owner or the bank's author may be able to bring it back.".to_string());
     }
     match st {
         Some(s) if s.missing => v.push("This bank is not on this computer any more.".to_string()),
-        Some(s) if s.stale => v.push("The bank on this computer is older than the record of it (a saved copy may have been put back). Sending is blocked until you get the latest from its page in My Banks.".to_string()),
+        Some(s) if s.stale => v.push("The bank on this computer is older than the record of it (a safety copy may have been put back). Sending is blocked until you get the latest from its page in My Banks.".to_string()),
         // (a copy that follows the circle, or that the person can not send from now, has nothing to send: critic 64)
         Some(_) if !(l.can_send() && role.can_add_banks()) => {}
-        // (critic 88 I2) with why a change to a difficulty may be missing, as the strip says
-        Some(s) if s.changes.total() > 0 => v.push(format!("Not sent yet: {}.{}", counts(s.changes.added as u32, s.changes.changed as u32, s.changes.removed as u32), if s.changes.partial() { " A change to a difficulty can't be counted for this copy." } else { "" })),
-        Some(s) if s.changes.partial() => v.push("A change to a difficulty can't be counted for this copy.".to_string()),
+        // (round 15, critic 91 I2) a copy an earlier build linked, before the circle's version it last matched is read
+        Some(s) if s.learning == Some(Learning::Checking) => v.push(text::CHECKING.to_string()),
+        Some(s) if s.learning == Some(Learning::CantReach) => v.push(text::CANT_CHECK.to_string()),
+        // (round 16) as the strip says them
+        Some(s) if s.learning == Some(Learning::Limited) => v.push(text::READ_LIMIT.to_string()),
+        Some(s) if s.learning == Some(Learning::Held) => v.push(text::DIFFICULTY_HELD.to_string()),
+        // (round 16, q93_4) "not kept": counted as the strip counts it, and sending is said to be off
+        // (round 17, critic 96 minor 1) with where she can do something about it
+        // (round 18, critic 98 minor 3) by why the version can't be read
+        Some(s) if s.learning == Some(Learning::NotKept) => v.push(if s.changes.total() > 0 {
+            format!("Not sent yet: {}. A change to a difficulty can't be counted for this copy. {}", counts(s.changes.added as u32, s.changes.changed as u32, s.changes.removed as u32), text::cant_read_row(s.unread.unwrap_or(Unread::NotKept)))
+        } else {
+            format!("A change to a difficulty can't be counted for this copy. {}", text::cant_read_row(s.unread.unwrap_or(Unread::NotKept)))
+        }),
+        // (critic 88 I2) with why a change to a difficulty may be missing, as the strip says (round 18, critic 98 minor 5: not after
+        // "Use my bank as it is", whose send includes the difficulties)
+        Some(s) if s.changes.total() > 0 => v.push(format!("Not sent yet: {}.{}", counts(s.changes.added as u32, s.changes.changed as u32, s.changes.removed as u32), if s.changes.partial() && !l.as_is { " A change to a difficulty can't be counted for this copy." } else { "" })),
+        Some(s) if s.changes.partial() && !l.as_is => v.push("A change to a difficulty can't be counted for this copy.".to_string()),
+        Some(s) if s.changes.partial() => v.push("Your next send makes the circle's newest version match this bank, difficulties included.".to_string()),
         Some(s) if !s.changes.known => v.push("Unsent changes can not be counted for this copy.".to_string()),
         Some(_) => v.push("Nothing to send.".to_string()),
         None => {}

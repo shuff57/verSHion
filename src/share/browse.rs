@@ -185,6 +185,12 @@ pub type SharedImages = Arc<dyn ImageSink + Send + Sync>;
 /// Where the copy of the banks made just before a merge goes. Returns where it is, in words.
 pub trait RestoreSink {
     fn save(&self, banks: &[QuestionBank]) -> Result<String, String>;
+    /// (round 17, critic 96 I1) The same before something other than a merge (`what`: "difficulty", the circle's difficulty
+    /// put into a bank), named for it where the sink names its copies.
+    fn save_named(&self, banks: &[QuestionBank], what: &str) -> Result<String, String> {
+        let _ = what;
+        self.save(banks)
+    }
 }
 
 /// `backups/banks-before-merge-<date>.json` in the app's data folder (next to the automatic
@@ -193,19 +199,28 @@ pub struct StoreRestore;
 
 impl RestoreSink for StoreRestore {
     fn save(&self, banks: &[QuestionBank]) -> Result<String, String> {
-        let bytes = serde_json::to_vec(banks).map_err(|e| e.to_string())?;
-        let stamp = crate::store::backup_stamp(now_ms().div_euclid(1000));
-        crate::store::with_backend(|b| {
-            let mut rel = format!("backups/banks-before-merge-{stamp}.json");
-            let mut n = 2;
-            while b.exists(&rel) {
-                rel = format!("backups/banks-before-merge-{stamp}-{n}.json");
-                n += 1;
-            }
-            b.write(&rel, &bytes)?;
-            Ok(format!("{} ({rel})", b.label()))
-        })
+        self.save_named(banks, "merge")
     }
+
+    /// `backups/banks-before-<what>-<date>.json`.
+    fn save_named(&self, banks: &[QuestionBank], what: &str) -> Result<String, String> {
+        crate::store::with_backend(|b| save_copy_to(b, banks, what, now_ms().div_euclid(1000)))
+    }
+}
+
+/// (round 18, survivor k95) A safety copy of all the banks in `b`: `backups/banks-before-<what>-<date>.json` (`secs`: now), never
+/// over another one. Where it is, in words.
+pub fn save_copy_to(b: &dyn crate::store::Backend, banks: &[QuestionBank], what: &str, secs: i64) -> Result<String, String> {
+    let bytes = serde_json::to_vec(banks).map_err(|e| e.to_string())?;
+    let stamp = crate::store::backup_stamp(secs);
+    let mut rel = format!("backups/banks-before-{what}-{stamp}.json");
+    let mut n = 2;
+    while b.exists(&rel) {
+        rel = format!("backups/banks-before-{what}-{stamp}-{n}.json");
+        n += 1;
+    }
+    b.write(&rel, &bytes)?;
+    Ok(format!("{} ({rel})", b.label()))
 }
 
 pub type SharedRestore = Arc<dyn RestoreSink + Send + Sync>;
@@ -1039,7 +1054,7 @@ impl BrowseModel {
             PoolError::Api(_) => p.retry = true,
             PoolError::Local(_) => {}
             PoolError::Refused(r) => {
-                let wait = r.detail.retry_after.filter(|s| *s > 0).map(|s| now + Duration::from_secs(s));
+                let wait = r.detail.retry_after.filter(|s| *s > 0).map(|s| super::api::later(now, s));
                 match &r.kind {
                     RefusalKind::NotApproved { .. } => p.account = true,
                     RefusalKind::InviteRequired => {

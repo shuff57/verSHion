@@ -17,9 +17,11 @@ use super::circles_api::{BankHead, SentBank};
 use super::merge::{self, BaseQuestion, Theirs};
 use super::pool::{ItemHead, ItemMeta, ItemView, License, is_item_id};
 use super::publish::QidLink;
-use crate::model::{Question, QuestionBank};
+use crate::model::{Difficulty, Question, QuestionBank};
 
 pub const LINKS_DOC: &str = "share-circles.json";
+/// The banks file of the same store (`Store::save_banks` writes it there too).
+pub const BANKS_DOC: &str = "banks.json";
 
 /// The send payload's schema: 2 is the one that carries `published.qid`.
 pub const SEND_SCHEMA: u32 = 2;
@@ -113,11 +115,162 @@ pub struct CircleLink {
     /// A base whose version was read is not read again, even where that version lacks a question (critic 89 m4).
     #[serde(default)]
     pub difficulty_read: Option<u64>,
-    /// (the owner's decision, 2026-10-26; critic 90 I1) Difficulties were just learnt from the circle's version: a rating
-    /// the circle has there that the copy lacks, on a question the teacher has not edited since the copy last matched, is
-    /// inherited into the copy (see [`inherit_difficulty`]). Kept until a pass finds nothing left to inherit.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    /// (the owner's rule, 2026-10-26; round 15) Difficulties were just learnt from the circle's version: the copy takes the
+    /// circle's difficulty for each question that version has (see [`inherit_difficulty`]) at the next pass that has the bank.
+    /// (round 19, critic 99 m8) Read leniently: a value this build can't read is "no", never the link with it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not", deserialize_with = "lenient_bool")]
     pub inherit: bool,
+    /// (round 17, critic 95 I1) While `inherit` waits (its first pass could not be saved): each base question's difficulty in
+    /// the bank as the first pass after the read found it. A question whose difficulty differs from it now was changed by her
+    /// since, deliberately: it keeps hers, in this session and after a restart. `None`: not recorded yet.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "at_read_or_none")]
+    pub at_read: Option<Vec<AtRead>>,
+    /// (round 19, critic 99 m1-m3) Written just before a pass writes the banks file: the bank's time before it and the time the pass
+    /// gives it. While it is here the banks file may have the pass in it (a restart then takes the pass as done, and moves the time of
+    /// an unclear send on with it); a pass that could not write the banks file takes it out again. `None`: no such write.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "times_or_none")]
+    pub pass_times: Option<(i64, i64)>,
+    /// (round 16, critic 93 minor 2; round 19, critic 99 m4) Base questions the bank did not have when it took the circle's
+    /// difficulties (deleted before the read): one put back (Undo) takes the circle's at the next pass. The base version then, and
+    /// the ids. Kept in the file, so that a pass held for such a question is still waited for after a restart.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "missing_or_none")]
+    pub missing_at_read: Option<(u64, Vec<String>)>,
+    /// (round 17, critic 96 I1) What the circle's difficulty replaced in the bank, kept until she dismisses it: the badge and
+    /// the bank's strip say it, whichever page was open when it happened, and each question can be put back.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "news_or_none")]
+    pub difficulty_news: Option<DifficultyNews>,
+    /// (round 17, critic 96 I2) "Use my bank as it is" was confirmed: the next send makes the circle's newest version match
+    /// the bank, difficulties included (its Send page says so). Cleared once the copy moves to another version.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not", deserialize_with = "lenient_bool")]
+    pub as_is: bool,
+}
+
+/// (round 17, critic 95 I1) A base question's difficulty in the bank when the read's difficulties were first to be taken.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AtRead {
+    pub id: String,
+    /// (round 19, critic 99 m8) Never left out: an entry without it is not known (dropped), never "none".
+    #[serde(deserialize_with = "present")]
+    pub difficulty: Option<Difficulty>,
+}
+
+/// (round 19, critic 99 m8) A value that must be there (`null` included).
+fn present<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Difficulty>, D::Error> {
+    Option::<Difficulty>::deserialize(d)
+}
+
+/// (round 17, critic 96 I1) The circle's difficulty put into the bank after the read of `version`: each question it changed.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DifficultyNews {
+    pub version: u64,
+    pub questions: Vec<NewsItem>,
+}
+
+/// One question of that news: its id in the bank, her difficulty before and the circle's after, and whether she put hers back.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NewsItem {
+    pub id: String,
+    pub before: Option<Difficulty>,
+    pub after: Option<Difficulty>,
+    /// (round 19, critic 99 m8) Read leniently, as `changed`: a value this build can't read is "no", never the news with it.
+    #[serde(deserialize_with = "lenient_bool")]
+    pub put_back: bool,
+    /// (round 18, critic 98 I1) The question's difficulty was changed since (by her, or by a version she got): once seen, "Put
+    /// mine back" is never offered for it again, so it never writes over her newer choice or a colleague's newer difficulty.
+    #[serde(skip_serializing_if = "std::ops::Not::not", deserialize_with = "lenient_bool")]
+    pub changed: bool,
+}
+
+/// (round 18, critic 98 I1) Where one question of the difficulty news stands now.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NewsState {
+    /// It still has the circle's difficulty from the read, and the copy is still at that version: "Put mine back" is offered.
+    Replaced,
+    /// It still has the circle's difficulty, but the copy has moved on (a send, Get latest): nothing is offered.
+    Kept,
+    /// Hers is back and not sent yet.
+    Back,
+    /// Hers is back, and the version the copy is in step with has it (she sent it).
+    Sent,
+    /// Its difficulty changed since (her own choice, or a colleague's in a version she got): what it is now.
+    Changed(Option<Difficulty>),
+    /// The question is no longer in the bank.
+    Gone,
+}
+
+/// The difficulty the question is expected to have while nothing changed it: hers once she put it back, else the circle's.
+fn news_expected(item: &NewsItem) -> Option<Difficulty> {
+    if item.put_back { item.before } else { item.after }
+}
+
+/// (round 18, critic 98 I1) Where `item` of `link`'s news stands for `bank` as it is.
+pub fn news_state(link: &CircleLink, item: &NewsItem, bank: &QuestionBank) -> NewsState {
+    let Some(q) = bank.questions.iter().find(|q| q.id == item.id) else { return NewsState::Gone };
+    if q.difficulty == item.before {
+        // sent once the version the copy is in step with has hers; (round 19, critic 99 m9) said to be hers, sent, only where she put
+        // it back: a colleague's version that happens to give her old difficulty is "changed since"
+        let base = link.base.iter().find(|b| b.local_id == item.id).and_then(|b| b.snap.difficulty);
+        return match base == Some(item.before) {
+            true if item.put_back || !item.changed => NewsState::Sent,
+            true => NewsState::Changed(q.difficulty),
+            false => NewsState::Back,
+        };
+    }
+    if item.changed || q.difficulty != news_expected(item) {
+        return NewsState::Changed(q.difficulty);
+    }
+    let version = link.difficulty_news.as_ref().map_or(0, |n| n.version);
+    if link.base_version == version { NewsState::Replaced } else { NewsState::Kept }
+}
+
+/// (round 19, critic 100 minor 5) Nothing of the news is left for her to do: no question still has the circle's difficulty at the
+/// read's version (Put mine back offered), and none is hers back but not sent. The badge then no longer says it.
+pub fn news_settled(link: &CircleLink, bank: &QuestionBank) -> bool {
+    link.difficulty_news.as_ref().is_none_or(|n| n.questions.iter().all(|i| !matches!(news_state(link, i, bank), NewsState::Replaced | NewsState::Back)))
+}
+
+/// (round 18, critic 98 I1) Notes each question of the news whose difficulty changed since (see `NewsItem::changed`), for good.
+/// Returns whether the link changed.
+pub fn settle_news(link: &mut CircleLink, bank: &QuestionBank) -> bool {
+    let Some(n) = link.difficulty_news.as_mut() else { return false };
+    let mut changed = false;
+    for item in n.questions.iter_mut().filter(|i| !i.changed) {
+        if let Some(q) = bank.questions.iter().find(|q| q.id == item.id)
+            && q.difficulty != news_expected(item)
+        {
+            item.changed = true;
+            changed = true;
+        }
+    }
+    changed
+}
+
+fn news_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<DifficultyNews>, D::Error> {
+    Ok(serde_json::from_value(Value::deserialize(d)?).ok())
+}
+
+/// (round 17) One this build can not read is dropped alone, never the link with it (as `sent_record`). (round 18, critic 97 m7)
+/// Entry by entry: one entry this build can't read is dropped alone, never the others.
+fn at_read_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Vec<AtRead>>, D::Error> {
+    Ok(match Value::deserialize(d)? {
+        Value::Array(list) => Some(list.into_iter().filter_map(|e| serde_json::from_value(e).ok()).collect()),
+        _ => None,
+    })
+}
+
+/// (round 18, critic 97 m7) A flag this build can't read is "no", never the link with it.
+fn lenient_bool<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+    Ok(Value::deserialize(d)?.as_bool().unwrap_or(false))
+}
+
+fn times_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<(i64, i64)>, D::Error> {
+    Ok(serde_json::from_value(Value::deserialize(d)?).ok())
+}
+
+fn missing_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<(u64, Vec<String>)>, D::Error> {
+    Ok(serde_json::from_value(Value::deserialize(d)?).ok())
 }
 
 fn record_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<SentRecord>, D::Error> {
@@ -253,6 +406,11 @@ impl CircleLink {
             sent_record: None,
             difficulty_read: Some(0),
             inherit: false,
+            at_read: None,
+            pass_times: None,
+            missing_at_read: None,
+            difficulty_news: None,
+            as_is: false,
         }
     }
 
@@ -410,38 +568,63 @@ pub fn learn_difficulty(link: &mut CircleLink, theirs: &[Theirs]) -> bool {
     }
     link.difficulty_read = Some(link.base_version);
     link.inherit = true;
+    link.at_read = None;
+    link.pass_times = None;
     *link != before
 }
 
-/// Bank and link times are seconds; an earlier build wrote milliseconds (and a question copied or merged from the circle
-/// still has them).
-fn secs(t: i64) -> i64 {
-    if t > 100_000_000_000 { t / 1000 } else { t }
-}
-
-/// (the owner's decision, 2026-10-26; critic 90 I1) A link an earlier build wrote, its difficulties just learnt from the
-/// circle's version: the copy inherits the circle's rating where it has none, unless the teacher edited that question since
-/// the copy last matched (a later deliberate change of hers supersedes). A rating the copy has is never replaced (it may be
-/// her unsent one), and nothing goes into a bank put back from a saved copy (what it matched is not known). Returns how
-/// many questions took the circle's rating.
-pub fn inherit_difficulty(link: &CircleLink, bank: &mut QuestionBank) -> usize {
+/// (the owner's rule, 2026-10-26; round 15) A link an earlier build wrote, its difficulties just learnt from the circle's
+/// version: the copy inherits the circle's difficulty for each question that version has, whatever the copy had (its rating,
+/// another one, none) and whenever the question was edited (critic 91 I3, critic 92 I1). From then on a difference is her
+/// deliberate change. Nothing goes into a bank put back from a saved copy (what it matched is not known). Returns each
+/// question whose difficulty changed: its id, and its difficulty before and after.
+///
+/// (round 16, critic 93 I1) Except a rating she already pressed Send for: a question her own send record (`sent`, the send
+/// whose answer did not say what it made) carried with a rating other than the circle's keeps the bank's (one it carried with
+/// none takes the circle's: the phase C build sent none for a rating it had dropped). `only`: just
+/// these questions (one put back after the read: see `CircleEditModel::inherit_pending`).
+///
+/// (round 17, critic 95 I1) And a question whose difficulty she changed since the first pass after the read (see
+/// `CircleLink::at_read`): her later change supersedes.
+pub fn inherit_difficulty(link: &CircleLink, bank: &mut QuestionBank, sent: Option<&SentRecord>, only: Option<&[String]>) -> Vec<(String, Option<Difficulty>, Option<Difficulty>)> {
     if link.stale_for(bank) {
-        return 0;
+        return Vec::new();
     }
-    // (the bank exactly as the app last wrote it with this link: nothing in it was edited since)
-    let untouched = !link.bank_print.is_empty() && bank_print(bank) == link.bank_print;
-    let since = secs(link.bank_modified);
-    let mut n = 0;
+    let mut moved = Vec::new();
     for b in &link.base {
-        let Some(Some(d)) = b.snap.difficulty else { continue };
-        let Some(q) = bank.questions.iter_mut().find(|q| q.id == b.local_id) else { continue };
-        if q.difficulty.is_some() || !(untouched || secs(q.modified) <= since) {
+        let Some(d) = b.snap.difficulty else { continue };
+        if only.is_some_and(|o| !o.contains(&b.local_id)) {
             continue;
         }
-        q.difficulty = Some(d);
-        n += 1;
+        if sent.is_some_and(|r| r.questions.iter().any(|s| s.q.id == b.local_id && s.q.difficulty.is_some() && s.q.difficulty != d)) {
+            continue;
+        }
+        let Some(q) = bank.questions.iter_mut().find(|q| q.id == b.local_id) else { continue };
+        if link.at_read.as_ref().is_some_and(|r| r.iter().any(|a| a.id == q.id && a.difficulty != q.difficulty)) {
+            continue;
+        }
+        if q.difficulty != d {
+            moved.push((q.id.clone(), q.difficulty, d));
+            q.difficulty = d;
+        }
     }
-    n
+    moved
+}
+
+/// (round 18, critic 97 m6) What an earlier pass of this read already put into the bank, told by the bank as the read found it
+/// (`at_read`): each question that has the circle's difficulty now, and had another one then (id, before, after). A pass whose banks
+/// file was written but whose links file was not is run again after a restart: these go into its news again.
+pub fn inherited_before(link: &CircleLink, bank: &QuestionBank) -> Vec<(String, Option<Difficulty>, Option<Difficulty>)> {
+    let Some(at) = &link.at_read else { return Vec::new() };
+    link.base
+        .iter()
+        .filter_map(|b| {
+            let d = b.snap.difficulty?;
+            let a = at.iter().find(|a| a.id == b.local_id)?;
+            let q = bank.questions.iter().find(|q| q.id == b.local_id)?;
+            (a.difficulty != d && q.difficulty == d).then(|| (q.id.clone(), a.difficulty, d))
+        })
+        .collect()
 }
 
 // ---- the payload ----------------------------------------------------------------------------------------
@@ -486,9 +669,14 @@ pub fn after_send(link: &CircleLink, bank: &QuestionBank, sent: &SentBank) -> Ci
     l.base_version_id = sent.version_id.clone();
     l.head_seen = l.head_seen.max(sent.version);
     l.mark_bank(bank);
-    // (critic 89 I1) the base is the bank as sent: its difficulties are known as written
+    // (critic 89 I1) the base is the bank as sent: its difficulties are known as written, and (round 16) none is left to take
     l.difficulty_read = Some(0);
     l.inherit = false;
+    l.at_read = None;
+    l.pass_times = None;
+    l.missing_at_read = None;
+    // (round 17) the bank as it is was sent
+    l.as_is = false;
     l
 }
 
@@ -534,6 +722,11 @@ pub fn link_from_share(circle_id: &str, circle_name: &str, role: super::circles_
         sent_record: None,
         difficulty_read: Some(0),
         inherit: false,
+        at_read: None,
+        pass_times: None,
+        missing_at_read: None,
+        difficulty_news: None,
+        as_is: false,
     };
     // The bank as it was sent: an edit made while the send was on its way shows as unsent, never as "put back".
     l.mark_bank(bank);
@@ -708,6 +901,17 @@ impl LinkLog {
             self.keep_bad(&bytes);
         }
         Ok(links)
+    }
+
+    /// (round 16, critic 93 minor 1) All the banks, into the banks file beside the links file (none for links in memory).
+    pub fn save_banks(&self, banks: &[QuestionBank]) -> Result<(), String> {
+        match self {
+            LinkLog::Memory(_) => Ok(()),
+            _ => {
+                let bytes = serde_json::to_vec(banks).map_err(|e| e.to_string())?;
+                self.write(BANKS_DOC, &bytes)
+            }
+        }
     }
 
     pub fn save(&self, links: &[CircleLink]) -> Result<(), String> {

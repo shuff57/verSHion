@@ -19,6 +19,8 @@ pub enum ResultKind {
     Session,
     /// (critic 73 minors 1, 6) No answer came in time for a restore or trim: it may still go through.
     NoAnswer,
+    /// (round 16, critic 93 I1) The circle's ratings were put into the bank after the read of its version (or could not be).
+    Ratings,
 }
 
 impl ResultKind {
@@ -34,7 +36,7 @@ impl ResultKind {
             Session => &[Restore, Trim, Send, GetLatest, Unlink, Check],
             // "No answer came for the restore ...": the next restore or trim of the bank says how that one went
             NoAnswer => &[Restore, Trim],
-            Restore | Trim | Unlink | Check => &[],
+            Restore | Trim | Unlink | Check | Ratings => &[],
         }
     }
 }

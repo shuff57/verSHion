@@ -73,27 +73,29 @@ fn send_page(m: &mut CirclesModel, s: &std::sync::Arc<Script>, banks: &mut [Ques
 
 // ---- c87 B1: a link an earlier build wrote learns its difficulties from the circle only -----------------------------------
 
-/// (P1x) HEAD's Get latest kept the teacher's unsent "Hard" on One (it ignored difficulty) and marked the bank. This build
-/// reads the circle's version 4 (One has none): her rating is an unsent change, never "up to date"; Bob's version 5, which
-/// left One alone, never takes it away by default.
+/// (P1x) HEAD's Get latest kept a "Hard" on One (it ignored difficulty) and marked the bank. This build reads the circle's
+/// version 4 (One has none). (round 15, the owner's rule) After the read the copy's difficulty is the circle's: nothing is
+/// counted, and Bob's version 5, which left One alone, is plain.
 #[test]
-fn c87_b1_p1x_a_rating_a_phase_c_merge_kept_is_still_unsent_and_kept() {
+fn c87_b1_p1x_after_the_read_the_copy_has_the_circles_difficulty() {
     let (mut m, s, mut banks, ctx, mut acct) = rig();
     s.keep("Post", "/circles/heads", 200, heads(4));
     phase_c(&mut m, &mut banks, 4, Some(Difficulty::High));
     s.keep_raw("Get", &version_path(4), served_qs(4, vec![rated(QA, "One", None), rated(QB, "Two", None)], false));
     let who = olga_named(&s);
     let strip = frames(&mut m, &mut banks, &ctx, &mut acct, &who, 3);
-    assert_eq!(changes(&mut m, &banks[0].clone()), (0, 1, 0), "{strip}");
-    assert!(strip.contains("You have 1 unsent change") && !strip.contains("up to date"), "{strip}");
-    assert_eq!(badge(&mut m, &banks[0].clone()), "1 unsent change");
+    assert_eq!(banks[0].questions[0].difficulty, None, "{strip}");
+    assert_eq!(changes(&mut m, &banks[0].clone()), (0, 0, 0), "{strip}");
+    assert!(strip.contains("up to date"), "{strip}");
+    // (round 17, critic 96 I1) her High replaced by the circle's none is said until she dismisses it
+    assert_eq!(badge(&mut m, &banks[0].clone()), "difficulty updated");
     frames(&mut m, &mut banks, &ctx, &mut acct, &who, 3);
     assert_eq!(version_reads(&s, 4), 1, "read once");
     let page = latest_as(&mut m, &s, &mut banks, &ctx, &mut acct, &who, merge_start_by(4, 5, "Bob Teacher"), served_qs(5, vec![rated(QA, "One", None), rated(QB, "Two", None)], false));
-    assert_eq!(kinds(&m).unwrap(), vec![RowKind::OursChanged, RowKind::Unchanged], "{page}");
+    assert_eq!(kinds(&m).unwrap(), vec![RowKind::Unchanged, RowKind::Unchanged], "{page}");
     apply(&mut m, &s, &mut banks, &ctx, &mut acct);
-    assert_eq!(banks[0].questions[0].difficulty, Some(Difficulty::High), "her rating stays");
-    assert_eq!(changes(&mut m, &banks[0].clone()), (0, 1, 0), "and is still to send");
+    assert_eq!(banks[0].questions[0].difficulty, None);
+    assert_eq!(changes(&mut m, &banks[0].clone()), (0, 0, 0));
 }
 
 /// (P7) HEAD's Get latest dropped Bob's "Hard" on One (the bank kept none) and marked the bank. This build reads the
@@ -114,7 +116,9 @@ fn c87_b1_p7_a_rating_a_phase_c_merge_dropped_is_inherited() {
 }
 
 /// (P3) "Use my bank as it is" on an earlier build's link whose copy was put back with One rated "Easy": the circle's version
-/// 3 has none, so the rating is what the next send carries (counted), and Get latest never takes it as the circle's.
+/// 3 has none. The bank's rating is never taken for the circle's. (round 16, critic 93 I2) Her choice settles the read: the
+/// bank is sent as it is (Low), whatever the read would have brought; what version 3 rated stays unknown, so the count says a
+/// change to a difficulty can't be counted, and Get latest asks her about One instead of choosing for her.
 #[test]
 fn c87_b1_p3_using_the_bank_as_it_is_never_takes_its_rating_for_the_circles() {
     let (mut m, s, mut banks, ctx, mut acct) = rig();
@@ -124,15 +128,19 @@ fn c87_b1_p3_using_the_bank_as_it_is_never_takes_its_rating_for_the_circles() {
     make_stale(&mut m, LOCAL);
     treat_in_step(&mut m, &s, &mut banks, LOCAL, BID, false);
     let strip = frames(&mut m, &mut banks, &ctx, &mut acct, &olga_named(&s), 3);
-    assert_eq!(changes(&mut m, &banks[0].clone()), (0, 1, 0), "{strip}");
+    assert_eq!(m.edit.with_link(LOCAL, |l| l.base[0].snap.difficulty).unwrap(), None, "{strip}");
+    assert_eq!(banks[0].questions[0].difficulty, Some(Difficulty::Low), "{strip}");
+    let c = m.edit.status_of(&banks[0].clone()).unwrap().changes;
+    assert!(c.partial() && c.total() == 0, "{c:?}: {strip}");
+    assert!(strip.contains("Send my changes"), "{strip}");
     let page = get_latest(&mut m, &s, &mut banks, &ctx, &mut acct, served_qs(4, vec![rated(QA, "One", None)], false));
-    assert_eq!(kinds(&m).unwrap(), vec![RowKind::OursChanged], "{page}");
-    apply(&mut m, &s, &mut banks, &ctx, &mut acct);
-    assert_eq!(banks[0].questions[0].difficulty, Some(Difficulty::Low));
+    assert_eq!(kinds(&m).unwrap(), vec![RowKind::Conflict], "{page}");
+    assert!(page.contains("Choose one to continue"), "nothing chosen for her: {page}");
 }
 
 /// The bank exactly as the app last wrote it is no evidence: a link whose bank print matches learns nothing from the bank,
-/// only from the circle's version (here One is "Hard" in the bank and none in version 3).
+/// only from the circle's version (here One is "Hard" in the bank and none in version 3). (round 15) The copy then has the
+/// circle's.
 #[test]
 fn c87_b1_the_bank_as_last_written_is_never_taken_for_the_circles_version() {
     let (mut m, s, mut banks, ctx, mut acct) = rig();
@@ -148,8 +156,9 @@ fn c87_b1_the_bank_as_last_written_is_never_taken_for_the_circles_version() {
     assert!(!c.known, "{c:?}");
     s.keep_raw("Get", &version_path(3), served_qs(3, vec![rated(QA, "One", None)], false));
     let strip = frames(&mut m, &mut banks, &ctx, &mut acct, &olga_named(&s), 3);
-    assert_eq!(changes(&mut m, &banks[0].clone()), (0, 1, 0), "{strip}");
     assert_eq!(m.edit.with_link(LOCAL, |l| l.base[0].snap.difficulty).unwrap(), Some(None), "the circle's, kept in the link");
+    assert_eq!(banks[0].questions[0].difficulty, None, "{strip}");
+    assert_eq!(changes(&mut m, &banks[0].clone()), (0, 0, 0), "{strip}");
 }
 
 /// The circle's version can't be read (no longer kept): nothing is learnt and it is not asked again on every frame; the
@@ -175,7 +184,7 @@ fn c87_b1_a_base_version_that_cannot_be_read_leaves_the_count_not_complete() {
 }
 
 /// The circle's version read for Get latest (the quiet read had not happened yet) is what the review compares with, and the
-/// link keeps what it learnt.
+/// link keeps what it learnt. (round 15) The copy takes the circle's difficulty before the review is made.
 #[test]
 fn c87_b1_get_latest_learns_the_difficulties_from_the_version_it_reads() {
     let (mut m, s, mut banks, _ctx, _acct) = rig();
@@ -192,7 +201,8 @@ fn c87_b1_get_latest_learns_the_difficulties_from_the_version_it_reads() {
         m.edit.frame(now(), &checking);
         m.edit.sync(&mut banks);
     }
-    assert_eq!(kinds(&m).unwrap(), vec![RowKind::OursChanged]);
+    assert_eq!(kinds(&m).unwrap(), vec![RowKind::Unchanged]);
+    assert_eq!(banks[0].questions[0].difficulty, None);
     assert_eq!(version_reads(&s, 3), 1);
     assert_eq!(m.edit.with_link(LOCAL, |l| l.base[0].snap.difficulty).unwrap(), Some(None));
 }
@@ -218,16 +228,16 @@ fn c87_i1_p2_the_teachers_rating_is_never_undone_by_a_default() {
     m.edit.set_merge_choice(i, Choice::Ours);
     apply(&mut m, &s, &mut banks, &ctx, &mut acct);
     assert_eq!(banks[0].questions[0].difficulty, Some(Difficulty::High));
-    // version 3 readable: One had none there, so it is only hers ("Changed by you"), kept with nothing to decide
+    // (round 15) version 3 readable: One had none there, so after the read the copy has none either: nothing to decide
     let (mut m, s, mut banks, ctx, mut acct) = rig();
     old_base(&mut m);
     s.keep_raw("Get", &version_path(3), served_qs(3, vec![rated(QA, "One", None)], false));
     banks[0].questions[0].difficulty = Some(Difficulty::High);
     banks[0].modified += 5;
     let page = get_latest(&mut m, &s, &mut banks, &ctx, &mut acct, served_qs(4, vec![rated(QA, "One", None)], false));
-    assert_eq!(kinds(&m).unwrap(), vec![RowKind::OursChanged], "{page}");
+    assert_eq!(kinds(&m).unwrap(), vec![RowKind::Unchanged], "{page}");
     apply(&mut m, &s, &mut banks, &ctx, &mut acct);
-    assert_eq!(banks[0].questions[0].difficulty, Some(Difficulty::High));
+    assert_eq!(banks[0].questions[0].difficulty, None);
 }
 
 /// (P2b) The same, Bob also reworded One: no choice is made for her either way. (round 14, critic 90 I2) His rewording is
@@ -275,7 +285,7 @@ fn c87_m1_keep_both_is_not_offered_where_only_the_difficulty_differs() {
     assert!(r.kind == RowKind::Conflict && r.options.contains(&Choice::Both), "{r:?}");
     // (round 14, critic 90 I2) only the circle's wording changed: its change to take or not, never a second copy
     let r = plan_of(None, ("One", None), ("One (b)", Some(Difficulty::High)));
-    assert!(r.kind == RowKind::TheirsChanged && r.options == vec![Choice::Take, Choice::Keep], "{r:?}");
+    assert!(r.kind == RowKind::TheirsChanged && r.options == vec![Choice::Keep, Choice::Take], "{r:?}");
 }
 
 // ---- c87 m2: the person's own version not read because the circle could not be asked ---------------------------------------
@@ -340,13 +350,15 @@ fn c88_i3_a_change_the_unreadable_send_carried_can_be_given_up_for_the_circles()
 
 // ---- c88 I2: a count that is complete except for a difficulty ------------------------------------------------------------------
 
-/// An earlier build's link whose version 3 can't be read, one question added: the badge, the strip and the Send page each say
-/// 1 unsent / 1 added, and the strip and the Send page say why a change to a difficulty may be missing; never "Press Send to
-/// see what you changed", nor "no record of what it looked like" (the copy has every question but the difficulties).
+/// An earlier build's link whose version 3 lacked its questions' difficulties (round 15: read once, nothing more to learn), one
+/// question added: the badge, the strip and the Send page each say 1 unsent / 1 added, and the strip and the Send page say why
+/// a change to a difficulty may be missing; never "Press Send to see what you changed", nor "no record of what it looked like"
+/// (the copy has every question but the difficulties).
 #[test]
 fn c88_i2_what_is_counted_is_said_with_the_difficulty_caveat() {
     let (mut m, s, mut banks, ctx, mut acct) = rig();
     old_base(&mut m);
+    super::bank_links_fix12_tests::read_lacking(&mut m);
     super::bank_links_fix12_tests::not_kept(&s, 3);
     add_question(&mut banks[0]);
     banks[0].modified += 5;
@@ -366,6 +378,7 @@ fn c88_i2_what_is_counted_is_said_with_the_difficulty_caveat() {
 fn c88_i2_with_nothing_counted_the_strip_and_the_send_page_agree() {
     let (mut m, s, mut banks, ctx, mut acct) = rig();
     old_base(&mut m);
+    super::bank_links_fix12_tests::read_lacking(&mut m);
     super::bank_links_fix12_tests::not_kept(&s, 3);
     banks[0].questions[0].difficulty = Some(Difficulty::Low);
     banks[0].modified += 5;
@@ -382,6 +395,7 @@ fn c88_i2_with_nothing_counted_the_strip_and_the_send_page_agree() {
 fn c88_i2_behind_and_not_countable_keeps_you_have_version_and_get_latest_first() {
     let (mut m, s, mut banks, ctx, mut acct) = rig();
     old_base(&mut m);
+    super::bank_links_fix12_tests::read_lacking(&mut m);
     super::bank_links_fix12_tests::not_kept(&s, 3);
     s.keep("Post", "/circles/heads", 200, heads(4));
     m.edit.update_link(LOCAL, |l| {
@@ -589,10 +603,11 @@ fn c88_i2_the_circle_page_line_says_the_same() {
         let l = m.edit.link_for_local(LOCAL).unwrap();
         super::circle_edit_ui::standing(&l, st.as_ref(), false, super::circles_api::Role::Owner).join(" ")
     };
-    assert_eq!(line(&mut m, &banks[0].clone()), "A change to a difficulty can't be counted for this copy.");
+    // (round 16, q93_4) and, as the strip says, that sending is off; (round 17, critic 96 minor 1) and where she can act
+    assert_eq!(line(&mut m, &banks[0].clone()), format!("A change to a difficulty can't be counted for this copy. {}", super::circles_text::NOT_KEPT_ROW));
     add_question(&mut banks[0]);
     banks[0].modified += 5;
-    assert_eq!(line(&mut m, &banks[0].clone()), "Not sent yet: 1 added, 0 changed, 0 removed. A change to a difficulty can't be counted for this copy.");
+    assert_eq!(line(&mut m, &banks[0].clone()), format!("Not sent yet: 1 added, 0 changed, 0 removed. A change to a difficulty can't be counted for this copy. {}", super::circles_text::NOT_KEPT_ROW));
 }
 
 /// (c87 m1) A difficulty and a picture both differ: the two are different questions, so "Keep both" is offered.

@@ -274,12 +274,12 @@ fn the_strip_says_every_state_of_the_table() {
     let mut seen = l.clone();
     seen.role_seen_at = Some(NOW - 2 * DAY);
     let v = strip_view(&StripInput { sign_in: SignIn::Out, ..input(&seen, &unsent) });
-    assert_eq!((v.line.as_str(), v.buttons.clone()), ("Shared with Algebra team. Version 1 when last checked, 2 days ago. Sign in to send or get newer versions.", vec![OpenAccount]));
+    assert_eq!((v.line.as_str(), v.buttons.clone()), ("Shared with Algebra team. Version 1 when last checked, 2 days ago. You have 3 unsent changes. Sign in to send or get newer versions.", vec![OpenAccount]));
     let v = strip_view(&StripInput { check: Check::Offline, ..input(&l, &unsent) });
     assert_eq!((v.line.as_str(), v.buttons.clone()), ("Couldn't check the circle just now. Your bank works as usual.", vec![TryAgain]));
-    // Put back from a saved copy.
+    // Put back from a safety copy.
     let v = strip_view(&input(&l, &status(0, 0, true, true)));
-    assert_eq!((v.line.as_str(), v.buttons.clone()), ("This bank was put back from a saved copy, so verSHion can't tell what you changed since version 1.", vec![GetLatest, TreatInStep, Unlink]));
+    assert_eq!((v.line.as_str(), v.buttons.clone()), ("This bank was put back from a safety copy, so verSHion can't tell what you changed since version 1.", vec![GetLatest, TreatInStep, Unlink]));
     assert!(v.warn);
     // Held back for review.
     let mut held = l.clone();
@@ -688,7 +688,8 @@ pub(super) fn text_of(width: f32, draw: &mut dyn FnMut(&mut egui::Ui)) -> String
         all.clear();
         for s in &out.shapes {
             if let egui::epaint::Shape::Text(t) = &s.shape {
-                all.push_str(t.galley.text());
+                // (round 18) a non-breaking space keeps "Easy -> Hard" on one line: read as a space
+                all.push_str(&t.galley.text().replace('\u{a0}', " "));
                 all.push('\n');
             }
         }

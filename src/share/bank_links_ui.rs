@@ -16,9 +16,15 @@ use crate::{kit, theme};
 pub fn badge(ui: &mut Ui, app: &mut crate::App, bank_id: &str) {
     let crate::App { shared, store, .. } = app;
     let Some(bank) = store.banks.iter().find(|b| b.id == bank_id) else { return };
-    let c = &mut shared.circles;
+    badge_of(ui, &mut shared.circles, bank);
+}
+
+/// [`badge`] with its parts (tests draw it without the app).
+pub(super) fn badge_of(ui: &mut Ui, c: &mut super::circles::CirclesModel, bank: &crate::model::QuestionBank) {
     if let Some(b) = c.links.badge(&mut c.edit, bank) {
-        let warns = c.edit.with_link(bank_id, super::bank_links::badge_warns).unwrap_or(false);
+        // (round 17, critic 96 minor 4) also while the circle's difficulty can't be saved into the bank
+        let status = c.edit.status(&bank.id).cloned();
+        let warns = c.edit.with_link(&bank.id, |l| super::bank_links::badge_warns_with(l, status.as_ref())).unwrap_or(false);
         badge_line(ui, &b, warns);
     }
 }
@@ -219,6 +225,9 @@ fn galley_width(ui: &Ui, t: egui::RichText) -> f32 {
     egui::WidgetText::from(t).into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, egui::TextStyle::Body).size().x
 }
 
+/// (round 18) The room the circle's name keeps on the badge before its note is said in short words.
+const BADGE_NAME_MIN: f32 = 90.0;
+
 /// One line: the pill, the circle's name (cut with an ellipsis when narrow), then the state, which is never cut.
 pub(super) fn badge_line(ui: &mut Ui, b: &Badge, warns: bool) {
     ui.scope(|ui| {
@@ -228,14 +237,29 @@ pub(super) fn badge_line(ui: &mut Ui, b: &Badge, warns: bool) {
             super::shared_ui::step_pill(ui, "Circle", theme::accent_faded(), theme::text_col());
             let name = theme::muted(b.circle.as_str()).size(12.0);
             // (critic 64 polish 11) a copy that can no longer be sent says so in the warning colour
-            let note = b.note.as_ref().map(|n| if warns { egui::RichText::new(format!("· {n}")).color(theme::bad()) } else { theme::accent(format!("· {n}")) }.size(12.0));
-            let note_w = note.clone().map_or(0.0, |n| galley_width(ui, n) + 6.0);
-            let name_w = galley_width(ui, name.clone()).min((ui.available_width() - note_w).max(24.0));
+            let rich = |n: &str| if warns { egui::RichText::new(format!("· {n}")).color(theme::bad()) } else { theme::accent(format!("· {n}")) }.size(12.0);
+            let mut note = b.note.as_deref().map(rich);
+            let mut note_w = note.clone().map_or(0.0, |n| galley_width(ui, n) + 6.0);
+            // (round 16, critic 94 m5) to what is on screen: a Banks list row at 420 px is wider than the window
+            let room = ui.available_width().min(ui.clip_rect().right() - ui.cursor().min.x);
+            // (round 18, critic 98 I2) where the note would leave the circle's name too little room, it is said in short words
+            if let Some(n) = b.note.as_deref()
+                && room - note_w < BADGE_NAME_MIN
+            {
+                let short = rich(&super::bank_links::short_note(n));
+                note_w = galley_width(ui, short.clone()) + 6.0;
+                note = Some(short);
+            }
+            let name_w = galley_width(ui, name.clone()).min((room - note_w).max(24.0));
             ui.allocate_ui_with_layout(egui::vec2(name_w, 16.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
                 ui.add(egui::Label::new(name).truncate());
             });
             if let Some(n) = note {
-                ui.add(egui::Label::new(n).extend());
+                let r = ui.add(egui::Label::new(n).extend());
+                // (round 18, critic 98 minor 8) what its words mean; (round 19, critic 100 minor 2) and why it is red
+                if let Some(h) = b.note.as_deref().and_then(|n| super::bank_links::note_hint_for(n, warns)) {
+                    r.on_hover_text(h);
+                }
             }
         });
     });
@@ -246,12 +270,21 @@ pub(super) fn badge_line(ui: &mut Ui, b: &Badge, warns: bool) {
 /// asks nothing, for a bank with no link. Saves the banks itself when a merge changed them.
 pub fn strip(ui: &mut Ui, app: &mut crate::App, bank_id: &str) -> bool {
     let snap = snapshot_of(&app.account.model);
-    let crate::App { shared, store, browse, account, .. } = app;
-    let out = strip_with(ui, &mut shared.circles, &mut store.banks, &mut browse.model, account, &snap, Instant::now(), now_ms(), bank_id);
+    let crate::App { shared, store, browse, account, qedit, .. } = app;
+    let out = strip_for_editor(ui, &mut shared.circles, &mut store.banks, &mut browse.model, account, &snap, Instant::now(), now_ms(), bank_id, qedit.as_mut());
     if out.save {
         store.save_banks();
     }
     out.page
+}
+
+/// [`strip_with`], then (round 15, critic 91 I1) the open question editor's draft is told of a difficulty just taken from the
+/// circle, before the editor is drawn (round 16, survivor m38: the page's own wiring, tested).
+#[allow(clippy::too_many_arguments)]
+pub(super) fn strip_for_editor(ui: &mut Ui, c: &mut super::circles::CirclesModel, banks: &mut [crate::model::QuestionBank], browse: &mut super::browse::BrowseModel, account: &mut dyn AccountHooks, snap: &super::publish::AccountSnapshot, now: Instant, ms: i64, bank_id: &str, draft: Option<&mut crate::qedit::Draft>) -> StripOut {
+    let out = strip_with(ui, c, banks, browse, account, snap, now, ms, bank_id);
+    super::circle_edit::refresh_draft(draft, &c.edit.take_inherited());
+    out
 }
 
 /// What the bank's page needs of the account window (tests give a stand-in: the real one may read the keychain).
@@ -320,6 +353,10 @@ pub(super) fn strip_with(ui: &mut Ui, c: &mut super::circles::CirclesModel, bank
     }
     if c.links.busy() || c.edit.busy() {
         ctx.request_repaint_after(std::time::Duration::from_millis(500));
+    } else if c.edit.status(bank_id).is_some_and(|s| s.learning.is_some()) {
+        // (round 16, critic 94 m2) a copy waiting for the circle: its read is asked again on time, and what the strip says
+        // follows it, without the person moving the mouse
+        ctx.request_repaint_after(std::time::Duration::from_secs(1));
     }
     if unreadable.is_some() {
         let mut again = false;
@@ -368,8 +405,14 @@ pub(super) fn strip_with(ui: &mut Ui, c: &mut super::circles::CirclesModel, bank
     });
     // (critic 71) this bank's own results, each with Dismiss, and (critic 67 I3) the wait note after them
     let notes: Vec<(Option<u64>, String)> = c.edit.results_of(bank_id).into_iter().map(|(id, t)| (Some(id), t)).chain(c.edit.wait_note().map(|w| (None, w))).collect();
-    draw_strip(ui, &view, &mut |b| pressed = Some(b), &mut |m| menu = Some(m), Some((asked, notes)));
-    let needs_account = matches!(pressed, Some(StripButton::Send | StripButton::GetLatest | StripButton::History | StripButton::TreatInStep | StripButton::TryAgain)) || matches!(menu, Some(Menu::History | Menu::CheckNow));
+    // (round 17, critic 96 I1) what the circle's difficulty replaced, until she dismisses it
+    let ask_put_all = c.edit.put_all_asked(bank_id);
+    // (round 20, critic 100 minor 6) at a narrow width the question is named by less of its stem, so a row stays two or three
+    // lines instead of four
+    let title_chars = if ui.available_width() < 520.0 { 28 } else { 60 };
+    let news = c.edit.with_link(bank_id, |l| news_view(l, bank, ask_put_all, title_chars)).flatten();
+    draw_strip_news(ui, &view, &mut |b| pressed = Some(b), &mut |m| menu = Some(m), Some((asked, notes)), news.as_ref());
+    let needs_account = matches!(pressed, Some(StripButton::Send | StripButton::GetLatest | StripButton::History | StripButton::TreatInStep | StripButton::TryAgain | StripButton::CheckNow)) || matches!(menu, Some(Menu::History | Menu::CheckNow));
     if needs_account && !account.is_open() {
         account.open_quiet();
     }
@@ -404,7 +447,16 @@ pub(super) fn strip_with(ui: &mut Ui, c: &mut super::circles::CirclesModel, bank
             c.links.check_now(bank_id);
             account.reveal();
         }
-        Some(StripButton::TryAgain) => c.links.check_now(bank_id),
+        // (round 15) and the circle's version a copy an earlier build linked waits for
+        Some(StripButton::TryAgain) => {
+            c.links.check_now(bank_id);
+            c.edit.read_base_again(bank_id);
+        }
+        // (round 19, critic 100 I1) and the strip says how it went
+        Some(StripButton::CheckNow) => {
+            c.links.check_now_pressed(bank_id, now);
+            c.edit.read_base_again(bank_id);
+        }
         Some(StripButton::Unlink) => c.edit.ask_forget(bank_id),
         Some(StripButton::AddFullCopy) => super::shared_ui::open_circle(&ctx, &cid, Some(&bid)),
     }
@@ -415,13 +467,71 @@ pub(super) fn strip_with(ui: &mut Ui, c: &mut super::circles::CirclesModel, bank
             hosted_now(c, opened);
         }
         Some(Menu::CirclePage) => super::shared_ui::open_circle(&ctx, &cid, Some(&bid)),
-        Some(Menu::CheckNow) => c.links.check_now(bank_id),
+        Some(Menu::CheckNow) => {
+            c.links.check_now_pressed(bank_id, now);
+            c.edit.read_base_again(bank_id);
+        }
         Some(Menu::Unlink) => c.edit.ask_forget(bank_id),
         Some(Menu::ConfirmUnlink) => c.edit.confirm_forget(bank_id),
         Some(Menu::KeepLink) => c.edit.cancel_forget(),
         Some(Menu::Dismiss(id)) => c.edit.dismiss_result(id),
+        Some(Menu::PutBack(i)) => {
+            if let Some(qid) = news.as_ref().and_then(|n| n.rows.get(i)).map(|r| r.qid.clone()) {
+                out.save |= c.edit.put_mine_back(banks, bank_id, &qid);
+            }
+        }
+        Some(Menu::DismissNews) => {
+            c.edit.cancel_put_all();
+            c.edit.dismiss_news(bank_id);
+        }
+        // (round 20, critic 100 minor 4) asked first, then done
+        Some(Menu::PutAllBack) => c.edit.ask_put_all(bank_id),
+        Some(Menu::ConfirmPutAllBack) => {
+            c.edit.cancel_put_all();
+            out.save |= c.edit.put_all_mine_back(banks, bank_id);
+        }
+        Some(Menu::KeepNews) => c.edit.cancel_put_all(),
     }
     out
+}
+
+/// (round 17, critic 96 I1) The difficulty news as the strip draws it: the words over the list, then each question.
+pub(super) struct NewsView {
+    pub head: String,
+    pub rows: Vec<NewsRow>,
+    /// (round 20, critic 100 minor 4) "Put all of mine back" was pressed: the news asks before it puts anything back.
+    pub ask_put_all: bool,
+    /// How many rows offer "Put mine back": what "Put all of mine back" would put back.
+    pub offered: usize,
+}
+
+pub(super) struct NewsRow {
+    pub qid: String,
+    pub line: String,
+    /// "Put mine back" is offered: hers differs from what the question has now.
+    pub can_put_back: bool,
+}
+
+/// The news of `bank`'s link: each question named by its place and its stem, before -> after, as it stands now (round 18, critic
+/// 98 I1: "Put mine back" only where the question still has the circle's difficulty from the read, at that version).
+pub(super) fn news_view(link: &super::circle_links::CircleLink, bank: &crate::model::QuestionBank, ask_put_all: bool, title_chars: usize) -> Option<NewsView> {
+    use super::circle_links::{NewsState, news_state};
+    use super::circles_text as t;
+    let n = link.difficulty_news.as_ref()?;
+    let rows: Vec<NewsRow> = n
+        .questions
+        .iter()
+        .map(|item| {
+            let at = bank.questions.iter().position(|q| q.id == item.id);
+            let q = at.map(|i| &bank.questions[i]);
+            let title = q.map(|q| super::merge::short_title(&q.stem, title_chars)).unwrap_or_default();
+            let state = news_state(link, item, bank);
+            NewsRow { qid: item.id.clone(), line: t::news_row(at.map(|i| i + 1), &title, item.before, item.after, state), can_put_back: state == NewsState::Replaced }
+        })
+        .collect();
+    let offered = rows.iter().any(|r| r.can_put_back);
+    let count = rows.iter().filter(|r| r.can_put_back).count();
+    Some(NewsView { head: t::news_head(n.version, n.questions.len(), offered, super::circle_links::news_settled(link, bank)), rows, ask_put_all, offered: count })
 }
 
 /// The strip's button: the first is the big one only when it is a real next step (never History or Unlink).
@@ -443,6 +553,93 @@ pub(super) enum Menu {
     KeepLink,
     /// "Dismiss" on one of the bank's results.
     Dismiss(u64),
+    /// (round 17, critic 96 I1) "Put mine back" on the difficulty news's row, and "Dismiss" on it.
+    PutBack(usize),
+    DismissNews,
+    /// (round 18, critic 98 minor 6) "Put all of mine back".
+    PutAllBack,
+    /// (round 20, critic 100 minor 4) its yes, and its "Keep them".
+    ConfirmPutAllBack,
+    KeepNews,
+}
+
+/// (round 18, critic 98 minor 6) How many rows of the difficulty news are drawn before "Show all".
+pub(super) const NEWS_SHOWN: usize = 5;
+
+/// (round 17, critic 96 I1; round 18, critic 98 minor 6) The difficulty news under the strip's line: its words, each question with
+/// its "Put mine back" in one column at the right, "Put all of mine back" when more than two offer it, a long list shortened with
+/// "Show all", and Dismiss with what it does; set apart from the strip's own buttons below it.
+fn news_list(ui: &mut Ui, n: &NewsView, menu: &mut dyn FnMut(Menu)) {
+    ui.add_space(6.0);
+    ui.add(egui::Label::new(theme::text(n.head.as_str()).size(12.5)).wrap());
+    ui.add_space(2.0);
+    let key = ui.make_persistent_id(("circle_news_all", n.rows.first().map(|r| r.qid.as_str()).unwrap_or("")));
+    let all = ui.data(|d| d.get_temp::<bool>(key)).unwrap_or(false);
+    let shown = if all { n.rows.len() } else { n.rows.len().min(NEWS_SHOWN) };
+    let button_w = galley_width(ui, egui::RichText::new(super::circles_text::PUT_MINE_BACK).size(13.0)) + 2.0 * ui.spacing().button_padding.x + 4.0;
+    let gap = ui.spacing().item_spacing.x;
+    // (round 20, critic 100 minor 6) the buttons keep one column, but the column sits just past the widest line that offers one,
+    // not at the far edge of a wide page; a row with no button keeps the whole width, with no empty column made for it
+    let room = ui.available_width();
+    let widest = n.rows.iter().take(shown).filter(|r| r.can_put_back).map(|r| galley_width(ui, theme::text(r.line.as_str()).size(12.5))).fold(0.0_f32, f32::max);
+    let col_w = widest.clamp(120.0, (room - button_w - gap).max(120.0));
+    for (i, r) in n.rows.iter().enumerate().take(shown) {
+        let w = if r.can_put_back { col_w } else { room };
+        ui.horizontal_top(|ui| {
+            ui.allocate_ui_with_layout(egui::vec2(w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                ui.set_width(w);
+                ui.add(egui::Label::new(theme::text(r.line.as_str()).size(12.5)).wrap());
+            });
+            if r.can_put_back && kit::ghost_button(ui, super::circles_text::PUT_MINE_BACK).clicked() {
+                menu(Menu::PutBack(i));
+            }
+        });
+    }
+    let offered = n.rows.iter().filter(|r| r.can_put_back).count();
+    let put_all = n.rows.len() > 2 && offered >= 2;
+    // (no empty line when neither is offered)
+    if n.rows.len() <= NEWS_SHOWN && !put_all {
+        news_dismiss(ui, menu);
+        return;
+    }
+    ui.horizontal_wrapped(|ui| {
+        if n.rows.len() > NEWS_SHOWN {
+            let label = if all { "Show fewer".to_string() } else { format!("Show all {}", n.rows.len()) };
+            if kit::ghost_button(ui, &label).clicked() {
+                ui.data_mut(|d| d.insert_temp(key, !all));
+            }
+        }
+        if put_all && !n.ask_put_all && kit::ghost_button(ui, "Put all of mine back").clicked() {
+            menu(Menu::PutAllBack);
+        }
+    });
+    // (round 20, critic 100 minor 4) "Put all of mine back" over eight questions asks first: one press never changes eight
+    // questions without a way to stop it
+    if put_all && n.ask_put_all {
+        ui.add_space(4.0);
+        ui.add(egui::Label::new(theme::text(super::circles_text::put_all_ask(n.offered).as_str()).size(12.5)).wrap());
+        ui.horizontal_wrapped(|ui| {
+            if kit::danger_text_button(ui, "Yes, put all back").clicked() {
+                menu(Menu::ConfirmPutAllBack);
+            }
+            if kit::ghost_button(ui, "Keep them").clicked() {
+                menu(Menu::KeepNews);
+            }
+        });
+    }
+    news_dismiss(ui, menu);
+}
+
+/// Dismiss with what it does, then the line that sets the news apart from the strip's own buttons.
+fn news_dismiss(ui: &mut Ui, menu: &mut dyn FnMut(Menu)) {
+    super::circles_ui::text_row(ui, |ui| {
+        ui.add(egui::Label::new(theme::muted(super::circles_text::NEWS_DISMISS).size(12.0)).wrap());
+        if kit::ghost_button(ui, "Dismiss").clicked() {
+            menu(Menu::DismissNews);
+        }
+    });
+    ui.add_space(4.0);
+    ui.separator();
 }
 
 /// The strip: the pill and the sentence, then the buttons (primary first) and "..." (History, Circle page, Check
@@ -450,6 +647,12 @@ pub(super) enum Menu {
 /// results, each with the id its Dismiss gives back, then the wait note); `None` for the unreadable-file strip, which
 /// has no menu.
 pub(super) fn draw_strip(ui: &mut Ui, v: &StripView, press: &mut dyn FnMut(StripButton), menu: &mut dyn FnMut(Menu), more: Option<StripMore>) {
+    draw_strip_news(ui, v, press, menu, more, None);
+}
+
+/// [`draw_strip`], with (round 17, critic 96 I1) the difficulty news under the strip's line: its words, each question with "Put
+/// mine back", and a Dismiss.
+pub(super) fn draw_strip_news(ui: &mut Ui, v: &StripView, press: &mut dyn FnMut(StripButton), menu: &mut dyn FnMut(Menu), more: Option<StripMore>, news: Option<&NewsView>) {
     let fill = if v.warn { theme::error_wash() } else { theme::accent_faded() };
     egui::Frame::new().fill(fill).corner_radius(8).inner_margin(Margin::symmetric(12, 10)).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
@@ -460,6 +663,9 @@ pub(super) fn draw_strip(ui: &mut Ui, v: &StripView, press: &mut dyn FnMut(Strip
             }
             ui.add(egui::Label::new(theme::text(v.line.as_str()).size(13.0)).wrap());
         });
+        if let Some(n) = news {
+            news_list(ui, n, menu);
+        }
         let Some((asked, notes)) = more else {
             if !v.buttons.is_empty() {
                 ui.add_space(6.0);
@@ -490,7 +696,8 @@ pub(super) fn draw_strip(ui: &mut Ui, v: &StripView, press: &mut dyn FnMut(Strip
                     press(*b);
                 }
             }
-            let r = kit::ghost_button(ui, "...").on_hover_text("More: history, the circle's page, check now, unlink");
+            // (round 18, critic 98 minor 11) the hint names what the menu offers
+            let r = kit::ghost_button(ui, "...").on_hover_text(more_hint(v));
             egui::Popup::menu(&r).show(|ui| {
                 ui.set_min_width(170.0);
                 if v.menu_history && !v.buttons.contains(&StripButton::History) && ui.button("History of the bank").clicked() {
@@ -501,7 +708,7 @@ pub(super) fn draw_strip(ui: &mut Ui, v: &StripView, press: &mut dyn FnMut(Strip
                     menu(Menu::CirclePage);
                     ui.close();
                 }
-                if !v.busy && ui.button("Check now").clicked() {
+                if v.menu_check && !v.busy && !v.buttons.contains(&StripButton::CheckNow) && ui.button("Check now").clicked() {
                     menu(Menu::CheckNow);
                     ui.close();
                 }
@@ -525,4 +732,23 @@ pub(super) fn draw_strip(ui: &mut Ui, v: &StripView, press: &mut dyn FnMut(Strip
         }
     });
     ui.add_space(10.0);
+}
+
+/// (round 18, critic 98 minor 11) The "..." button's hint: what its menu offers for this strip.
+pub(super) fn more_hint(v: &StripView) -> String {
+    let mut items = Vec::new();
+    if v.menu_history && !v.buttons.contains(&StripButton::History) {
+        items.push("history");
+    }
+    if v.menu_circle_page {
+        // (round 20, critic 100 minor 11) the menu's own words, "Circle page", not a second name for it
+        items.push("circle page");
+    }
+    if v.menu_check && !v.busy && !v.buttons.contains(&StripButton::CheckNow) {
+        items.push("check now");
+    }
+    if !v.buttons.contains(&StripButton::Unlink) {
+        items.push("unlink");
+    }
+    format!("More: {}", items.join(", "))
 }

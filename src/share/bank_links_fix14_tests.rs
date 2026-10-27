@@ -109,7 +109,8 @@ fn c90_i1_a_rating_the_phase_c_merge_dropped_is_inherited_never_counted_as_hers(
     assert_eq!(changes(&mut m, &banks[0].clone()), (0, 0, 0), "{strip}");
     assert_eq!(m.edit.with_link(LOCAL, |l| l.inherit), Some(false), "done: nothing left to inherit");
     assert!(!strip.contains("unsent change") && strip.contains("up to date"), "{strip}");
-    assert_eq!(badge(&mut m, &banks[0].clone()), "");
+    // (round 17, critic 96 I1) the news of it, until dismissed
+    assert_eq!(badge(&mut m, &banks[0].clone()), "difficulty updated");
     // (not an edit of hers: the question's own time is kept)
     assert_eq!(banks[0].questions[0].modified, NOW);
     // the next send carries his rating
@@ -201,10 +202,10 @@ fn c90_i1_an_edit_elsewhere_does_not_stop_the_inheritance() {
     assert_eq!(changes(&mut m, &banks[0].clone()), (0, 1, 0), "only her edit of Two: {strip}");
 }
 
-/// A later deliberate change of hers supersedes: she cleared One's rating after the copy last matched (the question's own
-/// time says so). That is hers: counted, and kept.
+/// (round 15, the owner's rule, accepted) She cleared One's rating after the copy last matched, before the read: the read
+/// fills it again with the circle's. Only a change made after the read is hers.
 #[test]
-fn c90_i1_her_own_later_clearing_of_a_rating_is_hers() {
+fn c90_i1_a_rating_cleared_before_the_read_is_filled_again() {
     let (mut m, s, mut banks, ctx, mut acct) = rig();
     s.keep("Post", "/circles/heads", 200, heads(3));
     phase_c(&mut m, &mut banks, 3, None, None);
@@ -212,21 +213,21 @@ fn c90_i1_her_own_later_clearing_of_a_rating_is_hers() {
     banks[0].modified = NOW / 1000 + 60;
     s.keep_raw("Get", &version_path(3), served_qs(3, vec![rated(QA, "One", Some("High")), rated(QB, "Two", None)], false));
     let strip = frames(&mut m, &mut banks, &ctx, &mut acct, &olga_named(&s), 3);
-    assert_eq!(banks[0].questions[0].difficulty, None, "{strip}");
-    assert_eq!(changes(&mut m, &banks[0].clone()), (0, 1, 0), "{strip}");
+    assert_eq!(banks[0].questions[0].difficulty, Some(Difficulty::High), "{strip}");
+    assert_eq!(changes(&mut m, &banks[0].clone()), (0, 0, 0), "{strip}");
 }
 
-/// Only a rating the copy lacks is inherited: a rating of hers the circle's version 3 does not have stays hers (critic 87's
-/// P1x), and so does one that differs from the circle's.
+/// (round 15, the owner's rule; critic 91 I3) A rating the copy has is replaced by the circle's too: one the circle's version
+/// 3 does not have, and one that differs from the circle's.
 #[test]
-fn c90_i1_a_rating_the_copy_has_is_never_replaced() {
+fn c90_i1_a_rating_the_copy_has_is_replaced_by_the_circles() {
     let (mut m, s, mut banks, ctx, mut acct) = rig();
     s.keep("Post", "/circles/heads", 200, heads(3));
     phase_c(&mut m, &mut banks, 3, Some(Difficulty::Low), Some(Difficulty::High));
     s.keep_raw("Get", &version_path(3), served_qs(3, vec![rated(QA, "One", Some("High")), rated(QB, "Two", None)], false));
     let strip = frames(&mut m, &mut banks, &ctx, &mut acct, &olga_named(&s), 3);
-    assert_eq!((banks[0].questions[0].difficulty, banks[0].questions[1].difficulty), (Some(Difficulty::Low), Some(Difficulty::High)), "{strip}");
-    assert_eq!(changes(&mut m, &banks[0].clone()), (0, 2, 0), "{strip}");
+    assert_eq!((banks[0].questions[0].difficulty, banks[0].questions[1].difficulty), (Some(Difficulty::High), None), "{strip}");
+    assert_eq!(changes(&mut m, &banks[0].clone()), (0, 0, 0), "{strip}");
 }
 
 /// A bank put back from a saved copy (older than the link, and different): what it was last in step with is not known, so
@@ -273,8 +274,8 @@ fn c90_i2_a_colleagues_rewording_is_changed_in_the_circle_and_undecided() {
     let rows = rows_of(&m);
     let r = &rows[0];
     assert_eq!((r.kind, r.choice, r.unrecorded), (RowKind::TheirsChanged, Choice::Undecided, false), "{page}");
-    assert_eq!(r.options, vec![Choice::Take, Choice::Keep]);
-    assert!(r.note.as_deref().is_some_and(|n| n.contains("not known whose rating is newer") && n.contains("then not kept")), "{r:?}");
+    assert_eq!(r.options, vec![Choice::Keep, Choice::Take]);
+    assert!(r.note.as_deref().is_some_and(|n| n.contains("not known whose difficulty is newer") && n.contains("then not kept")), "{r:?}");
     assert!(page.contains("1 changed in the circle") && !page.contains("Difficulty not recorded") && !page.contains("difficulty not recorded"), "{page}");
     assert!(page.contains("Choose one to continue") && page.contains("1 question still needs a decision"), "{page}");
     assert!(page.contains("Take the circle's version") && page.contains("Keep mine"), "{page}");
@@ -340,12 +341,14 @@ fn c89_i1_a_base_filled_from_the_bank_is_learnt_again_from_the_circle() {
     let strip = frames(&mut m, &mut banks, &ctx, &mut acct, &who, 3);
     assert_eq!(version_reads(&s, 4), 1, "{strip}");
     assert_eq!(one_of(&mut m), Some(None));
-    assert_eq!(changes(&mut m, &banks[0].clone()), (0, 1, 0), "{strip}");
-    assert!(strip.contains("You have 1 unsent change"), "{strip}");
+    // (round 15, the owner's rule) the copy then has the circle's difficulty
+    assert_eq!(banks[0].questions[0].difficulty, None, "{strip}");
+    assert_eq!(changes(&mut m, &banks[0].clone()), (0, 0, 0), "{strip}");
+    assert!(strip.contains("up to date"), "{strip}");
     let page = latest_as(&mut m, &s, &mut banks, &ctx, &mut acct, &who, merge_start_by(4, 5, "Bob Teacher"), served_qs(5, vec![rated(QA, "One", None), rated(QB, "Two", None)], false));
-    assert_eq!(kinds(&m).unwrap(), vec![RowKind::OursChanged, RowKind::Unchanged], "{page}");
+    assert_eq!(kinds(&m).unwrap(), vec![RowKind::Unchanged, RowKind::Unchanged], "{page}");
     apply(&mut m, &s, &mut banks, &ctx, &mut acct);
-    assert_eq!(banks[0].questions[0].difficulty, Some(Difficulty::High));
+    assert_eq!(banks[0].questions[0].difficulty, None);
     assert_eq!(version_reads(&s, 4), 1, "read once");
     // the merge wrote the base as the circle's version 5 is: nothing to read for it
     frames(&mut m, &mut banks, &ctx, &mut acct, &who, 3);
@@ -433,8 +436,8 @@ fn c89_p6_a_phase_c_file_loads_and_learns() {
 
 // ---- critic 89 m1: a partly learnt link's count -------------------------------------------------------------------------------
 
-/// (P1) Version 4 holds One but Two under another id: One's difficulty is learnt, Two's not. Her "High" on One, which the
-/// circle does not have, is counted at once (the count is worked out again after the read).
+/// (P1) Version 4 holds One but Two under another id: One's difficulty is learnt, Two's not. (round 15) One takes the
+/// circle's (none) at once, and the count is worked out again after the read: nothing counted, Two's difficulty not known.
 #[test]
 fn c89_m1_a_partly_learnt_link_counts_what_was_learnt() {
     let (mut m, s, mut banks, ctx, mut acct) = rig();
@@ -444,7 +447,8 @@ fn c89_m1_a_partly_learnt_link_counts_what_was_learnt() {
     let who = olga_named(&s);
     frames(&mut m, &mut banks, &ctx, &mut acct, &who, 4);
     let c = st(&mut m, &banks[0].clone());
-    assert_eq!(c.changed, 1, "{c:?}");
+    assert_eq!(banks[0].questions[0].difficulty, None);
+    assert_eq!(c.changed, 0, "{c:?}");
     assert!(c.partial(), "{c:?}");
 }
 
@@ -511,7 +515,7 @@ fn c89_m2_get_latest_reads_the_base_version_once() {
     let page = latest_as(&mut m, &s, &mut banks, &ctx, &mut acct, &who, merge_start_by(4, 5, "Bob Teacher"), served_qs(5, vec![rated(QA, "One", None), rated(QB, "Two", None)], false));
     frames(&mut m, &mut banks, &ctx, &mut acct, &who, 3);
     assert_eq!(version_reads(&s, 4), 1, "{page}");
-    assert_eq!(kinds(&m).unwrap(), vec![RowKind::OursChanged, RowKind::Unchanged], "{page}");
+    assert_eq!(kinds(&m).unwrap(), vec![RowKind::Unchanged, RowKind::Unchanged], "{page}");
 }
 
 /// The quiet read is on its way (held at the server) when Get latest is pressed: the merge waits for it and reads the base
@@ -545,7 +549,7 @@ fn c89_m2_get_latest_uses_the_quiet_read_on_its_way() {
     release.send(()).unwrap();
     quiet_until(&mut m, &mut banks, &who, now(), &|m| kinds(m).is_some());
     assert_eq!(version_reads(&s, 4), 1, "{:?}", s.paths());
-    assert_eq!(kinds(&m).unwrap(), vec![RowKind::OursChanged, RowKind::Unchanged]);
+    assert_eq!(kinds(&m).unwrap(), vec![RowKind::Unchanged, RowKind::Unchanged]);
 }
 
 /// A screen opened or closed while the quiet read is on its way keeps it: the base version is not asked a second time. Another
@@ -568,7 +572,8 @@ fn c89_m2_a_quiet_read_on_its_way_outlives_the_screens() {
         }
         match how {
             "close" => m.edit.close(),
-            "send" => assert!(m.edit.open_send(LOCAL, owner())),
+            // (round 15, critic 91 I2) no Send page before the read: the read on its way is left alone
+            "send" => assert!(!m.edit.open_send(LOCAL, owner())),
             "history" => assert!(m.edit.open_history(CID, BID, "Cells", owner())),
             _ => m.edit.forget_account(true),
         }

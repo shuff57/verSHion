@@ -421,8 +421,13 @@ impl Delta {
 }
 
 fn title_of(stem: &str) -> String {
+    short_title(stem, 90)
+}
+
+/// (round 17) A question's stem as one line of at most `max` characters (and "...").
+pub(super) fn short_title(stem: &str, max: usize) -> String {
     let p = text::shown(stem);
-    if p.chars().count() > 90 { format!("{}...", p.chars().take(90).collect::<String>()) } else { p }
+    if p.chars().count() > max { format!("{}...", p.chars().take(max).collect::<String>()) } else { p }
 }
 
 fn pic(s: &Option<String>) -> String {
@@ -644,8 +649,8 @@ fn unrecorded_note(old_version: u64) -> String {
 
 /// (critic 90 I2) The pool changed the question otherwise, and its difficulty differs from the person's where this computer has
 /// no record of it in `old_version`: what each choice takes, and what keeping theirs gives up.
-fn changed_unrecorded_note(old_version: u64) -> String {
-    format!("The pool changed this question since version {old_version}. Its difficulty also differs from yours, and this computer has no record of its difficulty in version {old_version}, so it is not known whose rating is newer. Take the pool's version to get its changes and its rating, or keep yours: the pool's changes to this question are then not kept.")
+pub(super) fn changed_unrecorded_note(old_version: u64) -> String {
+    format!("The pool changed this question since version {old_version}. Its difficulty also differs from yours, and this computer has no record of its difficulty in version {old_version}, so it is not known whose difficulty is newer. \"Take the pool's version\" to get its changes and its difficulty, or \"Keep mine\": the pool's changes to this question are then not kept.")
 }
 
 /// (critic 87 m1) The two questions differ in their difficulty and in nothing else a send carries (their pictures compared
@@ -737,7 +742,8 @@ pub fn build_plan(
         // either's) and the note saying what keeping theirs gives up.
         if unrecorded && known == (false, true) {
             row.kind = RowKind::TheirsChanged;
-            row.options = vec![Choice::Take, Choice::Keep];
+            // (critic 92 I3) every card: Keep mine first, then the other side's version
+            row.options = vec![Choice::Keep, Choice::Take];
             row.note = Some(changed_unrecorded_note(old_version));
             rows.push(row);
             continue;
@@ -746,7 +752,7 @@ pub fn build_plan(
             (false, false) => row.kind = RowKind::Unchanged,
             (false, true) => {
                 row.kind = RowKind::TheirsChanged;
-                row.options = vec![Choice::Take, Choice::Keep];
+                row.options = vec![Choice::Keep, Choice::Take];
                 row.choice = Choice::Take;
             }
             (true, false) => {
@@ -765,7 +771,7 @@ pub fn build_plan(
                     row.note = Some("You and the pool made the same change.".into());
                 } else if key_only {
                     row.kind = RowKind::TheirsChanged;
-                    row.options = vec![Choice::Take, Choice::Keep];
+                    row.options = vec![Choice::Keep, Choice::Take];
                     row.choice = Choice::Take;
                     row.carry_key = true;
                     row.note = Some("The pool changed this question and you entered its answer key. The pool's wording is taken and your key is kept.".into());
@@ -776,10 +782,11 @@ pub fn build_plan(
                     if row.ours_rekeyed && is_keyless(&t.q) {
                         if shape(&o.kind) == shape(&t.q.kind) {
                             row.carry_key = true;
-                            row.note = Some("Both changed this. If you use the pool's, your answer key is kept.".into());
+                            // (critic 94 m8) the choices named as the buttons name them
+                            row.note = Some("Both changed this. If you take the pool's version, your answer key is kept.".into());
                         } else {
                             row.options = vec![Choice::Ours, Choice::Both];
-                            row.note = Some("You entered an answer key and the pool changed the choices, so the pool's version can not take your key. Keep yours, or keep both.".into());
+                            row.note = Some("You entered an answer key and the pool changed the choices, so the pool's version can not take your key. Choose \"Keep mine\" or \"Keep both\".".into());
                         }
                     } else if unrecorded && !(known.0 && known.1) {
                         // (critic 86 I1) Only the difficulty, which this computer has no record of, makes it a decision: never

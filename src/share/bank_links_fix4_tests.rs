@@ -41,7 +41,8 @@ pub(super) fn frame_text(ctx: &egui::Context, draw: &mut dyn FnMut(&mut egui::Ui
     let mut all = String::new();
     for s in &out.shapes {
         if let egui::epaint::Shape::Text(t) = &s.shape {
-            all.push_str(t.galley.text());
+            // (round 18) a non-breaking space keeps "Easy -> Hard" on one line: read as a space
+            all.push_str(&t.galley.text().replace('\u{a0}', " "));
             all.push('\n');
         }
     }

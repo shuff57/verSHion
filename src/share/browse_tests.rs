@@ -2183,7 +2183,10 @@ fn an_import_recorded_with_no_difficulty_says_so_and_decides_nothing() {
     assert!(!page.contains("CONFLICT") && !page.contains("both changed"), "{page}");
     assert!(page.contains("no record of this question's difficulty") && page.contains("Choose which to keep"), "{page}");
     assert!(page.contains("1 question still needs a decision") && !page.contains("1 conflict still needs"), "{page}");
-    assert!(page.contains("Use the pool's version") && page.contains("Keep mine"), "{page}");
+    // (critic 92 I3) the same words and order as every other card: Keep mine, then Take the pool's version
+    assert!(!page.contains("Use the pool's version"), "{page}");
+    let (keep, take) = (page.find("Keep mine").expect(&page), page.find("Take the pool's version").expect(&page));
+    assert!(keep < take, "{page}");
     m.set_merge_choice(i, Choice::Ours);
     assert!(m.can_apply_merge());
 }
@@ -2353,4 +2356,43 @@ fn c61_the_same_account_signed_in_again_keeps_its_item() {
     m.frame(now(), &a);
     assert_eq!(m.screen, Screen::Item);
     assert!(m.loaded().is_some());
+}
+
+// -- round 16 (critic 93 survivor m43, critic 94 m8) --------------------------------------------------------------------------------
+
+/// (survivor m43) The "you entered its answer key" card lists Keep mine first, then the pool's version (critic 92 I3's order).
+#[test]
+fn r16_the_key_only_card_lists_keep_mine_first() {
+    let mut sc = Scn::new(&K1, "stripped", &[]);
+    rekey(&mut sc.banks[0].questions[0], 1);
+    let v2 = [("q0", "alpha v2"), ("q1", "beta"), ("q2", "gamma")];
+    let m = sc.review(2, "CC-BY-4.0", "stripped", &v2, &[]);
+    let r = row_of(&m, "alpha").1;
+    assert_eq!((r.kind, r.carry_key, r.options.clone()), (RowKind::TheirsChanged, true, vec![Choice::Keep, Choice::Take]));
+}
+
+/// (critic 94 m8) The cards' notes name the choices as the buttons do ("Take the pool's version", "Keep mine", "Keep both"),
+/// never "if you use the pool's" or "keep yours".
+#[test]
+fn r16_the_notes_name_the_choices_as_the_buttons_do() {
+    // both changed, the key kept if the pool's version is taken
+    let mut sc = Scn::new(&K1, "stripped", &[]);
+    rekey(&mut sc.banks[0].questions[0], 1);
+    sc.banks[0].questions[0].stem = "alpha (mine)".into();
+    let v2 = [("q0", "alpha v2"), ("q1", "beta"), ("q2", "gamma")];
+    let m = sc.review(2, "CC-BY-4.0", "stripped", &v2, &[]);
+    let r = row_of(&m, "alpha (mine)").1;
+    assert_eq!((r.kind, r.carry_key), (RowKind::Conflict, true));
+    assert_eq!(r.note.as_deref(), Some("Both changed this. If you take the pool's version, your answer key is kept."));
+    // the pool changed the choices of a question she keyed
+    let mut sc = Scn::new(&K1, "stripped", &[]);
+    rekey(&mut sc.banks[0].questions[1], 0);
+    let v2 = [("q0", "alpha"), ("q1", "beta !shape"), ("q2", "gamma")];
+    let m = sc.review(2, "CC-BY-4.0", "stripped", &v2, &[]);
+    let note = row_of(&m, "beta").1.note.clone().unwrap();
+    assert!(note.ends_with("so the pool's version can not take your key. Choose \"Keep mine\" or \"Keep both\"."), "{note}");
+    for n in [note, super::merge::changed_unrecorded_note(3)] {
+        assert!(!n.contains("If you use") && !n.contains("keep yours") && !n.contains("Keep yours"), "{n}");
+    }
+    assert!(super::merge::changed_unrecorded_note(3).contains("\"Take the pool's version\" to get its changes and its difficulty, or \"Keep mine\""));
 }

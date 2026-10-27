@@ -32,6 +32,15 @@ fn old_base(m: &mut CirclesModel) {
     });
 }
 
+/// (round 15) A read of version 3 was made, and that version lacked A's questions: their difficulties stay not known, and the
+/// copy sends (nothing more can be learnt for it).
+pub(super) fn read_lacking(m: &mut CirclesModel) {
+    m.edit.update_link(LOCAL, |l| {
+        l.difficulty_read = Some(l.base_version);
+        true
+    });
+}
+
 /// (round 13) The circle's version `n` is no longer kept: an earlier build's base learns nothing from it.
 pub(super) fn not_kept(s: &std::sync::Arc<Script>, n: u64) {
     s.keep("Get", &version_path(n), 404, json!({"error": "version_not_retained", "oldest_kept": n + 1}));
@@ -75,7 +84,7 @@ fn c85_i1_an_earlier_builds_link_learns_its_difficulties_from_the_circles_versio
 }
 
 /// The circle's version 3 can't be read: nothing is learnt (never from the bank), and what is unsent is not counted, so the
-/// strip never says the copy is up to date and offers Send.
+/// strip never says the copy is up to date. (round 15, critic 91 I2) Send waits for a read that works: Check now is offered.
 #[test]
 fn c85_i1_an_earlier_builds_link_edited_since_is_never_said_to_be_up_to_date() {
     let (mut m, s, mut banks, ctx, mut acct) = rig();
@@ -86,7 +95,8 @@ fn c85_i1_an_earlier_builds_link_edited_since_is_never_said_to_be_up_to_date() {
     let c = m.edit.status_of(&banks[0].clone()).unwrap().changes;
     assert!(!c.known, "{c:?}");
     let t = frames(&mut m, &mut banks, &ctx, &mut acct, &olga_named(&s), 2);
-    assert!(!t.contains("up to date") && t.contains("Send my changes"), "{t}");
+    // (round 17, critic 96 minor 1) what she can do is offered first, not Check now
+    assert!(!t.contains("up to date") && !t.contains("Send my changes") && t.contains("Use my bank as it is..."), "{t}");
     assert_eq!(badge(&mut m, &banks[0].clone()), "changes not counted");
     assert_eq!(base_difficulties(&mut m), vec![None], "never filled in from a bank changed since");
 }
@@ -417,6 +427,7 @@ fn c85_m4_a_lost_send_that_changed_only_a_difficulty_is_the_persons_own() {
     let ctx = ctx();
     let mut acct = FakeAccount { open: true, ..FakeAccount::default() };
     old_base(&mut m);
+    read_lacking(&mut m);
     banks[0].questions[0].difficulty = Some(Difficulty::High);
     banks[0].modified += 5;
     frames(&mut m, &mut banks, &ctx, &mut acct, &who, 2);

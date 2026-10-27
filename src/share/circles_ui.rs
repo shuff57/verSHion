@@ -48,7 +48,9 @@ pub(super) fn problem_box(ui: &mut Ui, p: &Problem, wait: Option<std::time::Dura
         }
     });
     if let Some(w) = wait {
-        para(ui, &format!("You can try again in about {} seconds.", w.as_secs().max(1)));
+        // (round 17, critic 96 minor 3) a daily limit's wait in hours, not tens of thousands of seconds
+        let s = w.as_secs().max(1);
+        para(ui, &if s < 90 { format!("You can try again in about {s} seconds.") } else { format!("You can try again {}.", super::api::wait_text(Some(s))) });
     }
 }
 
@@ -709,6 +711,8 @@ struct RowLink {
     /// "Add a full copy" is offered (critic 63 I3).
     full_copy: bool,
     lines: Vec<String>,
+    /// (round 18, critic 98 minor 4) Sending is off for it (its lines in the warning colour).
+    warn: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -750,10 +754,16 @@ fn banks_section(ui: &mut Ui, m: &mut CirclesModel, d: &super::circles_api::Circ
             missing: st.as_ref().is_some_and(|s| s.missing),
             full_copy: super::bank_links::full_copy_offered(l, role),
             lines: super::circle_edit_ui::standing(l, st.as_ref(), removed, role),
+            warn: st.as_ref().is_some_and(|s| !s.missing && l.can_send() && role.can_add_banks() && super::bank_links::sending_off(s)),
         }) {
             rows.insert(b.id.clone(), r);
         }
     }
+    // (round 16, critic 94 m6) removing a bank she has in My Banks with changes not sent: named under the question
+    let remove_unsent = match m.row_bank().filter(|rb| rb.confirm_remove).map(|rb| rb.bid.clone()) {
+        Some(bid) => m.edit.unsent_of_bank(&cid, &bid),
+        None => Vec::new(),
+    };
     let mut act = RowAct::None;
     let mut add = false;
     // (critic 65 B1) while this computer's list of shared banks can not be read, a bank it already has can not be
@@ -817,7 +827,8 @@ fn banks_section(ui: &mut Ui, m: &mut CirclesModel, d: &super::circles_api::Circ
                                 ui.add(egui::Label::new(theme::accent(if name.is_empty() { "In My Banks.".to_string() } else { format!("In My Banks as \"{name}\"") }).size(12.5)).wrap());
                             }
                             for s in &l.lines {
-                                ui.add(egui::Label::new(theme::accent(s.as_str()).size(12.5)).wrap());
+                                let t = if l.warn { egui::RichText::new(s.as_str()).color(theme::bad()) } else { theme::accent(s.as_str()) };
+                                ui.add(egui::Label::new(t.size(12.5)).wrap());
                             }
                         } else if b.is_author && b.removed.is_none() && !links_unreadable {
                             // (section 11: a bank shared before phase D has no link on this computer)
@@ -883,6 +894,7 @@ fn banks_section(ui: &mut Ui, m: &mut CirclesModel, d: &super::circles_api::Circ
                 let settings = b.removed.is_none() && !b.hidden && !closed && (role == Role::Owner || b.is_author);
                 let report = bank_can(role, closed, b, BankAction::Report) && !b.hidden;
                 let remove = bank_can(role, closed, b, BankAction::Remove);
+                let asking_remove = m.row_bank().is_some_and(|rb| rb.bid == b.id && rb.confirm_remove);
                 // (owner decision a) look at the questions before adding, read only
                 let preview = b.removed.is_none() && can_copy;
                 if settings || report || remove || preview {
@@ -897,8 +909,9 @@ fn banks_section(ui: &mut Ui, m: &mut CirclesModel, d: &super::circles_api::Circ
                         if report && back_link(ui, "Report...") {
                             act = RowAct::Report(b.id.clone());
                         }
-                        // (critic 64 polish 11) a destructive action in the danger colour
-                        if remove && kit::danger_text_button(ui, "Remove...").clicked() {
+                        // (critic 64 polish 11) a destructive action in the danger colour; (round 19, critic 100 minor 10) not offered again
+                        // while it is asked
+                        if remove && !asking_remove && kit::danger_text_button(ui, "Remove...").clicked() {
                             act = RowAct::AskRemove(b.id.clone());
                         }
                     });
@@ -909,7 +922,12 @@ fn banks_section(ui: &mut Ui, m: &mut CirclesModel, d: &super::circles_api::Circ
                         warn_box(ui, &p.message);
                     }
                     if rb.confirm_remove {
+                        // (round 19, critic 100 minor 10) the question has its heading, as in Bank settings
+                        ui.add(egui::Label::new(theme::strong(text::REMOVE_BANK_HEAD).size(13.5)).wrap());
                         body(ui, text::REMOVE_BANK);
+                        for (name, n, waiting) in &remove_unsent {
+                            line(ui, text::leave_unsent(name, *n, *waiting));
+                        }
                         ui.horizontal_wrapped(|ui| {
                             if kit::danger_text_button(ui, "Remove it").clicked() {
                                 act = RowAct::Remove;
@@ -1090,6 +1108,8 @@ fn panels(ui: &mut Ui, m: &mut CirclesModel) {
         _ => (String::new(), String::new()),
     };
     let owner_leaving = m.my_role_public() == Role::Owner;
+    // (critic 92 I2) the banks of this circle in My Banks with changes not sent yet; (round 16, critic 94 m6) also when closing it
+    let unsent = if matches!(m.panel, Panel::ConfirmLeave | Panel::ConfirmClose) { m.cid().map(|c| m.edit.unsent_in(&c)).unwrap_or_default() } else { Vec::new() };
     match &mut m.panel {
         Panel::None => {}
         Panel::NewCode(f) => {
@@ -1136,7 +1156,8 @@ fn panels(ui: &mut Ui, m: &mut CirclesModel) {
                     }
                     if let Some(x) = sent.expires_at.filter(|x| *x > 0) {
                         // (the date, as the mail gives it: "expires in 6 days" reads wrong for a 7-day code)
-                        line(ui, format!("The code in it works once, until {} (UTC).", api::date_text(x)));
+                        // (round 18, critic 98 minor 10) as every circle screen says dates
+                        line(ui, text::code_until(x));
                     }
                     line(ui, text::EMAIL_NEEDS_ACCOUNT);
                     ui.add_space(6.0);
@@ -1221,6 +1242,10 @@ fn panels(ui: &mut Ui, m: &mut CirclesModel) {
         Panel::ConfirmLeave => {
             section(ui, "Leave this circle?", |ui| {
                 body(ui, if owner_leaving { text::LEAVE_OWNER } else { text::LEAVE_MEMBER });
+                body(ui, text::LEAVE_MY_BANKS);
+                for (name, n, waiting) in &unsent {
+                    line(ui, text::leave_unsent(name, *n, *waiting));
+                }
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     ui.add_enabled_ui(!busy, |ui| {
@@ -1237,6 +1262,9 @@ fn panels(ui: &mut Ui, m: &mut CirclesModel) {
         Panel::ConfirmClose => {
             section(ui, "Close this circle?", |ui| {
                 body(ui, text::CLOSE_CIRCLE);
+                for (name, n, waiting) in &unsent {
+                    line(ui, text::leave_unsent(name, *n, *waiting));
+                }
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     ui.add_enabled_ui(!busy, |ui| {
@@ -1252,7 +1280,7 @@ fn panels(ui: &mut Ui, m: &mut CirclesModel) {
         }
         Panel::ConfirmRemove(_) => {
             section(ui, &format!("Remove {} from the circle?", names.0), |ui| {
-                body(ui, "They lose access at once. Copies they made stay on their computer. They can only come back with a code you make after this.");
+                body(ui, text::REMOVE_MEMBER);
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     ui.add_enabled_ui(!busy, |ui| {
@@ -1335,7 +1363,8 @@ fn members_section(ui: &mut Ui, m: &mut CirclesModel, d: &super::circles_api::Ci
                 ui.add(egui::Label::new(theme::strong(if mem.is_me { format!("{name} (you)") } else { name }).size(13.0)).wrap());
                 role_pill(ui, mem.role());
             });
-            let joined = btext::date(mem.joined_at);
+            // (round 17, critic 96 minor 8) dates in one form ("Oct 8, 2025")
+            let joined = text::date(mem.joined_at);
             line(ui, if joined.is_empty() { capitalised(mem.role().can()) } else { format!("Joined {joined} - {}", mem.role().can()) });
             if can(mine, closed, Action::ChangeRole) && !mem.is_me && mem.role() != Role::Owner {
                 ui.add_space(2.0);
@@ -1966,6 +1995,9 @@ fn bank_admin(ui: &mut Ui, m: &mut CirclesModel, current_license: &str) {
     let Some(b) = m.bank.as_ref() else { return };
     let problem = b.act_problem.clone();
     let confirming = b.confirm_remove;
+    let (cid, bid) = (b.cid.clone(), b.bid.clone());
+    // (round 16, critic 94 m6) as under the circle page's row
+    let remove_unsent = if confirming { m.edit.unsent_of_bank(&cid, &bid) } else { Vec::new() };
     let report_open = b.report.is_some();
     let mut set: Option<License> = None;
     let mut ask_remove = false;
@@ -1995,14 +2027,22 @@ fn bank_admin(ui: &mut Ui, m: &mut CirclesModel, current_license: &str) {
                 if can_report && !report_open {
                     begin_report = kit::ghost_button(ui, "Report this bank...").clicked();
                 }
-                if can_remove {
-                    if confirming {
-                        body(ui, text::REMOVE_BANK);
-                    } else {
-                        ask_remove = kit::danger_text_button(ui, "Remove from the circle...").clicked();
-                    }
+                if can_remove && !confirming {
+                    ask_remove = kit::danger_text_button(ui, "Remove from the circle...").clicked();
                 }
             });
+            // (round 17, critic 96 minor 7) the question and its lines each on their own line, under the buttons; (round 18, critic
+            // 98 minor 9) under a heading of its own, set apart from "Report this bank..."
+            if can_remove && confirming {
+                ui.add_space(8.0);
+                ui.separator();
+                ui.add_space(4.0);
+                ui.add(egui::Label::new(theme::strong(text::REMOVE_BANK_HEAD).size(13.5)).wrap());
+                body(ui, text::REMOVE_BANK);
+                for (name, n, waiting) in &remove_unsent {
+                    line(ui, text::leave_unsent(name, *n, *waiting));
+                }
+            }
             if confirming {
                 ui.horizontal(|ui| {
                     do_remove = kit::danger_text_button(ui, "Remove it").clicked();

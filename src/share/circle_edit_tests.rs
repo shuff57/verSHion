@@ -1259,7 +1259,7 @@ fn every_working_copy_screen_and_state_draws_wide_and_narrow() {
     assert!(t.contains("Looking at what changed"), "{t}");
     r.turns(2);
     let t = draw_all(&mut r, &ctx);
-    assert!(t.contains("Apply merge") && t.contains("Fixed the second question") && t.contains("Keep mine"), "{t}");
+    assert!(t.contains("Apply changes") && t.contains("Fixed the second question") && t.contains("Keep mine"), "{t}");
     let i = {
         let MergePhase::Review(rev) = r.merge_phase() else { panic!() };
         rev.plan.rows.iter().position(|x| x.kind == RowKind::Conflict).unwrap()
@@ -1644,7 +1644,7 @@ fn sending_on_top_says_it_replaces_and_shows_the_real_head() {
     let ctx = egui::Context::default();
     crate::theme::setup(&ctx);
     let t = draw_all(&mut r, &ctx);
-    assert!(t.contains("REPLACES") && t.contains("(3)") && t.contains("Version 2 by Ms Frizzle"), "{t}");
+    assert!(t.contains("Versions that would be replaced") && t.contains("(3)") && t.contains("Version 2 by Ms Frizzle"), "{t}");
     r.m.send_on_top(3, owner());
     let EditView::Send(v) = &r.m.view else { panic!() };
     assert_eq!((v.base_override, v.replaces.len()), (Some(3), 1));
@@ -1831,7 +1831,8 @@ fn n1_a_stale_copy_that_is_level_with_the_circle_can_be_set_in_step_or_forgotten
     r.m.cancel_stale_ask();
     r.m.ask_stale(StaleAsk::Rebase);
     let t = draw_all(&mut r, &ctx);
-    assert!(t.contains("Are you sure") && t.contains("Yes, use it as it is"), "{t}");
+    // (round 17, critic 96 I2) its own words: what the next send does
+    assert!(t.contains(super::circles_text::AS_IS_TEXT) && t.contains("Yes, use it as it is") && !t.contains("THIS"), "{t}");
     r.m.rebaseline();
     r.turns(2);
     assert!(matches!(r.merge_phase(), MergePhase::UpToDate));

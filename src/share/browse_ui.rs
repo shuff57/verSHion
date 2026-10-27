@@ -1006,8 +1006,9 @@ fn choice_label(row: &Row, c: Choice) -> &'static str {
         (RowKind::TheirsChanged, Choice::Take) => "Take the pool's version",
         (RowKind::TheirsChanged, _) => "Keep mine",
         (RowKind::Conflict, Choice::Ours) => "Keep mine",
-        (RowKind::Conflict, Choice::Theirs) if row.carry_key => "Use the pool's version, keeping my answer key",
-        (RowKind::Conflict, Choice::Theirs) => "Use the pool's version",
+        // (critic 92 I3) one wording on every card
+        (RowKind::Conflict, Choice::Theirs) if row.carry_key => "Take the pool's version, keeping my answer key",
+        (RowKind::Conflict, Choice::Theirs) => "Take the pool's version",
         (RowKind::Conflict, _) => "Keep both (the pool's is added as a second question, marked as from the pool)",
         (RowKind::NewInTheirs, Choice::Add) => "Add it to my bank",
         (RowKind::NewInTheirs, _) => "Do not add it",
@@ -1162,7 +1163,7 @@ fn merge_done(ui: &mut Ui, m: &mut BrowseModel, d: &MergeDone) {
         ui.add_space(4.0);
         ui.label(theme::strong("Your way back").size(12.5));
         ui.add(egui::Label::new(theme::text(format!("A copy of all your banks from just before the merge is saved at {}", api::plain(&d.restore))).size(12.0)).wrap());
-        line(ui, "To go back, close verSHion and copy that file over banks.json in the same folder.");
+        line(ui, "If you need to go back, that file has all your banks as they were just before.");
     });
     ui.add_space(6.0);
     if kit::primary_button(ui, "Back to my imports").clicked() {
