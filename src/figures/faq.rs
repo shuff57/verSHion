@@ -3206,7 +3206,7 @@ const CIRCLE: &[Faq] = &[
     },
     Faq {
         q: "How do I ask 'find the angle AOB', 'find the radius' or 'find OM'?",
-        a: "Set that value to Ask and give what it is worked out from. For the angle, set Central angle to Ask and give the chord or the radius and arc. For the radius, set Radius to Ask and set Circumference (or Area) to Given. For OM, give the radius and the chord (or AM), turn on the bisector, and set OM to Ask. The key shows the worked value.",
+        a: "Set that value to Ask and give what it is worked out from. For the angle, set Central angle to Ask and give the chord or the radius and arc. For the radius, set Radius to Ask and set Circumference (or Area) to Given. For OM, set Define the chord by to Chord length (r = 5, chord 8 gives OM = 3) or to OM distance (OM = 3 gives the chord), turn on the bisector, and set OM or the chord to Ask. The key shows the worked value.",
     },
     Faq {
         q: "Why do the right-angle marks give the answer away?",

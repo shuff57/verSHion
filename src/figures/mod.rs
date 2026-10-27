@@ -687,6 +687,8 @@ pub fn computed_for(id: &str, p: &Params) -> Vec<(&'static str, String)> {
 /// Upgrades a saved spec made before a figure's inputs were reworked: reads the old keys from
 /// `spec` and writes the new ones into `p` (called after the defaults + spec are applied).
 pub fn migrate(id: &str, spec: &crate::model::FigureSpec, p: &mut Params) {
+    // a saved or shared circle whose radius was out of range is clamped just after this: remember it for the editor note
+    if id == "circle" { circle::mark_clamped(p, spec.params.get("radius").and_then(|v| v.as_f64())); }
     // Old inclined-plane specs with a second block become n = 2 objects.
     if id == "inclined-plane" && spec.params.get("two") == Some(&serde_json::Value::Bool(true)) && !spec.params.contains_key("n") {
         p.set_i("n", 2);
@@ -777,8 +779,7 @@ pub fn params_from_json(def: &FigureDef, over: &serde_json::Value) -> Params {
     let mut p = start_params(def);
     // the circle's editor notes say when a loaded radius was out of range (it is clamped just below)
     if def.id == "circle" {
-        let r = over.get("radius").and_then(|v| v.as_f64());
-        if r.is_some_and(|r| !r.is_finite() || !(0.1..=10000.0).contains(&r)) { p.set_b("clamped_radius", true); }
+        circle::mark_clamped(&mut p, over.get("radius").and_then(|v| v.as_f64()));
     }
     for (k, v) in over.as_object().into_iter().flatten() {
         match v {
