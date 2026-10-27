@@ -79,6 +79,16 @@ impl BrowseUi {
     /// Draws the window when open; returns at once (no I/O at all) when closed. Returns true when
     /// `banks` changed (an import finished): the caller then saves them.
     pub fn show(&mut self, ctx: &egui::Context, account: &mut AccountUi, banks: &mut Vec<QuestionBank>) -> bool {
+        // (owner decision b) a circle bank the person asked to add, finished while the Shared page was left: it goes
+        // into the banks here, the one place called every frame that has them
+        let landed = super::circles::land_waiting(banks, &mut self.model);
+        if landed {
+            ctx.request_repaint();
+        }
+        landed | self.show_window(ctx, account, banks)
+    }
+
+    fn show_window(&mut self, ctx: &egui::Context, account: &mut AccountUi, banks: &mut Vec<QuestionBank>) -> bool {
         // (critic 61 I3: told of another account every frame, the window open or not)
         self.model.note_account(&snapshot_of(&account.model));
         let mut opened_now = false;
@@ -460,6 +470,7 @@ fn imported_tab(ui: &mut Ui, m: &mut BrowseModel) {
     let mut update: Option<ImportedRecord> = None;
     let mut view: Option<ImportedRecord> = None;
     let mut in_circle: Option<(String, String)> = None;
+    let mut in_banks: Option<String> = None;
     for r in recs.iter().rev() {
         kit::card().inner_margin(Margin::same(10)).show(ui, |ui| {
             ui.set_min_width(ui.available_width());
@@ -467,11 +478,18 @@ fn imported_tab(ui: &mut Ui, m: &mut BrowseModel) {
                 ui.vertical(|ui| {
                     ui.add(egui::Label::new(theme::strong(text::shown(&r.title)).size(14.0)).wrap());
                     line(ui, format!("In the bank \"{}\" - version {} - {} - by {}", text::shown(&r.bank_name), r.version, text::license_name(&r.license), text::author(&r.author)));
+                    let linked = super::browse::linked_here(r);
                     if let Some(c) = &r.circle {
                         let name = api::plain(&c.circle_name);
-                        line(ui, if name.is_empty() { "A copy from one of your circles. Nothing you change here goes back to the circle.".to_string() } else { format!("A copy from the circle \"{name}\". Nothing you change here goes back to the circle.") });
+                        line(ui, match (linked, name.is_empty()) {
+                            // (critic 66 I2) a copy made before phase D, linked: the bank's strip is where it is worked on
+                            (true, true) => "Linked to one of your circles: open it in My Banks to send or get the latest.".to_string(),
+                            (true, false) => format!("Linked to the circle \"{name}\": open it in My Banks to send or get the latest."),
+                            (false, true) => "A copy from one of your circles. Nothing you change here goes back to the circle.".to_string(),
+                            (false, false) => format!("A copy from the circle \"{name}\". Nothing you change here goes back to the circle."),
+                        });
                     }
-                    if let Some(n) = &r.newer {
+                    if let Some(n) = r.newer.as_ref().filter(|_| !linked) {
                         let lic = match &n.license {
                             Some(l) if *l != r.license => format!(" under {}", text::license_name(l)),
                             _ => String::new(),
@@ -490,9 +508,16 @@ fn imported_tab(ui: &mut Ui, m: &mut BrowseModel) {
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if let Some(c) = &r.circle {
-                        let label = if r.has_update() { "See the new version" } else { "Open in the circle" };
-                        if kit::ghost_button(ui, label).clicked() {
-                            in_circle = Some((c.circle_id.clone(), r.item_id.clone()));
+                        if super::browse::linked_here(r) {
+                            // (critic 68 minor 6) as its line says: it is worked on from its page in My Banks
+                            if kit::ghost_button(ui, "Open in My Banks").clicked() {
+                                in_banks = Some(r.bank_id.clone());
+                            }
+                        } else {
+                            let label = if r.has_update() { "See the new version" } else { "Open in the circle" };
+                            if kit::ghost_button(ui, label).clicked() {
+                                in_circle = Some((c.circle_id.clone(), r.item_id.clone()));
+                            }
                         }
                     } else if r.has_update() {
                         if kit::primary_button(ui, "Update...").clicked() {
@@ -508,6 +533,9 @@ fn imported_tab(ui: &mut Ui, m: &mut BrowseModel) {
     }
     if let Some((cid, bid)) = in_circle {
         super::shared_ui::open_circle(ui.ctx(), &cid, Some(&bid));
+    }
+    if let Some(b) = in_banks {
+        m.open_bank = Some(b);
     }
     if let Some(r) = update {
         m.start_update(&r);
@@ -1026,7 +1054,14 @@ fn review_page(ui: &mut Ui, m: &mut BrowseModel, plan: &MergePlan, problem: Opti
     ui.label(theme::serif(format!("Merge version {} into \"{}\"", plan.new_version, text::shown(&plan.bank_name))).size(18.0));
     para(ui, &format!("You have version {}. Nothing has been changed yet. Go through the questions below, then press Apply merge. Cancel leaves everything as it is. A copy of your banks is saved just before anything is written.", plan.old_version));
     let counts = [RowKind::Conflict, RowKind::TheirsChanged, RowKind::OursChanged, RowKind::NewInTheirs, RowKind::RemovedInTheirs, RowKind::RemovedLocally, RowKind::Unchanged];
-    let summary: Vec<String> = counts.iter().filter(|k| plan.count(**k) > 0).map(|k| format!("{} {}", plan.count(*k), kind_label(*k).to_lowercase())).collect();
+    // (critic 88 I4) an import recorded before difficulties were kept: a question that is a decision only because its
+    // difficulty is not recorded is counted apart, never as a conflict where both changed
+    let unrecorded = plan.rows.iter().filter(|r| r.unrecorded).count();
+    let mut summary: Vec<String> = counts.iter().map(|k| (*k, plan.count(*k) - if *k == RowKind::Conflict { unrecorded } else { 0 })).filter(|(_, n)| *n > 0).map(|(k, n)| format!("{n} {}", kind_label(k).to_lowercase())).collect();
+    if unrecorded > 0 {
+        let at = usize::from(plan.count(RowKind::Conflict) > unrecorded);
+        summary.insert(at, super::circles_text::unrecorded_count(unrecorded));
+    }
     line(ui, summary.join(" - "));
     if plan.unlinked > 0 {
         para(ui, &format!("{} question{} in this bank {} not linked to the pool (you added {} or copied {} in), so the merge leaves {} alone.", plan.unlinked, if plan.unlinked == 1 { "" } else { "s" }, if plan.unlinked == 1 { "is" } else { "are" }, if plan.unlinked == 1 { "it" } else { "them" }, if plan.unlinked == 1 { "it" } else { "them" }, if plan.unlinked == 1 { "it" } else { "them" }));
@@ -1060,8 +1095,10 @@ fn review_page(ui: &mut Ui, m: &mut BrowseModel, plan: &MergePlan, problem: Opti
         kit::card().inner_margin(Margin::same(10)).show(ui, |ui| {
             ui.set_min_width(ui.available_width());
             ui.horizontal_wrapped(|ui| {
-                let (fill, fg) = if row.kind == RowKind::Conflict { (theme::error_wash(), theme::bad()) } else { (theme::accent_faded(), theme::text_col()) };
-                kit::pill(ui, kind_label(row.kind), fill, fg);
+                // (critic 88 I4) as on a circle's review: its own words, and the conflict colour only while it waits
+                let urgent = if row.unrecorded || row.kind == RowKind::TheirsChanged { row.needs_decision() } else { row.kind == RowKind::Conflict };
+                let (fill, fg) = if urgent { (theme::error_wash(), theme::bad()) } else { (theme::accent_faded(), theme::text_col()) };
+                kit::pill(ui, if row.unrecorded { super::circles_text::UNRECORDED_LABEL } else { kind_label(row.kind) }, fill, fg);
                 ui.add(egui::Label::new(theme::strong(&row.title).size(13.0)).wrap());
             });
             if let Some(n) = &row.note {
@@ -1098,7 +1135,8 @@ fn review_page(ui: &mut Ui, m: &mut BrowseModel, plan: &MergePlan, problem: Opti
     ui.add_space(8.0);
     let undecided = plan.undecided();
     if undecided > 0 {
-        para(ui, &format!("{} conflict{} still need{} a decision before the merge can be applied.", undecided, if undecided == 1 { "" } else { "s" }, if undecided == 1 { "s" } else { "" }));
+        let what = if plan.rows.iter().filter(|r| r.needs_decision()).all(|r| r.kind == RowKind::Conflict && !r.unrecorded) { "conflict" } else { "question" };
+        para(ui, &format!("{} {what}{} still need{} a decision before the merge can be applied.", undecided, if undecided == 1 { "" } else { "s" }, if undecided == 1 { "s" } else { "" }));
     }
     ui.horizontal(|ui| {
         ui.add_enabled_ui(m.can_apply_merge(), |ui| {

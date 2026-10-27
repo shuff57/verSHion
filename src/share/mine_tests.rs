@@ -229,7 +229,7 @@ fn nothing_is_asked_until_the_account_is_ready_and_then_the_list_loads_once() {
     let (mut m, _) = plain_model();
     m.open_list();
     assert_eq!(m.screen, Screen::Gate);
-    m.frame(now(), &AccountSnapshot { gate: Gate::SignedOut, session: None, account_open: false, account: None });
+    m.frame(now(), &AccountSnapshot { gate: Gate::SignedOut, session: None, account_open: false, account: None, name: None });
     assert!(s.seen().is_empty());
     assert_eq!(m.screen, Screen::Gate);
     m.frame(now(), &ready(&s));
@@ -246,7 +246,7 @@ fn not_approved_and_signed_out_stop_at_the_gate_without_a_request() {
     let s = Script::new();
     let (mut m, _) = plain_model();
     m.open_list();
-    m.frame(now(), &AccountSnapshot { gate: Gate::NotApproved(Status::Pending), session: None, account_open: false, account: None });
+    m.frame(now(), &AccountSnapshot { gate: Gate::NotApproved(Status::Pending), session: None, account_open: false, account: None, name: None });
     assert_eq!(m.screen, Screen::Gate);
     assert!(s.seen().is_empty());
 }
@@ -1022,7 +1022,7 @@ fn every_screen_and_state_draws_without_panicking() {
     for gate in [Gate::Checking, Gate::NotSetUp, Gate::NoServer, Gate::SignedOut, Gate::Unreachable, Gate::NotApproved(Status::Pending)] {
         let (mut m, _) = plain_model();
         m.open_list();
-        m.frame(now(), &AccountSnapshot { gate, session: None, account_open: false, account: None });
+        m.frame(now(), &AccountSnapshot { gate, session: None, account_open: false, account: None, name: None });
         assert!(!draw(&ctx, &mut m));
     }
 
@@ -1130,7 +1130,7 @@ fn as_account(s: &Arc<Script>, email: &str) -> AccountSnapshot {
 }
 
 fn signed_out() -> AccountSnapshot {
-    AccountSnapshot { gate: Gate::SignedOut, session: None, account_open: true, account: None }
+    AccountSnapshot { gate: Gate::SignedOut, session: None, account_open: true, account: None, name: None }
 }
 
 #[test]
@@ -1178,7 +1178,7 @@ fn c61_another_account_straight_after_reads_its_own_list_and_starts_at_the_list(
     let s2 = Script::new();
     s2.say(200, mine(vec![], None));
     let b = as_account(&s2, "bob@school.org");
-    m.frame(now(), &AccountSnapshot { gate: Gate::Checking, session: None, account_open: false, account: None });
+    m.frame(now(), &AccountSnapshot { gate: Gate::Checking, session: None, account_open: false, account: None, name: None });
     for _ in 0..3 {
         m.frame(now(), &b);
     }

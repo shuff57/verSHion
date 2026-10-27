@@ -36,8 +36,9 @@ use super::circle_links::*;
 use super::circle_versions_api::*;
 use super::circles_api::*;
 use super::circle_hide::{Decisions, Pictures, decision_refusal, left_out_unasked};
+use super::act_results::{ActResults, ResultBank, ResultKind};
 use super::circles_text as text;
-use super::merge::{self, BaseQuestion, Choice, MergeOutcome, MergePlan};
+use super::merge::{self, BaseQuestion, Choice, MergeOutcome, MergePlan, RowKind};
 use super::model::Runner;
 use super::pool::{ATTEST_STATEMENT, License, LocalProblem, PayloadRefusal, Pool, PoolError, PublishProgress, RefusalKind, RetryPolicy, StoreMedia, sha256_hex};
 use super::publish::{AccountSnapshot, Gate, SharedMedia, SharedSession};
@@ -171,6 +172,49 @@ pub enum LicenceState {
     Failed(Problem),
 }
 
+/// Why a copy that follows the circle can not send (phase D1).
+pub const FOLLOW_NO_SEND: &str = "This copy follows the circle: it gets newer versions, but changes can't be sent from it.";
+
+/// Why no bank is linked while the links file could not be read (critic 65 B1).
+pub fn unreadable_words(m: &str) -> String {
+    format!("the list of shared banks on this computer couldn't be read ({m}), so no bank was linked")
+}
+
+/// Why a second bank can not take a circle bank's link (critic 63 B3).
+pub fn already_linked(name: &str) -> String {
+    let name = api::plain(name);
+    if name.is_empty() {
+        "another bank in My Banks is already connected to this circle bank, so this one is not; that bank and its changes stay as they are".into()
+    } else {
+        format!("your bank \"{name}\" is already connected to this circle bank, so this one is not; \"{name}\" and its changes stay as they are")
+    }
+}
+
+/// Get latest on a copy that has its answer keys, when the circle serves the person the viewers' form (critic 63 B1).
+pub const KEYS_KEPT: &str = "The circle now shows you this bank without its answer keys: they are hidden from viewers. Your copy has its answer keys, and getting this version would take them out, so nothing was changed. Your copy stays as it is. An editor or the circle's owner reads the bank with its keys.";
+
+/// (critic 67 M2) The same for a copy made from the viewers' form, reviewed with the keys and then read without them.
+pub const KEYS_GONE_AT_APPLY: &str = "The circle now shows you this bank without its answer keys again, so the version you reviewed with them can't be applied. Nothing was changed. Cancel, then press Get latest again.";
+
+/// (critic 71 minor 4) A send, restore or trim another account asked for before this one signed in is still on its
+/// way: the strip of its bank says neither what it is nor "up to date" meanwhile.
+/// (critic 71 minor 2, critic 74 I1) A send that went through whose answer had no version the app could read, said on
+/// the bank's strip.
+pub const SENT_UNREAD: &str = "The version was sent, but the server's answer could not be read. Press Get latest to catch up.";
+/// The same, in the "Sent" box of the Send page.
+pub const SENT_UNREAD_PAGE: &str = "Your changes were sent, but the circle's answer could not be read, so the new version's number is not known here. Press Get latest to catch up.";
+
+/// (critic 73 minor 3) A signed-out answer about a session that ended before the account signed in again.
+pub const EARLIER_SESSION: &str = "Your session ended before this was answered, so it may not have gone through. Press Try again: if it did, nothing is done twice.";
+/// The same for a send, on the bank's strip.
+pub const LEFT_EARLIER_SESSION: &str = "Your session ended before the send was answered. Press Send my changes to send them again; if it went through, nothing is sent twice.";
+
+/// (critic 76 I3) A send refused because the person can only view the circle's banks now.
+pub const SEND_ROLE_LEFT: &str = "You can only look at this circle's banks now. The owner can let you send changes by making you an editor.";
+
+pub const OTHER_ACT_LINE: &str = "Waiting for an earlier request on this computer to finish...";
+pub const OTHER_ACT_WAIT: &str = "Wait for an earlier request on this computer to finish, then try again.";
+
 /// The statement the person ticks on the send page. For the bank's author it is the same as the first
 /// share. Anyone else did not choose the licence, so it says whose it is.
 pub const SEND_ATTEST: &str = ATTEST_STATEMENT;
@@ -190,7 +234,7 @@ pub fn attest_statement(is_author: bool, licence: Option<License>) -> String {
 pub fn licence_line(is_author: bool, l: License) -> String {
     let full = super::publish_text::license_name(l.as_str());
     if is_author {
-        format!("Licence: {full}. A send keeps the bank's own licence; you can change it from the bank's page in the circle.")
+        format!("Licence: {full}. A send keeps the bank's own licence; you can change it from Bank settings on the circle's page.")
     } else {
         let short = full.split(" (").next().unwrap_or("").to_string();
         format!("Licence: {short}, set by the bank's author. Your changes go with it; only the author can change it.")
@@ -202,6 +246,9 @@ pub struct Fetched {
     pub start: MergeStart,
     pub head: BankDoc,
     pub base: Option<BankDoc>,
+    /// (critic 83 I2) The version a send with no readable answer made, when colleagues sent more after it: what the
+    /// questions it carried are compared from (`None`: not needed, or not readable).
+    pub mine: Option<BankDoc>,
 }
 
 #[derive(Debug)]
@@ -211,6 +258,18 @@ pub struct Review {
     pub fallback: bool,
     pub start: MergeStart,
     pub problem: Option<String>,
+    /// (critic 80 I1) The version that is the person's own send whose answer did not come back (its questions are
+    /// matched to the bank's), said plainly on the review.
+    pub own_version: Option<u64>,
+    /// (critic 80 I1) The questions whose earlier version here is what that send carried (by their id in the bank): the
+    /// review compares them with the circle's newest only, never under the old version's number.
+    pub resent: Vec<String>,
+    /// (critic 86 I2) The version those questions were matched to: the person's own (an older one, when colleagues sent
+    /// more since and it could be read), or the newest.
+    pub resent_at: u64,
+    /// (critic 85 m1) The version a send with no readable answer may have made, when colleagues sent more since and it can
+    /// not be read: what that send carried could only be matched to the newest, so the review says so.
+    pub own_unread: Option<u64>,
     base: Vec<BaseQuestion>,
     /// The bank as it was when this review was built: Apply refuses if it changed since.
     ours_print: String,
@@ -273,6 +332,9 @@ pub enum RestoreStage {
     Large { removed: u64, total: u64 },
     Done { version: u64, held: bool, withheld: bool },
     Failed(Problem),
+    /// (critic 77 I2) No clear answer came (none, an unreadable one, the server failed on its side): it may have gone
+    /// through. Why, in words. Try again goes as the same restore, which the circle never makes twice.
+    Unclear(String),
 }
 
 #[derive(Debug)]
@@ -288,6 +350,8 @@ pub enum TrimStage {
     Working,
     Done(Trimmed),
     Failed(Problem),
+    /// (critic 77 I2) No clear answer came: it may have gone through. Why, in words.
+    Unclear(String),
 }
 
 #[derive(Debug)]
@@ -383,19 +447,41 @@ pub struct LinkStatus {
     pub missing: bool,
     /// The bank is older than the link (a saved copy of the banks was put back).
     pub stale: bool,
+    /// The bank's name in My Banks (empty when it is missing).
+    pub bank_name: String,
+    /// (critic 85 I1) The link's base kept no difficulty for some question when this was worked out.
+    unknown: bool,
+}
+
+/// Where the open screen was asked for (phase D1): a bank's page in My Banks draws it in place of the questions,
+/// with this way back. `None`: the Shared page draws it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EditHost {
+    pub local_id: String,
+    pub back: String,
 }
 
 // ---- jobs ---------------------------------------------------------------------------------------------------------
 
 enum Work {
     Send { cid: String, bid: String, req: Box<CircleSend> },
-    MergeFetch { cid: String, bid: String, base: u64, need_base: bool },
+    /// `own`: the version a send with no readable answer was based on, and the person's display name (see `OwnRead`).
+    MergeFetch { cid: String, bid: String, base: u64, need_base: bool, own: Option<OwnRead> },
     MergeApply { cid: String, bid: String, version: u64 },
+    /// The viewers' form is shuffled afresh on every read (critic 63 B2): the body that was reviewed is the one
+    /// applied; only its pictures are fetched.
+    MergeApplyBody { doc: Box<BankDoc> },
+    /// Get the latest for a copy that can not send (a viewer's follow link, phase D1): no merge-initiate (owner and
+    /// editors only), the newest version read directly.
+    FollowFetch { cid: String, bid: String, base: u64, need_base: bool },
     Versions { cid: String, bid: String, before: Option<u64> },
     Version { cid: String, bid: String, n: u64 },
     Rollback { cid: String, bid: String, commit_id: String, base: u64, to: u64, confirm: bool },
     Trim { cid: String, bid: String, keep: u32 },
     Licence { bid: String },
+    /// (critic 87 B1) The circle's version at a link's base version, read quietly to learn the difficulties a base an
+    /// earlier build wrote kept none of.
+    BaseRead { cid: String, bid: String, n: u64 },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -406,16 +492,19 @@ enum JobKind {
     Versions,
     Version,
     Licence,
+    /// (critic 87 B1) One at a time, beside whatever else runs.
+    Base,
 }
 
 impl Work {
     fn kind(&self) -> JobKind {
         match self {
             Work::Send { .. } | Work::Rollback { .. } | Work::Trim { .. } => JobKind::Act,
-            Work::MergeFetch { .. } | Work::MergeApply { .. } => JobKind::Merge,
+            Work::MergeFetch { .. } | Work::FollowFetch { .. } | Work::MergeApply { .. } | Work::MergeApplyBody { .. } => JobKind::Merge,
             Work::Versions { .. } => JobKind::Versions,
             Work::Version { .. } => JobKind::Version,
             Work::Licence { .. } => JobKind::Licence,
+            Work::BaseRead { .. } => JobKind::Base,
         }
     }
 }
@@ -426,6 +515,8 @@ enum Fetch {
     Withheld(Box<MergeStart>),
     /// The circle's newest version changed while it was being read.
     Moved,
+    /// The copy already has the newest version (a follow link's read says so itself).
+    UpToDate,
 }
 
 enum Msg {
@@ -433,12 +524,13 @@ enum Msg {
     /// The answer, and the licence the send really went with (the pool's, asked just before).
     Sent(String, String, Result<SentBank, PoolError>, Option<License>),
     Fetched(String, String, Result<Fetch, PoolError>),
-    Applied(String, String, Result<Option<Box<Imported>>, PoolError>),
+    Applied(String, String, Result<ApplyRead, PoolError>),
     Versions(String, String, bool, Result<VersionsPage, PoolError>),
     Version(String, String, u64, Box<Result<BankDoc, PoolError>>),
     Rolled(String, String, u64, Result<SentBank, PoolError>),
     Trimmed(String, String, Result<Trimmed, PoolError>),
     Licence(String, Result<Vec<HeadEntry>, PoolError>),
+    BaseRead(String, String, u64, Box<Result<BankDoc, PoolError>>),
 }
 
 impl Msg {
@@ -449,6 +541,7 @@ impl Msg {
             Msg::Versions(..) => JobKind::Versions,
             Msg::Version(..) => JobKind::Version,
             Msg::Licence(..) => JobKind::Licence,
+            Msg::BaseRead(..) => JobKind::Base,
         }
     }
 }
@@ -474,12 +567,21 @@ async fn run_async(session: SharedSession, images: SharedImages, media: SharedMe
             let (r, eff) = send_checked(&pool, &cid, &bid, *req, &*media, &mut progress).await;
             Msg::Sent(cid, bid, r, eff)
         }
-        Work::MergeFetch { cid, bid, base, need_base } => {
-            let r = fetch_for_merge(&pool, &cid, &bid, base, need_base).await;
+        Work::MergeFetch { cid, bid, base, need_base, own } => {
+            let r = fetch_for_merge(&pool, &cid, &bid, base, need_base, own).await;
+            Msg::Fetched(cid, bid, r)
+        }
+        Work::FollowFetch { cid, bid, base, need_base } => {
+            let r = fetch_for_follow(&pool, &cid, &bid, base, need_base).await;
             Msg::Fetched(cid, bid, r)
         }
         Work::MergeApply { cid, bid, version } => {
             let r = fetch_for_apply(&pool, &images, &cid, &bid, version).await;
+            Msg::Applied(cid, bid, r)
+        }
+        Work::MergeApplyBody { doc } => {
+            let (cid, bid) = (doc.circle_id.clone(), doc.bank.id.clone());
+            let r = super::circles::copy_bank(&pool, &*images, &doc).await.map(|imp| ApplyRead::Doc(Box::new(imp)));
             Msg::Applied(cid, bid, r)
         }
         Work::Versions { cid, bid, before } => {
@@ -501,6 +603,10 @@ async fn run_async(session: SharedSession, images: SharedImages, media: SharedMe
         Work::Licence { bid } => {
             let r = pool.circle_heads(std::slice::from_ref(&bid)).await;
             Msg::Licence(bid, r)
+        }
+        Work::BaseRead { cid, bid, n } => {
+            let r = pool.circle_version(&cid, &bid, n).await;
+            Msg::BaseRead(cid, bid, n, Box::new(r))
         }
     };
     let _ = tx.send(msg);
@@ -530,8 +636,18 @@ async fn send_checked(pool: &Pool<'_>, cid: &str, bid: &str, mut req: CircleSend
     (pool.send_circle_version(cid, bid, &req, media, progress).await, now)
 }
 
-/// merge-initiate, the newest version, and (when the copy kept no snapshot) the version it was made from.
-async fn fetch_for_merge(pool: &Pool<'_>, cid: &str, bid: &str, base: u64, need_base: bool) -> Result<Fetch, PoolError> {
+/// (critic 83 I2) A send from the bank with no readable answer: the version it was based on, and the person's display
+/// name (whose version the one right after it is).
+#[derive(Clone, Debug)]
+struct OwnRead {
+    base: u64,
+    me: Option<String>,
+}
+
+/// merge-initiate, the newest version, (when the copy kept no snapshot) the version it was made from, and (critic 83 I2)
+/// the person's own version right after the one a send with no readable answer was based on, when newer ones came after
+/// it (the newest is read anyway).
+async fn fetch_for_merge(pool: &Pool<'_>, cid: &str, bid: &str, base: u64, need_base: bool, own: Option<OwnRead>) -> Result<Fetch, PoolError> {
     let start = pool.merge_start(cid, bid, base).await?;
     let head = match pool.circle_bank(cid, bid).await {
         Ok(h) => h,
@@ -551,16 +667,79 @@ async fn fetch_for_merge(pool: &Pool<'_>, cid: &str, bid: &str, base: u64, need_
     } else {
         None
     };
-    Ok(Fetch::Ready(Box::new(Fetched { start, head, base: base_doc })))
+    // (only one the circle lists as kept and readable, never a colleague's)
+    let next = own.as_ref().and_then(|o| o.base.checked_add(1).map(|n| (n, o)));
+    let mine = match next {
+        Some((n, o)) if start.head_version > n && start.between.iter().any(|l| l.version == n && l.kept && !l.withheld) && !matches!(sender_of(o.me.as_deref(), next_sender(o.base, &start)), Who::Other(_)) => {
+            match pool.circle_version(cid, bid, n).await {
+                Ok(d) => Some(d),
+                // (critic 87 m2) the sign-in ended or the circle could not be reached: said as that, with Try again, never
+                // as a version that can't be read
+                Err(e) if not_reached(&e) => return Err(e),
+                // (not readable, whatever else the reason: matched with the newest only, as before; critic 85 m2: it never
+                // stops Get latest)
+                Err(_) => None,
+            }
+        }
+        _ => None,
+    };
+    Ok(Fetch::Ready(Box::new(Fetched { start, head, base: base_doc, mine })))
 }
 
-/// The newest version again, with its pictures stored here. `None` when it is not the version that was reviewed.
-async fn fetch_for_apply(pool: &Pool<'_>, images: &SharedImages, cid: &str, bid: &str, version: u64) -> Result<Option<Box<Imported>>, PoolError> {
-    let doc = pool.circle_bank(cid, bid).await?;
-    if doc.bank.version != version {
-        return Ok(None);
+/// Get the latest for a copy that can not send (phase D1): the newest version read directly (merge-initiate is for
+/// the owner and editors), and the version the copy was made from when it kept no snapshot. The same review
+/// follows; no merge token (nothing is sent from such a copy).
+async fn fetch_for_follow(pool: &Pool<'_>, cid: &str, bid: &str, base: u64, need_base: bool) -> Result<Fetch, PoolError> {
+    let head = match pool.circle_bank(cid, bid).await {
+        Ok(h) => h,
+        Err(PoolError::Refused(r)) if matches!(r.kind, RefusalKind::VersionWithheld) => return Ok(Fetch::Withheld(Box::new(MergeStart { base_version: base, ..MergeStart::default() }))),
+        Err(e) => return Err(e),
+    };
+    if head.bank.version <= base {
+        return Ok(Fetch::UpToDate);
     }
-    Ok(Some(Box::new(super::circles::copy_bank(pool, &**images, &doc).await?)))
+    let base_doc = if need_base {
+        match pool.circle_version(cid, bid, base).await {
+            Ok(d) => Some(d),
+            Err(PoolError::Refused(r)) if matches!(r.kind, RefusalKind::VersionNotRetained | RefusalKind::VersionWithheld | RefusalKind::KeysHiddenUnavailable) => None,
+            Err(e) => return Err(e),
+        }
+    } else {
+        None
+    };
+    let start = MergeStart {
+        base_version: base,
+        base_kept: base_doc.is_some(),
+        head_version: head.bank.version,
+        head_version_id: head.bank.version_id.clone(),
+        head_at: head.bank.committed_at,
+        head_by: head.bank.committed_by.clone().unwrap_or_default(),
+        ..MergeStart::default()
+    };
+    Ok(Fetch::Ready(Box::new(Fetched { start, head, base: base_doc, mine: None })))
+}
+
+/// What the apply's read of the newest version found.
+enum ApplyRead {
+    /// The version reviewed, with its pictures stored here.
+    Doc(Box<Imported>),
+    /// Another version is the newest now.
+    Moved,
+    /// The review was read in full, and this read is the viewers' form (the person was made a viewer of a bank that
+    /// hides its keys meanwhile): nothing is applied (critic 63 B1).
+    KeysHidden,
+}
+
+/// The newest version again (a review read in full), with its pictures stored here.
+async fn fetch_for_apply(pool: &Pool<'_>, images: &SharedImages, cid: &str, bid: &str, version: u64) -> Result<ApplyRead, PoolError> {
+    let doc = pool.circle_bank(cid, bid).await?;
+    if doc.bank.keys_hidden {
+        return Ok(ApplyRead::KeysHidden);
+    }
+    if doc.bank.version != version {
+        return Ok(ApplyRead::Moved);
+    }
+    Ok(ApplyRead::Doc(Box::new(super::circles::copy_bank(pool, &**images, &doc).await?)))
 }
 
 // ---- the model ---------------------------------------------------------------------------------------------------
@@ -575,8 +754,54 @@ struct Inflight {
     dropped: Vec<usize>,
     /// The picture step was shown for this content (the person was told the bank hides its keys).
     asked: bool,
+    /// The sender's rights (who can fix a held version), for the answer said on the strip when the page was closed.
+    perm: Perm,
+    /// (critic 78 I1, critic 79 minor 4) What shaped the request besides the bank: a send with no clear answer is tried
+    /// again with it (the same request).
+    retry: RetrySend,
+    /// (critic 79 I2) The version the send was based on.
+    base: u64,
 }
 
+/// (critic 78 I1, critic 79 minor 4) What the Send page sent besides the bank itself: its note, the viewers' copy
+/// decisions and pictures (for the content they were made for), the hidden version it went over, a large change
+/// accepted, and the merge it went with. After a send with no clear answer, the bank's next Send page starts from it, so
+/// the same changes go as the same request (the circle answers the first one again, never twice).
+#[derive(Clone)]
+struct RetrySend {
+    local_id: String,
+    message: String,
+    decisions: StripDecisions,
+    decisions_for: Option<String>,
+    picked: Option<Box<Pictures>>,
+    base_override: Option<u64>,
+    replaces: Vec<VersionLine>,
+    confirm_large: bool,
+    carry: Option<Carry>,
+}
+
+/// (critic 79 I2, critic 80 I2) What the newest version says of a send with no clear answer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Found {
+    /// The circle still has the version the send was based on: it has not arrived (critic 81 minor 5: it may yet).
+    Still,
+    /// A colleague (named) sent the version right after it: it did not go through.
+    OtherFirst(String),
+    /// The person sent the version right after it: it went through.
+    Mine,
+    /// A newer version: it may be the send.
+    Maybe,
+}
+
+/// (critic 80 I2) Who sent a version, as far as the names say.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Who {
+    Me,
+    Other(String),
+    Unknown,
+}
+
+#[derive(Clone)]
 struct Carry {
     local_id: String,
     token: String,
@@ -586,7 +811,9 @@ struct Carry {
 
 pub struct CircleEditModel {
     pub view: EditView,
-    pub notice: Option<String>,
+    /// (critic 71, round 5) How a restore, trim, send, Get latest, unlink or check went, where the person did not see
+    /// it happen: per bank, until dismissed or replaced by the next outcome of its kind (see `act_results`).
+    results: ActResults,
     /// The pool answered `invite_required`.
     pub invite_required: bool,
     links: Vec<CircleLink>,
@@ -621,6 +848,10 @@ pub struct CircleEditModel {
     merge_note: Option<String>,
     /// The links file is there but could not be read: it is not written over until it can be.
     unreadable: Option<String>,
+    /// "Try again" was pressed on a links file that could not be read: the next use reads it again (critic 65).
+    read_again: bool,
+    /// "Open account..." was pressed on one of these screens: the page that hosts them opens the Account window.
+    account_ask: bool,
     /// The card whose "Forget this link" was pressed once.
     forget_ask: Option<String>,
     /// "Treat this copy as in step": done by `sync`, which has the banks.
@@ -628,7 +859,129 @@ pub struct CircleEditModel {
     /// Circle banks known to hide their answer keys from viewers (`true`) or not, as last read (the circle page,
     /// a bank's read, a change of the setting, a send's answer). A send to one asks about pictures first.
     hiding: HashMap<String, bool>,
+    /// Where the open screen was asked for (phase D1): a bank's page, or the Shared page (`None`).
+    pub host: Option<EditHost>,
+    /// The frame the bank's page last drew the open screen: a History or a version left behind when the person went
+    /// elsewhere is closed when they come back (critic 64 polish 13).
+    pub host_frame: Option<u64>,
+    /// "Treat as in step..." from a bank's page: when Get latest finds nothing newer, the question is asked at once.
+    rebase_next: bool,
+    /// (critic 67 I3) Which of a send, restore or trim is on its way, and the bank's name.
+    act_for: Option<ActFor>,
+    /// A screen was asked for while that was on its way: the strip says to wait.
+    act_waited: bool,
+    /// (critic 71) Which account's turn it is: another account signing in starts a new one. A send, restore or trim
+    /// started in an earlier turn is not told to this account, and what it answers changes nothing for it.
+    turn: u64,
+    /// (critic 71 I1) The app's frame (egui pass) the model was last given, and the last one that drew the History or
+    /// one of its versions: a History not drawn since the last frame is not shown, wherever it was left open.
+    /// `None` until the app says (the model alone, in tests: the open History counts as shown).
+    pass: Option<u64>,
+    drawn: Option<u64>,
+    /// The account was signed in at the last frame: "your session ended" goes once it is again.
+    was_ready: bool,
+    /// (critic 73 I1) Banks whose strip checks the circle at once (see `take_check_asks`).
+    check_asks: Vec<String>,
+    /// (critic 82 I1) Banks the circle answered for since their strip last asked (see `take_answered`).
+    answered: Vec<String>,
+    /// (critic 75 I1) What the strip says of the answer on the open Send page (a failure, a hold, a conflict...), if
+    /// the page is closed before the person acts on it there: it may have landed while the page was left undrawn.
+    send_note: Option<(ResultBank, ResultKind, String)>,
+    /// (critic 73 minor 1) Circle banks whose restore or trim had no answer in time (it may still land): their newest
+    /// version is "when last checked", never "the latest", until the next check or History read.
+    unsure: std::collections::HashSet<(String, String)>,
+    /// (critic 73 minor 4) The account signed in at the last frame that had one (the pool's address and its email).
+    account: Option<String>,
+    /// (critic 73 minor 3) Sign-outs and account changes seen: a signed-out answer to a job started before the last one
+    /// is about a session that already ended, not the one signed in now.
+    outs: u64,
+    /// (critic 78 I1) Circle banks whose last send had no clear answer and whose note still says the circle "is checked
+    /// again": the check's answer replaces it once. (critic 79 I2) With the version the send was based on: the check
+    /// decides by it, never by whether the check itself moved the newest version (another read may have seen it first).
+    /// Whether the send may have gone through (a conflict may then be with it) is kept with the link (`sent_record`).
+    unclear_noted: HashMap<(String, String), u64>,
+    /// (critic 78 I1, critic 79 minor 4) A send with no clear answer, as its page sent it: the next Send page of the bank
+    /// starts from it (see `RetrySend`).
+    retry_send: Option<RetrySend>,
+    /// (critic 77 I2) Circle banks whose restore had no clear answer: the version restored, (critic 79 I2) the version the
+    /// restore was based on, and what the check asked for at once found (said in place of "may have gone through" once
+    /// it answered); (critic 84 I1) whether that was the circle still at the version it was based on (the next check says
+    /// again what it finds).
+    unclear_restores: HashMap<(String, String), (u64, u64, Option<String>, bool)>,
+    /// (critic 80 I2) The display name of the account signed in, when known: a version the circle says this name sent is
+    /// the person's own.
+    me_name: Option<String>,
+    /// (critic 87 B1) The circle's versions read to learn the difficulties a base an earlier build wrote kept none of, by
+    /// (circle, bank, version): each is read once (see `read_bases`).
+    base_reads: HashMap<(String, String, u64), BaseRead>,
+    /// (critic 87 B1) The base version being read now.
+    base_asked: Option<(String, String, u64)>,
+    /// (critic 89 m2) The base version the open Get latest reads itself to learn its difficulties (the quiet read is then not
+    /// asked beside it).
+    merge_base: Option<(String, String, u64)>,
 }
+
+/// (critic 87 B1) How the read of a link's base version went, when it taught nothing (one that did is recorded on the link
+/// itself: see `CircleLink::difficulty_read`).
+#[derive(Clone, Debug)]
+enum BaseRead {
+    /// It can't be read (no longer kept, hidden, not the version asked for, a reply that can't be read): (critic 89 m4) asked
+    /// again after `BASE_UNREADABLE_RETRY`, or as soon as the circle's state of the bank (as the link last saw it) changes.
+    Unreadable(Instant, String),
+    /// The circle could not be asked (signed out, offline, a problem of its own): asked again after `BASE_RETRY`.
+    NotReached(Instant),
+}
+
+/// (critic 89 m4) The circle's state of a bank as the link last saw it: its newest version, whether it is held back or
+/// removed, the person's role.
+fn circle_state(l: &CircleLink) -> String {
+    format!("{}|{:?}|{:?}|{:?}", l.head_seen, l.head_seen_at, l.seen, l.role_seen)
+}
+
+/// (critic 87 B1) How long a read of a base version that could not reach the circle waits before it is tried again.
+pub const BASE_RETRY: Duration = Duration::from_secs(60);
+
+/// (critic 89 m4) How long a base version the circle would not show (no longer kept, held back, a reply that could not be
+/// read) waits before it is asked again; sooner when the circle's state of the bank changes.
+pub const BASE_UNREADABLE_RETRY: Duration = Duration::from_secs(30 * 60);
+
+/// (critic 87 m2) The sign-in ended, or the circle could not be reached or had a problem of its own: that says nothing of
+/// the version asked for, so it is never taken for a version that can't be read.
+fn not_reached(e: &PoolError) -> bool {
+    match e {
+        PoolError::Api(a) => !matches!(a, ApiError::BadReply(_) | ApiError::TooLarge(_)),
+        PoolError::Refused(r) => matches!(r.kind, RefusalKind::Busy | RefusalKind::RateLimited | RefusalKind::TooManyOpenReads | RefusalKind::PoolNotConfigured) || matches!(r.detail.status, 401 | 408 | 429 | 500..=599),
+        PoolError::Local(_) => false,
+    }
+}
+
+/// (critic 67 I3, critic 69 I1) The send, restore or trim on its way: what it is, the bank's name, its bank on this
+/// computer, and the version restored (a restore) or the versions kept (a trim).
+#[derive(Clone, Debug)]
+struct ActFor {
+    what: &'static str,
+    name: String,
+    local: Option<String>,
+    cid: String,
+    bid: String,
+    arg: u64,
+    /// (critic 79 I2) The version a send or restore was based on (a trim: 0).
+    base: u64,
+    /// The account's turn it was started in (see `CircleEditModel::turn`).
+    turn: u64,
+    /// (critic 73 minor 4) The account it was asked for, when known: the same account back after another one is
+    /// told how it went.
+    account: Option<String>,
+    /// (critic 73 minor 3) The sign-outs seen before it started (see `CircleEditModel::outs`).
+    outs: u64,
+    /// When it started (a restore or trim is waited for at most `ACT_PATIENCE`).
+    since: Instant,
+}
+
+/// (critic 69 minor 7, critic 71) How long a restore or trim with no answer holds Send, Get latest and History on
+/// every linked bank: after this the screens open again and the bank's strip says it may still go through. (The
+/// request itself stops at the transport's limit and its retries, which can be over three minutes.)
+pub const ACT_PATIENCE: Duration = Duration::from_secs(60);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ActAgain {
@@ -648,7 +1001,7 @@ impl CircleEditModel {
     pub fn new(runner: Runner, images: SharedImages, media: SharedMedia, restore: SharedRestore, log: LinkLog) -> CircleEditModel {
         CircleEditModel {
             view: EditView::Closed,
-            notice: None,
+            results: ActResults::default(),
             invite_required: false,
             links: Vec::new(),
             loaded: false,
@@ -677,9 +1030,33 @@ impl CircleEditModel {
             last_act: None,
             merge_note: None,
             unreadable: None,
+            read_again: false,
+            account_ask: false,
             forget_ask: None,
             cmd_rebase: false,
             hiding: HashMap::new(),
+            host: None,
+            host_frame: None,
+            rebase_next: false,
+            act_for: None,
+            act_waited: false,
+            turn: 0,
+            pass: None,
+            drawn: None,
+            was_ready: false,
+            check_asks: Vec::new(),
+            answered: Vec::new(),
+            send_note: None,
+            unsure: Default::default(),
+            account: None,
+            outs: 0,
+            unclear_noted: HashMap::new(),
+            retry_send: None,
+            unclear_restores: HashMap::new(),
+            me_name: None,
+            base_reads: HashMap::new(),
+            base_asked: None,
+            merge_base: None,
         }
     }
 
@@ -717,26 +1094,510 @@ impl CircleEditModel {
         self.jobs.iter().any(|j| j.kind == k)
     }
 
+    /// (critic 89 m2) The quiet read of this base version is on its way.
+    fn quiet_read_of(&self, key: &(String, String, u64)) -> bool {
+        self.running(JobKind::Base) && self.base_asked.as_ref() == Some(key)
+    }
+
+    /// (critic 89 m2) The open Get latest waits for the quiet read of its bank's base version on its way (its difficulties are
+    /// to be learnt, and the review is made after).
+    fn merge_waits_for_base(&self) -> bool {
+        let EditView::Merge(m) = &self.view else { return false };
+        self.links.iter().find(|l| l.local_bank_id == m.local_id).is_some_and(|l| needs_difficulty_read(l) && self.quiet_read_of(&(l.circle_id.clone(), l.circle_bank_id.clone(), l.base_version)))
+    }
+
+    /// (critic 87 B1, critic 89 m2) What the open Get latest read of its bank's base version (when it read it to learn the
+    /// difficulties) is learnt before the review is made; one it could not read is not asked again quietly until later.
+    fn learn_from_fetch(&mut self) {
+        let EditView::Merge(m) = &self.view else { return };
+        let MergePhase::Ready(f) = &m.phase else { return };
+        let Some(link) = self.links.iter().find(|l| l.local_bank_id == m.local_id) else { return };
+        let key = (link.circle_id.clone(), link.circle_bank_id.clone(), link.base_version);
+        let asked = self.merge_base.take().is_some_and(|k| k == key);
+        if !needs_difficulty_read(link) {
+            return;
+        }
+        let at = self.clock.unwrap_or_else(now_ms);
+        let read = f.base.as_ref().filter(|bd| bd.bank.version == key.2).map(|bd| circle_theirs_as(&bd.payload, at, bd.bank.keys_hidden));
+        match read {
+            Some(theirs) => self.learn_base(&key.0, &key.1, key.2, &theirs),
+            None if asked => {
+                let state = self.unreadable_now(&key.0, &key.1);
+                self.base_reads.insert(key, state);
+            }
+            None => {}
+        }
+    }
+
     /// A send, a restore or a trim is on its way.
     pub fn acting(&self) -> bool {
         self.running(JobKind::Act) || self.cmd_send
+    }
+
+    /// (critic 67 I3) A send, restore or trim is on its way: no other screen opens in its place (one model serves every
+    /// bank's page, and the new screen would drop the answer that moves that bank's link on). Returns true, and the
+    /// strip says to wait, when the screen asked for is refused.
+    fn wait_for_act(&mut self) -> bool {
+        self.act_waited = self.running(JobKind::Act);
+        self.act_waited
+    }
+
+    /// What the strip says after a screen was refused by [`wait_for_act`](Self::wait_for_act), while that is so.
+    pub fn wait_note(&self) -> Option<String> {
+        if !self.act_waited || !self.running(JobKind::Act) {
+            return None;
+        }
+        let a = self.act_for.as_ref()?;
+        // (critic 71 minor 4) one an earlier account asked for is not named to this one
+        if !self.mine(a) {
+            return Some(OTHER_ACT_WAIT.into());
+        }
+        let of = if a.what == "send" { "from" } else { "of" };
+        Some(format!("Wait for the {} {of} \"{}\" to finish, then try again.", a.what, a.name))
+    }
+
+    /// (critic 69 I1) A restore or trim of this bank is on its way while its History is not shown: what the strip says
+    /// in place of where the copy stands (never "up to date" while the circle's newest version may be changing).
+    pub fn act_line(&self, local_id: &str) -> Option<String> {
+        let a = self.act_for.as_ref().filter(|a| self.running(JobKind::Act) && a.local.as_deref() == Some(local_id))?;
+        self.act_words(a)
+    }
+
+    /// (critic 71 I1) The same for a circle bank's Bank settings page, linked here or not.
+    pub fn act_line_of(&self, cid: &str, bid: &str) -> Option<String> {
+        let a = self.act_for.as_ref().filter(|a| self.running(JobKind::Act) && a.cid == cid && a.bid == bid)?;
+        self.act_words(a)
+    }
+
+    fn act_words(&self, a: &ActFor) -> Option<String> {
+        // (critic 71 minor 4) an earlier account's send, restore or trim: not named, and not "up to date" meanwhile
+        if !self.mine(a) {
+            return Some(OTHER_ACT_LINE.into());
+        }
+        match a.what {
+            "restore" => Some(format!("Restoring version {} in the circle...", a.arg)),
+            "trim" => Some("Trimming the bank's old versions in the circle...".into()),
+            _ => None,
+        }
+    }
+
+    /// (critic 69 minor 2) A send from this bank is on its way.
+    pub fn sending_from(&self, local_id: &str) -> bool {
+        self.running(JobKind::Act) && self.act_for.as_ref().is_some_and(|a| a.what == "send" && a.local.as_deref() == Some(local_id))
+    }
+
+    /// (critic 74 I1) The last send from this bank went through, but its answer could not be read: the copy has not
+    /// caught up with the version it made. (critic 75 minor 5) Kept in the links file; said only to the account that
+    /// sent it.
+    pub fn sent_unread(&self, local_id: &str) -> bool {
+        self.sent_unread_link(local_id).is_some()
+    }
+
+    /// (critic 76 I1) The same for `bank`, and whether it changed after that send (`Some(true)`: changes made since
+    /// are not sent).
+    pub fn sent_unread_of(&self, bank: &QuestionBank) -> Option<bool> {
+        self.sent_unread_link(&bank.id).map(|u| bank.modified != u.modified)
+    }
+
+    fn sent_unread_link(&self, local_id: &str) -> Option<&SentUnread> {
+        let u = self.links.iter().find(|l| l.local_bank_id == local_id)?.sent_unread.as_ref()?;
+        let me = super::bank_links::account_tag(self.account.as_deref()).unwrap_or_default();
+        (u.by.is_empty() || u.by == me).then_some(u)
+    }
+
+    /// (critic 73 minor 1) A restore or trim of this bank had no answer in time and may still land.
+    pub fn unsure(&self, local_id: &str) -> bool {
+        self.links.iter().find(|l| l.local_bank_id == local_id).is_some_and(|l| self.unsure.contains(&(l.circle_id.clone(), l.circle_bank_id.clone())))
+    }
+
+    /// (critic 73 minors 1, 6) A check of this bank was answered (`moved`: it found a newer version).
+    pub fn checked(&mut self, local_id: &str, moved: bool) {
+        let Some(l) = self.links.iter().find(|l| l.local_bank_id == local_id).cloned() else { return };
+        let key = (l.circle_id.clone(), l.circle_bank_id.clone());
+        let head = l.head_seen;
+        self.unsure.remove(&key);
+        if moved {
+            self.head_moved(local_id);
+        }
+        // (critic 79 I2) A send with no clear answer is decided by the version it was based on, never by whether this
+        // check moved the newest version: a History, the Shared page or a merge may have seen it first. (critic 80 I2) A
+        // colleague's version right after it means it did not go through (it could only be refused now); the person's own
+        // means it did. (critic 81 minor 5) The circle still at that version proves nothing: a slow commit may land after
+        // the check, so nothing is settled then.
+        let by = l.head_seen_by.clone();
+        if let Some(base) = self.pending_send_base(&l) {
+            match self.found(head, base, by.as_deref()) {
+                Found::OtherFirst(_) => self.update_link(local_id, |l| l.sent_record.as_mut().is_some_and(|r| !std::mem::replace(&mut r.not_through, true))),
+                // the person's own version right after it: the send went, as if its answer had come but could not be read
+                // (its changes are not unsent, and the strip offers Get latest)
+                Found::Mine => self.update_link(local_id, went_through),
+                Found::Still | Found::Maybe => {}
+            }
+        }
+        // (critic 78 I1) Its note said the circle "is checked again"; now it says what the check found, on the strip and
+        // in what the open Send page leaves there. (critic 84 I1) The circle still at that version settles nothing (the
+        // send may land later): the next check says again what it finds, so the note never stays "may not have arrived
+        // yet" beside a newer version.
+        if let Some(&base) = self.unclear_noted.get(&key) {
+            let found = self.found(head, base, by.as_deref());
+            if found != Found::Still {
+                self.unclear_noted.remove(&key);
+            }
+            let text = match found {
+                Found::Still => unclear_still(head),
+                Found::OtherFirst(who) => unclear_other_first(&who, head),
+                Found::Mine => unclear_mine(head),
+                Found::Maybe => unclear_moved(head),
+            };
+            if let Some(b) = self.result_bank_of_local(local_id) {
+                self.results.replace_text(&b, ResultKind::Send, &text);
+            }
+            if let Some((b, ResultKind::Send, t)) = &mut self.send_note
+                && b.cid == key.0
+                && b.bid == key.1
+            {
+                *t = text;
+            }
+        }
+        // (critic 77 I2) The same for a restore with no clear answer (on the strip, and when its History is left),
+        // (critic 79 I2) decided by the version the restore was based on; (critic 84 I1) said again by each check while
+        // the circle is still at that version.
+        if let Some((to, base, found, still)) = self.unclear_restores.get_mut(&key)
+            && (found.is_none() || *still)
+        {
+            let to = *to;
+            *still = head <= *base;
+            let text = if !*still {
+                format!("The check found a newer version in the circle, version {head}. It may be the restore of version {to}: open History to see.")
+            } else {
+                // (critic 81 minor 5) not proof that it failed: it may land after the check
+                format!("The restore of version {to} may not have arrived yet: the circle still has version {head}. Open History to try again.")
+            };
+            *found = Some(text.clone());
+            if let Some(b) = self.result_bank_of_local(local_id) {
+                self.results.replace_text(&b, ResultKind::Restore, &text);
+            }
+        }
+    }
+
+    /// (critic 79 I2, critic 80 I2) What the newest version `head`, sent by `by`, says of a send based on `base`.
+    fn found(&self, head: u64, base: u64, by: Option<&str>) -> Found {
+        if head <= base {
+            return Found::Still;
+        }
+        // (critic 81 minor 6) never past the largest version number
+        match (base.checked_add(1) == Some(head), self.sender(by)) {
+            (true, Who::Other(who)) => Found::OtherFirst(who),
+            (true, Who::Me) => Found::Mine,
+            _ => Found::Maybe,
+        }
+    }
+
+    /// (critic 80 I2) Whether `by`, a name the circle gave for who sent a version, is the person signed in. (critic 81
+    /// minor 1) The circle names who sent a version by display name only (its heads, its versions and a conflict carry no
+    /// account id), so a colleague with exactly the same display name is taken for the person: a limit of what the
+    /// circle says. Names are compared exactly, white space aside.
+    fn sender(&self, by: Option<&str>) -> Who {
+        sender_of(self.me_name.as_deref(), by)
+    }
+
+    /// (critic 79 I2) The send with no clear answer kept with this link, for the account signed in, while it may have gone
+    /// through: the version it was based on. (One whose answer came but could not be read went: `sent_unread` says so
+    /// first wherever this is asked.)
+    fn pending_send_base(&self, l: &CircleLink) -> Option<u64> {
+        self.record_mine(l).filter(|r| !r.not_through).map(|r| r.base)
+    }
+
+    /// (critic 80 I1) What a send from this link with no readable outcome carried, when the account signed in sent it
+    /// (one whose account is not known is said to no one but the account of this turn, like `sent_unread`).
+    fn record_mine<'a>(&self, l: &'a CircleLink) -> Option<&'a SentRecord> {
+        let r = l.sent_record.as_ref()?;
+        let me = super::bank_links::account_tag(self.account.as_deref()).unwrap_or_default();
+        (r.by.is_empty() || r.by == me).then_some(r)
+    }
+
+    /// (critic 78 I2) What the bank's last send is known to have done, when it may make the circle ahead of the copy:
+    /// it went through but its answer could not be read (`Some(true)`), or no clear answer came (`Some(false)`).
+    pub fn earlier_send(&self, local_id: &str) -> Option<bool> {
+        if self.sent_unread(local_id) {
+            return Some(true);
+        }
+        let l = self.links.iter().find(|l| l.local_bank_id == local_id)?;
+        self.pending_send_base(l).map(|_| false)
+    }
+
+    /// (critic 78 I2, critic 80 I2) A conflict on a send from this bank is with the person's own earlier send: it went
+    /// through (`Some(true)`: its answer could not be read, or the version right after the one it was based on is the
+    /// person's), it may be (`Some(false)`), or the newer version is a colleague's (`None`).
+    pub fn conflict_own(&self, local_id: &str, c: &ConflictInfo) -> Option<bool> {
+        if self.earlier_send(local_id)? {
+            return Some(true);
+        }
+        let base = self.links.iter().find(|l| l.local_bank_id == local_id).and_then(|l| self.pending_send_base(l))?;
+        match self.sender(c.head_by.as_deref()) {
+            Who::Other(_) => None,
+            Who::Me => Some(base.checked_add(1).is_some_and(|next| c.head_version == Some(next))),
+            Who::Unknown => Some(false),
+        }
+    }
+
+    /// The bank's send with no clear answer is no longer in question (caught up, unlinked).
+    fn forget_maybe(&mut self, local_id: &str) {
+        if let Some(key) = self.links.iter().find(|l| l.local_bank_id == local_id).map(|l| (l.circle_id.clone(), l.circle_bank_id.clone())) {
+            self.unclear_noted.remove(&key);
+        }
+        self.update_link(local_id, |l| l.sent_record.take().is_some());
+        if self.retry_send.as_ref().is_some_and(|r| r.local_id == local_id) {
+            self.retry_send = None;
+        }
+    }
+
+    /// (critic 73 minor 6) The circle's newest version moved on for this bank: what said it matches the newest version,
+    /// or that a restore may still go through, is no longer so.
+    fn head_moved(&mut self, local_id: &str) {
+        if let Some(b) = self.result_bank_of_local(local_id) {
+            self.results.drop_of(&b, ResultKind::GetLatest);
+            self.results.drop_of(&b, ResultKind::NoAnswer);
+        }
+    }
+
+    /// The send, restore or trim on its way was asked for in this account's turn (critic 71: not by an account that
+    /// signed in on this computer before this one).
+    fn act_mine(&self) -> bool {
+        self.act_for.as_ref().is_some_and(|a| self.mine(a))
+    }
+
+    /// (critic 73 minor 4) It was asked for by the account signed in now: the same account (also back after another
+    /// one signed in meanwhile), or, when the accounts are not known, in this account's turn.
+    fn mine(&self, a: &ActFor) -> bool {
+        match (&a.account, &self.account) {
+            (Some(x), Some(y)) => x == y,
+            _ => a.turn == self.turn,
+        }
+    }
+
+    /// (critic 73 minor 3) A signed-out answer to the send, restore or trim on its way, while the account that asked for
+    /// it is signed in again after a sign-out: the session that ended was the earlier one. Nothing asks to sign in.
+    fn ended_earlier(&self, e: &PoolError) -> bool {
+        matches!(e, PoolError::Api(ApiError::SignedOut)) && self.gate == Gate::Ready && self.act_for.as_ref().is_some_and(|a| a.outs != self.outs && self.mine(a))
+    }
+
+    // ---- results (critic 71, round 5) ---------------------------------------------------------------------------
+
+    /// The bank a result about this circle bank is said for: its linked bank here, if it has one.
+    fn result_bank(&self, cid: &str, bid: &str, name: &str) -> ResultBank {
+        ResultBank { local: self.local_of(cid, bid), cid: cid.to_string(), bid: bid.to_string(), name: api::plain(name) }
+    }
+
+    /// The bank of a linked bank on this computer.
+    fn result_bank_of_local(&self, local: &str) -> Option<ResultBank> {
+        let l = self.links.iter().find(|l| l.local_bank_id == local)?;
+        Some(ResultBank { local: Some(local.to_string()), cid: l.circle_id.clone(), bid: l.circle_bank_id.clone(), name: self.act_name(&l.circle_id, &l.circle_bank_id) })
+    }
+
+    /// The bank of the send, restore or trim on its way (critic 71 I2): its own, as it was when it started, unless it
+    /// is no longer linked here (unlinked meanwhile): then the circle bank alone, said with its name.
+    fn act_bank(&self, cid: &str, bid: &str) -> ResultBank {
+        let a = self.act_for.as_ref().filter(|a| a.cid == cid && a.bid == bid);
+        let still = |l: &String| self.links.iter().any(|x| &x.local_bank_id == l && x.circle_id == cid && x.circle_bank_id == bid);
+        let local = a.and_then(|a| a.local.clone()).filter(still).or_else(|| self.local_of(cid, bid));
+        let name = a.map(|a| a.name.clone()).filter(|n| !n.is_empty()).unwrap_or_else(|| self.act_name(cid, bid));
+        ResultBank { local, cid: cid.to_string(), bid: bid.to_string(), name }
+    }
+
+    fn say(&mut self, bank: ResultBank, kind: ResultKind, text: impl Into<String>) {
+        self.results.put(bank, kind, text);
+    }
+
+    /// The results of this linked bank, for its strip: (id, words).
+    pub fn results_of(&self, local: &str) -> Vec<(u64, String)> {
+        self.results.of_local(local).into_iter().map(|r| (r.id, r.text.clone())).collect()
+    }
+
+    /// The results of this circle bank, linked here or not, for its Bank settings page.
+    pub fn results_of_circle_bank(&self, cid: &str, bid: &str) -> Vec<(u64, String)> {
+        self.results.of_circle_bank(cid, bid).into_iter().map(|r| (r.id, r.text.clone())).collect()
+    }
+
+    /// The results of circle banks with no copy on this computer, named, for the top of the Banks list.
+    pub fn results_bankless(&self) -> Vec<(u64, String)> {
+        self.results.bankless().into_iter().map(|r| (r.id, if r.bank.name.is_empty() { r.text.clone() } else { format!("\"{}\": {}", r.bank.name, r.text) })).collect()
+    }
+
+    /// The results drawn above the open screen: those of the screen's own bank only (critic 69 I2). (critic 88 I3) Above a
+    /// review that can't read the version a send with no readable answer may have made, not what the check said of that send
+    /// (it went through, by the name on it): the review says what is known; the strip keeps the note.
+    pub fn page_results(&self) -> Vec<(u64, String)> {
+        let own_unread = matches!(&self.view, EditView::Merge(m) if matches!(&m.phase, MergePhase::Review(r) | MergePhase::Applying(r) if r.own_unread.is_some()));
+        if let Some(l) = self.view_local() {
+            return self.results.of_local(&l).into_iter().filter(|r| !(own_unread && r.kind == ResultKind::Send)).map(|r| (r.id, r.text.clone())).collect();
+        }
+        match self.view_circle() {
+            Some((cid, bid)) => self.results_of_circle_bank(&cid, &bid),
+            None => Vec::new(),
+        }
+    }
+
+    /// "Dismiss" on a result.
+    pub fn dismiss_result(&mut self, id: u64) {
+        self.results.dismiss(id);
+    }
+
+    /// (critic 71 I1) The app's frame (egui pass): the History counts as shown only while it is drawn.
+    pub fn set_pass(&mut self, nr: u64) {
+        self.pass = Some(nr);
+    }
+
+    /// The History, or one of its versions, was drawn in this frame.
+    pub fn mark_drawn(&mut self, nr: u64) {
+        self.drawn = Some(nr);
+    }
+
+    /// The open History is in front of the person: drawn in this frame or the last one (always, until the app says
+    /// which frame it is).
+    fn history_shown(&self) -> bool {
+        match (self.pass, self.drawn) {
+            (None, _) => true,
+            (Some(p), Some(d)) => d.saturating_add(1) >= p,
+            (Some(_), None) => false,
+        }
+    }
+
+    /// The bank the open screen is about, if it has one on this computer.
+    fn view_local(&self) -> Option<String> {
+        match &self.view {
+            EditView::Send(v) => Some(v.local_id.clone()),
+            EditView::Merge(v) => Some(v.local_id.clone()),
+            EditView::History(h) => h.local_id.clone(),
+            EditView::Version(_) => self.history_stash.as_ref().and_then(|h| h.local_id.clone()),
+            EditView::Closed => None,
+        }
+        .or_else(|| self.host.as_ref().map(|h| h.local_id.clone()))
+    }
+
+    /// The circle bank the open screen is about.
+    fn view_circle(&self) -> Option<(String, String)> {
+        match &self.view {
+            EditView::Send(v) => Some((v.cid.clone(), v.bid.clone())),
+            EditView::Merge(v) => Some((v.cid.clone(), v.bid.clone())),
+            EditView::History(h) => Some((h.cid.clone(), h.bid.clone())),
+            EditView::Version(v) => Some((v.cid.clone(), v.bid.clone())),
+            EditView::Closed => None,
+        }
+    }
+
+    /// The local bank linked to this circle bank.
+    fn local_of(&self, cid: &str, bid: &str) -> Option<String> {
+        self.links.iter().find(|l| l.circle_id == cid && l.circle_bank_id == bid).map(|l| l.local_bank_id.clone())
+    }
+
+    /// (critic 69 I1) The History is left (Back, the Circles tab, another bank's screen): a restore or trim result the
+    /// person has not closed is said on the bank's strip. One still on its way is kept (see `close`), and its answer
+    /// is said there when it comes.
+    fn leave_view(&mut self) {
+        // (critic 74 I1, critic 75 I1) The answer on the Send page that the person did not act on there (a failure, a
+        // hold, a conflict, the daily limit, the "Sent" box of a send whose answer could not be read): said on the
+        // bank's strip. It may have landed while the page was left undrawn (the person on another bank's page), and
+        // whatever closes the page now (another bank's screen, "Circle page", the Shared page, a sign-out) would drop
+        // it. A send that simply went through says nothing more.
+        let note = self.send_note.take();
+        if let EditView::Send(v) = &self.view {
+            if !matches!(v.stage, SendStage::Editing | SendStage::Working(_))
+                && let Some((bank, kind, text)) = note
+            {
+                self.say(bank, kind, text);
+            }
+            return;
+        }
+        self.park_result();
+    }
+
+    /// (critic 71 I1) The History was not drawn since the last frame (left open on the Shared page while the person is
+    /// on a bank's page, or on another tab): a result on it is said on its bank's strip and Bank settings instead.
+    fn park_unseen(&mut self) {
+        if !self.history_shown() {
+            self.park_result();
+        }
+    }
+
+    /// A restore or trim result on the History (or the one kept while a version is looked at) the person has not
+    /// closed: said for its bank, and taken off the History (it is said once).
+    fn park_result(&mut self) {
+        let h = match &self.view {
+            EditView::History(h) => Some(&**h),
+            EditView::Version(_) => self.history_stash.as_deref(),
+            _ => None,
+        };
+        let Some(h) = h else { return };
+        let (cid, bid, title) = (h.cid.clone(), h.bid.clone(), h.title.clone());
+        // (critic 77 I2) a restore with no clear answer whose check answered meanwhile: what the check found
+        let found = h.restore.as_ref().filter(|r| matches!(r.stage, RestoreStage::Unclear(_))).and_then(|_| self.unclear_restores.get(&(cid.clone(), bid.clone()))).and_then(|(_, _, f, _)| f.clone());
+        let restore = found.or_else(|| h.restore.as_ref().and_then(|r| restore_note(r.to, Some(&r.stage))));
+        let trim = h.trim.as_ref().and_then(|t| trim_note(Some(&t.stage)));
+        if restore.is_none() && trim.is_none() {
+            return;
+        }
+        let bank = self.result_bank(&cid, &bid, &title);
+        let h = match &mut self.view {
+            EditView::History(h) => Some(&mut **h),
+            EditView::Version(_) => self.history_stash.as_deref_mut(),
+            _ => None,
+        };
+        if let Some(h) = h {
+            if restore.is_some() {
+                h.restore = None;
+            }
+            if trim.is_some() {
+                h.trim = None;
+            }
+        }
+        if let Some(t) = restore {
+            self.say(bank.clone(), ResultKind::Restore, t);
+        }
+        if let Some(t) = trim {
+            self.say(bank, ResultKind::Trim, t);
+        }
+    }
+
+    /// The name a send, restore or trim of this circle bank goes by: the bank's name in My Banks, else the circle's.
+    fn act_name(&self, cid: &str, bid: &str) -> String {
+        let local = self.links.iter().find(|l| l.circle_id == cid && l.circle_bank_id == bid);
+        let mine = local.and_then(|l| self.statuses.get(&l.local_bank_id)).map(|s| s.bank_name.clone()).filter(|n| !n.is_empty());
+        let shown = match &self.view {
+            EditView::History(h) if h.cid == cid && h.bid == bid => Some(h.title.clone()),
+            _ => None,
+        };
+        api::plain(&mine.or(shown).or_else(|| local.map(|l| l.title.clone())).unwrap_or_default())
     }
 
     pub fn take_signed_out(&mut self) -> bool {
         std::mem::take(&mut self.signed_out)
     }
 
+    /// "Open account..." on one of these screens (critic 66 I7): the page hosting them opens the Account window.
+    pub fn ask_account(&mut self) {
+        self.account_ask = true;
+    }
+
+    pub fn take_account_ask(&mut self) -> bool {
+        std::mem::take(&mut self.account_ask)
+    }
+
     pub fn take_advanced(&mut self) -> Vec<Advanced> {
         std::mem::take(&mut self.advanced)
     }
 
-    /// The screens close and their jobs go, except a send already on its way (critic 61 I4): its answer only moves
-    /// this computer's link on (see `on_sent`: "a send that went through still moves the link on"), so the link is
-    /// never left behind a version the person sent, and their next send is not refused as a conflict with it.
+    /// The screens close and their jobs go, except a send, restore or trim already on its way. A send's answer only
+    /// moves this computer's link on (critic 61 I4, see `on_sent`: "a send that went through still moves the link
+    /// on"), so the link is never left behind a version the person sent, and their next send is not refused as a
+    /// conflict with it. A restore's or trim's answer is said on the bank's strip (critic 69 I1): the person was told
+    /// to wait for it.
     pub fn close(&mut self) {
-        let sending = self.inflight.is_some();
-        self.jobs.retain(|j| sending && j.kind == JobKind::Act);
-        if self.jobs.is_empty() {
+        self.leave_view();
+        // (critic 89 m2) and a quiet read of a base version on its way: dropped here, it would be asked again beside the one
+        // still running at the server
+        self.jobs.retain(|j| matches!(j.kind, JobKind::Act | JobKind::Base));
+        if !self.running(JobKind::Act) {
             self.inflight = None;
         }
         self.view = EditView::Closed;
@@ -744,6 +1605,8 @@ impl CircleEditModel {
         self.cmd_send = false;
         self.applying = None;
         self.carry = None;
+        self.host = None;
+        self.rebase_next = false;
     }
 
     /// The account signed out or another signed in (`another`, critic 60 I1): the screens close (a history goes with
@@ -754,11 +1617,41 @@ impl CircleEditModel {
     /// doubled); another account starts its own.
     pub fn forget_account(&mut self, another: bool) {
         self.close();
-        self.notice = None;
+        self.outs += 1;
         self.invite_required = false;
         if another {
             self.pending_send = None;
             self.pending_restore = None;
+            // (critic 78 I1) the earlier account's send with no clear answer is not this account's (what it carried
+            // stays with the link, for that account: see `record_mine`)
+            self.unclear_noted.clear();
+            self.me_name = None;
+            self.retry_send = None;
+            self.unclear_restores.clear();
+            // (critic 87 B1) a version this account can't read may be readable to the next one; (critic 89 m2) a quiet read
+            // asked with the earlier account's sign-in is not this one's
+            self.base_reads.clear();
+            self.jobs.retain(|j| j.kind != JobKind::Base);
+            self.base_asked = None;
+            // (critic 69 I1, critic 71) this account's turn: a send, restore or trim the first account asked for is
+            // not told to this one, and nothing the first one was told stays. (A sign-out keeps the results: the same
+            // account signing in again sees them.)
+            self.turn += 1;
+            self.results.clear();
+            // (critic 75 minor 5) A send that could not be read is kept in the link with the account that sent it (told
+            // again when that account is back); one whose account is not known is not told to this one. The account
+            // signed in now is learnt at the next frame.
+            self.account = None;
+            // (critic 83 minor) The same for what a send with no readable outcome carried: one whose account is not known is
+            // that turn's only, never the next account's own.
+            let unknown: Vec<String> = self.links.iter().filter(|l| l.sent_unread.as_ref().is_some_and(|u| u.by.is_empty()) || l.sent_record.as_ref().is_some_and(|r| r.by.is_empty())).map(|l| l.local_bank_id.clone()).collect();
+            for local in unknown {
+                self.update_link(&local, |l| {
+                    let unread = l.sent_unread.take_if(|u| u.by.is_empty()).is_some();
+                    let record = l.sent_record.take_if(|r| r.by.is_empty()).is_some();
+                    unread || record
+                });
+            }
         }
         self.signed_out = false;
         self.last_act = None;
@@ -771,22 +1664,94 @@ impl CircleEditModel {
     // ---- the links -----------------------------------------------------------------------------------------
 
     fn ensure(&mut self) {
-        if self.loaded {
+        // (critic 65 minor) A file that could not be read is read again when the person asks ("Try again", or the
+        // Shared page opening), not on every badge and every frame.
+        if !self.loaded && (self.unreadable.is_none() || std::mem::take(&mut self.read_again)) {
+            match self.log.load_checked() {
+                Ok(file) => {
+                    // (critic 65 B1, critic 67 k01) Nothing is ever linked before the file is read: every way in
+                    // (`add_link`, `add_link_replacing`, `take_shared_link`) reads it first and refuses while it can
+                    // not be read, so the list here is the file's.
+                    self.links = file;
+                    self.loaded = true;
+                    self.unreadable = None;
+                    note_linked(&self.links);
+                }
+                Err(m) => self.unreadable = Some(m),
+            }
+        }
+        // (phase D1) Links made by the publish window: a bank just shared into a circle.
+        for l in take_queued() {
+            self.take_shared_link(l);
+        }
+    }
+
+    /// A bank shared into a circle becomes the linked bank (Q6), unless it is already linked to another circle bank:
+    /// that link stays (one link per bank), and the publish window says so.
+    fn take_shared_link(&mut self, link: CircleLink) {
+        let bid = link.circle_bank_id.clone();
+        // (critic 65 B1) While the file can not be read, no bank can be told apart: nothing is linked.
+        if let Some(m) = &self.unreadable {
+            note_outcome(&bid, LinkOutcome::NotSaved(unreadable_words(m)));
             return;
         }
-        match self.log.load_checked() {
-            Ok(file) => {
-                // Anything added while the file could not be read is kept, and wins over the file.
-                let pending = std::mem::replace(&mut self.links, file);
-                for p in pending {
-                    // The same local bank, or the same circle bank, is one link: the newer wins.
-                    self.links.retain(|l| l.local_bank_id != p.local_bank_id && !(l.circle_id == p.circle_id && l.circle_bank_id == p.circle_bank_id));
-                    self.links.push(p);
-                }
-                self.loaded = true;
-                self.unreadable = None;
-            }
-            Err(m) => self.unreadable = Some(m),
+        if self.links.iter().any(|l| l.local_bank_id == link.local_bank_id) {
+            note_outcome(&bid, LinkOutcome::AlreadyLinked);
+            return;
+        }
+        match self.put_link(link) {
+            Ok(()) => note_outcome(&bid, LinkOutcome::Linked),
+            Err(m) => note_outcome(&bid, LinkOutcome::NotSaved(m)),
+        }
+    }
+
+    /// "Try again" on a links file that could not be read: the next use reads it again.
+    pub fn read_links_again(&mut self) {
+        self.read_again = true;
+    }
+
+    /// The links file is there but could not be read (nothing is written over it): the words why.
+    pub fn unreadable(&mut self) -> Option<String> {
+        self.ensure();
+        self.unreadable.clone()
+    }
+
+    /// Where the link of this bank stands, counted from this computer only (the Banks list and a bank's page, for
+    /// the banks on screen). Cached by the bank's `modified` and question count, as the circle page's counts are.
+    pub fn status_of(&mut self, bank: &QuestionBank) -> Option<LinkStatus> {
+        self.ensure();
+        let links = std::mem::take(&mut self.links);
+        if let Some(l) = links.iter().find(|l| l.local_bank_id == bank.id) {
+            self.refresh_one(l, Some(bank));
+        }
+        let found = links.iter().any(|l| l.local_bank_id == bank.id);
+        self.links = links;
+        if found { self.statuses.get(&bank.id).cloned() } else { None }
+    }
+
+    /// (critic 88 I2) The version the copy last matched, as its link says.
+    pub fn base_version_of(&self, local_id: &str) -> Option<u64> {
+        self.links.iter().find(|l| l.local_bank_id == local_id).map(|l| l.base_version)
+    }
+
+    /// The link of a circle bank, without copying its snapshot (`f` reads it).
+    pub fn with_bank_link<R>(&mut self, cid: &str, bid: &str, f: impl FnOnce(&CircleLink) -> R) -> Option<R> {
+        self.ensure();
+        self.links.iter().find(|l| l.circle_id == cid && l.circle_bank_id == bid).map(f)
+    }
+
+    /// The link of a local bank, without copying its snapshot (`f` reads it).
+    pub fn with_link<R>(&mut self, local_id: &str, f: impl FnOnce(&CircleLink) -> R) -> Option<R> {
+        self.ensure();
+        self.links.iter().find(|l| l.local_bank_id == local_id).map(f)
+    }
+
+    /// Changes one link with `f` and saves the list when `f` says something changed (a check's answer).
+    pub fn update_link(&mut self, local_id: &str, f: impl FnOnce(&mut CircleLink) -> bool) {
+        self.ensure();
+        let Some(mut l) = self.links.iter().find(|l| l.local_bank_id == local_id).cloned() else { return };
+        if f(&mut l) {
+            self.replace_link(l);
         }
     }
 
@@ -818,21 +1783,76 @@ impl CircleEditModel {
         self.statuses.get(local_id)
     }
 
-    /// Remembers a new working copy. The copy itself is already in the banks.
+    /// Remembers a new working copy. The copy itself is already in the banks. Critic 63 B3: one link per circle
+    /// bank, and a link is never taken from another bank of this computer that still has it (its unsent work could
+    /// no longer reach the circle): that is refused, and the words say which bank has it.
     pub fn add_link(&mut self, link: CircleLink) -> Result<(), String> {
         self.ensure();
+        if let Some(m) = &self.unreadable {
+            return Err(unreadable_words(m));
+        }
+        if let Some(name) = self.linked_elsewhere(&link.circle_id, &link.circle_bank_id, &link.local_bank_id) {
+            return Err(already_linked(&name));
+        }
+        self.put_link(link)
+    }
+
+    /// "Add a full copy": the new bank takes the link of the circle bank on purpose (the earlier copy stays in My
+    /// Banks, no longer connected; the page says so).
+    pub fn add_link_replacing(&mut self, link: CircleLink) -> Result<(), String> {
+        self.ensure();
+        if let Some(m) = &self.unreadable {
+            return Err(unreadable_words(m));
+        }
+        self.put_link(link)
+    }
+
+    /// Puts a link in the list and saves it. (critic 65 B1) A link that could not be saved is not kept as if it
+    /// were: the list stays as it was, so nothing the page said "could not be saved" is used.
+    fn put_link(&mut self, link: CircleLink) -> Result<(), String> {
+        let before = self.links.clone();
         self.links.retain(|l| l.local_bank_id != link.local_bank_id && !(l.circle_id == link.circle_id && l.circle_bank_id == link.circle_bank_id));
         self.links.push(link);
-        self.save()
+        if let Err(m) = self.save() {
+            self.links = before;
+            note_linked(&self.links);
+            return Err(m);
+        }
+        Ok(())
+    }
+
+    /// The name of another bank of this computer that is linked to this circle bank and still here (`None` when
+    /// none is, or its bank is known to be gone). A bank not counted yet is taken as here.
+    pub fn linked_elsewhere(&mut self, cid: &str, bid: &str, local_id: &str) -> Option<String> {
+        self.ensure();
+        let l = self.links.iter().find(|l| l.circle_id == cid && l.circle_bank_id == bid && l.local_bank_id != local_id)?;
+        match self.statuses.get(&l.local_bank_id) {
+            Some(s) if s.missing => None,
+            Some(s) => Some(s.bank_name.clone()),
+            None => Some(String::new()),
+        }
     }
 
     /// Stops following the circle bank. The local bank stays as it is.
     pub fn forget(&mut self, local_id: &str) {
         self.ensure();
+        self.forget_maybe(local_id);
+        let before = self.links.clone();
+        let bank = self.result_bank_of_local(local_id);
         self.links.retain(|l| l.local_bank_id != local_id);
         self.statuses.remove(local_id);
-        if let Err(m) = self.save() {
-            self.notice = Some(format!("The list of working copies could not be saved ({m})."));
+        match self.save() {
+            // (the results of a link that is gone go with it)
+            Ok(()) => self.results.forget_local(local_id),
+            Err(m) => {
+                // (critic 71 I2) The file still has the link: it is kept here too (as a link that could not be saved
+                // is never kept, critic 65 B1), and the bank's strip says the unlink did not happen.
+                self.links = before;
+                note_linked(&self.links);
+                if let Some(b) = bank {
+                    self.say(b, ResultKind::Unlink, format!("The bank could not be unlinked: the list of shared banks could not be saved ({m}). It is still linked."));
+                }
+            }
         }
     }
 
@@ -840,26 +1860,35 @@ impl CircleEditModel {
         // Never write over a file that could not be read: it may hold every link.
         self.ensure();
         if let Some(m) = &self.unreadable {
-            return Err(format!("the list of working copies could not be read ({m}), so it was left as it is"));
+            return Err(format!("the list of shared banks could not be read ({m}), so it was left as it is"));
         }
-        self.log.save(&self.links)
+        note_linked(&self.links);
+        let r = self.log.save(&self.links);
+        if r.is_ok() {
+            // (critic 71) every link in memory is in the file now: "could not be saved" is no longer so
+            self.results.drop_kind(ResultKind::Check);
+        }
+        r
     }
 
     fn replace_link(&mut self, link: CircleLink) {
         self.ensure();
+        let local = link.local_bank_id.clone();
         match self.links.iter_mut().find(|l| l.local_bank_id == link.local_bank_id) {
             Some(l) => *l = link,
             None => return,
         }
-        if let Err(m) = self.save() {
-            self.notice = Some(format!("The working copy was updated, but the list could not be saved ({m}). The next check will catch up."));
+        if let Err(m) = self.save()
+            && let Some(b) = self.result_bank_of_local(&local)
+        {
+            self.say(b, ResultKind::Check, format!("The bank's link was updated, but the list could not be saved ({m}). The next check will catch up."));
         }
     }
 
     /// The quiet check of the circles' newest versions: a link that is behind says so.
     pub fn apply_heads(&mut self, entries: &[HeadEntry]) {
         self.ensure();
-        let mut changed = false;
+        let mut changed = Vec::new();
         for l in &mut self.links {
             let Some(e) = entries.iter().find(|e| e.bank_id == l.circle_bank_id) else { continue };
             if let HeadState::Current { version, at, by, .. } = &e.state
@@ -869,11 +1898,21 @@ impl CircleEditModel {
                 l.head_seen = *version;
                 l.head_seen_at = *at;
                 l.head_seen_by = by.clone();
-                changed = true;
+                changed.push(l.local_bank_id.clone());
             }
         }
-        if changed && let Err(m) = self.save() {
-            self.notice = Some(format!("The result of the check could not be saved ({m})."));
+        for local in &changed {
+            self.head_moved(local);
+        }
+        if !changed.is_empty()
+            && let Err(m) = self.save()
+        {
+            // (critic 71 I2) said on the strip of each bank it changed
+            for local in changed {
+                if let Some(b) = self.result_bank_of_local(&local) {
+                    self.say(b, ResultKind::Check, format!("The result of the check could not be saved ({m})."));
+                }
+            }
         }
     }
 
@@ -883,7 +1922,155 @@ impl CircleEditModel {
         self.now = Some(now);
         self.session = snap.session.clone();
         self.gate = snap.gate.clone();
+        // ("your session ended" is no longer so once the account is signed in again)
+        let ready = self.gate == Gate::Ready;
+        self.learn_account(snap);
+        if ready && !self.was_ready {
+            self.results.drop_kind(ResultKind::Session);
+        }
+        self.was_ready = ready;
         self.drain();
+        self.stop_waiting(now);
+        self.park_unseen();
+        self.read_bases();
+    }
+
+    /// (critic 87 B1) A base an earlier build wrote kept no difficulty: the circle's own version at the link's base version is
+    /// read quietly, one at a time while signed in, and each difficulty is learnt from it (never from the bank). One that
+    /// can't be read is asked again only later (critic 89 m4): the count then stays not complete, and Get latest leaves a
+    /// differing difficulty to the person. (critic 89 m3) Never for a copy that can't send (it shows no count, and a viewer's
+    /// read of a bank that hides its keys is one of the few they have); (critic 89 m2) never beside Get latest's own read of
+    /// that bank.
+    fn read_bases(&mut self) {
+        if !self.loaded || self.gate != Gate::Ready || self.running(JobKind::Base) {
+            return;
+        }
+        let now = self.now.unwrap_or_else(Instant::now);
+        let merging = if let EditView::Merge(m) = &self.view { Some(m.local_id.as_str()) } else { None };
+        let next = self
+            .links
+            .iter()
+            .filter(|l| needs_difficulty_read(l) && !l.gone() && !l.seen.removed && l.can_send() && l.role() != Some(Role::Viewer) && merging != Some(l.local_bank_id.as_str()))
+            .find(|l| self.base_read_due(l, now))
+            .map(|l| (l.circle_id.clone(), l.circle_bank_id.clone(), l.base_version));
+        if let Some((cid, bid, n)) = next {
+            // (a read dropped on its way by another screen is asked again at the next frame; see `drain` for one whose thread
+            // died)
+            self.base_asked = Some((cid.clone(), bid.clone(), n));
+            self.launch(Work::BaseRead { cid, bid, n });
+        }
+    }
+
+    /// (critic 89 m4) This link's base version may be asked for now: never asked, or what stopped the last read may have passed
+    /// (a minute for a circle that could not be reached; a while, or a change in the circle's state of the bank, for one that
+    /// would not show it).
+    fn base_read_due(&self, l: &CircleLink, now: Instant) -> bool {
+        match self.base_reads.get(&(l.circle_id.clone(), l.circle_bank_id.clone(), l.base_version)) {
+            None => true,
+            Some(BaseRead::NotReached(at)) => now.saturating_duration_since(*at) >= BASE_RETRY,
+            Some(BaseRead::Unreadable(at, seen)) => now.saturating_duration_since(*at) >= BASE_UNREADABLE_RETRY || *seen != circle_state(l),
+        }
+    }
+
+    fn on_base_read(&mut self, cid: &str, bid: &str, n: u64, r: Result<BankDoc, PoolError>) {
+        let key = (cid.to_string(), bid.to_string(), n);
+        self.base_asked = None;
+        let state = match r {
+            // (only the version asked for: survivor c2)
+            Ok(doc) if doc.bank.version == n => {
+                let theirs = circle_theirs_as(&doc.payload, self.now_ms(), doc.bank.keys_hidden);
+                // (what it taught is kept on the link: it is not read for again)
+                self.learn_base(cid, bid, n, &theirs);
+                return;
+            }
+            Err(e) if not_reached(&e) => BaseRead::NotReached(self.now.unwrap_or_else(Instant::now)),
+            _ => self.unreadable_now(cid, bid),
+        };
+        self.base_reads.insert(key, state);
+    }
+
+    /// (critic 89 m4) A base version of this circle bank can't be read now, as the circle's state of it is.
+    fn unreadable_now(&self, cid: &str, bid: &str) -> BaseRead {
+        let seen = self.links.iter().find(|l| l.circle_id == cid && l.circle_bank_id == bid).map(circle_state).unwrap_or_default();
+        BaseRead::Unreadable(self.now.unwrap_or_else(Instant::now), seen)
+    }
+
+    /// (critic 87 B1) The link of this circle bank, still at version `n`, learns its base's difficulties from that version.
+    /// (critic 89 m1) Its count is worked out again (what it learnt may change it, also where it still knows not all).
+    fn learn_base(&mut self, cid: &str, bid: &str, n: u64, theirs: &[merge::Theirs]) {
+        let Some(local) = self.links.iter().find(|l| l.circle_id == cid && l.circle_bank_id == bid && l.base_version == n).map(|l| l.local_bank_id.clone()) else { return };
+        self.update_link(&local, |l| learn_difficulty(l, theirs));
+        self.recount(&local);
+    }
+
+    /// (critic 89 m1) The bank's count is worked out again at the next pass (what the link knows changed, not the bank).
+    /// What the status says meanwhile (a bank put back, say) stays until then.
+    fn recount(&mut self, local: &str) {
+        if let Some(s) = self.statuses.get_mut(local) {
+            s.key = (i64::MIN, usize::MAX);
+        }
+    }
+
+    /// (the owner's decision, critic 90 I1) A copy whose difficulties were just learnt inherits the circle's rating where it
+    /// has none and the teacher did not edit the question since (see `inherit_difficulty`). Not her edit: the question's and
+    /// the bank's own times are kept. Kept to do until a pass finds nothing left (a pass whose bank was not saved does it
+    /// again). Returns true when a bank changed (the caller saves the banks).
+    fn inherit_pending(&mut self, banks: &mut [QuestionBank]) -> bool {
+        let pending: Vec<String> = self.links.iter().filter(|l| l.inherit).map(|l| l.local_bank_id.clone()).collect();
+        let mut changed = false;
+        for local in pending {
+            let Some(bank) = banks.iter_mut().find(|b| b.id == local) else { continue };
+            let Some(link) = self.links.iter().find(|l| l.local_bank_id == local) else { continue };
+            if inherit_difficulty(link, bank) == 0 {
+                self.update_link(&local, |l| std::mem::take(&mut l.inherit));
+                continue;
+            }
+            changed = true;
+            self.recount(&local);
+        }
+        changed
+    }
+
+    /// (critic 73 minor 4, critic 77 minor 3) The account signed in, when the snapshot says (the Banks list learns it too,
+    /// for its badges).
+    pub fn learn_account(&mut self, snap: &AccountSnapshot) {
+        if snap.gate == Gate::Ready {
+            self.account = snap.account.clone();
+            self.me_name = snap.name.clone();
+        }
+    }
+
+    /// (critic 69 minor 7, critic 71) A restore or trim with no answer after `ACT_PATIENCE` is no longer waited for:
+    /// the other screens open again, and the bank's strip says it may still go through (its commit id is kept: the
+    /// same restore asked again is not made twice). A send is always waited for: its answer moves the link on.
+    fn stop_waiting(&mut self, now: Instant) {
+        let Some(a) = self.act_for.clone().filter(|a| a.what != "send" && self.running(JobKind::Act)) else { return };
+        if now.saturating_duration_since(a.since) < ACT_PATIENCE {
+            return;
+        }
+        self.jobs.retain(|j| j.kind != JobKind::Act);
+        self.act_waited = false;
+        if let Some(h) = self.history_of(&a.cid, &a.bid) {
+            if h.restore.as_ref().is_some_and(|r| matches!(r.stage, RestoreStage::Working)) {
+                h.restore = None;
+            }
+            if h.trim.as_ref().is_some_and(|t| matches!(t.stage, TrimStage::Working)) {
+                h.trim = None;
+            }
+        }
+        // (critic 73 minor 1) the circle's newest version may still change: never "the latest" or "up to date" until
+        // the next check or History read
+        self.unsure.insert((a.cid.clone(), a.bid.clone()));
+        if !self.mine(&a) {
+            return;
+        }
+        let said = if a.what == "restore" {
+            format!("No answer came for the restore of version {} within a minute. It may still go through: open History to see whether it did.", a.arg)
+        } else {
+            "No answer came for the trim within a minute. It may still go through: open History to see whether it did.".to_string()
+        };
+        let bank = self.act_bank(&a.cid, &a.bid);
+        self.say(bank, ResultKind::NoAnswer, said);
     }
 
     // ---- errors ------------------------------------------------------------------------------------------------
@@ -894,8 +2081,8 @@ impl CircleEditModel {
         let mut p = Problem { message: e.message(), retry: false, retry_at: None, account: false };
         match e {
             PoolError::Api(ApiError::SignedOut) => {
+                // (the screen that asked says it: the strip offers "Sign in...", the Shared page says so)
                 self.signed_out = true;
-                self.notice = Some("Your session ended. Sign in again; where you were is kept, and nothing was lost.".into());
                 return None;
             }
             PoolError::Api(_) => p.retry = true,
@@ -912,8 +2099,8 @@ impl CircleEditModel {
                         p.retry = true;
                         p.retry_at = wait;
                         match metric.as_deref() {
-                            Some("circle_rollbacks") => p.message = "You have restored as many older versions today as the pool allows. Try again tomorrow.".into(),
-                            Some("circle_commits") => p.message = "You have sent as many versions to circles today as the pool allows. Your changes are still on this device. Try again tomorrow.".into(),
+                            Some("circle_rollbacks") => p.message = "You have restored as many older versions today as verSHion allows. Try again tomorrow.".into(),
+                            Some("circle_commits") => p.message = "You have sent as many versions to circles today as verSHion allows. Your changes are still on this device. Try again tomorrow.".into(),
                             _ => {}
                         }
                     }
@@ -923,7 +2110,7 @@ impl CircleEditModel {
                     }
                     RefusalKind::NotFound => p.message = "That circle or bank is not available to you any more. It may have been closed, removed or hidden, or you may have left the circle.".into(),
                     RefusalKind::ModerationState { message } => {
-                        p.message = message.as_deref().map(api::plain).filter(|m| !m.is_empty()).unwrap_or_else(|| "The pool does not allow that right now.".into());
+                        p.message = message.as_deref().map(api::plain).filter(|m| !m.is_empty()).unwrap_or_else(|| "verSHion does not allow that in this circle right now.".into());
                     }
                     RefusalKind::InvalidRequest { field } => {
                         p.message = match field.as_deref() {
@@ -934,12 +2121,12 @@ impl CircleEditModel {
                             Some("merge_token" | "merged_from") => "This merge is out of date. Get the latest changes and merge again, then send.".into(),
                             Some("commit_id") => "That send could not be identified. Start it again.".into(),
                             Some("license") => "Choose a licence for this bank.".into(),
-                            Some(f) => format!("The pool did not accept the {}. Nothing was changed.", f.replace('_', " ")),
-                            None => "The pool did not accept that. Nothing was changed.".into(),
+                            Some(f) => format!("verSHion did not accept the {}. Nothing was changed.", f.replace('_', " ")),
+                            None => "verSHion did not accept that. Nothing was changed.".into(),
                         }
                     }
                     RefusalKind::Other if r.detail.code == "pool_migrating" => {
-                        p.message = "The pool is being upgraded. Try again in a few minutes.".into();
+                        p.message = "verSHion's server is being upgraded. Try again in a few minutes.".into();
                         p.retry = true;
                         p.retry_at = wait;
                     }
@@ -947,18 +2134,42 @@ impl CircleEditModel {
                 }
             }
         }
+        // (critic 68 minor 1) a refusal not mapped above says the circle, not the public pool
+        p.message = super::circles_text::circle_words(&p.message);
         Some(p)
     }
 
     // ---- jobs ----------------------------------------------------------------------------------------------------
 
     fn launch(&mut self, work: Work) -> bool {
-        let Some(session) = self.session.clone() else {
+        // (critic 71 minor 3) the job keeps to the account signed in now: a retry after another account signed in is
+        // not sent with that account's sign-in
+        let Some(session) = self.session.clone().map(super::pool::pinned) else {
             return false;
         };
         let kind = work.kind();
         if kind == JobKind::Act && self.running(JobKind::Act) {
             return false;
+        }
+        let act = match &work {
+            Work::Send { cid, bid, req } => Some(("send", cid, bid, 0, req.base_version.unwrap_or(0))),
+            Work::Rollback { cid, bid, to, base, .. } => Some(("restore", cid, bid, *to, *base)),
+            Work::Trim { cid, bid, keep } => Some(("trim", cid, bid, u64::from(*keep), 0)),
+            _ => None,
+        };
+        if let Some((what, cid, bid, arg, base)) = act {
+            let since = self.now.unwrap_or_else(Instant::now);
+            let a = ActFor { what, name: self.act_name(cid, bid), local: self.local_of(cid, bid), cid: cid.clone(), bid: bid.clone(), arg, base, turn: self.turn, account: self.account.clone(), outs: self.outs, since };
+            // (critic 71 I1) a new restore, trim or send of the bank: what the last one said is out of date
+            let kind = match what {
+                "restore" => ResultKind::Restore,
+                "trim" => ResultKind::Trim,
+                _ => ResultKind::Send,
+            };
+            let bank = self.result_bank(cid, bid, &a.name);
+            self.results.settle(&bank, kind);
+            self.act_for = Some(a);
+            self.act_waited = false;
         }
         self.jobs.retain(|j| j.kind != kind);
         let (tx, rx) = channel::<Msg>();
@@ -1006,6 +2217,7 @@ impl CircleEditModel {
             let kind = m.kind();
             self.jobs.retain(|j| j.kind != kind);
             lost.retain(|k| *k != kind);
+            self.note_answer(&m);
             match m {
                 Msg::Progress(_) => {}
                 Msg::Sent(cid, bid, r, eff) => self.on_sent(&cid, &bid, r, eff),
@@ -1016,17 +2228,78 @@ impl CircleEditModel {
                 Msg::Rolled(cid, bid, to, r) => self.on_rolled(&cid, &bid, to, r),
                 Msg::Trimmed(cid, bid, r) => self.on_trimmed(&cid, &bid, r),
                 Msg::Licence(bid, r) => self.on_licence(&bid, r),
+                Msg::BaseRead(cid, bid, n, r) => self.on_base_read(&cid, &bid, n, *r),
             }
         }
         // A job that ended without an answer (its thread died).
         for k in lost {
             self.jobs.retain(|j| j.kind != k);
-            let p = Problem { message: "The pool did not answer. Nothing was changed. Try again.".into(), retry: true, retry_at: None, account: false };
+            // (critic 87 B1) the quiet read of a base version: asked again later, nothing said
+            if k == JobKind::Base {
+                if let Some(key) = self.base_asked.take() {
+                    self.base_reads.insert(key, BaseRead::NotReached(self.now.unwrap_or_else(Instant::now)));
+                }
+                continue;
+            }
+            let p = Problem { message: "verSHion's server did not answer. Nothing was changed. Try again.".into(), retry: true, retry_at: None, account: false };
             self.fail_kind(k, p);
         }
     }
 
     fn fail_kind(&mut self, k: JobKind, p: Problem) {
+        // (critic 73 I1) a send whose page was closed under it: said for its bank
+        if k == JobKind::Act
+            && let Some(a) = self.act_for.clone().filter(|a| a.what == "send")
+            && !matches!(&self.view, EditView::Send(v) if v.cid == a.cid && v.bid == a.bid)
+        {
+            self.inflight = None;
+            if self.act_mine() {
+                let bank = self.act_bank(&a.cid, &a.bid);
+                self.say(bank, ResultKind::Send, not_sent(&p.message));
+            }
+            return;
+        }
+        // (critic 69 I1) a restore or trim: on the History showing it (also one kept while a version is looked at),
+        // else, the History left, on the bank's strip
+        if k == JobKind::Act
+            && let Some(a) = self.act_for.clone().filter(|a| a.what != "send")
+        {
+            // (critic 71 minor 2) an earlier account's: nothing is said to this one
+            if !self.mine(&a) {
+                return;
+            }
+            let shown = self.history_shown();
+            match self.history_of(&a.cid, &a.bid).filter(|h| shown && (h.restore.is_some() || h.trim.is_some())) {
+                Some(h) => {
+                    if let Some(r) = &mut h.restore {
+                        r.stage = RestoreStage::Failed(p.clone());
+                    }
+                    if let Some(t) = &mut h.trim {
+                        t.stage = TrimStage::Failed(p);
+                    }
+                }
+                None => {
+                    if let Some(h) = self.history_of(&a.cid, &a.bid) {
+                        h.restore = None;
+                        h.trim = None;
+                    }
+                    let (kind, said) = if a.what == "restore" { (ResultKind::Restore, restore_note(a.arg, Some(&RestoreStage::Failed(p)))) } else { (ResultKind::Trim, trim_note(Some(&TrimStage::Failed(p)))) };
+                    if let Some(t) = said {
+                        let bank = self.act_bank(&a.cid, &a.bid);
+                        self.say(bank, kind, t);
+                    }
+                }
+            }
+            return;
+        }
+        // (critic 75 I1) on its own Send page: what the strip says if the page is closed without the person acting on it
+        if k == JobKind::Act
+            && let EditView::Send(v) = &self.view
+            && self.act_mine()
+        {
+            let bank = self.act_bank(&v.cid.clone(), &v.bid.clone());
+            self.send_note = Some((bank, ResultKind::Send, not_sent(&p.message)));
+        }
         match (&mut self.view, k) {
             (EditView::Send(v), JobKind::Act) => v.stage = SendStage::Failed(p),
             (EditView::Merge(v), JobKind::Merge) => v.phase = MergePhase::Failed(p),
@@ -1060,18 +2333,33 @@ impl CircleEditModel {
 
     // ---- send my changes ------------------------------------------------------------------------------------
 
-    /// "Send my changes": the page where the person adds a note and sends.
-    pub fn open_send(&mut self, local_id: &str, perm: Perm) {
+    /// "Send my changes": the page where the person adds a note and sends. Returns true when it opened.
+    pub fn open_send(&mut self, local_id: &str, perm: Perm) -> bool {
         self.ensure();
-        let Some(l) = self.links.iter().find(|l| l.local_bank_id == local_id).cloned() else { return };
-        self.jobs.clear();
+        let Some(l) = self.links.iter().find(|l| l.local_bank_id == local_id).cloned() else { return false };
+        // (phase D1) A copy that follows the circle (a viewer's, or the viewers' form) never sends.
+        if !l.can_send() || self.wait_for_act() {
+            return false;
+        }
+        self.leave_view();
+        // (critic 89 m2) a quiet read of a base version on its way is kept
+        self.jobs.retain(|j| j.kind == JobKind::Base);
+        // (critic 78 I1, critic 79 minor 4) after a send with no clear answer, what its page sent: the same changes then
+        // go as the same request (a merge it went with is kept for it, even when the page was closed meanwhile)
+        let retry = self.retry_send.clone().filter(|r| r.local_id == l.local_bank_id);
+        if self.carry.is_none()
+            && let Some(c) = retry.as_ref().and_then(|r| r.carry.clone())
+        {
+            self.carry = Some(c);
+        }
+        let message = retry.as_ref().map(|r| r.message.clone()).unwrap_or_default();
         self.view = EditView::Send(Box::new(SendView {
             local_id: l.local_bank_id.clone(),
             cid: l.circle_id.clone(),
             bid: l.circle_bank_id.clone(),
             title: api::plain(&l.title),
             perm,
-            message: String::new(),
+            message,
             changes: None,
             stage: SendStage::Editing,
             confirm_large: false,
@@ -1085,10 +2373,20 @@ impl CircleEditModel {
             sent_payload: None,
             picked: None,
         }));
+        if let (Some(r), EditView::Send(v)) = (retry, &mut self.view) {
+            // (`do_send` drops the decisions and pictures again for content they were not made for)
+            v.decisions = r.decisions;
+            v.decisions_for = r.decisions_for;
+            v.picked = r.picked;
+            v.base_override = r.base_override;
+            v.replaces = r.replaces;
+            v.confirm_large = r.confirm_large;
+        }
         // The counts are filled in by `sync`. The bank's licence is asked of the pool now: a send
         // goes with the licence the pool has, never with the one this device saw at copy time.
         self.statuses.remove(local_id);
         self.check_licence();
+        true
     }
 
     fn check_licence(&mut self) {
@@ -1098,7 +2396,7 @@ impl CircleEditModel {
         if !self.launch(Work::Licence { bid })
             && let EditView::Send(v) = &mut self.view
         {
-            v.licence = LicenceState::Failed(Problem { message: "Not signed in to the pool. Open the account window and sign in.".into(), retry: true, retry_at: None, account: true });
+            v.licence = LicenceState::Failed(Problem { message: "Not signed in. Open the Account window and sign in.".into(), retry: true, retry_at: None, account: true });
         }
     }
 
@@ -1139,9 +2437,9 @@ impl CircleEditModel {
                     }
                     (None, Some(link)) => match link.licence() {
                         Some(l) => LicenceState::Known(l),
-                        None => LicenceState::Failed(Problem { message: "This bank's licence is not known on this device and the pool did not say. Try again.".into(), retry: true, retry_at: None, account: false }),
+                        None => LicenceState::Failed(Problem { message: "This bank's licence is not known on this device and verSHion's server did not say. Try again.".into(), retry: true, retry_at: None, account: false }),
                     },
-                    _ => LicenceState::Failed(Problem { message: "This working copy is not in the list any more.".into(), retry: false, retry_at: None, account: false }),
+                    _ => LicenceState::Failed(Problem { message: "This bank is no longer linked to the circle.".into(), retry: false, retry_at: None, account: false }),
                 }
             }
             Err(e) => match self.problem_of(&e) {
@@ -1177,6 +2475,9 @@ impl CircleEditModel {
         if !v.perm.can_send() {
             return Some(if v.perm.closed { "This circle is closed." } else { "You can only look at this circle's banks. The owner can let you add banks by changing your role to editor." });
         }
+        if self.links.iter().find(|l| l.local_bank_id == v.local_id).is_some_and(|l| !l.can_send()) {
+            return Some(FOLLOW_NO_SEND);
+        }
         if self.acting() {
             return Some("Wait for the current step to finish.");
         }
@@ -1189,7 +2490,7 @@ impl CircleEditModel {
             LicenceState::Known(_) => {}
         }
         if self.copy_is_stale(&v.local_id) {
-            return Some("This copy no longer matches where it was last in step with the circle (a saved copy of your banks may have been put back). Get the latest changes and merge first.");
+            return Some("This bank no longer matches what it last had from the circle (a saved copy of your banks may have been put back). Get the latest first.");
         }
         if !v.attest {
             return Some("Tick the box that says this is your own work.");
@@ -1351,18 +2652,24 @@ impl CircleEditModel {
     }
 
     fn do_send(&mut self, banks: &[QuestionBank]) {
+        // (critic 75 I1) the person sends again: what the page said of the last answer is out of date
+        self.send_note = None;
         let hiding = match &self.view {
             EditView::Send(v) => self.hides_keys(&v.bid),
             _ => return,
         };
         let EditView::Send(v) = &mut self.view else { return };
         let Some(link) = self.links.iter().find(|l| l.local_bank_id == v.local_id).cloned() else {
-            v.stage = SendStage::Failed(Problem { message: "This working copy is not in the list any more.".into(), retry: false, retry_at: None, account: false });
+            v.stage = SendStage::Failed(Problem { message: "This bank is no longer linked to the circle.".into(), retry: false, retry_at: None, account: false });
             return;
         };
         let fail = |v: &mut SendView, m: &str| v.stage = SendStage::Failed(Problem { message: m.into(), retry: false, retry_at: None, account: false });
         if !v.perm.can_send() {
             fail(v, "Your role in this circle does not allow sending a version.");
+            return;
+        }
+        if !link.can_send() {
+            fail(v, FOLLOW_NO_SEND);
             return;
         }
         let Some(bank) = banks.iter().find(|b| b.id == link.local_bank_id) else {
@@ -1378,7 +2685,7 @@ impl CircleEditModel {
             return;
         }
         if link.stale_for(bank) {
-            fail(v, "This copy no longer matches where it was last in step with the circle. Get the latest changes and merge first. Nothing was sent.");
+            fail(v, "This bank no longer matches what it last had from the circle. Get the latest first. Nothing was sent.");
             return;
         }
         // Questions copied without their keys can not go to a circle (phase C): said here, nothing is sent.
@@ -1419,6 +2726,19 @@ impl CircleEditModel {
         let asked = v.picked.is_some();
         let dropped = v.picked.as_ref().map(|p| p.dropped()).unwrap_or_default();
         let image_ok = v.decisions.image_ok.clone();
+        let perm = v.perm;
+        let carry = self.carry.clone().filter(|c| c.local_id == v.local_id && c.head == base);
+        let retry = RetrySend {
+            local_id: v.local_id.clone(),
+            message: v.message.trim().to_string(),
+            decisions: v.decisions.clone(),
+            decisions_for: v.decisions_for.clone(),
+            picked: v.picked.clone(),
+            base_override: v.base_override,
+            replaces: v.replaces.clone(),
+            confirm_large: v.confirm_large,
+            carry,
+        };
         v.sent_payload = Some(payload_sha);
         let mut req = CircleSend::new(payload, license, link.meta());
         req.message = v.message.trim().to_string();
@@ -1438,9 +2758,9 @@ impl CircleEditModel {
         let (cid, bid) = (link.circle_id.clone(), link.circle_bank_id.clone());
         let bank = bank.clone();
         if self.launch(Work::Send { cid, bid, req: Box::new(req) }) {
-            self.inflight = Some(Inflight { link, bank, pictures: shown, image_ok, dropped, asked });
+            self.inflight = Some(Inflight { link, bank, pictures: shown, image_ok, dropped, asked, perm, retry, base });
         } else if let EditView::Send(v) = &mut self.view {
-            v.stage = SendStage::Failed(Problem { message: "Not signed in to the pool. Open the account window and sign in.".into(), retry: true, retry_at: None, account: true });
+            v.stage = SendStage::Failed(Problem { message: "Not signed in. Open the Account window and sign in.".into(), retry: true, retry_at: None, account: true });
         }
     }
 
@@ -1450,9 +2770,13 @@ impl CircleEditModel {
             && i.link.license != l.as_str()
         {
             // The licence changed while the page was open: the send went with the pool's, and the link follows.
+            // (critic 75 minor 4) the link as it is now: what a check learnt meanwhile stays
             i.link.license = l.as_str().to_string();
-            let link = i.link.clone();
-            self.replace_link(link);
+            let lic = i.link.license.clone();
+            self.update_link(&i.link.local_bank_id, |x| {
+                x.license = lic;
+                true
+            });
             if let EditView::Send(v) = &mut self.view {
                 v.licence = LicenceState::Known(l);
             }
@@ -1463,13 +2787,76 @@ impl CircleEditModel {
         {
             self.note_hiding(bid, sent.keys_hidden);
         }
-        if !self.here(cid, bid) || !matches!(self.view, EditView::Send(_)) {
-            // The person left: a send that went through still moves the link on.
-            if let (Ok(sent), Some(i)) = (&r, &inflight) {
-                self.finish_send(i, sent);
+        // (critic 73 I1) a conflict names the circle's newer version: the link learns it, whether or not the page is
+        // still open, so the strip never names the old version as the latest. (critic 75 minor 4) Written into the link
+        // as it is now, not as it was when the send started: what a check learnt meanwhile stays.
+        if let (Err(PoolError::Refused(rf)), Some(i)) = (&r, &inflight)
+            && let RefusalKind::CircleConflict { head_version: Some(h), head_at, head_by } = &rf.kind
+        {
+            let local = i.link.local_bank_id.clone();
+            let mut moved = false;
+            self.update_link(&local, |l| {
+                moved = *h > l.head_seen;
+                if moved {
+                    l.head_seen = *h;
+                    l.head_seen_at = *head_at;
+                    l.head_seen_by = head_by.clone();
+                }
+                moved
+            });
+            if moved {
+                self.head_moved(&local);
             }
-            return;
+            // (critic 80 I2) a colleague's version right after the one an earlier send with no clear answer was based on:
+            // that send did not go through (the app says so from now on, and never "it may be your earlier send")
+            if let Some(l) = self.links.iter().find(|l| l.local_bank_id == local).cloned()
+                && let Some(base) = self.pending_send_base(&l)
+            {
+                match self.found(*h, base, head_by.as_deref()) {
+                    Found::OtherFirst(_) => self.update_link(&local, |l| l.sent_record.as_mut().is_some_and(|r| !std::mem::replace(&mut r.not_through, true))),
+                    // (critic 86 minor) the person's own version right after it: that send went, as when a check finds it,
+                    // so what it carried is never counted again as unsent
+                    Found::Mine => self.update_link(&local, went_through),
+                    Found::Still | Found::Maybe => {}
+                }
+            }
         }
+        // (critic 75 minor 3) An answer that does not say whether the send went through (none came, it could not be
+        // read, the server failed on its side): never "not sent"; and (critic 76 I3) a send refused because the person
+        // can only view now. Where the circle bank stands is checked at once; until then its newest version is "when
+        // last checked".
+        let unclear = r.as_ref().err().and_then(unclear_why);
+        // (critic 84 I1) The circle answered this send: what the strip says of it is that answer now, never what a later
+        // check would say of an earlier send's note.
+        if matches!(&r, Ok(_) | Err(PoolError::Refused(_))) {
+            self.unclear_noted.remove(&(cid.to_string(), bid.to_string()));
+        }
+        let role_left = matches!(&r, Err(PoolError::Refused(rf)) if matches!(rf.kind, RefusalKind::CircleRoleRequired { .. }));
+        if unclear.is_some() || role_left {
+            if let Some(l) = self.local_of(cid, bid) {
+                self.check_asks.push(l);
+            }
+            if unclear.is_some() {
+                self.unsure.insert((cid.to_string(), bid.to_string()));
+                // (critic 78 I1, I2) it may have gone through: the check's answer replaces the note, a conflict may be
+                // with this send, and the next Send page tries the same request again; (critic 79 I2, critic 80 I1)
+                // what it carried and the version it was based on are kept with the link (also across a restart)
+                if let Some(i) = &inflight {
+                    self.unclear_noted.insert((cid.to_string(), bid.to_string()), i.base);
+                    self.retry_send = Some(i.retry.clone());
+                    self.keep_record(i);
+                }
+            }
+        }
+        // (critic 73 I1) The person left (the page closed under the send: the Shared page opened, another bank's
+        // "Circle page", a sign-out): a send that went through still moves the link on, and how it went is said for
+        // its bank. (critic 75 I1) Still open, the answer goes on the page, and what the strip would say of it is kept
+        // for when the page is closed without the person acting on it.
+        let here = self.here(cid, bid) && matches!(self.view, EditView::Send(_));
+        if here {
+            self.send_note = None;
+        }
+        let can_fix = inflight.as_ref().is_some_and(|i| i.perm.can_rewind());
         match r {
             Ok(sent) => {
                 let merged_from = sent.merged_from;
@@ -1491,25 +2878,33 @@ impl CircleEditModel {
                     }
                 }
                 let ask_next = self.hides_keys(bid);
-                if let EditView::Send(v) = &mut self.view {
-                    v.stage = SendStage::Done(Box::new(Sent { version: sent.version, added: sent.added, changed: sent.changed, removed: sent.removed, replayed: sent.replayed, held: sent.held, withheld: sent.withheld, merged_from, left_out_unasked: left_out, not_asked, hiding_stopped, ask_next }));
+                let done = Sent { version: sent.version, added: sent.added, changed: sent.changed, removed: sent.removed, replayed: sent.replayed, held: sent.held, withheld: sent.withheld, merged_from, left_out_unasked: left_out, not_asked, hiding_stopped, ask_next };
+                // What the "Sent" box says beyond the counts (held for review, pictures left out), or that the answer
+                // could not be read (critic 74 I1); nothing for a send that simply went through. (critic 71 minor 2)
+                // Never said to an account that signed in after it was sent.
+                let note = if sent.version == 0 {
+                    Some(SENT_UNREAD.to_string())
+                } else {
+                    let rest: Vec<String> = sent_lines(&Sent { replayed: false, merged_from: None, ..done.clone() }, can_fix).into_iter().skip(1).collect();
+                    (!rest.is_empty()).then(|| format!("Version {} was sent. {}", sent.version, rest.join(" ")))
+                };
+                let note = note.filter(|_| self.act_mine());
+                if here {
+                    if let EditView::Send(v) = &mut self.view {
+                        v.stage = SendStage::Done(Box::new(done));
+                    }
+                    let bank = self.act_bank(cid, bid);
+                    self.send_note = note.map(|t| (bank, ResultKind::Send, t));
+                } else if let Some(t) = note {
+                    let bank = self.act_bank(cid, bid);
+                    self.say(bank, ResultKind::Send, t);
                 }
             }
             Err(e) => {
-                let stage = match &e {
-                    PoolError::Refused(r) => match &r.kind {
-                        RefusalKind::CircleConflict { head_version, head_at, head_by } => {
-                            if let (Some(h), Some(i)) = (head_version, &inflight) {
-                                let mut l = i.link.clone();
-                                if *h > l.head_seen {
-                                    l.head_seen = *h;
-                                    l.head_seen_at = *head_at;
-                                    l.head_seen_by = head_by.clone();
-                                    self.replace_link(l);
-                                }
-                            }
-                            Some(SendStage::Conflict(ConflictInfo { head_version: *head_version, head_at: *head_at, head_by: head_by.clone() }))
-                        }
+                let stage = match (&e, &unclear) {
+                    (_, Some(why)) => Some(SendStage::Failed(Problem { message: unclear_page(why), retry: true, retry_at: None, account: false })),
+                    (PoolError::Refused(r), None) => match &r.kind {
+                        RefusalKind::CircleConflict { head_version, head_at, head_by } => Some(SendStage::Conflict(ConflictInfo { head_version: *head_version, head_at: *head_at, head_by: head_by.clone() })),
                         RefusalKind::ConfirmLarge { removed, total } => Some(SendStage::Large { removed: *removed, total: *total }),
                         // A bank that hides its answer keys: the pool asks how the viewers' copy is made.
                         k if decision_refusal(k).is_some() => {
@@ -1531,16 +2926,19 @@ impl CircleEditModel {
                             if let Some(h) = hide_key {
                                 self.note_hiding(bid, *h);
                             }
-                            Some(SendStage::Refused { message: e.message(), merge_again: false })
+                            Some(SendStage::Refused { message: super::circles_text::circle_words(&e.message()), merge_again: false })
                         }
                         RefusalKind::AttestationRequired => {
-                            Some(SendStage::Failed(Problem { message: e.message(), retry: false, retry_at: None, account: false }))
+                            Some(SendStage::Failed(Problem { message: super::circles_text::circle_words(&e.message()), retry: false, retry_at: None, account: false }))
                         }
                         RefusalKind::LicenseAuthorOnly { license } => {
                             if let (Some(l), Some(i)) = (license.as_deref().filter(|l| super::pool::License::parse(l).is_some()), &inflight) {
-                                let mut link = i.link.clone();
-                                link.license = l.to_string();
-                                self.replace_link(link);
+                                // (critic 75 minor 4) into the link as it is now
+                                let lic = l.to_string();
+                                self.update_link(&i.link.local_bank_id, |x| {
+                                    x.license = lic;
+                                    true
+                                });
                                 if let (EditView::Send(v), Some(known)) = (&mut self.view, super::pool::License::parse(l)) {
                                     v.licence = LicenceState::Known(known);
                                 }
@@ -1556,46 +2954,211 @@ impl CircleEditModel {
                             Some(SendStage::Failed(Problem { message: "This send was already used for different content. Press Send again to start it again.".into(), retry: true, retry_at: None, account: false }))
                         }
                         RefusalKind::BankRemoved => Some(SendStage::Failed(Problem { message: "This bank was removed from the circle, so nothing can be sent to it. The owner or the bank's author may be able to restore it.".into(), retry: false, retry_at: None, account: false })),
+                        // (critic 76 I3) the person can only view now: the send, not adding banks
+                        RefusalKind::CircleRoleRequired { needed } if needed.as_deref().is_none_or(|n| n == "editor") => Some(SendStage::Failed(Problem { message: SEND_ROLE_LEFT.into(), retry: false, retry_at: None, account: false })),
                         _ => None,
                     },
                     _ => None,
                 };
-                match stage {
-                    Some(s) => {
-                        let unticked = matches!(&e, PoolError::Refused(r) if matches!(r.kind, RefusalKind::AttestationRequired));
-                        if let EditView::Send(v) = &mut self.view {
-                            v.stage = s;
-                            if unticked {
-                                v.attest = false;
-                            }
-                        }
-                    }
-                    None => match self.problem_of(&e) {
-                        Some(p) => {
-                            if let EditView::Send(v) = &mut self.view {
-                                v.stage = SendStage::Failed(p);
-                            }
-                        }
-                        None => {
-                            // Signed out: back to the note, the commit id is kept for the retry.
-                            if let EditView::Send(v) = &mut self.view {
-                                v.stage = SendStage::Editing;
-                            }
-                        }
-                    },
+                if !here {
+                    self.say_send_left(cid, bid, &e, stage);
+                    return;
                 }
+                // (critic 73 minor 3) the session that ended was an earlier one: the account is signed in again
+                let (stage, earlier) = match stage {
+                    Some(s) => (Some(s), false),
+                    None if self.ended_earlier(&e) => (Some(SendStage::Failed(Problem { message: EARLIER_SESSION.into(), retry: true, retry_at: None, account: false })), true),
+                    None => (self.problem_of(&e).map(SendStage::Failed), false),
+                };
+                let Some(stage) = stage else {
+                    // Signed out: back to the note, the commit id is kept for the retry; said above the page.
+                    if let EditView::Send(v) = &mut self.view {
+                        v.stage = SendStage::Editing;
+                        let (cid, bid, title) = (v.cid.clone(), v.bid.clone(), v.title.clone());
+                        let bank = self.result_bank(&cid, &bid, &title);
+                        self.say(bank, ResultKind::Session, "Your session ended. Sign in again; where you were is kept, and nothing was lost.");
+                    }
+                    return;
+                };
+                let note = if !self.act_mine() {
+                    None
+                } else if earlier {
+                    Some(LEFT_EARLIER_SESSION.to_string())
+                } else {
+                    let bank = self.act_bank(cid, bid);
+                    self.stage_words(&bank, &stage, unclear.as_deref())
+                };
+                let unticked = matches!(&e, PoolError::Refused(r) if matches!(r.kind, RefusalKind::AttestationRequired));
+                if let EditView::Send(v) = &mut self.view {
+                    v.stage = stage;
+                    if unticked {
+                        v.attest = false;
+                    }
+                }
+                let bank = self.act_bank(cid, bid);
+                self.send_note = note.map(|t| (bank, ResultKind::Send, t));
             }
         }
+    }
+
+    /// (critic 73 I1, critic 75 I1) What the bank's strip says of a send's answer the person did not see on its page:
+    /// the failure's words, the newer version a conflict named (the strip then offers Get latest; a conflict that named
+    /// none has the bank checked at once), or that Send has something to ask. `None` for a stage that is no answer.
+    fn stage_words(&mut self, bank: &ResultBank, stage: &SendStage, unclear: Option<&str>) -> Option<String> {
+        if let Some(why) = unclear {
+            return Some(unclear_strip(why));
+        }
+        // (critic 78 I2) the circle is ahead because of the person's own earlier send, or may be; (critic 80 I2) never when
+        // the newer version is a colleague's
+        let earlier = match (stage, bank.local.as_deref()) {
+            (SendStage::Conflict(c), Some(l)) => self.conflict_own(l, c),
+            _ => None,
+        };
+        Some(match stage {
+            SendStage::Conflict(c) if earlier.is_some() => {
+                if c.head_version.is_none()
+                    && let Some(l) = &bank.local
+                {
+                    self.check_asks.push(l.clone());
+                }
+                own_conflict_strip(earlier == Some(true), c.head_version)
+            }
+            SendStage::Conflict(c) => match c.head_version {
+                Some(h) => format!("Your changes were not sent: someone sent version {h} first. Get the latest, then send them."),
+                None => {
+                    if let Some(l) = &bank.local {
+                        self.check_asks.push(l.clone());
+                    }
+                    "Your changes were not sent: someone sent a newer version first. Get the latest, then send them.".to_string()
+                }
+            },
+            SendStage::Large { removed, total } => format!("Your changes were not sent: they remove {removed} of the bank's {total} questions. Press Send my changes to send them anyway."),
+            SendStage::Decide(_) | SendStage::Payload(_) | SendStage::Keyless { .. } | SendStage::Pictures(_) => "Your changes were not sent: the circle needs a few choices or changes first. Press Send my changes to see them.".to_string(),
+            SendStage::Refused { message, .. } => not_sent(message),
+            SendStage::Failed(p) => not_sent(&p.message),
+            SendStage::Editing | SendStage::Working(_) | SendStage::Done(_) => return None,
+        })
+    }
+
+    /// (critic 73 I1) How a send that did not go through went, said for its bank when its page was closed under it.
+    /// Nothing is said to an account that signed in after the send was asked for.
+    fn say_send_left(&mut self, cid: &str, bid: &str, e: &PoolError, stage: Option<SendStage>) {
+        if !self.act_mine() {
+            return;
+        }
+        let bank = self.act_bank(cid, bid);
+        let unclear = unclear_why(e);
+        let text = match stage {
+            Some(s) => match self.stage_words(&bank, &s, unclear.as_deref()) {
+                Some(t) => t,
+                None => return,
+            },
+            // (critic 73 minor 3) the session that ended was an earlier one: the account is signed in again
+            None if self.ended_earlier(e) => LEFT_EARLIER_SESSION.to_string(),
+            None => match self.problem_of(e) {
+                Some(p) => not_sent(&p.message),
+                None => {
+                    // (the strip offers "Sign in...": `problem_of` noted the session ended)
+                    self.say(bank, ResultKind::Session, "Your session ended before the send was answered. Sign in, then send your changes again; they are still on this computer.");
+                    return;
+                }
+            },
+        };
+        self.say(bank, ResultKind::Send, text);
+    }
+
+    /// (critic 82 I1) The circle answered for a bank (a send, Get latest, a merge, its History, a restore or trim, its
+    /// licence): it can be reached, whatever an earlier check met.
+    fn note_answer(&mut self, m: &Msg) {
+        fn answer<T>(r: &Result<T, PoolError>) -> bool {
+            matches!(r, Ok(_) | Err(PoolError::Refused(_)))
+        }
+        let bank = match m {
+            Msg::Sent(c, b, r, _) | Msg::Rolled(c, b, _, r) => answer(r).then_some((c, b)),
+            Msg::Fetched(c, b, r) => answer(r).then_some((c, b)),
+            Msg::Applied(c, b, r) => answer(r).then_some((c, b)),
+            Msg::Versions(c, b, _, r) => answer(r).then_some((c, b)),
+            Msg::Version(c, b, _, r) | Msg::BaseRead(c, b, _, r) => answer(r).then_some((c, b)),
+            Msg::Trimmed(c, b, r) => answer(r).then_some((c, b)),
+            Msg::Licence(b, r) => {
+                if answer(r) {
+                    let local = self.links.iter().find(|l| l.circle_bank_id == *b).map(|l| l.local_bank_id.clone());
+                    if let Some(l) = local.filter(|l| !self.answered.contains(l)) {
+                        self.answered.push(l);
+                    }
+                }
+                None
+            }
+            Msg::Progress(_) => None,
+        };
+        if let Some(l) = bank.and_then(|(c, b)| self.local_of(c, b)).filter(|l| !self.answered.contains(l)) {
+            self.answered.push(l);
+        }
+    }
+
+    /// (critic 82 I1) Banks the circle answered for since this was last asked: a strip that could not check the circle
+    /// does not go on saying so (its page checks again at once).
+    pub fn take_answered(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.answered)
+    }
+
+    /// (critic 73 I1) Banks whose strip checks the circle at once (the next frame of its page): a conflict that did not
+    /// name the newer version, (critic 75 minor 3) a send with no clear answer, (critic 76 I3) a send refused because
+    /// the person can only view now, (critic 76 I2) a restore with no readable answer.
+    pub fn take_check_asks(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.check_asks)
+    }
+
+    /// (critic 79 I2, critic 80 I1) A send with no readable outcome: what it carried and the version it was based on are
+    /// kept with the link, for the account that sent it (the same rule as `sent_unread`).
+    fn keep_record(&mut self, i: &Inflight) {
+        let sender = self.act_for.as_ref().and_then(|a| a.account.clone());
+        if sender.is_none() && !self.act_mine() {
+            return;
+        }
+        let by = super::bank_links::account_tag(sender.as_deref().or(self.account.as_deref())).unwrap_or_default();
+        let record = sent_record(&i.link, &i.bank, i.base, by);
+        self.update_link(&i.link.local_bank_id, |l| {
+            l.sent_record = Some(record);
+            true
+        });
     }
 
     fn finish_send(&mut self, i: &Inflight, sent: &SentBank) {
         self.pending_send = None;
         self.carry = None;
+        // (critic 78 I1) the send's answer came: it went (read, or `sent_unread` below)
+        let key = (i.link.circle_id.clone(), i.link.circle_bank_id.clone());
+        self.unclear_noted.remove(&key);
+        if self.retry_send.as_ref().is_some_and(|r| r.local_id == i.link.local_bank_id) {
+            self.retry_send = None;
+        }
         if sent.version == 0 {
-            self.notice = Some("The version was sent, but the pool's answer could not be read. Press Get latest and merge to catch up.".into());
+            // (critic 74 I1) the changes went: never counted as unsent, and the strip offers Get latest (for the account
+            // that sent them); (critic 75 minor 5) kept in the links file, with (critic 76 I1) the bank as it was sent,
+            // so that changes made after it are not taken as sent. (critic 77 minor 4) Kept for the account that sent it
+            // whoever is signed in now: it is said to that account only. One whose sender is not known is kept only
+            // while that account's turn lasts.
+            let sender = self.act_for.as_ref().and_then(|a| a.account.clone());
+            if sender.is_some() || self.act_mine() {
+                let by = super::bank_links::account_tag(sender.as_deref().or(self.account.as_deref())).unwrap_or_default();
+                let modified = i.bank.modified;
+                self.update_link(&i.link.local_bank_id, |l| {
+                    l.sent_unread = Some(SentUnread { by, modified });
+                    true
+                });
+                // (critic 80 I1) and what it carried, so Get latest matches the circle's questions to it
+                self.keep_record(i);
+            }
             return;
         }
-        let l = after_send(&i.link, &i.bank, sent);
+        // (critic 75 minor 4) the link as it is now (a check may have learnt something meanwhile) moves on
+        let now = self.links.iter().find(|l| l.local_bank_id == i.link.local_bank_id).cloned().unwrap_or_else(|| i.link.clone());
+        let mut l = after_send(&now, &i.bank, sent);
+        // (critic 74 I1) a send whose answer was read: the copy is at the version it made; (critic 80 I1) an earlier send
+        // with no readable outcome is settled too (this one went on top of it, or was it)
+        l.sent_unread = None;
+        l.sent_record = None;
         self.advanced.push(Advanced { circle_bank_id: l.circle_bank_id.clone(), local_bank_id: l.local_bank_id.clone(), version: l.base_version });
         self.statuses.remove(&l.local_bank_id);
         self.replace_link(l);
@@ -1603,17 +3166,53 @@ impl CircleEditModel {
 
     // ---- get latest and merge --------------------------------------------------------------------------------
 
-    pub fn open_merge(&mut self, local_id: &str, perm: Perm) {
+    /// "Get latest". Returns true when the page opened.
+    pub fn open_merge(&mut self, local_id: &str, perm: Perm) -> bool {
         self.ensure();
-        let Some(l) = self.links.iter().find(|l| l.local_bank_id == local_id).cloned() else { return };
-        self.jobs.clear();
+        let Some(l) = self.links.iter().find(|l| l.local_bank_id == local_id).cloned() else { return false };
+        if self.wait_for_act() {
+            return false;
+        }
+        // (critic 75 I1) Get latest pressed on the Send page's own answer (a conflict, a merge out of date): acted on
+        if matches!(&self.view, EditView::Send(v) if v.local_id == local_id) {
+            self.send_note = None;
+        }
+        self.leave_view();
+        // (critic 89 m2) a quiet read of a base version on its way is kept: when it is this bank's, the review waits for it
+        // and the base version is not read a second time beside it
+        self.jobs.retain(|j| j.kind == JobKind::Base);
         self.view = EditView::Merge(Box::new(MergeView { local_id: l.local_bank_id.clone(), cid: l.circle_id.clone(), bid: l.circle_bank_id.clone(), title: api::plain(&l.title), perm, phase: MergePhase::Fetching }));
-        let w = Work::MergeFetch { cid: l.circle_id, bid: l.circle_bank_id, base: l.base_version, need_base: l.base.is_empty() };
+        self.rebase_next = false;
+        // (critic 87 B1) also read for a base whose difficulties are to be learnt: the review learns them from it
+        let key = (l.circle_id.clone(), l.circle_bank_id.clone(), l.base_version);
+        // (critic 89 m4) not one the circle would not show a moment ago (a reply that can't be read, a version no longer kept)
+        let refused = matches!(self.base_reads.get(&key), Some(BaseRead::Unreadable(..))) && !self.base_read_due(&l, self.now.unwrap_or_else(Instant::now));
+        let learn = needs_difficulty_read(&l) && !self.quiet_read_of(&key) && !refused;
+        self.merge_base = learn.then_some(key);
+        let need_base = l.base.is_empty() || learn;
+        // (phase D1) A copy that can not send gets the latest without merge-initiate, which is for the owner and editors.
+        let w = if perm.can_send() && l.can_send() {
+            // (critic 83 I2) a send with no readable answer that may have gone through: its own version may be needed
+            let own = self.record_mine(&l).filter(|r| !r.not_through && !r.questions.is_empty()).map(|r| OwnRead { base: r.base, me: self.me_name.clone() });
+            Work::MergeFetch { cid: l.circle_id, bid: l.circle_bank_id, base: l.base_version, need_base, own }
+        } else {
+            Work::FollowFetch { cid: l.circle_id, bid: l.circle_bank_id, base: l.base_version, need_base }
+        };
         if !self.launch(w)
             && let EditView::Merge(m) = &mut self.view
         {
-            m.phase = MergePhase::Failed(Problem { message: "Not signed in to the pool. Open the account window and sign in.".into(), retry: true, retry_at: None, account: true });
+            m.phase = MergePhase::Failed(Problem { message: "Not signed in. Open the Account window and sign in.".into(), retry: true, retry_at: None, account: true });
         }
+        true
+    }
+
+    /// "Treat as in step..." on a bank's page (phase D1): Get latest, and when the circle has nothing newer the
+    /// question "treat this copy as in step?" is asked at once. When it has something newer, the merge review
+    /// comes instead (it puts the copy in step itself). Returns true when the page opened.
+    pub fn open_merge_to_rebase(&mut self, local_id: &str, perm: Perm) -> bool {
+        let opened = self.open_merge(local_id, perm);
+        self.rebase_next = opened && perm.can_send();
+        opened
     }
 
     /// "Try again" on a failed fetch.
@@ -1640,6 +3239,11 @@ impl CircleEditModel {
                 MergePhase::HeadWithheld { head_version: Some(start.head_version).filter(|h| *h > 0), replaces }
             }
             Ok(Fetch::Moved) => MergePhase::Failed(Problem { message: "Someone sent changes while this was loading. Press Try again to start the merge over.".into(), retry: true, retry_at: None, account: false }),
+            Ok(Fetch::UpToDate) => {
+                let local = if let EditView::Merge(m) = &self.view { m.local_id.clone() } else { String::new() };
+                self.caught_up(&local);
+                if self.copy_is_stale(&local) { MergePhase::StaleUpToDate { ask: std::mem::take(&mut self.rebase_next).then_some(StaleAsk::Rebase) } } else { MergePhase::UpToDate }
+            }
             Err(e) => {
                 let kind = if let PoolError::Refused(r) = &e { Some(r.kind.clone()) } else { None };
                 match kind {
@@ -1647,7 +3251,8 @@ impl CircleEditModel {
                     Some(RefusalKind::InvalidRequest { field: Some(f) }) if f == "base_version" => {
                         // The copy is already at the newest version.
                         let local = if let EditView::Merge(m) = &self.view { m.local_id.clone() } else { String::new() };
-                        if self.copy_is_stale(&local) { MergePhase::StaleUpToDate { ask: None } } else { MergePhase::UpToDate }
+                        self.caught_up(&local);
+                        if self.copy_is_stale(&local) { MergePhase::StaleUpToDate { ask: std::mem::take(&mut self.rebase_next).then_some(StaleAsk::Rebase) } } else { MergePhase::UpToDate }
                     }
                     _ => match self.problem_of(&e) {
                         Some(p) => MergePhase::Failed(p),
@@ -1661,8 +3266,23 @@ impl CircleEditModel {
                 }
             }
         };
+        // (asked once, for this fetch only)
+        self.rebase_next = false;
         if let EditView::Merge(m) = &mut self.view {
             m.phase = phase;
+        }
+    }
+
+    /// (critic 72 I2) Get latest found the copy at the circle's newest version, or put it there: a result that said to
+    /// catch up is out of date.
+    fn caught_up(&mut self, local: &str) {
+        // (critic 75 minor 5) in the links file too
+        self.update_link(local, |l| l.sent_unread.take().is_some());
+        // (critic 78 I1) the copy is at the circle's newest version: whatever the earlier send did is in it (and what it
+        // carried is no longer needed to tell)
+        self.forget_maybe(local);
+        if let Some(b) = self.result_bank_of_local(local) {
+            self.results.settle(&b, ResultKind::GetLatest);
         }
     }
 
@@ -1675,15 +3295,21 @@ impl CircleEditModel {
         let EditView::Merge(m) = &mut self.view else { return };
         let MergePhase::Ready(f) = std::mem::replace(&mut m.phase, MergePhase::Fetching) else { return };
         let Some(link) = self.links.iter().find(|l| l.local_bank_id == m.local_id).cloned() else {
-            m.phase = MergePhase::Blocked("This working copy is not in the list any more.".into());
+            m.phase = MergePhase::Blocked("This bank is no longer linked to the circle.".into());
             return;
         };
         let Some(bank) = banks.iter().find(|b| b.id == link.local_bank_id) else {
             m.phase = MergePhase::Blocked("The bank is not on this device any more, so there is nothing to merge into.".into());
             return;
         };
+        // (critic 63 B1) The viewers' form never goes into a copy that has its answer keys: nothing is reviewed.
+        if f.head.bank.keys_hidden && !link.viewers_form {
+            m.phase = MergePhase::Blocked(KEYS_KEPT.into());
+            return;
+        }
         let at = self.clock.unwrap_or_else(now_ms);
-        let theirs = circle_theirs(&f.head.payload, at);
+        // (phase D1: a viewer's copy of a bank that hides its keys follows the viewers' form, marked keyless)
+        let theirs = circle_theirs_as(&f.head.payload, at, f.head.bank.keys_hidden);
         if theirs.is_empty() {
             m.phase = MergePhase::Blocked("The circle's newest version could not be read. Nothing was changed.".into());
             return;
@@ -1694,10 +3320,12 @@ impl CircleEditModel {
         }
         // A bank put back from a saved copy is older than the link: what it was last in step with is not known.
         let stale = link.stale_for(bank);
+        // (critic 87 B1) A base whose difficulties were to be learnt from the circle's version at the base version learnt them
+        // from the one read for this review before it is made (see `learn_from_fetch`).
         let (base, fallback) = if !stale && !link.base.is_empty() {
             (link.base.clone(), false)
         } else if let (false, Some(bd)) = (stale, &f.base) {
-            let bt = circle_theirs(&bd.payload, at);
+            let bt = circle_theirs_as(&bd.payload, at, bd.bank.keys_hidden);
             // A question deleted here stays in the base (so it is "deleted by you"), not "new in the circle".
             let rebuilt: Vec<BaseQuestion> = link
                 .qids
@@ -1714,9 +3342,85 @@ impl CircleEditModel {
         } else {
             (merge::unknown_base(bank, &pairs(&link), &theirs), true)
         };
-        let plan = merge::build_plan(&link.circle_bank_id, &base, bank, &theirs, link.base_version, f.start.head_version, None, String::new());
+        // (critic 63 B2) The viewers' form is shuffled afresh on every read: a question whose choices only moved is
+        // not a change, and keeps the order this copy has.
+        let mut theirs = theirs;
+        if f.head.bank.keys_hidden {
+            settle_shuffle(&mut theirs, &base);
+        }
+        // (critic 80 I1) A send from this bank whose answer did not say what it made: where the circle has a question as
+        // that send carried it, that is what the copy is in step with (a correction made since is "changed only by you",
+        // never a conflict with the person's own send).
+        // (the same account rule as `record_mine`, read here beside the open review) (critic 81 I2) Only while that send may
+        // have gone through: not once a colleague's version is known to have come right after the one it was based on,
+        // and only when the version right after it, as the circle lists it now, is not a colleague's. (The circle gives
+        // names only, see `sender`: while the person's own name is not known, what the send carried decides alone.)
+        let me = super::bank_links::account_tag(self.account.as_deref()).unwrap_or_default();
+        let record = link.sent_record.clone().filter(|r| {
+            (r.by.is_empty() || r.by == me) && !r.not_through && r.base.checked_add(1).is_some() && !matches!(sender_of(self.me_name.as_deref(), next_sender(r.base, &f.start)), Who::Other(_))
+        });
+        let own_at = record.as_ref().and_then(|r| r.base.checked_add(1)).unwrap_or(0);
+        // (critic 83 I2) What that send carried is compared with the version it made, the person's own right after the one
+        // it was based on: the newest, or (colleagues sent more since) that version as read for this review. Not readable:
+        // the newest only, as before.
+        let own_doc = f.mine.as_ref().filter(|d| f.start.head_version != own_at && d.bank.version == own_at && !d.bank.keys_hidden);
+        let mine = own_doc.map(|d| circle_theirs(&d.payload, at));
+        let sent: Vec<(&str, &crate::model::Question)> = record.iter().flat_map(|r| r.questions.iter()).map(|q| (q.qid.as_str(), &q.q)).collect();
+        let linked: Vec<&str> = link.qids.iter().map(|q| q.qid.as_str()).collect();
+        let mut base = base;
+        let found = merge::rebase_own_send(&mut base, &linked, &sent, mine.as_deref().unwrap_or(&theirs), &same_picture, !fallback);
+        let mut plan = merge::build_plan(&link.circle_bank_id, &base, bank, &theirs, link.base_version, f.start.head_version, None, String::new());
+        for row in plan.rows.iter_mut().filter(|r| found.resent.contains(&r.base_id)) {
+            match row.kind {
+                RowKind::OursChanged => row.note = Some(text::sent_then_changed(own_at)),
+                // (critic 78 I1, critic 80 I1) the question that send added, as the circle has it: linked, not added twice
+                RowKind::Unchanged if found.added.contains(&row.base_id) => {
+                    row.note = Some(text::SAME_ADDED.into());
+                    plan.matched += 1;
+                }
+                _ => {}
+            }
+        }
+        // (critic 78 I1) A question new in the circle that this bank already has, unlinked and the same (the person's own,
+        // sent without a readable answer): linked to it, never added a second time.
+        merge::match_new_to_unlinked(&mut plan, bank, &theirs, &same_picture, text::SAME_ADDED);
+        // (critic 85 m1) That send's own version was needed (colleagues sent more since) and can not be read: what it
+        // changed and the newest does not have is not said to be the person's alone, and while a question it added is not
+        // matched, a question new in the circle (which may be that one, changed since) is not added by default.
+        // (also in a two-way merge: a question that send added is no more matched there)
+        let own_unread = (own_at > 0 && own_at < f.start.head_version && mine.is_none()).then_some(own_at);
+        if let Some(n) = own_unread {
+            let linked_now: Vec<&str> = plan.rows.iter().filter_map(|r| r.local_id.as_deref()).collect();
+            let unmatched_added = sent.iter().any(|(qid, q)| qid.is_empty() && !linked_now.contains(&q.id.as_str()) && bank.questions.iter().any(|b| b.id == q.id));
+            let changed: Vec<&str> = sent.iter().filter(|(qid, q)| !qid.is_empty() && base.iter().any(|b| b.local_id == q.id && merge::ours_changed(b, q))).map(|(_, q)| q.id.as_str()).collect();
+            for row in &mut plan.rows {
+                match row.kind {
+                    RowKind::OursChanged if changed.contains(&row.base_id.as_str()) => {
+                        row.note = Some(text::sent_change_unread(n));
+                        // (critic 88 I3) someone may have changed it since: the circle's version can be taken instead
+                        row.options = vec![Choice::Keep, Choice::Take];
+                    }
+                    RowKind::NewInTheirs if unmatched_added => {
+                        row.choice = Choice::Undecided;
+                        row.note = Some(text::maybe_your_added(n));
+                    }
+                    _ => {}
+                }
+            }
+        }
         let start = f.start.clone();
-        m.phase = MergePhase::Review(Box::new(Review { plan, fallback, start, problem: self.merge_note.take(), base, ours_print: print_of(bank), fetched: f }));
+        // (critic 85 m4) The version right after the one the send was based on is the person's by name and holds every
+        // question the send carried as it carried them: it is that send, also where what the send changed can not be told
+        // (a difficulty, on a base an earlier build wrote).
+        // (Only when what it carried was matched to that version itself: the newest, read in its place, says nothing of it.)
+        let by_me = record.as_ref().is_some_and(|r| matches!(sender_of(self.me_name.as_deref(), next_sender(r.base, &f.start)), Who::Me));
+        let own = found.own || (by_me && (mine.is_some() || own_at == f.start.head_version) && found.carried > 0 && found.matched == found.carried);
+        let resent = found.resent;
+        let own_version = own.then_some(own_at);
+        // (the review says the version may be the send's only where it does not already say it is)
+        let own_unread = own_unread.filter(|_| !own);
+        let resent_at = if mine.is_some() { own_at } else { start.head_version };
+        m.phase = MergePhase::Review(Box::new(Review { plan, fallback, start, problem: self.merge_note.take(), own_version, resent, resent_at, own_unread, base, ours_print: print_of(bank), fetched: f }));
     }
 
     pub fn set_merge_choice(&mut self, row: usize, c: Choice) {
@@ -1743,13 +3447,15 @@ impl CircleEditModel {
         let (cid, bid) = (m.cid.clone(), m.bid.clone());
         let MergePhase::Review(r) = std::mem::replace(&mut m.phase, MergePhase::Fetching) else { return };
         let version = r.plan.new_version;
+        // (critic 63 B2) A read in the viewers' form is not read again: the next read would be shuffled afresh.
+        let work = if r.fetched.head.bank.keys_hidden { Work::MergeApplyBody { doc: Box::new(r.fetched.head.clone()) } } else { Work::MergeApply { cid, bid, version } };
         m.phase = MergePhase::Applying(r);
-        if !self.launch(Work::MergeApply { cid, bid, version })
+        if !self.launch(work)
             && let EditView::Merge(m) = &mut self.view
             && let MergePhase::Applying(r) = std::mem::replace(&mut m.phase, MergePhase::Fetching)
         {
             let mut r = r;
-            r.problem = Some("Not signed in to the pool. Sign in, then press Apply merge again.".into());
+            r.problem = Some("Not signed in. Sign in, then press Apply merge again.".into());
             m.phase = MergePhase::Review(r);
         }
     }
@@ -1821,7 +3527,9 @@ impl CircleEditModel {
         if let EditView::Merge(m) = &mut self.view {
             m.phase = MergePhase::UpToDate;
         }
-        self.notice = Some("This copy is now treated as in step with the circle's newest version. Your bank was not changed; the next send sends it as it is.".into());
+        if let Some(b) = self.result_bank_of_local(&local) {
+            self.say(b, ResultKind::GetLatest, "Your bank is now used as it is, as matching the circle's newest version. It was not changed; the next send sends it as it is.");
+        }
     }
 
     /// Leaves a review or a wait: nothing was changed.
@@ -1843,13 +3551,18 @@ impl CircleEditModel {
         }
     }
 
-    fn on_applied(&mut self, cid: &str, bid: &str, r: Result<Option<Box<Imported>>, PoolError>) {
+    fn on_applied(&mut self, cid: &str, bid: &str, r: Result<ApplyRead, PoolError>) {
         if !self.here(cid, bid) || !matches!(&self.view, EditView::Merge(m) if matches!(m.phase, MergePhase::Applying(_))) {
             return;
         }
         match r {
-            Ok(Some(imp)) => self.applying = Some(imp),
-            Ok(None) => self.back_to_review("The circle has a different newest version now than the one you reviewed. Nothing was applied. Cancel and start the merge again.".into()),
+            Ok(ApplyRead::Doc(imp)) => self.applying = Some(imp),
+            Ok(ApplyRead::Moved) => self.back_to_review("The circle has a different newest version now than the one you reviewed. Nothing was applied. Cancel and start the merge again.".into()),
+            Ok(ApplyRead::KeysHidden) => {
+                // (critic 67 M2) a copy made from the viewers' form has no keys to keep: it is told what happened
+                let keyless = self.links.iter().any(|l| l.circle_id == cid && l.circle_bank_id == bid && l.viewers_form);
+                self.back_to_review(if keyless { KEYS_GONE_AT_APPLY } else { KEYS_KEPT }.into())
+            }
             Err(e) => match self.problem_of(&e) {
                 Some(p) => self.back_to_review(p.message),
                 None => self.back_to_review("Your session ended. Sign in again, then press Apply merge. Nothing was changed.".into()),
@@ -1867,7 +3580,7 @@ impl CircleEditModel {
             m.phase = MergePhase::Review(rev);
         };
         let Some(mut link) = self.links.iter().find(|l| l.local_bank_id == local_id).cloned() else {
-            back(m, rev, "This working copy is not in the list any more. Nothing was applied.".into());
+            back(m, rev, "This bank is no longer linked to the circle. Nothing was applied.".into());
             return false;
         };
         if imp.head.item.version != rev.plan.new_version {
@@ -1892,10 +3605,16 @@ impl CircleEditModel {
         }
         let author = api::plain(&imp.head.item.author_name);
         let mut bank = banks[pos].clone();
-        let (outcome, new_base) = match merge::apply_merge(&mut bank, &rev.plan, &imp.theirs, &rev.base, &author, imp.at_ms) {
+        // (the same order as the review: see build_review)
+        let mut theirs = imp.theirs.clone();
+        if rev.fetched.head.bank.keys_hidden {
+            settle_shuffle(&mut theirs, &rev.base);
+        }
+        let (outcome, new_base) = match merge::apply_merge(&mut bank, &rev.plan, &theirs, &rev.base, &author, imp.at_ms) {
             Ok(a) => a,
             Err(msg) => {
-                back(m, rev, msg);
+                // (critic 72 I1) merge.rs speaks of "the pool": here it is the circle
+                back(m, rev, super::circles_text::merge_words(&msg));
                 return false;
             }
         };
@@ -1924,14 +3643,22 @@ impl CircleEditModel {
         link.base_version = imp.head.item.version;
         link.base_version_id = imp.head.item.publish_id.clone();
         link.head_seen = link.head_seen.max(link.base_version);
+        // (critic 89 I1) the base is the circle's version as merged: its difficulties are known as written
+        link.difficulty_read = Some(0);
+        link.inherit = false;
+        // (critic 63 I3) Read in full: the answer keys came with it, so the copy no longer follows the viewers' form.
+        if !rev.fetched.head.bank.keys_hidden {
+            link.viewers_form = false;
+        }
         let carry = Carry { local_id: local_id.clone(), token: rev.start.merge_token.clone(), from: rev.plan.old_version, head: link.base_version };
         let changes = changes_since(&link, &banks[pos]);
         self.advanced.push(Advanced { circle_bank_id: link.circle_bank_id.clone(), local_bank_id: local_id.clone(), version: link.base_version });
         let version = link.base_version;
         self.statuses.remove(&local_id);
         self.replace_link(link);
-        // The next send, if there is something to send, goes with the token.
-        self.carry = (changes.total() > 0).then_some(carry);
+        self.caught_up(&local_id);
+        // The next send, if there is something to send, goes with the token (a follow link's get has none).
+        self.carry = (changes.total() > 0 && !carry.token.is_empty()).then_some(carry);
         if let EditView::Merge(m) = &mut self.view {
             m.phase = MergePhase::Applied(Box::new(MergeDone { outcome, restore, version, changes }));
         }
@@ -1940,12 +3667,18 @@ impl CircleEditModel {
 
     // ---- the history -------------------------------------------------------------------------------------------
 
-    pub fn open_history(&mut self, cid: &str, bid: &str, title: &str, perm: Perm) {
+    /// The bank's history of versions. Returns true when the page opened.
+    pub fn open_history(&mut self, cid: &str, bid: &str, title: &str, perm: Perm) -> bool {
         if !super::pool::is_item_id(cid) || !super::pool::is_item_id(bid) {
-            return;
+            return false;
         }
         self.ensure();
-        self.jobs.clear();
+        if self.wait_for_act() {
+            return false;
+        }
+        self.leave_view();
+        // (critic 89 m2) a quiet read of a base version on its way is kept
+        self.jobs.retain(|j| j.kind == JobKind::Base);
         self.history_stash = None;
         let local_id = self.links.iter().find(|l| l.circle_id == cid && l.circle_bank_id == bid).map(|l| l.local_bank_id.clone());
         self.view = EditView::History(Box::new(HistoryView {
@@ -1967,6 +3700,7 @@ impl CircleEditModel {
             keys_closed: Default::default(),
         }));
         self.load_history(None);
+        true
     }
 
     fn load_history(&mut self, before: Option<u64>) {
@@ -1980,7 +3714,7 @@ impl CircleEditModel {
             && let EditView::History(h) = &mut self.view
         {
             h.loading_more = false;
-            h.problem = Some(Problem { message: "Not signed in to the pool. Open the account window and sign in.".into(), retry: true, retry_at: None, account: true });
+            h.problem = Some(Problem { message: "Not signed in. Open the Account window and sign in.".into(), retry: true, retry_at: None, account: true });
         }
     }
 
@@ -2027,6 +3761,9 @@ impl CircleEditModel {
                     }
                     h.problem = None;
                 }
+                if first {
+                    self.unsure.remove(&(cid.to_string(), bid.to_string()));
+                }
                 self.note_head(cid, bid, head);
             }
             Err(e) => {
@@ -2047,7 +3784,9 @@ impl CircleEditModel {
         if let Some(l) = self.links.iter().find(|l| l.circle_id == cid && l.circle_bank_id == bid && l.head_seen < head).cloned() {
             let mut l = l;
             l.head_seen = head;
+            let local = l.local_bank_id.clone();
             self.replace_link(l);
+            self.head_moved(&local);
         }
     }
 
@@ -2066,7 +3805,7 @@ impl CircleEditModel {
         if !self.launch(Work::Version { cid, bid, n })
             && let EditView::Version(v) = &mut self.view
         {
-            v.load = VersionLoad::Failed(Problem { message: "Not signed in to the pool. Open the account window and sign in.".into(), retry: true, retry_at: None, account: true });
+            v.load = VersionLoad::Failed(Problem { message: "Not signed in. Open the Account window and sign in.".into(), retry: true, retry_at: None, account: true });
         }
     }
 
@@ -2103,17 +3842,20 @@ impl CircleEditModel {
 
     /// Back from a version to the history (or out, when there is none).
     pub fn back(&mut self) {
-        match std::mem::take(&mut self.view) {
-            EditView::Version(_) => {
-                self.jobs.retain(|j| j.kind != JobKind::Version);
-                self.view = self.history_stash.take().map_or(EditView::Closed, EditView::History);
+        if matches!(self.view, EditView::Version(_)) {
+            self.jobs.retain(|j| j.kind != JobKind::Version);
+            self.view = self.history_stash.take().map_or(EditView::Closed, EditView::History);
+            // (a restore or trim answered while a version was looked at: the history is read again)
+            if matches!(&self.view, EditView::History(h) if !h.loaded && h.problem.is_none()) {
+                self.load_history(None);
             }
-            _ => {
-                self.jobs.clear();
-                self.history_stash = None;
-                self.view = EditView::Closed;
-            }
+            return;
         }
+        // (critic 69 I1) a restore or trim on its way is kept, and a result not closed is said on the bank's strip
+        self.leave_view();
+        self.jobs.retain(|j| matches!(j.kind, JobKind::Act | JobKind::Base));
+        self.history_stash = None;
+        self.view = EditView::Closed;
     }
 
     // ---- restore -----------------------------------------------------------------------------------------------
@@ -2159,19 +3901,76 @@ impl CircleEditModel {
             && let EditView::History(h) = &mut self.view
             && let Some(r) = &mut h.restore
         {
-            r.stage = RestoreStage::Failed(Problem { message: "Not signed in to the pool. Open the account window and sign in.".into(), retry: true, retry_at: None, account: true });
+            r.stage = RestoreStage::Failed(Problem { message: "Not signed in. Open the Account window and sign in.".into(), retry: true, retry_at: None, account: true });
+        }
+    }
+
+    /// The History showing this circle bank: the open one, or the one kept while one of its versions is looked at.
+    fn history_of(&mut self, cid: &str, bid: &str) -> Option<&mut HistoryView> {
+        match &mut self.view {
+            EditView::History(h) if h.cid == cid && h.bid == bid => Some(h),
+            EditView::Version(_) => self.history_stash.as_deref_mut().filter(|h| h.cid == cid && h.bid == bid),
+            _ => None,
+        }
+    }
+
+    /// A History whose list changed while it was not the open screen is read again when it is shown (see `back`).
+    fn history_changed(&mut self, cid: &str, bid: &str) {
+        if matches!(&self.view, EditView::History(h) if h.cid == cid && h.bid == bid) {
+            self.reload_history_keeping_ask();
+        } else if let Some(h) = self.history_of(cid, bid) {
+            h.loaded = false;
+            h.lines.clear();
+            h.next_before = None;
         }
     }
 
     fn on_rolled(&mut self, cid: &str, bid: &str, to: u64, r: Result<SentBank, PoolError>) {
-        if !matches!(&self.view, EditView::History(h) if h.cid == cid && h.bid == bid && h.restore.as_ref().is_some_and(|x| x.to == to)) {
+        // (critic 69 I1, critic 71 I3) the circle's newest version, as the answer says it: the bank's strip never says
+        // "up to date" behind it, even when the History's own reload is never read (it was left)
+        let conflict = match &r {
+            Err(PoolError::Refused(rf)) => match &rf.kind {
+                RefusalKind::CircleConflict { head_version, .. } => Some(*head_version),
+                _ => None,
+            },
+            _ => None,
+        };
+        match (&r, conflict) {
+            (Ok(sent), _) => self.note_head(cid, bid, sent.version),
+            (_, Some(Some(h))) => self.note_head(cid, bid, h),
+            _ => {}
+        }
+        // (critic 76 I2) Restored, but the answer named no version the app can read: the circle's newest version is not
+        // known here. It is "when last checked" (never "up to date") until the bank is checked, which it is at once.
+        // (critic 77 I2) The same for an answer that does not say whether it went (none came, it could not be read, the
+        // server failed on its side): never "did not go through".
+        let unclear = r.as_ref().err().and_then(unclear_why);
+        // (critic 77 I2) this answer replaces what an earlier unclear one left to be checked
+        self.unclear_restores.remove(&(cid.to_string(), bid.to_string()));
+        if unclear.is_some() {
+            // (critic 79 I2) with the version it was based on: the check decides by it
+            let base = self.act_for.as_ref().filter(|a| a.what == "restore" && a.cid == cid && a.bid == bid).map(|a| a.base).or_else(|| self.link_head(cid, bid)).unwrap_or(0);
+            self.unclear_restores.insert((cid.to_string(), bid.to_string()), (to, base, None, false));
+        }
+        if matches!(&r, Ok(sent) if sent.version == 0) || unclear.is_some() {
+            self.unsure.insert((cid.to_string(), bid.to_string()));
+            if let Some(l) = self.local_of(cid, bid) {
+                self.check_asks.push(l);
+            }
+        }
+        // (critic 71 minor 2) asked for before another account signed in: nothing changes for the account here now (no
+        // sign-out, no result)
+        if !self.act_mine() {
             return;
         }
+        let earlier = matches!(&r, Err(e) if self.ended_earlier(e));
         let stage = match r {
             Ok(sent) => {
                 self.pending_restore = None;
                 Some(RestoreStage::Done { version: sent.version, held: sent.held, withheld: sent.withheld })
             }
+            // (critic 77 I2) the commit id is kept: Try again goes as the same restore
+            Err(_) if let Some(why) = unclear => Some(RestoreStage::Unclear(why)),
             Err(e) => match &e {
                 PoolError::Refused(rf) if matches!(rf.kind, RefusalKind::ConfirmLarge { .. }) => {
                     let RefusalKind::ConfirmLarge { removed, total } = rf.kind else { unreachable!() };
@@ -2190,17 +3989,45 @@ impl CircleEditModel {
                     self.pending_restore = None;
                     Some(RestoreStage::Failed(Problem { message: "The bank's answer-key setting changed while this was on its way, so nothing was stored. Press Restore again.".into(), retry: true, retry_at: None, account: false }))
                 }
+                // (critic 73 minor 3) the session that ended was an earlier one: the account is signed in again
+                _ if earlier => Some(RestoreStage::Failed(Problem { message: EARLIER_SESSION.into(), retry: true, retry_at: None, account: false })),
                 _ => self.problem_of(&e).map(RestoreStage::Failed),
             },
         };
-        let reload = matches!(stage, Some(RestoreStage::Done { .. })) || matches!(&stage, Some(RestoreStage::Failed(p)) if p.message.starts_with("A newer version"));
-        if let EditView::History(h) = &mut self.view
+        // (critic 73 minors 1, 3) the session ended before the answer: the restore may have gone through, so the newest
+        // version is "when last checked" until the circle is read again
+        if earlier || stage.is_none() {
+            self.unsure.insert((cid.to_string(), bid.to_string()));
+        }
+        let reload = matches!(stage, Some(RestoreStage::Done { .. })) || conflict.is_some();
+        let asked = self.history_of(cid, bid).is_some_and(|h| h.restore.as_ref().is_some_and(|x| x.to == to));
+        if !(asked && self.history_shown()) {
+            // (critic 69 I1, critic 71 I1) The History was left (Back, the Circles tab, another bank's page), or is
+            // open where the person is not looking (Bank settings on the Shared page): how it went is said on the
+            // bank's strip and Bank settings, and the History no longer holds the restore.
+            if asked && let Some(h) = self.history_of(cid, bid) {
+                h.restore = None;
+            }
+            if reload {
+                self.history_changed(cid, bid);
+            }
+            let said = match conflict {
+                // (critic 71 I3) no history was reloaded here: the person chooses again
+                Some(h) => restore_conflict_note(to, h),
+                None if earlier => format!("Your session ended before the restore of version {to} was answered. Open History to see whether it went through."),
+                None => restore_note(to, stage.as_ref()).unwrap_or_else(|| format!("Your session ended before the restore of version {to} was answered. Sign in, then open History to see whether it went through.")),
+            };
+            let bank = self.act_bank(cid, bid);
+            self.say(bank, ResultKind::Restore, said);
+            return;
+        }
+        if let Some(h) = self.history_of(cid, bid)
             && let Some(x) = &mut h.restore
         {
             x.stage = stage.unwrap_or(RestoreStage::Confirm);
         }
         if reload {
-            self.reload_history_keeping_ask();
+            self.history_changed(cid, bid);
         }
     }
 
@@ -2215,7 +4042,7 @@ impl CircleEditModel {
 
     pub fn close_restore_result(&mut self) {
         if let EditView::History(h) = &mut self.view
-            && matches!(h.restore.as_ref().map(|r| &r.stage), Some(RestoreStage::Done { .. } | RestoreStage::Failed(_)))
+            && matches!(h.restore.as_ref().map(|r| &r.stage), Some(RestoreStage::Done { .. } | RestoreStage::Failed(_) | RestoreStage::Unclear(_)))
         {
             h.restore = None;
         }
@@ -2264,7 +4091,7 @@ impl CircleEditModel {
         let acting = self.running(JobKind::Act);
         let EditView::History(h) = &mut self.view else { return };
         let Some(t) = &mut h.trim else { return };
-        if !h.perm.can_rewind() || !matches!(t.stage, TrimStage::Confirm | TrimStage::Failed(_)) || acting {
+        if !h.perm.can_rewind() || !matches!(t.stage, TrimStage::Confirm | TrimStage::Failed(_) | TrimStage::Unclear(_)) || acting {
             return;
         }
         let keep = t.keep;
@@ -2275,35 +4102,54 @@ impl CircleEditModel {
             && let EditView::History(h) = &mut self.view
             && let Some(t) = &mut h.trim
         {
-            t.stage = TrimStage::Failed(Problem { message: "Not signed in to the pool. Open the account window and sign in.".into(), retry: true, retry_at: None, account: true });
+            t.stage = TrimStage::Failed(Problem { message: "Not signed in. Open the Account window and sign in.".into(), retry: true, retry_at: None, account: true });
         }
     }
 
     fn on_trimmed(&mut self, cid: &str, bid: &str, r: Result<Trimmed, PoolError>) {
-        if !matches!(&self.view, EditView::History(h) if h.cid == cid && h.bid == bid && h.trim.is_some()) {
+        // (critic 71 minor 2) asked for before another account signed in: nothing changes for the account here now
+        if !self.act_mine() {
             return;
         }
+        let earlier = matches!(&r, Err(e) if self.ended_earlier(e));
         let stage = match r {
-            Ok(t) => TrimStage::Done(t),
-            Err(e) => match self.problem_of(&e) {
-                Some(p) => TrimStage::Failed(p),
-                None => TrimStage::Confirm,
-            },
+            Ok(t) => Some(TrimStage::Done(t)),
+            // (critic 77 I2) no clear answer: it may have gone through
+            Err(e) if let Some(why) = unclear_why(&e) => Some(TrimStage::Unclear(why)),
+            // (critic 73 minor 3) the session that ended was an earlier one: the account is signed in again
+            Err(_) if earlier => Some(TrimStage::Failed(Problem { message: EARLIER_SESSION.into(), retry: true, retry_at: None, account: false })),
+            Err(e) => self.problem_of(&e).map(TrimStage::Failed),
         };
-        let done = matches!(stage, TrimStage::Done(_));
-        if let EditView::History(h) = &mut self.view
+        let done = matches!(stage, Some(TrimStage::Done(_)));
+        let asked = self.history_of(cid, bid).is_some_and(|h| h.trim.is_some());
+        if !(asked && self.history_shown()) {
+            // (critic 69 I1, critic 71 I1) the History was left, or is not where the person is looking: how the trim
+            // went is said on the bank's strip and Bank settings
+            if asked && let Some(h) = self.history_of(cid, bid) {
+                h.trim = None;
+            }
+            if done {
+                self.history_changed(cid, bid);
+            }
+            let said = if earlier { Some("Your session ended before the trim was answered. Open History to see whether it went through.".to_string()) } else { trim_note(stage.as_ref()) };
+            let said = said.unwrap_or_else(|| "Your session ended before the trim was answered. Sign in, then open History to see whether it went through.".into());
+            let bank = self.act_bank(cid, bid);
+            self.say(bank, ResultKind::Trim, said);
+            return;
+        }
+        if let Some(h) = self.history_of(cid, bid)
             && let Some(t) = &mut h.trim
         {
-            t.stage = stage;
+            t.stage = stage.unwrap_or(TrimStage::Confirm);
         }
         if done {
-            self.reload_history_keeping_ask();
+            self.history_changed(cid, bid);
         }
     }
 
     pub fn close_trim_result(&mut self) {
         if let EditView::History(h) = &mut self.view
-            && matches!(h.trim.as_ref().map(|t| &t.stage), Some(TrimStage::Done(_) | TrimStage::Failed(_)))
+            && matches!(h.trim.as_ref().map(|t| &t.stage), Some(TrimStage::Done(_) | TrimStage::Failed(_) | TrimStage::Unclear(_)))
         {
             h.trim = None;
         }
@@ -2314,22 +4160,24 @@ impl CircleEditModel {
         match self.last_act {
             Some(ActAgain::Send) => {
                 if matches!(&self.view, EditView::Send(v) if matches!(v.stage, SendStage::Failed(_))) {
-                    // (the pictures kept go again: the pool never asks about them, so they would be lost)
+                    // (the pictures kept go again: the pool never asks about them, so they would be lost; critic 79 minor
+                    // 4: and every viewers' copy decision, so that Try again is the same request. `do_send` drops them
+                    // for content they were not made for.)
                     let keep = match &mut self.view {
-                        EditView::Send(v) => v.picked.take().map(|p| (p, std::mem::take(&mut v.decisions.image_ok), v.decisions_for.clone())),
+                        EditView::Send(v) => Some((v.picked.take(), std::mem::take(&mut v.decisions), v.decisions_for.clone())),
                         _ => None,
                     };
                     self.back_to_note();
-                    if let (EditView::Send(v), Some((p, image_ok, Some(sha)))) = (&mut self.view, keep) {
-                        v.decisions.image_ok = image_ok;
+                    if let (EditView::Send(v), Some((p, decisions, Some(sha)))) = (&mut self.view, keep) {
+                        v.decisions = decisions;
                         v.decisions_for = Some(sha);
-                        v.picked = Some(p);
+                        v.picked = p;
                     }
                     self.send();
                 }
             }
             Some(ActAgain::Restore(_)) => {
-                if matches!(&self.view, EditView::History(h) if h.restore.as_ref().is_some_and(|r| matches!(r.stage, RestoreStage::Failed(_)))) {
+                if matches!(&self.view, EditView::History(h) if h.restore.as_ref().is_some_and(|r| matches!(r.stage, RestoreStage::Failed(_) | RestoreStage::Unclear(_)))) {
                     if let EditView::History(h) = &mut self.view
                         && let Some(r) = &mut h.restore
                     {
@@ -2349,6 +4197,13 @@ impl CircleEditModel {
     /// merge. Returns true when a bank changed (the caller saves the banks).
     pub fn sync(&mut self, banks: &mut [QuestionBank]) -> bool {
         self.ensure();
+        // (critic 89 m2) a review waits for the quiet read of its base version on its way
+        let review = matches!(&self.view, EditView::Merge(m) if matches!(m.phase, MergePhase::Ready(_))) && !self.merge_waits_for_base();
+        if review {
+            self.learn_from_fetch();
+        }
+        // (the owner's decision, critic 90 I1) before anything is counted or reviewed
+        let inherited = self.inherit_pending(banks);
         self.refresh_statuses(banks);
         if let EditView::Send(v) = &mut self.view
             && let Some(s) = self.statuses.get(&v.local_id)
@@ -2362,28 +4217,47 @@ impl CircleEditModel {
         if std::mem::take(&mut self.cmd_rebase) {
             self.do_rebaseline(banks);
         }
-        if matches!(&self.view, EditView::Merge(m) if matches!(m.phase, MergePhase::Ready(_))) {
+        if review {
             self.build_review(banks);
         }
         if let Some(imp) = self.applying.take() {
-            return self.finish_merge(banks, imp);
+            return self.finish_merge(banks, imp) || inherited;
         }
-        false
+        inherited
     }
 
     fn refresh_statuses(&mut self, banks: &[QuestionBank]) {
-        for l in &self.links {
+        // (the links are lent out, not copied: a link's snapshot can be large)
+        let links = std::mem::take(&mut self.links);
+        for l in &links {
             let bank = banks.iter().find(|b| b.id == l.local_bank_id);
-            let key = bank.map_or((0, 0), |b| (b.modified, b.questions.len()));
-            let stale = bank.is_some_and(|b| l.stale_for(b));
-            let fresh = self.statuses.get(&l.local_bank_id).is_some_and(|s| s.key == key && s.missing == bank.is_none() && s.stale == stale);
-            if fresh {
-                continue;
-            }
-            let changes = bank.map(|b| changes_since(l, b)).unwrap_or_default();
-            self.statuses.insert(l.local_bank_id.clone(), LinkStatus { key, changes, missing: bank.is_none(), stale });
+            self.refresh_one(l, bank);
         }
+        self.links = links;
     }
+
+    /// Works out where the link stands, unless that is known for the bank as it is (and for what the link knows of the
+    /// difficulties: critic 87 B1 learns them from the circle).
+    fn refresh_one(&mut self, l: &CircleLink, bank: Option<&QuestionBank>) {
+        let key = bank.map_or((0, 0), |b| (b.modified, b.questions.len()));
+        let stale = bank.is_some_and(|b| l.stale_for(b));
+        let name = bank.map(|b| b.name.clone()).unwrap_or_default();
+        let unknown = difficulty_unknown(l);
+        let fresh = self.statuses.get(&l.local_bank_id).is_some_and(|s| s.key == key && s.missing == bank.is_none() && s.stale == stale && s.bank_name == name && s.unknown == unknown);
+        if fresh {
+            return;
+        }
+        let changes = bank.map(|b| changes_since(l, b)).unwrap_or_default();
+        self.statuses.insert(l.local_bank_id.clone(), LinkStatus { key, changes, missing: bank.is_none(), stale, bank_name: name, unknown });
+    }
+}
+
+/// (critic 80 I2, critic 86 minor) The send kept in `sent_record` went through (the person's own version came right after
+/// the one it was based on): as if its answer had come but could not be read.
+fn went_through(l: &mut CircleLink) -> bool {
+    let Some(r) = &l.sent_record else { return false };
+    l.sent_unread = Some(SentUnread { by: r.by.clone(), modified: r.modified });
+    true
 }
 
 /// What the bank's questions are right now, to notice an edit made while a review was open.
@@ -2420,9 +4294,9 @@ fn hidden_lines(held: bool, withheld: bool, can_fix: bool) -> Vec<String> {
     let mut out = Vec::new();
     if withheld {
         out.push(if can_fix {
-            "This version is held back while an administrator reviews it: something in it matched what the pool checks for, so nobody can open it until an administrator releases it. Change the questions that may be the cause and send a clean version.".to_string()
+            "This version is held back while an administrator reviews it: something in it matched what verSHion checks for, so nobody can open it until an administrator releases it. Change the questions that may be the cause and send a clean version.".to_string()
         } else {
-            "This version is held back while an administrator reviews it: something in it matched what the pool checks for, so nobody can open it until an administrator releases it. Only the bank's author or the circle's owner can send a clean version. Ask one of them.".to_string()
+            "This version is held back while an administrator reviews it: something in it matched what verSHion checks for, so nobody can open it until an administrator releases it. Only the bank's author or the circle's owner can send a clean version. Ask one of them.".to_string()
         });
     }
     if held {
@@ -2435,9 +4309,117 @@ fn hidden_lines(held: bool, withheld: bool, can_fix: bool) -> Vec<String> {
     out
 }
 
+/// (critic 75 minor 3) An answer to a send that does not say whether it went through: none came (offline, a timeout
+/// after the request left), it could not be read, or the server failed on its side. The words why; `None` for an
+/// answer that says the send was refused (nothing was stored).
+fn unclear_why(e: &PoolError) -> Option<String> {
+    match e {
+        PoolError::Api(ApiError::Offline(why)) => Some(why.trim().to_string()),
+        PoolError::Api(ApiError::BadReply(_) | ApiError::TooLarge(_)) => Some("The circle's answer could not be read.".into()),
+        PoolError::Refused(r) if matches!(r.detail.status, 500 | 502 | 504) && matches!(r.kind, RefusalKind::Other) => Some("verSHion's server had a problem on its side.".into()),
+        _ => None,
+    }
+}
+
+/// The same on the Send page: Try again sends the same changes again, which the circle never takes twice.
+fn unclear_page(why: &str) -> String {
+    format!("Your send may have gone through, but no clear answer came: {why} Press Try again: if it went through, nothing is sent twice. Your changes are still on this computer.")
+}
+
+/// (critic 78 I1) The bank's question and the circle's have the same picture (or neither has one).
+/// (critic 80 I2) Whether `by` names the person whose display name is `me` (see `CircleEditModel::sender`).
+fn sender_of(me: Option<&str>, by: Option<&str>) -> Who {
+    let name = |s: &str| api::plain(s).trim().to_string();
+    let (Some(by), Some(me)) = (by.map(name).filter(|s| !s.is_empty()), me.map(name).filter(|s| !s.is_empty())) else { return Who::Unknown };
+    if by == me { Who::Me } else { Who::Other(by) }
+}
+
+/// (critic 81 I2) Who sent the version right after `base`, as the merge-initiate answer lists the versions after the copy's
+/// (the first 50, oldest first: that one is always among them).
+fn next_sender(base: u64, start: &MergeStart) -> Option<&str> {
+    let next = base.checked_add(1)?;
+    start.between.iter().find(|l| l.version == next).map(|l| l.by.as_str())
+}
+
+pub fn same_picture(q: &crate::model::Question, t: &merge::Theirs) -> bool {
+    match (&q.image, &t.sha) {
+        (None, None) => true,
+        (Some(i), Some(sha)) => sha_of_file(&i.file).as_deref() == Some(sha.as_str()),
+        _ => false,
+    }
+}
+
+/// (critic 77 I2) A restore with no clear answer, on the History: Try again goes as the same restore.
+pub fn unclear_restore_page(why: &str) -> String {
+    format!("Your restore may have gone through, but no clear answer came: {why} Press Try again: if it went through, nothing is restored twice.")
+}
+
+/// (critic 77 I2) The same for a trim; (critic 79 minor 6) exactly what trying again does: it keeps the same newest
+/// versions, so after a trim that went through it deletes only what fell out of them since.
+pub fn unclear_trim_page(why: &str) -> String {
+    format!("Your trim may have gone through, but no clear answer came: {why} Press Try again to make sure. If it went through, trying again deletes nothing more, unless newer versions were sent since.")
+}
+
+/// (critic 78 I1) What the check after a send with no clear answer found: a newer version (it may be the send).
+fn unclear_moved(head: u64) -> String {
+    format!("The check found a newer version in the circle, version {head}. It may be the one you sent: press Get latest to see. Your changes are still on this computer.")
+}
+
+/// (critic 78 I1) The same, when the circle still has the version the send was based on.
+fn unclear_still(head: u64) -> String {
+    // (critic 81 minor 5) not "did not go through": a slow commit may land after the check
+    format!("Your send may not have arrived yet: the circle still has version {head}. Your changes are still on this computer; press Send my changes to send them.")
+}
+
+/// (critic 80 I2) The same, when a colleague sent the version right after the one the send was based on.
+fn unclear_other_first(who: &str, head: u64) -> String {
+    format!("{who} sent version {head} first, so your send did not go through. Your changes are still on this computer: get the latest, then send them.")
+}
+
+/// (critic 80 I2) The same, when the version right after it is the person's own.
+fn unclear_mine(head: u64) -> String {
+    format!("The check found version {head} in the circle, sent by you: your send went through. Press Get latest to catch up.")
+}
+
+/// (critic 78 I2) A conflict with the person's own earlier send (`went`: it went through but its answer could not be
+/// read), or one that may be (no clear answer came), said on the strip: never "someone sent".
+fn own_conflict_strip(went: bool, head: Option<u64>) -> String {
+    match (went, head) {
+        (true, Some(h)) => format!("Your changes were not sent: your earlier send went through, so the circle is ahead of your copy (version {h}). Get the latest, then send what is left."),
+        (true, None) => "Your changes were not sent: your earlier send went through, so the circle is ahead of your copy. Get the latest, then send what is left.".into(),
+        (false, Some(h)) => format!("Your changes were not sent: the circle has version {h}, which may be your earlier send. Get the latest, then send what is left."),
+        (false, None) => "Your changes were not sent: the circle has a newer version, which may be your earlier send. Get the latest, then send what is left.".into(),
+    }
+}
+
+/// (critic 78 I2) The conflict box on the Send page for the same: the box's words and what to do.
+pub fn own_conflict_page(went: bool) -> (&'static str, &'static str) {
+    if went {
+        ("Your earlier send went through, so the circle is ahead of your copy: nothing was sent and nothing was overwritten.", "Get the latest to catch up, then send what is left.")
+    } else {
+        ("The circle has a newer version than your copy, so nothing was sent and nothing was overwritten. It may be your earlier send.", "Get the latest to catch up, then send what is left. You decide what happens to every question that was changed on both sides.")
+    }
+}
+
+/// (critic 78 I2) The Send page of a bank whose earlier send went through but whose answer could not be read.
+pub const SEND_PAGE_EARLIER: &str = "Your earlier send went through, so these counts still include its changes until you get the latest. Get the latest first, then send what is left.";
+
+/// The same on the bank's strip, which checks the circle at once.
+fn unclear_strip(why: &str) -> String {
+    format!("Your send may have gone through, but no clear answer came: {why} Your changes are still on this computer; the circle is checked again to see where it stands.")
+}
+
+/// (critic 73 I1) A send that did not go through, said on the strip: the reason, and that the changes are kept.
+fn not_sent(m: &str) -> String {
+    let m = m.trim_end();
+    if m.contains("still on this") { format!("Your changes were not sent: {m}") } else { format!("Your changes were not sent: {m} They are still on this computer.") }
+}
+
 /// The lines under "Sent": what happened, in plain words. `can_fix`: the owner, or the bank's author.
 pub fn sent_lines(s: &Sent, can_fix: bool) -> Vec<String> {
-    let mut out = vec![format!("Version {} is now the circle's newest. {} added, {} changed, {} removed.", s.version, s.added, s.changed, s.removed)];
+    // (critic 74 I1) an answer with no version the app could read: never "Version 0 ... 0 added"
+    let first = if s.version == 0 { SENT_UNREAD_PAGE.to_string() } else { format!("Version {} is now the circle's newest. {} added, {} changed, {} removed.", s.version, s.added, s.changed, s.removed) };
+    let mut out = vec![first];
     if s.replayed {
         out.push("This send had already gone through; nothing was sent twice.".into());
     }
@@ -2456,18 +4438,71 @@ pub fn sent_lines(s: &Sent, can_fix: bool) -> Vec<String> {
 /// The lines under a finished restore: what happened, including when the restored content was held.
 pub fn restore_lines(version: u64, to: u64, held: bool, withheld: bool, can_fix: bool) -> Vec<String> {
     if withheld || held {
-        let mut out = vec![format!("Version {version} was made from version {to}, but it is not shown to the circle yet.")];
+        // (critic 76 I2) never "version 0": an answer that named no version the app can read
+        let made = if version == 0 { "A new version".to_string() } else { format!("Version {version}") };
+        let mut out = vec![format!("{made} was made from version {to}, but it is not shown to the circle yet.")];
         // A restore sends nothing from this computer: "take it out and send again" would point at the
         // wrong questions, so the advice names what a restore can do instead.
         if withheld && can_fix {
-            out.push(format!("It is held back while an administrator reviews it: something in version {to} matched what the pool checks for, so nobody can open the new version until an administrator releases it. To give the circle a clean newest version, restore a different version, or send a clean one from a working copy."));
+            out.push(format!("It is held back while an administrator reviews it: something in version {to} matched what verSHion checks for, so nobody can open the new version until an administrator releases it. To give the circle a clean newest version, restore a different version, or send a clean one from the bank in My Banks."));
             out.extend(hidden_lines(held, false, can_fix));
             return out;
         }
         out.extend(hidden_lines(held, withheld, can_fix));
         return out;
     }
-    vec![format!("Done. Version {version} is now the circle's newest, with the content of version {to}."), "Everyone with a working copy sees it as a new version, and merges it in when they choose.".into()]
+    let first = if version == 0 {
+        // (critic 76 I2) restored, but the answer named no version the app can read
+        format!("Done. Version {to} was restored as the circle's newest version, but the circle's answer could not be read, so the new version's number is not known here.")
+    } else {
+        format!("Done. Version {version} is now the circle's newest, with the content of version {to}.")
+    };
+    vec![first, "Everyone who has the bank in My Banks sees it as a new version, and gets it when they choose.".into()]
+}
+
+/// (critic 69 I1) How a restore went, for the bank's strip when its History is no longer shown (`None`: nothing to
+/// say yet).
+fn restore_note(to: u64, stage: Option<&RestoreStage>) -> Option<String> {
+    match stage? {
+        RestoreStage::Done { version, held, withheld } if *held || *withheld => restore_lines(*version, to, *held, *withheld, true).into_iter().next(),
+        // (critic 72 I2) no "it is now the circle's newest": the strip's own line says which version is the newest
+        // (critic 76 I2) no "version 0": the strip checks the circle at once
+        RestoreStage::Done { version: 0, .. } => Some(format!("Version {to} was restored, but the circle's answer could not be read. Open History to see the new version.")),
+        RestoreStage::Done { version, .. } => Some(format!("Version {version} was restored from version {to}.")),
+        RestoreStage::Large { removed, total } => Some(format!("Version {to} was not restored: it would remove {removed} of the bank's {total} questions. Open History to restore it anyway.")),
+        RestoreStage::Failed(p) => Some(format!("The restore of version {to} did not go through: {} Open History to try again.", p.message.trim_end())),
+        RestoreStage::Unclear(why) => Some(format!("Your restore of version {to} may have gone through, but no clear answer came: {why} Open History to see whether it did.")),
+        RestoreStage::Confirm | RestoreStage::Working => None,
+    }
+}
+
+/// (critic 71 I3) A restore refused because someone sent a newer version first, said where no History was reloaded.
+fn restore_conflict_note(to: u64, head: Option<u64>) -> String {
+    match head {
+        Some(h) => format!("The restore of version {to} did not go through: someone sent version {h} first. Open History to choose again."),
+        None => format!("The restore of version {to} did not go through: someone sent a newer version first. Open History to choose again."),
+    }
+}
+
+/// (critic 69 I1) How a trim went, for the bank's strip when its History is no longer shown; (critic 71 minor 7) with
+/// the versions it could not delete, kept for an administrator's review.
+fn trim_note(stage: Option<&TrimStage>) -> Option<String> {
+    match stage? {
+        TrimStage::Done(t) => {
+            let first = match t.pruned {
+                0 => "The trim deleted nothing: no older version could be trimmed.".to_string(),
+                1 => "The trim deleted the content of 1 older version.".to_string(),
+                n => format!("The trim deleted the content of {n} older versions."),
+            };
+            Some(match trim_lines(t).get(1) {
+                Some(kept) => format!("{first} {kept}"),
+                None => first,
+            })
+        }
+        TrimStage::Failed(p) => Some(format!("The trim of old versions did not go through: {} Open History to try again.", p.message.trim_end())),
+        TrimStage::Unclear(why) => Some(format!("Your trim of old versions may have gone through, but no clear answer came: {why} Open History to see whether it did.")),
+        TrimStage::Editing | TrimStage::Confirm | TrimStage::Working => None,
+    }
 }
 
 /// What a trim did, in words: how many versions went, and the ones it could not delete (kept for an
@@ -2547,6 +4582,6 @@ pub fn conflict_line(c: &ConflictInfo, now: i64) -> String {
 
 impl From<LocalProblem> for Problem {
     fn from(l: LocalProblem) -> Problem {
-        Problem { message: PoolError::Local(l).message(), retry: false, retry_at: None, account: false }
+        Problem { message: super::circles_text::circle_words(&PoolError::Local(l).message()), retry: false, retry_at: None, account: false }
     }
 }

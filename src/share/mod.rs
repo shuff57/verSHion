@@ -13,6 +13,7 @@
 //! - [`browse`] / [`browse_text`] / [`browse_ui`]: the pool browser, import and update checks (logic, wording, egui).
 //! - [`shared`] / [`shared_ui`]: the Shared page (a top-level screen): guided steps and tabs hosting the models below.
 //! - [`mine`] / [`mine_text`] / [`mine_ui`]: "My shared items": states, appeals, counter-notices, the data download.
+//! - [`bank_links`] / [`bank_links_ui`]: circle banks in My Banks (phase D1): the badge, the status strip, the check.
 //!
 //! # Which server (decided when the app is built)
 //!
@@ -32,10 +33,15 @@
 //! `share.json` (in the store) holds the development address and the list of saved sign-ins the
 //! keychain would not delete. Neither is a secret.
 
+pub mod act_results;
 pub mod api;
+pub mod bank_links;
+pub mod bank_links_ui;
 pub mod browse;
 pub mod browse_text;
 pub mod browse_ui;
+pub mod canon;
+mod canon_tables;
 pub mod circle_edit;
 pub mod circle_edit_ui;
 pub mod circle_hide;
@@ -65,6 +71,36 @@ pub mod transport;
 pub mod ui;
 pub mod vault;
 
+#[cfg(test)]
+mod bank_links_fix2_tests;
+#[cfg(test)]
+mod bank_links_fix3_tests;
+#[cfg(test)]
+mod bank_links_fix4_tests;
+#[cfg(test)]
+mod bank_links_fix5_tests;
+#[cfg(test)]
+mod bank_links_fix6_tests;
+#[cfg(test)]
+mod bank_links_fix7_tests;
+#[cfg(test)]
+mod bank_links_fix8_tests;
+#[cfg(test)]
+mod bank_links_fix9_tests;
+#[cfg(test)]
+mod bank_links_fix10_tests;
+#[cfg(test)]
+mod bank_links_fix11_tests;
+#[cfg(test)]
+mod bank_links_fix12_tests;
+#[cfg(test)]
+mod bank_links_fix13_tests;
+#[cfg(test)]
+mod bank_links_fix14_tests;
+#[cfg(test)]
+mod bank_links_fix_tests;
+#[cfg(test)]
+mod bank_links_tests;
 #[cfg(test)]
 mod browse_tests;
 #[cfg(test)]

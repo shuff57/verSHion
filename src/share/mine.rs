@@ -858,6 +858,8 @@ impl MineModel {
         self.jobs.retain(|j| j.kind != kind);
         let (tx, rx) = channel::<JobMsg>();
         let (retry, repaint) = (self.retry, self.repaint.clone());
+        // (critic 71 minor 3) kept to the account signed in now: a retry after another account signed in is not sent as it
+        let session = super::pool::pinned(session);
         match self.runner {
             #[cfg(not(target_arch = "wasm32"))]
             Runner::Inline => run_work(session, retry, work, tx, repaint),

@@ -4,16 +4,114 @@
 use super::api;
 use super::circles_api::{ActivityEntry, HideKeyResult, Role};
 
+/// The public pool's words in a sentence shown on a circle screen (critic 66 I7, critic 68 minor 1): verSHion's
+/// instead, and verSHion's server for what the server did (critic 70 I1: never "the circle", which would blame the
+/// teacher's colleagues for a server fault or a limit). One server error reads the same on every circle screen.
+pub fn circle_words(note: &str) -> String {
+    // (critic 78 I3) The account's own invite code (an administrator's) is not the circle's code: a circle screen says
+    // which code is meant, so the teacher never takes the circle's code they just entered for the wrong one.
+    // Circles not set up on the server is said of circles, not of "this circle".
+    // (owner decision, round 7) any other "shared pool" names the circle on a circle's screen
+    note.replace(POOL_INVITE_REQUIRED, CIRCLE_INVITE_REQUIRED)
+        .replace("The shared pool is not available on this server yet.", "Circles are not available on this server yet.")
+        .replace("The shared pool", "The circle")
+        .replace("the shared pool", "the circle")
+        .replace("The pool server", "verSHion's server")
+        .replace("the pool server", "verSHion's server")
+        .replace("reach the pool", "reach verSHion's server")
+        .replace("The pool's", "verSHion's")
+        .replace("the pool's", "verSHion's")
+        .replace("The pool", "verSHion's server")
+        .replace("the pool", "verSHion")
+}
+
+/// The public pool's "invite code needed" sentence (`pool::INVITE_REQUIRED_TEXT`, without its last sentence).
+const POOL_INVITE_REQUIRED: &str = "The shared pool needs an invite code. Open the Account window, find \"Invite code\" and enter the code an admin gave you.";
+/// (critic 78 I3) The same on a circle screen; (critic 80 polish) in words that fit the join page, the Circles list and
+/// Create a circle alike: no "join", and no "the circle's code" where none was entered.
+const CIRCLE_INVITE_REQUIRED: &str = "Your verSHion account needs an invite code from an administrator before it can use circles. The code it needs is not a circle's code. Open the Account window, find \"Invite code\" and enter it.";
+
+/// (critic 72 I1) The merge review's words (`merge.rs`, shared with the public pool's updates): there "the pool" is
+/// where the newer version came from, which for a circle bank is the circle and the colleagues in it, never
+/// verSHion's server (that is [`circle_words`], for what the server did).
+pub fn merge_words(note: &str) -> String {
+    note.replace("The pool dropped this question", "The circle removed this question")
+        .replace("The pool's", "The circle's")
+        .replace("the pool's", "the circle's")
+        .replace("The pool", "The circle")
+        .replace("the pool", "the circle")
+}
+
+/// (critic 78 I1) The merge review: a question new in the circle that the bank already has (the person's own, sent
+/// without a readable answer). Linked, not added twice.
+pub const SAME_ADDED: &str = "You and the circle added the same question.";
+
+/// (critic 80 I1) The merge review: version `n` is the person's own send whose answer did not come back.
+pub fn own_send_line(n: u64) -> String {
+    format!("Version {n} is your own send from this computer: its answer did not come back. The questions it carried are matched to yours here, never added twice.")
+}
+
+/// (critic 85 m1) The merge review: the version a send with no readable answer may have made (`n`, right after the one it
+/// was based on) can not be read now, while colleagues sent more since.
+pub fn own_unreadable_line(n: u64) -> String {
+    format!("Version {n} may be your earlier send from this computer, but it can't be read now, so what that send changed or added can't be matched to your questions here. A question it added may show below as new in the circle, changed since by someone else, or be gone from the circle's newest version. Your copy keeps every question it has, and they go with your next send.")
+}
+
+/// (critic 85 m1) A question that send changed, as the circle's newest version does not have it. (critic 88 I3) The row
+/// offers the circle's version.
+pub fn sent_change_unread(n: u64) -> String {
+    format!("You sent a change to this question, maybe in version {n}, which can't be read now, so it is not known whether someone changed it since. Yours stays as it is unless you take the circle's version.")
+}
+
+/// (critic 85 m1) A question new in the circle while a question that send added is not matched: not added by default.
+pub fn maybe_your_added(n: u64) -> String {
+    format!("This may be a question your earlier send added (version {n} can't be read now), changed since by someone else. If it is, adding it puts it in your bank twice.")
+}
+
+/// (critic 80 I1) A question that send carried, changed since it went.
+pub fn sent_then_changed(n: u64) -> String {
+    format!("You sent this in version {n} and changed it since. Your change stays here and goes with your next send.")
+}
+
+/// (critic 86 I1) A merge review row that is a decision only because this computer has no record of the question's
+/// difficulty in the earlier version (never "both changed"), and how many there are.
+pub const UNRECORDED_LABEL: &str = "Difficulty not recorded";
+
+/// (critic 88 I2) A copy that has no record of the difficulties in version `n`, the one it last matched (a base an earlier
+/// build wrote, that version not readable): what else changed is counted; a change to a difficulty can't be. The strip and
+/// the Send page say the same.
+pub fn difficulty_caveat(n: u64) -> String {
+    format!("This copy has no record of the difficulties in version {n}, so a change to a difficulty can't be counted here.")
+}
+
+/// (critic 88 I2) A copy with no record at all of the version it last matched: the strip and the Send page say the same.
+pub const NO_RECORD: &str = "Your copy has no record of what it looked like when it last matched the circle, so the changes can't be counted here.";
+
+pub fn unrecorded_count(n: usize) -> String {
+    if n == 1 { "1 difficulty not recorded".into() } else { format!("{n} difficulties not recorded") }
+}
+
+pub fn same_added_line(n: usize) -> String {
+    if n == 1 {
+        "You and the circle added the same question, so it is linked to the circle's, not added twice.".into()
+    } else {
+        format!("You and the circle added the same {n} questions, so they are linked to the circle's, not added twice.")
+    }
+}
+
 pub const EMPTY_LIST_TITLE: &str = "You are not in any circle yet";
 pub const EMPTY_LIST_HELP: &str = "A circle is a small private group of teachers who share banks with each other. Create one, or enter a code someone gave you.";
 pub const EMPTY_BANKS: &str = "No banks in this circle yet.";
-pub const EMPTY_BANKS_HELP_EDITOR: &str = "Share a bank to the circle from the Banks page (Share to pool..., then choose a circle), or with the button above.";
+pub const EMPTY_BANKS_HELP_EDITOR: &str = "Share a bank to the circle from the Banks page (the bank's Share menu, then choose this circle), or with the button above.";
 pub const EMPTY_BANKS_HELP_VIEWER: &str = "An owner or editor can add banks. You can look at and copy anything they add.";
 pub const EMPTY_ACTIVITY: &str = "Nothing has happened in this circle yet.";
 pub const NO_CODES: &str = "No codes yet. Make one to invite another teacher.";
 
 pub const CODE_SHOWN_ONCE: &str = "Anyone with this code can join until it expires or is used up. It is shown only now: copy it before you close this.";
 pub const CODE_PASTE_HELP: &str = "Paste the code, or the link or the whole message from an invitation email. Nothing is used up until you press Join.";
+/// Bank settings (phase D1, critic 64 I8): the page shows no questions, so it does not say they are shown.
+pub const SETTINGS_KEYS_NOTE: &str = "Everyone in this circle can see the answer keys: they come with every copy.";
+pub const SETTINGS_KEYS_HIDDEN_NOTE: &str = "This bank hides its answer keys from viewers: editors and the owner see the full bank; viewers get it without the correct answers and explanations.";
 pub const ANSWER_KEYS_NOTE: &str = "The questions are shown here without their answers. Everyone in this circle can see the answer keys: they come with every copy.";
 pub const COPY_LINE: &str = "A copy is private to you and made on this computer. The circle's bank is not changed, and nothing you change in your copy goes back to it.";
 pub const WORKING_COPY_LINE: &str = "A working copy stays linked to the circle's bank. It is private to you and on this computer, and the circle is changed only when you press Send. You can also get the newer versions others send, and merge them in when you choose.";
@@ -23,17 +121,17 @@ pub const LEAVE_MEMBER: &str = "You will lose access to this circle's banks. Cop
 pub const LEAVE_OWNER: &str = "You own this circle. If you leave, it passes to the member who has been here longest (an editor first). If nobody else is in it, the circle closes.";
 pub const CLOSE_CIRCLE: &str = "Everyone loses access in 14 days. Copies on their computers stay. Until then you can reopen it.";
 pub const REMOVE_BANK: &str = "The bank disappears for everyone in the circle. You can bring it back for 14 days; after that it is deleted. Copies people made stay with them.";
-pub const REPORT_THANKS: &str = "Thank you. Your report goes to the people who run the pool. The author is not told who sent it.";
+pub const REPORT_THANKS: &str = "Thank you. Your report goes to the people who run verSHion. The author is not told who sent it.";
 pub const TRANSFER_NOTE: &str = "This is an offer: they have 7 days to accept. Until they do you stay the owner. If they accept, they become the owner and you become an editor.";
-pub const NOT_REACHED: &str = "Could not reach the pool.";
+pub const NOT_REACHED: &str = "Could not reach verSHion's server.";
 pub const HIDDEN_BANK_TITLE: &str = "Hidden while a review is open";
 pub const HIDDEN_BANK_LINE: &str = "Its title and author are not shown while it is reviewed, or while its author's account is.";
 pub const PURGE_BANK: &str = "This deletes the bank for good now, instead of after its 14 days. It can not be brought back.";
-pub const HELD_BANK: &str = "This bank is on hold while the pool's reviewers look at it. Only you can see it; the other members cannot until it is cleared.";
+pub const HELD_BANK: &str = "This bank is on hold while verSHion's reviewers look at it. Only you can see it; the other members cannot until it is cleared.";
 // ---- phase C: invite by email ----------------------------------------------------------------------------------
 
 pub const EMAIL_HELP: &str = "verSHion mails the teacher an invitation with a code that works once, for 7 days. The mail is a fixed text: it does not name you or the circle (the app shows both before they join).";
-pub const EMAIL_NEEDS_ACCOUNT: &str = "To join, they need a verSHion account that an administrator has approved and that has redeemed an invite code for the shared pool. Until then the code can not be used.";
+pub const EMAIL_NEEDS_ACCOUNT: &str = "To join, they need a verSHion account that an administrator has approved and that has redeemed its account invite code. Until then the circle's code in the mail can not be used.";
 pub const EMAIL_PRIVACY: &str = "The address is not kept: it is used for this one mail and cleared from this form once it is sent. The list below shows only a masked label (like j***@school.org) so you can tell invitations apart.";
 pub const EMAIL_PACE: &str = "Invitations go out at a steady pace. If you invite many colleagues at one school, some may have to wait for the next hour; the app says so, and nothing is lost.";
 pub const EMAIL_RESENT: &str = "This address already had an open invitation from this circle: a new code was mailed, and the earlier one no longer works.";
@@ -47,7 +145,7 @@ pub const COPY_NO_KEYS_DONE: &str = "This copy has no answer keys. Each question
 pub const HIDE_SECTION: &str = "Answer keys for viewers";
 pub const HIDE_OFF_LINE: &str = "Everyone in this circle sees the answer keys, viewers too.";
 pub const HIDE_ON_LINE: &str = "Viewers get this bank without its answer keys. Editors and the owner still see everything, and can edit it as before.";
-pub const HIDE_ON_ASK: &str = "Viewers will get every version of this bank without the correct answers, the explanations and the pictures, and with the choices shuffled. Editors and the owner keep seeing the full bank. If the newest version has pictures, you choose next which of them viewers may keep. The pool first checks the viewers' copy; it may ask you to decide about letter labels (A, B, C ...) or choice orders.";
+pub const HIDE_ON_ASK: &str = "Viewers will get every version of this bank without the correct answers, the explanations and the pictures, and with the choices shuffled. Editors and the owner keep seeing the full bank. If the newest version has pictures, you choose next which of them viewers may keep. verSHion first checks the viewers' copy; it may ask you to decide about letter labels (A, B, C ...) or choice orders.";
 pub const HIDE_OFF_ASK: &str = "Viewers will see the answer keys again, in every version of this bank.";
 /// The bank page when the newest version of a bank that hides its keys is held back and the pool said turning
 /// hiding off releases it (critic 58 B2, critic 59 B1).
@@ -58,7 +156,7 @@ pub const HIDE_OFF_STILL_HELD: &str = "Turning hiding off did not release the ne
 pub const PICTURES_HEADING: &str = "Pictures";
 pub const PICTURES_HELP: &str = "Viewers get a picture only if you keep it for them. A picture you keep is shown to viewers as it is, so keep it only if it does not show an answer or a hint.";
 pub const PICTURES_BANK_INTRO: &str = "The newest version of this bank has pictures. Choose for each one whether viewers get it. Nothing has changed yet.";
-pub const PICTURES_SEND_INTRO: &str = "This bank hides its answer keys from viewers, so the pool makes a viewers' copy of what you send. Choose for each picture whether viewers get it. Nothing was sent yet; your changes are still on this computer.";
+pub const PICTURES_SEND_INTRO: &str = "This bank hides its answer keys from viewers, so verSHion makes a viewers' copy of what you send for the circle. Choose for each picture whether viewers get it. Nothing was sent yet; your changes are still on this computer.";
 pub const PICTURE_KEEP: &str = "Keep it for viewers";
 pub const PICTURE_DROP: &str = "Drop it";
 /// The confirmation's button when the picture step comes next (critic 62 minor: one "Hide the keys", on the step).
@@ -68,7 +166,7 @@ pub const HIDE_NEXT: &str = "Next";
 pub const PICTURES_CHANGE: &str = "Change picture choices";
 pub const PICTURES_SAVE: &str = "Save picture choices";
 pub const PICTURES_CHANGE_INTRO: &str = "Choose again for each picture of the newest version whether viewers get it. Every picture starts as dropped here, whatever was chosen before. Nothing has changed yet. Saving new choices counts as a change of the answer-key setting, and there is a daily number of those.";
-pub const PICTURES_CHANGE_DECIDE: &str = "Before the new picture choices can be saved, the pool needs these decisions about the copy viewers will get. Nothing has changed yet.";
+pub const PICTURES_CHANGE_DECIDE: &str = "Before the new picture choices can be saved, verSHion needs these decisions about the copy viewers will get. Nothing has changed yet.";
 
 /// A new version arrived before a change of the setting went through (the head read right before it moved, or the
 /// pool's `409 conflict` on the PATCH pinned to the version, critic 62 B1): nothing changed, and whatever was decided
@@ -125,7 +223,7 @@ pub fn pictures_left_out_line(qs: &[usize]) -> Option<String> {
     }
 }
 
-pub const HIDE_TRIES: &str = "Each press counts toward a daily number of tries, also when the pool asks for decisions, so decide everything listed before you press again.";
+pub const HIDE_TRIES: &str = "Each press counts toward a daily number of tries, also when verSHion asks for decisions, so decide everything listed before you press again.";
 
 pub const LICENSE_SETTING_NOTE: &str = "This is the licence you attach to the bank. Not yet: sharing a circle bank's questions publicly is not available in this version, whatever the licence. A later version may let members do it for Creative Commons banks. Earlier versions keep the licence they were shared under.";
 
@@ -353,7 +451,7 @@ pub fn hide_result_lines(r: &HideKeyResult, head_held: bool) -> Vec<String> {
     if r.withheld || r.held {
         // (critic 60 B1: whether turning hiding off makes it readable again is the pool's to say, on the bank's read:
         // HIDE_HELD_HEAD says it only then)
-        out.push("The viewers' copy matched something the pool checks for, so the newest version is held back and the bank is hidden from the circle while an administrator reviews it. The questions are safe.".into());
+        out.push("The viewers' copy matched something verSHion checks for, so the newest version is held back and the bank is hidden from the circle while an administrator reviews it. The questions are safe.".into());
     }
     out
 }

@@ -172,8 +172,9 @@ pub(super) fn field(ui: &mut Ui, label: &str, value: &mut String, id: &str, hint
     ui.add_space(4.0);
 }
 
-fn title(model: &PublishModel) -> &'static str {
+pub(super) fn title(model: &PublishModel) -> &'static str {
     match model.step {
+        Step::Gate if model.circle.active => "Share to a circle",
         Step::Gate => "Share to the pool",
         Step::Options if model.circle.active => "Share to a circle",
         Step::Options => "Share to the pool",
@@ -941,9 +942,20 @@ fn circle_page(ui: &mut Ui, m: &mut PublishModel) {
         SendStage::Done(info) => {
             let info = (**info).clone();
             body(ui, &format!("\"{}\" is now in the circle \"{}\".", text::shown(&info.title), api::plain(&info.circle_name)));
-            para(ui, &format!("{} question{} added. Its members can open it and get a copy; the answer keys are visible to them.", info.sent.added, if info.sent.added == 1 { "" } else { "s" }));
+            para(ui, &format!("{} question{} added. Its members can add it to My Banks or make their own copy; the answer keys are visible to them.", info.sent.added, if info.sent.added == 1 { "" } else { "s" }));
             if info.sent.replayed {
-                para(ui, "The pool already had this send, so nothing was added twice.");
+                para(ui, "The circle already had this send, so nothing was added twice.");
+            }
+            // (phase D1, Q6) the bank shared is now the linked one
+            if let Some(name) = &info.linked {
+                use super::circle_links::{LinkOutcome, outcome_of};
+                let name = text::shown(name);
+                match outcome_of(&info.sent.bank_id) {
+                    Some(LinkOutcome::Linked) => para(ui, &format!("\"{name}\" in My Banks is now linked to it: its page shows where it stands, and you send your changes from there.")),
+                    Some(LinkOutcome::AlreadyLinked) => para(ui, &format!("\"{name}\" was already linked to another circle bank, so it stays linked to that one. To work on this one with the circle, add it to My Banks from the circle's page.")),
+                    Some(LinkOutcome::NotSaved(m)) => para(ui, &format!("\"{name}\" could not be linked to it ({}). To work on it with the circle, add it to My Banks from the circle's page.", api::plain(&m))),
+                    None => {}
+                }
             }
             if kit::primary_button(ui, "Open the circle").clicked() {
                 crate::share::shared_ui::open_circle(ui.ctx(), &info.circle_id, Some(&info.sent.bank_id));
@@ -978,7 +990,7 @@ fn circle_page(ui: &mut Ui, m: &mut PublishModel) {
         }
         SendStage::Refused(Refused::Payload(p)) => {
             let p = p.clone();
-            para(ui, "The pool checked these questions and needs you to change the items below. Nothing was shared.");
+            para(ui, "verSHion checked these questions for the circle and needs you to change the items below. Nothing was shared.");
             for i in p.issues.iter().take(30) {
                 let t = text::issue_text_circle(i, false);
                 egui::Frame::new().fill(theme::error_wash()).corner_radius(8).inner_margin(Margin::same(8)).show(ui, |ui| {
@@ -1047,15 +1059,7 @@ fn circle_page(ui: &mut Ui, m: &mut PublishModel) {
                     m.close();
                 }
             } else {
-                let mut cur = m.circle.chosen.clone();
-                for (id, name, role) in &choices {
-                    ui.radio_value(&mut cur, Some(id.clone()), format!("{name}  ({})", role.name()));
-                }
-                if cur != m.circle.chosen
-                    && let Some(id) = cur
-                {
-                    m.circle.choose(&id);
-                }
+                circle_choices(ui, m, &choices);
             }
         }
     }
@@ -1117,6 +1121,36 @@ fn circle_page(ui: &mut Ui, m: &mut PublishModel) {
 }
 
 /// "Question 3 was", "Questions 1 and 2 were", "Questions 1, 2 and 5 were" (1-based numbers).
+/// The circles to share into, one radio each. A circle the bank is already linked to is shown greyed, with the way
+/// to send to it instead (critic 64 I11): sharing it again would make a second circle bank.
+fn circle_choices(ui: &mut Ui, m: &mut PublishModel, choices: &[(String, String, super::circles_api::Role)]) {
+    const ALREADY: &str = "This bank is already in it: use Send my changes on the bank's page.";
+    if choices.iter().any(|(id, ..)| m.circle.blocked.contains(id)) {
+        para(ui, ALREADY);
+    }
+    let mut cur = m.circle.chosen.clone();
+    for (id, name, role) in choices {
+        let blocked = m.circle.blocked.contains(id);
+        ui.add_enabled_ui(!blocked, |ui| {
+            ui.radio_value(&mut cur, Some(id.clone()), format!("{name}  ({})", role.name()));
+        })
+        .response
+        .on_disabled_hover_text(ALREADY);
+    }
+    if cur != m.circle.chosen
+        && let Some(id) = cur
+    {
+        m.circle.choose(&id);
+    }
+}
+
+/// The circle choices of the publish window as they are drawn (tests).
+#[cfg(test)]
+pub(super) fn which_circle(ui: &mut Ui, m: &mut PublishModel) {
+    let choices: Vec<(String, String, super::circles_api::Role)> = m.circle.choices().iter().map(|c| (c.id.clone(), api::plain(&c.name), c.role())).collect();
+    circle_choices(ui, m, &choices);
+}
+
 fn questions_were(positions: &[usize]) -> String {
     match positions {
         [one] => format!("Question {one} was"),

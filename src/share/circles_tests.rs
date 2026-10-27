@@ -67,6 +67,13 @@ impl Script {
         self.routes.lock().unwrap().entry(format!("{m} {path}")).or_default().push_back(Response::new(status, &body.to_string()));
         self
     }
+    /// A queued reply for one route whose body is read as bytes (a circle bank).
+    pub(super) fn on_raw(&self, m: &str, path: &str, body: Vec<u8>) -> &Self {
+        let mut r = Response::new(200, &String::from_utf8_lossy(&body));
+        r.bytes = body;
+        self.routes.lock().unwrap().entry(format!("{m} {path}")).or_default().push_back(r);
+        self
+    }
     /// A queued reply for one route that also says how long to wait (`Retry-After`, in seconds).
     pub(super) fn on_wait(&self, m: &str, path: &str, status: u16, body: Value, secs: u64) -> &Self {
         let mut r = Response::new(status, &body.to_string());
@@ -268,7 +275,7 @@ fn nothing_is_asked_until_signed_in_and_then_the_list_loads_once() {
     s.say(200, json!({"circles": [summary("editor", json!({}))]}));
     let mut m = model();
     m.open_list();
-    m.frame(now(), &AccountSnapshot { gate: Gate::SignedOut, session: None, account_open: false, account: None });
+    m.frame(now(), &AccountSnapshot { gate: Gate::SignedOut, session: None, account_open: false, account: None, name: None });
     assert!(s.seen().is_empty());
     assert_eq!(m.screen, Screen::Gate);
     for _ in 0..3 {

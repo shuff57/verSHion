@@ -150,7 +150,8 @@ pub fn issue_text_circle(i: &Issue, single: bool) -> String {
     if i.code == "keyless_needs_hide_key" {
         return format!("{}: this copy came from a version shared without its key; set the answers yourself", where_text(&i.path, single));
     }
-    issue_text(i, single)
+    // (critic 68 minor 1) the circle's words, not the public pool's
+    super::circles_text::circle_words(&issue_text(i, single))
 }
 
 pub fn issue_text(i: &Issue, single: bool) -> String {

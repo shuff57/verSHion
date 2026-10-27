@@ -30,7 +30,7 @@ use web_time::Instant;
 
 use super::api::{self, ApiError};
 use super::browse::{
-    Applied, CircleOrigin, Dest, ImageSink, Imported, Problem, SharedImages, StoreImages, apply_import, now_ms,
+    CircleOrigin, Dest, ImageSink, Imported, Problem, SharedImages, StoreImages, apply_import, now_ms,
 };
 use super::circle_edit::{CircleEditModel, Perm};
 use super::circle_hide::{Decisions, Pictures, decision_refusal, left_out_unasked};
@@ -383,6 +383,8 @@ pub struct BankView {
     /// The picture step (and what follows it) is "Change picture choices" on a bank that already hides its keys
     /// (critic 62 I2), not turning hiding on.
     pub pictures_change: bool,
+    /// Owner decision (a): a read-only Preview of the bank's questions, not its settings.
+    pub preview: bool,
 }
 
 // ---- jobs -------------------------------------------------------------------------------------------------------
@@ -439,6 +441,10 @@ enum Work {
     Join(String),
     Heads(Vec<String>),
     Act(Act),
+    /// "Add to My Banks" / "Make my own copy" from the circle page (phase D1): the bank read, then copied.
+    Add(String, String),
+    /// The banks of a circle just joined, for the offer to add them (phase D1).
+    Offer(String),
 }
 
 impl std::fmt::Debug for Work {
@@ -460,6 +466,7 @@ enum JobKind {
     Heads,
     /// Any change: one at a time.
     Act,
+    Offer,
 }
 
 impl Work {
@@ -474,6 +481,9 @@ impl Work {
             Work::Preview(_) | Work::Join(_) => JobKind::Code,
             Work::Heads(_) => JobKind::Heads,
             Work::Act(_) => JobKind::Act,
+            // (one copy at a time, as on the bank's page)
+            Work::Add(..) => JobKind::Copy,
+            Work::Offer(_) => JobKind::Offer,
         }
     }
 }
@@ -489,6 +499,8 @@ enum JobMsg {
     Join(Result<Joined, PoolError>, String),
     Heads(Result<Vec<HeadEntry>, PoolError>),
     Act(Act, Result<ActDone, PoolError>),
+    Added(Box<(String, String)>, Result<Box<(BankHead, Imported)>, PoolError>),
+    Offer(String, Result<CircleDetail, PoolError>),
 }
 
 impl JobMsg {
@@ -503,6 +515,8 @@ impl JobMsg {
             JobMsg::Preview(..) | JobMsg::Join(..) => JobKind::Code,
             JobMsg::Heads(_) => JobKind::Heads,
             JobMsg::Act(..) => JobKind::Act,
+            JobMsg::Added(..) => JobKind::Copy,
+            JobMsg::Offer(..) => JobKind::Offer,
         }
     }
 }
@@ -619,6 +633,17 @@ async fn run_work_async(session: SharedSession, images: SharedImages, retry: Ret
             let r = do_act(&pool, &a).await;
             JobMsg::Act(a, r)
         }
+        Work::Add(cid, bid) => {
+            let r = match pool.circle_bank(&cid, &bid).await {
+                Ok(doc) => copy_bank(&pool, &*images, &doc).await.map(|imp| Box::new((doc.bank, imp))),
+                Err(e) => Err(e),
+            };
+            JobMsg::Added(Box::new((cid, bid)), r)
+        }
+        Work::Offer(cid) => {
+            let r = pool.circle(&cid).await;
+            JobMsg::Offer(cid, r)
+        }
     };
     let _ = tx.send(msg);
     if let Some(r) = repaint {
@@ -709,6 +734,80 @@ struct ReadyCopy {
     circle: CircleOrigin,
     /// A working copy: the head it was made from (the link is made from it).
     working: Option<BankHead>,
+    /// Made by "Add to My Banks" or "Make my own copy" (phase D1).
+    add: Option<AddFor>,
+}
+
+/// The join offer while this computer's list of shared banks can not be read (critic 65 B1).
+pub const LINKS_UNREADABLE_JOIN: &str = "The list of shared banks on this computer couldn't be read just now, so the circle's banks can't be added yet. Nothing was changed.";
+
+/// "Add a full copy" whose read came without the answer keys (critic 65 I3).
+pub const FULL_COPY_KEYLESS: &str = "The circle sent this bank without its answer keys (you can only view it now), so no full copy was made. Nothing was changed.";
+
+/// Who asked for an added bank, and how it is linked (phase D1).
+#[derive(Clone, Debug, PartialEq)]
+struct AddFor {
+    cid: String,
+    bid: String,
+    own: bool,
+    role: Role,
+    /// "Add a full copy": the new bank takes the circle bank's link from the copy without keys (or the viewer's).
+    full: bool,
+}
+
+// ---- adding banks to My Banks (phase D1) ------------------------------------------------------------------------------
+
+/// Where one "Add to My Banks" or "Make my own copy" stands.
+#[derive(Clone, Debug, PartialEq)]
+pub enum AddState {
+    /// Waiting for the copy before it to finish.
+    Waiting,
+    Working,
+    /// In My Banks under this name (and, for an added bank, linked); `why` it is not linked when it should be.
+    Done { bank_id: String, bank_name: String, linked: bool, why: Option<String> },
+    Failed(Problem),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct AddJob {
+    pub cid: String,
+    pub bid: String,
+    /// "Make my own copy": not linked, with a note of where it came from.
+    pub own: bool,
+    pub title: String,
+    pub role: Role,
+    pub state: AddState,
+    /// "Add a full copy" (see [`CirclesModel::add_full_copy`]).
+    pub full: bool,
+    /// The person dismissed its line on the Banks list (critic 66 I4).
+    pub dismissed: bool,
+    /// (critic 69 minor 1) The account that asked for it (see `bank_links::account_tag`): it is made for that account
+    /// only, and "Try again" by another account does nothing.
+    pub account: Option<String>,
+}
+
+/// After joining: "Add its banks to My Banks?" with a tick per bank.
+#[derive(Clone, Debug, PartialEq)]
+pub struct JoinOffer {
+    pub cid: String,
+    pub name: String,
+    pub role: Role,
+    /// `None` while the circle's banks are read.
+    pub banks: Option<Vec<OfferBank>>,
+    pub problem: Option<Problem>,
+    /// "Add the ticked banks" was pressed.
+    pub started: bool,
+    /// The banks are read from the frame after the join's answer, with the list of circles.
+    pub wait: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct OfferBank {
+    pub id: String,
+    pub title: String,
+    pub ticked: bool,
+    /// This computer already has it in My Banks, under this name: it is not ticked and not added again (critic 63 B3).
+    pub in_banks: Option<String>,
 }
 
 pub struct CirclesModel {
@@ -730,6 +829,14 @@ pub struct CirclesModel {
     /// administrator is still reviewing are kept, the rest is gone and nothing can be brought back. The
     /// pool's circle page does not say so, so it is remembered here (bank id -> versions kept).
     pub purge_claimed: std::collections::HashMap<String, u64>,
+    /// Phase D1: the checks of linked banks for the badge and the strip in My Banks.
+    pub links: super::bank_links::BankLinks,
+    /// Phase D1: "Add to My Banks" and "Make my own copy", one copy at a time.
+    pub adds: Vec<AddJob>,
+    /// Phase D1: the offer to add a just-joined circle's banks.
+    pub join_offer: Option<JoinOffer>,
+    /// A bank's row to bring into view on the circle page (a link to a circle and one of its banks).
+    pub scroll_to: Option<String>,
     open_account: bool,
     resume: Screen,
     session: Option<SharedSession>,
@@ -751,7 +858,57 @@ pub struct CirclesModel {
     /// The account what is loaded here was read for (critic 60 I1), and whether it has signed out since.
     account: Option<String>,
     account_out: bool,
+    /// (critic 67 I1) An add was answered "signed out" while the account still looks signed in: no add starts until
+    /// a sign-out is seen, the Circles tab opens again, or the person presses "Sign in..." on the Banks list.
+    adds_out: bool,
+    /// "Sign in..." was pressed on the Banks list: the page there opens the Account window.
+    adds_sign_in: bool,
+    /// "Open it" was pressed on the Banks list: the page there opens this bank.
+    open_bank_asked: Option<String>,
+    /// (critic 69 minor 3) Where the number of adds not finished is written, for the next start.
+    adds_log: AddsLog,
+    /// What that file says now (`None`: not read yet this start).
+    unfinished_noted: Option<usize>,
+    /// The adds the last run did not finish (it was closed first), said on the Banks list until dismissed.
+    unfinished_at_start: usize,
 }
+
+/// (critic 69 minor 3) Adds live in memory only: a closed app drops those not finished. Resuming them would need the
+/// account they were asked for, which is not known at start; so only how many were not finished is written down, and
+/// the next start says so.
+pub const ADDS_DOC: &str = "share-circle-adds.json";
+
+/// Where [`ADDS_DOC`] is kept: the app's store, or memory (tests never touch the app's real data folder).
+#[derive(Clone, Debug)]
+pub enum AddsLog {
+    Store,
+    Memory(Arc<std::sync::Mutex<Option<usize>>>),
+}
+
+impl AddsLog {
+    pub fn memory() -> AddsLog {
+        AddsLog::Memory(Arc::default())
+    }
+
+    fn read(&self) -> usize {
+        match self {
+            AddsLog::Store => crate::store::with_backend(|b| b.read_doc(ADDS_DOC)).and_then(|v| serde_json::from_slice::<serde_json::Value>(&v).ok()).and_then(|v| v.get("unfinished").and_then(serde_json::Value::as_u64)).unwrap_or(0) as usize,
+            AddsLog::Memory(m) => m.lock().unwrap_or_else(|p| p.into_inner()).unwrap_or(0),
+        }
+    }
+
+    fn write(&self, n: usize) {
+        match self {
+            AddsLog::Store => {
+                let _ = crate::store::with_backend(|b| b.write_doc(ADDS_DOC, serde_json::json!({"unfinished": n}).to_string().as_bytes()));
+            }
+            AddsLog::Memory(m) => *m.lock().unwrap_or_else(|p| p.into_inner()) = Some(n),
+        }
+    }
+}
+
+/// (critic 67 I2) An add that was waiting or under way when another account signed in: it is not made for that one.
+pub const ADD_OTHER_ACCOUNT: &str = "Another account signed in before it was finished. Sign in with the account that asked for it, then add it again from the circle's page.";
 
 impl Default for CirclesModel {
     fn default() -> Self {
@@ -776,6 +933,10 @@ impl CirclesModel {
             edit: CircleEditModel::new(runner, images.clone(), Arc::new(StoreMedia), Arc::new(StoreRestore), LinkLog::Store),
             invite_required: false,
             purge_claimed: Default::default(),
+            links: super::bank_links::BankLinks::new(runner),
+            adds: Vec::new(),
+            join_offer: None,
+            scroll_to: None,
             open_account: false,
             resume: Screen::List,
             session: None,
@@ -796,18 +957,31 @@ impl CirclesModel {
             repaint: None,
             account: None,
             account_out: false,
+            adds_out: false,
+            adds_sign_in: false,
+            open_bank_asked: None,
+            adds_log: if cfg!(test) { AddsLog::memory() } else { AddsLog::Store },
+            unfinished_noted: None,
+            unfinished_at_start: 0,
         }
     }
 
     pub fn with_retry(mut self, retry: RetryPolicy) -> CirclesModel {
         self.retry = retry;
         self.edit.set_retry(retry);
+        self.links.set_retry(retry);
         self
     }
 
     pub fn set_repaint(&mut self, f: Arc<dyn Fn() + Send + Sync>) {
         self.edit.set_repaint(f.clone());
+        self.links.set_repaint(f.clone());
         self.repaint = Some(f);
+    }
+
+    /// A repaint was set (the Shared page or a linked bank's page sets it once).
+    pub fn has_repaint(&self) -> bool {
+        self.repaint.is_some()
     }
 
     pub fn set_clock(&mut self, ms: i64) {
@@ -833,8 +1007,23 @@ impl CirclesModel {
 
     // ---- opening --------------------------------------------------------------------------------------------
 
+    /// An add whose job was just dropped starts again; its copy is made once (a copy already handed to the banks
+    /// lands on this add, see `finish_landing`).
+    fn requeue_adds(&mut self) {
+        for a in &mut self.adds {
+            if a.state == AddState::Working {
+                a.state = AddState::Waiting;
+            }
+        }
+    }
+
     fn reset(&mut self, screen: Screen) {
         self.cancel_all();
+        // (critic 65 minor) a list of shared banks that could not be read is read again when the page opens
+        self.edit.read_links_again();
+        self.requeue_adds();
+        // (critic 67 I1) opening the tab tries an add stopped by a signed-out answer once more
+        self.adds_out = false;
         self.edit.close();
         self.open = true;
         self.notice = None;
@@ -875,8 +1064,20 @@ impl CirclesModel {
         }
     }
 
-    /// Opens one circle's bank.
+    /// Opens one circle at one of its banks (phase D1): the circle page, with the bank's row brought into view.
+    /// `<bank id>:settings` opens the bank's settings page instead (owner and author; QA rigs).
     pub fn open_bank_at(&mut self, cid: &str, bid: &str) {
+        if let Some(b) = bid.strip_suffix(":settings") {
+            return self.open_bank_settings_at(cid, b);
+        }
+        self.open_circle_at(cid);
+        if self.circle.is_some() && super::pool::is_item_id(bid) {
+            self.scroll_to = Some(bid.to_string());
+        }
+    }
+
+    /// Opens one circle's bank settings page.
+    pub fn open_bank_settings_at(&mut self, cid: &str, bid: &str) {
         self.reset(Screen::List);
         if super::pool::is_item_id(cid) && super::pool::is_item_id(bid) {
             self.circle = Some(CircleView { id: cid.to_string(), ..CircleView::default() });
@@ -888,6 +1089,8 @@ impl CirclesModel {
     pub fn close(&mut self) {
         self.open = false;
         self.cancel_all();
+        // (critic 67 M1) an add whose read was dropped here is read again, not left "under way" for ever
+        self.requeue_adds();
         self.edit.close();
         self.wipe_secrets();
         self.ready = None;
@@ -925,6 +1128,9 @@ impl CirclesModel {
         self.apply_snapshot(snap);
         self.drain();
         self.edit.frame(now, snap);
+        if self.edit.take_account_ask() {
+            self.open_account = true;
+        }
         if self.edit.take_signed_out() {
             self.gate = Gate::SignedOut;
             if self.screen != Screen::Gate {
@@ -945,6 +1151,11 @@ impl CirclesModel {
     /// members and invitations, the history and the versions refused); where the person was is kept, and read again
     /// when the same account signs in. Another account signing in starts at the list.
     pub fn note_account(&mut self, snap: &AccountSnapshot) {
+        // (critic 69 minor 5) the account is looked up again or signed out: a sign-in follows, and the adds stopped by a
+        // signed-out answer are tried once more then
+        if snap.gate != Gate::Ready {
+            self.adds_out = false;
+        }
         match (&snap.gate, &snap.account) {
             (Gate::Ready, Some(a)) => {
                 if self.account.as_ref().is_some_and(|p| p != a) {
@@ -965,6 +1176,13 @@ impl CirclesModel {
     /// `another`: another account signed in (not only a sign-out).
     fn forget_reads(&mut self, keep: Screen, another: bool) {
         let (open, cid, bid) = (self.open, self.circle.as_ref().map(|c| c.id.clone()), self.bank.as_ref().map(|b| b.bid.clone()));
+        // (a copy already put into the banks is linked first, for the account that asked for it)
+        if let Some(l) = take_landed() {
+            self.finish_landing(l);
+        }
+        // (critic 69 minor 4) signed out: a copy read for an add stays in memory, not put into the banks, until the
+        // same account is back (it is not read twice); another account: it goes
+        let kept = if another { None } else { self.ready.take().or_else(|| LANDING.with(|s| s.borrow_mut().take()).map(|l| l.r)).filter(|r| r.add.is_some()) };
         self.reset(Screen::List);
         self.edit.forget_account(another);
         match (keep, cid, bid) {
@@ -981,7 +1199,7 @@ impl CirclesModel {
             _ => {}
         }
         self.open = open;
-        self.ready = None;
+        self.ready = kept;
         self.last_act = None;
         self.heads_wanted = None;
         self.heads = None;
@@ -990,6 +1208,25 @@ impl CirclesModel {
         self.joining_name = None;
         self.purge_claimed.clear();
         self.invite_required = false;
+        // (phase D1) what the checks read; a copy read for the account and not yet in the banks is read again
+        self.links.forget();
+        drop_landing();
+        if another {
+            // (critic 67 I2) none of the adds is made for the account that signed in now: those not finished say
+            // so on the Banks list; what the earlier ones said goes with what was read for that account. (critic 71
+            // minor 5) Those stopped by an account switch stay, not dismissed, so the account that asked for them is
+            // told once it is back.
+            self.adds.retain(|a| in_flight(&a.state) || (stopped_by_switch(&a.state) && !a.dismissed));
+            for a in &mut self.adds {
+                if in_flight(&a.state) {
+                    a.state = AddState::Failed(Problem { message: ADD_OTHER_ACCOUNT.into(), retry: false, retry_at: None, account: false });
+                }
+            }
+        }
+        // (critic 67 I2) signed out: the adds wait (`reset` above put the one under way back), and are made once the
+        // same account signs in again
+        self.join_offer = None;
+        self.scroll_to = None;
     }
 
     /// Signed out: nothing read stays, where the person was is kept (see note_account).
@@ -1035,6 +1272,7 @@ impl CirclesModel {
         if matches!(self.screen, Screen::Circle | Screen::Bank) {
             self.auto_circle();
         }
+        self.auto_adds();
         if self.screen == Screen::List {
             // Opened at a circle or bank by id: go there as soon as the session works.
             if (self.resume == Screen::Circle && self.circle.is_some()) || (self.resume == Screen::Bank && self.bank.is_some()) {
@@ -1067,6 +1305,35 @@ impl CirclesModel {
             if !c.activity_loaded && c.activity_problem.is_none() && !self.running(JobKind::Activity) {
                 self.launch(Work::Activity(cid, None));
             }
+        }
+    }
+
+    /// The next "Add to My Banks" or "Make my own copy", once the one before is in the banks; and the banks of a
+    /// circle just joined, for the offer.
+    fn auto_adds(&mut self) {
+        let wait = self.join_offer.as_mut().is_some_and(|o| std::mem::take(&mut o.wait));
+        if !wait
+            && let Some(o) = &self.join_offer
+            && o.banks.is_none()
+            && o.problem.is_none()
+            && !self.running(JobKind::Offer)
+        {
+            let cid = o.cid.clone();
+            self.launch(Work::Offer(cid));
+        }
+        self.next_add();
+    }
+
+    /// Starts the next add the person asked for, once the one before is in the banks (one copy at a time).
+    fn next_add(&mut self) {
+        if self.adds_out || self.running(JobKind::Copy) || self.ready.is_some() || landing_pending() {
+            return;
+        }
+        // (critic 69 minor 1) only an add the account signed in now asked for
+        let Some(i) = self.adds.iter().position(|a| a.state == AddState::Waiting && self.ours(a)) else { return };
+        let (cid, bid) = (self.adds[i].cid.clone(), self.adds[i].bid.clone());
+        if self.launch(Work::Add(cid, bid)) {
+            self.adds[i].state = AddState::Working;
         }
     }
 
@@ -1111,7 +1378,7 @@ impl CirclesModel {
                         if let RefusalKind::DailyLimit { metric: Some(m) } = &r.kind
                             && m == "circle_join_tries"
                         {
-                            p.message = "You have tried as many circle codes today as the pool allows. Try again tomorrow, or ask the owner to check the code.".into();
+                            p.message = "You have tried as many circle codes today as verSHion allows. Try again tomorrow, or ask the owner to check the code.".into();
                         }
                     }
                     RefusalKind::RateLimited | RefusalKind::TooManyOpenReads | RefusalKind::TooManyUploads | RefusalKind::Busy | RefusalKind::HourlyLimit { .. } => {
@@ -1130,7 +1397,7 @@ impl CirclesModel {
                         }
                     }
                     RefusalKind::ModerationState { message } => {
-                        p.message = message.as_deref().map(api::plain).filter(|m| !m.is_empty()).unwrap_or_else(|| "The pool does not allow that right now.".into());
+                        p.message = message.as_deref().map(api::plain).filter(|m| !m.is_empty()).unwrap_or_else(|| "verSHion does not allow that in this circle right now.".into());
                     }
                     RefusalKind::InvalidRequest { field } => {
                         p.message = match field.as_deref() {
@@ -1141,16 +1408,16 @@ impl CirclesModel {
                             Some("max_uses") => "Choose how many people the code is for, from 1 to 50.".into(),
                             Some("expires_in_days") => "Choose how long the code works, from 1 to 30 days.".into(),
                             Some("note") => "The note can be at most 200 characters.".into(),
-                            Some("user_id") => "The pool did not recognise that member. Reload the circle.".into(),
-                            Some("email") => "That is not an email address the pool can send to. Check it for a typo.".into(),
-                            Some(f) => format!("The pool did not accept the {}. Nothing was changed.", f.replace('_', " ")),
-                            None => "The pool did not accept that. Nothing was changed.".into(),
+                            Some("user_id") => "verSHion did not recognise that member. Reload the circle.".into(),
+                            Some("email") => "That is not an email address verSHion can send to. Check it for a typo.".into(),
+                            Some(f) => format!("verSHion did not accept the {}. Nothing was changed.", f.replace('_', " ")),
+                            None => "verSHion did not accept that. Nothing was changed.".into(),
                         }
                     }
                     RefusalKind::Other => match (r.detail.status, r.detail.code.as_str()) {
                         (409, "conflict") => p.message = "Something changed at the same moment. Reload the page and try again.".into(),
                         (_, "pool_migrating") => {
-                            p.message = "The pool is being upgraded. Try again in a few minutes.".into();
+                            p.message = "verSHion's server is being upgraded. Try again in a few minutes.".into();
                             p.retry = true;
                             p.retry_at = wait;
                         }
@@ -1160,6 +1427,8 @@ impl CirclesModel {
                 }
             }
         }
+        // (critic 70 I1) the public pool's words, as every circle screen says them
+        p.message = text::circle_words(&p.message);
         Some(p)
     }
 
@@ -1182,6 +1451,8 @@ impl CirclesModel {
         self.jobs.retain(|j| j.kind != kind);
         let (tx, rx) = channel::<JobMsg>();
         let (retry, repaint, images) = (self.retry, self.repaint.clone(), self.images.clone());
+        // (critic 71 minor 3) kept to the account signed in now: a retry after another account signed in is not sent as it
+        let session = super::pool::pinned(session);
         match self.runner {
             #[cfg(not(target_arch = "wasm32"))]
             Runner::Inline => run_work(session, images, retry, work, tx, repaint),
@@ -1228,6 +1499,8 @@ impl CirclesModel {
                 JobMsg::Join(r, _code) => self.on_join(r),
                 JobMsg::Heads(r) => self.on_heads(r),
                 JobMsg::Act(a, r) => self.on_act(a, r),
+                JobMsg::Added(key, r) => self.on_added(*key, r),
+                JobMsg::Offer(cid, r) => self.on_offer(cid, r),
             }
         }
         for kind in lost {
@@ -1247,8 +1520,18 @@ impl CirclesModel {
                 }
                 JobKind::Code => self.join.stage = JoinStage::Failed(p),
                 JobKind::Copy => {
+                    for a in &mut self.adds {
+                        if a.state == AddState::Working {
+                            a.state = AddState::Failed(p.clone());
+                        }
+                    }
                     if let Some(b) = &mut self.bank {
                         b.copy = CopyPanel::Failed(p);
+                    }
+                }
+                JobKind::Offer => {
+                    if let Some(o) = &mut self.join_offer {
+                        o.problem = Some(p);
                     }
                 }
                 _ => {
@@ -1302,8 +1585,15 @@ impl CirclesModel {
         match r {
             Ok(d) => {
                 // (the working copies' sends ask about pictures first for a bank that hides its keys)
+                // (critic 65 I2) only a link whose role was seen by the account signed in now: whether another account
+                // is the bank's author is not this account's to say
+                let tag = super::bank_links::account_tag(self.account.as_deref());
                 for b in &d.banks {
                     self.edit.note_hiding(&b.id, b.hide_key);
+                    // (critic 63 I5) a link of this computer learns whether the person is the bank's author
+                    if let Some(local) = self.edit.with_bank_link(&cid, &b.id, |l| (l.role_seen_by == tag).then(|| l.local_bank_id.clone())).flatten() {
+                        self.edit.update_link(&local, |l| super::bank_links::learn_author(l, &d));
+                    }
                 }
                 if let Some(c) = &mut self.circle {
                     c.detail = Some(d);
@@ -1407,7 +1697,7 @@ impl CirclesModel {
             Ok(doc) => {
                 // A viewer of a bank that hides its keys is served the viewers' form (phase C).
                 let form = if doc.bank.keys_hidden { Served::Stripped } else { Served::Full };
-                let view = StudentView::from_payload(&doc.payload, form).map_err(|e| e.message());
+                let view = StudentView::from_payload(&doc.payload, form).map_err(|e| text::circle_words(&e.message()));
                 self.edit.note_hiding(&bid, doc.bank.hide_key || doc.bank.keys_hidden);
                 if let Some(b) = &mut self.bank {
                     b.load = BankLoad::Ready(Box::new(BankLoaded { doc, view }));
@@ -1443,7 +1733,7 @@ impl CirclesModel {
                 let circle_name = self.circle.as_ref().and_then(|c| c.detail.as_ref()).map(|d| api::plain(&d.circle.name)).or_else(|| self.list.items.iter().find(|i| i.id == key.0).map(|i| api::plain(&i.name))).unwrap_or_default();
                 let wanted = self.copy_name.take().unwrap_or_default();
                 let working = self.copy_seed.take();
-                self.ready = Some(ReadyCopy { imp, name: wanted, circle: CircleOrigin { circle_id: key.0, circle_name }, working });
+                self.ready = Some(ReadyCopy { imp, name: wanted, circle: CircleOrigin { circle_id: key.0, circle_name }, working, add: None });
             }
             Err(e) => {
                 self.copy_seed = None;
@@ -1461,6 +1751,75 @@ impl CirclesModel {
                         }
                         self.notice = Some(Notice::Info("Your session ended, so no copy was made. Sign in again, then press Get a copy again.".into()));
                     }
+                }
+            }
+        }
+    }
+
+    /// The circle's name as this page knows it (its page, the list, the join offer).
+    pub fn circle_name_of(&self, cid: &str) -> String {
+        self.circle
+            .as_ref()
+            .filter(|c| c.id == cid)
+            .and_then(|c| c.detail.as_ref())
+            .map(|d| api::plain(&d.circle.name))
+            .or_else(|| self.list.items.iter().find(|i| i.id == cid).map(|i| api::plain(&i.name)))
+            .or_else(|| self.join_offer.as_ref().filter(|o| o.cid == cid).map(|o| o.name.clone()))
+            .unwrap_or_default()
+    }
+
+    fn on_added(&mut self, key: (String, String), r: Result<Box<(BankHead, Imported)>, PoolError>) {
+        let Some(i) = self.adds.iter().position(|a| a.cid == key.0 && a.bid == key.1 && a.state == AddState::Working) else { return };
+        match r {
+            Ok(b) => {
+                let (head, imp) = *b;
+                let a = self.adds[i].clone();
+                let circle_name = self.circle_name_of(&a.cid);
+                let working = (!a.own).then(|| head.clone());
+                self.ready = Some(ReadyCopy { imp: Box::new(imp), name: String::new(), circle: CircleOrigin { circle_id: a.cid.clone(), circle_name }, working, add: Some(AddFor { cid: a.cid, bid: a.bid, own: a.own, role: a.role, full: a.full }) });
+            }
+            Err(e) => match self.problem_of(&e) {
+                Some(p) => self.adds[i].state = AddState::Failed(p),
+                // (the sign-in ended: it is made once signed in again; critic 67 I1: not asked again on every frame
+                // while the account still looks signed in)
+                None => {
+                    self.adds[i].state = AddState::Waiting;
+                    self.adds_out = true;
+                }
+            },
+        }
+    }
+
+    fn on_offer(&mut self, cid: String, r: Result<CircleDetail, PoolError>) {
+        if !self.join_offer.as_ref().is_some_and(|o| o.cid == cid) {
+            return;
+        }
+        match r {
+            Ok(d) => {
+                // (critic 65 B1) While this computer's list of shared banks can not be read, no bank can be told
+                // apart from one it already has: none is offered.
+                if self.edit.unreadable().is_some() {
+                    if let Some(o) = &mut self.join_offer {
+                        o.problem = Some(Problem { message: LINKS_UNREADABLE_JOIN.into(), retry: false, retry_at: None, account: false });
+                    }
+                    return;
+                }
+                let readable: Vec<&BankEntry> = d.banks.iter().filter(|b| b.removed.is_none() && !b.hidden).collect();
+                // (critic 63 B3) A bank this computer already has is said, never ticked, never added again.
+                let mut banks: Vec<OfferBank> = readable.iter().map(|b| OfferBank { id: b.id.clone(), title: super::publish_text::shown(&b.title), ticked: false, in_banks: self.edit.linked_elsewhere(&cid, &b.id, "") }).collect();
+                let tick = super::bank_links::join_ticks(banks.iter().filter(|b| b.in_banks.is_none()).count());
+                for b in &mut banks {
+                    b.ticked = tick && b.in_banks.is_none();
+                }
+                if let Some(o) = &mut self.join_offer {
+                    o.banks = Some(banks);
+                    o.problem = None;
+                }
+            }
+            Err(e) => {
+                let p = self.problem_of(&e);
+                if let Some(o) = &mut self.join_offer {
+                    o.problem = p.or(Some(Problem { message: "Your session ended. Sign in again, then add the circle's banks from its page.".into(), retry: false, retry_at: None, account: false }));
                 }
             }
         }
@@ -1489,7 +1848,13 @@ impl CirclesModel {
         match r {
             Ok(j) => {
                 let name = self.joining_name.take().unwrap_or_default();
-                self.join = JoinState { text: String::new(), stage: JoinStage::Done { name, role: Role::parse(&j.role), already: j.already, circle_id: j.circle_id } };
+                let role = Role::parse(&j.role);
+                // (critic 65 I1) a copy the circle had said the person was no longer in is checked again at once
+                let locals: Vec<String> = self.edit.links_in(&j.circle_id).into_iter().map(|l| l.local_bank_id).collect();
+                self.links.rearm(&locals);
+                // (phase D1) "Add its banks to My Banks?": the circle's banks are read for the offer.
+                self.join_offer = (!j.already && super::pool::is_item_id(&j.circle_id)).then(|| JoinOffer { cid: j.circle_id.clone(), name: name.clone(), role, banks: None, problem: None, started: false, wait: true });
+                self.join = JoinState { text: String::new(), stage: JoinStage::Done { name, role, already: j.already, circle_id: j.circle_id } };
                 self.list = ListState::default();
             }
             Err(e) => {
@@ -1584,9 +1949,9 @@ impl CirclesModel {
                             Some(RefusalKind::NotFound) => p.message = "This circle is not available to you any more. Nothing was sent.".into(),
                             Some(RefusalKind::InvalidRequest { field }) => {
                                 p.message = match field.as_deref() {
-                                    Some("email") => "That is not an email address the pool can send to. Check it for a typo. Nothing was sent.".into(),
+                                    Some("email") => "That is not an email address verSHion can send to. Check it for a typo. Nothing was sent.".into(),
                                     Some("role") => "Choose whether the person can add banks or can only look and copy.".into(),
-                                    _ => "The pool did not accept that invitation. Nothing was sent.".into(),
+                                    _ => "verSHion did not accept that invitation. Nothing was sent.".into(),
                                 }
                             }
                             _ => {}
@@ -1631,7 +1996,7 @@ impl CirclesModel {
                                 reread = true;
                                 keep = false;
                             }
-                            Some(RefusalKind::InvalidRequest { .. }) => p.message = "The pool did not accept that request. Nothing was changed.".into(),
+                            Some(RefusalKind::InvalidRequest { .. }) => p.message = "verSHion did not accept that request. Nothing was changed.".into(),
                             Some(RefusalKind::BankRemoved | RefusalKind::NotFound | RefusalKind::CircleRoleRequired { .. } | RefusalKind::CircleClosed { .. }) => reread = true,
                             _ => {}
                         }
@@ -1883,7 +2248,7 @@ fn has_decisions(d: &StripDecisions) -> bool {
 }
 
 fn new_bank_view(cid: &str, bid: &str) -> BankView {
-    BankView { cid: cid.to_string(), bid: bid.to_string(), load: BankLoad::Loading, copy: CopyPanel::Closed, report: None, act_problem: None, confirm_remove: false, license_choice: None, hide: HideStage::Idle, withheld_head: false, hide_off_releases: false, picked: None, pictures_change: false }
+    BankView { cid: cid.to_string(), bid: bid.to_string(), load: BankLoad::Loading, copy: CopyPanel::Closed, report: None, act_problem: None, confirm_remove: false, license_choice: None, hide: HideStage::Idle, withheld_head: false, hide_off_releases: false, picked: None, pictures_change: false, preview: false }
 }
 
 // ---- what the screens ask for ----------------------------------------------------------------------------
@@ -1971,6 +2336,27 @@ impl CirclesModel {
         self.screen = Screen::Bank;
     }
 
+    /// Owner decision (a): "Preview" in a bank's row on the circle page. The bank is read once (the reads every
+    /// member's open of a bank already counts; the viewers' form for a viewer of a bank that hides its keys) and its
+    /// questions shown without their answers. Nothing on that page edits or adds anything.
+    pub fn open_preview(&mut self, bid: &str) {
+        let Some(cid) = self.cid() else { return };
+        let role = self.my_role();
+        let closed = self.is_closed();
+        let Some(e) = self.entry_of(bid) else { return };
+        // (a removed bank can not be read: `bank_can` says so)
+        if e.hidden || !bank_can(role, closed, e, BankAction::Copy) {
+            return;
+        }
+        let mut v = new_bank_view(&cid, bid);
+        v.preview = true;
+        self.bank = Some(v);
+        self.panel = Panel::None;
+        self.notice = None;
+        self.resume = Screen::Bank;
+        self.screen = Screen::Bank;
+    }
+
     /// One step back: bank to circle, circle (or join or create) to the list.
     pub fn back(&mut self) {
         if self.busy_action() {
@@ -1978,11 +2364,15 @@ impl CirclesModel {
         }
         match self.screen {
             Screen::Bank => {
+                // (a preview changed nothing: the circle's page is not read again)
+                let preview = self.bank.as_ref().is_some_and(|b| b.preview);
                 self.bank = None;
                 self.screen = Screen::Circle;
                 self.resume = Screen::Circle;
                 // The circle page is read again so a change shows.
-                if let Some(c) = &mut self.circle {
+                if let Some(c) = &mut self.circle
+                    && !preview
+                {
                     c.detail = None;
                 }
             }
@@ -2397,6 +2787,158 @@ impl CirclesModel {
         {
             b.copy = CopyPanel::Closed;
         }
+    }
+
+    // ---- add to my banks / make my own copy (phase D1) ------------------------------------------------------------
+
+    /// Where "Add to My Banks" or "Make my own copy" of this circle bank stands, the newest first.
+    pub fn add_state(&self, cid: &str, bid: &str) -> Option<&AddJob> {
+        self.adds.iter().rev().find(|a| a.cid == cid && a.bid == bid)
+    }
+
+    fn entry_of(&self, bid: &str) -> Option<&BankEntry> {
+        self.circle.as_ref()?.detail.as_ref()?.banks.iter().find(|e| e.id == bid)
+    }
+
+    /// "Add to My Banks" (`own` false: linked, Q2: a follow link for a viewer) or "Make my own copy" (`own`: not
+    /// linked, with a note of where it came from) for a bank of the open circle.
+    pub fn add_bank(&mut self, bid: &str, own: bool) {
+        let Some(cid) = self.cid() else { return };
+        let role = self.my_role();
+        let Some(e) = self.entry_of(bid) else { return };
+        if e.hidden || !bank_can(role, self.is_closed(), e, BankAction::Copy) {
+            return;
+        }
+        let title = super::publish_text::shown(&e.title);
+        self.queue_add(&cid, bid, own, &title, role, false);
+    }
+
+    /// "Add a full copy" (phase D1): the bank, read in full, as a new bank in My Banks that takes the circle bank's
+    /// link from this computer's copy. Only where that copy can never send while the person now could: one made
+    /// from the viewers' form, or a viewer's copy after a promotion to editor (critic 63 I3, critic 64 I2). The
+    /// earlier copy stays in My Banks, not connected.
+    pub fn add_full_copy(&mut self, bid: &str) {
+        let Some(cid) = self.cid() else { return };
+        let role = self.my_role();
+        let Some(e) = self.entry_of(bid) else { return };
+        if e.hidden || !role.can_add_banks() || !bank_can(role, self.is_closed(), e, BankAction::Copy) {
+            return;
+        }
+        let title = super::publish_text::shown(&e.title);
+        if self.edit.with_bank_link(&cid, bid, |l| super::bank_links::full_copy_offered(l, role)) == Some(true) {
+            self.queue_add(&cid, bid, false, &title, role, true);
+        }
+    }
+
+    fn queue_add(&mut self, cid: &str, bid: &str, own: bool, title: &str, role: Role, full: bool) {
+        if self.adds.iter().any(|a| a.cid == cid && a.bid == bid && matches!(a.state, AddState::Waiting | AddState::Working)) {
+            return;
+        }
+        // (critic 63 B3) Never a second linked bank for a circle bank this computer still has; (critic 65 B1) and
+        // none while this computer's list of shared banks can not be read, as it may have it.
+        if !own && (self.edit.unreadable().is_some() || (!full && self.edit.linked_elsewhere(cid, bid, "").is_some())) {
+            return;
+        }
+        self.adds.retain(|a| !(a.cid == cid && a.bid == bid && a.own == own));
+        let account = self.account_tag();
+        self.adds.push(AddJob { cid: cid.to_string(), bid: bid.to_string(), own, title: title.to_string(), role, state: AddState::Waiting, full, dismissed: false, account });
+        self.note_unfinished();
+    }
+
+    /// The account signed in as this model last saw it, as a short fingerprint (see `bank_links::account_tag`).
+    pub fn account_tag(&self) -> Option<String> {
+        super::bank_links::account_tag(self.account.as_deref())
+    }
+
+    /// (critic 69 minor 1) An add asked for by the account signed in now (or by one this model never knew).
+    fn ours(&self, a: &AddJob) -> bool {
+        a.account.is_none() || a.account == self.account_tag()
+    }
+
+    /// A tick of the join offer.
+    pub fn tick_offer(&mut self, bid: &str, on: bool) {
+        if let Some(o) = &mut self.join_offer
+            && !o.started
+            && let Some(b) = o.banks.as_mut().and_then(|v| v.iter_mut().find(|b| b.id == bid))
+        {
+            b.ticked = on && b.in_banks.is_none();
+        }
+    }
+
+    /// "Add the ticked banks": each is added to My Banks (linked; a follow link for a viewer), one after another.
+    pub fn add_ticked(&mut self) {
+        let Some(o) = &self.join_offer else { return };
+        if o.started {
+            return;
+        }
+        let (cid, role) = (o.cid.clone(), o.role);
+        let picks: Vec<(String, String)> = o.banks.iter().flatten().filter(|b| b.ticked && b.in_banks.is_none()).map(|b| (b.id.clone(), b.title.clone())).collect();
+        if picks.is_empty() {
+            return;
+        }
+        for (bid, title) in picks {
+            self.queue_add(&cid, &bid, false, &title, role, false);
+        }
+        if let Some(o) = &mut self.join_offer {
+            o.started = true;
+        }
+    }
+
+    /// "Not now" (or the offer is done with).
+    pub fn dismiss_offer(&mut self) {
+        self.join_offer = None;
+    }
+
+    /// "Try again" on a failed add: only by the account that asked for it (critic 69 minor 1), with its role now.
+    pub fn retry_add(&mut self, cid: &str, bid: &str) {
+        let role = (self.cid().as_deref() == Some(cid)).then(|| self.my_role());
+        let Some(i) = self.adds.iter().rposition(|a| a.cid == cid && a.bid == bid) else { return };
+        if !matches!(self.adds[i].state, AddState::Failed(_)) || !self.ours(&self.adds[i]) {
+            return;
+        }
+        let a = &mut self.adds[i];
+        a.state = AddState::Waiting;
+        if let Some(r) = role {
+            a.role = r;
+        }
+        self.note_unfinished();
+    }
+
+    /// "Report..." in a bank's row on the circle page: the form opens under the row.
+    pub fn begin_report_on(&mut self, bid: &str) {
+        self.hold_row(bid);
+        self.begin_report();
+    }
+
+    /// "Remove..." in a bank's row on the circle page: asks under the row.
+    pub fn ask_remove_on(&mut self, bid: &str) {
+        self.hold_row(bid);
+        self.ask_remove_bank();
+    }
+
+    /// The bank whose report form or removal question is open under its row, while the circle page shows.
+    pub fn row_bank(&self) -> Option<&BankView> {
+        self.bank.as_ref().filter(|_| self.screen == Screen::Circle)
+    }
+
+    fn hold_row(&mut self, bid: &str) {
+        let Some(cid) = self.cid() else { return };
+        if !super::pool::is_item_id(bid) {
+            return;
+        }
+        // (the bank is not read: the circle page's row says everything the form needs)
+        if !self.bank.as_ref().is_some_and(|b| b.cid == cid && b.bid == bid) {
+            self.bank = Some(new_bank_view(&cid, bid));
+        }
+    }
+
+    /// The row to bring into view, once.
+    pub fn take_scroll_to(&mut self, bid: &str) -> bool {
+        if self.scroll_to.as_deref() == Some(bid) {
+            self.scroll_to = None;
+            return true;
+        }
+        false
     }
 
     /// "Get a copy": fetches the pictures and makes the bank on this device.
@@ -2829,6 +3371,10 @@ impl CirclesModel {
     /// Puts a finished copy into the banks and records it like an import. Returns true when `banks`
     /// changed (the caller then saves them). Does nothing when nothing is waiting.
     pub fn sync(&mut self, banks: &mut Vec<QuestionBank>, browse: &mut super::browse::BrowseModel) -> bool {
+        // (owner decision b) a copy put into the banks in the background: its link and its row
+        if let Some(l) = take_landed() {
+            self.finish_landing(l);
+        }
         let mut changed = self.sync_copy(banks, browse);
         if self.open {
             changed |= self.edit.sync(banks);
@@ -2836,53 +3382,228 @@ impl CirclesModel {
                 browse.set_circle_version(&a.circle_bank_id, &a.local_bank_id, a.version);
             }
         }
+        // (critic 71 minor 1) an add that failed on the Shared page is no longer counted as unfinished
+        self.note_unfinished();
         changed
     }
 
     fn sync_copy(&mut self, banks: &mut Vec<QuestionBank>, browse: &mut super::browse::BrowseModel) -> bool {
-        let Some(r) = self.ready.take() else { return false };
-        let name = if r.name.trim().is_empty() { api::plain(&r.imp.head.item.title) } else { r.name.clone() };
-        let applied: Result<Applied, String> = apply_import(banks, &Dest::New, &name, &r.imp);
+        let Some(l) = self.prepare_landing() else { return false };
+        let landed = land(l, banks, browse);
+        let changed = landed.applied.is_ok();
+        self.finish_landing(landed);
+        changed
+    }
+
+    /// The model's half of putting a finished copy into the banks: its name, and the link it may take from an
+    /// earlier copy ("Add a full copy").
+    fn prepare_landing(&mut self) -> Option<Landing> {
+        let r = self.ready.take()?;
+        // (critic 65 I3) "Add a full copy" read without the answer keys (the person can only view it now): no
+        // bank is made and no link moves; the row says why.
+        if let (Some(x), Some(h)) = (&r.add, &r.working)
+            && x.full
+            && h.keys_hidden
+        {
+            if let Some(job) = self.adds.iter_mut().rev().find(|j| j.cid == x.cid && j.bid == x.bid && j.full && in_flight(&j.state)) {
+                job.state = AddState::Failed(Problem { message: FULL_COPY_KEYLESS.into(), retry: false, retry_at: None, account: false });
+            }
+            return None;
+        }
+        // (critic 64 I5) Never two banks of the same name from one circle bank without a word: an own copy and a full
+        // copy say what they are; the earlier copy a full copy takes the link from is named in the notice.
+        let title = api::plain(&r.imp.head.item.title);
+        let earlier = r.add.as_ref().filter(|x| x.full).and_then(|x| self.edit.with_bank_link(&x.cid, &x.bid, |l| (l.local_bank_id.clone(), l.viewers_form)));
+        let name = match &r.add {
+            _ if !r.name.trim().is_empty() => r.name.clone(),
+            Some(x) if x.own => format!("{title} (my copy)"),
+            Some(x) if x.full && earlier.as_ref().is_some_and(|e| e.1) => format!("{title} (with answer keys)"),
+            Some(x) if x.full => format!("{title} (full copy)"),
+            _ => title.clone(),
+        };
+        let tag = super::bank_links::account_tag(self.account.as_deref());
+        Some(Landing { r, name, earlier, now_ms: self.now_ms(), tag })
+    }
+
+    /// The model's half after the copy is in the banks: the link (never taken from a bank that still has it, critic
+    /// 63 B3), what the circle page and the join offer say.
+    fn finish_landing(&mut self, landed: Landed) {
+        let Landed { add, applied, link, mut link_note, saved, earlier_name, copy_done, mut why } = landed;
         match applied {
-            Ok(a) => {
-                // The credit line says where it came from: the circle, not the public pool.
-                if let Some(b) = banks.iter_mut().find(|b| b.id == a.bank_id) {
-                    let it = &r.imp.head.item;
-                    b.details.description = format!("From the circle \"{}\": \"{}\" by {}, version {}.", r.circle.circle_name, api::plain(&it.title), super::browse_text::author(&it.author_name), it.version);
-                }
-                let saved = browse.record_circle_copy(&r.imp, &a, r.circle.clone());
-                let mut link_note = None;
-                if r.working.is_some() && r.imp.pictures_missing > 0 {
-                    // Sending from a copy that lost pictures would remove them from the circle for everyone.
-                    link_note = Some(format!("{} of {} pictures could not be fetched, so this copy is a plain copy and is not linked to the circle bank. Make the working copy again when the pictures can be fetched", r.imp.pictures_missing, r.imp.pictures));
-                } else if let Some(head) = &r.working {
-                    let base = r.imp.theirs.iter().map(|t| super::merge::base_of(&t.q, &t.qid, &t.fp, t.sha.clone())).collect();
-                    let mut link = CircleLink::from_head(&r.circle.circle_id, &r.circle.circle_name, head, &a.bank_id, base, r.imp.at_ms);
-                    if let Some(b) = banks.iter().find(|b| b.id == a.bank_id) {
-                        link.mark_bank(b);
-                    }
-                    if let Err(m) = self.edit.add_link(link) {
-                        link_note = Some(m);
+            Ok((bank_id, bank_name)) => {
+                let mut linked = false;
+                if let Some(link) = link {
+                    let full = add.as_ref().is_some_and(|x| x.full);
+                    match if full { self.edit.add_link_replacing(link) } else { self.edit.add_link(link) } {
+                        Ok(()) => {
+                            linked = true;
+                            if let Some((old_name, keyless)) = earlier_name {
+                                let what = if keyless { "Your earlier copy without answer keys" } else { "Your earlier copy" };
+                                let named = if old_name.is_empty() { String::new() } else { format!(", \"{old_name}\",") };
+                                self.notice = Some(Notice::Info(format!("{what}{named} stays in My Banks but is no longer connected to the circle. You can delete it when you're ready.")));
+                            }
+                        }
+                        Err(m) => {
+                            why = Some(m.clone());
+                            link_note = Some(m);
+                        }
                     }
                 }
-                if let Some(b) = &mut self.bank {
-                    b.copy = CopyPanel::Done(CopyDone { bank_name: a.bank_name.clone(), added: a.added, pictures: r.imp.pictures, pictures_missing: r.imp.pictures_missing, version: r.imp.head.item.version });
+                if let Some(x) = &add {
+                    if let Some(job) = self.adds.iter_mut().rev().find(|j| j.cid == x.cid && j.bid == x.bid && j.own == x.own && in_flight(&j.state)) {
+                        job.state = AddState::Done { bank_id, bank_name, linked, why: if linked || x.own { None } else { why } };
+                    }
+                } else if let (Some(b), Some(done)) = (&mut self.bank, copy_done) {
+                    b.copy = CopyPanel::Done(done);
                 }
                 if let Err(m) = saved {
                     self.notice = Some(Notice::Error(format!("The questions were added, but the list of copies could not be saved ({m}). Updates will not be noticed for this one.")));
                 }
                 if let Some(m) = link_note {
-                    self.notice = Some(Notice::Error(if m.contains("not linked") { format!("The questions were added, but {m}.") } else { format!("The questions were added, but the link to the circle bank could not be saved ({m}). Changes can not be sent from this copy.") }));
+                    self.notice = Some(Notice::Error(if m.starts_with("The bank was added") {
+                        m
+                    } else if m.contains("already connected") {
+                        // (critic 63 B3) another bank of this computer keeps the link and its changes
+                        format!("The bank was added, but {m}.")
+                    } else {
+                        format!("The bank was added, but the link to the circle bank could not be saved ({m}). Changes can't be sent from it.")
+                    }));
                 }
-                true
             }
             Err(m) => {
-                if let Some(b) = &mut self.bank {
-                    b.copy = CopyPanel::Failed(Problem { message: m, retry: false, retry_at: None, account: false });
+                let p = Problem { message: m, retry: false, retry_at: None, account: false };
+                if let Some(x) = &add {
+                    if let Some(job) = self.adds.iter_mut().rev().find(|j| j.cid == x.cid && j.bid == x.bid && j.own == x.own && in_flight(&j.state)) {
+                        job.state = AddState::Failed(p);
+                    }
+                } else if let Some(b) = &mut self.bank {
+                    b.copy = CopyPanel::Failed(p);
                 }
-                false
             }
         }
+        // (critic 71 minor 1) the adds not finished, as they are now, wherever this ran (also on the Shared page)
+        self.note_unfinished();
+    }
+
+    /// Owner decision (b): "Add to My Banks" and "Add the ticked banks" finish after the Shared page is left. Called
+    /// by the app's frame (`shared_ui::take_goto`) when the Shared page was not drawn. Does nothing at all unless an
+    /// add the person asked for is waiting, under way, or landing: then it applies answers that came, starts the
+    /// next add, and hands a finished copy to the banks' side ([`land_waiting`], from the browse window's frame,
+    /// which has the banks). It reads nothing else (no list, no circle page). Returns true while a copy is under way
+    /// or landing (adds waiting for a sign-in do not keep the app awake).
+    ///
+    /// (critic 75 minor 6) `frame`: the app's frame (egui pass) this runs in. The Shared page was not drawn in it, so a
+    /// History left open there is not in front of the person (a bank's page that drew it in this frame says so): an
+    /// answer to its restore or trim is said for its bank, on the Banks list for a bank with no copy here.
+    pub fn tick_background_in(&mut self, now: Instant, snap: &AccountSnapshot, frame: u64) -> bool {
+        self.edit.set_pass(frame);
+        self.tick_background(now, snap)
+    }
+
+    /// [`tick_background_in`](Self::tick_background_in), the frame left as the last one given.
+    pub fn tick_background(&mut self, now: Instant, snap: &AccountSnapshot) -> bool {
+        self.finish_landed();
+        self.note_unfinished();
+        // (critic 77 minor 3) the Banks list's badges keep the account rule from its first frame: what a send whose answer
+        // could not be read left in the links file is said (as sent) to the account that sent it only
+        if snap.gate == Gate::Ready {
+            self.note_account(snap);
+            self.edit.learn_account(snap);
+        }
+        // (critic 73 minor 5) a send, restore or trim on its way is read on any page (the Banks list says how it went for
+        // a circle bank with no copy here), under the same account rule as the Shared page
+        if self.edit.acting() {
+            self.note_account(snap);
+            self.edit.frame(now, snap);
+        }
+        let pending = self.adds.iter().any(|a| in_flight(&a.state)) || self.ready.is_some() || landing_pending();
+        if !pending {
+            return false;
+        }
+        self.now = Some(now);
+        self.note_account(snap);
+        self.session = if snap.gate == Gate::Ready { snap.session.clone() } else { None };
+        self.drain();
+        // (critic 69 minor 4) a copy read for the account is put in only while it is signed in
+        let can_land = snap.gate == Gate::Ready && !self.account_out;
+        if can_land
+            && self.ready.is_some()
+            && !landing_pending()
+            && let Some(l) = self.prepare_landing()
+        {
+            LANDING.with(|s| *s.borrow_mut() = Some(l));
+        }
+        self.next_add();
+        self.note_unfinished();
+        // (critic 67 I1, I2) adds that wait for a sign-in keep no frames coming: only a copy under way or landing does
+        self.running(JobKind::Copy) || (can_land && self.ready.is_some()) || landing_pending()
+    }
+
+    /// (critic 69 minor 3) A copy the browse window put into the banks gets its link now, wherever the Shared page is
+    /// (also on a sign-in step): the banks are saved with it, so it is never left without its link for long.
+    pub fn finish_landed(&mut self) {
+        if let Some(l) = take_landed() {
+            self.finish_landing(l);
+        }
+    }
+
+    /// (critic 69 minor 3) Writes how many adds are not finished, when that changed (read first, once a start).
+    fn note_unfinished(&mut self) {
+        self.read_unfinished();
+        let n = self.adds.iter().filter(|a| in_flight(&a.state)).count();
+        if self.unfinished_noted != Some(n) {
+            self.adds_log.write(n);
+            self.unfinished_noted = Some(n);
+        }
+    }
+
+    fn read_unfinished(&mut self) {
+        if self.unfinished_noted.is_none() {
+            let n = self.adds_log.read();
+            self.unfinished_at_start = n;
+            self.unfinished_noted = Some(n);
+        }
+    }
+
+    /// The adds the last run did not finish (verSHion was closed first), for the Banks list.
+    pub fn unfinished_at_start(&mut self) -> usize {
+        // (read, then the file says this run's number: the start after this one does not say it again)
+        self.note_unfinished();
+        self.unfinished_at_start
+    }
+
+    pub fn dismiss_unfinished(&mut self) {
+        self.unfinished_at_start = 0;
+    }
+
+    pub fn set_adds_log(&mut self, log: AddsLog) {
+        self.adds_log = log;
+        self.unfinished_noted = None;
+        self.unfinished_at_start = 0;
+    }
+
+    /// (critic 67 I1, I2) The adds wait for a sign-in: the session ended during one, or a sign-out was seen.
+    pub fn adds_need_sign_in(&self) -> bool {
+        self.adds_out || self.account_out
+    }
+
+    /// "Sign in..." on the Banks list: the Account window opens, and the adds are tried again.
+    pub fn sign_in_for_adds(&mut self) {
+        self.adds_out = false;
+        self.adds_sign_in = true;
+    }
+
+    pub fn take_adds_sign_in(&mut self) -> bool {
+        std::mem::take(&mut self.adds_sign_in)
+    }
+
+    /// "Open it" on the Banks list (critic 68 minor 3): the page there opens this bank.
+    pub fn ask_open_bank(&mut self, local_id: &str) {
+        self.open_bank_asked = Some(local_id.to_string());
+    }
+
+    pub fn take_open_bank(&mut self) -> Option<String> {
+        self.open_bank_asked.take()
     }
 
     /// The shared page tells the model which circle banks were copied (once per opening); the
@@ -2897,6 +3618,150 @@ impl CirclesModel {
     pub fn take_heads(&mut self) -> Option<Vec<HeadEntry>> {
         self.heads.take()
     }
+}
+
+// ---- putting a finished copy into the banks (owner decision b) ----------------------------------------------------------
+
+/// A finished copy and what the model decided for it, waiting for the banks.
+struct Landing {
+    r: ReadyCopy,
+    name: String,
+    /// "Add a full copy": the bank whose link it takes, and whether that one was made from the viewers' form.
+    earlier: Option<(String, bool)>,
+    now_ms: i64,
+    /// The account the link's role is for (see `bank_links::account_tag`).
+    tag: Option<String>,
+}
+
+/// What putting it into the banks did, for the model.
+struct Landed {
+    add: Option<AddFor>,
+    /// The new bank's id and name.
+    applied: Result<(String, String), String>,
+    link: Option<CircleLink>,
+    link_note: Option<String>,
+    saved: Result<(), String>,
+    /// The earlier copy's name (for the notice of a full copy), and whether it had no answer keys.
+    earlier_name: Option<(String, bool)>,
+    copy_done: Option<CopyDone>,
+    /// Why an added bank that should be linked is not, in a few words (critic 66 I4, I5).
+    why: Option<String>,
+}
+
+thread_local! {
+    /// A copy handed from the model to the banks' side while the Shared page is not drawn (UI thread only).
+    static LANDING: std::cell::RefCell<Option<Landing>> = const { std::cell::RefCell::new(None) };
+    static LANDED: std::cell::RefCell<Option<Landed>> = const { std::cell::RefCell::new(None) };
+}
+
+/// An add asked for and not finished: waiting, or under way. A copy handed to the banks lands on it in either state
+/// (an add put back to waiting when its job was dropped keeps the copy already read, and is made once).
+fn in_flight(s: &AddState) -> bool {
+    matches!(s, AddState::Waiting | AddState::Working)
+}
+
+/// (critic 71 minor 5) An add not made because another account signed in before it was.
+pub(super) fn stopped_by_switch(s: &AddState) -> bool {
+    matches!(s, AddState::Failed(p) if p.message == ADD_OTHER_ACCOUNT)
+}
+
+fn landing_pending() -> bool {
+    LANDING.with(|s| s.borrow().is_some()) || LANDED.with(|s| s.borrow().is_some())
+}
+
+fn take_landed() -> Option<Landed> {
+    LANDED.with(|s| s.borrow_mut().take())
+}
+
+/// Drops a copy handed over and not yet put into the banks (another account signed in).
+fn drop_landing() {
+    LANDING.with(|s| *s.borrow_mut() = None);
+}
+
+/// The banks' half of a background add: puts a copy the model handed over into the banks (owner decision b). Called
+/// every frame by the browse window, which has the banks, whatever the screen; returns true when the banks changed
+/// (the app saves them). Does nothing when nothing was handed over.
+pub fn land_waiting(banks: &mut Vec<QuestionBank>, browse: &mut super::browse::BrowseModel) -> bool {
+    let Some(l) = LANDING.with(|s| s.borrow_mut().take()) else { return false };
+    let landed = land(l, banks, browse);
+    let changed = landed.applied.is_ok();
+    LANDED.with(|s| *s.borrow_mut() = Some(landed));
+    changed
+}
+
+/// Puts a finished copy into the banks and records it like an import; makes the link it should have (the model
+/// saves it). Nothing here reads or writes the links.
+fn land(l: Landing, banks: &mut Vec<QuestionBank>, browse: &mut super::browse::BrowseModel) -> Landed {
+    let Landing { r, name, earlier, now_ms, tag } = l;
+    let mut out = Landed { add: r.add.clone(), applied: Err(String::new()), link: None, link_note: None, saved: Ok(()), earlier_name: None, copy_done: None, why: None };
+    // (critic 66 I5) a bank added again (after one that was not connected) gets a name of its own
+    let name = if r.add.is_some() { free_name(banks, &name) } else { name };
+    let a = match apply_import(banks, &Dest::New, &name, &r.imp) {
+        Ok(a) => a,
+        Err(m) => {
+            out.applied = Err(m);
+            return out;
+        }
+    };
+    let own = r.add.as_ref().is_some_and(|x| x.own);
+    // The credit line says where it came from: the circle, not the public pool.
+    if let Some(b) = banks.iter_mut().find(|b| b.id == a.bank_id) {
+        let it = &r.imp.head.item;
+        b.details.description = if own {
+            // (phase D1, Q7) "Make my own copy": where it came from and when; it is not linked.
+            super::bank_links::own_copy_line(&r.circle.circle_name, &api::plain(&it.title), &super::browse_text::author(&it.author_name), it.version, now_ms)
+        } else if r.add.is_some() {
+            // (critic 64 polish 14) a linked bank's version is on its page, and changes: not written here
+            format!("From the circle \"{}\": \"{}\" by {}.", r.circle.circle_name, api::plain(&it.title), super::browse_text::author(&it.author_name))
+        } else {
+            format!("From the circle \"{}\": \"{}\" by {}, version {}.", r.circle.circle_name, api::plain(&it.title), super::browse_text::author(&it.author_name), it.version)
+        };
+    }
+    // (Q2) An added bank follows the circle for a viewer, and for a read without the answer keys.
+    let (mode, viewers_form) = match (&r.add, &r.working) {
+        (Some(x), Some(h)) => super::bank_links::add_mode(x.role, h.keys_hidden),
+        _ => (super::circle_links::LinkMode::Edit, false),
+    };
+    let sendable = mode == super::circle_links::LinkMode::Edit && !viewers_form;
+    if r.working.is_some() && sendable && r.imp.pictures_missing > 0 {
+        // Sending from a copy that lost pictures would remove them from the circle for everyone.
+        // (critic 64 I6) said plainly, with the way on
+        out.link_note = Some(format!("The bank was added, but {} of {} pictures couldn't be fetched, so it is not linked to the circle (a send from it would remove those pictures for everyone). Delete it and press Add to My Banks again when the pictures can be fetched.", r.imp.pictures_missing, r.imp.pictures));
+        out.why = Some(format!("{} of {} pictures couldn't be fetched", r.imp.pictures_missing, r.imp.pictures));
+    } else if let Some(head) = &r.working {
+        let base = r.imp.theirs.iter().map(|t| super::merge::base_of(&t.q, &t.qid, &t.fp, t.sha.clone())).collect();
+        let mut link = CircleLink::from_head(&r.circle.circle_id, &r.circle.circle_name, head, &a.bank_id, base, r.imp.at_ms);
+        if let Some(x) = &r.add {
+            link.mode = mode;
+            link.viewers_form = viewers_form;
+            link.role_seen = Some(x.role.as_str().to_string());
+            link.role_seen_at = Some(now_ms);
+            link.role_seen_by = tag;
+        }
+        if let Some(b) = banks.iter().find(|b| b.id == a.bank_id) {
+            link.mark_bank(b);
+        }
+        out.link = Some(link);
+    }
+    // (Q7) An own copy gets no update notices; (critic 66 I2) nor does a linked bank: its strip says where it stands,
+    // and the Shared page's "Things I imported" would say nothing goes back to the circle. A copy that is not linked
+    // (a plain copy, or one missing pictures) is recorded as before.
+    out.saved = if own || out.link.is_some() { Ok(()) } else { browse.record_circle_copy(&r.imp, &a, r.circle.clone()) };
+    out.earlier_name = earlier.filter(|e| e.0 != a.bank_id).map(|(old, keyless)| (banks.iter().find(|b| b.id == old).map(|b| api::plain(&b.name)).unwrap_or_default(), keyless));
+    if r.add.is_none() {
+        out.copy_done = Some(CopyDone { bank_name: a.bank_name.clone(), added: a.added, pictures: r.imp.pictures, pictures_missing: r.imp.pictures_missing, version: r.imp.head.item.version });
+    }
+    out.applied = Ok((a.bank_id, a.bank_name));
+    out
+}
+
+/// `name`, or "name (2)", "name (3)" ... when My Banks already has a bank of that name (critic 66 I5).
+fn free_name(banks: &[QuestionBank], name: &str) -> String {
+    let taken = |n: &str| banks.iter().any(|b| b.name.trim() == n.trim());
+    if name.trim().is_empty() || !taken(name) {
+        return name.to_string();
+    }
+    (2..1000).map(|k| format!("{name} ({k})")).find(|n| !taken(n)).unwrap_or_else(|| name.to_string())
 }
 
 /// "Deleted teacher" stays "deleted teacher"; a name is cleaned.

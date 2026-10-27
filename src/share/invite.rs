@@ -111,6 +111,8 @@ impl InviteModel {
         };
         let (tx, rx) = channel();
         let (code, retry, repaint) = (self.code.trim().to_string(), self.retry, self.repaint.clone());
+        // (critic 71 minor 3) the code is redeemed for the account signed in now, never for one that signs in meanwhile
+        let session = super::pool::pinned(session);
         async fn run(session: SharedSession, retry: RetryPolicy, code: String, tx: std::sync::mpsc::Sender<Result<InviteAck, PoolError>>, repaint: Option<Arc<dyn Fn() + Send + Sync>>) {
             let pool = Pool::new(&*session).with_retry(retry);
             let r = pool.redeem_invite(&code).await;

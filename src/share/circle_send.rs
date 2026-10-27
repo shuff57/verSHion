@@ -56,6 +56,19 @@ pub struct SentInfo {
     pub circle_name: String,
     pub circle_id: String,
     pub title: String,
+    /// The bank that was shared is now linked to the new circle bank (phase D1, Q6): its name in My Banks. The
+    /// circles model takes the link on its next read and says how it went (`circle_links::outcome_of`).
+    pub linked: Option<String>,
+}
+
+/// The bank being shared into a circle, kept for its link (phase D1, Q6).
+struct Linking {
+    bank: crate::model::QuestionBank,
+    meta: ItemMeta,
+    license: License,
+    role: Role,
+    /// The account that shared it (`bank_links::account_tag`): its role and authorship are known for that account.
+    tag: Option<String>,
 }
 
 enum Msg {
@@ -94,11 +107,17 @@ pub struct CircleSendModel {
     sent_title: Option<String>,
     job: Option<Job>,
     now: Option<Instant>,
+    linking: Option<Linking>,
+    /// Circles the bank being shared is already linked to on this computer: not offered (critic 64 I11), its send
+    /// goes from the bank's page.
+    pub blocked: Vec<String>,
+    /// The account signed in when the send starts (`bank_links::account_tag`), for the link it makes (critic 67 M5).
+    pub account_tag: Option<String>,
 }
 
 /// The fixed words of the circle destination.
 pub const KEYS_NOTE: &str = "Everyone in this circle will see the answer keys.";
-pub const NEW_BANK_NOTE: &str = "This adds a new bank to the circle. Sending a changed version of the same bank comes in a later update of verSHion.";
+pub const NEW_BANK_NOTE: &str = "This adds a new bank to the circle and links this bank to it: you send later changes from its page in My Banks.";
 /// "All rights reserved" for a circle bank (the public list's line is about unlisted items).
 pub const CIRCLE_ONLY_LINE: &str = "Members can open it and copy it inside the circle, but may not share it publicly.";
 pub const RESHARE_NOTE: &str = "Not yet: sharing a circle bank's questions publicly is not available in this version, whatever the licence. A later version may let members do it for Creative Commons banks. \"All rights reserved\" always keeps them inside the circle.";
@@ -147,7 +166,7 @@ impl CircleSendModel {
     }
 
     pub fn choose(&mut self, id: &str) {
-        if self.choices().iter().any(|c| c.id == id) {
+        if self.choices().iter().any(|c| c.id == id) && !self.blocked.iter().any(|b| b == id) {
             self.chosen = Some(id.to_string());
         }
     }
@@ -237,6 +256,8 @@ impl CircleSendModel {
                 }
             }
         }
+        // (critic 70 I1) a circle's words: verSHion's, never the public pool's
+        p.message = super::circles_text::circle_words(&p.message);
         Some(p)
     }
 
@@ -248,7 +269,7 @@ impl CircleSendModel {
                     self.choose(&p);
                 }
                 if self.chosen.is_none() {
-                    let only: Vec<String> = self.choices().iter().map(|c| c.id.clone()).collect();
+                    let only: Vec<String> = self.choices().iter().map(|c| c.id.clone()).filter(|c| !self.blocked.contains(c)).collect();
                     if only.len() == 1 {
                         self.chosen = Some(only[0].clone());
                     }
@@ -270,7 +291,21 @@ impl CircleSendModel {
                 let (circle_name, circle_id) = self.chosen_circle().map(|c| (api::plain(&c.name), c.id.clone())).unwrap_or_default();
                 let title = self.sent_title.take().unwrap_or_default();
                 self.commit = None;
-                self.stage = SendStage::Done(Box::new(SentInfo { sent, circle_name, circle_id, title }));
+                // (phase D1, Q6) The bank shared becomes the linked bank: no second copy for its author.
+                let now = super::browse::now_ms();
+                // (critic 67 M5) made for the account that shared it: its first check does not read the circle's page
+                // again to learn who the author is (a read that fails would take Restore and Trim away)
+                let link = self.linking.take().and_then(|l| {
+                    super::circle_links::link_from_share(&circle_id, &circle_name, l.role, &l.bank, &sent, &l.meta, l.license, now).map(|mut k| {
+                        k.role_seen_by = l.tag;
+                        (k, l.bank.name)
+                    })
+                });
+                let linked = link.map(|(k, name)| {
+                    super::circle_links::queue_link(k);
+                    name
+                });
+                self.stage = SendStage::Done(Box::new(SentInfo { sent, circle_name, circle_id, title, linked }));
             }
             Err(e) => match e.kind() {
                 Some(RefusalKind::InvalidPayload(p)) | Some(RefusalKind::LabelsNeedDecision(p)) | Some(RefusalKind::OrderAckRequired(p)) => {
@@ -283,11 +318,11 @@ impl CircleSendModel {
                 }
                 Some(RefusalKind::AttestationRequired) => {
                     self.attest = false;
-                    self.stage = SendStage::Failed(Problem { message: e.message(), retry: false, retry_at: None, account: false });
+                    self.stage = SendStage::Failed(Problem { message: super::circles_text::circle_words(&e.message()), retry: false, retry_at: None, account: false });
                 }
                 Some(RefusalKind::CommitIdConflict) => {
                     self.commit = None;
-                    self.stage = SendStage::Failed(Problem { message: e.message(), retry: true, retry_at: None, account: false });
+                    self.stage = SendStage::Failed(Problem { message: super::circles_text::circle_words(&e.message()), retry: true, retry_at: None, account: false });
                 }
                 _ => match self.problem(&e) {
                     Some(p) => self.stage = SendStage::Failed(p),
@@ -347,6 +382,8 @@ impl CircleSendModel {
             _ => self.commit = Some((print, req.commit_id.clone())),
         }
         self.sent_title = Some(meta.title.clone());
+        let role = self.role_of(&cid);
+        self.linking = source.bank().map(|bank| Linking { bank, meta: meta.clone(), license, role, tag: self.account_tag.clone() });
         self.stage = SendStage::Sending(None);
         self.spawn(Kind::Send, session.clone(), runner, retry, media.clone(), repaint, Work::Send(cid, Box::new(req)));
     }
@@ -354,6 +391,8 @@ impl CircleSendModel {
     #[allow(clippy::too_many_arguments)]
     fn spawn(&mut self, kind: Kind, session: SharedSession, runner: super::model::Runner, retry: RetryPolicy, media: SharedMedia, repaint: Option<Arc<dyn Fn() + Send + Sync>>, work: Work) {
         let (tx, rx) = channel::<Msg>();
+        // (critic 71 minor 3) kept to the account signed in now: a retry after another account signed in is not sent as it
+        let session = super::pool::pinned(session);
         match runner {
             #[cfg(not(target_arch = "wasm32"))]
             super::model::Runner::Inline => run(session, media, retry, work, tx, repaint),

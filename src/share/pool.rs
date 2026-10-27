@@ -1145,6 +1145,19 @@ pub trait PoolSession {
     /// Sends the request `build` makes (with the bearer token added); a 401 `unauthorized` is
     /// refreshed and retried once by the session. The answer comes back whatever its status.
     fn send<'a>(&'a self, build: &'a dyn Fn() -> Request) -> LocalFuture<'a, Result<Response, ApiError>>;
+    /// The account signed in, when the session knows it (see [`pinned`]).
+    fn account(&self) -> Option<String> {
+        None
+    }
+    /// [`send`](Self::send) for `account` only (critic 73 I2): nothing goes, and the answer is `SignedOut`, once another
+    /// account is signed in. A session that retries inside one call (the real [`Client`]'s refresh-and-retry) checks
+    /// again before each try.
+    fn send_as<'a>(&'a self, account: Option<&'a str>, build: &'a dyn Fn() -> Request) -> LocalFuture<'a, Result<Response, ApiError>> {
+        if account.is_some() && self.account().as_deref() != account {
+            return Box::pin(async { Err(ApiError::SignedOut) });
+        }
+        self.send(build)
+    }
 }
 
 impl PoolSession for Client {
@@ -1153,6 +1166,42 @@ impl PoolSession for Client {
     }
     fn send<'a>(&'a self, build: &'a dyn Fn() -> Request) -> LocalFuture<'a, Result<Response, ApiError>> {
         Box::pin(self.authed_raw(build))
+    }
+    fn send_as<'a>(&'a self, account: Option<&'a str>, build: &'a dyn Fn() -> Request) -> LocalFuture<'a, Result<Response, ApiError>> {
+        Box::pin(self.authed_raw_as(account, build))
+    }
+    fn account(&self) -> Option<String> {
+        Client::account(self)
+    }
+}
+
+/// (critic 71 minor 3) A session for one job, kept to the account signed in when the job started. One `Client` serves
+/// every account on this computer and reads the sign-in of whoever is signed in on each try: a job's retry (after a
+/// busy server's wait, or a send's later picture uploads) would otherwise go out with the next account's sign-in once
+/// another account signed in meanwhile. Once the account is another one, nothing more is sent: the job ends as signed
+/// out. A session that does not know its account is never held back.
+struct PinnedSession {
+    inner: super::publish::SharedSession,
+    account: Option<String>,
+}
+
+pub fn pinned(inner: super::publish::SharedSession) -> super::publish::SharedSession {
+    let account = inner.account();
+    std::sync::Arc::new(PinnedSession { inner, account })
+}
+
+impl PoolSession for PinnedSession {
+    fn base(&self) -> String {
+        self.inner.base()
+    }
+    fn send<'a>(&'a self, build: &'a dyn Fn() -> Request) -> LocalFuture<'a, Result<Response, ApiError>> {
+        // (critic 73 I2) the account goes down to the session, which checks it again before each of its own tries
+        self.inner.send_as(self.account.as_deref(), build)
+    }
+    // (critic 75 r05, r06) no `send_as` of its own: no session is pinned twice, so the trait's default (refuse another
+    // account, else `send`) is all a pinned session needs.
+    fn account(&self) -> Option<String> {
+        self.account.clone()
     }
 }
 

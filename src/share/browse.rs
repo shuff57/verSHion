@@ -66,6 +66,11 @@ pub struct NewerInfo {
     pub license_version: Option<u64>,
 }
 
+/// The record's bank is linked to a circle on this computer (as the circles model last read its links).
+pub fn linked_here(r: &ImportedRecord) -> bool {
+    !super::circle_links::circles_of_bank(&r.bank_id).is_empty()
+}
+
 /// One import into one bank. `fingerprints` let a later update say what changed without keeping
 /// the old text; `imported_at` lets it say which questions the teacher edited since.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -722,6 +727,8 @@ pub struct BrowseModel {
     pub banks: Vec<BankInfo>,
     /// The bank the person came from: the import's default destination.
     pub default_bank: Option<String>,
+    /// "Open in My Banks" on the Imported tab (critic 68 minor 6): the Shared page opens this bank's page.
+    pub open_bank: Option<String>,
     open_account: bool,
     asked_account: bool,
     resume: Screen,
@@ -767,6 +774,7 @@ impl BrowseModel {
             invite_required: false,
             banks: Vec::new(),
             default_bank: None,
+            open_bank: None,
             open_account: false,
             asked_account: false,
             resume: Screen::Browse,
@@ -813,9 +821,10 @@ impl BrowseModel {
         self.running(JobKind::Import)
     }
 
-    /// How many imports the last check found a newer version for.
+    /// How many imports the last check found a newer version for. (critic 66 I2) Not a bank linked to a circle on
+    /// this computer: its strip on the bank's page offers Get latest.
     pub fn update_count(&self) -> usize {
-        self.imported.iter().filter(|r| r.has_update()).count()
+        self.imported.iter().filter(|r| r.has_update() && !linked_here(r)).count()
     }
 
     fn running(&self, k: JobKind) -> bool {
@@ -859,7 +868,7 @@ impl BrowseModel {
     /// from, with what changed. Falls back to the Imported tab when the bank has several sources.
     pub fn open_update(&mut self, bank_id: &str) {
         self.open_window(Tab::Imported, Some(bank_id.to_string()));
-        let ups: Vec<ImportedRecord> = self.imported.iter().filter(|r| r.bank_id == bank_id && r.has_update()).cloned().collect();
+        let ups: Vec<ImportedRecord> = self.imported.iter().filter(|r| r.bank_id == bank_id && r.has_update() && r.circle.is_none()).cloned().collect();
         if let [one] = ups.as_slice() {
             self.pending_update = Some(one.clone());
         }
@@ -911,10 +920,12 @@ impl BrowseModel {
         &self.imported
     }
 
-    /// The quiet "update available" note for a bank page, from the last check (no network).
+    /// The quiet "update available" note for a bank page ("Update from pool..."), from the last check (no network).
+    /// (critic 66 I2) Never for a copy of a circle bank, which is not a public pool item, nor for a bank linked to a
+    /// circle on this computer: its strip offers Get latest.
     pub fn update_for_bank(&mut self, bank_id: &str) -> Option<ImportedRecord> {
         self.ensure_log();
-        self.imported.iter().find(|r| r.bank_id == bank_id && r.has_update()).cloned()
+        self.imported.iter().find(|r| r.bank_id == bank_id && r.has_update() && r.circle.is_none() && !linked_here(r)).cloned()
     }
 
     /// The record of an earlier import of this item, newest first.
@@ -1074,6 +1085,8 @@ impl BrowseModel {
         self.jobs.retain(|j| j.kind != kind);
         let (tx, rx) = channel::<JobMsg>();
         let (images, retry, repaint) = (self.images.clone(), self.retry, self.repaint.clone());
+        // (critic 71 minor 3) kept to the account signed in now: a retry after another account signed in is not sent as it
+        let session = super::pool::pinned(session);
         match self.runner {
             #[cfg(not(target_arch = "wasm32"))]
             Runner::Inline => run_work(session, images, retry, work, tx, repaint),
@@ -1242,6 +1255,10 @@ impl BrowseModel {
     }
 
     fn open_item_for_update(&mut self, rec: ImportedRecord) {
+        // (critic 66 I2) a circle bank's id is not a public pool item: it is never opened as one
+        if rec.circle.is_some() {
+            return;
+        }
         self.open_item(&rec.item_id.clone(), None);
         if let Some(it) = &mut self.item {
             it.update = Some(UpdateCtx { record: rec, changes: None });

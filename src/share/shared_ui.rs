@@ -31,6 +31,8 @@ pub struct SharedUi {
     pub circles: CirclesModel,
     /// "Add a bank" on a circle's page: the chooser then sends to this circle.
     pub share_target: Option<String>,
+    /// "Open in My Banks" on a circle's page (phase D1): the app opens this bank's page.
+    pub open_bank: Option<String>,
     repaint_set: bool,
 }
 
@@ -61,6 +63,12 @@ pub fn goto(ctx: &egui::Context, tab: Tab) {
 /// True when something asked for the Shared page this frame (a contextual button, or the account
 /// being asked for): the app then switches the screen. Reads and clears the request.
 pub fn take_goto(ctx: &egui::Context, shared: &mut SharedUi, account: &mut AccountUi) -> bool {
+    // (owner decision b) Banks the person asked to add finish after the Shared page is left: the circles model's
+    // adds advance here, and the finished copy goes into the banks in the browse window's frame (`land_waiting`).
+    // Nothing runs unless an add is waiting, under way or landing.
+    if !is_drawn(ctx) && shared.circles.tick_background_in(web_time::Instant::now(), &snapshot_of(&account.model), ctx.cumulative_frame_nr()) {
+        ctx.request_repaint_after(std::time::Duration::from_millis(250));
+    }
     let mut go = false;
     if ctx.data(|d| d.get_temp::<Option<(String, Option<String>)>>(circle_goto_id())).flatten().is_some() {
         shared.model.goto(Tab::Circles);
@@ -98,6 +106,12 @@ impl crate::App {
                 store.save_banks();
             }
         });
+        // (phase D1) "Open in My Banks": the bank's page, where its strip says where it stands.
+        if let Some(id) = self.shared.open_bank.take()
+            && self.store.bank(&id).is_some()
+        {
+            self.open_bank(&id);
+        }
     }
 }
 
@@ -108,6 +122,10 @@ impl SharedUi {
     pub fn draw(&mut self, ui: &mut Ui, account: &mut AccountUi, browse: &mut BrowseUi, mine: &mut MineUi, banks: &mut Vec<QuestionBank>, exams: &[Exam]) -> bool {
         let mut changed = false;
         mark_drawn(ui.ctx());
+        // (phase D1) a bank just shared into a circle is linked here too (the circles model takes it on a read)
+        let _ = self.circles.edit.links();
+        // (critic 69 minor 3) a circle bank the browse window put into the banks gets its link whatever this page shows
+        self.circles.finish_landed();
         // (an address or code field the Circles tab emptied or closed leaves no undo history, whichever tab shows)
         super::circles_ui::forget_cleared_fields(ui.ctx(), &self.circles);
         account.pin();
@@ -230,6 +248,8 @@ impl SharedUi {
         if !self.circles.open && (self.model.tab == Tab::Circles || !copies.is_empty()) {
             self.circles.open_list();
         }
+        // (critic 71 I1) which frame this is: a History left open here and not drawn is not in front of the person
+        self.circles.edit.set_pass(ui.ctx().cumulative_frame_nr());
         self.circles.frame(web_time::Instant::now(), &snap);
         if self.circles.open {
             self.circles.want_heads(copies);
@@ -291,7 +311,13 @@ impl SharedUi {
         let tab = self.model.tab;
         pageshell::card(ui, |ui| match tab {
             Tab::Browse => super::browse_ui::tab_body(ui, &mut browse.model, super::browse::Tab::Search),
-            Tab::Imported => super::browse_ui::tab_body(ui, &mut browse.model, super::browse::Tab::Imported),
+            Tab::Imported => {
+                super::browse_ui::tab_body(ui, &mut browse.model, super::browse::Tab::Imported);
+                // (critic 68 minor 6) "Open in My Banks" on a linked copy
+                if let Some(local) = browse.model.open_bank.take() {
+                    self.open_bank = Some(local);
+                }
+            }
             Tab::Mine => {
                 pageshell::heading(ui, "Items I shared");
                 ui.add_space(6.0);
@@ -310,6 +336,7 @@ impl SharedUi {
                     self.model.choosing = true;
                 }
                 Outcome::ShowImported => self.model.goto(Tab::Imported),
+                Outcome::OpenBank(local) => self.open_bank = Some(local),
             },
             Tab::Reports => reports_body(ui, mine, &mut self.model),
             Tab::Settings => {
@@ -336,7 +363,7 @@ impl SharedUi {
     /// Pick a bank or an exam: the publish window opens for it.
     fn chooser(&mut self, ui: &mut Ui, banks: &[QuestionBank], exams: &[Exam]) {
         pageshell::card(ui, |ui| {
-            pageshell::heading(ui, if self.share_target.is_some() { "Which bank do you want to add to the circle?" } else { "What do you want to share?" });
+            pageshell::heading(ui, if self.share_target.is_some() { "Which bank do you want to share with the circle?" } else { "What do you want to share?" });
             ui.add_space(4.0);
             if banks.is_empty() && exams.is_empty() {
                 ui.add(egui::Label::new(theme::muted("You have no banks or exams yet. Make a bank on the Banks page, add some questions, then come back.").size(13.0)).wrap());

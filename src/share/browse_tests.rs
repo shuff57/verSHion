@@ -2157,6 +2157,37 @@ fn credit_lines_are_replaced_by_item_and_other_lines_are_left_alone() {
 
 // -- headless frames --------------------------------------------------------------------------------------------------------------------
 
+/// (critic 88 I4) An import recorded before this build kept no difficulty (the phase C build's record has none): where the
+/// teacher's rating and the pool's differ, the pool's review says so in its own words (never "CONFLICT: both changed"),
+/// counts it apart, and makes no choice for the teacher.
+#[test]
+fn an_import_recorded_with_no_difficulty_says_so_and_decides_nothing() {
+    let mut sc = Scn::new(&V1[..2], "full", &[]);
+    let mut r = sc.log.load();
+    for b in &mut r[0].base {
+        b.snap.difficulty = None;
+    }
+    sc.log.save(&r).unwrap();
+    sc.banks[0].questions[0].difficulty = Some(crate::model::Difficulty::High);
+    let mut m = sc.review(2, "CC-BY-4.0", "full", &V1[..2], &[]);
+    let (i, row) = row_of(&m, "zero");
+    assert!(row.kind == RowKind::Conflict && row.unrecorded && row.choice == Choice::Undecided, "{row:?}");
+    assert_eq!(row.options, vec![Choice::Ours, Choice::Theirs], "never a second copy that differs only in difficulty");
+    assert!(!m.can_apply_merge());
+    let ctx = egui::Context::default();
+    crate::theme::setup(&ctx);
+    let page = super::bank_links_fix4_tests::frame_text(&ctx, &mut |ui| {
+        super::browse_ui::page(ui, &mut m);
+    });
+    assert!(page.contains("Difficulty not recorded") && page.contains("1 difficulty not recorded"), "{page}");
+    assert!(!page.contains("CONFLICT") && !page.contains("both changed"), "{page}");
+    assert!(page.contains("no record of this question's difficulty") && page.contains("Choose which to keep"), "{page}");
+    assert!(page.contains("1 question still needs a decision") && !page.contains("1 conflict still needs"), "{page}");
+    assert!(page.contains("Use the pool's version") && page.contains("Keep mine"), "{page}");
+    m.set_merge_choice(i, Choice::Ours);
+    assert!(m.can_apply_merge());
+}
+
 #[test]
 fn the_merge_screens_draw_in_every_state() {
     let ctx = egui::Context::default();

@@ -244,6 +244,9 @@ pub struct AccountModel {
     pub forms: Forms,
     pub notice: Option<Notice>,
     pub me: Option<Me>,
+    /// (critic 77 I1) The client's account when `me` was taken in: the pages are told another account (or none) is
+    /// signed in when the client's moved on from it.
+    pub me_account: Option<String>,
     /// Sign-in was refused with `429`: offer the device code and the reset.
     pub lockdown: bool,
     /// The reset link belongs to an account never finished: the profile fields are required.
@@ -308,6 +311,7 @@ impl AccountModel {
             forms: Forms::default(),
             notice: None,
             me: None,
+            me_account: None,
             lockdown: false,
             reset_needs_profile: false,
             keychain_note: None,
@@ -763,6 +767,13 @@ impl AccountModel {
                 }
             }
         }
+        // (critic 77 I1) The session here is no longer the account the window shows (another tab of this browser signed
+        // in, or the session ended under it): the window looks up who is signed in now, once, and shows it.
+        if self.job.is_none() && self.me.is_some() && self.client.as_ref().is_some_and(|c| c.moved()) {
+            self.poller.stop();
+            self.spawn(Box::new(|c, _| Box::pin(async move { Outcome::Restored(c.restore().await) })));
+            return;
+        }
         if self.job.is_none() && self.page == Page::Status && self.poller.due(now) {
             self.poller.stop();
             self.spawn(Box::new(|c, _| Box::pin(async move { Outcome::Me(c.me().await) })));
@@ -776,6 +787,7 @@ impl AccountModel {
     fn signed_in(&mut self, me: Me, now: Instant) {
         self.forms.wipe_secrets();
         self.poller.after_success(now, &me.status);
+        self.me_account = self.client.as_ref().and_then(|c| c.account());
         self.me = Some(me);
         self.lockdown = false;
         self.page = Page::Status;
@@ -818,6 +830,7 @@ impl AccountModel {
             }
             Outcome::Restored(Ok(me)) | Outcome::Me(Ok(me)) => {
                 self.poller.after_success(now, &me.status);
+                self.me_account = self.client.as_ref().and_then(|c| c.account());
                 self.me = Some(me);
                 if self.page == Page::SignIn {
                     self.page = Page::Status;
@@ -828,7 +841,10 @@ impl AccountModel {
                 self.page = Page::SignIn;
             }
             Outcome::Restored(Err(e)) | Outcome::Me(Err(e)) => {
-                if matches!(e, ApiError::SignedOut) || !session {
+                // (critic 77 I1) the session moved on and who is signed in now could not be looked up: the window no
+                // longer shows the earlier account
+                let moved = self.client.as_ref().is_some_and(|c| c.moved());
+                if matches!(e, ApiError::SignedOut) || !session || moved {
                     self.me = None;
                     self.go(Page::SignIn);
                     if !matches!(e, ApiError::SignedOut) {

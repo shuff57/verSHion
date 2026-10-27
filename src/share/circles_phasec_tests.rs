@@ -2101,7 +2101,7 @@ fn c62_i2_with_the_keys_hidden_the_owner_can_change_which_pictures_viewers_get()
     m.send_hide_pictures();
     m.frame(now(), &ready(&s));
     let HideStage::Failed { problem, .. } = hide(&m) else { panic!("{:?}", hide(&m)) };
-    assert!(problem.message.contains("changed answer-key settings as many times as the pool allows today"), "{}", problem.message);
+    assert!(problem.message.contains("changed answer-key settings as many times as verSHion allows today"), "{}", problem.message);
 }
 
 #[test]

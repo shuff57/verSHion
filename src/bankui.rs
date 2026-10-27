@@ -459,6 +459,7 @@ impl App {
             save_settings(self);
         }
         ui.add_space(12.0);
+        crate::share::bank_links_ui::adding_rows(ui, self);
 
         if self.store.banks.is_empty() {
             ui.add_space(30.0);
@@ -861,6 +862,7 @@ impl App {
             ctx.data_mut(|d| d.insert_temp(tools_key, w));
             ctx.request_repaint();
         }
+        if crate::share::bank_links_ui::strip(ui, self, bank_id) { return; }
         let desc = self.store.bank(bank_id).map(|b| b.details.description.trim().to_string()).unwrap_or_default();
         if !desc.is_empty() {
             ui.add_space(2.0);
@@ -1349,6 +1351,7 @@ fn bank_card(ui: &mut Ui, app: &mut App, ctx: &egui::Context, key: UiId, r: &Ban
                 menu_rect = ui.allocate_exact_size(MENU_BTN, Sense::hover()).0;
             });
         });
+        crate::share::bank_links_ui::badge(ui, app, &r.id);
         ui.label(theme::muted(counts_line(r)).size(12.5));
         ui.add_space(8.0);
         paint_mix_bar(ui, ui.available_width(), &r.mix);
@@ -1409,9 +1412,14 @@ fn bank_list_row(ui: &mut Ui, app: &mut App, ctx: &egui::Context, key: UiId, r: 
                 menu_rect = ui.allocate_exact_size(MENU_BTN, Sense::hover()).0;
             });
         });
+        crate::share::bank_links_ui::badge(ui, app, &r.id);
     });
+    // The "..." sits centred on the row, also when a circle line makes it taller.
+    menu_rect = Rect::from_center_size(egui::pos2(menu_rect.center().x, resp.response.rect.center().y), MENU_BTN);
     let click = ui.interact(resp.response.rect, ui.id().with(("bank_row", &r.id)), Sense::click());
     let (menu_act, over_menu) = bank_menu(ui, menu_rect, r);
+    // (the menu is placed inside the row: the next row still starts below this one)
+    ui.advance_cursor_after_rect(resp.response.rect);
     if menu_act.is_some() {
         apply_bank_menu(app, ctx, key, r, menu_act);
         return;

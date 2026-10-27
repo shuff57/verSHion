@@ -154,6 +154,12 @@ impl ShareSource {
         ShareSource { key: key.into(), label: label.into(), title: title.into(), questions, missing: 0, bank_json: bank_json.into(), question_ids: ids_of(&v) }
     }
 
+    /// The bank itself when this is a bank (not an exam): what a share into a circle links (phase D1, Q6).
+    pub fn bank(&self) -> Option<QuestionBank> {
+        let id = self.key.strip_prefix("bank:")?;
+        serde_json::from_str::<QuestionBank>(&self.bank_json).ok().filter(|b| b.id == id)
+    }
+
     /// `{"schema_version": n, "bank": ...}`.
     pub fn payload(&self, schema: u32) -> Vec<u8> {
         format!("{{\"schema_version\":{schema},\"bank\":{}}}", self.bank_json).into_bytes()
@@ -314,6 +320,9 @@ pub struct AccountSnapshot {
     /// Who is signed in (the pool's address and the account's email), when known: a page that keeps what it read
     /// drops it when this changes (critic 60 I1). Never shown and never sent.
     pub account: Option<String>,
+    /// (critic 80 I2) The account's display name, when known: the name the circle shows on the versions it sends, so a
+    /// newer version can be told to be the person's own or a colleague's.
+    pub name: Option<String>,
 }
 
 /// What changed about who is signed in, as a page that keeps what it read sees it (critic 61 I3).
@@ -356,16 +365,25 @@ impl AccountWatch {
 
 impl AccountSnapshot {
     pub fn ready(session: SharedSession) -> AccountSnapshot {
-        AccountSnapshot { gate: Gate::Ready, session: Some(session), account_open: false, account: None }
+        AccountSnapshot { gate: Gate::Ready, session: Some(session), account_open: false, account: None, name: None }
     }
     pub fn of_gate(gate: Gate) -> AccountSnapshot {
-        AccountSnapshot { gate, session: None, account_open: false, account: None }
+        AccountSnapshot { gate, session: None, account_open: false, account: None, name: None }
     }
 }
 
 /// Reads the Account window's state. Does no I/O.
 pub fn snapshot_of(m: &AccountModel) -> AccountSnapshot {
     let session: Option<SharedSession> = m.client().map(|c| c.clone() as SharedSession);
+    // (critic 77 I1) The client's session is no longer the account the window shows (a refresh came back for another
+    // account: another tab of this browser signed in; or the session ended under it): the pages are told at once, and
+    // every job is refused by the client until the window shows who is signed in now.
+    let moved = m.client().is_some_and(|c| c.moved());
+    let behind = m.me.is_some() && m.client().is_some_and(|c| c.account() != m.me_account);
+    if *m.server_mode() != ServerMode::NotSetUp && (moved || behind) {
+        let gate = if moved { Gate::SignedOut } else { Gate::Checking };
+        return AccountSnapshot { gate, session, account_open: m.open, account: None, name: None };
+    }
     let gate = if *m.server_mode() == ServerMode::NotSetUp {
         Gate::NotSetUp
     } else if let Some(me) = &m.me {
@@ -388,7 +406,8 @@ pub fn snapshot_of(m: &AccountModel) -> AccountSnapshot {
         }
     };
     let account = m.me.as_ref().map(|me| format!("{}\n{}", session.as_ref().map(|s| s.base()).unwrap_or_default(), me.email));
-    AccountSnapshot { gate, session, account_open: m.open, account }
+    let name = m.me.as_ref().map(|me| me.display_name.clone()).filter(|n| !n.trim().is_empty());
+    AccountSnapshot { gate, session, account_open: m.open, account, name }
 }
 
 // ---- the form -----------------------------------------------------------------------------------------
@@ -820,6 +839,11 @@ impl PublishModel {
         self.apply_snapshot(snap);
         self.drain(now);
         if self.circle.active || self.circle.busy() {
+            // (critic 64 I11) the circle this bank is already linked to is not offered: it is sent to from its page
+            self.circle.blocked = self.source.as_ref().and_then(|s| s.key.strip_prefix("bank:")).map(super::circle_links::circles_of_bank).unwrap_or_default();
+            if self.circle.chosen.as_ref().is_some_and(|c| self.circle.blocked.contains(c)) {
+                self.circle.chosen = None;
+            }
             let (session, runner, retry, media, repaint) = (self.session.clone(), self.runner, self.retry, self.media.clone(), self.repaint.clone());
             self.circle.frame(now, session.as_ref(), runner, retry, &media, repaint);
             if self.circle.take_signed_out() {
@@ -1074,6 +1098,7 @@ impl PublishModel {
         let Some(source) = self.source.clone() else { return };
         self.notice = None;
         let (runner, retry, media, repaint) = (self.runner, self.retry, self.media.clone(), self.repaint.clone());
+        self.circle.account_tag = super::bank_links::account_tag(self.watch.account.as_deref());
         self.circle.send(&source, meta, &session, runner, retry, &media, repaint);
     }
 
@@ -1384,6 +1409,8 @@ impl PublishModel {
         let retry = self.retry;
         let repaint = self.repaint.clone();
         self.progress = None;
+        // (critic 71 minor 3) kept to the account signed in now: a retry after another account signed in is not sent as it
+        let session = super::pool::pinned(session);
         match self.runner {
             #[cfg(not(target_arch = "wasm32"))]
             Runner::Inline => run_job(session, media, retry, kind, req, order, tx, repaint),

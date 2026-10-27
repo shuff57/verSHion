@@ -1107,7 +1107,8 @@ fn an_editor_makes_a_working_copy_that_is_linked_to_the_circle_bank() {
     assert_eq!(l.base.len(), 2);
     assert_eq!(l.license, "CC-BY-4.0");
     assert_eq!(banks[0].questions.len(), 2);
-    assert!(browse.imported().iter().any(|r| r.circle.is_some()), "it is also in the list of copies");
+    // (critic 66 I2) a linked copy is not in the list of imports: its strip on the bank's page says where it stands
+    assert!(!browse.imported().iter().any(|r| r.circle.is_some()), "not recorded as an import");
     // A second copy button press after the copy is done makes nothing more.
     assert!(!m.sync(&mut banks, &mut browse));
 }
@@ -1142,7 +1143,7 @@ fn a_plain_copy_for_an_editor_is_not_linked_either() {
 }
 
 #[test]
-fn the_list_of_copies_follows_a_send_or_a_merge() {
+fn a_copy_recorded_before_phase_d_follows_a_send_or_a_merge() {
     let (mut m, s) = open_bank_page("editor");
     let _ = link_log_model(&mut m);
     let mut browse = super::browse::BrowseModel::new(Runner::Inline, Arc::new(Mem::default()), super::browse::ImportLog::memory());
@@ -1152,6 +1153,9 @@ fn the_list_of_copies_follows_a_send_or_a_merge() {
     let mut banks = Vec::new();
     m.sync(&mut banks, &mut browse);
     let local = banks[0].id.clone();
+    // (critic 66 I2) working copies made before phase D were recorded as imports; their record still follows
+    let rec: super::browse::ImportedRecord = serde_json::from_value(json!({"item_id": BID, "bank_id": local, "version": 2, "license": "CC-BY-4.0", "imported_at": NOW, "circle": {"circle_id": CID, "circle_name": "Biology team"}})).unwrap();
+    let mut browse = super::browse::BrowseModel::new(Runner::Inline, Arc::new(Mem::default()), super::browse::ImportLog::Memory(Arc::new(std::sync::Mutex::new(vec![rec]))));
     banks[0].questions[0].stem = "One, reworded".into();
     banks[0].modified += 1;
     let perm = m.perm_for(CID, BID);
@@ -1232,7 +1236,7 @@ fn every_working_copy_screen_and_state_draws_wide_and_narrow() {
     r.m.send();
     r.turn();
     let t = draw_all(&mut r, &ctx);
-    assert!(t.contains("Someone else sent changes first") && t.contains("Get latest and merge"), "{t}");
+    assert!(t.contains("Someone else sent changes first") && t.contains("Get latest"), "{t}");
     r.m.back_to_note();
     r.s.on("Put", &bank_path(), 428, json!({"error": "confirm_large_required", "removed": 1, "total": 2}));
     r.m.send();
@@ -1264,7 +1268,7 @@ fn every_working_copy_screen_and_state_draws_wide_and_narrow() {
     r.m.apply_merge();
     r.turns(2);
     let t = draw_all(&mut r, &ctx);
-    assert!(t.contains("now in step with version 2") && t.contains("Your way back"), "{t}");
+    assert!(t.contains("now matches version 2") && t.contains("Your way back"), "{t}");
 
     // Two-way fallback says so.
     let mut r = Rig::new(&[(QA, "One"), (QB, "Two")]);
@@ -1336,7 +1340,8 @@ fn every_working_copy_screen_and_state_draws_wide_and_narrow() {
 }
 
 #[test]
-fn the_circle_page_shows_working_copies_and_the_bank_page_offers_a_working_copy() {
+fn the_circle_page_row_says_the_bank_is_in_my_banks_and_where_it_stands() {
+    // (phase D1: the "My working copies" card is replaced by the bank's own row and the badge in My Banks)
     let ctx = egui::Context::default();
     crate::theme::setup(&ctx);
     for width in [1000.0, 420.0] {
@@ -1360,8 +1365,8 @@ fn the_circle_page_shows_working_copies_and_the_bank_page_offers_a_working_copy(
             }
         }
         out.drop_without_applying_deltas();
-        assert!(seen.contains("My working copies") && seen.contains("2 new versions in the circle"), "{seen}");
-        assert!(seen.contains("You have a working copy"), "{seen}");
+        assert!(!seen.contains("My working copies") && seen.contains("2 new versions in the circle"), "{seen}");
+        assert!(seen.contains("In My Banks") && seen.contains("Open in My Banks") && !seen.contains("Add to My Banks"), "{seen}");
     }
 }
 
@@ -1807,7 +1812,7 @@ fn n1_a_stale_copy_that_is_level_with_the_circle_can_be_set_in_step_or_forgotten
     let ctx = egui::Context::default();
     crate::theme::setup(&ctx);
     let t = draw_all(&mut r, &ctx);
-    assert!(t.contains("Treat this copy as in step") && t.contains("Forget this link"), "{t}");
+    assert!(t.contains("Use my bank as it is") && t.contains("Unlink..."), "{t}");
     // One click only asks.
     r.m.rebaseline();
     r.turns(2);
@@ -1822,11 +1827,11 @@ fn n1_a_stale_copy_that_is_level_with_the_circle_can_be_set_in_step_or_forgotten
     r.turns(2);
     assert!(matches!(r.merge_phase(), MergePhase::StaleUpToDate { ask: Some(StaleAsk::Forget) }), "the wrong question confirms nothing");
     let t = draw_all(&mut r, &ctx);
-    assert!(t.contains("Yes, forget the link"), "{t}");
+    assert!(t.contains("Yes, unlink"), "{t}");
     r.m.cancel_stale_ask();
     r.m.ask_stale(StaleAsk::Rebase);
     let t = draw_all(&mut r, &ctx);
-    assert!(t.contains("Are you sure") && t.contains("Yes, treat it as in step"), "{t}");
+    assert!(t.contains("Are you sure") && t.contains("Yes, use it as it is"), "{t}");
     r.m.rebaseline();
     r.turns(2);
     assert!(matches!(r.merge_phase(), MergePhase::UpToDate));
@@ -1930,13 +1935,15 @@ fn v5_a_links_file_that_can_not_be_read_is_never_written_over() {
     let (_, l1) = linked(&[(QA, "One")]);
     assert!(m.add_link(l1.clone()).is_err(), "the save is refused");
     assert!(dir.join(LINKS_DOC).is_dir(), "nothing was written over it");
-    // It becomes readable again, with a link in it: the link added meanwhile is kept, the file's is not lost.
+    // It becomes readable again, with a link in it: the file's link is not lost (critic 65 B1: the link refused
+    // meanwhile was not kept), and the add works once it is read.
     std::fs::remove_dir_all(dir.join(LINKS_DOC)).unwrap();
     let mut other = l1.clone();
     other.local_bank_id = "local-bank-2".into();
     other.circle_bank_id = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1".into();
     LinkLog::Dir(dir.clone()).save(std::slice::from_ref(&other)).unwrap();
-    assert_eq!(m.links().len(), 2);
+    m.read_links_again();
+    assert_eq!(m.links().len(), 1);
     assert!(m.add_link(l1).is_ok());
     assert_eq!(LinkLog::Dir(dir.clone()).load().len(), 2);
     let _ = std::fs::remove_dir_all(&dir);
@@ -2053,7 +2060,7 @@ fn r4_a_bank_time_in_milliseconds_from_an_older_build_is_read_as_seconds() {
 }
 
 #[test]
-fn r4_the_same_circle_bank_is_one_link_when_the_file_is_read_again() {
+fn r4_the_same_circle_bank_is_one_link_when_the_file_is_read_again_and_the_files_link_wins() {
     let dir = std::env::temp_dir().join(format!("vershion-links-{}-e", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -2065,8 +2072,11 @@ fn r4_the_same_circle_bank_is_one_link_when_the_file_is_read_again() {
     let mut b = a.clone();
     b.local_bank_id = "other-local".into(); // the same circle bank under another local id
     LinkLog::Dir(dir.clone()).save(&[b]).unwrap();
+    m.read_links_again();
     assert_eq!(m.links().len(), 1, "one link per circle bank");
-    assert_eq!(m.links()[0].local_bank_id, LOCAL, "the one added meanwhile wins");
+    // (critic 65 B1) nothing was linked while the file could not be read: the file's link, and its changes, stay
+    assert_eq!(m.links()[0].local_bank_id, "other-local");
+    assert!(m.add_link(a).is_err(), "and it is not taken now either");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -2385,7 +2395,7 @@ fn c61_a_send_that_went_through_before_a_sign_out_still_moves_the_link_on() {
         r.turns(2);
         assert_eq!(r.link().base_version, 2, "the send that went through moved this computer's link on (another: {another})");
         assert_eq!(r.m.status(LOCAL).map(|s| s.changes.total()), Some(0), "nothing shows as unsent");
-        assert!(r.m.notice.is_none());
+        assert!(r.m.results_of(LOCAL).is_empty());
         // Nothing is sent again.
         r.open_send(editor());
         r.turns(2);
@@ -2820,4 +2830,214 @@ fn pictures_the_send_step_draws_wide_and_narrow() {
         }
     }
     crate::theme::set_dark(false, Some(&ctx));
+}
+
+// ---- round 9 (critic 79 minors 4 and 6): a send with no clear answer is tried again as the same request ---------------
+
+/// The next send's answer is lost after it left (the licence read inside the send is answered, the send itself not).
+fn lose_next_send(r: &Rig) {
+    r.s.on("Post", "/circles/heads", 200, heads_json("CC-BY-4.0", 1));
+    r.s.fail(ApiError::Offline("Can't reach pool.test: the connection timed out.".into()));
+}
+
+fn same_request(r: &Rig) -> Value {
+    let puts = r.puts();
+    let n = puts.len();
+    assert!(n >= 2, "{:?}", r.s.paths());
+    let (a, b) = (body_parts(&puts[n - 2]).0, body_parts(&puts[n - 1]).0);
+    assert_eq!(a["commit_id"], b["commit_id"], "the same request (the circle answers the first one again): {a} / {b}");
+    b
+}
+
+#[test]
+fn c79_m4_send_my_changes_again_after_an_unclear_send_from_a_merge_goes_with_the_merge() {
+    let mut r = Rig::new(&[(QA, "One"), (QB, "Two")]);
+    r.edit_stem(0, "One, reworded by me");
+    script_merge(&r, &v2(), 2);
+    r.m.open_merge(LOCAL, editor());
+    r.turns(2);
+    r.m.apply_merge();
+    r.turns(2);
+    r.open_send(editor());
+    r.turn();
+    r.m.set_message("Merged, and my rewording");
+    lose_next_send(&r);
+    r.m.send();
+    r.turn();
+    assert!(matches!(r.send_stage(), SendStage::Failed(_)), "{:?}", r.send_stage());
+    // Back, then "Send my changes..." again
+    r.m.close();
+    r.open_send(editor());
+    r.turn();
+    assert!(matches!(&r.m.view, EditView::Send(v) if v.merged), "the page still says the send goes with the merge");
+    r.s.on("Put", &bank_path(), 201, sent_ok(3, &[QA, QB, QC]));
+    r.m.send();
+    r.turn();
+    let meta = same_request(&r);
+    assert_eq!(meta["merge_token"], "tok.en");
+}
+
+#[test]
+fn c79_m4_send_my_changes_again_after_an_unclear_send_over_a_hidden_version_goes_over_it_again() {
+    let mut r = Rig::new(&[(QA, "One")]);
+    r.edit_stem(0, "One, reworded");
+    r.m.apply_heads(&[HeadEntry { bank_id: BID.into(), state: HeadState::Current { version: 3, license: None, at: None, by: None, hide_key: None } }]);
+    r.s.on("Post", &format!("{}/merge", bank_path()), 200, merge_start_json(1, 3, true));
+    r.s.keep("Get", &bank_path(), 404, json!({"error": "version_withheld", "message": "raw words"}));
+    r.m.open_merge(LOCAL, editor());
+    r.turns(2);
+    r.m.send_on_top(3, editor());
+    r.frame();
+    r.m.set_attest(true);
+    r.turn();
+    lose_next_send(&r);
+    r.m.send();
+    r.turn();
+    assert!(matches!(r.send_stage(), SendStage::Failed(_)), "{:?}", r.send_stage());
+    r.m.close();
+    r.open_send(editor());
+    r.turn();
+    r.s.on("Put", &bank_path(), 201, sent_ok(4, &[QA]));
+    r.m.send();
+    r.turn();
+    assert_eq!(same_request(&r)["base_version"], 3);
+}
+
+/// A bank that hides its keys: the label decisions made for the content go again with it, by Try again or after the
+/// page was left.
+#[test]
+fn c79_m4_a_send_with_no_clear_answer_keeps_its_viewers_copy_decisions_for_the_retry() {
+    for leave in [false, true] {
+        let mut r = Rig::new(&[(QA, "One"), (QB, "Two")]);
+        r.edit_stem(0, "One, reworded");
+        r.open_send(editor());
+        r.s.on("Put", &bank_path(), 422, json!({"error": "labels_need_decision", "errors": [{"code": "labels_need_decision", "path": "bank.questions[1]"}], "label_findings": [{"question": 1, "strip_allowed": true, "choices": [{"before": "A) x", "after": "x"}]}]}));
+        r.m.send();
+        r.turn();
+        r.m.send_decide_label(Pos::question(1), LabelChoice::Strip);
+        lose_next_send(&r);
+        r.m.send_with_decisions();
+        r.turn();
+        assert!(matches!(r.send_stage(), SendStage::Failed(_)), "{:?}", r.send_stage());
+        r.s.on("Put", &bank_path(), 201, json!({"circle_id": CID, "bank_id": BID, "version": 2, "version_id": hex(2), "qids": [QA, QB], "added": 0, "changed": 1, "removed": 0, "keys_hidden": true}));
+        if leave {
+            r.m.close();
+            r.open_send(editor());
+            r.turn();
+            r.m.send();
+        } else {
+            r.m.retry_act();
+        }
+        r.turn();
+        let meta = same_request(&r);
+        assert_eq!(meta["labels"], json!([{"question": 1, "choice": "strip"}]), "leave {leave}");
+        assert!(matches!(r.send_stage(), SendStage::Done(_)), "leave {leave}: {:?}", r.send_stage());
+    }
+}
+
+/// Only for the bank it was made on, and not once its answer was read.
+#[test]
+fn c79_m4_what_a_retry_keeps_is_for_that_bank_and_that_send_only() {
+    let mut r = Rig::new(&[(QA, "One")]);
+    r.edit_stem(0, "One, reworded");
+    r.open_send(editor());
+    r.m.set_message("A note");
+    lose_next_send(&r);
+    r.m.send();
+    r.turn();
+    r.m.close();
+    r.open_send(editor());
+    r.turn();
+    r.s.on("Put", &bank_path(), 201, sent_ok(2, &[QA]));
+    r.m.send();
+    r.turn();
+    same_request(&r);
+    r.m.close();
+    r.edit_stem(0, "One, reworded again");
+    r.open_send(editor());
+    assert!(matches!(&r.m.view, EditView::Send(v) if v.message.is_empty() && !v.merged && v.base_override.is_none()), "a send that was answered leaves nothing for the next");
+}
+
+#[test]
+fn c79_m6_the_unclear_trim_says_exactly_what_trying_again_does() {
+    assert_eq!(
+        unclear_trim_page("The connection timed out."),
+        "Your trim may have gone through, but no clear answer came: The connection timed out. Press Try again to make sure. If it went through, trying again deletes nothing more, unless newer versions were sent since."
+    );
+}
+
+/// (critic 79 minor 4) A large change the person accepted goes again accepted.
+#[test]
+fn c79_m4_a_large_change_accepted_goes_again_accepted_after_an_unclear_send() {
+    let mut r = Rig::new(&[(QA, "One"), (QB, "Two"), (QC, "Three")]);
+    r.banks[0].questions.truncate(1);
+    r.banks[0].modified += 1;
+    r.open_send(editor());
+    r.s.on("Put", &bank_path(), 428, json!({"error": "confirm_large_required", "removed": 2, "total": 3}));
+    r.m.send();
+    r.turn();
+    r.s.on("Put", &bank_path(), 500, json!({"error": "server_error"}));
+    r.m.confirm_large_send();
+    r.turn();
+    assert!(matches!(r.send_stage(), SendStage::Failed(_)), "{:?}", r.send_stage());
+    r.m.close();
+    r.open_send(editor());
+    r.turn();
+    r.s.on("Put", &bank_path(), 201, sent_ok(2, &[QA]));
+    r.m.send();
+    r.turn();
+    assert_eq!(same_request(&r)["confirm_large_change"], true);
+}
+
+/// (critic 79 minor 4) A bank that hides its keys: the pictures kept for viewers are not asked again, and go again.
+#[test]
+fn c79_m4_the_pictures_kept_for_viewers_go_again_after_an_unclear_send() {
+    let mut r = pictured_rig(Some(true));
+    r.open_send(editor());
+    r.m.send();
+    r.turn();
+    r.m.send_keep_picture(1, true);
+    r.s.on("Put", &bank_path(), 500, json!({"error": "server_error"}));
+    r.m.send_with_pictures();
+    r.turn();
+    assert!(matches!(r.send_stage(), SendStage::Failed(_)), "{:?}", r.send_stage());
+    r.m.close();
+    r.open_send(editor());
+    r.turn();
+    r.s.on("Put", &bank_path(), 201, sent_hidden(2));
+    r.m.send();
+    r.turn();
+    let s = sends(&r);
+    assert_eq!(s.len(), 2, "sent again, without asking about the pictures again: {:?}", r.send_stage());
+    let (a, b) = (body_parts(&s[0]).0, body_parts(&s[1]).0);
+    assert_eq!(a["commit_id"], b["commit_id"]);
+    assert_eq!(b["image_ok"], json!([1]));
+}
+
+/// (critic 79 minor 4) Over a hidden version: the Send page again lists the versions the send replaces.
+#[test]
+fn c79_m4_the_versions_a_send_over_a_hidden_version_replaces_are_listed_again() {
+    let mut r = Rig::new(&[(QA, "One")]);
+    r.edit_stem(0, "One, reworded");
+    r.m.apply_heads(&[HeadEntry { bank_id: BID.into(), state: HeadState::Current { version: 3, license: None, at: None, by: None, hide_key: None } }]);
+    let mut start = merge_start_json(1, 3, true);
+    start["between"] = json!([
+        {"version": 2, "version_id": hex(2), "by": "Ms Frizzle", "at": NOW - 2000, "message": "Fixed one", "added": 0, "changed": 1, "removed": 0, "question_count": 1, "license": "CC-BY-4.0", "kept": true, "withheld": false},
+        {"version": 3, "version_id": hex(3), "by": "Ms Frizzle", "at": NOW - 1000, "message": "", "added": 0, "changed": 1, "removed": 0, "question_count": 1, "license": "CC-BY-4.0", "kept": true, "withheld": true}
+    ]);
+    r.s.on("Post", &format!("{}/merge", bank_path()), 200, start);
+    r.s.keep("Get", &bank_path(), 404, json!({"error": "version_withheld", "message": "raw words"}));
+    r.m.open_merge(LOCAL, editor());
+    r.turns(2);
+    r.m.send_on_top(3, editor());
+    r.frame();
+    r.m.set_attest(true);
+    r.turn();
+    assert!(matches!(&r.m.view, EditView::Send(v) if v.replaces.len() == 1));
+    lose_next_send(&r);
+    r.m.send();
+    r.turn();
+    r.m.close();
+    r.open_send(editor());
+    assert!(matches!(&r.m.view, EditView::Send(v) if v.base_override == Some(3) && v.replaces.iter().map(|l| l.version).collect::<Vec<_>>() == vec![2]), "{:?}", r.m.view);
 }

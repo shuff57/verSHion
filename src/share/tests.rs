@@ -2708,3 +2708,936 @@ fn link_results_do_not_claim_the_account_is_yours() {
         assert!(text.contains("If you did not request this on this device, ignore it."));
     }
 }
+
+// ---- 11. a job kept to its account (critic 73 I2) ----------------------------------------------------------------
+
+/// (critic 73 I2) A request of a job pinned to one account (`pool::pinned`) is held in the network while that account
+/// signs out and another signs in; the server answers it 401 (its session was revoked). The client's own
+/// refresh-and-retry must not send it again with the other account's sign-in: the job ends as signed out.
+#[test]
+fn c73_i2_a_pinned_request_is_never_retried_with_another_accounts_sign_in() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let (t, mut h) = hang(&s, Mode::Native, "/circles/x");
+    let c = Arc::new(Client::new(BASE, Mode::Native, Box::new(t), Box::new(v.clone())));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    let first = c.account();
+    let sess: super::publish::SharedSession = c.clone();
+    let pinned = super::pool::pinned(sess);
+    let job = std::thread::spawn(move || {
+        let build = || Request { method: Method::Put, url: format!("{BASE}/circles/x"), ..Request::default() };
+        block_on(pinned.send(&build)).map(|r| r.status)
+    });
+    h.wait_reached();
+    block_on(c.sign_out(false, false)).unwrap();
+    s.with(|f| {
+        f.script.push_back(("/auth/login".into(), Ok(ok(200, json!({"access_token": token("bt", 7), "token_type": "Bearer", "expires_in": 900, "refresh_token": token("brt", 7), "refresh_expires_in": 2_592_000, "user": {"id": UID2, "trust": "pending"}})))));
+        f.script.push_back(("/circles/x".into(), Ok(err(401, "unauthorized"))));
+    });
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    assert_ne!(c.account(), first);
+    h.release();
+    let r = job.join().unwrap();
+    let auth: Vec<String> = s.log().into_iter().filter(|l| l.path == "/circles/x").map(|l| l.header("Authorization").unwrap_or("").chars().skip(7).take(2).collect()).collect();
+    assert_eq!(auth, ["at"], "sent once, with the first account's sign-in only");
+    assert!(matches!(r, Err(ApiError::SignedOut)), "{r:?}");
+    // and the other account's session is not ended by the first one's 401
+    assert_eq!(c.account().as_deref(), Some(UID2));
+    assert!(c.has_session());
+}
+
+/// The same pin, the account unchanged: a 401 is refreshed and retried once as before (the pin holds nothing back).
+#[test]
+fn c73_i2_a_pinned_request_is_still_refreshed_and_retried_for_its_own_account() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let c = Arc::new(client(Mode::Native, &s, &v));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    s.with(|f| f.script.push_back(("/circles/x".into(), Ok(err(401, "unauthorized")))));
+    let sess: super::publish::SharedSession = c.clone();
+    let pinned = super::pool::pinned(sess);
+    let build = || Request { method: Method::Put, url: format!("{BASE}/circles/x"), ..Request::default() };
+    let r = block_on(pinned.send(&build));
+    let n = s.log().into_iter().filter(|l| l.path == "/circles/x").count();
+    assert_eq!(n, 2, "refreshed and sent again: {r:?}");
+}
+
+/// Holds the `nth` request (from 1) to one route until the test releases it; the others go through at once.
+struct HangNth {
+    inner: MockTransport,
+    path: &'static str,
+    nth: usize,
+    seen: AtomicUsize,
+    reached: Mutex<std::sync::mpsc::Sender<()>>,
+    release: Mutex<std::sync::mpsc::Receiver<()>>,
+}
+
+impl Transport for HangNth {
+    fn send<'a>(&'a self, req: Request) -> LocalFuture<'a, Result<Response, NetError>> {
+        if req.path() == self.path && self.seen.fetch_add(1, Ordering::SeqCst) + 1 == self.nth {
+            let _ = self.reached.lock().unwrap().send(());
+            let _ = self.release.lock().unwrap().recv();
+        }
+        self.inner.send(req)
+    }
+}
+
+/// (critic 73 I2) A job pinned to one account, run after another account signed in: nothing is sent at all.
+#[test]
+fn c73_i2_a_pinned_request_started_after_another_account_signed_in_sends_nothing() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let c = Arc::new(client(Mode::Native, &s, &v));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    let sess: super::publish::SharedSession = c.clone();
+    let pinned = super::pool::pinned(sess);
+    block_on(c.sign_out(false, false)).unwrap();
+    s.with(|f| f.script.push_back(("/auth/login".into(), Ok(ok(200, json!({"access_token": token("bt", 7), "token_type": "Bearer", "expires_in": 900, "refresh_token": token("brt", 7), "refresh_expires_in": 2_592_000, "user": {"id": UID2, "trust": "pending"}}))))));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    let build = || Request { method: Method::Put, url: format!("{BASE}/circles/x"), ..Request::default() };
+    let r = block_on(pinned.send(&build));
+    assert!(matches!(r, Err(ApiError::SignedOut)), "{r:?}");
+    assert_eq!(s.log().into_iter().filter(|l| l.path == "/circles/x").count(), 0, "nothing sent with the other account's sign-in");
+    assert_eq!(c.account().as_deref(), Some(UID2));
+}
+
+/// (critic 73 I2) The pinned job's retry is answered 401 after another account signed in meanwhile: that account's
+/// session is not ended by it.
+#[test]
+fn c73_i2_a_pinned_retrys_401_after_another_account_signed_in_does_not_end_that_accounts_session() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let (reached_tx, reached_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+    let t = HangNth { inner: MockTransport { server: s.clone(), mode: Mode::Native }, path: "/circles/x", nth: 2, seen: AtomicUsize::new(0), reached: Mutex::new(reached_tx), release: Mutex::new(release_rx) };
+    let c = Arc::new(Client::new(BASE, Mode::Native, Box::new(t), Box::new(v.clone())));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    s.with(|f| f.script.push_back(("/circles/x".into(), Ok(err(401, "unauthorized")))));
+    let sess: super::publish::SharedSession = c.clone();
+    let pinned = super::pool::pinned(sess);
+    let job = std::thread::spawn(move || {
+        let build = || Request { method: Method::Put, url: format!("{BASE}/circles/x"), ..Request::default() };
+        block_on(pinned.send(&build)).map(|r| r.status)
+    });
+    // the retry (after the first 401 and a refresh) is held; meanwhile the first account signs out, another signs in
+    reached_rx.recv_timeout(Duration::from_secs(10)).expect("the retry never reached the network");
+    block_on(c.sign_out(false, false)).unwrap();
+    s.with(|f| {
+        f.script.push_back(("/auth/login".into(), Ok(ok(200, json!({"access_token": token("bt", 7), "token_type": "Bearer", "expires_in": 900, "refresh_token": token("brt", 7), "refresh_expires_in": 2_592_000, "user": {"id": UID2, "trust": "pending"}})))));
+        f.script.push_back(("/circles/x".into(), Ok(err(401, "unauthorized"))));
+    });
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    drop(release_tx);
+    let r = job.join().unwrap();
+    assert!(matches!(r, Err(ApiError::SignedOut)), "{r:?}");
+    assert_eq!(c.account().as_deref(), Some(UID2));
+    assert!(c.has_session(), "the account signed in now keeps its session");
+}
+
+// ---- 12. critic 75: the pin on the web build, an old refresh's 401, `authed` pinned ------------------------------
+
+fn login_as(uid: &str, n: u32) -> Response {
+    ok(200, json!({"access_token": token("bt", n), "token_type": "Bearer", "expires_in": 900, "refresh_token": token("brt", n), "refresh_expires_in": 2_592_000, "user": {"id": uid, "trust": "pending"}}))
+}
+
+/// The first two letters of each bearer token sent to `path`, in order.
+fn bearers(s: &Server, path: &str) -> Vec<String> {
+    s.log().into_iter().filter(|l| l.path == path).map(|l| l.header("Authorization").unwrap_or("").chars().skip(7).take(2).collect()).collect()
+}
+
+fn put_x() -> Request {
+    Request { method: Method::Put, url: format!("{BASE}/circles/x"), ..Request::default() }
+}
+
+/// (critic 75 I2) The web build knows whose session it is (the token answer names it), so `pool::pinned` pins it.
+#[test]
+fn c75_i2_web_the_session_knows_its_account_and_the_pin_holds_it() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let c = Arc::new(client(Mode::Web, &s, &v));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    assert_eq!(c.account().as_deref(), Some(UID));
+    let sess: super::publish::SharedSession = c.clone();
+    assert_eq!(super::pool::pinned(sess).account().as_deref(), Some(UID));
+    block_on(c.sign_out(false, false)).unwrap();
+    assert_eq!(c.account(), None, "signed out: no account");
+    assert_eq!(v.writes.load(Ordering::SeqCst), 0, "still nothing written to storage on the web");
+}
+
+/// (critic 75 I2) Critic 73's I2 on the web build: the pinned request's 401 is never retried with the next account's
+/// sign-in, and that account's session is left alone.
+#[test]
+fn c75_i2_web_a_pinned_request_is_never_retried_with_another_accounts_sign_in() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let (t, mut h) = hang(&s, Mode::Web, "/circles/x");
+    let c = Arc::new(Client::new(BASE, Mode::Web, Box::new(t), Box::new(v.clone())));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    let sess: super::publish::SharedSession = c.clone();
+    let pinned = super::pool::pinned(sess);
+    let job = std::thread::spawn(move || block_on(pinned.send(&put_x)).map(|r| r.status));
+    h.wait_reached();
+    block_on(c.sign_out(false, false)).unwrap();
+    s.with(|f| {
+        f.script.push_back(("/auth/login".into(), Ok(login_as(UID2, 7))));
+        f.script.push_back(("/circles/x".into(), Ok(err(401, "unauthorized"))));
+    });
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    assert_eq!(c.account().as_deref(), Some(UID2));
+    h.release();
+    let r = job.join().unwrap();
+    assert_eq!(bearers(&s, "/circles/x"), ["at"], "sent once, with the first account's sign-in only");
+    assert!(matches!(r, Err(ApiError::SignedOut)), "{r:?}");
+    assert_eq!(c.account().as_deref(), Some(UID2));
+    assert!(c.has_session(), "the account signed in now keeps its session");
+}
+
+/// (critic 75 I2) On the web the refresh cookie is whoever is signed in now (another tab may have changed it): a
+/// pinned job whose token ran out never uses a refresh that came back for another account.
+#[test]
+fn c75_i2_web_a_pinned_job_never_uses_a_refresh_that_came_back_for_another_account() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let (clock, clock_fn) = test_clock();
+    let c = Arc::new(Client::with_clock(BASE, Mode::Web, Box::new(MockTransport { server: s.clone(), mode: Mode::Web }), Box::new(v.clone()), clock_fn));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    let sess: super::publish::SharedSession = c.clone();
+    let pinned = super::pool::pinned(sess);
+    s.with(|f| f.script.push_back(("/auth/refresh".into(), Ok(ok(200, json!({"access_token": token("bt", 7), "expires_in": 900, "user": {"id": UID2}}))))));
+    *clock.lock().unwrap() += Duration::from_secs(900);
+    let r = block_on(pinned.send(&put_x));
+    assert!(matches!(r, Err(ApiError::SignedOut)), "{r:?}");
+    assert!(bearers(&s, "/circles/x").is_empty(), "nothing sent with the other account's sign-in");
+}
+
+/// (critic 75 I2) The web build: a pinned job run after another account signed in sends nothing.
+#[test]
+fn c75_i2_web_a_pinned_request_started_after_another_account_signed_in_sends_nothing() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let c = Arc::new(client(Mode::Web, &s, &v));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    let sess: super::publish::SharedSession = c.clone();
+    let pinned = super::pool::pinned(sess);
+    block_on(c.sign_out(false, false)).unwrap();
+    s.with(|f| f.script.push_back(("/auth/login".into(), Ok(login_as(UID2, 7)))));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    let r = block_on(pinned.send(&put_x));
+    assert!(matches!(r, Err(ApiError::SignedOut)), "{r:?}");
+    assert!(bearers(&s, "/circles/x").is_empty());
+}
+
+/// (critic 75 minor 1) A refresh for the first account, answered 401 after it signed out and another signed in, does
+/// not end the other account's session (nor delete its saved sign-in).
+#[test]
+fn c75_m1_an_old_accounts_refresh_answered_401_after_a_sign_out_leaves_the_next_account_alone() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let (t, mut h) = hang(&s, Mode::Native, "/auth/refresh");
+    let c = Arc::new(Client::new(BASE, Mode::Native, Box::new(t), Box::new(v.clone())));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    s.with(|f| f.script.push_back(("/circles/x".into(), Ok(err(401, "unauthorized")))));
+    let sess: super::publish::SharedSession = c.clone();
+    let pinned = super::pool::pinned(sess);
+    let job = std::thread::spawn(move || block_on(pinned.send(&put_x)).map(|r| r.status));
+    h.wait_reached();
+    block_on(c.sign_out(false, false)).unwrap();
+    s.with(|f| f.script.push_back(("/auth/login".into(), Ok(login_as(UID2, 7)))));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    s.with(|f| f.script.push_back(("/auth/refresh".into(), Ok(err(401, "invalid_refresh_token")))));
+    h.release();
+    let r = job.join().unwrap();
+    assert!(matches!(r, Err(ApiError::SignedOut)), "{r:?}");
+    assert_eq!(c.account().as_deref(), Some(UID2));
+    assert!(c.has_session(), "the account signed in now keeps its session");
+    assert!(v.get(Slot::Refresh(UID2.into())).is_some(), "and its saved sign-in");
+}
+
+/// (critic 75 minor 1) The same, with the other account signed in over the first (no sign-out between, so the
+/// sign-out count is unchanged): the 401 is for the account whose token was presented only.
+#[test]
+fn c75_m1_an_old_accounts_refresh_answered_401_after_another_signed_in_over_it_leaves_that_account_alone() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let (t, mut h) = hang(&s, Mode::Native, "/auth/refresh");
+    let c = Arc::new(Client::new(BASE, Mode::Native, Box::new(t), Box::new(v.clone())));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    s.with(|f| f.script.push_back(("/circles/x".into(), Ok(err(401, "unauthorized")))));
+    let sess: super::publish::SharedSession = c.clone();
+    let pinned = super::pool::pinned(sess);
+    let job = std::thread::spawn(move || block_on(pinned.send(&put_x)).map(|r| r.status));
+    h.wait_reached();
+    s.with(|f| f.script.push_back(("/auth/login".into(), Ok(login_as(UID2, 7)))));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    s.with(|f| f.script.push_back(("/auth/refresh".into(), Ok(err(401, "invalid_refresh_token")))));
+    h.release();
+    let r = job.join().unwrap();
+    assert!(matches!(r, Err(ApiError::SignedOut)), "{r:?}");
+    assert_eq!(c.account().as_deref(), Some(UID2));
+    assert!(c.has_session());
+    assert!(v.get(Slot::Refresh(UID2.into())).is_some());
+}
+
+/// (critic 75 minor 1) The account's own refresh answered 401 still ends its session, as before.
+#[test]
+fn c75_m1_the_accounts_own_refresh_answered_401_still_ends_its_session() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let c = Arc::new(client(Mode::Native, &s, &v));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    s.with(|f| {
+        f.script.push_back(("/circles/x".into(), Ok(err(401, "unauthorized"))));
+        f.script.push_back(("/auth/refresh".into(), Ok(err(401, "invalid_refresh_token"))));
+    });
+    let sess: super::publish::SharedSession = c.clone();
+    let r = block_on(super::pool::pinned(sess).send(&put_x));
+    assert!(matches!(r, Err(ApiError::SignedOut)), "{r:?}");
+    assert!(!c.has_session());
+    assert_eq!(c.account(), None);
+    assert!(v.refresh().is_none());
+}
+
+/// (critic 75 r04) A pinned request whose retry (after a good refresh) is answered 401 again, for the account itself:
+/// that account's session ends.
+#[test]
+fn c75_r04_a_pinned_retry_answered_401_again_ends_the_accounts_own_session() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let c = Arc::new(client(Mode::Native, &s, &v));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    s.with(|f| {
+        f.script.push_back(("/circles/x".into(), Ok(err(401, "unauthorized"))));
+        f.script.push_back(("/circles/x".into(), Ok(err(401, "unauthorized"))));
+    });
+    let sess: super::publish::SharedSession = c.clone();
+    let r = block_on(super::pool::pinned(sess).send(&put_x));
+    assert!(matches!(r, Err(ApiError::SignedOut)), "{r:?}");
+    assert_eq!(bearers(&s, "/circles/x"), ["at", "at"], "refreshed once and sent again");
+    assert!(!c.has_session(), "its session ended");
+    assert!(v.refresh().is_none());
+}
+
+/// (critic 75 minor 2) Delete account held in the network while its account signs out and another (same password)
+/// signs in, then answered 401: never sent again with the other account's sign-in, so the other account is never
+/// deleted, and its session is left alone.
+#[test]
+fn c75_m2_delete_account_is_never_retried_with_another_accounts_sign_in() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let (t, mut h) = hang(&s, Mode::Native, "/account");
+    let c = Arc::new(Client::new(BASE, Mode::Native, Box::new(t), Box::new(v.clone())));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    let c2 = c.clone();
+    let job = std::thread::spawn(move || block_on(c2.delete_account(&pw(PASSWORD))));
+    h.wait_reached();
+    block_on(c.sign_out(false, false)).unwrap();
+    s.with(|f| {
+        f.script.push_back(("/auth/login".into(), Ok(login_as(UID2, 7))));
+        f.script.push_back(("/account".into(), Ok(err(401, "unauthorized"))));
+    });
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    h.release();
+    let r = job.join().unwrap();
+    assert!(matches!(r, Err(ApiError::SignedOut)), "{r:?}");
+    assert_eq!(bearers(&s, "/account"), ["at"], "sent once, with the first account's sign-in only");
+    assert_eq!(c.account().as_deref(), Some(UID2));
+    assert!(c.has_session());
+    assert!(v.get(Slot::Refresh(UID2.into())).is_some());
+}
+
+/// (critic 75 minor 2) Delete account answered (it went through, for the first account) after another account signed
+/// in: the other account's session and its device token stay.
+#[test]
+fn c75_m2_a_delete_answered_after_another_account_signed_in_leaves_that_account_alone() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let (t, mut h) = hang(&s, Mode::Native, "/account");
+    let c = Arc::new(Client::new(BASE, Mode::Native, Box::new(t), Box::new(v.clone())));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    let c2 = c.clone();
+    let job = std::thread::spawn(move || block_on(c2.delete_account(&pw(PASSWORD))));
+    h.wait_reached();
+    block_on(c.sign_out(false, false)).unwrap();
+    let uid2_device = dev_token(UID2, 7);
+    s.with(|f| {
+        let mut body = login_as(UID2, 7).json();
+        body["device_token"] = json!(uid2_device);
+        f.script.push_back(("/auth/login".into(), Ok(ok(200, body))));
+        f.script.push_back(("/account".into(), Ok(Response::new(204, ""))));
+    });
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    h.release();
+    let r = job.join().unwrap();
+    assert_eq!(r, Ok(()), "the first account was deleted, as asked");
+    assert_eq!(c.account().as_deref(), Some(UID2));
+    assert!(c.has_session());
+    assert!(v.get(Slot::Refresh(UID2.into())).is_some());
+    assert_eq!(v.get(Slot::Device(UID2.into())), Some(uid2_device), "the other account's device token stays");
+    assert!(v.device().is_none(), "the deleted account's device token goes");
+}
+
+/// (critic 75 minor 2) `me` and re-apply are kept to the account signed in when they started, like Delete account.
+#[test]
+fn c75_m2_me_is_never_retried_with_another_accounts_sign_in() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let (t, mut h) = hang(&s, Mode::Native, "/me");
+    let c = Arc::new(Client::new(BASE, Mode::Native, Box::new(t), Box::new(v.clone())));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    let c2 = c.clone();
+    let job = std::thread::spawn(move || block_on(c2.me()).map(|_| ()));
+    h.wait_reached();
+    block_on(c.sign_out(false, false)).unwrap();
+    s.with(|f| {
+        f.script.push_back(("/auth/login".into(), Ok(login_as(UID2, 7))));
+        f.script.push_back(("/me".into(), Ok(err(401, "unauthorized"))));
+    });
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    h.release();
+    let r = job.join().unwrap();
+    assert!(matches!(r, Err(ApiError::SignedOut)), "{r:?}");
+    assert_eq!(bearers(&s, "/me"), ["at"]);
+    assert!(c.has_session());
+}
+
+/// (critic 75 minor 1) The same account signed out and in again while its old refresh was on its way: that refresh's 401
+/// is about the session that ended, and the new one stays.
+#[test]
+fn c75_m1_an_old_refresh_answered_401_after_the_same_account_signed_in_again_leaves_the_new_session_alone() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let (t, mut h) = hang(&s, Mode::Native, "/auth/refresh");
+    let c = Arc::new(Client::new(BASE, Mode::Native, Box::new(t), Box::new(v.clone())));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    s.with(|f| f.script.push_back(("/circles/x".into(), Ok(err(401, "unauthorized")))));
+    let sess: super::publish::SharedSession = c.clone();
+    let pinned = super::pool::pinned(sess);
+    let job = std::thread::spawn(move || block_on(pinned.send(&put_x)).map(|r| r.status));
+    h.wait_reached();
+    block_on(c.sign_out(false, false)).unwrap();
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    s.with(|f| f.script.push_back(("/auth/refresh".into(), Ok(err(401, "invalid_refresh_token")))));
+    h.release();
+    let _ = job.join().unwrap();
+    assert_eq!(c.account().as_deref(), Some(UID));
+    assert!(c.has_session(), "the new session of the same account stays");
+    assert!(v.refresh().is_some());
+}
+
+// ---- round 8 (critic 77): the account the page shows, and refreshes that cross a sign-in ------------------------------
+
+const OTHER_EMAIL: &str = "other@school.example.org";
+
+/// `/me` for the second account (the cookie's, after another tab signed in).
+fn me_of_uid2() -> Response {
+    ok(200, json!({"status": {"state": "approved"}, "id": UID2, "email": OTHER_EMAIL, "email_verified": true, "display_name": "Mr Other", "profile": {"school": "Walkerville Elementary"}, "trust": "teacher"}))
+}
+
+/// A web client signed in as the first account whose next refresh comes back for the second (another tab of this browser
+/// signed in as it: the refresh cookie is its now). The first account's job that asked is refused.
+fn web_flipped() -> (Arc<Client>, Server) {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let (clock, clock_fn) = test_clock();
+    let c = Arc::new(Client::with_clock(BASE, Mode::Web, Box::new(MockTransport { server: s.clone(), mode: Mode::Web }), Box::new(v), clock_fn));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    let sess: super::publish::SharedSession = c.clone();
+    let pinned = super::pool::pinned(sess);
+    s.with(|f| f.script.push_back(("/auth/refresh".into(), Ok(ok(200, json!({"access_token": token("bt", 7), "expires_in": 900, "user": {"id": UID2}}))))));
+    *clock.lock().unwrap() += Duration::from_secs(900);
+    let r = block_on(pinned.send(&put_x));
+    assert!(matches!(r, Err(ApiError::SignedOut)), "{r:?}");
+    (c, s)
+}
+
+/// (critic 77 I1, probe P1) Web: after a refresh came back for another account, no later job goes out as that account
+/// (a send, a publish, an invite, any page's job, Delete account) until the page shows who is signed in now.
+#[test]
+fn c77_i1_p1_web_after_a_refresh_for_another_account_every_later_job_is_refused_until_the_page_resyncs() {
+    let (c, s) = web_flipped();
+    let n = s.count();
+    let sess: super::publish::SharedSession = c.clone();
+    let r2 = block_on(super::pool::pinned(sess).send(&put_x));
+    assert!(matches!(r2, Err(ApiError::SignedOut)), "a job started after the flip: {r2:?}");
+    let r3 = block_on(c.authed_raw(&put_x));
+    assert!(matches!(r3, Err(ApiError::SignedOut)), "an unpinned one too: {r3:?}");
+    s.with(|f| f.script.push_back(("/account".into(), Ok(Response::new(204, "")))));
+    let r4 = block_on(c.delete_account(&pw(PASSWORD)));
+    assert!(matches!(r4, Err(ApiError::SignedOut)), "Delete account: {r4:?}");
+    assert!(matches!(block_on(c.me()), Err(ApiError::SignedOut)));
+    assert_eq!(s.count(), n, "nothing went out: {:?}", s.paths());
+    assert!(bearers(&s, "/circles/x").iter().all(|b| b != "bt") && bearers(&s, "/account").is_empty());
+    assert!(c.moved(), "the client says the page must show who is signed in now");
+    // the page shows who is signed in now (the Account window's restore), then jobs go as that account
+    s.with(|f| {
+        f.script.push_back(("/auth/refresh".into(), Ok(ok(200, json!({"access_token": token("bt", 8), "expires_in": 900, "user": {"id": UID2}})))));
+        f.script.push_back(("/me".into(), Ok(me_of_uid2())));
+    });
+    let me = block_on(c.restore()).unwrap();
+    assert_eq!(me.email, OTHER_EMAIL);
+    assert!(!c.moved(), "the page shows the account signed in now: jobs go again");
+    s.with(|f| f.script.push_back(("/circles/x".into(), Ok(ok(201, json!({"version": 9}))))));
+    let sess: super::publish::SharedSession = c.clone();
+    let p = super::pool::pinned(sess);
+    assert_eq!(p.account().as_deref(), Some(UID2));
+    assert_eq!(block_on(p.send(&put_x)).map(|r| r.status), Ok(201));
+    assert_eq!(bearers(&s, "/circles/x").last().map(String::as_str), Some("bt"));
+}
+
+/// (critic 77 I1) Web: signing in on this page is the page showing the account: jobs go again at once.
+#[test]
+fn c77_i1_web_signing_in_here_after_the_flip_ends_the_refusal() {
+    let (c, s) = web_flipped();
+    s.with(|f| f.script.push_back(("/auth/login".into(), Ok(login_as(UID2, 9)))));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    assert!(!c.moved());
+    s.with(|f| f.script.push_back(("/circles/x".into(), Ok(ok(201, json!({"version": 9}))))));
+    let sess: super::publish::SharedSession = c.clone();
+    assert_eq!(block_on(super::pool::pinned(sess).send(&put_x)).map(|r| r.status), Ok(201));
+}
+
+/// (critic 77 I1) Web: the session here ended under the page (the refresh cookie was gone: another tab signed out), and
+/// then another tab signed in as the second account: a job of this page never picks that account up from the cookie.
+#[test]
+fn c77_i1_web_a_session_that_ended_under_the_page_never_picks_up_the_next_cookies_account() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let (clock, clock_fn) = test_clock();
+    let c = Arc::new(Client::with_clock(BASE, Mode::Web, Box::new(MockTransport { server: s.clone(), mode: Mode::Web }), Box::new(v), clock_fn));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    s.with(|f| f.script.push_back(("/auth/refresh".into(), Ok(err(401, "invalid_refresh_token")))));
+    *clock.lock().unwrap() += Duration::from_secs(900);
+    let sess: super::publish::SharedSession = c.clone();
+    assert!(matches!(block_on(super::pool::pinned(sess).send(&put_x)), Err(ApiError::SignedOut)));
+    assert_eq!(c.account(), None);
+    // another tab signs in as the second account: the cookie is its now
+    s.with(|f| f.script.push_back(("/auth/refresh".into(), Ok(ok(200, json!({"access_token": token("bt", 7), "expires_in": 900, "user": {"id": UID2}}))))));
+    let calls = s.refresh_calls();
+    let sess: super::publish::SharedSession = c.clone();
+    let r = block_on(super::pool::pinned(sess).send(&put_x));
+    assert!(matches!(r, Err(ApiError::SignedOut)), "{r:?}");
+    assert!(matches!(block_on(c.authed_raw(&put_x)), Err(ApiError::SignedOut)));
+    assert_eq!(s.refresh_calls(), calls, "the cookie is not even asked");
+    assert!(bearers(&s, "/circles/x").is_empty());
+}
+
+/// (critic 77 I1, probe P1b) Through the Account window's model (web): after the flip the pages see the account change
+/// at once (no longer Ready, no account), a job started then sends nothing, and the window, opened, shows the account
+/// signed in now; the pages then see another account.
+#[test]
+fn c77_i1_p1b_web_the_pages_see_the_flip_and_the_window_shows_the_account_signed_in_now() {
+    let mut h = harness(Mode::Web);
+    h.server.with(|f| f.status = json!({"state": "approved"}));
+    h.configure();
+    h.frame();
+    h.frame();
+    h.sign_in();
+    h.frame();
+    let snap0 = super::publish::snapshot_of(&h.model);
+    assert!(matches!(snap0.gate, super::publish::Gate::Ready));
+    let mut watch = super::publish::AccountWatch::default();
+    assert_eq!(watch.note(&snap0), super::publish::AccountTurn::Same);
+    h.model.close();
+    // the first account's session was ended in another tab, which signed in as the second
+    h.server.with(|f| {
+        f.script.push_back(("/circles/x".into(), Ok(err(401, "unauthorized"))));
+        f.script.push_back(("/auth/refresh".into(), Ok(ok(200, json!({"access_token": token("bt", 7), "expires_in": 900, "user": {"id": UID2}})))));
+    });
+    let r = block_on(super::pool::pinned(snap0.session.clone().unwrap()).send(&put_x));
+    assert!(matches!(r, Err(ApiError::SignedOut)), "{r:?}");
+    h.frame();
+    let snap = super::publish::snapshot_of(&h.model);
+    assert!(!matches!(snap.gate, super::publish::Gate::Ready), "{:?}", snap.gate);
+    assert_eq!(snap.account, None);
+    assert_eq!(watch.note(&snap), super::publish::AccountTurn::SignedOut, "the pages see it");
+    let n = h.server.count();
+    let r = block_on(super::pool::pinned(snap.session.clone().unwrap()).send(&put_x));
+    assert!(matches!(r, Err(ApiError::SignedOut)), "{r:?}");
+    assert_eq!(h.server.count(), n, "a job started now sends nothing");
+    // the window opened ("Sign in..." on a page): it shows the account signed in now
+    h.server.with(|f| {
+        f.script.push_back(("/auth/refresh".into(), Ok(ok(200, json!({"access_token": token("bt", 8), "expires_in": 900, "user": {"id": UID2}})))));
+        f.script.push_back(("/me".into(), Ok(me_of_uid2())));
+    });
+    h.model.open();
+    h.frame();
+    h.frame();
+    assert_eq!(h.model.me.as_ref().map(|m| m.email.clone()).as_deref(), Some(OTHER_EMAIL), "notice {:?}", h.notice());
+    let snap2 = super::publish::snapshot_of(&h.model);
+    assert!(matches!(snap2.gate, super::publish::Gate::Ready), "{:?}", snap2.gate);
+    assert!(snap2.account.as_deref().is_some_and(|a| a.ends_with(OTHER_EMAIL)), "{:?}", snap2.account);
+    assert_eq!(watch.note(&snap2), super::publish::AccountTurn::Another);
+}
+
+/// (critic 77 I1) The Account window left open on its status page: it shows the account signed in now by itself.
+#[test]
+fn c77_i1_web_an_open_account_window_shows_the_account_signed_in_now() {
+    let mut h = harness(Mode::Web);
+    h.server.with(|f| f.status = json!({"state": "approved"}));
+    h.configure();
+    h.frame();
+    h.frame();
+    h.sign_in();
+    h.frame();
+    let snap0 = super::publish::snapshot_of(&h.model);
+    h.server.with(|f| {
+        f.script.push_back(("/circles/x".into(), Ok(err(401, "unauthorized"))));
+        f.script.push_back(("/auth/refresh".into(), Ok(ok(200, json!({"access_token": token("bt", 7), "expires_in": 900, "user": {"id": UID2}})))));
+    });
+    let _ = block_on(super::pool::pinned(snap0.session.clone().unwrap()).send(&put_x));
+    h.server.with(|f| {
+        f.script.push_back(("/auth/refresh".into(), Ok(ok(200, json!({"access_token": token("bt", 8), "expires_in": 900, "user": {"id": UID2}})))));
+        f.script.push_back(("/me".into(), Ok(me_of_uid2())));
+    });
+    h.frame();
+    h.frame();
+    assert_eq!(h.model.me.as_ref().map(|m| m.email.clone()).as_deref(), Some(OTHER_EMAIL));
+    assert!(matches!(super::publish::snapshot_of(&h.model).gate, super::publish::Gate::Ready));
+}
+
+struct GateLock {
+    first: std::sync::atomic::AtomicBool,
+    reached: Mutex<std::sync::mpsc::Sender<()>>,
+    release: Mutex<std::sync::mpsc::Receiver<()>>,
+}
+
+impl super::vault::SessionLock for GateLock {
+    fn acquire(&self) -> LocalFuture<'_, Result<super::vault::LockGuard, ApiError>> {
+        if self.first.swap(false, Ordering::SeqCst) {
+            let _ = self.reached.lock().unwrap().send(());
+            let _ = self.release.lock().unwrap().recv();
+        }
+        Box::pin(std::future::ready(Ok(super::vault::LockGuard::new(()))))
+    }
+}
+
+/// (critic 77 minor 1, probe P2) Native: the first account's refresh waits for the cross-process lock (another copy of
+/// verSHion holds it) while the first account signs out and another signs in. It never presents the other account's
+/// token: the server would rotate it and the successor would be thrown away (a replay later, the theft alarm).
+#[test]
+fn c77_m1_p2_a_refresh_that_waited_for_the_lock_never_rotates_the_next_accounts_token() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let (reached_tx, reached_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+    let lock = GateLock { first: std::sync::atomic::AtomicBool::new(true), reached: Mutex::new(reached_tx), release: Mutex::new(release_rx) };
+    let c = Arc::new(client(Mode::Native, &s, &v).with_lock(Box::new(lock)));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    s.with(|f| f.script.push_back(("/circles/x".into(), Ok(err(401, "unauthorized")))));
+    let sess: super::publish::SharedSession = c.clone();
+    let pinned = super::pool::pinned(sess);
+    let job = std::thread::spawn(move || block_on(pinned.send(&put_x)).map(|r| r.status));
+    reached_rx.recv_timeout(Duration::from_secs(10)).expect("the refresh never asked for the lock");
+    block_on(c.sign_out(false, false)).unwrap();
+    s.with(|f| f.script.push_back(("/auth/login".into(), Ok(login_as(UID2, 7)))));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    s.with(|f| f.script.push_back(("/auth/refresh".into(), Ok(ok(200, json!({"access_token": token("ct", 8), "expires_in": 900, "refresh_token": token("crt", 8), "user": {"id": UID2}}))))));
+    drop(release_tx);
+    let r = job.join().unwrap();
+    assert!(matches!(r, Err(ApiError::SignedOut)), "{r:?}");
+    let presented: Vec<String> = s.log().into_iter().filter(|l| l.path == "/auth/refresh").map(|l| l.body.as_ref().and_then(|b| b.get("refresh_token")).and_then(Value::as_str).unwrap_or("").chars().take(3).collect()).collect();
+    assert!(!presented.iter().any(|p| p == "brt"), "the other account's token was presented: {presented:?}");
+    assert_eq!(v.get(Slot::Refresh(UID2.into())).map(|t| t.chars().take(3).collect::<String>()).as_deref(), Some("brt"), "its saved token is its own, unrotated");
+    assert_eq!(c.account().as_deref(), Some(UID2));
+    assert!(c.has_session());
+}
+
+/// (critic 77 minor 2, probe P3) Native: the first account's refresh is on its way when the second signs in over it
+/// (no sign-out between: the Enrol page while signed in), and is then answered 200 for the first. The client stays
+/// the second account's, its saved sign-in stays, and nothing goes out with the first account's new token.
+#[test]
+fn c77_m2_p3_a_late_refresh_for_the_first_account_after_a_sign_in_over_it_changes_nothing() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let (t, mut h) = hang(&s, Mode::Native, "/auth/refresh");
+    let c = Arc::new(Client::new(BASE, Mode::Native, Box::new(t), Box::new(v.clone())));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    s.with(|f| f.script.push_back(("/circles/x".into(), Ok(err(401, "unauthorized")))));
+    let sess: super::publish::SharedSession = c.clone();
+    let pinned = super::pool::pinned(sess);
+    let job = std::thread::spawn(move || block_on(pinned.send(&put_x)).map(|r| r.status));
+    h.wait_reached();
+    s.with(|f| f.script.push_back(("/auth/login".into(), Ok(login_as(UID2, 7)))));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    h.release();
+    let r = job.join().unwrap();
+    assert!(matches!(r, Err(ApiError::SignedOut)), "{r:?}");
+    assert_eq!(c.account().as_deref(), Some(UID2), "the client stays the second account's");
+    assert!(c.has_session());
+    assert_eq!(v.get(Slot::Refresh(UID2.into())).map(|t| t.chars().take(3).collect::<String>()).as_deref(), Some("brt"), "its saved sign-in stays");
+    assert_eq!(bearers(&s, "/circles/x"), ["at"], "sent once, before the refresh");
+}
+
+/// (critic 77 I1) The open window's look-up of who is signed in now fails (offline): it says so and shows the sign-in,
+/// and does not ask again and again.
+#[test]
+fn c77_i1_web_a_lookup_after_the_flip_that_fails_is_not_repeated_every_frame() {
+    let mut h = harness(Mode::Web);
+    h.server.with(|f| f.status = json!({"state": "approved"}));
+    h.configure();
+    h.frame();
+    h.frame();
+    h.sign_in();
+    h.frame();
+    let snap0 = super::publish::snapshot_of(&h.model);
+    h.server.with(|f| {
+        f.script.push_back(("/circles/x".into(), Ok(err(401, "unauthorized"))));
+        f.script.push_back(("/auth/refresh".into(), Ok(ok(200, json!({"access_token": token("bt", 7), "expires_in": 900, "user": {"id": UID2}})))));
+    });
+    let _ = block_on(super::pool::pinned(snap0.session.clone().unwrap()).send(&put_x));
+    let calls = h.server.refresh_calls();
+    h.server.with(|f| {
+        f.script.push_back(("/auth/refresh".into(), Err(NetError::offline("Can't reach pool.test: the connection timed out."))));
+        f.script.push_back(("/auth/refresh".into(), Err(NetError::offline("Can't reach pool.test: the connection timed out."))));
+    });
+    for _ in 0..6 {
+        h.frame();
+    }
+    assert!(h.server.refresh_calls() <= calls + 2, "looked up once (with its one retry): {}", h.server.refresh_calls() - calls);
+    assert!(h.model.me.is_none() && h.model.page == Page::SignIn, "{:?} {}", h.model.page, h.notice());
+    assert!(!matches!(super::publish::snapshot_of(&h.model).gate, super::publish::Gate::Ready));
+}
+
+/// (critic 77 I1) Signed out here: a job never picks a session up from the cookie (another tab's sign-in) before the
+/// page shows it or someone signs in here.
+#[test]
+fn c77_i1_web_after_a_sign_out_no_job_picks_up_another_tabs_session() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let c = Arc::new(client(Mode::Web, &s, &v));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    block_on(c.sign_out(false, false)).unwrap();
+    s.with(|f| f.script.push_back(("/auth/refresh".into(), Ok(ok(200, json!({"access_token": token("bt", 7), "expires_in": 900, "user": {"id": UID2}}))))));
+    let calls = s.refresh_calls();
+    assert!(matches!(block_on(c.authed_raw(&put_x)), Err(ApiError::SignedOut)));
+    let sess: super::publish::SharedSession = c.clone();
+    assert!(matches!(block_on(super::pool::pinned(sess).send(&put_x)), Err(ApiError::SignedOut)));
+    assert_eq!(s.refresh_calls(), calls, "the cookie is not asked");
+    assert!(bearers(&s, "/circles/x").is_empty());
+}
+
+/// (critic 77 I1) The window's look-up of who is signed in now, answered after the session here changed again (a
+/// sign-out and a sign-in here meanwhile): it is not taken as the page's account (that answer is for the earlier one).
+#[test]
+fn c77_i1_web_a_lookup_answered_for_a_session_that_was_replaced_meanwhile_is_not_used() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let (t, mut h) = hang(&s, Mode::Web, "/me");
+    let c = Arc::new(Client::new(BASE, Mode::Web, Box::new(t), Box::new(v)));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    s.with(|f| {
+        f.script.push_back(("/circles/x".into(), Ok(err(401, "unauthorized"))));
+        f.script.push_back(("/auth/refresh".into(), Ok(ok(200, json!({"access_token": token("bt", 7), "expires_in": 900, "user": {"id": UID2}})))));
+    });
+    let sess: super::publish::SharedSession = c.clone();
+    assert!(matches!(block_on(super::pool::pinned(sess).send(&put_x)), Err(ApiError::SignedOut)));
+    assert!(c.moved());
+    s.with(|f| {
+        f.script.push_back(("/auth/refresh".into(), Ok(ok(200, json!({"access_token": token("bt", 8), "expires_in": 900, "user": {"id": UID2}})))));
+        f.script.push_back(("/me".into(), Ok(me_of_uid2())));
+    });
+    let c2 = c.clone();
+    let job = std::thread::spawn(move || block_on(c2.restore()).map(|m| m.email));
+    h.wait_reached();
+    block_on(c.sign_out(false, false)).unwrap();
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    h.release();
+    let r = job.join().unwrap();
+    assert!(matches!(r, Err(ApiError::SignedOut)), "{r:?}");
+    assert_eq!(c.account().as_deref(), Some(UID));
+    assert!(!c.moved(), "signed in here: jobs go");
+}
+
+/// (critic 77 I1) Between the window's look-up answering and the window showing it, the pages are not told the earlier
+/// account is still signed in.
+#[test]
+fn c77_i1_web_until_the_window_shows_the_account_signed_in_now_the_pages_are_not_ready() {
+    let mut h = harness(Mode::Web);
+    h.server.with(|f| f.status = json!({"state": "approved"}));
+    h.configure();
+    h.frame();
+    h.frame();
+    h.sign_in();
+    h.frame();
+    let snap0 = super::publish::snapshot_of(&h.model);
+    h.server.with(|f| {
+        f.script.push_back(("/circles/x".into(), Ok(err(401, "unauthorized"))));
+        f.script.push_back(("/auth/refresh".into(), Ok(ok(200, json!({"access_token": token("bt", 7), "expires_in": 900, "user": {"id": UID2}})))));
+    });
+    let _ = block_on(super::pool::pinned(snap0.session.clone().unwrap()).send(&put_x));
+    h.server.with(|f| {
+        f.script.push_back(("/auth/refresh".into(), Ok(ok(200, json!({"access_token": token("bt", 8), "expires_in": 900, "user": {"id": UID2}})))));
+        f.script.push_back(("/me".into(), Ok(me_of_uid2())));
+    });
+    // the look-up runs (inline) and has answered; the window shows it at its next frame
+    h.frame();
+    assert!(!h.model.client().unwrap().moved());
+    let snap = super::publish::snapshot_of(&h.model);
+    assert!(!matches!(snap.gate, super::publish::Gate::Ready) && snap.account.is_none(), "{:?} {:?}", snap.gate, snap.account);
+    h.frame();
+    let snap = super::publish::snapshot_of(&h.model);
+    assert!(matches!(snap.gate, super::publish::Gate::Ready) && snap.account.as_deref().is_some_and(|a| a.ends_with(OTHER_EMAIL)));
+}
+
+// ---- round 9 (critic 79 survivors a02, c10, c12) ----------------------------------------------------------------------
+
+/// (critic 79 a02) The open window's look-up after the flip: the refresh comes back, but `/me` fails. The window no
+/// longer shows the earlier account (the session moved on, and who is signed in now is not known).
+#[test]
+fn c79_a02_web_a_lookup_after_the_flip_whose_me_fails_does_not_keep_showing_the_earlier_account() {
+    let mut h = harness(Mode::Web);
+    h.server.with(|f| f.status = json!({"state": "approved"}));
+    h.configure();
+    h.frame();
+    h.frame();
+    h.sign_in();
+    h.frame();
+    assert!(h.model.me.is_some());
+    let snap0 = super::publish::snapshot_of(&h.model);
+    h.server.with(|f| {
+        f.script.push_back(("/circles/x".into(), Ok(err(401, "unauthorized"))));
+        f.script.push_back(("/auth/refresh".into(), Ok(ok(200, json!({"access_token": token("bt", 7), "expires_in": 900, "user": {"id": UID2}})))));
+    });
+    let _ = block_on(super::pool::pinned(snap0.session.clone().unwrap()).send(&put_x));
+    h.server.with(|f| {
+        f.script.push_back(("/auth/refresh".into(), Ok(ok(200, json!({"access_token": token("bt", 8), "expires_in": 900, "user": {"id": UID2}})))));
+        for _ in 0..4 {
+            f.script.push_back(("/me".into(), Ok(err(500, "server_error"))));
+        }
+    });
+    for _ in 0..4 {
+        h.frame();
+    }
+    assert!(h.model.me.is_none(), "the earlier account is still shown: {:?} / {}", h.model.me.as_ref().map(|m| m.email.clone()), h.notice());
+    assert_eq!(h.model.page, Page::SignIn);
+    assert!(!matches!(super::publish::snapshot_of(&h.model).gate, super::publish::Gate::Ready));
+}
+
+/// A vault whose first load or save of one slot, once armed, waits until the test lets it go (a keychain prompt).
+#[derive(Clone)]
+struct GateVault {
+    inner: SharedVault,
+    armed: Arc<Mutex<Option<(bool, Slot)>>>,
+    reached: Arc<Mutex<std::sync::mpsc::Sender<()>>>,
+    release: Arc<Mutex<std::sync::mpsc::Receiver<()>>>,
+}
+
+impl GateVault {
+    fn new(inner: SharedVault) -> (GateVault, std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>) {
+        let (reached_tx, reached_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        (GateVault { inner, armed: Arc::default(), reached: Arc::new(Mutex::new(reached_tx)), release: Arc::new(Mutex::new(release_rx)) }, reached_rx, release_tx)
+    }
+    /// The next `load` (or `save`, when `save`) of `slot` waits.
+    fn arm(&self, save: bool, slot: Slot) {
+        *self.armed.lock().unwrap() = Some((save, slot));
+    }
+    fn gate(&self, save: bool, slot: &Slot) {
+        let hit = {
+            let mut a = self.armed.lock().unwrap();
+            let hit = a.as_ref().is_some_and(|(s, x)| *s == save && x == slot);
+            if hit {
+                *a = None;
+            }
+            hit
+        };
+        if hit {
+            let _ = self.reached.lock().unwrap().send(());
+            let _ = self.release.lock().unwrap().recv_timeout(Duration::from_secs(10));
+        }
+    }
+}
+
+impl Vault for GateVault {
+    fn load(&self, slot: &Slot) -> Result<Option<Secret>, VaultError> {
+        self.gate(false, slot);
+        self.inner.load(slot)
+    }
+    fn save(&self, slot: &Slot, value: &Secret) -> Result<(), VaultError> {
+        self.gate(true, slot);
+        self.inner.save(slot, value)
+    }
+    fn clear(&self, slot: &Slot) -> Result<(), VaultError> {
+        self.inner.clear(slot)
+    }
+    fn persistent(&self) -> bool {
+        true
+    }
+}
+
+/// (critic 79 c12) Native: a refresh reads the saved token (a keychain prompt) while the account signs out and another
+/// signs in. The token it finds gone ends only the session that read it: the other account keeps its own.
+#[test]
+fn c79_c12_a_saved_token_found_gone_after_a_sign_out_and_in_leaves_the_next_account_alone() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let (gv, reached, release) = GateVault::new(v.clone());
+    let c = Arc::new(Client::new(BASE, Mode::Native, Box::new(MockTransport { server: s.clone(), mode: Mode::Native }), Box::new(gv.clone())));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    gv.arm(false, Slot::Refresh(UID.into()));
+    s.with(|f| f.script.push_back(("/circles/x".into(), Ok(err(401, "unauthorized")))));
+    let sess: super::publish::SharedSession = c.clone();
+    let pinned = super::pool::pinned(sess);
+    let job = std::thread::spawn(move || block_on(pinned.send(&put_x)).map(|r| r.status));
+    reached.recv_timeout(Duration::from_secs(10)).expect("the refresh never read the saved token");
+    block_on(c.sign_out(false, false)).unwrap();
+    s.with(|f| f.script.push_back(("/auth/login".into(), Ok(login_as(UID2, 7)))));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    drop(release);
+    let r = job.join().unwrap();
+    assert!(matches!(r, Err(ApiError::SignedOut)), "{r:?}");
+    assert_eq!(c.account().as_deref(), Some(UID2), "the account signed in now");
+    assert!(c.has_session(), "keeps its session");
+    assert!(v.get(Slot::Refresh(UID2.into())).is_some());
+}
+
+/// (critic 79 c10) Native: the first account's refresh is answered while its new token is being written to the keychain
+/// (a prompt), and another account signs in over it meanwhile (no sign-out between: the Enrol page). The first account's
+/// new token is not taken: the client stays the second account's, and the first token is taken back out.
+#[test]
+fn c79_c10_a_refreshed_token_written_while_another_account_signed_in_over_it_is_not_taken() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let (gv, reached, release) = GateVault::new(v.clone());
+    let c = Arc::new(Client::new(BASE, Mode::Native, Box::new(MockTransport { server: s.clone(), mode: Mode::Native }), Box::new(gv.clone())));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    gv.arm(true, Slot::Refresh(UID.into()));
+    s.with(|f| {
+        f.script.push_back(("/circles/x".into(), Ok(err(401, "unauthorized"))));
+        f.script.push_back(("/auth/refresh".into(), Ok(ok(200, json!({"access_token": token("ct", 8), "expires_in": 900, "refresh_token": token("crt", 8), "user": {"id": UID}})))));
+    });
+    let sess: super::publish::SharedSession = c.clone();
+    let pinned = super::pool::pinned(sess);
+    let job = std::thread::spawn(move || block_on(pinned.send(&put_x)).map(|r| r.status));
+    reached.recv_timeout(Duration::from_secs(10)).expect("the refreshed token was never written");
+    s.with(|f| f.script.push_back(("/auth/login".into(), Ok(login_as(UID2, 7)))));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    drop(release);
+    let r = job.join().unwrap();
+    assert!(matches!(r, Err(ApiError::SignedOut)), "{r:?}");
+    assert_eq!(c.account().as_deref(), Some(UID2), "the client stays the second account's");
+    assert!(c.has_session());
+    assert_eq!(v.get(Slot::Refresh(UID2.into())).map(|t| t.chars().take(3).collect::<String>()).as_deref(), Some("brt"));
+    assert!(v.get(Slot::Refresh(UID.into())).is_none(), "the first account's new token is taken back out");
+    assert_eq!(bearers(&s, "/circles/x"), ["at"], "nothing went out with the first account's new token");
+}
+
+/// (critic 79 c08) Native: the first account's refresh waits for the cross-process lock while another account signs in
+/// over it (no sign-out between: the Enrol page). It never presents that account's token (the server would rotate it
+/// for a refresh nobody asked for it).
+#[test]
+fn c79_c08_a_refresh_that_waited_for_the_lock_while_another_account_signed_in_over_it_presents_nothing() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let (reached_tx, reached_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+    let lock = GateLock { first: std::sync::atomic::AtomicBool::new(true), reached: Mutex::new(reached_tx), release: Mutex::new(release_rx) };
+    let c = Arc::new(client(Mode::Native, &s, &v).with_lock(Box::new(lock)));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    s.with(|f| f.script.push_back(("/circles/x".into(), Ok(err(401, "unauthorized")))));
+    let sess: super::publish::SharedSession = c.clone();
+    let pinned = super::pool::pinned(sess);
+    let job = std::thread::spawn(move || block_on(pinned.send(&put_x)).map(|r| r.status));
+    reached_rx.recv_timeout(Duration::from_secs(10)).expect("the refresh never asked for the lock");
+    s.with(|f| f.script.push_back(("/auth/login".into(), Ok(login_as(UID2, 7)))));
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    s.with(|f| f.script.push_back(("/auth/refresh".into(), Ok(ok(200, json!({"access_token": token("ct", 8), "expires_in": 900, "refresh_token": token("crt", 8), "user": {"id": UID2}}))))));
+    drop(release_tx);
+    let r = job.join().unwrap();
+    assert!(matches!(r, Err(ApiError::SignedOut)), "{r:?}");
+    assert_eq!(s.refresh_calls(), 0, "no refresh went out");
+    assert_eq!(v.get(Slot::Refresh(UID2.into())).map(|t| t.chars().take(3).collect::<String>()).as_deref(), Some("brt"), "its saved token is its own, unrotated");
+    assert_eq!(c.account().as_deref(), Some(UID2));
+}
+
+/// (critic 80 I2) The pages are told the account's display name with the account (to tell the person's own versions from
+/// a colleague's), and nothing once signed out.
+#[test]
+fn c80_i2_the_snapshot_carries_the_display_name_of_the_account_signed_in() {
+    let mut h = harness(Mode::Native);
+    h.server.with(|f| f.status = json!({"state": "approved"}));
+    h.configure();
+    h.frame();
+    h.frame();
+    assert_eq!(super::publish::snapshot_of(&h.model).name, None);
+    h.sign_in();
+    h.frame();
+    let snap = super::publish::snapshot_of(&h.model);
+    assert!(matches!(snap.gate, super::publish::Gate::Ready), "{:?}", snap.gate);
+    assert_eq!(snap.name.as_deref(), Some("Ms Frizzle"));
+}

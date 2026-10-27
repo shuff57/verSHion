@@ -11,7 +11,7 @@ use super::circles_api::{Invite, Role, code_groups};
 use super::circles_text as text;
 use super::pool::License;
 use super::publish_text::{license_info, license_name};
-use super::publish_ui::{banner, body, body_lines, heading, link, para, warn_box};
+use super::publish_ui::{banner, body, link, para, warn_box};
 use crate::{kit, theme};
 
 /// What the page asks the rest of the app for.
@@ -22,6 +22,8 @@ pub enum Outcome {
     ShareToCircle(String),
     /// "See it under Things I imported".
     ShowImported,
+    /// "Open in My Banks" (phase D1): the Banks screen on this local bank.
+    OpenBank(String),
 }
 
 pub(super) fn line(ui: &mut Ui, s: impl Into<String>) {
@@ -153,8 +155,8 @@ fn with_action(ui: &mut Ui, action: Option<(&str, bool)>, body: impl FnOnce(&mut
 
 // ---- the tab ----------------------------------------------------------------------------------------------------
 
-/// The Circles tab body. `banks` are the person's own banks (not used yet; kept for "add a bank").
-pub(super) fn body_of(ui: &mut Ui, m: &mut CirclesModel) -> Outcome {
+/// The Circles tab body (also drawn on its own by the QA rig).
+pub fn body_of(ui: &mut Ui, m: &mut CirclesModel) -> Outcome {
     let out = body_inner(ui, m);
     forget_cleared_fields(ui.ctx(), m);
     out
@@ -192,7 +194,7 @@ fn body_inner(ui: &mut Ui, m: &mut CirclesModel) -> Outcome {
         Screen::List => list_page(ui, m),
         Screen::Circle => circle_page(ui, m, &mut out),
         Screen::Bank => bank_page(ui, m, &mut out),
-        Screen::Join => join_page(ui, m),
+        Screen::Join => join_page(ui, m, &mut out),
         Screen::Create => create_page(ui, m),
     }
     out
@@ -345,7 +347,7 @@ fn create_page(ui: &mut Ui, m: &mut CirclesModel) {
     }
 }
 
-fn join_page(ui: &mut Ui, m: &mut CirclesModel) {
+fn join_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
     if back_link(ui, "< All circles") {
         m.go_list();
         return;
@@ -358,6 +360,7 @@ fn join_page(ui: &mut Ui, m: &mut CirclesModel) {
     let mut join = false;
     let mut retry = false;
     let mut account = false;
+    let mut offer = OfferAct::None;
     let working = matches!(m.join.stage, JoinStage::Looking | JoinStage::Joining);
     match &m.join.stage {
         JoinStage::Typing | JoinStage::Looking | JoinStage::Failed(_) => {
@@ -411,7 +414,15 @@ fn join_page(ui: &mut Ui, m: &mut CirclesModel) {
             let n = if name.is_empty() { "the circle".to_string() } else { format!("\"{name}\"") };
             body(ui, &if *already { format!("You were already in {n}.") } else { format!("You joined {n} as {}.", role_phrase(*role)) });
             ui.add_space(6.0);
-            open = kit::primary_button(ui, "Open the circle").clicked();
+            // (phase D1) "Add its banks to My Banks?", a tick per bank.
+            if let Some(o) = m.join_offer.clone() {
+                offer = join_offer(ui, m, &o);
+            }
+            // (critic 64 polish 7, critic 66 minor 7) while the offer of its banks is up, adding them (then opening
+            // them) is the next step, not the circle: one big button at a time
+            let offering = m.join_offer.as_ref().is_some_and(|o| o.problem.is_none() && o.banks.as_ref().is_none_or(|b| !b.is_empty()));
+            let label = "Open the circle";
+            open = if offering { kit::ghost_button(ui, label) } else { kit::primary_button(ui, label) }.clicked();
         }
     }
     if account {
@@ -434,9 +445,113 @@ fn join_page(ui: &mut Ui, m: &mut CirclesModel) {
     if change {
         m.change_code();
     }
+    match offer {
+        OfferAct::None => {}
+        OfferAct::Tick(bid, on) => m.tick_offer(&bid, on),
+        OfferAct::Add => m.add_ticked(),
+        OfferAct::NotNow => m.dismiss_offer(),
+        OfferAct::Retry(cid, bid) => m.retry_add(&cid, &bid),
+        OfferAct::Open(local) => *out = Outcome::OpenBank(local),
+    }
     if open {
+        m.dismiss_offer();
         m.open_joined();
     }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum OfferAct {
+    None,
+    Tick(String, bool),
+    Add,
+    NotNow,
+    Retry(String, String),
+    Open(String),
+}
+
+/// After joining (phase D1, section 4.4): "Add its banks to My Banks?" with a tick per bank (all ticked when there
+/// are 10 or fewer), then how each one went.
+fn join_offer(ui: &mut Ui, m: &CirclesModel, o: &JoinOffer) -> OfferAct {
+    let mut act = OfferAct::None;
+    section(ui, "Add its banks to My Banks?", |ui| {
+        if let Some(p) = &o.problem {
+            warn_box(ui, &p.message);
+            line(ui, "You can add its banks from the circle's page.");
+            return;
+        }
+        let Some(banks) = &o.banks else {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(theme::muted("Looking at the circle's banks...").size(12.5));
+            });
+            return;
+        };
+        if banks.is_empty() {
+            line(ui, "The circle has no banks yet.");
+            return;
+        }
+        para(ui, if o.role.can_add_banks() {
+            "Each one is linked to the circle: get newer versions when you choose, and send your changes back. Nothing changes by itself."
+        } else {
+            "Each one is linked to the circle: get newer versions when you choose. As a viewer you can't send changes back."
+        });
+        for b in banks {
+            // (critic 63 B3) A bank this computer already has is not added again: its link and its changes stay.
+            if let Some(name) = &b.in_banks {
+                let name = api::plain(name);
+                two_tone(ui, &b.title, " - ", &if name.is_empty() { "already in My Banks".to_string() } else { format!("already in My Banks as \"{name}\"") });
+                continue;
+            }
+            if !o.started {
+                let mut on = b.ticked;
+                if ui.checkbox(&mut on, b.title.as_str()).changed() {
+                    act = OfferAct::Tick(b.id.clone(), on);
+                }
+                continue;
+            }
+            if !b.ticked {
+                // (critic 66 minor 7) said, not dropped
+                two_tone(ui, &b.title, " - ", "not added");
+                continue;
+            }
+            match m.add_state(&o.cid, &b.id).map(|j| &j.state) {
+                Some(AddState::Done { bank_id, bank_name, .. }) => {
+                    text_row(ui, |ui| {
+                        two_tone(ui, &b.title, " - ", &format!("in My Banks as \"{}\"", api::plain(bank_name)));
+                        if back_link(ui, "Open") {
+                            act = OfferAct::Open(bank_id.clone());
+                        }
+                    });
+                }
+                Some(AddState::Failed(p)) => {
+                    two_tone(ui, &b.title, " - ", &p.message);
+                    if kit::ghost_button(ui, "Try again").clicked() {
+                        act = OfferAct::Retry(o.cid.clone(), b.id.clone());
+                    }
+                }
+                Some(AddState::Working) => {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.add(egui::Spinner::new().size(14.0));
+                        ui.label(theme::muted(format!("Adding \"{}\"...", b.title)).size(12.5));
+                    });
+                }
+                _ => two_tone(ui, &b.title, " - ", "waiting"),
+            }
+        }
+        if !o.started {
+            let n = banks.iter().filter(|b| b.ticked && b.in_banks.is_none()).count();
+            ui.add_space(4.0);
+            ui.horizontal_wrapped(|ui| {
+                if ui.add_enabled(n > 0, |ui: &mut Ui| kit::primary_button(ui, "Add the ticked banks")).clicked() {
+                    act = OfferAct::Add;
+                }
+                if kit::ghost_button(ui, "Not now").clicked() {
+                    act = OfferAct::NotNow;
+                }
+            });
+        }
+    });
+    act
 }
 
 fn role_phrase(r: Role) -> &'static str {
@@ -519,119 +634,11 @@ fn circle_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
     }
     panels(ui, m);
 
-    // Banks.
-    let mut open_bank: Option<String> = None;
-    let mut restore: Option<String> = None;
-    let mut ask_purge: Option<String> = None;
-    let mut purge: Option<String> = None;
-    let mut cancel_purge = false;
-    let confirming_purge = m.circle.as_ref().and_then(|c| c.confirm_purge.clone());
-    let mut add = false;
-    let badges: std::collections::HashMap<String, String> = d.banks.iter().filter_map(|b| super::circle_edit_ui::bank_badge(m, &d.circle.id, &b.id).map(|t| (b.id.clone(), t))).collect();
-    section(ui, "Banks", |ui| {
-        if m.allowed(Action::AddBank) {
-            add = kit::primary_button(ui, "Add a bank...").clicked();
-            ui.add_space(4.0);
-        }
-        if d.banks.is_empty() {
-            ui.label(theme::strong(text::EMPTY_BANKS).size(13.5));
-            para(ui, if role.can_add_banks() { text::EMPTY_BANKS_HELP_EDITOR } else { text::EMPTY_BANKS_HELP_VIEWER });
-        }
-        for b in &d.banks {
-            kit::card().inner_margin(Margin::same(8)).show(ui, |ui| {
-                ui.set_min_width(ui.available_width());
-                let now_ms = m.now_ms();
-                // (round 48: after a partial "Delete for good now" nothing can be brought back or deleted again from here)
-                let claimed = m.purge_claimed.get(&b.id).copied();
-                let can_restore = claimed.is_none() && bank_can(role, closed, b, BankAction::Restore) && b.removed.as_ref().and_then(|r| r.undo_until).is_some_and(|u| u > now_ms);
-                let can_purge = claimed.is_none() && bank_can(role, closed, b, BankAction::Purge);
-                let action = match &b.removed {
-                    Some(_) if can_restore => Some(("Bring it back", false)),
-                    Some(_) => None,
-                    None => Some(("Open", true)),
-                };
-                let clicked = with_action(ui, action, |ui| {
-                    if b.hidden {
-                        ui.add(egui::Label::new(theme::strong(text::HIDDEN_BANK_TITLE).size(13.5)).wrap());
-                        line(ui, text::HIDDEN_BANK_LINE.to_string());
-                        line(ui, format!("version {} - {}", b.head_version, text::questions_text(b.question_count)));
-                        if let Some(n) = claimed {
-                            line(ui, text::purge_pending_line(n));
-                        } else if let Some(r) = &b.removed {
-                            line(ui, format!("Removed from the circle. {}", text::undo_line(r.undo_until, now)));
-                        }
-                        return;
-                    }
-                    ui.add(egui::Label::new(theme::strong(btext_shown(&b.title)).size(13.5)).wrap());
-                    let mut bits = vec![format!("by {}", btext::author(&b.author_name)), format!("version {}", b.head_version), text::questions_text(b.question_count)];
-                    let ago = text::ago(b.updated_at, now);
-                    if !ago.is_empty() {
-                        bits.push(format!("updated {ago}"));
-                    }
-                    line(ui, bits.join(" - "));
-                    line(ui, format!("{}. {}", license_name(&b.license), text::reshare_line(&b.license)));
-                    if let Some(bd) = badges.get(&b.id) {
-                        ui.add(egui::Label::new(theme::accent(bd).size(12.5)).wrap());
-                    }
-                    if b.hide_key && b.removed.is_none() {
-                        line(ui, if role.can_add_banks() { "Answer keys hidden from viewers." } else { "Answer keys hidden for viewers: you get it without them." });
-                    }
-                    if b.is_held() {
-                        ui.add(egui::Label::new(theme::accent(text::HELD_BANK).size(12.5)).wrap());
-                    }
-                    if let Some(n) = claimed {
-                        line(ui, text::purge_pending_line(n));
-                    } else if let Some(r) = &b.removed {
-                        line(ui, format!("Removed from the circle. {}", text::undo_line(r.undo_until, now)));
-                    }
-                });
-                if clicked {
-                    if b.removed.is_some() {
-                        restore = Some(b.id.clone());
-                    } else {
-                        open_bank = Some(b.id.clone());
-                    }
-                }
-                if can_purge {
-                    if confirming_purge.as_deref() == Some(b.id.as_str()) {
-                        body(ui, text::PURGE_BANK);
-                        ui.horizontal_wrapped(|ui| {
-                            if kit::danger_text_button(ui, "Delete it for good").clicked() {
-                                purge = Some(b.id.clone());
-                            }
-                            if kit::ghost_button(ui, "Keep it").clicked() {
-                                cancel_purge = true;
-                            }
-                        });
-                    } else if kit::danger_text_button(ui, "Delete for good now...").clicked() {
-                        ask_purge = Some(b.id.clone());
-                    }
-                }
-            });
-            ui.add_space(3.0);
-        }
-    });
-    if add {
-        *out = Outcome::ShareToCircle(d.circle.id.clone());
-    }
-    if let Some(b) = restore {
-        m.restore_bank(&b);
-    }
-    if let Some(b) = ask_purge {
-        m.ask_purge(&b);
-    }
-    if let Some(b) = purge {
-        m.purge_bank(&b);
-    }
-    if cancel_purge {
-        m.cancel_purge();
-    }
-    if let Some(b) = open_bank {
-        m.open_bank(&b);
+    // Banks (phase D1): each row opens the bank in My Banks or adds it there; nothing is edited on this page.
+    if banks_section(ui, m, &d, out) {
         return;
     }
 
-    super::circle_edit_ui::working_copies(ui, m, &d.circle.id);
     members_section(ui, m, &d);
     if role == Role::Owner && !closed {
         codes_section(ui, m);
@@ -655,6 +662,402 @@ fn circle_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
             para(ui, "As the owner you can rename the circle, make codes, change roles, remove members, hand the circle to someone else, or close it.");
         }
     });
+}
+
+/// A row's buttons (phase D1): the primary first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RowButton {
+    Open,
+    Add,
+    Own,
+    FullCopy,
+    BringBack,
+}
+
+impl RowButton {
+    fn label(self) -> &'static str {
+        match self {
+            RowButton::Open => "Open in My Banks",
+            RowButton::Add => "Add to My Banks",
+            RowButton::Own => "Make my own copy",
+            RowButton::FullCopy => "Add a full copy",
+            RowButton::BringBack => "Bring it back",
+        }
+    }
+
+    /// What the button does, on hover (critic 64 I1).
+    fn hint(self, can_send: bool) -> Option<&'static str> {
+        match self {
+            RowButton::Add => Some(if can_send { ADD_HINT } else { ADD_HINT_VIEWER }),
+            RowButton::Own => Some(OWN_HINT),
+            RowButton::FullCopy => Some("A new bank, read in full, that is connected to the circle so you can send from it. Your earlier copy stays, no longer connected."),
+            _ => None,
+        }
+    }
+}
+
+const ADD_HINT: &str = "Add to My Banks: the bank stays connected to the circle. You get newer versions when you choose and send your changes back.";
+const ADD_HINT_VIEWER: &str = "Add to My Banks: the bank stays connected to the circle, so you can get newer versions (viewers can't send changes).";
+const LINKS_UNREADABLE_ROW: &str = "The list of shared banks on this computer couldn't be read just now, so banks can't be added to My Banks: this computer may have them already. Nothing was changed.";
+const OWN_HINT: &str = "Make my own copy: a separate bank that is yours alone; nothing goes back and forth.";
+
+/// What a row needs from this computer's link to its bank.
+struct RowLink {
+    local_id: String,
+    bank_name: String,
+    missing: bool,
+    /// "Add a full copy" is offered (critic 63 I3).
+    full_copy: bool,
+    lines: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum RowAct {
+    None,
+    Open(String),
+    Add(String, bool),
+    FullCopy(String),
+    RetryAdd(String),
+    OpenNew(String),
+    Restore(String),
+    AskPurge(String),
+    Purge(String),
+    CancelPurge,
+    Settings(String),
+    Preview(String),
+    Report(String),
+    AskRemove(String),
+    Remove,
+    KeepIt,
+}
+
+/// The Banks card of the circle page (phase D1, section 4.3). Each bank is a row: "Open in My Banks" when this
+/// computer has it, else "Add to My Banks" and "Make my own copy"; under it Bank settings (owner and author),
+/// Report... and Remove.... Returns true when the page was left (a bank's settings opened).
+fn banks_section(ui: &mut Ui, m: &mut CirclesModel, d: &super::circles_api::CircleDetail, out: &mut Outcome) -> bool {
+    let role = d.circle.role();
+    let closed = d.circle.closed();
+    let cid = d.circle.id.clone();
+    let now = m.now_ms();
+    let confirming_purge = m.circle.as_ref().and_then(|c| c.confirm_purge.clone());
+    let mut rows: std::collections::HashMap<String, RowLink> = Default::default();
+    for b in &d.banks {
+        let removed = b.removed.is_some();
+        let st = m.edit.with_bank_link(&cid, &b.id, |l| l.local_bank_id.clone()).and_then(|local| m.edit.status(&local).cloned());
+        if let Some(r) = m.edit.with_bank_link(&cid, &b.id, |l| RowLink {
+            local_id: l.local_bank_id.clone(),
+            bank_name: st.as_ref().map(|s| s.bank_name.clone()).unwrap_or_default(),
+            missing: st.as_ref().is_some_and(|s| s.missing),
+            full_copy: super::bank_links::full_copy_offered(l, role),
+            lines: super::circle_edit_ui::standing(l, st.as_ref(), removed, role),
+        }) {
+            rows.insert(b.id.clone(), r);
+        }
+    }
+    let mut act = RowAct::None;
+    let mut add = false;
+    // (critic 65 B1) while this computer's list of shared banks can not be read, a bank it already has can not be
+    // told apart: no "Add to My Banks"
+    let links_unreadable = m.edit.unreadable().is_some();
+    let mut read_again = false;
+    section(ui, "Banks", |ui| {
+        if m.allowed(Action::AddBank) {
+            // (critic 66 I1) the other way round from "Add to My Banks": one of my banks goes into the circle
+            add = kit::primary_button(ui, "Share one of my banks here...").on_hover_text("Shares one of your banks with this circle. It stays in My Banks, connected to the circle.").clicked();
+            ui.add_space(4.0);
+        }
+        // (critic 64 I1) the two verbs, said once where they are offered
+        let offers_add = d.banks.iter().any(|b| b.removed.is_none() && !b.hidden && bank_can(role, closed, b, BankAction::Copy) && !rows.get(&b.id).is_some_and(|l| !l.missing));
+        if links_unreadable {
+            warn_box(ui, LINKS_UNREADABLE_ROW);
+            if kit::ghost_button(ui, "Try again").clicked() {
+                read_again = true;
+            }
+        } else if offers_add {
+            para(ui, &format!("{} {}", if role.can_add_banks() { ADD_HINT } else { ADD_HINT_VIEWER }, OWN_HINT));
+        }
+        if d.banks.is_empty() {
+            ui.label(theme::strong(text::EMPTY_BANKS).size(13.5));
+            para(ui, if role.can_add_banks() { text::EMPTY_BANKS_HELP_EDITOR } else { text::EMPTY_BANKS_HELP_VIEWER });
+        }
+        for b in &d.banks {
+            let link = rows.get(&b.id);
+            let present = link.is_some_and(|l| !l.missing);
+            let job = m.add_state(&cid, &b.id).cloned();
+            let adding = job.as_ref().is_some_and(|j| matches!(j.state, AddState::Waiting | AddState::Working));
+            // (round 48: after a partial "Delete for good now" nothing can be brought back or deleted again from here)
+            let claimed = m.purge_claimed.get(&b.id).copied();
+            let can_restore = claimed.is_none() && bank_can(role, closed, b, BankAction::Restore) && b.removed.as_ref().and_then(|r| r.undo_until).is_some_and(|u| u > now);
+            let can_purge = claimed.is_none() && bank_can(role, closed, b, BankAction::Purge);
+            let can_copy = !b.hidden && bank_can(role, closed, b, BankAction::Copy);
+            let buttons = row_buttons(b.removed.is_some(), can_restore, present, link.is_some_and(|l| l.full_copy), can_copy && !adding, links_unreadable);
+            let card = kit::card().inner_margin(Margin::same(8)).show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                // (critic 66 I5) after an add that was not connected, adding again is not the next step
+                let unconnected = job.as_ref().is_some_and(|j| !j.own && matches!(j.state, AddState::Done { linked: false, .. }));
+                // (and Make my own copy is not made the big button while Add can not be offered)
+                let clicked = with_actions_hinted(ui, &buttons, role.can_add_banks(), !unconnected && (present || !links_unreadable), |ui| {
+                    if b.hidden {
+                        ui.add(egui::Label::new(theme::strong(text::HIDDEN_BANK_TITLE).size(13.5)).wrap());
+                        line(ui, text::HIDDEN_BANK_LINE.to_string());
+                        line(ui, format!("version {} - {}", b.head_version, text::questions_text(b.question_count)));
+                    } else {
+                        ui.add(egui::Label::new(theme::strong(btext_shown(&b.title)).size(13.5)).wrap());
+                        let mut bits = vec![format!("by {}", btext::author(&b.author_name)), format!("version {}", b.head_version), text::questions_text(b.question_count)];
+                        let ago = text::ago(b.updated_at, now);
+                        if !ago.is_empty() {
+                            bits.push(format!("updated {ago}"));
+                        }
+                        line(ui, bits.join(" - "));
+                        // (critic 64 polish 16) only a promise the page keeps: "circle-only" stays inside the circle
+                        line(ui, if b.license == "circle-only" { format!("{}. {}", license_name(&b.license), text::reshare_line(&b.license)) } else { format!("{}.", license_name(&b.license)) });
+                        if let Some(l) = link {
+                            if !l.missing {
+                                let name = api::plain(&l.bank_name);
+                                ui.add(egui::Label::new(theme::accent(if name.is_empty() { "In My Banks.".to_string() } else { format!("In My Banks as \"{name}\"") }).size(12.5)).wrap());
+                            }
+                            for s in &l.lines {
+                                ui.add(egui::Label::new(theme::accent(s.as_str()).size(12.5)).wrap());
+                            }
+                        } else if b.is_author && b.removed.is_none() && !links_unreadable {
+                            // (section 11: a bank shared before phase D has no link on this computer)
+                            line(ui, "Your original bank is not linked. Add the circle's bank to My Banks to work on it with the circle (this adds a second bank; you can delete your original afterwards).");
+                        }
+                        if b.hide_key && b.removed.is_none() {
+                            line(ui, if role.can_add_banks() { "Answer keys hidden from viewers." } else { "Answer keys hidden for viewers: you get it without them." });
+                        }
+                        if b.is_held() {
+                            ui.add(egui::Label::new(theme::accent(text::HELD_BANK).size(12.5)).wrap());
+                        }
+                    }
+                    if let Some(n) = claimed {
+                        line(ui, text::purge_pending_line(n));
+                    } else if let Some(r) = &b.removed {
+                        line(ui, format!("Removed from the circle. {}", text::undo_line(r.undo_until, now)));
+                    }
+                    match job.as_ref().map(|j| (&j.state, j.own)) {
+                        Some((AddState::Waiting, _)) => line(ui, "Waiting for the copy before it..."),
+                        Some((AddState::Working, own)) => {
+                            ui.horizontal(|ui| {
+                                ui.add(egui::Spinner::new().size(14.0));
+                                ui.label(theme::muted(if own { "Making your own copy..." } else { "Adding it to My Banks..." }).size(12.5));
+                            });
+                        }
+                        Some((AddState::Done { bank_id, bank_name, linked: false, why }, own)) => {
+                            // (critic 64 I6, polish 8) where it is, and a way to open it; (critic 66 I5) why it is not
+                            // connected and, when adding it again can help, what to do
+                            let words = if own {
+                                format!("Your own copy \"{}\" is in My Banks. It is not linked to the circle.", api::plain(bank_name))
+                            } else {
+                                let why = why.as_deref().map_or(String::new(), |w| format!(": {w}"));
+                                let again = if present { "" } else { " Delete it in My Banks, then add it again." };
+                                format!("Added as \"{}\", not connected{why}.{again}", api::plain(bank_name))
+                            };
+                            text_row(ui, |ui| {
+                                ui.add(egui::Label::new(theme::accent(words).size(12.5)).wrap());
+                                if back_link(ui, "Open it") {
+                                    act = RowAct::OpenNew(bank_id.clone());
+                                }
+                            });
+                        }
+                        _ => {}
+                    }
+                });
+                if let Some(i) = clicked {
+                    act = match buttons[i] {
+                        RowButton::Open => link.map_or(RowAct::None, |l| RowAct::Open(l.local_id.clone())),
+                        RowButton::Add => RowAct::Add(b.id.clone(), false),
+                        RowButton::FullCopy => RowAct::FullCopy(b.id.clone()),
+                        RowButton::Own => RowAct::Add(b.id.clone(), true),
+                        RowButton::BringBack => RowAct::Restore(b.id.clone()),
+                    };
+                }
+                if let Some(AddState::Failed(p)) = job.as_ref().map(|j| &j.state) {
+                    warn_box(ui, &p.message);
+                    // (critic 69 minor 1) "Try again" only where trying again can help (not for another account's add)
+                    if p.retry && kit::ghost_button(ui, "Try again").clicked() {
+                        act = RowAct::RetryAdd(b.id.clone());
+                    }
+                }
+                // More: what is not editing (Q1).
+                let settings = b.removed.is_none() && !b.hidden && !closed && (role == Role::Owner || b.is_author);
+                let report = bank_can(role, closed, b, BankAction::Report) && !b.hidden;
+                let remove = bank_can(role, closed, b, BankAction::Remove);
+                // (owner decision a) look at the questions before adding, read only
+                let preview = b.removed.is_none() && can_copy;
+                if settings || report || remove || preview {
+                    text_row(ui, |ui| {
+                        ui.label(theme::muted("More:").size(12.5));
+                        if preview && back_link(ui, "Preview") {
+                            act = RowAct::Preview(b.id.clone());
+                        }
+                        if settings && back_link(ui, "Bank settings") {
+                            act = RowAct::Settings(b.id.clone());
+                        }
+                        if report && back_link(ui, "Report...") {
+                            act = RowAct::Report(b.id.clone());
+                        }
+                        // (critic 64 polish 11) a destructive action in the danger colour
+                        if remove && kit::danger_text_button(ui, "Remove...").clicked() {
+                            act = RowAct::AskRemove(b.id.clone());
+                        }
+                    });
+                }
+                // Removing, asked under the row.
+                if let Some(rb) = m.row_bank().filter(|rb| rb.bid == b.id) {
+                    if let Some(p) = &rb.act_problem {
+                        warn_box(ui, &p.message);
+                    }
+                    if rb.confirm_remove {
+                        body(ui, text::REMOVE_BANK);
+                        ui.horizontal_wrapped(|ui| {
+                            if kit::danger_text_button(ui, "Remove it").clicked() {
+                                act = RowAct::Remove;
+                            }
+                            if kit::ghost_button(ui, "Keep it").clicked() {
+                                act = RowAct::KeepIt;
+                            }
+                        });
+                    }
+                }
+                if can_purge {
+                    if confirming_purge.as_deref() == Some(b.id.as_str()) {
+                        body(ui, text::PURGE_BANK);
+                        ui.horizontal_wrapped(|ui| {
+                            if kit::danger_text_button(ui, "Delete it for good").clicked() {
+                                act = RowAct::Purge(b.id.clone());
+                            }
+                            if kit::ghost_button(ui, "Keep it").clicked() {
+                                act = RowAct::CancelPurge;
+                            }
+                        });
+                    } else if kit::danger_text_button(ui, "Delete for good now...").clicked() {
+                        act = RowAct::AskPurge(b.id.clone());
+                    }
+                }
+            });
+            if m.scroll_to.as_deref() == Some(b.id.as_str()) {
+                ui.scroll_to_rect(card.response.rect, Some(egui::Align::Center));
+            }
+            // The report form, under its row.
+            if m.row_bank().is_some_and(|rb| rb.bid == b.id && rb.report.is_some()) {
+                report_form(ui, m);
+            }
+            ui.add_space(3.0);
+        }
+    });
+    if let Some(bid) = d.banks.iter().find(|b| m.scroll_to.as_deref() == Some(b.id.as_str())).map(|b| b.id.clone()) {
+        m.take_scroll_to(&bid);
+    }
+    if add {
+        *out = Outcome::ShareToCircle(d.circle.id.clone());
+    }
+    if read_again {
+        m.edit.read_links_again();
+    }
+    match act {
+        RowAct::None => {}
+        RowAct::Open(local) => *out = Outcome::OpenBank(local),
+        RowAct::Add(bid, own) => m.add_bank(&bid, own),
+        RowAct::FullCopy(bid) => m.add_full_copy(&bid),
+        RowAct::OpenNew(local) => *out = Outcome::OpenBank(local),
+        RowAct::RetryAdd(bid) => m.retry_add(&cid, &bid),
+        RowAct::Restore(bid) => m.restore_bank(&bid),
+        RowAct::AskPurge(bid) => m.ask_purge(&bid),
+        RowAct::Purge(bid) => m.purge_bank(&bid),
+        RowAct::CancelPurge => m.cancel_purge(),
+        RowAct::Settings(bid) => {
+            m.open_bank(&bid);
+            return true;
+        }
+        RowAct::Preview(bid) => {
+            m.open_preview(&bid);
+            return true;
+        }
+        RowAct::Report(bid) => m.begin_report_on(&bid),
+        RowAct::AskRemove(bid) => m.ask_remove_on(&bid),
+        RowAct::Remove => m.remove_bank(),
+        RowAct::KeepIt => m.cancel_remove_bank(),
+    }
+    false
+}
+
+/// A bank row's buttons, primary first (phase D1, section 4.3): the same on the circle page and the preview. A
+/// removed bank: Bring it back. A bank this computer has: Open in My Banks (and Add a full copy where offered, and
+/// Make my own copy). Else Add to My Banks (not while the links file can not be read, critic 65 B1) and Make my
+/// own copy. `can_copy`: the person may copy it and no add of it is under way.
+fn row_buttons(removed: bool, can_restore: bool, present: bool, full_copy: bool, can_copy: bool, links_unreadable: bool) -> Vec<RowButton> {
+    let mut buttons = Vec::new();
+    if removed {
+        if can_restore {
+            buttons.push(RowButton::BringBack);
+        }
+    } else if present {
+        buttons.push(RowButton::Open);
+        if full_copy && can_copy {
+            buttons.push(RowButton::FullCopy);
+        }
+        if can_copy {
+            buttons.push(RowButton::Own);
+        }
+    } else if can_copy {
+        if !links_unreadable {
+            buttons.push(RowButton::Add);
+        }
+        buttons.push(RowButton::Own);
+    }
+    buttons
+}
+
+/// A card's content with its buttons on the right, the content wrapping in the width left over (primary first,
+/// left to right). In a narrow card the buttons go under the content. Each button says what it does on hover
+/// (critic 64 I1). Which one was clicked.
+fn with_actions_hinted(ui: &mut Ui, actions: &[RowButton], can_send: bool, primary: bool, body: impl FnOnce(&mut Ui)) -> Option<usize> {
+    if actions.is_empty() {
+        body(ui);
+        return None;
+    }
+    let gap = ui.spacing().item_spacing.x;
+    let bw: f32 = actions.iter().map(|a| button_width(ui, a.label()) + gap).sum::<f32>() - gap;
+    let avail = ui.available_width();
+    let mut clicked = None;
+    let press = |ui: &mut Ui, i: usize, clicked: &mut Option<usize>| {
+        let mut r = if i == 0 && primary { kit::primary_button(ui, actions[i].label()) } else { kit::ghost_button(ui, actions[i].label()) };
+        if let Some(h) = actions[i].hint(can_send) {
+            r = r.on_hover_text(h);
+        }
+        if r.clicked() {
+            *clicked = Some(i);
+        }
+    };
+    if avail < bw + 240.0 {
+        body(ui);
+        ui.add_space(4.0);
+        ui.horizontal_wrapped(|ui| {
+            for i in 0..actions.len() {
+                press(ui, i, &mut clicked);
+            }
+        });
+        return clicked;
+    }
+    ui.horizontal_top(|ui| {
+        let w = avail - bw - gap;
+        let h = ui
+            .allocate_ui_with_layout(egui::vec2(w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                ui.set_width(w);
+                body(ui);
+            })
+            .response
+            .rect
+            .height();
+        let size = egui::vec2(ui.available_width(), h.max(ui.spacing().interact_size.y));
+        ui.allocate_ui_with_layout(size, egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            for i in (0..actions.len()).rev() {
+                press(ui, i, &mut clicked);
+            }
+        });
+    });
+    clicked
 }
 
 fn btext_shown(s: &str) -> String {
@@ -1084,6 +1487,9 @@ fn activity_section(ui: &mut Ui, m: &mut CirclesModel) {
 
 // ---- one bank -------------------------------------------------------------------------------------------------------
 
+/// "Bank settings" (phase D1, Q1): what is not editing, for the owner and the bank's author: answer keys for
+/// viewers, the licence, the history, remove and report. No question list, no send, no merge: the bank is worked
+/// on in My Banks.
 fn bank_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
     let circle_name = m.circle.as_ref().and_then(|c| c.detail.as_ref()).map(|d| api::plain(&d.circle.name)).unwrap_or_else(|| "the circle".into());
     if back_link(ui, &format!("< {circle_name}")) {
@@ -1095,11 +1501,14 @@ fn bank_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
     let (mut retry, mut account) = (false, false);
     let Some((bank_cid, bank_bid)) = m.bank.as_ref().map(|b| (b.cid.clone(), b.bid.clone())) else { return };
     let Some(b) = m.bank.as_ref() else { return };
+    if b.preview {
+        return preview_page(ui, m, out);
+    }
     match &b.load {
         BankLoad::Loading => {
             ui.horizontal(|ui| {
                 ui.spinner();
-                ui.label(theme::muted("Opening the bank..."));
+                ui.label(theme::muted("Opening the bank's settings..."));
             });
             return;
         }
@@ -1128,16 +1537,16 @@ fn bank_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
             }
             let (cid, bid) = (bank_cid.clone(), bank_bid.clone());
             let title = m.circle.as_ref().and_then(|c| c.detail.as_ref()).and_then(|d| d.banks.iter().find(|x| x.id == bid).map(|x| x.title.clone())).unwrap_or_default();
-            super::circle_edit_ui::bank_section(ui, m, &cid, &bid, &api::plain(&title));
+            super::circle_edit_ui::history_section(ui, m, &cid, &bid, &api::plain(&title));
             return;
         }
         BankLoad::Ready(_) => {}
     }
     let Some(BankView { load: BankLoad::Ready(l), .. }) = m.bank.as_ref() else { return };
     let head = l.doc.bank.clone();
-    let questions = l.view.clone();
     let origins_note = l.doc.origins.as_array().is_some_and(|a| !a.is_empty());
 
+    ui.label(theme::muted("Bank settings").size(12.5));
     ui.add(egui::Label::new(theme::serif(btext_shown(&head.title)).size(20.0)).wrap());
     let mut bits = vec![format!("by {}", btext::author(&head.author_name)), format!("version {}", head.version), text::questions_text(head.question_count)];
     let ago = text::ago(head.committed_at, now);
@@ -1155,9 +1564,10 @@ fn bank_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
         // A viewer of a bank that hides its keys: said plainly, before anything else.
         keys_banner(ui, text::KEYS_HIDDEN_VIEWER);
     } else if head.hide_key {
-        para(ui, text::ANSWER_KEYS_HIDDEN_NOTE);
-    } else {
-        para(ui, text::ANSWER_KEYS_NOTE);
+        para(ui, text::SETTINGS_KEYS_HIDDEN_NOTE);
+    } else if !m.hide_allowed() {
+        // (critic 66 minor 10) where the switch is shown, its card says it: not twice
+        para(ui, text::SETTINGS_KEYS_NOTE);
     }
     if head.is_author && !matches!(head.held, serde_json::Value::Null | serde_json::Value::Bool(false)) {
         warn_box(ui, text::HELD_BANK);
@@ -1165,119 +1575,212 @@ fn bank_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
     if origins_note {
         para(ui, "Some questions in this bank were built on items from the public pool; their credits are kept with it.");
     }
-
-    // The actions.
-    let can_copy = m.bank_allowed(BankAction::Copy);
-    // A second working copy would take the link from the first one: while this computer has a
-    // working copy of the bank (still in the banks), only a plain copy is offered here.
-    let linked = m.edit.link_for_bank(&bank_cid, &bank_bid).map(|l| !m.edit.status(&l.local_bank_id).is_some_and(|s| s.missing));
-    let has_working = linked == Some(true);
-    let can_work = m.can_make_working_copy() && !has_working;
-    let (mut begin_copy, mut get_copy, mut cancel_copy, mut go_imported, mut work_copy) = (false, false, false, false, false);
-    section(ui, "Get a copy", |ui| {
-        let Some(b) = m.bank.as_mut() else { return };
-        match &mut b.copy {
-            CopyPanel::Closed => {
-                para(ui, if can_work { text::WORKING_COPY_LINE } else { text::COPY_LINE });
-                if head.keys_hidden {
-                    para(ui, text::COPY_NO_KEYS);
-                }
-                if has_working {
-                    line(ui, text::HAS_WORKING_COPY);
-                }
-                ui.add_enabled_ui(can_copy, |ui| begin_copy = kit::primary_button(ui, if can_work { "Make a working copy..." } else { "Get a copy..." }).clicked());
-            }
-            CopyPanel::Choosing { name } => {
-                para(ui, if can_work { text::WORKING_COPY_LINE } else { text::COPY_LINE });
-                if head.keys_hidden {
-                    para(ui, text::COPY_NO_KEYS);
-                }
-                if has_working {
-                    line(ui, text::HAS_WORKING_COPY);
-                }
-                ui.label(theme::strong("Name of your copy").size(12.5));
-                ui.add(egui::TextEdit::singleline(name).id(egui::Id::new("circle_copy_name")).desired_width(f32::INFINITY));
-                ui.add_space(6.0);
-                ui.horizontal_wrapped(|ui| {
-                    if can_work {
-                        work_copy = kit::primary_button(ui, "Make the working copy").clicked();
-                        get_copy = kit::ghost_button(ui, "Get a plain copy instead").clicked();
-                    } else {
-                        get_copy = kit::primary_button(ui, "Get the copy").clicked();
-                    }
-                    cancel_copy = kit::ghost_button(ui, "Cancel").clicked();
-                });
-            }
-            CopyPanel::Working => {
-                ui.horizontal(|ui| {
-                    ui.spinner();
-                    ui.label(theme::muted("Making your copy..."));
-                });
-            }
-            CopyPanel::Done(done) => {
-                body(ui, &format!("Done. \"{}\" is now in your banks with {}.", api::plain(&done.bank_name), text::questions_text(done.added as u32)));
-                if done.pictures_missing > 0 {
-                    para(ui, &format!("{} of {} pictures could not be fetched; those questions are shown without them.", done.pictures_missing, done.pictures));
-                }
-                if head.keys_hidden {
-                    para(ui, text::COPY_NO_KEYS_DONE);
-                }
-                para(ui, "It also appears under \"Things I imported\", where verSHion tells you if the circle sends a newer version. Your copy is never changed for you.");
-                // (a copy of the viewers' form is never the working copy, whatever this computer holds)
-                if linked.is_some() && !head.keys_hidden {
-                    line(ui, text::WORKING_COPY_DONE);
-                }
-                go_imported = link(ui, "See it under Things I imported");
-            }
-            CopyPanel::Failed(p) => {
-                warn_box(ui, &p.message);
-                begin_copy = kit::ghost_button(ui, "Try again").clicked();
+    // (critic 64 I8) the way there, on this page
+    para(ui, "The questions are worked on in My Banks.");
+    let cid_here = m.bank.as_ref().map(|b| b.cid.clone()).unwrap_or_default();
+    let local = m.edit.with_bank_link(&cid_here, &head.id, |l| l.local_bank_id.clone()).filter(|l| !m.edit.status(l).is_some_and(|s| s.missing));
+    let adding = m.add_state(&cid_here, &head.id).is_some_and(|j| matches!(j.state, AddState::Waiting | AddState::Working));
+    match local {
+        Some(l) => {
+            if kit::primary_button(ui, "Open in My Banks").clicked() {
+                *out = Outcome::OpenBank(l);
             }
         }
-    });
-    if get_copy {
-        m.get_copy();
-    }
-    if work_copy {
-        m.make_working_copy();
-    }
-    if cancel_copy {
-        m.cancel_copy();
-    }
-    if begin_copy {
-        m.begin_copy();
-    }
-    if go_imported {
-        *out = Outcome::ShowImported;
+        None if adding => {
+            ui.horizontal(|ui| {
+                ui.add(egui::Spinner::new().size(14.0));
+                ui.label(theme::muted("Adding it to My Banks...").size(12.5));
+            });
+        }
+        // (critic 65 B1) not while this computer's list of shared banks can not be read
+        None if m.edit.unreadable().is_some() => warn_box(ui, LINKS_UNREADABLE_ROW),
+        None => {
+            if kit::primary_button(ui, "Add to My Banks").clicked() {
+                let bid = head.id.clone();
+                m.add_bank(&bid, false);
+            }
+        }
     }
 
     hide_section(ui, m);
 
     let cid_now = m.bank.as_ref().map(|b| b.cid.clone()).unwrap_or_default();
-    super::circle_edit_ui::bank_section(ui, m, &cid_now, &head.id, &api::plain(&head.title));
+    super::circle_edit_ui::history_section(ui, m, &cid_now, &head.id, &api::plain(&head.title));
 
     // Author's setting, remove, report.
     bank_admin(ui, m, &head.license);
+}
 
-    // The questions.
-    heading(ui, "Questions");
-    match &questions {
-        Err(e) => warn_box(ui, &format!("The questions could not be shown: {e}")),
-        Ok(v) => {
-            for q in v.questions.iter().take(100) {
-                kit::card().inner_margin(Margin::same(8)).show(ui, |ui| {
-                    ui.set_min_width(ui.available_width());
-                    let pts = q.points.map(|p| format!(" ({} point{})", p, if p == 1.0 { "" } else { "s" })).unwrap_or_default();
-                    ui.add(egui::Label::new(theme::strong(format!("{}.{pts} {}", q.number, btext_shown(&q.stem))).size(13.0)).wrap());
-                    if q.has_image || q.has_figure {
-                        line(ui, "Has a picture. Pictures are copied with the bank.");
-                    }
-                    body_lines(ui, &q.body);
-                });
-                ui.add_space(3.0);
+/// Owner decision (a): a circle bank's questions, read only, before adding it, with the row's own buttons (critic
+/// 66 I3). A bank read in full shows its answer key, as the bank page does: the person gets it on adding the bank.
+/// A viewer of a bank that hides its keys reads the viewers' form, and is told so. Nothing here edits.
+fn preview_page(ui: &mut Ui, m: &mut CirclesModel, out: &mut Outcome) {
+    let (mut retry, mut account) = (false, false);
+    let mut act = None;
+    let Some((bank_cid, bank_bid)) = m.bank.as_ref().map(|b| (b.cid.clone(), b.bid.clone())) else { return };
+    let Some(b) = m.bank.as_ref() else { return };
+    match &b.load {
+        BankLoad::Loading => {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(theme::muted("Opening the preview..."));
+            });
+        }
+        BankLoad::Failed(p) => {
+            let p = p.clone();
+            let w = wait_of(m, &p);
+            problem_box(ui, &p, w, &mut retry, &mut account);
+        }
+        BankLoad::Ready(l) => {
+            let head = &l.doc.bank;
+            ui.label(theme::muted("Preview").size(12.5));
+            ui.add(egui::Label::new(theme::serif(btext_shown(&head.title)).size(20.0)).wrap());
+            line(ui, [format!("by {}", btext::author(&head.author_name)), format!("version {}", head.version), text::questions_text(head.question_count)].join(" - "));
+            ui.add_space(4.0);
+            let full = l.view.as_ref().is_ok_and(|v| v.form == super::pool::Served::Full);
+            act = preview_actions(ui, m, &bank_cid, &bank_bid);
+            let Some(BankView { load: BankLoad::Ready(l), .. }) = m.bank.as_ref() else { return };
+            if l.doc.bank.keys_hidden {
+                keys_banner(ui, text::KEYS_HIDDEN_VIEWER);
             }
-            if v.questions.len() > 100 {
-                para(ui, &format!("... and {} more questions.", v.questions.len() - 100));
+            para(ui, if full { "Read only: nothing here changes the bank." } else { "Read only: nothing here changes the bank. The answers are not shown." });
+            match &l.view {
+                Err(e) => warn_box(ui, &format!("The questions could not be shown: {e}")),
+                Ok(v) => {
+                    for q in v.questions.iter().take(100) {
+                        kit::card().inner_margin(Margin::same(8)).show(ui, |ui| {
+                            ui.set_min_width(ui.available_width());
+                            let pts = q.points.map(|p| format!(" ({} point{})", p, if p == 1.0 { "" } else { "s" })).unwrap_or_default();
+                            ui.add(egui::Label::new(theme::strong(format!("{}.{pts} {}", q.number, btext_shown(&q.stem))).size(13.0)).wrap());
+                            if q.has_image || q.has_figure {
+                                line(ui, "Has a picture.");
+                            }
+                            preview_body(ui, &q.body);
+                            if let Some(e) = q.explanation.as_deref().map(btext_shown).filter(|e| !e.is_empty()) {
+                                line(ui, format!("Explanation: {e}"));
+                            }
+                        });
+                        ui.add_space(3.0);
+                    }
+                    if v.questions.len() > 100 {
+                        para(ui, &format!("... and {} more questions.", v.questions.len() - 100));
+                    }
+                }
+            }
+        }
+    }
+    if retry {
+        m.retry_bank();
+    }
+    if account {
+        m.request_open_account();
+    }
+    match act {
+        Some((RowButton::Open, Some(local))) => *out = Outcome::OpenBank(local),
+        Some((RowButton::Add, _)) => m.add_bank(&bank_bid, false),
+        Some((RowButton::Own, _)) => m.add_bank(&bank_bid, true),
+        Some((RowButton::FullCopy, _)) => m.add_full_copy(&bank_bid),
+        _ => {}
+    }
+}
+
+/// The preview's buttons, as the bank's row has them (critic 66 I3), and how an add of it stands. The button
+/// pressed, with the bank in My Banks for "Open in My Banks".
+fn preview_actions(ui: &mut Ui, m: &mut CirclesModel, cid: &str, bid: &str) -> Option<(RowButton, Option<String>)> {
+    let d = m.circle.as_ref().filter(|c| c.id == cid).and_then(|c| c.detail.clone())?;
+    let e = d.banks.iter().find(|b| b.id == bid)?;
+    let (role, closed) = (d.circle.role(), d.circle.closed());
+    let local = m.edit.with_bank_link(cid, bid, |l| (l.local_bank_id.clone(), super::bank_links::full_copy_offered(l, role)));
+    let present = local.as_ref().filter(|(l, _)| !m.edit.status(l).is_some_and(|s| s.missing)).cloned();
+    let job = m.add_state(cid, bid).cloned();
+    let adding = job.as_ref().is_some_and(|j| matches!(j.state, AddState::Waiting | AddState::Working));
+    let can_copy = !e.hidden && e.removed.is_none() && bank_can(role, closed, e, BankAction::Copy);
+    let links_unreadable = m.edit.unreadable().is_some();
+    let buttons = row_buttons(false, false, present.is_some(), present.as_ref().is_some_and(|p| p.1), can_copy && !adding, links_unreadable);
+    let unconnected = job.as_ref().is_some_and(|j| !j.own && matches!(j.state, AddState::Done { linked: false, .. }));
+    let mut pressed = None;
+    if !buttons.is_empty() {
+        ui.horizontal_wrapped(|ui| {
+            for (i, b) in buttons.iter().enumerate() {
+                let mut r = if i == 0 && !unconnected { kit::primary_button(ui, b.label()) } else { kit::ghost_button(ui, b.label()) };
+                if let Some(h) = b.hint(role.can_add_banks()) {
+                    r = r.on_hover_text(h);
+                }
+                if r.clicked() {
+                    pressed = Some(*b);
+                }
+            }
+        });
+    }
+    match job.as_ref().map(|j| (&j.state, j.own)) {
+        Some((AddState::Waiting | AddState::Working, own)) => {
+            ui.horizontal(|ui| {
+                ui.add(egui::Spinner::new().size(14.0));
+                ui.label(theme::muted(if own { "Making your own copy..." } else { "Adding it to My Banks..." }).size(12.5));
+            });
+        }
+        Some((AddState::Failed(p), _)) => warn_box(ui, &p.message),
+        Some((AddState::Done { bank_name, linked, .. }, own)) => {
+            let name = api::plain(bank_name);
+            line(ui, if own { format!("Your own copy \"{name}\" is in My Banks.") } else if *linked { format!("In My Banks as \"{name}\".") } else { format!("Added as \"{name}\", not connected to the circle.") });
+        }
+        None => {}
+    }
+    ui.add_space(6.0);
+    pressed.map(|b| (b, present.map(|p| p.0)))
+}
+
+/// A previewed question's body (critic 66 I3, minor 2): choices lettered A., B., C. as on the bank page (a number
+/// would read as a decimal in a maths bank), and the answer key when the bank was read in full.
+fn preview_body(ui: &mut Ui, b: &super::pool::StudentBody) {
+    use super::pool::StudentBody;
+    let say = |ui: &mut Ui, s: String| {
+        ui.add(egui::Label::new(theme::text(s).size(12.5)).wrap());
+    };
+    match b {
+        StudentBody::Mc { choices } => {
+            for (i, c) in choices.iter().enumerate() {
+                let lock = if c.locked { "  (stays in place)" } else { "" };
+                let tick = if c.correct == Some(true) { " ✓" } else { "" };
+                say(ui, format!("   {}. {}{tick}{lock}", char::from(b'A' + (i % 26) as u8), btext_shown(&c.text)));
+            }
+        }
+        StudentBody::TrueFalse { answer } => match answer {
+            Some(a) => say(ui, format!("   True{}   False{}", if *a { " ✓" } else { "" }, if *a { "" } else { " ✓" })),
+            None => line(ui, "   True / False"),
+        },
+        StudentBody::Matching { left, word_bank, pairs } => {
+            if pairs.is_empty() {
+                for l in left {
+                    say(ui, format!("   - {}", btext_shown(l)));
+                }
+            } else {
+                for (l, r) in pairs {
+                    say(ui, format!("   - {}: {} ✓", btext_shown(l), btext_shown(r)));
+                }
+            }
+            if !word_bank.is_empty() {
+                let label = if pairs.is_empty() { "Word bank" } else { "Also in the word bank" };
+                line(ui, format!("   {label}: {}", word_bank.iter().map(|w| btext_shown(w)).collect::<Vec<_>>().join(", ")));
+            }
+        }
+        StudentBody::Blank { blanks, accepted } => {
+            if accepted.iter().any(|a| !a.is_empty()) {
+                for (i, a) in accepted.iter().enumerate() {
+                    say(ui, format!("   Blank {}: {} ✓", i + 1, a.iter().map(|w| btext_shown(w)).collect::<Vec<_>>().join(" / ")));
+                }
+            } else {
+                line(ui, format!("   {blanks} blank{} to fill in", if *blanks == 1 { "" } else { "s" }));
+            }
+        }
+        StudentBody::Short { sample } => match sample.as_deref().map(btext_shown).filter(|s| !s.is_empty()) {
+            Some(s) => say(ui, format!("   Sample answer: {s}")),
+            None => line(ui, "   Written answer"),
+        },
+        StudentBody::Multipart { parts } => {
+            for (i, p) in parts.iter().enumerate() {
+                ui.label(theme::strong(format!("   Part {}: {}", i + 1, btext_shown(&p.stem))).size(12.5));
+                preview_body(ui, &p.body);
             }
         }
     }
@@ -1381,8 +1884,8 @@ fn hide_section(ui: &mut Ui, m: &mut CirclesModel) {
                 let a = super::circle_hide_ui::decisions(
                     ui,
                     dd,
-                    if change { text::PICTURES_CHANGE_DECIDE } else { "Before the keys can be hidden, the pool needs these decisions about the copy viewers will get. Nothing has changed yet." },
-                    "Change the questions in a working copy and send a new version, then try again.",
+                    if change { text::PICTURES_CHANGE_DECIDE } else { "Before the keys can be hidden, verSHion needs these decisions about the copy viewers will get. Nothing has changed yet." },
+                    "Change the questions in the bank in My Banks and send a new version, then try again.",
                     if change { text::PICTURES_SAVE } else { "Hide the keys" },
                     false,
                 );

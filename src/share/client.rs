@@ -97,6 +97,11 @@ struct Inner {
     /// Bumped by every sign-out. A login or refresh that started under an older epoch finishes
     /// without keeping anything, so a reply arriving after "Sign out" cannot sign back in.
     epoch: u64,
+    /// (critic 77 I1) The session here is no longer the one the page shows: a refresh came back for another account
+    /// (web: another tab of this browser signed in, and the refresh cookie is its now), the session ended under the page
+    /// (a refused refresh), or it was signed out. Every job is refused, with nothing sent, until the page shows who is
+    /// signed in now ([`Client::restore`]) or someone signs in here.
+    moved: bool,
 }
 
 /// A session taken out of memory by [`Client::begin_sign_out`], still to be wiped from the vault
@@ -314,6 +319,11 @@ impl Client {
         self.lock().account.clone()
     }
 
+    /// (critic 77 I1) Jobs are refused until the page shows who is signed in now (see `Inner::moved`).
+    pub fn moved(&self) -> bool {
+        self.lock().moved
+    }
+
     pub fn knows_device(&self) -> bool {
         let i = self.lock();
         match &i.account {
@@ -402,13 +412,15 @@ impl Client {
     /// Keeps a rotated or new refresh token for `account`. If the vault refuses, the old saved
     /// token is deleted (it would be replayed next run and end the session as "stolen"); if even
     /// that fails, the account goes on the purge list.
-    fn store_refresh(&self, account: &str, token: Secret, epoch: u64) -> bool {
+    fn store_refresh(&self, account: &str, token: Secret, epoch: u64, whose: Option<&Option<String>>) -> bool {
+        // (critic 77 minor 2) a refresh is kept only while the session here is still the one whose token it presented
+        let still = |i: &Inner| i.epoch == epoch && whose.is_none_or(|w| i.account == *w);
         let retired = self.lock().retired;
-        if self.lock().epoch != epoch {
+        if !still(&self.lock()) {
             return false;
         }
         let saved = !retired && self.vault.save(&Slot::Refresh(account.to_string()), &token).is_ok();
-        if saved && self.lock().epoch != epoch {
+        if saved && !still(&self.lock()) {
             // Signed out while the keychain was writing: take it back out.
             if self.vault.clear(&Slot::Refresh(account.to_string())).is_err() {
                 self.lock().purge.insert(account.to_string());
@@ -426,7 +438,7 @@ impl Client {
             // The slot now holds the live token: deleting it later would end a good session.
             i.purge.remove(account);
         }
-        if i.epoch != epoch {
+        if !still(&i) {
             return false;
         }
         i.refresh = Some(token);
@@ -462,33 +474,52 @@ impl Client {
     /// Ends the local session (access and refresh) of the current account. The device token
     /// stays unless `forget_device`. False if a keychain delete failed.
     fn drop_session(&self, forget_device: bool) -> bool {
+        self.drop_session_if(&|_| true, forget_device).unwrap_or(true)
+    }
+
+    /// [`drop_session`](Self::drop_session), only while `still(..)` holds of the session, checked under the same lock
+    /// that ends it (critic 75 minors 1 and 2: an answer for one account never ends another's session). `None` when it
+    /// did not hold: nothing was touched.
+    fn drop_session_if(&self, still: &dyn Fn(&Inner) -> bool, forget_device: bool) -> Option<bool> {
         let account = {
             let mut i = self.lock();
+            if !still(&i) {
+                return None;
+            }
             i.access = None;
             i.access_until = None;
             i.generation += 1;
             i.refresh = None;
             i.refresh_saved = false;
+            // (critic 77 I1) the page still shows the account whose session ended: nothing goes until it shows who is
+            // signed in now (the web's refresh cookie may be another tab's account by then)
+            i.moved = true;
             i.account.take()
         };
         if self.mode != Mode::Native {
-            return true;
+            return Some(true);
         }
-        let Some(a) = account else { return true };
+        let Some(a) = account else { return Some(true) };
         let mut ok = self.clear_refresh(&a);
         if forget_device {
-            ok &= self.vault.clear(&Slot::Device(a.clone())).is_ok();
-            let mut i = self.lock();
-            i.devices.remove(&a);
-            if i.index.latest_device.as_deref() == Some(a.as_str()) {
-                i.index.latest_device = None;
-            }
-            i.index.emails.retain(|_, id| *id != a);
+            ok &= self.forget_device_of(&a);
         }
         if self.lock().index.current.as_deref() == Some(a.as_str()) {
             self.lock().index.current = None;
         }
         self.save_index();
+        Some(ok)
+    }
+
+    /// Deletes `a`'s device token here (saved and in memory) and its address mapping. False if the keychain refused.
+    fn forget_device_of(&self, a: &str) -> bool {
+        let ok = self.vault.clear(&Slot::Device(a.to_string())).is_ok();
+        let mut i = self.lock();
+        i.devices.remove(a);
+        if i.index.latest_device.as_deref() == Some(a) {
+            i.index.latest_device = None;
+        }
+        i.index.emails.retain(|_, id| id != a);
         ok
     }
 
@@ -523,16 +554,17 @@ impl Client {
 
     /// Stores what a token response carries (login, refresh). `email` is the address used to
     /// sign in (login only).
-    fn take_tokens(&self, resp: &Response, email: Option<&str>, epoch: u64) -> Result<(), ApiError> {
+    /// `whose`: a refresh, of this account's session (the account read when it started).
+    fn take_tokens(&self, resp: &Response, email: Option<&str>, epoch: u64, whose: Option<&Option<String>>) -> Result<(), ApiError> {
         let mut v = resp.json();
-        let r = self.take_tokens_from(&mut v, email, epoch);
+        let r = self.take_tokens_from(&mut v, email, epoch, whose);
         // Whatever token text is left in the parsed reply is overwritten (residual: serde_json's
         // own parse buffers, and the response bytes ureq or the browser held).
         wipe(&mut v);
         r
     }
 
-    fn take_tokens_from(&self, v: &mut Value, email: Option<&str>, epoch: u64) -> Result<(), ApiError> {
+    fn take_tokens_from(&self, v: &mut Value, email: Option<&str>, epoch: u64, whose: Option<&Option<String>>) -> Result<(), ApiError> {
         let Some(access) = take_str(v, "/access_token") else { return Err(ApiError::BadReply("no access token".into())) };
         if self.lock().epoch != epoch {
             // Signed out while this was on its way: keep nothing.
@@ -550,11 +582,17 @@ impl Client {
             let Some(account) = account else { return Err(ApiError::BadReply("no account id".into())) };
             // Signing in as someone else ends the previous account's local session first.
             let previous = self.lock().account.clone();
+            // (critic 77 minor 2) A refresh answered after another account signed in over the one whose token it
+            // presented (no sign-out between: the Enrol page): nothing of it is kept, and the account signed in now
+            // keeps its session and its saved sign-in.
+            if whose.is_some_and(|w| previous != *w) {
+                return Err(ApiError::SignedOut);
+            }
             if let Some(p) = previous.filter(|p| *p != account) {
                 self.clear_refresh(&p);
             }
             // The rotated token is kept before anything else happens: losing it ends the session.
-            if !self.store_refresh(&account, refresh, epoch) {
+            if !self.store_refresh(&account, refresh, epoch, whose) {
                 return Err(ApiError::SignedOut);
             }
             if let Some(e) = email {
@@ -572,6 +610,30 @@ impl Client {
         let mut i = self.lock();
         if i.epoch != epoch {
             return Err(ApiError::SignedOut);
+        }
+        if self.mode == Mode::Web {
+            // (critic 75 I2) The web build learns whose session it is from the same answer (the refresh cookie is
+            // whoever is signed in in this browser now), so a job kept to one account (`pool::pinned`) is held to it
+            // here too. (critic 77 minor 5) An answer that names nobody (no server does) leaves the account unknown,
+            // and a job pinned to no account is not held back by its pin. A refresh that names another account than the
+            // session here, or nobody, is held back by the rule below.
+            let named = v.pointer("/user/id").and_then(Value::as_str).map(str::to_ascii_lowercase);
+            if whose.is_some() && i.account.is_some() && named != i.account {
+                // (critic 77 I1) A refresh came back for another account than the session here (another tab of this
+                // browser signed in as it): its token is not kept, and every job is refused until the page shows who is
+                // signed in now (`restore`) or someone signs in here. The pages see the change (`publish::snapshot_of`).
+                i.account = named;
+                i.moved = true;
+                i.access = None;
+                i.access_until = None;
+                i.generation += 1;
+                return Err(ApiError::SignedOut);
+            }
+            i.account = named;
+        }
+        if email.is_some() {
+            // (critic 77 I1) a sign-in here: the page shows this account
+            i.moved = false;
         }
         drop(i.access.take());
         drop(i);
@@ -595,12 +657,21 @@ impl Client {
 
     /// One refresh, under the cross-process lock, with the lost-reply retry from the module docs.
     async fn refresh_once(&self) -> Result<(), ApiError> {
-        let epoch = self.lock().epoch;
+        let (epoch, asked_for) = {
+            let i = self.lock();
+            (i.epoch, i.account.clone())
+        };
         let _held = self.lock.acquire().await?;
         let token = match self.mode {
             Mode::Native => {
                 let (account, mem, saved) = {
                     let i = self.lock();
+                    // (critic 77 minor 1) The wait for the lock (another copy of verSHion refreshing, a keychain prompt)
+                    // may have let a sign-out and another account's sign-in through: that account's token is never
+                    // presented for this refresh (the server would rotate it and the successor would be thrown away).
+                    if i.epoch != epoch || i.account != asked_for {
+                        return Err(ApiError::SignedOut);
+                    }
                     (i.account.clone(), i.refresh.clone(), i.refresh_saved)
                 };
                 let Some(account) = account else { return Err(ApiError::SignedOut) };
@@ -610,8 +681,12 @@ impl Client {
                     match self.vault.load(&Slot::Refresh(account.clone())) {
                         Ok(Some(t)) => t,
                         Ok(None) => {
-                            self.lock().refresh = None;
-                            self.lock().account = None;
+                            // (critic 77 minor 1) only the session whose saved token is gone ends
+                            let mut i = self.lock();
+                            if i.epoch == epoch && i.account.as_deref() == Some(account.as_str()) {
+                                i.refresh = None;
+                                i.account = None;
+                            }
                             return Err(ApiError::SignedOut);
                         }
                         Err(_) => match mem {
@@ -625,11 +700,24 @@ impl Client {
                         None => return Err(ApiError::SignedOut),
                     }
                 };
-                self.lock().refresh = Some(token.clone());
+                {
+                    let mut i = self.lock();
+                    if i.epoch != epoch || i.account.as_deref() != Some(account.as_str()) {
+                        return Err(ApiError::SignedOut);
+                    }
+                    i.refresh = Some(token.clone());
+                }
                 Some(token)
             }
-            Mode::Web => None,
+            Mode::Web => {
+                if self.lock().epoch != epoch {
+                    return Err(ApiError::SignedOut);
+                }
+                None
+            }
         };
+        // Whose token this refresh presents (native: the account read above; web: the cookie of the session here now).
+        let whose = self.lock().account.clone();
         let started = (self.clock)();
         let mut retried = false;
         loop {
@@ -637,9 +725,11 @@ impl Client {
             let mut req = self.request(Method::Post, "/auth/refresh", body);
             req.timeout = Some(REFRESH_TIMEOUT);
             match self.send(req).await {
-                Ok(resp) if resp.status == 200 => return self.take_tokens(&resp, None, epoch),
+                Ok(resp) if resp.status == 200 => return self.take_tokens(&resp, None, epoch, Some(&whose)),
                 Ok(resp) if resp.status == 401 => {
-                    self.drop_session(false);
+                    // (critic 75 minor 1) Only the session whose token was refused ends: once it signed out, or another
+                    // account signed in over it, while this was on its way, the session here now is left alone.
+                    self.drop_session_if(&|i| i.epoch == epoch && i.account == whose, false);
                     return Err(ApiError::SignedOut);
                 }
                 // 429, 5xx: the token is still good; keep it.
@@ -705,10 +795,24 @@ impl Client {
         .await
     }
 
-    /// The access token to use, refreshing first when there is none or it is about to expire.
-    async fn access(&self) -> Result<(Secret, u64), ApiError> {
+    /// The session is `account`'s (or no account was asked for).
+    fn is_account(&self, account: Option<&str>) -> bool {
+        account.is_none_or(|a| self.lock().account.as_deref() == Some(a))
+    }
+
+    /// The access token to use, refreshing first when there is none or it is about to expire, for one account only
+    /// (`None`: whoever is signed in; critic 73 I2): the token handed back is read under the same
+    /// lock that says whose session it is, and once another account (or none) is signed in, `SignedOut`, with no
+    /// refresh made for it.
+    async fn access_for(&self, account: Option<&str>, resync: bool) -> Result<(Secret, u64), ApiError> {
+        // (critic 77 I1) while the session here is not the one the page shows, nothing goes but the page's own look-up
+        // of who is signed in now (`resync`)
+        let mine = |i: &Inner| (resync || !i.moved) && account.is_none_or(|a| i.account.as_deref() == Some(a));
         let seen = {
             let i = self.lock();
+            if !mine(&i) {
+                return Err(ApiError::SignedOut);
+            }
             let fresh = i.access_until.is_none_or(|t| (self.clock)() < t);
             if let (Some(a), true) = (&i.access, fresh) {
                 return Ok((a.clone(), i.generation));
@@ -721,31 +825,32 @@ impl Client {
         self.refresh_after(seen).await?;
         // Whatever the refresh produced is used as is (no second refresh for a short-lived token).
         let i = self.lock();
+        if !mine(&i) {
+            return Err(ApiError::SignedOut);
+        }
         i.access.clone().map(|a| (a, i.generation)).ok_or(ApiError::SignedOut)
     }
 
     /// An authenticated call: bearer token, one refresh-and-retry on `401 unauthorized`. The body
     /// is serialised once by the caller; each try sends a copy that is wiped when dropped.
+    ///
+    /// (critic 75 minor 2) The call is kept to the account signed in when it started, exactly like a pinned pool job
+    /// ([`authed_raw_as`](Self::authed_raw_as)): once another account signed in meanwhile, nothing more is sent (Delete
+    /// account never goes out with another account's sign-in) and the answer is `SignedOut`.
     async fn authed(&self, method: Method, path: &str, body: Option<Secret>) -> Result<Response, ApiError> {
-        for attempt in 0..2 {
-            let (token, generation) = self.access().await?;
-            let mut req = self.request(method, path, body.clone());
-            req.headers.push(("Authorization".into(), Secret::new(format!("Bearer {}", token.expose()))));
-            let resp = self.send(req).await?;
-            // Only the bearer check's 401 means "token expired". A route's own 401 (a wrong
-            // password on DELETE /account is `invalid_credentials`) is that route's answer.
-            let expired = resp.status == 401 && matches!(ApiError::from_response(&resp).code(), "unauthorized" | "");
-            if expired && attempt == 0 {
-                self.refresh_after(generation).await?;
-                continue;
-            }
-            if expired {
-                self.drop_session(false);
-                return Err(ApiError::SignedOut);
-            }
-            return if (200..300).contains(&resp.status) { Ok(resp) } else { Err(ApiError::from_response(&resp)) };
-        }
-        Err(ApiError::SignedOut)
+        self.authed_as(self.account().as_deref(), method, path, body).await
+    }
+
+    async fn authed_as(&self, account: Option<&str>, method: Method, path: &str, body: Option<Secret>) -> Result<Response, ApiError> {
+        self.authed_with(account, false, method, path, body).await
+    }
+
+    async fn authed_with(&self, account: Option<&str>, resync: bool, method: Method, path: &str, body: Option<Secret>) -> Result<Response, ApiError> {
+        let build = || self.request(method, path, body.clone());
+        // Only the bearer check's 401 means "token expired" (handled there). A route's own 401 (a wrong password on
+        // DELETE /account is `invalid_credentials`) is that route's answer.
+        let resp = self.authed_raw_with(account, resync, &build).await?;
+        if (200..300).contains(&resp.status) { Ok(resp) } else { Err(ApiError::from_response(&resp)) }
     }
 
     /// An authenticated call for the pool layer (`share::pool`): the same bearer-and-refresh handling
@@ -754,12 +859,27 @@ impl Client {
     /// Only the bearer check's own `401 unauthorized` is handled here (one refresh and retry, then
     /// signed out).
     pub(crate) async fn authed_raw(&self, build: &dyn Fn() -> Request) -> Result<Response, ApiError> {
+        self.authed_raw_as(None, build).await
+    }
+
+    /// [`authed_raw`](Self::authed_raw) for a job kept to one account (`pool::pinned`, critic 73 I2). Every try, the
+    /// one after a refresh too, goes only with that account's own sign-in: once another account signed in meanwhile
+    /// (its session ended under the request, then someone else signed in), nothing more is sent and the answer is
+    /// `SignedOut`. A 401 for it never ends the session of the account signed in now.
+    pub(crate) async fn authed_raw_as(&self, account: Option<&str>, build: &dyn Fn() -> Request) -> Result<Response, ApiError> {
+        self.authed_raw_with(account, false, build).await
+    }
+
+    async fn authed_raw_with(&self, account: Option<&str>, resync: bool, build: &dyn Fn() -> Request) -> Result<Response, ApiError> {
         for attempt in 0..2 {
-            let (token, generation) = self.access().await?;
+            let (token, generation) = self.access_for(account, resync).await?;
             let mut req = build();
             req.headers.push(("Authorization".into(), Secret::new(format!("Bearer {}", token.expose()))));
             let resp = self.send(req).await?;
             let expired = resp.status == 401 && matches!(ApiError::from_response(&resp).code(), "unauthorized" | "");
+            if expired && !self.is_account(account) {
+                return Err(ApiError::SignedOut);
+            }
             if expired && attempt == 0 {
                 self.refresh_after(generation).await?;
                 continue;
@@ -851,7 +971,7 @@ impl Client {
         if resp.status != 200 {
             return Err(ApiError::from_response(&resp));
         }
-        self.take_tokens(&resp, Some(email), epoch)
+        self.take_tokens(&resp, Some(email), epoch, None)
     }
 
     /// `POST /auth/device/enrol`: redeems the mailed code with the password; this device becomes
@@ -876,6 +996,9 @@ impl Client {
         i.epoch += 1;
         i.generation += 1;
         i.access_until = None;
+        // (critic 77 I1) signed out here: no job picks a session up again (the web's cookie may be another tab's)
+        // until someone signs in or the page looks up who is signed in now
+        i.moved = true;
         let account = i.account.take();
         if i.index.current.is_some() && i.index.current == account {
             i.index.current = None;
@@ -969,7 +1092,26 @@ impl Client {
 
     /// `GET /me`.
     pub async fn me(&self) -> Result<Me, ApiError> {
-        let resp = self.authed(Method::Get, "/me", None).await?;
+        self.me_with(false).await
+    }
+
+    async fn me_with(&self, resync: bool) -> Result<Me, ApiError> {
+        let (account, epoch) = {
+            let i = self.lock();
+            (i.account.clone(), i.epoch)
+        };
+        let resp = self.authed_with(account.as_deref(), resync, Method::Get, "/me", None).await?;
+        if resync {
+            // (critic 77 I1) The page is about to show this answer: jobs go again, unless the session moved on while this
+            // was on its way (it is then looked up again).
+            let mut i = self.lock();
+            let now = i.account.clone();
+            let same = i.epoch == epoch && (account.is_none() || now == account);
+            if !same {
+                return Err(ApiError::SignedOut);
+            }
+            i.moved = false;
+        }
         let v = resp.json();
         if self.mode == Mode::Native
             && let Some(id) = v.get("id").and_then(Value::as_str)
@@ -983,11 +1125,14 @@ impl Client {
 
     /// Picks up an existing session when the account screen opens. Native: only if a refresh
     /// token was saved (otherwise no request at all). Web: one refresh with the cookie, if any.
+    ///
+    /// (critic 77 I1) This is the page's look-up of who is signed in now: it goes while other jobs are refused (see
+    /// `Inner::moved`), and once answered for the session here now, jobs go again.
     pub async fn restore(&self) -> Result<Me, ApiError> {
         if self.mode == Mode::Native && !self.has_session() {
             return Err(ApiError::SignedOut);
         }
-        self.me().await
+        self.me_with(true).await
     }
 
     /// `POST /account/reapply` after a rejection and the waiting period.
@@ -998,10 +1143,26 @@ impl Client {
     }
 
     /// `DELETE /account` with the password. Everything local goes too, the device token included.
+    ///
+    /// (critic 75 minor 2) Only the account signed in when it was asked is deleted, and only its session and device
+    /// token here end: another account signed in while the request was on its way keeps its own.
     pub async fn delete_account(&self, password: &Secret) -> Result<(), ApiError> {
+        let account = self.account();
         let body = json_body(json!({ "password": password.expose() }));
-        self.authed(Method::Delete, "/account", Some(body)).await?;
-        if !self.drop_session(true) {
+        self.authed_as(account.as_deref(), Method::Delete, "/account", Some(body)).await?;
+        let ok = match self.drop_session_if(&|i| i.account == account, true) {
+            Some(ok) => ok,
+            // It signed out here meanwhile (its saved sign-in went then): its device token is all that is left.
+            None => match account.as_deref() {
+                Some(a) if self.mode == Mode::Native => {
+                    let ok = self.forget_device_of(a);
+                    self.save_index();
+                    ok
+                }
+                _ => true,
+            },
+        };
+        if !ok {
             return Err(ApiError::LocalCleanup);
         }
         Ok(())

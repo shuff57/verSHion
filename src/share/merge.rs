@@ -22,7 +22,8 @@ use serde_json::Value;
 
 use super::api;
 use super::browse_text as text;
-use crate::model::{Kind, KEYLESS_SENTINEL, Part, PartKind, Question, QuestionBank, is_keyless, rekeyed};
+use super::canon;
+use crate::model::{Difficulty, Kind, KEYLESS_SENTINEL, Part, PartKind, Question, QuestionBank, is_keyless, rekeyed};
 
 /// Most questions a record keeps a base for, and the most bytes of base kept for one record.
 /// Past either, the record has no base and the person is told a merge is not possible for it.
@@ -49,6 +50,16 @@ pub struct Snap {
     /// Imported without its answer key.
     #[serde(default)]
     pub keyless: bool,
+    /// (critic 83 I1) The difficulty (`Some(None)`: none). `None`: not known, a base an earlier build wrote (it kept no
+    /// difficulty), so nothing is counted as changed for it; written back as not known, never as "none".
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "known_difficulty")]
+    pub difficulty: Option<Option<Difficulty>>,
+}
+
+/// A `difficulty` that is in the file is known, also when it is `null` (none). One this build can not read is not known
+/// (the link is kept, never dropped for it).
+fn known_difficulty<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Option<Difficulty>>, D::Error> {
+    Ok(serde_json::from_value::<Option<Difficulty>>(Value::deserialize(d)?).ok())
 }
 
 /// One imported question, linked to the bank by its local id.
@@ -74,11 +85,17 @@ impl PartialEq for BaseQuestion {
 }
 
 fn explanation_of(q: &Question) -> Option<String> {
-    if is_keyless(q) { None } else { q.explanation.clone().filter(|e| !e.trim().is_empty()) }
+    if is_keyless(q) { None } else { not_blank(&q.explanation) }
+}
+
+/// (critic 81 I1) An explanation that is blank as the server stores it (white space, a byte-order mark alone) is none.
+/// (critic 83 minor) Also a base's: an earlier build kept a byte-order mark alone as an explanation.
+fn not_blank(e: &Option<String>) -> Option<String> {
+    e.clone().filter(|e| !canon::block(e).trim().is_empty())
 }
 
 pub fn snap_of(q: &Question, image_sha: Option<String>) -> Snap {
-    Snap { stem: q.stem.clone(), kind: q.kind.clone(), points: q.points, topics: q.topics.clone(), explanation: explanation_of(q), image: image_sha, keyless: is_keyless(q) }
+    Snap { stem: q.stem.clone(), kind: q.kind.clone(), points: q.points, topics: q.topics.clone(), explanation: explanation_of(q), image: image_sha, keyless: is_keyless(q), difficulty: Some(q.difficulty) }
 }
 
 pub fn base_of(q: &Question, qid: &str, fp: &str, sha: Option<String>) -> BaseQuestion {
@@ -118,11 +135,58 @@ pub fn strip_key(k: &Kind) -> Kind {
 }
 
 fn shape(k: &Kind) -> String {
-    serde_json::to_string(&strip_key(k)).unwrap_or_default()
+    serde_json::to_string(&strip_key(&canon_kind(k))).unwrap_or_default()
 }
 
-/// Only the key of a question, for comparing.
+/// (critic 79 I3) The choices and key of a question with every text in the form verSHion's server stores it (see
+/// `canon`): a question the server stored composed is the same as the bank's decomposed one.
+fn canon_kind(k: &Kind) -> Kind {
+    let b = |s: &str| canon::block(s).into_owned();
+    let answers = |a: &[crate::model::Answer]| a.iter().map(|x| crate::model::Answer { text: b(&x.text), correct: x.correct, locked: x.locked }).collect();
+    match k {
+        Kind::Mc { answers: a } => Kind::Mc { answers: answers(a) },
+        Kind::Tf { correct } => Kind::Tf { correct: *correct },
+        Kind::Matching { pairs, distractors } => Kind::Matching { pairs: pairs.iter().map(|p| crate::model::Pair { left: b(&p.left), right: b(&p.right) }).collect(), distractors: distractors.iter().map(|d| b(d)).collect() },
+        Kind::Blank { accept } => Kind::Blank { accept: accept.iter().map(|a| a.iter().map(|x| b(x)).collect()).collect() },
+        Kind::Short { sample } => Kind::Short { sample: b(sample) },
+        Kind::Multipart { parts } => Kind::Multipart {
+            parts: parts
+                .iter()
+                .map(|p| Part {
+                    stem: b(&p.stem),
+                    kind: match &p.kind {
+                        PartKind::Mc { answers: a } => PartKind::Mc { answers: answers(a) },
+                        PartKind::Tf { correct } => PartKind::Tf { correct: *correct },
+                        PartKind::Short { sample } => PartKind::Short { sample: b(sample) },
+                    },
+                })
+                .collect(),
+        },
+    }
+}
+
+/// (critic 79 I3) Two texts are the same as the server stores them.
+fn same_text(a: &str, b: &str) -> bool {
+    a == b || canon::block(a) == canon::block(b)
+}
+
+fn same_opt_text(a: &Option<String>, b: &Option<String>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(a), Some(b)) => same_text(a, b),
+        _ => false,
+    }
+}
+
+/// Topics are one-line texts: the server also collapses their white space, and (critic 81 I1) drops the blank and the
+/// repeated ones (see `canon::topics`).
+fn same_topics(a: &[String], b: &[String]) -> bool {
+    a == b || canon::topics(a) == canon::topics(b)
+}
+
+/// Only the key of a question, for comparing (its texts as the server stores them).
 fn key_value(k: &Kind) -> String {
+    let k = &canon_kind(k);
     let v: Value = match k {
         Kind::Mc { answers } => answers.iter().map(|a| a.correct).collect::<Vec<_>>().into(),
         Kind::Tf { correct } => (*correct).into(),
@@ -287,11 +351,16 @@ pub struct Row {
     pub carry_key: bool,
     /// You entered a key into a question that came without one.
     pub ours_rekeyed: bool,
+    /// (critic 86 I1) The decision is there only because this computer has no record of the question's difficulty in the
+    /// earlier version (a base an earlier build wrote): not "both changed".
+    pub unrecorded: bool,
 }
 
 impl Row {
     pub fn needs_decision(&self) -> bool {
-        self.kind == RowKind::Conflict && self.choice == Choice::Undecided
+        // (critic 85 m1) a question new in the circle that may be the person's own is left for them to decide too; (critic 90
+        // I2) and a change of the circle's beside a difficulty this computer has no record of
+        matches!(self.kind, RowKind::Conflict | RowKind::NewInTheirs | RowKind::TheirsChanged) && self.choice == Choice::Undecided
     }
 }
 
@@ -305,6 +374,9 @@ pub struct MergePlan {
     pub rows: Vec<Row>,
     /// Questions in the bank that are not linked to the pool (yours, or copied in): left alone.
     pub unlinked: usize,
+    /// (critic 78 I1) Questions new in the pool's version that this bank already had, unlinked and the same (see
+    /// [`match_new_to_unlinked`]): linked, not added twice.
+    pub matched: usize,
     pub license: Option<(String, String)>,
     pub new_credit: String,
 }
@@ -335,14 +407,16 @@ struct Delta {
     points: bool,
     topics: bool,
     image: bool,
+    /// (critic 83 I1)
+    difficulty: bool,
 }
 
 impl Delta {
     fn any(&self) -> bool {
-        self.stem || self.shape || self.key || self.expl || self.points || self.topics || self.image
+        self.stem || self.shape || self.key || self.expl || self.points || self.topics || self.image || self.difficulty
     }
     fn only_key(&self) -> bool {
-        self.key && !(self.stem || self.shape || self.expl || self.points || self.topics || self.image)
+        self.key && !(self.stem || self.shape || self.expl || self.points || self.topics || self.image || self.difficulty)
     }
 }
 
@@ -357,6 +431,17 @@ fn pic(s: &Option<String>) -> String {
 
 fn pts(p: Option<f64>) -> String {
     p.map_or("none".into(), |p| p.to_string())
+}
+
+/// (critic 83 I1) A difficulty in the question editor's words.
+fn level(d: Option<Difficulty>) -> String {
+    match d {
+        Some(Difficulty::Low) => "Easy",
+        Some(Difficulty::Medium) => "Medium",
+        Some(Difficulty::High) => "Hard",
+        None => "none",
+    }
+    .into()
 }
 
 /// What the person is shown for each changed field.
@@ -377,10 +462,14 @@ fn diffs(base: &BaseQuestion, ours: &Question, theirs: &Question, theirs_sha: &O
     }
     if on(od.expl, td.expl) {
         let s = |e: &Option<String>| e.as_deref().map_or("none".to_string(), text::shown);
-        v.push(FieldDiff { field: "Explanation", base: s(&b.explanation), ours: s(&oexp), theirs: s(&texp) });
+        v.push(FieldDiff { field: "Explanation", base: s(&not_blank(&b.explanation)), ours: s(&oexp), theirs: s(&texp) });
     }
     if on(od.points, td.points) {
         v.push(FieldDiff { field: "Points", base: pts(b.points), ours: pts(ours.points), theirs: pts(theirs.points) });
+    }
+    if on(od.difficulty, td.difficulty) {
+        // (critic 86 I1) a base that kept none: the earlier version is kept, only this computer has no record of it
+        v.push(FieldDiff { field: "Difficulty", base: b.difficulty.map_or_else(|| NOT_RECORDED.to_string(), level), ours: level(ours.difficulty), theirs: level(theirs.difficulty) });
     }
     if on(od.topics, td.topics) {
         v.push(FieldDiff { field: "Topics", base: b.topics.join(", "), ours: ours.topics.join(", "), theirs: theirs.topics.join(", ") });
@@ -406,13 +495,15 @@ fn ours_delta(base: &BaseQuestion, o: &Question) -> Delta {
         key_value(&o.kind) != key_value(&b.kind)
     };
     Delta {
-        stem: o.stem != b.stem,
+        stem: !same_text(&o.stem, &b.stem),
         shape: shape(&o.kind) != shape(&b.kind),
         key,
-        expl: explanation_of(o) != b.explanation,
+        expl: !same_opt_text(&explanation_of(o), &not_blank(&b.explanation)),
         points: o.points != b.points,
-        topics: o.topics != b.topics,
+        topics: !same_topics(&o.topics, &b.topics),
         image: o.image.as_ref().map(|i| &i.file) != base.local_image.as_ref(),
+        // (a base that kept none is no evidence of a change: see `build_plan`)
+        difficulty: b.difficulty.is_some_and(|d| d != o.difficulty),
     }
 }
 
@@ -423,6 +514,9 @@ pub fn ours_changed(base: &BaseQuestion, q: &Question) -> bool {
 
 /// The text a two-way review shows where the earlier version is not known.
 pub const NOT_KEPT: &str = "(the earlier version is not kept)";
+
+/// (critic 86 I1) The earlier version's difficulty, where the base kept none (an earlier build wrote it).
+pub const NOT_RECORDED: &str = "not recorded on this computer";
 
 /// Two-way fallback for a circle bank whose base version is gone: every linked question that both
 /// sides have is treated as changed on both sides, so a difference is a conflict the person
@@ -446,6 +540,8 @@ pub fn unknown_base(bank: &QuestionBank, links: &[(String, String)], theirs: &[T
             b.snap.points = Some(-1.0);
             b.snap.topics = vec![NOT_KEPT.to_string()];
             b.snap.explanation = Some(NOT_KEPT.to_string());
+            // (critic 83 I1: the difficulty is the bank's own; a circle's that differs is still a decision, like every
+            // difference here)
             b.snap.image = theirs.iter().find(|t| t.qid == *qid).and_then(|t| t.sha.clone()).filter(|_| q.image.is_some());
             b.local_image = q.image.as_ref().map(|i| i.file.clone());
         }
@@ -459,24 +555,108 @@ fn theirs_delta(base: &BaseQuestion, t: &Theirs) -> Delta {
     let tk = is_keyless(&t.q);
     let key = if b.keyless && tk { false } else { b.keyless != tk || key_value(&t.q.kind) != key_value(&b.kind) };
     Delta {
-        stem: t.q.stem != b.stem,
+        stem: !same_text(&t.q.stem, &b.stem),
         shape: shape(&t.q.kind) != shape(&b.kind),
         key,
-        expl: explanation_of(&t.q) != b.explanation,
+        expl: !same_opt_text(&explanation_of(&t.q), &not_blank(&b.explanation)),
         points: t.q.points != b.points,
-        topics: t.q.topics != b.topics,
+        topics: !same_topics(&t.q.topics, &b.topics),
         image: t.sha != b.image,
+        difficulty: b.difficulty.is_some_and(|d| d != t.q.difficulty),
     }
 }
 
-/// Whether yours and the pool's end up the same on everything but pictures.
+/// Whether the pool's question differs from what the bank was last in step with (`base`).
+pub fn theirs_changed(base: &BaseQuestion, t: &Theirs) -> bool {
+    theirs_delta(base, t).any()
+}
+
+/// Whether yours and the pool's end up the same on everything but pictures, (critic 79 I3) their texts compared as the
+/// server stores them.
 fn same_result(o: &Question, t: &Question) -> bool {
-    o.stem == t.stem
+    same_text(&o.stem, &t.stem)
         && shape(&o.kind) == shape(&t.kind)
         && key_value(&o.kind) == key_value(&t.kind)
-        && explanation_of(o) == explanation_of(t)
+        && same_opt_text(&explanation_of(o), &explanation_of(t))
         && o.points == t.points
-        && o.topics == t.topics
+        && same_topics(&o.topics, &t.topics)
+        && o.difficulty == t.difficulty
+}
+
+/// (critic 80 I1, critic 79 minor 5) The same question in everything a send carries but its picture (compared apart):
+/// its words, choices and key, and also its difficulty and figure.
+pub fn same_question(o: &Question, t: &Question) -> bool {
+    Sig::of(o) == Sig::of(t)
+}
+
+/// (critic 81 minor 4) What [`same_question`] compares, with every text in the form the server stores it: worked out
+/// once per question, so a pass that compares many questions with many (the circle's new ones with the bank's)
+/// normalises each text once, not once per comparison.
+#[derive(PartialEq)]
+struct Sig {
+    stem: String,
+    shape: String,
+    key: String,
+    explanation: Option<String>,
+    points: Option<f64>,
+    topics: Vec<String>,
+    difficulty: Option<crate::model::Difficulty>,
+    /// The figure and its values (by name): a number the same whether written `1` or `1.0`, a text as stored. (critic 83
+    /// minor) Only the values the server keeps: it drops one that is not a number, a text or true/false (what this app
+    /// writes for a number that is not finite is `null`; a list).
+    figure: Option<(String, Vec<(String, FigureValue)>)>,
+}
+
+#[derive(PartialEq)]
+enum FigureValue {
+    Number(f64),
+    Text(String),
+    Flag(bool),
+}
+
+impl Sig {
+    fn of(q: &Question) -> Sig {
+        let value = |v: &Value| match v {
+            Value::Number(n) => n.as_f64().map(FigureValue::Number),
+            Value::String(s) => Some(FigureValue::Text(canon::block(s).into_owned())),
+            Value::Bool(b) => Some(FigureValue::Flag(*b)),
+            Value::Null | Value::Array(_) | Value::Object(_) => None,
+        };
+        Sig {
+            stem: canon::block(&q.stem).into_owned(),
+            shape: shape(&q.kind),
+            key: key_value(&q.kind),
+            explanation: explanation_of(q).map(|e| canon::block(&e).into_owned()),
+            points: q.points,
+            topics: canon::topics(&q.topics),
+            difficulty: q.difficulty,
+            figure: q.figure.as_ref().map(|f| (f.id.clone(), f.params.iter().filter_map(|(k, v)| Some((k.clone(), value(v)?))).collect())),
+        }
+    }
+}
+
+/// (critic 86 I1) Why a question is a decision when the base kept no difficulty. (critic 87 I1) Never with a choice made for
+/// the person: who changed it is not known, so either default could undo someone's rating. (Never naming verSHion: critic
+/// 72 I1.)
+fn unrecorded_note(old_version: u64) -> String {
+    format!("This computer has no record of this question's difficulty in version {old_version}, so it is not known who changed it. Choose which to keep.")
+}
+
+/// (critic 90 I2) The pool changed the question otherwise, and its difficulty differs from the person's where this computer has
+/// no record of it in `old_version`: what each choice takes, and what keeping theirs gives up.
+fn changed_unrecorded_note(old_version: u64) -> String {
+    format!("The pool changed this question since version {old_version}. Its difficulty also differs from yours, and this computer has no record of its difficulty in version {old_version}, so it is not known whose rating is newer. Take the pool's version to get its changes and its rating, or keep yours: the pool's changes to this question are then not kept.")
+}
+
+/// (critic 87 m1) The two questions differ in their difficulty and in nothing else a send carries (their pictures compared
+/// apart): keeping both would add a second copy that only rates it differently.
+fn only_difficulty_differs(o: &Question, t: &Question) -> bool {
+    if o.difficulty == t.difficulty {
+        return false;
+    }
+    let mut same = o.clone();
+    same.difficulty = t.difficulty;
+    same_question(&same, t)
 }
 
 /// Builds the review. `theirs` is the pool's version (pictures not needed); `bank` is the target.
@@ -518,6 +698,7 @@ pub fn build_plan(
             note: None,
             carry_key: false,
             ours_rekeyed: false,
+            unrecorded: false,
         };
         let Some(o) = ours else {
             row.kind = RowKind::RemovedLocally;
@@ -527,7 +708,7 @@ pub fn build_plan(
             continue;
         };
         linked += 1;
-        let od = ours_delta(b, o);
+        let mut od = ours_delta(b, o);
         row.ours_rekeyed = b.snap.keyless && od.key;
         let Some(i) = ti else {
             row.kind = RowKind::RemovedInTheirs;
@@ -539,9 +720,28 @@ pub fn build_plan(
             continue;
         };
         let t = &theirs[i];
-        let td = theirs_delta(b, t);
+        let mut td = theirs_delta(b, t);
+        // (critic 83 I1) A base that kept no difficulty (an earlier build's, or none known) can not say who changed it:
+        // where the two sides differ, both count as changed, so it is never taken silently either way. (critic 86 I1) What
+        // each side is known to have changed apart from it says how the row is worded and what it starts from.
+        let known = (od.any(), td.any());
+        let unrecorded = b.snap.difficulty.is_none() && o.difficulty != t.q.difficulty;
+        if unrecorded {
+            od.difficulty = true;
+            td.difficulty = true;
+        }
         row.title = title_of(&o.stem);
         row.diffs = diffs(b, o, &t.q, &t.sha, od, td);
+        // (critic 90 I2) The pool changed something else and the person nothing known: that change is the pool's, said and
+        // counted so (never behind a "difficulty not recorded" label), with nothing chosen (the difficulty is not known to be
+        // either's) and the note saying what keeping theirs gives up.
+        if unrecorded && known == (false, true) {
+            row.kind = RowKind::TheirsChanged;
+            row.options = vec![Choice::Take, Choice::Keep];
+            row.note = Some(changed_unrecorded_note(old_version));
+            rows.push(row);
+            continue;
+        }
         match (od.any(), td.any()) {
             (false, false) => row.kind = RowKind::Unchanged,
             (false, true) => {
@@ -571,7 +771,8 @@ pub fn build_plan(
                     row.note = Some("The pool changed this question and you entered its answer key. The pool's wording is taken and your key is kept.".into());
                 } else {
                     row.kind = RowKind::Conflict;
-                    row.options = vec![Choice::Ours, Choice::Theirs, Choice::Both];
+                    // (critic 87 m1) never a second copy that differs only in its difficulty
+                    row.options = if !od.image && !td.image && only_difficulty_differs(o, &t.q) { vec![Choice::Ours, Choice::Theirs] } else { vec![Choice::Ours, Choice::Theirs, Choice::Both] };
                     if row.ours_rekeyed && is_keyless(&t.q) {
                         if shape(&o.kind) == shape(&t.q.kind) {
                             row.carry_key = true;
@@ -580,14 +781,19 @@ pub fn build_plan(
                             row.options = vec![Choice::Ours, Choice::Both];
                             row.note = Some("You entered an answer key and the pool changed the choices, so the pool's version can not take your key. Keep yours, or keep both.".into());
                         }
+                    } else if unrecorded && !(known.0 && known.1) {
+                        // (critic 86 I1) Only the difficulty, which this computer has no record of, makes it a decision: never
+                        // "both changed". (critic 87 I1) Nothing is chosen for the person: the pool's version could undo a
+                        // rating of theirs, and theirs a colleague's.
+                        row.unrecorded = true;
+                        row.note = Some(unrecorded_note(old_version));
                     }
                 }
             }
         }
         rows.push(row);
     }
-    for (i, t) in theirs.iter().enumerate().filter(|(i, _)| !used[*i]) {
-        let _ = i;
+    for t in theirs.iter().enumerate().filter(|(i, _)| !used[*i]).map(|(_, t)| t) {
         rows.push(Row {
             kind: RowKind::NewInTheirs,
             title: title_of(&t.q.stem),
@@ -602,6 +808,7 @@ pub fn build_plan(
             note: None,
             carry_key: false,
             ours_rekeyed: false,
+            unrecorded: false,
         });
     }
     MergePlan {
@@ -612,9 +819,105 @@ pub fn build_plan(
         new_version,
         rows,
         unlinked: bank.questions.len().saturating_sub(linked),
+        matched: 0,
         license,
         new_credit,
     }
+}
+
+/// (critic 78 I1) A question new in the pool's version that this bank already has, not linked yet and the same in
+/// everything (`same_picture` says whether the pictures are the same too): the person's own question that reached the
+/// pool's version without this bank learning its id (a send whose answer was lost). It is linked to the pool's
+/// question instead of being offered as new, so it is never added twice. Each one is matched once, in order.
+pub fn match_new_to_unlinked(plan: &mut MergePlan, bank: &QuestionBank, theirs: &[Theirs], same_picture: &dyn Fn(&Question, &Theirs) -> bool, note: &str) {
+    let mut taken: Vec<String> = plan.rows.iter().filter_map(|r| r.local_id.clone()).collect();
+    // (critic 81 minor 4) each question's texts normalised once for the whole pass
+    let mut sigs: Option<Vec<Sig>> = None;
+    for row in plan.rows.iter_mut().filter(|r| r.kind == RowKind::NewInTheirs) {
+        let Some(t) = theirs.iter().find(|t| Some(t.index) == row.theirs_index && t.qid == row.theirs_qid) else { continue };
+        let sigs = sigs.get_or_insert_with(|| bank.questions.iter().map(Sig::of).collect());
+        let theirs_sig = Sig::of(&t.q);
+        // (every question the base links has a row, so `taken` holds it: only an unlinked one is matched; critic 79
+        // minor 5: the same difficulty and figure too)
+        let ours = bank.questions.iter().zip(sigs.iter()).find(|(q, sig)| !taken.contains(&q.id) && **sig == theirs_sig && same_picture(q, t)).map(|(q, _)| q);
+        let Some(q) = ours else { continue };
+        taken.push(q.id.clone());
+        row.kind = RowKind::Unchanged;
+        row.local_id = Some(q.id.clone());
+        row.title = title_of(&q.stem);
+        row.choice = Choice::Undecided;
+        row.options = Vec::new();
+        row.note = Some(note.to_string());
+        plan.unlinked = plan.unlinked.saturating_sub(1);
+        plan.matched += 1;
+    }
+}
+
+/// What [`rebase_own_send`] found of a send whose answer was lost.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct OwnSend {
+    /// The version holds something that send changed or added: it is the person's own send.
+    pub own: bool,
+    /// The bank's questions (by local id) that send changed or added, whose base is now what it carried.
+    pub resent: Vec<String>,
+    /// Of those, the ones it added (new to the circle then).
+    pub added: Vec<String>,
+    /// (critic 85 m4) How many questions the send carried with the circle's id, and how many of them the version holds as
+    /// sent.
+    pub carried: usize,
+    pub matched: usize,
+}
+
+/// (critic 80 I1, critic 83 I2, critic 84 I2) A send from this bank whose answer was lost, and `mine`, the version it made
+/// (the person's own version right after the one it was based on, read from the circle; the newest or an older one).
+/// `sent` is what the send carried: each question of the bank as sent, with the circle's id it went with (empty: new to
+/// the circle then). Each sent question that version holds as sent becomes its base, so the merge compares the circle's
+/// newest with what the person sent, never with the version before it: a colleague's later change to it is theirs to
+/// take, a correction made since is "changed only by you", and an added one is linked, never added twice. `linked`: the
+/// circle's ids the link already knows (a question new in `mine` has none of them). `known`: the base said what each
+/// question was before the send (not the two-way fallback), so whether the send changed it can be told.
+pub fn rebase_own_send(base: &mut Vec<BaseQuestion>, linked: &[&str], sent: &[(&str, &Question)], mine: &[Theirs], same_picture: &dyn Fn(&Question, &Theirs) -> bool, known: bool) -> OwnSend {
+    let mut out = OwnSend::default();
+    let rebased = |t: &Theirs, local: &str, q: &Question| {
+        let mut nb = base_of(&t.q, &t.qid, &t.fp, t.sha.clone());
+        nb.local_id = local.to_string();
+        nb.local_image = q.image.as_ref().map(|i| i.file.clone());
+        nb
+    };
+    // (critic 81 minor 4) each question's texts normalised once for the whole pass
+    let sigs: Vec<Sig> = mine.iter().map(|t| Sig::of(&t.q)).collect();
+    let mut taken: Vec<&str> = Vec::new();
+    for (qid, q) in sent.iter().filter(|(qid, _)| !qid.is_empty()) {
+        out.carried += 1;
+        let sig = Sig::of(q);
+        let Some(t) = mine.iter().zip(&sigs).find(|(t, s)| t.qid == *qid && **s == sig && same_picture(q, t)).map(|(t, _)| t) else { continue };
+        out.matched += 1;
+        let Some(b) = base.iter_mut().find(|b| b.qid == *qid && b.local_id == q.id) else { continue };
+        // (critic 85 m3) evidence only against a base that says what the question was: in a two-way merge every question
+        // differs from it, also one a colleague's version holds as the send carried it, unchanged
+        out.own |= known && theirs_changed(b, t);
+        // (critic 84 I2) "you sent this" only of what the send changed
+        if known && ours_changed(b, q) {
+            out.resent.push(q.id.clone());
+        }
+        *b = rebased(t, &q.id, q);
+    }
+    // the questions it added: each linked once, in order, to a question new in that version, the same and with the same
+    // picture; never to one the link already knows, nor for a bank question already linked
+    for (_, q) in sent.iter().filter(|(qid, _)| qid.is_empty()) {
+        if base.iter().any(|b| b.local_id == q.id) {
+            continue;
+        }
+        let sig = Sig::of(q);
+        let found = mine.iter().zip(&sigs).find(|(t, s)| !t.qid.is_empty() && !linked.contains(&t.qid.as_str()) && !taken.contains(&t.qid.as_str()) && **s == sig && same_picture(q, t));
+        let Some((t, _)) = found else { continue };
+        taken.push(&t.qid);
+        base.push(rebased(t, &q.id, q));
+        out.own = true;
+        out.resent.push(q.id.clone());
+        out.added.push(q.id.clone());
+    }
+    out
 }
 
 // ---- applying ---------------------------------------------------------------------------------------------------
@@ -658,17 +961,43 @@ pub fn apply_merge(bank: &mut QuestionBank, plan: &MergePlan, fetched: &[Theirs]
     let mut new_base: Vec<BaseQuestion> = Vec::new();
     for row in &plan.rows {
         let old_base = row.local_id.as_ref().and_then(|id| base.iter().find(|x| x.local_id == *id));
-        match row.kind {
+        // (critic 88 I3) a change of yours that may have been undone in the pool since, given up for the pool's version: taken
+        // as a change of the pool's is
+        let kind = if row.kind == RowKind::OursChanged && row.choice == Choice::Take { RowKind::TheirsChanged } else { row.kind };
+        match kind {
             RowKind::Unchanged | RowKind::OursChanged => {
                 if let Some(ob) = old_base {
-                    new_base.push(ob.clone());
+                    let mut nb = ob.clone();
+                    if row.theirs_index.is_some() {
+                        let t = find(row)?;
+                        if row.kind == RowKind::Unchanged {
+                            // (critic 85 I2) the pool's version is what the bank is in step with now: also after the same
+                            // change on both sides, which the old base would count as still to send
+                            nb.snap = snap_of(&t.q, t.sha.clone());
+                        } else if nb.snap.difficulty.is_none() {
+                            // (critic 85 I1) a base an earlier build wrote: the difficulty the pool's version has (the same as
+                            // the bank's, or the row would be a decision), so a later difficulty-only edit is counted
+                            nb.snap.difficulty = Some(t.q.difficulty);
+                        }
+                    }
+                    new_base.push(nb);
+                } else if row.base_id.is_empty()
+                    && row.theirs_index.is_some()
+                    && let Some(q) = row.local_id.as_ref().and_then(|id| b.questions.iter().find(|q| q.id == *id))
+                {
+                    // (critic 78 I1) a question this bank had that is the pool's new one: linked to it, not added;
+                    // (critic 80 I1) also one changed since it was sent, whose base is then the pool's
+                    let t = find(row)?;
+                    let mut nb = base_of(q, &t.qid, &t.fp, t.sha.clone());
+                    nb.snap = snap_of(&t.q, t.sha.clone());
+                    new_base.push(nb);
                 }
             }
             RowKind::TheirsChanged | RowKind::Conflict => {
                 let id = row.local_id.clone().unwrap_or_default();
                 let pos = b.questions.iter().position(|q| q.id == id).ok_or("A question of the bank went missing.")?;
                 let t = find(row)?;
-                let (take, both) = match (row.kind, row.choice) {
+                let (take, both) = match (kind, row.choice) {
                     (RowKind::TheirsChanged, Choice::Take) | (RowKind::Conflict, Choice::Theirs) => (true, false),
                     (RowKind::TheirsChanged, Choice::Keep) | (RowKind::Conflict, Choice::Ours) => (false, false),
                     (RowKind::Conflict, Choice::Both) => (false, true),
