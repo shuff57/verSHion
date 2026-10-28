@@ -2389,13 +2389,15 @@ impl CircleEditModel {
             // restart) is told by the bank as the read found it: what it gave the circle's difficulty is in the news again. (round 19,
             // critic 99 m6) Only where that write may have happened (the links file said the banks file was next, and no try of it
             // failed since): a question she set to the circle's difficulty herself during a hold is her choice, never the app's
-            let ran = link.pass_times.is_some() && !self.inherit_held.contains_key(&local);
+            // (critic 101 m1) `pass_times` is written before the safety copy and the banks file, so it alone does not say the banks
+            // write happened: the bank's time does (`after`, the time the pass wrote). Without that, a crash or a failed safety copy
+            // with an unwritable links file could leave `pass_times` on file with the banks never written, and the pass would be
+            // recorded as done. (A later edit of that same bank after such a failure can still look like the write.)
+            let ran = link.pass_times.is_some_and(|(_, after)| banks[pos].modified >= after) && !self.inherit_held.contains_key(&local);
             let already = if ran { inherited_before(&link, &banks[pos]) } else { Vec::new() };
             // (round 19, critic 99 m2) such a pass is done: what differs from the circle's now was put back by her since (Put mine
             // back, or her own edit), and is never taken again; it is listed as hers, back. (critic 101 m1) `ran` alone says it:
-            // "Put all of mine back" can leave `already` empty, and the pass must not run again over her put-back. A held pass
-            // drops `pass_times` from the file, so only a banks write that failed *and* a links write that could not say so at
-            // once could make this skip an inherit that never happened.
+            // "Put all of mine back" can leave `already` empty, and the pass must not run again over her put-back.
             if only.is_none() && ran {
                 self.update_link(&local, |l| {
                     // (round 19, critic 99 m3) an unclear send's time moves with the pass, as it did in the session that ran it

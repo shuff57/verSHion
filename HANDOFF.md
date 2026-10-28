@@ -56,7 +56,7 @@ Reports: `docs/critic-reports/2026-10-27-circles-phaseD1-critic101.md` and `-cri
 | # | Finding | Fix |
 |---|---------|-----|
 | 1 | c101 I1: `finish_merge` wrote the links file before the merged bank, through an unchecked caller save. A failed banks write left the link advanced, the bank stale and her merge choices lost | the model writes all banks, **checked**, before `replace_link`; on failure the bank is restored and the page says nothing was changed, with Apply changes again. `banks_saved()` clears a stale "edits aren't saved" warning after the write |
-| 2 | c102 I1: an under-review head returned before the `Learning::Held` arm, so a failed save was drawn as a calm "You can keep working here" with no Try again, while the badge said "couldn't save" | the `held` warning is applied after the state is chosen (as round 19 did for `unsaved`): the line is replaced in the warning colour, Try again first, a still-useful action (sign in) and History kept. The normal `Held` arm is untouched |
+| 2 | c102 I1: an under-review head returned before the `Learning::Held` arm, so a failed save was drawn as a calm "You can keep working here" with no Try again, while the badge said "couldn't save" | the `held` warning is applied after the state is chosen (as round 19 did for `unsaved`): where the line would mislead it is replaced, elsewhere the warning is added after it; warning colour, Try again first, a still-useful action (sign in) kept. The normal `Held` arm is untouched |
 | 3 | c101 m1: "Put all of mine back" emptied `inherited_before`, so a restart re-ran the pass over her put-back | the round-19 guard now fires on `ran` (the pass's banks write is known to have happened). A held pass drops `pass_times`, so only both files unwritable at once could mask it |
 | 4 | c102 m1: "Dismiss hides this list", but Dismiss deletes it for good | `NEWS_DISMISS` says it removes the list for good, with the offer to put hers back |
 | 5 | c102 m2: the badge's "newer version" hover promised "Get latest … brings it in" where the page cannot offer it | the hover says the bank's page says what she can do |
@@ -65,14 +65,21 @@ One existing test changed **deliberately**: `bank_links_fix18_tests::c98_m6_the_
 
 ### Verification (2026-10-27 late evening, live tree)
 
-- `cargo test --lib`: **2006 passed, 5 failed, 3 ignored** (2001 before + the 5 new; the 5 are the known share-core/vishion ones).
+- `cargo test --lib`: **2007 passed, 5 failed, 3 ignored** (2001 before + the 6 new; the 5 are the known share-core/vishion ones).
 - `cargo build --bins`: EXIT 0. `cargo check --lib --target wasm32-unknown-unknown`: EXIT 0 (23 pre-existing warnings).
-- Mutation: scratch `/tmp/d1mut21` (HEAD + live `src/share/`, own target `/tmp/d1mut21-target`, script `/tmp/mut21.py`). m0 pristine: 5/5 pass. m1–m5 each fail their pinning test. Logs `/tmp/mut21-m*.log`.
+- Mutation: scratch `/tmp/d1mut21` (HEAD + live `src/share/`, own target `/tmp/d1mut21-target`, script `/tmp/mut21.py`). m0 pristine: 6/6 pass. m1–m6 each fail their pinning test. Logs `/tmp/mut21-m*.log`.
+
+### Re-check of the fix diff (focused, same evening)
+
+One critic re-checked only `git diff a02c12d -- src/share/`: **fixes hold**, no blocker or important, two minors — both fixed in the same round. Report: `2026-10-27-circles-phaseD1-recheck.md`.
+
+- the held warning replaced every state's line, losing a removal's bring-back deadline and the sent-unread explanation and pushing History where there is no menu for it: it now replaces only where the line would mislead ("You can keep working here", "works as usual") and appends elsewhere;
+- `pass_times` alone did not prove the pass's banks write: `ran` now also requires `bank.modified >= after`, so a crash or a failed safety copy cannot record a pass that never wrote the banks. New test `c101_m1_a_pass_times_write_…`; six mutants killed (m1–m6).
 
 ### Screenshots (2026-10-27 late evening, `/tmp/d1shots/`)
 
 - `news21-{light,dark}-{1280,760,420}.png` — the news list with the new Dismiss words. `news21-dark-420.png` replaces the stale `news20-dark-420.png` (which still showed the 60-char stem from before round 20); the new dark frame shows the 28-char stem and three-line rows, matching light.
-- `held21-{light,dark}-{1280,760,420}.png` — the Held save failure drawn over the signed-out strip: red panel, "your own edits aren't saved either", Try again first, the sign-in button kept, History. Fixtures rebuilt by `/tmp/fixture21.py` from the news fixture (difficulty pass pending, `banks.json.tmp` a directory).
+- `held21-{light,dark}-{1280,760,420}.png` — the Held save failure drawn over the signed-out strip: red panel, "your own edits aren't saved either", Try again first, the sign-in button kept. Fixtures rebuilt by `/tmp/fixture21.py` from the news fixture (difficulty pass pending, `banks.json.tmp` a directory). Recaptured after the re-check narrowing: the signed-out state keeps its own line and the warning follows it.
 - **Not captured**: the under-review variant of that strip (needs a signed-in check, i.e. a live read) and the merge save-failure page (a merge needs a circle read). Both are pinned by `c102_i1_…` and `c101_i1_…`.
 
 ## Verification of rounds 19-20 (before the scoped fix round)
@@ -117,8 +124,8 @@ Fixtures were made by a temporary `#[ignore]` test appended to `bank_links_fix19
 
 ## What is left (in order)
 
-1. **Focused critic re-check of the fix diff** (`git diff a02c12d -- src/share/`), read-only: do the five fixes hold, and did they introduce a new class? Then commit D1 locally as done.
-2. If it passes: **commit D1 locally** and **ask the owner about the Tidy change**. Local commits are fine; never push. See memory `circles-loop-authorisation`.
+1. **D1 is ready to close**: the fix round and its focused re-check both hold (2007 passed / 5 known failures / 3 ignored; bins and wasm green). The next step is the owner's: ask about the Tidy change (`src/tidy.rs` belongs to another session; do not touch it).
+2. Local commits only; never push. See memory `circles-loop-authorisation`.
 
 ## Decisions taken by the owner (2026-10-27)
 

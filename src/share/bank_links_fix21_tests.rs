@@ -17,6 +17,7 @@ use super::bank_links_fix9_tests::*;
 use super::bank_links_fix_tests::*;
 use super::bank_links_tests::*;
 use super::circle_edit::*;
+use super::circle_links::AtRead;
 use super::circles::CirclesModel;
 use super::circles_tests::*;
 use super::publish::AccountSnapshot;
@@ -123,6 +124,28 @@ fn c101_m1_put_all_back_while_the_links_file_cant_be_written_survives_a_restart(
     assert!(!link.inherit && link.at_read.is_none() && link.pass_times.is_none(), "the pass is done");
     let news = link.difficulty_news.expect("the news");
     assert!(news.questions.iter().all(|q| q.put_back), "{news:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A links file that says the pass wrote the banks next, but whose banks write never happened (a crash, or a safety copy
+/// that failed with a links file that could not say so): the next start is not told the pass ran, so it runs it.
+#[test]
+fn c101_m1_a_pass_times_write_whose_banks_write_never_happened_runs_again() {
+    let dir = fresh_dir("m1crash");
+    let (bank, mut l) = pending();
+    // the links file says the pass was about to write the banks (its times are the pass's), the bank still her own
+    l.at_read = Some(l.base.iter().filter(|b| b.snap.difficulty.is_some()).map(|b| AtRead { id: b.local_id.clone(), difficulty: Some(Difficulty::Low) }).collect());
+    l.pass_times = Some((bank.modified, bank.modified + 10));
+    l.difficulty_news = None;
+    let saved: Saved = Arc::default();
+    let mut e = dir_model(&dir, recording(&saved));
+    e.add_link(l).unwrap();
+    let mut banks = vec![bank];
+    let out = signed_out();
+    e.frame(now(), &out);
+    assert!(e.sync(&mut banks), "the pass runs and writes the banks");
+    assert_eq!((banks[0].questions[0].difficulty, banks[0].questions[1].difficulty), (Some(Difficulty::High), None), "the circle's difficulties are in");
+    assert_eq!(saved.lock().unwrap().len(), 1, "the banks file was written");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

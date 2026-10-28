@@ -345,18 +345,21 @@ fn strip_view_known(i: &StripInput) -> StripView {
     // (critic 102 I1) the circle's difficulty could not be saved into the bank, and with it her own edits: said in the
     // warning colour with Try again whatever else the strip says, including the states (under review, offline, signed
     // out) that return before the `Learning::Held` arm. That arm already says exactly this, so it is not said twice.
+    // (re-check minor) where the state's own line does not mislead, it is kept and the warning added after it: a removal's
+    // deadline and the "your earlier changes were sent" explanation are not lost to it.
     if let Some((why, tries)) = i.status.and_then(|s| s.held.as_ref()) {
         let held = super::circles_text::held_line(why, *tries);
         if !v.line.contains(held.as_str()) {
             v.warn = true;
-            v.line = format!("Shared with {}. {held}", circle_name(i.link));
-            v.busy = false;
+            if v.line.contains("You can keep working here") || v.line.contains("works as usual") {
+                // the state would say she may keep working while nothing is being written
+                v.line = format!("Shared with {}. {held}", circle_name(i.link));
+            } else {
+                v.line = format!("{} {}", v.line.replace(UP_TO_DATE, "").trim_end(), held);
+            }
             // the actions that would meet the held pass are out; one she can still take (sign in, say) stays
             v.buttons.retain(|b| !matches!(b, StripButton::Send | StripButton::CheckNow | StripButton::GetLatest | StripButton::TreatInStep | StripButton::TryAgain));
             v.buttons.insert(0, StripButton::TryAgain);
-            if !v.buttons.contains(&StripButton::History) {
-                v.buttons.push(StripButton::History);
-            }
         }
     }
     v
