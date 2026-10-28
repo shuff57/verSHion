@@ -186,8 +186,18 @@ that used the lost-job branch now script 503.
 Deferred: the missing-picture fetch for an unticked question; narrowing the harness 404 fallback (the `JobKind::Base`
 disconnected branch lost its test); decision/label refusal positions (keyless is mapped).
 
-Next: the tick-box drawing (`SendView.partial`/`notice`/`ReadFailed`/`retry_partial`), the picture fetch, then the
-staging round-trip (needs the owner's yes).
+**Piece 5, committed: the visible summary.** The Ready page draws the plan 4.7 heading, the intro, one row per change
+(kind, the bank's question number, the stem cut to one line at 1280 and a second line at 420), a tick box whose
+accessible name carries the question and stem, `N of M ticked`, Tick all/Untick all, and `Send N change(s)` — disabled
+with nothing ticked, with "Tick at least one change". Reading shows the spinner and waits; ReadFailed shows its stored
+reason (session ended, daily limit, network) with Try again; Unavailable shows the state's line with **Get latest** and
+Send everything. The notice is drawn above the rows; an in-step copy says there is nothing to send and has no Send;
+after a partial send the result says "Sent version N with X of your Y changes. Z stay on this computer, not sent."
+72 partial-send tests; full `cargo test --lib`: 2080 passed, 5 known failed, 3 ignored. No screenshots: the Ready state
+needs a live circle read (the local rig on 18791 now makes it reachable; no GUI automation was run).
+
+Next: the missing-picture fetch for an unticked question, the harness 404 fallback narrowing, then the staging
+round-trip (needs the owner's yes).
 
 ## What is left (in order)
 

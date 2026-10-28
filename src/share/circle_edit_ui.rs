@@ -80,12 +80,15 @@ fn counts(a: u32, c: u32, r: u32) -> String {
 
 // ---- send my changes ------------------------------------------------------------------------------------------
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, PartialEq)]
 enum SendAct {
     None,
     Back,
     Send,
     Retry,
+    RetryPartial,
+    Toggle(String, bool),
+    TickAll(bool),
     SendAnyway,
     CancelLarge,
     Merge,
@@ -95,6 +98,100 @@ enum SendAct {
     Pictures(super::circle_hide_ui::PictureAct),
 }
 
+/// The send summary's words (plan 4.7): each change's kind, the row's first line, and the sentence above the rows.
+const TICK_INTRO: &str = "Tick the changes to send. Unticked ones stay on this computer, still shown as unsent.";
+/// A copy in step with its base has nothing to send and no list to tick. (The second sentence is the page's old wording,
+/// kept so what it has said about an in-step copy stays recognisable.)
+const IN_STEP: &str = "This copy is in step with the circle, so there is nothing to send. Nothing in your copy differs from the version it was made from.";
+
+fn kind_word(k: super::partial_send::SendKind) -> &'static str {
+    use super::partial_send::SendKind;
+    match k {
+        SendKind::Changed => "Changed",
+        SendKind::Added => "Added",
+        SendKind::Removed => "Removed",
+    }
+}
+
+/// "Changed  Q3", or plain "Removed" for a removal a bounded link no longer has a question number for.
+fn row_tag(row: &super::partial_send::SendRow) -> String {
+    match row.number {
+        Some(n) => format!("{}  Q{n}", kind_word(row.kind)),
+        None => kind_word(row.kind).to_string(),
+    }
+}
+
+/// The tick box's accessible name: its kind, the question number, and the stem when this copy still has it, so a
+/// screen-reader user hears which question a row is (two bounded removals stay distinguishable by their number).
+pub(super) fn row_name(row: &super::partial_send::SendRow) -> String {
+    let kind = kind_word(row.kind);
+    let number = row.number.map(|n| format!("question {n}"));
+    match (&row.stem, number) {
+        (Some(stem), Some(n)) => format!("{kind}, {n}: \"{}\"", api::plain(stem)),
+        (None, Some(n)) => format!("{kind}, {n}"),
+        (Some(stem), None) => format!("{kind}: \"{}\"", api::plain(stem)),
+        (None, None) => kind.to_string(),
+    }
+}
+
+/// The tick box of one row: the visible tag, and the full row as its accessible name.
+fn tick_box(ui: &mut Ui, row: &super::partial_send::SendRow, on: &mut bool) -> bool {
+    let resp = ui.checkbox(on, theme::text(row_tag(row)));
+    let name = row_name(row);
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, ui.is_enabled(), *on, &name));
+    resp.changed()
+}
+
+/// "Send 2 changes", "Send 1 change".
+fn send_label(n: usize) -> String {
+    if n == 1 { "Send 1 change".into() } else { format!("Send {n} changes") }
+}
+
+/// The send summary's first line: what is sent, where, and the version it is based on.
+fn send_heading(title: &str, circle: Option<&str>, base: u64) -> String {
+    let to = match circle {
+        Some(c) => format!("Send my changes to \"{title}\" ({c})."),
+        None => format!("Send my changes to \"{title}\"."),
+    };
+    format!("{to} Based on version {base}.")
+}
+
+/// (phase D3, plan 4.7) What a send that left changes behind says: what went, and what stays on this computer.
+pub(super) fn partial_sent_line(version: u64, sent: usize, total: usize) -> String {
+    let left = total - sent;
+    let stays = if left == 1 { "1 change stays on this computer, not sent.".to_string() } else { format!("{left} changes stay on this computer, not sent.") };
+    format!("Sent version {version} with {sent} of your {total} changes. {stays}")
+}
+
+/// One change's row: its tick box (kind and question number) and the stem in quotes, cut to the room it has. At a
+/// narrow width the stem goes on its own line under the box (plan 4.8); otherwise it follows on the same line. Returns
+/// the new tick state when the person changed it.
+fn change_row(ui: &mut Ui, row: &super::partial_send::SendRow, ticked: bool) -> Option<bool> {
+    let mut on = ticked;
+    let mut changed = false;
+    let stem = row.stem.as_deref().map(|s| format!("\"{}\"", api::plain(s)));
+    let narrow = ui.available_width() < 520.0;
+    if narrow {
+        changed |= tick_box(ui, row, &mut on);
+        if let Some(stem) = &stem {
+            ui.indent(("send_row", &row.local), |ui| {
+                ui.add(egui::Label::new(theme::text(stem)).truncate());
+            });
+        }
+    } else {
+        ui.horizontal(|ui| {
+            changed |= tick_box(ui, row, &mut on);
+            if let Some(stem) = &stem {
+                ui.add(egui::Label::new(theme::text(stem)).truncate());
+            }
+        });
+    }
+    changed.then_some(on)
+}
+
+/// The send page. (phase D3, plan 4.7) When the base version's body is read, the page lists the changes with a tick
+/// box each: the kind, the bank's own question number and the stem, then how many are ticked and the Send button with
+/// its count. The plan's per-row "Compare" links are not drawn: the D2 compare view is not built yet.
 fn send_page(ui: &mut Ui, e: &mut CircleEditModel, now: i64) {
     let mut act = SendAct::None;
     let mut msg;
@@ -113,22 +210,97 @@ fn send_page(ui: &mut Ui, e: &mut CircleEditModel, now: i64) {
             act = SendAct::Back;
         }
         ui.add_space(4.0);
-        ui.add(egui::Label::new(theme::serif(format!("Send my changes: \"{}\"", v.title)).size(20.0)).wrap());
+        // (phase D3, plan 4.7) Once the base version's body is read, the summary's own words say what is sent and
+        // from which version; the summary itself is drawn while the page is the person's to act on.
+        let editing = matches!(v.stage, SendStage::Editing);
+        // (phase D3) A copy in step has nothing to send: no list, no Send, and no "this adds a new version" beside it.
+        let in_step = matches!(&v.partial, PartialSend::Ready { changes, .. } if changes.ids().is_empty());
+        let heading = match &v.partial {
+            PartialSend::Ready { base, .. } if editing => send_heading(&v.title, e.send_circle_name().map(|n| api::plain(n)).as_deref(), *base),
+            _ => format!("Send my changes: \"{}\"", v.title),
+        };
+        ui.add(egui::Label::new(theme::serif(heading).size(20.0)).wrap());
         ui.add_space(2.0);
+        // (phase D3) The tick list, or what stands in its way. No per-row "Compare" links: the D2 compare view is not
+        // built yet (see this page's own note).
+        if editing {
+            match &v.partial {
+                PartialSend::Ready { changes, ticked, rows, .. } => {
+                    if let Some(n) = &v.notice {
+                        warn_box(ui, n);
+                        ui.add_space(4.0);
+                    }
+                    // (phase D3) Nothing differs: there is no list to tick, and the page says plainly that there is
+                    // nothing to send (no "you can still send it" beside a Send it does not offer).
+                    if changes.ids().is_empty() {
+                        line(ui, IN_STEP);
+                    } else {
+                        line(ui, TICK_INTRO);
+                        ui.add_space(4.0);
+                        for row in rows {
+                            if let Some(on) = change_row(ui, row, ticked.contains(&row.local)) {
+                                act = SendAct::Toggle(row.local.clone(), on);
+                            }
+                        }
+                        ui.add_space(4.0);
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(theme::text(format!("{} of {} ticked.", ticked.len(), changes.ids().len())));
+                            ui.add_space(8.0);
+                            if kit::ghost_button(ui, "Tick all").clicked() {
+                                act = SendAct::TickAll(true);
+                            }
+                            ui.label(theme::muted("·"));
+                            if kit::ghost_button(ui, "Untick all").clicked() {
+                                act = SendAct::TickAll(false);
+                            }
+                        });
+                    }
+                    ui.add_space(6.0);
+                }
+                PartialSend::Reading => {
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label(theme::muted(PARTIAL_READING));
+                    });
+                    ui.add_space(6.0);
+                }
+                // (phase D3) A read that may yet work keeps the page and its note field; Send waits for Try again. The
+                // generic line is followed by the reason the read kept (a session that ended, the daily limit, the
+                // network) when it says more.
+                PartialSend::ReadFailed(why) => {
+                    warn_box(ui, PARTIAL_READ_FAILED);
+                    if why != PARTIAL_READ_FAILED && !why.is_empty() {
+                        line(ui, why);
+                    }
+                    if kit::ghost_button(ui, "Try again").clicked() {
+                        act = SendAct::RetryPartial;
+                    }
+                    ui.add_space(6.0);
+                }
+                // (phase D3, plan 4.7) The base can not be had: the whole bank is sent, said plainly.
+                PartialSend::Unavailable(why) => {
+                    warn_box(ui, why);
+                    ui.add_space(6.0);
+                }
+            }
+        }
         // What is about to go: once sent, the "Sent" box says what went instead.
         if !done {
-            match &v.changes {
-                Some(c) if c.known && c.total() == 0 => line(ui, "Nothing in your copy differs from the version it was made from. You can still send it, but there is nothing new to say."),
-                Some(c) if c.known => line(ui, format!("Since your copy last matched the circle: {}.", counts(c.added as u32, c.changed as u32, c.removed as u32))),
-                // (critic 88 I2) counted but for a difficulty: what is counted, and why a difficulty may be missing (the
-                // strip says the same)
-                // (round 18, critic 98 minor 5) after "Use my bank as it is" the send includes the difficulties: nothing contradicts it
-                Some(c) if c.partial() && e.sends_as_is(&v.local_id) => line(ui, format!("Since your copy last matched the circle: {}.", counts(c.added as u32, c.changed as u32, c.removed as u32))),
-                Some(c) if c.partial() => line(ui, format!("Since your copy last matched the circle: {}. {}", counts(c.added as u32, c.changed as u32, c.removed as u32), text::difficulty_caveat(e.base_version_of(&v.local_id).unwrap_or(0)))),
-                Some(_) => line(ui, format!("{} The circle works them out when you send.", text::NO_RECORD)),
-                None => line(ui, "Counting what changed..."),
+            // (phase D3) The summary's tick list replaces the counts line it is made of.
+            if !matches!(v.partial, PartialSend::Ready { .. }) {
+                match &v.changes {
+                    Some(c) if c.known && c.total() == 0 => line(ui, IN_STEP),
+                    Some(c) if c.known => line(ui, format!("Since your copy last matched the circle: {}.", counts(c.added as u32, c.changed as u32, c.removed as u32))),
+                    // (critic 88 I2) counted but for a difficulty: what is counted, and why a difficulty may be missing (the
+                    // strip says the same)
+                    // (round 18, critic 98 minor 5) after "Use my bank as it is" the send includes the difficulties: nothing contradicts it
+                    Some(c) if c.partial() && e.sends_as_is(&v.local_id) => line(ui, format!("Since your copy last matched the circle: {}.", counts(c.added as u32, c.changed as u32, c.removed as u32))),
+                    Some(c) if c.partial() => line(ui, format!("Since your copy last matched the circle: {}. {}", counts(c.added as u32, c.changed as u32, c.removed as u32), text::difficulty_caveat(e.base_version_of(&v.local_id).unwrap_or(0)))),
+                    Some(_) => line(ui, format!("{} The circle works them out when you send.", text::NO_RECORD)),
+                    None => line(ui, "Counting what changed..."),
+                }
             }
-            if matches!(v.stage, SendStage::Editing) {
+            if matches!(v.stage, SendStage::Editing) && !in_step {
                 // (round 19, critic 100 minor 9) "restore one later" only to someone who can (the owner, the bank's author)
                 line(ui, if v.perm.can_rewind() { "This adds a new version to the circle's bank. The older versions stay in the history, and you can restore one later." } else { "This adds a new version to the circle's bank. The older versions stay in the history." });
             }
@@ -168,8 +340,19 @@ fn send_page(ui: &mut Ui, e: &mut CircleEditModel, now: i64) {
         ui.add_space(6.0);
         match &v.stage {
             SendStage::Done(s) => {
+                let mut lines = sent_lines(s, v.perm.can_rewind());
+                // (phase D3, plan 4.7) A send that left changes behind says what went and what stayed here, in place
+                // of the server's counts. The selection is the page's own (`partial` is not reset by the send), so it
+                // is exactly what was sent.
+                if s.version > 0
+                    && let PartialSend::Ready { changes, ticked, .. } = &v.partial
+                    && !ticked.is_empty()
+                    && ticked.len() < changes.ids().len()
+                {
+                    lines[0] = partial_sent_line(s.version, ticked.len(), changes.ids().len());
+                }
                 section(ui, "Sent", |ui| {
-                    for (i, l) in sent_lines(s, v.perm.can_rewind()).iter().enumerate() {
+                    for (i, l) in lines.iter().enumerate() {
                         if i == 0 {
                             body(ui, l);
                         } else {
@@ -359,15 +542,34 @@ fn send_page(ui: &mut Ui, e: &mut CircleEditModel, now: i64) {
         });
         ui.add_space(6.0);
         let blocker = e.send_blocker();
+        // (phase D3, plan 4.7 and 6) The Send button says how many changes go, and with nothing ticked it is disabled:
+        // the page says what to do instead of relying on the send's own refusal. A copy with nothing differing has no
+        // Send at all: there is nothing to send.
+        let (send_text, no_tick) = match &v.partial {
+            PartialSend::Ready { ticked, .. } => (send_label(ticked.len()), ticked.is_empty()),
+            PartialSend::Unavailable(_) => ("Send everything".to_string(), false),
+            _ => ("Send".to_string(), false),
+        };
+        let unavailable = matches!(v.partial, PartialSend::Unavailable(_));
         ui.horizontal_wrapped(|ui| {
-            if ui.add_enabled(blocker.is_none(), |ui: &mut Ui| kit::primary_button(ui, "Send")).clicked() {
+            if !in_step && ui.add_enabled(blocker.is_none() && !no_tick, |ui: &mut Ui| kit::primary_button(ui, &send_text)).clicked() {
                 act = SendAct::Send;
+            }
+            // (phase D3, plan 4.7) The plan's line offers Get latest; the way to it is here, as on a 409.
+            if unavailable && kit::ghost_button(ui, "Get latest").clicked() {
+                act = SendAct::Merge;
             }
             if kit::ghost_button(ui, "Cancel").clicked() {
                 act = SendAct::Back;
             }
         });
-        if let Some(b) = blocker {
+        if no_tick && !in_step {
+            line(ui, TICK_ONE);
+        }
+        if let Some(b) = blocker
+            && !in_step
+            && !matches!(v.partial, PartialSend::Reading | PartialSend::ReadFailed(_))
+        {
             line(ui, b);
         }
     }
@@ -392,6 +594,9 @@ fn finish_send(_ui: &mut Ui, e: &mut CircleEditModel, act: SendAct, msg: String,
         SendAct::Back => e.close(),
         SendAct::Send => e.send(),
         SendAct::Retry => e.retry_act(),
+        SendAct::RetryPartial => e.retry_partial(),
+        SendAct::Toggle(local, on) => e.toggle_change(&local, on),
+        SendAct::TickAll(on) => e.tick_all(on),
         SendAct::SendAnyway => e.confirm_large_send(),
         SendAct::CancelLarge => e.cancel_large_send(),
         SendAct::Note => e.back_to_note(),

@@ -64,6 +64,64 @@ impl BodyChanges {
     }
 }
 
+/// (phase D3, plan 4.7) What kind of change a send summary row is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SendKind {
+    Changed,
+    Added,
+    Removed,
+}
+
+/// (phase D3, plan 4.7) One row of the send summary as the page draws it: a change's kind, the question's number,
+/// and the stem in quotes. `number` is the question's place among this bank's questions (a removal's place in the
+/// base); both are `None` for a removal whose base snapshot a bounded link no longer keeps, which the page lists as a
+/// plain "Removed" row.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SendRow {
+    /// The local id the tick box toggles (`toggle_change`).
+    pub local: String,
+    pub kind: SendKind,
+    pub number: Option<usize>,
+    pub stem: Option<String>,
+}
+
+/// (phase D3, plan 4.7) The send summary's rows, in the order the page draws them: this bank in order (changed and
+/// added questions as they stand here), then the removals in the base's order. A removal lists the base's
+/// last-known stem from `link.base`; when the link is bounded and kept no snapshot for it, the row has no stem and
+/// takes its number from the pair's place in `link.qids`, so two such removals can still be told apart. Pure: no UI,
+/// no network, no files.
+///
+/// A removal's number is its 1-based place in `link.base`. That is the base order as this copy keeps it; after a
+/// partial send `circle_links::after_partial_send` can leave a question's snapshot out when this build could not read
+/// it, so a later summary's removal numbers can shift by one in that rare case (the local ids and the list itself do
+/// not change).
+pub fn send_rows(link: &CircleLink, bank: &QuestionBank, changes: &BodyChanges) -> Vec<SendRow> {
+    let mut rows = Vec::new();
+    for (i, q) in bank.questions.iter().enumerate() {
+        let kind = if changes.changed.contains(&q.id) {
+            SendKind::Changed
+        } else if changes.added.contains(&q.id) {
+            SendKind::Added
+        } else {
+            continue;
+        };
+        rows.push(SendRow { local: q.id.clone(), kind, number: Some(i + 1), stem: Some(q.stem.clone()) });
+    }
+    for (i, b) in link.base.iter().enumerate() {
+        if changes.removed.contains(&b.local_id) {
+            rows.push(SendRow { local: b.local_id.clone(), kind: SendKind::Removed, number: Some(i + 1), stem: Some(b.snap.stem.clone()) });
+        }
+    }
+    for id in &changes.removed {
+        if !link.base.iter().any(|b| b.local_id == *id) {
+            // A bounded link: the pairs keep the base order even when their snapshots were not kept.
+            let number = link.qids.iter().position(|p| p.local == *id).map(|i| i + 1);
+            rows.push(SendRow { local: id.clone(), kind: SendKind::Removed, number, stem: None });
+        }
+    }
+    rows
+}
+
 /// One question of the composed bank, and the circle id it keeps (none: new to the circle).
 struct Slot {
     value: Value,

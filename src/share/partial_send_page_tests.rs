@@ -4,7 +4,8 @@
 //! unticked removal is put back and keeps its pair, a base that can not be had sends the whole bank said plainly,
 //! nothing ticked refuses the send, and an edit made while the send was in flight shows as unsent afterwards.
 //!
-//! The drawing is the next piece: these tests drive the model only.
+//! The drawing is the next piece: these tests drive the model only. (phase D3, piece 5) The tests at the end draw
+//! the page itself, at 1280 and 420, with the existing `drawn` / `click_text` helpers.
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -12,12 +13,13 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 
 use super::bank_links_fix11_tests::version_path;
-use super::bank_links_fix4_tests::{background, owner};
+use super::bank_links_fix4_tests::{background, ctx, owner};
 use super::bank_links_fix_tests::{QC, linked_from, qfull, served_qs};
 use super::bank_links_tests::{LOCAL, QA, QB, heads, hex};
 use super::circle_edit::*;
 use super::circle_links::{CircleLink, changes_since, payload_of};
 use super::circles::CirclesModel;
+use super::circles_phasec_tests::click_text;
 use super::circles_tests::{Script, model, now, ready};
 use super::merge::{Choice, RowKind};
 use super::partial_send::BodyChanges;
@@ -681,4 +683,429 @@ fn d3_a_send_over_a_held_version_goes_as_the_whole_bank() {
     let payload = put_payload(&puts(&s).last().expect("the send went out"));
     assert_eq!(payload, expected, "the whole bank goes over the held version");
     assert_eq!(question_stems(&payload).len(), 4, "the unticked addition is still in the whole bank: {payload}");
+}
+
+// ---- the drawing: the summary and its tick boxes (plan 4.7 and 4.8) --------------------------------------------------------
+
+/// The raw text, box and colour of each drawn text, `width` wide (the same helper the other page tests use).
+fn drawn(width: f32, draw: &mut dyn FnMut(&mut egui::Ui)) -> Vec<(String, egui::Rect, egui::Color32)> {
+    let ctx = ctx();
+    let mut all = Vec::new();
+    for _ in 0..2 {
+        let input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 6000.0))), ..Default::default() };
+        let out = ctx.run_ui(input, |ui| {
+            egui::CentralPanel::default().show(ui, |ui| draw(ui));
+        });
+        all = out
+            .shapes
+            .iter()
+            .filter_map(|s| if let egui::epaint::Shape::Text(t) = &s.shape { Some((t.galley.text().to_string(), t.galley.rect.translate(t.pos.to_vec2()), t.galley.job.sections.first().map_or(t.fallback_color, |x| x.format.color))) } else { None })
+            .collect();
+        out.drop_without_applying_deltas();
+    }
+    all
+}
+
+/// The Send page as the Circles tab draws it.
+fn page(width: f32, m: &mut CirclesModel) -> Vec<(String, egui::Rect, egui::Color32)> {
+    drawn(width, &mut |ui| super::circle_edit_ui::draw_page(ui, m))
+}
+
+/// Every drawn text with whether egui cut it. `galley.text()` is the full job text, so a cut is seen only through
+/// `elided`.
+fn elided(width: f32, draw: &mut dyn FnMut(&mut egui::Ui)) -> Vec<(String, bool)> {
+    let ctx = ctx();
+    let mut all = Vec::new();
+    for _ in 0..2 {
+        let input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 6000.0))), ..Default::default() };
+        let out = ctx.run_ui(input, |ui| {
+            egui::CentralPanel::default().show(ui, |ui| draw(ui));
+        });
+        all = out
+            .shapes
+            .iter()
+            .filter_map(|s| if let egui::epaint::Shape::Text(t) = &s.shape { Some((t.galley.text().to_string(), t.galley.elided)) } else { None })
+            .collect();
+        out.drop_without_applying_deltas();
+    }
+    all
+}
+
+/// Every drawn text stays inside `width` (nothing spills out of the page).
+fn within(shapes: &[(String, egui::Rect, egui::Color32)], width: f32) {
+    for (t, r, _) in shapes {
+        assert!(r.min.x >= -0.5 && r.max.x <= width + 0.5, "{width}: {t:?} leaves the page: {r:?}");
+    }
+}
+
+fn texts(shapes: &[(String, egui::Rect, egui::Color32)]) -> Vec<&str> {
+    shapes.iter().map(|(t, ..)| t.as_str()).collect()
+}
+
+fn has(shapes: &[(String, egui::Rect, egui::Color32)], want: &str) -> bool {
+    shapes.iter().any(|(t, ..)| t == want)
+}
+
+/// A Send page whose base version body has arrived but whose summary is worked out by `sync`, which has the bank:
+/// the page is still Reading.
+fn reading_page() -> (CirclesModel, Arc<Script>, Vec<QuestionBank>) {
+    let base = base_qs();
+    let (mut bank, mut link) = linked_from(base.clone(), false);
+    link.base_version = 3;
+    link.head_seen = 3;
+    link.role_seen = Some("owner".into());
+    link.author_known = true;
+    link.is_author = true;
+    bank.questions[0].stem = "A (changed)".into();
+    bank.modified += 5;
+    let s = Script::new();
+    s.keep("Post", "/circles/heads", 200, heads(3));
+    s.keep_raw("Get", &version_path(3), served_qs(3, base, false));
+    let mut banks = vec![bank];
+    let mut m = model();
+    m.edit.add_link(link).unwrap();
+    m.edit.frame(now(), &ready(&s));
+    m.edit.sync(&mut banks);
+    assert!(m.edit.open_send(LOCAL, owner()));
+    // the read's answer is drained; the summary waits for `sync`, which has the bank
+    m.edit.frame(now(), &ready(&s));
+    (m, s, banks)
+}
+
+#[test]
+fn d3_ui_the_ready_page_lists_each_change_with_kind_number_stem_and_tick_state() {
+    // base [A, B, C]; this bank [A', B, D] (A changed, B unchanged, C removed, D added), C held back (unticked)
+    let (mut m, _s, _banks) = open_page(
+        &|b| {
+            b.questions[0].stem = "A (changed)".into();
+            b.questions.pop();
+            b.questions.push(added_question());
+        },
+        &[QC],
+    );
+    for width in [1280.0, 420.0] {
+        let shapes = page(width, &mut m);
+        for want in [
+            "Send my changes to \"Cells\" (Algebra team). Based on version 3.",
+            "Tick the changes to send. Unticked ones stay on this computer, still shown as unsent.",
+            "Changed  Q1",
+            "\"A (changed)\"",
+            "Added  Q3",
+            "\"D\"",
+            "Removed  Q3",
+            "\"C\"",
+            "2 of 3 ticked.",
+            "Tick all",
+            "Untick all",
+            "Send 2 changes",
+            "Cancel",
+            "A note for the history (optional)",
+        ] {
+            assert!(has(&shapes, want), "{width}: {want:?} is not drawn: {:?}", texts(&shapes));
+        }
+        let at = |want: &str| shapes.iter().find(|(t, ..)| t == want).map(|(_, r, _)| *r).unwrap_or_else(|| panic!("{width}: {want:?} is not drawn"));
+        let (tag, stem) = (at("Changed  Q1"), at("\"A (changed)\""));
+        if width > 520.0 {
+            assert!((tag.center().y - stem.center().y).abs() < 2.0, "{width}: a row is one line: {tag:?} {stem:?}");
+        } else {
+            assert!(stem.top() >= tag.bottom() - 1.0, "{width}: the stem is on its own line under the tag: {tag:?} {stem:?}");
+        }
+    }
+}
+
+#[test]
+fn d3_ui_clicking_a_rows_box_sends_toggle_change_and_the_count_follows() {
+    let (mut m, _s, _banks) = open_page(
+        &|b| {
+            b.questions[0].stem = "A (changed)".into();
+            b.questions.pop();
+            b.questions.push(added_question());
+        },
+        &[],
+    );
+    let ctx = ctx();
+    let link = m.edit.link_for_local(LOCAL).unwrap();
+    let a = local(&link, QA);
+    assert_eq!(m.edit.send_ticked().unwrap().len(), 3, "every change starts ticked");
+    assert!(click_text(&ctx, 1280.0, "Changed  Q1", 0, &mut |ui| super::circle_edit_ui::draw_page(ui, &mut m)), "the row's box is drawn with its tag");
+    assert!(!m.edit.send_ticked().unwrap().contains(&a), "clicking the box calls toggle_change");
+    let shapes = page(1280.0, &mut m);
+    assert!(has(&shapes, "2 of 3 ticked.") && has(&shapes, "Send 2 changes"), "{:?}", texts(&shapes));
+    assert!(click_text(&ctx, 1280.0, "Tick all", 0, &mut |ui| super::circle_edit_ui::draw_page(ui, &mut m)));
+    assert_eq!(m.edit.send_ticked().unwrap().len(), 3, "Tick all ticks every change");
+    assert!(has(&page(1280.0, &mut m), "3 of 3 ticked."));
+    assert!(click_text(&ctx, 1280.0, "Untick all", 0, &mut |ui| super::circle_edit_ui::draw_page(ui, &mut m)));
+    assert!(m.edit.send_ticked().unwrap().is_empty(), "Untick all ticks none");
+    let shapes = page(1280.0, &mut m);
+    for want in ["0 of 3 ticked.", TICK_ONE, "Send 0 changes"] {
+        assert!(has(&shapes, want), "{want:?} is not drawn: {:?}", texts(&shapes));
+    }
+}
+
+#[test]
+fn d3_ui_with_nothing_ticked_the_send_is_disabled_and_nothing_goes() {
+    let (mut m, s, mut banks) = open_page(&|b| b.questions[0].stem = "A (changed)".into(), &[]);
+    m.edit.tick_all(false);
+    let shapes = page(1280.0, &mut m);
+    assert!(has(&shapes, TICK_ONE), "nothing ticked: the line is there: {:?}", texts(&shapes));
+    assert!(has(&shapes, "Send 0 changes"), "{:?}", texts(&shapes));
+    assert!(click_text(&ctx(), 1280.0, "Send 0 changes", 0, &mut |ui| super::circle_edit_ui::draw_page(ui, &mut m)));
+    m.edit.sync(&mut banks);
+    m.edit.frame(now(), &ready(&s));
+    assert!(puts(&s).is_empty(), "a disabled Send sends nothing: {:?}", s.paths());
+    assert!(matches!(&m.edit.view, EditView::Send(v) if matches!(v.stage, SendStage::Editing)), "the page stays: no refusal stage");
+}
+
+#[test]
+fn d3_ui_while_the_base_is_read_the_page_says_so_and_send_waits() {
+    let (mut m, s, mut banks) = reading_page();
+    assert!(matches!(m.edit.partial_send(), Some(PartialSend::Reading)));
+    let shapes = page(1280.0, &mut m);
+    assert!(has(&shapes, PARTIAL_READING), "{:?}", texts(&shapes));
+    assert!(!shapes.iter().any(|(t, ..)| t.ends_with(" changes")), "no tick list yet: {:?}", texts(&shapes));
+    assert!(click_text(&ctx(), 1280.0, "Send", 0, &mut |ui| super::circle_edit_ui::draw_page(ui, &mut m)));
+    m.edit.sync(&mut banks);
+    m.edit.frame(now(), &ready(&s));
+    assert!(puts(&s).is_empty(), "Send waits for the read: {:?}", s.paths());
+}
+
+#[test]
+fn d3_ui_a_failed_base_read_keeps_the_page_says_so_and_try_again_reads_again() {
+    let (mut m, s, mut banks) = open_page_base_error(503, json!({"error": "unavailable"}), &|b| b.questions[0].stem = "A (changed)".into());
+    let why = match m.edit.partial_send() {
+        Some(PartialSend::ReadFailed(why)) => why.clone(),
+        other => panic!("{other:?}"),
+    };
+    let shapes = page(1280.0, &mut m);
+    for want in [PARTIAL_READ_FAILED, "Try again", "A note for the history (optional)", "Your confirmation", "Cancel"] {
+        assert!(has(&shapes, want), "{want:?} is not drawn: {:?}", texts(&shapes));
+    }
+    // (phase D3) The generic line, then the reason the read kept when it says more (the network, the limit, the session).
+    assert!(why == PARTIAL_READ_FAILED || has(&shapes, &why), "the stored reason {why:?} is drawn: {:?}", texts(&shapes));
+    // Send is there but disabled: pressing it sends nothing.
+    assert!(click_text(&ctx(), 1280.0, "Send", 0, &mut |ui| super::circle_edit_ui::draw_page(ui, &mut m)));
+    m.edit.sync(&mut banks);
+    m.edit.frame(now(), &ready(&s));
+    assert!(puts(&s).is_empty(), "a failed read never sends the whole bank: {:?}", s.paths());
+    // the circle answers the one read when it is asked again
+    s.on_raw("Get", &version_path(3), served_qs(3, base_qs(), false));
+    assert!(click_text(&ctx(), 1280.0, "Try again", 0, &mut |ui| super::circle_edit_ui::draw_page(ui, &mut m)));
+    m.edit.frame(now(), &ready(&s));
+    m.edit.sync(&mut banks);
+    assert!(matches!(m.edit.partial_send(), Some(PartialSend::Ready { .. })), "Try again reads again: {:?}", s.paths());
+    assert_eq!(s.paths().iter().filter(|p| **p == format!("Get {}", version_path(3))).count(), 2, "one more read, not none: {:?}", s.paths());
+}
+
+#[test]
+fn d3_ui_the_unavailable_page_says_so_and_send_everything_sends_the_whole_bank() {
+    let (mut m, s, mut banks) = open_page_base_error(404, json!({"error": "version_not_retained"}), &|b| b.questions[0].stem = "A (changed)".into());
+    let shapes = page(1280.0, &mut m);
+    assert!(has(&shapes, PARTIAL_UNAVAILABLE) && has(&shapes, "Send everything"), "{:?}", texts(&shapes));
+    let link = m.edit.link_for_local(LOCAL).unwrap();
+    let expected: Value = serde_json::from_slice(&payload_of(&link, &banks[0]).unwrap()).unwrap();
+    s.on("Put", &super::bank_links_fix8_tests::put_path(), 201, sent_with(4, &[QA]));
+    assert!(click_text(&ctx(), 1280.0, "Send everything", 0, &mut |ui| super::circle_edit_ui::draw_page(ui, &mut m)));
+    m.edit.sync(&mut banks);
+    m.edit.frame(now(), &ready(&s));
+    let payload = put_payload(&puts(&s).last().expect("the whole bank went out"));
+    assert_eq!(payload, expected, "the whole-bank path is unchanged");
+}
+
+#[test]
+fn d3_ui_a_send_over_a_held_version_says_the_whole_bank_goes() {
+    let (mut m, _s, _banks) = open_page(&|b| b.questions[0].stem = "A (changed)".into(), &[]);
+    if let EditView::Send(v) = &mut m.edit.view {
+        v.base_override = Some(6);
+        v.partial = PartialSend::Unavailable(SEND_ON_TOP_WHOLE.into());
+    }
+    let shapes = page(1280.0, &mut m);
+    assert!(has(&shapes, SEND_ON_TOP_WHOLE) && has(&shapes, "Send everything"), "{:?}", texts(&shapes));
+    assert!(!has(&shapes, "Changed  Q1"), "no tick list for a whole-bank send: {:?}", texts(&shapes));
+}
+
+#[test]
+fn d3_ui_the_list_again_notice_is_drawn_above_the_rows() {
+    let (mut m, _s, _banks) = open_page(&|b| b.questions[0].stem = "A (changed)".into(), &[]);
+    if let EditView::Send(v) = &mut m.edit.view {
+        v.notice = Some(SEND_LIST_AGAIN.into());
+    }
+    let shapes = page(1280.0, &mut m);
+    let at = |want: &str| shapes.iter().find(|(t, ..)| t == want).map(|(_, r, _)| *r).unwrap_or_else(|| panic!("{want:?} is not drawn: {:?}", texts(&shapes)));
+    let notice = at(SEND_LIST_AGAIN);
+    assert!(notice.top() < at("Tick the changes to send. Unticked ones stay on this computer, still shown as unsent.").top(), "above the instructions");
+    assert!(notice.top() < at("Changed  Q1").top(), "above the rows");
+}
+
+#[test]
+fn d3_ui_at_420_each_row_is_two_lines_in_order_and_nothing_leaves_the_page() {
+    let long = "Which of these numbers is prime, and why is it prime rather than a product of two smaller numbers? ".repeat(6);
+    let (mut m, _s, _banks) = open_page(
+        &move |b| {
+            b.questions[0].stem = long.clone();
+            b.questions.pop();
+            b.questions.push(added_question());
+        },
+        &[QC],
+    );
+    for width in [1280.0, 420.0] {
+        let shapes = page(width, &mut m);
+        within(&shapes, width);
+        let stem = shapes.iter().find(|(t, ..)| t.starts_with("\"Which of these numbers")).map(|(t, r, _)| (t.clone(), *r)).unwrap_or_else(|| panic!("{width}: the long stem is not drawn: {:?}", texts(&shapes)));
+        assert!(stem.0.starts_with("\"Which of these numbers"), "{width}: the stem is drawn in quotes");
+        assert!(stem.1.height() < 24.0, "{width}: the stem is cut to one line: {:?}", stem.1);
+        // (phase D3) The cut itself, through the galley's own `elided`: a long stem is elided, a short one is not.
+        let cuts = elided(width, &mut |ui| super::circle_edit_ui::draw_page(ui, &mut m));
+        let cut = |want: &str| cuts.iter().find(|(t, _)| t.starts_with(want)).map(|(_, e)| *e);
+        assert_eq!(cut("\"Which of these numbers"), Some(true), "{width}: the long stem is elided: {cuts:?}");
+        assert_eq!(cut("\"D\""), Some(false), "{width}: a short stem is not cut: {cuts:?}");
+        let tag = shapes.iter().find(|(t, ..)| t == "Changed  Q1").map(|(_, r, _)| *r).expect("the changed question's tag");
+        if width > 520.0 {
+            assert!((tag.center().y - stem.1.center().y).abs() < 2.0, "a row is one line at 1280: {tag:?} {:?}", stem.1);
+        } else {
+            assert!(stem.1.top() >= tag.bottom() - 1.0, "the stem is under its tag at 420: {tag:?} {:?}", stem.1);
+        }
+    }
+    // (plan 4.8) two lines a row at 420, the rows in the order the list has them: changed, added, removed
+    let shapes = page(420.0, &mut m);
+    let at = |want: &str| shapes.iter().find(|(t, ..)| t == want).map(|(_, r, _)| *r).unwrap_or_else(|| panic!("{want:?} is not drawn: {:?}", texts(&shapes)));
+    let (a_tag, d_tag, c_tag) = (at("Changed  Q1"), at("Added  Q3"), at("Removed  Q3"));
+    let a_stem = shapes.iter().find(|(t, ..)| t.starts_with("\"Which of these numbers")).map(|(_, r, _)| *r).expect("the changed row's stem");
+    let (d_stem, c_stem) = (at("\"D\""), at("\"C\""));
+    assert!(a_stem.top() >= a_tag.bottom() - 1.0, "changed: stem under tag");
+    assert!(d_tag.top() >= a_stem.bottom() - 1.0, "added: after the changed row");
+    assert!(d_stem.top() >= d_tag.bottom() - 1.0, "added: stem under tag");
+    assert!(c_tag.top() >= d_stem.bottom() - 1.0, "removed: after the added row");
+    assert!(c_stem.top() >= c_tag.bottom() - 1.0, "removed: stem under tag");
+}
+
+#[test]
+fn d3_ui_a_copy_in_step_lists_no_rows_and_says_so() {
+    let (mut m, _s, _banks) = open_page(&|_| {}, &[]);
+    for width in [1280.0, 420.0] {
+        let shapes = page(width, &mut m);
+        let t = texts(&shapes);
+        assert!(has(&shapes, "This copy is in step with the circle, so there is nothing to send. Nothing in your copy differs from the version it was made from."), "{width}: {t:?}");
+        assert!(!t.iter().any(|t| t.contains("You can still send it")), "{width}: no promise beside a Send that is not offered: {t:?}");
+        assert!(!has(&shapes, "Tick the changes to send. Unticked ones stay on this computer, still shown as unsent.") && !has(&shapes, TICK_ONE), "{width}: nothing to tick: {t:?}");
+        assert!(!shapes.iter().any(|(t, ..)| t.starts_with("Changed")), "{width}: no rows: {t:?}");
+        assert!(!has(&shapes, "Send") && !has(&shapes, "Send 0 changes"), "{width}: no Send button: {t:?}");
+        assert!(!t.iter().any(|t| t.starts_with("This adds a new version")), "{width}: nothing is added: {t:?}");
+        assert!(has(&shapes, "Cancel"), "{width}: {t:?}");
+    }
+}
+
+#[test]
+fn d3_ui_a_removal_whose_base_snapshot_is_not_kept_is_a_plain_removed_row() {
+    // A bounded link keeps its local id -> circle id pairs but no base snapshots: the removal is still listed, with no
+    // stem and with the number its pair's place gives (so two of them can be told apart), plan 4.7.
+    let base = base_qs();
+    let (mut bank, mut link) = linked_from(base.clone(), false);
+    link.base_version = 3;
+    link.head_seen = 3;
+    link.role_seen = Some("owner".into());
+    link.author_known = true;
+    link.is_author = true;
+    link.base.clear();
+    bank.questions.pop(); // C removed
+    bank.modified += 5;
+    let s = Script::new();
+    s.keep("Post", "/circles/heads", 200, heads(3));
+    s.keep_raw("Get", &version_path(3), served_qs(3, base, false));
+    let mut banks = vec![bank];
+    let mut m = model();
+    m.edit.add_link(link).unwrap();
+    m.edit.frame(now(), &ready(&s));
+    m.edit.sync(&mut banks);
+    assert!(m.edit.open_send(LOCAL, owner()));
+    m.edit.frame(now(), &ready(&s));
+    m.edit.sync(&mut banks);
+    assert!(matches!(m.edit.partial_send(), Some(PartialSend::Ready { .. })), "the removal is still listed: {:?}", m.edit.partial_send());
+    let shapes = page(1280.0, &mut m);
+    let t = texts(&shapes);
+    assert!(has(&shapes, "Removed  Q3"), "the plain row, numbered by its pair's place: {t:?}");
+    assert!(!has(&shapes, "\"C\""), "no stem without a snapshot: {t:?}");
+    let link = m.edit.link_for_local(LOCAL).unwrap();
+    let c = local(&link, QC);
+    assert!(m.edit.send_ticked().unwrap().contains(&c));
+    assert!(click_text(&ctx(), 1280.0, "Removed  Q3", 0, &mut |ui| super::circle_edit_ui::draw_page(ui, &mut m)));
+    assert!(!m.edit.send_ticked().unwrap().contains(&c), "the plain row's box toggles it");
+    assert_eq!(super::circle_edit_ui::row_name(&super::partial_send::SendRow { local: c, kind: super::partial_send::SendKind::Removed, number: Some(3), stem: None }), "Removed, question 3");
+}
+
+#[test]
+fn d3_ui_a_rows_accessible_name_carries_its_question_and_stem() {
+    use super::partial_send::{SendKind, SendRow};
+    let changed = SendRow { local: "l".into(), kind: SendKind::Changed, number: Some(3), stem: Some("Which of these is prime?".into()) };
+    assert_eq!(super::circle_edit_ui::row_name(&changed), "Changed, question 3: \"Which of these is prime?\"");
+    let added = SendRow { local: "l".into(), kind: SendKind::Added, number: Some(12), stem: Some("Solve 2x + 3 = 7".into()) };
+    assert_eq!(super::circle_edit_ui::row_name(&added), "Added, question 12: \"Solve 2x + 3 = 7\"");
+    // Two bounded removals stay distinguishable even with no stem: their numbers are their own.
+    let bounded = SendRow { local: "l".into(), kind: SendKind::Removed, number: Some(8), stem: None };
+    assert_eq!(super::circle_edit_ui::row_name(&bounded), "Removed, question 8");
+    let plain = SendRow { local: "l".into(), kind: SendKind::Removed, number: None, stem: None };
+    assert_eq!(super::circle_edit_ui::row_name(&plain), "Removed");
+}
+
+#[test]
+fn d3_ui_the_unavailable_page_offers_get_latest_and_it_opens_the_merge() {
+    let (mut m, s, _banks) = open_page_base_error(404, json!({"error": "version_not_retained"}), &|b| b.questions[0].stem = "A (changed)".into());
+    let shapes = page(1280.0, &mut m);
+    assert!(has(&shapes, PARTIAL_UNAVAILABLE) && has(&shapes, "Send everything") && has(&shapes, "Get latest"), "{:?}", texts(&shapes));
+    s.on("Post", &format!("{}/merge", super::bank_links_fix8_tests::put_path()), 200, super::bank_links_fix8_tests::merge_start(3, 4));
+    s.keep_raw("Get", &super::bank_links_fix8_tests::put_path(), served_qs(3, base_qs(), false));
+    assert!(click_text(&ctx(), 1280.0, "Get latest", 0, &mut |ui| super::circle_edit_ui::draw_page(ui, &mut m)));
+    assert!(matches!(&m.edit.view, EditView::Merge(_)), "Get latest from the send page opens the merge: {:?}", m.edit.view);
+}
+
+#[test]
+fn d3_ui_every_summary_state_draws_at_1280_and_420_within_the_page() {
+    // (plan 4.8) Every new state gets a frame at both widths, not only the summary.
+    let states: [(&str, fn() -> (CirclesModel, Arc<Script>, Vec<QuestionBank>), &[&str]); 4] = [
+        ("reading", reading_page, &[PARTIAL_READING]),
+        ("read failed", || open_page_base_error(503, json!({"error": "unavailable"}), &|b| b.questions[0].stem = "A (changed)".into()), &[PARTIAL_READ_FAILED, "Try again"]),
+        ("unavailable", || open_page_base_error(404, json!({"error": "version_not_retained"}), &|b| b.questions[0].stem = "A (changed)".into()), &[PARTIAL_UNAVAILABLE, "Send everything", "Get latest"]),
+        ("notice", || open_page(&|b| b.questions[0].stem = "A (changed)".into(), &[]), &[]),
+    ];
+    for (state, make, wants) in states {
+        let (mut m, _s, _banks) = make();
+        if state == "notice" {
+            if let EditView::Send(v) = &mut m.edit.view {
+                v.notice = Some(SEND_LIST_AGAIN.into());
+            }
+        }
+        for width in [1280.0, 420.0] {
+            let shapes = page(width, &mut m);
+            within(&shapes, width);
+            for want in wants.iter().copied().chain(if state == "notice" { Some(SEND_LIST_AGAIN) } else { None }) {
+                assert!(has(&shapes, want), "{state} at {width}: {want:?} is not drawn: {:?}", texts(&shapes));
+            }
+        }
+    }
+}
+
+#[test]
+fn d3_ui_a_partial_sends_result_says_what_went_and_what_stayed() {
+    // A change, C removed and D added; the removal is unticked, so two of the three changes go.
+    let (mut m, s, mut banks) = open_page(
+        &|b| {
+            b.questions[0].stem = "A (changed)".into();
+            b.questions.pop();
+            b.questions.push(added_question());
+        },
+        &[],
+    );
+    let link = m.edit.link_for_local(LOCAL).unwrap();
+    let c = local(&link, QC);
+    m.edit.toggle_change(&c, false);
+    send(&mut m, &s, &mut banks, sent_with(4, &[QA, QB, QC]));
+    let shapes = page(1280.0, &mut m);
+    let t = texts(&shapes);
+    assert!(t.contains(&"Sent version 4 with 2 of your 3 changes. 1 change stays on this computer, not sent."), "the plan 4.7 result: {t:?}");
+    assert!(!t.iter().any(|t| t.starts_with("Version 4 is now the circle's newest")), "the server's counts are replaced: {t:?}");
+    // The one that stayed is still on this computer, and the note says which version was made.
+    assert_eq!(m.edit.link_for_local(LOCAL).unwrap().held_back, vec![c], "the unticked change stays held back");
+    // Singular and plurals of the same sentence.
+    assert_eq!(super::circle_edit_ui::partial_sent_line(8, 2, 3), "Sent version 8 with 2 of your 3 changes. 1 change stays on this computer, not sent.");
+    assert_eq!(super::circle_edit_ui::partial_sent_line(8, 1, 2), "Sent version 8 with 1 of your 2 changes. 1 change stays on this computer, not sent.");
+    assert_eq!(super::circle_edit_ui::partial_sent_line(8, 1, 3), "Sent version 8 with 1 of your 3 changes. 2 changes stay on this computer, not sent.");
 }

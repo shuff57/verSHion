@@ -40,7 +40,7 @@ use super::act_results::{ActResults, ResultBank, ResultKind};
 use super::circles_text as text;
 use super::merge::{self, BaseQuestion, Choice, MergeOutcome, MergePlan, RowKind};
 use super::model::Runner;
-use super::partial_send::{BodyChanges, ComposedPartial, ComposedQuestion, changes_against_body, compose_partial_parts};
+use super::partial_send::{BodyChanges, ComposedPartial, ComposedQuestion, SendRow, changes_against_body, compose_partial_parts, send_rows};
 use super::pool::{ATTEST_STATEMENT, License, LocalProblem, PayloadRefusal, Pool, PoolError, PublishProgress, RefusalKind, RetryPolicy, StoreMedia, sha256_hex};
 use super::publish::{AccountSnapshot, Gate, SharedMedia, SharedSession};
 use crate::model::QuestionBank;
@@ -143,8 +143,8 @@ pub enum PartialSend {
     /// The changes against `body`, the body of version `base`, read when the page opened. `print` is the bank's
     /// fingerprint then: a bank that changed since is listed again by `do_send` before anything is sent. `ticked` holds
     /// the local ids to send: every change at first, except the ones in `link.held_back` (the person left them unticked
-    /// at the last send).
-    Ready { base: u64, body: Vec<u8>, print: String, changes: BodyChanges, ticked: BTreeSet<String> },
+    /// at the last send). `rows` is the same list as the page draws it (kind, the bank's own question number, the stem).
+    Ready { base: u64, body: Vec<u8>, print: String, changes: BodyChanges, ticked: BTreeSet<String>, rows: Vec<SendRow> },
     /// The base can not be had because the circle no longer keeps it (or holds it back), so choosing which changes to
     /// send is not possible: the whole bank is sent, and the words say why in plain language (plan 4.7).
     Unavailable(String),
@@ -3266,6 +3266,12 @@ impl CircleEditModel {
         }
     }
 
+    /// (phase D3) The circle's name for the open send page's heading (`None`: no send page, or the link knows none).
+    pub fn send_circle_name(&self) -> Option<&str> {
+        let EditView::Send(v) = &self.view else { return None };
+        self.links.iter().find(|l| l.local_bank_id == v.local_id).map(|l| l.circle_name.as_str()).filter(|n| !n.is_empty())
+    }
+
     /// (phase D3) The changes the open send page lists (only once its base version's body is read).
     pub fn send_changes(&self) -> Option<&BodyChanges> {
         match self.partial_send()? {
@@ -3289,8 +3295,9 @@ impl CircleEditModel {
         }
     }
 
-    /// (phase D3, plan 4.7) Tick or untick one change of the open send page. Only a change can be ticked; nothing is
-    /// refused for having no tick yet (Send is not disabled: the send says "Tick at least one change").
+    /// (phase D3, plan 4.7) Tick or untick one change of the open send page. Only a change can be ticked. The page
+    /// disables Send while nothing is ticked, so the send's own "Tick at least one change" refusal below is dead
+    /// defence for a caller other than the page (it keeps the ticks and the page as they are).
     pub fn toggle_change(&mut self, local: &str, on: bool) {
         if let EditView::Send(v) = &mut self.view
             && !matches!(v.stage, SendStage::Working(_))
@@ -3361,8 +3368,8 @@ impl CircleEditModel {
         if self.send_blocker().is_some() {
             return;
         }
-        // (phase D3, plan 4.7) The button stays enabled with nothing ticked; the send says what to do and the page
-        // stays as it is (the ticks are kept).
+        // (phase D3, plan 4.7) The page disables Send while nothing is ticked and says "Tick at least one change".
+        // This refusal is dead defence for a caller other than the page: the ticks are kept and nothing is sent.
         if let EditView::Send(v) = &self.view
             && let PartialSend::Ready { ticked, .. } = &v.partial
             && ticked.is_empty()
@@ -3583,7 +3590,7 @@ impl CircleEditModel {
         // (phase D3) The summary is a snapshot taken when the body arrived. A bank that changed since is worked out
         // again against the SAME base body: nothing is sent on that press, the ticks stay by local id, and a change the
         // person has not seen yet starts ticked (plan 4.7).
-        if let PartialSend::Ready { base, body, print, changes, ticked } = &v.partial
+        if let PartialSend::Ready { base, body, print, changes, ticked, .. } = &v.partial
             && bank_print(bank) != *print
         {
             let (base, body, old_changes, old_ticked) = (*base, body.clone(), changes.clone(), ticked.clone());
@@ -3591,7 +3598,8 @@ impl CircleEditModel {
                 Ok(fresh) => {
                     // (an id no longer a change is simply not in the new list; a new change starts ticked)
                     let ticked = fresh.ids().into_iter().filter(|id| if old_changes.contains(id) { old_ticked.contains(id) } else { true }).collect();
-                    v.partial = PartialSend::Ready { base, body: body.clone(), print: bank_print(bank), changes: fresh, ticked };
+                    let rows = send_rows(&link, bank, &fresh);
+                    v.partial = PartialSend::Ready { base, body: body.clone(), print: bank_print(bank), changes: fresh, ticked, rows };
                     v.stage = SendStage::Editing;
                     v.notice = Some(SEND_LIST_AGAIN.into());
                     // (the large-change confirmation was for the old payload)
@@ -5391,7 +5399,8 @@ impl CircleEditModel {
                     if let Some((_, unticked)) = carried {
                         ticked.retain(|id| !unticked.contains(id));
                     }
-                    PartialSend::Ready { base: n, body, print: bank_print(bank), changes, ticked }
+                    let rows = send_rows(&link, bank, &changes);
+                    PartialSend::Ready { base: n, body, print: bank_print(bank), changes, ticked, rows }
                 }
                 Err(m) => PartialSend::Unavailable(m),
             }
