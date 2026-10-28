@@ -64,6 +64,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "energy-bar-chart" => ENERGY_BAR_CHART,
         "collision-momentum" => COLLISION_MOMENTUM,
         "circular-motion" => CIRCULAR_MOTION,
+        "refraction" => REFRACTION,
         "parallelogram" => PARALLELOGRAM,
         "trapezoid" => TRAPEZOID,
         "kite" => KITE,
@@ -3449,6 +3450,25 @@ const ENERGY_BAR_CHART: &[Faq] = &[
     Faq {
         q: "How do I make a worksheet?",
         a: "Turn Show answers off: the bars are not drawn and the three numbers become blanks, while the axes, the store names and the givens (mass, heights, loss share, g) stay, so the student works out the stores and draws the bars.",
+    },
+];
+
+const REFRACTION: &[Faq] = &[
+    Faq {
+        q: "Why does the ray bend?",
+        a: "Light travels more slowly in a denser medium, and the change of speed at the boundary turns the ray. Snell's law says n1 sin theta1 = n2 sin theta2: going into the denser medium the ray bends towards the normal, and coming out it bends away.",
+    },
+    Faq {
+        q: "What is the critical angle?",
+        a: "It only exists going from a denser medium into a less dense one. At that angle the refracted ray lies along the boundary at 90 degrees; past it there is no refracted ray at all and the light is reflected back inside. The angle is arcsin(n2 / n1).",
+    },
+    Faq {
+        q: "Why does the figure say there is no refracted ray?",
+        a: "Because the incident angle is past the critical angle, so refraction is impossible and the light reflects instead. The figure draws the reflected ray and says so in the readout; there is no second medium ray to draw.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the refracted angle, the critical angle and the speeds become blanks while the rays, the normal and the given indices and angle stay.",
     },
 ];
 
