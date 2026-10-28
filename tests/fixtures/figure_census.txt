@@ -228,8 +228,8 @@ sentence-diagram__defaults 16a9df68074b212f
 sentence-diagram__start 16a9df68074b212f
 sine-cosine__defaults 3180a65e16ea590e
 sine-cosine__start 3180a65e16ea590e
-slope-triangle__defaults 6026139a7e6dc71c
-slope-triangle__start 6026139a7e6dc71c
+slope-triangle__defaults 53cc7d348c685d49
+slope-triangle__start 53cc7d348c685d49
 sorting-passes__defaults 4eeaec6f73c98f22
 sorting-passes__start 4eeaec6f73c98f22
 sphere__defaults 026a80b5e0fb10f8

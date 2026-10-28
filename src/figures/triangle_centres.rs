@@ -17,7 +17,7 @@ const CONSTRUCTION_PRINT: &str = "#777777";
 const MARK: &str = "#7a4fc4";
 const MARK_PRINT: &str = "#333333";
 const GRID_COLOUR: &str = "#e6ebf1";
-const GRID_PRINT: &str = "#9a9a9a"; // dark enough to survive a 66% bitonal copy
+const GRID_PRINT: &str = "#787878"; // dark enough to survive a 66% bitonal copy at the 1.3x raster the tests use
 const W: f64 = 470.0;
 const PLOT: f64 = 330.0;
 const L: f64 = 56.0;
@@ -251,8 +251,8 @@ pub fn build(p: &Params) -> (String, Report) {
     let row2 = match which {
         0 => if ans { format!("circumradius  {}", num(radii.0, dec)) } else { format!("circumradius  {blank}") },
         1 => if ans { format!("inradius  {}", num(radii.1, dec)) } else { format!("inradius  {blank}") },
-        2 => "the medians meet two thirds of the way from a vertex to the opposite midpoint".to_string(),
-        _ => "each altitude is perpendicular to the side it meets; the three meet at the orthocentre".to_string(),
+        2 => "the medians meet at the centre of gravity".to_string(),
+        _ => "each altitude is perpendicular to its side".to_string(),
     };
     for (i, line) in [row1, row2].iter().enumerate() {
         let mut s = line.clone();

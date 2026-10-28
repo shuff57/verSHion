@@ -14,7 +14,7 @@ const LINE_PRINT: &str = "#111111";
 const TRI: &str = "#a0704c";
 const TRI_PRINT: &str = "#777777";
 const GRID_COLOUR: &str = "#e6ebf1";
-const GRID_PRINT: &str = "#9a9a9a"; // dark enough to survive a 66% bitonal copy
+const GRID_PRINT: &str = "#787878"; // dark enough to survive a 66% bitonal copy at the 1.3x raster the tests use
 const BLANK: &str = "_____";
 const W: f64 = 460.0;
 const PLOT: f64 = 330.0;
@@ -126,7 +126,7 @@ pub struct Report {
 
 pub fn build(p: &Params) -> (String, Report) {
     let (m, c, run, rise) = values(p);
-    let dec = p.i("dec").clamp(0, 2);
+    let dec = p.i("dec").clamp(0, 3);
     let print = p.s("style") == "Print";
     let ans = p.b(SHOW_ANSWERS);
     let f = svg::label_factor(p.s("label_size"));
@@ -162,7 +162,11 @@ pub fn build(p: &Params) -> (String, Report) {
     let c1 = (px(ax), py(ay));
     let c2 = (px(bx), py(ay));
     let c3 = (px(bx), py(by));
-    d.polyline(&[c1, c2, c3], tri, 2.0);
+    // drawn leg by leg, each clipped to the plot: a steep gradient with a long run cannot fit the triangle whole,
+    // so the part that is on screen is shown and the note says why it is cut
+    for (a, b) in [(c1, c2), (c2, c3)] {
+        if let Some((s, e)) = clip_seg(a.0, a.1, b.0, b.1, ox, oy, ox + PLOT, oy + PLOT) { d.line(s.0, s.1, e.0, e.1, tri, 2.0); }
+    }
     // the right angle at the corner (there is no triangle to mark when the rise is zero)
     if rise.abs() > 1e-9 {
         d.right_angle(c2, ((c1.0 - c2.0).signum(), 0.0), (0.0, (c3.1 - c2.1).signum()), 11.0, tri, 1.4);
@@ -184,9 +188,10 @@ pub fn build(p: &Params) -> (String, Report) {
 
     // the axis numbers, except where a number would sit on one of the triangle's labels
     let (rw, rw2) = (tw(&run_text, size, false), tw(&rise_text, size, false));
+    // the boxes must follow the labels as drawn (the rise moves when the rise is zero)
     let boxes = [
         Rect { x0: mid_x - rw / 2.0, y0: run_y - size, x1: mid_x + rw / 2.0, y1: run_y + size * 0.3 },
-        Rect { x0: c3.0 + 8.0, y0: mid_y + 4.0 - size, x1: c3.0 + 8.0 + rw2, y1: mid_y + 4.0 + size * 0.3 },
+        Rect { x0: c3.0 + 8.0, y0: rise_y - size, x1: c3.0 + 8.0 + rw2, y1: rise_y + size * 0.3 },
     ];
     let clear = |x: f64, y: f64, w: f64| {
         let r = Rect { x0: x - w / 2.0, y0: y - 12.0, x1: x + w / 2.0, y1: y + 4.0 };

@@ -16,7 +16,7 @@ const IMAGE_PRINT: &str = "#111111";
 const PRE_COLOUR: &str = "#8a8f99";
 const PRE_PRINT: &str = "#777777";
 const GRID_COLOUR: &str = "#e6ebf1";
-const GRID_PRINT: &str = "#9a9a9a"; // dark enough to survive a 66% bitonal copy
+const GRID_PRINT: &str = "#787878"; // dark enough to survive a 66% bitonal copy at the 1.3x raster the tests use
 const BLANK: &str = "_____";
 /// The canvas and the plot area inside it (px).
 const W: f64 = 470.0;

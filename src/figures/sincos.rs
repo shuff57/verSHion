@@ -18,7 +18,7 @@ const INK: &str = "#111111";
 const CURVE_COLOUR: &str = "#1f5fbf";
 const CURVE_PRINT: &str = "#111111";
 const GRID_COLOUR: &str = "#e2e6ee";
-const GRID_PRINT: &str = "#9a9a9a"; // dark enough to survive a 66% bitonal copy
+const GRID_PRINT: &str = "#787878"; // dark enough to survive a 66% bitonal copy at the 1.3x raster the tests use
 const MARK_COLOUR: &str = "#7a4fc4";
 const MARK_PRINT: &str = "#555555";
 const BLANK: &str = "_____";
@@ -236,7 +236,8 @@ pub fn build(p: &Params) -> (String, Report) {
     // peak is used when it leaves room for both arrows.
     let mcol = if print { MARK_PRINT } else { MARK_COLOUR };
     let mut xp = w.first_peak(0.0);
-    if frame.px(xp) < frame.left() + 12.0 && frame.px(xp + 2.0 * w.period) < frame.right() - 12.0 {
+    // the axis covers two periods past the first peak, so the next peak is always inside the frame
+    if frame.px(xp) < frame.left() + 12.0 && xp + 2.0 * w.period <= frame.x1 + 1e-9 {
         xp += w.period;
     }
     let xp2 = xp + w.period;
