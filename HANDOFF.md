@@ -55,13 +55,15 @@ Written 2026-10-27 ~19:40 PT by the circles/D1 session, which the owner asked to
 - Then phases 3-6 (physics, biology, chemistry, stats) in `docs/figures-loop.md`.
 
 
-## Notes box — fixed, needs one look in the app
+## Notes box — fixed and confirmed in the app (2026-10-28)
 The editor notes used to be built inside `rows_card`, which only four figures get, so `figures::notes_for` returned
 strings that were never drawn for `collision-momentum`, `energy-bar-chart`, `circle`, `sine-cosine` or
-`slope-triangle`. They are now a `notes_box` called from `controls` for every figure (`src/figuresui.rs`, the call is
-just before the sections are laid out). It compiles and the suite is green, but **the tests cannot see a UI change**:
-open any of those five figures, set a state that produces a note (collision-momentum with A not closing on B, or
-sine-cosine with the phase shift folded), and check the red Notes box appears.
+`slope-triangle`. They are now a `notes_box` called from `controls` for every figure (`src/figuresui.rs`).
+
+Confirmed by running the app (`VERSHION_SCREEN=figures VERSHION_FIG=collision-momentum`, Xvfb :88):
+- with `VERSHION_FIG_PARAMS='{"u1":0,"u2":5}'` the red framed **Notes** box appears above Values with "A is not
+  closing on B (A must start faster than B for the carts to meet), so there is no collision to work out."
+- with `{"u1":4,"u2":0}` the box is absent, so it is not always-on.
 
 ## Pitfalls
 - Builders sometimes stop without reporting: ping them with SendMessage.
