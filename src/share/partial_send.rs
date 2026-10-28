@@ -128,6 +128,8 @@ struct Slot {
     local: String,
     qid: Option<String>,
     question: Option<Question>,
+    /// The picture the base body names, for a question sent as the base has it (none for this bank's own question).
+    base_image: Option<String>,
 }
 
 /// One question of the composed payload, for the bookkeeping a partial send leaves behind: its local id in this
@@ -140,6 +142,10 @@ pub struct ComposedQuestion {
     pub local: String,
     pub qid: Option<String>,
     pub question: Option<Question>,
+    /// (plan section 6, "Pictures") The base body's picture file for a question sent as the base has it, read from
+    /// the raw JSON so a raw question this build can not deserialise still names its picture. `None` for this bank's
+    /// own question (and for a base question without a picture).
+    pub base_image: Option<String>,
 }
 
 /// What [`compose_partial_parts`] made: the send payload, and each of its questions with the local id it stands for.
@@ -275,14 +281,15 @@ pub fn compose_partial_parts(link: &CircleLink, bank: &QuestionBank, base_body: 
     for q in &bank.questions {
         let Some(qid) = link.qid_of(&q.id).filter(|id| !id.is_empty()) else {
             if ticked.contains(&q.id) {
-                out.push(Slot { value: ours(link, q), local: q.id.clone(), qid: None, question: Some(q.clone()) });
+                out.push(Slot { value: ours(link, q), local: q.id.clone(), qid: None, question: Some(q.clone()), base_image: None });
             }
             continue;
         };
         let held = changed.contains(&q.id) && !ticked.contains(&q.id);
         let value = if held { base_value(link, &q.id, raw.get(qid).copied())? } else { ours(link, q) };
         let question = if held { question_of(&value).ok() } else { Some(q.clone()) };
-        out.push(Slot { value, local: q.id.clone(), qid: Some(qid.to_string()), question });
+        let base_image = if held { image_file_of(&value) } else { None };
+        out.push(Slot { value, local: q.id.clone(), qid: Some(qid.to_string()), question, base_image });
     }
 
     // Removals: a pair in `link.qids` whose question this bank no longer has. (The full pairs are kept even when
@@ -295,16 +302,22 @@ pub fn compose_partial_parts(link: &CircleLink, bank: &QuestionBank, base_body: 
         }
         let value = base_value(link, &p.local, raw.get(p.qid.as_str()).copied())?;
         let question = question_of(&value).ok();
+        let base_image = image_file_of(&value);
         let at = anchor(&out, &order, &p.qid);
-        out.insert(at, Slot { value, local: p.local.clone(), qid: Some(p.qid.clone()), question });
+        out.insert(at, Slot { value, local: p.local.clone(), qid: Some(p.qid.clone()), question, base_image });
     }
 
     let mut v = serde_json::to_value(bank).map_err(|e| e.to_string())?;
     if let Some(o) = v.as_object_mut() {
         o.insert("questions".into(), Value::Array(out.iter().map(|s| s.value.clone()).collect()));
     }
-    let questions = out.into_iter().map(|s| ComposedQuestion { local: s.local, qid: s.qid, question: s.question }).collect();
+    let questions = out.into_iter().map(|s| ComposedQuestion { local: s.local, qid: s.qid, question: s.question, base_image: s.base_image }).collect();
     Ok(ComposedPartial { payload: format!("{{\"schema_version\":{SEND_SCHEMA},\"bank\":{v}}}").into_bytes(), questions })
+}
+
+/// A raw question's picture file (`media/<sha256>.<ext>`), for a question sent as the base has it.
+fn image_file_of(value: &Value) -> Option<String> {
+    value.pointer("/image/file").and_then(Value::as_str).filter(|f| !f.is_empty()).map(str::to_string)
 }
 
 /// A base body's raw question as this app's shape (its `published` block is not part of a `Question`). `Err` when

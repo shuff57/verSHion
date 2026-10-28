@@ -196,8 +196,16 @@ after a partial send the result says "Sent version N with X of your Y changes. Z
 72 partial-send tests; full `cargo test --lib`: 2080 passed, 5 known failed, 3 ignored. No screenshots: the Ready state
 needs a live circle read (the local rig on 18791 now makes it reachable; no GUI automation was run).
 
-Next: the missing-picture fetch for an unticked question, the harness 404 fallback narrowing, then the staging
-round-trip (needs the owner's yes).
+**Piece 6, committed: the picture fetch.** A partial send whose unticked, base-raw question names a picture not on this
+computer fetches it from the circle with `circle_blob` (hash checked) and uses the fetched bytes under the base's own
+file name (`FetchedMedia`, each picture moved out on its one read), so the question hashes as unchanged; the store
+keeps a local copy best-effort. A failed fetch sends nothing, and the page's "Try again" re-composes and re-fetches.
+`pool::media_sha` is shared with the uploader so the name rule cannot diverge. 82 partial-send tests; full
+`cargo test --lib`: 2090 passed, 5 known failed, 3 ignored. A missing picture on the person's own question keeps
+today's refusal and fetches nothing; whole-bank sends fetch nothing; the blob GET costs no item/change read.
+
+Next: the two documented minors — the test harness's 404 fallback (and the `JobKind::Base` disconnected branch it
+lost) and the decision/label refusal positions — then the staging round-trip (needs the owner's yes).
 
 ## What is left (in order)
 

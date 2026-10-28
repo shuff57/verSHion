@@ -7,24 +7,28 @@
 //! The drawing is the next piece: these tests drive the model only. (phase D3, piece 5) The tests at the end draw
 //! the page itself, at 1280 and 420, with the existing `drawn` / `click_text` helpers.
 
-use std::collections::BTreeSet;
-use std::sync::Arc;
+use std::collections::{BTreeSet, HashMap};
+use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
 
+use super::api::ApiError;
 use super::bank_links_fix11_tests::version_path;
 use super::bank_links_fix4_tests::{background, ctx, owner};
 use super::bank_links_fix_tests::{QC, linked_from, qfull, served_qs};
 use super::bank_links_tests::{LOCAL, QA, QB, heads, hex};
+use super::browse::ImageSink;
 use super::circle_edit::*;
-use super::circle_links::{CircleLink, changes_since, payload_of};
+use super::circle_links::{CircleLink, LinkLog, changes_since, payload_of};
 use super::circles::CirclesModel;
 use super::circles_phasec_tests::click_text;
-use super::circles_tests::{Script, model, now, ready};
+use super::circles_tests::{NoDiskRestore, Script, model, now, ready};
 use super::merge::{Choice, RowKind};
+use super::model::Runner;
 use super::partial_send::BodyChanges;
+use super::pool::{LocalProblem, MediaSource, RetryPolicy, sha256_hex};
 use super::transport::Method;
-use crate::model::QuestionBank;
+use crate::model::{ImageRef, QuestionBank};
 
 /// The question only this bank has (added: no circle id).
 const QD: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa4";
@@ -46,10 +50,62 @@ fn local(link: &CircleLink, qid: &str) -> String {
     link.qids.iter().find(|q| q.qid == qid).expect("a linked question").local.clone()
 }
 
+/// A question as the base body has it, with a picture (`media/<sha256>.<ext>`).
+fn qfull_pic(id: &str, stem: &str, file: &str) -> Value {
+    let mut q = qfull(id, stem);
+    q["image"] = json!({"file": file, "width": 4, "height": 3});
+    q
+}
+
+/// The circle's blob route for a picture (the fetch the merge already makes).
+fn blob_path(sha: &str) -> String {
+    format!("/circles/{}/banks/{}/blobs/{sha}", super::circles_tests::CID, super::circles_tests::BID)
+}
+
+/// Where a send's pictures go: every `images.put` is kept so a test can say the fetched bytes were stored.
+#[derive(Default)]
+struct Pics(Mutex<Vec<Vec<u8>>>);
+
+impl ImageSink for Pics {
+    fn put(&self, bytes: &[u8]) -> Result<ImageRef, String> {
+        self.0.lock().unwrap().push(bytes.to_vec());
+        Ok(ImageRef { file: format!("media/{}.webp", sha256_hex(bytes)), width: 2, height: 2 })
+    }
+}
+
+/// What a test's `MediaSource::read` answers: pictures on this computer, by file name.
+#[derive(Default)]
+struct MediaOnDisk(Mutex<HashMap<String, Vec<u8>>>);
+
+impl MediaSource for MediaOnDisk {
+    fn read(&self, file: &str) -> Option<Vec<u8>> {
+        self.0.lock().unwrap().get(file).cloned()
+    }
+}
+
+impl MediaOnDisk {
+    fn put(&self, file: &str, bytes: &[u8]) {
+        self.0.lock().unwrap().insert(file.to_string(), bytes.to_vec());
+    }
+}
+
+/// The circles model with a test's picture sink and media store (the send fetches a base picture through the one
+/// and reads this computer's through the other).
+fn model_with(images: Arc<Pics>, media: Arc<MediaOnDisk>) -> CirclesModel {
+    let mut m = CirclesModel::new(Runner::Inline, images.clone()).with_retry(RetryPolicy::none());
+    m.edit = CircleEditModel::new(Runner::Inline, images, media, Arc::new(NoDiskRestore), LinkLog::memory()).with_retry(RetryPolicy::none());
+    m.set_clock(super::circles_tests::NOW);
+    m
+}
+
 /// A working copy in step with version 3 (the base body is `base_qs`), `edit` applied, and the Send page opened
 /// with its base body read once. The links file lives in memory.
 fn open_page(edit: &dyn Fn(&mut QuestionBank), held_back: &[&str]) -> (CirclesModel, Arc<Script>, Vec<QuestionBank>) {
-    let base = base_qs();
+    open_page_in(base_qs(), edit, held_back, model())
+}
+
+/// The same, with the pictures of a test's own model.
+fn open_page_in(base: Vec<Value>, edit: &dyn Fn(&mut QuestionBank), held_back: &[&str], mut m: CirclesModel) -> (CirclesModel, Arc<Script>, Vec<QuestionBank>) {
     let (mut bank, mut link) = linked_from(base.clone(), false);
     link.base_version = 3;
     link.head_seen = 3;
@@ -63,7 +119,6 @@ fn open_page(edit: &dyn Fn(&mut QuestionBank), held_back: &[&str]) -> (CirclesMo
     s.keep("Post", "/circles/heads", 200, heads(3));
     s.keep_raw("Get", &version_path(3), served_qs(3, base, false));
     let mut banks = vec![bank];
-    let mut m = model();
     m.edit.add_link(link).unwrap();
     m.edit.frame(now(), &ready(&s));
     m.edit.sync(&mut banks);
@@ -76,7 +131,11 @@ fn open_page(edit: &dyn Fn(&mut QuestionBank), held_back: &[&str]) -> (CirclesMo
 
 /// The same, with the circle answering the base read `status`/`body` instead.
 fn open_page_base_error(status: u16, body: Value, edit: &dyn Fn(&mut QuestionBank)) -> (CirclesModel, Arc<Script>, Vec<QuestionBank>) {
-    let base = base_qs();
+    open_page_base_error_in(base_qs(), status, body, edit, model())
+}
+
+/// The same, with a test's model and base body (for a base question with a picture).
+fn open_page_base_error_in(base: Vec<Value>, status: u16, body: Value, edit: &dyn Fn(&mut QuestionBank), mut m: CirclesModel) -> (CirclesModel, Arc<Script>, Vec<QuestionBank>) {
     let (mut bank, mut link) = linked_from(base, false);
     link.base_version = 3;
     link.head_seen = 3;
@@ -89,7 +148,6 @@ fn open_page_base_error(status: u16, body: Value, edit: &dyn Fn(&mut QuestionBan
     s.keep("Post", "/circles/heads", 200, heads(3));
     s.on("Get", &version_path(3), status, body);
     let mut banks = vec![bank];
-    let mut m = model();
     m.edit.add_link(link).unwrap();
     m.edit.frame(now(), &ready(&s));
     m.edit.sync(&mut banks);
@@ -102,28 +160,7 @@ fn open_page_base_error(status: u16, body: Value, edit: &dyn Fn(&mut QuestionBan
 
 /// The same, for a base body in another order (the circle's own order).
 fn open_page_with_base(base: Vec<Value>, edit: &dyn Fn(&mut QuestionBank), held_back: &[&str]) -> (CirclesModel, Arc<Script>, Vec<QuestionBank>) {
-    let (mut bank, mut link) = linked_from(base.clone(), false);
-    link.base_version = 3;
-    link.head_seen = 3;
-    link.role_seen = Some("owner".into());
-    link.author_known = true;
-    link.is_author = true;
-    link.held_back = held_back.iter().map(|qid| local(&link, qid)).collect();
-    edit(&mut bank);
-    bank.modified += 5;
-    let s = Script::new();
-    s.keep("Post", "/circles/heads", 200, heads(3));
-    s.keep_raw("Get", &version_path(3), served_qs(3, base, false));
-    let mut banks = vec![bank];
-    let mut m = model();
-    m.edit.add_link(link).unwrap();
-    m.edit.frame(now(), &ready(&s));
-    m.edit.sync(&mut banks);
-    assert!(m.edit.open_send(LOCAL, owner()));
-    m.edit.frame(now(), &ready(&s));
-    m.edit.sync(&mut banks);
-    m.edit.set_attest(true);
-    (m, s, banks)
+    open_page_in(base, edit, held_back, model())
 }
 
 /// Frames and syncs until the send summary is ready (and the licence is known).
@@ -298,6 +335,313 @@ fn d3_an_unticked_removal_is_put_back_with_its_pair_and_a_ticked_one_is_omitted(
             assert_eq!(changes_since(&link, &banks[0]).removed, 0);
         }
     }
+}
+
+// ---- pictures: a question sent as the base has it keeps the base's picture ---------------------------------------------
+
+/// (plan section 6, "Pictures") The plain line when a picture the person did not change can not be fetched.
+const BASE_PICTURE_NOT_FETCHED: &str =
+    "The picture for a change you are not sending could not be fetched from the circle, so nothing was sent. Try again.";
+
+/// The stage the page shows after a send attempt.
+fn send_stage(m: &CirclesModel) -> &SendStage {
+    match &m.edit.view {
+        EditView::Send(v) => &v.stage,
+        other => panic!("not the send page: {other:?}"),
+    }
+}
+
+#[test]
+fn d3_an_unticked_changes_base_picture_missing_here_is_fetched_and_stored_before_the_send() {
+    // base [A with a picture, B, C]; this bank changes A and the person unticks it: it goes as the base has it,
+    // picture included, and that file is not on this computer.
+    let pic = b"the base's picture".to_vec();
+    let sha = sha256_hex(&pic);
+    let file = format!("media/{sha}.webp");
+    let base = vec![qfull_pic(QA, "A", &file), qfull(QB, "B"), qfull(QC, "C")];
+    let images = Arc::new(Pics::default());
+    let media = Arc::new(MediaOnDisk::default());
+    let (mut m, s, mut banks) = open_page_in(base, &|b| {
+        b.questions[0].stem = "A (changed)".into();
+        b.questions[1].stem = "B (changed)".into();
+    }, &[], model_with(images.clone(), media));
+    let link = m.edit.link_for_local(LOCAL).unwrap();
+    let a = local(&link, QA);
+    m.edit.toggle_change(&a, false);
+    s.on_raw("Get", &blob_path(&sha), pic.clone());
+    s.on("Put", &format!("/blobs/{sha}"), 200, json!({"sha256": sha, "size": pic.len(), "width": 4, "height": 3}));
+    send(&mut m, &s, &mut banks, sent_with(4, &[QA, QB, QC]));
+    // The base body is still read once; the picture adds one blob GET, not another version read.
+    assert_eq!(s.paths().iter().filter(|p| **p == format!("Get {}", version_path(3))).count(), 1, "{:?}", s.paths());
+    assert_eq!(s.paths().iter().filter(|p| **p == format!("Get {}", blob_path(&sha))).count(), 1, "one blob GET: {:?}", s.paths());
+    assert_eq!(*images.0.lock().unwrap(), vec![pic], "the fetched bytes go through the send's image sink");
+    let payload = put_payload(&puts(&s).last().expect("the send went out"));
+    let qs = payload.pointer("/bank/questions").and_then(Value::as_array).unwrap();
+    assert_eq!(qs[0]["id"], json!(QA), "the base's raw question");
+    assert_eq!(qs[0]["image"]["file"], json!(file), "with the base's own picture");
+    assert!(matches!(send_stage(&m), SendStage::Done(_)), "the send went: {:?}", send_stage(&m));
+}
+
+#[test]
+fn d3_a_restored_removals_picture_is_fetched_too() {
+    // base [A, B, C with a picture]; this bank removed C and the person unticks the removal: C goes back as the base
+    // has it, picture included, and that file is not on this computer.
+    let pic = b"the removed question's picture".to_vec();
+    let sha = sha256_hex(&pic);
+    let file = format!("media/{sha}.webp");
+    let base = vec![qfull(QA, "A"), qfull(QB, "B"), qfull_pic(QC, "C", &file)];
+    let images = Arc::new(Pics::default());
+    let media = Arc::new(MediaOnDisk::default());
+    let (mut m, s, mut banks) = open_page_in(base, &|b| {
+        b.questions[0].stem = "A (changed)".into();
+        b.questions.pop();
+    }, &[], model_with(images.clone(), media));
+    let link = m.edit.link_for_local(LOCAL).unwrap();
+    let x = local(&link, QC);
+    m.edit.toggle_change(&x, false);
+    s.on_raw("Get", &blob_path(&sha), pic.clone());
+    s.on("Put", &format!("/blobs/{sha}"), 200, json!({"sha256": sha, "size": pic.len(), "width": 4, "height": 3}));
+    send(&mut m, &s, &mut banks, sent_with(4, &[QA, QB, QC]));
+    assert_eq!(s.paths().iter().filter(|p| **p == format!("Get {}", blob_path(&sha))).count(), 1, "{:?}", s.paths());
+    assert_eq!(*images.0.lock().unwrap(), vec![pic], "the restored question's picture is stored");
+    let payload = put_payload(&puts(&s).last().expect("the send went out"));
+    let qs = payload.pointer("/bank/questions").and_then(Value::as_array).unwrap();
+    assert_eq!(qs[2]["id"], json!(QC), "the removal is put back as the base has it");
+    assert_eq!(qs[2]["image"]["file"], json!(file), "with its picture");
+    assert!(matches!(send_stage(&m), SendStage::Done(_)), "the send went: {:?}", send_stage(&m));
+}
+
+#[test]
+fn d3_a_blob_404_or_a_hash_mismatch_fetches_nothing_sends_nothing_and_says_the_plain_line() {
+    for mismatch in [false, true] {
+        let pic = b"the base's picture".to_vec();
+        let sha = sha256_hex(&pic);
+        let file = format!("media/{sha}.webp");
+        let base = vec![qfull_pic(QA, "A", &file), qfull(QB, "B"), qfull(QC, "C")];
+        let images = Arc::new(Pics::default());
+        let media = Arc::new(MediaOnDisk::default());
+        let (mut m, s, mut banks) = open_page_in(base, &|b| {
+            b.questions[0].stem = "A (changed)".into();
+            b.questions[1].stem = "B (changed)".into();
+        }, &[], model_with(images.clone(), media));
+        let link = m.edit.link_for_local(LOCAL).unwrap();
+        let a = local(&link, QA);
+        m.edit.toggle_change(&a, false);
+        if mismatch {
+            // 200 with bytes that do not hash to the name asked for: `circle_blob` refuses it.
+            s.on_raw("Get", &blob_path(&sha), b"some other picture".to_vec());
+        } else {
+            s.on("Get", &blob_path(&sha), 404, json!({"error": "not_found"}));
+        }
+        send(&mut m, &s, &mut banks, sent_with(4, &[QA, QB, QC]));
+        assert!(puts(&s).is_empty(), "nothing is uploaded or sent: {:?}", s.paths());
+        assert!(images.0.lock().unwrap().is_empty(), "the bytes are never stored, whatever came back");
+        match send_stage(&m) {
+            SendStage::Failed(p) => assert_eq!(p.message, BASE_PICTURE_NOT_FETCHED, "mismatch: {mismatch}"),
+            other => panic!("not the plain line (mismatch: {mismatch}): {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn d3_a_base_picture_already_here_is_not_fetched() {
+    let pic = b"the base's picture".to_vec();
+    let sha = sha256_hex(&pic);
+    let file = format!("media/{sha}.webp");
+    let base = vec![qfull_pic(QA, "A", &file), qfull(QB, "B"), qfull(QC, "C")];
+    let images = Arc::new(Pics::default());
+    let media = Arc::new(MediaOnDisk::default());
+    media.put(&file, &pic);
+    let (mut m, s, mut banks) = open_page_in(base, &|b| {
+        b.questions[0].stem = "A (changed)".into();
+        b.questions[1].stem = "B (changed)".into();
+    }, &[], model_with(images.clone(), media));
+    let link = m.edit.link_for_local(LOCAL).unwrap();
+    let a = local(&link, QA);
+    m.edit.toggle_change(&a, false);
+    // No blob GET is scripted: a fetch here would panic in the scripted session.
+    s.on("Put", &format!("/blobs/{sha}"), 200, json!({"sha256": sha, "size": pic.len(), "width": 4, "height": 3}));
+    send(&mut m, &s, &mut banks, sent_with(4, &[QA, QB, QC]));
+    assert!(!s.paths().iter().any(|p| p.contains("/blobs/") && p.starts_with("Get ")), "no blob GET: {:?}", s.paths());
+    assert!(images.0.lock().unwrap().is_empty(), "nothing is fetched or re-stored");
+    assert!(matches!(send_stage(&m), SendStage::Done(_)), "{:?}", send_stage(&m));
+}
+
+#[test]
+fn d3_a_whole_bank_send_does_not_fetch_a_picture() {
+    // The base can not be had, so the whole bank goes: the picture comes from this computer, and no blob is fetched.
+    let pic = b"the base's picture".to_vec();
+    let sha = sha256_hex(&pic);
+    let file = format!("media/{sha}.webp");
+    let base = vec![qfull_pic(QA, "A", &file), qfull(QB, "B"), qfull(QC, "C")];
+    let images = Arc::new(Pics::default());
+    let media = Arc::new(MediaOnDisk::default());
+    media.put(&file, &pic);
+    let (mut m, s, mut banks) = open_page_base_error_in(base, 404, json!({"error": "version_not_retained"}), &|b| b.questions[0].stem = "A (changed)".into(), model_with(images.clone(), media));
+    assert!(matches!(m.edit.partial_send(), Some(PartialSend::Unavailable(_))), "the whole bank: {:?}", m.edit.partial_send());
+    // No blob GET is scripted: a fetch here would panic in the scripted session.
+    s.on("Put", &format!("/blobs/{sha}"), 200, json!({"sha256": sha, "size": pic.len(), "width": 4, "height": 3}));
+    send(&mut m, &s, &mut banks, sent_with(4, &[QA, QB, QC]));
+    assert!(!s.paths().iter().any(|p| p.contains("/blobs/") && p.starts_with("Get ")), "no blob GET: {:?}", s.paths());
+    let payload = put_payload(&puts(&s).last().expect("the send went out"));
+    assert_eq!(question_stems(&payload), ["A (changed)", "B", "C"], "the whole bank, as before: {payload}");
+    assert!(matches!(send_stage(&m), SendStage::Done(_)), "{:?}", send_stage(&m));
+}
+
+#[test]
+fn d3_a_missing_picture_on_our_own_question_keeps_the_missing_media_refusal_and_fetches_nothing() {
+    // The added question is the person's own (ticked): its picture is not fetched from the circle. Today's refusal
+    // still says so, and nothing is sent.
+    let pic = b"our own picture".to_vec();
+    let sha = sha256_hex(&pic);
+    let file = format!("media/{sha}.webp");
+    let images = Arc::new(Pics::default());
+    let media = Arc::new(MediaOnDisk::default());
+    let (mut m, s, mut banks) = open_page_in(base_qs(), &|b| {
+        let mut q = added_question();
+        q.image = Some(ImageRef { file: file.clone(), width: 4, height: 3 });
+        b.questions.push(q);
+    }, &[], model_with(images.clone(), media));
+    // No blob GET is scripted: a fetch here would panic in the scripted session.
+    send(&mut m, &s, &mut banks, sent_with(4, &[QA, QB, QC, QNEW]));
+    assert!(!s.paths().iter().any(|p| p.contains("/blobs/") && p.starts_with("Get ")), "no blob GET: {:?}", s.paths());
+    assert!(puts(&s).is_empty(), "nothing is sent: {:?}", s.paths());
+    let want = LocalProblem::MissingMedia { file }.message();
+    match send_stage(&m) {
+        SendStage::Failed(p) => assert_eq!(p.message, want),
+        other => panic!("not the missing-picture refusal: {other:?}"),
+    }
+}
+
+#[test]
+fn d3_two_base_questions_sharing_one_picture_make_one_blob_get() {
+    // base [A with a picture, B, C with the same picture]; A and C are changed and unticked, B is ticked. The one
+    // file is fetched once, though two base raw questions name it.
+    let pic = b"one picture, two questions".to_vec();
+    let sha = sha256_hex(&pic);
+    let file = format!("media/{sha}.webp");
+    let base = vec![qfull_pic(QA, "A", &file), qfull(QB, "B"), qfull_pic(QC, "C", &file)];
+    let images = Arc::new(Pics::default());
+    let media = Arc::new(MediaOnDisk::default());
+    let (mut m, s, mut banks) = open_page_in(base, &|b| {
+        b.questions[0].stem = "A (changed)".into();
+        b.questions[1].stem = "B (changed)".into();
+        b.questions[2].stem = "C (changed)".into();
+    }, &[], model_with(images.clone(), media));
+    let link = m.edit.link_for_local(LOCAL).unwrap();
+    let (a, c) = (local(&link, QA), local(&link, QC));
+    m.edit.toggle_change(&a, false);
+    m.edit.toggle_change(&c, false);
+    s.on_raw("Get", &blob_path(&sha), pic.clone());
+    s.on("Put", &format!("/blobs/{sha}"), 200, json!({"sha256": sha, "size": pic.len(), "width": 4, "height": 3}));
+    send(&mut m, &s, &mut banks, sent_with(4, &[QA, QB, QC]));
+    assert_eq!(s.paths().iter().filter(|p| **p == format!("Get {}", blob_path(&sha))).count(), 1, "one GET for one file: {:?}", s.paths());
+    let payload = put_payload(&puts(&s).last().expect("the send went out"));
+    let qs = payload.pointer("/bank/questions").and_then(Value::as_array).unwrap();
+    assert_eq!(qs[0]["image"]["file"], json!(file));
+    assert_eq!(qs[2]["image"]["file"], json!(file));
+    assert!(matches!(send_stage(&m), SendStage::Done(_)), "{:?}", send_stage(&m));
+}
+
+#[test]
+fn d3_a_base_picture_named_png_is_sent_under_its_own_name() {
+    // The base names a PNG (an imported picture); the store would keep a fetched copy as WebP under another name. The
+    // base raw question must keep the base's name, or the server would hash it as changed.
+    let pic = b"an imported picture".to_vec();
+    let sha = sha256_hex(&pic);
+    let file = format!("media/{sha}.png");
+    let base = vec![qfull_pic(QA, "A", &file), qfull(QB, "B"), qfull(QC, "C")];
+    let images = Arc::new(Pics::default());
+    let media = Arc::new(MediaOnDisk::default());
+    let (mut m, s, mut banks) = open_page_in(base, &|b| {
+        b.questions[0].stem = "A (changed)".into();
+        b.questions[1].stem = "B (changed)".into();
+    }, &[], model_with(images.clone(), media));
+    let link = m.edit.link_for_local(LOCAL).unwrap();
+    let a = local(&link, QA);
+    m.edit.toggle_change(&a, false);
+    s.on_raw("Get", &blob_path(&sha), pic.clone());
+    s.on("Put", &format!("/blobs/{sha}"), 200, json!({"sha256": sha, "size": pic.len(), "width": 4, "height": 3}));
+    send(&mut m, &s, &mut banks, sent_with(4, &[QA, QB, QC]));
+    assert_eq!(s.paths().iter().filter(|p| **p == format!("Get {}", blob_path(&sha))).count(), 1, "{:?}", s.paths());
+    let payload = put_payload(&puts(&s).last().expect("the send went out"));
+    let qs = payload.pointer("/bank/questions").and_then(Value::as_array).unwrap();
+    assert_eq!(qs[0]["image"]["file"], json!(file), "the base's PNG name, not the store's WebP name");
+    assert!(puts(&s).iter().any(|p| p.path == format!("/blobs/{sha}")), "the fetched PNG bytes go up: {:?}", s.paths());
+}
+
+#[test]
+fn d3_a_signed_out_fetch_goes_to_the_sign_in_path_and_an_offline_one_to_the_plain_line() {
+    for signed_out in [true, false] {
+        let pic = b"the base's picture".to_vec();
+        let sha = sha256_hex(&pic);
+        let file = format!("media/{sha}.webp");
+        let base = vec![qfull_pic(QA, "A", &file), qfull(QB, "B"), qfull(QC, "C")];
+        let images = Arc::new(Pics::default());
+        let media = Arc::new(MediaOnDisk::default());
+        let (mut m, s, mut banks) = open_page_in(base, &|b| {
+            b.questions[0].stem = "A (changed)".into();
+            b.questions[1].stem = "B (changed)".into();
+        }, &[], model_with(images.clone(), media));
+        let link = m.edit.link_for_local(LOCAL).unwrap();
+        let a = local(&link, QA);
+        m.edit.toggle_change(&a, false);
+        // The send's licence check (a POST) answers first; the blob GET then meets the failure.
+        s.say(200, heads(3));
+        if signed_out {
+            s.fail(ApiError::SignedOut);
+        } else {
+            s.fail(ApiError::Offline("no network".into()));
+        }
+        send(&mut m, &s, &mut banks, sent_with(4, &[QA, QB, QC]));
+        assert!(puts(&s).is_empty(), "nothing is uploaded or sent: {:?}", s.paths());
+        assert!(images.0.lock().unwrap().is_empty(), "nothing is stored");
+        if signed_out {
+            assert!(m.edit.take_signed_out(), "the sign-in path, as for any signed-out answer");
+            assert!(matches!(send_stage(&m), SendStage::Editing), "back to the note, not a picture refusal: {:?}", send_stage(&m));
+        } else {
+            match send_stage(&m) {
+                SendStage::Failed(p) => {
+                    assert_eq!(p.message, BASE_PICTURE_NOT_FETCHED);
+                    assert!(p.retry, "the line says Try again, and that control is drawn");
+                }
+                other => panic!("not the plain line: {other:?}"),
+            }
+        }
+    }
+}
+
+#[test]
+fn d3_ui_a_failed_picture_fetch_draws_try_again_and_pressing_it_fetches_and_sends() {
+    let pic = b"the base's picture".to_vec();
+    let sha = sha256_hex(&pic);
+    let file = format!("media/{sha}.webp");
+    let base = vec![qfull_pic(QA, "A", &file), qfull(QB, "B"), qfull(QC, "C")];
+    let images = Arc::new(Pics::default());
+    let media = Arc::new(MediaOnDisk::default());
+    let (mut m, s, mut banks) = open_page_in(base, &|b| {
+        b.questions[0].stem = "A (changed)".into();
+        b.questions[1].stem = "B (changed)".into();
+    }, &[], model_with(images.clone(), media));
+    let link = m.edit.link_for_local(LOCAL).unwrap();
+    let a = local(&link, QA);
+    m.edit.toggle_change(&a, false);
+    s.on("Get", &blob_path(&sha), 404, json!({"error": "not_found"}));
+    send(&mut m, &s, &mut banks, sent_with(4, &[QA, QB, QC]));
+    match send_stage(&m) {
+        SendStage::Failed(p) => assert!(p.retry, "the Failed page offers to try again"),
+        other => panic!("not the plain line: {other:?}"),
+    }
+    let shapes = page(1280.0, &mut m);
+    assert!(has(&shapes, "Try again"), "the control the line names is drawn: {:?}", texts(&shapes));
+    // The second attempt: the blob now answers, then the picture upload and the send.
+    s.on_raw("Get", &blob_path(&sha), pic.clone());
+    s.on("Put", &format!("/blobs/{sha}"), 200, json!({"sha256": sha, "size": pic.len(), "width": 4, "height": 3}));
+    assert!(click_text(&ctx(), 1280.0, "Try again", 0, &mut |ui| super::circle_edit_ui::draw_page(ui, &mut m)), "Try again is clickable");
+    m.edit.sync(&mut banks);
+    m.edit.frame(now(), &ready(&s));
+    assert_eq!(s.paths().iter().filter(|p| **p == format!("Get {}", blob_path(&sha))).count(), 2, "the retry fetches again: {:?}", s.paths());
+    assert!(matches!(send_stage(&m), SendStage::Done(_)), "and the send goes: {:?}", send_stage(&m));
 }
 
 // ---- the base can not be had: the whole bank, said plainly ---------------------------------------------------------------

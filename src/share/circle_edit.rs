@@ -588,7 +588,10 @@ pub struct EditHost {
 // ---- jobs ---------------------------------------------------------------------------------------------------------
 
 enum Work {
-    Send { cid: String, bid: String, req: Box<CircleSend> },
+    /// `fetch`: (phase D3, plan section 6 "Pictures") the pictures of questions sent as the base has them, by
+    /// `media/<sha256>.<ext>`: the job fetches each one this computer lacks from the circle before the send, so a
+    /// base raw question is never sent with a missing picture. Empty for a whole-bank send.
+    Send { cid: String, bid: String, req: Box<CircleSend>, fetch: Vec<String> },
     /// `own`: the version a send with no readable answer was based on, and the person's display name (see `OwnRead`).
     MergeFetch { cid: String, bid: String, base: u64, need_base: bool, own: Option<OwnRead> },
     MergeApply { cid: String, bid: String, version: u64 },
@@ -688,7 +691,7 @@ type Repaint = Option<Arc<dyn Fn() + Send + Sync>>;
 async fn run_async(session: SharedSession, images: SharedImages, media: SharedMedia, retry: RetryPolicy, work: Work, tx: Sender<Msg>, repaint: Repaint) {
     let pool = Pool::new(&*session).with_retry(retry);
     let msg = match work {
-        Work::Send { cid, bid, req } => {
+        Work::Send { cid, bid, req, fetch } => {
             let (ptx, prepaint) = (tx.clone(), repaint.clone());
             let mut progress = move |p: PublishProgress| {
                 let _ = ptx.send(Msg::Progress(p));
@@ -696,7 +699,7 @@ async fn run_async(session: SharedSession, images: SharedImages, media: SharedMe
                     r();
                 }
             };
-            let (r, eff) = send_checked(&pool, &cid, &bid, *req, &*media, &mut progress).await;
+            let (r, eff) = send_checked(&pool, &cid, &bid, *req, &*media, &*images, &fetch, &mut progress).await;
             Msg::Sent(cid, bid, r, eff)
         }
         Work::MergeFetch { cid, bid, base, need_base, own } => {
@@ -758,7 +761,13 @@ fn run(session: SharedSession, images: SharedImages, media: SharedMedia, retry: 
 
 /// The send, with the licence asked of the pool just before: the page may have been open a while, and a
 /// send must never change the bank's licence back. If the pool can not be asked, nothing is sent.
-async fn send_checked(pool: &Pool<'_>, cid: &str, bid: &str, mut req: CircleSend, media: &dyn super::pool::MediaSource, progress: &mut dyn FnMut(PublishProgress)) -> (Result<SentBank, PoolError>, Option<License>) {
+///
+/// (phase D3, plan section 6 "Pictures") `fetch` names the pictures of questions sent as the base has them; each one
+/// this computer lacks is fetched from the circle (hash checked by `circle_blob`) and stored through the same image
+/// sink the merge uses. The send then reads those bytes from `FetchedMedia`, so the base raw question keeps its own
+/// file name even when the store gives it another (a picture kept as PNG or JPEG under its own hash). A fetch that
+/// fails sends nothing and says the plain line; only a sign-out keeps the sign-in path.
+async fn send_checked(pool: &Pool<'_>, cid: &str, bid: &str, mut req: CircleSend, media: &dyn super::pool::MediaSource, images: &dyn super::browse::ImageSink, fetch: &[String], progress: &mut dyn FnMut(PublishProgress)) -> (Result<SentBank, PoolError>, Option<License>) {
     let now = match pool.circle_heads(&[bid.to_string()]).await {
         Ok(es) => es.into_iter().find(|e| e.bank_id == bid).and_then(|e| match e.state {
             HeadState::Current { license: Some(l), .. } => License::parse(&l),
@@ -769,7 +778,42 @@ async fn send_checked(pool: &Pool<'_>, cid: &str, bid: &str, mut req: CircleSend
     if let Some(l) = now {
         req.license = l;
     }
-    (pool.send_circle_version(cid, bid, &req, media, progress).await, now)
+    let mut extra: HashMap<String, Vec<u8>> = HashMap::new();
+    for file in fetch {
+        if media.read(file).is_some() {
+            continue;
+        }
+        let Some(sha) = super::pool::media_sha(file) else {
+            return (Err(LocalProblem::BaseMediaUnavailable.into()), now);
+        };
+        match pool.circle_blob(cid, bid, &sha).await {
+            Ok(blob) => {
+                // Best effort: kept on this computer for the next send or open; the send itself reads the bytes below
+                // (the store may name the file differently, e.g. a picture kept as WebP).
+                let _ = images.put(&blob.bytes);
+                extra.insert(file.clone(), blob.bytes);
+            }
+            // The sign-in ended: that is the page's own step, not a picture problem.
+            Err(e @ PoolError::Api(ApiError::SignedOut)) => return (Err(e), now),
+            Err(_) => return (Err(LocalProblem::BaseMediaUnavailable.into()), now),
+        }
+    }
+    let media = FetchedMedia { base: media, fetched: std::cell::RefCell::new(extra) };
+    (pool.send_circle_version(cid, bid, &req, &media, progress).await, now)
+}
+
+/// The pictures of a send: those this computer has (`base`), and the ones just fetched from the circle, by the file
+/// name the composed question names (which the image store may keep under another name). A fetched entry is handed
+/// over (moved out) on its one read, so the send does not hold a second copy of every fetched picture.
+struct FetchedMedia<'a> {
+    base: &'a dyn super::pool::MediaSource,
+    fetched: std::cell::RefCell<HashMap<String, Vec<u8>>>,
+}
+
+impl super::pool::MediaSource for FetchedMedia<'_> {
+    fn read(&self, file: &str) -> Option<Vec<u8>> {
+        self.fetched.borrow_mut().remove(file).or_else(|| self.base.read(file))
+    }
 }
 
 /// (critic 83 I2) A send from the bank with no readable answer: the version it was based on, and the person's display
@@ -2769,6 +2813,9 @@ impl CircleEditModel {
                 return None;
             }
             PoolError::Api(_) => p.retry = true,
+            // (phase D3, plan section 6 "Pictures") A base picture that could not be fetched is worth trying again: the
+            // Failed page then draws "Try again", which re-runs the send (and so the fetch). The line says so.
+            PoolError::Local(LocalProblem::BaseMediaUnavailable) => p.retry = true,
             PoolError::Local(_) => {}
             PoolError::Refused(r) => {
                 let wait = r.detail.retry_after.filter(|s| *s > 0).map(|s| api::later(now, s));
@@ -2842,7 +2889,7 @@ impl CircleEditModel {
             return false;
         }
         let act = match &work {
-            Work::Send { cid, bid, req } => Some(("send", cid, bid, 0, req.base_version.unwrap_or(0))),
+            Work::Send { cid, bid, req, .. } => Some(("send", cid, bid, 0, req.base_version.unwrap_or(0))),
             Work::Rollback { cid, bid, to, base, .. } => Some(("restore", cid, bid, *to, *base)),
             Work::Trim { cid, bid, keep } => Some(("trim", cid, bid, u64::from(*keep), 0)),
             _ => None,
@@ -3630,6 +3677,10 @@ impl CircleEditModel {
         let plan_base = plan.as_ref().map(|(base, ..)| *base);
         let mut composed: Option<ComposedPartial> = None;
         let mut held_back: Vec<String> = Vec::new();
+        // (phase D3, plan section 6 "Pictures") The base's picture files for questions sent as the base has it; the
+        // send job fetches any this computer lacks. Only those questions are carried: a picture on the person's own
+        // question keeps today's MissingMedia refusal.
+        let mut fetch: Vec<String> = Vec::new();
         let payload = match plan {
             Some((_base, body, changed, ticked)) => {
                 if ticked.is_empty() {
@@ -3641,6 +3692,13 @@ impl CircleEditModel {
                         // (plan section 6) The unticked changes still differing: what the link keeps in `held_back`.
                         if let PartialSend::Ready { changes, .. } = &v.partial {
                             held_back = changes.ids().into_iter().filter(|id| !ticked.contains(id)).collect();
+                        }
+                        for cq in &c.questions {
+                            if let Some(file) = cq.base_image.as_ref()
+                                && !fetch.contains(file)
+                            {
+                                fetch.push(file.clone());
+                            }
                         }
                         let payload = c.payload.clone();
                         composed = Some(c);
@@ -3743,7 +3801,7 @@ impl CircleEditModel {
         }
         let (cid, bid) = (link.circle_id.clone(), link.circle_bank_id.clone());
         let bank = bank.clone();
-        if self.launch(Work::Send { cid, bid, req: Box::new(req) }) {
+        if self.launch(Work::Send { cid, bid, req: Box::new(req), fetch }) {
             self.inflight = Some(Inflight { link, bank, pictures: shown, image_ok, dropped, asked, perm, retry, base, partial: composed, held_back });
         } else if let EditView::Send(v) = &mut self.view {
             v.stage = SendStage::Failed(Problem { message: "Not signed in. Open the Account window and sign in.".into(), retry: true, retry_at: None, account: true });

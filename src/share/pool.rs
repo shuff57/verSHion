@@ -97,6 +97,9 @@ pub enum LocalProblem {
     IndependenceClaim(&'static str),
     /// A picture the payload names is not in the media store.
     MissingMedia { file: String },
+    /// (phase D3, plan section 6 "Pictures") A base question's picture, for a change the person did not send, is not
+    /// on this computer and could not be fetched from the circle: nothing is sent.
+    BaseMediaUnavailable,
     /// A name is not `media/<sha256>.<png|jpg|gif|webp>`.
     BadMediaName { file: String },
     /// The bytes of a picture do not hash to the name it has.
@@ -127,6 +130,7 @@ impl LocalProblem {
             LocalProblem::LicenseNotPublic => "An all-rights-reserved (circle-only) item can not be public. Pick a Creative Commons licence or keep it unlisted.".into(),
             LocalProblem::IndependenceClaim(why) => (*why).into(),
             LocalProblem::MissingMedia { file } => format!("A picture used by this question ({file}) is missing from this device. Re-add it, or remove it from the question."),
+            LocalProblem::BaseMediaUnavailable => "The picture for a change you are not sending could not be fetched from the circle, so nothing was sent. Try again.".into(),
             LocalProblem::BadMediaName { file } => format!("A picture has a name the pool can not take ({file})."),
             LocalProblem::MediaHashMismatch { file } => format!("The picture {file} on this device does not match its name. Re-add it to the question."),
             LocalProblem::MediaTooLarge { file, len } => {
@@ -1673,7 +1677,9 @@ pub struct ImageUse {
     pub sha256: String,
 }
 
-fn media_sha(file: &str) -> Option<String> {
+/// `media/<sha256>.<png|jpg|gif|webp>` -> its sha. Shared with a circle send's picture fetch (phase D3), so a name
+/// the pool accepts can not be read two ways.
+pub(super) fn media_sha(file: &str) -> Option<String> {
     let rest = file.strip_prefix("media/")?;
     let (stem, ext) = rest.split_once('.')?;
     (is_sha256(stem) && matches!(ext, "png" | "jpg" | "gif" | "webp")).then(|| stem.to_string())
