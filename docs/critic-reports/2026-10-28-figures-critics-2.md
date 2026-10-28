@@ -40,6 +40,29 @@ committed after 1.3 round 3. Verdicts: both FAIL. This file records the findings
 | B13 | Fraction printed `0.62` beside `62.5%`. | **fixed**: the percentage is derived from the decimal as printed. |
 | B14 | Print grids vanished in a 66% bitonal copy (five figures). | **fixed**: the Print grid is `#9a9a9a`, dark enough to survive the threshold. |
 
+## Verification round (same day, on `e72a4bc`)
+
+A verification critic re-checked that commit independently (own target dir, own PNGs, a probe linking the lib).
+It confirmed the suite at 1685 green and re-derived most fixes: the equation round-trip over 17 periods, the two
+composite blanks, the slope line staying in the plot across 220 settings, the transform grid across 148, the
+unit-circle label sweep across 2160 renders, the fraction decimal/percentage pair across 2496 cases, and the
+triangle-centres student copy and altitudes.
+
+It found three fixes that did not hold and three defects the fixes introduced; all six were fixed in `4ff5ea5`:
+
+| | |
+|---|---|
+| A5 not fixed | the cosine markers were still on the y-axis — the guard tested a condition that could never be true |
+| B14 not fixed | the Print grid still vanished at the 1.3x raster (#9a9a9a blends to 179); darkened to #787878 |
+| B11 partly fixed | the slope triangle still left the plot in 638 of 3444 settings; legs are now clipped to the plot |
+| new major | the longer triangle-centres sentences ran to 700 px on a 470 px canvas and were cut off; shortened |
+| new minor | the zero-rise slope label moved but its collision box did not |
+| new minor | slope's Decimal places control offered 3 while build clamped to 2 |
+
+Two critic rounds are now spent on this batch, which is the cap agreed for these figures. The remaining risk is
+that no automated test pins 66% grid survivability; it is verified by measurement and the colour choice, not by a
+test. That is recorded as a gap rather than closed.
+
 ## Left open (minors, recorded here and in the progress doc)
 - sincos axis text goes through `chart::text`, whose ink is `#111827` (grey within the repo's spread of 24, but
   not exactly neutral); the module's Print test checks strokes only.
