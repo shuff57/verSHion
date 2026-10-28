@@ -3,7 +3,7 @@
 Written 2026-10-27 ~19:40 PT by the circles/D1 session, which the owner asked to take over and "finish both".
 
 ## Where things are
-- Worktree `/home/shuff57/Documents/GitHub/verSHion-figures`, branch `figures-gapfill` (based on `figures-circuits`). HEAD `b706974` (the four uncritiqued figures' blocker and major fixes). **Phase 2 is complete.** **Math core (1.1-1.5) is complete; phase 2 has started.**
+- Worktree `/home/shuff57/Documents/GitHub/verSHion-figures`, branch `figures-gapfill` (based on `figures-circuits`). HEAD `fab618d` (phase 3 opened: energy bar charts). **Math core and phase 2 are complete; phase 3 is under way.**
 - Do not touch the main repo `/home/shuff57/Documents/GitHub/verSHion` (branch `shared-pool-phase1`): it holds the circles D1 work, committed locally, waiting on critics 101/102.
 - Loop spec: `docs/figures-loop.md`. Rules: `docs/figures-conventions.md`. Progress and critic minors: `docs/figures-progress.md`. Memory: `figures-gapfill-loop.md`.
 - Done and committed: phase 0, 1.1 conics (`b009d82`), 1.2 circle (`4f5715d`, closed), 1.3 rounds 1-3 (`c3eb729`, `0f81c30`, `2cc0a58`).
