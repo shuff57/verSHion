@@ -107,13 +107,19 @@ pub fn build(p: &Params) -> (String, Report) {
     ];
     for (x, y, w, h) in cells {
         d.rect(px(x), py(y), w * s, h * s, face, ink, 1.8);
+        // which edges each face is made of, so a teacher can point at one and name it
+        let label = if (w - a).abs() < 1e-9 && (h - c).abs() < 1e-9 { "a x c" } else if (w - b).abs() < 1e-9 && (h - c).abs() < 1e-9 { "b x c" } else { "a x b" };
+        d.raw(&text_el(px(x) + w * s / 2.0, py(y) + h * s / 2.0 + 4.0, 11.0, "middle", ink, label));
     }
 
     // the readout
+    // the edges are the given, so they stay on the student copy: the net is drawn to fit its box, so the picture
+    // is the same size for every similar box and cannot be measured back to the edges
+    let ed = dec.max(1);
     let rows = [
-        if ans { format!("Edges  {} x {} x {}", num(a, dec), num(b, dec), num(c, dec)) } else { format!("Edges  {BLANK} x {BLANK} x {BLANK}") },
-        if ans { format!("Surface area  {}", num(area, dec)) } else { format!("Surface area  {BLANK}") },
-        if ans { format!("Volume  {}", num(volume, dec)) } else { format!("Volume  {BLANK}") },
+        format!("Edges  {} x {} x {}", num(a, ed), num(b, ed), num(c, ed)),
+        if ans { format!("Surface area  {}", num(area, ed)) } else { format!("Surface area  {BLANK}") },
+        if ans { format!("Volume  {}", num(volume, ed)) } else { format!("Volume  {BLANK}") },
     ];
     for (i, line) in rows.iter().enumerate() {
         d.raw(&format!(
@@ -215,9 +221,23 @@ mod tests {
     fn the_answers_are_blank_on_the_student_copy() {
         let stu = texts(&render_of(&[b(SHOW_ANSWERS, false)]));
         assert!(stu.contains("Surface area  _____") && stu.contains("Volume  _____"), "{stu}");
-        assert!(stu.contains("Edges  _____ x _____ x _____"), "{stu}");
+        // the edges are the given: the net is scaled to fit, so the picture alone cannot supply them
+        assert!(stu.contains("Edges  4 x 3 x 2"), "{stu}");
         let key = texts(&render_of(&[b(SHOW_ANSWERS, true)]));
         assert!(key.contains("Surface area  52"), "{key}");
+    }
+
+    /// A half-unit edge must not print 0, and a real volume must not round away to 0.
+    #[test]
+    fn half_unit_edges_never_print_as_zero() {
+        for (solid, edges) in [("Cube", (0.5, 0.5, 0.5)), ("Cuboid", (0.5, 3.0, 2.0))] {
+            for dec in 0..=2i64 {
+                let l = [s("solid", solid), f("a", edges.0), f("b", edges.1), f("c", edges.2), ("dec", Value::I(dec)), b(SHOW_ANSWERS, true)];
+                let t = texts(&render_of(&l));
+                assert!(!t.contains("Edges  0 x"), "{solid} dec {dec}: {t}");
+                assert!(!t.contains("Volume  0\n"), "{solid} dec {dec}: a real volume printed as 0: {t}");
+            }
+        }
     }
 
     #[test]

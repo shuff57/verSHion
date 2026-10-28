@@ -58,7 +58,8 @@ pub fn warnings(_p: &Params) -> Vec<String> { Vec::new() }
 
 fn text_el(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) -> String {
     format!(
-        r##"<text x="{x:.2}" y="{y:.2}" font-size="{size}" text-anchor="{anchor}" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{fill}">{}</text>"##,
+        // a halo, so a scale number stays readable where the ray runs over it
+        r##"<text x="{x:.2}" y="{y:.2}" font-size="{size}" text-anchor="{anchor}" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{fill}" stroke="#fff" stroke-width="2.4" paint-order="stroke" stroke-linejoin="round">{}</text>"##,
         svg::esc(s)
     )
 }
@@ -84,9 +85,19 @@ pub fn build(p: &Params) -> (String, Report) {
     let mut d = Doc::new(W, ROWS_Y0 + 2.0 * ROW_H * f + 8.0);
     d.describe("Protractor", "A half-disc protractor with both degree scales and a ray at the chosen angle");
 
-    // the half-disc and its baseline
+    // the half-disc and its baseline. The right-hand half of the baseline is the reference arm, drawn heavier, so
+    // the reading is not ambiguous between 55 and 125
     d.sector(CX, CY, R, 0.0, 180.0, body, ink, 2.0);
     d.line(CX - R, CY, CX + R, CY, ink, 2.0);
+    d.line(CX, CY, CX + R, CY, ink, 4.0);
+
+    // the ray goes under the numbers, which carry a halo, so it never strikes a scale label through
+    let rad = deg.to_radians();
+    let tip = (CX + R * rad.cos(), CY - R * rad.sin());
+    if p.b("show_ray") {
+        d.line(CX, CY, tip.0, tip.1, ray, if print { 2.6 } else { 3.0 });
+        d.circle(CX, CY, 3.5, ray, ray, 0.0);
+    }
 
     // the graduations: a tick every 5 degrees, longer every 10, a number every 30 on each scale
     for k in 0..=36 {
@@ -115,19 +126,19 @@ pub fn build(p: &Params) -> (String, Report) {
         }
     }
 
-    // the ray
-    let r = deg.to_radians();
-    let tip = (CX + R * r.cos(), CY - R * r.sin());
-    if p.b("show_ray") {
-        d.line(CX, CY, tip.0, tip.1, ray, if print { 2.6 } else { 3.0 });
-        d.circle(CX, CY, 3.5, ray, ray, 0.0);
-    }
-
-    // the readout
+    // the readout follows what is drawn: no ray means no reading, and a scale that is not labelled has no second row
     let reading = format!("Reading  {}\u{b0}", deg.round());
     let other = format!("The other scale reads  {}\u{b0}", 180 - deg.round() as i64);
-    let rows = [if ans { reading } else { format!("Reading  {BLANK}\u{b0}") }, if ans { other } else { format!("The other scale reads  {BLANK}\u{b0}") }];
+    let rows = if !p.b("show_ray") {
+        vec!["No ray drawn".to_string()]
+    } else {
+        vec![
+            if ans { reading } else { format!("Reading  {BLANK}\u{b0}") },
+            if !p.b("inner") { String::new() } else if ans { other } else { format!("The other scale reads  {BLANK}\u{b0}") },
+        ]
+    };
     for (i, line) in rows.iter().enumerate() {
+        if line.is_empty() { continue; }
         d.raw(&format!(
             r##"<text x="24.00" y="{:.2}" font-size="{}" text-anchor="start" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{}">{}</text>"##,
             ROWS_Y0 + i as f64 * ROW_H * f,
@@ -226,6 +237,17 @@ mod tests {
         let with_ray = render_of(&[]);
         let without = render_of(&[b("show_ray", false)]);
         assert!(with_ray.matches(RAY).count() > without.matches(RAY).count());
+    }
+
+    /// The readout must follow what is drawn: no ray, no reading; no second scale, no second row.
+    #[test]
+    fn the_readout_follows_the_drawing() {
+        let none = texts(&render_of(&[b("show_ray", false)]));
+        assert!(!none.contains("Reading"), "a reading is printed with no ray: {none}");
+        assert!(none.contains("No ray drawn"), "{none}");
+        let one = texts(&render_of(&[b("inner", false)]));
+        assert!(!one.contains("The other scale"), "the second scale is not drawn: {one}");
+        assert!(one.contains("Reading"), "{one}");
     }
 
     #[test]

@@ -3319,7 +3319,7 @@ const TRANSFORMATIONS: &[Faq] = &[
 const FRACTION_MODELS: &[Faq] = &[
     Faq {
         q: "Which model should I use?",
-        a: "A bar and a tape diagram are the same idea: one strip cut into equal parts, with some shaded. The tape diagram also numbers the cuts, which helps for equivalent fractions and number lines. The circle suits fractions of a whole and turns, and the ten-frame is for tenths and for place value within 10.",
+        a: "A bar and a tape diagram are the same idea: one strip cut into equal parts, with some shaded. The tape diagram also numbers the cuts, which helps for equivalent fractions and number lines. The circle suits fractions of a whole and turns, the ten-frame is for tenths and for place value within 10, and the area model cuts a rectangle into a grid of equal cells, which is the picture to use for multiplying fractions and for showing that a fraction of an area is the same share.",
     },
     Faq {
         q: "Why is the fraction not printed?",
@@ -3331,7 +3331,7 @@ const FRACTION_MODELS: &[Faq] = &[
     },
     Faq {
         q: "How is the percentage worked out?",
-        a: "It is the fraction as a percentage: shaded / parts x 100, rounded to one decimal place (or to the Decimal places setting when that is 0 or 1). The decimal is the same division at the Decimal places setting.",
+        a: "The decimal is shaded / parts at the Decimal places setting, never fewer than two places. The percentage is that printed decimal x 100, so the two always agree: 5/8 prints 0.62 and 62%.",
     },
 ];
 
@@ -3376,7 +3376,7 @@ const SLOPE_TRIANGLE: &[Faq] = &[
 const PROTRACTOR: &[Faq] = &[
     Faq {
         q: "Which of the two scales do I read?",
-        a: "The outer scale runs from 0 at the right-hand end to 180 at the left, and the inner one the other way round. Read whichever starts at 0 on the arm that lies on the baseline: that is the angle the ray makes with it. The readout gives the reading and what the other scale shows, which is 180 minus it.",
+        a: "The outer scale runs from 0 at the right-hand end to 180 at the left, and the inner one the other way round. The right-hand half of the baseline is drawn heavier: that is the fixed arm, and the outer scale reads 0 there. The reading is the angle between that arm and the ray. The readout gives the reading and what the other scale shows, which is 180 minus it.",
     },
     Faq {
         q: "Why do the two readings add to 180?",
@@ -3399,7 +3399,7 @@ const BASE_TEN_BLOCKS: &[Faq] = &[
     },
     Faq {
         q: "Why does 305 have no rods?",
-        a: "A zero in the tens place means there are no tens, so no rod is drawn. The expansion leaves that place out entirely: 3 hundreds + 5 ones.",
+        a: "A zero in the tens place means there are no tens, so no rod is drawn, and the expansion writes that place as 0 rather than dropping it: 3 hundreds + 0 tens + 5 ones. Every place is always named, so the blanks on the student copy line up with the key.",
     },
     Faq {
         q: "Why do the blocks regroup at ten?",
@@ -3426,6 +3426,6 @@ const SOLID_NET: &[Faq] = &[
     },
     Faq {
         q: "How do I make a worksheet?",
-        a: "Turn Show answers off: the edges, the surface area and the volume become blanks while the net stays, so the student measures the net and works them out.",
+        a: "Turn Show answers off: the surface area and the volume become blanks while the net and the edges stay. The edges are the given, because the net is scaled to fit its box, so two similar boxes draw the same picture and the edges cannot be measured back from it.",
     },
 ];

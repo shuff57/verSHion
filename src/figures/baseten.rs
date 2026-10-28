@@ -135,12 +135,11 @@ pub fn build(p: &Params) -> (String, Report) {
 
     // the readout
     let row1 = format!("Number  {}", p.i("n").clamp(0, 999));
-    let mut parts = Vec::new();
-    if h > 0 { parts.push(format!("{h} hundred{}", if h == 1 { "" } else { "s" })); }
-    if t > 0 { parts.push(format!("{t} ten{}", if t == 1 { "" } else { "s" })); }
-    if o > 0 { parts.push(format!("{o} one{}", if o == 1 { "" } else { "s" })); }
-    let expansion = if parts.is_empty() { "0".to_string() } else { parts.join(" + ") };
-    let row2 = if ans { format!("{expansion}") } else { format!("{BLANK} + {BLANK} + {BLANK}") };
+    // every place is named in both copies, so the student's blanks and the key's expansion have the same shape;
+    // a zero place is written as 0 rather than dropped
+    let key_terms = format!("{h} hundreds + {t} tens + {o} ones");
+    let stu_terms = format!("{BLANK} hundreds + {BLANK} tens + {BLANK} ones");
+    let row2 = if ans { key_terms } else { stu_terms };
     for (i, line) in [row1, row2].iter().enumerate() {
         d.raw(&format!(
             r##"<text x="20.00" y="{:.2}" font-size="{}" text-anchor="start" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{}">{}</text>"##,
@@ -218,15 +217,16 @@ mod tests {
     fn a_missing_place_is_left_out_of_the_expansion() {
         // the expansion is the last line of the readout (the column names above it always say hundreds/tens/ones)
         let last = |svg: String| texts(&svg).lines().last().unwrap_or("").trim().to_string();
-        assert_eq!(last(render_of(&[i("n", 100)])), "1 hundred");
-        assert_eq!(last(render_of(&[i("n", 305)])), "3 hundreds + 5 ones");
-        assert_eq!(last(render_of(&[i("n", 0)])), "0");
+        assert_eq!(last(render_of(&[i("n", 100)])), "1 hundreds + 0 tens + 0 ones");
+        assert_eq!(last(render_of(&[i("n", 305)])), "3 hundreds + 0 tens + 5 ones");
+        assert_eq!(last(render_of(&[i("n", 0)])), "0 hundreds + 0 tens + 0 ones");
     }
 
     #[test]
     fn the_expansion_is_blank_on_the_student_copy() {
         let stu = texts(&render_of(&[b(SHOW_ANSWERS, false)]));
-        assert!(stu.contains("_____ + _____ + _____"), "{stu}");
+        // the blanks name their places, so they match the key's shape term for term
+        assert!(stu.contains("_____ hundreds + _____ tens + _____ ones"), "{stu}");
         assert!(stu.contains("Number  247"), "the number itself stays: {stu}");
         let key = texts(&render_of(&[b(SHOW_ANSWERS, true)]));
         assert!(key.contains("2 hundreds + 4 tens + 7 ones"), "{key}");

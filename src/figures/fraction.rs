@@ -10,7 +10,7 @@ use super::*;
 pub const ID: &str = "fraction-models";
 const INK: &str = "#111111";
 const SHADE: &str = "#7a4fc4";
-const SHADE_PRINT: &str = "#555555";
+// (Print shades with a hatch, so there is no solid print tone)
 const EMPTY: &str = "#ffffff";
 const OUTLINE_PRINT: &str = "#111111";
 const BLANK: &str = "_____";
@@ -81,13 +81,20 @@ fn text_el(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) -> Stri
 
 pub fn build(p: &Params) -> (String, Report) {
     let (shaded, parts) = fraction_of(p);
-    let dec = p.i("dec").clamp(0, 3);
+    // a fraction always prints at least two decimals: at fewer, 1/12 prints as "0" and its percentage as 0%
+    let dec = p.i("dec").clamp(0, 3).max(2);
     let print = p.s("style") == "Print";
     let ans = p.b(SHOW_ANSWERS);
     let f = svg::label_factor(p.s("label_size"));
-    let (ink, shade, empty) = (if print { OUTLINE_PRINT } else { INK }, if print { SHADE_PRINT } else { SHADE }, EMPTY);
+    let (ink, empty) = (if print { OUTLINE_PRINT } else { INK }, EMPTY);
 
     let mut d = Doc::new(W, H);
+    // in Print the shaded cells are hatched rather than filled: a solid tone merges neighbouring cells into one
+    // black shape in a 66% bitonal copy, which loses the subdivisions the model is for
+    if print {
+        d.defs(r##"<pattern id="fraction-shade" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="9" height="9" fill="#ffffff"/><line x1="0" y1="0" x2="0" y2="9" stroke="#333333" stroke-width="2.4"/></pattern>"##);
+    }
+    let shade = if print { "url(#fraction-shade)" } else { SHADE };
     d.describe("Fraction models", "A shape divided into equal parts with some of them shaded, showing a fraction");
     let lw = if print { 2.2 } else { 2.4 };
 
