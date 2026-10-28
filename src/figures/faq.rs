@@ -57,6 +57,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "transformations" => TRANSFORMATIONS,
         "fraction-models" => FRACTION_MODELS,
         "triangle-centres" => TRIANGLE_CENTRES,
+        "slope-triangle" => SLOPE_TRIANGLE,
         "parallelogram" => PARALLELOGRAM,
         "trapezoid" => TRAPEZOID,
         "kite" => KITE,
@@ -3347,5 +3348,24 @@ const TRIANGLE_CENTRES: &[Faq] = &[
     Faq {
         q: "How are the coordinates worked out?",
         a: "The centroid is the mean of the three vertices. The circumcentre is where two perpendicular bisectors cross; the incentre weights each vertex by the length of the opposite side; and the orthocentre follows from the Euler relation: the centroid is one third of the way from the circumcentre to the orthocentre.",
+    },
+];
+
+const SLOPE_TRIANGLE: &[Faq] = &[
+    Faq {
+        q: "What does the triangle show?",
+        a: "Its flat leg is the run and its upright leg is the rise between two points on the line. The gradient is rise over run, and because the triangle's run is set by the 'Triangle run' control, the rise is the gradient multiplied by it: a run of 1 with a gradient of 2 gives a rise of 2.",
+    },
+    Faq {
+        q: "Why is the gradient negative sometimes?",
+        a: "A line that goes down as it goes right has a negative gradient, so the triangle hangs below the line instead of standing above it. The slope is still rise over run, with the rise counted downwards.",
+    },
+    Faq {
+        q: "What is the equation of the line?",
+        a: "y = mx + c, where m is the gradient and c is where the line crosses the y-axis. The figure prints it from the two controls, so changing either one updates the line, the triangle and the equation together.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off. The line and the triangle stay, and the gradient, the rise, the run on the legs and the equation become blanks for the student to fill in from the picture.",
     },
 ];
