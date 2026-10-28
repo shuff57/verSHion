@@ -342,6 +342,23 @@ fn strip_view_known(i: &StripInput) -> StripView {
         v.buttons.retain(|b| *b != StripButton::TryAgain);
         v.buttons.insert(0, StripButton::TryAgain);
     }
+    // (critic 102 I1) the circle's difficulty could not be saved into the bank, and with it her own edits: said in the
+    // warning colour with Try again whatever else the strip says, including the states (under review, offline, signed
+    // out) that return before the `Learning::Held` arm. That arm already says exactly this, so it is not said twice.
+    if let Some((why, tries)) = i.status.and_then(|s| s.held.as_ref()) {
+        let held = super::circles_text::held_line(why, *tries);
+        if !v.line.contains(held.as_str()) {
+            v.warn = true;
+            v.line = format!("Shared with {}. {held}", circle_name(i.link));
+            v.busy = false;
+            // the actions that would meet the held pass are out; one she can still take (sign in, say) stays
+            v.buttons.retain(|b| !matches!(b, StripButton::Send | StripButton::CheckNow | StripButton::GetLatest | StripButton::TreatInStep | StripButton::TryAgain));
+            v.buttons.insert(0, StripButton::TryAgain);
+            if !v.buttons.contains(&StripButton::History) {
+                v.buttons.push(StripButton::History);
+            }
+        }
+    }
     v
 }
 
@@ -1030,7 +1047,8 @@ pub fn note_hint_for(note: &str, warns: bool) -> Option<String> {
         out.push("This bank was put back from a safety copy. Its page says what you can do.");
     }
     if parts.iter().any(|p| *p == "newer version" || *p == "newer") {
-        out.push("The circle has a newer version than this copy. Get latest on the bank's page brings it in.");
+        // (critic 102 m2) not "Get latest ... brings it in": the page does not offer it while the version is held for review
+        out.push("The circle has a newer version than this copy. The bank's page says what you can do about it.");
     }
     if let Some(h) = note_hint(note) {
         out.push(h);

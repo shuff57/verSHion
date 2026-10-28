@@ -2392,8 +2392,11 @@ impl CircleEditModel {
             let ran = link.pass_times.is_some() && !self.inherit_held.contains_key(&local);
             let already = if ran { inherited_before(&link, &banks[pos]) } else { Vec::new() };
             // (round 19, critic 99 m2) such a pass is done: what differs from the circle's now was put back by her since (Put mine
-            // back, or her own edit), and is never taken again; it is listed as hers, back
-            if only.is_none() && !already.is_empty() {
+            // back, or her own edit), and is never taken again; it is listed as hers, back. (critic 101 m1) `ran` alone says it:
+            // "Put all of mine back" can leave `already` empty, and the pass must not run again over her put-back. A held pass
+            // drops `pass_times` from the file, so only a banks write that failed *and* a links write that could not say so at
+            // once could make this skip an inherit that never happened.
+            if only.is_none() && ran {
                 self.update_link(&local, |l| {
                     // (round 19, critic 99 m3) an unclear send's time moves with the pass, as it did in the session that ran it
                     if let Some((before, after)) = l.pass_times {
@@ -4332,10 +4335,26 @@ impl CircleEditModel {
                 }
             }
         }
+        let before = banks[pos].clone();
         let prev = banks[pos].modified;
         banks[pos] = bank;
         // Seconds, like every editor writes; never the millisecond clock.
         banks[pos].modified = (self.now_ms() / 1000).max(prev.saturating_add(1));
+        // (critic 101 I1) the merged bank reaches the disk before the link says the merge was made: a links file ahead
+        // of the banks file is the "put back from a safety copy" state, and her choices in the merge are lost. The save
+        // is the model's, checked, not the caller's (which discards its error). On failure nothing changes.
+        let saved = match &self.bank_saver {
+            Some(f) => f(banks),
+            None => self.log.save_banks(banks),
+        };
+        if let Err(msg) = saved {
+            banks[pos] = before;
+            let why = format!("Your banks couldn't be saved ({}), so nothing was changed. Press Apply changes to try again; if it keeps failing, free some disk space.", super::circles_text::save_problem(&msg));
+            if let EditView::Merge(mv) = &mut self.view {
+                back(mv, rev, why);
+            }
+            return false;
+        }
         link.mark_bank(&banks[pos]);
         link.qids = qids_of(&new_base);
         link.base = merge::bounded(new_base);
@@ -4360,6 +4379,8 @@ impl CircleEditModel {
         let version = link.base_version;
         self.statuses.remove(&local_id);
         self.replace_link(link);
+        // the merge wrote every bank a moment ago: a "your own edits aren't saved" warning is out of date
+        self.banks_saved();
         self.caught_up(&local_id);
         // The next send, if there is something to send, goes with the token (a follow link's get has none).
         self.carry = (changes.total() > 0 && !carry.token.is_empty()).then_some(carry);

@@ -1,6 +1,6 @@
-# HANDOFF 2026-10-27 (evening): circles phase D1, rounds 19 and 20 complete, waiting on critics 101/102
+# HANDOFF 2026-10-27 (late evening): circles phase D1 — critics 101/102 ran, scoped fixes in, awaiting the re-check
 
-Repo `verSHion`, branch `shared-pool-phase1`, last commit is the round 19–20 checkpoint. This file was rewritten after the round-19 takeover session (`vershion-fd`, `240c6322`) lost its builder to the weekly API limit. The limit resets **2026-10-28 16:00 PT**.
+Repo `verSHion`, branch `shared-pool-phase1`, last commit is the round 19–20 checkpoint. This file was rewritten after the round-19 takeover session (`vershion-fd`, `240c6322`) lost its builder to the weekly API limit. The limit was due to reset **2026-10-28 16:00 PT**; the owner lifted that gate early, so the critic pair ran on the evening of 2026-10-27 (see the scoped fix round below).
 
 D1 rounds 19 and 20 are **committed locally** (the round 19–20 checkpoint, 45 files: 35 under `src/share/` plus this file and the nine critic reports 92-100). **Nothing is pushed.** The rest of the dirty tree belongs to the other sessions (see "Do not touch").
 
@@ -47,7 +47,35 @@ New file: `src/share/bank_links_fix20_tests.rs` (13 tests). Five existing tests 
 | mr2 | "verSHion tries again every minute" comes back (four names in the strip) | `c100_m12_the_held_…` |
 | mr3 | the Account window says "(UTC)" again | `c100_m12_the_account_…` |
 
-## Verification (2026-10-27 evening, live tree)
+## Scoped fix round, critics 101/102 (2026-10-27 late evening)
+
+The owner lifted the agent-quota gate early, so the pair ran on 2026-10-27 evening rather than after 2026-10-28 16:00 PT. Both were read-only on `a02c12d`, exactly per `docs/critic-reports/2026-10-28-round101-102-brief.md`. Both returned **important problem(s)**; per the brief the lead stopped and told the owner, and the owner then authorised one scoped fix round.
+
+Reports: `docs/critic-reports/2026-10-27-circles-phaseD1-critic101.md` and `-critic102.md`. Five fixes, each with a test in `src/share/bank_links_fix21_tests.rs` (5 tests), each mutation-checked (5 of 5 killed):
+
+| # | Finding | Fix |
+|---|---------|-----|
+| 1 | c101 I1: `finish_merge` wrote the links file before the merged bank, through an unchecked caller save. A failed banks write left the link advanced, the bank stale and her merge choices lost | the model writes all banks, **checked**, before `replace_link`; on failure the bank is restored and the page says nothing was changed, with Apply changes again. `banks_saved()` clears a stale "edits aren't saved" warning after the write |
+| 2 | c102 I1: an under-review head returned before the `Learning::Held` arm, so a failed save was drawn as a calm "You can keep working here" with no Try again, while the badge said "couldn't save" | the `held` warning is applied after the state is chosen (as round 19 did for `unsaved`): the line is replaced in the warning colour, Try again first, a still-useful action (sign in) and History kept. The normal `Held` arm is untouched |
+| 3 | c101 m1: "Put all of mine back" emptied `inherited_before`, so a restart re-ran the pass over her put-back | the round-19 guard now fires on `ran` (the pass's banks write is known to have happened). A held pass drops `pass_times`, so only both files unwritable at once could mask it |
+| 4 | c102 m1: "Dismiss hides this list", but Dismiss deletes it for good | `NEWS_DISMISS` says it removes the list for good, with the offer to put hers back |
+| 5 | c102 m2: the badge's "newer version" hover promised "Get latest … brings it in" where the page cannot offer it | the hover says the bank's page says what she can do |
+
+One existing test changed **deliberately**: `bank_links_fix18_tests::c98_m6_the_news_list_layout` pinned the old Dismiss words; it now pins the new ones.
+
+### Verification (2026-10-27 late evening, live tree)
+
+- `cargo test --lib`: **2006 passed, 5 failed, 3 ignored** (2001 before + the 5 new; the 5 are the known share-core/vishion ones).
+- `cargo build --bins`: EXIT 0. `cargo check --lib --target wasm32-unknown-unknown`: EXIT 0 (23 pre-existing warnings).
+- Mutation: scratch `/tmp/d1mut21` (HEAD + live `src/share/`, own target `/tmp/d1mut21-target`, script `/tmp/mut21.py`). m0 pristine: 5/5 pass. m1–m5 each fail their pinning test. Logs `/tmp/mut21-m*.log`.
+
+### Screenshots (2026-10-27 late evening, `/tmp/d1shots/`)
+
+- `news21-{light,dark}-{1280,760,420}.png` — the news list with the new Dismiss words. `news21-dark-420.png` replaces the stale `news20-dark-420.png` (which still showed the 60-char stem from before round 20); the new dark frame shows the 28-char stem and three-line rows, matching light.
+- `held21-{light,dark}-{1280,760,420}.png` — the Held save failure drawn over the signed-out strip: red panel, "your own edits aren't saved either", Try again first, the sign-in button kept, History. Fixtures rebuilt by `/tmp/fixture21.py` from the news fixture (difficulty pass pending, `banks.json.tmp` a directory).
+- **Not captured**: the under-review variant of that strip (needs a signed-in check, i.e. a live read) and the merge save-failure page (a merge needs a circle read). Both are pinned by `c102_i1_…` and `c101_i1_…`.
+
+## Verification of rounds 19-20 (before the scoped fix round)
 
 - `cargo test --lib`: **2001 passed, 5 failed, 3 ignored** (2009 total). Log: `/tmp/d1-m12-final.log`.
 - `cargo build --bins`: EXIT 0.
@@ -89,7 +117,7 @@ Fixtures were made by a temporary `#[ignore]` test appended to `bank_links_fix19
 
 ## What is left (in order)
 
-1. **Fresh critic pair (101 data safety, 102 product/UX) on round 19.** Blocked until the weekly API limit resets **2026-10-28 16:00 PT**. Rule from the brief: if the pair finds only minors, commit D1 locally and write up the leftovers; if it finds new important problems, tell the owner rather than keep looping.
+1. **Focused critic re-check of the fix diff** (`git diff a02c12d -- src/share/`), read-only: do the five fixes hold, and did they introduce a new class? Then commit D1 locally as done.
 2. If it passes: **commit D1 locally** and **ask the owner about the Tidy change**. Local commits are fine; never push. See memory `circles-loop-authorisation`.
 
 ## Decisions taken by the owner (2026-10-27)

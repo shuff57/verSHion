@@ -99,8 +99,9 @@ pub const SEND_WAITS: &str = "Sending is turned off until the circle can be chec
 pub const NEWS_BADGE: &str = "difficulty updated";
 /// The button that puts her difficulty back on one question.
 pub const PUT_MINE_BACK: &str = "Put mine back";
-/// (round 18, critic 98 minor 6) What Dismiss does, beside it.
-pub const NEWS_DISMISS: &str = "Dismiss hides this list. Your bank stays as it is.";
+/// (round 18, critic 98 minor 6; critic 102 m1) What Dismiss does: it removes the list for good, taking with it the offer and her
+/// only record of what she had before the circle's difficulty replaced it.
+pub const NEWS_DISMISS: &str = "Dismiss removes this list for good, and with it the offer to put yours back. Your bank stays as it is.";
 
 /// (round 17, critic 96 I1) The strip's words over the list: that hers was replaced, why, and what she can do. (round 18, critic 98
 /// minor 7) In words that fit a question the circle gives no difficulty, and "press Put mine back" only where a row offers it.

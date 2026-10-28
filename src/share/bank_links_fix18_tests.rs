@@ -857,7 +857,8 @@ fn c98_m6_the_news_list_layout() {
         assert!(buttons.iter().all(|b| (b.1.right() - buttons[0].1.right()).abs() < 1.0), "one column at {width}: {buttons:?}");
         assert!(d.iter().any(|t| t.0 == "Put all of mine back") && d.iter().any(|t| t.0 == "Show all 8"), "{d:?}");
         let dismiss = d.iter().find(|t| t.0 == "Dismiss").unwrap();
-        assert!(d.iter().any(|t| t.0.contains("Dismiss hides this list")), "{d:?}");
+        // (critic 102 m1) the words say the list goes for good, with the offer, not that it only hides
+        assert!(d.iter().any(|t| t.0.contains("Dismiss removes this list for good")), "{d:?}");
         let history = d.iter().find(|t| t.0 == "History").unwrap();
         assert!(history.1.top() - dismiss.1.bottom() >= 12.0, "set apart at {width}: {dismiss:?} {history:?}");
     }

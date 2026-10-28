@@ -110,6 +110,8 @@ mod bank_links_fix19_tests;
 #[cfg(test)]
 mod bank_links_fix20_tests;
 #[cfg(test)]
+mod bank_links_fix21_tests;
+#[cfg(test)]
 mod bank_links_fix_tests;
 #[cfg(test)]
 mod bank_links_tests;

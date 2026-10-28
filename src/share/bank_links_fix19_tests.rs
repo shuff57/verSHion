@@ -193,11 +193,11 @@ fn c100_i1_check_now_that_finds_something_says_the_new_result() {
 
 // ---- c99 m1, m2: a pass never writes the banks file while the links file is not in step -------------------------------------------
 
-fn signed_out() -> AccountSnapshot {
+pub(super) fn signed_out() -> AccountSnapshot {
     AccountSnapshot { gate: super::publish::Gate::SignedOut, session: None, account_open: true, account: None, name: None }
 }
 
-fn fresh_dir(tag: &str) -> std::path::PathBuf {
+pub(super) fn fresh_dir(tag: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("vershion-r19-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -209,20 +209,20 @@ fn block_links(dir: &std::path::Path) {
     std::fs::create_dir_all(dir.join("share-circles.json.tmp").join("held")).unwrap();
 }
 
-fn unblock_links(dir: &std::path::Path) {
+pub(super) fn unblock_links(dir: &std::path::Path) {
     let _ = std::fs::remove_dir_all(dir.join("share-circles.json.tmp"));
 }
 
-type Saved = Arc<Mutex<Vec<Vec<QuestionBank>>>>;
+pub(super) type Saved = Arc<Mutex<Vec<Vec<QuestionBank>>>>;
 
-fn dir_model(dir: &std::path::Path, saver: BankSaver) -> CircleEditModel {
+pub(super) fn dir_model(dir: &std::path::Path, saver: BankSaver) -> CircleEditModel {
     let media: super::publish::SharedMedia = Arc::new(std::collections::HashMap::<String, Vec<u8>>::new());
     let mut e = CircleEditModel::new(super::model::Runner::Inline, Arc::new(Mem::default()), media, Arc::new(NoDiskRestore), LinkLog::Dir(dir.to_path_buf())).with_retry(super::pool::RetryPolicy::none()).with_bank_saver(saver);
     e.set_clock(NOW);
     e
 }
 
-fn recording(saved: &Saved) -> BankSaver {
+pub(super) fn recording(saved: &Saved) -> BankSaver {
     let sv = saved.clone();
     Arc::new(move |b: &[QuestionBank]| {
         sv.lock().unwrap().push(b.to_vec());
@@ -231,7 +231,7 @@ fn recording(saved: &Saved) -> BankSaver {
 }
 
 /// Records each banks file, then makes the links file unwritable (a sync tool takes it right then).
-fn recording_then_blocking(saved: &Saved, dir: &std::path::Path) -> BankSaver {
+pub(super) fn recording_then_blocking(saved: &Saved, dir: &std::path::Path) -> BankSaver {
     let (sv, d) = (saved.clone(), dir.to_path_buf());
     Arc::new(move |b: &[QuestionBank]| {
         sv.lock().unwrap().push(b.to_vec());
@@ -241,7 +241,7 @@ fn recording_then_blocking(saved: &Saved, dir: &std::path::Path) -> BankSaver {
 }
 
 /// A's bank (One, Two both her Low) whose link has just learnt version 1 (One High there, Two none): the pass is to run.
-fn pending() -> (QuestionBank, CircleLink) {
+pub(super) fn pending() -> (QuestionBank, CircleLink) {
     let (mut bank, mut l) = linked(&[(QA, "One"), (QB, "Two")]);
     bank.questions[0].difficulty = Some(Difficulty::Low);
     bank.questions[1].difficulty = Some(Difficulty::Low);
