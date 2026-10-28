@@ -55,13 +55,13 @@ Written 2026-10-27 ~19:40 PT by the circles/D1 session, which the owner asked to
 - Then phases 3-6 (physics, biology, chemistry, stats) in `docs/figures-loop.md`.
 
 
-## KNOWN GAP, worth fixing first next session
-The Notes box that shows a figure's editor warnings is unreachable for every figure that has no rows card:
-`figures::notes_for` returns the right strings, but the only place that draws them (`src/figuresui.rs:2562-2586`)
-sits inside `rows_card`, which `figures::rows_for` only requests for coordinate-grid, number-line, mapping-diagram,
-composite-shape and box-plot. So the warnings never appear for `collision-momentum`, `energy-bar-chart`, `circle`,
-`sine-cosine` or `slope-triangle` — the last three got their Notes wiring earlier today and it has never surfaced.
-Fixing it means moving that block out of `rows_card` so it runs for every figure; it needs the app running to verify.
+## Notes box — fixed, needs one look in the app
+The editor notes used to be built inside `rows_card`, which only four figures get, so `figures::notes_for` returned
+strings that were never drawn for `collision-momentum`, `energy-bar-chart`, `circle`, `sine-cosine` or
+`slope-triangle`. They are now a `notes_box` called from `controls` for every figure (`src/figuresui.rs`, the call is
+just before the sections are laid out). It compiles and the suite is green, but **the tests cannot see a UI change**:
+open any of those five figures, set a state that produces a note (collision-momentum with A not closing on B, or
+sine-cosine with the phase shift folded), and check the red Notes box appears.
 
 ## Pitfalls
 - Builders sometimes stop without reporting: ping them with SendMessage.
