@@ -71,7 +71,7 @@ Written 2026-10-27 ~19:40 PT by the circles/D1 session, which the owner asked to
   equipotentials, refraction/Snell/total internal reflection, magnetic field and right-hand rule, standing waves and
   interference, PV diagrams, a ray diagram with handles, a capacitor, series-parallel circuits, and the handles /
   hide-reading work on the existing physics figures.
-- Suite on `94bde95`: 1707 passed, 0 failed, 5 ignored.
+- Suite on `2f9924a`: 1716 passed, 0 failed, 5 ignored.
 - **All eleven figures have now been critiqued.** The last four (protractor, area model, base-ten blocks, solid-net)
   were failed on 2 blockers and 8 majors, fixed in `b706974`, and re-checked by a verification critic: the blockers
   and all but one major hold; the leftovers were fixed in the commit after it. See
