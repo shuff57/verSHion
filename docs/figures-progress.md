@@ -152,6 +152,16 @@ prefixed `x =` / `y =`); 360 degrees folding to 0 making 2pi unreachable; the si
 the sincos FAQ claiming a 90 degree right shift gives cosine (it gives minus cosine); and the Print grid vanishing
 in a 66% bitonal copy in five figures (now `#9a9a9a`). ## Phase 3: physics
 
+Circular motion: new figure `circular-motion` (`src/figures/circular.rs`, Physics). A body on a circle at a chosen
+angle, with its velocity along the tangent, its centripetal acceleration and force towards the centre (through the
+radius line, so the direction is unambiguous), and a readout of the acceleration v²/r, the force mv²/r, the angular
+speed and the period. The givens (mass, radius, speed) always print; the four derived values blank on the student
+copy. Tests: the textbook formulas at the defaults, F = ma and T·ω = 2π over four settings, doubling the speed
+quadrupling the acceleration, the body on the rim at six angles, the student/key split, and Print neutrality (fills
+as well as strokes). No handles, so the figure joins `NO_HANDLES`. FAQ arm has four entries. Five examples: the
+defaults, a shorter string, twice the speed, a heavy mass on a long string, and a slow small circle. Census: only
+`circular-motion__defaults` and `circular-motion__start` added.
+
 Collisions: new figure `collision-momentum` (`src/figures/momentum.rs`, Physics). Two carts on a track before and
 after a one-dimensional collision, each with a velocity arrow scaled to the largest speed in the picture, cart size
 following mass, and a readout of the momentum before and after (always equal), the speeds after and the kinetic

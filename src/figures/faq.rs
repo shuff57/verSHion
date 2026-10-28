@@ -63,6 +63,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "solid-net" => SOLID_NET,
         "energy-bar-chart" => ENERGY_BAR_CHART,
         "collision-momentum" => COLLISION_MOMENTUM,
+        "circular-motion" => CIRCULAR_MOTION,
         "parallelogram" => PARALLELOGRAM,
         "trapezoid" => TRAPEZOID,
         "kite" => KITE,
@@ -3448,6 +3449,25 @@ const ENERGY_BAR_CHART: &[Faq] = &[
     Faq {
         q: "How do I make a worksheet?",
         a: "Turn Show answers off: the bars are not drawn and the three numbers become blanks, while the axes, the store names and the givens (mass, heights, loss share, g) stay, so the student works out the stores and draws the bars.",
+    },
+];
+
+const CIRCULAR_MOTION: &[Faq] = &[
+    Faq {
+        q: "Why does the velocity point sideways?",
+        a: "The body is going round at a steady speed, so its velocity is along the tangent to the circle at the moment shown. Nothing in a circle is moving towards the centre; what points at the centre is the acceleration, which is what changes the direction of the velocity rather than its size.",
+    },
+    Faq {
+        q: "Where do the numbers come from?",
+        a: "The centripetal acceleration is v squared over r, the force is the mass times that (m v squared over r), the angular speed is v over r, and the period is 2 pi r over v, the time for one whole turn. Doubling the speed on the same circle quadruples the acceleration.",
+    },
+    Faq {
+        q: "Is there a force pushing the body outwards?",
+        a: "No. The only horizontal force on a body in steady circular motion acts towards the centre: the tension in a string, gravity for a satellite, friction for a car on a bend. What feels like being pushed outwards is the body trying to carry on in a straight line while it is being turned.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the acceleration, the force, the angular speed and the period become blanks while the circle, the arrows and the given mass, radius and speed stay.",
     },
 ];
 
