@@ -30,7 +30,7 @@ pub fn defs() -> Vec<FigureDef> {
         id: ID,
         subject: Subject::Physics,
         title: "Circular motion",
-        blurb: "A body going round a circle at a steady speed, with its velocity along the tangent and its centripetal acceleration and force towards the centre.",
+        blurb: "A body going round a circle at a steady speed, with its velocity along the tangent and the centripetal acceleration towards the centre.",
         params,
         render,
     }]
@@ -42,7 +42,7 @@ fn params() -> Vec<ParamDef> {
         ParamDef::float("radius", "Radius (m)", 0.2, 5.0, 0.1, 1.5),
         ParamDef::float("speed", "Speed (m/s)", 0.2, 30.0, 0.1, 6.0),
         ParamDef::float("angle", "Where the body is (degrees)", 0.0, 360.0, 5.0, 40.0),
-        ParamDef::int("dec", "Decimal places", 0, 2, 2),
+        ParamDef::int("dec", "Decimal places", 1, 4, 2),
         answers_param(),
         svg::style_param(),
         svg::label_size_param(),
@@ -63,11 +63,19 @@ pub fn derived(p: &Params) -> (f64, f64, f64, f64) {
     (v * v / r, m * v * v / r, v / r, 2.0 * std::f64::consts::PI * r / v)
 }
 
+/// A number that never rounds a real value to "0": when the chosen precision would, it prints more places. A speed
+/// of 0.2 m/s on a 1.5 m circle is a real 0.03 m/s\u{b2}, not zero, and a teacher reading "0" would be misled.
+fn q(v: f64, dec: i64) -> String {
+    let s = num(v, dec);
+    let all_zero = s.trim_start_matches('\u{2212}').chars().filter(|c| c.is_ascii_digit()).all(|c| c == '0');
+    if v != 0.0 && all_zero { num(v, 4) } else { s }
+}
+
 pub fn warnings(_p: &Params) -> Vec<String> { Vec::new() }
 
 fn text_el(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) -> String {
     format!(
-        r##"<text x="{x:.2}" y="{y:.2}" font-size="{size}" text-anchor="{anchor}" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{fill}">{}</text>"##,
+        r##"<text x="{x:.2}" y="{y:.2}" font-size="{size}" text-anchor="{anchor}" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{fill}" stroke="#fff" stroke-width="2.2" paint-order="stroke" stroke-linejoin="round">{}</text>"##,
         svg::esc(s)
     )
 }
@@ -83,7 +91,7 @@ pub struct Report {
 pub fn build(p: &Params) -> (String, Report) {
     let (m, r, v) = given(p);
     let (a, fcent, omega, period) = derived(p);
-    let dec = p.i("dec").clamp(0, 2).max(1);
+    let dec = p.i("dec").clamp(1, 4);
     let print = p.s("style") == "Print";
     let ans = p.b(SHOW_ANSWERS);
     let lab = svg::label_factor(p.s("label_size"));
@@ -94,7 +102,7 @@ pub fn build(p: &Params) -> (String, Report) {
         if print { ACC_PRINT } else { ACC },
     );
 
-    let rows_y0 = ROWS_Y0;
+    let rows_y0 = ROWS_Y0 + (lab - 1.0) * 26.0;
     let w = (W * (1.0 + 1.1 * (lab - 1.0))).max(W);
     let mut d = Doc::new(w, rows_y0 + 3.0 * ROW_H * lab + 8.0);
     d.describe("Circular motion", "A body on a circle with its tangential velocity and its centripetal acceleration");
@@ -106,31 +114,35 @@ pub fn build(p: &Params) -> (String, Report) {
     // where the body is
     let th = p.f("angle").clamp(0.0, 360.0).to_radians();
     let body = (CX + R * th.cos(), CY - R * th.sin());
-    // the radius line, so the direction of the centre is unambiguous
-    d.line(CX, CY, body.0, body.1, path, 1.2);
-
-    // the velocity is tangent: rotate the outward radius by a quarter turn anticlockwise
+    // the outward radius, the tangent, and the arrow lengths
     let (ux, uy) = (th.cos(), -th.sin());
     let (tx, ty) = (-uy, ux);
-    let vlen = 62.0;
-    d.arrow(body.0, body.1, body.0 + tx * vlen, body.1 + ty * vlen, vel, 2.2);
-    d.raw(&text_el(body.0 + tx * vlen + 6.0 * tx, body.1 + ty * vlen + 6.0 * ty + 4.0, 12.0 * lab, "start", vel, "v"));
-    // the acceleration and the force point at the centre
-    let alen = 54.0;
+    let (vlen, alen) = (62.0, 54.0);
+
+    // the radius, dashed and stopped where the acceleration arrow begins, so it cannot be read as that vector
+    let rad_end = (body.0 - ux * alen, body.1 - uy * alen);
+    d.raw(&format!(r##"<line x1="{CX:.2}" y1="{CY:.2}" x2="{:.2}" y2="{:.2}" stroke="{path}" stroke-width="1.2" stroke-dasharray="6 4"/>"##, rad_end.0, rad_end.1));
+
+    // the velocity is tangent; its label sits past the tip and off to the side, so it never rides on the head
+    let tip = (body.0 + tx * vlen, body.1 + ty * vlen);
+    d.arrow(body.0, body.1, tip.0, tip.1, vel, 2.2);
+    d.raw(&text_el(tip.0 + tx * 9.0 + ux * 12.0, tip.1 + ty * 9.0 + uy * 12.0 + 4.0, 12.0 * lab, "middle", vel, "v"));
+
+    // the acceleration points at the centre; its label sits beside the arrow, not on the radius line
     d.arrow(body.0, body.1, body.0 - ux * alen, body.1 - uy * alen, acc, 2.2);
-    let mid = (body.0 - ux * (alen + 10.0), body.1 - uy * (alen + 10.0));
-    d.raw(&text_el(mid.0, mid.1 + 4.0, 12.0 * lab, "middle", acc, "a"));
+    let mid = (body.0 - ux * (alen + 12.0), body.1 - uy * (alen + 12.0));
+    d.raw(&text_el(mid.0 + tx * 11.0, mid.1 + ty * 11.0 + 4.0, 12.0 * lab, "middle", acc, "a"));
     d.circle(body.0, body.1, 5.0, ink, ink, 0.0);
 
     // the givens, always printed
     let givens = format!("m = {} kg,  r = {} m,  v = {} m/s", num(m, 2), num(r, 2), num(v, 2));
-    d.raw(&text_el(24.0, rows_y0 - 14.0, 12.5 * lab, "start", ink, &givens));
+    d.raw(&text_el(24.0, rows_y0 - 16.0 * lab, 12.5 * lab, "start", ink, &givens));
 
     // the readout
     let rows = [
-        if ans { format!("Centripetal acceleration  {} m/s\u{b2}", num(a, dec)) } else { format!("Centripetal acceleration  {BLANK} m/s\u{b2}") },
-        if ans { format!("Centripetal force  {} N", num(fcent, dec)) } else { format!("Centripetal force  {BLANK} N") },
-        if ans { format!("Angular speed  {} rad/s,  period {} s", num(omega, dec), num(period, dec)) } else { format!("Angular speed  {BLANK} rad/s,  period {BLANK} s") },
+        if ans { format!("Centripetal acceleration  {} m/s\u{b2}", q(a, dec)) } else { format!("Centripetal acceleration  {BLANK} m/s\u{b2}") },
+        if ans { format!("Centripetal force  {} N", q(fcent, dec)) } else { format!("Centripetal force  {BLANK} N") },
+        if ans { format!("Angular speed  {} rad/s,  period {} s", q(omega, dec), q(period, dec)) } else { format!("Angular speed  {BLANK} rad/s,  period {BLANK} s") },
     ];
     for (i, line) in rows.iter().enumerate() {
         d.raw(&format!(
@@ -242,6 +254,35 @@ mod tests {
         assert!(key.contains("Centripetal force  48"), "{key}");
     }
 
+    /// A slow body on a wide circle has a small but real acceleration; it must not print as zero.
+    #[test]
+    fn a_small_derived_value_never_prints_as_zero() {
+        for (m, r, v, dec) in [(2.0, 1.5, 0.2, 1i64), (0.1, 5.0, 0.2, 2), (20.0, 0.2, 30.0, 1)] {
+            let l = [f("mass", m), f("radius", r), f("speed", v), ("dec", Value::I(dec)), b(SHOW_ANSWERS, true)];
+            let t = texts(&render_of(&l));
+            for line in t.lines().filter(|x| x.starts_with("Centripetal") || x.starts_with("Angular")) {
+                assert!(!line.contains(" 0 ") && !line.contains(" 0\u{b2}") && !line.contains("period 0 "), "{m} {r} {v} dec {dec}: {line}");
+            }
+        }
+    }
+
+    /// The two vectors must stay at right angles, with the acceleration pointing at the centre, at every angle.
+    #[test]
+    fn the_vectors_keep_their_geometry() {
+        for deg in [0.0, 40.0, 90.0, 135.0, 180.0, 225.0, 295.0, 359.0] {
+            let rep = build(&with(&[f("angle", deg)])).1;
+            let (bx, by) = rep.body;
+            let (ux, uy) = ((bx - CX) / R, (by - CY) / R);
+            let (tx, ty) = (-uy, ux);
+            // the velocity is perpendicular to the radius
+            assert!((ux * tx + uy * ty).abs() < 1e-9, "{deg}: not tangent");
+            // the acceleration points from the body at the centre
+            let a = (-ux, -uy);
+            let to_centre = ((CX - bx) / R, (CY - by) / R);
+            assert!((a.0 - to_centre.0).abs() < 1e-9 && (a.1 - to_centre.1).abs() < 1e-9, "{deg}: acceleration not radial");
+        }
+    }
+
     #[test]
     fn print_is_neutral_grey_only() {
         let svg = render_of(&[s("style", "Print"), b(SHOW_ANSWERS, true)]);
@@ -261,7 +302,7 @@ mod tests {
     #[test]
     fn circular_pngs() {
         let Ok(dir) = std::env::var("VERSHION_PNG_DIR") else { return };
-        let mut cases: Vec<(String, Vec<(&'static str, Value)>)> = vec![("default".into(), vec![])];
+        let mut cases: Vec<(String, Vec<(&'static str, Value)>)> = vec![("default".into(), vec![]), ("large".into(), vec![s("label_size", "Large")])];
         for (i, (_, l)) in examples(ID).unwrap().into_iter().map(|e| (e.name.to_string(), e.params)).enumerate() { cases.push((format!("ex{i}"), l)); }
         for (tag, list) in cases {
             for (kind, extra) in [("colour", vec![]), ("print", vec![s("style", "Print")]), ("student", vec![b(SHOW_ANSWERS, false)]), ("key", vec![b(SHOW_ANSWERS, true)])] {
