@@ -53,6 +53,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "circle" => CIRCLE,
         "right-triangle-trig" => RIGHT_TRIANGLE_TRIG,
         "sine-cosine" => SINE_COSINE,
+        "unit-circle" => UNIT_CIRCLE,
         "parallelogram" => PARALLELOGRAM,
         "trapezoid" => TRAPEZOID,
         "kite" => KITE,
@@ -3267,5 +3268,24 @@ const SINE_COSINE: &[Faq] = &[
     Faq {
         q: "How do I make a worksheet and its answer key?",
         a: "Each of the amplitude, the period, the midline and the equation is Given, Ask or Hidden. Given is printed on both copies, Ask is a blank on the student copy and the value on the key (the arrow labels are blanked too), Hidden shows no value and no row. Turn Show answers off for the student copy; Student + key exports both.",
+    },
+];
+
+const UNIT_CIRCLE: &[Faq] = &[
+    Faq {
+        q: "What are the two coordinates of the point?",
+        a: "On a circle of radius 1, a point at angle theta has x = cos theta and y = sin theta. The figure drops a dashed line from the point to each axis and prints both numbers there, so the coordinates are read off the picture rather than told. Drag the point or type the angle to move it.",
+    },
+    Faq {
+        q: "When are the angles in radians?",
+        a: "Choose Radians in 'Show the angle in'. An angle that is a simple fraction of a half turn is written as a fraction of pi (30 degrees is pi/6, 45 is pi/4, 90 is pi/2, 180 is pi), and any other angle is written as a decimal number of radians with the usual Decimal places.",
+    },
+    Faq {
+        q: "Why is cos negative in the second quadrant?",
+        a: "cos is the x coordinate, so it is negative whenever the point is left of the y axis (between 90 and 270 degrees), and sin is the y coordinate, so it is negative below the x axis (between 180 and 360). The dropped lines make that visible: the value on an axis sits to the left of 0 or below it.",
+    },
+    Faq {
+        q: "How do I make a worksheet and its answer key?",
+        a: "The angle, cos, sin and the point are each Given, Ask or Hidden. Given is printed on both copies, Ask is a blank on the student copy and the value on the key (the labels on the figure are blanked too), Hidden shows no value and no row. A common worksheet gives the angle and asks for the two coordinates; a harder one asks for the angle from the coordinates.",
     },
 ];
