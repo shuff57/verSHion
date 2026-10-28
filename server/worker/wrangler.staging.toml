@@ -39,4 +39,6 @@ ADMIN_EMAIL = "shuff57@gmail.com"
 
 [triggers]
 crons = ["17 * * * *"]
-# Secrets (wrangler secret put --config wrangler.staging.toml): AUTH_SECRET, RESEND_API_KEY, POOL_HASH_KEY.
+# Secrets (wrangler secret put --config wrangler.staging.toml): AUTH_SECRET, POOL_HASH_KEY, and
+# SMTP_PASSWORD (or RESEND_API_KEY) once mail is real: staging is log mode today. Vars for SMTP:
+# SMTP_HOSTNAME, SMTP_PORT, SMTP_USERNAME, SMTP_FROM_NAME, MAIL_FROM.

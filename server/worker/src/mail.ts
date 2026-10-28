@@ -1,12 +1,27 @@
-// verSHion mail. The provider is still an open question in docs/shared-pool.md (Resend vs
-// Cloudflare Email); Resend is wired because it is a single HTTPS call.
+// verSHion mail. Two senders: SMTP submission (mail_smtp.ts, the shape raSHio uses, pointed at the
+// owner's Stalwart) and Resend over HTTPS. SMTP wins when its three settings are present, so the
+// owner's own mail server needs no third party; "log" prints links for local development.
 import type { MailMessage, MailSender } from "../../auth/src/index.js";
+import { sendViaSmtp, smtpConfigured } from "./mail_smtp.ts";
 
 export interface MailEnv {
-  /** "resend" (default) or "log". "log" is for local development only and prints links. */
+  /**
+   * "log" prints links (local development only). Anything else sends: through SMTP when
+   * SMTP_HOSTNAME, SMTP_USERNAME and SMTP_PASSWORD are all set (see mail_smtp.ts), else Resend.
+   */
   MAIL_MODE?: string;
   RESEND_API_KEY?: string;
+  /** The sender address. With SMTP, it may differ from the mailbox that signs in (e.g. pool@…). */
   MAIL_FROM?: string;
+  /** SMTP submission (raSHio's transport shape). The mailbox's own login; its password is a secret. */
+  SMTP_HOSTNAME?: string;
+  SMTP_PORT?: string;
+  SMTP_USERNAME?: string;
+  SMTP_PASSWORD?: string;
+  /** Display name on the From line; "verSHion" when absent. */
+  SMTP_FROM_NAME?: string;
+  /** "on" forces implicit TLS, "off" STARTTLS; the default follows the port (465 = implicit). */
+  SMTP_SECURE?: string;
   /** Base URL of the app page that handles the links (it reads the token from the fragment). */
   APP_URL?: string;
   /** Comma-separated: every admin who should hear about new applications and reminders. */
@@ -25,7 +40,7 @@ function render(env: MailEnv, m: MailMessage): { subject: string; text: string }
     case "verify":
       return {
         subject: "Confirm your verSHion address",
-        text: `Confirm this address to finish signing up:\n\n${link(env, "/account/verify", m.token!)}\n\nThe link works once and expires in 24 hours. If you did not sign up, ignore this mail.`,
+        text: `Confirm this address to finish signing up:\n\n${link(env, "/account/verify", m.token!)}\n\nThe link works once and expires in 24 hours. If you do not see this after a few minutes, look in your spam or junk folder. If you did not sign up, ignore this mail.`,
       };
     case "reset":
       return {
@@ -83,6 +98,7 @@ async function sendRaw(env: MailEnv, to: string, subject: string, text: string):
     console.log(`[dev mail] to=${to} subject=${subject}\n${text}`);
     return;
   }
+  if (smtpConfigured(env)) return sendViaSmtp(env, to, subject, text);
   if (!env.RESEND_API_KEY || !env.MAIL_FROM) throw new Error("mail not configured");
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",

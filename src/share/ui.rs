@@ -523,6 +523,7 @@ fn paste_box(ui: &mut Ui, m: &mut AccountModel) -> bool {
 
 fn check_email_page(ui: &mut Ui, m: &mut AccountModel, kind: MailKind) {
     para(ui, "Open the link from the email on this device, or copy the whole link (or just the long code in it) and paste it here.");
+    para(ui, "If it does not arrive in a few minutes, look in your spam or junk folder.");
     let mut go = paste_box(ui, m);
     let mut resend = false;
     actions(ui, m.busy(), |ui| {

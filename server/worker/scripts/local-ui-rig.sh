@@ -15,9 +15,14 @@
 #   scripts/local-ui-rig.sh reset                 # stop, then delete server/worker/.wrangler-ui
 #
 # Mail goes to a log file, except when server/worker/.wrangler-ui/real-mail.env exists (mode 600,
-# made by hand, never committed): then `start` sends through Resend instead. That file needs
-#   MAIL_FROM="verSHion <pool@yourdomain.org>"     (the domain must be verified in Resend)
-#   RESEND_API_KEY=re_...
+# made by hand, never committed): then `start` sends through the owner's SMTP server instead. That
+# file needs the mailbox the pool signs in as, and what appears on the From line:
+#   SMTP_HOSTNAME=smtp.yourdomain.org
+#   SMTP_PORT=465                                  (465 = implicit TLS; 587 does STARTTLS)
+#   SMTP_USERNAME=vershion@yourdomain.org           (the login, also the sender unless MAIL_FROM is set)
+#   SMTP_PASSWORD=...                               (a mailbox password or app password)
+#   SMTP_FROM_NAME="verSHion"
+#   MAIL_FROM="verSHion <vershion@yourdomain.org>"  (optional: only if the sender differs from the login)
 # With real mail the log holds no links, so `links`, `approve` and `seed` cannot help: sign up in the
 # app and use the message that arrives. `start` and `status` say which mode is on.
 #
@@ -125,7 +130,7 @@ cmd_start() {
     if curl -s -o /dev/null -m 2 "$BASE/" 2>/dev/null; then
       echo "Ready: $BASE  (pid $(cat "$pidfile"))"
       if [ "$real_mail" = 1 ]; then
-        echo "Mail: real, through Resend (real-mail.env). Links are emailed, not logged; '$0 links' cannot help."
+        echo "Mail: real, through SMTP (real-mail.env). Links are emailed, not logged; '$0 links' cannot help."
       else
         echo "Mail: log ($log). Use '$0 links EMAIL' for the newest link."
       fi
@@ -157,7 +162,7 @@ cmd_stop() {
 
 cmd_status() {
   if pid=$(rig_pid); then echo "Running: $BASE (pid $pid)"; else echo "Not running."; fi
-  if real_mail; then echo "Mail: real, through Resend (starts fresh from real-mail.env)."; else echo "Mail: log."; fi
+  if real_mail; then echo "Mail: real, through SMTP (starts fresh from real-mail.env)."; else echo "Mail: log."; fi
 }
 
 cmd_reset() {

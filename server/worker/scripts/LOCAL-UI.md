@@ -37,19 +37,24 @@ The script never sees a password. You type passwords only into the app.
 ### Real mail (optional)
 
 By default the server prints each mail to `.wrangler-ui/dev.log` and `rig links` reads the
-newest link out of it. To send through Resend instead, make the file
-`server/worker/.wrangler-ui/real-mail.env` (the directory is mode 700; keep the file 600) with two
-lines:
+newest link out of it. To send through an SMTP server instead, make the file
+`server/worker/.wrangler-ui/real-mail.env` (the directory is mode 700; keep the file 600):
 
 ```
-MAIL_FROM="verSHion <pool@yourdomain.org>"
-RESEND_API_KEY=re_...
+SMTP_HOSTNAME=smtp.yourdomain.org
+SMTP_PORT=465
+SMTP_USERNAME=vershion@yourdomain.org
+SMTP_PASSWORD=the-mailbox-password
+SMTP_FROM_NAME="verSHion"
+MAIL_FROM="verSHion <vershion@yourdomain.org>"
 ```
 
-`yourdomain.org` must be a domain verified in your Resend account, and the key needs the sending
-permission. Make the file in your own editor or terminal, so the key never passes through a
-shell command that is logged. Then `rig stop` and `rig start`: it reports `Mail: real, through
-Resend (real-mail.env)`. `rig status` says which mode is on.
+`SMTP_PORT=465` means implicit TLS (what the owner's Stalwart publishes); 587 does STARTTLS.
+`SMTP_USERNAME` is the mailbox that signs in, and the sender unless `MAIL_FROM` names a different
+one. Make the file in your own editor or terminal, so the password never passes through a shell
+command that is logged. Then `rig stop` and `rig start`: it reports `Mail: real, through SMTP
+(real-mail.env)`. `rig status` says which mode is on. (Resend is still wired for a deployment that
+prefers it: `MAIL_FROM` plus `RESEND_API_KEY` sends that way when no SMTP settings are present.)
 
 In real-mail mode nothing is written to the log, so `rig links`, `rig approve` and `rig seed`
 cannot find their links (`seed` refuses). Sign up in the app and use the message that arrives:
