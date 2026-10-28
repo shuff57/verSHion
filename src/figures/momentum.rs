@@ -15,7 +15,6 @@ const C1_PRINT: &str = "#333333";
 const C2_PRINT: &str = "#777777";
 const BLANK: &str = "_____";
 const W: f64 = 470.0;
-const H: f64 = 310.0;
 const ROWS_Y0: f64 = 252.0;
 const ROW_H: f64 = 18.0;
 const ROW_FS: f64 = 15.0;
@@ -37,9 +36,9 @@ fn params() -> Vec<ParamDef> {
     vec![
         ParamDef::choice("kind", "Collision", &KINDS, KINDS[0]),
         ParamDef::float("m1", "Mass of cart A (kg)", 0.5, 20.0, 0.5, 2.0),
-        ParamDef::float("u1", "Speed of cart A before (m/s)", -10.0, 10.0, 0.5, 4.0),
+        ParamDef::float("u1", "Velocity of cart A before (m/s)", -10.0, 10.0, 0.5, 4.0),
         ParamDef::float("m2", "Mass of cart B (kg)", 0.5, 20.0, 0.5, 3.0),
-        ParamDef::float("u2", "Speed of cart B before (m/s)", -10.0, 10.0, 0.5, 0.0),
+        ParamDef::float("u2", "Velocity of cart B before (m/s)", -10.0, 10.0, 0.5, 0.0),
         ParamDef::int("dec", "Decimal places", 0, 2, 1),
         answers_param(),
         svg::style_param(),
@@ -79,10 +78,9 @@ pub fn totals(p: &Params) -> (f64, f64, f64, f64) {
 
 pub fn warnings(p: &Params) -> Vec<String> {
     let (_, u1, _, u2) = given(p);
-    // after an elastic collision the carts cannot pass through each other: A must not still be closing on B
-    let (v1, v2) = after(p);
-    if p.s("kind") == "Elastic" && u1 > u2 && v1 > v2 + 1e-9 {
-        return vec!["After an elastic collision A cannot still be closing on B; check the speeds (A must start faster than B for them to meet).".to_string()];
+    // A is on the left and B on the right, so they only collide when A is closing on B: u1 > u2
+    if u1 <= u2 + 1e-9 {
+        return vec!["A is not closing on B (A must start faster than B for the carts to meet), so there is no collision to work out.".to_string()];
     }
     Vec::new()
 }
@@ -103,24 +101,29 @@ pub fn build(p: &Params) -> (String, Report) {
     let (m1, u1, m2, u2) = given(p);
     let (v1, v2) = after(p);
     let tot = totals(p);
-    let dec = p.i("dec").clamp(0, 2);
+    // at 0 places a perfectly inelastic 0.33 m/s prints as "0 m/s" beside a real momentum; one place at least
+    let dec = p.i("dec").clamp(0, 2).max(1);
     let print = p.s("style") == "Print";
     let ans = p.b(SHOW_ANSWERS);
     let f = svg::label_factor(p.s("label_size"));
     let (ink, c1, c2) = (if print { "#555555" } else { INK }, if print { C1_PRINT } else { CART1 }, if print { C2_PRINT } else { CART2 });
 
-    let mut d = Doc::new(W, ROWS_Y0 + 4.0 * ROW_H * f + 8.0);
+    let w = (W * (1.0 + 0.7 * (f - 1.0))).max(W);
+    let mut d = Doc::new(w, ROWS_Y0 + 4.0 * ROW_H * f + 8.0);
     d.describe("Collisions", "Two carts on a track before and after a collision, with their velocity arrows and momenta");
 
-    // the two tracks, before above and after below
-    let max_v = [u1, u2, v1, v2].iter().fold(1.0f64, |a, v| a.max(v.abs()));
+    // The arrows are scaled by the GIVEN speeds only. Scaling by the after speeds as well would let a student read an
+    // answer off the before arrows, since the row the answer lives in shares the scale.
+    let max_v = [u1, u2].iter().fold(1.0f64, |a, v| a.max(v.abs()));
     let arrow = |d: &mut Doc, x0: f64, y: f64, v: f64, col: &str| {
-        let len = (v.abs() / max_v * 60.0).max(if v.abs() < 1e-9 { 0.0 } else { 6.0 });
-        if len > 0.0 { d.arrow(x0, y, x0 + len * v.signum(), y, col, 2.2); }
+        // no minimum length: a short arrow must read as a short speed
+        let len = v.abs() / max_v * 60.0;
+        if len > 0.5 { d.arrow(x0, y, x0 + len * v.signum(), y, col, 2.2); }
     };
     for (row, (a, b, label)) in [(u1, u2, "before"), (v1, v2, "after")].iter().enumerate() {
         let y = 96.0 + row as f64 * 78.0;
-        d.line(30.0, y + 20.0, W - 30.0, y + 20.0, ink, 1.2);
+        let shown = row == 0 || ans;
+        d.line(30.0, y + 20.0, w - 30.0, y + 20.0, ink, 1.2);
         d.raw(&text_el(30.0, y - 26.0, 13.0 * f, "start", ink, label));
         // cart A on the left, cart B on the right
         let (xa, xb) = (150.0, 300.0);
@@ -128,21 +131,33 @@ pub fn build(p: &Params) -> (String, Report) {
         let (wa, wb) = (26.0 + m1 * 1.6, 26.0 + m2 * 1.6);
         d.rect(xa - wa / 2.0, y, wa, 20.0, c1, ink, 1.4);
         d.rect(xb - wb / 2.0, y, wb, 20.0, c2, ink, 1.4);
-        d.raw(&text_el(xa, y + 14.0, 11.0 * f, "middle", ink, "A"));
-        d.raw(&text_el(xb, y + 14.0, 11.0 * f, "middle", ink, "B"));
-        arrow(&mut d, xa, y + 34.0, *a, c1);
-        arrow(&mut d, xb, y + 34.0, *b, c2);
+        // the letters sit above the carts, so they stay legible in Print and in a bitonal copy
+        d.raw(&text_el(xa, y - 4.0, 11.0 * f, "middle", ink, "A"));
+        d.raw(&text_el(xb, y - 4.0, 11.0 * f, "middle", ink, "B"));
+        if shown {
+            arrow(&mut d, xa, y + 34.0, *a, c1);
+            arrow(&mut d, xb, y + 34.0, *b, c2);
+        }
     }
 
     // the given data, always shown (it is what the question gives)
-    let data = format!("A: {} kg at {} m/s     B: {} kg at {} m/s", num(m1, 1), num(u1, dec), num(m2, 1), num(u2, dec));
-    d.raw(&text_el(30.0, 230.0, 13.0 * f, "start", ink, &data));
+    // the givens print at a fixed, sufficient precision whatever the answer's setting, so the stated inputs are the
+    // ones the arithmetic used; the kind is named, and the sign convention with it
+    let data = format!(
+        "{}   A: {} kg at {} m/s,  B: {} kg at {} m/s   (positive is to the right)",
+        p.s("kind"),
+        num(m1, 2),
+        num(u1, 2),
+        num(m2, 2),
+        num(u2, 2)
+    );
+    d.raw(&text_el(24.0, 230.0, 12.0 * f, "start", ink, &data));
 
     // the readout
     let rows = [
         if ans { format!("Momentum before  {} kg m/s", num(tot.0, dec)) } else { format!("Momentum before  {BLANK} kg m/s") },
         if ans { format!("Momentum after  {} kg m/s", num(tot.1, dec)) } else { format!("Momentum after  {BLANK} kg m/s") },
-        if ans { format!("Speeds after  A {} m/s,  B {} m/s", num(v1, dec), num(v2, dec)) } else { format!("Speeds after  A {BLANK} m/s,  B {BLANK} m/s") },
+        if ans { format!("Velocities after  A {} m/s,  B {} m/s", num(v1, dec), num(v2, dec)) } else { format!("Velocities after  A {BLANK} m/s,  B {BLANK} m/s") },
         if ans { format!("Kinetic energy before {} J, after {} J", num(tot.2, dec), num(tot.3, dec)) } else { format!("Kinetic energy  {BLANK} J before, {BLANK} J after") },
     ];
     for (i, line) in rows.iter().enumerate() {
@@ -243,11 +258,32 @@ mod tests {
         assert!((v1 - (-1.0)).abs() < 1e-9 && (v2 - 3.0).abs() < 1e-9, "{v1} {v2}");
     }
 
+    /// The after velocities are the answer: only the given arrows may be drawn on the student copy.
+    #[test]
+    fn the_after_arrows_are_the_answer() {
+        // both givens nonzero, so every arrow that is drawn has a visible head
+        let l = [f("m1", 2.0), f("u1", 4.0), f("m2", 3.0), f("u2", -2.0)];
+        let mut stu = l.to_vec();
+        stu.push(b(SHOW_ANSWERS, false));
+        let mut key = l.to_vec();
+        key.push(b(SHOW_ANSWERS, true));
+        assert_eq!(render_of(&stu).matches("<polygon").count(), 2, "only the two given velocities are drawn");
+        assert_eq!(render_of(&key).matches("<polygon").count(), 4, "the key draws all four");
+    }
+
+    /// A must be closing on B for there to be a collision at all.
+    #[test]
+    fn a_setup_where_they_never_meet_is_noted() {
+        assert!(warnings(&with(&[f("u1", 0.0), f("u2", 5.0)])).iter().any(|s| s.contains("not closing")));
+        assert!(warnings(&with(&[f("u1", 4.0), f("u2", 0.0)])).is_empty());
+        assert!(warnings(&with(&[f("u1", 3.0), f("u2", 3.0)])).iter().any(|s| s.contains("not closing")));
+    }
+
     #[test]
     fn the_answers_are_blank_on_the_student_copy() {
         let stu = texts(&render_of(&[b(SHOW_ANSWERS, false)]));
         assert!(stu.contains("Momentum before  _____ kg m/s"), "{stu}");
-        assert!(stu.contains("Speeds after  A _____ m/s"), "{stu}");
+        assert!(stu.contains("Velocities after  A _____ m/s"), "{stu}");
         assert!(!stu.contains("Momentum before  8.0"), "{stu}");
         // the given data stays (trailing zeros are dropped by the number formatter)
         assert!(stu.contains("A: 2 kg at 4 m/s"), "{stu}");

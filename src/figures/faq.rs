@@ -3447,7 +3447,7 @@ const ENERGY_BAR_CHART: &[Faq] = &[
     },
     Faq {
         q: "How do I make a worksheet?",
-        a: "Turn Show answers off: the bars are drawn as empty frames on the same scale and the three numbers become blanks, so the student works out the stores from the mass and the heights.",
+        a: "Turn Show answers off: the bars are not drawn and the three numbers become blanks, while the axes, the store names and the givens (mass, heights, loss share, g) stay, so the student works out the stores and draws the bars.",
     },
 ];
 
@@ -3466,6 +3466,6 @@ const COLLISION_MOMENTUM: &[Faq] = &[
     },
     Faq {
         q: "How do I make a worksheet?",
-        a: "Turn Show answers off: the momenta, the speeds after and the kinetic energies become blanks while the carts, their arrows and their given masses and speeds stay, so the student works out the collision.",
+        a: "Turn Show answers off: the momenta, the velocities after and the kinetic energies become blanks, and only the given (before) arrows are drawn — the after arrows are part of the answer. The carts, the collision kind and the given masses and velocities stay.",
     },
 ];

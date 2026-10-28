@@ -12,15 +12,10 @@ const INK: &str = "#111111";
 const KE: &str = "#1f5fbf";
 const GPE: &str = "#7a4fc4";
 const TH: &str = "#c47a1f";
-const KE_PRINT: &str = "#333333";
-const GPE_PRINT: &str = "#777777";
-const TH_PRINT: &str = "#bbbbbb";
 const BLANK: &str = "_____";
 const W: f64 = 470.0;
-const H: f64 = 330.0;
 const BASE: f64 = 250.0;
 const MAXBAR: f64 = 150.0;
-const ROWS_Y0: f64 = 286.0;
 const ROW_H: f64 = 18.0;
 const ROW_FS: f64 = 15.0;
 /// Standard gravity, as printed in the working.
@@ -88,19 +83,29 @@ pub struct Report {
 
 pub fn build(p: &Params) -> (String, Report) {
     let s = stores(p);
-    let dec = p.i("dec").clamp(0, 2);
+    // at 0 places a real 0.49 J prints as "0 J" beside a full-height bar; one place at least
+    let dec = p.i("dec").clamp(0, 2).max(1);
     let print = p.s("style") == "Print";
     let ans = p.b(SHOW_ANSWERS);
     let f = svg::label_factor(p.s("label_size"));
-    let (ink, cols) = (
-        if print { "#555555" } else { INK },
-        if print { [KE_PRINT, GPE_PRINT, TH_PRINT] } else { [KE, GPE, TH] },
-    );
+    let ink = if print { "#555555" } else { INK };
     let total = s[0].0.max(1e-9);
 
-    let rows_y0 = BASE + 58.0;
-    let mut d = Doc::new(W, rows_y0 + 4.0 * ROW_H * f + 8.0);
+    let rows_y0 = BASE + 76.0;
+    let w = (W * (1.0 + 0.7 * (f - 1.0))).max(W);
+    let mut d = Doc::new(w, rows_y0 + 4.0 * ROW_H * f + 8.0);
     d.describe("Energy bar chart", "The kinetic, gravitational and thermal energy before and after, on one scale");
+
+    // In Print a solid tone cannot tell three stores apart in a bitonal copy — kinetic and gravitational both
+    // threshold to black and thermal to white — so each store gets its own hatch.
+    if print {
+        d.defs(
+            r##"<pattern id="e-ke" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="7" fill="#ffffff"/><line x1="0" y1="0" x2="0" y2="7" stroke="#333333" stroke-width="2.6"/></pattern>
+<pattern id="e-gpe" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><rect width="7" height="7" fill="#ffffff"/><line x1="0" y1="0" x2="0" y2="7" stroke="#333333" stroke-width="2.6"/></pattern>
+<pattern id="e-th" width="6" height="6" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="#ffffff"/><line x1="0" y1="0" x2="6" y2="0" stroke="#333333" stroke-width="2.6"/></pattern>"##,
+        );
+    }
+    let cols = if print { ["url(#e-ke)", "url(#e-gpe)", "url(#e-th)"] } else { [KE, GPE, TH] };
 
     // the baseline and the scale
     d.line(30.0, BASE, W - 30.0, BASE, ink, 2.0);
@@ -119,12 +124,33 @@ pub fn build(p: &Params) -> (String, Report) {
             // the bar is the answer: with Show answers off the chart keeps its axes, its names and its blanks
             if ans && hh > 0.0 {
                 d.rect(x, BASE - hh, 40.0, hh, cols[i], ink, 1.4);
+            } else if ans {
+                // an empty store is marked, so a gap is not mistaken for a bar that was not drawn
+                d.line(x, BASE, x + 40.0, BASE, ink, 3.0);
             }
             tops[g][i] = BASE - hh;
             // the store under its bar, small enough that three fit side by side
             d.raw(&text_el(x + 20.0, BASE + 14.0, 9.5 * f, "middle", ink, names[i]));
         }
     }
+
+    // the axis label, and the givens the chart is drawn from (always printed: they are the question)
+    d.raw(&format!(
+        r##"<text transform="translate(16.00 {:.2}) rotate(-90)" font-size="{}" text-anchor="middle" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{}">energy (J)</text>"##,
+        BASE - MAXBAR / 2.0,
+        11.0 * f,
+        ink
+    ));
+    let (m, h1, h2, loss) = (p.f("mass"), p.f("h1"), p.f("h2"), p.f("loss"));
+    let givens = format!(
+        "m = {} kg, drops from {} m to {} m, {}% lost, g = {} m/s\u{b2}",
+        num(m, 2),
+        num(h1, 2),
+        num(h2, 2),
+        num(loss.clamp(0.0, 1.0) * 100.0, 0),
+        num(G, 1)
+    );
+    d.raw(&text_el(24.0, BASE + 54.0, 12.0 * f, "start", ink, &givens));
 
     // the readout
     let rows = [
@@ -240,6 +266,24 @@ mod tests {
         let n = warnings(&with(&[f("h1", 2.0), f("h2", 5.0)]));
         assert!(n.iter().any(|s| s.contains("cannot fall")), "{n:?}");
         assert!(warnings(&with(&[f("h1", 5.0), f("h2", 2.0)])).is_empty());
+    }
+
+    /// The chart cannot be read without the data it was drawn from, so the givens print on both copies.
+    #[test]
+    fn the_givens_are_always_printed() {
+        let stu = texts(&render_of(&[b(SHOW_ANSWERS, false)]));
+        assert!(stu.contains("m = 2 kg"), "{stu}");
+        assert!(stu.contains("drops from 5 m to 0 m"), "{stu}");
+        assert!(stu.contains("g = 9.8"), "{stu}");
+    }
+
+    /// A real energy of half a joule must not print as "0 J" beside a full-height bar.
+    #[test]
+    fn a_small_energy_never_prints_as_zero() {
+        let t = texts(&render_of(&[f("mass", 0.1), f("h1", 0.5), ("dec", Value::I(0)), b(SHOW_ANSWERS, true)]));
+        // 0.1 x 9.8 x 0.5 = 0.49 J, drawn as a full-height bar: it must not print as "0 J"
+        assert!(!t.contains("Kinetic  0 J"), "{t}");
+        assert!(t.contains("Kinetic  0.5 J"), "{t}");
     }
 
     #[test]
