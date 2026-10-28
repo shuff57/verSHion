@@ -2026,6 +2026,8 @@ impl Workspace {
                             .show(ui, |ui| self.rows_card(ui, def.id, &pdefs, &card));
                         ui.add_space(6.0);
                     }
+                    // what the figure could not draw as asked, for every figure that has notes
+                    self.notes_box(ui, def.id);
                     let secs = figures::layout::sections(def.id, &pdefs, n_now);
                     if skin && def.id == "mass-spectrum" {
                         self.isotopes_card(ui, &pdefs);
@@ -2558,32 +2560,6 @@ impl Workspace {
                         }
                     }
                 }
-                // equations the figure could not draw (unreadable, too many, outside the window): shown here, never in the SVG
-                if fig == "coordinate-grid" || fig == "circle" || fig == "right-triangle-trig" || fig == "sine-cosine" || fig == "slope-triangle" {
-                    let key = figures::params_key(&self.params);
-                    let wid = ui.make_persistent_id(("grid_warn", fig));
-                    let cached: Option<(u64, Vec<String>)> = ui.data(|d| d.get_temp(wid));
-                    let warns = match cached {
-                        Some((k, w)) if k == key => w,
-                        _ => { let w = figures::notes_for(fig, &self.params); ui.data_mut(|d| d.insert_temp(wid, (key, w.clone()))); w }
-                    };
-                    if !warns.is_empty() {
-                        // a framed box, so a row that was not drawn is not missed
-                        ui.add_space(4.0);
-                        Frame::new()
-                            .fill(egui::Color32::from_rgba_unmultiplied(200, 50, 50, 22))
-                            .stroke(Stroke::new(1.0, theme::red()))
-                            .corner_radius(CornerRadius::same(6))
-                            .inner_margin(Margin::same(8))
-                            .show(ui, |ui| {
-                                ui.label(RichText::new("Notes").color(theme::red()).strong().size(12.5));
-                                for w in warns {
-                                    ui.add_space(2.0);
-                                    ui.label(RichText::new(w).color(theme::red()).size(12.0));
-                                }
-                            });
-                    }
-                }
             });
         ui.data_mut(|d| d.insert_temp(extra_id, extra));
         if skin {
@@ -2595,6 +2571,34 @@ impl Workspace {
     }
 
     /// "Add a force" chips: each appends one preset item and bumps the count.
+    /// Editor warnings for any figure: what could not be drawn as asked. Shown here, never in the SVG, and for every
+    /// figure that has notes — not only the ones with a rows card.
+    fn notes_box(&mut self, ui: &mut Ui, fig: &str) {
+        let key = figures::params_key(&self.params);
+        let wid = ui.make_persistent_id(("grid_warn", fig));
+        let cached: Option<(u64, Vec<String>)> = ui.data(|d| d.get_temp(wid));
+        let warns = match cached {
+            Some((k, w)) if k == key => w,
+            _ => { let w = figures::notes_for(fig, &self.params); ui.data_mut(|d| d.insert_temp(wid, (key, w.clone()))); w }
+        };
+        if !warns.is_empty() {
+            // a framed box, so a row that was not drawn is not missed
+            ui.add_space(4.0);
+            Frame::new()
+                .fill(egui::Color32::from_rgba_unmultiplied(200, 50, 50, 22))
+                .stroke(Stroke::new(1.0, theme::red()))
+                .corner_radius(CornerRadius::same(6))
+                .inner_margin(Margin::same(8))
+                .show(ui, |ui| {
+                    ui.label(RichText::new("Notes").color(theme::red()).strong().size(12.5));
+                    for w in warns {
+                        ui.add_space(2.0);
+                        ui.label(RichText::new(w).color(theme::red()).size(12.0));
+                    }
+                });
+        }
+    }
+
     fn chips_card(&mut self, ui: &mut Ui, fig: &str, pdefs: &[ParamDef], card: &figures::ChipsCard) {
         let n = self.params.i(card.count_key);
         Frame::new()
