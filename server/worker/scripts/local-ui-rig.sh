@@ -14,6 +14,13 @@
 #   scripts/local-ui-rig.sh stop
 #   scripts/local-ui-rig.sh reset                 # stop, then delete server/worker/.wrangler-ui
 #
+# Mail goes to a log file, except when server/worker/.wrangler-ui/real-mail.env exists (mode 600,
+# made by hand, never committed): then `start` sends through Resend instead. That file needs
+#   MAIL_FROM="verSHion <pool@yourdomain.org>"     (the domain must be verified in Resend)
+#   RESEND_API_KEY=re_...
+# With real mail the log holds no links, so `links`, `approve` and `seed` cannot help: sign up in the
+# app and use the message that arrives. `start` and `status` say which mode is on.
+#
 # Port 18791 only (devtools on 18792). It refuses to start if either is taken and never stops any
 # process it did not start. Passwords never pass through this script: they are typed in the app
 # (seed's throwaway password is made and kept inside its node process, see local-ui-seed.mjs).
@@ -54,6 +61,8 @@ rig_pid() {
 
 need_dir() { [ -d "$dir" ] || die "nothing here yet: run '$0 start' first"; }
 
+real_mail() { [ -s "$dir/real-mail.env" ]; }
+
 d1() { (cd "$here" && "$WRANGLER" d1 "$@" --local --persist-to "$dir"); }
 
 valid_email() {
@@ -79,12 +88,15 @@ cmd_start() {
     )
   fi
   # Non-secret settings. Log-mode mail needs a localhost APP_URL (src/mail.ts); the native app
-  # sends no Origin, so ALLOWED_ORIGINS only has to be a valid localhost value.
-  cat >"$dir/vars.env" <<EOF
-MAIL_MODE=log
-APP_URL=$BASE
-ALLOWED_ORIGINS=$BASE
-EOF
+  # sends no Origin, so ALLOWED_ORIGINS only has to be a valid localhost value. A real-mail.env the
+  # person made by hand turns log mode off (its RESEND_API_KEY and MAIL_FROM are added below).
+  local real_mail=0
+  [ -s "$dir/real-mail.env" ] && real_mail=1
+  {
+    [ "$real_mail" = 1 ] || echo "MAIL_MODE=log"
+    echo "APP_URL=$BASE"
+    echo "ALLOWED_ORIGINS=$BASE"
+  } >"$dir/vars.env"
 
   echo "Applying migrations to the local D1 in $dir ..."
   d1 migrations apply "$DB" </dev/null
@@ -92,10 +104,12 @@ EOF
   echo "Starting wrangler dev on $BASE (log: $log) ..."
    # Appended, so mail links from before a restart are still there for 'links'.
   ( umask 077; echo "==== local-ui-rig start $(date -Is) ====" >>"$log" )
+  local mail_file=()
+  [ "$real_mail" = 1 ] && mail_file=(--env-file "$dir/real-mail.env")
   (
     cd "$here"
     exec setsid "$WRANGLER" dev --local --ip localhost --port "$PORT" --inspector-port "$INSPECTOR_PORT" \
-      --persist-to "$dir" --env-file "$dir/secrets.env" --env-file "$dir/vars.env" \
+      --persist-to "$dir" --env-file "$dir/secrets.env" --env-file "$dir/vars.env" "${mail_file[@]}" \
       --show-interactive-dev-session=false
   ) >>"$log" 2>&1 </dev/null &
   local pid=$!
@@ -110,6 +124,11 @@ EOF
     fi
     if curl -s -o /dev/null -m 2 "$BASE/" 2>/dev/null; then
       echo "Ready: $BASE  (pid $(cat "$pidfile"))"
+      if [ "$real_mail" = 1 ]; then
+        echo "Mail: real, through Resend (real-mail.env). Links are emailed, not logged; '$0 links' cannot help."
+      else
+        echo "Mail: log ($log). Use '$0 links EMAIL' for the newest link."
+      fi
       return 0
     fi
     sleep 1
@@ -138,6 +157,7 @@ cmd_stop() {
 
 cmd_status() {
   if pid=$(rig_pid); then echo "Running: $BASE (pid $pid)"; else echo "Not running."; fi
+  if real_mail; then echo "Mail: real, through Resend (starts fresh from real-mail.env)."; else echo "Mail: log."; fi
 }
 
 cmd_reset() {
@@ -150,6 +170,7 @@ cmd_reset() {
 
 cmd_links() {
   need_dir
+  real_mail && echo "local-ui-rig: real mail is on (real-mail.env): newest links are emailed, the log only holds earlier ones." >&2
   [ -f "$log" ] || die "no mail log yet"
   local want="${1:-}"
   want=$(printf '%s' "$want" | tr '[:upper:]' '[:lower:]')
@@ -235,6 +256,7 @@ JS
 
 cmd_seed() {
   need_dir
+  real_mail && die "real mail is on: the seed script confirms its own throwaway account from the mail log, which real mail does not write. Remove .wrangler-ui/real-mail.env (or '$0 reset') to seed."
   rig_pid >/dev/null || die "not running: '$0 start' first"
   local seed_email=b@example.test out n
   # Idempotent: an existing b@example.test (seeded before, or made by hand) publishes nothing public

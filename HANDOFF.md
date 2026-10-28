@@ -53,6 +53,24 @@ passed, 0 failed, 5 ignored.
 Still unproven: production, real-network behaviour, and partial sends with pictures, additions or removals (the pure
 tests cover those; this round-trip covered a changed raw-base question).
 
+### Real-mail test on the local rig (2026-10-28)
+
+The owner asked to test an actual email flow, using their `lefthanddev.com` domain. State of the mail path: the worker
+sends only through Resend over HTTPS (`server/worker/src/mail.ts`); staging has no `RESEND_API_KEY` secret (only
+`AUTH_SECRET`, `POOL_HASH_KEY`) and still runs `MAIL_MODE = "log"`; `lefthanddev.com` has no Resend records (SPF
+`v=spf1 mx -all`, DMARC `p=reject`, no `resend._domainkey`), though its DNS is on Cloudflare, so Resend can add them.
+
+What changed here: `scripts/local-ui-rig.sh` gained an opt-in real-mail mode. If `.wrangler-ui/real-mail.env` exists
+(made by hand, mode 600, `MAIL_FROM="verSHion <pool@lefthanddev.com>"` + `RESEND_API_KEY=re_…`), `start` leaves
+`MAIL_MODE` out of `vars.env`, passes the file with `--env-file`, and says `Mail: real, through Resend`. With no such
+file nothing changes: `MAIL_MODE=log` as before. In real mode `links` warns that links are emailed and `seed` refuses
+(it confirms its throwaway account from the log). Documented in `scripts/LOCAL-UI.md` ("Real mail (optional)").
+
+Limitation to expect: the mail's link points at `/account/verify#token=…`, which this repo does not serve (no web app
+here), so opening it in a browser gets a 404 on the local rig. The app's **"Link or code from the email"** box accepts
+the whole link or the long code, which is the path that works. A real sender also needs the domain verified in Resend
+and an API key — both only the owner can supply, and the key must not pass through a logged shell command.
+
 D1 rounds 19 and 20 are **committed locally** (the round 19–20 checkpoint, 45 files: 35 under `src/share/` plus this file and the nine critic reports 92-100). **Nothing is pushed.** The rest of the dirty tree belongs to the other sessions (see "Do not touch").
 
 ## Where D1 stands

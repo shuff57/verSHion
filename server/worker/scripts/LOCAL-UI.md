@@ -34,6 +34,31 @@ Other commands:
 
 The script never sees a password. You type passwords only into the app.
 
+### Real mail (optional)
+
+By default the server prints each mail to `.wrangler-ui/dev.log` and `rig links` reads the
+newest link out of it. To send through Resend instead, make the file
+`server/worker/.wrangler-ui/real-mail.env` (the directory is mode 700; keep the file 600) with two
+lines:
+
+```
+MAIL_FROM="verSHion <pool@yourdomain.org>"
+RESEND_API_KEY=re_...
+```
+
+`yourdomain.org` must be a domain verified in your Resend account, and the key needs the sending
+permission. Make the file in your own editor or terminal, so the key never passes through a
+shell command that is logged. Then `rig stop` and `rig start`: it reports `Mail: real, through
+Resend (real-mail.env)`. `rig status` says which mode is on.
+
+In real-mail mode nothing is written to the log, so `rig links`, `rig approve` and `rig seed`
+cannot find their links (`seed` refuses). Sign up in the app and use the message that arrives:
+paste the whole link, or just the long code after `#token=`, into the app's **Link or code from
+the email** box. The link's page is not served by the local server (there is no web app in this
+repo), so opening it in a browser only gets a 404; pasting it into the app is the path that works.
+
+`rig reset` deletes `real-mail.env` with the rest of `.wrangler-ui/`.
+
 ### Sample items (`rig seed`)
 
 `rig seed` fills an empty pool with three public items, so Browse and Import have something to
