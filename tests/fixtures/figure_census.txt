@@ -224,6 +224,8 @@ scatterplot__defaults 9346175339a08c40
 scatterplot__start 9346175339a08c40
 sentence-diagram__defaults 16a9df68074b212f
 sentence-diagram__start 16a9df68074b212f
+sine-cosine__defaults 3180a65e16ea590e
+sine-cosine__start 3180a65e16ea590e
 sorting-passes__defaults 4eeaec6f73c98f22
 sorting-passes__start 4eeaec6f73c98f22
 sphere__defaults 026a80b5e0fb10f8

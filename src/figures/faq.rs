@@ -52,6 +52,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "rectangle" => RECTANGLE,
         "circle" => CIRCLE,
         "right-triangle-trig" => RIGHT_TRIANGLE_TRIG,
+        "sine-cosine" => SINE_COSINE,
         "parallelogram" => PARALLELOGRAM,
         "trapezoid" => TRAPEZOID,
         "kite" => KITE,
@@ -3247,5 +3248,24 @@ const RIGHT_TRIANGLE_TRIG: &[Faq] = &[
     Faq {
         q: "Can I drag the triangle?",
         a: "Drag the far vertex (the one that is not the right angle and not theta) to change the angle in whole degrees. The picture is always fitted to the same size; the numbers follow, and the value you typed for the first side stays.",
+    },
+];
+
+const SINE_COSINE: &[Faq] = &[
+    Faq {
+        q: "Where do the amplitude, the period and the midline come from?",
+        a: "The amplitude A is how far the wave rises above the midline and falls below it, the period is how many degrees one full cycle takes, and the midline is the horizontal line the wave swings around (y = D). The graph draws all three: the amplitude as an arrow from the midline to a peak, the period as an arrow between two neighbouring peaks, and the midline as a dashed line.",
+    },
+    Faq {
+        q: "How do I write the equation?",
+        a: "y = A sin(B(x - C)) + D, where B = 360 / period and the x axis is in degrees. 'The wave starts at the' picks the function: midline going up is sin, a peak is cos, and the other two are the negative of each. The Equation row prints the form that matches the drawing, so a student can read the numbers off the axes and check the sign.",
+    },
+    Faq {
+        q: "What does the phase shift do?",
+        a: "It moves where the cycle starts to the right, in degrees. A shift of a whole cycle or more is folded back into one cycle and the Notes box says so. A shift of a quarter period turns a sine into a cosine, which is why 'a peak' and 'midline, going up' with a 90 degree shift draw the same wave.",
+    },
+    Faq {
+        q: "How do I make a worksheet and its answer key?",
+        a: "Each of the amplitude, the period, the midline and the equation is Given, Ask or Hidden. Given is printed on both copies, Ask is a blank on the student copy and the value on the key (the arrow labels are blanked too), Hidden shows no value and no row. Turn Show answers off for the student copy; Student + key exports both.",
     },
 ];
