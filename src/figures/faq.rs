@@ -58,6 +58,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "fraction-models" => FRACTION_MODELS,
         "triangle-centres" => TRIANGLE_CENTRES,
         "slope-triangle" => SLOPE_TRIANGLE,
+        "protractor" => PROTRACTOR,
         "parallelogram" => PARALLELOGRAM,
         "trapezoid" => TRAPEZOID,
         "kite" => KITE,
@@ -3367,5 +3368,24 @@ const SLOPE_TRIANGLE: &[Faq] = &[
     Faq {
         q: "How do I make a worksheet?",
         a: "Turn Show answers off. The line and the triangle stay, and the gradient, the rise, the run on the legs and the equation become blanks for the student to fill in from the picture.",
+    },
+];
+
+const PROTRACTOR: &[Faq] = &[
+    Faq {
+        q: "Which of the two scales do I read?",
+        a: "The outer scale runs from 0 at the right-hand end to 180 at the left, and the inner one the other way round. Read whichever starts at 0 on the arm that lies on the baseline: that is the angle the ray makes with it. The readout gives the reading and what the other scale shows, which is 180 minus it.",
+    },
+    Faq {
+        q: "Why do the two readings add to 180?",
+        a: "The two scales are the same graduations numbered from opposite ends, so a ray at 55 degrees reads 55 on one scale and 125 on the other. They always add to a half turn.",
+    },
+    Faq {
+        q: "Can I show the protractor with no ray?",
+        a: "Turn off Draw the ray. The graduations and both scales stay, which is what you want for a sheet where the student places the arm themselves.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the reading and the other scale become blanks while the protractor and the ray stay.",
     },
 ];

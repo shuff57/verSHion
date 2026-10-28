@@ -150,6 +150,17 @@ now follows the printed decimal); unit-circle value labels colliding with axis n
 candidate positions, swept at all three sizes); its coordinate labels indistinguishable from ticks in Print (now
 prefixed `x =` / `y =`); 360 degrees folding to 0 making 2pi unreachable; the sincos Notes never being displayed;
 the sincos FAQ claiming a 90 degree right shift gives cosine (it gives minus cosine); and the Print grid vanishing
-in a 66% bitonal copy in five figures (now `#9a9a9a`). Left open: axis ink `#111827` is grey but not exactly
+in a 66% bitonal copy in five figures (now `#9a9a9a`). Protractor: new figure `protractor` (`src/figures/protractor.rs`, Math). A half-disc graduated every 5 degrees
+with longer ticks every 10 and numbers every 30 on two scales (outer 0 at the right, inner 0 at the left), a ray at
+a typed angle from 0 to 180, and a readout giving the reading and what the other scale shows (180 minus it). The
+ray can be switched off for a sheet where the student places the arm. The reading is the answer, so it is blank
+while Show answers is off. The end numbers are lifted off the baseline and the second scale is set further in,
+which is what the first render showed needed doing: at 0 and 180 both scales printed on the baseline and on each
+other. No handles, so the figure joins `NO_HANDLES`. FAQ arm has four entries. Five examples: 55 degrees, a right
+angle, 120 degrees, a ray to read, and the bare protractor. Tests: the default reading, both scales graduated and
+summing to 180, the ray's tip on the rim at five angles, the student/key split, the ray switch, Print neutrality,
+and the PNG export. Census: only `protractor__defaults` and `protractor__start` added.
+
+Left open: axis ink `#111827` is grey but not exactly
 neutral; trig's key prints a Hidden side inside a fraction; two-label y axes on tall waves; some coordinate labels
 sit over the drop lines; two example names overstate what they show.

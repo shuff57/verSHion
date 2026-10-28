@@ -42,6 +42,7 @@ pub mod transform;
 pub mod fraction;
 pub mod triangle_centres;
 pub mod slope;
+pub mod protractor;
 pub mod math;
 pub mod math_geo;
 pub mod math_plot;
@@ -498,6 +499,7 @@ pub fn registry() -> Vec<FigureDef> {
     v.extend(fraction::defs());
     v.extend(triangle_centres::defs());
     v.extend(slope::defs());
+    v.extend(protractor::defs());
     v.extend(stats::defs());
     v.extend(computing::defs());
     v.extend(accounting::defs());
@@ -674,7 +676,7 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
 pub fn grid_warnings(p: &Params) -> Vec<String> { math::grid_warnings(p) }
 /// Editor-only notes for the figures that have them (what could not be drawn as asked).
 pub fn notes_for(id: &str, p: &Params) -> Vec<String> {
-    match id { "coordinate-grid" => math::grid_warnings(p), "circle" => circle::warnings(p), "right-triangle-trig" => trig::warnings(p), "sine-cosine" => sincos::warnings(p), "unit-circle" => unitcircle::warnings(p), "transformations" => transform::warnings(p), "fraction-models" => fraction::warnings(p), "triangle-centres" => triangle_centres::warnings(p), "slope-triangle" => slope::warnings(p), _ => vec![] }
+    match id { "coordinate-grid" => math::grid_warnings(p), "circle" => circle::warnings(p), "right-triangle-trig" => trig::warnings(p), "sine-cosine" => sincos::warnings(p), "unit-circle" => unitcircle::warnings(p), "transformations" => transform::warnings(p), "fraction-models" => fraction::warnings(p), "triangle-centres" => triangle_centres::warnings(p), "slope-triangle" => slope::warnings(p), "protractor" => protractor::warnings(p), _ => vec![] }
 }
 
 /// A hash of every parameter (names and values, no formatting): the key under which the editor caches what a figure
@@ -767,6 +769,7 @@ pub fn examples_for(id: &str) -> Vec<Example> {
         .or_else(|| fraction::examples(id))
         .or_else(|| triangle_centres::examples(id))
         .or_else(|| slope::examples(id))
+        .or_else(|| protractor::examples(id))
         .or_else(|| stats::examples(id))
         .or_else(|| computing::examples(id))
         .or_else(|| electric::examples(id))
