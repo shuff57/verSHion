@@ -211,8 +211,19 @@ Compare/History version reads are strict again; the lost `JobKind::Base` disconn
 question, a picture row and a decision refusal, with the submitted `image_ok`/`labels` still in payload positions.
 85 partial-send tests; full `cargo test --lib`: 2094 passed, 5 known failed, 3 ignored.
 
-Next: the plan's one unproven assumption — the all-but-one-unticked round-trip (`changed == 1`) — to be checked against
-the local rig (18791) with an ignored, in-memory-session test; staging still needs the owner's yes.
+**Round-trip confirmed on the local rig.** `src/share/partial_send_rig_tests.rs` (ignored; refuses unless the base is
+`http://localhost:18791`) signs up a throwaway account with an in-memory random password (never printed or stored),
+approves it with the rig script, creates a circle and a 3-question bank (version 1), changes two questions, sends
+all-but-one-unticked, and asserts the server answers `version 2, added 0, changed 1, removed 0` with the unticked
+question byte-identical to version 1. Run it while the rig is up with
+`cargo test --lib partial_send_rig_round_trip -- --ignored --nocapture`. It passed.
+
+This confirms the plan's one unproven assumption locally: the raw base JSON round-trips as unchanged and the server
+counts exactly the ticked change. Still unproven: staging/production, real-network behaviour, and partial sends with
+pictures, additions or removals (the pure D3 tests cover those; this round-trip does not). Full
+`cargo test --lib`: 2094 passed, 5 known failed, 4 ignored.
+
+Next: staging (needs the owner's yes); otherwise D3 is done.
 
 ## What is left (in order)
 
