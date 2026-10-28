@@ -2,6 +2,37 @@
 
 Repo `verSHion`, branch `shared-pool-phase1`, last commit is the round 19–20 checkpoint. This file was rewritten after the round-19 takeover session (`vershion-fd`, `240c6322`) lost its builder to the weekly API limit. The limit was due to reset **2026-10-28 16:00 PT**; the owner lifted that gate early, so the critic pair ran on the evening of 2026-10-27 (see the scoped fix round below).
 
+## Phase D2 backend: per-question change lists (2026-10-28, commit 21d66aa)
+
+The route the plan defers to D2 is in: `GET /circles/:cid/banks/:bid/changes` (a member who may read the bank)
+returns the kept, readable versions newest first, each compared with the next one below it, from the per-version R2
+indexes the server already keeps — no migration, no share-core change (`circleversions.ts` `changes()`, the index
+reader exported from `circlesend.ts`). Rules pinned by `test/pool/round54.test.ts` (5 cases, each killed by a
+mutation: the withheld filter, the hiding-bank refusal, the 40-index cap, pruned versions as a base):
+
+- withheld and pruned versions are absent and never a `compared_to`; the comparison skips to the next readable kept
+  version;
+- at most 40 indexes are read (two in memory), so the oldest entry in the window is left out — it has no base inside
+  the window, and reading one more would break the cap;
+- a missing index is `{version, compared_to, gap: true}`, never an error, and the entry that would compare with it is
+  a gap too;
+- a viewer of a bank that hides its keys gets `{per_question: false, reason: "keys_hidden"}` and nothing is read or
+  counted for that answer (their compare is the stripped read, Q4);
+- `ETag` over the head version id and the readable kept versions; a matching `If-None-Match` is `304` and costs
+  nothing; a served read counts one `item_reads` and one `circle_change_reads` (new metric, 200 a day — the plan's
+  proposal, still an unconfirmed number).
+
+Measured locally (MemR2, 990-question bank, median of 20): **19.9 ms at 60 versions, 17.0 ms at 1,000**, 19 entries
+both. `EXPLAIN QUERY PLAN` is `SEARCH circle_versions USING INDEX sqlite_autoindex_circle_versions_3 (bank_id=?)` with
+no temp B-tree, so the unique `(bank_id, version)` index supplies the order and `LIMIT 40` stops the scan. The D1
+`meta.rows_read` figure the plan asks for cannot be taken on the local harness; the local plan bounds it at ~40 index
+rows, and it should be re-taken on staging when D2 closes. Worker `npm test` **704/704**, typecheck clean.
+
+**Still to do for D2 (client, 2-3 rounds):** the per-question history panel built from these lists plus the existing
+history lines; side-by-side compare of two versions of one question (viewers of a hiding bank: the stripped reads,
+Matching word banks compared sorted); "Restore this question to version N" as a local edit that writes a restore point
+first and then counts as one unsent change; hook H3 (`question_menu`) needs the owner's approval before it is touched.
+
 ## The 5 known failures are fixed (2026-10-28)
 
 The owner asked to fix the five `share_core::wasm::publish_prepare_json` failures. Cause: the viSHion path deps in
