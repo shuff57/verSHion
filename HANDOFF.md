@@ -151,8 +151,22 @@ Piece-2 critic: **holds**, two minors, both fixed — a removal the base body la
 unticked one makes the composer refuse), and an empty bank is refused with the composer's own words so the summary
 cannot offer a send that can never compose.
 
+**Piece 3, committed: the bookkeeping.** `CircleLink.held_back` (serde default, lenient reader; cleared by a
+whole-bank send); `ComposedQuestion` / `compose_partial_parts` keep each composed question's local id (a restored
+removal's raw carries the circle qid as its `id`); `after_partial_send` sets the base and pairs from the COMPOSED
+questions (a ticked removal's pair dropped, an unticked one kept), stores `held_back`, marks the send-start bank
+(so an edit during the send is not stale and shows as unsent), and clears the inherit state. A composed question's
+snapshot is optional: a restored question this build cannot read still composes and keeps its pair, with no base
+entry (the count then says not fully known). The server's returned qid wins where the answer's list aligns; a short
+list is ignored whole, so no question borrows another's qid. 42 tests in the module; five mutants killed
+(`held_back` not stored, `mark_bank` on the composed bank, `c.qid` over the answer, the length guard, the
+unreadable-removal refusal).
+
+Piece-3 critic: one important (an unreadable restored question refused the payload, so the caller's whole-bank
+fallback would send the unticked removal) and three minors, all fixed.
+
 Next: the tick-list model + send summary (all ticked by default, `held_back` unticked, one base-body read on the
-page), then `after_partial_send`, the send page, pictures, and the staging round-trip (needs the owner's yes).
+page), then `after_partial_send` wiring, the send page, pictures, and the staging round-trip (needs the owner's yes).
 
 ## What is left (in order)
 

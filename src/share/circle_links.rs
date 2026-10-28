@@ -15,6 +15,7 @@ use serde_json::{Value, json};
 use super::browse::theirs_of;
 use super::circles_api::{BankHead, SentBank};
 use super::merge::{self, BaseQuestion, Theirs};
+use super::partial_send::ComposedQuestion;
 use super::pool::{ItemHead, ItemMeta, ItemView, License, is_item_id};
 use super::publish::QidLink;
 use crate::model::{Difficulty, Question, QuestionBank};
@@ -53,6 +54,11 @@ pub struct CircleLink {
     /// Empty when too big to keep: then a merge reads the base from the circle, or is two-way.
     #[serde(default)]
     pub base: Vec<BaseQuestion>,
+    /// (phase D3, plan 5.1) Local question ids the person unticked at the last partial send, so the next send summary
+    /// starts them unticked again. A link written before phase D3 has none, and a whole-bank send clears it. Read
+    /// leniently: a value this build can not read is none, never the link with it.
+    #[serde(default, deserialize_with = "ids_or_empty")]
+    pub held_back: Vec<String>,
     /// The newest version the last quiet check saw, and who sent it and when.
     #[serde(default)]
     pub head_seen: u64,
@@ -277,6 +283,15 @@ fn record_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<SentR
     Ok(serde_json::from_value(Value::deserialize(d)?).ok())
 }
 
+/// (phase D3) A list of local ids read leniently: absent (by `default`) or unreadable is none, and a list keeps only
+/// its string entries. One this build can not read never drops the link with it.
+fn ids_or_empty<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
+    Ok(match Value::deserialize(d)? {
+        Value::Array(list) => list.into_iter().filter_map(|v| v.as_str().map(str::to_string)).collect(),
+        _ => Vec::new(),
+    })
+}
+
 /// (critic 79 I2, critic 80 I1) What a send whose answer did not say what it made carried (see `CircleLink::sent_record`).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -387,6 +402,7 @@ impl CircleLink {
             base_version_id: b.version_id.clone(),
             qids,
             base: merge::bounded(base),
+            held_back: Vec::new(),
             head_seen: b.version,
             head_seen_at: Some(b.committed_at).filter(|a| *a > 0),
             head_seen_by: b.committed_by.clone(),
@@ -676,6 +692,8 @@ pub fn after_send(link: &CircleLink, bank: &QuestionBank, sent: &SentBank) -> Ci
     l.base_version_id = sent.version_id.clone();
     l.head_seen = l.head_seen.max(sent.version);
     l.mark_bank(bank);
+    // A whole-bank send carries every change: nothing is left unticked for the next summary.
+    l.held_back.clear();
     // (critic 89 I1) the base is the bank as sent: its difficulties are known as written, and (round 16) none is left to take
     l.difficulty_read = Some(0);
     l.inherit = false;
@@ -684,6 +702,64 @@ pub fn after_send(link: &CircleLink, bank: &QuestionBank, sent: &SentBank) -> Ci
     l.missing_at_read = None;
     // (round 17) the bank as it is was sent
     l.as_is = false;
+    l
+}
+
+/// The link after a partial send (phase D3, plan section 6): `sent` made `composed`, this bank with every unticked
+/// change left as the base had it. The copy is now in step with the version the send made, so the base snapshot and
+/// the local id -> qid pairs are those of the COMPOSED questions: an unticked removal keeps its pair with the base
+/// body's raw question, a ticked removal's pair is dropped, and a question new to the circle takes the qid the send's
+/// answer gave it at its place.
+///
+/// `bank` is the bank as it was when the send started, not the composed version: the send does not change the bank,
+/// so an edit made while it was in flight is newer and never "put back", and the next summary lists it as unsent.
+/// `held_back` is the caller's unticked ids that still differ, stored as given for the next summary's defaults.
+/// Pure: it reads its arguments and writes nothing.
+///
+/// A composed question this build could not read (a newer client's `Kind` or `Difficulty`) still keeps its local id
+/// -> qid pair, but has no base snapshot. A bank question that then has a pair and no snapshot cannot have its
+/// changes counted: `changes_since` says the count is not fully known, as for a base an earlier build wrote.
+pub fn after_partial_send(link: &CircleLink, bank: &QuestionBank, composed: &[ComposedQuestion], sent: &SentBank, held_back: Vec<String>) -> CircleLink {
+    let mut l = link.clone();
+    // (critic) The answer's qids are one per composed question in payload order, and are authoritative where they
+    // are there. A short or empty list is not aligned, so it is ignored whole: no question may borrow another's qid.
+    let aligned = sent.qids.len() == composed.len();
+    let mut qids: Vec<QidLink> = Vec::new();
+    let mut base: Vec<BaseQuestion> = Vec::new();
+    for (i, c) in composed.iter().enumerate() {
+        // The qid it keeps: the server's when the answer names one, else the composed pair's own; an addition with
+        // neither stays unlinked.
+        let served = aligned.then(|| sent.qids[i].as_str()).filter(|q| !q.is_empty());
+        let qid = served.or_else(|| c.qid.as_deref().filter(|q| !q.is_empty())).unwrap_or_default();
+        if !qid.is_empty() {
+            qids.push(QidLink { local: c.local.clone(), qid: qid.to_string() });
+        }
+        // Only a question this build can read goes into the snapshot; the pair above is kept either way.
+        if let Some(q) = &c.question {
+            let mut b = base_for(q, qid);
+            // The composed question's own local id: for a restored removal the raw question's `id` is the circle's qid.
+            b.local_id = c.local.clone();
+            base.push(b);
+        }
+    }
+    l.qids = qids;
+    l.base = merge::bounded(base);
+    l.base_version = sent.version;
+    l.base_version_id = sent.version_id.clone();
+    l.head_seen = l.head_seen.max(sent.version);
+    l.held_back = held_back;
+    l.mark_bank(bank);
+    // The base is the composed version: its difficulties are known as written, and none is left to take.
+    l.difficulty_read = Some(0);
+    l.inherit = false;
+    l.at_read = None;
+    l.pass_times = None;
+    l.missing_at_read = None;
+    l.as_is = false;
+    // A send of the full form no longer follows the viewers' form, as a merge of a full version (`finish_merge`).
+    if !sent.keys_hidden {
+        l.viewers_form = false;
+    }
     l
 }
 
@@ -711,6 +787,7 @@ pub fn link_from_share(circle_id: &str, circle_name: &str, role: super::circles_
         base_version_id: sent.version_id.clone(),
         qids: qids_of(&base),
         base: merge::bounded(base),
+        held_back: Vec::new(),
         head_seen: sent.version,
         head_seen_at: Some(now),
         head_seen_by: None,

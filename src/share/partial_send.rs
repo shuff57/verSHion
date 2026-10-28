@@ -49,20 +49,55 @@ pub struct BodyChanges {
 /// One question of the composed bank, and the circle id it keeps (none: new to the circle).
 struct Slot {
     value: Value,
+    local: String,
     qid: Option<String>,
+    question: Option<Question>,
+}
+
+/// One question of the composed payload, for the bookkeeping a partial send leaves behind: its local id in this
+/// bank, the circle id it keeps (none for a question new to the circle, which the send's answer then names), and the
+/// question itself when this build can read it. A held or restored raw question written by a newer client (an
+/// unknown `Kind` or `Difficulty`) is still composed into the payload as it is, but has no `Question` here: its
+/// local id and qid pair is kept, its base snapshot is not.
+#[derive(Clone, Debug)]
+pub struct ComposedQuestion {
+    pub local: String,
+    pub qid: Option<String>,
+    pub question: Option<Question>,
+}
+
+/// What [`compose_partial_parts`] made: the send payload, and each of its questions with the local id it stands for.
+#[derive(Clone, Debug)]
+pub struct ComposedPartial {
+    pub payload: Vec<u8>,
+    pub questions: Vec<ComposedQuestion>,
 }
 
 /// The base body's questions by circle id (the first with each id) and in their order.
 ///
-/// Shared by [`compose_partial`] and [`changes_against_body`] so the two can not read the base differently.
+/// A base body is usually the circle's own (each question's `id` is its circle id). A payload composed here keeps a
+/// linked question's local `id` and its circle id in `published.qid`, so such a question is indexed under both, and
+/// the order uses the circle id where there is one. A ticked addition has no `published.qid` and is indexed only by
+/// its local id, so a composed payload is not in general the next comparison's base: the app reads the circle's
+/// served version for that, where every question's `id` is its qid.
+///
+/// Shared by [`compose_partial_parts`] and [`changes_against_body`] so the two can not read the base differently.
 fn base_index(base: &Value) -> Result<(BTreeMap<&str, &Value>, Vec<&str>), String> {
     let base_qs = base.get("bank").and_then(|b| b.get("questions")).and_then(Value::as_array).ok_or_else(|| UNREADABLE.to_string())?;
     let mut raw: BTreeMap<&str, &Value> = BTreeMap::new();
     let mut order: Vec<&str> = Vec::new();
     for q in base_qs {
-        let Some(qid) = q.get("id").and_then(Value::as_str).filter(|id| !id.is_empty()) else { continue };
-        order.push(qid);
-        raw.entry(qid).or_insert(q);
+        let id = q.get("id").and_then(Value::as_str).filter(|id| !id.is_empty());
+        let published = q.pointer("/published/qid").and_then(Value::as_str).filter(|id| !id.is_empty());
+        if let Some(key) = published.or(id) {
+            order.push(key);
+        }
+        if let Some(id) = id {
+            raw.entry(id).or_insert(q);
+        }
+        if let Some(published) = published {
+            raw.entry(published).or_insert(q);
+        }
     }
     Ok((raw, order))
 }
@@ -139,6 +174,18 @@ fn same_image(a: Option<&ImageRef>, b: Option<&ImageRef>) -> bool {
 /// whole-bank send and must say so plainly, plan 4.7) when the bank is empty, the base body can not be read, or a
 /// changed or removed qid has no question in it.
 pub fn compose_partial(link: &CircleLink, bank: &QuestionBank, base_body: &[u8], changed: &BTreeSet<String>, ticked: &BTreeSet<String>) -> Result<Vec<u8>, String> {
+    Ok(compose_partial_parts(link, bank, base_body, changed, ticked)?.payload)
+}
+
+/// [`compose_partial`] with the composed questions kept: this bank in order, with every unticked change left as the
+/// base has it, and for each question its local id and the circle id it keeps. The send's bookkeeping
+/// (`circle_links::after_partial_send`) needs them to rebuild the base snapshot and the local id -> qid pairs.
+///
+/// A restored removal's composed question is the base body's raw question, whose own `id` is the circle's: its local
+/// id here is the pair's local id. A question new to the circle has no qid yet; the send's answer names it. A held or
+/// restored raw question this build can not deserialise (a newer client's `Kind` or `Difficulty`) still goes into the
+/// payload byte for byte, but its `question` is `None`: composing never refuses a payload that is right.
+pub fn compose_partial_parts(link: &CircleLink, bank: &QuestionBank, base_body: &[u8], changed: &BTreeSet<String>, ticked: &BTreeSet<String>) -> Result<ComposedPartial, String> {
     if bank.questions.is_empty() {
         return Err("The bank has no questions. A circle bank needs at least one.".into());
     }
@@ -152,13 +199,14 @@ pub fn compose_partial(link: &CircleLink, bank: &QuestionBank, base_body: &[u8],
     for q in &bank.questions {
         let Some(qid) = link.qid_of(&q.id).filter(|id| !id.is_empty()) else {
             if ticked.contains(&q.id) {
-                out.push(Slot { qid: None, value: ours(link, q) });
+                out.push(Slot { value: ours(link, q), local: q.id.clone(), qid: None, question: Some(q.clone()) });
             }
             continue;
         };
         let held = changed.contains(&q.id) && !ticked.contains(&q.id);
         let value = if held { base_value(link, &q.id, raw.get(qid).copied())? } else { ours(link, q) };
-        out.push(Slot { qid: Some(qid.to_string()), value });
+        let question = if held { question_of(&value).ok() } else { Some(q.clone()) };
+        out.push(Slot { value, local: q.id.clone(), qid: Some(qid.to_string()), question });
     }
 
     // Removals: a pair in `link.qids` whose question this bank no longer has. (The full pairs are kept even when
@@ -170,15 +218,24 @@ pub fn compose_partial(link: &CircleLink, bank: &QuestionBank, base_body: &[u8],
             continue;
         }
         let value = base_value(link, &p.local, raw.get(p.qid.as_str()).copied())?;
+        let question = question_of(&value).ok();
         let at = anchor(&out, &order, &p.qid);
-        out.insert(at, Slot { qid: Some(p.qid.clone()), value });
+        out.insert(at, Slot { value, local: p.local.clone(), qid: Some(p.qid.clone()), question });
     }
 
     let mut v = serde_json::to_value(bank).map_err(|e| e.to_string())?;
     if let Some(o) = v.as_object_mut() {
-        o.insert("questions".into(), Value::Array(out.into_iter().map(|s| s.value).collect()));
+        o.insert("questions".into(), Value::Array(out.iter().map(|s| s.value.clone()).collect()));
     }
-    Ok(format!("{{\"schema_version\":{SEND_SCHEMA},\"bank\":{v}}}").into_bytes())
+    let questions = out.into_iter().map(|s| ComposedQuestion { local: s.local, qid: s.qid, question: s.question }).collect();
+    Ok(ComposedPartial { payload: format!("{{\"schema_version\":{SEND_SCHEMA},\"bank\":{v}}}").into_bytes(), questions })
+}
+
+/// A base body's raw question as this app's shape (its `published` block is not part of a `Question`). `Err` when
+/// this build can not read it (a newer client's `Kind` or `Difficulty`): the caller composes the raw JSON anyway and
+/// leaves the snapshot out, never refusing the payload.
+fn question_of(value: &Value) -> Result<Question, String> {
+    serde_json::from_value(value.clone()).map_err(|_| UNREADABLE.to_string())
 }
 
 /// This bank's question with the `published` block a send gives it (none for a question new to the circle).

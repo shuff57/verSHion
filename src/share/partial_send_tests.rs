@@ -13,9 +13,11 @@ use serde_json::{Value, json};
 
 use super::bank_links_fix_tests::{body_of, linked_from, qfull, QC};
 use super::bank_links_tests::{LOCAL, QA, QB};
-use super::circle_links::{CircleLink, SEND_SCHEMA, circle_theirs};
+use super::circle_links::{CircleLink, SEND_SCHEMA, after_partial_send, changes_since, circle_theirs};
+use super::circles_api::SentBank;
 use super::circles_tests::NOW;
-use super::partial_send::{BodyChanges, changes_against_body, compose_partial};
+use super::partial_send::{BodyChanges, ComposedPartial, changes_against_body, compose_partial, compose_partial_parts};
+use super::publish::QidLink;
 use crate::model::{Difficulty, ImageRef, Kind, Question, QuestionBank};
 
 /// A question only this bank has (added: no circle id).
@@ -647,4 +649,273 @@ fn an_empty_bank_is_refused_with_the_composers_words() {
     bank.questions.clear();
     let err = changes_against_body(&link, &bank, &base).unwrap_err();
     assert_eq!(err, "The bank has no questions. A circle bank needs at least one.");
+}
+
+// ---- what the link keeps after a partial send (phase D3, piece 3) ---------------------------------------
+
+/// The circle id the send's answer gives the question this bank added (at D's place in the payload).
+const QNEW: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa6";
+
+/// The answer a send of `composed` gets: version 2, one qid per composed question in payload order, naming a
+/// question new to the circle.
+fn sent_of(composed: &ComposedPartial) -> SentBank {
+    let qids = composed.questions.iter().map(|c| c.qid.clone().unwrap_or_else(|| QNEW.to_string())).collect();
+    SentBank { version: 2, version_id: format!("{:064x}", 2), qids, ..SentBank::default() }
+}
+
+/// The body the circle would serve for a version made from `composed`: every question's `id` is the circle id it
+/// got (`published` is not part of a served question). The next summary in the app reads this, not the payload.
+fn served(composed: &ComposedPartial, sent: &SentBank) -> Vec<u8> {
+    let mut v: Value = serde_json::from_slice(&composed.payload).expect("the payload is JSON");
+    let qs = v.pointer_mut("/bank/questions").and_then(Value::as_array_mut).expect("bank.questions");
+    for (i, q) in qs.iter_mut().enumerate() {
+        let qid = composed.questions.get(i).and_then(|c| c.qid.clone()).or_else(|| sent.qids.get(i).cloned()).expect("a qid for each composed question");
+        let o = q.as_object_mut().expect("a question object");
+        o.remove("published");
+        o.insert("id".into(), Value::String(qid));
+    }
+    serde_json::to_vec(&v).expect("the served body")
+}
+
+/// Base [A, B, C]; this bank [A', B] (A changed, C removed): no added question, for the edit-during-send case.
+fn abc_case() -> Case {
+    let base_qs = vec![qfull(QA, "A"), qfull(QB, "B"), qfull(QC, "C")];
+    let base = body_of(base_qs.clone());
+    let (mut bank, link) = linked_from(base_qs, false);
+    bank.questions[0].stem = "A (changed)".into();
+    bank.questions.pop();
+    Case { bank, link, base }
+}
+
+#[test]
+fn after_a_partial_send_the_next_summary_against_the_composed_payload_lists_the_unticked_change() {
+    // Everything but D (the added question) ticked: the composed payload holds only linked questions, which keep
+    // their circle ids in `published`, so it can be read as the next base.
+    let c = case();
+    let (a, x, d) = (local_of(&c.link, QA), local_of(&c.link, QC), added_local(&c));
+    let composed = compose_partial_parts(&c.link, &c.bank, &c.base, &set(&[&a, &d]), &set(&[&a, &x])).expect("the composed payload");
+    let sent = sent_of(&composed);
+    let link = after_partial_send(&c.link, &c.bank, &composed.questions, &sent, vec![d.clone()]);
+    let next = changes_against_body(&link, &c.bank, &composed.payload).expect("the next summary");
+    assert_eq!(next, BodyChanges { added: set(&[&d]), ..Default::default() });
+    let count = changes_since(&link, &c.bank);
+    assert_eq!((count.added, count.changed, count.removed), (1, 0, 0), "changes_since counts the same one: {count:?}");
+}
+
+#[test]
+fn after_a_partial_send_the_next_summary_lists_each_kind_of_unticked_change() {
+    // The same invariant for a changed question, a removal and an added one left unticked. The next base is the
+    // version the circle serves (a question the send added is named by the answer's qid, so the payload's own local
+    // id is not what the next read compares against).
+    for which in ["changed", "removed", "added"] {
+        let c = case();
+        let (a, x, d) = (local_of(&c.link, QA), local_of(&c.link, QC), added_local(&c));
+        let (ticked, unticked) = match which {
+            "changed" => (set(&[&x, &d]), a.clone()),
+            "removed" => (set(&[&a, &d]), x.clone()),
+            _ => (set(&[&a, &x]), d.clone()),
+        };
+        let composed = compose_partial_parts(&c.link, &c.bank, &c.base, &set(&[&a, &d]), &ticked).expect("the composed payload");
+        let sent = sent_of(&composed);
+        let link = after_partial_send(&c.link, &c.bank, &composed.questions, &sent, vec![unticked]);
+        let next = changes_against_body(&link, &c.bank, &served(&composed, &sent)).expect("the next summary");
+        let want = match which {
+            "changed" => BodyChanges { changed: set(&[&a]), ..Default::default() },
+            "removed" => BodyChanges { removed: set(&[&x]), ..Default::default() },
+            _ => BodyChanges { added: set(&[&d]), ..Default::default() },
+        };
+        assert_eq!(next, want, "{which}");
+        let count = changes_since(&link, &c.bank);
+        let got = match which {
+            "changed" => (count.changed, count.added, count.removed),
+            "removed" => (count.removed, count.changed, count.added),
+            _ => (count.added, count.changed, count.removed),
+        };
+        assert_eq!(got, (1, 0, 0), "{which}: changes_since counts the same one: {count:?}");
+    }
+}
+
+#[test]
+fn a_ticked_removals_pair_is_dropped_and_an_unticked_ones_kept() {
+    let c = case();
+    let (a, x, d) = (local_of(&c.link, QA), local_of(&c.link, QC), added_local(&c));
+
+    // C's removal ticked: no pair, no snapshot entry.
+    let composed = compose_partial_parts(&c.link, &c.bank, &c.base, &set(&[&a]), &set(&[&a, &x, &d])).expect("ticked, composed");
+    let sent = sent_of(&composed);
+    let link = after_partial_send(&c.link, &c.bank, &composed.questions, &sent, vec![]);
+    assert!(link.qid_of(&x).is_none(), "a ticked removal's pair is gone");
+    assert!(!link.qids.iter().any(|p| p.local == x));
+    assert!(!link.base.iter().any(|b| b.local_id == x));
+
+    // C's removal unticked: the pair stays and the base snapshot holds the base's own question.
+    let composed = compose_partial_parts(&c.link, &c.bank, &c.base, &set(&[&a]), &set(&[&a, &d])).expect("unticked, composed");
+    let sent = sent_of(&composed);
+    let link = after_partial_send(&c.link, &c.bank, &composed.questions, &sent, vec![x.clone()]);
+    assert_eq!(link.qid_of(&x), Some(QC), "an unticked removal keeps its pair");
+    let base_c = link.base.iter().find(|b| b.local_id == x).expect("its snapshot entry");
+    assert_eq!(base_c.snap.stem, "C");
+}
+
+#[test]
+fn a_bank_edited_during_the_send_is_not_stale_and_its_edit_shows_as_unsent() {
+    let c = abc_case();
+    let (a, b, x) = (local_of(&c.link, QA), local_of(&c.link, QB), local_of(&c.link, QC));
+    // The bank was edited before the send started: its mark moves on with it.
+    let mut started = c.bank.clone();
+    started.modified += 100;
+    let composed = compose_partial_parts(&c.link, &started, &c.base, &set(&[&a]), &set(&[&a])).expect("the composed payload");
+    let sent = sent_of(&composed);
+
+    // The bank moves on again while the send is in flight.
+    let mut edited = started.clone();
+    edited.modified += 10;
+    edited.questions.iter_mut().find(|q| q.id == b).unwrap().stem = "B (edited during the send)".into();
+
+    // The link is told the bank as it was when the send started, never the edited one.
+    let link = after_partial_send(&c.link, &started, &composed.questions, &sent, vec![]);
+    assert_eq!(link.bank_modified, started.modified, "the bank as the send started");
+    assert_eq!(link.bank_print, super::circle_links::bank_print(&started), "its print, not the composed version's");
+    assert!(!link.stale_for(&edited), "a bank newer than the send started is not put back");
+    // The send does not leave a print of a version the bank never had: its edit is unsent, not a stale bank.
+    let next = changes_against_body(&link, &edited, &served(&composed, &sent)).expect("the next summary");
+    assert!(next.changed.contains(&b), "the edit made during the send is unsent: {next:?}");
+    assert!(!next.changed.contains(&a), "what was sent is not listed again: {next:?}");
+    assert!(next.removed.contains(&x), "the unticked removal is still unsent too: {next:?}");
+    assert_eq!(changes_since(&link, &edited).changed, 1);
+}
+
+#[test]
+fn the_base_snapshot_is_the_composed_version_and_held_back_the_unticked_set() {
+    let c = case();
+    let (a, b, x, d) = (local_of(&c.link, QA), local_of(&c.link, QB), local_of(&c.link, QC), added_local(&c));
+    // A unticked; C's removal and D ticked.
+    let composed = compose_partial_parts(&c.link, &c.bank, &c.base, &set(&[&a, &d]), &set(&[&x, &d])).expect("the composed payload");
+    let sent = sent_of(&composed);
+    let held = vec![a.clone()];
+    let link = after_partial_send(&c.link, &c.bank, &composed.questions, &sent, held.clone());
+
+    assert_eq!(link.held_back, held, "exactly the unticked set");
+    let base_a = link.base.iter().find(|x| x.local_id == a).expect("A's snapshot entry");
+    assert_eq!(base_a.snap.stem, "A", "A unticked: the base's version, not the bank's");
+    assert_ne!(c.bank.questions[0].stem, base_a.snap.stem);
+    assert_eq!(link.base.iter().find(|x| x.local_id == b).expect("B's snapshot entry").snap.stem, "B", "B unchanged: ours");
+    // The unticked change still compares as changed against the snapshot.
+    assert_eq!(changes_since(&link, &c.bank).changed, 1);
+    // A ticked added question is linked by the qid the send's answer gave it.
+    assert_eq!(link.qid_of(&d), Some(QNEW));
+    // And the copy is in step with the version the send made.
+    assert_eq!((link.base_version, link.base_version_id.as_str()), (sent.version, sent.version_id.as_str()));
+}
+
+#[test]
+fn a_link_written_before_held_back_loads_with_none() {
+    let c = case();
+    let mut v = serde_json::to_value(&c.link).expect("the link as JSON");
+    assert!(v.as_object_mut().unwrap().remove("held_back").is_some(), "this build writes held_back");
+    let old: CircleLink = serde_json::from_value(v).expect("a link from before phase D3");
+    assert!(old.held_back.is_empty(), "absent reads as none");
+    assert_eq!(old, c.link, "the rest of the link is the same");
+
+    // Lenient, as the other new fields: a value this build can not read is none, or its readable entries; never the
+    // link with it.
+    let mut v = serde_json::to_value(&c.link).expect("the link as JSON");
+    v["held_back"] = json!("not a list");
+    let odd: CircleLink = serde_json::from_value(v).expect("the link still loads");
+    assert!(odd.held_back.is_empty());
+    let mut v = serde_json::to_value(&c.link).expect("the link as JSON");
+    v["held_back"] = json!([1, "kept", null]);
+    let odd: CircleLink = serde_json::from_value(v).expect("the link still loads");
+    assert_eq!(odd.held_back, ["kept"]);
+}
+
+#[test]
+fn after_partial_send_is_pure_and_writes_nothing() {
+    let c = case();
+    let (a, x, d) = (local_of(&c.link, QA), local_of(&c.link, QC), added_local(&c));
+    let link_before = c.link.clone();
+    let bank_before = serde_json::to_value(&c.bank).expect("the bank as JSON");
+    let composed = compose_partial_parts(&c.link, &c.bank, &c.base, &set(&[&a, &d]), &set(&[&a, &x, &d])).expect("the composed payload");
+    let sent = sent_of(&composed);
+    let one = after_partial_send(&c.link, &c.bank, &composed.questions, &sent, vec![a.clone()]);
+    let two = after_partial_send(&c.link, &c.bank, &composed.questions, &sent, vec![a.clone()]);
+    assert_eq!(c.link, link_before, "the link it was given is untouched");
+    assert_eq!(serde_json::to_value(&c.bank).unwrap(), bank_before, "the bank it was given is untouched");
+    assert_eq!(one, two, "the same inputs give the same link");
+    assert_eq!(one.held_back, vec![a]);
+}
+
+#[test]
+fn a_whole_bank_send_clears_held_back() {
+    let c = case();
+    let mut link = c.link.clone();
+    link.held_back = vec![c.bank.questions[0].id.clone()];
+    let sent = SentBank { version: 3, version_id: format!("{:064x}", 3), qids: c.bank.questions.iter().map(|_| QNEW.to_string()).collect(), ..SentBank::default() };
+    let after = super::circle_links::after_send(&link, &c.bank, &sent);
+    assert!(after.held_back.is_empty(), "everything was sent, so nothing is held back");
+}
+
+/// The qid the server's answer gives a question the composed pair knew under another id (the answer is authoritative).
+const QSERVER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa7";
+
+#[test]
+fn a_restored_removal_this_build_cannot_read_still_composes_and_keeps_its_pair() {
+    // A newer client wrote C with a Kind this build does not know. The payload must still carry C raw, byte for
+    // byte; only the base snapshot is left out.
+    let mut c_bad = qfull(QC, "C");
+    c_bad["kind"] = json!({"NewerKind": {"parts": []}});
+    assert!(serde_json::from_value::<Question>(c_bad.clone()).is_err(), "this build can not read it");
+    let base = body_of(vec![qfull(QA, "A"), qfull(QB, "B"), c_bad.clone()]);
+    let (bank, mut link) = linked_from(vec![qfull(QA, "A"), qfull(QB, "B")], false);
+    let gone = "local-c-gone".to_string();
+    link.qids.push(QidLink { local: gone.clone(), qid: QC.into() });
+
+    let composed = compose_partial_parts(&link, &bank, &base, &set(&[]), &set(&[])).expect("the payload is still composed");
+    let qs = questions(&serde_json::from_slice::<Value>(&composed.payload).expect("the payload is JSON"));
+    let c = qs.iter().find(|q| q["id"].as_str() == Some(QC)).expect("C is restored");
+    assert_eq!(content(c), c_bad, "the raw question, although this build can not read it");
+    let cq = composed.questions.iter().find(|c| c.local == gone).expect("C's composed question");
+    assert!(cq.question.is_none(), "no Question this build can read");
+    assert_eq!(cq.qid.as_deref(), Some(QC), "but its pair is known");
+
+    let sent = sent_of(&composed);
+    let link = after_partial_send(&link, &bank, &composed.questions, &sent, vec![gone.clone()]);
+    assert_eq!(link.qid_of(&gone), Some(QC), "the pair is kept");
+    assert!(!link.base.iter().any(|b| b.local_id == gone), "no snapshot for a question this build can not read");
+    // The next summary still lists it as removed.
+    let next = changes_against_body(&link, &bank, &composed.payload).expect("the next summary");
+    assert_eq!(next.removed, set(&[&gone]));
+}
+
+#[test]
+fn a_short_or_empty_sent_qids_list_keeps_linked_qids_and_never_borrows_one() {
+    let c = case();
+    let (a, b, x, d) = (local_of(&c.link, QA), local_of(&c.link, QB), local_of(&c.link, QC), added_local(&c));
+    // C's removal unticked and D ticked: composed = [A', B, C_base, D'].
+    let composed = compose_partial_parts(&c.link, &c.bank, &c.base, &set(&[&a, &d]), &set(&[&a, &d])).expect("the composed payload");
+    assert_eq!(composed.questions.len(), 4);
+    for qids in [Vec::new(), vec![QB.to_string()], vec![QB.to_string(), QC.to_string()]] {
+        let mut sent = sent_of(&composed);
+        sent.qids = qids.clone();
+        let link = after_partial_send(&c.link, &c.bank, &composed.questions, &sent, vec![x.clone()]);
+        assert_eq!(link.qid_of(&a), Some(QA), "a linked question keeps its own qid, list {qids:?}");
+        assert_eq!(link.qid_of(&b), Some(QB), "list {qids:?}");
+        assert_eq!(link.qid_of(&x), Some(QC), "a restored removal keeps its pair, list {qids:?}");
+        assert!(link.qid_of(&d).is_none(), "an addition never borrows another question's qid, list {qids:?}");
+    }
+}
+
+#[test]
+fn the_sends_qid_wins_over_the_composed_pair_when_the_arrays_align() {
+    let c = case();
+    let (a, x, d) = (local_of(&c.link, QA), local_of(&c.link, QC), added_local(&c));
+    // Everything ticked: composed = [A', B, D], three questions for the answer's three qids.
+    let composed = compose_partial_parts(&c.link, &c.bank, &c.base, &set(&[&a, &d]), &set(&[&a, &x, &d])).expect("the composed payload");
+    let mut sent = sent_of(&composed);
+    assert_eq!(sent.qids.len(), composed.questions.len());
+    assert_eq!(sent.qids[0], QA);
+    sent.qids[0] = QSERVER.to_string();
+    let link = after_partial_send(&c.link, &c.bank, &composed.questions, &sent, vec![]);
+    assert_eq!(link.qid_of(&a), Some(QSERVER), "the answer's qid is authoritative");
+    assert_eq!(link.base.iter().find(|b| b.local_id == a).expect("A's snapshot entry").qid, QSERVER);
 }
