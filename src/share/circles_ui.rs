@@ -225,8 +225,12 @@ fn gate(ui: &mut Ui, m: &mut CirclesModel) {
 
 fn list_page(ui: &mut Ui, m: &mut CirclesModel) {
     let (mut create, mut join) = (false, false);
+    // (round 54) creating a circle waits for approval (the server refuses it): a pending account is only offered the code.
+    let pending = m.gate.confirmed_pending();
     ui.horizontal_wrapped(|ui| {
-        create = kit::primary_button(ui, "Create a circle...").clicked();
+        if !pending {
+            create = kit::primary_button(ui, "Create a circle...").clicked();
+        }
         join = kit::ghost_button(ui, "Enter a code...").clicked();
         if m.busy() {
             ui.spinner();

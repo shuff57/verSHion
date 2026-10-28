@@ -19,7 +19,7 @@ use std::time::Duration;
 
 use web_time::Instant;
 
-use super::api::{self, ApiError};
+use super::api::{self, ApiError, Status};
 use super::circle_edit::{CircleEditModel, LinkStatus, Perm};
 use super::circle_links::{CircleLink, LinkMode, ROLE_NONE};
 use super::circles_api::{CircleDetail, CircleSummary, HeadEntry, HeadState, Role};
@@ -204,6 +204,8 @@ pub enum SignIn {
 pub fn sign_in_of(gate: &Gate) -> SignIn {
     match gate {
         Gate::Ready => SignIn::Ready,
+        // (round 54) a confirmed pending account is signed in and may use circles: its strip offers the circle actions.
+        Gate::NotApproved(Status::Pending) => SignIn::Ready,
         Gate::Checking | Gate::Unreachable => SignIn::Unknown,
         Gate::NotSetUp | Gate::NoServer | Gate::SignedOut | Gate::NotApproved(_) => SignIn::Out,
     }

@@ -1152,11 +1152,12 @@ impl CirclesModel {
     pub fn note_account(&mut self, snap: &AccountSnapshot) {
         // (critic 69 minor 5) the account is looked up again or signed out: a sign-in follows, and the adds stopped by a
         // signed-out answer are tried once more then
-        if snap.gate != Gate::Ready {
+        if !snap.gate.confirmed_pending() && snap.gate != Gate::Ready {
             self.adds_out = false;
         }
         match (&snap.gate, &snap.account) {
-            (Gate::Ready, Some(a)) => {
+            // (round 54: a confirmed pending account uses circles, so its reads belong to it too)
+            (g, Some(a)) if g == &Gate::Ready || g.confirmed_pending() => {
                 if self.account.as_ref().is_some_and(|p| p != a) {
                     self.forget_account();
                 }
@@ -1244,11 +1245,13 @@ impl CirclesModel {
         self.note_account(snap);
         self.session = snap.session.clone();
         self.gate = snap.gate.clone();
+        // (round 54: a confirmed pending account is signed in and may use circles: it is not sent to the gate)
+        let usable = self.gate == Gate::Ready || self.gate.confirmed_pending();
         if self.screen == Screen::Gate {
-            if self.gate == Gate::Ready {
+            if usable {
                 self.screen = self.resume;
             }
-        } else if matches!(self.gate, Gate::SignedOut | Gate::NotApproved(_) | Gate::NotSetUp | Gate::NoServer) {
+        } else if !usable && matches!(self.gate, Gate::SignedOut | Gate::NotApproved(_) | Gate::NotSetUp | Gate::NoServer) {
             self.resume = self.screen;
             self.screen = Screen::Gate;
         }
@@ -2409,6 +2412,10 @@ impl CirclesModel {
     // ---- create ---------------------------------------------------------------------------------------------------
 
     pub fn start_create(&mut self) {
+        // (round 54) a confirmed pending account joins by code; creating a circle waits for approval (the server refuses it).
+        if self.gate.confirmed_pending() {
+            return;
+        }
         self.create = CreateForm::default();
         self.notice = None;
         self.screen = Screen::Create;
@@ -3505,7 +3512,9 @@ impl CirclesModel {
         self.note_unfinished();
         // (critic 77 minor 3) the Banks list's badges keep the account rule from its first frame: what a send whose answer
         // could not be read left in the links file is said (as sent) to the account that sent it only
-        if snap.gate == Gate::Ready {
+        // (round 54: a confirmed pending account's circle work — copies, merge base reads — runs too)
+        let circle_ready = snap.gate == Gate::Ready || snap.gate.confirmed_pending();
+        if circle_ready {
             self.note_account(snap);
             self.edit.learn_account(snap);
         }
@@ -3521,10 +3530,10 @@ impl CirclesModel {
         }
         self.now = Some(now);
         self.note_account(snap);
-        self.session = if snap.gate == Gate::Ready { snap.session.clone() } else { None };
+        self.session = if circle_ready { snap.session.clone() } else { None };
         self.drain();
-        // (critic 69 minor 4) a copy read for the account is put in only while it is signed in
-        let can_land = snap.gate == Gate::Ready && !self.account_out;
+        // (critic 69 minor 4) a copy read for the account is put in only while it is signed in (or confirmed pending)
+        let can_land = circle_ready && !self.account_out;
         if can_land
             && self.ready.is_some()
             && !landing_pending()

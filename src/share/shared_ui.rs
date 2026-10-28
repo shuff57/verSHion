@@ -16,7 +16,7 @@ use super::circles::CirclesModel;
 use super::circles_ui::Outcome;
 use super::mine_ui::MineUi;
 use super::publish::{Gate, ShareSource, snapshot_of};
-use super::shared::{Guide, SHARE_ACTION, STEPS, SharedModel, Tab};
+use super::shared::{tabs_for, Guide, SHARE_ACTION, STEPS, SharedModel, Tab};
 use super::ui::AccountUi;
 use crate::model::{Exam, QuestionBank};
 use crate::{kit, pageshell, theme};
@@ -159,6 +159,12 @@ impl SharedUi {
             ui.add_space(6.0);
             // The page's one action beside the title, as Banks has "New bank" (once the tabs show).
             let ready = guide == Guide::Ready;
+            // (round 54) a confirmed account waiting for approval gets the Circles tab and its settings; the public
+            // pool's action and tabs wait for approval.
+            let pending = snap.gate.confirmed_pending();
+            if pending && !tabs_for(&snap.gate).contains(&self.model.tab) {
+                self.model.goto(Tab::Circles);
+            }
             let avail = ui.available_width();
             let action_w = pill_width(ui, SHARE_ACTION) + 24.0;
             let beside = ready && avail - action_w >= 320.0;
@@ -179,7 +185,13 @@ impl SharedUi {
             }
             ui.add_space(14.0);
             match guide {
-                Guide::Ready => changed |= self.tabs(ui, account, browse, mine, banks, exams),
+                Guide::Ready => changed |= self.tabs(ui, account, browse, mine, banks, exams, false),
+                // The waiting card says what an approval is for, and the two tabs a pending account may use follow it.
+                _ if pending => {
+                    self.guide_card(ui, &guide, account);
+                    ui.add_space(12.0);
+                    changed |= self.tabs(ui, account, browse, mine, banks, exams, true);
+                }
                 g => self.guide_card(ui, &g, account),
             }
             ui.add_space(12.0);
@@ -230,8 +242,9 @@ impl SharedUi {
 
     // ---- the tabs ------------------------------------------------------------------------------------------
 
-    /// The tabs. Returns true when a circle copy changed the banks.
-    pub(super) fn tabs(&mut self, ui: &mut Ui, account: &mut AccountUi, browse: &mut BrowseUi, mine: &mut MineUi, banks: &mut Vec<QuestionBank>, exams: &[Exam]) -> bool {
+    /// The tabs. Returns true when a circle copy changed the banks. `pending`: a confirmed account waiting for
+    /// approval, which gets only the Circles and Settings tabs (round 54).
+    pub(super) fn tabs(&mut self, ui: &mut Ui, account: &mut AccountUi, browse: &mut BrowseUi, mine: &mut MineUi, banks: &mut Vec<QuestionBank>, exams: &[Exam], pending: bool) -> bool {
         // Circles first: a request to open a circle or bank, the model's frame, copies and badges.
         let snap = snapshot_of(&account.model);
         if !self.repaint_set {
@@ -266,8 +279,11 @@ impl SharedUi {
             account.reveal();
         }
         let changed = self.circles.sync(banks, &mut browse.model);
+        // (round 54) only the tabs this account may use; a pending account's stray request for a public tab is not
+        // drawn as one.
+        let tab = if pending && !matches!(self.model.tab, Tab::Circles | Tab::Settings) { Tab::Circles } else { self.model.tab };
         // Keep the hosted models running only for the tab that needs them.
-        match self.model.tab {
+        match tab {
             Tab::Circles => {}
             Tab::Browse => {
                 if !browse.model.open {
@@ -285,10 +301,11 @@ impl SharedUi {
                 }
             }
         }
+        let shown: &[Tab] = if pending { &super::shared::PENDING_TABS } else { &Tab::ALL };
         ui.horizontal_wrapped(|ui| {
             // A tab that does not fit moves to the next row whole: its label never wraps.
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-            for t in Tab::ALL {
+            for &t in shown {
                 let badge = match t {
                     Tab::Imported => browse.model.update_count(),
                     _ => 0,
@@ -310,7 +327,6 @@ impl SharedUi {
             self.chooser(ui, banks, exams);
         }
         ui.add_space(10.0);
-        let tab = self.model.tab;
         pageshell::card(ui, |ui| match tab {
             Tab::Browse => super::browse_ui::tab_body(ui, &mut browse.model, super::browse::Tab::Search),
             Tab::Imported => {

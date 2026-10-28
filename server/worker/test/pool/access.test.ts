@@ -32,18 +32,30 @@ function idRoutes(id: string, sha: string, base: string) {
   ] as const;
 }
 
-test("no token: 401 on every route; pending and unverified: 403 on every route", async () => {
+test("no token: 401 on every route; pending and unverified: 403 on every public route", async () => {
   const { w, pub, img, pubPid } = await setup();
-  const routes = [...idRoutes(pub, img.sha, pubPid), ["GET", "/items", {}], ["GET", "/items/mine", {}], ["POST", "/items/versions", { json: { ids: [pub] } }], ["PUT", `/blobs/${img.sha}`, { body: png(5, 5, 1) }], ["POST", "/items", { body: "x\ny", contentType: PUBLISH_CONTENT_TYPE }]] as const;
-  for (const [m, p, o] of routes) {
+  const routes = [...idRoutes(pub, img.sha, pubPid), ["GET", "/items", {}], ["GET", "/items/mine", {}], ["POST", "/items/versions", { json: { ids: [pub] } }], ["POST", "/items", { body: "x\ny", contentType: PUBLISH_CONTENT_TYPE }]] as const;
+  const uploadPath = ["PUT", `/blobs/${img.sha}`, { body: png(5, 5, 1) }] as const;
+  for (const [m, p, o] of [...routes, uploadPath]) {
     const none = await w.json(m, p, { ...o, user: null });
     assert.equal(none.status, 401, `${m} ${p}`);
-    for (const trust of ["pending", "unverified", "member"]) {
+  }
+  for (const trust of ["unverified", "member"]) {
+    for (const [m, p, o] of [...routes, uploadPath]) {
       const u = w.user(trust);
       const x = await w.json(m, p, { ...o, user: u });
       assert.deepEqual([x.status, x.body.error], [403, "account_not_approved"], `${trust} ${m} ${p}`);
     }
   }
+  // A CONFIRMED pending account may upload the image a circle send carries (round 54); every public route is still
+  // refused. The public pool itself (items, browse, publish, import) did not change.
+  for (const [m, p, o] of routes) {
+    const u = w.user("pending");
+    const x = await w.json(m, p, { ...o, user: u });
+    assert.deepEqual([x.status, x.body.error], [403, "account_not_approved"], `pending ${m} ${p}`);
+  }
+  const up = await w.json("PUT", `/blobs/${img.sha}`, { user: w.user("pending"), body: png(5, 5, 1) });
+  assert.notEqual(up.status, 403, "a pending account's circle image upload is not refused by the approval gate");
   assert.equal(w.q(`SELECT * FROM imports`).length + w.q(`SELECT * FROM reports`).length, 0, "nothing recorded");
 });
 

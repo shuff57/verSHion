@@ -2257,8 +2257,9 @@ impl CircleEditModel {
         self.now = Some(now);
         self.session = snap.session.clone();
         self.gate = snap.gate.clone();
-        // ("your session ended" is no longer so once the account is signed in again)
-        let ready = self.gate == Gate::Ready;
+        // ("your session ended" is no longer so once the account is signed in again). Round 54: a confirmed pending
+        // account is signed in for circle work (merge base reads, restores, trims).
+        let ready = self.gate == Gate::Ready || self.gate.confirmed_pending();
         self.learn_account(snap);
         if ready && !self.was_ready {
             self.results.drop_kind(ResultKind::Session);
@@ -2277,7 +2278,7 @@ impl CircleEditModel {
     /// read of a bank that hides its keys is one of the few they have); (critic 89 m2) never beside Get latest's own read of
     /// that bank.
     fn read_bases(&mut self) {
-        if !self.loaded || self.gate != Gate::Ready || self.running(JobKind::Base) {
+        if !self.loaded || !(self.gate == Gate::Ready || self.gate.confirmed_pending()) || self.running(JobKind::Base) {
             return;
         }
         let now = self.now.unwrap_or_else(Instant::now);

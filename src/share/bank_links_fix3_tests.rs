@@ -89,6 +89,21 @@ fn i1_a_signed_out_answer_stops_the_add_and_the_banks_list_asks_to_sign_in() {
     assert!(!m.tick_background(now(), &a), "nothing left to do");
 }
 
+#[test]
+fn a_confirmed_pending_account_finishes_a_background_add() {
+    // Round 54: an "Add to My Banks" copy is circle work, so it runs for a confirmed pending member too.
+    let (mut m, s) = open_circle("editor", json!({}));
+    s.keep_raw("Get", &format!("/circles/{CID}/banks/{BID}"), served(2, &[(QA, "One")], false));
+    let p = pending(&s);
+    m.note_account(&p);
+    m.add_bank(BID, false);
+    let (mut banks, mut b) = (Vec::new(), browse());
+    ticks(&mut m, &p, &mut banks, &mut b, 8);
+    assert_eq!(banks.len(), 1, "{:?}", m.adds);
+    assert!(matches!(state(&m, BID), AddState::Done { linked: true, .. }), "{:?}", m.adds);
+    assert!(!m.tick_background(now(), &p), "nothing left to do");
+}
+
 // ---- c67 I2: a sign-out, or another account, in the middle of an add -----------------------------------------------------
 
 #[test]
@@ -537,7 +552,7 @@ fn m7_the_chooser_asks_which_bank_to_share_with_the_circle() {
     let (bank, _) = linked(&[(QA, "One")]);
     let mut banks = vec![bank];
     let t = text_of(1280.0, &mut |ui| {
-        s.tabs(ui, &mut a, &mut b, &mut mi, &mut banks, &[]);
+        s.tabs(ui, &mut a, &mut b, &mut mi, &mut banks, &[], false);
     });
     assert!(t.contains("Which bank do you want to share with the circle?") && !t.contains("add to the circle"), "{t}");
 }

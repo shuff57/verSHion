@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
+use super::api::Status;
 use super::bank_links::*;
 use super::browse::{BrowseModel, ImportLog};
 use super::circle_edit::*;
@@ -208,6 +209,20 @@ fn the_badge_says_the_circle_and_at_most_one_state() {
     let mut odd = l;
     odd.circle_name = "<b>Algebra</b>\u{202e} team".into();
     assert!(!badge_of(&odd, None).circle.contains('\u{202e}'));
+}
+
+#[test]
+fn a_confirmed_pending_account_is_signed_in_on_the_circle_strip() {
+    use StripButton::*;
+    let (_, l) = linked(&[(QA, "One"), (QB, "Two")]);
+    let unsent = status(1, 2, true, false);
+    // Round 54: the pending member gets the circle actions, not "Sign in...".
+    let v = strip_view(&StripInput { sign_in: sign_in_of(&Gate::NotApproved(Status::Pending)), ..input(&l, &unsent) });
+    assert_eq!(v.buttons, vec![Send, History]);
+    assert!(!v.line.contains("Sign in"), "{v:?}");
+    // Every other not-approved state still says so.
+    let v = strip_view(&StripInput { sign_in: sign_in_of(&Gate::NotApproved(Status::Unverified)), ..input(&l, &unsent) });
+    assert_eq!(v.buttons, vec![OpenAccount]);
 }
 
 #[test]

@@ -234,6 +234,30 @@ fn a_signed_out_account_points_to_the_account_window_and_resumes_when_ready() {
 }
 
 #[test]
+fn a_confirmed_pending_account_may_send_to_a_circle_but_not_publish_publicly() {
+    let snap = |s: &Arc<Script>| AccountSnapshot {
+        gate: Gate::NotApproved(Status::Pending),
+        session: Some(s.clone()),
+        account_open: false,
+        account: Some("a@b.org".into()),
+        name: Some("Pat".into()),
+    };
+    // Opened with a circle as the destination, the pending account reaches the form (the pool's own role checks then
+    // decide what it may send). Round 54.
+    let s = Script::new();
+    s.say(200, json!({"circles": []}));
+    let (mut m, _) = model(HashMap::new());
+    m.start_for_circle(source(1), Some(ID.into()));
+    m.frame(now(), &snap(&s));
+    assert_eq!(m.step, Step::Options);
+    // The same window opened for a public publish stays at its gate.
+    let (mut p, _) = model(HashMap::new());
+    p.start(source(1));
+    p.frame(now(), &snap(&s));
+    assert_eq!(p.step, Step::Gate);
+}
+
+#[test]
 fn the_account_gate_is_read_from_the_account_window_without_any_io() {
     let factory: super::model::Factory = Arc::new(|_| panic!("no client may be built"));
     let acct = |mode| AccountModel::new(factory.clone(), Runner::Inline, SettingsIo::memory()).with_server_mode(mode);

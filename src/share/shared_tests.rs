@@ -6,7 +6,7 @@ use std::sync::Arc;
 use super::api::Status;
 use super::model::{AccountModel, MailKind, Page, Runner, SettingsIo, server_mode};
 use super::publish::Gate;
-use super::shared::{Guide, STEPS, SharedModel, Tab, guide_of};
+use super::shared::{Guide, STEPS, SharedModel, Tab, guide_of, tabs_for};
 use super::shared_ui::{SharedUi, goto, take_goto};
 use super::ui::AccountUi;
 
@@ -32,6 +32,27 @@ fn every_account_state_maps_to_one_guided_step_or_note() {
     assert_eq!(g(Gate::Ready, Page::Status, true, false), Guide::NeedsInvite);
     assert_eq!(g(Gate::Ready, Page::Status, true, true), Guide::Ready, "a redeemed code lets the tabs come back");
     assert_eq!(g(Gate::Ready, Page::Status, false, false), Guide::Ready);
+}
+
+#[test]
+fn a_confirmed_pending_account_gets_circles_and_settings_only() {
+    // Round 54: a confirmed account waiting for approval may use circles, not the public pool's tabs.
+    let pending = Gate::NotApproved(Status::Pending);
+    assert_eq!(tabs_for(&pending), &[Tab::Circles, Tab::Settings]);
+    for t in [Tab::Browse, Tab::Mine, Tab::Imported, Tab::Reports] {
+        assert!(!tabs_for(&pending).contains(&t), "{t:?} waits for approval");
+    }
+    assert_eq!(tabs_for(&Gate::Ready), &Tab::ALL);
+}
+
+#[test]
+fn the_waiting_copy_says_a_circle_code_works_now() {
+    let help = Guide::Waiting.help();
+    assert!(help.contains("circle code"), "{help}");
+    let (_, body) = super::ui::status_text(&Status::Pending);
+    assert!(body.contains("circle code"), "{body}");
+    let (_, more) = super::publish_ui::status_line(&Status::Pending);
+    assert!(more.contains("circle"), "{more}");
 }
 
 #[test]
@@ -152,7 +173,7 @@ fn the_tab_row_and_the_step_pills_wrap_inside_a_narrow_page() {
         let mut s = SharedUi::default();
         let mut right = 0.0f32;
         frame(&ctx, width, &mut |ui| {
-            s.tabs(ui, &mut a, &mut b, &mut m, &mut Vec::new(), &[]);
+            s.tabs(ui, &mut a, &mut b, &mut m, &mut Vec::new(), &[], false);
             right = right.max(ui.min_rect().right());
         });
         assert!(right <= width + 0.5, "tabs reach {right} in a {width} wide page");
@@ -176,12 +197,12 @@ fn smoke_frames_of_every_tab_body() {
         for t in Tab::ALL {
             s.model.goto(t);
             frame(&ctx, width, &mut |ui| {
-                s.tabs(ui, &mut a, &mut b, &mut m, &mut banks, &[]);
+                s.tabs(ui, &mut a, &mut b, &mut m, &mut banks, &[], false);
             });
         }
         s.model.toggle_chooser();
         frame(&ctx, width, &mut |ui| {
-                s.tabs(ui, &mut a, &mut b, &mut m, &mut banks, &[]);
+                s.tabs(ui, &mut a, &mut b, &mut m, &mut banks, &[], false);
             });
     }
 }

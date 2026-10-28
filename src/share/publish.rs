@@ -310,6 +310,14 @@ pub enum Gate {
     Ready,
 }
 
+impl Gate {
+    /// A CONFIRMED account still waiting for approval. It is signed in and its email is verified, so it may use
+    /// circles (join with a circle code, then act by its role); the public pool's tabs stay gated (round 54).
+    pub fn confirmed_pending(&self) -> bool {
+        matches!(self, Gate::NotApproved(Status::Pending))
+    }
+}
+
 /// What the publish flow needs of the account, every frame.
 #[derive(Clone)]
 pub struct AccountSnapshot {
@@ -347,7 +355,8 @@ pub struct AccountWatch {
 impl AccountWatch {
     pub fn note(&mut self, snap: &AccountSnapshot) -> AccountTurn {
         match &snap.gate {
-            Gate::Ready => {
+            // (round 54: a confirmed pending account is signed in too; the circles it reads belong to it)
+            Gate::Ready | Gate::NotApproved(Status::Pending) => {
                 self.out = false;
                 let Some(a) = &snap.account else { return AccountTurn::Same };
                 let another = self.account.as_ref().is_some_and(|p| p != a);
@@ -893,15 +902,24 @@ impl PublishModel {
             gate = Gate::SignedOut;
         }
         self.gate = gate.clone();
+        // Round 54: a confirmed pending account may send to a circle (`self.circle.active`), and only there. The same
+        // window opened for a public publish stays at its gate until approval, as before.
+        let circle_send = self.circle.active;
+        let allowed = gate == Gate::Ready || (circle_send && gate.confirmed_pending());
         match self.step {
             Step::Gate => {
-                if gate == Gate::Ready {
+                if allowed {
                     self.step = self.resume;
                 }
             }
             Step::Done => {}
             _ => {
-                let definite = matches!(gate, Gate::SignedOut | Gate::NotApproved(_) | Gate::NotSetUp | Gate::NoServer);
+                let definite = match &gate {
+                    Gate::SignedOut | Gate::NotSetUp | Gate::NoServer => true,
+                    Gate::NotApproved(Status::Pending) => !circle_send,
+                    Gate::NotApproved(_) => true,
+                    _ => false,
+                };
                 if definite && self.job.is_none() {
                     self.resume = self.step;
                     self.step = Step::Gate;
@@ -1076,7 +1094,8 @@ impl PublishModel {
         if self.job.is_some() || !self.circle.active {
             return;
         }
-        if self.gate != Gate::Ready {
+        // (round 54) a confirmed pending account may send to a circle; a public publish is still gated in `publish`.
+        if self.gate != Gate::Ready && !(self.circle.active && self.gate.confirmed_pending()) {
             self.notice = Some(Notice::Error("Sign in with an approved account first.".into()));
             return;
         }

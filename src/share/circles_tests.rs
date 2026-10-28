@@ -11,7 +11,7 @@ use std::time::Duration;
 use serde_json::{Value, json};
 use web_time::Instant;
 
-use super::api::ApiError;
+use super::api::{ApiError, Status};
 use super::browse::{BrowseModel, ImageSink, ImportLog};
 use super::circle_send::{CircleList, Refused, SendStage};
 use super::circles::*;
@@ -195,6 +195,17 @@ pub(super) fn ready(s: &Arc<Script>) -> AccountSnapshot {
     AccountSnapshot::ready(s.clone())
 }
 
+/// A CONFIRMED account still waiting for approval (round 54): signed in, and allowed to use circles.
+pub(super) fn pending(s: &Arc<Script>) -> AccountSnapshot {
+    AccountSnapshot {
+        gate: Gate::NotApproved(Status::Pending),
+        session: Some(s.clone()),
+        account_open: false,
+        account: Some("https://pool.test\npat@school.example.org".into()),
+        name: Some("Pat".into()),
+    }
+}
+
 /// A restore point kept in memory (tests never write the app's real data folder).
 pub(super) struct NoDiskRestore;
 
@@ -307,6 +318,50 @@ fn nothing_is_asked_until_signed_in_and_then_the_list_loads_once() {
     assert_eq!(s.paths(), vec!["Get /circles"]);
     assert_eq!(m.screen, Screen::List);
     assert_eq!(m.list.items.len(), 1);
+}
+
+#[test]
+fn a_confirmed_pending_account_uses_circles() {
+    // Round 54: a confirmed account waiting for approval may join and use circles; the model is not sent to its gate.
+    let s = Script::new();
+    s.say(200, json!({"circles": [summary("editor", json!({}))]}));
+    let mut m = model();
+    m.open_list();
+    let snap = pending(&s);
+    m.frame(now(), &snap);
+    m.frame(now(), &snap);
+    assert_eq!(m.screen, Screen::List);
+    assert_eq!(s.paths(), vec!["Get /circles"]);
+}
+
+#[test]
+fn unverified_rejected_and_suspended_accounts_stay_at_the_gate() {
+    for gate in [
+        Gate::NotApproved(Status::Unverified),
+        Gate::NotApproved(Status::Suspended { reason: None }),
+        Gate::NotApproved(Status::Rejected { revoked: false, reason: None, reapply_after_ms: None, can_reapply: false }),
+    ] {
+        let s = Script::new();
+        let mut m = model();
+        m.open_list();
+        let snap = AccountSnapshot { gate, session: Some(s.clone()), account_open: false, account: Some("u-no\nn@school.example.org".into()), name: None };
+        m.frame(now(), &snap);
+        assert_eq!(m.screen, Screen::Gate);
+        assert!(s.seen().is_empty(), "nothing is asked of the pool");
+    }
+}
+
+#[test]
+fn a_pending_account_cannot_start_a_circle() {
+    // Round 54: creating a circle waits for approval (the server refuses it); the list offers only the code.
+    let s = Script::new();
+    s.say(200, json!({"circles": []}));
+    let mut m = model();
+    m.open_list();
+    m.frame(now(), &pending(&s));
+    assert_eq!(m.screen, Screen::List);
+    m.start_create();
+    assert_eq!(m.screen, Screen::List, "no create form for a pending account");
 }
 
 #[test]
@@ -897,6 +952,26 @@ fn a_bank_is_sent_to_the_chosen_circle_with_its_licence_and_the_note() {
     assert_eq!(post.path, format!("/circles/{CID}/banks"));
     let head = String::from_utf8_lossy(&post.body).lines().next().unwrap_or_default().to_string();
     assert!(head.contains("CC-BY-4.0") && head.contains("for unit 1"), "{head}");
+    assert!(matches!(&p.circle.stage, SendStage::Done(i) if i.sent.added == 1), "{:?}", p.circle.stage);
+}
+
+#[test]
+fn a_confirmed_pending_editor_sends_to_a_circle() {
+    // Round 54: the circle-send button must not stop at the gate for a confirmed pending account.
+    let s = Script::new();
+    s.keep("Get", "/circles", 200, json!({"circles": [summary("editor", json!({}))]}));
+    let mut p = PublishModel::new(Runner::Inline, Arc::new(HashMap::<String, Vec<u8>>::new()), LogIo::memory()).with_retry(RetryPolicy::none());
+    p.start_for_circle(bank_src(), Some(CID.into()));
+    p.frame(now(), &pending(&s));
+    p.frame(now(), &pending(&s));
+    assert_eq!(p.step, Step::Options);
+    p.circle.choose(CID);
+    p.circle.license = Some(License::CcBy);
+    p.circle.attest = true;
+    s.act("Post", "/banks", 201, json!({"circle_id": CID, "bank_id": BID, "version": 1, "version_id": "v1", "qids": ["a"], "added": 1, "changed": 0, "removed": 0, "replayed": false}));
+    p.send_to_circle();
+    p.frame(now(), &pending(&s));
+    assert_eq!(s.last().path, format!("/circles/{CID}/banks"), "{:?}", p.notice);
     assert!(matches!(&p.circle.stage, SendStage::Done(i) if i.sent.added == 1), "{:?}", p.circle.stage);
 }
 

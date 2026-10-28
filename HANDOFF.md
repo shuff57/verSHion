@@ -12,11 +12,31 @@ a `Scalar` shape, so `points: 1.0` became `Skipped` and the validator said `expe
 (the text charged to the budget); inert when the feature is off, so the worker's own build is unchanged. The owner
 authorised this one edit outside `src/share/`.
 
-`cargo test --lib`: **2099 passed, 0 failed, 4 ignored**. share-core's own behaviour tests pass; its
-`critic24b_scans_are_linear` (an absolute <2.0 s bound) fails on this loaded box at ~3.0 s both with and without
-this fix, so that one is environmental, not a regression. `cargo build --bins` and the wasm32 check green. The old
-"D1 baseline 2001/5/3" line no longer applies — use **2099 passed, 0 failed, 4 ignored** (the 4 ignored include the
-local-rig round-trip).
+`cargo test --lib`: **2099 passed, 0 failed, 4 ignored** — the five are fixed (later rounds: 2108/0/4). share-core's
+own behaviour tests pass; its `critic24b_scans_are_linear` (an absolute <2.0 s bound) fails on this loaded box at ~3.0 s
+both with and without this fix, so that one is environmental, not a regression. `cargo build --bins` and the wasm32
+check green.
+
+## Confirmed accounts may join circles (owner decision, 2026-10-28)
+
+The owner decided: a **confirmed** (email-verified) account still awaiting its first approval decision may join a
+circle with a circle code and act there **by its role** (viewer reads/copies; editor sends/merges; owner
+invites/owns). The **public pool stays approval- and invite-gated**, and creating a circle stays behind approval.
+Rejected applicants and revoked teachers are refused — their trust is also `pending`, so the gate checks the latest
+approval decision (`awaitingFirstDecision`). A confirmed pending account may also upload the images a circle send
+needs (`PUT /blobs/<sha256>`); `/items/*` stays gated.
+
+Implementation: `server/worker/src/pool/index.ts` (`pendingCirclePath`, `pendingBlobPath`, `awaitingFirstDecision`,
+the invite-gate exemption on circle paths for every account — a circle code, not a pool invite, admits to a circle);
+`circles.ts` `IN_STANDING_SQL`/`AUTHOR_OK_SQL` count `pending`; the student-data instant hide still needs an approved
+reporter. Client: a pending account sees only the Circles and Settings tabs, may start a circle send (never a public
+publish), the linked-bank strip treats it as signed in, and background circle work runs for it; "Create a circle…" is
+hidden. Legal pages (index, terms, privacy) updated to separate the public pool from circles — they remain **drafts for
+review, not legal advice**.
+
+Tests: worker `npm test` 694/694, `npm run typecheck` clean; Rust `cargo test --lib` 2108 passed, 0 failed, 4 ignored.
+The `pending_circles.test.ts` file's TypeScript diagnostics are the IDE's (tests are outside `tsconfig.include`; the
+suite runs and typecheck passes).
 
 D1 rounds 19 and 20 are **committed locally** (the round 19–20 checkpoint, 45 files: 35 under `src/share/` plus this file and the nine critic reports 92-100). **Nothing is pushed.** The rest of the dirty tree belongs to the other sessions (see "Do not touch").
 

@@ -799,12 +799,13 @@ fn invite_box(ui: &mut Ui, inv: &mut super::invite::InviteModel, session: Option
     }
 }
 
-fn status_text(s: &Status) -> (&'static str, &'static str) {
+pub(super) fn status_text(s: &Status) -> (&'static str, &'static str) {
     match s {
         Status::Pending => (
             "Waiting for approval",
-            "An administrator checks every account by hand before it can share; this keeps answer keys away \
-             from students. This window checks again every minute while it is open.",
+            "An administrator checks every account by hand before it can use the public pool; this keeps answer keys \
+             away from students. You can already join a circle with a circle code from a colleague. This window checks \
+             again every minute while it is open.",
         ),
         Status::Approved => ("Approved", "You can share questions and use the shared pool."),
         Status::Rejected { revoked: false, .. } => ("Not approved", "Your application was not approved."),

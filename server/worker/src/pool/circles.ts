@@ -134,9 +134,12 @@ export const OWNED_SQL = (me: string) =>
 /** Circles `me` is an active member of (closed ones included until purged or left). */
 export const MEMBERSHIPS_SQL = (me: string) =>
   `(SELECT COUNT(*) FROM circle_members mm JOIN circles mc ON mc.id = mm.circle_id WHERE mm.user_id = ${me} AND mm.left_at IS NULL AND mc.purged_at IS NULL)`;
-/** Round 34 (critic41b F2): the account `uid` (SQL) is in good standing: approved, not suspended, not erased. */
+/**
+ * Round 34 (critic41b F2): the account `uid` (SQL) is in good standing for a CIRCLE: confirmed (`pending` counts;
+ * round 54), not suspended, not erased. The public pool's STANDING (shared.ts) stays teacher/admin only.
+ */
 export const IN_STANDING_SQL = (uid: string) =>
-  `EXISTS (SELECT 1 FROM users su WHERE su.id = ${uid} AND su.trust IN ('teacher', 'admin') AND su.suspended_at IS NULL AND su.deleted_at IS NULL)`;
+  `EXISTS (SELECT 1 FROM users su WHERE su.id = ${uid} AND su.trust IN ('teacher', 'admin', 'pending') AND su.suspended_at IS NULL AND su.deleted_at IS NULL)`;
 /** Round 34: bank row `b`'s content follows its author's standing (as public items do): served only while the author
  *  is in good standing, or erased with the bank kept anonymised (D15). A suspended author's banks are hidden like
  *  held ones until the account is restored. */
@@ -154,7 +157,7 @@ export const SEND_FLAG_KINDS = `('privacy_text_match', 'blocklist')`;
  */
 export const BLOCKING_HOLD_SQL = (bid: string) => `EXISTS (SELECT 1 FROM circle_holds xh WHERE xh.bank_id = ${bid} AND xh.source NOT IN ${SEND_HOLD_SOURCES})`;
 export const AUTHOR_OK_SQL = (b: string) =>
-  `EXISTS (SELECT 1 FROM users au WHERE au.id = ${b}.author_id AND au.trust IN ('teacher', 'admin') AND au.suspended_at IS NULL AND (au.deleted_at IS NULL OR ${b}.anonymized = 1))`;
+  `EXISTS (SELECT 1 FROM users au WHERE au.id = ${b}.author_id AND au.trust IN ('teacher', 'admin', 'pending') AND au.suspended_at IS NULL AND (au.deleted_at IS NULL OR ${b}.anonymized = 1))`;
 /** Membership rows of `me`, former ones included (rows live until their circle is purged): the cap that
  *  bounds what the public publish check reads (round 33). */
 export const MEMBERSHIP_ROWS_SQL = (me: string) => `(SELECT COUNT(*) FROM circle_members rm WHERE rm.user_id = ${me})`;
@@ -2048,6 +2051,9 @@ export async function reportBank(c: Ctx, req: Request, p: PoolPrincipal, cid: st
               AND (SELECT COUNT(*) FROM circle_holds h WHERE h.reason = 'student_data' AND h.source = '' AND h.at >= ?5)
                   + (SELECT COUNT(*) FROM item_holds ih WHERE ih.reason = 'student_data' AND ih.source = '' AND ih.at >= ?5) < ?7
               AND COALESCE((SELECT MAX(a.decided_at) FROM approval_requests a WHERE a.user_id = ?3 AND a.decision = 'approved'), (SELECT u.created_at FROM users u WHERE u.id = ?3)) <= ?2 - ?8
+              -- (round 54) an instant hide is only for an APPROVED member's report, as the public pool requires; a
+              -- pending member's report waits for the administrator
+              AND EXISTS (SELECT 1 FROM users ru WHERE ru.id = ?3 AND ru.trust IN ('teacher', 'admin') AND ru.suspended_at IS NULL AND ru.deleted_at IS NULL)
               AND EXISTS (SELECT 1 FROM circle_members em WHERE em.circle_id = ?10 AND em.user_id = ?3 AND em.left_at IS NULL AND em.joined_at <= ?2 - ?11)
               AND ${ALIVE_SQL("?3")}`,
         )

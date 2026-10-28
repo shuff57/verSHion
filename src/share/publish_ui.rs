@@ -226,7 +226,7 @@ pub(super) fn page(ui: &mut Ui, m: &mut PublishModel) -> bool {
 
 pub(super) fn status_line(s: &Status) -> (&'static str, &'static str) {
     match s {
-        Status::Pending => ("Your account is waiting for approval.", "An administrator checks every account by hand before it can share. You can keep working; come back when it is approved."),
+        Status::Pending => ("Your account is waiting for approval.", "An administrator checks every account by hand before it can share to the public pool. You can already share to a circle you joined. Come back when it is approved."),
         Status::Approved => ("Your account is approved.", ""),
         Status::Rejected { revoked: false, .. } => ("Your account was not approved.", "You can read the reason in the Account window, and apply again if it allows."),
         Status::Rejected { revoked: true, .. } => ("Your account's approval was withdrawn.", "You can read the reason in the Account window."),

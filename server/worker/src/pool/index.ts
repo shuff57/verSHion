@@ -1,6 +1,8 @@
-// The shared pool's routes (docs/shared-pool.md, phase 2). Every route needs `teacher` (or `admin`)
-// trust, read from D1 on every request by the auth package's authenticate; `pending` and
-// `unverified` accounts are refused. Items the caller may not see are 404, never 403.
+// The shared pool's routes (docs/shared-pool.md, phase 2). The PUBLIC pool needs `teacher` (or `admin`)
+// trust, read from D1 on every request by the auth package's authenticate, plus a redeemed invite code;
+// `pending` and `unverified` accounts are refused there. A confirmed `pending` account that is genuinely
+// awaiting its first decision may use circles (round 54: see pendingCirclePath), and may upload the images a
+// circle send carries; a rejected or revoked one may not. Items the caller may not see are 404, never 403.
 import { flushWasmTraps } from "./cron.ts";
 import { poolAdminRoutes } from "./admin.ts";
 import { ADMIN_BODY_MAX } from "./preread.ts";
@@ -42,6 +44,42 @@ async function putPrefs(c: Ctx, req: Request, p: PoolPrincipal): Promise<Respons
 
 export const POOL_METHODS = "GET, HEAD, POST, PUT, PATCH, DELETE";
 const POOL_TRUST = new Set(["teacher", "admin"]);
+/**
+ * Round 54 (owner decision): a CONFIRMED account still waiting for approval (`pending`) may use circles: it joins
+ * with a circle code and then acts by its role there. The public pool stays approval- and invite-gated. Creation
+ * stays behind approval too (POST /circles): a new circle confers ownership and invites, which the role model is
+ * designed around for approved members. These are the circle paths open to a pending account; the handlers'
+ * membership and role checks remain the real gate.
+ */
+const PENDING_CIRCLE_PATHS: ReadonlySet<string> = new Set(["/circles/join/preview", "/circles/join", "/circles/heads"]);
+const CIRCLE_ID_PATH = /^\/circles\/[0-9a-f]{32}(\/|$)/;
+/** A circle path a pending account may call: the list (GET /circles), join and its preview, heads, and every /circles/:cid route. */
+function pendingCirclePath(method: string, path: string): boolean {
+  if (path === "/circles") return method === "GET";
+  return PENDING_CIRCLE_PATHS.has(path) || CIRCLE_ID_PATH.test(path);
+}
+/** The image upload a circle send makes (`PUT /blobs/<sha256>`): content-addressed, and its quota/caps still apply. */
+const BLOB_PUT_PATH = /^\/blobs\/[0-9a-f]{64}$/;
+function pendingBlobPath(method: string, path: string): boolean {
+  return method === "PUT" && BLOB_PUT_PATH.test(path);
+}
+/**
+ * True when the account's latest approval request is genuinely undecided. `trust === "pending"` alone is not
+ * enough: the auth package puts a revoked teacher back on `pending`, and a rejected applicant stays there
+ * (admin.ts `statusOf`). A re-application after the cooldown is a new row with no decision, so it counts as
+ * waiting again. One indexed D1 read, and only for a pending account on these paths.
+ */
+async function awaitingFirstDecision(c: Ctx, userId: string): Promise<boolean> {
+  const decided = await c.db
+    .prepare(
+      `SELECT 1 AS x FROM approval_requests ar
+        WHERE ar.rowid = (SELECT ar2.rowid FROM approval_requests ar2 WHERE ar2.user_id = ?1 ORDER BY ar2.requested_at DESC, ar2.rowid DESC LIMIT 1)
+          AND ar.decided_at IS NOT NULL AND ar.decision IN ('rejected', 'revoked')`,
+    )
+    .bind(userId)
+    .first();
+  return decided === null;
+}
 
 type Route = (c: Ctx, req: Request, p: PoolPrincipal, m: string[], url: URL) => Promise<Response>;
 
@@ -159,15 +197,24 @@ export function createPool(d: PoolDeps): Pool {
       // Round 16 (critic21d 8): every authenticated request is counted first, approved or not, so a
       // pending account cannot send unlimited requests (each one a D1 read of its trust).
       await rateLimit(ctx, req, p.userId, req.method === "GET" || req.method === "HEAD" || /\/(import|versions)$/.test(url.pathname) || url.pathname === "/circles/heads");
-      // pending and unverified accounts (and anything else) cannot use the pool at all (a pending account
-      // may export its profile and, round 28, redeem an invite code while it waits).
-      if (!POOL_TRUST.has(p.trust) && !(INVITE_FREE_PATHS.has(url.pathname) && p.trust === "pending"))
+      // pending and unverified accounts (and anything else) cannot use the public pool. A CONFIRMED pending
+      // account may export its profile, redeem a pool invite code (round 28), and use circles (round 54: join
+      // with a circle code, then act by its role there) — but only while its latest approval decision is still
+      // open: a rejected applicant and a revoked teacher also have trust "pending" (admin.ts statusOf).
+      const uploadPath = pendingBlobPath(req.method, url.pathname);
+      const pendingAllowed =
+        p.trust === "pending" &&
+        (pendingCirclePath(req.method, url.pathname) || uploadPath) &&
+        (await awaitingFirstDecision(ctx, p.userId));
+      if (!POOL_TRUST.has(p.trust) && !pendingAllowed && !(INVITE_FREE_PATHS.has(url.pathname) && p.trust === "pending"))
         throw new PoolError(403, "account_not_approved", {
-          message: p.trust === "pending" ? "Your account is waiting for approval. The shared pool opens once an admin approves it." : "This account cannot use the shared pool.",
+          message: p.trust === "pending" ? "Your account is waiting for approval. The shared pool opens once an admin approves it; you can already join a circle with a circle code." : "This account cannot use the shared pool.",
         });
-      // Round 28 (owner): an approved account also needs a redeemed invite code (admins are exempt; the
-      // export and the redemption itself are open). invites.ts says why the gate sits here.
-      if (p.trust !== "admin" && !INVITE_FREE_PATHS.has(url.pathname)) await requireInvite(ctx, p.userId);
+      // Round 28 (owner): the PUBLIC pool also needs a redeemed invite code (admins are exempt; the export and
+      // the redemption itself are open). Round 54 (owner): circle paths and the image uploads of a circle send
+      // are exempt — a circle code, not a pool invite, admits a member to a circle; the handlers' membership
+      // and role checks remain the real gate. invites.ts says why the gate sits here.
+      if (p.trust !== "admin" && !pendingCirclePath(req.method, url.pathname) && !uploadPath && !INVITE_FREE_PATHS.has(url.pathname)) await requireInvite(ctx, p.userId);
       // Round 23 (critic30a B1): no write under a key other than the pool's own (reads continue).
       // Round 24: POST /items/versions is a bulk READ (it returns item metadata, never a hash): it
       // continues under a mismatch like any GET, as "plain reads continue" promises.

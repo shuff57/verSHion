@@ -36,6 +36,15 @@ pub enum Tab {
     Settings,
 }
 
+/// The tabs a confirmed account still waiting for approval may use: its circles and its own settings. The public
+/// pool's tabs (Browse, Items I shared, Things I imported, Reports and appeals) wait for approval (round 54).
+pub const PENDING_TABS: [Tab; 2] = [Tab::Circles, Tab::Settings];
+
+/// The tabs this account may use. Every other not-approved state (unverified, rejected, suspended) reaches no tab.
+pub fn tabs_for(gate: &Gate) -> &'static [Tab] {
+    if gate.confirmed_pending() { &PENDING_TABS } else { &Tab::ALL }
+}
+
 impl Tab {
     pub const ALL: [Tab; 6] = [Tab::Browse, Tab::Circles, Tab::Mine, Tab::Imported, Tab::Reports, Tab::Settings];
 
@@ -119,7 +128,7 @@ impl Guide {
             Guide::Offline => "You may be offline. You can still use everything else in verSHion.",
             Guide::SignIn => "An account lets you find questions other teachers shared and share your own. It is optional; nothing else in verSHion needs one.",
             Guide::ConfirmEmail => "We sent a link to your email. Open it, or paste the link or code below.",
-            Guide::Waiting => "A person at the pool checks every account by hand before it can share. This page checks again every minute. If you were given an invite code you can already enter it below.",
+            Guide::Waiting => "A person at the pool checks every account by hand before it can use the public pool. You can already join a circle with a circle code from a colleague, then read, copy and share there by your role. This page checks again every minute.",
             Guide::Blocked(_) => "The reason, if the reviewer gave one, is below.",
             Guide::NeedsInvite => "The pool is invite-only. Enter the code an admin gave you; it is sent once and not kept.",
             Guide::Ready => "",
