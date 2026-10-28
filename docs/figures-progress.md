@@ -150,7 +150,17 @@ now follows the printed decimal); unit-circle value labels colliding with axis n
 candidate positions, swept at all three sizes); its coordinate labels indistinguishable from ticks in Print (now
 prefixed `x =` / `y =`); 360 degrees folding to 0 making 2pi unreachable; the sincos Notes never being displayed;
 the sincos FAQ claiming a 90 degree right shift gives cosine (it gives minus cosine); and the Print grid vanishing
-in a 66% bitonal copy in five figures (now `#9a9a9a`). Base-ten blocks: new figure `base-ten-blocks` (`src/figures/baseten.rs`, Math). A three-digit number drawn as
+in a 66% bitonal copy in five figures (now `#9a9a9a`). Nets: new figure `solid-net` (`src/figures/nets.rs`, Math). The net of a cube or cuboid: four side rectangles in a
+row (a by c, b by c alternating) with the top and bottom (a by b) above and below the first, fitted into a fixed box
+and drawn with a light fill. The readout gives the edges, the surface area 2(ab + ac + bc) and the volume abc; the
+edges, area and volume are all blanks while Show answers is off. Choosing Cube forces all three edges equal, so the
+Width and Height controls are ignored. No handles, so the figure joins `NO_HANDLES`. FAQ arm has four entries. Five
+examples: a cube of edge 3, a 4 x 3 x 2 cuboid, a tall thin one, a flat one, and a cube of edge 1. Tests: the
+defaults' area and volume, a cube forcing its edges, the surface area equalling the six drawn rectangles, six faces
+inside the canvas, the student/key split, Print neutrality and the PNG export. Census: only `solid-net__defaults`
+and `solid-net__start` added. **This closes the phase-2 list.**
+
+Base-ten blocks: new figure `base-ten-blocks` (`src/figures/baseten.rs`, Math). A three-digit number drawn as
 hundreds flats (ten by ten, three to a row), tens rods (one by ten) and ones cubes, each group labelled, with the
 place-value expansion written under it. A missing place draws nothing and is left out of the expansion (305 is
 "3 hundreds + 5 ones"), and zero prints as "0". The expansion is the answer, so it is three blanks while Show

@@ -60,6 +60,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "slope-triangle" => SLOPE_TRIANGLE,
         "protractor" => PROTRACTOR,
         "base-ten-blocks" => BASE_TEN_BLOCKS,
+        "solid-net" => SOLID_NET,
         "parallelogram" => PARALLELOGRAM,
         "trapezoid" => TRAPEZOID,
         "kite" => KITE,
@@ -3407,5 +3408,24 @@ const BASE_TEN_BLOCKS: &[Faq] = &[
     Faq {
         q: "How do I make a worksheet?",
         a: "Turn Show answers off: the expansion becomes three blanks while the blocks and the number stay, so the student writes what the blocks show.",
+    },
+];
+
+const SOLID_NET: &[Faq] = &[
+    Faq {
+        q: "How does the net fold up?",
+        a: "The four rectangles in the row wrap round the sides, and the two rectangles above and below the first one become the top and the bottom. Every edge of the net meets an edge of the same length when it is folded, which is why the row alternates a by c and b by c.",
+    },
+    Faq {
+        q: "Where do the surface area and the volume come from?",
+        a: "The surface area is the area of the six rectangles added up, which is 2(ab + ac + bc). The volume is length x width x height, abc. Both are worked out from the three edges and printed under the net.",
+    },
+    Faq {
+        q: "Why is a cube a special case?",
+        a: "Choosing Cube makes all three edges the same, so the net is six equal squares and the formulas collapse to 6a squared for the area and a cubed for the volume. The Width and Height controls are ignored while Cube is chosen.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the edges, the surface area and the volume become blanks while the net stays, so the student measures the net and works them out.",
     },
 ];
