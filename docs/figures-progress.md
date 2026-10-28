@@ -150,7 +150,18 @@ now follows the printed decimal); unit-circle value labels colliding with axis n
 candidate positions, swept at all three sizes); its coordinate labels indistinguishable from ticks in Print (now
 prefixed `x =` / `y =`); 360 degrees folding to 0 making 2pi unreachable; the sincos Notes never being displayed;
 the sincos FAQ claiming a 90 degree right shift gives cosine (it gives minus cosine); and the Print grid vanishing
-in a 66% bitonal copy in five figures (now `#9a9a9a`). Area model added to `fraction-models` as a fifth `Show a` choice: a rectangle cut into as many equal cells as there
+in a 66% bitonal copy in five figures (now `#9a9a9a`). Base-ten blocks: new figure `base-ten-blocks` (`src/figures/baseten.rs`, Math). A three-digit number drawn as
+hundreds flats (ten by ten, three to a row), tens rods (one by ten) and ones cubes, each group labelled, with the
+place-value expansion written under it. A missing place draws nothing and is left out of the expansion (305 is
+"3 hundreds + 5 ones"), and zero prints as "0". The expansion is the answer, so it is three blanks while Show
+answers is off, with the blocks and the number still drawn. The canvas is sized from the blocks actually used, so a
+single flat does not leave a page of air, and the column label sits under the rows drawn rather than under a fixed
+three. No handles, so the figure joins `NO_HANDLES`. FAQ arm has four entries. Five examples: 247, 100, 305, 60 and
+999. Tests: the default, the places summing back to the number across seven values, a missing place left out of the
+expansion, the student/key split, the columns not overlapping, Print neutrality, and the PNG export. Census: only
+`base-ten-blocks__defaults` and `base-ten-blocks__start` added.
+
+Area model added to `fraction-models` as a fifth `Show a` choice: a rectangle cut into as many equal cells as there
 are parts, laid out as the factorisation closest to square (twelve parts is 3 x 4, a prime falls back to one row),
 shaded in reading order. Same readout as the other models, one new example (five twelfths) and a test that the
 layout is the expected grid and that the shaded cell count matches the numerator.

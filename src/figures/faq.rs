@@ -59,6 +59,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "triangle-centres" => TRIANGLE_CENTRES,
         "slope-triangle" => SLOPE_TRIANGLE,
         "protractor" => PROTRACTOR,
+        "base-ten-blocks" => BASE_TEN_BLOCKS,
         "parallelogram" => PARALLELOGRAM,
         "trapezoid" => TRAPEZOID,
         "kite" => KITE,
@@ -3387,5 +3388,24 @@ const PROTRACTOR: &[Faq] = &[
     Faq {
         q: "How do I make a worksheet?",
         a: "Turn Show answers off: the reading and the other scale become blanks while the protractor and the ray stay.",
+    },
+];
+
+const BASE_TEN_BLOCKS: &[Faq] = &[
+    Faq {
+        q: "What does each block stand for?",
+        a: "A flat is one hundred (ten by ten), a rod is ten (one by ten) and a cube is one. The figure draws as many of each as the number has in that place, so 247 is two flats, four rods and seven cubes.",
+    },
+    Faq {
+        q: "Why does 305 have no rods?",
+        a: "A zero in the tens place means there are no tens, so no rod is drawn. The expansion leaves that place out entirely: 3 hundreds + 5 ones.",
+    },
+    Faq {
+        q: "Why do the blocks regroup at ten?",
+        a: "Ten cubes make one rod and ten rods make one flat, which is why the places step in tens. Asking for 10 in a place is the same as carrying one into the place to its left, so the control stops at 999 and each place holds a single digit.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the expansion becomes three blanks while the blocks and the number stay, so the student writes what the blocks show.",
     },
 ];
