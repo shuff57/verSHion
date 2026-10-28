@@ -15,11 +15,13 @@ use super::bank_links_fix_tests::{body_of, linked_from, qfull, QC};
 use super::bank_links_tests::{LOCAL, QA, QB};
 use super::circle_links::{CircleLink, SEND_SCHEMA, circle_theirs};
 use super::circles_tests::NOW;
-use super::partial_send::compose_partial;
-use crate::model::{Difficulty, QuestionBank};
+use super::partial_send::{BodyChanges, changes_against_body, compose_partial};
+use crate::model::{Difficulty, ImageRef, Kind, Question, QuestionBank};
 
 /// A question only this bank has (added: no circle id).
 const QD: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa4";
+/// A fifth circle question, for the matrix's "extra unchanged question" variation.
+const QE: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa5";
 
 fn qd(stem: &str) -> Value {
     qfull(QD, stem)
@@ -403,4 +405,246 @@ fn every_tick_pattern_keeps_the_bank_questions_and_restores_the_rest() {
             }
         }
     }
+}
+
+// ---- the change list against the base body (phase D3, piece 2) -----------------------------------------
+
+/// The change list for a case.
+fn changes_of(c: &Case) -> BodyChanges {
+    changes_against_body(&c.link, &c.bank, &c.base).expect("the change list")
+}
+
+/// The changed ids when nothing was added or removed.
+fn changed_ids(bank: &QuestionBank, link: &CircleLink, base: &[u8]) -> BTreeSet<String> {
+    let got = changes_against_body(link, bank, base).expect("the change list");
+    assert!(got.added.is_empty() && got.removed.is_empty(), "only a change: {got:?}");
+    got.changed
+}
+
+#[test]
+fn an_unchanged_bank_lists_no_changes() {
+    let base_qs = vec![qfull(QA, "A"), qfull(QB, "B")];
+    let base = body_of(base_qs.clone());
+    let (bank, link) = linked_from(base_qs, false);
+    assert_eq!(changes_against_body(&link, &bank, &base).unwrap(), BodyChanges::default());
+}
+
+#[test]
+fn a_difference_the_server_stores_the_same_is_not_a_change() {
+    // The server stores every text in NFC, without a byte-order mark, and a topic with its runs of white space
+    // collapsed, trimmed, and the blank and repeated ones dropped (share-core `text::clean`; `merge`'s helpers
+    // mirror it). The bank holds the same texts in the form the person typed.
+    let mut base_a = qfull(QA, "Cafe\u{301}"); // decomposed
+    base_a["explanation"] = json!("\u{FEFF}Because A."); // a byte-order mark the server drops
+    base_a["topics"] = json!(["  Fractions  ", "Fractions"]); // collapsed, then a repeat
+    base_a["kind"]["Mc"]["answers"][0]["text"] = json!("Cafe\u{301}"); // decomposed
+    let base_qs = vec![base_a, qfull(QB, "B")];
+    let base = body_of(base_qs.clone());
+    let (mut bank, link) = linked_from(base_qs, false);
+    bank.questions[0].stem = "Café".into(); // the composed form
+    bank.questions[0].explanation = Some("Because A.".into());
+    bank.questions[0].topics = vec!["Fractions".into()];
+    if let Kind::Mc { answers } = &mut bank.questions[0].kind {
+        answers[0].text = "Café".into();
+    }
+    assert_eq!(changes_against_body(&link, &bank, &base).unwrap(), BodyChanges::default());
+}
+
+#[test]
+fn each_hashed_field_change_lists_the_question() {
+    let base_qs = vec![qfull(QA, "A"), qfull(QB, "B")];
+    let base = body_of(base_qs.clone());
+    let (bank, link) = linked_from(base_qs, false);
+    let a = bank.questions[0].id.clone();
+    let mut edits: Vec<(&str, Question)> = Vec::new();
+    let mut q = bank.questions[0].clone();
+    q.stem = "A (changed)".into();
+    edits.push(("stem", q));
+    let mut q = bank.questions[0].clone();
+    if let Kind::Mc { answers } = &mut q.kind {
+        answers[1].text = "C".into();
+    }
+    edits.push(("choices", q));
+    let mut q = bank.questions[0].clone();
+    if let Kind::Mc { answers } = &mut q.kind {
+        answers[0].correct = false;
+        answers[1].correct = true;
+    }
+    edits.push(("answer key", q));
+    let mut q = bank.questions[0].clone();
+    q.points = Some(2.0);
+    edits.push(("points", q));
+    let mut q = bank.questions[0].clone();
+    q.topics = vec!["Fractions".into()];
+    edits.push(("topics", q));
+    let mut q = bank.questions[0].clone();
+    q.explanation = Some("Because B.".into());
+    edits.push(("explanation", q));
+    for (what, q) in edits {
+        let mut bank = bank.clone();
+        bank.questions[0] = q;
+        assert_eq!(changed_ids(&bank, &link, &base), set(&[&a]), "{what}");
+    }
+}
+
+#[test]
+fn a_changed_picture_lists_the_question() {
+    let base_qs = vec![qfull(QA, "A"), qfull(QB, "B")];
+    let (mut bank, link) = linked_from(base_qs, false);
+    let a = bank.questions[0].id.clone();
+    let same_pic = ImageRef { file: "media/aaaa.png".into(), width: 4, height: 3 };
+    let mut base_a = qfull(QA, "A");
+    base_a["image"] = json!({"file": "media/aaaa.png", "width": 4, "height": 3});
+    let base = body_of(vec![base_a, qfull(QB, "B")]);
+    bank.questions[0].image = Some(same_pic.clone());
+    assert!(changed_ids(&bank, &link, &base).is_empty(), "the same picture is not a change");
+    // A different picture of the same size (the server hashes the file name and the size).
+    bank.questions[0].image = Some(ImageRef { file: "media/bbbb.png".into(), ..same_pic });
+    assert_eq!(changed_ids(&bank, &link, &base), set(&[&a]), "a different picture");
+}
+
+#[test]
+fn a_figure_only_change_is_listed_though_the_snapshot_can_not_see_it() {
+    let mut base_a = qfull(QA, "A");
+    base_a["figure"] = json!({"id": "number-line", "params": {"min": 1, "max": 9}});
+    let base_qs = vec![base_a, qfull(QB, "B")];
+    let base = body_of(base_qs.clone());
+    let (mut bank, link) = linked_from(base_qs, false);
+    let a = bank.questions[0].id.clone();
+    let entry = link.base.iter().find(|b| b.local_id == a).unwrap();
+    assert!(!super::merge::ours_changed(entry, &bank.questions[0]), "the snapshot has no figure");
+    bank.questions[0].figure = Some(serde_json::from_value(json!({"id": "number-line", "params": {"min": 1, "max": 5}})).unwrap());
+    assert!(!super::merge::ours_changed(entry, &bank.questions[0]), "the snapshot still can not see it");
+    assert_eq!(changed_ids(&bank, &link, &base), set(&[&a]), "the body comparison sees the figure");
+}
+
+#[test]
+fn a_difficulty_only_change_is_listed_also_when_the_snapshot_does_not_know_it() {
+    let mut base_a = qfull(QA, "A");
+    base_a["difficulty"] = json!("High");
+    let base_qs = vec![base_a, qfull(QB, "B")];
+    let base = body_of(base_qs.clone());
+    let (mut bank, mut link) = linked_from(base_qs, false);
+    assert_eq!(bank.questions[0].difficulty, Some(Difficulty::High));
+    bank.questions[0].difficulty = Some(Difficulty::Low);
+    let a = bank.questions[0].id.clone();
+
+    // The snapshot knows the difficulty and sees the change.
+    let entry = link.base.iter().find(|b| b.local_id == a).unwrap();
+    assert!(super::merge::ours_changed(entry, &bank.questions[0]));
+    assert_eq!(changed_ids(&bank, &link, &base), set(&[&a]));
+
+    // A base an earlier build wrote has no record of it: `ours_changed` can not see the change, the body can.
+    link.base.iter_mut().find(|b| b.local_id == a).unwrap().snap.difficulty = None;
+    let entry = link.base.iter().find(|b| b.local_id == a).unwrap();
+    assert!(!super::merge::ours_changed(entry, &bank.questions[0]), "the snapshot does not know the difficulty");
+    assert_eq!(changed_ids(&bank, &link, &base), set(&[&a]), "the body has the difficulty");
+}
+
+#[test]
+fn an_added_question_is_listed_as_added_not_changed() {
+    let c = case();
+    let d = added_local(&c);
+    let got = changes_of(&c);
+    assert_eq!(got.added, set(&[&d]));
+    assert_eq!(got.changed, set(&[&local_of(&c.link, QA)]));
+    assert_eq!(got.removed, set(&[&local_of(&c.link, QC)]));
+}
+
+#[test]
+fn a_removed_question_is_listed_also_when_the_link_keeps_no_base() {
+    let base_qs = vec![qfull(QA, "A"), qfull(QB, "B"), qfull(QC, "C")];
+    let base = body_of(base_qs.clone());
+    let (mut bank, mut link) = linked_from(base_qs, false);
+    let (a, x) = (local_of(&link, QA), local_of(&link, QC));
+    bank.questions.retain(|q| q.id != x);
+    bank.questions.iter_mut().find(|q| q.id == a).unwrap().stem = "A (changed)".into();
+    link.base.clear(); // too big to keep: only the local id -> qid pairs remain
+    let got = changes_against_body(&link, &bank, &base).unwrap();
+    assert_eq!(got.removed, set(&[&x]));
+    assert_eq!(got.changed, set(&[&a]));
+    assert!(got.added.is_empty());
+}
+
+#[test]
+fn an_unreadable_base_body_is_an_error_and_says_everything_is_sent() {
+    let c = case();
+    for bad in [&b"not json"[..], &b"{\"schema_version\":2}"[..], &b"{\"bank\":{}}"[..]] {
+        let err = changes_against_body(&c.link, &c.bank, bad).unwrap_err();
+        assert!(err.contains("could not be read"), "{err}");
+        assert!(err.contains("Send everything instead"), "{err}");
+    }
+}
+
+#[test]
+fn a_linked_question_missing_from_the_base_is_an_error() {
+    // A bank question whose circle id the body does not have: its content can not be compared. (A removal the body
+    // lacks is different: it is still listed, and only an unticked one makes the composer refuse — see
+    // `a_removal_the_base_body_lacks_is_still_listed`.)
+    let base_qs = vec![qfull(QA, "A"), qfull(QB, "B")];
+    let (bank, link) = linked_from(base_qs, false);
+    let short = body_of(vec![qfull(QA, "A")]);
+    let err = changes_against_body(&link, &bank, &short).unwrap_err();
+    assert!(err.contains("does not have one of this copy's linked questions"), "{err}");
+    assert!(err.contains("Send everything instead"), "{err}");
+}
+
+/// The plan's matrix, optionally with a fifth unchanged question: base [A, B, C(, E)]; bank [A', B, D(, E)].
+fn matrix_case(with_e: bool) -> Case {
+    let mut base_qs = vec![qfull(QA, "A"), qfull(QB, "B"), qfull(QC, "C")];
+    if with_e {
+        base_qs.push(qfull(QE, "E"));
+    }
+    let base = body_of(base_qs.clone());
+    let (mut bank, link) = linked_from(base_qs, false);
+    let (a, x) = (local_of(&link, QA), local_of(&link, QC));
+    bank.questions.iter_mut().find(|q| q.id == a).unwrap().stem = "A (changed)".into();
+    bank.questions.retain(|q| q.id != x);
+    let mut added = circle_theirs(&body_of(vec![qd("D")]), NOW).remove(0).q;
+    added.id = crate::model::new_id();
+    bank.questions.push(added);
+    Case { bank, link, base }
+}
+
+#[test]
+fn the_matrix_lists_exactly_the_changed_added_and_removed_questions() {
+    for with_e in [false, true] {
+        let c = matrix_case(with_e);
+        let (a, x, d) = (local_of(&c.link, QA), local_of(&c.link, QC), added_local(&c));
+        let got = changes_of(&c);
+        assert_eq!(got, BodyChanges { changed: set(&[&a]), added: set(&[&d]), removed: set(&[&x]) }, "with_e {with_e}");
+        // A move (and the extra unchanged question) changes nothing.
+        let mut moved = c;
+        moved.bank.questions.rotate_left(1);
+        assert_eq!(changes_of(&moved), got, "rotated, with_e {with_e}");
+        moved.bank.questions.reverse();
+        assert_eq!(changes_of(&moved), got, "reversed, with_e {with_e}");
+    }
+}
+
+#[test]
+fn a_removal_the_base_body_lacks_is_still_listed() {
+    // (critic minor) The list does not need the base's raw question to name a removal; the composer refuses only
+    // when the removal is unticked and so would have to be put back.
+    let c = case();
+    let (a, x, d) = (local_of(&c.link, QA), local_of(&c.link, QC), added_local(&c));
+    let short = body_of(vec![qfull(QA, "A"), qfull(QB, "B")]);
+    let got = changes_against_body(&c.link, &c.bank, &short).expect("a removal without a base raw is still a removal");
+    assert!(got.removed.contains(&x), "{got:?}");
+    // ticked: the removal needs nothing from the base, so the send is composed
+    let out = compose_partial(&c.link, &c.bank, &short, &got.changed, &set(&[&a, &x, &d])).expect("ticked: no base raw needed");
+    let v: Value = serde_json::from_slice(&out).unwrap();
+    assert_eq!(stems(&v), ["A (changed)", "B", "D"]);
+    // unticked: it would have to be put back, and the base body lacks it
+    let err = compose_partial(&c.link, &c.bank, &short, &got.changed, &set(&[&a, &d])).unwrap_err();
+    assert!(err.contains("does not have one of the questions"), "{err}");
+}
+
+#[test]
+fn an_empty_bank_is_refused_with_the_composers_words() {
+    // (critic minor) The summary cannot offer a send that the composer would refuse.
+    let Case { mut bank, link, base } = case();
+    bank.questions.clear();
+    let err = changes_against_body(&link, &bank, &base).unwrap_err();
+    assert_eq!(err, "The bank has no questions. A circle bank needs at least one.");
 }

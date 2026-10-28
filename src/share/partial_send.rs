@@ -21,17 +21,111 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::Value;
 
 use super::circle_links::{CircleLink, SEND_SCHEMA, published_block};
-use crate::model::{Question, QuestionBank};
+use super::merge::same_question;
+use crate::model::{ImageRef, Question, QuestionBank, is_keyless};
 
 /// The base body could not be read, so which questions changed can not be told.
 const UNREADABLE: &str = "The version this copy is based on could not be read.";
 /// A change has no question in the base body: there is nothing to send or to put back.
 const MISSING: &str = "The version this copy is based on does not have one of the questions this copy changed or removed.";
 
+/// [`changes_against_body`]'s error for a body it can not read. It says what the caller does then (plan 4.7).
+const UNREADABLE_CHANGES: &str = "The version this copy is based on could not be read, so its changes can not be listed. Send everything instead.";
+/// [`changes_against_body`]'s error for a linked question the body does not have. Same fallback.
+const MISSING_CHANGES: &str = "The version this copy is based on does not have one of this copy's linked questions, so its changes can not be listed. Send everything instead.";
+
+/// The unsent changes of a bank against the base version's body (plan section 6): the questions the send summary
+/// ticks. A pure function: no UI, no network, no files.
+#[derive(Default, Debug, PartialEq, Eq)]
+pub struct BodyChanges {
+    /// Local ids of questions in the bank that differ from the base body's own question for their qid.
+    pub changed: BTreeSet<String>,
+    /// Local ids of questions with no circle id.
+    pub added: BTreeSet<String>,
+    /// Local ids in `link.qids` whose question the bank no longer has.
+    pub removed: BTreeSet<String>,
+}
+
 /// One question of the composed bank, and the circle id it keeps (none: new to the circle).
 struct Slot {
     value: Value,
     qid: Option<String>,
+}
+
+/// The base body's questions by circle id (the first with each id) and in their order.
+///
+/// Shared by [`compose_partial`] and [`changes_against_body`] so the two can not read the base differently.
+fn base_index(base: &Value) -> Result<(BTreeMap<&str, &Value>, Vec<&str>), String> {
+    let base_qs = base.get("bank").and_then(|b| b.get("questions")).and_then(Value::as_array).ok_or_else(|| UNREADABLE.to_string())?;
+    let mut raw: BTreeMap<&str, &Value> = BTreeMap::new();
+    let mut order: Vec<&str> = Vec::new();
+    for q in base_qs {
+        let Some(qid) = q.get("id").and_then(Value::as_str).filter(|id| !id.is_empty()) else { continue };
+        order.push(qid);
+        raw.entry(qid).or_insert(q);
+    }
+    Ok((raw, order))
+}
+
+/// The unsent changes of `bank` against the base version's body, comparing every field the server hashes (so a change
+/// to `figure` or `difficulty` counts, unlike `merge::ours_changed` against a snapshot). `Err` when the body can not be
+/// read or a linked question has no question in it, and the caller falls back to a whole-bank send (plan 4.7).
+///
+/// A bank question with no circle id is added. A bank question with a circle id is changed when its content differs
+/// from the base body's question for that id: the server's content hash (`server/worker/src/` `core.ts`, `contentOf`)
+/// drops `id`, `created`, `modified`, `origin` and `published` and hashes the rest, whose texts it has already put in
+/// its stored form (`share-core` `text::clean`; see `merge::same_question` for the client's copy of that). A pair in
+/// `link.qids` whose local id is not in the bank is removed; the full pairs are used, not `link.base`, so a bounded
+/// link still lists its removals. A move alone is not a change.
+///
+/// `Err` when the bank is empty (the composer refuses it too), the body can not be read, or a linked question in
+/// this bank has no question in it. A removal the body lacks is still listed; the composer refuses only if that
+/// removal is unticked and so would have to be put back.
+pub fn changes_against_body(link: &CircleLink, bank: &QuestionBank, base_body: &[u8]) -> Result<BodyChanges, String> {
+    if bank.questions.is_empty() {
+        return Err("The bank has no questions. A circle bank needs at least one.".into());
+    }
+    let base: Value = serde_json::from_slice(base_body).map_err(|_| UNREADABLE_CHANGES.to_string())?;
+    let (raw, _order) = base_index(&base).map_err(|_| UNREADABLE_CHANGES.to_string())?;
+    let mut out = BodyChanges::default();
+    for q in &bank.questions {
+        let Some(qid) = link.qid_of(&q.id).filter(|id| !id.is_empty()) else {
+            out.added.insert(q.id.clone());
+            continue;
+        };
+        let base_q = raw.get(qid).ok_or_else(|| MISSING_CHANGES.to_string())?;
+        let base_q: Question = serde_json::from_value((*base_q).clone()).map_err(|_| UNREADABLE_CHANGES.to_string())?;
+        if !same_content(q, &base_q) {
+            out.changed.insert(q.id.clone());
+        }
+    }
+    for p in &link.qids {
+        if p.qid.is_empty() {
+            continue;
+        }
+        if !bank.questions.iter().any(|q| q.id == p.local) {
+            out.removed.insert(p.local.clone());
+        }
+    }
+    Ok(out)
+}
+
+/// Whether a bank question is the same as the base body's question for its circle id, on every field the server
+/// hashes. `merge::same_question` covers the stem, choices and key, explanation, points, topics, difficulty and figure
+/// with the texts in the server's stored form; the picture and the keyless placeholder are compared here because
+/// `same_question` compares pictures apart and `explanation_of` drops the keyless sentinel.
+fn same_content(ours: &Question, base: &Question) -> bool {
+    same_question(ours, base) && same_image(ours.image.as_ref(), base.image.as_ref()) && is_keyless(ours) == is_keyless(base)
+}
+
+/// The picture as the server hashes it: its name on the server and its size (an absent one is a change from a
+/// picture, and the other way round).
+fn same_image(a: Option<&ImageRef>, b: Option<&ImageRef>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(a), Some(b)) => a.file == b.file && a.width == b.width && a.height == b.height,
+        _ => false,
+    }
 }
 
 /// The payload for a partial send: this bank in order, with every unticked change left as the base has it.
@@ -49,15 +143,8 @@ pub fn compose_partial(link: &CircleLink, bank: &QuestionBank, base_body: &[u8],
         return Err("The bank has no questions. A circle bank needs at least one.".into());
     }
     let base: Value = serde_json::from_slice(base_body).map_err(|_| UNREADABLE.to_string())?;
-    let base_qs = base.get("bank").and_then(|b| b.get("questions")).and_then(Value::as_array).ok_or_else(|| UNREADABLE.to_string())?;
     // Each base question's raw JSON, by its circle id, and the base order (for putting a removal back).
-    let mut raw: BTreeMap<&str, &Value> = BTreeMap::new();
-    let mut order: Vec<&str> = Vec::new();
-    for q in base_qs {
-        let Some(qid) = q.get("id").and_then(Value::as_str).filter(|id| !id.is_empty()) else { continue };
-        order.push(qid);
-        raw.entry(qid).or_insert(q);
-    }
+    let (raw, order) = base_index(&base)?;
 
     // This bank in order. A changed question that is unticked is replaced by the base's raw question; an added
     // question that is unticked is left out.

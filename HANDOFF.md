@@ -140,8 +140,19 @@ snapshot cannot see `figure`; the server hashes it, `share-core/src/hash.rs:394`
 link, and the same wrong predicate for an unknown difficulty. The composer now trusts the caller's change set, so
 the body-based summary is the next piece and must include `figure` and the difficulty.
 
-Next: the tick-list model + send summary (compute `changed` against the body, all ticked by default, `held_back`
-unticked), then `after_partial_send`, the send page, pictures, and the staging round-trip (needs the owner's yes).
+**Piece 2, committed: the body-based change list.** `changes_against_body(link, bank, base_body)` returns
+`changed` / `added` / `removed`, comparing every field the server hashes: `merge::same_question` (stem, choices and
+key, explanation, points, topics, difficulty, figure) plus the picture `{file,width,height}` and the keyless
+placeholder. Removals come from `link.qids`, so a bounded link still lists them. `base_index` is shared with the
+composer. 31 tests in the module; six mutants killed (figure ignored, difficulty ignored, picture ignored,
+removals from `link.base`, the re-added strict check, the empty-bank refusal).
+
+Piece-2 critic: **holds**, two minors, both fixed — a removal the base body lacks is now still listed (only an
+unticked one makes the composer refuse), and an empty bank is refused with the composer's own words so the summary
+cannot offer a send that can never compose.
+
+Next: the tick-list model + send summary (all ticked by default, `held_back` unticked, one base-body read on the
+page), then `after_partial_send`, the send page, pictures, and the staging round-trip (needs the owner's yes).
 
 ## What is left (in order)
 
