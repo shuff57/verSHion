@@ -448,6 +448,25 @@ impl<'de> Visitor<'de> for Read<'_, '_> {
     fn visit_map<A: MapAccess<'de>>(self, mut a: A) -> Result<Node, A::Error> {
         self.cx.value()?;
         self.cx.charge(NODE_COST)?;
+        // `serde_json`'s `arbitrary_precision` (another crate in this build turns it on through
+        // feature unification) delivers a number to `deserialize_any` as this one-entry map, never
+        // as `visit_f64`. A scalar shape can only be that number (or a container in its place).
+        if matches!(self.shape, Shape::Scalar) {
+            let key: Option<String> = a.next_key()?;
+            if key.as_deref() == Some("$serde_json::private::Number") {
+                let text: String = a.next_value()?;
+                self.cx.charge(text.len())?;
+                return text.parse::<serde_json::Number>().map(Node::Num).map_err(|_| self.cx.stop(ParseError::Syntax));
+            }
+            let d = self.cx.deeper(self.depth)?;
+            if key.is_some() {
+                a.next_value_seed(Skip { cx: self.cx, depth: d })?;
+            }
+            while a.next_key::<de::IgnoredAny>()?.is_some() {
+                a.next_value_seed(Skip { cx: self.cx, depth: d })?;
+            }
+            return Ok(Node::Skipped);
+        }
         let d = self.cx.deeper(self.depth)?;
         let (names, tagged) = match self.shape {
             Shape::Obj(n) => (*n, false),

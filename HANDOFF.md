@@ -2,6 +2,20 @@
 
 Repo `verSHion`, branch `shared-pool-phase1`, last commit is the round 19–20 checkpoint. This file was rewritten after the round-19 takeover session (`vershion-fd`, `240c6322`) lost its builder to the weekly API limit. The limit was due to reset **2026-10-28 16:00 PT**; the owner lifted that gate early, so the critic pair ran on the evening of 2026-10-27 (see the scoped fix round below).
 
+## The 5 known failures are fixed (2026-10-28)
+
+The owner asked to fix the five `share_core::wasm::publish_prepare_json` failures. Cause: the viSHion path deps in
+`Cargo.toml` turn on `serde_json`'s `arbitrary_precision` through feature unification, so `serde_json` hands a number
+to `deserialize_any` as a one-entry map (`$serde_json::private::Number`); share-core's `Read::visit_map` skipped it at
+a `Scalar` shape, so `points: 1.0` became `Skipped` and the validator said `expected_number`. Fix in
+`server/share-core/src/json.rs`: a `Shape::Scalar` map that is that private-number form is read back into `Node::Num`
+(the text charged to the budget); inert when the feature is off, so the worker's own build is unchanged. The owner
+authorised this one edit outside `src/share/`.
+
+`cargo test --lib`: **2099 passed, 0 failed, 4 ignored**. share-core's own suite green; `cargo build --bins` and the
+wasm32 check green. The old "D1 baseline 2001/5/3" line no longer applies — use **2099 passed, 0 failed, 4 ignored**
+(the 4 ignored include the local-rig round-trip).
+
 D1 rounds 19 and 20 are **committed locally** (the round 19–20 checkpoint, 45 files: 35 under `src/share/` plus this file and the nine critic reports 92-100). **Nothing is pushed.** The rest of the dirty tree belongs to the other sessions (see "Do not touch").
 
 ## Where D1 stands
