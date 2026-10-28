@@ -55,6 +55,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "sine-cosine" => SINE_COSINE,
         "unit-circle" => UNIT_CIRCLE,
         "transformations" => TRANSFORMATIONS,
+        "fraction-models" => FRACTION_MODELS,
         "parallelogram" => PARALLELOGRAM,
         "trapezoid" => TRAPEZOID,
         "kite" => KITE,
@@ -3307,5 +3308,24 @@ const TRANSFORMATIONS: &[Faq] = &[
     Faq {
         q: "Can I move the pre-image?",
         a: "The pre-image is the fixed triangle A(1, 1), B(4, 1), C(1, 3); the transformation is what changes. The grid takes in whichever image the rule produces, including an enlargement by 3 or a translation of 8 units, so both shapes always fit.",
+    },
+];
+
+const FRACTION_MODELS: &[Faq] = &[
+    Faq {
+        q: "Which model should I use?",
+        a: "A bar and a tape diagram are the same idea: one strip cut into equal parts, with some shaded. The tape diagram also numbers the cuts, which helps for equivalent fractions and number lines. The circle suits fractions of a whole and turns, and the ten-frame is for tenths and for place value within 10.",
+    },
+    Faq {
+        q: "Why is the fraction not printed?",
+        a: "The fraction, its decimal and its percentage are the answers, so they are printed only while Show answers is on. Turn it off and the shaded shape is the question: the student writes the fraction it shows.",
+    },
+    Faq {
+        q: "What if I ask for more shaded parts than there are?",
+        a: "The shaded count is held at the number of parts, and the parts at 12 at most, so a fraction between 0 and 1 is always drawn. The ten-frame always has ten cells, whatever the parts control says.",
+    },
+    Faq {
+        q: "How is the percentage worked out?",
+        a: "It is the fraction as a percentage: shaded / parts x 100, rounded to one decimal place (or to the Decimal places setting when that is 0 or 1). The decimal is the same division at the Decimal places setting.",
     },
 ];
