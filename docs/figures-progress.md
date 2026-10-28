@@ -150,7 +150,17 @@ now follows the printed decimal); unit-circle value labels colliding with axis n
 candidate positions, swept at all three sizes); its coordinate labels indistinguishable from ticks in Print (now
 prefixed `x =` / `y =`); 360 degrees folding to 0 making 2pi unreachable; the sincos Notes never being displayed;
 the sincos FAQ claiming a 90 degree right shift gives cosine (it gives minus cosine); and the Print grid vanishing
-in a 66% bitonal copy in five figures (now `#9a9a9a`). ## Phase 3: physics
+in a 66% bitonal copy in five figures (now `#9a9a9a`). Refraction: new figure `refraction` (`src/figures/refraction.rs`, Physics). An interface, the normal, an incident
+ray at a typed angle and the refracted ray from Snell's law; past the critical angle the reflected ray is drawn and
+the readout says "Total internal reflection: no refracted ray". The refracted angle, the critical angle (only when
+light goes from the denser medium outwards) and the speed in each medium are the answers and blank on the student
+copy. Labels sit beside their rays with a halo; the canvas widens with the label size and the readout gap scales with
+it, and the PNG export includes a Large case (both lessons from the circular-motion round). Tests: Snell's law across
+four index pairs, the bending direction and the absence of a critical angle going inwards, glass to air at 41.81
+degrees with the steep just-below case, no bending down the normal, the student/key split, TIR said in words, and
+Print neutrality. Census: only `refraction__defaults` and `refraction__start` added.
+
+## Phase 3: physics
 
 Circular motion: new figure `circular-motion` (`src/figures/circular.rs`, Physics). A body on a circle at a chosen
 angle, with its velocity along the tangent, its centripetal acceleration and force towards the centre (through the
