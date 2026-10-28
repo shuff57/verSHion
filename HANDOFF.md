@@ -34,9 +34,24 @@ publish), the linked-bank strip treats it as signed in, and background circle wo
 hidden. Legal pages (index, terms, privacy) updated to separate the public pool from circles — they remain **drafts for
 review, not legal advice**.
 
-Tests: worker `npm test` 694/694, `npm run typecheck` clean; Rust `cargo test --lib` 2108 passed, 0 failed, 4 ignored.
+Tests: worker `npm test` 694/694, `npm run typecheck` clean; Rust `cargo test --lib` 2108 passed, 0 failed, 5 ignored.
 The `pending_circles.test.ts` file's TypeScript diagnostics are the IDE's (tests are outside `tsconfig.include`; the
 suite runs and typecheck passes).
+
+### Staging round-trip (2026-10-28)
+
+The changed worker is deployed to `vershion-pool-staging` (version `05465e46`, `workers_dev = false`, no public URL).
+Against a `wrangler dev --remote` session on the staging bindings (localhost:18793), the round-trip passed: a
+throwaway account (confirmed, approved in the staging D1 as teacher with pool access) created a circle and a
+3-question bank (v1), made two changes, and sent all-but-one-unticked -> the server answered version 2 with **added 0,
+changed 1, removed 0**, and the unticked question is identical to version 1. The test is
+`partial_send_staging_round_trip` (ignored; refuses any base but 18793). Cleanup: the D1 rows (account, circle, bank,
+versions, qkeys, members) and the four R2 objects (`circles/<cid>/<bid>/<vid>{,.idx}.json`) were deleted and verified;
+the remote dev session was stopped. The local rig on 18791 is still running for the demo. `cargo test --lib`: 2108
+passed, 0 failed, 5 ignored.
+
+Still unproven: production, real-network behaviour, and partial sends with pictures, additions or removals (the pure
+tests cover those; this round-trip covered a changed raw-base question).
 
 D1 rounds 19 and 20 are **committed locally** (the round 19–20 checkpoint, 45 files: 35 under `src/share/` plus this file and the nine critic reports 92-100). **Nothing is pushed.** The rest of the dirty tree belongs to the other sessions (see "Do not touch").
 
