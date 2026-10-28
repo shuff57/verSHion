@@ -45,6 +45,7 @@ pub mod slope;
 pub mod protractor;
 pub mod baseten;
 pub mod nets;
+pub mod energy;
 pub mod math;
 pub mod math_geo;
 pub mod math_plot;
@@ -504,6 +505,7 @@ pub fn registry() -> Vec<FigureDef> {
     v.extend(protractor::defs());
     v.extend(baseten::defs());
     v.extend(nets::defs());
+    v.extend(energy::defs());
     v.extend(stats::defs());
     v.extend(computing::defs());
     v.extend(accounting::defs());
@@ -680,7 +682,7 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
 pub fn grid_warnings(p: &Params) -> Vec<String> { math::grid_warnings(p) }
 /// Editor-only notes for the figures that have them (what could not be drawn as asked).
 pub fn notes_for(id: &str, p: &Params) -> Vec<String> {
-    match id { "coordinate-grid" => math::grid_warnings(p), "circle" => circle::warnings(p), "right-triangle-trig" => trig::warnings(p), "sine-cosine" => sincos::warnings(p), "unit-circle" => unitcircle::warnings(p), "transformations" => transform::warnings(p), "fraction-models" => fraction::warnings(p), "triangle-centres" => triangle_centres::warnings(p), "slope-triangle" => slope::warnings(p), "protractor" => protractor::warnings(p), "base-ten-blocks" => baseten::warnings(p), "solid-net" => nets::warnings(p), _ => vec![] }
+    match id { "coordinate-grid" => math::grid_warnings(p), "circle" => circle::warnings(p), "right-triangle-trig" => trig::warnings(p), "sine-cosine" => sincos::warnings(p), "unit-circle" => unitcircle::warnings(p), "transformations" => transform::warnings(p), "fraction-models" => fraction::warnings(p), "triangle-centres" => triangle_centres::warnings(p), "slope-triangle" => slope::warnings(p), "protractor" => protractor::warnings(p), "base-ten-blocks" => baseten::warnings(p), "solid-net" => nets::warnings(p), "energy-bar-chart" => energy::warnings(p), _ => vec![] }
 }
 
 /// A hash of every parameter (names and values, no formatting): the key under which the editor caches what a figure
@@ -776,6 +778,7 @@ pub fn examples_for(id: &str) -> Vec<Example> {
         .or_else(|| protractor::examples(id))
         .or_else(|| baseten::examples(id))
         .or_else(|| nets::examples(id))
+        .or_else(|| energy::examples(id))
         .or_else(|| stats::examples(id))
         .or_else(|| computing::examples(id))
         .or_else(|| electric::examples(id))

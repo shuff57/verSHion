@@ -68,6 +68,8 @@ earth-layers__defaults 37c454c5d31bef26
 earth-layers__start 37c454c5d31bef26
 elasticity__defaults f12af64ea90eafaf
 elasticity__start f12af64ea90eafaf
+energy-bar-chart__defaults 22d87991925a0aef
+energy-bar-chart__start 22d87991925a0aef
 er-diagram__defaults 8866218ba5ebbaac
 er-diagram__start 8866218ba5ebbaac
 experiment-flow__defaults eed3a0215c8f7e94

@@ -61,6 +61,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "protractor" => PROTRACTOR,
         "base-ten-blocks" => BASE_TEN_BLOCKS,
         "solid-net" => SOLID_NET,
+        "energy-bar-chart" => ENERGY_BAR_CHART,
         "parallelogram" => PARALLELOGRAM,
         "trapezoid" => TRAPEZOID,
         "kite" => KITE,
@@ -3427,5 +3428,24 @@ const SOLID_NET: &[Faq] = &[
     Faq {
         q: "How do I make a worksheet?",
         a: "Turn Show answers off: the surface area and the volume become blanks while the net and the edges stay. The edges are the given, because the net is scaled to fit its box, so two similar boxes draw the same picture and the edges cannot be measured back from it.",
+    },
+];
+
+const ENERGY_BAR_CHART: &[Faq] = &[
+    Faq {
+        q: "Why is the total the same before and after?",
+        a: "Energy is conserved: the gravitational store empties by m g h and the kinetic and thermal stores fill by exactly that. Both stacks are drawn to the same scale, so the three bars in a group always add up to the same height.",
+    },
+    Faq {
+        q: "Where does the thermal bar come from?",
+        a: "It is the share of the drop lost to air resistance, set by the 'Share lost to air resistance' control. With no loss the kinetic bar takes all the gravitational energy; a fifth lost gives a thermal bar a fifth as tall as the drop.",
+    },
+    Faq {
+        q: "Why does the kinetic bar start at nothing?",
+        a: "The body starts from rest at the higher point, so it has no kinetic energy there; all of it is gravitational until it falls. The chart shows the stores at the two heights, not every point in between.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the bars are drawn as empty frames on the same scale and the three numbers become blanks, so the student works out the stores from the mass and the heights.",
     },
 ];

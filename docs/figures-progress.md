@@ -150,7 +150,21 @@ now follows the printed decimal); unit-circle value labels colliding with axis n
 candidate positions, swept at all three sizes); its coordinate labels indistinguishable from ticks in Print (now
 prefixed `x =` / `y =`); 360 degrees folding to 0 making 2pi unreachable; the sincos Notes never being displayed;
 the sincos FAQ claiming a 90 degree right shift gives cosine (it gives minus cosine); and the Print grid vanishing
-in a 66% bitonal copy in five figures (now `#9a9a9a`). Nets: new figure `solid-net` (`src/figures/nets.rs`, Math). The net of a cube or cuboid: four side rectangles in a
+in a 66% bitonal copy in five figures (now `#9a9a9a`). ## Phase 3: physics
+
+Energy bar charts: new figure `energy-bar-chart` (`src/figures/energy.rs`, Physics). A body dropped from one height
+to another, with its gravitational, kinetic and thermal energy drawn as two stacks of three bars on one scale, so the
+group heights can be seen to match: m g h empties, and kinetic plus thermal fill by exactly that (the thermal part
+is the share lost to air resistance). The bars are the answer, so with Show answers off the chart keeps its axes,
+its names and its blanks and draws no bars at all. Short store names (KE, GPE, thermal) with a header saying what
+they stand for, because "gravitational" is wider than the 52 px column. A final height above the start is noted and
+held. No handles, so the figure joins `NO_HANDLES`. FAQ arm has four entries. Five examples: a 2 kg ball dropped
+5 m, the same with a fifth lost, falling part of the way, a heavier ball, and a small drop. Tests: the default
+leaving all 98 J as kinetic, the total never changing over five settings, the bars drawn to one scale, the
+student/key split, the height note, and Print neutrality (fills as well as strokes). Census: only
+`energy-bar-chart__defaults` and `energy-bar-chart__start` added.
+
+Nets: new figure `solid-net` (`src/figures/nets.rs`, Math). The net of a cube or cuboid: four side rectangles in a
 row (a by c, b by c alternating) with the top and bottom (a by b) above and below the first, fitted into a fixed box
 and drawn with a light fill. The readout gives the edges, the surface area 2(ab + ac + bc) and the volume abc; the
 area and volume are blanks while Show answers is off, but the edges stay: the net is scaled to fit its box, so two
