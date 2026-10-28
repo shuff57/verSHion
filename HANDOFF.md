@@ -64,6 +64,13 @@ Written 2026-10-27 ~19:40 PT by the circles/D1 session, which the owner asked to
   Suite on the fix commit: 1685 passed, 0 failed, 5 ignored. **The fixes themselves have not been re-critiqued.**
 - Phase 2 is complete (all committed): transformations, fraction-models (bar, circle, tape, ten-frame, area model),
   triangle-centres, slope-triangle, protractor, base-ten-blocks, solid-net. Next is phase 3 (physics).
+- **Phase 3 inventory (2026-10-28, checked against the 141 registered ids):** almost nothing exists. Present:
+  `waves` (generic), `circuit-diagram`, `motion-graphs`, `projectile-motion`, `free-body`, `inclined-plane`,
+  `pulley`, `spring-scale`, `vector-diagram`, `logic-circuit`, `kirchhoff-loops`, `rc-curve`. Missing from the
+  phase-3 list: energy bar charts, collisions and momentum, circular motion, electric field lines and
+  equipotentials, refraction/Snell/total internal reflection, magnetic field and right-hand rule, standing waves and
+  interference, PV diagrams, a ray diagram with handles, a capacitor, series-parallel circuits, and the handles /
+  hide-reading work on the existing physics figures.
 - Suite on `94bde95`: 1707 passed, 0 failed, 5 ignored.
 - **All eleven figures have now been critiqued.** The last four (protractor, area model, base-ten blocks, solid-net)
   were failed on 2 blockers and 8 majors, fixed in `b706974`, and re-checked by a verification critic: the blockers
