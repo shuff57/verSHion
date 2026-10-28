@@ -20,7 +20,20 @@ const ROW_Y0: f64 = 216.0;
 const ROW_H: f64 = 18.0;
 const ROW_FS: f64 = 15.0;
 
-const MODELS: [&str; 4] = ["Fraction bar", "Fraction circle", "Tape diagram", "Ten-frame"];
+const MODELS: [&str; 5] = ["Fraction bar", "Fraction circle", "Tape diagram", "Ten-frame", "Area model"];
+
+/// The rows and columns an area model of `n` equal parts is drawn with: the factorisation closest to square, so
+/// twelve parts is 3 x 4 rather than 1 x 12, and a prime number falls back to a single row.
+pub fn grid_of(n: i64) -> (i64, i64) {
+    let n = n.clamp(1, 144);
+    let mut best = (1, n);
+    let mut r = 2;
+    while r * r <= n {
+        if n % r == 0 { best = (r, n / r); }
+        r += 1;
+    }
+    best
+}
 
 pub fn defs() -> Vec<FigureDef> {
     vec![FigureDef {
@@ -110,6 +123,20 @@ pub fn build(p: &Params) -> (String, Report) {
                 d.raw(&text_el(x, y0 + h + 20.0, 13.0, "middle", ink, &k.to_string()));
             }
         }
+        "Area model" => {
+            // a rectangle cut into equal cells, shaded in reading order
+            let (rows, cols) = grid_of(parts);
+            let (avail_w, avail_h) = (W - 80.0, 150.0);
+            let cell = (avail_w / cols as f64).min(avail_h / rows as f64).min(46.0);
+            let (gw, gh) = (cell * cols as f64, cell * rows as f64);
+            let (x0, y0) = ((W - gw) / 2.0, 40.0 + (avail_h - gh) / 2.0);
+            for i in 0..parts {
+                let (r, c) = (i / cols, i % cols);
+                let x = x0 + c as f64 * cell;
+                let y = y0 + r as f64 * cell;
+                d.rect(x, y, cell, cell, if i < shaded { shade } else { empty }, ink, lw);
+            }
+        }
         _ => {
             // fraction bar: one row of equal parts
             let (x0, x1, y0, h) = (40.0, W - 40.0, 88.0, 56.0);
@@ -163,6 +190,7 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
         Example { name: "Five eighths as a tape diagram", params: vec![s("model", MODELS[2]), f("num", 5), f("den", 8)] },
         Example { name: "Seven tenths in a ten-frame", params: vec![s("model", MODELS[3]), f("num", 7), f("den", 10)] },
         Example { name: "One whole, all shaded", params: vec![s("model", MODELS[0]), f("num", 6), f("den", 6)] },
+        Example { name: "Five twelfths as an area model", params: vec![s("model", MODELS[4]), f("num", 5), f("den", 12)] },
     ])
 }
 
@@ -249,6 +277,19 @@ mod tests {
         assert!(texts(&render_of(&[f("num", 6), f("den", 6)])).contains("Fraction  6/6"));
         assert!(texts(&render_of(&[f("num", 6), f("den", 6)])).contains("Percent  100%"));
         assert!(texts(&render_of(&[f("num", 0), f("den", 4)])).contains("Percent  0%"));
+    }
+
+    /// The area model is a rectangle cut into equal cells, laid out as the factorisation closest to square.
+    #[test]
+    fn the_area_model_is_a_grid_of_equal_cells() {
+        assert_eq!(grid_of(12), (3, 4));
+        assert_eq!(grid_of(10), (2, 5));
+        assert_eq!(grid_of(7), (1, 7));
+        assert_eq!(grid_of(1), (1, 1));
+        let svg = render_of(&[s("model", "Area model"), f("num", 5), f("den", 12)]);
+        // five shaded cells out of twelve (the document's own background is the extra rect)
+        assert_eq!(svg.matches(&format!("fill=\"{SHADE}\"")).count(), 5, "the shaded cells");
+        assert!(texts(&svg).contains("Fraction  5/12"), "{}", texts(&svg));
     }
 
     #[test]

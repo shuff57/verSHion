@@ -150,7 +150,12 @@ now follows the printed decimal); unit-circle value labels colliding with axis n
 candidate positions, swept at all three sizes); its coordinate labels indistinguishable from ticks in Print (now
 prefixed `x =` / `y =`); 360 degrees folding to 0 making 2pi unreachable; the sincos Notes never being displayed;
 the sincos FAQ claiming a 90 degree right shift gives cosine (it gives minus cosine); and the Print grid vanishing
-in a 66% bitonal copy in five figures (now `#9a9a9a`). Protractor: new figure `protractor` (`src/figures/protractor.rs`, Math). A half-disc graduated every 5 degrees
+in a 66% bitonal copy in five figures (now `#9a9a9a`). Area model added to `fraction-models` as a fifth `Show a` choice: a rectangle cut into as many equal cells as there
+are parts, laid out as the factorisation closest to square (twelve parts is 3 x 4, a prime falls back to one row),
+shaded in reading order. Same readout as the other models, one new example (five twelfths) and a test that the
+layout is the expected grid and that the shaded cell count matches the numerator.
+
+Protractor: new figure `protractor` (`src/figures/protractor.rs`, Math). A half-disc graduated every 5 degrees
 with longer ticks every 10 and numbers every 30 on two scales (outer 0 at the right, inner 0 at the left), a ray at
 a typed angle from 0 to 180, and a readout giving the reading and what the other scale shows (180 minus it). The
 ray can be switched off for a sheet where the student places the arm. The reading is the answer, so it is blank
