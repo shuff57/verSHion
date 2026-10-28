@@ -105,11 +105,17 @@ pub fn build(p: &Params) -> (String, Report) {
         (0.0, -b, a, b),
         (0.0, c, a, b),
     ];
-    for (x, y, w, h) in cells {
+    for (i, (x, y, w, h)) in cells.into_iter().enumerate() {
         d.rect(px(x), py(y), w * s, h * s, face, ink, 1.8);
-        // which edges each face is made of, so a teacher can point at one and name it
-        let label = if (w - a).abs() < 1e-9 && (h - c).abs() < 1e-9 { "a x c" } else if (w - b).abs() < 1e-9 && (h - c).abs() < 1e-9 { "b x c" } else { "a x b" };
-        d.raw(&text_el(px(x) + w * s / 2.0, py(y) + h * s / 2.0 + 4.0, 11.0, "middle", ink, label));
+        // Which edges each face is made of. Taken from the face's place in the net, not from its size, because a
+        // cube has b = c and the sizes no longer tell the flaps from the sides.
+        let label = if i >= 4 { "a x b" } else if i % 2 == 0 { "a x c" } else { "b x c" };
+        // the label shrinks to its face, and is left out when the face is too small to hold it legibly
+        let (fw, fh) = (w * s, h * s);
+        let size = (11.0 * f).min(fh * 0.5).min(fw / (label.chars().count() as f64 * 0.62));
+        if size >= 6.0 {
+            d.raw(&text_el(px(x) + fw / 2.0, py(y) + fh / 2.0 + size * 0.35, size, "middle", ink, label));
+        }
     }
 
     // the readout

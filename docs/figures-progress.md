@@ -153,7 +153,9 @@ the sincos FAQ claiming a 90 degree right shift gives cosine (it gives minus cos
 in a 66% bitonal copy in five figures (now `#9a9a9a`). Nets: new figure `solid-net` (`src/figures/nets.rs`, Math). The net of a cube or cuboid: four side rectangles in a
 row (a by c, b by c alternating) with the top and bottom (a by b) above and below the first, fitted into a fixed box
 and drawn with a light fill. The readout gives the edges, the surface area 2(ab + ac + bc) and the volume abc; the
-edges, area and volume are all blanks while Show answers is off. Choosing Cube forces all three edges equal, so the
+area and volume are blanks while Show answers is off, but the edges stay: the net is scaled to fit its box, so two
+similar boxes draw the same picture and the edges cannot be measured back from it. Every face is labelled a x c,
+b x c or a x b, in a size that shrinks to fit the face. Choosing Cube forces all three edges equal, so the
 Width and Height controls are ignored. No handles, so the figure joins `NO_HANDLES`. FAQ arm has four entries. Five
 examples: a cube of edge 3, a 4 x 3 x 2 cuboid, a tall thin one, a flat one, and a cube of edge 1. Tests: the
 defaults' area and volume, a cube forcing its edges, the surface area equalling the six drawn rectangles, six faces
@@ -162,9 +164,10 @@ and `solid-net__start` added. **This closes the phase-2 list.**
 
 Base-ten blocks: new figure `base-ten-blocks` (`src/figures/baseten.rs`, Math). A three-digit number drawn as
 hundreds flats (ten by ten, three to a row), tens rods (one by ten) and ones cubes, each group labelled, with the
-place-value expansion written under it. A missing place draws nothing and is left out of the expansion (305 is
-"3 hundreds + 5 ones"), and zero prints as "0". The expansion is the answer, so it is three blanks while Show
-answers is off, with the blocks and the number still drawn. The canvas is sized from the blocks actually used, so a
+place-value expansion written under it. A missing place draws nothing, and every place is named in both copies —
+the key writes a zero place as 0 (305 is "3 hundreds + 0 tens + 5 ones") and the student copy gets the same three
+labelled blanks, so the two line up term for term. The expansion is the answer, so it is blank while Show answers is
+off, with the blocks and the number still drawn. The canvas is sized from the blocks actually used, so a
 single flat does not leave a page of air, and the column label sits under the rows drawn rather than under a fixed
 three. No handles, so the figure joins `NO_HANDLES`. FAQ arm has four entries. Five examples: 247, 100, 305, 60 and
 999. Tests: the default, the places summing back to the number across seven values, a missing place left out of the

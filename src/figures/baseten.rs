@@ -137,7 +137,8 @@ pub fn build(p: &Params) -> (String, Report) {
     let row1 = format!("Number  {}", p.i("n").clamp(0, 999));
     // every place is named in both copies, so the student's blanks and the key's expansion have the same shape;
     // a zero place is written as 0 rather than dropped
-    let key_terms = format!("{h} hundreds + {t} tens + {o} ones");
+    let name = |n: i64, one: &str, many: &str| if n == 1 { one.to_string() } else { many.to_string() };
+    let key_terms = format!("{h} {} + {t} {} + {o} {}", name(h, "hundred", "hundreds"), name(t, "ten", "tens"), name(o, "one", "ones"));
     let stu_terms = format!("{BLANK} hundreds + {BLANK} tens + {BLANK} ones");
     let row2 = if ans { key_terms } else { stu_terms };
     for (i, line) in [row1, row2].iter().enumerate() {
@@ -214,10 +215,10 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_place_is_left_out_of_the_expansion() {
+    fn every_place_is_written_even_when_zero() {
         // the expansion is the last line of the readout (the column names above it always say hundreds/tens/ones)
         let last = |svg: String| texts(&svg).lines().last().unwrap_or("").trim().to_string();
-        assert_eq!(last(render_of(&[i("n", 100)])), "1 hundreds + 0 tens + 0 ones");
+        assert_eq!(last(render_of(&[i("n", 100)])), "1 hundred + 0 tens + 0 ones");
         assert_eq!(last(render_of(&[i("n", 305)])), "3 hundreds + 0 tens + 5 ones");
         assert_eq!(last(render_of(&[i("n", 0)])), "0 hundreds + 0 tens + 0 ones");
     }

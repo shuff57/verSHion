@@ -65,8 +65,10 @@ Written 2026-10-27 ~19:40 PT by the circles/D1 session, which the owner asked to
 - Phase 2 is complete (all committed): transformations, fraction-models (bar, circle, tape, ten-frame, area model),
   triangle-centres, slope-triangle, protractor, base-ten-blocks, solid-net. Next is phase 3 (physics).
 - Suite on `94bde95`: 1707 passed, 0 failed, 5 ignored.
-- **Not yet critiqued:** protractor, the area model, base-ten blocks and solid-net (the other seven have had two
-  rounds). Send one combined critic over these four before calling phase 2 done rather than built.
+- **All eleven figures have now been critiqued.** The last four (protractor, area model, base-ten blocks, solid-net)
+  were failed on 2 blockers and 8 majors, fixed in `b706974`, and re-checked by a verification critic: the blockers
+  and all but one major hold; the leftovers were fixed in the commit after it. See
+  `docs/critic-reports/2026-10-28-figures-critics-3.md`.
 - The five newest figures (1.4, 1.5, transformations, fraction models, triangle centres, slope) have had two
   critic rounds; the protractor has had none yet.
 - `HANDOFF.md` here is untracked; do not commit it with the figure work.

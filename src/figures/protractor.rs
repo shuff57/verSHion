@@ -130,7 +130,8 @@ pub fn build(p: &Params) -> (String, Report) {
     let reading = format!("Reading  {}\u{b0}", deg.round());
     let other = format!("The other scale reads  {}\u{b0}", 180 - deg.round() as i64);
     let rows = if !p.b("show_ray") {
-        vec!["No ray drawn".to_string()]
+        // on a student copy with no ray the reading is the student's to take, so it keeps a blank to write in
+        if ans { vec!["No ray drawn".to_string()] } else { vec!["No ray drawn".to_string(), format!("Reading  {BLANK}\u{b0}")] }
     } else {
         vec![
             if ans { reading } else { format!("Reading  {BLANK}\u{b0}") },

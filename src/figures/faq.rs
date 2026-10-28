@@ -3331,7 +3331,7 @@ const FRACTION_MODELS: &[Faq] = &[
     },
     Faq {
         q: "How is the percentage worked out?",
-        a: "The decimal is shaded / parts at the Decimal places setting, never fewer than two places. The percentage is that printed decimal x 100, so the two always agree: 5/8 prints 0.62 and 62%.",
+        a: "The decimal is shaded / parts at two places or more (any trailing zeros are dropped). The percentage is that printed decimal x 100, so the two always agree: 5/8 prints 0.63 and 63%.",
     },
 ];
 
