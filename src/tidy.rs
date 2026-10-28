@@ -460,12 +460,16 @@ pub fn apply(qs: &mut [Question], picked: &[&QuestionTidy], now: i64) -> Vec<Que
     undo
 }
 
-/// Puts back the questions [`apply`] returned (by id). Returns how many were restored.
+/// Puts back what [`apply`] wrote (by id): the stem and, where a table fix dropped markers, the answers. Everything else
+/// stays as it is now — in particular a difficulty the circle's read has put in since, or her own edit, is not reverted
+/// (critic 95 p95_6). The question's time is left at the tidy's; the caller moves the bank's on. Returns how many were
+/// restored.
 pub fn undo(qs: &mut [Question], before: &[Question]) -> usize {
     let mut n = 0;
     for b in before {
         if let Some(q) = qs.iter_mut().find(|q| q.id == b.id) {
-            *q = b.clone();
+            q.stem = b.stem.clone();
+            q.kind = b.kind.clone();
             n += 1;
         }
     }
@@ -523,14 +527,42 @@ mod tests {
         }
         assert!(tidy_bank(&qs).is_empty(), "tidying is idempotent");
         assert_eq!(undo(&mut qs, &before), before.len());
+        // (critic 95 p95_6) the stems and answers come back; the question's time is the tidy's (the caller moves the bank's on)
         for (a, b) in qs.iter().zip(&old.questions) {
-            assert!(same(a, b));
+            assert_eq!(a.stem, b.stem);
+            assert_eq!(serde_json::to_value(&a.kind).unwrap(), serde_json::to_value(&b.kind).unwrap());
         }
     }
 
     #[test]
     fn the_real_ch4_bank_is_already_tidy() {
         assert!(tidy_bank(&clean().questions).is_empty());
+    }
+
+    /// (critic 95 p95_6) Tidy's Undo puts back what `apply` wrote — the stem and the answers — and nothing else: a
+    /// difficulty the circle's read has put in since, or her own edit, stays, so the strip does not turn it into an
+    /// unsent change and the next send cannot remove a colleague's difficulty.
+    #[test]
+    fn undo_keeps_what_changed_after_the_tidy() {
+        use crate::model::Difficulty;
+        let old = old();
+        let mut qs = old.questions.clone();
+        let tidies = tidy_bank(&qs);
+        let picked: Vec<&QuestionTidy> = tidies.iter().collect();
+        let before = apply(&mut qs, &picked, 99);
+        assert!(!before.is_empty());
+        // after the tidy: the circle's read gives every question a difficulty, and she adds a topic
+        for q in &mut qs {
+            q.difficulty = Some(Difficulty::High);
+            q.topics = vec!["read".into()];
+        }
+        undo(&mut qs, &before);
+        for (a, b) in qs.iter().zip(&old.questions) {
+            assert_eq!(a.stem, b.stem, "the stem comes back");
+            assert_eq!(serde_json::to_value(&a.kind).unwrap(), serde_json::to_value(&b.kind).unwrap(), "the answers come back");
+            assert_eq!(a.difficulty, Some(Difficulty::High), "the difficulty set after the tidy stays");
+            assert_eq!(a.topics, vec!["read".to_string()], "her later edit stays");
+        }
     }
 
     #[test]
