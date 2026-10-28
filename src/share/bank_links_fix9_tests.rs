@@ -59,6 +59,8 @@ pub(super) fn frames(m: &mut CirclesModel, banks: &mut [QuestionBank], ctx: &egu
 /// then left.
 pub(super) fn sent_with(edit: &dyn Fn(&mut QuestionBank), named: bool, fail: Option<super::api::ApiError>, status: u16, body: Value, check: (u16, Value)) -> Rig {
     let (mut m, s, mut banks) = two_at_three();
+    // (phase D3) the Send page reads its base version body; these tests leave that read unscripted
+    s.send_base_404(true);
     let who = &if named { olga_named(&s) } else { olga(&s) };
     s.keep("Get", &format!("/circles/{CID}"), 200, detail("owner", json!({})));
     let ctx = ctx();
@@ -197,6 +199,8 @@ fn c80_i2_the_check_finding_the_persons_own_next_version_says_the_send_went_thro
 
 /// A send from A as `who` answered 409 for version `head` sent by `by`; the page's text.
 pub(super) fn conflict_by(m: &mut CirclesModel, s: &Arc<Script>, banks: &mut [QuestionBank], ctx: &egui::Context, acct: &mut FakeAccount, who: &AccountSnapshot, head: u64, by: &str) -> String {
+    // (phase D3) the Send page reads its base version body; these tests leave that read unscripted
+    s.send_base_404(true);
     banks[0].questions[0].stem = format!("One (fix {head})");
     banks[0].modified += 5;
     assert!(m.edit.open_send(LOCAL, owner()));

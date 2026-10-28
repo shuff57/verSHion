@@ -3752,7 +3752,14 @@ impl CircleEditModel {
             v.picked = None;
             v.decisions.image_ok.clear();
         }
-        let pictures = Pictures::of_payload(&payload);
+        // (phase D3) The picture rows are named by the bank's question numbers on screen; `image_ok` stays in payload
+        // positions (what the pool reads), so a restored removal shifts only what the person sees.
+        let pictures = Pictures::of_payload(&payload).map(|mut p| {
+            if let Some(c) = &composed {
+                p.set_bank_map(bank_positions(&c.questions, bank));
+            }
+            p
+        });
         if hiding
             && v.picked.is_none()
             && let Some(p) = pictures.clone()
@@ -3959,11 +3966,25 @@ impl CircleEditModel {
                         k if decision_refusal(k).is_some() => {
                             self.pending_send = None;
                             let carried = if let EditView::Send(v) = &self.view { v.decisions.clone() } else { StripDecisions::default() };
-                            decision_refusal(k).map(|p| SendStage::Decide(Box::new(Decisions::new(p.clone(), carried))))
+                            // (phase D3) The page names the bank's questions; the refusal and the decisions stay in
+                            // payload positions (what the pool reads).
+                            let display = inflight.as_ref().and_then(|i| i.partial.as_ref().map(|c| bank_positions(&c.questions, &i.bank)));
+                            decision_refusal(k).map(|p| {
+                                let mut d = Decisions::new(p.clone(), carried);
+                                if let Some(map) = display.clone() {
+                                    d.set_bank_map(map);
+                                }
+                                SendStage::Decide(Box::new(d))
+                            })
                         }
                         RefusalKind::InvalidPayload(p) | RefusalKind::LabelsNeedDecision(p) | RefusalKind::OrderAckRequired(p) => {
                             self.pending_send = None;
-                            Some(SendStage::Payload(p.clone()))
+                            // (phase D3) a payload refusal's numbers are shown as the bank's; nothing is decided from it
+                            let p = match inflight.as_ref().and_then(|i| i.partial.as_ref().map(|c| bank_positions(&c.questions, &i.bank))) {
+                                Some(map) => Box::new(refusal_for_display((**p).clone(), &map)),
+                                None => p.clone(),
+                            };
+                            Some(SendStage::Payload(p))
                         }
                         RefusalKind::KeylessQuestion { positions, kinds } => {
                             self.pending_send = None;
@@ -5871,6 +5892,50 @@ fn bank_positions(composed: &[ComposedQuestion], bank: &QuestionBank) -> Vec<Opt
 /// (phase D3) Payload positions as the bank's question numbers, where the composed question is in the bank.
 fn bank_numbers(positions: &[usize], map: &[Option<usize>]) -> Vec<usize> {
     positions.iter().map(|p| map.get(*p).copied().flatten().unwrap_or(*p)).collect()
+}
+
+/// (phase D3) A payload refusal's question numbers as the bank's, for the page only: `decisions_from` and the request
+/// keep the payload positions the pool names. Where the payload position has no bank question, its payload number
+/// stays (never a wrong bank number).
+fn refusal_for_display(mut r: PayloadRefusal, map: &[Option<usize>]) -> PayloadRefusal {
+    fn shown(map: &[Option<usize>], payload: usize) -> usize {
+        map.get(payload).copied().flatten().unwrap_or(payload)
+    }
+    fn path_question(path: &str) -> Option<usize> {
+        if path.starts_with("question") && !path.starts_with("questions") {
+            return Some(0);
+        }
+        let rest = path.split("questions[").nth(1).or_else(|| path.split("question=").nth(1))?;
+        rest.chars().take_while(char::is_ascii_digit).collect::<String>().parse().ok()
+    }
+    fn path_for(path: &str, map: &[Option<usize>]) -> String {
+        let Some(q) = path_question(path) else { return path.to_string() };
+        let b = shown(map, q);
+        if b == q {
+            return path.to_string();
+        }
+        path.replace(&format!("questions[{q}]"), &format!("questions[{b}]")).replace(&format!("question={q}"), &format!("question={b}"))
+    }
+    for i in &mut r.issues {
+        i.path = path_for(&i.path, map);
+    }
+    for f in &mut r.formatting_findings {
+        f.question = shown(map, f.question);
+        f.path = path_for(&f.path, map);
+    }
+    for f in &mut r.label_findings {
+        f.question = shown(map, f.question);
+    }
+    for p in &mut r.needs_order_ack {
+        p.question = shown(map, p.question);
+    }
+    for o in &mut r.order_reasons {
+        o.question = shown(map, o.question);
+    }
+    for o in &mut r.order_preview {
+        o.question = shown(map, o.question);
+    }
+    r
 }
 
 fn kind_tag(k: &crate::model::Kind) -> &'static str {

@@ -14,19 +14,20 @@ use serde_json::{Value, json};
 
 use super::api::ApiError;
 use super::bank_links_fix11_tests::version_path;
-use super::bank_links_fix4_tests::{background, ctx, owner};
+use super::bank_links_fix4_tests::{background, ctx, frame_text, owner};
 use super::bank_links_fix_tests::{QC, linked_from, qfull, served_qs};
 use super::bank_links_tests::{LOCAL, QA, QB, heads, hex};
 use super::browse::ImageSink;
 use super::circle_edit::*;
+use super::circle_hide::{Decisions, Pictures};
 use super::circle_links::{CircleLink, LinkLog, changes_since, payload_of};
 use super::circles::CirclesModel;
 use super::circles_phasec_tests::click_text;
-use super::circles_tests::{NoDiskRestore, Script, model, now, ready};
+use super::circles_tests::{BID, NoDiskRestore, Script, model, now, ready};
 use super::merge::{Choice, RowKind};
 use super::model::Runner;
 use super::partial_send::BodyChanges;
-use super::pool::{LocalProblem, MediaSource, RetryPolicy, sha256_hex};
+use super::pool::{LabelChoice, LocalProblem, MediaSource, PayloadRefusal, Pos, RetryPolicy, sha256_hex};
 use super::transport::Method;
 use crate::model::{ImageRef, QuestionBank};
 
@@ -193,6 +194,12 @@ fn put_payload(x: &super::circles_tests::Sent) -> Value {
     let text = String::from_utf8(x.body.clone()).expect("a UTF-8 send body");
     let (_, payload) = text.split_once('\n').expect("a meta line and a payload");
     serde_json::from_str(payload).expect("the payload is JSON")
+}
+
+/// The meta line of the last PUT (the decisions and the commit id).
+fn put_meta(x: &super::circles_tests::Sent) -> Value {
+    let text = String::from_utf8(x.body.clone()).expect("a UTF-8 send body");
+    serde_json::from_str(text.split_once('\n').expect("a meta line and a payload").0).expect("the meta is JSON")
 }
 
 fn question_stems(v: &Value) -> Vec<String> {
@@ -1452,4 +1459,108 @@ fn d3_ui_a_partial_sends_result_says_what_went_and_what_stayed() {
     assert_eq!(super::circle_edit_ui::partial_sent_line(8, 2, 3), "Sent version 8 with 2 of your 3 changes. 1 change stays on this computer, not sent.");
     assert_eq!(super::circle_edit_ui::partial_sent_line(8, 1, 2), "Sent version 8 with 1 of your 2 changes. 1 change stays on this computer, not sent.");
     assert_eq!(super::circle_edit_ui::partial_sent_line(8, 1, 3), "Sent version 8 with 1 of your 3 changes. 2 changes stay on this computer, not sent.");
+}
+
+// ---- decision/picture rows name the bank's question, the request keeps the payload position ---------------------------------
+
+#[test]
+fn d3_a_picture_row_names_the_banks_question_and_the_request_keeps_the_payload_position() {
+    // base order A, C, B; this bank A, B (C removed and unticked, so the payload is A, C, B); B has a picture.
+    let base = vec![qfull(QA, "A"), qfull(QC, "C"), qfull(QB, "B")];
+    let pic = b"the B picture".to_vec();
+    let sha = sha256_hex(&pic);
+    let file = format!("media/{sha}.png");
+    let images = Arc::new(Pics::default());
+    let media = Arc::new(MediaOnDisk::default());
+    media.put(&file, &pic);
+    let (mut m, s, mut banks) = open_page_in(
+        base,
+        &|b| {
+            b.questions.remove(1); // C
+            b.questions[1].image = Some(ImageRef { file: file.clone(), width: 4, height: 3 }); // B
+        },
+        &[QC],
+        model_with(images, media),
+    );
+    m.edit.note_hiding(BID, true);
+    m.edit.send();
+    m.edit.sync(&mut banks);
+    let ctx = ctx();
+    let text = {
+        let EditView::Send(v) = &m.edit.view else { panic!("not on the send page") };
+        let SendStage::Pictures(p) = &v.stage else { panic!("not the picture step: {:?}", v.stage) };
+        assert_eq!(p.list.iter().map(|x| x.question).collect::<Vec<_>>(), vec![2], "the picture is payload position 2");
+        frame_text(&ctx, &mut |ui| {
+            let _ = super::circle_hide_ui::pictures(ui, p, "intro", "Send", false, false);
+        })
+    };
+    assert!(text.contains("Question 2"), "the bank's question 2 (B), not the payload's 3: {text}");
+    assert!(!text.contains("Question 3"), "{text}");
+    m.edit.send_keep_picture(2, true);
+    m.edit.send_with_pictures();
+    s.on("Put", &format!("/blobs/{sha}"), 200, json!({"sha256": sha, "size": pic.len(), "width": 4, "height": 3}));
+    s.on("Put", &super::bank_links_fix8_tests::put_path(), 201, sent_with(4, &[QA, QC, QB]));
+    m.edit.sync(&mut banks);
+    m.edit.frame(now(), &ready(&s));
+    let send = puts(&s).into_iter().rev().find(|x| x.path == super::bank_links_fix8_tests::put_path()).expect("the send went out");
+    assert_eq!(put_meta(&send)["image_ok"], json!([2]), "the request names the payload position, not the bank's");
+}
+
+#[test]
+fn d3_a_decision_refusal_names_the_banks_question_and_the_request_keeps_the_payload_position() {
+    let base = vec![qfull(QA, "A"), qfull(QC, "C"), qfull(QB, "B")];
+    let (mut m, s, mut banks) = open_page_with_base(
+        base,
+        &|b| {
+            b.questions.remove(1); // C
+            b.questions[1].stem = "B (changed)".into(); // so the send has a ticked change besides the held removal
+        },
+        &[QC],
+    );
+    s.on(
+        "Put",
+        &super::bank_links_fix8_tests::put_path(),
+        422,
+        json!({"error": "labels_need_decision", "errors": [], "label_findings": [{"question": 2, "strip_allowed": true, "choices": [{"before": "A) x", "after": "x"}]}]}),
+    );
+    m.edit.send();
+    m.edit.sync(&mut banks);
+    m.edit.frame(now(), &ready(&s));
+    let ctx = ctx();
+    let text = {
+        let EditView::Send(v) = &m.edit.view else { panic!("not on the send page") };
+        let SendStage::Decide(d) = &v.stage else { panic!("not the decisions page: {:?}", v.stage) };
+        assert_eq!(d.refusal.label_findings[0].question, 2, "the refusal itself stays at the payload position");
+        frame_text(&ctx, &mut |ui| {
+            let _ = super::circle_hide_ui::decisions(ui, d, "intro", "fix", "Send", false);
+        })
+    };
+    assert!(text.contains("Question 2"), "the bank's question 2 (B), not the payload's 3: {text}");
+    assert!(!text.contains("Question 3"), "{text}");
+    m.edit.send_decide_label(Pos { question: 2, part: None }, LabelChoice::Strip);
+    m.edit.send_with_decisions();
+    s.on("Put", &super::bank_links_fix8_tests::put_path(), 201, sent_with(4, &[QA, QC, QB]));
+    m.edit.sync(&mut banks);
+    m.edit.frame(now(), &ready(&s));
+    let meta = put_meta(&puts(&s).last().expect("the send went out"));
+    assert_eq!(meta["labels"][0]["question"], json!(2), "the request names the payload position, not the bank's: {meta}");
+}
+
+#[test]
+fn d3_without_a_restored_removal_the_display_numbers_are_the_payload_numbers() {
+    // No map: the page names each payload position as it is (the bank page, a whole-bank send).
+    let payload = json!({"schema_version": 2, "bank": {"questions": [{"stem": "A"}, {"stem": "B", "image": {"file": format!("media/{}.png", "d".repeat(64))}}]}}).to_string();
+    let p = Pictures::of_payload(payload.as_bytes()).expect("one picture");
+    assert_eq!(p.display_question(1), 1);
+    let d = Decisions::new(PayloadRefusal::default(), Default::default());
+    assert_eq!(d.display_question(1), 1);
+    // A payload position with no bank question (a restored removal) keeps its payload number, never a wrong bank one.
+    let mut p = p;
+    p.set_bank_map(vec![Some(0), Some(1)]);
+    assert_eq!(p.display_question(1), 1, "no removal: the payload number is the bank's");
+    p.set_bank_map(vec![Some(0), None, Some(2)]);
+    assert_eq!(p.display_question(1), 1);
+    let mut d = Decisions::new(PayloadRefusal::default(), Default::default());
+    d.set_bank_map(vec![Some(0), None, Some(2)]);
+    assert_eq!(d.display_question(2), 2);
 }

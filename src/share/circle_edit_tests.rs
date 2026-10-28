@@ -128,6 +128,9 @@ impl Rig {
 
     /// Opens the send page, lets the licence check come back, and ticks the own-work box.
     fn open_send(&mut self, perm: Perm) {
+        // (phase D3) a Send page reads its base version body; these tests leave that read unscripted, which means the
+        // circle no longer keeps it (the whole-bank path), not a missing script
+        self.s.send_base_404(true);
         self.m.open_send(LOCAL, perm);
         self.frame();
         self.m.set_attest(true);
@@ -674,6 +677,7 @@ fn a_copy_that_is_up_to_date_says_so() {
 #[test]
 fn a_hidden_newest_version_can_not_be_merged_but_can_be_sent_over() {
     let mut r = Rig::new(&[(QA, "One")]);
+    r.s.send_base_404(true);
     r.edit_stem(0, "One, reworded");
     r.m.apply_heads(&[HeadEntry { bank_id: BID.into(), state: HeadState::Current { version: 3, license: None, at: None, by: None, hide_key: None } }]);
     r.s.on("Post", &format!("{}/merge", bank_path()), 200, merge_start_json(1, 3, true));
@@ -1145,6 +1149,8 @@ fn a_plain_copy_for_an_editor_is_not_linked_either() {
 #[test]
 fn a_copy_recorded_before_phase_d_follows_a_send_or_a_merge() {
     let (mut m, s) = open_bank_page("editor");
+    // (phase D3) the Send page below reads its base version body; this test leaves that read unscripted
+    s.send_base_404(true);
     let _ = link_log_model(&mut m);
     let mut browse = super::browse::BrowseModel::new(Runner::Inline, Arc::new(Mem::default()), super::browse::ImportLog::memory());
     m.begin_copy();
@@ -1381,6 +1387,7 @@ fn served_raw(version: u64, qs: Vec<Value>) -> Vec<u8> {
 }
 
 fn tick_free_send(r: &mut Rig) {
+    r.s.send_base_404(true);
     r.m.open_send(LOCAL, editor());
     r.frame();
 }
@@ -1445,6 +1452,7 @@ fn b2_the_send_goes_with_the_licence_the_pool_has_now() {
 #[test]
 fn b2_a_licence_that_can_not_be_checked_blocks_the_send_and_can_be_tried_again() {
     let mut r = Rig::new(&[(QA, "One")]);
+    r.s.send_base_404(true);
     r.s.keep("Post", "/circles/heads", 503, json!({"error": "busy"}));
     r.m.open_send(LOCAL, editor());
     r.frame();
@@ -1627,6 +1635,7 @@ fn hidden_advice_is_for_whoever_can_fix_it() {
 #[test]
 fn sending_on_top_says_it_replaces_and_shows_the_real_head() {
     let mut r = Rig::new(&[(QA, "One")]);
+    r.s.send_base_404(true);
     r.edit_stem(0, "One, reworded");
     // The copy never heard of version 3: the head number comes from merge-initiate, not a guess.
     let mut start = merge_start_json(1, 3, true);
@@ -1748,6 +1757,8 @@ fn real_working_copy() -> (CirclesModel, Arc<Script>, Vec<QuestionBank>, super::
 #[test]
 fn n1_a_real_edit_after_a_real_working_copy_is_not_stale_and_can_be_sent() {
     let (mut m, s, mut banks, mut browse) = real_working_copy();
+    // (phase D3) the Send page below reads its base version body; this test leaves that read unscripted
+    s.send_base_404(true);
     let local = banks[0].id.clone();
     // The editor writes seconds.
     banks[0].questions[0].stem = "First, reworded".into();
@@ -2881,6 +2892,7 @@ fn c79_m4_send_my_changes_again_after_an_unclear_send_from_a_merge_goes_with_the
 #[test]
 fn c79_m4_send_my_changes_again_after_an_unclear_send_over_a_hidden_version_goes_over_it_again() {
     let mut r = Rig::new(&[(QA, "One")]);
+    r.s.send_base_404(true);
     r.edit_stem(0, "One, reworded");
     r.m.apply_heads(&[HeadEntry { bank_id: BID.into(), state: HeadState::Current { version: 3, license: None, at: None, by: None, hide_key: None } }]);
     r.s.on("Post", &format!("{}/merge", bank_path()), 200, merge_start_json(1, 3, true));
@@ -3019,6 +3031,7 @@ fn c79_m4_the_pictures_kept_for_viewers_go_again_after_an_unclear_send() {
 #[test]
 fn c79_m4_the_versions_a_send_over_a_hidden_version_replaces_are_listed_again() {
     let mut r = Rig::new(&[(QA, "One")]);
+    r.s.send_base_404(true);
     r.edit_stem(0, "One, reworded");
     r.m.apply_heads(&[HeadEntry { bank_id: BID.into(), state: HeadState::Current { version: 3, license: None, at: None, by: None, hide_key: None } }]);
     let mut start = merge_start_json(1, 3, true);

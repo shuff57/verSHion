@@ -785,6 +785,7 @@ fn c98_m4_not_kept_offers_the_safe_action_first_and_warns() {
 #[test]
 fn c98_m5_after_use_as_is_the_send_page_warns_again_and_nothing_contradicts_it() {
     let (mut m, s, mut banks, ctx, mut acct) = not_kept_rig();
+    s.send_base_404(true);
     let who = olga_named(&s);
     assert!(m.edit.open_merge_to_rebase(LOCAL, owner()));
     host_a(&mut m);

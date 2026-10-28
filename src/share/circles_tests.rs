@@ -52,6 +52,9 @@ pub(super) struct Script {
     /// Answers that stay (the page's own loads), used when nothing else is queued for the route.
     sticky: Mutex<HashMap<String, (u16, String)>>,
     gate: Mutex<Option<Receiver<()>>>,
+    /// (phase D3) Only a Send page's base read may be answered 404 when a test does not script it; every other
+    /// unscripted kept-version read (Compare, the History's version view) still panics, as before.
+    send_base_404: std::sync::atomic::AtomicBool,
 }
 
 impl Script {
@@ -118,6 +121,13 @@ impl Script {
         *self.gate.lock().unwrap() = Some(rx);
         tx
     }
+    /// (phase D3) This test's Send page reads the base version itself: an unscripted kept-version read is the circle
+    /// no longer keeping it (404, the whole-bank path), not a missing script. Off by default: every other version read
+    /// still panics when unscripted.
+    pub(super) fn send_base_404(&self, on: bool) -> &Self {
+        self.send_base_404.store(on, std::sync::atomic::Ordering::Relaxed);
+        self
+    }
 }
 
 impl PoolSession for Script {
@@ -148,10 +158,10 @@ impl PoolSession for Script {
                 r.bytes = b.clone().into_bytes();
                 return Ok(r);
             }
-            // (phase D3) A Send page reads the version its copy is based on once. A script that does not answer that
-            // read means a circle that no longer keeps it: the page sends the whole bank, as it did before phase D3
-            // (the whole-bank path's tests stay as they were). A test that wants the summary scripts the read itself.
-            if r.method == Method::Get && is_kept_version_path(&path) {
+            // (phase D3) A Send page reads the version its copy is based on once. Only a test that says so may leave
+            // that read unscripted (a circle that no longer keeps it: the whole bank, as before phase D3); every
+            // other unscripted kept-version read is a missing script and still panics.
+            if self.send_base_404.load(std::sync::atomic::Ordering::Relaxed) && r.method == Method::Get && is_kept_version_path(&path) {
                 return Ok(Response::new(404, "{\"error\":\"version_not_retained\"}"));
             }
             panic!("no scripted reply for {key}")

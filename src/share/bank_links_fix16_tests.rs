@@ -278,6 +278,7 @@ fn c93_m1_the_banks_file_is_written_before_the_links_file_says_done() {
 #[test]
 fn c93_i2_use_my_bank_as_it_is_then_the_read_changes_nothing() {
     let (mut m, s, mut banks, _ctx, _acct) = rig();
+    s.send_base_404(true);
     phase_c(&mut m, &mut banks, 3, Some(Difficulty::Low), None);
     make_stale(&mut m, LOCAL);
     s.on("Get", &version_path(3), 503, json!({"error": "unavailable"}));
@@ -489,6 +490,7 @@ fn c93_m5_not_kept_strip_badge_row_and_leave_panel_agree() {
 #[test]
 fn c94_m1_a_version_that_cant_be_read_says_what_she_can_do() {
     let (mut m, s, mut banks, ctx, mut acct) = rig();
+    s.send_base_404(true);
     s.keep("Post", "/circles/heads", 200, heads(3));
     phase_c(&mut m, &mut banks, 3, Some(Difficulty::Low), None);
     super::bank_links_fix12_tests::not_kept(&s, 3);

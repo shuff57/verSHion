@@ -848,6 +848,8 @@ fn i4_m5_a_get_latest_with_no_merge_token_never_marks_the_next_send_as_merged() 
     bank.questions[1].stem = "Two (mine)".into();
     bank.modified += 5;
     let s = Script::new();
+    // (phase D3) the Send page opened below reads its base version body; this test leaves it unscripted
+    s.send_base_404(true);
     s.keep_raw("Get", &format!("/circles/{CID}/banks/{BID}"), served_qs(2, vec![qfull(QA, "One, reworded"), qfull(QB, "Two")], false));
     s.keep("Post", "/circles/heads", 200, heads(2));
     let mut m = edit_model();
@@ -1076,6 +1078,8 @@ fn c64_i11_sharing_a_bank_into_the_circle_it_is_linked_to_is_not_offered() {
 #[test]
 fn c64_polish_13_history_closes_when_the_bank_page_was_left_but_a_send_stays() {
     let s = Script::new();
+    // (phase D3) the Send page opened below reads its base version body; this test leaves it unscripted
+    s.send_base_404(true);
     s.keep("Post", "/circles/heads", 200, heads(1));
     s.keep("Get", "/circles", 200, circles_list("editor"));
     s.keep("Get", &format!("/circles/{CID}/banks/{BID}/versions"), 200, json!({"bank_id": BID, "head_version": 1, "oldest_kept": 1, "pinned_versions": [], "versions": [], "next_before": null}));

@@ -66,6 +66,7 @@ fn phase_c(m: &mut CirclesModel, banks: &mut [QuestionBank], version: u64, one: 
 }
 
 fn send_page(m: &mut CirclesModel, s: &std::sync::Arc<Script>, banks: &mut [QuestionBank], ctx: &egui::Context, acct: &mut FakeAccount) -> String {
+    s.send_base_404(true);
     assert!(m.edit.open_send(LOCAL, owner()));
     host_a(m);
     frames(m, banks, ctx, acct, &olga_named(s), 3)
@@ -438,6 +439,7 @@ fn r12_e4_a_matched_added_question_does_not_hold_back_a_colleagues_new_one() {
 #[test]
 fn r12_e7_a_version_holding_only_some_of_what_the_send_carried_is_not_hers() {
     let (mut m, s, mut banks) = two_at_three();
+    s.send_base_404(true);
     s.keep("Get", &format!("/circles/{CID}"), 200, detail("owner", json!({})));
     let (bank, mut link) = linked(&[(QA, "One"), (QB, "Two")]);
     (link.base_version, link.base_version_id, link.head_seen) = (3, hex(3), 3);

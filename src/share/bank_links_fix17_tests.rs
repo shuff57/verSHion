@@ -308,6 +308,7 @@ fn c96_i1_the_safety_copy_is_named_for_the_difficulty() {
 #[test]
 fn c96_i2_use_as_is_has_its_own_page_and_the_send_page_says_it() {
     let (mut m, s, mut banks, ctx, mut acct) = rig();
+    s.send_base_404(true);
     s.keep("Post", "/circles/heads", 200, heads(3));
     phase_c(&mut m, &mut banks, 3, Some(Difficulty::Low), None);
     super::bank_links_fix12_tests::not_kept(&s, 3);

@@ -566,6 +566,7 @@ fn c81_a_sent_question_is_matched_only_to_the_bank_question_it_was_sent_from() {
 #[test]
 fn c81_a_send_by_an_unknown_account_answered_after_another_signs_in_is_not_kept_for_it() {
     let (mut m, s, mut banks, ctx, mut acct) = a_rig();
+    s.send_base_404(true);
     let unknown = ready(&s);
     strip_as(&ctx, &mut m, &mut banks, &mut acct, &unknown, LOCAL);
     banks[0].questions[0].stem = "One (13)".into();
@@ -592,6 +593,7 @@ fn c81_a_send_by_an_unknown_account_answered_after_another_signs_in_is_not_kept_
 fn c82_i1_an_answer_from_the_circle_ends_couldnt_check() {
     for answer in ["went through", "conflict"] {
         let (mut m, s, mut banks) = two_at_three();
+        s.send_base_404(true);
         s.keep("Get", &format!("/circles/{CID}"), 200, detail("owner", json!({})));
         let ctx = ctx();
         let mut acct = FakeAccount { open: true, ..FakeAccount::default() };

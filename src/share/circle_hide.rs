@@ -54,9 +54,23 @@ pub struct Pictures {
     pub head: Option<u64>,
     /// The sha256 of the payload the list was made from (a send: the choices go only with that content).
     pub payload_sha: String,
+    /// (phase D3) Payload position -> the bank's question number, for display only: a partial send's restored removal
+    /// shifts the payload order, but `list`, `kept` and `image_ok` stay in payload positions (what the pool reads).
+    /// Empty (the bank page): the payload position is the bank's.
+    display: Vec<Option<usize>>,
 }
 
 impl Pictures {
+    /// (phase D3) How each payload position is named on screen (see [`Pictures::display`]).
+    pub fn set_bank_map(&mut self, map: Vec<Option<usize>>) {
+        self.display = map;
+    }
+
+    /// (phase D3) The bank's 0-based question number for a payload position; the payload position itself when the
+    /// payload has no bank question (a restored removal, a new question), never a wrong bank number.
+    pub fn display_question(&self, payload: usize) -> usize {
+        self.display.get(payload).copied().flatten().unwrap_or(payload)
+    }
     /// The pictures of a bank (or of a single question) as sent or served. `None` when it has none: the step
     /// is skipped.
     pub fn of_payload(payload: &[u8]) -> Option<Pictures> {
@@ -79,7 +93,7 @@ impl Pictures {
                 Picture { question, stem }
             })
             .collect();
-        (!list.is_empty()).then(|| Pictures { list, kept: BTreeSet::new(), head: None, payload_sha: sha256_hex(payload) })
+        (!list.is_empty()).then(|| Pictures { list, kept: BTreeSet::new(), head: None, payload_sha: sha256_hex(payload), display: Vec::new() })
     }
 
     pub fn kept(&self, question: usize) -> bool {
@@ -138,6 +152,9 @@ pub struct Decisions {
     /// The bank version this page was made for, when the caller knows it (the bank page reads the head
     /// again right before sending, and sends nothing when it moved).
     pub head: Option<u64>,
+    /// (phase D3) Payload position -> the bank's question number, for display only. Empty (the bank page): the payload
+    /// position is the bank's. The decisions themselves stay in payload positions, which is what the pool reads.
+    display: Vec<Option<usize>>,
 }
 
 /// What is left to do before the decisions can be sent.
@@ -181,7 +198,18 @@ impl Decisions {
         let mut carried = if restarted { StripDecisions::default() } else { carried };
         // A refused choice is asked again.
         carried.labels.retain(|l| !(no_keep.contains(&l.question) && l.choice == LabelChoice::Keep) && !(no_strip.contains(&l.question) && l.choice == LabelChoice::Strip));
-        Decisions { refusal, labels: BTreeMap::new(), orders: BTreeSet::new(), formatting: BTreeSet::new(), carried, restarted, pictures_dropped, no_keep, no_strip, head: None }
+        Decisions { refusal, labels: BTreeMap::new(), orders: BTreeSet::new(), formatting: BTreeSet::new(), carried, restarted, pictures_dropped, no_keep, no_strip, head: None, display: Vec::new() }
+    }
+
+    /// (phase D3) How each payload position is named on screen (see [`Decisions::display`]).
+    pub fn set_bank_map(&mut self, map: Vec<Option<usize>>) {
+        self.display = map;
+    }
+
+    /// (phase D3) The bank's 0-based question number for a payload position; the payload position itself when the
+    /// payload has no bank question (a restored removal, a new question), never a wrong bank number.
+    pub fn display_question(&self, payload: usize) -> usize {
+        self.display.get(payload).copied().flatten().unwrap_or(payload)
     }
 
     /// Whether this choice may be made for a finding (the pool allows it, and did not refuse it).

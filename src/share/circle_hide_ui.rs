@@ -7,7 +7,7 @@ use egui::{Margin, RichText, Ui};
 use super::api;
 use super::circle_hide::{Decisions, Pictures};
 use super::circles_text as ctext;
-use super::pool::{LabelChoice, Pos};
+use super::pool::{Issue, LabelChoice, Pos};
 use super::publish_text as text;
 use super::publish_ui::{heading, link, para, warn_box};
 use crate::{kit, theme};
@@ -30,6 +30,19 @@ fn place(question: usize, part: Option<usize>) -> String {
         name.push_str(&format!(", part {}", p + 1));
     }
     name
+}
+
+/// (phase D3) A finding's own words with the question number the bank knows it by: the refusal names payload positions,
+/// and a partial send's restored removal shifts them. The decision itself stays at the payload position.
+fn issue_for(d: &Decisions, i: &Issue, circle: bool) -> String {
+    let mut s = if circle { text::issue_text_circle(i, false) } else { text::issue_text(i, false) };
+    if let Some(q) = i.question_index() {
+        let shown = d.display_question(q);
+        if shown != q {
+            s = s.replace(&format!("Question {}", q + 1), &format!("Question {}", shown + 1));
+        }
+    }
+    s
 }
 
 /// What is left, in one line ("Still to decide: 2 letter labels, 1 choice order.").
@@ -70,7 +83,7 @@ pub(super) fn decisions(ui: &mut Ui, d: &Decisions, intro: &str, fix: &str, send
         for i in hard.iter().take(30) {
             egui::Frame::new().fill(theme::error_wash()).corner_radius(8).inner_margin(Margin::same(8)).show(ui, |ui| {
                 ui.set_min_width(ui.available_width());
-                ui.add(egui::Label::new(RichText::new(text::issue_text_circle(i, false)).color(theme::bad()).size(12.5)).wrap());
+                ui.add(egui::Label::new(RichText::new(issue_for(d, i, true)).color(theme::bad()).size(12.5)).wrap());
                 if let Some(h) = &i.hint {
                     ui.add(egui::Label::new(theme::text(api::plain(h)).size(12.0)).wrap());
                 }
@@ -89,7 +102,7 @@ pub(super) fn decisions(ui: &mut Ui, d: &Decisions, intro: &str, fix: &str, send
             let at = Pos { question: f.question, part: f.part };
             kit::card().inner_margin(Margin::same(8)).show(ui, |ui| {
                 ui.set_min_width(ui.available_width());
-                ui.label(theme::strong(place(f.question, f.part)).size(12.5));
+                ui.label(theme::strong(place(d.display_question(f.question), f.part)).size(12.5));
                 for c in f.choices.iter().take(6) {
                     ui.add(egui::Label::new(theme::muted(format!("\"{}\" becomes \"{}\"", text::shown(&c.before), text::shown(&c.after))).size(12.0)).wrap());
                 }
@@ -122,7 +135,7 @@ pub(super) fn decisions(ui: &mut Ui, d: &Decisions, intro: &str, fix: &str, send
         for at in &p.needs_order_ack {
             let why = p.order_reasons.iter().find(|o| (o.question, o.part) == (at.question, at.part)).map(|o| text::order_reason_text(&o.reason));
             let mut yes = d.order_acked(*at);
-            let label = format!("{} stays in this order{}", place(at.question, at.part), why.map(|w| format!(" ({w})")).unwrap_or_default());
+            let label = format!("{} stays in this order{}", place(d.display_question(at.question), at.part), why.map(|w| format!(" ({w})")).unwrap_or_default());
             if ui.checkbox(&mut yes, label).changed() {
                 act = DecideAct::Order(*at, yes);
             }
@@ -139,9 +152,9 @@ pub(super) fn decisions(ui: &mut Ui, d: &Decisions, intro: &str, fix: &str, send
         for q in ackable {
             kit::card().inner_margin(Margin::same(8)).show(ui, |ui| {
                 ui.set_min_width(ui.available_width());
-                ui.label(theme::strong(text::question_label(q, false)).size(12.5));
+                ui.label(theme::strong(text::question_label(d.display_question(q), false)).size(12.5));
                 for i in p.issues.iter().filter(|i| i.question_index() == Some(q)) {
-                    ui.add(egui::Label::new(theme::text(text::issue_text(i, false)).size(12.0)).wrap());
+                    ui.add(egui::Label::new(theme::text(issue_for(d, i, false)).size(12.0)).wrap());
                     if let Some(h) = &i.hint {
                         ui.add(egui::Label::new(theme::muted(api::plain(h)).size(11.5)).wrap());
                     }
@@ -200,7 +213,7 @@ pub(super) fn pictures(ui: &mut Ui, p: &Pictures, intro: &str, send: &str, tries
     for pic in &p.list {
         kit::card().inner_margin(Margin::same(8)).show(ui, |ui| {
             ui.set_min_width(ui.available_width());
-            ui.label(theme::strong(text::question_label(pic.question, false)).size(12.5));
+            ui.label(theme::strong(text::question_label(p.display_question(pic.question), false)).size(12.5));
             if !pic.stem.is_empty() {
                 ui.add(egui::Label::new(theme::muted(text::shown(&pic.stem)).size(12.0)).wrap());
             }

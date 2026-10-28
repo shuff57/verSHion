@@ -70,6 +70,8 @@ fn sent_body(version: u64, extra: Value) -> Value {
 
 /// A's Send page on A's page as `perm`, licence known, the own-work box ticked, one change; both banks' checks done.
 fn send_ready_as(ctx: &egui::Context, m: &mut CirclesModel, banks: &mut Vec<QuestionBank>, acct: &mut FakeAccount, s: &Arc<Script>, perm: Perm) {
+    // (phase D3) the Send page reads its base version body; these tests leave that read unscripted
+    s.send_base_404(true);
     until(ctx, m, banks, acct, s, LOCAL, &|m| m.links.check_of(LOCAL) != Check::Checking);
     until(ctx, m, banks, acct, s, LOCAL_B, &|m| m.links.check_of(LOCAL_B) != Check::Checking);
     banks[0].questions[0].stem = "One (my fix)".into();
@@ -156,6 +158,7 @@ enum Away {
 const AWAY: [Away; 6] = [Away::CirclePage, Away::OtherHistory, Away::OtherSend, Away::OtherGetLatest, Away::SharedPageFirst, Away::SignOut];
 
 fn go(m: &mut CirclesModel, s: &Arc<Script>, how: Away) {
+    s.send_base_404(true);
     let b = hex(77);
     match how {
         Away::CirclePage => m.open_circle_at(CID),
@@ -255,6 +258,7 @@ fn c75_i1_a_plain_send_left_undrawn_adds_nothing_when_its_page_closes() {
 #[test]
 fn c75_r20_done_on_a_normal_sent_box_adds_nothing_to_the_strip() {
     let (mut m, s, mut banks) = two_at_three();
+    s.send_base_404(true);
     let ctx = ctx();
     let mut acct = FakeAccount { open: true, ..FakeAccount::default() };
     strip(&ctx, &mut m, &mut banks, &mut acct, &s, LOCAL);
@@ -312,6 +316,7 @@ fn c75_m3_a_server_failure_with_the_page_closed_is_not_called_not_sent() {
 #[test]
 fn c75_m3_the_send_page_itself_never_says_nothing_changed_after_a_timeout() {
     let (mut m, s, mut banks) = two_at_three();
+    s.send_base_404(true);
     let ctx = ctx();
     let mut acct = FakeAccount { open: true, ..FakeAccount::default() };
     strip(&ctx, &mut m, &mut banks, &mut acct, &s, LOCAL);
@@ -371,6 +376,7 @@ fn c75_m4_a_conflict_answered_with_the_page_closed_keeps_what_a_check_learnt_mea
 /// minor 5) olga is signed in throughout, so what is kept names her and the account rule is exercised.
 fn unread_on(log: Arc<Mutex<Vec<super::circle_links::CircleLink>>>) -> Rig {
     let (m0, s, mut banks) = two_at_three();
+    s.send_base_404(true);
     s.keep("Get", &format!("/circles/{CID}"), 200, detail("owner", json!({})));
     let mut m = model();
     m.edit = super::circle_edit::CircleEditModel::new(super::model::Runner::Inline, Arc::new(Mem::default()), Arc::new(std::collections::HashMap::<String, Vec<u8>>::new()), Arc::new(NoDiskRestore), LinkLog::Memory(log)).with_retry(super::pool::RetryPolicy::none());
@@ -639,6 +645,8 @@ fn c75_r14_the_session_line_of_a_left_send_goes_once_signed_in_again() {
 /// olga's send from A (owner), held; pete signs in on this computer before the answer (`reply`, or the job dies).
 fn olgas_send_then_pete(reply: Option<(u16, Value)>) -> Rig {
     let (mut m, s, mut banks) = two_at_three();
+    // (phase D3) the Send page reads its base version body; this test leaves that read unscripted
+    s.send_base_404(true);
     background(&mut m);
     let ctx = ctx();
     let mut acct = FakeAccount { open: true, ..FakeAccount::default() };
@@ -904,6 +912,7 @@ fn c75_r33_the_banks_list_keeps_the_account_rule() {
 #[test]
 fn r7_get_latest_on_the_send_pages_conflict_adds_no_result() {
     let (mut m, s, mut banks) = two_at_three();
+    s.send_base_404(true);
     let ctx = ctx();
     let mut acct = FakeAccount { open: true, ..FakeAccount::default() };
     strip(&ctx, &mut m, &mut banks, &mut acct, &s, LOCAL);
@@ -978,6 +987,7 @@ fn r7_a_send_answered_with_the_page_closed_keeps_what_a_check_learnt_meanwhile()
 #[test]
 fn r7_sent_but_not_read_is_kept_for_the_account_that_sent_it() {
     let (mut m, s, mut banks) = two_at_three();
+    s.send_base_404(true);
     let ctx = ctx();
     let mut acct = FakeAccount { open: true, ..FakeAccount::default() };
     let (olga, pete) = (as_who(&s, "olga"), as_who(&s, "pete"));
@@ -1009,6 +1019,7 @@ fn r7_sent_but_not_read_is_kept_for_the_account_that_sent_it() {
 #[test]
 fn r7_sending_again_drops_what_the_last_answer_would_have_said() {
     let (mut m, s, mut banks) = two_at_three();
+    s.send_base_404(true);
     let ctx = ctx();
     let mut acct = FakeAccount { open: true, ..FakeAccount::default() };
     strip(&ctx, &mut m, &mut banks, &mut acct, &s, LOCAL);

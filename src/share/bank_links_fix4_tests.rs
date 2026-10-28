@@ -343,6 +343,7 @@ fn i2_a_one_banks_notice_is_drawn_on_its_own_strip_only_and_goes_once_seen() {
 #[test]
 fn i2_b_a_banks_own_notice_does_not_hide_the_wait_note() {
     let (mut m, s, mut banks) = two_at_three();
+    s.send_base_404(true);
     background(&mut m);
     let ctx = ctx();
     let mut acct = FakeAccount { open: true, ..FakeAccount::default() };
@@ -466,6 +467,7 @@ fn m1_another_accounts_try_again_does_not_run_the_first_accounts_add() {
 #[test]
 fn m2_unlink_while_a_send_from_the_bank_is_on_its_way_does_not_say_its_changes_are_stranded() {
     let (mut m, s, mut banks) = two_at_three();
+    s.send_base_404(true);
     background(&mut m);
     let ctx = ctx();
     let mut acct = FakeAccount { open: true, ..FakeAccount::default() };

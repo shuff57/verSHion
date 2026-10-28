@@ -850,3 +850,31 @@ const HEAD_LINK: &str = r#"{"circle_id":"ccccccccccccccccccccccccccccccc1","circ
 fn _uses(m: &mut CirclesModel) {
     host_a(m);
 }
+
+/// (phase D3 harness) A quiet read whose job disappears (its thread ended without an answer, the `Disconnected` branch in
+/// `drain`: `base_asked.take()` and `not_reached_now`) is asked again later and then says it couldn't check; it never
+/// leaves the copy "checking" for ever.
+#[test]
+fn d3_a_quiet_read_whose_job_disappears_goes_through_the_disconnected_branch_not_a_hang() {
+    let (mut m, s, mut banks, _ctx, _acct) = rig();
+    phase_c(&mut m, &mut banks, 3, None, None);
+    background(&mut m);
+    // (no reply scripted for version 3: the read's thread ends without one)
+    let who = olga_named(&s);
+    let t0 = now();
+    for _ in 0..40 {
+        quiet(&mut m, &mut banks, &who, t0, 1);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(version_reads(&s, 3), 1, "{:?}", s.paths());
+    assert_eq!(m.edit.status(LOCAL).unwrap().learning, Some(Learning::Checking), "one lost job is not yet couldn't check");
+    for _ in 0..100 {
+        quiet(&mut m, &mut banks, &who, t0 + Duration::from_secs(6), 1);
+        if m.edit.status(LOCAL).unwrap().learning == Some(Learning::CantReach) {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(version_reads(&s, 3), 2, "{:?}", s.paths());
+    assert_eq!(m.edit.status(LOCAL).unwrap().learning, Some(Learning::CantReach), "the disconnected job is asked again, then said as couldn't check");
+}

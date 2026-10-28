@@ -204,8 +204,15 @@ keeps a local copy best-effort. A failed fetch sends nothing, and the page's "Tr
 `cargo test --lib`: 2090 passed, 5 known failed, 3 ignored. A missing picture on the person's own question keeps
 today's refusal and fetches nothing; whole-bank sends fetch nothing; the blob GET costs no item/change read.
 
-Next: the two documented minors — the test harness's 404 fallback (and the `JobKind::Base` disconnected branch it
-lost) and the decision/label refusal positions — then the staging round-trip (needs the owner's yes).
+**Minor round, committed.** The test harness's unscripted-version 404 is now opt-in (`Script::send_base_404`), so
+Compare/History version reads are strict again; the lost `JobKind::Base` disconnected branch is pinned by a new test.
+`Pictures`/`Decisions` carry a display-only map from payload positions to the bank's question numbers
+(`display_question`), while the data and the request keep payload positions — covered for a restored removal before a
+question, a picture row and a decision refusal, with the submitted `image_ok`/`labels` still in payload positions.
+85 partial-send tests; full `cargo test --lib`: 2094 passed, 5 known failed, 3 ignored.
+
+Next: the plan's one unproven assumption — the all-but-one-unticked round-trip (`changed == 1`) — to be checked against
+the local rig (18791) with an ignored, in-memory-session test; staging still needs the owner's yes.
 
 ## What is left (in order)
 

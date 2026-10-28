@@ -84,6 +84,7 @@ fn c83_i1_a_colleagues_difficulty_change_is_got_and_never_sent_back() {
 #[test]
 fn c83_i1_the_teachers_own_difficulty_change_is_counted_and_offered_for_sending() {
     let (mut m, s, mut banks, ctx, mut acct) = rig();
+    s.send_base_404(true);
     banks[0].questions[0].difficulty = Some(Difficulty::Low);
     banks[0].modified += 5;
     assert_eq!(changes(&mut m, &banks[0].clone()), (0, 1, 0));
@@ -642,6 +643,7 @@ fn unknown_named(s: &Arc<Script>) -> AccountSnapshot {
 /// answered `check`. The Send page is then left.
 fn unknown_sent(check: (u16, Value)) -> Rig {
     let (mut m, s, mut banks) = two_at_three();
+    s.send_base_404(true);
     s.keep("Get", &format!("/circles/{CID}"), 200, detail("owner", json!({})));
     let ctx = ctx();
     let mut acct = FakeAccount { open: true, ..FakeAccount::default() };

@@ -78,6 +78,8 @@ pub(super) fn unclear_send_open(fail: Option<super::api::ApiError>, head: u64) -
 
 pub(super) fn unclear_send_with(fail: Option<super::api::ApiError>, status: u16, body: Value, head: u64) -> Rig {
     let (mut m, s, mut banks) = two_at_three();
+    // (phase D3) the Send page reads its base version body; these tests leave that read unscripted
+    s.send_base_404(true);
     s.keep("Get", &format!("/circles/{CID}"), 200, detail("owner", json!({})));
     let ctx = ctx();
     let mut acct = FakeAccount { open: true, ..FakeAccount::default() };
@@ -228,6 +230,7 @@ fn c78_i1_send_my_changes_after_an_unclear_send_goes_as_the_same_request_with_it
 /// A's send as olga answered with no version the app can read (it went through), then one more edit.
 pub(super) fn unread_then_edit() -> Rig {
     let (mut m, s, mut banks) = two_at_three();
+    s.send_base_404(true);
     s.keep("Get", &format!("/circles/{CID}"), 200, detail("owner", json!({})));
     let ctx = ctx();
     let mut acct = FakeAccount { open: true, ..FakeAccount::default() };
@@ -553,6 +556,7 @@ fn settle(m: &mut CirclesModel, snap: &AccountSnapshot) {
 /// olga's send from A (owner), held at the server; pete signs in on this computer before the answer `reply` comes.
 fn olgas_send_then_pete(status: u16, reply: Value) -> Rig {
     let (mut m, s, mut banks) = two_at_three();
+    s.send_base_404(true);
     background(&mut m);
     let ctx = ctx();
     let mut acct = FakeAccount { open: true, ..FakeAccount::default() };
@@ -662,6 +666,7 @@ fn c77_i2_once_the_check_answers_the_restore_note_says_what_it_found() {
 
 /// A send from A's page as `who` (owner) answered 409 for version `head` sent by Mr Keesler; the page's text.
 pub(super) fn conflict_as(m: &mut CirclesModel, s: &Arc<Script>, banks: &mut [QuestionBank], ctx: &egui::Context, acct: &mut FakeAccount, who: &AccountSnapshot, head: u64) -> String {
+    s.send_base_404(true);
     banks[0].questions[0].stem = format!("One (fix {head})");
     banks[0].modified += 5;
     assert!(m.edit.open_send(LOCAL, owner()));

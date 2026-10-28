@@ -212,6 +212,7 @@ fn two_linked() -> (CirclesModel, Arc<Script>, Vec<QuestionBank>) {
 #[test]
 fn i3_another_banks_page_does_not_open_while_a_send_is_on_its_way_and_the_send_lands() {
     let (mut m, s, mut banks) = two_linked();
+    s.send_base_404(true);
     let e = &mut m.edit;
     e.frame(now(), &ready(&s));
     assert!(e.open_send(LOCAL, editor()));
@@ -251,6 +252,7 @@ fn i3_another_banks_page_does_not_open_while_a_send_is_on_its_way_and_the_send_l
 #[test]
 fn n23_a_send_on_its_way_is_kept_when_the_screens_close_and_moves_the_link_on() {
     let (mut m, s, mut banks) = two_linked();
+    s.send_base_404(true);
     let e = &mut m.edit;
     e.frame(now(), &ready(&s));
     assert!(e.open_send(LOCAL, editor()));
@@ -968,6 +970,7 @@ fn i2_a_copy_already_put_into_the_banks_when_another_account_signs_in_is_linked_
 #[test]
 fn i3_a_retried_send_does_not_say_wait_until_another_page_is_asked_for() {
     let (mut m, s, mut banks) = two_linked();
+    s.send_base_404(true);
     let e = &mut m.edit;
     e.frame(now(), &ready(&s));
     assert!(e.open_send(LOCAL, editor()));
@@ -1015,6 +1018,7 @@ fn i3_the_bank_settings_history_says_to_wait_too() {
 fn i3_another_banks_strip_does_not_take_over_a_send_under_way_and_says_to_wait() {
     // A send on its way for real (a background thread held at the server), while the person uses bank B's strip.
     let (mut m, s, mut banks) = two_linked();
+    s.send_base_404(true);
     let media: super::publish::SharedMedia = Arc::new(std::collections::HashMap::<String, Vec<u8>>::new());
     let mut e = CircleEditModel::new(Runner::Background, Arc::new(Mem::default()), media, Arc::new(NoDiskRestore), LinkLog::memory()).with_retry(RetryPolicy::none());
     e.set_clock(NOW);

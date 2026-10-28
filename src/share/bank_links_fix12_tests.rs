@@ -421,6 +421,7 @@ fn c85_m3_in_a_two_way_merge_a_colleagues_version_is_never_taken_for_the_persons
 #[test]
 fn c85_m4_a_lost_send_that_changed_only_a_difficulty_is_the_persons_own() {
     let (mut m, s, mut banks) = two_at_three();
+    s.send_base_404(true);
     not_kept(&s, 3);
     let who = olga_named(&s);
     s.keep("Get", &format!("/circles/{CID}"), 200, detail("owner", json!({})));

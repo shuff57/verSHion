@@ -769,6 +769,7 @@ fn c100_m9_restore_later_only_where_true() {
     use super::circles_api::Role;
     for (perm, says) in [(owner(), true), (Perm { role: Role::Editor, is_author: false, closed: false }, false), (Perm { role: Role::Editor, is_author: true, closed: false }, true)] {
         let (mut m, s, mut banks, ctx, mut acct) = rig();
+        s.send_base_404(true);
         let who = olga_named(&s);
         frames(&mut m, &mut banks, &ctx, &mut acct, &who, 2);
         assert!(m.edit.open_send(LOCAL, perm));

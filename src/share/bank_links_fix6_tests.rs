@@ -65,6 +65,8 @@ fn wait_more(s: &Arc<Script>, n: usize) {
 
 /// A's Send page on A's page, licence known, the own-work box ticked, one change; both banks' checks answered.
 fn send_ready(ctx: &egui::Context, m: &mut CirclesModel, banks: &mut Vec<QuestionBank>, acct: &mut FakeAccount, s: &Arc<Script>) {
+    // (phase D3) the Send page reads its base version body; these tests leave that read unscripted
+    s.send_base_404(true);
     until(ctx, m, banks, acct, s, LOCAL, &|m| m.links.check_of(LOCAL) != Check::Checking);
     until(ctx, m, banks, acct, s, LOCAL_B, &|m| m.links.check_of(LOCAL_B) != Check::Checking);
     banks[0].questions[0].stem = "One (my fix)".into();
@@ -229,6 +231,7 @@ fn unread_body() -> serde_json::Value {
 /// A's Send page on A's page (inline jobs), one change, sent; the answer has no version the app can read.
 fn send_unread_here() -> (CirclesModel, Arc<Script>, Vec<QuestionBank>, egui::Context, FakeAccount) {
     let (mut m, s, mut banks) = two_at_three();
+    s.send_base_404(true);
     let ctx = ctx();
     let mut acct = FakeAccount { open: true, ..FakeAccount::default() };
     strip(&ctx, &mut m, &mut banks, &mut acct, &s, LOCAL);
@@ -456,6 +459,7 @@ fn c73_minor3_the_same_account_signed_in_again_is_not_asked_to_sign_in_by_its_ea
 #[test]
 fn c73_minor3_a_send_answered_signed_out_for_an_earlier_session_offers_try_again_not_sign_in() {
     let (mut m, s, mut banks) = two_at_three();
+    s.send_base_404(true);
     background(&mut m);
     let ctx = ctx();
     let mut acct = FakeAccount { open: true, ..FakeAccount::default() };
@@ -821,6 +825,7 @@ fn p27_a_restore_whose_job_died_while_its_history_was_not_drawn_does_not_leave_i
 #[test]
 fn p28_another_account_is_not_told_the_first_ones_send_could_not_be_read() {
     let (mut m, s, mut banks) = two_at_three();
+    s.send_base_404(true);
     background(&mut m);
     let ctx = ctx();
     let mut acct = FakeAccount { open: true, ..FakeAccount::default() };
@@ -954,6 +959,7 @@ fn p39_dismiss_on_bank_settings_takes_the_result_away() {
 #[test]
 fn c73_i1_another_account_is_not_told_how_the_first_ones_send_went() {
     let (mut m, s, mut banks) = two_at_three();
+    s.send_base_404(true);
     background(&mut m);
     let ctx = ctx();
     let mut acct = FakeAccount { open: true, ..FakeAccount::default() };

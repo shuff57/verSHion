@@ -389,6 +389,7 @@ fn c72_i2_a_restore_result_never_says_it_is_the_newest_next_to_a_newer_version()
 #[test]
 fn c72_i2_a_send_whose_answer_could_not_be_read_is_no_longer_said_once_get_latest_caught_up() {
     let (mut m, s, mut banks) = two_at_three();
+    s.send_base_404(true);
     let ctx = ctx();
     let mut acct = FakeAccount { open: true, ..FakeAccount::default() };
     strip(&ctx, &mut m, &mut banks, &mut acct, &s, LOCAL);
@@ -981,6 +982,7 @@ fn m23_m24_another_banks_history_or_send_opened_over_a_result_not_closed_says_it
         let mut acct = FakeAccount { open: true, ..FakeAccount::default() };
         a_result_on_as_history(&ctx, &mut m, &mut banks, &mut acct, &s);
         if send {
+            s.send_base_404(true);
             assert!(m.edit.open_send(LOCAL_B, owner()));
         } else {
             s.on("Get", &format!("/circles/{CID}/banks/{}/versions", hex(77)), 200, page(1, &[1]));
@@ -1062,6 +1064,7 @@ fn m35_a_copy_read_for_bank_settings_before_a_sign_out_is_not_put_into_the_banks
 
 /// A's Send page on its page, its send answered "signed out" while it is shown.
 fn a_send_whose_session_ended(ctx: &egui::Context, m: &mut CirclesModel, banks: &mut [QuestionBank], acct: &mut FakeAccount, s: &Arc<Script>) -> String {
+    s.send_base_404(true);
     strip(ctx, m, banks, acct, s, LOCAL);
     banks[0].questions[0].stem = "One (my fix)".into();
     banks[0].modified += 5;
