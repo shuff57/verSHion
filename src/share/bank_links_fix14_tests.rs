@@ -785,6 +785,9 @@ fn c89_q8_a_quiet_read_whose_thread_died_is_asked_again_later() {
     phase_c(&mut m, &mut banks, 3, None, None);
     background(&mut m);
     // (no answer scripted for the version: the read's thread ends without one)
+    // (phase D3: the scripted session answers an unscripted kept-version read with 404; a circle that can not be
+    // reached for it says so directly, and the quiet read treats it the same as a lost job)
+    s.on("Get", &version_path(3), 503, json!({"error": "unavailable"}));
     let who = olga_named(&s);
     let t0 = now();
     for _ in 0..40 {

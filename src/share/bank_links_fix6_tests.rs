@@ -72,7 +72,7 @@ fn send_ready(ctx: &egui::Context, m: &mut CirclesModel, banks: &mut Vec<Questio
     assert!(m.edit.open_send(LOCAL, owner()));
     m.edit.host = Some(EditHost { local_id: LOCAL.into(), back: "< Back to Unit 2 quiz".into() });
     m.edit.host_frame = None;
-    until(ctx, m, banks, acct, s, LOCAL, &|m| matches!(&m.edit.view, EditView::Send(v) if matches!(v.licence, LicenceState::Known(_))));
+    until(ctx, m, banks, acct, s, LOCAL, &|m| matches!(&m.edit.view, EditView::Send(v) if matches!(v.licence, LicenceState::Known(_)) && !matches!(v.partial, PartialSend::Reading)));
     m.edit.set_attest(true);
     assert!(m.edit.send_blocker().is_none(), "blocked: {:?} {}", m.edit.send_blocker(), phase(&m.edit));
 }
@@ -470,7 +470,7 @@ fn c73_minor3_a_send_answered_signed_out_for_an_earlier_session_offers_try_again
     m.edit.host = Some(EditHost { local_id: LOCAL.into(), back: "< Back to Unit 2 quiz".into() });
     for _ in 0..500 {
         strip_as(&ctx, &mut m, &mut banks, &mut acct, &olga, LOCAL);
-        if matches!(&m.edit.view, EditView::Send(v) if matches!(v.licence, LicenceState::Known(_))) {
+        if matches!(&m.edit.view, EditView::Send(v) if matches!(v.licence, LicenceState::Known(_)) && !matches!(v.partial, PartialSend::Reading)) {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -835,7 +835,7 @@ fn p28_another_account_is_not_told_the_first_ones_send_could_not_be_read() {
     m.edit.host = Some(EditHost { local_id: LOCAL.into(), back: "< Back to Unit 2 quiz".into() });
     for _ in 0..500 {
         strip_as(&ctx, &mut m, &mut banks, &mut acct, &olga, LOCAL);
-        if matches!(&m.edit.view, EditView::Send(v) if matches!(v.licence, LicenceState::Known(_))) {
+        if matches!(&m.edit.view, EditView::Send(v) if matches!(v.licence, LicenceState::Known(_)) && !matches!(v.partial, PartialSend::Reading)) {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -968,7 +968,7 @@ fn c73_i1_another_account_is_not_told_how_the_first_ones_send_went() {
     m.edit.host = Some(EditHost { local_id: LOCAL.into(), back: "< Back to Unit 2 quiz".into() });
     for _ in 0..500 {
         strip_as(&ctx, &mut m, &mut banks, &mut acct, &olga, LOCAL);
-        if matches!(&m.edit.view, EditView::Send(v) if matches!(v.licence, LicenceState::Known(_))) {
+        if matches!(&m.edit.view, EditView::Send(v) if matches!(v.licence, LicenceState::Known(_)) && !matches!(v.partial, PartialSend::Reading)) {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(10));

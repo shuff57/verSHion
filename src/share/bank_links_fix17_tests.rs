@@ -675,6 +675,9 @@ fn s17_m53_a_read_lost_twice_says_it_couldnt_check() {
     phase_c(&mut m, &mut banks, 3, None, None);
     background(&mut m);
     // no reply is scripted for version 3: the job's thread dies
+    // (phase D3: the scripted session answers an unscripted kept-version read with 404; a circle that can not be
+    // reached for it says so directly, and the quiet read treats it the same as a lost job)
+    s.keep("Get", &version_path(3), 503, json!({"error": "unavailable"}));
     let who = olga_named(&s);
     let t0 = now();
     for at in [t0, t0 + Duration::from_secs(6)] {

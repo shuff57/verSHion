@@ -606,6 +606,9 @@ fn send_view(stage: SendStage) -> SendView {
         message: String::new(),
         changes: None,
         stage,
+        partial: PartialSend::Unavailable(PARTIAL_UNAVAILABLE.into()),
+        base_body: None,
+        notice: None,
         confirm_large: false,
         base_override: None,
         merged: false,
@@ -1043,7 +1046,7 @@ fn i3_another_banks_strip_does_not_take_over_a_send_under_way_and_says_to_wait()
     // A's send page, hosted on A's page.
     assert!(m.edit.open_send(LOCAL, editor()));
     m.edit.host = Some(EditHost { local_id: LOCAL.into(), back: "< Back to Unit 2 quiz".into() });
-    wait_for(&mut m, &mut banks, &|m| matches!(&m.edit.view, EditView::Send(v) if matches!(v.licence, LicenceState::Known(_)) && v.changes.is_some()));
+    wait_for(&mut m, &mut banks, &|m| matches!(&m.edit.view, EditView::Send(v) if matches!(v.licence, LicenceState::Known(_)) && !matches!(v.partial, PartialSend::Reading) && v.changes.is_some()));
     m.edit.set_attest(true);
     s.on("Put", &format!("/circles/{CID}/banks/{BID}"), 201, json!({"circle_id": CID, "bank_id": BID, "version": 2, "version_id": hex(2), "qids": [QA], "added": 0, "changed": 1, "removed": 0}));
     let release = s.hold();

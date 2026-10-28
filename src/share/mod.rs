@@ -125,6 +125,8 @@ mod mine_tests;
 #[cfg(test)]
 mod partial_send_tests;
 #[cfg(test)]
+mod partial_send_page_tests;
+#[cfg(test)]
 mod pool_tests;
 #[cfg(test)]
 mod publish_tests;

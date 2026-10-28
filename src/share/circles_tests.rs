@@ -129,7 +129,7 @@ impl PoolSession for Script {
             let r = build();
             let path = r.url.trim_start_matches("https://pool.test").to_string();
             let body = r.bytes.clone().or_else(|| r.body.as_ref().map(|b| b.expose().as_bytes().to_vec())).unwrap_or_default();
-            self.seen.lock().unwrap().push(Sent { method: r.method, path, body });
+            self.seen.lock().unwrap().push(Sent { method: r.method, path: path.clone(), body });
             let g = self.gate.lock().unwrap().take();
             if let Some(rx) = g {
                 let _ = rx.recv_timeout(Duration::from_secs(10));
@@ -143,13 +143,26 @@ impl PoolSession for Script {
                 return q;
             }
             let kept = self.sticky.lock().unwrap().get(&key).cloned();
-            kept.map(|(st, b)| {
+            if let Some((st, b)) = kept {
                 let mut r = Response::new(st, &b);
                 r.bytes = b.clone().into_bytes();
-                Ok(r)
-            }).unwrap_or_else(|| panic!("no scripted reply for {key}"))
+                return Ok(r);
+            }
+            // (phase D3) A Send page reads the version its copy is based on once. A script that does not answer that
+            // read means a circle that no longer keeps it: the page sends the whole bank, as it did before phase D3
+            // (the whole-bank path's tests stay as they were). A test that wants the summary scripts the read itself.
+            if r.method == Method::Get && is_kept_version_path(&path) {
+                return Ok(Response::new(404, "{\"error\":\"version_not_retained\"}"));
+            }
+            panic!("no scripted reply for {key}")
         })
     }
+}
+
+/// `/circles/:cid/banks/:bid/versions/:n` (not the list, `/versions`).
+fn is_kept_version_path(path: &str) -> bool {
+    let p: Vec<&str> = path.trim_end_matches('/').split('/').collect();
+    p.len() == 7 && p[1] == "circles" && p[3] == "banks" && p[5] == "versions" && p[6].parse::<u64>().is_ok()
 }
 
 #[derive(Default)]

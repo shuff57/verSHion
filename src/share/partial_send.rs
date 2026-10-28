@@ -36,7 +36,7 @@ const MISSING_CHANGES: &str = "The version this copy is based on does not have o
 
 /// The unsent changes of a bank against the base version's body (plan section 6): the questions the send summary
 /// ticks. A pure function: no UI, no network, no files.
-#[derive(Default, Debug, PartialEq, Eq)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct BodyChanges {
     /// Local ids of questions in the bank that differ from the base body's own question for their qid.
     pub changed: BTreeSet<String>,
@@ -44,6 +44,24 @@ pub struct BodyChanges {
     pub added: BTreeSet<String>,
     /// Local ids in `link.qids` whose question the bank no longer has.
     pub removed: BTreeSet<String>,
+}
+
+impl BodyChanges {
+    /// Every change's local id: a changed question, an added question, a removed one. The send summary ticks these,
+    /// and the ones left unticked are what the link keeps in `held_back`.
+    pub fn ids(&self) -> BTreeSet<String> {
+        self.changed.iter().chain(&self.added).chain(&self.removed).cloned().collect()
+    }
+
+    /// Whether `local` is one of the changes (only a change may be ticked).
+    pub fn contains(&self, local: &str) -> bool {
+        self.changed.contains(local) || self.added.contains(local) || self.removed.contains(local)
+    }
+
+    /// Whether the bank has nothing to send that differs from its base.
+    pub fn is_empty(&self) -> bool {
+        self.changed.is_empty() && self.added.is_empty() && self.removed.is_empty()
+    }
 }
 
 /// One question of the composed bank, and the circle id it keeps (none: new to the circle).

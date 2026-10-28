@@ -565,7 +565,7 @@ fn olgas_send_then_pete(status: u16, reply: Value) -> Rig {
     strip_as(&ctx, &mut m, &mut banks, &mut acct, &who, LOCAL);
     assert!(m.edit.open_send(LOCAL, owner()));
     m.edit.host = Some(EditHost { local_id: LOCAL.into(), back: "< Back to Unit 2 quiz".into() });
-    until_as(&ctx, &mut m, &mut banks, &mut acct, &s, LOCAL, &|m| matches!(&m.edit.view, EditView::Send(v) if matches!(v.licence, LicenceState::Known(_))));
+    until_as(&ctx, &mut m, &mut banks, &mut acct, &s, LOCAL, &|m| matches!(&m.edit.view, EditView::Send(v) if matches!(v.licence, LicenceState::Known(_)) && !matches!(v.partial, PartialSend::Reading)));
     m.edit.set_attest(true);
     s.on("Put", &put_path(), status, reply);
     let n = s.paths().len();

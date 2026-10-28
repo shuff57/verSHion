@@ -356,7 +356,7 @@ fn i2_b_a_banks_own_notice_does_not_hide_the_wait_note() {
     banks[0].modified += 5;
     assert!(m.edit.open_send(LOCAL, editor()));
     m.edit.host = Some(EditHost { local_id: LOCAL.into(), back: "< Back to Unit 2 quiz".into() });
-    until(&ctx, &mut m, &mut banks, &mut acct, &s, LOCAL, &|m| matches!(&m.edit.view, EditView::Send(v) if matches!(v.licence, LicenceState::Known(_)) && v.changes.is_some()));
+    until(&ctx, &mut m, &mut banks, &mut acct, &s, LOCAL, &|m| matches!(&m.edit.view, EditView::Send(v) if matches!(v.licence, LicenceState::Known(_)) && !matches!(v.partial, PartialSend::Reading) && v.changes.is_some()));
     m.edit.set_attest(true);
     s.on("Put", &format!("/circles/{CID}/banks/{BID}"), 201, json!({"circle_id": CID, "bank_id": BID, "version": 4, "version_id": hex(4), "qids": [QA], "added": 0, "changed": 1, "removed": 0}));
     let release = s.hold();
@@ -474,7 +474,7 @@ fn m2_unlink_while_a_send_from_the_bank_is_on_its_way_does_not_say_its_changes_a
     banks[0].modified += 5;
     assert!(m.edit.open_send(LOCAL, editor()));
     m.edit.host = Some(EditHost { local_id: LOCAL.into(), back: "< Back to Unit 2 quiz".into() });
-    until(&ctx, &mut m, &mut banks, &mut acct, &s, LOCAL, &|m| matches!(&m.edit.view, EditView::Send(v) if matches!(v.licence, LicenceState::Known(_)) && v.changes.is_some()));
+    until(&ctx, &mut m, &mut banks, &mut acct, &s, LOCAL, &|m| matches!(&m.edit.view, EditView::Send(v) if matches!(v.licence, LicenceState::Known(_)) && !matches!(v.partial, PartialSend::Reading) && v.changes.is_some()));
     m.edit.set_attest(true);
     s.on("Put", &format!("/circles/{CID}/banks/{BID}"), 201, json!({"circle_id": CID, "bank_id": BID, "version": 4, "version_id": hex(4), "qids": [QA], "added": 0, "changed": 1, "removed": 0}));
     let release = s.hold();

@@ -165,8 +165,29 @@ unreadable-removal refusal).
 Piece-3 critic: one important (an unreadable restored question refused the payload, so the caller's whole-bank
 fallback would send the unticked removal) and three minors, all fixed.
 
-Next: the tick-list model + send summary (all ticked by default, `held_back` unticked, one base-body read on the
-page), then `after_partial_send` wiring, the send page, pictures, and the staging round-trip (needs the owner's yes).
+**Piece 4, committed: the send summary model.** `PartialSend` (`Reading` / `Ready { base, body, print, changes, ticked }` /
+`Unavailable` / `ReadFailed`), one base-version read per page (`Work::SendBase`), all changes ticked except
+`link.held_back`, `toggle_change`/`tick_all`, the composed send through the existing path, the keyless check on the
+composed questions (refusals mapped back to bank question numbers), and `after_partial_send` with the as-sent bank;
+`held_back` = the unticked ids still differing. Critic blockers fixed in the same pass:
+- the summary re-checks the bank's print at Send; a bank changed since the body arrived sends nothing, is re-listed
+  against the same body, and keeps ticks by local id (new changes start ticked), sending over the body's own
+  `base_version`;
+- a 409 carries the unticked set across Get latest and the merge (`send_unticked`), so the rebuilt list starts them
+  unticked;
+- a transient base read is `ReadFailed` with Try again, never "the circle no longer keeps it" and never a silent
+  whole-bank send; only 404/withheld does that;
+- an unread answer (version 0) keeps the selection in `RetrySend` and reuses the commit id;
+- send-on-top goes as the whole bank instead of composing against another base.
+57 partial-send tests (15 page tests); full `cargo test --lib`: 2065 passed, 5 known failed, 3 ignored. The send-test
+harness now answers an unscripted version read with 404 (keeps the ~130 whole-bank tests on today's path); two tests
+that used the lost-job branch now script 503.
+
+Deferred: the missing-picture fetch for an unticked question; narrowing the harness 404 fallback (the `JobKind::Base`
+disconnected branch lost its test); decision/label refusal positions (keyless is mapped).
+
+Next: the tick-box drawing (`SendView.partial`/`notice`/`ReadFailed`/`retry_partial`), the picture fetch, then the
+staging round-trip (needs the owner's yes).
 
 ## What is left (in order)
 

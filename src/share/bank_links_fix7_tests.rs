@@ -77,7 +77,7 @@ fn send_ready_as(ctx: &egui::Context, m: &mut CirclesModel, banks: &mut Vec<Ques
     assert!(m.edit.open_send(LOCAL, perm));
     m.edit.host = Some(EditHost { local_id: LOCAL.into(), back: "< Back to Unit 2 quiz".into() });
     m.edit.host_frame = None;
-    until(ctx, m, banks, acct, s, LOCAL, &|m| matches!(&m.edit.view, EditView::Send(v) if matches!(v.licence, LicenceState::Known(_))));
+    until(ctx, m, banks, acct, s, LOCAL, &|m| matches!(&m.edit.view, EditView::Send(v) if matches!(v.licence, LicenceState::Known(_)) && !matches!(v.partial, PartialSend::Reading)));
     m.edit.set_attest(true);
     assert!(m.edit.send_blocker().is_none(), "blocked: {:?} {}", m.edit.send_blocker(), phase(&m.edit));
 }
@@ -653,7 +653,7 @@ fn olgas_send_then_pete(reply: Option<(u16, Value)>) -> Rig {
     m.edit.host = Some(EditHost { local_id: LOCAL.into(), back: "< Back to Unit 2 quiz".into() });
     for _ in 0..500 {
         strip_as(&ctx, &mut m, &mut banks, &mut acct, &olga, LOCAL);
-        if matches!(&m.edit.view, EditView::Send(v) if matches!(v.licence, LicenceState::Known(_))) {
+        if matches!(&m.edit.view, EditView::Send(v) if matches!(v.licence, LicenceState::Known(_)) && !matches!(v.partial, PartialSend::Reading)) {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(10));

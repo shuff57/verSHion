@@ -23,7 +23,7 @@
 //! - Server text is kept raw and drawn through `api::plain`. Nothing here keeps a token or password:
 //!   the merge token lives in memory for the length of one merge.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use std::time::Duration;
@@ -40,6 +40,7 @@ use super::act_results::{ActResults, ResultBank, ResultKind};
 use super::circles_text as text;
 use super::merge::{self, BaseQuestion, Choice, MergeOutcome, MergePlan, RowKind};
 use super::model::Runner;
+use super::partial_send::{BodyChanges, ComposedPartial, ComposedQuestion, changes_against_body, compose_partial_parts};
 use super::pool::{ATTEST_STATEMENT, License, LocalProblem, PayloadRefusal, Pool, PoolError, PublishProgress, RefusalKind, RetryPolicy, StoreMedia, sha256_hex};
 use super::publish::{AccountSnapshot, Gate, SharedMedia, SharedSession};
 use crate::model::QuestionBank;
@@ -132,6 +133,47 @@ pub enum SendStage {
     Pictures(Box<Pictures>),
 }
 
+/// (phase D3, plan 4.7 and 6) Where the send summary stands. The base version's body is read once when the page opens,
+/// because the link's snapshot (`merge::Snap`) has no `figure` and not always a `difficulty`, so it can neither list
+/// every change nor rebuild an unticked question.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PartialSend {
+    /// The base version's body is on its way.
+    Reading,
+    /// The changes against `body`, the body of version `base`, read when the page opened. `print` is the bank's
+    /// fingerprint then: a bank that changed since is listed again by `do_send` before anything is sent. `ticked` holds
+    /// the local ids to send: every change at first, except the ones in `link.held_back` (the person left them unticked
+    /// at the last send).
+    Ready { base: u64, body: Vec<u8>, print: String, changes: BodyChanges, ticked: BTreeSet<String> },
+    /// The base can not be had because the circle no longer keeps it (or holds it back), so choosing which changes to
+    /// send is not possible: the whole bank is sent, and the words say why in plain language (plan 4.7).
+    Unavailable(String),
+    /// The base read failed for a reason that may pass (no connection, the server's own trouble, the daily limit, a
+    /// session that ended): the page stays, nothing is sent, and Try again runs the one read again. Never the
+    /// whole-bank path: that is only for a version the circle no longer keeps.
+    ReadFailed(String),
+}
+
+/// (phase D3, plan 4.7) Why the send summary can not tick changes: the base version is no longer kept (or is held back).
+/// The whole bank may be sent, said plainly on the page.
+pub const PARTIAL_UNAVAILABLE: &str = "Choosing which changes to send needs the version your copy is based on, and the circle no longer keeps it. Send everything, or get the latest first.";
+
+/// (phase D3) The base read failed for a reason that may pass: nothing is sent until it is read (Try again).
+pub const PARTIAL_READ_FAILED: &str = "The version your copy is based on could not be read just now, so nothing is sent. Try again.";
+
+/// (phase D3) What the Send button says while the base version is being read.
+pub const PARTIAL_READING: &str = "Checking the version your copy is based on...";
+
+/// (phase D3, plan 4.7) Nothing is ticked: the send refuses and the page stays as it is.
+pub const TICK_ONE: &str = "Tick at least one change";
+
+/// (phase D3) The bank changed while the person was choosing: the list is worked out again and nothing is sent yet.
+pub const SEND_LIST_AGAIN: &str = "Your bank changed while you were choosing what to send, so nothing was sent. This is the list again.";
+
+/// (phase D3) A send over a held version goes as the whole bank: changes can not be chosen against a base that is
+/// not the version it goes over.
+pub const SEND_ON_TOP_WHOLE: &str = "This send goes over a version that is held back while it is reviewed, so your whole bank is sent. Changes can not be chosen for it.";
+
 #[derive(Debug)]
 pub struct SendView {
     pub local_id: String,
@@ -142,6 +184,14 @@ pub struct SendView {
     pub message: String,
     pub changes: Option<ChangeCount>,
     pub stage: SendStage,
+    /// (phase D3) The tick list of a partial send, and the base version's body it was worked out against.
+    pub partial: PartialSend,
+    /// (phase D3) The base version's body once read (`version`, bytes): the bank is needed to work out the changes, and
+    /// `sync` is the only place that has it. Taken by `resolve_partial`.
+    pub base_body: Option<(u64, Vec<u8>)>,
+    /// (phase D3) A line for the page: the bank changed while the person was choosing, or a held version sends the
+    /// whole bank. The drawing comes with the tick boxes.
+    pub notice: Option<String>,
     /// The person accepted a large change.
     pub confirm_large: bool,
     /// Sending over a version the person could not read (a hidden newest version).
@@ -556,6 +606,8 @@ enum Work {
     /// (critic 87 B1) The circle's version at a link's base version, read quietly to learn the difficulties a base an
     /// earlier build wrote kept none of.
     BaseRead { cid: String, bid: String, n: u64 },
+    /// (phase D3) The base version's body for the open send page's summary, read once per page.
+    SendBase { cid: String, bid: String, n: u64 },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -568,6 +620,8 @@ enum JobKind {
     Licence,
     /// (critic 87 B1) One at a time, beside whatever else runs.
     Base,
+    /// (phase D3) The open send page's one read of its base version's body.
+    SendBase,
 }
 
 impl Work {
@@ -579,6 +633,7 @@ impl Work {
             Work::Version { .. } => JobKind::Version,
             Work::Licence { .. } => JobKind::Licence,
             Work::BaseRead { .. } => JobKind::Base,
+            Work::SendBase { .. } => JobKind::SendBase,
         }
     }
 }
@@ -605,6 +660,8 @@ enum Msg {
     Trimmed(String, String, Result<Trimmed, PoolError>),
     Licence(String, Result<Vec<HeadEntry>, PoolError>),
     BaseRead(String, String, u64, Box<Result<BankDoc, PoolError>>),
+    /// (phase D3) The base version's body for the send summary.
+    SendBase(String, String, u64, Box<Result<BankDoc, PoolError>>),
 }
 
 impl Msg {
@@ -616,6 +673,7 @@ impl Msg {
             Msg::Version(..) => JobKind::Version,
             Msg::Licence(..) => JobKind::Licence,
             Msg::BaseRead(..) => JobKind::Base,
+            Msg::SendBase(..) => JobKind::SendBase,
         }
     }
 }
@@ -681,6 +739,10 @@ async fn run_async(session: SharedSession, images: SharedImages, media: SharedMe
         Work::BaseRead { cid, bid, n } => {
             let r = pool.circle_version(&cid, &bid, n).await;
             Msg::BaseRead(cid, bid, n, Box::new(r))
+        }
+        Work::SendBase { cid, bid, n } => {
+            let r = pool.circle_version(&cid, &bid, n).await;
+            Msg::SendBase(cid, bid, n, Box::new(r))
         }
     };
     let _ = tx.send(msg);
@@ -835,6 +897,10 @@ struct Inflight {
     retry: RetrySend,
     /// (critic 79 I2) The version the send was based on.
     base: u64,
+    /// (phase D3) A partial send's composed questions and the unticked change ids that still differ: what the link
+    /// keeps after it (`after_partial_send`). `None`: the whole bank was sent.
+    partial: Option<ComposedPartial>,
+    held_back: Vec<String>,
 }
 
 /// (critic 78 I1, critic 79 minor 4) What the Send page sent besides the bank itself: its note, the viewers' copy
@@ -852,6 +918,9 @@ struct RetrySend {
     replaces: Vec<VersionLine>,
     confirm_large: bool,
     carry: Option<Carry>,
+    /// (phase D3) The local ids the person unticked for this request: reopening after an answer that could not be read
+    /// starts the same selection, and a conflict then Get latest keeps these marks by local id.
+    unticked: BTreeSet<String>,
 }
 
 /// (critic 79 I2, critic 80 I2) What the newest version says of a send with no clear answer.
@@ -1019,6 +1088,10 @@ pub struct CircleEditModel {
     banks_unsaved: HashMap<String, (String, u32)>,
     /// (round 19, critic 100 I2) "Try again" on such a bank: all the banks are written at the next pass.
     banks_again: bool,
+    /// (phase D3) Unticked local ids of a send page that is about to be rebuilt (a 409 then Get latest, an answer that
+    /// could not be read): ids still changes start unticked, new changes ticked. By local bank; consumed by
+    /// `resolve_partial`, cleared when a send is done or the page abandoned.
+    send_unticked: Option<(String, BTreeSet<String>)>,
 }
 
 /// (round 16, critic 93 I1; round 17) The circle's difficulties could not be written into a bank: when that was last tried
@@ -1190,6 +1263,7 @@ impl CircleEditModel {
             links_unsaved: None,
             banks_unsaved: HashMap::new(),
             banks_again: false,
+            send_unticked: None,
         }
     }
 
@@ -1760,6 +1834,8 @@ impl CircleEditModel {
         self.carry = None;
         self.host = None;
         self.rebase_next = false;
+        // (phase D3) the send page is abandoned: a carried selection does not outlive it (a retry record keeps its own)
+        self.send_unticked = None;
     }
 
     /// The account signed out or another signed in (`another`, critic 60 I1): the screens close (a history goes with
@@ -2843,6 +2919,7 @@ impl CircleEditModel {
                 Msg::Trimmed(cid, bid, r) => self.on_trimmed(&cid, &bid, r),
                 Msg::Licence(bid, r) => self.on_licence(&bid, r),
                 Msg::BaseRead(cid, bid, n, r) => self.on_base_read(&cid, &bid, n, *r),
+                Msg::SendBase(cid, bid, n, r) => self.on_send_base(&cid, &bid, n, *r),
             }
         }
         // A job that ended without an answer (its thread died).
@@ -2862,6 +2939,16 @@ impl CircleEditModel {
     }
 
     fn fail_kind(&mut self, k: JobKind, p: Problem) {
+        // (phase D3) The send page's base read was lost on its way: the page stays and Try again reads it again; never
+        // the whole bank for a read that may yet work.
+        if k == JobKind::SendBase {
+            if let EditView::Send(v) = &mut self.view
+                && matches!(v.partial, PartialSend::Reading)
+            {
+                v.partial = PartialSend::ReadFailed(PARTIAL_READ_FAILED.into());
+            }
+            return;
+        }
         // (critic 73 I1) a send whose page was closed under it: said for its bank
         if k == JobKind::Act
             && let Some(a) = self.act_for.clone().filter(|a| a.what == "send")
@@ -2963,6 +3050,14 @@ impl CircleEditModel {
         // (critic 78 I1, critic 79 minor 4) after a send with no clear answer, what its page sent: the same changes then
         // go as the same request (a merge it went with is kept for it, even when the page was closed meanwhile)
         let retry = self.retry_send.clone().filter(|r| r.local_id == l.local_bank_id);
+        // (phase D3, plan section 6) A selection carried from a conflict's Get latest stays for this bank only; an
+        // answer that could not be read is fresher still, and reopening starts from it.
+        let carried = self.send_unticked.take().filter(|(bank, _)| bank == local_id);
+        self.send_unticked = match &retry {
+            Some(r) if !r.unticked.is_empty() => Some((local_id.to_string(), r.unticked.clone())),
+            Some(_) => None,
+            None => carried,
+        };
         if self.carry.is_none()
             && let Some(c) = retry.as_ref().and_then(|r| r.carry.clone())
         {
@@ -2978,6 +3073,9 @@ impl CircleEditModel {
             message,
             changes: None,
             stage: SendStage::Editing,
+            partial: PartialSend::Reading,
+            base_body: None,
+            notice: None,
             confirm_large: false,
             base_override: None,
             merged: self.carry.as_ref().is_some_and(|c| c.local_id == local_id && c.head == l.base_version),
@@ -3002,7 +3100,82 @@ impl CircleEditModel {
         // goes with the licence the pool has, never with the one this device saw at copy time.
         self.statuses.remove(local_id);
         self.check_licence();
+        // (phase D3, plan 5.5) ONE read of the base version's body for this page's summary. A read that can not be
+        // made keeps the page with Try again; only a version the circle no longer keeps sends the whole bank.
+        self.start_partial_send(&l);
+        // (phase D3) A send over a held version goes as the whole bank: composing against one base and sending over
+        // another is never done.
+        if let EditView::Send(v) = &mut self.view
+            && v.base_override.is_some()
+        {
+            v.partial = PartialSend::Unavailable(SEND_ON_TOP_WHOLE.into());
+            v.base_body = None;
+        }
+        let over_held = matches!(&self.view, EditView::Send(v) if matches!(&v.partial, PartialSend::Unavailable(why) if why.as_str() == SEND_ON_TOP_WHOLE));
+        if over_held {
+            self.jobs.retain(|j| j.kind != JobKind::SendBase);
+        }
         true
+    }
+
+    /// (phase D3) Starts the one read of a send page's base version body; the answer is worked out by `resolve_partial`
+    /// in `sync`, which has the bank. A read that can not even be asked (not signed in) keeps the page with Try again.
+    fn start_partial_send(&mut self, l: &CircleLink) {
+        let made = l.base_version != 0 && self.launch(Work::SendBase { cid: l.circle_id.clone(), bid: l.circle_bank_id.clone(), n: l.base_version });
+        if !made
+            && let EditView::Send(v) = &mut self.view
+        {
+            v.partial = PartialSend::ReadFailed(PARTIAL_READ_FAILED.into());
+        }
+    }
+
+    /// (phase D3) "Try again" on a base version that could not be read: the one read runs again.
+    pub fn retry_partial(&mut self) {
+        let Some(local) = (match &self.view {
+            EditView::Send(v) if matches!(v.partial, PartialSend::ReadFailed(_)) => Some(v.local_id.clone()),
+            _ => None,
+        }) else {
+            return;
+        };
+        let Some(l) = self.links.iter().find(|l| l.local_bank_id == local).cloned() else { return };
+        if let EditView::Send(v) = &mut self.view {
+            v.partial = PartialSend::Reading;
+            v.base_body = None;
+            v.notice = None;
+        }
+        self.start_partial_send(&l);
+    }
+
+    /// (phase D3) The base version's body is back: kept for `sync`, which has the bank. Only a version the circle no
+    /// longer keeps (or holds back) is the whole-bank path, said plainly (plan 4.7); any other failure keeps the page
+    /// with Try again.
+    fn on_send_base(&mut self, cid: &str, bid: &str, n: u64, r: Result<BankDoc, PoolError>) {
+        let matches_page = matches!(&self.view, EditView::Send(v) if v.cid == cid && v.bid == bid && matches!(v.partial, PartialSend::Reading));
+        if !matches_page {
+            return;
+        }
+        let gone = matches!(&r, Err(PoolError::Refused(rf)) if matches!(rf.kind, RefusalKind::VersionNotRetained | RefusalKind::VersionWithheld));
+        let state = match r {
+            // (only the version asked for: a reply for another version is not this page's base)
+            Ok(doc) if doc.bank.version == n => {
+                if let EditView::Send(v) = &mut self.view {
+                    v.base_body = Some((n, doc.payload));
+                }
+                return;
+            }
+            Ok(_) => PartialSend::ReadFailed(PARTIAL_READ_FAILED.into()),
+            Err(_) if gone => PartialSend::Unavailable(PARTIAL_UNAVAILABLE.into()),
+            Err(e) => {
+                // (no borrow of the view while `problem_of` runs: a signed-out answer is noted there)
+                let why = self.problem_of(&e).map(|p| p.message).filter(|m| !m.is_empty()).unwrap_or_else(|| PARTIAL_READ_FAILED.into());
+                PartialSend::ReadFailed(why)
+            }
+        };
+        if let EditView::Send(v) = &mut self.view
+            && matches!(v.partial, PartialSend::Reading)
+        {
+            v.partial = state;
+        }
     }
 
     fn check_licence(&mut self) {
@@ -3085,6 +3258,67 @@ impl CircleEditModel {
         }
     }
 
+    /// (phase D3) Where the open send page's summary stands (`None`: no send page).
+    pub fn partial_send(&self) -> Option<&PartialSend> {
+        match &self.view {
+            EditView::Send(v) => Some(&v.partial),
+            _ => None,
+        }
+    }
+
+    /// (phase D3) The changes the open send page lists (only once its base version's body is read).
+    pub fn send_changes(&self) -> Option<&BodyChanges> {
+        match self.partial_send()? {
+            PartialSend::Ready { changes, .. } => Some(changes),
+            _ => None,
+        }
+    }
+
+    /// (phase D3) The local ids ticked on the open send page, and the base body they were worked out against.
+    pub fn send_ticked(&self) -> Option<&BTreeSet<String>> {
+        match self.partial_send()? {
+            PartialSend::Ready { ticked, .. } => Some(ticked),
+            _ => None,
+        }
+    }
+
+    pub fn send_base_body(&self) -> Option<&[u8]> {
+        match self.partial_send()? {
+            PartialSend::Ready { body, .. } => Some(body),
+            _ => None,
+        }
+    }
+
+    /// (phase D3, plan 4.7) Tick or untick one change of the open send page. Only a change can be ticked; nothing is
+    /// refused for having no tick yet (Send is not disabled: the send says "Tick at least one change").
+    pub fn toggle_change(&mut self, local: &str, on: bool) {
+        if let EditView::Send(v) = &mut self.view
+            && !matches!(v.stage, SendStage::Working(_))
+            && let PartialSend::Ready { changes, ticked, .. } = &mut v.partial
+            && changes.contains(local)
+        {
+            if on {
+                ticked.insert(local.to_string());
+            } else {
+                ticked.remove(local);
+            }
+        }
+    }
+
+    /// (phase D3) "Tick all" or "Untick all": every change on the open send page.
+    pub fn tick_all(&mut self, on: bool) {
+        if let EditView::Send(v) = &mut self.view
+            && !matches!(v.stage, SendStage::Working(_))
+            && let PartialSend::Ready { changes, ticked, .. } = &mut v.partial
+        {
+            if on {
+                *ticked = changes.ids();
+            } else {
+                ticked.clear();
+            }
+        }
+    }
+
     /// Why the Send button can not be pressed, or `None`.
     pub fn send_blocker(&self) -> Option<&'static str> {
         let EditView::Send(v) = &self.view else { return Some("Nothing to send.") };
@@ -3105,6 +3339,14 @@ impl CircleEditModel {
             LicenceState::Failed(_) => return Some("The bank's licence could not be checked, so nothing is sent. Try again."),
             LicenceState::Known(_) => {}
         }
+        // (phase D3) the base version's body is on its way, or the read failed for a reason that may pass: the summary
+        // decides what is sent, so the page waits (Try again for the failed read)
+        if matches!(v.partial, PartialSend::Reading) {
+            return Some(PARTIAL_READING);
+        }
+        if matches!(v.partial, PartialSend::ReadFailed(_)) {
+            return Some(PARTIAL_READ_FAILED);
+        }
         if self.copy_is_stale(&v.local_id) {
             return Some("This bank no longer matches what it last had from the circle (a safety copy of your banks may have been put back). Get the latest first.");
         }
@@ -3117,6 +3359,17 @@ impl CircleEditModel {
     /// The Send button.
     pub fn send(&mut self) {
         if self.send_blocker().is_some() {
+            return;
+        }
+        // (phase D3, plan 4.7) The button stays enabled with nothing ticked; the send says what to do and the page
+        // stays as it is (the ticks are kept).
+        if let EditView::Send(v) = &self.view
+            && let PartialSend::Ready { ticked, .. } = &v.partial
+            && ticked.is_empty()
+        {
+            if let EditView::Send(v) = &mut self.view {
+                v.stage = SendStage::Refused { message: TICK_ONE.into(), merge_again: false };
+            }
             return;
         }
         if let EditView::Send(v) = &mut self.view {
@@ -3249,6 +3502,9 @@ impl CircleEditModel {
             v.decisions = StripDecisions::default();
             v.decisions_for = None;
             v.picked = None;
+            // (phase D3) the selection stays in `partial`; a carry meant for a page rebuilt after Get latest is not
+            // needed once the person is back on this page's own list.
+            self.send_unticked = None;
         }
     }
 
@@ -3261,9 +3517,14 @@ impl CircleEditModel {
             _ => Vec::new(),
         };
         self.open_send(&local, perm);
+        // (phase D3) This send goes over a held version: the whole bank, never a selection composed against another
+        // base. The reason stays on the page for the tick boxes to show.
+        self.jobs.retain(|j| j.kind != JobKind::SendBase);
         if let EditView::Send(v) = &mut self.view {
             v.base_override = Some(head_version);
             v.replaces = replaces;
+            v.partial = PartialSend::Unavailable(SEND_ON_TOP_WHOLE.into());
+            v.base_body = None;
         }
     }
 
@@ -3304,20 +3565,115 @@ impl CircleEditModel {
             fail(v, "This bank no longer matches what it last had from the circle. Get the latest first. Nothing was sent.");
             return;
         }
-        // Questions copied without their keys can not go to a circle (phase C): said here, nothing is sent.
-        let keyless: Vec<(usize, String)> = bank.questions.iter().enumerate().filter(|(_, q)| crate::model::is_keyless(q)).map(|(i, q)| (i, kind_tag(&q.kind).to_string())).collect();
+        // (phase D3) A partial send composes its payload from the bank and the base version's body; a page whose base
+        // can not be had sends the whole bank exactly as before. Nothing here falls back silently.
+        match &v.partial {
+            PartialSend::Reading => {
+                fail(v, "Checking the version your copy is based on. Try again in a moment. Nothing was sent.");
+                return;
+            }
+            // A read that may yet work is never the whole-bank path: the page stays with Try again.
+            PartialSend::ReadFailed(why) => {
+                let why = why.clone();
+                fail(v, &why);
+                return;
+            }
+            _ => {}
+        }
+        // (phase D3) The summary is a snapshot taken when the body arrived. A bank that changed since is worked out
+        // again against the SAME base body: nothing is sent on that press, the ticks stay by local id, and a change the
+        // person has not seen yet starts ticked (plan 4.7).
+        if let PartialSend::Ready { base, body, print, changes, ticked } = &v.partial
+            && bank_print(bank) != *print
+        {
+            let (base, body, old_changes, old_ticked) = (*base, body.clone(), changes.clone(), ticked.clone());
+            match changes_against_body(&link, bank, &body) {
+                Ok(fresh) => {
+                    // (an id no longer a change is simply not in the new list; a new change starts ticked)
+                    let ticked = fresh.ids().into_iter().filter(|id| if old_changes.contains(id) { old_ticked.contains(id) } else { true }).collect();
+                    v.partial = PartialSend::Ready { base, body: body.clone(), print: bank_print(bank), changes: fresh, ticked };
+                    v.stage = SendStage::Editing;
+                    v.notice = Some(SEND_LIST_AGAIN.into());
+                    // (the large-change confirmation was for the old payload)
+                    v.confirm_large = false;
+                    self.last_act = None;
+                    return;
+                }
+                Err(m) => {
+                    fail(v, &m);
+                    return;
+                }
+            }
+        }
+        // (phase D3) A send over a held version goes as the whole bank: never compose against one base and send over
+        // another. `send_on_top` says so on the page.
+        if v.base_override.is_some()
+            && matches!(v.partial, PartialSend::Ready { .. })
+        {
+            v.partial = PartialSend::Unavailable(SEND_ON_TOP_WHOLE.into());
+        }
+        // (the list is the bank's now: an earlier "the list again" line is out of date)
+        v.notice = None;
+        let plan = match &v.partial {
+            PartialSend::Ready { base, body, changes, ticked, .. } if v.base_override.is_none() => Some((*base, body.clone(), changes.changed.clone(), ticked.clone())),
+            _ => None,
+        };
+        // (phase D3) The compare-and-set goes over the version the body was read at, not whatever the link says now.
+        let plan_base = plan.as_ref().map(|(base, ..)| *base);
+        let mut composed: Option<ComposedPartial> = None;
+        let mut held_back: Vec<String> = Vec::new();
+        let payload = match plan {
+            Some((_base, body, changed, ticked)) => {
+                if ticked.is_empty() {
+                    v.stage = SendStage::Refused { message: TICK_ONE.into(), merge_again: false };
+                    return;
+                }
+                match compose_partial_parts(&link, bank, &body, &changed, &ticked) {
+                    Ok(c) => {
+                        // (plan section 6) The unticked changes still differing: what the link keeps in `held_back`.
+                        if let PartialSend::Ready { changes, .. } = &v.partial {
+                            held_back = changes.ids().into_iter().filter(|id| !ticked.contains(id)).collect();
+                        }
+                        let payload = c.payload.clone();
+                        composed = Some(c);
+                        payload
+                    }
+                    Err(m) => {
+                        // Never silently the whole bank: the reason stays on the page and nothing is sent.
+                        fail(v, &m);
+                        return;
+                    }
+                }
+            }
+            None => match payload_of(&link, bank) {
+                Ok(p) => p,
+                Err(m) => {
+                    fail(v, &m);
+                    return;
+                }
+            },
+        };
+        // (plan section 6) The checks run on the composed version: a change the person unticked goes as the base had
+        // it, so a key the bank lacks there is no key the circle is given. The refusals name the bank's question
+        // numbers, not the payload's (a restored removal would shift them). The whole-bank path is untouched.
+        let keyless: Vec<(usize, String)> = match &composed {
+            Some(c) => c
+                .questions
+                .iter()
+                .enumerate()
+                .filter_map(|(i, cq)| {
+                    let q = cq.question.as_ref().filter(|q| crate::model::is_keyless(q))?;
+                    let at = bank.questions.iter().position(|bq| bq.id == cq.local).unwrap_or(i);
+                    Some((at, kind_tag(&q.kind).to_string()))
+                })
+                .collect(),
+            None => bank.questions.iter().enumerate().filter(|(_, q)| crate::model::is_keyless(q)).map(|(i, q)| (i, kind_tag(&q.kind).to_string())).collect(),
+        };
         if !keyless.is_empty() {
             v.stage = SendStage::Keyless { positions: keyless.iter().map(|k| k.0).collect(), kinds: keyless.into_iter().map(|k| k.1).collect() };
             return;
         }
-        let payload = match payload_of(&link, bank) {
-            Ok(p) => p,
-            Err(m) => {
-                fail(v, &m);
-                return;
-            }
-        };
-        let base = v.base_override.unwrap_or(link.base_version);
+        let base = v.base_override.or(plan_base).unwrap_or(link.base_version);
         // (critic 57 I1) The decisions are by position: they go only with the content they were made for.
         let payload_sha = sha256_hex(&payload);
         if v.decisions_for.as_deref() != Some(payload_sha.as_str()) {
@@ -3344,6 +3700,11 @@ impl CircleEditModel {
         let image_ok = v.decisions.image_ok.clone();
         let perm = v.perm;
         let carry = self.carry.clone().filter(|c| c.local_id == v.local_id && c.head == base);
+        // (phase D3) What this selection leaves unticked: kept with the retry record and across a conflict's Get latest.
+        let unticked: BTreeSet<String> = match (&v.partial, plan_base) {
+            (PartialSend::Ready { changes, ticked, .. }, Some(_)) => changes.ids().difference(ticked).cloned().collect(),
+            _ => BTreeSet::new(),
+        };
         let retry = RetrySend {
             local_id: v.local_id.clone(),
             message: v.message.trim().to_string(),
@@ -3354,6 +3715,7 @@ impl CircleEditModel {
             replaces: v.replaces.clone(),
             confirm_large: v.confirm_large,
             carry,
+            unticked,
         };
         v.sent_payload = Some(payload_sha);
         let mut req = CircleSend::new(payload, license, link.meta());
@@ -3374,7 +3736,7 @@ impl CircleEditModel {
         let (cid, bid) = (link.circle_id.clone(), link.circle_bank_id.clone());
         let bank = bank.clone();
         if self.launch(Work::Send { cid, bid, req: Box::new(req) }) {
-            self.inflight = Some(Inflight { link, bank, pictures: shown, image_ok, dropped, asked, perm, retry, base });
+            self.inflight = Some(Inflight { link, bank, pictures: shown, image_ok, dropped, asked, perm, retry, base, partial: composed, held_back });
         } else if let EditView::Send(v) = &mut self.view {
             v.stage = SendStage::Failed(Problem { message: "Not signed in. Open the Account window and sign in.".into(), retry: true, retry_at: None, account: true });
         }
@@ -3478,6 +3840,11 @@ impl CircleEditModel {
                 let merged_from = sent.merged_from;
                 if let Some(i) = &inflight {
                     self.finish_send(i, &sent);
+                    // (phase D3) An answer with no version (the send went through, but what it made is not known)
+                    // keeps the selection too: the next page starts from the same request, ticks included.
+                    if sent.version == 0 {
+                        self.retry_send = Some(i.retry.clone());
+                    }
                 }
                 // The viewers' copy left out every picture not in `image_ok` (share-core's strip): said when the person
                 // did not choose that: kept and then dropped by a restart, or never asked (critic 62 I5: this computer did
@@ -3534,7 +3901,12 @@ impl CircleEditModel {
                         }
                         RefusalKind::KeylessQuestion { positions, kinds } => {
                             self.pending_send = None;
-                            Some(SendStage::Keyless { positions: positions.clone(), kinds: kinds.clone() })
+                            // (phase D3) A partial send's payload positions are not the bank's question numbers.
+                            let positions = match inflight.as_ref().and_then(|i| i.partial.as_ref().map(|c| (c, i))) {
+                                Some((c, i)) => bank_numbers(positions, &bank_positions(&c.questions, &i.bank)),
+                                None => positions.clone(),
+                            };
+                            Some(SendStage::Keyless { positions, kinds: kinds.clone() })
                         }
                         RefusalKind::HideKeyChanged { hide_key, .. } => {
                             // Nothing was stored; the same send goes again (with decisions if the pool asks for them,
@@ -3576,6 +3948,13 @@ impl CircleEditModel {
                     },
                     _ => None,
                 };
+                // (phase D3, plan section 6) A conflict sends nothing; the unticked marks survive Get latest and the
+                // merge, by local id, and the list rebuilt from the new base starts them unticked.
+                if matches!(&stage, Some(SendStage::Conflict(_)))
+                    && let Some(i) = &inflight
+                {
+                    self.send_unticked = (!i.retry.unticked.is_empty()).then(|| (i.link.local_bank_id.clone(), i.retry.unticked.clone()));
+                }
                 if !here {
                     self.say_send_left(cid, bid, &e, stage);
                     return;
@@ -3694,7 +4073,7 @@ impl CircleEditModel {
             Msg::Fetched(c, b, r) => answer(r).then_some((c, b)),
             Msg::Applied(c, b, r) => answer(r).then_some((c, b)),
             Msg::Versions(c, b, _, r) => answer(r).then_some((c, b)),
-            Msg::Version(c, b, _, r) | Msg::BaseRead(c, b, _, r) => answer(r).then_some((c, b)),
+            Msg::Version(c, b, _, r) | Msg::BaseRead(c, b, _, r) | Msg::SendBase(c, b, _, r) => answer(r).then_some((c, b)),
             Msg::Trimmed(c, b, r) => answer(r).then_some((c, b)),
             Msg::Licence(b, r) => {
                 if answer(r) {
@@ -3741,8 +4120,14 @@ impl CircleEditModel {
     }
 
     fn finish_send(&mut self, i: &Inflight, sent: &SentBank) {
-        self.pending_send = None;
+        // (phase D3) An answer with no version is not a clear answer: the same selection tried again is the same
+        // request (the pool replays it, never a second version), so the commit id stays. A readable answer ends it.
+        if sent.version != 0 {
+            self.pending_send = None;
+        }
         self.carry = None;
+        // (phase D3) the send is done: no selection waits for another page
+        self.send_unticked = None;
         // (critic 78 I1) the send's answer came: it went (read, or `sent_unread` below)
         let key = (i.link.circle_id.clone(), i.link.circle_bank_id.clone());
         self.unclear_noted.remove(&key);
@@ -3770,7 +4155,13 @@ impl CircleEditModel {
         }
         // (critic 75 minor 4) the link as it is now (a check may have learnt something meanwhile) moves on
         let now = self.links.iter().find(|l| l.local_bank_id == i.link.local_bank_id).cloned().unwrap_or_else(|| i.link.clone());
-        let mut l = after_send(&now, &i.bank, sent);
+        // (phase D3, plan section 6) A partial send writes the composed version as the base: `bank` is the bank as it
+        // was when the send started, never the composed payload, so an edit made while it was in flight is newer and
+        // shows as unsent. A whole-bank send is unchanged. The links file is written, never the banks file.
+        let mut l = match &i.partial {
+            Some(c) => after_partial_send(&now, &i.bank, &c.questions, sent, i.held_back.clone()),
+            None => after_send(&now, &i.bank, sent),
+        };
         // (critic 74 I1) a send whose answer was read: the copy is at the version it made; (critic 80 I1) an earlier send
         // with no readable outcome is settled too (this one went on top of it, or was it)
         l.sent_unread = None;
@@ -4946,6 +5337,8 @@ impl CircleEditModel {
         {
             v.changes = Some(s.changes);
         }
+        // (phase D3) the body read when the page opened, worked out against the bank as it is now
+        self.resolve_partial(banks);
         if self.cmd_send {
             self.cmd_send = false;
             self.do_send(banks);
@@ -4960,6 +5353,55 @@ impl CircleEditModel {
             return self.finish_merge(banks, imp) || inherited;
         }
         inherited
+    }
+
+    /// (phase D3) The send page's base version body, against the bank as it is now: every change ticked except the
+    /// ones the link left in `held_back`; a base that can not be read, or a bank it can not list, leaves the whole
+    /// bank (plan 4.7). Does nothing until both the body and the bank are here.
+    fn resolve_partial(&mut self, banks: &[QuestionBank]) {
+        let (local, arrived) = match &mut self.view {
+            EditView::Send(v) => {
+                if !matches!(v.partial, PartialSend::Reading) {
+                    return;
+                }
+                (v.local_id.clone(), v.base_body.take())
+            }
+            _ => return,
+        };
+        let Some((n, body)) = arrived else { return };
+        let (Some(link), Some(bank)) = (self.links.iter().find(|l| l.local_bank_id == local).cloned(), banks.iter().find(|b| b.id == local)) else {
+            // (the bank may be on its way, or the link written yet: the body waits for the next pass)
+            if let EditView::Send(v) = &mut self.view {
+                v.base_body = Some((n, body));
+            }
+            return;
+        };
+        let state = if link.base_version != n {
+            // (the copy caught up with another version meanwhile: this body is not its base)
+            PartialSend::Unavailable(PARTIAL_UNAVAILABLE.into())
+        } else {
+            match changes_against_body(&link, bank, &body) {
+                Ok(changes) => {
+                    // All changes start ticked, but the ones the person left unticked at the last send, and the ones a
+                    // conflict's Get latest carries by local id. An id no longer a change is simply not here; a change
+                    // the person has not seen yet starts ticked (plan 4.7).
+                    let mut ticked = changes.ids();
+                    ticked.retain(|id| !link.held_back.contains(id));
+                    let carried = self.send_unticked.take().filter(|(l, _)| *l == local);
+                    if let Some((_, unticked)) = carried {
+                        ticked.retain(|id| !unticked.contains(id));
+                    }
+                    PartialSend::Ready { base: n, body, print: bank_print(bank), changes, ticked }
+                }
+                Err(m) => PartialSend::Unavailable(m),
+            }
+        };
+        if let EditView::Send(v) = &mut self.view
+            && matches!(v.partial, PartialSend::Reading)
+        {
+            v.partial = state;
+            v.notice = None;
+        }
     }
 
     fn refresh_statuses(&mut self, banks: &[QuestionBank]) {
@@ -5352,6 +5794,18 @@ pub fn trim_lines(t: &Trimmed) -> Vec<String> {
 }
 
 /// The tag of a question's kind, as the pool names it (`Mc`, `Tf`, `Short`, ...).
+/// (phase D3) For each question of a composed payload, its number in the bank (`None`: a restored removal, which the
+/// bank no longer has). The circle's refusals name payload positions; the page names the bank's own questions, which a
+/// restored removal would otherwise shift.
+fn bank_positions(composed: &[ComposedQuestion], bank: &QuestionBank) -> Vec<Option<usize>> {
+    composed.iter().map(|c| bank.questions.iter().position(|q| q.id == c.local)).collect()
+}
+
+/// (phase D3) Payload positions as the bank's question numbers, where the composed question is in the bank.
+fn bank_numbers(positions: &[usize], map: &[Option<usize>]) -> Vec<usize> {
+    positions.iter().map(|p| map.get(*p).copied().flatten().unwrap_or(*p)).collect()
+}
+
 fn kind_tag(k: &crate::model::Kind) -> &'static str {
     use crate::model::Kind;
     match k {
