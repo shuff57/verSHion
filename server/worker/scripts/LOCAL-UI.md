@@ -49,6 +49,7 @@ SMTP_FROM_NAME="verSHion"
 MAIL_FROM="verSHion <vershion@yourdomain.org>"
 ```
 
+`MAIL_FROM` may be `Name <addr>` or a bare address; SMTP sends only the address in `MAIL FROM` (Stalwart refuses the name form with 501) and the name comes from `SMTP_FROM_NAME`.
 `SMTP_PORT=465` means implicit TLS (what the owner's Stalwart publishes); 587 does STARTTLS.
 `SMTP_USERNAME` is the mailbox that signs in, and the sender unless `MAIL_FROM` names a different
 one. Make the file in your own editor or terminal, so the password never passes through a shell

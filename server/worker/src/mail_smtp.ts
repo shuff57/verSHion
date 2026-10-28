@@ -16,9 +16,15 @@ export function smtpConfigured(env: MailEnv): boolean {
   return Boolean(env.SMTP_HOSTNAME && env.SMTP_USERNAME && env.SMTP_PASSWORD);
 }
 
-/** The envelope and header sender: MAIL_FROM when set, else the mailbox that signs in. */
+/**
+ * The bare envelope and header sender address: MAIL_FROM when set, else the mailbox that signs in.
+ * MAIL_FROM may be written "Name <addr>" (the shape Resend takes); SMTP's MAIL FROM wants only the address
+ * (Stalwart answers 501 to the name form), and the display name comes from SMTP_FROM_NAME.
+ */
 export function smtpFrom(env: MailEnv): string {
-  return env.MAIL_FROM?.trim() || env.SMTP_USERNAME!.trim();
+  const configured = env.MAIL_FROM?.trim();
+  if (!configured) return env.SMTP_USERNAME!.trim();
+  return /<([^<>]+)>\s*$/.exec(configured)?.[1]?.trim() || configured;
 }
 
 export function smtpPort(env: MailEnv): number {

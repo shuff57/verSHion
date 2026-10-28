@@ -75,7 +75,8 @@ test("SMTP is used only when its three settings are all present", () => {
 
 test("the sender is MAIL_FROM when set, else the mailbox that signs in", () => {
   assert.equal(smtpFrom(SMTP), "pool@example.org");
-  assert.equal(smtpFrom({ ...SMTP, MAIL_FROM: " verSHion <notes@example.org> " }), "verSHion <notes@example.org>");
+  assert.equal(smtpFrom({ ...SMTP, MAIL_FROM: " verSHion <notes@example.org> " }), "notes@example.org");
+  assert.equal(smtpFrom({ ...SMTP, MAIL_FROM: "notes@example.org" }), "notes@example.org");
 });
 
 test("port defaults to 465 and 465 means implicit TLS; SMTP_SECURE overrides both", () => {
