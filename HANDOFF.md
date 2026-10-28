@@ -20,7 +20,7 @@ Round 18 (committed in `0d17a83` as WIP) was failed by its critic pair; round 19
 
 ## Round 20 (2026-10-27): the leftover minors
 
-The owner asked for the leftovers from critic 100 to be worked: **minors 3, 4, 6, 8 and 11 are now done**; minor 12 (walls of text) was not in that set and stays.
+The owner asked for the leftovers from critic 100 to be worked: **minors 3, 4, 6, 8, 11 and 12 are now done**.
 
 | Minor | Change | Test |
 |-------|--------|------|
@@ -29,10 +29,11 @@ The owner asked for the leftovers from critic 100 to be worked: **minors 3, 4, 6
 | 6 | The button column sits just past the widest line that offers one (was at the far edge, ~700 px away at 1280); a row with no button uses the whole width; at a narrow width the stem is cut at 28 chars, so a row is 3 lines, not 4, and "Easy -> Hard" stays whole | `c100_m6_…` ×3 |
 | 8 | "Use my bank as it is" and "Get latest" name the same bank: the circle's title, never her bank's own name on one page and the circle's on the next (`merge_title`) | `c100_m8_…` |
 | 11 | The news part of the badge has a short form ("difficulty"); "removed from the circle" is said as removed even when `gone()` is also true; `WAITING_NOTE` is "circle not checked yet", not "waiting for the circle check"; the "..." hint says "circle page", the menu's own words | `c100_m11_…` ×3 |
+| 12 | The review-plus-not-kept strip is three sentences (`review_not_kept_line`), not five saying the same thing twice; the held line names verSHion once, not four times; the Account window drops "(UTC)". The rest of minor 12 (no "merge", no "REPLACES", no "copy that file over banks.json", no "redeemed") was already pinned by round 19's `c100_m12_leftover_words` | `c100_m12_…` ×3 |
 
-New file: `src/share/bank_links_fix20_tests.rs` (10 tests). Five existing tests changed **deliberately**, each because round 20 reverses what it pinned: `fix18` `c98_m11` (as-is now names the circle's title), `c98_i2` (the news part is now shortened), `c98_m6` (Put all now asks), `fix15`/`fix17`/`fix18` waiting-note assertions (now the constant), `fix18` hint wording.
+New file: `src/share/bank_links_fix20_tests.rs` (13 tests). Five existing tests changed **deliberately**, each because round 20 reverses what it pinned: `fix18` `c98_m11` (as-is now names the circle's title), `c98_i2` (the news part is now shortened), `c98_m6` (Put all now asks), `fix15`/`fix17`/`fix18` waiting-note assertions (now the constant), `fix18` hint wording.
 
-**Round 20's six behavioural tests are mutation-checked, 6 of 6 killed** (scratch tree `/tmp/d1mut`, own target `/tmp/d1mut-target`, script `/tmp/d1mut-scripts/mut20.py`, logs `/tmp/d1mut20-*.log`):
+**Round 20's nine behavioural tests are mutation-checked, 9 of 9 killed** (scratch tree `/tmp/d1mut`, own target `/tmp/d1mut-target`, script `/tmp/d1mut-scripts/mut20.py`, logs `/tmp/d1mut20-*.log`):
 
 | Mutant | What it breaks | Test that failed |
 |--------|----------------|------------------|
@@ -42,10 +43,13 @@ New file: `src/share/bank_links_fix20_tests.rs` (10 tests). Five existing tests 
 | md | `gone()` is asked before `seen.removed` (removed said as "left") | `c100_m11_removed_…` |
 | me | a put-back row drops the circle's value | `c100_m4_a_put_back_…` |
 | mf | a row whose button is gone gives no reason or tip | `c100_m3_…` |
+| mr1 | the review line goes back to the five-sentence wall | `c100_m12_the_review_…` |
+| mr2 | "verSHion tries again every minute" comes back (four names in the strip) | `c100_m12_the_held_…` |
+| mr3 | the Account window says "(UTC)" again | `c100_m12_the_account_…` |
 
 ## Verification (2026-10-27 evening, live tree)
 
-- `cargo test --lib`: **1998 passed, 5 failed, 3 ignored** (2006 total, 83.3 s). Log: `/tmp/d1-round20-final2.log`.
+- `cargo test --lib`: **2001 passed, 5 failed, 3 ignored** (2009 total). Log: `/tmp/d1-m12-final.log`.
 - `cargo build --bins`: EXIT 0.
 - `cargo check --lib --target wasm32-unknown-unknown`: EXIT 0 (23 warnings, pre-existing).
 
@@ -118,5 +122,5 @@ Fixtures were made by a temporary `#[ignore]` test appended to `bank_links_fix19
 ```
 cd ~/Documents/GitHub/verSHion
 git status --short src/share            # nothing: D1 is committed
-cargo test --lib                        # expect 1998 pass, 5 fail (the share-core ones), 3 ignored
+cargo test --lib                        # expect 2001 pass, 5 fail (the share-core ones), 3 ignored
 ```

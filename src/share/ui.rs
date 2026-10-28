@@ -725,7 +725,8 @@ fn status_box(ui: &mut Ui, m: &mut AccountModel, me: &api::Me) {
                     m.submit_reapply();
                 }
             } else if let Some(at) = reapply_after_ms {
-                para(ui, &format!("You can apply again from {} (UTC).", api::date_text(*at)));
+                // (round 20, critic 100 minor 12) no time-zone jargon in the Account window: it is a date, and the server's own day
+                para(ui, &format!("You can apply again from {}.", api::date_text(*at)));
             }
         }
     });

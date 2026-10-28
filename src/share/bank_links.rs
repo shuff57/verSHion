@@ -426,11 +426,11 @@ fn strip_view_inner(i: &StripInput) -> StripView {
     if l.seen.under_review {
         // (round 17, critic 96 minor 1) a copy whose version can't be read is not left with nothing to press
         if can_send && i.status.is_some_and(|s| s.learning == Some(super::circle_edit::Learning::NotKept)) {
-            use super::circles_text as t;
             // (round 18, critic 98 minors 3 and 4) waiting for the review helps; the safe action first
             let why = i.status.and_then(|s| s.unread).unwrap_or(super::circle_edit::Unread::NotKept);
-            // (round 19, critic 100 minor 2) sending is off: in the warning colour, as the badge and the circle page's row
-            return warn(format!("Shared with {name}. The circle's newest version is held back for review. {} {} {} {}", t::cant_read_line(l.base_version, why, false), t::REVIEW_HELPS, t::cant_read_ways(why), t::CHECK_NOW_DOES), vec![CheckNow, TreatInStep]);
+            // (round 19, critic 100 minor 2) sending is off: in the warning colour, as the badge and the circle page's row;
+            // (round 20, critic 100 minor 12) three sentences, not five saying the same thing twice
+            return warn(super::circles_text::review_not_kept_line(&name, l.base_version, why), vec![CheckNow, TreatInStep]);
         }
         // (critic 66 minor 3) Send only with something to send: with nothing, it would only replace the circle's version
         let something = !changes.known || changes.total() > 0;

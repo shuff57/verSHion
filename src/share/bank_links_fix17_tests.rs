@@ -578,7 +578,8 @@ fn c96_m4_a_save_failure_is_said_plainly_and_try_again_answers() {
     assert_eq!(badge(&mut m, &banks[0].clone()), "couldn't save");
     let st = m.edit.status(LOCAL).cloned();
     assert!(m.edit.with_link(LOCAL, |l| super::bank_links::badge_warns_with(l, st.as_ref())).unwrap());
-    assert!(strip.contains("verSHion tries again every minute"), "{strip}");
+    // (round 20, critic 100 minor 12) "verSHion" once in the line, not four times
+    assert!(strip.contains("tries again every minute"), "{strip}");
     click(&ctx, &mut m, &mut banks, &mut acct, &who, "Try again", 0);
     let strip = frames(&mut m, &mut banks, &ctx, &mut acct, &who, 2);
     assert!(strip.contains("Tried 2 times; it still couldn't be saved."), "{strip}");

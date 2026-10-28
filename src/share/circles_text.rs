@@ -206,8 +206,9 @@ pub fn unsaved_line(line: &str, tries: u32) -> String {
 }
 /// The strip while that is so: why, that nothing changed, and (critic 96 minor 4) that Try again tried.
 pub fn held_line(why: &str, tries: u32) -> String {
-    let again = if tries <= 1 { "verSHion tries again every minute.".to_string() } else { format!("Tried {tries} times; it still couldn't be saved. verSHion keeps trying every minute.") };
-    format!("{why} Nothing in the bank changed, and nothing can be sent from it until this is saved. {again}")
+    // (round 20, critic 100 minor 12) "verSHion" once in the whole line, not four times: the reason already names it
+    let again = if tries <= 1 { "It tries again every minute.".to_string() } else { format!("Tried {tries} times; it still couldn't be saved. It keeps trying every minute.") };
+    format!("{why} Nothing in the bank changed; nothing can be sent from it until this is saved. {again}")
 }
 /// The badge while that is so.
 pub const HELD_BADGE: &str = "couldn't save";
@@ -259,9 +260,18 @@ pub fn cant_read_row(why: super::circle_edit::Unread) -> &'static str {
 }
 pub const NOT_KEPT_WAYS: &str = "You can use your bank as it is: your next send then makes the circle's newest version match it, difficulties included. Or wait until someone in the circle sends a newer version, then get it.";
 pub const WITHHELD_WAYS: &str = "Or you can use your bank as it is: your next send then makes the circle's newest version match it, difficulties included.";
-/// (round 18, critic 98 minor 3) The circle's newest version held back for review, the one she matched not readable: the review
-/// ending helps.
-pub const REVIEW_HELPS: &str = "Once the review is done, you can get the newest version, and sending works again.";
+/// (round 18, critic 98 minor 3; round 20, critic 100 minor 12) The strip's line where the circle's newest version is held back
+/// for review and the copy's version can't be read: three sentences, never the five it took to say the same twice.
+pub fn review_not_kept_line(name: &str, version: u64, why: super::circle_edit::Unread) -> String {
+    use super::circle_edit::Unread;
+    // the two facts in one sentence: the copy's own version can't be read, and the circle's newest version is under review
+    let copy = match why {
+        Unread::Withheld => format!("Your copy last matched version {version}, and the newest version is held back for review"),
+        Unread::NotKept => format!("Your copy last matched version {version}, which the circle no longer keeps, and the newest version is held back for review"),
+        Unread::Other => format!("Your copy last matched version {version}, which verSHion couldn't read, and the newest version is held back for review"),
+    };
+    format!("Shared with {name}. {copy}, so sending is off. Waiting is enough; Check now asks the circle again.")
+}
 /// (round 16, critic 93 minor 4; round 17, critic 96 minor 3) The daily limit on reading banks: the circle page's row. (round 18,
 /// critic 98 minor 1) It is the account's (it counts every circle and the public pool), never the circle's.
 pub const READ_LIMIT: &str = "Your daily limit for reading banks has been reached, so this bank can't be checked until it resets. Nothing can be sent from it until then.";

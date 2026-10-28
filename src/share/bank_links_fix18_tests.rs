@@ -758,7 +758,8 @@ fn c98_m3_cant_read_is_said_per_reason() {
     let who = olga_named(&s);
     frames(&mut m, &mut banks, &ctx, &mut acct, &who, 6);
     let v = strip_view(&mut m, &banks, &who);
-    assert!(v.line.contains("held back for review") && v.line.contains("Once the review is done"), "{}", v.line);
+    // (round 20, critic 100 minor 12) the same in three sentences: held back, waiting is enough, Check now asks again
+    assert!(v.line.contains("held back for review") && v.line.contains("Waiting is enough; Check now asks the circle again"), "{}", v.line);
 }
 
 /// (minor 4) Not kept: the big button is the safe one (Check now); "Use my bank as it is..." is a plain one after it. The badge and

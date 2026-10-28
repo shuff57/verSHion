@@ -231,3 +231,43 @@ fn c100_m6_a_narrow_row_names_less_of_the_question() {
     assert!(narrow.starts_with("Question 1,"), "{narrow}");
     assert!(narrow.chars().count() + 20 < wide.chars().count(), "the narrow row names less: {narrow} vs {wide}");
 }
+
+// ---- minor 12: walls of text -------------------------------------------------------------------------------------------------
+
+/// (minor 12) The review-plus-not-kept line is three sentences: the reason, that waiting is enough, and Check now. No second
+/// telling of the same advice, and no repeating "use your bank as it is" that the button already says.
+#[test]
+fn c100_m12_the_review_line_is_three_sentences() {
+    use super::circle_edit::Unread;
+    for why in [Unread::Withheld, Unread::NotKept, Unread::Other] {
+        let line = t::review_not_kept_line("Algebra team", 3, why);
+        let sentences = line.matches(". ").count() + usize::from(line.ends_with('.'));
+        assert!(sentences <= 3, "{why:?}: {sentences} sentences: {line}");
+        assert!(!line.contains("Once the review is done"), "no second telling of the same advice: {line}");
+        assert!(!line.to_lowercase().contains("use your bank as it is"), "the button says that: {line}");
+        assert!(line.contains("Check now"), "{line}");
+        assert!(line.ends_with("Check now asks the circle again."), "{line}");
+    }
+}
+
+/// (minor 12) The held strip names verSHion three times at most (it was four): twice in the saved-banks reason, once in the
+/// advice, and never again in the "tries again" that follows.
+#[test]
+fn c100_m12_the_held_line_names_vershion_once() {
+    let why = format!("{} {}", t::save_problem(""), t::SAVE_ADVICE);
+    // the words the strip puts before it, as the app composes them
+    let outer = "Shared with Algebra team. verSHion couldn't save your banks (verSHion isn't allowed to write to its data folder), so the circle's difficulty isn't in this bank yet, and your own edits aren't saved either.";
+    for tries in [0, 1, 2, 9] {
+        let line = format!("{outer} {}", t::held_line(&why, tries));
+        let n = line.matches("verSHion").count();
+        assert!(n <= 3, "{n} times in: {line}");
+    }
+    assert!(t::held_line(&why, 1).contains("tries again every minute"));
+    assert!(t::held_line(&why, 3).contains("keeps trying every minute"));
+}
+
+/// (minor 12) The Account window says the date, not the time zone's name.
+#[test]
+fn c100_m12_the_account_window_has_no_utc_jargon() {
+    assert!(!include_str!("ui.rs").contains("(UTC)"), "the Account window says the date");
+}
