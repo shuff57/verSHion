@@ -62,6 +62,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "base-ten-blocks" => BASE_TEN_BLOCKS,
         "solid-net" => SOLID_NET,
         "energy-bar-chart" => ENERGY_BAR_CHART,
+        "collision-momentum" => COLLISION_MOMENTUM,
         "parallelogram" => PARALLELOGRAM,
         "trapezoid" => TRAPEZOID,
         "kite" => KITE,
@@ -3447,5 +3448,24 @@ const ENERGY_BAR_CHART: &[Faq] = &[
     Faq {
         q: "How do I make a worksheet?",
         a: "Turn Show answers off: the bars are drawn as empty frames on the same scale and the three numbers become blanks, so the student works out the stores from the mass and the heights.",
+    },
+];
+
+const COLLISION_MOMENTUM: &[Faq] = &[
+    Faq {
+        q: "Why is the momentum the same before and after?",
+        a: "Momentum is conserved in any collision, because the forces the carts exert on each other are equal and opposite and act for the same time. The two rows of the figure always print the same total; only the kinetic energy differs.",
+    },
+    Faq {
+        q: "What is the difference between the two kinds?",
+        a: "An elastic collision keeps the kinetic energy: the carts bounce apart with the same total kinetic energy they had. A perfectly inelastic one loses as much kinetic energy as any collision can, because the carts end up moving together at one speed.",
+    },
+    Faq {
+        q: "Why do equal masses swap speeds?",
+        a: "It falls out of momentum and kinetic energy both being conserved: when the masses are equal, each cart leaves with the other's speed. The example does exactly that, and the readout shows the totals unchanged.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the momenta, the speeds after and the kinetic energies become blanks while the carts, their arrows and their given masses and speeds stay, so the student works out the collision.",
     },
 ];

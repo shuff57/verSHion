@@ -325,7 +325,7 @@ mod tests {
     const NO_HANDLES: &[&str] = &[
         "accounting-equation", "ad-as", "bank-reconciliation", "base-ten-blocks", "block-diagram", "body-map", "boolean-table",
         "brain-regions", "break-even", "cash-flow-statement", "cause-effect", "chi-square-table",
-        "circle-of-fifths", "circular-flow", "climate-graph", "colour-wheel", "confidence-interval",
+        "circle-of-fifths", "circular-flow", "climate-graph", "collision-momentum", "colour-wheel", "confidence-interval",
         "cost-curves", "court-layout", "data-structure", "depreciation-schedule", "discrete-distribution",
         "dot-plot", "earth-cycles", "earth-layers", "elasticity", "energy-bar-chart", "er-diagram", "experiment-flow",
         "family-tree", "financial-statement", "flowchart", "food-plate", "fraction-models", "free-body", "gear-train",

@@ -152,6 +152,17 @@ prefixed `x =` / `y =`); 360 degrees folding to 0 making 2pi unreachable; the si
 the sincos FAQ claiming a 90 degree right shift gives cosine (it gives minus cosine); and the Print grid vanishing
 in a 66% bitonal copy in five figures (now `#9a9a9a`). ## Phase 3: physics
 
+Collisions: new figure `collision-momentum` (`src/figures/momentum.rs`, Physics). Two carts on a track before and
+after a one-dimensional collision, each with a velocity arrow scaled to the largest speed in the picture, cart size
+following mass, and a readout of the momentum before and after (always equal), the speeds after and the kinetic
+energy on both sides. `Collision` chooses elastic (the standard solution) or perfectly inelastic (both at the common
+speed). The given masses and speeds always print; the momenta, speeds and energies are blanks while Show answers is
+off. Tests: momentum conserved in both kinds over four settings, kinetic energy conserved for elastic collisions,
+the inelastic loss equalling the kinetic energy of the relative motion exactly, equal masses swapping speeds, the
+student/key split, and Print neutrality (fills as well as strokes). No handles, so the figure joins `NO_HANDLES`.
+FAQ arm has four entries. Five examples: equal masses, sticking together, a heavier cart, a head-on with both moving,
+and a light cart into a heavy one. Census: only `collision-momentum__defaults` and `collision-momentum__start` added.
+
 Energy bar charts: new figure `energy-bar-chart` (`src/figures/energy.rs`, Physics). A body dropped from one height
 to another, with its gravitational, kinetic and thermal energy drawn as two stacks of three bars on one scale, so the
 group heights can be seen to match: m g h empties, and kinetic plus thermal fill by exactly that (the thermal part
