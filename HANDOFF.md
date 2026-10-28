@@ -12,9 +12,11 @@ a `Scalar` shape, so `points: 1.0` became `Skipped` and the validator said `expe
 (the text charged to the budget); inert when the feature is off, so the worker's own build is unchanged. The owner
 authorised this one edit outside `src/share/`.
 
-`cargo test --lib`: **2099 passed, 0 failed, 4 ignored**. share-core's own suite green; `cargo build --bins` and the
-wasm32 check green. The old "D1 baseline 2001/5/3" line no longer applies — use **2099 passed, 0 failed, 4 ignored**
-(the 4 ignored include the local-rig round-trip).
+`cargo test --lib`: **2099 passed, 0 failed, 4 ignored**. share-core's own behaviour tests pass; its
+`critic24b_scans_are_linear` (an absolute <2.0 s bound) fails on this loaded box at ~3.0 s both with and without
+this fix, so that one is environmental, not a regression. `cargo build --bins` and the wasm32 check green. The old
+"D1 baseline 2001/5/3" line no longer applies — use **2099 passed, 0 failed, 4 ignored** (the 4 ignored include the
+local-rig round-trip).
 
 D1 rounds 19 and 20 are **committed locally** (the round 19–20 checkpoint, 45 files: 35 under `src/share/` plus this file and the nine critic reports 92-100). **Nothing is pushed.** The rest of the dirty tree belongs to the other sessions (see "Do not touch").
 
