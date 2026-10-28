@@ -337,7 +337,7 @@ mod tests {
         "rc-curve", "recursion-tree", "rejection-region", "residual-plot", "rhythm-counting",
         "sampling-distribution", "scatterplot", "sentence-diagram", "sine-cosine", "sorting-passes", "state-machine",
         "stem-and-leaf", "strata", "structure-chart", "supply-demand", "swot", "t-account", "time-value",
-        "timeline", "topo-contours", "trace-table", "tree-diagram", "trial-balance", "two-way-table",
+        "timeline", "topo-contours", "trace-table", "transformations", "tree-diagram", "trial-balance", "two-way-table",
         "venn-diagram",
     ];
 

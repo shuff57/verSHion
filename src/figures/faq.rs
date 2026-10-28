@@ -54,6 +54,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "right-triangle-trig" => RIGHT_TRIANGLE_TRIG,
         "sine-cosine" => SINE_COSINE,
         "unit-circle" => UNIT_CIRCLE,
+        "transformations" => TRANSFORMATIONS,
         "parallelogram" => PARALLELOGRAM,
         "trapezoid" => TRAPEZOID,
         "kite" => KITE,
@@ -3287,5 +3288,24 @@ const UNIT_CIRCLE: &[Faq] = &[
     Faq {
         q: "How do I make a worksheet and its answer key?",
         a: "The angle, cos, sin and the point are each Given, Ask or Hidden. Given is printed on both copies, Ask is a blank on the student copy and the value on the key (the labels on the figure are blanked too), Hidden shows no value and no row. A common worksheet gives the angle and asks for the two coordinates; a harder one asks for the angle from the coordinates.",
+    },
+];
+
+const TRANSFORMATIONS: &[Faq] = &[
+    Faq {
+        q: "Where does the image go for each transformation?",
+        a: "Translate moves every corner by the same amount. Reflect flips the shape over the named line: over the x-axis y changes sign, over the y-axis x does, over y = x the coordinates swap. Rotate turns the shape about the origin, anticlockwise. Enlarge multiplies both coordinates by the scale factor, about the origin.",
+    },
+    Faq {
+        q: "Why is the image not drawn?",
+        a: "The image is the answer. It is drawn, with its corners named A', B' and C' and its coordinates printed, only while Show answers is on. Turn it off to give a student the pre-image and the rule and leave the image to them.",
+    },
+    Faq {
+        q: "Does the shape stay the same size?",
+        a: "Under a translation, a reflection or a turn the image is congruent to the pre-image: the same sides and angles, only moved. Under an enlargement the sides are multiplied by the scale factor and the shape stays similar, with the same angles and the same proportions.",
+    },
+    Faq {
+        q: "Can I move the pre-image?",
+        a: "The pre-image is the fixed triangle A(1, 1), B(4, 1), C(1, 3); the transformation is what changes. The grid takes in whichever image the rule produces, including an enlargement by 3 or a translation of 8 units, so both shapes always fit.",
     },
 ];
