@@ -102,19 +102,24 @@ pub fn build(p: &Params) -> (String, Report) {
     let (v1, v2) = after(p);
     let tot = totals(p);
     // at 0 places a perfectly inelastic 0.33 m/s prints as "0 m/s" beside a real momentum; one place at least
-    let dec = p.i("dec").clamp(0, 2).max(1);
+    let dec = p.i("dec").clamp(0, 2).max(2);
     let print = p.s("style") == "Print";
     let ans = p.b(SHOW_ANSWERS);
     let f = svg::label_factor(p.s("label_size"));
     let (ink, c1, c2) = (if print { "#555555" } else { INK }, if print { C1_PRINT } else { CART1 }, if print { C2_PRINT } else { CART2 });
 
-    let w = (W * (1.0 + 0.7 * (f - 1.0))).max(W);
+    let w = (W * (1.0 + 1.25 * (f - 1.0))).max(W);
     let mut d = Doc::new(w, ROWS_Y0 + 4.0 * ROW_H * f + 8.0);
     d.describe("Collisions", "Two carts on a track before and after a collision, with their velocity arrows and momenta");
 
-    // The arrows are scaled by the GIVEN speeds only. Scaling by the after speeds as well would let a student read an
-    // answer off the before arrows, since the row the answer lives in shares the scale.
-    let max_v = [u1, u2].iter().fold(1.0f64, |a, v| a.max(v.abs()));
+    // On the student copy the arrows are scaled by the GIVEN speeds only: scaling by the after speeds as well would
+    // let an answer be read off the before arrows, since both rows share one scale. On the key all four are known, so
+    // the scale takes them all in and a fast after velocity cannot run off the canvas.
+    let max_v = if ans {
+        [u1, u2, v1, v2].iter().fold(1.0f64, |a, v| a.max(v.abs()))
+    } else {
+        [u1, u2].iter().fold(1.0f64, |a, v| a.max(v.abs()))
+    };
     let arrow = |d: &mut Doc, x0: f64, y: f64, v: f64, col: &str| {
         // no minimum length: a short arrow must read as a short speed
         let len = v.abs() / max_v * 60.0;

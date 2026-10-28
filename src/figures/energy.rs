@@ -83,8 +83,8 @@ pub struct Report {
 
 pub fn build(p: &Params) -> (String, Report) {
     let s = stores(p);
-    // at 0 places a real 0.49 J prints as "0 J" beside a full-height bar; one place at least
-    let dec = p.i("dec").clamp(0, 2).max(1);
+    // two places at least: at one, a real 0.049 J still trimmed to "0 J" (the formatter drops a trailing zero)
+    let dec = p.i("dec").clamp(0, 2).max(2);
     let print = p.s("style") == "Print";
     let ans = p.b(SHOW_ANSWERS);
     let f = svg::label_factor(p.s("label_size"));
@@ -146,7 +146,7 @@ pub fn build(p: &Params) -> (String, Report) {
         "m = {} kg, drops from {} m to {} m, {}% lost, g = {} m/s\u{b2}",
         num(m, 2),
         num(h1, 2),
-        num(h2, 2),
+        num(h2.min(h1), 2),
         num(loss.clamp(0.0, 1.0) * 100.0, 0),
         num(G, 1)
     );
@@ -283,7 +283,11 @@ mod tests {
         let t = texts(&render_of(&[f("mass", 0.1), f("h1", 0.5), ("dec", Value::I(0)), b(SHOW_ANSWERS, true)]));
         // 0.1 x 9.8 x 0.5 = 0.49 J, drawn as a full-height bar: it must not print as "0 J"
         assert!(!t.contains("Kinetic  0 J"), "{t}");
-        assert!(t.contains("Kinetic  0.5 J"), "{t}");
+        assert!(t.contains("Kinetic  0.49 J"), "{t}");
+        // and the smallest reachable energy, 0.049 J with 90% lost, must not trim to 0 either
+        let t = texts(&render_of(&[f("mass", 0.1), f("h1", 0.5), f("loss", 0.9), b(SHOW_ANSWERS, true)]));
+        assert!(!t.contains("Kinetic  0 J"), "{t}");
+        assert!(t.contains("Kinetic  0.05 J"), "{t}");
     }
 
     #[test]
