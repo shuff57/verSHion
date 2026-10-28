@@ -56,6 +56,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "unit-circle" => UNIT_CIRCLE,
         "transformations" => TRANSFORMATIONS,
         "fraction-models" => FRACTION_MODELS,
+        "triangle-centres" => TRIANGLE_CENTRES,
         "parallelogram" => PARALLELOGRAM,
         "trapezoid" => TRAPEZOID,
         "kite" => KITE,
@@ -3327,5 +3328,24 @@ const FRACTION_MODELS: &[Faq] = &[
     Faq {
         q: "How is the percentage worked out?",
         a: "It is the fraction as a percentage: shaded / parts x 100, rounded to one decimal place (or to the Decimal places setting when that is 0 or 1). The decimal is the same division at the Decimal places setting.",
+    },
+];
+
+const TRIANGLE_CENTRES: &[Faq] = &[
+    Faq {
+        q: "Which centre is which?",
+        a: "The circumcentre is where the perpendicular bisectors of the sides meet, and it is the centre of the circle through all three vertices. The incentre is where the angle bisectors meet, the centre of the circle touching all three sides. The centroid is where the medians meet. The orthocentre is where the altitudes meet.",
+    },
+    Faq {
+        q: "Why do three lines always meet at one point?",
+        a: "That is a theorem, not a coincidence: each family of three lines (the three perpendicular bisectors, the three angle bisectors, the three medians, the three altitudes) is concurrent. The figure draws two of each family; the third goes through the same point, which is why the centre is trustworthy as a construction.",
+    },
+    Faq {
+        q: "Where is the centre on a right-angled or obtuse triangle?",
+        a: "This triangle is acute, so all four centres sit inside it. On a right-angled triangle the orthocentre is the right-angle vertex and the circumcentre is the midpoint of the hypotenuse; on an obtuse triangle the orthocentre and the circumcentre fall outside the triangle.",
+    },
+    Faq {
+        q: "How are the coordinates worked out?",
+        a: "The centroid is the mean of the three vertices. The circumcentre is where two perpendicular bisectors cross; the incentre weights each vertex by the length of the opposite side; and the orthocentre follows from the Euler relation: the centroid is one third of the way from the circumcentre to the orthocentre.",
     },
 ];
