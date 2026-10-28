@@ -629,6 +629,14 @@ pub fn inherited_before(link: &CircleLink, bank: &QuestionBank) -> Vec<(String, 
 
 // ---- the payload ----------------------------------------------------------------------------------------
 
+/// The `published` block a send gives the question whose local id is `local` (none: not known by a usable circle
+/// id). The server keeps the question's identity from `published.qid`; the rest is what the pool's sends carry.
+pub(super) fn published_block(link: &CircleLink, local: &str) -> Option<Value> {
+    let qid = link.qid_of(local).filter(|id| is_item_id(id))?;
+    let pid = if super::pool::is_publish_id(&link.base_version_id) { link.base_version_id.clone() } else { link.circle_bank_id.clone() };
+    Some(json!({ "item_id": link.circle_bank_id, "qid": qid, "publish_id": pid, "version": link.base_version.min(u64::from(u32::MAX)) }))
+}
+
 /// The bank as sent: its JSON, and for each question the circle already knows, `published.qid` so it
 /// keeps its identity (an unchanged question is not counted as changed, nor is its credit lost).
 pub fn payload_of(link: &CircleLink, bank: &QuestionBank) -> Result<Vec<u8>, String> {
@@ -636,14 +644,13 @@ pub fn payload_of(link: &CircleLink, bank: &QuestionBank) -> Result<Vec<u8>, Str
         return Err("The bank has no questions. A circle bank needs at least one.".into());
     }
     let mut v = serde_json::to_value(bank).map_err(|e| e.to_string())?;
-    let pid = if super::pool::is_publish_id(&link.base_version_id) { link.base_version_id.clone() } else { link.circle_bank_id.clone() };
     if let Some(qs) = v.get_mut("questions").and_then(Value::as_array_mut) {
         for q in qs {
             let local = q.get("id").and_then(Value::as_str).unwrap_or("").to_string();
-            if let Some(qid) = link.qid_of(&local).filter(|id| is_item_id(id))
+            if let Some(published) = published_block(link, &local)
                 && let Some(o) = q.as_object_mut()
             {
-                o.insert("published".into(), json!({ "item_id": link.circle_bank_id, "qid": qid, "publish_id": pid, "version": link.base_version.min(u64::from(u32::MAX)) }));
+                o.insert("published".into(), published);
             }
         }
     }

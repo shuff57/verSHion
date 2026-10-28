@@ -60,6 +60,7 @@ pub mod mine;
 pub mod mine_text;
 pub mod mine_ui;
 pub mod model;
+pub mod partial_send;
 pub mod pool;
 pub mod publish;
 pub mod publish_text;
@@ -121,6 +122,8 @@ mod browse_tests;
 mod invite_tests;
 #[cfg(test)]
 mod mine_tests;
+#[cfg(test)]
+mod partial_send_tests;
 #[cfg(test)]
 mod pool_tests;
 #[cfg(test)]

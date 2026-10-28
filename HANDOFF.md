@@ -122,9 +122,30 @@ The save failure was produced without code changes by making the banks write fai
 
 Fixtures were made by a temporary `#[ignore]` test appended to `bank_links_fix19_tests.rs` (it ran `many_news(3)` from `bank_links_fix18_tests` and wrote `banks.json`, `share-circles.json`, `settings.json`). It has been removed; re-add it if the shots need regenerating.
 
+## Phase D3 (partial send), piece 1 (2026-10-27 late evening)
+
+The owner chose **D3 before D2**. D2's backend route stays with the db/sharing session; `server/` is untouched.
+
+**Piece 1, committed: the pure composer.** `src/share/partial_send.rs`:
+`compose_partial(link, bank, base_body, changed, ticked)` returns the send payload. `changed` is authoritative,
+computed by the caller's summary against the base body over every field the server hashes (so a change to `figure`
+counts); the composer never calls `merge::ours_changed`. An unticked changed question is sent as the base's raw
+JSON plus a `published` block; an unticked addition is omitted; an unticked removal is restored after its base
+predecessor, read from `link.qids` (the full pairs survive `bounded` emptying `link.base`). 18 tests in
+`partial_send_tests.rs`; four mutants killed in `/tmp/d1mut21` (p1 removals from `link.base`, p2 ignore `changed`,
+p3 anchor at the front, p4 send an unticked addition). `cargo test --lib`: 2026 passed, 5 known failed, 3 ignored.
+
+Critic round: 2 blockers + 1 important, all fixed before the commit — a figure-only change sent unticked (the
+snapshot cannot see `figure`; the server hashes it, `share-core/src/hash.rs:394`), removals missed on a bounded
+link, and the same wrong predicate for an unknown difficulty. The composer now trusts the caller's change set, so
+the body-based summary is the next piece and must include `figure` and the difficulty.
+
+Next: the tick-list model + send summary (compute `changed` against the body, all ticked by default, `held_back`
+unticked), then `after_partial_send`, the send page, pictures, and the staging round-trip (needs the owner's yes).
+
 ## What is left (in order)
 
-1. **D1 is ready to close**: the fix round and its focused re-check both hold (2007 passed / 5 known failures / 3 ignored; bins and wasm green). The next step is the owner's: ask about the Tidy change (`src/tidy.rs` belongs to another session; do not touch it).
+1. **D1 is closed** (commits `fb1b7e9`, `cc49eed`; Tidy Undo `7956fe7`). **D3 piece 1 is committed**; the next piece is the tick-list model and send summary, which computes `changed` against the base body (including `figure` and the difficulty). Then `after_partial_send`, the send page, pictures, and the staging round-trip (owner's yes).
 2. Local commits only; never push. See memory `circles-loop-authorisation`.
 
 ## Decisions taken by the owner (2026-10-27)
