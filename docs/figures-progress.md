@@ -133,3 +133,23 @@ Fraction and number models: new figure `fraction-models` (`src/figures/fraction.
 Triangle centres: new figure `triangle-centres` (`src/figures/triangle_centres.rs`, Math). A fixed acute triangle A(1, 1), B(9, 2), C(3, 8) on a grid, with a `Show the` choice of circumcentre, incentre, centroid or orthocentre. Each draws its own construction (two perpendicular bisectors and the circle through the vertices; two angle bisectors and the incircle; two medians; two altitudes), the centre as a marked point named in words, and a readout giving its coordinates and, where there is one, its radius. Construction lines are clipped to the plot so none runs off the canvas. The centres are computed, not stored: the circumcentre solves the two perpendicular-bisector equations, the incentre weights each vertex by the opposite side, the centroid is the mean, and the orthocentre follows from the Euler relation. Tests check all four against their definitions (equal distance to the vertices, equal distance to the sides, the mean, perpendicular to each opposite side), the Euler line G = (2O + H)/3, the radii, the construction switch, Print neutrality, and the PNG export. No handles, so the figure joins `NO_HANDLES`. FAQ arm has four entries. Five examples: one per centre and the centroid with the construction hidden. Census: only `triangle-centres__defaults` and `triangle-centres__start` added.
 
 Slope triangle: new figure `slope-triangle` (`src/figures/slope.rs`, Math). The line y = mx + c across a fixed window with a right-angled slope triangle on it: a flat leg of `Triangle run` units and an upright leg of gradient x run, with the right angle marked and `run` and `rise` written beside the legs. The readout gives the gradient, the rise for that run, and the equation with the right signs (no `+` when the intercept is zero, a true minus otherwise). The gradient, the rise, the equation and the two leg labels are the answer, so they are blanks while Show answers is off, with the line and the triangle still drawn. An axis number is left out where it would sit on one of the triangle's labels, which is what the first render showed: `run 1` sat on the -4. No handles, so the figure joins `NO_HANDLES`. FAQ arm has four entries. Five examples: gradient 2, a half, a negative gradient, through the origin, and a gentle quarter. Tests: the defaults, the rise equalling gradient x run over five settings with the triangle ends on the line, the equation's signs, the student/key split (readout and legs), Print neutrality, and the PNG export. Census: only `slope-triangle__defaults` and `slope-triangle__start` added.
+
+Critic round, 2026-10-28 (two combined critics over all seven new figures, both FAIL; full disposition in
+`docs/critic-reports/2026-10-28-figures-critics-2.md`). Fixed: the sine/cosine equation printed B rounded to the
+readout precision, so it described a different wave (B now 4 dp, A and D at one decimal at least, with a round-trip
+test); composite leaks on the student copy (a Given equation spelling out an Asked amplitude/midline, a Given point
+spelling out an Asked cos/sin — both blanked unless their parts are Given); the slope line not clipped to the plot
+(it ran through the readout); slope and transformations printing rounded values that contradicted the drawing at
+`dec` 0 (default is now 2); the transformations student grid not containing the image at all (the exercise was
+impossible, now the grid always covers both shapes); the mirror line for y = x and y = -x never drawn; axis numbers
+painted over by an image side; Large label sizes cutting the readout off the canvas (the canvas widens with the
+size); triangle centres having no Show answers at all (a student copy was impossible) and no axis numbers; its
+altitudes stopping at the orthocentre instead of reaching the sides; the slope triangle able to leave the plot (the
+anchor now moves to fit) and its degenerate m = 0 right angle; fraction printing 0.62 beside 62.5% (the percentage
+now follows the printed decimal); unit-circle value labels colliding with axis numbers at Large (a ladder of
+candidate positions, swept at all three sizes); its coordinate labels indistinguishable from ticks in Print (now
+prefixed `x =` / `y =`); 360 degrees folding to 0 making 2pi unreachable; the sincos Notes never being displayed;
+the sincos FAQ claiming a 90 degree right shift gives cosine (it gives minus cosine); and the Print grid vanishing
+in a 66% bitonal copy in five figures (now `#9a9a9a`). Left open: axis ink `#111827` is grey but not exactly
+neutral; trig's key prints a Hidden side inside a fraction; two-label y axes on tall waves; some coordinate labels
+sit over the drop lines; two example names overstate what they show.

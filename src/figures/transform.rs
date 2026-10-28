@@ -16,7 +16,7 @@ const IMAGE_PRINT: &str = "#111111";
 const PRE_COLOUR: &str = "#8a8f99";
 const PRE_PRINT: &str = "#777777";
 const GRID_COLOUR: &str = "#e6ebf1";
-const GRID_PRINT: &str = "#dedede";
+const GRID_PRINT: &str = "#9a9a9a"; // dark enough to survive a 66% bitonal copy
 const BLANK: &str = "_____";
 /// The canvas and the plot area inside it (px).
 const W: f64 = 470.0;
@@ -54,7 +54,8 @@ fn params() -> Vec<ParamDef> {
         ParamDef::choice("angle", "Turn about the origin", &ANGLES, ANGLES[0]),
         ParamDef::float("scale", "Scale factor", 0.5, 3.0, 0.5, 2.0),
         ParamDef::bool("show_pre", "Show the pre-image", true),
-        ParamDef::int("dec", "Decimal places", 0, 2, 0),
+        // enough places for the image a half-unit enlargement produces (a 0.5 scale factor is an ordinary setting)
+        ParamDef::int("dec", "Decimal places", 0, 2, 2),
         answers_param(),
         svg::style_param(),
         svg::label_size_param(),
@@ -131,6 +132,22 @@ fn text_rect(x: f64, y: f64, size: f64, anchor: &str, s: &str) -> Rect {
     Rect { x0, y0: y - size, x1, y1: y + size * 0.3 }
 }
 
+/// A segment clipped to a rectangle (Liang-Barsky); `None` when it misses the rectangle entirely.
+fn clip_seg(x0: f64, y0: f64, x1: f64, y1: f64, rx0: f64, ry0: f64, rx1: f64, ry1: f64) -> Option<((f64, f64), (f64, f64))> {
+    let (dx, dy) = (x1 - x0, y1 - y0);
+    let (mut t0, mut t1) = (0.0f64, 1.0f64);
+    for (p, q) in [(-dx, x0 - rx0), (dx, rx1 - x0), (-dy, y0 - ry0), (dy, ry1 - y0)] {
+        if p.abs() < 1e-12 {
+            if q < 0.0 { return None; }
+        } else {
+            let r = q / p;
+            if p < 0.0 { if r > t1 { return None; } if r > t0 { t0 = r; } } else { if r < t0 { return None; } if r < t1 { t1 = r; } }
+        }
+    }
+    if t0 > t1 { return None; }
+    Some(((x0 + t0 * dx, y0 + t0 * dy), (x0 + t1 * dx, y0 + t1 * dy)))
+}
+
 pub struct Report {
     /// The image's vertices, in the same order as the pre-image.
     pub image: [Pt; 3],
@@ -148,9 +165,10 @@ pub fn build(p: &Params) -> (String, Report) {
     let show_pre = p.b("show_pre");
 
     // the grid covers both shapes, with a unit of air all round
+    // both shapes decide the grid, answers or not: a student has to plot the image, so the room for it must be there
     let mut pts: Vec<Pt> = Vec::new();
     if show_pre { pts.extend(PRE.iter().copied()); }
-    if ans { pts.extend(image.iter().copied()); }
+    pts.extend(image.iter().copied());
     if pts.is_empty() { pts.extend(PRE.iter().copied()); }
     let x0 = pts.iter().map(|q| q.0).fold(f64::MAX, f64::min).min(0.0) - 1.0;
     let x1 = pts.iter().map(|q| q.0).fold(f64::MIN, f64::max).max(0.0) + 1.0;
@@ -166,7 +184,7 @@ pub fn build(p: &Params) -> (String, Report) {
     let py = |y: f64| oy + (y1 - y) * u;
 
     let (ink, image_col, pre_col, grid) = (if print { "#555555" } else { INK }, if print { IMAGE_PRINT } else { IMAGE_COLOUR }, if print { PRE_PRINT } else { PRE_COLOUR }, if print { GRID_PRINT } else { GRID_COLOUR });
-    let mut d = Doc::new(W, ROWS_Y0 + 2.0 * ROW_H * f + 8.0);
+    let mut d = Doc::new((W * (1.0 + 0.75 * (f - 1.0))).max(W), ROWS_Y0 + 2.0 * ROW_H * f + 8.0);
     d.describe("Transformations", "A triangle and its image after a transformation, on one coordinate grid");
 
     // the grid: one line per unit
@@ -177,16 +195,18 @@ pub fn build(p: &Params) -> (String, Report) {
     // the axes
     d.line(ox, py(0.0), ox + gw, py(0.0), ink, 1.8);
     d.line(px(0.0), oy, px(0.0), oy + gh, ink, 1.8);
-    // a number every second unit, only where it is a whole number
-    let mut k = (x0.max(-6.0)).ceil();
-    while k <= x1.min(12.0) {
-        if k.abs() > 0.5 && (k as i64) % 2 == 0 { d.raw(&text_el(px(k), py(0.0) + 16.0, 12.0, "middle", ink, &format!("{}", k as i64))); }
-        k += 1.0;
-    }
-    let mut k = (y0.max(-6.0)).ceil();
-    while k <= y1.min(12.0) {
-        if k.abs() > 0.5 && (k as i64) % 2 == 0 { d.raw(&text_el(px(0.0) - 6.0, py(k) + 4.0, 12.0, "end", ink, &format!("{}", k as i64))); }
-        k += 1.0;
+    // a reflected shape needs its mirror line: y = x and y = -x are not axes, so draw them as a dashed helper
+    if p.s("op") == "Reflect" {
+        let (a, b) = match p.s("axis") {
+            "the line y = x" => ((x0, x0), (x1, x1)),
+            "the line y = -x" => ((x0, -x0), (x1, -x1)),
+            _ => ((0.0, 0.0), (0.0, 0.0)),
+        };
+        if a != b {
+            if let Some((s, e)) = clip_seg(px(a.0), py(a.1), px(b.0), py(b.1), ox, oy, ox + gw, oy + gh) {
+                d.raw(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{pre_col}" stroke-width="1.4" stroke-dasharray="7 5"/>"##, s.0, s.1, e.0, e.1));
+            }
+        }
     }
 
     let mut labels: Vec<Rect> = Vec::new();
@@ -219,6 +239,18 @@ pub fn build(p: &Params) -> (String, Report) {
         for (i, q) in image.iter().enumerate() {
             put(&mut d, &mut labels, px(q.0) + 8.0, py(q.1) - 6.0, "start", &format!("{}\u{2032}", NAMES[i]), image_col, size);
         }
+    }
+
+    // the axis numbers, drawn after the shapes so a side cannot swallow a digit (they carry a halo)
+    let mut k = (x0.max(-6.0)).ceil();
+    while k <= x1.min(12.0) {
+        if k.abs() > 0.5 && (k as i64) % 2 == 0 { d.raw(&text_el(px(k), py(0.0) + 16.0, 12.0, "middle", ink, &format!("{}", k as i64))); }
+        k += 1.0;
+    }
+    let mut k = (y0.max(-6.0)).ceil();
+    while k <= y1.min(12.0) {
+        if k.abs() > 0.5 && (k as i64) % 2 == 0 { d.raw(&text_el(px(0.0) - 6.0, py(k) + 4.0, 12.0, "end", ink, &format!("{}", k as i64))); }
+        k += 1.0;
     }
 
     // the readout: the rule, then the image vertices

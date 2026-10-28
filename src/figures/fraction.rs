@@ -123,8 +123,12 @@ pub fn build(p: &Params) -> (String, Report) {
 
     // the readout: the fraction, its decimal and its percentage
     let frac = format!("{shaded}/{parts}");
-    let deci = num(shaded as f64 / parts as f64, dec);
-    let pct = format!("{}%", num(100.0 * shaded as f64 / parts as f64, if dec > 1 { 1 } else { dec }));
+    // the percentage is worked out from the decimal as printed, so the two always agree (5/8 at 2 places is
+    // 0.62 and 62%, not 0.62 and 62.5%)
+    let p = 10f64.powi(dec as i32);
+    let deci_val = (shaded as f64 / parts as f64 * p).round() / p;
+    let deci = num(deci_val, dec);
+    let pct = format!("{}%", num(deci_val * 100.0, dec));
     let rows = [
         (format!("Fraction  {frac}"), format!("Fraction  {BLANK}")),
         (format!("Decimal  {deci}"), format!("Decimal  {BLANK}")),

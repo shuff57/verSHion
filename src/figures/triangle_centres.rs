@@ -17,7 +17,7 @@ const CONSTRUCTION_PRINT: &str = "#777777";
 const MARK: &str = "#7a4fc4";
 const MARK_PRINT: &str = "#333333";
 const GRID_COLOUR: &str = "#e6ebf1";
-const GRID_PRINT: &str = "#dedede";
+const GRID_PRINT: &str = "#9a9a9a"; // dark enough to survive a 66% bitonal copy
 const W: f64 = 470.0;
 const PLOT: f64 = 330.0;
 const L: f64 = 56.0;
@@ -50,9 +50,25 @@ fn params() -> Vec<ParamDef> {
         ParamDef::choice("centre", "Show the", &CENTRES, CENTRES[0]),
         ParamDef::bool("show_lines", "Show the construction", true),
         ParamDef::int("dec", "Decimal places", 0, 2, 1),
+        // the centres are computed values, so they need a student copy: the dot, its name and the numbers all go
+        answers_param(),
         svg::style_param(),
         svg::label_size_param(),
     ]
+}
+
+/// The foot of the perpendicular from `v` to the line through `p` and `q`.
+fn foot(v: Pt, p: Pt, q: Pt) -> Pt {
+    let d = sub(q, p);
+    let t = ((v.0 - p.0) * d.0 + (v.1 - p.1) * d.1) / (d.0 * d.0 + d.1 * d.1).max(1e-12);
+    add(p, mul(d, t))
+}
+
+/// A unit direction in screen space (y flipped) from one point to another.
+fn dir(from: Pt, to: Pt) -> (f64, f64) {
+    let (dx, dy) = (to.0 - from.0, to.1 - from.1);
+    let l = (dx * dx + dy * dy).sqrt().max(1e-9);
+    (dx / l, -dy / l)
 }
 
 fn render(p: &Params) -> String { build(p).0 }
@@ -150,7 +166,7 @@ pub fn build(p: &Params) -> (String, Report) {
         if print { MARK_PRINT } else { MARK },
         if print { GRID_PRINT } else { GRID_COLOUR },
     );
-    let mut d = Doc::new(W, ROWS_Y0 + 2.0 * ROW_H * f + 8.0);
+    let mut d = Doc::new((W * (1.0 + 0.75 * (f - 1.0))).max(W), ROWS_Y0 + 2.0 * ROW_H * f + 8.0);
     d.describe("Triangle centres", "A triangle with one of its four centres and the construction that finds it");
 
     // grid and axes
@@ -160,6 +176,17 @@ pub fn build(p: &Params) -> (String, Report) {
     while k <= y1 + 1e-9 { d.line(ox, py(k), ox + gw, py(k), grid, 1.0); k += 1.0; }
     d.line(ox, py(0.0), ox + gw, py(0.0), ink, 1.6);
     d.line(px(0.0), oy, px(0.0), oy + gh, ink, 1.6);
+    // numbers on both axes, so the printed coordinates can be found and checked on the drawing
+    let mut k = x0.ceil();
+    while k <= x1 + 1e-9 {
+        if k.abs() > 0.5 { d.raw(&text_el(px(k), py(0.0) + 14.0, 11.0, "middle", ink, &format!("{}", k as i64))); }
+        k += 1.0;
+    }
+    let mut k = y0.ceil();
+    while k <= y1 + 1e-9 {
+        if k.abs() > 0.5 { d.raw(&text_el(px(0.0) - 5.0, py(k) + 4.0, 11.0, "end", ink, &format!("{}", k as i64))); }
+        k += 1.0;
+    }
 
     // the construction, behind the triangle
     if p.b("show_lines") {
@@ -192,9 +219,13 @@ pub fn build(p: &Params) -> (String, Report) {
                 d.line(px(C.0), py(C.1), px(mid(A, B).0), py(mid(A, B).1), con, 1.4);
             }
             _ => {
-                // the altitudes from B and C
-                d.line(px(B.0), py(B.1), px(centre.0), py(centre.1), con, 1.4);
-                d.line(px(C.0), py(C.1), px(centre.0), py(centre.1), con, 1.4);
+                // the altitudes: each runs from its vertex through the orthocentre to the opposite side, so the
+                // drawing shows the perpendicular the readout talks about
+                let (fb, fc) = (foot(B, A, C), foot(C, A, B));
+                d.line(px(B.0), py(B.1), px(fb.0), py(fb.1), con, 1.4);
+                d.line(px(C.0), py(C.1), px(fc.0), py(fc.1), con, 1.4);
+                d.right_angle((px(fb.0), py(fb.1)), dir(A, C), dir(fb, B), 9.0, con, 1.2);
+                d.right_angle((px(fc.0), py(fc.1)), dir(A, B), dir(fc, C), 9.0, con, 1.2);
             }
         }
     }
@@ -202,22 +233,26 @@ pub fn build(p: &Params) -> (String, Report) {
     // the triangle
     d.polyline(&[(px(A.0), py(A.1)), (px(B.0), py(B.1)), (px(C.0), py(C.1)), (px(A.0), py(A.1))], shape, if print { 2.4 } else { 2.8 });
 
-    // the centre and its name
-    d.circle(px(centre.0), py(centre.1), 4.5, mark, mark, 0.0);
+    // the centre and its name: the answer, so they are drawn only while Show answers is on
+    let ans = p.b(SHOW_ANSWERS);
     let size = 14.0 * f;
     let name = ["circumcentre", "incentre", "centroid", "orthocentre"][which];
-    d.raw(&text_el(px(centre.0) + 9.0, py(centre.1) - 7.0, size, "start", mark, name));
+    if ans {
+        d.circle(px(centre.0), py(centre.1), 4.5, mark, mark, 0.0);
+        d.raw(&text_el(px(centre.0) + 9.0, py(centre.1) - 7.0, size, "start", mark, name));
+    }
     for (i, q) in [A, B, C].iter().enumerate() {
         d.raw(&text_el(px(q.0) - 9.0, py(q.1) + 4.0, size, "end", shape, NAMES[i]));
     }
 
     // the readout
-    let row1 = format!("{name}  ({}, {})", num(centre.0, dec), num(centre.1, dec));
+    let blank = "_____";
+    let row1 = if ans { format!("{name}  ({}, {})", num(centre.0, dec), num(centre.1, dec)) } else { format!("{name}  ({blank}, {blank})") };
     let row2 = match which {
-        0 => format!("circumradius  {}", num(radii.0, dec)),
-        1 => format!("inradius  {}", num(radii.1, dec)),
-        2 => "the medians meet two thirds of the way from a vertex".to_string(),
-        _ => "the altitudes meet at a right angle to the opposite side".to_string(),
+        0 => if ans { format!("circumradius  {}", num(radii.0, dec)) } else { format!("circumradius  {blank}") },
+        1 => if ans { format!("inradius  {}", num(radii.1, dec)) } else { format!("inradius  {blank}") },
+        2 => "the medians meet two thirds of the way from a vertex to the opposite midpoint".to_string(),
+        _ => "each altitude is perpendicular to the side it meets; the three meet at the orthocentre".to_string(),
     };
     for (i, line) in [row1, row2].iter().enumerate() {
         let mut s = line.clone();

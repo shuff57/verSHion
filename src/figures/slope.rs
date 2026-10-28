@@ -14,7 +14,7 @@ const LINE_PRINT: &str = "#111111";
 const TRI: &str = "#a0704c";
 const TRI_PRINT: &str = "#777777";
 const GRID_COLOUR: &str = "#e6ebf1";
-const GRID_PRINT: &str = "#dedede";
+const GRID_PRINT: &str = "#9a9a9a"; // dark enough to survive a 66% bitonal copy
 const BLANK: &str = "_____";
 const W: f64 = 460.0;
 const PLOT: f64 = 330.0;
@@ -47,7 +47,9 @@ fn params() -> Vec<ParamDef> {
         ParamDef::float("m", "Gradient m", -5.0, 5.0, 0.25, 2.0),
         ParamDef::float("c", "y-intercept c", -5.0, 5.0, 0.5, 1.0),
         ParamDef::int("run", "Triangle run", 1, 4, 1),
-        ParamDef::int("dec", "Decimal places", 0, 2, 0),
+        // enough places to show the gradient the control can actually be set to (steps of 0.25): at 0 the
+        // printed gradient disagreed with the drawn line and with its own rise row
+        ParamDef::int("dec", "Decimal places", 0, 3, 2),
         answers_param(),
         svg::style_param(),
         svg::label_size_param(),
@@ -65,7 +67,48 @@ pub fn values(p: &Params) -> (f64, f64, i64, f64) {
     (m, c, run, m * run as f64)
 }
 
-pub fn warnings(_p: &Params) -> Vec<String> { Vec::new() }
+/// A segment clipped to a rectangle (Liang-Barsky); `None` when it misses the rectangle entirely.
+fn clip_seg(x0: f64, y0: f64, x1: f64, y1: f64, rx0: f64, ry0: f64, rx1: f64, ry1: f64) -> Option<((f64, f64), (f64, f64))> {
+    let (dx, dy) = (x1 - x0, y1 - y0);
+    let (mut t0, mut t1) = (0.0f64, 1.0f64);
+    for (p, q) in [(-dx, x0 - rx0), (dx, rx1 - x0), (-dy, y0 - ry0), (dy, ry1 - y0)] {
+        if p.abs() < 1e-12 {
+            if q < 0.0 { return None; }
+        } else {
+            let r = q / p;
+            if p < 0.0 { if r > t1 { return None; } if r > t0 { t0 = r; } } else { if r < t0 { return None; } if r < t1 { t1 = r; } }
+        }
+    }
+    if t0 > t1 { return None; }
+    Some(((x0 + t0 * dx, y0 + t0 * dy), (x0 + t1 * dx, y0 + t1 * dy)))
+}
+
+/// The left corner of the slope triangle, moved from `ANCHOR` just enough that the whole triangle sits inside the
+/// window. `None` when no position fits (a gradient too steep for the window at this run).
+pub fn fit_anchor(m: f64, c: f64, run: i64, rise: f64) -> Option<f64> {
+    let lo_y = Y0.min(Y0 + rise);
+    let hi_y = Y1.max(Y1 + rise);
+    let mut best: Option<(f64, f64)> = None;
+    for step in 0..=24 {
+        for ax in [ANCHOR + step as f64 * 0.5, ANCHOR - step as f64 * 0.5] {
+            if ax < X0 || ax + run as f64 > X1 { continue; }
+            let (a, b) = (m * ax + c, m * ax + c + rise);
+            if a >= lo_y - 1e-9 && a <= hi_y + 1e-9 && b >= Y0 - 1e-9 && b <= Y1 + 1e-9 {
+                let d = (ax - ANCHOR).abs();
+                if best.map_or(true, |(bd, _)| d < bd) { best = Some((d, ax)); }
+            }
+        }
+    }
+    best.map(|(_, ax)| ax)
+}
+
+pub fn warnings(p: &Params) -> Vec<String> {
+    let (m, c, run, rise) = values(p);
+    match fit_anchor(m, c, run, rise) {
+        Some(_) => Vec::new(),
+        None => vec!["The slope triangle does not fit in the window at this gradient and run; it is drawn where it does fit.".to_string()],
+    }
+}
 
 fn text_el(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) -> String {
     format!(
@@ -95,7 +138,7 @@ pub fn build(p: &Params) -> (String, Report) {
     let px = |x: f64| ox + (x - X0) * u;
     let py = |y: f64| oy + (Y1 - y) * u;
 
-    let mut d = Doc::new(W, ROWS_Y0 + 3.0 * ROW_H * f + 8.0);
+    let mut d = Doc::new((W * (1.0 + 0.6 * (f - 1.0))).max(W), ROWS_Y0 + 3.0 * ROW_H * f + 8.0);
     d.describe("Slope triangle", "A straight line with a right-angled triangle showing its rise over its run");
 
     // grid, then the axes
@@ -106,19 +149,24 @@ pub fn build(p: &Params) -> (String, Report) {
     d.line(ox, py(0.0), ox + PLOT, py(0.0), ink, 1.6);
     d.line(px(0.0), oy, px(0.0), oy + PLOT, ink, 1.6);
 
-    // the line, from edge to edge of the window
+    // the line, clipped to the plot so it never runs through the readout or off the canvas
     let (ya, yb) = (m * X0 + c, m * X1 + c);
-    d.line(px(X0), py(ya), px(X1), py(yb), line, if print { 2.6 } else { 3.0 });
+    if let Some((s, e)) = clip_seg(px(X0), py(ya), px(X1), py(yb), ox, oy, ox + PLOT, oy + PLOT) {
+        d.line(s.0, s.1, e.0, e.1, line, if print { 2.6 } else { 3.0 });
+    }
 
-    // the slope triangle: across `run`, up `rise`
-    let (ax, ay) = (ANCHOR, m * ANCHOR + c);
+    // the slope triangle: across `run`, up `rise`, moved from ANCHOR if that would leave the window
+    let ax = fit_anchor(m, c, run, rise).unwrap_or(ANCHOR);
+    let ay = m * ax + c;
     let (bx, by) = (ax + run as f64, ay + rise);
     let c1 = (px(ax), py(ay));
     let c2 = (px(bx), py(ay));
     let c3 = (px(bx), py(by));
     d.polyline(&[c1, c2, c3], tri, 2.0);
-    // the right angle at the corner
-    d.right_angle(c2, ((c1.0 - c2.0).signum(), 0.0), (0.0, (c3.1 - c2.1).signum()), 11.0, tri, 1.4);
+    // the right angle at the corner (there is no triangle to mark when the rise is zero)
+    if rise.abs() > 1e-9 {
+        d.right_angle(c2, ((c1.0 - c2.0).signum(), 0.0), (0.0, (c3.1 - c2.1).signum()), 11.0, tri, 1.4);
+    }
 
     // the run and the rise written along their legs
     let size = 13.0 * f;
@@ -130,7 +178,9 @@ pub fn build(p: &Params) -> (String, Report) {
     // and the rise to the right of the upright leg
     let run_y = if m >= 0.0 { c2.1 + 16.0 } else { c2.1 - 8.0 };
     d.raw(&text_el(mid_x, run_y, size, "middle", tri, &run_text));
-    d.raw(&text_el(c3.0 + 8.0, mid_y + 4.0, size, "start", tri, &rise_text));
+    // with a zero rise the upright leg is a point, so the rise goes above the flat leg instead of on it
+    let rise_y = if rise.abs() < 1e-9 { c2.1 - 8.0 } else { mid_y + 4.0 };
+    d.raw(&text_el(c3.0 + 8.0, rise_y, size, "start", tri, &rise_text));
 
     // the axis numbers, except where a number would sit on one of the triangle's labels
     let (rw, rw2) = (tw(&run_text, size, false), tw(&rise_text, size, false));

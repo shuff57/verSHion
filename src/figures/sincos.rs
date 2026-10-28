@@ -18,7 +18,7 @@ const INK: &str = "#111111";
 const CURVE_COLOUR: &str = "#1f5fbf";
 const CURVE_PRINT: &str = "#111111";
 const GRID_COLOUR: &str = "#e2e6ee";
-const GRID_PRINT: &str = "#d8d8d8";
+const GRID_PRINT: &str = "#9a9a9a"; // dark enough to survive a 66% bitonal copy
 const MARK_COLOUR: &str = "#7a4fc4";
 const MARK_PRINT: &str = "#555555";
 const BLANK: &str = "_____";
@@ -112,11 +112,15 @@ impl Wave {
         let base = self.shift + off;
         base + ((x0 - base) / self.period).ceil() * self.period
     }
+    /// The equation as printed. A and D carry at least one decimal (their controls step by 0.1), and B is printed
+    /// at four places so that 360 / B round-trips to the exact period: printed at the readout precision, B
+    /// disagreed with the Period row and with the curve as drawn (360/1080 printed as 0.3 implies 1200).
     pub fn equation(&self, dec: i64) -> String {
+        let (ad, bd) = (dec.max(1), 4);
         let (sign, func) = match self.start { 0 => ("", "sin"), 1 => ("", "cos"), 2 => ("\u{2212}", "sin"), _ => ("\u{2212}", "cos") };
-        let mut s = format!("y = {sign}{} {func}({}(x \u{2212} {}))", num(self.a, dec), num(self.b(), dec), num(self.shift, dec));
+        let mut s = format!("y = {sign}{} {func}({}(x \u{2212} {}))", num(self.a, ad), num(self.b(), bd), num(self.shift, ad));
         if self.mid.abs() > 1e-9 {
-            s.push_str(&format!(" {} {}", if self.mid > 0.0 { "+" } else { "\u{2212}" }, num(self.mid.abs(), dec)));
+            s.push_str(&format!(" {} {}", if self.mid > 0.0 { "+" } else { "\u{2212}" }, num(self.mid.abs(), ad)));
         }
         s
     }
@@ -142,15 +146,13 @@ pub fn warnings(p: &Params) -> Vec<String> {
     if w.wrapped {
         out.push(format!("The phase shift is a whole cycle or more (one cycle is {} degrees), so it is drawn shifted by {}.", fmt(w.period), fmt(w.shift)));
     }
-    if 2.0 * w.period > 1080.0 {
-        out.push(format!("Two cycles are {} degrees wide, so part of the second one is past the axis.", fmt(2.0 * w.period)));
-    }
     out
 }
 
 /// The readout rows: (value, key text, student text).
 fn rows(w: &Wave, dec: i64) -> [(V, String, String); 4] {
-    let (pa, pp, pm, pe) = (num(w.a, dec), format!("{}\u{b0}", fmt(w.period)), format!("y = {}", num(w.mid, dec)), w.equation(dec));
+    let ad = dec.max(1);
+    let (pa, pp, pm, pe) = (num(w.a, ad), format!("{}\u{b0}", fmt(w.period)), format!("y = {}", num(w.mid, ad)), w.equation(dec));
     [
         (V::Amp, format!("Amplitude  A = {pa}"), format!("Amplitude  A = {BLANK}")),
         (V::Period, format!("Period  P = {pp}"), format!("Period  P = {BLANK}\u{b0}")),
@@ -186,6 +188,8 @@ pub struct Report {
 pub fn build(p: &Params) -> (String, Report) {
     let w = solve(p);
     let dec = p.i("dec").clamp(0, 2);
+    // the amplitude and the midline step by 0.1, so they never print fewer than one decimal
+    let ad = dec.max(1);
     let print = p.s("style") == "Print";
     let ans = p.b(SHOW_ANSWERS);
     let f = svg::label_factor(p.s("label_size"));
@@ -227,9 +231,14 @@ pub fn build(p: &Params) -> (String, Report) {
     let pts: Vec<Pt> = (0..=n).map(|i| { let x = frame.x0 + (frame.x1 - frame.x0) * i as f64 / n as f64; (frame.px(x), frame.py(w.y(x))) }).collect();
     d.polyline(&pts, if print { CURVE_PRINT } else { CURVE_COLOUR }, if print { 2.6 } else { 3.0 });
 
-    // the markers: midline, amplitude at the first peak, period between the first two peaks
+    // the markers: midline, amplitude at the first peak, period between the first two peaks. A cosine that starts
+    // at a peak puts that peak on the y-axis, where a marker drawn over the axis reads as part of it, so the next
+    // peak is used when it leaves room for both arrows.
     let mcol = if print { MARK_PRINT } else { MARK_COLOUR };
-    let xp = w.first_peak(0.0);
+    let mut xp = w.first_peak(0.0);
+    if frame.px(xp) < frame.left() + 12.0 && frame.px(xp + 2.0 * w.period) < frame.right() - 12.0 {
+        xp += w.period;
+    }
     let xp2 = xp + w.period;
     let peak_y = frame.py(w.mid + w.a);
     let mid_y = frame.py(w.mid);
@@ -249,9 +258,9 @@ pub fn build(p: &Params) -> (String, Report) {
             _ => text,
         }
     };
-    let amp_label = label(V::Amp, format!("amplitude = {}", num(w.a, dec)), format!("amplitude = {BLANK}"));
+    let amp_label = label(V::Amp, format!("amplitude = {}", num(w.a, ad)), format!("amplitude = {BLANK}"));
     let per_label = label(V::Period, format!("period = {}\u{b0}", fmt(w.period)), format!("period = {BLANK}\u{b0}"));
-    let mid_label = label(V::Mid, format!("midline  y = {}", num(w.mid, dec)), format!("midline  y = {BLANK}"));
+    let mid_label = label(V::Mid, format!("midline  y = {}", num(w.mid, ad)), format!("midline  y = {BLANK}"));
 
     let mut placed: Vec<Rect> = Vec::new();
     let mut put = |x: f64, y: f64, anchor: &str, s: &str| {
@@ -268,10 +277,13 @@ pub fn build(p: &Params) -> (String, Report) {
     // midline: at the right end, above the line
     put(frame.right() - 2.0, mid_y - 6.0, "end", &mid_label);
 
-    // the readout
+    // the readout. The equation is a composite of A, B and D: printing it while any of those is Ask or Hidden
+    // would spell out the answer on the student copy, so it is blanked unless its parts are all Given.
+    let parts_given = mode(p, V::Amp) == "Given" && mode(p, V::Period) == "Given" && mode(p, V::Mid) == "Given";
     for (i, (v, key, stu)) in rows(&w, dec).into_iter().enumerate() {
         let line = match mode(p, v) {
             "Hidden" => continue,
+            _ if v == V::Eq && !ans && !parts_given => stu,
             "Ask" if !ans => stu,
             _ => key,
         };
@@ -426,6 +438,30 @@ mod tests {
                     let buf: Vec<u8> = px.chunks(4).map(|c| { let a = c[3] as f64 / 255.0; let l = (0.299 * c[0] as f64 + 0.587 * c[1] as f64 + 0.114 * c[2] as f64) * a + 255.0 * (1.0 - a); if l < 0.66 * 255.0 { 0 } else { 255 } }).collect();
                     image::GrayImage::from_raw(w, h, buf).unwrap().save(format!("{dir}/sincos-{tag}-print-bw66.png")).unwrap();
                 }
+            }
+        }
+    }
+
+    /// A Given equation is a composite of A, B and D: when any of those is Ask, the student copy must not print it.
+    #[test]
+    fn a_given_equation_never_spells_out_an_asked_part() {
+        let l = [s("g_amp", "Ask"), s("g_per", "Ask"), s("g_mid", "Ask"), s("g_eq", "Given"), b(SHOW_ANSWERS, false), f("amp", 3.0), f("mid", 2.0)];
+        let t = texts(&render_of(&l));
+        assert!(!t.contains("3 sin") && !t.contains("+ 2)"), "the equation spells out an asked amplitude or midline: {t}");
+        assert!(t.contains("Equation  y = _____"), "{t}");
+        // the key still prints it
+        let k = texts(&render_of(&[s("g_amp", "Ask"), s("g_eq", "Given"), b(SHOW_ANSWERS, true)]));
+        assert!(k.contains("Equation  y = "), "{k}");
+    }
+
+    /// The printed B must round-trip to the period printed beside it, or the equation describes another wave.
+    #[test]
+    fn the_printed_equation_reproduces_its_own_period() {
+        for period in [36.0, 180.0, 270.0, 360.0, 541.0, 1080.0] {
+            for dec in 0..=2i64 {
+                let w = solve(&with(&[f("period", period), ("dec", Value::I(dec))]));
+                let b: f64 = num(360.0 / w.period, 4).replace('\u{2212}', "-").parse().unwrap();
+                assert!((360.0 / b - period).abs() < 0.5, "period {period} at dec {dec}: B prints as {b}, which means {}", 360.0 / b);
             }
         }
     }

@@ -3267,7 +3267,7 @@ const SINE_COSINE: &[Faq] = &[
     },
     Faq {
         q: "What does the phase shift do?",
-        a: "It moves where the cycle starts to the right, in degrees. A shift of a whole cycle or more is folded back into one cycle and the Notes box says so. A shift of a quarter period turns a sine into a cosine, which is why 'a peak' and 'midline, going up' with a 90 degree shift draw the same wave.",
+        a: "It moves where the cycle starts to the right, in degrees. A shift of a whole cycle or more is folded back into one cycle and the Notes box says so. A shift moves the wave right, so a sine shifted 90 degrees is minus the cosine (it starts at a trough, not a peak); a shift left by 90 degrees would be the cosine.",
     },
     Faq {
         q: "How do I make a worksheet and its answer key?",

@@ -15,7 +15,7 @@ pub const ID: &str = "unit-circle";
 const INK: &str = "#111111";
 const CIRCLE_COLOUR: &str = "#1f5fbf";
 const PRINT_COLOUR: &str = "#111111";
-const GRID_PRINT: &str = "#d8d8d8";
+const GRID_PRINT: &str = "#9a9a9a"; // dark enough to survive a 66% bitonal copy
 const GRID_COLOUR: &str = "#e2e6ee";
 const MARK_COLOUR: &str = "#7a4fc4";
 const MARK_PRINT: &str = "#555555";
@@ -73,7 +73,10 @@ fn render(p: &Params) -> String { build(p).0 }
 /// The angle as typed, folded into `[0, 360)`.
 pub fn angle_of(p: &Params) -> f64 {
     let a = p.f("angle");
-    if a.is_finite() { a.rem_euclid(360.0) } else { 0.0 }
+    if !a.is_finite() { return 0.0; }
+    // a typed 360 is kept as typed, so the figure can show a whole turn (2pi) rather than folding it to 0;
+    // anything outside one turn is folded into [0, 360)
+    if (0.0..=360.0).contains(&a) { a } else { a.rem_euclid(360.0) }
 }
 
 fn gcd(a: i64, b: i64) -> i64 { if b == 0 { a.abs().max(1) } else { gcd(b, a % b) } }
@@ -217,7 +220,12 @@ pub fn build(p: &Params) -> (String, Report) {
         placed.push(text_rect(x, y, size, anchor, s));
     };
     let shown = |v: V| mode(p, v) != "Hidden";
-    let filled = |v: V| mode(p, v) == "Given" || ans;
+    // the point is a composite of cos and sin: printing it while either is Ask or Hidden would spell out the
+    // answer, so it is filled only when its parts are Given (or on the key)
+    let filled = |v: V| match v {
+        V::Pt => ans || (mode(p, V::X) == "Given" && mode(p, V::Y) == "Given" && mode(p, V::Pt) == "Given"),
+        _ => mode(p, v) == "Given" || ans,
+    };
     // the angle, just beyond the arc
     if shown(V::Ang) {
         let mid = (deg / 2.0).to_radians();
@@ -227,14 +235,15 @@ pub fn build(p: &Params) -> (String, Report) {
         put(&[(at.0, at.1, anchor), (at.0, at.1 + 18.0, anchor)], &s);
     }
     // the x value on the x axis, the y value on the y axis
+    // the coordinate labels are always prefixed, so in Print they can never be mistaken for an axis tick number
     if shown(V::X) {
-        let s = if filled(V::X) { num(x, dec) } else { BLANK.to_string() };
+        let s = if filled(V::X) { format!("x = {}", num(x, dec)) } else { format!("x = {BLANK}") };
         // a line below the axis numbers, so it never rides on the -1 or 1 tick label
-        put(&[(px, cy + 34.0, "middle"), (px, cy + 48.0, "middle")], &s);
+        put(&[(px, cy + 34.0, "middle"), (px, cy + 50.0, "middle"), (px, cy + 66.0, "middle")], &s);
     }
     if shown(V::Y) {
-        let s = if filled(V::Y) { num(y, dec) } else { BLANK.to_string() };
-        put(&[(cx - 12.0, py + 4.0, "end"), (cx - 12.0, py + 20.0, "end"), (cx - 12.0, py - 12.0, "end")], &s);
+        let s = if filled(V::Y) { format!("y = {}", num(y, dec)) } else { format!("y = {BLANK}") };
+        put(&[(cx - 12.0, py + 4.0, "end"), (cx - 12.0, py + 20.0, "end"), (cx - 12.0, py - 12.0, "end"), (cx - 12.0, py - 28.0, "end"), (cx - 12.0, py + 36.0, "end")], &s);
     }
     // the point, off the circle away from the centre
     if shown(V::Pt) {
@@ -244,19 +253,13 @@ pub fn build(p: &Params) -> (String, Report) {
         let width = tw(&s, size, false);
         let rx = (px + 14.0).min(W - 8.0 - width);
         let lx = (px - 14.0).max(8.0 + width);
-        put(
-            &[
-                (rx, py - 10.0, "start"),
-                (rx, py + 18.0, "start"),
-                (lx, py - 10.0, "end"),
-                (lx, py + 18.0, "end"),
-                (lx, py - 28.0, "end"),
-                (rx, py - 28.0, "start"),
-                (lx, py + 36.0, "end"),
-                (rx, py + 36.0, "start"),
-            ],
-            &s,
-        );
+        // a ladder of positions either side of the point: at Large label size the first few are often taken
+        let mut cands = Vec::new();
+        for dy in [-10.0, 18.0, -28.0, 36.0, -46.0, 54.0, -64.0, 72.0] {
+            cands.push((rx, py + dy, "start"));
+            cands.push((lx, py + dy, "end"));
+        }
+        put(&cands, &s);
     }
 
     // the readout: the coordinate triple
@@ -270,8 +273,8 @@ pub fn build(p: &Params) -> (String, Report) {
     for (i, (v, key, stu)) in rows.into_iter().enumerate() {
         let line = match mode(p, v) {
             "Hidden" => continue,
-            "Given" => key,
             _ if ans => key,
+            "Given" => if filled(v) { key } else { stu },
             _ => stu,
         };
         d.raw(&format!(
@@ -423,17 +426,42 @@ mod tests {
     /// when they share more than a pixel, so the crude descent estimate above is not a collision.
     #[test]
     fn labels_never_overlap_or_leave_the_canvas() {
-        for deg in (0..360).step_by(2) {
-            let rep = build(&with(&[f("angle", deg as f64)])).1;
+        // every whole degree at every label size: Large is where the value labels and the axis numbers compete
+        for size in ["Small", "Medium", "Large"] {
+        for deg in 0..360 {
+            let rep = build(&with(&[f("angle", deg as f64), s("label_size", size)])).1;
             for r in &rep.labels {
-                assert!(r.x0 >= 0.0 && r.x1 <= W, "{deg}: a label leaves the canvas: {r:?}");
+                assert!(r.x0 >= 0.0 && r.x1 <= W, "{size} {deg}: a label leaves the canvas: {r:?}");
             }
             for i in 0..rep.labels.len() {
                 for j in (i + 1)..rep.labels.len() {
-                    assert!(!overlaps(&rep.labels[i], &rep.labels[j]), "{deg}: labels overlap: {:?} and {:?}", rep.labels[i], rep.labels[j]);
+                    assert!(!overlaps(&rep.labels[i], &rep.labels[j]), "{size} {deg}: labels overlap: {:?} and {:?}", rep.labels[i], rep.labels[j]);
                 }
             }
         }
+        }
+    }
+
+    /// The point is a composite of cos and sin: a Given P must not print an Asked coordinate on the student copy.
+    #[test]
+    fn a_given_point_never_spells_out_an_asked_coordinate() {
+        let t = texts(&render_of(&[s("g_x", "Ask"), s("g_y", "Given"), s("g_pt", "Given"), b(SHOW_ANSWERS, false)]));
+        assert!(!t.contains("0.87"), "the asked cos is printed through the point: {t}");
+        assert!(t.contains("P (_____"), "{t}");
+        // and the key still shows it
+        let k = texts(&render_of(&[s("g_x", "Ask"), s("g_pt", "Given"), b(SHOW_ANSWERS, true)]));
+        assert!(k.contains("P (0.87,"), "{k}");
+    }
+
+    /// A typed 360 is a whole turn: it prints as 2pi rather than folding to 0.
+    #[test]
+    fn a_whole_turn_stays_two_pi() {
+        let p = with(&[f("angle", 360.0), s("angle_unit", "Radians")]);
+        assert_eq!(angle_of(&p), 360.0);
+        assert_eq!(angle_text(angle_of(&p), "Radians", 2), "2\u{3c0}");
+        // and the point is where 0 degrees would put it
+        let rep = build(&p).1;
+        assert!((rep.p.0 - (rep.cx + rep.r)).abs() < 1e-9);
     }
 
     #[test]
