@@ -939,6 +939,21 @@ Tests: `test/pool/round37.test.ts` (17, each failed on round 36's code); `round3
   `item_reads`; ETag/304); a pruned one is `404 version_not_retained {oldest_kept, message}`, one that never existed
   (0, past the head) `404 not_found`. The head read gains the same `head_version`, `message`, `rollback_of?`,
   `merged_from?`. Fields that do not apply are absent, never null.
+* **Per-question change lists (phase D2, round 54).** `GET /circles/:cid/banks/:bid/changes` (a member who may read
+  the bank): the kept, readable versions newest first, each compared with the next one below it, so the app can show a
+  question's own history without downloading every version. `{bank_id, head_version, per_question, versions:
+  [{version, compared_to, added: [qid], changed: [qid], removed: [qid]}]}`; qids only, no text and no people. Withheld
+  and pruned versions are absent and are never a `compared_to` (the comparison skips to the next readable kept
+  version). At most 40 versions are read (one R2 index each, two in memory), so the oldest entry in the window is left
+  out: it has no base inside the window and reading one would break the cap. A version whose index is gone from R2 is
+  `{version, compared_to, gap: true}`, never an error; the version that would compare with it is a gap too. A viewer of
+  a bank that hides its keys gets `{per_question: false, reason: "keys_hidden"}` and no lists (their compare is the
+  stripped read, Q4); nothing is read or counted for that answer. `ETag` over the head version id and the readable kept
+  versions; a matching `If-None-Match` is `304` and costs nothing. A served read counts one `item_reads` and one
+  `circle_change_reads` (200 a day, a proposal; `429 daily_limit {metric: "circle_change_reads"}`). Measured locally
+  (MemR2, 990-question bank, median of 20): 19.9 ms at 60 versions, 17.0 ms at 1,000, 19 entries both; `EXPLAIN QUERY
+  PLAN` is `SEARCH circle_versions USING INDEX sqlite_autoindex_circle_versions_3 (bank_id=?)` with no temp B-tree for
+  the sort, so the unique `(bank_id, version)` index supplies the order and `LIMIT 40` stops the scan.
 * **Merge-initiate.** `POST .../merge {base_version}` (owner, editor; `1 <= base < head`, else `400 {field,
   head_version}`) -> `{bank_id, base_version, base_kept, oldest_kept, head_version, head_version_id, head_at, head_by,
   between: [history lines base+1..head, at most 50; round 38: the FIRST 50 after the base, oldest first], between_total, merge_token,
@@ -1229,6 +1244,7 @@ rows, cap crossings use `cap`, circle independence statements `independent_claim
   | `PUT /circles/:cid/banks/:bid` | owner, editor (round 37; phase A: the bank's author) | the next version: meta `base_version`, `merge_token?`, `confirm_large_change?` (and the strip decisions while the bank hides its keys; `hide_key` itself is `400 {field: "hide_key"}`) -> `200 {..., held, withheld, merged_from?, keys_hidden?}`; `409 conflict {head_version, head_at, head_by}` (nothing stored); `409 hide_key_changed {hide_key, head_version, message}` (the setting changed meanwhile, nothing stored: send again, round 48); `422 keyless_question`; `428 confirm_large_required {removed, total}`; `422 license_author_only {license}`; `422 merge_token_invalid` |
   | `GET /circles/:cid/banks/:bid/versions?before=` | member who may read the bank | the history, 50 a page (round 37): `versions: [{version, version_id, by, at, message, added, changed, removed, question_count, license, kept, withheld, review_copy?: "full"\|"hashes_only" (only when withheld, round 48), rollback_of?, merged_from?}]` |
   | `GET /circles/:cid/banks/:bid/versions/:n` | member who may read the bank | a kept version, streamed like the head; `404 version_not_retained {oldest_kept, pinned_versions}` (round 37/38), a withheld one pruned `{..., withheld: true, review_copy: "hashes_only", message}` (round 48); a withheld one (or head) `404 version_withheld {message}`, with `hide_off_releases` for the owner and the bank's author while an editor (round 49); viewers of a bank that hides its keys as the head below |
+  | `GET /circles/:cid/banks/:bid/changes` | member who may read the bank | the per-question change lists (round 54): `{bank_id, head_version, per_question, versions: [{version, compared_to, added, changed, removed}] \| {version, compared_to, gap: true}]}`, newest first, at most 40 versions read; `{per_question: false, reason: "keys_hidden"}` for a viewer of a hiding bank; `ETag`/`304`; counts `item_reads` and `circle_change_reads` |
   | `POST /circles/:cid/banks/:bid/merge` | owner, editor | `{base_version}` -> head, `base_kept`, versions between, `merge_token` (30 min) (round 37) |
   | `POST /circles/:cid/banks/:bid/rollback` | owner; the bank's author while an editor (D17) | `{to_version, base_version, commit_id, message?, confirm_large_change?}` -> `200 {..., rollback_of, held, withheld}`; 20 a day (round 37); `404 version_withheld` (round 38); `409 hide_key_changed` (round 48); `403 circle_role_required {needed: "owner_or_author"}` |
   | `POST /circles/:cid/banks/:bid/trim` | owner; the bank's author while an editor | `{keep: 1-19}` -> `{ok, pruned, evidence_kept, oldest_kept, pinned_versions}` (round 38; round 39: a student-data hold does not stop it, a withheld version with an open flag is kept; round 47: `evidence_kept`; round 48: `pinned_versions` lists that evidence too); `400 invalid_request {field: "keep", min, max}`; `403 circle_role_required {needed: "owner_or_author"}` |

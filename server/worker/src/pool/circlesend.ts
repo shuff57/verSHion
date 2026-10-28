@@ -462,12 +462,12 @@ async function replayOf(c: Ctx, me: string, cid: string, bid: string | null, com
 }
 
 /** A version's per-question index in R2: qids, content hashes and (round 37) the key-free match hashes. */
-interface Index {
+export interface Index {
   qids: string[];
   h: string[];
   m?: string[];
 }
-async function readIndex(c: Ctx, key: string): Promise<Index | null> {
+export async function readIndex(c: Ctx, key: string): Promise<Index | null> {
   const o = key ? await c.r2.get(key) : null;
   if (!o) return null;
   try {

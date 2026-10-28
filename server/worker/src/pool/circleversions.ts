@@ -10,7 +10,8 @@
 // lets the next send (based on that head) record "merged from the base" in the history.
 import { b64url, fromB64url, hmac, timingSafeEqual, utf8 } from "../../../auth/src/crypto.ts";
 import { ACTIVE_SQL, BLOCKING_HOLD_SQL, bankOrMiss, getBank, KEPT_VERSIONS, keptInfo, nameOf, OPEN_SQL, OWNER_OR_AUTHOR, requireOpen, requireReadable, requireRole, SEND_FLAG_KINDS, text } from "./circles.ts";
-import { ALIVE_SQL, audit, json, PoolError, readJson, throwIfErased, type Ctx, type PoolPrincipal } from "./shared.ts";
+import { readIndex, type Index } from "./circlesend.ts";
+import { ALIVE_SQL, audit, json, PoolError, readJson, requireDaily, sha256Hex, throwIfErased, type Ctx, type PoolPrincipal } from "./shared.ts";
 import { PINNED_EVIDENCE_SQL, PRUNED_NOW_SQL } from "./circlesend.ts";
 
 /** History lines a page. */
@@ -85,6 +86,80 @@ export async function history(c: Ctx, p: PoolPrincipal, cid: string, bid: string
     versions: page.map((r) => lineOf(r, b.hide_key === 1 && m.role === "viewer")),
     next_before: rows.results.length > HISTORY_PAGE && last ? last.version : null,
   });
+}
+
+/** How many versions' per-question indexes one call reads (plan 5.5: the cap keeps the read bounded). */
+export const CHANGE_VERSION_MAX = 40;
+
+interface ChangeRow {
+  version: number;
+  id: string;
+  index_key: string;
+}
+
+/** What changed from the older version's index to the newer one's, by qid (the circle's own content hashes). */
+function diffOf(older: Index, newer: Index): { added: string[]; changed: string[]; removed: string[] } {
+  const before = new Map(older.qids.map((q, k) => [q, older.h[k]!]));
+  const after = new Set(newer.qids);
+  const added: string[] = [];
+  const changed: string[] = [];
+  newer.qids.forEach((q, k) => {
+    const was = before.get(q);
+    if (was === undefined) added.push(q);
+    else if (was !== newer.h[k]) changed.push(q);
+  });
+  return { added, changed, removed: [...before.keys()].filter((q) => !after.has(q)) };
+}
+
+/**
+ * Phase D2: GET /circles/:cid/banks/:bid/changes — the per-question change lists of a bank's kept, readable
+ * versions, newest first, read from the indexes the server already keeps (no migration, no share-core change).
+ * Each version is compared with the next readable kept one below it (withheld and pruned versions are never a
+ * comparison base), and the oldest in the window is left out: it has no base inside the window, and reading
+ * past the window would break the read cap. A version whose index is gone from R2 is a gap, never an error.
+ * A viewer of a bank that hides its keys gets `per_question: false` and no lists at all (the plan's Q4 rule:
+ * their compare uses the stripped reads, not this route).
+ */
+export async function changes(c: Ctx, req: Request, p: PoolPrincipal, cid: string, bid: string): Promise<Response> {
+  const me = p.userId;
+  const { m, b } = await bankOrMiss(c, cid, bid, me);
+  await requireReadable(c, m, b, me);
+  if (b.hide_key === 1 && m.role === "viewer") {
+    return json(200, { bank_id: bid, head_version: b.head_version, per_question: false, reason: "keys_hidden" });
+  }
+  const rows = (
+    await c.db
+      .prepare(
+        `SELECT version, id, index_key FROM circle_versions
+          WHERE bank_id = ?1 AND status IN ('current', 'previous') AND full_key <> '' AND withheld_at IS NULL
+          ORDER BY version DESC LIMIT ?2`,
+      )
+      .bind(bid, CHANGE_VERSION_MAX)
+      .all<ChangeRow>()
+  ).results;
+  // The ETag names the head and the readable kept versions: a new send changes it, and nothing here does.
+  const etag = `"${(await sha256Hex(utf8([b.head_version_id ?? "", ...rows.map((r) => `${r.version}:${r.id}`)].join("\n")))).slice(0, 32)}"`;
+  if ((req.headers.get("If-None-Match") ?? "").split(",").some((t) => t.trim().replace(/^W\//, "") === etag || t.trim() === "*")) {
+    return new Response(null, { status: 304, headers: { ETag: etag } });
+  }
+  await requireDaily(c, me, "item_reads");
+  await requireDaily(c, me, "circle_change_reads");
+  const out: Record<string, unknown>[] = [];
+  // Two indexes in memory at most: `held` (newer) is compared with the one just read.
+  let held: { row: ChangeRow; idx: Index | null } | null = null;
+  for (const row of rows) {
+    const idx = await readIndex(c, row.index_key);
+    if (held) {
+      const lists = held.idx && idx ? diffOf(idx, held.idx) : null;
+      out.push(
+        lists
+          ? { version: held.row.version, compared_to: row.version, added: lists.added, changed: lists.changed, removed: lists.removed }
+          : { version: held.row.version, compared_to: row.version, gap: true },
+      );
+    }
+    held = { row, idx };
+  }
+  return json(200, { bank_id: bid, head_version: b.head_version, per_question: true, versions: out }, { ETag: etag });
 }
 
 /** GET /circles/:cid/banks/:bid/versions/:n: a kept version's body. */

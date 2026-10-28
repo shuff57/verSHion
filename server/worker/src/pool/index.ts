@@ -16,7 +16,7 @@ import { getBlob, getItem, importItem, list, mine, versions } from "./read.ts";
 import { activity, circleErasureStatements, closeCircle, createCircle, createInvite, deleteBank, getBank, getBankBlob, getCircle, heads, joinCircle, joinPreview, leaveCircle, listCircles, listInvites, patchBank, patchCircle, purgeBankNow, removeMember, reopenCircle, reportBank, revokeInvite, setRole, undeleteBank, offerTransfer, acceptTransfer, cancelTransfer } from "./circles.ts";
 import { rollbackBank, sendVersion } from "./circlesend.ts";
 import { emailInvite } from "./circlemail.ts";
-import { getVersion, history, mergeInitiate, trimVersions } from "./circleversions.ts";
+import { changes, getVersion, history, mergeInitiate, trimVersions } from "./circleversions.ts";
 import { ALIVE_SQL, assertPoolKey, unauthorized, errKind, json, makeCtx, PoolError, rateLimit, readJson, type Ctx, type PoolDeps, type PoolPrincipal } from "./shared.ts";
 
 /** GET/PUT /items/prefs {keep_on_delete}: what happens to my shared items if I delete my account. */
@@ -154,6 +154,8 @@ const ROUTES: { re: RegExp; methods: Record<string, Route> }[] = [
   // Round 37: circles phase B (circleversions.ts, circlesend.ts): history, kept versions, merge-initiate, rollback.
   { re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})\/versions$/, methods: { GET: (c, _r, p, m, u) => history(c, p, m[1]!, m[2]!, u) } },
   { re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})\/versions\/(0|[1-9][0-9]{0,9})$/, methods: { GET: (c, r, p, m) => getVersion(c, r, p, m[1]!, m[2]!, m[3]!) } },
+  // Round 54 (phase D2): the per-question change lists behind a bank's history (circleversions.ts changes).
+  { re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})\/changes$/, methods: { GET: (c, r, p, m) => changes(c, r, p, m[1]!, m[2]!) } },
   { re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})\/merge$/, methods: { POST: (c, r, p, m) => mergeInitiate(c, r, p, m[1]!, m[2]!) } },
   { re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})\/rollback$/, methods: { POST: (c, r, p, m) => rollbackBank(c, r, p, m[1]!, m[2]!) } },
   // Round 38: the owner (or the bank's author) trims a bank's older versions (a full circle's way back).
