@@ -3,7 +3,7 @@
 Written 2026-10-27 ~19:40 PT by the circles/D1 session, which the owner asked to take over and "finish both".
 
 ## Where things are
-- Worktree `/home/shuff57/Documents/GitHub/verSHion-figures`, branch `figures-gapfill` (based on `figures-circuits`). HEAD `de97c6b`. **Math core and phase 2 complete and critiqued; phase 3 has two figures, both through a critic and a verification round.**
+- Worktree `/home/shuff57/Documents/GitHub/verSHion-figures`, branch `figures-gapfill` (based on `figures-circuits`). HEAD `0e4624e` (phase 3: circular motion). **Math core and phase 2 complete and critiqued; phase 3 has two figures, both through a critic and a verification round.**
 - Do not touch the main repo `/home/shuff57/Documents/GitHub/verSHion` (branch `shared-pool-phase1`): it holds the circles D1 work, committed locally, waiting on critics 101/102.
 - Loop spec: `docs/figures-loop.md`. Rules: `docs/figures-conventions.md`. Progress and critic minors: `docs/figures-progress.md`. Memory: `figures-gapfill-loop.md`.
 - Done and committed: phase 0, 1.1 conics (`b009d82`), 1.2 circle (`4f5715d`, closed), 1.3 rounds 1-3 (`c3eb729`, `0f81c30`, `2cc0a58`).
@@ -82,7 +82,9 @@ Confirmed by running the app (`VERSHION_SCREEN=figures VERSHION_FIG=collision-mo
   equipotentials, refraction/Snell/total internal reflection, magnetic field and right-hand rule, standing waves and
   interference, PV diagrams, a ray diagram with handles, a capacitor, series-parallel circuits, and the handles /
   hide-reading work on the existing physics figures.
-- Suite on `de97c6b`: 1727 passed, 0 failed, 5 ignored.
+- Suite on `0e4624e`: **1734 passed, 0 failed, 5 ignored** (a clean run with nothing else on the box).
+  Note: `figuresui::tests::dragging_a_label_moves_it_as_one_undo_step` failed once while three builds were
+  running and passes alone and in the clean run; it is timing-sensitive under CPU contention, not a regression.
 - **All eleven figures have now been critiqued.** The last four (protractor, area model, base-ten blocks, solid-net)
   were failed on 2 blockers and 8 majors, fixed in `b706974`, and re-checked by a verification critic: the blockers
   and all but one major hold; the leftovers were fixed in the commit after it. See
