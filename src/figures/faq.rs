@@ -3234,15 +3234,15 @@ const RIGHT_TRIANGLE_TRIG: &[Faq] = &[
     },
     Faq {
         q: "How do I make a worksheet and its answer key?",
-        a: "Each of the three sides, theta, sin, cos and tan is Given, Ask or Hidden. Given is printed on both copies, Ask is a blank line on the student copy and the value on the key, Hidden is not shown. Turn Show answers off for the student copy; Student + key exports both. The Notes box warns when the Given values do not fix the triangle.",
+        a: "Each of the three sides, theta, sin, cos and tan is Given, Ask or Hidden. Given is printed on both copies, Ask is a blank line on the student copy and the value on the key, Hidden shows no value (a hidden side keeps its name on the drawing). Turn Show answers off for the student copy; Student + key exports both. The Notes box warns when the Given values do not fix the triangle.",
     },
     Faq {
         q: "How do I ask for a missing side or for an angle?",
-        a: "For a missing side, set 'The triangle is set by' to an angle and a side (for example Angle and adjacent), give both as Given and set the other sides to Ask: the key shows the sides worked out with sin, cos or tan. For an angle, give two sides (Two legs, or Leg and hypotenuse) and set the angle to Ask: the key shows the inverse trig, for example arctan(7/10) = 35 degrees to one decimal place.",
+        a: "For a missing side, set 'The triangle is set by' to an angle and a side (for example Angle and adjacent), give both as Given and set the other sides to Ask: the key shows the sides worked out with sin, cos or tan. For an angle, give two sides (Two legs, or Leg and hypotenuse) and set the angle to Ask: with 'Show the SOH CAH TOA hint' on, the key names the inverse trig, for example theta = arctan(7/10) = 35 degrees (Decimal places set the rounding).",
     },
     Faq {
         q: "Why is the angle kept between 10 and 80 degrees?",
-        a: "Outside that range the triangle is too thin to label, so the angle is kept in it and the sides adjust (a Notes line says so). The values on the key are always worked out from the triangle that is drawn. Decimal places set the rounding of every value; ratios are worked out from the exact sides, not from the rounded ones.",
+        a: "Outside that range the triangle is too thin to label, so the angle is kept in it and the sides adjust (a Notes line says so). The values on the key are always worked out from the triangle that is drawn. Decimal places set the rounding of theta; lengths print with at least two decimals, and a ratio is worked out from the lengths as printed, so its fraction and its decimal always agree.",
     },
     Faq {
         q: "Can I drag the triangle?",

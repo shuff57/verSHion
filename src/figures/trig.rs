@@ -61,7 +61,7 @@ fn params() -> Vec<ParamDef> {
         ParamDef::int("dec", "Decimal places", 0, 4, 2),
     ];
     for e in VALS {
-        v.push(ParamDef::choice(e.1, e.2, &["Given", "Ask", "Hidden"], e.3).hint("Given is printed on the student copy; Ask is blank there and filled on the key; Hidden is not shown"));
+        v.push(ParamDef::choice(e.1, e.2, &["Given", "Ask", "Hidden"], e.3).hint("Given is printed on the student copy; Ask is blank there and filled on the key; Hidden shows no value (a side keeps its name on the drawing)"));
     }
     v.push(answers_param());
     v.push(svg::style_param());
@@ -123,6 +123,11 @@ fn mode(p: &Params, key: &str) -> Md {
 
 fn vi(v: V) -> usize { VALS.iter().position(|e| e.0 == v).unwrap_or(0) }
 
+/// A length as printed (`num`) read back as a number: no thousands commas, U+2212 as a minus.
+fn parse_printed(s: &str) -> f64 {
+    s.chars().filter(|c| *c != ',').map(|c| if c == '\u{2212}' { '-' } else { c }).collect::<String>().parse().unwrap_or(f64::NAN)
+}
+
 struct Ctx { s: Sol, dec: i64, unit: String, words: bool, ta: bool, md: [Md; 7] }
 
 fn ctx(p: &Params) -> Ctx {
@@ -146,8 +151,10 @@ impl Ctx {
         }
     }
     fn n(&self, x: f64) -> String { num(x, self.dec) }
-    /// A ratio is always printed with at least two decimals (0.6 is not 1).
-    fn nr(&self, x: f64) -> String { num(x, self.dec.max(2)) }
+    /// A length is printed with at least two decimals, whatever the setting for theta: a side rounded to a
+    /// whole number would no longer make a right triangle with the other two.
+    fn len_dec(&self) -> i64 { self.dec.max(2) }
+    fn nl(&self, x: f64) -> String { num(x, self.len_dec()) }
     /// The sides a ratio is made of.
     fn ratio_sides(v: V) -> [V; 2] { match v { V::Sin => [V::Opp, V::Hyp], V::Cos => [V::Adj, V::Hyp], _ => [V::Opp, V::Adj] } }
     fn side_name(&self, v: V) -> &'static str {
@@ -162,20 +169,36 @@ impl Ctx {
         match (self.md(v), ans) {
             (Md::Hidden, _) => nm.to_string(),
             (Md::Ask, false) => format!("{nm} = {BLANK}{u}"),
-            _ => format!("{nm} = {}{u}", self.n(self.value(v))),
+            _ => format!("{nm} = {}{u}", self.nl(self.value(v))),
         }
+    }
+    /// A ratio as printed: the two lengths as labelled, and the decimal worked out from those printed
+    /// lengths (not from the exact sides), so `a/b = v` is true to the displayed precision.
+    fn ratio_parts(&self, v: V) -> (String, String, String) {
+        let s = &self.s;
+        let (a, b) = match v { V::Sin => (s.opp, s.hyp), V::Cos => (s.adj, s.hyp), _ => (s.opp, s.adj) };
+        let d = self.len_dec();
+        let (pa, pb) = (num(a, d), num(b, d));
+        let q = parse_printed(&pa) / parse_printed(&pb);
+        (pa, pb, num(q, d))
     }
     /// "3/5 = 0.6": the ratio as a fraction of the side lengths and as a decimal.
     fn ratio_rhs(&self, v: V) -> String {
-        let s = &self.s;
-        let (a, b) = match v { V::Sin => (s.opp, s.hyp), V::Cos => (s.adj, s.hyp), _ => (s.opp, s.adj) };
-        format!("{}/{} = {}", self.n(a), self.n(b), self.nr(self.value(v)))
+        let (a, b, q) = self.ratio_parts(v);
+        format!("{a}/{b} = {q}")
     }
+    /// The ratio's decimal as printed, for the student copy when the fraction is left out.
+    fn ratio_decimal(&self, v: V) -> String { self.ratio_parts(v).2 }
     /// Every text that would give the value away: the number itself and, for a ratio, its fraction.
     fn tokens(&self, v: V) -> Vec<String> {
-        let mut t = vec![if matches!(v, V::Sin | V::Cos | V::Tan) { self.nr(self.value(v)) } else { self.n(self.value(v)) }];
-        if matches!(v, V::Sin | V::Cos | V::Tan) { t.push(self.ratio_rhs(v).split(" = ").next().unwrap_or("").to_string()); }
-        t
+        if matches!(v, V::Sin | V::Cos | V::Tan) {
+            let (a, b, q) = self.ratio_parts(v);
+            vec![q, format!("{a}/{b}")]
+        } else if v == V::Theta {
+            vec![self.n(self.value(v))]
+        } else {
+            vec![self.nl(self.value(v))]
+        }
     }
 }
 
@@ -187,7 +210,7 @@ fn rows(c: &Ctx, hint: bool) -> Vec<Row> {
         let md = c.md(v);
         if md == Md::Hidden { continue; }
         let (key, blank) = if v == V::Theta {
-            let f = if hint && md == Md::Ask { format!("arctan({}/{}) = ", c.n(c.s.opp), c.n(c.s.adj)) } else { String::new() };
+            let f = if hint && md == Md::Ask { format!("arctan({}/{}) = ", c.nl(c.s.opp), c.nl(c.s.adj)) } else { String::new() };
             (format!("{name} = {f}{}\u{b0}", c.n(c.s.th)), format!("{name} = {BLANK}\u{b0}"))
         } else {
             (format!("{name} = {}", c.ratio_rhs(v)), format!("{name} = {BLANK}"))
@@ -200,7 +223,7 @@ fn rows(c: &Ctx, hint: bool) -> Vec<Row> {
             key.clone()
         } else {
             // the fraction would print a side that is Ask or Hidden: the student copy shows the decimal only
-            format!("{name} = {}", c.nr(c.value(v)))
+            format!("{name} = {}", c.ratio_decimal(v))
         };
         out.push(Row { key, stu });
     }
@@ -567,6 +590,27 @@ mod tests {
     }
     fn near(a: f64, b: f64) -> bool { (a - b).abs() < 1e-9 }
 
+    /// Every number in a line of printed text, read back (thousands commas removed, U+2212 as a minus).
+    fn nums_in(s: &str) -> Vec<f64> {
+        fn push(out: &mut Vec<f64>, tok: &mut String) {
+            let cleaned: String = tok.chars().filter(|c| *c != ',').map(|c| if c == '\u{2212}' { '-' } else { c }).collect();
+            if let Ok(v) = cleaned.parse() { out.push(v); }
+            tok.clear();
+        }
+        let mut out = Vec::new();
+        let mut tok = String::new();
+        for ch in s.chars() {
+            if ch.is_ascii_digit() || ch == '.' || ch == ',' || ch == '-' || ch == '\u{2212}' { tok.push(ch); } else { push(&mut out, &mut tok); }
+        }
+        push(&mut out, &mut tok);
+        out
+    }
+    fn round_to(v: f64, dec: i64) -> f64 { let p = 10f64.powi(dec as i32); (v * p).round() / p }
+    /// The value printed after `name = ` on the figure (the unit carries no digits).
+    fn side_value(t: &str, name: &str) -> Option<f64> {
+        t.lines().find(|l| l.starts_with(&format!("{name} = "))).and_then(|l| nums_in(l).first().copied())
+    }
+
     #[test]
     fn values_3_4_5() {
         let p = with(&[s("define", "Two legs"), f("opp_len", 3.0), f("adj_len", 4.0)]);
@@ -628,6 +672,95 @@ mod tests {
         let h = texts(&render_of(&[b("soh", true), b(SHOW_ANSWERS, true)]));
         assert!(h.contains("arctan(3/4) = 36.87\u{b0}") && h.contains("SOH") && h.contains("CAH") && h.contains("TOA"), "{h}");
         assert!(!texts(&render_of(&[])).contains("SOH"), "the hint is off by default");
+        // the method line's operands are lengths: they print as the side labels do, at least two decimals
+        let m = texts(&render_of(&[s("define", "Two legs"), f("opp_len", 8.4025), f("adj_len", 12.0), ("dec", Value::I(0)), b("soh", true), b(SHOW_ANSWERS, true)]));
+        assert!(m.contains("arctan(8.4/12) = 35\u{b0}"), "{m}");
+    }
+
+    /// The printed sides still make a right triangle and every printed `x/y = z` is true at the display
+    /// precision, at every setting of `dec`, in every define mode, on the key and on the student copy.
+    #[test]
+    fn printed_lengths_and_ratios_agree_at_every_precision() {
+        // (define mode, whole-number inputs, non-integer inputs); the sides are the ones each mode reads.
+        type Case = (&'static str, Vec<(&'static str, Value)>, Vec<(&'static str, Value)>);
+        let cases: [Case; 5] = [
+            ("Two legs", vec![f("opp_len", 3.0), f("adj_len", 4.0)], vec![f("opp_len", 8.4025), f("adj_len", 12.0)]),
+            ("Leg and hypotenuse", vec![f("opp_len", 3.0), f("hyp_len", 5.0)], vec![f("opp_len", 7.0), f("hyp_len", 7.3)]),
+            ("Angle and opposite", vec![f("theta", 30.0), f("opp_len", 6.0)], vec![f("theta", 53.0), f("opp_len", 8.0)]),
+            ("Angle and adjacent", vec![f("theta", 30.0), f("adj_len", 6.0)], vec![f("theta", 35.0), f("adj_len", 12.0)]),
+            ("Angle and hypotenuse", vec![f("theta", 30.0), f("hyp_len", 10.0)], vec![f("theta", 35.0), f("hyp_len", 14.6493)]),
+        ];
+        // every side and every ratio Given, theta asked: both copies print the sides and the fractions.
+        let states = [
+            s("g_opp", "Given"), s("g_adj", "Given"), s("g_hyp", "Given"),
+            s("g_theta", "Ask"), s("g_sin", "Given"), s("g_cos", "Given"), s("g_tan", "Given"),
+        ];
+        let mut checked = 0;
+        for (define, whole, frac) in cases {
+            for (tag, extra) in [("whole", &whole), ("non-integer", &frac)] {
+                for dec in 0..=4i64 {
+                    let mut list = vec![s("define", define), ("dec", Value::I(dec))];
+                    list.extend(extra.iter().cloned());
+                    list.extend(states.iter().cloned());
+                    let p = with(&list);
+                    let c = ctx(&p);
+                    let pd = dec.max(2);
+                    for ans in [true, false] {
+                        let mut l = list.clone();
+                        l.push(b(SHOW_ANSWERS, ans));
+                        let t = texts(&render_of(&l));
+                        // 1. every printed `x/y = z` holds at the displayed precision
+                        for line in t.lines().filter(|l| (l.starts_with("sin ") || l.starts_with("cos ") || l.starts_with("tan ")) && l.contains('/')) {
+                            let ns = nums_in(line);
+                            assert_eq!(ns.len(), 3, "{define} {tag} dec {dec} ans {ans}: {line:?}");
+                            let (x, y, z) = (ns[0], ns[1], ns[2]);
+                            // the display rounding is `num`'s (the same formatter the figure prints with)
+                            let want = parse_printed(&num(x / y, pd));
+                            assert!((z - want).abs() < 1e-9, "{define} {tag} dec {dec} ans {ans}: {line:?} is not {x}/{y} at {pd} dp (want {want})");
+                            checked += 1;
+                        }
+                        // 2. the printed sides still satisfy o^2 + a^2 = h^2 at the displayed precision
+                        let (o, a, h) = (side_value(&t, "opposite"), side_value(&t, "adjacent"), side_value(&t, "hypotenuse"));
+                        let (Some(o), Some(a), Some(h)) = (o, a, h) else { panic!("{define} {tag} dec {dec} ans {ans}: a side is not printed\n{t}") };
+                        let tol = (o + a + h) * 10f64.powi(-(pd as i32)) + 1e-9;
+                        assert!((o * o + a * a - h * h).abs() <= tol, "{define} {tag} dec {dec} ans {ans}: {o}^2 + {a}^2 != {h}^2 (off by {})", o * o + a * a - h * h);
+                        // 3. each printed length is the solved length at max(dec, 2) places (whole numbers stay short)
+                        for line in t.lines().filter(|l| l.starts_with("opposite = ") || l.starts_with("adjacent = ") || l.starts_with("hypotenuse = ")) {
+                            let exact = match line.split(" = ").next().unwrap() { "opposite" => c.s.opp, "adjacent" => c.s.adj, _ => c.s.hyp };
+                            let shown = nums_in(line)[0];
+                            let want = parse_printed(&num(exact, pd));
+                            assert!((shown - want).abs() < 1e-9, "{define} {tag} dec {dec} ans {ans}: {line:?} should be the length at {pd} dp ({want})");
+                        }
+                        // 4. theta keeps its own precision
+                        if ans {
+                            let line = t.lines().find(|l| l.starts_with("\u{3b8} = ")).expect("the theta row");
+                            let ns = nums_in(line);
+                            assert_eq!(ns.len(), 1, "{line:?}");
+                            assert!((ns[0] - round_to(c.s.th, dec)).abs() < 1e-9, "{define} {tag} dec {dec}: {line:?} should be {} dp", dec);
+                        }
+                    }
+                }
+            }
+        }
+        assert!(checked >= 150, "{checked}");
+
+        // A Given ratio whose side is Ask prints the decimal only on the student copy; that decimal is still
+        // the ratio of the lengths as printed (never of the exact sides).
+        for dec in 0..=4i64 {
+            for (opp, hyp) in [(7.0, 7.3), (3.0, 5.0), (8.4025, 14.6493)] {
+                let l = vec![s("define", "Leg and hypotenuse"), f("opp_len", opp), f("hyp_len", hyp), ("dec", Value::I(dec)),
+                    s("g_opp", "Given"), s("g_hyp", "Ask"), s("g_adj", "Ask"), s("g_sin", "Given"), s("g_cos", "Hidden"), s("g_tan", "Hidden"), s("g_theta", "Hidden"), b(SHOW_ANSWERS, false)];
+                let c = ctx(&with(&l));
+                let stu = texts(&render_of(&l));
+                let row = stu.lines().find(|x| x.starts_with("sin ")).unwrap_or("");
+                assert!(!row.contains('/'), "{dec} {opp}/{hyp}: the fraction names a side that is not Given: {row:?}");
+                let ns = nums_in(row);
+                assert_eq!(ns.len(), 1, "{row:?}");
+                let (pa, pb, _) = c.ratio_parts(V::Sin);
+                let want = round_to(parse_printed(&pa) / parse_printed(&pb), c.len_dec());
+                assert!((ns[0] - want).abs() < 1e-9, "{dec} {opp}/{hyp}: {row:?} is not {pa}/{pb} at {} dp", c.len_dec());
+            }
+        }
     }
 
     /// No value that is asked for appears in the student copy (as text); the key shows every one of them.
@@ -917,7 +1050,7 @@ mod tests {
                     let all = Ctx::ratio_sides(v).iter().all(|x| c.md(*x) == Md::Given);
                     assert_eq!(row.contains('/'), all, "{opp} {hyp} {mo} {ma} {mh} {ratio}: {row:?}");
                     for sv in [V::Opp, V::Adj, V::Hyp] {
-                        if c.md(sv) != Md::Given && Ctx::ratio_sides(v).contains(&sv) { assert!(!has_tok(&row, &c.n(c.value(sv))) || row.contains(&c.nr(c.value(v))) && !row.contains('/'), "{row:?} shows {sv:?}"); }
+                        if c.md(sv) != Md::Given && Ctx::ratio_sides(v).contains(&sv) { assert!(!has_tok(&row, &c.nl(c.value(sv))) || row.contains(&c.ratio_decimal(v)) && !row.contains('/'), "{row:?} shows {sv:?}"); }
                     }
                     let warned = warnings(&p).iter().any(|w| w.contains("Given sin, cos or tan"));
                     assert_eq!(warned, !all, "{opp} {hyp} {mo} {ma} {mh} {ratio}");
