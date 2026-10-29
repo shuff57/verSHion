@@ -134,6 +134,8 @@ logic-circuit__defaults 7768e6a757381fcb
 logic-circuit__start 7768e6a757381fcb
 lorenz__defaults ef6c047cbc7881c4
 lorenz__start ef6c047cbc7881c4
+magnetic-field__defaults 5efad0d0e9927ff4
+magnetic-field__start 5efad0d0e9927ff4
 map-scale__defaults b5b2ddcbc80cc9ca
 map-scale__start b5b2ddcbc80cc9ca
 mapping-diagram__defaults bca744bdcfc94138

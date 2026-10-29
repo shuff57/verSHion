@@ -66,6 +66,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "circular-motion" => CIRCULAR_MOTION,
         "refraction" => REFRACTION,
         "electric-field" => ELECTRIC_FIELD,
+        "magnetic-field" => MAGNETIC_FIELD,
         "parallelogram" => PARALLELOGRAM,
         "trapezoid" => TRAPEZOID,
         "kite" => KITE,
@@ -3451,6 +3452,25 @@ const ENERGY_BAR_CHART: &[Faq] = &[
     Faq {
         q: "How do I make a worksheet?",
         a: "Turn Show answers off: the bars are not drawn and the three numbers become blanks, while the axes, the store names and the givens (mass, heights, loss share, g) stay, so the student works out the stores and draws the bars.",
+    },
+];
+
+const MAGNETIC_FIELD: &[Faq] = &[
+    Faq {
+        q: "Which way do the field lines go round?",
+        a: "Point the thumb of your right hand along the current and your fingers curl the way the field lines go. A current out of the page gives anticlockwise circles, a current into the page gives clockwise ones, which is why the arrows reverse when you change the sense.",
+    },
+    Faq {
+        q: "Where does the formula come from?",
+        a: "For a long straight wire the field is mu0 I over 2 pi r: it is proportional to the current and falls as 1/r, not 1/r squared. Doubling the distance halves the field; doubling the current doubles it.",
+    },
+    Faq {
+        q: "Why is the wire drawn as a dot or a cross?",
+        a: "The picture looks down the wire. A dot is the tip of an arrow coming towards you (current out of the page) and a cross is the tail feathers going away (current into the page). The field circles lie in the plane of the page, round the wire.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the field strength and its value in microtesla become blanks while the wire, the field circles and the given current and distance stay. The direction is printed either way, since it follows from the sense of the current.",
     },
 ];
 
