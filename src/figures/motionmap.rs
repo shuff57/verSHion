@@ -190,7 +190,9 @@ pub fn build(p: &Params) -> (String, Report) {
     d.raw(&text_el(24.0, rows_y0 - 18.0 * lab, 12.0 * lab, "start", ink, &givens));
 
     // the readout
-    let gap_list = gaps(p).iter().map(|g| q_num(*g, dec)).collect::<Vec<_>>().join(", ");
+    // at least two decimals for the gaps: a 0.05 m gap (0.5 m/s sampled every 0.1 s) printed as "0.1" at one decimal
+    // place, which contradicts the arithmetic the student is meant to check it against
+    let gap_list = gaps(p).iter().map(|g| q_num(*g, dec.max(2))).collect::<Vec<_>>().join(", ");
     let rows = [
         if ans {
             format!("Velocity at each flash  {} m/s", vs.iter().map(|v| q_num(*v, dec)).collect::<Vec<_>>().join(", "))
@@ -230,7 +232,8 @@ pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
         let t = (n - 1) as f64 * dt;
         // solve x = v0 t + a t^2 / 2 for v0
         let v0 = (x - 0.5 * a * t * t) / t.max(1e-9);
-        if v0.is_finite() { p.set_f("v0", (v0 * 4.0).round() / 4.0); }
+        // rounded to the control's own step, so the knob lands where the slider would put it
+        if v0.is_finite() { p.set_f("v0", (v0 * 2.0).round() / 2.0); }
     })])
 }
 
@@ -244,7 +247,7 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
         Example { name: "Speeding up from 0.5 m/s", params: vec![s("motion", "speeding up"), f("v0", 0.5), f("a", 2.0), f("dt", 0.5), i("n", 6)] },
         Example { name: "Speeding up from 1 m/s", params: vec![s("motion", "speeding up"), f("v0", 1.0), f("a", 1.5), f("dt", 0.4), i("n", 5)] },
         Example { name: "Slowing down until it stops", params: vec![s("motion", "slowing down"), f("v0", 4.0), f("a", 2.0), f("dt", 0.5), i("n", 6)] },
-        Example { name: "The same motion sampled twice as often", params: vec![f("v0", 3.0), f("dt", 0.25), i("n", 8)] },
+        Example { name: "Eight flashes at 0.25 s intervals", params: vec![f("v0", 3.0), f("dt", 0.25), i("n", 8)] },
     ])
 }
 
@@ -361,6 +364,27 @@ mod tests {
         let key = texts(&render_of(&[s("motion", "speeding up"), b(SHOW_ANSWERS, true)]));
         assert!(key.contains("v0 = 2 m/s"), "{key}");
         assert!(key.contains("a = 2 m/s"), "{key}");
+    }
+
+    #[test]
+    fn the_givens_and_the_readout_print_the_same_acceleration() {
+        // the givens used to print the magnitude while the readout printed the signed value: "a = 2" beside
+        // "Acceleration -2" on the same slowing figure
+        let t = texts(&render_of(&[s("motion", "slowing down"), f("v0", 4.0), f("a", 2.0), b(SHOW_ANSWERS, true)]));
+        let givens = t.lines().find(|l| l.contains("v0 =")).unwrap_or("");
+        let read = t.lines().find(|l| l.starts_with("Acceleration")).unwrap_or("");
+        assert!(givens.contains("a = \u{2212}2"), "the givens do not print the signed value: {givens}");
+        assert!(read.contains("\u{2212}2"), "{read}");
+    }
+
+    #[test]
+    fn a_gap_smaller_than_a_tenth_still_prints_truthfully() {
+        // 0.5 m/s sampled every 0.1 s is a 0.05 m gap; at one decimal place it printed "0.1", which contradicts the
+        // arithmetic the student is asked to check
+        let t = texts(&render_of(&[f("v0", 0.5), f("dt", 0.1), ("dec", Value::I(1)), b(SHOW_ANSWERS, true)]));
+        let line = t.lines().find(|l| l.starts_with("Gap between flashes")).unwrap_or("");
+        assert!(line.contains("0.05"), "{line}");
+        assert!(!line.contains("0.1"), "{line}");
     }
 
     #[test]

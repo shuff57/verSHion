@@ -415,3 +415,16 @@ credited the readout with the stopping time and distance, which is the editor's 
 Left open: axis ink `#111827` is grey but not exactly
 neutral; trig's key prints a Hidden side inside a fraction; two-label y axes on tall waves; some coordinate labels
 sit over the drop lines; two example names overstate what they show.
+
+Verification of the ray/motion fixes (`99d3e43`): a read-only pass in its own archive copy confirmed all four blockers
+and seven of the majors fixed with evidence, and found the other two only partly fixed — the image still left the
+canvas at long focal lengths (f = 40, u = 40.5 → x = 1332 on a 640 canvas, 2,120 settings) and labels still collided
+("F′image" at f = 10, u = 60). It also caught three defects the fix itself had introduced: the vertical fit ignored
+the lens, so a tall image pushed it off the top or across the readout; the nature sentence used the exact
+magnification while the readout used the rounded one ("Magnification −1" beside "smaller"); and unclipped rays printed
+through the readout. All fixed: one collision-aware placer for every drawing label, the lens reserved in the vertical
+fit, rays clipped to the drawing band, and an off-canvas image named at the edge (with the distance blanked on the
+student copy) instead of silently missing. New tests parse the drawn lens polygons and every rendered label over 96
+settings, so a collision or an off-canvas label now fails a test rather than a critic. Report:
+`docs/critic-reports/2026-10-29-ray-motion-verify-99d3e43.md`. Census: `hardy-weinberg__defaults` and
+`hardy-weinberg__start` added; `ray-diagram__defaults` and `ray-diagram__start` re-hashed for the new geometry.

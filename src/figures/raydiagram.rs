@@ -81,8 +81,11 @@ pub fn nature(p: &Params) -> String {
         Some(v) => {
             let real = v > 0.0;
             let upright = m.is_some_and(|m| m > 0.0);
-            let size = m.map(|m| m.abs()).unwrap_or(1.0);
-            let size = if (size - 1.0).abs() < 0.02 { "the same size" } else if size > 1.0 { "magnified" } else { "smaller" };
+            // compared as it will be printed, not as it is: at one decimal place u = 20.5, f = 10 prints
+            // "Magnification -1" beside "smaller", which reads as a contradiction. Round first, then describe.
+            let dec = 10f64.powi(p.i("dec").clamp(1, 3) as i32);
+            let size = m.map(|m| (m.abs() * dec).round() / dec).unwrap_or(1.0);
+            let size = if (size - 1.0).abs() < 1e-9 { "the same size" } else if size > 1.0 { "magnified" } else { "smaller" };
             let side = if real { "" } else { ", on the same side as the object" };
             match (real, upright) {
                 (true, false) => format!("Real, inverted and {size}"),
@@ -123,7 +126,69 @@ fn q_num(v: f64, dec: i64) -> String {
     if v != 0.0 && all_zero { format!("{v:.2e}").replace('-', "\u{2212}") } else { s }
 }
 
-pub fn warnings(_p: &Params) -> Vec<String> { Vec::new() }
+/// True when the object sits close enough to the focal point that the image cannot be shown on the canvas.
+pub fn image_off_canvas(p: &Params) -> bool {
+    let (f, u, h) = given(p);
+    let (v, _, hi) = derived(p);
+    let Some(v) = v else { return false };
+    let rows_y0 = ROWS_Y0 + (svg::label_factor(p.s("label_size")) - 1.0) * 30.0;
+    let band = rows_y0 - 90.0;
+    let hi_v = hi.unwrap_or(0.0);
+    let up = h.max(if hi_v > 0.0 { hi_v } else { 0.0 }).max(0.2);
+    let down = if hi_v < 0.0 { -hi_v } else { 0.0 };
+    let w = (W * (1.0 + 0.6 * (svg::label_factor(p.s("label_size")) - 1.0))).max(W);
+    let horiz = ((CX - 70.0) / u).min((w - 40.0 - CX) / f.abs()).min((w - CX - 60.0) / v.abs().max(0.001));
+    let vert = (band - 2.0 * LENS_H).max(20.0) / (up + down).max(0.2);
+    let _ = f;
+    horiz.min(vert) < 0.3
+}
+
+pub fn warnings(p: &Params) -> Vec<String> {
+    let (_, u, _) = given(p);
+    let (v, _, hi) = derived(p);
+    match (v, hi) {
+        (Some(v), Some(hi)) if image_off_canvas(p) => vec![format!(
+            "The object at {} cm is too close to the focal point for the image to fit on the canvas: the image is {} cm away, {} cm tall, and the rays are drawn leaving the frame.",
+            q_num(u, 1),
+            q_num(v.abs(), 0),
+            q_num(hi.abs(), 0)
+        )],
+        _ => Vec::new(),
+    }
+}
+
+/// The boxes of the labels already drawn, so a later label can move clear of them or be dropped. Two labels over
+/// each other ("F\u{2032}image", "imaget") are worse than one label missing: the reader cannot read either word.
+struct Placer {
+    boxes: Vec<(f64, f64, f64, f64)>,
+}
+
+impl Placer {
+    fn new() -> Self { Placer { boxes: Vec::new() } }
+    fn free(&self, x: f64, y: f64, w: f64) -> bool {
+        let (x0, x1, y0, y1) = (x - w / 2.0, x + w / 2.0, y - 8.0, y + 4.0);
+        // a box is (x0, x1, y0, y1)
+        !self.boxes.iter().any(|b| x0 < b.1 && b.0 < x1 && y0 < b.3 && b.2 < y1)
+    }
+    fn take(&mut self, x: f64, y: f64, w: f64) { self.boxes.push((x - w / 2.0, x + w / 2.0, y - 8.0, y + 4.0)); }
+}
+
+/// Draws a label at `(x, y)` if it fits clear of the ones already placed — trying a little above, then below, and
+/// dropping it when nothing is free. Returns whether it was drawn.
+fn place(d: &mut Doc, pl: &mut Placer, x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) -> bool {
+    let w = s.chars().count() as f64 * size * 0.58 + 4.0;
+    let cx = match anchor { "start" => x + w / 2.0, "end" => x - w / 2.0, _ => x };
+    for dy in [0.0, -15.0, 15.0, -30.0, 30.0] {
+        let yy = y + dy;
+        if yy < 14.0 { continue; }
+        if pl.free(cx, yy, w) {
+            pl.take(cx, yy, w);
+            d.raw(&text_el(x, yy, size, anchor, fill, s));
+            return true;
+        }
+    }
+    false
+}
 
 fn text_el(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) -> String {
     format!(
@@ -169,11 +234,27 @@ pub fn build(p: &Params) -> (String, Report) {
     let up = h.max(if hi_v > 0.0 { hi_v } else { 0.0 }).max(0.2);
     let down = if hi_v < 0.0 { -hi_v } else { 0.0 };
     let band = rows_y0 - 60.0 - 30.0;
-    let horiz = ((CX - 70.0) / u).min((w - CX - 60.0) / v_abs);
-    let vert = band / (up + down).max(0.2);
-    let scale = horiz.min(vert).clamp(0.3, 16.0);
-    // centre what is drawn in the band rather than hanging it from the top
-    let axis_y = 30.0 + (band - (up + down) * scale).max(0.0) / 2.0 + up * scale;
+    // The lens is 2 x LENS_H tall whatever the scale, so the band always has to leave that much room either side
+    // of the axis; without it a tall image pushes the axis up and the lens runs off the top of the canvas.
+    let fit = |with_image: bool| -> f64 {
+        let (u_, d_) = if with_image { (up, down) } else { (h.max(0.2), 0.0) };
+        // the far focal point has to fit on the page too: a long focal length at a scale that only fits the object
+        // put its label past the right edge
+        let horiz = ((CX - 70.0) / u)
+            .min((w - 40.0 - CX) / f.abs())
+            .min(if with_image { (w - CX - 60.0) / v_abs } else { f64::INFINITY });
+        let vert = (band - 2.0 * LENS_H).max(20.0) / (u_ + d_).max(0.2);
+        horiz.min(vert)
+    };
+    // Near the focal point the image is thousands of centimetres away: at any scale that still shows the object it
+    // is off the page. The picture is then drawn for the object and the rays, and the image is named in a label at
+    // the edge rather than silently missing while the readout quotes a distance.
+    let off_canvas = v.is_some() && fit(true) < 0.3;
+    let scale = (if off_canvas { fit(false) } else { fit(true) }).clamp(0.3, 16.0);
+    let (up_v, down_v) = if off_canvas { (h.max(0.2), 0.0) } else { (up, down) };
+    let above = (up_v * scale).max(LENS_H);
+    let below = (down_v * scale).max(LENS_H);
+    let axis_y = 30.0 + (band - (above + below)).max(0.0) / 2.0 + above;
     d.line(20.0, axis_y, w - 20.0, axis_y, ink, 1.2);
 
     // the lens, drawn as the usual double arrow: a converging lens is thicker in the middle, so its heads point
@@ -187,22 +268,26 @@ pub fn build(p: &Params) -> (String, Report) {
         d.arrow(CX, tail, CX, head, lens, 1.8);
     }
 
+    // Every label goes through the placer, so no two of them can print into each other: the lens caption claims its
+    // place first (it is the one the figure is named for), then the foci, then the object and the image.
+    let mut pl = Placer::new();
+    let fpx = f.abs() * scale;
+    let lens_cap = (axis_y - LENS_H - 14.0).max(12.0);
+    if scale >= 2.0 {
+        let _ = place(&mut d, &mut pl, CX, lens_cap, 12.0 * lab, "middle", lens, if conv { "converging lens" } else { "diverging lens" });
+    }
     // the focal points: their labels are dropped when the drawing is so compressed that the two would print into
     // each other (a long focal length seen at a tiny scale)
-    let fpx = f.abs() * scale;
     for (x, name) in [(CX - fpx, "F"), (CX + fpx, "F\u{2032}")] {
         d.circle(x, axis_y, 3.0, lens, lens, 1.0);
-        if fpx >= 24.0 { d.raw(&text_el(x, axis_y + 22.0, 12.0 * lab, "middle", lens, name)); }
+        if fpx >= 24.0 { let _ = place(&mut d, &mut pl, x, axis_y + 22.0, 12.0 * lab, "middle", lens, name); }
     }
 
     // the object
     let ox = CX - u * scale;
     let oy = axis_y - h * scale;
     d.arrow(ox, axis_y, ox, oy, ink, 2.2);
-    // the lens caption sits above the lens; the object caption is dropped where the two would print into each other
-    let lens_cap = (axis_y - LENS_H - 14.0).max(12.0);
-    let crowded = |x: f64, y: f64| (x - CX).abs() < 110.0 && (y - lens_cap).abs() < 26.0;
-    if scale >= 2.0 && !crowded(ox, oy - 10.0) { d.raw(&text_el(ox, oy - 10.0, 12.0 * lab, "middle", ink, "object")); }
+    if scale >= 2.0 { let _ = place(&mut d, &mut pl, ox, oy - 10.0, 12.0 * lab, "middle", ink, "object"); }
 
     // the rays: parallel-then-through-F', through the centre, and through F-then-parallel
     let (fx2, fx1) = (CX + fpx, CX - fpx);
@@ -212,23 +297,40 @@ pub fn build(p: &Params) -> (String, Report) {
         if (b.0 - a.0).abs() < 1e-9 { return a.1; }
         a.1 + (x - a.0) * ((b.1 - a.1) / (b.0 - a.0))
     };
+    // A ray is clipped to the drawing band. Unclipped, the near-parallel rays of an object close to the focal point
+    // run diagonally across the bottom of the canvas and print straight through the readout underneath.
+    let (y_top, y_bot) = (10.0, rows_y0 - 70.0);
+    let ray_line = |d: &mut Doc, a: (f64, f64), b: (f64, f64), sw: f64| {
+        let (mut t0, mut t1) = (0.0f64, 1.0f64);
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        for (p, q) in [(-dx, a.0 - 20.0), (dx, edge - a.0), (-dy, a.1 - y_top), (dy, y_bot - a.1)] {
+            if p.abs() < 1e-12 {
+                if q < 0.0 { return; }
+            } else {
+                let r = q / p;
+                if p < 0.0 { if r > t1 { return; } if r > t0 { t0 = r; } }
+                else { if r < t0 { return; } if r < t1 { t1 = r; } }
+            }
+        }
+        d.line(a.0 + t0 * dx, a.1 + t0 * dy, a.0 + t1 * dx, a.1 + t1 * dy, ray, sw);
+    };
     // ray 1: parallel to the axis, then through the far focal point — or, for a diverging lens, away from the near
     // one, which is where it appears to come from
-    d.line(ox, oy, CX, oy, ray, 1.8);
+    ray_line(&mut d, (ox, oy), (CX, oy), 1.8);
     if conv {
-        d.line(CX, oy, edge, y_on((CX, oy), (fx2, axis_y), edge), ray, 1.8);
+        ray_line(&mut d, (CX, oy), (edge, y_on((CX, oy), (fx2, axis_y), edge)), 1.8);
     } else {
-        d.line(CX, oy, edge, y_on((fx1, axis_y), (CX, oy), edge), ray, 1.8);
+        ray_line(&mut d, (CX, oy), (edge, y_on((fx1, axis_y), (CX, oy), edge)), 1.8);
     }
     // ray 2: through the centre of the lens, undeviated: the object tip, the centre and the edge are one line
-    d.line(ox, oy, CX, axis_y, ray, 1.8);
-    d.line(CX, axis_y, edge, y_on((ox, oy), (CX, axis_y), edge), ray, 1.8);
+    ray_line(&mut d, (ox, oy), (CX, axis_y), 1.8);
+    ray_line(&mut d, (CX, axis_y), (edge, y_on((ox, oy), (CX, axis_y), edge)), 1.8);
     // ray 3: through the near focal point, then parallel to the axis — only for a converging lens with the object
     // beyond that focus, where the ray exists
     if conv && u > f.abs() + 1e-9 {
         let yc = y_on((ox, oy), (fx1, axis_y), CX);
-        d.line(ox, oy, CX, yc, ray, 1.6);
-        d.line(CX, yc, edge, yc, ray, 1.6);
+        ray_line(&mut d, (ox, oy), (CX, yc), 1.6);
+        ray_line(&mut d, (CX, yc), (edge, yc), 1.6);
     }
 
     // the image, dashed when it is virtual — both the construction lines and the arrow itself, which is what the FAQ
@@ -236,7 +338,18 @@ pub fn build(p: &Params) -> (String, Report) {
     if let (Some(v), Some(hi)) = (v, hi) {
         let ix = CX + v * scale;
         let iy = axis_y - hi * scale;
-        if v < 0.0 {
+        if off_canvas {
+            // the image is thousands of centimetres away: the rays are drawn leaving the frame and the distance is
+            // named here, so the picture and the readout cannot disagree about whether there is an image
+            let side = if v > 0.0 { "to the right" } else { "on the object's side" };
+            // with answers off the distance is the answer, so the note says only that the image is off the page
+            let note = if ans {
+                format!("image {} cm {}, beyond the canvas", q_num(printed(p).0.unwrap_or(v).abs(), dec), side)
+            } else {
+                format!("image {BLANK} cm {side}, beyond the canvas")
+            };
+            let _ = place(&mut d, &mut pl, w - 26.0, 22.0, 12.0 * lab, "end", virt, &note);
+        } else if v < 0.0 {
             // the rays only appear to come from here: extend them backwards
             d.raw(&format!(r##"<line x1="{CX:.2}" y1="{oy:.2}" x2="{ix:.2}" y2="{iy:.2}" stroke="{virt}" stroke-width="1.4" stroke-dasharray="6 4"/>"##));
             d.raw(&format!(r##"<line x1="{CX:.2}" y1="{axis_y:.2}" x2="{ix:.2}" y2="{iy:.2}" stroke="{virt}" stroke-width="1.4" stroke-dasharray="6 4"/>"##));
@@ -245,12 +358,11 @@ pub fn build(p: &Params) -> (String, Report) {
             d.arrow(ix, axis_y, ix, iy, virt, 2.2);
         }
         // the label goes clear of the canvas edge and of the axis
-        let ly = (iy + if hi < 0.0 { 20.0 } else { -10.0 }).clamp(12.0, rows_y0 - 40.0);
-        let lx = ix.clamp(30.0, w - 30.0);
-        if scale >= 2.0 && !crowded(lx, ly) { d.raw(&text_el(lx, ly, 12.0 * lab, "middle", virt, "image")); }
-    }
-    if scale >= 2.0 {
-        d.raw(&text_el(CX, lens_cap, 12.0 * lab, "middle", lens, if conv { "converging lens" } else { "diverging lens" }));
+        if !off_canvas {
+            let ly = (iy + if hi < 0.0 { 20.0 } else { -10.0 }).clamp(12.0, rows_y0 - 40.0);
+            let lx = ix.clamp(30.0, w - 30.0);
+            if scale >= 2.0 { let _ = place(&mut d, &mut pl, lx, ly, 12.0 * lab, "middle", virt, "image"); }
+        }
     }
 
     // the givens
@@ -271,7 +383,8 @@ pub fn build(p: &Params) -> (String, Report) {
             _ => String::new(),
         },
         // the nature of the image follows from the diagram, so it is part of the answer
-        if ans { nature(p) } else if v.is_some() { "The image is ______, ______ and ______".to_string() } else { "No image: the rays leave parallel".to_string() },
+        // at u = f the row above has already said there is no image; saying it twice read as a stutter
+        if ans { nature(p) } else if v.is_some() { "The image is ______, ______ and ______".to_string() } else { String::new() },
     ];
     for (i, line) in rows.iter().enumerate() {
         d.raw(&format!(
@@ -283,7 +396,8 @@ pub fn build(p: &Params) -> (String, Report) {
         ));
     }
 
-    let image_tip = v.zip(hi).map(|(v, hi)| (CX + v * scale, axis_y - hi * scale));
+    // no tip when the image is off the page: it is named at the edge instead, and a handle there would be a lie
+    let image_tip = v.zip(hi).filter(|_| !off_canvas).map(|(v, hi)| (CX + v * scale, axis_y - hi * scale));
     (d.finish(), Report { object_tip: (ox, oy), image_tip, scale, axis_y })
 }
 
@@ -345,6 +459,143 @@ mod tests {
             rest = &body[k..];
         }
         out
+    }
+
+    /// Every label in the drawing area as (text, centre x, baseline y, width).
+    fn drawing_labels(svg: &str, rows_y0: f64) -> Vec<(String, f64, f64, f64)> {
+        let mut out = Vec::new();
+        let mut rest = svg;
+        while let Some(i) = rest.find("<text") {
+            rest = &rest[i..];
+            let Some(j) = rest.find('>') else { break };
+            let head = &rest[..j];
+            let body_rest = &rest[j + 1..];
+            let Some(k) = body_rest.find("</text>") else { break };
+            let body = body_rest[..k].to_string();
+            let num = |name: &str| -> f64 {
+                let p = format!("{name}=\"");
+                head.find(&p)
+                    .and_then(|s| { let v = &head[s + p.len()..]; v.find('"').map(|e| v[..e].parse::<f64>().unwrap_or(0.0)) })
+                    .unwrap_or(0.0)
+            };
+            let (size, x, y) = (num("font-size"), num("x"), num("y"));
+            let anchor = if head.contains("text-anchor=\"start\"") { "start" } else if head.contains("text-anchor=\"end\"") { "end" } else { "middle" };
+            let wl = body.chars().count() as f64 * size * 0.58;
+            if y < rows_y0 - 60.0 {
+                let cx = match anchor { "start" => x + wl / 2.0, "end" => x - wl / 2.0, _ => x };
+                out.push((body, cx, y, wl));
+            }
+            rest = &body_rest[k..];
+        }
+        out
+    }
+
+    /// Whether a polygon head has a vertex within 1.5 px of (x, y).
+    fn head_at(svg: &str, x: f64, y: f64) -> bool {
+        let mut rest = svg;
+        while let Some(i) = rest.find("<polygon points=\"") {
+            rest = &rest[i + 17..];
+            let Some(e) = rest.find('"') else { break };
+            for p in rest[..e].split(' ') {
+                if let Some((px, py)) = p.split_once(',') {
+                    if let (Ok(px), Ok(py)) = (px.parse::<f64>(), py.parse::<f64>()) {
+                        if (px - x).abs() < 1.5 && (py - y).abs() < 1.5 { return true; }
+                    }
+                }
+            }
+            rest = &rest[e..];
+        }
+        false
+    }
+
+    #[test]
+    fn the_lens_and_every_label_stay_on_the_canvas() {
+        let mut bad = Vec::new();
+        for fl in [4.0, 10.0, 25.0, 40.0] {
+            for uu in [2.0, 4.5, 6.0, 10.0, 15.0, 25.0, 40.5, 60.0] {
+                for hh in [0.5, 4.0, 10.0] {
+                    let p = with(&[f("f", fl), f("u", uu), f("h", hh)]);
+                    let (svg, rep) = build(&p);
+                    let (w, rows) = (W, ROWS_Y0);
+                    // the lens, caps and all, inside the frame and clear of the givens line
+                    if rep.axis_y - LENS_H < 12.0 || rep.axis_y + LENS_H > rows - 40.0 {
+                        bad.push(format!("lens {fl}/{uu}/{hh}: axis at {}", rep.axis_y));
+                    }
+                    // and no two labels over each other
+                    let labels = drawing_labels(&svg, rows);
+                    for (i, a) in labels.iter().enumerate() {
+                        if a.1 - a.3 / 2.0 < 0.0 || a.1 + a.3 / 2.0 > w {
+                            bad.push(format!("label {a:?} off the canvas at {fl}/{uu}/{hh}"));
+                        }
+                        for b in labels.iter().skip(i + 1) {
+                            let (ax0, ax1) = (a.1 - a.3 / 2.0 + 2.0, a.1 + a.3 / 2.0 - 2.0);
+                            let (bx0, bx1) = (b.1 - b.3 / 2.0 + 2.0, b.1 + b.3 / 2.0 - 2.0);
+                            let (ay0, ay1) = (a.2 - 8.0, a.2 + 4.0);
+                            let (by0, by1) = (b.2 - 8.0, b.2 + 4.0);
+                            if ax0 < bx1 && bx0 < ax1 && ay0 < by1 && by0 < ay1 {
+                                bad.push(format!("{} + {} overlap at {fl}/{uu}/{hh}", a.0, b.0));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{:#?}", &bad[..bad.len().min(8)]);
+    }
+
+    #[test]
+    fn an_image_too_far_away_is_named_at_the_edge_not_silently_missing() {
+        for (fl, uu) in [(40.0, 40.5), (40.0, 39.5), (40.0, 39.0), (25.0, 25.5)] {
+            let p = with(&[f("f", fl), f("u", uu)]);
+            let (svg, rep) = build(&p);
+            let (v, _, _) = derived(&p);
+            match rep.image_tip {
+                Some((x, y)) => {
+                    assert!(x > 0.0 && x < W, "f = {fl}, u = {uu}: image tip at x = {x}");
+                    assert!(y > 0.0 && y < ROWS_Y0 - 60.0, "f = {fl}, u = {uu}: image tip at y = {y}");
+                }
+                None => {
+                    let t = texts(&svg);
+                    assert!(t.contains("beyond the canvas"), "f = {fl}, u = {uu}: no note, and no image: {t}");
+                    // and the note names the distance the readout quotes
+                    let quoted = q_num(v.unwrap().abs(), p.i("dec"));
+                    assert!(t.contains(&quoted), "f = {fl}, u = {uu}: the note does not say {quoted}");
+                    assert!(image_off_canvas(&p), "f = {fl}, u = {uu}");
+                    assert!(!warnings(&p).is_empty(), "the editor is not told: f = {fl}, u = {uu}");
+                }
+            }
+        }
+        // and the student copy keeps the fact but not the number
+        let stu = texts(&render_of(&[f("f", 40.0), f("u", 40.5), b(SHOW_ANSWERS, false)]));
+        assert!(stu.contains("beyond the canvas"), "{stu}");
+        assert!(!stu.contains("3,240"), "the image distance leaked onto the student copy: {stu}");
+        // the default has an image, drawn on the page
+        let (svg, rep) = build(&with(&[]));
+        assert!(rep.image_tip.is_some());
+        assert!(!texts(&svg).contains("beyond the canvas"));
+    }
+
+    #[test]
+    fn the_lens_symbol_points_the_right_way() {
+        let conv = render_of(&[]);
+        let divg = render_of(&[s("lens", "diverging")]);
+        let rep = build(&with(&[])).1;
+        let (lt, lb) = (rep.axis_y - LENS_H, rep.axis_y + LENS_H);
+        // converging: thicker in the middle, so the heads are outside the body
+        assert!(head_at(&conv, CX, lt - 9.0) && head_at(&conv, CX, lb + 9.0), "converging lens heads point inward");
+        assert!(!head_at(&conv, CX, lt + 9.0), "converging lens has an inward head");
+        // diverging: thinner in the middle, so the heads are inside
+        assert!(head_at(&divg, CX, lt) && head_at(&divg, CX, lb), "diverging lens heads point outward");
+    }
+
+    #[test]
+    fn a_virtual_image_is_dashed_and_a_real_one_is_not() {
+        let virt = render_of(&[f("u", 6.0)]);
+        // two extensions and the arrow's own shaft, all dashed — the cue that survives a Print copy
+        assert_eq!(virt.matches("stroke-dasharray=\"6 4\"").count(), 2, "the extensions are not dashed");
+        assert_eq!(virt.matches("stroke-dasharray=\"5 3\"").count(), 1, "the virtual arrow is not dashed");
+        let real = render_of(&[f("u", 25.0)]);
+        assert!(!real.contains("stroke-dasharray"), "a real image is drawn dashed");
     }
 
     #[test]
@@ -480,6 +731,11 @@ mod tests {
             ("nearfocus".into(), vec![f("u", 10.5)]),
             ("tall".into(), vec![f("u", 6.0), f("h", 10.0)]),
             ("closeup".into(), vec![f("u", 2.0), f("h", 10.0)]),
+            // the cases the verification critic found: an image thousands of centimetres away, a lens pushed off the
+            // top of the canvas by a tall image, and a label with nowhere to go
+            ("faraway".into(), vec![f("f", 40.0), f("u", 40.5)]),
+            ("steep".into(), vec![f("f", 4.0), f("u", 4.5), f("h", 5.0)]),
+            ("lowobject".into(), vec![f("u", 2.0), f("h", 0.5)]),
         ];
         for (i, (_, l)) in examples(ID).unwrap().into_iter().map(|e| (e.name.to_string(), e.params)).enumerate() { cases.push((format!("ex{i}"), l)); }
         for (tag, list) in cases {
