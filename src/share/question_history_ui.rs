@@ -193,6 +193,8 @@ pub struct QuestionPage {
     pub draft_open: bool,
     /// (round 5, critic S3) The held-back versions, sorted (for `held_between`).
     held: Vec<u64>,
+    /// (round 7, critic M5) The pool has more history lines below the one page read: said, never dropped silently.
+    pub more_older: bool,
     /// (round 4, critic P-4) The last restore's words, put back when a second restore is cancelled.
     undo_text: Option<String>,
     env: Env,
@@ -300,6 +302,7 @@ impl QuestionPage {
             fail_retry: false,
             draft_open: false,
             held: Vec::new(),
+            more_older: false,
             undo_text: None,
             env,
             jobs: Vec::new(),
@@ -337,10 +340,11 @@ impl QuestionPage {
         if self.qid.is_none() {
             return;
         }
-        let lines = cache.lines(&self.cid, &self.bid, &self.scope, self.head_key).map(<[VersionLine]>::to_vec);
+        let lines = cache.lines(&self.cid, &self.bid, &self.scope, self.head_key).map(|(l, more)| (l.to_vec(), more));
         let need_lines = lines.is_none() || self.lines_again;
-        if let Some(l) = lines.filter(|_| !self.lines_again) {
+        if let Some((l, more)) = lines.filter(|_| !self.lines_again) {
             self.lines = l;
+            self.more_older = more;
         }
         let cached = if self.hiding_viewer || self.lines_again { None } else { cache.page(&self.cid, &self.bid, &self.scope).cloned() };
         self.load = Load::Loading;
@@ -359,6 +363,7 @@ impl QuestionPage {
     fn forget_reads(&mut self, cache: &mut HistoryCache, keep_result: bool) {
         cache.drop_bank(&self.cid, &self.bid);
         self.lines.clear();
+        self.more_older = false;
         self.page = None;
         self.compare = None;
         self.preview = None;
@@ -408,7 +413,9 @@ impl QuestionPage {
                 }
                 if let Some(vp) = vp {
                     self.lines = vp.versions;
-                    cache.put_lines(&self.cid, &self.bid, &self.scope, self.head_key, self.lines.clone());
+                    // (round 7, critic M5) the pool serves one page of lines: say when older ones are left unread
+                    self.more_older = vp.next_before.is_some();
+                    cache.put_lines(&self.cid, &self.bid, &self.scope, self.head_key, self.lines.clone(), self.more_older);
                 }
                 cache.put_page(&self.cid, &self.bid, &self.scope, page.clone());
                 // lines kept from earlier this session that end below the circle's newest version: read once more
@@ -1130,7 +1137,7 @@ fn held_between(p: &QuestionPage, a: u64, b: u64) -> Vec<u64> {
 }
 
 /// A ghost button that is drawn but does nothing while `on` is false (styled as `kit::ghost_button`, added in place so a
-/// wrapped row never squeezes it).
+/// wrapped row never squeezes it). (round 7, critic M6) While it is off it says why: every one of these waits for a restore.
 fn button_if(ui: &mut Ui, on: bool, label: &str) -> bool {
     if on {
         return kit::ghost_button(ui, label).clicked();
@@ -1140,7 +1147,7 @@ fn button_if(ui: &mut Ui, on: bool, label: &str) -> bool {
         .stroke(egui::Stroke::new(1.0, theme::rule()))
         .corner_radius(egui::CornerRadius::same(17))
         .min_size(egui::vec2(0.0, 34.0));
-    ui.add_enabled(false, b).clicked()
+    ui.add_enabled(false, b).on_disabled_hover_text("A restore is reading its version. Wait for it, or press Cancel.").clicked()
 }
 
 /// A restore asked about or under way: other rows' Restore and Compare wait (critic P6, round 4 P-3).
@@ -1388,6 +1395,11 @@ fn draw_question(ui: &mut Ui, p: &QuestionPage, back: &str, now: i64) -> Act {
         if kit::ghost_button(ui, "Show every version").clicked() {
             act = Act::ShowAll(true);
         }
+    }
+    // (round 7, critic M5) the pool serves one page of lines: never drop the rest silently
+    if p.more_older {
+        ui.add_space(4.0);
+        line(ui, format!("Only the newest {} versions are shown here; older ones are not.", super::circle_versions_api::HISTORY_PAGE));
     }
     act
 }

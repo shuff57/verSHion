@@ -1499,6 +1499,9 @@ fn d2f_the_bankui_hook_sits_in_the_question_cards_menu() {
     let keyed = src.find("egui::Key::F10").expect("a keyboard route to the card's menu");
     assert!(card < keyed && keyed < hook, "the keyboard route opens the menu the hook is in");
     assert_eq!(src.matches("egui::Key::F10").count(), 1);
+    // (round 7, critic M7) the hint is on the card itself, not only inside the menu it describes
+    let hint = src.find("Right-click for Duplicate, Delete and History in the circle").expect("a hint on the card");
+    assert!(card < hint && hint < menu, "the hint sits on the card, before the menu it describes");
 }
 
 #[test]
@@ -2412,3 +2415,45 @@ fn d2l_open_compare_refuses_the_same_side() {
     }
     assert!(r.qpage().compare.is_some());
 }
+
+// ---- round 7 (fifth critic pair): minors -------------------------------------------------------------------------------
+
+#[test]
+fn d2m_the_page_says_when_older_versions_are_not_shown() {
+    // (round 7, critic M5) the pool serves one page of history lines; older ones left unread are said, never dropped silently
+    let mut r = rig();
+    let mut l = lines_json();
+    l["next_before"] = json!(3);
+    r.w.on("Get", &versions_path(), 200, l, None);
+    r.w.on("Get", &changes_path(), 200, changes_json(), Some("\"e1\""));
+    r.open(0);
+    let t = r.page(1280.0);
+    assert!(t.contains("older ones are not"), "{t}");
+    // one page and nothing older: nothing said
+    let mut r = rig();
+    r.script_load();
+    r.open(0);
+    let t = r.page(1280.0);
+    assert!(!t.contains("older ones are not"), "{t}");
+}
+
+#[test]
+fn d2m_a_disabled_show_says_wait_for_the_restore() {
+    // (round 7, critic M6) Show waits while a restore is asked; the disabled button says why
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Restore...", 0));
+    // hover the disabled Show: the tooltip says what it waits for (egui waits half a second of a still pointer)
+    let show = r.frame_at(1280.0, Vec::new()).into_iter().find(|(t, _)| t == "Show").map(|(_, rect)| rect).expect("a Show button");
+    let p = show.center();
+    r.frame_at(1280.0, vec![egui::Event::PointerMoved(p)]);
+    let mut t = String::new();
+    for _ in 0..16 {
+        t = r.frame_at(1280.0, Vec::new()).into_iter().map(|(t, _)| t).collect::<Vec<_>>().join("\n");
+    }
+    assert!(t.contains("A restore is reading its version"), "{t}");
+}
+

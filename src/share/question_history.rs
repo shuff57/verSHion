@@ -433,8 +433,9 @@ pub struct HistoryCache {
     bodies: Vec<(BodyKey, Arc<VersionBody>)>,
     /// (round 2) Each bank's change lists as last read, sent back as `If-None-Match` (a 304 costs nothing).
     pages: Vec<(PageKey, ChangesPage)>,
-    /// (round 2) Each bank's history lines, for the newest version they were read at.
-    lines: Vec<(PageKey, u64, Vec<VersionLine>)>,
+    /// (round 2) Each bank's history lines, for the newest version they were read at; (round 7, critic M5) and whether the
+    /// pool said older versions are still to be read past them.
+    lines: Vec<(PageKey, u64, Vec<VersionLine>, bool)>,
 }
 
 impl std::fmt::Debug for HistoryCache {
@@ -475,14 +476,15 @@ impl HistoryCache {
         }
     }
 
-    /// The bank's history lines, if they were read at the newest version `head`.
-    pub fn lines(&self, cid: &str, bid: &str, scope: &str, head: u64) -> Option<&[VersionLine]> {
-        self.lines.iter().find(|((c, b, s), h, _)| c == cid && b == bid && s == scope && *h == head && head > 0).map(|(_, _, l)| l.as_slice())
+    /// The bank's history lines, if they were read at the newest version `head`; and whether older ones are to be read past
+    /// them (the pool's `next_before`).
+    pub fn lines(&self, cid: &str, bid: &str, scope: &str, head: u64) -> Option<(&[VersionLine], bool)> {
+        self.lines.iter().find(|((c, b, s), h, _, _)| c == cid && b == bid && s == scope && *h == head && head > 0).map(|(_, _, l, more)| (l.as_slice(), *more))
     }
 
-    pub fn put_lines(&mut self, cid: &str, bid: &str, scope: &str, head: u64, lines: Vec<VersionLine>) {
-        self.lines.retain(|((c, b, _), _, _)| !(c == cid && b == bid));
-        self.lines.push(((cid.to_string(), bid.to_string(), scope.to_string()), head, lines));
+    pub fn put_lines(&mut self, cid: &str, bid: &str, scope: &str, head: u64, lines: Vec<VersionLine>, more: bool) {
+        self.lines.retain(|((c, b, _), _, _, _)| !(c == cid && b == bid));
+        self.lines.push(((cid.to_string(), bid.to_string(), scope.to_string()), head, lines, more));
         while self.lines.len() > PAGE_CACHE_MAX {
             self.lines.remove(0);
         }
@@ -520,12 +522,12 @@ impl HistoryCache {
     pub fn drop_bank(&mut self, cid: &str, bid: &str) {
         self.bodies.retain(|((c, b, _, _), _)| !(c == cid && b == bid));
         self.pages.retain(|((c, b, _), _)| !(c == cid && b == bid));
-        self.lines.retain(|((c, b, _), _, _)| !(c == cid && b == bid));
+        self.lines.retain(|((c, b, _), _, _, _)| !(c == cid && b == bid));
     }
 
     /// (round 4) Something is held for the bank (a body, lists or lines).
     pub fn has_bank(&self, cid: &str, bid: &str) -> bool {
-        self.bodies.iter().any(|((c, b, _, _), _)| c == cid && b == bid) || self.pages.iter().any(|((c, b, _), _)| c == cid && b == bid) || self.lines.iter().any(|((c, b, _), _, _)| c == cid && b == bid)
+        self.bodies.iter().any(|((c, b, _, _), _)| c == cid && b == bid) || self.pages.iter().any(|((c, b, _), _)| c == cid && b == bid) || self.lines.iter().any(|((c, b, _), _, _, _)| c == cid && b == bid)
     }
 
     /// (round 3) One version's body, whatever it was read under (the pool no longer serves it).

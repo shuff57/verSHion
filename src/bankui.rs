@@ -2497,7 +2497,8 @@ fn draw_card(
             }
         });
         let hid = ui.id().with(("qhdr", q.map(|q| q.id.as_str()).unwrap_or("<new>")));
-        let hr = ui.interact(hdr.response.rect, hid, Sense::click());
+        // (round 7, critic M7) the card's menu route is said on the card, where the person looks, not only inside the menu
+        let hr = ui.interact(hdr.response.rect, hid, Sense::click()).on_hover_text("Right-click for Duplicate, Delete and History in the circle; Shift+F10 works from the keyboard.");
         if hr.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
         }
