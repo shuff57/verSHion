@@ -118,6 +118,24 @@ Loop rules: local commits only, never push; critic pair (product vs Moodle, secu
   unreadable non-scalar link field can still drop that link.
 - Next: a fresh round-13 pair (product + security) on r14; the loop exits when both are clean on the same build.
 
+### D2 client loop CONVERGED (2026-10-29)
+
+- **Round 13 pair** on `83469e3` (r14): product **CLEAN** (0 blockers, 0 importants, 3 minors), security **CLEAN**
+  (0 blockers, 0 importants, 0 new minors). The loop's exit condition — a product and a security critic clean on the
+  same build — is met. Reports: `docs/critic-reports/2026-10-29-d2-r14-critic-product.md` and `-security.md`.
+- **Leftovers recorded, not gating:** (1) the failed-fetch sentence says "a change you are not sending", false for a
+  ticked question whose picture was substituted (`pool.rs:133`); (2) a base picture the circle will never serve (a
+  purged/blocked blob) is offered only as Try again, with no way forward after a 404; (3) every partial send
+  re-downloads and re-uploads every untouched re-encoded picture — keeping the fetched original under its circle name
+  would avoid it; plus the earlier open minors: the file-keyed map collision (two circle names for one local picture),
+  an unreadable `seen` over-hiding and stating it as fact, and unreadable non-scalar link fields dropping that link.
+  The strip still compares pictures by local file name (`merge::ours_delta`), a recorded residual.
+- **Still owed before D2 is called done:** the owner's look on a real screen (frames are rasterized, light theme only);
+  the staging re-measure of `/changes` (`meta.rows_read`) and the partial-send picture round-trip — both need the
+  owner's yes; D3's remaining pieces and its staging check per the plan.
+- The figures gap-fill work remains paused in `/home/shuff57/Documents/GitHub/verSHion-figures` (phase 4, fixes staged
+  but uncommitted, verification critic not yet run) — see its own HANDOFF.md.
+
 ## The 5 known failures are fixed (2026-10-28)
 
 The owner asked to fix the five `share_core::wasm::publish_prepare_json` failures. Cause: the viSHion path deps in
