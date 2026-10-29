@@ -277,6 +277,12 @@ mod tests {
         // 10 µF in series with (10 + 10) µF is 20/3 µF, and 12 V puts 80 µC on each
         assert!(cs.contains("6.67 µF"), "the equivalent capacitance:\n{cs}");
         assert!(cs.contains("80 µC"), "the charge");
+        // the layout's own fallback is spoken, not silent
+        let mut one = p.clone();
+        one.0.insert("n".into(), Value::I(1));
+        let w = instr::circuit_warnings(&one);
+        assert!(w.iter().any(|s| s.contains("drawn as a series circuit")), "{w:?}");
+        assert!(instr::circuit_warnings(&p).is_empty(), "no note for a real combination");
         if let Ok(dir) = std::env::var("VERSHION_PNG_DIR") {
             for (tag, q) in [("combo-key", p.clone()), ("combo-student", { let mut s = p.clone(); s.0.insert(SHOW_ANSWERS.into(), Value::B(false)); s }), ("combo-caps", c.clone())] {
                 let _ = std::fs::write(format!("{dir}/circuit-{tag}.png"), to_png(&(cd.render)(&q), 1.0).unwrap());

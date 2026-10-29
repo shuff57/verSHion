@@ -407,17 +407,22 @@ pub(super) fn caps(p: &Params) -> bool { p.s("components") == "Capacitors" }
 /// Editor notes for a capacitor circuit: a value still marked in ohms is not a capacitance and is left out of the
 /// worked-out answer rather than read as farads, which would be wrong by a factor of a million and silent.
 pub(super) fn circuit_warnings(p: &Params) -> Vec<String> {
-    if !caps(p) { return Vec::new(); }
+    let mut out = Vec::new();
     let n = p.i("n").clamp(1, 4) as usize;
-    let ohms = (0..n).any(|i| {
-        let s = p.s(RK[i][4]);
-        s.contains('\u{3a9}') || s.to_ascii_lowercase().contains("ohm")
-    });
-    if ohms {
-        vec!["A capacitor is marked in farads, not ohms: these values still read in ohms, so they are left out of the worked-out answer. Type a capacitance such as 10 \u{b5}F.".to_string()]
-    } else {
-        Vec::new()
+    // a combination with one part is drawn in series; say so rather than silently drawing something else
+    if p.s("layout") == "In series and parallel" && n < 2 {
+        out.push("A combination needs at least two components: with one there is nothing to put in parallel, so this is drawn as a series circuit.".to_string());
     }
+    if caps(p) {
+        let ohms = (0..n).any(|i| {
+            let s = p.s(RK[i][4]);
+            s.contains('\u{3a9}') || s.to_ascii_lowercase().contains("ohm")
+        });
+        if ohms {
+            out.push("A capacitor is marked in farads, not ohms: these values still read in ohms, so they are left out of the worked-out answer. Type a capacitance such as 10 \u{b5}F.".to_string());
+        }
+    }
+    out
 }
 
 fn component(g: &mut G, bulb: bool, cap: bool, iec: bool, cx: f64, cy: f64, len: f64, vert: bool, c: &str) {
