@@ -169,6 +169,15 @@ formulas at the defaults, 1/r² for the field against 1/r for the potential, the
 charge on the canvas at any distance, the student/key split, a small value never printing zero (falling through to
 exponential form), and Print neutrality. Census: only `electric-field__defaults` and `electric-field__start` added.
 
+Magnetic field: new figure `magnetic-field` (`src/figures/magnetic.rs`, Physics). The field round a long straight wire
+seen end-on: a dot for current out of the page, a cross for into it, three concentric field-line circles with arrows,
+a point P at a chosen distance, and B = mu0 I / (2 pi r) printed in tesla and microtesla. The render caught a reversed
+direction — on screen anticlockwise means the top of a circle moves left, and a current out of the page gives
+anticlockwise lines, so the arrows had been drawn backwards; both senses are now right and the readout says which.
+Tests: the formula at the defaults (8 uT), doubling the distance halving the field, doubling the current doubling it,
+the direction following the sense, P inside the outer circle at every distance, the student/key split, a small field
+never printing zero, and Print neutrality. Census: only `magnetic-field__defaults` and `magnetic-field__start` added.
+
 ## Phase 3: physics
 
 Circular motion: new figure `circular-motion` (`src/figures/circular.rs`, Physics). A body on a circle at a chosen
