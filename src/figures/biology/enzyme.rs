@@ -247,15 +247,36 @@ pub fn build(p: &Params) -> (String, Report) {
             let note = format!("{km_name} = {}, beyond this axis", val(km_a, dec));
             d.raw(&text_el(f.right() - 4.0, half - 7.0 * lab, 12.0 * lab, "end", curve, &note));
         }
+        // (round 5) whichever of the two sits under the point — the Km label at low [S] or the beyond-the-axis note —
+        // is one of the boxes the other labels must clear. It used to be checked only for the rate label, and only when
+        // the label itself was drawn, so the note and the half-rate label went unguarded.
+        let under_box = if km_a <= smax {
+            let km_y = f.bottom() - 6.0 * lab;
+            let (k0, k1) = match km_anchor { "end" => (km_lx - km_w, km_lx), "middle" => (km_lx - km_w / 2.0, km_lx + km_w / 2.0), _ => (km_lx, km_lx + km_w) };
+            (k0, k1, km_y - 12.0 * lab, km_y + 4.0 * lab)
+        } else {
+            let note = format!("{km_name} = {}, beyond this axis", val(km_a, dec));
+            let note_w = note.chars().count() as f64 * 12.0 * lab * 0.55;
+            let ny = half - 7.0 * lab;
+            (f.right() - 4.0 - note_w, f.right() - 4.0, ny - 12.0 * lab, ny + 4.0 * lab)
+        };
         // (round 4) the half-rate label names the APPARENT half when an inhibitor is on (Vmax′/2), like the asymptote
         let half_label = format!("{vmax_name}/2 = {}", val(vmax_a / 2.0, dec));
-        // the Km marker and this label both sit low and near the left when Km is small: put the label right of the
-        // marker rather than on top of it
-        let hx = if km_a <= smax && f.px(km_a) < f.left() + 118.0 { f.px(km_a) + 8.0 } else { f.left() + 6.0 };
-        let half_y = half - 7.0 * lab;
+        let half_w = half_label.chars().count() as f64 * 11.0 * lab * 0.55;
+        let hx0 = if km_a <= smax && f.px(km_a) < f.left() + 118.0 { f.px(km_a) + 8.0 } else { f.left() + 6.0 };
+        // (round 5) a strong inhibitor puts the half-rate line near the axis, where the Km label lives: take the first
+        // of its usual place, a little above it, and clear above that, which does not overlap the Km label
+        let mut half_pos = (hx0, half - 7.0 * lab);
+        for (x, y) in [(hx0, half - 7.0 * lab), (hx0, half - 27.0 * lab), (f.left() + 6.0, half - 41.0 * lab)] {
+            let b = (x, x + half_w, y - 11.0 * lab, y + 4.0 * lab);
+            if !hits(b, under_box) && y - 11.0 * lab > f.top() {
+                half_pos = (x, y);
+                break;
+            }
+        }
+        let (hx, half_y) = half_pos;
         // (round 4) this label runs over the curve too, so it carries the same halo as the rate label
         d.raw(&text_el_halo(hx, half_y, 11.0 * lab, "start", curve, &half_label));
-        let half_w = half_label.chars().count() as f64 * 11.0 * lab * 0.55;
         let half_box = (hx, hx + half_w, half_y - 11.0 * lab, half_y + 4.0 * lab);
         // the marked point
         let px = f.px(s_at);
@@ -272,15 +293,8 @@ pub fn build(p: &Params) -> (String, Report) {
         // half-rate one at [S] = Km (where the rate label used to print straight over "Vmax/2 = 5"). Take the first
         // candidate row that overlaps neither and stays inside the plot.
         let (lo, hi) = if anchor == "start" { (lx, lx + text_w) } else { (lx - text_w, lx) };
-        let km_box = if km_a <= smax {
-            let km_y = f.bottom() - 6.0 * lab;
-            let (k0, k1) = match km_anchor { "end" => (km_lx - km_w, km_lx), "middle" => (km_lx - km_w / 2.0, km_lx + km_w / 2.0), _ => (km_lx, km_lx + km_w) };
-            Some((k0, k1, km_y - 12.0 * lab, km_y + 4.0 * lab))
-        } else {
-            None
-        };
         let box_at = |yy: f64| (lo, hi, yy - 12.0 * lab, yy + 4.0 * lab);
-        let clear = |yy: f64| !hits(box_at(yy), half_box) && km_box.is_none_or(|k| !hits(box_at(yy), k));
+        let clear = |yy: f64| !hits(box_at(yy), half_box) && !hits(box_at(yy), under_box);
         let mut ly = start;
         for yy in [start, py - 24.0 * lab, py - 38.0 * lab, py + 18.0 * lab, py + 32.0 * lab] {
             if clear(yy) && yy - 12.0 * lab > f.top() && yy + 4.0 * lab < f.bottom() + 10.0 * lab {
@@ -526,10 +540,12 @@ mod tests {
         assert!((q.f("at") - want).abs() < 1e-9, "{} vs {want}", q.f("at"));
     }
 
-    /// Every drawn text as (x, y, size, anchor, content).
+    /// Every drawn text as (x, y, size, anchor, content). The halo copy of a label (fill="none") is skipped, so each
+    /// label appears once.
     fn boxes(svg: &str) -> Vec<(f64, f64, f64, String, String)> {
         let mut out = Vec::new();
         for part in svg.split("<text").skip(1) {
+            if part.contains(r##"fill="none""##) { continue; }
             let num = |k: &str| -> Option<f64> {
                 let at = part.find(&format!("{k}=\""))? + k.len() + 2;
                 part[at..].split('"').next()?.parse().ok()
@@ -560,6 +576,33 @@ mod tests {
 
     fn overlaps(a: (f64, f64, f64, f64), b: (f64, f64, f64, f64)) -> bool {
         a.0 < b.1 && b.0 < a.1 && a.2 < b.3 && b.2 < a.3
+    }
+
+    #[test]
+    fn no_two_labels_overprint_each_other_at_the_awkward_settings() {
+        // (round 5) a strong inhibitor puts the half-rate line on the axis, where the Km label is, and a Km past the axis
+        // puts its note under a point marked near the end — the half label and the note were outside the collision test
+        let cases: Vec<Vec<(&'static str, Value)>> = vec![
+            vec![s("mode", "noncompetitive"), f("inh", 10.0), f("ki", 0.2), f("km", 2.0), f("smax", 12.0)],
+            vec![s("mode", "competitive"), f("inh", 0.5), f("ki", 10.0), f("vmax", 10.0), f("km", 12.0), f("smax", 12.0), f("at", 12.0)],
+            vec![f("at", 0.0)],
+            vec![f("at", 2.0)],
+            vec![f("km", 12.0), f("smax", 12.0), f("at", 11.5)],
+        ];
+        for c in &cases {
+            let svg = render_of(c);
+            let mut all: Vec<((f64, f64, f64, f64), String)> = Vec::new();
+            for prefix in ["v = ", "Km = ", "Km\u{2032} = ", "Vmax/2 = ", "Vmax\u{2032}/2 = "] {
+                for b in label_box(&svg, prefix) {
+                    all.push((b, prefix.to_string()));
+                }
+            }
+            for i in 0..all.len() {
+                for j in (i + 1)..all.len() {
+                    assert!(!overlaps(all[i].0, all[j].0), "{c:?}: {:?} overprints {:?}", all[i], all[j]);
+                }
+            }
+        }
     }
 
     #[test]

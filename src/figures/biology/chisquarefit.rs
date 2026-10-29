@@ -290,7 +290,9 @@ pub fn build(p: &Params) -> String {
     // the columns are fractions of the width, so they spread as the canvas grows
     let (col_o, col_e, col_t) = (w * 0.515, w * 0.703, w * 0.956);
     let decision_text = if ans { decision(&f) } else { "Decision  ______________________________________".to_string() };
-    let decision_lines = if ans { wrap(&decision_text, 70) } else { vec![decision_text.clone()] };
+    // (round 5) wrapped to the canvas, not to a fixed 70 characters: at Large the line ran past the right edge
+    let dec_chars = (((w - 48.0) / (ROW_FS * lab * 0.58)).floor() as usize).max(24);
+    let decision_lines = if ans { wrap(&decision_text, dec_chars) } else { vec![decision_text.clone()] };
     let mut d = Doc::new(w, stats_y0 + (3.0 + decision_lines.len() as f64) * ROW_FS * lab * 1.35 + 12.0);
     d.describe("Chi-square goodness of fit", "Observed counts beside the counts a ratio predicts, with the statistic, degrees of freedom and p-value");
 
@@ -317,20 +319,27 @@ pub fn build(p: &Params) -> String {
     rule(&mut d, head_y + 8.0 * lab, 1.6);
 
     // the rows
-    // a long category name would print through the three number columns
-    let name_chars = (((col_o - 34.0) / (FS * lab * 0.56)).floor() as usize).max(6);
+    // huge counts: one compact format for the whole table, or "1 × 10^12" sits beside "999999999999.56".
+    // (round 5) A contribution can be enormous from a tiny expected count while every count is small, so the term is
+    // part of the test too — printed in plain decimals it ran across the Expected and Total columns.
+    let total_obs: f64 = f.rows.iter().map(|r| r.observed).sum();
+    let huge = total_obs.abs() >= 1e7 || f.rows.iter().any(|r| r.observed.abs() >= 1e7 || r.expected.abs() >= 1e7 || r.term.abs() >= 1e7);
+    // (round 5) an overflowing value prints "inf"; the rest of the figure writes ∞
+    let sci = |v: f64| if v == 0.0 { "0".to_string() } else if !v.is_finite() { "\u{221e}".to_string() } else { format!("{v:.2e}").replace('-', "\u{2212}") };
+    let fmt_cnt = |v: f64| if huge { sci(v) } else { num(v, 2) };
+    // (round 5) the contributions are grouped like the counts (1,234.56), so one row does not mix two formats
+    let fmt_term = |v: f64| if huge { sci(v) } else if !v.is_finite() { "\u{221e}".to_string() } else { group(&col(v, dec.max(2))) };
+    // a long category name would print through the three number columns: the room it has is what is left of the
+    // Observed column once its widest printed number is drawn (round 5: a grouped count ran under the name)
+    let obs_text: Vec<String> = f.rows.iter().map(|r| fmt_cnt(r.observed)).collect();
+    let widest_obs = obs_text.iter().map(|s| s.chars().count()).max().unwrap_or(1) as f64 * FS * lab * 0.56;
+    let name_chars = (((col_o - 24.0 - widest_obs - 8.0) / (FS * lab * 0.56)).floor() as usize).max(6);
     let short = |n: &str| -> String {
         if n.chars().count() <= name_chars { n.to_string() } else {
             let head: String = n.chars().take(name_chars.saturating_sub(1)).collect();
             format!("{head}\u{2026}")
         }
     };
-    // huge counts: one compact format for the whole table, or "1 × 10^12" sits beside "999999999999.56"
-    let total_obs: f64 = f.rows.iter().map(|r| r.observed).sum();
-    let huge = total_obs.abs() >= 1e7 || f.rows.iter().any(|r| r.observed.abs() >= 1e7 || r.expected.abs() >= 1e7);
-    let sci = |v: f64| if v == 0.0 { "0".to_string() } else { format!("{v:.2e}").replace('-', "\u{2212}") };
-    let fmt_cnt = |v: f64| if huge { sci(v) } else { num(v, 2) };
-    let fmt_term = |v: f64| if huge { sci(v) } else { col(v, dec.max(2)) };
     // (round 3) The total is the sum of what is PRINTED, and at the precision the column actually prints: `col` shows
     // more decimals when a real contribution would otherwise print as 0, so 0.0033 + 0.01 must total 0.0133, not 0.01.
     // (round 4) a category expected to be empty but counted has an INFINITE contribution, not 0: the row used to print
@@ -340,18 +349,20 @@ pub fn build(p: &Params) -> String {
         .iter()
         .map(|r| if r.expected == 0.0 && r.observed > 0.0 { "\u{221e}".to_string() } else { fmt_term(r.term) })
         .collect();
+    // (round 5) an overflowed contribution is infinite too: the total must not print 0 beside rows that print ∞
+    let infinite = f.impossible || term_text.iter().any(|t| t == "\u{221e}") || !f.chi2.is_finite();
     let term_dec = term_text
         .iter()
         .map(|s| s.split_once('.').map_or(0, |(_, d)| d.chars().take_while(char::is_ascii_digit).count()) as i64)
         .max()
         .unwrap_or(0)
         .max(dec.max(2));
-    let printed_chi2: f64 = term_text.iter().map(|s| s.replace('\u{2212}', "-").parse::<f64>().unwrap_or(0.0)).sum();
+    let printed_chi2: f64 = term_text.iter().map(|s| s.replace(',', "").replace('\u{2212}', "-").parse::<f64>().unwrap_or(0.0)).sum();
 
     let mut y = head_y + 8.0 * lab + row_h - 7.0 * lab;
     for (i, r) in f.rows.iter().enumerate() {
         d.raw(&text_el(24.0, y, FS * lab, "start", ink, &short(&r.name)));
-        d.raw(&text_el(col_o, y, FS * lab, "end", ink, &fmt_cnt(r.observed)));
+        d.raw(&text_el(col_o, y, FS * lab, "end", ink, &obs_text[i]));
         if ans {
             d.raw(&text_el(col_e, y, FS * lab, "end", ink, &if huge { sci(r.expected) } else { group(&col(r.expected, dec)) }));
             d.raw(&text_el(col_t, y, FS * lab, "end", ink, &term_text[i]));
@@ -371,9 +382,9 @@ pub fn build(p: &Params) -> String {
     // number the line under the table prints, or the table's own total contradicts it: an impossible test has no
     // finite total at all
     let total_text = if !ans { BLANK.to_string() }
-    else if f.impossible { "\u{221e}".to_string() }
+    else if infinite { "\u{221e}".to_string() }
     else if huge { sci(printed_chi2) }
-    else { col(printed_chi2, term_dec) };
+    else { group(&col(printed_chi2, term_dec)) };
     d.raw(&text_el(col_t, y, FS * lab, "end", ink, &total_text));
     rule(&mut d, y + 9.0 * lab, 1.6);
 
@@ -381,14 +392,20 @@ pub fn build(p: &Params) -> String {
     let ratio_text: Vec<String> = f.ratio.iter().map(|v| val(*v, 0)).collect();
     let total_shown = if huge { sci(total_obs) } else { val(total_obs, 0) };
     let givens = format!("Expected from the ratio {} out of {} observations", ratio_text.join(" : "), total_shown);
-    d.raw(&text_el(24.0, stats_y0 - 14.0 * lab, 12.0 * lab, "start", ink, &givens));
+    // (round 5) long ratio parts ran off the canvas: wrapped to the width, the lines stacking up into the gap above
+    // the statistics block
+    let givens_chars = (((w - 48.0) / (12.0 * lab * 0.56)).floor() as usize).max(20);
+    for (i, line) in wrap(&givens, givens_chars).iter().rev().enumerate() {
+        d.raw(&text_el(24.0, stats_y0 - 14.0 * lab - i as f64 * 15.0 * lab, 12.0 * lab, "start", ink, line));
+    }
 
     // the statistics block
     let lines = [
         if !ans { format!("Chi-square  \u{3c7}\u{b2} = {BLANK}") }
         else if f.impossible { "Chi-square  \u{3c7}\u{b2} = \u{221e}  (a category expected to be empty has counts in it)".to_string() }
+        else if infinite { "Chi-square  \u{3c7}\u{b2} = \u{221e}  (the counts are too large to work out)".to_string() }
         else if huge { format!("Chi-square  \u{3c7}\u{b2} = {}", sci(printed_chi2)) }
-        else { format!("Chi-square  \u{3c7}\u{b2} = {}", col(printed_chi2, term_dec)) },
+        else { format!("Chi-square  \u{3c7}\u{b2} = {}", group(&col(printed_chi2, term_dec))) },
         if ans {
             let (one, many) = ("1 category counted", "categories counted");
             let n = if f.kept == 1 { one.to_string() } else { format!("{} {many}", f.kept) };
@@ -561,6 +578,60 @@ mod tests {
         let line = t.lines().find(|l| l.contains("Chi-square  \u{3c7}\u{b2} =")).unwrap_or("");
         assert!(line.contains("= 0.0133"), "the printed total is not the sum of the printed contributions: {line}");
         assert_eq!(t.lines().filter(|l| *l == "0.0133").count(), 1, "the Total row disagrees with the line under the table: {t}");
+    }
+
+    /// Every drawn text as (x, y, size, anchor, content).
+    fn boxes(svg: &str) -> Vec<(f64, f64, f64, String, String)> {
+        let mut out = Vec::new();
+        for part in svg.split("<text").skip(1) {
+            let num = |k: &str| -> Option<f64> {
+                let at = part.find(&format!("{k}=\""))? + k.len() + 2;
+                part[at..].split('"').next()?.parse().ok()
+            };
+            let Some(x) = num("x") else { continue };
+            let anchor = match part.find("text-anchor=\"") {
+                Some(i) => part[i + 13..].split('"').next().unwrap_or("start").to_string(),
+                None => "start".to_string(),
+            };
+            let content = part.split_once('>').map(|(_, rest)| rest.split("</text>").next().unwrap_or("").to_string()).unwrap_or_default();
+            out.push((x, num("y").unwrap_or(0.0), num("font-size").unwrap_or(12.0), anchor, content));
+        }
+        out
+    }
+
+    #[test]
+    fn no_text_runs_off_the_canvas() {
+        // (round 5) the givens line was never wrapped, a wide grouped count printed under a truncated name, and a
+        // contribution could be written in plain decimals across two columns
+        let cases: Vec<Vec<(&'static str, Value)>> = vec![
+            vec![s("names", "Round yellow seeds with a smooth coat on the tall parent plant, Other"), s("obs", "123456, 100"), s("ratio", "3, 1")],
+            vec![s("obs", "100000,100000,100000,100000,100000,100000"), s("ratio", "100000,100000,100000,100000,100000,100000"), s("label_size", "Large")],
+            vec![s("obs", "1e160, 1"), s("ratio", "3, 1")],
+            vec![s("obs", "1, 1"), s("ratio", "1, 100000000000000000000")],
+            vec![s("obs", "2, 3, 4, 5"), s("ratio", "1, 1, 1, 1")],
+        ];
+        for c in &cases {
+            let svg = render_of(c);
+            let w = {
+                let at = svg.find("width=\"").expect("width") + 7;
+                svg[at..].split('"').next().unwrap().parse::<f64>().unwrap()
+            };
+            for (x, _y, size, anchor, text) in boxes(&svg) {
+                let text = text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&").replace("&quot;", "\"");
+                let n = text.chars().count() as f64 * size * 0.58;
+                let right = match anchor.as_str() { "end" => x, "middle" => x + n / 2.0, _ => x + n };
+                assert!(right <= w + 1.0, "{c:?}: {text:?} ends at {right:.1} on a {w} canvas");
+            }
+        }
+        // an overflowing statistic writes ∞, not "inf"
+        let t = texts(&render_of(&[s("obs", "1e160, 1"), s("ratio", "3, 1")]));
+        assert!(!t.contains("inf"), "{t}");
+        assert!(t.contains('\u{221e}'), "{t}");
+        // a wide observed number no longer runs under the name, and the contributions are grouped like the counts
+        let t = texts(&render_of(&[s("names", "Round yellow seeds with a smooth coat on the tall parent plant, Other"), s("obs", "123456, 100"), s("ratio", "3, 1")]));
+        assert!(t.contains('\u{2026}'), "the long name is not shortened: {t}");
+        assert!(t.contains("123,456"), "{t}");
+        assert!(t.contains("10,229"), "the contribution is not grouped: {t}");
     }
 
     #[test]

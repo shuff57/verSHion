@@ -555,3 +555,19 @@ unwrapped and ran off the canvas at Large — it wraps now, and the canvas takes
 Large; (5) a chi-square category expected to be empty but counted printed a contribution of 0.00 beside a Total of ∞ — the
 row prints ∞. Two minors fixed too: the half-rate label is haloed like the rate label, and the enzyme's Print grid is
 `#787878` like every other figure, because `#e2e2e2` vanished in a 66% bitonal copy. Census: only `enzyme-kinetics`.
+
+Third verification critic on `8d64904` (2026-10-29): **FAIL** — no blocker; 4 majors and 6 minors, and again three of the
+majors were one case over from the fix before. Fixed here, each seen in a PNG:
+(1) the half-rate label was never checked against the Km label, so a strong noncompetitive inhibitor printed
+"Km′=Vmax′/2 = 0.1" on one line — it takes the first of three rows that clears the Km label (or its beyond-the-axis note);
+(2) that note was outside every collision test when Km sits past the axis, and a point marked at the axis end printed
+through it — the note is in the box list now; (3) a long category name was shortened without reserving the width of the
+observed number, so a grouped count printed under the name — the room is what the Observed column leaves once its widest
+number is drawn; (4) Hardy-Weinberg's rounding moved the whole difference into the largest part, printing a 1:2:1 cross
+as 0.3/0.4/0.3 (a full unit low on the heterozygote against a bar that is plainly half) — the printed set is now the
+largest-remainder rounding, which is the nearest set that adds to 1.
+Minors fixed too: the chi-square givens line wraps to the canvas (it ran off at Large); an overflowing statistic prints ∞
+rather than "inf", and its Total and χ² line agree; a huge contribution from a tiny expected count is written in one
+compact form instead of across two columns; the contribution column is thousands-grouped like the counts; the decision
+line wraps to the canvas (70 characters overflowed at Large); and the cladogram measures text by width per glyph rather
+than by character count, so a run of Ws is no longer clipped at either edge. Census: only `cladogram`.

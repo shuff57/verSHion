@@ -92,19 +92,30 @@ pub fn generations(p: &Params) -> Vec<Gen> {
     out
 }
 
-/// The three frequencies as they are printed: each rounded to `dec` places, then the largest moved by the rounding
-/// difference, so the printed numbers add up to exactly 1. Rounding each on its own printed "0.4 + 0.5 + 0.2 = 1.1"
-/// beside a Check line that said 1.
+/// The three frequencies as they are printed: rounded by largest remainder, so the printed numbers add up to exactly 1
+/// and each is the nearest it can be to its true value. Rounding each on its own printed "0.4 + 0.5 + 0.2 = 1.1" beside a
+/// Check line that said 1; (round 5) moving the whole difference into the largest part printed a 1:2:1 cross as
+/// 0.3 / 0.4 / 0.3, a full unit low on the heterozygote against a bar that was plainly half.
 pub fn printed_parts(g: &Gen, dec: i64) -> [f64; 3] {
     let f = 10f64.powi(dec as i32);
-    let r = |v: f64| (v * f).round() / f;
-    let mut v = [r(g.dom), r(g.het), r(g.rec)];
-    let diff = r(1.0 - (v[0] + v[1] + v[2]));
-    if diff != 0.0 {
-        let i = (0..3).max_by(|a, b| v[*a].partial_cmp(&v[*b]).unwrap_or(std::cmp::Ordering::Equal)).unwrap_or(0);
-        v[i] = r(v[i] + diff);
+    let exact = [g.dom * f, g.het * f, g.rec * f];
+    let mut units: [i64; 3] = exact.map(|v| v.floor() as i64);
+    let mut left = f.round() as i64 - units.iter().sum::<i64>();
+    let rem = |i: usize| exact[i] - exact[i].floor();
+    let mut order = [0usize, 1, 2];
+    order.sort_by(|a, b| rem(*b).partial_cmp(&rem(*a)).unwrap_or(std::cmp::Ordering::Equal));
+    let mut k = 0usize;
+    while left > 0 {
+        units[order[k % 3]] += 1;
+        left -= 1;
+        k += 1;
     }
-    v
+    while left < 0 {
+        units[order[2 - k % 3]] -= 1;
+        left += 1;
+        k += 1;
+    }
+    units.map(|u| u as f64 / f)
 }
 
 /// The decimal places the picture is printed at: `dec`, raised until no real frequency would print as zero — and, since
@@ -482,6 +493,18 @@ mod tests {
             assert!(p0 >= 1.0 || p < 1.0, "p = {p0} printed as {p}: {t}");
             assert!(p0 <= 0.0 || p > 0.0, "p = {p0} printed as {p}: {t}");
         }
+    }
+
+    #[test]
+    fn the_printed_fractions_are_the_nearest_ones_that_add_up() {
+        // (round 5) a 1:2:1 cross was printed 0.3 / 0.4 / 0.3: the whole rounding difference went into the largest part
+        // instead of the parts that lost the most to rounding
+        let g = Gen { p: 0.5, dom: 0.25, het: 0.5, rec: 0.25 };
+        assert_eq!(printed_parts(&g, 1), [0.3, 0.5, 0.2], "the heterozygote is a unit low");
+        let g = Gen { p: 0.34, dom: 0.4356, het: 0.4488, rec: 0.1156 };
+        let parts = printed_parts(&g, 2);
+        assert!((parts.iter().sum::<f64>() - 1.0).abs() < 1e-9, "{parts:?}");
+        assert!((parts[1] - 0.45).abs() < 1e-9, "2pq should print 0.45, the count says 449 of 1000: {parts:?}");
     }
 
     #[test]

@@ -188,17 +188,46 @@ fn walk(n: &Node, maxd: usize, row: &mut usize, p: &mut Placed) -> (usize, f64) 
     (x, y)
 }
 
-/// The leaf order as printed under the picture, wrapped to `chars` characters a line: the first line carries
-/// "Left to right: " and the later ones a 14-space indent, so their budgets are counted in. (round 2) It takes the
-/// canvas's own measure: a fixed 74 characters ran past the right edge and cut the last names off.
-pub fn leaf_order(root: &Node, chars: usize) -> Vec<String> {
+/// A string's width at `size` px, summed per glyph: a run of wide capitals is nearly twice the width of the same count
+/// of lower-case letters, and measuring by character count clipped `(WWWW…)` off the canvas (round 5).
+pub fn text_w(s: &str, size: f64) -> f64 {
+    s.chars()
+        .map(|c| {
+            size * match c {
+                'W' | 'M' | 'm' | 'w' => 0.95,
+                'A'..='Z' => 0.72,
+                '0'..='9' => 0.58,
+                ' ' => 0.28,
+                'i' | 'j' | 'l' | 't' | 'f' | 'r' | '.' | ',' | ';' | ':' | '\'' | '!' | '|' => 0.32,
+                _ => 0.56,
+            }
+        })
+        .sum()
+}
+
+/// Greedy word wrap to a width in px; a word wider than the line takes a line of its own.
+fn wrap_w(s: &str, max: f64, size: f64) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut cur = String::new();
-    let mut budget = chars.saturating_sub(15).max(8);
-    for part in leaves(root).iter() {
-        if !cur.is_empty() && cur.chars().count() + 2 + part.chars().count() > budget {
+    for word in s.split_whitespace() {
+        if !cur.is_empty() && text_w(&cur, size) + text_w(" ", size) + text_w(word, size) > max {
             out.push(std::mem::take(&mut cur));
-            budget = chars.saturating_sub(14).max(8);
+        }
+        if !cur.is_empty() { cur.push(' '); }
+        cur.push_str(word);
+    }
+    if !cur.is_empty() { out.push(cur); }
+    out
+}
+
+/// The leaf order as printed under the picture, wrapped to `max` px: the first line carries "Left to right: " and the
+/// later ones are aligned under it, so their widths are counted in.
+pub fn leaf_order(root: &Node, max: f64, size: f64) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    for part in leaves(root).iter() {
+        if !cur.is_empty() && text_w(&cur, size) + text_w(", ", size) + text_w(part, size) > max {
+            out.push(std::mem::take(&mut cur));
         }
         if !cur.is_empty() { cur.push_str(", "); }
         cur.push_str(part);
@@ -234,16 +263,20 @@ pub fn build(p: &Params) -> String {
     let node = parse(p.s("tree"));
     let maxd = node.as_ref().map(height).unwrap_or(0);
     let n_leaves = node.as_ref().map(|n| leaves(n).len()).unwrap_or(1).max(1);
-    let widest = node.as_ref().map(|n| leaves(n).iter().map(|l| l.chars().count()).max().unwrap_or(4)).unwrap_or(4);
+    // (round 5) measured by width, not by characters (see `text_w`)
+    let widest = node
+        .as_ref()
+        .map(|n| leaves(n).into_iter().max_by(|a, b| text_w(a, 12.0 * lab).partial_cmp(&text_w(b, 12.0 * lab)).unwrap_or(std::cmp::Ordering::Equal)).unwrap_or_default())
+        .unwrap_or_default();
 
     // (round 2) an ancestor's label sits above and to the left of its branching point: the column must be wide enough for
-    // the longest of them (or it would run back over the previous branch), and the left margin for the root's.
-    let widest_anc = node.as_ref().map(|n| ancestor_labels(n).iter().map(|l| l.chars().count()).max().unwrap_or(0)).unwrap_or(0);
-    let root_w = node.as_ref().map(|n| if n.is_leaf() { 0 } else { n.label.chars().count() }).unwrap_or(0) as f64 * 7.2 * lab;
+    // the widest of them (or it would run back over the previous branch), and the left margin for the root's.
+    let widest_anc = node.as_ref().map(|n| ancestor_labels(n).into_iter().map(|l| text_w(&l, 11.0 * lab)).fold(0.0f64, f64::max)).unwrap_or(0.0);
+    let root_w = node.as_ref().map(|n| if n.is_leaf() { 0.0 } else { text_w(&n.label, 11.0 * lab) }).unwrap_or(0.0);
     let left = 30.0 + root_w;
-    let step_x = (STEP_X * lab).max(widest_anc as f64 * 7.2 * lab + 30.0);
+    let step_x = (STEP_X * lab).max(widest_anc + 30.0);
     let tree_w = left + maxd as f64 * step_x;
-    let label_w = widest as f64 * 8.4 * lab + 18.0;
+    let label_w = text_w(&widest, 12.0 * lab) + 18.0;
     // (round 4) the line under the picture ("4 leaves, 1 branching point, 1 level") grew with the labels and ran past
     // the canvas at Large: the canvas takes its width into account
     let count_text = node.as_ref().ok().map(|root| {
@@ -253,18 +286,17 @@ pub fn build(p: &Params) -> String {
     });
     let mut w = (tree_w + label_w + 28.0).max(360.0);
     if let Some(t) = &count_text {
-        w = w.max(24.0 + t.chars().count() as f64 * 12.0 * lab * 0.6 + 8.0);
+        w = w.max(24.0 + text_w(t, 12.0 * lab) + 12.0);
     }
     let top = 34.0;
     let h = top + ((n_leaves as f64) - 1.0).max(1.0) * LEAF_GAP * lab + 40.0 * lab;
-    // (round 2) the text under the picture wraps to the CANVAS, not to a fixed character count: 74 characters ran off
-    // the right edge of the 360 px floor canvas, so the last names of a student's list were never shown. The same
-    // measure serves the error reasons, which were cut mid-word for the same reason.
-    let text_chars = (((w - 48.0) / (12.0 * lab * 0.6)).floor() as usize).max(18);
-    let err_chars = (((w - 48.0) / (13.0 * lab * 0.6)).floor() as usize).max(18);
+    // (round 2) the text under the picture wraps to the CANVAS, not to a fixed character count; (round 5) to its width.
+    let prefix_w = text_w("Left to right: ", 12.0 * lab);
+    let leaf_max = (w - 24.0 - prefix_w - 12.0).max(40.0);
+    let err_max = (w - 48.0).max(60.0);
     let below = match &node {
-        Ok(root) => leaf_order(root, text_chars).len().max(1),
-        Err(e) => super::wrap(e, err_chars).len() + super::wrap(NO_TREE, err_chars).len(),
+        Ok(root) => leaf_order(root, leaf_max, 12.0 * lab).len().max(1),
+        Err(e) => wrap_w(e, err_max, 13.0 * lab).len() + wrap_w(NO_TREE, err_max, 12.0 * lab).len(),
     };
     let mut d = Doc::new(w, h + (14.0 + below as f64 * 18.0).max(62.0) * lab);
     d.describe("Cladogram", "A branching tree of the names typed, with the leaves in the order they were written");
@@ -301,14 +333,14 @@ pub fn build(p: &Params) -> String {
         Err(e) => {
             d.raw(&text_el(24.0, 46.0, 13.0 * lab, "start", if print { "#555555" } else { ERR }, "The tree could not be read:"));
             let mut y = 70.0 * lab;
-            for line in super::wrap(e, err_chars) {
+            for line in wrap_w(e, err_max, 13.0 * lab) {
                 d.raw(&text_el(24.0, y, 13.0 * lab, "start", ink, &line));
                 y += 18.0 * lab;
             }
             // (round 2) after the reason, not at a fixed row it used to overprint; (round 4) wrapped like the reason,
             // which at Large ran off the 360 px canvas
             let mut ny = y + 8.0 * lab;
-            for line in super::wrap(NO_TREE, err_chars) {
+            for line in wrap_w(NO_TREE, err_max, 12.0 * lab) {
                 d.raw(&text_el(24.0, ny, 12.0 * lab, "start", ink, &line));
                 ny += 15.0 * lab;
             }
@@ -322,10 +354,10 @@ pub fn build(p: &Params) -> String {
         if let Some(count) = &count_text {
             d.raw(&text_el(24.0, y, 12.0 * lab, "start", ink, count));
         }
-        for (i, line) in leaf_order(root, text_chars).iter().enumerate() {
+        for (i, line) in leaf_order(root, leaf_max, 12.0 * lab).iter().enumerate() {
             // (round 3) the continuation lines are indented by x, not by leading spaces: SVG collapses those, so the
             // line used to start hard against the left margin
-            let (x, text) = if i == 0 { (24.0, format!("Left to right: {line}")) } else { (24.0 + 15.0 * 12.0 * lab * 0.6, line.clone()) };
+            let (x, text) = if i == 0 { (24.0, format!("Left to right: {line}")) } else { (24.0 + prefix_w, line.clone()) };
             d.raw(&text_el(x, y + (15.0 + i as f64 * 17.0) * lab, 12.0 * lab, "start", ink, &text));
         }
     }
@@ -541,7 +573,7 @@ mod tests {
                     svg[at..].split('"').next().unwrap().parse::<f64>().unwrap()
                 };
                 for (x, _y, size, anchor, text) in boxes(&svg) {
-                    let n = text.chars().count() as f64 * size * 0.6;
+                    let n = text_w(&text, size) * 1.05;
                     let right = match anchor.as_str() { "end" => x, "middle" => x + n / 2.0, _ => x + n };
                     assert!(right <= w + 1.0, "{tree:?} at {size}: {text:?} ends at {right:.1} on a {w} canvas");
                 }
