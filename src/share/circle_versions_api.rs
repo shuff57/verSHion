@@ -106,6 +106,89 @@ pub struct Trimmed {
     pub evidence_kept: u64,
 }
 
+/// Phase D2 (plan 7): one entry of `GET .../changes`: what changed in `version` since `compared_to` (the
+/// next readable kept version below it), by the circle's question ids. `gap`: its lists could not be
+/// worked out (an index is gone, or the entry did not carry them): nothing is known about it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ChangeEntry {
+    pub version: u64,
+    pub compared_to: u64,
+    pub gap: bool,
+    pub added: Vec<String>,
+    pub changed: Vec<String>,
+    pub removed: Vec<String>,
+}
+
+impl ChangeEntry {
+    /// What happened to the question `qid` in this version, by its lists.
+    pub fn touches(&self, qid: &str) -> Option<QuestionChange> {
+        if self.gap {
+            return None;
+        }
+        let has = |l: &[String]| l.iter().any(|x| x == qid);
+        if has(&self.added) {
+            Some(QuestionChange::Added)
+        } else if has(&self.changed) {
+            Some(QuestionChange::Changed)
+        } else if has(&self.removed) {
+            Some(QuestionChange::Removed)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QuestionChange {
+    Added,
+    Changed,
+    Removed,
+}
+
+/// The change lists of a bank, newest first. `per_question: false` (`reason` `keys_hidden`): a viewer of a
+/// bank that hides its keys, who gets no lists (plan 5.4, Q4). `etag` for `If-None-Match`; `from_cache`: a
+/// 304 said nothing moved, and this is the page read before.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ChangesPage {
+    pub bank_id: String,
+    pub head_version: u64,
+    pub per_question: bool,
+    pub reason: String,
+    pub versions: Vec<ChangeEntry>,
+    pub etag: Option<String>,
+    pub from_cache: bool,
+}
+
+/// A list of question ids; `None` when the key is missing, null or not a list.
+fn ids_at(v: &Value, key: &str) -> Option<Vec<String>> {
+    v.get(key).and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).filter(|s| !s.is_empty()).map(str::to_string).collect())
+}
+
+fn change_entry(v: &Value) -> Option<ChangeEntry> {
+    let version = v.get("version").and_then(Value::as_u64).filter(|n| *n > 0)?;
+    let compared_to = v.get("compared_to").and_then(Value::as_u64).unwrap_or(0);
+    if compared_to >= version {
+        return None;
+    }
+    let lists = (ids_at(v, "added"), ids_at(v, "changed"), ids_at(v, "removed"));
+    // (null-tolerant) an entry that carries no list at all says nothing: a gap, never "nothing changed"
+    let gap = v.get("gap").and_then(Value::as_bool) == Some(true) || compared_to == 0 || (lists.0.is_none() && lists.1.is_none() && lists.2.is_none());
+    if gap {
+        return Some(ChangeEntry { version, compared_to, gap: true, ..ChangeEntry::default() });
+    }
+    Some(ChangeEntry { version, compared_to, gap: false, added: lists.0.unwrap_or_default(), changed: lists.1.unwrap_or_default(), removed: lists.2.unwrap_or_default() })
+}
+
+/// The answer of `GET .../changes` as this app keeps it.
+pub fn changes_page(v: &Value, etag: Option<String>) -> ChangesPage {
+    let reason = text_of(v, "reason");
+    let per_question = reason != "keys_hidden" && v.get("per_question").and_then(Value::as_bool).unwrap_or(true);
+    let mut versions: Vec<ChangeEntry> = if per_question { v.get("versions").and_then(Value::as_array).map(|a| a.iter().filter_map(change_entry).collect()).unwrap_or_default() } else { Vec::new() };
+    versions.sort_by_key(|a| std::cmp::Reverse(a.version));
+    versions.dedup_by_key(|e| e.version);
+    ChangesPage { bank_id: text_of(v, "bank_id"), head_version: v.get("head_version").and_then(Value::as_u64).unwrap_or(0), per_question, reason, versions, etag, from_cache: false }
+}
+
 fn list_of<T: serde::de::DeserializeOwned>(v: &Value, key: &str) -> Result<Vec<T>, PoolError> {
     match v.get(key) {
         None | Some(Value::Null) => Ok(Vec::new()),
@@ -178,6 +261,33 @@ impl<'a> Pool<'a> {
             versions: list_of(&v, "versions")?,
             next_before: v.get("next_before").and_then(Value::as_u64),
         })
+    }
+
+    /// Phase D2: `GET /circles/:cid/banks/:bid/changes`, the per-question change lists (one `item_reads`
+    /// and one `circle_change_reads`).
+    pub async fn circle_changes(&self, cid: &str, bid: &str) -> Result<ChangesPage, PoolError> {
+        self.circle_changes_if(cid, bid, None).await
+    }
+
+    /// The same with `If-None-Match` from the page read before (`cached`, of this bank): a 304 is that page
+    /// again (`from_cache`), and is not counted by the pool.
+    pub async fn circle_changes_if(&self, cid: &str, bid: &str, cached: Option<&ChangesPage>) -> Result<ChangesPage, PoolError> {
+        check_id(cid)?;
+        check_id(bid)?;
+        let cached = cached.filter(|p| p.bank_id == bid && p.etag.is_some());
+        let mut c = Call::new(Method::Get, format!("/circles/{cid}/banks/{bid}/changes"));
+        if let Some(e) = cached.and_then(|p| p.etag.clone()) {
+            c.headers.push(("If-None-Match".into(), e));
+        }
+        let r = self.call(&c).await?;
+        if r.not_modified() {
+            return match cached {
+                Some(p) => Ok(ChangesPage { from_cache: true, ..p.clone() }),
+                None => Err(ApiError::BadReply("304 without a cached copy".into()).into()),
+            };
+        }
+        let v: Value = parse(&r)?;
+        Ok(changes_page(&v, r.etag.clone()))
     }
 
     /// `GET /circles/:cid/banks/:bid/versions/:n`: a kept version's body, in the shape of the head
