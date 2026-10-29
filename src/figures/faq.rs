@@ -29,6 +29,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "pedigree" => PEDIGREE,
         "gel-electrophoresis" => GEL_ELECTROPHORESIS,
         "micropipette-reading" => MICROPIPETTE_READING,
+        "hardy-weinberg" => HARDY_WEINBERG,
         // chemistry
         "bohr-model" => BOHR_MODEL,
         "gas-syringe" => GAS_SYRINGE,
@@ -538,6 +539,29 @@ const MICROPIPETTE_READING: &[Faq] = &[
     Faq {
         q: "Why can't a micropipette be set to any volume?",
         a: "A pipette can only be set inside its working range and in increments of its last digit. On a P20, 25 µL is too high and 12.53 µL is finer than the 0.1 µL steps.",
+    },
+];
+
+const HARDY_WEINBERG: &[Faq] = &[
+    Faq {
+        q: "What does Hardy-Weinberg equilibrium actually say?",
+        a: "That allele and genotype frequencies in a population do not change from generation to generation, provided five conditions hold: no selection, no mutation, no migration, random mating, and a large population. The figure draws those frequencies as p\u{b2}, 2pq and q\u{b2}.",
+    },
+    Faq {
+        q: "Why does a rare allele sit mostly in heterozygotes?",
+        a: "The heterozygote fraction is 2pq, which is larger than p\u{b2} whenever p is below one half. So a dominant allele at 10 % is carried by 18 % of the population in heterozygotes but shows in only 1 % as homozygotes. A rare dominant trait therefore stays rare in the population but keeps appearing in families.",
+    },
+    Faq {
+        q: "Why is selection against the recessive phenotype not Hardy-Weinberg?",
+        a: "It breaks the first condition. Every recessive homozygote is removed before it reproduces, while the recessive allele hides unchanged in heterozygotes, where selection cannot see it. So q falls more slowly than the recessive phenotype does, and the bars shift instead of repeating.",
+    },
+    Faq {
+        q: "How do the counts and the fractions relate?",
+        a: "The counts are the fraction multiplied by the population size, rounded so that the three counts add up to exactly that size. They are there to show what a population of that size would actually contain; at very small sizes they show that the fractions are expectations, not exact promises.",
+    },
+    Faq {
+        q: "What are p and q?",
+        a: "The frequencies of the two alleles of one gene in the population, where p is the dominant one and q the recessive. They always add to one, so a population can be described with a single number.",
     },
 ];
 

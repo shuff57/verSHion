@@ -106,6 +106,8 @@ grid-reference__defaults bd20f29bc53724a1
 grid-reference__start bd20f29bc53724a1
 guitar-chords__defaults 22c54dd2251e9f0a
 guitar-chords__start 22c54dd2251e9f0a
+hardy-weinberg__defaults 8a0fa9de9bc077a8
+hardy-weinberg__start 8a0fa9de9bc077a8
 heart-zones__defaults 1ffedb1752ddeafe
 heart-zones__start 1ffedb1752ddeafe
 heating-cooling-curve__defaults 806df7740f057c78

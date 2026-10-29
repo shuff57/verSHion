@@ -416,6 +416,25 @@ Left open: axis ink `#111827` is grey but not exactly
 neutral; trig's key prints a Hidden side inside a fraction; two-label y axes on tall waves; some coordinate labels
 sit over the drop lines; two example names overstate what they show.
 
+## Phase 4: biology
+
+Hardy-Weinberg: new figure `hardy-weinberg` (`src/figures/biology/hardyweinberg.rs`, Biology). The gene pool as one bar
+split by p and q, and below it one stacked bar per generation showing the genotypes random mating makes from that
+pool. With no selection the bars repeat exactly — that is the equilibrium — and the readout gives p², 2pq and q² with
+a sum check; the optional counts are rounded by largest remainder so they add up to N exactly (1 + 4 + 5 of 10, never
+9 or 11). A "Selection" choice removes every recessive homozygote before it reproduces, and the next generation's
+allele frequency follows p′ = p / (1 − q²), so the bars shift and the point of the figure becomes what breaks the
+equilibrium. The allele boundary in the gene pool is a drag handle and inverts exactly. Two defects found by looking
+at the exports rather than by the tests: a real AA frequency of 0.0001 printed as "AA p² = 0" beside a segment that was
+really there (a never-zero formatter now goes to six decimals before exponential form), and the Print copy's labels
+were lost in the hatching (they now sit on a white plate; a `paint-order` halo is not used because the PNG renderer
+paints the stroke over the glyphs and turns the label white). Tests: p²/2pq/q² and their sum at the defaults, every
+generation identical without selection over five allele frequencies, p′ = p/(1 − q²) under selection with p rising
+every generation, counts summing to N at four population sizes, a segment too narrow for its label drawn without one,
+the student copy free of genotype bars and numbers, the never-zero prints, the drag's exact inverse, Print neutrality
+(fills as well as strokes), and the PNG export. Census: only `hardy-weinberg__defaults` and `hardy-weinberg__start`
+added.
+
 Verification of the ray/motion fixes (`99d3e43`): a read-only pass in its own archive copy confirmed all four blockers
 and seven of the majors fixed with evidence, and found the other two only partly fixed — the image still left the
 canvas at long focal lengths (f = 40, u = 40.5 → x = 1332 on a 640 canvas, 2,120 settings) and labels still collided

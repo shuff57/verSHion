@@ -6,6 +6,7 @@ use super::*;
 
 mod handles;
 pub mod gel;
+pub mod hardyweinberg;
 pub mod pedigree;
 pub mod pipette;
 mod plot;
@@ -22,6 +23,7 @@ pub fn examples(id: &str) -> Option<Vec<super::Example>> {
         "predator-prey" => Some(popdyn::pp_examples()),
         "pedigree" => Some(pedigree::examples()),
         "micropipette-reading" => Some(pipette::examples()),
+        "hardy-weinberg" => hardyweinberg::examples(id),
         _ => None,
     }
 }
@@ -115,6 +117,7 @@ pub fn defs() -> Vec<FigureDef> {
             params: pipette::params,
             render: pipette::render,
         },
+        hardyweinberg::defs().pop().unwrap(),
     ]
 }
 
