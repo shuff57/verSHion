@@ -508,7 +508,7 @@ fn json_of(b: &[QuestionBank]) -> String {
 }
 
 fn ask<'a>(link: &'a CircleLink, local: Option<&'a str>, qid: &'a str, body: &'a VersionBody) -> RestoreAsk<'a> {
-    RestoreAsk { link, local_id: local, qid, body, picture: None, removed_in_circle: false }
+    RestoreAsk { link, local_id: local, qid, body, picture: None, store_picture: None, removed_in_circle: false }
 }
 
 #[test]
@@ -858,7 +858,6 @@ fn d2f_undo_restore_puts_back_exactly_what_was_replaced() {
     let mut banks = vec![bank.clone()];
     let done = restore_question(&mut banks, &RestoreAsk { removed_in_circle: true, ..ask(&link, Some(&c), QC, &six) }, &sink, &ok, NOW + 1000).unwrap();
     let unpaired = done.link.clone().unwrap();
-    assert_eq!(done.link_before.as_ref(), Some(&link));
     let back = undo_restore(&mut banks, &unpaired, &done, &sink, &ok, NOW + 2000).unwrap();
     assert_eq!(back.as_ref(), Some(&link));
     assert_eq!(serde_json::to_value(&banks[0].questions).unwrap(), serde_json::to_value(&bank.questions).unwrap());
@@ -866,9 +865,11 @@ fn d2f_undo_restore_puts_back_exactly_what_was_replaced() {
     let mut follow = link.clone();
     follow.mode = LinkMode::Follow;
     assert_eq!(undo_restore(&mut banks, &follow, &done, &sink, &ok, NOW + 3000), Err(RestoreRefused::FollowLink));
-    // a restore point that can not be saved: nothing changes
+    // a restore point that can not be saved: nothing changes (a fresh restore: the one above is undone already)
+    let done = restore_question(&mut banks, &RestoreAsk { removed_in_circle: true, ..ask(&link, Some(&c), QC, &six) }, &sink, &ok, NOW + 4000).unwrap();
+    let unpaired = done.link.clone().unwrap();
     let before = json_of(&banks);
-    assert!(matches!(undo_restore(&mut banks, &unpaired, &done, &BadRestore, &ok, NOW + 3000), Err(RestoreRefused::RestorePoint(_))));
+    assert!(matches!(undo_restore(&mut banks, &unpaired, &done, &BadRestore, &ok, NOW + 5000), Err(RestoreRefused::RestorePoint(_))));
     assert_eq!(json_of(&banks), before);
 }
 
@@ -893,4 +894,126 @@ fn d2f_the_cache_keeps_each_scope_apart_and_drops_a_bank_or_a_version() {
     cache.drop_bank(CID, BID);
     assert_eq!(cache.bodies(), 1);
     assert!(cache.page(CID, BID, "viewer|false|false").is_none() && cache.lines(CID, BID, "viewer|false|false", 9).is_none());
+}
+
+
+// ---- round 4 (second critic pair): each test written first --------------------------------------------------------------
+
+#[test]
+fn d2g_undo_patches_the_link_as_it_is_now_and_refuses_when_its_version_moved() {
+    // (critic S-I1) the restore unpaired C; meanwhile the link moved on in other ways: undo puts back only C's pair
+    let (bank, link) = linked();
+    let c = local_of(&link, QC);
+    let six = body(6, &v6(), false);
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    let ok = |_: &[QuestionBank]| -> Result<(), String> { Ok(()) };
+    let mut banks = vec![bank.clone()];
+    let done = restore_question(&mut banks, &RestoreAsk { removed_in_circle: true, ..ask(&link, Some(&c), QC, &six) }, &sink, &ok, NOW + 1000).unwrap();
+    let mut now = done.link.clone().unwrap();
+    now.head_seen = 12;
+    now.head_seen_by = Some("C. Teacher".into());
+    now.seen.hide_key = true;
+    let back = undo_restore(&mut banks, &now, &done, &sink, &ok, NOW + 2000).unwrap().expect("the pair comes back");
+    assert_eq!((back.head_seen, back.head_seen_by.as_deref(), back.seen.hide_key), (12, Some("C. Teacher"), true), "nothing else is put back");
+    assert_eq!(back.qid_of(&c), Some(QC));
+    assert_eq!(back.qids, link.qids, "in its place");
+    assert_eq!(serde_json::to_value(&back.base).unwrap(), serde_json::to_value(&link.base).unwrap());
+    // the copy moved to another version since the restore (a merge, a send): refused, nothing changed
+    let mut banks = vec![bank.clone()];
+    let done = restore_question(&mut banks, &RestoreAsk { removed_in_circle: true, ..ask(&link, Some(&c), QC, &six) }, &sink, &ok, NOW + 1000).unwrap();
+    let mut moved = done.link.clone().unwrap();
+    moved.base_version = 10;
+    let before = json_of(&banks);
+    assert_eq!(undo_restore(&mut banks, &moved, &done, &sink, &ok, NOW + 2000), Err(RestoreRefused::LinkMoved));
+    assert_eq!(json_of(&banks), before);
+}
+
+#[test]
+fn d2g_undo_never_overwrites_a_later_edit_nor_brings_back_a_deleted_question() {
+    // (critic S-I2)
+    let (bank, link) = linked();
+    let a = local_of(&link, QA);
+    let six = body(6, &v6(), false);
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    let ok = |_: &[QuestionBank]| -> Result<(), String> { Ok(()) };
+    // edited after the restore
+    let mut banks = vec![bank.clone()];
+    let done = restore_question(&mut banks, &ask(&link, Some(&a), QA, &six), &sink, &ok, NOW + 1000).unwrap();
+    banks[0].questions[0].stem = "Edited after the restore".into();
+    assert_eq!(undo_restore(&mut banks, &link, &done, &sink, &ok, NOW + 2000), Err(RestoreRefused::EditedSince));
+    assert_eq!(banks[0].questions[0].stem, "Edited after the restore");
+    // deleted after the restore: not put back
+    let mut banks = vec![bank.clone()];
+    let done = restore_question(&mut banks, &ask(&link, Some(&a), QA, &six), &sink, &ok, NOW + 1000).unwrap();
+    banks[0].questions.retain(|q| q.id != a);
+    assert_eq!(undo_restore(&mut banks, &link, &done, &sink, &ok, NOW + 2000), Err(RestoreRefused::EditedSince));
+    assert_eq!(banks[0].questions.len(), 2);
+    // a question the restore brought back new, edited since: not deleted
+    let mut gone = bank.clone();
+    gone.questions.retain(|q| q.id != local_of(&link, QC));
+    let mut l2 = link.clone();
+    l2.qids.retain(|q| q.qid != QC);
+    l2.base.retain(|b| b.qid != QC);
+    l2.mark_bank(&gone);
+    let mut banks = vec![gone];
+    let done = restore_question(&mut banks, &RestoreAsk { removed_in_circle: true, ..ask(&l2, None, QC, &six) }, &sink, &ok, NOW + 1000).unwrap();
+    banks[0].questions[2].points = Some(9.0);
+    assert_eq!(undo_restore(&mut banks, &l2, &done, &sink, &ok, NOW + 2000), Err(RestoreRefused::EditedSince));
+    assert_eq!(banks[0].questions.len(), 3);
+}
+
+#[test]
+fn d2g_a_restore_the_count_could_not_see_is_refused() {
+    // (critic P-2) version 6 differs from the copy only in its figure's settings, with the same picture
+    let (mut bank, link) = linked();
+    let a = local_of(&link, QA);
+    bank.questions[0].figure = Some(crate::model::FigureSpec { id: "triangle".into(), params: [("a".to_string(), json!(3))].into_iter().collect() });
+    let mut q = mc(QA, "Question A as of version 9", 1.0);
+    q["figure"] = json!({"id": "triangle", "params": {"a": 4}});
+    let b = body(6, &[q, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)], false);
+    let mut banks = vec![bank];
+    let before = json_of(&banks);
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    assert_eq!(restore_question(&mut banks, &ask(&link, Some(&a), QA, &b), &sink, &|_: &[QuestionBank]| Ok(()), NOW + 1000), Err(RestoreRefused::NotCountable));
+    assert_eq!(json_of(&banks), before);
+    assert!(sink.log.lock().unwrap().is_empty());
+}
+
+#[test]
+fn d2g_compare_reuses_the_merges_figure_rule_and_names_what_it_did_not_compare() {
+    // (critic P-7) a figure value the merge drops (null, a list) is not a change
+    let fig = |extra: Value| {
+        let mut q = mc(QA, "With a figure", 1.0);
+        q["figure"] = json!({"id": "triangle", "params": {"a": 3, "note": extra}});
+        body(7, &[q], false)
+    };
+    let c = compare(side_of_version(&fig(Value::Null), QA).as_ref(), side_of_version(&fig(json!([1, 2])), QA).as_ref(), false);
+    assert!(!c.changed_fields().contains(&"Figure"), "{:?}", c.fields);
+    let f = c.fields.iter().find(|f| f.field == "Figure").unwrap();
+    assert!(!f.left.contains('"'), "values drawn without JSON quotes: {f:?}");
+    // (critic P-8) in the viewers' form the key and the explanation are not compared, and not called "the same"
+    let (a, b) = (body(3, &[mc(QA, "Same", 1.0)], true), body(4, &[mc(QA, "Same", 1.0)], true));
+    let c = compare(side_of_version(&a, QA).as_ref(), side_of_version(&b, QA).as_ref(), true);
+    assert!(!c.same_fields().contains(&"Answer key") && !c.same_fields().contains(&"Explanation"), "{:?}", c.same_fields());
+    assert_eq!(c.hidden_fields(), vec!["Answer key", "Explanation"]);
+    // (critic P-9) an empty value is "none", never blank
+    let c = compare(side_of_version(&a, QA).as_ref(), side_of_version(&b, QA).as_ref(), false);
+    assert!(c.fields.iter().all(|f| !f.left.trim().is_empty() && !f.right.trim().is_empty()), "{:?}", c.fields);
+}
+
+#[test]
+fn d2g_overlapping_gaps_are_one_line_and_the_empty_state_does_not_contradict_them() {
+    // (critic P-10) two gap entries whose spans overlap (an odd answer): one line
+    let (bank, link) = linked();
+    let mut p = changes();
+    p.versions = vec![ChangeEntry { version: 9, compared_to: 5, gap: true, ..ChangeEntry::default() }, ChangeEntry { version: 6, compared_to: 4, gap: true, ..ChangeEntry::default() }];
+    let t = tl(&link, &bank, &p, QA, false);
+    let gaps: Vec<&Row> = t.rows.iter().filter(|r| matches!(r, Row::Gap(_))).collect();
+    assert_eq!(gaps.len(), 1, "{:?}", t.rows);
+    assert!(matches!(gaps[0], Row::Gap(g) if g.newer == 9 && g.older == 4), "{:?}", gaps);
+    assert_eq!(empty_text(&t), Some("No kept version is known to have changed this question."));
+    let mut quiet = changes();
+    quiet.versions = vec![entry(9, 8, &[], &[QB], &[])];
+    let t = tl(&link, &bank, &quiet, QC, false);
+    let _ = empty_text(&t);
 }

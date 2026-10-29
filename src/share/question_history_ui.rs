@@ -111,6 +111,9 @@ struct Inputs {
     base_version: u64,
     bank_print_at: i64,
     pairs: usize,
+    head_seen: u64,
+    /// The link's record of the question (its base entry), as JSON.
+    base: String,
     scope: String,
     show_all: bool,
     data: u64,
@@ -167,8 +170,19 @@ pub struct QuestionPage {
     /// Bumped whenever the page's reads change what it shows.
     data: u64,
     inputs: Option<Inputs>,
+    /// (round 4, critic S-I4) Each read carries the generation it was asked in; a reset bumps it and older answers are
+    /// dropped (never applied to the next account, role or bank state).
+    round: u64,
+    /// (round 4, critic P-6) A version shown whole ("Show").
+    pub preview: Option<u64>,
+    /// Worked out in `sync_page` for drawing: the shown version's question (and whether it is the viewers' form), and the
+    /// stem of the question a restore asked about would bring in.
+    preview_view: Option<(u64, Option<Shown>, bool)>,
+    incoming: Option<(u64, String)>,
+    /// (round 4, critic P-4) The last restore's words, put back when a second restore is cancelled.
+    undo_text: Option<String>,
     env: Env,
-    jobs: Vec<Receiver<Msg>>,
+    jobs: Vec<(u64, Receiver<Msg>)>,
 }
 
 impl std::fmt::Debug for QuestionPage {
@@ -262,6 +276,11 @@ impl QuestionPage {
             undo_asked: false,
             data: 0,
             inputs: None,
+            round: 0,
+            preview: None,
+            preview_view: None,
+            incoming: None,
+            undo_text: None,
             env,
             jobs: Vec::new(),
         };
@@ -287,7 +306,7 @@ impl QuestionPage {
             #[cfg(target_arch = "wasm32")]
             _ => wasm_bindgen_futures::spawn_local(async move { run_async(session, retry, work, tx, repaint).await }),
         }
-        self.jobs.push(rx);
+        self.jobs.push((self.round, rx));
         true
     }
 
@@ -319,7 +338,19 @@ impl QuestionPage {
         self.lines.clear();
         self.page = None;
         self.compare = None;
+        self.preview = None;
         self.reading.clear();
+        // (round 4, critic S-I4, S-m2, S-m7) what was asked or kept before the reset goes too: answers on their way, a
+        // restore being read (it would keep every Restore button off), its picture, and the last restore's undo
+        // (answers already on their way still arrive: each is dropped by its round when it does)
+        self.round += 1;
+        self.picture = None;
+        self.picture_asked = false;
+        self.undo = None;
+        self.undo_text = None;
+        self.undo_asked = false;
+        self.restore = None;
+        self.known = None;
         self.data += 1;
     }
 
@@ -332,6 +363,12 @@ impl QuestionPage {
                 // bank before is used again, and its lines are read again.
                 let prior = cache.page(&self.cid, &self.bid, &self.scope).cloned();
                 let moved = !page.from_cache && prior.as_ref().is_some_and(|p| page.etag.is_none() || page.etag != p.etag || page.per_question != p.per_question);
+                // (round 4, critic S-m5) a first answer for the bank, with nothing kept of an earlier one (its page was
+                // evicted): bodies and lines kept from before it are not trusted either
+                let moved = moved || (!page.from_cache && prior.is_none() && cache.has_bank(&self.cid, &self.bid) && !read_lines);
+                if !page.from_cache && prior.is_none() && read_lines {
+                    cache.drop_bank(&self.cid, &self.bid);
+                }
                 if moved {
                     cache.drop_bank(&self.cid, &self.bid);
                     self.compare = None;
@@ -412,9 +449,12 @@ impl QuestionPage {
 
     fn poll(&mut self, cache: &mut HistoryCache, now: i64) {
         let mut got = Vec::new();
-        self.jobs.retain(|rx| match rx.try_recv() {
+        let round = self.round;
+        self.jobs.retain(|(g, rx)| match rx.try_recv() {
             Ok(m) => {
-                got.push(m);
+                if *g == round {
+                    got.push(m);
+                }
                 false
             }
             Err(std::sync::mpsc::TryRecvError::Empty) => true,
@@ -443,7 +483,9 @@ impl QuestionPage {
     /// page says this person sees the viewers' form (that one is dropped, to be read again).
     fn usable_body(&self, cache: &mut HistoryCache, n: u64) -> Option<Arc<VersionBody>> {
         let b = cache.body(&self.cid, &self.bid, &self.scope, n)?;
-        if self.viewers_only() && !b.keys_hidden {
+        // (round 4, critic S-m5) the lines as read now: a version since held back or no longer kept is not used
+        let unreadable = self.lines.iter().any(|l| l.version == n && (l.withheld || !l.kept));
+        if unreadable || (self.viewers_only() && !b.keys_hidden) {
             cache.drop_body(&self.cid, &self.bid, n);
             return None;
         }
@@ -514,8 +556,37 @@ impl QuestionPage {
         }
     }
 
+    /// Cancel (or Escape, or Dismiss). (round 4, critic P-4) A second restore cancelled: the last one's words, and its
+    /// Undo, come back.
     pub fn cancel_restore(&mut self) {
-        self.restore = None;
+        let asked = self.restore.as_ref().is_some_and(|r| r.state == RestoreState::Asking);
+        self.restore = match (&self.undo, &self.undo_text) {
+            (Some(u), Some(t)) if asked => Some(RestoreView { version: u.version, state: RestoreState::Done(t.clone()) }),
+            _ => None,
+        };
+    }
+
+    /// (round 4) "Try again" on a failed restore: asked once more.
+    pub fn retry_restore(&mut self) {
+        if let Some(r) = self.restore.as_mut().filter(|r| matches!(r.state, RestoreState::Failed(_))) {
+            r.state = RestoreState::Asking;
+        }
+    }
+
+    /// (round 4, critic P-6) "Show": the whole question of a version (one read, none when held).
+    pub fn show(&mut self, version: u64, cache: &mut HistoryCache) {
+        if self.preview == Some(version) {
+            self.preview = None;
+            return;
+        }
+        self.preview = Some(version);
+        let _ = self.read_sides(&[Side::Version(version)], cache);
+    }
+
+    /// The body of a version for drawing (a preview, the incoming question of a restore).
+    pub(super) fn shown_side(&self, cache: &mut HistoryCache, version: u64) -> Option<Option<Shown>> {
+        let qid = self.qid.clone()?;
+        self.usable_body(cache, version).map(|b| side_of_version(&b, &qid))
     }
 
     /// "Yes, restore": the version is read (none when it was just compared); the bank changes in the next `sync`.
@@ -554,6 +625,8 @@ impl QuestionPage {
             base_version: link.base_version,
             bank_print_at: link.bank_modified,
             pairs: link.qids.len(),
+            head_seen: link.head_seen,
+            base: link.base.iter().find(|b| b.local_id == self.local_id).and_then(|b| serde_json::to_string(b).ok()).unwrap_or_default(),
             scope: self.scope.clone(),
             show_all: self.show_all,
             data: self.data,
@@ -570,16 +643,24 @@ impl QuestionPage {
         self.base_version = link.base_version;
         self.copy = side_of_copy(bank, &self.local_id);
         let mut yc = your_copy(link, bank, &self.local_id);
-        // (round 3, critic P9) a difference the link's record can not see (a figure, a picture), told by the base version's
-        // body when this session read it
+        // (round 3, critic P9) a difference the link's record can not see (a figure's settings), told by the base version's
+        // body when this session read it. (round 4, critic P-2) Never "changed, not sent yet" while the strip counts none:
+        // it is said not to be counted.
         if let (YourCopy::SameAs(b), Some(mine)) = (yc, self.copy.as_ref())
             && let Some(theirs) = self.usable_body(cache, b).filter(|x| !x.keys_hidden)
             && let Some(t) = self.qid.as_deref().and_then(|q| theirs.question(q))
             && (!super::merge::same_question(&mine.q, &t.q) || mine.sha != t.sha)
         {
-            yc = YourCopy::Unsent;
+            yc = YourCopy::NotCounted(b);
         }
         self.your_copy = yc;
+        // (round 4, critic P-3) a compare with "Your copy" as a side is worked out again from the copy as it is now
+        if let Some(c) = self.compare.as_mut()
+            && matches!(c.state, CompareState::Ready(_))
+            && (c.left == Side::YourCopy || c.right == Side::YourCopy)
+        {
+            c.state = CompareState::Reading;
+        }
         self.timeline_builds += 1;
         self.timeline = self.page.as_ref().filter(|_| self.load == Load::Ready).map(|page| timeline(&TimelineIn { lines: &self.lines, changes: page, link, bank, local_id: &self.local_id, show_all: self.show_all, qid: self.qid.as_deref() }));
     }
@@ -595,19 +676,26 @@ impl QuestionPage {
         };
         let Some(t) = body.question(&qid) else { return fail(self, format!("Version {v} does not have this question. Nothing was changed.")) };
         let removed = self.comes_back_new(Some(link));
-        let ask = |picture| RestoreAsk { link, local_id: Some(self.local_id.as_str()), qid: &qid, body: &body, picture, removed_in_circle: removed };
+        let local = self.local_id.clone();
+        let plain = RestoreAsk { link, local_id: Some(local.as_str()), qid: &qid, body: &body, picture: None, store_picture: None, removed_in_circle: removed };
         // (critic M2) first without a picture: a restore refused for any other reason stores nothing; only one that needs
-        // the version's picture fetches it, keeps its bytes in memory, and stores it just before the restore is made
-        let mut r = restore_question(banks, &ask(None), &*self.env.restore, save, now);
+        // the version's picture fetches it, keeps its bytes in memory, and (round 4, critic S-m3) stores it once the restore
+        // point is saved
+        let mut r = restore_question(banks, &plain, &*self.env.restore, save, now);
         if r == Err(RestoreRefused::PictureMissing) {
             let sha = t.sha.clone()?;
             match &self.picture {
-                Some((s, Ok(bytes))) if *s == sha => match self.env.images.put(bytes) {
-                    Ok(img) => r = restore_question(banks, &ask(Some(img)), &*self.env.restore, save, now),
-                    Err(m) => return fail(self, format!("Version {v}'s picture couldn't be stored on this computer ({m}), so nothing was changed.")),
-                },
+                Some((s, Ok(bytes))) if *s == sha => {
+                    let (images, bytes) = (self.env.images.clone(), bytes.clone());
+                    let store = move || images.put(&bytes);
+                    let with = RestoreAsk { store_picture: Some(&store), ..plain };
+                    r = restore_question(banks, &with, &*self.env.restore, save, now);
+                    if r == Err(RestoreRefused::PictureMissing) {
+                        return fail(self, format!("Version {v}'s picture couldn't be stored on this computer, so nothing was changed."));
+                    }
+                }
                 Some((s, Err(m))) if *s == sha => {
-                    let m = format!("{m} Nothing was changed.");
+                    let m = nothing_changed(m);
                     return fail(self, m);
                 }
                 _ if !self.picture_asked => {
@@ -625,7 +713,8 @@ impl QuestionPage {
                 self.local_id = done.local_id.clone();
                 let back_new = if removed { format!(" {BACK_NEW}") } else { String::new() };
                 let what = question_words(self.number);
-                let text = format!("{} is now as it was in version {v}. Only your copy changed: it counts as an unsent change until you send.{back_new} A restore point of all your banks was saved first, with verSHion's other safety copies.", capital(&what));
+                let text = format!("{} is now as it was in version {v}. Only your copy changed: it counts as an unsent change until you send.{back_new} A restore point of all your banks was saved first, with verSHion's other safety copies. Undo is available until you leave this page.", capital(&what));
+                self.undo_text = Some(text.clone());
                 self.restore = Some(RestoreView { version: v, state: RestoreState::Done(text) });
                 self.picture = None;
                 let link = done.link.clone();
@@ -647,6 +736,7 @@ impl QuestionPage {
         match undo_restore(banks, link, &done, &*self.env.restore, save, now) {
             Ok(before) => {
                 self.local_id = done.local_id.clone();
+                self.undo_text = None;
                 self.restore = Some(RestoreView { version: v, state: RestoreState::Done(format!("The restore was undone: {} is back as it was before. A restore point was saved first.", question_words(self.number))) });
                 self.data += 1;
                 Some((self.local_bank_id.clone(), before))
@@ -658,6 +748,11 @@ impl QuestionPage {
             }
         }
     }
+}
+
+/// A failure's words, ending once with "Nothing was changed." (round 4, minor: never twice).
+fn nothing_changed(m: &str) -> String {
+    if m.contains("Nothing was changed") { m.to_string() } else { format!("{} Nothing was changed.", m.trim_end()) }
 }
 
 fn capital(s: &str) -> String {
@@ -676,6 +771,9 @@ fn refused_words(e: &RestoreRefused, v: u64) -> String {
         RestoreRefused::PictureMissing => format!("Version {v}'s picture could not be fetched, so nothing was changed. Press Restore again to try again."),
         RestoreRefused::RestorePoint(m) => format!("A copy of your banks could not be saved first ({m}), so nothing was changed."),
         RestoreRefused::NotSaved(m) => format!("Your banks couldn't be saved ({}), so nothing was changed.", words::save_problem(m)),
+        RestoreRefused::NotCountable => "This version differs only in figure settings that verSHion can't count as a change here, so it can't be restored from this page. Nothing was changed.".into(),
+        RestoreRefused::EditedSince => "This question was changed (or deleted) after the restore, so Undo would lose that. Nothing was changed; change it back by hand if you need to.".into(),
+        RestoreRefused::LinkMoved => "Your copy has moved to another version of the circle's bank since the restore, so Undo can't put the question back as it was. Nothing was changed.".into(),
         RestoreRefused::Moved => "This question is no longer paired with the circle's question it was opened on (a merge or a send changed it). Open its history again. Nothing was changed.".into(),
     }
 }
@@ -729,9 +827,8 @@ pub(super) fn sync_page(p: &mut QuestionPage, cache: &mut HistoryCache, banks: &
             p.reload(cache);
         }
     }
-    p.poll(cache, now);
     let Some(link) = links.iter().find(|l| l.local_bank_id == p.local_bank_id) else { return SyncOut { close: true, ..SyncOut::default() } };
-    if link.gone() || !banks.iter().any(|b| b.id == p.local_bank_id) {
+    if link.gone() || link.circle_id != p.cid || link.circle_bank_id != p.bid || !banks.iter().any(|b| b.id == p.local_bank_id) {
         return SyncOut { close: true, ..SyncOut::default() };
     }
     // (critic B1, P10) another role or hiding state: what was read under the old one goes, and the page reads again
@@ -746,9 +843,33 @@ pub(super) fn sync_page(p: &mut QuestionPage, cache: &mut HistoryCache, banks: &
     if p.waiting_session && p.env.session.is_some() && (!had_session || p.load == Load::SignedOut) {
         p.reload(cache);
     }
+    // (round 4, critic S-I4) answers are taken in only after the account, the link and the role are checked: one asked
+    // before a reset is dropped by its round
+    p.poll(cache, now);
     let Some(bank) = banks.iter().find(|b| b.id == p.local_bank_id) else { return SyncOut::default() };
     p.refresh(link, bank, cache);
     p.refresh_compare(cache);
+    // (round 4, critic P-6) the question a restore asked about would bring in, read to be shown in the question; and a
+    // version shown whole
+    if let Some(v) = p.restore.as_ref().filter(|r| r.state == RestoreState::Asking).map(|r| r.version) {
+        if p.incoming.as_ref().is_none_or(|(n, _)| *n != v) {
+            match p.shown_side(cache, v) {
+                Some(side) => p.incoming = Some((v, side.map_or_else(|| "(not in that version)".into(), |s| super::merge::short_title(&s.q.stem, 90)))),
+                None => {
+                    let _ = p.read_sides(&[Side::Version(v)], cache);
+                }
+            }
+        }
+    } else {
+        p.incoming = None;
+    }
+    p.preview_view = match p.preview {
+        Some(v) => {
+            let hidden = p.viewers_only();
+            p.shown_side(cache, v).map(|side| (v, side, hidden))
+        }
+        None => None,
+    };
     let changed = p.restore_step(cache, banks, link, save, now).or_else(|| p.undo_step(banks, link, save, now));
     if changed.is_some()
         && let Some(bank) = banks.iter().find(|b| b.id == p.local_bank_id)
@@ -783,7 +904,9 @@ enum Act {
     ConfirmRestore,
     CancelRestore,
     DismissRestore,
+    RetryRestore,
     Undo,
+    Show(u64),
 }
 
 /// The page (from `circle_edit_ui::draw_page`).
@@ -824,8 +947,11 @@ pub(super) fn draw(ui: &mut Ui, m: &mut CirclesModel) {
         Act::CloseCompare => p.close_compare(),
         Act::AskRestore(v) => p.ask_restore(v),
         Act::ConfirmRestore => p.confirm_restore(cache),
-        Act::CancelRestore | Act::DismissRestore => p.cancel_restore(),
+        Act::CancelRestore => p.cancel_restore(),
+        Act::DismissRestore => p.restore = None,
+        Act::RetryRestore => p.retry_restore(),
         Act::Undo => p.ask_undo(),
+        Act::Show(v) => p.show(v, cache),
     }
 }
 
@@ -875,9 +1001,23 @@ fn held_between(p: &QuestionPage, a: u64, b: u64) -> Vec<u64> {
     v
 }
 
-/// A ghost button that is drawn but does nothing while `on` is false.
+/// A ghost button that is drawn but does nothing while `on` is false (styled as `kit::ghost_button`, added in place so a
+/// wrapped row never squeezes it).
 fn button_if(ui: &mut Ui, on: bool, label: &str) -> bool {
-    ui.add_enabled_ui(on, |ui| kit::ghost_button(ui, label).clicked()).inner
+    if on {
+        return kit::ghost_button(ui, label).clicked();
+    }
+    let b = egui::Button::new(egui::RichText::new(label).family(theme::bold_family()).color(theme::ink()))
+        .fill(egui::Color32::TRANSPARENT)
+        .stroke(egui::Stroke::new(1.0, theme::rule()))
+        .corner_radius(egui::CornerRadius::same(17))
+        .min_size(egui::vec2(0.0, 34.0));
+    ui.add_enabled(false, b).clicked()
+}
+
+/// A restore asked about or under way: other rows' Restore and Compare wait (critic P6, round 4 P-3).
+fn restore_busy(p: &QuestionPage) -> bool {
+    p.restore.as_ref().is_some_and(|r| matches!(r.state, RestoreState::Asking | RestoreState::Reading))
 }
 
 fn draw_question(ui: &mut Ui, p: &QuestionPage, back: &str, now: i64) -> Act {
@@ -889,15 +1029,16 @@ fn draw_question(ui: &mut Ui, p: &QuestionPage, back: &str, now: i64) -> Act {
     ui.add(egui::Label::new(theme::serif("History in the circle").size(20.0)).wrap());
     ui.add(egui::Label::new(theme::strong(p.heading.as_str()).size(14.0)).wrap());
     ui.add_space(4.0);
-    // (critic P6) Escape takes back a question asked
-    if p.restore.as_ref().is_some_and(|r| r.state == RestoreState::Asking) && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+    // (critic P6) Escape takes back a question asked (round 4: only one in view, not behind a compare)
+    if p.compare.is_none() && p.restore.as_ref().is_some_and(|r| r.state == RestoreState::Asking) && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
         act = Act::CancelRestore;
     }
+    let free = !restore_busy(p);
     // "Your copy: ..." and Compare with...
     let compare_ok = p.load == Load::Ready && p.copy.is_some() && p.lines.iter().any(|l| l.kept && !l.withheld);
     text_row(ui, |ui| {
         ui.add(egui::Label::new(theme::text(your_copy_text(p.your_copy)).size(13.0)).wrap());
-        if compare_ok && p.compare.is_none() && kit::ghost_button(ui, "Compare with...").clicked() {
+        if compare_ok && p.compare.is_none() && button_if(ui, free, "Compare with...") {
             let base = Side::Version(p.base_version);
             let left = if p.lines.iter().any(|l| l.version == p.base_version && l.kept && !l.withheld) { base } else { sides_of(p).into_iter().next().unwrap_or(base) };
             act = Act::Compare(left, Side::YourCopy);
@@ -935,31 +1076,37 @@ fn draw_question(ui: &mut Ui, p: &QuestionPage, back: &str, now: i64) -> Act {
         Load::Ready => {}
     }
     if let Some(c) = &p.compare {
+        // (round 4, critic P-3) a restore's result (and its Undo) stays in view above an open compare
+        if let Some(r) = &p.restore {
+            restore_panel(ui, p, r, &mut act);
+        }
         compare_panel(ui, p, c, &mut act);
         return act;
     }
     let Some(t) = &p.timeline else { return act };
     if !t.per_question {
-        para(ui, "This bank hides its answer keys from viewers, so this list shows the bank's versions, not which questions changed. Compare shows two versions as viewers see them; each Compare uses 2 of your 100 daily reads of hidden banks.");
+        para(ui, "This bank hides its answer keys from viewers, so this list shows the bank's versions, not which questions changed. Compare and Show show versions as viewers see them; each version read uses 1 of your 100 daily reads of hidden banks.");
     }
     let narrow = ui.available_width() < NARROW;
-    if t.rows.is_empty() || (t.per_question && !t.rows.iter().any(|r| matches!(r, Row::Version { .. }))) {
-        line(ui, "No version that is still kept changed this question.");
+    if let Some(e) = empty_text(t) {
+        line(ui, e);
     }
     // a restore asked about is drawn under its own row; one whose row is not listed, at the top
     let restore_row = p.restore.as_ref().filter(|r| t.rows.iter().any(|x| matches!(x, Row::Version { version, .. } if *version == r.version)));
     if let Some(r) = p.restore.as_ref().filter(|_| restore_row.is_none()) {
         restore_panel(ui, p, r, &mut act);
     }
-    // (critic P6) no other row's Restore while one is asked or under way
-    let free = !p.restore.as_ref().is_some_and(|r| matches!(r.state, RestoreState::Asking | RestoreState::Reading));
     let stale = p.your_copy == YourCopy::Stale;
+    let listed = |v: u64| t.rows.iter().any(|r| matches!(r, Row::Version { version, .. } if *version == v));
     for row in &t.rows {
         match row {
             Row::Version { version, line: l, tag, compared_to, compare, restore } => {
-                // (critic P7) no Restore on a bank put back from a safety copy, nor to the version the copy already is
-                let restore = *restore && !stale && p.your_copy != YourCopy::SameAs(*version);
-                let as_it_was = *tag == Some(Tag::AsItWas);
+                // (critic P7) no Restore on a bank put back from a safety copy, nor to the version the copy already is;
+                // (round 4) nor to the version just restored
+                let just = p.undo.as_ref().is_some_and(|u| u.version == *version);
+                let restore = *restore && !stale && p.your_copy != YourCopy::SameAs(*version) && !just;
+                // (round 4, minor) a compare against "Your copy" says so
+                let with_copy = compared_to.is_none();
                 kit::card().inner_margin(Margin::symmetric(10, 8)).show(ui, |ui| {
                     ui.set_min_width(ui.available_width());
                     let mut head = vec![format!("Version {version}")];
@@ -972,12 +1119,17 @@ fn draw_question(ui: &mut Ui, p: &QuestionPage, back: &str, now: i64) -> Act {
                             Some(Tag::Removed) => "removed",
                             _ => "changed",
                         };
-                        let since = format!("{what} since version {c}");
+                        // (round 4, minor) a version named that has no row of its own says why
+                        let why = if listed(c) { String::new() } else { " (not listed: it did not change this question)".into() };
+                        let since = format!("{what} since version {c}{why}");
                         msg = Some(msg.map_or(since.clone(), |m| format!("{m} · {since}")));
+                    }
+                    if just {
+                        msg = Some(msg.map_or("your copy is now this".into(), |m| format!("{m} · your copy is now this")));
                     }
                     // the tag and buttons, in reading order (`from_right`: drawn into a right-to-left layout)
                     let buttons = |ui: &mut Ui, act: &mut Act, from_right: bool| {
-                        let mut parts: Vec<u8> = vec![0, 1, 2];
+                        let mut parts: Vec<u8> = vec![0, 1, 2, 3];
                         if from_right {
                             parts.reverse();
                         }
@@ -989,8 +1141,15 @@ fn draw_question(ui: &mut Ui, p: &QuestionPage, back: &str, now: i64) -> Act {
                                     }
                                 }
                                 1 => {
-                                    let label = if as_it_was { "Compare with your copy" } else { "Compare" };
-                                    if *compare && kit::ghost_button(ui, label).clicked() {
+                                    // (round 4, critic P-6) the whole question of that version
+                                    let label = if p.preview == Some(*version) { "Hide" } else { "Show" };
+                                    if kit::ghost_button(ui, label).clicked() {
+                                        *act = Act::Show(*version);
+                                    }
+                                }
+                                2 => {
+                                    let label = if with_copy { "Compare with your copy" } else { "Compare" };
+                                    if *compare && button_if(ui, free, label) {
                                         let left = compared_to.map(Side::Version).unwrap_or(Side::Version(*version));
                                         let right = if compared_to.is_some() { Side::Version(*version) } else { Side::YourCopy };
                                         *act = Act::Compare(left, right);
@@ -1018,6 +1177,11 @@ fn draw_question(ui: &mut Ui, p: &QuestionPage, back: &str, now: i64) -> Act {
                         egui::Sides::new().shrink_left().wrap().show(ui, |ui| ui.add(egui::Label::new(theme::text(all.join(" · ")).size(13.0)).wrap()), |ui| buttons(ui, &mut act, true));
                     }
                 });
+                if let Some((v, side, hidden)) = p.preview_view.as_ref().filter(|(v, _, _)| v == version) {
+                    preview_panel(ui, *v, side.as_ref(), *hidden);
+                } else if p.preview == Some(*version) {
+                    spinner_line(ui, &format!("Reading version {version}..."));
+                }
                 if let Some(r) = restore_row.filter(|r| r.version == *version) {
                     restore_panel(ui, p, r, &mut act);
                 }
@@ -1063,28 +1227,58 @@ fn draw_question(ui: &mut Ui, p: &QuestionPage, back: &str, now: i64) -> Act {
     act
 }
 
+/// (round 4, critic P-6) One version's whole question: each field and its value (the key and explanation hidden in the
+/// viewers' form), the picture named.
+fn preview_panel(ui: &mut Ui, version: u64, side: Option<&Shown>, hidden: bool) {
+    kit::card().inner_margin(Margin::same(12)).show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
+        ui.label(theme::strong(format!("Version {version}, as it was")).size(13.0));
+        match side {
+            None => line(ui, format!("Version {version} does not have this question.")),
+            Some(s) => question_fields(ui, s, hidden),
+        }
+    });
+}
+
+/// Every field of one side's question, once.
+fn question_fields(ui: &mut Ui, s: &Shown, hidden: bool) {
+    for f in compare(Some(s), Some(s), hidden).fields {
+        ui.add(egui::Label::new(theme::text(format!("{}: {}", f.field, f.left)).size(13.0)).wrap());
+    }
+}
+
 fn restore_panel(ui: &mut Ui, p: &QuestionPage, r: &RestoreView, act: &mut Act) {
     let what = question_words(p.number);
     let back_new = p.comes_back_new(None);
+    let mut yes: Option<egui::Response> = None;
     let resp = kit::card().inner_margin(Margin::same(12)).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
         match &r.state {
             RestoreState::Asking => {
                 let mut ask = format!("Replace your copy of {what} with version {}'s? Only your copy changes; the circle gets it when you send. A restore point is saved first.", r.version);
-                // (critic P2) unsent edits are named before they go
-                if p.your_copy == YourCopy::Unsent {
-                    ask.push_str(&format!(" Your unsent changes to {what} will be replaced."));
+                // (critic P2) unsent edits are named before they go; (round 4, minor) also where they can not be counted
+                match p.your_copy {
+                    YourCopy::Unsent => ask.push_str(&format!(" Your unsent changes to {what} will be replaced.")),
+                    YourCopy::Unknown | YourCopy::NotCounted(_) => ask.push_str(&format!(" Any changes to {what} you have not sent will be replaced.")),
+                    _ => {}
                 }
                 // (critic P3) a question the circle removed
                 if back_new {
                     ask.push_str(&format!(" {BACK_NEW}"));
                 }
                 ui.add(egui::Label::new(theme::text(ask).size(13.0)).wrap());
+                // (round 4, critic P-6) what comes in
+                match p.incoming.as_ref().filter(|(v, _)| *v == r.version) {
+                    Some((_, stem)) => line(ui, format!("Version {}'s question: \"{stem}\"", r.version)),
+                    None => spinner_line(ui, &format!("Reading version {}...", r.version)),
+                }
                 ui.add_space(4.0);
                 ui.horizontal_wrapped(|ui| {
-                    if kit::primary_button(ui, "Yes, restore").clicked() {
+                    let y = kit::primary_button(ui, "Yes, restore");
+                    if y.clicked() {
                         *act = Act::ConfirmRestore;
                     }
+                    yes = Some(y);
                     if kit::ghost_button(ui, "Cancel").clicked() {
                         *act = Act::CancelRestore;
                     }
@@ -1103,18 +1297,28 @@ fn restore_panel(ui: &mut Ui, p: &QuestionPage, r: &RestoreView, act: &mut Act) 
                 });
             }
             RestoreState::Failed(t) => {
-                warn_box(ui, t);
-                if kit::ghost_button(ui, "Dismiss").clicked() {
-                    *act = Act::DismissRestore;
-                }
+                warn_box(ui, &nothing_changed(t));
+                ui.horizontal_wrapped(|ui| {
+                    // (round 4, minor) a failure that may pass has its Try again
+                    if kit::ghost_button(ui, "Try again").clicked() {
+                        *act = Act::RetryRestore;
+                    }
+                    if kit::ghost_button(ui, "Dismiss").clicked() {
+                        *act = Act::DismissRestore;
+                    }
+                });
             }
         }
     });
-    // (critic P6) brought into view once, when it is first drawn in this state
+    // (critic P6) brought into view once, when it is first drawn in this state; (round 4, minor) the question's Yes takes
+    // the keyboard focus
     let key = ui.make_persistent_id(("qh_restore_seen", r.version, std::mem::discriminant(&r.state)));
     if !ui.data(|d| d.get_temp::<bool>(key)).unwrap_or(false) {
         ui.data_mut(|d| d.insert_temp(key, true));
         resp.response.scroll_to_me(None);
+        if let Some(y) = &yes {
+            y.request_focus();
+        }
     }
     ui.add_space(8.0);
 }
@@ -1151,9 +1355,9 @@ fn picker(ui: &mut Ui, id: &str, label: &str, now: Side, all: &[Side]) -> Option
 }
 
 /// "Points, topics: the same" (plan 4.6).
-fn folded(names: &[&str]) -> String {
+fn folded(names: &[&str], what: &str) -> String {
     let list: Vec<String> = names.iter().enumerate().map(|(i, n)| if i == 0 { n.to_string() } else { n.to_lowercase() }).collect();
-    format!("{}: the same", list.join(", "))
+    format!("{}: {what}", list.join(", "))
 }
 
 /// A changed field's cell: the left accent bar, its name and "changed", then `body`.
@@ -1205,19 +1409,29 @@ fn compare_panel(ui: &mut Ui, p: &QuestionPage, c: &CompareView, act: &mut Act) 
         }
         CompareState::Ready(cmp) => cmp,
     };
-    for (absent, s) in [(cmp.left_absent, c.left), (cmp.right_absent, c.right)] {
-        if absent {
-            line(ui, format!("{} does not have this question.", side_name(s)));
+    // (round 4, critic P-9) one side does not have the question: said once, and the other side's question shown once
+    if cmp.left_absent || cmp.right_absent {
+        let (absent, present) = if cmp.left_absent { (c.left, c.right) } else { (c.right, c.left) };
+        line(ui, format!("{} does not have this question.", side_name(absent)));
+        if !(cmp.left_absent && cmp.right_absent) {
+            kit::card().inner_margin(Margin::same(12)).show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                ui.label(theme::strong(format!("{}:", side_name(present))).size(13.0));
+                for f in &cmp.fields {
+                    let v = if cmp.left_absent { &f.right } else { &f.left };
+                    ui.add(egui::Label::new(theme::text(format!("{}: {v}", f.field)).size(13.0)).wrap());
+                }
+            });
         }
+        return;
     }
     let changed: Vec<&FieldRow> = cmp.fields.iter().filter(|f| f.changed).collect();
     let same = cmp.same_fields();
+    let hidden = cmp.hidden_fields();
     let columns = compare_columns(ui.available_width());
     if changed.is_empty() {
-        para(ui, &format!("The two are the same. {}.", folded(&same)));
-        return;
-    }
-    if columns {
+        para(ui, &format!("The two are the same. {}.", folded(&same, "the same")));
+    } else if columns {
         ui.columns(2, |cols| {
             cols[0].label(theme::strong(side_name(c.left)).size(13.5));
             cols[1].label(theme::strong(side_name(c.right)).size(13.5));
@@ -1234,6 +1448,9 @@ fn compare_panel(ui: &mut Ui, p: &QuestionPage, c: &CompareView, act: &mut Act) 
             });
             ui.add_space(4.0);
         }
+        if !same.is_empty() {
+            line(ui, folded(&same, "the same"));
+        }
     } else {
         // stacked (critic P12): the field once, both sides under it
         for f in &changed {
@@ -1243,25 +1460,39 @@ fn compare_panel(ui: &mut Ui, p: &QuestionPage, c: &CompareView, act: &mut Act) 
             });
             ui.add_space(4.0);
         }
+        if !same.is_empty() {
+            line(ui, folded(&same, "the same"));
+        }
     }
-    if !same.is_empty() {
-        line(ui, folded(&same));
+    // (round 4, critic P-8) what the viewers' form does not show is named so, never "the same"
+    if !hidden.is_empty() {
+        line(ui, folded(&hidden, "hidden from viewers, not compared"));
     }
 }
 
 /// Hook H3 (approved by the owner): the question card's right-click menu item "History in the circle". Draws nothing for
-/// a bank with no link, and reads nothing: the page reads when it opens.
+/// a bank with no link, and reads nothing: the page reads when it opens. (round 4, critic S-I3) While a question of this bank
+/// is open in the editor, the page does not open (its draft would later be written over a restored question).
 pub fn question_menu(ui: &mut Ui, app: &mut crate::App, bank_id: &str, question_id: &str) {
+    let draft_open = app.qedit.as_ref().is_some_and(|d| d.bank_id == bank_id);
     let crate::App { shared, store, .. } = app;
     let Some(bank) = store.banks.iter().find(|b| b.id == bank_id) else { return };
-    if question_menu_of(ui, &mut shared.circles, bank, question_id) {
+    if question_menu_of(ui, &mut shared.circles, bank, question_id, draft_open) {
         ui.close();
     }
 }
 
+/// The words beside the item while a question of the bank is open in the editor.
+pub const DRAFT_OPEN: &str = "Finish or close the open question first";
+
 /// [`question_menu`] with its parts (tests). True when the page opened.
-pub(super) fn question_menu_of(ui: &mut Ui, c: &mut CirclesModel, bank: &QuestionBank, question_id: &str) -> bool {
+pub(super) fn question_menu_of(ui: &mut Ui, c: &mut CirclesModel, bank: &QuestionBank, question_id: &str, draft_open: bool) -> bool {
     if c.edit.with_link(&bank.id, |_| ()).is_none() {
+        return false;
+    }
+    if draft_open {
+        ui.add_enabled(false, egui::Button::new("History in the circle")).on_disabled_hover_text(DRAFT_OPEN);
+        ui.label(theme::muted(DRAFT_OPEN).size(12.0));
         return false;
     }
     ui.button("History in the circle").clicked() && c.edit.open_question_history(bank, question_id)

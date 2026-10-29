@@ -134,7 +134,7 @@ pub fn strip_key(k: &Kind) -> Kind {
     }
 }
 
-fn shape(k: &Kind) -> String {
+pub(super) fn shape(k: &Kind) -> String {
     serde_json::to_string(&strip_key(&canon_kind(k))).unwrap_or_default()
 }
 
@@ -185,7 +185,7 @@ fn same_topics(a: &[String], b: &[String]) -> bool {
 }
 
 /// Only the key of a question, for comparing (its texts as the server stores them).
-fn key_value(k: &Kind) -> String {
+pub(super) fn key_value(k: &Kind) -> String {
     let k = &canon_kind(k);
     let v: Value = match k {
         Kind::Mc { answers } => answers.iter().map(|a| a.correct).collect::<Vec<_>>().into(),
@@ -598,7 +598,7 @@ pub fn same_question(o: &Question, t: &Question) -> bool {
 /// once per question, so a pass that compares many questions with many (the circle's new ones with the bank's)
 /// normalises each text once, not once per comparison.
 #[derive(PartialEq)]
-struct Sig {
+pub(super) struct Sig {
     stem: String,
     shape: String,
     key: String,
@@ -609,18 +609,18 @@ struct Sig {
     /// The figure and its values (by name): a number the same whether written `1` or `1.0`, a text as stored. (critic 83
     /// minor) Only the values the server keeps: it drops one that is not a number, a text or true/false (what this app
     /// writes for a number that is not finite is `null`; a list).
-    figure: Option<(String, Vec<(String, FigureValue)>)>,
+    pub(super) figure: Option<(String, Vec<(String, FigureValue)>)>,
 }
 
-#[derive(PartialEq)]
-enum FigureValue {
+#[derive(Debug, PartialEq)]
+pub(super) enum FigureValue {
     Number(f64),
     Text(String),
     Flag(bool),
 }
 
 impl Sig {
-    fn of(q: &Question) -> Sig {
+    pub(super) fn of(q: &Question) -> Sig {
         let value = |v: &Value| match v {
             Value::Number(n) => n.as_f64().map(FigureValue::Number),
             Value::String(s) => Some(FigureValue::Text(canon::block(s).into_owned())),

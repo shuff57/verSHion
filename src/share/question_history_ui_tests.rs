@@ -35,6 +35,8 @@ pub(super) struct Wire {
     seen: Mutex<Vec<Seen>>,
     /// Who the session says is signed in (round 3, critic I4).
     who: Mutex<Option<String>>,
+    /// (round 4) The next request waits here, after taking its reply, until released.
+    gate: Mutex<Option<std::sync::mpsc::Receiver<()>>>,
 }
 
 fn reply(status: u16, body: &Value, etag: Option<&str>) -> Response {
@@ -63,6 +65,12 @@ impl Wire {
         r.bytes = bytes;
         self.routes.lock().unwrap().entry(format!("Get {path}")).or_default().push_back(r);
     }
+    /// The next request with a reply waits until the sender is used (or dropped).
+    fn hold(&self) -> std::sync::mpsc::Sender<()> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        *self.gate.lock().unwrap() = Some(rx);
+        tx
+    }
     fn calls(&self, needle: &str) -> usize {
         self.seen.lock().unwrap().iter().filter(|(p, _)| p.contains(needle)).count()
     }
@@ -90,7 +98,12 @@ impl PoolSession for Wire {
             let path = r.url.trim_start_matches("https://pool.test").split('?').next().unwrap_or_default().to_string();
             let key = format!("{:?} {}", r.method, path);
             self.seen.lock().unwrap().push((key.clone(), r.headers.iter().map(|(k, v)| (k.clone(), v.expose().to_string())).collect()));
-            if let Some(q) = self.routes.lock().unwrap().get_mut(&key).and_then(VecDeque::pop_front) {
+            let queued = self.routes.lock().unwrap().get_mut(&key).and_then(VecDeque::pop_front);
+            if let Some(q) = queued {
+                let g = self.gate.lock().unwrap().take();
+                if let Some(rx) = g {
+                    let _ = rx.recv_timeout(std::time::Duration::from_secs(10));
+                }
                 return Ok(q);
             }
             match self.sticky.lock().unwrap().get(&key) {
@@ -303,7 +316,7 @@ impl Rig {
 /// The card's menu item, drawn as the menu draws it (a plain button); the text drawn, and whether it was clicked open.
 fn menu_text(m: &mut CirclesModel, bank: &QuestionBank, question_id: &str) -> String {
     super::bank_links_tests::text_of(1280.0, &mut |ui| {
-        super::question_history_ui::question_menu_of(ui, m, bank, question_id);
+        super::question_history_ui::question_menu_of(ui, m, bank, question_id, false);
     })
 }
 
@@ -549,7 +562,9 @@ fn d2u_restore_asks_first_then_restores_that_question_as_one_unsent_change() {
     assert!(t.contains("Replace your copy of question 1 with version 2's? Only your copy changes; the circle gets it when you send. A restore point is saved first."), "{t}");
     assert_eq!(serde_json::to_string(&r.banks).unwrap(), before, "nothing changes before the yes");
     assert_eq!(*r.restores.0.lock().unwrap(), 0);
-    assert_eq!(r.w.calls("/versions/2"), 0, "nothing read before the yes");
+    // (round 4, critic P-6) the question names what comes in: version 2 is read for it (the restore's one read)
+    assert_eq!(r.w.calls("/versions/2"), 1);
+    assert!(t.contains(A3), "{t}");
     assert!(r.page(420.0).contains("Replace your copy of question 1 with version 2's?"), "the question at 420 px too");
     // No: nothing
     assert!(r.click(1280.0, "Cancel", 0));
@@ -869,9 +884,13 @@ fn d2u_frames() {
         r.script_load();
         r.open(0);
         both(&mut r, "17-follow-viewer", w);
-        // a viewer of a hiding bank: bank lines, then its compare of two viewers' forms (word bank sorted)
+        // a viewer of a hiding bank: bank lines (the pool blanks the messages), then its compare of two viewers' forms
         let mut r = hiding_viewer();
-        r.w.on("Get", &versions_path(), 200, lines_json(), None);
+        let mut blank = lines_json();
+        for v in blank["versions"].as_array_mut().unwrap() {
+            v["message"] = json!("");
+        }
+        r.w.on("Get", &versions_path(), 200, blank, None);
         r.w.on("Get", &changes_path(), 200, json!({"bank_id": BID, "head_version": 5, "per_question": false, "reason": "keys_hidden"}), None);
         r.open(0);
         both(&mut r, "18-hiding-viewer", w);
@@ -907,6 +926,55 @@ fn d2u_frames() {
         r.page(w);
         r.qpage_mut().load = Load::SignedOut;
         both(&mut r, "22-signed-out", w);
+        // (round 4, critic P-6) a version shown whole
+        let mut r = rig();
+        r.script_load();
+        let mut q = qj(QA, A3);
+        q["explanation"] = json!("Subtract 3, then divide by 2.");
+        q["topics"] = json!(["linear equations"]);
+        r.w.raw(&version_path(2), served(2, &[q], false));
+        r.open(0);
+        r.page(w);
+        let cache = &mut r.m.edit.question_cache;
+        if let EditView::Question(p) = &mut r.m.edit.view {
+            p.show(2, cache);
+        }
+        both(&mut r, "23-show-version", w);
+        // (round 4, critic P-2) a restore the count could not see, refused
+        let mut r = rig();
+        r.script_load();
+        let mut q = qj(QA, A5);
+        q["figure"] = json!({"id": "triangle", "params": {"a": 4}});
+        r.w.raw(&version_path(2), served(2, &[q], false));
+        r.banks[0].questions[0].figure = Some(crate::model::FigureSpec { id: "triangle".into(), params: [("a".to_string(), json!(3))].into_iter().collect() });
+        r.banks[0].modified += 1;
+        r.open(0);
+        r.page(w);
+        r.qpage_mut().ask_restore(2);
+        r.page(w);
+        let cache = &mut r.m.edit.question_cache;
+        if let EditView::Question(p) = &mut r.m.edit.view {
+            p.confirm_restore(cache);
+        }
+        both(&mut r, "24-restore-refused-figure-only", w);
+        // (round 4, critic P-4) a second restore cancelled: the first one's Undo is back
+        let mut r = rig();
+        r.script_load();
+        r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+        r.w.raw(&version_path(5), served(5, &[qj(QA, A5), qj(QB, B)], false));
+        r.open(0);
+        r.page(w);
+        r.qpage_mut().ask_restore(2);
+        r.page(w);
+        let cache = &mut r.m.edit.question_cache;
+        if let EditView::Question(p) = &mut r.m.edit.view {
+            p.confirm_restore(cache);
+        }
+        r.page(w);
+        r.qpage_mut().ask_restore(5);
+        r.page(w);
+        r.qpage_mut().cancel_restore();
+        both(&mut r, "25-undo-after-cancel", w);
     }
 }
 
@@ -1037,7 +1105,7 @@ fn d2f_a_viewer_of_a_hiding_bank_gets_bank_lines_whatever_the_answer_says() {
     r.open(0);
     let t = r.page(1280.0);
     assert!(!t.contains("Changed") && !t.contains("As it was then"), "{t}");
-    assert!(t.contains("2 of your 100 daily"), "(critic P11) {t}");
+    assert!(t.contains("1 of your 100 daily"), "(critic P11; round 4: one read per version) {t}");
     assert!(r.click(1280.0, "< Back to Unit 2 quiz", 0));
     // and its change lists are never asked with a tag (a 304 would bring back a page read under another role)
     r.w.on("Get", &changes_path(), 200, json!({"bank_id": BID, "head_version": 5, "per_question": false, "reason": "keys_hidden"}), Some("\"v1\""));
@@ -1236,6 +1304,7 @@ fn d2f_the_restore_question_is_asked_under_its_row_and_escape_cancels() {
     // (critic P6) an edited copy: both rows offer Restore
     let mut r = rig();
     r.script_load();
+    r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
     r.banks[0].questions[0].stem = "Edited here".into();
     r.banks[0].modified += 1;
     r.open(0);
@@ -1319,7 +1388,8 @@ fn d2f_your_copy_agrees_with_the_strip() {
     r.banks[0].questions[0].figure = Some(crate::model::FigureSpec { id: "triangle".into(), params: Default::default() });
     r.banks[0].modified += 1;
     let t = r.page(1280.0);
-    assert!(t.contains("Your copy: changed, not sent yet."), "{t}");
+    // (round 4, critic P-2) the strip counts none: never "changed, not sent yet", nor "the same"
+    assert!(t.contains("no change counted since version 5") && !t.contains("changed, not sent yet") && !t.contains("the same as version"), "{t}");
 }
 
 #[test]
@@ -1426,4 +1496,345 @@ fn d2f_a_full_body_held_is_never_compared_beside_the_viewers_form() {
     let t = r.page(1280.0);
     assert!(!t.contains("SECRET") && !t.contains("choice 1"), "{t}");
     assert_eq!(r.w.calls("/versions/5"), 1, "read again in the viewers' form");
+}
+
+// ---- round 4 (second critic pair) -------------------------------------------------------------------------------------
+
+#[test]
+fn zz_undo_overwrites_an_edit_made_after_the_restore() {
+    // (critic S-I2, ported) an edit after the restore is never undone
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Restore...", 0));
+    assert!(r.click(1280.0, "Yes, restore", 0));
+    r.page(1280.0);
+    assert_eq!(r.banks[0].questions[0].stem, A3);
+    // an edit after the restore (pop-over window, AI job, any other writer)
+    r.banks[0].questions[0].stem = "Edited after the restore".into();
+    r.banks[0].modified += 5;
+    r.page(1280.0);
+    let t = r.page(1280.0);
+    assert!(t.contains("Undo restore"), "undo still offered after an edit: {t}");
+    assert!(r.click(1280.0, "Undo restore", 0));
+    let t = r.page(1280.0);
+    assert_eq!(r.banks[0].questions[0].stem, "Edited after the restore", "undo silently overwrote the later edit");
+    assert!(t.contains("changed (or deleted) after the restore"), "{t}");
+}
+
+#[test]
+fn zz_undo_writes_back_a_stale_whole_link() {
+    // (critic S-I1, ported) undo puts back only the restore's own change to the link
+    let mut r = removed_rig();
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Restore...", 0));
+    assert!(r.click(1280.0, "Yes, restore", 0));
+    r.page(1280.0);
+    // something else moves the link on meanwhile (a quiet check, settle_all_news, ...)
+    r.m.edit.update_link(LOCAL, |l| {
+        l.head_seen = 9;
+        l.head_seen_by = Some("C. Teacher".into());
+        true
+    });
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Undo restore", 0));
+    r.page(1280.0);
+    let l = r.m.edit.link_for_local(LOCAL).unwrap();
+    assert_eq!(l.head_seen, 9, "undo reverted unrelated link state");
+    assert_eq!(l.qid_of(&r.banks[0].questions[0].id), Some(QA), "the pair is back");
+}
+
+#[test]
+fn zz_page_survives_its_link_pointing_at_another_circle_bank() {
+    // (critic S-m1, ported)
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Restore...", 0));
+    // the local bank is now linked to another circle bank (re-linked)
+    r.m.edit.update_link(LOCAL, |l| {
+        l.circle_bank_id = "bk_other000000000000".into();
+        true
+    });
+    assert!(r.click(1280.0, "Yes, restore", 0) || !matches!(r.m.edit.view, EditView::Question(_)));
+    r.page(1280.0);
+    let open = matches!(r.m.edit.view, EditView::Question(_));
+    assert!(!open || r.banks[0].questions[0].stem != A3, "old circle bank's version restored into a bank linked elsewhere");
+    assert!(!open, "the page closes");
+}
+
+#[test]
+fn d2g_the_page_does_not_open_while_a_question_of_the_bank_is_open_in_the_editor() {
+    // (critic S-I3) its draft would later be written over a restored question
+    let mut r = rig();
+    let bank = r.banks[0].clone();
+    let id = bank.questions[0].id.clone();
+    let t = super::bank_links_tests::text_of(1280.0, &mut |ui| {
+        assert!(!super::question_history_ui::question_menu_of(ui, &mut r.m, &bank, &id, true));
+    });
+    assert!(t.contains(super::question_history_ui::DRAFT_OPEN), "{t}");
+    assert!(!r.m.edit.active());
+    assert!(r.w.reads().is_empty());
+}
+
+#[test]
+fn d2g_answers_asked_before_a_reset_are_never_applied_after_it() {
+    // (critic S-I4, S-m2) a version read for olga, answered after pete signed in on this session
+    let mut r = rig();
+    *r.w.who.lock().unwrap() = Some("https://pool.test\nolga@school.org".into());
+    r.script_load();
+    r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+    r.open(0);
+    r.page(1280.0);
+    r.qpage_mut().ask_restore(2);
+    let cache = &mut r.m.edit.question_cache;
+    if let EditView::Question(p) = &mut r.m.edit.view {
+        p.confirm_restore(cache);
+    }
+    // the answer is waiting, not yet taken in; another account now
+    *r.w.who.lock().unwrap() = Some("https://pool.test\npete@school.org".into());
+    r.script_load();
+    r.page(1280.0);
+    assert_eq!(r.m.edit.question_cache.bodies(), 0, "olga's read is not kept for pete");
+    assert_eq!(r.banks[0].questions[0].stem, A5, "nor restored for him");
+    assert!(r.qpage().restore.is_none(), "the restore under way is gone, so the Restore buttons work again");
+}
+
+#[test]
+fn d2g_a_first_answer_for_a_bank_drops_what_was_held_from_before() {
+    // (critic S-m5) a body held from earlier in the session, its bank's lists since evicted
+    let mut r = rig();
+    let scope = super::question_history::scope_of(&r.m.edit.link_for_local(LOCAL).unwrap());
+    r.frame_at(1280.0, Vec::new());
+    r.frame_at(1280.0, Vec::new());
+    let scope_now = super::question_history::scope_of(&r.m.edit.link_for_local(LOCAL).unwrap());
+    let _ = scope;
+    r.m.edit.question_cache.put_body(CID, BID, &scope_now, super::question_history::VersionBody::from_payload(3, &[], false, NOW));
+    r.script_load();
+    r.open_cold(0);
+    r.page(1280.0);
+    assert!(r.m.edit.question_cache.body(CID, BID, &scope_now, 3).is_none());
+}
+
+#[test]
+fn d2g_a_figure_only_restore_is_refused_and_the_copy_agrees_with_the_strip() {
+    // (critic P-2) version 2 differs from the copy only in a figure's settings
+    let mut r = rig();
+    r.script_load();
+    let mut q = qj(QA, A5);
+    q["figure"] = json!({"id": "triangle", "params": {"a": 4}});
+    r.w.raw(&version_path(2), served(2, &[q], false));
+    r.banks[0].questions[0].figure = Some(crate::model::FigureSpec { id: "triangle".into(), params: [("a".to_string(), json!(3))].into_iter().collect() });
+    r.banks[0].modified += 1;
+    r.open(0);
+    r.page(1280.0);
+    let before = serde_json::to_string(&r.banks).unwrap();
+    assert!(r.click(1280.0, "Restore...", 0));
+    assert!(r.click(1280.0, "Yes, restore", 0));
+    let t = r.page(1280.0);
+    assert!(t.contains("differs only in figure settings"), "{t}");
+    assert_eq!(serde_json::to_string(&r.banks).unwrap(), before);
+    assert!(!t.contains("changed, not sent yet"), "the strip counts none: {t}");
+    assert_eq!(r.m.edit.status(LOCAL).map(|s| s.changes.total()), Some(0));
+}
+
+#[test]
+fn d2g_a_compare_with_your_copy_follows_the_copy_and_waits_for_a_restore() {
+    // (critic P-3)
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(5), served(5, &[qj(QA, A5), qj(QB, B)], false));
+    r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Compare with...", 0));
+    assert!(r.page(1280.0).contains("The two are the same"));
+    r.banks[0].questions[0].stem = "Edited while comparing".into();
+    r.banks[0].modified += 1;
+    let t = r.page(1280.0);
+    assert!(!t.contains("The two are the same") && t.lines().any(|l| l == "changed") && t.lines().any(|l| l == "Edited while comparing"), "worked out again: {t}");
+    assert!(r.click(1280.0, "Close compare", 0));
+    // while a restore is asked, Compare waits
+    assert!(r.click(1280.0, "Restore...", 0));
+    assert!(r.click(1280.0, "Compare", 0));
+    assert!(r.qpage().compare.is_none(), "{:?}", r.qpage().compare);
+    // the result and its Undo stay in view over a compare
+    r.w.raw(&version_path(3), served(3, &[qj(QA, A3), qj(QB, B)], false));
+    assert!(r.click(1280.0, "Yes, restore", 0));
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Compare", 0));
+    let t = r.page(1280.0);
+    assert!(r.qpage().compare.is_some() && t.contains("Undo restore"), "{t}");
+}
+
+#[test]
+fn d2g_undo_says_how_long_it_lasts_and_survives_a_second_restore_cancelled() {
+    // (critic P-4)
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+    r.w.raw(&version_path(5), served(5, &[qj(QA, A5), qj(QB, B)], false));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Restore...", 0));
+    assert!(r.click(1280.0, "Yes, restore", 0));
+    let t = r.page(1280.0);
+    assert!(t.contains("Undo is available until you leave this page"), "{t}");
+    // (round 4, minor) version 2 is what the copy is now: no Restore on it; version 5 offers one
+    assert!(t.contains("your copy is now this"), "{t}");
+    assert!(r.click(1280.0, "Restore...", 0));
+    assert!(r.click(1280.0, "Cancel", 0));
+    let t = r.page(1280.0);
+    assert!(t.contains("Undo restore"), "{t}");
+}
+
+#[test]
+fn d2g_show_draws_a_versions_whole_question() {
+    // (critic P-6)
+    let mut r = rig();
+    r.script_load();
+    let mut q = qj(QA, A3);
+    q["explanation"] = json!("Subtract 3, then divide by 2.");
+    q["topics"] = json!(["linear equations"]);
+    r.w.raw(&version_path(2), served(2, &[q], false));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Show", 1));
+    let t = r.page(1280.0);
+    for want in ["Version 2, as it was", A3, "Choices: A | B", "Answer key: choice 1", "Topics: linear equations", "Explanation: Subtract 3, then divide by 2.", "Picture: no picture"] {
+        assert!(t.contains(want), "{want}: {t}");
+    }
+    assert!(r.click(1280.0, "Hide", 0));
+    assert!(r.qpage().preview.is_none());
+}
+
+#[test]
+fn d2g_a_compare_with_a_missing_side_shows_the_other_once() {
+    // (critic P-9) version 2 has no B
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+    r.w.raw(&version_path(3), served(3, &[qj(QA, A3), qj(QB, B)], false));
+    r.open(1);
+    r.page(1280.0);
+    let cache = &mut r.m.edit.question_cache;
+    if let EditView::Question(p) = &mut r.m.edit.view {
+        p.open_compare(Side::Version(2), Side::Version(3), cache);
+    }
+    let t = r.page(1280.0);
+    assert_eq!(t.matches("Version 2 does not have this question.").count(), 1, "{t}");
+    assert!(t.contains(&format!("Question text: {B}")) && !t.contains("Version 2: \n"), "{t}");
+}
+
+#[test]
+fn d2g_a_viewers_form_compare_names_what_it_did_not_compare() {
+    // (critic P-8)
+    let mut r = hiding_viewer();
+    r.w.on("Get", &versions_path(), 200, lines_json(), None);
+    r.w.on("Get", &changes_path(), 200, json!({"bank_id": BID, "head_version": 5, "per_question": false, "reason": "keys_hidden"}), None);
+    r.w.raw(&version_path(3), served(3, &[qs(QA, A3), qs(QB, B)], true));
+    r.w.raw(&version_path(5), served(5, &[qs(QA, A5), qs(QB, B)], true));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Compare", 0));
+    let t = r.page(1280.0);
+    assert!(t.contains("Answer key, explanation: hidden from viewers, not compared"), "{t}");
+    assert!(!t.contains("answer key, points") && !t.contains("explanation, picture"), "not called the same: {t}");
+}
+
+#[test]
+fn d2g_the_empty_state_with_gaps_says_nothing_is_known_to_have_changed_it() {
+    // (critic P-10)
+    let mut r = rig();
+    r.w.on("Get", &versions_path(), 200, lines_json(), None);
+    r.w.on("Get", &changes_path(), 200, json!({"bank_id": BID, "head_version": 5, "per_question": true, "versions": [{"version": 5, "compared_to": 3, "gap": true}, {"version": 3, "compared_to": 2, "gap": true}]}), None);
+    r.open(0);
+    let t = r.page(1280.0);
+    assert!(t.contains("No kept version is known to have changed this question.") && !t.contains("No version that is still kept changed"), "{t}");
+}
+
+#[test]
+fn d2g_escape_only_cancels_a_question_in_view_and_the_oldest_viewer_row_compares_with_the_copy() {
+    // (round 4, minors)
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+    r.w.raw(&version_path(3), served(3, &[qj(QA, A3), qj(QB, B)], false));
+    r.w.raw(&version_path(5), served(5, &[qj(QA, A5), qj(QB, B)], false));
+    r.open(0);
+    r.page(1280.0);
+    r.qpage_mut().ask_restore(2);
+    let cache = &mut r.m.edit.question_cache;
+    if let EditView::Question(p) = &mut r.m.edit.view {
+        p.open_compare(Side::Version(3), Side::Version(5), cache);
+    }
+    r.page(1280.0);
+    r.frame_at(1280.0, vec![egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE }]);
+    r.page(1280.0);
+    assert!(r.qpage().restore.is_some(), "a question behind the compare is not cancelled unseen");
+    // a viewer of a hiding bank: the oldest kept version compares with the copy, and says so
+    let mut r = hiding_viewer();
+    r.w.on("Get", &versions_path(), 200, lines_json(), None);
+    r.w.on("Get", &changes_path(), 200, json!({"bank_id": BID, "head_version": 5, "per_question": false, "reason": "keys_hidden"}), None);
+    r.open(0);
+    let t = r.page(1280.0);
+    assert_eq!(t.matches("Compare with your copy").count(), 1, "{t}");
+}
+
+#[test]
+fn d2g_a_list_answered_after_a_role_change_is_not_taken_for_the_new_role() {
+    // (critic S-I4) the page's first read is held at the pool while the role changes; the read for the new role is answered
+    // first, then the held one: that one belongs to the old role and is never used
+    let mut r = rig();
+    let media: super::publish::SharedMedia = Arc::new(HashMap::<String, Vec<u8>>::new());
+    let links = r.m.edit.links().to_vec();
+    r.m.edit = CircleEditModel::new(Runner::Background, r.pics.clone(), media, r.restores.clone(), LinkLog::memory()).with_retry(RetryPolicy::none());
+    r.m.edit.set_clock(NOW);
+    for l in links {
+        r.m.edit.add_link(l).unwrap();
+    }
+    r.frame_at(1280.0, Vec::new());
+    r.frame_at(1280.0, Vec::new());
+    // the old role's read: its lines (its lists, tag e1, are queued below: it asks for them only once released)
+    r.w.on("Get", &versions_path(), 200, lines_json(), None);
+    let release = r.w.hold();
+    r.open_cold(0);
+    // (the circle's own checks say viewer from now on too)
+    r.w.keep("Get", "/circles", circles_list("viewer"));
+    r.w.keep("Get", &format!("/circles/{CID}"), detail("viewer", json!({})));
+    r.m.edit.update_link(LOCAL, |l| {
+        l.role_seen = Some("viewer".into());
+        true
+    });
+    // the new role's read
+    r.w.on("Get", &versions_path(), 200, lines_json(), None);
+    r.w.on("Get", &changes_path(), 200, json!({"bank_id": BID, "head_version": 5, "per_question": true, "versions": []}), Some("\"viewer-1\""));
+    r.w.on("Get", &changes_path(), 200, changes_json(), Some("\"e1\""));
+    let s = super::question_history::scope_of(&r.m.edit.link_for_local(LOCAL).unwrap());
+    for _ in 0..1000 {
+        r.page(1280.0);
+        if r.m.edit.question_cache.page(CID, BID, &s).is_some() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert_eq!(r.m.edit.question_cache.page(CID, BID, &s).and_then(|p| p.etag.clone()).as_deref(), Some("\"viewer-1\""));
+    // now the old read's answer arrives
+    release.send(()).unwrap();
+    // (until the old read's answer is in: its job is no longer waiting)
+    for _ in 0..500 {
+        r.page(1280.0);
+        if !r.qpage().busy() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    r.page(1280.0);
+    assert_eq!(r.m.edit.question_cache.page(CID, BID, &s).and_then(|p| p.etag.clone()).as_deref(), Some("\"viewer-1\""), "the old role's answer is not used");
+    assert!(!r.page(1280.0).contains("Changed"), "nor drawn");
 }

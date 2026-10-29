@@ -4897,6 +4897,9 @@ impl CircleEditModel {
         // (critic 89 m2) a quiet read of a base version on its way is kept
         self.jobs.retain(|j| j.kind == JobKind::Base);
         self.history_stash = None;
+        // (round 4, critic S-m6) the cache belongs to the account signed in now, before anything is read from it
+        let tag = super::bank_links::account_tag(self.session.as_ref().and_then(|s| s.account()).as_deref());
+        self.question_cache.note_account(tag.as_deref());
         let env = super::question_history_ui::Env { session: self.session.clone(), runner: self.runner, retry: self.retry, repaint: self.repaint.clone(), images: self.images.clone(), restore: self.restore.clone() };
         let page = super::question_history_ui::QuestionPage::open(&link, bank, question_id, env, &mut self.question_cache);
         self.view = EditView::Question(Box::new(page));
