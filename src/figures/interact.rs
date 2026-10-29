@@ -335,7 +335,7 @@ mod tests {
         "normal-curve", "number-base", "org-chart", "organiser", "orthographic", "perspective-grid",
         "piano-keyboard", "plate-boundaries", "plot-arc", "population-pyramid", "ppf", "probability-tree", "protractor",
         "rc-curve", "recursion-tree", "refraction", "rejection-region", "residual-plot", "rhythm-counting",
-        "sampling-distribution", "scatterplot", "sentence-diagram", "sine-cosine", "slope-triangle", "solid-net", "sorting-passes", "state-machine",
+        "sampling-distribution", "scatterplot", "sentence-diagram", "sine-cosine", "slope-triangle", "solid-net", "sorting-passes", "standing-wave", "state-machine",
         "stem-and-leaf", "strata", "structure-chart", "supply-demand", "swot", "t-account", "time-value",
         "timeline", "topo-contours", "trace-table", "transformations", "tree-diagram", "trial-balance", "triangle-centres", "two-way-table",
         "venn-diagram",

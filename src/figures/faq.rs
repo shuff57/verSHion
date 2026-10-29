@@ -67,6 +67,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "refraction" => REFRACTION,
         "electric-field" => ELECTRIC_FIELD,
         "magnetic-field" => MAGNETIC_FIELD,
+        "standing-wave" => STANDING_WAVE,
         "parallelogram" => PARALLELOGRAM,
         "trapezoid" => TRAPEZOID,
         "kite" => KITE,
@@ -3452,6 +3453,25 @@ const ENERGY_BAR_CHART: &[Faq] = &[
     Faq {
         q: "How do I make a worksheet?",
         a: "Turn Show answers off: the bars are not drawn and the three numbers become blanks, while the axes, the store names and the givens (mass, heights, loss share, g) stay, so the student works out the stores and draws the bars.",
+    },
+];
+
+const STANDING_WAVE: &[Faq] = &[
+    Faq {
+        q: "Why are some points not moving?",
+        a: "The two travelling waves that make the standing wave pass through each other in opposite directions, and at the nodes they always cancel. The string there never moves; halfway between them, at the antinodes, the motion is greatest. A standing wave carries no energy along the string, which is why nothing moves from one end to the other.",
+    },
+    Faq {
+        q: "How is the wavelength related to the string?",
+        a: "The ends are fixed, so they must be nodes: a whole number of half wavelengths fits the string. The nth harmonic has n half wavelengths, so the wavelength is 2L over n, and the frequency is n v over 2L.",
+    },
+    Faq {
+        q: "What are the dashed lines?",
+        a: "The envelope: the greatest displacement each point ever reaches. The solid curve is the string at one instant; it swings between the two dashed lines, which is why the picture alone does not show a single fixed shape.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the wavelength, the frequency and the counts of nodes and antinodes become blanks while the string, the wave, the envelope and the given length, speed and harmonic stay.",
     },
 ];
 

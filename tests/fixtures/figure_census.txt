@@ -254,6 +254,8 @@ sphere__defaults 026a80b5e0fb10f8
 sphere__start 6714de163741fd83
 spring-scale__defaults c3d974171b15ec4c
 spring-scale__start c3d974171b15ec4c
+standing-wave__defaults 6f45e9b6de659e9b
+standing-wave__start 6f45e9b6de659e9b
 state-machine__defaults 4e2d388723d17449
 state-machine__start 4e2d388723d17449
 stem-and-leaf__defaults 7ec6afc7b20c4366
