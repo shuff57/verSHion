@@ -882,8 +882,9 @@ fn d2f_the_cache_keeps_each_scope_apart_and_drops_a_bank_or_a_version() {
     assert!(cache.body(CID, BID, "viewer|false|false", 3).is_some());
     cache.put_page(CID, BID, "viewer|false|false", changes());
     assert!(cache.page(CID, BID, "viewer|true|false").is_none());
-    cache.put_lines(CID, BID, "viewer|false|false", 9, lines());
+    cache.put_lines(CID, BID, "viewer|false|false", 9, lines(), true);
     assert!(cache.lines(CID, BID, "editor|false|false", 9).is_none());
+    assert_eq!(cache.lines(CID, BID, "viewer|false|false", 9).map(|(l, more)| (l.len(), more)), Some((lines().len(), true)));
     // a version the pool no longer serves: gone under every scope
     cache.put_body(CID, BID, "editor|false|false", body(3, &v6(), false));
     cache.drop_body(CID, BID, 3);
@@ -1280,4 +1281,155 @@ fn d2l_the_same_restore_point_is_not_saved_twice() {
     assert_ne!(moved, first);
     assert_eq!(std::fs::read_dir(dir.join("backups")).unwrap().count(), 2);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ---- round 5 critics' probes (r7) ---------------------------------------------------------------------------------------
+
+/// A bank in step with `qs` as version 9, its link, with the circle's pictures named in the payload as given.
+fn linked_with(qs: &[Value]) -> (QuestionBank, CircleLink) {
+    let theirs = circle_theirs(&payload(qs), NOW);
+    let bank = QuestionBank { id: LOCAL.into(), name: "Cells".into(), questions: theirs.iter().map(|t| t.q.clone()).collect(), created: NOW / 1000, modified: NOW / 1000, details: Default::default() };
+    let head = BankHead { id: BID.into(), title: "Cells".into(), license: "CC-BY-4.0".into(), version: 9, version_id: format!("{:032x}", 9), committed_at: NOW - DAY, ..BankHead::default() };
+    let base = theirs.iter().map(|t| base_of(&t.q, &t.qid, &t.fp, t.sha.clone())).collect();
+    let mut link = CircleLink::from_head(CID, "Biology team", &head, LOCAL, base, NOW);
+    link.mark_bank(&bank);
+    (bank, link)
+}
+
+#[test]
+fn d2m_a_picture_fetch_does_not_skip_the_not_countable_guard() {
+    // The NotCountable guard sits under `if !deferred`, so a restore that must FETCH a picture never runs it.
+    // A locally DELETED question; version 6 has version 9's words and the base's own picture (so the picture does
+    // not count as a change) but other figure settings (which the strip cannot count, and Snap does not hold at
+    // all). The restore lands and the strip says "in step" (0 changes): exactly the hole r6 claimed to close for a
+    // deleted question, defeated by adding a picture.
+    let (mut bank, mut link) = linked();
+    let a = local_of(&link, QA);
+    let sha = format!("{:064x}", 0x5a);
+    let file = format!("media/{sha}.webp");
+    // the base recorded the picture the copy landed with, and the circle's name for it
+    link.base[0].snap.image = Some(sha.clone());
+    link.base[0].local_image = Some(file.clone());
+    // the person deleted the question (unsent)
+    bank.questions.retain(|q| q.id != a);
+    bank.modified += 10;
+    // version 6: version 9's words, the same picture, other figure settings
+    let mut q = mc(QA, "Question A as of version 9", 1.0);
+    q["image"] = json!({"file": format!("media/{sha}.png"), "width": 3, "height": 2});
+    q["figure"] = json!({"id": "triangle", "params": {"a": 4}});
+    let b = body(6, &[q, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)], false);
+    assert_eq!(b.question(QA).and_then(|t| t.sha.clone()).as_deref(), Some(sha.as_str()), "the version carries the picture");
+    let mut banks = vec![bank];
+    let before = json_of(&banks);
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    let picture = ImageRef { file: file.clone(), width: 3, height: 2 };
+    let store = move || Ok(picture.clone());
+    let with = RestoreAsk { store_picture: Some(&store), ..ask(&link, Some(&a), QA, &b) };
+    let r = restore_question(&mut banks, &with, &sink, &|_: &[QuestionBank]| Ok(()), NOW + 100_000);
+    let after = banks[0].questions.iter().find(|q| q.id == a).cloned();
+    assert_eq!(
+        r.map(|d| d.version),
+        Err(RestoreRefused::NotCountable),
+        "a picture fetch skipped the NotCountable guard: restored figure = {:?}, strip count = {:?}, banks before = {before}",
+        after.as_ref().and_then(|q| q.figure.clone()),
+        changes_since(&link, &banks[0])
+    );
+}
+
+#[test]
+fn d2m_a_restore_that_undoes_an_unsent_edit_is_not_refused_as_figure_only() {
+    // N1 was fixed by skipping the count for the base version's own number. A version that is not the base can hold the
+    // base version's question exactly (the question did not change between them): restoring it is the same restore.
+    // Here the copy has an unsent stem edit AND a different figure; version 6's QA is v9's QA exactly (text and figure),
+    // so the restore brings the copy to v9 in step (a counted change undone). It must not be refused as "figure settings
+    // only".
+    let mut q9 = mc(QA, "Question A as of version 9", 1.0);
+    q9["figure"] = json!({"id": "triangle", "params": {"a": 4}});
+    let v9q = vec![q9, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)];
+    let (mut bank, link) = linked_with(&v9q);
+    let a = local_of(&link, QA);
+    bank.questions.iter_mut().find(|q| q.id == a).unwrap().stem = "My unsent edit".into();
+    bank.questions.iter_mut().find(|q| q.id == a).unwrap().figure = Some(crate::model::FigureSpec { id: "triangle".into(), params: [("a".to_string(), json!(3))].into_iter().collect() });
+    bank.modified += 10;
+    // the strip counts the unsent stem edit
+    assert_eq!(changes_since(&link, &bank).changed, 1);
+    let mut banks = vec![bank];
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    let six = body(6, &v9q, false);
+    let r = restore_question(&mut banks, &ask(&link, Some(&a), QA, &six), &sink, &|_| Ok(()), NOW + 100_000);
+    assert_eq!(r.map(|d| d.version), Ok(6), "restoring a version whose question is the base version's exactly was refused");
+    assert_eq!(changes_since(&link, &banks[0]).changed, 0, "the copy is now the base version, in step");
+}
+
+#[test]
+fn d2m_a_picture_a_restore_stored_under_its_own_name_compares_as_the_same_picture() {
+    // N2 compares a picture by the circle's name for it through the link's record (`local_image`). A restore that
+    // fetches and stores a PNG/JPEG version's picture writes a new file (the store keeps it as WebP), and nothing puts
+    // that file in the link's record. Comparing "Your copy" with the very version restored then falls back to the local
+    // file's own name and calls the same picture "a different picture".
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(3, 2, image::Rgb([200, 10, 10])))
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    let circle_sha = sha256_hex(&png);
+    let prepared = crate::store::prepare_image(&png).unwrap();
+    let stored_file = format!("media/{}.webp", sha256_hex(&prepared.bytes));
+    assert_ne!(stored_file, format!("media/{circle_sha}.png"), "the store renames it");
+    // version 6: a question the circle has with a picture (a PNG in the circle's store)
+    let mut q = mc(QA, "Question A as of version 6", 2.0);
+    q["image"] = json!({"file": format!("media/{circle_sha}.png"), "width": 3, "height": 2});
+    let six = body(6, &[q, mc(QB, "Question B", 1.0), mc(QC, "Question C", 1.0)], false);
+    // the copy in step with v9, which has no picture on this question: base.local_image is none
+    let (bank, link) = linked();
+    let a = local_of(&link, QA);
+    let mut banks = vec![bank];
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    let (p2f, p2w, p2h) = (stored_file.clone(), prepared.width, prepared.height);
+    let store = move || -> Result<ImageRef, String> { Ok(ImageRef { file: p2f.clone(), width: p2w, height: p2h }) };
+    let with = RestoreAsk { link: &link, local_id: Some(&a), qid: QA, body: &six, picture: None, store_picture: Some(&store), removed_in_circle: false };
+    let done = restore_question(&mut banks, &with, &sink, &|_| Ok(()), NOW + 1000).unwrap();
+    assert_eq!(done.version, 6);
+    assert_eq!(banks[0].questions.iter().find(|q| q.id == a).and_then(|q| q.image.clone()).map(|i| i.file), Some(stored_file));
+    // the copy is now version 6's question, picture included. (The critic's probe compared with the pre-restore link; the
+    // picture record the restore writes is in the link it hands back, so that is the one the page keeps and this reads.)
+    let kept = done.link.clone().unwrap_or_else(|| link.clone());
+    let cmp = compare(side_of_copy(&kept, &banks[0], &a).as_ref(), side_of_version(&six, QA).as_ref(), false);
+    assert!(cmp.changed_fields().is_empty(), "the copy IS version 6's question, but Compare says {:?}", cmp.changed_fields());
+    let pic = cmp.fields.iter().find(|f| f.field == "Picture").unwrap();
+    assert_eq!((pic.left.as_str(), pic.right.as_str()), ("the same picture", "the same picture"));
+}
+
+#[test]
+fn d2m_the_restore_point_dedupe_compares_against_the_newest_copy() {
+    // `save_copy_to` sorts the names and takes the LAST, but within one stamp `…-2.json` sorts BEFORE `….json`
+    // ('.' 0x2E > '-' 0x2D). So "the newest copy of that kind" is really the FIRST copy made in the newest second:
+    // an identical restore point made later in the same second is written again (dedupe misses it).
+    let dir = std::env::temp_dir().join(format!("vershion-d2-r6-dedupe-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let (bank, _) = linked();
+    let fs = crate::store::FsBackend::new(dir.clone());
+    let secs = NOW / 1000;
+    let mut moved = bank.clone();
+    moved.questions[0].stem = "Changed".into();
+    let b0 = super::browse::save_copy_to(&fs, std::slice::from_ref(&bank), "restore", secs).unwrap();
+    let b1 = super::browse::save_copy_to(&fs, std::slice::from_ref(&moved), "restore", secs).unwrap();
+    assert_ne!(b0, b1);
+    // the same banks as the *newest* copy (`b1`), made again in the same second: should be `b1`, not a third file
+    let again = super::browse::save_copy_to(&fs, std::slice::from_ref(&moved), "restore", secs).unwrap();
+    let files = std::fs::read_dir(dir.join("backups")).unwrap().count();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(again, b1, "the newest restore point was not the one compared; {} files kept", files);
+}
+
+#[test]
+fn d2m_a_history_lines_version_id_is_kept_whole() {
+    // r6 caps `by` and `message` at parse, but the same untrusted line still carries `version_id` (and `license`,
+    // `review_copy`) unbounded, and these are kept for the session (50 lines per bank, 8 banks). A 100,000-char
+    // `version_id` is kept whole, so the cap is incomplete: the "never kept whole" claim covers only two fields.
+    let s = Tape::new();
+    let big = "v".repeat(100_000);
+    s.json("Get", &format!("/circles/{CID}/banks/{BID}/versions"), 200, json!({"bank_id": BID, "head_version": 1, "versions": [{"version": 1, "kept": true, "version_id": big, "by": "x", "at": NOW, "message": "m"}]}), None);
+    let p = block_on(Pool::new(s.as_ref()).circle_versions(CID, BID, None)).unwrap();
+    assert!(p.versions[0].version_id.chars().count() <= 200, "version_id kept whole: {} chars", p.versions[0].version_id.chars().count());
 }
