@@ -71,8 +71,25 @@ Updated 2026-10-28 late: the five-figure phase-3 critic round is fixed and commi
 ## What is left in the figures loop
 - **Spring-scale hide-reading: done** (`82846df`) — a new `answer_text` caption, so the worksheet copy can read
   `Force: ________ N` with the reading nowhere on the figure. Census unchanged.
-- The two remaining phase-3 items: **series-parallel and capacitor modes on `circuit-diagram`**, and **handles on the
-  ray diagram and the motion map** (`docs/figures-loop.md` has the order).
+- Two phase-3 items left, and **both are bigger than they look** (sized 2026-10-28 late):
+  1. **Series-parallel and capacitor modes on `circuit-diagram`.** The figure is a mature subsystem
+     (`src/figures/physics/instr.rs` ~800 lines plus `circuit_solve.rs`): a `CLay` geometry shared with the drag
+     handles, per-component kinds and label modes, an ammeter/voltmeter with their own readings, a `solve` mode with a
+     results table, US/IEC symbol styles and Print. Do it in this order, one commit each: (a) **capacitor as a
+     component kind** — a new top-level `components` choice (default `Resistors and bulbs`) so saved figures are
+     untouched, a two-plate symbol at the three places the bulb symbol is branched on (`instr.rs:305`, `:456` for the
+     same-kind grouping, `:518`), values in µF, and a capacitance solve path (series 1/C = Σ1/Cᵢ, parallel C = ΣCᵢ)
+     that replaces the current/voltage table when the circuit is all capacitors; the ammeter and voltmeter do not apply
+     to it, so they must be hidden or refused rather than silently wrong. (b) **a combination (series-parallel)
+     layout** — new geometry in `circuit_layout`, a solver branch, handle positions, and label placement. Each needs
+     five examples, a FAQ entry, PNG cases (Colour, Print, student, key, Large, 66 %), its own tests, census re-bless
+     with the diff showing only `circuit-diagram__*`, and a look at the renders.
+  2. **Handles on the ray diagram and the motion map — and neither figure exists.** Checked against the registry:
+     there is no `ray-diagram` and no `motion-map`, so this is two new figures *plus* their handles, not a handle
+     retrofit. Build each as a normal new figure (params, five examples, four FAQ entries, tests, PNG export),
+     leave them OUT of `NO_HANDLES`, add the dispatch in `physics::handles`, and satisfy
+     `interact::tests::every_handle_round_trips_and_stays_in_range`.
+- Then phase 4 (biology, 7 figures), phase 5 (chemistry, 10), phase 6 (stats, 7).
 - Then phase 4 (biology, 7 figures), phase 5 (chemistry, 10), phase 6 (stats, 7).
 - Phase 2 is complete and committed. Phase 3 built: energy bar charts, collision/momentum, circular motion, electric
   field, refraction, magnetic field, standing waves, PV diagrams.
