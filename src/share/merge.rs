@@ -1030,12 +1030,16 @@ pub fn apply_merge(bank: &mut QuestionBank, plan: &MergePlan, fetched: &[Theirs]
                     let mut nb = ob.clone();
                     if row.theirs_index.is_some() {
                         let t = find(row)?;
+                        // (round 11, security critic 9 I1) The record names the NEW base version's figure, whichever side
+                        // changed the question. `theirs_delta` does not compare figures (plan 13.9), so a circle change of
+                        // only the figure arrives as "only you changed this"; keeping the old base's figure there made
+                        // the record lie, and the restore guard then let a figure the base version never had back in.
+                        nb.figure = t.q.figure.clone();
+                        nb.figure_recorded = true;
                         if row.kind == RowKind::Unchanged {
                             // (critic 85 I2) the pool's version is what the bank is in step with now: also after the same
                             // change on both sides, which the old base would count as still to send
                             nb.snap = snap_of(&t.q, t.sha.clone());
-                            // (round 8, critic T1) the base's figure is the pool's version's, as its snapshot is
-                            nb.figure = t.q.figure.clone();
                         } else if nb.snap.difficulty.is_none() {
                             // (critic 85 I1) a base an earlier build wrote: the difficulty the pool's version has (the same as
                             // the bank's, or the row would be a decision), so a later difficulty-only edit is counted

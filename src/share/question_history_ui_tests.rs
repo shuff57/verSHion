@@ -349,6 +349,24 @@ fn d2u_the_menu_item_is_drawn_only_for_a_linked_bank_and_reads_nothing() {
 }
 
 #[test]
+fn d2u_a_gone_links_menu_item_is_not_offered() {
+    // (round 11, product critic 9 M1) A link that is gone (left, removed, circle closed) closes the history page on the
+    // next frame before it is drawn, so the card's menu must not offer it at all: the click would do nothing and say
+    // nothing. The unlinked bank draws nothing; a gone link draws nothing either, and reads nothing.
+    let mut r = rig();
+    let bank = r.banks[0].clone();
+    let id = bank.questions[0].id.clone();
+    assert!(menu_text(&mut r.m, &bank, &id).contains("History in the circle"));
+    r.m.edit.update_link(&bank.id, |l| {
+        l.role_seen = Some(super::circle_links::ROLE_NONE.into());
+        true
+    });
+    assert!(!menu_text(&mut r.m, &bank, &id).contains("History in the circle"), "a gone link still offers History");
+    assert!(!r.m.edit.open_question_history(&bank, &id), "a gone link never opens the page");
+    assert!(r.w.reads().is_empty(), "{:?}", r.w.reads());
+}
+
+#[test]
 fn d2u_nothing_is_read_until_the_page_opens() {
     let mut r = rig();
     for w in BOTH {

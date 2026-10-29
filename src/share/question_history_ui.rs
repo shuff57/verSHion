@@ -1704,7 +1704,9 @@ pub const DRAFT_OPEN: &str = "Finish or close the open question first";
 
 /// [`question_menu`] with its parts (tests). True when the page opened.
 pub(super) fn question_menu_of(ui: &mut Ui, c: &mut CirclesModel, bank: &QuestionBank, question_id: &str, draft_open: bool) -> bool {
-    if c.edit.with_link(&bank.id, |_| ()).is_none() {
+    // (round 11, product critic 9 M1) A link that is gone (left, removed, circle closed) has no history to open: the
+    // page closes itself on the next frame before it is ever drawn. Offer nothing, as for a bank with no link.
+    if c.edit.with_link(&bank.id, |l| l.gone()).unwrap_or(true) {
         return false;
     }
     if draft_open {

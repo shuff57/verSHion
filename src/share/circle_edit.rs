@@ -4853,6 +4853,10 @@ impl CircleEditModel {
         }
         link.mark_bank(&banks[pos]);
         link.qids = qids_of(&new_base);
+        // (round 11, security critic 9 I2) Judge the picture-name keep against the merged records as rebuilt, not the
+        // stored base: a base bounded away for a large bank is empty, and an empty base kept every name for a file the
+        // bank still has, including files the merge just named afresh.
+        let kept = picture_files_kept(&link.picture_files, &new_base, &banks[pos]);
         link.base = merge::bounded(new_base);
         link.base_version = imp.head.item.version;
         link.base_version_id = imp.head.item.publish_id.clone();
@@ -4871,8 +4875,7 @@ impl CircleEditModel {
         // (round 9, critic M1) the merge rebuilt the base records (their pictures named afresh), so the older file -> circle
         // name entries are dropped where a record names the file. (round 10, critic I1) Not the whole list: a question the
         // circle no longer has (an unpaired restore) keeps no rebuilt record, and clearing its name made Compare call the
-        // very picture the version restored "a different picture".
-        let kept = picture_files_kept(&link.picture_files, &link.base, &banks[pos]);
+        // very picture the version restored "a different picture". (kept was judged above, against the full merged base.)
         link.picture_files = kept;
         // (critic 63 I3) Read in full: the answer keys came with it, so the copy no longer follows the viewers' form.
         if !rev.fetched.head.bank.keys_hidden {
@@ -4907,6 +4910,10 @@ impl CircleEditModel {
     pub fn open_question_history(&mut self, bank: &QuestionBank, question_id: &str) -> bool {
         self.ensure();
         let Some(link) = self.links.iter().find(|l| l.local_bank_id == bank.id).cloned() else { return false };
+        // (round 11, product critic 9 M1) a link that is gone has no history to open: the page would close unseen.
+        if link.gone() {
+            return false;
+        }
         if self.wait_for_act() {
             return false;
         }

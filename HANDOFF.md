@@ -50,6 +50,20 @@ Loop rules: local commits only, never push; critic pair (product vs Moodle, secu
 - **Owner decisions parked:** `src/qedit.rs` `commit_draft` refusing when the question moved since the draft opened (one `opened_at` field on `Draft`); plan 4.8 layout at 420 px (rows three lines not two; compare one block per field); staging re-measure of `/changes`; owner's look on a real screen (frames are rasterized, light theme only); picture thumbnails in Show; focus after Yes/Undo/Show.
 - Not yet seen on a real screen; the owner's look is still due before D2 is called done. Staging re-measure of the `/changes` route (`meta.rows_read`) is still owed and needs the owner's yes.
 
+### Round 9 critic pair → r11 (2026-10-29)
+
+- **Round 9 pair** on `aac85dd` (r10): product FINDINGS (2 important, 1 minor), security FINDINGS (2 important,
+  2 minors). Reports: `docs/critic-reports/2026-10-29-d2-r10-critic-product.md` and `-security.md`.
+- **r11** fixed them, test-first: (1) a merge records the new base version's figure and sets `figure_recorded`,
+  including a pre-r10 link's `Unchanged` rows; (2) after a whole-bank send the picture map is cleared, a partial send
+  judges the keep from the composed records, and a merge from the full merged base, so a stale name never overrides
+  the sent file's own; `picture_files_kept` is one pass (was about 127 M pair checks on a 990-question bank);
+  (3) one unreadable link field no longer drops the link (`viewers_form` reads the unsafe `true`); (4) a gone link
+  offers no History item and `open_question_history` refuses it.
+- Suite on r11: **share 1559/0/3; full lib 2254/0/6**. Both critics' probe sets replay with the defect
+  demonstrations inverted and every finding probe green.
+- Next: a fresh round-10 pair (product + security) on r11; the loop exits when both are clean on the same build.
+
 ## The 5 known failures are fixed (2026-10-28)
 
 The owner asked to fix the five `share_core::wasm::publish_prepare_json` failures. Cause: the viSHion path deps in

@@ -1941,3 +1941,137 @@ fn d2o_a_link_with_one_unreadable_figure_still_parses() {
     v["base"][0]["figure"] = json!("triangle");
     assert!(serde_json::from_value::<CircleLink>(v).is_ok(), "one unreadable figure drops the whole link");
 }
+
+// ---- round 11 (security critic 9): the merge's figure record, picture names when the base is dropped, and lenient link fields ----
+
+fn with_figure(qid: &str, a: i64) -> crate::model::Question {
+    let mut q = mc(qid, "One", 1.0);
+    q["figure"] = json!({ "id": "triangle", "params": { "a": a } });
+    serde_json::from_value(q).expect("a figure question")
+}
+
+#[test]
+fn d2p_r10_a_merge_records_the_new_bases_figure() {
+    // `theirs_delta` does not compare figures (plan 13.9), so a circle change of only the figure arrives as
+    // "only you changed this". The merge keeps our question but advances the base version: the record it writes
+    // must still name the NEW base version's figure. Carrying the old base's figure makes the record lie, and the
+    // restore guard then lets that figure back in (see the end-to-end probe in the security report).
+    use super::merge::{self, Theirs};
+    let qid = QA.to_string();
+    let v9 = with_figure(&qid, 3);
+    let base = base_of(&v9, &qid, "fp", None);
+    let mut ours = v9.clone();
+    ours.stem = "One (mine)".into();
+    let mut bank = QuestionBank { id: LOCAL.into(), name: "B".into(), questions: vec![ours], created: 0, modified: 5, details: Default::default() };
+    let v10 = with_figure(&qid, 4);
+    let theirs = vec![Theirs { index: 0, qid: qid.clone(), fp: "fp".into(), sha: None, q: v10.clone() }];
+    let plan = merge::build_plan("item", std::slice::from_ref(&base), &bank, &theirs, 9, 10, None, String::new());
+    assert_eq!(plan.rows.len(), 1);
+    assert_eq!(plan.rows[0].kind, merge::RowKind::OursChanged, "the pool's figure-only change is invisible to the merge");
+    let (_, new_base) = merge::apply_merge(&mut bank, &plan, &theirs, &[base], "a", 10_000).expect("apply");
+    assert_eq!(new_base.len(), 1);
+    assert_eq!(new_base[0].figure, v10.figure, "the record kept the old base's figure, not the new base version's");
+    assert!(new_base[0].figure_recorded, "the record says its figure is the base version's");
+}
+
+#[test]
+fn d2p_r10_a_merge_marks_an_old_links_figure_record_as_recorded() {
+    // A link written before round 10 has `figure_recorded: false`. Get latest with every row Unchanged writes the pool's
+    // snapshot and figure into the record; leaving the flag false made the restore guard refuse a restore that lands
+    // exactly on the base, with a false "the figure is not the base's" explanation.
+    use super::merge::{self, Theirs};
+    let qid = QA.to_string();
+    let v9 = with_figure(&qid, 3);
+    let mut base = base_of(&v9, &qid, "fp", None);
+    base.figure_recorded = false; // an old link: no record of the base's figure
+    let mut bank = QuestionBank { id: LOCAL.into(), name: "B".into(), questions: vec![v9.clone()], created: 0, modified: 5, details: Default::default() };
+    let v10 = with_figure(&qid, 4);
+    let theirs = vec![Theirs { index: 0, qid: qid.clone(), fp: "fp".into(), sha: None, q: v10.clone() }];
+    let plan = merge::build_plan("item", std::slice::from_ref(&base), &bank, &theirs, 9, 10, None, String::new());
+    assert_eq!(plan.rows.len(), 1);
+    assert_eq!(plan.rows[0].kind, merge::RowKind::Unchanged);
+    let (_, new_base) = merge::apply_merge(&mut bank, &plan, &theirs, &[base], "a", 10_000).expect("apply");
+    assert_eq!(new_base[0].figure, v10.figure);
+    assert!(new_base[0].figure_recorded, "a merge that wrote the pool's figure left the old link's flag false");
+}
+
+#[test]
+fn d2p_r10_a_whole_bank_send_without_a_kept_base_drops_stale_picture_names() {
+    // A whole-bank send carried every question as itself. When the answer's qids cannot be matched to the bank the
+    // base is dropped; `picture_files_kept` then used to keep every name for a file the bank still has, and the stale
+    // name (the circle's older name for that picture) overrode the name the send itself gave the file. Compare then
+    // said the picture the send had just made was "a different picture".
+    let (mut bank, mut link) = linked();
+    let a = local_of(&link, QA);
+    let own = format!("{:064x}", 0xaau8);
+    let old = format!("{:064x}", 0xbbu8);
+    let file = format!("media/{own}.webp");
+    bank.questions.iter_mut().find(|q| q.id == a).unwrap().image = Some(ImageRef { file: file.clone(), width: 1, height: 1 });
+    link.picture_files.push((file.clone(), old.clone()));
+    let sent = super::circles_api::SentBank { circle_id: CID.into(), bank_id: BID.into(), version: 10, version_id: format!("{:032x}", 10), qids: Vec::new(), ..Default::default() };
+    let after = super::circle_links::after_send(&link, &bank, &sent);
+    assert!(after.base.is_empty(), "the answer's qids cannot be matched: the base is dropped");
+    assert!(after.picture_files.is_empty(), "a stale name survived a whole-bank send: {:?}", after.picture_files);
+    let q = bank.questions.iter().find(|q| q.id == a).unwrap();
+    assert_eq!(picture_sha_on_circle(&after, q).as_deref(), Some(own.as_str()), "Compare would call the just-sent picture a different picture");
+}
+
+#[test]
+fn d2p_r10_a_partial_send_without_a_kept_base_keeps_only_the_held_back_name() {
+    // The partial send's base is bounded away for a bank over `BASE_MAX_QUESTIONS`. The keep must then still be
+    // judged per question from the COMPOSED questions, not guessed from the empty stored base: only a question
+    // held back may keep a link-level picture name, never one the send carried as this bank's own.
+    use super::partial_send::ComposedQuestion;
+    let n = super::merge::BASE_MAX_QUESTIONS + 1;
+    let held_local = "local-held".to_string();
+    let held_file = format!("media/{}.webp", format!("{:064x}", 0xc1u8));
+    let held_sha = format!("{:064x}", 0xd1u8);
+    // the file of the first question the send CARRIES as this bank's own (i = 1 below)
+    let sent_file = format!("media/{}.webp", format!("{:064x}", 0x1001u64));
+    let mut questions = Vec::new();
+    let mut composed = Vec::new();
+    let mut qids = Vec::new();
+    for i in 0..n {
+        let qid = format!("{:032x}", i + 1);
+        let local = if i == 0 { held_local.clone() } else { format!("local-{i}") };
+        let file = if i == 0 { held_file.clone() } else { format!("media/{}.webp", format!("{:064x}", 0x1000u64 + i as u64)) };
+        let mut q = with_figure(&qid, 1);
+        q.id = local.clone();
+        q.image = Some(ImageRef { file: file.clone(), width: 1, height: 1 });
+        // the held-back question is sent as the base body has it (the base body has no picture of its own here)
+        let in_payload = if i == 0 { let mut b = q.clone(); b.image = None; b } else { q.clone() };
+        composed.push(ComposedQuestion {
+            local: local.clone(),
+            qid: Some(qid.clone()),
+            question: Some(in_payload),
+            base_image: (i == 0).then(|| "media/base.webp".to_string()),
+        });
+        qids.push(qid);
+        questions.push(q);
+    }
+    let bank = QuestionBank { id: LOCAL.into(), name: "B".into(), questions, created: 0, modified: 5, details: Default::default() };
+    let head = BankHead { id: BID.into(), title: "B".into(), license: "CC-BY-4.0".into(), version: 9, version_id: format!("{:032x}", 9), ..BankHead::default() };
+    let base: Vec<_> = bank.questions.iter().zip(&qids).map(|(q, id)| base_of(q, id, "fp", None)).collect();
+    let mut link = CircleLink::from_head(CID, "C", &head, LOCAL, base, NOW);
+    link.picture_files.push((held_file.clone(), held_sha.clone()));
+    link.picture_files.push((sent_file.clone(), format!("{:064x}", 0xffu8)));
+    let sent = super::circles_api::SentBank { circle_id: CID.into(), bank_id: BID.into(), version: 10, version_id: format!("{:032x}", 10), qids, ..Default::default() };
+    let after = super::circle_links::after_partial_send(&link, &bank, &composed, &sent, vec![held_local.clone()]);
+    assert!(after.base.is_empty(), "the composed base is dropped for size");
+    assert_eq!(after.picture_files, vec![(held_file, held_sha)], "only the held-back question's name may survive: {:?}", after.picture_files);
+}
+
+#[test]
+fn d2p_r10_unreadable_viewers_form_and_role_still_keep_the_link() {
+    // One unreadable field must not drop the whole link (the round-9 M3 rule). `viewers_form` is a safety flag: an
+    // unreadable value is the never-sendable true, never serde's false default. `role_seen`/`role_seen_at` read none.
+    let (_, link) = linked();
+    let mut v = serde_json::to_value(&link).unwrap();
+    v["viewers_form"] = json!("yes");
+    v["role_seen"] = json!(5);
+    v["role_seen_at"] = json!("yesterday");
+    let back: CircleLink = serde_json::from_value(v).expect("one unreadable field must not drop the link");
+    assert!(back.viewers_form, "an unreadable viewers_form must read as never-sendable");
+    assert_eq!(back.role_seen, None);
+    assert_eq!(back.role_seen_at, None);
+}

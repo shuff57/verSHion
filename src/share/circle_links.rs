@@ -49,7 +49,7 @@ pub struct CircleLink {
     pub base_version: u64,
     #[serde(default)]
     pub base_version_id: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "qids_or_empty")]
     pub qids: Vec<QidLink>,
     /// Empty when too big to keep: then a merge reads the base from the circle, or is two-way.
     #[serde(default)]
@@ -60,11 +60,11 @@ pub struct CircleLink {
     #[serde(default, deserialize_with = "ids_or_empty")]
     pub held_back: Vec<String>,
     /// The newest version the last quiet check saw, and who sent it and when.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "u64_or_zero")]
     pub head_seen: u64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "i64_or_none")]
     pub head_seen_at: Option<i64>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "string_or_none")]
     pub head_seen_by: Option<String>,
     pub linked_at: i64,
     /// The local bank's `modified` when this link was last written with the bank (a copy, a merge, a
@@ -80,17 +80,17 @@ pub struct CircleLink {
     #[serde(default)]
     pub mode: LinkMode,
     /// Made from the viewers' form of a bank that hides its answer keys: never sendable, whatever the role.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "bool_or_unsafe")]
     pub viewers_form: bool,
     /// The person's role in the circle at the last check (`owner`, `editor`, `viewer`), or `none` when the
     /// circle no longer lists them (they left or were removed, or it is gone). Not checked yet: `None`.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "string_or_none")]
     pub role_seen: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "i64_or_none")]
     pub role_seen_at: Option<i64>,
     /// Whose role `role_seen` is: a short fingerprint of the account that saw it (never the address itself), so
     /// another account's check on this computer does not overwrite it (critic 63 I1). `None`: not known.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "string_or_none")]
     pub role_seen_by: Option<String>,
     /// The person is the bank's author: the history offers restore and trim.
     #[serde(default)]
@@ -100,7 +100,7 @@ pub struct CircleLink {
     #[serde(default)]
     pub author_known: bool,
     /// What the last check said about the bank and the circle, so the badge and the strip say it without asking.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "seen_or_default")]
     pub seen: BankSeen,
     /// (critic 74 I1, critic 75 minor 5) The last send from this copy went through, but its answer could not be read,
     /// so the link could not move on to the version it made: kept in the file, so that after a restart the changes it
@@ -337,6 +337,41 @@ fn ids_or_empty<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<String>, D
     })
 }
 
+/// (round 11, security critic 9 M1) One unreadable field must never drop the whole link. `viewers_form` is the
+/// safety flag: an unreadable value reads as the never-sendable `true`, not serde's permissive `false`.
+fn bool_or_unsafe<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+    Ok(Value::deserialize(d)?.as_bool().unwrap_or(true))
+}
+
+/// (round 11, security critic 9 M1) Text read leniently: an unreadable value is none, never the link with it.
+fn string_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
+    Ok(Value::deserialize(d)?.as_str().map(str::to_string))
+}
+
+/// (round 11, security critic 9 M1) A time read leniently: an unreadable value is none.
+fn i64_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<i64>, D::Error> {
+    Ok(Value::deserialize(d)?.as_i64())
+}
+
+/// (round 11, security critic 9 M1) A version read leniently: an unreadable value is 0 (nothing seen).
+fn u64_or_zero<'de, D: serde::Deserializer<'de>>(d: D) -> Result<u64, D::Error> {
+    Ok(Value::deserialize(d)?.as_u64().unwrap_or(0))
+}
+
+/// (round 11, security critic 9 M1) The id pairs read leniently: an unreadable entry is skipped, never the link dropped.
+fn qids_or_empty<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<QidLink>, D::Error> {
+    Ok(match Value::deserialize(d)? {
+        Value::Array(list) => list.into_iter().filter_map(|v| serde_json::from_value::<QidLink>(v).ok()).collect(),
+        _ => Vec::new(),
+    })
+}
+
+/// (round 11, security critic 9 M1) The cached check state read leniently: an unreadable `seen` is the default
+/// (nothing known), never the link with it.
+fn seen_or_default<'de, D: serde::Deserializer<'de>>(d: D) -> Result<BankSeen, D::Error> {
+    Ok(serde_json::from_value(Value::deserialize(d)?).unwrap_or_default())
+}
+
 /// (critic 79 I2, critic 80 I1) What a send whose answer did not say what it made carried (see `CircleLink::sent_record`).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -416,13 +451,18 @@ impl<'de> Deserialize<'de> for LinkMode {
 #[serde(default)]
 pub struct BankSeen {
     /// The bank was removed from the circle; until when it can be brought back, when the pool said.
+    #[serde(default, deserialize_with = "lenient_bool")]
     pub removed: bool,
+    #[serde(default, deserialize_with = "i64_or_none")]
     pub removed_until: Option<i64>,
     /// The bank is held back for review (the pool's `under_review`).
+    #[serde(default, deserialize_with = "lenient_bool")]
     pub under_review: bool,
     /// The circle is closed.
+    #[serde(default, deserialize_with = "lenient_bool")]
     pub circle_closed: bool,
     /// The bank hides its answer keys from viewers (a viewer is served the viewers' form).
+    #[serde(default, deserialize_with = "bool_or_unsafe")]
     pub hide_key: bool,
 }
 
@@ -756,9 +796,12 @@ pub fn after_send(link: &CircleLink, bank: &QuestionBank, sent: &SentBank) -> Ci
     l.as_is = false;
     // (round 6, critic N5) the base is the bank as sent: no restored question is waiting for a difficulty pass any more
     l.restored.clear();
-    // (round 10, critic I1) every question was sent, so every record names its file: nothing is left for the link map
-    let kept = picture_files_kept(&l.picture_files, &l.base, bank);
-    l.picture_files = kept;
+    // (round 11, security critic 9 I2) A whole-bank send carried every question as this bank has it, so every
+    // picture name is derivable from the file itself (or from the base record just built). Never keep the older map
+    // here: when the answer's qids cannot be matched the base is dropped, and `picture_files_kept` would then keep
+    // every stale name for a file the bank still has, overriding the name the send gave it and making Compare call
+    // the just-sent picture "a different picture".
+    l.picture_files.clear();
     l
 }
 
@@ -770,13 +813,26 @@ pub fn after_send(link: &CircleLink, bank: &QuestionBank, sent: &SentBank) -> Ci
 /// file is content-addressed: two questions can share one (a picture restored into both), and a send that rebuilt the
 /// record of one must not drop the name the other still needs.
 pub fn picture_files_kept(records: &[(String, String)], base: &[BaseQuestion], bank: &QuestionBank) -> Vec<(String, String)> {
+    if records.is_empty() {
+        return Vec::new();
+    }
+    // (round 11, security critic 9 M2) One pass, not records x questions x base: a merge of a full base into a 990-
+    // question bank was about 127 M pair checks on the UI thread. Same rule: a record stays while some bank question
+    // still has its file and no rebuilt record names that file for that question.
     let names = |b: &BaseQuestion, file: &str| b.local_image.as_deref() == Some(file) || b.picture_now.as_ref().is_some_and(|(f, _)| f == file);
+    let mut bank_files: std::collections::HashMap<&str, Vec<&str>> = std::collections::HashMap::new();
+    for q in &bank.questions {
+        if let Some(i) = &q.image {
+            bank_files.entry(i.file.as_str()).or_default().push(q.id.as_str());
+        }
+    }
+    let by_local: std::collections::HashMap<&str, &BaseQuestion> = base.iter().map(|b| (b.local_id.as_str(), b)).collect();
     records
         .iter()
         .filter(|(file, _)| {
-            bank.questions.iter().any(|q| {
-                q.image.as_ref().is_some_and(|i| &i.file == file) && !base.iter().any(|b| b.local_id == q.id && names(b, file))
-            })
+            bank_files
+                .get(file.as_str())
+                .is_some_and(|ids| ids.iter().any(|id| by_local.get(id).map_or(true, |b| !names(b, file))))
         })
         .cloned()
         .collect()
@@ -820,6 +876,10 @@ pub fn after_partial_send(link: &CircleLink, bank: &QuestionBank, composed: &[Co
         }
     }
     l.qids = qids;
+    // (round 11, security critic 9 I2) Judge the picture-name keep against the COMPOSED records, not the stored
+    // base: for a bank over `BASE_MAX_QUESTIONS` the stored base is empty, and an empty base kept every name for a
+    // file the bank still has, including the files this send carried as this bank's own.
+    let kept = picture_files_kept(&l.picture_files, &base, bank);
     l.base = merge::bounded(base);
     l.base_version = sent.version;
     l.base_version_id = sent.version_id.clone();
@@ -838,7 +898,6 @@ pub fn after_partial_send(link: &CircleLink, bank: &QuestionBank, composed: &[Co
     // (round 10, critic I1) a send (or a merge) rebuilds the base records of the questions it carried, and those records
     // are authoritative: the link-level name is kept only for a file a record does not name (a question held back, or one
     // the circle no longer has). Per question, not per name: two questions can share one stored file.
-    let kept = picture_files_kept(&l.picture_files, &l.base, bank);
     l.picture_files = kept;
     // A send of the full form no longer follows the viewers' form, as a merge of a full version (`finish_merge`).
     if !sent.keys_hidden {
