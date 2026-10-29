@@ -74,6 +74,8 @@ pub enum EditView {
     Merge(Box<MergeView>),
     History(Box<HistoryView>),
     Version(Box<VersionView>),
+    /// (phase D2, plan 4.5) One question's history in its circle, opened from its card's menu on the bank's page.
+    Question(Box<super::question_history_ui::QuestionPage>),
 }
 
 /// What a finished send says, in numbers.
@@ -1054,6 +1056,9 @@ pub struct CircleEditModel {
     /// The frame the bank's page last drew the open screen: a History or a version left behind when the person went
     /// elsewhere is closed when they come back (critic 64 polish 13).
     pub host_frame: Option<u64>,
+    /// (phase D2, plan 5.3) The question history's reads kept for this session: change lists per bank (a 304 costs
+    /// nothing), history lines per head, and the last 4 version bodies. Dropped on sign-out and account switch.
+    pub question_cache: super::question_history::HistoryCache,
     /// "Treat as in step..." from a bank's page: when Get latest finds nothing newer, the question is asked at once.
     rebase_next: bool,
     /// (critic 67 I3) Which of a send, restore or trim is on its way, and the bank's name.
@@ -1308,6 +1313,7 @@ impl CircleEditModel {
             banks_unsaved: HashMap::new(),
             banks_again: false,
             send_unticked: None,
+            question_cache: Default::default(),
         }
     }
 
@@ -1742,6 +1748,7 @@ impl CircleEditModel {
             EditView::Merge(v) => Some(v.local_id.clone()),
             EditView::History(h) => h.local_id.clone(),
             EditView::Version(_) => self.history_stash.as_ref().and_then(|h| h.local_id.clone()),
+            EditView::Question(p) => Some(p.local_bank_id.clone()),
             EditView::Closed => None,
         }
         .or_else(|| self.host.as_ref().map(|h| h.local_id.clone()))
@@ -1754,6 +1761,7 @@ impl CircleEditModel {
             EditView::Merge(v) => Some((v.cid.clone(), v.bid.clone())),
             EditView::History(h) => Some((h.cid.clone(), h.bid.clone())),
             EditView::Version(v) => Some((v.cid.clone(), v.bid.clone())),
+            EditView::Question(p) => Some((p.cid.clone(), p.bid.clone())),
             EditView::Closed => None,
         }
     }
@@ -1890,6 +1898,8 @@ impl CircleEditModel {
     /// doubled); another account starts its own.
     pub fn forget_account(&mut self, another: bool) {
         self.close();
+        // (phase D2) the question history's reads belong to the account that made them
+        self.question_cache.forget();
         self.outs += 1;
         self.invite_required = false;
         if another {
@@ -3077,6 +3087,8 @@ impl CircleEditModel {
             EditView::Merge(v) => v.cid == cid && v.bid == bid,
             EditView::History(v) => v.cid == cid && v.bid == bid,
             EditView::Version(v) => v.cid == cid && v.bid == bid,
+            // (phase D2) the question history runs its own reads: no answer of this model's is for it
+            EditView::Question(_) => false,
             EditView::Closed => false,
         }
     }
@@ -4871,6 +4883,29 @@ impl CircleEditModel {
         true
     }
 
+    // ---- one question's history (phase D2) --------------------------------------------------------------------------
+
+    /// "History in the circle" on a question's card: the page opens in place of the bank's questions (the strip draws it,
+    /// as it draws the bank's History). Returns true when it opened. Reads nothing for a bank with no link.
+    pub fn open_question_history(&mut self, bank: &QuestionBank, question_id: &str) -> bool {
+        self.ensure();
+        let Some(link) = self.links.iter().find(|l| l.local_bank_id == bank.id).cloned() else { return false };
+        if self.wait_for_act() {
+            return false;
+        }
+        self.leave_view();
+        // (critic 89 m2) a quiet read of a base version on its way is kept
+        self.jobs.retain(|j| j.kind == JobKind::Base);
+        self.history_stash = None;
+        let env = super::question_history_ui::Env { session: self.session.clone(), runner: self.runner, retry: self.retry, repaint: self.repaint.clone(), images: self.images.clone(), restore: self.restore.clone() };
+        let page = super::question_history_ui::QuestionPage::open(&link, bank, question_id, env, &mut self.question_cache);
+        self.view = EditView::Question(Box::new(page));
+        self.host = Some(EditHost { local_id: bank.id.clone(), back: format!("< Back to {}", api::plain(&bank.name)) });
+        // (the strip notes the frame it draws the page in: one an earlier screen left must not close this one)
+        self.host_frame = None;
+        true
+    }
+
     // ---- the history -------------------------------------------------------------------------------------------
 
     /// The bank's history of versions. Returns true when the page opened.
@@ -5419,6 +5454,25 @@ impl CircleEditModel {
         // (round 17, critic 95 minor 1) nor is a review built while the circle's difficulties wait to be put into the bank (it
         // would call the circle's difficulty hers): it is built once they are in
         let review = review && !self.merge_waits_for_difficulty();
+        // (phase D2) the question history page: its reads, the bank it draws, and a restore of one question, which changes the
+        // bank only here and writes it first, as a merge does; then its link, when the question no longer pairs with the circle's
+        let now = self.now_ms();
+        let (saver, log, session) = (self.bank_saver.clone(), self.log.clone(), self.session.clone());
+        let save = move |b: &[QuestionBank]| match &saver {
+            Some(f) => f(b),
+            None => log.save_banks(b),
+        };
+        let restored = match &mut self.view {
+            EditView::Question(p) => super::question_history_ui::sync_page(p, &mut self.question_cache, banks, &self.links, session, &save, now),
+            _ => None,
+        };
+        let inherited = inherited || restored.is_some();
+        if let Some((local, Some(link))) = restored {
+            self.update_link(&local, |l| {
+                *l = link;
+                true
+            });
+        }
         self.refresh_statuses(banks);
         if let EditView::Send(v) = &mut self.view
             && let Some(s) = self.statuses.get(&v.local_id)

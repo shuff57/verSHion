@@ -378,7 +378,7 @@ pub(super) fn strip_with(ui: &mut Ui, c: &mut super::circles::CirclesModel, bank
     // the questions; a send or a Get latest under way stays.
     let frame = ui.ctx().cumulative_frame_nr();
     let hosted = c.edit.host.as_ref().is_some_and(|h| h.local_id == bank_id);
-    if hosted && matches!(c.edit.view, super::circle_edit::EditView::History(_) | super::circle_edit::EditView::Version(_)) && c.edit.host_frame.is_some_and(|f| f + 1 < frame) {
+    if hosted && matches!(c.edit.view, super::circle_edit::EditView::History(_) | super::circle_edit::EditView::Version(_) | super::circle_edit::EditView::Question(_)) && c.edit.host_frame.is_some_and(|f| f + 1 < frame) {
         c.edit.close();
     }
     if c.edit.active() && c.edit.host.as_ref().is_some_and(|h| h.local_id == bank_id) {

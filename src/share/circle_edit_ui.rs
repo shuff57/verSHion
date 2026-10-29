@@ -36,7 +36,7 @@ pub(super) fn merge_title(asking_as_is: bool, circle_title: &str) -> String {
 pub(super) fn draw_page(ui: &mut Ui, m: &mut CirclesModel) {
     let now = m.now_ms();
     // (critic 71 I1) the History, or one of its versions, is in front of the person this frame
-    if matches!(m.edit.view, EditView::History(_) | EditView::Version(_)) {
+    if matches!(m.edit.view, EditView::History(_) | EditView::Version(_) | EditView::Question(_)) {
         m.edit.mark_drawn(ui.ctx().cumulative_frame_nr());
     }
     // (critic 69 I2, critic 71) the results of this screen's own bank only, each with Dismiss
@@ -53,6 +53,7 @@ pub(super) fn draw_page(ui: &mut Ui, m: &mut CirclesModel) {
         EditView::Merge(_) => merge_page(ui, e),
         EditView::History(_) => history_page(ui, e, now),
         EditView::Version(_) => version_page(ui, e, now),
+        EditView::Question(_) => super::question_history_ui::draw(ui, m),
         EditView::Closed => {}
     }
 }

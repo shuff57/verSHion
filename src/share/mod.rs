@@ -14,7 +14,7 @@
 //! - [`shared`] / [`shared_ui`]: the Shared page (a top-level screen): guided steps and tabs hosting the models below.
 //! - [`mine`] / [`mine_text`] / [`mine_ui`]: "My shared items": states, appeals, counter-notices, the data download.
 //! - [`bank_links`] / [`bank_links_ui`]: circle banks in My Banks (phase D1): the badge, the status strip, the check.
-//! - [`question_history`]: one question's history in its circle, compare and restore one question (phase D2). No egui.
+//! - [`question_history`] / [`question_history_ui`]: one question's history in its circle, compare and restore one question (phase D2).
 //!
 //! # Which server (decided when the app is built)
 //!
@@ -67,6 +67,7 @@ pub mod publish;
 pub mod publish_text;
 pub mod publish_ui;
 pub mod question_history;
+pub mod question_history_ui;
 pub mod secret;
 pub mod shared;
 pub mod shared_ui;
@@ -136,6 +137,8 @@ mod pool_tests;
 mod publish_tests;
 #[cfg(test)]
 mod question_history_tests;
+#[cfg(test)]
+mod question_history_ui_tests;
 #[cfg(test)]
 mod shared_tests;
 #[cfg(test)]

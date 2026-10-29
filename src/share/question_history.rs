@@ -381,10 +381,23 @@ type BodyKey = (String, String, u64);
 
 /// Version bodies read for compare and restore, in memory only, for one account: another account (or a sign-out,
 /// [`HistoryCache::forget`]) drops them. The least recently used goes first.
+/// The most banks whose change lists and history lines are kept for the session.
+pub const PAGE_CACHE_MAX: usize = 8;
+
 #[derive(Default)]
 pub struct HistoryCache {
     account: Option<String>,
     bodies: Vec<(BodyKey, Arc<VersionBody>)>,
+    /// (round 2) Each bank's change lists as last read, sent back as `If-None-Match` (a 304 costs nothing).
+    pages: Vec<((String, String), ChangesPage)>,
+    /// (round 2) Each bank's history lines, for the newest version they were read at.
+    lines: Vec<((String, String), u64, Vec<VersionLine>)>,
+}
+
+impl std::fmt::Debug for HistoryCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HistoryCache").field("bodies", &self.bodies.len()).field("pages", &self.pages.len()).field("lines", &self.lines.len()).finish()
+    }
 }
 
 impl HistoryCache {
@@ -392,6 +405,8 @@ impl HistoryCache {
     pub fn note_account(&mut self, tag: Option<&str>) {
         if self.account.as_deref() != tag {
             self.bodies.clear();
+            self.pages.clear();
+            self.lines.clear();
             self.account = tag.map(str::to_string);
         }
     }
@@ -399,7 +414,40 @@ impl HistoryCache {
     /// Signed out: nothing is kept.
     pub fn forget(&mut self) {
         self.bodies.clear();
+        self.pages.clear();
+        self.lines.clear();
         self.account = None;
+    }
+
+    /// The bank's change lists as last read (to send back with `If-None-Match`).
+    pub fn page(&self, cid: &str, bid: &str) -> Option<&ChangesPage> {
+        self.pages.iter().find(|((c, b), _)| c == cid && b == bid).map(|(_, p)| p)
+    }
+
+    pub fn put_page(&mut self, cid: &str, bid: &str, page: ChangesPage) {
+        self.pages.retain(|((c, b), _)| !(c == cid && b == bid));
+        self.pages.push(((cid.to_string(), bid.to_string()), page));
+        while self.pages.len() > PAGE_CACHE_MAX {
+            self.pages.remove(0);
+        }
+    }
+
+    /// The bank's history lines, if they were read at the newest version `head`.
+    pub fn lines(&self, cid: &str, bid: &str, head: u64) -> Option<&[VersionLine]> {
+        self.lines.iter().find(|((c, b), h, _)| c == cid && b == bid && *h == head && head > 0).map(|(_, _, l)| l.as_slice())
+    }
+
+    pub fn put_lines(&mut self, cid: &str, bid: &str, head: u64, lines: Vec<VersionLine>) {
+        self.lines.retain(|((c, b), _, _)| !(c == cid && b == bid));
+        self.lines.push(((cid.to_string(), bid.to_string()), head, lines));
+        while self.lines.len() > PAGE_CACHE_MAX {
+            self.lines.remove(0);
+        }
+    }
+
+    /// Something of the account is held (tests, and the critic 60/61 rule's check).
+    pub fn is_empty(&self) -> bool {
+        self.bodies.is_empty() && self.pages.is_empty() && self.lines.is_empty()
     }
 
     pub fn body(&mut self, cid: &str, bid: &str, version: u64) -> Option<Arc<VersionBody>> {
