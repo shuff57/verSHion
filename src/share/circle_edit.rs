@@ -1059,6 +1059,8 @@ pub struct CircleEditModel {
     /// (phase D2, plan 5.3) The question history's reads kept for this session: change lists per bank (a 304 costs
     /// nothing), history lines per head, and the last 4 version bodies. Dropped on sign-out and account switch.
     pub question_cache: super::question_history::HistoryCache,
+    /// (round 5, critic I3) The bank one of whose questions is open in the app's editor (set by the bank's page each frame).
+    question_draft: Option<String>,
     /// "Treat as in step..." from a bank's page: when Get latest finds nothing newer, the question is asked at once.
     rebase_next: bool,
     /// (critic 67 I3) Which of a send, restore or trim is on its way, and the bank's name.
@@ -1314,6 +1316,7 @@ impl CircleEditModel {
             banks_again: false,
             send_unticked: None,
             question_cache: Default::default(),
+            question_draft: None,
         }
     }
 
@@ -4885,6 +4888,11 @@ impl CircleEditModel {
 
     // ---- one question's history (phase D2) --------------------------------------------------------------------------
 
+    /// (round 5, critic I3) The bank whose question is open in the app's editor (from the bank's page), or none.
+    pub fn set_question_draft(&mut self, bank_id: Option<&str>) {
+        self.question_draft = bank_id.map(str::to_string);
+    }
+
     /// "History in the circle" on a question's card: the page opens in place of the bank's questions (the strip draws it,
     /// as it draws the bank's History). Returns true when it opened. Reads nothing for a bank with no link.
     pub fn open_question_history(&mut self, bank: &QuestionBank, question_id: &str) -> bool {
@@ -5465,10 +5473,23 @@ impl CircleEditModel {
             Some(f) => f(b),
             None => log.save_banks(b),
         };
+        // (round 5, critic I3) a restore is made only while its page is in front of the person (drawn in the frame before this
+        // one, as the stale-frame rule counts it) and no question of the bank is open in the editor
+        let shown = self.host_frame.is_some_and(|f| self.pass.is_none_or(|p| f + 1 >= p));
+        let draft = match &self.view {
+            EditView::Question(p) => self.question_draft.as_deref() == Some(p.local_bank_id.as_str()),
+            _ => false,
+        };
         let out = match &mut self.view {
-            EditView::Question(p) => Some((super::question_history_ui::sync_page(p, &mut self.question_cache, banks, &self.links, session, &save, now), p.cid.clone(), p.bid.clone())),
+            EditView::Question(p) => Some((super::question_history_ui::sync_page(p, &mut self.question_cache, banks, &self.links, session, &save, now, draft, shown), p.cid.clone(), p.bid.clone())),
             _ => None,
         };
+        // (round 5) the way back names the bank as it is called now
+        if let (EditView::Question(p), Some(h)) = (&self.view, self.host.as_mut())
+            && let Some(b) = banks.iter().find(|b| b.id == p.local_bank_id)
+        {
+            h.back = format!("< Back to {}", api::plain(&b.name));
+        }
         // (round 3, critic M1) the link or the bank went, or the circle no longer lists the person: the page closes, and what
         // it read for the bank goes with it
         if let Some((o, cid, bid)) = &out

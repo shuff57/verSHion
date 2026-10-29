@@ -1017,3 +1017,69 @@ fn d2g_overlapping_gaps_are_one_line_and_the_empty_state_does_not_contradict_the
     let t = tl(&link, &bank, &quiet, QC, false);
     let _ = empty_text(&t);
 }
+
+// ---- round 5 (third critic pair): the critics' probes, ported to assertions -----------------------------------------
+
+#[test]
+fn probe_not_countable_bypass_via_unsent_edit() {
+    // (critic B1-A) an unsent stem edit, and version 6 = the base's content with other figure settings (same picture): the
+    // strip would count nothing after it, so it is refused
+    let (mut bank, link) = linked();
+    let a = local_of(&link, QA);
+    bank.questions[0].stem = "My unsent edit".into();
+    bank.modified += 10;
+    let mut q = mc(QA, "Question A as of version 9", 1.0);
+    q["figure"] = json!({"id": "triangle", "params": {"a": 4}});
+    let b = body(6, &[q, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)], false);
+    let mut banks = vec![bank];
+    let before = json_of(&banks);
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    let r = restore_question(&mut banks, &ask(&link, Some(&a), QA, &b), &sink, &|_: &[QuestionBank]| Ok(()), NOW + 100_000);
+    assert_eq!(r.map(|d| d.version), Err(RestoreRefused::NotCountable));
+    assert_eq!(json_of(&banks), before);
+}
+
+#[test]
+fn probe_not_countable_bypass_via_crlf() {
+    // (critic B1-B) no local edit; the copy's stem has CRLF, version 6 the same text with LF and other figure settings
+    let (mut bank, mut link) = linked();
+    let a = local_of(&link, QA);
+    bank.questions[0].stem = "Line one\r\nline two".into();
+    link.base[0].snap.stem = "Line one\r\nline two".into();
+    link.mark_bank(&bank);
+    let mut q = mc(QA, "Line one\nline two", 1.0);
+    q["figure"] = json!({"id": "triangle", "params": {"a": 4}});
+    let b = body(6, &[q, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)], false);
+    let mut banks = vec![bank];
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    let r = restore_question(&mut banks, &ask(&link, Some(&a), QA, &b), &sink, &|_: &[QuestionBank]| Ok(()), NOW + 100_000);
+    assert_eq!(r.map(|d| d.version), Err(RestoreRefused::NotCountable));
+    assert_eq!(changes_since(&link, &banks[0]).changed, 0);
+}
+
+#[test]
+fn d2h_restoring_the_base_over_an_unsent_edit_is_allowed_and_counts_nothing() {
+    // (the probe that passed: kept as a guard) restoring the version the copy is based on puts it back in step
+    let (mut bank, link) = linked();
+    let a = local_of(&link, QA);
+    bank.questions[0].stem = "My unsent edit".into();
+    bank.modified += 10;
+    let mut banks = vec![bank];
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    let nine = body(9, &v9(), false);
+    assert!(restore_question(&mut banks, &ask(&link, Some(&a), QA, &nine), &sink, &|_: &[QuestionBank]| Ok(()), NOW + 100_000).is_ok());
+    let c = changes_since(&link, &banks[0]);
+    assert_eq!((c.changed, c.known), (0, true));
+    assert_eq!(your_copy(&link, &banks[0], &a), YourCopy::SameAs(9));
+}
+
+#[test]
+fn d2h_a_history_page_is_read_no_further_than_the_pool_pages_it() {
+    // (critic S3) a reply with 20,000 lines: never more than the pool's page of 50
+    let s = Tape::new();
+    let lines: Vec<Value> = (1..=20_000u64).rev().map(|v| json!({"version": v, "kept": true, "by": "x", "at": NOW, "message": "m"})).collect();
+    s.json("Get", &format!("/circles/{CID}/banks/{BID}/versions"), 200, json!({"bank_id": BID, "head_version": 20_000, "versions": lines}), None);
+    let p = block_on(Pool::new(s.as_ref()).circle_versions(CID, BID, None)).unwrap();
+    assert_eq!(p.versions.len(), HISTORY_PAGE);
+    assert_eq!(p.versions[0].version, 20_000);
+}

@@ -75,6 +75,8 @@ pub enum RestoreState {
     Reading,
     Done(String),
     Failed(String),
+    /// (round 5, critic I4) "Undo restore" did not go through: the undo's own failure (its Try again undoes).
+    UndoFailed(String),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -179,6 +181,18 @@ pub struct QuestionPage {
     /// stem of the question a restore asked about would bring in.
     preview_view: Option<(u64, Option<Shown>, bool)>,
     incoming: Option<(u64, String)>,
+    /// (round 5, critic I2) The version a restore asked about was read for it (once per ask), or the read failed: why, and
+    /// whether Try again can help.
+    incoming_asked: Option<u64>,
+    incoming_err: Option<(u64, String, bool)>,
+    /// (round 5, critic I6) A Show whose read failed.
+    preview_err: Option<(u64, String, bool)>,
+    /// (round 5, critic I4) Whether Try again can help the restore's (or the undo's) failure.
+    fail_retry: bool,
+    /// (round 5, critic I3) A question of the bank is open in the app's editor: restore and undo wait.
+    pub draft_open: bool,
+    /// (round 5, critic S3) The held-back versions, sorted (for `held_between`).
+    held: Vec<u64>,
     /// (round 4, critic P-4) The last restore's words, put back when a second restore is cancelled.
     undo_text: Option<String>,
     env: Env,
@@ -280,6 +294,12 @@ impl QuestionPage {
             preview: None,
             preview_view: None,
             incoming: None,
+            incoming_asked: None,
+            incoming_err: None,
+            preview_err: None,
+            fail_retry: false,
+            draft_open: false,
+            held: Vec::new(),
             undo_text: None,
             env,
             jobs: Vec::new(),
@@ -413,37 +433,47 @@ impl QuestionPage {
 
     fn on_body(&mut self, n: u64, r: Result<BankDoc, PoolError>, cache: &mut HistoryCache, now: i64) {
         self.reading.retain(|v| *v != n);
-        let failed = match r {
+        // (what went wrong, and whether Try again can help)
+        let failed: Option<(String, bool)> = match r {
             // (critic M4) the answer is that version of this bank, or nothing of it is kept
-            Ok(doc) if doc.bank.version != n || (!doc.bank.id.is_empty() && doc.bank.id != self.bid) => Some(format!("The circle answered with something other than version {n} of this bank, so nothing of it is shown.")),
-            Ok(doc) if self.viewers_only() && !doc.bank.keys_hidden => Some(format!("Version {n} could not be read in the viewers' form. Try again later.")),
+            Ok(doc) if doc.bank.version != n || (!doc.bank.id.is_empty() && doc.bank.id != self.bid) => Some((format!("The circle answered with something other than version {n} of this bank, so nothing of it is shown."), true)),
+            Ok(doc) if self.viewers_only() && !doc.bank.keys_hidden => Some((format!("Version {n} could not be read in the viewers' form."), true)),
             Ok(doc) => {
                 let body = VersionBody::from_payload(n, &doc.payload, doc.bank.keys_hidden, now);
                 if super::circle_links::payload_question_count(&doc.payload) > body.questions.len() {
-                    Some(PoolError::Local(LocalProblem::NewerQuestions).message())
+                    Some((PoolError::Local(LocalProblem::NewerQuestions).message(), false))
                 } else {
                     cache.put_body(&self.cid, &self.bid, &self.scope, body);
                     self.data += 1;
                     None
                 }
             }
-            Err(PoolError::Api(ApiError::SignedOut)) => Some(SIGNED_OUT.into()),
+            Err(PoolError::Api(ApiError::SignedOut)) => Some((SIGNED_OUT.into(), true)),
             Err(e) => {
                 // (critic B1) a version the pool no longer serves: whatever this session held of it goes
-                if let PoolError::Refused(r) = &e
-                    && matches!(r.kind, RefusalKind::VersionWithheld | RefusalKind::VersionNotRetained)
-                {
+                let gone = matches!(&e, PoolError::Refused(r) if matches!(r.kind, RefusalKind::VersionWithheld | RefusalKind::VersionNotRetained));
+                if gone {
                     cache.drop_body(&self.cid, &self.bid, n);
                 }
-                Some(problem_words(&e).0)
+                let (m, retry) = problem_words(&e);
+                Some((m, retry && !gone))
             }
         };
-        let Some(m) = failed else { return };
+        let Some((m, retry)) = failed else { return };
         if let Some(c) = self.compare.as_mut().filter(|c| c.state == CompareState::Reading && (c.left == Side::Version(n) || c.right == Side::Version(n))) {
             c.state = CompareState::Failed(m.clone());
         }
         if let Some(r) = self.restore.as_mut().filter(|r| r.version == n && r.state == RestoreState::Reading) {
-            r.state = RestoreState::Failed(m);
+            r.state = RestoreState::Failed(m.clone());
+            self.fail_retry = retry;
+        }
+        // (round 5, critic I2) the question's own read: said in it, read again only on Try again
+        if self.restore.as_ref().is_some_and(|r| r.version == n && r.state == RestoreState::Asking) {
+            self.incoming_err = Some((n, m.clone(), retry));
+        }
+        // (round 5, critic I6) a Show's read
+        if self.preview == Some(n) {
+            self.preview_err = Some((n, m, retry));
         }
     }
 
@@ -553,6 +583,8 @@ impl QuestionPage {
     pub fn ask_restore(&mut self, version: u64) {
         if self.restore_ok && !self.restore.as_ref().is_some_and(|r| matches!(r.state, RestoreState::Asking | RestoreState::Reading)) {
             self.restore = Some(RestoreView { version, state: RestoreState::Asking });
+            self.incoming_asked = None;
+            self.incoming_err = None;
         }
     }
 
@@ -570,7 +602,15 @@ impl QuestionPage {
     pub fn retry_restore(&mut self) {
         if let Some(r) = self.restore.as_mut().filter(|r| matches!(r.state, RestoreState::Failed(_))) {
             r.state = RestoreState::Asking;
+            self.incoming_asked = None;
+            self.incoming_err = None;
         }
+    }
+
+    /// (round 5, critic I2) Try again on the question's own read.
+    pub fn retry_incoming(&mut self) {
+        self.incoming_err = None;
+        self.incoming_asked = None;
     }
 
     /// (round 4, critic P-6) "Show": the whole question of a version (one read, none when held).
@@ -580,7 +620,10 @@ impl QuestionPage {
             return;
         }
         self.preview = Some(version);
-        let _ = self.read_sides(&[Side::Version(version)], cache);
+        self.preview_err = None;
+        if let Err(m) = self.read_sides(&[Side::Version(version)], cache) {
+            self.preview_err = Some((version, m, false));
+        }
     }
 
     /// The body of a version for drawing (a preview, the incoming question of a restore).
@@ -598,10 +641,17 @@ impl QuestionPage {
         }
         self.picture = None;
         self.picture_asked = false;
+        // (round 5, critic I3) not while a question of the bank is open in the editor
+        if self.draft_open {
+            self.fail_retry = true;
+            self.restore = Some(RestoreView { version: v, state: RestoreState::Failed(format!("{DRAFT_OPEN}: its draft would be saved over the restored question.")) });
+            return;
+        }
         let state = match self.read_sides(&[Side::Version(v)], cache) {
             Ok(()) => RestoreState::Reading,
             Err(m) => RestoreState::Failed(m),
         };
+        self.fail_retry = true;
         self.restore = Some(RestoreView { version: v, state });
     }
 
@@ -636,6 +686,10 @@ impl QuestionPage {
             return;
         }
         self.inputs = Some(inputs);
+        let mut held: Vec<u64> = self.lines.iter().filter(|l| l.withheld).map(|l| l.version).collect();
+        held.sort_unstable();
+        held.dedup();
+        self.held = held;
         let (number, heading) = heading_of(bank, &self.local_id);
         self.number = number;
         self.heading = heading;
@@ -670,11 +724,12 @@ impl QuestionPage {
         let v = self.restore.as_ref().filter(|r| r.state == RestoreState::Reading)?.version;
         let qid = self.qid.clone()?;
         let body = self.usable_body(cache, v)?;
-        let fail = |p: &mut QuestionPage, m: String| {
+        let fail = |p: &mut QuestionPage, m: String, retry: bool| {
+            p.fail_retry = retry;
             p.restore = Some(RestoreView { version: v, state: RestoreState::Failed(m) });
             None
         };
-        let Some(t) = body.question(&qid) else { return fail(self, format!("Version {v} does not have this question. Nothing was changed.")) };
+        let Some(t) = body.question(&qid) else { return fail(self, format!("Version {v} does not have this question. Nothing was changed."), false) };
         let removed = self.comes_back_new(Some(link));
         let local = self.local_id.clone();
         let plain = RestoreAsk { link, local_id: Some(local.as_str()), qid: &qid, body: &body, picture: None, store_picture: None, removed_in_circle: removed };
@@ -691,17 +746,17 @@ impl QuestionPage {
                     let with = RestoreAsk { store_picture: Some(&store), ..plain };
                     r = restore_question(banks, &with, &*self.env.restore, save, now);
                     if r == Err(RestoreRefused::PictureMissing) {
-                        return fail(self, format!("Version {v}'s picture couldn't be stored on this computer, so nothing was changed."));
+                        return fail(self, format!("Version {v}'s picture couldn't be stored on this computer, so nothing was changed."), true);
                     }
                 }
                 Some((s, Err(m))) if *s == sha => {
                     let m = nothing_changed(m);
-                    return fail(self, m);
+                    return fail(self, m, true);
                 }
                 _ if !self.picture_asked => {
                     self.picture_asked = true;
                     if !self.launch(Work::Picture { cid: self.cid.clone(), bid: self.bid.clone(), sha }) {
-                        return fail(self, SIGNED_OUT.into());
+                        return fail(self, SIGNED_OUT.into(), true);
                     }
                     return None;
                 }
@@ -713,7 +768,15 @@ impl QuestionPage {
                 self.local_id = done.local_id.clone();
                 let back_new = if removed { format!(" {BACK_NEW}") } else { String::new() };
                 let what = question_words(self.number);
-                let text = format!("{} is now as it was in version {v}. Only your copy changed: it counts as an unsent change until you send.{back_new} A restore point of all your banks was saved first, with verSHion's other safety copies. Undo is available until you leave this page.", capital(&what));
+                // (round 5, critic I1) said from the copy as it is now, against the link as it is now
+                let after = done.link.as_ref().unwrap_or(link);
+                let now_is = banks.iter().find(|b| b.id == self.local_bank_id).map(|b| your_copy(after, b, &done.local_id));
+                let counts = match now_is {
+                    Some(YourCopy::SameAs(n)) => format!(" Your copy of it is now the same as version {n}, the version your copy is based on, so there is nothing to send for it."),
+                    Some(YourCopy::NotCounted(_) | YourCopy::Unknown) => " Only your copy changed. This computer can't tell whether it counts as a change to send.".to_string(),
+                    _ => " Only your copy changed: it counts as an unsent change until you send.".to_string(),
+                };
+                let text = format!("{} is now as it was in version {v}.{counts}{back_new} A restore point of all your banks was saved first, with verSHion's other safety copies. Undo is available until you leave this page.", capital(&what));
                 self.undo_text = Some(text.clone());
                 self.restore = Some(RestoreView { version: v, state: RestoreState::Done(text) });
                 self.picture = None;
@@ -722,7 +785,10 @@ impl QuestionPage {
                 self.data += 1;
                 Some((self.local_bank_id.clone(), link))
             }
-            Err(e) => fail(self, refused_words(&e, v)),
+            Err(e) => {
+                let retry = retryable(&e);
+                fail(self, refused_words(&e, v), retry)
+            }
         }
     }
 
@@ -742,8 +808,10 @@ impl QuestionPage {
                 Some((self.local_bank_id.clone(), before))
             }
             Err(e) => {
+                // (round 5, critic I4) the undo's own failure: its Try again undoes, and only where that can help
                 self.undo = Some(done);
-                self.restore = Some(RestoreView { version: v, state: RestoreState::Failed(refused_words(&e, v)) });
+                self.fail_retry = retryable(&e);
+                self.restore = Some(RestoreView { version: v, state: RestoreState::UndoFailed(refused_words(&e, v)) });
                 None
             }
         }
@@ -753,6 +821,11 @@ impl QuestionPage {
 /// A failure's words, ending once with "Nothing was changed." (round 4, minor: never twice).
 fn nothing_changed(m: &str) -> String {
     if m.contains("Nothing was changed") { m.to_string() } else { format!("{} Nothing was changed.", m.trim_end()) }
+}
+
+/// (round 5, critic I4) A refusal that may pass by itself (a disk, a picture's read); the rest are lasting.
+fn retryable(e: &RestoreRefused) -> bool {
+    matches!(e, RestoreRefused::RestorePoint(_) | RestoreRefused::NotSaved(_) | RestoreRefused::PictureMissing)
 }
 
 fn capital(s: &str) -> String {
@@ -772,7 +845,7 @@ fn refused_words(e: &RestoreRefused, v: u64) -> String {
         RestoreRefused::RestorePoint(m) => format!("A copy of your banks could not be saved first ({m}), so nothing was changed."),
         RestoreRefused::NotSaved(m) => format!("Your banks couldn't be saved ({}), so nothing was changed.", words::save_problem(m)),
         RestoreRefused::NotCountable => "This version differs only in figure settings that verSHion can't count as a change here, so it can't be restored from this page. Nothing was changed.".into(),
-        RestoreRefused::EditedSince => "This question was changed (or deleted) after the restore, so Undo would lose that. Nothing was changed; change it back by hand if you need to.".into(),
+        RestoreRefused::EditedSince => "This question changed after the restore (an edit, or a difficulty taken from the circle), or was deleted, so Undo would lose that. Nothing was changed; change it back by hand if you need to.".into(),
         RestoreRefused::LinkMoved => "Your copy has moved to another version of the circle's bank since the restore, so Undo can't put the question back as it was. Nothing was changed.".into(),
         RestoreRefused::Moved => "This question is no longer paired with the circle's question it was opened on (a merge or a send changed it). Open its history again. Nothing was changed.".into(),
     }
@@ -813,7 +886,11 @@ async fn run_async(session: SharedSession, retry: RetryPolicy, work: Work, tx: S
 
 /// From `CircleEditModel::sync`: the page's answers, the bank and link it draws, and a restore (or its undo) waiting.
 /// The page closes when its link or bank is gone, or the circle no longer lists the person (critic M1).
-pub(super) fn sync_page(p: &mut QuestionPage, cache: &mut HistoryCache, banks: &mut [QuestionBank], links: &[CircleLink], session: Option<SharedSession>, save: &dyn Fn(&[QuestionBank]) -> Result<(), String>, now: i64) -> SyncOut {
+/// (round 5, critic I3) `draft`: a question of the bank is open in the app's editor; `shown`: the page was in front of the
+/// person in the frame before (a restore or undo is made only then, so its result is always seen).
+#[allow(clippy::too_many_arguments)]
+pub(super) fn sync_page(p: &mut QuestionPage, cache: &mut HistoryCache, banks: &mut [QuestionBank], links: &[CircleLink], session: Option<SharedSession>, save: &dyn Fn(&[QuestionBank]) -> Result<(), String>, now: i64, draft: bool, shown: bool) -> SyncOut {
+    p.draft_open = draft;
     // (critic I4) another account in the session: nothing read for the first one is used, and the page reads again
     let tag = super::bank_links::account_tag(session.as_ref().and_then(|s| s.account()).as_deref());
     let had_session = p.env.session.is_some();
@@ -851,26 +928,47 @@ pub(super) fn sync_page(p: &mut QuestionPage, cache: &mut HistoryCache, banks: &
     p.refresh_compare(cache);
     // (round 4, critic P-6) the question a restore asked about would bring in, read to be shown in the question; and a
     // version shown whole
+    // (round 5, critic I2) read once per ask: a failure is kept (and said), read again only on Try again
     if let Some(v) = p.restore.as_ref().filter(|r| r.state == RestoreState::Asking).map(|r| r.version) {
         if p.incoming.as_ref().is_none_or(|(n, _)| *n != v) {
             match p.shown_side(cache, v) {
                 Some(side) => p.incoming = Some((v, side.map_or_else(|| "(not in that version)".into(), |s| super::merge::short_title(&s.q.stem, 90)))),
-                None => {
-                    let _ = p.read_sides(&[Side::Version(v)], cache);
+                None if p.incoming_asked != Some(v) && p.incoming_err.is_none() => {
+                    p.incoming_asked = Some(v);
+                    if let Err(m) = p.read_sides(&[Side::Version(v)], cache) {
+                        p.incoming_err = Some((v, m, false));
+                    }
                 }
+                None => {}
             }
         }
     } else {
         p.incoming = None;
     }
+    // (round 5, critic S2) a body read without its keys is drawn as such, whatever the lists said
     p.preview_view = match p.preview {
         Some(v) => {
-            let hidden = p.viewers_only();
-            p.shown_side(cache, v).map(|side| (v, side, hidden))
+            let viewers = p.viewers_only();
+            let qid = p.qid.clone();
+            p.usable_body(cache, v).map(|b| (v, qid.as_deref().and_then(|q| side_of_version(&b, q)), viewers || b.keys_hidden))
         }
         None => None,
     };
-    let changed = p.restore_step(cache, banks, link, save, now).or_else(|| p.undo_step(banks, link, save, now));
+    // (round 5, critic I3) a question of the bank open in the editor: nothing is restored or undone under it
+    if draft {
+        if let Some(r) = p.restore.as_mut().filter(|r| r.state == RestoreState::Reading) {
+            r.state = RestoreState::Failed(format!("{DRAFT_OPEN}: its draft would be saved over the restored question."));
+            p.fail_retry = true;
+        }
+        if std::mem::take(&mut p.undo_asked)
+            && let Some(u) = &p.undo
+        {
+            p.fail_retry = true;
+            p.restore = Some(RestoreView { version: u.version, state: RestoreState::UndoFailed(format!("{DRAFT_OPEN}: its draft would be saved over the question put back.")) });
+        }
+    }
+    // only while the page is in front of the person, so the result is seen
+    let changed = if shown && !draft { p.restore_step(cache, banks, link, save, now).or_else(|| p.undo_step(banks, link, save, now)) } else { None };
     if changed.is_some()
         && let Some(bank) = banks.iter().find(|b| b.id == p.local_bank_id)
     {
@@ -905,8 +1003,11 @@ enum Act {
     CancelRestore,
     DismissRestore,
     RetryRestore,
+    RetryIncoming,
     Undo,
     Show(u64),
+    RetryShow(u64),
+    ClosePreview,
 }
 
 /// The page (from `circle_edit_ui::draw_page`).
@@ -950,8 +1051,14 @@ pub(super) fn draw(ui: &mut Ui, m: &mut CirclesModel) {
         Act::CancelRestore => p.cancel_restore(),
         Act::DismissRestore => p.restore = None,
         Act::RetryRestore => p.retry_restore(),
+        Act::RetryIncoming => p.retry_incoming(),
         Act::Undo => p.ask_undo(),
         Act::Show(v) => p.show(v, cache),
+        Act::RetryShow(v) => {
+            p.preview = None;
+            p.show(v, cache);
+        }
+        Act::ClosePreview => p.preview = None,
     }
 }
 
@@ -994,11 +1101,12 @@ fn spinner_line(ui: &mut Ui, text: &str) {
 }
 
 /// The held-back versions strictly between two versions (critic P8).
+/// (round 5, critic S3) From the page's sorted list of them, worked out once per read.
 fn held_between(p: &QuestionPage, a: u64, b: u64) -> Vec<u64> {
     let (lo, hi) = (a.min(b), a.max(b));
-    let mut v: Vec<u64> = p.lines.iter().filter(|l| l.withheld && l.version > lo && l.version < hi).map(|l| l.version).collect();
-    v.sort_unstable();
-    v
+    let from = p.held.partition_point(|v| *v <= lo);
+    let to = p.held.partition_point(|v| *v < hi);
+    p.held[from..to.max(from)].to_vec()
 }
 
 /// A ghost button that is drawn but does nothing while `on` is false (styled as `kit::ghost_button`, added in place so a
@@ -1030,8 +1138,20 @@ fn draw_question(ui: &mut Ui, p: &QuestionPage, back: &str, now: i64) -> Act {
     ui.add(egui::Label::new(theme::strong(p.heading.as_str()).size(14.0)).wrap());
     ui.add_space(4.0);
     // (critic P6) Escape takes back a question asked (round 4: only one in view, not behind a compare)
-    if p.compare.is_none() && p.restore.as_ref().is_some_and(|r| r.state == RestoreState::Asking) && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        act = Act::CancelRestore;
+    // (round 5) then a compare, a version shown, a result
+    if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+        let asking = p.restore.as_ref().is_some_and(|r| r.state == RestoreState::Asking);
+        act = if p.compare.is_none() && asking {
+            Act::CancelRestore
+        } else if p.compare.is_some() {
+            Act::CloseCompare
+        } else if p.preview.is_some() {
+            Act::ClosePreview
+        } else if p.restore.as_ref().is_some_and(|r| matches!(r.state, RestoreState::Done(_) | RestoreState::Failed(_) | RestoreState::UndoFailed(_))) {
+            Act::DismissRestore
+        } else {
+            act
+        };
     }
     let free = !restore_busy(p);
     // "Your copy: ..." and Compare with...
@@ -1104,7 +1224,7 @@ fn draw_question(ui: &mut Ui, p: &QuestionPage, back: &str, now: i64) -> Act {
                 // (critic P7) no Restore on a bank put back from a safety copy, nor to the version the copy already is;
                 // (round 4) nor to the version just restored
                 let just = p.undo.as_ref().is_some_and(|u| u.version == *version);
-                let restore = *restore && !stale && p.your_copy != YourCopy::SameAs(*version) && !just;
+                let restore = *restore && !stale && p.your_copy != YourCopy::SameAs(*version) && p.your_copy != YourCopy::NotCounted(*version) && !just;
                 // (round 4, minor) a compare against "Your copy" says so
                 let with_copy = compared_to.is_none();
                 kit::card().inner_margin(Margin::symmetric(10, 8)).show(ui, |ui| {
@@ -1113,14 +1233,14 @@ fn draw_question(ui: &mut Ui, p: &QuestionPage, back: &str, now: i64) -> Act {
                     head.extend(who_when(l.as_ref(), now));
                     let mut msg = message_of(l.as_ref());
                     // (critic P8) a list worked out across a held-back version says what it is against
-                    if let Some(c) = compared_to.filter(|c| !held_between(p, *c, *version).is_empty() && tag.is_some()) {
+                    if let Some(c) = compared_to.filter(|c| tag.is_some() && !held_between(p, *c, *version).is_empty()) {
                         let what = match tag {
                             Some(Tag::Added) => "added",
                             Some(Tag::Removed) => "removed",
                             _ => "changed",
                         };
                         // (round 4, minor) a version named that has no row of its own says why
-                        let why = if listed(c) { String::new() } else { " (not listed: it did not change this question)".into() };
+                        let why = if listed(c) { String::new() } else { format!(" (version {c} has no row: this question was the same in it as before)") };
                         let since = format!("{what} since version {c}{why}");
                         msg = Some(msg.map_or(since.clone(), |m| format!("{m} · {since}")));
                     }
@@ -1159,6 +1279,10 @@ fn draw_question(ui: &mut Ui, p: &QuestionPage, back: &str, now: i64) -> Act {
                                     if restore && button_if(ui, free, "Restore...") {
                                         *act = Act::AskRestore(*version);
                                     }
+                                    // (round 5, critic I5) Undo stays reachable on the row restored, the result dismissed
+                                    if just && p.restore_ok && !matches!(p.restore.as_ref().map(|r| &r.state), Some(RestoreState::Done(_) | RestoreState::UndoFailed(_))) && button_if(ui, free, "Undo restore") {
+                                        *act = Act::Undo;
+                                    }
                                 }
                             }
                         }
@@ -1179,6 +1303,17 @@ fn draw_question(ui: &mut Ui, p: &QuestionPage, back: &str, now: i64) -> Act {
                 });
                 if let Some((v, side, hidden)) = p.preview_view.as_ref().filter(|(v, _, _)| v == version) {
                     preview_panel(ui, *v, side.as_ref(), *hidden);
+                } else if let Some((_, m, retry)) = p.preview_err.as_ref().filter(|(v, _, _)| v == version) {
+                    // (round 5, critic I6) why it could not be shown, with Try again where it can help
+                    warn_box(ui, m);
+                    ui.horizontal_wrapped(|ui| {
+                        if *retry && kit::ghost_button(ui, "Try again").clicked() {
+                            act = Act::RetryShow(*version);
+                        }
+                        if kit::ghost_button(ui, "Close").clicked() {
+                            act = Act::ClosePreview;
+                        }
+                    });
                 } else if p.preview == Some(*version) {
                     spinner_line(ui, &format!("Reading version {version}..."));
                 }
@@ -1223,6 +1358,12 @@ fn draw_question(ui: &mut Ui, p: &QuestionPage, back: &str, now: i64) -> Act {
         if kit::ghost_button(ui, "Show fewer versions").clicked() {
             act = Act::ShowAll(false);
         }
+    } else if !t.rows.iter().any(|r| matches!(r, Row::Older { .. })) && p.lines.iter().any(|l| l.kept && !l.withheld && !listed(l.version)) {
+        // (round 5) kept versions that did not change the question are listed on asking, also with none no longer kept
+        ui.add_space(4.0);
+        if kit::ghost_button(ui, "Show every version").clicked() {
+            act = Act::ShowAll(true);
+        }
     }
     act
 }
@@ -1240,10 +1381,12 @@ fn preview_panel(ui: &mut Ui, version: u64, side: Option<&Shown>, hidden: bool) 
     });
 }
 
-/// Every field of one side's question, once.
+/// Every field of one side's question, once. (round 5) Nothing is compared here: a picture is "a picture" or "no picture",
+/// and what the viewers' form does not show is "hidden from viewers".
 fn question_fields(ui: &mut Ui, s: &Shown, hidden: bool) {
-    for f in compare(Some(s), Some(s), hidden).fields {
-        ui.add(egui::Label::new(theme::text(format!("{}: {}", f.field, f.left)).size(13.0)).wrap());
+    for f in compare(Some(s), None, hidden).fields {
+        let v = if f.hidden { "hidden from viewers".to_string() } else { f.left };
+        ui.add(egui::Label::new(theme::text(format!("{}: {v}", f.field)).size(13.0)).wrap());
     }
 }
 
@@ -1251,6 +1394,7 @@ fn restore_panel(ui: &mut Ui, p: &QuestionPage, r: &RestoreView, act: &mut Act) 
     let what = question_words(p.number);
     let back_new = p.comes_back_new(None);
     let mut yes: Option<egui::Response> = None;
+    let mut ready = false;
     let resp = kit::card().inner_margin(Margin::same(12)).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
         match &r.state {
@@ -1262,19 +1406,38 @@ fn restore_panel(ui: &mut Ui, p: &QuestionPage, r: &RestoreView, act: &mut Act) 
                     YourCopy::Unknown | YourCopy::NotCounted(_) => ask.push_str(&format!(" Any changes to {what} you have not sent will be replaced.")),
                     _ => {}
                 }
+                // (round 5, minor) a question deleted from the copy comes back at its end
+                if p.number == 0 {
+                    ask.push_str(" It comes back at the end of the bank.");
+                }
                 // (critic P3) a question the circle removed
                 if back_new {
                     ask.push_str(&format!(" {BACK_NEW}"));
                 }
                 ui.add(egui::Label::new(theme::text(ask).size(13.0)).wrap());
-                // (round 4, critic P-6) what comes in
-                match p.incoming.as_ref().filter(|(v, _)| *v == r.version) {
-                    Some((_, stem)) => line(ui, format!("Version {}'s question: \"{stem}\"", r.version)),
-                    None => spinner_line(ui, &format!("Reading version {}...", r.version)),
+                // (round 5, critic I3) a question of the bank open in the editor holds it back
+                if p.draft_open {
+                    line(ui, format!("{DRAFT_OPEN}: its draft would be saved over the restored question."));
+                }
+                // (round 4, critic P-6) what comes in; (round 5, critic I2) or why it could not be read, with Try again
+                match (p.incoming.as_ref().filter(|(v, _)| *v == r.version), p.incoming_err.as_ref().filter(|(v, _, _)| *v == r.version)) {
+                    (Some((_, stem)), _) => {
+                        ready = true;
+                        line(ui, format!("Version {}'s question: \"{stem}\"", r.version));
+                    }
+                    (None, Some((_, m, retry))) => {
+                        warn_box(ui, m);
+                        if *retry && kit::ghost_button(ui, "Try again").clicked() {
+                            *act = Act::RetryIncoming;
+                        }
+                    }
+                    (None, None) => spinner_line(ui, &format!("Reading version {}...", r.version)),
                 }
                 ui.add_space(4.0);
                 ui.horizontal_wrapped(|ui| {
-                    let y = kit::primary_button(ui, "Yes, restore");
+                    // (round 5, critic I2) Yes waits for the version (and for the editor's question to be closed)
+                    let on = ready && !p.draft_open;
+                    let y = ui.add_enabled(on, egui::Button::new(egui::RichText::new("Yes, restore").family(theme::bold_family()).color(theme::on_accent_col())).fill(theme::accent_col()).stroke(egui::Stroke::NONE).corner_radius(egui::CornerRadius::same(17)).min_size(egui::vec2(0.0, 34.0)));
                     if y.clicked() {
                         *act = Act::ConfirmRestore;
                     }
@@ -1296,12 +1459,12 @@ fn restore_panel(ui: &mut Ui, p: &QuestionPage, r: &RestoreView, act: &mut Act) 
                     }
                 });
             }
-            RestoreState::Failed(t) => {
+            RestoreState::Failed(t) | RestoreState::UndoFailed(t) => {
                 warn_box(ui, &nothing_changed(t));
                 ui.horizontal_wrapped(|ui| {
-                    // (round 4, minor) a failure that may pass has its Try again
-                    if kit::ghost_button(ui, "Try again").clicked() {
-                        *act = Act::RetryRestore;
+                    // (round 5, critic I4) Try again only where it can help, and for an undo it undoes
+                    if p.fail_retry && kit::ghost_button(ui, "Try again").clicked() {
+                        *act = if matches!(r.state, RestoreState::UndoFailed(_)) { Act::Undo } else { Act::RetryRestore };
                     }
                     if kit::ghost_button(ui, "Dismiss").clicked() {
                         *act = Act::DismissRestore;
@@ -1311,12 +1474,12 @@ fn restore_panel(ui: &mut Ui, p: &QuestionPage, r: &RestoreView, act: &mut Act) 
         }
     });
     // (critic P6) brought into view once, when it is first drawn in this state; (round 4, minor) the question's Yes takes
-    // the keyboard focus
-    let key = ui.make_persistent_id(("qh_restore_seen", r.version, std::mem::discriminant(&r.state)));
+    // the keyboard focus once it can be pressed
+    let key = ui.make_persistent_id(("qh_restore_seen", r.version, std::mem::discriminant(&r.state), ready));
     if !ui.data(|d| d.get_temp::<bool>(key)).unwrap_or(false) {
         ui.data_mut(|d| d.insert_temp(key, true));
         resp.response.scroll_to_me(None);
-        if let Some(y) = &yes {
+        if let Some(y) = yes.as_ref().filter(|_| ready) {
             y.request_focus();
         }
     }
@@ -1474,7 +1637,7 @@ fn compare_panel(ui: &mut Ui, p: &QuestionPage, c: &CompareView, act: &mut Act) 
 /// a bank with no link, and reads nothing: the page reads when it opens. (round 4, critic S-I3) While a question of this bank
 /// is open in the editor, the page does not open (its draft would later be written over a restored question).
 pub fn question_menu(ui: &mut Ui, app: &mut crate::App, bank_id: &str, question_id: &str) {
-    let draft_open = app.qedit.as_ref().is_some_and(|d| d.bank_id == bank_id);
+    let draft_open = app.qedit.as_ref().is_some_and(|d| d.bank_id == bank_id && d.qid.is_some());
     let crate::App { shared, store, .. } = app;
     let Some(bank) = store.banks.iter().find(|b| b.id == bank_id) else { return };
     if question_menu_of(ui, &mut shared.circles, bank, question_id, draft_open) {

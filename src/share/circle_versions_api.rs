@@ -15,6 +15,9 @@ use super::circles_api::{BankDoc, BankHead, CircleSend, MESSAGE_MAX, SentBank, c
 use super::pool::*;
 use super::transport::Method;
 
+/// (round 5, critic S3) The most history lines read from one page: the pool's own page.
+pub const HISTORY_PAGE: usize = 50;
+
 /// The most a bank keeps in full; "trim" keeps 1 to one fewer.
 pub const KEPT_VERSIONS: u32 = 20;
 
@@ -268,13 +271,16 @@ impl<'a> Pool<'a> {
         if let Some(b) = before {
             path.push_str(&format!("?before={b}"));
         }
-        let v: Value = parse(&self.call(&Call::new(Method::Get, path)).await?)?;
+        // (round 5, critic S3) no more than a page's worth of bytes, and of lines
+        let mut c = Call::new(Method::Get, path);
+        c.max_response = Some(CHANGES_RESPONSE_MAX);
+        let v: Value = parse(&self.call(&c).await?)?;
         Ok(VersionsPage {
             bank_id: text_of(&v, "bank_id"),
             head_version: v.get("head_version").and_then(Value::as_u64).unwrap_or(0),
             oldest_kept: v.get("oldest_kept").and_then(Value::as_u64),
             pinned_versions: u64s(&v, "pinned_versions"),
-            versions: list_of(&v, "versions")?,
+            versions: { let mut l: Vec<VersionLine> = list_of(&v, "versions")?; l.truncate(HISTORY_PAGE); l },
             next_before: v.get("next_before").and_then(Value::as_u64),
         })
     }

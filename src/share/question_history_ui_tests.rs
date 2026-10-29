@@ -35,8 +35,8 @@ pub(super) struct Wire {
     seen: Mutex<Vec<Seen>>,
     /// Who the session says is signed in (round 3, critic I4).
     who: Mutex<Option<String>>,
-    /// (round 4) The next request waits here, after taking its reply, until released.
-    gate: Mutex<Option<std::sync::mpsc::Receiver<()>>>,
+    /// (round 4) The next request for the named "Method /path" waits here, after taking its reply, until released.
+    gate: Mutex<Option<(String, std::sync::mpsc::Receiver<()>)>>,
 }
 
 fn reply(status: u16, body: &Value, etag: Option<&str>) -> Response {
@@ -65,10 +65,10 @@ impl Wire {
         r.bytes = bytes;
         self.routes.lock().unwrap().entry(format!("Get {path}")).or_default().push_back(r);
     }
-    /// The next request with a reply waits until the sender is used (or dropped).
-    fn hold(&self) -> std::sync::mpsc::Sender<()> {
+    /// The next request for `key` ("Method /path") waits, after taking its reply, until the sender is used (or dropped).
+    fn hold(&self, key: &str) -> std::sync::mpsc::Sender<()> {
         let (tx, rx) = std::sync::mpsc::channel();
-        *self.gate.lock().unwrap() = Some(rx);
+        *self.gate.lock().unwrap() = Some((key.to_string(), rx));
         tx
     }
     fn calls(&self, needle: &str) -> usize {
@@ -100,8 +100,11 @@ impl PoolSession for Wire {
             self.seen.lock().unwrap().push((key.clone(), r.headers.iter().map(|(k, v)| (k.clone(), v.expose().to_string())).collect()));
             let queued = self.routes.lock().unwrap().get_mut(&key).and_then(VecDeque::pop_front);
             if let Some(q) = queued {
-                let g = self.gate.lock().unwrap().take();
-                if let Some(rx) = g {
+                let g = {
+                    let mut gate = self.gate.lock().unwrap();
+                    if gate.as_ref().is_some_and(|(k, _)| *k == key) { gate.take() } else { None }
+                };
+                if let Some((_, rx)) = g {
                     let _ = rx.recv_timeout(std::time::Duration::from_secs(10));
                 }
                 return Ok(q);
@@ -164,10 +167,14 @@ const A3: &str = "Solve 2x + 3 = 9";
 const B: &str = "Simplify 3(x + 2)";
 
 #[derive(Default)]
-struct CountRestore(Mutex<usize>);
+struct CountRestore(Mutex<usize>, std::sync::atomic::AtomicBool);
 
 impl RestoreSink for CountRestore {
     fn save(&self, _: &[QuestionBank]) -> Result<String, String> {
+        // (round 5) a disk that is full for now
+        if self.1.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err("the disk is full".into());
+        }
         *self.0.lock().unwrap() += 1;
         Ok("memory".into())
     }
@@ -892,6 +899,17 @@ fn d2u_frames() {
         }
         r.w.on("Get", &versions_path(), 200, blank, None);
         r.w.on("Get", &changes_path(), 200, json!({"bank_id": BID, "head_version": 5, "per_question": false, "reason": "keys_hidden"}), None);
+        // (round 5) the copy's question is the Matching one compared in frame 19
+        let mq: crate::model::Question = serde_json::from_value(json!({"id": r.banks[0].questions[0].id, "stem": "Match the organelle to its job", "kind": {"Matching": {"pairs": [{"left": "Nucleus", "right": ""}, {"left": "Ribosome", "right": ""}], "distractors": ["DNA", "proteins", "sugar"]}}, "points": 1.0, "difficulty": null, "created": 5, "modified": 6})).unwrap();
+        r.banks[0].questions[0] = mq.clone();
+        let bank = r.banks[0].clone();
+        r.m.edit.update_link(LOCAL, |l| {
+            if let Some(b) = l.base.iter_mut().find(|b| b.local_id == mq.id) {
+                b.snap = super::merge::snap_of(&mq, None);
+            }
+            l.mark_bank(&bank);
+            true
+        });
         r.open(0);
         both(&mut r, "18-hiding-viewer", w);
         let m3 = json!({"id": QA, "stem": "Match the organelle to its job", "kind": {"Matching": {"pairs": [{"left": "Nucleus", "right": ""}, {"left": "Ribosome", "right": ""}], "distractors": ["proteins", "DNA", "sugar"]}}, "points": 1.0, "difficulty": null, "created": 5, "modified": 6, "keyless": true});
@@ -975,6 +993,49 @@ fn d2u_frames() {
         r.page(w);
         r.qpage_mut().cancel_restore();
         both(&mut r, "25-undo-after-cancel", w);
+        // (round 5, critic I2) the question's version could not be read: said, with Try again, Yes waiting
+        let mut r = rig();
+        r.script_load();
+        r.w.on("Get", &version_path(2), 503, json!({"error": "busy"}), None);
+        r.open(0);
+        r.page(w);
+        r.qpage_mut().ask_restore(2);
+        both(&mut r, "26-restore-read-failed", w);
+        // (round 5, critic I6) a Show whose read failed
+        let mut r = rig();
+        r.script_load();
+        r.w.on("Get", &version_path(2), 503, json!({"error": "busy"}), None);
+        r.open(0);
+        r.page(w);
+        let cache = &mut r.m.edit.question_cache;
+        if let EditView::Question(p) = &mut r.m.edit.view {
+            p.show(2, cache);
+        }
+        both(&mut r, "27-show-failed", w);
+        // (round 5, critic I5) the result dismissed: Undo stays on the row restored
+        let mut r = rig();
+        r.script_load();
+        r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+        r.open(0);
+        r.page(w);
+        r.qpage_mut().ask_restore(2);
+        r.page(w);
+        let cache = &mut r.m.edit.question_cache;
+        if let EditView::Question(p) = &mut r.m.edit.view {
+            p.confirm_restore(cache);
+        }
+        r.page(w);
+        r.qpage_mut().restore = None;
+        both(&mut r, "28-undo-after-dismiss", w);
+        // (round 5, critic I3) a question of the bank open in the editor: the restore waits
+        let mut r = rig();
+        r.script_load();
+        r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+        r.open(0);
+        r.page(w);
+        r.qpage_mut().ask_restore(2);
+        r.m.edit.set_question_draft(Some(LOCAL));
+        both(&mut r, "29-restore-under-draft", w);
     }
 }
 
@@ -1521,7 +1582,7 @@ fn zz_undo_overwrites_an_edit_made_after_the_restore() {
     assert!(r.click(1280.0, "Undo restore", 0));
     let t = r.page(1280.0);
     assert_eq!(r.banks[0].questions[0].stem, "Edited after the restore", "undo silently overwrote the later edit");
-    assert!(t.contains("changed (or deleted) after the restore"), "{t}");
+    assert!(t.contains("changed after the restore"), "{t}");
 }
 
 #[test]
@@ -1802,8 +1863,17 @@ fn d2g_a_list_answered_after_a_role_change_is_not_taken_for_the_new_role() {
     r.frame_at(1280.0, Vec::new());
     // the old role's read: its lines (its lists, tag e1, are queued below: it asks for them only once released)
     r.w.on("Get", &versions_path(), 200, lines_json(), None);
-    let release = r.w.hold();
+    let release = r.w.hold(&format!("Get {}", versions_path()));
     r.open_cold(0);
+    // (round 5) deterministic: the old read has asked for its lines (and so holds the gate) before anything else is asked
+    for _ in 0..2000 {
+        if r.w.gate.lock().unwrap().is_none() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    assert!(r.w.gate.lock().unwrap().is_none(), "the old read waits at the gate");
+    assert_eq!(list_reads(&r.w), 1);
     // (the circle's own checks say viewer from now on too)
     r.w.keep("Get", "/circles", circles_list("viewer"));
     r.w.keep("Get", &format!("/circles/{CID}"), detail("viewer", json!({})));
@@ -1837,4 +1907,276 @@ fn d2g_a_list_answered_after_a_role_change_is_not_taken_for_the_new_role() {
     r.page(1280.0);
     assert_eq!(r.m.edit.question_cache.page(CID, BID, &s).and_then(|p| p.etag.clone()).as_deref(), Some("\"viewer-1\""), "the old role's answer is not used");
     assert!(!r.page(1280.0).contains("Changed"), "nor drawn");
+}
+
+
+// ---- round 5 (third critic pair): the critics' probes, ported to assertions ----------------------------------------
+
+#[test]
+fn probe_u1_asking_with_a_failing_read_loops() {
+    // (critic I2) the question's read fails: read once, the error said with Try again, Yes waits for the version
+    let mut r = rig();
+    r.script_load();
+    for _ in 0..200 {
+        r.w.on("Get", &version_path(2), 503, json!({"error": "busy"}), None);
+    }
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Restore...", 0));
+    let n0 = r.w.calls("/versions/2");
+    for _ in 0..20 {
+        r.page(1280.0);
+    }
+    let t = r.page(1280.0);
+    assert_eq!(r.w.calls("/versions/2"), n0, "read once per ask");
+    assert_eq!(n0, 1);
+    assert!(!t.contains("Reading version 2...") && t.contains("Try again"), "{t}");
+    // Yes waits for the version
+    assert!(r.click(1280.0, "Yes, restore", 0));
+    assert_eq!(r.qpage().restore.as_ref().map(|x| x.state.clone()), Some(RestoreState::Asking));
+    // Try again reads once more
+    assert!(r.click(1280.0, "Try again", 0));
+    assert_eq!(r.w.calls("/versions/2"), 2);
+}
+
+#[test]
+fn critic3_restore_question_rereads_a_failing_version_every_frame() {
+    // (critic S1, ported) a persistent failure (not a version body)
+    let mut r = rig();
+    r.script_load();
+    r.w.keep("Get", &version_path(2), json!({"nope": true}));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Restore...", 0));
+    let after_click = r.w.calls("/versions/2");
+    for _ in 0..30 {
+        r.frame_at(1280.0, Vec::new());
+    }
+    let n = r.w.calls("/versions/2");
+    assert!(n <= after_click + 1, "the confirmation re-reads the version every frame: {after_click} -> {n}");
+}
+
+#[test]
+fn probe_u2_show_failure_spins_forever() {
+    // (critic I6) a failed Show says so, with Try again
+    let mut r = rig();
+    r.script_load();
+    r.w.on("Get", &version_path(5), 503, json!({"error": "busy"}), None);
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Show", 0));
+    for _ in 0..10 {
+        r.page(1280.0);
+    }
+    let t = r.page(1280.0);
+    assert!(!t.contains("Reading version 5...") && t.contains("Try again"), "{t}");
+    assert_eq!(r.w.calls("/versions/5"), 1);
+    r.w.raw(&version_path(5), served(5, &[qj(QA, A5), qj(QB, B)], false));
+    assert!(r.click(1280.0, "Try again", 0));
+    let t = r.page(1280.0);
+    assert!(t.contains("Version 5, as it was"), "{t}");
+}
+
+#[test]
+fn probe_u3_restore_base_says_unsent() {
+    // (critic I1) restoring the version the copy is based on: the copy is in step again, and the Done words say so
+    let mut r = rig();
+    r.script_load();
+    r.banks[0].questions[0].stem = "My own unsent edit".into();
+    r.banks[0].modified += 10;
+    r.w.raw(&version_path(5), served(5, &[qj(QA, A5), qj(QB, B)], false));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Restore...", 0));
+    assert!(r.click(1280.0, "Yes, restore", 0));
+    let t = r.page(1280.0);
+    assert!(!t.contains("counts as an unsent change") && t.contains("the same as version 5"), "{t}");
+    assert!(r.click(1280.0, "< Back to Unit 2 quiz", 0));
+    r.page(1280.0);
+    assert_eq!(r.m.edit.status(LOCAL).map(|s| s.changes.total()), Some(0));
+}
+
+#[test]
+fn probe_u4_try_again_after_a_failed_undo_asks_to_restore() {
+    // (critic I4) a failed Undo is the undo's own: a lasting reason has no Try again, a passing one retries the undo
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Restore...", 0));
+    assert!(r.click(1280.0, "Yes, restore", 0));
+    r.page(1280.0);
+    // something changes the question after the restore
+    r.banks[0].questions[0].difficulty = Some(crate::model::Difficulty::High);
+    r.banks[0].modified += 5;
+    assert!(r.click(1280.0, "Undo restore", 0));
+    let t = r.page(1280.0);
+    assert!(!t.contains("Try again"), "a lasting reason: {t}");
+    assert!(!r.click(1280.0, "Try again", 0));
+    // a restore point that can not be saved for now: Try again undoes, never restores again
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Restore...", 0));
+    assert!(r.click(1280.0, "Yes, restore", 0));
+    r.page(1280.0);
+    r.restores.1.store(true, std::sync::atomic::Ordering::Relaxed);
+    assert!(r.click(1280.0, "Undo restore", 0));
+    let t = r.page(1280.0);
+    assert!(t.contains("disk is full") && t.contains("Try again"), "{t}");
+    r.restores.1.store(false, std::sync::atomic::Ordering::Relaxed);
+    assert!(r.click(1280.0, "Try again", 0));
+    let t = r.page(1280.0);
+    assert!(!t.contains("Replace your copy of question 1 with version 2's?"), "Try again asks to restore: {t}");
+    assert_eq!(r.banks[0].questions[0].stem, A5, "the undo was made");
+}
+
+#[test]
+fn probe_u5_dismiss_loses_undo() {
+    // (critic I5) Dismiss leaves Undo reachable until the page is left
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Restore...", 0));
+    assert!(r.click(1280.0, "Yes, restore", 0));
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Dismiss", 0));
+    let t = r.page(1280.0);
+    assert!(t.contains("Undo restore"), "{t}");
+    assert!(r.click(1280.0, "Undo restore", 0));
+    r.page(1280.0);
+    assert_eq!(r.banks[0].questions[0].stem, A5);
+}
+
+#[test]
+fn critic3_show_draws_a_stripped_body_as_if_it_had_its_key() {
+    // (critic S2, ported) hiding turned on after the lists were read: the body comes stripped
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], true));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Show", 1));
+    let t = r.page(1280.0);
+    assert!(!t.contains("Answer key: none marked") && !t.contains("Answer key: no key") && !t.contains("Answer key: choice"), "a stripped body's key drawn as a real one:\n{t}");
+}
+
+#[test]
+fn critic3_a_flood_of_history_lines_hangs_the_page() {
+    // (critic S3, ported) 20,000 history lines
+    let mut r = rig();
+    let n: u64 = 20000;
+    let lines: Vec<Value> = (1..=n).rev().map(|v| json!({"version": v, "kept": true, "withheld": false, "by": "x", "at": NOW, "message": "m"})).collect();
+    r.w.on("Get", &versions_path(), 200, json!({"bank_id": BID, "head_version": n, "versions": lines}), None);
+    r.w.on("Get", &changes_path(), 200, json!({"bank_id": BID, "head_version": n, "per_question": true, "versions": []}), Some("\"e1\""));
+    r.open(0);
+    let t = std::time::Instant::now();
+    r.frame_at(1280.0, Vec::new());
+    let first = t.elapsed();
+    r.qpage_mut().show_all = true;
+    let t = std::time::Instant::now();
+    r.frame_at(1280.0, Vec::new());
+    r.frame_at(1280.0, Vec::new());
+    assert!(first < std::time::Duration::from_millis(300), "first frame {first:?}");
+    assert!(t.elapsed() < std::time::Duration::from_millis(500), "{:?}", t.elapsed());
+}
+
+#[test]
+fn d2h_a_restore_waits_while_a_question_of_the_bank_is_open_in_the_editor() {
+    // (critic I3) the pop-over or the exams page opened an editor draft for this bank while the page was open
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Restore...", 0));
+    r.m.edit.set_question_draft(Some(LOCAL));
+    let cache = &mut r.m.edit.question_cache;
+    if let EditView::Question(p) = &mut r.m.edit.view {
+        p.confirm_restore(cache);
+    }
+    let t = r.page(1280.0);
+    assert_eq!(r.banks[0].questions[0].stem, A5, "not restored under an open draft");
+    assert!(t.contains(super::question_history_ui::DRAFT_OPEN), "{t}");
+    // the draft closed: asked again, then made
+    r.m.edit.set_question_draft(None);
+    r.qpage_mut().ask_restore(2);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Yes, restore", 0));
+    r.page(1280.0);
+    assert_eq!(r.banks[0].questions[0].stem, A3);
+    // and Undo waits for a draft too
+    r.m.edit.set_question_draft(Some(LOCAL));
+    assert!(r.click(1280.0, "Undo restore", 0));
+    let t = r.page(1280.0);
+    assert_eq!(r.banks[0].questions[0].stem, A3);
+    assert!(t.contains(super::question_history_ui::DRAFT_OPEN), "{t}");
+}
+
+#[test]
+fn d2h_a_confirmed_restore_is_made_only_while_its_page_is_shown() {
+    // (critic I3) the bank's page left after Yes, before the version came: another page's sync does not make it unseen
+    let mut r = rig();
+    r.script_load();
+    r.open(0);
+    r.page(1280.0);
+    r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+    r.qpage_mut().ask_restore(2);
+    r.page(1280.0);
+    let cache = &mut r.m.edit.question_cache;
+    if let EditView::Question(p) = &mut r.m.edit.view {
+        p.confirm_restore(cache);
+    }
+    // frames pass with the page not drawn (another screen), the circle model synced from elsewhere
+    for k in 0..5u64 {
+        r.m.edit.set_pass(10_000 + k);
+        r.m.edit.sync(&mut r.banks);
+    }
+    assert_eq!(r.banks[0].questions[0].stem, A5, "not made while nobody sees it");
+}
+
+#[test]
+fn d2h_the_back_label_follows_a_renamed_bank() {
+    let mut r = rig();
+    r.script_load();
+    r.open(0);
+    r.page(1280.0);
+    r.banks[0].name = "Unit 2 quiz (renamed)".into();
+    r.banks[0].modified += 1;
+    let t = r.page(1280.0);
+    assert!(t.contains("< Back to Unit 2 quiz (renamed)"), "{t}");
+}
+
+#[test]
+fn d2h_show_every_version_is_offered_whenever_versions_are_hidden() {
+    // (round 5) no version is "no longer kept", but kept versions that did not change the question are not listed
+    let mut r = rig();
+    let mut l = lines_json();
+    l["versions"].as_array_mut().unwrap().pop();
+    r.w.on("Get", &versions_path(), 200, l, None);
+    r.w.on("Get", &changes_path(), 200, changes_json(), Some("\"e1\""));
+    r.open(0);
+    let t = r.page(1280.0);
+    assert!(!t.contains("no longer kept in full") && t.contains("Show every version"), "{t}");
+    assert!(r.click(1280.0, "Show every version", 0));
+    assert!(r.page(1280.0).contains("Version 3"));
+}
+
+#[test]
+fn d2h_show_compares_nothing_and_says_what_the_picture_is() {
+    // (round 5) one version's question: no "the same picture", no "not compared"
+    let mut r = rig();
+    r.script_load();
+    let sha = sha256_hex(b"pic");
+    r.w.raw(&version_path(2), served(2, &[pictured(&sha)], false));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Show", 1));
+    let t = r.page(1280.0);
+    assert!(t.contains("Picture: a picture") && !t.contains("the same picture") && !t.contains("not compared"), "{t}");
 }

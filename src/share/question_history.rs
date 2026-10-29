@@ -8,11 +8,16 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 
-use super::browse::{ImageSink, RestoreSink};
+#[cfg(test)]
+use super::browse::ImageSink;
+use super::browse::RestoreSink;
 use super::canon;
-use super::circle_links::{CircleLink, circle_theirs_as, payload_question_count, sha_of_file};
+#[cfg(test)]
+use super::circle_links::payload_question_count;
+use super::circle_links::{CircleLink, circle_theirs_as, sha_of_file};
 use super::circle_versions_api::{ChangeEntry, ChangesPage, QuestionChange, VersionLine};
 use super::merge::{self, Theirs};
+#[cfg(test)]
 use super::pool::{LocalProblem, Pool, PoolError};
 use super::publish_text::shown;
 use crate::model::{Answer, ImageRef, Kind, PartKind, Question, QuestionBank, is_keyless};
@@ -175,17 +180,19 @@ fn readable_line(l: &VersionLine) -> bool {
     l.kept && !l.withheld
 }
 
-struct Lines(Vec<VersionLine>);
+/// The lines, newest first, with (round 5, critic S3) an index by version.
+struct Lines(Vec<VersionLine>, std::collections::HashMap<u64, usize>);
 
 impl Lines {
     fn of(lines: &[VersionLine]) -> Lines {
         let mut l = lines.to_vec();
         l.sort_by_key(|a| std::cmp::Reverse(a.version));
         l.dedup_by_key(|x| x.version);
-        Lines(l)
+        let at = l.iter().enumerate().map(|(i, x)| (x.version, i)).collect();
+        Lines(l, at)
     }
     fn get(&self, v: u64) -> Option<&VersionLine> {
-        self.0.iter().find(|l| l.version == v)
+        self.1.get(&v).map(|i| &self.0[*i])
     }
     /// Kept and readable, as far as the lines say (a version with no line read yet is taken as the lists say).
     fn readable(&self, v: u64) -> bool {
@@ -562,7 +569,9 @@ pub fn reads_needed(lines: &[VersionLine], cache: &mut HistoryCache, cid: &str, 
     Ok(out)
 }
 
-/// A version's body: from the cache, or one `GET .../versions/:n` (kept in the cache).
+/// A version's body: from the cache, or one `GET .../versions/:n` (kept in the cache). (round 5, critic S-m4) Tests
+/// only: the page reads through its own jobs, which check the answer.
+#[cfg(test)]
 pub async fn read_body(pool: &Pool<'_>, cache: &mut HistoryCache, cid: &str, bid: &str, scope: &str, version: u64, at_ms: i64) -> Result<Arc<VersionBody>, PoolError> {
     if let Some(b) = cache.body(cid, bid, scope, version) {
         return Ok(b);
@@ -577,7 +586,8 @@ pub async fn read_body(pool: &Pool<'_>, cache: &mut HistoryCache, cid: &str, bid
 }
 
 /// A picture of the circle bank by its hash (checked against the bytes by `circle_blob`), stored on this computer.
-/// `Ok(None)`: it could not be stored here.
+/// `Ok(None)`: it could not be stored here. Tests only, as `read_body`.
+#[cfg(test)]
 pub async fn fetch_picture(pool: &Pool<'_>, cid: &str, bid: &str, sha: &str, images: &dyn ImageSink) -> Result<Option<ImageRef>, PoolError> {
     let blob = pool.circle_blob(cid, bid, sha).await?;
     Ok(images.put(&blob.bytes).ok())
@@ -1051,11 +1061,22 @@ pub fn restore_question(banks: &mut [QuestionBank], ask: &RestoreAsk, sink: &dyn
         if merge::same_question(q, &r) && q.image.as_ref().map(|i| &i.file) == r.image.as_ref().map(|i| &i.file) {
             return Err(RestoreRefused::Same);
         }
-        // (round 4, critic P-2) a difference the copy's record of the circle can not count (a figure's settings, the same
-        // picture): the strip would go on saying "in step", so it is not made here
-        let snap = |x: &Question| serde_json::to_value(merge::snap_of(x, x.image.as_ref().and_then(|i| sha_of_file(&i.file)))).ok();
-        if snap(q) == snap(&r) {
-            return Err(RestoreRefused::NotCountable);
+        // (round 4, critic P-2; round 5, critic B1) a restore the strip would count as nothing, judged as the strip judges:
+        // against the link's record of the base, its texts compared as the server stores them. If the copy would then be
+        // "in step" but differ from what it is now in what that record can not hold (a figure's settings), the strip would
+        // say "up to date" over a change never offered: it is not made here.
+        let base = link.base.iter().find(|b| b.local_id == q.id);
+        let figure_moves = merge::Sig::of(q).figure != merge::Sig::of(&r).figure;
+        match base {
+            Some(b) if !merge::ours_changed(b, &r) && figure_moves => return Err(RestoreRefused::NotCountable),
+            // no record of the base: as before, the two compared directly
+            None => {
+                let snap = |x: &Question| serde_json::to_value(merge::snap_of(x, x.image.as_ref().and_then(|i| sha_of_file(&i.file)))).ok();
+                if snap(q) == snap(&r) {
+                    return Err(RestoreRefused::NotCountable);
+                }
+            }
+            _ => {}
         }
     }
     let replaced = at.map(|i| (i, bank.questions[i].clone()));

@@ -270,12 +270,21 @@ pub(super) fn badge_line(ui: &mut Ui, b: &Badge, warns: bool) {
 /// asks nothing, for a bank with no link. Saves the banks itself when a merge changed them.
 pub fn strip(ui: &mut Ui, app: &mut crate::App, bank_id: &str) -> bool {
     let snap = snapshot_of(&app.account.model);
+    // (phase D2, round 5) a question of this bank open in the editor holds back a restore of one of its questions
+    shared_draft(&mut app.shared.circles, app.qedit.as_ref(), bank_id);
     let crate::App { shared, store, browse, account, qedit, .. } = app;
     let out = strip_for_editor(ui, &mut shared.circles, &mut store.banks, &mut browse.model, account, &snap, Instant::now(), now_ms(), bank_id, qedit.as_mut());
     if out.save {
         store.save_banks();
     }
     out.page
+}
+
+/// (phase D2, round 5) Tells the circle model whether a question of `bank_id` is open in the app's editor (a new question's
+/// draft is not: it can not be written over a restored one).
+fn shared_draft(c: &mut super::circles::CirclesModel, draft: Option<&crate::qedit::Draft>, bank_id: &str) {
+    let open = draft.is_some_and(|d| d.bank_id == bank_id && d.qid.is_some());
+    c.edit.set_question_draft(open.then_some(bank_id));
 }
 
 /// [`strip_with`], then (round 15, critic 91 I1) the open question editor's draft is told of a difficulty just taken from the
