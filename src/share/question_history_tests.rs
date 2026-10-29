@@ -1083,3 +1083,142 @@ fn d2h_a_history_page_is_read_no_further_than_the_pool_pages_it() {
     assert_eq!(p.versions.len(), HISTORY_PAGE);
     assert_eq!(p.versions[0].version, 20_000);
 }
+
+// ---- throwaway critic probes (round 6) ---------------------------------------------------------------------------------
+
+#[test]
+fn d2i_restoring_the_base_version_over_a_stem_and_figure_edit_is_allowed() {
+    // (round 6, critic N1) an unsent stem edit AND an unsent figure-settings edit; the base version itself (9, no figure)
+    // is restored. The result IS version 9 exactly, so it can bring nothing the link's record lacks: never NotCountable.
+    let (mut bank, link) = linked();
+    let a = local_of(&link, QA);
+    bank.questions[0].stem = "My unsent edit".into();
+    bank.questions[0].figure = Some(crate::model::FigureSpec { id: "triangle".into(), params: [("a".to_string(), json!(3))].into_iter().collect() });
+    bank.modified += 10;
+    let mut banks = vec![bank];
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    let nine = body(9, &v9(), false);
+    let r = restore_question(&mut banks, &ask(&link, Some(&a), QA, &nine), &sink, &|_: &[QuestionBank]| Ok(()), NOW + 100_000);
+    assert!(r.is_ok(), "restoring the base version exactly is refused: {:?}", r.map(|d| d.version));
+    assert_eq!(changes_since(&link, &banks[0]).changed, 0);
+}
+
+#[test]
+fn d2i_a_figure_the_copy_already_has_is_not_refused_as_new() {
+    // (round 6, critic N1, reported only) base v9 has no figure; the copy already has figure a=4 (uncounted by the strip)
+    // and a stem edit; version 6 is v9's content with the same figure a=4. Nothing moves in the figure, so the restore is
+    // allowed. The strip then counts nothing: this uncounted figure predates the restore (the strip could not see it with
+    // the stem edit either), so it is a known gap, not one the restore opens.
+    let (mut bank, link) = linked();
+    let a = local_of(&link, QA);
+    bank.questions[0].stem = "edit".into();
+    bank.questions[0].figure = Some(crate::model::FigureSpec { id: "triangle".into(), params: [("a".to_string(), json!(4))].into_iter().collect() });
+    bank.modified += 10;
+    let mut q = mc(QA, "Question A as of version 9", 1.0);
+    q["figure"] = json!({"id": "triangle", "params": {"a": 4}});
+    let b = body(6, &[q, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)], false);
+    let mut banks = vec![bank];
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    let r = restore_question(&mut banks, &ask(&link, Some(&a), QA, &b), &sink, &|_: &[QuestionBank]| Ok(()), NOW + 100_000);
+    assert_eq!(r.map(|d| d.version), Ok(6));
+    assert_eq!(changes_since(&link, &banks[0]).changed, 0);
+}
+
+#[test]
+fn d2i_a_topics_reorder_is_a_counted_change_never_refused() {
+    // (round 6, critic N1) the pool keeps its topics in order (its hash reads them in order), so version 6's reordered
+    // topics are a change the strip counts: the restore is allowed and the copy counts as changed, never "in step".
+    let (mut bank, link) = linked();
+    let a = local_of(&link, QA);
+    bank.questions[0].topics = vec!["x".into(), "y".into()];
+    let mut link = link;
+    link.base[0].snap.topics = vec!["x".into(), "y".into()];
+    link.mark_bank(&bank);
+    let mut q = mc(QA, "Question A as of version 9", 1.0);
+    q["topics"] = json!(["y", "x"]);
+    let b = body(6, &[q, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)], false);
+    let mut banks = vec![bank];
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    let r = restore_question(&mut banks, &ask(&link, Some(&a), QA, &b), &sink, &|_: &[QuestionBank]| Ok(()), NOW + 100_000);
+    assert_eq!(r.map(|d| d.version), Ok(6));
+    assert_eq!(banks[0].questions[0].topics, vec!["y".to_string(), "x".to_string()]);
+    assert_eq!(changes_since(&link, &banks[0]).changed, 1);
+}
+
+#[test]
+fn d2i_a_figure_only_change_cannot_slip_in_through_a_deleted_question() {
+    // (round 6, critic N1) QA deleted here (unsent). Version 6 = version 9's QA with other figure settings, same (no)
+    // picture. The strip would count nothing after such a restore (the removal is undone, the figure is invisible), so it
+    // is refused exactly as for a copy present: never skipped because the question is gone.
+    let (mut bank, link) = linked();
+    let a = local_of(&link, QA);
+    bank.questions.retain(|q| q.id != a);
+    bank.modified += 10;
+    let mut q = mc(QA, "Question A as of version 9", 1.0);
+    q["figure"] = json!({"id": "triangle", "params": {"a": 4}});
+    let b = body(6, &[q, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)], false);
+    let mut banks = vec![bank];
+    let before = json_of(&banks);
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    let r = restore_question(&mut banks, &ask(&link, Some(&a), QA, &b), &sink, &|_: &[QuestionBank]| Ok(()), NOW + 100_000);
+    assert_eq!(r.map(|d| d.version), Err(RestoreRefused::NotCountable), "a figure-only difference slipped in through a deleted question");
+    assert_eq!(json_of(&banks), before);
+    assert!(sink.log.lock().unwrap().is_empty());
+}
+
+#[test]
+fn d2i_a_deleted_question_comes_back_from_a_counted_version() {
+    // (round 6, critic N1) the same deleted question, restored from a version that really changes its words: the picture
+    // and words count, so it comes back (never refused for a figure it does not carry).
+    let (mut bank, link) = linked();
+    let a = local_of(&link, QA);
+    bank.questions.retain(|q| q.id != a);
+    bank.modified += 10;
+    let mut banks = vec![bank];
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    let six = body(6, &v6(), false);
+    let r = restore_question(&mut banks, &ask(&link, Some(&a), QA, &six), &sink, &|_: &[QuestionBank]| Ok(()), NOW + 100_000);
+    assert_eq!(r.map(|d| d.version), Ok(6));
+    assert_eq!(banks[0].questions.len(), 3);
+    assert_eq!(banks[0].questions.iter().find(|q| q.id == a).map(|q| q.stem.as_str()), Some("Question A as of version 6"));
+}
+
+// ---- throwaway critic probe (round 6, copy7): a re-encoded picture ------------------------------------------------------
+
+#[test]
+fn zcrit_a_circle_picture_the_store_keeps_as_webp_reads_as_a_different_picture() {
+    // a PNG in the circle (sent by an older build, whose files are the hash of a PNG): this build keeps it as WebP
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(3, 2, image::Rgb([200, 10, 10])))
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    let circle_sha = sha256_hex(&png);
+    let prepared = crate::store::prepare_image(&png).unwrap();
+    let local_file = format!("media/{}.webp", sha256_hex(&prepared.bytes));
+    assert_ne!(Some(circle_sha.clone()), sha_of_file(&local_file), "the store renames it");
+    // version 9 as the pool serves it; the teammate's copy as a copy lands it (picture stored, base from theirs)
+    let mut q = mc(QA, "With a picture", 1.0);
+    q["image"] = json!({"file": format!("media/{circle_sha}.png"), "width": 3, "height": 2});
+    let nine = body(9, &[q.clone()], false);
+    let mut theirs = circle_theirs(&payload(&[q]), NOW);
+    for t in &mut theirs {
+        t.q.image = Some(ImageRef { file: local_file.clone(), width: 3, height: 2 });
+    }
+    let bank = QuestionBank { id: LOCAL.into(), name: "Cells".into(), questions: theirs.iter().map(|t| t.q.clone()).collect(), created: NOW / 1000, modified: NOW / 1000, details: Default::default() };
+    let head = BankHead { id: BID.into(), title: "Cells".into(), license: "CC-BY-4.0".into(), version: 9, version_id: format!("{:032x}", 9), committed_at: NOW - DAY, ..BankHead::default() };
+    let base = theirs.iter().map(|t| base_of(&t.q, &t.qid, &t.fp, t.sha.clone())).collect();
+    let mut link = CircleLink::from_head(CID, "Biology team", &head, LOCAL, base, NOW);
+    link.mark_bank(&bank);
+    let a = local_of(&link, QA);
+    // the strip: in step, nothing to send
+    let c = changes_since(&link, &bank);
+    println!("strip count: {c:?}; your copy: {:?}", your_copy(&link, &bank, &a));
+    // the page's compare of "Your copy" with the very version it is in step with
+    let cmp = compare(side_of_copy(&bank, &a).as_ref(), side_of_version(&nine, QA).as_ref(), false);
+    println!("changed fields: {:?}; picture row: {:?}", cmp.changed_fields(), cmp.fields.iter().find(|f| f.field == "Picture"));
+    // a restore of that same version is not "already the same": it needs the picture fetched
+    let mut banks = vec![bank.clone()];
+    let r = restore_question(&mut banks, &ask(&link, Some(&a), QA, &nine), &BadRestore, &|_| Ok(()), NOW + 1000);
+    println!("restore of the version the copy is: {r:?}");
+    assert!(cmp.changed_fields().is_empty(), "the copy and the version it is in step with differ only in how this computer named the same picture: {:?}", cmp.changed_fields());
+}

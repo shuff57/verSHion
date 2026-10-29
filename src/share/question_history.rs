@@ -1055,22 +1055,31 @@ pub fn restore_question(banks: &mut [QuestionBank], ask: &RestoreAsk, sink: &dyn
     r.created = existing.map_or(secs, |q| q.created);
     r.modified = secs;
     r.image = image;
-    if let Some(q) = existing
-        && !deferred
-    {
-        if merge::same_question(q, &r) && q.image.as_ref().map(|i| &i.file) == r.image.as_ref().map(|i| &i.file) {
+    if !deferred {
+        if let Some(q) = existing
+            && merge::same_question(q, &r)
+            && q.image.as_ref().map(|i| &i.file) == r.image.as_ref().map(|i| &i.file)
+        {
             return Err(RestoreRefused::Same);
         }
         // (round 4, critic P-2; round 5, critic B1) a restore the strip would count as nothing, judged as the strip judges:
         // against the link's record of the base, its texts compared as the server stores them. If the copy would then be
         // "in step" but differ from what it is now in what that record can not hold (a figure's settings), the strip would
         // say "up to date" over a change never offered: it is not made here.
-        let base = link.base.iter().find(|b| b.local_id == q.id);
-        let figure_moves = merge::Sig::of(q).figure != merge::Sig::of(&r).figure;
+        // (round 6, critic N1) The version the copy is based on *is* that record, so restoring it can not bring anything the
+        // record lacks: no refusal. And a question the copy no longer has is judged the same way, never skipped: with no
+        // copy's figure to compare, any figure the version carries is a change the record can not count.
+        let base = link.base.iter().find(|b| b.local_id == local_id);
         match base {
-            Some(b) if !merge::ours_changed(b, &r) && figure_moves => return Err(RestoreRefused::NotCountable),
+            Some(b) if ask.body.version != link.base_version && !merge::ours_changed(b, &r) => {
+                let uncounted = existing.map_or(r.figure.is_some(), |q| merge::Sig::of(q).figure != merge::Sig::of(&r).figure);
+                if uncounted {
+                    return Err(RestoreRefused::NotCountable);
+                }
+            }
             // no record of the base: as before, the two compared directly
-            None => {
+            None if existing.is_some() => {
+                let q = existing.expect("checked");
                 let snap = |x: &Question| serde_json::to_value(merge::snap_of(x, x.image.as_ref().and_then(|i| sha_of_file(&i.file)))).ok();
                 if snap(q) == snap(&r) {
                     return Err(RestoreRefused::NotCountable);
