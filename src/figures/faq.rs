@@ -31,6 +31,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "micropipette-reading" => MICROPIPETTE_READING,
         "hardy-weinberg" => HARDY_WEINBERG,
         "chi-square-fit" => CHI_SQUARE_FIT,
+        "enzyme-kinetics" => ENZYME_KINETICS,
         // chemistry
         "bohr-model" => BOHR_MODEL,
         "gas-syringe" => GAS_SYRINGE,
@@ -586,6 +587,29 @@ const CHI_SQUARE_FIT: &[Faq] = &[
     Faq {
         q: "Why is the statistic a sum of (O - E)\u{b2} / E?",
         a: "Each category contributes how far its count is from the expected count, squared so that over- and under-counting both count, and divided by the expected count so that a difference of 2 matters much more in a category expecting 5 than in one expecting 500.",
+    },
+];
+
+const ENZYME_KINETICS: &[Faq] = &[
+    Faq {
+        q: "What do Vmax and Km mean?",
+        a: "Vmax is the rate the enzyme reaches when every active site is busy, so the curve levels off towards it and never passes it. Km is the substrate concentration that gives half of Vmax: a low Km means the enzyme is already working fast at low concentrations, a high Km means it needs a lot of substrate.",
+    },
+    Faq {
+        q: "Why does the curve bend over instead of rising straight?",
+        a: "At low concentrations most collisions are between enzyme and substrate, so doubling the substrate roughly doubles the rate. As the substrate rises, more and more active sites are already occupied, so extra substrate has less and less effect until the enzyme is saturated.",
+    },
+    Faq {
+        q: "What does a competitive inhibitor do to the graph?",
+        a: "It binds the free enzyme, so substrate and inhibitor compete for the same site. More substrate is needed to reach half of Vmax, so Km rises; but at a high enough concentration the substrate wins, so Vmax is unchanged. On the graph the curve is stretched to the right.",
+    },
+    Faq {
+        q: "What does a noncompetitive inhibitor do?",
+        a: "It binds the enzyme somewhere other than the active site and takes that enzyme out of play. Some enzyme is simply unavailable however much substrate is added, so Vmax falls; the concentration needed for half of the new, lower Vmax is unchanged, so Km stays the same. The curve is squashed downwards.",
+    },
+    Faq {
+        q: "Why is the marked rate always below Vmax?",
+        a: "Because the enzyme can only work as fast as its active sites allow. The formula v = Vmax [S] / (Km + [S]) gives a fraction of Vmax for any finite concentration, and only approaches Vmax as the concentration becomes very large.",
     },
 ];
 

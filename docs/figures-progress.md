@@ -466,3 +466,16 @@ over four settings, a perfect fit giving 0 and p = 1, a wide mismatch being reje
 part of zero with something observed there refusing to produce a statistic, mismatched lists reported, the empty
 input, the student/key split, the never-zero prints, Print neutrality and the PNG export. No handles, so it joins
 `NO_HANDLES`. Census: only `chi-square-fit__defaults` and `chi-square-fit__start` added.
+
+Enzyme kinetics: new figure `enzyme-kinetics` (`src/figures/biology/enzyme.rs`, Biology). The Michaelis-Menten curve
+v = Vmax[S]/(Km + [S]) against the axis, with Vmax drawn as the dashed asymptote, Km marked by the two dotted lines
+that meet at half Vmax, and a draggable point reading the rate at a chosen concentration. An inhibitor choice moves
+exactly one of the constants: competitive raises Km by (1 + [I]/Ki) and leaves Vmax, noncompetitive divides Vmax by
+(1 + [I]/Ki) and leaves Km. The curve, the two constants and the marked rate are the answer and absent from the
+student copy, which keeps the axes, their numbers and the givens so the student sketches the curve and marks the
+constants. Defects the exports caught: the givens line printed into the readout (8 px apart); the readout repeated
+the typed Vmax and Km, which are already given (it now shows only the derived pair under inhibition and the marked
+rate); **the noncompetitive case inverted the mapping and printed "Without it: Vmax = 2, Km = 10"**, the shifted
+pair rather than the typed one (a test now pins the "Without it" line to the typed values for both inhibitors); and
+the marked point's label printed into the Vmax asymptote when the point sat just under it (it drops below the point
+there). Census: only `enzyme-kinetics__defaults` and `enzyme-kinetics__start` added.

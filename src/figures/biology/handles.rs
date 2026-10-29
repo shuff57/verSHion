@@ -13,6 +13,7 @@ pub fn handles(id: &str, p: &Params, size: Pt) -> Option<Vec<Handle>> {
         "gel-electrophoresis" => gel_h(p, size),
         "micropipette-reading" => pipette_h(p, size),
         "hardy-weinberg" => return super::hardyweinberg::handles(id, p, size),
+        "enzyme-kinetics" => return super::enzyme::handles(id, p, size),
         _ => return None,
     })
 }

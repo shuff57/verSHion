@@ -6,6 +6,7 @@ use super::*;
 
 mod handles;
 pub mod chisquarefit;
+pub mod enzyme;
 pub mod gel;
 pub mod hardyweinberg;
 pub mod pedigree;
@@ -26,6 +27,7 @@ pub fn examples(id: &str) -> Option<Vec<super::Example>> {
         "micropipette-reading" => Some(pipette::examples()),
         "hardy-weinberg" => hardyweinberg::examples(id),
         "chi-square-fit" => chisquarefit::examples(id),
+        "enzyme-kinetics" => enzyme::examples(id),
         _ => None,
     }
 }
@@ -121,6 +123,7 @@ pub fn defs() -> Vec<FigureDef> {
         },
         hardyweinberg::defs().pop().unwrap(),
         chisquarefit::defs().pop().unwrap(),
+        enzyme::defs().pop().unwrap(),
     ]
 }
 
