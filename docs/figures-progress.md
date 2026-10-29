@@ -178,6 +178,13 @@ Tests: the formula at the defaults (8 uT), doubling the distance halving the fie
 the direction following the sense, P inside the outer circle at every distance, the student/key split, a small field
 never printing zero, and Print neutrality. Census: only `magnetic-field__defaults` and `magnetic-field__start` added.
 
+Standing waves: new figure `standing-wave` (`src/figures/standing.rs`, Physics). A string fixed at both ends with a
+snapshot of the standing wave, the envelope it swings between (dashed), the nodes as dots and the antinodes between
+them, and the wavelength 2L/n, the frequency nv/2L and the two counts, all blanked on the student copy. Tests: the
+fundamental as half a wavelength, all six harmonics scaling as n and 1/n with f lambda = v, the nodes and antinodes
+where the drawn wave crosses and peaks, a short string never printing zero, the student/key split, and Print
+neutrality. Census: only `standing-wave__defaults` and `standing-wave__start` added.
+
 ## Phase 3: physics
 
 Circular motion: new figure `circular-motion` (`src/figures/circular.rs`, Physics). A body on a circle at a chosen
