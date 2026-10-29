@@ -2497,15 +2497,18 @@ fn draw_card(
             }
         });
         let hid = ui.id().with(("qhdr", q.map(|q| q.id.as_str()).unwrap_or("<new>")));
-        // (round 7, critic M7; round 8, critic P) the card's menu route is said on the card, where the person looks, and it
-        // promises only what this bank's menu holds: an unlinked bank's has Duplicate and Delete, no history
-        let linked = app.shared.circles.edit.with_link(bank_id, |_| ()).is_some();
-        let hint = if linked {
-            "Right-click for Duplicate, Delete and History in the circle; Shift+F10 works from the keyboard."
-        } else {
-            "Right-click for Duplicate and Delete; Shift+F10 works from the keyboard."
+        // (round 7, critic M7; round 8, critic P; round 9, critic M5) the card's menu route is said on the card, where the
+        // person looks, and it promises only what this card's menu holds: an unlinked bank's has Duplicate and Delete, and a
+        // new-question card has no menu at all
+        let hint = match q {
+            None => None,
+            Some(_) if app.shared.circles.edit.with_link(bank_id, |_| ()).is_some() => {
+                Some("Right-click for Duplicate, Delete and History in the circle; Shift+F10 works from the keyboard.")
+            }
+            Some(_) => Some("Right-click for Duplicate and Delete; Shift+F10 works from the keyboard."),
         };
-        let hr = ui.interact(hdr.response.rect, hid, Sense::click()).on_hover_text(hint);
+        let hr = ui.interact(hdr.response.rect, hid, Sense::click());
+        let hr = if let Some(h) = hint { hr.on_hover_text(h) } else { hr };
         if hr.hovered() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
         }

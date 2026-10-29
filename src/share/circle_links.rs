@@ -158,18 +158,24 @@ pub struct CircleLink {
     pub restored: Vec<String>,
     /// (round 8, critic T2) The copy's own picture files and the circle's name for each: what a restore stored, kept on the
     /// link rather than in a base entry so that it survives an unpaired restore (the circle removed the question and the base
-    /// entry with it). Read by [`super::question_history::picture_sha_on_circle`]. Cleared when the base is rebuilt (a send or
-    /// a merge), which records the pictures afresh. Read leniently: entries this build can not read are dropped.
+    /// entry with it). Read by [`super::question_history::picture_sha_on_circle`], and only for a file the per-question base
+    /// record does not name (round 9, critic M1: a rebuilt base record is authoritative). Taken out when the base is rebuilt
+    /// for that question: a whole-bank send and a merge clear the list, and a partial send keeps only what it held back
+    /// (round 9, critic T1). Read leniently: entries this build can not read are dropped. (round 9, critics M4/M6) A residual:
+    /// more than [`PICTURE_FILES_MAX`] unpaired restores drop the oldest names, and a link edited on disk can name a file
+    /// wrongly — the same privilege as editing the banks themselves.
     #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "picture_files_or_empty")]
     pub picture_files: Vec<(String, String)>,
 }
 
-/// The most picture files the link records (a restore writes one; a long session of restores stays bounded).
-pub const PICTURE_FILES_MAX: usize = 32;
+/// The most picture files the link records (a restore writes one; a long session of restores stays bounded). Kept generous
+/// so a session's unpaired restores do not start forgetting names; the oldest goes first.
+pub const PICTURE_FILES_MAX: usize = 256;
 
-/// (round 8, critic T2) A `picture_files` list read leniently: only pairs of two strings are kept.
+/// (round 8, critic T2) A `picture_files` list read leniently: only pairs of two strings are kept. (round 9, critic M4) The
+/// newest entries are kept, as the writer does: names past the cap must be the oldest, never the newest.
 fn picture_files_or_empty<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<(String, String)>, D::Error> {
-    Ok(match Value::deserialize(d)? {
+    let mut out: Vec<(String, String)> = match Value::deserialize(d)? {
         Value::Array(list) => list
             .into_iter()
             .filter_map(|v| {
@@ -179,10 +185,14 @@ fn picture_files_or_empty<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<
                     _ => None,
                 }
             })
-            .take(PICTURE_FILES_MAX)
             .collect(),
         _ => Vec::new(),
-    })
+    };
+    if out.len() > PICTURE_FILES_MAX {
+        let drop = out.len() - PICTURE_FILES_MAX;
+        out.drain(0..drop);
+    }
+    Ok(out)
 }
 
 /// (round 17, critic 95 I1) A base question's difficulty in the bank when the read's difficulties were first to be taken.
@@ -802,7 +812,10 @@ pub fn after_partial_send(link: &CircleLink, bank: &QuestionBank, composed: &[Co
     l.as_is = false;
     // (round 6, critic N5) the base is the bank as composed: no restored question is waiting for a difficulty pass any more
     l.restored.clear();
-    l.picture_files.clear();
+    // (round 9, critic T1) only the questions this send carried have a rebuilt base naming their picture: keep the record of
+    // a question it held back (its base is the base body's, which can not name the locally stored file)
+    let named: Vec<String> = l.base.iter().filter_map(|b| b.local_image.clone()).collect();
+    l.picture_files.retain(|(file, _)| !named.contains(file));
     // A send of the full form no longer follows the viewers' form, as a merge of a full version (`finish_merge`).
     if !sent.keys_hidden {
         l.viewers_form = false;

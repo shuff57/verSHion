@@ -652,20 +652,22 @@ pub fn side_of_version(body: &VersionBody, qid: &str) -> Option<Shown> {
 /// file name is not followed back to the circle's name; it reads as a local picture (a different one from the circle's).
 pub fn picture_sha_on_circle(link: &CircleLink, q: &Question) -> Option<String> {
     let file = q.image.as_ref()?.file.as_str();
-    // (round 8, critic T2) the link's own record, which an unpaired restore keeps (its base entry is gone)
+    // (round 9, critic M1) the base record is authoritative for a file it names; the link map is only for a file it does
+    // not (a restore's stored file for a question held back from a send, or one whose base entry is gone with an unpair)
+    if let Some(b) = link.base.iter().find(|b| b.local_id == q.id) {
+        if let Some((f, sha)) = &b.picture_now
+            && f == file
+        {
+            return Some(sha.clone());
+        }
+        if b.local_image.as_deref() == Some(file) {
+            return b.snap.image.clone();
+        }
+    }
     if let Some((_, sha)) = link.picture_files.iter().find(|(f, _)| f == file) {
         return Some(sha.clone());
     }
-    let Some(b) = link.base.iter().find(|b| b.local_id == q.id) else { return sha_of_file(file) };
-    if let Some((f, sha)) = &b.picture_now
-        && f == file
-    {
-        return Some(sha.clone());
-    }
-    match b.local_image.as_deref() {
-        Some(local) if local == file => b.snap.image.clone(),
-        _ => sha_of_file(file),
-    }
+    sha_of_file(file)
 }
 
 pub fn side_of_copy(link: &CircleLink, bank: &QuestionBank, local_id: &str) -> Option<Shown> {
@@ -1113,8 +1115,13 @@ pub fn restore_question(banks: &mut [QuestionBank], ask: &RestoreAsk, sink: &dyn
             // is right). A figure that differs from the record — or a figure the version has where the record has none, as
             // for a link an earlier build wrote — would leave the copy in step over a figure the strip can never count, and
             // is refused.
-            let figure_moves = merge::figure_key(r.figure.as_ref()) != merge::figure_key(b.figure.as_ref());
-            if ask.body.version != link.base_version && picture_same && figure_moves && !merge::ours_changed(b, &judged) {
+            // (round 9, critic M2) An unknown record (a link an earlier build wrote) is unsafe in the other direction too: a
+            // restore that would change the copy's own figure is a move just as uncountable.
+            let figure_recorded = merge::figure_key(b.figure.as_ref());
+            let figure_in = merge::figure_key(r.figure.as_ref());
+            let figure_moves = figure_in != figure_recorded;
+            let figure_unknown_unsafe = figure_recorded.is_none() && existing.is_some_and(|q| merge::figure_key(q.figure.as_ref()) != figure_in);
+            if ask.body.version != link.base_version && picture_same && (figure_moves || figure_unknown_unsafe) && !merge::ours_changed(b, &judged) {
                 return Err(RestoreRefused::NotCountable);
             }
         }

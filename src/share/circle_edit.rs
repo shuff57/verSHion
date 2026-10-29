@@ -4868,6 +4868,9 @@ impl CircleEditModel {
         // (round 7, critic M3) the base is the circle's version as merged: no restored question waits for a difficulty pass
         // any more (the base record and the bank's files are new)
         link.restored.clear();
+        // (round 9, critic M1) the merge rebuilt the base records (their pictures named afresh): the older file -> circle
+        // name entries would only override them
+        link.picture_files.clear();
         // (critic 63 I3) Read in full: the answer keys came with it, so the copy no longer follows the viewers' form.
         if !rev.fetched.head.bank.keys_hidden {
             link.viewers_form = false;

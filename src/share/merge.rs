@@ -79,8 +79,10 @@ pub struct BaseQuestion {
     /// (round 8, critic T1) The figure the question was drawn from in the base version, when it had one. `snap` has no
     /// figure, so without this the count guard could not tell a restore that puts the base's figure back from one that
     /// introduces a figure the base never had. `None`: the base had no figure, or (a link an earlier build wrote) it is not
-    /// known; the guard treats "not known" as unsafe.
-    #[serde(default)]
+    /// known; the guard treats "not known" as unsafe in both directions (a figure the version carries, or the copy's own
+    /// figure vanishing). (round 9, critic M3) Read leniently: a figure this build can not read is `None`, never the link
+    /// dropped with it.
+    #[serde(default, deserialize_with = "figure_or_none")]
     pub figure: Option<FigureSpec>,
     /// (round 7, critic R3) The copy's own picture when it is no longer the base's file: the file, and the circle's name
     /// for it. A restore that stores a picture writes it (the store may keep a circle's PNG as WebP under a new name), so
@@ -88,6 +90,12 @@ pub struct BaseQuestion {
     /// `snap.image` still describe the base version. Read leniently: a value this build can not read is none.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "picture_now_or_none")]
     pub picture_now: Option<(String, String)>,
+}
+
+/// (round 9, critic M3) A base figure read leniently: an unreadable value is none, never the link dropped with it (as
+/// `picture_now` and `snap.difficulty` already are).
+fn figure_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<FigureSpec>, D::Error> {
+    Ok(Option::<FigureSpec>::deserialize(d).ok().flatten())
 }
 
 /// A `picture_now` read leniently: an unreadable value is none, never the link dropped with it.
