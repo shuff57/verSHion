@@ -366,10 +366,12 @@ fn qids_or_empty<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<QidLink>,
     })
 }
 
-/// (round 11, security critic 9 M1) The cached check state read leniently: an unreadable `seen` is the default
-/// (nothing known), never the link with it.
+/// (round 11, security critic 9 M1; round 12, product critic 10 P3 / security critic 10 M2) The cached check state
+/// read leniently: an unreadable `seen` keeps the link but reads the SAFE hide_key (true), never `false`. A field
+/// that is genuinely absent still reads "nothing known" through serde's `default`; only a present-but-unreadable
+/// value takes this path.
 fn seen_or_default<'de, D: serde::Deserializer<'de>>(d: D) -> Result<BankSeen, D::Error> {
-    Ok(serde_json::from_value(Value::deserialize(d)?).unwrap_or_default())
+    Ok(serde_json::from_value(Value::deserialize(d)?).unwrap_or(BankSeen { hide_key: true, ..BankSeen::default() }))
 }
 
 /// (critic 79 I2, critic 80 I1) What a send whose answer did not say what it made carried (see `CircleLink::sent_record`).
@@ -872,6 +874,22 @@ pub fn after_partial_send(link: &CircleLink, bank: &QuestionBank, composed: &[Co
             let mut b = base_for(q, qid);
             // The composed question's own local id: for a restored removal the raw question's `id` is the circle's qid.
             b.local_id = c.local.clone();
+            // (round 12, product critic 10 P1) A question sent as the base has it carries the base body's RAW question,
+            // whose `image.file` is the circle's own file name; this store may keep the same picture under its own
+            // (re-encoded) name. Carrying that name into the rebuilt record made `ours_delta` report a picture change
+            // that never happened. The base version's picture did not change in the send: keep this store's file from
+            // the record it had, and fall back to the link map when the base was bounded away.
+            if c.base_image.is_some() {
+                if let Some(ob) = link.base.iter().find(|ob| ob.local_id == c.local) {
+                    b.local_image = ob.local_image.clone();
+                    b.picture_now = ob.picture_now.clone();
+                } else if let Some(local) = bank.questions.iter().find(|q| q.id == c.local).and_then(|q| q.image.as_ref()) {
+                    let circle_sha = b.snap.image.as_deref();
+                    if link.picture_files.iter().any(|(f, s)| f == &local.file && Some(s.as_str()) == circle_sha) {
+                        b.local_image = Some(local.file.clone());
+                    }
+                }
+            }
             base.push(b);
         }
     }

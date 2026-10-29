@@ -1715,6 +1715,18 @@ fn d2g_a_first_answer_for_a_bank_drops_what_was_held_from_before() {
 }
 
 #[test]
+fn d2u_an_unrecorded_base_figure_has_its_own_reason() {
+    // (round 12, product critic 10 P2) A link an earlier build wrote records no base figure. The refusal itself is
+    // right (the copy's hand-added figure would vanish uncounted), but it must not claim the version's figure is a
+    // different one.
+    let t = super::question_history_ui::refused_words(&super::question_history::RestoreRefused::FigureNotRecorded, 9);
+    assert!(t.contains("not recorded on this computer"), "{t}");
+    assert!(!t.contains("not the one your copy is based on"), "{t}");
+    let t = super::question_history_ui::refused_words(&super::question_history::RestoreRefused::NotCountable, 9);
+    assert!(t.contains("is not the one your copy is based on"), "{t}");
+}
+
+#[test]
 fn d2g_a_figure_only_restore_is_refused_and_the_copy_agrees_with_the_strip() {
     // (critic P-2) version 2 differs from the copy only in a figure's settings
     let mut r = rig();

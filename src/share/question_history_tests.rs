@@ -1882,7 +1882,7 @@ fn d2p_a_known_no_figure_record_allows_a_restore_that_lands_on_the_base() {
     unsure.base[0].figure_recorded = false;
     let mut other = banks.clone();
     let none = restore_question(&mut other, &ask(&unsure, Some(&a), QA, &six), &sink, &|_| Ok(()), NOW + 100_000);
-    assert_eq!(none.map(|d| d.version), Err(RestoreRefused::NotCountable), "a link with no figure record let a figure vanish");
+    assert_eq!(none.map(|d| d.version), Err(RestoreRefused::FigureNotRecorded), "a link with no figure record let a figure vanish");
     let r = restore_question(&mut banks, &ask(&link, Some(&a), QA, &six), &sink, &|_| Ok(()), NOW + 100_000);
     assert_eq!(r.map(|d| d.version), Ok(6), "a restore that puts back exactly the base (no figure, no picture, same words) was refused");
     assert!(banks[0].questions.iter().find(|q| q.id == a).unwrap().figure.is_none(), "the copy is the base version's: no figure");
@@ -2062,6 +2062,48 @@ fn d2p_r10_a_partial_send_without_a_kept_base_keeps_only_the_held_back_name() {
 }
 
 #[test]
+fn d2p_r10_a_held_back_reencoded_picture_keeps_this_stores_file() {
+    // (round 12, product critic 10 P1) A partial send rebuilds a held-back question's base record from the base body's
+    // RAW question, whose image.file is the circle's own name (here a PNG). This store keeps the same picture as WebP
+    // under its own name, which the old base record named. The rebuilt record must keep that local file: otherwise
+    // ours_delta sees a picture change that never happened, the strip counts an unsent change, and Compare says
+    // "a different picture" against the very base version whose picture did not change.
+    use super::partial_send::ComposedQuestion;
+    let (mut bank, mut link) = linked();
+    let a = local_of(&link, QA);
+    let local_file = format!("media/{}.webp", format!("{:064x}", 0xb2u8));
+    let circle_file = format!("media/{}.png", format!("{:064x}", 0xa1u8));
+    let circle_sha = format!("{:064x}", 0xa1u8);
+    {
+        let q = bank.questions.iter_mut().find(|q| q.id == a).unwrap();
+        q.image = Some(ImageRef { file: local_file.clone(), width: 1, height: 1 });
+        // a held-back figure-only edit: the snapshot cannot count it (plan 13.9), so it must not show as a change
+        q.figure = Some(crate::model::FigureSpec { id: "triangle".into(), params: [("a".to_string(), json!(3))].into_iter().collect() });
+    }
+    {
+        let b = link.base.iter_mut().find(|b| b.local_id == a).unwrap();
+        b.local_image = Some(local_file.clone());
+        b.snap.image = Some(circle_sha.clone());
+        b.picture_now = None;
+    }
+    let mut qa = v9()[0].clone();
+    qa["image"] = json!({ "file": circle_file, "width": 1, "height": 1 });
+    let composed: Vec<ComposedQuestion> = vec![
+        ComposedQuestion { local: a.clone(), qid: Some(QA.into()), question: Some(serde_json::from_value(qa).unwrap()), base_image: Some(circle_file.clone()) },
+        ComposedQuestion { local: local_of(&link, QB), qid: Some(QB.into()), question: Some(serde_json::from_value(v9()[1].clone()).unwrap()), base_image: None },
+        ComposedQuestion { local: local_of(&link, QC), qid: Some(QC.into()), question: Some(serde_json::from_value(v9()[2].clone()).unwrap()), base_image: None },
+    ];
+    let sent = super::circles_api::SentBank { circle_id: CID.into(), bank_id: BID.into(), version: 10, version_id: format!("{:032x}", 10), qids: vec![QA.into(), QB.into(), QC.into()], ..Default::default() };
+    let after = super::circle_links::after_partial_send(&link, &bank, &composed, &sent, vec![a.clone()]);
+    let b = after.base.iter().find(|b| b.local_id == a).expect("the held-back question keeps a record");
+    assert_eq!(b.local_image.as_deref(), Some(local_file.as_str()), "the rebuilt record names the circle's PNG, not this store's WebP");
+    assert_eq!(b.snap.image.as_deref(), Some(circle_sha.as_str()), "the base version's circle name is unchanged");
+    assert_eq!(changes_since(&after, &bank).changed, 0, "the copy is reported as an unsent picture change that never happened");
+    let q = bank.questions.iter().find(|q| q.id == a).unwrap();
+    assert_eq!(picture_sha_on_circle(&after, q).as_deref(), Some(circle_sha.as_str()), "Compare would call the unchanged picture a different one");
+}
+
+#[test]
 fn d2p_r10_unreadable_viewers_form_and_role_still_keep_the_link() {
     // One unreadable field must not drop the whole link (the round-9 M3 rule). `viewers_form` is a safety flag: an
     // unreadable value is the never-sendable true, never serde's false default. `role_seen`/`role_seen_at` read none.
@@ -2074,4 +2116,14 @@ fn d2p_r10_unreadable_viewers_form_and_role_still_keep_the_link() {
     assert!(back.viewers_form, "an unreadable viewers_form must read as never-sendable");
     assert_eq!(back.role_seen, None);
     assert_eq!(back.role_seen_at, None);
+    // (round 12, product critic 10 P3) an unreadable `seen` keeps the link but must read the SAFE hiding state; a
+    // genuinely missing field still means "nothing known".
+    let mut v = serde_json::to_value(&link).unwrap();
+    v["seen"] = json!("junk");
+    let back: CircleLink = serde_json::from_value(v).expect("an unreadable seen must not drop the link");
+    assert!(back.seen.hide_key, "an unreadable seen must read as hiding the keys");
+    let mut v = serde_json::to_value(&link).unwrap();
+    v.as_object_mut().unwrap().remove("seen");
+    let back: CircleLink = serde_json::from_value(v).expect("a missing seen is the default");
+    assert!(!back.seen.hide_key, "a missing seen means nothing known");
 }

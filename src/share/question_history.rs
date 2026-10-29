@@ -916,6 +916,9 @@ pub enum RestoreRefused {
     /// (round 4, critic P-2) The version differs from the copy only in what the copy's record of the circle can't count
     /// (a figure's settings with the same picture): the strip would still say "in step".
     NotCountable,
+    /// (round 12, product critic 10 P2) Same refusal, but the base version's figure is not recorded on this computer
+    /// (a link an earlier build wrote): the reason must say that, not that the version's figure is a different one.
+    FigureNotRecorded,
     /// (round 4, critic S-I2) Undo: the question was edited (or deleted) after the restore.
     EditedSince,
     /// (round 4, critic S-I1) Undo: the copy moved to another version of the circle since the restore.
@@ -1125,7 +1128,8 @@ pub fn restore_question(banks: &mut [QuestionBank], ask: &RestoreAsk, sink: &dyn
             let figure_moves = if figure_known { figure_in != figure_at_base } else { figure_in.is_some() };
             let figure_unknown_unsafe = !figure_known && existing.is_some_and(|q| merge::figure_key(q.figure.as_ref()) != figure_in);
             if ask.body.version != link.base_version && picture_same && (figure_moves || figure_unknown_unsafe) && !merge::ours_changed(b, &judged) {
-                return Err(RestoreRefused::NotCountable);
+                // (round 12, product critic 10 P2) say why truthfully: an unrecorded base figure is not "a different one"
+                return Err(if figure_known { RestoreRefused::NotCountable } else { RestoreRefused::FigureNotRecorded });
             }
         }
         // no record of the base: as before, the two compared directly

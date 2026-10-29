@@ -64,6 +64,25 @@ Loop rules: local commits only, never push; critic pair (product vs Moodle, secu
   demonstrations inverted and every finding probe green.
 - Next: a fresh round-10 pair (product + security) on r11; the loop exits when both are clean on the same build.
 
+### Round 10 critic pair → r12 (2026-10-29)
+
+- **Round 10 pair** on `9d926bf` (r11): product FINDINGS (1 important, 2 minors), security FINDINGS (1 important,
+  2 minors). Reports: `docs/critic-reports/2026-10-29-d2-r11-critic-product.md` and `-security.md`.
+- **r12** fixed them, test-first: (1) a partial send carries the held-back question's old base-record
+  `local_image`/`picture_now` into the rebuilt record (falling back to the link map when the base was bounded away),
+  so a re-encoded picture no longer reads as an unsent change or "a different picture"; (2) the merge's picture-name
+  keep is judged against the base that is actually STORED, not the full merged base that `bounded` then discards
+  (r11 had regressed this on large banks); (3) an unreadable `seen` reads the safe `hide_key = true`, while a missing
+  `seen` stays "nothing known"; (4) a distinct `RestoreRefused::FigureNotRecorded` gives the truthful reason when an
+  earlier build's link has no figure record.
+- Suite on r12: **share 1561/0/3; full lib 2256/0/6**. Replayed probe sets: the product's P1 is green; its P2/P3
+  probes invert (they documented the old wording/default); security's merge-order probe fails only because it
+  hardcodes the old r11 sequence, while its pre-r11-order twin (now the code's order) passes.
+- **Open minor, recorded:** an unreadable non-scalar link field (`base_version`, `linked_at`, `is_author`,
+  `author_known`, `difficulty_read`, `title`, `base`, `base[].local_id`, `base[].snap`, `base[].snap.points`) can
+  still drop that link. Same privilege as editing the banks; fix if the leniency is ever extended.
+- Next: a fresh round-11 pair (product + security) on r12; the loop exits when both are clean on the same build.
+
 ## The 5 known failures are fixed (2026-10-28)
 
 The owner asked to fix the five `share_core::wasm::publish_prepare_json` failures. Cause: the viSHion path deps in
