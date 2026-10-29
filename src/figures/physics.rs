@@ -11,6 +11,9 @@ mod pulley;
 pub(crate) use pulley::{pulley_relevant, pulley_setup_changed};
 mod examples;
 
+/// Editor notes for the instrument figures: what the circuit could not work out, and why.
+pub fn instr_warnings(p: &Params) -> Vec<String> { instr::circuit_warnings(p) }
+
 /// The collapsed-row summary of a section on the physics page skin, where the page has one.
 pub fn skin_summary(id: &str, title: &str, p: &Params) -> Option<String> {
     match id {
@@ -168,6 +171,83 @@ mod tests {
             // the worksheet copy, to be looked at: a caption, a pointer, and no answer anywhere
             let _ = std::fs::write(format!("{dir}/spring-scale-worksheet.png"), to_png(&sheet, 1.0).unwrap());
         }
+    }
+
+    #[test]
+    fn a_capacitor_circuit_reads_in_farads_and_has_no_meters() {
+        let cd = defs().into_iter().find(|d| d.id == "circuit-diagram").unwrap();
+        let cap = |list: &[(&'static str, Value)]| {
+            let mut p = Params::defaults(&(cd.params)());
+            for (k, v) in list { p.0.insert(k.to_string(), v.clone()); }
+            p
+        };
+        let series = cap(&[
+            ("components", Value::S("Capacitors".into())), ("n", Value::I(2)),
+            ("r1_val", Value::S("10 µF".into())), ("r2_val", Value::S("10 µF".into())),
+            ("cell_val", Value::S("12 V".into())), ("solve", Value::S("Readings and results".into())),
+        ]);
+        let svg = (cd.render)(&series);
+        // C_eq = 5 µF, Q = 60 µC, 6 V across each
+        assert!(svg.contains("5 µF"), "5 µF in series:\n{svg}");
+        assert!(svg.contains("60 µC"), "the charge");
+        assert!(!svg.contains("Ω"), "no resistance in a capacitor circuit");
+        // no meters, whatever the meter switches say
+        let mut with_meters = series.clone();
+        with_meters.0.insert("ammeter".into(), Value::B(true));
+        with_meters.0.insert("voltmeter".into(), Value::S("Across component 1".into()));
+        let lay = instr::circuit_layout(&with_meters);
+        assert!(lay.amm.is_none(), "an ammeter was placed on a capacitor circuit");
+        assert!(lay.vm_part.is_none(), "a voltmeter was placed on a capacitor circuit");
+        // neither meter control changes the figure at all
+        let mut plain = with_meters.clone();
+        plain.0.insert("ammeter".into(), Value::B(false));
+        plain.0.insert("voltmeter".into(), Value::S("None".into()));
+        let base = (cd.render)(&plain);
+        for vm in ["Across component 1", "Across component 2", "Across the battery"] {
+            let mut q = plain.clone();
+            q.0.insert("voltmeter".into(), Value::S(vm.into()));
+            assert_eq!((cd.render)(&q), base, "the voltmeter changed a capacitor circuit ({vm})");
+        }
+        let mut a = plain.clone();
+        a.0.insert("ammeter".into(), Value::B(true));
+        assert_eq!((cd.render)(&a), base, "the ammeter changed a capacitor circuit");
+        if let Ok(dir) = std::env::var("VERSHION_PNG_DIR") {
+            for (tag, list) in [
+                ("caps-series-key", vec![]),
+                ("caps-series-student", vec![(SHOW_ANSWERS, Value::B(false))]),
+                ("caps-parallel-key", vec![("layout", Value::S("In parallel".into())), ("n", Value::I(2)), ("r2_val", Value::S("22 µF".into()))]),
+            ] {
+                let mut q = with_meters.clone();
+                for (k, v) in list { q.0.insert(k.to_string(), v); }
+                let _ = std::fs::write(format!("{dir}/circuit-{tag}.png"), to_png(&(cd.render)(&q), 1.0).unwrap());
+            }
+        }
+    }
+
+    #[test]
+    fn a_capacitor_value_in_ohms_is_left_out_rather_than_read_as_farads() {
+        use super::instr::circuit_warnings;
+        let cd = defs().into_iter().find(|d| d.id == "circuit-diagram").unwrap();
+        let mut p = Params::defaults(&(cd.params)());
+        p.0.insert("components".into(), Value::S("Capacitors".into()));
+        p.0.insert("solve".into(), Value::S("Readings and results".into()));
+        p.0.insert("n".into(), Value::I(1));
+        // the default value is still in ohms
+        assert_eq!(p.s("r1_val"), "2 Ω");
+        assert!(!circuit_warnings(&p).is_empty(), "the note explains why nothing is worked out");
+        let svg = (cd.render)(&p);
+        assert!(!svg.contains("2 µF"), "2 Ω must not be read as 2 farads");
+        assert!(svg.contains('?'), "the value is unknown, not a number");
+        // typed as a capacitance, it works out
+        p.0.insert("r1_val".into(), Value::S("2 µF".into()));
+        assert!(circuit_warnings(&p).is_empty(), "no note once the values are capacitances");
+        assert!((cd.render)(&p).contains("2 µF"));
+        // an open switch leaves them uncharged: zero, not sixty microcoulombs
+        p.0.insert("r1_val".into(), Value::S("10 µF".into()));
+        p.0.insert("switch".into(), Value::S("Open".into()));
+        let open = (cd.render)(&p);
+        assert!(open.contains("0 C") || open.contains("0 µC"), "an open switch charges nothing:\n{open}");
+        assert!(!open.contains("120 µC"), "the battery is not charging an open circuit");
     }
 
     #[test]

@@ -32,8 +32,8 @@ circle-of-fifths__defaults f7e8a8b83655c15c
 circle-of-fifths__start f7e8a8b83655c15c
 circle__defaults 2a6da1f284f2a4dc
 circle__start 2a6da1f284f2a4dc
-circuit-diagram__defaults a755060df09d5f35
-circuit-diagram__start a755060df09d5f35
+circuit-diagram__defaults 4ba4486b53a91376
+circuit-diagram__start 4ba4486b53a91376
 circular-flow__defaults d1d0ed8b23a6ecf2
 circular-flow__start d1d0ed8b23a6ecf2
 circular-motion__defaults cc0df8164d451482

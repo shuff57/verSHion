@@ -371,11 +371,7 @@ const WAVES: &[Faq] = &[
 const CIRCUIT_DIAGRAM: &[Faq] = &[
     Faq {
         q: "Can the figure work out the current and voltages, and make a worksheet from it?",
-        a: "Yes. Type numbers for the battery and each part (12 V, 4 Ω, 4.7 kΩ) and set Work out the circuit to Fill meter readings or Readings and results. It handles series, parallel and an open switch; a part typed as a symbol such as R cannot be worked out, so that reading keeps your text. Turn off Show answers for a student copy: the worked-out values become blank lines, and Student + key saves both.",
-    },
-    Faq {
-        q: "How can I turn a circuit into a problem for students?",
-        a: "Give some values, like the battery voltage and resistances, and leave others unknown: a blank ammeter reading, a resistor labeled x, or a voltmeter whose reading students must find.",
+        a: "Yes. Type numbers for the battery and each part (12 V, 4 Ω, 4.7 kΩ) and set Work out the circuit to Fill meter readings or Readings and results. It handles series, parallel and an open switch; a part typed as a symbol such as R cannot be worked out, so that reading keeps your text. For a problem, leave something out: a blank ammeter reading, a part labelled x, or a voltmeter reading to be found. Turn off Show answers for a student copy: the worked-out values become blank lines, and Student + key saves both.",
     },
     Faq {
         q: "Why do resistor symbols look different in different books?",
@@ -388,6 +384,10 @@ const CIRCUIT_DIAGRAM: &[Faq] = &[
     Faq {
         q: "How are ammeters and voltmeters connected?",
         a: "An ammeter goes in series, in the path of the current it measures. A voltmeter goes in parallel, with its leads on either side of the component it measures.",
+    },
+    Faq {
+        q: "What happens when the components are capacitors?",
+        a: "Capacitors add the other way round from resistors: in series 1/C = 1/C1 + 1/C2, so the equivalent is smaller than the smallest, and in parallel C = C1 + C2. The charge is C V, the same on each capacitor in series and split between them in parallel, and the voltages reverse that. There is no steady current once they are charged, so the ammeter and voltmeter are left off, and the values have to be typed in farads (10 µF, 470 nF) rather than ohms.",
     },
     Faq {
         q: "How do series and parallel circuits behave differently?",

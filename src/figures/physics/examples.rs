@@ -34,6 +34,15 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
                 ("n", i(2)), ("r1_kind", s("Bulb")), ("r2_kind", s("Bulb")), ("r1_val_mode", s("None")),
                 ("r2_val_mode", s("None")), ("cell", s("One cell")), ("cell_val", s("3 V")), ("switch", s("Open")),
             ]),
+            ex("Capacitors in series on a 12 V battery", vec![
+                ("components", s("Capacitors")), ("n", i(2)), ("r1_val", s("10 µF")), ("r2_val", s("10 µF")),
+                ("cell", s("One cell")), ("cell_val", s("12 V")), ("solve", s("Readings and results")),
+            ]),
+            ex("Capacitors in parallel: the same voltage on each", vec![
+                ("components", s("Capacitors")), ("layout", s("In parallel")), ("n", i(2)),
+                ("r1_val", s("10 µF")), ("r2_val", s("22 µF")),
+                ("cell", s("One cell")), ("cell_val", s("6 V")), ("solve", s("Readings and results")),
+            ]),
         ],
         "vector-diagram" => vec![
             ex("Adding two perpendicular vectors head to tail", vec![

@@ -12,7 +12,7 @@ pub fn parse_qty(s: &str) -> Option<f64> {
         .map_or(s.len(), |(i, _)| i);
     let n: f64 = s[..end].parse().ok()?;
     let rest = s[end..].trim();
-    let is_unit = |u: &str| matches!(u.trim(), "" | "Ω" | "ohm" | "ohms" | "Ohm" | "Ohms" | "V" | "A" | "v" | "a");
+    let is_unit = |u: &str| matches!(u.trim(), "" | "Ω" | "ohm" | "ohms" | "Ohm" | "Ohms" | "V" | "A" | "v" | "a" | "F" | "f" | "farad" | "farads");
     // (multiply, divide): sub-unit prefixes divide so 10 µA is exactly 1e-5
     let (mult, div) = if is_unit(rest) {
         (1.0, 1.0)
@@ -24,6 +24,8 @@ pub fn parse_qty(s: &str) -> Option<f64> {
             'M' => (1e6, 1.0),
             'm' => (1.0, 1e3),
             'µ' | 'μ' | 'u' => (1.0, 1e6),
+            'n' | 'N' => (1.0, 1e9),
+            'p' | 'P' => (1.0, 1e12),
             _ => return None,
         };
         if !is_unit(it.as_str()) {
@@ -121,11 +123,103 @@ pub fn solve(v_batt: Option<f64>, r: &[Option<f64>], parallel: bool, open: bool)
     Solved { r_eq, i_total, v_batt, v, i }
 }
 
+/// A capacitance marked in ohms is a stray resistor value, not a capacitor: reading "4 Ω" as 4 farads would be
+/// silently, wildly wrong, so it counts as unknown instead.
+pub fn parse_cap(s: &str) -> Option<f64> {
+    if s.contains('Ω') || s.to_ascii_lowercase().contains("ohm") { return None; }
+    parse_qty(s).filter(|v| *v > 0.0)
+}
+
+/// A capacitor circuit worked out: equivalent capacitance, the total charge the battery puts on it, and the
+/// voltage across and charge on each part.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CapSolved {
+    pub c_eq: Option<f64>,
+    pub q_total: Option<f64>,
+    pub v: Vec<Option<f64>>,
+    pub q: Vec<Option<f64>>,
+}
+
+/// Solves capacitors in series (1/C = sum 1/C_i, the same charge on each) or in parallel (C = sum C_i, the same
+/// voltage across each) on a battery of `v_batt`. All in SI farads and coulombs.
+pub fn solve_caps(v_batt: Option<f64>, c: &[Option<f64>], parallel: bool, open: bool) -> CapSolved {
+    let n = c.len();
+    let all: Option<Vec<f64>> = c.iter().cloned().collect();
+    let c_eq = all.as_ref().map(|a| {
+        if parallel { a.iter().sum() } else { 1.0 / a.iter().map(|x| 1.0 / x).sum::<f64>() }
+    });
+    // an open switch leaves the capacitors uncharged: no charge flows, so no charge and no voltage on any of them
+    if open {
+        return CapSolved { c_eq, q_total: Some(0.0), v: vec![Some(0.0); n], q: vec![Some(0.0); n] };
+    }
+    let (mut v, mut q) = (vec![None; n], vec![None; n]);
+    let mut q_total = None;
+    if let (Some(vb), Some(a), Some(ce)) = (v_batt, all.as_ref(), c_eq) {
+        if parallel {
+            for k in 0..n { v[k] = Some(vb); q[k] = Some(a[k] * vb); }
+        } else {
+            for k in 0..n { q[k] = Some(ce * vb); v[k] = Some(ce * vb / a[k]); }
+        }
+        q_total = Some(ce * vb);
+    }
+    CapSolved { c_eq, q_total, v, q }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn near(a: Option<f64>, b: f64) -> bool { a.is_some_and(|a| (a - b).abs() < 1e-9 * b.abs().max(1.0)) }
+
+    #[test]
+    fn capacitors_in_series_and_parallel() {
+        // 10 µF and 10 µF: 5 µF in series, 20 µF in parallel, on a 10 V battery
+        let (a, b) = (Some(10e-6), Some(10e-6));
+        let s = solve_caps(Some(10.0), &[a, b], false, false);
+        assert!(near(s.c_eq, 5e-6), "{:?}", s.c_eq);
+        // in series the charge is the same on each and the voltages add
+        assert!(near(s.q[0], 5e-5) && near(s.q[1], 5e-5), "{:?}", s.q);
+        assert!(near(s.v[0], 5.0) && near(s.v[1], 5.0), "{:?}", s.v);
+        assert!(near(s.q_total, 5e-5));
+        let p = solve_caps(Some(10.0), &[a, b], true, false);
+        assert!(near(p.c_eq, 20e-6), "{:?}", p.c_eq);
+        // in parallel the voltage is the same across each and the charges add
+        assert!(near(p.v[0], 10.0) && near(p.v[1], 10.0));
+        assert!(near(p.q[0], 1e-4) && near(p.q[1], 1e-4), "{:?}", p.q);
+        assert!(near(p.q_total, 2e-4));
+    }
+
+    #[test]
+    fn an_unknown_capacitor_gives_no_answer_but_still_the_equivalent() {
+        let s = solve_caps(Some(12.0), &[Some(1e-5), None], false, false);
+        assert_eq!(s.c_eq, None);
+        assert_eq!(s.q_total, None);
+        assert_eq!(s.v, vec![None, None]);
+        // an open circuit (no battery) still knows the equivalent capacitance
+        let t = solve_caps(None, &[Some(2e-5), Some(2e-5)], true, false);
+        assert!(near(t.c_eq, 4e-5));
+        assert_eq!(t.q_total, None);
+    }
+
+    #[test]
+    fn an_open_switch_leaves_the_capacitors_uncharged() {
+        // no current can flow, so nothing charges: the equivalent is still known, the charge and voltages are zero
+        let s = solve_caps(Some(12.0), &[Some(1e-5), Some(1e-5)], false, true);
+        assert!(near(s.c_eq, 5e-6));
+        assert_eq!(s.q, vec![Some(0.0), Some(0.0)]);
+        assert_eq!(s.v, vec![Some(0.0), Some(0.0)]);
+        assert_eq!(s.q_total, Some(0.0));
+    }
+
+    #[test]
+    fn a_value_in_ohms_is_not_a_capacitance() {
+        assert_eq!(parse_cap("4 Ω"), None);
+        assert_eq!(parse_cap("4 ohm"), None);
+        assert_eq!(parse_cap("10 µF"), Some(1e-5));
+        assert_eq!(parse_cap("470 nF"), Some(4.7e-7));
+        assert_eq!(parse_cap("0.5 mF"), Some(5e-4));
+        assert_eq!(parse_cap(""), None);
+    }
 
     #[test]
     fn quantities_with_prefixes_and_units() {

@@ -75,15 +75,21 @@ Updated 2026-10-28 late: the five-figure phase-3 critic round is fixed and commi
   1. **Series-parallel and capacitor modes on `circuit-diagram`.** The figure is a mature subsystem
      (`src/figures/physics/instr.rs` ~800 lines plus `circuit_solve.rs`): a `CLay` geometry shared with the drag
      handles, per-component kinds and label modes, an ammeter/voltmeter with their own readings, a `solve` mode with a
-     results table, US/IEC symbol styles and Print. Do it in this order, one commit each: (a) **capacitor as a
-     component kind** — a new top-level `components` choice (default `Resistors and bulbs`) so saved figures are
-     untouched, a two-plate symbol at the three places the bulb symbol is branched on (`instr.rs:305`, `:456` for the
-     same-kind grouping, `:518`), values in µF, and a capacitance solve path (series 1/C = Σ1/Cᵢ, parallel C = ΣCᵢ)
-     that replaces the current/voltage table when the circuit is all capacitors; the ammeter and voltmeter do not apply
-     to it, so they must be hidden or refused rather than silently wrong. (b) **a combination (series-parallel)
-     layout** — new geometry in `circuit_layout`, a solver branch, handle positions, and label placement. Each needs
-     five examples, a FAQ entry, PNG cases (Colour, Print, student, key, Large, 66 %), its own tests, census re-bless
-     with the diff showing only `circuit-diagram__*`, and a look at the renders.
+     results table, US/IEC symbol styles and Print.
+     - **(a) Capacitor mode: DONE.** A new first-choice `components` control (default `Resistors and bulbs`, so saved
+       figures are untouched) makes every slot a capacitor, draws two plates, names them C/C_1..C_4, and switches the
+       worked-out block to `C_eq`, `Q`, and each part's `V_k`/`Q_k` (`solve_caps` in `circuit_solve.rs`). Series adds
+       reciprocals, parallel adds capacitances. Values are farads (`10 µF`, `470 nF`); `parse_qty` gained `F` and the
+       n/p prefixes. A value still in ohms is refused (prints `?`) rather than read as farads, and
+       `circuit_warnings` tells the editor why. The ammeter and voltmeter are forced out of the **layout**
+       (`circuit_layout`) and out of the drawing (including "Across the battery"), so the two meter controls render an
+       identical figure; an open switch leaves the capacitors uncharged (zero charge, zero volts) while the equivalent
+       capacitance is still known. The parallel layout also now starts its branches beyond the battery's value label
+       and the first branch's, measured from the texts — a fixed 240 px already collided for "4.7 kΩ" beside "12 V". Two examples and a FAQ entry added; census moved only for
+       `circuit-diagram__defaults`/`__start`, from the blurb.
+     - **(b) A combination (series-parallel) layout: still to do.** New geometry in `circuit_layout`, a solver branch,
+       handle positions, label placement — plus five examples, a FAQ entry, PNG cases (Colour, Print, student, key,
+       Large, 66 %), tests, census re-bless showing only `circuit-diagram__*`, and a look at the renders.
   2. **Handles on the ray diagram and the motion map — and neither figure exists.** Checked against the registry:
      there is no `ray-diagram` and no `motion-map`, so this is two new figures *plus* their handles, not a handle
      retrofit. Build each as a normal new figure (params, five examples, four FAQ entries, tests, PNG export),
@@ -106,6 +112,9 @@ Confirmed by running the app (`VERSHION_SCREEN=figures VERSHION_FIG=collision-mo
 - with `{"u1":4,"u2":0}` the box is absent, so it is not always-on.
 
 ## Pitfalls
+- **`until ! pgrep -f "cargo test …"` deadlocks.** The guard shell's own command line contains the pattern, so it
+  matches itself and never starts the command it is waiting to run — and two such guards match each other forever.
+  Wait on a real pid (`pgrep -x cargo`) or just run the suite directly; the background task notifies on exit anyway.
 - Builders sometimes stop without reporting: ping them with SendMessage.
 - The scratchpad can be wiped mid-session. Rebuild the baseline census from `git archive 0c1a8a8` if needed.
 - **The agent limit gate is lifted** (the owner lifted it on 2026-10-27 evening; the circles critics ran that night).

@@ -310,6 +310,27 @@ the electric 40 px distance floor made 0.1 m and 1.2 m draw identically (floor n
 beside the test charge so it needs no room in the gap), and the magnetic inner arrowhead was longer than its chord
 (chord now 0.34 r clamped to 12–26). Report: `docs/critic-reports/2026-10-28-figures-verify-8f40aff.md`.
 
+Capacitor circuits on `circuit-diagram`: a new `components` choice (default `Resistors and bulbs`, so every saved
+figure is untouched) turns all four slots into capacitors — two plates across the wire, named C or C_1..C_4 — and
+switches the worked-out block to capacitance: `C_eq` and `Q`, then each part's `V_k` and `Q_k`. Series adds
+reciprocals (1/C = Σ1/Cᵢ, the same charge on each, voltages adding to the battery), parallel adds capacitances (the
+same voltage on each, charges adding). Values are typed in farads — 10 µF, 470 nF, 0.5 mF — and `parse_qty` gained the
+farad unit and the nano and pico prefixes for them. There is no steady current in a capacitor circuit, so the ammeter
+and the voltmeter are forced off in the layout (not just skipped in the drawing), and the figure says so in its FAQ;
+the meters' switches stay where they are and simply have no effect. A value still marked in ohms is **not** read as a
+number of farads — that would be wrong by a factor of a million and silent — so it counts as unknown, prints as `?`,
+and the editor's Notes box says why. An open switch leaves them uncharged — zero charge, zero volts — while the
+equivalent capacitance is still known, which is the one place a capacitor circuit behaves differently from a resistor
+one. The first render also showed the battery's value label ("12 V") running into the first branch's value ("10 µF")
+in parallel: the parallel layout now starts its branches beyond both labels, measured from the texts rather than at a
+fixed 240 px, which was already marginal for a long resistance such as 4.7 kΩ. Tests: 10 µF + 10 µF in series on 12 V
+gives 5 µF, 60 µC and 6 V each; in parallel 2 × 10 µF on 10 V gives 20 µF and 100 µC each; an unknown part leaves the
+equivalent unknown but not the rest; a value in ohms is refused; an open switch charges nothing; both meter controls
+render an identical figure in capacitor mode (the ammeter and all four voltmeter settings); and the series and parallel
+12 V renders are exported as key and student copies to be looked at. Two examples (series and parallel) were added, and the FAQ explains how
+capacitors add the other way round. Census: `circuit-diagram__defaults` and `__start` only, from the blurb now naming
+capacitors.
+
 Left open: axis ink `#111827` is grey but not exactly
 neutral; trig's key prints a Hidden side inside a fraction; two-label y axes on tall waves; some coordinate labels
 sit over the drop lines; two example names overstate what they show.
