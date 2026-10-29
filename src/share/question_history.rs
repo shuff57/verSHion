@@ -641,8 +641,19 @@ pub fn side_of_version(body: &VersionBody, qid: &str) -> Option<Shown> {
     body.question(qid).map(|t| Shown { q: t.q.clone(), sha: t.sha.clone() })
 }
 
-pub fn side_of_copy(bank: &QuestionBank, local_id: &str) -> Option<Shown> {
-    bank.questions.iter().find(|q| q.id == local_id).map(|q| Shown { q: q.clone(), sha: q.image.as_ref().and_then(|i| sha_of_file(&i.file)) })
+/// (round 6, critic N2) The circle's name for the copy's picture: the picture the link recorded for it (`snap.image`) while
+/// the copy still has the file it landed with (`local_image`). The store may keep a circle's PNG (or JPEG) as WebP under a
+/// new name, so the file's own name is only used where the link has no record of that file (a picture changed here, or none).
+pub fn picture_sha_on_circle(link: &CircleLink, q: &Question) -> Option<String> {
+    let file = q.image.as_ref()?.file.as_str();
+    match link.base.iter().find(|b| b.local_id == q.id) {
+        Some(b) if b.local_image.as_deref() == Some(file) => b.snap.image.clone(),
+        _ => sha_of_file(file),
+    }
+}
+
+pub fn side_of_copy(link: &CircleLink, bank: &QuestionBank, local_id: &str) -> Option<Shown> {
+    bank.questions.iter().find(|q| q.id == local_id).map(|q| Shown { q: q.clone(), sha: picture_sha_on_circle(link, q) })
 }
 
 fn canon_text(s: &str) -> String {
@@ -1038,7 +1049,8 @@ pub fn restore_question(banks: &mut [QuestionBank], ask: &RestoreAsk, sink: &dyn
     let mut deferred = false;
     let image = match &t.sha {
         None => None,
-        Some(sha) => match existing.and_then(|q| q.image.clone()).filter(|i| sha_of_file(&i.file).as_deref() == Some(sha.as_str())) {
+        // (round 6, critic N2) the same picture by the circle's name for it, never the local file's (a re-encoded file)
+        Some(sha) => match existing.filter(|q| picture_sha_on_circle(link, q).as_deref() == Some(sha.as_str())).and_then(|q| q.image.clone()) {
             Some(i) => Some(i),
             None => match (&ask.picture, ask.store_picture) {
                 (Some(p), _) => Some(p.clone()),

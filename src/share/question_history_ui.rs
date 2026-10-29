@@ -277,7 +277,7 @@ impl QuestionPage {
             timeline_builds: 0,
             scope: scope_of(link),
             hiding_viewer: hiding_viewer_of(link),
-            copy: side_of_copy(bank, question_id),
+            copy: side_of_copy(link, bank, question_id),
             head_key: link.head_seen.max(link.base_version),
             reading: Vec::new(),
             picture: None,
@@ -695,7 +695,7 @@ impl QuestionPage {
         self.heading = heading;
         self.restore_ok = restore_offered(link);
         self.base_version = link.base_version;
-        self.copy = side_of_copy(bank, &self.local_id);
+        self.copy = side_of_copy(link, bank, &self.local_id);
         let mut yc = your_copy(link, bank, &self.local_id);
         // (round 3, critic P9) a difference the link's record can not see (a figure's settings), told by the base version's
         // body when this session read it. (round 4, critic P-2) Never "changed, not sent yet" while the strip counts none:

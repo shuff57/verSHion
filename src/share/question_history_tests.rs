@@ -384,7 +384,7 @@ fn d2_compare_flags_the_changed_fields_and_folds_the_rest() {
     assert_eq!(c.changed_fields(), vec!["Answer key"]);
     // your copy against a version, and a version without the question
     let (bank, link) = linked();
-    let mine = side_of_copy(&bank, &local_of(&link, QA));
+    let mine = side_of_copy(&link, &bank, &local_of(&link, QA));
     let c = compare(side_of_version(&b, QA).as_ref(), mine.as_ref(), false);
     assert!(c.changed_fields().is_empty() && !c.left_absent && !c.right_absent);
     let c = compare(side_of_version(&b, QD).as_ref(), mine.as_ref(), false);
@@ -1183,11 +1183,13 @@ fn d2i_a_deleted_question_comes_back_from_a_counted_version() {
     assert_eq!(banks[0].questions.iter().find(|q| q.id == a).map(|q| q.stem.as_str()), Some("Question A as of version 6"));
 }
 
-// ---- throwaway critic probe (round 6, copy7): a re-encoded picture ------------------------------------------------------
+// ---- round 6, critic N2: a re-encoded picture is the same picture ------------------------------------------------------
 
 #[test]
-fn zcrit_a_circle_picture_the_store_keeps_as_webp_reads_as_a_different_picture() {
-    // a PNG in the circle (sent by an older build, whose files are the hash of a PNG): this build keeps it as WebP
+fn d2i_a_circle_picture_the_store_keeps_as_webp_is_the_same_picture() {
+    // a PNG in the circle (sent by an older build, whose files are the hash of a PNG): this build keeps it as WebP, under a
+    // new file name. Compare, the page's header ("the same as version 9", never NotCounted) and a restore of that very
+    // version read it as the same picture by the link's record of the circle's name for it, never by the local file's.
     let mut png = Vec::new();
     image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(3, 2, image::Rgb([200, 10, 10])))
         .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
@@ -1212,13 +1214,17 @@ fn zcrit_a_circle_picture_the_store_keeps_as_webp_reads_as_a_different_picture()
     let a = local_of(&link, QA);
     // the strip: in step, nothing to send
     let c = changes_since(&link, &bank);
-    println!("strip count: {c:?}; your copy: {:?}", your_copy(&link, &bank, &a));
-    // the page's compare of "Your copy" with the very version it is in step with
-    let cmp = compare(side_of_copy(&bank, &a).as_ref(), side_of_version(&nine, QA).as_ref(), false);
-    println!("changed fields: {:?}; picture row: {:?}", cmp.changed_fields(), cmp.fields.iter().find(|f| f.field == "Picture"));
-    // a restore of that same version is not "already the same": it needs the picture fetched
-    let mut banks = vec![bank.clone()];
-    let r = restore_question(&mut banks, &ask(&link, Some(&a), QA, &nine), &BadRestore, &|_| Ok(()), NOW + 1000);
-    println!("restore of the version the copy is: {r:?}");
+    assert_eq!((c.changed, c.added, c.removed, c.known), (0, 0, 0, true));
+    assert_eq!(your_copy(&link, &bank, &a), YourCopy::SameAs(9));
+    // the picture row of "Your copy" against the very version it is in step with: the same picture
+    let cmp = compare(side_of_copy(&link, &bank, &a).as_ref(), side_of_version(&nine, QA).as_ref(), false);
     assert!(cmp.changed_fields().is_empty(), "the copy and the version it is in step with differ only in how this computer named the same picture: {:?}", cmp.changed_fields());
+    let pic = cmp.fields.iter().find(|f| f.field == "Picture").unwrap();
+    assert_eq!((pic.left.as_str(), pic.right.as_str()), ("the same picture", "the same picture"));
+    // a restore of that same version is "already the same", never a picture that has to be fetched again
+    let mut banks = vec![bank.clone()];
+    let before = json_of(&banks);
+    let r = restore_question(&mut banks, &ask(&link, Some(&a), QA, &nine), &BadRestore, &|_| Ok(()), NOW + 1000);
+    assert_eq!(r.map(|d| d.version), Err(RestoreRefused::Same));
+    assert_eq!(json_of(&banks), before);
 }
