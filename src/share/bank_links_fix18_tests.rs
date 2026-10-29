@@ -607,8 +607,13 @@ fn s18_k95_the_safety_copy_file_is_named_for_the_difficulty() {
     assert!(at.contains(&names[0]), "{at}");
     let back: Vec<QuestionBank> = serde_json::from_slice(&std::fs::read(dir.join("backups").join(&names[0])).unwrap()).unwrap();
     assert_eq!(back[0].questions[0].stem, "One");
-    // a second one the same second is not written over
+    // (round 6, critic) the same banks again are the same point, not a second copy; a bank that moved is a new one, and the
+    // first is never written over
     super::browse::save_copy_to(&fs, std::slice::from_ref(&bank), "difficulty", NOW / 1000).unwrap();
+    assert_eq!(std::fs::read_dir(dir.join("backups")).unwrap().count(), 1);
+    let mut moved = bank.clone();
+    moved.questions[0].stem = "One, changed".into();
+    super::browse::save_copy_to(&fs, std::slice::from_ref(&moved), "difficulty", NOW / 1000).unwrap();
     assert_eq!(std::fs::read_dir(dir.join("backups")).unwrap().count(), 2);
     let _ = std::fs::remove_dir_all(&dir);
 }

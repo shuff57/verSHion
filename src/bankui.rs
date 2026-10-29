@@ -133,7 +133,8 @@ fn crumb_row(ui: &mut Ui, app: &mut App, tail: Option<&str>) {
         }
         if let Some(t) = tail {
             ui.label(RichText::new("/").size(11.5).color(theme::muted_col()));
-            ui.label(RichText::new(t).size(11.5).color(theme::muted_col()));
+            // A long name is shortened to the row, never widening the page.
+            ui.add(egui::Label::new(RichText::new(t).size(11.5).color(theme::muted_col())).truncate());
         }
     });
 }
@@ -752,6 +753,8 @@ impl App {
             None => return,
         };
         let topics = unique_topics(&questions);
+        // The page's width before anything is drawn: the circle's strip is kept to it.
+        let page_w = ui.available_width();
 
         // Header: breadcrumb, serif name + subtitle, actions.
         crumb_row(ui, self, Some(&bank_name));
@@ -767,8 +770,8 @@ impl App {
         let one_row = beside >= name_need.max(300.0);
         let mut drawn_w = None;
         ui.horizontal(|ui| {
-            // On a row of its own the name may use the whole width.
-            let name_w = if one_row { beside.min(680.0) } else { avail }.max(160.0);
+            // On a row of its own the name may use the whole width, less its rename pencil.
+            let name_w = if one_row { beside.min(680.0) } else { avail - 30.0 }.max(160.0);
             ui.vertical(|ui| {
                 ui.set_max_width(if one_row { beside } else { avail });
                 let mut name_buf = bank_name.clone();
@@ -862,7 +865,13 @@ impl App {
             ctx.data_mut(|d| d.insert_temp(tools_key, w));
             ctx.request_repaint();
         }
-        if crate::share::bank_links_ui::strip(ui, self, bank_id) { return; }
+        let hosted = ui
+            .scope(|ui| {
+                ui.set_max_width(page_w);
+                crate::share::bank_links_ui::strip(ui, self, bank_id)
+            })
+            .inner;
+        if hosted { return; }
         let desc = self.store.bank(bank_id).map(|b| b.details.description.trim().to_string()).unwrap_or_default();
         if !desc.is_empty() {
             ui.add_space(2.0);
@@ -2493,7 +2502,11 @@ fn draw_card(
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
         }
         if let Some(q) = q {
-            hr.context_menu(|ui| {
+            // (round 6, critic) The card's menu is not mouse-only: Shift+F10 with the card focused (Tab reaches it) or under
+            // the pointer opens it at the card's corner, where Tab and Enter reach "History in the circle" (hook H3).
+            let keyed = ui.input(|i| i.modifiers.shift && i.key_pressed(egui::Key::F10)) && (hr.has_focus() || hr.hovered());
+            let menu = if keyed { egui::Popup::context_menu(&hr).at_position(hr.rect.left_bottom()).open_memory(egui::SetOpenCommand::Bool(true)) } else { egui::Popup::context_menu(&hr) };
+            menu.show(|ui| {
                 if ui.button("Duplicate").clicked() {
                     duplicate_question(app, bank_id, &q.id);
                     ui.close();

@@ -25,6 +25,24 @@ fn null_num<'de, D: serde::Deserializer<'de>, T: Default + Deserialize<'de>>(d: 
     Ok(Option::<T>::deserialize(d)?.unwrap_or_default())
 }
 
+/// (round 6, critic) The most characters of an author read from a history line, and of its message. The reply is untrusted
+/// and every line is kept for the session (50 of them): a name or a message far longer than the app ever writes is cut,
+/// never kept whole. The message keeps the pool's own limit (`MESSAGE_MAX`); a name is shorter than one.
+pub const BY_MAX: usize = 200;
+
+fn capped<'de, D: serde::Deserializer<'de>>(d: D, max: usize) -> Result<String, D::Error> {
+    let s = Option::<String>::deserialize(d)?.unwrap_or_default();
+    Ok(s.chars().take(max).collect())
+}
+
+fn capped_by<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    capped(d, BY_MAX)
+}
+
+fn capped_message<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    capped(d, MESSAGE_MAX)
+}
+
 /// One line of a bank's history.
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 #[serde(default)]
@@ -33,12 +51,12 @@ pub struct VersionLine {
     pub version: u64,
     #[serde(deserialize_with = "null_text")]
     pub version_id: String,
-    #[serde(deserialize_with = "null_text")]
+    #[serde(deserialize_with = "capped_by")]
     pub by: String,
     #[serde(deserialize_with = "null_num")]
     pub at: i64,
     /// Blank for a withheld version.
-    #[serde(deserialize_with = "null_text")]
+    #[serde(deserialize_with = "capped_message")]
     pub message: String,
     #[serde(deserialize_with = "null_num")]
     pub added: u32,

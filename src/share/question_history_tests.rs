@@ -1228,3 +1228,38 @@ fn d2i_a_circle_picture_the_store_keeps_as_webp_is_the_same_picture() {
     assert_eq!(r.map(|d| d.version), Err(RestoreRefused::Same));
     assert_eq!(json_of(&banks), before);
 }
+
+// ---- round 6, the "should fix" items -----------------------------------------------------------------------------------
+
+#[test]
+fn d2l_a_history_lines_author_and_message_are_cut_at_parse() {
+    // (round 6, critic) an untrusted reply: 100,000 characters of author and of message are cut when the line is read,
+    // never kept whole for the session
+    let s = Tape::new();
+    let big = "x".repeat(100_000);
+    s.json("Get", &format!("/circles/{CID}/banks/{BID}/versions"), 200, json!({"bank_id": BID, "head_version": 1, "versions": [{"version": 1, "kept": true, "by": big, "at": NOW, "message": big}]}), None);
+    let p = block_on(Pool::new(s.as_ref()).circle_versions(CID, BID, None)).unwrap();
+    assert_eq!(p.versions.len(), 1);
+    assert_eq!(p.versions[0].by.chars().count(), super::circle_versions_api::BY_MAX);
+    assert_eq!(p.versions[0].message.chars().count(), super::circles_api::MESSAGE_MAX);
+}
+
+#[test]
+fn d2l_the_same_restore_point_is_not_saved_twice() {
+    // (round 6, critic) a second restore point over banks nothing else touched (a retried restore) is the one already kept;
+    // banks that moved get a new point, and the first is never written over
+    let dir = std::env::temp_dir().join(format!("vershion-d2-r6-restore-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut bank, _) = linked();
+    let fs = crate::store::FsBackend::new(dir.clone());
+    let first = super::browse::save_copy_to(&fs, std::slice::from_ref(&bank), "restore", NOW / 1000).unwrap();
+    let again = super::browse::save_copy_to(&fs, std::slice::from_ref(&bank), "restore", NOW / 1000 + 1).unwrap();
+    assert_eq!(first, again, "the same banks are one restore point");
+    assert_eq!(std::fs::read_dir(dir.join("backups")).unwrap().count(), 1);
+    bank.questions[0].stem = "Changed".into();
+    let moved = super::browse::save_copy_to(&fs, std::slice::from_ref(&bank), "restore", NOW / 1000 + 2).unwrap();
+    assert_ne!(moved, first);
+    assert_eq!(std::fs::read_dir(dir.join("backups")).unwrap().count(), 2);
+    let _ = std::fs::remove_dir_all(&dir);
+}

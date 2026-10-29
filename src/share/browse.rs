@@ -209,9 +209,18 @@ impl RestoreSink for StoreRestore {
 }
 
 /// (round 18, survivor k95) A safety copy of all the banks in `b`: `backups/banks-before-<what>-<date>.json` (`secs`: now), never
-/// over another one. Where it is, in words.
+/// over another one. Where it is, in words. (round 6, critic) The same banks as the newest copy of that kind are not written
+/// again: a second restore (or a retried one) over banks nothing else touched since leaves that one as its restore point.
 pub fn save_copy_to(b: &dyn crate::store::Backend, banks: &[QuestionBank], what: &str, secs: i64) -> Result<String, String> {
     let bytes = serde_json::to_vec(banks).map_err(|e| e.to_string())?;
+    let prefix = format!("banks-before-{what}-");
+    let mut have: Vec<String> = b.list("backups").into_iter().filter(|n| n.starts_with(&prefix) && n.ends_with(".json")).collect();
+    have.sort();
+    if let Some(last) = have.last()
+        && b.read(&format!("backups/{last}")).as_deref() == Some(bytes.as_slice())
+    {
+        return Ok(format!("{} (backups/{last})", b.label()));
+    }
     let stamp = crate::store::backup_stamp(secs);
     let mut rel = format!("backups/banks-before-{what}-{stamp}.json");
     let mut n = 2;

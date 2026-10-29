@@ -1487,14 +1487,18 @@ fn d2f_the_pickers_list_versions_newest_first() {
 
 #[test]
 fn d2f_the_bankui_hook_sits_in_the_question_cards_menu() {
-    // the one H3 line is inside draw_card's right-click menu, before the card's own click handling
+    // the one H3 line is inside draw_card's menu (right-click, or Shift+F10 from the keyboard), before the card's own click
     let src = include_str!("../bankui.rs");
     let card = src.find("fn draw_card(").expect("draw_card");
-    let menu = card + src[card..].find("hr.context_menu(").expect("the card's menu");
+    let menu = card + src[card..].find("egui::Popup::context_menu(&hr)").expect("the card's menu");
     let after = menu + src[menu..].find("if hr.clicked()").expect("the card's click");
     let hook = src.find("crate::share::question_history_ui::question_menu(").expect("hook H3");
     assert!(menu < hook && hook < after, "H3 lies in the menu");
     assert_eq!(src.matches("question_history_ui::question_menu(").count(), 1);
+    // (round 6, critic) and the menu has a keyboard route: Shift+F10
+    let keyed = src.find("egui::Key::F10").expect("a keyboard route to the card's menu");
+    assert!(card < keyed && keyed < hook, "the keyboard route opens the menu the hook is in");
+    assert_eq!(src.matches("egui::Key::F10").count(), 1);
 }
 
 #[test]
@@ -2359,4 +2363,52 @@ fn d2k_a_difficulty_pass_never_writes_over_a_restored_question() {
     });
     r.page(1280.0);
     assert_eq!(r.banks[0].questions[0].difficulty, Some(crate::model::Difficulty::High));
+}
+
+// ---- round 6, the "should fix" items -----------------------------------------------------------------------------------
+
+#[test]
+fn d2l_show_waits_while_a_restore_is_asked() {
+    // (round 6, critic) Show reads a version the restore's own read would mix with: it waits while a restore is asked.
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+    r.w.raw(&version_path(5), served(5, &[qj(QA, A5)], false));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Restore...", 0));
+    r.click(1280.0, "Show", 0);
+    assert!(r.qpage().preview.is_none(), "Show read a version while a restore was asked");
+    // Cancel: the question is gone, and Show works again
+    assert!(r.click(1280.0, "Cancel", 0));
+    r.click(1280.0, "Show", 0);
+    assert!(r.qpage().preview.is_some(), "Show did not come back after Cancel");
+}
+
+#[test]
+fn d2l_a_compare_never_offers_the_same_side_in_both_pickers() {
+    let sides = vec![Side::Version(5), Side::Version(3), Side::YourCopy];
+    assert_eq!(picker_options(&sides, Side::Version(3)), vec![Side::Version(5), Side::YourCopy]);
+    assert_eq!(picker_options(&sides, Side::YourCopy), vec![Side::Version(5), Side::Version(3)]);
+    assert_eq!(picker_options(&[Side::Version(5), Side::YourCopy], Side::Version(5)), vec![Side::YourCopy]);
+}
+
+#[test]
+fn d2l_open_compare_refuses_the_same_side() {
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(3), served(3, &[qj(QA, A3), qj(QB, B)], false));
+    r.open(0);
+    r.page(1280.0);
+    let cache = &mut r.m.edit.question_cache;
+    if let EditView::Question(p) = &mut r.m.edit.view {
+        p.open_compare(Side::Version(3), Side::Version(3), cache);
+    }
+    assert!(r.qpage().compare.is_none(), "a version compared with itself");
+    // a real pair still opens
+    let cache = &mut r.m.edit.question_cache;
+    if let EditView::Question(p) = &mut r.m.edit.view {
+        p.open_compare(Side::Version(3), Side::YourCopy, cache);
+    }
+    assert!(r.qpage().compare.is_some());
 }

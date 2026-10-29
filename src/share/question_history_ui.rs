@@ -552,8 +552,12 @@ impl QuestionPage {
         Ok(())
     }
 
-    /// Compare two sides (plan 4.6): two version reads, none for "Your copy" or a version read this session.
+    /// Compare two sides (plan 4.6): two version reads, none for "Your copy" or a version read this session. (round 6,
+    /// critic) The same side is never both sides: a picker that would choose the other one leaves the compare as it is.
     pub fn open_compare(&mut self, left: Side, right: Side, cache: &mut HistoryCache) {
+        if left == right {
+            return;
+        }
         let state = match self.read_sides(&[left, right], cache) {
             Ok(()) => CompareState::Reading,
             Err(m) => CompareState::Failed(m),
@@ -1277,9 +1281,13 @@ fn draw_question(ui: &mut Ui, p: &QuestionPage, back: &str, now: i64) -> Act {
                                     }
                                 }
                                 1 => {
-                                    // (round 4, critic P-6) the whole question of that version
-                                    let label = if p.preview == Some(*version) { "Hide" } else { "Show" };
-                                    if kit::ghost_button(ui, label).clicked() {
+                                    // (round 4, critic P-6) the whole question of that version; (round 6, critic) Show waits
+                                    // while a restore is asked (its reads would mix with the restore's), Hide always closes it
+                                    if p.preview == Some(*version) {
+                                        if kit::ghost_button(ui, "Hide").clicked() {
+                                            *act = Act::Show(*version);
+                                        }
+                                    } else if button_if(ui, free, "Show") {
                                         *act = Act::Show(*version);
                                     }
                                 }
@@ -1533,6 +1541,11 @@ fn picker(ui: &mut Ui, id: &str, label: &str, now: Side, all: &[Side]) -> Option
     chosen
 }
 
+/// (round 6, critic) What a picker offers: every side but the one the other picker holds, so the same side is never both.
+pub(super) fn picker_options(all: &[Side], other: Side) -> Vec<Side> {
+    all.iter().copied().filter(|s| *s != other).collect()
+}
+
 /// "Points, topics: the same" (plan 4.6).
 fn folded(names: &[&str], what: &str) -> String {
     let list: Vec<String> = names.iter().enumerate().map(|(i, n)| if i == 0 { n.to_string() } else { n.to_lowercase() }).collect();
@@ -1557,10 +1570,10 @@ fn compare_panel(ui: &mut Ui, p: &QuestionPage, c: &CompareView, act: &mut Act) 
     let all = sides_of(p);
     ui.label(theme::strong("Compare").size(15.0));
     ui.horizontal_wrapped(|ui| {
-        if let Some(s) = picker(ui, "left", "From", c.left, &all) {
+        if let Some(s) = picker(ui, "left", "From", c.left, &picker_options(&all, c.right)) {
             *act = Act::SetLeft(s);
         }
-        if let Some(s) = picker(ui, "right", "To", c.right, &all) {
+        if let Some(s) = picker(ui, "right", "To", c.right, &picker_options(&all, c.left)) {
             *act = Act::SetRight(s);
         }
         if kit::ghost_button(ui, "Close compare").clicked() {
@@ -1674,5 +1687,5 @@ pub(super) fn question_menu_of(ui: &mut Ui, c: &mut CirclesModel, bank: &Questio
         ui.label(theme::muted(DRAFT_OPEN).size(12.0));
         return false;
     }
-    ui.button("History in the circle").clicked() && c.edit.open_question_history(bank, question_id)
+    ui.button("History in the circle").on_hover_text("Right-click a question, or press Shift+F10 over it").clicked() && c.edit.open_question_history(bank, question_id)
 }
