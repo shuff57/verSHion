@@ -150,9 +150,10 @@ pub struct CircleLink {
     #[serde(default, skip_serializing_if = "std::ops::Not::not", deserialize_with = "lenient_bool")]
     pub as_is: bool,
     /// (round 6, critic N5) Questions a restore set in this copy, not sent yet: a difficulty pass learnt from the circle
-    /// never writes over their difficulty (the restore's rating wins until the person changes it). Taken out when the copy
-    /// moves on (a send or a merge, whose base is the bank as sent) and by an Undo, which puts the old question back.
-    /// Read leniently: a value this build can not read is none, never the link with it.
+    /// never writes over their difficulty (the restore's rating is an explicit choice and wins; so does a change the person
+    /// makes afterwards, which this build never overwrites either). Taken out when the copy moves on (a send or a merge,
+    /// whose base is the bank as sent) and by an Undo, which puts the old question back. Read leniently: a value this build
+    /// can not read is none, never the link with it.
     #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "ids_or_empty")]
     pub restored: Vec<String>,
 }

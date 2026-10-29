@@ -561,9 +561,15 @@ fn get_latest_and_merge_then_send_goes_with_the_token() {
     assert_eq!(r.banks[0].questions[0].stem, "One, reworded by me", "nothing changes until the person applies");
     assert_eq!(*r.restores.0.lock().unwrap(), 0);
 
+    // (round 7, critic M3) a merge moves the base on: a restored question's marker does not outlive it
+    r.m.update_link(LOCAL, |l| {
+        l.restored.push("q-restored".into());
+        true
+    });
     r.m.apply_merge();
     r.turns(2);
     assert!(matches!(r.merge_phase(), MergePhase::Applied(_)), "{:?}", r.merge_phase());
+    assert!(r.link().restored.is_empty(), "a merge kept a restored question's marker");
     assert_eq!(*r.restores.0.lock().unwrap(), 1, "the restore point was saved first");
     let b = &r.banks[0];
     assert_eq!(b.questions.len(), 3);

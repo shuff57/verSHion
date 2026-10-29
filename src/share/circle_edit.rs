@@ -4865,6 +4865,9 @@ impl CircleEditModel {
         link.pass_times = None;
         link.missing_at_read = None;
         link.as_is = false;
+        // (round 7, critic M3) the base is the circle's version as merged: no restored question waits for a difficulty pass
+        // any more (the base record and the bank's files are new)
+        link.restored.clear();
         // (critic 63 I3) Read in full: the answer keys came with it, so the copy no longer follows the viewers' form.
         if !rev.fetched.head.bank.keys_hidden {
             link.viewers_form = false;
