@@ -1505,6 +1505,10 @@ fn d2f_the_bankui_hook_sits_in_the_question_cards_menu() {
     // (round 8, critic P) and it promises only what an unlinked bank's menu holds
     let unlinked = src.find("Right-click for Duplicate and Delete; Shift+F10").expect("the unlinked banks' hint");
     assert!(hint < unlinked && unlinked < menu, "both hints sit on the card, before the menu");
+    // (round 9, critic M5) a new-question card has no menu at all, so the hint is chosen by `q` and is none for it
+    let block = src.find("let hint = match q {").expect("the card's hint block");
+    assert!(card < block && block < hint, "the hint block comes before its texts");
+    assert!(src[block..block + 60].contains("None => None"), "a new-question card gets no hint");
 }
 
 #[test]

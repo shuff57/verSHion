@@ -1607,3 +1607,258 @@ fn d2n_a_changes_reply_and_merge_start_are_capped_at_parse() {
     assert_eq!(m.between.len(), super::circle_versions_api::HISTORY_PAGE);
     assert!(m.head_by.chars().count() <= super::circle_versions_api::BY_MAX);
 }
+
+// ---- round 8 product critic's probes -------------------------------------------------------------------------------------
+
+#[test]
+fn d2o_picture_records_kept_below_the_cap_still_compare() {
+    // 33 unpaired picture restores in one session: PICTURE_FILES_MAX keeps 32, evicting the oldest. A question whose
+    // picture is still the first one's then compares as "a different picture", because its base entry went with the unpair.
+    let n = 33usize;
+    let qid = |i: usize| format!("c{:031}", i);
+    let sha9 = |i: usize| format!("{:064x}", 0x9000 + i);
+    let sha6 = |i: usize| format!("{:064x}", 0x6000 + i);
+    let stored = |i: usize| format!("media/{:064x}.webp", 0x1000 + i);
+    let v9q: Vec<Value> = (0..n)
+        .map(|i| {
+            let mut q = mc(&qid(i), &format!("Question {i} as of version 9"), 1.0);
+            q["image"] = json!({"file": format!("media/{}.png", sha9(i)), "width": 3, "height": 2});
+            q
+        })
+        .collect();
+    let v6q: Vec<Value> = (0..n)
+        .map(|i| {
+            let mut q = mc(&qid(i), &format!("Question {i} as of version 9"), 1.0);
+            q["image"] = json!({"file": format!("media/{}.png", sha6(i)), "width": 3, "height": 2});
+            q
+        })
+        .collect();
+    let (bank, mut link) = linked_with(&v9q);
+    let locals: Vec<String> = (0..n).map(|i| local_of(&link, &qid(i))).collect();
+    let mut banks = vec![bank];
+    let six = body(6, &v6q, false);
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    for i in 0..n {
+        let pic = ImageRef { file: stored(i), width: 3, height: 2 };
+        let with = RestoreAsk { link: &link, local_id: Some(&locals[i]), qid: &qid(i), body: &six, picture: Some(pic), store_picture: None, removed_in_circle: true };
+        let done = restore_question(&mut banks, &with, &sink, &|_| Ok(()), NOW + 1000 + i as i64).unwrap();
+        link = done.link.clone().unwrap_or(link);
+    }
+    // (round 9, critic M4) 33 restores are all kept: the cap is far above a session's unpaired restores, and what it drops
+    // are the oldest names, never the newest
+    assert_eq!(link.picture_files.len(), n, "the map keeps every restore below its cap");
+    let cmp = compare(side_of_copy(&link, &banks[0], &locals[0]).as_ref(), side_of_version(&six, &qid(0)).as_ref(), false);
+    let pic = cmp.fields.iter().find(|f| f.field == "Picture").unwrap();
+    assert!(
+        (pic.left.as_str(), pic.right.as_str(), pic.changed) == ("the same picture", "the same picture", false),
+        "after 33 restores the first picture's record is gone: Compare says {} / {} (changed = {})",
+        pic.left,
+        pic.right,
+        pic.changed
+    );
+}
+
+#[test]
+fn d2o_an_old_links_unknown_figure_may_not_vanish() {
+    // A link an earlier build wrote has no figure record. Restoring a version whose question has NO figure, over a base
+    // version whose question HAD one, moves the copy off the base's figure with nothing countable left: the guard does not
+    // fire (None == None), and the strip then says 0 changed.
+    let mut q9 = mc(QA, "Question A as of version 9", 1.0);
+    q9["figure"] = json!({"id": "triangle", "params": {"a": 4}});
+    let v9q = vec![q9, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)];
+    let (mut bank, mut link) = linked_with(&v9q);
+    // as an earlier build wrote it: the base version's figure is not recorded
+    link.base[0].figure = None;
+    let a = local_of(&link, QA);
+    bank.questions.iter_mut().find(|q| q.id == a).unwrap().stem = "My unsent edit".into();
+    bank.modified += 10;
+    assert_eq!(changes_since(&link, &bank).changed, 1, "the strip counts the stem edit");
+    let six = body(6, &[mc(QA, "Question A as of version 9", 1.0), mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)], false);
+    let mut banks = vec![bank];
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    let r = restore_question(&mut banks, &ask(&link, Some(&a), QA, &six), &sink, &|_| Ok(()), NOW + 100_000);
+    let fig = banks[0].questions.iter().find(|q| q.id == a).and_then(|q| q.figure.clone());
+    let count = changes_since(&link, &banks[0]).changed;
+    let restored = r.map(|d| d.version);
+    assert!(
+        !(restored == Ok(6) && fig.is_none() && count == 0),
+        "restore allowed and the strip says up to date over the base version's figure: restore {restored:?}, copy figure {fig:?}, strip changed {count}"
+    );
+}
+
+#[test]
+fn d2o_an_unpaired_restore_that_stores_the_picture_compares_as_the_same() {
+    // The builder's unpaired test reuses the copy's picture; the store path (PNG -> WebP under a new name) is the one the
+    // brief named. Confirm the link-level record covers it too.
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(3, 2, image::Rgb([20, 200, 10])))
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    let circle_sha = sha256_hex(&png);
+    let prepared = crate::store::prepare_image(&png).unwrap();
+    let stored_file = format!("media/{}.webp", sha256_hex(&prepared.bytes));
+    // the copy in step with v9: QA has no picture
+    let (bank, link) = linked();
+    let a = local_of(&link, QA);
+    // version 6: QA with the circle's picture (a PNG in the circle's store)
+    let mut q6 = mc(QA, "Question A as of version 9", 1.0);
+    q6["image"] = json!({"file": format!("media/{circle_sha}.png"), "width": 3, "height": 2});
+    let six = body(6, &[q6, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)], false);
+    let mut banks = vec![bank];
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    let (f, w, h) = (stored_file.clone(), prepared.width, prepared.height);
+    let store = move || -> Result<ImageRef, String> { Ok(ImageRef { file: f.clone(), width: w, height: h }) };
+    // the circle removed QA: the restore brings it back new (unpaired) and must store the picture
+    let with = RestoreAsk { link: &link, local_id: Some(&a), qid: QA, body: &six, picture: None, store_picture: Some(&store), removed_in_circle: true };
+    let done = restore_question(&mut banks, &with, &sink, &|_| Ok(()), NOW + 1000).unwrap();
+    assert!(done.added && !done.link.as_ref().unwrap().base.iter().any(|b| b.local_id == a));
+    let kept = done.link.clone().unwrap();
+    let cmp = compare(side_of_copy(&kept, &banks[0], &a).as_ref(), side_of_version(&six, QA).as_ref(), false);
+    let pic = cmp.fields.iter().find(|f| f.field == "Picture").unwrap();
+    assert!(
+        (pic.left.as_str(), pic.right.as_str(), pic.changed) == ("the same picture", "the same picture", false),
+        "the stored picture is version 6's, but Compare says {} / {} (changed = {})",
+        pic.left,
+        pic.right,
+        pic.changed
+    );
+}
+
+#[test]
+fn d2o_a_figure_move_with_a_counted_change_keeps_the_strip_truthful() {
+    // The guard allows a figure move when the restored question itself differs from the base in something countable. The
+    // strip must then count it: never "up to date" over the figure.
+    let mut q9 = mc(QA, "Question A as of version 9", 1.0);
+    q9["figure"] = json!({"id": "triangle", "params": {"a": 4}});
+    let v9q = vec![q9, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)];
+    let (mut bank, link) = linked_with(&v9q);
+    let a = local_of(&link, QA);
+    bank.questions.iter_mut().find(|q| q.id == a).unwrap().stem = "My unsent edit".into();
+    bank.questions.iter_mut().find(|q| q.id == a).unwrap().figure = Some(crate::model::FigureSpec { id: "triangle".into(), params: [("a".to_string(), json!(3))].into_iter().collect() });
+    bank.modified += 10;
+    // version 6's QA carries a different stem (a countable change from the base) and a different figure
+    let mut q6 = mc(QA, "Question A, the older wording", 1.0);
+    q6["figure"] = json!({"id": "triangle", "params": {"a": 5}});
+    let six = body(6, &[q6, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)], false);
+    let mut banks = vec![bank];
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    let r = restore_question(&mut banks, &ask(&link, Some(&a), QA, &six), &sink, &|_| Ok(()), NOW + 100_000);
+    let count = changes_since(&link, &banks[0]).changed;
+    assert_eq!(r.map(|d| d.version), Ok(6), "a countable change plus a figure move must be restorable");
+    assert!(count >= 1, "the strip must count the restored question, got changed = {count}");
+}
+
+#[test]
+fn d2o_a_partial_send_keeps_a_held_back_restored_pictures_name() {
+    // The store renames a circle PNG to WebP; the restore records W -> S on the link. A partial send that leaves that
+    // restore unticked clears the record (after_partial_send), and the held question's base is rebuilt from the base
+    // body (which has no picture), so nothing names W on the circle any more and Compare says "a different picture"
+    // against the very version restored.
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(3, 2, image::Rgb([10, 20, 200])))
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    let circle_sha = sha256_hex(&png);
+    let prepared = crate::store::prepare_image(&png).unwrap();
+    let stored_file = format!("media/{}.webp", sha256_hex(&prepared.bytes));
+    let (bank, link) = linked();
+    let a = local_of(&link, QA);
+    // version 6: QA with the circle's picture (a PNG in the circle's store)
+    let mut q6 = mc(QA, "Question A as of version 9", 1.0);
+    q6["image"] = json!({"file": format!("media/{circle_sha}.png"), "width": 3, "height": 2});
+    let six = body(6, &[q6, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)], false);
+    let mut banks = vec![bank];
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    let (f, w, h) = (stored_file.clone(), prepared.width, prepared.height);
+    let store = move || -> Result<ImageRef, String> { Ok(ImageRef { file: f.clone(), width: w, height: h }) };
+    let with = RestoreAsk { link: &link, local_id: Some(&a), qid: QA, body: &six, picture: None, store_picture: Some(&store), removed_in_circle: false };
+    let done = restore_question(&mut banks, &with, &sink, &|_| Ok(()), NOW + 1000).unwrap();
+    let kept = done.link.clone().unwrap();
+    assert_eq!(kept.picture_files, vec![(stored_file.clone(), circle_sha.clone())], "the restore records the name");
+    // the send page: that change is held back (unticked); the composed question is the base body's (v9's, no picture)
+    let q9 = v9();
+    let composed: Vec<super::partial_send::ComposedQuestion> = vec![
+        super::partial_send::ComposedQuestion { local: a.clone(), qid: Some(QA.into()), question: Some(serde_json::from_value(q9[0].clone()).unwrap()), base_image: None },
+        super::partial_send::ComposedQuestion { local: local_of(&kept, QB), qid: Some(QB.into()), question: Some(serde_json::from_value(q9[1].clone()).unwrap()), base_image: None },
+        super::partial_send::ComposedQuestion { local: local_of(&kept, QC), qid: Some(QC.into()), question: Some(serde_json::from_value(q9[2].clone()).unwrap()), base_image: None },
+    ];
+    let sent = super::circles_api::SentBank { circle_id: CID.into(), bank_id: BID.into(), version: 10, version_id: format!("{:032x}", 10), qids: vec![QA.into(), QB.into(), QC.into()], ..Default::default() };
+    let after = super::circle_links::after_partial_send(&kept, &banks[0], &composed, &sent, vec![a.clone()]);
+    // (round 9, critic T1) the held-back question keeps its picture record; the two sent questions have rebuilt bases that
+    // name their pictures, so nothing of theirs is left to keep
+    assert_eq!(after.picture_files, vec![(stored_file.clone(), circle_sha.clone())], "the partial send kept the held-back record");
+    let cmp = compare(side_of_copy(&after, &banks[0], &a).as_ref(), side_of_version(&six, QA).as_ref(), false);
+    let pic = cmp.fields.iter().find(|f| f.field == "Picture").unwrap();
+    assert!(
+        (pic.left.as_str(), pic.right.as_str(), pic.changed) == ("the same picture", "the same picture", false),
+        "the partial send lost the name of the picture version 6's restore stored: Compare says {} / {} (changed = {})",
+        pic.left,
+        pic.right,
+        pic.changed
+    );
+}
+
+#[test]
+fn d2o_a_merge_clears_the_picture_records() {
+    // The r8 doc on CircleLink.picture_files (and the r8 brief) say it is "cleared when the base is rebuilt (a send
+    // or a merge)". finish_merge rebuilds the base (and even clears `restored`, the r7 M3 fix) but not this.
+    let src = include_str!("circle_edit.rs");
+    let fm = src.find("fn finish_merge").expect("finish_merge");
+    let next = src[fm..].find("\n    }\n").map(|i| fm + i).unwrap_or(src.len());
+    let body = &src[fm..next];
+    assert!(body.contains("picture_files.clear()"), "finish_merge rebuilds the base but leaves the stale picture_files map");
+}
+
+#[test]
+fn d2o_a_stale_picture_record_must_not_override_the_base_record() {
+    // picture_files is consulted FIRST. After a merge that rebuilt an accurate base record (local_image F, snap.image
+    // S_new) the stale entry F -> S_old still wins, so Compare reads the copy's picture as S_old.
+    let (mut bank, mut link) = linked();
+    let a = local_of(&link, QA);
+    let file = format!("media/{}.webp", format!("{:064x}", 0x11u8));
+    let s_new = format!("{:064x}", 0x11u8);
+    let s_old = format!("{:064x}", 0x22u8);
+    {
+        let b = link.base.iter_mut().find(|b| b.local_id == a).unwrap();
+        b.local_image = Some(file.clone());
+        b.snap.image = Some(s_new.clone());
+    }
+    bank.questions.iter_mut().find(|q| q.id == a).unwrap().image = Some(ImageRef { file: file.clone(), width: 1, height: 1 });
+    link.picture_files.push((file.clone(), s_old.clone()));
+    assert_eq!(
+        picture_sha_on_circle(&link, &bank.questions[0]).as_deref(),
+        Some(s_new.as_str()),
+        "the stale link-level map overrides the accurate per-question base record"
+    );
+}
+
+#[test]
+fn d2o_a_tampered_picture_record_must_not_make_a_different_picture_the_same() {
+    let (mut bank, mut link) = linked();
+    let a = local_of(&link, QA);
+    let actual = format!("{:064x}", 0x11u8);
+    let lie = format!("{:064x}", 0x22u8);
+    let file = format!("media/{actual}.webp");
+    {
+        let b = link.base.iter_mut().find(|b| b.local_id == a).unwrap();
+        b.local_image = Some(file.clone());
+        b.snap.image = Some(actual.clone());
+    }
+    bank.questions.iter_mut().find(|q| q.id == a).unwrap().image = Some(ImageRef { file: file.clone(), width: 1, height: 1 });
+    link.picture_files.push((file.clone(), lie.clone()));
+    let mut q = mc(QA, "Question A as of version 9", 1.0);
+    q["image"] = json!({"file": format!("media/{lie}.png"), "width": 1, "height": 1});
+    let six = body(6, &[q, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)], false);
+    let cmp = compare(side_of_copy(&link, &bank, &a).as_ref(), side_of_version(&six, QA).as_ref(), false);
+    let pic = cmp.fields.iter().find(|f| f.field == "Picture").unwrap();
+    assert!(pic.changed, "a different local picture is read as the circle's own: {} / {}", pic.left, pic.right);
+}
+
+#[test]
+fn d2o_a_link_with_one_unreadable_figure_still_parses() {
+    // picture_now and snap.difficulty read leniently ("the link is kept, never dropped for it"); figure does not.
+    let (_, link) = linked();
+    let mut v = serde_json::to_value(&link).unwrap();
+    v["base"][0]["figure"] = json!("triangle");
+    assert!(serde_json::from_value::<CircleLink>(v).is_ok(), "one unreadable figure drops the whole link");
+}
