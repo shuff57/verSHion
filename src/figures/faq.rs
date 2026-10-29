@@ -33,6 +33,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "chi-square-fit" => CHI_SQUARE_FIT,
         "enzyme-kinetics" => ENZYME_KINETICS,
         "cladogram" => CLADOGRAM,
+        "food-web" => FOOD_WEB,
         // chemistry
         "bohr-model" => BOHR_MODEL,
         "gas-syringe" => GAS_SYRINGE,
@@ -611,6 +612,29 @@ const ENZYME_KINETICS: &[Faq] = &[
     Faq {
         q: "Why is the marked rate always below Vmax?",
         a: "Because the enzyme can only work as fast as its active sites allow. The formula v = Vmax [S] / (Km + [S]) gives a fraction of Vmax for any finite concentration, and only approaches Vmax as the concentration becomes very large.",
+    },
+];
+
+const FOOD_WEB: &[Faq] = &[
+    Faq {
+        q: "How do I type the links?",
+        a: "One link per line: the eater's food, then ->, then the eater, as in Grass -> Rabbit. A whole chain may go on one line (Grass -> Rabbit -> Fox), and <- writes it from the predator's end. A line starting with # is a note and is not drawn.",
+    },
+    Faq {
+        q: "Why do the names sit on different rows?",
+        a: "Each row is a trophic level. Producers (nothing they eat is typed) are at the bottom; anything that eats only producers is a primary consumer above them; a predator is one level above its highest prey, so an animal that eats both grass and rabbits sits with the secondary consumers. The arrows run from the food to the eater, the way the energy goes.",
+    },
+    Faq {
+        q: "Why is a circle refused?",
+        a: "A food web is a one-way flow of energy: if A is eaten by B and B by A, no level can be worked out. The figure names the names in the loop so the link that closes it can be removed.",
+    },
+    Faq {
+        q: "Do the names have to match exactly?",
+        a: "Yes. Grass, grass and Grass. are three different names, and a typo becomes its own organism. Spaces are kept, so Arctic fox is one name.",
+    },
+    Faq {
+        q: "How many links can one picture hold?",
+        a: "Up to 24 names; past that the figure asks for two pictures rather than drawing something unreadable.",
     },
 ];
 

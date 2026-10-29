@@ -8,6 +8,7 @@ mod handles;
 pub mod chisquarefit;
 pub mod cladogram;
 pub mod enzyme;
+pub mod foodweb;
 pub mod gel;
 pub mod hardyweinberg;
 pub mod pedigree;
@@ -30,6 +31,7 @@ pub fn examples(id: &str) -> Option<Vec<super::Example>> {
         "chi-square-fit" => chisquarefit::examples(id),
         "enzyme-kinetics" => enzyme::examples(id),
         "cladogram" => cladogram::examples(id),
+        "food-web" => foodweb::examples(id),
         _ => None,
     }
 }
@@ -127,6 +129,7 @@ pub fn defs() -> Vec<FigureDef> {
         chisquarefit::defs().pop().unwrap(),
         enzyme::defs().pop().unwrap(),
         cladogram::defs().pop().unwrap(),
+        foodweb::defs().pop().unwrap(),
     ]
 }
 

@@ -328,7 +328,7 @@ mod tests {
         "circle-of-fifths", "circular-flow", "circular-motion", "cladogram", "climate-graph", "collision-momentum", "colour-wheel", "confidence-interval",
         "cost-curves", "court-layout", "data-structure", "depreciation-schedule", "discrete-distribution",
         "dot-plot", "earth-cycles", "earth-layers", "elasticity", "electric-field", "energy-bar-chart", "er-diagram", "experiment-flow",
-        "family-tree", "financial-statement", "flowchart", "food-plate", "fraction-models", "free-body", "gear-train",
+        "family-tree", "financial-statement", "flowchart", "food-plate", "food-web", "fraction-models", "free-body", "gear-train",
         "graph-diagram", "grid-reference", "guitar-chords", "heart-zones", "histogram", "hr-diagram",
         "journal-entry", "kirchhoff-loops", "loan-amortisation", "logic-circuit", "lorenz", "magnetic-field", "map-scale",
         "marketing-funnel", "maslow", "monopoly", "moon-seasons", "music-staff", "network-topology",

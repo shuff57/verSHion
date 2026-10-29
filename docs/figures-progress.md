@@ -582,3 +582,14 @@ the candidates are now bounded inside the plot and the fallback is the first row
 Minors: a ratio part that is not a whole number keeps its decimals ("1.5 : 2.5 : 1.5", not "2 : 2 : 2"), and a single
 name too long to break now sizes the canvas so the "Left to right:" line fits. The two statistic lines that carry a
 reason were shortened so they keep a margin at Large.
+
+Food web (2026-10-29): new figure `food-web` (`src/figures/biology/foodweb.rs`, Biology). Typed links, one per line
+(`Grass -> Rabbit`), with whole chains on one line (`Grass -> Rabbit -> Fox`), `<-` for the predator-first order, the
+unicode arrow, `#` notes, and spaces in names. Producers sit at the bottom (nothing they eat is typed); a predator is
+one level above its highest prey, so an omnivore sits with the secondary consumers; the levels are named on the left
+and can be turned off. Arrows run from the food to the eater, behind the white-filled boxes. Refused with a reason,
+never a panic: a line without an arrow (with its line number), an empty name, a mixed arrow line, a name eating
+itself, more than 24 names, and a cycle, whose reason names the loop (`A -> B -> A`). Empty input says what to type.
+Nine module tests (parser, levels, every name and link drawn, level names on/off, empty and bad input, canvas fit,
+Print neutrality, PNG export), six examples. Census: only `food-web__defaults` and `food-web__start` added. Awaiting
+its first critic.
