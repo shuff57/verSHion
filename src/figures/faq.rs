@@ -65,6 +65,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "collision-momentum" => COLLISION_MOMENTUM,
         "circular-motion" => CIRCULAR_MOTION,
         "refraction" => REFRACTION,
+        "electric-field" => ELECTRIC_FIELD,
         "parallelogram" => PARALLELOGRAM,
         "trapezoid" => TRAPEZOID,
         "kite" => KITE,
@@ -3450,6 +3451,25 @@ const ENERGY_BAR_CHART: &[Faq] = &[
     Faq {
         q: "How do I make a worksheet?",
         a: "Turn Show answers off: the bars are not drawn and the three numbers become blanks, while the axes, the store names and the givens (mass, heights, loss share, g) stay, so the student works out the stores and draws the bars.",
+    },
+];
+
+const ELECTRIC_FIELD: &[Faq] = &[
+    Faq {
+        q: "Why do the field lines point the way they do?",
+        a: "A field line shows the direction of the force on a positive test charge. Around a positive charge the lines point away from it; around a negative charge they point towards it, which is why the arrows reverse when you change the sign.",
+    },
+    Faq {
+        q: "Why are the equipotential circles spaced like that?",
+        a: "Equal steps of potential are equal steps of 1/r, so the circles sit at r, r/2, r/3: they bunch up near the charge, where the field is strongest. A charge moving along one of them does no work, which is what equipotential means.",
+    },
+    Faq {
+        q: "How do the field and the potential differ?",
+        a: "The field falls as 1/r squared and the potential as 1/r. So doubling the distance quarters the field but only halves the potential. The potential also carries the charge's sign: it is negative around a negative charge, while the field strength is always positive.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the field strength, the potential and the force become blanks, and the force arrow on the test charge is not drawn. The charge, the field lines, the equipotentials and the given values stay.",
     },
 ];
 

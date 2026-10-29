@@ -327,7 +327,7 @@ mod tests {
         "brain-regions", "break-even", "cash-flow-statement", "cause-effect", "chi-square-table",
         "circle-of-fifths", "circular-flow", "circular-motion", "climate-graph", "collision-momentum", "colour-wheel", "confidence-interval",
         "cost-curves", "court-layout", "data-structure", "depreciation-schedule", "discrete-distribution",
-        "dot-plot", "earth-cycles", "earth-layers", "elasticity", "energy-bar-chart", "er-diagram", "experiment-flow",
+        "dot-plot", "earth-cycles", "earth-layers", "elasticity", "electric-field", "energy-bar-chart", "er-diagram", "experiment-flow",
         "family-tree", "financial-statement", "flowchart", "food-plate", "fraction-models", "free-body", "gear-train",
         "graph-diagram", "grid-reference", "guitar-chords", "heart-zones", "histogram", "hr-diagram",
         "journal-entry", "kirchhoff-loops", "loan-amortisation", "logic-circuit", "lorenz", "map-scale",
