@@ -290,6 +290,14 @@ equipotential labels speckle at 66 % at 1.3-1.5x, the electric bottom arrowhead'
 magnetic field prints the direction on the student copy (deliberate), and the PV area in L.Pa needs the 10^-3
 conversion that the FAQ now states.
 
+Spring scale: the reading figures can now be printed as a worksheet. The scale's pointer and spring are the reading, so
+nothing on the instrument may print the number; the answer key line under the figure already existed, but there was no
+way to caption the figure without it, so a student copy could only be blank. A new `answer_text` control (blank by
+default, as on the micropipette) replaces the printed reading when typed: `Force: ________ N` gives the student a
+prompt and a place to write, with the pointer left where it is (that is the exercise), while leaving it empty keeps the
+reading under the figure for the key. Test: the key prints `Force: 3.47 N`, a typed caption wins, and the reading does
+not appear anywhere in the worksheet SVG. Census unchanged, because the new control defaults to empty.
+
 Left open: axis ink `#111827` is grey but not exactly
 neutral; trig's key prints a Hidden side inside a fraction; two-label y axes on tall waves; some coordinate labels
 sit over the drop lines; two example names overstate what they show.
