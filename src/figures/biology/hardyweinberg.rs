@@ -155,12 +155,14 @@ pub fn warnings(p: &Params) -> Vec<String> {
     let last = g.last().map(|x| x.p).unwrap_or(0.0);
     let q = 1.0 - last;
     let next = last / (1.0 - q * q);
+    // the editor note is read on its own, with no page to raise its precision: take the page's
+    let d = shown_dec(p);
     vec![format!(
         "Selection removes every recessive homozygote, so the population is not in Hardy\u{2013}Weinberg equilibrium: p rises from {} to {} over the {} generations shown, and to {} in the next.",
-        num(g[0].p, 2),
-        num(last, 2),
+        val(g[0].p, d),
+        val(last, d),
         gens,
-        num(next, 2)
+        val(next, d)
     )]
 }
 
@@ -326,7 +328,9 @@ pub fn build(p: &Params) -> (String, Report) {
         format!("Check: AA + Aa + aa = {BLANK}")
     });
     if sel {
-        let ps: Vec<String> = if ans { g.iter().map(|x| val(x.p, dec)).collect() } else { (0..gens).map(|_| BLANK.to_string()).collect() };
+        // (round 4) at the page's own precision, not the typed one: p = 0.99 in one decimal place printed a column of
+        // "1"s beside givens that plainly said 0.99
+        let ps: Vec<String> = if ans { g.iter().map(|x| val(x.p, dp)).collect() } else { (0..gens).map(|_| BLANK.to_string()).collect() };
         rows.push(format!("p in each generation  {}", ps.join(", ")));
     }
     for (i, line) in rows.iter().enumerate() {
@@ -452,6 +456,18 @@ mod tests {
         // and the given p itself must not round away either
         let t = texts(&render_of(&[f("p", 0.01), ("dec", Value::I(1))]));
         assert!(t.contains("A  p = 0.01"), "{t}");
+    }
+
+    #[test]
+    fn the_selection_line_prints_p_at_the_page_precision() {
+        // (round 4) the givens said p = 0.99 while the selection line said 1, 1, 1: it used the typed precision
+        let t = texts(&render_of(&[f("p", 0.99), ("dec", Value::I(1)), s("sel", "against the recessive phenotype"), b(SHOW_ANSWERS, true)]));
+        assert!(t.contains("p in each generation  0.99"), "{t}");
+        assert!(!t.contains("p in each generation  1,"), "{t}");
+        // and the editor note that explains the rise says the same numbers
+        let p = with(&[f("p", 0.99), ("dec", Value::I(1)), s("sel", "against the recessive phenotype"), b(SHOW_ANSWERS, true)]);
+        let note = warnings(&p).join(" ");
+        assert!(note.contains("from 0.99"), "{note}");
     }
 
     #[test]

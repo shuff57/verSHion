@@ -12,6 +12,8 @@ const LEAF: &str = "#1f5fbf";
 const ERR: &str = "#c0392b";
 const LEAF_GAP: f64 = 26.0;
 const STEP_X: f64 = 92.0;
+/// What the page says under a tree it could not read.
+const NO_TREE: &str = "Nothing is drawn until the brackets balance.";
 
 pub fn defs() -> Vec<FigureDef> {
     vec![FigureDef {
@@ -242,17 +244,27 @@ pub fn build(p: &Params) -> String {
     let step_x = (STEP_X * lab).max(widest_anc as f64 * 7.2 * lab + 30.0);
     let tree_w = left + maxd as f64 * step_x;
     let label_w = widest as f64 * 8.4 * lab + 18.0;
-    let w = (tree_w + label_w + 28.0).max(360.0);
+    // (round 4) the line under the picture ("4 leaves, 1 branching point, 1 level") grew with the labels and ran past
+    // the canvas at Large: the canvas takes its width into account
+    let count_text = node.as_ref().ok().map(|root| {
+        let plural = |n: usize, one: &str, many: &str| if n == 1 { one.to_string() } else { many.to_string() };
+        let (ls, br, lv) = (leaves(root).len(), branch_points(root), height(root));
+        format!("{ls} {}, {br} {}, {lv} {}", plural(ls, "leaf", "leaves"), plural(br, "branching point", "branching points"), plural(lv, "level", "levels"))
+    });
+    let mut w = (tree_w + label_w + 28.0).max(360.0);
+    if let Some(t) = &count_text {
+        w = w.max(24.0 + t.chars().count() as f64 * 12.0 * lab * 0.6 + 8.0);
+    }
     let top = 34.0;
     let h = top + ((n_leaves as f64) - 1.0).max(1.0) * LEAF_GAP * lab + 40.0 * lab;
     // (round 2) the text under the picture wraps to the CANVAS, not to a fixed character count: 74 characters ran off
     // the right edge of the 360 px floor canvas, so the last names of a student's list were never shown. The same
     // measure serves the error reasons, which were cut mid-word for the same reason.
-    let text_chars = (((w - 48.0) / (12.0 * lab * 0.56)).floor() as usize).max(18);
-    let err_chars = (((w - 48.0) / (13.0 * lab * 0.56)).floor() as usize).max(18);
+    let text_chars = (((w - 48.0) / (12.0 * lab * 0.6)).floor() as usize).max(18);
+    let err_chars = (((w - 48.0) / (13.0 * lab * 0.6)).floor() as usize).max(18);
     let below = match &node {
         Ok(root) => leaf_order(root, text_chars).len().max(1),
-        Err(e) => super::wrap(e, err_chars).len().max(1) + 1,
+        Err(e) => super::wrap(e, err_chars).len() + super::wrap(NO_TREE, err_chars).len(),
     };
     let mut d = Doc::new(w, h + (14.0 + below as f64 * 18.0).max(62.0) * lab);
     d.describe("Cladogram", "A branching tree of the names typed, with the leaves in the order they were written");
@@ -293,8 +305,13 @@ pub fn build(p: &Params) -> String {
                 d.raw(&text_el(24.0, y, 13.0 * lab, "start", ink, &line));
                 y += 18.0 * lab;
             }
-            // (round 2) after the reason, not at a fixed row it used to overprint
-            d.raw(&text_el(24.0, y + 8.0 * lab, 12.0 * lab, "start", ink, "Nothing is drawn until the brackets balance."));
+            // (round 2) after the reason, not at a fixed row it used to overprint; (round 4) wrapped like the reason,
+            // which at Large ran off the 360 px canvas
+            let mut ny = y + 8.0 * lab;
+            for line in super::wrap(NO_TREE, err_chars) {
+                d.raw(&text_el(24.0, ny, 12.0 * lab, "start", ink, &line));
+                ny += 15.0 * lab;
+            }
         }
     }
 
@@ -302,15 +319,13 @@ pub fn build(p: &Params) -> String {
     let y = h + 8.0 * lab;
     if let Ok(root) = &node {
         let ls = leaves(root);
-        let plural = |n: usize, one: &str, many: &str| if n == 1 { one.to_string() } else { many.to_string() };
-        let (br, lv) = (branch_points(root), height(root));
-        let (leaf_n, br_n, lv_n) = (plural(ls.len(), "leaf", "leaves"), plural(br, "branching point", "branching points"), plural(lv, "level", "levels"));
-        let count = format!("{} {leaf_n}, {br} {br_n}, {lv} {lv_n}", ls.len());
-        d.raw(&text_el(24.0, y, 12.0 * lab, "start", ink, &count));
+        if let Some(count) = &count_text {
+            d.raw(&text_el(24.0, y, 12.0 * lab, "start", ink, count));
+        }
         for (i, line) in leaf_order(root, text_chars).iter().enumerate() {
             // (round 3) the continuation lines are indented by x, not by leading spaces: SVG collapses those, so the
             // line used to start hard against the left margin
-            let (x, text) = if i == 0 { (24.0, format!("Left to right: {line}")) } else { (24.0 + 15.0 * 12.0 * lab * 0.56, line.clone()) };
+            let (x, text) = if i == 0 { (24.0, format!("Left to right: {line}")) } else { (24.0 + 15.0 * 12.0 * lab * 0.6, line.clone()) };
             d.raw(&text_el(x, y + (15.0 + i as f64 * 17.0) * lab, 12.0 * lab, "start", ink, &text));
         }
     }
@@ -518,20 +533,23 @@ mod tests {
             "(A,)".to_string(),
             "".to_string(),
         ] {
-            let svg = render_of(&[("tree", Value::S(tree.clone()))]);
-            let w = {
-                let at = svg.find("width=\"").expect("width") + 7;
-                svg[at..].split('"').next().unwrap().parse::<f64>().unwrap()
-            };
-            for (x, _y, size, anchor, text) in boxes(&svg) {
-                let n = text.chars().count() as f64 * size * 0.6;
-                let right = match anchor.as_str() { "end" => x, "middle" => x + n / 2.0, _ => x + n };
-                assert!(right <= w + 1.0, "{tree:?}: {text:?} ends at {right:.1} on a {w} canvas");
-            }
-            // and every name typed is somewhere on the page
-            if let Ok(n) = parse(&tree) {
-                let all = texts(&svg);
-                for leaf in leaves(&n) { assert!(all.contains(&leaf), "{tree:?}: {leaf} is not printed"); }
+            // (round 4) at Large the closing sentence ("Nothing is drawn…") was the one line still unwrapped
+            for size in ["Medium", "Large"] {
+                let svg = render_of(&[("tree", Value::S(tree.clone())), ("label_size", Value::S(size.to_string()))]);
+                let w = {
+                    let at = svg.find("width=\"").expect("width") + 7;
+                    svg[at..].split('"').next().unwrap().parse::<f64>().unwrap()
+                };
+                for (x, _y, size, anchor, text) in boxes(&svg) {
+                    let n = text.chars().count() as f64 * size * 0.6;
+                    let right = match anchor.as_str() { "end" => x, "middle" => x + n / 2.0, _ => x + n };
+                    assert!(right <= w + 1.0, "{tree:?} at {size}: {text:?} ends at {right:.1} on a {w} canvas");
+                }
+                // and every name typed is somewhere on the page
+                if let Ok(n) = parse(&tree) {
+                    let all = texts(&svg);
+                    for leaf in leaves(&n) { assert!(all.contains(&leaf), "{tree:?}: {leaf} is not printed"); }
+                }
             }
         }
     }

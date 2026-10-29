@@ -543,3 +543,15 @@ expected count" when one expected count is 0; "p = 0.050 is below α = 0.05" whe
 column did not group thousands beside a grouped Observed column; "(A)" reported a branching point it does not have;
 and with an inhibitor the plot's "Vmax = 2" now reads "Vmax′ = 2" (Km′ likewise), which is the apparent constant the
 givens' "Vmax = 10" does not contradict. Census: only `chi-square-fit` and `enzyme-kinetics` re-hashed.
+
+Second verification critic on `a073352` (2026-10-29): **FAIL** — twelve claimed fixes checked, most real, five majors left,
+three of them incomplete versions of the previous round's fixes. Fixed here, each seen in a PNG:
+(1) the enzyme's rate label was drawn over the "Vmax/2" label when the marked [S] is Km — the lift only knew about the Km
+label; it now tests both boxes and takes the first clear row; (2) the inhibited half-rate label still said "Vmax/2" beside
+a "Vmax′ = 2" asymptote and givens of 10 — it says "Vmax′/2" now; (3) Hardy-Weinberg's "p in each generation" line still
+used the typed precision, so p = 0.99 printed a column of 1s under selection — it uses the page's precision, and so does
+the editor note that explains the rise; (4) the cladogram's closing sentence ("Nothing is drawn…") was the one line still
+unwrapped and ran off the canvas at Large — it wraps now, and the canvas takes the count line's width into account at
+Large; (5) a chi-square category expected to be empty but counted printed a contribution of 0.00 beside a Total of ∞ — the
+row prints ∞. Two minors fixed too: the half-rate label is haloed like the rate label, and the enzyme's Print grid is
+`#787878` like every other figure, because `#e2e2e2` vanished in a 66% bitonal copy. Census: only `enzyme-kinetics`.

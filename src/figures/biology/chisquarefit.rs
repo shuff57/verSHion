@@ -106,7 +106,10 @@ pub fn fit(p: &Params) -> Fit {
         let r = ratio[i];
         let e = if total_ratio > 0.0 { r / total_ratio * total_obs } else { 0.0 };
         let term = if e > 0.0 {
-            (o - e) * (o - e) / e
+            let t = (o - e) * (o - e) / e;
+            // (round 4) counts exactly in the ratio leave a floating-point crumb (1e-13); printing it as a nonzero
+            // statistic turns a perfect fit at huge counts into "χ² = 4.36e−13"
+            if t < 1e-12 { 0.0 } else { t }
         } else if o > 0.0 {
             // a category the ratio says cannot happen has counts in it: the statistic is infinite, and the test
             // cannot be run at all rather than reporting a made-up finite number
@@ -325,12 +328,18 @@ pub fn build(p: &Params) -> String {
     // huge counts: one compact format for the whole table, or "1 × 10^12" sits beside "999999999999.56"
     let total_obs: f64 = f.rows.iter().map(|r| r.observed).sum();
     let huge = total_obs.abs() >= 1e7 || f.rows.iter().any(|r| r.observed.abs() >= 1e7 || r.expected.abs() >= 1e7);
-    let sci = |v: f64| format!("{v:.2e}").replace('-', "\u{2212}");
+    let sci = |v: f64| if v == 0.0 { "0".to_string() } else { format!("{v:.2e}").replace('-', "\u{2212}") };
     let fmt_cnt = |v: f64| if huge { sci(v) } else { num(v, 2) };
     let fmt_term = |v: f64| if huge { sci(v) } else { col(v, dec.max(2)) };
     // (round 3) The total is the sum of what is PRINTED, and at the precision the column actually prints: `col` shows
     // more decimals when a real contribution would otherwise print as 0, so 0.0033 + 0.01 must total 0.0133, not 0.01.
-    let term_text: Vec<String> = f.rows.iter().map(|r| fmt_term(r.term)).collect();
+    // (round 4) a category expected to be empty but counted has an INFINITE contribution, not 0: the row used to print
+    // "0.00" beside a Total of ∞
+    let term_text: Vec<String> = f
+        .rows
+        .iter()
+        .map(|r| if r.expected == 0.0 && r.observed > 0.0 { "\u{221e}".to_string() } else { fmt_term(r.term) })
+        .collect();
     let term_dec = term_text
         .iter()
         .map(|s| s.split_once('.').map_or(0, |(_, d)| d.chars().take_while(char::is_ascii_digit).count()) as i64)
@@ -340,12 +349,12 @@ pub fn build(p: &Params) -> String {
     let printed_chi2: f64 = term_text.iter().map(|s| s.replace('\u{2212}', "-").parse::<f64>().unwrap_or(0.0)).sum();
 
     let mut y = head_y + 8.0 * lab + row_h - 7.0 * lab;
-    for r in &f.rows {
+    for (i, r) in f.rows.iter().enumerate() {
         d.raw(&text_el(24.0, y, FS * lab, "start", ink, &short(&r.name)));
         d.raw(&text_el(col_o, y, FS * lab, "end", ink, &fmt_cnt(r.observed)));
         if ans {
             d.raw(&text_el(col_e, y, FS * lab, "end", ink, &if huge { sci(r.expected) } else { group(&col(r.expected, dec)) }));
-            d.raw(&text_el(col_t, y, FS * lab, "end", ink, &fmt_term(r.term)));
+            d.raw(&text_el(col_t, y, FS * lab, "end", ink, &term_text[i]));
         } else {
             d.raw(&text_el(col_e, y, FS * lab, "end", ink, BLANK));
             d.raw(&text_el(col_t, y, FS * lab, "end", ink, BLANK));
@@ -552,6 +561,22 @@ mod tests {
         let line = t.lines().find(|l| l.contains("Chi-square  \u{3c7}\u{b2} =")).unwrap_or("");
         assert!(line.contains("= 0.0133"), "the printed total is not the sum of the printed contributions: {line}");
         assert_eq!(t.lines().filter(|l| *l == "0.0133").count(), 1, "the Total row disagrees with the line under the table: {t}");
+    }
+
+    #[test]
+    fn an_impossible_category_prints_an_infinite_contribution_in_its_own_row() {
+        // (round 4) the row printed 0.00 beside a Total of ∞
+        let t = texts(&render_of(&[s("obs", "10, 5"), s("ratio", "1, 0")]));
+        assert!(t.lines().filter(|l| *l == "\u{221e}").count() >= 2, "a row contribution is not infinite: {t}");
+    }
+
+    #[test]
+    fn an_exact_fit_at_huge_counts_is_zero_not_floating_round_off() {
+        // (round 4) counts exactly in 9:3:3:1 left 1e-13 crumbs that printed as χ² = 4.36e−13 on a perfect fit
+        let t = texts(&render_of(&[s("obs", "1000000000000, 333333333333, 333333333333, 111111111111"), s("ratio", "9, 3, 3, 1")]));
+        assert!(!t.contains("e\u{2212}13") && !t.contains("e-13"), "{t}");
+        let line = t.lines().find(|l| l.contains("Chi-square  \u{3c7}")).unwrap_or("");
+        assert!(line.contains("= 0"), "a perfect fit is not zero: {line}");
     }
 
     #[test]

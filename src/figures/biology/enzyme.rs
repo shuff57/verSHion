@@ -106,8 +106,12 @@ pub fn warnings(p: &Params) -> Vec<String> {
     out
 }
 
-fn text_el(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) -> String {
-    format!(
+/// Whether two label boxes (left, right, top, bottom) overlap.
+fn hits(a: (f64, f64, f64, f64), b: (f64, f64, f64, f64)) -> bool {
+    a.0 < b.1 && b.0 < a.1 && a.2 < b.3 && b.2 < a.3
+}
+
+fn text_el(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) -> String {    format!(
         r##"<text x="{x:.2}" y="{y:.2}" font-size="{size}" text-anchor="{anchor}" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{fill}">{}</text>"##,
         svg::esc(s)
     )
@@ -154,6 +158,8 @@ pub fn build(p: &Params) -> (String, Report) {
     let ink = if print { "#555555" } else { INK };
     let curve = if print { CURVE_PRINT } else { CURVE };
     let mark = if print { MARK_PRINT } else { MARK };
+    // (round 4) the Print grid is #787878, like every other figure: #e2e2e2 vanished in a 66% bitonal copy
+    let grid = if print { "#787878" } else { "#e2e2e2" };
 
     // the y axis runs a little above Vmax so the asymptote is visibly an asymptote
     let y_top = (if inhibited { vmax.max(vmax_a) } else { vmax }) * 1.15;
@@ -171,12 +177,12 @@ pub fn build(p: &Params) -> (String, Report) {
     let ys = nice_step(y_top, 5.0);
     for (v, label) in ticks(f.x0, f.x1, xs) {
         let x = f.px(v);
-        d.line(x, f.top(), x, f.bottom(), "#e2e2e2", 1.0);
+        d.line(x, f.top(), x, f.bottom(), grid, 1.0);
         d.raw(&text_el(x, f.bottom() + 18.0 * lab, 12.0 * lab, "middle", ink, &label));
     }
     for (v, label) in ticks(f.y0, f.y1, ys) {
         let y = f.py(v);
-        d.line(f.left(), y, f.right(), y, "#e2e2e2", 1.0);
+        d.line(f.left(), y, f.right(), y, grid, 1.0);
         d.raw(&text_el(f.left() - 8.0, y + 4.0 * lab, 12.0 * lab, "end", ink, &label));
     }
     d.line(f.left(), f.bottom(), f.right(), f.bottom(), ink, 1.6);
@@ -241,11 +247,16 @@ pub fn build(p: &Params) -> (String, Report) {
             let note = format!("{km_name} = {}, beyond this axis", val(km_a, dec));
             d.raw(&text_el(f.right() - 4.0, half - 7.0 * lab, 12.0 * lab, "end", curve, &note));
         }
-        let half_label = format!("Vmax/2 = {}", val(vmax_a / 2.0, dec));
+        // (round 4) the half-rate label names the APPARENT half when an inhibitor is on (Vmax′/2), like the asymptote
+        let half_label = format!("{vmax_name}/2 = {}", val(vmax_a / 2.0, dec));
         // the Km marker and this label both sit low and near the left when Km is small: put the label right of the
         // marker rather than on top of it
         let hx = if km_a <= smax && f.px(km_a) < f.left() + 118.0 { f.px(km_a) + 8.0 } else { f.left() + 6.0 };
-        d.raw(&text_el(hx, half - 7.0 * lab, 11.0 * lab, "start", curve, &half_label));
+        let half_y = half - 7.0 * lab;
+        // (round 4) this label runs over the curve too, so it carries the same halo as the rate label
+        d.raw(&text_el_halo(hx, half_y, 11.0 * lab, "start", curve, &half_label));
+        let half_w = half_label.chars().count() as f64 * 11.0 * lab * 0.55;
+        let half_box = (hx, hx + half_w, half_y - 11.0 * lab, half_y + 4.0 * lab);
         // the marked point
         let px = f.px(s_at);
         let py = f.py(v_at);
@@ -256,15 +267,25 @@ pub fn build(p: &Params) -> (String, Report) {
         let (lx, anchor) = if px + 8.0 + text_w <= f.right() { (px + 8.0, "start") } else { (px - 8.0, "end") };
         // close under the Vmax line there is no room above the point, and the label would print into the dashed line
         let above = py - 9.0 * lab;
-        let mut ly = if (above - vy).abs() < 14.0 * lab { py + 18.0 * lab } else { above };
-        // (round 3) at low [S] the point sits on the axis, where the "Km = n" label is: lift the rate label clear of it
-        // rather than printing the two on top of each other
-        if km_a <= smax {
+        let start = if (above - vy).abs() < 14.0 * lab { py + 18.0 * lab } else { above };
+        // (round 3, round 4) it must clear BOTH labels that can sit under the point — the Km one at low [S] and the
+        // half-rate one at [S] = Km (where the rate label used to print straight over "Vmax/2 = 5"). Take the first
+        // candidate row that overlaps neither and stays inside the plot.
+        let (lo, hi) = if anchor == "start" { (lx, lx + text_w) } else { (lx - text_w, lx) };
+        let km_box = if km_a <= smax {
             let km_y = f.bottom() - 6.0 * lab;
-            let (km_lo, km_hi) = match km_anchor { "end" => (km_lx - km_w, km_lx), "middle" => (km_lx - km_w / 2.0, km_lx + km_w / 2.0), _ => (km_lx, km_lx + km_w) };
-            let (lo, hi) = if anchor == "start" { (lx, lx + text_w) } else { (lx - text_w, lx) };
-            if (ly - km_y).abs() < 15.0 * lab && lo < km_hi && km_lo < hi {
-                ly -= 22.0 * lab;
+            let (k0, k1) = match km_anchor { "end" => (km_lx - km_w, km_lx), "middle" => (km_lx - km_w / 2.0, km_lx + km_w / 2.0), _ => (km_lx, km_lx + km_w) };
+            Some((k0, k1, km_y - 12.0 * lab, km_y + 4.0 * lab))
+        } else {
+            None
+        };
+        let box_at = |yy: f64| (lo, hi, yy - 12.0 * lab, yy + 4.0 * lab);
+        let clear = |yy: f64| !hits(box_at(yy), half_box) && km_box.is_none_or(|k| !hits(box_at(yy), k));
+        let mut ly = start;
+        for yy in [start, py - 24.0 * lab, py - 38.0 * lab, py + 18.0 * lab, py + 32.0 * lab] {
+            if clear(yy) && yy - 12.0 * lab > f.top() && yy + 4.0 * lab < f.bottom() + 10.0 * lab {
+                ly = yy;
+                break;
             }
         }
         // (round 3) a label over the curve carries a thin halo, so the curve is never struck through
@@ -544,17 +565,28 @@ mod tests {
     #[test]
     fn the_rate_label_never_overprints_the_km_label() {
         // (round 3) at [S] = 0 the point sits on the axis, exactly where "Km = n" is drawn: the two texts printed on top
-        // of each other ("v = 0 at [S] = K0 = 2")
-        for at in [0.0, 0.2, 0.5, 2.0] {
+        // of each other ("v = 0 at [S] = K0 = 2"). (round 4) At [S] = Km the point lands on the half-rate label, which
+        // the lift did not know about; both are checked now.
+        for at in [0.0, 0.2, 0.5, 1.0, 2.0, 5.0] {
             for km in [0.5, 1.0, 2.0, 5.0] {
                 let svg = render_of(&[f("at", at), f("km", km)]);
                 let rate = label_box(&svg, "v = ");
-                let kmb = label_box(&svg, "Km = ");
+                let others: Vec<_> = label_box(&svg, "Km = ").into_iter().chain(label_box(&svg, "Vmax/2 = ")).collect();
                 for r in &rate {
-                    for k in &kmb {
-                        assert!(!overlaps(*r, *k), "at = {at}, km = {km}: the rate label {r:?} overprints the Km label {k:?}");
+                    for k in &others {
+                        assert!(!overlaps(*r, *k), "at = {at}, km = {km}: the rate label {r:?} overprints {k:?}");
                     }
                 }
+            }
+        }
+        // the case the first fix missed: the point exactly at Km
+        let svg = render_of(&[f("at", 2.0)]);
+        let rate = label_box(&svg, "v = ");
+        let half = label_box(&svg, "Vmax/2 = ");
+        assert!(!half.is_empty(), "the half-rate label is not drawn");
+        for r in &rate {
+            for h in &half {
+                assert!(!overlaps(*r, *h), "the rate label {r:?} overprints the half-rate label {h:?}");
             }
         }
     }
@@ -588,6 +620,8 @@ mod tests {
         // "Vmax = 2" beside givens "Vmax = 10" read as a contradiction; the prime says whose constant it is
         let t = texts(&render_of(&[s("mode", "noncompetitive"), f("inh", 4.0), f("ki", 1.0)]));
         assert!(t.contains("Vmax\u{2032} = 2"), "the apparent Vmax is not marked: {t}");
+        // (round 4) and the half of it is the apparent half, not "Vmax/2" beside givens of Vmax = 10
+        assert!(t.contains("Vmax\u{2032}/2 = 1"), "the half-rate label is not the apparent one: {t}");
         let t = texts(&render_of(&[s("mode", "competitive"), f("inh", 4.0), f("ki", 1.0)]));
         assert!(t.contains("Km\u{2032} = 10"), "the apparent Km is not marked: {t}");
         // and the plain figure keeps the plain names
