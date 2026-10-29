@@ -82,6 +82,10 @@ impl MediaSource for MediaOnDisk {
     fn read(&self, file: &str) -> Option<Vec<u8>> {
         self.0.lock().unwrap().get(file).cloned()
     }
+    fn keep(&self, file: &str, bytes: &[u8]) -> bool {
+        self.put(file, bytes);
+        true
+    }
 }
 
 impl MediaOnDisk {
@@ -346,9 +350,9 @@ fn d3_an_unticked_removal_is_put_back_with_its_pair_and_a_ticked_one_is_omitted(
 
 // ---- pictures: a question sent as the base has it keeps the base's picture ---------------------------------------------
 
-/// (plan section 6, "Pictures") The plain line when a picture the person did not change can not be fetched.
+/// (plan section 6, "Pictures") The plain line when a picture this send needs can not be fetched.
 const BASE_PICTURE_NOT_FETCHED: &str =
-    "The picture for a change you are not sending could not be fetched from the circle, so nothing was sent. Try again.";
+    "A picture this send needs could not be fetched from the circle, so nothing was sent. Try again.";
 
 /// The stage the page shows after a send attempt.
 fn send_stage(m: &CirclesModel) -> &SendStage {
@@ -563,7 +567,7 @@ fn d3_a_base_picture_named_png_is_sent_under_its_own_name() {
     let (mut m, s, mut banks) = open_page_in(base, &|b| {
         b.questions[0].stem = "A (changed)".into();
         b.questions[1].stem = "B (changed)".into();
-    }, &[], model_with(images.clone(), media));
+    }, &[], model_with(images.clone(), media.clone()));
     let link = m.edit.link_for_local(LOCAL).unwrap();
     let a = local(&link, QA);
     m.edit.toggle_change(&a, false);
@@ -575,6 +579,7 @@ fn d3_a_base_picture_named_png_is_sent_under_its_own_name() {
     let qs = payload.pointer("/bank/questions").and_then(Value::as_array).unwrap();
     assert_eq!(qs[0]["image"]["file"], json!(file), "the base's PNG name, not the store's WebP name");
     assert!(puts(&s).iter().any(|p| p.path == format!("/blobs/{sha}")), "the fetched PNG bytes go up: {:?}", s.paths());
+    assert_eq!(media.read(&file).as_deref(), Some(pic.as_slice()), "the fetched original is kept under the payload's name, so the next send does not download it again");
 }
 
 #[test]
@@ -615,6 +620,38 @@ fn d3_a_signed_out_fetch_goes_to_the_sign_in_path_and_an_offline_one_to_the_plai
                 other => panic!("not the plain line: {other:?}"),
             }
         }
+    }
+}
+
+#[test]
+fn d3_a_picture_the_circle_will_not_serve_says_why_and_offers_a_way_forward() {
+    // (product critic 13 minor 2) A 404 from the blob route will not change by trying again: it may mean the picture
+    // is no longer kept, or that the person may no longer read it. Say so, name the picture, and point at Get latest
+    // or removing it, instead of an endless "Try again".
+    let pic = b"the base's picture".to_vec();
+    let sha = sha256_hex(&pic);
+    let file = format!("media/{sha}.webp");
+    let base = vec![qfull_pic(QA, "A", &file), qfull(QB, "B"), qfull(QC, "C")];
+    let images = Arc::new(Pics::default());
+    let media = Arc::new(MediaOnDisk::default());
+    let (mut m, s, mut banks) = open_page_in(base, &|b| {
+        b.questions[0].stem = "A (changed)".into();
+        b.questions[1].stem = "B (changed)".into();
+    }, &[], model_with(images.clone(), media));
+    let link = m.edit.link_for_local(LOCAL).unwrap();
+    let a = local(&link, QA);
+    m.edit.toggle_change(&a, false);
+    s.say(200, heads(3));
+    s.fail(ApiError::Http { status: 404, code: "not_found".into(), field: None, reason: None, retry_after: None });
+    send(&mut m, &s, &mut banks, sent_with(4, &[QA, QB, QC]));
+    assert!(puts(&s).is_empty(), "nothing is uploaded or sent: {:?}", s.paths());
+    match send_stage(&m) {
+        SendStage::Failed(p) => {
+            assert!(!p.retry, "a 404 is not transient: no Try again");
+            assert!(p.message.contains("no longer be kept"), "{}", p.message);
+            assert!(p.message.contains(&file), "names the picture: {}", p.message);
+        }
+        other => panic!("not the 404 line: {other:?}"),
     }
 }
 

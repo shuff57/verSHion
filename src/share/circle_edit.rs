@@ -790,13 +790,19 @@ async fn send_checked(pool: &Pool<'_>, cid: &str, bid: &str, mut req: CircleSend
         };
         match pool.circle_blob(cid, bid, &sha).await {
             Ok(blob) => {
-                // Best effort: kept on this computer for the next send or open; the send itself reads the bytes below
-                // (the store may name the file differently, e.g. a picture kept as WebP).
+                // (round 15, product critic 13 minor 3) Keep the circle's original under the exact name the payload
+                // uses, so the next send finds it here instead of downloading the same picture again.
+                let _ = media.keep(file, &blob.bytes);
+                // Best effort: also kept in this store's own (re-encoded) form for the bank and the library; the send
+                // itself reads the bytes below (the store may name the file differently, e.g. a picture kept as WebP).
                 let _ = images.put(&blob.bytes);
                 extra.insert(file.clone(), blob.bytes);
             }
             // The sign-in ended: that is the page's own step, not a picture problem.
             Err(e @ PoolError::Api(ApiError::SignedOut)) => return (Err(e), now),
+            // (round 15, product critic 13 minor 2) A 404 will not change by trying again: say what it may mean and
+            // point at a way forward.
+            Err(PoolError::Api(ApiError::Http { status: 404, .. })) => return (Err(LocalProblem::BaseMediaGone { file: file.clone() }.into()), now),
             Err(_) => return (Err(LocalProblem::BaseMediaUnavailable.into()), now),
         }
     }

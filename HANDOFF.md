@@ -136,6 +136,19 @@ Loop rules: local commits only, never push; critic pair (product vs Moodle, secu
 - The figures gap-fill work remains paused in `/home/shuff57/Documents/GitHub/verSHion-figures` (phase 4, fixes staged
   but uncommitted, verification critic not yet run) — see its own HANDOFF.md.
 
+### The three recorded minors fixed (r15, 2026-10-29)
+
+- **(1) Wording.** `BaseMediaUnavailable` no longer says "a change you are not sending" (false since r14's fetch also
+  runs for a ticked, substituted question): it now says a picture this send needs could not be fetched.
+- **(2) A 404 has a way forward.** A new `LocalProblem::BaseMediaGone { file }` (no retry) names the picture and says
+  it may no longer be kept, or the person may no longer be able to read it, and points at Get latest or removing it.
+  Transient failures keep the plain line and Try again.
+- **(3) No re-download every send.** `MediaSource::keep` (`store::restore_image`) stores the fetched circle original
+  under the exact name the payload uses, so later sends find it locally. Disk cost: one original per distinct circle
+  picture the bank references.
+- Suite on r15: **share 1573/0/3; full lib 2268/0/6**. A verification pair runs on r15; the loop stays converged if
+  both are clean.
+
 ## The 5 known failures are fixed (2026-10-28)
 
 The owner asked to fix the five `share_core::wasm::publish_prepare_json` failures. Cause: the viSHion path deps in
