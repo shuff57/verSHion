@@ -23,6 +23,7 @@ const QA: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1";
 const QB: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2";
 const QC: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa3";
 const QD: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa4";
+const SCOPE: &str = "?|false|false";
 
 // ---- a taped session: replies by "Method /path", every request kept with its headers ----------------------------
 
@@ -169,7 +170,7 @@ fn changes() -> ChangesPage {
 fn tl(link: &CircleLink, bank: &QuestionBank, page: &ChangesPage, qid: &str, show_all: bool) -> Timeline {
     let lines = lines();
     let local = local_of(link, qid);
-    timeline(&TimelineIn { lines: &lines, changes: page, link, bank, local_id: &local, show_all })
+    timeline(&TimelineIn { lines: &lines, changes: page, link, bank, local_id: &local, show_all, qid: None })
 }
 
 fn tags(t: &Timeline) -> Vec<(u64, Option<Tag>)> {
@@ -250,6 +251,8 @@ fn d2_timeline_lists_only_this_questions_versions_and_one_line_per_gap() {
             Row::Version { version: 9, line: Some(lines()[0].clone()), tag: Some(Tag::Changed), compared_to: Some(8), compare: true, restore: true },
             // 8 did not change A; 7 is held back and 6 has no list: one line for the run
             Row::Gap(GapRun { newer: 8, older: 5, held: vec![7], not_kept: vec![], unreadable: true }),
+            // (round 3, critic P8) the plan's "Version 7 · held back for review · no details" line stays in the default view
+            Row::HeldBack { version: 7, line: Some(lines()[2].clone()) },
             Row::Version { version: 5, line: Some(lines()[4].clone()), tag: Some(Tag::Changed), compared_to: Some(4), compare: true, restore: true },
             Row::Version { version: 3, line: Some(lines()[6].clone()), tag: Some(Tag::AsItWas), compared_to: None, compare: true, restore: true },
             Row::Older { from: 1, to: 2, count: 2 },
@@ -287,7 +290,7 @@ fn d2_a_withheld_version_is_never_a_row_with_details_nor_compared() {
     let t = tl(&link, &bank, &changes(), QA, true);
     assert!(t.rows.iter().any(|r| matches!(r, Row::HeldBack { version: 7, .. })));
     let mut cache = HistoryCache::default();
-    assert_eq!(reads_needed(&lines(), &mut cache, CID, BID, &[Side::Version(7), Side::Version(9)]), Err(NotReadable::Withheld(7)));
+    assert_eq!(reads_needed(&lines(), &mut cache, CID, BID, SCOPE, &[Side::Version(7), Side::Version(9)]), Err(NotReadable::Withheld(7)));
 }
 
 #[test]
@@ -303,7 +306,7 @@ fn d2_pruned_versions_are_who_and_when_only_behind_show_every_version() {
     assert_eq!(tags(&t), vec![(9, Some(Tag::Changed)), (8, None), (6, None), (5, Some(Tag::Changed)), (4, None), (3, Some(Tag::AsItWas))]);
     assert!(t.rows.iter().any(|r| matches!(r, Row::Version { version: 8, compare: true, restore: false, .. })));
     let mut cache = HistoryCache::default();
-    assert_eq!(reads_needed(&lines(), &mut cache, CID, BID, &[Side::Version(2)]), Err(NotReadable::NotKept(2)));
+    assert_eq!(reads_needed(&lines(), &mut cache, CID, BID, SCOPE, &[Side::Version(2)]), Err(NotReadable::NotKept(2)));
 }
 
 #[test]
@@ -370,7 +373,7 @@ fn d2_compare_flags_the_changed_fields_and_folds_the_rest() {
     let (a, b) = (body(6, &v6(), false), body(9, &v9(), false));
     let c = compare(side_of_version(&a, QA).as_ref(), side_of_version(&b, QA).as_ref(), false);
     assert_eq!(c.changed_fields(), vec!["Question text", "Points"]);
-    assert_eq!(c.same_fields(), vec!["Choices", "Answer key", "Difficulty", "Topics", "Explanation", "Picture"]);
+    assert_eq!(c.same_fields(), vec!["Choices", "Answer key", "Difficulty", "Topics", "Explanation", "Picture", "Figure"]);
     let stem = c.fields.iter().find(|f| f.field == "Question text").unwrap();
     assert_eq!((stem.left.as_str(), stem.right.as_str()), ("Question A as of version 6", "Question A as of version 9"));
     // a changed key is a changed key
@@ -428,22 +431,22 @@ fn d2_compare_reads_two_versions_restore_one_and_none_after_a_compare() {
     let mut cache = HistoryCache::default();
     cache.note_account(Some("acct-1"));
     let ls = lines();
-    let need = reads_needed(&ls, &mut cache, CID, BID, &[Side::Version(6), Side::Version(9)]).unwrap();
+    let need = reads_needed(&ls, &mut cache, CID, BID, SCOPE, &[Side::Version(6), Side::Version(9)]).unwrap();
     assert_eq!(need, vec![6, 9]);
     for v in need {
-        let b = block_on(read_body(&pool, &mut cache, CID, BID, v, NOW)).unwrap();
+        let b = block_on(read_body(&pool, &mut cache, CID, BID, SCOPE, v, NOW)).unwrap();
         assert_eq!(b.version, v);
         assert!(b.question(QA).is_some());
     }
     assert_eq!(s.calls("/versions/"), 2);
     // Restore from the version just compared: no read
-    assert_eq!(reads_needed(&ls, &mut cache, CID, BID, &[Side::Version(6)]).unwrap(), Vec::<u64>::new());
-    let again = block_on(read_body(&pool, &mut cache, CID, BID, 6, NOW)).unwrap();
+    assert_eq!(reads_needed(&ls, &mut cache, CID, BID, SCOPE, &[Side::Version(6)]).unwrap(), Vec::<u64>::new());
+    let again = block_on(read_body(&pool, &mut cache, CID, BID, SCOPE, 6, NOW)).unwrap();
     assert_eq!(again.version, 6);
     assert_eq!(s.calls("/versions/"), 2);
     // your copy is never a read; restoring from another version is one
-    assert_eq!(reads_needed(&ls, &mut cache, CID, BID, &[Side::YourCopy, Side::Version(3)]).unwrap(), vec![3]);
-    block_on(read_body(&pool, &mut cache, CID, BID, 3, NOW)).unwrap();
+    assert_eq!(reads_needed(&ls, &mut cache, CID, BID, SCOPE, &[Side::YourCopy, Side::Version(3)]).unwrap(), vec![3]);
+    block_on(read_body(&pool, &mut cache, CID, BID, SCOPE, 3, NOW)).unwrap();
     assert_eq!(s.calls("/versions/"), 3);
 }
 
@@ -452,29 +455,29 @@ fn d2_the_cache_keeps_four_bodies_and_drops_them_for_another_account() {
     let mut cache = HistoryCache::default();
     cache.note_account(Some("acct-1"));
     for v in 1..=5 {
-        cache.put_body(CID, BID, body(v, &v9(), false));
+        cache.put_body(CID, BID, SCOPE, body(v, &v9(), false));
     }
     assert_eq!(cache.bodies(), BODY_CACHE_MAX);
     assert_eq!(BODY_CACHE_MAX, 4);
-    assert!(cache.body(CID, BID, 1).is_none(), "the oldest went first");
-    assert!(cache.body(CID, BID, 2).is_some());
+    assert!(cache.body(CID, BID, SCOPE, 1).is_none(), "the oldest went first");
+    assert!(cache.body(CID, BID, SCOPE, 2).is_some());
     // a body looked at is kept over the others
-    cache.put_body(CID, BID, body(6, &v9(), false));
-    assert!(cache.body(CID, BID, 2).is_some() && cache.body(CID, BID, 3).is_none());
+    cache.put_body(CID, BID, SCOPE, body(6, &v9(), false));
+    assert!(cache.body(CID, BID, SCOPE, 2).is_some() && cache.body(CID, BID, SCOPE, 3).is_none());
     // the same account again keeps them; another account (or none) drops them
     cache.note_account(Some("acct-1"));
     assert_eq!(cache.bodies(), 4);
     cache.note_account(Some("acct-2"));
     assert_eq!(cache.bodies(), 0);
-    cache.put_body(CID, BID, body(9, &v9(), false));
+    cache.put_body(CID, BID, SCOPE, body(9, &v9(), false));
     cache.note_account(None);
     assert_eq!(cache.bodies(), 0);
-    cache.put_body(CID, BID, body(9, &v9(), false));
+    cache.put_body(CID, BID, SCOPE, body(9, &v9(), false));
     cache.forget();
     assert_eq!(cache.bodies(), 0);
     // another bank's version is another body
-    cache.put_body(CID, BID, body(9, &v9(), false));
-    assert!(cache.body(CID, "0000000000000000000000000000000f", 9).is_none());
+    cache.put_body(CID, BID, SCOPE, body(9, &v9(), false));
+    assert!(cache.body(CID, "0000000000000000000000000000000f", SCOPE, 9).is_none());
 }
 
 // ---- restore one question ------------------------------------------------------------------------------------------
@@ -702,4 +705,192 @@ fn d2_a_restored_picture_is_fetched_by_its_hash_and_never_half_written() {
     b2[0].questions[0].stem = "Edited".into();
     assert!(restore_question(&mut b2, &ask(&link, Some(&a), QA, &pic_body), &sink, &ok, NOW + 1000).is_ok());
     assert_eq!(b2[0].questions[0].image.as_ref().map(|i| i.file.clone()), Some(format!("media/{sha}.webp")));
+}
+
+
+// ---- round 3 (critics on round 2): each test written first ------------------------------------------------------------
+
+fn changes_of(v: Value) -> ChangesPage {
+    super::circle_versions_api::changes_page(&v, None)
+}
+
+#[test]
+fn d2f_a_hostile_change_list_is_capped() {
+    // (critic I2) 100 entries, one above the head, one with 20,000 ids: never more than the pool's 40, never above the head
+    let mut versions: Vec<Value> = (2..=100u64).rev().map(|v| json!({"version": v, "compared_to": v - 1, "added": [], "changed": [QA], "removed": []})).collect();
+    versions.insert(0, json!({"version": 500, "compared_to": 100, "changed": [QB]}));
+    let many: Vec<String> = (0..20_000).map(|i| format!("{i:032x}")).collect();
+    versions[5]["changed"] = json!(many);
+    let p = changes_of(json!({"bank_id": BID, "head_version": 100, "per_question": true, "versions": versions}));
+    assert!(p.versions.len() <= CHANGES_MAX && CHANGES_MAX == 40, "{}", p.versions.len());
+    assert!(p.versions.iter().all(|e| e.version <= 100));
+    assert!(p.versions.iter().all(|e| e.added.len() + e.changed.len() + e.removed.len() <= CHANGE_IDS_MAX));
+    assert_eq!(p.versions[0].version, 100, "the newest within the head first");
+}
+
+fn blank(id: &str, accept: &str) -> Value {
+    json!({"id": id, "stem": "Fill it", "kind": {"Blank": {"accept": [[accept]]}}, "points": 1.0, "difficulty": null, "created": 5, "modified": 6})
+}
+
+#[test]
+fn d2f_blank_keys_are_drawn_as_plain_text() {
+    // (critic M3) a key with a right-to-left override is drawn without it
+    let (a, b) = (body(3, &[blank(QA, "x\u{202E}cba")], false), body(4, &[blank(QA, "y")], false));
+    let c = compare(side_of_version(&a, QA).as_ref(), side_of_version(&b, QA).as_ref(), false);
+    let k = c.fields.iter().find(|f| f.field == "Answer key").unwrap();
+    assert!(k.changed && !k.left.contains('\u{202E}'), "{k:?}");
+    // and in the merge review (merge::key_text)
+    let theirs_body = body(4, &[blank(QA, "z\u{202E}cba")], false);
+    let mine = body(3, &[blank(QA, "y")], false);
+    let t = theirs_body.question(QA).unwrap().clone();
+    let m = mine.question(QA).unwrap();
+    let base = vec![base_of(&m.q, QA, &m.fp, None)];
+    let bank = QuestionBank { id: LOCAL.into(), name: "b".into(), questions: vec![m.q.clone()], created: 1, modified: 1, details: Default::default() };
+    let plan = super::merge::build_plan(BID, &base, &bank, &[t], 3, 4, None, String::new());
+    let d = plan.rows[0].diffs.iter().find(|d| d.field == "Answer key").expect("the key changed");
+    assert!(!d.theirs.contains('\u{202E}'), "{d:?}");
+}
+
+#[test]
+fn d2f_restore_refuses_a_question_the_link_pairs_with_another() {
+    // (critic M5) the local question asked is paired with B, not A
+    let (bank, link) = linked();
+    let b = local_of(&link, QB);
+    let six = body(6, &v6(), false);
+    let mut banks = vec![bank];
+    let before = json_of(&banks);
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    assert_eq!(restore_question(&mut banks, &ask(&link, Some(&b), QA, &six), &sink, &|_: &[QuestionBank]| Ok(()), NOW + 1000), Err(RestoreRefused::Moved));
+    assert_eq!(json_of(&banks), before);
+    assert!(sink.log.lock().unwrap().is_empty());
+}
+
+fn multipart(id: &str, first_correct: bool, locked: bool) -> Value {
+    json!({"id": id, "stem": "Two parts", "kind": {"Multipart": {"parts": [
+        {"stem": "Part one", "kind": {"Mc": {"answers": [{"text": "yes", "correct": first_correct, "locked": locked}, {"text": "no", "correct": !first_correct}]}}},
+        {"stem": "Part two", "kind": {"Tf": {"correct": true}}}
+    ]}}, "points": 1.0, "difficulty": null, "created": 5, "modified": 6})
+}
+
+#[test]
+fn d2f_multipart_pictures_and_figures_compare_by_what_they_hold() {
+    // (critic P4) a part's key differs: the key changed, the choices did not, and each part's choices are shown
+    let (a, b) = (body(3, &[multipart(QA, true, false)], false), body(4, &[multipart(QA, false, false)], false));
+    let c = compare(side_of_version(&a, QA).as_ref(), side_of_version(&b, QA).as_ref(), false);
+    assert_eq!(c.changed_fields(), vec!["Answer key"]);
+    let ch = c.fields.iter().find(|f| f.field == "Choices").unwrap();
+    assert!(ch.left.contains("yes") && ch.left.contains("no") && ch.left.contains("Part one"), "{ch:?}");
+    let key = c.fields.iter().find(|f| f.field == "Answer key").unwrap();
+    assert_ne!(key.left, key.right, "{key:?}");
+    // a choice locked in its place: a change, and said
+    let l = body(5, &[multipart(QA, true, true)], false);
+    let c = compare(side_of_version(&a, QA).as_ref(), side_of_version(&l, QA).as_ref(), false);
+    let ch = c.fields.iter().find(|f| f.field == "Choices").unwrap();
+    assert!(ch.changed && ch.right.contains("(fixed place)"), "{ch:?}");
+    // pictures: a different one, or the same one
+    let pic = |sha: &str| {
+        let mut q = mc(QA, "With a picture", 1.0);
+        q["image"] = json!({"file": format!("media/{}.webp", sha.repeat(64)), "width": 2, "height": 2});
+        body(6, &[q], false)
+    };
+    let c = compare(side_of_version(&pic("a"), QA).as_ref(), side_of_version(&pic("b"), QA).as_ref(), false);
+    let p = c.fields.iter().find(|f| f.field == "Picture").unwrap();
+    assert!(p.changed && p.right == "a different picture", "{p:?}");
+    let c = compare(side_of_version(&pic("a"), QA).as_ref(), side_of_version(&pic("a"), QA).as_ref(), false);
+    let p = c.fields.iter().find(|f| f.field == "Picture").unwrap();
+    assert!(!p.changed && p.left == "the same picture", "{p:?}");
+    // a figure: its own field
+    let fig = |v: i64| {
+        let mut q = mc(QA, "With a figure", 1.0);
+        q["figure"] = json!({"id": "triangle", "params": {"a": v}});
+        body(7, &[q], false)
+    };
+    let c = compare(side_of_version(&fig(3), QA).as_ref(), side_of_version(&fig(4), QA).as_ref(), false);
+    assert_eq!(c.changed_fields(), vec!["Figure"]);
+}
+
+#[test]
+fn d2f_a_viewers_form_compare_never_shows_a_full_sides_explanation_or_key() {
+    // (critic B1) one side read in full earlier, one stripped now
+    let mut full = mc(QA, "Same stem", 1.0);
+    full["explanation"] = json!("SECRET EXPLANATION");
+    let (a, b) = (body(3, &[full], false), body(4, &[mc(QA, "Same stem", 1.0)], true));
+    let c = compare(side_of_version(&a, QA).as_ref(), side_of_version(&b, QA).as_ref(), true);
+    for f in &c.fields {
+        assert!(!f.left.contains("SECRET") && !f.right.contains("SECRET") && !f.left.contains("choice 1"), "{f:?}");
+    }
+}
+
+#[test]
+fn d2f_your_copy_is_not_the_same_when_the_base_has_no_record_of_a_difficulty() {
+    // (critic P9) as the strip: a base an earlier build wrote kept no difficulty, so nothing is said to be "the same"
+    let (bank, mut link) = linked();
+    let a = local_of(&link, QA);
+    for b in &mut link.base {
+        b.snap.difficulty = None;
+    }
+    assert_eq!(your_copy(&link, &bank, &a), YourCopy::NotCounted(9));
+}
+
+#[test]
+fn d2f_undo_restore_puts_back_exactly_what_was_replaced() {
+    // (critic P2)
+    let (bank, link) = linked();
+    let a = local_of(&link, QA);
+    let six = body(6, &v6(), false);
+    let mut banks = vec![bank.clone()];
+    banks[0].questions[0].stem = "My unsent edit".into();
+    banks[0].modified += 5;
+    let before = serde_json::to_value(&banks[0].questions).unwrap();
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let sink = LogRestore { log: log.clone(), copy: Mutex::new(None) };
+    let ok = |_: &[QuestionBank]| -> Result<(), String> { Ok(()) };
+    let done = restore_question(&mut banks, &ask(&link, Some(&a), QA, &six), &sink, &ok, NOW + 1000).unwrap();
+    assert_eq!(done.replaced.as_ref().map(|(i, q)| (*i, q.stem.clone())), Some((0, "My unsent edit".to_string())));
+    let t = banks[0].modified;
+    let back = undo_restore(&mut banks, &link, &done, &sink, &ok, NOW + 2000).unwrap();
+    assert!(back.is_none());
+    assert_eq!(serde_json::to_value(&banks[0].questions).unwrap(), before, "exactly the replaced question");
+    assert!(banks[0].modified > t && !link.stale_for(&banks[0]));
+    assert_eq!(log.lock().unwrap().len(), 2, "a restore point each time");
+    // a question the circle removed: the link comes back as it was
+    let c = local_of(&link, QC);
+    let mut banks = vec![bank.clone()];
+    let done = restore_question(&mut banks, &RestoreAsk { removed_in_circle: true, ..ask(&link, Some(&c), QC, &six) }, &sink, &ok, NOW + 1000).unwrap();
+    let unpaired = done.link.clone().unwrap();
+    assert_eq!(done.link_before.as_ref(), Some(&link));
+    let back = undo_restore(&mut banks, &unpaired, &done, &sink, &ok, NOW + 2000).unwrap();
+    assert_eq!(back.as_ref(), Some(&link));
+    assert_eq!(serde_json::to_value(&banks[0].questions).unwrap(), serde_json::to_value(&bank.questions).unwrap());
+    // a follow link never undoes
+    let mut follow = link.clone();
+    follow.mode = LinkMode::Follow;
+    assert_eq!(undo_restore(&mut banks, &follow, &done, &sink, &ok, NOW + 3000), Err(RestoreRefused::FollowLink));
+    // a restore point that can not be saved: nothing changes
+    let before = json_of(&banks);
+    assert!(matches!(undo_restore(&mut banks, &unpaired, &done, &BadRestore, &ok, NOW + 3000), Err(RestoreRefused::RestorePoint(_))));
+    assert_eq!(json_of(&banks), before);
+}
+
+#[test]
+fn d2f_the_cache_keeps_each_scope_apart_and_drops_a_bank_or_a_version() {
+    // (critic B1) a read made under one role and hiding state is never used under another
+    let mut cache = HistoryCache::default();
+    cache.put_body(CID, BID, "viewer|false|false", body(3, &v6(), false));
+    assert!(cache.body(CID, BID, "viewer|true|false", 3).is_none());
+    assert!(cache.body(CID, BID, "viewer|false|false", 3).is_some());
+    cache.put_page(CID, BID, "viewer|false|false", changes());
+    assert!(cache.page(CID, BID, "viewer|true|false").is_none());
+    cache.put_lines(CID, BID, "viewer|false|false", 9, lines());
+    assert!(cache.lines(CID, BID, "editor|false|false", 9).is_none());
+    // a version the pool no longer serves: gone under every scope
+    cache.put_body(CID, BID, "editor|false|false", body(3, &v6(), false));
+    cache.drop_body(CID, BID, 3);
+    assert_eq!(cache.bodies(), 0);
+    // a bank: its bodies, lists and lines, not another bank's
+    cache.put_body(CID, BID, SCOPE, body(4, &v6(), false));
+    cache.put_body(CID, "0000000000000000000000000000000f", SCOPE, body(4, &v6(), false));
+    cache.drop_bank(CID, BID);
+    assert_eq!(cache.bodies(), 1);
+    assert!(cache.page(CID, BID, "viewer|false|false").is_none() && cache.lines(CID, BID, "viewer|false|false", 9).is_none());
 }

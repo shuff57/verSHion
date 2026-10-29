@@ -79,6 +79,9 @@ pub enum YourCopy {
     Stale,
     /// The link kept no snapshot of it: can not be told.
     Unknown,
+    /// (round 3, critic P9) Nothing counted changed since version N, but the copy has no record of all of it (a base an
+    /// earlier build wrote kept no difficulty): not said to be "the same", as the strip does not say "up to date".
+    NotCounted(u64),
 }
 
 pub struct TimelineIn<'a> {
@@ -91,6 +94,9 @@ pub struct TimelineIn<'a> {
     pub local_id: &'a str,
     /// "Show every version".
     pub show_all: bool,
+    /// (round 3, critic P3) The circle's question the page opened on, kept when a restore unpaired the local question from
+    /// it (the circle had removed it). `None`: the link's pair.
+    pub qid: Option<&'a str>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -118,6 +124,8 @@ pub fn your_copy(link: &CircleLink, bank: &QuestionBank, local_id: &str) -> Your
         (Some(_), None) => YourCopy::NewHere,
         (Some(q), Some(_)) => match link.base.iter().find(|b| b.local_id == local_id) {
             Some(b) if merge::ours_changed(b, q) => YourCopy::Unsent,
+            // (round 3, critic P9) as the strip: a base with no record of the difficulty is never "the same"
+            Some(b) if b.snap.difficulty.is_none() => YourCopy::NotCounted(link.base_version),
             Some(_) => YourCopy::SameAs(link.base_version),
             None => YourCopy::Unknown,
         },
@@ -132,6 +140,7 @@ pub fn your_copy_text(y: YourCopy) -> String {
         YourCopy::DeletedHere => "Your copy: deleted here, not sent yet.".into(),
         YourCopy::Stale => "Your copy: put back from a safety copy, so which version it matches is not known.".into(),
         YourCopy::Unknown => "Your copy: can't be compared with the circle's on this computer.".into(),
+        YourCopy::NotCounted(n) => format!("Your copy: no change counted since version {n}, but this computer has no record of every detail of it."),
     }
 }
 
@@ -208,7 +217,9 @@ fn sanitized(entries: &[ChangeEntry], lines: &Lines) -> Vec<ChangeEntry> {
 }
 
 fn push_gap(rows: &mut Vec<Row>, g: GapRun) {
-    if let Some(Row::Gap(last)) = rows.last_mut()
+    // (round 3) the held-back lines of a run stay under its one gap line
+    let at = rows.iter().rposition(|r| !matches!(r, Row::HeldBack { .. }));
+    if let Some(Row::Gap(last)) = at.and_then(|i| rows.get_mut(i))
         && last.older == g.newer
     {
         last.older = g.older;
@@ -251,9 +262,11 @@ fn bank_lines(lines: &Lines, show_all: bool) -> Vec<Row> {
 }
 
 pub fn timeline(i: &TimelineIn) -> Timeline {
-    let qid = i.link.qid_of(i.local_id).map(str::to_string);
+    let qid = i.qid.or_else(|| i.link.qid_of(i.local_id)).map(str::to_string);
     let your_copy = your_copy(i.link, i.bank, i.local_id);
-    let per_question = i.changes.per_question;
+    // (round 3, critic I3) a viewer of a bank that hides its keys, as the link last saw it, gets bank lines whatever an answer says
+    let hiding_viewer = i.link.seen.hide_key && i.link.role() == Some(super::circles_api::Role::Viewer);
+    let per_question = i.changes.per_question && !hiding_viewer && !i.link.viewers_form;
     let lines = Lines::of(i.lines);
     let rows = match &qid {
         None => Vec::new(),
@@ -273,7 +286,7 @@ fn question_rows(i: &TimelineIn, lines: &Lines, qid: &str) -> Vec<Row> {
     // with no add since and no gap between: a changed or removed entry says it was in the version compared with, and
     // the link says it was in its base.
     let mut evidence: Vec<u64> = entries.iter().filter(|e| matches!(e.touches(qid), Some(QuestionChange::Changed | QuestionChange::Removed))).map(|e| e.compared_to).collect();
-    if i.link.qid_of(i.local_id) == Some(qid) {
+    if i.link.qids.iter().any(|l| l.qid == qid) {
         evidence.push(i.link.base_version);
     }
     let as_it_was = match (oldest, added_at) {
@@ -317,7 +330,8 @@ fn question_rows(i: &TimelineIn, lines: &Lines, qid: &str) -> Vec<Row> {
             // sent after the lists were read: not known yet whether it changed the question
             rows.push(Row::Version { version: v, compared_to: lines.lower_readable(v), line: Some(l), tag: None, compare: true, restore: false });
         } else if l.withheld {
-            if i.show_all || (!done && !covered(v)) {
+            // (round 3, critic P8) the plan's "Version 7 · held back for review · no details" line, also inside a gap
+            if i.show_all || !done {
                 rows.push(Row::HeldBack { version: v, line: Some(l) });
             }
         } else if i.show_all {
@@ -377,21 +391,30 @@ impl VersionBody {
 /// The most bodies held (plan 5.3).
 pub const BODY_CACHE_MAX: usize = 4;
 
-type BodyKey = (String, String, u64);
+type BodyKey = (String, String, String, u64);
+/// A bank's lists and lines: its circle, the bank, the scope they were read under.
+type PageKey = (String, String, String);
 
-/// Version bodies read for compare and restore, in memory only, for one account: another account (or a sign-out,
-/// [`HistoryCache::forget`]) drops them. The least recently used goes first.
 /// The most banks whose change lists and history lines are kept for the session.
 pub const PAGE_CACHE_MAX: usize = 8;
+
+/// (round 3, critic B1) What a read was made under: the role the link last saw, whether the bank hides its keys, and
+/// whether the copy is the viewers' form. A read made under another is never used.
+pub fn scope_of(link: &CircleLink) -> String {
+    format!("{}|{}|{}", link.role_seen.as_deref().unwrap_or("?"), link.seen.hide_key, link.viewers_form)
+}
+
+/// Version bodies, change lists and history lines read for one question's history, in memory only, for one account:
+/// another account (or a sign-out, [`HistoryCache::forget`]) drops them. The least recently used goes first.
 
 #[derive(Default)]
 pub struct HistoryCache {
     account: Option<String>,
     bodies: Vec<(BodyKey, Arc<VersionBody>)>,
     /// (round 2) Each bank's change lists as last read, sent back as `If-None-Match` (a 304 costs nothing).
-    pages: Vec<((String, String), ChangesPage)>,
+    pages: Vec<(PageKey, ChangesPage)>,
     /// (round 2) Each bank's history lines, for the newest version they were read at.
-    lines: Vec<((String, String), u64, Vec<VersionLine>)>,
+    lines: Vec<(PageKey, u64, Vec<VersionLine>)>,
 }
 
 impl std::fmt::Debug for HistoryCache {
@@ -420,26 +443,26 @@ impl HistoryCache {
     }
 
     /// The bank's change lists as last read (to send back with `If-None-Match`).
-    pub fn page(&self, cid: &str, bid: &str) -> Option<&ChangesPage> {
-        self.pages.iter().find(|((c, b), _)| c == cid && b == bid).map(|(_, p)| p)
+    pub fn page(&self, cid: &str, bid: &str, scope: &str) -> Option<&ChangesPage> {
+        self.pages.iter().find(|((c, b, s), _)| c == cid && b == bid && s == scope).map(|(_, p)| p)
     }
 
-    pub fn put_page(&mut self, cid: &str, bid: &str, page: ChangesPage) {
-        self.pages.retain(|((c, b), _)| !(c == cid && b == bid));
-        self.pages.push(((cid.to_string(), bid.to_string()), page));
+    pub fn put_page(&mut self, cid: &str, bid: &str, scope: &str, page: ChangesPage) {
+        self.pages.retain(|((c, b, _), _)| !(c == cid && b == bid));
+        self.pages.push(((cid.to_string(), bid.to_string(), scope.to_string()), page));
         while self.pages.len() > PAGE_CACHE_MAX {
             self.pages.remove(0);
         }
     }
 
     /// The bank's history lines, if they were read at the newest version `head`.
-    pub fn lines(&self, cid: &str, bid: &str, head: u64) -> Option<&[VersionLine]> {
-        self.lines.iter().find(|((c, b), h, _)| c == cid && b == bid && *h == head && head > 0).map(|(_, _, l)| l.as_slice())
+    pub fn lines(&self, cid: &str, bid: &str, scope: &str, head: u64) -> Option<&[VersionLine]> {
+        self.lines.iter().find(|((c, b, s), h, _)| c == cid && b == bid && s == scope && *h == head && head > 0).map(|(_, _, l)| l.as_slice())
     }
 
-    pub fn put_lines(&mut self, cid: &str, bid: &str, head: u64, lines: Vec<VersionLine>) {
-        self.lines.retain(|((c, b), _, _)| !(c == cid && b == bid));
-        self.lines.push(((cid.to_string(), bid.to_string()), head, lines));
+    pub fn put_lines(&mut self, cid: &str, bid: &str, scope: &str, head: u64, lines: Vec<VersionLine>) {
+        self.lines.retain(|((c, b, _), _, _)| !(c == cid && b == bid));
+        self.lines.push(((cid.to_string(), bid.to_string(), scope.to_string()), head, lines));
         while self.lines.len() > PAGE_CACHE_MAX {
             self.lines.remove(0);
         }
@@ -450,19 +473,19 @@ impl HistoryCache {
         self.bodies.is_empty() && self.pages.is_empty() && self.lines.is_empty()
     }
 
-    pub fn body(&mut self, cid: &str, bid: &str, version: u64) -> Option<Arc<VersionBody>> {
-        let at = self.bodies.iter().position(|((c, b, v), _)| c == cid && b == bid && *v == version)?;
+    pub fn body(&mut self, cid: &str, bid: &str, scope: &str, version: u64) -> Option<Arc<VersionBody>> {
+        let at = self.bodies.iter().position(|((c, b, s, v), _)| c == cid && b == bid && s == scope && *v == version)?;
         let e = self.bodies.remove(at);
         let body = e.1.clone();
         self.bodies.push(e);
         Some(body)
     }
 
-    pub fn put_body(&mut self, cid: &str, bid: &str, body: VersionBody) -> Arc<VersionBody> {
+    pub fn put_body(&mut self, cid: &str, bid: &str, scope: &str, body: VersionBody) -> Arc<VersionBody> {
         let version = body.version;
-        self.bodies.retain(|((c, b, v), _)| !(c == cid && b == bid && *v == version));
+        self.bodies.retain(|((c, b, _, v), _)| !(c == cid && b == bid && *v == version));
         let body = Arc::new(body);
-        self.bodies.push(((cid.to_string(), bid.to_string(), version), body.clone()));
+        self.bodies.push(((cid.to_string(), bid.to_string(), scope.to_string(), version), body.clone()));
         while self.bodies.len() > BODY_CACHE_MAX {
             self.bodies.remove(0);
         }
@@ -471,6 +494,18 @@ impl HistoryCache {
 
     pub fn bodies(&self) -> usize {
         self.bodies.len()
+    }
+
+    /// (round 3) Everything held for one bank: its bodies, change lists and lines.
+    pub fn drop_bank(&mut self, cid: &str, bid: &str) {
+        self.bodies.retain(|((c, b, _, _), _)| !(c == cid && b == bid));
+        self.pages.retain(|((c, b, _), _)| !(c == cid && b == bid));
+        self.lines.retain(|((c, b, _), _, _)| !(c == cid && b == bid));
+    }
+
+    /// (round 3) One version's body, whatever it was read under (the pool no longer serves it).
+    pub fn drop_body(&mut self, cid: &str, bid: &str, version: u64) {
+        self.bodies.retain(|((c, b, _, v), _)| !(c == cid && b == bid && *v == version));
     }
 }
 
@@ -490,7 +525,7 @@ pub enum NotReadable {
 
 /// The version reads a compare or a restore of `sides` needs: none for "Your copy" or a body already held, so a
 /// compare is 2 reads and a restore 1 (0 right after a compare). Withheld and pruned versions are refused.
-pub fn reads_needed(lines: &[VersionLine], cache: &mut HistoryCache, cid: &str, bid: &str, sides: &[Side]) -> Result<Vec<u64>, NotReadable> {
+pub fn reads_needed(lines: &[VersionLine], cache: &mut HistoryCache, cid: &str, bid: &str, scope: &str, sides: &[Side]) -> Result<Vec<u64>, NotReadable> {
     let mut out = Vec::new();
     for s in sides {
         let Side::Version(v) = *s else { continue };
@@ -502,7 +537,7 @@ pub fn reads_needed(lines: &[VersionLine], cache: &mut HistoryCache, cid: &str, 
                 return Err(NotReadable::NotKept(v));
             }
         }
-        if !out.contains(&v) && cache.body(cid, bid, v).is_none() {
+        if !out.contains(&v) && cache.body(cid, bid, scope, v).is_none() {
             out.push(v);
         }
     }
@@ -510,8 +545,8 @@ pub fn reads_needed(lines: &[VersionLine], cache: &mut HistoryCache, cid: &str, 
 }
 
 /// A version's body: from the cache, or one `GET .../versions/:n` (kept in the cache).
-pub async fn read_body(pool: &Pool<'_>, cache: &mut HistoryCache, cid: &str, bid: &str, version: u64, at_ms: i64) -> Result<Arc<VersionBody>, PoolError> {
-    if let Some(b) = cache.body(cid, bid, version) {
+pub async fn read_body(pool: &Pool<'_>, cache: &mut HistoryCache, cid: &str, bid: &str, scope: &str, version: u64, at_ms: i64) -> Result<Arc<VersionBody>, PoolError> {
+    if let Some(b) = cache.body(cid, bid, scope, version) {
         return Ok(b);
     }
     let doc = pool.circle_version(cid, bid, version).await?;
@@ -520,7 +555,7 @@ pub async fn read_body(pool: &Pool<'_>, cache: &mut HistoryCache, cid: &str, bid
     if payload_question_count(&doc.payload) > body.questions.len() {
         return Err(PoolError::Local(LocalProblem::NewerQuestions));
     }
-    Ok(cache.put_body(cid, bid, body))
+    Ok(cache.put_body(cid, bid, scope, body))
 }
 
 /// A picture of the circle bank by its hash (checked against the bytes by `circle_blob`), stored on this computer.
@@ -646,14 +681,39 @@ fn choices_text(k: &Kind, order_free: bool) -> String {
             let s = |l: &[String]| l.iter().map(|x| shown(x)).collect::<Vec<_>>().join(" | ");
             format!("{} (word bank: {})", s(&left), s(&bank))
         }
-        Kind::Mc { answers } if order_free => {
-            let mut free: Vec<&str> = answers.iter().filter(|a| !a.locked).map(|a| a.text.as_str()).collect();
-            free.sort_unstable();
-            let mut free = free.into_iter();
-            answers.iter().map(|a| shown(if a.locked { &a.text } else { free.next().unwrap_or_default() })).collect::<Vec<_>>().join(" | ")
-        }
+        Kind::Mc { answers } => answers_text(answers, order_free),
+        // (round 3, critic P4) each part's own choices, not only its stem
+        Kind::Multipart { parts } => parts
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                let what = match &p.kind {
+                    PartKind::Mc { answers } => answers_text(answers, order_free),
+                    PartKind::Tf { .. } => "True / False".into(),
+                    PartKind::Short { .. } => "Written answer".into(),
+                };
+                format!("Part {}: {} - {what}", i + 1, shown(&p.stem))
+            })
+            .collect::<Vec<_>>()
+            .join(" / "),
         _ => merge::kind_text(k),
     }
+}
+
+/// A list of choices in words, each one locked in its place marked so (round 3, critic P4). In the viewers' form the
+/// unlocked ones are sorted, as they are shuffled on each read.
+fn answers_text(answers: &[Answer], order_free: bool) -> String {
+    let mut free: Vec<&str> = answers.iter().filter(|a| !a.locked).map(|a| a.text.as_str()).collect();
+    if order_free {
+        free.sort_unstable();
+    }
+    let mut free = free.into_iter();
+    answers.iter().map(|a| if a.locked { format!("{} (fixed place)", shown(&a.text)) } else { shown(free.next().unwrap_or_default()) }).collect::<Vec<_>>().join(" | ")
+}
+
+fn mc_key(answers: &[Answer]) -> String {
+    let c: Vec<String> = answers.iter().enumerate().filter(|(_, a)| a.correct).map(|(i, _)| (i + 1).to_string()).collect();
+    if c.is_empty() { "none marked".into() } else { format!("choice {}", c.join(", ")) }
 }
 
 fn key_words(q: &Question) -> String {
@@ -661,15 +721,26 @@ fn key_words(q: &Question) -> String {
         return "no key".into();
     }
     match &q.kind {
-        Kind::Mc { answers } => {
-            let c: Vec<String> = answers.iter().enumerate().filter(|(_, a)| a.correct).map(|(i, _)| (i + 1).to_string()).collect();
-            if c.is_empty() { "none marked".into() } else { format!("choice {}", c.join(", ")) }
-        }
+        Kind::Mc { answers } => mc_key(answers),
         Kind::Tf { correct } => (if *correct { "True" } else { "False" }).into(),
         Kind::Matching { pairs, .. } => pairs.iter().map(|p| shown(&p.right)).collect::<Vec<_>>().join(" | "),
-        Kind::Blank { accept } => accept.iter().map(|a| a.join(" / ")).collect::<Vec<_>>().join(" | "),
+        // (round 3, critic M3) the accepted answers are server text: drawn plain
+        Kind::Blank { accept } => accept.iter().map(|a| a.iter().map(|x| shown(x)).collect::<Vec<_>>().join(" / ")).collect::<Vec<_>>().join(" | "),
         Kind::Short { sample } => shown(sample),
-        Kind::Multipart { .. } => "per part".into(),
+        // (round 3, critic P4) each part's key
+        Kind::Multipart { parts } => parts
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                let k = match &p.kind {
+                    PartKind::Mc { answers } => mc_key(answers),
+                    PartKind::Tf { correct } => (if *correct { "True" } else { "False" }).into(),
+                    PartKind::Short { sample } => shown(sample),
+                };
+                format!("Part {}: {k}", i + 1)
+            })
+            .collect::<Vec<_>>()
+            .join("; "),
     }
 }
 
@@ -693,7 +764,7 @@ fn level(d: Option<crate::model::Difficulty>) -> String {
 pub fn compare(left: Option<&Shown>, right: Option<&Shown>, viewers_form: bool) -> Comparison {
     const ABSENT: &str = "(not in this version)";
     type Field = (&'static str, fn(&Shown, bool) -> String, fn(&Shown, &Shown, bool) -> bool);
-    let fields: [Field; 8] = [
+    let fields: [Field; 9] = [
         ("Question text", |s, _| shown(&s.q.stem), |a, b, _| canon_text(&a.q.stem) != canon_text(&b.q.stem)),
         ("Choices", |s, f| choices_text(&s.q.kind, f), |a, b, f| std::mem::discriminant(&a.q.kind) != std::mem::discriminant(&b.q.kind) || shape_of(&a.q.kind, f) != shape_of(&b.q.kind, f)),
         (
@@ -705,11 +776,14 @@ pub fn compare(left: Option<&Shown>, right: Option<&Shown>, viewers_form: bool) 
         ("Difficulty", |s, _| level(s.q.difficulty), |a, b, _| a.q.difficulty != b.q.difficulty),
         ("Topics", |s, _| s.q.topics.iter().map(|t| shown(t)).collect::<Vec<_>>().join(", "), |a, b, _| canon::topics(&a.q.topics) != canon::topics(&b.q.topics)),
         (
+            // (round 3, critic B1) never a full side's explanation beside the viewers' form
             "Explanation",
-            |s, _| explanation_of(&s.q).map_or("none".into(), |e| shown(&e)),
-            |a, b, _| explanation_of(&a.q).map(|e| canon_text(&e)) != explanation_of(&b.q).map(|e| canon_text(&e)),
+            |s, f| if f { "hidden from viewers".into() } else { explanation_of(&s.q).map_or("none".into(), |e| shown(&e)) },
+            |a, b, f| !f && explanation_of(&a.q).map(|e| canon_text(&e)) != explanation_of(&b.q).map(|e| canon_text(&e)),
         ),
         ("Picture", |s, _| if s.sha.is_some() { "a picture".into() } else { "no picture".into() }, |a, b, _| a.sha != b.sha),
+        // (round 3, critic P4) the figure the picture was drawn from, and its values
+        ("Figure", |s, _| figure_text(&s.q), |a, b, _| figure_key(&a.q) != figure_key(&b.q)),
     ];
     let rows = fields
         .iter()
@@ -719,8 +793,34 @@ pub fn compare(left: Option<&Shown>, right: Option<&Shown>, viewers_form: bool) 
             (None, Some(b)) => FieldRow { field: name, left: ABSENT.into(), right: text(b, viewers_form), changed: true },
             (None, None) => FieldRow { field: name, left: ABSENT.into(), right: ABSENT.into(), changed: false },
         })
-        .collect();
+        .collect::<Vec<FieldRow>>();
+    let mut rows = rows;
+    // (round 3, critic P4) two pictures: the same one, or a different one
+    if let (Some(a), Some(b)) = (left, right)
+        && let (Some(x), Some(y)) = (&a.sha, &b.sha)
+        && let Some(f) = rows.iter_mut().find(|f| f.field == "Picture")
+    {
+        if x == y {
+            f.left = "the same picture".into();
+            f.right = "the same picture".into();
+        } else {
+            f.right = "a different picture".into();
+        }
+    }
     Comparison { fields: rows, left_absent: left.is_none(), right_absent: right.is_none() }
+}
+
+fn figure_key(q: &Question) -> Option<(String, Vec<(String, String)>)> {
+    let v = |x: &Value| x.as_f64().map_or_else(|| x.to_string(), |n| n.to_string());
+    q.figure.as_ref().map(|f| (f.id.clone(), f.params.iter().map(|(k, x)| (k.clone(), v(x))).collect()))
+}
+
+fn figure_text(q: &Question) -> String {
+    match figure_key(q) {
+        None => "no figure".into(),
+        Some((id, ps)) if ps.is_empty() => shown(&id),
+        Some((id, ps)) => format!("{} ({})", shown(&id), ps.iter().map(|(k, v)| format!("{} = {}", shown(k), shown(v))).collect::<Vec<_>>().join(", ")),
+    }
 }
 
 // ---- restore one question (plan 4.5) ---------------------------------------------------------------------------------
@@ -747,6 +847,8 @@ pub enum RestoreRefused {
     RestorePoint(String),
     /// The banks could not be saved: put back as they were.
     NotSaved(String),
+    /// (round 3, critic M5) The link no longer pairs that local question with that circle question.
+    Moved,
 }
 
 pub struct RestoreAsk<'a> {
@@ -762,7 +864,7 @@ pub struct RestoreAsk<'a> {
     pub removed_in_circle: bool,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct Restored {
     pub local_id: String,
     pub version: u64,
@@ -773,6 +875,49 @@ pub struct Restored {
     /// The link to keep instead (`CircleEditModel::update_link`): the question no longer paired with the circle's
     /// removed one. `None`: the link is unchanged.
     pub link: Option<CircleLink>,
+    /// (round 3, critic P2) What "Undo restore" puts back: the question replaced and its place (`None`: it was not in the
+    /// copy, so undo removes it again), and the link as it was when the restore changed it.
+    pub replaced: Option<(usize, Question)>,
+    pub link_before: Option<CircleLink>,
+}
+
+impl PartialEq for Restored {
+    fn eq(&self, o: &Self) -> bool {
+        let q = |r: &Option<(usize, Question)>| r.as_ref().map(|(i, q)| (*i, serde_json::to_value(q).ok()));
+        self.local_id == o.local_id && self.version == o.version && self.added == o.added && self.restore_point == o.restore_point && self.link == o.link && q(&self.replaced) == q(&o.replaced) && self.link_before == o.link_before
+    }
+}
+
+/// (round 3, critic P2) "Undo restore": puts back exactly the question a restore replaced (or removes the one it brought
+/// back), through the same safe local edit: a restore point first, then the bank, its time moved forward. Returns the
+/// link to keep when the restore had changed it. Edit links only.
+pub fn undo_restore(banks: &mut [QuestionBank], link: &CircleLink, done: &Restored, sink: &dyn RestoreSink, save: &dyn Fn(&[QuestionBank]) -> Result<(), String>, now_ms: i64) -> Result<Option<CircleLink>, RestoreRefused> {
+    if !link.can_send() {
+        return Err(if link.viewers_form { RestoreRefused::ViewersForm } else { RestoreRefused::FollowLink });
+    }
+    let pos = banks.iter().position(|b| b.id == link.local_bank_id).ok_or(RestoreRefused::NoBank)?;
+    if link.stale_for(&banks[pos]) {
+        return Err(RestoreRefused::Stale);
+    }
+    let bank = &banks[pos];
+    let mut next = bank.clone();
+    let now_at = next.questions.iter().position(|q| q.id == done.local_id);
+    match (&done.replaced, now_at) {
+        (Some((_, q)), Some(i)) => next.questions[i] = q.clone(),
+        (Some((i, q)), None) => next.questions.insert((*i).min(next.questions.len()), q.clone()),
+        (None, Some(i)) => {
+            next.questions.remove(i);
+        }
+        (None, None) => return Err(RestoreRefused::Same),
+    }
+    next.modified = now_ms.div_euclid(1000).max(bank.modified.saturating_add(1));
+    sink.save_named(banks, "restore").map_err(RestoreRefused::RestorePoint)?;
+    let before = std::mem::replace(&mut banks[pos], next);
+    if let Err(m) = save(banks) {
+        banks[pos] = before;
+        return Err(RestoreRefused::NotSaved(m));
+    }
+    Ok(done.link_before.clone())
 }
 
 /// "Replace your copy of question N with version V's": a local edit. The restore point is written first (nothing
@@ -795,6 +940,12 @@ pub fn restore_question(banks: &mut [QuestionBank], ask: &RestoreAsk, sink: &dyn
     let bank = &banks[pos];
     let in_bank = |id: &str| bank.questions.iter().position(|q| q.id == id);
     let paired = link.qids.iter().find(|l| l.qid == ask.qid).map(|l| l.local.clone());
+    // (round 3, critic M5) the question asked is the one the link pairs with that circle question (or, unpaired, with none)
+    if let Some(local) = ask.local_id
+        && (paired.as_deref().is_some_and(|p| p != local) || (paired.is_none() && link.qid_of(local).is_some()))
+    {
+        return Err(RestoreRefused::Moved);
+    }
     let at = ask.local_id.and_then(in_bank).or_else(|| paired.as_deref().and_then(in_bank));
     let existing = at.map(|i| &bank.questions[i]);
     let local_id = existing.map(|q| q.id.clone()).or(paired.clone()).unwrap_or_else(crate::model::new_id);
@@ -817,6 +968,7 @@ pub fn restore_question(banks: &mut [QuestionBank], ask: &RestoreAsk, sink: &dyn
     {
         return Err(RestoreRefused::Same);
     }
+    let replaced = at.map(|i| (i, bank.questions[i].clone()));
     let mut next = bank.clone();
     match at {
         Some(i) => next.questions[i] = r,
@@ -838,5 +990,6 @@ pub fn restore_question(banks: &mut [QuestionBank], ask: &RestoreAsk, sink: &dyn
         l
     });
     let added = unpair || link.qid_of(&local_id).is_none();
-    Ok(Restored { local_id, version: ask.body.version, added, restore_point, link: new_link })
+    let link_before = unpair.then(|| link.clone());
+    Ok(Restored { local_id, version: ask.body.version, added, restore_point, link: new_link, replaced, link_before })
 }

@@ -159,6 +159,13 @@ pub struct ChangesPage {
     pub from_cache: bool,
 }
 
+/// (round 3, critic I2) The most entries a change-list answer is read for: the pool reads at most 40 indexes.
+pub const CHANGES_MAX: usize = 40;
+/// The most question ids one entry's lists carry between them (a bank far bigger than any the app makes).
+pub const CHANGE_IDS_MAX: usize = 5000;
+/// The most bytes of a change-list answer read.
+pub const CHANGES_RESPONSE_MAX: usize = 1 << 20;
+
 /// A list of question ids; `None` when the key is missing, null or not a list.
 fn ids_at(v: &Value, key: &str) -> Option<Vec<String>> {
     v.get(key).and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).filter(|s| !s.is_empty()).map(str::to_string).collect())
@@ -172,7 +179,9 @@ fn change_entry(v: &Value) -> Option<ChangeEntry> {
     }
     let lists = (ids_at(v, "added"), ids_at(v, "changed"), ids_at(v, "removed"));
     // (null-tolerant) an entry that carries no list at all says nothing: a gap, never "nothing changed"
-    let gap = v.get("gap").and_then(Value::as_bool) == Some(true) || compared_to == 0 || (lists.0.is_none() && lists.1.is_none() && lists.2.is_none());
+    // (round 3, critic I2) lists longer than any bank the app makes are not read: the entry says nothing
+    let too_long = [&lists.0, &lists.1, &lists.2].iter().map(|l| l.as_ref().map_or(0, Vec::len)).sum::<usize>() > CHANGE_IDS_MAX;
+    let gap = v.get("gap").and_then(Value::as_bool) == Some(true) || compared_to == 0 || too_long || (lists.0.is_none() && lists.1.is_none() && lists.2.is_none());
     if gap {
         return Some(ChangeEntry { version, compared_to, gap: true, ..ChangeEntry::default() });
     }
@@ -183,9 +192,16 @@ fn change_entry(v: &Value) -> Option<ChangeEntry> {
 pub fn changes_page(v: &Value, etag: Option<String>) -> ChangesPage {
     let reason = text_of(v, "reason");
     let per_question = reason != "keys_hidden" && v.get("per_question").and_then(Value::as_bool).unwrap_or(true);
-    let mut versions: Vec<ChangeEntry> = if per_question { v.get("versions").and_then(Value::as_array).map(|a| a.iter().filter_map(change_entry).collect()).unwrap_or_default() } else { Vec::new() };
+    let head = v.get("head_version").and_then(Value::as_u64).unwrap_or(0);
+    // (round 3, critic I2) never more entries than the pool reads, none above its head, read no further than that
+    let mut versions: Vec<ChangeEntry> = if per_question {
+        v.get("versions").and_then(Value::as_array).map(|a| a.iter().take(4 * CHANGES_MAX).filter_map(change_entry).filter(|e| head == 0 || e.version <= head).collect()).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     versions.sort_by_key(|a| std::cmp::Reverse(a.version));
     versions.dedup_by_key(|e| e.version);
+    versions.truncate(CHANGES_MAX);
     ChangesPage { bank_id: text_of(v, "bank_id"), head_version: v.get("head_version").and_then(Value::as_u64).unwrap_or(0), per_question, reason, versions, etag, from_cache: false }
 }
 
@@ -276,6 +292,7 @@ impl<'a> Pool<'a> {
         check_id(bid)?;
         let cached = cached.filter(|p| p.bank_id == bid && p.etag.is_some());
         let mut c = Call::new(Method::Get, format!("/circles/{cid}/banks/{bid}/changes"));
+        c.max_response = Some(CHANGES_RESPONSE_MAX);
         if let Some(e) = cached.and_then(|p| p.etag.clone()) {
             c.headers.push(("If-None-Match".into(), e));
         }

@@ -33,6 +33,16 @@ history lines; side-by-side compare of two versions of one question (viewers of 
 Matching word banks compared sorted); "Restore this question to version N" as a local edit that writes a restore point
 first and then counts as one unsent change; hook H3 (`question_menu`) needs the owner's approval before it is touched.
 
+## Phase D2 client: per-question history, compare, restore (2026-10-28, overnight loop)
+
+Owner approved hook H3 on 2026-10-28 and asked for the rest to be finished overnight; the previous session closed, this one took over.
+Loop rules: local commits only, never push; critic pair (product vs Moodle, security vs ASVS) per round until both are clean on the same build; stop and leave a note here on a new class of critic finding, another protected file, staging/deploy, or privacy/terms wording.
+
+- **r1 `1ec39ff`** models, no UI: `Pool::circle_changes(_if)`, timeline, compare, body cache, `restore_question` (restore point first, one unsent change, edit links only). Share suite 1425.
+- **r2 `dce14de`** UI: `question_history_ui.rs` page drawn in place of the grid (new `EditView::Question`, additive edits in `circle_edit.rs`, `circle_edit_ui.rs`, `bank_links_ui.rs`), the restore applied from `CircleEditModel::sync`, and hook H3 (one line in `bankui.rs` `draw_card`). Share suite 1439, 7 mutations killed. Frames: `d2frames/` in the session scratchpad, rendered by the ignored test `d2u_frames` (`D2FRAMES=<dir> cargo test --lib d2u_frames -- --ignored`).
+- **Critic round 1** (product vs Moodle, security vs ASVS): 1 blocker (cached full bodies and lines surviving the server hiding keys or withholding a version), the H3 line committed in the wrong branch of `draw_card` (a zero-context patch against shifted lines; fixed in its own commit, now guarded by a test that reads `bankui.rs`), plus 10 important findings. **Fix round `r3`** fixed them (cache keyed by account/role/hide state and dropped on any change, caps on the `/changes` reply, restore warns about unsent edits and offers Undo, removed-question restore, Multipart/picture/figure compare, confirmation under its row, 22 frames at 420 and 1280). Share suite 1467, 20 mutations killed. M6 (bank written before link) kept deliberately; reason in the comment at the sync hook in `circle_edit.rs`.
+- Not yet seen on a real screen; the owner's look is still due before D2 is called done. Staging re-measure of the `/changes` route (`meta.rows_read`) is still owed and needs the owner's yes.
+
 ## The 5 known failures are fixed (2026-10-28)
 
 The owner asked to fix the five `share_core::wasm::publish_prepare_json` failures. Cause: the viSHion path deps in

@@ -5462,11 +5462,21 @@ impl CircleEditModel {
             Some(f) => f(b),
             None => log.save_banks(b),
         };
-        let restored = match &mut self.view {
-            EditView::Question(p) => super::question_history_ui::sync_page(p, &mut self.question_cache, banks, &self.links, session, &save, now),
+        let out = match &mut self.view {
+            EditView::Question(p) => Some((super::question_history_ui::sync_page(p, &mut self.question_cache, banks, &self.links, session, &save, now), p.cid.clone(), p.bid.clone())),
             _ => None,
         };
+        // (round 3, critic M1) the link or the bank went, or the circle no longer lists the person: the page closes, and what
+        // it read for the bank goes with it
+        if let Some((o, cid, bid)) = &out
+            && o.close
+        {
+            self.question_cache.drop_bank(cid, bid);
+            self.close();
+        }
+        let restored = out.and_then(|(o, _, _)| o.changed);
         let inherited = inherited || restored.is_some();
+        // (round 3, critic M6) the bank is written first (by the restore), then the link: see `restore_question`
         if let Some((local, Some(link))) = restored {
             self.update_link(&local, |l| {
                 *l = link;

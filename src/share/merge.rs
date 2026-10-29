@@ -236,7 +236,7 @@ fn key_text(k: &Kind, keyless: bool) -> String {
         }
         Kind::Tf { correct } => (if *correct { "True" } else { "False" }).into(),
         Kind::Matching { pairs, .. } => pairs.iter().map(|p| text::shown(&p.right)).collect::<Vec<_>>().join(" | "),
-        Kind::Blank { accept } => accept.iter().map(|a| a.join(" / ")).collect::<Vec<_>>().join(" | "),
+        Kind::Blank { accept } => accept.iter().map(|a| a.iter().map(|x| text::shown(x)).collect::<Vec<_>>().join(" / ")).collect::<Vec<_>>().join(" | "),
         Kind::Short { sample } => text::shown(sample),
         Kind::Multipart { .. } => "per part".into(),
     }

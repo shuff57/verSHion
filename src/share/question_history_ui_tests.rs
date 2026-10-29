@@ -33,6 +33,8 @@ pub(super) struct Wire {
     routes: Mutex<HashMap<String, VecDeque<Response>>>,
     sticky: Mutex<HashMap<String, Value>>,
     seen: Mutex<Vec<Seen>>,
+    /// Who the session says is signed in (round 3, critic I4).
+    who: Mutex<Option<String>>,
 }
 
 fn reply(status: u16, body: &Value, etag: Option<&str>) -> Response {
@@ -79,6 +81,9 @@ impl PoolSession for Wire {
     fn base(&self) -> String {
         "https://pool.test".into()
     }
+    fn account(&self) -> Option<String> {
+        self.who.lock().unwrap().clone()
+    }
     fn send<'a>(&'a self, build: &'a dyn Fn() -> Request) -> LocalFuture<'a, Result<Response, ApiError>> {
         Box::pin(async move {
             let r = build();
@@ -90,7 +95,7 @@ impl PoolSession for Wire {
             }
             match self.sticky.lock().unwrap().get(&key) {
                 Some(b) => Ok(reply(200, b, None)),
-                None => panic!("no wired reply for {key}"),
+                None => panic!("no wired reply for {key}; seen {:?}", self.seen.lock().unwrap().iter().map(|(p, _)| p.clone()).collect::<Vec<_>>()),
             }
         })
     }
@@ -131,7 +136,7 @@ fn changes_json() -> Value {
 }
 
 fn qj(id: &str, stem: &str) -> Value {
-    json!({"id": id, "stem": stem, "kind": {"Mc": {"answers": [{"text": "x = 2", "correct": true}, {"text": "x = 5", "correct": false}]}}, "points": 1.0, "difficulty": null, "created": 5, "modified": 6})
+    json!({"id": id, "stem": stem, "kind": {"Mc": {"answers": [{"text": "A", "correct": true}, {"text": "B", "correct": false}]}}, "points": 1.0, "difficulty": null, "created": 5, "modified": 6})
 }
 
 fn served(version: u64, qs: &[Value], keys_hidden: bool) -> Vec<u8> {
@@ -165,13 +170,29 @@ struct Rig {
     who: String,
     /// Every texture the context sent, for the screenshots.
     painter: Painter,
+    pics: Arc<Pics>,
 }
 
 fn rig_with(mode: LinkMode, viewers_form: bool) -> Rig {
+    rig_link(mode, viewers_form, |_| {})
+}
+
+#[derive(Default)]
+struct Pics(Mutex<usize>);
+
+impl super::browse::ImageSink for Pics {
+    fn put(&self, bytes: &[u8]) -> Result<crate::model::ImageRef, String> {
+        *self.0.lock().unwrap() += 1;
+        Ok(crate::model::ImageRef { file: format!("media/{}.webp", sha256_hex(bytes)), width: 2, height: 2 })
+    }
+}
+
+fn rig_link(mode: LinkMode, viewers_form: bool, f: impl FnOnce(&mut super::circle_links::CircleLink)) -> Rig {
     let mut m = model();
+    let pics = Arc::new(Pics::default());
     let restores = Arc::new(CountRestore::default());
     let media: super::publish::SharedMedia = Arc::new(HashMap::<String, Vec<u8>>::new());
-    m.edit = CircleEditModel::new(Runner::Inline, Arc::new(Mem::default()), media, restores.clone(), LinkLog::memory()).with_retry(RetryPolicy::none());
+    m.edit = CircleEditModel::new(Runner::Inline, pics.clone(), media, restores.clone(), LinkLog::memory()).with_retry(RetryPolicy::none());
     m.set_clock(NOW);
     let (mut bank, mut l) = linked(&[(QA, A5), (QB, B)]);
     bank.name = "Unit 2 quiz".into();
@@ -180,11 +201,12 @@ fn rig_with(mode: LinkMode, viewers_form: bool) -> Rig {
     l.head_seen = 5;
     l.mode = mode;
     l.viewers_form = viewers_form;
+    f(&mut l);
     l.mark_bank(&bank);
     m.edit.add_link(l).unwrap();
     let ctx = egui::Context::default();
     crate::theme::setup(&ctx);
-    Rig { m, w: Wire::new(), banks: vec![bank], acct: FakeAccount { open: true, ..FakeAccount::default() }, ctx, restores, who: "olga".into(), painter: Painter { textures: HashMap::new() } }
+    Rig { m, w: Wire::new(), banks: vec![bank], acct: FakeAccount { open: true, ..FakeAccount::default() }, ctx, restores, who: "olga".into(), painter: Painter { textures: HashMap::new() }, pics }
 }
 
 fn rig() -> Rig {
@@ -244,7 +266,8 @@ impl Rig {
 
     /// The history page for the bank's question `i` (0-based), opened as its card's menu opens it.
     fn open(&mut self, i: usize) {
-        // (the bank's page is drawn first, as in the app: the model has the session then)
+        // (the bank's page is drawn first, as in the app: the model has the session, and its check has said the role)
+        self.frame_at(1280.0, Vec::new());
         self.frame_at(1280.0, Vec::new());
         self.open_cold(i);
     }
@@ -391,10 +414,14 @@ fn d2u_signed_out_offline_and_errors_say_what_to_do() {
     let mut r = rig();
     r.open_cold(0);
     // (the session the page was opened with is the model's: none until a frame gave it one)
-    for w in BOTH {
-        let t = r.page(w);
-        assert!(t.contains("Try again"), "{t}");
-    }
+    assert_eq!(r.qpage().load, Load::SignedOut);
+    // (round 3, critic P11) once a session is there, the page reads by itself (twice here: the strip's first check then says
+    // the role, and a read made before that is not used under it)
+    r.script_load();
+    r.script_load();
+    r.page(1280.0);
+    let t = r.page(1280.0);
+    assert!(t.contains("Version 5") && t.contains("Changed"), "{t}");
     // offline, then an error the pool answered: Try again reads again
     let mut r = rig();
     r.w.on("Get", &versions_path(), 500, json!({"error": "internal"}), None);
@@ -408,9 +435,11 @@ fn d2u_signed_out_offline_and_errors_say_what_to_do() {
     assert!(r.click(1280.0, "Try again", 0));
     let t = r.page(1280.0);
     assert!(t.contains("Version 5") && t.contains("Changed"), "{t}");
-    // signed out while open: says so, with Sign in
+    // signed out while open (the session said so on a read): says so, with Sign in
     let mut r = rig();
-    r.open_cold(0);
+    r.script_load();
+    r.open(0);
+    r.page(1280.0);
     r.qpage_mut().load = Load::SignedOut;
     for w in BOTH {
         let t = r.page(w);
@@ -471,7 +500,7 @@ fn d2u_compare_reads_two_versions_flags_changes_and_folds_the_rest() {
         assert_eq!(r.w.calls("/versions/"), 2, "two version reads");
         assert!(t.contains("Question text") && t.contains("changed"), "{t}");
         assert!(t.contains(A3) && t.contains(A5), "{t}");
-        assert!(t.contains("Choices, answer key, points, difficulty, topics, explanation, picture: the same"), "{t}");
+        assert!(t.contains("Choices, answer key, points, difficulty, topics, explanation, picture, figure: the same"), "{t}");
         // two columns from 760 px, stacked below: the stacked view names each side above its block
         assert_eq!(compare_columns(w), w >= 760.0);
         assert!(r.click(w, "Close compare", 0));
@@ -514,8 +543,8 @@ fn d2u_restore_asks_first_then_restores_that_question_as_one_unsent_change() {
     r.open(0);
     r.page(1280.0);
     let before = serde_json::to_string(&r.banks).unwrap();
-    // Version 5's row, then version 2's ("as it was then")
-    assert!(r.click(1280.0, "Restore...", 1));
+    // (round 3, critic P7) version 5 is what the copy is: only version 2's row ("as it was then") offers Restore
+    assert!(r.click(1280.0, "Restore...", 0));
     let t = r.page(1280.0);
     assert!(t.contains("Replace your copy of question 1 with version 2's? Only your copy changes; the circle gets it when you send. A restore point is saved first."), "{t}");
     assert_eq!(serde_json::to_string(&r.banks).unwrap(), before, "nothing changes before the yes");
@@ -525,7 +554,7 @@ fn d2u_restore_asks_first_then_restores_that_question_as_one_unsent_change() {
     // No: nothing
     assert!(r.click(1280.0, "Cancel", 0));
     assert!(r.qpage().restore.is_none());
-    assert!(r.click(1280.0, "Restore...", 1));
+    assert!(r.click(1280.0, "Restore...", 0));
     assert!(r.click(1280.0, "Yes, restore", 0));
     let t = r.page(1280.0);
     assert_eq!(*r.restores.0.lock().unwrap(), 1, "a restore point first");
@@ -711,7 +740,7 @@ impl Rig {
         self.frame_at(width, Vec::new());
         let snap = self.snap();
         let t0 = self.ctx.input(|i| i.time);
-        let input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, h as f32))), time: Some(t0 + 0.05), ..Default::default() };
+        let input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, h as f32))), time: Some(t0 + 0.05), events: vec![egui::Event::PointerGone], ..Default::default() };
         let mut browse = BrowseModel::new(Runner::Inline, Arc::new(Mem::default()), ImportLog::memory());
         let (m, banks, acct) = (&mut self.m, &mut self.banks, &mut self.acct);
         let mut out = self.ctx.run_ui(input, |ui| {
@@ -733,33 +762,53 @@ impl Rig {
 fn d2u_frames() {
     let dir = std::env::var("D2FRAMES").expect("D2FRAMES");
     std::fs::create_dir_all(&dir).unwrap();
+    let both = |r: &mut Rig, name: &str, w: f32| {
+        r.page(w);
+        r.shot(&dir, name, w);
+    };
     for w in BOTH {
-        // the panel with its rows and gap line
+        // the panel with its rows, gap line and held-back line
         let mut r = rig();
         r.script_load();
         r.open(0);
-        r.page(w);
-        r.shot(&dir, "1-panel", w);
-        // every version
+        both(&mut r, "01-panel", w);
         r.qpage_mut().show_all = true;
-        r.page(w);
-        r.shot(&dir, "2-every-version", w);
+        both(&mut r, "02-every-version", w);
         r.qpage_mut().show_all = false;
-        // the restore question, then done
+        // the loading state
+        r.qpage_mut().load = Load::Loading;
+        both(&mut r, "03-loading", w);
+        // an Added row (question B)
+        let mut r = rig();
+        r.script_load();
+        r.open(1);
+        both(&mut r, "04-added-row", w);
+        // a compare where one side doesn't have the question (version 2 has no B)
         r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
-        r.qpage_mut().ask_restore(2);
+        r.w.raw(&version_path(3), served(3, &[qj(QA, A3), qj(QB, B)], false));
+        let cache = &mut r.m.edit.question_cache;
+        if let EditView::Question(p) = &mut r.m.edit.view {
+            p.open_compare(Side::Version(2), Side::Version(3), cache);
+        }
+        both(&mut r, "05-compare-one-side-missing", w);
+        // an unsent edit, the restore question with its warning, then done with Undo
+        let mut r = rig();
+        r.script_load();
+        r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+        r.banks[0].questions[0].stem = "Solve 2x + 3 = 11 (my unsent edit)".into();
+        r.banks[0].modified += 1;
+        r.open(0);
         r.page(w);
-        r.shot(&dir, "3-restore-ask", w);
+        r.qpage_mut().ask_restore(2);
+        both(&mut r, "06-restore-ask-unsent", w);
         let cache = &mut r.m.edit.question_cache;
         if let EditView::Question(p) = &mut r.m.edit.view {
             p.confirm_restore(cache);
         }
-        r.page(w);
-        r.shot(&dir, "4-restore-done", w);
+        both(&mut r, "07-restore-done-undo", w);
         assert!(r.click(w, "< Back to Unit 2 quiz", 0));
-        r.page(w);
-        r.shot(&dir, "5-strip-after", w);
-        // compare
+        both(&mut r, "08-strip-after", w);
+        // compare: two versions, and your copy as one side
         let mut r = rig();
         r.script_load();
         r.w.raw(&version_path(3), served(3, &[qj(QA, A3), qj(QB, B)], false));
@@ -767,19 +816,614 @@ fn d2u_frames() {
         r.open(0);
         r.page(w);
         assert!(r.click(w, "Compare", 0));
+        both(&mut r, "09-compare", w);
+        r.banks[0].questions[0].stem = "Solve 2x + 3 = 11".into();
+        r.banks[0].modified += 1;
+        let cache = &mut r.m.edit.question_cache;
+        if let EditView::Question(p) = &mut r.m.edit.view {
+            p.open_compare(Side::Version(5), Side::YourCopy, cache);
+        }
+        both(&mut r, "10-compare-your-copy", w);
+        // a Removed row, the restore question for it, and the page after restoring it
+        let mut r = removed_rig();
+        r.open(0);
+        both(&mut r, "11-removed-row", w);
+        r.qpage_mut().ask_restore(2);
+        both(&mut r, "12-removed-restore-ask", w);
+        let cache = &mut r.m.edit.question_cache;
+        if let EditView::Question(p) = &mut r.m.edit.view {
+            p.confirm_restore(cache);
+        }
+        both(&mut r, "13-removed-restored", w);
+        // a failed load (offline / the pool's error), with Try again
+        let mut r = rig();
+        r.w.on("Get", &versions_path(), 500, json!({"error": "internal"}), None);
+        r.open(0);
+        both(&mut r, "14-failed-load", w);
+        // a failed restore: the picture could not be read
+        let mut r = rig();
+        r.script_load();
+        let sha = sha256_hex(b"a picture");
+        r.w.raw(&version_path(2), served(2, &[pictured(&sha)], false));
+        r.w.on("Get", &format!("/circles/{CID}/banks/{BID}/blobs/{sha}"), 500, json!({"error": "internal"}), None);
+        r.open(0);
         r.page(w);
-        r.shot(&dir, "6-compare", w);
-        // a viewer of a hiding bank
-        let mut r = rig_with(LinkMode::Follow, true);
+        r.qpage_mut().ask_restore(2);
+        let cache = &mut r.m.edit.question_cache;
+        if let EditView::Question(p) = &mut r.m.edit.view {
+            p.confirm_restore(cache);
+        }
+        both(&mut r, "15-restore-failed-picture", w);
+        // a stale bank: no Restore, the copy's line says why
+        let mut r = rig();
+        r.script_load();
+        r.m.edit.update_link(LOCAL, |l| {
+            l.bank_modified = r.banks[0].modified + 100;
+            l.bank_print = "another".into();
+            true
+        });
+        r.open(0);
+        both(&mut r, "16-stale-bank", w);
+        // a plain follow-link viewer: compare, no Restore
+        let mut r = rig_with(LinkMode::Follow, false);
+        r.script_load();
+        r.open(0);
+        both(&mut r, "17-follow-viewer", w);
+        // a viewer of a hiding bank: bank lines, then its compare of two viewers' forms (word bank sorted)
+        let mut r = hiding_viewer();
         r.w.on("Get", &versions_path(), 200, lines_json(), None);
         r.w.on("Get", &changes_path(), 200, json!({"bank_id": BID, "head_version": 5, "per_question": false, "reason": "keys_hidden"}), None);
         r.open(0);
-        r.page(w);
-        r.shot(&dir, "7-hiding-viewer", w);
-        // signed out, and a question the circle does not have
+        both(&mut r, "18-hiding-viewer", w);
+        let m3 = json!({"id": QA, "stem": "Match the organelle to its job", "kind": {"Matching": {"pairs": [{"left": "Nucleus", "right": ""}, {"left": "Ribosome", "right": ""}], "distractors": ["proteins", "DNA", "sugar"]}}, "points": 1.0, "difficulty": null, "created": 5, "modified": 6, "keyless": true});
+        let mut m5 = m3.clone();
+        m5["kind"]["Matching"]["pairs"] = json!([{"left": "Ribosome", "right": ""}, {"left": "Nucleus", "right": ""}]);
+        m5["kind"]["Matching"]["distractors"] = json!(["sugar", "glucose", "DNA"]);
+        r.w.raw(&version_path(3), served(3, &[m3], true));
+        r.w.raw(&version_path(5), served(5, &[m5], true));
+        assert!(r.click(w, "Compare", 0));
+        both(&mut r, "19-hiding-viewer-compare", w);
+        // "No version that is still kept changed this question."
         let mut r = rig();
-        r.open_cold(0);
+        r.w.on("Get", &versions_path(), 200, lines_json(), None);
+        r.w.on("Get", &changes_path(), 200, json!({"bank_id": BID, "head_version": 5, "per_question": true, "versions": [{"version": 5, "compared_to": 3, "gap": true}, {"version": 3, "compared_to": 2, "gap": true}]}), None);
+        r.open(0);
+        both(&mut r, "20-no-version-changed-it", w);
+        // "The circle doesn't have this question yet"
+        let mut r = rig();
+        let mut q = r.banks[0].questions[0].clone();
+        q.id = "new-here".into();
+        q.stem = "A question only in my copy".into();
+        r.banks[0].questions.push(q);
+        r.banks[0].modified += 1;
+        let bank = r.banks[0].clone();
+        r.frame_at(w, Vec::new());
+        assert!(r.m.edit.open_question_history(&bank, "new-here"));
+        both(&mut r, "21-not-in-the-circle", w);
+        // signed out
+        let mut r = rig();
+        r.script_load();
+        r.open(0);
         r.page(w);
-        r.shot(&dir, "8-signed-out", w);
+        r.qpage_mut().load = Load::SignedOut;
+        both(&mut r, "22-signed-out", w);
     }
+}
+
+
+// ---- round 3 (critics on round 2): each test written first ------------------------------------------------------------
+
+/// The history list's own reads (not a version's).
+fn list_reads(w: &Wire) -> usize {
+    w.seen.lock().unwrap().iter().filter(|(p, _)| p.ends_with("/versions")).count()
+}
+
+fn qk(id: &str, stem: &str, correct_first: bool) -> Value {
+    json!({"id": id, "stem": stem, "kind": {"Mc": {"answers": [{"text": "x = 2", "correct": correct_first}, {"text": "x = 5", "correct": !correct_first}]}}, "points": 1.0, "difficulty": null, "created": 5, "modified": 6, "explanation": "SECRET EXPLANATION"})
+}
+
+/// The viewers' form of a question: no key, no explanation.
+fn qs(id: &str, stem: &str) -> Value {
+    json!({"id": id, "stem": stem, "kind": {"Mc": {"answers": [{"text": "x = 2", "correct": false}, {"text": "x = 5", "correct": false}]}}, "points": 1.0, "difficulty": null, "created": 5, "modified": 6, "keyless": true})
+}
+
+#[test]
+fn critic_cached_full_body_and_lines_survive_hiding_and_withholding() {
+    // (critic B1, ported) a viewer (follow link) of a bank that does not hide its keys yet
+    let mut r = rig_with(LinkMode::Follow, false);
+    r.script_load();
+    r.w.raw(&version_path(3), served(3, &[qk(QA, "WITHHELD STUDENT TEXT", false), qj(QB, B)], false));
+    r.w.raw(&version_path(5), served(5, &[qk(QA, A5, true), qj(QB, B)], false));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Compare", 0));
+    r.page(1280.0);
+    assert!(r.click(1280.0, "< Back to Unit 2 quiz", 0));
+    // the author turns hiding on (PATCH): the same PATCH withholds version 3; no new version, head stays 5. The server now
+    // says per_question:false for this viewer, the lines say 3 is withheld, messages are blank.
+    let mut l2 = lines_json();
+    l2["versions"][2] = json!({"version": 3, "by": "", "at": NOW - 3 * DAY, "message": "", "kept": false, "withheld": true, "review_copy": "full"});
+    l2["versions"][0]["message"] = json!("");
+    r.w.on("Get", &versions_path(), 200, l2, None);
+    r.w.on("Get", &changes_path(), 200, json!({"bank_id": BID, "head_version": 5, "per_question": false, "reason": "keys_hidden"}), None);
+    // what the pool serves this viewer now: the viewers' form
+    r.w.raw(&version_path(2), served(2, &[qs(QA, A3)], true));
+    r.w.raw(&version_path(5), served(5, &[qs(QA, A5), qs(QB, B)], true));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Compare", 0), "compare offered on version 5");
+    let t = r.page(1280.0);
+    for leak in ["WITHHELD STUDENT TEXT", "choice 1", "choice 2", "Fixed a distractor", "SECRET EXPLANATION"] {
+        assert!(!t.contains(leak), "{leak} leaked: {t}");
+    }
+}
+
+#[test]
+fn d2f_a_new_change_list_tag_drops_the_banks_bodies_and_reads_its_lines_again() {
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(3), served(3, &[qj(QA, A3), qj(QB, B)], false));
+    r.w.raw(&version_path(5), served(5, &[qj(QA, A5), qj(QB, B)], false));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Compare", 0));
+    r.page(1280.0);
+    assert_eq!(r.m.edit.question_cache.bodies(), 2);
+    assert!(r.click(1280.0, "< Back to Unit 2 quiz", 0));
+    // something moved at the pool (a new tag, the same head): what was read for the bank is not used again
+    r.w.on("Get", &changes_path(), 200, changes_json(), Some("\"e2\""));
+    r.w.on("Get", &versions_path(), 200, lines_json(), None);
+    r.open(0);
+    r.page(1280.0);
+    assert_eq!(r.m.edit.question_cache.bodies(), 0);
+    assert_eq!(list_reads(&r.w), 2, "{:?}", r.w.reads());
+    // and a tag missing from the answer is "moved" too
+    assert!(r.click(1280.0, "< Back to Unit 2 quiz", 0));
+    r.w.on("Get", &changes_path(), 200, changes_json(), None);
+    r.w.on("Get", &versions_path(), 200, lines_json(), None);
+    r.open(0);
+    r.page(1280.0);
+    assert_eq!(list_reads(&r.w), 3, "{:?}", r.w.reads());
+}
+
+#[test]
+fn d2f_a_withheld_or_mismatched_read_is_never_kept() {
+    let mut r = rig();
+    r.script_load();
+    r.w.on("Get", &version_path(3), 404, json!({"error": "version_withheld"}), None);
+    r.w.raw(&version_path(5), served(5, &[qj(QA, A5), qj(QB, B)], false));
+    r.open(0);
+    r.page(1280.0);
+    // a body kept from earlier this session for that version goes too
+    let scope = super::question_history::scope_of(&r.m.edit.link_for_local(LOCAL).unwrap());
+    r.m.edit.question_cache.put_body(CID, BID, "someone|false|false", super::question_history::VersionBody::from_payload(3, &[], false, NOW));
+    assert!(r.click(1280.0, "Compare", 0));
+    let t = r.page(1280.0);
+    assert!(t.contains("hidden while it is reviewed"), "{t}");
+    assert!(r.m.edit.question_cache.body(CID, BID, &scope, 3).is_none() && r.m.edit.question_cache.body(CID, BID, "someone|false|false", 3).is_none());
+    // (critic M4) an answer for another version, or another bank, is not kept as this one
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(3), served(4, &[qj(QA, A3), qj(QB, B)], false));
+    r.w.raw(&version_path(5), served(5, &[qj(QA, A5), qj(QB, B)], false));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Compare", 0));
+    r.page(1280.0);
+    assert!(matches!(r.qpage().compare.as_ref().map(|c| &c.state), Some(CompareState::Failed(_))));
+    let scope = super::question_history::scope_of(&r.m.edit.link_for_local(LOCAL).unwrap());
+    assert!(r.m.edit.question_cache.body(CID, BID, &scope, 3).is_none());
+}
+
+fn hiding_viewer() -> Rig {
+    let r = rig_link(LinkMode::Follow, true, |l| {
+        l.role_seen = Some("viewer".into());
+        l.seen.hide_key = true;
+    });
+    // (the circle's own checks say the same: a viewer, of a bank that hides its keys)
+    let mut h = heads(5);
+    h["banks"][0]["hide_key"] = json!(true);
+    r.w.keep("Post", "/circles/heads", h);
+    r.w.keep("Get", "/circles", circles_list("viewer"));
+    r.w.keep("Get", &format!("/circles/{CID}"), detail("viewer", json!({})));
+    r
+}
+
+#[test]
+fn d2f_a_viewer_of_a_hiding_bank_gets_bank_lines_whatever_the_answer_says() {
+    // (critic I3) the link says viewer of a bank that hides its keys; the answer (wrongly) carries lists
+    let mut r = hiding_viewer();
+    r.script_load();
+    r.open(0);
+    let t = r.page(1280.0);
+    assert!(!t.contains("Changed") && !t.contains("As it was then"), "{t}");
+    assert!(t.contains("2 of your 100 daily"), "(critic P11) {t}");
+    assert!(r.click(1280.0, "< Back to Unit 2 quiz", 0));
+    // and its change lists are never asked with a tag (a 304 would bring back a page read under another role)
+    r.w.on("Get", &changes_path(), 200, json!({"bank_id": BID, "head_version": 5, "per_question": false, "reason": "keys_hidden"}), Some("\"v1\""));
+    // (the answer is not the one read before: the lines are read again)
+    r.w.on("Get", &versions_path(), 200, lines_json(), None);
+    r.open(0);
+    r.page(1280.0);
+    assert_eq!(r.w.last_header("/changes", "If-None-Match"), None);
+}
+
+#[test]
+fn d2f_the_timeline_is_worked_out_only_when_what_it_shows_changes() {
+    // (critic I2)
+    let mut r = rig();
+    r.script_load();
+    r.open(0);
+    for _ in 0..5 {
+        r.page(1280.0);
+    }
+    let n = r.qpage().timeline_builds;
+    assert!(n <= 2, "{n}");
+    r.qpage_mut().show_all = true;
+    r.page(1280.0);
+    assert_eq!(r.qpage().timeline_builds, n + 1);
+    r.banks[0].questions[0].stem = "Edited".into();
+    r.banks[0].modified += 1;
+    r.page(1280.0);
+    assert_eq!(r.qpage().timeline_builds, n + 2);
+}
+
+#[test]
+fn d2f_another_account_in_the_session_drops_what_was_read() {
+    // (critic I4) the session's account changed under the page
+    let mut r = rig();
+    *r.w.who.lock().unwrap() = Some("https://pool.test\nolga@school.org".into());
+    r.script_load();
+    r.open(0);
+    r.page(1280.0);
+    assert!(!r.m.edit.question_cache.is_empty());
+    // (and another bank's reads go too: the whole session's, not only this page's)
+    r.m.edit.question_cache.put_body(CID, "0000000000000000000000000000000f", "editor|false|false", super::question_history::VersionBody::from_payload(3, &[], false, NOW));
+    *r.w.who.lock().unwrap() = Some("https://pool.test\npete@school.org".into());
+    r.script_load();
+    r.page(1280.0);
+    assert_eq!(list_reads(&r.w), 2, "read again for pete: {:?}", r.w.reads());
+    assert!(r.m.edit.question_cache.body(CID, "0000000000000000000000000000000f", "editor|false|false", 3).is_none());
+}
+
+#[test]
+fn d2f_the_page_closes_when_its_link_goes_and_drops_the_banks_reads() {
+    // (critic M1) left the circle (or removed, or closed)
+    let mut r = rig();
+    r.script_load();
+    r.open(0);
+    r.page(1280.0);
+    r.m.edit.update_link(LOCAL, |l| {
+        l.role_seen = Some(super::circle_links::ROLE_NONE.into());
+        true
+    });
+    r.page(1280.0);
+    assert!(!r.m.edit.active(), "{:?}", r.m.edit.view);
+    assert!(r.m.edit.question_cache.is_empty());
+    // the bank deleted
+    let mut r = rig();
+    r.script_load();
+    r.open(0);
+    r.page(1280.0);
+    r.banks[0].id = "gone".into();
+    r.page(1280.0);
+    assert!(!r.m.edit.active());
+}
+
+fn pictured(sha: &str) -> Value {
+    let mut q = qj(QA, A3);
+    q["image"] = json!({"file": format!("media/{sha}.webp"), "width": 2, "height": 2});
+    q
+}
+
+#[test]
+fn d2f_a_picture_is_stored_only_when_the_restore_goes_through() {
+    // (critic M2)
+    let bytes = b"the picture of version 2".to_vec();
+    let sha = sha256_hex(&bytes);
+    let blob = format!("/circles/{CID}/banks/{BID}/blobs/{sha}");
+    // refused (the bank was put back from a safety copy after the question was asked): nothing fetched or stored
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(2), served(2, &[pictured(&sha)], false));
+    r.open(0);
+    r.page(1280.0);
+    r.qpage_mut().ask_restore(2);
+    r.m.edit.update_link(LOCAL, |l| {
+        l.bank_modified = r.banks[0].modified + 100;
+        l.bank_print = "another".into();
+        true
+    });
+    let cache = &mut r.m.edit.question_cache;
+    if let EditView::Question(p) = &mut r.m.edit.view {
+        p.confirm_restore(cache);
+    }
+    r.page(1280.0);
+    assert_eq!(*r.pics.0.lock().unwrap(), 0);
+    assert_eq!(r.w.calls("/blobs/"), 0);
+    // signed out while fetching: said so
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(2), served(2, &[pictured(&sha)], false));
+    r.w.on("Get", &blob, 401, json!({"error": "unauthorized"}), None);
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Restore...", 0));
+    assert!(r.click(1280.0, "Yes, restore", 0));
+    let t = r.page(1280.0);
+    assert!(t.contains("Sign in") && !t.contains("could not be fetched"), "{t}");
+    assert_eq!(*r.pics.0.lock().unwrap(), 0);
+    // through: stored once
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(2), served(2, &[pictured(&sha)], false));
+    r.w.raw(&blob, bytes.clone());
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Restore...", 0));
+    assert!(r.click(1280.0, "Yes, restore", 0));
+    r.page(1280.0);
+    assert_eq!(*r.pics.0.lock().unwrap(), 1);
+    assert_eq!(r.banks[0].questions[0].image.as_ref().map(|i| i.file.clone()), Some(format!("media/{sha}.webp")));
+}
+
+#[test]
+fn d2f_restore_warns_of_unsent_edits_and_can_be_undone() {
+    // (critic P2)
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+    r.banks[0].questions[0].stem = "My unsent edit".into();
+    r.banks[0].modified += 1;
+    let mine = serde_json::to_value(&r.banks[0].questions).unwrap();
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Restore...", 1));
+    let t = r.page(1280.0);
+    assert!(t.contains("Your unsent changes to question 1 will be replaced."), "{t}");
+    assert!(r.click(1280.0, "Yes, restore", 0));
+    let t = r.page(1280.0);
+    assert_eq!(r.banks[0].questions[0].stem, A3);
+    assert!(t.contains("Undo restore") && t.contains("restore point") && !t.contains("memory") && !t.contains("backups/"), "{t}");
+    assert!(r.click(1280.0, "Undo restore", 0));
+    r.page(1280.0);
+    assert_eq!(serde_json::to_value(&r.banks[0].questions).unwrap(), mine, "exactly the question it replaced");
+    assert_eq!(*r.restores.0.lock().unwrap(), 2, "a restore point before each");
+    assert_eq!(r.m.edit.status(LOCAL).map(|s| s.changes.total()), Some(1));
+    assert!(r.page(1280.0).contains("Your copy: changed, not sent yet."));
+}
+
+/// Version 5 removed A; the copy is behind, at version 3, and still has A.
+fn removed_rig() -> Rig {
+    let r = rig_link(LinkMode::Edit, false, |l| {
+        l.base_version = 3;
+        l.base_version_id = hex(3);
+    });
+    r.w.on("Get", &versions_path(), 200, lines_json(), None);
+    r.w.on("Get", &changes_path(), 200, json!({"bank_id": BID, "head_version": 5, "per_question": true, "versions": [
+        {"version": 5, "compared_to": 3, "added": [], "changed": [], "removed": [QA]},
+        {"version": 3, "compared_to": 2, "added": [QB], "changed": [], "removed": []},
+    ]}), Some("\"r1\""));
+    r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+    r
+}
+
+#[test]
+fn d2f_restoring_a_question_the_circle_removed_says_it_comes_back_new_and_keeps_its_history() {
+    // (critic P3)
+    let mut r = removed_rig();
+    r.open(0);
+    let t = r.page(1280.0);
+    assert!(t.contains("Removed"), "{t}");
+    assert!(r.click(1280.0, "Restore...", 0));
+    let t = r.page(1280.0);
+    assert!(t.contains("It comes back as a new question when you send."), "{t}");
+    assert!(r.click(1280.0, "Yes, restore", 0));
+    let t = r.page(1280.0);
+    assert!(t.contains("comes back as a new question when you send"), "{t}");
+    assert!(t.contains("Removed") && t.contains("Version 2") && !t.contains("No version that is still kept changed this question"), "{t}");
+    let link = r.m.edit.link_for_local(LOCAL).unwrap();
+    assert_eq!(link.qid_of(&r.banks[0].questions[0].id), None, "no longer paired with the removed question");
+}
+
+fn text_rects(r: &mut Rig, width: f32) -> Vec<(String, egui::Rect)> {
+    r.frame_at(width, Vec::new());
+    r.frame_at(width, Vec::new())
+}
+
+#[test]
+fn d2f_the_restore_question_is_asked_under_its_row_and_escape_cancels() {
+    // (critic P6) an edited copy: both rows offer Restore
+    let mut r = rig();
+    r.script_load();
+    r.banks[0].questions[0].stem = "Edited here".into();
+    r.banks[0].modified += 1;
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Restore...", 1));
+    let rects = text_rects(&mut r, 1280.0);
+    let y = |needle: &str| rects.iter().find(|(t, _)| t.starts_with(needle)).map(|(_, r)| r.min.y).unwrap_or_else(|| panic!("{needle} not drawn"));
+    let (row, ask, below) = (y("Version 2"), y("Replace your copy"), y("Version 1 is no longer kept"));
+    assert!(row < ask && ask < below, "{row} {ask} {below}");
+    // another row's Restore does not take the question elsewhere
+    assert!(r.click(1280.0, "Restore...", 0));
+    assert_eq!(r.qpage().restore.as_ref().map(|x| x.version), Some(2));
+    // Escape: nothing restored
+    r.frame_at(1280.0, vec![egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE }]);
+    r.page(1280.0);
+    assert!(r.qpage().restore.is_none());
+}
+
+#[test]
+fn d2f_restore_is_hidden_on_a_stale_bank_and_for_the_version_the_copy_is() {
+    // (critic P7) in step with version 5: no Restore on its row
+    let mut r = rig();
+    r.script_load();
+    r.open(0);
+    let t = r.page(1280.0);
+    assert_eq!(t.matches("Restore...").count(), 1, "only version 2's: {t}");
+    assert!(t.contains("Compare with your copy"), "the as-it-was row compares with the copy: {t}");
+    // a bank put back from a safety copy: none at all
+    let mut r = rig_link(LinkMode::Edit, false, |_| {});
+    r.script_load();
+    r.m.edit.update_link(LOCAL, |l| {
+        l.bank_modified = r.banks[0].modified + 100;
+        l.bank_print = "another".into();
+        true
+    });
+    r.open(0);
+    let t = r.page(1280.0);
+    assert!(!t.contains("Restore..."), "{t}");
+}
+
+#[test]
+fn d2f_a_version_listed_after_a_held_back_one_says_so() {
+    // (critic P8)
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(3), served(3, &[qj(QA, A3), qj(QB, B)], false));
+    r.w.raw(&version_path(5), served(5, &[qj(QA, A5), qj(QB, B)], false));
+    r.open(0);
+    let t = r.page(1280.0);
+    assert!(t.contains("changed since version 3"), "{t}");
+    assert!(t.contains("Version 4 · held back for review · no details"), "{t}");
+    assert!(r.click(1280.0, "Compare", 0));
+    let t = r.page(1280.0);
+    assert!(t.contains("includes version 4, held back"), "{t}");
+}
+
+#[test]
+fn d2f_your_copy_agrees_with_the_strip() {
+    // (critic P9) a base with no record of a difficulty: never "the same"
+    let mut r = rig_link(LinkMode::Edit, false, |l| {
+        for b in &mut l.base {
+            b.snap.difficulty = None;
+        }
+    });
+    // (the circle model asks the base version for its difficulties; it is no longer kept, so they stay unknown)
+    for _ in 0..3 {
+        r.w.on("Get", &version_path(5), 404, json!({"error": "version_not_retained"}), None);
+    }
+    r.script_load();
+    r.open(0);
+    let t = r.page(1280.0);
+    assert!(!t.contains("the same as version"), "{t}");
+    // a figure-only change, told by the base version's body read this session
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(5), served(5, &[qj(QA, A5), qj(QB, B)], false));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Compare with...", 0));
+    r.page(1280.0);
+    r.banks[0].questions[0].figure = Some(crate::model::FigureSpec { id: "triangle".into(), params: Default::default() });
+    r.banks[0].modified += 1;
+    let t = r.page(1280.0);
+    assert!(t.contains("Your copy: changed, not sent yet."), "{t}");
+}
+
+#[test]
+fn d2f_a_role_change_drops_the_banks_reads() {
+    // (critic P10)
+    let mut r = rig();
+    r.script_load();
+    r.open(0);
+    r.page(1280.0);
+    let before = super::question_history::scope_of(&r.m.edit.link_for_local(LOCAL).unwrap());
+    assert!(r.m.edit.question_cache.page(CID, BID, &before).is_some());
+    r.script_load();
+    r.m.edit.update_link(LOCAL, |l| {
+        l.role_seen = Some("viewer".into());
+        true
+    });
+    r.page(1280.0);
+    assert!(r.m.edit.question_cache.page(CID, BID, &before).is_none());
+    assert_eq!(list_reads(&r.w), 2, "read again under the new role");
+}
+
+#[test]
+fn d2f_the_pickers_list_versions_newest_first() {
+    // (critic P13) whatever order the lines came in
+    let mut r = rig();
+    let mut l = lines_json();
+    l["versions"].as_array_mut().unwrap().reverse();
+    r.w.on("Get", &versions_path(), 200, l, None);
+    r.w.on("Get", &changes_path(), 200, changes_json(), None);
+    r.open(0);
+    r.page(1280.0);
+    assert_eq!(picker_sides(r.qpage()), vec![Side::Version(5), Side::Version(3), Side::Version(2), Side::YourCopy]);
+}
+
+#[test]
+fn d2f_the_bankui_hook_sits_in_the_question_cards_menu() {
+    // the one H3 line is inside draw_card's right-click menu, before the card's own click handling
+    let src = include_str!("../bankui.rs");
+    let card = src.find("fn draw_card(").expect("draw_card");
+    let menu = card + src[card..].find("hr.context_menu(").expect("the card's menu");
+    let after = menu + src[menu..].find("if hr.clicked()").expect("the card's click");
+    let hook = src.find("crate::share::question_history_ui::question_menu(").expect("hook H3");
+    assert!(menu < hook && hook < after, "H3 lies in the menu");
+    assert_eq!(src.matches("question_history_ui::question_menu(").count(), 1);
+}
+
+#[test]
+fn d2f_compare_columns_each_carry_their_field_and_the_rows_buttons_sit_right() {
+    // (critic P12)
+    for w in BOTH {
+        let mut r = rig();
+        r.script_load();
+        r.w.raw(&version_path(3), served(3, &[qj(QA, A3), qj(QB, B)], false));
+        r.w.raw(&version_path(5), served(5, &[qj(QA, A5), qj(QB, B)], false));
+        r.open(0);
+        r.page(w);
+        if w > 1000.0 {
+            let rects = text_rects(&mut r, w);
+            let restore = rects.iter().find(|(t, _)| t == "Restore...").map(|(_, r)| r.max.x).unwrap();
+            assert!(restore > w - 80.0, "the row's buttons sit at its right: {restore}");
+        }
+        assert!(r.click(w, "Compare", 0));
+        let t = r.page(w);
+        let (names, pills) = (t.matches("Question text").count(), t.lines().filter(|l| *l == "changed").count());
+        if compare_columns(w) {
+            assert_eq!((names, pills), (2, 2), "each column has its field: {t}");
+        } else {
+            assert_eq!((names, pills), (1, 1), "stacked: the field once, both sides under it: {t}");
+        }
+    }
+}
+
+
+#[test]
+fn d2f_an_answer_without_lists_is_bank_lines_even_when_the_link_does_not_know_yet() {
+    // (round 2 test, round 3 rig) an edit link whose last check did not see the hiding yet (a demoted author, a PATCH since):
+    // the pool's per_question:false is followed
+    let mut r = rig();
+    r.w.on("Get", &versions_path(), 200, lines_json(), None);
+    let mut bad = changes_json();
+    bad["per_question"] = json!(false);
+    r.w.on("Get", &changes_path(), 200, bad, None);
+    r.open(0);
+    let t = r.page(1280.0);
+    assert!(!t.contains("Changed") && !t.contains("Changes between") && t.contains("hides its answer keys"), "{t}");
+}
+
+#[test]
+fn d2f_a_full_body_held_is_never_compared_beside_the_viewers_form() {
+    // (critic B1) a body read in full is in the cache under the page's own scope; the page says viewers' form
+    let mut r = hiding_viewer();
+    r.w.on("Get", &versions_path(), 200, lines_json(), None);
+    r.w.on("Get", &changes_path(), 200, json!({"bank_id": BID, "head_version": 5, "per_question": false, "reason": "keys_hidden"}), None);
+    r.open(0);
+    r.page(1280.0);
+    let scope = super::question_history::scope_of(&r.m.edit.link_for_local(LOCAL).unwrap());
+    let full = String::from_utf8(served(5, &[qk(QA, A5, true), qj(QB, B)], false)).unwrap();
+    let payload = full.split("\"payload\":").nth(1).unwrap().trim_end_matches('}').to_string();
+    r.m.edit.question_cache.put_body(CID, BID, &scope, super::question_history::VersionBody::from_payload(5, payload.as_bytes(), false, NOW));
+    // what the pool serves now: the viewers' form
+    r.w.raw(&version_path(3), served(3, &[qs(QA, A3), qs(QB, B)], true));
+    r.w.raw(&version_path(5), served(5, &[qs(QA, A5), qs(QB, B)], true));
+    assert!(r.click(1280.0, "Compare", 0));
+    let t = r.page(1280.0);
+    assert!(!t.contains("SECRET") && !t.contains("choice 1"), "{t}");
+    assert_eq!(r.w.calls("/versions/5"), 1, "read again in the viewers' form");
 }
