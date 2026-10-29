@@ -15,7 +15,7 @@ use super::bank_links_fix_tests::{body_of, linked_from, qfull, QC};
 use super::bank_links_tests::{LOCAL, QA, QB};
 use super::circle_links::{CircleLink, SEND_SCHEMA, after_partial_send, changes_since, circle_theirs};
 use super::circles_api::SentBank;
-use super::circles_tests::NOW;
+use super::circles_tests::{BID, CID, NOW};
 use super::partial_send::{BodyChanges, ComposedPartial, changes_against_body, compose_partial, compose_partial_parts};
 use super::publish::QidLink;
 use crate::model::{Difficulty, ImageRef, Kind, Question, QuestionBank};
@@ -918,4 +918,109 @@ fn the_sends_qid_wins_over_the_composed_pair_when_the_arrays_align() {
     let link = after_partial_send(&c.link, &c.bank, &composed.questions, &sent, vec![]);
     assert_eq!(link.qid_of(&a), Some(QSERVER), "the answer's qid is authoritative");
     assert_eq!(link.base.iter().find(|b| b.local_id == a).expect("A's snapshot entry").qid, QSERVER);
+}
+
+// ---- round 13 (product critic 11 A/B): a fetched, re-encoded picture is the circle's picture ----
+
+fn reencoded() -> (QuestionBank, CircleLink, Vec<u8>, String, String) {
+    // The circle's PNG (circle_sha) was fetched and kept here as WebP (local_sha): different file names, same picture.
+    let circle_sha = format!("{:064x}", 0xa1u8);
+    let local_sha = format!("{:064x}", 0xb2u8);
+    let local_file = format!("media/{local_sha}.webp");
+    let mut base_q = qfull(QA, "A");
+    base_q["image"] = json!({ "file": format!("media/{circle_sha}.png"), "width": 1, "height": 1 });
+    let base = body_of(vec![base_q.clone()]);
+    let (mut bank, mut link) = linked_from(vec![base_q], false);
+    bank.questions[0].image = Some(ImageRef { file: local_file.clone(), width: 1, height: 1 });
+    // the link records the pair the fetch wrote: this store's WebP, the circle's sha
+    let id = bank.questions[0].id.clone();
+    let b = link.base.iter_mut().find(|b| b.local_id == id).unwrap();
+    b.local_image = Some(local_file.clone());
+    b.snap.image = Some(circle_sha.clone());
+    (bank, link, base, local_file, circle_sha)
+}
+
+#[test]
+fn a_fetched_reencoded_picture_is_not_a_change() {
+    let (bank, link, base, _, _) = reencoded();
+    let ch = changes_against_body(&link, &bank, &base).expect("the change list");
+    assert!(ch.changed.is_empty(), "a picture the link knows is the circle's is listed as a change: {:?}", ch.changed);
+}
+
+#[test]
+fn a_fetched_reencoded_picture_is_sent_as_the_bases_picture() {
+    // Fixing only the summary would hide the rewrite: the payload must carry the base body's picture identity, or the
+    // server stores the WebP under a new name and the circle's picture changes for everyone.
+    let (mut bank, link, base, local_file, circle_sha) = reencoded();
+    bank.questions[0].stem = "A (changed)".into();
+    let changed = changes_against_body(&link, &bank, &base).expect("the change list").changed;
+    assert!(changed.contains(&bank.questions[0].id), "the text change is still a change");
+    let composed = compose_partial_parts(&link, &bank, &base, &changed, &changed).expect("the composed payload");
+    let v: Value = serde_json::from_slice(&composed.payload).unwrap();
+    assert_eq!(
+        v.pointer("/bank/questions/0/image/file").and_then(Value::as_str),
+        Some(format!("media/{circle_sha}.png").as_str()),
+        "the payload carries this store's {local_file}, so the server counts the picture as changed"
+    );
+    assert_eq!(v.pointer("/bank/questions/0/stem").and_then(Value::as_str), Some("A (changed)"));
+}
+
+#[test]
+fn a_genuine_picture_change_is_still_a_change_and_is_sent_as_ours() {
+    let (mut bank, link, base, _, _) = reencoded();
+    let other = format!("media/{}.webp", format!("{:064x}", 0xc3u8));
+    bank.questions[0].image = Some(ImageRef { file: other.clone(), width: 1, height: 1 });
+    let changed = changes_against_body(&link, &bank, &base).expect("the change list").changed;
+    assert!(changed.contains(&bank.questions[0].id), "a different local picture is a change");
+    let composed = compose_partial_parts(&link, &bank, &base, &changed, &changed).expect("the composed payload");
+    let v: Value = serde_json::from_slice(&composed.payload).unwrap();
+    assert_eq!(v.pointer("/bank/questions/0/image/file").and_then(Value::as_str), Some(other.as_str()), "the bank's own picture is sent");
+}
+
+#[test]
+fn a_sent_reencoded_picture_keeps_the_circles_name_in_the_link() {
+    // The composer sent this store's WebP under the base body's picture identity; the rebuilt record must say so,
+    // or the next summary and Compare call the picture changed again.
+    let (bank, link, base, local_file, circle_sha) = reencoded();
+    let composed = compose_partial_parts(&link, &bank, &base, &BTreeSet::new(), &BTreeSet::new()).expect("the composed payload");
+    let sent = sent_of(&composed);
+    let after = after_partial_send(&link, &bank, &composed.questions, &sent, vec![]);
+    let b = after.base.iter().find(|b| b.local_id == bank.questions[0].id).expect("a record");
+    assert_eq!(b.local_image.as_deref(), Some(local_file.as_str()));
+    assert_eq!(b.snap.image.as_deref(), Some(circle_sha.as_str()), "the link recorded the WebP's own hash, not the identity the send used");
+    assert_eq!(changes_since(&after, &bank).changed, 0);
+    assert_eq!(super::question_history::picture_sha_on_circle(&after, &bank.questions[0]).as_deref(), Some(circle_sha.as_str()));
+}
+
+#[test]
+fn a_bounded_link_names_a_fetched_reencoded_picture() {
+    // (product critic 11 B) A circle bank over the base cap stores no base record, so the record that named the
+    // fetched picture is discarded; nothing repopulated the link map and Compare fell back to the WebP's own hash.
+    let n = super::merge::BASE_MAX_QUESTIONS + 1;
+    let circle_sha = format!("{:064x}", 0xa1u8);
+    let local_sha = format!("{:064x}", 0xb2u8);
+    let local_file = format!("media/{local_sha}.webp");
+    let mut questions = Vec::new();
+    let mut base = Vec::new();
+    for i in 0..n {
+        let qid = format!("{:032x}", i + 1);
+        let mut q = qfull(&qid, &format!("Q{i}"));
+        q["id"] = json!(format!("local-{i}"));
+        let q: Question = serde_json::from_value(q).unwrap();
+        if i == 0 {
+            let mut q = q.clone();
+            q.image = Some(ImageRef { file: local_file.clone(), width: 1, height: 1 });
+            base.push(super::merge::base_of(&q, &qid, "fp", Some(circle_sha.clone())));
+            questions.push(q);
+        } else {
+            base.push(super::merge::base_of(&q, &qid, "fp", None));
+            questions.push(q);
+        }
+    }
+    let head = super::circles_api::BankHead { id: BID.into(), title: "Cells".into(), license: "CC-BY-4.0".into(), version: 9, version_id: format!("{:032x}", 9), ..super::circles_api::BankHead::default() };
+    let link = CircleLink::from_head(CID, "C", &head, LOCAL, base, NOW);
+    assert!(link.base.is_empty(), "the base is over the cap");
+    assert!(link.picture_files.iter().any(|(f, s)| f == &local_file && s == &circle_sha), "the fetched picture has no name: {:?}", link.picture_files);
+    let bank = QuestionBank { id: LOCAL.into(), name: "B".into(), questions, created: 0, modified: 5, details: Default::default() };
+    assert_eq!(super::question_history::picture_sha_on_circle(&link, &bank.questions[0]).as_deref(), Some(circle_sha.as_str()), "Compare calls the circle's own picture a different one");
 }

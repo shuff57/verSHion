@@ -83,6 +83,24 @@ Loop rules: local commits only, never push; critic pair (product vs Moodle, secu
   still drop that link. Same privilege as editing the banks; fix if the leniency is ever extended.
 - Next: a fresh round-11 pair (product + security) on r12; the loop exits when both are clean on the same build.
 
+### Round 11 critic pair → r13 (2026-10-29)
+
+- **Round 11 pair** on `6777002` (r12): product FINDINGS (2 important A/B, 1 minor D), security FINDINGS (1 important
+  I1, 1 minor M1). Reports: `docs/critic-reports/2026-10-29-d2-r12-critic-product.md` and `-security.md`.
+- **r13** fixed them, test-first: (1) the send summary and composer compare a picture by its circle identity, not
+  the local file name; a fetched picture kept here re-encoded is not listed as a change, and it is sent under the
+  base body's picture identity so the server does not rewrite the circle's picture; `after_partial_send` records the
+  identity the send used; (2) `reencoded_pairs` keeps `(file, circle sha)` when `bounded` discards the base, in
+  `from_head` and `finish_merge`, so a large added bank's fetched pictures still have a name; (3) the partial-send keep
+  is judged against the records actually stored — when bounding discards the composed base, only questions the send
+  carried as this bank's own silence the map; (4) the carry only reuses a record of the same base picture.
+- Suite on r13: **share 1567/0/3; full lib 2262/0/6**. Replayed probe sets: the product's A/B probes are green (B's
+  probe fails only on its old “an Add starts with no map” precondition), the security I1 probe is green, and the
+  demonstration probes for the old behaviour invert as intended.
+- **Open minor, recorded:** D — an unreadable `seen` (hide_key = true) overrides a fresh `per_question: true` reply
+  and the panel states the hiding as fact; suggested follow-up is to let the fresh reply win or hedge the sentence.
+- Next: a fresh round-12 pair (product + security) on r13; the loop exits when both are clean on the same build.
+
 ## The 5 known failures are fixed (2026-10-28)
 
 The owner asked to fix the five `share_core::wasm::publish_prepare_json` failures. Cause: the viSHion path deps in

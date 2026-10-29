@@ -4853,6 +4853,9 @@ impl CircleEditModel {
         }
         link.mark_bank(&banks[pos]);
         link.qids = qids_of(&new_base);
+        // (round 13, product critic 11 B) A base over the cap stores no record: without the pairs, a fetched picture
+        // kept here re-encoded would have no name at all and Compare would call the circle's own picture a different one.
+        let fresh = super::circle_links::reencoded_pairs(&new_base);
         link.base = merge::bounded(new_base);
         link.base_version = imp.head.item.version;
         link.base_version_id = imp.head.item.publish_id.clone();
@@ -4874,7 +4877,17 @@ impl CircleEditModel {
         // very picture the version restored "a different picture". (round 12, security critic 10 I1) Judge against the base
         // that is actually STORED: a record bounding discards cannot silence the map, and on a large bank the map entry is
         // the only record of a re-encoded picture.
-        let kept = picture_files_kept(&link.picture_files, &link.base, &banks[pos]);
+        let mut kept = picture_files_kept(&link.picture_files, &link.base, &banks[pos]);
+        if link.base.is_empty() {
+            for p in fresh {
+                if !kept.contains(&p) {
+                    kept.push(p);
+                }
+            }
+            while kept.len() > super::circle_links::PICTURE_FILES_MAX {
+                kept.remove(0);
+            }
+        }
         link.picture_files = kept;
         // (critic 63 I3) Read in full: the answer keys came with it, so the copy no longer follows the viewers' form.
         if !rev.fetched.head.bank.keys_hidden {

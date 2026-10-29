@@ -2104,6 +2104,54 @@ fn d2p_r10_a_held_back_reencoded_picture_keeps_this_stores_file() {
 }
 
 #[test]
+fn d2p_r10_a_large_banks_partial_send_keeps_the_held_back_pictures_circle_name() {
+    // (round 13, security critic 11 I1) On a bank whose composed base is over the cap, the stored base is empty. The
+    // r12 carry makes the rebuilt held-back record name this store's re-encoded file; judging the keep against that
+    // record then drops the link map entry, and `bounded` discards the record: both gone. Compare falls back to the
+    // file's own hash and calls the circle's own picture "a different picture".
+    use super::partial_send::ComposedQuestion;
+    let n = super::merge::BASE_MAX_QUESTIONS + 1;
+    let held_local = "local-held".to_string();
+    let held_sha = format!("{:064x}", 0xb2u8);
+    let circle_sha = format!("{:064x}", 0xa1u8);
+    let local_file = format!("media/{held_sha}.webp");
+    let circle_file = format!("media/{circle_sha}.png");
+    let mut questions = Vec::new();
+    let mut composed = Vec::new();
+    let mut qids = Vec::new();
+    for i in 0..n {
+        let qid = format!("{:032x}", i + 1);
+        let local = if i == 0 { held_local.clone() } else { format!("local-{i}") };
+        let mut q = with_figure(&qid, 1);
+        q.id = local.clone();
+        if i == 0 {
+            q.image = Some(ImageRef { file: local_file.clone(), width: 1, height: 1 });
+        }
+        let in_payload = if i == 0 {
+            let mut b = q.clone();
+            b.image = Some(ImageRef { file: circle_file.clone(), width: 1, height: 1 });
+            b
+        } else {
+            q.clone()
+        };
+        composed.push(ComposedQuestion { local: local.clone(), qid: Some(qid.clone()), question: Some(in_payload), base_image: (i == 0).then(|| circle_file.clone()) });
+        qids.push(qid);
+        questions.push(q);
+    }
+    let bank = QuestionBank { id: LOCAL.into(), name: "B".into(), questions, created: 0, modified: 5, details: Default::default() };
+    let head = BankHead { id: BID.into(), title: "B".into(), license: "CC-BY-4.0".into(), version: 9, version_id: format!("{:032x}", 9), ..BankHead::default() };
+    // the link keeps no base at all (over the cap); the map is the only record of the re-encoded picture
+    let mut link = CircleLink::from_head(CID, "C", &head, LOCAL, Vec::new(), NOW);
+    link.picture_files = vec![(local_file.clone(), circle_sha.clone())];
+    let sent = super::circles_api::SentBank { circle_id: CID.into(), bank_id: BID.into(), version: 10, version_id: format!("{:032x}", 10), qids, ..Default::default() };
+    let after = super::circle_links::after_partial_send(&link, &bank, &composed, &sent, vec![held_local.clone()]);
+    assert!(after.base.is_empty(), "the composed base is dropped for size");
+    assert!(after.picture_files.iter().any(|(f, s)| f == &local_file && s == &circle_sha), "the only record of the picture was dropped with the discarded base: {:?}", after.picture_files);
+    let q = bank.questions.iter().find(|q| q.id == held_local).unwrap();
+    assert_eq!(picture_sha_on_circle(&after, q).as_deref(), Some(circle_sha.as_str()), "Compare calls the circle's own picture a different one");
+}
+
+#[test]
 fn d2p_r10_unreadable_viewers_form_and_role_still_keep_the_link() {
     // One unreadable field must not drop the whole link (the round-9 M3 rule). `viewers_form` is a safety flag: an
     // unreadable value is the never-sendable true, never serde's false default. `role_seen`/`role_seen_at` read none.

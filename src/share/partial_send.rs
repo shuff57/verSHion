@@ -20,8 +20,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::Value;
 
-use super::circle_links::{CircleLink, SEND_SCHEMA, published_block};
+use super::circle_links::{CircleLink, SEND_SCHEMA, published_block, sha_of_file};
 use super::merge::same_question;
+use super::question_history::picture_sha_on_circle;
 use crate::model::{ImageRef, Question, QuestionBank, is_keyless};
 
 /// The base body could not be read, so which questions changed can not be told.
@@ -212,7 +213,7 @@ pub fn changes_against_body(link: &CircleLink, bank: &QuestionBank, base_body: &
         };
         let base_q = raw.get(qid).ok_or_else(|| MISSING_CHANGES.to_string())?;
         let base_q: Question = serde_json::from_value((*base_q).clone()).map_err(|_| UNREADABLE_CHANGES.to_string())?;
-        if !same_content(q, &base_q) {
+        if !same_content(link, q, &base_q) {
             out.changed.insert(q.id.clone());
         }
     }
@@ -231,8 +232,30 @@ pub fn changes_against_body(link: &CircleLink, bank: &QuestionBank, base_body: &
 /// hashes. `merge::same_question` covers the stem, choices and key, explanation, points, topics, difficulty and figure
 /// with the texts in the server's stored form; the picture and the keyless placeholder are compared here because
 /// `same_question` compares pictures apart and `explanation_of` drops the keyless sentinel.
-fn same_content(ours: &Question, base: &Question) -> bool {
-    same_question(ours, base) && same_image(ours.image.as_ref(), base.image.as_ref()) && is_keyless(ours) == is_keyless(base)
+fn same_content(link: &CircleLink, ours: &Question, base: &Question) -> bool {
+    same_question(ours, base) && same_picture(link, ours, base) && is_keyless(ours) == is_keyless(base)
+}
+
+/// Whether the picture is the base body's, judged by its circle identity rather than by the local file name.
+///
+/// (round 13, product critic 11 A) A fetched picture is kept here re-encoded, under its own name, and the link knows
+/// the pair (this store's file -> the circle's sha). Comparing file names alone listed such an untouched picture as a
+/// change, so the default send re-uploaded it and the circle's picture was rewritten for everyone.
+fn same_picture(link: &CircleLink, ours: &Question, base: &Question) -> bool {
+    let (Some(a), Some(b)) = (ours.image.as_ref(), base.image.as_ref()) else {
+        return ours.image.is_none() && base.image.is_none();
+    };
+    if a.file == b.file && a.width == b.width && a.height == b.height {
+        return true;
+    }
+    picture_matches(link, ours, &b.file, u64::from(b.width), u64::from(b.height))
+}
+
+/// The same picture under another file name: the link says this store's file is the base version's picture.
+fn picture_matches(link: &CircleLink, ours: &Question, base_file: &str, base_w: u64, base_h: u64) -> bool {
+    let Some(a) = ours.image.as_ref() else { return false };
+    let Some(base_sha) = sha_of_file(base_file) else { return false };
+    u64::from(a.width) == base_w && u64::from(a.height) == base_h && picture_sha_on_circle(link, ours).as_deref() == Some(base_sha.as_str())
 }
 
 /// The picture as the server hashes it: its name on the server and its size (an absent one is a change from a
@@ -286,7 +309,17 @@ pub fn compose_partial_parts(link: &CircleLink, bank: &QuestionBank, base_body: 
             continue;
         };
         let held = changed.contains(&q.id) && !ticked.contains(&q.id);
-        let value = if held { base_value(link, &q.id, raw.get(qid).copied())? } else { ours(link, q) };
+        let mut value = if held { base_value(link, &q.id, raw.get(qid).copied())? } else { ours(link, q) };
+        if !held && let Some(img) = raw.get(qid).and_then(|bq| bq.get("image")) {
+            // (round 13, product critic 11 A) The picture is the base version's under this store's own name (a fetched
+            // one kept here re-encoded). Send it under the base body's picture identity, or the server stores the
+            // WebP under a new name and the circle's picture is rewritten for everyone.
+            let file = img.get("file").and_then(Value::as_str).unwrap_or("");
+            let (w, h) = (img.get("width").and_then(Value::as_u64).unwrap_or(0), img.get("height").and_then(Value::as_u64).unwrap_or(0));
+            if picture_matches(link, q, file, w, h) && let Some(o) = value.as_object_mut() {
+                o.insert("image".into(), img.clone());
+            }
+        }
         let question = if held { question_of(&value).ok() } else { Some(q.clone()) };
         let base_image = if held { image_file_of(&value) } else { None };
         out.push(Slot { value, local: q.id.clone(), qid: Some(qid.to_string()), question, base_image });
