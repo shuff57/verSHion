@@ -185,6 +185,14 @@ fundamental as half a wavelength, all six harmonics scaling as n and 1/n with f 
 where the drawn wave crosses and peaks, a short string never printing zero, the student/key split, and Print
 neutrality. Census: only `standing-wave__defaults` and `standing-wave__start` added.
 
+PV diagrams: new figure `pv-diagram` (`src/figures/pv_diagram.rs`, Physics). A pressure-volume diagram with the path
+drawn and the work shaded as the area under it — an isothermal hyperbola P = nRT/V or an isobaric line — with the start
+and end pressures and the work in the readout. The Print grid had been hard-coded to a blue-grey and failed the
+figure's own neutrality test; it is a neutral grey now. The first run also failed the two FAQ tests because the figure
+was registered without a FAQ arm; four entries were added. Tests: isothermal work = nRT ln(V2/V1) with PV constant, isobaric
+work = P ΔV at constant pressure, compression doing negative work, the equal-volumes note, the student/key split, and
+Print neutrality. Census: only `pv-diagram__defaults` and `pv-diagram__start` added.
+
 ## Phase 3: physics
 
 Circular motion: new figure `circular-motion` (`src/figures/circular.rs`, Physics). A body on a circle at a chosen
