@@ -154,7 +154,7 @@ pub fn build(p: &Params) -> (String, Report) {
     d.raw(&text_el(CX, CY + 5.0, 14.0 * lab, "middle", "#ffffff", if positive { "+" } else { "\u{2212}" }));
 
     // the test charge at its distance, and the force on it
-    let rr = (r / 5.0 * RMAX).clamp(18.0, RMAX + 10.0);
+    let rr = (r / 5.0 * RMAX).clamp(40.0, RMAX + 10.0);
     let test_at = (CX, CY - rr);
     // the force is the answer, so the arrow is drawn only on the key
     if ans && f.abs() > 0.0 {
@@ -167,7 +167,7 @@ pub fn build(p: &Params) -> (String, Report) {
         } else {
             (test_at.1 + 8.0, (test_at.1 + 42.0).min(CY - 13.0))
         };
-        if (y1 - y0).abs() >= 6.0 {
+        if (y1 - y0).abs() >= 8.0 {
             d.arrow(test_at.0, y0, test_at.0, y1, ch, 2.2);
             d.raw(&text_el(test_at.0 + 8.0, (y0 + y1) / 2.0 + 4.0, 12.0 * lab, "start", ch, "F"));
         }

@@ -134,7 +134,9 @@ pub fn build(p: &Params) -> (String, Report) {
     }).collect();
     d.polyline(&pts, wave, if print { 2.4 } else { 2.8 });
 
-    // the nodes, and the antinodes marked faintly
+    // the nodes and the antinodes are the counts asked for, so the markers are drawn only on the key; the wave
+    // itself still crosses the axis where the nodes are, which is the reading exercise
+    if ans {
     for k in 0..=n {
         let x = X0 + (X1 - X0) * k as f64 / n as f64;
         d.circle(x, MID, 3.5, node, ink, 0.0);
@@ -143,6 +145,7 @@ pub fn build(p: &Params) -> (String, Report) {
         let x = X0 + (X1 - X0) * (k as f64 + 0.5) / n as f64;
         let up = if k % 2 == 0 { -1.0 } else { 1.0 };
         d.circle(x, MID - up * AMP, 2.5, "#ffffff", wave, 1.2);
+    }
     }
 
     // the givens

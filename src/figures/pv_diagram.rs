@@ -15,7 +15,7 @@ const ISOB: &str = "#7a4fc4";
 const SHADE: &str = "#dfe6f5";
 const ISOT_PRINT: &str = "#111111";
 const ISOB_PRINT: &str = "#333333";
-const SHADE_PRINT: &str = "#e8e8e8";
+const SHADE_PRINT: &str = "url(#pv-shade)";
 const GRID_COLOUR: &str = "#e6ebf1";
 const GRID_PRINT: &str = "#787878"; // neutral, and dark enough to survive a 66% bitonal copy
 const BLANK: &str = "_____";
@@ -122,15 +122,18 @@ pub fn build(p: &Params) -> (String, Report) {
     let rows_y0 = ROWS_Y0 + (lab - 1.0) * 30.0;
     let w = (W * (1.0 + 1.1 * (lab - 1.0))).max(W);
     let mut d = Doc::new(w, rows_y0 + 3.0 * ROW_H * lab + 8.0);
+    if print {
+        d.defs(r##"<pattern id="pv-shade" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="#ffffff"/><line x1="0" y1="0" x2="0" y2="8" stroke="#666666" stroke-width="2.0"/></pattern>"##);
+    }
     d.describe("PV diagram", "A pressure-volume diagram with the work under the path shaded");
 
     // the window: a little past the two volumes and the higher pressure
     let (vlo, vhi) = (v1.min(v2), v1.max(v2));
     let (plo, phi) = (p1.min(p2), p1.max(p2));
     let frame = Frame {
-        w: L + PLOT_W + 20.0,
+        w: L + (lab - 1.0) * 34.0 + PLOT_W + 20.0,
         h: T + PLOT_H + 44.0,
-        l: L,
+        l: L + (lab - 1.0) * 34.0,
         r: 20.0,
         t: T,
         b: 44.0,
@@ -143,6 +146,7 @@ pub fn build(p: &Params) -> (String, Report) {
     let ys_step = nice_step(frame.y1 - frame.y0, 5.0);
     let (xt, yt) = (ticks(frame.x0, frame.x1, xs_step), ticks(frame.y0, frame.y1, ys_step));
     let grid = if print { GRID_PRINT } else { GRID_COLOUR };
+    // the pressures are the answer: the student copy keeps the gridlines but not the numbers on the y axis
     for (v, _) in &xt { let x = frame.px(*v); d.line(x, frame.top(), x, frame.bottom(), grid, 1.0); }
     for (v, _) in &yt { let y = frame.py(*v); d.line(frame.left(), y, frame.right(), y, grid, 1.0); }
     d.line(frame.left(), frame.bottom(), frame.right(), frame.bottom(), ink, 2.0);
@@ -155,7 +159,9 @@ pub fn build(p: &Params) -> (String, Report) {
     for (v, label) in &yt {
         let y = frame.py(*v);
         d.line(frame.left() - 5.0, y, frame.left(), y, ink, 1.3);
-        d.raw(&text_el(frame.left() - 8.0, y + 4.0, 11.0 * lab, "end", ink, label));
+        if ans {
+            d.raw(&text_el(frame.left() - 8.0, y + 4.0, 11.0 * lab, "end", ink, label));
+        }
     }
     d.raw(&text_el((frame.left() + frame.right()) / 2.0, frame.bottom() + 36.0, 13.0 * lab, "middle", ink, "volume (L)"));
     d.raw(&format!(
@@ -179,17 +185,26 @@ pub fn build(p: &Params) -> (String, Report) {
     let mut area: Vec<(f64, f64)> = vec![(frame.px(samples[0].0), frame.py(0.0))];
     area.extend(samples.iter().map(|q| (frame.px(q.0), frame.py(q.1))));
     area.push((frame.px(samples[samples.len() - 1].0), frame.py(0.0)));
-    d.poly(&area, shade, "none", 0.0);
+    // the shaded area is the work, so it is drawn only on the key
+    if ans { d.poly(&area, shade, "none", 0.0); }
     d.polyline(&samples.iter().map(|q| (frame.px(q.0), frame.py(q.1))).collect::<Vec<_>>(), path_col, if print { 2.6 } else { 3.0 });
 
     // the two end points
-    for (v, pp) in [(v1, p1), (v2, p2)] {
-        d.circle(frame.px(v * 1e3), frame.py(pp), 4.0, path_col, ink, 1.2);
+    for (k, (v, pp)) in [(v1, p1), (v2, p2)].iter().enumerate() {
+        let (x, y) = (frame.px(*v * 1e3), frame.py(*pp));
+        d.circle(x, y, 4.0, path_col, ink, 1.2);
+        d.raw(&text_el(x, y - 9.0, 11.0 * lab, "middle", path_col, if k == 0 { "1" } else { "2" }));
+    }
+    // the direction of the change, drawn on the key only (it says which way the work goes)
+    if ans {
+        let (mx, my) = (frame.px((v1 + v2) * 0.5 * 1e3), frame.py(n * R * t / ((v1 + v2) * 0.5)));
+        let dx = if v2 > v1 { 26.0 } else { -26.0 };
+        d.arrow(mx - dx / 2.0, my, mx + dx / 2.0, my, path_col, 2.0);
     }
 
     // the givens
     let givens = format!(
-        "n = {} mol,  T = {} K,  V1 = {} L,  V2 = {} L,  R = 8.314 J/mol K,  {}",
+        "n = {} mol,  T1 = {} K,  V1 = {} L,  V2 = {} L,  R = 8.314 J/(mol K),  {}",
         q_num(n, 2),
         q_num(t, 1),
         q_num(v1 * 1e3, 1),

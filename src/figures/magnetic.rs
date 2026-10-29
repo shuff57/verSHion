@@ -109,16 +109,14 @@ pub fn build(p: &Params) -> (String, Report) {
 
     // the field lines: three concentric circles with one arrow each, going anticlockwise for a current out of the
     // page and clockwise for one going in (the right-hand rule)
-    for (k, rr) in [(1usize, RMAX), (2, RMAX * 0.62), (3, RMAX * 0.32)] {
+    for (_k, rr) in [(1usize, RMAX), (2, RMAX * 0.62), (3, RMAX * 0.32)] {
         d.circle(CX, CY, rr, "none", field, 1.6);
-        // the arrow sits at the top of the circle, pointing one way or the other
-        // on screen, anticlockwise means the top of the circle moves to the LEFT; a current out of the page gives
+        // the arrow sits ON its own circle, at the top, with a chord proportional to the radius: on screen
+        // anticlockwise means the top of the circle moves to the LEFT, and a current out of the page gives
         // anticlockwise field lines (right-hand rule), a current into it gives clockwise ones
-        let (x0, x1) = if out { (CX + 22.0, CX - 22.0) } else { (CX - 22.0, CX + 22.0) };
         let y = CY - rr;
-        // only the outer circle keeps its arrow at the top; the inner two put theirs lower so they do not stack
-        let y = if k == 1 { y } else { y + rr * 0.5 };
-        let (xa, xb) = if k == 1 { (x0, x1) } else { (CX + if out { 12.0 } else { -12.0 }, CX + if out { -12.0 } else { 12.0 }) };
+        let half = (rr * 0.22).clamp(5.0, 26.0);
+        let (xa, xb) = if out { (CX + half, CX - half) } else { (CX - half, CX + half) };
         d.arrow(xa, y, xb, y, field, 1.8);
     }
 

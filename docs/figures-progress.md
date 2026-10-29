@@ -161,7 +161,7 @@ degrees with the steep just-below case, no bending down the normal, the student/
 Print neutrality. Census: only `refraction__defaults` and `refraction__start` added.
 
 Electric field: new figure `electric-field` (`src/figures/electric_field.rs`, Physics). Eight radial field lines whose
-arrows reverse with the sign of the charge, three equipotential circles at r, r/2 and r/3 (labelled V/1, V/2, V/3 —
+arrows reverse with the sign of the charge, three equipotential circles at r, r/2 and r/3 (labelled V, 2V, 3V inward —
 equal potential steps are equal steps of 1/r, which is why they bunch near the charge), the charge marked + or −, and
 a test charge at a chosen distance with the force on it. Field strength, potential and force are the answers and blank
 on the student copy; the force arrow is key-only and fixed-length so it encodes no magnitude. Tests: the textbook
