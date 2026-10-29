@@ -11,7 +11,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::api::ApiError;
-use super::circles_api::{BankDoc, BankHead, CircleSend, MESSAGE_MAX, SentBank, check_id, null_text};
+use super::circles_api::{BankDoc, BankHead, CircleSend, MESSAGE_MAX, SentBank, check_id};
 use super::pool::*;
 use super::transport::Method;
 
@@ -28,11 +28,19 @@ fn null_num<'de, D: serde::Deserializer<'de>, T: Default + Deserialize<'de>>(d: 
 /// (round 6, critic) The most characters of an author read from a history line, and of its message. The reply is untrusted
 /// and every line is kept for the session (50 of them): a name or a message far longer than the app ever writes is cut,
 /// never kept whole. The message keeps the pool's own limit (`MESSAGE_MAX`); a name is shorter than one.
+/// (round 7, critic M2) The same for a version id, a licence and a review-copy word: every text of the line is cut.
 pub const BY_MAX: usize = 200;
+pub const ID_MAX: usize = 200;
+pub const LICENSE_MAX: usize = 300;
+pub const REVIEW_MAX: usize = 32;
+
+/// Cut server text to `max` characters, never keeping a reply whole for the session.
+fn cut(s: String, max: usize) -> String {
+    if s.chars().count() > max { s.chars().take(max).collect() } else { s }
+}
 
 fn capped<'de, D: serde::Deserializer<'de>>(d: D, max: usize) -> Result<String, D::Error> {
-    let s = Option::<String>::deserialize(d)?.unwrap_or_default();
-    Ok(s.chars().take(max).collect())
+    Ok(cut(Option::<String>::deserialize(d)?.unwrap_or_default(), max))
 }
 
 fn capped_by<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error> {
@@ -43,13 +51,25 @@ fn capped_message<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::E
     capped(d, MESSAGE_MAX)
 }
 
+fn capped_id<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    capped(d, ID_MAX)
+}
+
+fn capped_license<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    capped(d, LICENSE_MAX)
+}
+
+fn capped_review<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
+    Ok(Option::<String>::deserialize(d)?.map(|s| cut(s, REVIEW_MAX)))
+}
+
 /// One line of a bank's history.
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 #[serde(default)]
 pub struct VersionLine {
     #[serde(deserialize_with = "null_num")]
     pub version: u64,
-    #[serde(deserialize_with = "null_text")]
+    #[serde(deserialize_with = "capped_id")]
     pub version_id: String,
     #[serde(deserialize_with = "capped_by")]
     pub by: String,
@@ -66,7 +86,7 @@ pub struct VersionLine {
     pub removed: u32,
     #[serde(deserialize_with = "null_num")]
     pub question_count: u32,
-    #[serde(deserialize_with = "null_text")]
+    #[serde(deserialize_with = "capped_license")]
     pub license: String,
     /// Its body is still kept (can be looked at and restored).
     #[serde(deserialize_with = "null_num")]
@@ -79,6 +99,7 @@ pub struct VersionLine {
     pub merged_from: Option<u64>,
     /// Round 48, a withheld version only: `full` (its text is still kept for the review) or `hashes_only`
     /// (only a record of what matched is kept, as fingerprints, for the administrator).
+    #[serde(deserialize_with = "capped_review")]
     pub review_copy: Option<String>,
 }
 
@@ -367,9 +388,9 @@ impl<'a> Pool<'a> {
             base_version: v.get("base_version").and_then(Value::as_u64).unwrap_or(base_version),
             base_kept: v.get("base_kept").and_then(Value::as_bool).unwrap_or(false),
             head_version: v.get("head_version").and_then(Value::as_u64).unwrap_or(0),
-            head_version_id: text_of(&v, "head_version_id"),
+            head_version_id: cut(text_of(&v, "head_version_id"), ID_MAX),
             head_at: v.get("head_at").and_then(Value::as_i64).unwrap_or(0),
-            head_by: text_of(&v, "head_by"),
+            head_by: cut(text_of(&v, "head_by"), BY_MAX),
             between: list_of(&v, "between")?,
             between_total: v.get("between_total").and_then(Value::as_u64).unwrap_or(0),
             merge_token: token,
