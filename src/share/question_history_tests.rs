@@ -1667,8 +1667,10 @@ fn d2o_an_old_links_unknown_figure_may_not_vanish() {
     q9["figure"] = json!({"id": "triangle", "params": {"a": 4}});
     let v9q = vec![q9, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)];
     let (mut bank, mut link) = linked_with(&v9q);
-    // as an earlier build wrote it: the base version's figure is not recorded
+    // as an earlier build wrote it: the base version's figure is not recorded at all (round 10: `None` alone no longer
+    // means that, so the record itself must say it does not know)
     link.base[0].figure = None;
+    link.base[0].figure_recorded = false;
     let a = local_of(&link, QA);
     bank.questions.iter_mut().find(|q| q.id == a).unwrap().stem = "My unsent edit".into();
     bank.modified += 10;
@@ -1799,14 +1801,91 @@ fn d2o_a_partial_send_keeps_a_held_back_restored_pictures_name() {
 }
 
 #[test]
-fn d2o_a_merge_clears_the_picture_records() {
-    // The r8 doc on CircleLink.picture_files (and the r8 brief) say it is "cleared when the base is rebuilt (a send
-    // or a merge)". finish_merge rebuilds the base (and even clears `restored`, the r7 M3 fix) but not this.
+fn d2p_a_merge_keeps_the_picture_record_of_an_unpaired_restore() {
+    // (round 9's test pinned the opposite: finish_merge cleared the whole map.) A merge rebuilds the base records of the
+    // questions the circle has, but a question it no longer has (an unpaired restore) keeps no record: the link-level name
+    // for the file the restore stored is the only thing that says the copy's picture is the version's, and clearing it
+    // makes Compare report "a different picture" against the very version restored.
     let src = include_str!("circle_edit.rs");
     let fm = src.find("fn finish_merge").expect("finish_merge");
     let next = src[fm..].find("\n    }\n").map(|i| fm + i).unwrap_or(src.len());
     let body = &src[fm..next];
-    assert!(body.contains("picture_files.clear()"), "finish_merge rebuilds the base but leaves the stale picture_files map");
+    assert!(!body.contains("picture_files.clear()"), "the merge wipes every picture name, including one it never rebuilt");
+    assert!(body.contains("picture_files_kept"), "the merge must keep the names of the files its rebuilt records do not name");
+
+    // and the rule itself: the circle no longer has A (the base entry and the pair are gone); its stored file keeps its name
+    let (mut bank, mut link) = linked();
+    let a = local_of(&link, QA);
+    let file = format!("media/{}.webp", format!("{:064x}", 0x33u8));
+    let sha = format!("{:064x}", 0x44u8);
+    bank.questions.iter_mut().find(|q| q.id == a).unwrap().image = Some(ImageRef { file: file.clone(), width: 1, height: 1 });
+    link.base.retain(|b| b.local_id != a);
+    link.qids.retain(|q| q.local != a);
+    link.picture_files.push((file.clone(), sha.clone()));
+    assert_eq!(picture_files_kept(&link.picture_files, &link.base, &bank), vec![(file.clone(), sha.clone())], "the unpaired restore's name is kept");
+    // once no question has the file any more it is dropped, so the map does not grow for ever
+    bank.questions.retain(|q| q.id != a);
+    assert!(picture_files_kept(&link.picture_files, &link.base, &bank).is_empty(), "a name for a file the bank no longer has is kept");
+}
+
+#[test]
+fn d2p_two_questions_sharing_one_stored_picture_keep_the_held_back_ones_name() {
+    // (round 10, critic minor) The partial send's retain dropped a name by FILE. A stored file is content-addressed, so two
+    // questions restored from the same picture share it: sending one rebuilt that question's record naming the file, which
+    // dropped the name the held-back question still needs (its record is the base body's, which has no picture).
+    let (mut bank, mut link) = linked();
+    let (a, b) = (local_of(&link, QA), local_of(&link, QB));
+    let file = format!("media/{}.webp", format!("{:064x}", 0x55u8));
+    let sha = format!("{:064x}", 0x66u8);
+    for id in [&a, &b] {
+        bank.questions.iter_mut().find(|q| q.id == *id).unwrap().image = Some(ImageRef { file: file.clone(), width: 1, height: 1 });
+    }
+    link.picture_files.push((file.clone(), sha.clone()));
+    // A is sent with the picture (its rebuilt record names the file); B is held back (its record is the base body's)
+    let mut qa = v9()[0].clone();
+    qa["image"] = json!({"file": file, "width": 1, "height": 1});
+    let composed: Vec<super::partial_send::ComposedQuestion> = vec![
+        super::partial_send::ComposedQuestion { local: a.clone(), qid: Some(QA.into()), question: Some(serde_json::from_value(qa).unwrap()), base_image: None },
+        super::partial_send::ComposedQuestion { local: b.clone(), qid: Some(QB.into()), question: Some(serde_json::from_value(v9()[1].clone()).unwrap()), base_image: None },
+        super::partial_send::ComposedQuestion { local: local_of(&link, QC), qid: Some(QC.into()), question: Some(serde_json::from_value(v9()[2].clone()).unwrap()), base_image: None },
+    ];
+    let sent = super::circles_api::SentBank { circle_id: CID.into(), bank_id: BID.into(), version: 10, version_id: format!("{:032x}", 10), qids: vec![QA.into(), QB.into(), QC.into()], ..Default::default() };
+    let after = super::circle_links::after_partial_send(&link, &bank, &composed, &sent, vec![b.clone()]);
+    assert!(
+        after.picture_files.iter().any(|(f, s)| *f == file && *s == sha),
+        "the send dropped the name of a file the held-back question still uses: {:?}",
+        after.picture_files
+    );
+    assert_eq!(picture_sha_on_circle(&after, bank.questions.iter().find(|q| q.id == b).unwrap()).as_deref(), Some(sha.as_str()), "the held-back question lost the circle's name for its picture");
+}
+
+#[test]
+fn d2p_a_known_no_figure_record_allows_a_restore_that_lands_on_the_base() {
+    // (round 10, critic I2) The base version has NO figure, and this build recorded that (`figure: None, figure_recorded:
+    // true`). The person added a figure locally. Version 6's question is the base's exactly: no figure, same (no) picture,
+    // same words. Restoring lands the copy on the base -- yet round 9 refused it as "not countable", because `None` also
+    // meant "not recorded".
+    let (mut bank, mut link) = linked();
+    let a = local_of(&link, QA);
+    let base = link.base.iter().find(|b| b.local_id == a).unwrap();
+    assert!(base.figure.is_none() && base.figure_recorded, "the base is a record that has no figure");
+    bank.questions.iter_mut().find(|q| q.id == a).unwrap().figure = Some(crate::model::FigureSpec {
+        id: "triangle".into(),
+        params: [("a".to_string(), json!(3))].into_iter().collect(),
+    });
+    bank.modified += 10;
+    let six = body(6, &v9(), false);
+    let mut banks = vec![bank];
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    // the other direction: the same restore over a link that does NOT record the base's figure is still unsafe, and refused
+    let mut unsure = link.clone();
+    unsure.base[0].figure_recorded = false;
+    let mut other = banks.clone();
+    let none = restore_question(&mut other, &ask(&unsure, Some(&a), QA, &six), &sink, &|_| Ok(()), NOW + 100_000);
+    assert_eq!(none.map(|d| d.version), Err(RestoreRefused::NotCountable), "a link with no figure record let a figure vanish");
+    let r = restore_question(&mut banks, &ask(&link, Some(&a), QA, &six), &sink, &|_| Ok(()), NOW + 100_000);
+    assert_eq!(r.map(|d| d.version), Ok(6), "a restore that puts back exactly the base (no figure, no picture, same words) was refused");
+    assert!(banks[0].questions.iter().find(|q| q.id == a).unwrap().figure.is_none(), "the copy is the base version's: no figure");
 }
 
 #[test]

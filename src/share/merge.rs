@@ -78,12 +78,17 @@ pub struct BaseQuestion {
     pub local_image: Option<String>,
     /// (round 8, critic T1) The figure the question was drawn from in the base version, when it had one. `snap` has no
     /// figure, so without this the count guard could not tell a restore that puts the base's figure back from one that
-    /// introduces a figure the base never had. `None`: the base had no figure, or (a link an earlier build wrote) it is not
-    /// known; the guard treats "not known" as unsafe in both directions (a figure the version carries, or the copy's own
-    /// figure vanishing). (round 9, critic M3) Read leniently: a figure this build can not read is `None`, never the link
-    /// dropped with it.
+    /// introduces a figure the base never had. `None` with `figure_recorded` true: the base had no figure. (round 9,
+    /// critic M3) Read leniently: a figure this build can not read is `None`, never the link dropped with it.
     #[serde(default, deserialize_with = "figure_or_none")]
     pub figure: Option<FigureSpec>,
+    /// (round 10, critic I2) Whether `figure` is a record of the base version at all. `None` alone conflated "the base had
+    /// no figure" with "not recorded" (a link an earlier build wrote): the restore guard read both as unknown, and then
+    /// refused a restore that lands the copy exactly on the base when base and version both have no figure. Every base
+    /// [`base_of`] writes is a record; a link written before round 10 reads false, the unsafe reading, so its figure guard
+    /// is unchanged. Read leniently: an unreadable value is false, never the link dropped with it.
+    #[serde(default, deserialize_with = "figure_recorded_or_false")]
+    pub figure_recorded: bool,
     /// (round 7, critic R3) The copy's own picture when it is no longer the base's file: the file, and the circle's name
     /// for it. A restore that stores a picture writes it (the store may keep a circle's PNG as WebP under a new name), so
     /// Compare and the strip read that picture as the circle's own and not as a new local picture. `local_image` and
@@ -101,6 +106,11 @@ fn figure_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Figur
 /// A `picture_now` read leniently: an unreadable value is none, never the link dropped with it.
 fn picture_now_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<(String, String)>, D::Error> {
     Ok(Option::<(String, String)>::deserialize(d).ok().flatten())
+}
+
+/// (round 10, critic I2) A bool read leniently: an unreadable value is false, never the link dropped with it.
+fn figure_recorded_or_false<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+    Ok(bool::deserialize(d).unwrap_or(false))
 }
 
 impl PartialEq for BaseQuestion {
@@ -124,7 +134,7 @@ pub fn snap_of(q: &Question, image_sha: Option<String>) -> Snap {
 }
 
 pub fn base_of(q: &Question, qid: &str, fp: &str, sha: Option<String>) -> BaseQuestion {
-    BaseQuestion { local_id: q.id.clone(), qid: qid.to_string(), fp: fp.to_string(), snap: snap_of(q, sha), local_image: q.image.as_ref().map(|i| i.file.clone()), figure: q.figure.clone(), picture_now: None }
+    BaseQuestion { local_id: q.id.clone(), qid: qid.to_string(), fp: fp.to_string(), snap: snap_of(q, sha), local_image: q.image.as_ref().map(|i| i.file.clone()), figure: q.figure.clone(), figure_recorded: true, picture_now: None }
 }
 
 /// The base to keep, or none when it would be too big.
@@ -568,11 +578,15 @@ pub fn unknown_base(bank: &QuestionBank, links: &[(String, String)], theirs: &[T
             if let Some(t) = theirs.iter().find(|t| t.qid == *qid) {
                 let mut b = base_of(&t.q, qid, &t.fp, t.sha.clone());
                 b.local_id = local.clone();
+                // (round 10) this is the circle's newest question, not the base version's: its figure is no record of the base
+                b.figure_recorded = false;
                 out.push(b);
             }
             continue;
         };
         let mut b = base_of(q, qid, "", None);
+        // (round 10) a two-way review keeps no record of the base version at all: its figure must not read as known
+        b.figure_recorded = false;
         if theirs.iter().any(|t| t.qid == *qid) {
             b.snap.stem = NOT_KEPT.to_string();
             b.snap.points = Some(-1.0);

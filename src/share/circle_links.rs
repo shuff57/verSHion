@@ -159,11 +159,12 @@ pub struct CircleLink {
     /// (round 8, critic T2) The copy's own picture files and the circle's name for each: what a restore stored, kept on the
     /// link rather than in a base entry so that it survives an unpaired restore (the circle removed the question and the base
     /// entry with it). Read by [`super::question_history::picture_sha_on_circle`], and only for a file the per-question base
-    /// record does not name (round 9, critic M1: a rebuilt base record is authoritative). Taken out when the base is rebuilt
-    /// for that question: a whole-bank send and a merge clear the list, and a partial send keeps only what it held back
-    /// (round 9, critic T1). Read leniently: entries this build can not read are dropped. (round 9, critics M4/M6) A residual:
-    /// more than [`PICTURE_FILES_MAX`] unpaired restores drop the oldest names, and a link edited on disk can name a file
-    /// wrongly — the same privilege as editing the banks themselves.
+    /// record does not name (round 9, critic M1: a rebuilt base record is authoritative). Kept only while a question still
+    /// has the file and its rebuilt record does not name it: a whole-bank send rebuilds every record, and a merge every
+    /// record of a question the circle still has; a partial send keeps the names of the questions it held back, judged per
+    /// question so a file two questions share is not lost for the one held back (round 10, critics I1 and minor). Read
+    /// leniently: entries this build can not read are dropped. (round 9, critics M4/M6) A residual: more than [`PICTURE_FILES_MAX`] unpaired restores drop
+    /// the oldest names, and a link edited on disk can name a file wrongly — the same privilege as editing the banks themselves.
     #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "picture_files_or_empty")]
     pub picture_files: Vec<(String, String)>,
 }
@@ -755,8 +756,30 @@ pub fn after_send(link: &CircleLink, bank: &QuestionBank, sent: &SentBank) -> Ci
     l.as_is = false;
     // (round 6, critic N5) the base is the bank as sent: no restored question is waiting for a difficulty pass any more
     l.restored.clear();
-    l.picture_files.clear();
+    // (round 10, critic I1) every question was sent, so every record names its file: nothing is left for the link map
+    let kept = picture_files_kept(&l.picture_files, &l.base, bank);
+    l.picture_files = kept;
     l
+}
+
+/// (round 10, critics I1 and minor) The `picture_files` entries still worth keeping after `base` was rebuilt for `bank`.
+///
+/// An entry names the circle's picture for a local file. It matters only where the per-question base record does not name
+/// that file itself (round 9, critic M1: the record is authoritative where it names one), so it is kept for a file a
+/// question of `bank` still has and whose record does not name. Keyed by file, and judged per question, because a stored
+/// file is content-addressed: two questions can share one (a picture restored into both), and a send that rebuilt the
+/// record of one must not drop the name the other still needs.
+pub fn picture_files_kept(records: &[(String, String)], base: &[BaseQuestion], bank: &QuestionBank) -> Vec<(String, String)> {
+    let names = |b: &BaseQuestion, file: &str| b.local_image.as_deref() == Some(file) || b.picture_now.as_ref().is_some_and(|(f, _)| f == file);
+    records
+        .iter()
+        .filter(|(file, _)| {
+            bank.questions.iter().any(|q| {
+                q.image.as_ref().is_some_and(|i| &i.file == file) && !base.iter().any(|b| b.local_id == q.id && names(b, file))
+            })
+        })
+        .cloned()
+        .collect()
 }
 
 /// The link after a partial send (phase D3, plan section 6): `sent` made `composed`, this bank with every unticked
@@ -812,10 +835,11 @@ pub fn after_partial_send(link: &CircleLink, bank: &QuestionBank, composed: &[Co
     l.as_is = false;
     // (round 6, critic N5) the base is the bank as composed: no restored question is waiting for a difficulty pass any more
     l.restored.clear();
-    // (round 9, critic T1) only the questions this send carried have a rebuilt base naming their picture: keep the record of
-    // a question it held back (its base is the base body's, which can not name the locally stored file)
-    let named: Vec<String> = l.base.iter().filter_map(|b| b.local_image.clone()).collect();
-    l.picture_files.retain(|(file, _)| !named.contains(file));
+    // (round 10, critic I1) a send (or a merge) rebuilds the base records of the questions it carried, and those records
+    // are authoritative: the link-level name is kept only for a file a record does not name (a question held back, or one
+    // the circle no longer has). Per question, not per name: two questions can share one stored file.
+    let kept = picture_files_kept(&l.picture_files, &l.base, bank);
+    l.picture_files = kept;
     // A send of the full form no longer follows the viewers' form, as a merge of a full version (`finish_merge`).
     if !sent.keys_hidden {
         l.viewers_form = false;

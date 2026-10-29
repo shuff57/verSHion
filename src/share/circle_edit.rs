@@ -4868,9 +4868,12 @@ impl CircleEditModel {
         // (round 7, critic M3) the base is the circle's version as merged: no restored question waits for a difficulty pass
         // any more (the base record and the bank's files are new)
         link.restored.clear();
-        // (round 9, critic M1) the merge rebuilt the base records (their pictures named afresh): the older file -> circle
-        // name entries would only override them
-        link.picture_files.clear();
+        // (round 9, critic M1) the merge rebuilt the base records (their pictures named afresh), so the older file -> circle
+        // name entries are dropped where a record names the file. (round 10, critic I1) Not the whole list: a question the
+        // circle no longer has (an unpaired restore) keeps no rebuilt record, and clearing its name made Compare call the
+        // very picture the version restored "a different picture".
+        let kept = picture_files_kept(&link.picture_files, &link.base, &banks[pos]);
+        link.picture_files = kept;
         // (critic 63 I3) Read in full: the answer keys came with it, so the copy no longer follows the viewers' form.
         if !rev.fetched.head.bank.keys_hidden {
             link.viewers_form = false;

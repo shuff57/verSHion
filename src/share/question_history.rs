@@ -1117,10 +1117,13 @@ pub fn restore_question(banks: &mut [QuestionBank], ask: &RestoreAsk, sink: &dyn
             // is refused.
             // (round 9, critic M2) An unknown record (a link an earlier build wrote) is unsafe in the other direction too: a
             // restore that would change the copy's own figure is a move just as uncountable.
-            let figure_recorded = merge::figure_key(b.figure.as_ref());
+            // (round 10, critic I2) "The base had no figure" and "not recorded" are now told apart (`figure_recorded`): a
+            // record that says the base had none makes a restore with no figure a restore to the base itself, never a guess.
+            let figure_known = b.figure_recorded;
+            let figure_at_base = merge::figure_key(b.figure.as_ref());
             let figure_in = merge::figure_key(r.figure.as_ref());
-            let figure_moves = figure_in != figure_recorded;
-            let figure_unknown_unsafe = figure_recorded.is_none() && existing.is_some_and(|q| merge::figure_key(q.figure.as_ref()) != figure_in);
+            let figure_moves = if figure_known { figure_in != figure_at_base } else { figure_in.is_some() };
+            let figure_unknown_unsafe = !figure_known && existing.is_some_and(|q| merge::figure_key(q.figure.as_ref()) != figure_in);
             if ask.body.version != link.base_version && picture_same && (figure_moves || figure_unknown_unsafe) && !merge::ours_changed(b, &judged) {
                 return Err(RestoreRefused::NotCountable);
             }
