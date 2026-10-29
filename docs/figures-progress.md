@@ -268,6 +268,28 @@ angle, 120 degrees, a ray to read, and the bare protractor. Tests: the default r
 summing to 180, the ray's tip on the rim at five angles, the student/key split, the ray switch, Print neutrality,
 and the PNG export. Census: only `protractor__defaults` and `protractor__start` added.
 
+Phase-3 critic round (five figures at `cfd89f0`: electric field, magnetic field, standing waves, PV diagrams,
+refraction): FAIL — 2 blockers, 6 majors, 9 minors. Both blockers were leaks through drawn geometry on the student
+copy, and neither was visible to the tests. The PV diagram printed the two asked pressures as y-axis numbers and shaded
+the area under the path, which *is* the work, while its readout said `_____ Pa` and `_____ J`; the y numbers and the
+shade are now key-only. The standing wave drew the node dots and antinode rings beside the blanked counts, so the
+counts could be answered by counting rather than by reading the wave; the markers are key-only. Majors: two of the
+magnetic field's three arrows were not on their field lines (fixed chord and two arrows pushed down the canvas), so each
+arrow now sits at the top of its own circle with a chord proportional to the radius; the electric force arrow vanished
+for attraction at r <= 1.1 m including the default, so the test charge sits at least 40 px out; the PV path had no
+direction and an unsigned area, so expansion and compression drew identically while the work flips sign — the key now
+carries a direction arrow and both copies number the ends; the PV givens said `T = 300 K` for an isobaric change, which
+is only the initial temperature (now `T1`); the PV title collided with the y tick labels at Large (the left margin now
+grows with the label size); and the PV shade at `#e8e8e8` vanished in the 66 % bitonal copy, leaving an isobaric figure
+as a bare line (Print now hatches it). Minors fixed in the commit after: the standing antinode rings were on the
+envelope side opposite the peak; refraction's doc and FAQ said "the rays stay" although the refracted ray is key-only;
+refraction gained the never-zero printer (a hand-edited 0.04 degree link printed `0.0` for a real 0.013); the PV
+worksheet FAQ still promised the shaded area; and the magnetic givens use mu-zero and 4pi rather than `mu0` and `4 pi`.
+Full disposition in `docs/critic-reports/2026-10-28-figures-critics-8.md`. Still open and recorded there: the electric
+equipotential labels speckle at 66 % at 1.3-1.5x, the electric bottom arrowhead's halo nicks the givens line, the
+magnetic field prints the direction on the student copy (deliberate), and the PV area in L.Pa needs the 10^-3
+conversion that the FAQ now states.
+
 Left open: axis ink `#111827` is grey but not exactly
 neutral; trig's key prints a Hidden side inside a fraction; two-label y axes on tall waves; some coordinate labels
 sit over the drop lines; two example names overstate what they show.

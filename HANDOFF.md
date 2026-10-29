@@ -1,9 +1,10 @@
-# Handoff: figures gap-fill loop, figure 1.3 round 3 committed
+# Handoff: figures gap-fill loop, phase 3 critic round 8 fixed
 
 Written 2026-10-27 ~19:40 PT by the circles/D1 session, which the owner asked to take over and "finish both".
+Updated 2026-10-28 late: the five-figure phase-3 critic round is fixed and committed.
 
 ## Where things are
-- Worktree `/home/shuff57/Documents/GitHub/verSHion-figures`, branch `figures-gapfill` (based on `figures-circuits`). HEAD `d19c08b` (phase 3: PV diagrams). **Math core and phase 2 complete and critiqued; phase 3 has two figures, both through a critic and a verification round.**
+- Worktree `/home/shuff57/Documents/GitHub/verSHion-figures`, branch `figures-gapfill` (based on `figures-circuits`). HEAD `21e5896` (phase 3: the five-figure critic's minors). **Math core, phase 2 and eight phase-3 figures are built; the five newest physics figures have had a combined critic round and a fix, and a verification critic is running on the fix commit.**
 - Do not touch the main repo `/home/shuff57/Documents/GitHub/verSHion` (branch `shared-pool-phase1`): it holds the circles D1 work, committed locally, waiting on critics 101/102.
 - Loop spec: `docs/figures-loop.md`. Rules: `docs/figures-conventions.md`. Progress and critic minors: `docs/figures-progress.md`. Memory: `figures-gapfill-loop.md`.
 - Done and committed: phase 0, 1.1 conics (`b009d82`), 1.2 circle (`4f5715d`, closed), 1.3 rounds 1-3 (`c3eb729`, `0f81c30`, `2cc0a58`).
@@ -46,13 +47,28 @@ Written 2026-10-27 ~19:40 PT by the circles/D1 session, which the owner asked to
 - Tests: 10 (defaults, pi fractions, radians row, student/key, point position, drag, Hidden, label sweep, Print
   neutrality, PNG export). Census: only `unit-circle__defaults` / `__start`.
 
+## Phase-3 critic round 8 (2026-10-28, the five newest physics figures)
+- Combined critic over `electric-field`, `magnetic-field`, `standing-wave`, `pv-diagram` and `refraction` at `cfd89f0`:
+  **FAIL — 2 blockers, 6 majors, 9 minors.** Both blockers were student-copy leaks through drawn geometry: PV printed
+  the two asked pressures on the y axis and shaded the work; standing drew the node/antinode markers beside the blanked
+  counts. Neither was visible to any test.
+- Fixed in `8f40aff` (blockers and majors) and `21e5896` (the minors worth doing). Census re-blessed twice, each time
+  only the intended ids: `electric-field`, `magnetic-field`, `pv-diagram` (six lines), then `magnetic-field` and
+  `standing-wave` (four lines, from the micro-sign text and the antinode-ring side).
+- Full disposition and the list left open: `docs/critic-reports/2026-10-28-figures-critics-8.md`.
+- Suite on `8f40aff`: **1775 passed, 0 failed, 5 ignored**. The minors commit has its module tests green (36) and the
+  census checked, but **the full suite has not been run on `21e5896`** — it is deliberately deferred until the
+  verification critic finishes, because `figuresui::tests::dragging_a_label_moves_it_as_one_undo_step` fails under the
+  CPU contention of two concurrent full runs. Run it once the critic is done.
+- **A verification critic on `8f40aff` is running** in `/tmp/verify-k` (a `git archive` copy, own target dir), checking
+  each of the eight fixes rather than reviewing afresh. Its verdict is not in yet.
+
 ## What is left in the figures loop
-- Critic runs for 1.3 round 3, 1.4 and 1.5 (all blocked until 2026-10-28 16:00 PT by the agent quota).
-- Phase 2 (math rest). Done: `transformations` (`e7eac7c`), `fraction-models` (`ed8f6b2`), `triangle-centres` (`4786301`), `slope-triangle` (`0f8a07a`). Phase-2 gaps still missing, checked against the 141
-  registered ids: fraction and number models (bars, circles, tape diagram, area model, base-ten blocks, ten-frame),
-  triangle centres, slope triangle, protractor, nets, and explicit bar/pie/line chart figures. Venn, probability
-  tree, histogram, scatter, dot plot, stem-and-leaf and the solids already exist.
-- Then phases 3-6 (physics, biology, chemistry, stats) in `docs/figures-loop.md`.
+- The three remaining phase-3 items: **spring-scale hide-reading**, **series-parallel and capacitor modes on
+  `circuit-diagram`**, and **handles on the ray diagram and the motion map** (`docs/figures-loop.md` has the order).
+- Then phase 4 (biology, 7 figures), phase 5 (chemistry, 10), phase 6 (stats, 7).
+- Phase 2 is complete and committed. Phase 3 built: energy bar charts, collision/momentum, circular motion, electric
+  field, refraction, magnetic field, standing waves, PV diagrams.
 
 
 ## Notes box — fixed and confirmed in the app (2026-10-28)

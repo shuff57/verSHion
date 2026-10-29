@@ -39,6 +39,7 @@ fn spring_params() -> Vec<ParamDef> {
         ParamDef::choice("minor", "Small marks between numbers", &["Automatic", "Tenths"], "Automatic"),
         ParamDef::text("title", "Chart title", ""),
         ParamDef::bool("answer", "Print the answer key under the figure", false),
+        ParamDef::text("answer_text", "Caption under the figure (blank = the reading)", ""),
     ]
 }
 
@@ -207,7 +208,11 @@ fn spring_render(p: &Params) -> String {
         }
     }
     if p.b("answer") {
-        g.text(w / 2.0, h - 14.0, 18.0, "middle", &format!("Force: {:.2} N", reading), true);
+        // the reading printed as the answer key; a typed caption replaces it, so a worksheet can carry a blank
+        // ("Force: ________ N") with nothing on the figure to give the reading away
+        let custom = p.s("answer_text").trim();
+        let t = if custom.is_empty() { format!("Force: {:.2} N", reading) } else { custom.to_string() };
+        g.text(w / 2.0, h - 14.0, 18.0, "middle", &t, true);
     }
     g.finish()
 }

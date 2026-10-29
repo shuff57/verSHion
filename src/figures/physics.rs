@@ -153,6 +153,24 @@ mod tests {
     }
 
     #[test]
+    fn the_spring_scale_caption_can_be_blanked_for_a_worksheet() {
+        // the answer key prints the reading; a typed caption replaces it, so a worksheet gets a blank instead
+        let sp = defs().into_iter().find(|d| d.id == "spring-scale").unwrap();
+        let mut p = Params::defaults(&(sp.params)());
+        p.0.insert("answer".into(), Value::B(true));
+        let key = (sp.render)(&p);
+        assert!(key.contains("Force: 3.47 N"), "the key prints the reading");
+        p.0.insert("answer_text".into(), Value::S("Force: ________ N".into()));
+        let sheet = (sp.render)(&p);
+        assert!(sheet.contains("Force: ________ N"), "the typed caption wins");
+        assert!(!sheet.contains("3.47"), "and the reading is gone from the figure");
+        if let Ok(dir) = std::env::var("VERSHION_PNG_DIR") {
+            // the worksheet copy, to be looked at: a caption, a pointer, and no answer anywhere
+            let _ = std::fs::write(format!("{dir}/spring-scale-worksheet.png"), to_png(&sheet, 1.0).unwrap());
+        }
+    }
+
+    #[test]
     fn nine_physics_generators() {
         let ids: Vec<_> = defs().iter().map(|d| d.id).collect();
         assert_eq!(ids.len(), 9);

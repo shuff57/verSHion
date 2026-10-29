@@ -339,6 +339,10 @@ const SPRING_SCALE: &[Faq] = &[
         q: "Why are spring scales different colors?",
         a: "School spring scales are often color-coded by their maximum load so the right one can be grabbed quickly. The color is only a convenience; the scale markings are what matter.",
     },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Print the answer key under the figure on and type your own caption: the reading is not printed anywhere on the instrument, so a caption such as Force: ________ N leaves the student to read the pointer and fill in the blank. Leaving the caption empty prints the reading instead, which is the key.",
+    },
 ];
 
 const WAVES: &[Faq] = &[
