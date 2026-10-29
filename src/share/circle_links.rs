@@ -149,6 +149,12 @@ pub struct CircleLink {
     /// the bank, difficulties included (its Send page says so). Cleared once the copy moves to another version.
     #[serde(default, skip_serializing_if = "std::ops::Not::not", deserialize_with = "lenient_bool")]
     pub as_is: bool,
+    /// (round 6, critic N5) Questions a restore set in this copy, not sent yet: a difficulty pass learnt from the circle
+    /// never writes over their difficulty (the restore's rating wins until the person changes it). Taken out when the copy
+    /// moves on (a send or a merge, whose base is the bank as sent) and by an Undo, which puts the old question back.
+    /// Read leniently: a value this build can not read is none, never the link with it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "ids_or_empty")]
+    pub restored: Vec<String>,
 }
 
 /// (round 17, critic 95 I1) A base question's difficulty in the bank when the read's difficulties were first to be taken.
@@ -427,6 +433,7 @@ impl CircleLink {
             missing_at_read: None,
             difficulty_news: None,
             as_is: false,
+            restored: Vec::new(),
         }
     }
 
@@ -609,6 +616,11 @@ pub fn inherit_difficulty(link: &CircleLink, bank: &mut QuestionBank, sent: Opti
     let mut moved = Vec::new();
     for b in &link.base {
         let Some(d) = b.snap.difficulty else { continue };
+        // (round 6, critic N5) a question a restore set keeps the restore's difficulty until the person changes it: a
+        // background pass never writes over it, not even one whose first pass has not run yet (`at_read` below).
+        if link.restored.contains(&b.local_id) {
+            continue;
+        }
         if only.is_some_and(|o| !o.contains(&b.local_id)) {
             continue;
         }
@@ -702,6 +714,8 @@ pub fn after_send(link: &CircleLink, bank: &QuestionBank, sent: &SentBank) -> Ci
     l.missing_at_read = None;
     // (round 17) the bank as it is was sent
     l.as_is = false;
+    // (round 6, critic N5) the base is the bank as sent: no restored question is waiting for a difficulty pass any more
+    l.restored.clear();
     l
 }
 
@@ -756,6 +770,8 @@ pub fn after_partial_send(link: &CircleLink, bank: &QuestionBank, composed: &[Co
     l.pass_times = None;
     l.missing_at_read = None;
     l.as_is = false;
+    // (round 6, critic N5) the base is the bank as composed: no restored question is waiting for a difficulty pass any more
+    l.restored.clear();
     // A send of the full form no longer follows the viewers' form, as a merge of a full version (`finish_merge`).
     if !sent.keys_hidden {
         l.viewers_form = false;
@@ -811,6 +827,7 @@ pub fn link_from_share(circle_id: &str, circle_name: &str, role: super::circles_
         missing_at_read: None,
         difficulty_news: None,
         as_is: false,
+        restored: Vec::new(),
     };
     // The bank as it was sent: an edit made while the send was on its way shows as unsent, never as "put back".
     l.mark_bank(bank);

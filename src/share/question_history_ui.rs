@@ -776,7 +776,13 @@ impl QuestionPage {
                 let back_new = if removed { format!(" {BACK_NEW}") } else { String::new() };
                 let what = question_words(self.number);
                 // (round 5, critic I1) said from the copy as it is now, against the link as it is now
-                let after = done.link.as_ref().unwrap_or(link);
+                // (round 6, critic N5) the restored question's difficulty is the restore's until she changes it: the link
+                // records the question, so a difficulty pass learnt later never writes over it
+                let mut kept = done.link.clone().unwrap_or_else(|| link.clone());
+                if !kept.restored.contains(&done.local_id) {
+                    kept.restored.push(done.local_id.clone());
+                }
+                let after = &kept;
                 let now_is = banks.iter().find(|b| b.id == self.local_bank_id).map(|b| your_copy(after, b, &done.local_id));
                 let counts = match now_is {
                     Some(YourCopy::SameAs(n)) => format!(" Your copy of it is now the same as version {n}, the version your copy is based on, so there is nothing to send for it."),
@@ -787,10 +793,9 @@ impl QuestionPage {
                 self.undo_text = Some(text.clone());
                 self.restore = Some(RestoreView { version: v, state: RestoreState::Done(text) });
                 self.picture = None;
-                let link = done.link.clone();
                 self.undo = Some(done);
                 self.data += 1;
-                Some((self.local_bank_id.clone(), link))
+                Some((self.local_bank_id.clone(), Some(kept)))
             }
             Err(e) => {
                 let retry = retryable(&e);
@@ -808,11 +813,14 @@ impl QuestionPage {
         let v = done.version;
         match undo_restore(banks, link, &done, &*self.env.restore, save, now) {
             Ok(before) => {
+                // (round 6, critic N5) the question is back as it was before the restore: a difficulty pass may fill it again
+                let mut kept = before.unwrap_or_else(|| link.clone());
+                kept.restored.retain(|id| *id != done.local_id);
                 self.local_id = done.local_id.clone();
                 self.undo_text = None;
                 self.restore = Some(RestoreView { version: v, state: RestoreState::Done(format!("The restore was undone: {} is back as it was before. A restore point was saved first.", question_words(self.number))) });
                 self.data += 1;
-                Some((self.local_bank_id.clone(), before))
+                Some((self.local_bank_id.clone(), Some(kept)))
             }
             Err(e) => {
                 // (round 5, critic I4) the undo's own failure: its Try again undoes, and only where that can help

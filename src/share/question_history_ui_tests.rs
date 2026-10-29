@@ -2322,3 +2322,41 @@ fn d2j_another_account_never_keeps_the_undo() {
     let t = r.page(1280.0);
     assert!(!t.contains("Undo restore"), "another account saw the first one's Undo: {t}");
 }
+
+#[test]
+fn d2k_a_difficulty_pass_never_writes_over_a_restored_question() {
+    // (round 6, critic N5) version 2's question is rated Low; the person restores it. A difficulty pass learnt from the
+    // circle afterwards (inherit, its first pass not yet run) would set the base version's rating (Hard) over it. The
+    // restore's rating wins until the person changes it: the pass leaves a restored question alone.
+    let mut r = rig();
+    r.script_load();
+    let mut q = qj(QA, A3);
+    q["difficulty"] = json!("Low");
+    r.w.raw(&version_path(2), served(2, &[q], false));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Restore...", 0));
+    assert!(r.click(1280.0, "Yes, restore", 0));
+    r.page(1280.0);
+    assert_eq!(r.banks[0].questions[0].difficulty, Some(crate::model::Difficulty::Low));
+    // the circle rated the base version Hard, and a read has just learnt its difficulties: the pass is to run
+    let hard = Some(Some(crate::model::Difficulty::High));
+    r.m.edit.update_link(LOCAL, |l| {
+        l.base[0].snap.difficulty = hard;
+        l.inherit = true;
+        l.at_read = None;
+        true
+    });
+    r.page(1280.0);
+    assert_eq!(r.banks[0].questions[0].difficulty, Some(crate::model::Difficulty::Low), "the difficulty pass wrote over the restore");
+    // without that guard the very same pass does turn it to the circle's: the test above is not passing for nothing
+    r.m.edit.update_link(LOCAL, |l| {
+        l.restored.clear();
+        l.base[0].snap.difficulty = hard;
+        l.inherit = true;
+        l.at_read = None;
+        true
+    });
+    r.page(1280.0);
+    assert_eq!(r.banks[0].questions[0].difficulty, Some(crate::model::Difficulty::High));
+}
