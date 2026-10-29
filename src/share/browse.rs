@@ -208,6 +208,19 @@ impl RestoreSink for StoreRestore {
     }
 }
 
+/// (round 7, critic M1) The order of two safety-copy names of one kind: by their stamp, then by the number after it, so
+/// `banks-before-restore-…-120000-2.json` (the second copy made in that second) is newer than `…-120000.json`. Sorting the
+/// names as text put `-2` first (`.` sorts after `-`), so the "newest" copy compared for the dedupe was the oldest in that
+/// second.
+fn copy_order(name: &str) -> (String, u32) {
+    let stem = name.strip_suffix(".json").unwrap_or(name).to_string();
+    // the stamp ends in `YYYYMMDD-HHMMSS`; only a short all-digit tail after it is the copy's own number
+    match stem.rsplit_once('-') {
+        Some((base, n)) if (1..=3).contains(&n.len()) && n.chars().all(|c| c.is_ascii_digit()) && base.len() >= 16 => (base.to_string(), n.parse().unwrap_or(1)),
+        _ => (stem, 1),
+    }
+}
+
 /// (round 18, survivor k95) A safety copy of all the banks in `b`: `backups/banks-before-<what>-<date>.json` (`secs`: now), never
 /// over another one. Where it is, in words. (round 6, critic) The same banks as the newest copy of that kind are not written
 /// again: a second restore (or a retried one) over banks nothing else touched since leaves that one as its restore point.
@@ -215,7 +228,7 @@ pub fn save_copy_to(b: &dyn crate::store::Backend, banks: &[QuestionBank], what:
     let bytes = serde_json::to_vec(banks).map_err(|e| e.to_string())?;
     let prefix = format!("banks-before-{what}-");
     let mut have: Vec<String> = b.list("backups").into_iter().filter(|n| n.starts_with(&prefix) && n.ends_with(".json")).collect();
-    have.sort();
+    have.sort_by_key(|n| copy_order(n));
     if let Some(last) = have.last()
         && b.read(&format!("backups/{last}")).as_deref() == Some(bytes.as_slice())
     {
