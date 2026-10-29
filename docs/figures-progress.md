@@ -392,6 +392,26 @@ is gone — the line reads for itself), and a slowing object's last dots crowd t
 flash numbers now sit on two staggered rows). Five examples and four FAQ entries. Census: only
 `motion-map__defaults` and `motion-map__start` added. **This closes the phase-3 list.**
 
+Ray diagram and motion map, critic round: FAIL on `1e9451f` — 4 blockers, 11 majors, 12 minors — with the physics right
+everywhere and the *printing* and the *extremes* wrong. Blockers: u = 2f said "smaller" at m = −1, in the shipped
+example whose point is that the image is the same size (a magnification within 2 % of 1 is now "the same size"); the
+printed magnification and image height disagreed with the printed object height ("Magnification −0.7, image height
+−2.7 cm" beside h = 4, where −0.7 × 4 = −2.8) — `printed()` now computes each number from the previous printed one; the
+motion map printed `a = 2` in the givens and "Acceleration −2" in the readout for the same figure (the givens print the
+signed value); and a constant-velocity map printed "0.1, 0.1, 0.1, 5.00e−2, 5.00e−2" under "Equal gaps: constant
+velocity", which was float noise in a gap computed by subtracting positions — gaps now come from the mean velocity
+times dt where that is exact, and from the positions only where the stop clamps them. Majors: the ray diagram's scale
+clamp broke the fit near the focal point (u = 10.5 put the image at x = 675 on a 640 canvas) and its canvas height
+ignored a tall image (f = 10, u = 6, h = 10 was clipped at y = −166) — one uniform scale now fits both directions and
+the axis is centred in the band; the motion map's clamp drew fewer dots than its readout listed (v₀ = 10, a = 5, dt = 1,
+n = 8 put three dots off the canvas); both student copies leaked (the ray diagram printed the real/virtual sentence, the
+motion map the acceleration and "v throughout") and both now blank them; the virtual image arrow was solid although the
+FAQ promised dashed; **the lens symbols were swapped** (the converging lens had its heads pointing inward); the motion
+handle inverted an unclamped parabola while the flashes clamp at the stop (it is not offered where it cannot be
+inverted); two example names were false ("from rest" starting at 0.5 m/s, "until it stops" never stopping); and the FAQ
+credited the readout with the stopping time and distance, which is the editor's Notes box. Report:
+`docs/critic-reports/2026-10-29-ray-motion-critic.md`.
+
 Left open: axis ink `#111827` is grey but not exactly
 neutral; trig's key prints a Hidden side inside a fraction; two-label y axes on tall waves; some coordinate labels
 sit over the drop lines; two example names overstate what they show.

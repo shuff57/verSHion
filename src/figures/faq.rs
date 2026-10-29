@@ -3569,7 +3569,7 @@ const MOTION_MAP: &[Faq] = &[
     },
     Faq {
         q: "Why does the object stop instead of going backwards?",
-        a: "A slowing object cannot reverse without something pushing it back. When the velocity would reach zero the dots sit on the stopping point, and the readout says how far it went and how long it took. Turn the acceleration down to keep every flash before the stop.",
+        a: "A slowing object cannot reverse without something pushing it back. When the velocity would reach zero the dots sit on the stopping point, with no arrow. The figure keeps the editor's Notes box informed: it says how far it went, how long it took, and that the later flashes are at the stop — turn the acceleration down if you want every flash before it.",
     },
     Faq {
         q: "How do I make a worksheet?",

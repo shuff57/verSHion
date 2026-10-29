@@ -156,8 +156,8 @@ moon-seasons__defaults f3d39f242e7dabeb
 moon-seasons__start f3d39f242e7dabeb
 motion-graphs__defaults 3c895b3293e8d26b
 motion-graphs__start 3c895b3293e8d26b
-motion-map__defaults 3ce9289c456c1bba
-motion-map__start 3ce9289c456c1bba
+motion-map__defaults 56e3b4a5b05d1a54
+motion-map__start 56e3b4a5b05d1a54
 music-staff__defaults 0d9580a8b0df7e66
 music-staff__start 0d9580a8b0df7e66
 network-topology__defaults fa59e7de9e0e081e
@@ -220,8 +220,8 @@ pv-diagram__defaults 308249e292637fdc
 pv-diagram__start 308249e292637fdc
 pyramid__defaults 26ad1f6ad8a8e29e
 pyramid__start b926d93b20c0f740
-ray-diagram__defaults 763503c014d603bd
-ray-diagram__start 763503c014d603bd
+ray-diagram__defaults 258b415dcb23f507
+ray-diagram__start 258b415dcb23f507
 rc-curve__defaults 9be7c6f399899d0e
 rc-curve__start 9be7c6f399899d0e
 rectangle__defaults 67e1b7b306d8ab1f

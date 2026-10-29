@@ -71,25 +71,49 @@ pub fn derived(p: &Params) -> (Option<f64>, Option<f64>, Option<f64>) {
     (Some(v), Some(m), Some(m * h))
 }
 
-/// One line saying what the image is like, from the sign of the image distance and the magnification.
+/// One line saying what the image is like, from the sign of the image distance and the magnification. A
+/// magnification of exactly -1 or +1 is "the same size", not "smaller": at u = 2f that is the whole point of the case.
 pub fn nature(p: &Params) -> String {
-    let (f, u, _) = given(p);
+    let (f, _, _) = given(p);
     let (v, m, _) = derived(p);
     match v {
         None => "No image: with the object at the focal point the rays leave parallel".to_string(),
         Some(v) => {
             let real = v > 0.0;
             let upright = m.is_some_and(|m| m > 0.0);
-            let bigger = m.is_some_and(|m| m.abs() > 1.0);
-            match (real, upright, bigger) {
-                (true, false, true) => "Real, inverted and magnified".to_string(),
-                (true, false, false) => "Real, inverted and smaller".to_string(),
-                (false, true, true) => "Virtual, upright and magnified, on the same side as the object".to_string(),
-                (false, true, false) => "Virtual, upright and smaller, on the same side as the object".to_string(),
+            let size = m.map(|m| m.abs()).unwrap_or(1.0);
+            let size = if (size - 1.0).abs() < 0.02 { "the same size" } else if size > 1.0 { "magnified" } else { "smaller" };
+            let side = if real { "" } else { ", on the same side as the object" };
+            match (real, upright) {
+                (true, false) => format!("Real, inverted and {size}"),
+                (false, true) => format!("Virtual, upright and {size}{side}"),
                 _ => if f > 0.0 { "Real image".to_string() } else { "Virtual image".to_string() },
             }
         }
     }
+}
+
+/// The three numbers as they will be printed, computed one from the next so they agree: the magnification comes from
+/// the printed image distance, and the image height from the printed magnification. Printing each from the exact value
+/// let "Magnification -0.7, image height -2.7 cm" sit beside an object of 4 cm, where -0.7 x 4 is -2.8.
+pub fn printed(p: &Params) -> (Option<f64>, Option<f64>, Option<f64>) {
+    let (_, u, h) = given(p);
+    let (v, m, hi) = derived(p);
+    let dec = p.i("dec").clamp(1, 3) as i32;
+    let round = |x: f64| {
+        let f = 10f64.powi(dec);
+        (x * f).round() / f
+    };
+    let vp = v.map(round);
+    let mp = match (vp, m) {
+        (Some(vp), Some(_)) => Some(round(-vp / u)),
+        (_, m) => m.map(round),
+    };
+    let hp = match (mp, hi) {
+        (Some(mp), Some(_)) => Some(round(mp * h)),
+        (_, hi) => hi.map(round),
+    };
+    (vp, mp, hp)
 }
 
 /// A number that never rounds a real value to "0".
@@ -111,6 +135,8 @@ fn text_el(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) -> Stri
 pub struct Report {
     /// Where the object tip is, in pixels (the drag handle).
     pub object_tip: (f64, f64),
+    /// Where the image tip is, when there is one.
+    pub image_tip: Option<(f64, f64)>,
     /// Pixels per centimetre, and the axis y.
     pub scale: f64,
     pub axis_y: f64,
@@ -130,41 +156,53 @@ pub fn build(p: &Params) -> (String, Report) {
         if print { VIRTUAL_PRINT } else { VIRTUAL },
     );
 
-    // the drawing scale: everything from the object to the far focal point has to fit
-    let right = v.map(|v| v.abs()).unwrap_or(0.0).max(f.abs());
-    let scale = ((CX - 70.0) / u).min((W - CX - 60.0) / right.max(1.0)).clamp(1.5, 16.0);
     let rows_y0 = ROWS_Y0 + (lab - 1.0) * 30.0;
     let w = (W * (1.0 + 0.6 * (lab - 1.0))).max(W);
     let mut d = Doc::new(w, rows_y0 + 3.0 * ROW_H * lab + 8.0);
     d.describe("Ray diagram", "A thin lens with the principal rays and the image they form");
 
-    let axis_y = AX;
+    // The drawing scale has to fit both ways round: the object to the left and the image to the right, and — the part
+    // that used to be missed — the taller of the object and the image above and below the axis. One scale for both
+    // axes, because a ray diagram that is not uniform teaches nothing.
+    let v_abs = v.map(|v| v.abs()).unwrap_or(f.abs()).max(f.abs()).max(0.001);
+    let hi_v = hi.unwrap_or(0.0);
+    let up = h.max(if hi_v > 0.0 { hi_v } else { 0.0 }).max(0.2);
+    let down = if hi_v < 0.0 { -hi_v } else { 0.0 };
+    let band = rows_y0 - 60.0 - 30.0;
+    let horiz = ((CX - 70.0) / u).min((w - CX - 60.0) / v_abs);
+    let vert = band / (up + down).max(0.2);
+    let scale = horiz.min(vert).clamp(0.3, 16.0);
+    // centre what is drawn in the band rather than hanging it from the top
+    let axis_y = 30.0 + (band - (up + down) * scale).max(0.0) / 2.0 + up * scale;
     d.line(20.0, axis_y, w - 20.0, axis_y, ink, 1.2);
 
-    // the lens, drawn as the usual double arrow
+    // the lens, drawn as the usual double arrow: a converging lens is thicker in the middle, so its heads point
+    // outward; a diverging one is thinner, so they point inward
     let (lt, lb) = (axis_y - LENS_H, axis_y + LENS_H);
     d.line(CX, lt, CX, lb, lens, 2.4);
     let conv = f > 0.0;
     for (y, dir) in [(lt, -1.0), (lb, 1.0)] {
         let tip = y + dir * 9.0;
-        // converging: heads point outward (the lens is thicker in the middle); diverging: inward
-        let head = if conv { y } else { tip };
-        let tail = if conv { tip } else { y };
+        let (tail, head) = if conv { (y, tip) } else { (tip, y) };
         d.arrow(CX, tail, CX, head, lens, 1.8);
     }
 
-    // the focal points
+    // the focal points: their labels are dropped when the drawing is so compressed that the two would print into
+    // each other (a long focal length seen at a tiny scale)
     let fpx = f.abs() * scale;
     for (x, name) in [(CX - fpx, "F"), (CX + fpx, "F\u{2032}")] {
         d.circle(x, axis_y, 3.0, lens, lens, 1.0);
-        d.raw(&text_el(x, axis_y + 22.0, 12.0 * lab, "middle", lens, name));
+        if fpx >= 24.0 { d.raw(&text_el(x, axis_y + 22.0, 12.0 * lab, "middle", lens, name)); }
     }
 
     // the object
     let ox = CX - u * scale;
     let oy = axis_y - h * scale;
     d.arrow(ox, axis_y, ox, oy, ink, 2.2);
-    d.raw(&text_el(ox, oy - 10.0, 12.0 * lab, "middle", ink, "object"));
+    // the lens caption sits above the lens; the object caption is dropped where the two would print into each other
+    let lens_cap = (axis_y - LENS_H - 14.0).max(12.0);
+    let crowded = |x: f64, y: f64| (x - CX).abs() < 110.0 && (y - lens_cap).abs() < 26.0;
+    if scale >= 2.0 && !crowded(ox, oy - 10.0) { d.raw(&text_el(ox, oy - 10.0, 12.0 * lab, "middle", ink, "object")); }
 
     // the rays: parallel-then-through-F', through the centre, and through F-then-parallel
     let (fx2, fx1) = (CX + fpx, CX - fpx);
@@ -193,7 +231,8 @@ pub fn build(p: &Params) -> (String, Report) {
         d.line(CX, yc, edge, yc, ray, 1.6);
     }
 
-    // the image, dashed when it is virtual
+    // the image, dashed when it is virtual — both the construction lines and the arrow itself, which is what the FAQ
+    // promises and what survives a Print copy where the colour cue is gone
     if let (Some(v), Some(hi)) = (v, hi) {
         let ix = CX + v * scale;
         let iy = axis_y - hi * scale;
@@ -201,29 +240,38 @@ pub fn build(p: &Params) -> (String, Report) {
             // the rays only appear to come from here: extend them backwards
             d.raw(&format!(r##"<line x1="{CX:.2}" y1="{oy:.2}" x2="{ix:.2}" y2="{iy:.2}" stroke="{virt}" stroke-width="1.4" stroke-dasharray="6 4"/>"##));
             d.raw(&format!(r##"<line x1="{CX:.2}" y1="{axis_y:.2}" x2="{ix:.2}" y2="{iy:.2}" stroke="{virt}" stroke-width="1.4" stroke-dasharray="6 4"/>"##));
+            d.arrow_with(ix, axis_y, ix, iy, virt, 2.2, "5 3", false);
+        } else {
+            d.arrow(ix, axis_y, ix, iy, virt, 2.2);
         }
-        d.arrow(ix, axis_y, ix, iy, virt, 2.2);
-        d.raw(&text_el(ix, iy + if hi < 0.0 { 20.0 } else { -10.0 }, 12.0 * lab, "middle", virt, "image"));
+        // the label goes clear of the canvas edge and of the axis
+        let ly = (iy + if hi < 0.0 { 20.0 } else { -10.0 }).clamp(12.0, rows_y0 - 40.0);
+        let lx = ix.clamp(30.0, w - 30.0);
+        if scale >= 2.0 && !crowded(lx, ly) { d.raw(&text_el(lx, ly, 12.0 * lab, "middle", virt, "image")); }
     }
-    d.raw(&text_el(CX, axis_y - LENS_H - 14.0, 12.0 * lab, "middle", lens, if conv { "converging lens" } else { "diverging lens" }));
+    if scale >= 2.0 {
+        d.raw(&text_el(CX, lens_cap, 12.0 * lab, "middle", lens, if conv { "converging lens" } else { "diverging lens" }));
+    }
 
     // the givens
     let givens = format!("f = {} cm ({}),  u = {} cm,  h = {} cm", q_num(f.abs(), 2), p.s("lens"), q_num(u, 2), q_num(h, 2));
     d.raw(&text_el(24.0, rows_y0 - 18.0 * lab, 12.0 * lab, "start", ink, &givens));
 
-    // the readout
+    // the readout, from the numbers as they will be printed so that they agree with each other
+    let (vp, mp, hp) = printed(p);
     let rows = [
         match v {
-            Some(v) if ans => format!("Image distance  {} cm{}", q_num(v, dec), if v < 0.0 { " (on the object's side)" } else { "" }),
+            Some(_) if ans => format!("Image distance  {} cm{}", q_num(vp.unwrap_or(0.0), dec), if vp.unwrap_or(0.0) < 0.0 { " (on the object's side)" } else { "" }),
             Some(_) => format!("Image distance  {BLANK} cm"),
             None => "No image: the rays leave parallel".to_string(),
         },
-        match (m, hi) {
-            (Some(m), Some(hi)) if ans => format!("Magnification  {},  image height  {} cm", q_num(m, dec), q_num(hi, dec)),
+        match (mp, hp) {
+            (Some(m), Some(h)) if ans => format!("Magnification  {},  image height  {} cm", q_num(m, dec), q_num(h, dec)),
             (Some(_), Some(_)) => format!("Magnification  {BLANK},  image height  {BLANK} cm"),
             _ => String::new(),
         },
-        nature(p),
+        // the nature of the image follows from the diagram, so it is part of the answer
+        if ans { nature(p) } else if v.is_some() { "The image is ______, ______ and ______".to_string() } else { "No image: the rays leave parallel".to_string() },
     ];
     for (i, line) in rows.iter().enumerate() {
         d.raw(&format!(
@@ -235,7 +283,8 @@ pub fn build(p: &Params) -> (String, Report) {
         ));
     }
 
-    (d.finish(), Report { object_tip: (ox, oy), scale, axis_y })
+    let image_tip = v.zip(hi).map(|(v, hi)| (CX + v * scale, axis_y - hi * scale));
+    (d.finish(), Report { object_tip: (ox, oy), image_tip, scale, axis_y })
 }
 
 /// The object tip is draggable: sideways sets the object distance, up and down sets its height.
@@ -351,6 +400,49 @@ mod tests {
     }
 
     #[test]
+    fn twice_the_focal_length_is_the_same_size_not_smaller() {
+        // m = -1 is the textbook "same size" case; calling it smaller was wrong
+        let n = nature(&with(&[f("u", 20.0)]));
+        assert!(n.contains("same size"), "{n}");
+        assert!(!n.contains("smaller"), "{n}");
+    }
+
+    #[test]
+    fn the_printed_magnification_and_image_height_agree_with_the_object() {
+        // m printed at one decimal, then applied to h, must give exactly the printed image height
+        for (list, h) in [
+            (vec![], 4.0),
+            (vec![s("lens", "diverging"), f("u", 60.0)], 4.0),
+            (vec![f("f", 5.0), f("u", 2.0)], 4.0),
+            (vec![f("h", 7.5), f("f", 6.0), f("u", 17.5)], 7.5),
+        ] {
+            let (_, m, hi) = printed(&with(&list));
+            let (m, hi) = (m.unwrap(), hi.unwrap());
+            assert!((m * h - hi).abs() < 1e-9 + 0.05 * h, "m {m} x h {h} != {hi}");
+        }
+    }
+
+    #[test]
+    fn the_image_stays_on_the_canvas_even_close_to_the_focal_point_and_when_tall() {
+        for list in [
+            vec![f("u", 10.5)], vec![f("u", 10.2)], vec![f("u", 9.8)],
+            vec![f("u", 6.0), f("h", 10.0)], vec![f("u", 2.0), f("h", 10.0)],
+            vec![f("f", 40.0), f("u", 2.0)], vec![f("f", 4.0), f("u", 60.0)],
+        ] {
+            let p = with(&list);
+            let rep = build(&p).1;
+            if let Some((ix, iy)) = rep.image_tip {
+                assert!(ix.is_finite() && iy.is_finite(), "{list:?}: image not finite");
+                assert!(ix > 0.0 && ix < W * 1.7, "{list:?}: image x {ix} off the canvas");
+                assert!(iy > 0.0 && iy < ROWS_Y0, "{list:?}: image y {iy} off the canvas");
+            }
+            // the object tip too
+            let (ox, oy) = rep.object_tip;
+            assert!(ox > 0.0 && ox < W * 1.7 && oy > 0.0 && oy < ROWS_Y0, "{list:?}: object at {ox},{oy}");
+        }
+    }
+
+    #[test]
     fn the_answers_are_blank_on_the_student_copy() {
         let stu = texts(&render_of(&[b(SHOW_ANSWERS, false)]));
         assert!(stu.contains("Image distance  _____ cm"), "{stu}");
@@ -381,7 +473,14 @@ mod tests {
     #[test]
     fn ray_pngs() {
         let Ok(dir) = std::env::var("VERSHION_PNG_DIR") else { return };
-        let mut cases: Vec<(String, Vec<(&'static str, Value)>)> = vec![("default".into(), vec![]), ("large".into(), vec![s("label_size", "Large")])];
+        let mut cases: Vec<(String, Vec<(&'static str, Value)>)> = vec![
+            ("default".into(), vec![]),
+            ("large".into(), vec![s("label_size", "Large")]),
+            // the extremes the critic named: near the focal point, and a tall object
+            ("nearfocus".into(), vec![f("u", 10.5)]),
+            ("tall".into(), vec![f("u", 6.0), f("h", 10.0)]),
+            ("closeup".into(), vec![f("u", 2.0), f("h", 10.0)]),
+        ];
         for (i, (_, l)) in examples(ID).unwrap().into_iter().map(|e| (e.name.to_string(), e.params)).enumerate() { cases.push((format!("ex{i}"), l)); }
         for (tag, list) in cases {
             for (kind, extra) in [("colour", vec![]), ("print", vec![s("style", "Print")]), ("student", vec![b(SHOW_ANSWERS, false)]), ("key", vec![b(SHOW_ANSWERS, true)])] {
