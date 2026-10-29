@@ -1167,6 +1167,24 @@ fn d2i_a_figure_only_change_cannot_slip_in_through_a_deleted_question() {
 }
 
 #[test]
+fn d2i_restoring_the_base_version_is_allowed_without_a_base_record() {
+    // (round 6, critic N1) a base too big to keep (no record): the strip says the count is not fully known, never "in step",
+    // so restoring the base version is allowed even over a figure-settings edit the record could not hold
+    let (mut bank, mut link) = linked();
+    let a = local_of(&link, QA);
+    bank.questions[0].stem = "My unsent edit".into();
+    bank.questions[0].figure = Some(crate::model::FigureSpec { id: "triangle".into(), params: [("a".to_string(), json!(3))].into_iter().collect() });
+    bank.modified += 10;
+    link.base.clear();
+    link.mark_bank(&bank);
+    let mut banks = vec![bank];
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    let nine = body(9, &v9(), false);
+    let r = restore_question(&mut banks, &ask(&link, Some(&a), QA, &nine), &sink, &|_: &[QuestionBank]| Ok(()), NOW + 100_000);
+    assert_eq!(r.map(|d| d.version), Ok(9));
+}
+
+#[test]
 fn d2i_a_deleted_question_comes_back_from_a_counted_version() {
     // (round 6, critic N1) the same deleted question, restored from a version that really changes its words: the picture
     // and words count, so it comes back (never refused for a figure it does not carry).
