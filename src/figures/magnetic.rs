@@ -113,9 +113,10 @@ pub fn build(p: &Params) -> (String, Report) {
         d.circle(CX, CY, rr, "none", field, 1.6);
         // the arrow sits ON its own circle, at the top, with a chord proportional to the radius: on screen
         // anticlockwise means the top of the circle moves to the LEFT, and a current out of the page gives
-        // anticlockwise field lines (right-hand rule), a current into it gives clockwise ones
+        // anticlockwise field lines (right-hand rule), a current into it gives clockwise ones. The floor keeps the
+        // chord longer than the arrowhead, which otherwise reads as a stub on the inner circle
         let y = CY - rr;
-        let half = (rr * 0.22).clamp(5.0, 26.0);
+        let half = (rr * 0.34).clamp(12.0, 26.0);
         let (xa, xb) = if out { (CX + half, CX - half) } else { (CX - half, CX + half) };
         d.arrow(xa, y, xb, y, field, 1.8);
     }

@@ -72,8 +72,8 @@ earth-layers__defaults 37c454c5d31bef26
 earth-layers__start 37c454c5d31bef26
 elasticity__defaults f12af64ea90eafaf
 elasticity__start f12af64ea90eafaf
-electric-field__defaults ccd1c14fc9c55a03
-electric-field__start ccd1c14fc9c55a03
+electric-field__defaults f5477ca3f656ac36
+electric-field__start f5477ca3f656ac36
 energy-bar-chart__defaults 2140369fa0365d7c
 energy-bar-chart__start 2140369fa0365d7c
 er-diagram__defaults 8866218ba5ebbaac
@@ -134,8 +134,8 @@ logic-circuit__defaults 7768e6a757381fcb
 logic-circuit__start 7768e6a757381fcb
 lorenz__defaults ef6c047cbc7881c4
 lorenz__start ef6c047cbc7881c4
-magnetic-field__defaults 9018c7f61cb12ee6
-magnetic-field__start 9018c7f61cb12ee6
+magnetic-field__defaults e92616b361f661d0
+magnetic-field__start e92616b361f661d0
 map-scale__defaults b5b2ddcbc80cc9ca
 map-scale__start b5b2ddcbc80cc9ca
 mapping-diagram__defaults bca744bdcfc94138
@@ -214,8 +214,8 @@ pulley__defaults 4c786acc64ec8d80
 pulley__start 4c786acc64ec8d80
 punnett-square__defaults cbc16b93afeaf4ad
 punnett-square__start cbc16b93afeaf4ad
-pv-diagram__defaults 75bac0809d14295b
-pv-diagram__start 75bac0809d14295b
+pv-diagram__defaults 308249e292637fdc
+pv-diagram__start 308249e292637fdc
 pyramid__defaults 26ad1f6ad8a8e29e
 pyramid__start b926d93b20c0f740
 rc-curve__defaults 9be7c6f399899d0e

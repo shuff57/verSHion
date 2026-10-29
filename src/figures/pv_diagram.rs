@@ -78,9 +78,18 @@ pub fn derived(p: &Params) -> (f64, f64, f64) {
     }
 }
 
+/// The left margin the y tick labels and the rotated title need at this label size: the title's band (it is drawn
+/// at x = 18, rotated, so it reaches from about x = 9 across its font size) plus the widest label plus a gap. A
+/// margin that only grew with the label size left a seven-digit pressure printing across the title, which the
+/// slider minimum V1 = 1 L reaches at 1 mol and 300 K.
+fn left_margin(lab: f64, widest_label: usize) -> f64 {
+    let title_band = 9.0 + 13.0 * lab + 4.0;
+    let labels = widest_label as f64 * 0.56 * 11.0 * lab;
+    (L + (lab - 1.0) * 34.0).max(title_band + labels + 10.0)
+}
+
 /// A number that never rounds a real value to "0".
-fn q_num(v: f64, dec: i64) -> String {
-    let s = num(v, dec);
+fn q_num(v: f64, dec: i64) -> String {    let s = num(v, dec);
     let all_zero = s.trim_start_matches('\u{2212}').chars().filter(|c| c.is_ascii_digit()).all(|c| c == '0');
     if v != 0.0 && all_zero { format!("{v:.2e}").replace('-', "\u{2212}") } else { s }
 }
@@ -120,20 +129,21 @@ pub fn build(p: &Params) -> (String, Report) {
     );
 
     let rows_y0 = ROWS_Y0 + (lab - 1.0) * 30.0;
-    let w = (W * (1.0 + 1.1 * (lab - 1.0))).max(W);
-    let mut d = Doc::new(w, rows_y0 + 3.0 * ROW_H * lab + 8.0);
-    if print {
-        d.defs(r##"<pattern id="pv-shade" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="#ffffff"/><line x1="0" y1="0" x2="0" y2="8" stroke="#666666" stroke-width="2.0"/></pattern>"##);
-    }
-    d.describe("PV diagram", "A pressure-volume diagram with the work under the path shaded");
-
     // the window: a little past the two volumes and the higher pressure
     let (vlo, vhi) = (v1.min(v2), v1.max(v2));
     let (plo, phi) = (p1.min(p2), p1.max(p2));
+    // the left margin is what the y tick labels and the rotated title need, measured rather than guessed: a
+    // pressure high enough to print seven digits at Large label size crosses the title if the margin only grows
+    // with the label size
+    let (yw0, yw1) = (0.0, phi * 1.1);
+    let ys_step = nice_step(yw1 - yw0, 5.0);
+    let yt = ticks(yw0, yw1, ys_step);
+    let y_widest = yt.iter().map(|(_, s)| s.chars().count()).max().unwrap_or(1);
+    let left = left_margin(lab, y_widest);
     let frame = Frame {
-        w: L + (lab - 1.0) * 34.0 + PLOT_W + 20.0,
+        w: left + PLOT_W + 20.0,
         h: T + PLOT_H + 44.0,
-        l: L + (lab - 1.0) * 34.0,
+        l: left,
         r: 20.0,
         t: T,
         b: 44.0,
@@ -142,9 +152,15 @@ pub fn build(p: &Params) -> (String, Report) {
         y0: 0.0,
         y1: phi * 1.1,
     };
+    let w = (W * (1.0 + 1.1 * (lab - 1.0))).max(frame.w);
+    let mut d = Doc::new(w, rows_y0 + 3.0 * ROW_H * lab + 8.0);
+    if print {
+        d.defs(r##"<pattern id="pv-shade" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="#ffffff"/><line x1="0" y1="0" x2="0" y2="8" stroke="#666666" stroke-width="2.0"/></pattern>"##);
+    }
+    d.describe("PV diagram", "A pressure-volume diagram with the work under the path shaded");
+
     let xs_step = nice_step(frame.x1 - frame.x0, 5.0);
-    let ys_step = nice_step(frame.y1 - frame.y0, 5.0);
-    let (xt, yt) = (ticks(frame.x0, frame.x1, xs_step), ticks(frame.y0, frame.y1, ys_step));
+    let xt = ticks(frame.x0, frame.x1, xs_step);
     let grid = if print { GRID_PRINT } else { GRID_COLOUR };
     // the pressures are the answer: the student copy keeps the gridlines but not the numbers on the y axis
     for (v, _) in &xt { let x = frame.px(*v); d.line(x, frame.top(), x, frame.bottom(), grid, 1.0); }
@@ -193,7 +209,10 @@ pub fn build(p: &Params) -> (String, Report) {
     for (k, (v, pp)) in [(v1, p1), (v2, p2)].iter().enumerate() {
         let (x, y) = (frame.px(*v * 1e3), frame.py(*pp));
         d.circle(x, y, 4.0, path_col, ink, 1.2);
-        d.raw(&text_el(x, y - 9.0, 11.0 * lab, "middle", path_col, if k == 0 { "1" } else { "2" }));
+        // the number goes above the point unless that would run off the top of the canvas, where the start of a
+        // high-pressure path sits: it goes below instead
+        let ly = if y - 9.0 < 12.0 * lab { y + 9.0 + 8.0 * lab } else { y - 9.0 };
+        d.raw(&text_el(x, ly, 11.0 * lab, "middle", path_col, if k == 0 { "1" } else { "2" }));
     }
     // the direction of the change, drawn on the key only (it says which way the work goes)
     if ans {
@@ -325,6 +344,20 @@ mod tests {
     }
 
     #[test]
+    fn a_long_pressure_label_never_reaches_the_rotated_title() {
+        // the widest case: V1 = 1 L at 1 mol and 300 K prints a seven-digit pressure, at Large
+        let lab = svg::label_factor("Large");
+        for digits in [1usize, 4, 7, 8] {
+            let left = left_margin(lab, digits);
+            let title_right = 18.0 + 13.0 * lab / 2.0; // the rotated title's band, centred on x = 18
+            let label_left = left - 8.0 - digits as f64 * 0.56 * 11.0 * lab;
+            assert!(label_left > title_right, "{digits} digits: label starts {label_left}, title reaches {title_right}");
+        }
+        // and the default case keeps its old margin or grows by only a few px to clear the title
+        assert!(left_margin(1.0, 6) >= L && left_margin(1.0, 6) < L + 8.0, "{}", left_margin(1.0, 6));
+    }
+
+    #[test]
     fn print_is_neutral_grey_only() {
         let svg = render_of(&[s("style", "Print"), b(SHOW_ANSWERS, true)]);
         for attr in ["stroke=\"#", "fill=\"#"] {
@@ -343,7 +376,14 @@ mod tests {
     #[test]
     fn pv_pngs() {
         let Ok(dir) = std::env::var("VERSHION_PNG_DIR") else { return };
-        let mut cases: Vec<(String, Vec<(&'static str, Value)>)> = vec![("default".into(), vec![]), ("large".into(), vec![s("label_size", "Large")])];
+        let mut cases: Vec<(String, Vec<(&'static str, Value)>)> = vec![
+            ("default".into(), vec![]),
+            ("large".into(), vec![s("label_size", "Large")]),
+            // the widest axis the controls reach: V1 = 1 L prints a seven-digit pressure, and at Large it used to
+            // print across the rotated title
+            ("v1one".into(), vec![f("v1", 1.0), s("label_size", "Large")]),
+            ("high".into(), vec![f("moles", 5.0), f("temp", 800.0), f("v1", 1.0), f("v2", 40.0), s("label_size", "Large")]),
+        ];
         for (i, (_, l)) in examples(ID).unwrap().into_iter().map(|e| (e.name.to_string(), e.params)).enumerate() { cases.push((format!("ex{i}"), l)); }
         for (tag, list) in cases {
             for (kind, extra) in [("colour", vec![]), ("print", vec![s("style", "Print")]), ("student", vec![b(SHOW_ANSWERS, false)]), ("key", vec![b(SHOW_ANSWERS, true)])] {

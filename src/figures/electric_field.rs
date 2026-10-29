@@ -153,23 +153,21 @@ pub fn build(p: &Params) -> (String, Report) {
     d.circle(CX, CY, 9.0, ch, ink, 1.6);
     d.raw(&text_el(CX, CY + 5.0, 14.0 * lab, "middle", "#ffffff", if positive { "+" } else { "\u{2212}" }));
 
-    // the test charge at its distance, and the force on it
-    let rr = (r / 5.0 * RMAX).clamp(40.0, RMAX + 10.0);
+    // the test charge at its distance. The floor only stops it landing on the source disc: 24 px per metre keeps
+    // 0.1 m and 1.0 m apart on the canvas, which a larger floor would not
+    let rr = (r / 5.0 * RMAX).clamp(16.0, RMAX + 10.0);
     let test_at = (CX, CY - rr);
-    // the force is the answer, so the arrow is drawn only on the key
+    // the force is the answer, so the arrow is drawn only on the key. It is a fixed length showing the direction
+    // only — the magnitude is printed, and a length scaled to a force of 2e-7 N would be a pixel long — and it is
+    // drawn BESIDE the test charge rather than between the two charges, so it fits at every distance, including
+    // the attraction cases where the charge is close and there is no room on the radial line
     if ans && f.abs() > 0.0 {
-        // a fixed length showing the direction only: the magnitude is the answer and is printed, and a length
-        // scaled to a force of 2e-7 N would be a pixel long (and would encode the answer besides). The arrow is
-        // kept clear of the source disc below and of the canvas edge above.
         let up = f > 0.0;
-        let (y0, y1) = if up {
-            (test_at.1 - 8.0, (test_at.1 - 42.0).max(8.0))
-        } else {
-            (test_at.1 + 8.0, (test_at.1 + 42.0).min(CY - 13.0))
-        };
-        if (y1 - y0).abs() >= 8.0 {
-            d.arrow(test_at.0, y0, test_at.0, y1, ch, 2.2);
-            d.raw(&text_el(test_at.0 + 8.0, (y0 + y1) / 2.0 + 4.0, 12.0 * lab, "start", ch, "F"));
+        let x = test_at.0 + 15.0;
+        let (y_lo, y_hi) = ((test_at.1 + 13.0).min(CY - 13.0), (test_at.1 - 13.0).max(10.0));
+        if y_lo - y_hi >= 6.0 {
+            if up { d.arrow(x, y_lo, x, y_hi, ch, 2.2); } else { d.arrow(x, y_hi, x, y_lo, ch, 2.2); }
+            d.raw(&text_el(x + 7.0, (y_lo + y_hi) / 2.0 + 4.0, 12.0 * lab, "start", ch, "F"));
         }
     }
     d.circle(test_at.0, test_at.1, 5.0, ch, ink, 1.4);
@@ -287,6 +285,31 @@ mod tests {
             assert!(dy > 0.0, "{r}: it must sit above the charge");
             assert!(dy <= RMAX + 10.0, "{r}: off the canvas");
         }
+    }
+
+    #[test]
+    fn the_drawn_distance_distinguishes_near_from_far() {
+        // the floor exists only to keep the dot off the source disc; it must not flatten the whole range
+        let near = build(&with(&[f("r", 0.1)])).1.test_at.1;
+        let metre = build(&with(&[f("r", 1.0)])).1.test_at.1;
+        let far = build(&with(&[f("r", 5.0)])).1.test_at.1;
+        assert!(CY - near < CY - metre && CY - metre < CY - far, "{near} {metre} {far}");
+        assert!((CY - metre) - (CY - near) >= 6.0, "0.1 m and 1.0 m are drawn {} px apart", (CY - metre) - (CY - near));
+    }
+
+    #[test]
+    fn the_force_arrow_is_drawn_at_every_distance_with_a_force() {
+        // eight field-line arrows always; the force arrow is the ninth. It was missing for attraction below
+        // r = 1.1 m before, including the default.
+        let heads = |list: &[(&'static str, Value)]| render_of(list).matches("<polygon").count();
+        for r in [0.1, 0.5, 1.0, 1.1, 1.5, 2.5, 5.0] {
+            assert_eq!(heads(&[f("r", r), f("q0", -2.0), b(SHOW_ANSWERS, true)]), 9, "attraction at {r} m");
+            assert_eq!(heads(&[f("r", r), f("q0", 2.0), b(SHOW_ANSWERS, true)]), 9, "repulsion at {r} m");
+        }
+        // no force, no arrow
+        assert_eq!(heads(&[f("q0", 0.0), b(SHOW_ANSWERS, true)]), 8);
+        // and nothing on the student copy
+        assert_eq!(heads(&[f("q0", -2.0), b(SHOW_ANSWERS, false)]), 8);
     }
 
     #[test]

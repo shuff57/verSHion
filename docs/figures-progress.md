@@ -298,6 +298,18 @@ prompt and a place to write, with the pointer left where it is (that is the exer
 reading under the figure for the key. Test: the key prints `Force: 3.47 N`, a typed caption wins, and the reading does
 not appear anywhere in the worksheet SVG. Census unchanged, because the new control defaults to empty.
 
+Verification of that round (`8f40aff`, frozen copy, own target dir): seven of the eight fixes hold exactly — the PV
+student copy has no polygons and no y numbers, the standing markers count 3/5/…/13 on the key and zero on the student
+copy, the magnetic arrows sit at 145 − r on each circle, the electric force arrow is drawn in all 100 distance × sign
+renders, expansion and compression differ by 219 plot pixels, the givens say T1, and the Print hatch survives 66 % at
+0.7x, 1.3x and 2.0x. One held only partly: the PV title was still crossed by a seven-digit pressure label, which the
+slider minimum V1 = 1 L reaches. The cause was a left margin that grew 34 px per label step while the labels grew
+about 37; the margin is now measured from the widest label the axis prints, with the title's band added, and the two
+worst layouts are exported as PNG cases. The verification also caught two regressions the fixes themselves introduced:
+the electric 40 px distance floor made 0.1 m and 1.2 m draw identically (floor now 16 px, and the force arrow is drawn
+beside the test charge so it needs no room in the gap), and the magnetic inner arrowhead was longer than its chord
+(chord now 0.34 r clamped to 12–26). Report: `docs/critic-reports/2026-10-28-figures-verify-8f40aff.md`.
+
 Left open: axis ink `#111827` is grey but not exactly
 neutral; trig's key prints a Hidden side inside a fraction; two-label y axes on tall waves; some coordinate labels
 sit over the drop lines; two example names overstate what they show.

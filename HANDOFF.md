@@ -5,7 +5,7 @@ Updated 2026-10-28 late: the five-figure phase-3 critic round is fixed and commi
 
 ## Where things are
 - Worktree `/home/shuff57/Documents/GitHub/verSHion-figures`, branch `figures-gapfill` (based on `figures-circuits`). HEAD `21e5896` (phase 3: the five-figure critic's minors). **Math core, phase 2 and eight phase-3 figures are built; the five newest physics figures have had a combined critic round and a fix, and a verification critic is running on the fix commit.**
-- Do not touch the main repo `/home/shuff57/Documents/GitHub/verSHion` (branch `shared-pool-phase1`): it holds the circles D1 work, committed locally, waiting on critics 101/102.
+- Do not touch the main repo `/home/shuff57/Documents/GitHub/verSHion` (branch `shared-pool-phase1`): another session owns `src/share/` there. **The circles D1 critics 101/102 gate is closed** — their findings were fixed in `fb1b7e9` and re-checked in `cc49eed`, and that repo has since moved through D3 and D2 (`dce14de`). Nothing on the circles side is waiting on this worktree.
 - Loop spec: `docs/figures-loop.md`. Rules: `docs/figures-conventions.md`. Progress and critic minors: `docs/figures-progress.md`. Memory: `figures-gapfill-loop.md`.
 - Done and committed: phase 0, 1.1 conics (`b009d82`), 1.2 circle (`4f5715d`, closed), 1.3 rounds 1-3 (`c3eb729`, `0f81c30`, `2cc0a58`).
 - Standing rules: local commits only, never push, no deploy. Protected: `src/screens.rs`, `theme.rs`, `fonts.rs`, `main.rs`, `examples/`. Stop and ask for saved-format changes, new dependencies, or privacy wording.
@@ -60,12 +60,19 @@ Updated 2026-10-28 late: the five-figure phase-3 critic round is fixed and commi
   census checked, but **the full suite has not been run on `21e5896`** — it is deliberately deferred until the
   verification critic finishes, because `figuresui::tests::dragging_a_label_moves_it_as_one_undo_step` fails under the
   CPU contention of two concurrent full runs. Run it once the critic is done.
-- **A verification critic on `8f40aff` is running** in `/tmp/verify-k` (a `git archive` copy, own target dir), checking
-  each of the eight fixes rather than reviewing afresh. Its verdict is not in yet.
+- **A verification critic on `8f40aff` came back: 7 of 8 FIXED, 1 PARTLY** (the PV title was still crossed by a
+  seven-digit pressure label at every label size, from the reachable V1 = 1 L), plus 3 defects the fixes themselves
+  introduced: the PV endpoint number could sit against the top edge; the electric 40 px distance floor made 0.1 m and
+  1.2 m draw identically; the magnetic inner arrowhead was longer than its chord. All four fixed in the commit the
+  verification produced — see `docs/critic-reports/2026-10-28-figures-verify-8f40aff.md`. **The lesson worth keeping:
+  the first fix aimed at the symptom (make the margin grow with the label size) instead of at the cause (measure the
+  widest label the axis will print).**
 
 ## What is left in the figures loop
-- The three remaining phase-3 items: **spring-scale hide-reading**, **series-parallel and capacitor modes on
-  `circuit-diagram`**, and **handles on the ray diagram and the motion map** (`docs/figures-loop.md` has the order).
+- **Spring-scale hide-reading: done** (`82846df`) — a new `answer_text` caption, so the worksheet copy can read
+  `Force: ________ N` with the reading nowhere on the figure. Census unchanged.
+- The two remaining phase-3 items: **series-parallel and capacitor modes on `circuit-diagram`**, and **handles on the
+  ray diagram and the motion map** (`docs/figures-loop.md` has the order).
 - Then phase 4 (biology, 7 figures), phase 5 (chemistry, 10), phase 6 (stats, 7).
 - Phase 2 is complete and committed. Phase 3 built: energy bar charts, collision/momentum, circular motion, electric
   field, refraction, magnetic field, standing waves, PV diagrams.
