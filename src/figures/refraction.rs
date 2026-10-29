@@ -43,7 +43,7 @@ fn params() -> Vec<ParamDef> {
         ParamDef::float("n1", "Refractive index above", 1.0, 3.0, 0.05, 1.0),
         ParamDef::float("n2", "Refractive index below", 1.0, 3.0, 0.05, 1.5),
         ParamDef::float("angle", "Angle of incidence (degrees)", 0.0, 89.0, 1.0, 40.0),
-        ParamDef::int("dec", "Decimal places", 0, 2, 1),
+        ParamDef::int("dec", "Decimal places", 1, 4, 1),
         answers_param(),
         svg::style_param(),
         svg::label_size_param(),
@@ -90,7 +90,7 @@ pub fn build(p: &Params) -> (String, Report) {
     let (n1, n2, th1) = given(p);
     let th2 = refracted(p);
     let crit = critical(p);
-    let dec = p.i("dec").clamp(0, 2).max(1);
+    let dec = p.i("dec").clamp(1, 4);
     let print = p.s("style") == "Print";
     let ans = p.b(SHOW_ANSWERS);
     let lab = svg::label_factor(p.s("label_size"));
@@ -119,23 +119,28 @@ pub fn build(p: &Params) -> (String, Report) {
     d.raw(&text_el(inc.0 - 4.0, inc.1 - 8.0, size, "middle", ray, &format!("\u{3b8}\u{2081} = {}\u{b0}", num(th1, 1))));
 
     // the refracted ray, or the reflection when the angle is past the critical one
-    match th2 {
-        Some(t) => {
-            let t2 = t.to_radians();
-            let out = (OX + LEN * t2.sin(), OY + LEN * t2.cos());
-            d.arrow(OX, OY, out.0, out.1, refr, 2.4);
-            d.raw(&text_el(out.0 + 4.0, out.1 + 14.0, size, "middle", refr, &format!("\u{3b8}\u{2082} = {}\u{b0}", num(t, 1))));
-        }
-        None => {
-            // total internal reflection: the ray leaves at the incidence angle, above the interface
-            let refl = (OX + LEN * t1.sin(), OY - LEN * t1.cos());
-            d.arrow(OX, OY, refl.0, refl.1, refr, 2.4);
-            d.raw(&text_el(refl.0 + 4.0, refl.1 - 8.0, size, "middle", refr, "reflected"));
+    // the second ray is the answer, so the student copy shows only the incident ray and the normal. The label is
+    // kept out of the text band below, where its halo would erase the givens.
+    let label_y = |y: f64| y.min(rows_y0 - 30.0 * lab);
+    if ans {
+        match th2 {
+            Some(t) => {
+                let t2 = t.to_radians();
+                let out = (OX + LEN * t2.sin(), OY + LEN * t2.cos());
+                d.arrow(OX, OY, out.0, out.1, refr, 2.4);
+                d.raw(&text_el(out.0 + 4.0, label_y(out.1 + 14.0), size, "middle", refr, &format!("\u{3b8}\u{2082} = {}\u{b0}", num(t, 1))));
+            }
+            None => {
+                // total internal reflection: the ray leaves at the incidence angle, above the interface
+                let refl = (OX + LEN * t1.sin(), OY - LEN * t1.cos());
+                d.arrow(OX, OY, refl.0, refl.1, refr, 2.4);
+                d.raw(&text_el(refl.0 + 4.0, label_y(refl.1 - 8.0), size, "middle", refr, "reflected"));
+            }
         }
     }
 
     // the givens, always printed
-    let givens = format!("above n\u{2081} = {}, below n\u{2082} = {}, incident {} \u{b0}", num(n1, 2), num(n2, 2), num(th1, 1));
+    let givens = format!("above n\u{2081} = {}, below n\u{2082} = {}, incident {} \u{b0}, c = 3.00 \u{d7} 10\u{2078} m/s", num(n1, 2), num(n2, 2), num(th1, 1));
     d.raw(&text_el(24.0, rows_y0 - 18.0 * lab, 12.5 * lab, "start", ink, &givens));
 
     // the readout
@@ -144,14 +149,14 @@ pub fn build(p: &Params) -> (String, Report) {
     let rows = [
         match th2 {
             Some(t) => if ans { format!("Angle of refraction  {}\u{b0}", num(t, dec)) } else { format!("Angle of refraction  {BLANK}\u{b0}") },
-            None => "Total internal reflection: no refracted ray".to_string(),
+            None => if ans { "Total internal reflection: no refracted ray".to_string() } else { format!("Angle of refraction  {BLANK}\u{b0}") },
         },
         match crit {
             Some(k) => if ans { format!("Critical angle  {}\u{b0}", num(k, dec)) } else { format!("Critical angle  {BLANK}\u{b0}") },
-            None => "No critical angle: going into a denser medium".to_string(),
+            None => if (n1 - n2).abs() < 1e-9 { "Same medium either side: no bending at all".to_string() } else { "No critical angle: going into a denser medium".to_string() },
         },
         if ans {
-            format!("Speed in each medium  {:.2} \u{d7} 10\u{2078} m/s and {:.2} \u{d7} 10\u{2078} m/s", v1 / 1e8, v2 / 1e8)
+            format!("Speed above {:.2} \u{d7} 10\u{2078} m/s, below {:.2} \u{d7} 10\u{2078} m/s", v1 / 1e8, v2 / 1e8)
         } else {
             format!("Speed in each medium  {BLANK} m/s and {BLANK} m/s")
         },
@@ -265,9 +270,25 @@ mod tests {
     }
 
     #[test]
-    fn total_internal_reflection_is_said_in_words() {
-        let t = texts(&render_of(&[f("n1", 1.5), f("n2", 1.0), f("angle", 60.0), b(SHOW_ANSWERS, false)]));
-        assert!(t.contains("Total internal reflection"), "{t}");
+    fn total_internal_reflection_is_said_in_words_on_the_key_only() {
+        // the sentence is the answer: the student copy keeps a blank and shows no reflected ray
+        let mk = |ans: bool| render_of(&[f("n1", 1.5), f("n2", 1.0), f("angle", 60.0), b(SHOW_ANSWERS, ans)]);
+        let key = texts(&mk(true));
+        assert!(key.contains("Total internal reflection"), "{key}");
+        assert!(key.contains("reflected"), "the key draws the reflected ray: {key}");
+        let stu = texts(&mk(false));
+        assert!(!stu.contains("Total internal reflection"), "{stu}");
+        assert!(!stu.contains("reflected"), "{stu}");
+        assert!(stu.contains("Angle of refraction  _____"), "{stu}");
+    }
+
+    /// The refracted angle must not be spelled out on the student copy, by word or by drawn ray.
+    #[test]
+    fn the_student_copy_never_names_the_refracted_angle() {
+        for (n1, n2, th) in [(1.0, 1.5, 40.0), (1.0, 1.33, 60.0), (1.5, 1.0, 30.0)] {
+            let stu = texts(&render_of(&[f("n1", n1), f("n2", n2), f("angle", th), b(SHOW_ANSWERS, false)]));
+            assert!(!stu.contains("\u{3b8}\u{2082}"), "{n1} {n2} {th}: {stu}");
+        }
     }
 
     #[test]

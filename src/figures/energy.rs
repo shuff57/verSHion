@@ -1,8 +1,8 @@
 //! Energy bar charts: the stores of a falling body before and after, drawn as two stacks of bars on one scale so the
 //! total can be seen to stay the same while it moves between the stores. Drawn with `svg::Doc` only.
 //!
-//! The bars are the answer, so they are blank (outlined, no fill) while Show answers is off; the axes and the store
-//! names stay.
+//! The bars are the answer, so none are drawn while Show answers is off; the axes, the store names and the givens
+//! stay.
 use super::circle::num;
 use super::svg::{self, Doc};
 use super::*;
@@ -38,7 +38,7 @@ fn params() -> Vec<ParamDef> {
         ParamDef::float("h1", "Drops from height (m)", 0.5, 20.0, 0.5, 5.0),
         ParamDef::float("h2", "To height (m)", 0.0, 20.0, 0.5, 0.0),
         ParamDef::float("loss", "Share lost to air resistance", 0.0, 1.0, 0.05, 0.0),
-        ParamDef::int("dec", "Decimal places", 0, 2, 1),
+        ParamDef::int("dec", "Decimal places", 2, 4, 2),
         answers_param(),
         svg::style_param(),
         svg::label_size_param(),
@@ -49,14 +49,18 @@ fn render(p: &Params) -> String { build(p).0 }
 
 /// The six numbers: (GPE, KE, thermal) before and after, in joules.
 pub fn stores(p: &Params) -> [(f64, f64, f64); 2] {
-    let fin = |v: f64, lo: f64, hi: f64, d: f64| if v.is_finite() { v.clamp(lo, hi) } else { d };
-    let m = fin(p.f("mass"), 0.1, 20.0, 1.0);
-    let h1 = fin(p.f("h1"), 0.5, 20.0, 5.0);
-    let h2 = fin(p.f("h2"), 0.0, 20.0, 0.0).min(h1);
-    let loss = fin(p.f("loss"), 0.0, 1.0, 0.0);
+    let (m, h1, h2, loss) = given(p);
     let e_total = m * G * h1;
     let moved = m * G * (h1 - h2);
     [(e_total, 0.0, 0.0), (m * G * h2, moved * (1.0 - loss), moved * loss)]
+}
+
+/// The four inputs, clamped exactly as the chart computes from them, so the printed givens cannot disagree with the
+/// bars (a hand-edited link could otherwise print "m = 0 kg" beside a chart computed for 0.1 kg).
+pub fn given(p: &Params) -> (f64, f64, f64, f64) {
+    let fin = |v: f64, lo: f64, hi: f64, d: f64| if v.is_finite() { v.clamp(lo, hi) } else { d };
+    let (m, h1) = (fin(p.f("mass"), 0.1, 20.0, 1.0), fin(p.f("h1"), 0.5, 20.0, 5.0));
+    (m, h1, fin(p.f("h2"), 0.0, 20.0, 0.0).min(h1), fin(p.f("loss"), 0.0, 1.0, 0.0))
 }
 
 pub fn warnings(p: &Params) -> Vec<String> {
@@ -84,7 +88,7 @@ pub struct Report {
 pub fn build(p: &Params) -> (String, Report) {
     let s = stores(p);
     // two places at least: at one, a real 0.049 J still trimmed to "0 J" (the formatter drops a trailing zero)
-    let dec = p.i("dec").clamp(0, 2).max(2);
+    let dec = p.i("dec").clamp(2, 4);
     let print = p.s("style") == "Print";
     let ans = p.b(SHOW_ANSWERS);
     let f = svg::label_factor(p.s("label_size"));
@@ -108,7 +112,7 @@ pub fn build(p: &Params) -> (String, Report) {
     let cols = if print { ["url(#e-ke)", "url(#e-gpe)", "url(#e-th)"] } else { [KE, GPE, TH] };
 
     // the baseline and the scale
-    d.line(30.0, BASE, W - 30.0, BASE, ink, 2.0);
+    d.line(30.0, BASE, w - 30.0, BASE, ink, 2.0);
     let scale_h = |e: f64| (e / total * MAXBAR).clamp(0.0, MAXBAR);
 
     // short names: the columns are 52 px apart and "gravitational" would run into its neighbours
@@ -141,7 +145,7 @@ pub fn build(p: &Params) -> (String, Report) {
         11.0 * f,
         ink
     ));
-    let (m, h1, h2, loss) = (p.f("mass"), p.f("h1"), p.f("h2"), p.f("loss"));
+    let (m, h1, h2, loss) = given(p);
     let givens = format!(
         "m = {} kg, drops from {} m to {} m, {}% lost, g = {} m/s\u{b2}",
         num(m, 2),
@@ -315,7 +319,7 @@ mod tests {
     #[test]
     fn energy_pngs() {
         let Ok(dir) = std::env::var("VERSHION_PNG_DIR") else { return };
-        let mut cases: Vec<(String, Vec<(&'static str, Value)>)> = vec![("default".into(), vec![])];
+        let mut cases: Vec<(String, Vec<(&'static str, Value)>)> = vec![("default".into(), vec![]), ("large".into(), vec![s("label_size", "Large")])];
         for (i, (_, l)) in examples(ID).unwrap().into_iter().map(|e| (e.name.to_string(), e.params)).enumerate() { cases.push((format!("ex{i}"), l)); }
         for (tag, list) in cases {
             for (kind, extra) in [("colour", vec![]), ("print", vec![s("style", "Print")]), ("student", vec![b(SHOW_ANSWERS, false)]), ("key", vec![b(SHOW_ANSWERS, true)])] {

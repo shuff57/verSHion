@@ -3,7 +3,7 @@
 //!
 //! The velocities, the momenta and the kinetic energies are the answer, so they are blanks while Show answers is off;
 //! the carts and their given data stay.
-use super::circle::num;
+use super::circle::{num, tw};
 use super::svg::{self, Doc};
 use super::*;
 
@@ -39,7 +39,7 @@ fn params() -> Vec<ParamDef> {
         ParamDef::float("u1", "Velocity of cart A before (m/s)", -10.0, 10.0, 0.5, 4.0),
         ParamDef::float("m2", "Mass of cart B (kg)", 0.5, 20.0, 0.5, 3.0),
         ParamDef::float("u2", "Velocity of cart B before (m/s)", -10.0, 10.0, 0.5, 0.0),
-        ParamDef::int("dec", "Decimal places", 0, 2, 1),
+        ParamDef::int("dec", "Decimal places", 2, 4, 2),
         answers_param(),
         svg::style_param(),
         svg::label_size_param(),
@@ -76,6 +76,13 @@ pub fn totals(p: &Params) -> (f64, f64, f64, f64) {
     (pb, pa, kb, ka)
 }
 
+/// A number that never rounds a real value to "0" (a light cart into a heavy one leaves 0.0015 J, not zero).
+fn q(v: f64, dec: i64) -> String {
+    let s = num(v, dec);
+    let all_zero = s.trim_start_matches('\u{2212}').chars().filter(|c| c.is_ascii_digit()).all(|c| c == '0');
+    if v != 0.0 && all_zero { num(v, 4) } else { s }
+}
+
 pub fn warnings(p: &Params) -> Vec<String> {
     let (_, u1, _, u2) = given(p);
     // A is on the left and B on the right, so they only collide when A is closing on B: u1 > u2
@@ -102,7 +109,7 @@ pub fn build(p: &Params) -> (String, Report) {
     let (v1, v2) = after(p);
     let tot = totals(p);
     // at 0 places a perfectly inelastic 0.33 m/s prints as "0 m/s" beside a real momentum; one place at least
-    let dec = p.i("dec").clamp(0, 2).max(2);
+    let dec = p.i("dec").clamp(2, 4);
     let print = p.s("style") == "Print";
     let ans = p.b(SHOW_ANSWERS);
     let f = svg::label_factor(p.s("label_size"));
@@ -156,14 +163,16 @@ pub fn build(p: &Params) -> (String, Report) {
         num(m2, 2),
         num(u2, 2)
     );
-    d.raw(&text_el(24.0, 230.0, 12.0 * f, "start", ink, &data));
+    // the line shrinks to fit rather than being cut: tw at size 1 is the width per point of text
+    let fs = (12.0 * f).min((w - 48.0) / tw(&data, 1.0, false)).max(8.0);
+    d.raw(&text_el(24.0, 230.0, fs, "start", ink, &data));
 
     // the readout
     let rows = [
-        if ans { format!("Momentum before  {} kg m/s", num(tot.0, dec)) } else { format!("Momentum before  {BLANK} kg m/s") },
-        if ans { format!("Momentum after  {} kg m/s", num(tot.1, dec)) } else { format!("Momentum after  {BLANK} kg m/s") },
-        if ans { format!("Velocities after  A {} m/s,  B {} m/s", num(v1, dec), num(v2, dec)) } else { format!("Velocities after  A {BLANK} m/s,  B {BLANK} m/s") },
-        if ans { format!("Kinetic energy before {} J, after {} J", num(tot.2, dec), num(tot.3, dec)) } else { format!("Kinetic energy  {BLANK} J before, {BLANK} J after") },
+        if ans { format!("Momentum before  {} kg m/s", q(tot.0, dec)) } else { format!("Momentum before  {BLANK} kg m/s") },
+        if ans { format!("Momentum after  {} kg m/s", q(tot.1, dec)) } else { format!("Momentum after  {BLANK} kg m/s") },
+        if ans { format!("Velocities after  A {} m/s,  B {} m/s", q(v1, dec), q(v2, dec)) } else { format!("Velocities after  A {BLANK} m/s,  B {BLANK} m/s") },
+        if ans { format!("Kinetic energy before {} J, after {} J", q(tot.2, dec), q(tot.3, dec)) } else { format!("Kinetic energy  {BLANK} J before, {BLANK} J after") },
     ];
     for (i, line) in rows.iter().enumerate() {
         d.raw(&format!(
@@ -297,6 +306,17 @@ mod tests {
         assert!(key.contains("Momentum after  8"), "{key}");
     }
 
+    /// A light cart into a heavy one leaves a real kinetic energy of about 0.0015 J, not zero.
+    #[test]
+    fn a_small_kinetic_energy_never_prints_as_zero() {
+        for (m1, u1, m2, u2) in [(0.5, 0.5, 20.0, 0.0), (19.5, 0.5, 20.0, -0.5)] {
+            let l = [s("kind", "Perfectly inelastic"), f("m1", m1), f("u1", u1), f("m2", m2), f("u2", u2), b(SHOW_ANSWERS, true)];
+            let t = texts(&render_of(&l));
+            let ke = t.lines().find(|x| x.starts_with("Kinetic energy")).unwrap_or("");
+            assert!(!ke.contains("after 0 J"), "{m1} {u1} {m2} {u2}: {ke}");
+        }
+    }
+
     #[test]
     fn print_is_neutral_grey_only() {
         let svg = render_of(&[s("style", "Print"), b(SHOW_ANSWERS, true)]);
@@ -316,7 +336,7 @@ mod tests {
     #[test]
     fn momentum_pngs() {
         let Ok(dir) = std::env::var("VERSHION_PNG_DIR") else { return };
-        let mut cases: Vec<(String, Vec<(&'static str, Value)>)> = vec![("default".into(), vec![])];
+        let mut cases: Vec<(String, Vec<(&'static str, Value)>)> = vec![("default".into(), vec![]), ("large".into(), vec![s("label_size", "Large")])];
         for (i, (_, l)) in examples(ID).unwrap().into_iter().map(|e| (e.name.to_string(), e.params)).enumerate() { cases.push((format!("ex{i}"), l)); }
         for (tag, list) in cases {
             for (kind, extra) in [("colour", vec![]), ("print", vec![s("style", "Print")]), ("student", vec![b(SHOW_ANSWERS, false)]), ("key", vec![b(SHOW_ANSWERS, true)])] {

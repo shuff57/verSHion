@@ -126,7 +126,8 @@ pub fn build(p: &Params) -> (String, Report) {
     // the velocity is tangent; its label sits past the tip and off to the side, so it never rides on the head
     let tip = (body.0 + tx * vlen, body.1 + ty * vlen);
     d.arrow(body.0, body.1, tip.0, tip.1, vel, 2.2);
-    d.raw(&text_el(tip.0 + tx * 9.0 + ux * 12.0, tip.1 + ty * 9.0 + uy * 12.0 + 4.0, 12.0 * lab, "middle", vel, "v"));
+    let vy = (tip.1 + ty * 9.0 + uy * 12.0 + 4.0).min(rows_y0 - 30.0 * lab);
+    d.raw(&text_el(tip.0 + tx * 9.0 + ux * 12.0, vy, 12.0 * lab, "middle", vel, "v"));
 
     // the acceleration points at the centre; its label sits beside the arrow, not on the radius line
     d.arrow(body.0, body.1, body.0 - ux * alen, body.1 - uy * alen, acc, 2.2);
