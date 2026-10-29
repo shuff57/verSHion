@@ -1,6 +1,6 @@
 //! Instrument-style figures: spring scale and circuit diagram.
 use super::common::*;
-use super::circuit_solve::{fmt_qty, parse_cap, parse_qty, solve, solve_caps, CapSolved, Solved};
+use super::circuit_solve::{fmt_qty, parse_cap, parse_qty, solve, solve_caps, solve_caps_combo, solve_combo, CapSolved, Solved};
 use crate::figures::{answers_param, FigureDef, ParamDef, Params, Subject, SHOW_ANSWERS};
 
 // ---------------------------------------------------------------- spring scale
@@ -240,7 +240,7 @@ fn circuit_params() -> Vec<ParamDef> {
         // Capacitor circuits are a different question from resistor ones: they have no steady current, so the
         // ammeter and voltmeter do not apply and are hidden, and the readout is capacitance and charge.
         ParamDef::choice("components", "The components are", &["Resistors and bulbs", "Capacitors"], "Resistors and bulbs"),
-        ParamDef::choice("layout", "Resistors and bulbs", &["In series", "In parallel"], "In series"),
+        ParamDef::choice("layout", "Resistors and bulbs", &["In series", "In parallel", "In series and parallel"], "In series"),
         ParamDef::int("n", "Number of components", 1, 4, 3),
     ];
     for (i, k) in RK.iter().enumerate() {
@@ -278,6 +278,8 @@ pub(super) struct CLay {
     pub w: f64,
     pub h: f64,
     pub parallel: bool,
+    /// The first part in series with the rest in parallel (a combination circuit).
+    pub combo: bool,
     pub n: usize,
     pub top_y: f64,
     pub bot_y: f64,
@@ -300,6 +302,8 @@ pub(super) const PITCH: f64 = 12.0;
 pub(super) fn circuit_layout(p: &Params) -> CLay {
     let parallel = p.s("layout") == "In parallel";
     let n = p.i("n").clamp(1, 4) as usize;
+    // a combination needs at least two parts: with one there is nothing to put in parallel
+    let combo = p.s("layout") == "In series and parallel" && n >= 2;
     let vm = p.s("voltmeter");
     let vm_part = vm.strip_prefix("Across component ").and_then(|d| d.trim().parse::<usize>().ok()).filter(|k| *k >= 1 && *k <= n).map(|k| k - 1);
     // a capacitor circuit has no steady current, so neither meter belongs on it
@@ -309,10 +313,31 @@ pub(super) fn circuit_layout(p: &Params) -> CLay {
     let bat_h = PITCH * (plates as f64 - 1.0);
     let bulb = |i: usize| !caps(p) && p.s(RK[i][0]) == "Bulb";
     let mut lx = 110.0;
-    let (top_y, bot_y, h) = if parallel { (80.0, 330.0, 380.0) } else { (150.0, 320.0, 380.0) };
+    let (top_y, bot_y, h) = if parallel || combo { (80.0, 330.0, 380.0) } else { (150.0, 320.0, 380.0) };
     let mut comps = vec![];
     let (rx, w);
-    if parallel {
+    if combo {
+        // the first part sits on the top wire, the rest hang as parallel branches off it
+        let pitch = if vm_part.is_some() { 175.0 } else { 125.0 };
+        let tw = |s: &str| if s.eq_ignore_ascii_case("none") { 0.0 } else if s.trim().is_empty() { 34.0 } else { s.chars().count() as f64 * 11.0 };
+        let series_len: f64 = if bulb(0) { 44.0 } else { 64.0 };
+        let series_w = tw(&lab_mode(p, RK[0][4], RMODE[0][2]));
+        let cell_w = tw(&lab_mode(p, "cell_val", "cell_val_mode"));
+        // the battery's value is start-anchored at lx + 34 and the series part's value is centred under it
+        let series_x = (lx + 34.0 + cell_w + 24.0 + series_w).max(lx + 120.0);
+        comps.push((series_x, top_y, series_len));
+        let first_branch = (series_x + series_len / 2.0 + 90.0).max(lx + 300.0);
+        for i in 1..n {
+            let len: f64 = if bulb(i) { 44.0 } else { 64.0 };
+            comps.push((first_branch + pitch * (i as f64 - 1.0), (top_y + bot_y) / 2.0, len));
+        }
+        let need = comps.last().map(|c| c.0).unwrap_or(first_branch) + if vm_part == Some(n - 1) { 140.0 } else { 100.0 };
+        let shift = ((580.0 - need) / 2.0).max(0.0);
+        lx += shift;
+        for c in comps.iter_mut() { c.0 += shift; }
+        rx = comps.last().map(|c| c.0).unwrap_or(first_branch);
+        w = need.max(580.0);
+    } else if parallel {
         // solved readings run longer ("12 V"), so the voltmeter needs more room beside it
         let pitch = if vm_part.is_some() { if p.s("solve") == "Off" { 175.0 } else { 230.0 } } else { 125.0 };
         // the battery's value label is start-anchored at lx + 34 and the first branch's value is end-anchored at
@@ -341,7 +366,7 @@ pub(super) fn circuit_layout(p: &Params) -> CLay {
     let has_s = p.s("switch") != "None";
     let (mut amm, mut sw) = (None, None);
     let mut by = (top_y + bot_y) / 2.0;
-    if !parallel {
+    if !parallel && !combo {
         // everything but the battery sits along the top wire, evenly spaced
         let count = n + has_a as usize + has_s as usize;
         let (a, b) = (lx + 60.0, rx - 30.0);
@@ -372,7 +397,7 @@ pub(super) fn circuit_layout(p: &Params) -> CLay {
             y += s + gap;
         }
     }
-    CLay { w, h, parallel, n, top_y, bot_y, lx, rx, comps, by, plates, amm, sw, vm_part }
+    CLay { w, h, parallel, combo, n, top_y, bot_y, lx, rx, comps, by, plates, amm, sw, vm_part }
 }
 
 /// Resistor or bulb centred at (cx,cy), `len` long along its axis, horizontal or vertical.
@@ -511,7 +536,13 @@ pub(super) fn comp_name(p: &Params, i: usize, n: usize) -> String {
 pub(super) fn circuit_solved(p: &Params, n: usize) -> Option<Solved> {
     if p.s("solve") == "Off" || caps(p) { return None; }
     let r: Vec<Option<f64>> = (0..n).map(|i| parse_qty(p.s(RK[i][4]))).collect();
-    Some(solve(parse_qty(p.s("cell_val")), &r, p.s("layout") == "In parallel", p.s("switch") == "Open"))
+    let cell = parse_qty(p.s("cell_val"));
+    let open = p.s("switch") == "Open";
+    Some(if p.s("layout") == "In series and parallel" && n >= 2 {
+        solve_combo(cell, &r, open)
+    } else {
+        solve(cell, &r, p.s("layout") == "In parallel", open)
+    })
 }
 
 /// The capacitor circuit worked out, in the same switch: equivalent capacitance and the charge and voltage on
@@ -520,7 +551,12 @@ pub(super) fn circuit_caps_solved(p: &Params, n: usize) -> Option<CapSolved> {
     if p.s("solve") == "Off" || !caps(p) { return None; }
     let c: Vec<Option<f64>> = (0..n).map(|i| parse_cap(p.s(RK[i][4]))).collect();
     let cell = if p.s("cell_val_mode") == "None" { None } else { parse_qty(p.s("cell_val")) };
-    Some(solve_caps(cell, &c, p.s("layout") == "In parallel", p.s("switch") == "Open"))
+    let open = p.s("switch") == "Open";
+    Some(if p.s("layout") == "In series and parallel" && n >= 2 {
+        solve_caps_combo(cell, &c, open)
+    } else {
+        solve_caps(cell, &c, p.s("layout") == "In parallel", open)
+    })
 }
 
 /// A meter's reading label: the typed text, or with the circuit worked out the computed value
@@ -586,10 +622,12 @@ fn circuit_render(p: &Params) -> String {
     let (mut top_gaps, mut left_gaps) = (vec![], vec![]);
     for (i, &(cx, cy, len)) in l.comps.iter().enumerate() {
         let bulb = p.s(RK[i][0]) == "Bulb";
-        component(&mut g, bulb, caps(p), iec, cx, cy, len, l.parallel, cc);
+        // in a combination circuit the first part lies along the top wire and the rest hang as branches
+        let vert = l.parallel || (l.combo && i > 0);
+        component(&mut g, bulb, caps(p), iec, cx, cy, len, vert, cc);
         let name = comp_name(p, i, l.n);
         let val = lab_mode(p, RK[i][4], RMODE[i][2]);
-        if l.parallel {
+        if vert {
             let mut br = vec![(cy - len / 2.0, cy + len / 2.0)];
             seg_line(&mut g, (cx, top_y), (cx, bot_y), &mut br);
             clabel(&mut g, cx + 24.0, cy + 8.0, "start", &name, 22.0, ITALIC);
@@ -605,7 +643,7 @@ fn circuit_render(p: &Params) -> String {
     if let Some((x, y)) = l.amm {
         meter(&mut g, x, y, "A", cc);
         let rd = reading(p, "amm_read", "amm_read_mode", solved.as_ref().map(|s| s.i_total), "A");
-        if l.parallel { left_gaps.push((y - 17.0, y + 17.0)); clabel(&mut g, x + 24.0, y + 8.0, "start", &rd, 21.0, UPRIGHT); }
+        if l.parallel || l.combo { left_gaps.push((y - 17.0, y + 17.0)); clabel(&mut g, x + 24.0, y + 8.0, "start", &rd, 21.0, UPRIGHT); }
         else { top_gaps.push((x - 17.0, x + 17.0)); clabel(&mut g, x, y + 44.0, "middle", &rd, 21.0, UPRIGHT); }
     }
     if let Some((a, b)) = l.sw {
@@ -647,7 +685,7 @@ fn circuit_render(p: &Params) -> String {
     seg_line(&mut g, (lx, top_y), (rx, top_y), &mut top_gaps);
     seg_line(&mut g, (lx, bot_y), (rx, bot_y), &mut vec![]);
     seg_line(&mut g, (lx, top_y), (lx, bot_y), &mut left_gaps);
-    if !l.parallel { seg_line(&mut g, (rx, top_y), (rx, bot_y), &mut vec![]); }
+    if !l.parallel && !l.combo { seg_line(&mut g, (rx, top_y), (rx, bot_y), &mut vec![]); }
     // voltmeter (never on a capacitor circuit: it measures a steady voltage, not a charging one)
     if !caps(p) && p.s("voltmeter") == "Across the battery" {
         let vx = lx - 66.0;
@@ -662,7 +700,7 @@ fn circuit_render(p: &Params) -> String {
         dot(&mut g, lx, yb);
     } else if let Some(k) = l.vm_part {
         let (cx, cy, len) = l.comps[k];
-        if l.parallel {
+        if l.parallel || (l.combo && k > 0) {
             let (ya, yb, vx) = (cy - len / 2.0 - 18.0, cy + len / 2.0 + 18.0, cx + 76.0);
             g.polyline(&[(cx, ya), (vx, ya), (vx, cy - 17.0)], INK, SW);
             g.polyline(&[(vx, cy + 17.0), (vx, yb), (cx, yb)], INK, SW);

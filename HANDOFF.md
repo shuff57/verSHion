@@ -87,9 +87,9 @@ Updated 2026-10-28 late: the five-figure phase-3 critic round is fixed and commi
        capacitance is still known. The parallel layout also now starts its branches beyond the battery's value label
        and the first branch's, measured from the texts — a fixed 240 px already collided for "4.7 kΩ" beside "12 V". Two examples and a FAQ entry added; census moved only for
        `circuit-diagram__defaults`/`__start`, from the blurb.
-     - **(b) A combination (series-parallel) layout: still to do.** New geometry in `circuit_layout`, a solver branch,
-       handle positions, label placement — plus five examples, a FAQ entry, PNG cases (Colour, Print, student, key,
-       Large, 66 %), tests, census re-bless showing only `circuit-diagram__*`, and a look at the renders.
+     - **(b) A combination (series-parallel) layout: DONE.** `In series and parallel` puts the first part on the top
+       wire and the rest as branches, with `solve_combo`/`solve_caps_combo`, handles that follow the drawing, and the
+       voltmeter placed per part. Census unchanged (the default layout is still series).
   2. **Handles on the ray diagram and the motion map — and neither figure exists.** Checked against the registry:
      there is no `ray-diagram` and no `motion-map`, so this is two new figures *plus* their handles, not a handle
      retrofit. Build each as a normal new figure (params, five examples, four FAQ entries, tests, PNG export),

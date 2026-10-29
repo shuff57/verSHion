@@ -391,7 +391,7 @@ const CIRCUIT_DIAGRAM: &[Faq] = &[
     },
     Faq {
         q: "How do series and parallel circuits behave differently?",
-        a: "In series, the same current flows through every part and the voltages add up to the battery voltage. In parallel, each branch gets the full battery voltage and the branch currents add up to the total.",
+        a: "In series, the same current flows through every part and the voltages add up to the battery voltage. In parallel, each branch gets the full battery voltage and the branch currents add up to the total. The combination layout puts the first part in series with all the rest in parallel: work out the parallel group first (1/R = 1/R2 + 1/R3 ...), add it to the series part to get the total, then work back out to the current and the voltages.",
     },
 ];
 

@@ -165,6 +165,68 @@ pub fn solve_caps(v_batt: Option<f64>, c: &[Option<f64>], parallel: bool, open: 
     CapSolved { c_eq, q_total, v, q }
 }
 
+/// The mixed circuit: the first part in series with the rest in parallel. `r_eq = r0 + 1/sum(1/r_k)`, the same
+/// current through the series part, the battery voltage split between it and the parallel group.
+pub fn solve_combo(v_batt: Option<f64>, r: &[Option<f64>], open: bool) -> Solved {
+    let n = r.len();
+    let r: Vec<Option<f64>> = r.iter().map(|x| x.filter(|v| *v >= 0.0)).collect();
+    let all: Option<Vec<f64>> = r.iter().cloned().collect();
+    let r_eq = all.as_ref().and_then(|a| {
+        if a.is_empty() { return None; }
+        let (series, rest) = a.split_first()?;
+        if rest.is_empty() { return Some(*series); }
+        let par = if rest.iter().any(|x| *x == 0.0) { 0.0 } else { 1.0 / rest.iter().map(|x| 1.0 / x).sum::<f64>() };
+        Some(series + par)
+    });
+    if open {
+        return Solved { r_eq, i_total: Some(0.0), v_batt, v: vec![Some(0.0); n], i: vec![Some(0.0); n] };
+    }
+    let (mut v, mut i) = (vec![None; n], vec![None; n]);
+    let mut i_total = None;
+    if let (Some(vb), Some(a), Some(req)) = (v_batt, all.as_ref(), r_eq.filter(|q| *q > 0.0)) {
+        let it = vb / req;
+        let par = req - a[0];
+        i_total = Some(it);
+        i[0] = Some(it);
+        v[0] = Some(it * a[0]);
+        for k in 1..n {
+            v[k] = Some(it * par);
+            i[k] = (a[k] > 0.0).then(|| it * par / a[k]);
+        }
+    }
+    Solved { r_eq, i_total, v_batt, v, i }
+}
+
+/// The same mixed circuit for capacitors: the first in series with the rest in parallel.
+pub fn solve_caps_combo(v_batt: Option<f64>, c: &[Option<f64>], open: bool) -> CapSolved {
+    let n = c.len();
+    let all: Option<Vec<f64>> = c.iter().cloned().collect();
+    let c_eq = all.as_ref().and_then(|a| {
+        if a.is_empty() { return None; }
+        let (series, rest) = a.split_first()?;
+        if rest.is_empty() { return Some(*series); }
+        Some(1.0 / (1.0 / series + 1.0 / rest.iter().sum::<f64>()))
+    });
+    if open {
+        return CapSolved { c_eq, q_total: Some(0.0), v: vec![Some(0.0); n], q: vec![Some(0.0); n] };
+    }
+    let (mut v, mut q) = (vec![None; n], vec![None; n]);
+    let mut q_total = None;
+    if let (Some(vb), Some(a), Some(ce)) = (v_batt, all.as_ref(), c_eq) {
+        let qt = ce * vb;
+        q_total = Some(qt);
+        // the series part carries the whole charge; the parallel group shares it, and its voltage is what is left
+        q[0] = Some(qt);
+        v[0] = (a[0] > 0.0).then(|| qt / a[0]);
+        let vp = vb - qt / a[0];
+        for k in 1..n {
+            v[k] = Some(vp);
+            q[k] = Some(a[k] * vp);
+        }
+    }
+    CapSolved { c_eq, q_total, v, q }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -209,6 +271,23 @@ mod tests {
         assert_eq!(s.q, vec![Some(0.0), Some(0.0)]);
         assert_eq!(s.v, vec![Some(0.0), Some(0.0)]);
         assert_eq!(s.q_total, Some(0.0));
+    }
+
+    #[test]
+    fn the_mixed_circuit_is_one_in_series_with_the_rest_in_parallel() {
+        // 2 Ω in series with 4 Ω and 4 Ω in parallel: 2 + 2 = 4 Ω, so 12 V drives 3 A
+        let s = solve_combo(Some(12.0), &[Some(2.0), Some(4.0), Some(4.0)], false);
+        assert!(near(s.r_eq, 4.0), "{:?}", s.r_eq);
+        assert!(near(s.i_total, 3.0));
+        assert!(near(s.v[0], 6.0), "6 V across the series part: {:?}", s.v);
+        assert!(near(s.v[1], 6.0) && near(s.v[2], 6.0), "and 6 V across each branch");
+        assert!(near(s.i[1], 1.5) && near(s.i[2], 1.5), "the branch currents add to 3 A");
+        // the same in capacitors: 10 µF in series with 20 µF is 20/3 µF, so 80 µC on each at 12 V
+        let c = solve_caps_combo(Some(12.0), &[Some(1e-5), Some(2e-5)], false);
+        assert!(near(c.c_eq, 20e-6 / 3.0), "{:?}", c.c_eq);
+        assert!(near(c.q[0], 8e-5), "the series capacitor carries the whole charge: {:?}", c.q);
+        assert!(near(c.q[1], 8e-5));
+        assert!(near(c.v[0], 8.0) && near(c.v[1], 4.0), "8 V and 4 V add to the battery's {:?}", c.v);
     }
 
     #[test]

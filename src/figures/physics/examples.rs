@@ -43,6 +43,11 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
                 ("r1_val", s("10 µF")), ("r2_val", s("22 µF")),
                 ("cell", s("One cell")), ("cell_val", s("6 V")), ("solve", s("Readings and results")),
             ]),
+            ex("Combination circuit: one resistor in series with two in parallel", vec![
+                ("layout", s("In series and parallel")), ("n", i(3)),
+                ("r1_val", s("2 Ω")), ("r2_val", s("4 Ω")), ("r3_val", s("4 Ω")),
+                ("cell", s("One cell")), ("cell_val", s("12 V")), ("solve", s("Readings and results")),
+            ]),
         ],
         "vector-diagram" => vec![
             ex("Adding two perpendicular vectors head to tail", vec![

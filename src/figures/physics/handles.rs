@@ -423,7 +423,7 @@ fn circuit(p: &Params, size: (f64, f64)) -> Vec<Handle> {
             let v = bump(p.s(RVAL[i]), d);
             p.set_s(RVAL[i], &v);
         };
-        if l.parallel {
+        if l.parallel || (l.combo && i > 0) {
             out.push(Handle::zone(m.p((cx, cy)), (36.0, len.max(44.0)), "Click to switch between resistor and bulb", toggle));
             out.push(lab(m, (cx + 44.0, cy), 44.0, RNAME[i]));
             out.push(lab(m, (cx - 50.0, cy), 56.0, RVAL[i]).with_scroll(scroll));

@@ -251,6 +251,40 @@ mod tests {
     }
 
     #[test]
+    fn a_combination_circuit_is_one_part_in_series_with_a_parallel_pair() {
+        let cd = defs().into_iter().find(|d| d.id == "circuit-diagram").unwrap();
+        let mut p = Params::defaults(&(cd.params)());
+        for (k, v) in [
+            ("layout", Value::S("In series and parallel".into())), ("n", Value::I(3)),
+            ("r1_val", Value::S("2 Ω".into())), ("r2_val", Value::S("4 Ω".into())), ("r3_val", Value::S("4 Ω".into())),
+            ("cell_val", Value::S("12 V".into())), ("solve", Value::S("Readings and results".into())),
+        ] { p.0.insert(k.into(), v); }
+        // 2 + (4 ∥ 4) = 4 Ω, so 3 A from 12 V: 6 V on the series part and 6 V across each branch, 1.5 A each
+        let svg = (cd.render)(&p);
+        assert!(svg.contains("3 A"), "the total current:\n{svg}");
+        assert!(svg.contains("1.5 A"), "each branch takes half");
+        assert!(svg.contains("6 V"), "the voltages");
+        // the layout puts the first part on the top wire and the rest in branches
+        let l = instr::circuit_layout(&p);
+        assert!(l.combo, "the layout knows it is a combination");
+        assert!((l.comps[0].1 - l.top_y).abs() < 1e-9, "the series part sits on the top wire");
+        assert!(l.comps[1].1 > l.top_y && l.comps[2].1 > l.top_y, "the branches hang below it");
+        // the same with capacitors: 10 µF in series with two 10 µF in parallel
+        let mut c = p.clone();
+        c.0.insert("components".into(), Value::S("Capacitors".into()));
+        for k in ["r1_val", "r2_val", "r3_val"] { c.0.insert(k.into(), Value::S("10 µF".into())); }
+        let cs = (cd.render)(&c);
+        // 10 µF in series with (10 + 10) µF is 20/3 µF, and 12 V puts 80 µC on each
+        assert!(cs.contains("6.67 µF"), "the equivalent capacitance:\n{cs}");
+        assert!(cs.contains("80 µC"), "the charge");
+        if let Ok(dir) = std::env::var("VERSHION_PNG_DIR") {
+            for (tag, q) in [("combo-key", p.clone()), ("combo-student", { let mut s = p.clone(); s.0.insert(SHOW_ANSWERS.into(), Value::B(false)); s }), ("combo-caps", c.clone())] {
+                let _ = std::fs::write(format!("{dir}/circuit-{tag}.png"), to_png(&(cd.render)(&q), 1.0).unwrap());
+            }
+        }
+    }
+
+    #[test]
     fn nine_physics_generators() {
         let ids: Vec<_> = defs().iter().map(|d| d.id).collect();
         assert_eq!(ids.len(), 9);

@@ -331,6 +331,19 @@ render an identical figure in capacitor mode (the ammeter and all four voltmeter
 capacitors add the other way round. Census: `circuit-diagram__defaults` and `__start` only, from the blurb now naming
 capacitors.
 
+Combination circuits on `circuit-diagram`: a third layout, `In series and parallel`, puts the first component on the top
+wire and the rest as branches hanging off it between the same two rails, with junction dots where the branches meet
+them. It needs two components or more (with one there is nothing to parallel), and falls back to the series drawing
+otherwise. The solver is the textbook mix — the parallel group first, added to the series part — so 2 Ω in series with
+4 Ω ∥ 4 Ω on 12 V gives R_eq = 4 Ω, I = 3 A, 6 V across the series part and 6 V across each branch at 1.5 A each. It
+works in capacitor mode too, where the same shape means 10 µF in series with two 10 µF in parallel: 20/3 µF, 80 µC on
+the series capacitor at 8 V, and 40 µC at 4 V on each branch. The handles follow the drawing (the series part toggles
+and scrolls above and below the top wire, the branches beside them), the voltmeter uses the series placement for the
+first part and the branch placement for the rest, and the ammeter and switch stay on the left wire. Tests: the
+resistor and capacitor figures above, the layout's own geometry (first part on the top wire, the rest below it), and
+PNG exports of the key, the student copy and the capacitor combination, all looked at. Census unchanged: the default
+layout is still series.
+
 Left open: axis ink `#111827` is grey but not exactly
 neutral; trig's key prints a Hidden side inside a fraction; two-label y axes on tall waves; some coordinate labels
 sit over the drop lines; two example names overstate what they show.
