@@ -76,6 +76,17 @@ pub struct BaseQuestion {
     /// The picture's file name in this app's store when imported.
     #[serde(default)]
     pub local_image: Option<String>,
+    /// (round 7, critic R3) The copy's own picture when it is no longer the base's file: the file, and the circle's name
+    /// for it. A restore that stores a picture writes it (the store may keep a circle's PNG as WebP under a new name), so
+    /// Compare and the strip read that picture as the circle's own and not as a new local picture. `local_image` and
+    /// `snap.image` still describe the base version. Read leniently: a value this build can not read is none.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "picture_now_or_none")]
+    pub picture_now: Option<(String, String)>,
+}
+
+/// A `picture_now` read leniently: an unreadable value is none, never the link dropped with it.
+fn picture_now_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<(String, String)>, D::Error> {
+    Ok(Option::<(String, String)>::deserialize(d).ok().flatten())
 }
 
 impl PartialEq for BaseQuestion {
@@ -99,7 +110,7 @@ pub fn snap_of(q: &Question, image_sha: Option<String>) -> Snap {
 }
 
 pub fn base_of(q: &Question, qid: &str, fp: &str, sha: Option<String>) -> BaseQuestion {
-    BaseQuestion { local_id: q.id.clone(), qid: qid.to_string(), fp: fp.to_string(), snap: snap_of(q, sha), local_image: q.image.as_ref().map(|i| i.file.clone()) }
+    BaseQuestion { local_id: q.id.clone(), qid: qid.to_string(), fp: fp.to_string(), snap: snap_of(q, sha), local_image: q.image.as_ref().map(|i| i.file.clone()), picture_now: None }
 }
 
 /// The base to keep, or none when it would be too big.
@@ -506,7 +517,15 @@ fn ours_delta(base: &BaseQuestion, o: &Question) -> Delta {
         expl: !same_opt_text(&explanation_of(o), &not_blank(&b.explanation)),
         points: o.points != b.points,
         topics: !same_topics(&o.topics, &b.topics),
-        image: o.image.as_ref().map(|i| &i.file) != base.local_image.as_ref(),
+        image: match &o.image {
+            None => base.local_image.is_some(),
+            Some(i) => {
+                // (round 7, critic R3) a restore that stored the base's own picture under another file name says so in the
+                // record: the picture is the base's, not a new one
+                let restored_base_picture = base.picture_now.as_ref().is_some_and(|(f, sha)| f == &i.file && Some(sha) == base.snap.image.as_ref());
+                base.local_image.as_deref() != Some(i.file.as_str()) && !restored_base_picture
+            }
+        },
         // (a base that kept none is no evidence of a change: see `build_plan`)
         difficulty: b.difficulty.is_some_and(|d| d != o.difficulty),
     }

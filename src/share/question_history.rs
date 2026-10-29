@@ -644,10 +644,18 @@ pub fn side_of_version(body: &VersionBody, qid: &str) -> Option<Shown> {
 /// (round 6, critic N2) The circle's name for the copy's picture: the picture the link recorded for it (`snap.image`) while
 /// the copy still has the file it landed with (`local_image`). The store may keep a circle's PNG (or JPEG) as WebP under a
 /// new name, so the file's own name is only used where the link has no record of that file (a picture changed here, or none).
+/// (round 7, critic R3) A picture a restore stored is named by the record it wrote (`picture_now`), also when its file is not
+/// the base's own.
 pub fn picture_sha_on_circle(link: &CircleLink, q: &Question) -> Option<String> {
     let file = q.image.as_ref()?.file.as_str();
-    match link.base.iter().find(|b| b.local_id == q.id) {
-        Some(b) if b.local_image.as_deref() == Some(file) => b.snap.image.clone(),
+    let Some(b) = link.base.iter().find(|b| b.local_id == q.id) else { return sha_of_file(file) };
+    if let Some((f, sha)) = &b.picture_now
+        && f == file
+    {
+        return Some(sha.clone());
+    }
+    match b.local_image.as_deref() {
+        Some(local) if local == file => b.snap.image.clone(),
         _ => sha_of_file(file),
     }
 }
@@ -1143,12 +1151,24 @@ pub fn restore_question(banks: &mut [QuestionBank], ask: &RestoreAsk, sink: &dyn
         base_version: link.base_version,
         base_version_id: link.base_version_id.clone(),
     });
-    let new_link = unpair.then(|| {
-        let mut l = link.clone();
+    // (round 7, critic R3) A picture the restore stored is the copy's own picture now: the link records the circle's name for
+    // that file, so Compare, the header and the strip read it as that picture and never as a new local one. The base's own
+    // fields (`local_image`, `snap.image`) are left as they were.
+    let mut l = link.clone();
+    let mut link_changed = false;
+    if let (Some(img), Some(sha)) = (r.image.as_ref(), t.sha.as_deref())
+        && let Some(b) = l.base.iter_mut().find(|b| b.local_id == local_id)
+        && b.local_image.as_deref() != Some(img.file.as_str())
+    {
+        b.picture_now = Some((img.file.clone(), sha.to_string()));
+        link_changed = true;
+    }
+    if unpair {
         l.qids.retain(|q| q.local != local_id);
         l.base.retain(|b| b.local_id != local_id);
-        l
-    });
+        link_changed = true;
+    }
+    let new_link = link_changed.then_some(l);
     let added = unpair || link.qid_of(&local_id).is_none();
     Ok(Restored { local_id, version: ask.body.version, added, restore_point, link: new_link, wrote: Some(r), unpaired, replaced })
 }
