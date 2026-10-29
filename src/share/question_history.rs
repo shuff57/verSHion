@@ -1092,9 +1092,15 @@ pub fn restore_question(banks: &mut [QuestionBank], ask: &RestoreAsk, sink: &dyn
             if picture_same {
                 judged.image = b.local_image.clone().map(|file| ImageRef { file, width: 0, height: 0 });
             }
-            if ask.body.version != link.base_version && picture_same && !merge::ours_changed(b, &judged) {
-                let uncounted = existing.map_or(r.figure.is_some(), |q| merge::Sig::of(q).figure != merge::Sig::of(&r).figure);
-                if uncounted {
+            let figure_moves = existing.map_or(r.figure.is_some(), |q| merge::Sig::of(q).figure != merge::Sig::of(&r).figure);
+            if ask.body.version != link.base_version && picture_same && figure_moves && !merge::ours_changed(b, &judged) {
+                // (round 7, critic R2) Decided by state, never by a version number: a restore that puts back a question the
+                // person changed and that already carries a figure of its own is her own unsent edit coming undone, and the
+                // version's figure is what she is putting back. The refusal is for a figure that would appear or move with
+                // nothing countable to undo (a copy already in step) or for a copy that is gone, where the record can not
+                // count a figure the version carries and the strip would say "up to date" over a change never offered.
+                let undoable = existing.is_some_and(|q| q.figure.is_some() && merge::ours_changed(b, q));
+                if !undoable {
                     return Err(RestoreRefused::NotCountable);
                 }
             }
