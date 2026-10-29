@@ -38,8 +38,21 @@ fn parse_unit(s: &str, units: &[&str]) -> Option<f64> {
     (v.is_finite() && v.abs() <= 1e12).then_some(v)
 }
 
-/// A voltage or any plain quantity (the battery): volts, or a bare number.
-pub fn parse_qty(s: &str) -> Option<f64> { parse_unit(s, &["", "Ω", "ohm", "ohms", "V", "A"]) }
+/// A voltage, or a bare number. Deliberately narrow: an ohm or an amp is not a voltage, and a battery typed as one
+/// must not quietly become a number.
+pub fn parse_qty(s: &str) -> Option<f64> { parse_unit(s, &["", "V"]) }
+
+/// What kind of unit a typed value carries, so a figure can refuse one that belongs to another quantity without
+/// refusing a symbol or a spelling it simply cannot read. A bare number has no unit.
+pub fn unit_kind(s: &str) -> Option<&'static str> {
+    // to_lowercase turns both the ohm sign and the Greek capital omega into the small omega
+    let l = s.to_lowercase();
+    if l.contains('\u{3c9}') || l.contains("ohm") { return Some("ohm"); }
+    if l.contains('f') { return Some("farad"); }
+    if l.contains('v') { return Some("volt"); }
+    if l.contains('a') { return Some("amp"); }
+    None
+}
 
 /// A resistance: ohms or a bare number. A farad or an amp is not a resistance.
 pub fn parse_ohm(s: &str) -> Option<f64> { parse_unit(s, &["", "Ω", "ohm", "ohms"]) }
@@ -337,16 +350,21 @@ mod tests {
 
     #[test]
     fn quantities_with_prefixes_and_units() {
-        assert_eq!(parse_qty("2 Ω"), Some(2.0));
+        // the resistance reader takes ohms; the battery reader takes volts; neither takes the other's unit
+        assert_eq!(parse_ohm("2 Ω"), Some(2.0));
+        assert_eq!(parse_ohm("4.7 kΩ"), Some(4700.0));
+        assert_eq!(parse_ohm("4.7k"), Some(4700.0));
+        assert_eq!(parse_ohm("2 MΩ"), Some(2e6));
+        assert_eq!(parse_ohm("220 ohm"), Some(220.0));
         assert_eq!(parse_qty("12 V"), Some(12.0));
-        assert_eq!(parse_qty("4.7 kΩ"), Some(4700.0));
-        assert_eq!(parse_qty("4.7k"), Some(4700.0));
-        assert_eq!(parse_qty("40 mA"), Some(0.04));
-        assert_eq!(parse_qty("2 MΩ"), Some(2e6));
-        assert_eq!(parse_qty("10µA"), Some(1e-5));
-        assert_eq!(parse_qty("1e3"), Some(1000.0));
-        assert_eq!(parse_qty("220 ohm"), Some(220.0));
         assert_eq!(parse_qty("-5 V"), Some(-5.0));
+        assert_eq!(parse_qty("1e3"), Some(1000.0));
+        assert_eq!(parse_qty("2 Ω"), None, "an ohm is not a voltage");
+        assert_eq!(unit_kind("2 Ω"), Some("ohm"));
+        assert_eq!(unit_kind("10 µF"), Some("farad"));
+        assert_eq!(unit_kind("12 V"), Some("volt"));
+        assert_eq!(unit_kind("x"), None);
+        assert_eq!(unit_kind("4"), None);
     }
 
     #[test]

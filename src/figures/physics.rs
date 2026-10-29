@@ -336,10 +336,32 @@ mod tests {
                 ("combo-vm4", mk(&[("layout", Value::S("In series and parallel".into())), ("n", Value::I(4)), ("voltmeter", Value::S("Across component 4".into())), ("solve", Value::S("Readings and results".into()))])),
                 ("combo-long", mk(&[("layout", Value::S("In series and parallel".into())), ("n", Value::I(3)), ("r1_val", Value::S("4.7 kΩ".into())), ("r2_val", Value::S("4.7 kΩ".into())), ("r3_val", Value::S("4.7 kΩ".into()))])),
                 ("series-long", mk(&[("n", Value::I(4)), ("switch", Value::S("Closed".into())), ("r1_val", Value::S("4.7 kΩ".into())), ("r2_val", Value::S("4.7 kΩ".into())), ("r3_val", Value::S("4.7 kΩ".into())), ("r4_val", Value::S("4.7 kΩ".into()))])),
+                ("combo-vm1-text", mk(&[("layout", Value::S("In series and parallel".into())), ("n", Value::I(4)), ("voltmeter", Value::S("Across component 1".into())), ("vm_read_mode", Value::S("Text".into())), ("vm_read", Value::S("6.24 V".into())), ("solve", Value::S("Readings and results".into()))])),
+                ("combo-bulb-vm", mk(&[("layout", Value::S("In series and parallel".into())), ("n", Value::I(3)), ("r1_kind", Value::S("Bulb".into())), ("r1_val", Value::S("12.5 kΩ".into())), ("voltmeter", Value::S("Across component 1".into()))])),
             ] {
                 let _ = std::fs::write(format!("{dir}/circuit-{tag}.png"), to_png(&(cd.render)(&q), 1.0).unwrap());
             }
         }
+    }
+
+    #[test]
+    fn a_capacitor_keeps_a_spelling_it_cannot_read_but_loses_a_wrong_unit() {
+        let cd = defs().into_iter().find(|d| d.id == "circuit-diagram").unwrap();
+        let mk = |v: &str| {
+            let mut p = Params::defaults(&(cd.params)());
+            p.0.insert("components".into(), Value::S("Capacitors".into()));
+            p.0.insert("n".into(), Value::I(1));
+            p.0.insert("r1_val".into(), Value::S(v.into()));
+            p
+        };
+        // an ohms value is a false statement on a capacitor, so it is blanked
+        assert!(!(cd.render)(&mk("4 Ω")).contains("4 Ω"));
+        // but a symbol, or a spelling the reader cannot parse, is left exactly as typed
+        assert!((cd.render)(&mk("x")).contains(">x<"), "a symbol must stay");
+        assert!((cd.render)(&mk("10UF")).contains("10UF"), "a spelling must stay");
+        // the voltmeter leads stand clear of the widest value label below a short bulb
+        assert!(instr::vm_lead_half(44.0) >= 44.0, "a bulb's leads must clear an 88 px label");
+        assert!(instr::vm_lead_half(64.0) >= 42.0);
     }
 
     #[test]

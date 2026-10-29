@@ -47,6 +47,28 @@ Left open (recorded, not fixed):
 - This figure has no label-size control, so the Large/Small sweeps the brief asks for are unreachable; simulated 1.4×
   text shows little headroom even after M3/M4.
 
+## Verification of the fixes (`f19cda4`)
+
+A verification critic checked all eight on a frozen copy. **All eight: FIXED.** Evidence highlights: the combination
+meter's circle sits at (245,162) with no ink within 2 px of any edge in any of the four components × solve off/on; the
+resistor labelled 470 µF now prints `?` everywhere (base: R_eq 4 Ω, V₁ 1.41 mV); parallel branch labels have 20 px of
+clear space (base: −10); the series default is byte-identical to the base with its right wire at exactly 490; a hidden
+battery leaves only the equivalents; a 0 Ω branch reads 0 V and `?` currents. Base↔fix byte diff over 84 renders: 29
+identical, 55 different, every difference accounted for.
+
+It also found five new defects, four of which are now fixed:
+
+| # | Finding | State |
+|---|---------|-------|
+| A | The combination voltmeter's own lead was drawn through its reading (pre-existing in series, newly visible once the meter stopped being off-canvas). | **fixed**: in the horizontal placement the reading now sits *below* the meter, clear of both leads. |
+| B | The new below-the-wire meter's leads cut a bulb's value label (leads at ±32, the label spans ±33). | **fixed**: the leads stand at `max(len, 68)/2 + 10`, which is the resistor's width for a short bulb. This was a defect my own B1 fix introduced. |
+| C | The capacitor blanking swallowed any value the reader could not parse, including `10UF` and a symbol `x` that used to print. | **fixed**: only a value carrying a *resistance or voltage unit* is blanked; a symbol or an unreadable spelling is left exactly as typed. `unit_kind` names the unit, and the Notes box warns for volts and amps as well as ohms. This too was a defect my own M7 fix introduced. |
+| D | `parse_qty` still accepted ohms and amps while documented as volts, so a battery typed `4 Ω` solved as 4 V. | **fixed**: `parse_qty` takes volts or a bare number; the test block was rewritten to use `parse_ohm` for resistances. |
+| E | The meter's right margin was a constant 160 px, leaving 2 px on the widest solved reading and overflowing on a long typed one. | **fixed**: `meter_room` measures the reading's text instead. |
+
+The lesson from C is the sharpest of the round: a fix that blanks anything unparseable is not the same as a fix that
+blanks the *wrong unit*, and the difference is a teacher's `10UF` disappearing off the sheet.
+
 ## Verified correct (so silence is not approval)
 
 - **Every number, recomputed independently**: 12 Ω → 1 A; 12/11 Ω → 11 A; combination 2 + (4∥4) = 4 Ω, 3 A, 6 V + 6 V,

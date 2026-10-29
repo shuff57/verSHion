@@ -299,6 +299,14 @@ pub(super) struct CLay {
 
 pub(super) const PITCH: f64 = 12.0;
 
+/// The room to the right of the last branch: a voltmeter beside it needs its reading's width, not a constant.
+fn meter_room(p: &Params, vm_part: Option<usize>, n: usize) -> f64 {
+    if vm_part != Some(n.saturating_sub(1)) { return 100.0; }
+    let t = lab_mode(p, "vm_read", "vm_read_mode");
+    let rd = if t.trim().is_empty() { 34.0 } else { t.chars().count() as f64 * 11.0 };
+    44.0 + rd.max(34.0) + 24.0
+}
+
 pub(super) fn circuit_layout(p: &Params) -> CLay {
     let parallel = p.s("layout") == "In parallel";
     let n = p.i("n").clamp(1, 4) as usize;
@@ -334,7 +342,7 @@ pub(super) fn circuit_layout(p: &Params) -> CLay {
             let len: f64 = if bulb(i) { 44.0 } else { 64.0 };
             comps.push((first_branch + pitch * (i as f64 - 1.0), (top_y + bot_y) / 2.0, len));
         }
-        let need = comps.last().map(|c| c.0).unwrap_or(first_branch) + if vm_part == Some(n - 1) { 160.0 } else { 100.0 };
+        let need = comps.last().map(|c| c.0).unwrap_or(first_branch) + meter_room(p, vm_part, n);
         let shift = ((580.0 - need) / 2.0).max(0.0);
         lx += shift;
         for c in comps.iter_mut() { c.0 += shift; }
@@ -357,7 +365,7 @@ pub(super) fn circuit_layout(p: &Params) -> CLay {
             let len: f64 = if bulb(i) { 44.0 } else { 64.0 };
             comps.push((first_x + pitch * i as f64, (top_y + bot_y) / 2.0, len));
         }
-        let need = comps.last().map(|c| c.0).unwrap_or(first_x) + if vm_part == Some(n - 1) { 160.0 } else { 100.0 };
+        let need = comps.last().map(|c| c.0).unwrap_or(first_x) + meter_room(p, vm_part, n);
         // centre narrow circuits on the standard 580-wide canvas
         let shift = ((580.0 - need) / 2.0).max(0.0);
         lx += shift;
@@ -413,7 +421,11 @@ pub(super) fn circuit_layout(p: &Params) -> CLay {
     CLay { w, h, parallel, combo, n, top_y, bot_y, lx, rx, comps, by, plates, amm, sw, vm_part }
 }
 
-/// Resistor or bulb centred at (cx,cy), `len` long along its axis, horizontal or vertical.
+/// How far to the side of a horizontal part the voltmeter's leads stand: clear of the value label written below the
+/// part, so a short bulb needs the resistor's width.
+pub(super) fn vm_lead_half(len: f64) -> f64 { len.max(68.0) / 2.0 + 10.0 }
+
+/// A resistor or bulb centred at (cx,cy), `len` long along its axis, horizontal or vertical.
 /// Capacitor mode: every component slot is a capacitor and the readout is capacitance and charge.
 pub(super) fn caps(p: &Params) -> bool { p.s("components") == "Capacitors" }
 
@@ -427,12 +439,9 @@ pub(super) fn circuit_warnings(p: &Params) -> Vec<String> {
         out.push("A combination needs at least two components: with one there is nothing to put in parallel, so this is drawn as a series circuit.".to_string());
     }
     if caps(p) {
-        let ohms = (0..n).any(|i| {
-            let s = p.s(RK[i][4]);
-            s.contains('\u{3a9}') || s.to_ascii_lowercase().contains("ohm")
-        });
-        if ohms {
-            out.push("A capacitor is marked in farads, not ohms: these values still read in ohms, so they are left out of the worked-out answer. Type a capacitance such as 10 \u{b5}F.".to_string());
+        let wrong = (0..n).any(|i| matches!(super::circuit_solve::unit_kind(p.s(RK[i][4])), Some("ohm") | Some("volt") | Some("amp")));
+        if wrong {
+            out.push("A capacitor is marked in farads: these values carry resistance or voltage units, so they are left out of the worked-out answer and drawn as blanks. Type a capacitance such as 10 \u{b5}F.".to_string());
         }
     }
     out
@@ -507,10 +516,13 @@ fn meter(g: &mut G, cx: f64, cy: f64, letter: &str, c: &str) {
 }
 
 /// The voltmeter's reading, written to the right of the meter.
-fn vm_reading(g: &mut G, p: &Params, solved: &Option<Solved>, part: Option<usize>, x: f64, y: f64) {
+/// The meter's reading label: `below` puts it under the meter, for the horizontal placement where the leads run
+/// down either side of it; otherwise it sits beside the meter.
+fn vm_reading(g: &mut G, p: &Params, solved: &Option<Solved>, part: Option<usize>, x: f64, y: f64, below: bool) {
     let computed = solved.as_ref().map(|s| match part { Some(k) => s.v.get(k).copied().flatten(), None => s.v_batt });
     let rd = reading(p, "vm_read", "vm_read_mode", computed.map(|c| c), "V");
-    clabel(g, x + 24.0, y + 8.0, "start", &rd, 21.0, UPRIGHT);
+    if below { clabel(g, x, y + 34.0, "middle", &rd, 21.0, UPRIGHT); }
+    else { clabel(g, x + 24.0, y + 8.0, "start", &rd, 21.0, UPRIGHT); }
 }
 
 fn dot(g: &mut G, x: f64, y: f64) { g.circle(x, y, 3.6, INK, INK, 1.0); }
@@ -646,8 +658,9 @@ fn circuit_render(p: &Params) -> String {
         component(&mut g, bulb, caps(p), iec, cx, cy, len, vert, cc);
         let name = comp_name(p, i, l.n);
         let mut val = lab_mode(p, RK[i][4], RMODE[i][2]);
-        // a capacitance cannot be marked in ohms: rather than label a capacitor "2 Ω", leave the blank to fill in
-        if caps(p) && !val.eq_ignore_ascii_case("none") && !val.trim().is_empty() && parse_cap(&val).is_none() {
+        // a capacitance cannot be marked in ohms or volts: rather than label a capacitor "2 Ω", leave the blank to
+        // fill in. A symbol or a spelling the reader cannot parse is left exactly as typed.
+        if caps(p) && matches!(super::circuit_solve::unit_kind(&val), Some("ohm") | Some("volt") | Some("amp")) {
             val = String::new();
         }
         if vert {
@@ -718,7 +731,7 @@ fn circuit_render(p: &Params) -> String {
         g.polyline(&[(lx, ya), (vx, ya), (vx, ym - 17.0)], INK, SW);
         g.polyline(&[(vx, ym + 17.0), (vx, yb), (lx, yb)], INK, SW);
         meter(&mut g, vx, ym, "V", cc);
-        vm_reading(&mut g, p, &solved, None, vx, ym);
+        vm_reading(&mut g, p, &solved, None, vx, ym, false);
         dot(&mut g, lx, ya);
         dot(&mut g, lx, yb);
     } else if let Some(k) = l.vm_part {
@@ -728,18 +741,19 @@ fn circuit_render(p: &Params) -> String {
             g.polyline(&[(cx, ya), (vx, ya), (vx, cy - 17.0)], INK, SW);
             g.polyline(&[(vx, cy + 17.0), (vx, yb), (cx, yb)], INK, SW);
             meter(&mut g, vx, cy, "V", cc);
-            vm_reading(&mut g, p, &solved, Some(k), vx, cy);
+            vm_reading(&mut g, p, &solved, Some(k), vx, cy, false);
             dot(&mut g, cx, ya);
             dot(&mut g, cx, yb);
         } else {
             // a horizontal part: in the series layout the meter goes above the wire, but a combination's wire
             // sits high on the canvas, so the meter goes below it there
             let vy = if l.combo { top_y + 82.0 } else { top_y - 82.0 };
-            let (xa, xb) = (cx - len / 2.0 - 10.0, cx + len / 2.0 + 10.0);
+            let half = vm_lead_half(len);
+            let (xa, xb) = (cx - half, cx + half);
             g.polyline(&[(xa, top_y), (xa, vy), (cx - 17.0, vy)], INK, SW);
             g.polyline(&[(cx + 17.0, vy), (xb, vy), (xb, top_y)], INK, SW);
             meter(&mut g, cx, vy, "V", cc);
-            vm_reading(&mut g, p, &solved, Some(k), cx, vy);
+            vm_reading(&mut g, p, &solved, Some(k), cx, vy, true);
             dot(&mut g, xa, top_y);
             dot(&mut g, xb, top_y);
         }
