@@ -26,8 +26,8 @@ cash-flow-statement__defaults 5f56a9154fcea79e
 cash-flow-statement__start 5f56a9154fcea79e
 cause-effect__defaults 8774a71b1432ad9b
 cause-effect__start 8774a71b1432ad9b
-chi-square-fit__defaults 2f65c3a7af7330e9
-chi-square-fit__start 2f65c3a7af7330e9
+chi-square-fit__defaults de2f14d0e1aadee5
+chi-square-fit__start de2f14d0e1aadee5
 chi-square-table__defaults ed9ff82be03eae95
 chi-square-table__start ed9ff82be03eae95
 circle-of-fifths__defaults f7e8a8b83655c15c
@@ -80,8 +80,8 @@ electric-field__defaults f5477ca3f656ac36
 electric-field__start f5477ca3f656ac36
 energy-bar-chart__defaults 2140369fa0365d7c
 energy-bar-chart__start 2140369fa0365d7c
-enzyme-kinetics__defaults 6cd3463d0f17a25f
-enzyme-kinetics__start 6cd3463d0f17a25f
+enzyme-kinetics__defaults c0aefaae416ec123
+enzyme-kinetics__start c0aefaae416ec123
 er-diagram__defaults 8866218ba5ebbaac
 er-diagram__start 8866218ba5ebbaac
 experiment-flow__defaults eed3a0215c8f7e94

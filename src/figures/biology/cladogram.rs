@@ -129,6 +129,15 @@ pub fn height(n: &Node) -> usize {
     if n.is_leaf() { 0 } else { 1 + n.children.iter().map(height).max().unwrap_or(0) }
 }
 
+/// (round 2) The branching points a reader can see: a group of two or more names. A one-child group branches nothing,
+/// though the parser accepts it (`(A)` is a name in brackets, not a fork), so counting every inner node said
+/// "1 branching point" for a single stub.
+pub fn branch_points(n: &Node) -> usize {
+    if n.is_leaf() { 0 } else { usize::from(n.children.len() >= 2) + n.children.iter().map(branch_points).sum::<usize>() }
+}
+
+/// Every inner node, for the tests that count the bars drawn (a one-child node's bar is zero-length and not drawn).
+#[cfg(test)]
 fn count_inner(n: &Node) -> usize {
     if n.is_leaf() { 0 } else { 1 + n.children.iter().map(count_inner).sum::<usize>() }
 }
@@ -177,12 +186,18 @@ fn walk(n: &Node, maxd: usize, row: &mut usize, p: &mut Placed) -> (usize, f64) 
     (x, y)
 }
 
-/// The leaf order as printed under the picture: the names in order, wrapped to about 74 characters a line.
-pub fn leaf_order(root: &Node) -> Vec<String> {
+/// The leaf order as printed under the picture, wrapped to `chars` characters a line: the first line carries
+/// "Left to right: " and the later ones a 14-space indent, so their budgets are counted in. (round 2) It takes the
+/// canvas's own measure: a fixed 74 characters ran past the right edge and cut the last names off.
+pub fn leaf_order(root: &Node, chars: usize) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut cur = String::new();
+    let mut budget = chars.saturating_sub(15).max(8);
     for part in leaves(root).iter() {
-        if !cur.is_empty() && cur.chars().count() + 2 + part.chars().count() > 74 { out.push(std::mem::take(&mut cur)); }
+        if !cur.is_empty() && cur.chars().count() + 2 + part.chars().count() > budget {
+            out.push(std::mem::take(&mut cur));
+            budget = chars.saturating_sub(14).max(8);
+        }
         if !cur.is_empty() { cur.push_str(", "); }
         cur.push_str(part);
     }
@@ -230,14 +245,16 @@ pub fn build(p: &Params) -> String {
     let w = (tree_w + label_w + 28.0).max(360.0);
     let top = 34.0;
     let h = top + ((n_leaves as f64) - 1.0).max(1.0) * LEAF_GAP * lab + 40.0 * lab;
-    // (round 2) the leaf order prints under the picture, wrapped: a long list needs more lines than the old fixed
-    // allowance, and the last ones were drawn outside the canvas. The floor keeps the small trees' size (and their
-    // census hashes) as they were.
+    // (round 2) the text under the picture wraps to the CANVAS, not to a fixed character count: 74 characters ran off
+    // the right edge of the 360 px floor canvas, so the last names of a student's list were never shown. The same
+    // measure serves the error reasons, which were cut mid-word for the same reason.
+    let text_chars = (((w - 48.0) / (12.0 * lab * 0.56)).floor() as usize).max(18);
+    let err_chars = (((w - 48.0) / (13.0 * lab * 0.56)).floor() as usize).max(18);
     let below = match &node {
-        Ok(root) => leaf_order(root).len().max(1),
-        Err(_) => 2,
+        Ok(root) => leaf_order(root, text_chars).len().max(1),
+        Err(e) => super::wrap(e, err_chars).len().max(1) + 1,
     };
-    let mut d = Doc::new(w, h + (14.0 + below as f64 * 17.0).max(62.0) * lab);
+    let mut d = Doc::new(w, h + (14.0 + below as f64 * 18.0).max(62.0) * lab);
     d.describe("Cladogram", "A branching tree of the names typed, with the leaves in the order they were written");
 
     match &node {
@@ -272,29 +289,30 @@ pub fn build(p: &Params) -> String {
         Err(e) => {
             d.raw(&text_el(24.0, 46.0, 13.0 * lab, "start", if print { "#555555" } else { ERR }, "The tree could not be read:"));
             let mut y = 70.0 * lab;
-            for line in super::wrap(e, 68) {
+            for line in super::wrap(e, err_chars) {
                 d.raw(&text_el(24.0, y, 13.0 * lab, "start", ink, &line));
                 y += 18.0 * lab;
             }
+            // (round 2) after the reason, not at a fixed row it used to overprint
+            d.raw(&text_el(24.0, y + 8.0 * lab, 12.0 * lab, "start", ink, "Nothing is drawn until the brackets balance."));
         }
     }
 
     // what the text was read as: the leaves, so a typo is visible without counting brackets
     let y = h + 8.0 * lab;
-    match &node {
-        Ok(root) => {
-            let ls = leaves(root);
-            let plural = |n: usize, one: &str, many: &str| if n == 1 { one.to_string() } else { many.to_string() };
-            let (br, lv) = (count_inner(root), height(root));
-            let (leaf_n, br_n, lv_n) = (plural(ls.len(), "leaf", "leaves"), plural(br, "branching point", "branching points"), plural(lv, "level", "levels"));
-            let count = format!("{} {leaf_n}, {br} {br_n}, {lv} {lv_n}", ls.len());
-            d.raw(&text_el(24.0, y, 12.0 * lab, "start", ink, &count));
-            for (i, line) in leaf_order(root).iter().enumerate() {
-                let text = if i == 0 { format!("Left to right: {line}") } else { format!("              {line}") };
-                d.raw(&text_el(24.0, y + (15.0 + i as f64 * 17.0) * lab, 12.0 * lab, "start", ink, &text));
-            }
+    if let Ok(root) = &node {
+        let ls = leaves(root);
+        let plural = |n: usize, one: &str, many: &str| if n == 1 { one.to_string() } else { many.to_string() };
+        let (br, lv) = (branch_points(root), height(root));
+        let (leaf_n, br_n, lv_n) = (plural(ls.len(), "leaf", "leaves"), plural(br, "branching point", "branching points"), plural(lv, "level", "levels"));
+        let count = format!("{} {leaf_n}, {br} {br_n}, {lv} {lv_n}", ls.len());
+        d.raw(&text_el(24.0, y, 12.0 * lab, "start", ink, &count));
+        for (i, line) in leaf_order(root, text_chars).iter().enumerate() {
+            // (round 3) the continuation lines are indented by x, not by leading spaces: SVG collapses those, so the
+            // line used to start hard against the left margin
+            let (x, text) = if i == 0 { (24.0, format!("Left to right: {line}")) } else { (24.0 + 15.0 * 12.0 * lab * 0.56, line.clone()) };
+            d.raw(&text_el(x, y + (15.0 + i as f64 * 17.0) * lab, 12.0 * lab, "start", ink, &text));
         }
-        Err(_) => { d.raw(&text_el(24.0, y, 12.0 * lab, "start", ink, "Nothing is drawn until the brackets balance.")); }
     }
 
     d.finish()
@@ -466,6 +484,62 @@ mod tests {
         }
         assert!(last <= h, "the last line (y = {last}) is below the canvas (height {h})");
         assert!(texts(&svg).contains("Left to right: Species name1"), "{}", texts(&svg));
+    }
+
+    /// Every drawn text as (x, y, font-size, anchor, content).
+    fn boxes(svg: &str) -> Vec<(f64, f64, f64, String, String)> {
+        let mut out = Vec::new();
+        for part in svg.split("<text").skip(1) {
+            let num = |k: &str| -> Option<f64> {
+                let at = part.find(&format!("{k}=\""))? + k.len() + 2;
+                part[at..].split('"').next()?.parse().ok()
+            };
+            let Some(x) = num("x") else { continue };
+            let anchor = match part.find("text-anchor=\"") {
+                Some(i) => part[i + 13..].split('"').next().unwrap_or("start").to_string(),
+                None => "start".to_string(),
+            };
+            let content = part.split_once('>').map(|(_, rest)| rest.split("</text>").next().unwrap_or("").to_string()).unwrap_or_default();
+            out.push((x, num("y").unwrap_or(0.0), num("font-size").unwrap_or(12.0), anchor, content));
+        }
+        out
+    }
+
+    #[test]
+    fn every_line_of_text_fits_the_canvas() {
+        // (round 3) the wrap was 74 characters whatever the canvas: on the 360 px floor the last names of a student's
+        // list were cut off at the right edge, and a malformed-tree reason was cut mid-word. Both wrap to the width now.
+        let twelve = format!("({})", (1..=12).map(|i| format!("Species name{i}")).collect::<Vec<_>>().join(", "));
+        for tree in [
+            "(Homo sapiens, Pan troglodytes, Gorilla gorilla, Pongo pygmaeus)".to_string(),
+            twelve.clone(),
+            "(((Human, Chimp), Gorilla), Orangutan)".to_string(),
+            "()".to_string(),
+            "(A,)".to_string(),
+            "".to_string(),
+        ] {
+            let svg = render_of(&[("tree", Value::S(tree.clone()))]);
+            let w = {
+                let at = svg.find("width=\"").expect("width") + 7;
+                svg[at..].split('"').next().unwrap().parse::<f64>().unwrap()
+            };
+            for (x, _y, size, anchor, text) in boxes(&svg) {
+                let n = text.chars().count() as f64 * size * 0.6;
+                let right = match anchor.as_str() { "end" => x, "middle" => x + n / 2.0, _ => x + n };
+                assert!(right <= w + 1.0, "{tree:?}: {text:?} ends at {right:.1} on a {w} canvas");
+            }
+            // and every name typed is somewhere on the page
+            if let Ok(n) = parse(&tree) {
+                let all = texts(&svg);
+                for leaf in leaves(&n) { assert!(all.contains(&leaf), "{tree:?}: {leaf} is not printed"); }
+            }
+        }
+    }
+
+    #[test]
+    fn a_one_name_group_is_not_called_a_branching_point() {
+        let t = texts(&render_of(&[s("tree", "(A)")]));
+        assert!(t.contains("1 leaf, 0 branching points, 1 level"), "{t}");
     }
 
     #[test]

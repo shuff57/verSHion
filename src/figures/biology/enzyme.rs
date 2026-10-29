@@ -113,6 +113,14 @@ fn text_el(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) -> Stri
     )
 }
 
+/// (round 3) A label drawn over the curve carries a thin white halo, never a plate (conventions: a label never erases a
+/// curve). The PNG renderer ignores `paint-order`, so the outline is drawn as its own text first and the fill on top.
+fn text_el_halo(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) -> String {
+    let common = format!(r##"x="{x:.2}" y="{y:.2}" font-size="{size}" text-anchor="{anchor}" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif""##);
+    let t = svg::esc(s);
+    format!(r##"<text {common} fill="none" stroke="#fff" stroke-width="2.4" stroke-linejoin="round">{t}</text><text {common} fill="{fill}">{t}</text>"##)
+}
+
 fn val(v: f64, dec: i64) -> String {
     let zeros = |s: &str| s.trim_start_matches('\u{2212}').chars().filter(|c| c.is_ascii_digit()).all(|c| c == '0');
     let s = num(v, dec);
@@ -207,21 +215,30 @@ pub fn build(p: &Params) -> (String, Report) {
                 poly0.join(" ")
             ));
         }
-        // Vmax as the dashed asymptote
+        // Vmax as the dashed asymptote. (round 3) With an inhibitor this is the APPARENT Vmax, and labelling it plainly
+        // "Vmax = 2" beside givens that say "Vmax = 10" reads as a contradiction; the prime is the usual mark.
         let vy = f.py(vmax_a);
         d.raw(&format!(r##"<line x1="{:.2}" y1="{vy:.2}" x2="{:.2}" y2="{vy:.2}" stroke="{curve}" stroke-width="1.4" stroke-dasharray="7 5"/>"##, f.left(), f.right()));
-        d.raw(&text_el(f.right() - 4.0, vy - 8.0 * lab, 12.0 * lab, "end", curve, &format!("Vmax = {}", val(vmax_a, dec))));
+        let vmax_name = if inhibited { "Vmax\u{2032}" } else { "Vmax" };
+        d.raw(&text_el(f.right() - 4.0, vy - 8.0 * lab, 12.0 * lab, "end", curve, &format!("{vmax_name} = {}", val(vmax_a, dec))));
         // Km: the concentration that reaches half of it — or, past the right-hand edge, named there, because an
         // inhibitor can push Km far beyond the axis the curve is drawn on
         let half = f.py(vmax_a / 2.0);
+        let km_name = if inhibited { "Km\u{2032}" } else { "Km" };
+        let km_text = format!("{km_name} = {}", val(km_a, dec));
+        let km_w = km_text.chars().count() as f64 * 12.0 * lab * 0.55;
+        // (round 3) centred on its marker it clipped at the right edge when Km sat near the axis end; keep it inside
+        let (km_lx, km_anchor) = if km_a <= smax && f.px(km_a) + km_w / 2.0 > f.right() { (f.right() - 2.0, "end") }
+        else if km_a <= smax && f.px(km_a) - km_w / 2.0 < f.left() { (f.left() + 2.0, "start") }
+        else { (f.px(km_a), "middle") };
         if km_a <= smax {
             let kx = f.px(km_a);
             d.raw(&format!(r##"<line x1="{kx:.2}" y1="{:.2}" x2="{kx:.2}" y2="{half:.2}" stroke="{curve}" stroke-width="1.2" stroke-dasharray="3 4"/>"##, f.bottom()));
             d.raw(&format!(r##"<line x1="{:.2}" y1="{half:.2}" x2="{kx:.2}" y2="{half:.2}" stroke="{curve}" stroke-width="1.2" stroke-dasharray="3 4"/>"##, f.left()));
-            d.raw(&text_el(kx, f.bottom() - 6.0 * lab, 12.0 * lab, "middle", curve, &format!("Km = {}", val(km_a, dec))));
+            d.raw(&text_el(km_lx, f.bottom() - 6.0 * lab, 12.0 * lab, km_anchor, curve, &km_text));
         } else {
             d.raw(&format!(r##"<line x1="{:.2}" y1="{half:.2}" x2="{:.2}" y2="{half:.2}" stroke="{curve}" stroke-width="1.2" stroke-dasharray="3 4"/>"##, f.left(), f.right()));
-            let note = format!("Km = {}, beyond this axis", val(km_a, dec));
+            let note = format!("{km_name} = {}, beyond this axis", val(km_a, dec));
             d.raw(&text_el(f.right() - 4.0, half - 7.0 * lab, 12.0 * lab, "end", curve, &note));
         }
         let half_label = format!("Vmax/2 = {}", val(vmax_a / 2.0, dec));
@@ -239,8 +256,19 @@ pub fn build(p: &Params) -> (String, Report) {
         let (lx, anchor) = if px + 8.0 + text_w <= f.right() { (px + 8.0, "start") } else { (px - 8.0, "end") };
         // close under the Vmax line there is no room above the point, and the label would print into the dashed line
         let above = py - 9.0 * lab;
-        let ly = if (above - vy).abs() < 14.0 * lab { py + 18.0 * lab } else { above };
-        d.raw(&text_el(lx, ly, 12.0 * lab, anchor, mark, &label));
+        let mut ly = if (above - vy).abs() < 14.0 * lab { py + 18.0 * lab } else { above };
+        // (round 3) at low [S] the point sits on the axis, where the "Km = n" label is: lift the rate label clear of it
+        // rather than printing the two on top of each other
+        if km_a <= smax {
+            let km_y = f.bottom() - 6.0 * lab;
+            let (km_lo, km_hi) = match km_anchor { "end" => (km_lx - km_w, km_lx), "middle" => (km_lx - km_w / 2.0, km_lx + km_w / 2.0), _ => (km_lx, km_lx + km_w) };
+            let (lo, hi) = if anchor == "start" { (lx, lx + text_w) } else { (lx - text_w, lx) };
+            if (ly - km_y).abs() < 15.0 * lab && lo < km_hi && km_lo < hi {
+                ly -= 22.0 * lab;
+            }
+        }
+        // (round 3) a label over the curve carries a thin halo, so the curve is never struck through
+        d.raw(&text_el_halo(lx, ly, 12.0 * lab, anchor, mark, &label));
     }
 
     // the givens, always printed: they are what the curve is drawn from
@@ -453,7 +481,7 @@ mod tests {
         let p = with(&[s("mode", "competitive"), f("inh", 4.0), f("ki", 1.0), f("km", 20.0)]);
         assert!((kinetics(&p).1 - 100.0).abs() < 1e-9);
         let t = texts(&render_of(&[s("mode", "competitive"), f("inh", 4.0), f("ki", 1.0), f("km", 20.0)]));
-        assert!(t.contains("Km = 100, beyond this axis"), "{t}");
+        assert!(t.contains("Km\u{2032} = 100, beyond this axis"), "{t}");
         assert!(warnings(&p).iter().any(|w| w.contains("the axis stops")), "{:?}", warnings(&p));
         // and inside the axis it is still drawn at its dotted line
         let inside = with(&[]);
@@ -475,6 +503,96 @@ mod tests {
         (hs[0].drag.as_ref().unwrap())(&mut q, (mid, 0.0));
         let want = ((x0 + (mid - l) / span * (x1 - x0)) * 10.0).round() / 10.0;
         assert!((q.f("at") - want).abs() < 1e-9, "{} vs {want}", q.f("at"));
+    }
+
+    /// Every drawn text as (x, y, size, anchor, content).
+    fn boxes(svg: &str) -> Vec<(f64, f64, f64, String, String)> {
+        let mut out = Vec::new();
+        for part in svg.split("<text").skip(1) {
+            let num = |k: &str| -> Option<f64> {
+                let at = part.find(&format!("{k}=\""))? + k.len() + 2;
+                part[at..].split('"').next()?.parse().ok()
+            };
+            let Some(x) = num("x") else { continue };
+            let anchor = match part.find("text-anchor=\"") {
+                Some(i) => part[i + 13..].split('"').next().unwrap_or("start").to_string(),
+                None => "start".to_string(),
+            };
+            let content = part.split_once('>').map(|(_, rest)| rest.split("</text>").next().unwrap_or("").to_string()).unwrap_or_default();
+            out.push((x, num("y").unwrap_or(0.0), num("font-size").unwrap_or(12.0), anchor, content));
+        }
+        out
+    }
+
+    /// The boxes of the labels whose text starts with `prefix`, as (left, right, top, bottom).
+    fn label_box(svg: &str, prefix: &str) -> Vec<(f64, f64, f64, f64)> {
+        boxes(svg)
+            .into_iter()
+            .filter(|b| b.4.starts_with(prefix))
+            .map(|(x, y, size, anchor, text)| {
+                let n = text.chars().count() as f64 * size * 0.55;
+                let (l, r) = match anchor.as_str() { "end" => (x - n, x), "middle" => (x - n / 2.0, x + n / 2.0), _ => (x, x + n) };
+                (l, r, y - size, y + size * 0.3)
+            })
+            .collect()
+    }
+
+    fn overlaps(a: (f64, f64, f64, f64), b: (f64, f64, f64, f64)) -> bool {
+        a.0 < b.1 && b.0 < a.1 && a.2 < b.3 && b.2 < a.3
+    }
+
+    #[test]
+    fn the_rate_label_never_overprints_the_km_label() {
+        // (round 3) at [S] = 0 the point sits on the axis, exactly where "Km = n" is drawn: the two texts printed on top
+        // of each other ("v = 0 at [S] = K0 = 2")
+        for at in [0.0, 0.2, 0.5, 2.0] {
+            for km in [0.5, 1.0, 2.0, 5.0] {
+                let svg = render_of(&[f("at", at), f("km", km)]);
+                let rate = label_box(&svg, "v = ");
+                let kmb = label_box(&svg, "Km = ");
+                for r in &rate {
+                    for k in &kmb {
+                        assert!(!overlaps(*r, *k), "at = {at}, km = {km}: the rate label {r:?} overprints the Km label {k:?}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_rate_label_has_a_halo_so_the_curve_is_not_struck_through() {
+        // conventions: a label never erases a curve, and never lets the curve erase it
+        let svg = render_of(&[]);
+        let halo = svg.matches(r##"fill="none" stroke="#fff""##).count();
+        assert!(halo >= 1, "the rate label is not haloed");
+        // the haloed copy carries the same text as the filled one, so nothing is doubled on the page
+        let rate = label_box(&svg, "v = ");
+        assert!(!rate.is_empty(), "the rate label is not drawn");
+    }
+
+    #[test]
+    fn the_km_label_stays_inside_the_canvas_at_the_right_edge() {
+        // (round 3) centred on a Km at the axis end, its last digit was cut off ("Km = 1" for 12)
+        let svg = render_of(&[f("km", 12.0), f("smax", 12.0)]);
+        let w = {
+            let at = svg.find("width=\"").expect("width") + 7;
+            svg[at..].split('"').next().unwrap().parse::<f64>().unwrap()
+        };
+        for k in label_box(&svg, "Km = ") {
+            assert!(k.1 <= w + 1.0, "the Km label runs off the canvas: {k:?} on {w}");
+        }
+    }
+
+    #[test]
+    fn the_inhibited_curves_own_constants_are_named_as_apparent() {
+        // "Vmax = 2" beside givens "Vmax = 10" read as a contradiction; the prime says whose constant it is
+        let t = texts(&render_of(&[s("mode", "noncompetitive"), f("inh", 4.0), f("ki", 1.0)]));
+        assert!(t.contains("Vmax\u{2032} = 2"), "the apparent Vmax is not marked: {t}");
+        let t = texts(&render_of(&[s("mode", "competitive"), f("inh", 4.0), f("ki", 1.0)]));
+        assert!(t.contains("Km\u{2032} = 10"), "the apparent Km is not marked: {t}");
+        // and the plain figure keeps the plain names
+        let t = texts(&render_of(&[s("mode", "none")]));
+        assert!(t.contains("Vmax = 10") && t.contains("Km = 2"), "{t}");
     }
 
     #[test]

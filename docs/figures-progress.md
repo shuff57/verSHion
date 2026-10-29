@@ -526,3 +526,20 @@ name. Also: the count line now reads "1 branching point, 1 level" rather than "1
 no longer says an ancestor label is not printed. The same pass fixed a contradiction the biology critic's M7 fix had
 left: the table's own Total row still printed the exact statistic (1.43) beside the line under it that now prints the
 sum of the printed contributions (1.42). Census re-blessed: only `cladogram`'s two ids move.
+
+Verification critic on `9a5ae46` (2026-10-29): **FAIL** — it confirmed both blockers and most majors fixed, and found
+six majors the first round had missed or introduced. Fixed here, all seen in a PNG afterwards:
+(1) the cladogram's "Left to right" line wrapped at a fixed 74 characters whatever the canvas, so on the 360 px floor
+the last names were cut off — it wraps to the canvas width now, and the continuation lines are indented (SVG collapses
+leading spaces, so they were not); (2) malformed-tree reasons were cut mid-word for the same reason, and now wrap to
+the width and print "Nothing is drawn…" below them instead of over them; (3) the enzyme's rate label at [S] = 0 landed
+on the "Km = n" label (now lifted clear when the two boxes overlap); (4) the rate label was drawn straight through the
+curve with no halo (it has one, drawn as an outline first because the PNG renderer ignores `paint-order`); (5) the
+chi-square total was rounded to two decimals while a contribution could print four, so 0.0033 + 0.01 totalled 0.01 —
+the total now sums the printed strings at the precision they print at (0.0133); (6) at one decimal place Hardy-Weinberg
+printed p = 0.99 as "1" beside q = 0.01 — the page's precision now also rises until p and q print honestly.
+Minors fixed too: the Km label clips at the right edge near the axis end; "1 categories" and "2 categories with an
+expected count" when one expected count is 0; "p = 0.050 is below α = 0.05" when the printed p equals α; the Expected
+column did not group thousands beside a grouped Observed column; "(A)" reported a branching point it does not have;
+and with an inhibitor the plot's "Vmax = 2" now reads "Vmax′ = 2" (Km′ likewise), which is the apparent constant the
+givens' "Vmax = 10" does not contradict. Census: only `chi-square-fit` and `enzyme-kinetics` re-hashed.

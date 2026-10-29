@@ -107,16 +107,24 @@ pub fn printed_parts(g: &Gen, dec: i64) -> [f64; 3] {
     v
 }
 
-/// The decimal places the first generation is printed at: `dec`, raised until no real frequency would print as zero.
+/// The decimal places the picture is printed at: `dec`, raised until no real frequency would print as zero — and, since
+/// round 3, until the allele frequencies themselves print honestly: p = 0.99 at one decimal place printed "1" beside a
+/// q of "0.01" and a genotype set that plainly does not come from p = 1.
 pub fn shown_dec(p: &Params) -> i64 {
     let g = generations(p);
     let dec = p.i("dec").clamp(1, 3);
+    let (p0, _, _, _, _) = given(p);
+    let q0 = 1.0 - p0;
+    let collapses = |v: f64, d: i64| {
+        let shown = num(v, d).replace('\u{2212}', "-").parse::<f64>().unwrap_or(v);
+        (v < 1.0 && shown >= 1.0) || (v > 0.0 && shown <= 0.0)
+    };
     let needs_more = |gg: &Gen, d: i64| {
         let pr = printed_parts(gg, d);
         [gg.dom, gg.het, gg.rec].iter().zip(pr.iter()).any(|(ex, sh)| *ex != 0.0 && *sh == 0.0)
     };
     let mut dp = dec;
-    while dp < 5 && needs_more(&g[0], dp) { dp += 1; }
+    while dp < 5 && (needs_more(&g[0], dp) || collapses(p0, dp) || collapses(q0, dp)) { dp += 1; }
     dp
 }
 
@@ -228,17 +236,19 @@ pub fn build(p: &Params) -> (String, Report) {
     d.rect(BAR_X, POOL_Y, p0 * BAR_W, POOL_H, allele_a, ink, 1.4);
     d.rect(split, POOL_Y, q0 * BAR_W, POOL_H, "#ffffff", ink, 1.4);
     d.raw(&text_el(24.0, POOL_Y + 18.0, 13.0 * f, "start", ink, "Gene pool"));
+    // the precision the whole page prints at: raised until no real frequency prints as zero and p and q print honestly
+    // (round 3: at one decimal place p = 0.99 printed "1" beside q = 0.01)
+    let dp = shown_dec(p);
     // the legend under the pool, so a segment too narrow for its own label still says what it is
     let legend_y = POOL_Y + POOL_H + 16.0;
     d.rect(BAR_X, legend_y - 11.0, 12.0, 12.0, allele_a, ink, 1.0);
-    d.raw(&text_el(BAR_X + 18.0, legend_y, 12.0 * f, "start", ink, &format!("A  p = {}", val(p0, dec))));
+    d.raw(&text_el(BAR_X + 18.0, legend_y, 12.0 * f, "start", ink, &format!("A  p = {}", val(p0, dp))));
     d.rect(BAR_X + 150.0, legend_y - 11.0, 12.0, 12.0, "#ffffff", ink, 1.0);
-    d.raw(&text_el(BAR_X + 168.0, legend_y, 12.0 * f, "start", ink, &format!("a  q = {}", val(q0, dec))));
+    d.raw(&text_el(BAR_X + 168.0, legend_y, 12.0 * f, "start", ink, &format!("a  q = {}", val(q0, dp))));
 
     // one stacked bar per generation: the genotype that random mating makes from that generation's pool
     // the printed set must add up to one AND must not show a real frequency as zero: at one decimal place
     // p = 0.01 has AA = 0.0001, so the precision rises until every real part shows
-    let dp = shown_dec(p);
 
     let mut segments = Vec::with_capacity(gens);
     for (k, cur) in g.iter().enumerate() {
@@ -281,8 +291,8 @@ pub fn build(p: &Params) -> (String, Report) {
     // the givens, always printed: they are what the student is asked to work from
     let givens = format!(
         "p = {}, q = {}, N = {}",
-        val(p0, dec),
-        val(q0, dec),
+        val(p0, dp),
+        val(q0, dp),
         n
     );
     d.raw(&text_el(24.0, GEN_Y0 - 16.0, 12.0 * f, "start", ink, &givens));
@@ -442,6 +452,20 @@ mod tests {
         // and the given p itself must not round away either
         let t = texts(&render_of(&[f("p", 0.01), ("dec", Value::I(1))]));
         assert!(t.contains("A  p = 0.01"), "{t}");
+    }
+
+    #[test]
+    fn the_allele_frequencies_never_print_as_one_or_zero_when_they_are_not() {
+        // (round 3) p = 0.99 at one decimal place printed "p = 1, q = 0.01" beside AA p² = 0.9801 and aa q² = 0.0001
+        for (p0, dec) in [(0.99, 1), (0.01, 1), (0.999, 1), (0.5, 1)] {
+            let t = texts(&render_of(&[f("p", p0), ("dec", Value::I(dec)), b(SHOW_ANSWERS, true)]));
+            let line = t.lines().find(|l| l.starts_with("p = ")).unwrap_or("");
+            let after = |k: &str| line.split(&format!("{k} = ")).nth(1).and_then(|r| r.split(',').next()).and_then(|v| v.parse::<f64>().ok());
+            let (p, q) = (after("p").unwrap_or(-1.0), after("q").unwrap_or(-1.0));
+            assert!((p + q - 1.0).abs() < 1e-9, "p = {p0}, dec = {dec}: printed p + q = {p} + {q}: {t}");
+            assert!(p0 >= 1.0 || p < 1.0, "p = {p0} printed as {p}: {t}");
+            assert!(p0 <= 0.0 || p > 0.0, "p = {p0} printed as {p}: {t}");
+        }
     }
 
     #[test]

@@ -206,10 +206,18 @@ fn col(v: f64, dec: i64) -> String {
     s.replace('-', "\u{2212}")
 }
 
-/// Rounds to `dec` decimal places, for totalling what is actually printed rather than what is exact.
-fn round_to(v: f64, dec: i64) -> f64 {
-    let f = 10f64.powi(dec as i32);
-    (v * f).round() / f
+/// (round 3) Thousands separators on an already-formatted number, so the Expected column reads "31,275.00" beside an
+/// Observed column that already groups ("31,500") instead of the two mixing formats in one row.
+fn group(s: &str) -> String {
+    let (sign, rest) = match s.strip_prefix('\u{2212}') { Some(r) => ("\u{2212}", r), None => ("", s) };
+    let (int, frac) = match rest.split_once('.') { Some((i, f)) => (i, Some(f)), None => (rest, None) };
+    let mut back = String::new();
+    for (i, c) in int.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 { back.push(','); }
+        back.push(c);
+    }
+    let int: String = back.chars().rev().collect();
+    match frac { Some(f) => format!("{sign}{int}.{f}"), None => format!("{sign}{int}") }
 }
 
 /// Greedy word wrap to `max` characters.
@@ -240,16 +248,22 @@ pub fn p_phrase(p: f64) -> String {
     if t.starts_with('<') { format!("p {t}") } else { format!("p = {t}") }
 }
 
-/// The decision in words, from the p-value and the significance level.
+/// The decision in words, from the p-value and the significance level. (round 3) Judged on the p-value as PRINTED: at
+/// p = 0.0503 the page said "p = 0.050 is below α = 0.05", which contradicts itself, so an equal printed p is called
+/// borderline rather than placed on either side.
 pub fn decision(f: &Fit) -> String {
     match f.p {
         None => "The test cannot be run on these numbers".to_string(),
         Some(p) => {
             let a = num(f.alpha, 3);
-            if p < f.alpha {
+            let t = p_text(p);
+            let shown = if t.starts_with('<') { 0.0 } else { t.parse::<f64>().unwrap_or(p) };
+            if shown < f.alpha {
                 format!("{} is below \u{3b1} = {}, so reject the hypothesis: the counts do not fit the ratio.", p_phrase(p), a)
-            } else {
+            } else if shown > f.alpha {
                 format!("{} is above \u{3b1} = {}, so do not reject the hypothesis: the counts are consistent with the ratio.", p_phrase(p), a)
+            } else {
+                format!("{} is level with \u{3b1} = {} at this precision: a borderline result, so do not reject the hypothesis.", p_phrase(p), a)
             }
         }
     }
@@ -314,15 +328,23 @@ pub fn build(p: &Params) -> String {
     let sci = |v: f64| format!("{v:.2e}").replace('-', "\u{2212}");
     let fmt_cnt = |v: f64| if huge { sci(v) } else { num(v, 2) };
     let fmt_term = |v: f64| if huge { sci(v) } else { col(v, dec.max(2)) };
-    // the total is the sum of what is printed, so a student adding the column gets the total that is printed
-    let printed_chi2: f64 = f.rows.iter().map(|r| if huge { r.term } else { round_to(r.term, dec.max(2)) }).sum();
+    // (round 3) The total is the sum of what is PRINTED, and at the precision the column actually prints: `col` shows
+    // more decimals when a real contribution would otherwise print as 0, so 0.0033 + 0.01 must total 0.0133, not 0.01.
+    let term_text: Vec<String> = f.rows.iter().map(|r| fmt_term(r.term)).collect();
+    let term_dec = term_text
+        .iter()
+        .map(|s| s.split_once('.').map_or(0, |(_, d)| d.chars().take_while(char::is_ascii_digit).count()) as i64)
+        .max()
+        .unwrap_or(0)
+        .max(dec.max(2));
+    let printed_chi2: f64 = term_text.iter().map(|s| s.replace('\u{2212}', "-").parse::<f64>().unwrap_or(0.0)).sum();
 
     let mut y = head_y + 8.0 * lab + row_h - 7.0 * lab;
     for r in &f.rows {
         d.raw(&text_el(24.0, y, FS * lab, "start", ink, &short(&r.name)));
         d.raw(&text_el(col_o, y, FS * lab, "end", ink, &fmt_cnt(r.observed)));
         if ans {
-            d.raw(&text_el(col_e, y, FS * lab, "end", ink, &if huge { sci(r.expected) } else { col(r.expected, dec) }));
+            d.raw(&text_el(col_e, y, FS * lab, "end", ink, &if huge { sci(r.expected) } else { group(&col(r.expected, dec)) }));
             d.raw(&text_el(col_t, y, FS * lab, "end", ink, &fmt_term(r.term)));
         } else {
             d.raw(&text_el(col_e, y, FS * lab, "end", ink, BLANK));
@@ -342,13 +364,14 @@ pub fn build(p: &Params) -> String {
     let total_text = if !ans { BLANK.to_string() }
     else if f.impossible { "\u{221e}".to_string() }
     else if huge { sci(printed_chi2) }
-    else { col(printed_chi2, dec.max(2)) };
+    else { col(printed_chi2, term_dec) };
     d.raw(&text_el(col_t, y, FS * lab, "end", ink, &total_text));
     rule(&mut d, y + 9.0 * lab, 1.6);
 
-    // the givens: the ratio the expected counts come from, always printed
+    // the givens: the ratio the expected counts come from, always printed (in the table's own notation when huge)
     let ratio_text: Vec<String> = f.ratio.iter().map(|v| val(*v, 0)).collect();
-    let givens = format!("Expected from the ratio {} out of {} observations", ratio_text.join(" : "), val(total_obs, 0));
+    let total_shown = if huge { sci(total_obs) } else { val(total_obs, 0) };
+    let givens = format!("Expected from the ratio {} out of {} observations", ratio_text.join(" : "), total_shown);
     d.raw(&text_el(24.0, stats_y0 - 14.0 * lab, 12.0 * lab, "start", ink, &givens));
 
     // the statistics block
@@ -356,8 +379,14 @@ pub fn build(p: &Params) -> String {
         if !ans { format!("Chi-square  \u{3c7}\u{b2} = {BLANK}") }
         else if f.impossible { "Chi-square  \u{3c7}\u{b2} = \u{221e}  (a category expected to be empty has counts in it)".to_string() }
         else if huge { format!("Chi-square  \u{3c7}\u{b2} = {}", sci(printed_chi2)) }
-        else { format!("Chi-square  \u{3c7}\u{b2} = {}", col(printed_chi2, dec.max(2))) },
-        if ans { format!("Degrees of freedom  df = {}  ({} categories with an expected count \u{2212} 1)", f.df, f.kept) } else { format!("Degrees of freedom  df = {BLANK}") },
+        else { format!("Chi-square  \u{3c7}\u{b2} = {}", col(printed_chi2, term_dec)) },
+        if ans {
+            let (one, many) = ("1 category counted", "categories counted");
+            let n = if f.kept == 1 { one.to_string() } else { format!("{} {many}", f.kept) };
+            format!("Degrees of freedom  df = {}  ({n} \u{2212} 1)", f.df)
+        } else {
+            format!("Degrees of freedom  df = {BLANK}")
+        },
         if ans { match f.p { Some(p) => format!("p-value  {}", p_phrase(p)), None => "p-value  p = \u{2014}".to_string() } } else { format!("p-value  p = {BLANK}") },
     ];
     let mut all: Vec<String> = lines.to_vec();
@@ -513,6 +542,44 @@ mod tests {
         let t = texts(&render_of(&[s("obs", "10, 5"), s("ratio", "1, 0")]));
         assert!(t.contains("\u{221e}"), "the statistic is not shown as infinite: {t}");
         assert!(!t.contains("Chi-square  \u{3c7}\u{b2} = 1.67"), "{t}");
+    }
+
+    #[test]
+    fn a_contribution_below_the_printed_precision_still_adds_up() {
+        // (round 3) 1²/300 = 0.0033 and 1²/100 = 0.01: the first prints with four decimals (col's never-zero fallback)
+        // while the total was rounded to two, so the column read 0.0033 + 0.01 against a total of 0.01
+        let t = texts(&render_of(&[s("obs", "301, 99"), s("ratio", "3, 1")]));
+        let line = t.lines().find(|l| l.contains("Chi-square  \u{3c7}\u{b2} =")).unwrap_or("");
+        assert!(line.contains("= 0.0133"), "the printed total is not the sum of the printed contributions: {line}");
+        assert_eq!(t.lines().filter(|l| *l == "0.0133").count(), 1, "the Total row disagrees with the line under the table: {t}");
+    }
+
+    #[test]
+    fn the_decision_never_contradicts_the_printed_p() {
+        // p = 0.0503 prints as "0.050" at three decimals; the page then said "is below α = 0.05"
+        let fit = Fit { rows: Vec::new(), chi2: 0.0, df: 1, p: Some(0.0503), alpha: 0.05, ratio: Vec::new(), kept: 2, impossible: false };
+        let d = decision(&fit);
+        assert!(!d.contains("is below"), "{d}");
+        assert!(d.contains("level with"), "{d}");
+        // and a clearly-below p still reads below
+        let below = Fit { p: Some(0.001), ..fit.clone() };
+        assert!(decision(&below).contains("is below"), "{}", decision(&below));
+    }
+
+    #[test]
+    fn the_degrees_of_freedom_line_is_grammatical_and_counts_what_it_should() {
+        let t = texts(&render_of(&[s("obs", "10, 0"), s("ratio", "1, 0")]));
+        assert!(t.contains("(1 category counted \u{2212} 1)"), "{t}");
+        let t = texts(&render_of(&[s("obs", "10, 5"), s("ratio", "1, 0")]));
+        assert!(t.contains("(2 categories counted \u{2212} 1)"), "{t}");
+    }
+
+    #[test]
+    fn the_expected_column_groups_its_thousands_like_the_observed_one() {
+        // 31,500 beside 31275.00 is two formats in one row
+        let t = texts(&render_of(&[s("obs", "31500, 10100, 10800, 3200"), s("ratio", "9, 3, 3, 1")]));
+        assert!(t.contains("31,275.00"), "the expected count is not grouped: {t}");
+        assert!(!t.contains("31275.00"), "{t}");
     }
 
     #[test]
