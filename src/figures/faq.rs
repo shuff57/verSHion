@@ -68,6 +68,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "electric-field" => ELECTRIC_FIELD,
         "magnetic-field" => MAGNETIC_FIELD,
         "standing-wave" => STANDING_WAVE,
+        "pv-diagram" => PV_DIAGRAM,
         "parallelogram" => PARALLELOGRAM,
         "trapezoid" => TRAPEZOID,
         "kite" => KITE,
@@ -3453,6 +3454,25 @@ const ENERGY_BAR_CHART: &[Faq] = &[
     Faq {
         q: "How do I make a worksheet?",
         a: "Turn Show answers off: the bars are not drawn and the three numbers become blanks, while the axes, the store names and the givens (mass, heights, loss share, g) stay, so the student works out the stores and draws the bars.",
+    },
+];
+
+const PV_DIAGRAM: &[Faq] = &[
+    Faq {
+        q: "Why is the work the area under the line?",
+        a: "Work is pressure times the change in volume, and on a PV diagram that is the area of a strip P dV. Adding the strips up gives the area under the path, which is why a bigger area means more work done by the gas.",
+    },
+    Faq {
+        q: "What is the difference between the two paths?",
+        a: "On an isotherm the temperature is constant, so the pressure falls as the volume rises and the path curves. On an isobar the pressure is constant and the path is a flat line, so the work is simply P times the change in volume.",
+    },
+    Faq {
+        q: "Why is compressing the gas negative work?",
+        a: "The gas does work when it expands; work is done on it when it is compressed. The sign follows the direction of the change in volume, so putting the larger volume first gives a negative answer.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the work and the two pressures become blanks while the axes, the path, the shaded area and the given amounts, temperature and volumes stay.",
     },
 ];
 

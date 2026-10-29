@@ -214,6 +214,8 @@ pulley__defaults 4c786acc64ec8d80
 pulley__start 4c786acc64ec8d80
 punnett-square__defaults cbc16b93afeaf4ad
 punnett-square__start cbc16b93afeaf4ad
+pv-diagram__defaults 0a198e320d779559
+pv-diagram__start 0a198e320d779559
 pyramid__defaults 26ad1f6ad8a8e29e
 pyramid__start b926d93b20c0f740
 rc-curve__defaults 9be7c6f399899d0e
