@@ -20,6 +20,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "spring-scale" => SPRING_SCALE,
         "waves" => WAVES,
         "circuit-diagram" => CIRCUIT_DIAGRAM,
+        "ray-diagram" => RAY_DIAGRAM,
         // biology
         "population-growth" => POPULATION_GROWTH,
         "predator-prey" => PREDATOR_PREY,
@@ -3553,6 +3554,25 @@ const REFRACTION: &[Faq] = &[
     Faq {
         q: "How do I make a worksheet?",
         a: "Turn Show answers off: the refracted angle, the critical angle and the speeds become blanks while the incident ray, the normal and the given indices and angle stay. The refracted ray (or the reflected one past the critical angle) is drawn on the key only, since where it goes is the answer.",
+    },
+];
+
+const RAY_DIAGRAM: &[Faq] = &[
+    Faq {
+        q: "Why does the ray through the centre of the lens go straight on?",
+        a: "A thin lens is treated as flat in the middle, so a ray crossing there meets the two surfaces at equal and opposite angles and comes out undeviated. That is what makes it the easy ray to draw: it fixes the direction from the object tip to the image tip.",
+    },
+    Faq {
+        q: "Where does the lens equation come from?",
+        a: "1/f = 1/u + 1/v, with u the object distance and v the image distance, both measured from the lens. It follows from the similar triangles in the diagram. The magnification is m = -v/u, and a negative m means the image is inverted; a negative v means it is virtual, on the same side as the object and drawn dashed.",
+    },
+    Faq {
+        q: "Why is the image dashed sometimes?",
+        a: "Because the rays only appear to come from there. Inside the focal point, or with a diverging lens, the rays leave the lens still spreading out, so the dashed lines are their backward extensions meeting where the image would be. No light reaches a virtual image, so it cannot be caught on a screen.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the image distance, the magnification and the image height become blanks while the axis, the lens, its focal points, the object and the rays stay — the answers are read off the diagram.",
     },
 ];
 

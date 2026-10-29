@@ -218,6 +218,8 @@ pv-diagram__defaults 308249e292637fdc
 pv-diagram__start 308249e292637fdc
 pyramid__defaults 26ad1f6ad8a8e29e
 pyramid__start b926d93b20c0f740
+ray-diagram__defaults 763503c014d603bd
+ray-diagram__start 763503c014d603bd
 rc-curve__defaults 9be7c6f399899d0e
 rc-curve__start 9be7c6f399899d0e
 rectangle__defaults 67e1b7b306d8ab1f

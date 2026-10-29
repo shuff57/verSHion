@@ -360,6 +360,23 @@ Open and recorded: `fmt_qty`'s 3 s.f. can disagree with the printed inputs at a 
 results table's text, "Fill meter readings" is inert in capacitor mode, and this figure has no label-size control so
 the Large sweep is unreachable. Report: `docs/critic-reports/2026-10-29-circuit-diagram-critic.md`.
 
+Ray diagram: new figure `ray-diagram` (`src/figures/raydiagram.rs`, Physics). A thin lens on its axis with the object
+arrow, the principal rays and the image they form, for a converging or a diverging lens, and the lens equation worked
+underneath: image distance v = uf/(u − f) (signed, so a diverging lens has f < 0), magnification m = −v/u and image
+height mh, with a sentence saying whether the image is real or virtual and upright or inverted. The three rays are the
+textbook ones — parallel then through F′, straight through the centre, through F then parallel — with the third drawn
+only when the ray exists (a converging lens with the object beyond that focus); for a diverging lens the first ray
+leaves as though it came from the near focal point. A virtual image is drawn dashed, with its two backward extensions.
+The object is a drag handle: sideways sets the object distance, up and down its height, so the figure is not in
+`NO_HANDLES`. The image distance, magnification and height blank on the student copy; the axis, lens, foci, object and
+rays stay, because the answers are read off the diagram. Tests: the lens equation at the defaults (v = 250/15, m = −2/3,
+and 1/u + 1/v = 1/f), the four textbook cases (u = 2f same size, inside the focus virtual and magnified, diverging always
+virtual and smaller, on the focus no image), the sign of v over three distances, every nature sentence against its own
+numbers, the student/key split, Print neutrality and the PNG export. The first render caught two real defects: the
+centre ray was drawn horizontally (the extension helper walked the line the wrong way) and the third ray's parallel
+segment was at the wrong height (its base was the axis instead of the object tip); both were rebuilt from the line
+through two points. Census: only `ray-diagram__defaults` and `ray-diagram__start` added.
+
 Left open: axis ink `#111827` is grey but not exactly
 neutral; trig's key prints a Hidden side inside a fraction; two-label y axes on tall waves; some coordinate labels
 sit over the drop lines; two example names overstate what they show.

@@ -100,6 +100,8 @@ pub fn chips(id: &str) -> Option<super::ChipsCard> {
 
 /// Direct-manipulation handles for this subject's figures (None = not one of ours).
 pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<interact::Handle>> {
+    // the optics figure has its own drag handle on the object
+    if id == super::raydiagram::ID { return super::raydiagram::handles(id, p, size); }
     handles::handles(id, p, size)
 }
 
