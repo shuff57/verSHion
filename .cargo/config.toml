@@ -1,0 +1,22 @@
+# mold is a much faster linker than the default GNU ld; linking the egui/wgpu binary dominates
+# incremental rebuilds. Linux x86_64 only (the wasm build is untouched).
+[target.x86_64-unknown-linux-gnu]
+linker = "gcc"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+# Dev builds: less debug info (faster compile and link), dependencies lightly optimised so egui
+# stays responsive when the app is run from a debug build. (Here, not Cargo.toml, which another
+# agent has claimed; move them there if you prefer.)
+[profile.dev]
+debug = "line-tables-only"
+[profile.dev.package."*"]
+opt-level = 1
+
+# Local smoke-test build: `cargo build --profile fastrel`. Release code without fat LTO or a
+# single codegen unit, so it links in a fraction of the time. Never ship or size-check with it.
+[profile.fastrel]
+inherits = "release"
+lto = "off"
+codegen-units = 16
+opt-level = 1
+panic = "unwind"
