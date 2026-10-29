@@ -3460,7 +3460,7 @@ const ENERGY_BAR_CHART: &[Faq] = &[
 const PV_DIAGRAM: &[Faq] = &[
     Faq {
         q: "Why is the work the area under the line?",
-        a: "Work is pressure times the change in volume, and on a PV diagram that is the area of a strip P dV. Adding the strips up gives the area under the path, which is why a bigger area means more work done by the gas.",
+        a: "Work is pressure times the change in volume, and on a PV diagram that is the area of a strip P dV. Adding the strips up gives the area under the path, which is why a bigger area means more work done by the gas. The axes are litres and pascals, so a count of grid cells is in L·Pa: multiply by 10^-3 to get the joules in the readout.",
     },
     Faq {
         q: "What is the difference between the two paths?",
@@ -3472,7 +3472,7 @@ const PV_DIAGRAM: &[Faq] = &[
     },
     Faq {
         q: "How do I make a worksheet?",
-        a: "Turn Show answers off: the work and the two pressures become blanks while the axes, the path, the shaded area and the given amounts, temperature and volumes stay.",
+        a: "Turn Show answers off: the work and the two pressures become blanks while the axes, the path and the given amounts, temperature and volumes stay. The shaded area under the path and the numbers on the pressure axis are drawn on the key only, since between them they give away the work and both pressures.",
     },
 ];
 
@@ -3491,7 +3491,7 @@ const STANDING_WAVE: &[Faq] = &[
     },
     Faq {
         q: "How do I make a worksheet?",
-        a: "Turn Show answers off: the wavelength, the frequency and the counts of nodes and antinodes become blanks while the string, the wave, the envelope and the given length, speed and harmonic stay.",
+        a: "Turn Show answers off: the wavelength, the frequency and the counts of nodes and antinodes become blanks while the string, the wave, the envelope and the given length, speed and harmonic stay. The node dots and the antinode rings are drawn on the key only — counting them is the exercise.",
     },
 ];
 
@@ -3502,7 +3502,7 @@ const MAGNETIC_FIELD: &[Faq] = &[
     },
     Faq {
         q: "Where does the formula come from?",
-        a: "For a long straight wire the field is mu0 I over 2 pi r: it is proportional to the current and falls as 1/r, not 1/r squared. Doubling the distance halves the field; doubling the current doubles it.",
+        a: "For a long straight wire the field is μ₀I over 2πr: it is proportional to the current and falls as 1/r, not 1/r squared. Doubling the distance halves the field; doubling the current doubles it.",
     },
     Faq {
         q: "Why is the wire drawn as a dot or a cross?",
@@ -3548,7 +3548,7 @@ const REFRACTION: &[Faq] = &[
     },
     Faq {
         q: "How do I make a worksheet?",
-        a: "Turn Show answers off: the refracted angle, the critical angle and the speeds become blanks while the rays, the normal and the given indices and angle stay.",
+        a: "Turn Show answers off: the refracted angle, the critical angle and the speeds become blanks while the incident ray, the normal and the given indices and angle stay. The refracted ray (or the reflected one past the critical angle) is drawn on the key only, since where it goes is the answer.",
     },
 ];
 

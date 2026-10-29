@@ -137,7 +137,7 @@ pub fn build(p: &Params) -> (String, Report) {
 
     // the givens
     let givens = format!(
-        "I = {} A ({}),  P at {} cm,  mu0 = 4 pi \u{d7} 10\u{207b}\u{2077} T m/A",
+        "I = {} A ({}),  P at {} cm,  \u{3bc}\u{2080} = 4\u{3c0} \u{d7} 10\u{207b}\u{2077} T m/A",
         q_num(i, 2),
         if out { "out of the page" } else { "into the page" },
         q_num(r * 100.0, 1)
@@ -147,7 +147,7 @@ pub fn build(p: &Params) -> (String, Report) {
     // the readout
     let rows = [
         if ans { format!("Field at P  {} T", q_num(b, dec)) } else { format!("Field at P  {BLANK} T") },
-        if ans { format!("In microtesla  {} uT", q_num(b * 1e6, 2)) } else { format!("In microtesla  {BLANK} uT") },
+        if ans { format!("In microtesla  {} \u{b5}T", q_num(b * 1e6, 2)) } else { format!("In microtesla  {BLANK} \u{b5}T") },
         format!("Direction at P  {}", if out { "anticlockwise round the wire" } else { "clockwise round the wire" }),
     ];
     for (idx, line) in rows.iter().enumerate() {
@@ -243,7 +243,7 @@ mod tests {
     fn the_answers_are_blank_on_the_student_copy() {
         let stu = texts(&render_of(&[b(SHOW_ANSWERS, false)]));
         assert!(stu.contains("Field at P  _____ T"), "{stu}");
-        assert!(!stu.contains("8e-6") && !stu.contains("8 uT"), "{stu}");
+        assert!(!stu.contains("8e-6") && !stu.contains("8 \u{b5}T"), "{stu}");
         // the givens stay, and the direction is a given fact about the wire, not the answer
         assert!(stu.contains("I = 4 A"), "{stu}");
         let key = texts(&render_of(&[b(SHOW_ANSWERS, true)]));

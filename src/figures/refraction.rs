@@ -2,7 +2,8 @@
 //! reflection when the angle exceeds the critical angle. Drawn with `svg::Doc` only.
 //!
 //! The refracted angle, the critical angle and the speeds are the answers, so they are blanks while Show answers is
-//! off; the rays, the interface, the normal and the given angles and refractive indices stay.
+//! off; the incident ray, the interface, the normal and the given angles and refractive indices stay. The refracted
+//! (or, past the critical angle, reflected) ray is key-only: it is the answer drawn.
 use super::circle::num;
 use super::svg::{self, Doc};
 use super::*;
@@ -74,6 +75,19 @@ pub fn refracted(p: &Params) -> Option<f64> {
 
 pub fn warnings(_p: &Params) -> Vec<String> { Vec::new() }
 
+/// A number that never rounds a real value to "0": six decimals, then exponential form.
+fn q_num(v: f64, dec: i64) -> String {
+    let s = num(v, dec);
+    let all_zero = s.trim_start_matches('\u{2212}').chars().filter(|c| c.is_ascii_digit()).all(|c| c == '0');
+    if v != 0.0 && all_zero {
+        let six = num(v, 6);
+        let still = six.trim_start_matches('\u{2212}').chars().filter(|c| c.is_ascii_digit()).all(|c| c == '0');
+        if still { format!("{:.2e}", v).replace('-', "\u{2212}") } else { six }
+    } else {
+        s
+    }
+}
+
 fn text_el(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) -> String {
     format!(
         r##"<text x="{x:.2}" y="{y:.2}" font-size="{size}" text-anchor="{anchor}" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{fill}" stroke="#fff" stroke-width="2.2" paint-order="stroke" stroke-linejoin="round">{}</text>"##,
@@ -128,7 +142,7 @@ pub fn build(p: &Params) -> (String, Report) {
                 let t2 = t.to_radians();
                 let out = (OX + LEN * t2.sin(), OY + LEN * t2.cos());
                 d.arrow(OX, OY, out.0, out.1, refr, 2.4);
-                d.raw(&text_el(out.0 + 4.0, label_y(out.1 + 14.0), size, "middle", refr, &format!("\u{3b8}\u{2082} = {}\u{b0}", num(t, 1))));
+                d.raw(&text_el(out.0 + 4.0, label_y(out.1 + 14.0), size, "middle", refr, &format!("\u{3b8}\u{2082} = {}\u{b0}", q_num(t, 1))));
             }
             None => {
                 // total internal reflection: the ray leaves at the incidence angle, above the interface
@@ -148,11 +162,11 @@ pub fn build(p: &Params) -> (String, Report) {
     let v2 = C / n2;
     let rows = [
         match th2 {
-            Some(t) => if ans { format!("Angle of refraction  {}\u{b0}", num(t, dec)) } else { format!("Angle of refraction  {BLANK}\u{b0}") },
+            Some(t) => if ans { format!("Angle of refraction  {}\u{b0}", q_num(t, dec)) } else { format!("Angle of refraction  {BLANK}\u{b0}") },
             None => if ans { "Total internal reflection: no refracted ray".to_string() } else { format!("Angle of refraction  {BLANK}\u{b0}") },
         },
         match crit {
-            Some(k) => if ans { format!("Critical angle  {}\u{b0}", num(k, dec)) } else { format!("Critical angle  {BLANK}\u{b0}") },
+            Some(k) => if ans { format!("Critical angle  {}\u{b0}", q_num(k, dec)) } else { format!("Critical angle  {BLANK}\u{b0}") },
             None => if (n1 - n2).abs() < 1e-9 { "Same medium either side: no bending at all".to_string() } else { "No critical angle: going into a denser medium".to_string() },
         },
         if ans {
@@ -256,6 +270,15 @@ mod tests {
     fn straight_down_the_normal_is_not_bent() {
         let p = with(&[f("angle", 0.0), f("n1", 1.0), f("n2", 1.5)]);
         assert!(refracted(&p).unwrap().abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_shallow_refracted_angle_never_prints_as_zero() {
+        // 0.04 degrees at n1 = 1, n2 = 3 refracts to about 0.013 degrees: real, but "0.0" at one decimal place
+        let t = texts(&render_of(&[f("angle", 0.04), f("n1", 1.0), f("n2", 3.0), b(SHOW_ANSWERS, true)]));
+        let line = t.lines().find(|x| x.starts_with("Angle of refraction")).unwrap_or("");
+        assert!(!line.contains(" 0.0\u{b0}"), "{line}");
+        assert!(line.contains("0.013") || line.contains('e'), "{line}");
     }
 
     #[test]

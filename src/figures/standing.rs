@@ -71,6 +71,13 @@ fn q_num(v: f64, dec: i64) -> String {
     if v != 0.0 && all_zero { format!("{v:.2e}").replace('-', "\u{2212}") } else { s }
 }
 
+/// Which side of the axis the k-th antinode peaks on: the snapshot is sin(n pi x), so at x = (k + 1/2)/n it is
+/// +1 for even k and -1 for odd k. The ring is drawn on that side, so it marks the curve's peak and not merely a
+/// turning point of the envelope.
+fn antinode_side(k: i64) -> f64 {
+    if k % 2 == 0 { 1.0 } else { -1.0 }
+}
+
 pub fn warnings(_p: &Params) -> Vec<String> { Vec::new() }
 
 fn text_el(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) -> String {
@@ -143,8 +150,7 @@ pub fn build(p: &Params) -> (String, Report) {
     }
     for k in 0..n {
         let x = X0 + (X1 - X0) * (k as f64 + 0.5) / n as f64;
-        let up = if k % 2 == 0 { -1.0 } else { 1.0 };
-        d.circle(x, MID - up * AMP, 2.5, "#ffffff", wave, 1.2);
+        d.circle(x, MID - antinode_side(k) * AMP, 2.5, "#ffffff", wave, 1.2);
     }
     }
 
@@ -265,6 +271,25 @@ mod tests {
                 assert!((y.abs() - 1.0).abs() < 1e-9, "n {n} antinode {k}: {y}");
             }
         }
+    }
+
+    #[test]
+    fn the_antinode_rings_mark_the_curve_peak_not_just_the_envelope() {
+        // the ring at the k-th antinode sits on the same side as the snapshot at that x
+        for k in 0..6 {
+            let curve = (std::f64::consts::PI * (k as f64 + 0.5)).sin();
+            assert!((antinode_side(k) - curve).abs() < 1e-9, "k {k}: ring {} vs curve {curve}", antinode_side(k));
+        }
+    }
+
+    #[test]
+    fn the_markers_are_key_only_on_the_student_copy() {
+        // the counts are asked for, so no node dot and no antinode ring may be drawn while answers are off
+        let stu = render_of(&[b(SHOW_ANSWERS, false)]);
+        let rings = stu.matches("stroke=\"#1f5fbf\" stroke-width=\"1.2\"").count();
+        assert_eq!(rings, 0, "an antinode ring leaked onto the student copy");
+        // the wave itself is still drawn (its polyline is the only wide blue stroke)
+        assert!(stu.contains("stroke-width=\"2.8\""), "the wave must stay");
     }
 
     #[test]

@@ -1,8 +1,8 @@
 //! A pressure-volume diagram for an ideal gas: an isothermal or isobaric change, the path drawn on the axes, the work
 //! shaded as the area under it, and the work and the end state worked out. Drawn with `svg::Doc` only.
 //!
-//! The work and the final pressure are the answers, so they blank while Show answers is off; the axes, the path and
-//! the given values stay.
+//! The work and the two pressures are the answers, so they blank while Show answers is off — and so do the shaded
+//! area and the y-axis numbers that would give them away; the axes, the path and the given values stay.
 use super::chart::{fmt, nice_step, ticks, Frame};
 use super::circle::num;
 use super::svg::{self, Doc};

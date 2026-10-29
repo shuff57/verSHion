@@ -134,8 +134,8 @@ logic-circuit__defaults 7768e6a757381fcb
 logic-circuit__start 7768e6a757381fcb
 lorenz__defaults ef6c047cbc7881c4
 lorenz__start ef6c047cbc7881c4
-magnetic-field__defaults 10a5a17c0141f7a8
-magnetic-field__start 10a5a17c0141f7a8
+magnetic-field__defaults 9018c7f61cb12ee6
+magnetic-field__start 9018c7f61cb12ee6
 map-scale__defaults b5b2ddcbc80cc9ca
 map-scale__start b5b2ddcbc80cc9ca
 mapping-diagram__defaults bca744bdcfc94138
@@ -256,8 +256,8 @@ sphere__defaults 026a80b5e0fb10f8
 sphere__start 6714de163741fd83
 spring-scale__defaults c3d974171b15ec4c
 spring-scale__start c3d974171b15ec4c
-standing-wave__defaults 6f45e9b6de659e9b
-standing-wave__start 6f45e9b6de659e9b
+standing-wave__defaults 4909ba2d202c55f5
+standing-wave__start 4909ba2d202c55f5
 state-machine__defaults 4e2d388723d17449
 state-machine__start 4e2d388723d17449
 stem-and-leaf__defaults 7ec6afc7b20c4366
