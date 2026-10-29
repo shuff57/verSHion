@@ -72,8 +72,8 @@ earth-layers__defaults 37c454c5d31bef26
 earth-layers__start 37c454c5d31bef26
 elasticity__defaults f12af64ea90eafaf
 elasticity__start f12af64ea90eafaf
-electric-field__defaults dac32f01a67e562d
-electric-field__start dac32f01a67e562d
+electric-field__defaults fca7161063aa996c
+electric-field__start fca7161063aa996c
 energy-bar-chart__defaults 2140369fa0365d7c
 energy-bar-chart__start 2140369fa0365d7c
 er-diagram__defaults 8866218ba5ebbaac

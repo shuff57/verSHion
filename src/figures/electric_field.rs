@@ -82,7 +82,7 @@ fn q_num(v: f64, dec: i64) -> String {
         let six = num(v, 6);
         let still = six.trim_start_matches('\u{2212}').chars().filter(|c| c.is_ascii_digit()).all(|c| c == '0');
         // a force of 3.6e-10 N is real but vanishes at any fixed precision, so it goes to exponential form
-        if still { format!("{:.2e}", v) } else { six }
+        if still { format!("{:.2e}", v).replace('-', "\u{2212}") } else { six }
     } else {
         s
     }
@@ -126,11 +126,18 @@ pub fn build(p: &Params) -> (String, Report) {
     d.describe("Electric field", "The radial field of a point charge with equipotential circles and a test charge");
 
     // equipotentials: equal steps of potential are equal steps of 1/r, so the radii are r/1, r/2, r/3 ...
-    for k in 1..=3 {
+    // Equal potential steps are equal steps of 1/r, so the circles sit at r0, r0/2, r0/3 and the potential RISES
+    // inward: V, 2V, 3V (negated for a negative charge). Each label goes in its own direction so they cannot meet.
+    let sign = if positive { "" } else { "\u{2212}" };
+    for (k, ang) in [(1usize, 0.0f64), (2, -std::f64::consts::FRAC_PI_3), (3, std::f64::consts::PI)] {
         let rr = RMAX / k as f64 * 0.92;
         if rr < 6.0 { continue; }
-        d.circle(CX, CY, rr, "none", equi, 1.1);
-        d.raw(&text_el(CX + rr - 4.0, CY - 6.0, 10.0 * lab, "end", equi, &format!("V/{}", k)));
+        d.circle(CX, CY, rr, "none", equi, 1.4);
+        let (sx, sy) = (ang.cos(), -ang.sin());
+        let (lx, ly) = (CX + sx * (rr - 6.0), CY + sy * (rr - 6.0));
+        let label = if k == 1 { format!("{sign}V") } else { format!("{sign}{k}V") };
+        let anchor = if ang == 0.0 { "end" } else { "middle" };
+        d.raw(&text_el(lx, ly - 6.0, 10.0 * lab, anchor, equi, &label));
     }
 
     // the field lines: eight radial directions, with the arrows pointing the way a positive charge would be pushed
@@ -150,13 +157,20 @@ pub fn build(p: &Params) -> (String, Report) {
     let rr = (r / 5.0 * RMAX).clamp(18.0, RMAX + 10.0);
     let test_at = (CX, CY - rr);
     // the force is the answer, so the arrow is drawn only on the key
-    if ans {
+    if ans && f.abs() > 0.0 {
         // a fixed length showing the direction only: the magnitude is the answer and is printed, and a length
-        // scaled to a force of 2e-7 N would be a pixel long (and would encode the answer besides)
+        // scaled to a force of 2e-7 N would be a pixel long (and would encode the answer besides). The arrow is
+        // kept clear of the source disc below and of the canvas edge above.
         let up = f > 0.0;
-        let (y0, y1) = if up { (test_at.1 - 8.0, test_at.1 - 34.0) } else { (test_at.1 + 8.0, test_at.1 + 34.0) };
-        d.arrow(test_at.0, y0, test_at.0, y1, ch, 2.2);
-        d.raw(&text_el(test_at.0 + 8.0, y1 + if up { 0.0 } else { 10.0 }, 12.0 * lab, "start", ch, "F"));
+        let (y0, y1) = if up {
+            (test_at.1 - 8.0, (test_at.1 - 42.0).max(8.0))
+        } else {
+            (test_at.1 + 8.0, (test_at.1 + 42.0).min(CY - 13.0))
+        };
+        if (y1 - y0).abs() >= 6.0 {
+            d.arrow(test_at.0, y0, test_at.0, y1, ch, 2.2);
+            d.raw(&text_el(test_at.0 + 8.0, (y0 + y1) / 2.0 + 4.0, 12.0 * lab, "start", ch, "F"));
+        }
     }
     d.circle(test_at.0, test_at.1, 5.0, ch, ink, 1.4);
 
@@ -174,7 +188,7 @@ pub fn build(p: &Params) -> (String, Report) {
     let rows = [
         if ans { format!("Field strength  {} N/C", q_num(e, dec)) } else { format!("Field strength  {BLANK} N/C") },
         if ans { format!("Potential  {} V", q_num(v, dec)) } else { format!("Potential  {BLANK} V") },
-        if ans { format!("Force on the test charge  {} N", q_num(f, dec)) } else { format!("Force on the test charge  {BLANK} N") },
+        if ans { format!("Force on the test charge  {} N (outward is positive)", q_num(f, dec)) } else { format!("Force on the test charge  {BLANK} N") },
     ];
     for (i, line) in rows.iter().enumerate() {
         d.raw(&format!(
