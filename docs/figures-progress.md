@@ -377,6 +377,21 @@ centre ray was drawn horizontally (the extension helper walked the line the wron
 segment was at the wrong height (its base was the axis instead of the object tip); both were rebuilt from the line
 through two points. Census: only `ray-diagram__defaults` and `ray-diagram__start` added.
 
+Motion map: new figure `motion-map` (`src/figures/motionmap.rs`, Physics). A strobe record of a moving object: one dot
+per equal time interval on a track, a velocity arrow at each dot drawn to a common scale, and the flash number under
+each. The three motions are the ones the diagram teaches — constant velocity (equal gaps, equal arrows), speeding up
+(gaps growing by a·dt² each interval) and slowing down (gaps shrinking, and the object stopping rather than reversing:
+the flashes past the stop sit on the stopping point with v = 0, and a note says where and when it stops). The readout
+lists the velocity at every flash, the gaps, and either "Equal gaps: constant velocity" or the acceleration; all of it
+blanks on the student copy while the dots, arrows and interval stay. The last flash is a drag handle: it sets the first
+velocity by solving the position for v0, so the whole map stretches or compresses — the figure is not in `NO_HANDLES`.
+Tests: equal gaps at constant velocity, the gaps growing by exactly a·dt² and the velocities by a·dt, a slowing object
+stopping at v0²/2a with the later flashes on that point and the note raised, the student/key split, Print neutrality
+and the PNG export. The renders caught two defects: the "track" label printed into the first flash number (the label
+is gone — the line reads for itself), and a slowing object's last dots crowd together so their numbers collided (the
+flash numbers now sit on two staggered rows). Five examples and four FAQ entries. Census: only
+`motion-map__defaults` and `motion-map__start` added. **This closes the phase-3 list.**
+
 Left open: axis ink `#111827` is grey but not exactly
 neutral; trig's key prints a Hidden side inside a fraction; two-label y axes on tall waves; some coordinate labels
 sit over the drop lines; two example names overstate what they show.

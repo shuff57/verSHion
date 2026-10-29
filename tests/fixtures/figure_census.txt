@@ -156,6 +156,8 @@ moon-seasons__defaults f3d39f242e7dabeb
 moon-seasons__start f3d39f242e7dabeb
 motion-graphs__defaults 3c895b3293e8d26b
 motion-graphs__start 3c895b3293e8d26b
+motion-map__defaults 3ce9289c456c1bba
+motion-map__start 3ce9289c456c1bba
 music-staff__defaults 0d9580a8b0df7e66
 music-staff__start 0d9580a8b0df7e66
 network-topology__defaults fa59e7de9e0e081e

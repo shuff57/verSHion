@@ -21,6 +21,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "waves" => WAVES,
         "circuit-diagram" => CIRCUIT_DIAGRAM,
         "ray-diagram" => RAY_DIAGRAM,
+        "motion-map" => MOTION_MAP,
         // biology
         "population-growth" => POPULATION_GROWTH,
         "predator-prey" => PREDATOR_PREY,
@@ -3554,6 +3555,25 @@ const REFRACTION: &[Faq] = &[
     Faq {
         q: "How do I make a worksheet?",
         a: "Turn Show answers off: the refracted angle, the critical angle and the speeds become blanks while the incident ray, the normal and the given indices and angle stay. The refracted ray (or the reflected one past the critical angle) is drawn on the key only, since where it goes is the answer.",
+    },
+];
+
+const MOTION_MAP: &[Faq] = &[
+    Faq {
+        q: "What does each dot mean?",
+        a: "One flash of a strobe: the object's position at that instant. The flashes are equally spaced in time, so the diagram is a record of position against time with the time axis hidden — which is why the gaps between dots carry the information.",
+    },
+    Faq {
+        q: "How can I tell whether the object is speeding up?",
+        a: "Look at the gaps. Equal gaps mean the same distance in every interval, so the velocity is constant. Gaps that grow mean more distance in the same time, so it is speeding up; gaps that shrink mean it is slowing down. The arrow at each dot shows the velocity there, drawn to a common scale so they can be compared.",
+    },
+    Faq {
+        q: "Why does the object stop instead of going backwards?",
+        a: "A slowing object cannot reverse without something pushing it back. When the velocity would reach zero the dots sit on the stopping point, and the readout says how far it went and how long it took. Turn the acceleration down to keep every flash before the stop.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the list of velocities, the gaps and the acceleration become blanks while the dots, the arrows, the track and the flash interval stay — the student reads the pattern off the diagram.",
     },
 ];
 

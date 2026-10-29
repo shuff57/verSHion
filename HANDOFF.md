@@ -99,11 +99,10 @@ Updated 2026-10-28 late: the five-figure phase-3 critic round is fixed and commi
      - **(b) A combination (series-parallel) layout: DONE.** `In series and parallel` puts the first part on the top
        wire and the rest as branches, with `solve_combo`/`solve_caps_combo`, handles that follow the drawing, and the
        voltmeter placed per part. Census unchanged (the default layout is still series).
-  2. **Handles on the ray diagram and the motion map.** `ray-diagram` is now **built** (`src/figures/raydiagram.rs`,
-     thin lens, three principal rays, lens equation, drag handle on the object, five examples, four FAQ entries,
-     census two new ids). **`motion-map` is still to build** — a strobe/dot diagram of a moving object with velocity
-     arrows; build it like the ray diagram (params, five examples, four FAQ entries, tests, PNG export, a drag handle,
-     NOT in `NO_HANDLES`).
+  2. **Ray diagram and motion map: BOTH BUILT.** `ray-diagram` (thin lens, three principal rays, lens equation, drag
+     handle on the object) and `motion-map` (strobe dots, velocity arrows, constant/speeding/slowing, drag handle on
+     the last flash). Both have five examples, four FAQ entries, tests, PNG exports and handles, so neither is in
+     `NO_HANDLES`. **Phase 3 is complete.**
 - Then phase 4 (biology, 7 figures), phase 5 (chemistry, 10), phase 6 (stats, 7).
 - Then phase 4 (biology, 7 figures), phase 5 (chemistry, 10), phase 6 (stats, 7).
 - Phase 2 is complete and committed. Phase 3 built: energy bar charts, collision/momentum, circular motion, electric
