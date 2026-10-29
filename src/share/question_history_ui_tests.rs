@@ -2277,3 +2277,48 @@ fn d2j_a_restore_is_not_made_by_another_linked_banks_strip() {
     let t = r.page(1280.0);
     assert!(!applied || t.contains("Undo restore"), "restore applied while the person was on another bank's page, and its result and Undo were never shown: {t}");
 }
+
+#[test]
+fn d2j_undo_survives_a_role_or_hide_change_on_the_page() {
+    // (round 6, critic N4) the owner turns on hiding of keys while she is still on the page (an editor: still per-question
+    // lists). What was read under the old scope is dropped and read again, but the last restore's Undo and its words stay:
+    // she never left the page.
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Restore...", 0));
+    assert!(r.click(1280.0, "Yes, restore", 0));
+    let t = r.page(1280.0);
+    assert!(t.contains("Undo is available until you leave this page"), "{t}");
+    r.script_load();
+    r.m.edit.update_link(LOCAL, |l| {
+        l.seen.hide_key = true;
+        true
+    });
+    let t = r.page(1280.0);
+    assert!(r.m.edit.active(), "still on the page");
+    assert!(t.contains("Undo restore"), "she never left the page, but Undo is gone: {t}");
+    // and it still undoes, over the re-read page
+    assert!(r.click(1280.0, "Undo restore", 0));
+    let _ = r.page(1280.0);
+    assert_eq!(r.banks[0].questions[0].stem, A5);
+}
+
+#[test]
+fn d2j_another_account_never_keeps_the_undo() {
+    // (round 6, critic N4) the other side of it: a page whose account changed drops the last restore's Undo with the reads
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Restore...", 0));
+    assert!(r.click(1280.0, "Yes, restore", 0));
+    assert!(r.page(1280.0).contains("Undo restore"));
+    r.who = "someone-else".into();
+    r.script_load();
+    let t = r.page(1280.0);
+    assert!(!t.contains("Undo restore"), "another account saw the first one's Undo: {t}");
+}

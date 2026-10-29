@@ -352,24 +352,31 @@ impl QuestionPage {
         }
     }
 
-    /// (round 3, critic B1) Everything read for the bank is dropped and read again.
-    fn forget_reads(&mut self, cache: &mut HistoryCache) {
+    /// (round 3, critic B1) Everything read for the bank is dropped and read again. (round 6, critic N4) `keep_result`:
+    /// the page stays open for the same person (a role or hiding change), so the last restore's Undo and its words stay;
+    /// another account's page drops them (they are not its to see). A restore still being read is dropped either way: its
+    /// version was read under the old scope.
+    fn forget_reads(&mut self, cache: &mut HistoryCache, keep_result: bool) {
         cache.drop_bank(&self.cid, &self.bid);
         self.lines.clear();
         self.page = None;
         self.compare = None;
         self.preview = None;
         self.reading.clear();
-        // (round 4, critic S-I4, S-m2, S-m7) what was asked or kept before the reset goes too: answers on their way, a
-        // restore being read (it would keep every Restore button off), its picture, and the last restore's undo
-        // (answers already on their way still arrive: each is dropped by its round when it does)
+        // (round 4, critic S-I4, S-m2, S-m7) answers on their way are dropped by their round when they arrive
         self.round += 1;
         self.picture = None;
         self.picture_asked = false;
-        self.undo = None;
-        self.undo_text = None;
-        self.undo_asked = false;
-        self.restore = None;
+        if keep_result {
+            if self.restore.as_ref().is_some_and(|r| matches!(r.state, RestoreState::Asking | RestoreState::Reading)) {
+                self.restore = None;
+            }
+        } else {
+            self.undo = None;
+            self.undo_text = None;
+            self.undo_asked = false;
+            self.restore = None;
+        }
         self.known = None;
         self.data += 1;
     }
@@ -900,7 +907,7 @@ pub(super) fn sync_page(p: &mut QuestionPage, cache: &mut HistoryCache, banks: &
         cache.note_account(tag.as_deref());
         p.account = Some(tag);
         if !first {
-            p.forget_reads(cache);
+            p.forget_reads(cache, false);
             p.reload(cache);
         }
     }
@@ -908,10 +915,11 @@ pub(super) fn sync_page(p: &mut QuestionPage, cache: &mut HistoryCache, banks: &
     if link.gone() || link.circle_id != p.cid || link.circle_bank_id != p.bid || !banks.iter().any(|b| b.id == p.local_bank_id) {
         return SyncOut { close: true, ..SyncOut::default() };
     }
-    // (critic B1, P10) another role or hiding state: what was read under the old one goes, and the page reads again
+    // (critic B1, P10) another role or hiding state: what was read under the old one goes, and the page reads again.
+    // (round 6, critic N4) The page stays open for the same person: the last restore's Undo and its words stay.
     let scope = scope_of(link);
     if scope != p.scope {
-        p.forget_reads(cache);
+        p.forget_reads(cache, true);
         p.scope = scope;
         p.hiding_viewer = hiding_viewer_of(link);
         p.reload(cache);
