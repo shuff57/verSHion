@@ -1,6 +1,6 @@
 //! Instrument-style figures: spring scale and circuit diagram.
 use super::common::*;
-use super::circuit_solve::{fmt_qty, parse_cap, parse_qty, solve, solve_caps, solve_caps_combo, solve_combo, CapSolved, Solved};
+use super::circuit_solve::{fmt_qty, parse_cap, parse_ohm, parse_qty, solve, solve_caps, solve_caps_combo, solve_combo, CapSolved, Solved};
 use crate::figures::{answers_param, FigureDef, ParamDef, Params, Subject, SHOW_ANSWERS};
 
 // ---------------------------------------------------------------- spring scale
@@ -318,11 +318,14 @@ pub(super) fn circuit_layout(p: &Params) -> CLay {
     let (rx, w);
     if combo {
         // the first part sits on the top wire, the rest hang as parallel branches off it
-        let pitch = if vm_part.is_some() { 175.0 } else { 125.0 };
+        let base: f64 = if vm_part.is_some() { if p.s("solve") == "Off" { 175.0 } else { 230.0 } } else { 125.0 };
         let tw = |s: &str| if s.eq_ignore_ascii_case("none") { 0.0 } else if s.trim().is_empty() { 34.0 } else { s.chars().count() as f64 * 11.0 };
         let series_len: f64 = if bulb(0) { 44.0 } else { 64.0 };
         let series_w = tw(&lab_mode(p, RK[0][4], RMODE[0][2]));
         let cell_w = tw(&lab_mode(p, "cell_val", "cell_val_mode"));
+        let branch_w = (1..n).map(|i| tw(&lab_mode(p, RK[i][4], RMODE[i][2]))).fold(0.0, f64::max);
+        let branch_name = (1..n).map(|i| tw(&comp_name(p, i, n))).fold(0.0, f64::max);
+        let pitch = base.max(56.0 + branch_w + branch_name);
         // the battery's value is start-anchored at lx + 34 and the series part's value is centred under it
         let series_x = (lx + 34.0 + cell_w + 24.0 + series_w).max(lx + 120.0);
         comps.push((series_x, top_y, series_len));
@@ -331,7 +334,7 @@ pub(super) fn circuit_layout(p: &Params) -> CLay {
             let len: f64 = if bulb(i) { 44.0 } else { 64.0 };
             comps.push((first_branch + pitch * (i as f64 - 1.0), (top_y + bot_y) / 2.0, len));
         }
-        let need = comps.last().map(|c| c.0).unwrap_or(first_branch) + if vm_part == Some(n - 1) { 140.0 } else { 100.0 };
+        let need = comps.last().map(|c| c.0).unwrap_or(first_branch) + if vm_part == Some(n - 1) { 160.0 } else { 100.0 };
         let shift = ((580.0 - need) / 2.0).max(0.0);
         lx += shift;
         for c in comps.iter_mut() { c.0 += shift; }
@@ -339,19 +342,22 @@ pub(super) fn circuit_layout(p: &Params) -> CLay {
         w = need.max(580.0);
     } else if parallel {
         // solved readings run longer ("12 V"), so the voltmeter needs more room beside it
-        let pitch = if vm_part.is_some() { if p.s("solve") == "Off" { 175.0 } else { 230.0 } } else { 125.0 };
+        let pitch: f64 = if vm_part.is_some() { if p.s("solve") == "Off" { 175.0 } else { 230.0 } } else { 125.0 };
         // the battery's value label is start-anchored at lx + 34 and the first branch's value is end-anchored at
         // cx - 24, so a long value on either ("12 V" beside "10 µF") makes the two labels meet unless the first
         // branch starts beyond both of them. Estimated at about 11 px a character for the 21-22 px labels.
         let tw = |s: &str| if s.eq_ignore_ascii_case("none") { 0.0 } else if s.trim().is_empty() { 34.0 } else { s.chars().count() as f64 * 11.0 };
         let cell_w = tw(&lab_mode(p, "cell_val", "cell_val_mode"));
         let comp_w = (0..n).map(|i| tw(&lab_mode(p, RK[i][4], RMODE[i][2]))).fold(0.0, f64::max);
+        let name_w = (0..n).map(|i| tw(&comp_name(p, i, n))).fold(0.0, f64::max);
+        // a branch carries its value on the left and its name on the right, so the pitch has to clear both
+        let pitch = pitch.max(56.0 + comp_w + name_w);
         let first_x = 240.0f64.max(lx + 34.0 + cell_w + 12.0 + 24.0 + comp_w);
         for i in 0..n {
             let len: f64 = if bulb(i) { 44.0 } else { 64.0 };
             comps.push((first_x + pitch * i as f64, (top_y + bot_y) / 2.0, len));
         }
-        let need = comps.last().map(|c| c.0).unwrap_or(first_x) + if vm_part == Some(n - 1) { 140.0 } else { 100.0 };
+        let need = comps.last().map(|c| c.0).unwrap_or(first_x) + if vm_part == Some(n - 1) { 160.0 } else { 100.0 };
         // centre narrow circuits on the standard 580-wide canvas
         let shift = ((580.0 - need) / 2.0).max(0.0);
         lx += shift;
@@ -359,8 +365,15 @@ pub(super) fn circuit_layout(p: &Params) -> CLay {
         rx = comps.last().map(|c| c.0).unwrap_or(240.0);
         w = need.max(580.0);
     } else {
-        rx = 490.0;
-        w = 580.0;
+        // the series canvas grows when the labels need the room: four parts with a switch and long values would
+        // otherwise print their values into each other
+        let tw = |s: &str| if s.eq_ignore_ascii_case("none") { 0.0 } else if s.trim().is_empty() { 34.0 } else { s.chars().count() as f64 * 11.0 };
+        let widest = (0..n).map(|i| tw(&lab_mode(p, RK[i][4], RMODE[i][2])).max(tw(&comp_name(p, i, n)))).fold(0.0, f64::max);
+        let count = n + (p.b("ammeter") && !caps(p)) as usize + (p.s("switch") != "None") as usize;
+        let slot = 64.0f64.max(widest + 14.0);
+        let need = lx + 60.0 + slot * count as f64 + 30.0;
+        // the standard canvas keeps its standard right-hand wire; only a crowded circuit grows
+        if need > 580.0 { w = need; rx = w - 30.0; } else { w = 580.0; rx = 490.0; }
     }
     let has_a = p.b("ammeter") && !caps(p);
     let has_s = p.s("switch") != "None";
@@ -540,8 +553,9 @@ pub(super) fn comp_name(p: &Params, i: usize, n: usize) -> String {
 /// The circuit worked out from the typed values, when "Work out the circuit" is on.
 pub(super) fn circuit_solved(p: &Params, n: usize) -> Option<Solved> {
     if p.s("solve") == "Off" || caps(p) { return None; }
-    let r: Vec<Option<f64>> = (0..n).map(|i| parse_qty(p.s(RK[i][4]))).collect();
-    let cell = parse_qty(p.s("cell_val"));
+    let r: Vec<Option<f64>> = (0..n).map(|i| parse_ohm(p.s(RK[i][4]))).collect();
+    // a battery value the figure does not print cannot be used: the worked-out answers would give it away
+    let cell = if p.s("cell_val_mode") == "None" { None } else { parse_qty(p.s("cell_val")) };
     let open = p.s("switch") == "Open";
     Some(if p.s("layout") == "In series and parallel" && n >= 2 {
         solve_combo(cell, &r, open)
@@ -631,7 +645,11 @@ fn circuit_render(p: &Params) -> String {
         let vert = l.parallel || (l.combo && i > 0);
         component(&mut g, bulb, caps(p), iec, cx, cy, len, vert, cc);
         let name = comp_name(p, i, l.n);
-        let val = lab_mode(p, RK[i][4], RMODE[i][2]);
+        let mut val = lab_mode(p, RK[i][4], RMODE[i][2]);
+        // a capacitance cannot be marked in ohms: rather than label a capacitor "2 Ω", leave the blank to fill in
+        if caps(p) && !val.eq_ignore_ascii_case("none") && !val.trim().is_empty() && parse_cap(&val).is_none() {
+            val = String::new();
+        }
         if vert {
             let mut br = vec![(cy - len / 2.0, cy + len / 2.0)];
             seg_line(&mut g, (cx, top_y), (cx, bot_y), &mut br);
@@ -714,7 +732,10 @@ fn circuit_render(p: &Params) -> String {
             dot(&mut g, cx, ya);
             dot(&mut g, cx, yb);
         } else {
-            let (xa, xb, vy) = (cx - len / 2.0 - 10.0, cx + len / 2.0 + 10.0, top_y - 82.0);
+            // a horizontal part: in the series layout the meter goes above the wire, but a combination's wire
+            // sits high on the canvas, so the meter goes below it there
+            let vy = if l.combo { top_y + 82.0 } else { top_y - 82.0 };
+            let (xa, xb) = (cx - len / 2.0 - 10.0, cx + len / 2.0 + 10.0);
             g.polyline(&[(xa, top_y), (xa, vy), (cx - 17.0, vy)], INK, SW);
             g.polyline(&[(cx + 17.0, vy), (xb, vy), (xb, top_y)], INK, SW);
             meter(&mut g, cx, vy, "V", cc);

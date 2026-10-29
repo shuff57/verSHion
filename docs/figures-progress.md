@@ -344,6 +344,22 @@ resistor and capacitor figures above, the layout's own geometry (first part on t
 PNG exports of the key, the student copy and the capacitor combination, all looked at. Census unchanged: the default
 layout is still series.
 
+Circuit diagram, critic round: FAIL on `9addc16` — 2 blockers, 7 majors, 11 minors — with every number in the figures
+verified correct, so none of it was arithmetic. Both blockers were mine: the combination layout put a voltmeter at
+y = −2 (its "above the wire" placement only holds for the series layout, whose top wire sits 70 px lower), and adding
+`F` to the shared quantity parser made resistor mode read `470 µF` as 470 µΩ — "1.41 mV across a 470 µF resistor" where
+the base build printed `?`. The parser now takes its allowed units as a parameter (`parse_ohm`, `parse_cap`, and
+`parse_qty` for the battery), so a farad is never a resistance nor a volt a capacitance, and the uppercase `N`/`P`
+prefixes are gone because `N` is newtons. Majors fixed: the branch pitch is measured from the widest value and name
+(so "R₂4.7 kΩ" cannot happen), the series canvas grows when four long values plus a switch would merge, a solved
+voltmeter gets the wider pitch and a 160 px right margin, a 0 Ω branch in parallel now leaves 0 V everywhere instead of
+12 V (a short across the battery), and a capacitor is no longer labelled "2 Ω" — a value that is not a capacitance
+draws a blank line. Also: a battery the figure does not print can no longer produce answers (it would give the hidden
+voltage away), `fmt_qty` reaches pico, and the resistor/bulb toggle is left off in capacitor mode where it did nothing.
+Open and recorded: `fmt_qty`'s 3 s.f. can disagree with the printed inputs at a .5 rounding, mirror mode mirrors the
+results table's text, "Fill meter readings" is inert in capacitor mode, and this figure has no label-size control so
+the Large sweep is unreachable. Report: `docs/critic-reports/2026-10-29-circuit-diagram-critic.md`.
+
 Left open: axis ink `#111827` is grey but not exactly
 neutral; trig's key prints a Hidden side inside a fraction; two-label y axes on tall waves; some coordinate labels
 sit over the drop lines; two example names overstate what they show.

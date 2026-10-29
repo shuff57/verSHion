@@ -417,18 +417,21 @@ fn circuit(p: &Params, size: (f64, f64)) -> Vec<Handle> {
     let l = super::instr::circuit_layout(p);
     let mut out = vec![];
     out.push(lab(m, (size.0 / 2.0, 26.0), 220.0, "title"));
+    let caps = super::instr::caps(p);
     for (i, &(cx, cy, len)) in l.comps.iter().enumerate() {
         let toggle = move |p: &mut Params| cycle(p, RKIND[i], &["Resistor", "Bulb"]);
+        // a capacitor circuit ignores the resistor/bulb kind, so that toggle is left off rather than doing nothing
+        let hint = if caps { "Drag to move" } else { "Click to switch between resistor and bulb" };
         let scroll = move |p: &mut Params, d: f64| {
             let v = bump(p.s(RVAL[i]), d);
             p.set_s(RVAL[i], &v);
         };
         if l.parallel || (l.combo && i > 0) {
-            out.push(Handle::zone(m.p((cx, cy)), (36.0, len.max(44.0)), "Click to switch between resistor and bulb", toggle));
+            if !caps { out.push(Handle::zone(m.p((cx, cy)), (36.0, len.max(44.0)), hint, toggle)); }
             out.push(lab(m, (cx + 44.0, cy), 44.0, RNAME[i]));
             out.push(lab(m, (cx - 50.0, cy), 56.0, RVAL[i]).with_scroll(scroll));
         } else {
-            out.push(Handle::zone(m.p((cx, l.top_y)), (len, 34.0), "Click to switch between resistor and bulb", toggle));
+            if !caps { out.push(Handle::zone(m.p((cx, l.top_y)), (len, 34.0), hint, toggle)); }
             out.push(lab(m, (cx, l.top_y - 32.0), 56.0, RNAME[i]));
             out.push(lab(m, (cx, l.top_y + 33.0), 56.0, RVAL[i]).with_scroll(scroll));
         }

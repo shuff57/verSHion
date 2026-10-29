@@ -2,9 +2,10 @@
 //! as "4.7 kΩ" or "12 V", solving the series or parallel circuit with ideal meters, and writing
 //! a result back out with a sensible unit prefix. Pure functions, no drawing.
 
-/// The value of a typed quantity: a number with an optional SI prefix (m, k, M, µ) and an
-/// optional unit (Ω, ohm, V, A). None for a symbol such as "R", an empty box, or junk.
-pub fn parse_qty(s: &str) -> Option<f64> {
+/// The value of a typed quantity: a number with an optional SI prefix and one of `units`. None for a symbol such as
+/// "R", an empty box, junk, or a unit that does not belong to the quantity being read — a resistance typed in farads
+/// must not become a number, and neither must a capacitance typed in volts.
+fn parse_unit(s: &str, units: &[&str]) -> Option<f64> {
     let s = s.trim();
     let end = s
         .char_indices()
@@ -12,9 +13,9 @@ pub fn parse_qty(s: &str) -> Option<f64> {
         .map_or(s.len(), |(i, _)| i);
     let n: f64 = s[..end].parse().ok()?;
     let rest = s[end..].trim();
-    let is_unit = |u: &str| matches!(u.trim(), "" | "Ω" | "ohm" | "ohms" | "Ohm" | "Ohms" | "V" | "A" | "v" | "a" | "F" | "f" | "farad" | "farads");
+    let ok = |u: &str| units.iter().any(|x| u.eq_ignore_ascii_case(x));
     // (multiply, divide): sub-unit prefixes divide so 10 µA is exactly 1e-5
-    let (mult, div) = if is_unit(rest) {
+    let (mult, div) = if ok(rest) {
         (1.0, 1.0)
     } else {
         let mut it = rest.chars();
@@ -24,11 +25,11 @@ pub fn parse_qty(s: &str) -> Option<f64> {
             'M' => (1e6, 1.0),
             'm' => (1.0, 1e3),
             'µ' | 'μ' | 'u' => (1.0, 1e6),
-            'n' | 'N' => (1.0, 1e9),
-            'p' | 'P' => (1.0, 1e12),
+            'n' => (1.0, 1e9),
+            'p' => (1.0, 1e12),
             _ => return None,
         };
-        if !is_unit(it.as_str()) {
+        if !ok(it.as_str()) {
             return None;
         }
         m
@@ -36,6 +37,12 @@ pub fn parse_qty(s: &str) -> Option<f64> {
     let v = n * mult / div;
     (v.is_finite() && v.abs() <= 1e12).then_some(v)
 }
+
+/// A voltage or any plain quantity (the battery): volts, or a bare number.
+pub fn parse_qty(s: &str) -> Option<f64> { parse_unit(s, &["", "Ω", "ohm", "ohms", "V", "A"]) }
+
+/// A resistance: ohms or a bare number. A farad or an amp is not a resistance.
+pub fn parse_ohm(s: &str) -> Option<f64> { parse_unit(s, &["", "Ω", "ohm", "ohms"]) }
 
 /// A result with three significant figures and a prefix that keeps the number in 1..1000
 /// ("2.5 kΩ", "40 mA"). Zero is "0 unit".
@@ -55,7 +62,7 @@ pub fn fmt_qty(x: f64, unit: &str) -> String {
         }
     }
     if prefix.is_empty() {
-        for (limit, p, mul) in [(1.0, "", 1.0), (1e-3, "m", 1e3), (1e-6, "µ", 1e6), (1e-9, "n", 1e9)] {
+        for (limit, p, mul) in [(1.0, "", 1.0), (1e-3, "m", 1e3), (1e-6, "µ", 1e6), (1e-9, "n", 1e9), (1e-12, "p", 1e12)] {
             if x.abs() >= limit {
                 v = x * mul;
                 prefix = p;
@@ -106,11 +113,17 @@ pub fn solve(v_batt: Option<f64>, r: &[Option<f64>], parallel: bool, open: bool)
     let mut i_total = None;
     if let (Some(vb), Some(a)) = (v_batt, all.as_ref()) {
         if parallel {
-            for k in 0..n {
-                v[k] = Some(vb);
-                i[k] = (a[k] > 0.0).then(|| vb / a[k]);
+            if a.iter().any(|x| *x == 0.0) {
+                // a 0 Ω branch shorts the battery: no voltage is left across any branch and the current is not
+                // something the figure can state, so every branch reads 0 V with no current
+                for k in 0..n { v[k] = Some(0.0); }
+            } else {
+                for k in 0..n {
+                    v[k] = Some(vb);
+                    i[k] = Some(vb / a[k]);
+                }
+                i_total = i.iter().cloned().sum::<Option<f64>>();
             }
-            i_total = i.iter().cloned().sum::<Option<f64>>();
         } else if let Some(req) = r_eq.filter(|q| *q > 0.0) {
             let it = vb / req;
             i_total = Some(it);
@@ -125,10 +138,8 @@ pub fn solve(v_batt: Option<f64>, r: &[Option<f64>], parallel: bool, open: bool)
 
 /// A capacitance marked in ohms is a stray resistor value, not a capacitor: reading "4 Ω" as 4 farads would be
 /// silently, wildly wrong, so it counts as unknown instead.
-pub fn parse_cap(s: &str) -> Option<f64> {
-    if s.contains('Ω') || s.to_ascii_lowercase().contains("ohm") { return None; }
-    parse_qty(s).filter(|v| *v > 0.0)
-}
+/// A capacitance: farads or a bare number, and positive (a 0 F part has no equivalent to compute).
+pub fn parse_cap(s: &str) -> Option<f64> { parse_unit(s, &["", "F", "f", "farad", "farads"]).filter(|v| *v > 0.0) }
 
 /// A capacitor circuit worked out: equivalent capacitance, the total charge the battery puts on it, and the
 /// voltage across and charge on each part.
@@ -288,6 +299,30 @@ mod tests {
         assert!(near(c.q[0], 8e-5), "the series capacitor carries the whole charge: {:?}", c.q);
         assert!(near(c.q[1], 8e-5));
         assert!(near(c.v[0], 8.0) && near(c.v[1], 4.0), "8 V and 4 V add to the battery's {:?}", c.v);
+    }
+
+    #[test]
+    fn a_unit_of_the_wrong_kind_is_not_a_number() {
+        // each quantity accepts only its own units: a farad is not a resistance, a volt is not a capacitance
+        assert_eq!(parse_ohm("4 Ω"), Some(4.0));
+        assert_eq!(parse_ohm("470 µF"), None);
+        assert_eq!(parse_ohm("12 V"), None);
+        assert_eq!(parse_ohm("2 N"), None, "N is newtons, not nano");
+        assert_eq!(parse_cap("10 µF"), Some(1e-5));
+        assert_eq!(parse_cap("12 V"), None);
+        assert_eq!(parse_cap("4 Ω"), None);
+        // and the battery still reads volts
+        assert_eq!(parse_qty("12 V"), Some(12.0));
+    }
+
+    #[test]
+    fn a_short_across_a_parallel_circuit_leaves_no_voltage_anywhere() {
+        // a 0 Ω branch shorts the battery: no voltage is left across any branch, and the current is not stated
+        let s = solve(Some(12.0), &[Some(4.0), Some(0.0)], true, false);
+        assert_eq!(s.r_eq, Some(0.0));
+        assert_eq!(s.v, vec![Some(0.0), Some(0.0)]);
+        assert_eq!(s.i, vec![None, None]);
+        assert_eq!(s.i_total, None);
     }
 
     #[test]

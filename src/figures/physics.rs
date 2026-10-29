@@ -291,6 +291,56 @@ mod tests {
     }
 
     #[test]
+    fn the_circuit_keeps_its_meters_and_labels_inside_the_canvas() {
+        let cd = defs().into_iter().find(|d| d.id == "circuit-diagram").unwrap();
+        let mk = |list: &[(&'static str, Value)]| {
+            let mut p = Params::defaults(&(cd.params)());
+            for (k, v) in list { p.0.insert(k.to_string(), v.clone()); }
+            p
+        };
+        // the combination layout puts the top wire high, so a meter above it would leave the canvas
+        for vm in ["Across component 1", "Across component 2", "Across component 4"] {
+            let p = mk(&[("layout", Value::S("In series and parallel".into())), ("n", Value::I(4)),
+                ("voltmeter", Value::S(vm.into())), ("cell_val", Value::S("12 V".into())),
+                ("solve", Value::S("Readings and results".into()))]);
+            let svg = (cd.render)(&p);
+            assert!(!svg.contains("cy=\"-"), "{vm}: a circle was drawn above the canvas");
+            // nothing is clipped off the right: every circle centre is inside the canvas width
+            let w: f64 = svg.split("width=\"").nth(1).and_then(|s| s.split('"').next()).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+            for part in svg.split("<circle cx=\"").skip(1) {
+                let cx: f64 = part.split('"').next().and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                assert!(cx + 18.0 <= w, "{vm}: a circle at {cx} runs off the {w} px canvas");
+            }
+        }
+        // long values must not print into each other in a combination
+        let p = mk(&[("layout", Value::S("In series and parallel".into())), ("n", Value::I(3)),
+            ("r1_val", Value::S("4.7 kΩ".into())), ("r2_val", Value::S("4.7 kΩ".into())), ("r3_val", Value::S("4.7 kΩ".into()))]);
+        let l = instr::circuit_layout(&p);
+        let gap = l.comps[2].0 - l.comps[1].0;
+        assert!(gap >= 56.0 + 6.0 * 11.0 + 3.0 * 11.0, "branch pitch {gap} too small for 4.7 kΩ and R_1");
+        // a capacitor is never labelled in ohms
+        let c = mk(&[("components", Value::S("Capacitors".into())), ("n", Value::I(2)),
+            ("r1_val", Value::S("10 µF".into())), ("r2_val", Value::S("4 Ω".into()))]);
+        let svg = (cd.render)(&c);
+        assert!(!svg.contains("4 Ω"), "a capacitor was labelled with a resistance:\n{svg}");
+        assert!(svg.contains("10 µF"), "the real capacitance stays");
+        // and a battery the figure does not print cannot be used to work out the answers
+        let h = mk(&[("cell_val_mode", Value::S("None".into())), ("solve", Value::S("Readings and results".into())), ("n", Value::I(2))]);
+        let hs = (cd.render)(&h);
+        assert!(!hs.contains("6 A") && !hs.contains("12 Ω"), "answers came from a hidden battery:\n{hs}");
+        if let Ok(dir) = std::env::var("VERSHION_PNG_DIR") {
+            for (tag, q) in [
+                ("combo-vm1", mk(&[("layout", Value::S("In series and parallel".into())), ("n", Value::I(4)), ("voltmeter", Value::S("Across component 1".into())), ("solve", Value::S("Readings and results".into()))])),
+                ("combo-vm4", mk(&[("layout", Value::S("In series and parallel".into())), ("n", Value::I(4)), ("voltmeter", Value::S("Across component 4".into())), ("solve", Value::S("Readings and results".into()))])),
+                ("combo-long", mk(&[("layout", Value::S("In series and parallel".into())), ("n", Value::I(3)), ("r1_val", Value::S("4.7 kΩ".into())), ("r2_val", Value::S("4.7 kΩ".into())), ("r3_val", Value::S("4.7 kΩ".into()))])),
+                ("series-long", mk(&[("n", Value::I(4)), ("switch", Value::S("Closed".into())), ("r1_val", Value::S("4.7 kΩ".into())), ("r2_val", Value::S("4.7 kΩ".into())), ("r3_val", Value::S("4.7 kΩ".into())), ("r4_val", Value::S("4.7 kΩ".into()))])),
+            ] {
+                let _ = std::fs::write(format!("{dir}/circuit-{tag}.png"), to_png(&(cd.render)(&q), 1.0).unwrap());
+            }
+        }
+    }
+
+    #[test]
     fn nine_physics_generators() {
         let ids: Vec<_> = defs().iter().map(|d| d.id).collect();
         assert_eq!(ids.len(), 9);

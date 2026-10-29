@@ -68,6 +68,15 @@ Updated 2026-10-28 late: the five-figure phase-3 critic round is fixed and commi
   the first fix aimed at the symptom (make the margin grow with the label size) instead of at the cause (measure the
   widest label the axis will print).**
 
+## Circuit diagram critic round (2026-10-29)
+- Combined critic on `9addc16`: **FAIL — 2 blockers, 7 majors, 11 minors**, all arithmetic verified correct. Fixed in
+  the commit after; disposition in `docs/critic-reports/2026-10-29-circuit-diagram-critic.md`.
+- The two blockers: a combination voltmeter drawn at y = −2 (the "above the wire" placement is series-only), and a
+  regression I introduced — adding `F` to the shared parser let resistor mode read `470 µF` as 470 µΩ. The parser is
+  now unit-parameterised (`parse_ohm` / `parse_cap` / `parse_qty`).
+- **Lesson worth keeping: a parser shared by two quantities needs its units passed in, not widened.** Widening
+  `parse_qty` to accept farads looked additive and silently changed what a resistor value meant.
+
 ## What is left in the figures loop
 - **Spring-scale hide-reading: done** (`82846df`) — a new `answer_text` caption, so the worksheet copy can read
   `Force: ________ N` with the reading nowhere on the figure. Census unchanged.
