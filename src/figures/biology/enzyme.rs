@@ -224,9 +224,8 @@ pub fn build(p: &Params) -> (String, Report) {
         // Vmax as the dashed asymptote. (round 3) With an inhibitor this is the APPARENT Vmax, and labelling it plainly
         // "Vmax = 2" beside givens that say "Vmax = 10" reads as a contradiction; the prime is the usual mark.
         let vy = f.py(vmax_a);
-        d.raw(&format!(r##"<line x1="{:.2}" y1="{vy:.2}" x2="{:.2}" y2="{vy:.2}" stroke="{curve}" stroke-width="1.4" stroke-dasharray="7 5"/>"##, f.left(), f.right()));
         let vmax_name = if inhibited { "Vmax\u{2032}" } else { "Vmax" };
-        d.raw(&text_el(f.right() - 4.0, vy - 8.0 * lab, 12.0 * lab, "end", curve, &format!("{vmax_name} = {}", val(vmax_a, dec))));
+        let vmax_text = format!("{vmax_name} = {}", val(vmax_a, dec));
         // Km: the concentration that reaches half of it — or, past the right-hand edge, named there, because an
         // inhibitor can push Km far beyond the axis the curve is drawn on
         let half = f.py(vmax_a / 2.0);
@@ -237,39 +236,63 @@ pub fn build(p: &Params) -> (String, Report) {
         let (km_lx, km_anchor) = if km_a <= smax && f.px(km_a) + km_w / 2.0 > f.right() { (f.right() - 2.0, "end") }
         else if km_a <= smax && f.px(km_a) - km_w / 2.0 < f.left() { (f.left() + 2.0, "start") }
         else { (f.px(km_a), "middle") };
+        let km_y = f.bottom() - 6.0 * lab;
+        let box_around = |x: f64, w: f64, anchor: &str, y: f64, size: f64| match anchor {
+            "end" => (x - w, x, y - size, y + size * 0.35),
+            "middle" => (x - w / 2.0, x + w / 2.0, y - size, y + size * 0.35),
+            _ => (x, x + w, y - size, y + size * 0.35),
+        };
+        let km_box = box_around(km_lx, km_w, km_anchor, km_y, 12.0 * lab);
+        let note_text = format!("{km_name} = {}, beyond this axis", val(km_a, dec));
+        let note_w = note_text.chars().count() as f64 * 12.0 * lab * 0.55;
+        let note_box = box_around(f.right() - 4.0, note_w, "end", half - 7.0 * lab, 12.0 * lab);
+        // (round 6) the asymptote label is a box too, and no earlier round checked it: a noncompetitive inhibitor drops
+        // the asymptote onto the row where the Km label (or its note) lives, and the two printed through each other.
+        // It goes above its line, then higher, until it clears them; it is never moved below the line.
+        let vmax_w = vmax_text.chars().count() as f64 * 12.0 * lab * 0.55;
+        let under_base = if km_a <= smax { km_box } else { note_box };
+        let mut vmax_y = vy - 8.0 * lab;
+        for y in [vy - 8.0 * lab, vy - 24.0 * lab, vy - 40.0 * lab, vy - 56.0 * lab] {
+            let b = box_around(f.right() - 4.0, vmax_w, "end", y, 12.0 * lab);
+            if !hits(b, under_base) && b.2 > f.top() {
+                vmax_y = y;
+                break;
+            }
+        }
+        let vmax_box = box_around(f.right() - 4.0, vmax_w, "end", vmax_y, 12.0 * lab);
+        d.raw(&format!(r##"<line x1="{:.2}" y1="{vy:.2}" x2="{:.2}" y2="{vy:.2}" stroke="{curve}" stroke-width="1.4" stroke-dasharray="7 5"/>"##, f.left(), f.right()));
+        d.raw(&text_el(f.right() - 4.0, vmax_y, 12.0 * lab, "end", curve, &vmax_text));
         if km_a <= smax {
             let kx = f.px(km_a);
             d.raw(&format!(r##"<line x1="{kx:.2}" y1="{:.2}" x2="{kx:.2}" y2="{half:.2}" stroke="{curve}" stroke-width="1.2" stroke-dasharray="3 4"/>"##, f.bottom()));
             d.raw(&format!(r##"<line x1="{:.2}" y1="{half:.2}" x2="{kx:.2}" y2="{half:.2}" stroke="{curve}" stroke-width="1.2" stroke-dasharray="3 4"/>"##, f.left()));
-            d.raw(&text_el(km_lx, f.bottom() - 6.0 * lab, 12.0 * lab, km_anchor, curve, &km_text));
+            d.raw(&text_el(km_lx, km_y, 12.0 * lab, km_anchor, curve, &km_text));
         } else {
             d.raw(&format!(r##"<line x1="{:.2}" y1="{half:.2}" x2="{:.2}" y2="{half:.2}" stroke="{curve}" stroke-width="1.2" stroke-dasharray="3 4"/>"##, f.left(), f.right()));
-            let note = format!("{km_name} = {}, beyond this axis", val(km_a, dec));
-            d.raw(&text_el(f.right() - 4.0, half - 7.0 * lab, 12.0 * lab, "end", curve, &note));
+            // (round 6) the note clears the asymptote label too: it used to print through it with a Km past the axis
+            let mut note_y = half - 7.0 * lab;
+            for y in [half - 7.0 * lab, half + 12.0 * lab, half - 26.0 * lab] {
+                let b = box_around(f.right() - 4.0, note_w, "end", y, 12.0 * lab);
+                if !hits(b, vmax_box) && b.2 > f.top() && b.3 < f.bottom() + 30.0 * lab {
+                    note_y = y;
+                    break;
+                }
+            }
+            d.raw(&text_el(f.right() - 4.0, note_y, 12.0 * lab, "end", curve, &note_text));
         }
         // (round 5) whichever of the two sits under the point — the Km label at low [S] or the beyond-the-axis note —
-        // is one of the boxes the other labels must clear. It used to be checked only for the rate label, and only when
-        // the label itself was drawn, so the note and the half-rate label went unguarded.
-        let under_box = if km_a <= smax {
-            let km_y = f.bottom() - 6.0 * lab;
-            let (k0, k1) = match km_anchor { "end" => (km_lx - km_w, km_lx), "middle" => (km_lx - km_w / 2.0, km_lx + km_w / 2.0), _ => (km_lx, km_lx + km_w) };
-            (k0, k1, km_y - 12.0 * lab, km_y + 4.0 * lab)
-        } else {
-            let note = format!("{km_name} = {}, beyond this axis", val(km_a, dec));
-            let note_w = note.chars().count() as f64 * 12.0 * lab * 0.55;
-            let ny = half - 7.0 * lab;
-            (f.right() - 4.0 - note_w, f.right() - 4.0, ny - 12.0 * lab, ny + 4.0 * lab)
-        };
+        // is one of the boxes the other labels must clear.
+        let under_box = if km_a <= smax { km_box } else { note_box };
         // (round 4) the half-rate label names the APPARENT half when an inhibitor is on (Vmax′/2), like the asymptote
         let half_label = format!("{vmax_name}/2 = {}", val(vmax_a / 2.0, dec));
         let half_w = half_label.chars().count() as f64 * 11.0 * lab * 0.55;
         let hx0 = if km_a <= smax && f.px(km_a) < f.left() + 118.0 { f.px(km_a) + 8.0 } else { f.left() + 6.0 };
-        // (round 5) a strong inhibitor puts the half-rate line near the axis, where the Km label lives: take the first
-        // of its usual place, a little above it, and clear above that, which does not overlap the Km label
+        // (round 5, round 6) a strong inhibitor puts the half-rate line near the axis, where the Km label and the
+        // asymptote label live: take the first of its usual place and two rows above that clears both
         let mut half_pos = (hx0, half - 7.0 * lab);
         for (x, y) in [(hx0, half - 7.0 * lab), (hx0, half - 27.0 * lab), (f.left() + 6.0, half - 41.0 * lab)] {
-            let b = (x, x + half_w, y - 11.0 * lab, y + 4.0 * lab);
-            if !hits(b, under_box) && y - 11.0 * lab > f.top() {
+            let b = box_around(x, half_w, "start", y, 11.0 * lab);
+            if !hits(b, under_box) && !hits(b, vmax_box) && b.2 > f.top() {
                 half_pos = (x, y);
                 break;
             }
@@ -277,7 +300,7 @@ pub fn build(p: &Params) -> (String, Report) {
         let (hx, half_y) = half_pos;
         // (round 4) this label runs over the curve too, so it carries the same halo as the rate label
         d.raw(&text_el_halo(hx, half_y, 11.0 * lab, "start", curve, &half_label));
-        let half_box = (hx, hx + half_w, half_y - 11.0 * lab, half_y + 4.0 * lab);
+        let half_box = box_around(hx, half_w, "start", half_y, 11.0 * lab);
         // the marked point
         let px = f.px(s_at);
         let py = f.py(v_at);
@@ -289,18 +312,21 @@ pub fn build(p: &Params) -> (String, Report) {
         // close under the Vmax line there is no room above the point, and the label would print into the dashed line
         let above = py - 9.0 * lab;
         let start = if (above - vy).abs() < 14.0 * lab { py + 18.0 * lab } else { above };
-        // (round 3, round 4) it must clear BOTH labels that can sit under the point — the Km one at low [S] and the
-        // half-rate one at [S] = Km (where the rate label used to print straight over "Vmax/2 = 5"). Take the first
-        // candidate row that overlaps neither and stays inside the plot.
-        let (lo, hi) = if anchor == "start" { (lx, lx + text_w) } else { (lx - text_w, lx) };
-        let box_at = |yy: f64| (lo, hi, yy - 12.0 * lab, yy + 4.0 * lab);
-        let clear = |yy: f64| !hits(box_at(yy), half_box) && !hits(box_at(yy), under_box);
-        let mut ly = start;
-        for yy in [start, py - 24.0 * lab, py - 38.0 * lab, py + 18.0 * lab, py + 32.0 * lab] {
-            if clear(yy) && yy - 12.0 * lab > f.top() && yy + 4.0 * lab < f.bottom() + 10.0 * lab {
-                ly = yy;
-                break;
-            }
+        // (round 3-6) it must clear every label that can sit near it — the Km one, the half-rate one, the note and the
+        // asymptote label. Inside the plot only: a row below the axis would print across the tick numbers (round 6:
+        // the unchecked fallback did exactly that when every candidate failed).
+        let inside = |b: (f64, f64, f64, f64)| b.2 > f.top() && b.3 < f.bottom() - 2.0 * lab;
+        let clear = |yy: f64| {
+            let b = box_around(lx, text_w, anchor, yy, 12.0 * lab);
+            inside(b) && !hits(b, half_box) && !hits(b, under_box) && !hits(b, vmax_box)
+        };
+        let cands = [start, py - 9.0 * lab, py - 24.0 * lab, py - 38.0 * lab, py - 52.0 * lab, py + 18.0 * lab, py + 32.0 * lab];
+        let mut ly = cands[0];
+        if let Some(y) = cands.iter().copied().find(|y| clear(*y)) {
+            ly = y;
+        } else if let Some(y) = cands.iter().copied().find(|y| inside(box_around(lx, text_w, anchor, *y, 12.0 * lab))) {
+            // nothing is clear: stay inside the plot rather than print across the ticks
+            ly = y;
         }
         // (round 3) a label over the curve carries a thin halo, so the curve is never struck through
         d.raw(&text_el_halo(lx, ly, 12.0 * lab, anchor, mark, &label));
@@ -584,6 +610,8 @@ mod tests {
         // puts its note under a point marked near the end — the half label and the note were outside the collision test
         let cases: Vec<Vec<(&'static str, Value)>> = vec![
             vec![s("mode", "noncompetitive"), f("inh", 10.0), f("ki", 0.2), f("km", 2.0), f("smax", 12.0)],
+            vec![s("mode", "noncompetitive"), f("inh", 10.0), f("ki", 0.2), f("km", 20.0), f("smax", 12.0)],
+            vec![s("mode", "noncompetitive"), f("inh", 1.0), f("ki", 0.2), f("vmax", 5.0), f("km", 5.0), f("smax", 6.0), f("at", 6.0)],
             vec![s("mode", "competitive"), f("inh", 0.5), f("ki", 10.0), f("vmax", 10.0), f("km", 12.0), f("smax", 12.0), f("at", 12.0)],
             vec![f("at", 0.0)],
             vec![f("at", 2.0)],
@@ -592,7 +620,7 @@ mod tests {
         for c in &cases {
             let svg = render_of(c);
             let mut all: Vec<((f64, f64, f64, f64), String)> = Vec::new();
-            for prefix in ["v = ", "Km = ", "Km\u{2032} = ", "Vmax/2 = ", "Vmax\u{2032}/2 = "] {
+            for prefix in ["v = ", "Km = ", "Km\u{2032} = ", "Vmax = ", "Vmax\u{2032} = ", "Vmax/2 = ", "Vmax\u{2032}/2 = "] {
                 for b in label_box(&svg, prefix) {
                     all.push((b, prefix.to_string()));
                 }
@@ -601,6 +629,23 @@ mod tests {
                 for j in (i + 1)..all.len() {
                     assert!(!overlaps(all[i].0, all[j].0), "{c:?}: {:?} overprints {:?}", all[i], all[j]);
                 }
+            }
+        }
+        // and the rate label never falls back onto the x-axis tick numbers (round 6: the unchecked fallback did)
+        let svg = render_of(&[f("vmax", 1.0), f("km", 2.0), f("smax", 12.0), f("at", 2.0), s("mode", "noncompetitive"), f("inh", 4.0), f("ki", 0.2)]);
+        let ticks: Vec<_> = boxes(&svg)
+            .into_iter()
+            .filter(|b| b.4.parse::<f64>().is_ok())
+            .map(|(x, y, size, anchor, text)| {
+                let n = text.chars().count() as f64 * size * 0.55;
+                let (l, r) = match anchor.as_str() { "end" => (x - n, x), "middle" => (x - n / 2.0, x + n / 2.0), _ => (x, x + n) };
+                (l, r, y - size, y + size * 0.3)
+            })
+            .collect();
+        assert!(!ticks.is_empty(), "no tick numbers found");
+        for r in label_box(&svg, "v = ") {
+            for t in &ticks {
+                assert!(!overlaps(r, *t), "the rate label {r:?} prints across a tick number {t:?}");
             }
         }
     }

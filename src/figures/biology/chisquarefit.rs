@@ -388,8 +388,10 @@ pub fn build(p: &Params) -> String {
     d.raw(&text_el(col_t, y, FS * lab, "end", ink, &total_text));
     rule(&mut d, y + 9.0 * lab, 1.6);
 
-    // the givens: the ratio the expected counts come from, always printed (in the table's own notation when huge)
-    let ratio_text: Vec<String> = f.ratio.iter().map(|v| val(*v, 0)).collect();
+    // the givens: the ratio the expected counts come from, always printed (in the table's own notation when huge).
+    // (round 6) a ratio part that is not a whole number keeps its decimals: rounding them to integers printed
+    // "1.5 : 2.5 : 1.5" as "2 : 2 : 2", which contradicts the expected counts beside it.
+    let ratio_text: Vec<String> = f.ratio.iter().map(|v| if (v - v.round()).abs() < 1e-9 { format!("{}", v.round() as i64) } else { format!("{v}") }).collect();
     let total_shown = if huge { sci(total_obs) } else { val(total_obs, 0) };
     let givens = format!("Expected from the ratio {} out of {} observations", ratio_text.join(" : "), total_shown);
     // (round 5) long ratio parts ran off the canvas: wrapped to the width, the lines stacking up into the gap above
@@ -402,8 +404,8 @@ pub fn build(p: &Params) -> String {
     // the statistics block
     let lines = [
         if !ans { format!("Chi-square  \u{3c7}\u{b2} = {BLANK}") }
-        else if f.impossible { "Chi-square  \u{3c7}\u{b2} = \u{221e}  (a category expected to be empty has counts in it)".to_string() }
-        else if infinite { "Chi-square  \u{3c7}\u{b2} = \u{221e}  (the counts are too large to work out)".to_string() }
+        else if f.impossible { "Chi-square  \u{3c7}\u{b2} = \u{221e}  (a category expected to be empty has counts)".to_string() }
+        else if infinite { "Chi-square  \u{3c7}\u{b2} = \u{221e}  (the counts are too large)".to_string() }
         else if huge { format!("Chi-square  \u{3c7}\u{b2} = {}", sci(printed_chi2)) }
         else { format!("Chi-square  \u{3c7}\u{b2} = {}", group(&col(printed_chi2, term_dec))) },
         if ans {
@@ -416,8 +418,6 @@ pub fn build(p: &Params) -> String {
         if ans { match f.p { Some(p) => format!("p-value  {}", p_phrase(p)), None => "p-value  p = \u{2014}".to_string() } } else { format!("p-value  p = {BLANK}") },
     ];
     let mut all: Vec<String> = lines.to_vec();
-    let first = if ans { 0.0 } else { 0.0 };
-    let _ = first;
     all.extend(decision_lines.iter().cloned());
     for (i, line) in all.iter().enumerate() {
         let yy = stats_y0 + i as f64 * ROW_FS * lab * 1.35;
@@ -632,6 +632,17 @@ mod tests {
         assert!(t.contains('\u{2026}'), "the long name is not shortened: {t}");
         assert!(t.contains("123,456"), "{t}");
         assert!(t.contains("10,229"), "the contribution is not grouped: {t}");
+    }
+
+    #[test]
+    fn a_ratio_with_decimals_is_printed_as_typed() {
+        // (round 6) "1.5 : 2.5 : 1.5" printed as "2 : 2 : 2", contradicting the expected counts beside it
+        let t = texts(&render_of(&[s("obs", "100, 200, 100"), s("ratio", "1.5, 2.5, 1.5")]));
+        assert!(t.contains("1.5 : 2.5 : 1.5"), "{t}");
+        assert!(!t.contains("2 : 2 : 2"), "{t}");
+        // whole numbers still print whole
+        let t = texts(&render_of(&[s("obs", "315, 101, 108, 32"), s("ratio", "9, 3, 3, 1")]));
+        assert!(t.contains("9 : 3 : 3 : 1"), "{t}");
     }
 
     #[test]

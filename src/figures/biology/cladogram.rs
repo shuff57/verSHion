@@ -277,6 +277,7 @@ pub fn build(p: &Params) -> String {
     let step_x = (STEP_X * lab).max(widest_anc + 30.0);
     let tree_w = left + maxd as f64 * step_x;
     let label_w = text_w(&widest, 12.0 * lab) + 18.0;
+    let prefix_w = text_w("Left to right: ", 12.0 * lab);
     // (round 4) the line under the picture ("4 leaves, 1 branching point, 1 level") grew with the labels and ran past
     // the canvas at Large: the canvas takes its width into account
     let count_text = node.as_ref().ok().map(|root| {
@@ -288,10 +289,13 @@ pub fn build(p: &Params) -> String {
     if let Some(t) = &count_text {
         w = w.max(24.0 + text_w(t, 12.0 * lab) + 12.0);
     }
+    // (round 6) the leaf-order line: a name too long to break takes a line of its own, so the canvas must fit the
+    // prefix plus the widest name as well as the leaf label at the end of the tree (with a little headroom for a font
+    // wider than the estimate)
+    w = w.max(24.0 + prefix_w + text_w(&widest, 12.0 * lab) * 1.06 + 14.0);
     let top = 34.0;
     let h = top + ((n_leaves as f64) - 1.0).max(1.0) * LEAF_GAP * lab + 40.0 * lab;
     // (round 2) the text under the picture wraps to the CANVAS, not to a fixed character count; (round 5) to its width.
-    let prefix_w = text_w("Left to right: ", 12.0 * lab);
     let leaf_max = (w - 24.0 - prefix_w - 12.0).max(40.0);
     let err_max = (w - 48.0).max(60.0);
     let below = match &node {
@@ -564,6 +568,8 @@ mod tests {
             "()".to_string(),
             "(A,)".to_string(),
             "".to_string(),
+            // (round 6) one name too long to break: it takes a line of its own, so the canvas must fit it
+            "a".repeat(60),
         ] {
             // (round 4) at Large the closing sentence ("Nothing is drawn…") was the one line still unwrapped
             for size in ["Medium", "Large"] {

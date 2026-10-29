@@ -571,3 +571,14 @@ rather than "inf", and its Total and χ² line agree; a huge contribution from a
 compact form instead of across two columns; the contribution column is thousands-grouped like the counts; the decision
 line wraps to the canvas (70 characters overflowed at Large); and the cladogram measures text by width per glyph rather
 than by character count, so a run of Ws is no longer clipped at either edge. Census: only `cladogram`.
+
+Fourth verification critic on `cef0949` (2026-10-29): **FAIL** — no blocker; 2 majors, 2 minors, both majors in the
+enzyme's label placement. Fixed here, seen in a PNG:
+(1) the Vmax/Vmax′ asymptote label was in no collision box at all, so a noncompetitive inhibitor — which drops the
+asymptote onto the row where the Km label (or its beyond-the-axis note) lives — printed the two through each other; the
+label now moves up its column until it clears them, and the note clears it in turn; (2) when every candidate row for the
+rate label failed, the unchecked fallback could be the row below the point, which at the axis is the x-axis tick row —
+the candidates are now bounded inside the plot and the fallback is the first row that is inside it, never a tick row.
+Minors: a ratio part that is not a whole number keeps its decimals ("1.5 : 2.5 : 1.5", not "2 : 2 : 2"), and a single
+name too long to break now sizes the canvas so the "Left to right:" line fits. The two statistic lines that carry a
+reason were shortened so they keep a margin at Large.
