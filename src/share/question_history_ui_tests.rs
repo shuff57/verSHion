@@ -2180,3 +2180,100 @@ fn d2h_show_compares_nothing_and_says_what_the_picture_is() {
     let t = r.page(1280.0);
     assert!(t.contains("Picture: a picture") && !t.contains("the same picture") && !t.contains("not compared"), "{t}");
 }
+
+// ---- throwaway critic probes (round 6) ---------------------------------------------------------------------------------
+
+#[test]
+fn d2j_a_restore_is_not_made_from_another_page_after_leaving() {
+    // (round 6, critic N3) a restore confirmed just before the person leaves (its version still on its way) is not made by
+    // the next frame's sync from the Shared page: only the frame that draws its own page may make it, so its Done text and
+    // Undo are never lost.
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+    r.open(0);
+    r.page(1280.0);
+    // Yes, restore pressed while the version is still on its way (Inline runner: the answer waits in the channel, as a
+    // background read that arrives just after the page's last frame)
+    let cache = &mut r.m.edit.question_cache;
+    match &mut r.m.edit.view {
+        EditView::Question(p) => {
+            p.ask_restore(2);
+            p.confirm_restore(cache);
+        }
+        _ => panic!(),
+    }
+    // the person goes to the Shared page: its frame runs the circle model's sync (shared_ui), the bank page is not drawn
+    let next = r.ctx.cumulative_frame_nr();
+    r.m.edit.set_pass(next);
+    let _ = r.m.edit.sync(&mut r.banks);
+    let applied = r.banks[0].questions[0].stem == A3;
+    // back on the bank a few frames later: the page is closed by the stale-frame rule, its Done text and Undo gone
+    r.m.edit.set_pass(next + 5);
+    let t = r.page(1280.0);
+    assert!(!t.contains("Undo restore") || !applied, "a restore was made away from its page yet its undo never shown:\n{t}");
+    assert!(!applied, "a restore was made while its page was not in front of the person");
+}
+
+#[test]
+fn d2j_a_restore_is_not_made_by_another_banks_strip() {
+    // (round 6, critic N3) the draft flag is one value for the whole model: the last bank page drawn sets it. Another
+    // linked bank's strip syncing the model must not make this bank's confirmed restore (or skip its draft guard).
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
+    r.open(0);
+    r.page(1280.0);
+    r.m.edit.set_question_draft(Some(LOCAL));
+    // a bank page for another bank ("other") is drawn next: its strip says "no draft" for it
+    r.m.edit.set_question_draft(Some("other"));
+    let cache = &mut r.m.edit.question_cache;
+    match &mut r.m.edit.view {
+        EditView::Question(p) => {
+            p.ask_restore(2);
+            p.confirm_restore(cache);
+        }
+        _ => panic!(),
+    }
+    r.m.edit.set_question_draft(None);
+    let next = r.ctx.cumulative_frame_nr();
+    r.m.edit.set_pass(next);
+    let _ = r.m.edit.sync(&mut r.banks);
+    assert_eq!(r.banks[0].questions[0].stem, A5, "another bank's strip made this bank's restore");
+}
+
+#[test]
+fn d2j_a_restore_is_not_made_by_another_linked_banks_strip() {
+    // (round 6, critic N3) a restore waiting for its picture while the person clicks another linked bank: its strip sets the
+    // pass and syncs the same model. The restore is only made (and its result and Undo shown) by its own page's frame.
+    let bytes = b"the picture of version 2".to_vec();
+    let sha = sha256_hex(&bytes);
+    let blob = format!("/circles/{CID}/banks/{BID}/blobs/{sha}");
+    let mut r = rig();
+    r.script_load();
+    r.w.raw(&version_path(2), served(2, &[pictured(&sha)], false));
+    r.w.raw(&blob, bytes.clone());
+    r.open(0);
+    r.page(1280.0);
+    assert!(r.click(1280.0, "Restore...", 0));
+    let cache = &mut r.m.edit.question_cache;
+    if let EditView::Question(p) = &mut r.m.edit.view {
+        p.confirm_restore(cache);
+    }
+    // one frame of the page: the restore asks for the picture ("Reading version 2...")
+    let t: String = r.frame_at(1280.0, Vec::new()).into_iter().map(|(t, _)| t).collect::<Vec<_>>().join("\n");
+    assert!(t.contains("Reading version 2"), "{t}");
+    assert_eq!(r.banks[0].questions[0].stem, A5, "not yet");
+    // the person clicks another linked bank: that page's strip sets the pass and syncs, as strip_with does
+    let f = r.m.edit.host_frame.unwrap();
+    r.m.edit.set_pass(f + 1);
+    r.m.edit.sync(&mut r.banks);
+    let applied = r.banks[0].questions[0].stem == A3;
+    // more frames elsewhere, then back to the bank
+    for _ in 0..3 {
+        let input = r.input(1280.0, Vec::new());
+        let _ = r.ctx.run_ui(input, |_| {});
+    }
+    let t = r.page(1280.0);
+    assert!(!applied || t.contains("Undo restore"), "restore applied while the person was on another bank's page, and its result and Undo were never shown: {t}");
+}

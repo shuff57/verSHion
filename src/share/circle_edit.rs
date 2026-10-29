@@ -5447,7 +5447,17 @@ impl CircleEditModel {
 
     /// Does what needs the banks: counts what changed, starts a send, builds a review, applies a
     /// merge. Returns true when a bank changed (the caller saves the banks).
+    ///
+    /// (round 6, critic N3) This says the bank's page is **not** in front of the person: a restore asked for on the
+    /// question's history is not made here. The bank's strip, which is about to draw that page, calls [`sync_in_front`].
+    /// The Shared page and tests that drive the model on its own come through here.
     pub fn sync(&mut self, banks: &mut [QuestionBank]) -> bool {
+        self.sync_in_front(banks, false)
+    }
+
+    /// [`sync`], saying whether the bank's page is drawn in this frame: a restore (or its undo) is made only then, so
+    /// its result and Undo are seen.
+    pub fn sync_in_front(&mut self, banks: &mut [QuestionBank], page_in_front: bool) -> bool {
         self.ensure();
         // (round 18, critic 97 m6) a links file that could not be written is written again
         self.links_again();
@@ -5473,9 +5483,10 @@ impl CircleEditModel {
             Some(f) => f(b),
             None => log.save_banks(b),
         };
-        // (round 5, critic I3) a restore is made only while its page is in front of the person (drawn in the frame before this
-        // one, as the stale-frame rule counts it) and no question of the bank is open in the editor
-        let shown = self.host_frame.is_some_and(|f| self.pass.is_none_or(|p| f + 1 >= p));
+        // (round 5, critic I3; round 6, critic N3) a restore is made only while its page is in front of the person: the
+        // frame syncing must be the one that drew it last (the strip calls `sync_in_front` for its own bank, and the page is
+        // drawn after this sync) and no question of the bank may be open in the editor
+        let shown = page_in_front && self.host_frame.is_some_and(|f| self.pass.is_none_or(|p| f + 1 >= p));
         let draft = match &self.view {
             EditView::Question(p) => self.question_draft.as_deref() == Some(p.local_bank_id.as_str()),
             _ => false,

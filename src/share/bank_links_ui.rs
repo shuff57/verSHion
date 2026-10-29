@@ -356,7 +356,10 @@ pub(super) fn strip_with(ui: &mut Ui, c: &mut super::circles::CirclesModel, bank
     // (critic 63 I2: a signed-out answer stops the checks in `links` itself, until the account changes or the person asks)
     let _ = c.links.take_signed_out();
     // Counts, a send the person asked for, a review to build, a merge to apply: the bank changes only here.
-    out.save |= c.edit.sync(banks);
+    // (round 6, critic N3) A restore asked for on the question's history is made only by the frame that draws that page for
+    // this bank: the Shared page and another linked bank's strip sync the same model, and would otherwise make one unseen.
+    let host_here = matches!(c.edit.view, super::circle_edit::EditView::Question(_)) && c.edit.host.as_ref().is_some_and(|h| h.local_id == bank_id);
+    out.save |= c.edit.sync_in_front(banks, host_here);
     for a in c.edit.take_advanced() {
         browse.set_circle_version(&a.circle_bank_id, &a.local_bank_id, a.version);
     }
