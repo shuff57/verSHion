@@ -1105,11 +1105,11 @@ fn d2i_restoring_the_base_version_over_a_stem_and_figure_edit_is_allowed() {
 }
 
 #[test]
-fn d2i_a_figure_the_copy_already_has_is_not_refused_as_new() {
-    // (round 6, critic N1, reported only) base v9 has no figure; the copy already has figure a=4 (uncounted by the strip)
-    // and a stem edit; version 6 is v9's content with the same figure a=4. Nothing moves in the figure, so the restore is
-    // allowed. The strip then counts nothing: this uncounted figure predates the restore (the strip could not see it with
-    // the stem edit either), so it is a known gap, not one the restore opens.
+fn d2i_a_figure_the_copy_already_has_but_the_base_lacks_is_refused() {
+    // (round 6, critic N1 reported this as a known gap; round 8, critic T1 closes it) base v9 has no figure; the copy
+    // already has figure a=4 (uncounted by the strip) and a stem edit; version 6 is v9's content with the same figure a=4.
+    // The base record now holds its figure (none), so restoring a figure the base never had would leave the strip saying
+    // the copy is in step over a change it can never send: refused.
     let (mut bank, link) = linked();
     let a = local_of(&link, QA);
     bank.questions[0].stem = "edit".into();
@@ -1119,10 +1119,11 @@ fn d2i_a_figure_the_copy_already_has_is_not_refused_as_new() {
     q["figure"] = json!({"id": "triangle", "params": {"a": 4}});
     let b = body(6, &[q, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)], false);
     let mut banks = vec![bank];
+    let before = json_of(&banks);
     let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
     let r = restore_question(&mut banks, &ask(&link, Some(&a), QA, &b), &sink, &|_: &[QuestionBank]| Ok(()), NOW + 100_000);
-    assert_eq!(r.map(|d| d.version), Ok(6));
-    assert_eq!(changes_since(&link, &banks[0]).changed, 0);
+    assert_eq!(r.map(|d| d.version), Err(RestoreRefused::NotCountable));
+    assert_eq!(json_of(&banks), before);
 }
 
 #[test]
@@ -1432,4 +1433,177 @@ fn d2m_a_history_lines_version_id_is_kept_whole() {
     s.json("Get", &format!("/circles/{CID}/banks/{BID}/versions"), 200, json!({"bank_id": BID, "head_version": 1, "versions": [{"version": 1, "kept": true, "version_id": big, "by": "x", "at": NOW, "message": "m"}]}), None);
     let p = block_on(Pool::new(s.as_ref()).circle_versions(CID, BID, None)).unwrap();
     assert!(p.versions[0].version_id.chars().count() <= 200, "version_id kept whole: {} chars", p.versions[0].version_id.chars().count());
+}
+
+// ---- round 6 critics' probes (r8) ---------------------------------------------------------------------------------------
+
+#[test]
+fn d2n_a_text_edit_never_lets_an_uncounted_figure_move_pass() {
+    // R2's fix made the NotCountable guard "undoable = the copy has a figure AND any unsent change". But any unsent
+    // change is enough: an unsent STEM edit alone lets a restore carry a figure the base record can not count, while
+    // the counted change it undoes (the stem) is also undone -- so the strip lands on 0 ("up to date") with the figure
+    // silently moved. The invariant R1/N1/R2 all chase: never let a restore leave the copy "in step" over a figure move.
+    let mut q9 = mc(QA, "Question A as of version 9", 1.0);
+    q9["figure"] = json!({"id": "triangle", "params": {"a": 3}});
+    let v9q = vec![q9, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)];
+    let (mut bank, link) = linked_with(&v9q);
+    let a = local_of(&link, QA);
+    {
+        let q = bank.questions.iter_mut().find(|q| q.id == a).unwrap();
+        // the person edited only the STEM; the figure is still the base's own a:3
+        q.stem = "My unsent stem edit".into();
+        assert_eq!(q.figure.as_ref().map(|f| f.params.get("a").cloned()), Some(Some(json!(3))), "the copy's figure is the base's");
+    }
+    bank.modified += 10;
+    assert_eq!(changes_since(&link, &bank).changed, 1, "the strip counts the stem edit");
+    // version 6's QA carries the BASE version's words exactly, but a DIFFERENT figure (a:9)
+    let mut q6 = mc(QA, "Question A as of version 9", 1.0);
+    q6["figure"] = json!({"id": "triangle", "params": {"a": 9}});
+    let six = body(6, &[q6, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)], false);
+    let mut banks = vec![bank];
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    let r = restore_question(&mut banks, &ask(&link, Some(&a), QA, &six), &sink, &|_| Ok(()), NOW + 100_000);
+    let after = banks[0].questions.iter().find(|q| q.id == a).cloned();
+    let count = changes_since(&link, &banks[0]);
+    assert_eq!(
+        r.map(|d| d.version),
+        Err(RestoreRefused::NotCountable),
+        "a text edit let an uncounted figure move through: restored figure = {:?}, strip says changed = {} (up to date)",
+        after.as_ref().and_then(|q| q.figure.clone()),
+        count.changed
+    );
+}
+
+#[test]
+fn d2n_a_changes_reply_strings_are_cut_at_parse() {
+    // M2/r6 caps the history *lines*; the `/changes` reply is held for the session too (8 banks) and its texts are not
+    // capped: `reason`, `bank_id`, and every qid in the added/changed/removed lists. Bounded only by the 1 MB response
+    // cap, so up to 8 MB of untrusted text can be kept, each string whole. Same gap the r6/r7 cap claims to close.
+    let s = Tape::new();
+    let big = "r".repeat(100_000);
+    let qid = "q".repeat(100_000);
+    s.json("Get", &format!("/circles/{CID}/banks/{BID}/changes"), 200, json!({"bank_id": BID, "head_version": 2, "reason": big, "versions": [{"version": 2, "compared_to": 1, "added": [qid]}]}), None);
+    let p = block_on(Pool::new(s.as_ref()).circle_changes(CID, BID)).unwrap();
+    assert!(p.reason.chars().count() <= 200, "changes reason kept whole: {} chars", p.reason.chars().count());
+    assert!(p.versions[0].added[0].chars().count() <= 200, "changes qid kept whole: {} chars", p.versions[0].added[0].chars().count());
+}
+
+#[test]
+fn d2n_a_figure_not_in_the_base_is_refused() {
+    let mut q9 = mc(QA, "Question A as of version 9", 1.0);
+    q9["figure"] = json!({"id": "triangle", "params": {"a": 4}});
+    let v9q = vec![q9, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)];
+    let (mut bank, link) = linked_with(&v9q);
+    let a = local_of(&link, QA);
+    // the person edited the stem (counted) and set the figure to a = 3 (uncounted)
+    {
+        let q = bank.questions.iter_mut().find(|q| q.id == a).unwrap();
+        q.stem = "My unsent edit".into();
+        q.figure = Some(crate::model::FigureSpec { id: "triangle".into(), params: [("a".to_string(), json!(3))].into_iter().collect() });
+    }
+    bank.modified += 10;
+    assert_eq!(changes_since(&link, &bank).changed, 1, "the strip counts the stem edit");
+    // version 6: the SAME countable fields as v9, but its figure is a = 5 (v9's, the base's, is a = 4)
+    let mut q6 = mc(QA, "Question A as of version 9", 1.0);
+    q6["figure"] = json!({"id": "triangle", "params": {"a": 5}});
+    let six = body(6, &[q6, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)], false);
+    let mut banks = vec![bank];
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    let r = restore_question(&mut banks, &ask(&link, Some(&a), QA, &six), &sink, &|_| Ok(()), NOW + 100_000);
+    let rv = r.map(|d| d.version);
+    let after_fig = banks[0].questions.iter().find(|q| q.id == a).and_then(|q| q.figure.clone());
+    let strip = changes_since(&link, &banks[0]);
+    assert!(
+        rv == Err(RestoreRefused::NotCountable),
+        "R2 allows a figure that is not the base's: restore gave {rv:?}; the copy's figure is now {after_fig:?} (version 9's is a = 4); strip changed = {}",
+        strip.changed
+    );
+    // the refusal changed nothing: her own unsent stem edit is still the one change the strip counts
+    assert_eq!(strip.changed, 1, "nothing was restored, so the stem edit is still to send");
+    assert_eq!(after_fig.as_ref().map(|f| f.params.get("a").cloned()), Some(Some(json!(3))), "her figure is untouched");
+}
+
+#[test]
+fn d2n_a_restore_landing_in_step_is_allowed_with_no_copy_figure() {
+    let mut q9 = mc(QA, "Question A as of version 9", 1.0);
+    q9["figure"] = json!({"id": "triangle", "params": {"a": 4}});
+    let v9q = vec![q9, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)];
+    let (mut bank, link) = linked_with(&v9q);
+    let a = local_of(&link, QA);
+    // the person edited the stem (counted) and removed the figure (uncounted)
+    {
+        let q = bank.questions.iter_mut().find(|q| q.id == a).unwrap();
+        q.stem = "My unsent edit".into();
+        q.figure = None;
+    }
+    bank.modified += 10;
+    assert_eq!(changes_since(&link, &bank).changed, 1);
+    // version 6's QA is v9's QA exactly (stem and figure a = 4): restoring lands the copy on the base
+    let mut q6 = mc(QA, "Question A as of version 9", 1.0);
+    q6["figure"] = json!({"id": "triangle", "params": {"a": 4}});
+    let six = body(6, &[q6, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)], false);
+    let mut banks = vec![bank];
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    let r = restore_question(&mut banks, &ask(&link, Some(&a), QA, &six), &sink, &|_| Ok(()), NOW + 100_000);
+    let rv = r.map(|d| d.version);
+    assert!(rv == Ok(6), "a restore that lands the copy in step was refused because the copy had no figure: {rv:?}");
+}
+
+#[test]
+fn d2n_an_unpaired_restore_compares_as_the_same_picture() {
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(3, 2, image::Rgb([200, 10, 10])))
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    let circle_sha = sha256_hex(&png);
+    let prepared = crate::store::prepare_image(&png).unwrap();
+    let stored_file = format!("media/{}.webp", sha256_hex(&prepared.bytes));
+    assert_ne!(stored_file, format!("media/{circle_sha}.png"), "the store renames it");
+    // the copy is in step with v9, whose QA carries the circle's picture (kept here as a WebP under its own name)
+    let mut q9 = mc(QA, "Question A as of version 9", 1.0);
+    q9["image"] = json!({"file": format!("media/{circle_sha}.png"), "width": 3, "height": 2});
+    let v9q = vec![q9, mc(QB, "Question B as of version 8", 1.0), mc(QC, "Question C", 1.0)];
+    let (mut bank, mut link) = linked_with(&v9q);
+    let a = local_of(&link, QA);
+    link.base.iter_mut().find(|b| b.local_id == a).unwrap().local_image = Some(stored_file.clone());
+    bank.questions.iter_mut().find(|q| q.id == a).unwrap().image = Some(ImageRef { file: stored_file.clone(), width: prepared.width, height: prepared.height });
+    link.mark_bank(&bank);
+    // version 6 has QA with the SAME circle picture
+    let mut q6 = mc(QA, "Question A as of version 6", 2.0);
+    q6["image"] = json!({"file": format!("media/{circle_sha}.png"), "width": 3, "height": 2});
+    let six = body(6, &[q6, mc(QB, "Question B", 1.0), mc(QC, "Question C", 1.0)], false);
+    let mut banks = vec![bank];
+    let sink = LogRestore { log: Arc::default(), copy: Mutex::new(None) };
+    // the circle removed QA: restoring brings it back new (unpaired)
+    let with = RestoreAsk { link: &link, local_id: Some(&a), qid: QA, body: &six, picture: None, store_picture: None, removed_in_circle: true };
+    let done = restore_question(&mut banks, &with, &sink, &|_| Ok(()), NOW + 1000).unwrap();
+    assert!(done.added, "the question comes back new");
+    assert!(!done.link.as_ref().unwrap().base.iter().any(|b| b.local_id == a), "the base entry is removed on unpair");
+    // the copy IS version 6's question, picture included: Compare must say the same picture
+    let kept = done.link.clone().unwrap();
+    let cmp = compare(side_of_copy(&kept, &banks[0], &a).as_ref(), side_of_version(&six, QA).as_ref(), false);
+    let pic = cmp.fields.iter().find(|f| f.field == "Picture").unwrap();
+    assert!(
+        (pic.left.as_str(), pic.right.as_str(), pic.changed) == ("the same picture", "the same picture", false),
+        "the copy IS version 6's question, but Compare says {} / {} (changed = {})",
+        pic.left,
+        pic.right,
+        pic.changed
+    );
+}
+
+#[test]
+fn d2n_a_changes_reply_and_merge_start_are_capped_at_parse() {
+    // (round 8, critic S) the /changes bank id and the merge answer's line count are bounded like the history lines
+    let s = Tape::new();
+    let big = "b".repeat(100_000);
+    s.json("Get", &format!("/circles/{CID}/banks/{BID}/changes"), 200, json!({"bank_id": big, "head_version": 1, "versions": []}), None);
+    let p = block_on(Pool::new(s.as_ref()).circle_changes(CID, BID)).unwrap();
+    assert!(p.bank_id.chars().count() <= super::circle_versions_api::ID_MAX, "bank_id kept whole: {} chars", p.bank_id.chars().count());
+    // a merge answer naming 500 versions: never more than one history page is kept
+    let lines: Vec<Value> = (1..=500u64).map(|v| json!({"version": v, "kept": true, "by": "x", "at": NOW, "message": "m"})).collect();
+    s.json("Post", &format!("/circles/{CID}/banks/{BID}/merge"), 200, json!({"bank_id": BID, "base_version": 1, "base_kept": true, "head_version": 500, "head_version_id": format!("{:032x}", 500), "head_at": NOW, "head_by": big, "between": lines, "between_total": 499, "merge_token": "tok"}), None);
+    let m = block_on(Pool::new(s.as_ref()).merge_start(CID, BID, 1)).unwrap();
+    assert_eq!(m.between.len(), super::circle_versions_api::HISTORY_PAGE);
+    assert!(m.head_by.chars().count() <= super::circle_versions_api::BY_MAX);
 }

@@ -1137,8 +1137,9 @@ fn held_between(p: &QuestionPage, a: u64, b: u64) -> Vec<u64> {
 }
 
 /// A ghost button that is drawn but does nothing while `on` is false (styled as `kit::ghost_button`, added in place so a
-/// wrapped row never squeezes it). (round 7, critic M6) While it is off it says why: every one of these waits for a restore.
-fn button_if(ui: &mut Ui, on: bool, label: &str) -> bool {
+/// wrapped row never squeezes it). (round 7, critic M6; round 8, critic P) While it is off it says why, in the words of the
+/// state it waits for: asked (`why`) by the caller, because during Asking there is a Cancel and during Reading there is not.
+fn button_if(ui: &mut Ui, on: bool, label: &str, why: &str) -> bool {
     if on {
         return kit::ghost_button(ui, label).clicked();
     }
@@ -1147,7 +1148,17 @@ fn button_if(ui: &mut Ui, on: bool, label: &str) -> bool {
         .stroke(egui::Stroke::new(1.0, theme::rule()))
         .corner_radius(egui::CornerRadius::same(17))
         .min_size(egui::vec2(0.0, 34.0));
-    ui.add_enabled(false, b).on_disabled_hover_text("A restore is reading its version. Wait for it, or press Cancel.").clicked()
+    ui.add_enabled(false, b).on_disabled_hover_text(why).clicked()
+}
+
+/// Why the row's buttons wait while a restore is busy, in that restore's own words (round 8, critic P): Asking still has
+/// Yes and Cancel on its panel, Reading has neither a Cancel nor an Escape that would stop it.
+fn waiting_words(p: &QuestionPage) -> &'static str {
+    match p.restore.as_ref().map(|r| &r.state) {
+        Some(RestoreState::Asking) => "A restore is waiting for your Yes. Press \"Yes, restore\" or Cancel first.",
+        Some(RestoreState::Reading) => "A restore is reading its version. Wait for it to finish.",
+        _ => "A restore is under way. Wait for it to finish.",
+    }
 }
 
 /// A restore asked about or under way: other rows' Restore and Compare wait (critic P6, round 4 P-3).
@@ -1181,11 +1192,12 @@ fn draw_question(ui: &mut Ui, p: &QuestionPage, back: &str, now: i64) -> Act {
         };
     }
     let free = !restore_busy(p);
+    let why = waiting_words(p);
     // "Your copy: ..." and Compare with...
     let compare_ok = p.load == Load::Ready && p.copy.is_some() && p.lines.iter().any(|l| l.kept && !l.withheld);
     text_row(ui, |ui| {
         ui.add(egui::Label::new(theme::text(your_copy_text(p.your_copy)).size(13.0)).wrap());
-        if compare_ok && p.compare.is_none() && button_if(ui, free, "Compare with...") {
+        if compare_ok && p.compare.is_none() && button_if(ui, free, "Compare with...", why) {
             let base = Side::Version(p.base_version);
             let left = if p.lines.iter().any(|l| l.version == p.base_version && l.kept && !l.withheld) { base } else { sides_of(p).into_iter().next().unwrap_or(base) };
             act = Act::Compare(left, Side::YourCopy);
@@ -1267,8 +1279,8 @@ fn draw_question(ui: &mut Ui, p: &QuestionPage, back: &str, now: i64) -> Act {
                             _ => "changed",
                         };
                         // (round 4, minor) a version named that has no row of its own says why
-                        let why = if listed(c) { String::new() } else { format!(" (version {c} has no row: this question was the same in it as before)") };
-                        let since = format!("{what} since version {c}{why}");
+                        let no_row = if listed(c) { String::new() } else { format!(" (version {c} has no row: this question was the same in it as before)") };
+                        let since = format!("{what} since version {c}{no_row}");
                         msg = Some(msg.map_or(since.clone(), |m| format!("{m} · {since}")));
                     }
                     if just {
@@ -1294,24 +1306,24 @@ fn draw_question(ui: &mut Ui, p: &QuestionPage, back: &str, now: i64) -> Act {
                                         if kit::ghost_button(ui, "Hide").clicked() {
                                             *act = Act::Show(*version);
                                         }
-                                    } else if button_if(ui, free, "Show") {
+                                    } else if button_if(ui, free, "Show", why) {
                                         *act = Act::Show(*version);
                                     }
                                 }
                                 2 => {
                                     let label = if with_copy { "Compare with your copy" } else { "Compare" };
-                                    if *compare && button_if(ui, free, label) {
+                                    if *compare && button_if(ui, free, label, why) {
                                         let left = compared_to.map(Side::Version).unwrap_or(Side::Version(*version));
                                         let right = if compared_to.is_some() { Side::Version(*version) } else { Side::YourCopy };
                                         *act = Act::Compare(left, right);
                                     }
                                 }
                                 _ => {
-                                    if restore && button_if(ui, free, "Restore...") {
+                                    if restore && button_if(ui, free, "Restore...", why) {
                                         *act = Act::AskRestore(*version);
                                     }
                                     // (round 5, critic I5) Undo stays reachable on the row restored, the result dismissed
-                                    if just && p.restore_ok && !matches!(p.restore.as_ref().map(|r| &r.state), Some(RestoreState::Done(_) | RestoreState::UndoFailed(_))) && button_if(ui, free, "Undo restore") {
+                                    if just && p.restore_ok && !matches!(p.restore.as_ref().map(|r| &r.state), Some(RestoreState::Done(_) | RestoreState::UndoFailed(_))) && button_if(ui, free, "Undo restore", why) {
                                         *act = Act::Undo;
                                     }
                                 }
@@ -1396,10 +1408,11 @@ fn draw_question(ui: &mut Ui, p: &QuestionPage, back: &str, now: i64) -> Act {
             act = Act::ShowAll(true);
         }
     }
-    // (round 7, critic M5) the pool serves one page of lines: never drop the rest silently
+    // (round 7, critic M5; round 8, critic P) the pool serves one page of the bank's lines: say so as the bank's fact, never
+    // as "this question has more": a question's own history may end well above the page
     if p.more_older {
         ui.add_space(4.0);
-        line(ui, format!("Only the newest {} versions are shown here; older ones are not.", super::circle_versions_api::HISTORY_PAGE));
+        line(ui, "This bank has older versions than this page shows; they are not listed here.");
     }
     act
 }

@@ -208,9 +208,10 @@ pub const CHANGE_IDS_MAX: usize = 5000;
 /// The most bytes of a change-list answer read.
 pub const CHANGES_RESPONSE_MAX: usize = 1 << 20;
 
-/// A list of question ids; `None` when the key is missing, null or not a list.
+/// A list of question ids; `None` when the key is missing, null or not a list. (round 8, critic S) Each id is cut at parse:
+/// the same untrusted text kept for the session, as `VersionLine`'s texts are.
 fn ids_at(v: &Value, key: &str) -> Option<Vec<String>> {
-    v.get(key).and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).filter(|s| !s.is_empty()).map(str::to_string).collect())
+    v.get(key).and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).filter(|s| !s.is_empty()).map(|s| cut(s.to_string(), ID_MAX)).collect())
 }
 
 fn change_entry(v: &Value) -> Option<ChangeEntry> {
@@ -232,7 +233,7 @@ fn change_entry(v: &Value) -> Option<ChangeEntry> {
 
 /// The answer of `GET .../changes` as this app keeps it.
 pub fn changes_page(v: &Value, etag: Option<String>) -> ChangesPage {
-    let reason = text_of(v, "reason");
+    let reason = cut(text_of(v, "reason"), BY_MAX);
     let per_question = reason != "keys_hidden" && v.get("per_question").and_then(Value::as_bool).unwrap_or(true);
     let head = v.get("head_version").and_then(Value::as_u64).unwrap_or(0);
     // (round 3, critic I2) never more entries than the pool reads, none above its head, read no further than that
@@ -244,7 +245,7 @@ pub fn changes_page(v: &Value, etag: Option<String>) -> ChangesPage {
     versions.sort_by_key(|a| std::cmp::Reverse(a.version));
     versions.dedup_by_key(|e| e.version);
     versions.truncate(CHANGES_MAX);
-    ChangesPage { bank_id: text_of(v, "bank_id"), head_version: v.get("head_version").and_then(Value::as_u64).unwrap_or(0), per_question, reason, versions, etag, from_cache: false }
+    ChangesPage { bank_id: cut(text_of(v, "bank_id"), ID_MAX), head_version: v.get("head_version").and_then(Value::as_u64).unwrap_or(0), per_question, reason, versions, etag, from_cache: false }
 }
 
 fn list_of<T: serde::de::DeserializeOwned>(v: &Value, key: &str) -> Result<Vec<T>, PoolError> {
@@ -391,7 +392,12 @@ impl<'a> Pool<'a> {
             head_version_id: cut(text_of(&v, "head_version_id"), ID_MAX),
             head_at: v.get("head_at").and_then(Value::as_i64).unwrap_or(0),
             head_by: cut(text_of(&v, "head_by"), BY_MAX),
-            between: list_of(&v, "between")?,
+            // (round 8, critic S) the answer names a page of them; never keep more than the history page does
+            between: {
+                let mut b: Vec<VersionLine> = list_of(&v, "between")?;
+                b.truncate(HISTORY_PAGE);
+                b
+            },
             between_total: v.get("between_total").and_then(Value::as_u64).unwrap_or(0),
             merge_token: token,
             oldest_kept: v.get("oldest_kept").and_then(Value::as_u64),

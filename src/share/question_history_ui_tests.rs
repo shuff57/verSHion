@@ -1502,6 +1502,9 @@ fn d2f_the_bankui_hook_sits_in_the_question_cards_menu() {
     // (round 7, critic M7) the hint is on the card itself, not only inside the menu it describes
     let hint = src.find("Right-click for Duplicate, Delete and History in the circle").expect("a hint on the card");
     assert!(card < hint && hint < menu, "the hint sits on the card, before the menu it describes");
+    // (round 8, critic P) and it promises only what an unlinked bank's menu holds
+    let unlinked = src.find("Right-click for Duplicate and Delete; Shift+F10").expect("the unlinked banks' hint");
+    assert!(hint < unlinked && unlinked < menu, "both hints sit on the card, before the menu");
 }
 
 #[test]
@@ -1705,7 +1708,7 @@ fn d2g_a_figure_only_restore_is_refused_and_the_copy_agrees_with_the_strip() {
     assert!(r.click(1280.0, "Restore...", 0));
     assert!(r.click(1280.0, "Yes, restore", 0));
     let t = r.page(1280.0);
-    assert!(t.contains("differs only in figure settings"), "{t}");
+    assert!(t.contains("figure is not the one your copy is based on"), "{t}");
     assert_eq!(serde_json::to_string(&r.banks).unwrap(), before);
     assert!(!t.contains("changed, not sent yet"), "the strip counts none: {t}");
     assert_eq!(r.m.edit.status(LOCAL).map(|s| s.changes.total()), Some(0));
@@ -2420,7 +2423,8 @@ fn d2l_open_compare_refuses_the_same_side() {
 
 #[test]
 fn d2m_the_page_says_when_older_versions_are_not_shown() {
-    // (round 7, critic M5) the pool serves one page of history lines; older ones left unread are said, never dropped silently
+    // (round 7, critic M5; round 8, critic P) the pool serves one page of the bank's lines: said as the bank's own fact,
+    // never as "this question has more", since a question's history may end well above the page
     let mut r = rig();
     let mut l = lines_json();
     l["next_before"] = json!(3);
@@ -2428,25 +2432,45 @@ fn d2m_the_page_says_when_older_versions_are_not_shown() {
     r.w.on("Get", &changes_path(), 200, changes_json(), Some("\"e1\""));
     r.open(0);
     let t = r.page(1280.0);
-    assert!(t.contains("older ones are not"), "{t}");
+    assert!(t.contains("This bank has older versions than this page shows"), "{t}");
     // one page and nothing older: nothing said
     let mut r = rig();
     r.script_load();
     r.open(0);
     let t = r.page(1280.0);
-    assert!(!t.contains("older ones are not"), "{t}");
+    assert!(!t.contains("older versions than this page shows"), "{t}");
 }
 
 #[test]
 fn d2m_a_disabled_show_says_wait_for_the_restore() {
-    // (round 7, critic M6) Show waits while a restore is asked; the disabled button says why
+    // (round 7, critic M6; round 8, critic P) Show waits while a restore is busy, and the disabled button's words are the
+    // state's own: Asking still has Yes and Cancel, Reading has neither a Cancel nor a working Escape
     let mut r = rig();
     r.script_load();
     r.w.raw(&version_path(2), served(2, &[qj(QA, A3)], false));
     r.open(0);
     r.page(1280.0);
     assert!(r.click(1280.0, "Restore...", 0));
-    // hover the disabled Show: the tooltip says what it waits for (egui waits half a second of a still pointer)
+    let t = hover_disabled_show(&mut r);
+    assert!(t.contains("A restore is waiting for your Yes") && t.contains("Cancel"), "{t}");
+    assert!(!t.contains("reading its version"), "nothing is being read while the question is asked: {t}");
+    // the version read is under way: the words say to wait, and never offer a Cancel there is not. (Its body is dropped so
+    // the restore stays Reading: with the answer already here the page would finish it in this frame.)
+    let (cid, bid) = match &r.m.edit.view {
+        EditView::Question(p) => (p.cid.clone(), p.bid.clone()),
+        _ => panic!("the page"),
+    };
+    r.m.edit.question_cache.drop_body(&cid, &bid, 2);
+    if let EditView::Question(p) = &mut r.m.edit.view {
+        p.restore = Some(super::question_history_ui::RestoreView { version: 2, state: super::question_history_ui::RestoreState::Reading });
+    }
+    let t = hover_disabled_show(&mut r);
+    assert!(t.contains("A restore is reading its version"), "{t}");
+    assert!(!t.contains("Cancel") && !t.contains("Escape"), "Reading has no Cancel to offer: {t}");
+}
+
+/// The text drawn after half a second of a still pointer over the (disabled) Show button.
+fn hover_disabled_show(r: &mut Rig) -> String {
     let show = r.frame_at(1280.0, Vec::new()).into_iter().find(|(t, _)| t == "Show").map(|(_, rect)| rect).expect("a Show button");
     let p = show.center();
     r.frame_at(1280.0, vec![egui::Event::PointerMoved(p)]);
@@ -2454,6 +2478,6 @@ fn d2m_a_disabled_show_says_wait_for_the_restore() {
     for _ in 0..16 {
         t = r.frame_at(1280.0, Vec::new()).into_iter().map(|(t, _)| t).collect::<Vec<_>>().join("\n");
     }
-    assert!(t.contains("A restore is reading its version"), "{t}");
+    t
 }
 
