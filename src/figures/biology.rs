@@ -6,6 +6,7 @@ use super::*;
 
 mod handles;
 pub mod chisquarefit;
+pub mod cladogram;
 pub mod enzyme;
 pub mod gel;
 pub mod hardyweinberg;
@@ -28,6 +29,7 @@ pub fn examples(id: &str) -> Option<Vec<super::Example>> {
         "hardy-weinberg" => hardyweinberg::examples(id),
         "chi-square-fit" => chisquarefit::examples(id),
         "enzyme-kinetics" => enzyme::examples(id),
+        "cladogram" => cladogram::examples(id),
         _ => None,
     }
 }
@@ -124,6 +126,7 @@ pub fn defs() -> Vec<FigureDef> {
         hardyweinberg::defs().pop().unwrap(),
         chisquarefit::defs().pop().unwrap(),
         enzyme::defs().pop().unwrap(),
+        cladogram::defs().pop().unwrap(),
     ]
 }
 

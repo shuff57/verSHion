@@ -92,6 +92,34 @@ pub fn generations(p: &Params) -> Vec<Gen> {
     out
 }
 
+/// The three frequencies as they are printed: each rounded to `dec` places, then the largest moved by the rounding
+/// difference, so the printed numbers add up to exactly 1. Rounding each on its own printed "0.4 + 0.5 + 0.2 = 1.1"
+/// beside a Check line that said 1.
+pub fn printed_parts(g: &Gen, dec: i64) -> [f64; 3] {
+    let f = 10f64.powi(dec as i32);
+    let r = |v: f64| (v * f).round() / f;
+    let mut v = [r(g.dom), r(g.het), r(g.rec)];
+    let diff = r(1.0 - (v[0] + v[1] + v[2]));
+    if diff != 0.0 {
+        let i = (0..3).max_by(|a, b| v[*a].partial_cmp(&v[*b]).unwrap_or(std::cmp::Ordering::Equal)).unwrap_or(0);
+        v[i] = r(v[i] + diff);
+    }
+    v
+}
+
+/// The decimal places the first generation is printed at: `dec`, raised until no real frequency would print as zero.
+pub fn shown_dec(p: &Params) -> i64 {
+    let g = generations(p);
+    let dec = p.i("dec").clamp(1, 3);
+    let needs_more = |gg: &Gen, d: i64| {
+        let pr = printed_parts(gg, d);
+        [gg.dom, gg.het, gg.rec].iter().zip(pr.iter()).any(|(ex, sh)| *ex != 0.0 && *sh == 0.0)
+    };
+    let mut dp = dec;
+    while dp < 5 && needs_more(&g[0], dp) { dp += 1; }
+    dp
+}
+
 /// Counts that sum to `n` exactly: the whole parts, then the leftovers in order of largest remainder (rounding each
 /// frequency on its own could print three counts that add up to 999 or 1001).
 pub fn counts(f: [f64; 3], n: usize) -> [usize; 3] {
@@ -208,11 +236,16 @@ pub fn build(p: &Params) -> (String, Report) {
     d.raw(&text_el(BAR_X + 168.0, legend_y, 12.0 * f, "start", ink, &format!("a  q = {}", val(q0, dec))));
 
     // one stacked bar per generation: the genotype that random mating makes from that generation's pool
+    // the printed set must add up to one AND must not show a real frequency as zero: at one decimal place
+    // p = 0.01 has AA = 0.0001, so the precision rises until every real part shows
+    let dp = shown_dec(p);
+
     let mut segments = Vec::with_capacity(gens);
     for (k, cur) in g.iter().enumerate() {
         let y = GEN_Y0 + k as f64 * (GEN_H + GEN_GAP);
         d.raw(&text_el(24.0, y + GEN_H / 2.0 + 5.0, 13.0 * f, "start", ink, &format!("Generation {}", k + 1)));
         let fr = [cur.dom, cur.het, cur.rec];
+        let shown = printed_parts(cur, dp);
         let names = ["AA", "Aa", "aa"];
         let mut seg = [(0.0f64, 0.0f64); 3];
         let mut x = BAR_X;
@@ -221,7 +254,7 @@ pub fn build(p: &Params) -> (String, Report) {
             seg[i] = (x, wseg);
             if ans && wseg > 0.0 {
                 d.rect(x, y, wseg, GEN_H, geno[i], ink, 1.2);
-                let label = format!("{} {}", names[i], val(fr[i], dec));
+                let label = format!("{} {}", names[i], val(shown[i], dp));
                 let tw = label.chars().count() as f64 * 12.0 * f * 0.55;
                 // inside only when it fits: a real 0.0004 belongs in the readout, not squeezed into 0.2 px
                 if tw <= wseg - 8.0 {
@@ -263,12 +296,13 @@ pub fn build(p: &Params) -> (String, Report) {
     });
     let first = g[0];
     let c = counts([first.dom, first.het, first.rec], n);
-    for (i, (name, formula, v)) in [("AA", "p\u{b2}", first.dom), ("Aa", "2pq", first.het), ("aa", "q\u{b2}", first.rec)].iter().enumerate() {
+    let shown = printed_parts(&first, dp);
+    for (i, (name, formula, v)) in [("AA", "p\u{b2}", shown[0]), ("Aa", "2pq", shown[1]), ("aa", "q\u{b2}", shown[2])].iter().enumerate() {
         rows.push(if ans {
             if show_counts {
-                format!("{name}  {formula} = {}  ({} of {})", val(*v, dec), c[i], n)
+                format!("{name}  {formula} = {}  ({} of {})", val(*v, dp), c[i], n)
             } else {
-                format!("{name}  {formula} = {}", val(*v, dec))
+                format!("{name}  {formula} = {}", val(*v, dp))
             }
         } else if show_counts {
             format!("{name}  {formula} = {BLANK}  ({BLANK} of {n})")
@@ -277,7 +311,7 @@ pub fn build(p: &Params) -> (String, Report) {
         });
     }
     rows.push(if ans {
-        format!("Check: AA + Aa + aa = {}", num(first.dom + first.het + first.rec, dec))
+        format!("Check: AA + Aa + aa = {}", num(shown[0] + shown[1] + shown[2], dp))
     } else {
         format!("Check: AA + Aa + aa = {BLANK}")
     });
@@ -408,6 +442,25 @@ mod tests {
         // and the given p itself must not round away either
         let t = texts(&render_of(&[f("p", 0.01), ("dec", Value::I(1))]));
         assert!(t.contains("A  p = 0.01"), "{t}");
+    }
+
+    #[test]
+    fn the_printed_fractions_add_up_to_the_printed_check() {
+        // at one decimal place p = 0.6 printed "0.4 + 0.5 + 0.2 = 1.1" beside a check that said 1
+        for (p0, dec) in [(0.6, 1), (0.34, 2), (0.5, 1), (0.7, 3), (0.01, 1)] {
+            let p = with(&[f("p", p0), ("dec", Value::I(dec))]);
+            let g = generations(&p);
+            let parts = printed_parts(&g[0], shown_dec(&p));
+            let sum: f64 = parts.iter().sum();
+            assert!((sum - 1.0).abs() < 1e-9, "p = {p0}, dec = {dec}: {parts:?} add to {sum}");
+            // and no real frequency is shown as zero
+            for (ex, sh) in [g[0].dom, g[0].het, g[0].rec].iter().zip(parts.iter()) {
+                assert!(*ex == 0.0 || *sh != 0.0, "p = {p0}, dec = {dec}: {ex} printed as {sh}");
+            }
+        }
+        // and the printed check line agrees with them
+        let t = texts(&render_of(&[f("p", 0.6), ("dec", Value::I(1)), b(SHOW_ANSWERS, true)]));
+        assert!(t.contains("Check: AA + Aa + aa = 1"), "{t}");
     }
 
     #[test]

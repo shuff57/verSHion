@@ -149,11 +149,12 @@ pub fn build(p: &Params) -> (String, Report) {
 
     // the y axis runs a little above Vmax so the asymptote is visibly an asymptote
     let y_top = (if inhibited { vmax.max(vmax_a) } else { vmax }) * 1.15;
-    let f = Frame { w: W, h: H, l: 66.0, r: 20.0, t: 22.0, b: 52.0, x0: 0.0, x1: smax, y0: 0.0, y1: y_top };
+    // the canvas grows with the labels: at Large the givens line with an inhibitor ran off the right edge
+    let w = (W * (1.0 + 0.45 * (lab - 1.0))).max(W);
+    let f = Frame { w, h: H, l: 66.0, r: 20.0, t: 22.0, b: 52.0, x0: 0.0, x1: smax, y0: 0.0, y1: y_top };
 
     let rows = if inhibited { 3.0 } else { 1.0 };
     let rows_y0 = H + 46.0 * lab;
-    let w = W;
     let mut d = Doc::new(w, rows_y0 + (rows - 1.0) * ROW_H * lab + 16.0);
     d.describe("Enzyme kinetics", "Reaction rate against substrate concentration with Vmax and Km marked");
 
@@ -192,6 +193,20 @@ pub fn build(p: &Params) -> (String, Report) {
             r##"<polyline points="{}" fill="none" stroke="{curve}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>"##,
             poly.join(" ")
         ));
+        // the curve without the inhibitor, dashed underneath: competitive raises Km (stretched to the right),
+        // noncompetitive lowers Vmax (squashed down) — a claim the picture should show, not only the caption
+        if inhibited {
+            let mut pts0 = Vec::new();
+            for k in 0..=160 {
+                let s = smax * k as f64 / 160.0;
+                pts0.push((f.px(s), f.py(rate(vmax, km, s))));
+            }
+            let poly0: Vec<String> = pts0.iter().map(|(x, y)| format!("{x:.2},{y:.2}")).collect();
+            d.raw(&format!(
+                r##"<polyline points="{}" fill="none" stroke="{mark}" stroke-width="1.6" stroke-dasharray="6 5" stroke-linejoin="round" stroke-linecap="round"/>"##,
+                poly0.join(" ")
+            ));
+        }
         // Vmax as the dashed asymptote
         let vy = f.py(vmax_a);
         d.raw(&format!(r##"<line x1="{:.2}" y1="{vy:.2}" x2="{:.2}" y2="{vy:.2}" stroke="{curve}" stroke-width="1.4" stroke-dasharray="7 5"/>"##, f.left(), f.right()));
@@ -210,17 +225,22 @@ pub fn build(p: &Params) -> (String, Report) {
             d.raw(&text_el(f.right() - 4.0, half - 7.0 * lab, 12.0 * lab, "end", curve, &note));
         }
         let half_label = format!("Vmax/2 = {}", val(vmax_a / 2.0, dec));
-        d.raw(&text_el(f.left() + 6.0, half - 7.0 * lab, 11.0 * lab, "start", curve, &half_label));
+        // the Km marker and this label both sit low and near the left when Km is small: put the label right of the
+        // marker rather than on top of it
+        let hx = if km_a <= smax && f.px(km_a) < f.left() + 118.0 { f.px(km_a) + 8.0 } else { f.left() + 6.0 };
+        d.raw(&text_el(hx, half - 7.0 * lab, 11.0 * lab, "start", curve, &half_label));
         // the marked point
         let px = f.px(s_at);
         let py = f.py(v_at);
         d.circle(px, py, 4.5, mark, ink, 1.2);
         let label = format!("v = {} at [S] = {}", val(v_at, dec), val(s_at, dec));
-        let lx = (px + 8.0).min(f.right() - 4.0);
+        // the label reads to the right of the point; it only flips to the left when that would run off the canvas
+        let text_w = label.chars().count() as f64 * 12.0 * lab * 0.55;
+        let (lx, anchor) = if px + 8.0 + text_w <= f.right() { (px + 8.0, "start") } else { (px - 8.0, "end") };
         // close under the Vmax line there is no room above the point, and the label would print into the dashed line
         let above = py - 9.0 * lab;
         let ly = if (above - vy).abs() < 14.0 * lab { py + 18.0 * lab } else { above };
-        d.raw(&text_el(lx, ly, 12.0 * lab, if lx < px + 9.0 { "end" } else { "start" }, mark, &label));
+        d.raw(&text_el(lx, ly, 12.0 * lab, anchor, mark, &label));
     }
 
     // the givens, always printed: they are what the curve is drawn from
@@ -228,7 +248,7 @@ pub fn build(p: &Params) -> (String, Report) {
     let givens = if inhibited {
         let (_, _, _, _, factor, _) = given(p);
         format!(
-            "Vmax = {}, Km = {}, {} inhibition with [I] = {} and Ki = {} (1 + [I]/Ki = {})",
+            "Vmax = {}, Km = {}, {}, [I] = {}, Ki = {} (1 + [I]/Ki = {})",
             val(vmax, dec),
             val(km, dec),
             mode,
@@ -239,7 +259,10 @@ pub fn build(p: &Params) -> (String, Report) {
     } else {
         format!("Vmax = {}, Km = {}, curve drawn to [S] = {}", val(vmax, dec), val(km, dec), val(smax, dec))
     };
-    d.raw(&text_el(24.0, H + 18.0 * lab, 12.0 * lab, "start", ink, &givens));
+    let chars_per_line = ((w - 48.0) / (12.0 * lab * 0.55)).floor().max(20.0) as usize;
+    for (i, line) in super::wrap(&givens, chars_per_line).iter().enumerate() {
+        d.raw(&text_el(24.0, H + (18.0 + i as f64 * 15.0) * lab, 12.0 * lab, "start", ink, line));
+    }
 
     // the readout. Without an inhibitor Vmax and Km are already given, so only the marked rate is repeated here;
     // with one, the apparent pair is the whole point and both pairs are shown
@@ -452,6 +475,32 @@ mod tests {
         (hs[0].drag.as_ref().unwrap())(&mut q, (mid, 0.0));
         let want = ((x0 + (mid - l) / span * (x1 - x0)) * 10.0).round() / 10.0;
         assert!((q.f("at") - want).abs() < 1e-9, "{} vs {want}", q.f("at"));
+    }
+
+    #[test]
+    fn the_inhibited_figure_draws_both_curves() {
+        // the comparison the figure promises has to be on the page: the uninhibited curve dashed under the other
+        let svg = render_of(&[s("mode", "competitive"), f("inh", 4.0)]);
+        assert_eq!(svg.matches("<polyline").count(), 2, "only one curve is drawn");
+        assert!(svg.contains(&format!("stroke-dasharray=\"6 5\"")), "the comparison curve is not dashed");
+        // and a plain figure draws exactly one
+        assert_eq!(render_of(&[]).matches("<polyline").count(), 1);
+    }
+
+    #[test]
+    fn labels_stay_inside_the_canvas_at_the_marked_zero_and_at_large() {
+        // [S] = 0.5 sits near the left edge: the rate label used to be end-anchored there and ran off the canvas
+        for at in [0.0, 0.5, 12.0] {
+            let svg = render_of(&[f("at", at)]);
+            for line in svg.lines().filter(|l| l.contains("<text")) {
+                if let Some(x) = line.split("x=\"").nth(1).and_then(|v| v.split('"').next()).and_then(|v| v.parse::<f64>().ok()) {
+                    assert!((0.0..=640.0).contains(&x), "[S] = {at}: a label at x = {x}");
+                }
+            }
+        }
+        // Large with an inhibitor: the givens line must fit the wider canvas
+        let wide = render_of(&[s("mode", "competitive"), f("inh", 4.0), s("label_size", "Large")]);
+        assert!(texts(&wide).contains("(1 + [I]/Ki = 5)"), "the givens were cut: {}", texts(&wide));
     }
 
     #[test]

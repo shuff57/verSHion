@@ -32,6 +32,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "hardy-weinberg" => HARDY_WEINBERG,
         "chi-square-fit" => CHI_SQUARE_FIT,
         "enzyme-kinetics" => ENZYME_KINETICS,
+        "cladogram" => CLADOGRAM,
         // chemistry
         "bohr-model" => BOHR_MODEL,
         "gas-syringe" => GAS_SYRINGE,
@@ -610,6 +611,29 @@ const ENZYME_KINETICS: &[Faq] = &[
     Faq {
         q: "Why is the marked rate always below Vmax?",
         a: "Because the enzyme can only work as fast as its active sites allow. The formula v = Vmax [S] / (Km + [S]) gives a fraction of Vmax for any finite concentration, and only approaches Vmax as the concentration becomes very large.",
+    },
+];
+
+const CLADOGRAM: &[Faq] = &[
+    Faq {
+        q: "How do I type a tree?",
+        a: "Put each group in brackets with its members separated by commas: ((Human, Chimp), Gorilla). The outermost brackets are the common ancestor of everything inside them, so the order of the brackets is the order of the branching, not of the names.",
+    },
+    Faq {
+        q: "Can I label an ancestor?",
+        a: "Yes: write the name straight after the closing bracket of its group, as in ((Human, Chimp)Great apes, Gorilla). It is drawn just above that group's branching point. Names may contain spaces, so Homo sapiens and Great apes work as typed.",
+    },
+    Faq {
+        q: "What is the difference between the rectangular and slanted shapes?",
+        a: "They show the same tree. The rectangular shape keeps every branch horizontal with a vertical bar at each branching point, which makes the order of the leaves easy to read across the page; the slanted shape draws each branch as a diagonal, which looks more like a family tree drawn by hand.",
+    },
+    Faq {
+        q: "Does the order of the leaves mean anything?",
+        a: "No. A cladogram can be rotated at any branching point without changing what it says, so the left-to-right order is only how it was typed. Two trees that differ by a rotation are the same tree.",
+    },
+    Faq {
+        q: "What do the branch lengths mean?",
+        a: "Nothing here: this figure draws a cladogram, where only the pattern of branching carries information. A tree with branch lengths drawn to scale is a phylogram, where longer branches mean more change or more time.",
     },
 ];
 

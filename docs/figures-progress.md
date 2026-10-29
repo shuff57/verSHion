@@ -479,3 +479,50 @@ rate); **the noncompetitive case inverted the mapping and printed "Without it: V
 pair rather than the typed one (a test now pins the "Without it" line to the typed values for both inhibitors); and
 the marked point's label printed into the Vmax asymptote when the point sat just under it (it drops below the point
 there). Census: only `enzyme-kinetics__defaults` and `enzyme-kinetics__start` added.
+
+Cladogram: new figure `cladogram` (`src/figures/biology/cladogram.rs`, Biology). Newick-shaped text in, tree out:
+`(((Human, Chimp), Gorilla), Orangutan)` draws either a rectangular tree (horizontal branches with a vertical bar at
+each branching point) or a slanted one (diagonals), with the leaves in the order typed and a line under the picture
+repeating that order, so a misplaced bracket is visible without counting them. A name after a bracket labels that
+ancestor; malformed text is refused with the reason ("a bracket is never closed", "a pair of brackets with nothing
+inside them is not a group") instead of drawing nothing. Defects the exports caught: the slanted shape drew every
+diagonal flat, because each branch was recorded with the *child's* height at both ends — the parent's height is only
+known once its children are walked, so the edges are now recorded after that. Tests: the parser on nested, labelled,
+whitespace-and-semicolon trees and six malformed ones; the layout's leaf order, depth and branch direction; one bar
+per branching point; every leaf labelled; the two shapes drawing differently by counting segments; the single-name
+note; Print neutrality; the PNG export. No handles, so it joins `NO_HANDLES`. Census: only `cladogram__defaults` and
+`cladogram__start` added.
+
+Biology batch critic (three figures, `4f89e17`): **FAIL, 2 blockers, 9 majors, 13 minors** — the arithmetic was
+verified correct in all three (Hardy-Weinberg over six generations, chi-square against the 3.841 / 7.815 / 11.070
+tables and Mendel's 0.4700, enzyme against v = Vmax[S]/(Km+[S]) and both inhibition modes), and the failures were in
+what the figures did with awkward input. Fixed: (B1) a zero ratio part with a zero count left a category in the
+degrees of freedom, so a test that never ran reported "df = 1 … do not reject" — such categories are now dropped and
+the test refuses to run with one category left; (B2) a zero expected count with something observed printed a finite
+statistic — it is now ∞ and the test refuses; (M1) the enzyme figure never drew the uninhibited curve, so the
+comparison its caption promised was not on the page — it is now dashed underneath, which also fills the space a
+squashed noncompetitive curve left; (M2) the rate label was always end-anchored and ran off the left canvas at low
+[S]; (M3) the givens line was clipped at Large with an inhibitor (canvas now grows and the line is wrapped and
+shorter); (M4) a long category name printed through the number columns (names are shortened with an ellipsis);
+(M5) huge counts mixed "1 × 10^12" with "999999999999.56" (one compact format for the whole table); (M6) non-numeric
+tokens were dropped silently (reported in the Notes); (M7) the printed contributions did not add up to the printed
+total (the total is now the sum of what is printed); (M8) empty input drew a table of zeros (it now says what is
+missing); (M9) at one decimal place Hardy-Weinberg printed "0.4 + 0.5 + 0.2 = 1.1" beside a check that said 1 (the
+printed fractions are now rounded as a set that adds to exactly 1, at a precision raised until no real frequency
+prints as zero). Thirteen minors recorded. Census: `chi-square-fit` and `enzyme-kinetics` re-hashed for the changed
+default renders, `cladogram` added.
+
+Cladogram, round 2 (2026-10-29), from looking at the exported PNGs rather than at the tests. Three defects, one a
+blocker: (1) the rectangular shape drew every branch along the PARENT's row instead of the child's, so `(A, B, C, D, E)`
+— the simplest tree a student would type — came out as one vertical bar with a single horizontal stub at the middle
+row, and four leaves with no branch reaching them; every nested tree was subtly wrong the same way (a leaf's branch at
+its sibling's row). Branches now run along each child's row and meet the parent's bar, which is pinned by a test that
+counts the distinct branch rows of a five-name star. (2) The parser dropped ALL whitespace, so a name with a space
+became one word: `Homo sapiens` printed as `Homosapiens` and the "Great apes" example lost its space. Whitespace is now
+skipped only around brackets, commas and the semicolon, and a name may contain spaces. (3) A name typed after a bracket
+was parsed and never drawn, although the hint, the blurb, the FAQ and the "A labelled ancestor" example all promised it;
+it is now drawn just above its branching point, with the left margin and column width grown to fit the longest ancestor
+name. Also: the count line now reads "1 branching point, 1 level" rather than "1 branching points, 1 levels", and the FAQ
+no longer says an ancestor label is not printed. The same pass fixed a contradiction the biology critic's M7 fix had
+left: the table's own Total row still printed the exact statistic (1.43) beside the line under it that now prints the
+sum of the printed contributions (1.42). Census re-blessed: only `cladogram`'s two ids move.

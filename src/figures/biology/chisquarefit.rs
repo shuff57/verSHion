@@ -80,6 +80,10 @@ pub struct Fit {
     pub alpha: f64,
     /// The ratio parts actually used, in order, for the line under the table.
     pub ratio: Vec<f64>,
+    /// Categories that carry a degree of freedom: those with an expected count.
+    pub kept: usize,
+    /// A category expected to be empty has counts in it, so the statistic is infinite.
+    pub impossible: bool,
 }
 
 fn clamp_alpha(v: f64) -> f64 { if v.is_finite() { v.clamp(0.01, 0.10) } else { 0.05 } }
@@ -90,38 +94,56 @@ pub fn fit(p: &Params) -> Fit {
     let obs = numbers(p.s("obs"));
     let ratio = numbers(p.s("ratio"));
     let names = split_list(p.s("names"));
-    let k = obs.len().min(MAX_CATS).min(ratio.len()).max(0);
+    let k = obs.len().min(MAX_CATS).min(ratio.len());
     let total_obs: f64 = obs.iter().take(k).sum();
     let total_ratio: f64 = ratio.iter().take(k).sum();
     let mut rows = Vec::with_capacity(k);
     let mut chi2 = 0.0;
-    let mut usable = k > 0 && total_ratio > 0.0;
+    let mut impossible = false;
+    let mut kept = 0usize;
     for i in 0..k {
         let o = obs[i];
-        let e = if total_ratio > 0.0 { ratio[i] / total_ratio * total_obs } else { 0.0 };
+        let r = ratio[i];
+        let e = if total_ratio > 0.0 { r / total_ratio * total_obs } else { 0.0 };
         let term = if e > 0.0 {
             (o - e) * (o - e) / e
         } else if o > 0.0 {
-            // an expected count of zero with something observed in it: the statistic is infinite, so the test
-            // cannot be run at all rather than reporting a made-up number
-            usable = false;
+            // a category the ratio says cannot happen has counts in it: the statistic is infinite, and the test
+            // cannot be run at all rather than reporting a made-up finite number
+            impossible = true;
             0.0
         } else {
             0.0
         };
+        // a category with no expected count and no observed count is not part of the test and carries no degree of
+        // freedom; counting it gave "df = 1" and a confident "do not reject" on a test that never ran
+        if r > 0.0 || o > 0.0 { kept += 1; }
         chi2 += term;
         let name = names.get(i).cloned().unwrap_or_else(|| format!("Category {}", i + 1));
         rows.push(Row { name, observed: o, expected: e, term });
     }
-    let df = k.saturating_sub(1);
-    let p = if usable && df > 0 && chi2.is_finite() { Some((1.0 - chisq_cdf(chi2, df as f64)).clamp(0.0, 1.0)) } else { None };
-    Fit { rows, chi2, df, p, alpha, ratio: ratio.iter().take(k).cloned().collect() }
+    let df = kept.saturating_sub(1);
+    let p = if !impossible && df > 0 && total_ratio > 0.0 && chi2.is_finite() {
+        Some((1.0 - chisq_cdf(chi2, df as f64)).clamp(0.0, 1.0))
+    } else {
+        None
+    };
+    Fit { rows, chi2, df, p, alpha, ratio: ratio.iter().take(k).cloned().collect(), kept, impossible }
 }
 
 pub fn warnings(p: &Params) -> Vec<String> {
     let mut out = Vec::new();
     let obs = numbers(p.s("obs"));
     let ratio = numbers(p.s("ratio"));
+    // tokens that are not numbers are dropped silently by the parser; say so, or "100, x, 50" quietly becomes a
+    // two-category test on 100 and 50
+    for (what, text, parsed) in [("observed counts", p.s("obs"), obs.len()), ("ratio parts", p.s("ratio"), ratio.len())] {
+        let tokens: Vec<String> = split_list(&text).iter().map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect();
+        let bad: Vec<&String> = tokens.iter().filter(|t| t.parse::<f64>().map(|v| !(v.is_finite() && v >= 0.0)).unwrap_or(true)).collect();
+        if !bad.is_empty() {
+            out.push(format!("These {} are not counts and were ignored: {}.", what, bad.iter().map(|b| format!("\u{201c}{b}\u{201d}")).collect::<Vec<_>>().join(", ")));
+        }
+    }
     if obs.is_empty() {
         out.push("There are no observed counts to test.".to_string());
     }
@@ -143,8 +165,11 @@ pub fn warnings(p: &Params) -> Vec<String> {
     if f.rows.iter().any(|r| r.expected == 0.0 && r.observed > 0.0) {
         out.push("A category is expected to be empty but something was counted there, so the statistic cannot be computed.".to_string());
     }
+    if f.impossible {
+        out.push("A category the ratio expects to be empty has counts in it, so the statistic is infinite and the test cannot be run.".to_string());
+    }
     if f.df == 0 && !f.rows.is_empty() {
-        out.push("One category leaves no degrees of freedom, so there is nothing to test.".to_string());
+        out.push("Only one category has an expected count, which leaves no degrees of freedom, so there is nothing to test.".to_string());
     }
     out
 }
@@ -179,6 +204,12 @@ fn col(v: f64, dec: i64) -> String {
         return val(v, dec);
     }
     s.replace('-', "\u{2212}")
+}
+
+/// Rounds to `dec` decimal places, for totalling what is actually printed rather than what is exact.
+fn round_to(v: f64, dec: i64) -> f64 {
+    let f = 10f64.powi(dec as i32);
+    (v * f).round() / f
 }
 
 /// Greedy word wrap to `max` characters.
@@ -252,6 +283,12 @@ pub fn build(p: &Params) -> String {
         17.0 * lab,
         ink
     ));
+    // nothing to test: say what is missing rather than drawing a table of zeros and "df = 0 (0 categories - 1)"
+    if f.rows.is_empty() {
+        let msg = if numbers(p.s("obs")).is_empty() { "Type the observed counts, one per category." } else { "Type an expected ratio with the same number of parts as there are counts." };
+        d.raw(&text_el(24.0, 78.0 * lab, 13.0 * lab, "start", ink, msg));
+        return d.finish();
+    }
 
     // the header
     let head = FS * lab;
@@ -263,13 +300,30 @@ pub fn build(p: &Params) -> String {
     rule(&mut d, head_y + 8.0 * lab, 1.6);
 
     // the rows
+    // a long category name would print through the three number columns
+    let name_chars = (((col_o - 34.0) / (FS * lab * 0.56)).floor() as usize).max(6);
+    let short = |n: &str| -> String {
+        if n.chars().count() <= name_chars { n.to_string() } else {
+            let head: String = n.chars().take(name_chars.saturating_sub(1)).collect();
+            format!("{head}\u{2026}")
+        }
+    };
+    // huge counts: one compact format for the whole table, or "1 × 10^12" sits beside "999999999999.56"
+    let total_obs: f64 = f.rows.iter().map(|r| r.observed).sum();
+    let huge = total_obs.abs() >= 1e7 || f.rows.iter().any(|r| r.observed.abs() >= 1e7 || r.expected.abs() >= 1e7);
+    let sci = |v: f64| format!("{v:.2e}").replace('-', "\u{2212}");
+    let fmt_cnt = |v: f64| if huge { sci(v) } else { num(v, 2) };
+    let fmt_term = |v: f64| if huge { sci(v) } else { col(v, dec.max(2)) };
+    // the total is the sum of what is printed, so a student adding the column gets the total that is printed
+    let printed_chi2: f64 = f.rows.iter().map(|r| if huge { r.term } else { round_to(r.term, dec.max(2)) }).sum();
+
     let mut y = head_y + 8.0 * lab + row_h - 7.0 * lab;
     for r in &f.rows {
-        d.raw(&text_el(24.0, y, FS * lab, "start", ink, &r.name));
-        d.raw(&text_el(col_o, y, FS * lab, "end", ink, &val(r.observed, 2)));
+        d.raw(&text_el(24.0, y, FS * lab, "start", ink, &short(&r.name)));
+        d.raw(&text_el(col_o, y, FS * lab, "end", ink, &fmt_cnt(r.observed)));
         if ans {
-            d.raw(&text_el(col_e, y, FS * lab, "end", ink, &col(r.expected, dec)));
-            d.raw(&text_el(col_t, y, FS * lab, "end", ink, &col(r.term, dec.max(2))));
+            d.raw(&text_el(col_e, y, FS * lab, "end", ink, &if huge { sci(r.expected) } else { col(r.expected, dec) }));
+            d.raw(&text_el(col_t, y, FS * lab, "end", ink, &fmt_term(r.term)));
         } else {
             d.raw(&text_el(col_e, y, FS * lab, "end", ink, BLANK));
             d.raw(&text_el(col_t, y, FS * lab, "end", ink, BLANK));
@@ -279,11 +333,16 @@ pub fn build(p: &Params) -> String {
     rule(&mut d, y - row_h + 9.0 * lab, 1.6);
 
     // the total row: the counts add up, and the statistic is the sum of the contributions
-    let total_obs: f64 = f.rows.iter().map(|r| r.observed).sum();
     d.raw(&text_el(24.0, y, FS * lab, "start", ink, "Total"));
-    d.raw(&text_el(col_o, y, FS * lab, "end", ink, &num(total_obs, 2)));
-    d.raw(&text_el(col_e, y, FS * lab, "end", ink, &num(total_obs, 2)));
-    let total_text = if ans { col(f.chi2, dec.max(2)) } else { BLANK.to_string() };
+    d.raw(&text_el(col_o, y, FS * lab, "end", ink, &fmt_cnt(total_obs)));
+    d.raw(&text_el(col_e, y, FS * lab, "end", ink, &fmt_cnt(total_obs)));
+    // the total row: the counts add up, and the statistic is the sum of the contributions. (round 2) It must be the
+    // number the line under the table prints, or the table's own total contradicts it: an impossible test has no
+    // finite total at all
+    let total_text = if !ans { BLANK.to_string() }
+    else if f.impossible { "\u{221e}".to_string() }
+    else if huge { sci(printed_chi2) }
+    else { col(printed_chi2, dec.max(2)) };
     d.raw(&text_el(col_t, y, FS * lab, "end", ink, &total_text));
     rule(&mut d, y + 9.0 * lab, 1.6);
 
@@ -294,8 +353,11 @@ pub fn build(p: &Params) -> String {
 
     // the statistics block
     let lines = [
-        if ans { format!("Chi-square  \u{3c7}\u{b2} = {}", col(f.chi2, dec.max(2))) } else { format!("Chi-square  \u{3c7}\u{b2} = {BLANK}") },
-        if ans { format!("Degrees of freedom  df = {}  ({} categories \u{2212} 1)", f.df, n) } else { format!("Degrees of freedom  df = {BLANK}") },
+        if !ans { format!("Chi-square  \u{3c7}\u{b2} = {BLANK}") }
+        else if f.impossible { "Chi-square  \u{3c7}\u{b2} = \u{221e}  (a category expected to be empty has counts in it)".to_string() }
+        else if huge { format!("Chi-square  \u{3c7}\u{b2} = {}", sci(printed_chi2)) }
+        else { format!("Chi-square  \u{3c7}\u{b2} = {}", col(printed_chi2, dec.max(2))) },
+        if ans { format!("Degrees of freedom  df = {}  ({} categories with an expected count \u{2212} 1)", f.df, f.kept) } else { format!("Degrees of freedom  df = {BLANK}") },
         if ans { match f.p { Some(p) => format!("p-value  {}", p_phrase(p)), None => "p-value  p = \u{2014}".to_string() } } else { format!("p-value  p = {BLANK}") },
     ];
     let mut all: Vec<String> = lines.to_vec();
@@ -426,6 +488,67 @@ mod tests {
         // and an empty category nothing was counted in contributes nothing
         let ok = fit(&with(&[s("obs", "10, 0"), s("ratio", "1, 0")]));
         assert!((ok.chi2 - 0.0).abs() < 1e-9, "{}", ok.chi2);
+    }
+
+    #[test]
+    fn a_category_the_ratio_cannot_produce_is_not_a_pass() {
+        // an empty category with nothing counted in it carries no degree of freedom: one category left, so there is
+        // no test — it used to print "df = 1" and "do not reject", a confident pass on a test that never ran
+        let p = with(&[s("obs", "10, 0"), s("ratio", "1, 0")]);
+        let f = fit(&p);
+        assert_eq!(f.kept, 1, "only the category with an expected count counts");
+        assert_eq!(f.df, 0);
+        assert!(f.p.is_none(), "{:?}", f.p);
+        assert!(decision(&f).contains("cannot be run"), "{}", decision(&f));
+    }
+
+    #[test]
+    fn a_category_expected_to_be_empty_but_counted_makes_the_statistic_infinite() {
+        // obs 5 where the ratio says none can occur: chi-square is infinite, not a finite 1.67
+        let p = with(&[s("obs", "10, 5"), s("ratio", "1, 0")]);
+        let f = fit(&p);
+        assert!(f.impossible, "{f:?}");
+        assert!(f.p.is_none());
+        assert!(warnings(&p).iter().any(|w| w.contains("infinite")), "{:?}", warnings(&p));
+        let t = texts(&render_of(&[s("obs", "10, 5"), s("ratio", "1, 0")]));
+        assert!(t.contains("\u{221e}"), "the statistic is not shown as infinite: {t}");
+        assert!(!t.contains("Chi-square  \u{3c7}\u{b2} = 1.67"), "{t}");
+    }
+
+    #[test]
+    fn the_printed_contributions_add_up_to_the_printed_total() {
+        // 2, 3, 4, 5 against 1:1:1:1: the terms print 0.64, 0.07, 0.07, 0.64, which add to 1.42, while the exact
+        // statistic 1.4286 rounds to 1.43 — the printed total must be 1.42, or the column does not add up
+        let t = texts(&render_of(&[s("obs", "2, 3, 4, 5"), s("ratio", "1, 1, 1, 1")]));
+        let line = t.lines().find(|l| l.contains("Chi-square  \u{3c7}\u{b2} =")).unwrap_or("");
+        assert!(line.contains("= 1.42"), "the total does not match its own column: {line}");
+        // the table's own Total row must show that same number, not the exact 1.43
+        assert_eq!(t.lines().filter(|l| *l == "1.42").count(), 1, "the Total row contradicts the line under the table: {t}");
+        assert!(!t.lines().any(|l| l == "1.43"), "the exact statistic is printed beside the summed one: {t}");
+        assert_eq!(t.lines().filter(|l| *l == "0.64").count(), 2, "{t}");
+        assert_eq!(t.lines().filter(|l| *l == "0.07").count(), 2, "{t}");
+    }
+
+    #[test]
+    fn a_long_name_and_huge_counts_do_not_overprint_the_columns() {
+        let long = with(&[s("names", "Round yellow seeds with a smooth coat on the tall parent plant, Other")]);
+        let t = texts(&render_of(&[s("names", "Round yellow seeds with a smooth coat on the tall parent plant, Other")]));
+        assert!(t.contains("\u{2026}"), "a long name was not shortened: {t}");
+        assert!(!t.contains("Round yellow seeds with a smooth coat on the tall parent plant"), "{t}");
+        let _ = long;
+        // huge counts: one compact format, so no column is wider than the others
+        let t = texts(&render_of(&[s("obs", "1000000000000, 333333333333, 333333333333, 111111111111"), s("ratio", "9, 3, 3, 1")]));
+        assert!(!t.contains("999999999999.56"), "a plain long number slipped in: {t}");
+        assert!(t.contains("e12") || t.contains("e11") || t.contains("\u{d7}"), "{t}");
+    }
+
+    #[test]
+    fn text_that_is_not_a_number_is_reported_and_empty_input_says_so() {
+        let p = with(&[s("obs", "100, x, 50"), s("ratio", "3, 1")]);
+        assert!(warnings(&p).iter().any(|w| w.contains("ignored")), "{:?}", warnings(&p));
+        let t = texts(&render_of(&[s("obs", "")]));
+        assert!(t.contains("Type the observed counts"), "{t}");
+        assert!(!t.contains("df = 0 (0 categories"), "{t}");
     }
 
     #[test]

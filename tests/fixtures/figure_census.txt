@@ -26,8 +26,8 @@ cash-flow-statement__defaults 5f56a9154fcea79e
 cash-flow-statement__start 5f56a9154fcea79e
 cause-effect__defaults 8774a71b1432ad9b
 cause-effect__start 8774a71b1432ad9b
-chi-square-fit__defaults aae65b6e43d4d45b
-chi-square-fit__start aae65b6e43d4d45b
+chi-square-fit__defaults 2f65c3a7af7330e9
+chi-square-fit__start 2f65c3a7af7330e9
 chi-square-table__defaults ed9ff82be03eae95
 chi-square-table__start ed9ff82be03eae95
 circle-of-fifths__defaults f7e8a8b83655c15c
@@ -40,6 +40,8 @@ circular-flow__defaults d1d0ed8b23a6ecf2
 circular-flow__start d1d0ed8b23a6ecf2
 circular-motion__defaults cc0df8164d451482
 circular-motion__start cc0df8164d451482
+cladogram__defaults e9d1533ba89e1dcb
+cladogram__start e9d1533ba89e1dcb
 climate-graph__defaults 9a5619a94582a72d
 climate-graph__start 9a5619a94582a72d
 collision-momentum__defaults 8a551fe90f5f80b4
@@ -78,8 +80,8 @@ electric-field__defaults f5477ca3f656ac36
 electric-field__start f5477ca3f656ac36
 energy-bar-chart__defaults 2140369fa0365d7c
 energy-bar-chart__start 2140369fa0365d7c
-enzyme-kinetics__defaults 713f2e5b1722b481
-enzyme-kinetics__start 713f2e5b1722b481
+enzyme-kinetics__defaults 6cd3463d0f17a25f
+enzyme-kinetics__start 6cd3463d0f17a25f
 er-diagram__defaults 8866218ba5ebbaac
 er-diagram__start 8866218ba5ebbaac
 experiment-flow__defaults eed3a0215c8f7e94
