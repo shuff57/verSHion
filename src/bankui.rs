@@ -2505,6 +2505,7 @@ fn draw_card(
                     delete_question(app, ctx, key, bank_id, &q.id);
                     ui.close();
                 }
+                crate::share::question_history_ui::question_menu(ui, app, bank_id, &q.id);
             });
         }
         if hr.clicked() {
@@ -2514,7 +2515,6 @@ fn draw_card(
                 Some(q) if on_copy => duplicate_question(app, bank_id, &q.id),
                 Some(q) if on_usage => {
                     let ids: Vec<Id> = crate::bankops::exams_using_question(&app.store.exams, bank_id, &q.id).iter().map(|e| e.id.clone()).collect();
-                crate::share::question_history_ui::question_menu(ui, app, bank_id, &q.id);
                     open_usage(ctx, format!("Q{n} · {}", truncate(&crate::equation::stem_preview(&q.stem), 40)), ids);
                 }
                 _ => toggled = true,
