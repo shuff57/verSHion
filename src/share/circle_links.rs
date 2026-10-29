@@ -477,7 +477,12 @@ impl CircleLink {
         let qids = qids_of(&base);
         // (round 13, product critic 11 B) A base over the cap stores no record, so a fetched picture kept here
         // re-encoded would lose the only record of the circle's name. Keep the pairs when the records are discarded.
-        let fetched = reencoded_pairs(&base);
+        let mut fetched = reencoded_pairs(&base);
+        // (round 14, security critic 12 M2) The link map has a cap; keep the newest (the bank's later entries) so a
+        // reload does not silently drop the first ones.
+        if fetched.len() > PICTURE_FILES_MAX {
+            fetched.drain(0..fetched.len() - PICTURE_FILES_MAX);
+        }
         let stored = merge::bounded(base);
         let picture_files = if stored.is_empty() { fetched } else { Vec::new() };
         CircleLink {
@@ -892,28 +897,32 @@ pub fn after_partial_send(link: &CircleLink, bank: &QuestionBank, composed: &[Co
             let mut b = base_for(q, qid);
             // The composed question's own local id: for a restored removal the raw question's `id` is the circle's qid.
             b.local_id = c.local.clone();
-            // (round 12, product critic 10 P1) A question sent as the base has it carries the base body's RAW question,
-            // whose `image.file` is the circle's own file name; this store may keep the same picture under its own
-            // (re-encoded) name. Carrying that name into the rebuilt record made `ours_delta` report a picture change
-            // that never happened. The base version's picture did not change in the send: keep this store's file from
-            // the record it had, and fall back to the link map when the base was bounded away.
+            // (round 14, security critic 12 I1) Record the identity the send USED: the base version's sha where the
+            // composer substituted an untouched picture, else the file's own hash, and none where the send removed the
+            // picture. The file's own hash over a substituted picture made Compare say "a different picture" and the
+            // next summary list the untouched picture as a change.
+            b.snap.image = c.picture_on_circle.clone();
             if c.base_image.is_some() {
-                // (round 13, security critic 11 M1) only a record of the SAME base picture may be carried
-                if let Some(ob) = link.base.iter().find(|ob| ob.local_id == c.local && ob.snap.image == b.snap.image) {
-                    b.local_image = ob.local_image.clone();
+                // (round 12, product critic 10 P1) A held-back question carries the base body's RAW question, whose
+                // `image.file` is the circle's own name; this store keeps the same picture under its own (re-encoded)
+                // name. Keep this store's file from the record it had, falling back to the link map when the base was
+                // bounded away. (round 13, security critic 11 M1) Only a record of the SAME base picture is carried.
+                if let Some(ob) = link.base.iter().find(|ob| ob.local_id == c.local && ob.snap.image == c.picture_on_circle) {
+                    // a record that named the picture only through `picture_now` (a restore) now names this store's
+                    // file directly: after the send the base version's picture is what the bank has
+                    b.local_image = ob.local_image.clone().or_else(|| {
+                        ob.picture_now
+                            .as_ref()
+                            .filter(|(_, sha)| Some(sha.as_str()) == c.picture_on_circle.as_deref())
+                            .map(|(file, _)| file.clone())
+                    });
                     b.picture_now = ob.picture_now.clone();
                 } else if let Some(local) = bank.questions.iter().find(|q| q.id == c.local).and_then(|q| q.image.as_ref()) {
-                    let circle_sha = b.snap.image.as_deref();
+                    let circle_sha = c.picture_on_circle.as_deref();
                     if link.picture_files.iter().any(|(f, s)| f == &local.file && Some(s.as_str()) == circle_sha) {
                         b.local_image = Some(local.file.clone());
                     }
                 }
-            } else if let Some(ob) = link.base.iter().find(|ob| {
-                // (round 13, product critic 11 A) the composer sent this store's file under the base version's picture
-                // identity: the link must record the identity the send used, not the file's own hash.
-                ob.local_id == c.local && ob.snap.image.is_some() && ob.local_image.as_deref() == q.image.as_ref().map(|i| i.file.as_str())
-            }) {
-                b.snap.image = ob.snap.image.clone();
             }
             base.push(b);
         }
@@ -927,13 +936,21 @@ pub fn after_partial_send(link: &CircleLink, bank: &QuestionBank, composed: &[Co
     // name of a picture: there, only a question the send carried as this bank's own may silence the map (its file's
     // own hash is the circle's now), and a held-back question keeps the link's name.
     let stored = merge::bounded(base);
+    // (round 14, security critic 12 I1) Only a question sent under its OWN file's hash may silence a map entry: a
+    // substituted picture went under the base version's identity, and if bounding discards the record that carried
+    // it, the link map is the only name left.
     let sent_as_own: Vec<BaseQuestion> = composed
         .iter()
         .filter(|c| c.base_image.is_none())
+        .filter(|c| {
+            let own = c.question.as_ref().and_then(|q| q.image.as_ref()).and_then(|i| sha_of_file(&i.file));
+            c.picture_on_circle == own
+        })
         .filter_map(|c| {
             c.question.as_ref().map(|q| {
                 let mut b = base_for(q, "");
                 b.local_id = c.local.clone();
+                b.snap.image = c.picture_on_circle.clone();
                 b
             })
         })

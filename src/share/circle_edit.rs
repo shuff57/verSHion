@@ -4524,7 +4524,13 @@ impl CircleEditModel {
         let sent: Vec<(&str, &crate::model::Question)> = record.iter().flat_map(|r| r.questions.iter()).map(|q| (q.qid.as_str(), &q.q)).collect();
         let linked: Vec<&str> = link.qids.iter().map(|q| q.qid.as_str()).collect();
         let mut base = base;
-        let found = merge::rebase_own_send(&mut base, &linked, &sent, mine.as_deref().unwrap_or(&theirs), &same_picture, !fallback);
+        // (round 14, security critic 12 M1) The composer can send an untouched picture under the base version's
+        // identity; the lost-answer matcher must recognise that identity too, or the person's own send reads as a
+        // colleague's change and a later edit becomes a conflict.
+        let found = {
+            let same_pic = |q: &crate::model::Question, t: &merge::Theirs| same_picture_on_circle(&link, q, t);
+            merge::rebase_own_send(&mut base, &linked, &sent, mine.as_deref().unwrap_or(&theirs), &same_pic, !fallback)
+        };
         let mut plan = merge::build_plan(&link.circle_bank_id, &base, bank, &theirs, link.base_version, f.start.head_version, None, String::new());
         for row in plan.rows.iter_mut().filter(|r| found.resent.contains(&r.base_id)) {
             match row.kind {
@@ -5829,6 +5835,13 @@ pub fn same_picture(q: &crate::model::Question, t: &merge::Theirs) -> bool {
         (Some(i), Some(sha)) => sha_of_file(&i.file).as_deref() == Some(sha.as_str()),
         _ => false,
     }
+}
+
+/// (round 14, security critic 12 M1) The same, knowing the link: a partial send can name an untouched picture by the
+/// base version's identity (the file kept here re-encoded under its own name), and the lost-answer matcher must
+/// recognise the person's own send in that case too.
+pub fn same_picture_on_circle(link: &super::circle_links::CircleLink, q: &crate::model::Question, t: &merge::Theirs) -> bool {
+    same_picture(q, t) || (t.sha.is_some() && super::question_history::picture_sha_on_circle(link, q).as_deref() == t.sha.as_deref())
 }
 
 /// (critic 77 I2) A restore with no clear answer, on the History: Try again goes as the same restore.

@@ -101,6 +101,23 @@ Loop rules: local commits only, never push; critic pair (product vs Moodle, secu
   and the panel states the hiding as fact; suggested follow-up is to let the fresh reply win or hedge the sentence.
 - Next: a fresh round-12 pair (product + security) on r13; the loop exits when both are clean on the same build.
 
+### Round 12 critic pair → r14 (2026-10-29)
+
+- **Round 12 pair** on `494db7c` (r13): product FINDINGS (1 blocker, 1 important, 1 minor), security FINDINGS
+  (1 important, 4 minors). Reports: `docs/critic-reports/2026-10-29-d2-r13-critic-product.md` and `-security.md`.
+- **r14** fixed them, test-first: (1) the composer carries `picture_on_circle`, the identity it actually sent;
+  `after_partial_send` records that as `snap.image` and only a question sent under its own file hash may silence the
+  link map (a bounded base keeps held-back and substituted names); (2) a substituted question records the base
+  body's file in `base_image`, so the send page fetches the circle's file the payload names (no `MissingMedia`); (3)
+  `same_picture_on_circle` lets the lost-answer matcher recognise a picture sent under the circle's identity; (4)
+  `from_head` caps the map to `PICTURE_FILES_MAX`, newest kept; (5) a removed picture records none; a `picture_now`
+  record now names this store's file directly.
+- Suite on r14: **share 1572/0/3; full lib 2267/0/6**.
+- **Open minors, recorded:** the map is keyed by file, so one local picture with two circle names reads the second
+  as changed (a per-question name field is the real fix); an unreadable `seen` over-hides and states it as fact; an
+  unreadable non-scalar link field can still drop that link.
+- Next: a fresh round-13 pair (product + security) on r14; the loop exits when both are clean on the same build.
+
 ## The 5 known failures are fixed (2026-10-28)
 
 The owner asked to fix the five `share_core::wasm::publish_prepare_json` failures. Cause: the viSHion path deps in

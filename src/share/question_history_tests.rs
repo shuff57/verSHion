@@ -1780,9 +1780,9 @@ fn d2o_a_partial_send_keeps_a_held_back_restored_pictures_name() {
     // the send page: that change is held back (unticked); the composed question is the base body's (v9's, no picture)
     let q9 = v9();
     let composed: Vec<super::partial_send::ComposedQuestion> = vec![
-        super::partial_send::ComposedQuestion { local: a.clone(), qid: Some(QA.into()), question: Some(serde_json::from_value(q9[0].clone()).unwrap()), base_image: None },
-        super::partial_send::ComposedQuestion { local: local_of(&kept, QB), qid: Some(QB.into()), question: Some(serde_json::from_value(q9[1].clone()).unwrap()), base_image: None },
-        super::partial_send::ComposedQuestion { local: local_of(&kept, QC), qid: Some(QC.into()), question: Some(serde_json::from_value(q9[2].clone()).unwrap()), base_image: None },
+        super::partial_send::ComposedQuestion { local: a.clone(), qid: Some(QA.into()), question: Some(serde_json::from_value(q9[0].clone()).unwrap()), base_image: None, picture_on_circle: None },
+        super::partial_send::ComposedQuestion { local: local_of(&kept, QB), qid: Some(QB.into()), question: Some(serde_json::from_value(q9[1].clone()).unwrap()), base_image: None, picture_on_circle: None },
+        super::partial_send::ComposedQuestion { local: local_of(&kept, QC), qid: Some(QC.into()), question: Some(serde_json::from_value(q9[2].clone()).unwrap()), base_image: None, picture_on_circle: None },
     ];
     let sent = super::circles_api::SentBank { circle_id: CID.into(), bank_id: BID.into(), version: 10, version_id: format!("{:032x}", 10), qids: vec![QA.into(), QB.into(), QC.into()], ..Default::default() };
     let after = super::circle_links::after_partial_send(&kept, &banks[0], &composed, &sent, vec![a.clone()]);
@@ -1845,9 +1845,9 @@ fn d2p_two_questions_sharing_one_stored_picture_keep_the_held_back_ones_name() {
     let mut qa = v9()[0].clone();
     qa["image"] = json!({"file": file, "width": 1, "height": 1});
     let composed: Vec<super::partial_send::ComposedQuestion> = vec![
-        super::partial_send::ComposedQuestion { local: a.clone(), qid: Some(QA.into()), question: Some(serde_json::from_value(qa).unwrap()), base_image: None },
-        super::partial_send::ComposedQuestion { local: b.clone(), qid: Some(QB.into()), question: Some(serde_json::from_value(v9()[1].clone()).unwrap()), base_image: None },
-        super::partial_send::ComposedQuestion { local: local_of(&link, QC), qid: Some(QC.into()), question: Some(serde_json::from_value(v9()[2].clone()).unwrap()), base_image: None },
+        super::partial_send::ComposedQuestion { local: a.clone(), qid: Some(QA.into()), question: Some(serde_json::from_value(qa).unwrap()), base_image: None, picture_on_circle: Some(format!("{:064x}", 0x55u8)) },
+        super::partial_send::ComposedQuestion { local: b.clone(), qid: Some(QB.into()), question: Some(serde_json::from_value(v9()[1].clone()).unwrap()), base_image: None, picture_on_circle: None },
+        super::partial_send::ComposedQuestion { local: local_of(&link, QC), qid: Some(QC.into()), question: Some(serde_json::from_value(v9()[2].clone()).unwrap()), base_image: None, picture_on_circle: None },
     ];
     let sent = super::circles_api::SentBank { circle_id: CID.into(), bank_id: BID.into(), version: 10, version_id: format!("{:032x}", 10), qids: vec![QA.into(), QB.into(), QC.into()], ..Default::default() };
     let after = super::circle_links::after_partial_send(&link, &bank, &composed, &sent, vec![b.clone()]);
@@ -2045,6 +2045,8 @@ fn d2p_r10_a_partial_send_without_a_kept_base_keeps_only_the_held_back_name() {
             qid: Some(qid.clone()),
             question: Some(in_payload),
             base_image: (i == 0).then(|| "media/base.webp".to_string()),
+            // a question sent as this bank's own under its own file hash
+            picture_on_circle: (i != 0).then(|| format!("{:064x}", 0x1000u64 + i as u64)),
         });
         qids.push(qid);
         questions.push(q);
@@ -2089,9 +2091,9 @@ fn d2p_r10_a_held_back_reencoded_picture_keeps_this_stores_file() {
     let mut qa = v9()[0].clone();
     qa["image"] = json!({ "file": circle_file, "width": 1, "height": 1 });
     let composed: Vec<ComposedQuestion> = vec![
-        ComposedQuestion { local: a.clone(), qid: Some(QA.into()), question: Some(serde_json::from_value(qa).unwrap()), base_image: Some(circle_file.clone()) },
-        ComposedQuestion { local: local_of(&link, QB), qid: Some(QB.into()), question: Some(serde_json::from_value(v9()[1].clone()).unwrap()), base_image: None },
-        ComposedQuestion { local: local_of(&link, QC), qid: Some(QC.into()), question: Some(serde_json::from_value(v9()[2].clone()).unwrap()), base_image: None },
+        ComposedQuestion { local: a.clone(), qid: Some(QA.into()), question: Some(serde_json::from_value(qa).unwrap()), base_image: Some(circle_file.clone()), picture_on_circle: Some(circle_sha.clone()) },
+        ComposedQuestion { local: local_of(&link, QB), qid: Some(QB.into()), question: Some(serde_json::from_value(v9()[1].clone()).unwrap()), base_image: None, picture_on_circle: None },
+        ComposedQuestion { local: local_of(&link, QC), qid: Some(QC.into()), question: Some(serde_json::from_value(v9()[2].clone()).unwrap()), base_image: None, picture_on_circle: None },
     ];
     let sent = super::circles_api::SentBank { circle_id: CID.into(), bank_id: BID.into(), version: 10, version_id: format!("{:032x}", 10), qids: vec![QA.into(), QB.into(), QC.into()], ..Default::default() };
     let after = super::circle_links::after_partial_send(&link, &bank, &composed, &sent, vec![a.clone()]);
@@ -2101,6 +2103,31 @@ fn d2p_r10_a_held_back_reencoded_picture_keeps_this_stores_file() {
     assert_eq!(changes_since(&after, &bank).changed, 0, "the copy is reported as an unsent picture change that never happened");
     let q = bank.questions.iter().find(|q| q.id == a).unwrap();
     assert_eq!(picture_sha_on_circle(&after, q).as_deref(), Some(circle_sha.as_str()), "Compare would call the unchanged picture a different one");
+}
+
+#[test]
+fn d2p_r10_a_picture_sent_under_the_circles_identity_matches_the_sent_version() {
+    // (security critic 12 M1) The composer sends an untouched re-encoded picture under the base version's identity;
+    // the lost-answer matcher must recognise the person's own send by that identity, or their later edit becomes a
+    // conflict with themselves.
+    let (mut bank, mut link) = linked();
+    let a = local_of(&link, QA);
+    let file = format!("media/{}.webp", format!("{:064x}", 0xb2u8));
+    let circle_sha = format!("{:064x}", 0xa1u8);
+    bank.questions.iter_mut().find(|q| q.id == a).unwrap().image = Some(ImageRef { file: file.clone(), width: 1, height: 1 });
+    {
+        let b = link.base.iter_mut().find(|b| b.local_id == a).unwrap();
+        b.local_image = Some(file.clone());
+        b.snap.image = Some(circle_sha.clone());
+    }
+    let q = bank.questions.iter().find(|q| q.id == a).unwrap().clone();
+    let t = super::merge::Theirs { index: 0, qid: QA.into(), fp: String::new(), sha: Some(circle_sha.clone()), q: q.clone() };
+    assert!(super::circle_edit::same_picture_on_circle(&link, &q, &t), "the person's own send, named by the circle's identity, is not recognised");
+    // a genuinely different picture still does not match, and the plain matcher still reads the file's own hash
+    let mut other = q.clone();
+    other.image = Some(ImageRef { file: format!("media/{}.webp", format!("{:064x}", 0xc3u8)), width: 1, height: 1 });
+    assert!(!super::circle_edit::same_picture_on_circle(&link, &other, &t));
+    assert!(!super::circle_edit::same_picture(&q, &t));
 }
 
 #[test]
@@ -2134,7 +2161,13 @@ fn d2p_r10_a_large_banks_partial_send_keeps_the_held_back_pictures_circle_name()
         } else {
             q.clone()
         };
-        composed.push(ComposedQuestion { local: local.clone(), qid: Some(qid.clone()), question: Some(in_payload), base_image: (i == 0).then(|| circle_file.clone()) });
+        composed.push(ComposedQuestion {
+            local: local.clone(),
+            qid: Some(qid.clone()),
+            question: Some(in_payload),
+            base_image: (i == 0).then(|| circle_file.clone()),
+            picture_on_circle: (i == 0).then(|| circle_sha.clone()),
+        });
         qids.push(qid);
         questions.push(q);
     }

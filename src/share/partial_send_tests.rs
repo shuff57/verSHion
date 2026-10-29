@@ -978,6 +978,20 @@ fn a_genuine_picture_change_is_still_a_change_and_is_sent_as_ours() {
 }
 
 #[test]
+fn a_substituted_picture_is_put_on_the_sends_fetch_list() {
+    // (product critic 12 blocker 1) The payload names the circle's file, which this store does not have: the send
+    // page builds its fetch list from `base_image`, so the substituted question must record it there, or
+    // `load_images` refuses with "a picture used by this question is missing from this device".
+    let (mut bank, link, base, _, circle_sha) = reencoded();
+    bank.questions[0].stem = "A (changed)".into();
+    let changed = changes_against_body(&link, &bank, &base).expect("the change list").changed;
+    let composed = compose_partial_parts(&link, &bank, &base, &changed, &changed).expect("the composed payload");
+    let c = &composed.questions[0];
+    assert_eq!(c.base_image.as_deref(), Some(format!("media/{circle_sha}.png").as_str()), "the send page will never fetch the file the payload names");
+    assert_eq!(c.picture_on_circle.as_deref(), Some(circle_sha.as_str()));
+}
+
+#[test]
 fn a_sent_reencoded_picture_keeps_the_circles_name_in_the_link() {
     // The composer sent this store's WebP under the base body's picture identity; the rebuilt record must say so,
     // or the next summary and Compare call the picture changed again.
@@ -990,6 +1004,94 @@ fn a_sent_reencoded_picture_keeps_the_circles_name_in_the_link() {
     assert_eq!(b.snap.image.as_deref(), Some(circle_sha.as_str()), "the link recorded the WebP's own hash, not the identity the send used");
     assert_eq!(changes_since(&after, &bank).changed, 0);
     assert_eq!(super::question_history::picture_sha_on_circle(&after, &bank.questions[0]).as_deref(), Some(circle_sha.as_str()));
+}
+
+#[test]
+fn a_sent_substituted_picture_on_a_bounded_link_keeps_its_circle_name() {
+    // (security critic 12 I1a) A bounded link names the fetched picture only on the map. The composer sends it under
+    // the circle's identity; the keep must not count that as "sent under its own hash" and drop the only name.
+    let n = super::merge::BASE_MAX_QUESTIONS + 1;
+    let circle_sha = format!("{:064x}", 0xa1u8);
+    let local_sha = format!("{:064x}", 0xb2u8);
+    let local_file = format!("media/{local_sha}.webp");
+    let circle_file = format!("media/{circle_sha}.png");
+    let mut questions = Vec::new();
+    let mut base_records = Vec::new();
+    let mut base_qs = Vec::new();
+    for i in 0..n {
+        let qid = format!("{:032x}", i + 1);
+        let mut qv = qfull(&qid, &format!("Q{i}"));
+        if i == 0 {
+            qv["image"] = json!({ "file": circle_file, "width": 1, "height": 1 });
+        }
+        let mut q: Question = serde_json::from_value(qv.clone()).unwrap();
+        q.id = format!("local-{i}");
+        // this store keeps the fetched PNG as WebP under its own hash
+        if i == 0 {
+            q.image = Some(ImageRef { file: local_file.clone(), width: 1, height: 1 });
+        }
+        base_records.push(super::merge::base_of(&q, &qid, "fp", (i == 0).then(|| circle_sha.clone())));
+        base_qs.push(qv);
+        questions.push(q);
+    }
+    let head = super::circles_api::BankHead { id: BID.into(), title: "Cells".into(), license: "CC-BY-4.0".into(), version: 9, version_id: format!("{:032x}", 9), ..super::circles_api::BankHead::default() };
+    let link = CircleLink::from_head(CID, "C", &head, LOCAL, base_records, NOW);
+    assert!(link.base.is_empty(), "the base is over the cap");
+    assert!(link.picture_files.iter().any(|(f, s)| f == &local_file && s == &circle_sha), "the Add named the fetched picture");
+    let base = body_of(base_qs);
+    let bank = QuestionBank { id: LOCAL.into(), name: "B".into(), questions, created: 0, modified: 5, details: Default::default() };
+    let id = bank.questions[0].id.clone();
+    let changed: BTreeSet<String> = [id.clone()].into_iter().collect();
+    let composed = compose_partial_parts(&link, &bank, &base, &changed, &changed).expect("the composed payload");
+    assert_eq!(composed.questions[0].picture_on_circle.as_deref(), Some(circle_sha.as_str()), "the composer used the circle's identity");
+    let sent = sent_of(&composed);
+    let after = after_partial_send(&link, &bank, &composed.questions, &sent, vec![]);
+    assert!(after.base.is_empty(), "still over the cap");
+    assert!(after.picture_files.iter().any(|(f, s)| f == &local_file && s == &circle_sha), "the only name was dropped: {:?}", after.picture_files);
+    assert_eq!(super::question_history::picture_sha_on_circle(&after, &bank.questions[0]).as_deref(), Some(circle_sha.as_str()));
+    let again = changes_against_body(&after, &bank, &composed.payload).expect("the next summary");
+    assert!(again.changed.is_empty(), "the next summary lists the picture the send named as the circle's: {:?}", again.changed);
+}
+
+#[test]
+fn a_picture_named_by_picture_now_keeps_the_sent_identity() {
+    // (security critic 12 I1b) The old record names the picture only through `picture_now` (a restore), with no
+    // `local_image`; the composer substitutes it; the rebuilt record must carry the identity the send used.
+    let (bank, mut link, base, local_file, circle_sha) = reencoded();
+    {
+        let b = link.base.iter_mut().find(|b| b.local_id == bank.questions[0].id).unwrap();
+        b.local_image = None;
+        b.picture_now = Some((local_file.clone(), circle_sha.clone()));
+    }
+    let composed = compose_partial_parts(&link, &bank, &base, &BTreeSet::new(), &BTreeSet::new()).expect("the composed payload");
+    assert_eq!(composed.questions[0].picture_on_circle.as_deref(), Some(circle_sha.as_str()));
+    let sent = sent_of(&composed);
+    let after = after_partial_send(&link, &bank, &composed.questions, &sent, vec![]);
+    let b = after.base.iter().find(|b| b.local_id == bank.questions[0].id).expect("a record");
+    assert_eq!(b.snap.image.as_deref(), Some(circle_sha.as_str()), "the record lost the identity the send used");
+    assert_eq!(b.local_image.as_deref(), Some(local_file.as_str()));
+    assert_eq!(super::question_history::picture_sha_on_circle(&after, &bank.questions[0]).as_deref(), Some(circle_sha.as_str()));
+}
+
+#[test]
+fn a_removed_picture_is_not_recorded_as_the_bases() {
+    // (security critic 12 M4) The old record names no local file and the bank's question has no picture: both are
+    // None, which the old carry matched. The send removed the picture; the rebuilt record must say none.
+    let (mut bank, mut link, base, _, _) = reencoded();
+    {
+        let b = link.base.iter_mut().find(|b| b.local_id == bank.questions[0].id).unwrap();
+        b.local_image = None;
+    }
+    bank.questions[0].image = None;
+    let changed = changes_against_body(&link, &bank, &base).expect("the change list").changed;
+    assert!(changed.contains(&bank.questions[0].id), "removing the picture is a change");
+    let composed = compose_partial_parts(&link, &bank, &base, &changed, &changed).expect("the composed payload");
+    assert!(composed.questions[0].picture_on_circle.is_none());
+    let sent = sent_of(&composed);
+    let after = after_partial_send(&link, &bank, &composed.questions, &sent, vec![]);
+    let b = after.base.iter().find(|b| b.local_id == bank.questions[0].id).expect("a record");
+    assert!(b.snap.image.is_none(), "the removed picture was recorded as the base version's: {:?}", b.snap.image);
+    assert!(b.local_image.is_none());
 }
 
 #[test]
