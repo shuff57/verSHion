@@ -156,6 +156,33 @@ pub struct CircleLink {
     /// can not read is none, never the link with it.
     #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "ids_or_empty")]
     pub restored: Vec<String>,
+    /// (round 8, critic T2) The copy's own picture files and the circle's name for each: what a restore stored, kept on the
+    /// link rather than in a base entry so that it survives an unpaired restore (the circle removed the question and the base
+    /// entry with it). Read by [`super::question_history::picture_sha_on_circle`]. Cleared when the base is rebuilt (a send or
+    /// a merge), which records the pictures afresh. Read leniently: entries this build can not read are dropped.
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "picture_files_or_empty")]
+    pub picture_files: Vec<(String, String)>,
+}
+
+/// The most picture files the link records (a restore writes one; a long session of restores stays bounded).
+pub const PICTURE_FILES_MAX: usize = 32;
+
+/// (round 8, critic T2) A `picture_files` list read leniently: only pairs of two strings are kept.
+fn picture_files_or_empty<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<(String, String)>, D::Error> {
+    Ok(match Value::deserialize(d)? {
+        Value::Array(list) => list
+            .into_iter()
+            .filter_map(|v| {
+                let a = v.as_array()?;
+                match (a.first()?.as_str(), a.get(1)?.as_str()) {
+                    (Some(f), Some(sha)) => Some((f.to_string(), sha.to_string())),
+                    _ => None,
+                }
+            })
+            .take(PICTURE_FILES_MAX)
+            .collect(),
+        _ => Vec::new(),
+    })
 }
 
 /// (round 17, critic 95 I1) A base question's difficulty in the bank when the read's difficulties were first to be taken.
@@ -435,6 +462,7 @@ impl CircleLink {
             difficulty_news: None,
             as_is: false,
             restored: Vec::new(),
+            picture_files: Vec::new(),
         }
     }
 
@@ -717,6 +745,7 @@ pub fn after_send(link: &CircleLink, bank: &QuestionBank, sent: &SentBank) -> Ci
     l.as_is = false;
     // (round 6, critic N5) the base is the bank as sent: no restored question is waiting for a difficulty pass any more
     l.restored.clear();
+    l.picture_files.clear();
     l
 }
 
@@ -773,6 +802,7 @@ pub fn after_partial_send(link: &CircleLink, bank: &QuestionBank, composed: &[Co
     l.as_is = false;
     // (round 6, critic N5) the base is the bank as composed: no restored question is waiting for a difficulty pass any more
     l.restored.clear();
+    l.picture_files.clear();
     // A send of the full form no longer follows the viewers' form, as a merge of a full version (`finish_merge`).
     if !sent.keys_hidden {
         l.viewers_form = false;
@@ -829,6 +859,7 @@ pub fn link_from_share(circle_id: &str, circle_name: &str, role: super::circles_
         difficulty_news: None,
         as_is: false,
         restored: Vec::new(),
+        picture_files: Vec::new(),
     };
     // The bank as it was sent: an edit made while the send was on its way shows as unsent, never as "put back".
     l.mark_bank(bank);

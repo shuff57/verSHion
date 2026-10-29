@@ -870,7 +870,7 @@ fn refused_words(e: &RestoreRefused, v: u64) -> String {
         RestoreRefused::PictureMissing => format!("Version {v}'s picture could not be fetched, so nothing was changed. Press Restore again to try again."),
         RestoreRefused::RestorePoint(m) => format!("A copy of your banks could not be saved first ({m}), so nothing was changed."),
         RestoreRefused::NotSaved(m) => format!("Your banks couldn't be saved ({}), so nothing was changed.", words::save_problem(m)),
-        RestoreRefused::NotCountable => "This version differs only in figure settings that verSHion can't count as a change here, so it can't be restored from this page. Nothing was changed.".into(),
+        RestoreRefused::NotCountable => "This version's figure is not the one your copy is based on, and a figure change on its own can't be sent from here, so it can't be restored. Nothing was changed.".into(),
         RestoreRefused::EditedSince => "This question changed after the restore (an edit, or a difficulty taken from the circle), or was deleted, so Undo would lose that. Nothing was changed; change it back by hand if you need to.".into(),
         RestoreRefused::LinkMoved => "Your copy has moved to another version of the circle's bank since the restore, so Undo can't put the question back as it was. Nothing was changed.".into(),
         RestoreRefused::Moved => "This question is no longer paired with the circle's question it was opened on (a merge or a send changed it). Open its history again. Nothing was changed.".into(),

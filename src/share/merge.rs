@@ -23,7 +23,7 @@ use serde_json::Value;
 use super::api;
 use super::browse_text as text;
 use super::canon;
-use crate::model::{Difficulty, Kind, KEYLESS_SENTINEL, Part, PartKind, Question, QuestionBank, is_keyless, rekeyed};
+use crate::model::{Difficulty, FigureSpec, Kind, KEYLESS_SENTINEL, Part, PartKind, Question, QuestionBank, is_keyless, rekeyed};
 
 /// Most questions a record keeps a base for, and the most bytes of base kept for one record.
 /// Past either, the record has no base and the person is told a merge is not possible for it.
@@ -76,6 +76,12 @@ pub struct BaseQuestion {
     /// The picture's file name in this app's store when imported.
     #[serde(default)]
     pub local_image: Option<String>,
+    /// (round 8, critic T1) The figure the question was drawn from in the base version, when it had one. `snap` has no
+    /// figure, so without this the count guard could not tell a restore that puts the base's figure back from one that
+    /// introduces a figure the base never had. `None`: the base had no figure, or (a link an earlier build wrote) it is not
+    /// known; the guard treats "not known" as unsafe.
+    #[serde(default)]
+    pub figure: Option<FigureSpec>,
     /// (round 7, critic R3) The copy's own picture when it is no longer the base's file: the file, and the circle's name
     /// for it. A restore that stores a picture writes it (the store may keep a circle's PNG as WebP under a new name), so
     /// Compare and the strip read that picture as the circle's own and not as a new local picture. `local_image` and
@@ -110,7 +116,7 @@ pub fn snap_of(q: &Question, image_sha: Option<String>) -> Snap {
 }
 
 pub fn base_of(q: &Question, qid: &str, fp: &str, sha: Option<String>) -> BaseQuestion {
-    BaseQuestion { local_id: q.id.clone(), qid: qid.to_string(), fp: fp.to_string(), snap: snap_of(q, sha), local_image: q.image.as_ref().map(|i| i.file.clone()), picture_now: None }
+    BaseQuestion { local_id: q.id.clone(), qid: qid.to_string(), fp: fp.to_string(), snap: snap_of(q, sha), local_image: q.image.as_ref().map(|i| i.file.clone()), figure: q.figure.clone(), picture_now: None }
 }
 
 /// The base to keep, or none when it would be too big.
@@ -640,12 +646,6 @@ pub(super) enum FigureValue {
 
 impl Sig {
     pub(super) fn of(q: &Question) -> Sig {
-        let value = |v: &Value| match v {
-            Value::Number(n) => n.as_f64().map(FigureValue::Number),
-            Value::String(s) => Some(FigureValue::Text(canon::block(s).into_owned())),
-            Value::Bool(b) => Some(FigureValue::Flag(*b)),
-            Value::Null | Value::Array(_) | Value::Object(_) => None,
-        };
         Sig {
             stem: canon::block(&q.stem).into_owned(),
             shape: shape(&q.kind),
@@ -654,9 +654,21 @@ impl Sig {
             points: q.points,
             topics: canon::topics(&q.topics),
             difficulty: q.difficulty,
-            figure: q.figure.as_ref().map(|f| (f.id.clone(), f.params.iter().filter_map(|(k, v)| Some((k.clone(), value(v)?))).collect())),
+            figure: figure_key(q.figure.as_ref()),
         }
     }
+}
+
+/// (round 8, critic T1) A figure and its values as the merge compares them: a number the same whether written `1` or
+/// `1.0`, a text as stored, and a value the server drops left out. One rule for a question's figure and a base record's.
+pub(super) fn figure_key(f: Option<&FigureSpec>) -> Option<(String, Vec<(String, FigureValue)>)> {
+    let value = |v: &Value| match v {
+        Value::Number(n) => n.as_f64().map(FigureValue::Number),
+        Value::String(s) => Some(FigureValue::Text(canon::block(s).into_owned())),
+        Value::Bool(b) => Some(FigureValue::Flag(*b)),
+        Value::Null | Value::Array(_) | Value::Object(_) => None,
+    };
+    f.map(|f| (f.id.clone(), f.params.iter().filter_map(|(k, v)| Some((k.clone(), value(v)?))).collect()))
 }
 
 /// (critic 86 I1) Why a question is a decision when the base kept no difficulty. (critic 87 I1) Never with a choice made for
@@ -1000,6 +1012,8 @@ pub fn apply_merge(bank: &mut QuestionBank, plan: &MergePlan, fetched: &[Theirs]
                             // (critic 85 I2) the pool's version is what the bank is in step with now: also after the same
                             // change on both sides, which the old base would count as still to send
                             nb.snap = snap_of(&t.q, t.sha.clone());
+                            // (round 8, critic T1) the base's figure is the pool's version's, as its snapshot is
+                            nb.figure = t.q.figure.clone();
                         } else if nb.snap.difficulty.is_none() {
                             // (critic 85 I1) a base an earlier build wrote: the difficulty the pool's version has (the same as
                             // the bank's, or the row would be a decision), so a later difficulty-only edit is counted
@@ -1016,6 +1030,8 @@ pub fn apply_merge(bank: &mut QuestionBank, plan: &MergePlan, fetched: &[Theirs]
                     let t = find(row)?;
                     let mut nb = base_of(q, &t.qid, &t.fp, t.sha.clone());
                     nb.snap = snap_of(&t.q, t.sha.clone());
+                    // (round 8, critic T1) the base's figure is the pool's version's, as its snapshot is
+                    nb.figure = t.q.figure.clone();
                     new_base.push(nb);
                 }
             }
@@ -1052,6 +1068,8 @@ pub fn apply_merge(bank: &mut QuestionBank, plan: &MergePlan, fetched: &[Theirs]
                 // The base is what the pool's version is, not what is now in the bank.
                 nb.snap = snap_of(&t.q, t.sha.clone());
                 nb.local_image = t.q.image.as_ref().map(|i| i.file.clone());
+                // (round 8, critic T1) and its figure, never the bank's (which may be the person's kept version)
+                nb.figure = t.q.figure.clone();
                 new_base.push(nb);
             }
             RowKind::NewInTheirs => {

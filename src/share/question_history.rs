@@ -646,10 +646,16 @@ pub fn side_of_version(body: &VersionBody, qid: &str) -> Option<Shown> {
 /// (round 6, critic N2) The circle's name for the copy's picture: the picture the link recorded for it (`snap.image`) while
 /// the copy still has the file it landed with (`local_image`). The store may keep a circle's PNG (or JPEG) as WebP under a
 /// new name, so the file's own name is only used where the link has no record of that file (a picture changed here, or none).
-/// (round 7, critic R3) A picture a restore stored is named by the record it wrote (`picture_now`), also when its file is not
-/// the base's own.
+/// (round 7, critic R3) A picture a restore stored is named by the record it wrote, on the link (`picture_files`) or in the base
+/// entry (`picture_now`), also when its file is not the base's own.
+/// (round 8, critic M4) The limit: a picture this app's store re-encodes again on its own (not through a restore) under a new
+/// file name is not followed back to the circle's name; it reads as a local picture (a different one from the circle's).
 pub fn picture_sha_on_circle(link: &CircleLink, q: &Question) -> Option<String> {
     let file = q.image.as_ref()?.file.as_str();
+    // (round 8, critic T2) the link's own record, which an unpaired restore keeps (its base entry is gone)
+    if let Some((_, sha)) = link.picture_files.iter().find(|(f, _)| f == file) {
+        return Some(sha.clone());
+    }
     let Some(b) = link.base.iter().find(|b| b.local_id == q.id) else { return sha_of_file(file) };
     if let Some((f, sha)) = &b.picture_now
         && f == file
@@ -1102,17 +1108,14 @@ pub fn restore_question(banks: &mut [QuestionBank], ask: &RestoreAsk, sink: &dyn
             if picture_same {
                 judged.image = b.local_image.clone().map(|file| ImageRef { file, width: 0, height: 0 });
             }
-            let figure_moves = existing.map_or(r.figure.is_some(), |q| merge::Sig::of(q).figure != merge::Sig::of(&r).figure);
+            // (round 8, critic T1) The record now holds the base version's figure, so this is no guess: a restore whose figure
+            // is that one puts the base version's question back (it may undo a counted edit and the count drops to 0, which
+            // is right). A figure that differs from the record — or a figure the version has where the record has none, as
+            // for a link an earlier build wrote — would leave the copy in step over a figure the strip can never count, and
+            // is refused.
+            let figure_moves = merge::figure_key(r.figure.as_ref()) != merge::figure_key(b.figure.as_ref());
             if ask.body.version != link.base_version && picture_same && figure_moves && !merge::ours_changed(b, &judged) {
-                // (round 7, critic R2) Decided by state, never by a version number: a restore that puts back a question the
-                // person changed and that already carries a figure of its own is her own unsent edit coming undone, and the
-                // version's figure is what she is putting back. The refusal is for a figure that would appear or move with
-                // nothing countable to undo (a copy already in step) or for a copy that is gone, where the record can not
-                // count a figure the version carries and the strip would say "up to date" over a change never offered.
-                let undoable = existing.is_some_and(|q| q.figure.is_some() && merge::ours_changed(b, q));
-                if !undoable {
-                    return Err(RestoreRefused::NotCountable);
-                }
+                return Err(RestoreRefused::NotCountable);
             }
         }
         // no record of the base: as before, the two compared directly
@@ -1153,17 +1156,27 @@ pub fn restore_question(banks: &mut [QuestionBank], ask: &RestoreAsk, sink: &dyn
         base_version: link.base_version,
         base_version_id: link.base_version_id.clone(),
     });
-    // (round 7, critic R3) A picture the restore stored is the copy's own picture now: the link records the circle's name for
-    // that file, so Compare, the header and the strip read it as that picture and never as a new local one. The base's own
-    // fields (`local_image`, `snap.image`) are left as they were.
+    // (round 7, critic R3; round 8, critic T2) A picture the restore stored is the copy's own picture now: the link records
+    // the circle's name for that file (on the link itself, so an unpaired restore keeps it when its base entry goes), and the
+    // base entry records it too, where there is one, for the strip's own picture count. The base's own fields (`local_image`,
+    // `snap.image`) are left as they were.
     let mut l = link.clone();
     let mut link_changed = false;
-    if let (Some(img), Some(sha)) = (r.image.as_ref(), t.sha.as_deref())
-        && let Some(b) = l.base.iter_mut().find(|b| b.local_id == local_id)
-        && b.local_image.as_deref() != Some(img.file.as_str())
-    {
-        b.picture_now = Some((img.file.clone(), sha.to_string()));
-        link_changed = true;
+    if let (Some(img), Some(sha)) = (r.image.as_ref(), t.sha.as_deref()) {
+        if !l.picture_files.iter().any(|(f, s)| f == &img.file && s == sha) {
+            l.picture_files.retain(|(f, _)| f != &img.file);
+            l.picture_files.push((img.file.clone(), sha.to_string()));
+            while l.picture_files.len() > super::circle_links::PICTURE_FILES_MAX {
+                l.picture_files.remove(0);
+            }
+            link_changed = true;
+        }
+        if let Some(b) = l.base.iter_mut().find(|b| b.local_id == local_id)
+            && b.local_image.as_deref() != Some(img.file.as_str())
+        {
+            b.picture_now = Some((img.file.clone(), sha.to_string()));
+            link_changed = true;
+        }
     }
     if unpair {
         l.qids.retain(|q| q.local != local_id);
