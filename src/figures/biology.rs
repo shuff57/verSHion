@@ -5,6 +5,7 @@ use super::svg::{esc, Doc};
 use super::*;
 
 mod handles;
+pub mod chisquarefit;
 pub mod gel;
 pub mod hardyweinberg;
 pub mod pedigree;
@@ -24,6 +25,7 @@ pub fn examples(id: &str) -> Option<Vec<super::Example>> {
         "pedigree" => Some(pedigree::examples()),
         "micropipette-reading" => Some(pipette::examples()),
         "hardy-weinberg" => hardyweinberg::examples(id),
+        "chi-square-fit" => chisquarefit::examples(id),
         _ => None,
     }
 }
@@ -118,6 +120,7 @@ pub fn defs() -> Vec<FigureDef> {
             render: pipette::render,
         },
         hardyweinberg::defs().pop().unwrap(),
+        chisquarefit::defs().pop().unwrap(),
     ]
 }
 

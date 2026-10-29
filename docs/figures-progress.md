@@ -447,3 +447,22 @@ student copy) instead of silently missing. New tests parse the drawn lens polygo
 settings, so a collision or an off-canvas label now fails a test rather than a critic. Report:
 `docs/critic-reports/2026-10-29-ray-motion-verify-99d3e43.md`. Census: `hardy-weinberg__defaults` and
 `hardy-weinberg__start` added; `ray-diagram__defaults` and `ray-diagram__start` re-hashed for the new geometry.
+
+Chi-square goodness of fit: new figure `chi-square-fit` (`src/figures/biology/chisquarefit.rs`, Biology). This is the
+genetics test — do 315 : 101 : 108 : 32 peas fit 9 : 3 : 3 : 1? — and not the test of independence that
+`chi-square-table` already draws, where the expected counts come from the row and column totals and cannot be typed.
+The table carries the observed counts, the expected counts from the ratio, each category's (O − E)² / E and the totals,
+below it the statistic, the degrees of freedom, the p-value and the decision in words. The observed counts and the
+ratio are the question and always print; the expected counts, the contributions and the whole statistics block are
+the answer and blank on the student copy. The p-value comes from the existing `stats::dist::chisq_cdf` (a one-word
+change made `dist` visible to the rest of the crate), so no new special functions were added. Defects caught by
+looking at the exports: the decision sentence ran off the right edge (now wrapped to the canvas and the canvas grown
+to fit); at Large the title printed into the header and the givens into the statistics block (every vertical offset
+now scales with the label size, and the columns are fractions of the width so they spread); "p = < 0.001" read as a
+typo (now "p < 0.001"); and a column of trimmed decimals (0.1 beside 0.02) became fixed-decimal columns that fall back
+to the never-zero printer rather than showing a real 0.0002 as "0.00". Tests: Mendel's 556 peas giving χ² = 0.470 and
+p = 0.925, the statistic equalling the sum of the contributions and the expected counts summing to the observations
+over four settings, a perfect fit giving 0 and p = 1, a wide mismatch being rejected and a close one not, a ratio
+part of zero with something observed there refusing to produce a statistic, mismatched lists reported, the empty
+input, the student/key split, the never-zero prints, Print neutrality and the PNG export. No handles, so it joins
+`NO_HANDLES`. Census: only `chi-square-fit__defaults` and `chi-square-fit__start` added.

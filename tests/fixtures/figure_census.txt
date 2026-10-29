@@ -26,6 +26,8 @@ cash-flow-statement__defaults 5f56a9154fcea79e
 cash-flow-statement__start 5f56a9154fcea79e
 cause-effect__defaults 8774a71b1432ad9b
 cause-effect__start 8774a71b1432ad9b
+chi-square-fit__defaults aae65b6e43d4d45b
+chi-square-fit__start aae65b6e43d4d45b
 chi-square-table__defaults ed9ff82be03eae95
 chi-square-table__start ed9ff82be03eae95
 circle-of-fifths__defaults f7e8a8b83655c15c

@@ -30,6 +30,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "gel-electrophoresis" => GEL_ELECTROPHORESIS,
         "micropipette-reading" => MICROPIPETTE_READING,
         "hardy-weinberg" => HARDY_WEINBERG,
+        "chi-square-fit" => CHI_SQUARE_FIT,
         // chemistry
         "bohr-model" => BOHR_MODEL,
         "gas-syringe" => GAS_SYRINGE,
@@ -562,6 +563,29 @@ const HARDY_WEINBERG: &[Faq] = &[
     Faq {
         q: "What are p and q?",
         a: "The frequencies of the two alleles of one gene in the population, where p is the dominant one and q the recessive. They always add to one, so a population can be described with a single number.",
+    },
+];
+
+const CHI_SQUARE_FIT: &[Faq] = &[
+    Faq {
+        q: "What does a chi-square goodness-of-fit test actually ask?",
+        a: "Whether the counts you observed are close enough to the counts a hypothesis predicts. The hypothesis here is a ratio, such as 9 : 3 : 3 : 1, which sets the expected count in each category; the test measures how far the observations sit from those expectations, in units of the noise you would expect anyway.",
+    },
+    Faq {
+        q: "Why is the expected count a share of the total?",
+        a: "A ratio only says what fraction of the offspring each category should be. Multiplying each part by the total number observed turns the ratio into counts, so the expected counts add up to the same total as the observed ones. That is why the two totals agree in the table.",
+    },
+    Faq {
+        q: "Why are the degrees of freedom the number of categories minus one?",
+        a: "Once the total is fixed, the last category's count is decided by the others, so only the first few cells are free to vary. Four categories therefore leave three degrees of freedom, which is the 3 you look up in a chi-square table.",
+    },
+    Faq {
+        q: "What does the p-value mean here?",
+        a: "It is the chance of seeing counts at least this far from the expected ones if the ratio really held. A large p means the data are consistent with the hypothesis; a small p, below the significance level, means the data are unlikely under it, so the hypothesis is rejected.",
+    },
+    Faq {
+        q: "Why is the statistic a sum of (O - E)\u{b2} / E?",
+        a: "Each category contributes how far its count is from the expected count, squared so that over- and under-counting both count, and divided by the expected count so that a difference of 2 matters much more in a category expecting 5 than in one expecting 500.",
     },
 ];
 

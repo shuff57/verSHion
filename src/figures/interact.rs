@@ -324,7 +324,7 @@ mod tests {
     /// here deliberately; a figure that gains handles must be removed (the test checks both ways).
     const NO_HANDLES: &[&str] = &[
         "accounting-equation", "ad-as", "bank-reconciliation", "base-ten-blocks", "block-diagram", "body-map", "boolean-table",
-        "brain-regions", "break-even", "cash-flow-statement", "cause-effect", "chi-square-table",
+        "brain-regions", "break-even", "cash-flow-statement", "cause-effect", "chi-square-fit", "chi-square-table",
         "circle-of-fifths", "circular-flow", "circular-motion", "climate-graph", "collision-momentum", "colour-wheel", "confidence-interval",
         "cost-curves", "court-layout", "data-structure", "depreciation-schedule", "discrete-distribution",
         "dot-plot", "earth-cycles", "earth-layers", "elasticity", "electric-field", "energy-bar-chart", "er-diagram", "experiment-flow",

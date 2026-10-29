@@ -9,7 +9,7 @@ use super::{answers_param, Example, FigureDef, ParamDef, Params, Subject, Value}
 
 mod chisq;
 mod discrete;
-mod dist;
+pub(crate) mod dist;
 mod dot;
 mod interval;
 mod hypothesis;
