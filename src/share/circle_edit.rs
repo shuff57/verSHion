@@ -769,6 +769,23 @@ fn run(session: SharedSession, images: SharedImages, media: SharedMedia, retry: 
 /// sink the merge uses. The send then reads those bytes from `FetchedMedia`, so the base raw question keeps its own
 /// file name even when the store gives it another (a picture kept as PNG or JPEG under its own hash). A fetch that
 /// fails sends nothing and says the plain line; only a sign-out keeps the sign-in path.
+/// (round 16, verification I1) The stem of the payload question that uses `file`, shortened, for the 404 message.
+/// Empty when the payload can not be read or no question names it.
+fn question_using(payload: &[u8], file: &str) -> String {
+    let v: serde_json::Value = serde_json::from_slice(payload).unwrap_or(serde_json::Value::Null);
+    let stem = v
+        .pointer("/bank/questions")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|qs| qs.iter().find(|q| q.pointer("/image/file").and_then(serde_json::Value::as_str) == Some(file)))
+        .and_then(|q| q.get("stem"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if stem.chars().count() > 60 { stem.chars().take(59).collect::<String>() + "\u{2026}" } else { stem }
+}
+
 async fn send_checked(pool: &Pool<'_>, cid: &str, bid: &str, mut req: CircleSend, media: &dyn super::pool::MediaSource, images: &dyn super::browse::ImageSink, fetch: &[String], progress: &mut dyn FnMut(PublishProgress)) -> (Result<SentBank, PoolError>, Option<License>) {
     let now = match pool.circle_heads(&[bid.to_string()]).await {
         Ok(es) => es.into_iter().find(|e| e.bank_id == bid).and_then(|e| match e.state {
@@ -790,19 +807,20 @@ async fn send_checked(pool: &Pool<'_>, cid: &str, bid: &str, mut req: CircleSend
         };
         match pool.circle_blob(cid, bid, &sha).await {
             Ok(blob) => {
-                // (round 15, product critic 13 minor 3) Keep the circle's original under the exact name the payload
-                // uses, so the next send finds it here instead of downloading the same picture again.
-                let _ = media.keep(file, &blob.bytes);
-                // Best effort: also kept in this store's own (re-encoded) form for the bank and the library; the send
-                // itself reads the bytes below (the store may name the file differently, e.g. a picture kept as WebP).
+                // Best effort: kept on this computer for the next send or open; the send itself reads the bytes below
+                // (the store may name the file differently, e.g. a picture kept as WebP). (Round 16: the verbatim
+                // original is NOT kept under the payload's name — that would persist a circle author's EXIF/GPS and
+                // other metadata on every member's disk and in backups, which the re-encoded copy strips.)
                 let _ = images.put(&blob.bytes);
                 extra.insert(file.clone(), blob.bytes);
             }
             // The sign-in ended: that is the page's own step, not a picture problem.
             Err(e @ PoolError::Api(ApiError::SignedOut)) => return (Err(e), now),
-            // (round 15, product critic 13 minor 2) A 404 will not change by trying again: say what it may mean and
-            // point at a way forward.
-            Err(PoolError::Api(ApiError::Http { status: 404, .. })) => return (Err(LocalProblem::BaseMediaGone { file: file.clone() }.into()), now),
+            // (round 15, product critic 13 minor 2; round 16, verification I1) A 404 will not change by trying again.
+            // `Pool::call` turns every non-2xx answer into a `Refused`, so that is the shape a real 404 arrives in.
+            Err(PoolError::Refused(r)) if r.detail.status == 404 => {
+                return (Err(LocalProblem::BaseMediaGone { file: file.clone(), question: question_using(&req.payload, file) }.into()), now)
+            }
             Err(_) => return (Err(LocalProblem::BaseMediaUnavailable.into()), now),
         }
     }

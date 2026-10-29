@@ -82,10 +82,6 @@ impl MediaSource for MediaOnDisk {
     fn read(&self, file: &str) -> Option<Vec<u8>> {
         self.0.lock().unwrap().get(file).cloned()
     }
-    fn keep(&self, file: &str, bytes: &[u8]) -> bool {
-        self.put(file, bytes);
-        true
-    }
 }
 
 impl MediaOnDisk {
@@ -448,8 +444,18 @@ fn d3_a_blob_404_or_a_hash_mismatch_fetches_nothing_sends_nothing_and_says_the_p
         assert!(puts(&s).is_empty(), "nothing is uploaded or sent: {:?}", s.paths());
         assert!(images.0.lock().unwrap().is_empty(), "the bytes are never stored, whatever came back");
         match send_stage(&m) {
-            SendStage::Failed(p) => assert_eq!(p.message, BASE_PICTURE_NOT_FETCHED, "mismatch: {mismatch}"),
-            other => panic!("not the plain line (mismatch: {mismatch}): {other:?}"),
+            // a hash mismatch may be a bad answer from a server that can recover: the plain line, with Try again
+            SendStage::Failed(p) if mismatch => {
+                assert_eq!(p.message, BASE_PICTURE_NOT_FETCHED, "mismatch: {mismatch}");
+                assert!(p.retry);
+            }
+            // a 404 will not change: say what it may mean, name the picture and the question, no Try again
+            SendStage::Failed(p) => {
+                assert!(!p.retry, "a 404 has no Try again");
+                assert!(p.message.contains("would not send") && p.message.contains(&file), "{}", p.message);
+                assert!(p.message.contains("used by the question"), "names the question: {}", p.message);
+            }
+            other => panic!("not the failure line (mismatch: {mismatch}): {other:?}"),
         }
     }
 }
@@ -579,7 +585,6 @@ fn d3_a_base_picture_named_png_is_sent_under_its_own_name() {
     let qs = payload.pointer("/bank/questions").and_then(Value::as_array).unwrap();
     assert_eq!(qs[0]["image"]["file"], json!(file), "the base's PNG name, not the store's WebP name");
     assert!(puts(&s).iter().any(|p| p.path == format!("/blobs/{sha}")), "the fetched PNG bytes go up: {:?}", s.paths());
-    assert_eq!(media.read(&file).as_deref(), Some(pic.as_slice()), "the fetched original is kept under the payload's name, so the next send does not download it again");
 }
 
 #[test]
@@ -642,17 +647,23 @@ fn d3_a_picture_the_circle_will_not_serve_says_why_and_offers_a_way_forward() {
     let a = local(&link, QA);
     m.edit.toggle_change(&a, false);
     s.say(200, heads(3));
-    s.fail(ApiError::Http { status: 404, code: "not_found".into(), field: None, reason: None, retry_after: None });
+    // the real shape: a 404 Response, which `Pool::call` turns into a `Refused` (not an `ApiError::Http`)
+    s.on("Get", &blob_path(&sha), 404, json!({"error": "not_found"}));
     send(&mut m, &s, &mut banks, sent_with(4, &[QA, QB, QC]));
     assert!(puts(&s).is_empty(), "nothing is uploaded or sent: {:?}", s.paths());
     match send_stage(&m) {
         SendStage::Failed(p) => {
             assert!(!p.retry, "a 404 is not transient: no Try again");
+            assert!(p.message.contains("would not send"), "{}", p.message);
             assert!(p.message.contains("no longer be kept"), "{}", p.message);
             assert!(p.message.contains(&file), "names the picture: {}", p.message);
+            assert!(p.message.contains("used by the question") && p.message.contains('\u{201c}'), "names the question: {}", p.message);
+            assert!(p.message.contains("Remove or replace"), "a way forward, not Get latest: {}", p.message);
         }
         other => panic!("not the 404 line: {other:?}"),
     }
+    let shapes = page(1280.0, &mut m);
+    assert!(!has(&shapes, "Try again"), "a 404 draws no Try again: {:?}", texts(&shapes));
 }
 
 #[test]
@@ -670,7 +681,8 @@ fn d3_ui_a_failed_picture_fetch_draws_try_again_and_pressing_it_fetches_and_send
     let link = m.edit.link_for_local(LOCAL).unwrap();
     let a = local(&link, QA);
     m.edit.toggle_change(&a, false);
-    s.on("Get", &blob_path(&sha), 404, json!({"error": "not_found"}));
+    // a server-side failure is transient (a 404 has its own way forward, tested above)
+    s.on("Get", &blob_path(&sha), 500, json!({"error": "server_error"}));
     send(&mut m, &s, &mut banks, sent_with(4, &[QA, QB, QC]));
     match send_stage(&m) {
         SendStage::Failed(p) => assert!(p.retry, "the Failed page offers to try again"),

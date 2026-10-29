@@ -149,6 +149,26 @@ Loop rules: local commits only, never push; critic pair (product vs Moodle, secu
 - Suite on r15: **share 1573/0/3; full lib 2268/0/6**. A verification pair runs on r15; the loop stays converged if
   both are clean.
 
+### Round-14 verification of r15 → r16 (2026-10-29)
+
+- **Product and security verification** on `01b976e` both found the same important: the `BaseMediaGone` arm was
+  unreachable. `Pool::call` turns a real non-2xx answer into `PoolError::Refused`, not `ApiError::Http`; the r15 test
+  injected the impossible shape while the older real-shape test still asserted Try again. Reports:
+  `docs/critic-reports/2026-10-29-r15-verify-product.md` and `-security.md`.
+- **r16** matches `PoolError::Refused(r) if r.detail.status == 404` inside the blob-fetch loop only (sign-out first,
+  429/5xx transient), names the picture and the question's stem from the payload, and drops the unreachable "get the
+  latest" advice ("Remove or replace that picture, then send again"). The tests now drive a real 404 `Response`; the
+  transient retry test uses a 500.
+- **r15's "keep the fetched original" minor is DECLINED and reverted (security M1):** keeping the circle author's
+  verbatim PNG/JPEG/GIF/WebP bytes under `media/<sha>.<ext>` preserves EXIF/GPS, ICC, comments and trailing bytes on
+  every member's disk and in backups; the store used to keep only a stripped WebP. The per-send re-download (and the
+  re-upload) residual is accepted and recorded.
+- Suite on r16: **share 1573/0/3; full lib 2268/0/6**.
+- **Open hardening, recorded:** the fetch loop's `media.read(file)` runs before the name is validated, so a crafted
+  `image.file` is an existence/timing oracle (its bytes cannot be uploaded).
+- Still owed before D2 is called done: the owner's real-screen look; the staging re-measure of `/changes` and the
+  partial-send picture round-trip (owner's yes); D3's remaining pieces.
+
 ## The 5 known failures are fixed (2026-10-28)
 
 The owner asked to fix the five `share_core::wasm::publish_prepare_json` failures. Cause: the viSHion path deps in

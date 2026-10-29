@@ -100,9 +100,10 @@ pub enum LocalProblem {
     /// (phase D3, plan section 6 "Pictures") A picture this send needs is not on this computer and could not be
     /// fetched from the circle (offline, a timeout): nothing is sent, and trying again may work.
     BaseMediaUnavailable,
-    /// (round 15, product critic 13 minor 2) The circle answered 404 for a picture this send needs: it may no longer
-    /// be kept, or the person may no longer be able to read it. Trying again alone will not change that.
-    BaseMediaGone { file: String },
+    /// (round 15, product critic 13 minor 2; round 16, verification I1) The circle answered 404 for a picture this
+    /// send needs: it may no longer be kept, or the person may no longer be able to read it. Trying again alone will
+    /// not change that. `question` is the stem of the question that uses it, when the payload names one.
+    BaseMediaGone { file: String, question: String },
     /// A name is not `media/<sha256>.<png|jpg|gif|webp>`.
     BadMediaName { file: String },
     /// The bytes of a picture do not hash to the name it has.
@@ -134,7 +135,10 @@ impl LocalProblem {
             LocalProblem::IndependenceClaim(why) => (*why).into(),
             LocalProblem::MissingMedia { file } => format!("A picture used by this question ({file}) is missing from this device. Re-add it, or remove it from the question."),
             LocalProblem::BaseMediaUnavailable => "A picture this send needs could not be fetched from the circle, so nothing was sent. Try again.".into(),
-            LocalProblem::BaseMediaGone { file } => format!("The circle would not send a picture this send needs ({file}). It may no longer be kept, or you may no longer be able to read it. Nothing was sent: get the latest, or remove the picture from the question."),
+            LocalProblem::BaseMediaGone { file, question } => {
+                let used = if question.is_empty() { String::new() } else { format!(", used by the question \u{201c}{question}\u{201d}") };
+                format!("The circle would not send a picture this send needs ({file}{used}). It may no longer be kept, or you may no longer be able to read it. Remove or replace that picture, then send again. Nothing was sent.")
+            }
             LocalProblem::BadMediaName { file } => format!("A picture has a name the pool can not take ({file})."),
             LocalProblem::MediaHashMismatch { file } => format!("The picture {file} on this device does not match its name. Re-add it to the question."),
             LocalProblem::MediaTooLarge { file, len } => {
@@ -1216,11 +1220,6 @@ impl PoolSession for PinnedSession {
 /// Where the pictures a payload names are read from.
 pub trait MediaSource {
     fn read(&self, file: &str) -> Option<Vec<u8>>;
-    /// (round 15, product critic 13 minor 3) Keep fetched bytes under the exact name a payload uses, so the next send
-    /// finds them instead of downloading the same picture again. The default does nothing.
-    fn keep(&self, _file: &str, _bytes: &[u8]) -> bool {
-        false
-    }
 }
 
 /// The app's media store (`store::read_media`).
@@ -1229,9 +1228,6 @@ pub struct StoreMedia;
 impl MediaSource for StoreMedia {
     fn read(&self, file: &str) -> Option<Vec<u8>> {
         crate::store::read_media(file)
-    }
-    fn keep(&self, file: &str, bytes: &[u8]) -> bool {
-        crate::store::restore_image(file, bytes)
     }
 }
 
