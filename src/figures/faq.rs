@@ -35,6 +35,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "cladogram" => CLADOGRAM,
         "food-web" => FOOD_WEB,
         "energy-pyramid" => ENERGY_PYRAMID,
+        "action-potential" => ACTION_POTENTIAL,
         // chemistry
         "bohr-model" => BOHR_MODEL,
         "gas-syringe" => GAS_SYRINGE,
@@ -663,6 +664,29 @@ const ENERGY_PYRAMID: &[Faq] = &[
     Faq {
         q: "Why is a value beside its bar and not inside?",
         a: "A bar too narrow to hold its own number gets the number beside it on a short leader line, so a small top level is never clipped. A bar thinner than 6 px is drawn solid black with a small cap at each end so it cannot be mistaken for a line; its width is still to scale, except that one under 1.5 px is drawn 1.5 px wide (the caption says when that happens) so it survives a grey print copy. The arrows run in a column beside the pyramid for the same reason.",
+    },
+];
+
+const ACTION_POTENTIAL: &[Faq] = &[
+    Faq {
+        q: "How do I type the numbers?",
+        a: "Each control is a number with or without its unit: -70, \u{2212}70 and -70 mV are the same, and a decimal comma (1,5) is read as a point. A comma followed by exactly three digits (1,000) could mean one thousand or one, so it is refused rather than guessed. Potentials are drawn from -100 to +70 mV (the resting potential from -100 to -10 mV), and the stimulus is at 0.5 ms or later. Letters other than the unit, NaN, inf and 1e3 are not numbers here.",
+    },
+    Faq {
+        q: "Why is my value refused?",
+        a: "Each refusal gives its reason and what to change. The threshold must be at least 10 mV above the resting potential and at least 4 mV from 0 mV (or its dashed line would run into the resting level or onto the 0 mV line); the peak at least 20 mV above the threshold; the undershoot either the resting potential itself (no dip) or at least 3 mV below it, never above it. The spike takes about 4.7 ms after the stimulus to settle back to rest, so the total time must be at least the stimulus time plus 4.7 ms, and at most 12 ms (longer, and the 0.8 ms upstroke would be under 35 px wide). The figure is also refused, with that reason, if a numbered pointer cannot be placed clear of the curve; none of the bundled examples or the defaults does.",
+    },
+    Faq {
+        q: "What is the exercise, and why are the numbers not printed?",
+        a: "The names are the exercise. Numbered discs point at the stimulus, the resting level, the dashed threshold line and each phase of the curve, and lettered discs sit under the brackets for the ion channels and the refractory periods. Under Show answers the key under the figure names each one; in a student copy the same key has a blank line for each, and the picture is laid out identically. The typed resting, threshold, peak and undershoot values are never printed in either copy: they are read off the axes, which is the skill being tested. The curve is the same in both copies.",
+    },
+    Faq {
+        q: "What do the channel and refractory bands mean?",
+        a: "They are schematic brackets placed from the curve: Na+ channels open from the moment the curve crosses threshold to the peak; K+ channels open from the peak until 1 ms after the lowest point of the undershoot; the absolute refractory period runs from threshold until the curve is back down to the resting level; the relative one from there until the same time as the K+ band ends. With no undershoot there is no dip, so the relative period and the hyperpolarisation pointer are left out and the figure says so. Failed initiation draws a small bump that peaks 60 % of the way to threshold and returns to rest, with no spike bands, and says so when a band switch is on.",
+    },
+    Faq {
+        q: "Is the curve to scale?",
+        a: "The shape is schematic and the same for every neuron: the rise to the peak takes 0.8 ms, the fall to the lowest point 1.4 ms, and the return to rest follows a smooth exponential in about 2.5 ms, so a spike is about 4.7 ms long however you set the potentials. The resting level, peak and lowest point are hit exactly, the threshold is crossed once on the way up, and the trace never wiggles. Use Print for a grey-only copy that survives a black-and-white photocopy.",
     },
 ];
 

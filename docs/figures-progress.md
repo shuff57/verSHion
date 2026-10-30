@@ -800,3 +800,41 @@ reading as 1.5 × 10^67 is older); a bar that computes to 1.4999999999999998 can
 exact-1.5 inputs); the new message names 5 × 10^-324 as the smallest readable value but `3.125e-321` prints
 `3.127 × 10^-321`; a sliver's name sits further left than the next, wider level's. If the caption clutter bothers a
 teacher, shortening it to one sentence is the cheap fix. Phase 4 next: action potential, cell cycle, cell diagrams.
+
+Action potential (2026-10-30): new figure `action-potential` (`src/figures/biology/actionpotential.rs`, Biology). A neuron's
+membrane potential (mV) against time (ms), the standard exam trace. The curve is analytic, not a polyline: a flat rest,
+`smoothstep(u^1.5)` up to the peak (zero slope at the top), a mirror smoothstep down to the lowest point of the undershoot
+(zero slope again), then a critically damped exponential `(1 + kt)e^-kt` back to rest, so every piece is monotone and the
+trace cannot wiggle. Resting, peak and lowest point are hit exactly, the threshold is crossed once up and once down, and the
+path is sampled until no segment is longer than 0.9 px (the peak, trough, stimulus and threshold times are always sampled).
+The spike is a fixed 0.8 ms rise, 1.4 ms fall and about 2.5 ms settle, so it needs 4.7 ms after the stimulus. Controls: six
+typed numbers (resting, threshold, peak, undershoot in mV; stimulus time and total time in ms; unit text, a minus sign of
+any kind and a decimal comma are read; `1,000` is refused as ambiguous), a Failed initiation switch (a bump that peaks 60 %
+of the way to threshold and returns to rest), five show switches (threshold line, stimulus marker, phase pointers, ion-channel
+bands, refractory bands), Show answers, Style and Label size. Decisions: the NAMES are the exercise. Numbered discs point at the
+stimulus, the resting level, the threshold line (a disc in the right margin) and each phase; lettered discs sit under
+Na+/K+ and absolute/relative refractory brackets; every name lives in a two-column key under the figure, which has a blank
+line for each in a student copy, so both copies are the same size and the curve, discs and brackets are byte-identical. The
+typed resting, threshold, peak and undershoot numbers are never printed as text in either copy (they are read off the axes);
+the word "Threshold" is therefore a key entry, not a label on the line. A disc is found by search (several places along the
+curve, eight directions, four lengths; first clear of the curve, guide lines, discs and plot edge) and a trace with no clear
+place is refused with that reason rather than drawn crowded; none of the 4,992 sweep cases, 1,500+ grid cases or the examples hits it.
+Refused with a true reason and a second line: a value that is not a number, outside -100..+70 mV (resting -100..-10), a
+threshold under 10 mV above rest or within 4 mV of 0, a peak under 20 mV above the threshold, an undershoot above rest or
+under 3 mV below it (rest itself means no undershoot), a stimulus before 0.5 ms, a total over 12 ms (the upstroke would be
+under 35 px) or too short to hold the spike. Disclosures are one sentence each, name-free so a student copy never leaks, shown only when
+something was left out (no dip: the dip-dependent pointer and relative-period band; a failed initiation with a band switch
+on) and identical in the editor note (`notes_for`) and on the canvas. Tests (25, in the module): the extremes and the
+crossing count on a 13-set family, the derivative sign pattern over 80,000 samples, the path read back through the
+picture's own ticks (peak and trough rows within 0.06 px, no chord more than 0.25 px from the true curve), an independent
+audit (own Arial-based text widths, literal 1-2 px gaps) over 4,992 renders (13 trace sets x 3 sizes x 32 switch sets x
+failed x answers) for text/text, text/curve, text/line, disc/disc, disc/curve, disc/line, canvas edge, plus the expected disc
+count so nothing is dropped; a 1,500+ case grid of valid traces never refused; the student copy carries no name and none of the typed numbers
+over 256 states; note and canvas agreement over 10,000 random inputs (BOM, CRLF, tabs, decimal commas, unit text, NaN, inf, huge,
+tiny); Print grey-only. 17 of 17 mutants were killed (peak, trough, failure past threshold, wiggle, names always drawn, a name in the
+description, a typed number printed, note dropped, caption not drawn, disc clearance, x title into the ticks, coarse path, Na+
+band too long, no blank lines, a red Print line, refusal's second line dropped). Known limits: the shape and the time course are schematic and
+fixed, not fitted to a neuron type; the channel and refractory brackets are placed from the curve, not measured; a total over
+12 ms is refused; the refusal for "no clear place for a pointer" and for a stimulus pointer touching the dip are never reached by any
+input I found (they guard the search); the controls are text boxes, not sliders; the egui editor itself was not driven; text
+widths in the audit are an estimate of Noto Sans, not the rendered face.
