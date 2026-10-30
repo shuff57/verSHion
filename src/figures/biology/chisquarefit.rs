@@ -60,6 +60,101 @@ fn numbers(s: &str) -> Vec<f64> {
     split_list(s).iter().filter_map(|t| t.parse::<f64>().ok()).filter(|v| v.is_finite() && *v >= 0.0).collect()
 }
 
+/// A count as the test uses it: the typed number rounded once, exactly, to six decimals.
+#[derive(Clone, Debug)]
+struct Count {
+    /// The typed text.
+    typed: String,
+    /// The rounded number in decimal, ungrouped and without trailing zero decimals ("929059410.673343", "0").
+    text: String,
+    /// The rounded number as a double. Every value the test computes starts from this.
+    value: f64,
+    /// The rounded number in integer units at its own decimals, while it fits an i128 (it does below about 1e31).
+    units: Option<i128>,
+    /// Its own decimals, 0 to 6.
+    dec: i64,
+    /// The typed number has a nonzero digit past the sixth decimal, so rounding changed it.
+    changed: bool,
+}
+
+/// (round 11 blocker) A typed decimal ("929059410.6733431", "1e-14", "2.5e-6") rounded half up to six decimals, in
+/// exact decimal arithmetic on the typed digits, so the count the page prints is the count it computes with. None when
+/// the text is not a plain decimal (the caller falls back to the double's own shortest decimal).
+fn exact_six(t: &str) -> Option<Count> {
+    let typed = t.trim();
+    let body = typed.strip_prefix('+').or_else(|| typed.strip_prefix('-')).unwrap_or(typed);
+    let (mant, exp) = match body.find(['e', 'E']) { Some(i) => (&body[..i], Some(&body[i + 1..])), None => (body, None) };
+    let exp: i64 = match exp {
+        None => 0,
+        Some(e) => {
+            let (neg, d) = match e.strip_prefix('-') { Some(r) => (true, r), None => (false, e.strip_prefix('+').unwrap_or(e)) };
+            if d.is_empty() || !d.bytes().all(|b| b.is_ascii_digit()) { return None; }
+            let x = d.bytes().fold(0i64, |x, b| (x * 10 + (b - b'0') as i64).min(1_000_000));
+            if neg { -x } else { x }
+        }
+    };
+    let (ip, fp) = mant.split_once('.').unwrap_or((mant, ""));
+    if (ip.is_empty() && fp.is_empty()) || !ip.bytes().chain(fp.bytes()).all(|b| b.is_ascii_digit()) { return None; }
+    let mut ds: Vec<u8> = ip.bytes().chain(fp.bytes()).map(|b| b - b'0').collect();
+    // ds[..point] is the whole part of the number
+    let mut point = ip.len() as i64 + exp;
+    let lead = ds.iter().take_while(|&&d| d == 0).count();
+    ds.drain(..lead);
+    point -= lead as i64;
+    let zero = |changed: bool| Count { typed: typed.to_string(), text: "0".to_string(), value: 0.0, units: Some(0), dec: 0, changed };
+    if ds.is_empty() { return Some(zero(false)); }
+    // ds[..keep] are the digits kept: the whole part and six decimals (a finite double keeps this below ~320)
+    let keep = point + 6;
+    if keep > 400 { return None; }
+    let (mut kept, rest): (Vec<u8>, Vec<u8>) = if keep <= 0 {
+        (Vec::new(), ds.clone())
+    } else if keep as usize >= ds.len() {
+        let mut k = ds.clone();
+        k.resize(keep as usize, 0);
+        (k, Vec::new())
+    } else {
+        (ds[..keep as usize].to_vec(), ds[keep as usize..].to_vec())
+    };
+    let changed = rest.iter().any(|&d| d != 0);
+    // the seventh decimal decides; below 1e-7 it is a zero in front of the typed digits
+    let up = keep >= 0 && rest.first().is_some_and(|&d| d >= 5);
+    if up {
+        let mut i = kept.len();
+        loop {
+            if i == 0 { kept.insert(0, 1); break; }
+            i -= 1;
+            if kept[i] == 9 { kept[i] = 0; } else { kept[i] += 1; break; }
+        }
+    }
+    let lead = kept.iter().take_while(|&&d| d == 0).count();
+    kept.drain(..lead);
+    if kept.is_empty() { return Some(zero(changed)); }
+    while kept.len() < 7 { kept.insert(0, 0); }
+    let digits: String = kept.iter().map(|d| char::from(b'0' + d)).collect();
+    let (whole, frac) = digits.split_at(digits.len() - 6);
+    let whole = whole.trim_start_matches('0');
+    let whole = if whole.is_empty() { "0" } else { whole };
+    let frac = frac.trim_end_matches('0');
+    let text = if frac.is_empty() { whole.to_string() } else { format!("{whole}.{frac}") };
+    let value = text.parse::<f64>().ok().filter(|v| v.is_finite())?;
+    let units = if whole.len() + frac.len() <= 37 { format!("{whole}{frac}").parse::<i128>().ok() } else { None };
+    Some(Count { typed: typed.to_string(), text, value, units, dec: frac.len() as i64, changed })
+}
+
+/// The observed counts, each rounded once to six decimals, ignoring anything that is not a non-negative number.
+fn counts(s: &str) -> Vec<Count> {
+    split_list(s)
+        .iter()
+        .filter_map(|t| {
+            let v = t.parse::<f64>().ok().filter(|v| v.is_finite() && *v >= 0.0)?;
+            exact_six(t).or_else(|| exact_six(&format!("{v}")).map(|c| Count { typed: t.clone(), ..c }))
+        })
+        .collect()
+}
+
+/// The digits a count needs to print in full at its own decimals; a double carries 15.
+fn fits_a_double(c: &Count) -> bool { c.units.is_some_and(|u| u < 1_000_000_000_000_000) }
+
 /// One row of the table.
 #[derive(Clone, Debug)]
 pub struct Row {
@@ -91,7 +186,8 @@ fn clamp_alpha(v: f64) -> f64 { if v.is_finite() { v.clamp(0.01, 0.10) } else { 
 /// The whole test, computed from the typed text.
 pub fn fit(p: &Params) -> Fit {
     let alpha = clamp_alpha(p.f("alpha"));
-    let obs = numbers(p.s("obs"));
+    // (round 11 blocker) the counts as printed: rounded once to six decimals, so "0.0000004" is a count of 0 here too
+    let obs: Vec<f64> = counts(p.s("obs")).iter().map(|c| c.value).collect();
     let ratio = numbers(p.s("ratio"));
     let names = split_list(p.s("names"));
     let k = obs.len().min(MAX_CATS).min(ratio.len());
@@ -139,7 +235,8 @@ pub fn fit(p: &Params) -> Fit {
 
 pub fn warnings(p: &Params) -> Vec<String> {
     let mut out = Vec::new();
-    let obs = numbers(p.s("obs"));
+    let cnts = counts(p.s("obs"));
+    let obs: Vec<f64> = cnts.iter().map(|c| c.value).collect();
     let ratio = numbers(p.s("ratio"));
     // tokens that are not numbers are dropped silently by the parser; say so, or "100, x, 50" quietly becomes a
     // two-category test on 100 and 50
@@ -151,18 +248,13 @@ pub fn warnings(p: &Params) -> Vec<String> {
         }
     }
     // (round 10 minor) a count with more than six decimals is rounded to six on the page ("0.0000001" prints as 0):
-    // say so, rather than change what was typed without a word
-    let fine: Vec<String> = split_list(p.s("obs"))
-        .iter()
-        .map(|t| t.trim().to_string())
-        .filter(|t| t.parse::<f64>().map(|v| v.is_finite() && v >= 0.0 && beyond_six(v)).unwrap_or(false))
-        .collect();
+    // say so, rather than change what was typed without a word. (round 11) Exactly when the typed digits change, at
+    // any size ("1e-14", "929059410.6733431"), and naming what the test uses instead, because that is what it uses.
+    let fine: Vec<String> = cnts.iter().filter(|c| c.changed).map(|c| format!("\u{201c}{}\u{201d}", c.typed)).collect();
     if !fine.is_empty() {
-        out.push(format!(
-            "Counts are used to six decimals, so {} {} rounded.",
-            fine.iter().map(|b| format!("\u{201c}{b}\u{201d}")).collect::<Vec<_>>().join(", "),
-            if fine.len() == 1 { "is" } else { "are" }
-        ));
+        let used: Vec<String> = cnts.iter().filter(|c| c.changed).map(|c| group(&c.text)).collect();
+        let pairs: Vec<String> = fine.iter().zip(&used).enumerate().map(|(i, (f, u))| if i == 0 { format!("{f} is used as {u}") } else { format!("{f} as {u}") }).collect();
+        out.push(format!("Counts are used to six decimals, so {}.", pairs.join(", ")));
     }
     if obs.is_empty() {
         out.push("There are no observed counts to test.".to_string());
@@ -171,7 +263,9 @@ pub fn warnings(p: &Params) -> Vec<String> {
     // test and no statistic to compute. Without this the editor said nothing and the page reported "p = 1.00 … do not
     // reject" on a 0/0.
     if !obs.is_empty() && obs.iter().all(|v| *v == 0.0) {
-        out.push("Every observed count is zero, so there is nothing to test and the statistic cannot be computed.".to_string());
+        // (round 11 blocker) a count that rounds to 0 at six decimals is a zero count
+        let at_six = if cnts.iter().any(|c| c.changed) { " at six decimals" } else { "" };
+        out.push(format!("Every observed count is zero{at_six}, so there is nothing to test and the statistic cannot be computed."));
     }
     if ratio.is_empty() {
         out.push("There is no expected ratio to test them against.".to_string());
@@ -205,23 +299,6 @@ fn text_el(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) -> Stri
         r##"<text x="{x:.2}" y="{y:.2}" font-size="{size}" text-anchor="{anchor}" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{fill}">{}</text>"##,
         svg::esc(s)
     )
-}
-
-/// The decimals a typed count carries (5.5 → 1, 10.25 → 2, 315 → 0), at most six.
-fn own_decimals(v: f64) -> i64 {
-    if !v.is_finite() { return 0; }
-    for k in 0..=6i64 {
-        let x = v * 10f64.powi(k as i32);
-        if (x.round() - x).abs() <= (x.abs() * 4e-16).max(1e-7) { return k; }
-    }
-    6
-}
-
-/// Whether a count carries more than the six decimals `own_decimals` keeps.
-fn beyond_six(v: f64) -> bool {
-    if !v.is_finite() { return false; }
-    let x = v * 1e6;
-    (x.round() - x).abs() > (x.abs() * 4e-16).max(1e-7)
 }
 
 /// A number that never rounds a real value to "0" — a contribution of 0.0004 is real and belongs on the page.
@@ -335,16 +412,21 @@ pub fn build(p: &Params) -> String {
     // and exactly representable; past that the whole column (cells and total) follows one rule: plain below 1e7,
     // scientific from 1e7.
     let total_obs: f64 = f.rows.iter().map(|r| r.observed).sum();
-    let obs_dec: Vec<i64> = f.rows.iter().map(|r| own_decimals(r.observed)).collect();
+    // (round 11) the same rounded counts the fit used, with their exact digits
+    let cnts: Vec<Count> = counts(p.s("obs")).into_iter().take(f.rows.len()).collect();
+    let obs_dec: Vec<i64> = cnts.iter().map(|c| c.dec).collect();
     let col_dec = obs_dec.iter().copied().max().unwrap_or(0);
     // (round 10 minor) The column used to be plain only while every count scaled to the COLUMN's decimals stayed under
     // 9e15, so "1000000000000, 0.123456" (1e18 units at six decimals) went "1.00e12" and "0.12". Each count is exact in
     // integer units at its OWN decimals (under 2^53), and is raised to the column's decimals in i128, where the sum of
     // any number of counts below 1e15 at six decimals fits; so the column is plain whenever each count is below 1e15
     // and exact at its own decimals, and the total is still the exact sum of the printed cells.
-    let own_units: Vec<i128> = f.rows.iter().zip(&obs_dec).map(|(r, &d)| (r.observed * 10f64.powi(d as i32)).round() as i128).collect();
-    let col_units: Vec<i128> = own_units.iter().zip(&obs_dec).map(|(u, &d)| u * 10i128.pow((col_dec - d) as u32)).collect();
-    let obs_full = f.rows.iter().zip(&obs_dec).all(|(r, &d)| r.observed.is_finite() && r.observed.abs() < 1e15 && (r.observed * 10f64.powi(d as i32)).abs() < 9.0e15);
+    // (round 11 minor 1) ...and a count prints in full only while that takes at most 15 digits, all a double carries:
+    // "15410925012.328436" printed "15,410,925,012.32844", dropping a typed digit. A column with such a count follows
+    // the rule for huge counts (scientific from 1e7, as before round 10).
+    let own_units: Vec<i128> = cnts.iter().map(|c| c.units.unwrap_or(0)).collect();
+    let obs_full = cnts.iter().all(fits_a_double);
+    let col_units: Vec<i128> = if obs_full { own_units.iter().zip(&obs_dec).map(|(u, &d)| u * 10i128.pow((col_dec - d) as u32)).collect() } else { Vec::new() };
     let units_text = |u: i128, d: i64| -> String {
         let neg = u < 0;
         let u = u.abs();
@@ -360,7 +442,8 @@ pub fn build(p: &Params) -> String {
     let obs_text: Vec<String> = if obs_full {
         own_units.iter().zip(&obs_dec).map(|(&u, &d)| units_text(u, d)).collect()
     } else {
-        f.rows.iter().map(|r| fmt_cnt(r.observed)).collect()
+        // (round 11 minor 2) a small count beside a huge one still prints as it is used ("0.000001" printed "0")
+        cnts.iter().map(|c| match c.units { Some(u) if fits_a_double(c) && !big(c.value) => units_text(u, c.dec), _ => fmt_cnt(c.value) }).collect()
     };
     let total_text_obs = if obs_full {
         units_text(col_units.iter().sum(), col_dec)
@@ -373,7 +456,12 @@ pub fn build(p: &Params) -> String {
     // (round 10, accepted) The Expected cells need not add up to the Expected total at the printed decimals ("10.3"
     // three times beside 31): the total IS the observed total by construction (E sums to O), and each cell is the
     // true expected count rounded for display. Forcing the cells to sum would print an expected count that is wrong.
-    let fmt_exp = |v: f64| if !v.is_finite() { sci(v) } else if obs_full { group(&col(v, dec)) } else if big(v) { sci(v) } else { group(&col(v, dec)) };
+    // (round 11 minor 1) ...but only while every expected cell prints in at most 15 digits: past that a double cannot
+    // carry the last printed digit ("500,000,000,500,000.25" for an exact …500,000.2643), and the column follows the
+    // rule for huge values, scientific from 1e7
+    let digits = |s: &str| s.chars().filter(|c| c.is_ascii_digit()).skip_while(|c| *c == '0').count();
+    let exp_full = obs_full && f.rows.iter().all(|r| !r.expected.is_finite() || { let t = col(r.expected, dec); t.contains('e') || digits(&t) <= 15 });
+    let fmt_exp = |v: f64| if !v.is_finite() { sci(v) } else if exp_full { group(&col(v, dec)) } else if big(v) { sci(v) } else { group(&col(v, dec)) };
     let exp_text: Vec<String> = f.rows.iter().map(|r| fmt_exp(r.expected)).collect();
     // the canvas widens when a column's widest printed number would not fit between it and the column on its left
     // (a 15-digit expected count with its decimals is 22 characters)
@@ -1082,7 +1170,9 @@ mod tests {
                     let tv: f64 = typed.parse().unwrap();
                     if (c.replace(',', "").parse::<f64>().unwrap() - tv).abs() > tv.abs() * 1e-15 + 1e-9 { bad.push(format!("{ctx}: {typed} printed as {c:?}")); }
                 }
-                if ec.iter().any(|c| c.contains('e') && !c.contains("e\u{2212}")) { bad.push(format!("{ctx}: a plain column's expected cells go scientific: {ec:?}")); }
+                // (round 11) an expected cell may be scientific in a plain column only when printing it in full at the
+                // two decimals would need more than the 15 digits a double carries (at or above 1e13)
+                if ec.iter().any(|c| c.contains('e') && !c.contains("e\u{2212}") && c.replace(',', "").parse::<f64>().map_or(true, |v| v < 1e13)) { bad.push(format!("{ctx}: a plain column's expected cells go scientific: {ec:?}")); }
             }
             // nothing on the Total row or in the table runs into its neighbour or off the canvas
             let bs = boxes(&svg);
@@ -1151,6 +1241,261 @@ mod tests {
             let w = warnings(&with(&[s("obs", obs), s("ratio", "1, 1")]));
             assert!(!w.iter().any(|x| x.contains("six decimals")), "{obs}: {w:?}");
         }
+    }
+
+    #[test]
+    fn counts_that_round_to_zero_are_no_observations() {
+        // (round 11 blocker) "0.0000004, 0.0000004" printed Observed 0.000000 twice, "out of 0.000000 observations" and
+        // Expected 4.00e−7 beside an Expected total of 0.000000, then p = 1.00 "do not reject"; "1e-14, 1e-14" the same
+        // with no note at all. The counts are used at six decimals, so these are zero counts and the test is refused.
+        for obs in ["0.0000004, 0.0000004", "1e-14, 1e-14", "0.00000000000001, 0.0000001", "4e-7, 0"] {
+            for ans in [true, false] {
+                let list = [s("obs", obs), s("ratio", "1, 1"), b(SHOW_ANSWERS, ans)];
+                let p = with(&list);
+                let f = fit(&p);
+                assert!(f.p.is_none(), "{obs}: a p-value on counts that are all 0 at six decimals: {:?}", f.p);
+                assert!(f.rows.iter().all(|r| r.observed == 0.0 && r.expected == 0.0), "{obs}: {:?}", f.rows);
+                let w = warnings(&p);
+                assert!(w.iter().any(|x| x.contains("Every observed count is zero")), "{obs}: {w:?}");
+                assert!(w.iter().any(|x| x.contains("six decimals") && x.contains("used as 0")), "{obs}: {w:?}");
+                let t = texts(&render_of(&list));
+                assert!(!t.contains("p = 1.00") && !t.contains("consistent with the ratio"), "{obs}: a pass on no observations: {t}");
+                assert!(!t.lines().any(|l| l.contains("e\u{2212}")), "{obs}: an unrounded count leaked: {t}");
+                assert!(t.contains("out of 0 observations"), "{obs}: {t}");
+                assert!(!t.contains("0.000000"), "{obs}: {t}");
+                if ans {
+                    assert!(t.contains("no observations to test") && t.contains("cannot be run"), "{obs}: {t}");
+                }
+            }
+        }
+        // the rounding is exact at the half: 0.0000005 is a count of 0.000001 and the test runs on it
+        let p = with(&[s("obs", "0.0000005, 0.0000015"), s("ratio", "1, 1")]);
+        let f = fit(&p);
+        assert_eq!(f.rows.iter().map(|r| r.observed).collect::<Vec<_>>(), vec![0.000001, 0.000002]);
+        assert!(f.p.is_some());
+    }
+
+    #[test]
+    fn the_six_decimal_note_names_every_count_that_changes_and_what_it_becomes() {
+        // (round 11 minors 2 and blocker B) the note missed 1e-14 (below the absolute tolerance) and 929059410.6733431
+        // (inside the relative one); it now fires exactly when the typed number differs from its six-decimal rounding
+        for (obs, typed, used) in [
+            ("1e-14, 5", "1e-14", "0"),
+            ("0.00000000000001, 5", "0.00000000000001", "0"),
+            ("0.0000004, 0.0000004", "0.0000004", "0"),
+            ("929059410.6733431, 45700113.464", "929059410.6733431", "929,059,410.673343"),
+            ("1.123456789, 2", "1.123456789", "1.123457"),
+            ("0.0000001, 5", "0.0000001", "0"),
+            ("2.9999996, 1", "2.9999996", "3"),
+            ("12345678901234.5000001, 1", "12345678901234.5000001", "12,345,678,901,234.5"),
+            ("1e3, 2.5e-6", "2.5e-6", "0.000003"),
+        ] {
+            let w = warnings(&with(&[s("obs", obs), s("ratio", "1, 1")]));
+            let note = w.iter().find(|x| x.contains("six decimals")).unwrap_or_else(|| panic!("{obs}: no note: {w:?}"));
+            assert!(note.contains(&format!("\u{201c}{typed}\u{201d} is used as {used}")), "{obs}: {note}");
+        }
+        for obs in ["0.123456, 5", "315, 101", "1000000000000, 0.000001", "100.10000000, 3", "99999999999999.25, 0.000001, 7", "1e3, 2.5e-5"] {
+            let w = warnings(&with(&[s("obs", obs), s("ratio", "1, 1")]));
+            assert!(!w.iter().any(|x| x.contains("six decimals")), "{obs}: {w:?}");
+        }
+    }
+
+    #[test]
+    fn a_cell_that_needs_more_than_fifteen_digits_is_scientific_not_silently_cut() {
+        // (round 11 minor 1) "15410925012.328436" (17 digits) printed "15,410,925,012.32844", and the expected half of
+        // 1,000,000,001,000,000.5286 printed "…500,000.25" where the exact value is …500,000.2643: a double carries at
+        // most 15 digits, so a cell that needs more is written in scientific notation, as before round 10
+        let sci = |c: &str| c.contains('e');
+        let svg = render_of(&[s("obs", "15410925012.328436, 556248838103.0769"), s("ratio", "4, 9"), ("dec", Value::I(2)), b(SHOW_ANSWERS, true)]);
+        let (oc, ot, ec, et, giv, _) = columns(&svg);
+        assert_eq!(oc, vec!["1.54e10", "5.56e11"], "{oc:?}");
+        assert_eq!(ot, "5.72e11");
+        assert_eq!(et, ot);
+        assert!(giv.contains("out of 5.72e11 observations"), "{giv}");
+        assert!(ec.iter().all(|c| sci(c)), "{ec:?}");
+        let t = texts(&svg);
+        assert!(!t.contains("15,410,925,012.32844") && !t.contains("571,659,763,115.40544"), "{t}");
+
+        let svg = render_of(&[s("obs", "999999999999999, 1000001.5286"), s("ratio", "1, 1"), b(SHOW_ANSWERS, true)]);
+        let (oc, ot, ec, et, _, _) = columns(&svg);
+        assert_eq!(oc, vec!["999,999,999,999,999", "1,000,001.5286"]);
+        assert_eq!(ot, "1,000,000,001,000,000.5286");
+        assert_eq!(et, ot);
+        assert_eq!(ec, vec!["5.00e14", "5.00e14"], "the expected cells need 17 digits: {ec:?}");
+        let t = texts(&svg);
+        assert!(!t.contains("500,000,000,500,000.25"), "{t}");
+        for (ratio, want) in [("9, 3, 3, 1", vec!["5.63e14", "1.88e14", "1.88e14", "6.25e13"])] {
+            let svg = render_of(&[s("obs", "999999999999999, 1000001.5286, 0, 0"), s("ratio", ratio), b(SHOW_ANSWERS, true)]);
+            let (_, _, ec, _, _, _) = columns(&svg);
+            assert_eq!(ec, want, "{ratio}");
+        }
+        // (round 11 minor 2) "99999999999999.25" needs 16 digits, so its column is scientific; the 0.000001 beside it is
+        // a count used as typed (no note) and prints as one, not "0"
+        let list = [s("obs", "99999999999999.25, 0.000001, 7"), s("ratio", "1, 2, 3"), ("dec", Value::I(3)), s("label_size", "Large"), s("style", "Print"), b(SHOW_ANSWERS, true)];
+        let (oc, ot, _, et, giv, _) = columns(&render_of(&list));
+        assert_eq!(oc, vec!["1.00e14", "0.000001", "7"], "{oc:?}");
+        assert_eq!(ot, "1.00e14");
+        assert_eq!(et, ot);
+        assert!(giv.contains("out of 1.00e14 observations"), "{giv}");
+        assert!(!warnings(&with(&list)).iter().any(|x| x.contains("six decimals")));
+        // a 15-digit cell is still plain and exact, and its 15-digit neighbours too
+        let (oc, ot, ec, _, _, _) = columns(&render_of(&[s("obs", "123456789.123456, 1.5"), s("ratio", "1, 1"), b(SHOW_ANSWERS, true)]));
+        assert_eq!(oc, vec!["123,456,789.123456", "1.5"]);
+        assert_eq!(ot, "123,456,790.623456");
+        assert_eq!(ec, vec!["61,728,395.31", "61,728,395.31"]);
+    }
+
+    /// A typed count as an exact decimal (numerator, decimals), for the checks below; an independent parser.
+    fn exact_dec(t: &str) -> (i128, u32) {
+        let (m, e) = match t.split_once(['e', 'E']) { Some((m, e)) => (m, e.parse::<i32>().unwrap()), None => (t, 0) };
+        let (i, f) = m.split_once('.').unwrap_or((m, ""));
+        let mut num: i128 = format!("{i}{f}").parse().unwrap();
+        let mut scale = f.len() as i32 - e;
+        while scale < 0 { num *= 10; scale += 1; }
+        (num, scale as u32)
+    }
+
+    /// The typed count rounded (half up) to six decimals, in millionths, and whether that changed it.
+    fn six_units(t: &str) -> (i128, bool) {
+        let (num, scale) = exact_dec(t);
+        if scale <= 6 { return (num * 10i128.pow(6 - scale), false); }
+        let p = 10i128.pow(scale - 6);
+        let (q, r) = (num / p, num % p);
+        (if 2 * r >= p { q + 1 } else { q }, r != 0)
+    }
+
+    /// A printed number: plain (grouped, any decimals) or "1.23e−7". (value, half a unit of its last printed digit)
+    fn printed(c: &str) -> (f64, f64) {
+        let c = c.replace(',', "").replace('\u{2212}', "-");
+        match c.split_once('e') {
+            Some((m, e)) => {
+                let d = m.split_once('.').map_or(0, |(_, f)| f.len()) as i32;
+                (c.parse().unwrap(), 0.5 * 10f64.powi(e.parse::<i32>().unwrap() - d))
+            }
+            None => (c.parse().unwrap(), 0.5 * 10f64.powi(-(c.split_once('.').map_or(0, |(_, f)| f.len()) as i32))),
+        }
+    }
+
+    fn sig_digits(c: &str) -> usize { c.chars().filter(|c| c.is_ascii_digit()).skip_while(|c| *c == '0').count() }
+
+    #[test]
+    fn every_printed_number_derives_from_the_counts_at_six_decimals() {
+        // (round 11 blocker) the page printed counts at six decimals but computed the expected counts, the statistic and
+        // the decision from the raw typed values. Each count is now rounded once, and everything printed is checked here
+        // against exact arithmetic on those rounded counts, over counts with 0-9+ decimals from 1e-14 to 1e16.
+        let mut rng = crate::figures::biology::Rng::new(1111);
+        let digit = |rng: &mut crate::figures::biology::Rng| char::from(b'0' + rng.below(10) as u8);
+        let mut bad: Vec<String> = Vec::new();
+        let mut kinds = [0usize; 4]; // refused, plain column, scientific column, a count changed by the rounding
+        for case in 0..700 {
+            let k = 2 + rng.below(4);
+            let tiny_case = rng.below(10) == 0;
+            let toks: Vec<String> = (0..k).map(|_| {
+                let e = if tiny_case { -14 + rng.below(8) as i32 } else { rng.below(31) as i32 - 14 };
+                match rng.below(8) {
+                    0 => format!("{}e{}", 1 + rng.below(9), e),
+                    1 => format!("{}.{}e{}", 1 + rng.below(9), rng.below(100), e - 1),
+                    2 => ["0.0000005", "0.0000004999", "2.5000005", "0", "7", "0.000001", "999999999999999"][rng.below(7)].to_string(),
+                    _ => {
+                        let dd = rng.below(10);
+                        if e >= 0 {
+                            let mut s: String = std::iter::once(char::from(b'1' + rng.below(9) as u8)).chain((0..e).map(|_| digit(&mut rng))).collect();
+                            if dd > 0 { s.push('.'); for _ in 0..dd { s.push(digit(&mut rng)); } }
+                            s
+                        } else {
+                            let lead = (-e - 1) as usize;
+                            let more = dd.saturating_sub(lead + 1);
+                            format!("0.{}{}{}", "0".repeat(lead), char::from(b'1' + rng.below(9) as u8), (0..more).map(|_| digit(&mut rng)).collect::<String>())
+                        }
+                    }
+                }
+            }).collect();
+            let ratio: Vec<i128> = (0..k).map(|_| 1 + rng.below(9) as i128).collect();
+            let dec = 1 + rng.below(3) as i64;
+            let obs = toks.join(", ");
+            let list = [s("obs", &obs), s("ratio", &ratio.iter().map(|r| r.to_string()).collect::<Vec<_>>().join(", ")), ("dec", Value::I(dec)), s("label_size", ["Small", "Medium", "Large"][case % 3]), b(SHOW_ANSWERS, true)];
+            let ctx = format!("{obs} : {ratio:?} dec {dec}");
+            let units: Vec<(i128, bool)> = toks.iter().map(|t| six_units(t)).collect();
+            let n: i128 = units.iter().map(|u| u.0).sum();
+            let rt: i128 = ratio.iter().sum();
+            let changed = units.iter().any(|u| u.1);
+            if changed { kinds[3] += 1; }
+            let w = warnings(&with(&list));
+            if changed != w.iter().any(|x| x.contains("six decimals")) { bad.push(format!("{ctx}: the six-decimal note is {:?} but a count changed: {changed}", w)); }
+            let svg = render_of(&list);
+            let t = texts(&svg);
+            let (oc, ot, ec, et, giv, _) = columns(&svg);
+            if et != ot { bad.push(format!("{ctx}: Expected total {et:?} vs Observed total {ot:?}")); }
+            if !giv.contains(&format!("out of {ot} observations")) { bad.push(format!("{ctx}: givens {giv:?} vs total {ot:?}")); }
+            // the observed cells: exactly the rounded count when plain; scientific only in a column that holds a count
+            // needing more than 15 digits, and then only from 1e7
+            // the digits a count needs at its own decimals (trailing zero decimals dropped)
+            let own = |u6: i128| { let mut x = u6; let mut k = 0; while k < 6 && x != 0 && x % 10 == 0 { x /= 10; k += 1; } x };
+            let col_plain = units.iter().all(|u| own(u.0) < 10i128.pow(15));
+            for (c, u) in oc.iter().zip(&units) {
+                let v = u.0 as f64 / 1e6;
+                if c.contains('e') {
+                    if col_plain || v < 1e7 { bad.push(format!("{ctx}: {c:?} is scientific in a column that can print in full")); }
+                    let (p, half) = printed(c);
+                    if (p - v).abs() > half * (1.0 + 1e-9) { bad.push(format!("{ctx}: {c:?} is not {v}")); }
+                } else if units_at(c, 6) != Some(u.0) {
+                    bad.push(format!("{ctx}: the count {} (at six decimals) prints as {c:?}", u.0));
+                }
+            }
+            if col_plain {
+                kinds[1] += 1;
+                if units_at(&ot, 6) != Some(n) { bad.push(format!("{ctx}: the total {ot:?} is not the sum {n} of the rounded counts")); }
+            } else {
+                kinds[2] += 1;
+                let (p, half) = printed(&ot);
+                if !ot.contains('e') || (p - n as f64 / 1e6).abs() > half * (1.0 + 1e-9) { bad.push(format!("{ctx}: the total {ot:?} is not {n}e-6")); }
+            }
+            if n == 0 {
+                kinds[0] += 1;
+                if fit(&with(&list)).p.is_some() || !t.contains("cannot be run") || !t.contains("no observations to test") || t.contains("p = ") && !t.contains("p = \u{2014}") {
+                    bad.push(format!("{ctx}: a test ran on no observations: {t}"));
+                }
+                if !w.iter().any(|x| x.contains("Every observed count is zero")) { bad.push(format!("{ctx}: no zero-count refusal: {w:?}")); }
+                continue;
+            }
+            // the expected cells: N·r/R from the rounded total, within half a unit of the last printed digit; plain only
+            // while that takes at most 15 digits
+            let mut chi2 = 0.0;
+            for (i, c) in ec.iter().enumerate() {
+                let e = (n * ratio[i]) as f64 / (rt as f64 * 1e6);
+                let (p, half) = printed(c);
+                if (p - e).abs() > half * (1.0 + 1e-9) + e.abs() * 2e-15 { bad.push(format!("{ctx}: expected {c:?} is not {e}")); }
+                if !c.contains('e') && sig_digits(c) > 15 { bad.push(format!("{ctx}: expected {c:?} needs more digits than a double holds")); }
+                let o = units[i].0 as f64 / 1e6;
+                chi2 += (o - e) * (o - e) / e;
+            }
+            // the contributions, the statistic, df and p, from those same rounded counts
+            let bs = boxes(&svg);
+            let (tx, ty0) = bs.iter().find(|b| b.4.starts_with("(O")).map(|b| (b.0, b.1)).unwrap();
+            let terms: Vec<String> = bs.iter().filter(|b| (b.0 - tx).abs() < 0.01 && b.1 > ty0).map(|b| b.4.clone()).collect();
+            for (i, c) in terms.iter().take(k).enumerate() {
+                let e = (n * ratio[i]) as f64 / (rt as f64 * 1e6);
+                let o = units[i].0 as f64 / 1e6;
+                let want = (o - e) * (o - e) / e;
+                let (p, half) = printed(c);
+                if (p - want).abs() > half * (1.0 + 1e-6) + want.abs() * 1e-7 + 1e-12 { bad.push(format!("{ctx}: contribution {c:?} is not {want}")); }
+            }
+            let df = k - 1;
+            if !t.contains(&format!("df = {df}  ({k} categories counted")) { bad.push(format!("{ctx}: df is not {df}: {t}")); }
+            let pv = 1.0 - chisq_cdf(chi2, df as f64);
+            let pline = t.lines().find(|l| l.starts_with("p-value")).unwrap_or("").replace("&lt;", "<");
+            if let Some(v) = pline.strip_prefix("p-value  p = ") {
+                let (p, half) = printed(v);
+                if (p - pv).abs() > half * (1.0 + 1e-6) + 1e-9 + pv * 1e-6 { bad.push(format!("{ctx}: {pline:?} but the rounded counts give p = {pv}")); }
+            } else if pline == "p-value  p < 0.001" {
+                if pv >= 0.001 + 1e-9 { bad.push(format!("{ctx}: {pline:?} but p = {pv}")); }
+            } else {
+                bad.push(format!("{ctx}: no p-value: {pline:?}"));
+            }
+        }
+        assert!(bad.is_empty(), "{} problems, e.g.:\n{}", bad.len(), bad.iter().take(12).cloned().collect::<Vec<_>>().join("\n"));
+        // the sweep reaches every kind of page
+        assert!(kinds.iter().all(|&c| c >= 20), "{kinds:?}");
     }
 
     #[test]
