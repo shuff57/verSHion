@@ -705,3 +705,29 @@ Nit: `band()` no longer returns the departure margin, which no caller read. Reco
 canvas's bottom margin is 26.8 / 20 / 9.2 px at Small / Medium / Large (it was already 9.2 at Large before this round;
 only the top was fixed), and its last line does not mention the label size though the editor note does. The food web
 is converged. Census unchanged.
+
+Energy pyramid (2026-10-30): new figure `energy-pyramid` (`src/figures/biology/energypyramid.rs`, Biology). Typed levels,
+one `Name: value` per line, producers first, drawn as a centred stack of bars; in `Proportional` (the default) a bar's
+width is its energy, so the shape is honest, and `Equal steps` draws the conventional stepped pyramid (each bar 70 % of
+the one below) and says "Not to scale" on the picture and in its description. Each level is named to the left of its bar
+and valued with its unit (kcal, kJ or J per m² per year, or none) inside the bar, or, when the bar is too narrow to hold
+its own number, beside it on a short leader, so a sliver never clips its label; a bar under 3 px is solid black so it is
+still seen. The percent passed up from one level to the next is computed from the typed values, so it is an answer: drawn
+only under Show answers (`answers_param()`), with a rule and a "%" where it goes in a student copy, and absent from the
+description. Values print as typed, grouped in threes (`1.5e6` prints `1,500,000`; only below 0.001 or from 10^15 up
+is `1.5e21` used); the percent is three significant figures with no trailing zeros, rederived in a test from the two
+values as printed. Refusals, as a structured `Refusal { why, then }` on a 420 px canvas with a red header whose baseline
+scales with the label size, and each one also the editor's note (`warnings()` through `notes_for`; both come from one
+`read()`, so they cannot disagree): fewer than 2 or more than 6 levels, a line with no colon, two colons, no name or no
+value, a duplicate name (case-insensitive), a value that is not a number, has misplaced thousands commas, is not above
+zero or overflows, a level with more energy than the one below (energy cannot grow up a food chain: a decision the
+brief did not make), and, in Proportional only, a largest value more than 1,000 times the smallest (the top bar would be
+under half a pixel; Equal steps has no limit). Six examples, an FAQ arm, no handles. Tests (21): the parser and every
+refusal with its second line; the refusal canvas at three label sizes; the canvas and the note agree over 28 inputs at both scales and three label sizes;
+bar widths within 0.5 px of the typed values at 2 to 6 levels and ratios 1 to 1,000; a sweep of 1,920 renders (2 to 6
+levels, ratios 1 / 2 / 10 / 1,000, four name sets including 60-character, CJK and unbroken-W names, both scales, three
+label sizes, transfer on and off, key and student) asserting every text inside the canvas, no two texts overlapping, no
+text across a bar edge, every value printed; the sliver's label and leader; the student copy leaking none of the
+percents (rects, canvas size and values identical to the key); number round-trips; hostile input rendering to a valid
+image; no hue; a PNG export (`VERSHION_PNG_DIR`). Census: `energy-pyramid__defaults` and `energy-pyramid__start` added,
+nothing else moved. The food-web module's `wrap` and `text_el` became `pub(super)` to be shared. Awaiting its first critic.

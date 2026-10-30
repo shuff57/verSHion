@@ -253,14 +253,14 @@ pub fn warnings(p: &Params) -> Vec<String> {
     }
 }
 
-fn text_el(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) -> String {
+pub(super) fn text_el(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) -> String {
     format!(
         r##"<text x="{x:.2}" y="{y:.2}" font-size="{size}" text-anchor="{anchor}" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{fill}">{}</text>"##,
         svg::esc(s)
     )
 }
 
-fn wrap(s: &str, max: f64, size: f64) -> Vec<String> {
+pub(super) fn wrap(s: &str, max: f64, size: f64) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut cur = String::new();
     for word in s.split_whitespace() {

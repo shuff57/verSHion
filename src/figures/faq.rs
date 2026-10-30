@@ -34,6 +34,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "enzyme-kinetics" => ENZYME_KINETICS,
         "cladogram" => CLADOGRAM,
         "food-web" => FOOD_WEB,
+        "energy-pyramid" => ENERGY_PYRAMID,
         // chemistry
         "bohr-model" => BOHR_MODEL,
         "gas-syringe" => GAS_SYRINGE,
@@ -635,6 +636,29 @@ const FOOD_WEB: &[Faq] = &[
     Faq {
         q: "How many links can one picture hold?",
         a: "Up to 24 names; past that the figure asks for two pictures rather than drawing something unreadable.",
+    },
+];
+
+const ENERGY_PYRAMID: &[Faq] = &[
+    Faq {
+        q: "How do I type the levels?",
+        a: "One level per line as Name: value, with the producers first: they are the bottom bar and the later lines stack above them. Two to six levels. A value may have thousands commas (10,000) or an exponent (1.5e6, or 1.5 × 10^6), and the unit is set in its own control, not typed into the value. A line starting with # is a note and is not drawn.",
+    },
+    Faq {
+        q: "What does Proportional mean, and why is a value refused?",
+        a: "In Proportional the width of each bar is its energy, so the shape is honest and the top of a real food chain is a sliver. A bar cannot be drawn narrower than about half a pixel, so the largest value may be at most 1,000 times the smallest; past that the figure refuses and asks for Equal steps. A level with more energy than the one below it is refused too, because energy cannot grow up a food chain.",
+    },
+    Faq {
+        q: "When do I use Equal steps?",
+        a: "When the levels are too far apart to draw to scale, or you want the classroom triangle. Each bar is 70 % of the width of the one below it, whatever the energy, and the picture says Not to scale; read the energy from the numbers, not the widths.",
+    },
+    Faq {
+        q: "What is the percent between the bars?",
+        a: "The share of one level's energy that reaches the level above it: 100 out of 1,000 is 10 %, the 10 % rule. It is worked out from the typed values and is an answer, so it shows only when Show answers is on; a student copy has a blank to fill in. Turn off the switch for the percent to leave the picture.",
+    },
+    Faq {
+        q: "Why is a value beside its bar and not inside?",
+        a: "A bar too narrow to hold its own number gets the number beside it on a short leader line, so a small top level is never clipped. A bar thinner than 3 px is drawn solid black so you can still see it.",
     },
 ];
 
