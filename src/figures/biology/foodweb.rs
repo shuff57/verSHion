@@ -58,9 +58,24 @@ impl Web {
     pub fn is_empty(&self) -> bool { self.names.is_empty() }
 }
 
+/// Why a typed web was refused, and the line to show under the reason. The kind is known where the refusal is
+/// raised, so the second line never guesses from the message text (verification round 2: a name such as `mixes`
+/// made the sentence under a self-eat line talk about arrow directions).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Refusal {
+    pub why: String,
+    pub then: &'static str,
+}
+
+impl std::fmt::Display for Refusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str(&self.why) }
+}
+
+fn refuse(why: String, then: &'static str) -> Refusal { Refusal { why, then } }
+
 /// Reads the typed links. Blank lines and `#` notes are skipped; `->` and `→` point from prey to predator, `<-`
 /// the other way; a chain may be written on one line. Everything else is a name, spaces included.
-pub fn parse(text: &str) -> Result<Web, String> {
+pub fn parse(text: &str) -> Result<Web, Refusal> {
     let mut names: Vec<String> = Vec::new();
     let mut edges: Vec<(usize, usize)> = Vec::new();
     for (n, raw) in text.lines().enumerate() {
@@ -70,10 +85,10 @@ pub fn parse(text: &str) -> Result<Web, String> {
         let line = line.replace('→', "->").replace('←', "<-");
         let (fwd, back) = (line.matches("->").count(), line.matches("<-").count());
         if fwd > 0 && back > 0 {
-            return Err(format!("Line {at} mixes -> and <-; use one direction on a line."));
+            return Err(refuse(format!("Line {at} mixes -> and <-; use one direction on a line."), "Nothing is drawn until every line uses one direction."));
         }
         if fwd == 0 && back == 0 {
-            return Err(format!("Line {at} has no arrow: write Prey -> Predator."));
+            return Err(refuse(format!("Line {at} has no arrow: write Prey -> Predator."), "Nothing is drawn until every line is a link."));
         }
         let parts: Vec<String> = if fwd > 0 {
             line.split("->").map(tidy).collect()
@@ -83,16 +98,16 @@ pub fn parse(text: &str) -> Result<Web, String> {
             v
         };
         if parts.iter().any(String::is_empty) {
-            return Err(format!("Line {at} has an empty name: put a name on both sides of every arrow."));
+            return Err(refuse(format!("Line {at} has an empty name: put a name on both sides of every arrow."), "Nothing is drawn: an unnamed organism cannot be placed."));
         }
         if parts.len() == 1 {
-            return Err(format!("Line {at} has no arrow: write Prey -> Predator."));
+            return Err(refuse(format!("Line {at} has no arrow: write Prey -> Predator."), "Nothing is drawn until every line is a link."));
         }
         for pair in parts.windows(2) {
             let prey = index_of(&mut names, &pair[0], at)?;
             let predator = index_of(&mut names, &pair[1], at)?;
             if prey == predator {
-                return Err(format!("Line {at}: {} cannot eat itself.", pair[0]));
+                return Err(refuse(format!("Line {at}: {} cannot eat itself.", pair[0]), "Nothing is drawn until no name eats itself."));
             }
             if !edges.contains(&(prey, predator)) {
                 edges.push((prey, predator));
@@ -101,7 +116,7 @@ pub fn parse(text: &str) -> Result<Web, String> {
     }
     if let Some(cycle) = cycle(&names.len(), &edges) {
         let path = cycle.iter().map(|&i| names[i].as_str()).collect::<Vec<_>>().join(" -> ");
-        return Err(format!("A food web cannot run in a circle: {path}. Remove one of those links."));
+        return Err(refuse(format!("A food web cannot run in a circle: {path}. Remove one of those links."), "Nothing is drawn until the links form a one-way web."));
     }
     Ok(Web { names, edges })
 }
@@ -110,10 +125,10 @@ pub fn parse(text: &str) -> Result<Web, String> {
 /// organism as `Arctic fox`, while a double space can not make a second one.
 fn tidy(s: &str) -> String { s.split_whitespace().collect::<Vec<_>>().join(" ") }
 
-fn index_of(names: &mut Vec<String>, name: &str, line: usize) -> Result<usize, String> {
+fn index_of(names: &mut Vec<String>, name: &str, line: usize) -> Result<usize, Refusal> {
     if let Some(i) = names.iter().position(|n| n == name) { return Ok(i); }
     if names.len() >= MAX_NAMES {
-        return Err(format!("More than {MAX_NAMES} names (line {line}): split the web into two pictures."));
+        return Err(refuse(format!("More than {MAX_NAMES} names (line {line}): split the web into two pictures."), "Nothing is drawn: a web this large cannot be read."));
     }
     names.push(name.to_string());
     Ok(names.len() - 1)
@@ -245,17 +260,6 @@ fn wrap(s: &str, max: f64, size: f64) -> Vec<String> {
 
 fn plural(n: usize, one: &str, many: &str) -> String { if n == 1 { one.to_string() } else { many.to_string() } }
 
-/// The line under a refusal: what to do about the particular reason. One generic sentence is false for a web over
-/// the name cap (its links do form a one-way web) and misleading for mixed arrows (the verification critic, LOW-4).
-fn second_line(e: &str) -> &'static str {
-    if e.contains("run in a circle") { "Nothing is drawn until the links form a one-way web." }
-    else if e.starts_with("More than") { "Nothing is drawn: split the web into two pictures." }
-    else if e.contains("mixes") { "Nothing is drawn until every line uses one direction." }
-    else if e.contains("no arrow") { "Nothing is drawn until every line is a link." }
-    else if e.contains("empty name") { "Nothing is drawn until every name has letters." }
-    else { "Nothing is drawn until the web can be read." }
-}
-
 pub fn build(p: &Params) -> String {
     let lab = svg::label_factor(p.s("label_size"));
     let (ink, edge_col, hint_col) = (INK, EDGE, ERR);
@@ -281,10 +285,9 @@ pub fn build(p: &Params) -> String {
         Err(e) => {
             let reason = "The food web could not be read:";
             let max = min_w - 48.0;
-            let first = wrap(&e, max, 13.0 * lab);
-            // (critic minor 11) every line IS a link in a cycle: say what is actually missing — and for another
-            // refusal, say what is actually wrong with that one instead
-            let then = wrap(second_line(&e), max, 12.0 * lab);
+            let first = wrap(&e.why, max, 13.0 * lab);
+            // (verification round 2) the second line comes from the refusal itself, not from guessing at its text
+            let then = wrap(e.then, max, 12.0 * lab);
             let h = 34.0 + (first.len() as f64 + 1.0 + then.len() as f64) * 18.0 * lab + 20.0;
             let mut d = Doc::new(min_w, h);
             d.describe("Food web", "A food web from typed links");
@@ -368,6 +371,12 @@ pub fn build(p: &Params) -> String {
             let head = |d: &mut Doc, x: f64, y: f64| {
                 d.poly(&[(x, y), (x - normal_hl * 0.42, y + normal_hl), (x + normal_hl * 0.42, y + normal_hl)], edge_col, edge_col, 0.5);
             };
+            // (verification round 2, MED) two routed links from different prey at the same level ran their horizontal
+            // segments along one y and overlapped into a single bus, so the picture read as links that do not exist;
+            // each long link now gets its own run height inside the gap above its prey's row and below its predator's.
+            let clear = (LEVEL_GAP * lab - box_h).max(0.0);
+            let drop = (8.0 * lab).max(normal_hl + 2.0);
+            let step = ((clear - drop).max(0.0) / (long.len() as f64 + 1.0)).min(6.0 * lab);
             // the links first, then the boxes
             for (e, &(prey, predator)) in web.edges.iter().enumerate() {
                 let px = box_x[prey] + top_frac[e] * widths[prey];
@@ -382,8 +391,8 @@ pub fn build(p: &Params) -> String {
                     // row — never straight through an unrelated box, which would hide the shaft (the blocker)
                     let k = long.iter().position(|&x| x == e).unwrap_or(0);
                     let lane = left + content_w + 14.0 + k as f64 * 12.0 * lab + 6.0 * lab;
-                    let y0 = py - 8.0 * lab;
-                    let y1 = qy + (8.0 * lab).max(normal_hl + 2.0);
+                    let y0 = py - drop - k as f64 * step;
+                    let y1 = qy + drop + k as f64 * step;
                     d.polyline(&[(px, py), (px, y0), (lane, y0), (lane, y1), (qx, y1), (qx, qy)], edge_col, EDGE_W * lab);
                     head(&mut d, qx, qy);
                 }
@@ -479,10 +488,10 @@ mod tests {
             assert!(parse(bad).is_err(), "{bad:?} parsed");
         }
         let e = parse("A -> B\nB -> A").unwrap_err();
-        assert!(e.contains("circle") && e.contains("A -> B -> A"), "{e}");
-        assert!(parse("A -> B <- C").unwrap_err().contains("mixes"), "a line with both arrows is refused");
+        assert!(e.why.contains("circle") && e.why.contains("A -> B -> A"), "{e}");
+        assert!(parse("A -> B <- C").unwrap_err().why.contains("mixes"), "a line with both arrows is refused");
         let line = parse("Grass -> Rabbit\nnonsense").unwrap_err();
-        assert!(line.contains("Line 2") && line.contains("no arrow"), "{line}");
+        assert!(line.why.contains("Line 2") && line.why.contains("no arrow"), "{line}");
     }
 
     #[test]
@@ -650,15 +659,44 @@ mod tests {
 
     #[test]
     fn the_second_error_line_matches_the_refusal() {
-        // (verification critic, LOW-4) one generic sentence was false for the name cap and misleading for mixed arrows
+        // (verification round 2) one generic sentence was false for the name cap and misleading for mixed arrows
         let many = (1..=25).map(|i| format!("N{i} -> M{i}")).collect::<Vec<_>>().join("\n");
         let over = texts(&render_of(&[("links", Value::S(many))]));
-        assert!(over.contains("split the web into two pictures"), "{over}");
+        assert!(over.contains("cannot be read"), "{over}");
         assert!(!over.contains("one-way web"), "the 24-name cap is not a cycle: {over}");
         let cycle = texts(&render_of(&[s("links", "A -> B\nB -> A")]));
         assert!(cycle.contains("one-way web"), "{cycle}");
         let mixed = texts(&render_of(&[s("links", "A -> B <- C")]));
         assert!(mixed.contains("one direction"), "{mixed}");
+        let empty = texts(&render_of(&[s("links", "A ->")]));
+        assert!(empty.contains("unnamed organism cannot be placed"), "{empty}");
+    }
+
+    #[test]
+    fn a_name_that_looks_like_an_error_keeps_the_right_second_line() {
+        // (verification round 2, LOW) the sentence must come from the refusal kind, not from words in the name
+        let t = texts(&render_of(&[s("links", "mixes -> mixes")]));
+        assert!(t.contains("no name eats itself"), "{t}");
+        assert!(!t.contains("one direction"), "{t}");
+        let c = texts(&render_of(&[s("links", "run in a circle -> run in a circle")]));
+        assert!(!c.contains("one-way web"), "a self-eat is not a cycle: {c}");
+    }
+
+    #[test]
+    fn two_disjoint_routed_links_do_not_share_a_run() {
+        // (verification round 2, MED) both links ran their horizontal segments along one y and overlapped, so the
+        // picture read as {A1,A2}x{C1,C2}; each long link must get its own run height.
+        let svg = render_of(&[s("links", "A1 -> B1\nB1 -> C1\nA1 -> C1\nA2 -> B2\nB2 -> C2\nA2 -> C2")]);
+        let rs = routes(&svg);
+        assert_eq!(rs.len(), 2, "two links skip a level");
+        let mut y0s: Vec<i64> = rs.iter().map(|p| (p[1].1 * 100.0).round() as i64).collect();
+        let mut y1s: Vec<i64> = rs.iter().map(|p| (p[3].1 * 100.0).round() as i64).collect();
+        y0s.sort();
+        y0s.dedup();
+        y1s.sort();
+        y1s.dedup();
+        assert_eq!(y0s.len(), 2, "the departures run along one y: {y0s:?}");
+        assert_eq!(y1s.len(), 2, "the arrivals run along one y: {y1s:?}");
     }
 
     #[test]
@@ -708,6 +746,7 @@ mod tests {
             ("reversed".into(), vec![s("links", "Fox <- Rabbit <- Grass\nGrass -> Grasshopper")]),
             ("fanin".into(), vec![s("links", "Grass -> Prey1\nGrass -> Prey2\nGrass -> Prey3\nGrass -> Prey4\nGrass -> Prey5\nGrass -> Prey6\nGrass -> Prey7\nGrass -> Prey8\nPrey1 -> Apex\nPrey2 -> Apex\nPrey3 -> Apex\nPrey4 -> Apex\nPrey5 -> Apex\nPrey6 -> Apex\nPrey7 -> Apex\nPrey8 -> Apex")]),
             ("fanin-narrow".into(), vec![s("links", "Grass -> Prey1\nGrass -> Prey2\nGrass -> Prey3\nGrass -> Prey4\nGrass -> Prey5\nGrass -> Prey6\nGrass -> Prey7\nGrass -> Prey8\nPrey1 -> X\nPrey2 -> X\nPrey3 -> X\nPrey4 -> X\nPrey5 -> X\nPrey6 -> X\nPrey7 -> X\nPrey8 -> X")]),
+            ("two-omni".into(), vec![s("links", "A1 -> B1\nB1 -> C1\nA1 -> C1\nA2 -> B2\nB2 -> C2\nA2 -> C2")]),
             ("empty".into(), vec![s("links", "")]),
             ("cycle".into(), vec![s("links", "A -> B\nB -> A")]),
         ];

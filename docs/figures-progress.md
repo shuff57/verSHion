@@ -623,3 +623,15 @@ variable are gone. Two tests pin a narrow apex's heads apart and that the second
 export gained a `fanin-narrow` case and dropped the duplicate "print" outputs (the Style control is gone, so
 `style=Print` is an ignored key — old links still load). The valid render is asserted hue-free, so the figure prints
 as it stands. Census: only food-web's two hashes moved again.
+
+Food-web verification round 2 (2026-10-29): **PASS** — all seven round-2 claims held (the narrow apex's box widens
+29.36 → 76.48 px, heads are a uniform 9 px in straight and routed links, slots are symmetric and strictly inside,
+`wrap` never overflows its reserve, no warnings, census clean). One MED remained, pre-existing: two routed links from
+different prey on the same level pair ran their horizontal segments along one y and overlapped into a single bus, so
+a six-link picture with two separate pairs could read as all six relations. Round 3 fixes it: each routed link gets
+its own run height inside the inter-row gap (staggered by its lane) as well as its own lane. The three LOWs from the
+second line's text matching are gone at the root: `parse` now returns `Refusal { why, then }`, so the sentence under
+an error is the refusal's own and a name such as `mixes` can no longer change it. Tests pin disjoint routed runs
+apart and a self-eat named `mixes` / `run in a circle`. Census: only food-web's two hashes moved. (The worktree also
+held another session's uncommitted biology edits; their census hashes were left at the committed values and are not
+in this commit.)
