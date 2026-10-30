@@ -45,6 +45,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "line-spectrum" => LINE_SPECTRUM,
         "mass-reading" => MASS_READING,
         "mass-spectrum" => MASS_SPECTRUM,
+        "reaction-energy-diagram" => REACTION_ENERGY_DIAGRAM,
         "orbital-diagram" => ORBITAL_DIAGRAM,
         "particle-diagram" => PARTICLE_DIAGRAM,
         "ph-reading" => PH_READING,
@@ -3632,6 +3633,29 @@ const ENERGY_BAR_CHART: &[Faq] = &[
     Faq {
         q: "How do I make a worksheet?",
         a: "Turn Show answers off: the bars are not drawn and the three numbers become blanks, while the axes, the store names and the givens (mass, heights, loss share, g) stay, so the student works out the stores and draws the bars.",
+    },
+];
+
+const REACTION_ENERGY_DIAGRAM: &[Faq] = &[
+    Faq {
+        q: "What do the arrows measure?",
+        a: "Ea, the activation energy, runs from the reactants' level up to the peak: the energy the reactants must gain to reach the activated complex (transition state). \u{394}H runs from the reactants' level to the products' level. Ea (reverse) runs from the products up to the same peak, so it equals Ea \u{2212} \u{394}H.",
+    },
+    Faq {
+        q: "How do I tell exothermic from endothermic?",
+        a: "Compare the two ends. Products below the reactants means \u{394}H = E(products) \u{2212} E(reactants) is negative: energy is released and the reaction is exothermic. Products above the reactants means \u{394}H is positive and the reaction is endothermic. For an endothermic reaction the peak cannot be lower than the products, so Ea is at least \u{394}H; the figure raises a smaller Ea to \u{394}H and says so.",
+    },
+    Faq {
+        q: "What does the catalyst change?",
+        a: "A catalyst provides an alternative pathway with a lower activation energy, drawn as the dashed curve with the lower peak. It does not change the energy of the reactants or of the products, so \u{394}H is the same with and without it, and it lowers the forward and reverse Ea by the same amount.",
+    },
+    Faq {
+        q: "How is a two-step reaction drawn?",
+        a: "With two peaks, one transition state for each step, and a valley between them for the intermediate. Each step's Ea is measured from the level just before it: step 1 from the reactants, step 2 from the intermediate. The overall Ea runs from the reactants to the highest peak.",
+    },
+    Faq {
+        q: "What does the student copy leave out?",
+        a: "Show answers off keeps the curve, the axes and the energies printed at the axis, which are what a student works from, and replaces every computed value (\u{394}H, each Ea, how much the catalyst lowers Ea) and the words exothermic or endothermic with blank lines. The key prints the working, each number subtracted from the energies at the axis.",
     },
 ];
 

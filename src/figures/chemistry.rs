@@ -15,6 +15,7 @@ pub mod data;
 mod lewis;
 mod measure;
 pub mod notes;
+pub mod reactionenergy;
 pub mod spectra;
 
 pub const INK: &str = "#111";
@@ -190,6 +191,7 @@ pub fn skin_intro(id: &str) -> Option<&'static str> {
         "line-spectrum" => Some("Make printable line spectra for chemistry tests."),
         "photoelectron-spectrum" => Some("Make printable photoelectron spectra (PES) for AP Chemistry tests."),
         "mass-spectrum" => Some("Make printable mass spectra of elements for chemistry tests."),
+        "reaction-energy-diagram" => Some("Make printable reaction energy diagrams for chemistry tests."),
         "temperature-reading" => Some("Make printable thermometer figures for chemistry tests."),
         "ph-reading" => Some("Make printable pH meter figures for chemistry tests."),
         "punnett-square" => Some("Make printable Punnett squares for biology tests."),
@@ -329,6 +331,7 @@ pub fn examples(id: &str) -> Option<Vec<super::Example>> {
         .or_else(|| curves::examples(id))
         .or_else(|| lewis::examples(id))
         .or_else(|| measure::examples(id))
+        .or_else(|| reactionenergy::examples(id))
 }
 
 /// Handles are laid out in the figure's own coordinates; the chart-title band the wrapper adds
@@ -395,6 +398,7 @@ pub fn defs() -> Vec<FigureDef> {
     v.extend(atoms::defs());
     v.extend(lewis::defs());
     v.extend(spectra::defs());
+    v.extend(reactionenergy::defs());
     v
 }
 
@@ -620,7 +624,7 @@ mod tests {
     #[test]
     fn ids_unique_and_complete() {
         let ids: Vec<_> = defs().iter().map(|d| d.id).collect();
-        assert_eq!(ids.len(), 16);
+        assert_eq!(ids.len(), 17);
         for d in defs() {
             for p in (d.params)() {
                 match (&p.kind, &p.default) {
