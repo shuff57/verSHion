@@ -657,8 +657,12 @@ const ENERGY_PYRAMID: &[Faq] = &[
         a: "The share of one level's energy that reaches the level above it: 100 out of 1,000 is 10 %, the 10 % rule. It is worked out from the typed values and is an answer, so it shows only when Show answers is on; a student copy has a long blank to write it on. It is rounded to three significant figures, halves up (31.25 is 31.3), and two unequal bars never print 100 %: 99.96 is shown as 99.9. Turn off the switch for the arrows and the percents to leave the picture.",
     },
     Faq {
+        q: "Why does a copied value lose its exponent?",
+        a: "A value like 1 × 10^21 is drawn with a smaller, raised 21, which is not part of the text itself, so copying the drawn text from the picture gives 1 × 1021. The picture carries the number with its caret for screen readers, but a copy cannot; type the value from the levels box instead.",
+    },
+    Faq {
         q: "Why is a value beside its bar and not inside?",
-        a: "A bar too narrow to hold its own number gets the number beside it on a short leader line, so a small top level is never clipped. A bar thinner than 6 px is drawn solid black with a small cap at each end so it cannot be mistaken for a line; its width is still to scale. The arrows run in a column beside the pyramid for the same reason.",
+        a: "A bar too narrow to hold its own number gets the number beside it on a short leader line, so a small top level is never clipped. A bar thinner than 6 px is drawn solid black with a small cap at each end so it cannot be mistaken for a line; its width is still to scale, except that one under 1.5 px is drawn 1.5 px wide (the caption says when that happens) so it survives a grey print copy. The arrows run in a column beside the pyramid for the same reason.",
     },
 ];
 

@@ -26,6 +26,12 @@ const BAR_H: f64 = 36.0;
 const SLIVER: f64 = 6.0;
 /// Half the width of a sliver's end caps.
 const CAP: f64 = 3.5;
+/// The narrowest a bar is drawn: a thinner one is drawn this wide, solid black, so it survives a 66 % grey print copy at
+/// 1x (a 0.4 px black bar fades to light grey there). Wider bars are exactly to scale; the caption says when this
+/// happens (owner decision 2026-10-30).
+const MIN_DRAWN: f64 = 1.5;
+/// How far a sliver's name stands from its end caps, so a cap can never read as punctuation after the name.
+const SLIVER_NAME_GAP: f64 = 16.0;
 /// A raised exponent: its size and its lift, as fractions of the label's font size.
 const EXP_SIZE: f64 = 0.7;
 const EXP_RAISE: f64 = 0.42;
@@ -116,7 +122,7 @@ fn number(raw: &str, at: usize) -> Result<f64, Refusal> {
         }
     }
     let mut s = typed.replace('−', "-");
-    if s.contains("10^") {
+    if s.replace(char::is_whitespace, "").contains("10^") {
         s = s.replace(char::is_whitespace, "").replace("×10^", "e").replace("x10^", "e").replace("X10^", "e").replace("*10^", "e");
         if let Some(rest) = s.strip_prefix("10^") { s = format!("1e{rest}"); }
     }
@@ -138,6 +144,9 @@ fn number(raw: &str, at: usize) -> Result<f64, Refusal> {
     let Ok(v) = plain.parse::<f64>() else { return Err(bad()) };
     if v.is_infinite() { return Err(refuse(format!("Line {at}: \"{shown}\" is too large to draw."), THEN_LINE)); }
     if v.is_nan() { return Err(bad()); }
+    if v == 0.0 && plain.split(['e', 'E']).next().is_some_and(|m| m.chars().any(|c| ('1'..='9').contains(&c))) {
+        return Err(refuse(format!("Line {at}: \"{shown}\" is smaller than the figure can read (the least is about 5 × 10^-324)."), THEN_LINE));
+    }
     if v <= 0.0 { return Err(refuse(format!("Line {at}: \"{shown}\" is not above zero; every level has some energy."), THEN_LINE)); }
     // read to 15 significant digits, which every double holds exactly: 10000.000000000001 is 10,000, and what is
     // printed, drawn and divided for the percent is this one number
@@ -287,7 +296,9 @@ fn label_w(label: &str, size: f64) -> f64 {
 /// superscript glyphs.
 fn value_text(x: f64, y: f64, size: f64, anchor: &str, label: &str) -> String {
     let (head, exp, tail) = split_exp(label);
-    let mut out = format!(r##"<text x="{x:.2}" y="{y:.2}" font-size="{size}" text-anchor="{anchor}" font-family="{FONT}" fill="#000">{}"##, svg::esc(head));
+    // copying the drawn text loses the raised exponent (1 × 1021), so the plain number goes in an aria-label
+    let aria = if exp.is_empty() { String::new() } else { format!(r#" aria-label="{}""#, svg::esc(label)) };
+    let mut out = format!(r##"<text x="{x:.2}" y="{y:.2}" font-size="{size}" text-anchor="{anchor}" font-family="{FONT}" fill="#000"{aria}>{}"##, svg::esc(head));
     if !exp.is_empty() {
         out.push_str(&format!(r#"<tspan dy="{:.2}" font-size="{:.2}">{}</tspan>"#, -EXP_RAISE * size, EXP_SIZE * size, svg::esc(exp)));
         if !tail.is_empty() { out.push_str(&format!(r#"<tspan dy="{:.2}" font-size="{size}">{}</tspan>"#, EXP_RAISE * size, svg::esc(tail))); }
@@ -346,9 +357,12 @@ fn draw(p: &Params, py: &Pyramid, lab: f64) -> String {
     let show_pct = p.b("transfer");
     let key = p.b(SHOW_ANSWERS);
     let unit = unit_of(p.s("unit"));
-    let widths: Vec<f64> = (0..n)
+    let to_scale: Vec<f64> = (0..n)
         .map(|i| if proportional { BASE_W * py.values[i] / py.values[0] } else { BASE_W * STEP.powi(i as i32) })
         .collect();
+    let widths: Vec<f64> = to_scale.iter().map(|&bw| bw.max(MIN_DRAWN)).collect();
+    // the gap between a bar's centre line and the right end of its name
+    let name_off: Vec<f64> = widths.iter().map(|&bw| if bw < SLIVER { CAP + SLIVER_NAME_GAP } else { bw / 2.0 + 10.0 }).collect();
     let labels: Vec<String> = py.values.iter().map(|&v| if unit.is_empty() { fmt_num(v) } else { format!("{} {unit}", fmt_num(v)) }).collect();
     let name_lines: Vec<Vec<String>> = py.names.iter().map(|nm| wrap(nm, NAME_MAX * lab, fs)).collect();
     let name_w: Vec<f64> = name_lines.iter().map(|ls| ls.iter().map(|l| text_w(l, fs)).fold(0.0, f64::max)).collect();
@@ -357,7 +371,7 @@ fn draw(p: &Params, py: &Pyramid, lab: f64) -> String {
 
     // the horizontal extent around the axis (x = 0): names hug the left of their bars, outside values the right, and
     // the transfer arrows have a column of their own beyond everything, so an arrow is never mistaken for a thin bar
-    let left = (0..n).map(|i| -widths[i] / 2.0 - 10.0 - name_w[i]).fold(0.0, f64::min);
+    let left = (0..n).map(|i| -name_off[i] - name_w[i]).fold(0.0, f64::min);
     let content_right = (0..n).map(|i| if inside[i] { widths[i] / 2.0 } else { widths[i] / 2.0 + 12.0 + label_w(&labels[i], fs) }).fold(0.0, f64::max);
     let col = content_right + 24.0;
     let right = if show_pct { col + 10.0 + PCT_W * lab } else { content_right };
@@ -375,10 +389,12 @@ fn draw(p: &Params, py: &Pyramid, lab: f64) -> String {
     }
     let bottom = y + 14.0 * lab;
     let any_sliver = widths.iter().any(|&bw| bw < SLIVER);
+    let any_thin = to_scale.iter().any(|&bw| bw < MIN_DRAWN);
     let caption = format!(
         "{}{}{}",
         if proportional { "Bar widths are proportional to energy." } else { "Not to scale: the bars step in by a fixed ratio, so read the energy from the numbers, not the widths." },
-        if any_sliver { " A bar thinner than 6 px is drawn solid with end caps so it can be seen; its width is still to scale." } else { "" },
+        if any_thin { " A bar thinner than 6 px is drawn solid with end caps so it can be seen; its width is to scale, except that a bar under 1.5 px is drawn 1.5 px wide." }
+        else if any_sliver { " A bar thinner than 6 px is drawn solid with end caps so it can be seen; its width is still to scale." } else { "" },
         if show_pct { " Arrows show the share of the energy passed up to the next level." } else { "" },
     );
     let cap_lines = wrap(&caption, w - 2.0 * MARGIN, 12.0 * lab);
@@ -407,7 +423,7 @@ fn draw(p: &Params, py: &Pyramid, lab: f64) -> String {
         }
         for (k, l) in name_lines[i].iter().enumerate() {
             let ly = cy[i] - (name_lines[i].len() as f64 - 1.0) * LINE_H * lab / 2.0 + k as f64 * LINE_H * lab + fs * 0.35;
-            d.text(cx - bw / 2.0 - 10.0, ly, fs, "end", l);
+            d.text(cx - name_off[i], ly, fs, "end", l);
         }
     }
     if show_pct {
@@ -566,10 +582,15 @@ mod tests {
     #[test]
     fn the_parser_takes_the_ways_a_teacher_writes_a_power_of_ten() {
         // (critic 1, minor 2) a capital X, a typed superscript, and a bare power of ten
-        for (typed, v) in [("1.5 X 10^6", 1.5e6), ("1.5 × 10⁶", 1.5e6), ("2.5×10⁻³", 2.5e-3), ("1.5 x 10^+6", 1.5e6), ("10⁶", 1e6), ("10^6", 1e6), ("3 × 10¹²", 3e12), ("1,5 × 10⁶", f64::NAN)] {
+        for (typed, v) in [("1.5 X 10^6", 1.5e6), ("1.5 × 10⁶", 1.5e6), ("2.5×10⁻³", 2.5e-3), ("1.5 x 10^+6", 1.5e6), ("10⁶", 1e6), ("10^6", 1e6), ("3 × 10¹²", 3e12), ("1.5 × 10 ^ 6", 1.5e6), ("1.5 × 10 ^6", 1.5e6), ("10 ⁶", 1e6), ("1.5 × 10 ⁻³", 1.5e-3), ("1,5 × 10⁶", f64::NAN)] {
             let r = parse(&format!("A: 9e99\nB: {typed}"));
             if v.is_nan() { assert!(r.is_err(), "{typed}"); } else { assert_eq!(r.unwrap().values[1], v, "{typed}"); }
         }
+        // (critic 2, minor 2) a positive value that underflows is "too small", not "not above zero"
+        let e = parse("A: 5\nB: 1e-400").unwrap_err();
+        assert!(e.why.contains("smaller than the figure can read") && !e.why.contains("not above zero"), "{e}");
+        assert!(parse("A: 5\nB: 0e5").unwrap_err().why.contains("not above zero"), "a true zero still is");
+        assert!(parse("A: 5\nB: 0.000").unwrap_err().why.contains("not above zero"));
         // a byte-order mark at the start of pasted text is not part of line 1 (critic 1, LOW 5)
         assert_eq!(parse("\u{feff}# note\nProducers: 10000\nB: 1").unwrap().names, vec!["Producers", "B"]);
         assert_eq!(parse("\u{feff}Producers: 10000\nB: 1").unwrap().names[0], "Producers");
@@ -703,7 +724,7 @@ mod tests {
     #[test]
     fn the_canvas_and_the_note_agree_over_twelve_thousand_random_inputs() {
         let names = ["A", "B", "a", "Producers", "", "C:D", "#x", "Ratio", "\u{feff}Z", "ß", "SS", "More than 6"];
-        let vals = ["10000", "1,000", "1e3", "0", "-1", "x", "1,00", "1e-3", "1e300", "1e-300", "", "1.5 × 10^2", "1001", "NaN", "10⁶", "1.5 X 10^6", "999", "5", "2500", "8000", "0.5", "1e21", "10000.000000000001", "1e400"];
+        let vals = ["10000", "1,000", "1e3", "0", "-1", "x", "1,00", "1e-3", "1e300", "1e-300", "", "1.5 × 10^2", "1001", "NaN", "10⁶", "1.5 X 10^6", "999", "5", "2500", "8000", "0.5", "1e21", "10000.000000000001", "1e400", "1e-400", "1.5 × 10 ^ 6", "10 ⁶", "1.4", "0.4"];
         let mut seed = 0x9e37_79b9_7f4a_7c15u64;
         let mut next = |m: usize| { seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); ((seed >> 33) as usize) % m };
         let (mut refused, mut drawn) = (0, 0);
@@ -731,7 +752,7 @@ mod tests {
         assert!(!joined(&eq).contains("could not be drawn") && rects(&eq).len() == 2);
         // (critic 1, LOW 3) the reason is true on both sides of the line: 1000:1 draws a 0.40 px bar, which is not
         // thinner than 0.4 px, and 1001:1 would be
-        assert!((rects(&render_of(&[s("levels", &at(1000.0))]))[1].2 - 0.4).abs() < 0.001);
+        assert!((BASE_W / 1000.0 - 0.4).abs() < 1e-9 && (rects(&render_of(&[s("levels", &at(1000.0))]))[1].2 - MIN_DRAWN).abs() < 0.001);
         assert!(BASE_W / 1001.0 < 0.4);
         let why = read(&with(&[s("levels", &at(1001.0))])).unwrap_err();
         assert!(why.why.contains("thinner than 0.4 px") && !why.why.contains("half a pixel"), "{why}");
@@ -759,10 +780,14 @@ mod tests {
                 assert_eq!(rs.len(), n);
                 for i in 0..n {
                     let want = BASE_W * py.values[i] / py.values[0];
-                    assert!((rs[i].2 - want).abs() <= 0.5, "n {n} ratio {ratio} level {i}: drawn {} for {want}", rs[i].2);
+                    // exact from 1.5 px up; a thinner bar is drawn at exactly 1.5 px and the caption says so
+                    assert!((rs[i].2 - want.max(MIN_DRAWN)).abs() <= 0.011, "n {n} ratio {ratio} level {i}: drawn {} for {want}", rs[i].2);
+                    assert_eq!(want < MIN_DRAWN, rs[i].2 == MIN_DRAWN && want != MIN_DRAWN);
                     // centred on one axis
                     assert!(((rs[i].0 + rs[i].2 / 2.0) - (rs[0].0 + rs[0].2 / 2.0)).abs() < 0.02, "level {i} is off the axis");
                 }
+                let thin = py.values.iter().any(|v| BASE_W * v / py.values[0] < MIN_DRAWN);
+                assert_eq!(joined(&svg).contains("under 1.5 px is drawn 1.5 px wide"), thin, "the disclosure appears exactly when a bar is widened");
                 // the first line is the bottom: the lowest bar is the widest and the order climbs
                 assert!(rs.windows(2).all(|w| w[1].1 < w[0].1 && w[1].2 <= w[0].2 + 0.01), "n {n} ratio {ratio}: the bars do not climb");
             }
@@ -789,8 +814,8 @@ mod tests {
         let svg = render_of(&[]);
         let rs = rects(&svg);
         let ts = texts(&svg);
-        // 10,000 : 1,000 : 100 : 10 at 400 px -> 400, 40, 4, 0.4: the proportions stay exact
-        for (r, want) in rs.iter().zip([400.0, 40.0, 4.0, 0.4]) { assert!((r.2 - want).abs() < 0.01, "{} for {want}", r.2); }
+        // 10,000 : 1,000 : 100 : 10 at 400 px -> 400, 40, 4, 0.4 to scale; the last is drawn 1.5 px wide (MIN_DRAWN)
+        for (r, want) in rs.iter().zip([400.0, 40.0, 4.0, MIN_DRAWN]) { assert!((r.2 - want).abs() < 0.01, "{} for {want}", r.2); }
         let top = ts.iter().find(|t| t.s.starts_with("10 kcal")).expect("the top value is printed");
         assert!(top.anchor == "start" && top.x > rs[3].0 + rs[3].2, "the top label is beside the bar, not on it");
         let ls = lines(&svg);
@@ -823,27 +848,50 @@ mod tests {
 
     #[test]
     fn the_top_level_survives_the_print_copy() {
-        // (critic 1, LOW 4) a 0.4 px bar fades to light grey at 1x and drops out of the 66% print copy; its caps
-        // and the caption keep it. Dark here is the 66% cut-off the PNG export uses.
+        // (critic 2, MED 1) the 66% print copy at 1x must keep the BAR itself: a dark pixel in the bar's own columns on
+        // every row between its caps, for all three sizes at 1x and 1.3x. (Round 2 sampled only the caps and passed
+        // while the bar was gone.) Dark is the cut-off the PNG export uses.
         for size in ["Small", "Medium", "Large"] {
             for scale in [1.0f32, 1.3] {
-                let svg = render_of(&[s("label_size", size)]);
-                let r = rects(&svg)[3];
-                let (w, h, px) = to_rgba(&svg, scale).unwrap();
-                let dark = |x: f64, y: f64| {
-                    let (xi, yi) = (((x * scale as f64).floor() as u32).min(w - 1), ((y * scale as f64).floor() as u32).min(h - 1));
-                    let c = &px[((yi * w + xi) * 4) as usize..][..4];
-                    let a = c[3] as f64 / 255.0;
-                    (0.299 * c[0] as f64 + 0.587 * c[1] as f64 + 0.114 * c[2] as f64) * a + 255.0 * (1.0 - a) < 0.66 * 255.0
-                };
-                let cx = r.0 + r.2 / 2.0;
-                // some dark pixel on each cap, 3 px either side of the bar, for the top and the bottom edge
-                for y in [r.1, r.1 + r.3] {
-                    let hit = [-3.0, -2.0, 2.0, 3.0].iter().any(|dx| [-0.6, 0.0, 0.6].iter().any(|dy| dark(cx + dx, y + dy)));
-                    assert!(hit, "{size} at {scale}x: the cap at y={y} is not in the print copy");
+                for text in ["A: 10000\nB: 1000\nC: 100\nD: 10", "A: 1000\nB: 100\nC: 10\nD: 1", "A: 400\nB: 1.4"] {
+                    let svg = render_of(&[s("label_size", size), s("levels", text)]);
+                    let rs = rects(&svg);
+                    let r = *rs.last().unwrap();
+                    assert!((r.2 - MIN_DRAWN).abs() < 0.011, "the bar under test is the 1.5 px one: {text}");
+                    let (w, h, px) = to_rgba(&svg, scale).unwrap();
+                    let dark = |x: u32, y: u32| {
+                        let c = &px[((y.min(h - 1) * w + x.min(w - 1)) * 4) as usize..][..4];
+                        let a = c[3] as f64 / 255.0;
+                        (0.299 * c[0] as f64 + 0.587 * c[1] as f64 + 0.114 * c[2] as f64) * a + 255.0 * (1.0 - a) < 0.66 * 255.0
+                    };
+                    let sc = scale as f64;
+                    // the bar's own columns: its drawn extent, widened by one pixel for anti-aliasing and nothing more
+                    let (x0, x1) = (((r.0 * sc).floor() as u32).saturating_sub(1), ((r.0 + r.2) * sc).ceil() as u32 + 1);
+                    // the rows strictly between the caps (1.5 px clear of each, the cap's own thickness)
+                    let (y0, y1) = (((r.1 + 1.5) * sc).ceil() as u32, (((r.1 + r.3 - 1.5) * sc).floor() as u32).max(1));
+                    assert!(y1 > y0 + 10, "{size}: no rows to test");
+                    for y in y0..=y1 {
+                        assert!((x0..=x1).any(|x| dark(x, y)), "{size} at {scale}x, {text:?}: no dark pixel in the bar's columns on row {y}");
+                    }
                 }
             }
         }
+    }
+
+    #[test]
+    fn a_bar_near_the_minimum_is_exact_above_it_and_disclosed_below() {
+        // 1.4, 1.5 and 1.6 px bars: 400 against 1.4, 1.5, 1.6
+        for (small, drawn, disclosed) in [(1.4, 1.5, true), (1.49, 1.5, true), (1.5, 1.5, false), (1.6, 1.6, false), (3.0, 3.0, false)] {
+            let svg = render_of(&[s("levels", &format!("A: 400\nB: {small}")), s("unit", "none")]);
+            let r = rects(&svg)[1];
+            assert!((r.2 - drawn).abs() < 0.011, "{small}: drawn {}", r.2);
+            assert_eq!(joined(&svg).contains("1.5 px wide"), disclosed, "{small}");
+            assert!(joined(&svg).contains("thinner than 6 px"), "{small}");
+        }
+        // nothing is said, and nothing widened, in Equal steps or when every bar is wide
+        let eq = render_of(&[s("levels", "A: 400\nB: 0.4"), s("scale", "Equal steps")]);
+        assert!(!joined(&eq).contains("1.5 px") && !joined(&eq).contains("end caps"));
+        assert!(!joined(&render_of(&[s("levels", "A: 400\nB: 40")])).contains("1.5 px"));
     }
 
     #[test]
@@ -986,10 +1034,18 @@ mod tests {
             assert_eq!(canvas(&key), canvas(&student));
             assert_eq!(heads(&key), heads(&student));
             // switching the transfer off removes the arrows, the blanks and the answers, in either state
-            let off_key = render_of(&[s("levels", text), b("transfer", false), b(SHOW_ANSWERS, true)]);
-            let off_student = render_of(&[s("levels", text), b("transfer", false), b(SHOW_ANSWERS, false)]);
+            // (critic 2, LOW 1) in Equal steps so that no chain is refused: with the transfer off there is no arrow column
+            // (no head, no vertical shaft, no percent or blank), the caption does not mention arrows, and the page is
+            // the narrower for it
+            let off_key = render_of(&[s("levels", text), s("scale", "Equal steps"), b("transfer", false), b(SHOW_ANSWERS, true)]);
+            let off_student = render_of(&[s("levels", text), s("scale", "Equal steps"), b("transfer", false), b(SHOW_ANSWERS, false)]);
             assert_eq!(off_key, off_student);
-            assert!(!off_key.contains("<polygon") && !joined(&off_key).contains('%') || joined(&off_key).contains("proportional"));
+            assert!(!joined(&off_key).contains("could not be drawn") && joined(&off_key).contains("Not to scale"), "the pyramid is drawn, with its caption");
+            assert_eq!(heads(&off_key).len(), 0);
+            assert!(lines(&off_key).iter().all(|l| l.0 != l.2), "a vertical shaft is drawn with the transfer off");
+            assert!(!joined(&off_key).contains('%') && !joined(&off_key).contains("Arrows show"));
+            let on_eq = render_of(&[s("levels", text), s("scale", "Equal steps"), b("transfer", true)]);
+            assert!(canvas(&off_key).0 < canvas(&on_eq).0, "the arrow column still takes room");
             assert_eq!(key.matches("<polygon").count(), py.names.len() - 1);
         }
     }
@@ -1066,6 +1122,15 @@ mod tests {
         for i in 0..boxes.len() {
             for j in (i + 1)..boxes.len() { assert!(overlap(boxes[i], boxes[j]) < 0.01, "{tag}: {:?} overlaps {:?}", ts[i].s, ts[j].s); }
         }
+        // (critic 2, LOW 2) a cap never reads as punctuation after a name: where a cap is level with a name's lines it
+        // stands at least 16 px (a literal, not the constant) clear of the name
+        let caps: Vec<_> = ls.iter().filter(|l| l.1 == l.3 && ((l.2 - l.0) - 2.0 * CAP).abs() < 0.01).collect();
+        for (t, bb) in ts.iter().zip(&boxes) {
+            if t.anchor != "end" { continue; }
+            for c in &caps {
+                if c.1 >= bb.1 - 3.0 && c.1 <= bb.3 + 3.0 { assert!(c.0.min(c.2) - bb.2 >= 15.99, "{tag}: a cap sits {} px from the name {:?}", c.0.min(c.2) - bb.2, t.s); }
+            }
+        }
         // the arrows (vertical lines of the 1.2 stroke) never cross a bar, and everything stays on the canvas
         for l in &ls {
             for k in [l.0, l.2] { assert!((0.0..=w).contains(&k), "{tag}"); }
@@ -1077,7 +1142,7 @@ mod tests {
         assert!(svg.contains(&format!("viewBox=\"0 0 {w} {h}\"")), "{tag}");
         // proportional bars are the typed values to 0.5 px, and the first line is the widest
         if !joined(svg).contains("Not to scale") {
-            for i in 0..n { assert!((rs[i].2 - BASE_W * py.values[i] / py.values[0]).abs() <= 0.5, "{tag}: bar {i} is {}", rs[i].2); }
+            for i in 0..n { assert!((rs[i].2 - (BASE_W * py.values[i] / py.values[0]).max(MIN_DRAWN)).abs() <= 0.011, "{tag}: bar {i} is {}", rs[i].2); }
         }
     }
 
@@ -1106,6 +1171,23 @@ mod tests {
                 }
             }
         }
+        // (critic 2, LOW 3) copying the drawn text loses the raised exponent (1 × 1021), so the element carries the plain
+        // number for assistive technology, and the picture is the same with or without it
+        for el in svg.split("<text ").skip(1).filter(|e| e.contains("<tspan")) {
+            let head = el.split('>').next().unwrap();
+            let want = plain(el.split("</text>").next().unwrap().split_once('>').unwrap().1);
+            assert_eq!(unesc(&attr(head, "aria-label").expect("an aria-label")), want);
+            assert!(want.contains("× 10^"), "{want}");
+        }
+        assert!(!render_of(&[]).contains("aria-label"), "an ordinary label needs none");
+        let stripped = {
+            let mut out = String::new();
+            let mut rest = svg.as_str();
+            while let Some(i) = rest.find(" aria-label=\"") { out.push_str(&rest[..i]); let j = rest[i + 13..].find('"').unwrap() + i + 14; rest = &rest[j..]; }
+            out.push_str(rest);
+            out
+        };
+        assert_eq!(to_rgba(&svg, 1.3).unwrap(), to_rgba(&stripped, 1.3).unwrap(), "the aria-label changes no pixel");
         // the percent, the note and the label agree on the same number
         let p = with(&[s("levels", "A: 1e22\nB: 1e18"), s("scale", "Proportional")]);
         let note = crate::figures::notes_for(ID, &p);
@@ -1214,8 +1296,17 @@ mod tests {
             cases.push((format!("tiny-{size}"), vec![s("levels", "A: 4e-7\nB: 2e-7\nC: 1e-8"), s("label_size", size), b(SHOW_ANSWERS, false)]));
             cases.push((format!("ratio1000-{size}"), vec![s("levels", "A: 1000\nB: 100\nC: 10\nD: 1"), s("label_size", size)]));
         }
+        let fifty = |i: usize| format!("Extraordinarily long trophic level name number {i} that keeps going on");
+        cases.push(("six-long-large-student".into(), vec![s("levels", &ladder(6, 1000.0, &fifty)), s("label_size", "Large"), b(SHOW_ANSWERS, false)]));
+        cases.push(("six-long-large".into(), vec![s("levels", &ladder(6, 1000.0, &fifty)), s("label_size", "Large")]));
+        for px in ["1.4", "1.5", "1.6"] { cases.push((format!("bar{px}"), vec![s("levels", &format!("A: 400\nB: {px}\nC: 0.5")), s("scale", "Proportional")])); }
         for (idx, e) in examples(ID).unwrap().into_iter().enumerate() { cases.push((format!("ex{idx}"), e.params)); }
         for (tag, list) in cases {
+            // the print copy at 1x, where a thin bar is most at risk
+            let svg1 = render_of(&list);
+            let (w1, h1, px1) = to_rgba(&svg1, 1.0).unwrap();
+            let buf1: Vec<u8> = px1.chunks(4).map(|c| { let a = c[3] as f64 / 255.0; let l = (0.299 * c[0] as f64 + 0.587 * c[1] as f64 + 0.114 * c[2] as f64) * a + 255.0 * (1.0 - a); if l < 0.66 * 255.0 { 0 } else { 255 } }).collect();
+            image::GrayImage::from_raw(w1, h1, buf1).unwrap().save(format!("{dir}/energypyramid-{tag}-1x-bw66.png")).unwrap();
             let svg = render_of(&list);
             std::fs::write(format!("{dir}/energypyramid-{tag}.png"), to_png(&svg, 1.3).unwrap()).unwrap();
             let (w, h, px) = to_rgba(&svg, 1.3).unwrap();

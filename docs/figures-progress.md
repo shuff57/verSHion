@@ -759,3 +759,26 @@ refusal canvas writes a huge value with the plain `^`, since it is wrapped text 
 against the new tests (half-even rounding, no caps, arrows back on the axis, no BOM strip, no 15-digit read, a width
 estimate that ignores the exponent, a 30 px blank, unquoted names, the old reason, no `dy` return, no superscript or
 capital X read, the key always drawn) are each killed. Census: only `energy-pyramid__*` ids move. Awaiting its next critic.
+
+Energy pyramid round 3 (2026-10-30): the second critic **FAIL** (1 MED, 3 LOW, 5 minor; the half-up percent, the arrow
+column, the 6 px cap rule, the ratio refusal and the student copy all held). **Owner decision (2026-10-30):** a bar
+thinner than 1.5 px is drawn 1.5 px wide, solid black, so it survives the 66 % grey print copy at 1x (a 0.4 px black
+bar fades to light grey there, which round 2's cap-only test missed); bars of 1.5 px and wider stay exactly
+proportional, and Equal steps is untouched. The caption says so only when it happens: "...its width is to scale, except
+that a bar under 1.5 px is drawn 1.5 px wide", one sentence with the 6 px caps rule. `the_top_level_survives_the_print_copy`
+now rasterizes the 66 % copy at 1x and 1.3x at all three sizes and needs a dark pixel in the bar's own columns on every
+row between its caps (a mutant drawing 0.4 px is killed by it and by six more tests). **LOW 1:** the transfer-off
+assertion no longer ends in a clause the caption always satisfies; it renders the chain in Equal steps and asserts no
+arrowhead, no vertical shaft, no percent, no arrow sentence and a narrower canvas (a mutant drawing the column with the
+transfer off is killed). **LOW 2:** a sliver's name now stands 16 px from its caps, so a cap level with a wrapped name
+line cannot read as punctuation (checked in the sweep against a literal 16, so the constant cannot move the test with it;
+the six 50-character names at Large are in the PNG set). **LOW 3:** a value with a raised exponent carries an
+`aria-label` with the plain `1 × 10^21 kcal/m²/yr` (a test asserts it equals the drawn text with the caret and that
+the rasterized picture is unchanged). Copying the drawn text still gives `1 × 1021`: a known limit, not fixed, and an FAQ
+answer. **Minors fixed:** `1.5 × 10 ^ 6` and `10 ⁶` (a space before the exponent) are read; `1e-400` is refused as
+smaller than the figure can read, not as "not above zero". **Recorded limits, not fixed:** (1) the 1e-7 tie window:
+`1000000000 / 312499999.9` prints 31.3 where the exact value is 31.2; (2) the 15-digit read moves `999999999999999.9`
+across the notation threshold, so it prints `1 × 10^15`; (3) with the transfer on the pyramid sits up to 179 px left of
+centre, and at Large the fixed percent column leaves up to 83 px of empty right margin (the student blank needs that
+room). Tests: 27 in the module; mutants for each fix killed (the width mutant by seven tests). Census: only
+`energy-pyramid__*` ids move. Awaiting its next critic.
