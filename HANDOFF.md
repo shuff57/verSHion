@@ -166,6 +166,11 @@ Loop rules: local commits only, never push; critic pair (product vs Moodle, secu
 - Suite on r16: **share 1573/0/3; full lib 2268/0/6**.
 - **Open hardening, recorded:** the fetch loop's `media.read(file)` runs before the name is validated, so a crafted
   `image.file` is an existence/timing oracle (its bytes cannot be uploaded).
+- **That hardening is now closed (2026-10-29).** `send_checked` validates `media_sha(file)` BEFORE `media.read`, and a
+  malformed name refuses with `BadMediaName` (no Try again) instead of probing the store. The new page test
+  `d3_a_crafted_base_picture_name_is_refused_without_probing_the_disk` stores a readable file at a crafted name and
+  proves it is never read, nothing is sent, and the page says the name is unusable. `MediaOnDisk` records reads.
+  Suite: **share 1573/0/3; full lib 2269/0/6** (2268 + the one new test).
 - Still owed before D2 is called done: the owner's real-screen look; the staging re-measure of `/changes` and the
   partial-send picture round-trip (owner's yes); D3's remaining pieces.
 

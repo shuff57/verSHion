@@ -799,12 +799,15 @@ async fn send_checked(pool: &Pool<'_>, cid: &str, bid: &str, mut req: CircleSend
     }
     let mut extra: HashMap<String, Vec<u8>> = HashMap::new();
     for file in fetch {
+        // (round 16, security verification, recorded hardening) The name comes from the circle, so validate it BEFORE
+        // the store is asked: `media.read` would otherwise probe this computer's disk with a crafted `image.file`
+        // (an existence/timing oracle; the bytes could never be uploaded). A malformed name sends nothing.
+        let Some(sha) = super::pool::media_sha(file) else {
+            return (Err(LocalProblem::BadMediaName { file: file.clone() }.into()), now);
+        };
         if media.read(file).is_some() {
             continue;
         }
-        let Some(sha) = super::pool::media_sha(file) else {
-            return (Err(LocalProblem::BaseMediaUnavailable.into()), now);
-        };
         match pool.circle_blob(cid, bid, &sha).await {
             Ok(blob) => {
                 // Best effort: kept on this computer for the next send or open; the send itself reads the bytes below

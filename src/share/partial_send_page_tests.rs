@@ -74,12 +74,14 @@ impl ImageSink for Pics {
     }
 }
 
-/// What a test's `MediaSource::read` answers: pictures on this computer, by file name.
+/// What a test's `MediaSource::read` answers: pictures on this computer, by file name. Every name asked for is
+/// recorded, so a test can say a name was never probed on disk.
 #[derive(Default)]
-struct MediaOnDisk(Mutex<HashMap<String, Vec<u8>>>);
+struct MediaOnDisk(Mutex<HashMap<String, Vec<u8>>>, Mutex<Vec<String>>);
 
 impl MediaSource for MediaOnDisk {
     fn read(&self, file: &str) -> Option<Vec<u8>> {
+        self.1.lock().unwrap().push(file.to_string());
         self.0.lock().unwrap().get(file).cloned()
     }
 }
@@ -87,6 +89,11 @@ impl MediaSource for MediaOnDisk {
 impl MediaOnDisk {
     fn put(&self, file: &str, bytes: &[u8]) {
         self.0.lock().unwrap().insert(file.to_string(), bytes.to_vec());
+    }
+
+    /// Every file name `read` was asked for, in order.
+    fn reads(&self) -> Vec<String> {
+        self.1.lock().unwrap().clone()
     }
 }
 
@@ -482,6 +489,36 @@ fn d3_a_base_picture_already_here_is_not_fetched() {
     assert!(!s.paths().iter().any(|p| p.contains("/blobs/") && p.starts_with("Get ")), "no blob GET: {:?}", s.paths());
     assert!(images.0.lock().unwrap().is_empty(), "nothing is fetched or re-stored");
     assert!(matches!(send_stage(&m), SendStage::Done(_)), "{:?}", send_stage(&m));
+}
+
+#[test]
+fn d3_a_crafted_base_picture_name_is_refused_without_probing_the_disk() {
+    // (round 16, security verification, recorded hardening) The picture's name comes from the circle's payload, so
+    // it is checked before the store is asked. This name is readable by the test store; the send must never ask.
+    let crafted = "media/not-a-hash.webp";
+    let base = vec![qfull_pic(QA, "A", crafted), qfull(QB, "B"), qfull(QC, "C")];
+    let images = Arc::new(Pics::default());
+    let media = Arc::new(MediaOnDisk::default());
+    media.put(crafted, b"a file at a crafted name");
+    let (mut m, s, mut banks) = open_page_in(base, &|b| {
+        b.questions[0].stem = "A (changed)".into();
+        b.questions[1].stem = "B (changed)".into();
+    }, &[], model_with(images.clone(), media.clone()));
+    let link = m.edit.link_for_local(LOCAL).unwrap();
+    let a = local(&link, QA);
+    m.edit.toggle_change(&a, false);
+    // No blob GET is scripted: a fetch here would panic in the scripted session.
+    send(&mut m, &s, &mut banks, sent_with(4, &[QA, QB, QC]));
+    assert!(media.reads().is_empty(), "the crafted name is never probed on disk: {:?}", media.reads());
+    assert!(puts(&s).is_empty(), "nothing sent: {:?}", s.paths());
+    match send_stage(&m) {
+        SendStage::Failed(p) => {
+            assert!(!p.retry, "a malformed name will not change by trying again: {p:?}");
+            // The page rewrites "the pool" to "verSHion", so assert the stable part and the name.
+            assert!(p.message.contains("can not take") && p.message.contains(crafted), "{}", p.message);
+        }
+        other => panic!("not the failure line: {other:?}"),
+    }
 }
 
 #[test]
