@@ -691,3 +691,17 @@ Large); the run-height test holds to a stroke plus a visible pixel, the figure's
 stroke; `MIN_W` is the one width; the dead `6·lab` arrival term is gone; a test comment no longer calls
 a 0.96 px gap a "band". A test pins the note both ways at all three label sizes (a refused web has one, the web one
 run below does not). Census unchanged: the valid default render did not move.
+
+Food-web verification round 6 (2026-10-30): **PASS** — no blocker, major or MED; one LOW, two minors, one nit. All six
+claims held: 524 webs at each size (1,572 cases) gave zero disagreements between the canvas, `warnings()` and
+`notes_for`; 3,144 SVGs from each commit differ in 232 places, all of them the Small and Large refusal canvases (the
+header's y), so no drawn web moved; `gap_runs` matches the layout's own lists gap by gap. The LOW: the refusal counts
+runs through `gap_runs` while the layout counts them from its own lists, and deleting the arrival count from
+`gap_runs` left every test green. Fixed: `build()` now `debug_assert`s the two agree, and a new test puts six
+arrivals and five or six departures through one gap (11 draws, 12 is refused, the editor note agrees). That mutant now
+fails nine tests. Minor: nothing measured the spacing at the limit; the boundary test now measures the closest runs
+of the web just under each limit against stroke plus a pixel (2.34 / 2.66 / 3.28 px against bars of 2.2 / 2.5 / 3.1).
+Nit: `band()` no longer returns the departure margin, which no caller read. Recorded, not changed: the refusal
+canvas's bottom margin is 26.8 / 20 / 9.2 px at Small / Medium / Large (it was already 9.2 at Large before this round;
+only the top was fixed), and its last line does not mention the label size though the editor note does. The food web
+is converged. Census unchanged.

@@ -211,14 +211,14 @@ pub fn level_name(l: usize) -> String {
     LEVELS.get(l).map(|s| s.to_string()).unwrap_or_else(|| format!("Level {l}"))
 }
 
-/// The room one row gap gives the routed runs, as (clear, arrival margin, departure margin, usable band). Only an
-/// arrival has to clear an arrowhead; a departure only needs a small margin off its box.
-fn band(lab: f64) -> (f64, f64, f64, f64) {
+/// The room one row gap gives the routed runs, as (clear, arrival margin, usable band). Only an arrival has to clear an
+/// arrowhead; a departure only needs a small margin (4 px at Medium) off its box, taken out of the band here.
+fn band(lab: f64) -> (f64, f64, f64) {
     let box_h = NODE_FS * lab + 2.0 * PAD_Y * lab;
     let normal_hl = (EDGE_W * lab * 4.0).max(9.0);
     let clear = (LEVEL_GAP * lab - box_h).max(0.0);
     let (arrival, departure) = (normal_hl + 2.0, 4.0 * lab);
-    (clear, arrival, departure, (clear - arrival - departure).max(0.0))
+    (clear, arrival, (clear - arrival - departure).max(0.0))
 }
 
 /// Runs through each row gap: a link that skips a level leaves its prey's gap and enters its predator's.
@@ -238,7 +238,7 @@ fn gap_runs(web: &Web, level: &[usize]) -> Vec<usize> {
 /// The limit moves with the label size, because the gap does: 10 runs at Small, 12 at Medium, 15 at Large.
 pub fn crowded(web: &Web, lab: f64) -> bool {
     let Some(level) = level_of(web) else { return false };
-    let height = band(lab).3;
+    let height = band(lab).2;
     gap_runs(web, &level).iter().any(|&n| n > 0 && height / (n as f64 + 1.0) < EDGE_W * lab + 1.0)
 }
 
@@ -412,13 +412,16 @@ pub fn build(p: &Params) -> String {
             // (verification round 4, LOW) reserving the head's clearance at BOTH ends of the gap wasted a third of
             // the packing space: only an arrival must clear an arrowhead, a departure only needs to clear its box.
             // Arrivals take the slots nearest the predator (top), departures the ones nearest the prey (bottom).
-            let (clear, arrival_drop, _, height) = band(lab);
+            let (clear, arrival_drop, height) = band(lab);
             let mut run_y = vec![(0.0, 0.0); web.edges.len()];
             let mut gaps: Vec<Vec<(usize, bool)>> = vec![Vec::new(); rows];
             for &e in &long {
                 gaps[placed.level[web.edges[e].0]].push((e, true));
                 gaps[placed.level[web.edges[e].1] - 1].push((e, false));
             }
+            // (verification round 6) `crowded` counts the runs through `gap_runs`, the layout counts them here: they
+            // must be the same runs, or the refusal drifts from what is drawn.
+            debug_assert_eq!(gaps.iter().map(Vec::len).collect::<Vec<_>>(), gap_runs(&web, &placed.level), "the refusal and the layout count different runs");
             // (owner decision, 2026-10-29) a dense web must not ship with runs closer than a stroke and a visible
             // gap: it would read as links that do not exist. Refused like the 24-name cap, never drawn ambiguous.
             // The same test feeds the editor's note (`warnings`), so the canvas and the note area always agree.
@@ -736,6 +739,42 @@ mod tests {
         assert!(dr.matches("<rect").count() > 1, "eight long links fit in a gap and must draw");
     }
 
+    /// The closest two horizontal runs that share some x, as a vertical distance (infinite when there are none).
+    fn closest_runs(svg: &str) -> f64 {
+        let mut runs: Vec<(f64, f64, f64)> = Vec::new(); // y, x0, x1
+        for p in routes(svg) {
+            runs.push((p[1].1, p[0].0.min(p[2].0), p[0].0.max(p[2].0)));
+            runs.push((p[3].1, p[2].0.min(p[4].0), p[2].0.max(p[4].0)));
+        }
+        let mut best = f64::INFINITY;
+        for i in 0..runs.len() {
+            for j in (i + 1)..runs.len() {
+                if runs[i].2.min(runs[j].2) - runs[i].1.max(runs[j].1) > 0.5 { best = best.min((runs[i].0 - runs[j].0).abs()); }
+            }
+        }
+        best
+    }
+
+    #[test]
+    fn a_gap_holding_arrivals_and_departures_counts_both() {
+        // (verification round 6, LOW) the refusal counts runs through gap_runs and the layout through its own lists;
+        // deleting the arrival count from gap_runs left every other test green. Here one gap holds six arrivals (from
+        // X_i at the bottom to P2) and m departures (from Q_i to P3): 11 draws at Medium, 12 is refused.
+        let web = |m: usize| {
+            let mut l = String::from("P0 -> P1\nP1 -> P2\nP2 -> P3\n");
+            for i in 0..6 { l.push_str(&format!("X{i} -> P2\n")); }
+            for i in 0..m { l.push_str(&format!("P0 -> Q{i}\nQ{i} -> P3\n")); }
+            l
+        };
+        let drawn = render_of(&[("links", Value::S(web(5)))]);
+        assert!(drawn.matches("<rect").count() > 1, "11 runs through one gap must draw");
+        let refused = render_of(&[("links", Value::S(web(6)))]);
+        assert_eq!(refused.matches("<rect").count(), 1, "12 runs through one gap (6 arrivals + 6 departures) must be refused");
+        let note = |m: usize| crate::figures::notes_for(ID, &with(&[("links", Value::S(web(m)))]));
+        assert!(note(6).iter().any(|w| w.contains("could not be drawn")), "the note must count both kinds of run");
+        assert!(note(5).is_empty());
+    }
+
     #[test]
     fn the_density_limit_sits_where_the_notes_say() {
         // n long links A_i -> C put n departures in one gap and n arrivals in the next. Refused from 10 runs at
@@ -744,6 +783,10 @@ mod tests {
         for (size, first_refused) in [("Small", 10), ("Medium", 12), ("Large", 15)] {
             let drawn = render_of(&[("links", Value::S(web(first_refused - 1))), s("label_size", size)]);
             assert!(drawn.matches("<rect").count() > 1, "{size}: {} long links must draw", first_refused - 1);
+            // (verification round 6) and the web just under the limit really does keep its runs a stroke plus a pixel apart
+            let stroke = match size { "Small" => 1.2, "Medium" => 1.5, _ => 2.1 };
+            let closest = closest_runs(&drawn);
+            assert!(closest >= stroke + 1.0 - 0.01, "{size}: the drawn web's runs are only {closest:.2} px apart");
             let refused = render_of(&[("links", Value::S(web(first_refused))), s("label_size", size)]);
             assert_eq!(refused.matches("<rect").count(), 1, "{size}: {first_refused} long links must be refused");
             // (verification round 5, MED) the editor's note area must agree with the canvas, both ways
