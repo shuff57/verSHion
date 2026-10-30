@@ -80,8 +80,8 @@ electric-field__defaults f5477ca3f656ac36
 electric-field__start f5477ca3f656ac36
 energy-bar-chart__defaults 2140369fa0365d7c
 energy-bar-chart__start 2140369fa0365d7c
-energy-pyramid__defaults c7d8466ed791a1a6
-energy-pyramid__start c7d8466ed791a1a6
+energy-pyramid__defaults 87a3bebc05d097f1
+energy-pyramid__start 87a3bebc05d097f1
 enzyme-kinetics__defaults 92452f6d3bbbb3ac
 enzyme-kinetics__start 92452f6d3bbbb3ac
 er-diagram__defaults 8866218ba5ebbaac

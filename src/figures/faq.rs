@@ -642,11 +642,11 @@ const FOOD_WEB: &[Faq] = &[
 const ENERGY_PYRAMID: &[Faq] = &[
     Faq {
         q: "How do I type the levels?",
-        a: "One level per line as Name: value, with the producers first: they are the bottom bar and the later lines stack above them. Two to six levels. A value may have thousands commas (10,000) or an exponent (1.5e6, or 1.5 × 10^6), and the unit is set in its own control, not typed into the value. A line starting with # is a note and is not drawn.",
+        a: "One level per line as Name: value, with the producers first: they are the bottom bar and the later lines stack above them. Two to six levels. A value may have thousands commas (10,000) or a power of ten (1.5e6, 1.5 × 10^6 or 1.5 × 10⁶), and the unit is set in its own control, not typed into the value. Values are read to 15 significant figures, so 10000.000000000001 is 10,000; a value below 0.001 or from 10^15 up is written 1.5 × 10^21. A line starting with # is a note and is not drawn.",
     },
     Faq {
         q: "What does Proportional mean, and why is a value refused?",
-        a: "In Proportional the width of each bar is its energy, so the shape is honest and the top of a real food chain is a sliver. A bar cannot be drawn narrower than about half a pixel, so the largest value may be at most 1,000 times the smallest; past that the figure refuses and asks for Equal steps. A level with more energy than the one below it is refused too, because energy cannot grow up a food chain.",
+        a: "In Proportional the width of each bar is its energy, so the shape is honest and the top of a real food chain is a sliver. The widest bar is 400 px, so the largest value may be at most 1,000 times the smallest (a 0.4 px bar); past that the bar would be thinner than 0.4 px and the figure refuses. A 10 % chain of five or more levels is over the limit: set Bar widths to Equal steps for it, the figure never switches by itself. A level with more energy than the one below it is refused too, because energy cannot grow up a food chain.",
     },
     Faq {
         q: "When do I use Equal steps?",
@@ -654,11 +654,11 @@ const ENERGY_PYRAMID: &[Faq] = &[
     },
     Faq {
         q: "What is the percent between the bars?",
-        a: "The share of one level's energy that reaches the level above it: 100 out of 1,000 is 10 %, the 10 % rule. It is worked out from the typed values and is an answer, so it shows only when Show answers is on; a student copy has a blank to fill in. Turn off the switch for the percent to leave the picture.",
+        a: "The share of one level's energy that reaches the level above it: 100 out of 1,000 is 10 %, the 10 % rule. It is worked out from the typed values and is an answer, so it shows only when Show answers is on; a student copy has a long blank to write it on. It is rounded to three significant figures, halves up (31.25 is 31.3), and two unequal bars never print 100 %: 99.96 is shown as 99.9. Turn off the switch for the arrows and the percents to leave the picture.",
     },
     Faq {
         q: "Why is a value beside its bar and not inside?",
-        a: "A bar too narrow to hold its own number gets the number beside it on a short leader line, so a small top level is never clipped. A bar thinner than 3 px is drawn solid black so you can still see it.",
+        a: "A bar too narrow to hold its own number gets the number beside it on a short leader line, so a small top level is never clipped. A bar thinner than 6 px is drawn solid black with a small cap at each end so it cannot be mistaken for a line; its width is still to scale. The arrows run in a column beside the pyramid for the same reason.",
     },
 ];
 

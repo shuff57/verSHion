@@ -731,3 +731,31 @@ text across a bar edge, every value printed; the sliver's label and leader; the 
 percents (rects, canvas size and values identical to the key); number round-trips; hostile input rendering to a valid
 image; no hue; a PNG export (`VERSHION_PNG_DIR`). Census: `energy-pyramid__defaults` and `energy-pyramid__start` added,
 nothing else moved. The food-web module's `wrap` and `text_el` became `pub(super)` to be shared. Awaiting its first critic.
+
+Energy pyramid round 2 (2026-10-30): the first critic **FAIL** (2 MED, 5 LOW, 5 minor; bar widths, the 16,000-input
+agreement of canvas and note, and the student copy all held) and four owner decisions, fixed in one commit.
+**Owner decisions (2026-10-30):** (1) a chain over the 1,000:1 limit, such as a 10 % chain of five levels, stays
+refused in Proportional, and the refusal's second line now says plainly "set Bar widths to Equal steps to draw this
+chain (it is marked Not to scale)"; nothing switches by itself. (2) Equal values (a 100 % transfer) stay allowed. (3) The
+99.9 rule stays (two unequal bars never print 100 %) and is one short FAQ answer. (4) A value below 0.001 or from 10^15
+up is written `1.5 × 10^21`, drawn in the SVG as a smaller `<tspan>` raised by `dy` and a second `dy` back to the
+baseline (no superscript glyphs; a test pins the two `dy`s summing to zero and the 0.7 size); the width estimate counts
+the exponent, and the label, the percent and the editor note use the same number (the note and the description keep
+the plain `^`, since they are not drawn). **MED 1:** at 1000:1 the 0.40 px top bar sat on the arrows' x. The arrows now
+run in a column of their own beyond every bar and label, from just above one row to just below the next, and a bar
+under 6 px is solid with a 7 px cap at each end (the widths stay exactly proportional; the caption says so). A test
+renders the default at all three sizes at 1x and 1.3x and finds a print-copy-dark pixel on both caps. **MED 2:** the
+percent rounded exact ties to even (8000 over 2500 printed 31.2); it now rounds half up (31.3), and the test that
+checked `fmt_pct` against itself is replaced by an oracle in exact integer arithmetic over every b/a with a up to 400
+(more than 20 exact ties) plus a table (31.25, 56.25, 3.125, 81.25...). **LOW 3:** the ratio reason now says "thinner
+than 0.4 px", true on both sides of the limit. **LOW 5:** a leading U+FEFF is dropped. **LOW 7:** the student's blank is
+48 px long (scaled) with the whole column free above it, tested. **Minors:** values are read to 15 significant figures
+(10000.000000000001 is 10,000; stated in the FAQ); `1.5 X 10^6`, `1.5 × 10⁶`, and a bare `10⁶` or `10^6` are read; the
+names in the "more energy" and duplicate-name refusals are quoted; the leak test derives the hidden strings from the
+computed percents of four chains and also searches the note. **Recorded, not fixed:** duplicate names are folded with
+`to_lowercase`, not full case folding, so `ß` and `SS`, or `İ` and `i`, count as different levels. **Also noted:** the
+percent's tie test uses a 1e-7 tolerance on the last printed digit (a ratio within 3e-10 of a tie rounds up); the
+refusal canvas writes a huge value with the plain `^`, since it is wrapped text and not a figure. The mutants run
+against the new tests (half-even rounding, no caps, arrows back on the axis, no BOM strip, no 15-digit read, a width
+estimate that ignores the exponent, a 30 px blank, unquoted names, the old reason, no `dy` return, no superscript or
+capital X read, the key always drawn) are each killed. Census: only `energy-pyramid__*` ids move. Awaiting its next critic.
