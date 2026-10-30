@@ -40,8 +40,8 @@ pub const NEED: f64 = T_RISE + T_FALL + T_SETTLE;
 /// The rise is `smoothstep(u^SKEW)`: slow at first, then fast through the threshold. The exponent also sets how sharp
 /// the tip is (the curvature at the peak grows with its square), so it stays modest.
 const SKEW: f64 = 1.5;
-/// Channels stay open this long after the lowest point of the undershoot.
-const T_LINGER: f64 = 1.0;
+/// The membrane counts as back at rest when it is within this many mV of the resting level after the undershoot.
+const REST_TOL: f64 = 1.0;
 /// Failed initiation: how long the bump takes to peak, and how far up to threshold it climbs.
 const T_BUMP: f64 = 0.7;
 const BUMP_FRAC: f64 = 0.6;
@@ -49,13 +49,16 @@ const BUMP_FRAC: f64 = 0.6;
 // ---- what is accepted ----
 pub const MV_MIN: f64 = -100.0;
 pub const MV_MAX: f64 = 70.0;
-/// The resting potential is negative; this keeps the stimulus arrow, which sits under the resting level, off the 0 mV line.
-pub const REST_MAX: f64 = -10.0;
+/// The threshold is below 0 mV, at least `MIN_THR_TO_ZERO` of it, and at least `MIN_REST_TO_THR` above rest: so the
+/// resting potential cannot be above their difference.
+pub const REST_MAX: f64 = -(MIN_REST_TO_THR + MIN_THR_TO_ZERO);
 pub const MAX_DUR: f64 = 12.0;
 pub const MIN_LEAD: f64 = 0.5;
 const MIN_REST_TO_THR: f64 = 10.0;
 const MIN_THR_TO_PEAK: f64 = 20.0;
 const MIN_DIP: f64 = 3.0;
+/// The threshold must be this far below 0 mV (a neuron's threshold is a negative potential, and the dashed line must
+/// not lie on the 0 mV line).
 const MIN_THR_TO_ZERO: f64 = 4.0;
 
 // ---- the drawing (px at Medium; text-related sizes scale with the label size) ----
@@ -68,6 +71,17 @@ const MARGIN: f64 = 16.0;
 const MIN_W: f64 = 420.0;
 const SEG_PX: f64 = 0.9;
 const COARSE_PX: f64 = 5.0;
+/// Radius of the dot a leader starts on, and the clear gaps (px between centre lines, so a stroke's own half-width is
+/// already counted) kept around the leaders.
+const DOT_R: f64 = 3.2;
+const LEADER_FREE: f64 = 6.0;
+const LEADER_CURVE_GAP: f64 = 3.4;
+const LEADER_ARROW_GAP: f64 = 8.0;
+const LEADER_GAP: f64 = 3.6;
+const LEADER_DOT_GAP: f64 = 6.0;
+/// The least width, in px, of the plot before the stimulus: `LEAD_DISCS` disc radii and `LEAD_EXTRA` more.
+const LEAD_DISCS: f64 = 3.0;
+const LEAD_EXTRA: f64 = 8.0;
 const THEN_LINE: &str = "Nothing is drawn until every value is a number in its range.";
 
 pub fn defs() -> Vec<FigureDef> {
@@ -83,12 +97,12 @@ pub fn defs() -> Vec<FigureDef> {
 
 fn params() -> Vec<ParamDef> {
     vec![
-        ParamDef::text("resting", "Resting potential (mV)", "-70").hint("Type the number, with or without mV: -70, \u{2212}70 and -70 mV all work"),
-        ParamDef::text("threshold", "Threshold (mV)", "-55").hint("At least 10 mV above the resting potential"),
+        ParamDef::text("resting", "Resting potential (mV)", "-70").hint("-100 to -14 mV. Type the number, with or without mV: -70, \u{2212}70 and -70 mV all work"),
+        ParamDef::text("threshold", "Threshold (mV)", "-55").hint("At least 10 mV above the resting potential, and -4 mV or lower: a threshold is below zero"),
         ParamDef::text("peak", "Peak (mV)", "40").hint("At least 20 mV above the threshold"),
         ParamDef::text("undershoot", "Lowest point of the undershoot (mV)", "-80").hint("Type the resting potential again for no undershoot; otherwise at least 3 mV below it"),
         ParamDef::text("stimulus", "Stimulus at (ms)", "1").hint("0.5 ms or later; a decimal comma is fine"),
-        ParamDef::text("duration", "Total time (ms)", "8").hint("Room for the whole spike after the stimulus (about 4.7 ms), at most 12 ms"),
+        ParamDef::text("duration", "Total time (ms)", "8").hint("Room for the whole spike after the stimulus (4.7 ms), at most 12 ms"),
         ParamDef::bool("fail", "Failed initiation (stimulus too weak)", false).hint("A small bump that returns to rest: no spike, no channel or refractory bands"),
         ParamDef::bool("show_threshold", "Threshold line", true),
         ParamDef::bool("show_stimulus", "Stimulus marker", true),
@@ -123,13 +137,37 @@ fn clip(s: &str) -> String {
     if t.chars().count() <= 20 { t } else { format!("{}…", t.chars().take(20).collect::<String>()) }
 }
 
-/// A number as shown in a message: up to three decimals, no trailing zeros, a true minus.
-fn show(v: f64) -> String { fmt((v * 1000.0).round() / 1000.0) }
+/// One unit of the exact scale below: a typed number is kept to a billionth.
+const SCALE: i128 = 1_000_000_000;
+
+/// A typed number, kept twice: as the nearest double (for drawing) and exactly, in billionths (for every comparison
+/// and every message). A value typed exactly on a boundary, such as a threshold 10 mV above rest, is therefore on the
+/// boundary, not a rounding error either side of it, and a message quotes the digits that were typed.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Num {
+    pub v: f64,
+    d: i128,
+}
+
+/// A constant of the module (a limit written as a decimal) on the exact scale.
+fn exact(x: f64) -> i128 { (x * SCALE as f64).round() as i128 }
+
+/// An exact value as typed: a true minus, up to nine decimals, no trailing zeros.
+fn show_d(d: i128) -> String {
+    let (neg, a) = (d < 0, d.abs());
+    let (int, frac) = (a / SCALE, a % SCALE);
+    let mut t = int.to_string();
+    if frac != 0 { t.push('.'); t.push_str(format!("{frac:09}").trim_end_matches('0')); }
+    if neg && a != 0 { format!("\u{2212}{t}") } else { t }
+}
+
+/// A module constant as shown in a message.
+fn show(x: f64) -> String { show_d(exact(x)) }
 
 /// Reads one typed number: optional sign, digits with one decimal point or comma, and optionally the unit that
 /// belongs to the control (`mV` or `ms`, any case). A comma followed by exactly three digits is ambiguous
 /// (1,000: one thousand or one?) and is refused rather than guessed.
-fn number(raw: &str, what: &str, units: &[&str], example: &str) -> Result<f64, Refusal> {
+fn number(raw: &str, what: &str, units: &[&str], example: &str) -> Result<Num, Refusal> {
     let shown = clip(raw);
     let bad = |why: String| refuse(why, THEN_LINE);
     let not_a_number = || bad(format!("{what}: \"{shown}\" is not a number. Type it as {example}, with or without its unit."));
@@ -166,7 +204,14 @@ fn number(raw: &str, what: &str, units: &[&str], example: &str) -> Result<f64, R
     if digits.matches('.').count() > 1 { return Err(not_a_number()); }
     let v: f64 = digits.parse().map_err(|_| not_a_number())?;
     if !v.is_finite() { return Err(bad(format!("{what}: \"{shown}\" is too large to read."))); }
-    Ok(if neg { -v } else { v } + 0.0)
+    // the same digits, exactly: whole part (saturating far outside every range), nine decimals, the tenth rounds
+    let (whole, frac) = digits.split_once('.').unwrap_or((digits.as_str(), ""));
+    let whole = whole.trim_start_matches('0');
+    let whole: i128 = if whole.len() > 12 { 10_i128.pow(12) } else { whole.parse().unwrap_or(0) };
+    let mut f = frac.chars().chain(std::iter::repeat('0')).take(10).map(|c| c.to_digit(10).unwrap_or(0) as i128);
+    let nine = (0..9).fold(0i128, |acc, _| acc * 10 + f.next().unwrap());
+    let d = whole * SCALE + nine + i128::from(f.next().unwrap() >= 5);
+    Ok(Num { v: if neg { -v } else { v } + 0.0, d: if neg { -d } else { d } })
 }
 
 /// The typed controls, read and checked.
@@ -181,6 +226,32 @@ pub struct Spike {
     pub fail: bool,
 }
 
+/// How to make a stimulus time and a total time agree: the one thing that is true at every boundary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Fix {
+    /// Only a longer total time helps (the stimulus is already as early as it may be): at least this long.
+    Total(i128),
+    /// Only an earlier stimulus helps (the total is as long as it may be, or the stimulus is too late for any total).
+    Stimulus(i128),
+    /// Either helps: a total at least the first, or a stimulus no later than the second.
+    Either(i128, i128),
+    /// Neither alone helps: both are out of reach.
+    Both,
+}
+
+/// The advice for a stimulus at `ts` in a trace of `dur` (exact units), which is too short for the spike.
+fn timing_fix(ts: i128, dur: i128) -> Fix {
+    let (need, lead, max) = (exact(NEED), exact(MIN_LEAD), exact(MAX_DUR));
+    let longer_works = ts + need <= max;
+    let earlier_works = dur - need >= lead;
+    match (longer_works, earlier_works) {
+        (true, true) => Fix::Either(ts + need, dur - need),
+        (true, false) => Fix::Total(ts + need),
+        (false, true) => Fix::Stimulus(dur - need),
+        (false, false) => Fix::Both,
+    }
+}
+
 pub fn read(p: &Params) -> Result<Spike, Refusal> {
     let mv = |key: &str, what: &str| number(p.s(key), what, &["millivolts", "millivolt", "mv"], "-70");
     let ms = |key: &str, what: &str| number(p.s(key), what, &["milliseconds", "millisecond", "msec", "ms"], "1.5");
@@ -190,70 +261,104 @@ pub fn read(p: &Params) -> Result<Spike, Refusal> {
     let under = mv("undershoot", "Undershoot")?;
     let ts = ms("stimulus", "Stimulus time")?;
     let dur = ms("duration", "Total time")?;
-    if rest > REST_MAX {
+    let (lo, hi, rmax, tmax) = (exact(MV_MIN), exact(MV_MAX), exact(REST_MAX), exact(-MIN_THR_TO_ZERO));
+    let range = |what: &str, x: Num, top: f64| {
+        refuse(
+            format!("{what} is {} mV, outside the {} to {} mV this figure draws.", show_d(x.d), show(MV_MIN), signed(top)),
+            "Bring it inside that range; every neuron potential in a textbook is.",
+        )
+    };
+    // each value inside its own range, in field order
+    if rest.d >= 0 {
         return Err(refuse(
-            format!("The resting potential is {} mV, but a neuron's inside is negative at rest: this figure draws it from {} to {} mV.", show(rest), show(MV_MIN), show(REST_MAX)),
+            format!("The resting potential is {} mV, but a neuron's inside is negative at rest: this figure draws it from {} to {} mV.", show_d(rest.d), show(MV_MIN), show(REST_MAX)),
             "Type a negative resting potential.",
         ));
     }
-    for (v, what) in [(rest, "The resting potential"), (thr, "The threshold"), (peak, "The peak"), (under, "The undershoot")] {
-        if !(MV_MIN..=MV_MAX).contains(&v) {
-            return Err(refuse(
-                format!("{what} is {} mV, outside the {} to +{} mV this figure draws.", show(v), show(MV_MIN), show(MV_MAX)),
-                "Bring it inside that range; every neuron potential in a textbook is.",
-            ));
-        }
-    }
-    if thr < rest + MIN_REST_TO_THR {
+    if rest.d > rmax {
         return Err(refuse(
-            format!("The threshold ({} mV) must be at least {} mV above the resting potential ({} mV): a neuron fires only when it is depolarised up to threshold, and closer than that the dashed line would run into the resting level.", show(thr), show(MIN_REST_TO_THR), show(rest)),
+            format!("The resting potential is {} mV, above the {} mV limit: the threshold has to be at least {} mV above it and still {} mV below 0 mV, which leaves no room.", show_d(rest.d), show(REST_MAX), show(MIN_REST_TO_THR), show(MIN_THR_TO_ZERO)),
+            &format!("Type a resting potential of {} mV or lower.", show(REST_MAX)),
+        ));
+    }
+    if rest.d < lo { return Err(range("The resting potential", rest, REST_MAX)); }
+    if thr.d >= 0 {
+        return Err(refuse(
+            format!("The threshold is {} mV, at or above 0 mV, but a neuron fires from a threshold below zero: the inside is still negative when the spike starts.", show_d(thr.d)),
+            &format!("Type a threshold below zero, at most {} mV.", show(-MIN_THR_TO_ZERO)),
+        ));
+    }
+    if thr.d > tmax {
+        return Err(refuse(
+            format!("The threshold ({} mV) is within {} mV of 0 mV, so the dashed threshold line would lie on the 0 mV line.", show_d(thr.d), show(MIN_THR_TO_ZERO)),
+            &format!("Move the threshold to {} mV or lower.", show(-MIN_THR_TO_ZERO)),
+        ));
+    }
+    if thr.d < lo { return Err(range("The threshold", thr, -MIN_THR_TO_ZERO)); }
+    if peak.d < lo || peak.d > hi { return Err(range("The peak", peak, MV_MAX)); }
+    if under.d < lo || under.d > hi { return Err(range("The undershoot", under, MV_MAX)); }
+    // and then against each other
+    if thr.d < rest.d + exact(MIN_REST_TO_THR) {
+        return Err(refuse(
+            format!("The threshold ({} mV) must be at least {} mV above the resting potential ({} mV): a neuron fires only when it is depolarised up to threshold, and closer than that the dashed line would run into the resting level.", show_d(thr.d), show(MIN_REST_TO_THR), show_d(rest.d)),
             "Raise the threshold or lower the resting potential.",
         ));
     }
-    if thr.abs() < MIN_THR_TO_ZERO {
+    if peak.d < thr.d + exact(MIN_THR_TO_PEAK) {
         return Err(refuse(
-            format!("The threshold ({} mV) is within {} mV of 0 mV, so the dashed threshold line would lie on the 0 mV line.", show(thr), show(MIN_THR_TO_ZERO)),
-            "Move the threshold to at least 4 mV from zero.",
-        ));
-    }
-    if peak < thr + MIN_THR_TO_PEAK {
-        return Err(refuse(
-            format!("The peak ({} mV) must be at least {} mV above the threshold ({} mV): a rise shorter than that is too small to label.", show(peak), show(MIN_THR_TO_PEAK), show(thr)),
+            format!("The peak ({} mV) must be at least {} mV above the threshold ({} mV): a rise shorter than that is too small to label.", show_d(peak.d), show(MIN_THR_TO_PEAK), show_d(thr.d)),
             "Raise the peak or lower the threshold.",
         ));
     }
-    if under > rest {
+    if under.d > rest.d {
         return Err(refuse(
-            format!("The undershoot ({} mV) is above the resting potential ({} mV), but the undershoot is the dip below rest.", show(under), show(rest)),
+            format!("The undershoot ({} mV) is above the resting potential ({} mV), but the undershoot is the dip below rest.", show_d(under.d), show_d(rest.d)),
             "Type a lower value, or the resting potential itself for no undershoot.",
         ));
     }
-    if under < rest && rest - under < MIN_DIP {
+    if under.d < rest.d && rest.d - under.d < exact(MIN_DIP) {
         return Err(refuse(
-            format!("An undershoot only {} mV below rest ({} mV) is too shallow to see.", show(rest - under), show(rest)),
+            format!("An undershoot only {} mV below rest ({} mV) is too shallow to see.", show_d(rest.d - under.d), show_d(rest.d)),
             "Type a value at least 3 mV below the resting potential, or the resting potential itself for no undershoot.",
         ));
     }
-    if ts < MIN_LEAD {
+    if ts.d < exact(MIN_LEAD) {
         return Err(refuse(
-            format!("The stimulus time ({} ms) is before {} ms, so the stimulus arrow would lie on the y axis and there would be no resting stretch before it.", show(ts), show(MIN_LEAD)),
+            format!("The stimulus time ({} ms) is before {} ms, so the stimulus arrow would lie on the y axis and there would be no resting stretch before it.", show_d(ts.d), show(MIN_LEAD)),
             "Type 0.5 ms or later.",
         ));
     }
-    if dur > MAX_DUR {
+    if dur.d <= 0 {
         return Err(refuse(
-            format!("A total time of {} ms is over the {} ms the figure draws: the 0.8 ms upstroke would be under 35 px wide, too narrow to label.", show(dur), show(MAX_DUR)),
+            format!("A total time of {} ms is not a time: the trace has to run for more than 0 ms.", show_d(dur.d)),
+            &format!("Type a total time of {} to {} ms.", show(MIN_LEAD + NEED), show(MAX_DUR)),
+        ));
+    }
+    if dur.d > exact(MAX_DUR) {
+        return Err(refuse(
+            format!("A total time of {} ms is over the {} ms the figure draws: the 0.8 ms upstroke would be under 35 px wide, too narrow to label.", show_d(dur.d), show(MAX_DUR)),
             "Type a shorter time.",
         ));
     }
-    if ts + NEED > dur + 1e-9 {
+    if ts.d + exact(NEED) > dur.d {
+        let left = dur.d - ts.d;
+        let leaves = if left > 0 { format!("leaves only {} ms of the {} ms trace", show_d(left), show_d(dur.d)) } else { format!("is not before the end of the {} ms trace", show_d(dur.d)) };
+        let then = match timing_fix(ts.d, dur.d) {
+            Fix::Total(t) => format!("Make the total time at least {} ms.", show_d(t)),
+            Fix::Stimulus(s) => format!("Move the stimulus to {} ms or earlier; no total time up to {} ms is long enough for a stimulus this late.", show_d(s), show(MAX_DUR)),
+            Fix::Either(t, s) => format!("Make the total time at least {} ms, or move the stimulus to {} ms or earlier.", show_d(t), show_d(s)),
+            Fix::Both => format!("Type a stimulus time of {} to {} ms and a total time of at least {} ms after it.", show(MIN_LEAD), show(MAX_DUR - NEED), show(NEED)),
+        };
         return Err(refuse(
-            format!("The spike needs about {} ms after the stimulus to settle back to rest, but a stimulus at {} ms leaves only {} ms of a {} ms trace.", show(NEED), show(ts), show((dur - ts).max(0.0)), show(dur)),
-            &format!("Make the total time at least {} ms, or move the stimulus earlier.", show(((ts + NEED) * 10.0).ceil() / 10.0)),
+            format!("The spike needs about {} ms after the stimulus to settle back to rest, but a stimulus at {} ms {leaves}.", show(NEED), show_d(ts.d)),
+            &then,
         ));
     }
-    Ok(Spike { rest, thr, peak, under, ts, dur, fail: p.b("fail") })
+    Ok(Spike { rest: rest.v, thr: thr.v, peak: peak.v, under: under.v, ts: ts.v, dur: dur.v, fail: p.b("fail") })
 }
+
+/// A limit with its sign, `+70` or `−14`.
+fn signed(x: f64) -> String { if x > 0.0 { format!("+{}", show(x)) } else { show(x) } }
 
 // ================================================================== the curve
 
@@ -301,7 +406,17 @@ impl Spike {
         if self.under < self.rest { self.cross(self.t_peak(), self.t_low(), self.rest) } else { self.t_low() }
     }
     fn dips(&self) -> bool { self.under < self.rest }
-    fn t_linger_end(&self) -> f64 { self.t_low() + T_LINGER }
+    /// The recovery is over: the membrane is back within `REST_TOL` mV of the resting level (the end of the fall when
+    /// there is no undershoot). The potassium channels have closed again and the relative refractory period has ended.
+    pub fn t_settled(&self) -> f64 {
+        if !self.dips() { return self.t_low(); }
+        let (mut a, mut b) = (self.t_low(), self.t_low() + 20.0);
+        for _ in 0..80 {
+            let m = (a + b) / 2.0;
+            if (self.v(m) - self.rest).abs() > REST_TOL { a = m } else { b = m }
+        }
+        (a + b) / 2.0
+    }
 }
 
 // ================================================================== the plan
@@ -324,15 +439,19 @@ impl Frame {
 
 type P2 = (f64, f64);
 
-fn dist_seg(p: P2, a: P2, b: P2) -> f64 {
-    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
-    let l2 = dx * dx + dy * dy;
-    let t = if l2 < 1e-12 { 0.0 } else { (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / l2).clamp(0.0, 1.0) };
-    ((p.0 - a.0 - t * dx).powi(2) + (p.1 - a.1 - t * dy).powi(2)).sqrt()
-}
+
+use crate::figures::composite::seg_dist as dist_seg;
+
+fn dist(a: P2, b: P2) -> f64 { ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt() }
 
 fn dist_poly(p: P2, pts: &[P2]) -> f64 {
     pts.windows(2).map(|s| dist_seg(p, s[0], s[1])).fold(f64::INFINITY, f64::min)
+}
+
+/// The least distance between two segments (zero when they cross).
+fn segs_dist(a: P2, b: P2, c: P2, d: P2) -> f64 {
+    if seg_cross(a, b, c, d) { return 0.0; }
+    dist_seg(a, c, d).min(dist_seg(b, c, d)).min(dist_seg(c, a, b)).min(dist_seg(d, a, b))
 }
 
 fn seg_cross(a: P2, b: P2, c: P2, d: P2) -> bool {
@@ -387,7 +506,9 @@ struct Band {
     from: f64,
     to: f64,
     lane: usize,
-    /// Index into `Plan::pointers` of its lettered disc.
+    /// Which of the shared dash styles tells it apart from the others in Print (solid, long dashes, dots, dash-dot).
+    dash_slot: usize,
+    /// The name of its lettered pointer.
     key: &'static str,
     colour_slot: usize,
 }
@@ -405,6 +526,11 @@ struct Plan {
     lane_top: f64,
     lane_h: f64,
     yticks: Vec<(f64, String)>,
+    /// Unlabelled tick levels between the labelled ones (mV), and the same for time (ms).
+    yminor: Vec<f64>,
+    xminor: Vec<f64>,
+    /// One short label per bracket row, set to the left of the plot.
+    lane_labels: Vec<Vec<&'static str>>,
     xticks: Vec<(f64, String)>,
     show_thr: bool,
     thr_disc: bool,
@@ -413,8 +539,7 @@ struct Plan {
     key_rows: usize,
     key_col_w: f64,
     key_row_h: f64,
-    cap: Vec<String>,
-    cap_top: f64,
+    /// What was left out and why. The editor shows it; the picture never does.
     notes: Vec<String>,
     title_y: f64,
 }
@@ -435,9 +560,10 @@ const NAME_K: &str = "K+ channels open";
 const NAME_ABS: &str = "Absolute refractory period";
 const NAME_REL: &str = "Relative refractory period";
 
-/// The sentence the picture and the editor note both give, with no phase name in it (a student copy carries it).
-const NOTE_NO_DIP: &str = "The lowest point is the resting level, so the trace has no dip below rest and the items that belong to a dip are left out.";
-const NOTE_FAILED: &str = "This input is too weak to start a spike, so the bands that belong to a spike are not drawn.";
+/// What the editor note says when something switched on is left out. Only the note says it: the picture, its
+/// description and a student copy stay silent, because the sentence names the answer to a pointer.
+const NOTE_NO_DIP: &str = "No undershoot (the lowest point is the resting level), so the items that belong to a dip are left out: the hyperpolarisation and return-to-rest pointers and the relative refractory period.";
+const NOTE_FAILED: &str = "The stimulus is too weak to start a spike (failed initiation), so the bands that belong to a spike are not drawn: the channel and refractory bands.";
 
 fn notes_for_spike(sp: &Spike, p: &Params) -> Vec<String> {
     let mut v = Vec::new();
@@ -457,36 +583,58 @@ fn name_text(x: f64, y: f64, size: f64, name: &str) -> String {
     };
     let mut out = format!(r##"<text x="{x:.2}" y="{y:.2}" font-size="{size}" text-anchor="start" font-family="{FONT}" fill="{INK}">{}"##, svg::esc(head));
     if let Some(tail) = tail {
-        out.push_str(&format!(r#"<tspan dy="{:.2}" font-size="{:.2}">+</tspan>"#, -0.42 * size, 0.7 * size));
-        out.push_str(&format!(r#"<tspan dy="{:.2}" font-size="{size}">{}</tspan>"#, 0.42 * size, svg::esc(tail)));
+        // a raised plus, big and bold enough that a 66 % print copy cannot turn it into a minus or a dot
+        out.push_str(&format!(r#"<tspan dy="{:.2}" font-size="{:.2}" font-weight="700">+</tspan>"#, -0.34 * size, 0.95 * size));
+        out.push_str(&format!(r#"<tspan dy="{:.2}" font-size="{size}">{}</tspan>"#, 0.34 * size, svg::esc(tail)));
     }
     out.push_str("</text>");
     out
 }
 
-/// The padded range and its tick step; ticks are at least `min_gap` px apart.
-fn y_range(sp: &Spike, need_lo_rest: f64, need_lo_low: f64, need_hi: f64, min_gap: f64) -> (f64, f64, f64) {
+/// The minor step that divides a 1-2-5 major step into 5 (for 1 and 5) or 4 (for 2) parts.
+fn minor_of(step: f64) -> f64 {
+    let mag = 10f64.powf(step.log10().floor());
+    if ((step / mag).round() - 2.0).abs() < 1e-9 { step / 4.0 } else { step / 5.0 }
+}
+
+/// The padded range, its labelled step and its minor step. The range ends on a minor tick, not a labelled one, so a
+/// coarse labelled step (50 mV) cannot add up to 50 mV of empty axis at either end. Labelled ticks are at least
+/// `min_gap` px apart.
+fn y_range(sp: &Spike, need_lo_rest: f64, need_lo_low: f64, need_hi: f64, min_gap: f64) -> (f64, f64, f64, f64) {
     let low = sp.under.min(sp.rest);
     let mut pxmv = PLOT_H / (sp.peak - low + 40.0);
-    let mut best = (0.0, 0.0, 1.0);
+    let mut best = (0.0, 0.0, 1.0, 0.2);
     for _ in 0..40 {
         let lo_raw = (sp.rest - need_lo_rest / pxmv).min(low - need_lo_low / pxmv);
         let hi_raw = sp.peak + need_hi / pxmv;
         let mut target = 11.0;
-        let (mut lo, mut hi, mut step);
+        let (mut lo, mut hi, mut step, mut minor);
         loop {
             step = nice_step(hi_raw - lo_raw, target);
-            lo = (lo_raw / step + 1e-9).floor() * step;
-            hi = (hi_raw / step - 1e-9).ceil() * step;
+            minor = minor_of(step);
+            lo = (lo_raw / minor + 1e-9).floor() * minor;
+            hi = (hi_raw / minor - 1e-9).ceil() * minor;
             if PLOT_H / (hi - lo) * step >= min_gap || target <= 2.0 { break; }
             target -= 1.0;
         }
-        best = (lo, hi, step);
+        best = (lo, hi, step, minor);
         let now = PLOT_H / (hi - lo);
         if now >= pxmv * (1.0 - 1e-9) { break; }
         pxmv = now;
     }
     best
+}
+
+/// Labelled ticks (value, label) and the unlabelled ones between them, for `[lo, hi]` with labelled step `step`.
+fn ticks_in(lo: f64, hi: f64, step: f64, minor: f64) -> (Vec<(f64, String)>, Vec<f64>) {
+    let per = (step / minor).round() as i64;
+    let (j0, j1) = ((lo / minor - 1e-9).ceil() as i64, (hi / minor + 1e-9).floor() as i64);
+    let (mut major, mut small) = (Vec::new(), Vec::new());
+    for j in j0..=j1 {
+        let v = j as f64 * minor;
+        if j.rem_euclid(per) == 0 { major.push((j as f64 / per as f64 * step, fmt(j as f64 / per as f64 * step))); } else { small.push(v); }
+    }
+    (major, small)
 }
 
 fn plan(p: &Params) -> Result<Plan, Refusal> {
@@ -517,8 +665,9 @@ fn plan(p: &Params) -> Result<Plan, Refusal> {
             numbered.push(NAMES_COMMON[3]);
             numbered.push(NAMES_COMMON[4]);
             numbered.push(NAMES_COMMON[5]);
-            if dips { numbered.push(NAMES_COMMON[6]); }
-            numbered.push(NAMES_COMMON[7]);
+            // without a dip the curve never leaves the resting line after the fall, so a "return" would point at the same
+            // flat stretch as "resting potential": the pair is dropped to the one name that has its own place on the curve
+            if dips { numbered.push(NAMES_COMMON[6]); numbered.push(NAMES_COMMON[7]); }
         }
     }
     let mut lettered: Vec<&'static str> = Vec::new();
@@ -540,33 +689,35 @@ fn plan(p: &Params) -> Result<Plan, Refusal> {
     let need_lo_rest = if show_stim { arrow_l + 2.0 * r + 12.0 } else { 6.0 };
     let need_lo_low = if phases { 2.0 * r + 18.0 } else { 6.0 };
     let need_hi = if phases { 2.0 * r + 18.0 } else { 8.0 };
-    let (lo, hi, ystep) = y_range(&sp, need_lo_rest, need_lo_low, need_hi, 2.6 * fs);
-    let yticks: Vec<(f64, String)> = {
-        let k0 = (lo / ystep - 1e-9).ceil() as i64;
-        let k1 = (hi / ystep + 1e-9).floor() as i64;
-        (k0..=k1).map(|k| (k as f64 * ystep, fmt(k as f64 * ystep))).collect()
-    };
+    let (lo, hi, ystep, yminor_step) = y_range(&sp, need_lo_rest, need_lo_low, need_hi, (1.6 * fs).max(26.0));
+    let (yticks, yminor) = ticks_in(lo, hi, ystep, yminor_step);
     let tick_w = yticks.iter().map(|t| text_w(&t.1, fs)).fold(0.0, f64::max);
-    let ml = 8.0 + 1.15 * tfs + 8.0 + tick_w + 12.0;
+    // the row labels of the bracket lanes sit left of the plot, right-aligned to it
+    let mut lane_labels: Vec<Vec<&'static str>> = Vec::new();
+    if channels { lane_labels.push(vec!["Channels"]); }
+    if refr { lane_labels.push(vec!["Refractory", "period"]); }
+    let label_w = lane_labels.iter().flatten().map(|l| text_w(l, fs)).fold(0.0, f64::max);
+    let ml = (8.0 + 1.15 * tfs + 8.0 + tick_w + 12.0).max(label_w + 6.0 + 8.0);
     let thr_disc = show_thr && phases;
     let mr_disc = if thr_disc { 14.0 + 2.0 * r + 10.0 } else { 14.0 };
     // the last tick label is centred on the right end of the axis
     let dur_label = fmt(sp.dur);
     let mr = mr_disc.max(text_w(&dur_label, fs) / 2.0 + 6.0);
-    let plot_w = PLOT_W_MIN.max(key_w + 2.0 * MARGIN - ml - mr);
+    // the resting pointer sits before the stimulus, so that stretch must be wide enough for a disc and its leader:
+    // a stimulus very early in a long trace widens the plot rather than squeezing the pointer onto the spike
+    let lead_px = if phases { LEAD_DISCS * r + LEAD_EXTRA } else { 0.0 };
+    let plot_w = PLOT_W_MIN.max(key_w + 2.0 * MARGIN - ml - mr).max(lead_px * sp.dur / sp.ts);
     let w = ml + plot_w + mr;
 
     // ---- horizontal ticks
     let mut target = 8.0;
-    let (xstep, xticks) = loop {
+    let (xticks, xminor) = loop {
         let step = nice_step(sp.dur, target);
-        let k1 = (sp.dur / step + 1e-9).floor() as i64;
-        let ticks: Vec<(f64, String)> = (0..=k1).map(|k| (k as f64 * step, fmt(k as f64 * step))).collect();
-        let wmax = ticks.iter().map(|t| text_w(&t.1, fs)).fold(0.0, f64::max);
-        if step / sp.dur * plot_w >= wmax + 12.0 || target <= 2.0 { break (step, ticks); }
+        let (major, small) = ticks_in(0.0, sp.dur, step, minor_of(step));
+        let wmax = major.iter().map(|t| text_w(&t.1, fs)).fold(0.0, f64::max);
+        if step / sp.dur * plot_w >= wmax + 12.0 || target <= 2.0 { break (major, small); }
         target -= 1.0;
     };
-    let _ = xstep;
 
     // ---- vertical layout
     let mt = 0.8 * fs + 6.0;
@@ -581,20 +732,19 @@ fn plan(p: &Params) -> Result<Plan, Refusal> {
     let key_top = lanes_end + if n_items > 0 { 14.0 } else { 0.0 };
     let key_end = key_top + key_rows as f64 * key_row_h;
     let notes = notes_for_spike(&sp, p);
-    let cap: Vec<String> = notes.iter().flat_map(|n| wrap(n, w - 2.0 * MARGIN, 12.0 * lab)).collect();
-    let cap_top = key_end + if cap.is_empty() { 0.0 } else { 8.0 };
-    let h = cap_top + cap.len() as f64 * 16.0 * lab + 12.0;
+    let h = key_end + 12.0;
 
     // ---- bands
     let mut bands = Vec::new();
     if channels {
-        bands.push(Band { from: sp.t_threshold(), to: sp.t_peak(), lane: 0, key: NAME_NA, colour_slot: 1 });
-        bands.push(Band { from: sp.t_peak(), to: if dips { sp.t_linger_end() } else { sp.t_low() }, lane: 0, key: NAME_K, colour_slot: 2 });
+        bands.push(Band { from: sp.t_threshold(), to: sp.t_peak(), lane: 0, dash_slot: 0, key: NAME_NA, colour_slot: 1 });
+        // potassium channels close again as the membrane returns to rest
+        bands.push(Band { from: sp.t_peak(), to: sp.t_settled(), lane: 0, dash_slot: 1, key: NAME_K, colour_slot: 2 });
     }
     if refr {
         let lane = usize::from(channels);
-        bands.push(Band { from: sp.t_threshold(), to: sp.t_back_to_rest(), lane, key: NAME_ABS, colour_slot: 3 });
-        if rel { bands.push(Band { from: sp.t_back_to_rest(), to: sp.t_linger_end(), lane, key: NAME_REL, colour_slot: 4 }); }
+        bands.push(Band { from: sp.t_threshold(), to: sp.t_back_to_rest(), lane, dash_slot: 3, key: NAME_ABS, colour_slot: 3 });
+        if rel { bands.push(Band { from: sp.t_back_to_rest(), to: sp.t_settled(), lane, dash_slot: 2, key: NAME_REL, colour_slot: 4 }); }
     }
 
     // ---- obstacles for the discs
@@ -614,7 +764,10 @@ fn plan(p: &Params) -> Result<Plan, Refusal> {
     }
     let mut discs: Vec<(P2, f64)> = Vec::new();
     let mut leaders: Vec<(P2, P2)> = Vec::new();
+    let mut dots: Vec<P2> = Vec::new();
     let mut pointers: Vec<Pointer> = Vec::new();
+    // a finer copy of the curve for the leaders, which are thin and may graze it
+    let fine = trace(&sp, &f, 2.0);
 
     // numbered ones, in order
     let mut counter = 0usize;
@@ -643,12 +796,14 @@ fn plan(p: &Params) -> Result<Plan, Refusal> {
         let anchors = anchors_for(&sp, name);
         let dirs = dirs_for(name);
         let lens = [r + 14.0 * lab, r + 24.0 * lab, r + 36.0 * lab, r + 50.0 * lab];
-        let mut placed: Option<(P2, P2)> = None;
+        let mut placed: Option<(P2, P2, P2)> = None;
         'search: for strict in [true, false] {
             for &t in &anchors {
                 let dot = (f.px(t), f.py(sp.v(t)));
                 // a dot on a guide line is only allowed once nothing better exists (a peak at exactly 0 mV sits on the zero line)
                 if strict && hlines.iter().any(|(a, b)| dist_seg(dot, *a, *b) < 6.0) { continue; }
+                // the dot is a mark of its own: clear of every earlier leader and dot
+                if leaders.iter().any(|(a, b)| dist_seg(dot, *a, *b) < LEADER_DOT_GAP) || dots.iter().any(|q| dist(dot, *q) < 2.0 * DOT_R + 3.0) { continue; }
                 for &(dx, dy) in &dirs {
                     let n = (dx * dx + dy * dy).sqrt();
                     let (ux, uy) = (dx / n, dy / n);
@@ -658,37 +813,39 @@ fn plan(p: &Params) -> Result<Plan, Refusal> {
                         if dist_poly(c, &coarse) < r + 4.0 + 0.5 { continue; }
                         if hlines.iter().any(|(a, b)| dist_seg(c, *a, *b) < r + 3.0) { continue; }
                         if segs.iter().any(|(a, b)| dist_seg(c, *a, *b) < r + 4.0) { continue; }
-                        if discs.iter().any(|(d, dr)| ((c.0 - d.0).powi(2) + (c.1 - d.1).powi(2)).sqrt() < r + dr + 4.0) { continue; }
+                        if discs.iter().any(|(d, dr)| dist(c, *d) < r + dr + 4.0) { continue; }
+                        // the disc keeps clear of the leaders and dots already placed
+                        if leaders.iter().any(|(a, b)| dist_seg(c, *a, *b) < r + 3.0) || dots.iter().any(|q| dist(c, *q) < r + LEADER_DOT_GAP) { continue; }
                         let edge = (dot.0 + ux * (len - r), dot.1 + uy * (len - r));
                         if discs.iter().any(|(d, dr)| dist_seg(*d, dot, edge) < dr + 2.0) { continue; }
-                        // the leader must leave the curve, not run along it
+                        // the leader: not along the curve, not across the stimulus arrow, another leader or another dot
                         let mut ok = true;
                         let steps = ((len - r) / 2.0).ceil().max(1.0) as usize;
-                        for s in 1..=steps {
-                            let q = (dot.0 + ux * (len - r) * s as f64 / steps as f64, dot.1 + uy * (len - r) * s as f64 / steps as f64);
-                            let d = q.0 - dot.0;
-                            let e = q.1 - dot.1;
-                            if (d * d + e * e).sqrt() > 7.0 && dist_poly(q, &coarse) < 2.5 { ok = false; break; }
+                        for st in 1..=steps {
+                            let q = (dot.0 + ux * (len - r) * st as f64 / steps as f64, dot.1 + uy * (len - r) * st as f64 / steps as f64);
+                            if dist(q, dot) > LEADER_FREE && dist_poly(q, &fine) < LEADER_CURVE_GAP { ok = false; break; }
                         }
                         if !ok { continue; }
-                        if strict {
-                            if hlines.iter().any(|(a, b)| seg_cross(dot, edge, *a, *b)) { continue; }
-                            if leaders.iter().any(|(a, b)| seg_cross(dot, edge, *a, *b)) { continue; }
+                        if let Some((xs, y_top, y_tail)) = arrow {
+                            if segs_dist(dot, edge, (xs, y_top), (xs, y_tail)) < LEADER_ARROW_GAP { continue; }
                         }
-                        placed = Some((c, dot));
+                        if leaders.iter().any(|(a, b)| segs_dist(dot, edge, *a, *b) < LEADER_GAP) { continue; }
+                        if dots.iter().any(|q| dist_seg(*q, dot, edge) < LEADER_DOT_GAP) { continue; }
+                        if strict && hlines.iter().any(|(a, b)| seg_cross(dot, edge, *a, *b)) { continue; }
+                        placed = Some((c, dot, edge));
                         break 'search;
                     }
                 }
             }
         }
-        let Some((c, dot)) = placed else {
+        let Some((c, dot, edge)) = placed else {
             return Err(refuse(
                 format!("There is no clear place for the pointer to \"{name}\" with these values: it would touch the curve, a guide line or another pointer."),
                 "Change the potentials or the times a little, or turn the phase pointers off.",
             ));
         };
-        let edge = (dot.0 + (c.0 - dot.0) * (1.0 - r / ((c.0 - dot.0).powi(2) + (c.1 - dot.1).powi(2)).sqrt()), dot.1 + (c.1 - dot.1) * (1.0 - r / ((c.0 - dot.0).powi(2) + (c.1 - dot.1).powi(2)).sqrt()));
         leaders.push((dot, edge));
+        dots.push(dot);
         discs.push((c, r));
         pointers.push(Pointer { mark, name, disc: c, dot: Some(dot) });
     }
@@ -724,7 +881,7 @@ fn plan(p: &Params) -> Result<Plan, Refusal> {
 
     Ok(Plan {
         sp, f, w, h, lab, r, pointers, bands, lane_top, lane_h, yticks, xticks, show_thr,
-        thr_disc, stim: arrow, key_top, key_rows, key_col_w, key_row_h, cap, cap_top, notes, title_y,
+        thr_disc, stim: arrow, key_top, key_rows, key_col_w, key_row_h, notes, title_y, yminor, xminor, lane_labels,
     })
 }
 
@@ -737,7 +894,8 @@ fn anchors_for(sp: &Spike, name: &str) -> Vec<f64> {
         return match name {
             n if n == NAMES_COMMON[1] => rest_anchors(sp),
             n if n == NAME_LOCAL => vec![tb, tb - 0.15, tb + 0.2, tb + 0.45],
-            _ => vec![tb + 1.0, tb + 1.4, tb + 0.8, tb + 1.9, tb + 2.4],
+            // the falling limb of the bump, where the curve is still on its way back (not the flat rest line again)
+            _ => vec![tb + 0.55, tb + 0.7, tb + 0.45, tb + 0.9, tb + 0.35],
         };
     }
     match name {
@@ -756,19 +914,18 @@ fn anchors_for(sp: &Spike, name: &str) -> Vec<f64> {
         }
         n if n == NAMES_COMMON[6] => vec![tl, tl - 0.2, tl + 0.2, tl - 0.4, tl + 0.4],
         _ => {
-            let a = tl + T_LINGER;
-            let mut v = frac(a, ts + NEED, &[0.0, 0.25, 0.5, 0.75, 1.0]);
-            v.extend(frac(ts + NEED, sp.dur, &[0.2, 0.6]));
-            v
+            // where the recovery ends and the curve joins the resting line again
+            let a = sp.t_settled();
+            // strictly after the recovery (the brackets end at `a`), then later along the settled stretch
+            frac(a, (a + 1.5).min(sp.dur), &[0.5, 0.8, 0.3, 1.0, 0.15])
         }
     }
 }
 
+/// The resting potential is pointed out before the stimulus, where the trace has not yet been disturbed; the
+/// "return to rest" pointer owns the stretch after the spike, so the two never point at the same place.
 fn rest_anchors(sp: &Spike) -> Vec<f64> {
-    let mut v = vec![sp.ts * 0.5, sp.ts * 0.3, sp.ts * 0.75];
-    let end = sp.ts + NEED;
-    v.extend([end + (sp.dur - end) * 0.5, end + (sp.dur - end) * 0.85, end + (sp.dur - end) * 0.15]);
-    v
+    [0.5, 0.3, 0.75, 0.2, 0.9, 0.1].iter().map(|k| sp.ts * k).collect()
 }
 
 fn dirs_for(name: &str) -> Vec<P2> {
@@ -838,16 +995,27 @@ fn draw(p: &Params, pl: &Plan) -> String {
     let zero_col = if print { "#666666" } else { "#8a8f98" };
     let mut d = Doc::new(pl.w, pl.h);
     let names: Vec<&str> = pl.pointers.iter().map(|q| q.name).collect();
+    // nothing in the description says what was left out or why: that is the editor note's job
     let desc = if key && !names.is_empty() {
-        format!("Membrane potential in mV against time in ms for a neuron{}. Pointers: {}.", if sp.fail { ", a trace that fails to start a spike" } else { "" }, names.join("; "))
+        format!("Membrane potential in mV against time in ms for a neuron. Pointers: {}.", names.join("; "))
     } else {
-        format!("Membrane potential in mV against time in ms for a neuron{}. {} pointers to name.", if sp.fail { ", a trace that fails to start a spike" } else { "" }, pl.pointers.len())
+        format!("Membrane potential in mV against time in ms for a neuron. {} pointers to name.", pl.pointers.len())
     };
     d.describe("Action potential", &desc);
     d.defs(&fills.defs());
 
     // axes
     let (x0, x1, yb, yt) = (f.l, f.l + f.w, f.t + f.h, f.t);
+    // light grid lines at every tick level, behind everything (graph paper): a level can be read across the plot
+    {
+        let (g_major, g_minor) = if print { ("#cfcfcf", "#e6e6e6") } else { ("#d3d7de", "#e9ebf0") };
+        let mut g = String::from(r#"<g id="grid">"#);
+        let mut put = |y: f64, col: &str, sw: f64| g.push_str(&format!(r#"<line x1="{x0:.2}" y1="{y:.2}" x2="{x1:.2}" y2="{y:.2}" stroke="{col}" stroke-width="{sw}"/>"#));
+        for v in &pl.yminor { put(f.py(*v), g_minor, 0.8); }
+        for (v, _) in &pl.yticks { put(f.py(*v), g_major, 1.0); }
+        g.push_str("</g>");
+        d.raw(&g);
+    }
     if f.lo < 0.0 && 0.0 < f.hi { d.line(x0, f.py(0.0), x1, f.py(0.0), zero_col, 1.3); }
     d.line(x0, yb, x1, yb, INK, 1.8);
     d.line(x0, yt, x0, yb, INK, 1.8);
@@ -856,6 +1024,8 @@ fn draw(p: &Params, pl: &Plan) -> String {
         d.line(x0 - 6.0, y, x0, y, INK, 1.4);
         d.raw(&text_el(x0 - 10.0, y + fs * 0.35, fs, "end", INK, label));
     }
+    for v in &pl.yminor { let y = f.py(*v); d.line(x0 - 3.5, y, x0, y, INK, 1.0); }
+    for v in &pl.xminor { let x = f.px(*v); d.line(x, yb, x, yb + 3.5, INK, 1.0); }
     for (v, label) in &pl.xticks {
         let x = f.px(*v);
         d.line(x, yb, x, yb + 6.0, INK, 1.4);
@@ -882,12 +1052,23 @@ fn draw(p: &Params, pl: &Plan) -> String {
     for (i, q) in pts.iter().enumerate() { path.push_str(&format!("{}{:.2},{:.2}", if i == 0 { "M" } else { "L" }, q.0, q.1)); }
     d.path(&path, "none", curve_col, 2.6);
 
-    // bands
+    // bands: in Print the four brackets differ by their dash, as well as by their letter
     for b in &pl.bands {
         let y = pl.lane_top + b.lane as f64 * pl.lane_h + 12.0;
-        let (a, c) = (f.px(b.from) + 1.5, f.px(b.to) - 1.5);
+        let (a, c) = (f.px(b.from) + 3.0, f.px(b.to) - 3.0);
         let col = fills.line(b.colour_slot);
-        d.path(&format!("M{a:.2},{:.2}V{y:.2}H{c:.2}V{:.2}", y - 6.0, y - 6.0), "none", col, 2.2);
+        let dash = fills.dash(b.dash_slot);
+        let dash = if dash.is_empty() { String::new() } else { format!(r#" stroke-dasharray="{dash}""#) };
+        d.raw(&format!(r#"<path d="M{a:.2},{:.2}V{y:.2}H{c:.2}V{:.2}" fill="none" stroke="{col}" stroke-width="2.2"{dash}/>"#, y - 6.0, y - 6.0));
+    }
+    // a short label for each row of brackets, so two rows read as two different questions
+    for (i, lines) in pl.lane_labels.iter().enumerate() {
+        let cy = pl.lane_top + i as f64 * pl.lane_h + 16.0 + r;
+        let lh = 1.2 * fs;
+        for (j, l) in lines.iter().enumerate() {
+            let y = cy - (lines.len() as f64 - 1.0) * lh / 2.0 + j as f64 * lh + 0.35 * fs;
+            d.raw(&text_el(x0 - 6.0, y, fs, "end", INK, l));
+        }
     }
     // pointers
     for q in &pl.pointers {
@@ -895,12 +1076,10 @@ fn draw(p: &Params, pl: &Plan) -> String {
             let dist = ((q.disc.0 - dot.0).powi(2) + (q.disc.1 - dot.1).powi(2)).sqrt();
             let k = 1.0 - r / dist;
             d.line(dot.0, dot.1, dot.0 + (q.disc.0 - dot.0) * k, dot.1 + (q.disc.1 - dot.1) * k, INK, 1.2);
-            d.circle(dot.0, dot.1, 2.6, INK, INK, 0.5);
+            // a white ring round the dot, so it stands out on a black curve in Print
+            d.circle(dot.0, dot.1, DOT_R, INK, "#ffffff", 1.4);
         }
         disc(&mut d, q.disc, r, &q.mark, dfs);
-    }
-    if pl.thr_disc && pl.show_thr {
-        // the dashed line stops at the disc; nothing more to draw
     }
 
     // the key: both copies lay out identically
@@ -917,9 +1096,6 @@ fn draw(p: &Params, pl: &Plan) -> String {
         } else {
             d.line(x, cy + 0.35 * kfs + 3.0, x + blank_w, cy + 0.35 * kfs + 3.0, INK, 1.0);
         }
-    }
-    for (i, l) in pl.cap.iter().enumerate() {
-        d.raw(&text_el(MARGIN, pl.cap_top + 12.0 * lab + i as f64 * 16.0 * lab, 12.0 * lab, "start", INK, l));
     }
     d.finish()
 }
@@ -991,15 +1167,36 @@ mod tests {
             Tx { x, y, size: num(head, "font-size"), anchor: attr(head, "text-anchor").unwrap(), s: unesc(&strip_tags(body.split("</text>").next().unwrap())), rot }
         }).collect()
     }
+    /// The marks written inside the discs (1.. and A..), figure and key.
+    fn disc_marks(svg: &str) -> Vec<String> {
+        let ds: Vec<_> = circles(svg).into_iter().filter(|c| c.2 >= 6.0).collect();
+        texts(svg).into_iter().filter(|t| ds.iter().any(|d| ((t.x - d.0).powi(2) + (t.y - d.1).powi(2)).sqrt() < d.2)).map(|t| t.s).collect()
+    }
     fn joined(svg: &str) -> String { texts(svg).iter().map(|t| t.s.clone()).collect::<Vec<_>>().join("\n") }
     fn circles(svg: &str) -> Vec<(f64, f64, f64)> {
         svg.split("<circle ").skip(1).map(|c| { let c = c.split('>').next().unwrap(); (num(c, "cx"), num(c, "cy"), num(c, "r")) }).collect()
     }
-    fn lines(svg: &str) -> Vec<(P, P)> {
-        svg.split("<line ").skip(1).map(|l| { let l = l.split('>').next().unwrap(); ((num(l, "x1"), num(l, "y1")), (num(l, "x2"), num(l, "y2"))) }).collect()
+    /// The picture without its grid group (light graph-paper lines under everything, which no collision rule covers).
+    fn strip_grid(svg: &str) -> String {
+        match svg.split_once("<g id=\"grid\">") {
+            Some((a, rest)) => format!("{a}{}", rest.split_once("</g>").unwrap().1),
+            None => svg.to_string(),
+        }
     }
+    fn grid_lines(svg: &str) -> Vec<(P, f64, String)> {
+        let Some((_, rest)) = svg.split_once("<g id=\"grid\">") else { return vec![] };
+        rest.split_once("</g>").unwrap().0.split("<line ").skip(1).map(|l| {
+            let l = l.split('>').next().unwrap();
+            ((num(l, "x1"), num(l, "x2")), num(l, "y1"), attr(l, "stroke").unwrap())
+        }).collect()
+    }
+    /// Every line with its stroke width and colour.
+    fn lines_w(svg: &str) -> Vec<((P, P), f64, String)> {
+        strip_grid(svg).split("<line ").skip(1).map(|l| { let l = l.split('>').next().unwrap(); (((num(l, "x1"), num(l, "y1")), (num(l, "x2"), num(l, "y2"))), num(l, "stroke-width"), attr(l, "stroke").unwrap_or_default()) }).collect()
+    }
+    fn lines(svg: &str) -> Vec<(P, P)> { lines_w(svg).into_iter().map(|l| l.0).collect() }
     fn polys(svg: &str) -> Vec<Vec<P>> {
-        svg.split("<polygon ").skip(1).map(|g| {
+        strip_grid(svg).split("<polygon ").skip(1).map(|g| {
             attr(g.split('>').next().unwrap(), "points").unwrap().split_whitespace().map(|q| { let (x, y) = q.split_once(',').unwrap(); (x.parse().unwrap(), y.parse().unwrap()) }).collect()
         }).collect()
     }
@@ -1039,11 +1236,13 @@ mod tests {
         let x0 = match t.anchor.as_str() { "middle" => t.x - w / 2.0, "end" => t.x - w, _ => t.x };
         (x0, t.y - 0.82 * t.size, x0 + w, t.y + 0.25 * t.size)
     }
-    fn dseg(p: P, a: P, b: P) -> f64 {
-        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
-        let l2 = dx * dx + dy * dy;
-        let t = if l2 < 1e-12 { 0.0 } else { (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / l2).clamp(0.0, 1.0) };
-        ((p.0 - a.0 - t * dx).powi(2) + (p.1 - a.1 - t * dy).powi(2)).sqrt()
+    fn dseg(p: P, a: P, b: P) -> f64 { crate::figures::composite::seg_dist(p, a, b) }
+    /// Least distance between two segments, from my own crossing test.
+    fn sseg(a: P, b: P, c: P, d: P) -> f64 {
+        let o = |p: P, q: P, r: P| (q.0 - p.0) * (r.1 - p.1) - (q.1 - p.1) * (r.0 - p.0);
+        let crossing = (o(c, d, a) > 0.0) != (o(c, d, b) > 0.0) && (o(a, b, c) > 0.0) != (o(a, b, d) > 0.0);
+        if crossing { return 0.0; }
+        dseg(a, c, d).min(dseg(b, c, d)).min(dseg(c, a, b)).min(dseg(d, a, b))
     }
     fn dpoly(p: P, pts: &[P]) -> f64 { pts.windows(2).map(|w| dseg(p, w[0], w[1])).fold(f64::INFINITY, f64::min) }
     fn seg_in_box(a: P, b: P, bx: (f64, f64, f64, f64), pad: f64) -> bool {
@@ -1104,10 +1303,53 @@ mod tests {
             }
             for g in &heads { if g.iter().any(|q| ((q.0 - d.0).powi(2) + (q.1 - d.1).powi(2)).sqrt() < d.2 + 1.0) { bad.push(format!("an arrowhead touches disc {d:?}")); } }
         }
+        bad.extend(leader_problems(svg));
         for q in &curve { if q.0 < 0.0 || q.0 > w || q.1 < 0.0 || q.1 > h { bad.push(format!("curve leaves the canvas at {q:?}")); break; } }
         for l in &ls { for q in [l.0, l.1] { if q.0 < -0.01 || q.0 > w + 0.01 || q.1 < -0.01 || q.1 > h + 0.01 { bad.push(format!("line leaves the canvas {l:?}")); } } }
         bad
     }
+
+    /// The leaders (the 1.2 px lines from a dot on the curve to a disc), each measured against everything it could
+    /// cross, with literal gaps: 1 px between strokes' edges. The module's own constants are not used.
+    fn leader_problems(svg: &str) -> Vec<String> {
+        let mut bad = Vec::new();
+        let ls = lines_w(svg);
+        let leaders: Vec<(P, P)> = ls.iter().filter(|l| l.1 == 1.2).map(|l| l.0).collect();
+        let (curve, _) = paths(svg);
+        let all = circles(svg);
+        let discs: Vec<_> = all.iter().filter(|c| c.2 >= 6.0).collect();
+        let dots: Vec<_> = all.iter().filter(|c| c.2 < 6.0).collect();
+        let heads = polys(svg);
+        for (i, &(a, b)) in leaders.iter().enumerate() {
+            // along the curve: the curve is 2.6 wide, the leader 1.2, and they may meet only at the leader's own dot
+            let n = (dist2(a, b) / 0.5).ceil().max(1.0) as usize;
+            for k in 0..=n {
+                let q = (a.0 + (b.0 - a.0) * k as f64 / n as f64, a.1 + (b.1 - a.1) * k as f64 / n as f64);
+                if dist2(q, a) > 7.0 && dpoly(q, &curve) < 1.3 + 0.6 + 1.0 { bad.push(format!("a leader touches the curve away from its dot: {a:?} -> {b:?} at {q:?}")); break; }
+            }
+            for &&(cx, cy, r) in &discs {
+                let own = (dist2((cx, cy), b) - r).abs() < 0.6;
+                if !own && dseg((cx, cy), a, b) < r + 0.6 + 1.0 { bad.push(format!("a leader {a:?} -> {b:?} touches another disc {cx},{cy}")); }
+            }
+            for &&(cx, cy, r) in &dots {
+                if dist2((cx, cy), a) > 0.05 && dseg((cx, cy), a, b) < r + 0.7 + 0.6 + 1.0 { bad.push(format!("a leader {a:?} -> {b:?} touches another leader's dot {cx},{cy}")); }
+            }
+            for &(c, d) in leaders.iter().skip(i + 1) {
+                if sseg(a, b, c, d) < 1.2 + 1.0 { bad.push(format!("two leaders touch: {a:?}->{b:?} / {c:?}->{d:?}")); }
+            }
+            // the stimulus arrow: its shaft is the vertical 1.8 line under the head's tip, the head is the polygon
+            for g in &heads {
+                let tip = g[0];
+                let shaft: Vec<&(P, P)> = ls.iter().filter(|l| l.1 == 1.8 && l.0 .0 .0 == l.0 .1 .0 && (l.0 .0 .0 - tip.0).abs() < 0.02).map(|l| &l.0).collect();
+                for sh in shaft { if sseg(a, b, sh.0, sh.1) < 0.9 + 0.6 + 1.0 { bad.push(format!("a leader {a:?} -> {b:?} crosses or touches the stimulus arrow")); } }
+                for k in 0..3 {
+                    if sseg(a, b, g[k], g[(k + 1) % 3]) < 0.6 + 1.0 { bad.push(format!("a leader {a:?} -> {b:?} touches the arrowhead")); }
+                }
+            }
+        }
+        bad
+    }
+    fn dist2(a: P, b: P) -> f64 { ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt() }
 
     /// value -> pixel maps read back from the picture's own ticks, so a test never uses the module's frame.
     struct Axes { y0: f64, ky: f64, x0: f64, kx: f64 }
@@ -1143,7 +1385,7 @@ mod tests {
     // ------------------------------------------------------------------ the number reader
     #[test]
     fn numbers_are_read_forgivingly_and_refused_with_a_reason() {
-        let mv = |t: &str| number(t, "Peak", &["millivolts", "millivolt", "mv"], "-70");
+        let mv = |t: &str| number(t, "Peak", &["millivolts", "millivolt", "mv"], "-70").map(|n| n.v);
         for (t, v) in [
             ("-70", -70.0), ("\u{2212}70", -70.0), ("\u{feff}-70", -70.0), (" \t-70 mV\r\n", -70.0), ("-70mv", -70.0), ("- 70", -70.0),
             ("+40", 40.0), ("40.5", 40.5), ("40,5", 40.5), ("-0,5 MV", -0.5), ("\u{2013}55 millivolts", -55.0), ("007", 7.0), (".5", 0.5), ("0", 0.0), ("-0", 0.0),
@@ -1158,7 +1400,21 @@ mod tests {
         // the ambiguous comma says why, and the unit of the other control is not accepted
         assert!(mv("1,000").unwrap_err().why.contains("ambiguous"));
         assert!(number("6 mV", "Total time", &["ms"], "1.5").is_err());
-        assert_eq!(number("6 MS", "Total time", &["milliseconds", "ms"], "1.5"), Ok(6.0));
+        assert_eq!(number("6 MS", "Total time", &["milliseconds", "ms"], "1.5").map(|n| n.v), Ok(6.0));
+    }
+
+    #[test]
+    fn a_number_is_kept_exactly_as_typed_and_quoted_as_typed() {
+        let ex = |t: &str| number(t, "Peak", &["mv"], "-70").unwrap().d;
+        assert_eq!(ex("-63.6"), -63_600_000_000);
+        assert_eq!(ex("-73.6") + 10 * SCALE, ex("-63.6"), "ten more than -73.6 is exactly -63.6");
+        assert_eq!(ex("0.4999"), 499_900_000);
+        assert_eq!(ex("12,0001"), 12_000_100_000);
+        assert_eq!(ex("-0"), 0);
+        for t in ["-63.6", "0.4999", "12.0001", "-72.9999", "5", "-100.0001", "0.123456789"] {
+            assert_eq!(show_d(ex(t)), t.replace('-', "\u{2212}"), "{t}: a message quotes what was typed");
+        }
+        assert_eq!(show_d(ex("4.50")), "4.5");
     }
 
     fn refusal(list: &[(&'static str, Value)]) -> Refusal { read(&with(list)).expect_err("expected a refusal") }
@@ -1168,17 +1424,28 @@ mod tests {
         let cases: Vec<(Vec<(&'static str, Value)>, &str, &str)> = vec![
             (vec![s("resting", "x")], "is not a number", "Nothing is drawn until"),
             (vec![s("peak", "")], "is empty", "Nothing is drawn until"),
-            (vec![s("resting", "-5")], "negative at rest", "negative resting"),
+            (vec![s("resting", "5")], "negative at rest", "negative resting"),
+            (vec![s("resting", "-5")], "above the \u{2212}14 mV limit", "\u{2212}14 mV or lower"),
+            (vec![s("resting", "-150")], "outside the \u{2212}100 to \u{2212}14 mV", "inside that range"),
             (vec![s("peak", "150")], "outside the", "inside that range"),
             (vec![s("undershoot", "-120")], "outside the", "inside that range"),
             (vec![s("threshold", "-65")], "at least 10 mV above the resting potential", "Raise the threshold"),
-            (vec![s("threshold", "-3")], "within 4 mV of 0 mV", "at least 4 mV from zero"),
+            (vec![s("threshold", "-3")], "within 4 mV of 0 mV", "\u{2212}4 mV or lower"),
+            (vec![s("threshold", "0")], "at or above 0 mV", "below zero"),
+            (vec![s("threshold", "12"), s("peak", "60")], "at or above 0 mV", "below zero"),
+            (vec![s("threshold", "-120")], "outside the \u{2212}100 to \u{2212}4 mV", "inside that range"),
             (vec![s("peak", "-40")], "at least 20 mV above the threshold", "Raise the peak"),
             (vec![s("undershoot", "-60")], "is above the resting potential", "Type a lower value"),
             (vec![s("undershoot", "-72")], "too shallow", "at least 3 mV below"),
             (vec![s("stimulus", "0")], "before 0.5 ms", "Type 0.5 ms or later"),
             (vec![s("duration", "13")], "over the 12 ms", "shorter time"),
-            (vec![s("duration", "5")], "needs about 4.7 ms", "at least 5.7 ms"),
+            (vec![s("duration", "5")], "needs about 4.7 ms", "Make the total time at least 5.7 ms."),
+            (vec![s("stimulus", "7"), s("duration", "8")], "leaves only 1 ms of the 8 ms trace", "at least 11.7 ms, or move the stimulus to 3.3 ms or earlier"),
+            (vec![s("stimulus", "8"), s("duration", "12")], "leaves only 4 ms of the 12 ms trace", "Move the stimulus to 7.3 ms or earlier"),
+            (vec![s("stimulus", "100"), s("duration", "8")], "is not before the end of the 8 ms trace", "Move the stimulus to 3.3 ms or earlier"),
+            (vec![s("stimulus", "9"), s("duration", "5")], "is not before the end of the 5 ms trace", "stimulus time of 0.5 to 7.3 ms"),
+            (vec![s("duration", "-5")], "is not a time", "5.2 to 12 ms"),
+            (vec![s("duration", "0")], "is not a time", "5.2 to 12 ms"),
         ];
         for (list, why, then) in cases {
             let e = refusal(&list);
@@ -1193,6 +1460,10 @@ mod tests {
         }
         // the boundaries are exactly as stated
         assert!(read(&with(&[s("threshold", "-60")])).is_ok());
+        assert!(read(&with(&[s("threshold", "-4"), s("peak", "40")])).is_ok(), "-4 is the highest threshold");
+        assert!(read(&with(&[s("threshold", "-3.9")])).is_err());
+        assert!(read(&with(&[s("resting", "-14"), s("threshold", "-4"), s("undershoot", "-30")])).is_ok(), "-14 is the highest resting potential");
+        assert!(read(&with(&[s("resting", "-13.9"), s("threshold", "-4")])).is_err());
         assert!(read(&with(&[s("peak", "-35")])).is_ok());
         assert!(read(&with(&[s("undershoot", "-73")])).is_ok());
         assert!(read(&with(&[s("undershoot", "-70")])).is_ok());
@@ -1223,7 +1494,7 @@ mod tests {
         for (rest, thr, peak, under) in [
             (-70.0, -55.0, 40.0, -80.0), (-70.0, -55.0, -35.0, -80.0), (-70.0, -60.0, 40.0, -80.0), (-70.0, -55.0, 40.0, -70.0),
             (-90.0, -60.0, 60.0, -100.0), (-85.0, -65.0, 30.0, -90.0), (-20.0, -5.0, 40.0, -30.0), (-70.0, -55.0, 40.0, -73.0),
-            (-40.0, -30.0, 70.0, -50.0), (-100.0, -90.0, 70.0, -100.0), (-100.0, 10.0, 70.0, -100.0),
+            (-40.0, -30.0, 70.0, -50.0), (-100.0, -90.0, 70.0, -100.0), (-100.0, -4.0, 70.0, -100.0), (-14.0, -4.0, 40.0, -100.0),
         ] {
             for (ts, dur) in [(1.0, 8.0), (0.5, 5.2), (0.5, 12.0), (7.3, 12.0), (5.0, 12.0), (2.0, 7.0)] {
                 for fail in [false, true] { v.push(sp(rest, thr, peak, under, ts, dur, fail)); }
@@ -1324,7 +1595,6 @@ mod tests {
             }
         }
     }
-    fn b2f(a: P, b: P) -> P { (a.0 - b.0, a.1 - b.1) }
     fn num_of(s: &str) -> f64 { s.parse().unwrap() }
 
     #[test]
@@ -1352,8 +1622,12 @@ mod tests {
             mk("-85", "-65", "30", "-90", "1", "9"),
             mk("-20", "-5", "40", "-30", "1", "8"),
             mk("-70", "-55", "40", "-73", "3", "10"),
-            mk("-100", "10", "70", "-100", "0.5", "12"),
+            mk("-100", "-90", "70", "-100", "0.5", "5.2"),
+            mk("-100", "-90", "70", "-100", "1", "8"),
+            mk("-100", "-4", "70", "-100", "0.5", "12"),
+            mk("-14", "-4", "40", "-100", "2", "12"),
             mk("-45", "-33", "70", "-60", "4", "12"),
+            mk("-62.3", "-50.5", "37.5", "-77.9", "1.7", "9.3"),
         ]
     }
     fn switches(mask: u32, fail: bool, key: bool, size: &str) -> Vec<(&'static str, Value)> {
@@ -1366,7 +1640,7 @@ mod tests {
     /// How many pointers of each kind a valid figure draws, worked out here from the switches alone.
     fn expected_pointers(mask: u32, fail: bool, dips: bool) -> (usize, usize) {
         let (thr, stim, ph, ch, rf) = (mask & 1 != 0, mask & 2 != 0, mask & 4 != 0, mask & 8 != 0, mask & 16 != 0);
-        let numbered = if !ph { 0 } else if fail { 3 + usize::from(stim) + usize::from(thr) } else { 1 + usize::from(stim) + usize::from(thr) + 3 + usize::from(dips) + 1 };
+        let numbered = if !ph { 0 } else if fail { 3 + usize::from(stim) + usize::from(thr) } else { 1 + usize::from(stim) + usize::from(thr) + 3 + 2 * usize::from(dips) };
         let lettered = if fail { 0 } else { 2 * usize::from(ch) + usize::from(rf) * (1 + usize::from(dips)) };
         (numbered, lettered)
     }
@@ -1400,7 +1674,7 @@ mod tests {
                 }
             }
         }
-        assert!(checked >= 4992, "{checked} checked, {refused} refused");
+        assert!(checked >= 6528, "{checked} checked, {refused} refused");
         assert_eq!(refused, 0, "every set in the sweep is a valid trace");
     }
 
@@ -1408,12 +1682,12 @@ mod tests {
     fn placement_never_fails_for_any_valid_trace() {
         // a wide grid of valid traces: if the values read, the figure is drawn
         let mut n = 0;
-        for rest in [-100.0f64, -80.0, -70.0, -50.0, -30.0, -10.0] {
+        for rest in [-100.0f64, -80.0, -70.0, -50.0, -30.0, -20.0, -14.0] {
             for dthr in [10.0, 15.0, 30.0] {
                 for dpk in [20.0, 40.0, 60.0] {
                     for dip in [0.0, 3.0, 10.0, 25.0] {
                         let (thr, peak, under) = (rest + dthr, rest + dthr + dpk, rest - dip);
-                        if thr.abs() < 4.0 || peak > 70.0 || under < -100.0 { continue; }
+                        if thr > -4.0 || peak > 70.0 || under < -100.0 { continue; }
                         for (ts, dur) in [(0.5, 5.2), (1.0, 8.0), (4.0, 12.0)] {
                             for size in ["Small", "Large"] {
                                 for mask in [31u32, 0b10111, 0b01110, 0b11111] {
@@ -1437,9 +1711,9 @@ mod tests {
     }
 
     // ------------------------------------------------------------------ the exercise
-    const NAMES: [&str; 14] = [
+    const NAMES: [&str; 15] = [
         "resting potential", "threshold", "depolarisation", "peak", "repolarisation", "hyperpolarisation", "undershoot", "stimulus",
-        "channels open", "refractory", "na+", "k+", "local", "return to",
+        "channels open", "absolute", "relative", "na+", "k+", "local", "return to",
     ];
 
     #[test]
@@ -1528,17 +1802,19 @@ mod tests {
     }
 
     #[test]
-    fn failed_initiation_draws_a_bump_and_no_spike_bands_and_says_so_only_when_it_drops_something() {
+    fn failed_initiation_draws_a_bump_and_no_spike_bands_and_only_the_note_says_so() {
         let f = |extra: &[(&'static str, Value)]| { let mut l = vec![b("fail", true)]; l.extend(extra.iter().cloned()); l };
         let svg = render_of(&f(&[]));
         assert!(paths(&svg).1.is_empty(), "no channel brackets in a failure");
-        // the default switches have the channel bands on, so the note applies and is on the canvas
-        assert!(joined(&svg).contains("too weak to start a spike"));
-        // with both band switches off nothing was dropped, so nothing is said
-        let quiet = render_of(&f(&[b("show_channels", false)]));
-        assert!(!joined(&quiet).contains("too weak"));
+        // the default switches have the channel bands on, so something was dropped: the NOTE says so, the canvas does not
+        let notes = notes_for(ID, &with(&f(&[])));
+        assert_eq!(notes.len(), 1);
+        assert!(notes[0].contains("too weak to start a spike"), "{notes:?}");
+        assert!(!svg.to_lowercase().contains("weak"));
+        // with both band switches off nothing was dropped, so there is nothing to say
+        assert!(notes_for(ID, &with(&f(&[b("show_channels", false)]))).is_empty());
         // and the ordinary spike never carries the note
-        assert!(!joined(&render_of(&[])).contains("too weak"));
+        assert!(notes_for(ID, &with(&[])).is_empty());
         // the bump is below the threshold line and returns to rest
         let ax = axes_of(&svg);
         let (curve, _) = paths(&svg);
@@ -1551,23 +1827,35 @@ mod tests {
     }
 
     #[test]
-    fn no_undershoot_is_said_once_and_only_when_something_is_left_out() {
+    fn no_undershoot_drops_the_pair_that_would_point_at_one_flat_line_and_only_the_note_says_so() {
         let none = |extra: &[(&'static str, Value)]| { let mut l = vec![s("undershoot", "-70")]; l.extend(extra.iter().cloned()); l };
-        // phase pointers on: the hyperpolarisation pointer is dropped, so the note applies
-        let svg = render_of(&none(&[]));
-        assert!(joined(&svg).contains("no dip below rest"));
-        let t = texts(&svg).into_iter().filter(|t| t.s.contains("no dip below rest")).count();
-        assert_eq!(t, 1);
         let k = joined(&render_of(&none(&[b(SHOW_ANSWERS, true)])));
-        assert!(!k.contains("Hyperpolarisation") && !k.contains("Relative"));
+        for gone in ["Hyperpolarisation", "Return to resting", "Relative"] { assert!(!k.contains(gone), "{gone}"); }
+        assert!(k.contains("Resting potential") && k.contains("Repolarisation"));
+        // the key and the figure hold the same 1..N with no gap: stimulus, resting, threshold, depolarisation, peak, repolarisation
+        let marks = disc_marks(&render_of(&none(&[b(SHOW_ANSWERS, false)])));
+        assert_eq!(marks.iter().filter(|m| *m == "6").count(), 2, "{marks:?}");
+        assert!(!marks.iter().any(|m| m == "7"), "{marks:?}");
+        // the note says why, in the editor only
+        let notes = notes_for(ID, &with(&none(&[])));
+        assert_eq!(notes.len(), 1);
+        assert!(notes[0].contains("No undershoot") && notes[0].contains("left out"), "{notes:?}");
         // nothing that depends on a dip is on: nothing to say
-        let calm = render_of(&none(&[b("show_phases", false), b("show_refractory", false)]));
-        assert!(!joined(&calm).contains("no dip"));
+        assert!(notes_for(ID, &with(&none(&[b("show_phases", false), b("show_refractory", false)]))).is_empty());
         // with a dip it is never said
-        assert!(!joined(&render_of(&[b("show_refractory", true)])).contains("no dip"));
+        assert!(notes_for(ID, &with(&[b("show_refractory", true)])).is_empty());
         // K+ ends at the end of the fall when there is no dip, and the one refractory period reaches the same time
         let rf = render_of(&none(&[b("show_refractory", true)]));
         assert_eq!(paths(&rf).1.len(), 6 + 3, "Na, K and the absolute period only");
+        // the two pointers the exercise needs to tell apart are not on the same flat stretch: with a dip the
+        // resting pointer's dot is before the stimulus and the return pointer's dot is after the curve is back
+        let svg = render_of(&[]);
+        let ax = axes_of(&svg);
+        let dots: Vec<_> = circles(&svg).into_iter().filter(|c| c.2 < 6.0).collect();
+        let sp = sp(-70.0, -55.0, 40.0, -80.0, 1.0, 8.0, false);
+        let before = dots.iter().filter(|d| d.0 < ax.x(sp.ts) && (d.1 - ax.y(-70.0)).abs() < 0.3).count();
+        let after = dots.iter().filter(|d| d.0 > ax.x(sp.t_settled()) + 1.0 && (d.1 - ax.y(-70.0)).abs() < 2.0).count();
+        assert_eq!((before, after), (1, 1), "{dots:?}");
     }
 
     #[test]
@@ -1575,27 +1863,53 @@ mod tests {
         let svg = render_of(&[s("stimulus", "2"), s("duration", "10"), b("show_refractory", true)]);
         let ax = axes_of(&svg);
         let sp = sp(-70.0, -55.0, 40.0, -80.0, 2.0, 10.0, false);
-        let (_, br) = paths(&svg);
-        // each bracket is three strokes: left tick, bar, right tick
-        let spans: Vec<(f64, f64)> = br.chunks(3).map(|c| (c[0].0 .0, c[2].0 .0)).collect();
-        let want = [
-            (sp.t_threshold(), sp.t_peak()),
-            (sp.t_peak(), sp.t_low() + 1.0),
-            (sp.t_threshold(), sp.t_back_to_rest()),
-            (sp.t_back_to_rest(), sp.t_low() + 1.0),
-        ];
+        let (curve, br) = paths(&svg);
+        // each bracket is three strokes: left tick, bar, right tick; drawn 3 px in from its times
+        let spans: Vec<(f64, f64)> = br.chunks(3).map(|c| (c[0].0 .0 - 3.0, c[2].0 .0 + 3.0)).collect();
         assert_eq!(spans.len(), 4);
+        // what the curve itself says, read off the picture: the height of the curve at a pixel column
+        let mv_at = |x: f64| {
+            let q = curve.windows(2).find(|w| w[0].0 <= x && x <= w[1].0).unwrap();
+            let k = if q[1].0 > q[0].0 { (x - q[0].0) / (q[1].0 - q[0].0) } else { 0.0 };
+            (q[0].1 + k * (q[1].1 - q[0].1) - ax.y(0.0)) / ax.ky
+        };
+        let near = |v: f64, want: f64, tol: f64| (v - want).abs() <= tol;
+        let (na, k, abs, rel) = (spans[0], spans[1], spans[2], spans[3]);
+        // Na+ channels open from the threshold to the peak (Campbell 48.3, OpenStax 12.4: activation at threshold, inactivation at the peak)
+        assert!(near(mv_at(na.0), -55.0, 0.8) && near(mv_at(na.1), 40.0, 0.8), "Na+ {na:?}");
+        // K+ channels open from the peak until the membrane is back at rest, within a millivolt: after the undershoot
+        assert!(near(mv_at(k.0), 40.0, 0.8) && near(mv_at(k.1), -70.0, 1.05), "K+ {k:?} ends at {}", mv_at(k.1));
+        assert!(k.1 > ax.x(sp.t_low()), "K+ outlasts the lowest point");
+        // absolute refractory: from the threshold until the falling curve is back at rest; relative: until it has settled
+        assert!(near(mv_at(abs.0), -55.0, 0.8) && near(mv_at(abs.1), -70.0, 0.8), "absolute {abs:?}");
+        assert!(abs.1 < ax.x(sp.t_low()) && abs.1 > ax.x(sp.t_peak()), "absolute ends on the falling limb, before the lowest point");
+        assert!((rel.0 - abs.1).abs() < 1e-6 && (rel.1 - k.1).abs() < 1e-6, "relative runs from the end of the absolute period to the end of K+");
+        assert!(near(mv_at(rel.1), -70.0, 1.05));
+        // and with a coarser eye: the same four times as the module's curve gives
+        let want = [(sp.t_threshold(), sp.t_peak()), (sp.t_peak(), sp.t_settled()), (sp.t_threshold(), sp.t_back_to_rest()), (sp.t_back_to_rest(), sp.t_settled())];
         for ((a, c), (t0, t1)) in spans.iter().zip(want) {
-            assert!((a - (ax.x(t0) + 1.5)).abs() < 0.02 && (c - (ax.x(t1) - 1.5)).abs() < 0.02, "{a} {c} vs {t0} {t1}");
+            assert!((a - ax.x(t0)).abs() < 0.02 && (c - ax.x(t1)).abs() < 0.02, "{a} {c} vs {t0} {t1}");
             assert!(*a < *c);
         }
-        // Na+ opens as the curve passes the threshold: the bracket starts where the curve is at the threshold level
-        let (curve, _) = paths(&svg);
-        let at = curve.iter().min_by(|p, q| (p.0 - spans[0].0 + 1.5).abs().partial_cmp(&(q.0 - spans[0].0 + 1.5).abs()).unwrap()).unwrap();
-        assert!((at.1 - ax.y(-55.0)).abs() < 1.0, "{} vs {}", at.1, ax.y(-55.0));
-        // and K+ starts at the peak
-        let pk = curve.iter().min_by(|p, q| p.1.partial_cmp(&q.1).unwrap()).unwrap();
-        assert!((pk.0 - (spans[1].0 - 1.5)).abs() < 0.8);
+        // the return pointer's dot is after both brackets, so it points at the recovered level, not at the dip
+        let dots: Vec<_> = circles(&svg).into_iter().filter(|c| c.2 < 6.0).collect();
+        let last = dots.iter().map(|d| d.0).fold(f64::MIN, f64::max);
+        assert!(last >= k.1 - 0.5, "return dot at {last}, K+ ends at {}", k.1);
+        // the lowest point is inside the K+ and relative brackets
+        let low = curve.iter().map(|p| p.1).fold(f64::MIN, f64::max);
+        let xl = curve.iter().find(|p| p.1 == low).unwrap().0;
+        assert!(xl > k.0 && xl < k.1 && xl > rel.0 && xl < rel.1);
+    }
+
+    #[test]
+    fn the_recovery_ends_within_a_millivolt_of_rest_for_every_dip() {
+        for dip in [3.0, 5.0, 10.0, 25.0, 50.0, 86.0] {
+            let sp = sp(-14.0 - 0.0, -4.0, 40.0, -14.0 - dip, 1.0, 12.0, false);
+            let e = sp.t_settled();
+            assert!((sp.v(e) - sp.rest).abs() <= REST_TOL + 1e-6 && (sp.v(e - 0.01) - sp.rest).abs() > REST_TOL - 0.2, "{dip}: {}", sp.v(e) - sp.rest);
+            assert!(e > sp.t_low() && e < sp.ts + NEED, "{dip}: settled by {e}, the trace is kept {} long after the stimulus", NEED);
+        }
+        assert_eq!(sp(-70.0, -55.0, 40.0, -70.0, 1.0, 8.0, false).t_settled(), 1.0 + T_RISE + T_FALL);
     }
 
     // ------------------------------------------------------------------ labels, sizes, print
@@ -1610,8 +1924,20 @@ mod tests {
         assert!(texts(&svg).iter().all(|t| t.size >= 9.0), "{:?}", texts(&svg).iter().map(|t| t.size).fold(99.0, f64::min));
     }
 
+    /// 0.299 R + 0.587 G + 0.114 B of a `#rgb` or `#rrggbb` colour, 0..255.
+    fn luma(c: &str) -> f64 {
+        let h = c.trim_start_matches('#');
+        let h: String = if h.len() == 3 { h.chars().flat_map(|c| [c, c]).collect() } else { h.to_string() };
+        let v = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).unwrap() as f64;
+        0.299 * v(0) + 0.587 * v(2) + 0.114 * v(4)
+    }
+    /// The stroke of the curve itself: the one path made of straight segments.
+    fn curve_stroke(svg: &str) -> String {
+        svg.split("<path ").skip(1).map(|p| p.split('>').next().unwrap()).find(|h| attr(h, "d").is_some_and(|d| d.contains('L'))).and_then(|h| attr(h, "stroke")).unwrap()
+    }
+
     #[test]
-    fn print_is_grey_only_in_every_state() {
+    fn print_is_grey_only_and_every_mark_survives_a_66_percent_threshold() {
         for set in sets().into_iter().take(4) {
             for mask in [0u32, 31, 0b10101, 0b01010] {
                 for fail in [false, true] {
@@ -1620,12 +1946,61 @@ mod tests {
                     l.push(s("style", "Print"));
                     let svg = (def().render)(&with(&l));
                     assert!(crate::figures::census::non_grey_paints_within(&svg, 0).is_empty(), "{:?}", crate::figures::census::non_grey_paints_within(&svg, 0));
-                    assert!(!svg.contains("<path") || svg.contains("#000000") || svg.contains("#000\""), "the curve is black in Print");
+                    // the CURVE element is black, not just something somewhere in the picture
+                    assert_eq!(curve_stroke(&svg), "#000", "the curve itself is black in Print");
+                    // everything drawn as ink (all but the light grid) is dark enough to survive the 66 % copy
+                    let bw = 0.66 * 255.0;
+                    for (_, _, col) in lines_w(&svg) { assert!(luma(&col) < bw, "a line of {col} fades in the 66 % copy"); }
+                    for part in svg.split("<path ").skip(1) {
+                        let head = part.split('>').next().unwrap();
+                        let col = attr(head, "stroke").unwrap();
+                        assert!(luma(&col) < bw, "a path of {col} fades in the 66 % copy");
+                    }
                 }
             }
         }
         // and Colour is not grey (the difference is real)
         assert!(!crate::figures::census::non_grey_paints_within(&render_of(&[]), 0).is_empty());
+    }
+
+    #[test]
+    fn a_pale_curve_or_threshold_line_in_print_would_be_caught() {
+        // the test above must be able to fail: a stroke of #bbbbbb is lighter than the 66 % cut
+        assert!(luma("#bbbbbb") > 0.66 * 255.0 && luma("#000") < 1.0 && luma("#444444") < 0.66 * 255.0);
+        let svg = render_of(&[s("style", "Print")]);
+        // only the curve element is paled: black brackets, axes and pattern fills stay in the picture
+        let mut pale = String::new();
+        for (i, part) in svg.split("<path ").enumerate() {
+            if i == 0 { pale.push_str(part); continue; }
+            pale.push_str("<path ");
+            let is_curve = attr(part.split('>').next().unwrap(), "d").is_some_and(|d| d.contains('L'));
+            if is_curve { pale.push_str(&part.replacen("stroke=\"#000\"", "stroke=\"#bbbbbb\"", 1)); } else { pale.push_str(part); }
+        }
+        assert!(pale.contains("stroke=\"#000\" stroke-width=\"2.2\""), "something else is still black");
+        assert_eq!(curve_stroke(&pale), "#bbbbbb", "the curve is found by its element, not by any black stroke");
+    }
+
+    #[test]
+    fn in_print_the_four_brackets_differ_by_dash_and_the_plus_and_dots_stand_out() {
+        let svg = render_of(&[s("style", "Print"), b("show_refractory", true)]);
+        let dashes: Vec<String> = svg.split("<path ").skip(1).map(|p| p.split('>').next().unwrap()).filter(|h| attr(h, "d").is_some_and(|d| d.contains('V'))).map(|h| attr(h, "stroke-dasharray").unwrap_or_default()).collect();
+        assert_eq!(dashes.len(), 4);
+        let mut u = dashes.clone();
+        u.sort();
+        u.dedup();
+        assert_eq!(u.len(), 4, "four different dash styles: {dashes:?}");
+        // in Colour they are told apart by colour and stay solid
+        let col = render_of(&[b("show_refractory", true)]);
+        assert!(!col.contains("stroke-dasharray=\"6 3\"") && !col.contains("stroke-dasharray=\"2 3\"") && !col.contains("stroke-dasharray=\"8 3 2 3\""));
+        // each dot has a white ring so it shows on the black curve
+        let rings = svg.split("<circle ").skip(1).map(|c| c.split('>').next().unwrap()).filter(|c| num(c, "r") > 2.0 && num(c, "r") < 6.0).collect::<Vec<_>>();
+        assert!(rings.len() >= 5);
+        for c in rings { assert_eq!(attr(c, "stroke").unwrap(), "#ffffff", "{c}"); assert!(num(c, "stroke-width") >= 1.2); }
+        // the plus of Na+ and K+ is a bold glyph at nearly full size
+        let key = render_of(&[b(SHOW_ANSWERS, true), s("style", "Print"), s("label_size", "Small")]);
+        let plus = key.split("<tspan ").filter(|t| t.contains(">+</tspan>")).collect::<Vec<_>>();
+        assert_eq!(plus.len(), 2);
+        for t in plus { assert!(num(t, "font-size") >= 0.9 * 13.0 * 0.8 - 0.01 && t.contains("font-weight=\"700\""), "{t}"); }
     }
 
     // ------------------------------------------------------------------ editor note and canvas agree
@@ -1651,14 +2026,27 @@ mod tests {
     /// What a canvas says in words: its text, with line breaks and wrapping flattened.
     fn flat(svg: &str) -> String { joined(svg).split_whitespace().collect::<Vec<_>>().join(" ") }
 
+    /// Every phrase that gives away why something is missing (the failed initiation, the absent dip, anything left
+    /// out). Written here, not read from the module, and searched for in the whole of the SVG source: text, title,
+    /// description, attributes.
+    const DISCLOSURES: [&str; 14] = [
+        "too weak", "weak", "start a spike", "fails to start", "failed", "no dip", "no undershoot", "lowest point", "resting level",
+        "left out", "not drawn", "belong to", "dropped", "omitted",
+    ];
+
+    fn disclosure_in(svg: &str) -> Option<&'static str> {
+        let low = svg.to_lowercase();
+        DISCLOSURES.iter().copied().find(|p| low.contains(p))
+    }
+
     #[test]
-    fn the_editor_note_says_exactly_what_the_canvas_shows_over_ten_thousand_inputs() {
+    fn the_editor_note_carries_what_was_left_out_and_the_canvas_never_does_over_ten_thousand_inputs() {
         let mut r = Rng(0x9e3779b97f4a7c15);
-        let (mut refused, mut figures, mut noted) = (0, 0, 0);
+        let (mut refused, mut figures, mut noted, mut silent) = (0, 0, 0, 0);
         for i in 0..10_000 {
             let mut l = vec![
                 s("resting", &junk(&mut r, -105.0, -5.0, "mV")),
-                s("threshold", &junk(&mut r, -80.0, 20.0, "mV")),
+                s("threshold", &junk(&mut r, -80.0, 10.0, "mV")),
                 s("peak", &junk(&mut r, -20.0, 80.0, "mV")),
                 s("undershoot", &junk(&mut r, -110.0, -30.0, "mV")),
                 s("stimulus", &junk(&mut r, 0.0, 12.0, "ms")),
@@ -1669,10 +2057,11 @@ mod tests {
             ];
             // a third of the inputs are made valid so the figure side is exercised as hard as the refusal side
             if i % 3 == 0 {
-                l[0] = s("resting", &format!("{}", r.f(-95.0, -40.0).round()));
-                l[1] = s("threshold", &format!("{}", (r.f(-35.0, 10.0)).round()));
+                let rest = format!("{}", r.f(-95.0, -40.0).round());
+                l[0] = s("resting", &rest);
+                l[1] = s("threshold", &format!("{}", (r.f(-35.0, -4.0)).round()));
                 l[2] = s("peak", &format!("{}", (r.f(35.0, 65.0)).round()));
-                l[3] = s("undershoot", &format!("{}", (r.f(-100.0, -75.0)).round()));
+                l[3] = s("undershoot", &if r.next() % 5 == 0 { rest.clone() } else { format!("{}", (r.f(-100.0, -75.0)).round()) });
                 l[4] = s("stimulus", &format!("{:.1}", r.f(0.5, 5.0)));
                 l[5] = s("duration", &format!("{:.1}", r.f(10.0, 12.0)));
             }
@@ -1687,10 +2076,10 @@ mod tests {
                     assert!(is_refusal, "not a refusal canvas: {l:?} {words}");
                     assert_eq!(notes.len(), 1, "notes: {l:?} {notes:?}");
                     assert_eq!(notes[0].split_whitespace().collect::<Vec<_>>().join(" "), format!("The action potential could not be drawn: {} {}", e.why, e.then).split_whitespace().collect::<Vec<_>>().join(" "), "note text {l:?}");
-                    // the canvas is the note, word for word
+                    // a refusal's canvas is the note, word for word
                     assert_eq!(words, notes[0].split_whitespace().collect::<Vec<_>>().join(" "), "canvas vs note: {l:?}");
                 }
-                Ok(_) => match plan(&p) {
+                Ok(sp) => match plan(&p) {
                     Err(e) => {
                         refused += 1;
                         assert!(is_refusal, "{l:?}");
@@ -1701,23 +2090,293 @@ mod tests {
                         figures += 1;
                         assert!(!is_refusal, "{l:?}");
                         assert_eq!(notes, pl.notes, "{l:?}");
-                        // the caption on the canvas is the note: the last texts, in order
-                        let t = texts(&svg);
-                        let n = pl.cap.len();
-                        let tail: Vec<String> = t[t.len() - n..].iter().map(|x| x.s.clone()).collect();
-                        assert_eq!(tail.join(" "), notes.join(" ").split_whitespace().collect::<Vec<_>>().join(" "), "{l:?}");
-                        if n == 0 { for known in [NOTE_NO_DIP, NOTE_FAILED] { assert!(!words.contains(known), "{l:?}"); } } else { noted += 1; }
-                        // exactly the cases the module says: a dip-less spike with a dependent item, or a failure with band switches on
-                        let sp = read(&p).unwrap();
+                        // the picture is silent: no sentence of the note, and none of the phrases that give the reason away,
+                        // anywhere in the SVG source (so not in a caption, the description, the title or an attribute)
+                        assert_eq!(disclosure_in(&svg), None, "the canvas discloses {:?}: {l:?}", disclosure_in(&svg));
+                        for known in [NOTE_NO_DIP, NOTE_FAILED] { assert!(!words.contains(known), "{l:?}"); }
+                        // the note says something exactly when the switches ask for something this trace cannot have
                         let should = if sp.fail { p.b("show_channels") || p.b("show_refractory") } else { !sp.dips() && (p.b("show_refractory") || p.b("show_phases")) };
                         assert_eq!(!notes.is_empty(), should, "{l:?}");
+                        // and what it says is true of the picture: those items really are absent, the rest really present
+                        let (n, lt) = expected_pointers(
+                            u32::from(p.b("show_threshold")) | u32::from(p.b("show_stimulus")) << 1 | u32::from(p.b("show_phases")) << 2 | u32::from(p.b("show_channels")) << 3 | u32::from(p.b("show_refractory")) << 4,
+                            sp.fail, sp.dips(),
+                        );
+                        assert_eq!(circles(&svg).iter().filter(|c| c.2 >= 6.0).count(), 2 * (n + lt), "{l:?}");
+                        if should {
+                            noted += 1;
+                            let said = notes.join(" ").to_lowercase();
+                            if sp.fail { assert!(said.contains("too weak to start a spike") && said.contains("channel"), "{notes:?}"); } else { assert!(said.contains("no undershoot") && said.contains("left out"), "{notes:?}"); }
+                        } else {
+                            silent += 1;
+                        }
                     }
                 },
             }
             // nothing in a render is not a number
             if !is_refusal { assert!(!svg.contains("NaN") && !svg.contains("inf\"") && !svg.contains("-inf"), "{l:?}"); }
         }
-        assert!(refused > 2000 && figures > 2000 && noted > 100, "{refused} refused, {figures} drawn, {noted} with a note");
+        assert!(refused > 2000 && figures > 2000 && noted > 100 && silent > 500, "{refused} refused, {figures} drawn, {noted} with a note, {silent} silent");
+    }
+
+    #[test]
+    fn the_whole_svg_of_every_variant_is_free_of_every_disclosure_phrase() {
+        // answers off and on, every state a disclosure could belong to, every size, both styles
+        let mut checked = 0;
+        for set in [vec![], vec![s("undershoot", "-70")]] {
+            for fail in [false, true] {
+                for key in [false, true] {
+                    for size in ["Small", "Medium", "Large"] {
+                        for style in ["Colour", "Print"] {
+                            for mask in 0..32u32 {
+                                let mut l = set.clone();
+                                l.extend(switches(mask, fail, key, size));
+                                l.push(s("style", style));
+                                let svg = render_of(&l);
+                                assert_eq!(disclosure_in(&svg), None, "{l:?}");
+                                checked += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(checked, 2 * 2 * 2 * 3 * 2 * 32);
+        // the phrase search is real: it sees the phrases in the places they used to be
+        let svg = render_of(&[]);
+        let caption = svg.replace("</svg>", "<text x=\"1\" y=\"1\">This input is too weak to start a spike</text></svg>");
+        assert_eq!(disclosure_in(&caption), Some("too weak"));
+        let desc = svg.replacen("</desc>", " a trace that fails to start a spike</desc>", 1);
+        assert_eq!(disclosure_in(&desc), Some("start a spike"));
+        let title = svg.replacen("<title>", "<title>Failed ", 1);
+        assert_eq!(disclosure_in(&title), Some("failed"));
+    }
+
+    // ------------------------------------------------------------------ exact boundaries
+    /// A value in tenths as a typed one-decimal string.
+    fn tenth(t: i64) -> String { format!("{}{}.{}", if t < 0 { "-" } else { "" }, t.abs() / 10, t.abs() % 10) }
+
+    #[test]
+    fn a_one_decimal_value_typed_exactly_on_a_boundary_is_never_refused() {
+        let ok = |r: i64, t: i64, p: i64, u: i64, ts: i64, d: i64| read(&with(&[s("resting", &tenth(r)), s("threshold", &tenth(t)), s("peak", &tenth(p)), s("undershoot", &tenth(u)), s("stimulus", &tenth(ts)), s("duration", &tenth(d))])).is_ok();
+        let mut n = 0;
+        // every resting potential from -100.0 to -14.0, the threshold exactly 10 above, the peak exactly 20 above that
+        for r in -1000..=-140i64 {
+            let (t, p) = (r + 100, r + 300);
+            let u_ok = r - 30 >= -1000;
+            assert!(ok(r, t, p, r, 10, 80), "rest {r}");
+            if u_ok { assert!(ok(r, t, p, r - 30, 10, 80), "dip of exactly 3 at rest {r}"); }
+            assert!(!ok(r, t - 1, p, r, 10, 80), "a threshold 9.9 above rest {r}");
+            assert!(!ok(r, t, p - 1, r, 10, 80), "a peak 19.9 above the threshold {t}");
+            assert!(!ok(r, t, p, r - 29, 10, 80), "a dip of 2.9 at rest {r}");
+            assert!(!ok(r, t, p, r + 1, 10, 80), "an undershoot above rest {r}");
+            n += 6;
+        }
+        assert!(!ok(-1001, -901, -701, -1001, 10, 80), "rest below -100");
+        assert!(!ok(-139, -39, 161, -139, 10, 80), "rest -13.9 leaves no room for a threshold under zero");
+        // the same for the times, to the tenth
+        for ts in 5..=73i64 {
+            assert!(ok(-700, -550, 400, -800, ts, ts + 47), "ts {ts}");
+            assert!(!ok(-700, -550, 400, -800, ts, ts + 46), "ts {ts}: 0.1 ms short");
+            n += 2;
+        }
+        assert!(!ok(-700, -550, 400, -800, 4, 80) && ok(-700, -550, 400, -800, 5, 52) && !ok(-700, -550, 400, -800, 5, 51));
+        assert!(ok(-700, -550, 400, -800, 73, 120) && !ok(-700, -550, 400, -800, 74, 120) && !ok(-700, -550, 400, -800, 10, 121));
+        // other spellings of a boundary value: a comma, a true minus, a unit
+        let l = [s("resting", "\u{2212}73,6 mV"), s("threshold", "-63.6"), s("peak", "-43,6mV"), s("undershoot", "-76.6")];
+        assert!(read(&with(&l)).is_ok());
+        assert!(n > 5000);
+    }
+
+    #[test]
+    fn a_message_never_contradicts_the_number_it_quotes() {
+        let why = |l: &[(&'static str, Value)]| refusal(l).why;
+        assert!(why(&[s("stimulus", "0.4999")]).contains("(0.4999 ms) is before 0.5 ms"));
+        assert!(why(&[s("duration", "12.0001")]).contains("12.0001 ms is over the 12 ms"));
+        assert!(why(&[s("undershoot", "-70.0001")]).contains("only 0.0001 mV below rest"));
+        assert!(why(&[s("undershoot", "-72.9999")]).contains("only 2.9999 mV below rest"));
+        assert!(why(&[s("resting", "-100.0001")]).contains("\u{2212}100.0001 mV, outside the \u{2212}100 to"));
+        assert!(why(&[s("resting", "-9.99")]).contains("above the \u{2212}14 mV limit"));
+        assert!(why(&[s("duration", "-5")]).contains("is not a time") && !why(&[s("duration", "-5")]).contains("\u{2212}5 ms trace"));
+        assert!(why(&[s("threshold", "-65.0")]).contains("(\u{2212}65 mV)"));
+    }
+
+    #[test]
+    fn the_timing_advice_is_possible_at_every_boundary_and_names_only_what_helps() {
+        let base = with(&[]);
+        let rd = |ts: i64, d: i64| { let mut p = base.clone(); p.0.insert("stimulus".into(), Value::S(tenth(ts))); p.0.insert("duration".into(), Value::S(tenth(d))); read(&p) };
+        // the number after a phrase, to the tenth
+        let after = |t: &str, key: &str| -> Option<i64> {
+            let rest = t.split(key).nth(1)?;
+            let w = rest.split_whitespace().next()?;
+            let v: f64 = w.trim_end_matches(['.', ',', ';']).parse().ok()?;
+            Some((v * 10.0).round() as i64)
+        };
+        let mut checked = 0;
+        for ts in (5..=150).step_by(2) {
+            for d in (1..=130).step_by(2) {
+                let Err(e) = rd(ts, d) else { continue };
+                if !e.why.contains("needs about") { continue; }
+                let fix_total = (52..=120).any(|d2| rd(ts, d2).is_ok());
+                let fix_stim = (5..=73).any(|t2| rd(t2, d).is_ok());
+                let says_total = e.then.contains("total time at least");
+                let says_stim = e.then.contains("stimulus to");
+                if !fix_total && !fix_stim {
+                    assert!(e.then.starts_with("Type a stimulus time of 0.5 to 7.3 ms"), "{ts} {d}: {}", e.then);
+                } else {
+                    assert_eq!((says_total, says_stim), (fix_total, fix_stim), "{} / {}: {ts} {d}", e.why, e.then);
+                    // and the number it gives works
+                    if says_total { let t = after(&e.then, "total time at least ").unwrap(); assert!(rd(ts, t).is_ok(), "total {t} for {ts}: {}", e.then); assert!(t <= 120, "{}", e.then); }
+                    if says_stim { let t = after(&e.then, "stimulus to ").unwrap(); assert!(rd(t, d).is_ok(), "stimulus {t} for {d}: {}", e.then); assert!(t >= 5, "{}", e.then); }
+                }
+                checked += 1;
+            }
+        }
+        assert!(checked > 2000, "{checked}");
+    }
+
+    // ------------------------------------------------------------------ the axes: ticks, grid, range
+    #[test]
+    fn minor_ticks_and_a_light_grid_make_every_level_readable_at_every_label_size() {
+        let mut worst_span: f64 = 0.0;
+        for set in sets() {
+            for size in ["Small", "Medium", "Large"] {
+                let mut l = set.clone();
+                l.push(s("label_size", size));
+                let svg = render_of(&l);
+                let ax = axes_of(&svg);
+                let ls = lines(&svg);
+                let x0 = ls.iter().filter(|q| q.0 .0 == q.1 .0).map(|q| q.0 .0).fold(f64::MAX, f64::min); // the y axis
+                // labelled ticks: 6 px; unlabelled: 3.5 px, on the same axis, between them
+                let major: Vec<f64> = ls.iter().filter(|q| q.0 .1 == q.1 .1 && q.1 .0 == x0 && (q.1 .0 - q.0 .0 - 6.0).abs() < 0.01).map(|q| q.0 .1).collect();
+                let minor: Vec<f64> = ls.iter().filter(|q| q.0 .1 == q.1 .1 && q.1 .0 == x0 && (q.1 .0 - q.0 .0 - 3.5).abs() < 0.01).map(|q| q.0 .1).collect();
+                assert!(major.len() >= 3 && minor.len() >= 2 * major.len(), "{set:?} {size}: {} labelled, {} unlabelled", major.len(), minor.len());
+                // between two labelled ticks there are 3 or 4 unlabelled ones: 4 or 5 divisions
+                let gap = (major[1] - major[0]).abs();
+                let between = minor.iter().filter(|y| **y > major[0].min(major[1]) && **y < major[0].max(major[1])).count();
+                assert!(between == 3 || between == 4, "{set:?} {size}: {between} between labelled ticks");
+                // a division is at most 10 mV and at least 4 px: a level is read to within about half a division
+                let division_px = gap / (between + 1) as f64;
+                let division_mv = division_px / ax.ky.abs();
+                assert!(division_mv <= 10.01 && division_px >= 3.9, "{set:?} {size}: division {division_mv} mV = {division_px} px");
+                // the grid has a line at every tick level, inside the plot, drawn first
+                let g = grid_lines(&svg);
+                assert_eq!(g.len(), major.len() + minor.len(), "{set:?} {size}");
+                for (xs, y, _) in &g {
+                    assert!(xs.0 == x0 && (major.iter().chain(minor.iter()).any(|t| (t - y).abs() < 0.01)), "grid line off a tick: {y}");
+                }
+                assert!(svg.find("<g id=\"grid\">").unwrap() < svg.find("<path").unwrap(), "grid under the curve");
+                // the axis does not run on past what the picture needs: never twice the span of the trace
+                let span = 320.0 / ax.ky.abs();
+                let low = sp_of(&set).under.min(sp_of(&set).rest);
+                worst_span = worst_span.max(span / (sp_of(&set).peak - low));
+                assert!(span <= 2.0 * (sp_of(&set).peak - low) + 1e-6, "{set:?} {size}: axis spans {span} mV for a trace of {}", sp_of(&set).peak - low);
+            }
+        }
+        assert!(worst_span < 2.0, "{worst_span}");
+    }
+
+    fn sp_of(set: &[(&'static str, Value)]) -> Spike { read(&with(set)).unwrap() }
+
+    #[test]
+    fn a_large_label_size_does_not_double_the_range() {
+        // the critic's case: -100 / -90 / 70, no dip, 0.5 ms into a 5.2 ms trace, Large. It used to draw -200 to 150.
+        let l = [s("resting", "-100"), s("threshold", "-90"), s("peak", "70"), s("undershoot", "-100"), s("stimulus", "0.5"), s("duration", "5.2"), s("label_size", "Large")];
+        let svg = render_of(&l);
+        let ax = axes_of(&svg);
+        let span = 320.0 / ax.ky.abs();
+        let lowest_label = texts(&svg).iter().filter(|t| t.anchor == "end" && !t.rot).filter_map(|t| t.s.replace('\u{2212}', "-").parse::<f64>().ok()).fold(f64::MAX, f64::min);
+        assert!(span < 290.0 && lowest_label >= -150.0, "span {span}, lowest label {lowest_label}");
+        // the labelled step stays a 1-2-5 step that is not wider than the unlabelled ones need
+        assert!(audit(&svg).is_empty());
+    }
+
+    #[test]
+    fn each_bracket_row_has_a_short_label_that_names_no_answer() {
+        let svg = render_of(&[b(SHOW_ANSWERS, false), b("show_refractory", true)]);
+        let ax = axes_of(&svg);
+        let tx = texts(&svg);
+        let find = |w: &str| tx.iter().find(|t| t.s == w).unwrap_or_else(|| panic!("{w} missing"));
+        let (ch, rf1, rf2) = (find("Channels"), find("Refractory"), find("period"));
+        let x_axis = ax.x(0.0);
+        for t in [ch, rf1, rf2] { assert_eq!(t.anchor, "end"); assert!(t.x < x_axis - 5.0 && t.x - tw(&t.s, t.size) > 0.0, "{} sits left of the plot, inside the canvas", t.s); }
+        assert!(rf2.y > rf1.y && ch.y < rf1.y, "rows in order");
+        // alone, the row labels name nothing: no ion, no period, no phase
+        for t in [ch, rf1, rf2] { for n in NAMES { assert!(!t.s.to_lowercase().contains(n)); } }
+        // a lane that is off has no label
+        let one = joined(&render_of(&[b("show_refractory", false)]));
+        assert!(one.contains("Channels") && !one.contains("Refractory"));
+        let only_rf = joined(&render_of(&[b("show_channels", false), b("show_refractory", true)]));
+        assert!(!only_rf.contains("Channels") && only_rf.contains("Refractory"));
+        let none = joined(&render_of(&[b("show_channels", false)]));
+        assert!(!none.contains("Channels") && !none.contains("period"));
+        // the label of the first row is level with the discs of its row
+        let ds: Vec<_> = circles(&svg).into_iter().filter(|c| c.2 >= 6.0).collect();
+        let row_disc = ds.iter().filter(|d| d.1 > ch.y - 6.0 && d.1 < ch.y + 6.0).count();
+        assert!(row_disc >= 2, "the discs of the channel row share its line");
+    }
+
+    #[test]
+    fn resting_and_return_point_at_different_places_in_every_trace() {
+        // with the key on, find the dot each named pointer starts from, through its leader
+        for set in sets() {
+            for size in ["Small", "Large"] {
+                for fail in [false, true] {
+                    let mut l = set.clone();
+                    l.extend(switches(31, fail, true, size));
+                    let p = with(&l);
+                    let sp = read(&p).unwrap();
+                    let svg = (def().render)(&p);
+                    let ax = axes_of(&svg);
+                    let tx = texts(&svg);
+                    let ds: Vec<_> = circles(&svg).into_iter().filter(|c| c.2 >= 6.0).collect();
+                    let leaders: Vec<(P, P)> = lines_w(&svg).into_iter().filter(|q| q.1 == 1.2).map(|q| q.0).collect();
+                    // the key row of a name: the text, and the mark inside the disc on its line to the left; the figure's own
+                    // disc with that mark is the one above, and its leader starts at the dot
+                    let marked: Vec<((f64, f64, f64), String)> = ds.iter().filter_map(|d| tx.iter().find(|t| dist2((t.x, t.y), (d.0, d.1)) < d.2).map(|t| (*d, t.s.clone()))).collect();
+                    let dot_of = |name: &str| -> Option<P> {
+                        let row = tx.iter().find(|t| t.s == name)?;
+                        let (kd, mark) = marked.iter().filter(|(d, _)| (d.1 - row.y).abs() < 9.0 && d.0 < row.x).max_by(|a, c| a.0 .0.partial_cmp(&c.0 .0).unwrap())?;
+                        let (fd, _) = marked.iter().find(|(d, m)| m == mark && d.1 < kd.1 - 20.0)?;
+                        leaders.iter().find(|q| (dist2(q.1, (fd.0, fd.1)) - fd.2).abs() < 0.8).map(|q| q.0)
+                    };
+                    let rest = dot_of("Resting potential").expect("a dot for the resting pointer");
+                    assert!(rest.0 < ax.x(sp.ts) && (rest.1 - ax.y(sp.rest)).abs() < 0.1, "{set:?} {size} fail {fail}: resting dot {rest:?}");
+                    if let Some(ret) = dot_of("Return to resting potential") {
+                        if fail {
+                            assert!(ret.0 > ax.x(sp.ts + T_BUMP) && (ret.1 - ax.y(sp.rest)).abs() > 1.0, "the return dot is on the falling limb, above the rest line: {ret:?}");
+                        } else {
+                            assert!(sp.dips());
+                            assert!(ret.0 > ax.x(sp.t_settled()) + 0.05, "{set:?}: return dot at {} before the recovery ends at {}", ret.0, ax.x(sp.t_settled()));
+                        }
+                        assert!(dist2(ret, rest) > 20.0);
+                    } else {
+                        assert!(!fail && !sp.dips(), "{set:?}: a trace with a dip, or a failure, keeps its return pointer");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_faq_states_the_limits_the_code_enforces() {
+        let all: String = crate::figures::faq::faq_for(ID).iter().map(|q| q.a).collect::<Vec<_>>().join(" ");
+        let ascii = |x: f64| show(x).replace('\u{2212}', "-");
+        for want in [
+            format!("from {} to +{} mV", ascii(MV_MIN), ascii(MV_MAX)),
+            format!("from {} to {} mV and the threshold from {} to {} mV", ascii(MV_MIN), ascii(REST_MAX), ascii(MV_MIN), ascii(-MIN_THR_TO_ZERO)),
+            format!("at least {} mV above the resting potential", ascii(MIN_REST_TO_THR)),
+            format!("at least {} mV above the threshold", ascii(MIN_THR_TO_PEAK)),
+            format!("at least {} mV below it", ascii(MIN_DIP)),
+            format!("plus {} ms, and at most {} ms", ascii(NEED), ascii(MAX_DUR)),
+            format!("within {} mV of the resting level", ascii(REST_TOL)),
+            "divided into 4 or 5 parts".to_string(),
+        ] {
+            assert!(all.contains(&want), "the FAQ does not say {want:?}");
+        }
+        // what it says about reading precision is what the picture draws: 4 or 5 divisions, none wider than 10 mV
+        // (checked against the ticks in `minor_ticks_and_a_light_grid_make_every_level_readable_at_every_label_size`)
+        assert!(all.contains("2 to 5 mV"));
     }
 
     #[test]
@@ -1765,6 +2424,11 @@ mod tests {
         let desc = |key: bool| { let svg = def().svg(&with(&[b(SHOW_ANSWERS, key)])); svg.split("<desc>").nth(1).unwrap().split("</desc>").next().unwrap().to_string() };
         assert!(desc(true).contains("Depolarisation"));
         assert!(!desc(false).to_lowercase().contains("depolar") && desc(false).contains("pointers to name"));
+        // the description of a failed initiation says nothing of the failure, with or without the key
+        for key in [false, true] {
+            let svg = def().svg(&with(&[b(SHOW_ANSWERS, key), b("fail", true)]));
+            assert_eq!(disclosure_in(&svg), None);
+        }
         assert!(def().svg(&with(&[])).contains("role=\"img\""));
     }
 
@@ -1800,6 +2464,13 @@ mod tests {
             ("refused-short".into(), vec![s("duration", "4")]),
             ("refused-number".into(), vec![s("peak", "forty"), s("label_size", "Large")]),
             ("refused-threshold".into(), vec![s("threshold", "-66"), s("label_size", "Small")]),
+            ("refused-above-zero".into(), vec![s("threshold", "12"), s("peak", "60")]),
+            ("refused-timing".into(), vec![s("stimulus", "8"), s("duration", "12")]),
+            ("large-extreme".into(), vec![s("resting", "-100"), s("threshold", "-90"), s("peak", "70"), s("undershoot", "-100"), s("stimulus", "0.5"), s("duration", "5.2"), s("label_size", "Large"), b("show_refractory", true)]),
+            ("large-extreme-student".into(), vec![s("resting", "-100"), s("threshold", "-90"), s("peak", "70"), s("undershoot", "-100"), s("stimulus", "0.5"), s("duration", "5.2"), s("label_size", "Large"), b("show_refractory", true), b(SHOW_ANSWERS, false)]),
+            ("early-long".into(), vec![s("stimulus", "0.5"), s("duration", "12"), b("show_refractory", true)]),
+            ("no-dip-print".into(), vec![s("undershoot", "-70"), s("style", "Print"), b("show_refractory", true)]),
+            ("deep-dip".into(), vec![s("resting", "-14"), s("threshold", "-4"), s("peak", "40"), s("undershoot", "-100"), b("show_refractory", true)]),
         ];
         for size in ["Small", "Medium", "Large"] {
             cases.push((format!("size-{size}"), vec![s("label_size", size), b("show_refractory", true)]));

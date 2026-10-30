@@ -817,14 +817,15 @@ Na+/K+ and absolute/relative refractory brackets; every name lives in a two-colu
 line for each in a student copy, so both copies are the same size and the curve, discs and brackets are byte-identical. The
 typed resting, threshold, peak and undershoot numbers are never printed as text in either copy (they are read off the axes);
 the word "Threshold" is therefore a key entry, not a label on the line. A disc is found by search (several places along the
-curve, eight directions, four lengths; first clear of the curve, guide lines, discs and plot edge) and a trace with no clear
-place is refused with that reason rather than drawn crowded; none of the 4,992 sweep cases, 1,500+ grid cases or the examples hits it.
-Refused with a true reason and a second line: a value that is not a number, outside -100..+70 mV (resting -100..-10), a
-threshold under 10 mV above rest or within 4 mV of 0, a peak under 20 mV above the threshold, an undershoot above rest or
-under 3 mV below it (rest itself means no undershoot), a stimulus before 0.5 ms, a total over 12 ms (the upstroke would be
-under 35 px) or too short to hold the spike. Disclosures are one sentence each, name-free so a student copy never leaks, shown only when
-something was left out (no dip: the dip-dependent pointer and relative-period band; a failed initiation with a band switch
-on) and identical in the editor note (`notes_for`) and on the canvas. Tests (25, in the module): the extremes and the
+curve, eight directions, four lengths; first clear of the curve, guide lines, discs, other leaders and the stimulus arrow, with
+its leader kept off the curve, the arrow, other leaders and other dots) and a trace with no clear place is refused with that
+reason rather than drawn crowded; none of the 6,528 sweep cases, 1,500+ grid cases or the examples hits it.
+Refused with a true reason and a second line: a value that is not a number, outside -100..+70 mV (resting -100..-14,
+threshold -100..-4), a threshold at or above 0 mV or within 4 mV of it, a threshold under 10 mV above rest, a peak under 20 mV above
+the threshold, an undershoot above rest or under 3 mV below it (rest itself means no undershoot), a stimulus before 0.5 ms, a
+total that is not positive, over 12 ms (the upstroke would be under 35 px) or too short to hold the spike. Disclosures (a failed
+initiation with a band switch on; no undershoot with a dependent item on) are in the EDITOR NOTE ONLY (`notes_for`); the canvas, both copies, the
+title, the description and the aria text stay silent (round 2). Round-1 tests (25, in the module): the extremes and the
 crossing count on a 13-set family, the derivative sign pattern over 80,000 samples, the path read back through the
 picture's own ticks (peak and trough rows within 0.06 px, no chord more than 0.25 px from the true curve), an independent
 audit (own Arial-based text widths, literal 1-2 px gaps) over 4,992 renders (13 trace sets x 3 sizes x 32 switch sets x
@@ -839,6 +840,32 @@ fixed, not fitted to a neuron type; the channel and refractory brackets are plac
 input I found (they guard the search); the controls are text boxes, not sliders; the egui editor itself was not driven; text
 widths in the audit are an estimate of Noto Sans, not the rendered face.
 
+
+Action potential, round 2 (2026-10-30, after critic 1: 0 blocker, 3 major, 4 MED, 5 LOW, 6 minor). Owner decisions, dated
+2026-10-30: (1) disclosures live in the editor note only, so the canvas caption is gone and the description and title never say
+what was left out; the agreement test now asserts the canvas carries NO disclosure and the note carries it, over 10,000 random
+inputs; (2) the K+ bracket and the relative refractory bracket end where the curve is back at rest, taken as within 1 mV of the
+resting level after the undershoot (`t_settled`, 1.5 ms after the lowest point for a 10 mV dip, never more than 2.5 ms for any
+dip), and the "return to resting potential" pointer sits after them; Na+ runs from threshold to the peak and the absolute
+refractory period from threshold to where the falling curve crosses rest, which is how OpenStax A&P 12.4 and Campbell 48.3 draw
+them (I checked the extents against those two descriptions, not against a printed page); (3) a threshold at or above 0 mV is
+refused with a reason, and so is one within 4 mV of it, so the resting potential tops out at -14 mV (the 10 mV gap to threshold
+plus 4 mV): ranges, refusal text, FAQ, hints and census follow; (4) the editor keeps text boxes, not sliders. KNOWN DIFFERENCE:
+enzyme kinetics and Hardy-Weinberg use sliders, this figure's six numbers are text boxes, so it has parse refusals they do not;
+a value typed on a limit is now accepted exactly. Fixes: minor ticks (4 or 5 divisions per labelled step) and a light grid at
+every tick level; the range ends on a minor tick, so Large no longer draws -200..150 for -100/-90/70 (its span is under 290 mV, asserted);
+with no undershoot the "return" pointer is dropped with the hyperpolarisation pointer (it would point at the same flat line as
+"resting potential"), and the resting pointer is always before the stimulus, so no two blanks share an answer; a stimulus very
+early in a long trace widens the plot so the resting pointer has room; leaders are kept off the curve, the stimulus arrow,
+other leaders and other dots, in the search and in the audit (a leader used to cross the arrow in 16 renders); row labels
+Channels and Refractory period; in Print the four brackets differ by dash (solid, long dashes, dash-dot, dotted), the raised
+plus is bold at 0.95 of the key size, the pointer dots have a white ring, and the Print test reads the curve ELEMENT and every
+stroke against the 66 % cut; numbers are kept exactly (billionths) so a one-decimal value on a limit is never refused and a
+message quotes the digits typed; the timing refusal offers only what works (total, stimulus, both, or neither alone); dead
+code, `b2f` and the private `dist_seg` removed (the public `composite::seg_dist` is used). Mutants: 46 run, 43 killed; survivors are the leader-crosses-leader and leader-touches-another-dot guards and the disc-clearance guard, none of which changes any render in the 6,528-case sweep (redundant with the other checks; the audit still measures all three). Limits: the grid is light and
+vanishes in a 66 % black-and-white copy, where the minor ticks on the axis remain; the widened plot for a very early stimulus
+can be over 1,200 px at Large; a level reads to about half a division (2 to 5 mV), not better; the extents of the bands were
+checked against two textbook descriptions, not a printed figure; the live editor was not driven.
 ### Phase 4 biology: verification rounds 6-11 (hardy-weinberg, chi-square-fit, enzyme-kinetics, cladogram)
 Six more critic/builder rounds after the fifth pass, each on a frozen `git archive` with its own target dir (reports
 `2026-10-29-phase4-verify5.md` .. `2026-10-30-phase4-verify11.md`). Blockers/majors/minors: 6th 1/2/1, 7th 1/5/10, 8th 1/2/8,
