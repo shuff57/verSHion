@@ -678,3 +678,16 @@ ambiguous picture never ships. From the formula (band = 47·lab − 11 − 4·la
 gap is refused from 10 runs at Small, 12 at Medium and 15 at Large, and draws up to 9, 11 and 14; an ordinary web is
 far below it. The refusal canvas is shared with the parse refusals (`refusal()`); a test pins that twelve
 long links are refused with no boxes drawn while eight still draw, and the PNG export gains a `dense-refused` case.
+
+Food-web verification round 5 (2026-10-30): **FAIL as a complete change** — no blocker or major, one MED. All five
+claims held (packing exact, the refusal first fires at 10 / 12 / 15 runs per gap at Small / Medium / Large as rendered
+from n = 1 to 24, 42 of 42 parse refusals byte-identical after the `refusal()` refactor, census clean, 1924 passed
+on the real tree). The MED: the density refusal drew its canvas but never reached the editor's note area, which
+every parse refusal does. The test now lives in one place (`crowded()`, fed by `band()` and `gap_runs()`), so the
+canvas and `warnings()` cannot disagree, and the note adds that a larger label size leaves more room — a web with
+10–11 runs in one gap draws at Medium and is refused at Small, which the critic flagged as surprising. The minors:
+the refusal header's baseline now scales with the label size (it sat 11 px above the reason at Small and 50 px at
+Large); the run-height test holds to a stroke plus a visible pixel, the figure's own bar, instead of the looser bare
+stroke; `MIN_W` is the one width; the dead `6·lab` arrival term is gone; a test comment no longer calls
+a 0.96 px gap a "band". A test pins the note both ways at all three label sizes (a refused web has one, the web one
+run below does not). Census unchanged: the valid default render did not move.

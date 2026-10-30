@@ -211,9 +211,43 @@ pub fn level_name(l: usize) -> String {
     LEVELS.get(l).map(|s| s.to_string()).unwrap_or_else(|| format!("Level {l}"))
 }
 
+/// The room one row gap gives the routed runs, as (clear, arrival margin, departure margin, usable band). Only an
+/// arrival has to clear an arrowhead; a departure only needs a small margin off its box.
+fn band(lab: f64) -> (f64, f64, f64, f64) {
+    let box_h = NODE_FS * lab + 2.0 * PAD_Y * lab;
+    let normal_hl = (EDGE_W * lab * 4.0).max(9.0);
+    let clear = (LEVEL_GAP * lab - box_h).max(0.0);
+    let (arrival, departure) = (normal_hl + 2.0, 4.0 * lab);
+    (clear, arrival, departure, (clear - arrival - departure).max(0.0))
+}
+
+/// Runs through each row gap: a link that skips a level leaves its prey's gap and enters its predator's.
+fn gap_runs(web: &Web, level: &[usize]) -> Vec<usize> {
+    let mut n = vec![0usize; level.iter().max().map_or(0, |m| m + 1)];
+    for &(prey, predator) in &web.edges {
+        if level[predator].saturating_sub(level[prey]) > 1 {
+            n[level[prey]] += 1;
+            n[level[predator] - 1] += 1;
+        }
+    }
+    n
+}
+
+/// A web too dense to draw: some gap holds so many runs that they could not stay a stroke plus one visible pixel apart,
+/// and the picture would read as links that do not exist. It is refused rather than drawn (owner decision, 2026-10-29).
+/// The limit moves with the label size, because the gap does: 10 runs at Small, 12 at Medium, 15 at Large.
+pub fn crowded(web: &Web, lab: f64) -> bool {
+    let Some(level) = level_of(web) else { return false };
+    let height = band(lab).3;
+    gap_runs(web, &level).iter().any(|&n| n > 0 && height / (n as f64 + 1.0) < EDGE_W * lab + 1.0)
+}
+
 pub fn warnings(p: &Params) -> Vec<String> {
     match parse(p.s("links")) {
         Ok(w) if w.is_empty() => Vec::new(),
+        Ok(w) if crowded(&w, svg::label_factor(p.s("label_size"))) => vec![
+            "The food web could not be drawn: too many links skip a trophic level to keep their runs apart. Remove some, or choose a larger label size, which leaves more room.".to_string(),
+        ],
         Ok(_) => Vec::new(),
         Err(e) => vec![format!("The food web could not be read: {e}")],
     }
@@ -271,7 +305,7 @@ fn refusal(header: &str, why: &str, then: &str, lab: f64) -> String {
     let h = 34.0 + (first.len() as f64 + 1.0 + last.len() as f64) * 18.0 * lab + 20.0;
     let mut d = Doc::new(MIN_W, h);
     d.describe("Food web", "A food web from typed links");
-    d.raw(&text_el(24.0, 40.0, 13.0 * lab, "start", ERR, header));
+    d.raw(&text_el(24.0, 40.0 * lab, 13.0 * lab, "start", ERR, header));
     let mut y = 64.0 * lab;
     for line in &first {
         d.raw(&text_el(24.0, y, 13.0 * lab, "start", INK, line));
@@ -292,7 +326,7 @@ pub fn build(p: &Params) -> String {
     let level_fs = LEVEL_FS * lab;
     let show_levels = p.b("levels");
     let box_h = fs + 2.0 * PAD_Y * lab;
-    let min_w: f64 = 420.0;
+    let min_w = MIN_W;
 
     match parse(p.s("links")) {
         Ok(web) if web.is_empty() => {
@@ -378,10 +412,7 @@ pub fn build(p: &Params) -> String {
             // (verification round 4, LOW) reserving the head's clearance at BOTH ends of the gap wasted a third of
             // the packing space: only an arrival must clear an arrowhead, a departure only needs to clear its box.
             // Arrivals take the slots nearest the predator (top), departures the ones nearest the prey (bottom).
-            let clear = (LEVEL_GAP * lab - box_h).max(0.0);
-            let arrival_drop = (normal_hl + 2.0).max(6.0 * lab);
-            let departure_drop = 4.0 * lab;
-            let height = (clear - arrival_drop - departure_drop).max(0.0);
+            let (clear, arrival_drop, _, height) = band(lab);
             let mut run_y = vec![(0.0, 0.0); web.edges.len()];
             let mut gaps: Vec<Vec<(usize, bool)>> = vec![Vec::new(); rows];
             for &e in &long {
@@ -390,8 +421,8 @@ pub fn build(p: &Params) -> String {
             }
             // (owner decision, 2026-10-29) a dense web must not ship with runs closer than a stroke and a visible
             // gap: it would read as links that do not exist. Refused like the 24-name cap, never drawn ambiguous.
-            let stroke = EDGE_W * lab;
-            if gaps.iter().any(|l| !l.is_empty() && height / (l.len() as f64 + 1.0) < stroke + 1.0) {
+            // The same test feeds the editor's note (`warnings`), so the canvas and the note area always agree.
+            if crowded(&web, lab) {
                 return refusal(
                     "The food web could not be drawn:",
                     "Too many links skip a trophic level to keep their runs apart.",
@@ -680,7 +711,8 @@ mod tests {
                     let (y1, a0, a1) = runs[i];
                     let (y2, b0, b1) = runs[j];
                     let overlap = a1.min(b1) - a0.max(b0);
-                    assert!(!((y1 - y2).abs() < stroke - 0.01 && overlap > 0.5), "{size}: two runs overlap: y {y1} and {y2}, x overlap {overlap}");
+                    // the figure itself refuses below a stroke plus one visible pixel, so a drawn web holds to that
+                    assert!(!((y1 - y2).abs() < stroke + 1.0 - 0.01 && overlap > 0.5), "{size}: two runs too close: y {y1} and {y2}, x overlap {overlap}");
                 }
             }
         }
@@ -688,8 +720,9 @@ mod tests {
 
     #[test]
     fn a_web_too_dense_to_draw_is_refused_not_banded() {
-        // (owner decision 2026-10-29) twelve long links through one gap would merge their runs into a band; the
-        // figure refuses with a reason, like the 24-name cap, rather than draw links that do not exist
+        // (owner decision 2026-10-29) twelve long links through one gap would leave their runs closer than a stroke
+        // plus a visible gap; the figure refuses with a reason, like the 24-name cap, rather than draw a picture
+        // that can be misread as links that do not exist
         let mut links = String::new();
         for i in 0..12 { links.push_str(&format!("A{i} -> B\nA{i} -> C\n")); }
         links.push_str("B -> C\n");
@@ -713,6 +746,10 @@ mod tests {
             assert!(drawn.matches("<rect").count() > 1, "{size}: {} long links must draw", first_refused - 1);
             let refused = render_of(&[("links", Value::S(web(first_refused))), s("label_size", size)]);
             assert_eq!(refused.matches("<rect").count(), 1, "{size}: {first_refused} long links must be refused");
+            // (verification round 5, MED) the editor's note area must agree with the canvas, both ways
+            let note = |n: usize| crate::figures::notes_for(ID, &with(&[("links", Value::S(web(n))), s("label_size", size)]));
+            assert!(note(first_refused).iter().any(|w| w.contains("could not be drawn")), "{size}: no editor note for a refused web");
+            assert!(note(first_refused - 1).is_empty(), "{size}: a note for a web that draws");
         }
     }
 
@@ -836,6 +873,8 @@ mod tests {
             ("two-omni".into(), vec![s("links", "A1 -> B1\nB1 -> C1\nA1 -> C1\nA2 -> B2\nB2 -> C2\nA2 -> C2")]),
             ("gap-clash".into(), vec![s("links", "P0 -> P1\nP1 -> P2\nP2 -> P3\nX0 -> P2\nX1 -> P2\nX2 -> P3\nP1 -> P3")]),
             ("dense-refused".into(), { let mut l = String::new(); for i in 0..12 { l.push_str(&format!("A{i} -> B\nA{i} -> C\n")); } l.push_str("B -> C\n"); vec![("links", Value::S(l))] }),
+            ("dense-refused-small".into(), { let mut l = String::new(); for i in 0..10 { l.push_str(&format!("A{i} -> B\nA{i} -> C\n")); } l.push_str("B -> C\n"); vec![("links", Value::S(l)), s("label_size", "Small")] }),
+            ("dense-refused-large".into(), { let mut l = String::new(); for i in 0..15 { l.push_str(&format!("A{i} -> B\nA{i} -> C\n")); } l.push_str("B -> C\n"); vec![("links", Value::S(l)), s("label_size", "Large")] }),
             ("empty".into(), vec![s("links", "")]),
             ("cycle".into(), vec![s("links", "A -> B\nB -> A")]),
         ];
