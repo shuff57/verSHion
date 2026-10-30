@@ -75,7 +75,7 @@ pub fn parse(text: &str) -> Result<Web, String> {
         if fwd == 0 && back == 0 {
             return Err(format!("Line {at} has no arrow: write Prey -> Predator."));
         }
-        let mut parts: Vec<String> = if fwd > 0 {
+        let parts: Vec<String> = if fwd > 0 {
             line.split("->").map(tidy).collect()
         } else {
             let mut v: Vec<String> = line.split("<-").map(tidy).collect();
@@ -228,12 +228,11 @@ fn wrap(s: &str, max: f64, size: f64) -> Vec<String> {
                 cur.push_str(rest);
                 break;
             }
-            let mut cut = rest.len();
+            // the longest prefix that still fits; a single glyph wider than the line is kept whole
+            let mut cut = 0usize;
             for (i, _) in rest.char_indices() {
-                if text_w(&rest[..i], size) > max {
-                    cut = i;
-                    break;
-                }
+                if i == 0 { continue; }
+                if text_w(&rest[..i], size) <= max { cut = i; } else { break; }
             }
             if cut == 0 { cut = rest.char_indices().nth(1).map(|(i, _)| i).unwrap_or(rest.len()); }
             out.push(rest[..cut].to_string());
@@ -245,6 +244,17 @@ fn wrap(s: &str, max: f64, size: f64) -> Vec<String> {
 }
 
 fn plural(n: usize, one: &str, many: &str) -> String { if n == 1 { one.to_string() } else { many.to_string() } }
+
+/// The line under a refusal: what to do about the particular reason. One generic sentence is false for a web over
+/// the name cap (its links do form a one-way web) and misleading for mixed arrows (the verification critic, LOW-4).
+fn second_line(e: &str) -> &'static str {
+    if e.contains("run in a circle") { "Nothing is drawn until the links form a one-way web." }
+    else if e.starts_with("More than") { "Nothing is drawn: split the web into two pictures." }
+    else if e.contains("mixes") { "Nothing is drawn until every line uses one direction." }
+    else if e.contains("no arrow") { "Nothing is drawn until every line is a link." }
+    else if e.contains("empty name") { "Nothing is drawn until every name has letters." }
+    else { "Nothing is drawn until the web can be read." }
+}
 
 pub fn build(p: &Params) -> String {
     let lab = svg::label_factor(p.s("label_size"));
@@ -272,8 +282,9 @@ pub fn build(p: &Params) -> String {
             let reason = "The food web could not be read:";
             let max = min_w - 48.0;
             let first = wrap(&e, max, 13.0 * lab);
-            // (critic minor 11) every line IS a link in a cycle: say what is actually missing
-            let then = wrap("Nothing is drawn until the links form a one-way web.", max, 12.0 * lab);
+            // (critic minor 11) every line IS a link in a cycle: say what is actually missing — and for another
+            // refusal, say what is actually wrong with that one instead
+            let then = wrap(second_line(&e), max, 12.0 * lab);
             let h = 34.0 + (first.len() as f64 + 1.0 + then.len() as f64) * 18.0 * lab + 20.0;
             let mut d = Doc::new(min_w, h);
             d.describe("Food web", "A food web from typed links");
@@ -292,7 +303,15 @@ pub fn build(p: &Params) -> String {
         }
         Ok(web) => {
             let placed = place(&web);
-            let widths: Vec<f64> = web.names.iter().map(|n| text_w(n, fs) + 2.0 * PAD_X * lab).collect();
+            let normal_hl = (EDGE_W * lab * 4.0).max(9.0);
+            let slot_need = normal_hl * 0.84 + 2.0 * lab;
+            let mut widths: Vec<f64> = web.names.iter().map(|n| text_w(n, fs) + 2.0 * PAD_X * lab).collect();
+            // (verification critic, MED) on a box narrower than its own slots a row of heads merges into a band; widen
+            // the box rather than shrink the heads, so every head is the same size and every attachment stays apart.
+            for node in 0..web.names.len() {
+                let n = web.edges.iter().filter(|e| e.0 == node).count().max(web.edges.iter().filter(|e| e.1 == node).count());
+                if n > 1 { widths[node] = widths[node].max(n as f64 * slot_need); }
+            }
             let rows = placed.rows.len();
             let row_w = |row: &[usize]| row.iter().map(|i| widths[*i]).sum::<f64>() + row.len().saturating_sub(1) as f64 * NODE_GAP * lab;
             let content_w = placed.rows.iter().map(|r| row_w(r)).fold(0.0f64, f64::max);
@@ -328,7 +347,7 @@ pub fn build(p: &Params) -> String {
 
             // each box's left edge
             let mut box_x = vec![0.0; web.names.len()];
-            for (l, row) in placed.rows.iter().enumerate() {
+            for row in placed.rows.iter() {
                 let rw = row_w(row);
                 let mut x = left + (content_w - rw) / 2.0;
                 for &i in row {
@@ -342,13 +361,12 @@ pub fn build(p: &Params) -> String {
             let mut bot_frac = vec![0.5; web.edges.len()];
             for node in 0..web.names.len() {
                 let outs: Vec<usize> = (0..web.edges.len()).filter(|&e| web.edges[e].0 == node).collect();
-                for (k, &e) in outs.iter().enumerate() { top_frac[e] = (k as f64 + 1.0) / (outs.len() as f64 + 1.0); }
+                for (k, &e) in outs.iter().enumerate() { top_frac[e] = (k as f64 + 0.5) / outs.len() as f64; }
                 let ins: Vec<usize> = (0..web.edges.len()).filter(|&e| web.edges[e].1 == node).collect();
-                for (k, &e) in ins.iter().enumerate() { bot_frac[e] = (k as f64 + 1.0) / (ins.len() as f64 + 1.0); }
+                for (k, &e) in ins.iter().enumerate() { bot_frac[e] = (k as f64 + 0.5) / ins.len() as f64; }
             }
             let head = |d: &mut Doc, x: f64, y: f64| {
-                let hl = (EDGE_W * lab * 4.0).max(8.0 * lab);
-                d.poly(&[(x, y), (x - hl * 0.42, y + hl), (x + hl * 0.42, y + hl)], edge_col, edge_col, 0.5);
+                d.poly(&[(x, y), (x - normal_hl * 0.42, y + normal_hl), (x + normal_hl * 0.42, y + normal_hl)], edge_col, edge_col, 0.5);
             };
             // the links first, then the boxes
             for (e, &(prey, predator)) in web.edges.iter().enumerate() {
@@ -357,14 +375,15 @@ pub fn build(p: &Params) -> String {
                 let py = cy(placed.level[prey]) - box_h / 2.0;
                 let qy = cy(placed.level[predator]) + box_h / 2.0;
                 if span((prey, predator)) <= 1 {
-                    d.arrow(px, py, qx, qy, edge_col, EDGE_W * lab);
+                    d.line(px, py, qx, qy, edge_col, EDGE_W * lab);
+                    head(&mut d, qx, qy);
                 } else {
                     // around the rows: out above the prey's row, up a lane right of every box, in below the predator's
                     // row — never straight through an unrelated box, which would hide the shaft (the blocker)
                     let k = long.iter().position(|&x| x == e).unwrap_or(0);
                     let lane = left + content_w + 14.0 + k as f64 * 12.0 * lab + 6.0 * lab;
                     let y0 = py - 8.0 * lab;
-                    let y1 = qy + 8.0 * lab;
+                    let y1 = qy + (8.0 * lab).max(normal_hl + 2.0);
                     d.polyline(&[(px, py), (px, y0), (lane, y0), (lane, y1), (qx, y1), (qx, qy)], edge_col, EDGE_W * lab);
                     head(&mut d, qx, qy);
                 }
@@ -530,18 +549,21 @@ mod tests {
     }
 
     #[test]
-    fn print_draws_no_hue() {
-        let svg = render_of(&[s("style", "Print")]);
-        for part in svg.split("fill=\"").skip(1) {
-            let c = part.split('"').next().unwrap_or("");
-            let hex = c.trim_start_matches('#');
-            let byte = |s: &str| u8::from_str_radix(s, 16).unwrap_or(0);
-            let (r, g, b) = match hex.len() {
-                3 => (byte(&hex[0..1]) * 17, byte(&hex[1..2]) * 17, byte(&hex[2..3]) * 17),
-                6 => (byte(&hex[0..2]), byte(&hex[2..4]), byte(&hex[4..6])),
-                _ => continue,
-            };
-            assert!(r == g && g == b, "Print draws a hue: {c}");
+    fn a_valid_web_draws_no_hue() {
+        // the Style control is gone: this figure is monochrome in its one output, so it prints as it stands
+        let svg = render_of(&[]);
+        for attr in ["fill=\"", "stroke=\""] {
+            for part in svg.split(attr).skip(1) {
+                let c = part.split('"').next().unwrap_or("");
+                let hex = c.trim_start_matches('#');
+                let byte = |s: &str| u8::from_str_radix(s, 16).unwrap_or(0);
+                let (r, g, b) = match hex.len() {
+                    3 => (byte(&hex[0..1]) * 17, byte(&hex[1..2]) * 17, byte(&hex[2..3]) * 17),
+                    6 => (byte(&hex[0..2]), byte(&hex[2..4]), byte(&hex[4..6])),
+                    _ => continue,
+                };
+                assert!(r == g && g == b, "a valid web draws a hue: {c}");
+            }
         }
     }
 
@@ -599,6 +621,47 @@ mod tests {
     }
 
     #[test]
+    fn a_narrow_predator_does_not_merge_its_heads() {
+        // (verification critic, MED) `X` as typed is only 29 px wide, so its eight arrivals were ~3.3 px apart while a
+        // head base is ~7 px: the heads merged into a band. The box now widens to hold its slots, full-size.
+        let links = (1..=8).map(|i| format!("Grass -> Prey{i}")).collect::<Vec<_>>().join("\n") + "\n" + &(1..=8).map(|i| format!("Prey{i} -> X")).collect::<Vec<_>>().join("\n");
+        let svg = render_of(&[("links", Value::S(links))]);
+        let heads: Vec<(f64, f64, f64)> = svg.split("<polygon ").skip(1).filter_map(|part| {
+            let at = part.find("points=\"")? + 8;
+            let pts: Vec<(f64, f64)> = part[at..].split('"').next()?.split_whitespace().map(|p| {
+                let (x, y) = p.split_once(',')?;
+                Some((x.parse().ok()?, y.parse().ok()?))
+            }).collect::<Option<Vec<_>>>()?;
+            let (minx, maxx) = pts.iter().fold((f64::MAX, f64::MIN), |(a, b), p| (a.min(p.0), b.max(p.0)));
+            Some((pts[0].0, pts[0].1, maxx - minx))
+        }).collect();
+        assert_eq!(heads.len(), 16, "one head per link");
+        let mut rows: std::collections::BTreeMap<i64, Vec<(f64, f64)>> = std::collections::BTreeMap::new();
+        for (cx, y, w) in heads { rows.entry((y * 100.0).round() as i64).or_default().push((cx, w)); }
+        for (_, mut v) in rows {
+            v.sort_by(|a, b| a.0.total_cmp(&b.0));
+            for pair in v.windows(2) {
+                let gap = pair[1].0 - pair[0].0;
+                let need = (pair[0].1 + pair[1].1) / 2.0;
+                assert!(gap >= need - 0.01, "two heads overlap: centres {gap:.2} px apart, bases need {need:.2}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_second_error_line_matches_the_refusal() {
+        // (verification critic, LOW-4) one generic sentence was false for the name cap and misleading for mixed arrows
+        let many = (1..=25).map(|i| format!("N{i} -> M{i}")).collect::<Vec<_>>().join("\n");
+        let over = texts(&render_of(&[("links", Value::S(many))]));
+        assert!(over.contains("split the web into two pictures"), "{over}");
+        assert!(!over.contains("one-way web"), "the 24-name cap is not a cycle: {over}");
+        let cycle = texts(&render_of(&[s("links", "A -> B\nB -> A")]));
+        assert!(cycle.contains("one-way web"), "{cycle}");
+        let mixed = texts(&render_of(&[s("links", "A -> B <- C")]));
+        assert!(mixed.contains("one direction"), "{mixed}");
+    }
+
+    #[test]
     fn the_left_arrow_and_tidied_spacing_are_read() {
         assert_eq!(parse("Fox ← Rabbit").unwrap().edges, vec![(0, 1)]);
         // runs of whitespace inside a name are one space, so a double space does not make a second organism
@@ -607,14 +670,20 @@ mod tests {
 
     #[test]
     fn an_unbroken_long_name_stays_inside_the_error_canvas() {
+        // (verification critic, LOW-5) the old test only checked each line's start x, which is always 24; assert the
+        // wrapped line's measured width instead. (CJK is still under-measured by text_w — a recorded leftover.)
         let long = "x".repeat(300);
+        let max = 420.0 - 48.0;
+        for line in wrap(&long, max, 13.0) {
+            assert!(text_w(&line, 13.0) <= max + 0.01, "a wrapped line is wider than its reserve: {line:?}");
+        }
         let svg = render_of(&[("links", Value::S(format!("{long} -> {long}")))]);
         let w: f64 = {
             let at = svg.find("width=\"").expect("width") + 7;
             svg[at..].split('"').next().unwrap().parse().unwrap()
         };
         for el in svg.split("<text").skip(1) {
-            let at = el.find("x=\"") .unwrap_or(0) + 3;
+            let at = el.find("x=\"").unwrap_or(0) + 3;
             let x: f64 = el.get(at..).and_then(|r| r.split('"').next()).and_then(|v| v.parse().ok()).unwrap_or(0.0);
             assert!(x < w, "a text starts outside the canvas: {el}");
         }
@@ -627,7 +696,7 @@ mod tests {
         assert!(crate::figures::notes_for(ID, &p).iter().any(|w| w.contains("no arrow")), "the Figures tab's note area never shows it: {:?}", crate::figures::notes_for(ID, &p));
     }
 
-    /// Writes every case (Colour and Print, Small and Large) to $VERSHION_PNG_DIR.
+    /// Writes every case, and a copy reduced to 66% grey (the print check), to $VERSHION_PNG_DIR.
     #[test]
     fn food_web_pngs() {
         let Ok(dir) = std::env::var("VERSHION_PNG_DIR") else { return };
@@ -638,22 +707,17 @@ mod tests {
             ("chain".into(), vec![s("links", "Grass -> Grasshopper -> Frog -> Heron")]),
             ("reversed".into(), vec![s("links", "Fox <- Rabbit <- Grass\nGrass -> Grasshopper")]),
             ("fanin".into(), vec![s("links", "Grass -> Prey1\nGrass -> Prey2\nGrass -> Prey3\nGrass -> Prey4\nGrass -> Prey5\nGrass -> Prey6\nGrass -> Prey7\nGrass -> Prey8\nPrey1 -> Apex\nPrey2 -> Apex\nPrey3 -> Apex\nPrey4 -> Apex\nPrey5 -> Apex\nPrey6 -> Apex\nPrey7 -> Apex\nPrey8 -> Apex")]),
+            ("fanin-narrow".into(), vec![s("links", "Grass -> Prey1\nGrass -> Prey2\nGrass -> Prey3\nGrass -> Prey4\nGrass -> Prey5\nGrass -> Prey6\nGrass -> Prey7\nGrass -> Prey8\nPrey1 -> X\nPrey2 -> X\nPrey3 -> X\nPrey4 -> X\nPrey5 -> X\nPrey6 -> X\nPrey7 -> X\nPrey8 -> X")]),
             ("empty".into(), vec![s("links", "")]),
             ("cycle".into(), vec![s("links", "A -> B\nB -> A")]),
         ];
         for (idx, e) in examples(ID).unwrap().into_iter().enumerate() { cases.push((format!("ex{idx}"), e.params)); }
         for (tag, list) in cases {
-            for (kind, extra) in [("colour", vec![]), ("print", vec![s("style", "Print")])] {
-                let mut l = list.clone();
-                l.extend(extra);
-                let svg = render_of(&l);
-                std::fs::write(format!("{dir}/foodweb-{tag}-{kind}.png"), to_png(&svg, 1.3).unwrap()).unwrap();
-                if kind == "print" {
-                    let (w, h, px) = to_rgba(&svg, 1.3).unwrap();
-                    let buf: Vec<u8> = px.chunks(4).map(|c| { let a = c[3] as f64 / 255.0; let l = (0.299 * c[0] as f64 + 0.587 * c[1] as f64 + 0.114 * c[2] as f64) * a + 255.0 * (1.0 - a); if l < 0.66 * 255.0 { 0 } else { 255 } }).collect();
-                    image::GrayImage::from_raw(w, h, buf).unwrap().save(format!("{dir}/foodweb-{tag}-print-bw66.png")).unwrap();
-                }
-            }
+            let svg = render_of(&list);
+            std::fs::write(format!("{dir}/foodweb-{tag}.png"), to_png(&svg, 1.3).unwrap()).unwrap();
+            let (w, h, px) = to_rgba(&svg, 1.3).unwrap();
+            let buf: Vec<u8> = px.chunks(4).map(|c| { let a = c[3] as f64 / 255.0; let l = (0.299 * c[0] as f64 + 0.587 * c[1] as f64 + 0.114 * c[2] as f64) * a + 255.0 * (1.0 - a); if l < 0.66 * 255.0 { 0 } else { 255 } }).collect();
+            image::GrayImage::from_raw(w, h, buf).unwrap().save(format!("{dir}/foodweb-{tag}-bw66.png")).unwrap();
         }
     }
 }

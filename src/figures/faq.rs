@@ -630,7 +630,7 @@ const FOOD_WEB: &[Faq] = &[
     },
     Faq {
         q: "Do the names have to match exactly?",
-        a: "Yes. Grass, grass and Grass. are three different names, and a typo becomes its own organism. Spaces inside a name are tidied to one, so Arctic fox and Arctic  fox are the same organism.",
+        a: "Yes. Grass, grass and Grass. are three different names, and a typo becomes its own organism. Spaces inside a name are tidied to one, so Arctic fox and Arctic  fox are the same organism. An arrow (-> or ←) is always read as an arrow, so a name cannot contain one.",
     },
     Faq {
         q: "How many links can one picture hold?",

@@ -603,9 +603,23 @@ prey's row, up a lane right of every box, in below its predator's row — so it 
 (eight arrowheads stacked on one point under an apex) is fixed by the same attachments. Minors fixed: a narrow web is
 centred in the 420 px minimum; the inert Style control (a monochrome figure) is gone; a long unbroken name breaks in
 the error text; `←` is read; runs of whitespace inside a name are tidied to one; the editor note area shows the
-parse error; the cycle's second line says "until the links form a one-way web"; the unused `mut` warning is gone.
-Two tests pin that the skipping link is routed with distinct attachment points and that a many-prey apex has distinct
-arrivals; the PNG export gained a fan-in case. Census: only food-web's two hashes moved. Remaining, recorded: a
+parse error; the cycle's second line says "until the links form a one-way web"; it also claimed the unused `mut`
+warning was gone — verification round 1 found it still there, and round 2 removed it. Two tests pin that the
+skipping link is routed with distinct attachment points and that a many-prey apex has distinct arrivals; the PNG
+export gained a fan-in case. Census: only food-web's two hashes moved. Remaining, recorded: a
 20–24-name web is a very wide strip (the cap's rationale is not fully met at the top of its range); "Level 5"
 replaces the named levels after "Quaternary consumers"; the count line is always drawn (no Show-answers switch);
 wide/CJK glyph widths are under-measured by `text_w`.
+
+Food-web verification round 1 (2026-10-29): **PASS** — blocker 1/1 and the reported major confirmed fixed, no new
+blocker or major; one MED and five LOW, all addressed. The MED: on a box narrower than its own attachment slots (an
+apex named `X` is 29 px), eight full-size heads still merged into a band; the fix widens such a box to hold its
+slots rather than shrinking the heads, so every head is one size — which also removes the routed head's ±24–29 %
+mismatch with the straight one (both now use `svg::arrow`'s size). The second error line now names the actual
+refusal (the name cap says "split the web into two pictures", mixed arrows say "use one direction") instead of the
+cycle sentence in every case. `wrap`'s broken chunks are the last prefix that fits, not the first that overflows;
+the long-name test asserts the wrapped width, not a start x that is always 24; the unused `mut` and the unused loop
+variable are gone. Two tests pin a narrow apex's heads apart and that the second line matches the refusal; the PNG
+export gained a `fanin-narrow` case and dropped the duplicate "print" outputs (the Style control is gone, so
+`style=Print` is an ignored key — old links still load). The valid render is asserted hue-free, so the figure prints
+as it stands. Census: only food-web's two hashes moved again.
