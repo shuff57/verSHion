@@ -12,6 +12,7 @@ pub mod enzyme;
 pub mod foodweb;
 pub mod gel;
 pub mod hardyweinberg;
+mod noto_adv;
 pub mod pedigree;
 pub mod pipette;
 mod plot;

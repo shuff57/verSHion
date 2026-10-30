@@ -150,6 +150,20 @@ pub fn warnings(p: &Params) -> Vec<String> {
             out.push(format!("These {} are not counts and were ignored: {}.", what, bad.iter().map(|b| format!("\u{201c}{b}\u{201d}")).collect::<Vec<_>>().join(", ")));
         }
     }
+    // (round 10 minor) a count with more than six decimals is rounded to six on the page ("0.0000001" prints as 0):
+    // say so, rather than change what was typed without a word
+    let fine: Vec<String> = split_list(p.s("obs"))
+        .iter()
+        .map(|t| t.trim().to_string())
+        .filter(|t| t.parse::<f64>().map(|v| v.is_finite() && v >= 0.0 && beyond_six(v)).unwrap_or(false))
+        .collect();
+    if !fine.is_empty() {
+        out.push(format!(
+            "Counts are used to six decimals, so {} {} rounded.",
+            fine.iter().map(|b| format!("\u{201c}{b}\u{201d}")).collect::<Vec<_>>().join(", "),
+            if fine.len() == 1 { "is" } else { "are" }
+        ));
+    }
     if obs.is_empty() {
         out.push("There are no observed counts to test.".to_string());
     }
@@ -201,6 +215,13 @@ fn own_decimals(v: f64) -> i64 {
         if (x.round() - x).abs() <= (x.abs() * 4e-16).max(1e-7) { return k; }
     }
     6
+}
+
+/// Whether a count carries more than the six decimals `own_decimals` keeps.
+fn beyond_six(v: f64) -> bool {
+    if !v.is_finite() { return false; }
+    let x = v * 1e6;
+    (x.round() - x).abs() > (x.abs() * 4e-16).max(1e-7)
 }
 
 /// A number that never rounds a real value to "0" — a contribution of 0.0004 is real and belongs on the page.
@@ -316,8 +337,14 @@ pub fn build(p: &Params) -> String {
     let total_obs: f64 = f.rows.iter().map(|r| r.observed).sum();
     let obs_dec: Vec<i64> = f.rows.iter().map(|r| own_decimals(r.observed)).collect();
     let col_dec = obs_dec.iter().copied().max().unwrap_or(0);
-    let scale = 10f64.powi(col_dec as i32);
-    let obs_full = f.rows.iter().all(|r| r.observed.is_finite() && r.observed.abs() < 1e15 && (r.observed * scale).abs() < 9.0e15);
+    // (round 10 minor) The column used to be plain only while every count scaled to the COLUMN's decimals stayed under
+    // 9e15, so "1000000000000, 0.123456" (1e18 units at six decimals) went "1.00e12" and "0.12". Each count is exact in
+    // integer units at its OWN decimals (under 2^53), and is raised to the column's decimals in i128, where the sum of
+    // any number of counts below 1e15 at six decimals fits; so the column is plain whenever each count is below 1e15
+    // and exact at its own decimals, and the total is still the exact sum of the printed cells.
+    let own_units: Vec<i128> = f.rows.iter().zip(&obs_dec).map(|(r, &d)| (r.observed * 10f64.powi(d as i32)).round() as i128).collect();
+    let col_units: Vec<i128> = own_units.iter().zip(&obs_dec).map(|(u, &d)| u * 10i128.pow((col_dec - d) as u32)).collect();
+    let obs_full = f.rows.iter().zip(&obs_dec).all(|(r, &d)| r.observed.is_finite() && r.observed.abs() < 1e15 && (r.observed * 10f64.powi(d as i32)).abs() < 9.0e15);
     let units_text = |u: i128, d: i64| -> String {
         let neg = u < 0;
         let u = u.abs();
@@ -331,18 +358,21 @@ pub fn build(p: &Params) -> String {
     let sci = |v: f64| if v == 0.0 { "0".to_string() } else if !v.is_finite() { "\u{221e}".to_string() } else { format!("{v:.2e}").replace('-', "\u{2212}") };
     let fmt_cnt = |v: f64| if big(v) || !v.is_finite() { sci(v) } else { num(v, 2) };
     let obs_text: Vec<String> = if obs_full {
-        f.rows.iter().zip(&obs_dec).map(|(r, &d)| units_text((r.observed * 10f64.powi(d as i32)).round() as i128, d)).collect()
+        own_units.iter().zip(&obs_dec).map(|(&u, &d)| units_text(u, d)).collect()
     } else {
         f.rows.iter().map(|r| fmt_cnt(r.observed)).collect()
     };
     let total_text_obs = if obs_full {
-        units_text(f.rows.iter().map(|r| (r.observed * scale).round() as i128).sum(), col_dec)
+        units_text(col_units.iter().sum(), col_dec)
     } else {
         fmt_cnt(total_obs)
     };
     // the Expected column follows its own column's rule: plain and grouped while the Observed column is (the expected
     // counts sum to the same total, so none reaches 1e15 then), and its total is the Observed total, printed the same
     // way. (round 9 minor) "5,000,000.50" twice above an Expected total of "1.00e7" beside an Observed "10,000,001".
+    // (round 10, accepted) The Expected cells need not add up to the Expected total at the printed decimals ("10.3"
+    // three times beside 31): the total IS the observed total by construction (E sums to O), and each cell is the
+    // true expected count rounded for display. Forcing the cells to sum would print an expected count that is wrong.
     let fmt_exp = |v: f64| if !v.is_finite() { sci(v) } else if obs_full { group(&col(v, dec)) } else if big(v) { sci(v) } else { group(&col(v, dec)) };
     let exp_text: Vec<String> = f.rows.iter().map(|r| fmt_exp(r.expected)).collect();
     // the canvas widens when a column's widest printed number would not fit between it and the column on its left
@@ -1083,6 +1113,44 @@ mod tests {
         let tx = bs.iter().find(|b| b.4.starts_with("(O")).map(|b| b.0).unwrap();
         let col_t: Vec<&String> = bs.iter().filter(|b| (b.0 - tx).abs() < 0.01 && !b.4.starts_with("(O")).map(|b| &b.4).collect();
         assert!(col_t.iter().all(|c| c.contains('e')) || col_t.iter().all(|c| !c.contains('e')), "{col_t:?}");
+    }
+
+    #[test]
+    fn a_column_below_1e15_stays_plain_whatever_decimals_its_counts_carry() {
+        // (round 10 minor) the column went scientific when a fractional count raised its scale past 9e15 units:
+        // "1000000000000, 0.123456" printed "1.00e12" and "0.12". Each count is exact at its own decimals, and the
+        // total is their exact sum in integers, so the column stays plain and the total is the sum of the printed cells.
+        for (obs, cells, total) in [
+            ("1000000000000, 0.123456", vec!["1,000,000,000,000", "0.123456"], "1,000,000,000,000.123456"),
+            ("999999999999999, 1000001.5286", vec!["999,999,999,999,999", "1,000,001.5286"], "1,000,000,001,000,000.5286"),
+            ("123456789012345, 0.000001, 7", vec!["123,456,789,012,345", "0.000001", "7"], "123,456,789,012,352.000001"),
+        ] {
+            for size in ["Small", "Medium", "Large"] {
+                let k = obs.split(", ").count();
+                let svg = render_of(&[s("obs", obs), s("ratio", &vec!["1"; k].join(", ")), s("label_size", size), b(SHOW_ANSWERS, true)]);
+                let (oc, ot, _ec, et, giv, _) = columns(&svg);
+                assert_eq!(oc, cells, "{obs} ({size})");
+                assert_eq!(ot, total, "{obs} ({size})");
+                assert_eq!(et, total, "{obs} ({size})");
+                assert!(giv.contains(&format!("out of {total} observations")), "{obs} ({size}): {giv}");
+            }
+        }
+        // and from 1e15 a column is still scientific as a whole
+        let t = texts(&render_of(&[s("obs", "1000000000000000, 0.5"), s("ratio", "1, 1"), b(SHOW_ANSWERS, true)]));
+        assert!(t.contains("1.00e15"), "{t}");
+    }
+
+    #[test]
+    fn a_count_with_more_than_six_decimals_is_reported() {
+        // (round 10 minor) "0.0000001" printed as 0 and "1.123456789" as 1.123457 without a word
+        for obs in ["0.0000001, 5", "1.123456789, 2", "1e-7, 3"] {
+            let w = warnings(&with(&[s("obs", obs), s("ratio", "1, 1")]));
+            assert!(w.iter().any(|x| x.contains("six decimals")), "{obs}: {w:?}");
+        }
+        for obs in ["0.123456, 5", "315, 101", "1000000000000, 0.000001"] {
+            let w = warnings(&with(&[s("obs", obs), s("ratio", "1, 1")]));
+            assert!(!w.iter().any(|x| x.contains("six decimals")), "{obs}: {w:?}");
+        }
     }
 
     #[test]

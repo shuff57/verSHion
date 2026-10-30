@@ -263,24 +263,56 @@ fn script_class(c: char) -> u8 {
 /// admitted Armenian and whole symbol blocks (arrows, dingbats, Braille, box drawing, ⭐) that it does not: their names
 /// did not tofu, but the rasteriser set the whole "Left to right" line in a bold monospace or serif fallback face.
 /// Everything else gets the numbered rows, one name per row.
+/// (round 10 minor) Within those blocks, only the codepoints the face really has: the block ranges let through the Coptic
+/// letters inside the Greek block (U+03E2-03EF) and the newest Latin Extended-D letters (U+A7CB-A7CD, U+A7DA-A7DC), which
+/// Noto Sans lacks, and the order line again fell to a fallback face. `noto_adv::COVERED` is generated from the face's
+/// own cmap: Basic Latin to Latin Extended-B, IPA and modifiers, combining marks, Greek, Cyrillic, Latin Extended
+/// Additional, Greek Extended, general punctuation, super/subscripts, currency, letterlike symbols, Latin Extended-C and
+/// -D, and the Latin ligatures.
 fn latin_class(c: char) -> bool {
     let u = c as u32;
     if matches!(u, 0x200b..=0x200f | 0x202a..=0x202e | 0x2066..=0x2069) { return false; } // joiners and bidi controls
-    matches!(u,
-        0x0000..=0x024f     // Basic Latin, Latin-1 Supplement, Latin Extended-A and -B
-        | 0x0250..=0x02ff   // IPA extensions, spacing modifier letters
-        | 0x0300..=0x036f   // combining diacritical marks
-        | 0x0370..=0x03ff   // Greek and Coptic
-        | 0x0400..=0x052f   // Cyrillic and its supplement
-        | 0x1e00..=0x1eff   // Latin Extended Additional (Vietnamese)
-        | 0x1f00..=0x1fff   // Greek Extended
-        | 0x2000..=0x206f   // general punctuation
-        | 0x2070..=0x209f   // superscripts and subscripts
-        | 0x20a0..=0x20cf   // currency symbols
-        | 0x2100..=0x214f   // letterlike symbols
-        | 0x2c60..=0x2c7f   // Latin Extended-C
-        | 0xa720..=0xa7ff   // Latin Extended-D
-        | 0xfb00..=0xfb06)  // Latin ligatures (ﬁ ﬂ)
+    super::noto_adv::covered(c)
+}
+
+/// (round 10 major) A run's REAL width, for placing the runs of a mixed name: Noto Sans's own advance for what the Latin
+/// face carries, the honest one em for Han, kana and Hangul, and for anything else (no table: Arabic, Indic, emoji, a
+/// letter the face lacks) the larger of the estimate and 0.66 em, so an unknown run errs towards a small gap, never an
+/// overlap.
+fn real_w(s: &str, size: f64) -> f64 {
+    s.chars()
+        .map(|c| {
+            size * match script_class(c) {
+                1 | 2 => 1.0,
+                0 => super::noto_adv::advance_em(c).unwrap_or_else(|| if joins_previous(c) { 0.0 } else { glyph_em(c).max(0.66) }),
+                _ if joins_previous(c) => 0.0,
+                _ => glyph_em(c).max(0.66),
+            }
+        })
+        .sum()
+}
+
+/// The room a name takes in the layout (columns, canvas, the boxes other labels clear): for a name drawn as runs (see
+/// `label_el`) the larger of the estimate and its real width, so the room only ever grows past what round 9 gave it.
+/// The same for any other name with a letter outside ASCII: the estimate counts an unknown letter at 0.56 em, and
+/// Noto Sans draws "Ἄλφα" at 2.74 em, not 2.24, so an end-anchored ancestor reached 5 px further left than the box its
+/// place was tested with, onto a branch. An ASCII name keeps the estimate, so an ASCII tree measures as it always has.
+fn name_w(s: &str, size: f64) -> f64 {
+    if needs_runs(s) {
+        script_runs(s).iter().map(|r| real_w(&nbsp_edges(r), size)).sum::<f64>().max(text_w(s, size))
+    } else if !s.is_ascii() {
+        real_w(s, size).max(text_w(s, size))
+    } else {
+        text_w(s, size)
+    }
+}
+
+/// A run's edge spaces as no-break spaces, which the renderer keeps (a plain trailing space in a `<text>` is dropped).
+fn nbsp_edges(r: &str) -> String {
+    let lead = r.len() - r.trim_start_matches(' ').len();
+    let trail = r.len() - r.trim_end_matches(' ').len();
+    if lead + trail == 0 || lead == r.len() { return r.to_string(); }
+    format!("{}{}{}", "\u{a0}".repeat(lead), r.trim_matches(' '), "\u{a0}".repeat(trail))
 }
 
 /// (round 8 minor) A character that belongs to the glyph before it: a zero-width joiner, a variation selector, a
@@ -422,34 +454,22 @@ fn text_el_halo(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) ->
 fn label_el(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str, halo: bool) -> String {
     let one = |x: f64, anchor: &str, t: &str| if halo { text_el_halo(x, y, size, anchor, fill, t) } else { text_el(x, y, size, anchor, fill, t) };
     if !needs_runs(s) { return one(x, anchor, s); }
-    // (round 9 minor) A Latin run is placed against its neighbour, not by its own estimated width: the CJK and Hangul
-    // runs are a fixed 1 em a character, so their estimate is exact, while a Latin run's is not; "Mixed 日本한국" showed a
-    // double gap where the over-estimated "Mixed " ended. A Latin run before another run is anchored at that run's start
-    // ("end"), one after it at that run's end ("start"). Its edge spaces become no-break spaces, which the renderer
-    // keeps (a plain trailing space in a `<text>` is dropped).
-    let runs: Vec<String> = script_runs(s)
-        .into_iter()
-        .map(|r| {
-            let lead = r.len() - r.trim_start_matches(' ').len();
-            let trail = r.len() - r.trim_end_matches(' ').len();
-            if lead + trail == 0 || lead == r.len() { return r; }
-            format!("{}{}{}", "\u{a0}".repeat(lead), r.trim_matches(' '), "\u{a0}".repeat(trail))
-        })
-        .collect();
-    let widths: Vec<f64> = runs.iter().map(|r| text_w(r, size)).collect();
+    // (round 9 minor) A Latin run was placed against its neighbour by its ESTIMATED width ("end"-anchored at the next
+    // run's start). (round 10 major) That put the whole estimation error on the Latin run's left end: lowercase is
+    // counted at 0.56 em where Noto Sans draws b/o/u at about 0.61, so "Bubo bubo … 日本한국" ran back over its branch tip
+    // and over the list's row number, and wide glyphs (@ — %) clipped at the canvas edge. Every run is now measured by
+    // the face's real advances (`real_w`), and each starts exactly where the previous one ends; the name is placed by its
+    // real total from its anchor, so with "start" it begins at the anchor and nothing lands left of it. Edge spaces are
+    // no-break spaces, which the renderer keeps.
+    let runs: Vec<String> = script_runs(s).iter().map(|r| nbsp_edges(r)).collect();
+    let widths: Vec<f64> = runs.iter().map(|r| real_w(r, size)).collect();
     let total: f64 = widths.iter().sum();
     let x0 = match anchor { "end" => x - total, "middle" => x - total / 2.0, _ => x };
-    let starts: Vec<f64> = widths.iter().scan(x0, |acc, w| { let s0 = *acc; *acc += w; Some(s0) }).collect();
-    let latin = |r: &str| r.chars().filter(|c| !joins_previous(*c)).all(|c| script_class(c) == 0);
     let mut out = String::new();
-    for (i, r) in runs.iter().enumerate() {
-        if latin(r) && i + 1 < runs.len() {
-            out.push_str(&one(starts[i + 1], "end", r));
-        } else if latin(r) && i > 0 {
-            out.push_str(&one(starts[i], "start", r));
-        } else {
-            out.push_str(&one(starts[i], "start", r));
-        }
+    let mut at = x0;
+    for (r, w) in runs.iter().zip(&widths) {
+        out.push_str(&one(at, "start", r));
+        at += w;
     }
     out
 }
@@ -490,8 +510,9 @@ pub fn build(p: &Params) -> String {
 
     // (round 2) an ancestor's label sits above and to the left of its branching point: the column must be wide enough for
     // the widest of them (or it would run back over the previous branch), and the left margin for the root's.
-    let widest_anc = node.as_ref().map(|n| ancestor_labels(n).into_iter().map(|l| text_w(&l, 11.0 * lab)).fold(0.0f64, f64::max)).unwrap_or(0.0);
-    let root_w = node.as_ref().map(|n| if n.is_leaf() { 0.0 } else { text_w(&n.label, 11.0 * lab) }).unwrap_or(0.0);
+    // (round 10) a name drawn as runs is measured by its real width (`name_w`); any other exactly as before
+    let widest_anc = node.as_ref().map(|n| ancestor_labels(n).into_iter().map(|l| name_w(&l, 11.0 * lab)).fold(0.0f64, f64::max)).unwrap_or(0.0);
+    let root_w = node.as_ref().map(|n| if n.is_leaf() { 0.0 } else { name_w(&n.label, 11.0 * lab) }).unwrap_or(0.0);
     let left = 30.0 + root_w;
     let step_x = (STEP_X * lab).max(widest_anc + 30.0);
     let tree_w = left + maxd as f64 * step_x;
@@ -514,13 +535,13 @@ pub fn build(p: &Params) -> String {
     w = w.max(24.0 + prefix_w + text_w(&widest, 12.0 * lab) * 1.06 + 14.0);
     // (round 8) every leaf label fits by the conservative width too (o/p/b/d-heavy names drew wider than estimated)
     let names = node.as_ref().map(|n| leaves(n)).unwrap_or_default();
-    for l in &names { w = w.max(tree_w + 8.0 + safe_w(l, 12.0 * lab) + 6.0); }
+    for l in &names { w = w.max(tree_w + 8.0 + safe_w(l, 12.0 * lab).max(name_w(l, 12.0 * lab)) + 6.0); }
     // (round 8 major) the order line is one Latin `<text>` only when every name is Latin; otherwise one name per row
     let latin_line = all_latin(&names);
     let rows = if latin_line { Vec::new() } else { order_rows(&names) };
     let num_w = rows.iter().map(|r| text_w(&r.0, 12.0 * lab)).fold(0.0f64, f64::max);
     let row_x = 24.0 + 12.0 * lab + num_w + 6.0 * lab;
-    for (_, name) in &rows { w = w.max(row_x + safe_w(name, 12.0 * lab).max(text_w(name, 12.0 * lab) * 1.06) + 14.0); }
+    for (_, name) in &rows { w = w.max(row_x + safe_w(name, 12.0 * lab).max(text_w(name, 12.0 * lab) * 1.06).max(name_w(name, 12.0 * lab)) + 14.0); }
     let top = 34.0;
     let h = top + ((n_leaves as f64) - 1.0).max(1.0) * LEAF_GAP * lab + 40.0 * lab;
     // (round 2) the text under the picture wraps to the CANVAS, not to a fixed character count; (round 5) to its width.
@@ -570,7 +591,7 @@ pub fn build(p: &Params) -> String {
             let mut taken: Vec<(f64, f64, f64, f64)> = placed
                 .leaves
                 .iter()
-                .map(|(label, x, y)| { let (lx, ly) = (px(*x) + 8.0, py(*y) + 4.5 * lab); (lx, lx + text_w(label, 12.0 * lab), ly - 12.0 * lab * 0.8, ly + 12.0 * lab * 0.25) })
+                .map(|(label, x, y)| { let (lx, ly) = (px(*x) + 8.0, py(*y) + 4.5 * lab); (lx, lx + name_w(label, 12.0 * lab), ly - 12.0 * lab * 0.8, ly + 12.0 * lab * 0.25) })
                 .collect();
             for (label, x, y) in &placed.nodes {
                 if !slanted {
@@ -588,7 +609,7 @@ pub fn build(p: &Params) -> String {
                 // and to its right); the nearest place no branch crosses wins, and only when there is none, the one
                 // crossed least.
                 let size = 11.0 * lab;
-                let lw = text_w(label, size);
+                let lw = name_w(label, size);
                 let (fx, fy) = (px(*x), py(*y));
                 let from_above = placed.edges.iter().any(|(_, y0, x1, y1)| *x1 == *x && *y1 == *y && *y0 < *y);
                 let above = fy - 5.0;
@@ -992,6 +1013,29 @@ mod tests {
     }
 
     #[test]
+    fn the_latin_allow_list_is_exactly_what_noto_sans_carries() {
+        // (round 10 minor) Coptic inside the Greek block (U+03E2-03EF) and the newest Latin Extended-D letters
+        // (U+A7CB-A7CD, U+A7DA-A7DC) were allowed but are not in Noto Sans: the order line fell back to a serif or bold
+        // monospace face and "Gorilla" clipped at the edge. The allow-list is now the face's own coverage of its blocks.
+        for c in ['\u{3e1}', '\u{3f0}', '\u{3ff}', 'Ͱ', 'ʹ', ';', '\u{a720}', '\u{a7ca}', '\u{a7d0}', '\u{a7d9}', '\u{a7f2}', '\u{a7ff}', 'Ἀ', 'ῼ', '₿', '\u{2064}'] {
+            assert!(latin_class(c), "{c:?} (U+{:04X}) is in Noto Sans", c as u32);
+        }
+        for c in ['\u{3e2}', 'ϣ', '\u{3ec}', '\u{3ef}', '\u{378}', '\u{a7cb}', '\u{a7cc}', '\u{a7cd}', '\u{a7da}', '\u{a7db}', '\u{a7dc}', '\u{a7ce}', '\u{a7f0}', '\u{1fff}', '\u{20c1}', '\u{7f}', '\u{85}', '\u{2065}'] {
+            assert!(!latin_class(c), "{c:?} (U+{:04X}) is not in Noto Sans", c as u32);
+        }
+        for name in ["Ꟛꟛ Ɤ", "Ϣϣ Ϭ"] {
+            let t = texts(&render_of(&[s("tree", &format!("((Homo sapiens, {name}), (Pan, Gorilla){name} anc)"))]));
+            assert!(!t.contains("Left to right: Homo sapiens"), "{name}: {t}");
+            assert!(t.lines().any(|l| l == name), "{name} is not on a row of its own: {t}");
+        }
+        // the neighbours that are carried stay on the one Latin line
+        for name in ["Ϡϡ", "Ꟑꟑ", "ϰϱ"] {
+            let t = texts(&render_of(&[s("tree", &format!("((Homo sapiens, {name}), Pan)"))]));
+            assert!(t.contains(&format!("Left to right: Homo sapiens, {name}, Pan")), "{name}: {t}");
+        }
+    }
+
+    #[test]
     fn a_mixed_script_name_has_no_double_gap() {
         // (round 9 minor) "Mixed 日本한국" as an ancestor showed a double gap before the Han run: the Latin run was placed
         // by its own over-estimated width. It now ends exactly where the next run starts, its space kept as a no-break
@@ -1003,10 +1047,124 @@ mod tests {
                 let latin = bs.iter().find(|b| b.4.starts_with("Mixed")).expect("the Latin run");
                 let han = bs.iter().find(|b| b.4 == "日本").expect("the Han run");
                 assert_eq!(latin.4, "Mixed\u{a0}", "{shape} {size}: {:?}", latin.4);
-                assert_eq!(latin.3, "end", "{shape} {size}: the Latin run is not pinned to the next one");
-                assert!((latin.0 - han.0).abs() < 0.01, "{shape} {size}: {latin:?} ends at {} but 日本 starts at {}", latin.0, han.0);
+                // (round 10) every run is start-anchored; the Latin run ends, by Noto Sans's real advances, exactly
+                // where the Han run starts (round 9 pinned it there by an end anchor, which moved the estimate's error
+                // to its left end)
+                assert_eq!(latin.3, "start", "{shape} {size}");
+                let end = latin.0 + real_w(&latin.4, latin.2);
+                assert!((end - han.0).abs() < 0.01, "{shape} {size}: {latin:?} ends at {end} but 日本 starts at {}", han.0);
             }
         }
+    }
+
+    /// A run's real width: Noto Sans's own advance for what the Latin face carries, one em for Han, kana and Hangul.
+    fn real_w(s: &str, size: f64) -> f64 {
+        s.chars().map(|c| size * match script_class(c) {
+            1 | 2 => 1.0,
+            _ => super::super::noto_adv::advance_em(c).unwrap_or_else(|| glyph_em(c)),
+        }).sum()
+    }
+
+    fn unesc(s: &str) -> String { s.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&#39;", "'").replace("&amp;", "&") }
+
+    /// The elements one name is drawn as, found on any baseline, as (left, right, text) by real widths, plus the right
+    /// edge of whatever is drawn just before them on that baseline (the row number), every occurrence of the name.
+    fn name_runs(svg: &str, name: &str) -> Vec<(Vec<(f64, f64, String)>, Option<f64>, f64)> {
+        let mut rows: Vec<(f64, Vec<(f64, f64, String)>)> = Vec::new();
+        for part in svg.split("<text").skip(1) {
+            if part.contains(r##"fill="none""##) { continue; }
+            let num = |k: &str| -> Option<f64> { let at = part.find(&format!("{k}=\""))? + k.len() + 2; part[at..].split('"').next()?.parse().ok() };
+            let (Some(x), Some(y), Some(sz)) = (num("x"), num("y"), num("font-size")) else { continue };
+            let anchor = part.find("text-anchor=\"").map(|i| part[i + 13..].split('"').next().unwrap_or("start").to_string()).unwrap_or_else(|| "start".into());
+            let t = unesc(part.split_once('>').map(|(_, r)| r.split("</text>").next().unwrap_or("")).unwrap_or(""));
+            let wd = real_w(&t, sz);
+            let l = match anchor.as_str() { "end" => x - wd, "middle" => x - wd / 2.0, _ => x };
+            match rows.iter_mut().find(|(ry, _)| (*ry - y).abs() < 0.01) {
+                Some((_, v)) => v.push((l, l + wd, t)),
+                None => rows.push((y, vec![(l, l + wd, t)])),
+            }
+        }
+        let want = name.replace('\u{a0}', " ");
+        let mut out = Vec::new();
+        for (y, mut els) in rows {
+            els.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+            for i in 0..els.len() {
+                let mut acc = String::new();
+                for j in i..els.len() {
+                    acc.push_str(&els[j].2.replace('\u{a0}', " "));
+                    if acc == want {
+                        out.push((els[i..=j].to_vec(), if i > 0 { Some(els[i - 1].1) } else { None }, y));
+                        break;
+                    }
+                    if !want.starts_with(&acc) { break; }
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn a_mixed_name_is_laid_out_by_real_advances_and_never_runs_back_over_its_tip() {
+        // (round 10 major) round 9 end-anchored a Latin run before a Han/Hangul run at an ESTIMATED width (lowercase at
+        // 0.56 em, Noto Sans draws b/o/u at about 0.61): "Bubo bubo … 日本한국" ran left over its branch tip and over the
+        // list's row number ("2Bubo"), wide glyphs clipped at the canvas edge, narrow ones left a 10-35 px hole. Each run
+        // now starts where the previous one ends by Noto Sans's real advances, the name starts at its anchor, and the
+        // canvas fits its real width.
+        let pieces = [
+            "Bubo bubo bubo bubo bubo bubo bubo bubo", "Bo", "mWwMW", "@@@@——%%%%", "iiiiiiiiiiii lllll", "ttt", "日本", "한국", "ひらがなカタカナ",
+            "123", " ", "中文", "Ёжик", "Tiếng",
+        ];
+        let mut names: Vec<String> = vec![
+            "Bubo bubo bubo bubo bubo bubo bubo bubo 日本한국".into(), "Bubo bubo bubo bubo 日本한국".into(), "@@@@@@@@——————%%%% 日本한국".into(),
+            "iiiiiiiiiiii lllll 日本한국".into(), "Mixed 日本한국".into(), "日本 Mixed 한국".into(), "日本한국 tail".into(),
+        ];
+        let mut rng = crate::figures::biology::Rng::new(10);
+        while names.len() < 60 {
+            let k = 2 + rng.below(4);
+            let n: String = (0..k).map(|_| pieces[rng.below(pieces.len())]).collect::<Vec<_>>().join(if rng.below(2) == 0 { "" } else { " " });
+            let n = n.trim().split_whitespace().collect::<Vec<_>>().join(" ");
+            if needs_runs(&n) && !names.contains(&n) { names.push(n); }
+        }
+        let mut bad = Vec::new();
+        let mut checked = 0usize;
+        for (i, name) in names.iter().enumerate() {
+            let trees = [format!("((Gorilla, {name}), Pan)"), format!("((Homo, Pan){name}, (Gorilla, Pongo))")];
+            for tree in &trees {
+                for shape in ["rectangular", "slanted"] {
+                    for (size, style) in [("Small", "Colour"), ("Medium", "Colour"), ("Large", "Colour"), (["Small", "Medium", "Large"][i % 3], "Print")] {
+                        let ctx = format!("{tree} {shape} {size} {style}");
+                        let svg = render_of(&[s("tree", tree), s("shape", shape), s("label_size", size), s("style", style)]);
+                        let w = canvas_w(&svg);
+                        let lab = svg::label_factor(size);
+                        let segs = lines(&svg);
+                        let found = name_runs(&svg, name);
+                        // a leaf: in the tree and in the list; an ancestor: in the tree
+                        let want = if tree.starts_with("((Gorilla") { 2 } else { 1 };
+                        if found.len() < want { bad.push(format!("{ctx}: {name:?} drawn {} times", found.len())); continue; }
+                        for (runs, before, y) in &found {
+                            checked += 1;
+                            let space = real_w(" ", 12.0 * lab);
+                            for p in runs.windows(2) {
+                                if p[0].1 > p[1].0 + 0.05 { bad.push(format!("{ctx}: {:?} overlaps {:?} by {:.1}", p[0].2, p[1].2, p[0].1 - p[1].0)); }
+                                if p[1].0 - p[0].1 > space + 0.05 { bad.push(format!("{ctx}: {:.1} px between {:?} and {:?}", p[1].0 - p[0].1, p[0].2, p[1].2)); }
+                            }
+                            let (l, r) = (runs[0].0, runs.last().unwrap().1);
+                            if l < 0.0 || r > w + 0.05 { bad.push(format!("{ctx}: {name:?} spans {l:.1}..{r:.1} on a {w} canvas")); }
+                            // in the list: right of the row number
+                            if let Some(b) = before { if l < b + 2.0 { bad.push(format!("{ctx}: {name:?} starts at {l:.1}, over the row number ending at {b:.1}")); } }
+                            // a leaf in the tree: no branch runs into its ink (it starts right of its tip)
+                            let ink = (l, r, y - 0.7 * 12.0 * lab, y + 0.2 * 12.0 * lab);
+                            if tree.starts_with("((Gorilla") && before.is_none() {
+                                let hit: f64 = segs.iter().map(|sg| seg_in_box(*sg, ink)).sum();
+                                if hit > 0.0 { bad.push(format!("{ctx}: a branch runs {hit:.1} px into the leaf {name:?}")); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(checked > 500, "{checked}");
+        assert!(bad.is_empty(), "{} problems, e.g.:\n{}", bad.len(), bad.iter().take(16).cloned().collect::<Vec<_>>().join("\n"));
     }
 
     #[test]
