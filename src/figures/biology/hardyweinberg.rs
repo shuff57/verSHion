@@ -142,52 +142,56 @@ fn valid_dec(gg: &Gen, p0: f64, d: i64) -> bool {
 /// until each printed fraction, times N, rounds to the count printed beside it: p = 0.34 printed "AA p² = 0.12
 /// (116 of 1000)", and 0.12 × 1000 is 120, not 116. Raising the precision to three makes 0.116 × 1000 = 116.
 /// (round 7) When no precision makes every fraction agree, it takes the valid one that contradicts the counts least.
+/// (round 8 blocker) It is never COARSER than the typed precision, nor than the decimals of the typed p: the strict
+/// pass used to try coarser precisions before the minimum-error rule ran, so a count tie broken on floating-point
+/// noise dropped p = 0.5, N = 10 at two decimals to "0.3 / 0.5 / 0.2", and p = 0.21 printed as "p = 0.2" beside
+/// "p² = 0.1". A population too small to hold the typed fraction now prints it with a count at most one off.
 pub fn shown_dec(p: &Params) -> i64 {
     let g = generations(p);
     let dec = p.i("dec").clamp(1, 3);
     let (p0, n, _, _, show_counts) = given(p);
-    // the printed fraction is what a reader multiplies by N, so it must give back the count on the same line: the
-    // count is a nearest rounding of the exact frequency × N, the fraction a nearest rounding at some precision, and
-    // the two only agree when that precision is fine enough (round 6 blocker: "0.43 (435 of 1000)", but 435/1000
-    // rounds to 0.44)
-    let agrees = |gg: &Gen, d: i64| {
-        let pr = printed_parts(gg, d);
-        let c = counts([gg.dom, gg.het, gg.rec], n);
-        (0..3).all(|i| (pr[i] * n as f64).round() == c[i] as f64)
+    // the floor: what was typed, and never fewer decimals than the given p itself, which must print exactly
+    let lo = dec.max(own_decimals(p0)).min(6);
+    let valid: Vec<i64> = (lo..=6).filter(|&d| valid_dec(&g[0], p0, d)).collect();
+    let Some(&first) = valid.first() else {
+        // nothing short of six decimals keeps every real part off zero: six is the finest the page prints
+        return 6;
     };
-    // The precision at which the page is honest: no real part prints as zero, the allele frequencies do not collapse,
-    // and — when counts are shown — each fraction times N gives the count beside it. Prefer the typed precision, then
-    // finer ones (the reported cases need three or four decimals); only a population too small to hold the fraction
-    // at the typed precision (n = 10 cannot hold 0.25) makes a coarser one the honest choice.
-    let fits = |d: i64| valid_dec(&g[0], p0, d) && (!show_counts || agrees(&g[0], d));
-    let order = || (dec..=6).chain((1..dec).rev());
-    for d in order() {
-        if fits(d) { return d; }
+    if !show_counts { return first; }
+    // The printed fraction is what a reader multiplies by N, so it should give back the count on the same line (round
+    // 6 blocker: "0.43 (435 of 1000)"). The count is the largest-remainder allocation of N, so for some (p, N) no
+    // precision agrees exactly; among the valid precisions, finest-needed only, take the one with the least total
+    // contradiction, the typed one first on ties. The contradiction is counted in whole units from the printed
+    // integer numerator, so floating-point noise cannot make two precisions look different.
+    let c = counts([g[0].dom, g[0].het, g[0].rec], n);
+    let mut best = (i64::MAX, first);
+    for &d in &valid {
+        let e = count_error(&g[0], d, n, &c);
+        if e < best.0 { best = (e, d); }
     }
-    // (round 7 blocker) No precision satisfies the strict agreement. The count is not round(exact × N) but the
-    // largest-remainder allocation of N, so a row can sit a whole unit off it; and a frequency × N that is a
-    // half-integer can never agree (p = 0.5, N = 999: 0.50 × 999 = 499.5). Returning the typed `dec` here printed the
-    // coarsest, worst set — "AA 0.3 (250 of 999)" beside a bar that was plainly a quarter. Choose instead the valid
-    // precision that minimises the total |round(printed fraction × N) − count|, the typed precision first on ties, so
-    // p = 0.5, N = 999 prints 0.25 / 0.50 / 0.25 (250 / 499 / 250), at worst one per row and never the coarse set.
-    if show_counts {
-        let c = counts([g[0].dom, g[0].het, g[0].rec], n);
-        let err = |d: i64| {
-            let pr = printed_parts(&g[0], d);
-            (0..3).map(|i| ((pr[i] * n as f64).round() - c[i] as f64).abs()).sum::<f64>()
-        };
-        let mut best: Option<(f64, i64)> = None;
-        for d in order() {
-            if !valid_dec(&g[0], p0, d) { continue; }
-            let e = err(d);
-            if best.map_or(true, |(be, _)| e < be) { best = Some((e, d)); }
-        }
-        if let Some((_, d)) = best { return d; }
+    best.1
+}
+
+/// The decimals a typed value carries (0.21 → 2, 0.333 → 3, 0.6 → 1), at most six.
+fn own_decimals(v: f64) -> i64 {
+    for k in 0..=6i64 {
+        let f = 10f64.powi(k as i32);
+        if ((v * f).round() - v * f).abs() < 1e-7 { return k; }
     }
-    // nothing fits (a pathological tie): keep the never-zero precision, the pre-round-6 behaviour
-    let mut dp = dec;
-    while dp < 6 && !valid_dec(&g[0], p0, dp) { dp += 1; }
-    dp
+    6
+}
+
+/// round(units × N / 10^d), half up, in exact integers: what a reader gets multiplying the printed fraction by N.
+fn implied_count(units: i64, n: usize, d: i64) -> i64 {
+    let den = 10i64.pow(d.clamp(0, 9) as u32);
+    (2 * units * n as i64 + den) / (2 * den)
+}
+
+/// The total |fraction × N − count| over the three rows at precision `d`, in whole units.
+fn count_error(gg: &Gen, d: i64, n: usize, c: &[usize; 3]) -> i64 {
+    let f = 10f64.powi(d as i32);
+    let pr = printed_parts(gg, d);
+    (0..3).map(|i| (implied_count((pr[i] * f).round() as i64, n, d) - c[i] as i64).abs()).sum()
 }
 
 /// Counts that sum to `n` exactly: the whole parts, then the leftovers in order of largest remainder (rounding each
@@ -217,14 +221,19 @@ pub fn warnings(p: &Params) -> Vec<String> {
     let last = g.last().map(|x| x.p).unwrap_or(0.0);
     let q = 1.0 - last;
     let next = last / (1.0 - q * q);
-    // the editor note is read on its own, with no page to raise its precision: take the page's
-    let d = shown_dec(p);
+    // the editor note is read on its own, with no page to raise its precision: take the page's. (round 8 minor) At
+    // one fixed precision, like the page's p list: `val` trimmed, so the note read "0.41 → 0.851 → 0.87".
+    // A rise that prints as no rise ("to 0.9 … and to 0.9 in the next") says nothing: the note's one precision is
+    // raised until the three numbers it names read as rising.
+    let mut d = shown_dec(p);
+    let rises = |d: i64| fixed(g[0].p, d) != fixed(last, d) && fixed(last, d) != fixed(next, d);
+    while d < 6 && !rises(d) { d += 1; }
     vec![format!(
         "Selection removes every recessive homozygote, so the population is not in Hardy\u{2013}Weinberg equilibrium: p rises from {} to {} over the {} generations shown, and to {} in the next.",
-        val(g[0].p, d),
-        val(last, d),
+        fixed(g[0].p, d),
+        fixed(last, d),
         gens,
-        val(next, d)
+        fixed(next, d)
     )]
 }
 
@@ -342,8 +351,11 @@ pub fn build(p: &Params) -> (String, Report) {
                 d.rect(x, y, wseg, GEN_H, geno[i], ink, 1.2);
                 let label = format!("{} {}", names[i], fixed(shown[i], dp));
                 let tw = label.chars().count() as f64 * 12.0 * f * 0.55;
-                // inside only when it fits: a real 0.0004 belongs in the readout, not squeezed into 0.2 px
-                if tw <= wseg - 8.0 {
+                // inside only when it fits: a real 0.0004 belongs in the readout, not squeezed into 0.2 px. (round 8
+                // minor) The margin shrinks with the labels at Small: the bar and the label both scale by `f`, but a
+                // fixed 8 px margin dropped a segment's label at Small that Medium carried ("AA 0.12" at p = 0.35).
+                // It never grows past 8 px, so Large keeps every label it had.
+                if tw <= wseg - 8.0 * f.min(1.0) {
                     // in Print the bar is hatched, so the label sits on a white plate; in Colour the fill is solid
                     // and a plate would only cut a hole in the bar
                     if print {
@@ -618,6 +630,20 @@ mod tests {
             let parts = printed_parts(&g[0], dp);
             let c = counts([g[0].dom, g[0].het, g[0].rec], n as usize);
             assert!((parts.iter().sum::<f64>() - 1.0).abs() < 1e-9, "p = {p0}, n = {n}, dp = {dp}: {parts:?} do not sum to 1");
+            // (round 8) the page is never coarser than the typed precision or the given p's own decimals. Where some
+            // precision at or above that floor agrees exactly, the page must agree exactly; where none can (p = 0.5,
+            // N = 10 at two decimals: 0.25 × 10 = 2.5 beside a count of 2 or 3; p = 0.333, N = 37: 0.445 × 37 = 16.5
+            // beside the largest-remainder 17), the row is at most one off rather than the page going coarser.
+            let floor = p.i("dec").clamp(1, 3).max(own_decimals(p0));
+            let exact_possible = (floor..=6).any(|d| valid_dec(&g[0], p0, d) && count_error(&g[0], d, n as usize, &c) == 0);
+            if !exact_possible {
+                for i in 0..3 {
+                    let implied = (parts[i] * n as f64).round() as i64;
+                    assert!((implied - c[i] as i64).abs() <= 1, "p = {p0}, n = {n}, dp = {dp}: part {i} prints {} beside the count {}", parts[i], c[i]);
+                }
+                assert!(dp >= floor, "p = {p0}, n = {n}: the page went coarser than {floor}");
+                continue;
+            }
             for i in 0..3 {
                 assert_eq!(
                     (parts[i] * n as f64).round() as usize, c[i],
@@ -716,6 +742,136 @@ mod tests {
             for (fv, c) in rows {
                 let implied = (fv * n as f64).round() as i64;
                 assert!((implied - c as i64).abs() <= 1, "p = {p0}, n = {n}: {fv} \u{d7} {n} = {implied} beside {c}: {t}");
+            }
+        }
+    }
+
+    /// The decimals a printed number carries ("0.250" → 3).
+    fn decimals(tok: &str) -> usize { tok.split('.').nth(1).map(|d| d.chars().take_while(char::is_ascii_digit).count()).unwrap_or(0) }
+
+    #[test]
+    fn the_page_is_never_coarser_than_typed_and_never_rewrites_the_given_p() {
+        // (round 8 blocker) the strict pass tried COARSER precisions before the minimum-error rule ran, and a count tie
+        // broken on float noise made a coarser one "agree": p = 0.5, N = 10 at two decimals printed 0.3 / 0.5 / 0.2 for a
+        // 1 : 2 : 1 cross, and p = 0.21 printed "p = 0.2" with "p² = 0.1" (true 0.0441). The page precision is now never
+        // below the typed decimals or p's own, the given p and q print exactly as typed, every count is within one of
+        // its fraction × N, the fractions sum to 1, and every later generation prints at the same precision.
+        let mut ps: Vec<f64> = (1..=99).map(|k| k as f64 / 100.0).collect();
+        ps.extend([0.333, 0.1234, 0.6667, 0.005 + 0.5]);
+        let ns = [10usize, 11, 12, 13, 17, 18, 20, 25, 34, 37, 50, 100, 101, 250, 500, 1000];
+        for &p0 in &ps {
+            for &n in &ns {
+                for dec in 1..=3i64 {
+                    for counts_on in [true, false] {
+                        for sel in [false, true] {
+                            let mut list = vec![f("p", p0), i("n", n as i64), ("dec", Value::I(dec)), b("counts", counts_on), b(SHOW_ANSWERS, true)];
+                            if sel { list.push(s("sel", "against the recessive phenotype")); list.push(i("gens", 6)); }
+                            let p = with(&list);
+                            let dp = shown_dec(&p);
+                            let ctx = format!("p = {p0}, n = {n}, dec = {dec}, counts = {counts_on}, sel = {sel}, dp = {dp}");
+                            // (a) never coarser than typed, nor than p's own decimals
+                            assert!(dp >= dec, "{ctx}: the page prints coarser than the typed {dec} decimals");
+                            assert!(dp >= own_decimals(p0), "{ctx}: the page prints coarser than the given p");
+                            let t = texts(&render_of(&list));
+                            // (b) the givens print p and q exactly as typed
+                            let line = t.lines().find(|l| l.starts_with("p = ")).unwrap_or("");
+                            let after = |k: &str| line.split(&format!("{k} = ")).nth(1).and_then(|r| r.split(',').next()).and_then(|v| v.parse::<f64>().ok());
+                            let (pp, qq) = (after("p").unwrap_or(-1.0), after("q").unwrap_or(-1.0));
+                            assert!((pp - p0).abs() < 1e-9 && (qq - (1.0 - p0)).abs() < 1e-9, "{ctx}: the givens read {line:?}");
+                            assert!(t.contains(&format!("A  p = {}", num(p0, 6))), "{ctx}: the legend rewrites p: {t}");
+                            // (c) every row within one of fraction × N, and (d) the fractions sum to 1 at the page precision
+                            if counts_on {
+                                let rows = readout_rows(&t);
+                                assert_eq!(rows.len(), 3, "{ctx}: {t}");
+                                let sum: f64 = rows.iter().map(|r| r.0).sum();
+                                assert!((sum - 1.0).abs() < 1e-9, "{ctx}: the fractions sum to {sum}: {t}");
+                                assert_eq!(rows.iter().map(|r| r.1).sum::<usize>(), n, "{ctx}: the counts do not sum to N: {t}");
+                                for (fv, c) in rows {
+                                    let implied = (fv * n as f64).round() as i64;
+                                    assert!((implied - c as i64).abs() <= 1, "{ctx}: {fv} \u{d7} {n} = {implied} beside {c}: {t}");
+                                }
+                            }
+                            // every readout fraction and every bar label, in every generation, prints at the page precision
+                            for l in t.lines().filter(|l| l.contains(" = ") && (l.starts_with("AA  ") || l.starts_with("Aa  ") || l.starts_with("aa  "))) {
+                                let tok = l.split(" = ").nth(1).and_then(|r| r.split_whitespace().next()).unwrap_or("");
+                                assert_eq!(decimals(tok), dp as usize, "{ctx}: {l:?}");
+                            }
+                            for l in bar_labels(&render_of(&list)) {
+                                let tok = l.split_whitespace().nth(1).unwrap_or("");
+                                assert_eq!(decimals(tok), dp as usize, "{ctx}: bar label {l:?}");
+                                assert!(tok.parse::<f64>().map(|v| v > 0.0 && v < 1.0).unwrap_or(false), "{ctx}: bar label {l:?}");
+                            }
+                            if sel {
+                                let pl = t.lines().find(|l| l.starts_with("p in each generation")).unwrap_or("");
+                                for tok in pl.rsplit("  ").next().unwrap_or("").split(", ") {
+                                    assert_eq!(decimals(tok), dp as usize, "{ctx}: {pl:?}");
+                                }
+                                assert!(pl.contains(&format!("generation  {}", fixed(p0, dp))), "{ctx}: the list does not start at the given p: {pl:?}");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // (e) the two reported cases, as printed
+        let t = texts(&render_of(&[f("p", 0.5), i("n", 10), ("dec", Value::I(2)), b("counts", true), b(SHOW_ANSWERS, true)]));
+        assert!(t.contains("p = 0.5, q = 0.5, N = 10"), "{t}");
+        assert!(t.contains("AA  p\u{b2} = 0.25  ("), "{t}");
+        assert!(t.contains("Aa  2pq = 0.50  (5 of 10)"), "{t}");
+        assert!(t.contains("aa  q\u{b2} = 0.25  ("), "{t}");
+        assert!(!t.contains("= 0.3  ") && !t.contains("= 0.2  "), "{t}");
+        let t = texts(&render_of(&[f("p", 0.21), i("n", 10), ("dec", Value::I(2)), b("counts", true), b(SHOW_ANSWERS, true)]));
+        assert!(t.contains("p = 0.21, q = 0.79, N = 10"), "{t}");
+        assert!(t.contains("A  p = 0.21"), "{t}");
+        // 0.21² = 0.0441: two decimals print it as 0.04 or (a remainder tie with 0.6241) 0.05, never 0.1
+        assert!(t.contains("AA  p\u{b2} = 0.04  (") || t.contains("AA  p\u{b2} = 0.05  ("), "{t}");
+        assert!(t.contains("Aa  2pq = 0.33  ("), "{t}");
+        let t = texts(&render_of(&[f("p", 0.6), i("n", 10), ("dec", Value::I(2)), b("counts", true), b(SHOW_ANSWERS, true)]));
+        assert!(t.contains("AA  p\u{b2} = 0.36  (") && t.contains("Aa  2pq = 0.48  (") && t.contains("aa  q\u{b2} = 0.16  ("), "{t}");
+    }
+
+    #[test]
+    fn a_segment_labelled_at_medium_stays_labelled_at_small_and_large() {
+        // (round 8 minor) the bar shrinks by the label factor at Small but the margin stayed a fixed 8 px, so "AA 0.12"
+        // at p = 0.35 was drawn at Medium and gone at Small
+        for k in 1..=99 {
+            let p0 = k as f64 / 100.0;
+            for extra in [vec![], vec![s("style", "Print")], vec![s("sel", "against the recessive phenotype"), i("gens", 6)], vec![b("counts", true), i("n", 10)], vec![("dec", Value::I(3))]] {
+                let mut base = vec![f("p", p0), b(SHOW_ANSWERS, true)];
+                base.extend(extra.clone());
+                let at = |size: &str| { let mut l = base.clone(); l.push(s("label_size", size)); bar_labels(&render_of(&l)) };
+                let (small, medium, large) = (at("Small"), at("Medium"), at("Large"));
+                for l in &medium {
+                    assert!(small.contains(l), "p = {p0} {extra:?}: {l} is drawn at Medium but lost at Small ({small:?})");
+                    assert!(large.contains(l), "p = {p0} {extra:?}: {l} is drawn at Medium but lost at Large ({large:?})");
+                }
+            }
+        }
+        let small = bar_labels(&render_of(&[f("p", 0.35), s("label_size", "Small"), b(SHOW_ANSWERS, true)]));
+        assert!(small.contains(&"AA 0.12".to_string()), "{small:?}");
+    }
+
+    #[test]
+    fn the_selection_note_carries_one_precision_and_reads_as_a_rise() {
+        // (round 8 minor) the note used `val`, which trims: "rises from 0.41 to 0.851 … and to 0.87", and at one decimal
+        // "from 0.4 to 0.9 … and to 0.9 in the next", a rise to the same number
+        for (p0, dec, n) in [(0.41, 2, 10), (0.41, 1, 10), (0.333, 1, 9999), (0.4, 1, 1000), (0.6, 1, 1000), (0.9, 1, 100), (0.99, 1, 1000), (0.05, 3, 37)] {
+            for gens in 2..=6 {
+                let p = with(&[f("p", p0), ("dec", Value::I(dec)), i("gens", gens), i("n", n), b("counts", true), s("sel", "against the recessive phenotype")]);
+                let note = warnings(&p).join(" ");
+                let nums: Vec<&str> = note
+                    .split(|c: char| c == ' ' || c == ',')
+                    .filter(|w| w.starts_with("0.") || w.starts_with("1."))
+                    .map(|w| w.trim_end_matches('.'))
+                    .collect();
+                assert_eq!(nums.len(), 3, "p = {p0}, dec = {dec}, gens = {gens}: {note}");
+                let d0 = decimals(nums[0]);
+                assert!(nums.iter().all(|x| decimals(x) == d0), "p = {p0}, dec = {dec}, gens = {gens}: mixed precisions in {note}");
+                assert!(d0 as i64 >= shown_dec(&p), "p = {p0}, dec = {dec}: the note is coarser than the page: {note}");
+                let v: Vec<f64> = nums.iter().map(|x| x.parse().unwrap()).collect();
+                assert!(v[0] < v[1] && v[1] < v[2], "p = {p0}, dec = {dec}, gens = {gens}: the note does not read as a rise: {note}");
+                // and it starts at the given p, as typed
+                assert!((v[0] - p0).abs() < 1e-9, "p = {p0}: the note rewrites p: {note}");
             }
         }
     }

@@ -294,8 +294,41 @@ pub fn build(p: &Params) -> String {
     // into the statistics block
     let (head_y, row_h) = (HEAD_Y * lab, ROW_H * lab);
     let table_bottom = head_y + 8.0 * lab + row_h * (n as f64 + 1.0);
-    let stats_y0 = table_bottom + 46.0 * lab;
     let w = (W * (1.0 + 0.5 * (lab - 1.0))).max(W);
+    // (round 8 minor) observed counts are whole numbers the student is given: printed in full with grouping up to 1e15
+    // (at 1e7 they went "1.23e7" and could not be recovered, and 5,000,000 + 5,000,001 totalled "1.00e7"). The total is
+    // the sum of the cells as printed, in full while every cell is. Only derived values go scientific.
+    let whole = |v: f64| v.is_finite() && v.fract() == 0.0 && v.abs() < 1e15;
+    let total_obs: f64 = f.rows.iter().map(|r| r.observed).sum();
+    let obs_full = f.rows.iter().all(|r| whole(r.observed)) && total_obs < 9.0e15;
+    let sci_total = |v: f64| if !v.is_finite() { "\u{221e}".to_string() } else { format!("{v:.2e}").replace('-', "\u{2212}") };
+    let total_text_obs = if obs_full { group(&format!("{}", total_obs as i64)) } else if !total_obs.is_finite() || total_obs.abs() >= 1e7 { sci_total(total_obs) } else { num(total_obs, 2) };
+    // the givens: the ratio the expected counts come from, always printed (in the table's own notation when huge).
+    // (round 6) a ratio part that is not a whole number keeps its decimals: rounding them to integers printed
+    // "1.5 : 2.5 : 1.5" as "2 : 2 : 2", which contradicts the expected counts beside it. A part too large for an i64
+    // printed a saturated 9223372036854775807: it is written in scientific notation instead, the same way the expected
+    // counts built from it are.
+    let ratio_text: Vec<String> = f
+        .ratio
+        .iter()
+        .map(|v| {
+            if !v.is_finite() { "\u{221e}".to_string() }
+            else if (v - v.round()).abs() < 1e-9 && v.abs() < 1e15 { format!("{}", v.round() as i64) }
+            else if v.abs() >= 1e15 { format!("{v:.2e}").replace('-', "\u{2212}") }
+            else { format!("{v}").replace('-', "\u{2212}") }
+        })
+        .collect();
+    let total_shown = if obs_full { total_text_obs.clone() } else if !total_obs.is_finite() || total_obs.abs() >= 1e7 { sci_total(total_obs) } else { val(total_obs, 0) };
+    let givens = format!("Expected from the ratio {} out of {} observations", ratio_text.join(" : "), total_shown);
+    // (round 5) long ratio parts ran off the canvas: wrapped to the width, the lines stacking up into the gap above
+    // the statistics block
+    let givens_chars = (((w - 48.0) / (12.0 * lab * 0.56)).floor() as usize).max(20);
+    let givens_lines = wrap(&givens, givens_chars);
+    // (round 8 minor) the givens' last line sat 14 px over the 15 px \u{3c7}\u{b2} line, its descenders a pixel from
+    // "Chi-square": the statistics block moves down to leave a real gap, and each wrapped givens line pushes it further
+    // rather than stacking up into the table's bottom rule
+    let givens_gap = 20.0 * lab;
+    let stats_y0 = table_bottom + (52.0 + 15.0 * (givens_lines.len().max(1) - 1) as f64) * lab;
     // the columns are fractions of the width, so they spread as the canvas grows
     let (col_o, col_e, col_t) = (w * 0.515, w * 0.703, w * 0.956);
     let decision_text = if ans { decision(&f) } else { "Decision  ______________________________________".to_string() };
@@ -331,7 +364,6 @@ pub fn build(p: &Params) -> String {
     // huge counts: one compact format for the whole table, or "1 × 10^12" sits beside "999999999999.56".
     // (round 5) A contribution can be enormous from a tiny expected count while every count is small, so the term is
     // part of the test too — printed in plain decimals it ran across the Expected and Total columns.
-    let total_obs: f64 = f.rows.iter().map(|r| r.observed).sum();
     // (round 6 blocker) nothing observed: every (O − E)² / E is 0/0, so there is no contribution, statistic or test.
     let no_obs = total_obs == 0.0;
     // a test that cannot run has no statistic to print: zero observations (0/0) or a single category (no degrees of
@@ -350,7 +382,7 @@ pub fn build(p: &Params) -> String {
     let fmt_exp = |v: f64| if big(v) || !v.is_finite() { sci(v) } else { group(&col(v, dec)) };
     // a long category name would print through the three number columns: the room it has is what is left of the
     // Observed column once its widest printed number is drawn (round 5: a grouped count ran under the name)
-    let obs_text: Vec<String> = f.rows.iter().map(|r| fmt_cnt(r.observed)).collect();
+    let obs_text: Vec<String> = f.rows.iter().map(|r| if whole(r.observed) { group(&format!("{}", r.observed as i64)) } else { fmt_cnt(r.observed) }).collect();
     let widest_obs = obs_text.iter().map(|s| s.chars().count()).max().unwrap_or(1) as f64 * FS * lab * 0.56;
     let name_chars = (((col_o - 24.0 - widest_obs - 8.0) / (FS * lab * 0.56)).floor() as usize).max(6);
     let short = |n: &str| -> String {
@@ -395,10 +427,13 @@ pub fn build(p: &Params) -> String {
 
     // the total row: the counts add up, and the statistic is the sum of the contributions
     d.raw(&text_el(24.0, y, FS * lab, "start", ink, "Total"));
-    d.raw(&text_el(col_o, y, FS * lab, "end", ink, &fmt_cnt(total_obs)));
+    let obs_total_cell = if obs_full { total_text_obs.clone() } else { fmt_cnt(total_obs) };
+    d.raw(&text_el(col_o, y, FS * lab, "end", ink, &obs_total_cell));
     // (round 6 minor) the Expected total is the answer column's total: blank it with the cells it totals on the student
-    // copy, or it hands back a number from a column the student is asked to fill
-    let expected_total = if ans { fmt_cnt(total_obs) } else { BLANK.to_string() };
+    // copy, or it hands back a number from a column the student is asked to fill. It equals the observed total and
+    // prints the same way while it is small; at 1e7 and above it is a derived value in the Expected column, which goes
+    // scientific like the cells above it (in full it ran into the observed total beside it).
+    let expected_total = if !ans { BLANK.to_string() } else if big(total_obs) || !total_obs.is_finite() { sci(total_obs) } else { obs_total_cell.clone() };
     d.raw(&text_el(col_e, y, FS * lab, "end", ink, &expected_total));
     // the total row: the counts add up, and the statistic is the sum of the contributions. (round 2) It must be the
     // number the line under the table prints, or the table's own total contradicts it: an impossible test has no
@@ -411,28 +446,8 @@ pub fn build(p: &Params) -> String {
     d.raw(&text_el(col_t, y, FS * lab, "end", ink, &total_text));
     rule(&mut d, y + 9.0 * lab, 1.6);
 
-    // the givens: the ratio the expected counts come from, always printed (in the table's own notation when huge).
-    // (round 6) a ratio part that is not a whole number keeps its decimals: rounding them to integers printed
-    // "1.5 : 2.5 : 1.5" as "2 : 2 : 2", which contradicts the expected counts beside it. A part too large for an i64
-    // printed a saturated 9223372036854775807: it is written in scientific notation instead, the same way the expected
-    // counts built from it are.
-    let ratio_text: Vec<String> = f
-        .ratio
-        .iter()
-        .map(|v| {
-            if !v.is_finite() { "\u{221e}".to_string() }
-            else if (v - v.round()).abs() < 1e-9 && v.abs() < 1e15 { format!("{}", v.round() as i64) }
-            else if v.abs() >= 1e15 { format!("{v:.2e}").replace('-', "\u{2212}") }
-            else { format!("{v}").replace('-', "\u{2212}") }
-        })
-        .collect();
-    let total_shown = if big(total_obs) { sci(total_obs) } else { val(total_obs, 0) };
-    let givens = format!("Expected from the ratio {} out of {} observations", ratio_text.join(" : "), total_shown);
-    // (round 5) long ratio parts ran off the canvas: wrapped to the width, the lines stacking up into the gap above
-    // the statistics block
-    let givens_chars = (((w - 48.0) / (12.0 * lab * 0.56)).floor() as usize).max(20);
-    for (i, line) in wrap(&givens, givens_chars).iter().rev().enumerate() {
-        d.raw(&text_el(24.0, stats_y0 - 14.0 * lab - i as f64 * 15.0 * lab, 12.0 * lab, "start", ink, line));
+    for (i, line) in givens_lines.iter().rev().enumerate() {
+        d.raw(&text_el(24.0, stats_y0 - givens_gap - i as f64 * 15.0 * lab, 12.0 * lab, "start", ink, line));
     }
 
     // the statistics block
@@ -856,6 +871,83 @@ mod tests {
         // ordinary whole and decimal ratios still print as typed
         assert!(texts(&render_of(&[s("obs", "315, 101, 108, 32"), s("ratio", "9, 3, 3, 1")])).contains("9 : 3 : 3 : 1"));
         assert!(texts(&render_of(&[s("obs", "100, 200, 100"), s("ratio", "1.5, 2.5, 1.5")])).contains("1.5 : 2.5 : 1.5"));
+    }
+
+    #[test]
+    fn observed_counts_print_in_full_and_their_total_is_their_sum() {
+        // (round 8 minor) an observed count is a given, but at or above 1e7 it printed with three significant figures:
+        // the student saw "1.23e7" / "8.77e7" and could not recover the counts, and 5,000,000 + 5,000,001 totalled
+        // "1.00e7". Whole counts now print in full up to 1e15, and the total is the sum of the printed cells.
+        let parse = |t: &str| t.replace(',', "").parse::<f64>().ok();
+        for (obs, ratio) in [
+            ("12345678, 87654321", "1, 1"),
+            ("5000000, 5000001", "1, 1"),
+            ("9999999, 10000000", "1, 1"),
+            ("123456789012345, 1", "1, 1"),
+            ("999999999999999, 999999999999999, 3", "1, 1, 1"),
+            ("315, 101, 108, 32", "9, 3, 3, 1"),
+        ] {
+            for ans in [true, false] {
+                let svg = render_of(&[s("obs", obs), s("ratio", ratio), b(SHOW_ANSWERS, ans)]);
+                let t = texts(&svg);
+                let counts: Vec<f64> = obs.split(", ").map(|v| v.parse().unwrap()).collect();
+                let bs = boxes(&svg);
+                // the observed column: the cells right-aligned on the Observed column, below its header
+                let col_x = bs.iter().find(|b| b.4 == "Observed (O)").map(|b| b.0).unwrap();
+                let head_y = bs.iter().find(|b| b.4 == "Observed (O)").map(|b| b.1).unwrap();
+                let cells: Vec<String> = bs.iter().filter(|b| (b.0 - col_x).abs() < 0.01 && b.1 > head_y).map(|b| b.4.clone()).collect();
+                assert_eq!(cells.len(), counts.len() + 1, "{obs}: {cells:?}");
+                for (c, want) in cells.iter().zip(&counts) {
+                    assert_eq!(parse(c), Some(*want), "{obs} ({ans}): the count {want} prints as {c:?}");
+                    assert!(!c.contains('e'), "{obs}: {c:?} is in scientific notation");
+                }
+                let total: f64 = counts.iter().sum();
+                assert_eq!(parse(cells.last().unwrap()), Some(total), "{obs}: the total {:?} is not the sum of the cells", cells.last());
+                assert!(t.contains(&format!("out of {} observations", cells.last().unwrap())), "{obs}: {t}");
+                // the givens line names the observed total in full too (the Expected total, a derived value, may be scientific)
+                assert!(!t.lines().any(|l| l.starts_with("Expected from") && l.contains('e') && l.contains("e7")), "{obs}: {t}");
+            }
+        }
+        // (round 8) the Total row's cells never run into each other, at every size, however long the observed total
+        for size in ["Small", "Medium", "Large"] {
+            for obs in ["999999999999999, 999999999999999, 3", "12345678, 87654321", "315, 101, 108, 32"] {
+                let svg = render_of(&[s("obs", obs), s("ratio", "1, 1, 1"), s("label_size", size)]);
+                let bs = boxes(&svg);
+                let ty = bs.iter().find(|b| b.4 == "Total").map(|b| b.1).unwrap();
+                let mut row: Vec<(f64, f64)> = bs.iter().filter(|b| (b.1 - ty).abs() < 0.01).map(|b| {
+                    let n = b.4.chars().count() as f64 * b.2 * 0.56;
+                    if b.3 == "end" { (b.0 - n, b.0) } else { (b.0, b.0 + n) }
+                }).collect();
+                row.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+                for w in row.windows(2) { assert!(w[0].1 + 4.0 <= w[1].0, "{size} {obs}: Total row cells {w:?} collide"); }
+            }
+        }
+        // a count beyond 1e15 still goes scientific (it cannot print exactly), and so does its total
+        let t = texts(&render_of(&[s("obs", "1e160, 1"), s("ratio", "3, 1")]));
+        assert!(t.contains("1.00e160"), "{t}");
+    }
+
+    #[test]
+    fn the_givens_line_has_a_real_gap_above_the_statistics() {
+        // (round 8 minor) the givens line sat 14 px over the 15 px χ² line, its descenders a pixel from "Chi-square"
+        for size in ["Small", "Medium", "Large"] {
+            for ratio in ["9, 3, 3, 1", "123456789.25, 987654321.5, 3, 1"] {
+                let svg = render_of(&[s("label_size", size), s("ratio", ratio)]);
+                let bs = boxes(&svg);
+                let chi = bs.iter().find(|b| b.4.starts_with("Chi-square  ")).unwrap();
+                let giv: Vec<_> = bs.iter().filter(|b| b.1 < chi.1 && b.1 > chi.1 - 80.0 * svg::label_factor(size) && b.0 == 24.0 && b.4 != "Total").collect();
+                assert!(!giv.is_empty(), "{size}: no givens line");
+                let last = giv.iter().map(|b| b.1).fold(f64::MIN, f64::max);
+                // the givens' descenders (0.25 em) to the χ² line's cap height (0.72 em): at least 4 px at every size
+                let gap = (chi.1 - chi.2 * 0.72) - (last + 12.0 * svg::label_factor(size) * 0.25);
+                assert!(gap >= 4.0, "{size} {ratio}: the givens line is {gap:.1} px from the \u{3c7}\u{b2} line");
+                // and the first givens line clears the table's bottom rule
+                let first = giv.iter().map(|b| b.1).fold(f64::MAX, f64::min);
+                let rules: Vec<f64> = svg.split("<line ").skip(1).filter_map(|p| p.split("y1=\"").nth(1)?.split('"').next()?.parse().ok()).collect();
+                let rule = rules.iter().cloned().fold(f64::MIN, f64::max);
+                assert!(first - 12.0 * svg::label_factor(size) * 0.75 > rule + 2.0, "{size} {ratio}: the givens line {first} runs into the rule at {rule}");
+            }
+        }
     }
 
     #[test]

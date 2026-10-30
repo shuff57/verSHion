@@ -247,9 +247,37 @@ fn script_class(c: char) -> u8 {
         2
     } else if u >= 0x1f000 {
         3 // emoji and pictographs
+    } else if (0x0590..=0x08ff).contains(&u) || (0xfb1d..=0xfdff).contains(&u) || (0xfe70..=0xfeff).contains(&u) {
+        4 // (round 8) Hebrew, Arabic, Syriac, Thaana: right to left
+    } else if u >= 0x0900 && !latin_class(c) {
+        5 // (round 8) every other alphabet the Latin face does not carry: Indic, Thai, Ethiopic, ...
     } else {
-        0 // Latin, digits, punctuation, spaces, other alphabets
+        0 // Latin, Greek, Cyrillic, digits, punctuation, spaces, symbols
     }
+}
+
+/// (round 8) A character the order line can draw in one `<text>` with the Latin prefix: Latin, Greek, Cyrillic,
+/// punctuation and symbols. Arabic, Hebrew, Thai, Devanagari, CJK, Hangul and emoji are not: in the same element as
+/// "Left to right:" the rasteriser printed an Arabic name as tofu, unjoined its letters, and reordered RTL names.
+fn latin_class(c: char) -> bool {
+    let u = c as u32;
+    if matches!(u, 0x200b..=0x200f | 0x202a..=0x202e | 0x2066..=0x2069) { return false; } // joiners and bidi controls
+    u < 0x0590 || (0x1e00..=0x1fff).contains(&u) || (0x2000..=0x2bff).contains(&u)
+}
+
+/// (round 8 minor) A character that belongs to the glyph before it: a zero-width joiner, a variation selector, a
+/// combining mark, a keycap or a tag. Splitting at one broke a joined emoji (👨‍👩‍👧) into three faces.
+fn joins_previous(c: char) -> bool {
+    matches!(c as u32,
+        0x200c | 0x200d | 0x0300..=0x036f | 0x1ab0..=0x1aff | 0x20d0..=0x20ff | 0xfe00..=0xfe0f | 0xfe20..=0xfe2f
+        | 0x1f3fb..=0x1f3ff | 0xe0020..=0xe007f | 0xe0100..=0xe01ef)
+}
+
+/// (round 8 major) Whether a name mixes two scripts the rasteriser cannot share one element between (Han with Hangul,
+/// say): drawn as one `<text>`, "日本한국" printed as "日本ㅎㅏㄴㄱㅜㄱ". Latin beside one other script is fine.
+fn needs_runs(s: &str) -> bool {
+    let classes: std::collections::BTreeSet<u8> = s.chars().filter(|c| !joins_previous(*c)).map(script_class).filter(|k| *k != 0).collect();
+    classes.len() >= 2
 }
 
 /// Split a string into maximal runs of one script class, so each becomes its own `<text>` and no element mixes a Han
@@ -259,6 +287,8 @@ fn script_runs(s: &str) -> Vec<String> {
     let mut cur = String::new();
     let mut cls: Option<u8> = None;
     for c in s.chars() {
+        // a joiner, selector or modifier stays with the glyph it modifies
+        if cls.is_some() && joins_previous(c) { cur.push(c); continue; }
         let k = script_class(c);
         if cls.is_some() && cls != Some(k) {
             out.push(std::mem::take(&mut cur));
@@ -292,12 +322,50 @@ pub fn leaf_order(root: &Node, max: f64, size: f64) -> Vec<String> {
     let mut cur = String::new();
     for part in leaves(root).iter() {
         if !cur.is_empty() && text_w(&cur, size) + text_w(", ", size) + text_w(part, size) > max {
+            // (round 8 minor) the separator stays at the end of the line it breaks: with multi-word names a reader
+            // could not tell one long name from two
+            cur.push(',');
             out.push(std::mem::take(&mut cur));
         }
         if !cur.is_empty() { cur.push_str(", "); }
         cur.push_str(part);
     }
     if !cur.is_empty() { out.push(cur); }
+    out
+}
+
+/// (round 8 minor) A conservative width for the canvas guard: Noto Sans draws o, p, b, d, g, h, n and u at about 0.6 em
+/// where `text_w` counts 0.56, so a line of them clipped at the right edge. Never less than `text_w`.
+fn safe_w(s: &str, size: f64) -> f64 {
+    s.chars()
+        .map(|c| {
+            let real = match c {
+                'b' | 'd' | 'g' | 'h' | 'n' | 'o' | 'p' | 'q' | 'u' => 0.63,
+                'a' | 'e' => 0.58,
+                'r' => 0.42,
+                'f' | 't' => 0.37,
+                'D' | 'G' | 'H' | 'N' | 'O' | 'Q' | 'U' => 0.8,
+                _ if !c.is_ascii() && glyph_em(c) < 0.9 => glyph_em(c).max(0.66),
+                _ => glyph_em(c),
+            };
+            size * real.max(glyph_em(c))
+        })
+        .sum()
+}
+
+/// The names of a tree that the order line must not set in the Latin prefix's element (see `latin_class`).
+fn all_latin(names: &[String]) -> bool { names.iter().all(|n| n.chars().all(latin_class)) }
+
+/// (round 8) The most names the order line lists one to a row; a longer list ends with a line saying how many more.
+const MAX_ORDER_ROWS: usize = 40;
+
+/// The order line's rows when a name is not Latin: one name per row, so no run is placed by an estimated width.
+fn order_rows(names: &[String]) -> Vec<(String, String)> {
+    let shown = if names.len() > MAX_ORDER_ROWS { MAX_ORDER_ROWS - 1 } else { names.len() };
+    let mut out: Vec<(String, String)> = names.iter().take(shown).enumerate().map(|(i, n)| (format!("{}.", i + 1), n.clone())).collect();
+    if names.len() > shown {
+        out.push((String::new(), format!("\u{2026} and {} more, in order on the tree above", names.len() - shown)));
+    }
     out
 }
 
@@ -320,6 +388,47 @@ fn text_el(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) -> Stri
         r##"<text x="{x:.2}" y="{y:.2}" font-size="{size}" text-anchor="{anchor}" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{fill}">{}</text>"##,
         svg::esc(s)
     )
+}
+
+/// (round 8 major) A label over a branch carries a thin white halo, like the enzyme labels: the outline is drawn as its
+/// own text first and the fill on top, because the PNG renderer ignores `paint-order`.
+fn text_el_halo(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) -> String {
+    let common = format!(r##"x="{x:.2}" y="{y:.2}" font-size="{size}" text-anchor="{anchor}" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif""##);
+    let t = svg::esc(s);
+    format!(r##"<text {common} fill="none" stroke="#fff" stroke-width="2.4" stroke-linejoin="round">{t}</text><text {common} fill="{fill}">{t}</text>"##)
+}
+
+/// A name as it is drawn everywhere (leaf, ancestor, order line): one `<text>`, or, when it mixes two scripts the
+/// rasteriser cannot share (see `needs_runs`), one `<text>` per script run laid out from the estimated widths. A single
+/// short name drifts little, and the runs together keep the anchor the single element had.
+fn label_el(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str, halo: bool) -> String {
+    let one = |x: f64, anchor: &str, t: &str| if halo { text_el_halo(x, y, size, anchor, fill, t) } else { text_el(x, y, size, anchor, fill, t) };
+    if !needs_runs(s) { return one(x, anchor, s); }
+    let runs = script_runs(s);
+    let total: f64 = runs.iter().map(|r| text_w(r, size)).sum();
+    let mut cx = match anchor { "end" => x - total, "middle" => x - total / 2.0, _ => x };
+    let mut out = String::new();
+    for r in &runs {
+        out.push_str(&one(cx, "start", r));
+        cx += text_w(r, size);
+    }
+    out
+}
+
+/// The length of the part of segment (x0, y0)-(x1, y1) inside the box (left, right, top, bottom) (Liang-Barsky).
+fn seg_in_box(s: (f64, f64, f64, f64), b: (f64, f64, f64, f64)) -> f64 {
+    let (x0, y0, x1, y1) = s;
+    let (dx, dy) = (x1 - x0, y1 - y0);
+    let (mut t0, mut t1) = (0.0f64, 1.0f64);
+    for (p, q) in [(-dx, x0 - b.0), (dx, b.1 - x0), (-dy, y0 - b.2), (dy, b.3 - y0)] {
+        if p == 0.0 {
+            if q < 0.0 { return 0.0; }
+        } else {
+            let r = q / p;
+            if p < 0.0 { t0 = t0.max(r); } else { t1 = t1.min(r); }
+        }
+    }
+    if t1 > t0 { (t1 - t0) * (dx * dx + dy * dy).sqrt() } else { 0.0 }
 }
 
 pub fn build(p: &Params) -> String {
@@ -364,12 +473,31 @@ pub fn build(p: &Params) -> String {
     // prefix plus the widest name as well as the leaf label at the end of the tree (with a little headroom for a font
     // wider than the estimate)
     w = w.max(24.0 + prefix_w + text_w(&widest, 12.0 * lab) * 1.06 + 14.0);
+    // (round 8) every leaf label fits by the conservative width too (o/p/b/d-heavy names drew wider than estimated)
+    let names = node.as_ref().map(|n| leaves(n)).unwrap_or_default();
+    for l in &names { w = w.max(tree_w + 8.0 + safe_w(l, 12.0 * lab) + 6.0); }
+    // (round 8 major) the order line is one Latin `<text>` only when every name is Latin; otherwise one name per row
+    let latin_line = all_latin(&names);
+    let rows = if latin_line { Vec::new() } else { order_rows(&names) };
+    let num_w = rows.iter().map(|r| text_w(&r.0, 12.0 * lab)).fold(0.0f64, f64::max);
+    let row_x = 24.0 + 12.0 * lab + num_w + 6.0 * lab;
+    for (_, name) in &rows { w = w.max(row_x + safe_w(name, 12.0 * lab).max(text_w(name, 12.0 * lab) * 1.06) + 14.0); }
     let top = 34.0;
     let h = top + ((n_leaves as f64) - 1.0).max(1.0) * LEAF_GAP * lab + 40.0 * lab;
     // (round 2) the text under the picture wraps to the CANVAS, not to a fixed character count; (round 5) to its width.
     let leaf_max = (w - 24.0 - prefix_w - 12.0).max(40.0);
     let err_max = (w - 48.0).max(60.0);
+    // (round 8 minor) a Latin line that the estimate under-measures still fits: the canvas grows to its safe width
+    if latin_line {
+        if let Ok(root) = &node {
+            for (i, line) in leaf_order(root, leaf_max, 12.0 * lab).iter().enumerate() {
+                let x = if i == 0 { 24.0 + safe_w("Left to right: ", 12.0 * lab) } else { 24.0 + prefix_w };
+                w = w.max(x + safe_w(line, 12.0 * lab) + 6.0);
+            }
+        }
+    }
     let below = match &node {
+        Ok(_) if !latin_line => 1 + rows.len(),
         Ok(root) => leaf_order(root, leaf_max, 12.0 * lab).len().max(1),
         Err(e) => wrap_w(e, err_max, 13.0 * lab).len() + if too_long { 0 } else { wrap_w(NO_TREE, err_max, 12.0 * lab).len() },
     };
@@ -398,11 +526,37 @@ pub fn build(p: &Params) -> String {
                 }
             }
             // a labelled ancestor, just above its branching point and clear of the bar
+            let segs: Vec<(f64, f64, f64, f64)> = placed.edges.iter().map(|(x0, y0, x1, y1)| (px(*x0), py(*y0), px(*x1), py(*y1))).collect();
             for (label, x, y) in &placed.nodes {
-                d.raw(&text_el(px(*x) - 5.0, py(*y) - 5.0, 11.0 * lab, "end", ink, label));
+                if !slanted {
+                    d.raw(&label_el(px(*x) - 5.0, py(*y) - 5.0, 11.0 * lab, "end", ink, label, false));
+                    continue;
+                }
+                // (round 8 major) In the slanted shape the parent's diagonal reaches a lower child's fork through the
+                // spot above-left of it, and struck the label through ("Others"). The label goes on the side the
+                // diagonal does not come from (above-left, or below-left), the one its branches cross least, and it is
+                // haloed so a line that still grazes it does not strike it through.
+                let size = 11.0 * lab;
+                let lw = text_w(label, size);
+                let (fx, fy) = (px(*x), py(*y));
+                let from_above = placed.edges.iter().any(|(_, y0, x1, y1)| *x1 == *x && *y1 == *y && *y0 < *y);
+                let above = fy - 5.0;
+                let below = fy + 5.0 + size * 0.75;
+                let mut cands = vec![(fx - 5.0, above), (fx - 5.0, below)];
+                if from_above { cands.swap(0, 1); }
+                cands.push((fx - 5.0, above - 8.0 * lab));
+                cands.push((fx - 5.0, below + 8.0 * lab));
+                let cost = |(lx, ly): (f64, f64)| {
+                    let b = (lx - lw - 1.0, lx + 1.0, ly - size * 0.8, ly + size * 0.25);
+                    segs.iter().map(|sg| seg_in_box(*sg, b)).sum::<f64>()
+                };
+                let best = cands.iter().copied().find(|c| cost(*c) == 0.0).unwrap_or_else(|| {
+                    cands.iter().copied().fold(cands[0], |a, c| if cost(c) < cost(a) { c } else { a })
+                });
+                d.raw(&label_el(best.0, best.1, size, "end", ink, label, true));
             }
             for (label, x, y) in &placed.leaves {
-                d.raw(&text_el(px(*x) + 8.0, py(*y) + 4.5 * lab, 12.0 * lab, "start", leaf_col, label));
+                d.raw(&label_el(px(*x) + 8.0, py(*y) + 4.5 * lab, 12.0 * lab, "start", leaf_col, label, false));
             }
         }
         Err(e) => {
@@ -430,21 +584,27 @@ pub fn build(p: &Params) -> String {
     // what the text was read as: the leaves, so a typo is visible without counting brackets
     let y = h + 8.0 * lab;
     if let Ok(root) = &node {
-        let ls = leaves(root);
         if let Some(count) = &count_text {
             d.raw(&text_el(24.0, y, 12.0 * lab, "start", ink, count));
         }
-        for (i, line) in leaf_order(root, leaf_max, 12.0 * lab).iter().enumerate() {
-            // (round 3) the continuation lines are indented by x, not by leading spaces: SVG collapses those, so the
-            // line used to start hard against the left margin
-            let (x, text) = if i == 0 { (24.0, format!("Left to right: {line}")) } else { (24.0 + prefix_w, line.clone()) };
-            // (round 7 major) one `<text>` per script run, each at the x the glyphs would have started at: a line that
-            // mixed a Han and a Hangul name printed as tofu because the rasteriser gave the whole run one fallback.
-            let yy = y + (15.0 + i as f64 * 17.0) * lab;
-            let mut cx = x;
-            for run in script_runs(&text) {
-                d.raw(&text_el(cx, yy, 12.0 * lab, "start", ink, &run));
-                cx += text_w(&run, 12.0 * lab);
+        if latin_line {
+            for (i, line) in leaf_order(root, leaf_max, 12.0 * lab).iter().enumerate() {
+                // (round 3) the continuation lines are indented by x, not by leading spaces: SVG collapses those, so
+                // the line used to start hard against the left margin
+                let (x, text) = if i == 0 { (24.0, format!("Left to right: {line}")) } else { (24.0 + prefix_w, line.clone()) };
+                d.raw(&text_el(x, y + (15.0 + i as f64 * 17.0) * lab, 12.0 * lab, "start", ink, &text));
+            }
+        } else {
+            // (round 8 majors 2 and 4) A name that is not Latin is never set in the Latin prefix's element (an Arabic
+            // name printed as tofu, an RTL pair reordered) and no run is placed at an estimated cumulative x (runs
+            // overlapped or left holes, a comma vanished at a wrap). "Left to right:" is its own element, then each
+            // name is its own element on its own numbered row, drawn exactly as its leaf is.
+            d.raw(&text_el(24.0, y + 15.0 * lab, 12.0 * lab, "start", ink, "Left to right:"));
+            let num_x = 24.0 + 12.0 * lab + num_w;
+            for (i, (num, name)) in rows.iter().enumerate() {
+                let yy = y + (15.0 + (i + 1) as f64 * 17.0) * lab;
+                if !num.is_empty() { d.raw(&text_el(num_x, yy, 12.0 * lab, "end", ink, num)); }
+                d.raw(&label_el(if num.is_empty() { 24.0 + 12.0 * lab } else { row_x }, yy, 12.0 * lab, "start", ink, name, false));
             }
         }
     }
@@ -750,39 +910,342 @@ mod tests {
         assert_eq!(emoji, vec![", ", "🦕🦖", ", B"], "{emoji:?}");
         assert_eq!(emoji.concat(), ", 🦕🦖, B");
 
+        // (round 8) a line holding a non-Latin name is no longer one line of runs at estimated x (they overlapped and
+        // left holes): "Left to right:" is its own element and each name is its own element on its own row. Still no
+        // element mixes scripts, and the rows still spell the leaves in order.
         for tree in ["(日本語のテスト, 한국어이름)", "(Homo sapiens, 日本語のテスト, 한국어이름, 🦕🦖, B)"] {
             let names = leaves(&parse(tree).unwrap());
             for size in ["Small", "Medium", "Large"] {
                 let svg = render_of(&[("tree", Value::S(tree.to_string())), ("label_size", Value::S(size.to_string()))]);
-                let bs = boxes(&svg);
-                let yc = bs.iter().find(|b| b.4.contains("leaves,")).map(|b| b.1).unwrap_or(-1.0);
-                // the drawn order line(s) are every text below the count line, grouped by row
-                let mut lines: Vec<(f64, Vec<(f64, String)>)> = Vec::new();
-                for (x, y, _s, _a, t) in &bs {
-                    if *y > yc + 1.0 {
-                        match lines.iter_mut().find(|(ly, _)| (*ly - *y).abs() < 0.01) {
-                            Some((_, v)) => v.push((*x, t.clone())),
-                            None => lines.push((*y, vec![(*x, t.clone())])),
+                let (header, rows) = order_list(&svg);
+                assert_eq!(header.as_deref(), Some("Left to right:"), "{tree:?} at {size}:\n{}", texts(&svg));
+                for (_, body) in &rows {
+                    let classes: std::collections::BTreeSet<u8> = body.chars().filter(|c| !joins_previous(*c)).map(script_class).collect();
+                    assert_eq!(classes.len(), 1, "{tree:?} at {size}: {body:?} mixes scripts {classes:?}");
+                }
+                assert_eq!(rows.iter().map(|r| r.1.clone()).collect::<Vec<_>>(), names, "{tree:?} at {size}: the rows do not spell the leaves in order");
+            }
+        }
+    }
+
+    /// The order list under a non-Latin tree: the "Left to right:" header, then (number, name) per row, read from the
+    /// drawn elements below the count line, a row's runs joined in x order.
+    fn order_list(svg: &str) -> (Option<String>, Vec<(String, String)>) {
+        let bs = boxes(svg);
+        let yc = bs.iter().find(|b| b.4.contains("leaves,") || b.4.contains("leaf,")).map(|b| b.1).unwrap_or(f64::MAX);
+        let mut lines: Vec<(f64, Vec<(f64, String, String)>)> = Vec::new();
+        for (x, y, _s, a, t) in &bs {
+            if *y > yc + 1.0 {
+                match lines.iter_mut().find(|(ly, _)| (*ly - *y).abs() < 0.01) {
+                    Some((_, v)) => v.push((*x, a.clone(), t.clone())),
+                    None => lines.push((*y, vec![(*x, a.clone(), t.clone())])),
+                }
+            }
+        }
+        lines.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        let mut header = None;
+        let mut rows = Vec::new();
+        for (k, (_, mut els)) in lines.into_iter().enumerate() {
+            els.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+            if k == 0 { header = Some(els.iter().map(|e| e.2.as_str()).collect::<String>()); continue; }
+            let num = els.iter().find(|e| e.1 == "end").map(|e| e.2.clone()).unwrap_or_default();
+            let body: String = els.iter().filter(|e| e.1 != "end").map(|e| e.2.as_str()).collect();
+            rows.push((num, body));
+        }
+        (header, rows)
+    }
+
+    fn canvas_w(svg: &str) -> f64 {
+        let at = svg.find("width=\"").expect("width") + 7;
+        svg[at..].split('"').next().unwrap().parse::<f64>().unwrap()
+    }
+    fn canvas_h(svg: &str) -> f64 {
+        let at = svg.find("height=\"").expect("height") + 8;
+        svg[at..].split('"').next().unwrap().parse::<f64>().unwrap()
+    }
+
+    /// Every element inside the canvas, measured by the larger of the estimate (+5 %) and the conservative width.
+    fn assert_fits(ctx: &str, svg: &str) {
+        let (w, h) = (canvas_w(svg), canvas_h(svg));
+        for (x, y, sz, anchor, text) in boxes(svg) {
+            let n = (text_w(&text, sz) * 1.05).max(safe_w(&text, sz));
+            let (l, r) = match anchor.as_str() { "end" => (x - n, x), "middle" => (x - n / 2.0, x + n / 2.0), _ => (x, x + n) };
+            assert!(l >= -1.0 && r <= w + 1.0, "{ctx}: {text:?} spans {l:.1}..{r:.1} on a {w} canvas");
+            assert!(y - sz * 0.8 >= -1.0 && y + sz * 0.25 <= h + 1.0, "{ctx}: {text:?} at y {y} on a {h} canvas");
+        }
+    }
+
+    #[test]
+    fn a_name_that_is_not_latin_gets_its_own_row_in_the_order_list() {
+        // (round 8 majors 2 and 4, minors 2, 3 and 8) Arabic was lumped with Latin, so an Arabic tree's order line was
+        // all tofu; an RTL pair was reordered by bidi inside the Latin run; runs placed at an estimated cumulative x
+        // overlapped ("polyphemus,日本語") or left holes ("Canis lupus,    日本語"); a joined emoji split into three
+        // faces; and the comma at a wrap break vanished. Any non-Latin name now puts every name in its own element on
+        // its own numbered row, each drawn exactly as its leaf is.
+        let trees = [
+            "((إنسان, شمبانزي), غوريلا)",
+            "((אדם, שימפנזה), גורילה)",
+            "((שלום, עולם), Dog)",
+            "((Русский, Ελληνικά), (עברית, العربية), (ภาษาไทย, Ñandú), 🦕🦖)",
+            "(Hippopotamus amphibius, Bubo bubo, Gopherus polyphemus, 日本語, 한국어)",
+            "(Mus musculus, Rattus norvegicus, Felis catus, Canis lupus, 日本語, 한국어)",
+            "(((👨\u{200d}👩\u{200d}👧, ❤\u{fe0f}), (☀ sun, ✈ plane)), (🇯🇵, 👍🏽))",
+            "((日本한국, 中文Latin), (Русский, Ελληνικά), (עברית, العربية), (ภาษาไทย, Ñandú), 🦕🦖)",
+            "(हिन्दी, English)",
+            "(Homo sapiens, 日本語のテスト, 한국어이름, 🦕🦖, B)",
+        ];
+        for tree in trees {
+            let names = leaves(&parse(tree).unwrap());
+            for size in ["Small", "Medium", "Large"] {
+                for style in ["Colour", "Print"] {
+                    for shape in ["rectangular", "slanted"] {
+                        let ctx = format!("{tree:?} {size} {style} {shape}");
+                        let svg = render_of(&[s("tree", tree), s("label_size", size), s("style", style), s("shape", shape)]);
+                        let (header, rows) = order_list(&svg);
+                        assert_eq!(header.as_deref(), Some("Left to right:"), "{ctx}:\n{}", texts(&svg));
+                        assert_eq!(rows.iter().map(|r| r.1.clone()).collect::<Vec<_>>(), names, "{ctx}");
+                        for (i, (num, _)) in rows.iter().enumerate() { assert_eq!(num, &format!("{}.", i + 1), "{ctx}"); }
+                        // the header is its own element: no name shares the Latin prefix's element
+                        let bs = boxes(&svg);
+                        assert!(bs.iter().any(|b| b.4 == "Left to right:"), "{ctx}");
+                        assert!(!bs.iter().any(|b| b.4.starts_with("Left to right:") && b.4 != "Left to right:"), "{ctx}");
+                        // every name's row starts at one fixed x: nothing is placed by a cumulative width
+                        let ys: Vec<f64> = { let mut v: Vec<f64> = bs.iter().map(|b| b.1).collect(); v.sort_by(|a, b| a.partial_cmp(b).unwrap()); v };
+                        let last_y = *ys.last().unwrap();
+                        let name_xs: Vec<f64> = bs.iter().filter(|b| b.3 == "start" && b.1 > last_y - (names.len() as f64) * 17.5 * svg::label_factor(size) && b.4 != "Left to right:").map(|b| b.0).collect();
+                        let x0 = name_xs.iter().cloned().fold(f64::MAX, f64::min);
+                        for n in &names {
+                            if needs_runs(n) { continue; }
+                            assert!(bs.iter().any(|b| b.4 == *n && (b.0 - x0).abs() < 0.01), "{ctx}: {n:?} is not its own element at x {x0}");
+                        }
+                        assert_fits(&ctx, &svg);
+                    }
+                }
+            }
+        }
+        // a joined emoji stays one element, in the leaf and in the list
+        let svg = render_of(&[s("tree", "(((👨\u{200d}👩\u{200d}👧, ❤\u{fe0f}), (☀ sun, ✈ plane)), (🇯🇵, 👍🏽))")]);
+        assert_eq!(boxes(&svg).iter().filter(|b| b.4 == "👨\u{200d}👩\u{200d}👧").count(), 2, "{}", texts(&svg));
+        assert_eq!(boxes(&svg).iter().filter(|b| b.4 == "👍🏽").count(), 2, "{}", texts(&svg));
+        assert_eq!(script_runs("👨\u{200d}👩\u{200d}👧, ❤\u{fe0f}"), vec!["👨\u{200d}👩\u{200d}👧", ", ❤\u{fe0f}"]);
+        // the classifier no longer lumps RTL and other alphabets with Latin
+        for c in ['ا', 'א', 'ก', 'ह'] { assert!(!latin_class(c) && script_class(c) != 0, "{c}"); }
+        for c in ['A', 'ñ', 'Ж', 'λ', '☀', '–'] { assert!(latin_class(c), "{c}"); }
+    }
+
+    #[test]
+    fn a_very_long_non_latin_list_is_capped_and_fits() {
+        let tree = format!("({}, 日本)", (1..=60).map(|i| format!("S{i}")).collect::<Vec<_>>().join(", "));
+        for size in ["Small", "Medium", "Large"] {
+            let svg = render_of(&[s("tree", &tree), s("label_size", size)]);
+            let (_, rows) = order_list(&svg);
+            assert_eq!(rows.len(), MAX_ORDER_ROWS, "{size}");
+            assert!(rows.last().unwrap().1.contains("and 22 more"), "{size}: {:?}", rows.last());
+            assert_fits(size, &svg);
+        }
+    }
+
+    #[test]
+    fn a_wrapped_latin_order_line_keeps_its_comma() {
+        // (round 8 minor) "… Bubo bubo" / "Gopherus polyphemus …" with the comma lost at the break
+        let tree = "(Hippopotamus amphibius, Bubo bubo, Gopherus polyphemus, Panthera leo, Canis lupus familiaris, Felis silvestris catus, Mus musculus)";
+        for size in ["Small", "Medium", "Large"] {
+            let svg = render_of(&[s("tree", tree), s("label_size", size)]);
+            let t = texts(&svg);
+            let lines: Vec<&str> = t.lines().skip_while(|l| !l.starts_with("Left to right:")).collect();
+            assert!(lines.len() >= 2, "{size}: the fixture does not wrap: {t}");
+            for l in &lines[..lines.len() - 1] { assert!(l.ends_with(','), "{size}: {l:?} drops the separator at the break"); }
+            assert!(!lines.last().unwrap().ends_with(','), "{size}");
+            assert_eq!(lines.join(" ").replace("Left to right: ", ""), leaves(&parse(tree).unwrap()).join(", "), "{size}");
+            assert_fits(size, &svg);
+        }
+        // (round 8 minor) o/p/b/d-heavy names are measured conservatively, so the line does not clip at the edge
+        for size in ["Small", "Medium", "Large"] {
+            for shape in ["rectangular", "slanted"] {
+                let svg = render_of(&[s("tree", "(Mogonmono, Homodo hopudro, Gopuobpoop, Buhydbobopo)"), s("label_size", size), s("shape", shape)]);
+                assert_fits(&format!("{size} {shape}"), &svg);
+            }
+        }
+    }
+
+    #[test]
+    fn a_name_mixing_han_and_hangul_is_drawn_as_runs_in_the_leaf_and_the_ancestor() {
+        // (round 8 major) one `<text>` holding Han and Hangul printed "日本ㅎㅏㄴㄱㅜㄱ" for the leaf 日本한국, and the
+        // same for an ancestor, whose wider jamo ran over its branch
+        for (tree, name) in [("((日本한국, 中文Latin), Dog)", "日本한국"), ("((Human, Chimp)日本한국, Gorilla)", "日本한국"), ("((Human, Chimp)日本한국, (日本, 한국)東亜)", "日本한국")] {
+            for size in ["Small", "Medium", "Large"] {
+                for shape in ["rectangular", "slanted"] {
+                    let svg = render_of(&[s("tree", tree), s("label_size", size), s("shape", shape)]);
+                    let bs = boxes(&svg);
+                    assert!(!bs.iter().any(|b| b.4 == name), "{tree} {size} {shape}: {name} is still one element");
+                    let runs: Vec<_> = bs.iter().filter(|b| b.4 == "日本" || b.4 == "한국").collect();
+                    assert!(runs.len() >= 2, "{tree} {size} {shape}: {:?}", texts(&svg));
+                    for b in &bs {
+                        let classes: std::collections::BTreeSet<u8> = b.4.chars().filter(|c| !joins_previous(*c)).map(script_class).filter(|k| *k != 0).collect();
+                        assert!(classes.len() <= 1, "{tree} {size} {shape}: {:?} mixes scripts", b.4);
+                    }
+                    // the ancestor's runs end where the single label ended, clear of the parent's bar
+                    if tree.contains(")日本한국") {
+                        let n = parse(tree).unwrap();
+                        let pl = place(&n);
+                        let (_, x, _) = pl.nodes.iter().find(|nd| nd.0 == name).unwrap().clone();
+                        let lab = svg::label_factor(size);
+                        let root_w = text_w(&n.label, 11.0 * lab);
+                        let widest_anc = ancestor_labels(&n).iter().map(|l| text_w(l, 11.0 * lab)).fold(0.0f64, f64::max);
+                        let step = (STEP_X * lab).max(widest_anc + 30.0);
+                        let fork = 30.0 + root_w + x as f64 * step;
+                        let parent_bar = fork - step;
+                        let first = bs.iter().filter(|b| b.4 == "日本").map(|b| b.0).fold(f64::MAX, f64::min);
+                        assert!(first > parent_bar + 10.0, "{tree} {size} {shape}: the ancestor label starts at {first}, over the bar at {parent_bar}");
+                    }
+                    assert_fits(&format!("{tree} {size} {shape}"), &svg);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_slanted_ancestor_label_is_not_struck_through_by_its_own_branch() {
+        // (round 8 major) the label always sat above-left of its fork, exactly where the parent's diagonal arrives at a
+        // lower child: "Others" had the diagonal through it
+        for tree in [
+            "((Human, Chimp)Hominini, (Gorilla, Orangutan)Others)",
+            "((Human, Chimp)Great apes, (日本, 한국)東亜)",
+            "(((A, B)Lower, C)Middle, ((D, E)Upper, F)Again)",
+            "((A, B)One, (C, D)Two, (E, F)Three)",
+        ] {
+            let n = parse(tree).unwrap();
+            for size in ["Small", "Medium", "Large"] {
+                for style in ["Colour", "Print"] {
+                    let svg = render_of(&[s("tree", tree), s("shape", "slanted"), s("label_size", size), s("style", style)]);
+                    let segs = lines(&svg);
+                    for label in ancestor_labels(&n) {
+                        // haloed: an outline copy is drawn under the fill
+                        assert!(svg.contains(&format!(r##"stroke-linejoin="round">{}</text>"##, svg::esc(&label))), "{tree} {size}: {label} has no halo");
+                        for (x, y, sz, anchor, text) in boxes(&svg).into_iter().filter(|b| b.4 == label) {
+                            let w = text_w(&text, sz);
+                            let (l, r) = if anchor == "end" { (x - w, x) } else { (x, x + w) };
+                            let b = (l, r, y - sz * 0.75, y + sz * 0.2);
+                            for sg in &segs {
+                                assert!(seg_in_box(*sg, b) == 0.0, "{tree} {size} {style}: {label:?} {b:?} is crossed by the branch {sg:?}");
+                            }
                         }
                     }
                 }
-                assert!(!lines.is_empty(), "{tree:?} at {size}: no order line found:\n{}", texts(&svg));
-                lines.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-                let mut bodies: Vec<String> = Vec::new();
-                for (_, mut runs) in lines {
-                    runs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-                    for (_, t) in &runs {
-                        let classes: std::collections::BTreeSet<u8> = t.chars().map(script_class).collect();
-                        assert_eq!(classes.len(), 1, "{tree:?} at {size}: {t:?} mixes scripts {classes:?}");
-                    }
-                    bodies.push(runs.iter().map(|(_, t)| t.as_str()).collect::<String>());
-                }
-                assert_eq!(
-                    bodies.join(", "),
-                    format!("Left to right: {}", names.join(", ")),
-                    "{tree:?} at {size}: the runs do not spell the leaves in order: {bodies:?}"
-                );
             }
+        }
+        // the rectangular tree is unchanged: no halo, the label above-left of the fork
+        let rect = render_of(&[s("tree", "((Human, Chimp)Great apes, Gorilla)")]);
+        assert!(!rect.contains(r##"stroke="#fff""##), "the rectangular tree changed");
+    }
+
+    #[test]
+    fn a_latin_tree_renders_byte_for_byte_as_before() {
+        // (round 8) the order-line rework applies only when a name is not Latin: a Latin tree's SVG must be exactly what
+        // the frozen round-7 build (80b2eb1) drew, every size, style and shape of the examples. The hashes are FNV-1a 64
+        // of those frozen renders, the census's own hash (the Medium Colour default is the census entry). Expected
+        // exceptions, not listed: a slanted labelled ancestor (halo, placement), a wrapped line (its comma), and a
+        // name the conservative width says could clip (the canvas widens).
+        fn fnv64(s: &str) -> u64 {
+            let mut h: u64 = 0xcbf29ce484222325;
+            for b in s.as_bytes() { h ^= *b as u64; h = h.wrapping_mul(0x100000001b3); }
+            h
+        }
+        let frozen: &[(&str, &str, &str, &str, u64)] = &[
+            ("(((Human, Chimp), Gorilla), Orangutan)", "Small", "Colour", "rectangular", 0xaaf7bf8633d380b3),
+            ("(((Human, Chimp), Gorilla), Orangutan)", "Small", "Print", "rectangular", 0xb9efce3e4487c077),
+            ("(((Human, Chimp), Gorilla), Orangutan)", "Small", "Colour", "slanted", 0x70d7bdcce8780f6a),
+            ("(((Human, Chimp), Gorilla), Orangutan)", "Small", "Print", "slanted", 0x7064d137c578f396),
+            ("(((Human, Chimp), Gorilla), Orangutan)", "Medium", "Colour", "rectangular", 0x4041fa1d6b9d93f9),
+            ("(((Human, Chimp), Gorilla), Orangutan)", "Medium", "Print", "rectangular", 0x593abe211d8dc2b5),
+            ("(((Human, Chimp), Gorilla), Orangutan)", "Medium", "Colour", "slanted", 0xc9c65aec02c60842),
+            ("(((Human, Chimp), Gorilla), Orangutan)", "Medium", "Print", "slanted", 0x8ebdf29a1544db86),
+            ("(((Human, Chimp), Gorilla), Orangutan)", "Large", "Colour", "rectangular", 0x834922361c831abf),
+            ("(((Human, Chimp), Gorilla), Orangutan)", "Large", "Print", "rectangular", 0x6026bb6278e65017),
+            ("(((Human, Chimp), Gorilla), Orangutan)", "Large", "Colour", "slanted", 0x1e3c43121fa809aa),
+            ("(((Human, Chimp), Gorilla), Orangutan)", "Large", "Print", "slanted", 0x5140bcc0e22775aa),
+            ("(((Lizard, Bird), (Frog, Fish)), Lamprey)", "Small", "Colour", "rectangular", 0xa971bd086723df55),
+            ("(((Lizard, Bird), (Frog, Fish)), Lamprey)", "Small", "Print", "rectangular", 0xab044c6b36660693),
+            ("(((Lizard, Bird), (Frog, Fish)), Lamprey)", "Small", "Colour", "slanted", 0x014db5c0adeedf15),
+            ("(((Lizard, Bird), (Frog, Fish)), Lamprey)", "Small", "Print", "slanted", 0xf0209f04b567d953),
+            ("(((Lizard, Bird), (Frog, Fish)), Lamprey)", "Medium", "Colour", "rectangular", 0x2784d3aa37522a5d),
+            ("(((Lizard, Bird), (Frog, Fish)), Lamprey)", "Medium", "Print", "rectangular", 0x8cff41a8165d1c2b),
+            ("(((Lizard, Bird), (Frog, Fish)), Lamprey)", "Medium", "Colour", "slanted", 0xaa33b7a4ba12f599),
+            ("(((Lizard, Bird), (Frog, Fish)), Lamprey)", "Medium", "Print", "slanted", 0x9caf767a3ae4ce37),
+            ("(((Lizard, Bird), (Frog, Fish)), Lamprey)", "Large", "Colour", "rectangular", 0x31efd4c6f7c34910),
+            ("(((Lizard, Bird), (Frog, Fish)), Lamprey)", "Large", "Print", "rectangular", 0x78925f4ea6c9dc2e),
+            ("(((Lizard, Bird), (Frog, Fish)), Lamprey)", "Large", "Colour", "slanted", 0x7b4a9b6b09fb5606),
+            ("(((Lizard, Bird), (Frog, Fish)), Lamprey)", "Large", "Print", "slanted", 0x31fc76cb9b93ee24),
+            ("(Red, Blue, Green, Yellow)", "Small", "Colour", "rectangular", 0x8a1b7f7dac9651f9),
+            ("(Red, Blue, Green, Yellow)", "Small", "Print", "rectangular", 0xb645fbd9c209e875),
+            ("(Red, Blue, Green, Yellow)", "Small", "Colour", "slanted", 0x51b7c9352efb7755),
+            ("(Red, Blue, Green, Yellow)", "Small", "Print", "slanted", 0x6d1907e22b024501),
+            ("(Red, Blue, Green, Yellow)", "Medium", "Colour", "rectangular", 0x6a4baad1f4b75613),
+            ("(Red, Blue, Green, Yellow)", "Medium", "Print", "rectangular", 0x984cd94738f7da17),
+            ("(Red, Blue, Green, Yellow)", "Medium", "Colour", "slanted", 0xf5317667ef606d10),
+            ("(Red, Blue, Green, Yellow)", "Medium", "Print", "slanted", 0x15f5fa3b0952aa54),
+            ("(Red, Blue, Green, Yellow)", "Large", "Colour", "rectangular", 0x5da0bd4a1136e30e),
+            ("(Red, Blue, Green, Yellow)", "Large", "Print", "rectangular", 0x994d85f6df66800e),
+            ("(Red, Blue, Green, Yellow)", "Large", "Colour", "slanted", 0x62fd7f9537e4a8af),
+            ("(Red, Blue, Green, Yellow)", "Large", "Print", "slanted", 0xcf7e7ce1fca40da7),
+            ("((Human, Chimp)Great apes, Gorilla)", "Small", "Colour", "rectangular", 0xab62decb939b7b09),
+            ("((Human, Chimp)Great apes, Gorilla)", "Small", "Print", "rectangular", 0x261a6b50f5c1d9f7),
+            ("((Human, Chimp)Great apes, Gorilla)", "Medium", "Colour", "rectangular", 0x439d6f31abe7bb1e),
+            ("((Human, Chimp)Great apes, Gorilla)", "Medium", "Print", "rectangular", 0x2a19485f5fbccb94),
+            ("((Human, Chimp)Great apes, Gorilla)", "Large", "Colour", "rectangular", 0x3a0bdb026cc22741),
+            ("((Human, Chimp)Great apes, Gorilla)", "Large", "Print", "rectangular", 0xba00656302f5702f),
+            ("((A, B), (C, D));", "Small", "Colour", "rectangular", 0x349ca13e0e19ab69),
+            ("((A, B), (C, D));", "Small", "Print", "rectangular", 0x98ca4fbac2c06831),
+            ("((A, B), (C, D));", "Small", "Colour", "slanted", 0xdf54631db555a592),
+            ("((A, B), (C, D));", "Small", "Print", "slanted", 0x8a2037f0be3749a2),
+            ("((A, B), (C, D));", "Medium", "Colour", "rectangular", 0x0a09a2caeeb7fc2d),
+            ("((A, B), (C, D));", "Medium", "Print", "rectangular", 0xf4dc9bc3d72236f5),
+            ("((A, B), (C, D));", "Medium", "Colour", "slanted", 0xe1191458af61e9ec),
+            ("((A, B), (C, D));", "Medium", "Print", "slanted", 0x9d898227e8348dec),
+            ("((A, B), (C, D));", "Large", "Colour", "rectangular", 0x71dc8a97d55242ac),
+            ("((A, B), (C, D));", "Large", "Print", "rectangular", 0x350a2955a06dd218),
+            ("((A, B), (C, D));", "Large", "Colour", "slanted", 0x7cacdb9647cdc0f7),
+            ("((A, B), (C, D));", "Large", "Print", "slanted", 0xfd4b09f819c87bfb),
+            ("(A, B, C, D, E, F, G, H)", "Small", "Colour", "rectangular", 0x24592e6a4abf7082),
+            ("(A, B, C, D, E, F, G, H)", "Small", "Print", "rectangular", 0xf0a833d5d15633ea),
+            ("(A, B, C, D, E, F, G, H)", "Small", "Colour", "slanted", 0x738c62f1eda6e180),
+            ("(A, B, C, D, E, F, G, H)", "Small", "Print", "slanted", 0xd442ca637d766a40),
+            ("(A, B, C, D, E, F, G, H)", "Medium", "Colour", "rectangular", 0x92a74ff48774f0dc),
+            ("(A, B, C, D, E, F, G, H)", "Medium", "Print", "rectangular", 0x665648daf35941ac),
+            ("(A, B, C, D, E, F, G, H)", "Medium", "Colour", "slanted", 0xc0deddceddf67090),
+            ("(A, B, C, D, E, F, G, H)", "Medium", "Print", "slanted", 0xe79570c06ea5e010),
+            ("(A, B, C, D, E, F, G, H)", "Large", "Colour", "rectangular", 0x736780cce7fda399),
+            ("(A, B, C, D, E, F, G, H)", "Large", "Print", "rectangular", 0x586b9696ba4b2b6d),
+            ("(A, B, C, D, E, F, G, H)", "Large", "Colour", "slanted", 0x250b31a3e830e059),
+            ("(A, B, C, D, E, F, G, H)", "Large", "Print", "slanted", 0x4bf1aa78f175642d),
+            ("(((((A, B), C), D), E), F)", "Small", "Colour", "rectangular", 0x5586d7be9ef14f53),
+            ("(((((A, B), C), D), E), F)", "Small", "Print", "rectangular", 0x869fe682125302f3),
+            ("(((((A, B), C), D), E), F)", "Small", "Colour", "slanted", 0xd5778333d44a6784),
+            ("(((((A, B), C), D), E), F)", "Small", "Print", "slanted", 0x4b9a9a95d8e74a6c),
+            ("(((((A, B), C), D), E), F)", "Medium", "Colour", "rectangular", 0x5c2f327a7c04d888),
+            ("(((((A, B), C), D), E), F)", "Medium", "Print", "rectangular", 0xe3eaa17c1d92a89c),
+            ("(((((A, B), C), D), E), F)", "Medium", "Colour", "slanted", 0xa7979e7469961517),
+            ("(((((A, B), C), D), E), F)", "Medium", "Print", "slanted", 0xe6a2d2af56651593),
+            ("(((((A, B), C), D), E), F)", "Large", "Colour", "rectangular", 0xb2091346769e9bcd),
+            ("(((((A, B), C), D), E), F)", "Large", "Print", "rectangular", 0xd0d6c0cb1a39d15d),
+            ("(((((A, B), C), D), E), F)", "Large", "Colour", "slanted", 0x62fdf88cc5cdddf6),
+            ("(((((A, B), C), D), E), F)", "Large", "Print", "slanted", 0x40b9fb2618235e7e),
+            ("(A, B", "Small", "Colour", "rectangular", 0x3b7eb918f2266409),
+            ("(A, B", "Small", "Print", "rectangular", 0x6716b5c40d1212ae),
+            ("(A, B", "Small", "Colour", "slanted", 0x3b7eb918f2266409),
+            ("(A, B", "Small", "Print", "slanted", 0x6716b5c40d1212ae),
+            ("(A, B", "Medium", "Colour", "rectangular", 0x2a0bb0a022a2b428),
+            ("(A, B", "Medium", "Print", "rectangular", 0x21debb369b93b0fd),
+            ("(A, B", "Medium", "Colour", "slanted", 0x2a0bb0a022a2b428),
+            ("(A, B", "Medium", "Print", "slanted", 0x21debb369b93b0fd),
+            ("(A, B", "Large", "Colour", "rectangular", 0xa630f328140185ba),
+            ("(A, B", "Large", "Print", "rectangular", 0x86148b13dd6d1a29),
+            ("(A, B", "Large", "Colour", "slanted", 0xa630f328140185ba),
+            ("(A, B", "Large", "Print", "slanted", 0x86148b13dd6d1a29),
+        ];
+        for (tree, size, style, shape, want) in frozen {
+            let svg = render_of(&[s("tree", tree), s("label_size", size), s("style", style), s("shape", shape)]);
+            assert_eq!(fnv64(&svg), *want, "{tree:?} {size} {style} {shape} no longer renders as the frozen build did:\n{svg}");
         }
     }
 
