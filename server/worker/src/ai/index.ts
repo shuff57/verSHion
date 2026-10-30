@@ -7,6 +7,9 @@
 // The body is read by the pool's one guarded reader (`readJson`), never directly: the Worker's
 // I4/I5 lint refuses any other direct body read in `src/`.
 import { PoolError, readJson } from "../pool/shared.ts";
+import { readJob, startJob, type JobLimits } from "./jobs.ts";
+import { AiStore, HOUR_MS, utcDayStart, DAY_MS } from "./store.ts";
+import { dataUriBytes, err, json, type Message, type ModelOut, type Part } from "./util.ts";
 
 /** The slice of the Workers AI binding this relay uses (the real type is a large generated union). */
 export interface AiBinding {
@@ -35,28 +38,40 @@ export interface AiDeps {
    * turns it back on for every request.
    */
   thinking?: boolean;
-  /** Test seams; production uses the constants. */
-  limits?: { maxImageBytes?: number; maxOutTokens?: number };
+  /** `env.DB`: usage rows and import jobs. Absent: no quota, and the job routes answer 503. */
+  db?: D1Database;
+  /** `env.POOL`: a job result above 256 KB goes here. */
+  bucket?: R2Bucket;
+  now?: () => number;
+  /** Test seams and the deployment's quotas; production uses the constants and the env values. */
+  limits?: Partial<Limits>;
 }
+
+export interface Limits extends JobLimits {
+  maxOutTokens: number;
+  /** Chat turns per principal per hour. */
+  chatPerHour: number;
+}
+
+export const DEFAULT_LIMITS: Limits = {
+  maxImageBytes: 4 * 1024 * 1024,
+  maxOutTokens: 8192,
+  chatPerHour: 120,
+  importPerDay: 20,
+  // ~2 000 pages at the measured 23 neurons a page.
+  dailyNeurons: 50_000,
+  maxPages: 20,
+};
 
 export const AI_PATH = "/ai/chat/completions";
 export const AI_HEALTH_PATH = "/ai/health";
+export const AI_IMPORT_PATH = "/ai/import";
+const AI_IMPORT_ONE = /^\/ai\/import\/[^/]+$/;
 export const AI_DEFAULT_MODEL = "@cf/google/gemma-4-26b-a4b-it";
 
 const MAX_BODY_BYTES = 13 * 1024 * 1024;
-const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const MAX_IMAGES = 4;
-const MAX_OUT_TOKENS = 8192;
 const MAX_MESSAGES = 40;
-
-type Part = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
-type Message = { role: string; content: string | Part[] };
-
-const json = (status: number, body: unknown, headers: Record<string, string> = {}): Response =>
-  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
-
-const err = (status: number, code: string, message: string, headers?: Record<string, string>): Response =>
-  json(status, { error: { code, message } }, headers);
 
 /** The bearer token of a request, if it has one. */
 function bearer(req: Request): string | null {
@@ -72,12 +87,6 @@ function sameSecret(a: string, b: string): boolean {
   let diff = 0;
   for (let i = 0; i < x.length; i++) diff |= x[i]! ^ y[i]!;
   return diff === 0;
-}
-
-/** Decoded byte count of a base64 image data URI, or null when the URI is not one we accept. */
-function dataUriBytes(url: string): number | null {
-  const m = /^data:image\/(?:png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(url);
-  return m ? Math.floor((m[1]!.length * 3) / 4) : null;
 }
 
 /** Validates `messages` and counts images across the whole conversation. */
@@ -125,13 +134,13 @@ function readMessages(
 /**
  * The app-facing reply: the upstream OpenAI body with `reasoning_content` and `usage.neurons`
  * dropped. Hidden reasoning can be larger than the answer (95 tokens for a ~10-token reply in the
- * probe), and it is not part of the contract.
+ * probe), and it is not part of the contract. The neurons are kept aside for the quota.
  */
-function shapeReply(raw: unknown): Record<string, unknown> | null {
+function shapeReply(raw: unknown): (ModelOut & { ok: true }) | null {
   const o = raw as
     | {
         choices?: { message?: { content?: unknown }; finish_reason?: unknown }[];
-        usage?: { prompt_tokens?: unknown; completion_tokens?: unknown; total_tokens?: unknown };
+        usage?: { prompt_tokens?: unknown; completion_tokens?: unknown; total_tokens?: unknown; neurons?: unknown };
       }
     | null;
   const choice = o?.choices?.[0];
@@ -139,80 +148,38 @@ function shapeReply(raw: unknown): Record<string, unknown> | null {
   // An empty completion is not an answer: it is retried once by the caller.
   if (typeof content !== "string" || content.trim() === "") return null;
   const n = (x: unknown): number => (typeof x === "number" && Number.isFinite(x) ? x : 0);
+  const inTokens = n(o?.usage?.prompt_tokens);
+  const outTokens = n(o?.usage?.completion_tokens);
   return {
-    choices: [
-      {
-        index: 0,
-        message: { role: "assistant", content },
-        finish_reason: typeof choice?.finish_reason === "string" ? choice.finish_reason : "stop",
-      },
-    ],
-    usage: {
-      prompt_tokens: n(o?.usage?.prompt_tokens),
-      completion_tokens: n(o?.usage?.completion_tokens),
-      total_tokens: n(o?.usage?.total_tokens),
+    ok: true,
+    text: content,
+    inTokens,
+    outTokens,
+    neurons: n(o?.usage?.neurons),
+    reply: {
+      choices: [
+        {
+          index: 0,
+          message: { role: "assistant", content },
+          finish_reason: typeof choice?.finish_reason === "string" ? choice.finish_reason : "stop",
+        },
+      ],
+      usage: { prompt_tokens: inTokens, completion_tokens: outTokens, total_tokens: n(o?.usage?.total_tokens) },
     },
   };
 }
 
 export function createAi(d: AiDeps) {
-  const maxImageBytes = d.limits?.maxImageBytes ?? MAX_IMAGE_BYTES;
-  const maxOutTokens = d.limits?.maxOutTokens ?? MAX_OUT_TOKENS;
+  const lim: Limits = { ...DEFAULT_LIMITS, ...d.limits };
+  const now = d.now ?? Date.now;
+  const store = d.db ? new AiStore(d.db) : undefined;
 
-  async function handle(req: Request): Promise<Response | null> {
-    const url = new URL(req.url);
-    // Unauthenticated and data-free: the Settings "Test connection" button checks the relay is up.
-    if (url.pathname === AI_HEALTH_PATH) {
-      if (req.method !== "GET") return err(405, "method_not_allowed", `Use GET ${AI_HEALTH_PATH}.`, { Allow: "GET" });
-      return json(200, { ok: true, model: d.model, ai: d.ai !== undefined });
-    }
-    if (url.pathname !== AI_PATH) return null;
-    if (req.method === "OPTIONS") return new Response(null, { status: 204 });
-    if (req.method !== "POST")
-      return err(405, "method_not_allowed", `Use POST ${AI_PATH}.`, { Allow: "POST, OPTIONS" });
-
-    // Same origin rule as the pool: a browser may only call from the app's own origins.
-    const origin = req.headers.get("Origin");
-    if (origin !== null && !d.allowedOrigins.includes(origin))
-      return err(403, "origin_not_allowed", "This origin may not call the relay.");
-
-    // A signed-in pool user, or the desktop app's relay key. With no relay key configured the
-    // native app (which sends no Origin) may use the relay: a deployment without a key must stay
-    // unreachable (workers_dev = false, no route), which both wrangler configs do. Browsers always
-    // send Origin, so a public page cannot use an unkeyed relay even if it learns the URL.
-    const token = bearer(req);
-    const who = await d.authenticate(req);
-    let userId = who?.userId ?? (d.relayKey && token && sameSecret(token, d.relayKey) ? "relay" : null);
-    if (!userId) {
-      if (d.relayKey || origin !== null) return err(401, "unauthenticated", "Sign in first, or use the relay key.");
-      userId = "native";
-    }
-    if (!d.ai) return err(503, "ai_not_configured", "This deployment has no Workers AI binding.");
-
-    let body: Record<string, unknown>;
-    try {
-      // One key per request: a PDF import converts its pages in parallel, and the pool's
-      // per-account slot cap (4 bodies at once) is for its own routes, not for a batch of pages.
-      // The isolate byte budget still bounds the memory all of them may hold together.
-      body = await readJson(req, `ai:${userId}:${crypto.randomUUID()}`, { max: MAX_BODY_BYTES });
-    } catch (e) {
-      if (e instanceof PoolError) {
-        const code = e.status === 413 ? "payload_too_large" : e.status === 415 ? "unsupported_media_type" : "bad_request";
-        return err(e.status, code, "The request body was refused.");
-      }
-      return err(400, "bad_request", "The body is not JSON.");
-    }
-
-    const read = readMessages(body.messages, maxImageBytes);
-    if ("error" in read) return err(400, "bad_request", read.error);
-
-    const requested = typeof body.max_tokens === "number" ? Math.floor(body.max_tokens) : maxOutTokens;
-    const max_tokens = Math.max(1, Math.min(requested, maxOutTokens));
-    const t = typeof body.temperature === "number" && Number.isFinite(body.temperature) ? body.temperature : 0.2;
-    const temperature = Math.max(0, Math.min(t, 1));
-
+  /** One model turn: up to two tries, because Workers AI sometimes throws, or returns an empty
+   *  completion, on a call that succeeds when repeated (about 1 in 8 in the live runs). Only the
+   *  error CLASS is logged: the message can carry a provider key or the prompt (spec §5). */
+  async function callModel(messages: Message[], max_tokens: number, temperature: number): Promise<ModelOut> {
     const inputs = {
-      messages: read.messages,
+      messages,
       response_format: { type: "json_object" },
       max_tokens,
       temperature,
@@ -221,14 +188,11 @@ export function createAi(d: AiDeps) {
       // while a two-sentence visible "reasoning" field in the answer fixed the same mistakes in ~15 s.
       chat_template_kwargs: { enable_thinking: d.thinking === true },
     };
-    // Up to two tries: Workers AI sometimes throws, or returns an empty completion, on a call that
-    // succeeds when repeated (about 1 call in 8 in the live runs). A third failure is the caller's.
-    // Only the error CLASS is logged: the message can carry a provider key or the prompt (spec §5).
     let thrown = false;
     for (let attempt = 1; attempt <= 2; attempt++) {
       let raw: unknown;
       try {
-        raw = await d.ai.run(d.model, inputs);
+        raw = await d.ai!.run(d.model, inputs);
       } catch (e) {
         thrown = true;
         console.error(`ai: upstream call failed (${e instanceof Error ? e.name : "unknown"}), attempt ${attempt}`);
@@ -236,10 +200,129 @@ export function createAi(d: AiDeps) {
       }
       thrown = false;
       const shaped = shapeReply(raw);
-      if (shaped) return json(200, shaped);
+      if (shaped) return shaped;
       console.error(`ai: upstream returned no text, attempt ${attempt}`);
     }
-    return err(502, "model_failed", thrown ? "The model call failed. Try again." : "The model returned no text.");
+    return { ok: false, code: thrown ? "failed" : "empty" };
+  }
+
+  /** The caller: a pool user, the relay key, or (keyless deployment, no Origin) the native app. */
+  async function principal(req: Request): Promise<{ userId: string } | Response> {
+    // Same origin rule as the pool: a browser may only call from the app's own origins.
+    const origin = req.headers.get("Origin");
+    if (origin !== null && !d.allowedOrigins.includes(origin))
+      return err(403, "origin_not_allowed", "This origin may not call the relay.");
+    // With no relay key configured the native app (which sends no Origin) may use the relay: a
+    // deployment without a key must stay unreachable (workers_dev = false, no route), which both
+    // wrangler configs do. Browsers always send Origin, so a public page cannot use an unkeyed relay
+    // even if it learns the URL.
+    const token = bearer(req);
+    const who = await d.authenticate(req);
+    const userId = who?.userId ?? (d.relayKey && token && sameSecret(token, d.relayKey) ? "relay" : null);
+    if (userId) return { userId };
+    if (d.relayKey || origin !== null) return err(401, "unauthenticated", "Sign in first, or use the relay key.");
+    return { userId: "native" };
+  }
+
+  async function readBody(req: Request, userId: string): Promise<Record<string, unknown> | Response> {
+    try {
+      // One key per request: a PDF import converts its pages in parallel, and the pool's
+      // per-account slot cap (4 bodies at once) is for its own routes, not for a batch of pages.
+      // The isolate byte budget still bounds the memory all of them may hold together.
+      return await readJson(req, `ai:${userId}:${crypto.randomUUID()}`, { max: MAX_BODY_BYTES });
+    } catch (e) {
+      if (e instanceof PoolError) {
+        const code = e.status === 413 ? "payload_too_large" : e.status === 415 ? "unsupported_media_type" : "bad_request";
+        return err(e.status, code, "The request body was refused.");
+      }
+      return err(400, "bad_request", "The body is not JSON.");
+    }
+  }
+
+  /** The account's daily neuron cap and this caller's hourly turn cap; null when both have room.
+   *  Counted from usage rows, so two requests racing at the line can both pass: the cap is a
+   *  budget guard, not an exact meter. */
+  async function overQuota(userId: string): Promise<Response | null> {
+    if (!store) return null;
+    try {
+      return await checkQuota(store, userId);
+    } catch {
+      // Fail closed: the binding is billed to one account, so a quota that cannot be read (for
+      // instance migrations 0116/0117 not applied) must not become an open relay.
+      console.error("ai: quota unavailable");
+      return err(503, "quota_unavailable", "The AI service is not ready. Try again later.");
+    }
+  }
+
+  async function checkQuota(store: AiStore, userId: string): Promise<Response | null> {
+    const t = now();
+    const untilMidnight = { "Retry-After": String(Math.ceil((utcDayStart(t) + DAY_MS - t) / 1000)) };
+    if ((await store.neuronsSince(utcDayStart(t))) >= lim.dailyNeurons)
+      return err(429, "quota_exhausted", "The AI allowance for today is used up.", untilMidnight);
+    if ((await store.chatTurnsSince(userId, t - HOUR_MS)) >= lim.chatPerHour)
+      return err(429, "rate_limited", "Too many requests this hour. Try again later.", { "Retry-After": "600" });
+    return null;
+  }
+
+  async function handle(req: Request, ctx?: { waitUntil(p: Promise<unknown>): void }): Promise<Response | null> {
+    const url = new URL(req.url);
+    // Unauthenticated and data-free: the Settings "Test connection" button checks the relay is up.
+    if (url.pathname === AI_HEALTH_PATH) {
+      if (req.method !== "GET") return err(405, "method_not_allowed", `Use GET ${AI_HEALTH_PATH}.`, { Allow: "GET" });
+      return json(200, { ok: true, model: d.model, ai: d.ai !== undefined });
+    }
+    const job = url.pathname === AI_IMPORT_PATH ? "start" : AI_IMPORT_ONE.test(url.pathname) ? "read" : null;
+    if (url.pathname !== AI_PATH && job === null) return null;
+    if (req.method === "OPTIONS") return new Response(null, { status: 204 });
+    const want = job === "read" ? "GET" : "POST";
+    if (req.method !== want) return err(405, "method_not_allowed", `Use ${want} ${url.pathname.replace(/[0-9a-f]{32}$/, ":id")}.`, { Allow: `${want}, OPTIONS` });
+
+    const who = await principal(req);
+    if (who instanceof Response) return who;
+    const { userId } = who;
+    if (!d.ai) return err(503, "ai_not_configured", "This deployment has no Workers AI binding.");
+
+    if (job !== null && !store) return err(503, "jobs_not_configured", "This deployment has no database for import jobs.");
+    const jobDeps = () => ({
+      store: store!,
+      bucket: d.bucket,
+      now,
+      limits: lim,
+      model: (messages: Message[]) => callModel(messages, lim.maxOutTokens, 0),
+    });
+    if (job === "read") return readJob(jobDeps(), url.pathname.slice(AI_IMPORT_PATH.length + 1), userId);
+
+    const body = await readBody(req, userId);
+    if (body instanceof Response) return body;
+
+    if (job === "start") {
+      const over = await overQuota(userId);
+      if (over) return over;
+      // Without a context (tests) the job still runs; the caller awaits it through the returned promise.
+      return startJob(jobDeps(), body, userId, (p) => (ctx ? ctx.waitUntil(p) : void p.catch(() => {})));
+    }
+
+    const read = readMessages(body.messages, lim.maxImageBytes);
+    if ("error" in read) return err(400, "bad_request", read.error);
+    const over = await overQuota(userId);
+    if (over) return over;
+
+    const requested = typeof body.max_tokens === "number" ? Math.floor(body.max_tokens) : lim.maxOutTokens;
+    const max_tokens = Math.max(1, Math.min(requested, lim.maxOutTokens));
+    const t = typeof body.temperature === "number" && Number.isFinite(body.temperature) ? body.temperature : 0.2;
+    const temperature = Math.max(0, Math.min(t, 1));
+
+    const out = await callModel(read.messages, max_tokens, temperature);
+    if (!out.ok) return err(502, "model_failed", out.code === "failed" ? "The model call failed. Try again." : "The model returned no text.");
+    if (store) {
+      // A usage row that fails to write must not cost the caller an answer they already paid for.
+      try {
+        await store.record(userId, { kind: "chat", inTokens: out.inTokens, outTokens: out.outTokens, neurons: out.neurons }, now());
+      } catch {
+        console.error("ai: could not record usage");
+      }
+    }
+    return json(200, out.reply);
   }
 
   return { handle };

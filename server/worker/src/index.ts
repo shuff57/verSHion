@@ -14,7 +14,8 @@ import { json as poolJson } from "./pool/shared.ts";
 import { poolNotifier } from "./poolmail.ts";
 import { adminAlert, makeMailer, queueReminder, type MailEnv } from "./mail.js";
 import { flushNoticeBacklog, noticeNewApplication } from "./notices.js";
-import { AI_DEFAULT_MODEL, createAi, type AiBinding } from "./ai/index.ts";
+import { AI_DEFAULT_MODEL, createAi, type AiBinding, type Limits } from "./ai/index.ts";
+import { pruneAi } from "./ai/jobs.ts";
 
 export interface Env extends MailEnv {
   DB: D1Database;
@@ -46,6 +47,12 @@ export interface Env extends MailEnv {
   AI_RELAY_KEY?: string;
   /** "1" turns Gemma 4's thinking mode on for the relay. Off by default (see src/ai/index.ts). */
   AI_THINKING?: string;
+  /** Quotas (docs/ai-harness-spec.md section 5). Each is a positive integer; unset or invalid keeps the default. */
+  AI_CHAT_PER_HOUR?: string;
+  AI_IMPORT_PER_DAY?: string;
+  AI_DAILY_NEURONS?: string;
+  AI_MAX_PAGES?: string;
+  AI_JOB_TTL_HOURS?: string;
 }
 
 /** The derived full-hash key, per secret value (one HKDF per isolate). */
@@ -164,6 +171,22 @@ export async function requireTrust(a: Auth, req: Request, min: Trust): Promise<P
   return p;
 }
 
+/** A positive integer from an env var, or undefined (so the default stands) when unset or not one. */
+function posInt(v: string | undefined): number | undefined {
+  const n = Number(v);
+  return v !== undefined && Number.isInteger(n) && n > 0 ? n : undefined;
+}
+
+function aiLimits(env: Env): Partial<Limits> {
+  const l: Partial<Limits> = {};
+  const set = <K extends keyof Limits>(k: K, v: number | undefined) => void (v !== undefined && (l[k] = v as Limits[K]));
+  set("chatPerHour", posInt(env.AI_CHAT_PER_HOUR));
+  set("importPerDay", posInt(env.AI_IMPORT_PER_DAY));
+  set("dailyNeurons", posInt(env.AI_DAILY_NEURONS));
+  set("maxPages", posInt(env.AI_MAX_PAGES));
+  return l;
+}
+
 async function handleFetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const hashKey = await poolHashKey(env);
   const { a, pool } = build(env, ctx, hashKey);
@@ -176,8 +199,18 @@ async function handleFetch(req: Request, env: Env, ctx: ExecutionContext): Promi
   const pre = a.preflight(req, POOL_METHODS);
   if (pre) return pre;
   // The AI relay (docs/ai-harness-spec.md §2): authenticated, no D1 and no share-core involved.
-  const ai = createAi({ ai: env.AI, model: env.AI_MODEL ?? AI_DEFAULT_MODEL, allowedOrigins: origins(env), authenticate: (r) => a.authenticate(r), relayKey: env.AI_RELAY_KEY, thinking: env.AI_THINKING === "1" });
-  const relayed = await ai.handle(req);
+  const ai = createAi({
+    ai: env.AI,
+    model: env.AI_MODEL ?? AI_DEFAULT_MODEL,
+    allowedOrigins: origins(env),
+    authenticate: (r) => a.authenticate(r),
+    relayKey: env.AI_RELAY_KEY,
+    thinking: env.AI_THINKING === "1",
+    db: env.DB,
+    bucket: env.POOL,
+    limits: aiLimits(env),
+  });
+  const relayed = await ai.handle(req, ctx);
   if (relayed) return a.withCors(req, relayed);
   // No hash key (POOL_HASH_KEY missing or too short): the pool refuses, never hashes unkeyed.
   if (hashKey === null && /^\/(items|blobs|circles)(\/|$)/.test(new URL(req.url).pathname))
@@ -203,6 +236,12 @@ export default {
     // Hourly: the summary for sign-up notices over the budget, and the pool's GC.
     await flushNoticeBacklog(env, c.scheduledTime);
     await pool.hourly();
+    // The AI relay's expired jobs and old usage rows. A failure here must not stop the daily stage below.
+    try {
+      await pruneAi(env.DB, env.POOL, c.scheduledTime, (posInt(env.AI_JOB_TTL_HOURS) ?? 72) * 3_600_000);
+    } catch {
+      console.error("ai: prune failed");
+    }
     // Daily (04:xx UTC): purge, and escalate an overdue queue or send the digest.
     if (new Date(c.scheduledTime).getUTCHours() === 4) {
       await a.purgeExpired();

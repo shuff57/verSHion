@@ -106,10 +106,13 @@ Limits (from the probe, plus headroom):
 `GET /ai/import/:id` →
 
 ```json
-{ "status": "queued|running|done|failed", "pages_done": 3, "pages_total": 10,
-  "result": { "doc": { … `ditto::import_text` wire shape … }, "warnings": ["…"] } }
+{ "status": "queued|running|done|failed", "pages_done": 3, "pages_total": 10, "error": null,
+  "result": { "pages": [ { "page": 1, "text": "<the model's Ditto JSON text>" }, { "page": 2, "error": "model_failed" } ] } }
 ```
 
+- The worker returns each page's **raw Ditto text**, not a parsed document: parsing and picture
+  cropping need the page raster, so the app feeds `text` to its own `ditto::import_text`. One parser.
+- Only the job's owner can read it; anyone else gets the same 404 as for a missing id.
 - Work runs in `ctx.waitUntil`, one page at a time (the model is the bottleneck, not the worker).
 - **Why a job:** 12–15 s/page warm, so 10 pages is 2+ minutes — beyond a single `fetch`, and the
   first call may add 36 s of cold start.
@@ -151,7 +154,6 @@ R2 (binding `POOL`, existing private bucket, served only through the Worker):
 
 | Key | Contents |
 |---|---|
-| `ai/jobs/<job_id>/page-000.png` | the page the app sent (kept for re-runs; expires with the job) |
 | `ai/jobs/<job_id>/result.json` | result when the D1 row would exceed 256 KB |
 
 Retention: jobs deleted after `AI_JOB_TTL_HOURS` (default 72) by the existing hourly cron.
@@ -269,6 +271,26 @@ live; the generator-fitting half is covered by `retry_fit` unit tests but has **
 against a live model yet. A real deployment (rather than the dev tunnel) is the way to finish it.
 - The app has not yet been driven through the GUI against the relay; the proof above is the
   endpoint the app calls, not a click-through.
+
+### Slice 4 — quota and import jobs, done 2026-10-30
+
+- **Quota** (`ai_usage`, migration `0117`): per principal `AI_CHAT_PER_HOUR` (120) answered chat turns,
+  per principal `AI_IMPORT_PER_DAY` (20) jobs, and the account-wide `AI_DAILY_NEURONS` (50 000) from UTC
+  midnight. Over a limit: 429 `rate_limited` or `quota_exhausted` with `Retry-After`, before any model
+  call. Counted from usage rows, so two requests racing at the line can both pass: a budget guard, not
+  an exact meter. If the quota cannot be read (migrations not applied) the relay **fails closed**: 503
+  `quota_unavailable`.
+- **Jobs** (`ai_jobs`, migration `0116`): `POST /ai/import`, `GET /ai/import/:id`, as in section 3. Pages
+  run one at a time in `ctx.waitUntil`; a failing page is reported on that page and the job still
+  finishes; a job that has not moved for 10 minutes reads as failed ("interrupted"). The quota is
+  re-checked before every page.
+- **Deviation from the plan:** the uploaded pages are **not** kept in R2 (they live in memory for the
+  run); only a result above 256 KB goes to R2. Re-running a job means uploading it again.
+- The worker's prompt is generated from `prompts/ditto-convert.md` (`node scripts/gen-ai-prompt.mjs`);
+  a test fails if they differ.
+- Hourly cron prunes jobs past `AI_JOB_TTL_HOURS` (72) with their R2 results, and usage past 90 days.
+- Not yet: the app does not call the job endpoints (it still converts page by page through the relay),
+  and migrations `0116`/`0117` are not applied to any remote database.
 
 ## 8. Acceptance
 
