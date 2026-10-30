@@ -216,8 +216,9 @@ export function createAi(d: AiDeps) {
       response_format: { type: "json_object" },
       max_tokens,
       temperature,
-      // The deployment's choice only. A per-request switch was tried and dropped: thinking on cost
-      // 2.7-4.5k tokens a page and still missed a picture's box that the prompt fix gets for free.
+      // The deployment's choice only. Per-request thinking was tried for the figure fitter and
+      // dropped: with the real ~45-parameter prompt it ran 280-400 s and often came back empty,
+      // while a two-sentence visible "reasoning" field in the answer fixed the same mistakes in ~15 s.
       chat_template_kwargs: { enable_thinking: d.thinking === true },
     };
     // Up to two tries: Workers AI sometimes throws, or returns an empty completion, on a call that

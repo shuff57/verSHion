@@ -1284,6 +1284,19 @@ mod tests {
     }
 
     #[test]
+    fn cfg_maps_the_relay_provider() {
+        let c = AiCfg::from(&settings("workers", "", "https://relay.example/ai/"));
+        assert_eq!(c.provider, "workers");
+        assert_eq!(c.base, "https://relay.example/ai");
+        assert_eq!(c.model, WORKERS_DEFAULT_MODEL);
+        assert!(c.uses_key(), "the relay needs its relay key");
+        assert!(c.key_source_help().contains("relay"));
+        // The aliases map to the same provider; an empty base stays empty so chat_turns says to set it.
+        assert_eq!(AiCfg::from(&settings("relay", "", "")).provider, "workers");
+        assert_eq!(AiCfg::from(&settings("workers-ai", "", "")).base, "");
+    }
+
+    #[test]
     fn cfg_maps_the_three_providers() {
         let c = AiCfg::from(&settings("ollama", "", ""));
         assert_eq!(c.provider, "ollama");
@@ -1311,19 +1324,6 @@ mod tests {
         assert!(AiCfg::from(&settings("openrouter", "", "")).key_source_help().contains(OPENROUTER_KEY_ENV));
         assert!(AiCfg::from(&settings("custom", "", "")).key_source_help().contains(CUSTOM_KEY_ENV));
         assert!(AiCfg::from(&settings("ollama", "", "")).key_source_help().contains("no API key"));
-    #[test]
-    fn cfg_maps_the_relay_provider() {
-        let c = AiCfg::from(&settings("workers", "", "https://relay.example/ai/"));
-        assert_eq!(c.provider, "workers");
-        assert_eq!(c.base, "https://relay.example/ai");
-        assert_eq!(c.model, WORKERS_DEFAULT_MODEL);
-        assert!(c.uses_key(), "the relay needs its relay key");
-        assert!(c.key_source_help().contains("relay"));
-        // The aliases map to the same provider; an empty base stays empty so chat_turns says to set it.
-        assert_eq!(AiCfg::from(&settings("relay", "", "")).provider, "workers");
-        assert_eq!(AiCfg::from(&settings("workers-ai", "", "")).base, "");
-    }
-
     }
 
     #[test]
