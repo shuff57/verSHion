@@ -656,5 +656,25 @@ land on the same height in one gap (repro: `P0->P1 / P1->P2 / P2->P3 / X0->P2 / 
 X1->P2's arrival and P1->P3's departure sat 1 px apart and overlapped 120 px, against 28 px apart before). Round 4
 slots every run per gap: departures and arrivals in a gap alike take their own height inside that gap's usable band,
 so no two runs can share a height and overlap into a false link. A test walks every pair of runs and fails on any
-near-equal height with overlapping x. Recorded limit: past roughly 14 long links through one gap the slots sit
-closer than the 1.5 px stroke; such a web is already a wide strip. Census: only food-web's two hashes moved.
+near-equal height with overlapping x. Recorded limit: past a certain number of runs through one gap the slots sit
+closer than the stroke — the exact counts are in the round-4 note below. Census: only food-web's two hashes moved.
+
+Food-web verification round 4 (2026-10-29): **PASS as a fix** — the per-gap slots fixed the MED (the old 1 px pair is
+6.25 px apart at Medium), the census and suite were confirmed independently, and no blocker or major was found. Two
+cheap corrections from its LOWs. First, the packing reserved an arrowhead's clearance at *both* ends of every gap;
+only an arrival has to clear a head, so arrivals now carry that margin and departures only a small box margin,
+recovering part of each gap (the usable band is 47·lab − 11 − 4·lab px, against 47·lab − 22 before). Second, the
+limit recorded in the round-3 note was Medium-only and its "already a wide strip" defence was wrong: the critic
+measured the old packing against the real stroke (1.5 px Medium, 2.1 Large, 1.2 Small) and found it banded from about
+15 runs per gap at Medium, 11 at Small and 19 at Large, and a dense 11-name web can put 25 long links through one
+gap — the limit is one-dimensional packing, not the canvas. (Those counts are the critic's, for the old margins; the
+new margins' limits are worked from the formula below, not re-measured.) The test now sweeps all three label sizes at
+the true stroke and asserts the run count. Census: only food-web's two hashes moved.
+
+Food-web density decision (2026-10-29, owner): a web whose routed runs cannot keep a stroke plus 1 px apart in any
+gap is **refused**, not drawn. The canvas says "The food web could not be drawn: Too many links skip a trophic level
+to keep their runs apart." and asks for fewer level-skipping links — the same policy as the 24-name cap, so an
+ambiguous picture never ships. From the formula (band = 47·lab − 11 − 4·lab, refuse when band / (n + 1) < stroke + 1) a
+gap is refused from 10 runs at Small, 12 at Medium and 15 at Large, and draws up to 9, 11 and 14; an ordinary web is
+far below it. The refusal canvas is shared with the parse refusals (`refusal()`); a test pins that twelve
+long links are refused with no boxes drawn while eight still draw, and the PNG export gains a `dense-refused` case.
