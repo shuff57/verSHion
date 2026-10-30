@@ -838,3 +838,23 @@ fixed, not fitted to a neuron type; the channel and refractory brackets are plac
 12 ms is refused; the refusal for "no clear place for a pointer" and for a stimulus pointer touching the dip are never reached by any
 input I found (they guard the search); the controls are text boxes, not sliders; the egui editor itself was not driven; text
 widths in the audit are an estimate of Noto Sans, not the rendered face.
+
+### Phase 4 biology: verification rounds 6-11 (hardy-weinberg, chi-square-fit, enzyme-kinetics, cladogram)
+Six more critic/builder rounds after the fifth pass, each on a frozen `git archive` with its own target dir (reports
+`2026-10-29-phase4-verify5.md` .. `2026-10-30-phase4-verify11.md`). Blockers/majors/minors: 6th 1/2/1, 7th 1/5/10, 8th 1/2/8,
+9th 0/3/6, 10th 1/0/7, **11th 0/0/3 (PASS, chi-square only)**. Commits `68a5ed7`, `dfcbd79`, `df9c7c2`, `48d7701`, `db37b61`.
+What changed: Hardy-Weinberg derives everything from one six-decimal p as an exact fraction; chi-square rounds each count once
+to six decimals and computes everything from that, prints plain only up to 15 digits, else scientific; the enzyme labels are
+placed by a collision box with thin-line penalties (half-rate label inside the plot, above the axis, off the Km row; givens wrap
+grows the readout offset); the cladogram lays mixed-script names out by real glyph advances (new data-only
+`noto_adv.rs`, generated from NotoSans-Regular.ttf) and sends what Noto Sans lacks to the numbered list. The repeating defect
+was a fix right for the reported case and wrong for its neighbour; two of the ninth round's three majors were regressions from
+the eighth round's fixes.
+Known residuals (recorded, not fixed): Hangul draws in the bundled font's faint face and at 0.92 em (gaps wider than a space in
+Han+Hangul names); rare CJK-adjacent blocks overlap; Devanagari mixed with Latin shows boxes; the enzyme half-rate fallback row
+can sit ~40 px above its line and the curve crosses haloed labels with a strong inhibitor; a 1-2 px touch of Km' against the
+marked point in rare seeds; ~3 of 2,000 dense slanted trees keep one struck ancestor label; chi-square Expected cells of 13-15
+digits can be wrong in the last digit in about 0.9% of very large tables (double-precision rounding; the sweep test tolerance
+is too loose to see it); the six-decimal note names counts the test does not use; chi-square chi-square printed at mixed
+precision when contributions are tiny. Not checked in any round: the live egui editor, the web renderer (no system Noto Sans
+there, so the width table may differ), PDF/DOCX export.
