@@ -120,11 +120,13 @@ pub fn printed_parts(g: &Gen, dec: i64) -> [f64; 3] {
 
 /// The decimal places the picture is printed at: `dec`, raised until no real frequency would print as zero — and, since
 /// round 3, until the allele frequencies themselves print honestly: p = 0.99 at one decimal place printed "1" beside a
-/// q of "0.01" and a genotype set that plainly does not come from p = 1.
+/// q of "0.01" and a genotype set that plainly does not come from p = 1. (round 6) With counts shown it is raised again
+/// until each printed fraction, times N, rounds to the count printed beside it: p = 0.34 printed "AA p² = 0.12
+/// (116 of 1000)", and 0.12 × 1000 is 120, not 116. Raising the precision to three makes 0.116 × 1000 = 116.
 pub fn shown_dec(p: &Params) -> i64 {
     let g = generations(p);
     let dec = p.i("dec").clamp(1, 3);
-    let (p0, _, _, _, _) = given(p);
+    let (p0, n, _, _, show_counts) = given(p);
     let q0 = 1.0 - p0;
     let collapses = |v: f64, d: i64| {
         let shown = num(v, d).replace('\u{2212}', "-").parse::<f64>().unwrap_or(v);
@@ -134,8 +136,31 @@ pub fn shown_dec(p: &Params) -> i64 {
         let pr = printed_parts(gg, d);
         [gg.dom, gg.het, gg.rec].iter().zip(pr.iter()).any(|(ex, sh)| *ex != 0.0 && *sh == 0.0)
     };
+    // the printed fraction is what a reader multiplies by N, so it must give back the count on the same line: the
+    // count is a nearest rounding of the exact frequency × N, the fraction a nearest rounding at some precision, and
+    // the two only agree when that precision is fine enough (round 6 blocker: "0.43 (435 of 1000)", but 435/1000
+    // rounds to 0.44)
+    let agrees = |gg: &Gen, d: i64| {
+        let pr = printed_parts(gg, d);
+        let c = counts([gg.dom, gg.het, gg.rec], n);
+        (0..3).all(|i| (pr[i] * n as f64).round() == c[i] as f64)
+    };
+    // The precision at which the page is honest: no real part prints as zero, the allele frequencies do not collapse,
+    // and — when counts are shown — each fraction times N gives the count beside it. Prefer the typed precision, then
+    // finer ones (the reported cases need three or four decimals); only a population too small to hold the fraction
+    // at the typed precision (n = 10 cannot hold 0.25) makes a coarser one the honest choice.
+    let fits = |d: i64| {
+        !needs_more(&g[0], d)
+            && !collapses(p0, d)
+            && !collapses(q0, d)
+            && (!show_counts || agrees(&g[0], d))
+    };
+    for d in (dec..=6).chain((1..dec).rev()) {
+        if fits(d) { return d; }
+    }
+    // nothing fits (a pathological tie): keep the never-zero precision, the pre-round-6 behaviour
     let mut dp = dec;
-    while dp < 5 && (needs_more(&g[0], dp) || collapses(p0, dp) || collapses(q0, dp)) { dp += 1; }
+    while dp < 6 && (needs_more(&g[0], dp) || collapses(p0, dp) || collapses(q0, dp)) { dp += 1; }
     dp
 }
 
@@ -201,6 +226,14 @@ fn val(v: f64, dec: i64) -> String {
     s
 }
 
+/// A frequency at a fixed number of decimals, so the three parts of a row line up. (round 6) `val` trims trailing
+/// zeros, so a selection row printed "AA 0.53" beside "Aa 0.4" and a generation list read "0.99, 0.9901"; the page must
+/// carry one precision. `dec` is the page precision (`shown_dec`), which already keeps every real part off "0".
+fn fixed(v: f64, dec: i64) -> String {
+    let d = dec.clamp(0, 6) as usize;
+    format!("{v:.d$}").replace('-', "\u{2212}")
+}
+
 pub struct Report {
     /// x of the boundary between the two alleles in the gene pool, in pixels (the drag handle).
     pub split: f64,
@@ -219,7 +252,11 @@ pub fn build(p: &Params) -> (String, Report) {
 
     let rows_y0 = GEN_Y0 + gens as f64 * GEN_H + (gens.max(1) - 1) as f64 * GEN_GAP + 44.0;
     let extra_rows = if sel { 2 } else { 1 };
-    let w = (W * (1.0 + 0.55 * (f - 1.0))).max(W);
+    // (round 6) the bars grow with the labels. The canvas widened at Large while the bars stayed 452 px, so a segment
+    // that carried its label at Medium lost it at Large: a size control that removes annotations instead of enlarging
+    // them. Keeping the bar width and the label width in the same ratio means a labelled segment stays labelled.
+    let bar_w = BAR_W * f;
+    let w = (BAR_X + bar_w + 40.0).max(W);
     let mut d = Doc::new(w, rows_y0 + (4.0 + extra_rows as f64) * ROW_H * f + 10.0);
     d.describe(
         "Hardy-Weinberg",
@@ -245,9 +282,9 @@ pub fn build(p: &Params) -> (String, Report) {
 
     // the gene pool: the two alleles at their frequencies, always drawn because p is given
     let q0 = 1.0 - p0;
-    let split = BAR_X + p0 * BAR_W;
-    d.rect(BAR_X, POOL_Y, p0 * BAR_W, POOL_H, allele_a, ink, 1.4);
-    d.rect(split, POOL_Y, q0 * BAR_W, POOL_H, "#ffffff", ink, 1.4);
+    let split = BAR_X + p0 * bar_w;
+    d.rect(BAR_X, POOL_Y, p0 * bar_w, POOL_H, allele_a, ink, 1.4);
+    d.rect(split, POOL_Y, q0 * bar_w, POOL_H, "#ffffff", ink, 1.4);
     d.raw(&text_el(24.0, POOL_Y + 18.0, 13.0 * f, "start", ink, "Gene pool"));
     // the precision the whole page prints at: raised until no real frequency prints as zero and p and q print honestly
     // (round 3: at one decimal place p = 0.99 printed "1" beside q = 0.01)
@@ -273,11 +310,11 @@ pub fn build(p: &Params) -> (String, Report) {
         let mut seg = [(0.0f64, 0.0f64); 3];
         let mut x = BAR_X;
         for i in 0..3 {
-            let wseg = fr[i] * BAR_W;
+            let wseg = fr[i] * bar_w;
             seg[i] = (x, wseg);
             if ans && wseg > 0.0 {
                 d.rect(x, y, wseg, GEN_H, geno[i], ink, 1.2);
-                let label = format!("{} {}", names[i], val(shown[i], dp));
+                let label = format!("{} {}", names[i], fixed(shown[i], dp));
                 let tw = label.chars().count() as f64 * 12.0 * f * 0.55;
                 // inside only when it fits: a real 0.0004 belongs in the readout, not squeezed into 0.2 px
                 if tw <= wseg - 8.0 {
@@ -296,7 +333,7 @@ pub fn build(p: &Params) -> (String, Report) {
         }
         if !ans {
             // the row keeps its frame: an empty bar with the three divisions marked in the readout
-            d.rect(BAR_X, y, BAR_W, GEN_H, "none", ink, 1.2);
+            d.rect(BAR_X, y, bar_w, GEN_H, "none", ink, 1.2);
         }
         segments.push(seg);
     }
@@ -323,9 +360,9 @@ pub fn build(p: &Params) -> (String, Report) {
     for (i, (name, formula, v)) in [("AA", "p\u{b2}", shown[0]), ("Aa", "2pq", shown[1]), ("aa", "q\u{b2}", shown[2])].iter().enumerate() {
         rows.push(if ans {
             if show_counts {
-                format!("{name}  {formula} = {}  ({} of {})", val(*v, dp), c[i], n)
+                format!("{name}  {formula} = {}  ({} of {})", fixed(*v, dp), c[i], n)
             } else {
-                format!("{name}  {formula} = {}", val(*v, dp))
+                format!("{name}  {formula} = {}", fixed(*v, dp))
             }
         } else if show_counts {
             format!("{name}  {formula} = {BLANK}  ({BLANK} of {n})")
@@ -340,8 +377,9 @@ pub fn build(p: &Params) -> (String, Report) {
     });
     if sel {
         // (round 4) at the page's own precision, not the typed one: p = 0.99 in one decimal place printed a column of
-        // "1"s beside givens that plainly said 0.99
-        let ps: Vec<String> = if ans { g.iter().map(|x| val(x.p, dp)).collect() } else { (0..gens).map(|_| BLANK.to_string()).collect() };
+        // "1"s beside givens that plainly said 0.99. (round 6) at a fixed number of decimals, so the column does not
+        // mix "0.99" with "0.9901"
+        let ps: Vec<String> = if ans { g.iter().map(|x| fixed(x.p, dp)).collect() } else { (0..gens).map(|_| BLANK.to_string()).collect() };
         rows.push(format!("p in each generation  {}", ps.join(", ")));
     }
     for (i, line) in rows.iter().enumerate() {
@@ -362,10 +400,12 @@ pub fn build(p: &Params) -> (String, Report) {
 pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
     if id != ID { return None; }
     let rep = build(p).1;
+    // (round 6) the bars grow with the label size, so the drag inverts against the drawn width, not the base one
+    let bar_w = BAR_W * svg::label_factor(p.s("label_size"));
     Some(vec![Handle::knob((rep.split, POOL_Y + POOL_H / 2.0), "Drag the boundary to set the frequency of the dominant allele", move |p, pt| {
         if !pt.0.is_finite() { return; }
-        let f = ((pt.0 - BAR_X) / BAR_W).clamp(0.01, 0.99);
-        p.set_f("p", (f * 100.0).round() / 100.0);
+        let frac = ((pt.0 - BAR_X) / bar_w).clamp(0.01, 0.99);
+        p.set_f("p", (frac * 100.0).round() / 100.0);
     })])
 }
 
@@ -534,6 +574,103 @@ mod tests {
             let c = counts([g[0].dom, g[0].het, g[0].rec], n);
             assert_eq!(c.iter().sum::<usize>(), n, "p = {p0}, n = {n}: {c:?}");
         }
+    }
+
+    #[test]
+    fn a_count_beside_a_fraction_is_the_fraction_times_the_population() {
+        // (round 6 blocker) p = 0.34 printed "AA p² = 0.12 (116 of 1000)" — 0.12 × 1000 is 120 — and
+        // "aa q² = 0.43 (435 of 1000)" where 435/1000 rounds to 0.44. The fraction is raised in precision until its
+        // product with N gives the count on the same line, and the three fractions still add to 1.
+        let grid: Vec<(f64, i64)> = vec![
+            (0.34, 1000), (0.06, 9999), (0.07, 1000), (0.6, 1000), (0.01, 1000),
+            (0.3, 10), (0.95, 9999), (0.5, 10000), (0.333, 37), (0.5, 10), (0.99, 1000),
+        ];
+        for (p0, n) in grid {
+            let p = with(&[f("p", p0), i("n", n), b("counts", true)]);
+            let g = generations(&p);
+            let dp = shown_dec(&p);
+            let parts = printed_parts(&g[0], dp);
+            let c = counts([g[0].dom, g[0].het, g[0].rec], n as usize);
+            assert!((parts.iter().sum::<f64>() - 1.0).abs() < 1e-9, "p = {p0}, n = {n}, dp = {dp}: {parts:?} do not sum to 1");
+            for i in 0..3 {
+                assert_eq!(
+                    (parts[i] * n as f64).round() as usize, c[i],
+                    "p = {p0}, n = {n}, dp = {dp}: part {i} prints {} which × {n} is not the count {}", parts[i], c[i]
+                );
+            }
+        }
+        // the reported case, as printed
+        let t = texts(&render_of(&[f("p", 0.34), i("n", 1000), b("counts", true)]));
+        assert!(t.contains("AA  p\u{b2} = 0.116  (116 of 1000)"), "{t}");
+        assert!(t.contains("aa  q\u{b2} = 0.435  (435 of 1000)"), "{t}");
+        assert!(!t.contains("0.12  (116"), "the fraction still contradicts its count: {t}");
+        // and the p² = 0.0036 case that used to print 0.01 beside "36 of 9999"
+        let t = texts(&render_of(&[f("p", 0.06), i("n", 9999), b("counts", true)]));
+        assert!(t.contains("AA  p\u{b2} = 0.0036  (36 of 9999)"), "{t}");
+    }
+
+    /// The bar labels: text bodies that start with a genotype name and a number (not the readout's "AA p²").
+    fn bar_labels(svg: &str) -> Vec<String> {
+        texts(svg)
+            .lines()
+            .filter(|l| {
+                (l.starts_with("AA ") || l.starts_with("Aa ") || l.starts_with("aa "))
+                    && l.chars().nth(3).map(|c| c.is_ascii_digit()).unwrap_or(false)
+            })
+            .map(|l| l.to_string())
+            .collect()
+    }
+
+    #[test]
+    fn no_labelled_segment_loses_its_label_when_the_labels_grow() {
+        // (round 6 major) at Large the canvas widened but the bars did not, so "aa 0.16" was drawn at Medium and gone
+        // at Large. The bars now grow with the labels, so every segment labelled at Medium is labelled at Large.
+        for case in [vec![], vec![f("p", 0.34)], vec![f("p", 0.5)], vec![f("p", 0.3)]] {
+            let mut med = case.clone();
+            let mut big = case.clone();
+            med.push(s("label_size", "Medium"));
+            big.push(s("label_size", "Large"));
+            let medium = bar_labels(&render_of(&med));
+            let large = bar_labels(&render_of(&big));
+            for l in &medium {
+                assert!(large.contains(l), "{} is drawn at Medium but lost at Large (Large labels: {large:?})", l);
+            }
+        }
+        // the reported case: p = 0.6 at Large keeps all three
+        let large = bar_labels(&render_of(&[s("label_size", "Large")]));
+        assert!(large.contains(&"aa 0.16".to_string()), "aa 0.16 is lost at Large: {large:?}");
+        assert!(large.contains(&"AA 0.36".to_string()), "{large:?}");
+        // and the Print selection case keeps "AA 0.16" in generation 1
+        let sel = render_of(&[f("p", 0.4), s("sel", "against the recessive phenotype"), i("gens", 6), s("style", "Print"), s("label_size", "Large")]);
+        assert!(bar_labels(&sel).contains(&"AA 0.16".to_string()), "AA 0.16 is lost in the selection bar: {:?}", bar_labels(&sel));
+    }
+
+    #[test]
+    fn a_row_of_frequencies_carries_one_precision() {
+        // (round 6 minor) "AA 0.53" beside "Aa 0.4" in a selection row, and "0.99, 0.9901" in the generation list,
+        // because `val` trimmed trailing zeros. Every part of a row now prints at the page precision.
+        let sel = render_of(&[f("p", 0.4), s("sel", "against the recessive phenotype"), i("gens", 6), s("style", "Print"), s("label_size", "Large")]);
+        let dp = shown_dec(&with(&[f("p", 0.4), s("sel", "against the recessive phenotype"), i("gens", 6)])) as usize;
+        for l in bar_labels(&sel) {
+            let num = l.split_whitespace().nth(1).unwrap_or("");
+            let dec = num.split('.').nth(1).unwrap_or("");
+            assert_eq!(dec.chars().count(), dp, "{l:?} does not carry the page precision {dp}");
+        }
+        assert!(texts(&sel).contains("Aa 0.40"), "{}", texts(&sel));
+        assert!(!texts(&sel).contains("Aa 0.4\n"), "{}", texts(&sel));
+        // the one-decimal, selection, p = 0.99 case: the generation list must not mix "0.99" with "0.9901"
+        let p99 = with(&[f("p", 0.99), i("dec", 1), s("sel", "against the recessive phenotype"), i("gens", 6), b(SHOW_ANSWERS, true)]);
+        let t = texts(&render_of(&[f("p", 0.99), i("dec", 1), s("sel", "against the recessive phenotype"), i("gens", 6), b(SHOW_ANSWERS, true)]));
+        let dp = shown_dec(&p99) as usize;
+        let line = t.lines().find(|l| l.starts_with("p in each generation")).unwrap_or("");
+        let list = line.rsplit("  ").next().unwrap_or("");
+        for tok in list.split(", ") {
+            let dec = tok.split('.').nth(1).unwrap_or("");
+            assert_eq!(dec.chars().count(), dp, "{tok:?} in {line:?} does not carry {dp} decimals");
+        }
+        // and the readout row for p = 0.99 carries the page precision too
+        assert!(t.contains("AA  p\u{b2} = 0.9801"), "{t}");
+        assert!(!t.contains("AA  p\u{b2} = 0.98\n"), "{t}");
     }
 
     #[test]

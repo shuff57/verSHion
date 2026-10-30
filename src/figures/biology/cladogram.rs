@@ -14,6 +14,11 @@ const LEAF_GAP: f64 = 26.0;
 const STEP_X: f64 = 92.0;
 /// What the page says under a tree it could not read.
 const NO_TREE: &str = "Nothing is drawn until the brackets balance.";
+/// The shared text cap (`Params::normalize` cuts a `Kind::Text` value to 500 characters). A tree longer than this is
+/// cut mid-name before it reaches the parser, so the figure cannot blame the brackets — it has to say the tree is too
+/// long. (round 6 minor)
+const MAX_TREE_CHARS: usize = 500;
+const TOO_LONG: &str = "The box holds at most 500 characters. Shorten the tree, or split it into smaller ones.";
 
 pub fn defs() -> Vec<FigureDef> {
     vec![FigureDef {
@@ -191,18 +196,33 @@ fn walk(n: &Node, maxd: usize, row: &mut usize, p: &mut Placed) -> (usize, f64) 
 /// A string's width at `size` px, summed per glyph: a run of wide capitals is nearly twice the width of the same count
 /// of lower-case letters, and measuring by character count clipped `(WWWW…)` off the canvas (round 5).
 pub fn text_w(s: &str, size: f64) -> f64 {
-    s.chars()
-        .map(|c| {
-            size * match c {
-                'W' | 'M' | 'm' | 'w' => 0.95,
-                'A'..='Z' => 0.72,
-                '0'..='9' => 0.58,
-                ' ' => 0.28,
-                'i' | 'j' | 'l' | 't' | 'f' | 'r' | '.' | ',' | ';' | ':' | '\'' | '!' | '|' => 0.32,
-                _ => 0.56,
-            }
-        })
-        .sum()
+    s.chars().map(|c| size * glyph_em(c)).sum()
+}
+
+/// (round 6) The width of one glyph in em. The Latin table is unchanged; CJK ideographs, kana, Hangul and full-width
+/// forms draw at about one em, and emoji wider still, so measuring a Japanese name at the 0.56 em of an unknown Latin
+/// glyph made the canvas ~45 % too narrow and clipped both the leaf and the "Left to right:" line.
+fn glyph_em(c: char) -> f64 {
+    match c {
+        'W' | 'M' | 'm' | 'w' => 0.95,
+        'A'..='Z' => 0.72,
+        '0'..='9' => 0.58,
+        ' ' => 0.28,
+        'i' | 'j' | 'l' | 't' | 'f' | 'r' | '.' | ',' | ';' | ':' | '\'' | '!' | '|' => 0.32,
+        '\u{1100}'..='\u{11ff}'          // Hangul Jamo
+        | '\u{2e80}'..='\u{2fdf}'        // CJK radicals, Kangxi radicals
+        | '\u{3000}'..='\u{303f}'        // CJK punctuation
+        | '\u{3040}'..='\u{30ff}'        // Hiragana and Katakana
+        | '\u{3400}'..='\u{4dbf}'        // CJK Extension A
+        | '\u{4e00}'..='\u{9fff}'        // CJK Unified Ideographs
+        | '\u{a960}'..='\u{a97f}'        // Hangul Jamo Extended-A
+        | '\u{ac00}'..='\u{d7ff}'        // Hangul syllables
+        | '\u{f900}'..='\u{faff}'        // CJK compatibility ideographs
+        | '\u{fe30}'..='\u{fe4f}'        // CJK compatibility forms
+        | '\u{ff00}'..='\u{ffef}' => 1.0, // full-width forms
+        _ if c as u32 >= 0x1f000 => 1.15, // emoji and pictographs
+        _ => 0.56,
+    }
 }
 
 /// Greedy word wrap to a width in px; a word wider than the line takes a line of its own.
@@ -237,6 +257,11 @@ pub fn leaf_order(root: &Node, max: f64, size: f64) -> Vec<String> {
 }
 
 pub fn warnings(p: &Params) -> Vec<String> {
+    // (round 6 minor) a tree at the shared cap was cut before the parser saw it: the figure said "A bracket is never
+    // closed" about a tree the student typed balanced. Say what actually happened.
+    if p.s("tree").chars().count() >= MAX_TREE_CHARS {
+        return vec![format!("The tree is too long: the box holds at most {MAX_TREE_CHARS} characters, so it was cut and cannot be drawn. Shorten it, or split it into smaller trees.")];
+    }
     match parse(p.s("tree")) {
         Ok(n) => {
             if n.is_leaf() { vec!["The tree is a single name: put two or more inside brackets to make a group.".to_string()] } else { Vec::new() }
@@ -260,7 +285,8 @@ pub fn build(p: &Params) -> String {
     let branch = if print { "#333333" } else { BRANCH };
     let leaf_col = if print { "#111111" } else { LEAF };
 
-    let node = parse(p.s("tree"));
+    let too_long = p.s("tree").chars().count() >= MAX_TREE_CHARS;
+    let node = if too_long { Err(TOO_LONG.to_string()) } else { parse(p.s("tree")) };
     let maxd = node.as_ref().map(height).unwrap_or(0);
     let n_leaves = node.as_ref().map(|n| leaves(n).len()).unwrap_or(1).max(1);
     // (round 5) measured by width, not by characters (see `text_w`)
@@ -300,7 +326,7 @@ pub fn build(p: &Params) -> String {
     let err_max = (w - 48.0).max(60.0);
     let below = match &node {
         Ok(root) => leaf_order(root, leaf_max, 12.0 * lab).len().max(1),
-        Err(e) => wrap_w(e, err_max, 13.0 * lab).len() + wrap_w(NO_TREE, err_max, 12.0 * lab).len(),
+        Err(e) => wrap_w(e, err_max, 13.0 * lab).len() + if too_long { 0 } else { wrap_w(NO_TREE, err_max, 12.0 * lab).len() },
     };
     let mut d = Doc::new(w, h + (14.0 + below as f64 * 18.0).max(62.0) * lab);
     d.describe("Cladogram", "A branching tree of the names typed, with the leaves in the order they were written");
@@ -335,7 +361,10 @@ pub fn build(p: &Params) -> String {
             }
         }
         Err(e) => {
-            d.raw(&text_el(24.0, 46.0, 13.0 * lab, "start", if print { "#555555" } else { ERR }, "The tree could not be read:"));
+            // (round 6 minor) a tree cut at the shared cap never reached the parser: say it is too long, not that a
+            // bracket is unclosed
+            let head = if too_long { "The tree is too long:" } else { "The tree could not be read:" };
+            d.raw(&text_el(24.0, 46.0, 13.0 * lab, "start", if print { "#555555" } else { ERR }, head));
             let mut y = 70.0 * lab;
             for line in wrap_w(e, err_max, 13.0 * lab) {
                 d.raw(&text_el(24.0, y, 13.0 * lab, "start", ink, &line));
@@ -343,10 +372,12 @@ pub fn build(p: &Params) -> String {
             }
             // (round 2) after the reason, not at a fixed row it used to overprint; (round 4) wrapped like the reason,
             // which at Large ran off the 360 px canvas
-            let mut ny = y + 8.0 * lab;
-            for line in wrap_w(NO_TREE, err_max, 12.0 * lab) {
-                d.raw(&text_el(24.0, ny, 12.0 * lab, "start", ink, &line));
-                ny += 15.0 * lab;
+            if !too_long {
+                let mut ny = y + 8.0 * lab;
+                for line in wrap_w(NO_TREE, err_max, 12.0 * lab) {
+                    d.raw(&text_el(24.0, ny, 12.0 * lab, "start", ink, &line));
+                    ny += 15.0 * lab;
+                }
             }
         }
     }
@@ -621,6 +652,55 @@ mod tests {
         assert!(texts(&render_of(&[s("tree", "((A, B), C)Root")])).contains("Root"));
         // an unlabelled tree draws no such label
         assert!(place(&parse("((A, B), C)").unwrap()).nodes.is_empty());
+    }
+
+    #[test]
+    fn a_name_that_is_not_latin_fits_the_canvas() {
+        // (round 6 major) every non-ASCII glyph was measured at 0.56 em, so a Japanese name sized its canvas ~45 % too
+        // narrow and ran off the right edge, the leaf and the "Left to right:" line alike.
+        let name = "日本語の名前がとても長い場合のテストですこれはどうなるでしょうか";
+        for tree in [format!("({name}, B)"), name.to_string()] {
+            for size in ["Small", "Medium", "Large"] {
+                let svg = render_of(&[("tree", Value::S(tree.clone())), ("label_size", Value::S(size.to_string()))]);
+                let w = {
+                    let at = svg.find("width=\"").expect("width") + 7;
+                    svg[at..].split('"').next().unwrap().parse::<f64>().unwrap()
+                };
+                for (x, _y, sz, anchor, text) in boxes(&svg) {
+                    let n = text_w(&text, sz) * 1.05;
+                    let right = match anchor.as_str() { "end" => x, "middle" => x + n / 2.0, _ => x + n };
+                    assert!(right <= w + 1.0, "{tree:?} at {size}: {text:?} ends at {right:.1} on a {w} canvas");
+                }
+                // the whole name is on the page, not cut at the edge
+                assert!(texts(&svg).contains(name), "{tree:?} at {size}: the name is cut: {}", texts(&svg));
+            }
+        }
+        // the Latin cases the round-5 fix already held still fit (no regression in the table)
+        let svg = render_of(&[s("tree", &format!("({})", "W".repeat(29)))]);
+        let w = { let at = svg.find("width=\"").unwrap() + 7; svg[at..].split('"').next().unwrap().parse::<f64>().unwrap() };
+        for (x, _y, sz, anchor, text) in boxes(&svg) {
+            let n = text_w(&text, sz) * 1.05;
+            let right = match anchor.as_str() { "end" => x, "middle" => x + n / 2.0, _ => x + n };
+            assert!(right <= w + 1.0, "{text:?} ends at {right:.1} on a {w} canvas");
+        }
+    }
+
+    #[test]
+    fn a_tree_cut_at_the_text_cap_says_it_is_too_long() {
+        // (round 6 minor) the shared 500-character text cap cut the typed tree mid-name, and the page blamed the
+        // brackets. It must name the real cause.
+        let long = format!("({})", (0..130).map(|i| format!("S{i}")).collect::<Vec<_>>().join(", "));
+        let p = with(&[s("tree", &long)]);
+        assert_eq!(p.s("tree").chars().count(), MAX_TREE_CHARS, "the fixture is not cut at the cap");
+        let t = texts(&render_of(&[s("tree", &long)]));
+        assert!(t.contains("The tree is too long"), "{t}");
+        assert!(!t.contains("A bracket is never closed"), "{t}");
+        assert!(!t.contains("until the brackets balance"), "{t}");
+        assert!(warnings(&p).iter().any(|w| w.contains("too long")), "{:?}", warnings(&p));
+        // a tree under the cap still draws, and a genuinely unbalanced one still blames the brackets
+        let ok = texts(&render_of(&[s("tree", "(A, B)")]));
+        assert!(ok.contains("2 leaves"), "{ok}");
+        assert!(texts(&render_of(&[s("tree", "(A, B")])).contains("A bracket is never closed"), "{}", texts(&render_of(&[s("tree", "(A, B")])));
     }
 
     #[test]

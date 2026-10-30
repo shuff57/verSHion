@@ -261,12 +261,15 @@ pub fn build(p: &Params) -> (String, Report) {
         }
         let vmax_box = box_around(f.right() - 4.0, vmax_w, "end", vmax_y, 12.0 * lab);
         d.raw(&format!(r##"<line x1="{:.2}" y1="{vy:.2}" x2="{:.2}" y2="{vy:.2}" stroke="{curve}" stroke-width="1.4" stroke-dasharray="7 5"/>"##, f.left(), f.right()));
-        d.raw(&text_el(f.right() - 4.0, vmax_y, 12.0 * lab, "end", curve, &vmax_text));
+        // (round 6) the asymptote label sits on its own dashed line and the curve runs under it: it carries the same
+        // thin halo as the half-rate and rate labels, so a drawn line never strikes through it
+        d.raw(&text_el_halo(f.right() - 4.0, vmax_y, 12.0 * lab, "end", curve, &vmax_text));
         if km_a <= smax {
             let kx = f.px(km_a);
             d.raw(&format!(r##"<line x1="{kx:.2}" y1="{:.2}" x2="{kx:.2}" y2="{half:.2}" stroke="{curve}" stroke-width="1.2" stroke-dasharray="3 4"/>"##, f.bottom()));
             d.raw(&format!(r##"<line x1="{:.2}" y1="{half:.2}" x2="{kx:.2}" y2="{half:.2}" stroke="{curve}" stroke-width="1.2" stroke-dasharray="3 4"/>"##, f.left()));
-            d.raw(&text_el(km_lx, km_y, 12.0 * lab, km_anchor, curve, &km_text));
+            // (round 6) the dotted Km marker runs through the middle of "Km = n"; haloed like every other plot label
+            d.raw(&text_el_halo(km_lx, km_y, 12.0 * lab, km_anchor, curve, &km_text));
         } else {
             d.raw(&format!(r##"<line x1="{:.2}" y1="{half:.2}" x2="{:.2}" y2="{half:.2}" stroke="{curve}" stroke-width="1.2" stroke-dasharray="3 4"/>"##, f.left(), f.right()));
             // (round 6) the note clears the asymptote label too: it used to print through it with a Km past the axis
@@ -278,7 +281,7 @@ pub fn build(p: &Params) -> (String, Report) {
                     break;
                 }
             }
-            d.raw(&text_el(f.right() - 4.0, note_y, 12.0 * lab, "end", curve, &note_text));
+            d.raw(&text_el_halo(f.right() - 4.0, note_y, 12.0 * lab, "end", curve, &note_text));
         }
         // (round 5) whichever of the two sits under the point — the Km label at low [S] or the beyond-the-axis note —
         // is one of the boxes the other labels must clear.
@@ -336,6 +339,9 @@ pub fn build(p: &Params) -> (String, Report) {
     let mode = p.s("mode");
     let givens = if inhibited {
         let (_, _, _, _, factor, _) = given(p);
+        // (round 6 minor) the factor 1 + [I]/Ki is the multiplier both blanked pairs are computed from: on the student
+        // copy it is an answer, so it is blanked with them rather than handed over beside them
+        let factor_text = if ans { val(factor, 2) } else { BLANK.to_string() };
         format!(
             "Vmax = {}, Km = {}, {}, [I] = {}, Ki = {} (1 + [I]/Ki = {})",
             val(vmax, dec),
@@ -343,7 +349,7 @@ pub fn build(p: &Params) -> (String, Report) {
             mode,
             val(fin(p.f("inh"), 0.0, 10.0, 3.0), 1),
             val(fin(p.f("ki"), 0.2, 10.0, 1.0), 1),
-            val(factor, 2)
+            factor_text
         )
     } else {
         format!("Vmax = {}, Km = {}, curve drawn to [S] = {}", val(vmax, dec), val(km, dec), val(smax, dec))
@@ -688,6 +694,48 @@ mod tests {
         // the haloed copy carries the same text as the filled one, so nothing is doubled on the page
         let rate = label_box(&svg, "v = ");
         assert!(!rate.is_empty(), "the rate label is not drawn");
+    }
+
+    /// The bodies of every haloed text (the `fill="none"` outline copy).
+    fn halo_texts(svg: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        for part in svg.split(r##"fill="none" stroke="#fff""##).skip(1) {
+            let Some(i) = part.find('>') else { continue };
+            let body = &part[i + 1..];
+            let Some(k) = body.find("</text>") else { continue };
+            out.push(body[..k].to_string());
+        }
+        out
+    }
+
+    #[test]
+    fn the_km_and_vmax_labels_carry_the_halo_too() {
+        // (round 6 major) the dotted Km marker and the curves ran straight through "Km = 2" and "Vmax = 10": these two
+        // were the only plot labels without the thin halo the half-rate and rate labels got in rounds 3-4.
+        let cases: Vec<Vec<(&'static str, Value)>> = vec![
+            vec![],
+            vec![s("mode", "noncompetitive"), f("inh", 10.0), f("ki", 0.2)],
+            vec![s("mode", "noncompetitive"), f("inh", 3.0), f("ki", 1.0), f("vmax", 50.0), f("km", 0.2), f("smax", 2.0), f("at", 0.5), s("label_size", "Large"), ("dec", Value::I(1))],
+            vec![s("mode", "noncompetitive"), f("inh", 0.5), f("ki", 10.0), f("vmax", 100.0), f("km", 0.2), f("smax", 40.0), f("at", 1.0), ("dec", Value::I(3))],
+            vec![s("mode", "competitive"), f("inh", 4.0), f("ki", 1.0), f("km", 20.0)],
+        ];
+        for c in &cases {
+            let svg = render_of(c);
+            let hs = halo_texts(&svg);
+            assert!(hs.iter().any(|t| t.starts_with("Km")), "{c:?}: the Km label has no halo: {hs:?}");
+            assert!(hs.iter().any(|t| t.starts_with("Vmax")), "{c:?}: the Vmax label has no halo: {hs:?}");
+        }
+    }
+
+    #[test]
+    fn the_student_copy_blanks_the_inhibition_factor() {
+        // (round 6 minor) the student copy blanked both pairs of constants but handed over the multiplier they are
+        // computed from, "(1 + [I]/Ki = 5)"
+        let stu = texts(&render_of(&[b(SHOW_ANSWERS, false), s("mode", "competitive"), f("inh", 4.0), f("ki", 1.0)]));
+        assert!(stu.contains("1 + [I]/Ki = _____"), "{stu}");
+        assert!(!stu.contains("1 + [I]/Ki = 5"), "the derived factor leaked: {stu}");
+        let key = texts(&render_of(&[b(SHOW_ANSWERS, true), s("mode", "competitive"), f("inh", 4.0), f("ki", 1.0)]));
+        assert!(key.contains("1 + [I]/Ki = 5"), "{key}");
     }
 
     #[test]

@@ -126,7 +126,10 @@ pub fn fit(p: &Params) -> Fit {
         rows.push(Row { name, observed: o, expected: e, term });
     }
     let df = kept.saturating_sub(1);
-    let p = if !impossible && df > 0 && total_ratio > 0.0 && chi2.is_finite() {
+    // (round 6 blocker) with no observations every expected count is 0 · ratio = 0, so (O - E)² / E is 0/0 for every
+    // row: there is no statistic to compute. It used to fall through to χ² = 0, df = 1 and a confident "p = 1.00 …
+    // do not reject". A test with nothing observed cannot be run.
+    let p = if total_obs > 0.0 && !impossible && df > 0 && total_ratio > 0.0 && chi2.is_finite() {
         Some((1.0 - chisq_cdf(chi2, df as f64)).clamp(0.0, 1.0))
     } else {
         None
@@ -149,6 +152,12 @@ pub fn warnings(p: &Params) -> Vec<String> {
     }
     if obs.is_empty() {
         out.push("There are no observed counts to test.".to_string());
+    }
+    // (round 6 blocker) an all-zero observation column is not a fit: nothing has been counted, so there is nothing to
+    // test and no statistic to compute. Without this the editor said nothing and the page reported "p = 1.00 … do not
+    // reject" on a 0/0.
+    if !obs.is_empty() && obs.iter().all(|v| *v == 0.0) {
+        out.push("Every observed count is zero, so there is nothing to test and the statistic cannot be computed.".to_string());
     }
     if ratio.is_empty() {
         out.push("There is no expected ratio to test them against.".to_string());
@@ -323,6 +332,11 @@ pub fn build(p: &Params) -> String {
     // (round 5) A contribution can be enormous from a tiny expected count while every count is small, so the term is
     // part of the test too — printed in plain decimals it ran across the Expected and Total columns.
     let total_obs: f64 = f.rows.iter().map(|r| r.observed).sum();
+    // (round 6 blocker) nothing observed: every (O − E)² / E is 0/0, so there is no contribution, statistic or test.
+    let no_obs = total_obs == 0.0;
+    // a test that cannot run has no statistic to print: zero observations (0/0) or a single category (no degrees of
+    // freedom) leave χ² undefined rather than a meaningful 0.00
+    let no_test = no_obs || f.df == 0;
     let huge = total_obs.abs() >= 1e7 || f.rows.iter().any(|r| r.observed.abs() >= 1e7 || r.expected.abs() >= 1e7 || r.term.abs() >= 1e7);
     // (round 5) an overflowing value prints "inf"; the rest of the figure writes ∞
     let sci = |v: f64| if v == 0.0 { "0".to_string() } else if !v.is_finite() { "\u{221e}".to_string() } else { format!("{v:.2e}").replace('-', "\u{2212}") };
@@ -347,7 +361,7 @@ pub fn build(p: &Params) -> String {
     let term_text: Vec<String> = f
         .rows
         .iter()
-        .map(|r| if r.expected == 0.0 && r.observed > 0.0 { "\u{221e}".to_string() } else { fmt_term(r.term) })
+        .map(|r| if r.expected == 0.0 && r.observed > 0.0 { "\u{221e}".to_string() } else if no_test { "\u{2014}".to_string() } else { fmt_term(r.term) })
         .collect();
     // (round 5) an overflowed contribution is infinite too: the total must not print 0 beside rows that print ∞
     let infinite = f.impossible || term_text.iter().any(|t| t == "\u{221e}") || !f.chi2.is_finite();
@@ -377,12 +391,16 @@ pub fn build(p: &Params) -> String {
     // the total row: the counts add up, and the statistic is the sum of the contributions
     d.raw(&text_el(24.0, y, FS * lab, "start", ink, "Total"));
     d.raw(&text_el(col_o, y, FS * lab, "end", ink, &fmt_cnt(total_obs)));
-    d.raw(&text_el(col_e, y, FS * lab, "end", ink, &fmt_cnt(total_obs)));
+    // (round 6 minor) the Expected total is the answer column's total: blank it with the cells it totals on the student
+    // copy, or it hands back a number from a column the student is asked to fill
+    let expected_total = if ans { fmt_cnt(total_obs) } else { BLANK.to_string() };
+    d.raw(&text_el(col_e, y, FS * lab, "end", ink, &expected_total));
     // the total row: the counts add up, and the statistic is the sum of the contributions. (round 2) It must be the
     // number the line under the table prints, or the table's own total contradicts it: an impossible test has no
     // finite total at all
     let total_text = if !ans { BLANK.to_string() }
     else if infinite { "\u{221e}".to_string() }
+    else if no_test { "\u{2014}".to_string() }
     else if huge { sci(printed_chi2) }
     else { group(&col(printed_chi2, term_dec)) };
     d.raw(&text_el(col_t, y, FS * lab, "end", ink, &total_text));
@@ -390,8 +408,19 @@ pub fn build(p: &Params) -> String {
 
     // the givens: the ratio the expected counts come from, always printed (in the table's own notation when huge).
     // (round 6) a ratio part that is not a whole number keeps its decimals: rounding them to integers printed
-    // "1.5 : 2.5 : 1.5" as "2 : 2 : 2", which contradicts the expected counts beside it.
-    let ratio_text: Vec<String> = f.ratio.iter().map(|v| if (v - v.round()).abs() < 1e-9 { format!("{}", v.round() as i64) } else { format!("{v}") }).collect();
+    // "1.5 : 2.5 : 1.5" as "2 : 2 : 2", which contradicts the expected counts beside it. A part too large for an i64
+    // printed a saturated 9223372036854775807: it is written in scientific notation instead, the same way the expected
+    // counts built from it are.
+    let ratio_text: Vec<String> = f
+        .ratio
+        .iter()
+        .map(|v| {
+            if !v.is_finite() { "\u{221e}".to_string() }
+            else if (v - v.round()).abs() < 1e-9 && v.abs() < 1e15 { format!("{}", v.round() as i64) }
+            else if v.abs() >= 1e15 { format!("{v:.2e}").replace('-', "\u{2212}") }
+            else { format!("{v}").replace('-', "\u{2212}") }
+        })
+        .collect();
     let total_shown = if huge { sci(total_obs) } else { val(total_obs, 0) };
     let givens = format!("Expected from the ratio {} out of {} observations", ratio_text.join(" : "), total_shown);
     // (round 5) long ratio parts ran off the canvas: wrapped to the width, the lines stacking up into the gap above
@@ -406,6 +435,8 @@ pub fn build(p: &Params) -> String {
         if !ans { format!("Chi-square  \u{3c7}\u{b2} = {BLANK}") }
         else if f.impossible { "Chi-square  \u{3c7}\u{b2} = \u{221e}  (a category expected to be empty has counts)".to_string() }
         else if infinite { "Chi-square  \u{3c7}\u{b2} = \u{221e}  (the counts are too large)".to_string() }
+        else if no_obs { "Chi-square  \u{3c7}\u{b2} = \u{2014}  (no observations to test)".to_string() }
+        else if f.df == 0 { "Chi-square  \u{3c7}\u{b2} = \u{2014}  (no degrees of freedom)".to_string() }
         else if huge { format!("Chi-square  \u{3c7}\u{b2} = {}", sci(printed_chi2)) }
         else { format!("Chi-square  \u{3c7}\u{b2} = {}", group(&col(printed_chi2, term_dec))) },
         if ans {
@@ -755,6 +786,61 @@ mod tests {
         // a contribution of 0.00025 is real and must not print as "0.00"
         let t2 = texts(&render_of(&[s("obs", "1000, 1000"), s("ratio", "1000, 1001")]));
         assert!(t2.contains("0.0002"), "a real contribution rounded away: {t2}");
+    }
+
+    #[test]
+    fn a_test_with_no_observations_refuses_instead_of_passing() {
+        // (round 6 blocker) obs 0,0 against 1,1 printed E = 0.00, χ² = 0.00, df = 1, p = 1.00 and "do not reject …
+        // consistent with the ratio" — a confident pass on a test that ran on 0/0.
+        for (obs, ratio) in [("0, 0", "1, 1"), ("0, 0, 0", "0, 1, 1")] {
+            let p = with(&[s("obs", obs), s("ratio", ratio)]);
+            let f = fit(&p);
+            assert!(f.p.is_none(), "{obs} / {ratio}: a p-value on no observations: {:?}", f.p);
+            assert!(warnings(&p).iter().any(|w| w.contains("Every observed count is zero")), "{obs}: {:?}", warnings(&p));
+            let t = texts(&render_of(&[s("obs", obs), s("ratio", ratio)]));
+            assert!(!t.contains("p = 1.00"), "a p-value on no observations: {t}");
+            assert!(!t.contains("consistent with the ratio"), "a confident pass on no observations: {t}");
+            assert!(t.contains("cannot be run"), "{t}");
+            assert!(t.contains("no observations to test"), "{t}");
+            // no contribution, statistic or total is invented out of 0/0
+            assert!(!t.contains("Chi-square  \u{3c7}\u{b2} = 0"), "{t}");
+        }
+    }
+
+    #[test]
+    fn a_single_category_has_no_statistic_to_print() {
+        // the decision already said "cannot be run" (df = 0) beside a χ² = 0.00 statistic
+        let p = with(&[s("names", "Only"), s("obs", "10"), s("ratio", "1")]);
+        assert!(fit(&p).p.is_none());
+        let t = texts(&render_of(&[s("names", "Only"), s("obs", "10"), s("ratio", "1")]));
+        assert!(!t.contains("Chi-square  \u{3c7}\u{b2} = 0.00"), "{t}");
+        assert!(t.contains("no degrees of freedom"), "{t}");
+        assert!(t.contains("cannot be run"), "{t}");
+    }
+
+    #[test]
+    fn the_expected_total_is_blank_on_the_student_copy() {
+        // (round 6 minor) the Expected cells were "_____" but the Expected Total row still read 556
+        let stu = texts(&render_of(&[b(SHOW_ANSWERS, false)]));
+        assert_eq!(stu.lines().filter(|l| *l == "556").count(), 1, "the Expected total still prints on the student copy: {stu}");
+        // the observed total stays, because the observed column is the question
+        assert_eq!(stu.lines().filter(|l| *l == "556").count(), 1);
+        let key = texts(&render_of(&[b(SHOW_ANSWERS, true)]));
+        assert_eq!(key.lines().filter(|l| *l == "556").count(), 2, "the key keeps both totals: {key}");
+    }
+
+    #[test]
+    fn a_ratio_part_too_large_for_an_integer_is_printed_honestly() {
+        // (round 6 minor) a typed 1 : 1e20 printed "1 : 9223372036854775807" (an i64 saturation) and the observed 1s
+        // as "1.00e0"
+        let p = with(&[s("names", "A, B"), s("obs", "1, 1"), s("ratio", "1, 100000000000000000000")]);
+        assert!(fit(&p).p.is_some());
+        let t = texts(&render_of(&[s("names", "A, B"), s("obs", "1, 1"), s("ratio", "1, 100000000000000000000")]));
+        assert!(!t.contains("9223372036854775807"), "a saturated ratio part: {t}");
+        assert!(t.contains("1.00e20"), "the ratio is not printed honestly: {t}");
+        // ordinary whole and decimal ratios still print as typed
+        assert!(texts(&render_of(&[s("obs", "315, 101, 108, 32"), s("ratio", "9, 3, 3, 1")])).contains("9 : 3 : 3 : 1"));
+        assert!(texts(&render_of(&[s("obs", "100, 200, 100"), s("ratio", "1.5, 2.5, 1.5")])).contains("1.5 : 2.5 : 1.5"));
     }
 
     #[test]

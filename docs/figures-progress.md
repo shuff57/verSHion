@@ -635,3 +635,17 @@ an error is the refusal's own and a name such as `mixes` can no longer change it
 apart and a self-eat named `mixes` / `run in a circle`. Census: only food-web's two hashes moved. (The worktree also
 held another session's uncommitted biology edits; their census hashes were left at the committed values and are not
 in this commit.)
+
+Fifth verification critic on `57a8fe0` (2026-10-29): **FAIL** — two blockers, three majors and five minors, all
+reproduced and all fixed here, each seen in a PNG. Hardy–Weinberg printed a fraction beside a count it contradicted
+(`AA p² = 0.12 (116 of 1000)`, and `aa 0.43` where 435/1000 rounds to 0.44): the page now raises its precision until
+each printed fraction × N gives the count on its line (`0.116 (116 of 1000)`), and a row or column carries one
+precision. Chi-square ran a test on zero observations and reported `p = 1.00 … consistent with the ratio`: it now says
+there are no observations to test, prints `—` for the statistic and no decision (a single category likewise has
+none). The HW bars grow with the label size, so `aa 0.16` no longer vanishes at Large; the enzyme's Km and Vmax labels
+carry the same halo as the other plot labels, so the dotted marker and curves stop striking through them; the
+cladogram measures CJK and other wide glyphs honestly, so a Japanese name stays inside the canvas. The student copies
+no longer leak the enzyme's `1 + [I]/Ki` factor or the chi-square Expected Total; a ratio part too large for an integer
+prints in scientific notation instead of a saturated i64; a tree cut by the box's 500-character cap says it is too
+long instead of blaming the brackets. Eleven new tests; figures 1400/0/4 and figuresui 82/0/0 in the worktree.
+Census: only enzyme-kinetics' two hashes moved. Awaiting a sixth verification critic.
