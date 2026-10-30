@@ -649,3 +649,12 @@ no longer leak the enzyme's `1 + [I]/Ki` factor or the chi-square Expected Total
 prints in scientific notation instead of a saturated i64; a tree cut by the box's 500-character cap says it is too
 long instead of blaming the brackets. Eleven new tests; figures 1400/0/4 and figuresui 82/0/0 in the worktree.
 Census: only enzyme-kinetics' two hashes moved. Awaiting a sixth verification critic.
+
+Food-web verification round 3 (2026-10-29): **FAIL as a fix** — the stagger's four claims all held, but it
+introduced a new MED of the same class. One global index let a departure run and a *different* route's arrival run
+land on the same height in one gap (repro: `P0->P1 / P1->P2 / P2->P3 / X0->P2 / X1->P2 / X2->P3 / P1->P3`, where
+X1->P2's arrival and P1->P3's departure sat 1 px apart and overlapped 120 px, against 28 px apart before). Round 4
+slots every run per gap: departures and arrivals in a gap alike take their own height inside that gap's usable band,
+so no two runs can share a height and overlap into a false link. A test walks every pair of runs and fails on any
+near-equal height with overlapping x. Recorded limit: past roughly 14 long links through one gap the slots sit
+closer than the 1.5 px stroke; such a web is already a wide strip. Census: only food-web's two hashes moved.

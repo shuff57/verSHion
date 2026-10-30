@@ -371,12 +371,27 @@ pub fn build(p: &Params) -> String {
             let head = |d: &mut Doc, x: f64, y: f64| {
                 d.poly(&[(x, y), (x - normal_hl * 0.42, y + normal_hl), (x + normal_hl * 0.42, y + normal_hl)], edge_col, edge_col, 0.5);
             };
-            // (verification round 2, MED) two routed links from different prey at the same level ran their horizontal
-            // segments along one y and overlapped into a single bus, so the picture read as links that do not exist;
-            // each long link now gets its own run height inside the gap above its prey's row and below its predator's.
+            // (verification round 3, MED) one global stagger still let a departure run and a different route's
+            // arrival run land on the same y in one gap. Every run in a gap — departures and arrivals alike — now
+            // takes its own slot inside that gap, so no two runs can share a height and overlap into a false link.
             let clear = (LEVEL_GAP * lab - box_h).max(0.0);
             let drop = (8.0 * lab).max(normal_hl + 2.0);
-            let step = ((clear - drop).max(0.0) / (long.len() as f64 + 1.0)).min(6.0 * lab);
+            let height = (clear - 2.0 * drop).max(0.0);
+            let mut run_y = vec![(0.0, 0.0); web.edges.len()];
+            let mut gaps: Vec<Vec<(usize, bool)>> = vec![Vec::new(); rows];
+            for &e in &long {
+                gaps[placed.level[web.edges[e].0]].push((e, true));
+                gaps[placed.level[web.edges[e].1] - 1].push((e, false));
+            }
+            for (g, list) in gaps.iter().enumerate() {
+                let n = list.len();
+                if n == 0 { continue; }
+                let top = cy(g) - box_h / 2.0 - clear + drop;
+                for (s, &(e, dep)) in list.iter().enumerate() {
+                    let y = top + (s as f64 + 1.0) * height / (n as f64 + 1.0);
+                    if dep { run_y[e].0 = y } else { run_y[e].1 = y }
+                }
+            }
             // the links first, then the boxes
             for (e, &(prey, predator)) in web.edges.iter().enumerate() {
                 let px = box_x[prey] + top_frac[e] * widths[prey];
@@ -391,8 +406,8 @@ pub fn build(p: &Params) -> String {
                     // row — never straight through an unrelated box, which would hide the shaft (the blocker)
                     let k = long.iter().position(|&x| x == e).unwrap_or(0);
                     let lane = left + content_w + 14.0 + k as f64 * 12.0 * lab + 6.0 * lab;
-                    let y0 = py - drop - k as f64 * step;
-                    let y1 = qy + drop + k as f64 * step;
+                    let y0 = run_y[e].0;
+                    let y1 = run_y[e].1;
                     d.polyline(&[(px, py), (px, y0), (lane, y0), (lane, y1), (qx, y1), (qx, qy)], edge_col, EDGE_W * lab);
                     head(&mut d, qx, qy);
                 }
@@ -630,6 +645,26 @@ mod tests {
     }
 
     #[test]
+    fn a_departure_and_an_arrival_never_share_a_run_height() {
+        // (verification round 3, MED) one global stagger let X1->P2's arrival and P1->P3's departure sit 1 px apart
+        // in the same gap and overlap; every run in a gap now takes its own slot.
+        let svg = render_of(&[s("links", "P0 -> P1\nP1 -> P2\nP2 -> P3\nX0 -> P2\nX1 -> P2\nX2 -> P3\nP1 -> P3")]);
+        let mut runs: Vec<(f64, f64, f64)> = Vec::new(); // y, x0, x1
+        for p in routes(&svg) {
+            runs.push((p[1].1, p[0].0.min(p[2].0), p[0].0.max(p[2].0)));
+            runs.push((p[3].1, p[2].0.min(p[4].0), p[2].0.max(p[4].0)));
+        }
+        for i in 0..runs.len() {
+            for j in (i + 1)..runs.len() {
+                let (y1, a0, a1) = runs[i];
+                let (y2, b0, b1) = runs[j];
+                let overlap = a1.min(b1) - a0.max(b0);
+                assert!(!((y1 - y2).abs() < 2.0 && overlap > 0.5), "two runs overlap: y {y1} and {y2}, x overlap {overlap}");
+            }
+        }
+    }
+
+    #[test]
     fn a_narrow_predator_does_not_merge_its_heads() {
         // (verification critic, MED) `X` as typed is only 29 px wide, so its eight arrivals were ~3.3 px apart while a
         // head base is ~7 px: the heads merged into a band. The box now widens to hold its slots, full-size.
@@ -747,6 +782,7 @@ mod tests {
             ("fanin".into(), vec![s("links", "Grass -> Prey1\nGrass -> Prey2\nGrass -> Prey3\nGrass -> Prey4\nGrass -> Prey5\nGrass -> Prey6\nGrass -> Prey7\nGrass -> Prey8\nPrey1 -> Apex\nPrey2 -> Apex\nPrey3 -> Apex\nPrey4 -> Apex\nPrey5 -> Apex\nPrey6 -> Apex\nPrey7 -> Apex\nPrey8 -> Apex")]),
             ("fanin-narrow".into(), vec![s("links", "Grass -> Prey1\nGrass -> Prey2\nGrass -> Prey3\nGrass -> Prey4\nGrass -> Prey5\nGrass -> Prey6\nGrass -> Prey7\nGrass -> Prey8\nPrey1 -> X\nPrey2 -> X\nPrey3 -> X\nPrey4 -> X\nPrey5 -> X\nPrey6 -> X\nPrey7 -> X\nPrey8 -> X")]),
             ("two-omni".into(), vec![s("links", "A1 -> B1\nB1 -> C1\nA1 -> C1\nA2 -> B2\nB2 -> C2\nA2 -> C2")]),
+            ("gap-clash".into(), vec![s("links", "P0 -> P1\nP1 -> P2\nP2 -> P3\nX0 -> P2\nX1 -> P2\nX2 -> P3\nP1 -> P3")]),
             ("empty".into(), vec![s("links", "")]),
             ("cycle".into(), vec![s("links", "A -> B\nB -> A")]),
         ];
