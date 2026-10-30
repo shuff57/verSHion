@@ -758,7 +758,7 @@ percent's tie test uses a 1e-7 tolerance on the last printed digit (a ratio with
 refusal canvas writes a huge value with the plain `^`, since it is wrapped text and not a figure. The mutants run
 against the new tests (half-even rounding, no caps, arrows back on the axis, no BOM strip, no 15-digit read, a width
 estimate that ignores the exponent, a 30 px blank, unquoted names, the old reason, no `dy` return, no superscript or
-capital X read, the key always drawn) are each killed. Census: only `energy-pyramid__*` ids move. Awaiting its next critic.
+capital X read, the key always drawn) are each killed. Census: only `energy-pyramid__*` ids move. Verified by the third critic (below).
 
 Energy pyramid round 3 (2026-10-30): the second critic **FAIL** (1 MED, 3 LOW, 5 minor; the half-up percent, the arrow
 column, the 6 px cap rule, the ratio refusal and the student copy all held). **Owner decision (2026-10-30):** a bar
@@ -780,5 +780,23 @@ smaller than the figure can read, not as "not above zero". **Recorded limits, no
 `1000000000 / 312499999.9` prints 31.3 where the exact value is 31.2; (2) the 15-digit read moves `999999999999999.9`
 across the notation threshold, so it prints `1 × 10^15`; (3) with the transfer on the pyramid sits up to 179 px left of
 centre, and at Large the fixed percent column leaves up to 83 px of empty right margin (the student blank needs that
-room). Tests: 27 in the module; mutants for each fix killed (the width mutant by seven tests). Census: only
-`energy-pyramid__*` ids move. Awaiting its next critic.
+room). Tests: 27 in the module; mutants for each fix killed (the width mutant by three tests; the builder's note said seven, the third critic counted three). Census: only
+`energy-pyramid__*` ids move. Verified by the third critic (below).
+
+Energy pyramid, third critic on `e29ba45` (2026-10-30): **PASS** — no blocker, major or MED; two LOW, six minor. Round 2's
+MED is closed: bars under 1.5 px draw exactly 1.5 px (242 boundary renders, no jump at the line, centred on the axis),
+the caption sentence appears exactly when a bar is widened and never in Equal steps, and the 66 % print copy keeps ink
+on every bar row, line, arrowhead and label in all 78 renders checked (a mutant drawing the 1.5 px bar grey is killed,
+so the test does look at the bar and not only its caps). The transfer-off check is real again, a sliver's name stays
+16 px from its caps over 10,608 renders, the `aria-label` is on exactly the labels with a raised exponent and every
+render parses as XML even with hostile names, 10 of 10 mutants were killed, canvas and editor note agreed on 12,000
+random inputs plus the sweep, the census moved only the two energy-pyramid ids, 1975 passed on the critic's copy.
+Recorded, not fixed (the loop converges on minors): two unequal levels can now draw identical bars (`Grass: 1000 /
+Mice: 3 / Owls: 1` gives 1.2 px and 0.4 px to scale, both drawn 1.5 px) and the caption says a bar was widened without
+saying which; the default figure always has a 0.4 px level, so the commonest render carries the long caption (3 lines at
+Medium, 4 at Large; nothing collides, it is clutter); `B: -1e-400` is refused as "smaller than the figure can read" when
+it is negative; spaces between digits are now joined silently (`1 5 × 10 ^ 6` reads as 15,000,000; `1.5 × 10⁶ 7`
+reading as 1.5 × 10^67 is older); a bar that computes to 1.4999999999999998 can be called widened (985 of 19,999
+exact-1.5 inputs); the new message names 5 × 10^-324 as the smallest readable value but `3.125e-321` prints
+`3.127 × 10^-321`; a sliver's name sits further left than the next, wider level's. If the caption clutter bothers a
+teacher, shortening it to one sentence is the cheap fix. Phase 4 next: action potential, cell cycle, cell diagrams.
