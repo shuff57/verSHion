@@ -618,7 +618,7 @@ const ENZYME_KINETICS: &[Faq] = &[
 const FOOD_WEB: &[Faq] = &[
     Faq {
         q: "How do I type the links?",
-        a: "One link per line: the eater's food, then ->, then the eater, as in Grass -> Rabbit. A whole chain may go on one line (Grass -> Rabbit -> Fox), and <- writes it from the predator's end. A line starting with # is a note and is not drawn.",
+        a: "One link per line: the eater's food, then ->, then the eater, as in Grass -> Rabbit. A whole chain may go on one line (Grass -> Rabbit -> Fox); <- (or the arrow key's ←) writes it from the predator's end. A line starting with # is a note and is not drawn.",
     },
     Faq {
         q: "Why do the names sit on different rows?",
@@ -630,7 +630,7 @@ const FOOD_WEB: &[Faq] = &[
     },
     Faq {
         q: "Do the names have to match exactly?",
-        a: "Yes. Grass, grass and Grass. are three different names, and a typo becomes its own organism. Spaces are kept, so Arctic fox is one name.",
+        a: "Yes. Grass, grass and Grass. are three different names, and a typo becomes its own organism. Spaces inside a name are tidied to one, so Arctic fox and Arctic  fox are the same organism.",
     },
     Faq {
         q: "How many links can one picture hold?",

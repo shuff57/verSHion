@@ -593,3 +593,19 @@ itself, more than 24 names, and a cycle, whose reason names the loop (`A -> B ->
 Nine module tests (parser, levels, every name and link drawn, level names on/off, empty and bad input, canvas fit,
 Print neutrality, PNG export), six examples. Census: only `food-web__defaults` and `food-web__start` added. Awaiting
 its first critic.
+
+Food-web critic round 1 (2026-10-29): **FAIL** — one blocker, two majors. The blocker: a link that skips a trophic
+level was drawn straight behind the boxes and, when the boxes shared an x, exactly on the short links — the bundled
+"An omnivore" example (Grass -> Rabbit, Grass -> Fox, Rabbit -> Fox) rendered as a plain chain while the count line
+said three links. Fixed, seen in a PNG: every link gets its own attachment points along the box edges (outgoing
+spread on the top, incoming on the bottom), and a link that skips a level is routed outside the rows — out above its
+prey's row, up a lane right of every box, in below its predator's row — so it can never be hidden. The fan-in major
+(eight arrowheads stacked on one point under an apex) is fixed by the same attachments. Minors fixed: a narrow web is
+centred in the 420 px minimum; the inert Style control (a monochrome figure) is gone; a long unbroken name breaks in
+the error text; `←` is read; runs of whitespace inside a name are tidied to one; the editor note area shows the
+parse error; the cycle's second line says "until the links form a one-way web"; the unused `mut` warning is gone.
+Two tests pin that the skipping link is routed with distinct attachment points and that a many-prey apex has distinct
+arrivals; the PNG export gained a fan-in case. Census: only food-web's two hashes moved. Remaining, recorded: a
+20–24-name web is a very wide strip (the cap's rationale is not fully met at the top of its range); "Level 5"
+replaces the named levels after "Quaternary consumers"; the count line is always drawn (no Show-answers switch);
+wide/CJK glyph widths are under-measured by `text_w`.

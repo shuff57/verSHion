@@ -41,7 +41,6 @@ fn params() -> Vec<ParamDef> {
         ParamDef::long("links", "Food chains", "Grass -> Rabbit\nGrass -> Grasshopper\nGrasshopper -> Frog\nRabbit -> Fox\nFrog -> Fox")
             .hint("Prey -> Predator, one per line; a whole chain may go on one line (Grass -> Rabbit -> Fox). Use <- to write it from the predator's end. A # line is a note."),
         ParamDef::bool("levels", "Name the trophic levels", true),
-        svg::style_param(),
         svg::label_size_param(),
     ]
 }
@@ -68,7 +67,7 @@ pub fn parse(text: &str) -> Result<Web, String> {
         let at = n + 1;
         let line = raw.trim();
         if line.is_empty() || line.starts_with('#') { continue; }
-        let line = line.replace('→', "->");
+        let line = line.replace('→', "->").replace('←', "<-");
         let (fwd, back) = (line.matches("->").count(), line.matches("<-").count());
         if fwd > 0 && back > 0 {
             return Err(format!("Line {at} mixes -> and <-; use one direction on a line."));
@@ -77,9 +76,9 @@ pub fn parse(text: &str) -> Result<Web, String> {
             return Err(format!("Line {at} has no arrow: write Prey -> Predator."));
         }
         let mut parts: Vec<String> = if fwd > 0 {
-            line.split("->").map(|s| s.trim().to_string()).collect()
+            line.split("->").map(tidy).collect()
         } else {
-            let mut v: Vec<String> = line.split("<-").map(|s| s.trim().to_string()).collect();
+            let mut v: Vec<String> = line.split("<-").map(tidy).collect();
             v.reverse();
             v
         };
@@ -106,6 +105,10 @@ pub fn parse(text: &str) -> Result<Web, String> {
     }
     Ok(Web { names, edges })
 }
+
+/// A name as typed, tidied: one space for any run of whitespace, none at the ends. So `Arctic  fox` is the same
+/// organism as `Arctic fox`, while a double space can not make a second one.
+fn tidy(s: &str) -> String { s.split_whitespace().collect::<Vec<_>>().join(" ") }
 
 fn index_of(names: &mut Vec<String>, name: &str, line: usize) -> Result<usize, String> {
     if let Some(i) = names.iter().position(|n| n == name) { return Ok(i); }
@@ -210,11 +213,32 @@ fn wrap(s: &str, max: f64, size: f64) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut cur = String::new();
     for word in s.split_whitespace() {
-        if !cur.is_empty() && text_w(&cur, size) + text_w(" ", size) + text_w(word, size) > max {
+        if !cur.is_empty() {
+            if text_w(&cur, size) + text_w(" ", size) + text_w(word, size) <= max {
+                cur.push(' ');
+                cur.push_str(word);
+                continue;
+            }
             out.push(std::mem::take(&mut cur));
         }
-        if !cur.is_empty() { cur.push(' '); }
-        cur.push_str(word);
+        // (critic minor 7) a word wider than the line is broken, or a long unbroken name runs off the canvas
+        let mut rest = word;
+        loop {
+            if text_w(rest, size) <= max || rest.chars().count() <= 1 {
+                cur.push_str(rest);
+                break;
+            }
+            let mut cut = rest.len();
+            for (i, _) in rest.char_indices() {
+                if text_w(&rest[..i], size) > max {
+                    cut = i;
+                    break;
+                }
+            }
+            if cut == 0 { cut = rest.char_indices().nth(1).map(|(i, _)| i).unwrap_or(rest.len()); }
+            out.push(rest[..cut].to_string());
+            rest = rest[cut..].trim_start();
+        }
     }
     if !cur.is_empty() { out.push(cur); }
     out
@@ -223,11 +247,8 @@ fn wrap(s: &str, max: f64, size: f64) -> Vec<String> {
 fn plural(n: usize, one: &str, many: &str) -> String { if n == 1 { one.to_string() } else { many.to_string() } }
 
 pub fn build(p: &Params) -> String {
-    let print = p.s("style") == "Print";
     let lab = svg::label_factor(p.s("label_size"));
-    let ink = if print { "#111111" } else { INK };
-    let edge_col = if print { "#333333" } else { EDGE };
-    let hint_col = if print { "#555555" } else { ERR };
+    let (ink, edge_col, hint_col) = (INK, EDGE, ERR);
     let fs = NODE_FS * lab;
     let level_fs = LEVEL_FS * lab;
     let show_levels = p.b("levels");
@@ -251,7 +272,8 @@ pub fn build(p: &Params) -> String {
             let reason = "The food web could not be read:";
             let max = min_w - 48.0;
             let first = wrap(&e, max, 13.0 * lab);
-            let then = wrap("Nothing is drawn until every line is a link.", max, 12.0 * lab);
+            // (critic minor 11) every line IS a link in a cycle: say what is actually missing
+            let then = wrap("Nothing is drawn until the links form a one-way web.", max, 12.0 * lab);
             let h = 34.0 + (first.len() as f64 + 1.0 + then.len() as f64) * 18.0 * lab + 20.0;
             let mut d = Doc::new(min_w, h);
             d.describe("Food web", "A food web from typed links");
@@ -276,8 +298,16 @@ pub fn build(p: &Params) -> String {
             let content_w = placed.rows.iter().map(|r| row_w(r)).fold(0.0f64, f64::max);
             let level_names: Vec<String> = (0..rows).map(level_name).collect();
             let level_w = if show_levels { level_names.iter().map(|s| text_w(s, level_fs)).fold(0.0f64, f64::max) } else { 0.0 };
-            let left = 20.0 + if show_levels { level_w + 16.0 } else { 0.0 };
-            let w = (left + content_w + 20.0).max(min_w);
+            // (critic blocker and majors) A link that skips a level is routed outside the rows; a lane is reserved for
+            // each of them, so every typed link is visible and the count line matches the picture.
+            let span = |e: (usize, usize)| placed.level[e.1].saturating_sub(placed.level[e.0]);
+            let long: Vec<usize> = (0..web.edges.len()).filter(|&e| span(web.edges[e]) > 1).collect();
+            let lane_w = if long.is_empty() { 0.0 } else { 14.0 + long.len() as f64 * 12.0 * lab };
+            let base_left = 20.0 + if show_levels { level_w + 16.0 } else { 0.0 };
+            let w = (base_left + content_w + 20.0 + lane_w).max(min_w);
+            // (critic minor 5) a narrow web is centred in the 420 px minimum, not left-aligned with a blank margin
+            let slack = (w - base_left - content_w - 20.0 - lane_w).max(0.0);
+            let left = base_left + slack / 2.0;
             let top: f64 = 28.0;
             let max_level = rows.saturating_sub(1);
             let cy = |l: usize| top + box_h / 2.0 + (max_level - l) as f64 * LEVEL_GAP * lab;
@@ -296,21 +326,48 @@ pub fn build(p: &Params) -> String {
             let mut d = Doc::new(w, h);
             d.describe("Food web", "A food web from typed links: producers at the bottom, arrows to whatever eats them, trophic levels named");
 
-            // every box's centre, so the arrows can run between them
-            let mut at = vec![(0.0, 0.0); web.names.len()];
+            // each box's left edge
+            let mut box_x = vec![0.0; web.names.len()];
             for (l, row) in placed.rows.iter().enumerate() {
                 let rw = row_w(row);
                 let mut x = left + (content_w - rw) / 2.0;
                 for &i in row {
-                    at[i] = (x + widths[i] / 2.0, cy(l));
+                    box_x[i] = x;
                     x += widths[i] + NODE_GAP * lab;
                 }
             }
-            // the links first: a long link passes behind the boxes between its levels, which are filled white
-            for &(prey, predator) in &web.edges {
-                let (x0, y0) = at[prey];
-                let (x1, y1) = at[predator];
-                d.arrow(x0, y0 - box_h / 2.0, x1, y1 + box_h / 2.0, edge_col, EDGE_W * lab);
+            // (critic major 2) every link gets its own attachment on the box edge: outgoing slots spread along the top,
+            // incoming slots along the bottom, so a predator with many prey does not become one black cluster.
+            let mut top_frac = vec![0.5; web.edges.len()];
+            let mut bot_frac = vec![0.5; web.edges.len()];
+            for node in 0..web.names.len() {
+                let outs: Vec<usize> = (0..web.edges.len()).filter(|&e| web.edges[e].0 == node).collect();
+                for (k, &e) in outs.iter().enumerate() { top_frac[e] = (k as f64 + 1.0) / (outs.len() as f64 + 1.0); }
+                let ins: Vec<usize> = (0..web.edges.len()).filter(|&e| web.edges[e].1 == node).collect();
+                for (k, &e) in ins.iter().enumerate() { bot_frac[e] = (k as f64 + 1.0) / (ins.len() as f64 + 1.0); }
+            }
+            let head = |d: &mut Doc, x: f64, y: f64| {
+                let hl = (EDGE_W * lab * 4.0).max(8.0 * lab);
+                d.poly(&[(x, y), (x - hl * 0.42, y + hl), (x + hl * 0.42, y + hl)], edge_col, edge_col, 0.5);
+            };
+            // the links first, then the boxes
+            for (e, &(prey, predator)) in web.edges.iter().enumerate() {
+                let px = box_x[prey] + top_frac[e] * widths[prey];
+                let qx = box_x[predator] + bot_frac[e] * widths[predator];
+                let py = cy(placed.level[prey]) - box_h / 2.0;
+                let qy = cy(placed.level[predator]) + box_h / 2.0;
+                if span((prey, predator)) <= 1 {
+                    d.arrow(px, py, qx, qy, edge_col, EDGE_W * lab);
+                } else {
+                    // around the rows: out above the prey's row, up a lane right of every box, in below the predator's
+                    // row — never straight through an unrelated box, which would hide the shaft (the blocker)
+                    let k = long.iter().position(|&x| x == e).unwrap_or(0);
+                    let lane = left + content_w + 14.0 + k as f64 * 12.0 * lab + 6.0 * lab;
+                    let y0 = py - 8.0 * lab;
+                    let y1 = qy + 8.0 * lab;
+                    d.polyline(&[(px, py), (px, y0), (lane, y0), (lane, y1), (qx, y1), (qx, qy)], edge_col, EDGE_W * lab);
+                    head(&mut d, qx, qy);
+                }
             }
             // the boxes, filled white so a link running behind one is not drawn through its name
             for (l, row) in placed.rows.iter().enumerate() {
@@ -488,6 +545,88 @@ mod tests {
         }
     }
 
+    /// Every drawn shaft as (x1, y1, x2, y2).
+    fn segs(svg: &str) -> Vec<(f64, f64, f64, f64)> {
+        svg.split("<line ").skip(1).map(|part| {
+            let num = |k: &str| -> f64 {
+                let at = part.find(&format!("{k}=\"")).expect("attribute") + k.len() + 2;
+                part[at..].split('"').next().unwrap().parse().unwrap()
+            };
+            (num("x1"), num("y1"), num("x2"), num("y2"))
+        }).collect()
+    }
+
+    /// Every routed shaft as its points.
+    fn routes(svg: &str) -> Vec<Vec<(f64, f64)>> {
+        svg.split("<polyline ").skip(1).map(|part| {
+            let at = part.find("points=\"").expect("points") + 8;
+            part[at..].split('"').next().unwrap().split_whitespace().map(|p| {
+                let (x, y) = p.split_once(',').expect("x,y");
+                (x.parse().unwrap(), y.parse().unwrap())
+            }).collect()
+        }).collect()
+    }
+
+    #[test]
+    fn a_link_that_skips_a_level_is_routed_and_never_hidden() {
+        // (critic blocker) The omnivore's Grass -> Fox runs straight through Rabbit's box and is hidden; the picture
+        // then shows a plain chain while the count line says three links.
+        let svg = render_of(&[s("links", "Grass -> Rabbit\nGrass -> Fox\nRabbit -> Fox")]);
+        let rs = routes(&svg);
+        assert_eq!(rs.len(), 1, "the link that skips a level must be routed around the rows, not drawn straight");
+        let ls = segs(&svg);
+        let mut starts: Vec<(i64, i64)> = ls.iter().map(|l| (l.0 as i64, l.1 as i64)).chain(rs.iter().map(|p| (p[0].0 as i64, p[0].1 as i64))).collect();
+        starts.sort();
+        starts.dedup();
+        assert_eq!(starts.len(), 3, "two links leave the same point: {starts:?}");
+        let mut ends: Vec<(i64, i64)> = ls.iter().map(|l| (l.2 as i64, l.3 as i64)).chain(rs.iter().map(|p| (p[p.len() - 1].0 as i64, p[p.len() - 1].1 as i64))).collect();
+        ends.sort();
+        ends.dedup();
+        assert_eq!(ends.len(), 3, "two links meet the same point: {ends:?}");
+    }
+
+    #[test]
+    fn a_predator_with_many_prey_gets_distinct_arrivals() {
+        // (critic major) Eight arrowheads stacked on one point under the apex.
+        let links = (1..=8).map(|i| format!("Grass -> Prey{i}")).collect::<Vec<_>>().join("\n") + "\n" + &(1..=8).map(|i| format!("Prey{i} -> Apex")).collect::<Vec<_>>().join("\n");
+        let svg = render_of(&[("links", Value::S(links))]);
+        let ls = segs(&svg);
+        let arrivals: Vec<i64> = ls.iter().filter(|l| l.3 < l.1).map(|(_x1, _y1, x2, _y2)| *x2 as i64).collect();
+        let mut unique = arrivals.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(unique.len(), arrivals.len(), "arrowheads share an arrival point: {arrivals:?}");
+    }
+
+    #[test]
+    fn the_left_arrow_and_tidied_spacing_are_read() {
+        assert_eq!(parse("Fox ← Rabbit").unwrap().edges, vec![(0, 1)]);
+        // runs of whitespace inside a name are one space, so a double space does not make a second organism
+        assert_eq!(parse("Arctic  fox -> Wolf").unwrap().names, vec!["Arctic fox", "Wolf"]);
+    }
+
+    #[test]
+    fn an_unbroken_long_name_stays_inside_the_error_canvas() {
+        let long = "x".repeat(300);
+        let svg = render_of(&[("links", Value::S(format!("{long} -> {long}")))]);
+        let w: f64 = {
+            let at = svg.find("width=\"").expect("width") + 7;
+            svg[at..].split('"').next().unwrap().parse().unwrap()
+        };
+        for el in svg.split("<text").skip(1) {
+            let at = el.find("x=\"") .unwrap_or(0) + 3;
+            let x: f64 = el.get(at..).and_then(|r| r.split('"').next()).and_then(|v| v.parse().ok()).unwrap_or(0.0);
+            assert!(x < w, "a text starts outside the canvas: {el}");
+        }
+    }
+
+    #[test]
+    fn the_editor_reports_a_parse_error() {
+        let p = with(&[s("links", "Grass -> Rabbit\nnonsense")]);
+        assert!(warnings(&p).iter().any(|w| w.contains("no arrow")), "{:?}", warnings(&p));
+        assert!(crate::figures::notes_for(ID, &p).iter().any(|w| w.contains("no arrow")), "the Figures tab's note area never shows it: {:?}", crate::figures::notes_for(ID, &p));
+    }
+
     /// Writes every case (Colour and Print, Small and Large) to $VERSHION_PNG_DIR.
     #[test]
     fn food_web_pngs() {
@@ -498,6 +637,7 @@ mod tests {
             ("levels-off".into(), vec![("levels", Value::B(false))]),
             ("chain".into(), vec![s("links", "Grass -> Grasshopper -> Frog -> Heron")]),
             ("reversed".into(), vec![s("links", "Fox <- Rabbit <- Grass\nGrass -> Grasshopper")]),
+            ("fanin".into(), vec![s("links", "Grass -> Prey1\nGrass -> Prey2\nGrass -> Prey3\nGrass -> Prey4\nGrass -> Prey5\nGrass -> Prey6\nGrass -> Prey7\nGrass -> Prey8\nPrey1 -> Apex\nPrey2 -> Apex\nPrey3 -> Apex\nPrey4 -> Apex\nPrey5 -> Apex\nPrey6 -> Apex\nPrey7 -> Apex\nPrey8 -> Apex")]),
             ("empty".into(), vec![s("links", "")]),
             ("cycle".into(), vec![s("links", "A -> B\nB -> A")]),
         ];
