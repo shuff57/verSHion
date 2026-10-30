@@ -105,6 +105,52 @@ fn ai_loop_fit_retries_turn_a_diagram_into_an_editable_figure() {
     }
 }
 
+/// Figures the registry can draw, rendered with known parameters and handed to the fitter as if they
+/// were a scanned diagram: the expected outcome is an editable figure of the same kind. Prints one
+/// line per case; fails only when the loop errors, because "no fit" is an honest answer and the
+/// printed table is the measurement.
+#[test]
+#[ignore = "needs a running relay; set VERSHION_RELAY_BASE and run with --ignored"]
+fn ai_loop_fit_round_trips_registered_figures() {
+    let Ok(base) = std::env::var("VERSHION_RELAY_BASE") else {
+        eprintln!("skipped: set VERSHION_RELAY_BASE (e.g. http://127.0.0.1:18795/ai)");
+        return;
+    };
+    let settings = vershion::Settings { ai_provider: "workers".into(), ai_base: base.trim().trim_end_matches('/').to_string(), ..Default::default() };
+    let cfg = vershion::ai::AiCfg::from(&settings);
+    // (generator, parameters it is drawn with, the question text printed beside it).
+    let cases: [(&str, serde_json::Value, &str); 6] = [
+        ("rectangle", serde_json::json!({"w": 5.0, "h": 3.0, "unit": "cm"}), "Find the perimeter of the rectangle."),
+        ("number-line", serde_json::json!({}), "What number does point A show on the number line?"),
+        ("scatterplot", serde_json::json!({}), "Describe the association shown in the scatterplot."),
+        ("lewis-structures", serde_json::json!({"formula": "H2O"}), "How many lone pairs are on the central atom?"),
+        ("circuit-diagram", serde_json::json!({}), "What is the total resistance of the circuit?"),
+        ("histogram", serde_json::json!({}), "Which interval holds the most values?"),
+    ];
+    let only = std::env::var("FIT_ONLY").ok();
+    let mut table = Vec::new();
+    for (id, params, context) in cases {
+        if only.as_deref().is_some_and(|o| o != id) {
+            continue;
+        }
+        let def = vershion::figures::registry().into_iter().find(|d| d.id == id).unwrap_or_else(|| panic!("no generator {id}"));
+        let p = vershion::figures::params_from_json(&def, &params);
+        let png = vershion::figures::to_png(&(def.render)(&p), 1.5).expect("render");
+        let png = vershion::figures::spec::flatten_white(&png).expect("flatten");
+        let started = Instant::now();
+        let outcome = match vershion::figfit::fit_with_retries(&png, context, &cfg, 3) {
+            Ok(Some(f)) if f.spec.id == id => format!("FOUND {}", f.spec.id),
+            Ok(Some(f)) => format!("FOUND other generator: {}", f.spec.id),
+            Ok(None) => "no fit (crop kept)".to_string(),
+            Err(e) => panic!("the fitting loop errored on {id}: {e}"),
+        };
+        let line = format!("{id:<18} {outcome:<40} {:>4.0}s", started.elapsed().as_secs_f32());
+        eprintln!("{line}");
+        table.push(line);
+    }
+    eprintln!("---- round trip ----\n{}", table.join("\n"));
+}
+
 #[test]
 #[ignore = "needs a running relay; set VERSHION_RELAY_BASE and run with --ignored"]
 fn ai_loop_reads_every_question_type_and_rebuilds_a_figure() {
