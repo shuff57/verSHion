@@ -69,25 +69,35 @@ fn render(def: &FigureDef, params: &Value) -> Result<(FigureSpec, Vec<u8>), Stri
     Ok((crate::figures::spec::spec_for(def.id, &p), png))
 }
 
-/// `Ok(None)` when no generator reproduces the picture closely enough.
-pub fn fit(crop: &[u8], context: &str, cfg: &AiCfg) -> Result<Option<Fit>, String> {
-    if crop.is_empty() {
-        return Ok(None);
-    }
+/// What one fitting attempt produced.
+enum Fitted {
+    Found(Fit),
+    /// The model answered, but no generator could reproduce the picture. The reason is fed to the
+    /// next attempt.
+    Miss(String),
+}
+
+/// One fitting attempt. `feedback` is what earlier attempts got wrong (empty on the first try).
+fn fit_once(crop: &[u8], context: &str, cfg: &AiCfg, feedback: &str) -> Result<Fitted, String> {
     let pick = ask_json(
         &[crop],
         cfg,
         &format!(
-            "This picture was cut from a test question: \"{}\".\nWhich generator can redraw THIS picture closely (same kind of drawing and same subject, not just the same subject area)?\n{}\n\nAnswer JSON only: {{\"id\": \"<generator id>\" or null, \"reason\": \"...\"}}. Use null unless one clearly fits.",
+            "This picture was cut from a test question: \"{}\".\nWhich generator can redraw THIS picture closely (same kind of drawing and same subject, not just the same subject area)?\n{}{feedback}\n\nAnswer JSON only: {{\"id\": \"<generator id>\" or null, \"reason\": \"...\"}}. Use null unless one clearly fits.",
             context.chars().take(200).collect::<String>(),
             catalog()
         ),
     )?;
     debug(&format!("pick: {pick}"));
-    let Some(id) = pick.get("id").and_then(Value::as_str) else { return Ok(None) };
-    let Some(def) = figures::registry().into_iter().find(|d| d.id == id) else { return Ok(None) };
+    let Some(id) = pick.get("id").and_then(Value::as_str) else {
+        return Ok(Fitted::Miss("the model named no generator".to_string()));
+    };
+    let Some(def) = figures::registry().into_iter().find(|d| d.id == id) else {
+        return Ok(Fitted::Miss(format!("the model named a generator that does not exist ({id})")));
+    };
 
-    let mut feedback = String::new();
+    let mut feedback = feedback.to_string();
+    let mut reason = String::new();
     for _round in 0..3 {
         let spec = ask_json(
             &[crop],
@@ -101,7 +111,9 @@ pub fn fit(crop: &[u8], context: &str, cfg: &AiCfg) -> Result<Option<Fit>, Strin
         )?;
         debug(&format!("params: {spec}"));
         let spec_json = spec.get("params").cloned().unwrap_or(Value::Null).to_string();
-        let Ok((spec, png)) = render(&def, spec.get("params").unwrap_or(&Value::Null)) else { break };
+        let Ok((spec, png)) = render(&def, spec.get("params").unwrap_or(&Value::Null)) else {
+            return Ok(Fitted::Miss(format!("the \"{}\" generator could not draw the parameters it proposed", def.title)));
+        };
         let verdict = ask_json(
             &[crop, &png],
             cfg,
@@ -109,15 +121,59 @@ pub fn fit(crop: &[u8], context: &str, cfg: &AiCfg) -> Result<Option<Fit>, Strin
         )?;
         debug(&format!("verdict: {verdict}"));
         if verdict.get("same").and_then(Value::as_bool) == Some(true) {
-            return Ok(Some(Fit { spec, png }));
+            return Ok(Fitted::Found(Fit { spec, png }));
         }
+        reason = verdict.get("differences").and_then(Value::as_str).unwrap_or("it did not match").to_string();
         feedback.push_str(&format!(
-            "\nAn earlier attempt with parameters {} was compared with the original and differed: {}",
+            "\nAn earlier attempt with parameters {} was compared with the original and differed: {reason}",
             spec_json,
-            verdict.get("differences").and_then(Value::as_str).unwrap_or("it did not match")
         ));
     }
-    Ok(None)
+    Ok(Fitted::Miss(format!("the \"{}\" redraw still did not match after 3 parameter repairs: {reason}", def.title)))
+}
+
+/// One fitting attempt; `Ok(None)` when no generator reproduces the picture closely enough.
+pub fn fit(crop: &[u8], context: &str, cfg: &AiCfg) -> Result<Option<Fit>, String> {
+    if crop.is_empty() {
+        return Ok(None);
+    }
+    Ok(match fit_once(crop, context, cfg, "")? {
+        Fitted::Found(f) => Some(f),
+        Fitted::Miss(_) => None,
+    })
+}
+
+/// Up to `tries` fitting attempts, each told why the ones before it failed. The import path asks
+/// for 3, so a picture the first generator misses still gets a chance with another one.
+pub fn fit_with_retries(crop: &[u8], context: &str, cfg: &AiCfg, tries: usize) -> Result<Option<Fit>, String> {
+    if crop.is_empty() {
+        return Ok(None);
+    }
+    retry_fit(tries, |feedback| fit_once(crop, context, cfg, feedback))
+}
+
+fn retry_fit(tries: usize, mut attempt: impl FnMut(&str) -> Result<Fitted, String>) -> Result<Option<Fit>, String> {
+    let tries = tries.max(1);
+    let mut feedback = String::new();
+    let mut last_error: Option<String> = None;
+    let mut answered = false;
+    for _ in 0..tries {
+        match attempt(&feedback) {
+            Ok(Fitted::Found(f)) => return Ok(Some(f)),
+            Ok(Fitted::Miss(reason)) => {
+                answered = true;
+                feedback.push_str(&format!(
+                    "\nAn earlier attempt with this same picture failed: {reason}. Try a different generator, or parameters that match the picture more closely."
+                ));
+            }
+            Err(e) => {
+                last_error = Some(e);
+                feedback.push_str("\nAn earlier attempt failed before it could draw anything.");
+            }
+        }
+    }
+    // A model that answered but found nothing is a real answer; only an all-error run is an error.
+    if answered { Ok(None) } else { last_error.map_or(Ok(None), Err) }
 }
 
 /// Browser version of [`fit`], awaiting each model round trip instead of blocking.
@@ -127,26 +183,29 @@ async fn ask_json_async(images: &[&[u8]], cfg: &AiCfg, prompt: &str) -> Result<V
     crate::ditto::json_object(&reply).ok_or_else(|| "the model did not answer with JSON".to_string())
 }
 
+/// One fitting attempt on the web: the same prompts and feedback as [`fit_once`], awaited.
 #[cfg(target_arch = "wasm32")]
-pub async fn fit_async(crop: &[u8], context: &str, cfg: &AiCfg) -> Result<Option<Fit>, String> {
-    if crop.is_empty() {
-        return Ok(None);
-    }
+async fn fit_once_async(crop: &[u8], context: &str, cfg: &AiCfg, feedback: &str) -> Result<Fitted, String> {
     let pick = ask_json_async(
         &[crop],
         cfg,
         &format!(
-            "This picture was cut from a test question: \"{}\".\nWhich generator can redraw THIS picture closely (same kind of drawing and same subject, not just the same subject area)?\n{}\n\nAnswer JSON only: {{\"id\": \"<generator id>\" or null, \"reason\": \"...\"}}. Use null unless one clearly fits.",
+            "This picture was cut from a test question: \"{}\".\nWhich generator can redraw THIS picture closely (same kind of drawing and same subject, not just the same subject area)?\n{}{feedback}\n\nAnswer JSON only: {{\"id\": \"<generator id>\" or null, \"reason\": \"...\"}}. Use null unless one clearly fits.",
             context.chars().take(200).collect::<String>(),
             catalog()
         ),
     )
     .await?;
     debug(&format!("pick: {pick}"));
-    let Some(id) = pick.get("id").and_then(Value::as_str) else { return Ok(None) };
-    let Some(def) = figures::registry().into_iter().find(|d| d.id == id) else { return Ok(None) };
+    let Some(id) = pick.get("id").and_then(Value::as_str) else {
+        return Ok(Fitted::Miss("the model named no generator".to_string()));
+    };
+    let Some(def) = figures::registry().into_iter().find(|d| d.id == id) else {
+        return Ok(Fitted::Miss(format!("the model named a generator that does not exist ({id})")));
+    };
 
-    let mut feedback = String::new();
+    let mut feedback = feedback.to_string();
+    let mut reason = String::new();
     for _round in 0..3 {
         let spec = ask_json_async(
             &[crop],
@@ -161,7 +220,9 @@ pub async fn fit_async(crop: &[u8], context: &str, cfg: &AiCfg) -> Result<Option
         .await?;
         debug(&format!("params: {spec}"));
         let spec_json = spec.get("params").cloned().unwrap_or(Value::Null).to_string();
-        let Ok((spec, png)) = render(&def, spec.get("params").unwrap_or(&Value::Null)) else { break };
+        let Ok((spec, png)) = render(&def, spec.get("params").unwrap_or(&Value::Null)) else {
+            return Ok(Fitted::Miss(format!("the \"{}\" generator could not draw the parameters it proposed", def.title)));
+        };
         let verdict = ask_json_async(
             &[crop, &png],
             cfg,
@@ -170,15 +231,55 @@ pub async fn fit_async(crop: &[u8], context: &str, cfg: &AiCfg) -> Result<Option
         .await?;
         debug(&format!("verdict: {verdict}"));
         if verdict.get("same").and_then(Value::as_bool) == Some(true) {
-            return Ok(Some(Fit { spec, png }));
+            return Ok(Fitted::Found(Fit { spec, png }));
         }
+        reason = verdict.get("differences").and_then(Value::as_str).unwrap_or("it did not match").to_string();
         feedback.push_str(&format!(
-            "\nAn earlier attempt with parameters {} was compared with the original and differed: {}",
+            "\nAn earlier attempt with parameters {} was compared with the original and differed: {reason}",
             spec_json,
-            verdict.get("differences").and_then(Value::as_str).unwrap_or("it did not match")
         ));
     }
-    Ok(None)
+    Ok(Fitted::Miss(format!("the \"{}\" redraw still did not match after 3 parameter repairs: {reason}", def.title)))
+}
+
+/// Browser version of [`fit`], awaiting each model round trip instead of blocking.
+#[cfg(target_arch = "wasm32")]
+pub async fn fit_async(crop: &[u8], context: &str, cfg: &AiCfg) -> Result<Option<Fit>, String> {
+    if crop.is_empty() {
+        return Ok(None);
+    }
+    Ok(match fit_once_async(crop, context, cfg, "").await? {
+        Fitted::Found(f) => Some(f),
+        Fitted::Miss(_) => None,
+    })
+}
+
+/// Browser version of [`fit_with_retries`]: up to `tries` attempts, each told what the last missed.
+#[cfg(target_arch = "wasm32")]
+pub async fn fit_async_with_retries(crop: &[u8], context: &str, cfg: &AiCfg, tries: usize) -> Result<Option<Fit>, String> {
+    if crop.is_empty() {
+        return Ok(None);
+    }
+    let tries = tries.max(1);
+    let mut feedback = String::new();
+    let mut last_error: Option<String> = None;
+    let mut answered = false;
+    for _ in 0..tries {
+        match fit_once_async(crop, context, cfg, &feedback).await {
+            Ok(Fitted::Found(f)) => return Ok(Some(f)),
+            Ok(Fitted::Miss(reason)) => {
+                answered = true;
+                feedback.push_str(&format!(
+                    "\nAn earlier attempt with this same picture failed: {reason}. Try a different generator, or parameters that match the picture more closely."
+                ));
+            }
+            Err(e) => {
+                last_error = Some(e);
+                feedback.push_str("\nAn earlier attempt failed before it could draw anything.");
+            }
+        }
+    }
+    if answered { Ok(None) } else { last_error.map_or(Ok(None), Err) }
 }
 
 #[cfg(test)]
@@ -201,5 +302,59 @@ mod tests {
         assert!(png.starts_with(b"\x89PNG"));
         assert!(!spec.params.contains_key("bogus"));
         assert_eq!(spec.params["preset"], "CH₃COCl, acetyl chloride");
+    }
+
+    /// A real, renderable figure, for the retry loop's success case.
+    fn a_fit() -> Fit {
+        let lewis = figures::registry().into_iter().find(|d| d.id == "lewis-structures").unwrap();
+        let (spec, png) = render(&lewis, &serde_json::json!({"preset": "CH₃COCl, acetyl chloride"})).unwrap();
+        Fit { spec, png }
+    }
+
+    #[test]
+    fn retries_stop_at_the_first_editable_figure_and_feed_each_miss_forward() {
+        let mut prompts: Vec<String> = Vec::new();
+        let got = retry_fit(3, |feedback| {
+            prompts.push(feedback.to_string());
+            if prompts.len() < 3 { Ok(Fitted::Miss(format!("miss {}", prompts.len()))) } else { Ok(Fitted::Found(a_fit())) }
+        })
+        .unwrap()
+        .expect("the third attempt made a figure");
+        assert_eq!(got.spec.id, "lewis-structures");
+        assert_eq!(prompts.len(), 3);
+        assert_eq!(prompts[0], "", "the first attempt is told nothing");
+        assert!(prompts[1].contains("miss 1"));
+        assert!(prompts[2].contains("miss 1") && prompts[2].contains("miss 2"), "feedback accumulates");
+    }
+
+    #[test]
+    fn retries_give_up_after_the_number_of_tries() {
+        let mut calls = 0;
+        for tries in [1, 2, 3] {
+            calls = 0;
+            let r = retry_fit(tries, |_| {
+                calls += 1;
+                Ok(Fitted::Miss("no generator fits".to_string()))
+            })
+            .unwrap();
+            assert!(r.is_none());
+            assert_eq!(calls, tries);
+        }
+    }
+
+    #[test]
+    fn an_all_error_run_is_an_error_but_a_model_that_answered_is_not() {
+        let e = match retry_fit(2, |_| Err("no model".to_string())) {
+            Err(e) => e,
+            Ok(_) => panic!("an all-error run must be an error"),
+        };
+        assert_eq!(e, "no model");
+        let mut n = 0;
+        let r = retry_fit(3, |_| {
+            n += 1;
+            if n == 1 { Err("flaky".to_string()) } else { Ok(Fitted::Miss("nothing fits".to_string())) }
+        })
+        .unwrap();
+        assert!(r.is_none(), "one real 'nothing fits' answer is not an error");
     }
 }

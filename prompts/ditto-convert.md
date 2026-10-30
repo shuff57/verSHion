@@ -66,11 +66,12 @@ Question ids are `q1`, `q2`, ... in printed order on this page.
 
 # Figures (very important)
 If a question needs a picture that is printed on the page (a diagram, graph, map, photo,
-structure or circuit drawing) add `"figure": {"box": [x0,y0,x1,y1], "alt": "..."}`.
-- `box` is the picture's rectangle as FRACTIONS of the page image: x from the left edge, y from
-  the TOP edge, each 0 to 1, `x0 < x1`, `y0 < y1`. Look at where the picture sits on the page
-  and be tight: include the whole drawing and its own labels, exclude the question text above
-  it and the answer lines below it.
+structure or circuit drawing) add `"figure": {"box": [ymin,xmin,ymax,xmax], "alt": "..."}`.
+- `box` is the picture's rectangle on a 0 to 1000 grid laid over the whole page image, in the
+  order `[ymin, xmin, ymax, xmax]`: y counts down from the TOP edge (0 = top, 1000 = bottom), x
+  counts right from the LEFT edge (0 = left, 1000 = right), `ymin < ymax`, `xmin < xmax`. Be
+  tight: include the whole drawing and its own labels, exclude the question text above it and
+  the answer lines below it. `box` holds exactly four numbers; `alt` is a separate key.
 - Never write a figure for typed text, a table, an equation, an answer blank, or handwriting.
 - One figure per question. If a question has two separate pictures, use `multipart` and give each
   part its own figure.
@@ -101,7 +102,7 @@ never grouped by row.)
 Page shows "3. Give the number of bonding and nonbonding electrons for the structure below:"
 with a Lewis structure in the upper middle of the page and blanks "BONDING ELECTRONS: 14,
 NONBONDING ELECTRONS: 10" filled in by hand:
-{"id":"q3","type":"fill-in-the-blank","stem":"Give the number of bonding and nonbonding electrons for the structure below:\nBONDING ELECTRONS: ___  NONBONDING ELECTRONS: ___","blanks":[["14"],["10"]],"figure":{"box":[0.42,0.27,0.62,0.37],"alt":"Lewis structure of a molecule"}}
+{"id":"q3","type":"fill-in-the-blank","stem":"Give the number of bonding and nonbonding electrons for the structure below:\nBONDING ELECTRONS: ___  NONBONDING ELECTRONS: ___","blanks":[["14"],["10"]],"figure":{"box":[270,420,370,620],"alt":"Lewis structure of a molecule"}}
 
 Page shows "4. For the following compounds ... a. NH3  b. CO2" (bullets of instructions, student drawings):
 {"id":"q4","type":"multipart","stem":"For the following compounds, do all to receive full credit:\n• Draw a valid Lewis structure.\n• Count the number of electron clouds.","parts":[{"stem":"a. NH₃","type":"short-answer","suggestedAnswer":"4 clouds, trigonal pyramidal, polar"},{"stem":"b. CO₂","type":"short-answer","suggestedAnswer":"2 clouds, linear, nonpolar"}]}

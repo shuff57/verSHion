@@ -39,10 +39,19 @@ bucket_name = "vershion-pool"
 [vars]
 ALLOWED_ORIGINS = "https://app.example.org"
 APP_URL = "https://app.example.org"
+# The one model the /ai/chat/completions relay calls (docs/ai-harness-spec.md). The client's
+# `model` field is ignored: only this model can be spent.
+AI_MODEL = "@cf/google/gemma-4-26b-a4b-it"
+
+# Workers AI for the app's relay. Inference is billed to this account; there is no per-request
+# key (BYOK does not exist for Workers AI).
+[ai]
+binding = "AI"
 
 # Secrets (wrangler secret put): AUTH_SECRET, POOL_HASH_KEY (32+ chars; without it the pool answers 503),
-# and SMTP_PASSWORD when mail goes through SMTP (src/mail_smtp.ts) — or RESEND_API_KEY when it goes through
-# Resend. Vars: SMTP_HOSTNAME, SMTP_PORT, SMTP_USERNAME, SMTP_FROM_NAME, MAIL_FROM, ADMIN_EMAIL.
+# AI_RELAY_KEY (the desktop app's key to the AI relay), and SMTP_PASSWORD when mail goes through SMTP
+# (src/mail_smtp.ts) — or RESEND_API_KEY when it goes through Resend. Vars: SMTP_HOSTNAME, SMTP_PORT,
+# SMTP_USERNAME, SMTP_FROM_NAME, MAIL_FROM, ADMIN_EMAIL.
 
 [triggers]
 crons = ["17 * * * *"]

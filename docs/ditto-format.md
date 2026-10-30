@@ -63,12 +63,16 @@ Per type:
 ### Figure
 
 ```json
-"figure": { "box": [0.18, 0.21, 0.83, 0.43], "alt": "Lewis structure of CH₃COCl", "page": 1 }
+"figure": { "box": [210, 180, 430, 830], "alt": "Lewis structure of CH₃COCl", "page": 1 }
 ```
 
-- `box` = `[x0, y0, x1, y1]` as **fractions of the page image** (0–1), origin top-left,
-  `x0 < x1`, `y0 < y1`. Draw it tightly around the picture, including its labels and captions
-  if they are part of the picture, and excluding the question text and answer lines.
+- `box` = `[ymin, xmin, ymax, xmax]` on a **0–1000 grid** laid over the page image: y counts
+  down from the top edge, x right from the left edge, `ymin < ymax`, `xmin < xmax`. This is the
+  order vision models are trained to give boxes in, which is why the conversion prompt asks for
+  it. Draw it tightly around the picture, including its labels and captions if they are part of
+  the picture, and excluding the question text and answer lines.
+  Older files wrote `[x0, y0, x1, y1]` as **fractions** (0–1) instead and still import: a box
+  with any value above 1 is read as the grid, a box whose values are all 1 or below as fractions.
 - `page` = 1-based page of the source. Optional when converting one page at a time (verSHion
   fills it in).
 - `alt` = a short description for accessibility. Never copy handwriting into it.

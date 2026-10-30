@@ -24,6 +24,11 @@ const OPENROUTER_DEFAULT_MODEL: &str = "qwen/qwen3-vl-8b-instruct:free";
 /// Custom OpenAI-compatible endpoints default to the same model as local Ollama unless
 /// `ai_model` says otherwise (the base URL decides what that model id actually means).
 const CUSTOM_DEFAULT_MODEL: &str = "gemma4:31b";
+/// The verSHion AI relay: a Cloudflare Worker that calls Workers AI on its own account. The base
+/// is the worker's `/ai` path, the key is the relay's key (`AI_RELAY_KEY`), and the worker picks
+/// the model (a client's model id is ignored there, so this one is only for display).
+const WORKERS_DEFAULT_MODEL: &str = "@cf/google/gemma-4-26b-a4b-it";
+const WORKERS_KEY_ENV: &str = "VERSHION_RELAY_KEY";
 /// Images are slow, on small local GPUs especially.
 const TIMEOUT: Duration = Duration::from_secs(300);
 
@@ -102,6 +107,7 @@ impl AiCfg {
         let provider = match s.ai_provider.trim().to_ascii_lowercase().as_str() {
             "openrouter" => "openrouter",
             "custom" => "custom",
+            "workers" | "workers-ai" | "relay" => "workers",
             "ollama-cloud" | "cloud" | "ollama cloud" => "cloud",
             // Empty or unknown settings fall back to local Ollama.
             _ => "ollama",
@@ -110,6 +116,7 @@ impl AiCfg {
             match provider {
                 "openrouter" => OPENROUTER_DEFAULT_MODEL.to_string(),
                 "custom" => CUSTOM_DEFAULT_MODEL.to_string(),
+                "workers" => WORKERS_DEFAULT_MODEL.to_string(),
                 "cloud" => OLLAMA_CLOUD_DEFAULT_MODEL.to_string(),
                 _ => OLLAMA_DEFAULT_MODEL.to_string(),
             }
@@ -119,7 +126,8 @@ impl AiCfg {
         let base: String = match provider {
             "openrouter" => OPENROUTER_BASE.to_string(),
             "cloud" => cloud_base(),
-            "custom" => s.ai_base.trim().trim_end_matches('/').to_string(),
+            // Both the custom endpoint and the relay are whatever URL the user set.
+            "custom" | "workers" => s.ai_base.trim().trim_end_matches('/').to_string(),
             _ => OLLAMA_DEFAULT_BASE.to_string(),
         };
         AiCfg { provider: provider.to_string(), base, model }
@@ -137,6 +145,9 @@ impl AiCfg {
             "custom" => format!(
                 "A custom endpoint may need an API key. A key saved here is used first, otherwise the {CUSTOM_KEY_ENV} environment variable."
             ),
+            "workers" => format!(
+                "The verSHion relay calls Workers AI on its Cloudflare account, so there is no provider key: the binding is the credential. A relay key is needed only when the relay is reachable publicly, and is then the same key the relay was deployed with (saved here first, otherwise the {WORKERS_KEY_ENV} environment variable). A relay running on this machine needs none."
+            ),
             _ => "Ollama runs on the local machine and needs no API key.".to_string(),
         }
     }
@@ -151,9 +162,10 @@ impl AiCfg {
         resolve_key(self, &load_keys(), &|v| std::env::var(v).ok(), home_dir().as_deref()).map(|(_, s)| s).unwrap_or(KeySource::None)
     }
 
-    /// True when a request would carry a key (or the provider needs none).
+    /// True when a request would carry a key (or the provider needs none). The relay's key is
+    /// optional: a relay that is not publicly reachable (local `wrangler dev --remote`) needs none.
     pub fn has_key_or_needs_none(&self) -> bool {
-        !self.uses_key() || self.provider == "custom" || self.key_status() != KeySource::None
+        !self.uses_key() || self.provider == "custom" || self.provider == "workers" || self.key_status() != KeySource::None
     }
 
     fn key_env(&self) -> Option<&'static str> {
@@ -161,6 +173,7 @@ impl AiCfg {
             "openrouter" => Some(OPENROUTER_KEY_ENV),
             "custom" => Some(CUSTOM_KEY_ENV),
             "cloud" => Some(CLOUD_KEY_ENV),
+            "workers" => Some(WORKERS_KEY_ENV),
             _ => None,
         }
     }
@@ -320,6 +333,16 @@ fn request_key(cfg: &AiCfg) -> Option<String> {
     resolve_key(cfg, &load_keys(), &|v| std::env::var(v).ok(), home_dir().as_deref()).map(|(k, _)| k)
 }
 
+/// The listing/probe URL for a provider: Ollama's tags, the relay's health route, else `/models`.
+fn list_url(cfg: &AiCfg, base: &str) -> String {
+    match cfg.provider.as_str() {
+        "ollama" => format!("{base}/api/tags"),
+        // The relay serves one model and has no /models route; its health route proves it is up.
+        "workers" => format!("{base}/health"),
+        _ => format!("{base}/models"),
+    }
+}
+
 /// Cheap authenticated probe for the Settings "Test connection" button: GET {base}/models.
 /// Blocking; call from a thread. The reply never contains the key.
 #[cfg(not(target_arch = "wasm32"))]
@@ -328,7 +351,7 @@ pub fn test_connection(cfg: &AiCfg) -> Result<(), String> {
     if base.is_empty() {
         return Err("Set a base URL first.".to_string());
     }
-    let url = if cfg.provider == "ollama" { format!("{base}/api/tags") } else { format!("{base}/models") };
+    let url = list_url(cfg, base);
     let mut req = agent().get(&url);
     if let Some(k) = request_key(cfg) {
         req = req.header("Authorization", &format!("Bearer {k}"));
@@ -349,7 +372,7 @@ pub async fn test_connection_async(cfg: &AiCfg) -> Result<(), String> {
     if base.is_empty() {
         return Err("Set a base URL first.".to_string());
     }
-    let url = if cfg.provider == "ollama" { format!("{base}/api/tags") } else { format!("{base}/models") };
+    let url = list_url(cfg, base);
     let status = fetch_status_async(&url, request_key(cfg).as_deref())
         .await
         .map_err(|e| cloud_error_hint(cfg, e))?;
@@ -418,11 +441,15 @@ pub fn parse_models(provider: &str, v: &Value) -> Vec<String> {
 /// The models the server lists. Blocking; call from a thread.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn list_models(cfg: &AiCfg) -> Result<Vec<String>, String> {
+    // The relay serves exactly one model: nothing to list.
+    if cfg.provider == "workers" {
+        return Ok(vec![cfg.model.clone()]);
+    }
     let base = cfg.base.trim_end_matches('/');
     if base.is_empty() {
         return Err("Set a base URL first.".to_string());
     }
-    let url = if cfg.provider == "ollama" { format!("{base}/api/tags") } else { format!("{base}/models") };
+    let url = list_url(cfg, base);
     let mut req = agent().get(&url);
     if let Some(k) = request_key(cfg) {
         req = req.header("Authorization", &format!("Bearer {k}"));
@@ -444,7 +471,7 @@ pub async fn list_models_async(cfg: &AiCfg) -> Result<Vec<String>, String> {
     if base.is_empty() {
         return Err("Set a base URL first.".to_string());
     }
-    let url = if cfg.provider == "ollama" { format!("{base}/api/tags") } else { format!("{base}/models") };
+    let url = list_url(cfg, base);
     let v = get_json_async(&url, request_key(cfg).as_deref())
         .await
         .map_err(|e| cloud_error_hint(cfg, e))?;
@@ -709,7 +736,7 @@ fn list_models_json(cfg: &AiCfg) -> Result<Value, String> {
     if base.is_empty() {
         return Err("Set a base URL first.".to_string());
     }
-    let url = if cfg.provider == "ollama" { format!("{base}/api/tags") } else { format!("{base}/models") };
+    let url = list_url(cfg, base);
     let mut req = agent().get(&url);
     if let Some(k) = request_key(cfg) {
         req = req.header("Authorization", &format!("Bearer {k}"));
@@ -734,6 +761,10 @@ fn show_vision(shown: &Value) -> Option<bool> {
 /// called as the pings go. Blocking, so call it off the UI thread.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn check_models(cfg: &AiCfg, progress: &dyn Fn(usize, usize)) -> Result<Checked, String> {
+    // The relay serves one model chosen by the worker; there is nothing to list or ping.
+    if cfg.provider == "workers" {
+        return Ok(Checked { ok: vec![cfg.model.clone()], total: 1, ..Default::default() });
+    }
     let listing = list_models_json(cfg)?;
     let infos = parse_model_info(&cfg.provider, &listing);
     let total = infos.len();
@@ -785,11 +816,15 @@ fn checked_from_flags(total: usize, flags: Vec<(String, Option<bool>)>) -> Check
 
 #[cfg(target_arch = "wasm32")]
 pub async fn check_models_async(cfg: &AiCfg, progress: &dyn Fn(usize, usize)) -> Result<Checked, String> {
+    // The relay serves one model chosen by the worker; there is nothing to list or ping.
+    if cfg.provider == "workers" {
+        return Ok(Checked { ok: vec![cfg.model.clone()], total: 1, ..Default::default() });
+    }
     let base = cfg.base.trim_end_matches('/');
     if base.is_empty() {
         return Err("Set a base URL first.".to_string());
     }
-    let url = if cfg.provider == "ollama" { format!("{base}/api/tags") } else { format!("{base}/models") };
+    let url = list_url(cfg, base);
     let listing = get_json_async(&url, request_key(cfg).as_deref()).await.map_err(|e| cloud_error_hint(cfg, e))?;
     let infos = parse_model_info(&cfg.provider, &listing);
     let total = infos.len();
@@ -912,7 +947,8 @@ pub fn convert_page(bytes: &[u8], mime: &str, hint: &str, cfg: &AiCfg, page_no: 
             continue;
         }
         let crop = crate::store::read_media(&q.image.as_ref().expect("checked").file).unwrap_or_default();
-        match crate::figfit::fit(&crop, &q.stem, cfg) {
+        // Up to 3 attempts: a picture the first generator misses gets another generator.
+        match crate::figfit::fit_with_retries(&crop, &q.stem, cfg, 3) {
             Ok(Some(f)) => match crate::store::put_image(&f.png) {
                 Ok(img) => {
                     q.image = Some(img);
@@ -933,8 +969,13 @@ pub fn convert_page(bytes: &[u8], mime: &str, hint: &str, cfg: &AiCfg, page_no: 
 pub fn transcribe_checked(bytes: &[u8], mime: &str, cfg: &AiCfg, prompt: &str) -> Result<String, String> {
     let mut reply = transcribe_at(bytes, mime, cfg, prompt, 0.0)?;
     for attempt in 1..=2 {
-        let Some(err) = crate::ditto::json_error(&reply) else { break };
-        let again = format!("{prompt}\n\nYour previous reply was not valid JSON ({err}). Output the complete package again as strictly valid JSON: commas between members, no trailing commas, no comments.");
+        // An empty reply is retried like a bad one: a burst of pages can come back empty.
+        let problem = match crate::ditto::json_error(&reply) {
+            Some(e) => format!("Your previous reply was not valid JSON ({e})."),
+            None if reply.trim().is_empty() => "Your previous reply was empty.".to_string(),
+            None => break,
+        };
+        let again = format!("{prompt}\n\n{problem} Output the complete package again as strictly valid JSON: commas between members, no trailing commas, no comments.");
         match transcribe_at(bytes, mime, cfg, &again, 0.2 * attempt as f64) {
             Ok(r) => reply = r,
             Err(_) => break,
@@ -1004,7 +1045,7 @@ fn post_json(url: &str, body: Value, key: Option<&str>) -> Result<Value, String>
     let status = resp.status().as_u16();
     let text = resp.body_mut().read_to_string().map_err(|e| format!("Bad reply from {url}: {e}"))?;
     let v: Value = serde_json::from_str(&text)
-        .map_err(|e| format!("{url} did not answer with JSON ({e}): {}", text.chars().take(160).collect::<String>()))?;
+        .map_err(|e| format!("{url} did not answer with JSON ({e})."))?;
     if !(200..300).contains(&status) {
         let msg = v.pointer("/error/message").and_then(Value::as_str).or_else(|| v.get("error").and_then(Value::as_str)).unwrap_or("request failed");
         return Err(format!("{url} answered {status}: {msg}"));
@@ -1045,7 +1086,7 @@ async fn post_json_async(url: &str, body: &Value, key: Option<&str>) -> Result<V
     let status = resp.status();
     let text = wasm_bindgen_futures::JsFuture::from(resp.text().map_err(js)?).await.map_err(js)?.as_string().unwrap_or_default();
     let v: Value = serde_json::from_str(&text)
-        .map_err(|e| format!("{url} did not answer with JSON ({e}): {}", text.chars().take(160).collect::<String>()))?;
+        .map_err(|e| format!("{url} did not answer with JSON ({e})."))?;
     if !(200..300).contains(&status) {
         let msg = v.pointer("/error/message").and_then(Value::as_str).or_else(|| v.get("error").and_then(Value::as_str)).unwrap_or("request failed");
         return Err(format!("{url} answered {status}: {msg}"));
@@ -1159,7 +1200,7 @@ pub async fn convert_page_async(bytes: &[u8], mime: &str, hint: &str, cfg: &AiCf
             continue;
         }
         let crop = crate::store::read_media(&q.image.as_ref().expect("checked").file).unwrap_or_default();
-        match crate::figfit::fit_async(&crop, &q.stem, cfg).await {
+        match crate::figfit::fit_async_with_retries(&crop, &q.stem, cfg, 3).await {
             Ok(Some(f)) => match crate::store::put_image(&f.png) {
                 Ok(img) => {
                     q.image = Some(img);
@@ -1220,7 +1261,7 @@ mod tests {
         for ty in ["multiple-choice", "true-false", "matching", "fill-in-the-blank", "short-answer", "multipart"] {
             assert!(p.contains(ty), "prompt must name {ty}");
         }
-        for must in ["___", "\"box\"", "queshion/ditto", "No markdown fences", "FRACTIONS"] {
+        for must in ["___", "\"box\"", "queshion/ditto", "No markdown fences", "[ymin, xmin, ymax, xmax]", "0 to 1000 grid"] {
             assert!(p.contains(must), "prompt must mention {must}");
         }
     }
@@ -1270,6 +1311,19 @@ mod tests {
         assert!(AiCfg::from(&settings("openrouter", "", "")).key_source_help().contains(OPENROUTER_KEY_ENV));
         assert!(AiCfg::from(&settings("custom", "", "")).key_source_help().contains(CUSTOM_KEY_ENV));
         assert!(AiCfg::from(&settings("ollama", "", "")).key_source_help().contains("no API key"));
+    #[test]
+    fn cfg_maps_the_relay_provider() {
+        let c = AiCfg::from(&settings("workers", "", "https://relay.example/ai/"));
+        assert_eq!(c.provider, "workers");
+        assert_eq!(c.base, "https://relay.example/ai");
+        assert_eq!(c.model, WORKERS_DEFAULT_MODEL);
+        assert!(c.uses_key(), "the relay needs its relay key");
+        assert!(c.key_source_help().contains("relay"));
+        // The aliases map to the same provider; an empty base stays empty so chat_turns says to set it.
+        assert_eq!(AiCfg::from(&settings("relay", "", "")).provider, "workers");
+        assert_eq!(AiCfg::from(&settings("workers-ai", "", "")).base, "");
+    }
+
     }
 
     #[test]

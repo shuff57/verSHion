@@ -14,6 +14,7 @@ import { json as poolJson } from "./pool/shared.ts";
 import { poolNotifier } from "./poolmail.ts";
 import { adminAlert, makeMailer, queueReminder, type MailEnv } from "./mail.js";
 import { flushNoticeBacklog, noticeNewApplication } from "./notices.js";
+import { AI_DEFAULT_MODEL, createAi, type AiBinding } from "./ai/index.ts";
 
 export interface Env extends MailEnv {
   DB: D1Database;
@@ -31,6 +32,20 @@ export interface Env extends MailEnv {
    * (503 pool_not_configured); auth keeps working. Never rotate it casually: stored hashes use it.
    */
   POOL_HASH_KEY?: string;
+  /**
+   * Workers AI binding (`[ai]` in wrangler.toml). Absent under `wrangler dev --local`, where
+   * `/ai/chat/completions` answers 503 ai_not_configured. See docs/ai-harness-spec.md.
+   */
+  AI?: AiBinding;
+  /** The one model the relay calls. The client's `model` field is ignored on purpose. */
+  AI_MODEL?: string;
+  /**
+   * `wrangler secret put AI_RELAY_KEY`: the desktop app's key to the relay. Inference is billed to
+   * this account; the key only authorises the app. Not a Cloudflare API token.
+   */
+  AI_RELAY_KEY?: string;
+  /** "1" turns Gemma 4's thinking mode on for the relay. Off by default (see src/ai/index.ts). */
+  AI_THINKING?: string;
 }
 
 /** The derived full-hash key, per secret value (one HKDF per isolate). */
@@ -160,6 +175,10 @@ async function handleFetch(req: Request, env: Env, ctx: ExecutionContext): Promi
   if (handled) return handled;
   const pre = a.preflight(req, POOL_METHODS);
   if (pre) return pre;
+  // The AI relay (docs/ai-harness-spec.md §2): authenticated, no D1 and no share-core involved.
+  const ai = createAi({ ai: env.AI, model: env.AI_MODEL ?? AI_DEFAULT_MODEL, allowedOrigins: origins(env), authenticate: (r) => a.authenticate(r), relayKey: env.AI_RELAY_KEY, thinking: env.AI_THINKING === "1" });
+  const relayed = await ai.handle(req);
+  if (relayed) return a.withCors(req, relayed);
   // No hash key (POOL_HASH_KEY missing or too short): the pool refuses, never hashes unkeyed.
   if (hashKey === null && /^\/(items|blobs|circles)(\/|$)/.test(new URL(req.url).pathname))
     return a.withCors(req, poolJson(503, { error: "pool_not_configured" }));

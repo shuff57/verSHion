@@ -439,6 +439,20 @@ fn part(p: &Value) -> Option<Part> {
 }
 
 /// Crops `figure.box` (fractions of the page, top-left origin) out of the page raster.
+/// A figure box as `[x0, y0, x1, y1]` fractions of the page, whichever of the two conventions it
+/// was written in. The conversion prompt asks for the vision model's native one,
+/// `[ymin, xmin, ymax, xmax]` on a 0..1000 grid: asked for x-first fractions instead, the model
+/// put pictures near the top of a page in the wrong place (a blank region) about half the time.
+/// Older files and hand-written ones use the fractions. Telling them apart is safe because a grid
+/// box always has a value above 1, and a fraction box never does.
+fn box_fractions(b: &[f64]) -> [f64; 4] {
+    if b.iter().any(|v| *v > 1.0) {
+        [b[1] / 1000.0, b[0] / 1000.0, b[3] / 1000.0, b[2] / 1000.0]
+    } else {
+        [b[0], b[1], b[2], b[3]]
+    }
+}
+
 fn crop(fig: &Value, page: Option<&image::DynamicImage>, page_no: usize) -> Result<Vec<u8>, String> {
     let page = page.ok_or("no page image to crop from")?;
     if let Some(p) = fig.get("page").and_then(Value::as_u64)
@@ -452,8 +466,9 @@ fn crop(fig: &Value, page: Option<&image::DynamicImage>, page_no: usize) -> Resu
     }
     let (w, h) = (page.width() as f64, page.height() as f64);
     let pad = 0.012;
-    let (x0, y0) = ((b[0] - pad).clamp(0.0, 1.0), (b[1] - pad).clamp(0.0, 1.0));
-    let (x1, y1) = ((b[2] + pad).clamp(0.0, 1.0), (b[3] + pad).clamp(0.0, 1.0));
+    let [bx0, by0, bx1, by1] = box_fractions(&b);
+    let (x0, y0) = ((bx0 - pad).clamp(0.0, 1.0), (by0 - pad).clamp(0.0, 1.0));
+    let (x1, y1) = ((bx1 + pad).clamp(0.0, 1.0), (by1 + pad).clamp(0.0, 1.0));
     let (px, py) = ((x0 * w) as u32, (y0 * h) as u32);
     let (pw, ph) = (((x1 - x0) * w) as u32, ((y1 - y0) * h) as u32);
     if pw < 24 || ph < 24 {
@@ -639,5 +654,39 @@ mod tests {
         assert_eq!(r.figures, 1);
         assert!(r.doc.questions[0].image.is_some() && r.doc.questions[1].image.is_none());
         assert_eq!(r.warnings.len(), 1);
+    }
+
+    #[test]
+    fn a_box_is_read_in_the_models_native_grid_or_in_legacy_fractions() {
+        // Native: [ymin, xmin, ymax, xmax] on a 0..1000 grid (a value above 1 says so).
+        assert_eq!(box_fractions(&[100.0, 200.0, 400.0, 600.0]), [0.2, 0.1, 0.6, 0.4]);
+        // Legacy: [x0, y0, x1, y1] fractions, unchanged, including the whole-page box.
+        assert_eq!(box_fractions(&[0.2, 0.1, 0.6, 0.4]), [0.2, 0.1, 0.6, 0.4]);
+        assert_eq!(box_fractions(&[0.0, 0.0, 1.0, 1.0]), [0.0, 0.0, 1.0, 1.0]);
+        // The whole page on the grid is still the whole page.
+        assert_eq!(box_fractions(&[0.0, 0.0, 1000.0, 1000.0]), [0.0, 0.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn a_grid_box_crops_the_same_region_as_its_fraction_twin() {
+        store();
+        // The same rectangle, once on the grid and once as fractions, on a 200x300 page.
+        let grid = r#"{"format":"queshion/ditto","bank":{"questions":[{"type":"short-answer","stem":"G","figure":{"box":[100,200,400,600]}}]}}"#;
+        let frac = r#"{"format":"queshion/ditto","bank":{"questions":[{"type":"short-answer","stem":"F","figure":{"box":[0.2,0.1,0.6,0.4]}}]}}"#;
+        let g = import_text(grid, Some(&page()), 1, "n").unwrap();
+        let f = import_text(frac, Some(&page()), 1, "n").unwrap();
+        let (gi, fi) = (g.doc.questions[0].image.as_ref().expect("grid box cropped"), f.doc.questions[0].image.as_ref().expect("fraction box cropped"));
+        assert_eq!((gi.width, gi.height), (fi.width, fi.height));
+        // x 0.2..0.6 of 200 px plus padding, y 0.1..0.4 of 300 px plus padding.
+        assert!((gi.width as i64 - 84).abs() <= 2 && (gi.height as i64 - 97).abs() <= 2, "{}x{}", gi.width, gi.height);
+    }
+
+    #[test]
+    fn a_model_that_puts_the_alt_text_inside_the_box_array_still_crops() {
+        store();
+        // Seen from the live model: the description rode along as a fifth element of `box`.
+        let t = r#"{"format":"queshion/ditto","bank":{"questions":[{"type":"short-answer","stem":"S","figure":{"box":[100,200,400,600,"A right triangle"]}}]}}"#;
+        // A string is not a number, so only four numbers remain and the crop goes ahead.
+        assert_eq!(import_text(t, Some(&page()), 1, "n").unwrap().figures, 1);
     }
 }

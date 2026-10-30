@@ -53,7 +53,7 @@ export async function preReadBody(
   _ipBucket?: (ip: string) => string,
 ): Promise<Request | Response> {
   const path = new URL(req.url).pathname;
-  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS" || /^\/(items|blobs|circles)(\/|$)/.test(path)) return req;
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS" || /^\/(items|blobs|circles|ai)(\/|$)/.test(path)) return req;
   try {
     const ip = (req.headers.get("CF-Connecting-IP") ?? "").trim();
     const bearer = /^Bearer \S+$/.test(req.headers.get("Authorization") ?? "");

@@ -1338,7 +1338,7 @@ impl crate::App {
         let testing = msg.as_ref().is_some_and(|m| m.0 == "Testing…");
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            ui.label(theme::text("API key"));
+            ui.label(theme::text(if cfg.provider == "workers" { "Relay key" } else { "API key" }));
             ui.add(
                 egui::TextEdit::singleline(&mut buf)
                     .password(true)
@@ -1495,6 +1495,7 @@ impl crate::App {
                     ui.horizontal_wrapped(|ui| {
                         for (val, label) in [
                             ("cloud", "Ollama Cloud"),
+                            ("workers", "verSHion relay"),
                             ("ollama", "Ollama (local)"),
                             ("openrouter", "OpenRouter"),
                             ("custom", "Custom endpoint"),
@@ -1506,13 +1507,18 @@ impl crate::App {
                         }
                     });
                     ui.add_space(6.0);
-                    if app.settings.ai_provider == "custom" {
+                    if app.settings.ai_provider == "custom" || app.settings.ai_provider == "workers" {
                         ui.horizontal(|ui| {
                             ui.label(theme::text("Base URL"));
+                            let hint = if app.settings.ai_provider == "workers" {
+                                "https://your-relay.example/ai"
+                            } else {
+                                "http://127.0.0.1:8000/v1"
+                            };
                             ui.add(
                                 egui::TextEdit::singleline(&mut app.settings.ai_base)
                                     .desired_width(360.0)
-                                    .hint_text("http://127.0.0.1:8000/v1"),
+                                    .hint_text(hint),
                             );
                         });
                     }
