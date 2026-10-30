@@ -930,9 +930,57 @@ pub struct Converted {
 
 /// The whole Import path for one page image: model reply -> Ditto parse (figures cropped) ->
 /// figure fitting (crops become editable Figures-tab figures when a generator matches).
+/// With the relay provider the page goes as a one-page import job (no long-held connection);
+/// anything else, or a relay without the job routes, takes the chat path.
 pub fn convert_page(bytes: &[u8], mime: &str, hint: &str, cfg: &AiCfg, page_no: usize) -> Result<Converted, String> {
+    #[cfg(not(target_arch = "wasm32"))]
+    if cfg.provider == "workers"
+        && let Ok(mut texts) = job_texts(&[(bytes, mime)], hint, cfg, &|_, _| {})
+        && let Some(Ok(raw)) = texts.pop()
+        && crate::ditto::json_error(&raw).is_none()
+    {
+        return finish_page(&raw, bytes, cfg, page_no);
+    }
+    convert_page_chat(bytes, mime, hint, cfg, page_no)
+}
+
+/// [`convert_page`] without the job route: the model answers one chat turn (retried on bad JSON).
+pub fn convert_page_chat(bytes: &[u8], mime: &str, hint: &str, cfg: &AiCfg, page_no: usize) -> Result<Converted, String> {
     let raw = transcribe_checked(bytes, mime, cfg, &transcription_prompt(hint))?;
-    let text = extract_import_text(&raw);
+    finish_page(&raw, bytes, cfg, page_no)
+}
+
+/// Every page of a document. With the relay provider the whole document is one import job (the
+/// worker reads the pages in order, so a long PDF is not a burst of parallel calls); a page the job
+/// could not read, or answered with broken JSON, is retried on the chat path. `progress(done,
+/// total)` reports the job's pages. Figure cropping and fitting then run per page, in parallel.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn convert_pages(pages: &[Vec<u8>], hint: &str, cfg: &AiCfg, progress: &(dyn Fn(usize, usize) + Sync)) -> Vec<Result<Converted, String>> {
+    let job: Option<Vec<Result<String, String>>> = if cfg.provider == "workers" {
+        let refs: Vec<(&[u8], &str)> = pages.iter().map(|p| (p.as_slice(), "image/png")).collect();
+        job_texts(&refs, hint, cfg, progress).ok()
+    } else {
+        None
+    };
+    std::thread::scope(|sc| {
+        let hs: Vec<_> = pages
+            .iter()
+            .enumerate()
+            .map(|(i, png)| {
+                let raw = job.as_ref().and_then(|j| j.get(i)).and_then(|r| r.as_ref().ok()).filter(|r| crate::ditto::json_error(r).is_none()).cloned();
+                sc.spawn(move || match raw {
+                    Some(raw) => finish_page(&raw, png, cfg, i + 1),
+                    None => convert_page_chat(png, "image/png", hint, cfg, i + 1),
+                })
+            })
+            .collect();
+        hs.into_iter().map(|h| h.join().unwrap_or_else(|_| Err("thread panicked".into()))).collect()
+    })
+}
+
+/// Parses one page's model reply into questions, crops its pictures and fits them to generators.
+fn finish_page(raw: &str, bytes: &[u8], cfg: &AiCfg, page_no: usize) -> Result<Converted, String> {
+    let text = extract_import_text(raw);
     if text.is_empty() {
         return Err("The model returned no text.".to_string());
     }
@@ -1032,6 +1080,77 @@ fn openai_chat(cfg: &AiCfg, prompt: &str, mime: &str, images: &[&[u8]], temp: f6
         .and_then(Value::as_str)
         .map(str::to_string)
         .ok_or_else(|| "The reply had no message content.".to_string())
+}
+
+/// How long a job may run, polled every JOB_POLL, before the app stops waiting.
+#[cfg(not(target_arch = "wasm32"))]
+const JOB_WAIT: Duration = Duration::from_secs(25 * 60);
+#[cfg(not(target_arch = "wasm32"))]
+const JOB_POLL: Duration = Duration::from_millis(1500);
+
+/// Sends pages to the relay's import job (`POST {base}/import`, then `GET {base}/import/<id>`) and
+/// waits for it. One entry per page: the model's reply text, or why that page has none. `Err`
+/// means the job could not be started or followed at all (an older relay, a refused request, a job
+/// that failed outright), and the caller falls back to the chat path.
+#[cfg(not(target_arch = "wasm32"))]
+fn job_texts(pages: &[(&[u8], &str)], hint: &str, cfg: &AiCfg, progress: &dyn Fn(usize, usize)) -> Result<Vec<Result<String, String>>, String> {
+    let base = cfg.base.trim_end_matches('/');
+    if base.is_empty() {
+        return Err("Set the relay URL in Settings.".to_string());
+    }
+    let key = request_key(cfg);
+    let body = json!({
+        "hint": hint.trim().chars().take(500).collect::<String>(),
+        "pages": pages.iter().map(|(b, m)| json!({"mime": m, "b64": base64_encode(b)})).collect::<Vec<_>>(),
+    });
+    let id = post_json(&format!("{base}/import"), body, key.as_deref())?
+        .get("job_id")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .ok_or_else(|| "The relay did not start a job.".to_string())?;
+    let url = format!("{base}/import/{id}");
+    let started = std::time::Instant::now();
+    loop {
+        let job = get_json(&url, key.as_deref())?;
+        progress(job.get("pages_done").and_then(Value::as_u64).unwrap_or(0) as usize, pages.len());
+        match job.get("status").and_then(Value::as_str) {
+            Some("done") => return Ok(job_pages(&job, pages.len())),
+            Some("failed") => return Err(job.get("error").and_then(Value::as_str).unwrap_or("The import job failed.").to_string()),
+            _ if started.elapsed() > JOB_WAIT => return Err("The import job took too long.".to_string()),
+            _ => std::thread::sleep(JOB_POLL),
+        }
+    }
+}
+
+/// The per-page texts of a finished job, in page order; a missing page counts as unread.
+#[cfg(not(target_arch = "wasm32"))]
+fn job_pages(job: &Value, total: usize) -> Vec<Result<String, String>> {
+    let mut out: Vec<Result<String, String>> = (0..total).map(|_| Err("no reply".to_string())).collect();
+    for p in job.pointer("/result/pages").and_then(Value::as_array).into_iter().flatten() {
+        let Some(i) = p.get("page").and_then(Value::as_u64).and_then(|n| (n as usize).checked_sub(1)).filter(|i| *i < total) else { continue };
+        out[i] = match p.get("text").and_then(Value::as_str) {
+            Some(t) => Ok(t.to_string()),
+            None => Err(p.get("error").and_then(Value::as_str).unwrap_or("no reply").to_string()),
+        };
+    }
+    out
+}
+
+/// One JSON GET, answered like [`post_json`].
+#[cfg(not(target_arch = "wasm32"))]
+fn get_json(url: &str, key: Option<&str>) -> Result<Value, String> {
+    let mut req = agent().get(url);
+    if let Some(k) = key {
+        req = req.header("Authorization", &format!("Bearer {k}"));
+    }
+    let mut resp = req.call().map_err(|e| format!("Can't reach {url}: {e}"))?;
+    let status = resp.status().as_u16();
+    let text = resp.body_mut().read_to_string().map_err(|e| format!("Bad reply from {url}: {e}"))?;
+    let v: Value = serde_json::from_str(&text).map_err(|e| format!("{url} did not answer with JSON ({e})."))?;
+    if !(200..300).contains(&status) {
+        return Err(format!("{url} answered {status}: {}", v.pointer("/error/message").and_then(Value::as_str).unwrap_or("request failed")));
+    }
+    Ok(v)
 }
 
 /// One JSON POST, with the same error shapes for both providers; answers with the body.
@@ -1281,6 +1400,94 @@ mod tests {
         assert_eq!(extract_import_text(" MC\nQ? "), "MC\nQ?");
         // No content line after the fence: left as-is for the parsers to report.
         assert_eq!(extract_import_text("```junk"), "```junk");
+    }
+
+    /// A one-connection-per-request stub relay: answers `replies` in order, records each request line
+    /// and body, and stops when they run out.
+    fn stub_relay(replies: Vec<(u16, String)>) -> (String, std::thread::JoinHandle<Vec<(String, String)>>) {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}/ai", listener.local_addr().unwrap());
+        let h = std::thread::spawn(move || {
+            let mut seen = Vec::new();
+            for (status, body) in replies {
+                let (mut sock, _) = listener.accept().unwrap();
+                let mut buf = Vec::new();
+                let mut chunk = [0u8; 4096];
+                let (head_end, want) = loop {
+                    let n = sock.read(&mut chunk).unwrap();
+                    buf.extend_from_slice(&chunk[..n]);
+                    if let Some(p) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                        let head = String::from_utf8_lossy(&buf[..p]).to_ascii_lowercase();
+                        let len = head.lines().find_map(|l| l.strip_prefix("content-length:")).and_then(|v| v.trim().parse::<usize>().ok()).unwrap_or(0);
+                        break (p + 4, len);
+                    }
+                };
+                while buf.len() < head_end + want {
+                    let n = sock.read(&mut chunk).unwrap();
+                    buf.extend_from_slice(&chunk[..n]);
+                }
+                let line = String::from_utf8_lossy(&buf).lines().next().unwrap_or("").to_string();
+                seen.push((line, String::from_utf8_lossy(&buf[head_end..]).to_string()));
+                let reply = format!("HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+                sock.write_all(reply.as_bytes()).unwrap();
+            }
+            seen
+        });
+        (base, h)
+    }
+
+    fn relay_cfg(base: &str) -> AiCfg {
+        AiCfg { provider: "workers".into(), base: base.into(), model: String::new() }
+    }
+
+    #[test]
+    fn a_job_is_started_followed_and_read_in_page_order() {
+        let done = r#"{"status":"done","pages_done":3,"pages_total":3,"error":null,"result":{"pages":[{"page":2,"error":"model_failed"},{"page":1,"text":"ONE"},{"page":3,"text":"THREE"}]}}"#;
+        let (base, h) = stub_relay(vec![
+            (202, r#"{"job_id":"abc"}"#.into()),
+            (200, r#"{"status":"running","pages_done":1,"pages_total":3,"result":{"pages":[]}}"#.into()),
+            (200, done.into()),
+        ]);
+        let seen_progress = std::sync::Mutex::new(Vec::new());
+        let pages: [(&[u8], &str); 3] = [(b"p1", "image/png"), (b"p2", "image/png"), (b"p3", "image/png")];
+        let out = job_texts(&pages, "  Quiz 4  ", &relay_cfg(&base), &|d, t| seen_progress.lock().unwrap().push((d, t))).unwrap();
+        // Page order, not the order the worker listed them in; a failed page says why.
+        assert_eq!(out, vec![Ok("ONE".to_string()), Err("model_failed".to_string()), Ok("THREE".to_string())]);
+        assert_eq!(*seen_progress.lock().unwrap(), vec![(1, 3), (3, 3)]);
+        let seen = h.join().unwrap();
+        assert_eq!(seen[0].0, "POST /ai/import HTTP/1.1");
+        assert_eq!(seen[1].0, "GET /ai/import/abc HTTP/1.1");
+        let sent: Value = serde_json::from_str(&seen[0].1).unwrap();
+        assert_eq!(sent["hint"], "Quiz 4");
+        assert_eq!(sent["pages"].as_array().unwrap().len(), 3);
+        assert_eq!(sent["pages"][0]["mime"], "image/png");
+        assert_eq!(sent["pages"][0]["b64"], base64_encode(b"p1"));
+    }
+
+    #[test]
+    fn a_job_the_relay_refuses_or_fails_is_an_error_so_the_caller_can_fall_back() {
+        let pages: [(&[u8], &str); 1] = [(b"p", "image/png")];
+        // An older relay without the job routes.
+        let (base, h) = stub_relay(vec![(404, r#"{"error":{"message":"not found"}}"#.into())]);
+        assert!(job_texts(&pages, "", &relay_cfg(&base), &|_, _| {}).unwrap_err().contains("404"));
+        h.join().unwrap();
+        // A quota refusal names itself.
+        let (base, h) = stub_relay(vec![(429, r#"{"error":{"code":"quota_exhausted","message":"The AI allowance for today is used up."}}"#.into())]);
+        assert!(job_texts(&pages, "", &relay_cfg(&base), &|_, _| {}).unwrap_err().contains("used up"));
+        h.join().unwrap();
+        // A job that failed outright.
+        let (base, h) = stub_relay(vec![(202, r#"{"job_id":"j"}"#.into()), (200, r#"{"status":"failed","error":"No page could be read.","result":{"pages":[]}}"#.into())]);
+        assert_eq!(job_texts(&pages, "", &relay_cfg(&base), &|_, _| {}).unwrap_err(), "No page could be read.");
+        h.join().unwrap();
+        // No URL set.
+        assert!(job_texts(&pages, "", &relay_cfg(""), &|_, _| {}).unwrap_err().contains("relay URL"));
+    }
+
+    #[test]
+    fn a_page_the_job_did_not_return_counts_as_unread() {
+        let job: Value = serde_json::from_str(r#"{"result":{"pages":[{"page":1,"text":"A"},{"page":9,"text":"stray"},{"page":0,"text":"zero"}]}}"#).unwrap();
+        assert_eq!(job_pages(&job, 2), vec![Ok("A".to_string()), Err("no reply".to_string())]);
     }
 
     #[test]

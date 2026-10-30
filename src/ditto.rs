@@ -667,26 +667,32 @@ mod tests {
         assert_eq!(box_fractions(&[0.0, 0.0, 1000.0, 1000.0]), [0.0, 0.0, 1.0, 1.0]);
     }
 
+    /// The size of what `crop` cuts from the 200x300 test page for a figure with this box.
+    fn cropped_size(box_json: &str) -> Result<(u32, u32), String> {
+        let page = image::load_from_memory(&page()).unwrap();
+        let fig: Value = serde_json::from_str(&format!(r#"{{"box":{box_json}}}"#)).unwrap();
+        let png = crop(&fig, Some(&page), 1)?;
+        let img = image::load_from_memory(&png).unwrap();
+        Ok((img.width(), img.height()))
+    }
+
     #[test]
     fn a_grid_box_crops_the_same_region_as_its_fraction_twin() {
-        store();
-        // The same rectangle, once on the grid and once as fractions, on a 200x300 page.
-        let grid = r#"{"format":"queshion/ditto","bank":{"questions":[{"type":"short-answer","stem":"G","figure":{"box":[100,200,400,600]}}]}}"#;
-        let frac = r#"{"format":"queshion/ditto","bank":{"questions":[{"type":"short-answer","stem":"F","figure":{"box":[0.2,0.1,0.6,0.4]}}]}}"#;
-        let g = import_text(grid, Some(&page()), 1, "n").unwrap();
-        let f = import_text(frac, Some(&page()), 1, "n").unwrap();
-        let (gi, fi) = (g.doc.questions[0].image.as_ref().expect("grid box cropped"), f.doc.questions[0].image.as_ref().expect("fraction box cropped"));
-        assert_eq!((gi.width, gi.height), (fi.width, fi.height));
+        // The same rectangle, once on the grid and once as fractions, on a 200x300 page. (Calls the
+        // pure `crop`, not the whole import: the import saves into the process-wide store dir, which
+        // other tests change concurrently.)
+        let grid = cropped_size("[100,200,400,600]").expect("grid box cropped");
+        let frac = cropped_size("[0.2,0.1,0.6,0.4]").expect("fraction box cropped");
+        assert_eq!(grid, frac);
         // x 0.2..0.6 of 200 px plus padding, y 0.1..0.4 of 300 px plus padding.
-        assert!((gi.width as i64 - 84).abs() <= 2 && (gi.height as i64 - 97).abs() <= 2, "{}x{}", gi.width, gi.height);
+        assert!((grid.0 as i64 - 84).abs() <= 2 && (grid.1 as i64 - 97).abs() <= 2, "{grid:?}");
     }
 
     #[test]
     fn a_model_that_puts_the_alt_text_inside_the_box_array_still_crops() {
-        store();
-        // Seen from the live model: the description rode along as a fifth element of `box`.
-        let t = r#"{"format":"queshion/ditto","bank":{"questions":[{"type":"short-answer","stem":"S","figure":{"box":[100,200,400,600,"A right triangle"]}}]}}"#;
-        // A string is not a number, so only four numbers remain and the crop goes ahead.
-        assert_eq!(import_text(t, Some(&page()), 1, "n").unwrap().figures, 1);
+        // Seen from the live model: the description rode along as a fifth element of `box`. A string
+        // is not a number, so only the four numbers remain and the crop goes ahead.
+        assert_eq!(cropped_size(r#"[100,200,400,600,"A right triangle"]"#), cropped_size("[100,200,400,600]"));
+        assert!(cropped_size("[100,200,400,600]").is_ok());
     }
 }

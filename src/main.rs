@@ -307,10 +307,8 @@ fn import_pdf_headless(pdf: &str) {
     let pages = platform::render_pdf_pages(&bytes).unwrap_or_else(|e| panic!("{e}"));
     let settings: Settings = store::load_json("settings.json").unwrap_or_default();
     let cfg = ai::AiCfg::from(&settings);
-    let converted: Vec<Result<ai::Converted, String>> = std::thread::scope(|sc| {
-        let hs: Vec<_> = pages.iter().enumerate().map(|(i, png)| sc.spawn({ let cfg = &cfg; move || ai::convert_page(png, "image/png", "", cfg, i + 1) })).collect();
-        hs.into_iter().map(|h| h.join().unwrap_or_else(|_| Err("thread panicked".into()))).collect()
-    });
+    let hint = vershion::env_var("VERSHION_IMPORT_HINT").unwrap_or_default();
+    let converted = ai::convert_pages(&pages, &hint, &cfg, &|done, total| eprintln!("job: {done}/{total} pages read"));
     let mut questions = Vec::new();
     for (i, c) in converted.into_iter().enumerate() {
         let c = c.unwrap_or_else(|e| panic!("page {} failed: {e}", i + 1));
