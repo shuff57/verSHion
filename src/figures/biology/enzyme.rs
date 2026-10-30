@@ -242,10 +242,38 @@ pub fn build(p: &Params) -> (String, Report) {
             "middle" => (x - w / 2.0, x + w / 2.0, y - size, y + size * 0.35),
             _ => (x, x + w, y - size, y + size * 0.35),
         };
+        // (round 7 major) the marked point is drawn AFTER every plot label, and was in no collision box at all: at
+        // [S] = Km it sat on the half-rate label, at a low rate on the Km label, and printed through them. Its
+        // footprint (the 4.5 px radius plus a little) is now one of the boxes every label has to clear.
+        let px = f.px(s_at);
+        let py = f.py(v_at);
+        const POINT_R: f64 = 4.5;
+        let point_box = (px - POINT_R - 2.0, px + POINT_R + 2.0, py - POINT_R - 2.0, py + POINT_R + 2.0);
+        // The Km label's usual place is centred on its marker at the axis. When the marked point sits there
+        // (s_at ≈ Km, or a low [S] on the same column), move it beside the point — then up a row — until it clears.
+        let km_base = (km_lx, km_anchor, km_y);
+        let mut km_pos = km_base;
+        for (x, a, y) in [
+            km_base,
+            (px + 8.0, "start", km_y),
+            (px - 8.0, "end", km_y),
+            (km_lx, km_anchor, km_y - 20.0 * lab),
+            (km_lx, km_anchor, km_y - 36.0 * lab),
+        ] {
+            let b = box_around(x, km_w, a, y, 12.0 * lab);
+            if !hits(b, point_box) && b.0 >= f.left() - 2.0 && b.1 <= f.right() + 2.0 && b.2 > f.top() {
+                km_pos = (x, a, y);
+                break;
+            }
+        }
+        let (km_lx, km_anchor, km_y) = km_pos;
         let km_box = box_around(km_lx, km_w, km_anchor, km_y, 12.0 * lab);
         let note_text = format!("{km_name} = {}, beyond this axis", val(km_a, dec));
         let note_w = note_text.chars().count() as f64 * 12.0 * lab * 0.55;
         let note_box = box_around(f.right() - 4.0, note_w, "end", half - 7.0 * lab, 12.0 * lab);
+        // the note is drawn at a row chosen below (clear of Vmax′ and the point), so the box the half-rate and rate
+        // labels clear must be the one it actually lands on, not its first candidate
+        let mut note_under = note_box;
         // (round 6) the asymptote label is a box too, and no earlier round checked it: a noncompetitive inhibitor drops
         // the asymptote onto the row where the Km label (or its note) lives, and the two printed through each other.
         // It goes above its line, then higher, until it clears them; it is never moved below the line.
@@ -254,7 +282,7 @@ pub fn build(p: &Params) -> (String, Report) {
         let mut vmax_y = vy - 8.0 * lab;
         for y in [vy - 8.0 * lab, vy - 24.0 * lab, vy - 40.0 * lab, vy - 56.0 * lab] {
             let b = box_around(f.right() - 4.0, vmax_w, "end", y, 12.0 * lab);
-            if !hits(b, under_base) && b.2 > f.top() {
+            if !hits(b, under_base) && !hits(b, point_box) && b.2 > f.top() {
                 vmax_y = y;
                 break;
             }
@@ -276,16 +304,17 @@ pub fn build(p: &Params) -> (String, Report) {
             let mut note_y = half - 7.0 * lab;
             for y in [half - 7.0 * lab, half + 12.0 * lab, half - 26.0 * lab] {
                 let b = box_around(f.right() - 4.0, note_w, "end", y, 12.0 * lab);
-                if !hits(b, vmax_box) && b.2 > f.top() && b.3 < f.bottom() + 30.0 * lab {
+                if !hits(b, vmax_box) && !hits(b, point_box) && b.2 > f.top() && b.3 < f.bottom() + 30.0 * lab {
                     note_y = y;
                     break;
                 }
             }
             d.raw(&text_el_halo(f.right() - 4.0, note_y, 12.0 * lab, "end", curve, &note_text));
+            note_under = box_around(f.right() - 4.0, note_w, "end", note_y, 12.0 * lab);
         }
         // (round 5) whichever of the two sits under the point — the Km label at low [S] or the beyond-the-axis note —
         // is one of the boxes the other labels must clear.
-        let under_box = if km_a <= smax { km_box } else { note_box };
+        let under_box = if km_a <= smax { km_box } else { note_under };
         // (round 4) the half-rate label names the APPARENT half when an inhibitor is on (Vmax′/2), like the asymptote
         let half_label = format!("{vmax_name}/2 = {}", val(vmax_a / 2.0, dec));
         let half_w = half_label.chars().count() as f64 * 11.0 * lab * 0.55;
@@ -295,7 +324,7 @@ pub fn build(p: &Params) -> (String, Report) {
         let mut half_pos = (hx0, half - 7.0 * lab);
         for (x, y) in [(hx0, half - 7.0 * lab), (hx0, half - 27.0 * lab), (f.left() + 6.0, half - 41.0 * lab)] {
             let b = box_around(x, half_w, "start", y, 11.0 * lab);
-            if !hits(b, under_box) && !hits(b, vmax_box) && b.2 > f.top() {
+            if !hits(b, under_box) && !hits(b, vmax_box) && !hits(b, point_box) && b.2 > f.top() {
                 half_pos = (x, y);
                 break;
             }
@@ -305,9 +334,7 @@ pub fn build(p: &Params) -> (String, Report) {
         d.raw(&text_el_halo(hx, half_y, 11.0 * lab, "start", curve, &half_label));
         let half_box = box_around(hx, half_w, "start", half_y, 11.0 * lab);
         // the marked point
-        let px = f.px(s_at);
-        let py = f.py(v_at);
-        d.circle(px, py, 4.5, mark, ink, 1.2);
+        d.circle(px, py, POINT_R, mark, ink, 1.2);
         let label = format!("v = {} at [S] = {}", val(v_at, dec), val(s_at, dec));
         // the label reads to the right of the point; it only flips to the left when that would run off the canvas
         let text_w = label.chars().count() as f64 * 12.0 * lab * 0.55;
@@ -321,7 +348,7 @@ pub fn build(p: &Params) -> (String, Report) {
         let inside = |b: (f64, f64, f64, f64)| b.2 > f.top() && b.3 < f.bottom() - 2.0 * lab;
         let clear = |yy: f64| {
             let b = box_around(lx, text_w, anchor, yy, 12.0 * lab);
-            inside(b) && !hits(b, half_box) && !hits(b, under_box) && !hits(b, vmax_box)
+            inside(b) && !hits(b, half_box) && !hits(b, under_box) && !hits(b, vmax_box) && !hits(b, point_box)
         };
         let cands = [start, py - 9.0 * lab, py - 24.0 * lab, py - 38.0 * lab, py - 52.0 * lab, py + 18.0 * lab, py + 32.0 * lab];
         let mut ly = cands[0];
@@ -681,6 +708,58 @@ mod tests {
         for r in &rate {
             for h in &half {
                 assert!(!overlaps(*r, *h), "the rate label {r:?} overprints the half-rate label {h:?}");
+            }
+        }
+    }
+
+    /// The marked point's footprint: (left, right, top, bottom), the 4.5 px radius plus the same small margin the
+    /// drawing clears.
+    fn point_footprint(svg: &str) -> (f64, f64, f64, f64) {
+        let part = svg.split("<circle").nth(1).expect("the marked point is not drawn");
+        let num = |k: &str| -> f64 {
+            let at = part.find(&format!("{k}=\"")).expect("circle attribute") + k.len() + 2;
+            part[at..].split('"').next().unwrap().parse().unwrap()
+        };
+        let (cx, cy, r) = (num("cx"), num("cy"), num("r"));
+        (cx - r - 2.0, cx + r + 2.0, cy - r - 2.0, cy + r + 2.0)
+    }
+
+    #[test]
+    fn no_plot_label_is_drawn_under_the_marked_point() {
+        // (round 7 major) the marked point was in no collision box at all: at [S] = Km it covered the "/2" of the
+        // half-rate label ("Vmax\u{2032}\u{25cf}2 = 1.25"), at a low rate it clipped the Km label. Every plot label —
+        // rate, half-rate, Km (or its beyond-the-axis note) and Vmax\u{2032} — now clears the point's footprint.
+        let mut cases: Vec<Vec<(&'static str, Value)>> = vec![
+            // the three reported cases
+            vec![s("mode", "noncompetitive"), f("inh", 3.0), f("ki", 1.0), f("vmax", 10.0), f("km", 2.0), f("smax", 40.0), f("at", 6.0)],
+            vec![s("mode", "noncompetitive"), f("inh", 3.0), f("ki", 1.0), f("vmax", 50.0), f("km", 0.2), f("smax", 2.0), f("at", 0.5), s("label_size", "Large"), ("dec", Value::I(1))],
+            vec![s("mode", "noncompetitive"), f("inh", 3.0), f("ki", 1.0), f("vmax", 10.0), f("km", 2.0), f("smax", 12.0), f("at", 2.0), s("label_size", "Large")],
+        ];
+        // a sweep near them: every mode, three label sizes, points at and around Km and at both axis ends
+        for mode in ["none", "competitive", "noncompetitive"] {
+            for (vmax, km, smax) in [(10.0, 2.0, 12.0), (50.0, 0.2, 2.0), (10.0, 2.0, 40.0), (5.0, 5.0, 6.0)] {
+                for at in [0.0, 0.2, 0.5, 1.0, 2.0, 6.0, smax] {
+                    for size in ["Small", "Medium", "Large"] {
+                        cases.push(vec![
+                            s("mode", mode), f("inh", 3.0), f("ki", 1.0), f("vmax", vmax), f("km", km), f("smax", smax),
+                            f("at", at), s("label_size", size),
+                        ]);
+                    }
+                }
+            }
+        }
+        for c in &cases {
+            let svg = render_of(c);
+            if !svg.contains("<circle") { continue; }
+            let pb = point_footprint(&svg);
+            for prefix in ["v = ", "Km = ", "Km\u{2032} = ", "Vmax = ", "Vmax\u{2032} = ", "Vmax/2 = ", "Vmax\u{2032}/2 = "] {
+                for b in label_box(&svg, prefix) {
+                    assert!(
+                        !overlaps(pb, b),
+                        "{c:?}: the marked point {pb:?} is drawn under {prefix:?} {b:?}:\n{}",
+                        texts(&svg)
+                    );
+                }
             }
         }
     }

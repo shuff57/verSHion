@@ -225,6 +225,51 @@ fn glyph_em(c: char) -> f64 {
     }
 }
 
+/// (round 7 major) The script a glyph belongs to, for splitting a line into `<text>` runs. The PNG rasteriser draws
+/// each `<text>` with one font run and falls back to `.notdef` (tofu) when a run mixes scripts it cannot resolve
+/// together — a "Left to right:" line holding both a Han and a Hangul name printed "□□□□□□, □□□□□". Latin, Han/kana,
+/// Hangul and emoji get their own classes so a mixed line is drawn as one element per class.
+fn script_class(c: char) -> u8 {
+    let u = c as u32;
+    if (0x1100..=0x11ff).contains(&u)      // Hangul Jamo
+        || (0xa960..=0xa97f).contains(&u)  // Hangul Jamo Extended-A
+        || (0xac00..=0xd7ff).contains(&u)  // Hangul syllables
+    {
+        1
+    } else if (0x2e80..=0x2fdf).contains(&u)   // CJK radicals
+        || (0x3000..=0x30ff).contains(&u)      // CJK punctuation, Hiragana, Katakana
+        || (0x3400..=0x4dbf).contains(&u)      // CJK Extension A
+        || (0x4e00..=0x9fff).contains(&u)      // CJK Unified Ideographs
+        || (0xf900..=0xfaff).contains(&u)      // CJK compatibility ideographs
+        || (0xfe30..=0xfe4f).contains(&u)      // CJK compatibility forms
+        || (0xff00..=0xffef).contains(&u)      // full-width forms
+    {
+        2
+    } else if u >= 0x1f000 {
+        3 // emoji and pictographs
+    } else {
+        0 // Latin, digits, punctuation, spaces, other alphabets
+    }
+}
+
+/// Split a string into maximal runs of one script class, so each becomes its own `<text>` and no element mixes a Han
+/// and a Hangul name (which the rasteriser prints as tofu).
+fn script_runs(s: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let mut cls: Option<u8> = None;
+    for c in s.chars() {
+        let k = script_class(c);
+        if cls.is_some() && cls != Some(k) {
+            out.push(std::mem::take(&mut cur));
+        }
+        cls = Some(k);
+        cur.push(c);
+    }
+    if !cur.is_empty() { out.push(cur); }
+    out
+}
+
 /// Greedy word wrap to a width in px; a word wider than the line takes a line of its own.
 fn wrap_w(s: &str, max: f64, size: f64) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
@@ -393,7 +438,14 @@ pub fn build(p: &Params) -> String {
             // (round 3) the continuation lines are indented by x, not by leading spaces: SVG collapses those, so the
             // line used to start hard against the left margin
             let (x, text) = if i == 0 { (24.0, format!("Left to right: {line}")) } else { (24.0 + prefix_w, line.clone()) };
-            d.raw(&text_el(x, y + (15.0 + i as f64 * 17.0) * lab, 12.0 * lab, "start", ink, &text));
+            // (round 7 major) one `<text>` per script run, each at the x the glyphs would have started at: a line that
+            // mixed a Han and a Hangul name printed as tofu because the rasteriser gave the whole run one fallback.
+            let yy = y + (15.0 + i as f64 * 17.0) * lab;
+            let mut cx = x;
+            for run in script_runs(&text) {
+                d.raw(&text_el(cx, yy, 12.0 * lab, "start", ink, &run));
+                cx += text_w(&run, 12.0 * lab);
+            }
         }
     }
 
@@ -682,6 +734,55 @@ mod tests {
             let n = text_w(&text, sz) * 1.05;
             let right = match anchor.as_str() { "end" => x, "middle" => x + n / 2.0, _ => x + n };
             assert!(right <= w + 1.0, "{text:?} ends at {right:.1} on a {w} canvas");
+        }
+    }
+
+    #[test]
+    fn a_mixed_script_order_line_is_drawn_as_one_text_per_script_run() {
+        // (round 7 major) "Left to right:" built one string for the whole line and drew it as one <text>: a line
+        // holding both a Han and a Hangul name printed as tofu ("\u{25a1}\u{25a1}\u{25a1}\u{25a1}\u{25a1}\u{25a1}, \u{25a1}\u{25a1}\u{25a1}\u{25a1}\u{25a1}"),
+        // and at Small an emoji in the same run was tofu too. Each run is now its own <text>, at the x its glyphs would
+        // have started at, so the concatenation is unchanged but no element mixes scripts the rasteriser cannot share.
+        let mixed = script_runs("Left to right: 日本語のテスト, 한국어이름");
+        assert_eq!(mixed, vec!["Left to right: ", "日本語のテスト", ", ", "한국어이름"], "{mixed:?}");
+        assert_eq!(mixed.concat(), "Left to right: 日本語のテスト, 한국어이름");
+        let emoji = script_runs(", 🦕🦖, B");
+        assert_eq!(emoji, vec![", ", "🦕🦖", ", B"], "{emoji:?}");
+        assert_eq!(emoji.concat(), ", 🦕🦖, B");
+
+        for tree in ["(日本語のテスト, 한국어이름)", "(Homo sapiens, 日本語のテスト, 한국어이름, 🦕🦖, B)"] {
+            let names = leaves(&parse(tree).unwrap());
+            for size in ["Small", "Medium", "Large"] {
+                let svg = render_of(&[("tree", Value::S(tree.to_string())), ("label_size", Value::S(size.to_string()))]);
+                let bs = boxes(&svg);
+                let yc = bs.iter().find(|b| b.4.contains("leaves,")).map(|b| b.1).unwrap_or(-1.0);
+                // the drawn order line(s) are every text below the count line, grouped by row
+                let mut lines: Vec<(f64, Vec<(f64, String)>)> = Vec::new();
+                for (x, y, _s, _a, t) in &bs {
+                    if *y > yc + 1.0 {
+                        match lines.iter_mut().find(|(ly, _)| (*ly - *y).abs() < 0.01) {
+                            Some((_, v)) => v.push((*x, t.clone())),
+                            None => lines.push((*y, vec![(*x, t.clone())])),
+                        }
+                    }
+                }
+                assert!(!lines.is_empty(), "{tree:?} at {size}: no order line found:\n{}", texts(&svg));
+                lines.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+                let mut bodies: Vec<String> = Vec::new();
+                for (_, mut runs) in lines {
+                    runs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+                    for (_, t) in &runs {
+                        let classes: std::collections::BTreeSet<u8> = t.chars().map(script_class).collect();
+                        assert_eq!(classes.len(), 1, "{tree:?} at {size}: {t:?} mixes scripts {classes:?}");
+                    }
+                    bodies.push(runs.iter().map(|(_, t)| t.as_str()).collect::<String>());
+                }
+                assert_eq!(
+                    bodies.join(", "),
+                    format!("Left to right: {}", names.join(", ")),
+                    "{tree:?} at {size}: the runs do not spell the leaves in order: {bodies:?}"
+                );
+            }
         }
     }
 

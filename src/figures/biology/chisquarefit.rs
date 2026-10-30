@@ -337,12 +337,17 @@ pub fn build(p: &Params) -> String {
     // a test that cannot run has no statistic to print: zero observations (0/0) or a single category (no degrees of
     // freedom) leave χ² undefined rather than a meaningful 0.00
     let no_test = no_obs || f.df == 0;
-    let huge = total_obs.abs() >= 1e7 || f.rows.iter().any(|r| r.observed.abs() >= 1e7 || r.expected.abs() >= 1e7 || r.term.abs() >= 1e7);
+    // (round 7 minor) scientific notation belongs only to the values that need it. A huge typed ratio (1 : 1e20) made
+    // the entire table "huge", so the small observed counts printed "1.00e0" and the total "2.00e0". A value is
+    // scientific only when it is itself ≥ 1e7; small counts stay counts, while the huge ratio/expected stay scientific.
+    let big = |v: f64| v.is_finite() && v.abs() >= 1e7;
     // (round 5) an overflowing value prints "inf"; the rest of the figure writes ∞
     let sci = |v: f64| if v == 0.0 { "0".to_string() } else if !v.is_finite() { "\u{221e}".to_string() } else { format!("{v:.2e}").replace('-', "\u{2212}") };
-    let fmt_cnt = |v: f64| if huge { sci(v) } else { num(v, 2) };
+    let fmt_cnt = |v: f64| if big(v) || !v.is_finite() { sci(v) } else { num(v, 2) };
     // (round 5) the contributions are grouped like the counts (1,234.56), so one row does not mix two formats
-    let fmt_term = |v: f64| if huge { sci(v) } else if !v.is_finite() { "\u{221e}".to_string() } else { group(&col(v, dec.max(2))) };
+    let fmt_term = |v: f64| if big(v) { sci(v) } else if !v.is_finite() { "\u{221e}".to_string() } else { group(&col(v, dec.max(2))) };
+    // an expected count only goes scientific when it is itself huge (a tiny one already falls back through `col`)
+    let fmt_exp = |v: f64| if big(v) || !v.is_finite() { sci(v) } else { group(&col(v, dec)) };
     // a long category name would print through the three number columns: the room it has is what is left of the
     // Observed column once its widest printed number is drawn (round 5: a grouped count ran under the name)
     let obs_text: Vec<String> = f.rows.iter().map(|r| fmt_cnt(r.observed)).collect();
@@ -378,7 +383,7 @@ pub fn build(p: &Params) -> String {
         d.raw(&text_el(24.0, y, FS * lab, "start", ink, &short(&r.name)));
         d.raw(&text_el(col_o, y, FS * lab, "end", ink, &obs_text[i]));
         if ans {
-            d.raw(&text_el(col_e, y, FS * lab, "end", ink, &if huge { sci(r.expected) } else { group(&col(r.expected, dec)) }));
+            d.raw(&text_el(col_e, y, FS * lab, "end", ink, &fmt_exp(r.expected)));
             d.raw(&text_el(col_t, y, FS * lab, "end", ink, &term_text[i]));
         } else {
             d.raw(&text_el(col_e, y, FS * lab, "end", ink, BLANK));
@@ -401,7 +406,7 @@ pub fn build(p: &Params) -> String {
     let total_text = if !ans { BLANK.to_string() }
     else if infinite { "\u{221e}".to_string() }
     else if no_test { "\u{2014}".to_string() }
-    else if huge { sci(printed_chi2) }
+    else if big(printed_chi2) { sci(printed_chi2) }
     else { group(&col(printed_chi2, term_dec)) };
     d.raw(&text_el(col_t, y, FS * lab, "end", ink, &total_text));
     rule(&mut d, y + 9.0 * lab, 1.6);
@@ -421,7 +426,7 @@ pub fn build(p: &Params) -> String {
             else { format!("{v}").replace('-', "\u{2212}") }
         })
         .collect();
-    let total_shown = if huge { sci(total_obs) } else { val(total_obs, 0) };
+    let total_shown = if big(total_obs) { sci(total_obs) } else { val(total_obs, 0) };
     let givens = format!("Expected from the ratio {} out of {} observations", ratio_text.join(" : "), total_shown);
     // (round 5) long ratio parts ran off the canvas: wrapped to the width, the lines stacking up into the gap above
     // the statistics block
@@ -437,7 +442,7 @@ pub fn build(p: &Params) -> String {
         else if infinite { "Chi-square  \u{3c7}\u{b2} = \u{221e}  (the counts are too large)".to_string() }
         else if no_obs { "Chi-square  \u{3c7}\u{b2} = \u{2014}  (no observations to test)".to_string() }
         else if f.df == 0 { "Chi-square  \u{3c7}\u{b2} = \u{2014}  (no degrees of freedom)".to_string() }
-        else if huge { format!("Chi-square  \u{3c7}\u{b2} = {}", sci(printed_chi2)) }
+        else if big(printed_chi2) { format!("Chi-square  \u{3c7}\u{b2} = {}", sci(printed_chi2)) }
         else { format!("Chi-square  \u{3c7}\u{b2} = {}", group(&col(printed_chi2, term_dec))) },
         if ans {
             let (one, many) = ("1 category counted", "categories counted");
@@ -838,6 +843,16 @@ mod tests {
         let t = texts(&render_of(&[s("names", "A, B"), s("obs", "1, 1"), s("ratio", "1, 100000000000000000000")]));
         assert!(!t.contains("9223372036854775807"), "a saturated ratio part: {t}");
         assert!(t.contains("1.00e20"), "the ratio is not printed honestly: {t}");
+        // (round 7 minor) the huge ratio made the whole table "huge", so the SMALL observed counts and their total
+        // printed "1.00e0" / "2.00e0". Scientific notation is now used only for the values that need it.
+        assert!(!t.contains("1.00e0"), "a small observed count is in scientific notation: {t}");
+        assert!(!t.contains("2.00e0"), "the small observed total is in scientific notation: {t}");
+        assert_eq!(t.lines().filter(|l| *l == "1").count(), 2, "the two observed 1s should print as counts: {t}");
+        assert!(t.lines().any(|l| l == "2"), "the observed total of 2 should print as a count: {t}");
+        assert!(t.contains("out of 2 observations"), "the given total is not a count: {t}");
+        // the huge expected count stays scientific, while the small one beside it is a plain count
+        assert!(t.contains("2.00e\u{2212}20"), "the tiny expected count lost its scientific form: {t}");
+        assert!(t.contains("2.00\n") || t.lines().any(|l| l == "2.00"), "the small expected count is not a plain count: {t}");
         // ordinary whole and decimal ratios still print as typed
         assert!(texts(&render_of(&[s("obs", "315, 101, 108, 32"), s("ratio", "9, 3, 3, 1")])).contains("9 : 3 : 3 : 1"));
         assert!(texts(&render_of(&[s("obs", "100, 200, 100"), s("ratio", "1.5, 2.5, 1.5")])).contains("1.5 : 2.5 : 1.5"));

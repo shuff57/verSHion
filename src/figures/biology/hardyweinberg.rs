@@ -118,24 +118,34 @@ pub fn printed_parts(g: &Gen, dec: i64) -> [f64; 3] {
     units.map(|u| u as f64 / f)
 }
 
+/// Whether a real frequency would print as a whole 1, or as 0, at `d` decimals — the allele-collapse test: p = 0.99
+/// at one decimal place printed "1" beside q = 0.01.
+fn collapses(v: f64, d: i64) -> bool {
+    let shown = num(v, d).replace('\u{2212}', "-").parse::<f64>().unwrap_or(v);
+    (v < 1.0 && shown >= 1.0) || (v > 0.0 && shown <= 0.0)
+}
+
+/// Whether any real genotype frequency would print as zero at `d` decimals (round 3: p = 0.01 makes AA = 0.0001).
+fn needs_more(gg: &Gen, d: i64) -> bool {
+    let pr = printed_parts(gg, d);
+    [gg.dom, gg.het, gg.rec].iter().zip(pr.iter()).any(|(ex, sh)| *ex != 0.0 && *sh == 0.0)
+}
+
+/// A precision the page may print at: no real part prints as zero and the allele frequency does not collapse to 1 or 0.
+fn valid_dec(gg: &Gen, p0: f64, d: i64) -> bool {
+    !needs_more(gg, d) && !collapses(p0, d) && !collapses(1.0 - p0, d)
+}
+
 /// The decimal places the picture is printed at: `dec`, raised until no real frequency would print as zero — and, since
 /// round 3, until the allele frequencies themselves print honestly: p = 0.99 at one decimal place printed "1" beside a
 /// q of "0.01" and a genotype set that plainly does not come from p = 1. (round 6) With counts shown it is raised again
 /// until each printed fraction, times N, rounds to the count printed beside it: p = 0.34 printed "AA p² = 0.12
 /// (116 of 1000)", and 0.12 × 1000 is 120, not 116. Raising the precision to three makes 0.116 × 1000 = 116.
+/// (round 7) When no precision makes every fraction agree, it takes the valid one that contradicts the counts least.
 pub fn shown_dec(p: &Params) -> i64 {
     let g = generations(p);
     let dec = p.i("dec").clamp(1, 3);
     let (p0, n, _, _, show_counts) = given(p);
-    let q0 = 1.0 - p0;
-    let collapses = |v: f64, d: i64| {
-        let shown = num(v, d).replace('\u{2212}', "-").parse::<f64>().unwrap_or(v);
-        (v < 1.0 && shown >= 1.0) || (v > 0.0 && shown <= 0.0)
-    };
-    let needs_more = |gg: &Gen, d: i64| {
-        let pr = printed_parts(gg, d);
-        [gg.dom, gg.het, gg.rec].iter().zip(pr.iter()).any(|(ex, sh)| *ex != 0.0 && *sh == 0.0)
-    };
     // the printed fraction is what a reader multiplies by N, so it must give back the count on the same line: the
     // count is a nearest rounding of the exact frequency × N, the fraction a nearest rounding at some precision, and
     // the two only agree when that precision is fine enough (round 6 blocker: "0.43 (435 of 1000)", but 435/1000
@@ -149,18 +159,34 @@ pub fn shown_dec(p: &Params) -> i64 {
     // and — when counts are shown — each fraction times N gives the count beside it. Prefer the typed precision, then
     // finer ones (the reported cases need three or four decimals); only a population too small to hold the fraction
     // at the typed precision (n = 10 cannot hold 0.25) makes a coarser one the honest choice.
-    let fits = |d: i64| {
-        !needs_more(&g[0], d)
-            && !collapses(p0, d)
-            && !collapses(q0, d)
-            && (!show_counts || agrees(&g[0], d))
-    };
-    for d in (dec..=6).chain((1..dec).rev()) {
+    let fits = |d: i64| valid_dec(&g[0], p0, d) && (!show_counts || agrees(&g[0], d));
+    let order = || (dec..=6).chain((1..dec).rev());
+    for d in order() {
         if fits(d) { return d; }
+    }
+    // (round 7 blocker) No precision satisfies the strict agreement. The count is not round(exact × N) but the
+    // largest-remainder allocation of N, so a row can sit a whole unit off it; and a frequency × N that is a
+    // half-integer can never agree (p = 0.5, N = 999: 0.50 × 999 = 499.5). Returning the typed `dec` here printed the
+    // coarsest, worst set — "AA 0.3 (250 of 999)" beside a bar that was plainly a quarter. Choose instead the valid
+    // precision that minimises the total |round(printed fraction × N) − count|, the typed precision first on ties, so
+    // p = 0.5, N = 999 prints 0.25 / 0.50 / 0.25 (250 / 499 / 250), at worst one per row and never the coarse set.
+    if show_counts {
+        let c = counts([g[0].dom, g[0].het, g[0].rec], n);
+        let err = |d: i64| {
+            let pr = printed_parts(&g[0], d);
+            (0..3).map(|i| ((pr[i] * n as f64).round() - c[i] as f64).abs()).sum::<f64>()
+        };
+        let mut best: Option<(f64, i64)> = None;
+        for d in order() {
+            if !valid_dec(&g[0], p0, d) { continue; }
+            let e = err(d);
+            if best.map_or(true, |(be, _)| e < be) { best = Some((e, d)); }
+        }
+        if let Some((_, d)) = best { return d; }
     }
     // nothing fits (a pathological tie): keep the never-zero precision, the pre-round-6 behaviour
     let mut dp = dec;
-    while dp < 6 && (needs_more(&g[0], dp) || collapses(p0, dp) || collapses(q0, dp)) { dp += 1; }
+    while dp < 6 && !valid_dec(&g[0], p0, dp) { dp += 1; }
     dp
 }
 
@@ -607,6 +633,91 @@ mod tests {
         // and the p² = 0.0036 case that used to print 0.01 beside "36 of 9999"
         let t = texts(&render_of(&[f("p", 0.06), i("n", 9999), b("counts", true)]));
         assert!(t.contains("AA  p\u{b2} = 0.0036  (36 of 9999)"), "{t}");
+    }
+
+    /// The (fraction, count) of each genotype row in the readout, e.g. "AA  p\u{b2} = 0.25  (250 of 999)".
+    fn readout_rows(t: &str) -> Vec<(f64, usize)> {
+        let mut out = Vec::new();
+        for name in ["AA", "Aa", "aa"] {
+            let line = t.lines().find(|l| l.starts_with(&format!("{name}  ")) && l.contains('(')).unwrap_or("");
+            let frac = line.split(" = ").nth(1).and_then(|r| r.split_whitespace().next()).and_then(|v| v.parse::<f64>().ok());
+            let cnt = line.split('(').nth(1).and_then(|r| r.split_whitespace().next()).and_then(|v| v.parse::<usize>().ok());
+            if let (Some(fv), Some(c)) = (frac, cnt) { out.push((fv, c)); }
+        }
+        out
+    }
+
+    #[test]
+    fn a_printed_count_is_never_more_than_one_from_its_fraction_times_the_population() {
+        // (round 7 blocker) counts allocate N by largest remainder, so a row can sit a whole unit off
+        // round(exact × N), and for many (p, N) NO precision satisfies the strict `agrees`. The old fallback then
+        // returned the typed (coarsest) precision: p = 0.5, N = 999, dec = 1 printed "AA 0.3 (250 of 999)" beside a
+        // bar that was plainly a quarter, and p = 0.34, N = 9999 printed 0.12 / 0.45 / 0.43 for 1156 / 4487 / 4356.
+        // The fallback now takes the valid precision that minimises the total contradiction: at worst one per row
+        // (a frequency × N that is a half-integer can never agree exactly), and never a coarser set that a finer one
+        // beats.
+        let mut ps: Vec<f64> = (1..=99).map(|k| k as f64 / 100.0).collect();
+        ps.extend([0.333, 0.1234, 0.6667]);
+        let ns = [10usize, 37, 100, 500, 999, 1000, 1001, 1234, 4321, 5555, 9999, 10000];
+        for &p0 in &ps {
+            for &n in &ns {
+                for dec in 1..=3 {
+                    for sel in [false, true] {
+                        let mut list = vec![f("p", p0), i("n", n as i64), ("dec", Value::I(dec)), b("counts", true)];
+                        if sel { list.push(s("sel", "against the recessive phenotype")); }
+                        let p = with(&list);
+                        let g = generations(&p);
+                        let dp = shown_dec(&p);
+                        let parts = printed_parts(&g[0], dp);
+                        let c = counts([g[0].dom, g[0].het, g[0].rec], n);
+                        // (a) every row is within one of fraction × N
+                        for k in 0..3 {
+                            let implied = (parts[k] * n as f64).round() as i64;
+                            assert!(
+                                (implied - c[k] as i64).abs() <= 1,
+                                "p = {p0}, n = {n}, dec = {dec}, sel = {sel}: row {k} prints {} (\u{d7} {n} = {implied}) beside the count {}",
+                                parts[k], c[k]
+                            );
+                        }
+                        // (b) the printed fractions sum to 1 at the page precision
+                        let sum: f64 = parts.iter().sum();
+                        assert!((sum - 1.0).abs() < 1e-9, "p = {p0}, n = {n}, dec = {dec}, sel = {sel}: {parts:?} sum to {sum}");
+                        // (d) no FINER valid precision has a strictly smaller total error
+                        let err = |d: i64| -> i64 {
+                            let pr = printed_parts(&g[0], d);
+                            (0..3).map(|k| ((pr[k] * n as f64).round() as i64 - c[k] as i64).abs()).sum()
+                        };
+                        let e0 = err(dp);
+                        for d2 in (dp + 1)..=6 {
+                            if valid_dec(&g[0], p0, d2) {
+                                assert!(
+                                    e0 <= err(d2),
+                                    "p = {p0}, n = {n}, dec = {dec}, sel = {sel}: chose d = {dp} (err {e0}) but the finer d = {d2} has err {}",
+                                    err(d2)
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // (c) the reported cases, as printed. p = 0.5, N = 999 is a half-integer: 0.25 / 0.50 / 0.25 is the honest set
+        let t = texts(&render_of(&[f("p", 0.5), i("n", 999), ("dec", Value::I(1)), b("counts", true)]));
+        assert!(t.contains("AA  p\u{b2} = 0.25  (250 of 999)"), "{t}");
+        assert!(t.contains("Aa  2pq = 0.50  (499 of 999)"), "{t}");
+        assert!(t.contains("aa  q\u{b2} = 0.25  (250 of 999)"), "{t}");
+        assert!(!t.contains("AA  p\u{b2} = 0.3  "), "the coarsest set is still printed: {t}");
+        for (p0, n, dec) in [(0.34, 9999, 2), (0.5, 9999, 1), (0.87, 500, 2), (0.94, 999, 2)] {
+            let t = texts(&render_of(&[f("p", p0), i("n", n), ("dec", Value::I(dec)), b("counts", true)]));
+            let rows = readout_rows(&t);
+            assert_eq!(rows.len(), 3, "p = {p0}, n = {n}: {t}");
+            let sum: f64 = rows.iter().map(|(fv, _)| fv).sum();
+            assert!((sum - 1.0).abs() < 1e-9, "p = {p0}, n = {n}: the printed fractions sum to {sum}: {t}");
+            for (fv, c) in rows {
+                let implied = (fv * n as f64).round() as i64;
+                assert!((implied - c as i64).abs() <= 1, "p = {p0}, n = {n}: {fv} \u{d7} {n} = {implied} beside {c}: {t}");
+            }
+        }
     }
 
     /// The bar labels: text bodies that start with a genotype name and a number (not the readout's "AA p²").
