@@ -103,7 +103,7 @@ fn fit_once(crop: &[u8], context: &str, cfg: &AiCfg, feedback: &str) -> Result<F
             &[crop],
             cfg,
             &format!(
-                "Set the \"{}\" generator so it redraws this picture. Question text: \"{}\".\nParameters:\n{}\n\nAnswer JSON only: {{\"params\": {{...}}}}, listing only the parameters that must differ from their defaults, with values of the stated kind. When a parameter offers a list of options and one option names what the picture shows, choose that option instead of typing free text.{feedback}",
+                "Set the \"{}\" generator so it redraws this picture. Question text: \"{}\".\nParameters:\n{}\n\nAnswer JSON only: {{\"params\": {{...}}}}, listing only the parameters that must differ from their defaults, with values of the stated kind. Every parameter you leave out keeps the default shown above, so when a default does not fit this picture (a preset angle or length it does not have), set it. Set a text parameter to \"\" (empty) to clear its default, which is how a measure the picture leaves out is \"worked out\" from the others. Check your values agree before answering: angles of a triangle add to 180, and the side opposite the largest angle (the hypotenuse, opposite a right angle) is the longest, so a 3 and a 4 are the two legs and the hypotenuse is the side left blank for the generator to work out. If the redraw shows a sentence of text instead of a drawing, the parameters contradict each other. When a parameter offers a list of options and one option names what the picture shows, choose that option instead of typing free text.{feedback}",
                 def.title,
                 context.chars().take(200).collect::<String>(),
                 param_help(&def)
@@ -211,7 +211,7 @@ async fn fit_once_async(crop: &[u8], context: &str, cfg: &AiCfg, feedback: &str)
             &[crop],
             cfg,
             &format!(
-                "Set the \"{}\" generator so it redraws this picture. Question text: \"{}\".\nParameters:\n{}\n\nAnswer JSON only: {{\"params\": {{...}}}}, listing only the parameters that must differ from their defaults, with values of the stated kind. When a parameter offers a list of options and one option names what the picture shows, choose that option instead of typing free text.{feedback}",
+                "Set the \"{}\" generator so it redraws this picture. Question text: \"{}\".\nParameters:\n{}\n\nAnswer JSON only: {{\"params\": {{...}}}}, listing only the parameters that must differ from their defaults, with values of the stated kind. Every parameter you leave out keeps the default shown above, so when a default does not fit this picture (a preset angle or length it does not have), set it. Set a text parameter to \"\" (empty) to clear its default, which is how a measure the picture leaves out is \"worked out\" from the others. Check your values agree before answering: angles of a triangle add to 180, and the side opposite the largest angle (the hypotenuse, opposite a right angle) is the longest, so a 3 and a 4 are the two legs and the hypotenuse is the side left blank for the generator to work out. If the redraw shows a sentence of text instead of a drawing, the parameters contradict each other. When a parameter offers a list of options and one option names what the picture shows, choose that option instead of typing free text.{feedback}",
                 def.title,
                 context.chars().take(200).collect::<String>(),
                 param_help(&def)
