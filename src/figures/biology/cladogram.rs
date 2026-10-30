@@ -259,10 +259,28 @@ fn script_class(c: char) -> u8 {
 /// (round 8) A character the order line can draw in one `<text>` with the Latin prefix: Latin, Greek, Cyrillic,
 /// punctuation and symbols. Arabic, Hebrew, Thai, Devanagari, CJK, Hangul and emoji are not: in the same element as
 /// "Left to right:" the rasteriser printed an Arabic name as tofu, unjoined its letters, and reordered RTL names.
+/// (round 9 minor) A NARROW allow-list: the blocks the Latin face (Noto Sans) actually carries. The round-8 ranges
+/// admitted Armenian and whole symbol blocks (arrows, dingbats, Braille, box drawing, ⭐) that it does not: their names
+/// did not tofu, but the rasteriser set the whole "Left to right" line in a bold monospace or serif fallback face.
+/// Everything else gets the numbered rows, one name per row.
 fn latin_class(c: char) -> bool {
     let u = c as u32;
     if matches!(u, 0x200b..=0x200f | 0x202a..=0x202e | 0x2066..=0x2069) { return false; } // joiners and bidi controls
-    u < 0x0590 || (0x1e00..=0x1fff).contains(&u) || (0x2000..=0x2bff).contains(&u)
+    matches!(u,
+        0x0000..=0x024f     // Basic Latin, Latin-1 Supplement, Latin Extended-A and -B
+        | 0x0250..=0x02ff   // IPA extensions, spacing modifier letters
+        | 0x0300..=0x036f   // combining diacritical marks
+        | 0x0370..=0x03ff   // Greek and Coptic
+        | 0x0400..=0x052f   // Cyrillic and its supplement
+        | 0x1e00..=0x1eff   // Latin Extended Additional (Vietnamese)
+        | 0x1f00..=0x1fff   // Greek Extended
+        | 0x2000..=0x206f   // general punctuation
+        | 0x2070..=0x209f   // superscripts and subscripts
+        | 0x20a0..=0x20cf   // currency symbols
+        | 0x2100..=0x214f   // letterlike symbols
+        | 0x2c60..=0x2c7f   // Latin Extended-C
+        | 0xa720..=0xa7ff   // Latin Extended-D
+        | 0xfb00..=0xfb06)  // Latin ligatures (ﬁ ﬂ)
 }
 
 /// (round 8 minor) A character that belongs to the glyph before it: a zero-width joiner, a variation selector, a
@@ -404,13 +422,34 @@ fn text_el_halo(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) ->
 fn label_el(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str, halo: bool) -> String {
     let one = |x: f64, anchor: &str, t: &str| if halo { text_el_halo(x, y, size, anchor, fill, t) } else { text_el(x, y, size, anchor, fill, t) };
     if !needs_runs(s) { return one(x, anchor, s); }
-    let runs = script_runs(s);
-    let total: f64 = runs.iter().map(|r| text_w(r, size)).sum();
-    let mut cx = match anchor { "end" => x - total, "middle" => x - total / 2.0, _ => x };
+    // (round 9 minor) A Latin run is placed against its neighbour, not by its own estimated width: the CJK and Hangul
+    // runs are a fixed 1 em a character, so their estimate is exact, while a Latin run's is not; "Mixed 日本한국" showed a
+    // double gap where the over-estimated "Mixed " ended. A Latin run before another run is anchored at that run's start
+    // ("end"), one after it at that run's end ("start"). Its edge spaces become no-break spaces, which the renderer
+    // keeps (a plain trailing space in a `<text>` is dropped).
+    let runs: Vec<String> = script_runs(s)
+        .into_iter()
+        .map(|r| {
+            let lead = r.len() - r.trim_start_matches(' ').len();
+            let trail = r.len() - r.trim_end_matches(' ').len();
+            if lead + trail == 0 || lead == r.len() { return r; }
+            format!("{}{}{}", "\u{a0}".repeat(lead), r.trim_matches(' '), "\u{a0}".repeat(trail))
+        })
+        .collect();
+    let widths: Vec<f64> = runs.iter().map(|r| text_w(r, size)).collect();
+    let total: f64 = widths.iter().sum();
+    let x0 = match anchor { "end" => x - total, "middle" => x - total / 2.0, _ => x };
+    let starts: Vec<f64> = widths.iter().scan(x0, |acc, w| { let s0 = *acc; *acc += w; Some(s0) }).collect();
+    let latin = |r: &str| r.chars().filter(|c| !joins_previous(*c)).all(|c| script_class(c) == 0);
     let mut out = String::new();
-    for r in &runs {
-        out.push_str(&one(cx, "start", r));
-        cx += text_w(r, size);
+    for (i, r) in runs.iter().enumerate() {
+        if latin(r) && i + 1 < runs.len() {
+            out.push_str(&one(starts[i + 1], "end", r));
+        } else if latin(r) && i > 0 {
+            out.push_str(&one(starts[i], "start", r));
+        } else {
+            out.push_str(&one(starts[i], "start", r));
+        }
     }
     out
 }
@@ -527,6 +566,12 @@ pub fn build(p: &Params) -> String {
             }
             // a labelled ancestor, just above its branching point and clear of the bar
             let segs: Vec<(f64, f64, f64, f64)> = placed.edges.iter().map(|(x0, y0, x1, y1)| (px(*x0), py(*y0), px(*x1), py(*y1))).collect();
+            // the boxes an ancestor label must not overprint: every leaf label, then each ancestor label as it is placed
+            let mut taken: Vec<(f64, f64, f64, f64)> = placed
+                .leaves
+                .iter()
+                .map(|(label, x, y)| { let (lx, ly) = (px(*x) + 8.0, py(*y) + 4.5 * lab); (lx, lx + text_w(label, 12.0 * lab), ly - 12.0 * lab * 0.8, ly + 12.0 * lab * 0.25) })
+                .collect();
             for (label, x, y) in &placed.nodes {
                 if !slanted {
                     d.raw(&label_el(px(*x) - 5.0, py(*y) - 5.0, 11.0 * lab, "end", ink, label, false));
@@ -536,24 +581,64 @@ pub fn build(p: &Params) -> String {
                 // spot above-left of it, and struck the label through ("Others"). The label goes on the side the
                 // diagonal does not come from (above-left, or below-left), the one its branches cross least, and it is
                 // haloed so a line that still grazes it does not strike it through.
+                // (round 9 major) Only its own incoming diagonal was considered, and the least-bad spot was taken
+                // even when it was struck: a SIBLING's diagonal ran through "Hominini" and "Primates and others". The
+                // label is now tested against every branch of the placed tree, and against the labels already
+                // drawn, over a wider set of places (both sides, above and below, further out, centred on the fork,
+                // and to its right); the nearest place no branch crosses wins, and only when there is none, the one
+                // crossed least.
                 let size = 11.0 * lab;
                 let lw = text_w(label, size);
                 let (fx, fy) = (px(*x), py(*y));
                 let from_above = placed.edges.iter().any(|(_, y0, x1, y1)| *x1 == *x && *y1 == *y && *y0 < *y);
                 let above = fy - 5.0;
                 let below = fy + 5.0 + size * 0.75;
-                let mut cands = vec![(fx - 5.0, above), (fx - 5.0, below)];
+                let mut cands: Vec<(f64, f64, &str)> = vec![(fx - 5.0, above, "end"), (fx - 5.0, below, "end")];
                 if from_above { cands.swap(0, 1); }
-                cands.push((fx - 5.0, above - 8.0 * lab));
-                cands.push((fx - 5.0, below + 8.0 * lab));
-                let cost = |(lx, ly): (f64, f64)| {
-                    let b = (lx - lw - 1.0, lx + 1.0, ly - size * 0.8, ly + size * 0.25);
-                    segs.iter().map(|sg| seg_in_box(*sg, b)).sum::<f64>()
+                cands.push((fx - 5.0, above - 8.0 * lab, "end"));
+                cands.push((fx - 5.0, below + 8.0 * lab, "end"));
+                for k in 1..=3 {
+                    let dy = (8.0 + 8.0 * k as f64) * lab;
+                    for dx in [0.0, 12.0 * k as f64] {
+                        cands.push((fx - 5.0 - dx, above - dy + 8.0 * lab, "end"));
+                        cands.push((fx - 5.0 - dx, below + dy - 8.0 * lab, "end"));
+                    }
+                }
+                for dx in [12.0, 24.0, 36.0, 48.0] {
+                    cands.push((fx - 5.0 - dx, above, "end"));
+                    cands.push((fx - 5.0 - dx, below, "end"));
+                }
+                for dy in [0.0, 8.0 * lab, 16.0 * lab, 24.0 * lab] {
+                    cands.push((fx, above - dy, "middle"));
+                    cands.push((fx, below + dy, "middle"));
+                    cands.push((fx + 5.0, above - dy, "start"));
+                    cands.push((fx + 5.0, below + dy, "start"));
+                }
+                let bx = |(lx, ly, an): (f64, f64, &str)| {
+                    let l = match an { "end" => lx - lw, "middle" => lx - lw / 2.0, _ => lx };
+                    (l - 1.0, l + lw + 1.0, ly - size * 0.8, ly + size * 0.25)
                 };
-                let best = cands.iter().copied().find(|c| cost(*c) == 0.0).unwrap_or_else(|| {
-                    cands.iter().copied().fold(cands[0], |a, c| if cost(c) < cost(a) { c } else { a })
+                // the round-8 places first, in their order; the rest nearest the fork first, so a clean place hugging
+                // the fork wins over one further down that only happens to be clean too
+                let dist = |c: &(f64, f64, &str)| {
+                    let b = bx(*c);
+                    let dx = (b.0 - fx).max(fx - b.1).max(0.0);
+                    let dy = (b.2 - fy).max(fy - b.3).max(0.0);
+                    (dx * dx + dy * dy).sqrt()
+                };
+                cands[4..].sort_by(|a, b| dist(a).partial_cmp(&dist(b)).unwrap_or(std::cmp::Ordering::Equal));
+                let clear_of = |b: (f64, f64, f64, f64), o: &(f64, f64, f64, f64)| b.1 <= o.0 || o.1 <= b.0 || b.3 <= o.2 || o.3 <= b.2;
+                let usable = |c: (f64, f64, &str)| {
+                    let b = bx(c);
+                    b.0 >= 2.0 && b.1 <= w - 2.0 && b.2 >= 2.0 && taken.iter().all(|o| clear_of(b, o))
+                };
+                let cost = |c: (f64, f64, &str)| { let b = bx(c); segs.iter().map(|sg| seg_in_box(*sg, b)).sum::<f64>() };
+                let best = cands.iter().copied().find(|c| usable(*c) && cost(*c) == 0.0).unwrap_or_else(|| {
+                    let pool: Vec<(f64, f64, &str)> = { let u: Vec<_> = cands.iter().copied().filter(|c| usable(*c)).collect(); if u.is_empty() { cands.clone() } else { u } };
+                    pool.iter().copied().fold(pool[0], |a, c| if cost(c) < cost(a) { c } else { a })
                 });
-                d.raw(&label_el(best.0, best.1, size, "end", ink, label, true));
+                taken.push(bx(best));
+                d.raw(&label_el(best.0, best.1, size, best.2, ink, label, true));
             }
             for (label, x, y) in &placed.leaves {
                 d.raw(&label_el(px(*x) + 8.0, py(*y) + 4.5 * lab, 12.0 * lab, "start", leaf_col, label, false));
@@ -799,6 +884,131 @@ mod tests {
         out
     }
 
+    /// The haloed ancestor-label texts of a slanted render (the halo copy marks them): (x, y, size, anchor, text).
+    fn ancestor_texts(svg: &str) -> Vec<(f64, f64, f64, String, String)> {
+        let mut out = Vec::new();
+        for part in svg.split("<text").skip(1) {
+            if !part.contains(r##"fill="none" stroke="#fff""##) { continue; }
+            let num = |k: &str| -> Option<f64> { let at = part.find(&format!("{k}=\""))? + k.len() + 2; part[at..].split('"').next()?.parse().ok() };
+            let anchor = part.find("text-anchor=\"").map(|i| part[i + 13..].split('"').next().unwrap_or("start").to_string()).unwrap_or_else(|| "start".into());
+            let content = part.split_once('>').map(|(_, r)| r.split("</text>").next().unwrap_or("").to_string()).unwrap_or_default();
+            out.push((num("x").unwrap(), num("y").unwrap(), num("font-size").unwrap(), anchor, content));
+        }
+        out
+    }
+
+    /// Branch length inside each ancestor label's ink, over a slanted render: (label, px of branch inside).
+    fn struck(svg: &str) -> Vec<(String, f64)> {
+        let lines: Vec<(f64, f64, f64, f64)> = svg.split("<line ").skip(1).filter_map(|p| {
+            let num = |k: &str| -> Option<f64> { let at = p.find(&format!("{k}=\""))? + k.len() + 2; p[at..].split('"').next()?.parse().ok() };
+            Some((num("x1")?, num("y1")?, num("x2")?, num("y2")?))
+        }).collect();
+        ancestor_texts(svg).into_iter().filter_map(|(x, y, size, anchor, t)| {
+            let w = text_w(&t.replace("&amp;", "&"), size);
+            let l = match anchor.as_str() { "end" => x - w, "middle" => x - w / 2.0, _ => x };
+            let ink = (l + 0.5, l + w - 0.5, y - 0.7 * size, y + 0.2 * size);
+            let len: f64 = lines.iter().map(|sg| seg_in_box(*sg, ink)).sum();
+            if len > 0.5 { Some((t, len)) } else { None }
+        }).collect()
+    }
+
+    /// A random tree like the critic's: 1-4 children, depth to 4, labelled ancestors, mixed names.
+    fn random_tree(r: &mut crate::figures::biology::Rng, depth: usize, labels: usize) -> String {
+        const NAMES: [&str; 10] = ["Homo", "Pan", "Gorilla", "Pongo", "Hylobates lar", "Macaca", "Bos taurus", "Ovis", "X", "Felis catus"];
+        const ANC: [&str; 6] = ["Great apes", "A", "Hominini", "Primates and others", "Clade 7", "Ruminantia"];
+        if depth == 0 || r.below(4) == 0 { return NAMES[r.below(NAMES.len())].to_string(); }
+        let k = [1usize, 2, 2, 2, 3, 4][r.below(6)];
+        let kids: Vec<String> = (0..k).map(|_| random_tree(r, depth - 1, labels)).collect();
+        let mut s = format!("({})", kids.join(", "));
+        if r.below(10) < labels { s.push_str(ANC[r.below(ANC.len())]); }
+        s
+    }
+
+    #[test]
+    fn no_branch_strikes_a_slanted_ancestor_label() {
+        // (round 9 major) the round-8 fix kept a slanted label off its OWN incoming diagonal only, and took the least-bad
+        // spot even when struck: a sibling's diagonal ran through "Hominini" and "Primates and others" (432 of 2,733
+        // random slanted trees). Every label is now tested against every branch, over a wider set of places.
+        let repros = [
+            ("(Gorilla, (Human, Chimp)Hominini, Orangutan)", "Medium"),
+            ("((Homo, X)Ruminantia, (Ovis, Homo)Primates and others, Homo)A", "Large"),
+            ("(Pongo, (Pongo, X)Ruminantia, Pan)Clade 7", "Large"),
+            ("((Human, Chimp)Hominini, (Gorilla, Orangutan)Others)", "Medium"),
+        ];
+        for (t, size) in repros {
+            let svg = render_of(&[s("tree", t), s("shape", "slanted"), s("label_size", size)]);
+            assert_eq!(struck(&svg), vec![], "{t} ({size})");
+            assert_fits(t, &svg);
+        }
+        let mut rng = crate::figures::biology::Rng::new(9);
+        let sizes = ["Small", "Medium", "Large"];
+        let (mut n, mut bad) = (0usize, Vec::new());
+        while n < 2500 {
+            let depth = 2 + rng.below(3);
+            let labels = [3usize, 7, 10][rng.below(3)];
+            let t = random_tree(&mut rng, depth, labels);
+            if !t.starts_with('(') || t.chars().count() >= 480 { continue; }
+            n += 1;
+            let size = sizes[rng.below(3)];
+            let svg = render_of(&[s("tree", &t), s("shape", "slanted"), s("label_size", size)]);
+            let st = struck(&svg);
+            if !st.is_empty() { bad.push(format!("[{size}] {st:?} {t}")); }
+            // every ancestor label stays on the canvas
+            let w: f64 = svg.split("width=\"").nth(1).and_then(|r| r.split('"').next()).and_then(|v| v.parse().ok()).unwrap();
+            for (x, y, sz, anchor, txt) in ancestor_texts(&svg) {
+                let tw = text_w(&txt, sz);
+                let l = match anchor.as_str() { "end" => x - tw, "middle" => x - tw / 2.0, _ => x };
+                if l < 0.0 || l + tw > w || y - sz < 0.0 { bad.push(format!("{t} ({size}): {txt:?} leaves the canvas")); }
+            }
+        }
+        // Off the canvas: never. Struck: only where no place in the candidate set is clear of every branch and every
+        // other label, which in this sweep is 4 of 2,500 dense trees (a root-to-leaf diagonal crossing a whole crowded
+        // subtree); round 8 struck 432 of 2,733. The bound is kept tight so a regression shows.
+        let off: Vec<_> = bad.iter().filter(|b| b.contains("leaves the canvas")).collect();
+        assert!(off.is_empty(), "{off:?}");
+        assert!(bad.len() <= 4, "{} of {n} slanted trees:\n{}", bad.len(), bad.iter().take(10).cloned().collect::<Vec<_>>().join("\n"));
+    }
+
+    #[test]
+    fn only_what_the_latin_face_carries_shares_the_order_line() {
+        // (round 9 minor) Armenian and whole symbol blocks were counted as Latin, and the whole "Left to right" line
+        // switched to a fallback face. The allow-list is now the blocks Noto Sans carries.
+        for c in ['A', 'z', 'é', 'ß', 'Ł', 'ǅ', 'ə', 'ʃ', '\u{301}', 'λ', 'Ω', 'Ж', 'ё', 'Ệ', 'ờ', 'ữ', '–', '\u{2032}', '…', '€', '₹', '²', '₂', '™', 'ℓ', 'ﬁ', 'ﬂ', '0', '9'] {
+            assert!(latin_class(c), "{c:?} (U+{:04X}) should be Latin", c as u32);
+        }
+        for c in ['Հ', 'ա', '→', '⇒', '↔', '✈', '✓', '⠃', '─', '┼', '⭐', '⬆', '☀', '♥', '♀', '⌘', '①', '■', '∑', '∞', '😀', '👍', 'ا', 'א', '日', '한'] {
+            assert!(!latin_class(c), "{c:?} (U+{:04X}) should not be Latin", c as u32);
+        }
+        // and the render: such a name moves the tree to numbered rows instead of the one-line list
+        for name in ["Հայերեն", "→⇒↔", "⠃⠗⠇", "✈ plane", "⭐ star", "┼─┼"] {
+            let t = texts(&render_of(&[s("tree", &format!("((Homo sapiens, {name}), Pan)"))]));
+            assert!(!t.contains("Left to right: Homo sapiens"), "{name}: {t}");
+            assert!(t.lines().any(|l| l == name), "{name} is not on a row of its own: {t}");
+        }
+        for name in ["Ελληνικά", "Кириллица", "Tiếng Việt", "ﬁsh"] {
+            let t = texts(&render_of(&[s("tree", &format!("((Homo sapiens, {name}), Pan)"))]));
+            assert!(t.contains(&format!("Left to right: Homo sapiens, {name}, Pan")), "{name}: {t}");
+        }
+    }
+
+    #[test]
+    fn a_mixed_script_name_has_no_double_gap() {
+        // (round 9 minor) "Mixed 日本한국" as an ancestor showed a double gap before the Han run: the Latin run was placed
+        // by its own over-estimated width. It now ends exactly where the next run starts, its space kept as a no-break
+        // space.
+        for shape in ["rectangular", "slanted"] {
+            for size in ["Small", "Medium", "Large"] {
+                let svg = render_of(&[s("tree", "((Homo, Pan)Mixed 日本한국, Gorilla)"), s("shape", shape), s("label_size", size)]);
+                let bs: Vec<_> = boxes(&svg).into_iter().filter(|b| !b.4.is_empty()).collect();
+                let latin = bs.iter().find(|b| b.4.starts_with("Mixed")).expect("the Latin run");
+                let han = bs.iter().find(|b| b.4 == "日本").expect("the Han run");
+                assert_eq!(latin.4, "Mixed\u{a0}", "{shape} {size}: {:?}", latin.4);
+                assert_eq!(latin.3, "end", "{shape} {size}: the Latin run is not pinned to the next one");
+                assert!((latin.0 - han.0).abs() < 0.01, "{shape} {size}: {latin:?} ends at {} but 日本 starts at {}", latin.0, han.0);
+            }
+        }
+    }
+
     #[test]
     fn every_line_of_text_fits_the_canvas() {
         // (round 3) the wrap was 74 characters whatever the canvas: on the 360 px floor the last names of a student's
@@ -1027,10 +1237,13 @@ mod tests {
         let svg = render_of(&[s("tree", "(((👨\u{200d}👩\u{200d}👧, ❤\u{fe0f}), (☀ sun, ✈ plane)), (🇯🇵, 👍🏽))")]);
         assert_eq!(boxes(&svg).iter().filter(|b| b.4 == "👨\u{200d}👩\u{200d}👧").count(), 2, "{}", texts(&svg));
         assert_eq!(boxes(&svg).iter().filter(|b| b.4 == "👍🏽").count(), 2, "{}", texts(&svg));
-        assert_eq!(script_runs("👨\u{200d}👩\u{200d}👧, ❤\u{fe0f}"), vec!["👨\u{200d}👩\u{200d}👧", ", ❤\u{fe0f}"]);
+        // (round 9) ❤ is a dingbat, which the Latin face does not carry: it is its own run now, after the separator
+        assert_eq!(script_runs("👨\u{200d}👩\u{200d}👧, ❤\u{fe0f}"), vec!["👨\u{200d}👩\u{200d}👧", ", ", "❤\u{fe0f}"]);
         // the classifier no longer lumps RTL and other alphabets with Latin
         for c in ['ا', 'א', 'ก', 'ह'] { assert!(!latin_class(c) && script_class(c) != 0, "{c}"); }
-        for c in ['A', 'ñ', 'Ж', 'λ', '☀', '–'] { assert!(latin_class(c), "{c}"); }
+        // (round 9) ☀ moved to the non-Latin side with the other symbol blocks (see the round-9 boundary test)
+        for c in ['A', 'ñ', 'Ж', 'λ', '–'] { assert!(latin_class(c), "{c}"); }
+        assert!(!latin_class('☀'));
     }
 
     #[test]

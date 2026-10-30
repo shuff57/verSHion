@@ -22,6 +22,8 @@ const W: f64 = 620.0;
 const H: f64 = 330.0;
 const ROW_FS: f64 = 15.0;
 const ROW_H: f64 = 20.0;
+/// (round 9) The farthest the Km label's box may sit from its dotted marker, in pixels.
+const KM_REACH: f64 = 45.0;
 
 pub fn defs() -> Vec<FigureDef> {
     vec![FigureDef {
@@ -155,6 +157,70 @@ fn pick<'a>(
         .unwrap_or(cands[0])
 }
 
+/// The ink of a label (left, right, top, bottom): cap height above the baseline, a little below it. (round 9) A thin
+/// line is tested against the ink, not the full em box: a dashed line passing through the empty space above the
+/// digits rejected the Km label's own place and sent it 500 px away.
+fn ink_box(x: f64, w: f64, anchor: &str, y: f64, size: f64) -> (f64, f64, f64, f64) {
+    // plus 1.5 px: the 2.4 px halo and half a line's stroke, so a line that only grazes the capitals counts too
+    let b = box_around(x, w, anchor, y, size);
+    (b.0 - 1.5, b.1 + 1.5, y - 0.74 * size - 1.5, y + 0.1 * size + 1.5)
+}
+
+/// Whether the segment a-b passes through the box (left, right, top, bottom) (Liang-Barsky clipping).
+fn seg_hits(a: (f64, f64), b: (f64, f64), r: (f64, f64, f64, f64)) -> bool {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let (mut t0, mut t1) = (0.0f64, 1.0f64);
+    for (p, q) in [(-dx, a.0 - r.0), (dx, r.1 - a.0), (-dy, a.1 - r.2), (dy, r.3 - a.1)] {
+        if p == 0.0 {
+            if q < 0.0 { return false; }
+        } else {
+            let t = q / p;
+            if p < 0.0 { t0 = t0.max(t); } else { t1 = t1.min(t); }
+        }
+    }
+    t0 < t1
+}
+
+/// How many of the thin lines (dashed asymptote, dotted markers, the curves) run through a label's ink.
+fn crossings(ink: (f64, f64, f64, f64), thin: &[Vec<(f64, f64)>]) -> usize {
+    thin.iter().filter(|l| l.windows(2).any(|w| seg_hits(w[0], w[1], ink))).count()
+}
+
+/// (round 9) Where a label goes when it must stay beside the thing it names. `cands` are all near enough, nearest first.
+/// Thin lines are not obstacles that may push the label away (it is haloed, so a line can cross it): among the
+/// candidates that clear every HARD obstacle (other labels, the point, the tick numbers, the canvas), the one crossing
+/// the fewest thin lines, the nearest on ties. When none is hard-clear, the near one overlapping the hard obstacles
+/// least, never a far one.
+fn pick_near<'a>(
+    cands: &[(f64, &'a str, f64)],
+    w: f64,
+    size: f64,
+    hard: &[(f64, f64, f64, f64)],
+    thin: &[Vec<(f64, f64)>],
+    ok: &dyn Fn((f64, f64, f64, f64)) -> bool,
+) -> ((f64, &'a str, f64), bool) {
+    let cross = |c: &(f64, &str, f64)| crossings(ink_box(c.0, w, c.1, c.2, size), thin);
+    let clear = cands.iter().enumerate().filter(|(_, c)| {
+        let b = box_around(c.0, w, c.1, c.2, size);
+        ok(b) && !hard.iter().any(|o| hits(b, *o))
+    });
+    if let Some((_, c)) = clear.min_by_key(|(i, c)| (cross(c), *i)) {
+        return (*c, true);
+    }
+    let area = |c: &(f64, &str, f64)| { let b = box_around(c.0, w, c.1, c.2, size); hard.iter().map(|o| overlap(b, *o)).sum::<f64>() };
+    let best = |it: &mut dyn Iterator<Item = (usize, &(f64, &'a str, f64))>| {
+        it.fold(None::<((f64, usize, usize), (f64, &'a str, f64))>, |acc, (i, c)| {
+            let k = (area(c), cross(c), i);
+            match acc { Some((bk, _)) if (bk.0, bk.1, bk.2) <= (k.0, k.1, k.2) => acc, _ => Some((k, *c)) }
+        })
+    };
+    let c = best(&mut cands.iter().enumerate().filter(|(_, c)| ok(box_around(c.0, w, c.1, c.2, size))))
+        .or_else(|| best(&mut cands.iter().enumerate()))
+        .map(|(_, c)| c)
+        .unwrap_or(cands[0]);
+    (c, false)
+}
+
 fn text_el(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) -> String {    format!(
         r##"<text x="{x:.2}" y="{y:.2}" font-size="{size}" text-anchor="{anchor}" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{fill}">{}</text>"##,
         svg::esc(s)
@@ -212,7 +278,13 @@ pub fn build(p: &Params) -> (String, Report) {
     let f = Frame { w, h: H, l: 66.0, r: 20.0, t: 22.0, b: 52.0, x0: 0.0, x1: smax, y0: 0.0, y1: y_top };
 
     let rows = if inhibited { 3.0 } else { 1.0 };
-    let rows_y0 = H + 46.0 * lab;
+    // (round 9 minor) the x-axis title and the givens line under it were about 5 px apart at Large (20 at Medium): the
+    // title grows down from the axis while the givens sat at a fixed H + 18. The givens keep at least 10 px (scaled)
+    // between the title's descenders and their own capitals, and everything under them moves down with them.
+    let title_y = f.bottom() + 40.0 * lab;
+    let givens_y0 = (H + 18.0 * lab).max(title_y + 0.22 * 13.0 * lab + 10.0 * lab + 0.74 * 12.0 * lab);
+    let shift = givens_y0 - (H + 18.0 * lab);
+    let rows_y0 = H + 46.0 * lab + shift;
     let mut d = Doc::new(w, rows_y0 + (rows - 1.0) * ROW_H * lab + 16.0);
     d.describe("Enzyme kinetics", "Reaction rate against substrate concentration with Vmax and Km marked");
 
@@ -235,7 +307,7 @@ pub fn build(p: &Params) -> (String, Report) {
     }
     d.line(f.left(), f.bottom(), f.right(), f.bottom(), ink, 1.6);
     d.line(f.left(), f.top(), f.left(), f.bottom(), ink, 1.6);
-    d.raw(&text_el((f.left() + f.right()) / 2.0, f.bottom() + 40.0 * lab, 13.0 * lab, "middle", ink, "Substrate concentration [S]"));
+    d.raw(&text_el((f.left() + f.right()) / 2.0, title_y, 13.0 * lab, "middle", ink, "Substrate concentration [S]"));
     d.raw(&format!(
         r##"<text transform="translate(18.00 {:.2}) rotate(-90)" font-size="{}" text-anchor="middle" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{}">Reaction rate v</text>"##,
         (f.top() + f.bottom()) / 2.0,
@@ -257,7 +329,7 @@ pub fn build(p: &Params) -> (String, Report) {
         ));
         // the curve without the inhibitor, dashed underneath: competitive raises Km (stretched to the right),
         // noncompetitive lowers Vmax (squashed down) — a claim the picture should show, not only the caption
-        if inhibited {
+        let pts0: Option<Vec<(f64, f64)>> = if inhibited {
             let mut pts0 = Vec::new();
             for k in 0..=160 {
                 let s = smax * k as f64 / 160.0;
@@ -268,7 +340,10 @@ pub fn build(p: &Params) -> (String, Report) {
                 r##"<polyline points="{}" fill="none" stroke="{mark}" stroke-width="1.6" stroke-dasharray="6 5" stroke-linejoin="round" stroke-linecap="round"/>"##,
                 poly0.join(" ")
             ));
-        }
+            Some(pts0)
+        } else {
+            None
+        };
         // Vmax as the dashed asymptote. (round 3) With an inhibitor this is the APPARENT Vmax, and labelling it plainly
         // "Vmax = 2" beside givens that say "Vmax = 10" reads as a contradiction; the prime is the usual mark.
         let vy = f.py(vmax_a);
@@ -297,26 +372,36 @@ pub fn build(p: &Params) -> (String, Report) {
         let with_ticks = |v: &[(f64, f64, f64, f64)]| -> Vec<(f64, f64, f64, f64)> { v.iter().chain(tick_boxes.iter()).copied().collect() };
         // The Km label's usual place is centred on its marker at the axis. When the marked point sits there
         // (s_at ≈ Km, or a low [S] on the same column), move it beside the point — then up a row — until it clears.
-        // (round 8) More rows, beside the point a row up too; nothing clear takes the least-overlapping place, never
-        // the usual one under the point.
+        // (round 9 major) Round 8 moved it beside the POINT, and a dashed line tested as a full em box rejected the
+        // usual place, so "Km′ = 3.3" was printed under a point at [S] = 40. The label now never leaves its marker:
+        // every candidate is on the axis row or one row up, within 45 px of the dotted Km line, nearest first.
+        let kx = f.px(km_a.min(smax));
         let km_base = (km_lx, km_anchor, km_y);
-        let km_cands = [
-            km_base,
-            (px + 8.0, "start", km_y),
-            (px - 8.0, "end", km_y),
-            (km_lx, km_anchor, km_y - 20.0 * lab),
-            (km_lx, km_anchor, km_y - 36.0 * lab),
-            (px + 8.0, "start", km_y - 20.0 * lab),
-            (px - 8.0, "end", km_y - 20.0 * lab),
-            (km_lx, km_anchor, km_y - 52.0 * lab),
-            (km_lx, km_anchor, km_y - 68.0 * lab),
-        ];
-        // (round 8) A strong noncompetitive inhibitor brings the asymptote and the half-rate line down onto the axis
-        // row where the Km label lives, and the two dashed lines struck through the answer: they are obstacles too.
-        let line_box = |x0: f64, x1: f64, y: f64| (x0, x1, y - 1.5, y + 1.5);
-        let half_line = line_box(f.left(), if km_a <= smax { f.px(km_a) } else { f.right() }, half);
-        let km_obstacles = with_ticks(&[point_box, line_box(f.left(), f.right(), vy), half_line]);
-        let (km_lx, km_anchor, km_y) = pick(&km_cands, km_w, 12.0 * lab, &km_obstacles, &|b| in_x(b) && b.2 > f.top());
+        let mut km_cands: Vec<(f64, &str, f64)> = vec![km_base];
+        {
+            let mut near: Vec<(f64, f64, (f64, &str, f64))> = Vec::new();
+            for (row, y) in [km_y, km_y - 16.0 * lab].into_iter().enumerate() {
+                let mut add = |x: f64, a: &'static str| {
+                    let bx = box_around(x, km_w, a, y, 12.0 * lab);
+                    let dist = (bx.0 - kx).max(kx - bx.1).max(0.0);
+                    if dist <= KM_REACH { near.push((row as f64 * 1000.0 + dist, ((bx.0 + bx.1) / 2.0 - kx).abs(), (x, a, y))); }
+                };
+                if row == 1 { add(km_lx, km_anchor); }
+                for dx in [12.0, 24.0, 40.0, 56.0, 72.0] { add(kx + dx, "middle"); add(kx - dx, "middle"); }
+                for dx in [4.0, 10.0, 20.0, 30.0, 40.0, KM_REACH] { add(kx + dx, "start"); add(kx - dx, "end"); }
+            }
+            near.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then(a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)));
+            km_cands.extend(near.into_iter().map(|(_, _, c)| c));
+        }
+        // The thin lines it may cross but would rather not: the dashed asymptote, the dotted half-rate line, both
+        // curves. Its own dotted marker runs through the middle of it by design (haloed).
+        let asym = vec![(f.left(), vy), (f.right(), vy)];
+        let half_seg = vec![(f.left(), half), (if km_a <= smax { f.px(km_a) } else { f.right() }, half)];
+        let km_marker = vec![(kx, f.bottom()), (kx, half)];
+        let mut thin_km: Vec<Vec<(f64, f64)>> = vec![asym.clone(), half_seg.clone(), pts.clone()];
+        if let Some(p0) = &pts0 { thin_km.push(p0.clone()); }
+        let km_obstacles = with_ticks(&[point_box]);
+        let ((km_lx, km_anchor, km_y), _) = pick_near(&km_cands, km_w, 12.0 * lab, &km_obstacles, &thin_km, &|b| in_x(b) && b.2 > f.top());
         let km_box = box_around(km_lx, km_w, km_anchor, km_y, 12.0 * lab);
         let note_text = format!("{km_name} = {}, beyond this axis", val(km_a, dec));
         let note_w = note_text.chars().count() as f64 * 12.0 * lab * 0.55;
@@ -371,7 +456,20 @@ pub fn build(p: &Params) -> (String, Report) {
         // (round 5, round 6) a strong inhibitor puts the half-rate line near the axis, where the Km label and the
         // asymptote label live: take the first of its usual place and two rows above that clears both. (round 8) Then
         // a row below the line and higher rows; nothing clear takes the least-overlapping place.
-        let half_cands = [
+        // (round 9 minor) Then the same rows further along the line, and one a little lower. The thin lines (the
+        // asymptote, both curves, the dotted Km marker) are no longer ignored: among the places clear of every label,
+        // the point and the ticks, it takes the one crossing the fewest, so a clean spot beside its line wins over one
+        // struck by the curve. It stays beside the line it names (starting no further than 60 px, scaled, past the
+        // line's end) and under the asymptote, where it cannot read as that line's label. Only when no such place is
+        // clear of the other labels and the point does it fall back to the round-8 rows, higher up.
+        let line_end = if km_a <= smax { f.px(km_a) } else { f.right() };
+        let mut near: Vec<(f64, &str, f64)> = vec![(hx0, "start", half - 7.0 * lab)];
+        for dx in [30.0, 60.0, 100.0, 140.0] { near.push((hx0 + dx * lab, "start", half - 7.0 * lab)); }
+        for dx in [0.0, 30.0, 60.0] { near.push((hx0 + dx * lab, "start", half - 3.5 * lab)); }
+        near.push((hx0, "start", half + 14.0 * lab));
+        for dx in [30.0, 60.0, 100.0, 140.0] { near.push((hx0 + dx * lab, "start", half + 14.0 * lab)); }
+        near.retain(|c| c.0 <= (line_end + 60.0 * lab).max(hx0));
+        let far: Vec<(f64, &str, f64)> = vec![
             (hx0, "start", half - 7.0 * lab),
             (hx0, "start", half - 27.0 * lab),
             (f.left() + 6.0, "start", half - 41.0 * lab),
@@ -380,7 +478,12 @@ pub fn build(p: &Params) -> (String, Report) {
             (f.left() + 6.0, "start", half - 69.0 * lab),
             (f.left() + 6.0, "start", half - 83.0 * lab),
         ];
-        let (hx, _, half_y) = pick(&half_cands, half_w, 11.0 * lab, &with_ticks(&[under_box, vmax_box, point_box]), &|b| b.2 > f.top());
+        let mut thin_half: Vec<Vec<(f64, f64)>> = vec![asym.clone(), half_seg.clone(), pts.clone()];
+        if km_a <= smax { thin_half.push(km_marker.clone()); }
+        if let Some(p0) = &pts0 { thin_half.push(p0.clone()); }
+        let half_hard = with_ticks(&[under_box, vmax_box, point_box]);
+        let (near_pick, clear) = pick_near(&near, half_w, 11.0 * lab, &half_hard, &thin_half, &|b| b.2 > f.top() && in_x(b) && b.3 > vy + 1.0);
+        let (hx, _, half_y) = if clear { near_pick } else { pick(&far, half_w, 11.0 * lab, &half_hard, &|b| b.2 > f.top()) };
         // (round 4) this label runs over the curve too, so it carries the same halo as the rate label
         d.raw(&text_el_halo(hx, half_y, 11.0 * lab, "start", curve, &half_label));
         let half_box = box_around(hx, half_w, "start", half_y, 11.0 * lab);
@@ -435,7 +538,7 @@ pub fn build(p: &Params) -> (String, Report) {
     };
     let chars_per_line = ((w - 48.0) / (12.0 * lab * 0.55)).floor().max(20.0) as usize;
     for (i, line) in super::wrap(&givens, chars_per_line).iter().enumerate() {
-        d.raw(&text_el(24.0, H + (18.0 + i as f64 * 15.0) * lab, 12.0 * lab, "start", ink, line));
+        d.raw(&text_el(24.0, givens_y0 + i as f64 * 15.0 * lab, 12.0 * lab, "start", ink, line));
     }
 
     // the readout. Without an inhibitor Vmax and Km are already given, so only the marked rate is repeated here;
@@ -917,6 +1020,141 @@ mod tests {
             if let Some(e) = first_collision(&render_of(&c)) { bad.push(format!("{c:?}: {e}")); }
         }
         assert!(bad.is_empty(), "{} of {n} cases collide, e.g.:\n{}", bad.len(), bad.iter().take(12).cloned().collect::<Vec<_>>().join("\n"));
+    }
+
+    /// The x of the dotted Km marker (the vertical "3 4" dashed line), if drawn.
+    fn km_marker_x(svg: &str) -> Option<f64> {
+        for part in svg.split("<line").skip(1) {
+            if !part.contains(r#"stroke-dasharray="3 4""#) { continue; }
+            let num = |k: &str| -> Option<f64> { let at = part.find(&format!("{k}=\""))? + k.len() + 2; part[at..].split('"').next()?.parse().ok() };
+            let (x1, x2, y1, y2) = (num("x1")?, num("x2")?, num("y1")?, num("y2")?);
+            if (x1 - x2).abs() < 1e-6 && (y1 - y2).abs() > 1e-6 { return Some(x1); }
+        }
+        None
+    }
+
+    /// Every polyline and dashed line of a render, as point lists.
+    fn thin_lines(svg: &str) -> Vec<Vec<(f64, f64)>> {
+        let mut out = Vec::new();
+        for part in svg.split("<polyline points=\"").skip(1) {
+            let pts: Vec<(f64, f64)> = part.split('"').next().unwrap_or("").split_whitespace().filter_map(|p| { let (a, b) = p.split_once(',')?; Some((a.parse().ok()?, b.parse().ok()?)) }).collect();
+            out.push(pts);
+        }
+        for part in svg.split("<line").skip(1) {
+            if !part.contains("stroke-dasharray") { continue; }
+            let num = |k: &str| -> f64 { let at = part.find(&format!("{k}=\"")).unwrap() + k.len() + 2; part[at..].split('"').next().unwrap().parse().unwrap() };
+            out.push(vec![(num("x1"), num("y1")), (num("x2"), num("y2"))]);
+        }
+        out
+    }
+
+    #[test]
+    fn the_km_label_stays_beside_its_marker_across_a_sweep() {
+        // (round 9 major) round 8 tested the dashed lines as full em boxes, so a line through the empty space above the
+        // digits rejected the label's own place and the next clear candidate was beside the POINT: "Km′ = 3.3" printed
+        // at [S] = 40, 560 px from its marker. The label now stays within 45 px of its dotted marker, on the axis row or
+        // one row up, and still clears every label, the point and the ticks.
+        let mut cases: Vec<Vec<(&'static str, Value)>> = vec![
+            vec![s("mode", "noncompetitive"), f("vmax", 10.0), f("km", 3.3), f("smax", 40.0), f("at", 40.0), f("inh", 1.0), f("ki", 0.2)],
+            vec![s("mode", "noncompetitive"), f("inh", 4.0), f("ki", 1.0), f("vmax", 10.0), f("km", 1.0), f("smax", 40.0), f("at", 40.0), s("label_size", "Large")],
+            vec![s("mode", "noncompetitive"), f("inh", 4.0), f("ki", 1.0), f("vmax", 1.0), f("km", 0.2), f("smax", 2.0), f("at", 1.0), s("label_size", "Large")],
+        ];
+        for mode in ["none", "competitive", "noncompetitive"] {
+            let inhs: &[(f64, f64)] = if mode == "none" { &[(3.0, 1.0)] } else { &[(0.5, 10.0), (4.0, 1.0), (10.0, 1.0), (10.0, 0.2), (1.0, 0.2)] };
+            for &(inh, ki) in inhs {
+                for vmax in [1.0, 10.0, 100.0] {
+                    for km in [0.2, 1.0, 3.3, 5.0, 20.0] {
+                        for smax in [2.0, 12.0, 40.0] {
+                            for at in [0.0, 0.5, km, smax / 2.0, smax] {
+                                for size in ["Small", "Medium", "Large"] {
+                                    cases.push(vec![s("mode", mode), f("inh", inh), f("ki", ki), f("vmax", vmax), f("km", km), f("smax", smax), f("at", at), s("label_size", size)]);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let mut rng = crate::figures::biology::Rng::new(9);
+        let modes = ["none", "competitive", "noncompetitive"];
+        let sizes = ["Small", "Medium", "Large"];
+        let pickf = |r: &mut crate::figures::biology::Rng, lo: f64, hi: f64, step: f64| lo + (r.below((((hi - lo) / step).round() as usize) + 1) as f64) * step;
+        for _ in 0..3000 {
+            let smax = pickf(&mut rng, 2.0, 40.0, 1.0);
+            cases.push(vec![
+                s("mode", modes[rng.below(3)]), f("vmax", pickf(&mut rng, 1.0, 100.0, 1.0)), f("km", pickf(&mut rng, 0.2, 20.0, 0.1)), f("smax", smax),
+                f("at", pickf(&mut rng, 0.0, smax, 0.5)), f("inh", pickf(&mut rng, 0.0, 10.0, 0.5)), f("ki", pickf(&mut rng, 0.2, 10.0, 0.1)),
+                ("dec", Value::I(1 + rng.below(3) as i64)), s("label_size", sizes[rng.below(3)]),
+            ]);
+        }
+        let mut bad = Vec::new();
+        for c in &cases {
+            let svg = render_of(c);
+            let Some(kx) = km_marker_x(&svg) else { continue };
+            let lab = svg::label_factor(with(c).s("label_size"));
+            let axis_row = (H - 52.0) - 6.0 * lab;
+            let kb: Vec<_> = boxes(&svg).into_iter().filter(|b| b.4.starts_with("Km = ") || b.4.starts_with("Km\u{2032} = ")).collect();
+            assert_eq!(kb.len(), 1, "{c:?}: {}", texts(&svg));
+            let b = label_box(&svg, if kb[0].4.starts_with("Km = ") { "Km = " } else { "Km\u{2032} = " })[0];
+            let dist = (b.0 - kx).max(kx - b.1).max(0.0);
+            let y = kb[0].1;
+            if dist > 45.0 || y > axis_row + 0.01 || y < axis_row - 16.0 * lab - 0.01 {
+                bad.push(format!("{c:?}: {:?} is {dist:.0} px from its marker at x = {kx:.0}, baseline {y:.1} (axis row {axis_row:.1})", kb[0].4));
+            }
+            if let Some(e) = first_collision(&svg) { bad.push(format!("{c:?}: {e}")); }
+        }
+        assert!(bad.is_empty(), "{} of {} cases:\n{}", bad.len(), cases.len(), bad.iter().take(12).cloned().collect::<Vec<_>>().join("\n"));
+    }
+
+    #[test]
+    fn the_half_rate_label_is_not_struck_through_when_a_clear_place_is_near() {
+        // (round 9 minor) the half-rate label ignored the dashed lines and the curves; with a clear place a little
+        // further along its line it no longer sits on the curve. It also never moves above the asymptote, where it would
+        // read as that line's label, nor far from its own line.
+        for size in ["Small", "Medium", "Large"] {
+            for style in ["Colour", "Print"] {
+                for extra in [vec![], vec![f("km", 0.5), f("at", 2.0)], vec![f("km", 10.0), f("smax", 40.0), f("at", 20.0)], vec![s("mode", "competitive"), f("inh", 4.0), f("ki", 1.0)]] {
+                    let mut c = vec![s("label_size", size), s("style", style), b(SHOW_ANSWERS, true)];
+                    c.extend(extra.clone());
+                    let svg = render_of(&c);
+                    let hb = boxes(&svg).into_iter().find(|b| b.4.starts_with("Vmax/2") || b.4.starts_with("Vmax\u{2032}/2")).expect("half label");
+                    let w = hb.4.chars().count() as f64 * hb.2 * 0.55;
+                    let ink = (hb.0, hb.0 + w, hb.1 - 0.74 * hb.2, hb.1 + 0.1 * hb.2);
+                    let n = thin_lines(&svg).iter().filter(|l| l.windows(2).any(|s| seg_hits(s[0], s[1], ink))).count();
+                    assert_eq!(n, 0, "{c:?}: the half-rate label {:?} at ({:.1}, {:.1}) is struck by {n} line(s)", hb.4, hb.0, hb.1);
+                }
+            }
+        }
+        // the reported Large case: no near place is clear of the curve (it rises through the 22 px between the half line
+        // and the asymptote, and the Km′ label holds the row below), so the label stays by its line, under the asymptote
+        let c = [s("mode", "noncompetitive"), f("inh", 4.0), f("ki", 1.0), f("vmax", 10.0), f("km", 1.0), f("smax", 40.0), f("at", 40.0), s("label_size", "Large")];
+        let svg = render_of(&c);
+        let hb = boxes(&svg).into_iter().find(|b| b.4.starts_with("Vmax\u{2032}/2")).unwrap();
+        let (_, km_a) = kinetics(&with(&c));
+        let fr = Frame { w: 0.0, h: H, l: 66.0, r: 20.0, t: 22.0, b: 52.0, x0: 0.0, x1: 40.0, y0: 0.0, y1: 11.5 };
+        assert!(hb.0 <= fr.px(km_a) + 60.0 * 1.4 + 8.0, "{hb:?}");
+        assert!(hb.1 > fr.py(2.0), "the half-rate label sits above the asymptote: {hb:?}");
+    }
+
+    #[test]
+    fn the_axis_title_and_the_givens_keep_a_gap_at_every_size() {
+        // (round 9 minor) at Large the x-axis title and the givens line were about 5 px apart
+        for size in ["Small", "Medium", "Large"] {
+            for extra in [vec![], vec![s("mode", "noncompetitive"), f("inh", 4.0), f("ki", 1.0)]] {
+                let mut c = vec![s("label_size", size)];
+                c.extend(extra);
+                let svg = render_of(&c);
+                let bx = boxes(&svg);
+                let title = bx.iter().find(|b| b.4.starts_with("Substrate concentration")).unwrap();
+                let givens = bx.iter().find(|b| b.4.starts_with("Vmax = ") && b.0 == 24.0).unwrap();
+                let lab = svg::label_factor(size);
+                let gap = (givens.1 - 0.74 * givens.2) - (title.1 + 0.22 * title.2);
+                assert!(gap >= 9.9 * lab, "{size}: {gap:.1} px between the axis title and the givens");
+                // and the readout below keeps its distance from the givens
+                let readout = bx.iter().find(|b| b.4.starts_with("Rate at")).unwrap();
+                assert!(readout.1 > givens.1 + 20.0 * lab, "{size}: {readout:?} vs {givens:?}");
+            }
+        }
     }
 
     #[test]

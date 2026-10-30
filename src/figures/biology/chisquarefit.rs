@@ -193,6 +193,16 @@ fn text_el(x: f64, y: f64, size: f64, anchor: &str, fill: &str, s: &str) -> Stri
     )
 }
 
+/// The decimals a typed count carries (5.5 → 1, 10.25 → 2, 315 → 0), at most six.
+fn own_decimals(v: f64) -> i64 {
+    if !v.is_finite() { return 0; }
+    for k in 0..=6i64 {
+        let x = v * 10f64.powi(k as i32);
+        if (x.round() - x).abs() <= (x.abs() * 4e-16).max(1e-7) { return k; }
+    }
+    6
+}
+
 /// A number that never rounds a real value to "0" — a contribution of 0.0004 is real and belongs on the page.
 fn val(v: f64, dec: i64) -> String {
     let zeros = |s: &str| s.trim_start_matches('\u{2212}').chars().filter(|c| c.is_ascii_digit()).all(|c| c == '0');
@@ -294,15 +304,54 @@ pub fn build(p: &Params) -> String {
     // into the statistics block
     let (head_y, row_h) = (HEAD_Y * lab, ROW_H * lab);
     let table_bottom = head_y + 8.0 * lab + row_h * (n as f64 + 1.0);
-    let w = (W * (1.0 + 0.5 * (lab - 1.0))).max(W);
     // (round 8 minor) observed counts are whole numbers the student is given: printed in full with grouping up to 1e15
     // (at 1e7 they went "1.23e7" and could not be recovered, and 5,000,000 + 5,000,001 totalled "1.00e7"). The total is
-    // the sum of the cells as printed, in full while every cell is. Only derived values go scientific.
-    let whole = |v: f64| v.is_finite() && v.fract() == 0.0 && v.abs() < 1e15;
+    // the sum of the cells as printed. Only derived values go scientific.
+    // (round 9 minor) The same for counts with decimals: "5.5, 10.25" totalled 15.75 in the table but "16 observations"
+    // in the givens, and "12345678, 0.5" totalled "1.23e7". Each count prints as typed (up to six decimals, grouped),
+    // the total is their exact sum in integer units at the finest decimals any of them carries, and the Observed
+    // total, the Expected total and the givens print that one string. A column is plain while every cell is below 1e15
+    // and exactly representable; past that the whole column (cells and total) follows one rule: plain below 1e7,
+    // scientific from 1e7.
     let total_obs: f64 = f.rows.iter().map(|r| r.observed).sum();
-    let obs_full = f.rows.iter().all(|r| whole(r.observed)) && total_obs < 9.0e15;
-    let sci_total = |v: f64| if !v.is_finite() { "\u{221e}".to_string() } else { format!("{v:.2e}").replace('-', "\u{2212}") };
-    let total_text_obs = if obs_full { group(&format!("{}", total_obs as i64)) } else if !total_obs.is_finite() || total_obs.abs() >= 1e7 { sci_total(total_obs) } else { num(total_obs, 2) };
+    let obs_dec: Vec<i64> = f.rows.iter().map(|r| own_decimals(r.observed)).collect();
+    let col_dec = obs_dec.iter().copied().max().unwrap_or(0);
+    let scale = 10f64.powi(col_dec as i32);
+    let obs_full = f.rows.iter().all(|r| r.observed.is_finite() && r.observed.abs() < 1e15 && (r.observed * scale).abs() < 9.0e15);
+    let units_text = |u: i128, d: i64| -> String {
+        let neg = u < 0;
+        let u = u.abs();
+        let p = 10i128.pow(d as u32);
+        let body = if d == 0 { format!("{u}") } else { format!("{}.{:0w$}", u / p, u % p, w = d as usize) };
+        let g = group(&body);
+        if neg { format!("\u{2212}{g}") } else { g }
+    };
+    let big = |v: f64| v.is_finite() && v.abs() >= 1e7;
+    // (round 5) an overflowing value prints "inf"; the rest of the figure writes ∞
+    let sci = |v: f64| if v == 0.0 { "0".to_string() } else if !v.is_finite() { "\u{221e}".to_string() } else { format!("{v:.2e}").replace('-', "\u{2212}") };
+    let fmt_cnt = |v: f64| if big(v) || !v.is_finite() { sci(v) } else { num(v, 2) };
+    let obs_text: Vec<String> = if obs_full {
+        f.rows.iter().zip(&obs_dec).map(|(r, &d)| units_text((r.observed * 10f64.powi(d as i32)).round() as i128, d)).collect()
+    } else {
+        f.rows.iter().map(|r| fmt_cnt(r.observed)).collect()
+    };
+    let total_text_obs = if obs_full {
+        units_text(f.rows.iter().map(|r| (r.observed * scale).round() as i128).sum(), col_dec)
+    } else {
+        fmt_cnt(total_obs)
+    };
+    // the Expected column follows its own column's rule: plain and grouped while the Observed column is (the expected
+    // counts sum to the same total, so none reaches 1e15 then), and its total is the Observed total, printed the same
+    // way. (round 9 minor) "5,000,000.50" twice above an Expected total of "1.00e7" beside an Observed "10,000,001".
+    let fmt_exp = |v: f64| if !v.is_finite() { sci(v) } else if obs_full { group(&col(v, dec)) } else if big(v) { sci(v) } else { group(&col(v, dec)) };
+    let exp_text: Vec<String> = f.rows.iter().map(|r| fmt_exp(r.expected)).collect();
+    // the canvas widens when a column's widest printed number would not fit between it and the column on its left
+    // (a 15-digit expected count with its decimals is 22 characters)
+    let cw = FS * lab * 0.58;
+    let wide = |v: &[String]| v.iter().map(|t| t.chars().count()).max().unwrap_or(0) as f64 * cw;
+    let w_obs = wide(&obs_text).max(total_text_obs.chars().count() as f64 * cw);
+    let w_exp = wide(&exp_text).max(total_text_obs.chars().count() as f64 * cw);
+    let w = (W * (1.0 + 0.5 * (lab - 1.0))).max(W).max((w_exp + 24.0) / (0.703 - 0.515)).max((24.0 + 6.0 * cw + 8.0 + w_obs) / 0.515);
     // the givens: the ratio the expected counts come from, always printed (in the table's own notation when huge).
     // (round 6) a ratio part that is not a whole number keeps its decimals: rounding them to integers printed
     // "1.5 : 2.5 : 1.5" as "2 : 2 : 2", which contradicts the expected counts beside it. A part too large for an i64
@@ -318,7 +367,7 @@ pub fn build(p: &Params) -> String {
             else { format!("{v}").replace('-', "\u{2212}") }
         })
         .collect();
-    let total_shown = if obs_full { total_text_obs.clone() } else if !total_obs.is_finite() || total_obs.abs() >= 1e7 { sci_total(total_obs) } else { val(total_obs, 0) };
+    let total_shown = total_text_obs.clone();
     let givens = format!("Expected from the ratio {} out of {} observations", ratio_text.join(" : "), total_shown);
     // (round 5) long ratio parts ran off the canvas: wrapped to the width, the lines stacking up into the gap above
     // the statistics block
@@ -372,17 +421,13 @@ pub fn build(p: &Params) -> String {
     // (round 7 minor) scientific notation belongs only to the values that need it. A huge typed ratio (1 : 1e20) made
     // the entire table "huge", so the small observed counts printed "1.00e0" and the total "2.00e0". A value is
     // scientific only when it is itself ≥ 1e7; small counts stay counts, while the huge ratio/expected stay scientific.
-    let big = |v: f64| v.is_finite() && v.abs() >= 1e7;
-    // (round 5) an overflowing value prints "inf"; the rest of the figure writes ∞
-    let sci = |v: f64| if v == 0.0 { "0".to_string() } else if !v.is_finite() { "\u{221e}".to_string() } else { format!("{v:.2e}").replace('-', "\u{2212}") };
-    let fmt_cnt = |v: f64| if big(v) || !v.is_finite() { sci(v) } else { num(v, 2) };
     // (round 5) the contributions are grouped like the counts (1,234.56), so one row does not mix two formats
-    let fmt_term = |v: f64| if big(v) { sci(v) } else if !v.is_finite() { "\u{221e}".to_string() } else { group(&col(v, dec.max(2))) };
-    // an expected count only goes scientific when it is itself huge (a tiny one already falls back through `col`)
-    let fmt_exp = |v: f64| if big(v) || !v.is_finite() { sci(v) } else { group(&col(v, dec)) };
+    // (round 9 minor) one rule for the column and its total: when any contribution or the statistic reaches 1e7 the
+    // whole column is scientific ("6,172,838.25" twice above a Total of "1.23e7" mixed two formats in one column)
+    let term_sci = f.rows.iter().any(|r| big(r.term)) || big(f.chi2);
+    let fmt_term = |v: f64| if !v.is_finite() { "\u{221e}".to_string() } else if term_sci || big(v) { sci(v) } else { group(&col(v, dec.max(2))) };
     // a long category name would print through the three number columns: the room it has is what is left of the
     // Observed column once its widest printed number is drawn (round 5: a grouped count ran under the name)
-    let obs_text: Vec<String> = f.rows.iter().map(|r| if whole(r.observed) { group(&format!("{}", r.observed as i64)) } else { fmt_cnt(r.observed) }).collect();
     let widest_obs = obs_text.iter().map(|s| s.chars().count()).max().unwrap_or(1) as f64 * FS * lab * 0.56;
     let name_chars = (((col_o - 24.0 - widest_obs - 8.0) / (FS * lab * 0.56)).floor() as usize).max(6);
     let short = |n: &str| -> String {
@@ -415,7 +460,7 @@ pub fn build(p: &Params) -> String {
         d.raw(&text_el(24.0, y, FS * lab, "start", ink, &short(&r.name)));
         d.raw(&text_el(col_o, y, FS * lab, "end", ink, &obs_text[i]));
         if ans {
-            d.raw(&text_el(col_e, y, FS * lab, "end", ink, &fmt_exp(r.expected)));
+            d.raw(&text_el(col_e, y, FS * lab, "end", ink, &exp_text[i]));
             d.raw(&text_el(col_t, y, FS * lab, "end", ink, &term_text[i]));
         } else {
             d.raw(&text_el(col_e, y, FS * lab, "end", ink, BLANK));
@@ -427,13 +472,14 @@ pub fn build(p: &Params) -> String {
 
     // the total row: the counts add up, and the statistic is the sum of the contributions
     d.raw(&text_el(24.0, y, FS * lab, "start", ink, "Total"));
-    let obs_total_cell = if obs_full { total_text_obs.clone() } else { fmt_cnt(total_obs) };
+    let obs_total_cell = total_text_obs.clone();
     d.raw(&text_el(col_o, y, FS * lab, "end", ink, &obs_total_cell));
     // (round 6 minor) the Expected total is the answer column's total: blank it with the cells it totals on the student
     // copy, or it hands back a number from a column the student is asked to fill. It equals the observed total and
     // prints the same way while it is small; at 1e7 and above it is a derived value in the Expected column, which goes
     // scientific like the cells above it (in full it ran into the observed total beside it).
-    let expected_total = if !ans { BLANK.to_string() } else if big(total_obs) || !total_obs.is_finite() { sci(total_obs) } else { obs_total_cell.clone() };
+    // (round 9) always the Observed total's string: the same number, printed the same way
+    let expected_total = if !ans { BLANK.to_string() } else { obs_total_cell.clone() };
     d.raw(&text_el(col_e, y, FS * lab, "end", ink, &expected_total));
     // the total row: the counts add up, and the statistic is the sum of the contributions. (round 2) It must be the
     // number the line under the table prints, or the table's own total contradicts it: an impossible test has no
@@ -441,7 +487,7 @@ pub fn build(p: &Params) -> String {
     let total_text = if !ans { BLANK.to_string() }
     else if infinite { "\u{221e}".to_string() }
     else if no_test { "\u{2014}".to_string() }
-    else if big(printed_chi2) { sci(printed_chi2) }
+    else if term_sci || big(printed_chi2) { sci(printed_chi2) }
     else { group(&col(printed_chi2, term_dec)) };
     d.raw(&text_el(col_t, y, FS * lab, "end", ink, &total_text));
     rule(&mut d, y + 9.0 * lab, 1.6);
@@ -457,7 +503,7 @@ pub fn build(p: &Params) -> String {
         else if infinite { "Chi-square  \u{3c7}\u{b2} = \u{221e}  (the counts are too large)".to_string() }
         else if no_obs { "Chi-square  \u{3c7}\u{b2} = \u{2014}  (no observations to test)".to_string() }
         else if f.df == 0 { "Chi-square  \u{3c7}\u{b2} = \u{2014}  (no degrees of freedom)".to_string() }
-        else if big(printed_chi2) { format!("Chi-square  \u{3c7}\u{b2} = {}", sci(printed_chi2)) }
+        else if term_sci || big(printed_chi2) { format!("Chi-square  \u{3c7}\u{b2} = {}", sci(printed_chi2)) }
         else { format!("Chi-square  \u{3c7}\u{b2} = {}", group(&col(printed_chi2, term_dec))) },
         if ans {
             let (one, many) = ("1 category counted", "categories counted");
@@ -761,10 +807,27 @@ mod tests {
         assert!(t.contains("\u{2026}"), "a long name was not shortened: {t}");
         assert!(!t.contains("Round yellow seeds with a smooth coat on the tall parent plant"), "{t}");
         let _ = long;
-        // huge counts: one compact format, so no column is wider than the others
-        let t = texts(&render_of(&[s("obs", "1000000000000, 333333333333, 333333333333, 111111111111"), s("ratio", "9, 3, 3, 1")]));
-        assert!(!t.contains("999999999999.56"), "a plain long number slipped in: {t}");
-        assert!(t.contains("e12") || t.contains("e11") || t.contains("\u{d7}"), "{t}");
+        // huge counts: one format per column. (round 9 minor 5: this asserted the expected cells went scientific; the
+        // rule is now plain and grouped up to 1e15 for a column and its total alike, so the Expected total no longer
+        // reads "1.00e7" under "5,000,000.50" twice. What the check was for, that no column prints into the next, is
+        // asserted here at every size, and across a sweep in `the_totals_and_the_givens_are_one_number_printed_one_way`.)
+        for size in ["Small", "Medium", "Large"] {
+            let svg = render_of(&[s("obs", "1000000000000, 333333333333, 333333333333, 111111111111"), s("ratio", "9, 3, 3, 1"), s("label_size", size)]);
+            let t = texts(&svg);
+            assert!(!t.contains("999999999999.56"), "an ungrouped long number slipped in: {t}");
+            assert!(t.contains("999,999,999,999.56"), "the expected column is not one plain grouped format: {t}");
+            let bs = boxes(&svg);
+            let w: f64 = svg.split("width=\"").nth(1).and_then(|r| r.split('"').next()).and_then(|v| v.parse().ok()).unwrap();
+            for y in bs.iter().map(|b| b.1).collect::<Vec<_>>() {
+                let mut row: Vec<(f64, f64)> = bs.iter().filter(|b| (b.1 - y).abs() < 0.01).map(|b| {
+                    let m = b.4.chars().count() as f64 * b.2 * 0.56;
+                    if b.3 == "end" { (b.0 - m, b.0) } else { (b.0, b.0 + m) }
+                }).collect();
+                row.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+                for p in row.windows(2) { assert!(p[0].1 + 4.0 <= p[1].0, "{size}: {p:?} collide: {t}"); }
+                assert!(row.last().unwrap().1 <= w + 0.5, "{size}: a text runs off the canvas: {t}");
+            }
+        }
     }
 
     #[test]
@@ -925,6 +988,101 @@ mod tests {
         // a count beyond 1e15 still goes scientific (it cannot print exactly), and so does its total
         let t = texts(&render_of(&[s("obs", "1e160, 1"), s("ratio", "3, 1")]));
         assert!(t.contains("1.00e160"), "{t}");
+    }
+
+    /// A printed plain number ("12,345,678.5") as integer units at `d` decimals, None for anything else.
+    fn units_at(t: &str, d: usize) -> Option<i128> {
+        let t = t.replace(',', "");
+        if t.contains('e') || t.is_empty() { return None; }
+        let (i, fr) = t.split_once('.').unwrap_or((&t, ""));
+        if fr.len() > d { return None; }
+        let digits = format!("{i}{fr}{}", "0".repeat(d - fr.len()));
+        digits.parse::<i128>().ok()
+    }
+
+    /// (observed cells, observed total, expected cells, expected total, givens line, svg width) of a key render.
+    fn columns(svg: &str) -> (Vec<String>, String, Vec<String>, String, String, f64) {
+        let bs = boxes(svg);
+        let (ox, oy) = bs.iter().find(|b| b.4 == "Observed (O)").map(|b| (b.0, b.1)).unwrap();
+        let ex = bs.iter().find(|b| b.4 == "Expected (E)").map(|b| b.0).unwrap();
+        let ty = bs.iter().find(|b| b.4 == "Total").map(|b| b.1).unwrap();
+        let at = |x: f64, total: bool| -> Vec<String> { bs.iter().filter(|b| (b.0 - x).abs() < 0.01 && b.1 > oy && ((b.1 - ty).abs() < 0.01) == total).map(|b| b.4.clone()).collect() };
+        let givens: String = texts(svg).lines().filter(|l| l.starts_with("Expected from") || l.contains("observations")).collect::<Vec<_>>().join(" ");
+        let w: f64 = svg.split("width=\"").nth(1).and_then(|r| r.split('"').next()).and_then(|v| v.parse().ok()).unwrap();
+        (at(ox, false), at(ox, true)[0].clone(), at(ex, false), at(ex, true)[0].clone(), givens, w)
+    }
+
+    #[test]
+    fn the_totals_and_the_givens_are_one_number_printed_one_way() {
+        // (round 9 minor) a fractional observed count broke the total: "5.5, 10.25" printed Total 15.75 but "out of 16
+        // observations", and "12345678, 0.5" totalled "1.23e7". (minor) The Expected total went scientific ("1.00e7")
+        // under plain cells and beside an Observed "10,000,001". Now the Observed total is the exact sum of the printed
+        // cells, and the Expected total and the givens print that same string; a plain column stays plain.
+        let mut cases: Vec<String> = vec![
+            "5.5, 10.25".into(), "12345678, 0.5".into(), "5000000, 5000001".into(), "0.1, 0.2, 0.3".into(), "1.234567, 2".into(),
+            "123456789012.345, 1.5".into(), "999999999999999, 999999999999999, 3".into(), "315, 101, 108, 32".into(), "0.000001, 3".into(),
+        ];
+        let mut rng = crate::figures::biology::Rng::new(9);
+        for _ in 0..600 {
+            let k = 2 + rng.below(4);
+            let v: Vec<String> = (0..k).map(|_| {
+                let mag = 10f64.powi(rng.below(15) as i32);
+                let whole = (rng.below(1000) as f64 * mag / 100.0).floor().min(9.0e14);
+                match rng.below(4) { 0 => format!("{whole}"), 1 => format!("{whole}.5"), 2 => format!("{}.{:02}", rng.below(1000), rng.below(100)), _ => format!("{}.{:03}", rng.below(100), rng.below(1000)) }
+            }).collect();
+            cases.push(v.join(", "));
+        }
+        let mut bad = Vec::new();
+        for (n, obs) in cases.iter().enumerate() {
+            let k = obs.split(", ").count();
+            let ratio = vec!["1"; k].join(", ");
+            let size = ["Small", "Medium", "Large"][n % 3];
+            let svg = render_of(&[s("obs", obs), s("ratio", &ratio), s("label_size", size), b(SHOW_ANSWERS, true)]);
+            let (oc, ot, ec, et, giv, w) = columns(&svg);
+            let ctx = format!("{obs} ({size})");
+            if !giv.contains(&format!("out of {ot} observations")) { bad.push(format!("{ctx}: the givens {giv:?} do not name the total {ot:?}")); }
+            if et != ot { bad.push(format!("{ctx}: Expected total {et:?} vs Observed total {ot:?}")); }
+            let plain = !oc.iter().any(|c| c.contains('e')) && !ot.contains('e');
+            if plain {
+                let d = oc.iter().chain(std::iter::once(&ot)).map(|c| c.split_once('.').map_or(0, |(_, f)| f.len())).max().unwrap();
+                let sum: Option<i128> = oc.iter().map(|c| units_at(c, d)).sum();
+                if sum != units_at(&ot, d) { bad.push(format!("{ctx}: cells {oc:?} do not sum to the total {ot:?}")); }
+                // each cell is what was typed
+                for (c, typed) in oc.iter().zip(obs.split(", ")) {
+                    let tv: f64 = typed.parse().unwrap();
+                    if (c.replace(',', "").parse::<f64>().unwrap() - tv).abs() > tv.abs() * 1e-15 + 1e-9 { bad.push(format!("{ctx}: {typed} printed as {c:?}")); }
+                }
+                if ec.iter().any(|c| c.contains('e') && !c.contains("e\u{2212}")) { bad.push(format!("{ctx}: a plain column's expected cells go scientific: {ec:?}")); }
+            }
+            // nothing on the Total row or in the table runs into its neighbour or off the canvas
+            let bs = boxes(&svg);
+            let ty = bs.iter().find(|b| b.4 == "Total").map(|b| b.1).unwrap();
+            let rows: Vec<f64> = bs.iter().filter(|b| b.1 > ty - 400.0 && b.1 <= ty + 0.01 && b.0 > 100.0).map(|b| b.1).collect();
+            for y in rows {
+                let mut row: Vec<(f64, f64)> = bs.iter().filter(|b| (b.1 - y).abs() < 0.01).map(|b| {
+                    let m = b.4.chars().count() as f64 * b.2 * 0.56;
+                    if b.3 == "end" { (b.0 - m, b.0) } else { (b.0, b.0 + m) }
+                }).collect();
+                row.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+                for p in row.windows(2) { if p[0].1 + 4.0 > p[1].0 { bad.push(format!("{ctx}: cells {p:?} collide on row {y}")); } }
+                if row.last().map(|r| r.1 > w).unwrap_or(false) { bad.push(format!("{ctx}: a cell runs off the {w} px canvas")); }
+            }
+        }
+        assert!(bad.is_empty(), "{} problems, e.g.:\n{}", bad.len(), bad.iter().take(12).cloned().collect::<Vec<_>>().join("\n"));
+        // the reported cases, as printed
+        let t = texts(&render_of(&[s("obs", "5.5, 10.25"), s("ratio", "1, 1"), b(SHOW_ANSWERS, true)]));
+        assert!(t.contains("out of 15.75 observations") && t.lines().filter(|l| *l == "15.75").count() == 2, "{t}");
+        let t = texts(&render_of(&[s("obs", "12345678, 0.5"), s("ratio", "1, 1"), b(SHOW_ANSWERS, true)]));
+        assert!(t.contains("out of 12,345,678.5 observations") && t.lines().filter(|l| *l == "12,345,678.5").count() == 2, "{t}");
+        let t = texts(&render_of(&[s("obs", "5000000, 5000001"), s("ratio", "1, 1"), b(SHOW_ANSWERS, true)]));
+        assert_eq!(t.lines().filter(|l| *l == "10,000,001").count(), 2, "{t}");
+        assert!(!t.contains("1.00e7"), "{t}");
+        // and the contribution column follows one rule with its total: 6,172,838.25 twice summed to a Total of 1.23e7
+        let svg = render_of(&[s("obs", "12345678, 0.5"), s("ratio", "1, 1"), b(SHOW_ANSWERS, true)]);
+        let bs = boxes(&svg);
+        let tx = bs.iter().find(|b| b.4.starts_with("(O")).map(|b| b.0).unwrap();
+        let col_t: Vec<&String> = bs.iter().filter(|b| (b.0 - tx).abs() < 0.01 && !b.4.starts_with("(O")).map(|b| &b.4).collect();
+        assert!(col_t.iter().all(|c| c.contains('e')) || col_t.iter().all(|c| !c.contains('e')), "{col_t:?}");
     }
 
     #[test]

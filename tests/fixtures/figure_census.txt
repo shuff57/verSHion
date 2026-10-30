@@ -82,8 +82,8 @@ energy-bar-chart__defaults 2140369fa0365d7c
 energy-bar-chart__start 2140369fa0365d7c
 energy-pyramid__defaults c7d8466ed791a1a6
 energy-pyramid__start c7d8466ed791a1a6
-enzyme-kinetics__defaults 540d0de2cc84b8f8
-enzyme-kinetics__start 540d0de2cc84b8f8
+enzyme-kinetics__defaults 92452f6d3bbbb3ac
+enzyme-kinetics__start 92452f6d3bbbb3ac
 er-diagram__defaults 8866218ba5ebbaac
 er-diagram__start 8866218ba5ebbaac
 experiment-flow__defaults eed3a0215c8f7e94
