@@ -15,6 +15,7 @@ pub mod http;
 pub mod jwt;
 pub mod mail;
 pub mod maintenance;
+pub mod notices;
 pub mod password;
 pub mod session;
 pub mod signup;
