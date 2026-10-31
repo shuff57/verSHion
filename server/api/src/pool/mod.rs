@@ -20,6 +20,7 @@ pub mod licensecheck;
 pub mod preread;
 pub mod qhash;
 pub mod qjson;
+pub mod readslots;
 pub mod served;
 pub mod sqlfrag;
 pub mod visible;
