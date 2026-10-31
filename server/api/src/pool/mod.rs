@@ -9,6 +9,7 @@ pub mod blockplan;
 pub mod blocking;
 pub mod circlebase;
 pub mod circlecheck;
+pub mod circles;
 pub mod circlesql;
 pub mod chain;
 pub mod core;
