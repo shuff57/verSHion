@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 pub mod common_passwords;
+pub mod config;
 pub mod crypto;
 pub mod jwt;
 pub mod password;
