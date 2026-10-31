@@ -7,6 +7,7 @@ pub mod blobs;
 pub mod chain;
 pub mod ctx;
 pub mod fingerprint;
+pub mod hit;
 pub mod image;
 pub mod jsonscan;
 pub mod license;
