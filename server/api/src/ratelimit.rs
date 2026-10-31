@@ -7,7 +7,7 @@ use rusqlite::{Connection, params};
 
 const SUB_BUCKETS: i64 = 12;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Rule {
     pub limit: i64,
     pub window_seconds: i64,
