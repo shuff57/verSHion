@@ -39,7 +39,7 @@ pub struct SendMeta {
 fn bad(field: &str) -> PoolError {
     PoolError::new(400, "invalid_request").with("field", field.into())
 }
-fn int_at_least_1(v: &Value) -> Option<i64> {
+pub(super) fn int_at_least_1(v: &Value) -> Option<i64> {
     v.as_i64().filter(|n| (1..=(1i64 << 31)).contains(n)).or_else(|| v.as_f64().filter(|f| f.fract() == 0.0 && (1.0..=2147483648.0).contains(f)).map(|f| f as i64))
 }
 fn present(m: &Map<String, Value>, k: &str) -> bool {
@@ -49,7 +49,7 @@ fn some(m: &Map<String, Value>, k: &str) -> bool {
     m.get(k).is_some_and(|v| !v.is_null())
 }
 
-fn message_of(v: Option<&Value>) -> Result<Option<String>, PoolError> {
+pub(super) fn message_of(v: Option<&Value>) -> Result<Option<String>, PoolError> {
     match v {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(s)) if s.is_empty() => Ok(None),

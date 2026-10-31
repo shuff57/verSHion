@@ -20,6 +20,7 @@ pub mod circlemembers;
 pub mod circles;
 pub mod circlecommit;
 pub mod circlehide;
+pub mod circlerollback;
 pub mod circlesendmeta;
 pub mod circlesendprep;
 pub mod circlesendsql;
