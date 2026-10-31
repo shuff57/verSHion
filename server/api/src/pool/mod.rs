@@ -51,6 +51,7 @@ pub mod modgc;
 pub mod modlineage;
 pub mod moderation;
 pub mod modpurge;
+pub mod modrestore;
 pub mod offer;
 pub mod publishdel;
 pub mod poolio;
