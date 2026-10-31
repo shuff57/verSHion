@@ -7,6 +7,7 @@ pub mod bizdays;
 pub mod blobs;
 pub mod chain;
 pub mod ctx;
+pub mod evidence;
 pub mod fingerprint;
 pub mod hit;
 pub mod image;
