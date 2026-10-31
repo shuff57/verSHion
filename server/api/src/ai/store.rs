@@ -72,6 +72,16 @@ impl<'a> AiStore<'a> {
         Self { conn }
     }
 
+    #[cfg(test)]
+    pub fn exec_for_test(&self, sql: &str) {
+        self.conn.execute_batch(sql).unwrap();
+    }
+
+    /// 32 random hex characters, from SQLite's own source of randomness.
+    pub fn new_id(&self) -> rusqlite::Result<String> {
+        self.conn.query_row("SELECT lower(hex(randomblob(16)))", [], |r| r.get(0))
+    }
+
     pub fn record(&self, principal: &str, u: &Usage, now: i64) -> rusqlite::Result<()> {
         self.conn.execute(
             "INSERT INTO ai_usage (id, principal, at, kind, in_tokens, out_tokens, neurons, cost_usd, session)

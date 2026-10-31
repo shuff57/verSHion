@@ -87,6 +87,19 @@ impl Service {
     }
 }
 
+/// The price list the app may show (`describeServices`).
+pub fn describe_services() -> serde_json::Value {
+    let mut m = serde_json::Map::new();
+    for s in Service::ALL {
+        let pages = if s.takes_pages() { 1 } else { 0 };
+        m.insert(
+            s.id().into(),
+            serde_json::json!({ "credits": s.credits(pages), "per_page": s.takes_pages() && s.credits(2) > s.credits(1), "max_pages": s.max_pages() }),
+        );
+    }
+    serde_json::Value::Object(m)
+}
+
 /// Start of the UTC day containing `now`.
 pub fn utc_day_start(now: i64) -> i64 {
     now - now.rem_euclid(DAY_MS)
