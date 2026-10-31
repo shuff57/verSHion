@@ -5,3 +5,4 @@ pub mod request;
 pub mod upstream;
 pub mod policy;
 pub mod routes;
+pub mod jobs;
