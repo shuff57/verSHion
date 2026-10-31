@@ -1,0 +1,18 @@
+=== CRITIC P2 ASSESSMENT (review.js bar vs gradeui.rs P2 candidate) ===
+BAR reference: review.js renderStrip:103-134, dotClass:97-101, thumbFor:87-95, onStripKey:136-152, bindDrag:154-184.
+
+PASS against bar:
+- page dot coloring maps to ok/warn/bad (matches dotClass)
+- click to select page (matches onclick -> S.select)
+- thumbnail image loaded via store (matches thumbFor -> OCR.fs.loadImage + thumb)
+- number badge "n" shown (matches h('span', {class:'n'}))
+- multi-select toggles ctrl/shift (matches review.js 112-118)
+- Export / Review / Clear buttons when multi set (matches 125-129)
+- Add page button (matches 130-131)
+
+FAIL / biggest gap:
+**NO keyboard navigation (onStripKey 136-152).** The bar supports ArrowLeft/Right/Home/End to move selection, Alt+ArrowLeft/Right to reorder pages, and Delete to remove a page. Our candidate has no key handler on the strip, so keyboard-only users (and the "move between pages" workflow) are broken.
+
+Second gap: **NO drag-and-drop reorder (bindDrag 154-184).** Pages can't be reordered by drag.
+
+Verdict: needs another cycle — add a key handler (ArrowLeft/Right to select prev/next page) at minimum.
