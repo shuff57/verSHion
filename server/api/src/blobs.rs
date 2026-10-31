@@ -34,7 +34,9 @@ impl BlobStore {
         let path = self.path(key)?;
         let dir = path.parent().unwrap_or(Path::new("."));
         std::fs::create_dir_all(dir)?;
-        let tmp = dir.join(format!(".tmp-{}", std::process::id()));
+        // Unique per write: two uploads into one directory at once must not share a temp file.
+        static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let tmp = dir.join(format!(".tmp-{}-{}", std::process::id(), SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
         std::fs::write(&tmp, bytes)?;
         std::fs::rename(&tmp, &path)
     }

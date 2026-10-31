@@ -3,6 +3,7 @@
 #![allow(dead_code)]
 
 pub mod bizdays;
+pub mod blobs;
 pub mod chain;
 pub mod ctx;
 pub mod image;
