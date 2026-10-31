@@ -35,7 +35,7 @@ pub const ID: &str = "reaction-rate-graph";
 pub type Pt = (f64, f64);
 pub type Seg = (Pt, Pt);
 /// A label place: (x, anchor, baseline of the first line).
-type Cand = (f64, &'static str, f64);
+pub(super) type Cand = (f64, &'static str, f64);
 
 pub const FONT: &str = "Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif";
 const BLANK: &str = "______";
@@ -433,12 +433,12 @@ pub fn warnings(p: &Params) -> Vec<String> { build(p).1.notes }
 // labels are not)
 // ---------------------------------------------------------------------------------------------
 
-fn overlap(a: Bx, b: Bx) -> f64 { (a.1.min(b.1) - a.0.max(b.0)).max(0.0) * (a.3.min(b.3) - a.2.max(b.2)).max(0.0) }
-fn pad(b: Bx, m: f64) -> Bx { (b.0 - m, b.1 + m, b.2 - m, b.3 + m) }
-fn pt_box(p: Pt, b: Bx) -> f64 { (b.0 - p.0).max(0.0).max(p.0 - b.1).hypot((b.2 - p.1).max(0.0).max(p.1 - b.3)) }
+pub(super) fn overlap(a: Bx, b: Bx) -> f64 { (a.1.min(b.1) - a.0.max(b.0)).max(0.0) * (a.3.min(b.3) - a.2.max(b.2)).max(0.0) }
+pub(super) fn pad(b: Bx, m: f64) -> Bx { (b.0 - m, b.1 + m, b.2 - m, b.3 + m) }
+pub(super) fn pt_box(p: Pt, b: Bx) -> f64 { (b.0 - p.0).max(0.0).max(p.0 - b.1).hypot((b.2 - p.1).max(0.0).max(p.1 - b.3)) }
 
 /// The distance from a segment to a box (0 when they touch).
-fn seg_box(a: Pt, c: Pt, b: Bx) -> f64 {
+pub(super) fn seg_box(a: Pt, c: Pt, b: Bx) -> f64 {
     if seg_hits(a, c, b) { return 0.0; }
     let ps = |x: f64, y: f64| {
         let (dx, dy) = (c.0 - a.0, c.1 - a.1);
@@ -451,18 +451,18 @@ fn seg_box(a: Pt, c: Pt, b: Bx) -> f64 {
 
 /// The width the placer reserves for a line of text: the estimate, widened a little so the real glyphs (measured in
 /// the tests) always fit inside it.
-fn text_w(s: &str, fs: f64) -> f64 { tw(s, fs) * 1.05 + 1.5 }
+pub(super) fn text_w(s: &str, fs: f64) -> f64 { tw(s, fs) * 1.05 + 1.5 }
 
 /// The ink of a label of `n` lines, `w` wide: brackets and subscripts reach a little past cap height and baseline.
-fn ink(c: &Cand, w: f64, fs: f64, lh: f64, n: usize) -> Bx {
+pub(super) fn ink(c: &Cand, w: f64, fs: f64, lh: f64, n: usize) -> Bx {
     let (l, r) = match c.1 { "end" => (c.0 - w, c.0), "middle" => (c.0 - w / 2.0, c.0 + w / 2.0), _ => (c.0, c.0 + w) };
     (l, r, c.2 - 0.86 * fs, c.2 + (n.max(1) - 1) as f64 * lh + 0.3 * fs)
 }
 
 /// A run of segments with its bounding box, so a label is tested against a long curve a chunk at a time.
-type Chunk = (Bx, Vec<Seg>);
+pub(super) type Chunk = (Bx, Vec<Seg>);
 
-fn chunks(pts: &[Pt]) -> Vec<Chunk> {
+pub(super) fn chunks(pts: &[Pt]) -> Vec<Chunk> {
     let mut out = Vec::new();
     for c in pts.windows(2).collect::<Vec<_>>().chunks(16) {
         let segs: Vec<Seg> = c.iter().map(|w| (w[0], w[1])).collect();
@@ -473,17 +473,17 @@ fn chunks(pts: &[Pt]) -> Vec<Chunk> {
 }
 
 #[derive(Clone)]
-struct Placer {
-    boxes: Vec<Bx>,
-    hard: Vec<Chunk>,
-    soft: Vec<Chunk>,
-    bounds: Bx,
+pub(super) struct Placer {
+    pub(super) boxes: Vec<Bx>,
+    pub(super) hard: Vec<Chunk>,
+    pub(super) soft: Vec<Chunk>,
+    pub(super) bounds: Bx,
     /// Every labelled feature, by key.
-    feats: Vec<(String, Vec<Chunk>)>,
-    reach: f64,
+    pub(super) feats: Vec<(String, Vec<Chunk>)>,
+    pub(super) reach: f64,
 }
 
-fn chunk_dist(cs: &[Chunk], b: Bx, cap: f64) -> f64 {
+pub(super) fn chunk_dist(cs: &[Chunk], b: Bx, cap: f64) -> f64 {
     let mut d = f64::MAX;
     for (cb, segs) in cs {
         if pt_box(((cb.0 + cb.1) / 2.0, (cb.2 + cb.3) / 2.0), b) - ((cb.1 - cb.0).hypot(cb.3 - cb.2) / 2.0) > d.min(cap) { continue; }
@@ -492,7 +492,7 @@ fn chunk_dist(cs: &[Chunk], b: Bx, cap: f64) -> f64 {
     d
 }
 
-fn chunk_hits(cs: &[Chunk], b: Bx) -> usize {
+pub(super) fn chunk_hits(cs: &[Chunk], b: Bx) -> usize {
     cs.iter().filter(|(cb, _)| hits(pad(*cb, 0.01), b)).map(|(_, segs)| segs.iter().filter(|s| seg_hits(s.0, s.1, b)).count()).sum()
 }
 
@@ -503,7 +503,7 @@ impl Placer {
     /// further off, 3 crossing thin lines further off; 4 not reading as its own feature's (more than `reach` away, or
     /// more than 11 px away while 4 px nearer another labelled feature: inside the audit's 40 px × size, 15 px and
     /// 6 px), 5 on a hard obstacle, 6 off the plot.
-    fn score(&self, own: &str, b: Bx) -> (u8, f64, usize) {
+    pub(super) fn score(&self, own: &str, b: Bx) -> (u8, f64, usize) {
         let inb = b.0 >= self.bounds.0 && b.1 <= self.bounds.1 && b.2 >= self.bounds.2 && b.3 <= self.bounds.3;
         let pb = pad(b, 2.5);
         let area: f64 = self.boxes.iter().map(|o| overlap(pb, *o)).sum();
@@ -526,7 +526,7 @@ impl Placer {
 
     /// The best place over `variants` (the same label on one line or wrapped) and `cands`; the rings around `anchor`
     /// are tried only when no near place reads as the feature's. Records the box.
-    fn place(&mut self, own: &str, variants: &[Vec<String>], fs: f64, lh: f64, anchor: Pt, lab: f64, cands: &dyn Fn(usize) -> Vec<Cand>) -> (usize, Cand, (u8, f64, usize)) {
+    pub(super) fn place(&mut self, own: &str, variants: &[Vec<String>], fs: f64, lh: f64, anchor: Pt, lab: f64, cands: &dyn Fn(usize) -> Vec<Cand>) -> (usize, Cand, (u8, f64, usize)) {
         let mut best: Option<((u8, f64, usize, usize, usize), usize, Cand, Bx)> = None;
         for phase in 0..2 {
             for (vi, lines) in variants.iter().enumerate() {
@@ -550,7 +550,7 @@ impl Placer {
 }
 
 /// Places around a point: beside it at a slant, over and under it, to each side, nearest first.
-fn around(x: f64, y: f64, fs: f64, lh: f64, n: usize, lab: f64) -> Vec<Cand> {
+pub(super) fn around(x: f64, y: f64, fs: f64, lh: f64, n: usize, lab: f64) -> Vec<Cand> {
     let up = |g: f64| y - g - 0.3 * fs - (n - 1) as f64 * lh;
     let dn = |g: f64| y + g + 0.86 * fs;
     let mid = y + 0.28 * fs - (n - 1) as f64 * lh / 2.0;
@@ -564,7 +564,7 @@ fn around(x: f64, y: f64, fs: f64, lh: f64, n: usize, lab: f64) -> Vec<Cand> {
 }
 
 /// Places beside a horizontal segment from `x0` to `x1` at `y`: over it, then under it, from its left end along.
-fn along_h(x0: f64, x1: f64, y: f64, fs: f64, lh: f64, n: usize, lab: f64) -> Vec<Cand> {
+pub(super) fn along_h(x0: f64, x1: f64, y: f64, fs: f64, lh: f64, n: usize, lab: f64) -> Vec<Cand> {
     let mut v = Vec::new();
     for g in [3.0, 6.0, 10.0] {
         let g = g * lab;
@@ -578,7 +578,7 @@ fn along_h(x0: f64, x1: f64, y: f64, fs: f64, lh: f64, n: usize, lab: f64) -> Ve
 }
 
 /// Places beside a vertical segment at `x` from `y0` (top) to `y1` (bottom): from its foot up, right then left.
-fn along_v(x: f64, y0: f64, y1: f64, fs: f64, lh: f64, n: usize, lab: f64) -> Vec<Cand> {
+pub(super) fn along_v(x: f64, y0: f64, y1: f64, fs: f64, lh: f64, n: usize, lab: f64) -> Vec<Cand> {
     let mut v = Vec::new();
     for g in [4.0, 7.0, 12.0] {
         let g = g * lab;
@@ -592,7 +592,7 @@ fn along_v(x: f64, y0: f64, y1: f64, fs: f64, lh: f64, n: usize, lab: f64) -> Ve
 }
 
 /// Rings around a feature, for when every near place is taken.
-fn ring(a: Pt, fs: f64, lh: f64, n: usize, lab: f64) -> Vec<Cand> {
+pub(super) fn ring(a: Pt, fs: f64, lh: f64, n: usize, lab: f64) -> Vec<Cand> {
     let mut v = Vec::new();
     for r in [18.0, 26.0, 36.0] {
         for k in 0..16 {
@@ -605,7 +605,7 @@ fn ring(a: Pt, fs: f64, lh: f64, n: usize, lab: f64) -> Vec<Cand> {
 }
 
 /// Greedy word wrap to `max_w` px; a word longer than the line is broken.
-fn wrap(s: &str, fs: f64, max_w: f64) -> Vec<String> {
+pub(super) fn wrap(s: &str, fs: f64, max_w: f64) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
     let mut cur = String::new();
     // a unit stays on the line of its number ("1.82 s.", never "1.82" and "s." apart)
@@ -677,19 +677,19 @@ struct Job { own: String, variants: Vec<Vec<String>>, anchor: Pt, cands: Box<dyn
 #[derive(Default)]
 struct Drawn { halves: usize, tangent: bool, initial: bool, end_shown: bool }
 
-fn text_el(x: f64, y: f64, fs: f64, anchor: &str, fill: &str, s: &str, kind: &str) -> String {
+pub(super) fn text_el(x: f64, y: f64, fs: f64, anchor: &str, fill: &str, s: &str, kind: &str) -> String {
     format!(r##"<text x="{x:.2}" y="{y:.2}" font-size="{fs:.2}" text-anchor="{anchor}" font-family="{FONT}" fill="{fill}" data-o="{kind}">{}</text>"##, esc(s))
 }
 
 /// A plot label with a thin white halo, so a dotted guide or a grid line it crosses never strikes it through. The PNG
 /// renderer ignores `paint-order`, so the outline is its own text drawn first.
-fn halo_el(x: f64, y: f64, fs: f64, anchor: &str, fill: &str, s: &str, feat: &str, group: usize) -> String {
+pub(super) fn halo_el(x: f64, y: f64, fs: f64, anchor: &str, fill: &str, s: &str, feat: &str, group: usize) -> String {
     let common = format!(r##"x="{x:.2}" y="{y:.2}" font-size="{fs:.2}" text-anchor="{anchor}" font-family="{FONT}""##);
     let t = esc(s);
     format!(r##"<text {common} fill="none" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" data-o="label" data-f="{feat}" data-g="{group}">{t}</text><text {common} fill="{fill}" data-o="label" data-f="{feat}" data-g="{group}">{t}</text>"##)
 }
 
-fn path_d(pts: &[Pt]) -> String {
+pub(super) fn path_d(pts: &[Pt]) -> String {
     let mut d = String::with_capacity(pts.len() * 18);
     for (i, (x, y)) in pts.iter().enumerate() { d.push_str(&format!("{}{x:.3},{y:.3}", if i == 0 { "M" } else { " L" })); }
     d

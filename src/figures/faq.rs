@@ -47,6 +47,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "mass-spectrum" => MASS_SPECTRUM,
         "reaction-energy-diagram" => REACTION_ENERGY_DIAGRAM,
         "reaction-rate-graph" => REACTION_RATE_GRAPH,
+        "phase-diagram" => PHASE_DIAGRAM,
         "orbital-diagram" => ORBITAL_DIAGRAM,
         "particle-diagram" => PARTICLE_DIAGRAM,
         "ph-reading" => PH_READING,
@@ -3657,6 +3658,29 @@ const REACTION_RATE_GRAPH: &[Faq] = &[
     Faq {
         q: "Why was a number I typed changed?",
         a: "k and [A]\u{2080} must be greater than 0; k = 0 or less is refused and the graph keeps a drawable k, with a note. The givens are kept to 4 significant figures so every printed result can be recomputed from the printed givens. The time shown is held between half of the first half-life and 20 half-lives, and a tangent's time past the end of the axis is moved to the end; each change is noted in the editor.",
+    },
+];
+
+const PHASE_DIAGRAM: &[Faq] = &[
+    Faq {
+        q: "Are the curves drawn to scale?",
+        a: "No. The triple point, the critical point and (for water and carbon dioxide) the normal boiling or sublimation point are the published values, and every curve passes through them, but the shapes between them are the textbook ones, not measured. Water's melting curve is also tilted more than it really is so that its slope can be seen. Temperatures and pressures read from the diagram are therefore rounded, and the working says so.",
+    },
+    Faq {
+        q: "Why does carbon dioxide have no boiling point at 1 atm?",
+        a: "1 atm is below carbon dioxide's triple-point pressure (5.11 atm), so the isobar at 1 atm never meets the liquid region. Heating the solid takes it straight to gas at 194.7 K (sublimation). The figure says that there is no normal melting point and no normal boiling point instead of inventing them. Raise the isobar above 5.11 atm to see melting and boiling.",
+    },
+    Faq {
+        q: "What is the supercritical fluid region?",
+        a: "Above both the critical temperature and the critical pressure there is no boundary between liquid and gas: the substance changes gradually from dense to thin, with no boiling. The dotted lines mark the region's edges; they are not phase boundaries. An isobar above the critical pressure melts the solid and then never boils, and an isotherm above the critical temperature never condenses.",
+    },
+    Faq {
+        q: "How do I make a student worksheet?",
+        a: "Turn Show answers off. The curves, the lines and the markers where they meet the curves stay; the phase changes, the temperatures and pressures read from the diagram, the heating arrows and the phase at each of points A to D become blank lines. Set Region labels, Curve labels or the point labels to Blank for students to leave those names for the class to fill in. The key (Show answers on) prints the working.",
+    },
+    Faq {
+        q: "How do I draw a substance of my own?",
+        a: "Choose Custom and type the triple point and the critical point; the curves are drawn through them, with Clausius-Clapeyron (straight in ln P against 1/T) for vaporisation and sublimation. Choose the melting slope: negative leans the melting curve left like water, positive leans it right. You can also drag the two points on the diagram. A critical point that is not clearly above the triple point is refused with a note.",
     },
 ];
 
