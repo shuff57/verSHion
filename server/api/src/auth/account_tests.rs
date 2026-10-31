@@ -194,3 +194,24 @@ fn deletion_attempts_are_limited_per_account() {
     }
     assert!(stopped, "five an hour");
 }
+
+#[test]
+fn a_rejected_applicant_reapplies_after_the_cooldown_with_a_new_row() {
+    let w = world();
+    let (id, at, _) = w.user("a@x.org", "pending");
+    let h = hdrs(&[("authorization", &bearer(&at))]);
+    let profile = obj(json!({ "display_name": "Ms Rivera", "school": "New School", "adult_school_employee": true }));
+    assert_eq!(code(reapply(&w.ctx(), &h, &profile)), (409, "not_eligible".into()), "nothing to reapply to");
+    w.db.lock().unwrap().execute_batch(&format!("INSERT INTO approval_requests (id, user_id, requested_at, decided_at, decision) VALUES ('r1', '{id}', 1, {}, 'rejected')", T0 - 86_400_000)).unwrap();
+    let e = reapply(&w.ctx(), &h, &profile).unwrap_err();
+    assert_eq!((e.status, e.code.as_str(), e.extra.get("reapply_after")), (429, "cooldown", Some(&json!(T0 - 86_400_000 + 7 * 86_400_000))));
+    assert!(e.headers.iter().any(|(k, v)| k == "Retry-After" && v == "518400"));
+    w.db.lock().unwrap().execute("UPDATE approval_requests SET decided_at = 1000", []).unwrap();
+    let r = reapply(&w.ctx(), &h, &profile).unwrap();
+    assert_eq!(r.status(), 202);
+    assert_eq!(w.count("SELECT COUNT(*) FROM approval_requests"), 2);
+    assert_eq!(w.count("SELECT COUNT(*) FROM approval_requests WHERE decided_at IS NULL AND display_name_snapshot = 'Ms Rivera'"), 1);
+    assert_eq!(w.count("SELECT COUNT(*) FROM auth_audit WHERE action = 'reapply' AND actor_kind = 'user'"), 1);
+    assert_eq!(code(reapply(&w.ctx(), &h, &profile)), (409, "not_eligible".into()), "one open application at a time");
+    assert_eq!(code(reapply(&w.ctx(), &h, &obj(json!({ "display_name": "x" })))).0, 400);
+}

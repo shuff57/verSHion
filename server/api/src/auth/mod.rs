@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 pub mod account;
+pub mod audit;
 pub mod common_passwords;
 pub mod config;
 pub mod crypto;

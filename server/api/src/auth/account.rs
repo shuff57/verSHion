@@ -1,6 +1,8 @@
 //! The signed-in user's own account: `me`, `export` and `delete` (port of the handlers of the same names in
 //! auth/src/auth.ts), plus the small admin-side pieces they lean on (`status_of`, the last-admin check, the deletion
 //! guard and the audit row), which the admin routes reuse.
+use super::audit::{AuditFields, audit};
+use super::signup::read_profile;
 use super::config::{ADMIN_LEVELS, Action, AFTER_VERIFY, APPROVED_LEVEL};
 use super::crypto::{hmac, uuid_v4};
 use super::device::sudo_valid;
@@ -233,6 +235,53 @@ pub fn delete_account(c: &Ctx, h: &HeaderMap, client: &ClientInfo, body: &Map<St
     tx.commit().map_err(dberr)?;
     tracing::info!(user = id.as_str(), "auth: account deleted");
     Ok(if client.mode == ClientMode::Web { empty(204, &[("Set-Cookie", &clear_cookie(&c.cfg.cookie_name))]) } else { empty(204, &[]) })
+}
+
+/// A rejected or revoked applicant applies again, after the cooldown, with a fresh profile. It is a NEW application row
+/// (with its own snapshot); the old decision stays as it was.
+pub fn reapply(c: &Ctx, h: &HeaderMap, body: &Map<String, Value>) -> Result<Response, HttpError> {
+    let p = require_principal(c, h)?;
+    let prof = read_profile(body, c.now)?;
+    let ip = guard::client_ip(h)?;
+    let mut conn = lock(c);
+    guard::limit(&conn, c.keys, Action::Reapply, &ip, Some(&format!("user:{}", p.user_id)), c.now)?;
+    let not_eligible = || HttpError::new(409, "not_eligible");
+    let u: Option<(String, Option<i64>)> = conn.query_row("SELECT trust, suspended_at FROM users WHERE id = ?1 AND deleted_at IS NULL", [&p.user_id], |r| Ok((r.get(0)?, r.get(1)?))).optional().map_err(dberr)?;
+    match u {
+        Some((trust, None)) if trust == AFTER_VERIFY => {}
+        _ => return Err(not_eligible()),
+    }
+    let last: Option<(Option<i64>, Option<String>)> = conn
+        .query_row("SELECT decided_at, decision FROM approval_requests WHERE user_id = ?1 ORDER BY requested_at DESC, rowid DESC LIMIT 1", [&p.user_id], |r| Ok((r.get(0)?, r.get(1)?)))
+        .optional()
+        .map_err(dberr)?;
+    let decided = match last {
+        Some((Some(at), Some(d))) if d == "rejected" || d == "revoked" => at,
+        _ => return Err(not_eligible()),
+    };
+    let after = decided + cooldown_ms(c);
+    if c.now < after {
+        return Err(HttpError::new(429, "cooldown").with("reapply_after", json!(after)).header("Retry-After", &((after - c.now + 999) / 1000).to_string()));
+    }
+    let req_id = uuid_v4();
+    let profile_json = prof.profile.as_ref().map(Value::to_string);
+    let tx = conn.transaction().map_err(dberr)?;
+    // OR IGNORE + the one-open-application index: concurrent re-applications make one row.
+    let n = tx
+        .execute(
+            "INSERT OR IGNORE INTO approval_requests (id, user_id, requested_at, email_domain, display_name_snapshot, profile_snapshot)
+             SELECT ?1, id, ?2, substr(email, instr(email, '@') + 1), ?4, ?5 FROM users WHERE id = ?3",
+            params![req_id, c.now, p.user_id, prof.display_name, profile_json],
+        )
+        .map_err(dberr)?;
+    if n != 1 {
+        return Err(not_eligible());
+    }
+    tx.execute("UPDATE users SET display_name = ?1, profile = ?2 WHERE id = ?3", params![prof.display_name, profile_json, p.user_id]).map_err(dberr)?;
+    let e = AuditFields { action: "reapply", target_id: Some(&p.user_id), detail: Some(json!({ "request_id": req_id })), ..Default::default() };
+    audit(&tx, Some(&p.user_id), "user", &e, c.now, None, false, &uuid_v4()).map_err(dberr)?;
+    tx.commit().map_err(dberr)?;
+    Ok(json(202, &json!({ "ok": true, "request_id": req_id }), &[]))
 }
 
 #[cfg(test)]
