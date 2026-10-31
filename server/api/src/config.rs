@@ -20,6 +20,8 @@ pub struct Config {
     pub stripe_key: Option<String>,
     pub stripe_webhook_secret: Option<String>,
     pub stripe_publishable_key: Option<String>,
+    /// 32+ characters. Without it nobody can sign in: the AI relay and billing see only the relay key and the native app.
+    pub auth_secret: Option<String>,
 }
 
 /// A positive whole number, or None (so the default stands) when unset or not one.
@@ -81,6 +83,7 @@ impl Config {
             stripe_key: nonempty(get("STRIPE_SECRET_KEY")),
             stripe_webhook_secret: nonempty(get("STRIPE_WEBHOOK_SECRET")),
             stripe_publishable_key: nonempty(get("STRIPE_PUBLISHABLE_KEY")),
+            auth_secret: nonempty(get("AUTH_SECRET")),
         }
     }
 }

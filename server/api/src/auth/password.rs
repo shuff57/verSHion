@@ -258,7 +258,7 @@ mod tests {
             good.replace("m=8", "m=99999999"),
             good.replace("m=8,t=1,p=1", "m=8,t=1"),
             good.replace("v=19", "v=16"),
-            format!("{a}{}", b.replace('A', "!")),
+            format!("{a}$!{}", &b[2..]),
         ] {
             assert!(parse_phc(&bad).is_none() || !verify_password(&bad, "pw-pw-pw-pw"), "{bad}");
         }

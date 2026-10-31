@@ -31,9 +31,29 @@ fn app(ai: Arc<AiState<HttpTransport>>, billing: Arc<BillingState<HttpStripe>>) 
     router().merge(ai::routes::router(ai)).merge(billing::router(billing))
 }
 
+/// Who is signed in: the pool's sessions when `AUTH_SECRET` is valid, otherwise nobody (only the relay key and the
+/// keyless native app can call, and the buying routes answer 401). Each gets its own connection to the file.
+fn authenticator(cfg: &config::Config) -> Box<dyn ai::routes::Authenticator> {
+    let Some(secret) = &cfg.auth_secret else {
+        tracing::warn!("AUTH_SECRET is not set: nobody can sign in");
+        return Box::new(NoAuth);
+    };
+    match (auth::config::AuthConfig::new(secret, cfg.allowed_origins.clone()), db::open(&cfg.db)) {
+        (Ok(a), Ok(conn)) => Box::new(auth::session::SessionAuth::new(conn, Arc::new(a))),
+        (Err(e), _) => {
+            tracing::error!("{e}");
+            Box::new(NoAuth)
+        }
+        (_, Err(e)) => {
+            tracing::error!("auth: could not open the database: {e}");
+            Box::new(NoAuth)
+        }
+    }
+}
+
 /// The billing state for one database file: its own connection (WAL lets both write), Stripe settings from the config.
 fn billing_state(cfg: &config::Config, conn: rusqlite::Connection) -> BillingState<HttpStripe> {
-    let mut b = BillingState::new(conn, HttpStripe::new(), Box::new(NoAuth), system_clock());
+    let mut b = BillingState::new(conn, HttpStripe::new(), authenticator(cfg), system_clock());
     b.enabled = cfg.billing_enabled;
     b.stripe_key = cfg.stripe_key.clone();
     b.webhook_secret = cfg.stripe_webhook_secret.clone();
@@ -59,13 +79,13 @@ async fn main() {
     }
     let billing = Arc::new(billing_state(&cfg, db::open(&cfg.db).expect("open the billing connection")));
     let job_ttl_ms = cfg.job_ttl_ms;
+    let ai_auth = authenticator(&cfg);
     let state = Arc::new(AiState {
         conn: Mutex::new(conn),
         limits: cfg.limits,
         openrouter: cfg.openrouter,
         transport: HttpTransport::new(),
-        // Pool sessions arrive with the auth port (phase 3): until then only the relay key and the native app can call.
-        auth: Box::new(NoAuth),
+        auth: ai_auth,
         relay_key: cfg.relay_key,
         allowed_origins: cfg.allowed_origins,
         credits: true,

@@ -7,5 +7,6 @@ pub mod crypto;
 pub mod guard;
 pub mod http;
 pub mod jwt;
+pub mod session;
 pub mod password;
 pub mod validate;

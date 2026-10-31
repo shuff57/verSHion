@@ -58,6 +58,15 @@ pub fn random_bytes(n: usize) -> Vec<u8> {
     v
 }
 
+/// A random (version 4) UUID, lower case, as the Worker's `crypto.randomUUID()` writes it.
+pub fn uuid_v4() -> String {
+    let mut b = random_bytes(16);
+    b[6] = b[6] & 0x0f | 0x40;
+    b[8] = b[8] & 0x3f | 0x80;
+    let h: String = b.iter().map(|x| format!("{x:02x}")).collect();
+    format!("{}-{}-{}-{}-{}", &h[0..8], &h[8..12], &h[12..16], &h[16..20], &h[20..32])
+}
+
 /// 256-bit random token, base64url (43 chars).
 pub fn random_token() -> String {
     b64url(&random_bytes(32))
