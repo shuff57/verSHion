@@ -74,4 +74,5 @@ Open for phase 0: which mail path to keep (SMTP or Resend), and whether the web 
 ## Progress log
 
 - 2026-10-31 phase 0: skeleton (db, blobs, /health).
-- 2026-10-31 phase 1 slice 1: `ai/credits.rs` (service prices, call budgets, UTC day and week). Next: `ai/store.rs` (usage rows, ledger, sessions).
+- 2026-10-31 phase 1 slice 1: `ai/credits.rs` (service prices, call budgets, UTC day and week). 
+- 2026-10-31 phase 1 slice 2: `ai/store.rs` (usage and cost, credit ledger, sessions, refunds; start_session is one immediate transaction). Jobs rows not ported yet. Next: job rows, then the relay request handling (`ai/index`).
