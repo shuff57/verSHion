@@ -3,7 +3,7 @@
 use crate::figures::interact::Handle;
 use crate::figures::Params;
 
-use super::{atoms, curves, lewis, measure, reactionenergy, spectra};
+use super::{atoms, curves, lewis, measure, ratesgraph, reactionenergy, spectra};
 
 pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<Handle>> {
     measure::handles(id, p, size)
@@ -12,6 +12,7 @@ pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<Handle>> {
         .or_else(|| lewis::handles(id, p, size))
         .or_else(|| spectra::handles(id, p, size))
         .or_else(|| reactionenergy::handles(id, p, size))
+        .or_else(|| ratesgraph::handles(id, p, size))
 }
 
 /// Set float `key` to `v` clamped into the effective range `[lo, hi]` the renderer uses. If that

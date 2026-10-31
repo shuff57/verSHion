@@ -46,6 +46,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "mass-reading" => MASS_READING,
         "mass-spectrum" => MASS_SPECTRUM,
         "reaction-energy-diagram" => REACTION_ENERGY_DIAGRAM,
+        "reaction-rate-graph" => REACTION_RATE_GRAPH,
         "orbital-diagram" => ORBITAL_DIAGRAM,
         "particle-diagram" => PARTICLE_DIAGRAM,
         "ph-reading" => PH_READING,
@@ -3633,6 +3634,29 @@ const ENERGY_BAR_CHART: &[Faq] = &[
     Faq {
         q: "How do I make a worksheet?",
         a: "Turn Show answers off: the bars are not drawn and the three numbers become blanks, while the axes, the store names and the givens (mass, heights, loss share, g) stay, so the student works out the stores and draws the bars.",
+    },
+];
+
+const REACTION_RATE_GRAPH: &[Faq] = &[
+    Faq {
+        q: "What do the three graphs show?",
+        a: "Concentration vs time draws [A] against t from the integrated rate law of the chosen order: [A] = [A]\u{2080} \u{2212} kt (zero order, which stops at 0 when A is used up), [A] = [A]\u{2080}e^(\u{2212}kt) (first order) and 1/[A] = 1/[A]\u{2080} + kt (second order). Linearised plots the quantity that gives a straight line for that order: [A], ln [A] or 1/[A] against t, with slope \u{2212}k, \u{2212}k or +k. Rate vs concentration plots rate = k[A]\u{207f}: flat for zero order, a line through the origin for first order, a parabola for second order.",
+    },
+    Faq {
+        q: "Is the half-life always constant?",
+        a: "Only for a first-order reaction: t\u{bd} = ln 2/k, the same however much A is left. For a zero-order reaction t\u{bd} = [A]\u{2080}/(2k), so each half-life is half as long as the one before; for a second-order reaction t\u{bd} = 1/(k[A]\u{2080}), so each one is twice as long as the one before. Dotted guides at [A]\u{2080}/2, [A]\u{2080}/4 and [A]\u{2080}/8 run out to the curve; the key drops them to the time axis, writes each time there and prints its working.",
+    },
+    Faq {
+        q: "How is the instantaneous rate found?",
+        a: "The rate is \u{2212}d[A]/dt, so it is minus the slope of the tangent to the [A] curve at that time. The key prints [A] at the tangent's time and the rate k[A]\u{207f} worked out from the printed k and [A]\u{2080}, and its legend gives the tangent's slope; the initial-rate tangent is the same at t = 0. A zero-order graph is a straight line, so its tangent is the line itself.",
+    },
+    Faq {
+        q: "What does the student copy leave out?",
+        a: "Show answers off keeps the axes, the curve, the guides out to the curve and the tangent lines, and turns the half-lives, the rates, the slope and the intercept into blank lines. With \"Order and k given\" the rate law, k and [A]\u{2080} stay as the question's givens. With \"Curve given\" the order and k are printed on the key only, so students find them from the graph: equal or changing half-lives, which plot is straight, or how the rate grows with [A].",
+    },
+    Faq {
+        q: "Why was a number I typed changed?",
+        a: "k and [A]\u{2080} must be greater than 0; k = 0 or less is refused and the graph keeps a drawable k, with a note. The givens are kept to 4 significant figures so every printed result can be recomputed from the printed givens. The time shown is held between half of the first half-life and 20 half-lives, and a tangent's time past the end of the axis is moved to the end; each change is noted in the editor.",
     },
 ];
 
