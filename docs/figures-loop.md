@@ -53,6 +53,13 @@ Phases:
    hide-reading on spring-scale, series-parallel and capacitor on circuit-diagram.
 4. Biology: Hardy-Weinberg, chi-square / expected-vs-observed table, enzyme kinetics, cladogram from a
    typed tree string, food web and energy pyramid, action potential, cell cycle, cell diagrams.
+4b. Plant science and horticulture (added by the owner 2026-10-30, after cell diagrams, before phase
+   5): photosynthesis (inputs, outputs and where each happens in the chloroplast, with an optional
+   rate against light intensity or CO2 graph), leaf cross-section (labelled layers, stomata and
+   guard cells open or closed, student copy with blanks), xylem and phloem (stem and root
+   cross-section with the direction of water and sugar transport), soil texture triangle (sand,
+   silt and clay with a plotted sample and the named texture region, a computed answer). Same
+   rules as phase 4: one builder, then a combined critic, then verification critics.
 5. Chemistry: reaction energy diagram (Ea, catalyst, delta H), rate and kinetics graphs, phase
    diagram, solubility curves, gas-law graphs, equilibrium/ICE graphs, buffer curves, Boltzmann
    distribution, periodic-table excerpt, VSEPR 3-D geometry.
