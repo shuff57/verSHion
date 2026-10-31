@@ -1,7 +1,7 @@
 // Run: npm test
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { AI_PATH, createAi, type AiDeps } from "../src/ai/index.ts";
+import { AI_PATH, createAi, type AiBinding, type AiDeps } from "../src/ai/index.ts";
 import { viaRun, type Run } from "./ai-fake.ts";
 
 const RELAY = "https://worker.example" + AI_PATH;
@@ -16,6 +16,7 @@ const OK_REPLY = {
 function harness(overrides: Partial<AiDeps> = {}, run: Run = async () => OK_REPLY) {
   const captured: { model: string; inputs: Record<string, unknown> }[] = [];
   const deps: AiDeps = {
+    model: "@cf/test/model",
     openrouter: viaRun(run, captured),
     allowedOrigins: ["https://app.example.org"],
     authenticate: async () => ({ userId: "u1" }),
@@ -130,8 +131,8 @@ test("no principal is 401 when the relay is keyed", async () => {
   assert.equal(((await res!.json()) as any).error.code, "unauthenticated");
 });
 
-test("no OpenRouter key is 503 ai_not_configured", async () => {
-  const { relay } = harness({ openrouter: undefined });
+test("no OpenRouter key and no binding is 503 ai_not_configured", async () => {
+  const { relay } = harness({ openrouter: undefined, ai: undefined });
   const res = await relay.handle(post(say()));
   assert.equal(res!.status, 503);
   assert.equal(((await res!.json()) as any).error.code, "ai_not_configured");
@@ -271,7 +272,74 @@ test("health is unauthenticated and reports the OpenRouter model and whether a k
   const res = await relay.handle(new Request("https://worker.example/ai/health"));
   assert.equal(res!.status, 200);
   assert.deepEqual(await res!.json(), { ok: true, model: "or/test-model", ai: true, upstream: "openrouter" });
-  const { relay: bare } = harness({ openrouter: undefined, authenticate: async () => null });
+  const { relay: bare } = harness({ openrouter: undefined, ai: undefined, authenticate: async () => null });
   const off = await bare.handle(new Request("https://worker.example/ai/health"));
-  assert.deepEqual(await off!.json(), { ok: true, model: null, ai: false, upstream: "openrouter" });
+  assert.deepEqual(await off!.json(), { ok: true, model: "@cf/test/model", ai: false, upstream: "workers" });
+});
+
+// ---- Workers AI as the fallback ----
+
+const wai = (run: AiBinding["run"]) => ({ ai: { run } as AiBinding });
+const workersOk = async () => ({ choices: [{ message: { content: '{"ok":true}', reasoning_content: "hidden" }, finish_reason: "stop" }], usage: { prompt_tokens: 5, completion_tokens: 6, total_tokens: 11, neurons: 1.5 } });
+
+test("when OpenRouter fails the Workers AI binding answers, with thinking off and neurons stripped", async () => {
+  let wcalls = 0;
+  let inputs: any;
+  const { relay, captured } = harness(
+    wai(async (_m, i) => ((wcalls++, (inputs = i)), workersOk())),
+    async () => {
+      throw new Error("down");
+    },
+  );
+  const orig = console.error;
+  console.error = () => {};
+  try {
+    const res = await relay.handle(post(say()));
+    assert.equal(res!.status, 200);
+    assert.equal(captured.length, 1, "OpenRouter is tried once before falling back");
+    assert.equal(wcalls, 1);
+    assert.deepEqual(inputs.chat_template_kwargs, { enable_thinking: false });
+    const body = (await res!.json()) as any;
+    assert.equal(body.usage.neurons, undefined);
+    assert.equal(body.choices[0].message.reasoning_content, undefined);
+  } finally {
+    console.error = orig;
+  }
+});
+
+test("an empty OpenRouter completion or a timeout falls back to Workers AI", async () => {
+  const orig = console.error;
+  console.error = () => {};
+  try {
+    let n = 0;
+    const empty = harness(wai(async () => (n++, workersOk())), async () => ({ choices: [{ message: { content: "  " } }] }));
+    assert.equal((await empty.relay.handle(post(say())))!.status, 200);
+    assert.equal(n, 1);
+    const boom = (async () => {
+      throw new DOMException("timed out", "TimeoutError");
+    }) as unknown as typeof fetch;
+    const timed = harness({ ...wai(async () => (n++, workersOk())), openrouter: { key: "k", model: "m", fetch: boom } });
+    assert.equal((await timed.relay.handle(post(say())))!.status, 200);
+    assert.equal(n, 2);
+  } finally {
+    console.error = orig;
+  }
+});
+
+test("with only a Workers AI binding the call goes there, retried once, and thinking is the deployment's choice", async () => {
+  let calls = 0;
+  const inputs: any[] = [];
+  const mk = (thinking?: boolean) =>
+    harness({ openrouter: undefined, thinking, ...wai(async (_m, i) => (inputs.push(i), calls++ === 0 ? Promise.reject(new Error("x")) : workersOk())) });
+  const orig = console.error;
+  console.error = () => {};
+  try {
+    assert.equal((await mk().relay.handle(post({ ...say(), thinking: true, chat_template_kwargs: { enable_thinking: true } })))!.status, 200);
+    assert.equal(calls, 2);
+    assert.deepEqual(inputs[0].chat_template_kwargs, { enable_thinking: false }, "a client cannot turn it on");
+    await mk(true).relay.handle(post(say()));
+    assert.deepEqual(inputs[2].chat_template_kwargs, { enable_thinking: true });
+  } finally {
+    console.error = orig;
+  }
 });

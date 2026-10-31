@@ -20,6 +20,7 @@ function world(o: Partial<AiDeps> & { fail?: boolean } = {}) {
     return reply("{}", 0.001);
   });
   const relay = createAi({
+    model: "@cf/test/model",
     openrouter,
     allowedOrigins: [],
     authenticate: async (r) => (r.headers.get("x-user") ? { userId: r.headers.get("x-user")! } : null),

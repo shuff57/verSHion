@@ -36,7 +36,11 @@ MAIL_MODE = "log"
 APP_URL = "http://localhost:5173"
 ALLOWED_ORIGINS = "http://localhost:5173"
 ADMIN_EMAIL = "shuff57@gmail.com"
-# The AI relay's only upstream is OpenRouter: secret OPENROUTER_API_KEY (docs/ai-harness-spec.md).
+AI_MODEL = "@cf/google/gemma-4-26b-a4b-it"
+
+# OpenRouter first (secret OPENROUTER_API_KEY), Workers AI as the fallback (docs/ai-harness-spec.md).
+[ai]
+binding = "AI"
 
 [triggers]
 crons = ["17 * * * *"]

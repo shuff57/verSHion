@@ -26,6 +26,7 @@ function world(o: Partial<AiDeps> & { cost?: number; run?: Run } = {}) {
   );
   const pending: Promise<unknown>[] = [];
   const relay = createAi({
+    model: "@cf/test/model",
     openrouter,
     allowedOrigins: [],
     authenticate: async (r) => {
@@ -73,6 +74,23 @@ test("each answered chat turn is recorded with its tokens and what OpenRouter bi
     { p: "u1", k: "chat", i: 100, o: 20, usd: 0.002, n: 0, s: null, at: T0 },
   );
   assert.deepEqual(Object.keys(rows[0]!).sort(), ["at", "cost_usd", "id", "in_tokens", "kind", "neurons", "out_tokens", "principal", "session"]);
+});
+
+test("a turn answered by the Workers AI fallback is booked in dollars at $0.000011 a neuron", async () => {
+  const boom = (async () => new Response("x", { status: 500 })) as unknown as typeof fetch;
+  const orig = console.error;
+  console.error = () => {};
+  try {
+    const w = world({
+      openrouter: { key: "k", model: "m", fetch: boom },
+      ai: { run: async () => ({ choices: [{ message: { content: "{}" } }], usage: { prompt_tokens: 3, completion_tokens: 4, neurons: 1000 } }) },
+    });
+    assert.equal((await w.send(AI_PATH, { user: "u1", body: chat }))!.status, 200);
+    const row = w.db.prepare("SELECT cost_usd, neurons FROM ai_usage").get() as any;
+    assert.deepEqual({ usd: Number(row.cost_usd.toFixed(6)), n: row.neurons }, { usd: 0.011, n: 0 });
+  } finally {
+    console.error = orig;
+  }
 });
 
 test("a principal over the hourly turn cap gets 429 rate_limited, without a model call, and the hour rolls", async () => {

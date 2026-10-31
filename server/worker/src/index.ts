@@ -14,7 +14,7 @@ import { json as poolJson } from "./pool/shared.ts";
 import { poolNotifier } from "./poolmail.ts";
 import { adminAlert, makeMailer, queueReminder, type MailEnv } from "./mail.js";
 import { flushNoticeBacklog, noticeNewApplication } from "./notices.js";
-import { OPENROUTER_DEFAULT_MODEL, createAi, type Limits } from "./ai/index.ts";
+import { AI_DEFAULT_MODEL, OPENROUTER_DEFAULT_MODEL, createAi, type AiBinding, type Limits } from "./ai/index.ts";
 import { pruneAi } from "./ai/jobs.ts";
 import { createBilling } from "./billing/index.ts";
 
@@ -34,14 +34,20 @@ export interface Env extends MailEnv {
    * (503 pool_not_configured); auth keeps working. Never rotate it casually: stored hashes use it.
    */
   POOL_HASH_KEY?: string;
+  /** Workers AI binding (`[ai]` in wrangler.toml): the fallback when OpenRouter fails. Absent under `wrangler dev --local`. */
+  AI?: AiBinding;
+  /** The Workers AI fallback model. The client's `model` field is ignored on purpose. */
+  AI_MODEL?: string;
+  /** "1" turns Gemma 4's thinking mode on for the Workers AI fallback. Off by default. */
+  AI_THINKING?: string;
   /**
-   * `AI_RELAY_KEY`: the desktop app's key to the relay. Inference is billed to the OpenRouter key; this
-   * key only authorises the app.
+   * `AI_RELAY_KEY`: the desktop app's key to the relay. Inference is billed to the OpenRouter key (or the
+   * Workers account on fallback); this key only authorises the app.
    */
   AI_RELAY_KEY?: string;
   /**
-   * `OPENROUTER_API_KEY`: the relay's only upstream, for the free weekly credits and the paid ones alike.
-   * Unset, `/ai/chat/completions` answers 503 ai_not_configured. OPENROUTER_MODEL picks the model;
+   * `OPENROUTER_API_KEY`: the relay's first upstream, for the free weekly credits and the paid ones alike;
+   * the Workers AI binding answers if it fails. With neither, `/ai/chat/completions` answers 503. OPENROUTER_MODEL picks the model;
    * OPENROUTER_PRIVACY="0" allows providers that may keep prompts (the default asks OpenRouter for ones
    * that do not). See docs/ai-harness-spec.md.
    */
@@ -230,9 +236,12 @@ async function handleFetch(req: Request, env: Env, ctx: ExecutionContext): Promi
   if (pre) return pre;
   // The AI relay (docs/ai-harness-spec.md §2): authenticated, no D1 and no share-core involved.
   const ai = createAi({
+    ai: env.AI,
+    model: env.AI_MODEL ?? AI_DEFAULT_MODEL,
     allowedOrigins: origins(env),
     authenticate: (r) => a.authenticate(r),
     relayKey: env.AI_RELAY_KEY,
+    thinking: env.AI_THINKING === "1",
     openrouter: env.OPENROUTER_API_KEY?.trim()
       ? { key: env.OPENROUTER_API_KEY.trim(), model: env.OPENROUTER_MODEL?.trim() || OPENROUTER_DEFAULT_MODEL, privacy: env.OPENROUTER_PRIVACY !== "0" }
       : undefined,
