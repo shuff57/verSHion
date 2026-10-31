@@ -39,6 +39,8 @@ pub struct AuthState {
     /// Extra sections of the data export (phase 4).
     pub export_extra: ExportExtra,
     pub domain_labels: Labels,
+    /// `APPROVAL_DIGEST=1`: a daily digest even when nothing is overdue.
+    pub approval_digest: bool,
 }
 
 pub fn system_now() -> i64 {
@@ -60,6 +62,7 @@ impl AuthState {
             standing: Box::new(|_, _, _| Ok(())),
             export_extra: Box::new(|_, _| Map::new()),
             domain_labels: Box::new(staff_domains::labels),
+            approval_digest: false,
         }
     }
 }

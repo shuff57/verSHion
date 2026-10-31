@@ -8,6 +8,7 @@ pub mod admin_suspend;
 pub mod audit;
 pub mod common_passwords;
 pub mod config;
+pub mod cron;
 pub mod crypto;
 pub mod device;
 pub mod guard;

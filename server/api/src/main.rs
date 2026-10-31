@@ -43,7 +43,9 @@ fn auth_state(cfg: &config::Config, conn: rusqlite::Connection) -> Option<Arc<au
     if !mail.smtp && !mail.log_mode {
         tracing::warn!("SMTP is not configured: confirmation and reset mail cannot be sent");
     }
-    Some(Arc::new(auth::router::AuthState::new(conn, a, mail)))
+    let mut st = auth::router::AuthState::new(conn, a, mail);
+    st.approval_digest = std::env::var("APPROVAL_DIGEST").as_deref() == Ok("1");
+    Some(Arc::new(st))
 }
 
 /// Who is signed in: the pool's sessions when `AUTH_SECRET` is valid, otherwise nobody (only the relay key and the
@@ -125,6 +127,9 @@ async fn main() {
 
     let listener = tokio::net::TcpListener::bind(&cfg.listen).await.expect("bind");
     tracing::info!(addr = %cfg.listen, "listening");
+    if let Some(a) = &auth {
+        tokio::spawn(auth::cron::run(a.clone()));
+    }
     axum::serve(listener, app(state, billing, auth))
         .with_graceful_shutdown(async {
             let _ = tokio::signal::ctrl_c().await;
