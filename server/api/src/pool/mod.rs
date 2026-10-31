@@ -5,6 +5,7 @@
 pub mod authctx;
 pub mod bizdays;
 pub mod blobs;
+pub mod blocking;
 pub mod chain;
 pub mod core;
 pub mod ctx;
