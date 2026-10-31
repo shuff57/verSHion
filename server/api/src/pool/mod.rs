@@ -4,5 +4,6 @@
 
 pub mod bizdays;
 pub mod jsonscan;
+pub mod license;
 pub mod preread;
 pub mod visible;
