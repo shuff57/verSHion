@@ -382,7 +382,10 @@ mod tests {
         assert!(parse_device(&derive_keys("other"), Some(&d.token), Some(&user), T).is_none(), "another secret");
         assert!(parse_device(&k, Some(&d.token), None, T).is_none() && parse_device(&k, None, Some(&user), T).is_none());
         let mut forged = d.token.clone();
-        forged.replace_range(forged.len() - 1.., if forged.ends_with('A') { "B" } else { "A" });
+        // A middle character: the last one of a 43-character MAC carries padding bits, so two values can decode alike.
+        let at = forged.len() - 10;
+        let flipped = if forged[at..].starts_with('A') { "B" } else { "A" };
+        forged.replace_range(at..at + 1, flipped);
         assert!(parse_device(&k, Some(&forged), Some(&user), T).is_none(), "a changed MAC");
         for bad in ["", "garbage", "v2.a.b.c.d.e", &d.token.replacen("v1", "v2", 1), &format!("{}.x", d.token)] {
             assert!(parse_device(&k, Some(bad), Some(&user), T).is_none(), "{bad:?}");
