@@ -53,10 +53,96 @@ pub fn fold(s: &str) -> String {
     stripped.to_lowercase().replace('ß', "ss").replace('ς', "σ").nfc().collect()
 }
 
+fn is_letter_or_number(c: char) -> bool {
+    matches!(
+        get_general_category(c),
+        G::UppercaseLetter | G::LowercaseLetter | G::TitlecaseLetter | G::ModifierLetter | G::OtherLetter | G::DecimalNumber | G::LetterNumber | G::OtherNumber
+    )
+}
+fn is_letter(c: char) -> bool {
+    matches!(get_general_category(c), G::UppercaseLetter | G::LowercaseLetter | G::TitlecaseLetter | G::ModifierLetter | G::OtherLetter)
+}
+
+/// The search key of one text: folded, punctuation and hyphens as spaces.
+pub fn search_key(s: &str) -> String {
+    let mut out = String::new();
+    let mut gap = false;
+    for c in fold(s).chars() {
+        let rep: Option<&str> = match c {
+            'œ' => Some("oe"),
+            'æ' => Some("ae"),
+            'ø' => Some("o"),
+            'ł' => Some("l"),
+            'đ' | 'ð' => Some("d"),
+            'þ' => Some("th"),
+            'ı' => Some("i"),
+            'ĸ' => Some("k"),
+            'ŋ' => Some("n"),
+            _ => None,
+        };
+        if rep.is_some() || is_letter_or_number(c) {
+            if gap {
+                out.push(' ');
+                gap = false;
+            }
+            match rep {
+                Some(r) => out.push_str(r),
+                None => out.push(c),
+            }
+        } else {
+            gap = true;
+        }
+    }
+    // (a leading gap is dropped: `trim` of the Worker's result)
+    out.trim().to_string()
+}
+
+/// The stored title search column: the search key, the German spelling of umlauts (ü = ue), and hyphenated words joined
+/// (co-operative = cooperative), each word-searchable (it starts with a space, and `q` matches the start of any word).
+pub fn title_search(title: &str) -> String {
+    let german: String = title
+        .chars()
+        .map(|c| match c {
+            'ä' => "ae".to_string(),
+            'ö' => "oe".to_string(),
+            'ü' => "ue".to_string(),
+            'Ä' => "Ae".to_string(),
+            'Ö' => "Oe".to_string(),
+            'Ü' => "Ue".to_string(),
+            c => c.to_string(),
+        })
+        .collect();
+    // `(\p{L})[-‐‑'’](?=\p{L})` -> `$1`: the joiner between two letters goes.
+    let cs: Vec<char> = title.chars().collect();
+    let joined: String = cs
+        .iter()
+        .enumerate()
+        .filter(|(i, c)| !(matches!(c, '-' | '\u{2010}' | '\u{2011}' | '\'' | '\u{2019}') && *i > 0 && is_letter(cs[*i - 1]) && cs.get(i + 1).is_some_and(|n| is_letter(*n))))
+        .map(|(_, c)| *c)
+        .collect();
+    let mut v: Vec<String> = Vec::new();
+    for k in [search_key(title), search_key(&german), search_key(&joined)] {
+        if !k.is_empty() && !v.contains(&k) {
+            v.push(k);
+        }
+    }
+    format!(" {}", v.join(" "))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::Value;
+
+    #[test]
+    fn search_key_and_title_search_match_the_worker() {
+        let v: Value = serde_json::from_str(include_str!("searchkey_vectors.json")).unwrap();
+        for (i, t) in v["texts"].as_array().unwrap().iter().enumerate() {
+            let t = t.as_str().unwrap();
+            assert_eq!(search_key(t), v["keys"][i].as_str().unwrap(), "key of {t:?}");
+            assert_eq!(title_search(t), v["titles"][i].as_str().unwrap(), "title of {t:?}");
+        }
+    }
 
     fn vectors() -> Value {
         serde_json::from_str(include_str!("textutil_vectors.json")).unwrap()
