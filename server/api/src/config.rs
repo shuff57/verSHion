@@ -15,6 +15,11 @@ pub struct Config {
     pub limits: Limits,
     pub job_ttl_ms: i64,
     pub openrouter: Option<OpenRouter>,
+    /// "1" turns buying credits on; the webhook works whenever its secret is set.
+    pub billing_enabled: bool,
+    pub stripe_key: Option<String>,
+    pub stripe_webhook_secret: Option<String>,
+    pub stripe_publishable_key: Option<String>,
 }
 
 /// A positive whole number, or None (so the default stands) when unset or not one.
@@ -72,6 +77,10 @@ impl Config {
             limits,
             job_ttl_ms: pos_int(get("AI_JOB_TTL_HOURS")).unwrap_or(72) * 3_600_000,
             openrouter,
+            billing_enabled: get("BILLING_ENABLED").as_deref().map(str::trim) == Some("1"),
+            stripe_key: nonempty(get("STRIPE_SECRET_KEY")),
+            stripe_webhook_secret: nonempty(get("STRIPE_WEBHOOK_SECRET")),
+            stripe_publishable_key: nonempty(get("STRIPE_PUBLISHABLE_KEY")),
         }
     }
 }
@@ -114,6 +123,17 @@ mod tests {
         assert_eq!((c.limits.daily_usd, c.job_ttl_ms), (0.25, 24 * 3_600_000));
         assert_eq!(cfg(&[("AI_DAILY_USD", "NaN")]).limits.daily_usd, d.daily_usd);
         assert_eq!(cfg(&[("AI_DAILY_USD", "inf")]).limits.daily_usd, d.daily_usd);
+    }
+
+    #[test]
+    fn billing_is_off_unless_exactly_one_and_the_stripe_values_are_trimmed() {
+        let c = cfg(&[]);
+        assert!(!c.billing_enabled && c.stripe_key.is_none() && c.stripe_webhook_secret.is_none() && c.stripe_publishable_key.is_none());
+        for v in ["0", "true", "yes", ""] {
+            assert!(!cfg(&[("BILLING_ENABLED", v)]).billing_enabled, "{v:?}");
+        }
+        let c = cfg(&[("BILLING_ENABLED", " 1 "), ("STRIPE_SECRET_KEY", " sk_test_x "), ("STRIPE_WEBHOOK_SECRET", "whsec_x"), ("STRIPE_PUBLISHABLE_KEY", "  ")]);
+        assert_eq!((c.billing_enabled, c.stripe_key.as_deref(), c.stripe_webhook_secret.as_deref(), c.stripe_publishable_key), (true, Some("sk_test_x"), Some("whsec_x"), None));
     }
 
     #[test]

@@ -2,12 +2,16 @@
 //!
 //! Configuration is environment variables only (see `config.rs`); secrets are never read from argv or logged.
 mod ai;
+mod billing;
 mod blobs;
+mod body;
 mod config;
 mod db;
+mod ratelimit;
 
 use ai::routes::{AiState, NoAuth, system_clock, tokio_spawn};
 use ai::upstream::HttpTransport;
+use billing::{BillingState, HttpStripe};
 use axum::{Json, Router, routing::get};
 use serde_json::{Value, json};
 use std::sync::{Arc, Mutex};
@@ -22,8 +26,18 @@ pub fn router() -> Router {
 }
 
 /// Everything the server serves so far: its own health check and the AI relay.
-fn app(state: Arc<AiState<HttpTransport>>) -> Router {
-    router().merge(ai::routes::router(state))
+fn app(ai: Arc<AiState<HttpTransport>>, billing: Arc<BillingState<HttpStripe>>) -> Router {
+    router().merge(ai::routes::router(ai)).merge(billing::router(billing))
+}
+
+/// The billing state for one database file: its own connection (WAL lets both write), Stripe settings from the config.
+fn billing_state(cfg: &config::Config, conn: rusqlite::Connection) -> BillingState<HttpStripe> {
+    let mut b = BillingState::new(conn, HttpStripe::new(), Box::new(NoAuth), system_clock());
+    b.enabled = cfg.billing_enabled;
+    b.stripe_key = cfg.stripe_key.clone();
+    b.webhook_secret = cfg.stripe_webhook_secret.clone();
+    b.publishable_key = cfg.stripe_publishable_key.clone();
+    b
 }
 
 #[tokio::main]
@@ -39,6 +53,10 @@ async fn main() {
     if cfg.openrouter.is_none() {
         tracing::warn!("OPENROUTER_API_KEY is not set: the AI relay answers 503 ai_not_configured");
     }
+    if cfg.stripe_webhook_secret.is_none() {
+        tracing::warn!("STRIPE_WEBHOOK_SECRET is not set: /billing/webhook answers 503");
+    }
+    let billing = Arc::new(billing_state(&cfg, db::open(&cfg.db).expect("open the billing connection")));
     let job_ttl_ms = cfg.job_ttl_ms;
     let state = Arc::new(AiState {
         conn: Mutex::new(conn),
@@ -57,18 +75,20 @@ async fn main() {
 
     // The Worker's hourly cron, AI stage: expired jobs and old usage rows.
     let hourly = state.clone();
+    let hourly_billing = billing.clone();
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(3600));
         loop {
             tick.tick().await;
             let dropped = ai::cron::prune(&hourly, job_ttl_ms);
-            tracing::info!(dropped, "hourly prune");
+            let limits = hourly_billing.with_conn(|c| ratelimit::prune(c, (hourly_billing.clock)()).unwrap_or(0));
+            tracing::info!(dropped, limits, "hourly prune");
         }
     });
 
     let listener = tokio::net::TcpListener::bind(&cfg.listen).await.expect("bind");
     tracing::info!(addr = %cfg.listen, "listening");
-    axum::serve(listener, app(state))
+    axum::serve(listener, app(state, billing))
         .with_graceful_shutdown(async {
             let _ = tokio::signal::ctrl_c().await;
         })
@@ -111,6 +131,7 @@ mod tests {
         });
         let mut conn = db::open(&cfg.db).unwrap();
         assert!(db::migrate(&mut conn, &cfg.migrations).unwrap().len() >= 26);
+        let billing = Arc::new(billing_state(&cfg, db::open(&cfg.db).unwrap()));
         let state = Arc::new(AiState {
             conn: Mutex::new(conn),
             limits: cfg.limits,
@@ -125,12 +146,16 @@ mod tests {
             spawn: tokio_spawn(),
         });
         let get = |p: &str| Request::get(p).body(Body::empty()).unwrap();
-        let ai_health = app(state.clone()).oneshot(get("/ai/health")).await.unwrap();
+        let ai_health = app(state.clone(), billing.clone()).oneshot(get("/ai/health")).await.unwrap();
         let body: Value = serde_json::from_slice(&ai_health.into_body().collect().await.unwrap().to_bytes()).unwrap();
         assert_eq!(body, json!({ "ok": true, "model": null, "ai": false, "upstream": "openrouter" }));
-        assert_eq!(app(state.clone()).oneshot(get("/health")).await.unwrap().status(), 200);
-        let credits = app(state).oneshot(get("/ai/credits")).await.unwrap();
+        assert_eq!(app(state.clone(), billing.clone()).oneshot(get("/health")).await.unwrap().status(), 200);
+        let credits = app(state.clone(), billing.clone()).oneshot(get("/ai/credits")).await.unwrap();
         let body: Value = serde_json::from_slice(&credits.into_body().collect().await.unwrap().to_bytes()).unwrap();
         assert_eq!(body["unlimited"], true, "the keyless native app is not on credits");
+        // Billing is off by default: buying is a 404, and the webhook says it is not configured.
+        assert_eq!(app(state.clone(), billing.clone()).oneshot(get("/billing/packs")).await.unwrap().status(), 404);
+        let hook = Request::post("/billing/webhook").body(Body::empty()).unwrap();
+        assert_eq!(app(state, billing).oneshot(hook).await.unwrap().status(), 503);
     }
 }
