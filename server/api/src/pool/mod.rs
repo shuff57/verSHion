@@ -53,6 +53,7 @@ pub mod moderation;
 pub mod modprivacy;
 pub mod modpurge;
 pub mod modrestore;
+pub mod modtakedown;
 pub mod offer;
 pub mod publishdel;
 pub mod poolio;
