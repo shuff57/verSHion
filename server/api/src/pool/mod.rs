@@ -9,6 +9,7 @@ pub mod chain;
 pub mod core;
 pub mod ctx;
 pub mod evidence;
+pub mod export;
 pub mod fingerprint;
 pub mod fuzzy;
 pub mod fuzzyhits;
