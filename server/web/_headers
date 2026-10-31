@@ -1,0 +1,7 @@
+# Cloudflare Pages headers. Replace https://api.example.org with the API origin before deploying.
+# Stripe.js must load from js.stripe.com (it cannot be self-hosted); everything else is same-origin.
+/account/*
+  Content-Security-Policy: default-src 'none'; script-src 'self' https://js.stripe.com; style-src 'self'; connect-src 'self' https://api.example.org https://api.stripe.com https://*.stripe.com; frame-src https://js.stripe.com https://hooks.stripe.com; img-src 'self' https://*.stripe.com data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Cache-Control: no-store

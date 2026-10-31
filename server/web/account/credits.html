@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Buy credits - verSHion</title>
+<meta name="description" content="Buy AI credits for verSHion.">
+<meta name="robots" content="noindex">
+<!-- Set to the API origin (the Worker's custom domain) before deploying. -->
+<meta name="api-base" content="https://api.example.org">
+<link rel="stylesheet" href="credits.css">
+</head>
+<body>
+<main>
+<h1>Buy credits</h1>
+<p class="lede">Credits pay for the built-in AI: importing a test, fitting a figure, reading handwriting. Purchased credits never expire and are used after your free weekly credits.</p>
+
+<p id="status" role="status" aria-live="polite" class="status" hidden></p>
+
+<p id="balance" class="balance" hidden></p>
+
+<section id="signin" hidden>
+  <h2>Sign in</h2>
+  <form id="signin-form" novalidate>
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" autocomplete="username" required>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Sign in</button>
+  </form>
+</section>
+
+<section id="closed" hidden>
+  <h2>Buying is not open yet</h2>
+  <p>Credit packs are not on sale during the pilot. Your free weekly credits keep working.</p>
+</section>
+
+<section id="shop" hidden>
+  <form id="amount-form" novalidate>
+    <fieldset>
+      <legend>Choose an amount</legend>
+      <div id="packs" class="packs"></div>
+      <div class="custom">
+        <input id="pick-custom" type="radio" name="pick" value="custom">
+        <label for="pick-custom">Another amount</label>
+        <span class="custom-field">
+          <label for="custom-usd" class="sr">Amount in US dollars</label>
+          <span aria-hidden="true">$</span>
+          <input id="custom-usd" type="number" inputmode="numeric" step="1" min="5" max="200" value="10" disabled>
+        </span>
+      </div>
+    </fieldset>
+    <p id="summary" class="summary"></p>
+    <p id="amount-error" class="error" role="alert" hidden></p>
+    <button id="continue" type="submit">Continue to payment</button>
+  </form>
+</section>
+
+<section id="pay" hidden>
+  <h2>Payment</h2>
+  <p id="pay-summary" class="summary"></p>
+  <form id="pay-form">
+    <div id="payment-element"></div>
+    <p id="pay-error" class="error" role="alert" hidden></p>
+    <button id="pay-button" type="submit">Pay</button>
+    <button id="pay-back" type="button" class="secondary">Change amount</button>
+  </form>
+</section>
+
+<section id="done" hidden>
+  <h2 id="done-title">Payment received</h2>
+  <p id="done-text"></p>
+</section>
+
+<p class="fine">Payments are handled by Stripe. We never see your card. Refunds are described in the <a href="../legal/terms.html">terms</a>.</p>
+</main>
+<script type="module" src="credits.js"></script>
+</body>
+</html>
