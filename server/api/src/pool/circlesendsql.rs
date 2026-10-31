@@ -26,7 +26,7 @@ pub fn privacy_sql(keys: &str, shas: &str) -> String {
 }
 /// An ACTIVE copyright re-upload block on blocked_hashes row `bh` that holds content sent by `sender` (a parameter reference): never one
 /// the administrator exempted the sender from, and never the rightful item's own material for its author or an account it was served to.
-fn copyright_active(bh: &str, now: &str, sender: &str) -> String {
+pub fn copyright_active(bh: &str, now: &str, sender: &str) -> String {
     format!(
         "{bh}.lifted_at IS NULL AND ({bh}.expires_at IS NULL OR {bh}.expires_at > {now}) AND {bh}.action_id IS NOT NULL
    AND NOT EXISTS (SELECT 1 FROM dmca_exempt ce WHERE ce.action_id = {bh}.action_id AND ce.user_id = {sender})
