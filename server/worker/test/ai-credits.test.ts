@@ -1,7 +1,8 @@
 // Run: npm test. Weekly credits and service sessions on the AI relay, over real SQLite.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createAi, type AiBinding, type AiDeps } from "../src/ai/index.ts";
+import { createAi, type AiDeps } from "../src/ai/index.ts";
+import { reply, viaRun } from "./ai-fake.ts";
 import { SERVICES, utcWeekStart } from "../src/ai/credits.ts";
 import { AiStore, DAY_MS } from "../src/ai/store.ts";
 import { d1, freshDb } from "./pool/harness.ts";
@@ -13,16 +14,13 @@ function world(o: Partial<AiDeps> & { fail?: boolean } = {}) {
   const db = freshDb();
   const clock = { t: MON };
   let modelCalls = 0;
-  const ai: AiBinding = {
-    run: async () => {
-      modelCalls++;
-      if (o.fail) throw new Error("down");
-      return { choices: [{ message: { content: "{}" }, finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, neurons: 1 } };
-    },
-  };
+  const openrouter = viaRun(async () => {
+    modelCalls++;
+    if (o.fail) throw new Error("down");
+    return reply("{}", 0.001);
+  });
   const relay = createAi({
-    ai,
-    model: "@cf/test/model",
+    openrouter,
     allowedOrigins: [],
     authenticate: async (r) => (r.headers.get("x-user") ? { userId: r.headers.get("x-user")! } : null),
     db: d1(db),
@@ -116,6 +114,20 @@ test("a session's call budget and lifetime are enforced", async () => {
   const e = await w.send("/ai/service", { service: "figure" });
   w.clock.t += SERVICES.figure.ttlMs + 1;
   assert.equal((await w.chat(e.body.session)).body.error.code, "session_exhausted");
+});
+
+test("each chat turn's OpenRouter cost is linked to its session, so a service's real cost can be measured", async () => {
+  const w = world();
+  const a = await w.send("/ai/service", { service: "import", pages: 2 });
+  const b = await w.send("/ai/service", { service: "figure" });
+  for (let i = 0; i < 3; i++) assert.equal((await w.chat(a.body.session)).status, 200);
+  for (let i = 0; i < 2; i++) assert.equal((await w.chat(b.body.session)).status, 200);
+  const report = await w.store.costByService(0);
+  assert.deepEqual(
+    report.map((r) => [r.service, r.sessions, r.calls, Number(r.usd.toFixed(6)), Number(r.avgUsd.toFixed(6))]),
+    [["figure", 1, 2, 0.002, 0.002], ["import", 1, 3, 0.003, 0.003]],
+  );
+  assert.equal(await w.store.costSince(0) > 0.004, true, "the daily cap sums the same rows");
 });
 
 test("a session that expires without one answered call is refunded", async () => {

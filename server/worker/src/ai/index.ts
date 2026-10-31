@@ -1,4 +1,5 @@
-// Workers AI relay for the desktop app. Contract: docs/ai-harness-spec.md §2.
+// OpenRouter relay for the desktop app (the free weekly credits and the paid ones go through the same
+// upstream). Contract: docs/ai-harness-spec.md §2; Workers AI is retired.
 //
 // One endpoint, OpenAI-shaped in and out, so the app's existing non-Ollama path
 // (`ai.rs::chat_turns` -> `choices/0/message/content`) and its base64 data-URI images work
@@ -12,16 +13,7 @@ import { readJob, startJob, type JobLimits } from "./jobs.ts";
 import { AiStore, HOUR_MS, utcDayStart, DAY_MS } from "./store.ts";
 import { dataUriBytes, err, json, type Message, type ModelOut, type Part } from "./util.ts";
 
-/** The slice of the Workers AI binding this relay uses (the real type is a large generated union). */
-export interface AiBinding {
-  run(model: string, inputs: Record<string, unknown>): Promise<unknown>;
-}
-
 export interface AiDeps {
-  /** `env.AI`; absent under `wrangler dev --local`, where the route answers 503. */
-  ai?: AiBinding;
-  /** The one model the relay calls. */
-  model: string;
   /** Exact origins allowed to call the relay (the app's web build). */
   allowedOrigins: string[];
   /** A signed-in pool user. */
@@ -35,16 +27,10 @@ export interface AiDeps {
   /** Signed-in accounts must spend credits through a service session (default on); false leaves only the hourly caps. */
   credits?: boolean;
   /**
-   * Gemma 4's built-in thinking mode. Off by default: on a page transcription the hidden
-   * reasoning was ~85-90% of the completion tokens (1.6-3.4k tokens spent on a ~200-token JSON
-   * answer), which is where the latency and the empty/truncated replies came from. `AI_THINKING=1`
-   * turns it back on for every request.
-   */
-  thinking?: boolean;
-  /**
-   * OpenRouter as the first upstream (`wrangler secret put OPENROUTER_API_KEY`). When set, a call goes
-   * there first and, if that fails and the Workers AI binding exists, falls back to it. The key is
-   * only ever sent in the Authorization header: never logged, never echoed.
+   * The upstream: OpenRouter, the only one. Absent, every model call answers 503 ai_not_configured. Hidden
+   * reasoning is always off (on a page transcription it was ~85-90% of the completion tokens, which is where
+   * the latency and the empty or truncated replies came from). The key is only ever sent in the
+   * Authorization header: never logged, never echoed.
    */
   openrouter?: {
     key: string;
@@ -78,8 +64,8 @@ export const DEFAULT_LIMITS: Limits = {
   chatPerHour: 120,
   weeklyCredits: 40,
   importPerDay: 20,
-  // ~2 000 pages at the measured 23 neurons a page.
-  dailyNeurons: 50_000,
+  // US dollars OpenRouter may bill in a UTC day: about 5 000 pages at a tenth of a cent a page.
+  dailyUsd: 5,
   maxPages: 20,
 };
 
@@ -89,11 +75,8 @@ export const AI_IMPORT_PATH = "/ai/import";
 export const AI_SERVICE_PATH = "/ai/service";
 export const AI_CREDITS_PATH = "/ai/credits";
 const AI_IMPORT_ONE = /^\/ai\/import\/[^/]+$/;
-export const AI_DEFAULT_MODEL = "@cf/google/gemma-4-26b-a4b-it";
 export const OPENROUTER_DEFAULT_MODEL = "google/gemma-4-26b-a4b-it";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-/** Dollars per neuron (Workers AI bills $0.011 per 1,000). An OpenRouter cost is booked as the neurons it would equal, so one daily cap covers both upstreams. */
-const USD_PER_NEURON = 0.000011;
 
 const MAX_BODY_BYTES = 13 * 1024 * 1024;
 const MAX_IMAGES = 4;
@@ -158,15 +141,15 @@ function readMessages(
 }
 
 /**
- * The app-facing reply: the upstream OpenAI body with `reasoning_content` and `usage.neurons`
+ * The app-facing reply: the upstream OpenAI body with `reasoning_content` and `usage.cost`
  * dropped. Hidden reasoning can be larger than the answer (95 tokens for a ~10-token reply in the
- * probe), and it is not part of the contract. The neurons are kept aside for the quota.
+ * probe), and it is not part of the contract. The cost (US dollars) is kept aside for the quota.
  */
 function shapeReply(raw: unknown): (ModelOut & { ok: true }) | null {
   const o = raw as
     | {
         choices?: { message?: { content?: unknown }; finish_reason?: unknown }[];
-        usage?: { prompt_tokens?: unknown; completion_tokens?: unknown; total_tokens?: unknown; neurons?: unknown };
+        usage?: { prompt_tokens?: unknown; completion_tokens?: unknown; total_tokens?: unknown; cost?: unknown };
       }
     | null;
   const choice = o?.choices?.[0];
@@ -174,7 +157,6 @@ function shapeReply(raw: unknown): (ModelOut & { ok: true }) | null {
   // An empty completion is not an answer: it is retried once by the caller.
   if (typeof content !== "string" || content.trim() === "") return null;
   const n = (x: unknown): number => (typeof x === "number" && Number.isFinite(x) ? x : 0);
-  const cost = n((o?.usage as { cost?: unknown } | undefined)?.cost);
   const inTokens = n(o?.usage?.prompt_tokens);
   const outTokens = n(o?.usage?.completion_tokens);
   return {
@@ -182,7 +164,7 @@ function shapeReply(raw: unknown): (ModelOut & { ok: true }) | null {
     text: content,
     inTokens,
     outTokens,
-    neurons: n(o?.usage?.neurons) || cost / USD_PER_NEURON,
+    costUsd: n(o?.usage?.cost),
     reply: {
       choices: [
         {
@@ -201,19 +183,13 @@ export function createAi(d: AiDeps) {
   const now = d.now ?? Date.now;
   const store = d.db ? new AiStore(d.db) : undefined;
 
-  /** One model turn: up to two tries, because Workers AI sometimes throws, or returns an empty
-   *  completion, on a call that succeeds when repeated (about 1 in 8 in the live runs). Only the
-   *  error CLASS is logged: the message can carry a provider key or the prompt (spec §5). */
+  /** One model turn: up to two tries, because a call sometimes throws, or returns an empty
+   *  completion, and succeeds when repeated (about 1 in 8 in the live runs). Only the error CLASS
+   *  is logged: the message can carry the provider key or the prompt (spec §5). */
   async function callModel(messages: Message[], max_tokens: number, temperature: number): Promise<ModelOut> {
-    if (d.openrouter) {
-      // One OpenRouter try, then Workers AI; with no binding to fall back to, a second OpenRouter try.
-      let last: ModelOut = await callOpenRouter(messages, max_tokens, temperature);
-      if (last.ok) return last;
-      if (d.ai) return callWorkersAi(messages, max_tokens, temperature);
-      last = await callOpenRouter(messages, max_tokens, temperature);
-      return last;
-    }
-    return callWorkersAi(messages, max_tokens, temperature);
+    if (!d.openrouter) return { ok: false, code: "failed" };
+    const first = await callOpenRouter(messages, max_tokens, temperature);
+    return first.ok ? first : callOpenRouter(messages, max_tokens, temperature);
   }
 
   /** One OpenRouter turn. Only the status class or error class is logged. */
@@ -250,36 +226,6 @@ export function createAi(d: AiDeps) {
     }
   }
 
-  async function callWorkersAi(messages: Message[], max_tokens: number, temperature: number): Promise<ModelOut> {
-    if (!d.ai) return { ok: false, code: "failed" };
-    const inputs = {
-      messages,
-      response_format: { type: "json_object" },
-      max_tokens,
-      temperature,
-      // The deployment's choice only. Per-request thinking was tried for the figure fitter and
-      // dropped: with the real ~45-parameter prompt it ran 280-400 s and often came back empty,
-      // while a two-sentence visible "reasoning" field in the answer fixed the same mistakes in ~15 s.
-      chat_template_kwargs: { enable_thinking: d.thinking === true },
-    };
-    let thrown = false;
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      let raw: unknown;
-      try {
-        raw = await d.ai.run(d.model, inputs);
-      } catch (e) {
-        thrown = true;
-        console.error(`ai: upstream call failed (${e instanceof Error ? e.name : "unknown"}), attempt ${attempt}`);
-        continue;
-      }
-      thrown = false;
-      const shaped = shapeReply(raw);
-      if (shaped) return shaped;
-      console.error(`ai: upstream returned no text, attempt ${attempt}`);
-    }
-    return { ok: false, code: thrown ? "failed" : "empty" };
-  }
-
   /** The caller: a pool user, the relay key, or (keyless deployment, no Origin) the native app. */
   async function principal(req: Request): Promise<{ userId: string; credited: boolean } | Response> {
     // Same origin rule as the pool: a browser may only call from the app's own origins.
@@ -314,7 +260,7 @@ export function createAi(d: AiDeps) {
     }
   }
 
-  /** The account's daily neuron cap and this caller's hourly turn cap; null when both have room.
+  /** The account's daily dollar cap and this caller's hourly turn cap; null when both have room.
    *  Counted from usage rows, so two requests racing at the line can both pass: the cap is a
    *  budget guard, not an exact meter. */
   async function overQuota(userId: string, onSession = false): Promise<Response | null> {
@@ -332,7 +278,7 @@ export function createAi(d: AiDeps) {
   async function checkQuota(store: AiStore, userId: string, onSession: boolean): Promise<Response | null> {
     const t = now();
     const untilMidnight = { "Retry-After": String(Math.ceil((utcDayStart(t) + DAY_MS - t) / 1000)) };
-    if ((await store.neuronsSince(utcDayStart(t))) >= lim.dailyNeurons)
+    if ((await store.costSince(utcDayStart(t))) >= lim.dailyUsd)
       return err(429, "quota_exhausted", "The AI allowance for today is used up.", untilMidnight);
     // A credit session has its own call budget; the per-hour turn cap is for callers without one.
     if (!onSession && (await store.chatTurnsSince(userId, t - HOUR_MS)) >= lim.chatPerHour)
@@ -372,7 +318,7 @@ export function createAi(d: AiDeps) {
     const weekStart = utcWeekStart(t);
     const credits = def.credits(pages);
     try {
-      if ((await store.neuronsSince(utcDayStart(t))) >= lim.dailyNeurons)
+      if ((await store.costSince(utcDayStart(t))) >= lim.dailyUsd)
         return err(429, "quota_exhausted", "The AI allowance for today is used up.", { "Retry-After": String(Math.ceil((utcDayStart(t) + DAY_MS - t) / 1000)) });
       await store.refundExpired(userId, t);
       // The weekly allowance pays first; the purchased balance covers the rest. A negative balance (a refund
@@ -402,7 +348,7 @@ export function createAi(d: AiDeps) {
     // Unauthenticated and data-free: the Settings "Test connection" button checks the relay is up.
     if (url.pathname === AI_HEALTH_PATH) {
       if (req.method !== "GET") return err(405, "method_not_allowed", `Use GET ${AI_HEALTH_PATH}.`, { Allow: "GET" });
-      return json(200, { ok: true, model: d.openrouter?.model ?? d.model, ai: d.ai !== undefined || d.openrouter !== undefined, upstream: d.openrouter ? "openrouter" : "workers" });
+      return json(200, { ok: true, model: d.openrouter?.model ?? null, ai: d.openrouter !== undefined, upstream: "openrouter" });
     }
     const job = url.pathname === AI_IMPORT_PATH ? "start" : AI_IMPORT_ONE.test(url.pathname) ? "read" : null;
     const credits = url.pathname === AI_CREDITS_PATH ? "balance" : url.pathname === AI_SERVICE_PATH ? "start" : null;
@@ -415,7 +361,7 @@ export function createAi(d: AiDeps) {
     if (who instanceof Response) return who;
     const { userId, credited } = who;
     if (credits === "balance") return balance(userId, credited);
-    if (!d.ai && !d.openrouter) return err(503, "ai_not_configured", "This deployment has no Workers AI binding.");
+    if (!d.openrouter) return err(503, "ai_not_configured", "This deployment has no OpenRouter key.");
 
     if (job !== null && !store) return err(503, "jobs_not_configured", "This deployment has no database for import jobs.");
     // The background import job is not priced in credits, so a signed-in account may not use it.
@@ -471,7 +417,7 @@ export function createAi(d: AiDeps) {
       // A usage row that fails to write must not cost the caller an answer they already paid for.
       try {
         if (session) await store.callAnswered(session);
-        await store.record(userId, { kind: "chat", inTokens: out.inTokens, outTokens: out.outTokens, neurons: out.neurons }, now());
+        await store.record(userId, { kind: "chat", inTokens: out.inTokens, outTokens: out.outTokens, costUsd: out.costUsd, session }, now());
       } catch {
         console.error("ai: could not record usage");
       }

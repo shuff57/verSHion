@@ -14,7 +14,7 @@ import { json as poolJson } from "./pool/shared.ts";
 import { poolNotifier } from "./poolmail.ts";
 import { adminAlert, makeMailer, queueReminder, type MailEnv } from "./mail.js";
 import { flushNoticeBacklog, noticeNewApplication } from "./notices.js";
-import { AI_DEFAULT_MODEL, OPENROUTER_DEFAULT_MODEL, createAi, type AiBinding, type Limits } from "./ai/index.ts";
+import { OPENROUTER_DEFAULT_MODEL, createAi, type Limits } from "./ai/index.ts";
 import { pruneAi } from "./ai/jobs.ts";
 import { createBilling } from "./billing/index.ts";
 
@@ -35,33 +35,26 @@ export interface Env extends MailEnv {
    */
   POOL_HASH_KEY?: string;
   /**
-   * Workers AI binding (`[ai]` in wrangler.toml). Absent under `wrangler dev --local`, where
-   * `/ai/chat/completions` answers 503 ai_not_configured. See docs/ai-harness-spec.md.
-   */
-  AI?: AiBinding;
-  /** The one model the relay calls. The client's `model` field is ignored on purpose. */
-  AI_MODEL?: string;
-  /**
-   * `wrangler secret put AI_RELAY_KEY`: the desktop app's key to the relay. Inference is billed to
-   * this account; the key only authorises the app. Not a Cloudflare API token.
+   * `AI_RELAY_KEY`: the desktop app's key to the relay. Inference is billed to the OpenRouter key; this
+   * key only authorises the app.
    */
   AI_RELAY_KEY?: string;
   /**
-   * `wrangler secret put OPENROUTER_API_KEY`: when set, the relay calls OpenRouter first and falls
-   * back to the Workers AI binding. OPENROUTER_MODEL picks the model; OPENROUTER_PRIVACY="0" allows
-   * providers that may keep prompts (the default asks OpenRouter for ones that do not).
+   * `OPENROUTER_API_KEY`: the relay's only upstream, for the free weekly credits and the paid ones alike.
+   * Unset, `/ai/chat/completions` answers 503 ai_not_configured. OPENROUTER_MODEL picks the model;
+   * OPENROUTER_PRIVACY="0" allows providers that may keep prompts (the default asks OpenRouter for ones
+   * that do not). See docs/ai-harness-spec.md.
    */
   OPENROUTER_API_KEY?: string;
   OPENROUTER_MODEL?: string;
   OPENROUTER_PRIVACY?: string;
-  /** "1" turns Gemma 4's thinking mode on for the relay. Off by default (see src/ai/index.ts). */
-  AI_THINKING?: string;
-  /** Quotas (docs/ai-harness-spec.md section 5). Each is a positive integer; unset or invalid keeps the default. */
+  /** Quotas (docs/ai-harness-spec.md section 5). Each is a positive integer unless noted; unset or invalid keeps the default. */
   AI_CHAT_PER_HOUR?: string;
   AI_IMPORT_PER_DAY?: string;
   /** Credits per signed-in account per UTC week (default 40). */
   AI_WEEKLY_CREDITS?: string;
-  AI_DAILY_NEURONS?: string;
+  /** US dollars OpenRouter may bill in a UTC day (a positive number, default 5): the budget guard for the whole key. */
+  AI_DAILY_USD?: string;
   AI_MAX_PAGES?: string;
   AI_JOB_TTL_HOURS?: string;
   /** "1" turns buying credits on (/billing/packs and /billing/intent answer 404 otherwise). The webhook works whenever its secret is set. */
@@ -194,12 +187,18 @@ function posInt(v: string | undefined): number | undefined {
   return v !== undefined && Number.isInteger(n) && n > 0 ? n : undefined;
 }
 
+/** A positive number (dollars may be fractional) from an env var, or undefined when unset or not one. */
+function posNum(v: string | undefined): number | undefined {
+  const n = Number(v);
+  return v !== undefined && Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
 function aiLimits(env: Env): Partial<Limits> {
   const l: Partial<Limits> = {};
   const set = <K extends keyof Limits>(k: K, v: number | undefined) => void (v !== undefined && (l[k] = v as Limits[K]));
   set("chatPerHour", posInt(env.AI_CHAT_PER_HOUR));
   set("importPerDay", posInt(env.AI_IMPORT_PER_DAY));
-  set("dailyNeurons", posInt(env.AI_DAILY_NEURONS));
+  set("dailyUsd", posNum(env.AI_DAILY_USD));
   set("maxPages", posInt(env.AI_MAX_PAGES));
   set("weeklyCredits", posInt(env.AI_WEEKLY_CREDITS));
   return l;
@@ -231,12 +230,9 @@ async function handleFetch(req: Request, env: Env, ctx: ExecutionContext): Promi
   if (pre) return pre;
   // The AI relay (docs/ai-harness-spec.md §2): authenticated, no D1 and no share-core involved.
   const ai = createAi({
-    ai: env.AI,
-    model: env.AI_MODEL ?? AI_DEFAULT_MODEL,
     allowedOrigins: origins(env),
     authenticate: (r) => a.authenticate(r),
     relayKey: env.AI_RELAY_KEY,
-    thinking: env.AI_THINKING === "1",
     openrouter: env.OPENROUTER_API_KEY?.trim()
       ? { key: env.OPENROUTER_API_KEY.trim(), model: env.OPENROUTER_MODEL?.trim() || OPENROUTER_DEFAULT_MODEL, privacy: env.OPENROUTER_PRIVACY !== "0" }
       : undefined,

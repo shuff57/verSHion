@@ -17,5 +17,5 @@ export function dataUriBytes(url: string): number | null {
 
 /** What one model turn gave back: the text, and what it cost. Never the provider's own body. */
 export type ModelOut =
-  | { ok: true; reply: Record<string, unknown>; text: string; inTokens: number; outTokens: number; neurons: number }
+  | { ok: true; reply: Record<string, unknown>; text: string; inTokens: number; outTokens: number; costUsd: number }
   | { ok: false; code: "failed" | "empty" };

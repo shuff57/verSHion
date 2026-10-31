@@ -39,14 +39,9 @@ bucket_name = "vershion-pool"
 [vars]
 ALLOWED_ORIGINS = "https://app.example.org"
 APP_URL = "https://app.example.org"
-# The one model the /ai/chat/completions relay calls (docs/ai-harness-spec.md). The client's
-# `model` field is ignored: only this model can be spent.
-AI_MODEL = "@cf/google/gemma-4-26b-a4b-it"
-
-# Workers AI for the app's relay. Inference is billed to this account; there is no per-request
-# key (BYOK does not exist for Workers AI).
-[ai]
-binding = "AI"
+# The AI relay's only upstream is OpenRouter (docs/ai-harness-spec.md): set the secret OPENROUTER_API_KEY and,
+# optionally, OPENROUTER_MODEL (default google/gemma-4-26b-a4b-it). The client's `model` field is ignored.
+# AI_DAILY_USD caps what the key may spend in a UTC day (default 5).
 
 # Secrets (wrangler secret put): AUTH_SECRET, POOL_HASH_KEY (32+ chars; without it the pool answers 503),
 # AI_RELAY_KEY (the desktop app's key to the AI relay), and SMTP_PASSWORD when mail goes through SMTP

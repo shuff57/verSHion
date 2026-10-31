@@ -5,6 +5,14 @@ Owner decisions: account `bd92…9055` (Shuff57), storage **D1 + R2**, figures *
 
 ---
 
+> **2026-10-30 update: OpenRouter is the only upstream.** Workers AI is retired. Read "Workers AI",
+> `env.AI`, `AI_MODEL` and "neurons" below as history. Today: secret `OPENROUTER_API_KEY`, optional
+> `OPENROUTER_MODEL` (default `google/gemma-4-26b-a4b-it`), `usage.cost` (dollars) recorded in
+> `ai_usage.cost_usd` with the session id, the account-wide guard `AI_DAILY_USD` (default 5) replacing
+> `AI_DAILY_NEURONS`, reasoning off, and `provider.data_collection: "deny"` unless `OPENROUTER_PRIVACY=0`.
+> `/ai/health` reports `upstream: "openrouter"`; a missing key is `503 ai_not_configured`. A failed or empty
+> call is retried once, then 502. Paid credits: `docs/billing.md`.
+
 ## 1. Shape, and why it is this shape
 
 ```

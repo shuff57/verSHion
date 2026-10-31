@@ -2,7 +2,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { AI_IMPORT_PATH, AI_PATH, createAi, type AiBinding, type AiDeps } from "../src/ai/index.ts";
+import { AI_IMPORT_PATH, AI_PATH, createAi, type AiDeps } from "../src/ai/index.ts";
+import { reply, viaRun, type Run } from "./ai-fake.ts";
 import { DITTO_PROMPT } from "../src/ai/prompt.ts";
 import { pagePrompt, pruneAi, STALE_MS } from "../src/ai/jobs.ts";
 import { DAY_MS, HOUR_MS, utcDayStart } from "../src/ai/store.ts";
@@ -11,26 +12,21 @@ import { d1, freshDb, MemR2 } from "./pool/harness.ts";
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 const T0 = Date.UTC(2026, 9, 30, 12, 0, 0);
 
-function world(o: Partial<AiDeps> & { neurons?: number; run?: AiBinding["run"] } = {}) {
+function world(o: Partial<AiDeps> & { cost?: number; run?: Run } = {}) {
   const db = freshDb();
   const bucket = new MemR2();
   const clock = { t: T0 };
   const calls: { inputs: Record<string, unknown> }[] = [];
-  const ai: AiBinding = {
-    run:
-      o.run ??
+  const openrouter = viaRun(
+    o.run ??
       (async (_m, inputs) => {
         calls.push({ inputs });
-        return {
-          choices: [{ message: { content: '{"format":"queshion/ditto"}' }, finish_reason: "stop" }],
-          usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120, neurons: o.neurons ?? 23 },
-        };
+        return reply('{"format":"queshion/ditto"}', o.cost ?? 0.002);
       }),
-  };
+  );
   const pending: Promise<unknown>[] = [];
   const relay = createAi({
-    ai,
-    model: "@cf/test/model",
+    openrouter,
     allowedOrigins: [],
     authenticate: async (r) => {
       const u = r.headers.get("x-user");
@@ -67,16 +63,16 @@ const page = { mime: "image/png", b64: PNG };
 
 // ---- quota -----------------------------------------------------------------------------------
 
-test("each answered chat turn is recorded with its tokens and neurons, and nothing else", async () => {
+test("each answered chat turn is recorded with its tokens and what OpenRouter billed, and nothing else", async () => {
   const w = world();
   assert.equal((await w.send(AI_PATH, { user: "u1", body: chat }))!.status, 200);
   const rows = w.db.prepare("SELECT * FROM ai_usage").all() as Record<string, unknown>[];
   assert.equal(rows.length, 1);
   assert.deepEqual(
-    { p: rows[0]!.principal, k: rows[0]!.kind, i: rows[0]!.in_tokens, o: rows[0]!.out_tokens, n: rows[0]!.neurons, at: rows[0]!.at },
-    { p: "u1", k: "chat", i: 100, o: 20, n: 23, at: T0 },
+    { p: rows[0]!.principal, k: rows[0]!.kind, i: rows[0]!.in_tokens, o: rows[0]!.out_tokens, usd: rows[0]!.cost_usd, n: rows[0]!.neurons, s: rows[0]!.session, at: rows[0]!.at },
+    { p: "u1", k: "chat", i: 100, o: 20, usd: 0.002, n: 0, s: null, at: T0 },
   );
-  assert.deepEqual(Object.keys(rows[0]!).sort(), ["at", "id", "in_tokens", "kind", "neurons", "out_tokens", "principal"]);
+  assert.deepEqual(Object.keys(rows[0]!).sort(), ["at", "cost_usd", "id", "in_tokens", "kind", "neurons", "out_tokens", "principal", "session"]);
 });
 
 test("a principal over the hourly turn cap gets 429 rate_limited, without a model call, and the hour rolls", async () => {
@@ -93,10 +89,10 @@ test("a principal over the hourly turn cap gets 429 rate_limited, without a mode
   assert.equal((await w.send(AI_PATH, { user: "u1", body: chat }))!.status, 200, "an hour later the window has moved");
 });
 
-test("the account's daily neuron cap is 429 quota_exhausted for everyone until UTC midnight", async () => {
-  const w = world({ neurons: 40, limits: { dailyNeurons: 50 } });
-  assert.equal((await w.send(AI_PATH, { user: "u1", body: chat }))!.status, 200); // 40
-  assert.equal((await w.send(AI_PATH, { user: "u2", body: chat }))!.status, 200); // 80, over the cap now
+test("the account's daily dollar cap is 429 quota_exhausted for everyone until UTC midnight", async () => {
+  const w = world({ cost: 0.4, limits: { dailyUsd: 0.5 } });
+  assert.equal((await w.send(AI_PATH, { user: "u1", body: chat }))!.status, 200); // $0.40
+  assert.equal((await w.send(AI_PATH, { user: "u2", body: chat }))!.status, 200); // $0.80, over the cap now
   const res = (await w.send(AI_PATH, { user: "u3", body: chat }))!;
   assert.equal(res.status, 429);
   assert.equal(((await res.json()) as any).error.code, "quota_exhausted");
@@ -143,7 +139,7 @@ test("a job runs its pages in order and returns each page's text", async () => {
   const content = (w.calls[0]!.inputs.messages as any[])[0].content;
   assert.equal(content[0].text, pagePrompt("Quiz 3"));
   assert.equal(content[1].image_url.url, `data:image/png;base64,${PNG}`);
-  assert.deepEqual(w.calls[0]!.inputs.chat_template_kwargs, { enable_thinking: false });
+  assert.deepEqual(w.calls[0]!.inputs.reasoning, { enabled: false });
   assert.equal((w.db.prepare("SELECT COUNT(*) AS n FROM ai_usage WHERE kind = 'import_page'").get() as any).n, 3);
 });
 
@@ -158,7 +154,7 @@ test("a failing page is reported on that page and the job still finishes with th
     run: async () => {
       n += 1;
       if (n === 2 || n === 3) throw new Error("secret provider text"); // page 2 fails both tries
-      return { choices: [{ message: { content: "{}" } }], usage: { neurons: 1 } };
+      return reply("{}", 0.0001);
     },
   });
   const orig = console.error;
@@ -226,8 +222,8 @@ test("a principal over the daily import cap gets 429 and no job is made", async 
   assert.equal((await start(w, { pages: [page] }, "u2")).res.status, 202);
 });
 
-test("when the daily neuron cap is reached mid-job, the remaining pages say quota_exhausted", async () => {
-  const w = world({ neurons: 30, limits: { dailyNeurons: 50 } });
+test("when the daily dollar cap is reached mid-job, the remaining pages say quota_exhausted", async () => {
+  const w = world({ cost: 0.3, limits: { dailyUsd: 0.5 } });
   const { id } = await start(w, { pages: [page, page, page] });
   await w.settle();
   const got = (await (await read(w, id)).json()) as any;
@@ -247,7 +243,7 @@ test("a job that stops moving is reported failed once it is stale", async () => 
 
 test("a result above 256 KB is kept in R2 and still returned whole", async () => {
   const big = "x".repeat(300 * 1024);
-  const w = world({ run: async () => ({ choices: [{ message: { content: big } }], usage: { neurons: 1 } }) });
+  const w = world({ run: async () => reply(big, 0.0001) });
   const { id } = await start(w, { pages: [page] });
   await w.settle();
   assert.deepEqual(w.bucket.keys("ai/jobs/"), [`ai/jobs/${id}/result.json`]);
@@ -258,7 +254,7 @@ test("a result above 256 KB is kept in R2 and still returned whole", async () =>
 });
 
 test("the hourly prune drops expired jobs, their R2 results, and usage past 90 days", async () => {
-  const w = world({ run: async () => ({ choices: [{ message: { content: "x".repeat(300 * 1024) } }], usage: { neurons: 1 } }) });
+  const w = world({ run: async () => reply("x".repeat(300 * 1024), 0.0001) });
   const { id } = await start(w, { pages: [page] });
   await w.settle();
   const db = d1(w.db);

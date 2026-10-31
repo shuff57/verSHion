@@ -36,11 +36,7 @@ MAIL_MODE = "log"
 APP_URL = "http://localhost:5173"
 ALLOWED_ORIGINS = "http://localhost:5173"
 ADMIN_EMAIL = "shuff57@gmail.com"
-AI_MODEL = "@cf/google/gemma-4-26b-a4b-it"
-
-# Workers AI for the /ai/chat/completions relay (docs/ai-harness-spec.md).
-[ai]
-binding = "AI"
+# The AI relay's only upstream is OpenRouter: secret OPENROUTER_API_KEY (docs/ai-harness-spec.md).
 
 [triggers]
 crons = ["17 * * * *"]

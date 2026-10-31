@@ -1,4 +1,4 @@
-// D1 side of the Workers AI relay: usage rows for the quota, and import job rows.
+// D1 side of the OpenRouter relay: usage rows for the quota, and import job rows.
 // Schema: migrations/0116_ai_jobs.sql and 0117_ai_usage.sql. Nothing here reads a request body.
 
 export const HOUR_MS = 3_600_000;
@@ -39,10 +39,13 @@ export interface Usage {
   kind: "chat" | "import_page";
   inTokens: number;
   outTokens: number;
-  neurons: number;
+  /** What OpenRouter billed for the call, in US dollars (its `usage.cost`). */
+  costUsd: number;
+  /** The credit session the call ran in, when it ran in one: links a cost to its service for pricing. */
+  session?: string | null;
 }
 
-/** Start of the UTC day containing `now`: the daily neuron cap resets here. */
+/** Start of the UTC day containing `now`: the daily spend cap resets here. */
 export const utcDayStart = (now: number): number => now - (now % DAY_MS);
 
 export function newJobId(): string {
@@ -58,8 +61,9 @@ export class AiStore {
 
   async record(principal: string, u: Usage, now: number): Promise<void> {
     await this.db
-      .prepare(`INSERT INTO ai_usage (id, principal, at, kind, in_tokens, out_tokens, neurons) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`)
-      .bind(newJobId(), principal, now, u.kind, Math.max(0, Math.floor(u.inTokens)), Math.max(0, Math.floor(u.outTokens)), Math.max(0, u.neurons))
+      // (`neurons` is the retired Workers AI unit: the column stays, always 0.)
+      .prepare(`INSERT INTO ai_usage (id, principal, at, kind, in_tokens, out_tokens, neurons, cost_usd, session) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, ?8)`)
+      .bind(newJobId(), principal, now, u.kind, Math.max(0, Math.floor(u.inTokens)), Math.max(0, Math.floor(u.outTokens)), Math.max(0, u.costUsd), u.session ?? null)
       .run();
   }
 
@@ -72,10 +76,22 @@ export class AiStore {
     return Number(r?.n ?? 0);
   }
 
-  /** Neurons the whole account spent since `since` (the binding is billed to one account). */
-  async neuronsSince(since: number): Promise<number> {
-    const r = await this.db.prepare(`SELECT COALESCE(SUM(neurons), 0) AS n FROM ai_usage WHERE at >= ?1`).bind(since).first<{ n: number }>();
+  /** US dollars OpenRouter billed since `since` (one key pays for every account). */
+  async costSince(since: number): Promise<number> {
+    const r = await this.db.prepare(`SELECT COALESCE(SUM(cost_usd), 0) AS n FROM ai_usage WHERE at >= ?1`).bind(since).first<{ n: number }>();
     return Number(r?.n ?? 0);
+  }
+
+  /** What each service has cost per session since `since`: the measurement that prices credits (docs/billing.md). */
+  async costByService(since: number): Promise<{ service: string; sessions: number; usd: number; avgUsd: number; calls: number }[]> {
+    const r = await this.db
+      .prepare(
+        `SELECT s.service AS service, COUNT(DISTINCT s.id) AS sessions, COALESCE(SUM(u.cost_usd), 0) AS usd, COUNT(u.id) AS calls
+           FROM ai_sessions s JOIN ai_usage u ON u.session = s.id WHERE u.at >= ?1 GROUP BY s.service ORDER BY s.service`,
+      )
+      .bind(since)
+      .all<{ service: string; sessions: number; usd: number; calls: number }>();
+    return (r.results ?? []).map((x) => ({ service: x.service, sessions: Number(x.sessions), usd: Number(x.usd), avgUsd: Number(x.sessions) ? Number(x.usd) / Number(x.sessions) : 0, calls: Number(x.calls) }));
   }
 
   async jobsSince(principal: string, since: number): Promise<number> {

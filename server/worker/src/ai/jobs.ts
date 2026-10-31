@@ -17,7 +17,8 @@ export interface JobLimits {
   maxPages: number;
   maxImageBytes: number;
   importPerDay: number;
-  dailyNeurons: number;
+  /** US dollars OpenRouter may bill the account in a UTC day. */
+  dailyUsd: number;
 }
 
 export interface JobDeps {
@@ -67,7 +68,7 @@ export async function startJob(d: JobDeps, body: Record<string, unknown>, princi
   const now = d.now();
   if ((await d.store.jobsSince(principal, now - DAY_MS)) >= d.limits.importPerDay)
     return err(429, "rate_limited", "Too many imports today. Try again tomorrow.", { "Retry-After": String(Math.ceil((utcDayStart(now) + DAY_MS - now) / 1000)) });
-  if ((await d.store.neuronsSince(utcDayStart(now))) >= d.limits.dailyNeurons)
+  if ((await d.store.costSince(utcDayStart(now))) >= d.limits.dailyUsd)
     return err(429, "quota_exhausted", "The AI allowance for today is used up.", { "Retry-After": String(Math.ceil((utcDayStart(now) + DAY_MS - now) / 1000)) });
   const id = newJobId();
   await d.store.createJob(id, principal, v.images.length, v.hint, now);
@@ -82,14 +83,14 @@ async function runJob(d: JobDeps, id: string, principal: string, hint: string, i
     const prompt = pagePrompt(hint);
     await d.store.progress(id, "running", 0, null, null, d.now());
     for (const [i, url] of images.entries()) {
-      if ((await d.store.neuronsSince(utcDayStart(d.now()))) >= d.limits.dailyNeurons) {
+      if ((await d.store.costSince(utcDayStart(d.now()))) >= d.limits.dailyUsd) {
         out.push({ page: i + 1, error: "quota_exhausted" });
       } else {
         const r = await d.model([{ role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url } }] }]);
         if (r.ok) {
           ok += 1;
           out.push({ page: i + 1, text: r.text });
-          await d.store.record(principal, { kind: "import_page", inTokens: r.inTokens, outTokens: r.outTokens, neurons: r.neurons }, d.now());
+          await d.store.record(principal, { kind: "import_page", inTokens: r.inTokens, outTokens: r.outTokens, costUsd: r.costUsd }, d.now());
         } else {
           out.push({ page: i + 1, error: "model_failed" });
         }

@@ -33,8 +33,9 @@ in `credits.html` and the API origin in `server/web/_headers`, and add the page'
   whole-dollar amount from $5 to $200 at the base rate. At those prices a handwriting page is 4 cents and a test
   import 8 cents. The model cost is a fraction of that (Gemma 4 26B is about $0.07 per million input tokens and
   $0.34 per million output tokens on OpenRouter, roughly a tenth of a cent per quiz page), so the margin is large
-  even after Stripe's 2.9% + 30 cents. Those costs are estimates: check them on real tests (link `ai_usage` rows
-  to their session first) before launch. The free weekly allowance stays at 40 credits, about $1.60 of value.
+  even after Stripe's 2.9% + 30 cents. Those costs are estimates: check them on real tests before launch:
+  every chat turn's `usage.cost` is now stored in `ai_usage.cost_usd` with its session, and
+  `AiStore.costByService(since)` reports sessions, calls, total and average dollars per service. The free weekly allowance stays at 40 credits, about $1.60 of value.
 - Limits: 10 payments started per account per hour; the body reader requires Content-Length and caps sizes.
 - Terms and refund wording (`server/web/legal`), and a stored-value check with counsel.
 - Deleting an account erases its `credit_ledger`, `ai_sessions` and `ai_usage` rows (in the pool's erasure batch
