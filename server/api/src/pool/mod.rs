@@ -9,6 +9,7 @@ pub mod chain;
 pub mod ctx;
 pub mod evidence;
 pub mod fingerprint;
+pub mod fuzzy;
 pub mod hit;
 pub mod image;
 pub mod jsonscan;
