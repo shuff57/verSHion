@@ -667,6 +667,24 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn the_hourly_prune_drops_expired_jobs_and_their_blob_results_and_keeps_usage_for_90_days() {
+        let w = world(vec![text(&"x".repeat(300 * 1024))], |_| {});
+        let id = w.start(json!({ "pages": [page()] }), KEY).await.1["job_id"].as_str().unwrap().to_string();
+        w.settle().await;
+        let ttl = 72 * 3_600_000;
+        let key = format!("ai/jobs/{id}/result.json");
+        w.clock.store((w.st.clock)() + 71 * 3_600_000, std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(super::super::cron::prune(&w.st, ttl), 0, "inside the ttl nothing goes");
+        w.clock.store((w.st.clock)() + 2 * 3_600_000, std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(super::super::cron::prune(&w.st, ttl), 1);
+        assert_eq!(w.job(&id, KEY).await.0, 404);
+        assert!(w.st.blobs.as_ref().unwrap().get(&key).unwrap().is_none(), "the blob result goes with the job");
+        assert_eq!(w.st.store(|s| s.chat_turns_since("relay", 0).unwrap() + s.cost_since(0).unwrap() as i64), 0);
+        let n: i64 = w.st.conn.lock().unwrap().query_row("SELECT COUNT(*) FROM ai_usage", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1, "usage is kept for 90 days");
+    }
+
+    #[tokio::test]
     async fn signed_in_accounts_cannot_use_the_unpriced_job_and_the_routes_have_their_methods() {
         let w = world(vec![], |_| {});
         let (s, b, _) = w.start(json!({ "pages": [page()] }), &[("x-user", "u1")]).await;

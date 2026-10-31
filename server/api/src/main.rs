@@ -1,21 +1,16 @@
-//! vershion-api: the pool, AI relay and billing server (docs/hosting-port.md, phase 0).
+//! vershion-api: the pool, AI relay and billing server (docs/hosting-port.md).
 //!
-//! Configuration is environment variables only; secrets are never read from argv or logged.
-//!   VERSHION_DB       path of the SQLite file            (default ./data/pool.db)
-//!   VERSHION_BLOBS    directory for pool bodies and jobs (default ./data/blobs)
-//!   VERSHION_MIGRATIONS  directory of NNNN_*.sql files   (default ./migrations)
-//!   VERSHION_LISTEN   address to bind                    (default 127.0.0.1:8787; Caddy fronts it)
+//! Configuration is environment variables only (see `config.rs`); secrets are never read from argv or logged.
 mod ai;
 mod blobs;
+mod config;
 mod db;
 
+use ai::routes::{AiState, NoAuth, system_clock, tokio_spawn};
+use ai::upstream::HttpTransport;
 use axum::{Json, Router, routing::get};
 use serde_json::{Value, json};
-use std::path::PathBuf;
-
-fn env_or(name: &str, default: &str) -> String {
-    std::env::var(name).ok().filter(|v| !v.trim().is_empty()).unwrap_or_else(|| default.to_string())
-}
+use std::sync::{Arc, Mutex};
 
 /// `share-core`'s own health value, so a running server proves the shared crate is linked and sane.
 async fn health() -> Json<Value> {
@@ -26,22 +21,54 @@ pub fn router() -> Router {
     Router::new().route("/health", get(health))
 }
 
+/// Everything the server serves so far: its own health check and the AI relay.
+fn app(state: Arc<AiState<HttpTransport>>) -> Router {
+    router().merge(ai::routes::router(state))
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
-    let db_path = PathBuf::from(env_or("VERSHION_DB", "./data/pool.db"));
-    if let Some(dir) = db_path.parent() {
+    let cfg = config::Config::from_env();
+    if let Some(dir) = cfg.db.parent() {
         std::fs::create_dir_all(dir).expect("create the database directory");
     }
-    let mut conn = db::open(&db_path).expect("open the database");
-    let applied = db::migrate(&mut conn, &PathBuf::from(env_or("VERSHION_MIGRATIONS", "./migrations"))).expect("migrate");
+    let mut conn = db::open(&cfg.db).expect("open the database");
+    let applied = db::migrate(&mut conn, &cfg.migrations).expect("migrate");
     tracing::info!(applied = applied.len(), "migrations");
-    let _blobs = blobs::BlobStore::new(env_or("VERSHION_BLOBS", "./data/blobs")).expect("open the blob directory");
+    if cfg.openrouter.is_none() {
+        tracing::warn!("OPENROUTER_API_KEY is not set: the AI relay answers 503 ai_not_configured");
+    }
+    let job_ttl_ms = cfg.job_ttl_ms;
+    let state = Arc::new(AiState {
+        conn: Mutex::new(conn),
+        limits: cfg.limits,
+        openrouter: cfg.openrouter,
+        transport: HttpTransport::new(),
+        // Pool sessions arrive with the auth port (phase 3): until then only the relay key and the native app can call.
+        auth: Box::new(NoAuth),
+        relay_key: cfg.relay_key,
+        allowed_origins: cfg.allowed_origins,
+        credits: true,
+        clock: system_clock(),
+        blobs: Some(blobs::BlobStore::new(&cfg.blobs).expect("open the blob directory")),
+        spawn: tokio_spawn(),
+    });
 
-    let addr = env_or("VERSHION_LISTEN", "127.0.0.1:8787");
-    let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");
-    tracing::info!(%addr, "listening");
-    axum::serve(listener, router())
+    // The Worker's hourly cron, AI stage: expired jobs and old usage rows.
+    let hourly = state.clone();
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(3600));
+        loop {
+            tick.tick().await;
+            let dropped = ai::cron::prune(&hourly, job_ttl_ms);
+            tracing::info!(dropped, "hourly prune");
+        }
+    });
+
+    let listener = tokio::net::TcpListener::bind(&cfg.listen).await.expect("bind");
+    tracing::info!(addr = %cfg.listen, "listening");
+    axum::serve(listener, app(state))
         .with_graceful_shutdown(async {
             let _ = tokio::signal::ctrl_c().await;
         })
@@ -69,5 +96,41 @@ mod tests {
     async fn unknown_paths_are_404() {
         let res = router().oneshot(Request::get("/nope").body(Body::empty()).unwrap()).await.unwrap();
         assert_eq!(res.status(), 404);
+    }
+
+    /// The whole server as main builds it, over a real migrated file: health and the AI health answer, and
+    /// a keyless relay without an OpenRouter key says so.
+    #[tokio::test]
+    async fn the_assembled_app_serves_health_and_the_ai_routes() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = config::Config::from_lookup(|k| match k {
+            "VERSHION_DB" => Some(dir.path().join("pool.db").to_string_lossy().into()),
+            "VERSHION_BLOBS" => Some(dir.path().join("blobs").to_string_lossy().into()),
+            "VERSHION_MIGRATIONS" => Some(concat!(env!("CARGO_MANIFEST_DIR"), "/../worker/migrations").into()),
+            _ => None,
+        });
+        let mut conn = db::open(&cfg.db).unwrap();
+        assert!(db::migrate(&mut conn, &cfg.migrations).unwrap().len() >= 26);
+        let state = Arc::new(AiState {
+            conn: Mutex::new(conn),
+            limits: cfg.limits,
+            openrouter: cfg.openrouter,
+            transport: HttpTransport::new(),
+            auth: Box::new(NoAuth),
+            relay_key: cfg.relay_key,
+            allowed_origins: cfg.allowed_origins,
+            credits: true,
+            clock: system_clock(),
+            blobs: Some(blobs::BlobStore::new(&cfg.blobs).unwrap()),
+            spawn: tokio_spawn(),
+        });
+        let get = |p: &str| Request::get(p).body(Body::empty()).unwrap();
+        let ai_health = app(state.clone()).oneshot(get("/ai/health")).await.unwrap();
+        let body: Value = serde_json::from_slice(&ai_health.into_body().collect().await.unwrap().to_bytes()).unwrap();
+        assert_eq!(body, json!({ "ok": true, "model": null, "ai": false, "upstream": "openrouter" }));
+        assert_eq!(app(state.clone()).oneshot(get("/health")).await.unwrap().status(), 200);
+        let credits = app(state).oneshot(get("/ai/credits")).await.unwrap();
+        let body: Value = serde_json::from_slice(&credits.into_body().collect().await.unwrap().to_bytes()).unwrap();
+        assert_eq!(body["unlimited"], true, "the keyless native app is not on credits");
     }
 }
