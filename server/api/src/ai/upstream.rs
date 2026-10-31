@@ -45,6 +45,64 @@ pub trait Transport {
     fn post(&self, p: Post<'_>) -> impl std::future::Future<Output = Result<Answer, String>> + Send;
 }
 
+/// The real network: a shared `reqwest` client (rustls). Errors are reduced to a class name here, so nothing
+/// that could hold the key or the prompt travels any further. A non-2xx answer is not read at all.
+pub struct HttpTransport {
+    client: reqwest::Client,
+}
+
+/// A reply bigger than this is refused: the relay only ever expects a completion.
+const MAX_REPLY_BYTES: u64 = 16 * 1024 * 1024;
+
+impl HttpTransport {
+    pub fn new() -> Self {
+        Self { client: reqwest::Client::builder().user_agent("vershion-api").build().expect("build the http client") }
+    }
+}
+
+impl Default for HttpTransport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn class(e: &reqwest::Error) -> String {
+    if e.is_timeout() {
+        "Timeout"
+    } else if e.is_connect() {
+        "Connect"
+    } else if e.is_decode() || e.is_body() {
+        "Decode"
+    } else {
+        "Request"
+    }
+    .to_string()
+}
+
+impl Transport for HttpTransport {
+    async fn post(&self, p: Post<'_>) -> Result<Answer, String> {
+        let res = self
+            .client
+            .post(p.url)
+            .bearer_auth(p.key)
+            .header("X-Title", "verSHion")
+            .json(p.body)
+            .timeout(p.timeout)
+            .send()
+            .await
+            .map_err(|e| class(&e))?;
+        let status = res.status().as_u16();
+        if !res.status().is_success() {
+            return Ok(Answer { status, body: Value::Null });
+        }
+        if res.content_length().is_some_and(|n| n > MAX_REPLY_BYTES) {
+            return Err("TooLarge".into());
+        }
+        let body = res.json::<Value>().await.map_err(|e| class(&e))?;
+        Ok(Answer { status, body })
+    }
+}
+
 /// What one model turn gave back: the text and what it cost. Never the provider's own body.
 #[derive(Debug, PartialEq)]
 pub enum ModelOut {
@@ -262,5 +320,68 @@ mod tests {
         assert_eq!((r.cost_usd, r.in_tokens, r.reply["choices"][0]["finish_reason"].as_str()), (0.0, 0.0, Some("length")));
         let r = shape_reply(&json!({ "choices": [{ "message": { "content": "x" } }] })).unwrap();
         assert_eq!(r.reply["choices"][0]["finish_reason"], "stop");
+    }
+
+    mod http {
+        use super::*;
+        use axum::{Router, extract::State, http::HeaderMap, response::IntoResponse, routing::post};
+        use std::sync::Arc;
+
+        type Seen = Arc<Mutex<Vec<(String, String, String, Value)>>>; // (authorization, content-type, x-title, body)
+
+        async fn serve() -> (String, Seen) {
+            let seen: Seen = Arc::default();
+            async fn ok(State(s): State<Seen>, h: HeaderMap, axum::Json(b): axum::Json<Value>) -> axum::Json<Value> {
+                let g = |n: &str| h.get(n).and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+                s.lock().unwrap().push((g("authorization"), g("content-type"), g("x-title"), b));
+                axum::Json(json!({ "choices": [{ "message": { "content": "hi" } }] }))
+            }
+            async fn busy() -> impl IntoResponse {
+                (axum::http::StatusCode::SERVICE_UNAVAILABLE, "trouble with or-secret-key")
+            }
+            async fn garbled() -> &'static str {
+                "this is not json"
+            }
+            async fn slow() -> &'static str {
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                "{}"
+            }
+            let app = Router::new().route("/ok", post(ok)).route("/busy", post(busy)).route("/garbled", post(garbled)).route("/slow", post(slow)).with_state(seen.clone());
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let base = format!("http://{}", listener.local_addr().unwrap());
+            tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+            (base, seen)
+        }
+
+        async fn go(base: &str, path: &str, ms: u64) -> Result<Answer, String> {
+            let url = format!("{base}{path}");
+            HttpTransport::new().post(Post { url: &url, key: "or-secret-key", body: &json!({ "model": "m" }), timeout: Duration::from_millis(ms) }).await
+        }
+
+        #[tokio::test]
+        async fn a_post_carries_the_key_in_the_header_and_the_body_as_json() {
+            let (base, seen) = serve().await;
+            let a = go(&base, "/ok", 2000).await.unwrap();
+            assert_eq!((a.status, a.body["choices"][0]["message"]["content"].as_str()), (200, Some("hi")));
+            let s = seen.lock().unwrap();
+            assert_eq!(s[0].0, "Bearer or-secret-key");
+            assert!(s[0].1.starts_with("application/json"));
+            assert_eq!((s[0].2.as_str(), &s[0].3), ("verSHion", &json!({ "model": "m" })));
+        }
+
+        #[tokio::test]
+        async fn an_error_status_is_returned_without_reading_its_body() {
+            let (base, _) = serve().await;
+            let a = go(&base, "/busy", 2000).await.unwrap();
+            assert_eq!((a.status, a.body), (503, Value::Null), "the upstream text never travels on");
+        }
+
+        #[tokio::test]
+        async fn failures_are_reduced_to_a_class_that_never_holds_the_key() {
+            let (base, _) = serve().await;
+            assert_eq!(go(&base, "/slow", 100).await.err().as_deref(), Some("Timeout"));
+            assert_eq!(go(&base, "/garbled", 2000).await.err().as_deref(), Some("Decode"));
+            assert_eq!(go("http://127.0.0.1:1", "/ok", 2000).await.err().as_deref(), Some("Connect"));
+        }
     }
 }
