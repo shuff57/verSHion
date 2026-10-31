@@ -238,8 +238,8 @@ ray-diagram__defaults f86aa3b5ace0056a
 ray-diagram__start f86aa3b5ace0056a
 rc-curve__defaults 9be7c6f399899d0e
 rc-curve__start 9be7c6f399899d0e
-reaction-energy-diagram__defaults aee7e32d2bacca24
-reaction-energy-diagram__start aee7e32d2bacca24
+reaction-energy-diagram__defaults ddda473929152aaf
+reaction-energy-diagram__start ddda473929152aaf
 rectangle__defaults 67e1b7b306d8ab1f
 rectangle__start b7f912406a806fa2
 recursion-tree__defaults 0765bddcddf2ea4e

@@ -3639,7 +3639,7 @@ const ENERGY_BAR_CHART: &[Faq] = &[
 const REACTION_ENERGY_DIAGRAM: &[Faq] = &[
     Faq {
         q: "What do the arrows measure?",
-        a: "Ea, the activation energy, runs from the reactants' level up to the peak: the energy the reactants must gain to reach the activated complex (transition state). \u{394}H runs from the reactants' level to the products' level. Ea (reverse) runs from the products up to the same peak, so it equals Ea \u{2212} \u{394}H.",
+        a: "Ea, the activation energy, runs from the reactants' level up to the peak: the energy the reactants must gain to reach the activated complex (transition state). \u{394}H runs from the reactants' level to the products' level. Ea (reverse) runs from the products up to the same peak, so it equals Ea \u{2212} \u{394}H (except in a two-step reaction whose intermediate lies below the reactants or the products: see the two-step answer). In Print, where every arrow is grey, Ea is solid, Ea (reverse) dashed, \u{394}H solid and heavier, and Ea (catalysed) dotted and lighter.",
     },
     Faq {
         q: "How do I tell exothermic from endothermic?",
@@ -3647,11 +3647,11 @@ const REACTION_ENERGY_DIAGRAM: &[Faq] = &[
     },
     Faq {
         q: "What does the catalyst change?",
-        a: "A catalyst provides an alternative pathway with a lower activation energy, drawn as the dashed curve with the lower peak. It does not change the energy of the reactants or of the products, so \u{394}H is the same with and without it, and it lowers the forward and reverse Ea by the same amount.",
+        a: "A catalyst provides an alternative pathway with a lower activation energy, drawn as the dashed curve with the lower peak. It does not change the energy of the reactants or of the products, so \u{394}H is the same with and without it, and it lowers the forward and reverse Ea by the same amount (unless a two-step reaction's intermediate lies below the reactants or the products: then each overall Ea is measured from the intermediate, as below, and the two are lowered by different amounts). The catalysed pathway is drawn as one hump even for a two-step reaction, and the legend says so: it shows where the lower peak lies, not how many steps the catalysed mechanism has, and its Ea is compared with the overall Ea of the uncatalysed reaction.",
     },
     Faq {
         q: "How is a two-step reaction drawn?",
-        a: "With two peaks, one transition state for each step, and a valley between them for the intermediate. Each step's Ea is measured from the level just before it: step 1 from the reactants, step 2 from the intermediate. The overall Ea runs from the reactants to the highest peak.",
+        a: "With two peaks, one transition state for each step, and a valley between them for the intermediate. Each step's Ea is measured from the level just before it: step 1 from the reactants, step 2 from the intermediate. The overall Ea runs from the reactants to the highest peak, and Ea (reverse) from the products to the same peak. When the intermediate lies below the reactants, the reaction first drops into it and must then climb out, so the overall Ea is the largest climb on the way: from the intermediate up to the second peak if that is more than the climb from the reactants to the first. In the same way, when the intermediate lies below the products, Ea (reverse) is the larger of the climb from the products to the second peak and from the intermediate to the first, and the Ea (reverse) arrow is drawn on that climb. The key then says which climb it is and why, so the overall Ea is never smaller than the Ea of either step.",
     },
     Faq {
         q: "What does the student copy leave out?",
