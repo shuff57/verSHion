@@ -49,6 +49,15 @@ impl BlobStore {
         }
     }
 
+    /// The size of a stored blob, or None if there is none (R2's `head`).
+    pub fn len(&self, key: &str) -> std::io::Result<Option<u64>> {
+        match std::fs::metadata(self.path(key)?) {
+            Ok(m) => Ok(Some(m.len())),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
     /// Deleting a missing key is not an error (R2 behaves the same).
     pub fn delete(&self, key: &str) -> std::io::Result<()> {
         match std::fs::remove_file(self.path(key)?) {
@@ -73,6 +82,15 @@ mod tests {
         s.delete("ai/jobs/abc/result.json").unwrap();
         s.delete("ai/jobs/abc/result.json").unwrap();
         assert_eq!(s.get("ai/jobs/abc/result.json").unwrap(), None);
+    }
+
+    #[test]
+    fn len_is_the_size_or_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = BlobStore::new(dir.path()).unwrap();
+        assert_eq!(s.len("a/b").unwrap(), None);
+        s.put("a/b", b"12345").unwrap();
+        assert_eq!(s.len("a/b").unwrap(), Some(5));
     }
 
     #[test]
