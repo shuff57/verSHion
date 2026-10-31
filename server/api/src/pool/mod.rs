@@ -22,6 +22,7 @@ pub mod preread;
 pub mod qhash;
 pub mod qjson;
 pub mod readslots;
+pub mod republish;
 pub mod recordserved;
 pub mod served;
 pub mod sqlfrag;
