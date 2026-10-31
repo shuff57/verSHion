@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS credit_ledger (
   kind      TEXT NOT NULL CHECK (kind IN ('purchase','spend','refund','reversal','grant')),
   ref       TEXT NOT NULL,
   at        INTEGER NOT NULL,
+  -- What a purchase cost in US cents (purchase rows only): refunds and disputes take back credits pro rata.
+  cents     INTEGER,
   UNIQUE (kind, ref)
 );
 CREATE INDEX IF NOT EXISTS credit_ledger_principal ON credit_ledger (principal);

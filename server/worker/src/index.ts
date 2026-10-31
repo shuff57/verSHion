@@ -16,6 +16,7 @@ import { adminAlert, makeMailer, queueReminder, type MailEnv } from "./mail.js";
 import { flushNoticeBacklog, noticeNewApplication } from "./notices.js";
 import { AI_DEFAULT_MODEL, OPENROUTER_DEFAULT_MODEL, createAi, type AiBinding, type Limits } from "./ai/index.ts";
 import { pruneAi } from "./ai/jobs.ts";
+import { createBilling } from "./billing/index.ts";
 
 export interface Env extends MailEnv {
   DB: D1Database;
@@ -63,6 +64,12 @@ export interface Env extends MailEnv {
   AI_DAILY_NEURONS?: string;
   AI_MAX_PAGES?: string;
   AI_JOB_TTL_HOURS?: string;
+  /** "1" turns buying credits on (/billing/packs and /billing/intent answer 404 otherwise). The webhook works whenever its secret is set. */
+  BILLING_ENABLED?: string;
+  /** `wrangler secret put STRIPE_SECRET_KEY` (sk_test_... until launch) and `STRIPE_WEBHOOK_SECRET` (whsec_... of this Worker's own endpoint). */
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
+  STRIPE_PUBLISHABLE_KEY?: string;
 }
 
 /** The derived full-hash key, per secret value (one HKDF per isolate). */
@@ -201,6 +208,18 @@ function aiLimits(env: Env): Partial<Limits> {
 async function handleFetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const hashKey = await poolHashKey(env);
   const { a, pool } = build(env, ctx, hashKey);
+  // Billing reads its own small bodies: Stripe's signature needs the raw webhook body, untouched.
+  if (new URL(req.url).pathname.startsWith("/billing/")) {
+    const billed = await createBilling({
+      enabled: env.BILLING_ENABLED === "1",
+      stripeKey: env.STRIPE_SECRET_KEY?.trim() || undefined,
+      webhookSecret: env.STRIPE_WEBHOOK_SECRET?.trim() || undefined,
+      publishableKey: env.STRIPE_PUBLISHABLE_KEY?.trim() || undefined,
+      db: env.DB,
+      authenticate: (r) => a.authenticate(r),
+    }).handle(req);
+    if (billed) return a.withCors(req, billed);
+  }
   // EVERY body the auth package reads goes through the pool's one body reader first (round 8 I4/I5).
   const body = await preReadBody(req, (r) => a.authenticate(r), ipBucket);
   if (body instanceof Response) return a.withCors(req, body);

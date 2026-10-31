@@ -118,12 +118,30 @@ export class AiStore {
   }
 
   /** Adds a ledger row once; false when (kind, ref) is already there (a replayed Stripe event). */
-  async ledger(principal: string, delta: number, kind: "purchase" | "reversal" | "grant", ref: string, now: number): Promise<boolean> {
+  async ledger(principal: string, delta: number, kind: "purchase" | "reversal" | "grant", ref: string, now: number, cents: number | null = null): Promise<boolean> {
     const r = await this.db
-      .prepare(`INSERT OR IGNORE INTO credit_ledger (id, principal, delta, kind, ref, at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)`)
-      .bind(crypto.randomUUID().replace(/-/g, ""), principal, delta, kind, ref, now)
+      .prepare(`INSERT OR IGNORE INTO credit_ledger (id, principal, delta, kind, ref, at, cents) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`)
+      .bind(crypto.randomUUID().replace(/-/g, ""), principal, delta, kind, ref, now, cents)
       .run();
     return (r.meta?.changes ?? 0) === 1;
+  }
+
+  /** The purchase a payment id credited (who, how many credits, what it cost), or null if it is not one of ours. */
+  async purchase(ref: string): Promise<{ principal: string; credits: number; cents: number } | null> {
+    const r = await this.db
+      .prepare(`SELECT principal, delta, cents FROM credit_ledger WHERE kind = 'purchase' AND ref = ?1`)
+      .bind(ref)
+      .first<{ principal: string; delta: number; cents: number | null }>();
+    return r && r.cents ? { principal: r.principal, credits: Number(r.delta), cents: Number(r.cents) } : null;
+  }
+
+  /** Credits already taken back for a payment (reversal refs start with `<payment id>#`). */
+  async reversedFor(prefix: string): Promise<number> {
+    const r = await this.db
+      .prepare(`SELECT COALESCE(-SUM(delta), 0) AS n FROM credit_ledger WHERE kind = 'reversal' AND substr(ref, 1, ?2) = ?1`)
+      .bind(prefix, prefix.length)
+      .first<{ n: number }>();
+    return Number(r?.n ?? 0);
   }
 
   /** Gives back the purchased part of sessions that expired without an answered call. Idempotent per session. */
