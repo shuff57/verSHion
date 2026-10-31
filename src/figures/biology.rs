@@ -7,6 +7,7 @@ use super::*;
 mod handles;
 pub mod actionpotential;
 pub mod chisquarefit;
+pub mod cellcycle;
 pub mod cladogram;
 pub mod energypyramid;
 pub mod enzyme;
@@ -37,6 +38,7 @@ pub fn examples(id: &str) -> Option<Vec<super::Example>> {
         "food-web" => foodweb::examples(id),
         "energy-pyramid" => energypyramid::examples(id),
         "action-potential" => actionpotential::examples(id),
+        "cell-cycle" => cellcycle::examples(id),
         _ => None,
     }
 }
@@ -137,6 +139,7 @@ pub fn defs() -> Vec<FigureDef> {
         foodweb::defs().pop().unwrap(),
         energypyramid::defs().pop().unwrap(),
         actionpotential::defs().pop().unwrap(),
+        cellcycle::defs().pop().unwrap(),
     ]
 }
 

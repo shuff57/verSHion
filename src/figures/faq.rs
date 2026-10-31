@@ -36,6 +36,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "food-web" => FOOD_WEB,
         "energy-pyramid" => ENERGY_PYRAMID,
         "action-potential" => ACTION_POTENTIAL,
+        "cell-cycle" => CELL_CYCLE,
         // chemistry
         "bohr-model" => BOHR_MODEL,
         "gas-syringe" => GAS_SYRINGE,
@@ -668,6 +669,33 @@ const ENERGY_PYRAMID: &[Faq] = &[
     Faq {
         q: "Why is a value beside its bar and not inside?",
         a: "A bar too narrow to hold its own number gets the number beside it on a short leader line, so a small top level is never clipped. A bar thinner than 6 px is drawn solid black with a small cap at each end so it cannot be mistaken for a line; its width is still to scale, except that one under 1.5 px is drawn 1.5 px wide (the caption says when that happens) so it survives a grey print copy. The arrows run in a column beside the pyramid for the same reason.",
+    },
+];
+
+const CELL_CYCLE: &[Faq] = &[
+    Faq {
+        q: "How do I type the lengths?",
+        a: "Hours for G1, S, G2 and M (M is mitosis and cytokinesis together), to the thousandth: 11, 11 h or 5,5 all work, up to 1000 hours each. A zero, a negative number, a figure with more than three decimals or a word is refused with the digits you typed. Each phase must be at least 0.1 % of the whole cycle; a shorter one is refused, and the message gives the length that draws.",
+    },
+    Faq {
+        q: "How is the share of the cycle worked out, and why does it always add to 100.0?",
+        a: "Each phase's hours divided by the total, as a percent rounded half up to 0.1. If the four rounded values do not add to exactly 100.0, one tenth is added to the phase that was rounded down furthest (or taken from the phase that was rounded up furthest); the earlier phase wins a tie. The caption names the phase it changed, and only when a change was needed. The shares are answers: a student copy has blanks.",
+    },
+    Faq {
+        q: "Why is the M wedge a bit wider than its share?",
+        a: "A wedge narrower than 5 degrees would not survive a photocopy, so it is drawn 5 degrees wide and the others are scaled slightly to make up the circle. The caption says so only when it happens, and the labels and percents always use the true hours. Wedge sizes: Equal draws four equal wedges and says they are not to scale.",
+    },
+    Faq {
+        q: "What do the checkpoints and the G0 branch show?",
+        a: "The G1/S and G2/M checkpoints are ticks across the ring at the end of G1 and of G2. The spindle (metaphase to anaphase) checkpoint sits between metaphase and anaphase on the strip of the stages of M, so it needs Show the stages of M. G0 is a box off G1 for cells that leave the cycle; it needs a G1 wedge at least 20 degrees wide, otherwise the figure says so and tells you what to change.",
+    },
+    Faq {
+        q: "What does the marker read out?",
+        a: "The triangle in the hole stands on the stage you choose (a stage of M marks the M wedge and the box on the strip). DNA amount is per cell in C, where a G1 cell is 2C: 2C in G1, 2C to 4C across S, 4C through G2, prophase, metaphase, anaphase and telophase, and 4C to 2C as cytokinesis makes the daughters. Chromosome number uses the 2n you type and counts the whole cell: 2n up to metaphase, twice that from anaphase when the sister chromatids separate, and back to 2n in each daughter. 2n must be even, 2 to 1000.",
+    },
+    Faq {
+        q: "What does a student copy hide?",
+        a: "With Show answers off the names, the shares, the total and the readout are blank: wedges, checkpoints, the stages of M and G0 keep numbered discs, and a table under the figure has a rule for each name (and the share). The key (Show answers on) prints them. The hours you typed stay on the figure because they are the givens. The layout is the same in both copies.",
     },
 ];
 

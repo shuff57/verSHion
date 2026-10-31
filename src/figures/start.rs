@@ -11,6 +11,8 @@ use super::Value;
 pub fn overrides(id: &str) -> Vec<(&'static str, Value)> {
     let st = |v: &str| Value::S(v.to_string());
     match id {
+        // the cell cycle opens with the marker on S and the DNA readout, so the first picture shows the 2C to 4C step
+        "cell-cycle" => vec![("pointer", st("S")), ("readout", st("DNA amount"))],
         // Math polygons open unfilled (black outline on white), angles unshaded.
         "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "regular-polygon" => vec![("fill", st("#ffffff"))],
         // the reference names the kite counter-clockwise (A right, B top, C left): our mirror
