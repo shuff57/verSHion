@@ -58,7 +58,7 @@ pub fn defs() -> Vec<FigureDef> {
         title: "Phase Diagram",
         blurb: "Pressure against temperature for one substance: solid, liquid and gas regions, the three phase boundaries, the triple and critical points, the phase at a point, and the changes along a line of constant pressure.",
         params,
-        render: |p| build(p).0,
+        render: render,
     }]
 }
 
@@ -141,7 +141,7 @@ pub struct Cross { pub curve: Curve, pub t: f64, pub p: f64, pub from: Phase, pu
 fn eq(a: f64, b: f64) -> bool { (a - b).abs() <= 2e-6 * a.abs().max(b.abs()) }
 
 #[derive(Clone, Copy, Debug)]
-enum Vap { Cc { b: f64 }, An { a: f64, b: f64, c: f64 } }
+enum Vap { Cc { b: f64 }, An { a: f64, b: f64, c: f64 }, Wp { d: [f64; 3] } }
 
 /// ln P = A - B/(T + C) through (t1, p1), (t2, 1 atm) and (t3, p3), with the three constants solved in closed form.
 fn antoine(t1: f64, p1: f64, t2: f64, t3: f64, p3: f64) -> Option<Vap> {
@@ -155,6 +155,20 @@ fn antoine(t1: f64, p1: f64, t2: f64, t3: f64, p3: f64) -> Option<Vap> {
     let b = -l1 * (t1 + c) * (t2 + c) / (t2 - t1);
     if !(b > 0.0 && b.is_finite()) { return None; }
     Some(Vap::An { a: l1 + b / (t1 + c), b, c })
+}
+
+/// ln of the saturation pressure of water in atm at T (the IAPWS-95 / Wagner-Pruss equation, valid to 647.096 K).
+fn wp_ln(t: f64) -> f64 {
+    const A: [(f64, f64); 6] = [(-7.859_517_83, 1.0), (1.844_082_59, 1.5), (-11.786_649_7, 3.0), (22.680_741_1, 3.5), (-15.961_871_9, 4.0), (1.801_225_02, 7.5)];
+    let th = (1.0 - t / 647.096).max(0.0);
+    let s: f64 = A.iter().map(|&(a, e)| a * th.powf(e)).sum();
+    (22.064f64 / 0.101_325).ln() + 647.096 / t * s
+}
+
+/// The steam-table curve nudged by at most 0.3% to pass through the stated triple point, normal boiling point and
+/// critical point exactly: the nudge is straight lines in ln P between the three.
+fn wp_corr(d: &[f64; 3], t: f64, tt: f64, tb: f64, tc: f64) -> f64 {
+    if t <= tb { d[0] + (d[1] - d[0]) * ((t - tt) / (tb - tt)).clamp(0.0, 1.0) } else { d[1] + (d[2] - d[1]) * ((t - tb) / (tc - tb)).clamp(0.0, 1.0) }
 }
 
 /// How the melting curve is drawn and computed. The two real substances use their published curves; every other
@@ -174,6 +188,11 @@ enum Melt {
 const ICE_A: [(f64, f64); 3] = [(1.195_393_37e6, 3.0), (8.081_831_59e4, 25.75), (3.338_268_6e3, 103.75)];
 /// The lowest temperature the ice curve is continued to. Below it the curve is drawn straight up.
 const ICE_FLOOR: f64 = 150.0;
+/// The pressure (atm) at which ice Ih gives way to ice III, and where water's diagram ends: the equation is not valid
+/// beyond it (the true melting curve turns back up there).
+pub const ICE_PMAX: f64 = 2070.0;
+/// Where carbon dioxide's melting fit stops being a fit to measurements (atm; 800 MPa).
+pub const CO2_PFIT: f64 = 7900.0;
 
 /// One substance's diagram. Temperatures in kelvin, pressures in atm.
 #[derive(Clone, Copy, Debug)]
@@ -186,6 +205,8 @@ pub struct Sub {
     /// Whether the melting curve leans left (water).
     pub neg: bool,
     vap: Vap,
+    /// The normal boiling point used by the steam-table curve (the critical temperature when there is none).
+    tb: f64,
     /// The steepness of the sublimation curve, in ln P against 1/T.
     bs: f64,
     melt: Melt,
@@ -203,27 +224,55 @@ impl Sub {
     #[allow(clippy::too_many_arguments)]
     fn anchored(name: &'static str, tt: f64, pt: f64, tc: f64, pc: f64, neg: bool, nbp: Option<f64>, nsp: Option<f64>, nmp: Option<f64>) -> Sub {
         let b_cc = (pc / pt).ln() / (1.0 / tt - 1.0 / tc);
-        let vap = nbp.and_then(|tb| antoine(tt, pt, tb, tc, pc)).unwrap_or(Vap::Cc { b: b_cc });
-        let slope_t = match vap { Vap::Cc { b } => b, Vap::An { b, c, .. } => b * tt * tt / ((tt + c) * (tt + c)) };
+        let vap = match nbp {
+            Some(tb) if name == "Water" && tt < tb && tb < tc => Vap::Wp { d: [pt.ln() - wp_ln(tt), -wp_ln(tb), pc.ln() - wp_ln(tc)] },
+            Some(tb) => antoine(tt, pt, tb, tc, pc).unwrap_or(Vap::Cc { b: b_cc }),
+            None => Vap::Cc { b: b_cc },
+        };
+        let slope_t = match vap {
+            Vap::Cc { b } => b,
+            Vap::An { b, c, .. } => b * tt * tt / ((tt + c) * (tt + c)),
+            Vap::Wp { d } => { let t2 = tt * 1.0005; let tb = nbp.unwrap_or(tc); (wp_ln(t2) + wp_corr(&d, t2, tt, tb, tc) - pt.ln()) / (1.0 / tt - 1.0 / t2) }
+        };
         let bs = match nsp { Some(ts) if pt > 1.0 && ts < tt => pt.ln() / (1.0 / ts - 1.0 / tt), _ => 1.15 * slope_t };
         let melt = match nmp { Some(_) => Melt::Ice, None if nsp.is_some() => Melt::Simon { c: 1.83, k: 1955.539 }, None => Melt::Schematic };
-        let mut sb = Sub { name, tt, pt, tc, pc, neg, vap, bs, melt, ice_d: 0.0, kt: 0.05 * (tc - tt).min(2.0 * tt) };
+        let mut sb = Sub { name, tt, pt, tc, pc, neg, vap, tb: nbp.unwrap_or(tc), bs, melt, ice_d: 0.0, kt: 0.05 * (tc - tt).min(2.0 * tt) };
         if let (Melt::Ice, Some(tn)) = (melt, nmp) { sb.ice_d = sb.ice_t(1.0) - tn; }
         sb
     }
 
     /// Vapour pressure at T (tt <= T <= tc).
     pub fn pvap(&self, t: f64) -> f64 {
-        match self.vap { Vap::Cc { b } => (self.pt.ln() - b * (1.0 / t - 1.0 / self.tt)).exp(), Vap::An { a, b, c } => (a - b / (t + c)).exp() }
+        match self.vap {
+            Vap::Cc { b } => (self.pt.ln() - b * (1.0 / t - 1.0 / self.tt)).exp(),
+            Vap::An { a, b, c } => (a - b / (t + c)).exp(),
+            Vap::Wp { d } => (wp_ln(t) + wp_corr(&d, t, self.tt, self.tb, self.tc)).exp(),
+        }
     }
     /// Boiling temperature at P (pt <= P <= pc).
     pub fn tvap(&self, p: f64) -> f64 {
-        match self.vap { Vap::Cc { b } => 1.0 / (1.0 / self.tt - (p / self.pt).ln() / b), Vap::An { a, b, c } => b / (a - p.ln()) - c }
+        match self.vap {
+            Vap::Cc { b } => 1.0 / (1.0 / self.tt - (p / self.pt).ln() / b),
+            Vap::An { a, b, c } => b / (a - p.ln()) - c,
+            Vap::Wp { .. } => {
+                let (mut lo, mut hi) = (self.tt, self.tc);
+                let lp = p.ln();
+                for _ in 0..80 { let mid = 0.5 * (lo + hi); if self.pvap(mid).ln() < lp { lo = mid } else { hi = mid } }
+                0.5 * (lo + hi)
+            }
+        }
     }
     /// Sublimation pressure at T (T <= tt).
     pub fn psub(&self, t: f64) -> f64 { (self.pt.ln() - self.bs * (1.0 / t - 1.0 / self.tt)).exp() }
     /// Sublimation temperature at P (P <= pt).
     pub fn tsub(&self, p: f64) -> f64 { 1.0 / (1.0 / self.tt - (p / self.pt).ln() / self.bs) }
+    /// The range this substance's diagram models: the highest pressure and the lowest melting temperature (water: ice
+    /// Ih, up to 2070 atm). None for the others.
+    pub fn limit(&self) -> Option<(f64, f64)> {
+        match self.melt { Melt::Ice => Some((ICE_PMAX, self.tm(ICE_PMAX))), _ => None }
+    }
+    /// Whether the melting curve here is a fit extended past the pressures it was measured to.
+    pub fn extrapolated(&self, p: f64) -> bool { matches!(self.melt, Melt::Simon { .. }) && p > CO2_PFIT }
     /// The pressure on the ice equation at T (floor <= T <= tt).
     fn ice_p(&self, t: f64) -> f64 {
         let th = t / self.tt;
@@ -258,7 +307,7 @@ impl Sub {
         match self.melt {
             Melt::Simon { c, k } => (t >= self.tt).then(|| self.pt * (1.0 + k * ((t / self.tt).powf(c) - 1.0))),
             Melt::Ice => {
-                if t > self.tt || t <= ICE_FLOOR { return None; }
+                if t > self.tt || t <= ICE_FLOOR || t < self.tm(ICE_PMAX) * (1.0 - 1e-12) { return None; }
                 // tm falls as P rises: bisect on ln P between the triple pressure and where the curve reaches its floor
                 let (mut lo, mut hi) = (self.pt.ln(), self.ice_p(ICE_FLOOR).ln());
                 for _ in 0..90 { let mid = 0.5 * (lo + hi); if self.tm(mid.exp()) > t { lo = mid } else { hi = mid } }
@@ -357,10 +406,11 @@ fn trim_zeros(s: &str) -> String {
 /// `v` to `sf` significant figures, plain from 10^-3 up to 10^5 and "m x 10^n" outside, trailing zeros dropped.
 fn sf_fmt(v: f64, sf: usize) -> String {
     if !v.is_finite() || v == 0.0 { return "0".into(); }
-    let a = v.abs();
-    let s = format!("{:.*e}", sf - 1, a);
+    let s = format!("{:.*e}", sf - 1, v.abs());
     let (m, e) = s.split_once('e').unwrap_or((&s, "0"));
     let e: i32 = e.parse().unwrap_or(0);
+    // the digits beyond the figures asked for are zeros, however large the value
+    let a: f64 = s.parse().unwrap_or(v.abs());
     let body = if (-3..5).contains(&e) { trim_zeros(&format!("{:.*}", (sf as i32 - 1 - e).max(0) as usize, a)) } else { format!("{} \u{d7} 10{}", trim_zeros(m), sup(e)) };
     if v < 0.0 { format!("\u{2212}{body}") } else { body }
 }
@@ -503,7 +553,9 @@ fn read(p: &Params) -> (Setup, Vec<String>) {
         (s, Giv { tt: sig6(s.tt - off), pt: s.pt, tc: sig6(s.tc - off), pc: s.pc })
     };
     let mid_u = sig6(((sub.tt + sub.tc) / 2.0 - off) * 1.0);
-    let isobar = if bo(p, "isobar", true) {
+    let range = sub.limit();
+    let ih = format!("outside the range this diagram models (ice Ih, up to {} atm)", gfmt(ICE_PMAX));
+    let isobar_raw = if bo(p, "isobar", true) {
         Some(match got(p, "p_line") {
             Got::Missing => 1.0,
             Got::Bad => { n.push("The isobar's pressure is not a number, so it is drawn at P = 1 atm.".into()); 1.0 }
@@ -517,7 +569,11 @@ fn read(p: &Params) -> (Setup, Vec<String>) {
             }
         })
     } else { None };
-    let isotherm = if bo(p, "isotherm", false) {
+    let isobar = isobar_raw.and_then(|v| match range {
+        Some((pmax, _)) if v > pmax => { n.push(format!("The isobar at P = {} atm is {ih}, so it is not drawn and nothing is read from it.", gfmt(sig6(v)))); None }
+        _ => Some(v),
+    });
+    let isotherm_raw = if bo(p, "isotherm", false) {
         let v = match got(p, "t_line") {
             Got::Missing => 300.0 - off,
             Got::Bad => { n.push(format!("The isotherm's temperature is not a number, so it is drawn at T = {} {u}.", gfmt(mid_u))); mid_u }
@@ -531,6 +587,10 @@ fn read(p: &Params) -> (Setup, Vec<String>) {
         };
         Some((v, v + off))
     } else { None };
+    let isotherm = isotherm_raw.and_then(|(v, tk)| match range {
+        Some((_, tmin)) if tk < tmin * (1.0 - 1e-12) => { n.push(format!("The isotherm at T = {} {u} is {ih}: below {} {u} water's solid is not ice Ih, so it is not drawn and nothing is read from it.", gfmt(v), gfmt(sig6(tmin - off)))); None }
+        _ => Some((v, tk)),
+    });
     let count = match p.0.get("n_points") { Some(Value::I(i)) => (*i).clamp(0, 4) as usize, Some(Value::F(v)) if v.is_finite() => v.round().clamp(0.0, 4.0) as usize, _ => 0 };
     let mut pts = Vec::new();
     for (k, (tk, pk)) in PT_KEYS.iter().enumerate().take(count) {
@@ -551,6 +611,7 @@ fn read(p: &Params) -> (Setup, Vec<String>) {
         if t + off > T_LINE_MAX { bad(&mut n, format!("its temperature {} {u} is higher than this diagram can draw", typed(t))); continue; }
         if !(pr > 0.0) { bad(&mut n, format!("its pressure must be greater than 0 atm (P = {} atm)", typed(pr))); continue; }
         if !(P_MIN..=P_MAX).contains(&pr) { bad(&mut n, format!("its pressure {} atm is outside the range this diagram can draw ({} to {} atm)", typed(pr), gfmt(P_MIN), gfmt(P_MAX))); continue; }
+        if let Some((pmax, _)) = range { if pr > pmax { bad(&mut n, format!("its pressure {} atm is {ih}", gfmt(sig6(pr)))); continue; } }
         let (rt, rp) = (sig6(t), sig6(pr));
         if rt != t { n.push(format!("Point {name}'s temperature {} {u} is kept to 6 significant figures, so it is drawn and printed as {} {u}.", fmt(t), gfmt(rt))); }
         if rp != pr { n.push(format!("Point {name}'s pressure {} atm is kept to 6 significant figures, so it is drawn and printed as {} atm.", fmt(pr), gfmt(rp))); }
@@ -1023,6 +1084,32 @@ struct Analysis {
     points: Vec<(PointIn, Where)>,
 }
 
+/// The figure as published. A student copy with any label set to blank carries no name of what the blanks hide: the
+/// feature ids that the placer, the audit and the handles read from the drawing are replaced by opaque ones.
+pub fn render(p: &Params) -> String {
+    let svg = build(p).0;
+    let blanked = !bo(p, SHOW_ANSWERS, true) && [lab_of(p, "lab_regions"), lab_of(p, "lab_curves"), lab_of(p, "lab_special")].contains(&Lab::Blank);
+    if blanked { opaque_ids(&svg) } else { svg }
+}
+
+/// Every `data-f="name"` becomes `data-f="fN"`, the same N for the same name.
+fn opaque_ids(svg: &str) -> String {
+    let mut ids: Vec<String> = Vec::new();
+    let mut out = String::with_capacity(svg.len());
+    let mut rest = svg;
+    while let Some(at) = rest.find(" data-f=\"") {
+        let head = at + " data-f=\"".len();
+        out.push_str(&rest[..head]);
+        let Some(end) = rest[head..].find('"') else { rest = &rest[head..]; break };
+        let name = &rest[head..head + end];
+        let k = ids.iter().position(|x| x == name).unwrap_or_else(|| { ids.push(name.to_string()); ids.len() - 1 });
+        out.push_str(&format!("f{}", k + 1));
+        rest = &rest[head + end..];
+    }
+    out.push_str(rest);
+    out
+}
+
 pub fn build(p: &Params) -> (String, Report) {
     let (st, mut notes) = read(p);
     let sub = st.sub;
@@ -1084,6 +1171,7 @@ pub fn build(p: &Params) -> (String, Report) {
         }
         // a line or point at or above the critical pressure splits the supercritical region: keep room above it for its name
         if !ps.is_empty() && pmax_x >= sub.pc * 0.99 { e_hi = e_hi.max((pmax_x.log10() + 0.9 - 1e-9).ceil()); }
+        if let Some((pmax, _)) = sub.limit() { e_hi = e_hi.min(pmax.log10()); }
         if e_hi < e_lo + 2.0 { e_hi = e_lo + 2.0; }
         let count = (e_hi - e_lo) as i64 + 1;
         let stp = ((count as f64) / 7.0).ceil().max(1.0) as i64;
@@ -1092,8 +1180,9 @@ pub fn build(p: &Params) -> (String, Report) {
     } else {
         let top_raw = (sub.pc * 1.35).max(if ps.is_empty() { 0.0 } else { pmax_x * if pmax_x >= sub.pc * 0.99 { 1.3 } else { 1.12 } });
         let step = nice_step(top_raw, 6.0);
-        let top = ((top_raw / step) - 1e-9).ceil() * step;
-        let k1 = (top / step).round() as i64;
+        let mut top = ((top_raw / step) - 1e-9).ceil() * step;
+        if let Some((pmax, _)) = sub.limit() { top = top.min(pmax); }
+        let k1 = ((top / step) + 1e-9).floor() as i64;
         let ticks = (0..=k1.min(60)).map(|k| { let v = k as f64 * step; (v, fmt(v)) }).collect();
         (0.0, top, 0.0, top, ticks)
     };
@@ -1112,6 +1201,13 @@ pub fn build(p: &Params) -> (String, Report) {
             let what = match wh { Where::Triple => "at the triple point", Where::Critical => "at the critical point", _ => "on a curve" };
             let name = LETTERS[q.i];
             notes.push(format!("Point {name} is exactly {what}, so its phase is given as \"{}\".", wh.text()));
+        }
+    }
+    {
+        let mut ps_all: Vec<f64> = ps.clone();
+        if let Some(a) = &along { ps_all.extend(a.0.iter().filter(|c| c.curve == Curve::Melt).map(|c| c.p)); }
+        if ps_all.iter().any(|&q| sub.extrapolated(q)) {
+            notes.push(format!("Above {} atm the melting curve of this substance is the fit continued past the pressures it was measured to, so a value read there is an extrapolation.", gfmt(CO2_PFIT)));
         }
     }
     let an = Analysis { heat: heat.clone(), along: along.clone(), xsect, points };
@@ -1409,8 +1505,13 @@ pub fn build(p: &Params) -> (String, Report) {
     // A last resort for a name that has no room beside its feature: a place within reach of the feature (a marker, or
     // a point on a curve), clear of every stroke and label, joined to it by a thin leader line that crosses no label
     // and as few strokes as possible. The leader names the feature, so the label need not be the nearest thing to it.
+    // a leader may start only where it cannot be taken for another feature's: clear of every other marker
+    let off_other_marks = |a: Pt, own: &str| marks.iter().all(|m| m.feat == own || (m.x - a.0).hypot(m.y - a.1) > m.r + 9.0);
     let leader_for = |pl: &Placer, jb: &Job| -> Option<(Cand, Bx, (Pt, Pt))> {
         let (pts, gap) = jb.lead.as_ref()?;
+        // (a marker's own name leads to the marker; only a curve's leader must keep clear of the others)
+        let pts: Vec<Pt> = pts.iter().copied().filter(|a| pts.len() == 1 || off_other_marks(*a, &jb.own)).collect();
+        let pts = &pts;
         let (w, n) = (text_w(&jb.variants[0].concat(), fs_lab), 1usize);
         let mut best: Option<(f64, Cand, Bx, (Pt, Pt))> = None;
         let stride = (pts.len() / 6).max(1);
@@ -1550,7 +1651,7 @@ pub fn build(p: &Params) -> (String, Report) {
         let w = jb.variants[*vi].iter().map(|l| text_w(l, fs_lab)).fold(0.0, f64::max);
         let b = ink(c, w, fs_lab, lh, jb.variants[*vi].len());
         let bd = |q: &Pt| (q.0 - q.0.clamp(b.0, b.1)).hypot(q.1 - q.1.clamp(b.2, b.3));
-        let Some(a) = pts.iter().copied().min_by(|x, y| bd(x).total_cmp(&bd(y))) else { continue };
+        let Some(a) = pts.iter().copied().filter(|q| pts.len() == 1 || off_other_marks(*q, &jb.own)).min_by(|x, y| bd(x).total_cmp(&bd(y))) else { continue };
         let d = bd(&a);
         if d <= 11.0 { continue; }
         let tgt = (a.0.clamp(b.0, b.1), a.1.clamp(b.2, b.3));
@@ -1705,7 +1806,13 @@ pub fn build(p: &Params) -> (String, Report) {
 /// The figure's description for a screen reader: ASCII only and short (the canvas size is read from the first 400
 /// bytes of the SVG, which this text follows), with no number and nothing that is an answer.
 fn describe(st: &Setup, an: &Analysis, ans: bool) -> String {
-    let mut s = String::from("Pressure against temperature phase diagram with solid, liquid and gas regions, three curves between the regions, the triple point and the critical point");
+    // a student copy with a blank label must not name what the blank hides
+    let blanked = !ans && [st.lab_reg, st.lab_cur, st.lab_spec].contains(&Lab::Blank);
+    let mut s = String::from(if blanked {
+        "Pressure against temperature diagram for one substance with numbered blanks to fill in"
+    } else {
+        "Pressure against temperature phase diagram with solid, liquid and gas regions, three curves between the regions, the triple point and the critical point"
+    });
     if st.isobar.is_some() { s.push_str(", an isobar"); }
     if st.isotherm.is_some() { s.push_str(", an isotherm"); }
     if !an.points.is_empty() { s.push_str(", labelled points"); }
@@ -1815,6 +1922,8 @@ fn readout(st: &Setup, an: &Analysis, ans: bool, u: &str, tags: &[(&'static str,
     // neutral wording: the student copy must not name a curve
     v.push(if matches!(sub.melt, Melt::Schematic) {
         "Schematic diagram: the curves are drawn through the data, not measured, and the one that rises nearly straight up leans far more than a real one so that its slope can be seen. Temperatures and pressures read from it are rounded.".to_string()
+    } else if matches!(sub.melt, Melt::Ice) {
+        format!("Schematic diagram: the curves are drawn through the data, not measured, except the one that rises nearly straight up, which is the measured curve and is drawn only as far as {} atm, where the equation behind it ends. Temperatures and pressures read from it are rounded.", gfmt(ICE_PMAX))
     } else {
         "Schematic diagram: the curves are drawn through the data, not measured, except the one that rises nearly straight up, which is the measured curve and stays almost vertical at every pressure drawn. Temperatures and pressures read from it are rounded.".to_string()
     });

@@ -24,7 +24,7 @@ fn f(k: &'static str, v: f64) -> (&'static str, Value) { (k, Value::F(v)) }
 fn s(k: &'static str, v: &str) -> (&'static str, Value) { (k, Value::S(v.to_string())) }
 fn b(k: &'static str, v: bool) -> (&'static str, Value) { (k, Value::B(v)) }
 fn i(k: &'static str, v: i64) -> (&'static str, Value) { (k, Value::I(v)) }
-fn svg_of(list: &[(&'static str, Value)]) -> String { def().svg(&with(list)) }
+fn svg_of(list: &[(&'static str, Value)]) -> String { build(&with(list)).0 }
 fn rep_of(list: &[(&'static str, Value)]) -> Report { build(&with(list)).1 }
 fn key(list: &[(&'static str, Value)]) -> Report { let mut l = list.to_vec(); l.push(b(SHOW_ANSWERS, true)); rep_of(&l) }
 
@@ -231,6 +231,16 @@ fn audit(svg: &str, g: &mut Glyphs, lab: f64) -> Vec<String> {
             if let (Some(x), Some(y)) = (inks[a], inks[c]) {
                 if hits(x, y) { bad.push(format!("{:?} on {:?}", ts[a].text, ts[c].text)); }
             }
+        }
+    }
+    // a leader never starts or ends on another feature's marker, where it would read as that feature's
+    for (kind, feat, (p, q)) in &gm.strokes {
+        if kind != "leader" { continue; }
+        for (mf, (cx, cy, r)) in &gm.marks {
+            if mf == feat { continue; }
+            // two features' markers that nearly coincide cannot be told apart by any leader
+            if gm.marks.iter().any(|(f2, (x2, y2, _))| f2 == feat && (x2 - cx).hypot(y2 - cy) < 18.0) { continue; }
+            if (p.0 - cx).hypot(p.1 - cy) <= r + 3.0 { bad.push(format!("the leader of {feat} ends on the {mf} marker {p:?}-{q:?}")); }
         }
     }
     let mut groups: BTreeMap<String, (String, Bx)> = BTreeMap::new();
@@ -527,6 +537,7 @@ fn the_phase_sequences_along_a_line_match_a_brute_force_scan() {
         // heating along isobars
         for _ in 0..25 {
             let p = 10f64.powf(-6.0 + 11.0 * r());
+            if sb.limit().is_some_and(|l| p > l.0) { continue; }
             let (case, steps) = sb.heating(p);
             let mut scan: Vec<(Phase, f64)> = Vec::new();
             let n = 40_000;
@@ -556,7 +567,9 @@ fn the_phase_sequences_along_a_line_match_a_brute_force_scan() {
         // raising the pressure along isotherms
         for _ in 0..25 {
             let t = sb.tt * (0.2 + 2.5 * r()).min(sb.tc * 2.0 / sb.tt);
-            let (plo, phi) = (sb.pt * 1e-6, sb.pc * 1e3);
+            let (plo, mut phi) = (sb.pt * 1e-6, sb.pc * 1e3);
+            // water is modelled only as far as ice Ih: no isotherm below its end, nothing above 2070 atm
+            if let Some((pm, tmin)) = sb.limit() { if t < tmin { continue; } phi = phi.min(pm); }
             let along = sb.along(t, plo, phi);
             let n = 40_000;
             let mut scan: Vec<(Phase, f64)> = Vec::new();
@@ -1031,7 +1044,7 @@ fn the_student_copy_has_no_computed_value_anywhere() {
         let mut kc = c.clone();
         kc.push(b(SHOW_ANSWERS, true));
         let keyp = with(&kc);
-        let key = def().svg(&keyp);
+        let key = build(&keyp).0;
         let key_tokens: Vec<String> = texts(&key).into_iter().filter(|t| t.kind != "axis").flat_map(|t| tokens(&t.text)).collect();
         if ans.iter().any(|a| key_tokens.contains(a)) { with_answers += 1; }
         // the blanks are there to fill
@@ -1115,7 +1128,7 @@ fn the_description_is_short_ascii_and_answer_free() {
             assert_eq!(crate::figures::svg_size(&svg).1, rep.frame.h.max(crate::figures::svg_size(&svg).1));
         }
     }
-    let svg = def().svg(&with(&[s("label_size", "Large"), i("n_points", 4), b("isotherm", true)]));
+    let svg = build(&with(&[s("label_size", "Large"), i("n_points", 4), b("isotherm", true)])).0;
     let (w, h) = crate::figures::svg_size(&svg);
     assert!(w > 700.0 && h > 450.0, "{w} {h}");
 }
@@ -1322,7 +1335,7 @@ fn labels_clear_and_attributed_across_ten_thousand_cases_in_real_glyphs() {
             let mut regions = 0;
             for c in ch.iter() {
                 let p = with(c);
-                let svg = def().svg(&p);
+                let svg = build(&p).0;
                 let ts = texts(&svg);
                 labels += ts.iter().filter(|t| t.kind == "label").count();
                 regions += ts.iter().filter(|t| t.kind == "label" && t.feat.starts_with("reg:")).count();
@@ -1606,7 +1619,7 @@ fn the_isotherm_at_the_triple_or_critical_temperature_says_so() {
 /// The labels a diagram must always carry: each region's name when the regions are labelled, and the triple and
 /// critical points' when the special points are. Returns those that are missing from the render.
 fn missing_essentials(p: &Params) -> Vec<&'static str> {
-    let svg = def().svg(p);
+    let svg = build(p).0;
     let mut want: Vec<&'static str> = Vec::new();
     if p.s("lab_regions") != OFF { want.extend(["reg:solid", "reg:liquid", "reg:gas", "reg:super"]); }
     if p.s("lab_special") != OFF { want.extend(["tp", "cp"]); }
@@ -1766,3 +1779,141 @@ fn a_dropped_blank_still_has_its_numbered_line() {
     }
 }
 
+
+// ---------------------------------------------------------------------------------------------
+// Fix round 2
+// ---------------------------------------------------------------------------------------------
+
+const IH_NOTE: &str = "outside the range this diagram models (ice Ih, up to 2070 atm)";
+
+#[test]
+fn water_is_modelled_only_as_far_as_ice_ih() {
+    let w = preset(WATER).unwrap();
+    // inside the range: the readout is there and none of it is a refusal
+    for p in [1.0, 218.0, 500.0, 2000.0] {
+        let r = key(&[s("substance", WATER), f("p_line", p)]);
+        assert!(r.isobar.is_some() && r.heat.is_some(), "{p}");
+        assert!(!r.notes.iter().any(|n| n.contains(IH_NOTE)), "{p}: {:?}", r.notes);
+        let tm = w.tm(p);
+        assert!((250.9..=273.2).contains(&tm), "{p}: {tm}");
+    }
+    // beyond it: no isobar, no reading, a note
+    for p in [2100.0, 3000.0, 10000.0] {
+        let r = key(&[s("substance", WATER), f("p_line", p)]);
+        assert!(r.isobar.is_none() && r.heat.is_none(), "{p}");
+        assert!(r.notes.iter().any(|n| n.contains(IH_NOTE)), "{p}: {:?}", r.notes);
+        let j = joined(&r);
+        assert!(!j.contains("solid \u{2192} liquid") && !j.contains("\u{2212}36") && !j.contains("\u{2212}123"), "{p}: {j}");
+    }
+    // an isotherm below the end of the ice Ih curve has no melting to report
+    for t in [250.0, 200.0] {
+        let r = key(&[s("substance", WATER), b("isotherm", true), f("t_line", t)]);
+        assert!(r.isotherm.is_none() && r.along.is_none(), "{t}");
+        assert!(r.notes.iter().any(|n| n.contains(IH_NOTE)), "{t}: {:?}", r.notes);
+        assert!(!joined(&r).contains("isotherm"), "{t}: {}", joined(&r));
+    }
+    let r = key(&[s("substance", WATER), b("isotherm", true), f("t_line", 270.0)]);
+    assert!(r.isotherm.is_some() && r.along.as_ref().is_some_and(|a| a.iter().any(|c| c.curve == Curve::Melt)), "270 K");
+    // a point beyond the range is not classified
+    let r = key(&[s("substance", WATER), i("n_points", 1), f("a_t", 300.0), f("a_p", 3000.0)]);
+    assert!(r.points.is_empty() && r.notes.iter().any(|n| n.contains(IH_NOTE)), "{:?}", r.notes);
+    // the axis stops at the end of the range, on both axes, in both units; no curve is drawn beyond it
+    for paxis in ["Logarithmic", LINEAR] {
+        for unit in ["Kelvin (K)", CELSIUS] {
+            for pl in [218.0, 500.0, 2000.0] {
+                let r = key(&[s("substance", WATER), s("paxis", paxis), s("unit", unit), f("p_line", pl), i("n_points", 2), f("a_p", 2000.0), f("b_p", 400.0)]);
+                let top = if paxis == "Logarithmic" { 10f64.powf(r.frame.y1) } else { r.frame.y1 };
+                assert!(top <= 2070.0 * (1.0 + 1e-9) && top >= 2000.0, "{paxis} {unit} {pl}: {top}");
+                assert!(r.isobar.is_some());
+            }
+        }
+    }
+    // the caption no longer claims the curve is vertical at every pressure drawn for water
+    let j = joined(&key(&[s("substance", WATER)]));
+    assert!(!j.contains("at every pressure drawn"), "{j}");
+    // neighbours: custom and typical are not limited
+    for name in [TYPICAL, CUSTOM] {
+        let r = key(&[s("substance", name), f("p_line", 3000.0), b("isotherm", true), f("t_line", 150.0)]);
+        assert!(r.isobar.is_some() && r.isotherm.is_some(), "{name}");
+        assert!(!r.notes.iter().any(|n| n.contains("ice Ih")), "{name}");
+    }
+}
+
+#[test]
+fn carbon_dioxide_says_where_its_melting_fit_stops_being_measured() {
+    let r = key(&[s("substance", CO2), f("p_line", 10000.0)]);
+    assert!(r.isobar.is_some());
+    assert!(r.notes.iter().any(|n| n.contains("7900 atm")), "{:?}", r.notes);
+    let r = key(&[s("substance", CO2), f("p_line", 5000.0)]);
+    assert!(!r.notes.iter().any(|n| n.contains("7900 atm")), "{:?}", r.notes);
+}
+
+#[test]
+fn the_public_student_copy_does_not_name_what_the_blanks_hide() {
+    let hidden = ["reg:solid", "reg:liquid", "reg:gas", "reg:super", "\"melt\"", "\"sub\"", "\"vap\"", "\"tp\"", "\"cp\"", "\"ptA\"", "\"xm\"", "\"xv\"", "\"xs\"", "\"ym\"", "\"yv\"", "\"ys\""];
+    for group in ["lab_regions", "lab_curves", "lab_special"] {
+        let p = with(&[s(group, BLANKLAB), b(SHOW_ANSWERS, false), i("n_points", 4), b("isotherm", true), f("t_line", 250.0), s("substance", CO2)]);
+        let svg = def().svg(&p);
+        for h in hidden {
+            assert!(!svg.contains(&format!("data-f={h}")) && !svg.contains(&format!("data-f=\"{}", h.trim_matches('"'))), "{group}: data-f names {h}");
+        }
+        let desc = svg.split("<desc").nth(1).unwrap_or("").split("</desc>").next().unwrap_or("").to_lowercase();
+        for w in ["solid", "liquid", "gas", "triple", "critical", "curves between"] { assert!(!desc.contains(w), "{group}: desc names {w}: {desc}"); }
+        // the numbers are still on the plot, and the opaque ids still tie each label's text to one feature
+        assert!(texts(&svg).iter().any(|t| t.text.ends_with("______")));
+    }
+    // the key and a student copy with nothing blank are unchanged
+    let key_svg = def().svg(&with(&[s("lab_regions", BLANKLAB), b(SHOW_ANSWERS, true)]));
+    assert!(key_svg.contains("data-f=\"reg:solid\""));
+    let open = def().svg(&with(&[b(SHOW_ANSWERS, false)]));
+    assert!(open.contains("data-f=\"reg:solid\""));
+}
+
+#[test]
+fn no_leader_ends_on_another_features_marker() {
+    // the reported case: an isotherm on the triple temperature, an isobar on the triple pressure, everything blank
+    let case = vec![
+        s("substance", CO2), s("paxis", LINEAR), s("unit", CELSIUS), s("label_size", "Large"), s("style", "Print"), b(SHOW_ANSWERS, false),
+        s("lab_regions", BLANKLAB), s("lab_curves", BLANKLAB), s("lab_special", BLANKLAB), b("isotherm", true), f("t_line", -56.55), f("p_line", 5.11), i("n_points", 4),
+    ];
+    let p = with(&case);
+    let svg = build(&p).0;
+    let g = geo(&svg);
+    let leaders: Vec<_> = g.strokes.iter().filter(|x| x.0 == "leader").collect();
+    for (_, feat, (a, c)) in &leaders {
+        for (mf, (cx, cy, r)) in &g.marks {
+            if mf == feat || g.marks.iter().any(|(f2, (x2, y2, _))| f2 == feat && (x2 - cx).hypot(y2 - cy) < 18.0) { continue; }
+            // the end of the leader on the feature (the other end is at the label)
+            assert!((a.0 - cx).hypot(a.1 - cy) > r + 3.0, "the leader of {feat} ends on the {mf} marker: {a:?}-{c:?}");
+        }
+    }
+    let mut gl = Glyphs::new();
+    let bad = audit(&svg, &mut gl, svg::label_factor("Large"));
+    assert!(bad.is_empty(), "{bad:?}");
+}
+
+#[test]
+fn pressures_read_from_the_diagram_have_two_significant_figures() {
+    assert_eq!(pread(10423.0), "10000");
+    assert_eq!(pread(3971.0), "4000");
+    assert_eq!(pread(123.4), "120");
+    assert_eq!(pread(99.6), "100");
+    assert_eq!(pread(24.4), "24");
+    let j = joined(&key(&[s("substance", CO2), f("p_line", 10000.0), b("isotherm", true), f("t_line", 320.0)]));
+    assert!(!j.contains("10423"), "{j}");
+    let svg = svg_of(&[s("substance", CO2), f("p_line", 10000.0), b("isotherm", true), f("t_line", 320.0), b(SHOW_ANSWERS, true)]);
+    assert!(!svg.contains(">10423<"), "an axis annotation keeps a third figure");
+}
+
+#[test]
+fn the_vapour_pressure_of_water_follows_the_steam_tables() {
+    let w = preset(WATER).unwrap();
+    for (c, want) in [(100.0, 1.013), (200.0, 15.5), (300.0, 84.8)] {
+        let got = w.pvap(c + 273.15);
+        assert!(close(got, want, 0.015), "{c} C: {got} vs {want}");
+    }
+    assert!(close(w.pvap(w.tt), w.pt, 1e-9) && close(w.pvap(w.tc), w.pc, 1e-9));
+    assert!(close(w.tvap(1.0), 373.15, 1e-6), "{}", w.tvap(1.0));
+    let mut last = 0.0;
+    for k in 0..=200 { let t = w.tt + (w.tc - w.tt) * k as f64 / 200.0; let p = w.pvap(t); assert!(p > last, "{t}"); last = p; assert!(close(w.tvap(p), t, 1e-7), "{t}"); }
+}
