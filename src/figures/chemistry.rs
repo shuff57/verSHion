@@ -18,6 +18,7 @@ pub mod notes;
 pub mod reactionenergy;
 pub mod ratesgraph;
 pub mod phasediagram;
+pub mod solubilitycurves;
 pub mod spectra;
 
 pub const INK: &str = "#111";
@@ -196,6 +197,7 @@ pub fn skin_intro(id: &str) -> Option<&'static str> {
         "reaction-energy-diagram" => Some("Make printable reaction energy diagrams for chemistry tests."),
         "reaction-rate-graph" => Some("Make printable reaction rate graphs for chemistry tests: concentration against time, integrated rate law plots and half-lives."),
         "phase-diagram" => Some("Make printable pressure-temperature phase diagrams for chemistry tests: regions, curves, triple and critical points, and the phase at a point."),
+        "solubility-curves" => Some("Make printable solubility curves for chemistry tests: read a solubility, classify a solution, find the mass that crystallises on cooling, and the temperature of saturation."),
         "temperature-reading" => Some("Make printable thermometer figures for chemistry tests."),
         "ph-reading" => Some("Make printable pH meter figures for chemistry tests."),
         "punnett-square" => Some("Make printable Punnett squares for biology tests."),
@@ -338,6 +340,7 @@ pub fn examples(id: &str) -> Option<Vec<super::Example>> {
         .or_else(|| reactionenergy::examples(id))
         .or_else(|| ratesgraph::examples(id))
         .or_else(|| phasediagram::examples(id))
+        .or_else(|| solubilitycurves::examples(id))
 }
 
 /// Handles are laid out in the figure's own coordinates; the chart-title band the wrapper adds
@@ -407,6 +410,7 @@ pub fn defs() -> Vec<FigureDef> {
     v.extend(reactionenergy::defs());
     v.extend(ratesgraph::defs());
     v.extend(phasediagram::defs());
+    v.extend(solubilitycurves::defs());
     v
 }
 
@@ -632,7 +636,7 @@ mod tests {
     #[test]
     fn ids_unique_and_complete() {
         let ids: Vec<_> = defs().iter().map(|d| d.id).collect();
-        assert_eq!(ids.len(), 19);
+        assert_eq!(ids.len(), 20);
         for d in defs() {
             for p in (d.params)() {
                 match (&p.kind, &p.default) {

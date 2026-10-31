@@ -48,6 +48,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "reaction-energy-diagram" => REACTION_ENERGY_DIAGRAM,
         "reaction-rate-graph" => REACTION_RATE_GRAPH,
         "phase-diagram" => PHASE_DIAGRAM,
+        "solubility-curves" => SOLUBILITY_CURVES,
         "orbital-diagram" => ORBITAL_DIAGRAM,
         "particle-diagram" => PARTICLE_DIAGRAM,
         "ph-reading" => PH_READING,
@@ -3681,6 +3682,29 @@ const PHASE_DIAGRAM: &[Faq] = &[
     Faq {
         q: "How do I draw a substance of my own?",
         a: "Choose Custom and type the triple point and the critical point; the curves are drawn through them, with Clausius-Clapeyron (straight in ln P against 1/T) for vaporisation and sublimation. Choose the melting slope: negative leans the melting curve left like water, positive leans it right (drawn far steeper than a real one, so that it can be seen). You can also drag the two points on the diagram. A critical point that is not clearly above the triple point is refused with a note.",
+    },
+];
+
+const SOLUBILITY_CURVES: &[Faq] = &[
+    Faq {
+        q: "Where do the curves come from?",
+        a: "Each curve is drawn smoothly through published solubility values (the CRC Handbook of Chemistry and Physics table, in grams of solute per 100 g of water), with the table's own points marked as dots. The smooth curve never goes above or below the neighbouring table values, so it cannot wiggle. A salt's table does not always have a value at every 10 \u{b0}C; the curve then runs through the points that are published and the figure never invents a missing one. Where a substance has no data (for example, cerium(III) sulfate above 60 \u{b0}C) its curve stops, and a temperature past the end is moved to it with a note.",
+    },
+    Faq {
+        q: "How are the four questions answered?",
+        a: "Read a solubility: go up from the temperature to the curve and across to the axis. Saturated, unsaturated or supersaturated: a point on the curve is saturated, below it unsaturated (more solute can dissolve) and above it supersaturated (more is dissolved than the curve allows, an unstable state). Crystallisation: the solution is saturated at the first temperature, so the mass that comes out is (solubility at the first temperature \u{2212} solubility at the second) \u{d7} mass of water \u{f7} 100. Temperature of saturation: the grams per 100 g of water are the mass dissolved \u{d7} 100 \u{f7} the mass of water, and the temperature is where the curve passes that value.",
+    },
+    Faq {
+        q: "Why does a solid sometimes crystallise on warming?",
+        a: "Most solids dissolve better in hot water, but a few, like cerium(III) sulfate, dissolve less. The curve of such a substance falls, so a saturated solution that is warmed holds less than before and the extra comes out as crystals. The key says so, in words, whenever the solubility falls between the two temperatures. A solution of a rising-solubility salt that is warmed instead becomes unsaturated and nothing crystallises.",
+    },
+    Faq {
+        q: "How are gases different?",
+        a: "A gas dissolves less as the water gets hotter, and how much dissolves depends on its pressure. Carbon dioxide is shown at a partial pressure of 1 atm and oxygen at 21 kPa (its pressure in air); the figure says so under the graph. The gas values are about a thousand times smaller than a salt's, so beside a salt they lie against the axis: show gases on their own to see them. When a saturated solution of a gas is warmed, the gas that comes out of solution leaves as bubbles rather than crystals, and the key words it that way.",
+    },
+    Faq {
+        q: "What does the student copy leave out?",
+        a: "Show answers off keeps the curves, their names, the givens (the substance, the temperatures and the masses) and the points that the question marks on the graph, and turns the values read from the curve, the classification, the mass that crystallises and the temperature of saturation into blank lines. The key prints the values read from the curve, rounded once to the decimal places chosen, and then works the answer out from those printed values only, so the arithmetic on the key can be checked line by line.",
     },
 ];
 
