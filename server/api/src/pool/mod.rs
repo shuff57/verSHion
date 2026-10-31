@@ -8,6 +8,7 @@ pub mod blobs;
 pub mod blockplan;
 pub mod blocking;
 pub mod circleactivity;
+pub mod circlebanks;
 pub mod circlebase;
 pub mod circlecheck;
 pub mod circleinvites;
