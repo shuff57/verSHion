@@ -4,6 +4,7 @@
 
 pub mod bizdays;
 pub mod chain;
+pub mod image;
 pub mod jsonscan;
 pub mod license;
 pub mod licensecheck;
