@@ -12,6 +12,7 @@ pub mod circlebankedit;
 pub mod circlebankstate;
 pub mod circlebanks;
 pub mod circlebase;
+pub mod circleerase;
 pub mod circlecheck;
 pub mod circleinvites;
 pub mod circlepurge;
