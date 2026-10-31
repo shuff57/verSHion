@@ -6,5 +6,6 @@ pub mod bizdays;
 pub mod jsonscan;
 pub mod license;
 pub mod preread;
+pub mod served;
 pub mod sqlfrag;
 pub mod visible;
