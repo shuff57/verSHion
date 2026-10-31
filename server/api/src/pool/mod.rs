@@ -50,6 +50,7 @@ pub mod mine;
 pub mod modgc;
 pub mod moderation;
 pub mod offer;
+pub mod publishdel;
 pub mod poolio;
 pub mod privacynear;
 pub mod poolkeys;
