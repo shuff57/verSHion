@@ -39,6 +39,7 @@ function world(o: Partial<AiDeps> & { neurons?: number; run?: AiBinding["run"] }
     db: d1(db),
     bucket: bucket as unknown as R2Bucket,
     now: () => clock.t,
+    credits: false,
     ...o,
   });
   const ctx = { waitUntil: (p: Promise<unknown>) => void pending.push(p) };

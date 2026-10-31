@@ -14,7 +14,7 @@ import { json as poolJson } from "./pool/shared.ts";
 import { poolNotifier } from "./poolmail.ts";
 import { adminAlert, makeMailer, queueReminder, type MailEnv } from "./mail.js";
 import { flushNoticeBacklog, noticeNewApplication } from "./notices.js";
-import { AI_DEFAULT_MODEL, createAi, type AiBinding, type Limits } from "./ai/index.ts";
+import { AI_DEFAULT_MODEL, OPENROUTER_DEFAULT_MODEL, createAi, type AiBinding, type Limits } from "./ai/index.ts";
 import { pruneAi } from "./ai/jobs.ts";
 
 export interface Env extends MailEnv {
@@ -45,11 +45,21 @@ export interface Env extends MailEnv {
    * this account; the key only authorises the app. Not a Cloudflare API token.
    */
   AI_RELAY_KEY?: string;
+  /**
+   * `wrangler secret put OPENROUTER_API_KEY`: when set, the relay calls OpenRouter first and falls
+   * back to the Workers AI binding. OPENROUTER_MODEL picks the model; OPENROUTER_PRIVACY="0" allows
+   * providers that may keep prompts (the default asks OpenRouter for ones that do not).
+   */
+  OPENROUTER_API_KEY?: string;
+  OPENROUTER_MODEL?: string;
+  OPENROUTER_PRIVACY?: string;
   /** "1" turns Gemma 4's thinking mode on for the relay. Off by default (see src/ai/index.ts). */
   AI_THINKING?: string;
   /** Quotas (docs/ai-harness-spec.md section 5). Each is a positive integer; unset or invalid keeps the default. */
   AI_CHAT_PER_HOUR?: string;
   AI_IMPORT_PER_DAY?: string;
+  /** Credits per signed-in account per UTC week (default 40). */
+  AI_WEEKLY_CREDITS?: string;
   AI_DAILY_NEURONS?: string;
   AI_MAX_PAGES?: string;
   AI_JOB_TTL_HOURS?: string;
@@ -184,6 +194,7 @@ function aiLimits(env: Env): Partial<Limits> {
   set("importPerDay", posInt(env.AI_IMPORT_PER_DAY));
   set("dailyNeurons", posInt(env.AI_DAILY_NEURONS));
   set("maxPages", posInt(env.AI_MAX_PAGES));
+  set("weeklyCredits", posInt(env.AI_WEEKLY_CREDITS));
   return l;
 }
 
@@ -206,6 +217,9 @@ async function handleFetch(req: Request, env: Env, ctx: ExecutionContext): Promi
     authenticate: (r) => a.authenticate(r),
     relayKey: env.AI_RELAY_KEY,
     thinking: env.AI_THINKING === "1",
+    openrouter: env.OPENROUTER_API_KEY?.trim()
+      ? { key: env.OPENROUTER_API_KEY.trim(), model: env.OPENROUTER_MODEL?.trim() || OPENROUTER_DEFAULT_MODEL, privacy: env.OPENROUTER_PRIVACY !== "0" }
+      : undefined,
     db: env.DB,
     bucket: env.POOL,
     limits: aiLimits(env),
