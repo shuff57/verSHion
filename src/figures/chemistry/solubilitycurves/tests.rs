@@ -104,6 +104,17 @@ fn ref_round(v: f64, dec: usize) -> String {
     if v < 0.0 { format!("\u{2212}{out}") } else { out }
 }
 
+/// `v` to `places` decimals, half away from zero, by integer arithmetic on the value to 9 places.
+fn ref_round_at(v: f64, places: usize) -> String {
+    let scaled = (v.abs() * 1e9).round() as i128;
+    let unit = 10i128.pow((9 - places as i32).max(0) as u32);
+    let r = (scaled + unit / 2) / unit;
+    let s = format!("{:0>width$}", r, width = places + 1);
+    let (ip, fp) = s.split_at(s.len() - places);
+    let out = if places > 0 { format!("{ip}.{fp}") } else { ip.to_string() };
+    if v < 0.0 { format!("\u{2212}{out}") } else { out }
+}
+
 fn close(a: f64, b: f64, rel: f64) -> bool { (a - b).abs() <= rel * a.abs().max(b.abs()).max(1e-300) }
 
 // ---------------------------------------------------------------------------------------------
@@ -111,7 +122,7 @@ fn close(a: f64, b: f64, rel: f64) -> bool { (a - b).abs() <= rel * a.abs().max(
 // ---------------------------------------------------------------------------------------------
 
 #[derive(Clone, Debug)]
-struct T { x: f64, y: f64, fs: f64, anchor: String, text: String, kind: String, feat: String, group: String, rot: Option<(f64, f64)> }
+struct T { x: f64, y: f64, fs: f64, anchor: String, text: String, kind: String, feat: String, group: String, fill: String, rot: Option<(f64, f64)> }
 
 fn attr(tag: &str, k: &str) -> Option<String> {
     let pat = format!(" {k}=\"");
@@ -141,6 +152,7 @@ fn texts(svg: &str) -> Vec<T> {
             kind: attr(tag, "data-o").unwrap_or_default(),
             feat: attr(tag, "data-f").unwrap_or_default(),
             group: attr(tag, "data-g").unwrap_or_default(),
+            fill: attr(tag, "fill").unwrap_or_default(),
             rot,
         });
     }
@@ -162,10 +174,10 @@ fn path_pts(d: &str) -> Vec<Pt> {
 
 type Seg = (Pt, Pt);
 /// Strokes (kind, feature, segment), whole paths (kind, feature, points, style) and markers (feature, kind of shape, box).
-struct Geo { strokes: Vec<(String, String, Seg)>, paths: Vec<(String, String, Vec<Pt>, String)>, marks: Vec<(String, String, Bx)> }
+struct Geo { strokes: Vec<(String, String, Seg)>, paths: Vec<(String, String, Vec<Pt>, String)>, marks: Vec<(String, String, Bx)>, keys: Vec<(String, String, String, Bx)> }
 
 fn geo(svg: &str) -> Geo {
-    let mut g = Geo { strokes: Vec::new(), paths: Vec::new(), marks: Vec::new() };
+    let mut g = Geo { strokes: Vec::new(), paths: Vec::new(), marks: Vec::new(), keys: Vec::new() };
     for part in svg.split('<').skip(1) {
         let tag = part.split('>').next().unwrap_or("");
         let kind = attr(tag, "data-o").unwrap_or_default();
@@ -175,21 +187,21 @@ fn geo(svg: &str) -> Geo {
             g.strokes.push((kind, feat, ((x1, y1), (x2, y2))));
         } else if tag.starts_with("path ") {
             let pts = path_pts(&attr(tag, "d").unwrap());
-            if kind == "mark" {
+            if kind == "mark" || kind == "key" {
                 let bx = pts.iter().fold((f64::MAX, f64::MIN, f64::MAX, f64::MIN), |a, p| (a.0.min(p.0), a.1.max(p.0), a.2.min(p.1), a.3.max(p.1)));
-                g.marks.push((feat, attr(tag, "data-s").unwrap_or_default(), bx));
+                if kind == "key" { g.keys.push((feat, attr(tag, "data-g").unwrap_or_default(), attr(tag, "data-s").unwrap_or_default(), bx)); } else { g.marks.push((feat, attr(tag, "data-s").unwrap_or_default(), bx)); }
                 continue;
             }
             for w in pts.windows(2) { g.strokes.push((kind.clone(), feat.clone(), (w[0], w[1]))); }
             let style = format!("{}|{}|{}", attr(tag, "stroke").unwrap_or_default(), attr(tag, "stroke-width").unwrap_or_default(), attr(tag, "stroke-dasharray").unwrap_or_default());
             g.paths.push((kind, feat, pts, style));
-        } else if tag.starts_with("circle ") && kind == "mark" {
+        } else if tag.starts_with("circle ") && (kind == "mark" || kind == "key") {
             let (cx, cy, r) = (attr_f(tag, "cx").unwrap(), attr_f(tag, "cy").unwrap(), attr_f(tag, "r").unwrap());
-            g.marks.push((feat, attr(tag, "data-s").unwrap_or_default(), (cx - r, cx + r, cy - r, cy + r)));
-        } else if tag.starts_with("polygon ") && kind == "mark" {
+            if kind == "key" { g.keys.push((feat, attr(tag, "data-g").unwrap_or_default(), attr(tag, "data-s").unwrap_or_default(), (cx - r, cx + r, cy - r, cy + r))); } else { g.marks.push((feat, attr(tag, "data-s").unwrap_or_default(), (cx - r, cx + r, cy - r, cy + r))); }
+        } else if tag.starts_with("polygon ") && (kind == "mark" || kind == "key") {
             let pts: Vec<Pt> = attr(tag, "points").unwrap().split_whitespace().filter_map(|t| { let (a, b) = t.split_once(',')?; Some((a.parse().ok()?, b.parse().ok()?)) }).collect();
             let bx = pts.iter().fold((f64::MAX, f64::MIN, f64::MAX, f64::MIN), |a, p| (a.0.min(p.0), a.1.max(p.0), a.2.min(p.1), a.3.max(p.1)));
-            g.marks.push((feat, attr(tag, "data-s").unwrap_or_default(), bx));
+            if kind == "key" { g.keys.push((feat, attr(tag, "data-g").unwrap_or_default(), attr(tag, "data-s").unwrap_or_default(), bx)); } else { g.marks.push((feat, attr(tag, "data-s").unwrap_or_default(), bx)); }
         }
     }
     g
@@ -286,7 +298,7 @@ fn audit(svg: &str, g: &mut Glyphs, lab: f64) -> Vec<String> {
         if t.kind != "label" { continue; }
         let Some(bx) = bx else { continue };
         for (kind, feat, (p, q)) in &gm.strokes {
-            if kind == "guide" || kind == "grid" { continue; }
+            if kind == "grid" { continue; }
             if kind == "leader" && *feat == t.feat { continue; }
             if seg_hits(*p, *q, *bx) { bad.push(format!("{:?} on a {kind} stroke of {feat} {p:?}-{q:?}", t.text)); }
         }
@@ -296,6 +308,20 @@ fn audit(svg: &str, g: &mut Glyphs, lab: f64) -> Vec<String> {
         let e = groups.entry(t.group.clone()).or_insert((t.feat.clone(), *bx, t.text.clone()));
         e.1 = (e.1 .0.min(bx.0), e.1 .1.max(bx.1), e.1 .2.min(bx.2), e.1 .3.max(bx.3));
     }
+    // a name's own marker (Print) is part of the name; no other name may be on it
+    for (kf, kg, _, kb) in &gm.keys {
+        if let Some(e) = groups.get_mut(kg) {
+            if e.0 != *kf { bad.push(format!("the key marker of {kf} sits on the label of {}", e.0)); }
+            e.1 = (e.1 .0.min(kb.0), e.1 .1.max(kb.1), e.1 .2.min(kb.2), e.1 .3.max(kb.3));
+        }
+        for (t, bx) in ts.iter().zip(&inks) {
+            if t.kind == "label" && t.group != *kg { if let Some(bx) = bx { if hits(*bx, *kb) { bad.push(format!("{:?} on the key marker of {kf}", t.text)); } } }
+        }
+        for (kind, feat, (p, q)) in &gm.strokes {
+            if kind != "grid" && !(kind == "leader" && feat == kf) && seg_hits(*p, *q, *kb) { bad.push(format!("the key marker of {kf} is on a {kind} stroke of {feat}")); }
+        }
+    }
+    let curves: Vec<String> = { let mut v: Vec<String> = gm.strokes.iter().filter(|x| x.0 == "curve").map(|x| x.1.clone()).collect(); v.sort(); v.dedup(); v };
     let named: Vec<String> = { let mut v: Vec<String> = groups.values().map(|g| g.0.clone()).filter(|f| !f.starts_with("ann")).collect(); v.sort(); v.dedup(); v };
     let dist = |feat: &str, bx: Bx| -> f64 {
         let mut d = f64::MAX;
@@ -312,12 +338,27 @@ fn audit(svg: &str, g: &mut Glyphs, lab: f64) -> Vec<String> {
             if ds > 4.0 { bad.push(format!("the leader of {name:?} starts {ds:.1} px from its {own} feature")); }
             let de = pt_box(z, *bx);
             if de > 6.0 { bad.push(format!("the leader of {name:?} ends {de:.1} px from its label")); }
+            // a leader may not run through, or end beside, a marker that is not its own feature's
+            for (mf, _, mb) in &gm.marks {
+                if mf == own { continue; }
+                let starts_in = a.0 >= mb.0 - 0.5 && a.0 <= mb.1 + 0.5 && a.1 >= mb.2 - 0.5 && a.1 <= mb.3 + 0.5;
+                let own_curve = mf.starts_with("s_") && gm.marks.iter().any(|m2| &m2.0 == own && (m2.2 .0 - mb.0).abs() < 0.6 && (m2.2 .2 - mb.2).abs() < 0.6);
+                if own_curve { continue; }
+                if !starts_in && pts.windows(2).any(|w| seg_hits(w[0], w[1], *mb)) { bad.push(format!("the leader of {name:?} runs through the {mf} marker")); }
+                if !starts_in && pt_box(z, *mb) < 2.0 { bad.push(format!("the leader of {name:?} ends beside the {mf} marker")); }
+            }
             let d_other = named.iter().filter(|o| *o != own).map(|o| dist(o, (a.0, a.0, a.1, a.1))).fold(f64::MAX, f64::min);
             if d_other < ds - 0.25 { bad.push(format!("the leader of {name:?} starts nearer another feature")); }
             continue;
         }
         let d = dist(own, *bx);
         if d > 40.0 * lab { bad.push(format!("{name:?} is {d:.1} px from its {own} feature")); continue; }
+        if own.starts_with("s_") {
+            // a name with no leader line must be nearer its own curve than any other curve
+            let rival = curves.iter().filter(|o| *o != own).map(|o| (dist(o, *bx), o)).fold((f64::MAX, None), |a, (x, o)| if x < a.0 { (x, Some(o)) } else { a });
+            if d > rival.0 - 0.25 { bad.push(format!("{name:?} is {d:.1} px from its {own} curve but {:.1} px from {:?}, with no leader line", rival.0, rival.1)); }
+            continue;
+        }
         let other = named.iter().filter(|o| *o != own).map(|o| (dist(o, *bx), o)).fold((f64::MAX, None), |a, (x, o)| if x < a.0 { (x, Some(o)) } else { a });
         if d > 15.0 && other.0 < d - 6.0 { bad.push(format!("{name:?} is {d:.1} px from its {own} feature but {:.1} px from {:?}", other.0, other.1)); }
     }
@@ -559,12 +600,30 @@ fn a_point_is_classified_from_the_printed_values_and_the_neighbours_of_the_curve
                 let text = rep.readout.iter().find(|x| x.contains(" so A lies ")).unwrap().clone();
                 let dl = rep.readout.iter().find(|x| x.starts_with("Point A: dissolved per 100 g")).unwrap().clone();
                 let ys = dl.split("= ").last().unwrap().trim_end_matches(" g").to_string();
-                assert_eq!(ys, ref_round(m, dec), "{} {m}", r.1);
-                let rs = ref_round(sv, dec);
-                let (yv, rv) = (parse_num(&ys), parse_num(&rs));
-                let want = if yv < rv { "unsaturated" } else if yv > rv { "supersaturated" } else { "saturated" };
-                assert!(text.contains(&format!("the solution is {want}.")), "{} m={m} dec={dec}: {text} (ref {rs})", r.1);
-                assert!(text.starts_with(&format!("Point A: {ys} ")) && text.contains(&format!(" {rs}, so A lies ")), "{text}");
+                // the places shown: the chosen ones, and one more each time the two readings would still look alike
+                let nd = |s: &str| if s.contains('.') { s.split('.').nth(1).unwrap().len() } else { 0 };
+                let sigfig = |s: &str| s.trim_start_matches("0.").trim_start_matches('0').len();
+                let (yv, rv) = (m * 100.0 / 100.0, sv);
+                let exact = (yv - rv).abs() <= 1e-9 * yv.abs().max(rv.abs());
+                let want = if exact { "saturated" } else if yv < rv { "unsaturated" } else { "supersaturated" };
+                assert!(text.contains(&format!("the solution is {want}.")), "{} m={m} dec={dec}: {text} (ref {sv})", r.1);
+                // every printed value is the exact one rounded once to the places shown, and the two differ when they are not equal
+                let first = text.strip_prefix("Point A: ").unwrap();
+                let shown_y = first.split(' ').next().unwrap().to_string();
+                let rs = text.split(" so A lies ").next().unwrap().trim_end_matches(',').rsplit(' ').next().unwrap().to_string();
+                assert_eq!(shown_y, ys, "{} {m}: the comparison and the division print the same number", r.1);
+                let places = if sv.abs() >= 1.0 { nd(&rs) } else { 0 };
+                if yv == 0.0 {
+                    assert_eq!(parse_num(&ys), 0.0, "{text}");
+                } else if sv.abs() >= 1.0 {
+                    assert!(places >= dec, "{text}");
+                    assert_eq!(ys, ref_round_at(yv, places), "{} {m}", r.1);
+                    assert_eq!(rs, ref_round_at(rv, places), "{} {m}", r.1);
+                } else {
+                    // three significant figures, and more when they would agree
+                    assert!(sigfig(&rs) >= 3 && sigfig(&ys) == sigfig(&rs), "{text}");
+                }
+                if !exact { assert_ne!(ys, rs, "{} m={m} dec={dec}: unequal readings shown alike: {text}", r.1); }
             }
         }
     }
@@ -686,20 +745,29 @@ fn the_saturation_temperature_is_read_back_from_the_curve() {
         for n in 0..=20 {
             let target = a.min(z) + (a.max(z) - a.min(z)) * n as f64 / 20.0;
             let m = sig4(target * 2.5);
-            let rep = key(&temp_list(r.1, m, 250.0, 2));
-            let txt = joined(&rep);
-            let ys = ref_round(m * 100.0 / 250.0, 2);
-            let y = parse_num(&ys);
-            if y < a.min(z) - 1e-12 || y > a.max(z) + 1e-12 { continue; }
-            assert!(txt.contains(&format!("{} × 100 / 250 = {ys} g", tfmt(m))), "{txt}");
-            let line = line_starting(&rep.readout, "The curve is at ").unwrap_or_else(|| panic!("{} {m}: {txt}", r.1));
-            let t = parse_num(&num_after(line, "when T = "));
-            // independent inversion by scanning
-            let mut best = (f64::MAX, lo);
-            let mut tt = lo;
-            while tt <= hi + 1e-9 { let e = (ref_eval(r.3, tt) - y).abs(); if e < best.0 { best = (e, tt); } tt += 0.01; }
-            assert!((t - best.1).abs() <= 0.51, "{} y={y}: printed {t}, scan {}", r.1, best.1);
-            assert!(t == t.round() && t >= lo && t <= hi, "{t}");
+            // the amount as given: m grams in 250 g of water, not rounded to the places shown
+            let y = m * 100.0 / 250.0;
+            if y < a.min(z) - 1e-9 * a.min(z) || y > a.max(z) + 1e-9 * a.max(z) { continue; }
+            for dec in [0i64, 1, 2] {
+                let rep = key(&temp_list(r.1, m, 250.0, dec));
+                let txt = joined(&rep);
+                assert!(txt.contains(&format!("{} × 100 / 250 = ", tfmt(m))), "{txt}");
+                // independent inversion by scanning the reference curve
+                let mut best = (f64::MAX, lo);
+                let mut tt = lo;
+                while tt <= hi + 1e-9 { let e = (ref_eval(r.3, tt) - y).abs(); if e < best.0 { best = (e, tt); } tt += 0.01; }
+                // the local slope of the reference curve, per degree, against its value
+                let (v0, v1) = (ref_eval(r.3, (best.1 - 0.5).max(lo)), ref_eval(r.3, (best.1 + 0.5).min(hi)));
+                let rel_slope = ((v1 - v0) / ((best.1 + 0.5).min(hi) - (best.1 - 0.5).max(lo))).abs() / (0.5 * (v0 + v1));
+                if rel_slope < 0.0014 {
+                    assert!(txt.contains("almost flat here, so the temperature cannot be read reliably") && !txt.contains("when T ="), "{} y={y}: {txt}", r.1);
+                } else if rel_slope > 0.0016 {
+                    let line = line_starting(&rep.readout, "The curve is at ").unwrap_or_else(|| panic!("{} {m}: {txt}", r.1));
+                    let t = parse_num(&num_after(line, "when T = "));
+                    assert!((t - best.1).abs() <= 0.51, "{} y={y}: printed {t}, scan {}", r.1, best.1);
+                    assert!(t == t.round() && t >= lo && t <= hi, "{t}");
+                }
+            }
         }
     }
     // the example: 60 g KNO3 in 100 g water just saturates a little below 40 degrees
@@ -1065,8 +1133,9 @@ fn sweep_cases() -> Vec<Vec<(&'static str, Value)>> {
 
 #[test]
 fn labels_clear_and_attributed_across_ten_thousand_cases_in_real_glyphs() {
-    let cases = sweep_cases();
-    assert!(cases.len() >= 10_000);
+    let step: usize = std::env::var("VERSHION_SWEEP_STEP").ok().and_then(|v| v.parse().ok()).unwrap_or(1);
+    let cases: Vec<_> = sweep_cases().into_iter().step_by(step).collect();
+    assert!(cases.len() >= 10_000 / step);
     let chunks: Vec<&[Vec<(&'static str, Value)>]> = cases.chunks(cases.len().div_ceil(4)).collect();
     let results: Vec<(usize, usize, Vec<String>, usize)> = std::thread::scope(|sc| {
         let hs: Vec<_> = chunks.iter().map(|ch| sc.spawn(move || {
@@ -1092,10 +1161,10 @@ fn labels_clear_and_attributed_across_ten_thousand_cases_in_real_glyphs() {
     let labels: usize = results.iter().map(|r| r.0).sum();
     let leaders: usize = results.iter().map(|r| r.1).sum();
     let bad: Vec<&String> = results.iter().flat_map(|r| r.2.iter()).collect();
-    if let Ok(out) = std::env::var("VERSHION_AUDIT_OUT") { std::fs::write(out, bad.iter().map(|x| x.as_str()).collect::<Vec<_>>().join("\n")).unwrap(); }
+    if let Ok(out) = std::env::var("VERSHION_SOL_AUDIT_OUT") { std::fs::write(out, bad.iter().map(|x| x.as_str()).collect::<Vec<_>>().join("\n")).unwrap(); }
     let dropped: usize = results.iter().map(|r| r.3).sum();
     println!("labels {labels}, leader lines {leaders}, dropped {dropped}, problems {}", bad.len());
-    assert!(labels > 60_000, "only {labels} labels placed");
+    assert!(labels > 60_000 / step, "only {labels} labels placed");
     assert!(leaders > 0, "the sweep never needed a leader line");
     assert!(bad.is_empty(), "{} problems in {labels} labels, first: {:#?}", bad.len(), &bad[..bad.len().min(12)]);
 }
@@ -1111,7 +1180,7 @@ fn no_name_is_left_out_in_any_swept_case() {
         total += 1;
         for n in rep.notes.iter().filter(|n| n.contains("could not be placed")) { lost.push(format!("{n} in {c:?}")); }
     }
-    if let Ok(out) = std::env::var("VERSHION_DROP_OUT") { std::fs::write(out, lost.join("\n")).unwrap(); }
+    if let Ok(out) = std::env::var("VERSHION_SOL_DROP_OUT") { std::fs::write(out, lost.join("\n")).unwrap(); }
     assert!(total >= 10_000 / step);
     assert!(lost.is_empty(), "{} names left out of {total} cases, first: {:#?}", lost.len(), &lost[..lost.len().min(6)]);
 }
@@ -1319,6 +1388,13 @@ fn solubility_pngs() {
         gas.extend([b("s_o2", true), s("mode", mode), f("t1", 50.0), f("t2", 10.0), f("water", 1000.0), f("solute", 2.0), i("n_points", 2), f("pb_t", 20.0), f("pb_m", 1.688)]);
         cases.push((format!("{tag}-gas"), gas));
     }
+    cases.push(("fixsix".into(), vec![s("mode", READ)]));
+    cases.push(("fixcrystten".into(), { let mut g = all_on(); g.extend([s("mode", CRYST), f("t1", 40.0), f("t2", 20.0)]); g }));
+    cases.push(("fixclassco2".into(), { let mut g = sub_params("CO₂"); g.extend([s("mode", CLASSIFY), i("n_points", 3), f("t1", 20.0), f("solute", 0.169), f("pb_t", 40.0), f("pb_m", 0.2), f("pc_t", 10.0), f("pc_m", 0.05)]); g }));
+    cases.push(("fixclassoff".into(), { let mut g = sub_params("KNO₃"); g.extend([s("mode", CLASSIFY), i("n_points", 3), f("t1", 40.0), f("solute", 900.0), f("pb_t", 60.0), f("pb_m", 5000.0), f("pc_t", 20.0), f("pc_m", 20.0)]); g }));
+    cases.push(("fixtempa".into(), { let mut g = sub_params("KNO₃"); g.extend([s("mode", TEMP), f("solute", 60.0), f("water", 100.0)]); g }));
+    cases.push(("fixtempb".into(), { let mut g = sub_params("KNO₃"); g.extend([s("mode", TEMP), f("solute", 5.0), f("water", 100.0)]); g }));
+    cases.push(("fixtempnacl".into(), { let mut g = sub_params("NaCl"); g.extend([s("mode", TEMP), f("solute", 35.66), f("water", 100.0)]); g }));
     cases.push(("gas-cooled".into(), { let mut g = sub_params("CO₂"); g.extend([s("mode", CRYST), f("t1", 10.0), f("t2", 50.0), f("water", 1000.0)]); g }));
     cases.push(("mixed".into(), vec![s("mode", READ), b("s_co2", true), b("s_o2", true)]));
     for (i_, e) in examples(ID).unwrap().into_iter().enumerate() { cases.push((format!("ex{i_}"), e.params)); }
@@ -1336,3 +1412,248 @@ fn solubility_pngs() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// Fix round: gas wording, the student copy of the temperature question, attribution, leaders, flat curves
+// ---------------------------------------------------------------------------------------------
+
+fn every_text(l: &[(&'static str, Value)]) -> String {
+    let p = with(l);
+    let (svg, rep) = build(&p);
+    format!("{}\n{}\n{}\n{}", all_text(&svg), rep.notes.join("\n"), rep.readout.join("\n"), desc_of(&svg))
+}
+
+#[test]
+fn a_gas_never_crystallises_in_any_text_of_any_mode() {
+    let mut n = 0;
+    for name in ["CO₂", "O₂"] {
+        let top = if name == "CO₂" { 0.5 } else { 0.002 };
+        for mode in [READ, CLASSIFY, CRYST, TEMP] {
+            for ans in [true, false] {
+                for (t1, t2) in [(20.0, 40.0), (40.0, 20.0), (30.0, 30.0)] {
+                    for dec in 0..=2 {
+                        for fac in [0.0, 0.3, 0.7, 1.0, 1.4, 3.0] {
+                            let mut l = sub_params(name);
+                            l.extend([s("mode", mode), f("t1", t1), f("t2", t2), i("dec", dec), b(SHOW_ANSWERS, ans), i("n_points", 3), f("water", 100.0), f("solute", sig4(top * 0.34 * fac)), f("pb_t", 40.0), f("pb_m", sig4(top * 0.2 * fac)), f("pc_t", 10.0), f("pc_m", sig4(top * 0.4 * fac))]);
+                            let t = every_text(&l);
+                            n += 1;
+                            assert!(!t.to_lowercase().contains("crystallis"), "{name} {mode} ans={ans} t1={t1} t2={t2} dec={dec} fac={fac}: {t}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(n > 800);
+    // the reported case: a supersaturated gas says the gas comes out, in the words of the other modes
+    let mut l = sub_params("CO₂");
+    l.extend([s("mode", CLASSIFY), i("n_points", 3), f("t1", 20.0), f("solute", 0.169), f("pb_t", 40.0), f("pb_m", 0.2), b(SHOW_ANSWERS, true)]);
+    let t = every_text(&l);
+    assert!(t.contains("supersaturated") && t.contains("gas") && t.contains("comes out of solution"), "{t}");
+    // a salt still says it crystallises, so the words are not simply removed
+    let mut l = sub_params("KNO₃");
+    l.extend([s("mode", CLASSIFY), f("solute", 90.0), b(SHOW_ANSWERS, true)]);
+    assert!(every_text(&l).contains("crystallise"), "{}", every_text(&l));
+}
+
+/// What the student copy draws that is not a curve, a table point, the grid or the axes: kind, feature and the
+/// horizontal extent, rounded (the height of a guide is the given amount, the same whatever the answer).
+fn skeleton(svg: &str) -> Vec<String> {
+    let g = geo(svg);
+    let mut v: Vec<String> = Vec::new();
+    for (kind, feat, pts, style) in &g.paths {
+        if kind == "guide" {
+            let (a, z) = (pts.iter().map(|p| p.0).fold(f64::MAX, f64::min), pts.iter().map(|p| p.0).fold(f64::MIN, f64::max));
+            v.push(format!("guide {feat} x {a:.1}..{z:.1} {style}"));
+        }
+    }
+    for (feat, shape, bx) in &g.marks {
+        if feat.starts_with("pt") { v.push(format!("mark {feat} {shape} x {:.1}", (bx.0 + bx.1) / 2.0)); }
+    }
+    v.sort();
+    v
+}
+
+#[test]
+fn the_student_copy_of_the_temperature_question_draws_the_same_whatever_the_answer() {
+    let only = |name: &str, m: f64| { let mut l = sub_params(name); l.extend([s("mode", TEMP), f("solute", m), f("water", 100.0), b(SHOW_ANSWERS, false)]); l };
+    let with_answer = svg_of(&only("KNO₃", 60.0));
+    // the answer is a dot on the key and nothing on the student copy; the guide runs the whole width in every case
+    for (name, m) in [("KNO₃", 60.0), ("KNO₃", 5.0), ("KNO₃", 300.0), ("KNO₃", 13.3), ("KNO₃", 246.0), ("KClO₃", 20.0), ("Ce₂(SO₄)₃", 7.24)] {
+        let svg = svg_of(&only(name, m));
+        let right = rep_of(&only(name, m)).frame.right();
+        let g = geo(&svg);
+        assert!(!g.marks.iter().any(|x| x.0 == "ptT"), "{name} {m}: a dot on the student copy");
+        assert!(!g.paths.iter().any(|x| x.1 == "gTv"), "{name} {m}: a vertical guide on the student copy");
+        let gy = g.paths.iter().find(|x| x.0 == "guide" && x.1 == "gy").unwrap_or_else(|| panic!("{name} {m}: no guide"));
+        let x_end = gy.2.iter().map(|p| p.0).fold(f64::MIN, f64::max);
+        assert!((x_end - right).abs() < 0.6, "{name} {m}: the guide stops at {x_end}, the frame ends at {right}");
+    }
+    // the same geometry with an answer and without one
+    let a = skeleton(&with_answer);
+    // (the amounts written alike, so the margin that holds the given amount is the same width)
+    for m in [10.0, 12.0, 11.5, 99.0] {
+        let b_ = skeleton(&svg_of(&only("KNO₃", m)));
+        assert_eq!(a, b_, "KNO3 {m}");
+    }
+    let a2 = skeleton(&svg_of(&only("KNO₃", 100.0)));
+    for m in [260.0, 270.0, 300.0] { assert_eq!(a2, skeleton(&svg_of(&only("KNO₃", m))), "KNO3 {m}"); }
+    // the key still marks the answer
+    let mut k = only("KNO₃", 60.0);
+    k.push(b(SHOW_ANSWERS, true));
+    assert!(geo(&svg_of(&k)).marks.iter().any(|x| x.0 == "ptT"));
+    // and an amount that never saturates stays a full line on the key
+    let mut k = only("KNO₃", 300.0);
+    k.push(b(SHOW_ANSWERS, true));
+    assert!(!geo(&svg_of(&k)).marks.iter().any(|x| x.0 == "ptT"));
+}
+
+fn audit_case(l: &[(&'static str, Value)]) -> Vec<String> {
+    let p = with(l);
+    let svg = build(&p).0;
+    audit(&svg, &mut Glyphs::new(), svg::label_factor(p.s("label_size")))
+}
+
+#[test]
+fn the_default_six_curves_are_named_by_colour_marker_and_a_leader_where_the_end_is_crowded() {
+    for size in ["Small", "Medium", "Large"] {
+        for style in ["Colour", "Print"] {
+            for mode in [READ, CLASSIFY, CRYST, TEMP] {
+                for ans in [true, false] {
+                    let l = vec![s("label_size", size), s("style", style), s("mode", mode), b(SHOW_ANSWERS, ans), i("n_points", 3)];
+                    let bad = audit_case(&l);
+                    assert!(bad.is_empty(), "{size} {style} {mode} ans={ans}: {bad:?}");
+                }
+            }
+        }
+    }
+    let six = ["KNO₃", "NaNO₃", "NaCl", "KCl", "KClO₃", "NH₄Cl"];
+    // colour: each name has the colour of its curve (darkened to read on white), and no two are alike
+    let svg = svg_of(&[s("style", "Colour")]);
+    let ts: Vec<T> = texts(&svg).into_iter().filter(|t| t.kind == "label" && six.contains(&t.text.as_str())).collect();
+    assert_eq!(ts.len(), 6);
+    let fills: BTreeSet<String> = ts.iter().map(|t| t.fill.clone()).collect();
+    assert_eq!(fills.len(), 6, "{fills:?}");
+    for t in &ts {
+        assert!(t.fill != "#1b1b1b" && t.fill != "#111111", "{} is black", t.text);
+        let k = SUBS.iter().find(|x| x.name == t.text).unwrap();
+        let (cr, cg, cb) = hex(k.colour);
+        let (lr, lg, lb) = hex(&t.fill);
+        // the same hue: each channel no brighter than the curve's, and the order of the channels the same
+        assert!(lr <= cr + 1 && lg <= cg + 1 && lb <= cb + 1, "{} {} against {}", t.text, t.fill, k.colour);
+        assert!(((cr as i32 - cg as i32) * (lr as i32 - lg as i32)) >= 0 && ((cg as i32 - cb as i32) * (lg as i32 - lb as i32)) >= 0, "{} {} against {}", t.text, t.fill, k.colour);
+        // dark enough to read: contrast of at least 4.5 against white
+        assert!(contrast(lr, lg, lb) >= 4.5, "{} {}: {:.2}", t.text, t.fill, contrast(lr, lg, lb));
+    }
+    // print: grey only, and each name carries the marker shape of its curve
+    let svg = svg_of(&[s("style", "Print")]);
+    let g = geo(&svg);
+    for t in texts(&svg).into_iter().filter(|t| t.kind == "label" && six.contains(&t.text.as_str())) {
+        let k = SUBS.iter().find(|x| x.name == t.text).unwrap();
+        let km: Vec<_> = g.keys.iter().filter(|x| x.1 == t.group).collect();
+        assert_eq!(km.len(), 1, "{}: {} key markers", t.text, km.len());
+        assert_eq!(km[0].2, k.marker, "{}", t.text);
+        assert_eq!(km[0].0, k.key, "{}", t.text);
+        assert!(is_grey(&t.fill), "{} {}", t.text, t.fill);
+    }
+    // the end labels read in the order of the curves' ends, from the top, and keep clear of each other
+    for style in ["Colour", "Print"] {
+        let svg = svg_of(&[s("style", style)]);
+        let mut ends: Vec<(f64, f64, String)> = Vec::new();
+        for t in texts(&svg).into_iter().filter(|t| t.kind == "label" && six.contains(&t.text.as_str())) {
+            let k = SUBS.iter().position(|x| x.name == t.text).unwrap();
+            let rep = rep_of(&[s("style", style)]);
+            let end_y = rep.frame.py(SUBS[k].data[SUBS[k].data.len() - 1].1);
+            ends.push((end_y, t.y, t.text.clone()));
+        }
+        ends.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.2.cmp(&b.2)));
+        for w in ends.windows(2) {
+            if (w[0].0 - w[1].0).abs() > 0.5 { assert!(w[0].1 < w[1].1, "{style}: {} should be above {}: {ends:?}", w[0].2, w[1].2); }
+            assert!((w[1].1 - w[0].1).abs() >= 13.0, "{style}: {} and {} are too close: {ends:?}", w[0].2, w[1].2);
+        }
+    }
+}
+
+fn hex(h: &str) -> (u8, u8, u8) { let v = |a: usize| u8::from_str_radix(&h[a..a + 2], 16).unwrap(); (v(1), v(3), v(5)) }
+fn contrast(r: u8, g: u8, b: u8) -> f64 {
+    let lin = |c: u8| { let c = c as f64 / 255.0; if c <= 0.03928 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) } };
+    let l = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    1.05 / (l + 0.05)
+}
+
+#[test]
+fn crystallising_with_every_curve_on_keeps_the_temperature_leaders_clear_of_other_markers() {
+    for (t1, t2) in [(40.0, 20.0), (60.0, 20.0), (80.0, 20.0), (50.0, 10.0), (40.0, 30.0)] {
+        for size in ["Small", "Medium", "Large"] {
+            for style in ["Colour", "Print"] {
+                for ans in [true, false] {
+                    let mut l = all_on();
+                    l.extend([s("mode", CRYST), f("t1", t1), f("t2", t2), s("label_size", size), s("style", style), b(SHOW_ANSWERS, ans)]);
+                    let bad = audit_case(&l);
+                    assert!(bad.is_empty(), "{t1}->{t2} {size} {style} ans={ans}: {bad:?}");
+                    let svg = svg_of(&l);
+                    // the two temperatures are named at the foot of their guides, on the axis
+                    for t in ["T₁ = ", "T₂ = "] { assert!(texts(&svg).iter().any(|x| x.text.starts_with(t)), "{t1}->{t2}: no {t}"); }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn the_audit_sees_a_leader_through_another_curves_marker_and_a_name_nearer_another_curve() {
+    let mut g = Glyphs::new();
+    let svg = svg_of(&[s("mode", CLASSIFY), f("t1", 40.0), f("solute", 50.0)]);
+    assert!(audit(&svg, &mut g, 1.0).is_empty(), "{:?}", audit(&svg, &mut g, 1.0));
+    // a hand-made leader from the point A straight up through the markers above it
+    let gm = geo(&svg);
+    let p2 = gm.marks.iter().find(|m| m.0 == "ptA").unwrap().2;
+    let (x, y) = ((p2.0 + p2.1) / 2.0, (p2.2 + p2.3) / 2.0);
+    let leader = format!(r##"<path d="M{x:.2},{y:.2} L{x:.2},{:.2}" fill="none" stroke="#444" stroke-width="1" data-o="leader" data-f="ptA"/>"##, y - 60.0);
+    let bad = svg.replace("</svg>", &format!("{leader}</svg>"));
+    let out = audit(&bad, &mut g, 1.0);
+    assert!(out.iter().any(|m| m.contains("runs through") || m.contains("ends beside") || m.contains("ends ")), "{out:?}");
+    // the KCl name moved under the cluster, nearer the NaCl curve
+    let svg = svg_of(&[]);
+    let kcl = texts(&svg).into_iter().find(|t| t.text == "KCl").unwrap();
+    let nacl_curve = geo(&svg).paths.iter().find(|p| p.0 == "curve" && p.1 == "s_nacl").unwrap().2.clone();
+    let q = nacl_curve[nacl_curve.len() / 3];
+    let moved = svg.replace(&format!(r#"x="{:.2}" y="{:.2}""#, kcl.x, kcl.y), &format!(r#"x="{:.2}" y="{:.2}""#, q.0 + 8.0, q.1 + 24.0));
+    let out = audit(&moved, &mut g, 1.0);
+    assert!(out.iter().any(|m| m.contains("no leader line") || m.contains("stroke") || m.contains("marker") || m.contains("leader")), "{out:?}");
+}
+
+#[test]
+fn a_flat_curve_does_not_give_a_false_temperature() {
+    // NaCl rises 3.3 g per 100 g over 100 degrees: the temperature of a given amount is not determined by the data
+    for (m, dec) in [(35.66, 1), (35.66, 2), (36.0, 1), (36.0, 0), (36.5, 2), (37.0, 1), (38.0, 1), (35.7, 0)] {
+        let t = joined(&key(&temp_list("NaCl", m, 100.0, dec)));
+        assert!(t.contains("almost flat here, so the temperature cannot be read reliably"), "{m} dec {dec}: {t}");
+        assert!(!t.contains("when T ="), "{m} dec {dec}: {t}");
+    }
+    // the given is inverted as typed, not as rounded to the places shown: 35.66 g is at 1 degree, not at 8
+    // (the old key printed "8 °C" for it)
+    let t = joined(&key(&temp_list("NaCl", 35.66, 100.0, 1)));
+    assert!(!t.contains("8 °C") && !t.contains(" T = 8"), "{t}");
+    // a steep curve still gives a degree, from the typed amount
+    for (name, m, want) in [("KNO₃", 60.0, 38.0), ("KCl", 40.1, 40.0), ("KCl", 34.2, 20.0), ("KCl", 37.2, 30.0), ("NH₄Cl", 45.8, 40.0), ("NaNO₃", 87.6, 20.0)] {
+        let t = joined(&key(&temp_list(name, m, 100.0, 1)));
+        assert!(t.contains(&format!("when T = {want} °C")), "{name} {m}: {t}");
+    }
+    // typed 4-figure amounts are not rounded first: 61.57 g of KNO3 in 100 g of water, dec 0 (62 would be 39 degrees)
+    let exact = temperature_at(0, 61.57).unwrap();
+    let t = joined(&key(&temp_list("KNO₃", 61.57, 100.0, 0)));
+    assert!(t.contains(&format!("when T = {} °C", exact.round())), "{exact}: {t}");
+    // and the neighbours: just above the highest value of the curve, and a gas (small numbers, not flat)
+    let t = joined(&key(&temp_list("NaCl", 40.0, 100.0, 1)));
+    assert!(t.contains("more than the highest solubility"), "{t}");
+    let t = joined(&key(&temp_list("CO₂", 0.1688, 100.0, 1)));
+    assert!(t.contains("when T = 20 °C"), "{t}");
+    // the student copy never carries the sentence
+    let mut l = temp_list("NaCl", 35.66, 100.0, 1);
+    l.push(b(SHOW_ANSWERS, false));
+    assert!(!every_text(&l).contains("almost flat"));
+}
+
+
+

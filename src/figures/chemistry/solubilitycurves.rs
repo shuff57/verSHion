@@ -58,19 +58,19 @@ const fn salt(key: &'static str, name: &'static str, data: &'static [(f64, f64)]
 /// CRC Handbook of Chemistry and Physics, "Solubility of inorganic compounds in water", g of solute per 100 g of
 /// water, as listed in Wikipedia's "Solubility table" (read 2026-10-31): the cells the table fills, and no others.
 /// Carbon dioxide: Lange's Handbook of Chemistry, 10th ed., p. 1100, g per 100 mL of water at 101.3 kPa partial
-/// pressure of CO2 (the density of water is within 1% of 1 g/mL over 0 to 60 °C, so the figure reads them as per 100 g).
+/// pressure of CO2 (the density of water is within 2% of 1 g/mL over 0 to 60 °C, so the figure reads them as per 100 g).
 /// Oxygen: the same table, at a partial pressure of 21 kPa (air), g per 100 mL.
 pub const SUBS: [SubDef; 10] = [
     salt("s_kno3", "KNO₃", &[(0.0, 13.3), (10.0, 20.9), (20.0, 31.6), (30.0, 45.8), (40.0, 63.9), (50.0, 85.5), (60.0, 110.0), (70.0, 138.0), (80.0, 169.0), (90.0, 202.0), (100.0, 246.0)], "circle", "", "#1f5fbf"),
-    salt("s_nano3", "NaNO₃", &[(0.0, 73.0), (10.0, 80.8), (20.0, 87.6), (30.0, 94.9), (40.0, 102.0), (60.0, 122.0), (80.0, 148.0), (100.0, 180.0)], "square", "8 4", "#e08a00"),
-    salt("s_nacl", "NaCl", &[(0.0, 35.65), (10.0, 35.72), (20.0, 35.89), (30.0, 36.09), (40.0, 36.37), (50.0, 36.69), (60.0, 37.04), (70.0, 37.46), (80.0, 37.93), (90.0, 38.47), (100.0, 38.99)], "triangle", "2 3", "#2e8b57"),
-    salt("s_kcl", "KCl", &[(0.0, 28.0), (10.0, 31.2), (20.0, 34.2), (30.0, 37.2), (40.0, 40.1), (50.0, 42.6), (60.0, 45.8), (80.0, 51.3), (90.0, 53.9), (100.0, 56.3)], "diamond", "10 3 2 3", "#c0392b"),
-    salt("s_kclo3", "KClO₃", &[(0.0, 3.3), (10.0, 5.2), (20.0, 7.3), (30.0, 10.1), (40.0, 13.9), (60.0, 23.8), (80.0, 37.5), (90.0, 46.0), (100.0, 56.3)], "tridown", "5 2", "#7d3c98"),
-    salt("s_nh4cl", "NH₄Cl", &[(0.0, 29.4), (10.0, 33.2), (20.0, 37.2), (30.0, 41.4), (40.0, 45.8), (50.0, 50.4), (60.0, 55.3), (70.0, 60.2), (80.0, 65.6), (90.0, 71.2), (100.0, 77.3)], "ocircle", "14 4", "#008c9e"),
-    salt("s_pbno32", "Pb(NO₃)₂", &[(0.0, 37.5), (10.0, 46.2), (20.0, 54.3), (30.0, 63.4), (40.0, 72.1), (60.0, 91.6), (80.0, 111.0), (100.0, 133.0)], "osquare", "3 3 8 3", "#8a5a2b"),
-    salt("s_ce2so43", "Ce₂(SO₄)₃", &[(0.0, 21.4), (20.0, 9.84), (30.0, 7.24), (40.0, 5.63), (60.0, 3.87)], "otriangle", "1.5 3.5", "#d6409f"),
-    SubDef { key: "s_co2", name: "CO₂", gas: true, data: &[(0.0, 0.3346), (10.0, 0.2318), (20.0, 0.1688), (30.0, 0.1257), (40.0, 0.0973), (50.0, 0.0761), (60.0, 0.0576)], pressure: "a partial pressure of 1 atm", marker: "plus", dash: "12 3 2 3 2 3", colour: "#555555" },
-    SubDef { key: "s_o2", name: "O₂", gas: true, data: &[(0.0, 0.00146), (10.0, 0.00113), (20.0, 0.00091), (30.0, 0.00076), (40.0, 0.00065)], pressure: "a partial pressure of 21 kPa (its pressure in air)", marker: "cross", dash: "6 3 1.5 3", colour: "#1b2a6b" },
+    salt("s_nano3", "NaNO₃", &[(0.0, 73.0), (10.0, 80.8), (20.0, 87.6), (30.0, 94.9), (40.0, 102.0), (60.0, 122.0), (80.0, 148.0), (100.0, 180.0)], "square", "9 4", "#e08a00"),
+    salt("s_nacl", "NaCl", &[(0.0, 35.65), (10.0, 35.72), (20.0, 35.89), (30.0, 36.09), (40.0, 36.37), (50.0, 36.69), (60.0, 37.04), (70.0, 37.46), (80.0, 37.93), (90.0, 38.47), (100.0, 38.99)], "triangle", "3 3", "#2e8b57"),
+    salt("s_kcl", "KCl", &[(0.0, 28.0), (10.0, 31.2), (20.0, 34.2), (30.0, 37.2), (40.0, 40.1), (50.0, 42.6), (60.0, 45.8), (80.0, 51.3), (90.0, 53.9), (100.0, 56.3)], "diamond", "14 3 3 3", "#c0392b"),
+    salt("s_kclo3", "KClO₃", &[(0.0, 3.3), (10.0, 5.2), (20.0, 7.3), (30.0, 10.1), (40.0, 13.9), (60.0, 23.8), (80.0, 37.5), (90.0, 46.0), (100.0, 56.3)], "tridown", "6 6", "#7d3c98"),
+    salt("s_nh4cl", "NH₄Cl", &[(0.0, 29.4), (10.0, 33.2), (20.0, 37.2), (30.0, 41.4), (40.0, 45.8), (50.0, 50.4), (60.0, 55.3), (70.0, 60.2), (80.0, 65.6), (90.0, 71.2), (100.0, 77.3)], "ocircle", "20 5", "#008c9e"),
+    salt("s_pbno32", "Pb(NO₃)₂", &[(0.0, 37.5), (10.0, 46.2), (20.0, 54.3), (30.0, 63.4), (40.0, 72.1), (60.0, 91.6), (80.0, 111.0), (100.0, 133.0)], "osquare", "4 3 10 3", "#8a5a2b"),
+    salt("s_ce2so43", "Ce₂(SO₄)₃", &[(0.0, 21.4), (20.0, 9.84), (30.0, 7.24), (40.0, 5.63), (60.0, 3.87)], "otriangle", "1 4", "#d6409f"),
+    SubDef { key: "s_co2", name: "CO₂", gas: true, data: &[(0.0, 0.3346), (10.0, 0.2318), (20.0, 0.1688), (30.0, 0.1257), (40.0, 0.0973), (50.0, 0.0761), (60.0, 0.0576)], pressure: "a partial pressure of 1 atm", marker: "plus", dash: "12 3 1 3 1 3 1 3", colour: "#555555" },
+    SubDef { key: "s_o2", name: "O₂", gas: true, data: &[(0.0, 0.00146), (10.0, 0.00113), (20.0, 0.00091), (30.0, 0.00076), (40.0, 0.00065)], pressure: "a partial pressure of 21 kPa, its pressure in air", marker: "cross", dash: "7 2 7 2 1 2", colour: "#1b2a6b" },
 ];
 
 const SHOW_LABELS: [&str; 10] = ["Show KNO₃", "Show NaNO₃", "Show NaCl", "Show KCl", "Show KClO₃", "Show NH₄Cl", "Show Pb(NO₃)₂", "Show Ce₂(SO₄)₃", "Show CO₂", "Show O₂"];
@@ -205,6 +205,19 @@ fn vfmt(v: f64, dec: usize) -> String {
     let r = rd(v, dec);
     let s = format!("{:.*}", places(v.abs(), dec).max(0) as usize, r.abs());
     if r < 0.0 { format!("\u{2212}{s}") } else { s }
+}
+
+/// Like `vfmt` with `extra` more places (or significant figures, below 1): two readings that agree to the places shown
+/// are written to more of them.
+fn vfmt_x(v: f64, dec: usize, extra: usize) -> String {
+    if extra == 0 || !v.is_finite() { return vfmt(v, dec); }
+    let a = v.abs();
+    if a < 1e-12 { return format!("{:.*}", dec + extra, 0.0); }
+    let pl = (places(a, dec) + extra as i32).clamp(0, 300);
+    let p = 10f64.powi(pl);
+    let r = (a * p * (1.0 + 1e-13)).round() / p;
+    let t = format!("{:.*}", pl as usize, r);
+    if v < 0.0 { format!("\u{2212}{t}") } else { t }
 }
 
 /// A given mass or temperature as it is printed: 4 significant figures at most, plain digits.
@@ -349,7 +362,42 @@ struct Stroke { pts: Vec<Pt>, sty: Sty, kind: &'static str, feat: String }
 
 struct Mark { x: f64, y: f64, r: f64, shape: &'static str, fill: String, stroke: String, feat: String }
 
-struct Job { own: String, text: String, point: bool, anchor: Pt, lead: Vec<Pt>, cands: Box<dyn Fn() -> Vec<Cand>> }
+/// A name or letter to place. `ptext` is what the placer measures (the name, with the room for its marker in Print), `slot`
+/// the room the marker takes at the left of the name, `col` the colour of the text.
+struct Job { own: String, text: String, ptext: String, slot: f64, col: String, kmark: Option<(&'static str, String, String)>, curve: bool, point: bool, anchor: Pt, lead: Vec<Pt>, cands: Box<dyn Fn() -> Vec<Cand>> }
+
+/// A name set in the column to the right of the graph, at the end of a curve that runs to 100 °C: in the order of the
+/// curve ends, spaced, and joined to its curve end by a line where it is not level with it or another end is as near.
+struct Fixed { own: String, text: String, slot: f64, col: String, kmark: Option<(&'static str, String, String)>, base: f64, x: f64, bx: Bx, leader: Option<(Pt, Pt)> }
+
+/// A colour darkened to read as text on white (contrast of at least 4.5), keeping its hue.
+fn dark(hex: &str) -> String {
+    let v = |a: usize| u8::from_str_radix(&hex[a..a + 2], 16).unwrap_or(0) as f64;
+    let mut c = [v(1) * 0.62, v(3) * 0.62, v(5) * 0.62];
+    let lum = |c: &[f64; 3]| {
+        let l = |x: f64| { let x = x / 255.0; if x <= 0.03928 { x / 12.92 } else { ((x + 0.055) / 1.055).powf(2.4) } };
+        0.2126 * l(c[0]) + 0.7152 * l(c[1]) + 0.0722 * l(c[2])
+    };
+    while 1.05 / (lum(&c) + 0.05) < 4.5 { for x in c.iter_mut() { *x *= 0.9; } }
+    format!("#{:02x}{:02x}{:02x}", c[0].round() as u8, c[1].round() as u8, c[2].round() as u8)
+}
+
+/// Label positions (centres, top to bottom) as near the wanted ones as the spacing allows, in the same order.
+fn spread(want: &[f64], gap: f64, lo: f64, hi: f64) -> Vec<f64> {
+    let mut p = want.to_vec();
+    for _ in 0..400 {
+        let mut moved = false;
+        for i in 1..p.len() {
+            if p[i] - p[i - 1] < gap - 1e-9 { let m = 0.5 * (p[i] + p[i - 1]); p[i - 1] = m - gap / 2.0; p[i] = m + gap / 2.0; moved = true; }
+        }
+        if !moved { break; }
+    }
+    if let Some(f) = p.first_mut() { *f = f.max(lo); }
+    for i in 1..p.len() { p[i] = p[i].max(p[i - 1] + gap); }
+    if let Some(l) = p.last_mut() { *l = l.min(hi); }
+    for i in (0..p.len().saturating_sub(1)).rev() { p[i] = p[i].min(p[i + 1] - gap); }
+    p
+}
 
 struct Ann { axis: char, pos: f64, text: String, feat: String, key_only: bool }
 
@@ -373,8 +421,26 @@ pub struct Report {
     pub notes: Vec<String>,
 }
 
-fn marker_el(shape: &str, x: f64, y: f64, r: f64, fill: &str, stroke: &str, feat: &str) -> String {
-    let common = format!(r##"data-o="mark" data-f="{feat}" data-s="{shape}""##);
+/// The box a marker of `shape` fills (the box of the polygon, circle or strokes `marker_el` draws).
+fn marker_bbox(shape: &str, x: f64, y: f64, r: f64) -> Bx {
+    match shape {
+        "triangle" | "otriangle" => (x - 1.1 * r, x + 1.1 * r, y - 1.15 * r, y + 0.85 * r),
+        "tridown" => (x - 1.1 * r, x + 1.1 * r, y - 0.85 * r, y + 1.15 * r),
+        "up" => (x - r, x + r, y - 1.3 * r, y + 0.9 * r),
+        "square" | "osquare" | "circle" | "ocircle" | "pt" | "plus" | "cross" => (x - r, x + r, y - r, y + r),
+        _ => (x - 1.25 * r, x + 1.25 * r, y - 1.25 * r, y + 1.25 * r),
+    }
+}
+
+/// The distance from a point to a box (0 inside it).
+fn pt_box_(p: Pt, b: Bx) -> f64 { (b.0 - p.0).max(0.0).max(p.0 - b.1).hypot((b.2 - p.1).max(0.0).max(p.1 - b.3)) }
+
+fn marker_el(shape: &str, x: f64, y: f64, r: f64, fill: &str, stroke: &str, feat: &str) -> String { marker_el_k("mark", "", shape, x, y, r, fill, stroke, feat) }
+
+/// A marker of kind `kind` ("mark": a point on the graph; "key": the marker in front of a name in Print), with `extra` attributes.
+#[allow(clippy::too_many_arguments)]
+fn marker_el_k(kind: &str, extra: &str, shape: &str, x: f64, y: f64, r: f64, fill: &str, stroke: &str, feat: &str) -> String {
+    let common = format!(r##"data-o="{kind}" data-f="{feat}" data-s="{shape}"{extra}"##);
     match shape {
         "circle" | "ocircle" | "pt" => format!(r##"<circle cx="{x:.3}" cy="{y:.3}" r="{r}" fill="{fill}" stroke="{stroke}" stroke-width="1.4" {common}/>"##),
         "plus" => format!(r##"<path d="M{:.2},{y:.2} L{:.2},{y:.2} M{x:.2},{:.2} L{x:.2},{:.2}" fill="none" stroke="{stroke}" stroke-width="2" {common}/>"##, x - r, x + r, y - r, y + r),
@@ -384,6 +450,7 @@ fn marker_el(shape: &str, x: f64, y: f64, r: f64, fill: &str, stroke: &str, feat
                 "square" | "osquare" => vec![(x - r, y - r), (x + r, y - r), (x + r, y + r), (x - r, y + r)],
                 "triangle" | "otriangle" => vec![(x, y - 1.15 * r), (x + 1.1 * r, y + 0.85 * r), (x - 1.1 * r, y + 0.85 * r)],
                 "tridown" => vec![(x, y + 1.15 * r), (x + 1.1 * r, y - 0.85 * r), (x - 1.1 * r, y - 0.85 * r)],
+                "up" => vec![(x, y - 1.3 * r), (x + 1.0 * r, y + 0.9 * r), (x - 1.0 * r, y + 0.9 * r)],
                 _ => vec![(x, y - 1.25 * r), (x + 1.25 * r, y), (x, y + 1.25 * r), (x - 1.25 * r, y)],
             };
             let pts: String = q.iter().map(|(a, b)| format!("{a:.2},{b:.2}")).collect::<Vec<_>>().join(" ");
@@ -444,26 +511,39 @@ pub fn build(p: &Params) -> (String, Report) {
     let r_at = |t: f64| rd(value(sub, t), dec);
     let mut classes: Vec<(f64, f64, Class)> = Vec::new();
     let mut yex: Vec<f64> = Vec::new();
+    let mut extras: Vec<usize> = Vec::new();
     if st.mode == Mode::Classify {
         for &(t, m) in &st.pts {
             let y = 100.0 * m / w_;
-            let (yp, rp) = (rd(y, dec), r_at(t));
-            classes.push((yp, rp, if yp < rp { Class::Unsat } else if yp > rp { Class::Super } else { Class::Sat }));
+            let c = value(sub, t);
+            // the comparison is made on the full values: two readings that agree to the places shown are told apart by
+            // showing more places, not called equal
+            let cls = if (y - c).abs() <= 1e-9 * y.abs().max(c.abs()).max(1e-300) { Class::Sat } else if y < c { Class::Unsat } else { Class::Super };
+            let mut extra = 0;
+            if cls != Class::Sat { while extra < 4 && vfmt_x(y, dec, extra) == vfmt_x(c, dec, extra) { extra += 1; } }
+            classes.push((rd(y, dec), r_at(t), cls));
+            extras.push(extra);
             yex.push(y);
         }
     }
     let y_temp = 100.0 * st.solute / w_;
     let (r1, r2) = (r_at(st.t1), r_at(st.t2));
     let (smin, smax) = span(sub);
-    let temp_found: Option<f64> = if st.mode == Mode::Temp {
-        let yp = rd(y_temp, dec);
-        if yp < rd(smin, dec) || yp > rd(smax, dec) { None } else {
-            let d = SUBS[sub].data;
-            temperature_at(sub, yp.clamp(smin, smax)).map(|t| round_int(t).clamp(d[0].0, d[d.len() - 1].0))
-        }
-    } else { None };
-    // the crossing the line draws (unrounded) for its dot
-    let temp_cross: Option<f64> = if st.mode == Mode::Temp { temperature_at(sub, rd(y_temp, dec).clamp(smin, smax)).filter(|_| temp_found.is_some()) } else { None };
+    // the amount asked about is inverted as given (not as rounded to the places shown); a value within binary noise of an
+    // end of the curve is that end
+    let y_in = if (y_temp - smin).abs() <= 1e-9 * smin { smin } else if (y_temp - smax).abs() <= 1e-9 * smax { smax } else { y_temp };
+    let in_range = st.mode == Mode::Temp && y_in >= smin && y_in <= smax;
+    let temp_exact: Option<f64> = if in_range { temperature_at(sub, y_in) } else { None };
+    // the curve is almost flat where it changes by under 0.15 % of its value per degree (about 0.05 g per 100 g per degree
+    // at the value of sodium chloride): the temperature is then not fixed to the nearest degree by the data
+    let flat = temp_exact.is_some_and(|t| {
+        let d = SUBS[sub].data;
+        let (lo, hi) = ((t - 0.5).max(d[0].0), (t + 0.5).min(d[d.len() - 1].0));
+        let (va, vb) = (value(sub, lo), value(sub, hi));
+        ((vb - va) / (hi - lo)).abs() < 0.0015 * 0.5 * (va + vb)
+    });
+    let temp_found: Option<f64> = match temp_exact { Some(t) if !flat => { let d = SUBS[sub].data; Some(round_int(t).clamp(d[0].0, d[d.len() - 1].0)) } _ => None };
+    let temp_cross: Option<f64> = temp_exact;
 
     // ---- the axes
     let ymax = st.shown.iter().map(|&k| span(k).1).fold(0.0, f64::max);
@@ -485,34 +565,44 @@ pub fn build(p: &Params) -> (String, Report) {
             Mode::Classify => {
                 for (i, &(t, _)) in st.pts.iter().enumerate() { ax('x', t, gfmt(t), &format!("t{}", i + 1), false); }
                 for (i, &(yp, rp, _)) in classes.iter().enumerate() {
-                    if !off(yex[i]) { ax('y', yex[i], vfmt(yp, dec), &format!("y{}", i + 1), true); }
-                    ax('y', value(sub, st.pts[i].0), vfmt(rp, dec), &format!("r{}", i + 1), true);
+                    let _ = (yp, rp);
+                    if !off(yex[i]) { ax('y', yex[i], vfmt_x(yex[i], dec, extras[i]), &format!("y{}", i + 1), true); }
+                    ax('y', value(sub, st.pts[i].0), vfmt_x(value(sub, st.pts[i].0), dec, extras[i]), &format!("r{}", i + 1), true);
                 }
             }
             Mode::Crystal => {
-                ax('x', st.t1, gfmt(st.t1), "t1", false);
-                ax('x', st.t2, gfmt(st.t2), "t2", false);
+                if st.t1 == st.t2 {
+                    ax('x', st.t1, format!("T₁ = T₂ = {}", gfmt(st.t1)), "t1", false);
+                } else {
+                    ax('x', st.t1, format!("T₁ = {}", gfmt(st.t1)), "t1", false);
+                    ax('x', st.t2, format!("T₂ = {}", gfmt(st.t2)), "t2", false);
+                }
                 ax('y', value(sub, st.t1), vfmt(r1, dec), "r1", true);
                 ax('y', value(sub, st.t2), vfmt(r2, dec), "r2", true);
             }
             Mode::Temp => {
                 if !off(y_temp) { ax('y', y_temp, vfmt(rd(y_temp, dec), dec), "y", true); }
-                if let Some(t) = temp_found { ax('x', temp_cross.unwrap_or(t), gfmt(t), "ts", true); }
+                if let (Some(t), Some(tc)) = (temp_found, temp_cross) { ax('x', tc, gfmt(t), "ts", true); }
             }
         }
     }
     // the positions of the y annotations are data values for now; mapped to pixels below
     let ytw = yticks.iter().map(|t| text_w(&t.1, fs_ax)).chain(y_strs.iter().map(|s| text_w(s, fs_ax))).fold(0.0, f64::max);
-    let names_w = st.shown.iter().map(|&k| text_w(SUBS[k].name, fs_lab)).fold(0.0, f64::max);
+    // in Print each name carries the marker of its curve (the room for it is three spaces' worth)
+    let slot = if print { text_w("   x", fs_lab) - text_w("x", fs_lab) } else { 0.0 };
+    let pad_str = if print { "   " } else { "" };
+    // the curves that run to 100 °C are named in a column to the right of the graph
+    let col_ks: Vec<usize> = st.shown.iter().copied().filter(|&k| SUBS[k].data[SUBS[k].data.len() - 1].0 >= T_HI - 1e-9).collect();
+    let names_w = col_ks.iter().map(|&k| text_w(SUBS[k].name, fs_lab)).fold(0.0, f64::max);
     let l = (18.0 + 1.12 * fs_t + ytw).round();
-    let r = (16.0f64).max(names_w + 14.0 * lab).round();
+    let r = if col_ks.is_empty() { 16.0 } else { (16.0f64).max(names_w + slot + 19.0 * lab) }.round();
     let t = (14.0 * lab).round();
     let bm = (6.0 + 1.2 * fs_ax + 10.0 + 1.1 * fs_t + 6.0).round();
     let fr = Frame { w, h: ph, l, r, t, b: bm, x0: T_LO, x1: T_HI, y0: 0.0, y1: ytop };
     let (left, right, top, bottom) = (fr.left(), fr.right(), fr.top(), fr.bottom());
     let px = |x: f64| fr.px(x);
     let py = |y: f64| fr.py(y);
-    let ytop_px = |y: f64| if off(y) { py(ytop * 0.97) } else { py(y) };
+    let ytop_px = |y: f64| if off(y) { py(ytop * 0.93) } else { py(y) };
 
     // ---- the curves, the table points and the marks the question makes
     let mut strokes: Vec<Stroke> = Vec::new();
@@ -536,14 +626,20 @@ pub fn build(p: &Params) -> (String, Report) {
     }
 
     let one_end = |pts: &Vec<Pt>| pts[pts.len() - 1];
-    // curve names
-    for (k, pts) in &curve_px {
+    let label_col = |k: usize| -> String { if print { lab_c.to_string() } else { dark(SUBS[k].colour) } };
+    let key_mark = |k: usize| -> Option<(&'static str, String, String)> {
+        if !print { return None; }
+        let open = SUBS[k].marker.starts_with('o');
+        Some((SUBS[k].marker, if open { "#ffffff".to_string() } else { "#000000".to_string() }, "#000000".to_string()))
+    };
+    // names of the other curves (those that stop short of 100 °C): beside the curve end, or on a leader line
+    for (k, pts) in curve_px.iter().filter(|(k, _)| !col_ks.contains(k)) {
         let s = &SUBS[*k];
         let (xe, ye) = one_end(pts);
         let pts2 = pts.clone();
         let (fs, lb, lh2) = (fs_lab, lab, lh);
         let lead: Vec<Pt> = [1.0, 0.94, 0.88, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1].iter().map(|f| pts[((pts.len() - 1) as f64 * f) as usize]).collect();
-        jobs.push(Job { own: s.key.into(), text: s.name.into(), point: false, anchor: (xe, ye), lead, cands: Box::new(move || {
+        jobs.push(Job { own: s.key.into(), text: s.name.into(), ptext: format!("{pad_str}{}", s.name), slot, col: label_col(*k), kmark: key_mark(*k), curve: true, point: false, anchor: (xe, ye), lead, cands: Box::new(move || {
             let mut v: Vec<Cand> = Vec::new();
             for dy in [0.0, -8.0, 8.0, -16.0, 16.0, -25.0, 25.0, -36.0, 36.0, -50.0, 50.0, -66.0, 66.0] {
                 v.push((xe + 7.0 * lb, "start", ye + 0.28 * fs + dy * lb));
@@ -564,7 +660,7 @@ pub fn build(p: &Params) -> (String, Report) {
     let letters = ["A", "B", "C"];
     let label_job = |jobs: &mut Vec<Job>, feat: &str, text: &str, x: f64, y: f64| {
         let (fs, lb, lh2) = (fs_lab, lab, lh);
-        jobs.push(Job { own: feat.into(), text: text.into(), point: true, anchor: (x, y), lead: vec![(x, y)], cands: Box::new(move || around(x, y, fs, lh2, 1, lb)) });
+        jobs.push(Job { own: feat.into(), text: text.into(), ptext: text.into(), slot: 0.0, col: lab_c.to_string(), kmark: None, curve: false, point: true, anchor: (x, y), lead: vec![(x, y)], cands: Box::new(move || around(x, y, fs, lh2, 1, lb)) });
     };
     match st.mode {
         Mode::Read => {
@@ -586,7 +682,13 @@ pub fn build(p: &Params) -> (String, Report) {
                     if (yc - yp).abs() > 9.0 { marks.push(Mark { x, y: yc, r: 3.6, shape: "ocircle", fill: "#ffffff".into(), stroke: ink_c.into(), feat: feat.clone() }); }
                 }
                 marks.push(pt_mark(x, yp, &feat));
-                label_job(&mut jobs, &feat, letters[i], x, yp);
+                if off(yex[i]) {
+                    // off the scale: an arrow above the point and the words with its letter
+                    marks.push(Mark { x, y: yp - 10.0, r: 4.2, shape: "up", fill: ink_c.into(), stroke: "#ffffff".into(), feat: feat.clone() });
+                    label_job(&mut jobs, &feat, letters[i], x, yp);
+                } else {
+                    label_job(&mut jobs, &feat, letters[i], x, yp);
+                }
                 rep_pts.push((x, yp));
             }
         }
@@ -597,20 +699,22 @@ pub fn build(p: &Params) -> (String, Report) {
                 strokes.push(Stroke { pts: vec![(x, y), (x, bottom)], sty: s_g, kind: "guide", feat: format!("g{}v", i + 1) });
                 if ans { strokes.push(Stroke { pts: vec![(left, y), (x, y)], sty: s_g, kind: "guide", feat: format!("g{}h", i + 1) }); }
                 marks.push(pt_mark(x, y, &feat));
-                if i == 0 || st.t1 != st.t2 { label_job(&mut jobs, &feat, if i == 0 { "T₁" } else { "T₂" }, x, y); }
                 if i == 0 { rep_p1 = Some((x, y)); } else { rep_p2 = Some((x, y)); }
             }
         }
         Mode::Temp => {
             if !off(y_temp) {
                 let y = py(y_temp);
-                let x_end = match temp_cross { Some(t) => px(t), None => right };
+                // the student copy draws one line across the whole graph, the same whatever the answer; the key stops it at
+                // the curve and marks the crossing
+                let tc = if ans && temp_found.is_some() { temp_cross } else { None };
+                let x_end = match tc { Some(t) => px(t), None => right };
                 strokes.push(Stroke { pts: vec![(left, y), (x_end, y)], sty: s_g, kind: "guide", feat: "gy".into() });
                 rep_tline = Some((((left + x_end) / 2.0).max(px(50.0).min(x_end)), y));
-                if let Some(t) = temp_cross {
+                if let Some(t) = tc {
                     marks.push(pt_mark(px(t), y, "ptT"));
                     rep_tline = Some((px(t), y));
-                    if ans { strokes.push(Stroke { pts: vec![(px(t), y), (px(t), bottom)], sty: s_g, kind: "guide", feat: "gTv".into() }); }
+                    if temp_found.is_some() { strokes.push(Stroke { pts: vec![(px(t), y), (px(t), bottom)], sty: s_g, kind: "guide", feat: "gTv".into() }); }
                 }
             } else {
                 notes.push(format!("{} g of solute in {} g of water is {} g per 100 g of water, off the scale of this graph, so no line is drawn.", gfmt(st.solute), gfmt(w_), vfmt(y_temp, dec)));
@@ -632,24 +736,98 @@ pub fn build(p: &Params) -> (String, Report) {
     }
 
     // ---- place the labels
+    // names at the ends of the curves that run to 100 °C: in the order of the ends, spaced
+    let mut fixed: Vec<Fixed> = Vec::new();
+    {
+        let mut ends: Vec<(usize, f64, f64)> = curve_px.iter().filter(|(k, _)| col_ks.contains(k)).map(|(k, pts)| { let e = one_end(pts); (*k, e.0, e.1) }).collect();
+        ends.sort_by(|a, b| a.2.total_cmp(&b.2).then(SUBS[a.0].name.cmp(SUBS[b.0].name)));
+        let gap = lh + 0.6;
+        let (lo, hi) = (top + 0.62 * fs_lab + 1.0, bottom - 0.62 * fs_lab - 3.0);
+        let xl = right + 9.0;
+        let actual = |m: &Mark| marker_bbox(m.shape, m.x, m.y, m.r);
+        // a marker the line to a name would cross (a point of the question at the edge of the graph)
+        let blocked = |e: &(usize, f64, f64), yc: f64| marks.iter().filter(|m| m.feat != SUBS[e.0].key).any(|m| {
+            let bx = actual(m);
+            let inside = e.1 >= bx.0 && e.1 <= bx.1 && e.2 >= bx.2 && e.2 <= bx.3;
+            !inside && seg_hits((e.1, e.2), (xl - 1.5, yc), pad(bx, 0.6))
+        });
+        // the names spread in order, then moved a little (within their neighbours) off any marker their line would cross
+        let layout = |ends: &Vec<(usize, f64, f64)>, shift: &Vec<f64>| -> (Vec<f64>, usize) {
+            let want: Vec<f64> = ends.iter().zip(shift).map(|(e, s)| e.2 + s).collect();
+            let mut pos = spread(&want, gap, lo, hi);
+            for i in 0..ends.len() {
+                if blocked(&ends[i], pos[i]) {
+                    let (a, z) = (if i == 0 { lo } else { pos[i - 1] + gap }, if i + 1 == ends.len() { hi } else { pos[i + 1] - gap });
+                    let found = (1..=40).map(|k| k as f64).flat_map(|d| [pos[i] - d, pos[i] + d]).find(|&y| y >= a && y <= z && !blocked(&ends[i], y));
+                    if let Some(y) = found { pos[i] = y; }
+                }
+            }
+            let nb = (0..ends.len()).filter(|&i| blocked(&ends[i], pos[i])).count();
+            (pos, nb)
+        };
+        let n = ends.len();
+        let (mut pos, mut nb) = layout(&ends, &vec![0.0; n]);
+        // two curves that end together may swap places, or the pair may sit a half step higher or lower, when that clears a marker
+        for i in 0..n.saturating_sub(1) {
+            if nb > 0 && (ends[i].2 - ends[i + 1].2).abs() < 0.5 {
+                let mut best: Option<(usize, f64, Vec<(usize, f64, f64)>, Vec<f64>)> = None;
+                for swap in [false, true] {
+                    for sh in [0.0, -gap / 2.0, gap / 2.0] {
+                        let mut e2 = ends.clone();
+                        if swap { e2.swap(i, i + 1); }
+                        let mut shift = vec![0.0; n];
+                        shift[i] = sh;
+                        shift[i + 1] = sh;
+                        let (p2, nb2) = layout(&e2, &shift);
+                        let disp: f64 = p2.iter().zip(&e2).map(|(p, e)| (p - e.2).abs()).sum();
+                        if best.as_ref().is_none_or(|b| (nb2, disp) < (b.0, b.1)) { best = Some((nb2, disp, e2, p2)); }
+                    }
+                }
+                if let Some((nb2, _, e2, p2)) = best { if nb2 < nb { ends = e2; pos = p2; nb = nb2; } }
+            }
+        }
+        for (i, &(k, xe, ye)) in ends.iter().enumerate() {
+            let yc = pos[i];
+            let needs = (yc - ye).abs() > 2.5 || ends.iter().enumerate().any(|(j, e)| j != i && (e.2 - yc).abs() <= 0.58 * fs_lab + 1.5);
+            let ptext = format!("{pad_str}{}", SUBS[k].name);
+            let base = yc + 0.28 * fs_lab;
+            let bx = ink(&(xl, "start", base), text_w(&ptext, fs_lab), fs_lab, lh, 1);
+            fixed.push(Fixed { own: SUBS[k].key.into(), text: SUBS[k].name.into(), slot, col: label_col(k), kmark: key_mark(k), base, x: xl, bx, leader: if needs { Some(((xe, ye), (xl - 1.5, yc))) } else { None } });
+        }
+    }
     let bounds = (left + 3.0, w - 3.0, top + 2.0, bottom - 3.0);
     let mut hard: Vec<Chunk> = Vec::new();
-    let mut soft: Vec<Chunk> = Vec::new();
-    for s in &strokes { if s.kind == "guide" { soft.extend(chunks(&s.pts)); } else { hard.extend(chunks(&s.pts)); } }
+    let mut guide_chunks: Vec<Chunk> = Vec::new();
+    for s in &strokes { if s.kind == "guide" { guide_chunks.extend(chunks(&s.pts)); } else { hard.extend(chunks(&s.pts)); } }
+    // the guides are lines no name may lie on (the grid is not: it is a faint thin line the halo clears)
+    hard.extend(guide_chunks.iter().cloned());
     hard.extend(chunks(&[(left, top), (left, bottom), (right, bottom)]));
-    let owns: Vec<String> = { let mut o: Vec<String> = jobs.iter().map(|j| j.own.clone()).collect(); o.sort(); o.dedup(); o };
+    for f in &fixed { if let Some(l) = f.leader { hard.extend(chunks(&[l.0, l.1])); } }
+    let curve_keys: Vec<String> = order.iter().map(|&k| SUBS[k].key.to_string()).collect();
+    let owns: Vec<String> = { let mut o: Vec<String> = jobs.iter().map(|j| j.own.clone()).collect(); o.extend(curve_keys.iter().cloned()); o.sort(); o.dedup(); o };
     let feats: Vec<(String, Vec<Chunk>)> = owns.iter().map(|o| {
         let mut c: Vec<Chunk> = strokes.iter().filter(|s| &s.feat == o && s.kind != "guide").flat_map(|s| chunks(&s.pts)).collect();
         for m in marks.iter().filter(|m| &m.feat == o) { c.push(((m.x, m.x, m.y, m.y), vec![((m.x, m.y), (m.x, m.y))])); }
         (o.clone(), c)
     }).collect();
-    let boxes: Vec<Bx> = marks.iter().map(|m| (m.x - m.r - 1.0, m.x + m.r + 1.0, m.y - m.r - 1.0, m.y + m.r + 1.0)).collect();
-    let base = Placer { boxes, hard, soft, bounds, feats, reach: 36.0 * lab };
+    let mut boxes: Vec<Bx> = marks.iter().map(|m| pad(marker_bbox(m.shape, m.x, m.y, m.r), 1.0)).collect();
+    boxes.extend(fixed.iter().map(|f| f.bx));
+    let base = Placer { boxes, hard, soft: Vec::new(), bounds, feats, reach: 36.0 * lab };
     let nj = jobs.len();
-    let width_of = |j: &Job| text_w(&j.text, fs_lab);
+    let width_of = |j: &Job| text_w(&j.ptext, fs_lab);
+    // a curve's name reads as its own when its curve is nearer than any other curve (or it has a leader line)
+    let reads_own = |pl: &Placer, own: &str, b: Bx| -> bool {
+        let d = pl.feats.iter().find(|f| f.0 == own).map_or(0.0, |f| chunk_dist(&f.1, b, f64::MAX));
+        let rival = pl.feats.iter().filter(|f| f.0 != own && curve_keys.contains(&f.0)).map(|f| chunk_dist(&f.1, b, d + 4.0)).fold(f64::MAX, f64::min);
+        // (the estimated box of a name is a little wider than its letters: a margin keeps the reading true to the glyphs)
+        d + 2.5 <= rival
+    };
+    let count_cross = |list: &[Chunk], from: Pt, tgt: Pt| -> usize {
+        list.iter().filter(|(cb, _)| hits(*cb, (from.0.min(tgt.0) - 1.0, from.0.max(tgt.0) + 1.0, from.1.min(tgt.1) - 1.0, from.1.max(tgt.1) + 1.0))).flat_map(|(_, segs)| segs.iter()).filter(|sg| seg_cross(from, tgt, sg.0, sg.1)).count()
+    };
     // A last resort for a name that has no room beside its feature: a place clear of every stroke and label, joined to
-    // the feature by a thin leader line that crosses no label and as few strokes as possible.
-    let leader_for = |pl: &Placer, jb: &Job| -> Option<(Cand, Bx, (Pt, Pt))> {
+    // the feature by a thin leader line that crosses no label, no marker and as few strokes as possible.
+    let leader_for_at = |pl: &Placer, jb: &Job, ease: f64| -> Option<(Cand, Bx, (Pt, Pt))> {
         let wd = width_of(jb);
         let mut best: Option<(f64, Cand, Bx, (Pt, Pt))> = None;
         for (pi, anchor) in jb.lead.iter().enumerate() {
@@ -658,7 +836,9 @@ pub fn build(p: &Params) -> (String, Report) {
             // leader then starts on this one's own end)
             let clear = if jb.point { 2.5 } else { pl.feats.iter().filter(|f| f.0 != jb.own).map(|f| chunk_dist(&f.1, (anchor.0, anchor.0, anchor.1, anchor.1), 2.5)).fold(2.5, f64::min) };
             if clear < 0.05 { continue; }
-            for g in [22.0, 28.0, 36.0, 46.0, 58.0, 72.0, 90.0, 112.0, 138.0] {
+            // places on a ring around the anchor, and level places in the clear rows above and below it
+            let mut places: Vec<Cand> = Vec::new();
+            for g in [22.0, 28.0, 36.0, 46.0, 58.0, 72.0, 90.0, 112.0, 138.0, 170.0, 210.0] {
                 let g = g * lab;
                 for a in 0..32 {
                     let th = a as f64 * std::f64::consts::PI / 16.0;
@@ -666,8 +846,32 @@ pub fn build(p: &Params) -> (String, Report) {
                     let (qx, qy) = (anchor.0 + g * cs, anchor.1 + g * sn);
                     let align = if cs > 0.38 { "start" } else if cs < -0.38 { "end" } else { "middle" };
                     let base_y = if sn > 0.38 { qy + 0.86 * fs_lab } else if sn < -0.38 { qy - 0.3 * fs_lab } else { qy + 0.28 * fs_lab };
-                    let c: Cand = (qx, align, base_y);
+                    places.push((qx, align, base_y));
+                }
+            }
+            if ease < 0.5 {
+                // the last resort: any open place on the plot, on a coarse grid
+                let mut gy = top + 6.0;
+                while gy < bottom {
+                    let mut gx = left + 6.0;
+                    while gx < right {
+                        places.push((gx, "middle", gy + 0.28 * fs_lab));
+                        gx += 9.0;
+                    }
+                    gy += 9.0;
+                }
+            }
+            for dy in [-14.0, -20.0, -28.0, -38.0, -50.0, -64.0, 16.0, 24.0, 34.0] {
+                for dx in [8.0, 16.0, 28.0, 42.0, 58.0, 78.0] {
+                    places.push((anchor.0 + dx * lab, "start", anchor.1 + dy * lab + 0.28 * fs_lab));
+                    places.push((anchor.0 - dx * lab, "end", anchor.1 + dy * lab + 0.28 * fs_lab));
+                }
+            }
+            {
+                for c in places {
                     let b = ink(&c, wd, fs_lab, lh, 1);
+                    let (qx, base_y) = (c.0, c.2);
+                    let _ = qx;
                     let sc = pl.score(&jb.own, b);
                     if sc.0 >= 5 { continue; }
                     // aim at the letters themselves: the ink box is taller than the glyphs (room for brackets and descenders)
@@ -679,16 +883,24 @@ pub fn build(p: &Params) -> (String, Report) {
                     if len < 9.0 { continue; }
                     let from = *anchor;
                     let small = |o: &Bx| o.1 - o.0 < 11.0 && o.3 - o.2 < 11.0;
-                    let inside = |o: &Bx| anchor.0 >= o.0 && anchor.0 <= o.1 && anchor.1 >= o.2 && anchor.1 <= o.3;
+                    // (the placer's boxes are the markers' own boxes widened by 1 px: the line may start only on the marker itself)
+                    let inside = |o: &Bx| anchor.0 >= o.0 + 0.7 && anchor.0 <= o.1 - 0.7 && anchor.1 >= o.2 + 0.7 && anchor.1 <= o.3 - 0.7;
                     if pl.boxes.iter().filter(|o| !small(o)).any(|o| seg_hits(from, tgt, pad(*o, 1.5))) { continue; }
-                    let marker_hits = pl.boxes.iter().filter(|o| !inside(o) && small(o)).filter(|o| seg_hits(from, tgt, pad(**o, 1.5))).count();
-                    let crossings = pl.hard.iter().filter(|(cb, _)| hits(*cb, (from.0.min(tgt.0) - 1.0, from.0.max(tgt.0) + 1.0, from.1.min(tgt.1) - 1.0, from.1.max(tgt.1) + 1.0))).flat_map(|(_, segs)| segs.iter()).filter(|sg| seg_cross(from, tgt, sg.0, sg.1)).count();
-                    let cost = 60.0 * (crossings + 2 * marker_hits) as f64 + len + 8.0 * chunk_hits(&pl.soft, b) as f64 + 2.0 * pi as f64 + 30.0 * (2.5 - clear);
+                    // never through a marker (the one the line starts on apart), and never ending beside one
+                    // (the markers' own boxes are the placer's boxes less the 1 px they were widened by)
+                    if pl.boxes.iter().filter(|o| small(o) && !inside(o)).any(|o| { let m = pad(*o, -1.0); seg_hits(from, tgt, pad(m, 0.6 * ease)) || pt_box_(tgt, m) < 2.6 * ease }) { continue; }
+                    let all = count_cross(&pl.hard, from, tgt);
+                    let gd = count_cross(&guide_chunks, from, tgt);
+                    let cost = 120.0 * (all - gd.min(all)) as f64 + 15.0 * gd as f64 + len + 8.0 * chunk_hits(&pl.soft, b) as f64 + 2.0 * pi as f64 + 30.0 * (2.5 - clear);
                     if best.as_ref().is_none_or(|x| cost < x.0) { best = Some((cost, c, b, (from, tgt))); }
                 }
             }
         }
         best.map(|x| (x.1, x.2, x.3))
+    };
+    // (a point's letter that finds no clean way is allowed a closer pass by a marker before it is left out)
+    let leader_for = |pl: &Placer, jb: &Job| -> Option<(Cand, Bx, (Pt, Pt))> {
+        leader_for_at(pl, jb, 1.0).or_else(|| if jb.point { leader_for_at(pl, jb, 0.55).or_else(|| leader_for_at(pl, jb, 0.2)) } else { None })
     };
     type Run = (Vec<Cand>, Vec<u8>, (usize, usize, usize, usize, f64), Vec<Option<(Pt, Pt)>>);
     let run = |order: &[usize]| -> Run {
@@ -699,10 +911,13 @@ pub fn build(p: &Params) -> (String, Report) {
         let mut score = (0, 0, 0, 0, 0.0);
         for &j in order {
             let jb = &jobs[j];
-            let (_, c0, (mut tier, mut cost, sx)) = pl.place(&jb.own, &[vec![jb.text.clone()]], fs_lab, lh, jb.anchor, lab, &|_| (jb.cands)());
+            let (_, c0, (mut tier, mut cost, sx)) = pl.place(&jb.own, &[vec![jb.ptext.clone()]], fs_lab, lh, jb.anchor, lab, &|_| (jb.cands)());
             let mut c = c0;
-            if tier >= 4 {
-                pl.boxes.pop();
+            // a curve's name that does not read as its own (another curve is as near) goes on a leader line
+            let b0 = ink(&c0, width_of(jb), fs_lab, lh, 1);
+            let unclear = tier < 4 && jb.curve && !reads_own(&pl, &jb.own, b0);
+            if tier >= 4 || unclear {
+                let saved = pl.boxes.pop();
                 if let Some((lc, lb, seg)) = leader_for(&pl, jb) {
                     pl.boxes.push(lb);
                     pl.hard.extend(chunks(&[seg.0, seg.1]));
@@ -710,6 +925,8 @@ pub fn build(p: &Params) -> (String, Report) {
                     tier = 1;
                     cost = 50.0;
                     leaders[j] = Some(seg);
+                } else if let (true, Some(bx)) = (unclear, saved) {
+                    pl.boxes.push(bx);
                 }
             }
             if tier >= 5 { score.0 += 1; } else if tier == 4 { score.1 += 1; } else if tier >= 2 { score.2 += 1; }
@@ -721,8 +938,9 @@ pub fn build(p: &Params) -> (String, Report) {
         (out, tiers, score, leaders)
     };
     // the curves in order of the height of their ends, the highest first
+    // the points' letters first (they are the question), then the curves from the top
     let mut ord: Vec<usize> = (0..nj).collect();
-    ord.sort_by(|&a, &b| jobs[a].anchor.1.total_cmp(&jobs[b].anchor.1));
+    ord.sort_by(|&a, &b| jobs[a].curve.cmp(&jobs[b].curve).then(jobs[a].anchor.1.total_cmp(&jobs[b].anchor.1)));
     let (mut best_out, mut tiers, mut best, mut best_leaders) = run(&ord);
     let mut best_tiers = tiers.clone();
     let mut promoted: Vec<usize> = Vec::new();
@@ -751,11 +969,15 @@ pub fn build(p: &Params) -> (String, Report) {
     }
 
     // ---- the working under the plot
-    let ro_lines: Vec<String> = if st.readout { readout(&st, ans, &classes, (r1, r2), temp_found, (smin, smax)) } else { Vec::new() };
+    let ro_lines: Vec<String> = if st.readout { readout(&st, ans, &classes, &extras, (r1, r2), (temp_found, flat, y_in), (smin, smax)) } else { Vec::new() };
     let mut foot: Vec<String> = Vec::new();
     {
         let gases: Vec<String> = st.shown.iter().filter(|&&k| SUBS[k].gas).map(|&k| format!("{} at {}", SUBS[k].name, SUBS[k].pressure)).collect();
-        if !gases.is_empty() { foot.push(format!("Gases are shown at the stated pressure: {}.", gases.join("; "))); }
+        if !gases.is_empty() {
+            foot.push(format!("Gases are shown at the stated pressure: {}.", gases.join("; ")));
+            foot.push("The gas values are tabulated per 100 mL of water; water is within 2 % of 1 g per mL from 0 to 60 °C, so they are read as per 100 g.".to_string());
+        }
+        if st.shown.iter().any(|&k| SUBS[k].key == "s_ce2so43") { foot.push("Ce₂(SO₄)₃ is as tabulated in the source, which does not give its hydrate.".to_string()); }
         let co2 = st.shown.iter().any(|&k| SUBS[k].key == "s_co2");
         foot.push(format!("Source: CRC Handbook of Chemistry and Physics{}; each curve is a smooth fit through the published table values.", if co2 { " (CO₂: Lange's Handbook of Chemistry)" } else { "" }));
     }
@@ -785,27 +1007,48 @@ pub fn build(p: &Params) -> (String, Report) {
             d.raw(&format!(r##"<path d="{}" fill="none" stroke="{tick_c}" stroke-width="1" stroke-linecap="round" data-o="leader" data-f="{}"/>"##, path_d(&[seg.0, seg.1]), jobs[j].own));
         }
     }
+    for f in &fixed {
+        if let Some(l) = f.leader {
+            d.raw(&format!(r##"<path d="{}" fill="none" stroke="{tick_c}" stroke-width="1" stroke-linecap="round" data-o="leader" data-f="{}"/>"##, path_d(&[l.0, l.1]), f.own));
+        }
+    }
     for m in &marks { d.raw(&marker_el(m.shape, m.x, m.y, m.r, &m.fill, &m.stroke, &m.feat)); }
     d.raw(&format!(r##"<path d="M{left:.2},{top:.2} L{left:.2},{bottom:.2} L{right:.2},{bottom:.2}" fill="none" stroke="{ink_c}" stroke-width="1.6" data-o="axis"/>"##));
 
-    // the values written at the axes: the student copy's first, then the key's, each only if it clears the ones before
+    // the values written at the axes: the student copy's first, then the key's. An x value that lands on a tick's number
+    // replaces it; a y value that lands on a tick's number is nudged clear of it (a y value that is a tick's own value is
+    // marked on the axis and left to the tick's number), and one that cannot be kept clear is left out
     let base_x = bottom + 7.0 + 0.76 * fs_ax;
     let base_a = base_x + 2.0;
-    let mut shown_anns: Vec<(char, f64, String, String, Bx)> = Vec::new();
+    let ytick_boxes: Vec<(f64, Bx)> = yticks.iter().map(|(v, label)| { let tw_ = text_w(label, fs_ax); let yb = py(*v) + 0.36 * fs_ax; (py(*v), (left - 8.0 - tw_, left - 8.0, yb - 0.86 * fs_ax, yb + 0.3 * fs_ax)) }).collect();
+    // (axis, position, text, feature, box, nudge)
+    let mut shown_anns: Vec<(char, f64, String, String, Bx, f64)> = Vec::new();
     for a in anns.iter().filter(|a| !a.key_only).chain(anns.iter().filter(|a| a.key_only)) {
         if a.key_only && !ans { continue; }
         let wa = text_w(&a.text, fs_ax);
-        let (pos, bx) = if a.axis == 'x' {
-            let x = px(a.pos).clamp(left.min(wa / 2.0 + 3.0).max(wa / 2.0 + 3.0), w - wa / 2.0 - 3.0);
-            (x, (x - wa / 2.0, x + wa / 2.0, base_a - 0.86 * fs_ax, base_a + 0.3 * fs_ax))
+        if a.axis == 'x' {
+            let x0 = px(a.pos);
+            let boxat = |dx: f64| { let x = (x0 + dx).clamp(wa / 2.0 + 3.0, w - wa / 2.0 - 3.0); (x - wa / 2.0, x + wa / 2.0, base_a - 0.86 * fs_ax, base_a + 0.3 * fs_ax) };
+            // two values that would touch are moved apart along the axis (each keeps its tick mark where it belongs)
+            let Some(dx) = [0.0, 0.5 * wa, -0.5 * wa, wa, -wa].into_iter().find(|&dx| !shown_anns.iter().any(|s| s.0 == 'x' && hits(pad(boxat(dx), 2.0), s.4))) else { continue };
+            let bx = boxat(dx);
+            shown_anns.push(('x', x0, a.text.clone(), a.feat.clone(), bx, 0.5 * (bx.0 + bx.1) - x0));
         } else {
-            let y = ytop_px(a.pos) + 0.36 * fs_ax;
-            (y, (left - 8.0 - wa, left - 8.0, y - 0.86 * fs_ax, y + 0.3 * fs_ax))
-        };
-        if shown_anns.iter().any(|s| s.0 == a.axis && hits(pad(bx, 2.0), pad(s.4, 0.0))) { continue; }
-        shown_anns.push((a.axis, pos, a.text.clone(), a.feat.clone(), bx));
+            let y = ytop_px(a.pos);
+            let yb = y + 0.36 * fs_ax;
+            let boxat = |dy: f64| (left - 8.0 - wa, left - 8.0, yb + dy - 0.86 * fs_ax, yb + dy + 0.3 * fs_ax);
+            if ytick_boxes.iter().any(|(ty, _)| (ty - y).abs() < 0.5) {
+                // the tick's own value: the tick's number stands for it
+                if !shown_anns.iter().any(|s| s.0 == 'y' && (s.1 - y).abs() < 0.5) { shown_anns.push(('y', y, String::new(), a.feat.clone(), (0.0, 0.0, 0.0, 0.0), 0.0)); }
+                continue;
+            }
+            let ok = |dy: f64| { let bx = boxat(dy); bx.2 >= top - 2.0 && bx.3 <= bottom + 4.0 && !shown_anns.iter().any(|s| s.0 == 'y' && !s.2.is_empty() && hits(pad(bx, 1.5), s.4)) && !ytick_boxes.iter().any(|(_, tb)| hits(pad(bx, 1.5), *tb)) };
+            let step = 0.62 * fs_ax;
+            let Some(dy) = [0.0, -step, step, -2.0 * step, 2.0 * step, -3.0 * step, 3.0 * step].into_iter().find(|&dy| ok(dy)) else { continue };
+            shown_anns.push(('y', y, a.text.clone(), a.feat.clone(), boxat(dy), dy));
+        }
     }
-    let clear_of_anns = |b: Bx| !shown_anns.iter().any(|s| hits(pad(b, 2.5), s.4));
+    let clear_of_anns = |b: Bx| !shown_anns.iter().any(|s| s.0 == 'x' && !s.2.is_empty() && hits(pad(b, 2.5), s.4));
     for (v, label) in &x_ticks {
         let x = px(*v);
         d.raw(&format!(r##"<line x1="{x:.2}" y1="{bottom:.2}" x2="{x:.2}" y2="{:.2}" stroke="{ink_c}" stroke-width="1.2" data-o="axis"/>"##, bottom + 5.0));
@@ -817,25 +1060,40 @@ pub fn build(p: &Params) -> (String, Report) {
         d.raw(&format!(r##"<line x1="{:.2}" y1="{y:.2}" x2="{left:.2}" y2="{y:.2}" stroke="{ink_c}" stroke-width="1.2" data-o="axis"/>"##, left - 5.0));
         let tw_ = text_w(label, fs_ax);
         let yb = y + 0.36 * fs_ax;
-        if clear_of_anns((left - 8.0 - tw_, left - 8.0, yb - 0.86 * fs_ax, yb + 0.3 * fs_ax)) { d.raw(&text_el(left - 8.0, yb, fs_ax, "end", tick_c, label, "axis")); }
+        d.raw(&text_el(left - 8.0, yb, fs_ax, "end", tick_c, label, "axis"));
+        let _ = tw_;
     }
     for (i, a) in shown_anns.iter().enumerate() {
-        let (x, y, anchor) = if a.0 == 'x' { (a.1, base_a, "middle") } else { (left - 8.0, a.1, "end") };
         if a.0 == 'x' {
             d.raw(&format!(r##"<line x1="{:.2}" y1="{bottom:.2}" x2="{:.2}" y2="{:.2}" stroke="{ink_c}" stroke-width="1.6" data-o="axis"/>"##, a.1, a.1, bottom + 4.0));
         } else {
-            d.raw(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{left:.2}" y2="{:.2}" stroke="{ink_c}" stroke-width="1.6" data-o="axis"/>"##, left - 6.0, a.1 - 0.36 * fs_ax, a.1 - 0.36 * fs_ax));
+            d.raw(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{left:.2}" y2="{:.2}" stroke="{ink_c}" stroke-width="1.6" data-o="axis"/>"##, left - 6.0, a.1, a.1));
         }
-        d.raw(&format!(r##"<text x="{x:.2}" y="{y:.2}" font-size="{fs_ax:.2}" text-anchor="{anchor}" font-family="{FONT}" fill="{ink_c}" data-o="label" data-f="{}" data-g="{}">{}</text>"##, a.3, nj + i, esc(&a.2)));
+        if a.2.is_empty() { continue; }
+        let (x, y, anchor) = if a.0 == 'x' { (a.1 + a.5, base_a, "middle") } else { (left - 8.0, a.1 + 0.36 * fs_ax + a.5, "end") };
+        d.raw(&format!(r##"<text x="{x:.2}" y="{y:.2}" font-size="{fs_ax:.2}" text-anchor="{anchor}" font-family="{FONT}" fill="{ink_c}" data-o="label" data-f="{}" data-g="{}">{}</text>"##, a.3, 1000 + i, esc(&a.2)));
     }
     d.raw(&text_el((left + right) / 2.0, bottom + 6.0 + 1.2 * fs_ax + 10.0 + 0.76 * fs_t, fs_t, "middle", ink_c, "Temperature (°C)", "axis"));
     {
         let (tx, ty) = (4.0 + 0.84 * fs_t, (top + bottom) / 2.0);
         d.raw(&format!(r##"<text x="{tx:.2}" y="{ty:.2}" font-size="{fs_t:.2}" text-anchor="middle" font-family="{FONT}" fill="{ink_c}" transform="rotate(-90 {tx:.2} {ty:.2})" data-o="axis">Solubility (g per 100 g of water)</text>"##));
     }
+    // a name, with its colour and (in Print) the marker of its curve in front of it
+    let name_el = |d: &mut Doc, jb_text: &str, own: &str, col: &str, slot: f64, km: &Option<(&'static str, String, String)>, c: &Cand, wd: f64, gi: usize| {
+        let (lx, tx) = match c.1 { "end" => (c.0 - wd, c.0), "middle" => (c.0 - wd / 2.0, c.0 + slot / 2.0), _ => (c.0, c.0 + slot) };
+        d.raw(&halo_el(tx, c.2, fs_lab, c.1, col, jb_text, own, gi));
+        if let Some((shape, fill, stroke)) = km {
+            d.raw(&marker_el_k("key", &format!(r##" data-g="{gi}""##), shape, lx + 5.2, c.2 - 0.33 * fs_lab, 3.0, fill, stroke, own));
+        }
+    };
     for (gi, c) in best_out.iter().enumerate() {
         if !kept[gi] { continue; }
-        d.raw(&halo_el(c.0, c.2, fs_lab, c.1, lab_c, &jobs[gi].text, &jobs[gi].own, gi));
+        let jb = &jobs[gi];
+        name_el(&mut d, &jb.text, &jb.own, &jb.col, jb.slot, &jb.kmark, c, width_of(jb), gi);
+    }
+    for (fi, f) in fixed.iter().enumerate() {
+        let wd = text_w(&format!("{pad_str}{}", f.text), fs_lab);
+        name_el(&mut d, &f.text, &f.own, &f.col, f.slot, &f.kmark, &(f.x, "start", f.base), wd, 500 + fi);
     }
     let mut y = ph + 8.0;
     for (k, line) in wrapped.iter().enumerate() {
@@ -867,7 +1125,7 @@ fn describe(st: &Setup) -> String {
 
 /// The lines under the graph: the givens (both copies), then the blanks (student copy) or the working (key). Every
 /// substitution uses the printed readings only, and each result is rounded once.
-fn readout(st: &Setup, ans: bool, classes: &[(f64, f64, Class)], rr: (f64, f64), tfound: Option<f64>, sp: (f64, f64)) -> Vec<String> {
+fn readout(st: &Setup, ans: bool, classes: &[(f64, f64, Class)], extras: &[usize], rr: (f64, f64), tinfo: (Option<f64>, bool, f64), sp: (f64, f64)) -> Vec<String> {
     let s = &SUBS[st.sub];
     let nm = s.name;
     let dec = st.dec;
@@ -876,12 +1134,20 @@ fn readout(st: &Setup, ans: bool, classes: &[(f64, f64, Class)], rr: (f64, f64),
     let per100 = "g per 100 g water";
     let (w, wf) = (gfmt(st.water), st.water);
     let _ = wf;
-    let read_line = |t: f64, r: f64| format!("Read from the curve at {} °C: solubility = {} {per100} (read from the curve and rounded to {})", gfmt(t), vfmt(r, dec), if r.abs() >= 1.0 || r == 0.0 { format!("{dec} decimal place{}", if dec == 1 { "" } else { "s" }) } else { "3 significant figures".to_string() });
+    // `x` more places than the chosen ones, where two readings agree to the places shown
+    let read_line = |t: f64, r: f64, x: usize| {
+        let how = if r.abs() >= 1.0 || r == 0.0 {
+            match dec + x { 0 => "the nearest whole number".to_string(), 1 => "1 decimal place".to_string(), n => format!("{n} decimal places") }
+        } else {
+            format!("{} significant figures", 3 + x)
+        };
+        format!("Read from the curve at {} °C: solubility = {} {per100} (read from the curve and rounded to {how})", gfmt(t), vfmt_x(r, dec, x))
+    };
     match st.mode {
         Mode::Read => {
             v.push(format!("Temperature: T = {} °C", gfmt(st.t1)));
             if ans {
-                v.push(read_line(st.t1, rr.0));
+                v.push(read_line(st.t1, rr.0, 0));
                 if let Some(&(_, tv)) = s.data.iter().find(|(t, _)| *t == st.t1) {
                     v.push(format!("The table value at {} °C is {} {per100}.", gfmt(st.t1), fmt(tv)));
                 }
@@ -897,15 +1163,21 @@ fn readout(st: &Setup, ans: bool, classes: &[(f64, f64, Class)], rr: (f64, f64),
             for (i, &(t, m)) in st.pts.iter().enumerate() {
                 let l = letters[i];
                 if ans {
-                    let (yp, rp, c) = classes[i];
-                    v.push(format!("Point {l}: dissolved per 100 g of water = {} × 100 / {w} = {} g", gfmt(m), vfmt(yp, dec)));
-                    v.push(format!("Point {l}: {}", read_line(t, rp)));
-                    let (rel, side, tail) = match c {
-                        Class::Unsat => ("<", "below", "More solute can dissolve at this temperature."),
-                        Class::Sat => ("=", "on", "It holds as much as it can at this temperature."),
-                        Class::Super => (">", "above", "It holds more than it can at this temperature, so it is unstable and the excess can crystallise."),
+                    let (_, _, c) = classes[i];
+                    let x = extras.get(i).copied().unwrap_or(0);
+                    let (y, cv) = (100.0 * m / st.water, value(st.sub, t));
+                    let (ys, rs) = (vfmt_x(y, dec, x), vfmt_x(cv, dec, x));
+                    v.push(format!("Point {l}: dissolved per 100 g of water = {} × 100 / {w} = {ys} g", gfmt(m)));
+                    v.push(format!("Point {l}: {}", read_line(t, cv, x)));
+                    let (rel, side, tail) = match (c, s.gas) {
+                        (Class::Unsat, false) => ("<", "below", "More solute can dissolve at this temperature."),
+                        (Class::Unsat, true) => ("<", "below", "More gas can dissolve at this temperature."),
+                        (Class::Sat, false) => ("=", "on", "It holds as much as it can at this temperature."),
+                        (Class::Sat, true) => ("=", "on", "It holds as much gas as it can at this temperature."),
+                        (Class::Super, false) => (">", "above", "It holds more than it can at this temperature, so it is unstable and the excess can crystallise."),
+                        (Class::Super, true) => (">", "above", "It holds more gas than it can at this temperature, so it is unstable and the excess comes out of solution."),
                     };
-                    v.push(format!("Point {l}: {} {rel} {}, so {l} lies {side} the curve: the solution is {}. {tail}", vfmt(yp, dec), vfmt(rp, dec), c.word()));
+                    v.push(format!("Point {l}: {ys} {rel} {rs}, so {l} lies {side} the curve: the solution is {}. {tail}", c.word()));
                 } else {
                     v.push(format!("Point {l} is {BLANK} (saturated, unsaturated or supersaturated)"));
                 }
@@ -913,15 +1185,15 @@ fn readout(st: &Setup, ans: bool, classes: &[(f64, f64, Class)], rr: (f64, f64),
         }
         Mode::Crystal => {
             let (t1, t2) = (st.t1, st.t2);
-            let verb = if t2 < t1 { "cooled" } else if t2 > t1 { "heated" } else { "kept" };
-            v.push(format!("A saturated solution of {nm} is made with {w} g of water at {} °C and then {verb} to {} °C", gfmt(t1), gfmt(t2)));
+            let verb = if t2 < t1 { "cooled to" } else if t2 > t1 { "heated to" } else { "kept at" };
+            v.push(format!("A saturated solution of {nm} is made with {w} g of water at {} °C and then {verb} {} °C", gfmt(t1), gfmt(t2)));
             let what = if s.gas { "Mass of gas that comes out of solution" } else { "Mass that crystallises" };
             if ans {
                 let (r1, r2) = rr;
-                v.push(read_line(t1, r1));
-                v.push(read_line(t2, r2));
+                v.push(read_line(t1, r1, 0));
+                v.push(read_line(t2, r2, 0));
                 if t1 == t2 {
-                    v.push("The two temperatures are the same, so nothing changes and no solute crystallises.".into());
+                    v.push(if s.gas { "The two temperatures are the same, so nothing changes and no gas comes out of solution.".into() } else { "The two temperatures are the same, so nothing changes and no solute crystallises.".to_string() });
                 } else if r1 > r2 {
                     let m = (r1 - r2) * st.water / 100.0;
                     let label = if s.gas { "Mass that comes out of solution".to_string() } else { "Mass that crystallises".to_string() };
@@ -948,22 +1220,30 @@ fn readout(st: &Setup, ans: bool, classes: &[(f64, f64, Class)], rr: (f64, f64),
         Mode::Temp => {
             v.push(format!("{} g of {nm} are dissolved in {w} g of water. At what temperature is the solution just saturated?", gfmt(st.solute)));
             if ans {
-                let y = 100.0 * st.solute / st.water;
+                let (tfound, flat, y) = tinfo;
+                let y = if tfound.is_some() || flat { y } else { 100.0 * st.solute / st.water };
                 let yp = rd(y, dec);
                 v.push(format!("Dissolved per 100 g of water: {} × 100 / {w} = {} g", gfmt(st.solute), vfmt(yp, dec)));
                 let d = s.data;
                 let rising = d[d.len() - 1].1 > d[0].1;
+                // the amount is read on the curve as given, not as rounded to the places shown
+                let given_note = if vfmt(yp, dec) != gfmt(y) { format!(", using the amount as given, {} g per 100 g water", gfmt(y)) } else { String::new() };
+                // a value and an end of the curve that look alike at the places shown are written to more places
+                let pair = |a: f64, z: f64| {
+                    if vfmt(a, dec) != vfmt(z, dec) { (vfmt(a, dec), vfmt(z, dec)) } else if gfmt(a) != gfmt(z) { (gfmt(a), gfmt(z)) } else { (fmt(format!("{a:.6e}").parse().unwrap_or(a)), fmt(format!("{z:.6e}").parse().unwrap_or(z))) }
+                };
                 match tfound {
                     Some(t) => {
-                        v.push(format!("The curve is at {} {per100} when T = {} °C (read from the curve to the nearest degree): the solution is just saturated at {} °C.", vfmt(yp, dec), gfmt(t), gfmt(t)));
+                        v.push(format!("The curve is at {} {per100} when T = {} °C (read from the curve to the nearest degree{given_note}): the solution is just saturated at {} °C.", vfmt(yp, dec), gfmt(t), gfmt(t)));
                         v.push(if rising {
                             format!("Above this temperature the solution is unsaturated; cooled below it, {}.", if s.gas { "gas comes out of solution" } else { "solute crystallises" })
                         } else {
                             format!("Below this temperature the solution is unsaturated; when warmed above it, {}.", if s.gas { "gas comes out of solution" } else { "solute crystallises" })
                         });
                     }
-                    None if yp < rd(sp.0, dec) => v.push(format!("{} {per100} is less than the lowest solubility on the graph ({} {per100}), so the solution is unsaturated at every temperature from {} to {} °C and is never just saturated within the graph.", vfmt(yp, dec), vfmt(sp.0, dec), gfmt(d[0].0), gfmt(d[d.len() - 1].0))),
-                    None => v.push(format!("{} {per100} is more than the highest solubility on the graph ({} {per100}), so the solution is supersaturated at every temperature from {} to {} °C and is never just saturated within the graph.", vfmt(yp, dec), vfmt(sp.1, dec), gfmt(d[0].0), gfmt(d[d.len() - 1].0))),
+                    None if flat => v.push(format!("{} {per100} is on the curve, but the curve is almost flat here, so the temperature cannot be read reliably: it changes by less than 0.15 % of the solubility per degree.", vfmt(yp, dec))),
+                    None if y < sp.0 => { let (a, z) = pair(y, sp.0); v.push(format!("{a} {per100} is less than the lowest solubility on the graph ({z} {per100}), so the solution is unsaturated at every temperature from {} to {} °C and is never just saturated within the graph.", gfmt(d[0].0), gfmt(d[d.len() - 1].0))) }
+                    None => { let (a, z) = pair(y, sp.1); v.push(format!("{a} {per100} is more than the highest solubility on the graph ({z} {per100}), so the solution is supersaturated at every temperature from {} to {} °C and is never just saturated within the graph.", gfmt(d[0].0), gfmt(d[d.len() - 1].0))) }
                 }
             } else {
                 v.push(format!("Temperature = {BLANK} °C"));
