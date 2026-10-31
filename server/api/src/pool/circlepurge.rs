@@ -3,6 +3,7 @@
 //! `BlobStore`; a delete that fails stays in `r2_orphans` for the hourly retry.
 use super::circlebanks::*;
 use super::circlebase::*;
+use super::circlesendsql::*;
 use super::circlesql::*;
 use super::ctx::{AuditEntry, PoolCtx, PoolError, Res, audit};
 use crate::blobs::BlobStore;
@@ -16,10 +17,6 @@ pub const PRUNE_BATCH: usize = 500;
 pub const CIRCLE_PURGE_BANKS: usize = 200;
 pub const CIRCLE_PURGE_CIRCLES: usize = 50;
 
-/// A flag an administrator has not yet judged or captured the evidence of (a send's student-data or copyright match).
-pub fn evidence_flag_sql(f: &str) -> String {
-    format!("({f}.kind IN {SEND_FLAG_KINDS} AND {f}.resolved_at IS NULL AND COALESCE({f}.detail ->> '$.evidence_captured', 0) = 0)")
-}
 pub fn open_flag_bank(b: &str) -> String {
     format!("EXISTS (SELECT 1 FROM admin_flags pf WHERE pf.item_id = {b} AND {})", evidence_flag_sql("pf"))
 }
@@ -239,10 +236,58 @@ pub fn purge_bank_now(x: &PoolCtx, store: &BlobStore, me: &str, cid: &str, bid: 
     )?;
     if claim != 1 {
         x.throw_if_erased(me)?;
+        // A report or an admin's hold is moderation; an open student-data flag alone is a review to wait for.
+        let (moderated, flagged): (i64, i64) = x.conn.query_row(
+            &format!("SELECT (EXISTS (SELECT 1 FROM circle_reports r WHERE r.bank_id = ?1 AND r.resolved_at IS NULL) OR {}) AS moderated, {} AS flagged", blocking_hold_sql("?1"), open_flag_bank("?1")),
+            [bid],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?;
+        if moderated == 0 && flagged == 1 {
+            return purge_when_reviewed(x, me, cid, bid);
+        }
         return Err(PoolError::new(409, "under_moderation").with("message", "This bank is under review by an administrator.".into()).into());
     }
     purge_bank(x, store, bid, cid, "owner_purge", Some(me))?;
     Ok(json!({ "ok": true }))
+}
+
+/// Purge-now of a removed bank whose only obstacle is an open flag (an administrator's review of a withheld version): the purge is
+/// claimed (the bank can no longer be restored; the daily purge takes it once the review is done) and every version but the evidence
+/// kept for the administrator is pruned now, so its bytes stop counting at once. Answered as done: `purged_partial`.
+fn purge_when_reviewed(x: &PoolCtx, me: &str, cid: &str, bid: &str) -> Res<Value> {
+    let tx = x.conn.unchecked_transaction()?;
+    let claim = tx.execute(
+        &format!(
+            "UPDATE circle_banks SET purge_after = ?4 WHERE id = ?1 AND circle_id = ?2 AND removed_at IS NOT NULL AND purged_at IS NULL
+           AND removed_reason IN ('author_removed', 'owner_removed', 'account_deleted', 'circle_closed')
+           AND NOT EXISTS (SELECT 1 FROM circle_reports r WHERE r.bank_id = ?1 AND r.resolved_at IS NULL) AND NOT {}
+           AND {} AND {}",
+            blocking_hold_sql("?1"),
+            active_sql("?2", "?3", &["owner"]),
+            super::sqlfrag::alive_sql("?3")
+        ),
+        params![bid, cid, me, x.now],
+    )?;
+    if claim == 1 {
+        tx.execute(&format!("UPDATE circle_versions SET status = 'pruned', pruned_at = ?2 WHERE bank_id = ?1 AND status IN ('current', 'previous') AND NOT {}", pinned_evidence_sql("circle_versions")), params![bid, x.now])?;
+        tx.execute(&format!("DELETE FROM circle_version_blobs WHERE version_id IN ({PRUNED_NOW_SQL})"), params![bid, x.now])?;
+        audit(&tx, &AuditEntry { actor_id: Some(me), actor_kind: "user", action: "circle.bank_purge_requested", item_id: Some(cid), target_user_id: Some(me), detail: Some(json!({ "bank_id": bid })), ..Default::default() }, x.now, None)?;
+    }
+    let n: i64 = tx.query_row(
+        &format!("SELECT (SELECT COUNT(*) FROM circle_versions ev INDEXED BY circle_versions_bank WHERE ev.bank_id = ?1 AND ev.status IN ('current', 'previous') AND ev.full_key <> '' AND {})", pinned_evidence_sql("ev")),
+        [bid],
+        |r| r.get(0),
+    )?;
+    tx.commit()?;
+    if claim != 1 {
+        x.throw_if_erased(me)?;
+        return Err(PoolError::new(409, "under_moderation").with("message", "This bank is under review by an administrator.".into()).into());
+    }
+    let what = if n == 1 { "a version".to_string() } else { format!("{n} versions") };
+    Ok(json!({
+        "ok": true, "purged_partial": true, "pending_review": true, "evidence_kept": n,
+        "message": format!("An administrator is reviewing {what} of this bank. Everything else in it has been deleted now and the bank cannot be restored; the rest is deleted once that review is done.")
+    }))
 }
 
 /// The account's circles section of GET /me/export: memberships, circles owned, codes created (no codes), versions sent (no bodies), reports filed.

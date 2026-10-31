@@ -18,6 +18,7 @@ pub mod circleinvites;
 pub mod circlepurge;
 pub mod circlemembers;
 pub mod circles;
+pub mod circlesendsql;
 pub mod circlesql;
 pub mod chain;
 pub mod core;
