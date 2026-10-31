@@ -28,8 +28,8 @@ cash-flow-statement__defaults 5f56a9154fcea79e
 cash-flow-statement__start 5f56a9154fcea79e
 cause-effect__defaults 8774a71b1432ad9b
 cause-effect__start 8774a71b1432ad9b
-cell-cycle__defaults c12718162a86271d
-cell-cycle__start d931ecae1f39877e
+cell-cycle__defaults 49bead3f27e085cb
+cell-cycle__start 7b9fc25c62cc534c
 chi-square-fit__defaults cd5784ea1d11d1cf
 chi-square-fit__start cd5784ea1d11d1cf
 chi-square-table__defaults ed9ff82be03eae95

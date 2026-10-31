@@ -675,27 +675,27 @@ const ENERGY_PYRAMID: &[Faq] = &[
 const CELL_CYCLE: &[Faq] = &[
     Faq {
         q: "How do I type the lengths?",
-        a: "Hours for G1, S, G2 and M (M is mitosis and cytokinesis together), to the thousandth: 11, 11 h or 5,5 all work, up to 1000 hours each. A zero, a negative number, a figure with more than three decimals or a word is refused with the digits you typed. Each phase must be at least 0.1 % of the whole cycle; a shorter one is refused, and the message gives the length that draws.",
+        a: "Hours for G1, S, G2 and M (M is mitosis and cytokinesis together), to the thousandth: 11, 11 h or 5,5 all work, up to 1000 hours each. A zero, a negative number, a figure with more than three decimals or a word is refused with the digits you typed, and so is 1,000 (a comma before three digits could be a thousands separator or a decimal comma: type 1000 or 1.000). While the hours and percents are shown, each phase must be at least 0.1 % of the whole cycle; a shorter one is refused, every short phase is named, and the message gives the change that draws (never more than three steps).",
     },
     Faq {
         q: "How is the share of the cycle worked out, and why does it always add to 100.0?",
-        a: "Each phase's hours divided by the total, as a percent rounded half up to 0.1. If the four rounded values do not add to exactly 100.0, one tenth is added to the phase that was rounded down furthest (or taken from the phase that was rounded up furthest); the earlier phase wins a tie. The caption names the phase it changed, and only when a change was needed. The shares are answers: a student copy has blanks.",
+        a: "Each phase's hours divided by the total, as a percent rounded half up to 0.1. Phases with equal hours always print equal percents. If the four rounded values do not add to exactly 100.0, one tenth is added to the phase that was rounded down furthest (or taken from the phase that was rounded up furthest), the earlier phase winning a tie, but only a phase whose hours no other phase shares may change. If none can change, the shares are printed as rounded and the caption says what they add to. The caption names any change, and only when one was needed. The shares are answers: a student copy has blanks.",
     },
     Faq {
         q: "Why is the M wedge a bit wider than its share?",
         a: "A wedge narrower than 5 degrees would not survive a photocopy, so it is drawn 5 degrees wide and the others are scaled slightly to make up the circle. The caption says so only when it happens, and the labels and percents always use the true hours. Wedge sizes: Equal draws four equal wedges and says they are not to scale.",
     },
     Faq {
-        q: "What do the checkpoints and the G0 branch show?",
-        a: "The G1/S and G2/M checkpoints are ticks across the ring at the end of G1 and of G2. The spindle (metaphase to anaphase) checkpoint sits between metaphase and anaphase on the strip of the stages of M, so it needs Show the stages of M. G0 is a box off G1 for cells that leave the cycle; it needs a G1 wedge at least 20 degrees wide, otherwise the figure says so and tells you what to change.",
+        q: "What do the checkpoints, the G0 branch and the arc outside the ring show?",
+        a: "Show interphase (on by default) draws an arc just outside the ring over G1, S and G2 with a numbered label; the wedge leaders cross it, and if G1, S and G2 are so narrow together that no clean place is left for its label the figure says so and tells you to turn it off. M has no arc: it already has its label and the strip of its stages. The G1/S and G2/M checkpoints are ticks across the ring at the end of G1 and of G2. The spindle (metaphase to anaphase) checkpoint sits between metaphase and anaphase on the strip of the stages of M, so it needs Show the stages of M. G0 is a box off G1 for cells that leave the cycle; it needs a G1 wedge at least 20 degrees wide, otherwise the figure says so and tells you what to change.",
     },
     Faq {
         q: "What does the marker read out?",
-        a: "The triangle in the hole stands on the stage you choose (a stage of M marks the M wedge and the box on the strip). DNA amount is per cell in C, where a G1 cell is 2C: 2C in G1, 2C to 4C across S, 4C through G2, prophase, metaphase, anaphase and telophase, and 4C to 2C as cytokinesis makes the daughters. Chromosome number uses the 2n you type and counts the whole cell: 2n up to metaphase, twice that from anaphase when the sister chromatids separate, and back to 2n in each daughter. 2n must be even, 2 to 1000.",
+        a: "The triangle at the inner edge of the wedge stands on the stage you choose (a stage of M marks the M wedge and the box on the strip; G0 marks its box), and the caption says so. DNA amount is per cell in C, where a G1 cell is 2C: 2C in G1, 2C to 4C across S, 4C through G2, prophase, metaphase, anaphase and telophase, and 4C to 2C as cytokinesis makes the daughters. Chromosome number uses the 2n you type and counts the whole cell: 2n up to metaphase, twice that from anaphase when the sister chromatids separate, and back to 2n in each daughter; each of the two nuclei of telophase has 2n. A range such as 2C to 4C means the amount changes during that stage. 2n must be even, 2 to 1000. Prometaphase is counted with prophase.",
     },
     Faq {
         q: "What does a student copy hide?",
-        a: "With Show answers off the names, the shares, the total and the readout are blank: wedges, checkpoints, the stages of M and G0 keep numbered discs, and a table under the figure has a rule for each name (and the share). The key (Show answers on) prints them. The hours you typed stay on the figure because they are the givens. The layout is the same in both copies.",
+        a: "With Show answers off the names, the shares, the total and the readout are blank: wedges, checkpoints, interphase, the stages of M and G0 keep numbered discs, and a table under the figure has a rule for each name (and the share). The key (Show answers on) prints them. The hours you typed stay on the figure because they are the givens. The layout is the same in both copies.",
     },
 ];
 
