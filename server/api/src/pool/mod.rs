@@ -15,6 +15,7 @@ pub mod fuzzyhits;
 pub mod fuzzynear;
 pub mod hit;
 pub mod image;
+pub mod invites;
 pub mod itemview;
 pub mod jsonscan;
 pub mod license;
