@@ -54,6 +54,7 @@ pub mod modprivacy;
 pub mod modpurge;
 pub mod modrestore;
 pub mod modtakedown;
+pub mod adminpool;
 pub mod offer;
 pub mod publishdel;
 pub mod poolio;

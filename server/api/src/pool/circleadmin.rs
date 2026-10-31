@@ -21,10 +21,10 @@ pub const CIRCLE_ADMIN_PAGE: usize = 200;
 /// The versions one unblock releases at most (each is a body check); the rest keep their `block_lifted` flags.
 pub const UNBLOCK_RELEASE_MAX: usize = 50;
 
-fn bad(field: &str) -> Fail {
+pub(super) fn bad(field: &str) -> Fail {
     PoolError::new(400, "invalid_request").with("field", json!(field)).into()
 }
-fn id_of(v: Option<&Value>, field: &str) -> Res<String> {
+pub(super) fn id_of(v: Option<&Value>, field: &str) -> Res<String> {
     match v.and_then(Value::as_str) {
         Some(s) if is_id(s) => Ok(s.to_string()),
         _ => Err(bad(field)),
@@ -45,7 +45,7 @@ fn version_of(v: Option<&Value>) -> Res<Option<i64>> {
         },
     }
 }
-fn row_json(r: &Row) -> rusqlite::Result<Map<String, Value>> {
+pub(super) fn row_json(r: &Row) -> rusqlite::Result<Map<String, Value>> {
     let mut m = Map::new();
     for (i, name) in r.as_ref().column_names().iter().enumerate() {
         let v = match r.get_ref(i)? {
@@ -59,15 +59,15 @@ fn row_json(r: &Row) -> rusqlite::Result<Map<String, Value>> {
     }
     Ok(m)
 }
-fn rows(conn: &rusqlite::Connection, sql: &str, p: &[&dyn rusqlite::ToSql]) -> rusqlite::Result<Vec<Map<String, Value>>> {
+pub(super) fn rows(conn: &rusqlite::Connection, sql: &str, p: &[&dyn rusqlite::ToSql]) -> rusqlite::Result<Vec<Map<String, Value>>> {
     conn.prepare(sql)?.query_map(p, row_json)?.collect()
 }
 /// `^(\d{1,16}):([0-9a-f]{32})$`
-fn cursor(after: Option<&str>) -> Option<(i64, String)> {
+pub(super) fn cursor(after: Option<&str>) -> Option<(i64, String)> {
     let (a, b) = after?.split_once(':')?;
     (!a.is_empty() && a.len() <= 16 && a.bytes().all(|c| c.is_ascii_digit()) && is_id(b)).then(|| (a.parse().unwrap(), b.to_string()))
 }
-fn parse_json_col(m: &mut Map<String, Value>, k: &str) {
+pub(super) fn parse_json_col(m: &mut Map<String, Value>, k: &str) {
     let v = m.get(k).and_then(Value::as_str).and_then(|s| serde_json::from_str::<Value>(s).ok()).unwrap_or_else(|| json!([]));
     m.insert(k.into(), v);
 }
