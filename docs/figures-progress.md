@@ -866,6 +866,30 @@ code, `b2f` and the private `dist_seg` removed (the public `composite::seg_dist`
 vanishes in a 66 % black-and-white copy, where the minor ticks on the axis remain; the widened plot for a very early stimulus
 can be over 1,200 px at Large; a level reads to about half a division (2 to 5 mV), not better; the extents of the bands were
 checked against two textbook descriptions, not a printed figure; the live editor was not driven.
+Action potential, round 3 (2026-10-30, after critic 2: 0 blocker, 1 major, 2 MED, 4 LOW, 6 minor). Owner decisions, dated
+2026-10-30: (A) the "return to resting potential" pointer sits on the RECOVERING LIMB, inside the K+ and relative-refractory
+brackets and at least 4 px off the rest line (literal `RETURN_SEP_V`) and 14 px from every other dot, so it cannot be taken for
+the resting level; all eight blanks keep one right answer. In a failed initiation it sits on the falling tail of the bump, 2.5 px
+or more above rest and no higher than 45 % of the bump, and the test requires it 10 px right of and lower than the local-response
+dot (the mutant that moves it to the top of the bump is killed). If a combination has no valid spot (a 3 mV dip on a wide scale,
+e.g. rest -95, peak 70) it is refused with that reason and advice (deeper dip, lower peak, or phase pointers off); (B) the
+bracket-row labels are "Channels" and "Periods", each true of both brackets in its row. Other fixes: the plot is never widened
+for an early stimulus (canvas width is the same for every stimulus and total; the resting pointer goes on the flat line after the
+spike when the lead is too short, and no dot is closer than 12 px to the y axis); the test derives a width ceiling from a 6.5 in
+(624 px) column and a 9 px printed-text floor (widest canvas now 621 / 634 / 703 px at Small / Medium / Large; smallest text prints
+at 9.6 px, it was 7.1 px); the "not a time" refusal quotes `stimulus + 4.7`, and the brute-force advice test applies it at every
+allowed stimulus; the leak check is structural (a student copy may carry only tick numbers, disc marks, the two axis titles and
+the row labels, and the fixed title and description); `-,5`, `-70,` are not numbers and digits past 12 whole or 9 decimal places
+are refused, never rounded or saturated; discs are placed against the 2 px copy of the curve, with a literal 2 px curve gap and 3
+px disc gap tested on a 0.01 ms walk of the true curve; the dead leader-against-leader and leader-against-dot guards were deleted
+after a sweep showed neither ever changed a drawing, replaced by a literal 3.6 / 6 px check of every render. Mutants: 27 run, 26
+killed after one pattern fix; survivors, recorded: the old closed phrase list (kept as the weaker net; the structural test kills
+that mutant), the disc-to-curve guard on the coarse versus fine polyline and its 0.5 px variant, the leader-dot clearance at
+dot and disc placement, and "every return failure blamed on a shallow dip": none changes any drawing in the family, so the
+tests pin the outcome (gaps, separations) and not those mechanisms. Not fixed: Large -100/-90/70 still draws -170..110 with a
+"-150" label (room under the rest line for the arrow and disc 1); `seg_cross` is still a local copy because no public equivalent
+exists (the private `dist_seg` alias to `composite::seg_dist` stays); at a 3 mV dip the return dot is only just 4 px off rest;
+the failed-initiation return dot is 2.5-4 px above rest on a small bump; the live editor was not driven.
 ### Phase 4 biology: verification rounds 6-11 (hardy-weinberg, chi-square-fit, enzyme-kinetics, cladogram)
 Six more critic/builder rounds after the fifth pass, each on a frozen `git archive` with its own target dir (reports
 `2026-10-29-phase4-verify5.md` .. `2026-10-30-phase4-verify11.md`). Blockers/majors/minors: 6th 1/2/1, 7th 1/5/10, 8th 1/2/8,
