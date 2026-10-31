@@ -4,6 +4,7 @@
 pub mod common_passwords;
 pub mod config;
 pub mod crypto;
+pub mod device;
 pub mod guard;
 pub mod http;
 pub mod jwt;
