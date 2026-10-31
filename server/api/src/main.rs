@@ -8,6 +8,7 @@ mod blobs;
 mod body;
 mod config;
 mod db;
+mod pool;
 mod ratelimit;
 
 use ai::routes::{AiState, NoAuth, system_clock, tokio_spawn};
