@@ -465,7 +465,9 @@ fn crop(fig: &Value, page: Option<&image::DynamicImage>, page_no: usize) -> Resu
         return Err("its box needs four numbers".into());
     }
     let (w, h) = (page.width() as f64, page.height() as f64);
-    let pad = 0.012;
+    // The model's boxes run tight (on a real worksheet one clipped the edge atom of a structure), and a
+    // little extra paper costs nothing, so the crop is padded by 2.5% of the page on each side.
+    let pad = 0.025;
     let [bx0, by0, bx1, by1] = box_fractions(&b);
     let (x0, y0) = ((bx0 - pad).clamp(0.0, 1.0), (by0 - pad).clamp(0.0, 1.0));
     let (x1, y1) = ((bx1 + pad).clamp(0.0, 1.0), (by1 + pad).clamp(0.0, 1.0));
@@ -477,11 +479,23 @@ fn crop(fig: &Value, page: Option<&image::DynamicImage>, page_no: usize) -> Resu
     if pw as f64 > w * 0.98 && ph as f64 > h * 0.9 {
         return Err("its box covers the whole page".into());
     }
+    let piece = page.crop_imm(px, py, pw, ph);
+    // A box on bare paper is a wrong box, not a picture: on a real worksheet the model gave the
+    // right box on one run and a box over the empty bottom of the page on the next three.
+    if is_blank(&piece) {
+        return Err("its box is over a blank part of the page".into());
+    }
     let mut out = Vec::new();
-    page.crop_imm(px, py, pw, ph)
-        .write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
-        .map_err(|e| e.to_string())?;
+    piece.write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png).map_err(|e| e.to_string())?;
     Ok(out)
+}
+
+/// True when almost nothing in the picture is ink: under 0.2% of its pixels are darker than paper.
+/// A thin line drawing still has more than that; a scanner's grey speckle does not reach it.
+fn is_blank(img: &image::DynamicImage) -> bool {
+    let g = img.to_luma8();
+    let ink = g.pixels().filter(|p| p.0[0] < 200).count();
+    (ink as f64) < 0.002 * (g.width() as f64 * g.height() as f64).max(1.0)
 }
 
 fn exams(v: &Value, ids: &HashMap<String, String>) -> Vec<Exam> {
@@ -520,7 +534,13 @@ mod tests {
     use super::*;
 
     fn page() -> Vec<u8> {
-        let img = image::RgbaImage::from_pixel(200, 300, image::Rgba([255, 255, 255, 255]));
+        // White paper with a dark block in the middle: a crop of the block has ink, a crop of the margin does not.
+        let mut img = image::RgbaImage::from_pixel(200, 300, image::Rgba([255, 255, 255, 255]));
+        for y in 30..270 {
+            for x in 30..170 {
+                img.put_pixel(x, y, image::Rgba([0, 0, 0, 255]));
+            }
+        }
         let mut out = Vec::new();
         image::DynamicImage::ImageRgba8(img).write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png).unwrap();
         out
@@ -685,7 +705,7 @@ mod tests {
         let frac = cropped_size("[0.2,0.1,0.6,0.4]").expect("fraction box cropped");
         assert_eq!(grid, frac);
         // x 0.2..0.6 of 200 px plus padding, y 0.1..0.4 of 300 px plus padding.
-        assert!((grid.0 as i64 - 84).abs() <= 2 && (grid.1 as i64 - 97).abs() <= 2, "{grid:?}");
+        assert!((grid.0 as i64 - 90).abs() <= 2 && (grid.1 as i64 - 105).abs() <= 2, "{grid:?}");
     }
 
     #[test]
@@ -694,5 +714,20 @@ mod tests {
         // is not a number, so only the four numbers remain and the crop goes ahead.
         assert_eq!(cropped_size(r#"[100,200,400,600,"A right triangle"]"#), cropped_size("[100,200,400,600]"));
         assert!(cropped_size("[100,200,400,600]").is_ok());
+    }
+
+    #[test]
+    fn a_box_over_bare_paper_is_dropped_as_blank() {
+        // The margin of the test page (x 0..30) is white: a box there is the wrong box.
+        let err = cropped_size("[100,0,400,100]").unwrap_err();
+        assert!(err.contains("blank"), "{err}");
+        // The same size over the dark block crops fine.
+        assert!(cropped_size("[300,300,600,600]").is_ok());
+        // A thin line drawing still counts as a picture.
+        let mut img = image::RgbaImage::from_pixel(200, 300, image::Rgba([255, 255, 255, 255]));
+        for x in 20..180 {
+            img.put_pixel(x, 150, image::Rgba([0, 0, 0, 255]));
+        }
+        assert!(!is_blank(&image::DynamicImage::ImageRgba8(img)));
     }
 }

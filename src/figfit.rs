@@ -83,7 +83,7 @@ fn fit_once(crop: &[u8], context: &str, cfg: &AiCfg, feedback: &str) -> Result<F
         &[crop],
         cfg,
         &format!(
-            "This picture was cut from a test question: \"{}\".\nWhich generator can redraw THIS picture closely (same kind of drawing and same subject, not just the same subject area)?\n{}{feedback}\n\nAnswer JSON only: {{\"id\": \"<generator id>\" or null, \"reason\": \"...\"}}. Use null unless one clearly fits.",
+            "This picture was cut from a test question: \"{}\".\nWhich generator can redraw THIS picture closely (same kind of drawing and same subject, not just the same subject area)?\n{}{feedback}\n\nAnswer JSON only, written on one line with no indentation: {{\"id\": \"<generator id>\" or null, \"reason\": \"...\"}}. Use null unless one clearly fits.",
             context.chars().take(200).collect::<String>(),
             catalog()
         ),
@@ -103,7 +103,7 @@ fn fit_once(crop: &[u8], context: &str, cfg: &AiCfg, feedback: &str) -> Result<F
             &[crop],
             cfg,
             &format!(
-                "Set the \"{}\" generator so it redraws this picture. Question text: \"{}\".\nParameters:\n{}\n\nAnswer JSON only: {{\"reasoning\": \"two short sentences working out which part of the picture each parameter describes (for a triangle: which corner is the right angle, which side is the longest)\", \"params\": {{...}}}}, listing only the parameters that must differ from their defaults, with values of the stated kind. Every parameter you leave out keeps the default shown above, so when a default does not fit this picture (a preset angle or length it does not have), set it. Set a text parameter to \"\" (empty) to clear its default, which is how a measure the picture leaves out is \"worked out\" from the others. Check your values agree before answering: angles of a triangle add to 180, and the side opposite the largest angle (the hypotenuse, opposite a right angle) is the longest, so a 3 and a 4 are the two legs and the hypotenuse is the side left blank for the generator to work out. Match the picture's own labels exactly, units included (a side printed as \"3 cm\" needs the label text \"3 cm\"), and switch off every label, corner letter or measure the picture does not show. If the redraw shows a sentence of text instead of a drawing, the parameters contradict each other. When a parameter offers a list of options and one option names what the picture shows, choose that option instead of typing free text.{feedback}",
+                "Set the \"{}\" generator so it redraws this picture. Question text: \"{}\".\nParameters:\n{}\n\nAnswer JSON only, written on one line with no indentation: {{\"reasoning\": \"two short sentences working out which part of the picture each parameter describes (for a triangle: which corner is the right angle, which side is the longest)\", \"params\": {{...}}}}, listing only the parameters that must differ from their defaults, with values of the stated kind. Every parameter you leave out keeps the default shown above, so when a default does not fit this picture (a preset angle or length it does not have), set it. Set a text parameter to \"\" (empty) to clear its default, which is how a measure the picture leaves out is \"worked out\" from the others. Check your values agree before answering: angles of a triangle add to 180, and the side opposite the largest angle (the hypotenuse, opposite a right angle) is the longest, so a 3 and a 4 are the two legs and the hypotenuse is the side left blank for the generator to work out. Match the picture's own labels exactly, units included (a side printed as \"3 cm\" needs the label text \"3 cm\"), and switch off every label, corner letter or measure the picture does not show. If the redraw shows a sentence of text instead of a drawing, the parameters contradict each other. When a parameter offers a list of options and one option names what the picture shows, choose that option instead of typing free text.{feedback}",
                 def.title,
                 context.chars().take(200).collect::<String>(),
                 param_help(&def)
@@ -117,7 +117,7 @@ fn fit_once(crop: &[u8], context: &str, cfg: &AiCfg, feedback: &str) -> Result<F
         let verdict = ask_json(
             &[crop, &png],
             cfg,
-            "Image 1 is the original picture. Image 2 is a redraw made by a generator. Do they show the same thing: same molecule or structure, same labels and values, same layout? Ignore line thickness, font and exact position.\nAnswer JSON only: {\"same\": true or false, \"differences\": \"what is different, as a short instruction for fixing the parameters\"}",
+            "Image 1 is the original picture. Image 2 is a redraw made by a generator. Do they show the same thing: same molecule or structure, same labels and values, same layout? Ignore line thickness, font and exact position.\nAnswer JSON only, written on one line with no indentation: {\"same\": true or false, \"differences\": \"what is different, as a short instruction for fixing the parameters\"}",
         )?;
         debug(&format!("verdict: {verdict}"));
         if verdict.get("same").and_then(Value::as_bool) == Some(true) {
@@ -190,7 +190,7 @@ async fn fit_once_async(crop: &[u8], context: &str, cfg: &AiCfg, feedback: &str)
         &[crop],
         cfg,
         &format!(
-            "This picture was cut from a test question: \"{}\".\nWhich generator can redraw THIS picture closely (same kind of drawing and same subject, not just the same subject area)?\n{}{feedback}\n\nAnswer JSON only: {{\"id\": \"<generator id>\" or null, \"reason\": \"...\"}}. Use null unless one clearly fits.",
+            "This picture was cut from a test question: \"{}\".\nWhich generator can redraw THIS picture closely (same kind of drawing and same subject, not just the same subject area)?\n{}{feedback}\n\nAnswer JSON only, written on one line with no indentation: {{\"id\": \"<generator id>\" or null, \"reason\": \"...\"}}. Use null unless one clearly fits.",
             context.chars().take(200).collect::<String>(),
             catalog()
         ),
@@ -211,7 +211,7 @@ async fn fit_once_async(crop: &[u8], context: &str, cfg: &AiCfg, feedback: &str)
             &[crop],
             cfg,
             &format!(
-                "Set the \"{}\" generator so it redraws this picture. Question text: \"{}\".\nParameters:\n{}\n\nAnswer JSON only: {{\"reasoning\": \"two short sentences working out which part of the picture each parameter describes (for a triangle: which corner is the right angle, which side is the longest)\", \"params\": {{...}}}}, listing only the parameters that must differ from their defaults, with values of the stated kind. Every parameter you leave out keeps the default shown above, so when a default does not fit this picture (a preset angle or length it does not have), set it. Set a text parameter to \"\" (empty) to clear its default, which is how a measure the picture leaves out is \"worked out\" from the others. Check your values agree before answering: angles of a triangle add to 180, and the side opposite the largest angle (the hypotenuse, opposite a right angle) is the longest, so a 3 and a 4 are the two legs and the hypotenuse is the side left blank for the generator to work out. Match the picture's own labels exactly, units included (a side printed as \"3 cm\" needs the label text \"3 cm\"), and switch off every label, corner letter or measure the picture does not show. If the redraw shows a sentence of text instead of a drawing, the parameters contradict each other. When a parameter offers a list of options and one option names what the picture shows, choose that option instead of typing free text.{feedback}",
+                "Set the \"{}\" generator so it redraws this picture. Question text: \"{}\".\nParameters:\n{}\n\nAnswer JSON only, written on one line with no indentation: {{\"reasoning\": \"two short sentences working out which part of the picture each parameter describes (for a triangle: which corner is the right angle, which side is the longest)\", \"params\": {{...}}}}, listing only the parameters that must differ from their defaults, with values of the stated kind. Every parameter you leave out keeps the default shown above, so when a default does not fit this picture (a preset angle or length it does not have), set it. Set a text parameter to \"\" (empty) to clear its default, which is how a measure the picture leaves out is \"worked out\" from the others. Check your values agree before answering: angles of a triangle add to 180, and the side opposite the largest angle (the hypotenuse, opposite a right angle) is the longest, so a 3 and a 4 are the two legs and the hypotenuse is the side left blank for the generator to work out. Match the picture's own labels exactly, units included (a side printed as \"3 cm\" needs the label text \"3 cm\"), and switch off every label, corner letter or measure the picture does not show. If the redraw shows a sentence of text instead of a drawing, the parameters contradict each other. When a parameter offers a list of options and one option names what the picture shows, choose that option instead of typing free text.{feedback}",
                 def.title,
                 context.chars().take(200).collect::<String>(),
                 param_help(&def)
@@ -226,7 +226,7 @@ async fn fit_once_async(crop: &[u8], context: &str, cfg: &AiCfg, feedback: &str)
         let verdict = ask_json_async(
             &[crop, &png],
             cfg,
-            "Image 1 is the original picture. Image 2 is a redraw made by a generator. Do they show the same thing: same molecule or structure, same labels and values, same layout? Ignore line thickness, font and exact position.\nAnswer JSON only: {\"same\": true or false, \"differences\": \"what is different, as a short instruction for fixing the parameters\"}",
+            "Image 1 is the original picture. Image 2 is a redraw made by a generator. Do they show the same thing: same molecule or structure, same labels and values, same layout? Ignore line thickness, font and exact position.\nAnswer JSON only, written on one line with no indentation: {\"same\": true or false, \"differences\": \"what is different, as a short instruction for fixing the parameters\"}",
         )
         .await?;
         debug(&format!("verdict: {verdict}"));

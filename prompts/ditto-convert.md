@@ -106,3 +106,6 @@ NONBONDING ELECTRONS: 10" filled in by hand:
 
 Page shows "4. For the following compounds ... a. NH3  b. CO2" (bullets of instructions, student drawings):
 {"id":"q4","type":"multipart","stem":"For the following compounds, do all to receive full credit:\n• Draw a valid Lewis structure.\n• Count the number of electron clouds.","parts":[{"stem":"a. NH₃","type":"short-answer","suggestedAnswer":"4 clouds, trigonal pyramidal, polar"},{"stem":"b. CO₂","type":"short-answer","suggestedAnswer":"2 clouds, linear, nonpolar"}]}
+
+# Reply formatting
+Output the JSON with no indentation: one question per line. Keep all fields, blanks, parts, choices and `\n` line breaks inside strings exactly as the rules above require.

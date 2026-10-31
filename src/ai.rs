@@ -930,52 +930,92 @@ pub struct Converted {
 
 /// The whole Import path for one page image: model reply -> Ditto parse (figures cropped) ->
 /// figure fitting (crops become editable Figures-tab figures when a generator matches).
-/// With the relay provider the page goes as a one-page import job (no long-held connection);
-/// anything else, or a relay without the job routes, takes the chat path.
+/// One chat turn per page (the relay's import jobs are not used: see `convert_pages`).
 pub fn convert_page(bytes: &[u8], mime: &str, hint: &str, cfg: &AiCfg, page_no: usize) -> Result<Converted, String> {
-    #[cfg(not(target_arch = "wasm32"))]
-    if cfg.provider == "workers"
-        && let Ok(mut texts) = job_texts(&[(bytes, mime)], hint, cfg, &|_, _| {})
-        && let Some(Ok(raw)) = texts.pop()
-        && crate::ditto::json_error(&raw).is_none()
-    {
-        return finish_page(&raw, bytes, cfg, page_no);
-    }
     convert_page_chat(bytes, mime, hint, cfg, page_no)
 }
 
 /// [`convert_page`] without the job route: the model answers one chat turn (retried on bad JSON).
 pub fn convert_page_chat(bytes: &[u8], mime: &str, hint: &str, cfg: &AiCfg, page_no: usize) -> Result<Converted, String> {
     let raw = transcribe_checked(bytes, mime, cfg, &transcription_prompt(hint))?;
-    finish_page(&raw, bytes, cfg, page_no)
+    let first = finish_page(&raw, bytes, cfg, page_no)?;
+    Ok(redo_for_box(first, bytes, mime, hint, cfg, page_no))
 }
 
-/// Every page of a document. With the relay provider the whole document is one import job (the
-/// worker reads the pages in order, so a long PDF is not a burst of parallel calls); a page the job
-/// could not read, or answered with broken JSON, is retried on the chat path. `progress(done,
-/// total)` reports the job's pages. Figure cropping and fitting then run per page, in parallel.
+/// After this long without an answer a relay call is sent again in parallel and the first answer wins.
+/// A call normally answers in 1 to 12 s on the relay, but now and then one hangs for minutes.
+#[cfg(not(target_arch = "wasm32"))]
+const HEDGE_AFTER: Duration = Duration::from_secs(25);
+
+/// `VERSHION_AI_HEDGE_SECS` overrides [`HEDGE_AFTER`] (used to test the race).
+#[cfg(not(target_arch = "wasm32"))]
+fn hedge_after() -> Duration {
+    crate::env_var("VERSHION_AI_HEDGE_SECS").ok().and_then(|v| v.trim().parse::<u64>().ok()).map(Duration::from_secs).unwrap_or(HEDGE_AFTER)
+}
+
+/// Pictures dropped because their box was wrong (blank paper, off the page).
+fn boxes_dropped(c: &Converted) -> usize {
+    c.warnings.iter().filter(|w| w.contains("figure dropped")).count()
+}
+
+/// The model's picture box is the least stable part of a page read (on a real worksheet it was right
+/// on one run and over the empty bottom of the page on the next three). When a figure was dropped for
+/// its box, the page is asked once more, at a little temperature so the answer differs, with a note
+/// about what went wrong; the answer that keeps more pictures wins. Never worse than the first read.
+fn redo_for_box(first: Converted, bytes: &[u8], mime: &str, hint: &str, cfg: &AiCfg, page_no: usize) -> Converted {
+    if boxes_dropped(&first) == 0 {
+        return first;
+    }
+    let prompt = format!(
+        "{}\n\nYour earlier answer for this page gave a picture box over a blank part of the page. Look at the page again and put the box tightly around the printed picture itself (the drawing and its labels), not around empty paper.",
+        transcription_prompt(hint)
+    );
+    let second = transcribe_at(bytes, mime, cfg, &prompt, 0.3)
+        .ok()
+        .filter(|raw| crate::ditto::json_error(raw).is_none())
+        .and_then(|raw| finish_page(&raw, bytes, cfg, page_no).ok());
+    match second {
+        Some(c) if c.cropped > first.cropped || (c.cropped == first.cropped && boxes_dropped(&c) < boxes_dropped(&first)) => c,
+        _ => first,
+    }
+}
+
+/// Pages read at the same time. Each page is its own chat request (about 20 s on the relay), so a
+/// document takes roughly the time of its slowest page plus one more per `PAGE_PARALLEL` pages.
+/// `VERSHION_AI_PARALLEL` overrides it (used to measure the best value).
+#[cfg(not(target_arch = "wasm32"))]
+fn page_parallel() -> usize {
+    crate::env_var("VERSHION_AI_PARALLEL").ok().and_then(|v| v.trim().parse::<usize>().ok()).filter(|n| *n > 0).unwrap_or(PAGE_PARALLEL)
+}
+#[cfg(not(target_arch = "wasm32"))]
+const PAGE_PARALLEL: usize = 12;
+
+/// Every page of a document, a few at a time. Each page is one chat request, not an import job: the
+/// relay's background job was cut off after about a page (the platform cancels work that outlives
+/// the request that started it), and one request per page needs no polling. `progress(done, total)`
+/// reports pages as they finish; results come back in page order. A page's figure cropping and
+/// fitting run on the same worker thread right after its read.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn convert_pages(pages: &[Vec<u8>], hint: &str, cfg: &AiCfg, progress: &(dyn Fn(usize, usize) + Sync)) -> Vec<Result<Converted, String>> {
-    let job: Option<Vec<Result<String, String>>> = if cfg.provider == "workers" {
-        let refs: Vec<(&[u8], &str)> = pages.iter().map(|p| (p.as_slice(), "image/png")).collect();
-        job_texts(&refs, hint, cfg, progress).ok()
-    } else {
-        None
-    };
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let total = pages.len();
+    let next = AtomicUsize::new(0);
+    let done = AtomicUsize::new(0);
+    let slots: Vec<std::sync::Mutex<Option<Result<Converted, String>>>> = (0..total).map(|_| std::sync::Mutex::new(None)).collect();
     std::thread::scope(|sc| {
-        let hs: Vec<_> = pages
-            .iter()
-            .enumerate()
-            .map(|(i, png)| {
-                let raw = job.as_ref().and_then(|j| j.get(i)).and_then(|r| r.as_ref().ok()).filter(|r| crate::ditto::json_error(r).is_none()).cloned();
-                sc.spawn(move || match raw {
-                    Some(raw) => finish_page(&raw, png, cfg, i + 1),
-                    None => convert_page_chat(png, "image/png", hint, cfg, i + 1),
-                })
-            })
-            .collect();
-        hs.into_iter().map(|h| h.join().unwrap_or_else(|_| Err("thread panicked".into()))).collect()
-    })
+        for _ in 0..page_parallel().min(total) {
+            sc.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, Ordering::SeqCst);
+                    let Some(png) = pages.get(i) else { break };
+                    let r = convert_page_chat(png, "image/png", hint, cfg, i + 1);
+                    *slots[i].lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
+                    progress(done.fetch_add(1, Ordering::SeqCst) + 1, total);
+                }
+            });
+        }
+    });
+    slots.into_iter().map(|m| m.into_inner().unwrap_or_else(|e| e.into_inner()).unwrap_or_else(|| Err("page was not read".into()))).collect()
 }
 
 /// Parses one page's model reply into questions, crops its pictures and fits them to generators.
@@ -1057,6 +1097,50 @@ fn ollama_chat(cfg: &AiCfg, prompt: &str, images: &[&[u8]], temp: f64) -> Result
 
 /// OpenRouter and any custom OpenAI-compatible endpoint, with the image as a data URI.
 fn openai_chat(cfg: &AiCfg, prompt: &str, mime: &str, images: &[&[u8]], temp: f64) -> Result<String, String> {
+    #[cfg(not(target_arch = "wasm32"))]
+    if cfg.provider == "workers" {
+        return hedged(cfg, prompt, mime, images, temp);
+    }
+    openai_chat_once(cfg, prompt, mime, images, temp)
+}
+
+/// The relay call, raced against a second identical call once it has been slow for [`hedge_after`].
+/// The first usable answer wins; the slower call is left to finish on its own thread.
+#[cfg(not(target_arch = "wasm32"))]
+fn hedged(cfg: &AiCfg, prompt: &str, mime: &str, images: &[&[u8]], temp: f64) -> Result<String, String> {
+    let (tx, rx) = std::sync::mpsc::channel::<Result<String, String>>();
+    let launch = |tx: std::sync::mpsc::Sender<Result<String, String>>| {
+        let (c, p, m) = (cfg.clone(), prompt.to_string(), mime.to_string());
+        let imgs: Vec<Vec<u8>> = images.iter().map(|b| b.to_vec()).collect();
+        std::thread::spawn(move || {
+            let refs: Vec<&[u8]> = imgs.iter().map(Vec::as_slice).collect();
+            let _ = tx.send(openai_chat_once(&c, &p, &m, &refs, temp));
+        });
+    };
+    launch(tx.clone());
+    let (mut running, mut hedge_sent, mut last) = (1, false, Err("no reply".to_string()));
+    loop {
+        let got = if hedge_sent { rx.recv().ok() } else { rx.recv_timeout(hedge_after()).ok() };
+        match got {
+            Some(Ok(reply)) if !reply.trim().is_empty() => return Ok(reply),
+            Some(other) => {
+                running -= 1;
+                last = other;
+                if running == 0 {
+                    return last;
+                }
+            }
+            None if !hedge_sent => {
+                hedge_sent = true;
+                running += 1;
+                launch(tx.clone());
+            }
+            None => return last,
+        }
+    }
+}
+
+fn openai_chat_once(cfg: &AiCfg, prompt: &str, mime: &str, images: &[&[u8]], temp: f64) -> Result<String, String> {
     let base = cfg.base.trim_end_matches('/');
     if base.is_empty() {
         return Err("Set a base URL for the custom AI endpoint in Settings.".to_string());
@@ -1083,8 +1167,10 @@ fn openai_chat(cfg: &AiCfg, prompt: &str, mime: &str, images: &[&[u8]], temp: f6
 }
 
 /// How long a job may run, polled every JOB_POLL, before the app stops waiting.
+#[allow(dead_code)] // the app reads pages over chat; kept for when the relay's jobs run on Workflows
 #[cfg(not(target_arch = "wasm32"))]
 const JOB_WAIT: Duration = Duration::from_secs(25 * 60);
+#[allow(dead_code)] // the app reads pages over chat; kept for when the relay's jobs run on Workflows
 #[cfg(not(target_arch = "wasm32"))]
 const JOB_POLL: Duration = Duration::from_millis(1500);
 
@@ -1092,6 +1178,7 @@ const JOB_POLL: Duration = Duration::from_millis(1500);
 /// waits for it. One entry per page: the model's reply text, or why that page has none. `Err`
 /// means the job could not be started or followed at all (an older relay, a refused request, a job
 /// that failed outright), and the caller falls back to the chat path.
+#[allow(dead_code)] // the app reads pages over chat; kept for when the relay's jobs run on Workflows
 #[cfg(not(target_arch = "wasm32"))]
 fn job_texts(pages: &[(&[u8], &str)], hint: &str, cfg: &AiCfg, progress: &dyn Fn(usize, usize)) -> Result<Vec<Result<String, String>>, String> {
     let base = cfg.base.trim_end_matches('/');
@@ -1123,6 +1210,7 @@ fn job_texts(pages: &[(&[u8], &str)], hint: &str, cfg: &AiCfg, progress: &dyn Fn
 }
 
 /// The per-page texts of a finished job, in page order; a missing page counts as unread.
+#[allow(dead_code)] // the app reads pages over chat; kept for when the relay's jobs run on Workflows
 #[cfg(not(target_arch = "wasm32"))]
 fn job_pages(job: &Value, total: usize) -> Vec<Result<String, String>> {
     let mut out: Vec<Result<String, String>> = (0..total).map(|_| Err("no reply".to_string())).collect();

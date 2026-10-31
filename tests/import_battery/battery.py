@@ -36,7 +36,16 @@ def blob(q):
     return json.dumps(q["kind"]).lower()
 
 
+def as_fractions(b):
+    """A figure box as [x0, y0, x1, y1] fractions. The prompt asks for [ymin, xmin, ymax, xmax] on a 0..1000 grid;
+    older packages used fractions. Any value above 1 means the grid (same rule as src/ditto.rs box_fractions)."""
+    if b and len(b) >= 4 and any(v > 1 for v in b[:4]):
+        return [b[1] / 1000, b[0] / 1000, b[3] / 1000, b[2] / 1000]
+    return b[:4] if b else b
+
+
 def box_iou(a, b):
+    a = as_fractions(a)
     try:
         ix = max(0, min(a[2], b[2]) - max(a[0], b[0])); iy = max(0, min(a[3], b[3]) - max(a[1], b[1]))
         inter = ix * iy; u = (a[2]-a[0])*(a[3]-a[1]) + (b[2]-b[0])*(b[3]-b[1]) - inter
