@@ -902,7 +902,8 @@ pub fn build(p: &Params) -> (String, Report) {
             if let Some(te) = te_in {
                 let (xe, ye) = (px(te), py(if st.mode == Mode::Conc { 0.0 } else { kin.lin(te) }));
                 marks.push(Mark { x: xe, y: ye, r: 3.4, fill: "#ffffff", stroke: ink_c, feat: "end".into() });
-                legend.push((Sty { c: ink_c, w: 1.6, dash: "" }, "End of the reaction ([A] = 0)".into(), true));
+                // on a curve-given student copy the open circle is just part of the curve: naming it would give the order away
+                if ans || !st.curve_given { legend.push((Sty { c: ink_c, w: 1.6, dash: "" }, "End of the reaction ([A] = 0)".into(), true)); }
                 if ans && end_fits { anns.push(('x', xe, xs(te), "end".into())); }
                 if ans && !end_fits { notes.push("The end of the reaction is too close to the first half-life on this time axis for its time to be written at the axis; it is in the working.".into()); }
                 drawn.end_shown = true;
@@ -1190,7 +1191,7 @@ fn describe(st: &Setup, ans: bool, drawn: &Drawn, legend: &[(Sty, String, bool)]
     if legend.iter().any(|l| l.1.starts_with("Tangent")) { parts.push("a tangent"); }
     if legend.iter().any(|l| l.1.starts_with("Initial")) { parts.push("the initial-rate tangent"); }
     if st.product && st.mode == Mode::Conc { parts.push("the product concentration"); }
-    if drawn.end_shown { parts.push("the end of the reaction"); }
+    if drawn.end_shown && named { parts.push("the end of the reaction"); }
     if st.mode == Mode::Rate { parts.push("one marked point"); }
     match parts.len() {
         0 => {}
@@ -1227,7 +1228,7 @@ fn readout(st: &Setup, ans: bool, drawn: &Drawn) -> Vec<String> {
         if let Some(te) = te {
             if ans {
                 v.push(format!("[A] reaches 0 at t = [A]₀/k = {as_} / {ks} = {} s: the reaction is over, and [A] stays at 0{}.", r(te), if drawn.end_shown { "" } else { " (after the time shown)" }));
-            } else if drawn.end_shown {
+            } else if drawn.end_shown && !st.curve_given {
                 v.push(format!("Time when the reaction is over = {BLANK} s"));
             }
         }

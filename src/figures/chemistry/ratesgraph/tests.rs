@@ -804,7 +804,7 @@ fn the_student_copy_has_no_computed_value_anywhere() {
             assert!(!low.contains("slope =") || line.contains("= ______"), "{line}");
             if curve_given {
                 assert!(!tokens(line).contains(&given_fmt(kin.k)) || givens.contains(&given_fmt(kin.k)), "k printed on a curve-given student copy: {line}");
-                for w in ["zero order", "first order", "second order", "zero-order", "first-order", "second-order", "rate = k", "1/s", "1/(m s)"] {
+                for w in ["zero order", "first order", "second order", "zero-order", "first-order", "second-order", "rate = k", "1/s", "1/(m s)", "end of the reaction", "reaction is over"] {
                     assert!(!low.contains(w), "the order shows on a curve-given student copy: {w:?} in {line:?}");
                 }
             }
