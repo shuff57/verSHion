@@ -12,6 +12,8 @@ pub mod jsonscan;
 pub mod license;
 pub mod licensecheck;
 pub mod preread;
+pub mod qhash;
+pub mod qjson;
 pub mod served;
 pub mod sqlfrag;
 pub mod visible;

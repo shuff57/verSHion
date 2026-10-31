@@ -1,0 +1,667 @@
+{
+ "root": "7f757fb737085dcaaad0727deb89a14c18141681dc56be0a215a592c715f8e3b",
+ "questions": [
+  {
+   "id": "q1",
+   "points": null,
+   "difficulty": null,
+   "topics": [],
+   "image": null,
+   "explanation": "Paris has been the capital since 987.",
+   "figure": null,
+   "created": 1,
+   "modified": 2,
+   "stem": "What is the capital of France?",
+   "kind": {
+    "Short": {
+     "sample": "Paris"
+    }
+   }
+  },
+  {
+   "id": "q2",
+   "points": 2,
+   "difficulty": 1.5,
+   "topics": [
+    "zeta",
+    "😀",
+    "Ａlpha",
+    "beta"
+   ],
+   "image": null,
+   "explanation": null,
+   "figure": null,
+   "created": 1,
+   "modified": 2,
+   "stem": "The mitochondria is the powerhouse of the cell.",
+   "kind": {
+    "Tf": {
+     "correct": true
+    }
+   }
+  },
+  {
+   "id": "q3",
+   "points": null,
+   "difficulty": null,
+   "topics": [],
+   "image": null,
+   "explanation": "A prime has exactly two divisors.",
+   "figure": null,
+   "created": 1,
+   "modified": 2,
+   "stem": "Pick the primes — “carefully”.",
+   "kind": {
+    "Mc": {
+     "answers": [
+      {
+       "text": "Seven",
+       "correct": true
+      },
+      {
+       "text": "Nine",
+       "correct": false,
+       "locked": true
+      },
+      {
+       "text": "Eleven",
+       "correct": true
+      },
+      {
+       "text": "Fifteen (15)",
+       "correct": false
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "q4",
+   "points": null,
+   "difficulty": null,
+   "topics": [],
+   "image": null,
+   "explanation": null,
+   "figure": null,
+   "created": 1,
+   "modified": 2,
+   "stem": "Match each country to its capital",
+   "kind": {
+    "Matching": {
+     "pairs": [
+      {
+       "left": "France",
+       "right": "Paris"
+      },
+      {
+       "left": "Spain",
+       "right": "Madrid"
+      }
+     ],
+     "distractors": [
+      "Lisbon",
+      "Paris",
+      ""
+     ]
+    }
+   }
+  },
+  {
+   "id": "q5",
+   "points": null,
+   "difficulty": null,
+   "topics": [],
+   "image": null,
+   "explanation": null,
+   "figure": null,
+   "created": 1,
+   "modified": 2,
+   "stem": "Fill in: the ___ is ___ today.",
+   "kind": {
+    "Blank": {
+     "accept": [
+      [
+       "sky",
+       "Sky"
+      ],
+      [
+       "blue"
+      ]
+     ]
+    }
+   },
+   "keep_order": true
+  },
+  {
+   "id": "q6",
+   "points": null,
+   "difficulty": null,
+   "topics": [],
+   "image": null,
+   "explanation": null,
+   "figure": null,
+   "created": 1,
+   "modified": 2,
+   "stem": "Read the passage and answer each part below, carefully.",
+   "kind": {
+    "Multipart": {
+     "parts": [
+      {
+       "stem": "Part one: choose.",
+       "kind": {
+        "Mc": {
+         "answers": [
+          {
+           "text": "B",
+           "correct": false
+          },
+          {
+           "text": "A",
+           "correct": true
+          }
+         ]
+        }
+       },
+       "explanation": "Because A."
+      },
+      {
+       "stem": "  ",
+       "kind": {
+        "Short": {
+         "sample": "Σίσυφος"
+        }
+       }
+      },
+      {
+       "stem": "Part three: true or false, the earth is round?",
+       "kind": {
+        "Tf": {
+         "correct": true
+        }
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "q7",
+   "points": null,
+   "difficulty": null,
+   "topics": [],
+   "image": null,
+   "explanation": "Zero‍width﻿join; “quotes” and ‘single’ – dashes — more.",
+   "figure": null,
+   "created": 1,
+   "modified": 2,
+   "stem": "ΣΟΦΟΣ İstanbul ß Straße ﬁne ｆｕｌｌ​width­ soft͏ joiner",
+   "kind": {
+    "Short": {
+     "sample": "  Mixed\tCASE   answer… ok?  "
+    }
+   }
+  },
+  {
+   "id": "q8",
+   "points": null,
+   "difficulty": null,
+   "topics": [],
+   "image": null,
+   "explanation": null,
+   "figure": null,
+   "created": 1,
+   "modified": 2,
+   "stem": "Short?",
+   "kind": {
+    "Short": {
+     "sample": "x"
+    }
+   }
+  },
+  {
+   "id": "q9",
+   "points": 1e+21,
+   "difficulty": 0.000001,
+   "topics": [
+    "b",
+    "a"
+   ],
+   "image": null,
+   "explanation": null,
+   "figure": null,
+   "created": 1,
+   "modified": 2,
+   "stem": "Number test",
+   "kind": {
+    "Tf": {
+     "correct": false
+    }
+   }
+  }
+ ],
+ "texts": [
+  "Hello,  World!",
+  "  Café—au—lait  ",
+  "ΑΣ",
+  "ΑΣ ",
+  "İ",
+  "ǅ ǆ",
+  "a b c　d",
+  "x​y",
+  "Ａ１２",
+  "$5 + 3 = 8",
+  "é",
+  "«quoted» ¿qué?",
+  "a_b-c",
+  "𝐀𝐁",
+  "tab\there\nnewline",
+  ""
+ ],
+ "imgFor": "q2",
+ "norm": [
+  "hello world",
+  "café au lait",
+  "ας",
+  "ας",
+  "i̇",
+  "dž dž",
+  "a b c d",
+  "xy",
+  "a12",
+  "$5 + 3 = 8",
+  "é",
+  "quoted qué",
+  "a b c",
+  "ab",
+  "tab here newline",
+  ""
+ ],
+ "results": {
+  "q1": {
+   "near": "ded78bdad636c615b296a0e8bb430dd612774882009db2d45e77087cb343061c",
+   "nearBare": "893ff148d60a3a1fb3dbc0bb104dce9affab012c3934a34654e9cd91a329f126",
+   "keyfree": "28dd41a66167f9d873f069e4bc8e80cec81f19002f70f56db9fc0af262a98117",
+   "nearKf": "0f815e3cf884024eb246d6b86307637dc70deef9ceca0925116dd1348aeb6c22",
+   "skeleton": "n:42c437891201ecc4b36d53daedb16589a2c511af3c5834697df5726b1b0d9b4e",
+   "stemKey": "s:706f7cf0353217fa4f6821ccaa6543eb2c3e710457f15d5dd1ede2062edf1529",
+   "fieldKeys": {
+    "expl": "e:2465a75b3920078eb29ed148381c6b2521a0670d24a5df66f7495c13500b4aca",
+    "ans": "a:80658f09cbd2088f3e0e2b4b400d8afbf1c3660a2d82fe8da411a75a91e45f6d"
+   },
+   "partKeys": [],
+   "unitKeys": [],
+   "body": [
+    "kind:Short"
+   ],
+   "stemTokens": [
+    "what",
+    "is",
+    "the",
+    "capital",
+    "of",
+    "france"
+   ],
+   "stemBands": [
+    "0:hu5m1z:1454h9",
+    "1:5cw2zt:3qzz9a",
+    "2:5wu8x7:l0kotl",
+    "3:fjwyur:6ihldz",
+    "4:eu4v50:j3px1",
+    "5:1582qxx:anzg3s",
+    "6:33vaz7:8lcbsp",
+    "7:fl1e7k:ru1crf"
+   ],
+   "stemHash": "cb84cb8891127bc6cfc0dfae377412088abc4bd4caaca9873ac744e794fdb80e",
+   "orderFree": "{\"id\":\"q1\",\"points\":null,\"difficulty\":null,\"topics\":[],\"image\":null,\"explanation\":\"Paris has been the capital since 987.\",\"figure\":null,\"created\":1,\"modified\":2,\"stem\":\"What is the capital of France?\",\"kind\":{\"Short\":{\"sample\":\"Paris\"}}}"
+  },
+  "q2": {
+   "near": "052402d7c5c46b650a5ce10f8a8ae23a0fdf14803d28066581fe6a8d0df85981",
+   "nearBare": "ac54be2ea038fedc1e2384642743b12492caf6d48b08daa445864573df8908da",
+   "keyfree": "928bd91b2b35fde08bdd253030f4fff0a31a0dbc95a040505224a2887fb38c4e",
+   "nearKf": "0ca74d2c6f024a0527a024b0c37a840c6962e9a06237c0a656134e123da45058",
+   "skeleton": "n:ba12753cad2d22b0045ceeb5e9dc461071783b10acde0d4ec2e1125803b594d3",
+   "stemKey": "s:4513732516ae3c22fb6dd3646866f2801349d44b2ded1d766e1e99d545a66c7f",
+   "fieldKeys": {
+    "expl": null,
+    "ans": null
+   },
+   "partKeys": [],
+   "unitKeys": [],
+   "body": [
+    "kind:Tf"
+   ],
+   "stemTokens": [
+    "the",
+    "mitochondria",
+    "is",
+    "powerhouse",
+    "of",
+    "cell"
+   ],
+   "stemBands": [
+    "0:hrfbur:chj1yj",
+    "1:9old2y:5073j8",
+    "2:340gvp:6of3u0",
+    "3:82352j:7so83x",
+    "4:ms62r3:xnsqs",
+    "5:u6f56f:anzg3s",
+    "6:33vaz7:4kxmyo",
+    "7:9ethmy:un0s12"
+   ],
+   "stemHash": "dd258ad0739e2002419d5cf9ea08bd3cfe0ef9d0c0a3bcdc90fdd08f62e3131f",
+   "orderFree": "{\"id\":\"q2\",\"points\":2,\"difficulty\":1.5,\"topics\":[\"zeta\",\"😀\",\"Ａlpha\",\"beta\"],\"image\":null,\"explanation\":null,\"figure\":null,\"created\":1,\"modified\":2,\"stem\":\"The mitochondria is the powerhouse of the cell.\",\"kind\":{\"Tf\":{\"correct\":true}}}"
+  },
+  "q3": {
+   "near": "6c70fa3e887d662f92d6f356f6402fa7dfc4f0e37e71822dd4579d4038e9dfc6",
+   "nearBare": "497862dc197c44ba53f0ce7e09fd14c618f97e0aa4ae3eac6c29d92265f82d42",
+   "keyfree": "6e9ed87849d37c25fc0a16554d4579f38b1159b17c50d48bf80041662bbffc81",
+   "nearKf": "83a450551b45b04f327f115f7d2edb72c5ee1331fb64641d55c7df2ffbc6cd1f",
+   "skeleton": "n:9b2b767436a6e67c185b10bf222ba5b133ac6f94375fa0d63a6df84c1b9f7cb8",
+   "stemKey": "s:10d09358cea2a8276970ef9ba11940075d8181584b06d19b5634ee89b6c867d2",
+   "fieldKeys": {
+    "expl": "e:873921df195d026185e99140cfb9971d7b892fd7a121f8069d1d68583287c535",
+    "ans": null
+   },
+   "partKeys": [],
+   "unitKeys": [
+    {
+     "part": -1,
+     "key": "u:012ad4e0c7284f174bc342ddd67a948be692a3f57a4f94d16aaeb70f78d3e0aa",
+     "stemOnly": false
+    }
+   ],
+   "body": [
+    "kind:Mc",
+    "seven",
+    "nine",
+    "eleven",
+    "fifteen",
+    "15"
+   ],
+   "stemTokens": [
+    "pick",
+    "the",
+    "primes",
+    "carefully"
+   ],
+   "stemBands": [
+    "0:b6kcug:f2bnff",
+    "1:k7a2dt:1z46x0",
+    "2:5wu8x7:fetlpy",
+    "3:1fabyb:4l8xs",
+    "4:djhm67:4277qq",
+    "5:7h9vhb:anzg3s",
+    "6:20wh6z:dlqzam",
+    "7:co36h7:fsa2ug"
+   ],
+   "stemHash": "5598482580486833da873bcf1ac0c1feaeb948c3bb759217aca41b200aca205e",
+   "orderFree": "{\"id\":\"q3\",\"points\":null,\"difficulty\":null,\"topics\":[],\"image\":null,\"explanation\":\"A prime has exactly two divisors.\",\"figure\":null,\"created\":1,\"modified\":2,\"stem\":\"Pick the primes — “carefully”.\",\"kind\":{\"Mc\":{\"answers\":[{\"at\":1,\"a\":{\"text\":\"Nine\",\"correct\":false,\"locked\":true}},{\"free\":\"{\\\"text\\\":\\\"Eleven\\\",\\\"correct\\\":true}\"},{\"free\":\"{\\\"text\\\":\\\"Fifteen (15)\\\",\\\"correct\\\":false}\"},{\"free\":\"{\\\"text\\\":\\\"Seven\\\",\\\"correct\\\":true}\"}]}}}"
+  },
+  "q4": {
+   "near": "b15011f3b20314c3d80be9f62490b8884f99237715ec3700b9b6a1e43b9e7ed7",
+   "nearBare": "9ceeb54af7ba94ed8cd810473702b1c7fdbfcd531410bdf2ca9df440e19dd437",
+   "keyfree": "a71d1bf15f145bad079b427e24b7c9e7e8a4ece7f86b624ac18c1ab516f83340",
+   "nearKf": "a26661dbaceeaa04f45c6386d736e58e7d5026437855bd17be71e6c7bc0f8c50",
+   "skeleton": "n:2cd90941be0b250a6f082e1d060c2ecd6bbb7a8492b4d23bac616f635b6b714b",
+   "stemKey": "s:ec95f53c77115ebb39ea74d24e7d2deea95894593d9d2d320414171e5c3f1cb6",
+   "fieldKeys": {
+    "expl": null,
+    "ans": null
+   },
+   "partKeys": [],
+   "unitKeys": [
+    {
+     "part": -1,
+     "key": "u:1348394340716f1971f48da5e2042c51e1fd66305058e91cb36d01d07de9ae96",
+     "stemOnly": false
+    }
+   ],
+   "body": [
+    "kind:Matching",
+    "france",
+    "paris",
+    "spain",
+    "madrid",
+    "lisbon"
+   ],
+   "stemTokens": [
+    "match",
+    "each",
+    "country",
+    "to",
+    "its",
+    "capital"
+   ],
+   "stemBands": [
+    "0:lwnxkd:ye9cy3",
+    "1:1lnsx0:32y5s0",
+    "2:79o72i:367bvm",
+    "3:nn480o:8ynh6k",
+    "4:eu4v50:j3px1",
+    "5:je8rn:17li19z",
+    "6:fura15:8lcbsp",
+    "7:9cwqfw:2cf8ox"
+   ],
+   "stemHash": "f3744cadf423123d2bb3741abf8b69857152b6fb1c35f69e0343b596ac440db3",
+   "orderFree": "{\"id\":\"q4\",\"points\":null,\"difficulty\":null,\"topics\":[],\"image\":null,\"explanation\":null,\"figure\":null,\"created\":1,\"modified\":2,\"stem\":\"Match each country to its capital\",\"kind\":{\"Matching\":{\"pairs\":[\"{\\\"left\\\":\\\"France\\\",\\\"right\\\":\\\"Paris\\\"}\",\"{\\\"left\\\":\\\"Spain\\\",\\\"right\\\":\\\"Madrid\\\"}\"],\"distractors\":[\"\\\"\\\"\",\"\\\"Lisbon\\\"\",\"\\\"Paris\\\"\"]}}}"
+  },
+  "q5": {
+   "near": "aefe7e377fe1a217732609b5119a3c0825306d289c6f6a86090999bb9c5ce513",
+   "nearBare": "9e48bfb764e99732105759bcab595ad59f895dee678841bea8a2e46b8ddad309",
+   "keyfree": "d7c59486d18c619cdaf166d18eff9be68f1663602a9b094339d32c7470821c76",
+   "nearKf": "afe83bf238bb5a20f4334761b01865329708ce723971a783a01bd8f30c06f275",
+   "skeleton": "n:efe67c403c5903c5814845800dcd242ab679a8afd51cf07015cf1ec11b4e41e8",
+   "stemKey": "s:3743b5b99b458e5b2564cdf6bc979aed259985556687819378ccc9f9fc359364",
+   "fieldKeys": {
+    "expl": null,
+    "ans": "a:55986f1a9ee590eabbe48516f3fcae89b65739adbfb445cbdfdd2e1fb2ab239c"
+   },
+   "partKeys": [],
+   "unitKeys": [],
+   "body": [
+    "kind:Blank"
+   ],
+   "stemTokens": [
+    "fill",
+    "in",
+    "the",
+    "is",
+    "today"
+   ],
+   "stemBands": [
+    "0:hu5m1z:11tyc30",
+    "1:26w3cp:8lgsy9",
+    "2:zpwj5:b2fu42",
+    "3:hrnhel:7so83x",
+    "4:85292d:3ysw5w",
+    "5:un95t:a7jile",
+    "6:33vaz7:9z5v88",
+    "7:i2z3y3:43ew0o"
+   ],
+   "stemHash": "b46d38c608d8de3d8c75e2272433da293fffafc6ef06f8d4b8b93361cbe85d25",
+   "orderFree": "{\"id\":\"q5\",\"points\":null,\"difficulty\":null,\"topics\":[],\"image\":null,\"explanation\":null,\"figure\":null,\"created\":1,\"modified\":2,\"stem\":\"Fill in: the ___ is ___ today.\",\"kind\":{\"Blank\":{\"accept\":[[\"sky\",\"Sky\"],[\"blue\"]]}},\"keep_order\":true}"
+  },
+  "q6": {
+   "near": "ffbb45d85f49e3508dc914c45c93b52a3da102ae65d0abe9ef48b54beb01c39a",
+   "nearBare": "caf00e90ad3d1c7ed683c1e1d9d9c62518b195920377a053d2eda7c4a42a866e",
+   "keyfree": "3504950a08accc8d332f13cc19ef14bf2062e334f75b3aceebd2ad232efd7d8e",
+   "nearKf": "0a9a72c9d028b7fb36bfb1b695e4fc755c7a9d7d134f9ed1f0026ef571f96ab5",
+   "skeleton": "n:3a7574bd3134b78c7ca7f71d44ac1a3f904626ac39bf82fe886fe0ec2edb53d7",
+   "stemKey": "s:fb94ddfbe5594a01cb8db85bd16954a5093718b9e817a517eaadf5bc8cf5f83d",
+   "fieldKeys": {
+    "expl": null,
+    "ans": null
+   },
+   "partKeys": [
+    {
+     "part": 0,
+     "key": "s:e4bb48ed5c5741ad5bbd8cb7f501a77a93c0c3244792216feb934ceaaaa9dce7"
+    },
+    {
+     "part": 0,
+     "key": "e:ecb7205808155932960895f6759c791ea3cdee7b0b93c28e2f0a3cf2526803e8"
+    },
+    {
+     "part": 1,
+     "key": "a:9bb34f8734aecea97dc13da40d8367be6ee675a040caeb515277e89e637f7cb2"
+    },
+    {
+     "part": 2,
+     "key": "s:8d8877c768a05786e7236c8cd88a764fb5fb7355805ab84bfc4e122cea665dd4"
+    }
+   ],
+   "unitKeys": [
+    {
+     "part": 0,
+     "key": "u:544876adfdaf9f660b1f89768dd1fc561b792ef38043df1cd6da2b38ffc84f39",
+     "stemOnly": false
+    },
+    {
+     "part": 2,
+     "key": "u:98558ae09489b5b0031e31b426a903e318b6e87b270a1ca188fb47f5d4ef1e52",
+     "stemOnly": true
+    }
+   ],
+   "body": [
+    "kind:Multipart",
+    "part",
+    "one",
+    "choose",
+    "b",
+    "a",
+    "three",
+    "true",
+    "or",
+    "false",
+    "the",
+    "earth",
+    "is",
+    "round"
+   ],
+   "stemTokens": [
+    "read",
+    "the",
+    "passage",
+    "and",
+    "answer",
+    "each",
+    "part",
+    "below",
+    "carefully"
+   ],
+   "stemBands": [
+    "0:9zlaid:17anad",
+    "1:2gnpi3:1z46x0",
+    "2:5wu8x7:eaafr",
+    "3:77om8f:1ef4nv",
+    "4:6hgu8u:4277qq",
+    "5:ehwh7n:329ysy",
+    "6:20wh6z:co4kn0",
+    "7:2ypg8s:b73gk6"
+   ],
+   "stemHash": "45d9281190d479b9b56f2df006c072621371817df1a20d89b00f68167523a418",
+   "orderFree": "{\"id\":\"q6\",\"points\":null,\"difficulty\":null,\"topics\":[],\"image\":null,\"explanation\":null,\"figure\":null,\"created\":1,\"modified\":2,\"stem\":\"Read the passage and answer each part below, carefully.\",\"kind\":{\"Multipart\":{\"parts\":[\"{\\\"stem\\\":\\\"  \\\",\\\"kind\\\":{\\\"Short\\\":{\\\"sample\\\":\\\"Σίσυφος\\\"}}}\",\"{\\\"stem\\\":\\\"Part one: choose.\\\",\\\"kind\\\":{\\\"Mc\\\":{\\\"answers\\\":[{\\\"free\\\":\\\"{\\\\\\\"text\\\\\\\":\\\\\\\"A\\\\\\\",\\\\\\\"correct\\\\\\\":true}\\\"},{\\\"free\\\":\\\"{\\\\\\\"text\\\\\\\":\\\\\\\"B\\\\\\\",\\\\\\\"correct\\\\\\\":false}\\\"}]}},\\\"explanation\\\":\\\"Because A.\\\"}\",\"{\\\"stem\\\":\\\"Part three: true or false, the earth is round?\\\",\\\"kind\\\":{\\\"Tf\\\":{\\\"correct\\\":true}}}\"]}}}"
+  },
+  "q7": {
+   "near": "43d9983f2c451903c0c01ae2ca26991d767569ba7cee76b4d909d07c86d1bb2c",
+   "nearBare": "61c56e0afea875fa1b4b5dc58c2e1bf701c2c64299dafadabca62d6df1dbbb8e",
+   "keyfree": "73161c944094e1d57e4b239d654d22252084f55e4bd92945fdce83c5ce25af85",
+   "nearKf": "a4e4ba2c3f772ad78e80a309a0fd53f98cfc76faa23fce8b889b0524bacc773b",
+   "skeleton": "n:059f69e37da6d977dec61cfe6b3bc1297e5e636de83c72a46dbf6703105dd30e",
+   "stemKey": "s:1b6c0c9ceaf5cc241edad9b447294d1a61595138d5191b13f74e50e47d74f6fc",
+   "fieldKeys": {
+    "expl": "e:9be8404d5c592b99484526b916b1585d86d256a5a62629f80d21bd51ae3d8838",
+    "ans": "a:615ad697e974030655f09f06b17875bf41f4d690c5a84cd16293843ac7c0219b"
+   },
+   "partKeys": [],
+   "unitKeys": [],
+   "body": [
+    "kind:Short"
+   ],
+   "stemTokens": [
+    "σοφος",
+    "i̇stanbul",
+    "ß",
+    "straße",
+    "fine",
+    "fullwidth",
+    "soft",
+    "joiner"
+   ],
+   "stemBands": [
+    "0:chrlbv:3hn3ak",
+    "1:2mc5wi:2nr1bu",
+    "2:4f90lt:24ymwq",
+    "3:djs4gk:7ari2",
+    "4:6csd8s:86kqv",
+    "5:31q6al:4y6lqu",
+    "6:qfpj8f:cisnr6",
+    "7:3p48x8:2w2csz"
+   ],
+   "stemHash": "e42611872eb98ebfa486a1ad0c4755fe84ccb49e5bb986eee0e06e05046fbffe",
+   "orderFree": "{\"id\":\"q7\",\"points\":null,\"difficulty\":null,\"topics\":[],\"image\":null,\"explanation\":\"Zero‍width﻿join; “quotes” and ‘single’ – dashes — more.\",\"figure\":null,\"created\":1,\"modified\":2,\"stem\":\"ΣΟΦΟΣ İstanbul ß Straße ﬁne ｆｕｌｌ​width­ soft͏ joiner\",\"kind\":{\"Short\":{\"sample\":\"  Mixed\\tCASE   answer… ok?  \"}}}"
+  },
+  "q8": {
+   "near": "ac85dc856fb864e5e9517293670f9399722af529f98b19482f0339fb271ff7e5",
+   "nearBare": "1caba3369cb96d875c648e823b6032c3cf8b2af5f4e4dd178f240ce7560555ca",
+   "keyfree": "5f156ec4770359f30cda9bbbdabb61b62b9b1799cb47a50ab9ff31fd0261c949",
+   "nearKf": "8e46b18725c8075389533246a4a106e8b5c9a7953a8bff8a441f3027fee530b4",
+   "skeleton": "n:3b4786e8199da90002aeb434b8eb222578309346d7ae0ddaa3b6c87ff867c06c",
+   "stemKey": "s:18cf7c63d8bc29ea7a9fb380d5ebb82628e5cecd7b471068e1c61b9348debdae",
+   "fieldKeys": {
+    "expl": null,
+    "ans": "a:55e6385130b4e9a2293b9190228bdf64a792f3ac85bd501ce2a10adc70952036"
+   },
+   "partKeys": [],
+   "unitKeys": [],
+   "body": [
+    "kind:Short"
+   ],
+   "stemTokens": [
+    "short"
+   ],
+   "stemBands": [],
+   "stemHash": null,
+   "orderFree": "{\"id\":\"q8\",\"points\":null,\"difficulty\":null,\"topics\":[],\"image\":null,\"explanation\":null,\"figure\":null,\"created\":1,\"modified\":2,\"stem\":\"Short?\",\"kind\":{\"Short\":{\"sample\":\"x\"}}}"
+  },
+  "q9": {
+   "near": "85de60819b57e98d9cb819a300bd28823108cfa8fccd4227456c82a74e3e4d10",
+   "nearBare": "3bec420407369f2bae1052c016aa19cc2246d3c5cd385393db15fe2f3b4ba7dd",
+   "keyfree": "fcec9c19a26e941e772e6cca5dfb897ad73faa4af74e5f24174bae53b68b25eb",
+   "nearKf": "9454f0d464f7c0f7b18635394b5a2cabdaedd47716c83388e72d13e5e9efd5aa",
+   "skeleton": "n:bab631d94e8b916449576739d1c5554daf21b159618c7986e1544cb0f8ae4ff5",
+   "stemKey": "s:585e46e85c82043bd93c8c808bbacbd821511108af2a0bfc0ae1cfc0c93a9a01",
+   "fieldKeys": {
+    "expl": null,
+    "ans": null
+   },
+   "partKeys": [],
+   "unitKeys": [],
+   "body": [
+    "kind:Tf"
+   ],
+   "stemTokens": [
+    "number",
+    "test"
+   ],
+   "stemBands": [],
+   "stemHash": null,
+   "orderFree": "{\"id\":\"q9\",\"points\":1e+21,\"difficulty\":0.000001,\"topics\":[\"b\",\"a\"],\"image\":null,\"explanation\":null,\"figure\":null,\"created\":1,\"modified\":2,\"stem\":\"Number test\",\"kind\":{\"Tf\":{\"correct\":false}}}"
+  }
+ },
+ "textFieldKeys": [
+  "e:c3f0d842b0980f9fd767986011ce63497c55d9523c5f2211762daca8f44eae28",
+  "a:fa40d0e73bcca9f7d975efee1c20de256b89d9c7ff8ef0b96603e5901496fe37"
+ ],
+ "jaccard": [
+  0.5,
+  0,
+  1
+ ],
+ "sameBody": [
+  true,
+  true,
+  false,
+  false
+ ]
+}
