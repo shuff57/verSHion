@@ -14,6 +14,7 @@ pub mod circlebanks;
 pub mod circlebase;
 pub mod circlecheck;
 pub mod circleinvites;
+pub mod circlepurge;
 pub mod circlemembers;
 pub mod circles;
 pub mod circlesql;
