@@ -135,6 +135,11 @@ export class AiStore {
     return r && r.cents ? { principal: r.principal, credits: Number(r.delta), cents: Number(r.cents) } : null;
   }
 
+  /** True once the account has been deleted (its credits are erased with it). An id that has no account row is not "deleted". */
+  async accountDeleted(userId: string): Promise<boolean> {
+    return (await this.db.prepare(`SELECT 1 AS n FROM users WHERE id = ?1 AND deleted_at IS NOT NULL`).bind(userId).first()) !== null;
+  }
+
   /** Credits already taken back for a payment (reversal refs start with `<payment id>#`). */
   async reversedFor(prefix: string): Promise<number> {
     const r = await this.db

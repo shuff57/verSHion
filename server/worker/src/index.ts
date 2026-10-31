@@ -217,6 +217,7 @@ async function handleFetch(req: Request, env: Env, ctx: ExecutionContext): Promi
       publishableKey: env.STRIPE_PUBLISHABLE_KEY?.trim() || undefined,
       db: env.DB,
       authenticate: (r) => a.authenticate(r),
+      rateStore: new D1RateLimitStore(env.DB),
     }).handle(req);
     if (billed) return a.withCors(req, billed);
   }

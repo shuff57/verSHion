@@ -29,7 +29,14 @@ in `credits.html` and the API origin in `server/web/_headers`, and add the page'
 
 ## To decide before launch
 
-- Pack prices and the custom rate (`DEFAULT_PACKS`, 10 credits per dollar) are placeholders. Set them from the
-  measured cost per action on real tests; Stripe takes about 3% + 30 cents, so keep the minimum at $5 or more.
+- Prices: 25 credits per dollar (a credit is 4 cents), with packs $5 = 125, $15 = 400, $40 = 1,100 and a custom
+  whole-dollar amount from $5 to $200 at the base rate. At those prices a handwriting page is 4 cents and a test
+  import 8 cents. The model cost is a fraction of that (Gemma 4 26B is about $0.07 per million input tokens and
+  $0.34 per million output tokens on OpenRouter, roughly a tenth of a cent per quiz page), so the margin is large
+  even after Stripe's 2.9% + 30 cents. Those costs are estimates: check them on real tests (link `ai_usage` rows
+  to their session first) before launch. The free weekly allowance stays at 40 credits, about $1.60 of value.
+- Limits: 10 payments started per account per hour; the body reader requires Content-Length and caps sizes.
 - Terms and refund wording (`server/web/legal`), and a stored-value check with counsel.
-- Account deletion must delete the account's `credit_ledger` rows (not built yet).
+- Deleting an account erases its `credit_ledger`, `ai_sessions` and `ai_usage` rows (in the pool's erasure batch
+  and its daily resweep), so unspent purchased credits are lost, as the owner chose. A payment that arrives after
+  that credits nothing and is logged for a manual refund in Stripe.

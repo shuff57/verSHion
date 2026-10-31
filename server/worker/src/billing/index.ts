@@ -5,6 +5,7 @@
 // The flag (`enabled`) gates BUYING only (/billing/packs and /billing/intent answer 404 when off). The webhook
 // stays live whenever its secret is set, so a refund or dispute on an earlier sale is never missed.
 import { AiStore } from "../ai/store.ts";
+import { PoolError, readBody } from "../pool/shared.ts";
 
 export const BILLING_PACKS_PATH = "/billing/packs";
 export const BILLING_INTENT_PATH = "/billing/intent";
@@ -23,11 +24,15 @@ export interface Pack {
   credits: number;
 }
 
-/** Placeholder prices until the cost per action is measured on real tests (see docs/billing.md). */
+/**
+ * 25 credits per dollar (a credit is 4 cents; handwriting is a credit a page), with a small bonus on the larger
+ * packs. Still to be checked against the measured cost per action on real tests (see docs/billing.md).
+ */
+export const CREDITS_PER_USD = 25;
 export const DEFAULT_PACKS: Pack[] = [
-  { id: "small", usd: 5, credits: 50 },
-  { id: "medium", usd: 15, credits: 165 },
-  { id: "large", usd: 40, credits: 450 },
+  { id: "small", usd: 5, credits: 125 },
+  { id: "medium", usd: 15, credits: 400 },
+  { id: "large", usd: 40, credits: 1100 },
 ];
 
 export interface BillingDeps {
@@ -41,8 +46,12 @@ export interface BillingDeps {
   publishableKey?: string;
   db?: D1Database;
   authenticate(req: Request): Promise<{ userId: string } | null>;
+  /** The auth package's D1RateLimitStore (or any store with this shape). Absent: no limit on creating payments. */
+  rateStore?: { hit(key: string, rule: { limit: number; windowSeconds: number }, now: number): Promise<{ allowed: boolean; retryAfter: number }> };
+  /** Payments one account may start per hour (default 10). */
+  intentsPerHour?: number;
   packs?: Pack[];
-  /** Credits per dollar for a custom amount (default 10), and its whole-dollar range. */
+  /** Credits per dollar for a custom amount (default 25), and its whole-dollar range. */
   creditsPerUsd?: number;
   customMinUsd?: number;
   customMaxUsd?: number;
@@ -66,13 +75,18 @@ function same(a: string, b: string): boolean {
   return r === 0;
 }
 
-export async function stripeSignature(secret: string, t: number, payload: string): Promise<string> {
+export async function stripeSignature(secret: string, t: number, payload: string | Uint8Array): Promise<string> {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  return hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${t}.${payload}`)));
+  const head = new TextEncoder().encode(`${t}.`);
+  const body = typeof payload === "string" ? new TextEncoder().encode(payload) : payload;
+  const signed = new Uint8Array(head.length + body.length);
+  signed.set(head);
+  signed.set(body, head.length);
+  return hex(await crypto.subtle.sign("HMAC", key, signed));
 }
 
 /** Verifies a `Stripe-Signature` header (`t=...,v1=...`) against the raw body. */
-export async function verifyStripe(secret: string, header: string, payload: string, nowS: number): Promise<boolean> {
+export async function verifyStripe(secret: string, header: string, payload: string | Uint8Array, nowS: number): Promise<boolean> {
   let t = NaN;
   const sigs: string[] = [];
   for (const part of header.split(",")) {
@@ -85,17 +99,21 @@ export async function verifyStripe(secret: string, header: string, payload: stri
   return sigs.some((s) => same(s, want));
 }
 
-/** Text of a request body, refused past `max` bytes (a Content-Length lie is caught by the length check). */
-async function boundedText(req: Request, max: number): Promise<string | null> {
-  const declared = Number(req.headers.get("content-length") ?? "0");
-  if (declared > max) return null;
-  const text = await req.text();
-  return new TextEncoder().encode(text).length > max ? null : text;
+/** The body through the Worker's one body reader (Content-Length required, size and concurrency capped), or the refusal. */
+async function boundedBytes(req: Request, max: number, key: string): Promise<Uint8Array | Response> {
+  try {
+    const b = await readBody(req, { max, key, optional: true });
+    b.release();
+    return b.bytes;
+  } catch (e) {
+    if (e instanceof PoolError) return json(e.status, { error: { code: e.code, message: "The request body was refused." } }, e.headers);
+    return err(400, "bad_request", "Could not read the body.");
+  }
 }
 
 export function createBilling(d: BillingDeps) {
   const packs = d.packs ?? DEFAULT_PACKS;
-  const perUsd = d.creditsPerUsd ?? 10;
+  const perUsd = d.creditsPerUsd ?? CREDITS_PER_USD;
   const minUsd = d.customMinUsd ?? 5;
   const maxUsd = d.customMaxUsd ?? 200;
   const now = d.now ?? Date.now;
@@ -119,10 +137,11 @@ export function createBilling(d: BillingDeps) {
 
   /** `POST /billing/intent {pack}` or `{amount_usd}`: creates the PaymentIntent for the Payment Element. */
   async function intent(req: Request, userId: string): Promise<Response> {
-    const text = await boundedText(req, INTENT_BODY_MAX);
+    const bytes = await boundedBytes(req, INTENT_BODY_MAX, `u:${userId}`);
+    if (bytes instanceof Response) return bytes;
     let body: any;
     try {
-      body = text === null ? null : JSON.parse(text);
+      body = JSON.parse(new TextDecoder().decode(bytes));
     } catch {
       body = null;
     }
@@ -141,6 +160,11 @@ export function createBilling(d: BillingDeps) {
     }
     const credits = creditsFor(cents, pack);
     if (credits === null) return err(400, "bad_amount", `Choose between $${minUsd} and $${maxUsd}, in whole dollars.`);
+    // Counted only for a valid request: each one creates an object at Stripe, and a card-testing script would spam them.
+    if (d.rateStore) {
+      const hit = await d.rateStore.hit(`billing:intent:${userId}`, { limit: d.intentsPerHour ?? 10, windowSeconds: 3600 }, now());
+      if (!hit.allowed) return json(429, { error: { code: "rate_limited", message: "Too many payment attempts. Try again later." } }, { "retry-after": String(hit.retryAfter) });
+    }
     const form = new URLSearchParams({
       amount: String(cents),
       currency: "usd",
@@ -157,7 +181,7 @@ export function createBilling(d: BillingDeps) {
         headers: { authorization: `Bearer ${d.stripeKey}`, "content-type": "application/x-www-form-urlencoded", "stripe-version": STRIPE_VERSION },
         body: form,
       });
-      const pi = (await res.json()) as { client_secret?: string; id?: string };
+      const pi = (await res.json()) as { client_secret?: string; id?: string }; // r2-object: Stripe's reply to our call, not a request body
       if (!res.ok || !pi.client_secret) throw new Error(`stripe ${res.status}`);
       return json(200, { client_secret: pi.client_secret, publishable_key: d.publishableKey ?? null, credits, amount_usd: cents / 100 });
     } catch {
@@ -174,6 +198,12 @@ export function createBilling(d: BillingDeps) {
     const credits = creditsFor(Number(pi.amount_received), typeof meta.pack === "string" ? meta.pack : undefined);
     if (credits === null || String(credits) !== meta.credits) {
       console.error("billing: payment does not match a price, not credited");
+      return;
+    }
+    // A payment that lands after the account was deleted credits nothing (the row would outlive the erasure); the
+    // charge is logged for a manual refund in Stripe.
+    if (await store.accountDeleted(meta.user_id)) {
+      console.error(`billing: payment ${String(pi.id)} is for a deleted account, refund it in Stripe`);
       return;
     }
     await store.ledger(meta.user_id, credits, "purchase", String(pi.id), now(), Number(pi.amount_received));
@@ -196,11 +226,12 @@ export function createBilling(d: BillingDeps) {
     if (req.method !== "POST") return err(405, "method_not_allowed", "Use POST.");
     if (!d.webhookSecret) return err(503, "billing_not_configured", "Billing is not configured.");
     const sig = req.headers.get("stripe-signature");
-    const payload = await boundedText(req, WEBHOOK_BODY_MAX);
-    if (!sig || payload === null || !(await verifyStripe(d.webhookSecret, sig, payload, Math.floor(now() / 1000)))) return err(400, "bad_signature", "Invalid signature.");
+    const payload = await boundedBytes(req, WEBHOOK_BODY_MAX, "stripe:webhook");
+    if (payload instanceof Response) return payload;
+    if (!sig || !(await verifyStripe(d.webhookSecret, sig, payload, Math.floor(now() / 1000)))) return err(400, "bad_signature", "Invalid signature.");
     let event: any;
     try {
-      event = JSON.parse(payload);
+      event = JSON.parse(new TextDecoder().decode(payload));
     } catch {
       return err(400, "bad_request", "Invalid body.");
     }

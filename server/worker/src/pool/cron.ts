@@ -223,6 +223,10 @@ export async function daily(c: Ctx): Promise<DailyReport> {
       c.db.prepare(`UPDATE pool_audit SET actor_id = NULL, detail = json_remove(detail, '$.report_id') WHERE action = 'item.report' AND actor_id IN (${done})`),
       c.db.prepare(`DELETE FROM pool_prefs WHERE user_id IN (${done})`),
       c.db.prepare(`DELETE FROM usage_daily WHERE user_id IN (${done})`),
+      // (a session or a late credit written by a request that was past its guard when the erasure ran)
+      c.db.prepare(`DELETE FROM credit_ledger WHERE principal IN (${done})`),
+      c.db.prepare(`DELETE FROM ai_sessions WHERE principal IN (${done})`),
+      c.db.prepare(`DELETE FROM ai_usage WHERE principal IN (${done})`),
       c.db.prepare(`DELETE FROM pool_limits WHERE user_id IN (${done})`),
       c.db.prepare(`DELETE FROM pending_blobs WHERE uploader_id IN (${done})`),
       c.db.prepare(`DELETE FROM pool_locks WHERE user_id IN (${done})`),

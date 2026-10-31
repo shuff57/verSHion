@@ -279,6 +279,11 @@ export function deleteContentStatements(db: D1Database, userId: string, now: num
     // (Round 19: the account's served rows go: it can publish nothing a record could bind.)
     db.prepare(`DELETE FROM served WHERE reader_id = ?1`).bind(userId),
     db.prepare(`DELETE FROM usage_daily WHERE user_id = ?1`).bind(userId),
+    // The AI credits go with the account (purchased credits never expire except here): the ledger, the
+    // sessions that priced them, and the usage rows. Stripe keeps the payment record itself.
+    db.prepare(`DELETE FROM credit_ledger WHERE principal = ?1`).bind(userId),
+    db.prepare(`DELETE FROM ai_sessions WHERE principal = ?1`).bind(userId),
+    db.prepare(`DELETE FROM ai_usage WHERE principal = ?1`).bind(userId),
     db.prepare(`DELETE FROM pool_limits WHERE user_id = ?1`).bind(userId),
     // (Round 27: the account's publish lock row goes too; the cron's erasure_resweep repeats all of this
     // for anything a request that was already running wrote after this batch.)
