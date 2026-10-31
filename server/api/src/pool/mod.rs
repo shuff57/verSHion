@@ -3,8 +3,10 @@
 #![allow(dead_code)]
 
 pub mod bizdays;
+pub mod chain;
 pub mod jsonscan;
 pub mod license;
+pub mod licensecheck;
 pub mod preread;
 pub mod served;
 pub mod sqlfrag;
