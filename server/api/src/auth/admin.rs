@@ -261,4 +261,4 @@ pub fn revoke(c: &Ctx, h: &HeaderMap, client: &ClientInfo, body: &Map<String, Va
 
 #[cfg(test)]
 #[path = "admin_tests.rs"]
-mod tests;
+pub(crate) mod tests;

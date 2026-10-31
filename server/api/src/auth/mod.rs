@@ -3,6 +3,7 @@
 
 pub mod account;
 pub mod admin;
+pub mod admin_suspend;
 pub mod audit;
 pub mod common_passwords;
 pub mod config;
