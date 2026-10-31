@@ -50,6 +50,7 @@ pub mod mine;
 pub mod modgc;
 pub mod modlineage;
 pub mod moderation;
+pub mod modpurge;
 pub mod offer;
 pub mod publishdel;
 pub mod poolio;
