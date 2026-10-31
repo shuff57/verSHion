@@ -19,6 +19,7 @@ pub mod circlepurge;
 pub mod circlemembers;
 pub mod circles;
 pub mod circlecommit;
+pub mod circleadmin;
 pub mod circlehide;
 pub mod circlerollback;
 pub mod circlehidepatch;
