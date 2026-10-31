@@ -54,10 +54,65 @@ impl PoolKeys {
     }
 }
 
+/// A merge token lives this long.
+pub const MERGE_TOKEN_MS: i64 = 30 * 60_000;
+
+impl PoolKeys {
+    /// A merge token: `[tag, expiry, account, bank, base, head]`, HMAC'd with the merge key. Returns (token, expiry).
+    pub fn merge_token(&self, now: i64, me: &str, bid: &str, base: i64, head: i64) -> (String, i64) {
+        let exp = now + MERGE_TOKEN_MS;
+        let body = b64url(serde_json::json!(["m1", exp, me, bid, base, head]).to_string().as_bytes());
+        (format!("{body}.{}", hmac(&self.merge, &body)), exp)
+    }
+
+    /// The base a send's merge token records (`merged_from`), iff the token was issued to `me` for bank `bid` at head `head` and has not
+    /// expired; else None (`422 merge_token_invalid`).
+    pub fn verify_merge_token(&self, now: i64, token: &str, me: &str, bid: &str, head: i64) -> Option<i64> {
+        let (body, mac) = token.split_once('.')?;
+        let url_safe = |t: &str, n: std::ops::RangeInclusive<usize>| n.contains(&t.len()) && t.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+        if !url_safe(body, 1..=400) || !url_safe(mac, 43..=43) {
+            return None;
+        }
+        let want = hmac(&self.merge, body);
+        if want.len() != mac.len() || !timing_safe_equal(want.as_bytes(), mac.as_bytes()) {
+            return None;
+        }
+        let v: serde_json::Value = serde_json::from_slice(&from_b64url(body)?).ok()?;
+        let [tag, exp, u, b, base, h] = v.as_array()?.as_slice() else { return None };
+        if tag.as_str() != Some("m1") || exp.as_i64()? < now || u.as_str() != Some(me) || b.as_str() != Some(bid) || h.as_i64() != Some(head) {
+            return None;
+        }
+        base.as_i64().filter(|b| *b >= 1 && *b < head)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::Value;
+
+    #[test]
+    fn a_merge_token_is_bound_to_account_bank_head_and_time() {
+        let k = keys();
+        let (t, exp) = k.merge_token(1_000, "u1", "b1", 2, 5);
+        assert_eq!(exp, 1_000 + MERGE_TOKEN_MS);
+        assert_eq!(k.verify_merge_token(1_000, &t, "u1", "b1", 5), Some(2));
+        assert_eq!(k.verify_merge_token(exp, &t, "u1", "b1", 5), Some(2), "valid through its expiry");
+        for (now, me, bid, head) in [(exp + 1, "u1", "b1", 5), (1_000, "u2", "b1", 5), (1_000, "u1", "b2", 5), (1_000, "u1", "b1", 6)] {
+            assert_eq!(k.verify_merge_token(now, &t, me, bid, head), None);
+        }
+        let (body, mac) = t.split_once('.').unwrap();
+        let flipped = format!("{}{}", &mac[..42], if mac.ends_with('A') { 'B' } else { 'A' });
+        for bad in [format!("{body}.{flipped}"), "nonsense".into(), String::new(), format!("{body}x.{mac}"), format!("{body}.")] {
+            assert_eq!(k.verify_merge_token(1_000, &bad, "u1", "b1", 5), None, "{bad}");
+        }
+        // The base must precede the head, and the key is the merge key's alone.
+        let (same, _) = k.merge_token(1_000, "u1", "b1", 5, 5);
+        assert_eq!(k.verify_merge_token(1_000, &same, "u1", "b1", 5), None);
+        let (zero, _) = k.merge_token(1_000, "u1", "b1", 0, 5);
+        assert_eq!(k.verify_merge_token(1_000, &zero, "u1", "b1", 5), None);
+        assert_eq!(PoolKeys::from_secret("another-secret-0123456789abcdef012345").verify_merge_token(1_000, &t, "u1", "b1", 5), None);
+    }
 
     fn vectors() -> Value {
         serde_json::from_str(include_str!("searchkey_vectors.json")).unwrap()

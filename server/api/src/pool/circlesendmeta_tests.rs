@@ -179,3 +179,21 @@ fn a_second_form_adds_its_keys_to_each_position() {
     assert_eq!(privacy_scan(&x, &fp, &forms[..1], "z").unwrap().exact, Vec::<usize>::new());
     assert_eq!(privacy_scan(&x, &fp, &forms, "z").unwrap().exact, vec![0], "a position is held if any form a member may be served matches");
 }
+
+#[test]
+fn a_hidden_key_refusal_has_the_publishes_shape_and_code() {
+    let err = |code: &str| CoreError { code: code.into(), path: "p".into(), ..Default::default() };
+    let f = |codes: &[&str]| CoreFail {
+        errors: codes.iter().map(|c| err(c)).collect(),
+        label_findings: Some(vec![json!({ "question": 0 })]),
+        needs_order_ack: Some(vec![crate::pool::core::Pos { question: 1, part: None }]),
+        ..Default::default()
+    };
+    let e = strip_refusal(&f(&["key_in_stem"]));
+    assert_eq!((e.status, e.code.as_str()), (422, "invalid_payload"));
+    let b = e.body();
+    assert_eq!((b["label_findings"][0]["question"].clone(), b["needs_order_ack"][0]["question"].clone()), (json!(0), json!(1)));
+    assert!(b.get("order_preview").is_none() && b.get("formatting_findings").is_none());
+    assert_eq!(strip_refusal(&f(&["labels_keep_refused"])).code, "labels_need_decision");
+    assert_eq!(strip_refusal(&f(&["labels_keep_refused", "order_ack_required"])).code, "order_ack_required");
+}

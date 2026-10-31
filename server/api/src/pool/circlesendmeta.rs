@@ -120,6 +120,35 @@ pub fn invalid(f: &CoreFail) -> PoolError {
     e
 }
 
+/// A share-core refusal as the publishing author sees it (also a circle send to a bank that hides its keys): publish.ts `invalid`.
+pub fn strip_refusal(f: &CoreFail) -> PoolError {
+    let mut e = PoolError::new(422, "invalid_payload").with("errors", serde_json::to_value(&f.errors).unwrap_or(Value::Null));
+    if let Some(v) = &f.label_findings {
+        e = e.with("label_findings", Value::Array(v.clone()));
+    }
+    if let Some(v) = &f.needs_order_ack {
+        e = e.with("needs_order_ack", serde_json::to_value(v).unwrap_or(Value::Null));
+    }
+    if let Some(v) = &f.order_reasons {
+        e = e.with("order_reasons", Value::Array(v.clone()));
+    }
+    if let Some(v) = &f.order_preview {
+        e = e.with("order_preview", Value::Array(v.clone()));
+    }
+    if let Some(ff) = &f.formatting_findings {
+        e = e.with("formatting_findings", Value::Array(ff.clone())).with("formatting_findings_total", json!(f.formatting_findings_total.unwrap_or(ff.len() as f64)));
+    }
+    e.code = if f.errors.iter().any(|e| e.code == "order_ack_required") {
+        "order_ack_required"
+    } else if f.errors.iter().any(|e| e.code.starts_with("labels_")) {
+        "labels_need_decision"
+    } else {
+        "invalid_payload"
+    }
+    .into();
+    e
+}
+
 pub fn large_error(removed: i64, total: i64) -> PoolError {
     PoolError::new(428, "confirm_large_required").with("removed", removed.into()).with("total", total.into()).with(
         "message",
