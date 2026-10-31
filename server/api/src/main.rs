@@ -5,6 +5,7 @@
 //!   VERSHION_BLOBS    directory for pool bodies and jobs (default ./data/blobs)
 //!   VERSHION_MIGRATIONS  directory of NNNN_*.sql files   (default ./migrations)
 //!   VERSHION_LISTEN   address to bind                    (default 127.0.0.1:8787; Caddy fronts it)
+mod ai;
 mod blobs;
 mod db;
 

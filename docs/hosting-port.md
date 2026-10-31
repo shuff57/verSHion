@@ -70,3 +70,8 @@ Open for phase 0: which mail path to keep (SMTP or Resend), and whether the web 
 - TypeScript server first, or go straight to Rust?
 - Where does it run (a VPS, a home server)? That sets backup and uptime needs.
 - Is the Workers AI fallback still wanted off Cloudflare? It cannot be kept as is.
+
+## Progress log
+
+- 2026-10-31 phase 0: skeleton (db, blobs, /health).
+- 2026-10-31 phase 1 slice 1: `ai/credits.rs` (service prices, call budgets, UTC day and week). Next: `ai/store.rs` (usage rows, ledger, sessions).
