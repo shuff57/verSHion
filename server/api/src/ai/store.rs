@@ -39,6 +39,23 @@ pub struct ServiceCost {
     pub calls: i64,
 }
 
+/// A result above this lives in the blob store instead of the job row.
+pub const RESULT_D1_MAX: usize = 256 * 1024;
+
+#[derive(Debug, PartialEq)]
+pub struct JobRow {
+    pub id: String,
+    pub principal: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub status: String, // queued | running | done | failed
+    pub pages_total: i64,
+    pub pages_done: i64,
+    pub hint: Option<String>,
+    pub error: Option<String>,
+    pub result: Option<String>,
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Purchase {
     pub principal: String,
@@ -178,6 +195,61 @@ impl<'a> AiStore<'a> {
         self.conn.execute("UPDATE ai_sessions SET calls_ok = calls_ok + 1 WHERE id = ?1", [id])?;
         Ok(())
     }
+    pub fn jobs_since(&self, principal: &str, since: i64) -> rusqlite::Result<i64> {
+        self.conn.query_row("SELECT COUNT(*) FROM ai_jobs WHERE principal = ?1 AND created_at >= ?2", params![principal, since], |r| r.get(0))
+    }
+
+    pub fn create_job(&self, id: &str, principal: &str, pages_total: i64, hint: &str, now: i64) -> rusqlite::Result<()> {
+        let hint = if hint.is_empty() { None } else { Some(hint) };
+        self.conn.execute(
+            "INSERT INTO ai_jobs (id, principal, created_at, updated_at, status, pages_total, pages_done, hint) VALUES (?1, ?2, ?3, ?3, 'queued', ?4, 0, ?5)",
+            params![id, principal, now, pages_total, hint],
+        )?;
+        Ok(())
+    }
+
+    /// A job, only for the principal that made it: anyone else gets the same None as for a missing id.
+    pub fn job(&self, id: &str, principal: &str) -> rusqlite::Result<Option<JobRow>> {
+        self.conn
+            .query_row(
+                "SELECT id, principal, created_at, updated_at, status, pages_total, pages_done, hint, error, result FROM ai_jobs WHERE id = ?1 AND principal = ?2",
+                params![id, principal],
+                |r| {
+                    Ok(JobRow {
+                        id: r.get(0)?,
+                        principal: r.get(1)?,
+                        created_at: r.get(2)?,
+                        updated_at: r.get(3)?,
+                        status: r.get(4)?,
+                        pages_total: r.get(5)?,
+                        pages_done: r.get(6)?,
+                        hint: r.get(7)?,
+                        error: r.get(8)?,
+                        result: r.get(9)?,
+                    })
+                },
+            )
+            .optional()
+    }
+
+    pub fn progress(&self, id: &str, status: &str, pages_done: i64, result: Option<&str>, error: Option<&str>, now: i64) -> rusqlite::Result<()> {
+        self.conn.execute(
+            "UPDATE ai_jobs SET status = ?2, pages_done = ?3, result = ?4, error = ?5, updated_at = ?6 WHERE id = ?1",
+            params![id, status, pages_done, result, error, now],
+        )?;
+        Ok(())
+    }
+
+    /// Drops expired jobs, usage and sessions past their retention; returns the expired job ids so the caller
+    /// can delete their blob results (`ai/jobs/<id>/result.json`).
+    pub fn prune(&self, now: i64, job_ttl_ms: i64) -> rusqlite::Result<Vec<String>> {
+        let cutoff = now - job_ttl_ms;
+        let ids = self.conn.prepare("SELECT id FROM ai_jobs WHERE created_at < ?1")?.query_map([cutoff], |r| r.get::<_, String>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
+        self.conn.execute("DELETE FROM ai_jobs WHERE created_at < ?1", [cutoff])?;
+        self.conn.execute("DELETE FROM ai_usage WHERE at < ?1", [now - USAGE_KEEP_MS])?;
+        self.conn.execute("DELETE FROM ai_sessions WHERE created_at < ?1", [now - USAGE_KEEP_MS])?;
+        Ok(ids)
+    }
 }
 
 #[cfg(test)]
@@ -292,5 +364,47 @@ mod tests {
         assert!(!s.account_deleted("never-existed").unwrap());
         assert!(s.account_deleted("gone").unwrap());
         assert!(!s.account_deleted("live").unwrap());
+    }
+
+    #[test]
+    fn a_job_is_private_to_its_owner_and_progress_is_stored() {
+        let mut c = conn();
+        let s = AiStore::new(&mut c);
+        s.create_job("j1", "u1", 3, "Quiz 3", MON).unwrap();
+        s.create_job("j2", "u1", 1, "", MON + 5).unwrap();
+        let j = s.job("j1", "u1").unwrap().unwrap();
+        assert_eq!((j.status.as_str(), j.pages_total, j.pages_done, j.hint.as_deref()), ("queued", 3, 0, Some("Quiz 3")));
+        assert_eq!(s.job("j2", "u1").unwrap().unwrap().hint, None, "an empty hint is stored as NULL");
+        assert_eq!(s.job("j1", "u2").unwrap(), None, "another user sees the same None as a missing job");
+        assert_eq!(s.job("nope", "u1").unwrap(), None);
+        s.progress("j1", "running", 2, Some("{\"pages\":[]}"), None, MON + 10).unwrap();
+        s.progress("j2", "failed", 0, None, Some("No page could be read."), MON + 11).unwrap();
+        let j = s.job("j1", "u1").unwrap().unwrap();
+        assert_eq!((j.status.as_str(), j.pages_done, j.updated_at, j.result.as_deref()), ("running", 2, MON + 10, Some("{\"pages\":[]}")));
+        assert_eq!(s.job("j2", "u1").unwrap().unwrap().error.as_deref(), Some("No page could be read."));
+        assert_eq!(s.jobs_since("u1", MON).unwrap(), 2);
+        assert_eq!(s.jobs_since("u1", MON + 1).unwrap(), 1);
+        assert_eq!(s.jobs_since("u2", MON).unwrap(), 0);
+        assert!(c_status_check_rejects(&s), "status is constrained to the four known values");
+    }
+
+    fn c_status_check_rejects(s: &AiStore) -> bool {
+        s.create_job("j3", "u1", 1, "", MON).unwrap();
+        s.progress("j3", "weird", 0, None, None, MON).is_err()
+    }
+
+    #[test]
+    fn the_prune_drops_expired_jobs_and_old_usage_and_names_the_jobs() {
+        let mut c = conn();
+        let s = AiStore::new(&mut c);
+        let ttl = 72 * 3_600_000;
+        s.create_job("old", "u1", 1, "", MON).unwrap();
+        s.record("u1", &Usage { kind: "chat", in_tokens: 1.0, out_tokens: 1.0, cost_usd: 0.001, session: None }, MON).unwrap();
+        assert!(s.prune(MON + 71 * 3_600_000, ttl).unwrap().is_empty(), "inside the ttl nothing goes");
+        assert_eq!(s.prune(MON + 73 * 3_600_000, ttl).unwrap(), vec!["old".to_string()]);
+        assert_eq!(s.job("old", "u1").unwrap(), None);
+        assert!(s.cost_since(0).unwrap() > 0.0, "usage is kept for 90 days");
+        s.prune(MON + 91 * 86_400_000, ttl).unwrap();
+        assert_eq!(s.cost_since(0).unwrap(), 0.0);
     }
 }

@@ -75,4 +75,5 @@ Open for phase 0: which mail path to keep (SMTP or Resend), and whether the web 
 
 - 2026-10-31 phase 0: skeleton (db, blobs, /health).
 - 2026-10-31 phase 1 slice 1: `ai/credits.rs` (service prices, call budgets, UTC day and week). 
-- 2026-10-31 phase 1 slice 2: `ai/store.rs` (usage and cost, credit ledger, sessions, refunds; start_session is one immediate transaction). Jobs rows not ported yet. Next: job rows, then the relay request handling (`ai/index`).
+- 2026-10-31 phase 1 slice 2: `ai/store.rs` (usage and cost, credit ledger, sessions, refunds; start_session is one immediate transaction). 
+- 2026-10-31 phase 1 slice 3: job rows and prune in `ai/store.rs` (owner-only reads, status constraint, retention). Next: request validation (`util.ts`: data URIs, message parsing, error envelope), then the relay handler and OpenRouter call.
