@@ -18,6 +18,7 @@ pub mod maintenance;
 pub mod password;
 pub mod session;
 pub mod signup;
+pub mod smtp;
 pub mod staff_domains;
 pub mod tokens;
 pub mod validate;
