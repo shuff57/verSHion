@@ -7,6 +7,7 @@ pub mod bizdays;
 pub mod blobs;
 pub mod blockplan;
 pub mod blocking;
+pub mod circlebase;
 pub mod circlecheck;
 pub mod circlesql;
 pub mod chain;
