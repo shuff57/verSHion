@@ -10,6 +10,7 @@ pub mod blocking;
 pub mod circlebase;
 pub mod circlecheck;
 pub mod circleinvites;
+pub mod circlemembers;
 pub mod circles;
 pub mod circlesql;
 pub mod chain;
