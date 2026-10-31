@@ -373,7 +373,7 @@ pub fn seg_hits(a: Pt, b: Pt, r: Bx) -> bool {
 }
 
 /// Whether the segments p-q and a-b properly cross (a touch at an end does not count: a feature may lie on the curve).
-fn seg_cross(p: Pt, q: Pt, a: Pt, b: Pt) -> bool {
+pub fn seg_cross(p: Pt, q: Pt, a: Pt, b: Pt) -> bool {
     let o = |u: Pt, v: Pt, w: Pt| (v.0 - u.0) * (w.1 - u.1) - (v.1 - u.1) * (w.0 - u.0);
     o(a, b, p) * o(a, b, q) < 0.0 && o(p, q, a) * o(p, q, b) < 0.0
 }

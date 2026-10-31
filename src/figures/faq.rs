@@ -3664,7 +3664,7 @@ const REACTION_RATE_GRAPH: &[Faq] = &[
 const PHASE_DIAGRAM: &[Faq] = &[
     Faq {
         q: "Are the curves drawn to scale?",
-        a: "No. The triple point, the critical point and (for water and carbon dioxide) the normal boiling or sublimation point are the published values, and every curve passes through them, but the shapes between them are the textbook ones, not measured. Water's melting curve is also tilted more than it really is so that its slope can be seen. Temperatures and pressures read from the diagram are therefore rounded, and the working says so.",
+        a: "No. The triple point, the critical point and (for water and carbon dioxide) the normal boiling or sublimation point are the published values, and every curve passes through them, but the vaporisation and sublimation shapes between them are the textbook ones, not measured. The melting curves of water and carbon dioxide are the measured ones, so they are nearly vertical (water's leans left by only about 0.0075 K per atm); only the Typical substance and a custom substance exaggerate the lean of the melting curve so that it can be seen, and the working says so. Temperatures and pressures read from the diagram are therefore rounded, and the working says so.",
     },
     Faq {
         q: "Why does carbon dioxide have no boiling point at 1 atm?",
@@ -3680,7 +3680,7 @@ const PHASE_DIAGRAM: &[Faq] = &[
     },
     Faq {
         q: "How do I draw a substance of my own?",
-        a: "Choose Custom and type the triple point and the critical point; the curves are drawn through them, with Clausius-Clapeyron (straight in ln P against 1/T) for vaporisation and sublimation. Choose the melting slope: negative leans the melting curve left like water, positive leans it right. You can also drag the two points on the diagram. A critical point that is not clearly above the triple point is refused with a note.",
+        a: "Choose Custom and type the triple point and the critical point; the curves are drawn through them, with Clausius-Clapeyron (straight in ln P against 1/T) for vaporisation and sublimation. Choose the melting slope: negative leans the melting curve left like water, positive leans it right (drawn far steeper than a real one, so that it can be seen). You can also drag the two points on the diagram. A critical point that is not clearly above the triple point is refused with a note.",
     },
 ];
 

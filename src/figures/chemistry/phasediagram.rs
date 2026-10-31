@@ -4,14 +4,19 @@
 //! the heating path along the isobar, and up to four points A to D the teacher places by (T, P). Drawn with
 //! `svg::Doc` only; original drawing. The terms are those of a high-school or AP chemistry course.
 //!
-//! This is a schematic. The topology and the data are exact; the curve shapes are the textbook ones:
+//! This is a schematic, drawn through the published data. The topology and the data are exact; the vaporisation and
+//! sublimation curves are the textbook shapes, and the melting curve is the measured one for two substances:
 //! - vaporisation: ln P linear in 1/T (Clausius-Clapeyron) through the triple and critical points; for water, through
 //!   its published normal boiling point too (ln P = A - B/(T + C), the three constants solved from the three points);
 //! - sublimation: the same kind of curve through the triple point, 15% steeper in ln P against 1/T (carbon dioxide's
 //!   goes through its published sublimation point, 194.7 K at 1 atm, instead);
-//! - melting: vertical, leaning only above 1 atm (or above the triple pressure when that is higher), to the left for a
-//!   negative slope (water) and to the right for a positive one, by 0.05 min(Tc - Tt, 2 Tt) for each critical
-//!   pressure, capped at three critical pressures. Water's own tiny slope below 1 atm makes ice melt at 273.15 K.
+//! - melting, Water: the IAPWS 2011 melting-pressure equation of ice Ih (about -0.0075 K per atm, 271.5 K at 218 atm),
+//!   continued below its 251 K limit as the same equation and stopped at 150 K; Carbon dioxide: Span and Wagner's
+//!   Simon equation, P/Pt = 1 + 1955.539 ((T/Tt)^1.83 - 1). Both are nearly vertical on the pressure axis, which is
+//!   honest. Only the Typical substance and a custom substance exaggerate their lean (and say so): leaving the triple
+//!   point at 0.05 min(Tc - Tt, 2 Tt) kelvin per critical pressure, to the left for a negative slope and to the right
+//!   for a positive one, and bending smoothly (an exponential approach) to be vertical at three times that from the
+//!   triple temperature, so there is no kink.
 //!
 //! What is an answer. The temperatures at which the isobar crosses the curves, the pressures at which the isotherm
 //! does, the phase at each of A to D and where the lines cross are read from the curves, so they are printed only
@@ -25,7 +30,7 @@
 use crate::figures::chart::{fmt, nice_step, Frame};
 use crate::figures::chemistry::ratesgraph::{along_v, around, chunk_dist, chunk_hits, chunks, halo_el, ink, pad, path_d, ring, text_el, text_w, Cand, Chunk, Placer};
 pub use crate::figures::chemistry::ratesgraph::{Pt, Seg, FONT};
-pub use crate::figures::chemistry::reactionenergy::{hits, seg_hits, tw, Bx};
+pub use crate::figures::chemistry::reactionenergy::{hits, seg_cross, seg_hits, tw, Bx};
 use crate::figures::interact::Handle;
 use crate::figures::svg::{self, esc, Doc, Fills};
 use crate::figures::{answers_param, Example, FigureDef, ParamDef, Params, Subject, Value, SHOW_ANSWERS};
@@ -44,7 +49,7 @@ const K0: f64 = 273.15;
 const BLANK: &str = "______";
 const LETTERS: [char; 4] = ['A', 'B', 'C', 'D'];
 const PT_KEYS: [(&str, &str); 4] = [("a_t", "a_p"), ("b_t", "b_p"), ("c_t", "c_p"), ("d_t", "d_p")];
-const PT_DEFAULTS: [(f64, f64); 4] = [(250.0, 100.0), (320.0, 10.0), (500.0, 0.1), (700.0, 400.0)];
+const PT_DEFAULTS: [(f64, f64); 4] = [(250.0, 100.0), (300.0, 20.0), (500.0, 0.1), (700.0, 400.0)];
 
 pub fn defs() -> Vec<FigureDef> {
     vec![FigureDef {
@@ -68,7 +73,7 @@ fn params() -> Vec<ParamDef> {
         pr("pt", "Custom: triple point pressure (atm)", 0.00603).hint("Custom only"),
         t("tc", "Custom: critical point temperature", 647.0).hint("Custom only; at least 5% above the triple point temperature in kelvin"),
         pr("pc", "Custom: critical point pressure (atm)", 218.0).hint("Custom only; at least twice the triple point pressure"),
-        ParamDef::choice("melt_slope", "Custom: melting curve slope", &SLOPES, SLOPES[0]).hint("Custom only: negative leans the melting curve left (like water), positive leans it right. Water and carbon dioxide keep their own"),
+        ParamDef::choice("melt_slope", "Custom: melting curve slope", &SLOPES, SLOPES[0]).hint("Custom only: negative leans the melting curve left (like water), positive leans it right, by an exaggerated amount so that it can be seen. Water and carbon dioxide keep their own, measured, nearly vertical curves"),
         ParamDef::bool("isobar", "Isobar (line of constant pressure)", true).hint("The key shows where it crosses the curves and the changes on heating"),
         pr("p_line", "Isobar pressure (atm)", 1.0).hint("1 atm gives the normal melting, boiling and sublimation points"),
         ParamDef::bool("isotherm", "Isotherm (line of constant temperature)", false),
@@ -152,6 +157,24 @@ fn antoine(t1: f64, p1: f64, t2: f64, t3: f64, p3: f64) -> Option<Vap> {
     Some(Vap::An { a: l1 + b / (t1 + c), b, c })
 }
 
+/// How the melting curve is drawn and computed. The two real substances use their published curves; every other
+/// diagram (Typical substance and Custom) uses a schematic lean.
+#[derive(Clone, Copy, Debug)]
+enum Melt {
+    /// A cartoon: leaning from the triple point by `kt` kelvin per critical pressure at first, and bending smoothly
+    /// to be vertical at 3 `kt` from the triple temperature (so it never reaches the critical temperature).
+    Schematic,
+    /// The Simon-Glatzel form fitted to Span and Wagner: P/Pt = 1 + k ((T/Tt)^c - 1), rising to the right.
+    Simon { c: f64, k: f64 },
+    /// The IAPWS 2011 melting-pressure equation of ice Ih, P/Pt = 1 + sum a_i (1 - (T/Tt)^b_i), leaning left,
+    /// continued below its 251 K limit and stopped at `ICE_FLOOR`.
+    Ice,
+}
+
+const ICE_A: [(f64, f64); 3] = [(1.195_393_37e6, 3.0), (8.081_831_59e4, 25.75), (3.338_268_6e3, 103.75)];
+/// The lowest temperature the ice curve is continued to. Below it the curve is drawn straight up.
+const ICE_FLOOR: f64 = 150.0;
+
 /// One substance's diagram. Temperatures in kelvin, pressures in atm.
 #[derive(Clone, Copy, Debug)]
 pub struct Sub {
@@ -165,11 +188,12 @@ pub struct Sub {
     vap: Vap,
     /// The steepness of the sublimation curve, in ln P against 1/T.
     bs: f64,
-    /// The slope of the melting curve below `p1`, in K per atm (water only).
-    s: f64,
-    /// Where the melting curve starts to lean: 1 atm, or the triple pressure when that is higher.
-    p1: f64,
-    /// The lean: kelvin per critical pressure.
+    melt: Melt,
+    /// Ice only: how far (K) the equation's melting point at 1 atm lies above the published 273.15 K. The curve is
+    /// lowered by that much at 1 atm and above, fading to nothing at the triple point, so that it passes through the
+    /// published normal melting point as well as the triple point.
+    ice_d: f64,
+    /// The schematic lean: kelvin per critical pressure.
     kt: f64,
 }
 
@@ -182,8 +206,10 @@ impl Sub {
         let vap = nbp.and_then(|tb| antoine(tt, pt, tb, tc, pc)).unwrap_or(Vap::Cc { b: b_cc });
         let slope_t = match vap { Vap::Cc { b } => b, Vap::An { b, c, .. } => b * tt * tt / ((tt + c) * (tt + c)) };
         let bs = match nsp { Some(ts) if pt > 1.0 && ts < tt => pt.ln() / (1.0 / ts - 1.0 / tt), _ => 1.15 * slope_t };
-        let s = match nmp { Some(tm) if pt < 1.0 => (tm - tt) / (1.0 - pt), _ => 0.0 };
-        Sub { name, tt, pt, tc, pc, neg, vap, bs, s, p1: pt.max(1.0), kt: 0.05 * (tc - tt).min(2.0 * tt) }
+        let melt = match nmp { Some(_) => Melt::Ice, None if nsp.is_some() => Melt::Simon { c: 1.83, k: 1955.539 }, None => Melt::Schematic };
+        let mut sb = Sub { name, tt, pt, tc, pc, neg, vap, bs, melt, ice_d: 0.0, kt: 0.05 * (tc - tt).min(2.0 * tt) };
+        if let (Melt::Ice, Some(tn)) = (melt, nmp) { sb.ice_d = sb.ice_t(1.0) - tn; }
+        sb
     }
 
     /// Vapour pressure at T (tt <= T <= tc).
@@ -198,25 +224,53 @@ impl Sub {
     pub fn psub(&self, t: f64) -> f64 { (self.pt.ln() - self.bs * (1.0 / t - 1.0 / self.tt)).exp() }
     /// Sublimation temperature at P (P <= pt).
     pub fn tsub(&self, p: f64) -> f64 { 1.0 / (1.0 / self.tt - (p / self.pt).ln() / self.bs) }
-    /// Melting temperature at P (P >= pt).
+    /// The pressure on the ice equation at T (floor <= T <= tt).
+    fn ice_p(&self, t: f64) -> f64 {
+        let th = t / self.tt;
+        self.pt * (1.0 + ICE_A.iter().map(|&(a, b)| a * (1.0 - th.powf(b))).sum::<f64>())
+    }
+    /// The temperature on the ice equation at P (the inverse of `ice_p`).
+    fn ice_t(&self, p: f64) -> f64 {
+        if p <= self.pt { return self.tt; }
+        if p >= self.ice_p(ICE_FLOOR) { return ICE_FLOOR; }
+        let (mut lo, mut hi) = (ICE_FLOOR, self.tt);
+        for _ in 0..90 { let mid = 0.5 * (lo + hi); if self.ice_p(mid) > p { lo = mid } else { hi = mid } }
+        0.5 * (lo + hi)
+    }
+    /// How far the ice curve is lowered at P (see `ice_d`): none at the triple point, all of it from 1 atm up.
+    fn ice_shift(&self, p: f64) -> f64 {
+        if p >= 1.0 { self.ice_d } else if p <= self.pt { 0.0 } else { self.ice_d * (p / self.pt).ln() / (1.0 / self.pt).ln() }
+    }
+    /// Melting temperature at P (P >= pt). Real curves for Water and Carbon dioxide, a schematic lean otherwise.
     pub fn tm(&self, p: f64) -> f64 {
         let p = p.max(self.pt);
-        let sg = if self.neg { -1.0 } else { 1.0 };
-        self.tt + self.s * (p.min(self.p1) - self.pt) + sg * self.kt * (((p - self.p1).max(0.0)) / self.pc).min(3.0)
+        match self.melt {
+            Melt::Simon { c, k } => self.tt * (1.0 + (p / self.pt - 1.0) / k).powf(1.0 / c),
+            Melt::Ice => (self.ice_t(p) - self.ice_shift(p)).max(ICE_FLOOR),
+            Melt::Schematic => {
+                let sg = if self.neg { -1.0 } else { 1.0 };
+                self.tt + sg * 3.0 * self.kt * (1.0 - (-(p - self.pt) / (3.0 * self.pc)).exp())
+            }
+        }
     }
     /// The pressure at which the melting curve is at T, if it passes through T.
     pub fn pm(&self, t: f64) -> Option<f64> {
-        let sg = if self.neg { -1.0 } else { 1.0 };
-        let u = sg * (t - self.tm(self.p1));
-        if u > 0.0 {
-            let x = u / self.kt * self.pc;
-            return (x <= 3.0 * self.pc).then_some(self.p1 + x);
+        match self.melt {
+            Melt::Simon { c, k } => (t >= self.tt).then(|| self.pt * (1.0 + k * ((t / self.tt).powf(c) - 1.0))),
+            Melt::Ice => {
+                if t > self.tt || t <= ICE_FLOOR { return None; }
+                // tm falls as P rises: bisect on ln P between the triple pressure and where the curve reaches its floor
+                let (mut lo, mut hi) = (self.pt.ln(), self.ice_p(ICE_FLOOR).ln());
+                for _ in 0..90 { let mid = 0.5 * (lo + hi); if self.tm(mid.exp()) > t { lo = mid } else { hi = mid } }
+                Some((0.5 * (lo + hi)).exp().max(self.pt))
+            }
+            Melt::Schematic => {
+                let sg = if self.neg { -1.0 } else { 1.0 };
+                if eq(t, self.tt) { return Some(self.pt); }
+                let u = sg * (t - self.tt) / (3.0 * self.kt);
+                (u > 0.0 && u < 1.0).then(|| self.pt - 3.0 * self.pc * (1.0 - u).ln())
+            }
         }
-        if self.s != 0.0 {
-            let p = self.pt + (t - self.tt) / self.s;
-            return (p >= self.pt && p <= self.p1).then_some(p);
-        }
-        eq(t, self.tt).then_some(self.pt)
     }
 
     /// The phase at (T, P). With `tol`, a point within 2 parts in a million of a curve is on it.
@@ -249,7 +303,9 @@ impl Sub {
         let x = |curve, t, from, to| Cross { curve, t, p, from, to };
         if eq(p, self.pt) { return (HCase::AtTriple, vec![x(Curve::Triple, self.tt, Phase::Solid, Phase::Gas)]); }
         if p < self.pt { return (HCase::Below, vec![x(Curve::Sub, self.tsub(p), Phase::Solid, Phase::Gas)]); }
-        let m = x(Curve::Melt, self.tm(p), Phase::Solid, Phase::Liquid);
+        let tmv = self.tm(p);
+        // a melting curve that climbs past the critical temperature (carbon dioxide above about 8,500 atm) melts straight into the supercritical fluid
+        let m = x(Curve::Melt, tmv, Phase::Solid, if p >= self.pc && tmv > self.tc { Phase::Super } else { Phase::Liquid });
         if eq(p, self.pc) { return (HCase::AtCritical, vec![m]); }
         if p < self.pc { return (HCase::Between, vec![m, x(Curve::Vap, self.tvap(p), Phase::Liquid, Phase::Gas)]); }
         (HCase::Above, vec![m])
@@ -672,15 +728,15 @@ struct Stroke { pts: Vec<Pt>, sty: Sty, kind: &'static str, feat: String }
 
 struct Mark { x: f64, y: f64, r: f64, fill: &'static str, stroke: &'static str, feat: String }
 
-struct Job { own: String, text: String, variants: Vec<Vec<String>>, anchor: Pt, cands: Box<dyn Fn(usize) -> Vec<Cand>>, color: &'static str, ans: bool }
+struct Job { own: String, text: String, variants: Vec<Vec<String>>, anchor: Pt, cands: Box<dyn Fn(usize) -> Vec<Cand>>, color: &'static str, ans: bool, ess: bool, lead: Option<(Vec<Pt>, f64)> }
 
 /// A value written at an axis: ('x' or 'y', position in px along it, text, the feature it names).
 struct Ann { axis: char, pos: f64, text: String, feat: String }
 
 fn change_name(from: Phase, to: Phase) -> &'static str {
     match (from, to) {
-        (Phase::Solid, Phase::Liquid) => "melts",
-        (Phase::Liquid, Phase::Solid) => "freezes",
+        (Phase::Solid, Phase::Liquid | Phase::Super) => "melts",
+        (Phase::Liquid | Phase::Super, Phase::Solid) => "freezes",
         (Phase::Liquid, Phase::Gas) => "boils",
         (Phase::Gas, Phase::Liquid) => "condenses",
         (Phase::Solid, Phase::Gas) => "sublimes",
@@ -701,8 +757,28 @@ fn curve_feat(c: Curve, isobar: bool) -> &'static str {
     }
 }
 
-fn lab_text(l: Lab, ans: bool, name: &str) -> Option<String> {
-    match l { Lab::Show => Some(name.to_string()), Lab::Blank => Some(if ans { name.to_string() } else { BLANK.to_string() }), Lab::Off => None }
+fn lab_text(l: Lab, ans: bool, name: &str, tag: Option<usize>) -> Option<String> {
+    match l {
+        Lab::Show => Some(name.to_string()),
+        Lab::Blank => Some(if ans { name.to_string() } else { tag.map_or_else(|| BLANK.to_string(), |n| format!("{n} {BLANK}")) }),
+        Lab::Off => None,
+    }
+}
+
+/// The labels that are blank on the student copy, numbered in a fixed order (regions, curves, special points) so
+/// that the blanks on the plot, the answer lines in the working and the key's names all use the same numbers.
+fn numbered(st: &Setup) -> Vec<(&'static str, &'static str, usize)> {
+    let groups: [(Lab, [(&'static str, &'static str); 4]); 3] = [
+        (st.lab_reg, [("reg:solid", "Solid"), ("reg:liquid", "Liquid"), ("reg:gas", "Gas"), ("reg:super", "Supercritical fluid")]),
+        (st.lab_cur, [("sub", "Sublimation"), ("melt", "Melting"), ("vap", "Vaporisation"), ("", "")]),
+        (st.lab_spec, [("tp", "Triple point"), ("cp", "Critical point"), ("", ""), ("", "")]),
+    ];
+    let mut out = Vec::new();
+    for (l, list) in groups {
+        if l != Lab::Blank { continue; }
+        for (f, nm) in list.into_iter().filter(|x| !x.0.is_empty()) { out.push((f, nm, out.len() + 1)); }
+    }
+    out
 }
 
 /// Greedy word wrap to `max_w` px; a unit stays with its number, a power of ten with its mantissa.
@@ -771,7 +847,64 @@ fn near(x: f64, y: f64, fs: f64, lh: f64, n: usize, lab: f64) -> Vec<Cand> {
 /// The best place for a region's label: wholly inside the region, clear of every stroke and label, as far from them as
 /// there is room for, and near the middle. None when nothing fits.
 #[allow(clippy::too_many_arguments)]
-fn place_region(poly: &[Pt], variants: &[Vec<String>], hard: &[Chunk], soft: &[Chunk], boxes: &[Bx], bounds: Bx, fs: f64, lh: f64, lab: f64) -> Option<(usize, Cand)> {
+fn place_region(poly: &[Pt], variants: &[Vec<String>], hard: &[Chunk], soft: &[Chunk], boxes: &[Bx], bounds: Bx, fs: f64, lh: f64, lab: f64) -> Option<(usize, Cand, bool)> {
+    // roomy first; in a thin region the margins shrink (the box kept clear is already larger than the real ink)
+    for (pr, po) in [(3.0, 2.0), (1.5, 1.0), (0.5, 0.5)] {
+        if let Some(r) = place_region_pass(poly, variants, hard, soft, boxes, bounds, fs, lh, lab, pr, po) { return Some(r); }
+    }
+    None
+}
+
+/// A region too thin for its name: the name goes in free space close to the region, joined to a point well inside it
+/// by a thin leader line that crosses no label and as few strokes as possible.
+#[allow(clippy::too_many_arguments)]
+fn region_leader(poly: &[Pt], text: &str, hard: &[Chunk], soft: &[Chunk], boxes: &[Bx], bounds: Bx, fs: f64, lh: f64) -> Option<(Cand, Bx, (Pt, Pt))> {
+    if poly.len() < 3 { return None; }
+    let bb = poly.iter().fold((f64::MAX, f64::MIN, f64::MAX, f64::MIN), |b, p| (b.0.min(p.0), b.1.max(p.0), b.2.min(p.1), b.3.max(p.1)));
+    let bb = (bb.0.max(bounds.0), bb.1.min(bounds.1), bb.2.max(bounds.2), bb.3.min(bounds.3));
+    // targets: points inside the region with the most room around them
+    let mut tg: Vec<(f64, Pt)> = Vec::new();
+    let mut x = bb.0 + 2.0;
+    while x <= bb.1 - 2.0 {
+        let mut y = bb.2 + 2.0;
+        while y <= bb.3 - 2.0 {
+            if poly_inside(poly, (x, y)) { tg.push((chunk_dist(hard, (x - 1.0, x + 1.0, y - 1.0, y + 1.0), 12.0), (x, y))); }
+            y += 6.0;
+        }
+        x += 6.0;
+    }
+    tg.sort_by(|a, b| b.0.total_cmp(&a.0));
+    let mut chosen: Vec<Pt> = Vec::new();
+    for (_, q) in &tg { if chosen.len() < 8 && chosen.iter().all(|c| (c.0 - q.0).hypot(c.1 - q.1) > 24.0) { chosen.push(*q); } }
+    let w = text_w(text, fs);
+    let mut best: Option<(f64, Cand, Bx, (Pt, Pt))> = None;
+    let mut x = bounds.0 + w / 2.0 + 4.0;
+    while x <= bounds.1 - w / 2.0 - 4.0 {
+        let mut yb = bounds.2 + 0.86 * fs + 4.0;
+        while yb + 0.3 * fs <= bounds.3 - 4.0 {
+            let c: Cand = (x, "middle", yb);
+            let b = ink(&c, w, fs, lh, 1);
+            let pb = pad(b, 3.0);
+            if chunk_hits(hard, pb) == 0 && !boxes.iter().any(|o| hits(pad(*o, 2.0), b)) {
+                for t in &chosen {
+                    let tgt = (t.0.clamp(pb.0, pb.1), t.1.clamp(pb.2, pb.3));
+                    let len = (tgt.0 - t.0).hypot(tgt.1 - t.1);
+                    if len < 6.0 || len > 160.0 { continue; }
+                    if boxes.iter().any(|o| seg_hits(*t, tgt, pad(*o, 1.5))) { continue; }
+                    let cr = hard.iter().filter(|(cb, _)| hits(*cb, (t.0.min(tgt.0) - 1.0, t.0.max(tgt.0) + 1.0, t.1.min(tgt.1) - 1.0, t.1.max(tgt.1) + 1.0))).flat_map(|(_, sg)| sg.iter()).filter(|sg| seg_cross(*t, tgt, sg.0, sg.1)).count();
+                    let cost = 80.0 * cr as f64 + len + 6.0 * chunk_hits(soft, b) as f64;
+                    if best.as_ref().is_none_or(|bst| cost < bst.0) { best = Some((cost, c, b, (*t, tgt))); }
+                }
+            }
+            yb += 6.0;
+        }
+        x += 6.0;
+    }
+    best.map(|b| (b.1, b.2, b.3))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn place_region_pass(poly: &[Pt], variants: &[Vec<String>], hard: &[Chunk], soft: &[Chunk], boxes: &[Bx], bounds: Bx, fs: f64, lh: f64, lab: f64, pr: f64, po: f64) -> Option<(usize, Cand, bool)> {
     if poly.len() < 3 { return None; }
     // the curves are sampled finely; for the inside test a polygon with vertices at least 4 px apart is as good
     let mut thin: Vec<Pt> = Vec::new();
@@ -784,15 +917,16 @@ fn place_region(poly: &[Pt], variants: &[Vec<String>], hard: &[Chunk], soft: &[C
     let cen = poly_centroid(poly);
     let cap = 20.0 * lab;
     type Best = Option<((i64, usize, i64), usize, Cand)>;
-    // the key of a place (more room first, then the variant, then nearness to the middle), if the label fits there
-    let eval = |vi: usize, x: f64, yb: f64| -> Option<(i64, usize, i64)> {
+    // the key of a place (more room first, then the variant, then nearness to the middle), if the label fits there;
+    // a turned label (reading upward, for a region too narrow for it level) is placed by its centre
+    let eval = |vi: usize, rot: bool, x: f64, yb: f64| -> Option<(i64, usize, i64)> {
         let lines = &variants[vi];
         let w = lines.iter().map(|l| text_w(l, fs)).fold(0.0, f64::max);
         let n = lines.len();
-        let h_ink = (n - 1) as f64 * lh + 1.16 * fs;
+        let h_ink = if rot { 0.0 } else { (n - 1) as f64 * lh + 1.16 * fs };
         let c: Cand = (x, "middle", yb);
-        let b = ink(&c, w, fs, lh, n);
-        let pb = pad(b, 3.0);
+        let b = if rot { turned_box(x, yb, w, fs) } else { ink(&c, w, fs, lh, n) };
+        let pb = pad(b, pr);
         if pb.0 < bb.0 - 3.0 || pb.1 > bb.1 + 3.0 || pb.2 < bb.2 - 3.0 || pb.3 > bb.3 + 3.0 { return None; }
         if !poly_inside(poly, (x, (b.2 + b.3) / 2.0)) { return None; }
         for k in 0..=6 {
@@ -801,13 +935,14 @@ fn place_region(poly: &[Pt], variants: &[Vec<String>], hard: &[Chunk], soft: &[C
                 if !poly_inside(poly, q) { return None; }
             }
         }
-        if chunk_hits(hard, pb) != 0 || boxes.iter().any(|o| hits(pad(*o, 2.0), b)) { return None; }
-        let clear = chunk_dist(hard, b, cap).min(chunk_dist(soft, b, cap)).min(cap);
+        if chunk_hits(hard, pb) != 0 || boxes.iter().any(|o| hits(pad(*o, po), b)) { return None; }
+        let boxd = boxes.iter().map(|o| (o.0 - b.1).max(b.0 - o.1).max(0.0).hypot((o.2 - b.3).max(b.2 - o.3).max(0.0))).fold(cap, f64::min);
+        let clear = chunk_dist(hard, b, cap).min(chunk_dist(soft, b, cap)).min(boxd).min(cap);
         Some((-(clear * 4.0).round() as i64, vi, (((x - cen.0).hypot(yb - h_ink / 2.0 - cen.1)) * 4.0).round() as i64))
     };
     let mut best: Best = None;
-    let consider = |best: &mut Best, vi: usize, x: f64, yb: f64| {
-        if let Some(key) = eval(vi, x, yb) {
+    let consider = |best: &mut Best, vi: usize, rot: bool, x: f64, yb: f64| {
+        if let Some(key) = eval(vi, rot, x, yb) {
             if best.as_ref().is_none_or(|bst| key < bst.0) { *best = Some((key, vi, (x, "middle", yb))); }
         }
     };
@@ -816,11 +951,11 @@ fn place_region(poly: &[Pt], variants: &[Vec<String>], hard: &[Chunk], soft: &[C
         let w = lines.iter().map(|l| text_w(l, fs)).fold(0.0, f64::max);
         let n = lines.len();
         let mut local: Best = None;
-        let mut x = bb.0 + w / 2.0 + 3.0;
-        while x <= bb.1 - w / 2.0 - 3.0 {
-            let mut yb = bb.2 + 0.86 * fs + 3.0;
-            while yb + (n - 1) as f64 * lh + 0.3 * fs <= bb.3 - 3.0 {
-                consider(&mut local, vi, x, yb);
+        let mut x = bb.0 + w / 2.0 + pr;
+        while x <= bb.1 - w / 2.0 - pr {
+            let mut yb = bb.2 + 0.86 * fs + pr;
+            while yb + (n - 1) as f64 * lh + 0.3 * fs <= bb.3 - pr {
+                consider(&mut local, vi, false, x, yb);
                 yb += 8.0;
             }
             x += 8.0;
@@ -830,7 +965,7 @@ fn place_region(poly: &[Pt], variants: &[Vec<String>], hard: &[Chunk], soft: &[C
             while dx <= 8.0 {
                 let mut dy = -8.0;
                 while dy <= 8.0 {
-                    consider(&mut local, vi, cx + dx, cy + dy);
+                    consider(&mut local, vi, false, cx + dx, cy + dy);
                     dy += 2.0;
                 }
                 dx += 2.0;
@@ -838,7 +973,45 @@ fn place_region(poly: &[Pt], variants: &[Vec<String>], hard: &[Chunk], soft: &[C
             if let Some(l) = local { if best.as_ref().is_none_or(|bst| l.0 < bst.0) { best = Some(l); } }
         }
     }
-    best.map(|b| (b.1, b.2))
+    if let Some(b) = best { return Some((b.1, b.2, false)); }
+    // nothing fits level: try the name turned to read upward (one line only)
+    let mut turned: Best = None;
+    for (vi, lines) in variants.iter().enumerate().filter(|(_, l)| l.len() == 1) {
+        let w = lines.iter().map(|l| text_w(l, fs)).fold(0.0, f64::max);
+        let mut local: Best = None;
+        let mut x = bb.0 + 0.86 * fs + pr;
+        while x <= bb.1 - 0.3 * fs - pr {
+            let mut yc = bb.2 + w / 2.0 + pr;
+            while yc <= bb.3 - w / 2.0 - pr {
+                consider(&mut local, vi, true, x, yc);
+                yc += 8.0;
+            }
+            x += 8.0;
+        }
+        if let Some((_, _, (cx, _, cy))) = local {
+            let mut dx = -8.0;
+            while dx <= 8.0 {
+                let mut dy = -8.0;
+                while dy <= 8.0 {
+                    consider(&mut local, vi, true, cx + dx, cy + dy);
+                    dy += 2.0;
+                }
+                dx += 2.0;
+            }
+            if let Some(l) = local { if turned.as_ref().is_none_or(|t| l.0 < t.0) { turned = Some(l); } }
+        }
+    }
+    turned.map(|b| (b.1, b.2, true))
+}
+
+/// The ink box of a one-line label turned to read upward, centred at (x, yc).
+fn turned_box(x: f64, yc: f64, w: f64, fs: f64) -> Bx { (x - 0.86 * fs, x + 0.3 * fs, yc - w / 2.0, yc + w / 2.0) }
+
+/// A turned label: the text is centred on (x, yc) and rotated a quarter turn counter-clockwise about that point.
+fn halo_turned(x: f64, yc: f64, fs: f64, fill: &str, s: &str, feat: &str, group: usize) -> String {
+    let common = format!(r##"x="{x:.2}" y="{yc:.2}" font-size="{fs:.2}" text-anchor="middle" font-family="{FONT}" transform="rotate(-90 {x:.2} {yc:.2})""##);
+    let t = esc(s);
+    format!(r##"<text {common} fill="none" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" data-o="label" data-f="{feat}" data-g="{group}">{t}</text><text {common} fill="{fill}" data-o="label" data-f="{feat}" data-g="{group}">{t}</text>"##)
 }
 
 /// The phase-diagram readings: heating changes, isotherm crossings, phases of A to D.
@@ -866,9 +1039,9 @@ pub fn build(p: &Params) -> (String, Report) {
     let grid_c = if print { "#d9d9d9" } else { "#e4e7ec" };
     // in Print every line is grey, so the width and the dash tell them apart
     let s_sub = Sty { c: if print { "#000000" } else { "#8e44ad" }, w: 2.8, dash: if print { "2.5 3.5" } else { "" } };
-    let s_melt = Sty { c: if print { "#000000" } else { "#1f5fbf" }, w: 2.6, dash: if print { "11 4" } else { "" } };
+    let s_melt = Sty { c: if print { "#000000" } else { "#1f5fbf" }, w: if print { 3.2 } else { 2.6 }, dash: if print { "16 5" } else { "" } };
     let s_vap = Sty { c: if print { "#000000" } else { "#d35400" }, w: 2.6, dash: "" };
-    let s_ib = Sty { c: if print { "#333333" } else { "#b03a2e" }, w: 1.6, dash: "6 3" };
+    let s_ib = Sty { c: if print { "#333333" } else { "#b03a2e" }, w: if print { 1.4 } else { 1.6 }, dash: if print { "4 3" } else { "6 3" } };
     let s_it = Sty { c: if print { "#333333" } else { "#2e7d32" }, w: 1.6, dash: "6 3 1.5 3" };
     let s_g = Sty { c: guide_c, w: 1.0, dash: "1.5 3" };
     let lab_c = ink_c;
@@ -909,13 +1082,15 @@ pub fn build(p: &Params) -> (String, Report) {
             e_lo = e_lo.min((pmin_x.log10() - 0.15).floor());
             e_hi = e_hi.max((pmax_x.log10() + 0.15 - 1e-9).ceil());
         }
+        // a line or point at or above the critical pressure splits the supercritical region: keep room above it for its name
+        if !ps.is_empty() && pmax_x >= sub.pc * 0.99 { e_hi = e_hi.max((pmax_x.log10() + 0.9 - 1e-9).ceil()); }
         if e_hi < e_lo + 2.0 { e_hi = e_lo + 2.0; }
         let count = (e_hi - e_lo) as i64 + 1;
         let stp = ((count as f64) / 7.0).ceil().max(1.0) as i64;
         let ticks = (0..count).filter(|k| k % stp == 0).map(|k| { let e = e_lo as i64 + k; (e as f64, pow10_label(e as i32)) }).collect();
         (e_lo, e_hi, 10f64.powf(e_lo), 10f64.powf(e_hi), ticks)
     } else {
-        let top_raw = (sub.pc * 1.35).max(if ps.is_empty() { 0.0 } else { pmax_x * 1.12 });
+        let top_raw = (sub.pc * 1.35).max(if ps.is_empty() { 0.0 } else { pmax_x * if pmax_x >= sub.pc * 0.99 { 1.3 } else { 1.12 } });
         let step = nice_step(top_raw, 6.0);
         let top = ((top_raw / step) - 1e-9).ceil() * step;
         let k1 = (top / step).round() as i64;
@@ -960,6 +1135,8 @@ pub fn build(p: &Params) -> (String, Report) {
     let mut jobs: Vec<Job> = Vec::new();
     let mut anns: Vec<Ann> = Vec::new();
     let mut arrow_spans: Vec<(f64, f64, f64)> = Vec::new();
+    // the key's dotted guides, kept clear of the labels on both copies so that the shared labels are in the same place
+    let mut phantom: Vec<Vec<Pt>> = Vec::new();
 
     // ---- the curves
     let n_s = 220usize;
@@ -973,7 +1150,6 @@ pub fn build(p: &Params) -> (String, Report) {
     {
         let hi = p_top.max(sub.pt * 1.0001);
         for k in 0..=120 { melt_pc.push(sub.pt * (hi / sub.pt).powf(k as f64 / 120.0)); }
-        for extra in [sub.p1, sub.p1 + 3.0 * sub.pc] { if extra > sub.pt && extra < hi { melt_pc.push(extra); } }
         melt_pc.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         melt_pc.dedup();
     }
@@ -1032,11 +1208,12 @@ pub fn build(p: &Params) -> (String, Report) {
                 if c.curve == Curve::Triple { continue; }
                 let feat = curve_feat(c.curve, true);
                 marks.push(Mark { x, y, r: 3.6, fill: "#ffffff", stroke: ink_c, feat: feat.into() });
+                phantom.push(vec![(x, y), (x, bottom)]);
                 if ans {
                     let g = format!("d{}", &feat[1..]);
                     strokes.push(Stroke { pts: vec![(x, y), (x, bottom)], sty: s_g, kind: "guide", feat: g.clone() });
                     anns.push(Ann { axis: 'x', pos: x, text: tfmt(c.t - off, dec), feat: g });
-                    jobs.push(Job { own: feat.into(), text: change_name(c.from, c.to).into(), variants: vec![vec![change_name(c.from, c.to).into()]], anchor: (x, y), cands: { let (x, y, fs, lh) = (x, y, fs_lab, lh); Box::new(move |k| near(x, y, fs, lh, k, lab)) }, color: lab_c, ans: true });
+                    jobs.push(Job { own: feat.into(), text: change_name(c.from, c.to).into(), variants: vec![vec![change_name(c.from, c.to).into()]], anchor: (x, y), cands: { let (x, y, fs, lh) = (x, y, fs_lab, lh); Box::new(move |k| near(x, y, fs, lh, k, lab)) }, color: lab_c, ans: true, ess: false, lead: Some((vec![(x, y)], 5.5)) });
                 }
             }
             if ans && st.path {
@@ -1063,11 +1240,12 @@ pub fn build(p: &Params) -> (String, Report) {
                 let y = py(c.p);
                 let feat = curve_feat(c.curve, false);
                 marks.push(Mark { x, y, r: 3.4, fill: "#555555", stroke: "none", feat: feat.into() });
+                phantom.push(vec![(left, y), (x, y)]);
                 if ans {
                     let g = format!("h{}", &feat[1..]);
                     strokes.push(Stroke { pts: vec![(left, y), (x, y)], sty: s_g, kind: "guide", feat: g.clone() });
                     anns.push(Ann { axis: 'y', pos: y, text: pread(c.p), feat: g });
-                    jobs.push(Job { own: feat.into(), text: change_name(c.from, c.to).into(), variants: vec![vec![change_name(c.from, c.to).into()]], anchor: (x, y), cands: { let (x, y, fs, lh) = (x, y, fs_lab, lh); Box::new(move |k| near(x, y, fs, lh, k, lab)) }, color: lab_c, ans: true });
+                    jobs.push(Job { own: feat.into(), text: change_name(c.from, c.to).into(), variants: vec![vec![change_name(c.from, c.to).into()]], anchor: (x, y), cands: { let (x, y, fs, lh) = (x, y, fs_lab, lh); Box::new(move |k| near(x, y, fs, lh, k, lab)) }, color: lab_c, ans: true, ess: false, lead: Some((vec![(x, y)], 5.5)) });
                 }
             }
         }
@@ -1079,23 +1257,26 @@ pub fn build(p: &Params) -> (String, Report) {
         let feat = format!("pt{}", LETTERS[q.i]);
         marks.push(Mark { x: pos.0, y: pos.1, r: 4.0, fill: ink_c, stroke: "none", feat: feat.clone() });
         let name = LETTERS[q.i].to_string();
-        jobs.push(Job { own: feat, text: name.clone(), variants: vec![vec![name]], anchor: pos, cands: { let (x, y, fs, lh) = (pos.0, pos.1, fs_lab, lh); Box::new(move |k| near(x, y, fs, lh, k, lab)) }, color: lab_c, ans: false });
+        jobs.push(Job { own: feat, text: name.clone(), variants: vec![vec![name]], anchor: pos, cands: { let (x, y, fs, lh) = (pos.0, pos.1, fs_lab, lh); Box::new(move |k| near(x, y, fs, lh, k, lab)) }, color: lab_c, ans: false, ess: false, lead: Some((vec![pos], 5.5)) });
         pts_out.push(PointOut { i: q.i, t_u: q.t_u, p: q.p, pos, at: *wh });
     }
 
     // ---- the labels asked for
-    let mut push_point = |own: &str, l: Lab, name: &str, at: Pt| {
-        if let Some(text) = lab_text(l, ans, name) {
-            jobs.push(Job { own: own.into(), text: text.clone(), variants: vec![vec![text]], anchor: at, cands: { let (x, y, fs, lh) = (at.0, at.1, fs_lab, lh); Box::new(move |k| near(x, y, fs, lh, k, lab)) }, color: lab_c, ans: false });
+    let tags = numbered(&st);
+    let tag_of = |f: &str| tags.iter().find(|t| t.0 == f).map(|t| t.2);
+    let mut push_point = |own: &str, l: Lab, name: &str, at: Pt, ess: bool| {
+        if let Some(text) = lab_text(l, ans, name, tag_of(own)) {
+            jobs.push(Job { own: own.into(), text: text.clone(), variants: vec![vec![text]], anchor: at, cands: { let (x, y, fs, lh) = (at.0, at.1, fs_lab, lh); Box::new(move |k| near(x, y, fs, lh, k, lab)) }, color: lab_c, ans: false, ess, lead: Some((vec![at], 6.5)) });
         }
     };
-    push_point("tp", st.lab_spec, "Triple point", tp);
-    push_point("cp", st.lab_spec, "Critical point", cp);
+    push_point("tp", st.lab_spec, "Triple point", tp, true);
+    push_point("cp", st.lab_spec, "Critical point", cp, true);
     for (feat, name) in [("vap", "Vaporisation"), ("melt", "Melting"), ("sub", "Sublimation")] {
-        let Some(text) = lab_text(st.lab_cur, ans, name) else { continue };
+        let Some(text) = lab_text(st.lab_cur, ans, name, tag_of(feat)) else { continue };
         let all: Vec<Pt> = curve_pieces.iter().find(|c| c.0 == feat).map(|c| c.1.iter().flatten().copied().collect()).unwrap_or_default();
         if all.len() < 2 { continue; }
         let anchor = all[all.len() / 2];
+        let lead_pts: Vec<Pt> = all.clone();
         let (fs, lh2) = (fs_lab, lh);
         jobs.push(Job { own: feat.into(), text: text.clone(), variants: vec![vec![text]], anchor, cands: Box::new(move |k| {
             let mut v = Vec::new();
@@ -1104,22 +1285,22 @@ pub fn build(p: &Params) -> (String, Report) {
                 v.extend(around(q.0, q.1, fs, lh2, k, lab).into_iter().take(24));
             }
             v
-        }), color: lab_c, ans: false });
+        }), color: lab_c, ans: false, ess: false, lead: Some((lead_pts, 0.0)) });
     }
     if let (Some(pl), Some(y)) = (st.isobar, isobar_y) {
         let text = format!("P = {} atm", gfmt(pl));
         let (fs, lh2) = (fs_lab, lh);
-        jobs.push(Job { own: "isobar".into(), text: text.clone(), variants: vec![vec![text]], anchor: (right, y), cands: Box::new(move |k| along_right(left, right, y, fs, lh2, k, lab)), color: lab_c, ans: false });
+        jobs.push(Job { own: "isobar".into(), text: text.clone(), variants: vec![vec![text]], anchor: (right, y), cands: Box::new(move |k| along_right(left, right, y, fs, lh2, k, lab)), color: lab_c, ans: false, ess: false, lead: None });
     }
     if let (Some((tu, _)), Some(x)) = (st.isotherm, isotherm_x) {
         let text = format!("T = {} {u}", gfmt(tu));
         let (fs, lh2) = (fs_lab, lh);
-        jobs.push(Job { own: "isotherm".into(), text: text.clone(), variants: vec![vec![text]], anchor: (x, top), cands: Box::new(move |k| along_v(x, top, bottom, fs, lh2, k, lab)), color: lab_c, ans: false });
+        jobs.push(Job { own: "isotherm".into(), text: text.clone(), variants: vec![vec![text]], anchor: (x, top), cands: Box::new(move |k| along_v(x, top, bottom, fs, lh2, k, lab)), color: lab_c, ans: false, ess: false, lead: None });
     }
 
     // ---- place the labels. What is only on the key (the readings' labels, their guides and the arrows) is placed
     // after everything else, so the labels both copies share are in the same place on both.
-    jobs.sort_by_key(|j| j.ans);
+    jobs.sort_by_key(|j| (j.ans, !j.ess));
     let nb = jobs.iter().filter(|j| !j.ans).count();
     let bounds = (left + 3.0, right - 3.0, top + 2.0, bottom - 3.0);
     let aguide = |s: &Stroke| s.kind == "guide" && s.feat != "scv" && s.feat != "sch";
@@ -1129,6 +1310,7 @@ pub fn build(p: &Params) -> (String, Report) {
     for s in &strokes {
         if aguide(s) { soft_ans.extend(chunks(&s.pts)); } else if s.kind == "guide" { soft.extend(chunks(&s.pts)); } else { hard.extend(chunks(&s.pts)); }
     }
+    for pg in &phantom { soft.extend(chunks(pg)); }
     hard.extend(chunks(&[(left, top), (left, bottom), (right, bottom)]));
     let mut owns: Vec<String> = jobs.iter().map(|j| j.own.clone()).collect();
     owns.sort();
@@ -1145,25 +1327,35 @@ pub fn build(p: &Params) -> (String, Report) {
     let mut base = Placer { boxes, hard, soft, bounds, feats, reach: 36.0 * lab };
     // The small supercritical region's label goes first, so the point labels cannot take its room; the readings'
     // labels go before the big regions' (which have room to spare)
-    let mut reg_labels: Vec<(String, usize, Vec<String>, Cand)> = Vec::new();
-    let put_region = |ri: usize, boxes: &mut Vec<Bx>, labels: &mut Vec<(String, usize, Vec<String>, Cand)>, notes: &mut Vec<String>, hard: &[Chunk], soft: &[Chunk]| {
+    let mut reg_labels: Vec<(String, usize, Vec<String>, Cand, bool)> = Vec::new();
+    let mut reg_leads: Vec<(String, (Pt, Pt))> = Vec::new();
+    let put_region = |ri: usize, boxes: &mut Vec<Bx>, labels: &mut Vec<(String, usize, Vec<String>, Cand, bool)>, notes: &mut Vec<String>, hard: &[Chunk], soft: &[Chunk], rl: &mut Vec<(String, (Pt, Pt))>| {
         let (feat, poly, _, name, variants) = &regions[ri];
-        let Some(text) = lab_text(st.lab_reg, ans, name) else { return };
+        let Some(text) = lab_text(st.lab_reg, ans, name, tag_of(feat)) else { return };
         let vars: Vec<Vec<String>> = if text == *name { variants.clone() } else { vec![vec![text.clone()]] };
         match place_region(poly, &vars, hard, soft, boxes, bounds, fs_lab, lh, lab) {
-            Some((vi, c)) => {
+            Some((vi, c, rot)) => {
                 let wl = vars[vi].iter().map(|l| text_w(l, fs_lab)).fold(0.0, f64::max);
-                boxes.push(ink(&c, wl, fs_lab, lh, vars[vi].len()));
-                labels.push((feat.to_string(), vi, vars[vi].clone(), c));
+                boxes.push(if rot { turned_box(c.0, c.2, wl, fs_lab) } else { ink(&c, wl, fs_lab, lh, vars[vi].len()) });
+                labels.push((feat.to_string(), vi, vars[vi].clone(), c, rot));
             }
-            None => notes.push(format!("The label \"{text}\" could not be placed without covering something, so it is left out.")),
+            None => {
+                if let Some((c, b, seg)) = region_leader(poly, &text, hard, soft, boxes, bounds, fs_lab, lh) {
+                    boxes.push(b);
+                    labels.push((feat.to_string(), 0, vec![text.clone()], c, false));
+                    rl.push((feat.to_string(), seg));
+                } else {
+                    notes.push(format!("The label \"{text}\" could not be placed without covering something, so it is left out."));
+                }
+            }
         }
     };
     {
         let (h, so) = (base.hard.clone(), base.soft.clone());
         let mut bx = std::mem::take(&mut base.boxes);
-        put_region(3, &mut bx, &mut reg_labels, &mut notes, &h, &so);
+        put_region(3, &mut bx, &mut reg_labels, &mut notes, &h, &so, &mut reg_leads);
         base.boxes = bx;
+        for (_, sg) in &reg_leads { base.hard.extend(chunks(&[sg.0, sg.1])); }
     }
     // Where a label's ink really is (the box the placer keeps clear is larger: ascenders and descenders, a few
     // per cent of width, and an underscore is only a thin line at the baseline), and whether it reads as its own
@@ -1176,11 +1368,11 @@ pub fn build(p: &Params) -> (String, Report) {
         let desc = text.chars().any(|ch| "gjpqy,;()".contains(ch));
         (l + 0.5, r - 0.5, c.2 - 0.74 * fs_lab, last + if desc { 0.2 * fs_lab } else { 0.0 })
     };
-    let attrib = |own: &str, b: Bx| -> (bool, f64) {
+    let attrib = |own: &str, b: Bx| -> (bool, f64, f64) {
         let d = base.feats.iter().find(|f| f.0 == own).map_or(0.0, |f| chunk_dist(&f.1, b, f64::MAX));
-        if d > 37.0 * lab { return (false, d); }
-        let other = base.feats.iter().filter(|f| f.0 != own).map(|f| chunk_dist(&f.1, b, d + 6.0)).fold(f64::MAX, f64::min);
-        (!(d > 14.0 && other < d - 5.0), d)
+        if d > 37.0 * lab { return (false, d, 0.0); }
+        let other = base.feats.iter().filter(|f| f.0 != own).map(|f| chunk_dist(&f.1, b, d.max(30.0) + 6.0)).fold(f64::MAX, f64::min);
+        (!(d > 14.0 && other < d - 5.0), d, other)
     };
     // like Placer::place, with the attribution judged on the real ink: tiers 0 to 3 are kept, 4 reads as another
     // feature's, 5 and 6 are on a hard obstacle or off the plot
@@ -1199,9 +1391,10 @@ pub fn build(p: &Params) -> (String, Report) {
                     let (tier, cost) = if t >= 5 {
                         (t, cost)
                     } else {
-                        let (ok, d) = attrib(&jb.own, real_box(&c, w, n, &text));
+                        let (ok, d, other) = attrib(&jb.own, real_box(&c, w, n, &text));
                         let sx = chunk_hits(&pl.soft, b);
-                        if ok { ((if d > 12.0 { 2 } else { 0 }) + u8::from(sx > 0), d + 3.0 * sx as f64) } else { (4, d) }
+                        // among the places that read as the feature's own, prefer those with no other feature close by
+                        if ok { ((if d > 12.0 { 2 } else { 0 }) + u8::from(sx > 0), d + 3.0 * sx as f64 - 0.35 * other.min(30.0)) } else { (4, d) }
                     };
                     let key = (tier, cost, phase, vi, ci);
                     if best.as_ref().is_none_or(|x| key.partial_cmp(&x.0) == Some(std::cmp::Ordering::Less)) { best = Some((key, vi, c, b)); }
@@ -1213,25 +1406,82 @@ pub fn build(p: &Params) -> (String, Report) {
         pl.boxes.push(b);
         (vi, c, (k.0, k.1, chunk_hits(&pl.soft, b)))
     };
-    type Run = (Vec<(usize, Cand)>, Vec<u8>, (usize, usize, usize, usize, f64));
+    // A last resort for a name that has no room beside its feature: a place within reach of the feature (a marker, or
+    // a point on a curve), clear of every stroke and label, joined to it by a thin leader line that crosses no label
+    // and as few strokes as possible. The leader names the feature, so the label need not be the nearest thing to it.
+    let leader_for = |pl: &Placer, jb: &Job| -> Option<(Cand, Bx, (Pt, Pt))> {
+        let (pts, gap) = jb.lead.as_ref()?;
+        let (w, n) = (text_w(&jb.variants[0].concat(), fs_lab), 1usize);
+        let mut best: Option<(f64, Cand, Bx, (Pt, Pt))> = None;
+        let stride = (pts.len() / 6).max(1);
+        for (pi, anchor) in pts.iter().enumerate().filter(|(i, _)| i % stride == 0) {
+            for g in [24.0, 30.0, 38.0, 46.0, 56.0, 68.0, 82.0, 98.0, 116.0] {
+                let g = g * lab;
+                for a in 0..32 {
+                    let th = a as f64 * std::f64::consts::PI / 16.0;
+                    let (cs, sn) = (th.cos(), th.sin());
+                    let (qx, qy) = (anchor.0 + g * cs, anchor.1 + g * sn);
+                    let align = if cs > 0.38 { "start" } else if cs < -0.38 { "end" } else { "middle" };
+                    let base_y = if sn > 0.38 { qy + 0.86 * fs_lab } else if sn < -0.38 { qy - 0.3 * fs_lab } else { qy + 0.28 * fs_lab };
+                    let c: Cand = (qx, align, base_y);
+                    let b = ink(&c, w, fs_lab, lh, n);
+                    let sc = pl.score(&jb.own, b);
+                    if sc.0 >= 5 { continue; }
+                    // the leader runs from the feature's rim to the padded box
+                    let pb = pad(b, 3.0);
+                    let tgt = (anchor.0.clamp(pb.0, pb.1), anchor.1.clamp(pb.2, pb.3));
+                    let (dx, dy) = (tgt.0 - anchor.0, tgt.1 - anchor.1);
+                    let len = dx.hypot(dy);
+                    if len < gap + 7.0 { continue; }
+                    let from = (anchor.0 + dx / len * gap, anchor.1 + dy / len * gap);
+                    let small = |o: &Bx| o.1 - o.0 < 11.0 && o.3 - o.2 < 11.0;
+                    let inside = |o: &Bx| anchor.0 >= o.0 && anchor.0 <= o.1 && anchor.1 >= o.2 && anchor.1 <= o.3;
+                    if pl.boxes.iter().filter(|o| !inside(o) && !small(o)).any(|o| seg_hits(from, tgt, pad(*o, 1.5))) { continue; }
+                    let marker_hits = pl.boxes.iter().filter(|o| !inside(o) && small(o)).filter(|o| seg_hits(from, tgt, pad(**o, 1.5))).count();
+                    let crossings = pl.hard.iter().filter(|(cb, _)| hits(*cb, (from.0.min(tgt.0) - 1.0, from.0.max(tgt.0) + 1.0, from.1.min(tgt.1) - 1.0, from.1.max(tgt.1) + 1.0))).flat_map(|(_, segs)| segs.iter()).filter(|sg| seg_cross(from, tgt, sg.0, sg.1)).count();
+                    let cost = 60.0 * (crossings + 2 * marker_hits) as f64 + len + 8.0 * chunk_hits(&pl.soft, b) as f64 + 4.0 * pi as f64;
+                    if best.as_ref().is_none_or(|x| cost < x.0) { best = Some((cost, c, b, (from, tgt))); }
+                }
+            }
+        }
+        best.map(|x| (x.1, x.2, x.3))
+    };
+    type Run = (Vec<(usize, Cand)>, Vec<u8>, (usize, usize, usize, usize, f64), Vec<Option<(Pt, Pt)>>);
     let run = |order: &[usize]| -> Run {
         let mut pl = base.clone();
         let mut out = vec![(0usize, (0.0, "start", 0.0)); jobs.len()];
         let mut tiers = vec![0u8; jobs.len()];
+        let mut leaders: Vec<Option<(Pt, Pt)>> = vec![None; jobs.len()];
         let mut score = (0, 0, 0, 0, 0.0);
         for &j in order {
             let jb = &jobs[j];
-            let (vi, c, (tier, cost, sx)) = place2(&mut pl, jb);
+            let (vi, c, (mut tier, mut cost, sx)) = place2(&mut pl, jb);
+            let mut c = c;
+            if tier >= 4 {
+                // a label that is dropped takes no room from the ones after it
+                pl.boxes.pop();
+                if jb.lead.is_some() {
+                    let lf = leader_for(&pl, jb);
+                    if let Some((lc, lb, seg)) = lf {
+                        pl.boxes.push(lb);
+                        pl.hard.extend(chunks(&[seg.0, seg.1]));
+                        c = lc;
+                        tier = 1;
+                        cost = 50.0;
+                        leaders[j] = Some(seg);
+                    }
+                }
+            }
             if tier >= 5 { score.0 += 1; } else if tier == 4 { score.1 += 1; } else if tier >= 2 { score.2 += 1; }
             score.3 += sx;
             score.4 += cost;
             tiers[j] = tier;
-            out[j] = (vi, c);
+            out[j] = (if leaders[j].is_some() { 0 } else { vi }, c);
         }
-        (out, tiers, score)
+        (out, tiers, score, leaders)
     };
     let mut ord: Vec<usize> = (0..nb).collect();
-    let (mut best_out, mut tiers, mut best) = run(&ord);
+    let (mut best_out, mut tiers, mut best, mut best_leaders) = run(&ord);
     let mut best_tiers = tiers.clone();
     let mut promoted: Vec<usize> = Vec::new();
     while best.0 + best.1 + best.2 > 0 && promoted.len() < 6 {
@@ -1241,11 +1491,12 @@ pub fn build(p: &Params) -> (String, Report) {
         promoted.push(j);
         ord.retain(|x| *x != j);
         ord.insert(0, j);
-        let (out, tr, sc) = run(&ord);
+        let (out, tr, sc, ld) = run(&ord);
         tiers = tr;
         if (sc.0, sc.1, sc.2, sc.3) < (best.0, best.1, best.2, best.3) || ((sc.0, sc.1, sc.2, sc.3) == (best.0, best.1, best.2, best.3) && sc.4 < best.4 - 1e-9) {
             best = sc;
             best_out = out;
+            best_leaders = ld;
             best_tiers = tiers.clone();
         }
     }
@@ -1262,19 +1513,53 @@ pub fn build(p: &Params) -> (String, Report) {
         }
     };
     for j in 0..nb { keep_box(j, &jobs[j], &best_out[j], best_tiers[j], &mut kept, &mut final_boxes, &mut notes); }
+    // the leader lines of the labels that needed one are strokes for everything placed after
+    let mut leader_lines: Vec<(String, (Pt, Pt))> = (0..nb).filter(|j| kept[*j]).filter_map(|j| best_leaders[j].map(|sg| (jobs[j].own.clone(), sg))).collect();
+    let mut hard_after = base.hard.clone();
+    for (_, sg) in &leader_lines { hard_after.extend(chunks(&[sg.0, sg.1])); }
     // the readings' labels, with everything above as an obstacle and their guides as soft ones
     if nb < jobs.len() {
         let mut pl = base.clone();
         pl.boxes = final_boxes.clone();
+        pl.hard = hard_after.clone();
         pl.soft.extend(soft_ans);
         for j in nb..jobs.len() {
             let jb = &jobs[j];
-            let (vi, c, (tier, _, _)) = place2(&mut pl, jb);
+            let (vi, c, (mut tier, _, _)) = place2(&mut pl, jb);
+            let (mut vi, mut c) = (vi, c);
+            if tier >= 4 {
+                pl.boxes.pop();
+                if let Some((lc, lb, seg)) = leader_for(&pl, jb) {
+                    pl.boxes.push(lb);
+                    pl.hard.extend(chunks(&[seg.0, seg.1]));
+                    (vi, c, tier) = (0, lc, 1);
+                    leader_lines.push((jb.own.clone(), seg));
+                }
+            }
             best_out[j] = (vi, c);
             keep_box(j, jb, &best_out[j], tier, &mut kept, &mut final_boxes, &mut notes);
         }
     }
-    for ri in 0..3 { put_region(ri, &mut final_boxes, &mut reg_labels, &mut notes, &base.hard, &base.soft); }
+    // a label of a single point (a marker or a crossing) that ended up some way from it is joined to it by a thin
+    // leader line, so it is never read as the name of a nearer feature
+    for j in 0..jobs.len() {
+        let jb = &jobs[j];
+        if !kept[j] || leader_lines.iter().any(|l| l.0 == jb.own) { continue; }
+        let Some((pts, gap)) = jb.lead.as_ref() else { continue };
+        let (vi, c) = &best_out[j];
+        let w = jb.variants[*vi].iter().map(|l| text_w(l, fs_lab)).fold(0.0, f64::max);
+        let b = ink(c, w, fs_lab, lh, jb.variants[*vi].len());
+        let bd = |q: &Pt| (q.0 - q.0.clamp(b.0, b.1)).hypot(q.1 - q.1.clamp(b.2, b.3));
+        let Some(a) = pts.iter().copied().min_by(|x, y| bd(x).total_cmp(&bd(y))) else { continue };
+        let d = bd(&a);
+        if d <= 11.0 { continue; }
+        let tgt = (a.0.clamp(b.0, b.1), a.1.clamp(b.2, b.3));
+        let from = (a.0 + (tgt.0 - a.0) / d * gap, a.1 + (tgt.1 - a.1) / d * gap);
+        if final_boxes.iter().any(|o| *o != b && !(a.0 >= o.0 && a.0 <= o.1 && a.1 >= o.2 && a.1 <= o.3) && seg_hits(from, tgt, pad(*o, 1.0))) { continue; }
+        leader_lines.push((jb.own.clone(), (from, tgt)));
+        hard_after.extend(chunks(&[from, tgt]));
+    }
+    for ri in 0..3 { put_region(ri, &mut final_boxes, &mut reg_labels, &mut notes, &hard_after, &base.soft, &mut reg_leads); }
     // the heating arrows sit between the changes, clear of every label
     let mut arrows: Vec<Vec<Pt>> = Vec::new();
     for &(x0, x1, y) in &arrow_spans {
@@ -1291,7 +1576,8 @@ pub fn build(p: &Params) -> (String, Report) {
     }
 
     // ---- the working under the plot
-    let ro_lines = readout(&st, &an, ans, u);
+    let placed: Vec<&str> = jobs.iter().zip(&kept).filter(|x| *x.1).map(|x| x.0.own.as_str()).chain(reg_labels.iter().map(|r| r.0.as_str())).collect();
+    let ro_lines = readout(&st, &an, ans, u, &tags, &placed);
     let mut wrapped: Vec<String> = Vec::new();
     for line in &ro_lines { wrapped.extend(wrap_ro(line, fs_ro, (w - 40.0) * if line.contains('\u{2192}') { 0.9 } else { 0.97 })); }
     let ro_lh = 1.45 * fs_ro;
@@ -1382,6 +1668,9 @@ pub fn build(p: &Params) -> (String, Report) {
         let (tx, ty) = (4.0 + 0.84 * fs_t, (top + bottom) / 2.0);
         d.raw(&format!(r##"<text x="{tx:.2}" y="{ty:.2}" font-size="{fs_t:.2}" text-anchor="middle" font-family="{FONT}" fill="{ink_c}" transform="rotate(-90 {tx:.2} {ty:.2})" data-o="axis">{}</text>"##, esc(y_title)));
     }
+    for (feat, sg) in leader_lines.iter().chain(reg_leads.iter()) {
+        d.raw(&format!(r##"<path d="{}" fill="none" stroke="{ink_c}" stroke-width="1" stroke-linecap="round" data-o="leader" data-f="{feat}"/>"##, path_d(&[sg.0, sg.1])));
+    }
     let ngroups = ng + anns.len();
     for (gi, ((vi, c), jb)) in best_out.iter().zip(&jobs).enumerate() {
         if !kept[gi] { continue; }
@@ -1389,7 +1678,11 @@ pub fn build(p: &Params) -> (String, Report) {
             d.raw(&halo_el(c.0, c.2 + k as f64 * lh, fs_lab, c.1, jb.color, line, &jb.own, gi));
         }
     }
-    for (ri, (feat, _, lines, c)) in reg_labels.iter().enumerate() {
+    for (ri, (feat, _, lines, c, rot)) in reg_labels.iter().enumerate() {
+        if *rot {
+            d.raw(&halo_turned(c.0, c.2, fs_lab, lab_c, &lines.concat(), feat, ngroups + ri));
+            continue;
+        }
         for (k, line) in lines.iter().enumerate() {
             d.raw(&halo_el(c.0, c.2 + k as f64 * lh, fs_lab, c.1, lab_c, line, feat, ngroups + ri));
         }
@@ -1427,7 +1720,7 @@ fn describe(st: &Setup, an: &Analysis, ans: bool) -> String {
 
 /// The working (key) or the blank lines (student copy) under the plot. Each result is read from the curves at the
 /// printed givens and rounded once.
-fn readout(st: &Setup, an: &Analysis, ans: bool, u: &str) -> Vec<String> {
+fn readout(st: &Setup, an: &Analysis, ans: bool, u: &str, tags: &[(&'static str, &'static str, usize)], placed: &[&str]) -> Vec<String> {
     let sub = st.sub;
     let off = st.off;
     let dec = st.dec;
@@ -1466,13 +1759,17 @@ fn readout(st: &Setup, an: &Analysis, ans: bool, u: &str) -> Vec<String> {
                     v.push(format!("{} = {tm}; {} = {tv} {rounded}.", nm("melting"), nl("boiling")));
                 }
                 HCase::AtCritical => {
-                    let tm = tr(steps[0].t);
-                    v.push(format!("Heating along the isobar at {ps} atm, which is the critical pressure: solid \u{2192} liquid at {tm}; the line then passes through the critical point ({} {u}), where the liquid becomes a supercritical fluid with no boiling and no phase change.", gfmt(g.tc)));
+                    let (tm, mw) = (tr(steps[0].t), steps[0].to.word());
+                    v.push(format!("Heating along the isobar at {ps} atm, which is the critical pressure: solid \u{2192} {mw} at {tm}; the line then passes through the critical point ({} {u}), where the liquid becomes a supercritical fluid with no boiling and no phase change.", gfmt(g.tc)));
                     v.push(format!("{} = {tm} {rounded}. There is no boiling point at this pressure.", nm("melting")));
                 }
                 HCase::Above => {
-                    let tm = tr(steps[0].t);
-                    v.push(format!("Heating along the isobar at {ps} atm: solid \u{2192} liquid at {tm}. {ps} atm is above the critical pressure ({} atm), so the liquid does not boil: above the critical temperature ({} {u}) it becomes a supercritical fluid gradually, without a phase change.", gfmt(g.pc), gfmt(g.tc)));
+                    let (tm, mw) = (tr(steps[0].t), steps[0].to.word());
+                    if steps[0].to == Phase::Super {
+                        v.push(format!("Heating along the isobar at {ps} atm: solid \u{2192} supercritical fluid at {tm}. The melting curve has passed the critical temperature ({} {u}) here, so the solid melts straight into the supercritical fluid, with no liquid and no boiling.", gfmt(g.tc)));
+                    } else {
+                        v.push(format!("Heating along the isobar at {ps} atm: solid \u{2192} {mw} at {tm}. {ps} atm is above the critical pressure ({} atm), so the liquid does not boil: above the critical temperature ({} {u}) it becomes a supercritical fluid gradually, without a phase change.", gfmt(g.pc), gfmt(g.tc)));
+                    }
                     v.push(format!("{} = {tm} {rounded}. There is no boiling point at this pressure.", nm("melting")));
                 }
             }
@@ -1483,16 +1780,17 @@ fn readout(st: &Setup, an: &Analysis, ans: bool, u: &str) -> Vec<String> {
         if !ans {
             v.push(format!("Isotherm at T = {ts} {u}: the phase changes as the pressure increases, and the pressure of each = {BLANK}"));
         } else if let Some((cs, outside)) = &an.along {
-            let real: Vec<&Cross> = cs.iter().filter(|c| matches!(c.curve, Curve::Sub | Curve::Melt | Curve::Vap)).collect();
+            let real: Vec<&Cross> = cs.iter().filter(|c| matches!(c.curve, Curve::Sub | Curve::Melt | Curve::Vap | Curve::Triple)).collect();
             let mut line = format!("Raising the pressure along the isotherm at {ts} {u}: ");
             if real.is_empty() {
                 line.push_str("no phase boundary is crossed in the diagram.");
             } else {
-                let parts: Vec<String> = real.iter().map(|c| format!("{} \u{2192} {} at about {} atm ({})", c.from.word(), c.to.word(), pread(c.p), match (c.from, c.to) { (Phase::Gas, Phase::Liquid) => "condensation", (Phase::Gas, Phase::Solid) => "deposition", (Phase::Liquid, Phase::Solid) => "freezing", (Phase::Solid, Phase::Liquid) => "melting", (Phase::Liquid, Phase::Gas) => "boiling", _ => "sublimation" })).collect();
+                let parts: Vec<String> = real.iter().map(|c| format!("{} \u{2192} {} at about {} atm ({})", c.from.word(), c.to.word(), pread(c.p), if c.curve == Curve::Triple { "the triple point, where the isotherm passes through it" } else { match (c.from, c.to) { (Phase::Gas, Phase::Liquid) => "condensation", (Phase::Gas, Phase::Solid) => "deposition", (Phase::Liquid | Phase::Super, Phase::Solid) => "freezing", (Phase::Solid, Phase::Liquid | Phase::Super) => "melting", (Phase::Liquid, Phase::Gas) => "boiling", _ => "sublimation" } })).collect();
                 line.push_str(&parts.join(", then "));
                 line.push('.');
             }
-            if tk >= sub.tc { line.push_str(&format!(" Above the critical temperature ({} {u}) the gas never condenses; at pressures above {} atm it is a supercritical fluid (a gradual change, not a phase change).", gfmt(g.tc), gfmt(g.pc))); }
+            if eq(tk, sub.tc) { line.push_str(&format!(" This is the critical temperature ({} {u}): the gas never condenses, and at the critical pressure ({} atm) the liquid and the gas become one fluid, above it a supercritical fluid (a gradual change, not a phase change).", gfmt(g.tc), gfmt(g.pc))); }
+            else if tk > sub.tc { line.push_str(&format!(" Above the critical temperature ({} {u}) the gas never condenses; at pressures above {} atm it is a supercritical fluid (a gradual change, not a phase change).", gfmt(g.tc), gfmt(g.pc))); }
             if *outside { line.push_str(" Crossings outside the pressure range drawn are not listed."); }
             v.push(line);
         }
@@ -1505,7 +1803,21 @@ fn readout(st: &Setup, an: &Analysis, ans: bool, u: &str) -> Vec<String> {
         let head = format!("Phase at {} (T = {} {u}, P = {} atm) = ", LETTERS[q.i], gfmt(q.t_u), gfmt(q.p));
         v.push(if ans { format!("{head}{}", wh.text()) } else { format!("{head}{BLANK}") });
     }
-    v.push("Schematic diagram: the curves are drawn through the data, not measured, so temperatures and pressures read from it are rounded.".into());
+    if !tags.is_empty() {
+        if ans {
+            let names: Vec<String> = tags.iter().map(|t| format!("{}. {}{}", t.2, t.1, if placed.contains(&t.0) { "" } else { " (not marked on the diagram)" })).collect();
+            v.push(format!("Numbered labels on the student copy: {}.", names.join("; ")));
+        } else {
+            v.push("Name each numbered label on the diagram:".into());
+            for t in tags { v.push(format!("{}. {BLANK}{}", t.2, if placed.contains(&t.0) { "" } else { " (this label could not be marked on the diagram)" })); }
+        }
+    }
+    // neutral wording: the student copy must not name a curve
+    v.push(if matches!(sub.melt, Melt::Schematic) {
+        "Schematic diagram: the curves are drawn through the data, not measured, and the one that rises nearly straight up leans far more than a real one so that its slope can be seen. Temperatures and pressures read from it are rounded.".to_string()
+    } else {
+        "Schematic diagram: the curves are drawn through the data, not measured, except the one that rises nearly straight up, which is the measured curve and stays almost vertical at every pressure drawn. Temperatures and pressures read from it are rounded.".to_string()
+    });
     v
 }
 
