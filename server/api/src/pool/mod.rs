@@ -21,6 +21,7 @@ pub mod circles;
 pub mod circlecommit;
 pub mod circlehide;
 pub mod circlesendmeta;
+pub mod circlesendprep;
 pub mod circlesendsql;
 pub mod circlesql;
 pub mod chain;

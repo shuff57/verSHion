@@ -32,6 +32,8 @@ pub struct SendMeta {
     pub confirm: bool,
     /// A new bank that hides its keys from viewers from its first version (POST only).
     pub hide_key: bool,
+    /// The strip decisions for viewers (used when the bank hides its keys).
+    pub decisions: super::circlehide::StripDecisions,
 }
 
 fn bad(field: &str) -> PoolError {
@@ -108,6 +110,7 @@ pub fn read_send_meta(m: &Map<String, Value>, is_new: bool) -> Result<SendMeta, 
         merged_from: m.get("merged_from").and_then(Value::as_i64),
         confirm: m.get("confirm_large_change") == Some(&Value::Bool(true)),
         hide_key: m.get("hide_key") == Some(&Value::Bool(true)),
+        decisions: super::circlehide::read_strip_decisions(m)?,
     })
 }
 
