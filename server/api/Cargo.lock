@@ -457,6 +457,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hkdf"
+version = "0.12.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b5f8eb2ad728638ea2c7d47a21db23b7b58a72ed6a38256b8a1849f15fbbdf7"
+dependencies = [
+ "hmac",
+]
+
+[[package]]
 name = "hmac"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1759,10 +1768,13 @@ name = "vershion-api"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "getrandom 0.2.17",
+ "hkdf",
  "hmac",
  "http-body-util",
  "reqwest",
  "rusqlite",
+ "serde",
  "serde_json",
  "sha2",
  "share-core",
@@ -1771,6 +1783,8 @@ dependencies = [
  "tower",
  "tracing",
  "tracing-subscriber",
+ "unicode-general-category",
+ "unicode-normalization",
 ]
 
 [[package]]

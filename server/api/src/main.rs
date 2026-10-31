@@ -2,6 +2,7 @@
 //!
 //! Configuration is environment variables only (see `config.rs`); secrets are never read from argv or logged.
 mod ai;
+mod auth;
 mod billing;
 mod blobs;
 mod body;

@@ -12,12 +12,18 @@ share-core = { path = "../share-core" }
 axum = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }
 rusqlite = { version = "0.37", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json"] }
 hmac = "0.12"
 sha2 = "0.10"
+hkdf = "0.12"
+getrandom = "0.2"
+# Pinned like share-core: the character rules depend on these tables.
+unicode-normalization = "=0.1.25"
+unicode-general-category = "=1.1.0"
 
 [dev-dependencies]
 tempfile = "3"
