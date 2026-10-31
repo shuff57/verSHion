@@ -77,4 +77,5 @@ Open for phase 0: which mail path to keep (SMTP or Resend), and whether the web 
 - 2026-10-31 phase 1 slice 1: `ai/credits.rs` (service prices, call budgets, UTC day and week). 
 - 2026-10-31 phase 1 slice 2: `ai/store.rs` (usage and cost, credit ledger, sessions, refunds; start_session is one immediate transaction). 
 - 2026-10-31 phase 1 slice 3: job rows and prune in `ai/store.rs` (owner-only reads, status constraint, retention). 
-- 2026-10-31 phase 1 slice 4: `ai/request.rs` (data-URI checks, message parsing with the Worker's sentences, image and message caps, max_tokens and temperature clamps, error envelope). Next: the OpenRouter client (`callOpenRouter`, `shapeReply`, retry), then the relay handler and auth/quota checks.
+- 2026-10-31 phase 1 slice 4: `ai/request.rs` (data-URI checks, message parsing with the Worker's sentences, image and message caps, max_tokens and temperature clamps, error envelope). 
+- 2026-10-31 phase 1 slice 5: `ai/upstream.rs` (OpenRouter call logic behind a `Transport` trait, reply shaping, retry: primary once, then the fallback model twice, or the primary again with none). The real HTTP transport (reqwest + rustls) is not written yet. Next: the HTTP transport, then the relay handler with auth and quota checks.

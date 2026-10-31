@@ -2,3 +2,4 @@
 pub mod credits;
 pub mod store;
 pub mod request;
+pub mod upstream;
