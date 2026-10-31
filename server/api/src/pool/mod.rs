@@ -6,6 +6,7 @@ pub mod bizdays;
 pub mod blobs;
 pub mod chain;
 pub mod ctx;
+pub mod fingerprint;
 pub mod image;
 pub mod jsonscan;
 pub mod license;
