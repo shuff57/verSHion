@@ -168,6 +168,8 @@ pub fn render(env: &MailEnv, m: &MailMessage) -> (String, String) {
             format!("Your account has been suspended and signed out everywhere.\n\n{reason}\n\nReply to this mail to contact the site owner."),
         ),
         MailKind::AccountRestored => ("Your verSHion account is restored", "Your account's suspension has ended. You can sign in again.".into()),
+        // Handled by the router (they need the database and go to the admins), never rendered for a person.
+        MailKind::NewApplication | MailKind::AdminAlert => ("", String::new()),
         MailKind::DeviceEnrol => (
             "Add the verSHion app on your other devices",
             format!("To sign in to the verSHion app on another device (even while sign-ins are being blocked because of failed attempts), open this link on that device within 15 minutes and enter your password:\n\n{}\n\nThe link works once. If you did not just reset your password or confirm your address, ignore this mail.", env.link("/account/enrol", token)),

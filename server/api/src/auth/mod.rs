@@ -17,6 +17,7 @@ pub mod mail;
 pub mod maintenance;
 pub mod notices;
 pub mod password;
+pub mod router;
 pub mod session;
 pub mod signup;
 pub mod smtp;

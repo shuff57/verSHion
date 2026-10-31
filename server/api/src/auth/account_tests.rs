@@ -3,6 +3,7 @@ use super::*;
 use crate::auth::config::AuthConfig;
 use crate::auth::crypto::{derive_keys, sha256};
 use crate::auth::device::issue_sudo;
+use crate::auth::mail::Outbox;
 use crate::auth::password::{Argon2Params, hash_password, params_json};
 use crate::auth::session::login;
 use crate::db;
@@ -134,7 +135,7 @@ fn delete_needs_the_password_tombstones_the_account_and_ends_everything() {
         ))
         .unwrap();
     let h = hdrs(&[("authorization", &bearer(&at))]);
-    assert_eq!(code(delete_account(&w.ctx(), &h, &native(), &obj(json!({ "password": "wrong-password-here" })), &nothing)), (401, "invalid_credentials".into()));
+    assert_eq!(code(delete_account(&w.ctx(), &h, &native(), &obj(json!({ "password": "wrong-password-here" })), &nothing, &mut Outbox::new())), (401, "invalid_credentials".into()));
     assert_eq!(w.count("SELECT COUNT(*) FROM users WHERE deleted_at IS NULL"), 1);
     let called = std::cell::Cell::new(0);
     let hook = |_: &Transaction, uid: &str, _: i64| -> rusqlite::Result<()> {
@@ -142,7 +143,7 @@ fn delete_needs_the_password_tombstones_the_account_and_ends_everything() {
         called.set(called.get() + 1);
         Ok(())
     };
-    let r = delete_account(&w.ctx(), &h, &native(), &obj(json!({ "password": PW })), &hook).unwrap();
+    let r = delete_account(&w.ctx(), &h, &native(), &obj(json!({ "password": PW })), &hook, &mut Outbox::new()).unwrap();
     assert_eq!(r.status(), 204);
     assert_eq!(called.get(), 1);
     assert_eq!(w.count("SELECT COUNT(*) FROM users WHERE email IS NULL AND pw_hash IS NULL AND display_name IS NULL AND profile IS NULL AND deleted_at IS NOT NULL AND deleted_email_hmac IS NOT NULL"), 1);
@@ -151,7 +152,7 @@ fn delete_needs_the_password_tombstones_the_account_and_ends_everything() {
     assert_eq!(w.count("SELECT COUNT(*) FROM auth_audit WHERE action = 'account_deleted' AND prev_trust = 'pending'"), 1);
     assert_eq!(w.count("SELECT COUNT(*) FROM rate_limits WHERE key LIKE 'a:%'"), 0, "the account's counters go with it");
     assert_eq!(code(me(&w.ctx(), &h)).0, 401, "the old access token is dead");
-    assert_eq!(code(delete_account(&w.ctx(), &h, &native(), &obj(json!({ "password": PW })), &nothing)).0, 401);
+    assert_eq!(code(delete_account(&w.ctx(), &h, &native(), &obj(json!({ "password": PW })), &nothing, &mut Outbox::new())).0, 401);
 }
 
 #[test]
@@ -159,7 +160,7 @@ fn a_failing_cleanup_hook_rolls_the_whole_deletion_back() {
     let w = world();
     let (_, at, _) = w.user("a@x.org", "pending");
     let boom = |_: &Transaction, _: &str, _: i64| -> rusqlite::Result<()> { Err(rusqlite::Error::InvalidQuery) };
-    assert_eq!(code(delete_account(&w.ctx(), &hdrs(&[("authorization", &bearer(&at))]), &native(), &obj(json!({ "password": PW })), &boom)).0, 500);
+    assert_eq!(code(delete_account(&w.ctx(), &hdrs(&[("authorization", &bearer(&at))]), &native(), &obj(json!({ "password": PW })), &boom, &mut Outbox::new())).0, 500);
     assert_eq!(w.count("SELECT COUNT(*) FROM users WHERE deleted_at IS NULL AND email = 'a@x.org'"), 1);
     assert_eq!(w.count("SELECT COUNT(*) FROM sessions WHERE revoked_at IS NULL"), 1);
 }
@@ -170,16 +171,18 @@ fn the_last_admin_cannot_delete_themselves_and_an_admin_needs_a_device_and_sudo(
     let (id, at, dev) = w.user("root@x.org", "admin");
     let auth = bearer(&at);
     let body = obj(json!({ "password": PW }));
-    assert_eq!(code(delete_account(&w.ctx(), &hdrs(&[("authorization", &auth)]), &native(), &body, &nothing)), (403, "known_device_required".into()));
-    assert_eq!(code(delete_account(&w.ctx(), &hdrs(&[("authorization", &auth), ("x-device-token", &dev)]), &native(), &body, &nothing)), (403, "sudo_required".into()));
+    assert_eq!(code(delete_account(&w.ctx(), &hdrs(&[("authorization", &auth)]), &native(), &body, &nothing, &mut Outbox::new())), (403, "known_device_required".into()));
+    assert_eq!(code(delete_account(&w.ctx(), &hdrs(&[("authorization", &auth), ("x-device-token", &dev)]), &native(), &body, &nothing, &mut Outbox::new())), (403, "sudo_required".into()));
     let fam: String = w.db.lock().unwrap().query_row("SELECT family_id FROM sessions", [], |r| r.get(0)).unwrap();
     let (sudo, _) = issue_sudo(&w.keys, &Principal { user_id: id.clone(), session_family: fam, trust: "admin".into() }, 0, T0);
     let full = hdrs(&[("authorization", &auth), ("x-device-token", &dev), ("x-sudo-token", &sudo)]);
-    assert_eq!(code(delete_account(&w.ctx(), &full, &native(), &body, &nothing)), (409, "last_admin".into()));
+    assert_eq!(code(delete_account(&w.ctx(), &full, &native(), &body, &nothing, &mut Outbox::new())), (409, "last_admin".into()));
     assert_eq!(w.count("SELECT COUNT(*) FROM users WHERE deleted_at IS NULL"), 1);
     // With a second active admin the first can go.
     w.db.lock().unwrap().execute("INSERT INTO users (id, email, email_verified_at, trust, created_at) VALUES ('other', 'o@x.org', 1, 'admin', 1)", []).unwrap();
-    assert_eq!(delete_account(&w.ctx(), &full, &native(), &body, &nothing).unwrap().status(), 204);
+    let mut out = Outbox::new();
+    assert_eq!(delete_account(&w.ctx(), &full, &native(), &body, &nothing, &mut out).unwrap().status(), 204);
+    assert!(out.iter().any(|m| m.kind == crate::auth::mail::MailKind::AdminAlert && m.reason.as_deref() == Some("admin_account_deleted")), "deleting an admin account alerts the others");
     let _ = sha256("");
 }
 
@@ -190,7 +193,7 @@ fn deletion_attempts_are_limited_per_account() {
     let h = hdrs(&[("authorization", &bearer(&at))]);
     let mut stopped = false;
     for _ in 0..8 {
-        stopped |= delete_account(&w.ctx(), &h, &native(), &obj(json!({ "password": "wrong-password-here" })), &nothing).is_err_and(|e| e.status == 429);
+        stopped |= delete_account(&w.ctx(), &h, &native(), &obj(json!({ "password": "wrong-password-here" })), &nothing, &mut Outbox::new()).is_err_and(|e| e.status == 429);
     }
     assert!(stopped, "five an hour");
 }

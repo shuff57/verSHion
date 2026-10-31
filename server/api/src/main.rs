@@ -27,8 +27,23 @@ pub fn router() -> Router {
 }
 
 /// Everything the server serves so far: its own health check and the AI relay.
-fn app(ai: Arc<AiState<HttpTransport>>, billing: Arc<BillingState<HttpStripe>>) -> Router {
-    router().merge(ai::routes::router(ai)).merge(billing::router(billing))
+fn app(ai: Arc<AiState<HttpTransport>>, billing: Arc<BillingState<HttpStripe>>, auth: Option<Arc<auth::router::AuthState>>) -> Router {
+    let r = router().merge(ai::routes::router(ai)).merge(billing::router(billing));
+    match auth {
+        Some(a) => r.merge(auth::router::router(a)),
+        None => r,
+    }
+}
+
+/// The auth routes, when `AUTH_SECRET` is valid. Mail settings come from the process environment (SMTP_*, MAIL_*).
+fn auth_state(cfg: &config::Config, conn: rusqlite::Connection) -> Option<Arc<auth::router::AuthState>> {
+    let secret = cfg.auth_secret.as_ref()?;
+    let a = auth::config::AuthConfig::new(secret, cfg.allowed_origins.clone()).map_err(|e| tracing::error!("{e}")).ok()?;
+    let mail = auth::smtp::MailEnv::from_lookup(|k| std::env::var(k).ok()).map_err(|e| tracing::error!("mail: {e}")).ok()?;
+    if !mail.smtp && !mail.log_mode {
+        tracing::warn!("SMTP is not configured: confirmation and reset mail cannot be sent");
+    }
+    Some(Arc::new(auth::router::AuthState::new(conn, a, mail)))
 }
 
 /// Who is signed in: the pool's sessions when `AUTH_SECRET` is valid, otherwise nobody (only the relay key and the
@@ -78,6 +93,7 @@ async fn main() {
         tracing::warn!("STRIPE_WEBHOOK_SECRET is not set: /billing/webhook answers 503");
     }
     let billing = Arc::new(billing_state(&cfg, db::open(&cfg.db).expect("open the billing connection")));
+    let auth = auth_state(&cfg, db::open(&cfg.db).expect("open the auth connection"));
     let job_ttl_ms = cfg.job_ttl_ms;
     let ai_auth = authenticator(&cfg);
     let state = Arc::new(AiState {
@@ -109,7 +125,7 @@ async fn main() {
 
     let listener = tokio::net::TcpListener::bind(&cfg.listen).await.expect("bind");
     tracing::info!(addr = %cfg.listen, "listening");
-    axum::serve(listener, app(state, billing))
+    axum::serve(listener, app(state, billing, auth))
         .with_graceful_shutdown(async {
             let _ = tokio::signal::ctrl_c().await;
         })
@@ -167,16 +183,16 @@ mod tests {
             spawn: tokio_spawn(),
         });
         let get = |p: &str| Request::get(p).body(Body::empty()).unwrap();
-        let ai_health = app(state.clone(), billing.clone()).oneshot(get("/ai/health")).await.unwrap();
+        let ai_health = app(state.clone(), billing.clone(), None).oneshot(get("/ai/health")).await.unwrap();
         let body: Value = serde_json::from_slice(&ai_health.into_body().collect().await.unwrap().to_bytes()).unwrap();
         assert_eq!(body, json!({ "ok": true, "model": null, "ai": false, "upstream": "openrouter" }));
-        assert_eq!(app(state.clone(), billing.clone()).oneshot(get("/health")).await.unwrap().status(), 200);
-        let credits = app(state.clone(), billing.clone()).oneshot(get("/ai/credits")).await.unwrap();
+        assert_eq!(app(state.clone(), billing.clone(), None).oneshot(get("/health")).await.unwrap().status(), 200);
+        let credits = app(state.clone(), billing.clone(), None).oneshot(get("/ai/credits")).await.unwrap();
         let body: Value = serde_json::from_slice(&credits.into_body().collect().await.unwrap().to_bytes()).unwrap();
         assert_eq!(body["unlimited"], true, "the keyless native app is not on credits");
         // Billing is off by default: buying is a 404, and the webhook says it is not configured.
-        assert_eq!(app(state.clone(), billing.clone()).oneshot(get("/billing/packs")).await.unwrap().status(), 404);
+        assert_eq!(app(state.clone(), billing.clone(), None).oneshot(get("/billing/packs")).await.unwrap().status(), 404);
         let hook = Request::post("/billing/webhook").body(Body::empty()).unwrap();
-        assert_eq!(app(state, billing).oneshot(hook).await.unwrap().status(), 503);
+        assert_eq!(app(state, billing, None).oneshot(hook).await.unwrap().status(), 503);
     }
 }

@@ -8,6 +8,7 @@ use super::crypto::{hmac, uuid_v4};
 use super::device::sudo_valid;
 use super::guard::{self, acct_prefix};
 use super::http::{ClientInfo, ClientMode, HttpError, clear_cookie, empty, json};
+use super::mail::{MailMessage, Outbox};
 use super::password::verify_password;
 use super::session::{Ctx, Principal, read_password, require_principal, valid_device};
 use axum::http::HeaderMap;
@@ -157,7 +158,7 @@ fn deletion_guard(c: &Ctx, h: &HeaderMap, client: &ClientInfo, p: &Principal, id
 /// The pool's cleanup of the author's content runs inside the deletion transaction, once the account is certainly gone.
 pub type OnDelete<'a> = &'a dyn Fn(&Transaction, &str, i64) -> rusqlite::Result<()>;
 
-pub fn delete_account(c: &Ctx, h: &HeaderMap, client: &ClientInfo, body: &Map<String, Value>, on_delete: OnDelete) -> Result<Response, HttpError> {
+pub fn delete_account(c: &Ctx, h: &HeaderMap, client: &ClientInfo, body: &Map<String, Value>, on_delete: OnDelete, out: &mut Outbox) -> Result<Response, HttpError> {
     let p = require_principal(c, h)?;
     let password = read_password(body, "password")?;
     let ip = guard::client_ip(h)?;
@@ -234,6 +235,9 @@ pub fn delete_account(c: &Ctx, h: &HeaderMap, client: &ClientInfo, body: &Map<St
     on_delete(&tx, &id, now).map_err(dberr)?;
     tx.commit().map_err(dberr)?;
     tracing::info!(user = id.as_str(), "auth: account deleted");
+    if is_admin_level(&trust) {
+        out.push(MailMessage::alert("admin_account_deleted", &id, &id, None, now));
+    }
     Ok(if client.mode == ClientMode::Web { empty(204, &[("Set-Cookie", &clear_cookie(&c.cfg.cookie_name))]) } else { empty(204, &[]) })
 }
 

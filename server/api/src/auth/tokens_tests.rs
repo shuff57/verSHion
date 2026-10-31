@@ -108,8 +108,9 @@ async fn verify_with_a_password_activates_the_account_opens_an_approval_and_make
     assert!(b["device_token"].as_str().unwrap().starts_with("v1."));
     assert_eq!(w.count("SELECT COUNT(*) FROM users WHERE trust = 'pending' AND email_verified_at IS NOT NULL AND display_name = 'Real Owner' AND device_epoch = 1"), 1);
     assert_eq!(w.count("SELECT COUNT(*) FROM approval_requests WHERE email_domain = 'x.org' AND display_name_snapshot = 'Real Owner'"), 1);
-    assert_eq!(out.len(), 1);
-    assert_eq!(out[0].kind, MailKind::DeviceEnrol);
+    assert_eq!(out.len(), 2);
+    assert_eq!(out[0].kind, MailKind::NewApplication, "the admins hear about it exactly once");
+    assert_eq!(out[1].kind, MailKind::DeviceEnrol);
     let phc: String = w.db.lock().unwrap().query_row("SELECT pw_hash FROM users", [], |r| r.get(0)).unwrap();
     assert!(crate::auth::password::verify_password(&phc, NEW_PW) && !crate::auth::password::verify_password(&phc, PW), "the pre-confirmation password is gone");
     assert_eq!(w.count("SELECT COUNT(*) FROM email_tokens WHERE used_at IS NULL"), 0);

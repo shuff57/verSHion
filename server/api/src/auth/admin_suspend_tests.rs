@@ -114,10 +114,10 @@ fn any_admin_can_cancel_an_open_proposal_and_the_list_shows_it() {
     let pid = super::super::admin::tests::body_of(r)["proposal_id"].as_str().unwrap().to_string();
     let list = super::super::admin::tests::body_of(proposals(&w.ctx(), &a.read_only, &native()).unwrap());
     assert_eq!((list["proposals"][0]["id"].as_str(), list["proposals"][0]["outcome"].clone()), (Some(pid.as_str()), Value::Null));
-    assert_eq!(cancel(&w.ctx(), &b.full, &native(), &obj(json!({ "proposal_id": pid }))).unwrap().status(), 200, "even the target may cancel");
+    assert_eq!(cancel(&w.ctx(), &b.full, &native(), &obj(json!({ "proposal_id": pid })), &mut Outbox::new()).unwrap().status(), 200, "even the target may cancel");
     assert_eq!(w.count("SELECT COUNT(*) FROM admin_proposals WHERE outcome = 'cancelled'"), 1);
     assert_eq!(w.count("SELECT COUNT(*) FROM auth_audit WHERE action = 'suspend_proposal_cancelled'"), 1);
-    assert_eq!(code(cancel(&w.ctx(), &b.full, &native(), &obj(json!({ "proposal_id": pid })))), (409, "no_open_proposal".into()));
+    assert_eq!(code(cancel(&w.ctx(), &b.full, &native(), &obj(json!({ "proposal_id": pid })), &mut Outbox::new())), (409, "no_open_proposal".into()));
     assert!(do_suspend(&w, &a.full, &b.id).is_ok(), "a cancelled proposal frees the target for a new one");
     let _ = hdrs;
 }

@@ -224,6 +224,7 @@ pub fn verify(c: &Ctx, h: &HeaderMap, client: &ClientInfo, body: &Map<String, Va
             return Ok(res);
         }
         tracing::info!(user = user_id.as_str(), "auth: activated");
+        out.push(MailMessage::new(MailKind::NewApplication, &user_id));
         // The mailbox owner just set the password: the epoch bump re-keyed every failure counter, this becomes a known
         // device, and an enrolment code is mailed for the owner's other devices (the native app).
         let Some(epoch) = epoch else { return Ok(res) };
@@ -299,6 +300,7 @@ pub fn reset(c: &Ctx, h: &HeaderMap, client: &ClientInfo, body: &Map<String, Val
         tracing::info!(user = user_id.as_str(), "auth: password reset");
         if activated {
             tracing::info!(user = user_id.as_str(), "auth: activated");
+            out.push(MailMessage::new(MailKind::NewApplication, &user_id));
         }
         out.push(MailMessage::new(MailKind::PasswordChanged, &email));
         // Completing a reset proves control of the mailbox, so it restores login even during a lockdown: the epoch
