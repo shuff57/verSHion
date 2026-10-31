@@ -1,0 +1,3704 @@
+{
+ "folds": [
+  "Straße",
+  "ΟΔΟΣ",
+  "Café Crème",
+  "ＦＵＬＬ width",
+  "ǅ",
+  "İstanbul",
+  "éclair",
+  "ﬁne",
+  "Ångström",
+  "ʻokina",
+  "αβγς",
+  "x​y",
+  "",
+  "Hello  World"
+ ],
+ "foldOut": [
+  "strasse",
+  "οδοσ",
+  "cafe creme",
+  "full width",
+  "dz",
+  "istanbul",
+  "eclair",
+  "fine",
+  "angstrom",
+  "ʻokina",
+  "αβγσ",
+  "x​y",
+  "",
+  "hello  world"
+ ],
+ "chains": {
+  "n0": [],
+  "n1": [
+   {
+    "author_name": "A1",
+    "item_id": "item1",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   }
+  ],
+  "n9": [
+   {
+    "author_name": "A1",
+    "item_id": "item1",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A2",
+    "item_id": "item2",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A3",
+    "item_id": "item3",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A4",
+    "item_id": "item4",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A5",
+    "item_id": "item5",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A6",
+    "item_id": "item6",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A7",
+    "item_id": "item7",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A8",
+    "item_id": "item8",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A9",
+    "item_id": "item9",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   }
+  ],
+  "n33": [
+   {
+    "author_name": "A1",
+    "item_id": "item1",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A2",
+    "item_id": "item2",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A3",
+    "item_id": "item3",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A4",
+    "item_id": "item4",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A5",
+    "item_id": "item5",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A6",
+    "item_id": "item6",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A7",
+    "item_id": "item7",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A8",
+    "item_id": "item8",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A9",
+    "item_id": "item9",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A10",
+    "item_id": "item10",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A11",
+    "item_id": "item11",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A12",
+    "item_id": "item12",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A13",
+    "item_id": "item13",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A14",
+    "item_id": "item14",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A15",
+    "item_id": "item15",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A16",
+    "item_id": "item16",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A17",
+    "item_id": "item17",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A18",
+    "item_id": "item18",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A19",
+    "item_id": "item19",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A20",
+    "item_id": "item20",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A21",
+    "item_id": "item21",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A22",
+    "item_id": "item22",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A23",
+    "item_id": "item23",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A24",
+    "item_id": "item24",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A25",
+    "item_id": "item25",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A26",
+    "item_id": "item26",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A27",
+    "item_id": "item27",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A28",
+    "item_id": "item28",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A29",
+    "item_id": "item29",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A30",
+    "item_id": "item30",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A31",
+    "item_id": "item31",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A32",
+    "item_id": "item32",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A33",
+    "item_id": "item33",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   }
+  ],
+  "n34": [
+   {
+    "author_name": "A1",
+    "item_id": "item1",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A2",
+    "item_id": "item2",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A3",
+    "item_id": "item3",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A4",
+    "item_id": "item4",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A5",
+    "item_id": "item5",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A6",
+    "item_id": "item6",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A7",
+    "item_id": "item7",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A8",
+    "item_id": "item8",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A9",
+    "item_id": "item9",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A10",
+    "item_id": "item10",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A11",
+    "item_id": "item11",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A12",
+    "item_id": "item12",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A13",
+    "item_id": "item13",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A14",
+    "item_id": "item14",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A15",
+    "item_id": "item15",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A16",
+    "item_id": "item16",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A17",
+    "item_id": "item17",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A18",
+    "item_id": "item18",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A19",
+    "item_id": "item19",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A20",
+    "item_id": "item20",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A21",
+    "item_id": "item21",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A22",
+    "item_id": "item22",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A23",
+    "item_id": "item23",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A24",
+    "item_id": "item24",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A25",
+    "item_id": "item25",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A26",
+    "item_id": "item26",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A27",
+    "item_id": "item27",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A28",
+    "item_id": "item28",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A29",
+    "item_id": "item29",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A30",
+    "item_id": "item30",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A31",
+    "item_id": "item31",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A32",
+    "item_id": "item32",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A33",
+    "item_id": "item33",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A34",
+    "item_id": "item34",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   }
+  ],
+  "n40": [
+   {
+    "author_name": "A1",
+    "item_id": "item1",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A2",
+    "item_id": "item2",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A3",
+    "item_id": "item3",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A4",
+    "item_id": "item4",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A5",
+    "item_id": "item5",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A6",
+    "item_id": "item6",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A7",
+    "item_id": "item7",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A8",
+    "item_id": "item8",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A9",
+    "item_id": "item9",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A10",
+    "item_id": "item10",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A11",
+    "item_id": "item11",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A12",
+    "item_id": "item12",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A13",
+    "item_id": "item13",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A14",
+    "item_id": "item14",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A15",
+    "item_id": "item15",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A16",
+    "item_id": "item16",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A17",
+    "item_id": "item17",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A18",
+    "item_id": "item18",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A19",
+    "item_id": "item19",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A20",
+    "item_id": "item20",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A21",
+    "item_id": "item21",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A22",
+    "item_id": "item22",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A23",
+    "item_id": "item23",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A24",
+    "item_id": "item24",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A25",
+    "item_id": "item25",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A26",
+    "item_id": "item26",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A27",
+    "item_id": "item27",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A28",
+    "item_id": "item28",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A29",
+    "item_id": "item29",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A30",
+    "item_id": "item30",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A31",
+    "item_id": "item31",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A32",
+    "item_id": "item32",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A33",
+    "item_id": "item33",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A34",
+    "item_id": "item34",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A35",
+    "item_id": "item35",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A36",
+    "item_id": "item36",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A37",
+    "item_id": "item37",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A38",
+    "item_id": "item38",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A39",
+    "item_id": "item39",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A40",
+    "item_id": "item40",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   }
+  ],
+  "n100": [
+   {
+    "author_name": "A1",
+    "item_id": "item1",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A2",
+    "item_id": "item2",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A3",
+    "item_id": "item3",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A4",
+    "item_id": "item4",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A5",
+    "item_id": "item5",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A6",
+    "item_id": "item6",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A7",
+    "item_id": "item7",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A8",
+    "item_id": "item8",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A9",
+    "item_id": "item9",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A10",
+    "item_id": "item10",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A11",
+    "item_id": "item11",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A12",
+    "item_id": "item12",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A13",
+    "item_id": "item13",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A14",
+    "item_id": "item14",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A15",
+    "item_id": "item15",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A16",
+    "item_id": "item16",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A17",
+    "item_id": "item17",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A18",
+    "item_id": "item18",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A19",
+    "item_id": "item19",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A20",
+    "item_id": "item20",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A21",
+    "item_id": "item21",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A22",
+    "item_id": "item22",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A23",
+    "item_id": "item23",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A24",
+    "item_id": "item24",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A25",
+    "item_id": "item25",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A26",
+    "item_id": "item26",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A27",
+    "item_id": "item27",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A28",
+    "item_id": "item28",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A29",
+    "item_id": "item29",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A30",
+    "item_id": "item30",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A31",
+    "item_id": "item31",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A32",
+    "item_id": "item32",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A33",
+    "item_id": "item33",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A34",
+    "item_id": "item34",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A35",
+    "item_id": "item35",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A36",
+    "item_id": "item36",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A37",
+    "item_id": "item37",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A38",
+    "item_id": "item38",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A39",
+    "item_id": "item39",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A40",
+    "item_id": "item40",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A41",
+    "item_id": "item41",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A42",
+    "item_id": "item42",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A43",
+    "item_id": "item43",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A44",
+    "item_id": "item44",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A45",
+    "item_id": "item45",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A46",
+    "item_id": "item46",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A47",
+    "item_id": "item47",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A48",
+    "item_id": "item48",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A49",
+    "item_id": "item49",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A50",
+    "item_id": "item50",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A51",
+    "item_id": "item51",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A52",
+    "item_id": "item52",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A53",
+    "item_id": "item53",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A54",
+    "item_id": "item54",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A55",
+    "item_id": "item55",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A56",
+    "item_id": "item56",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A57",
+    "item_id": "item57",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A58",
+    "item_id": "item58",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A59",
+    "item_id": "item59",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A60",
+    "item_id": "item60",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A61",
+    "item_id": "item61",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A62",
+    "item_id": "item62",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A63",
+    "item_id": "item63",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A64",
+    "item_id": "item64",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A65",
+    "item_id": "item65",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A66",
+    "item_id": "item66",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A67",
+    "item_id": "item67",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A68",
+    "item_id": "item68",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A69",
+    "item_id": "item69",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A70",
+    "item_id": "item70",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A71",
+    "item_id": "item71",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A72",
+    "item_id": "item72",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A73",
+    "item_id": "item73",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A74",
+    "item_id": "item74",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A75",
+    "item_id": "item75",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A76",
+    "item_id": "item76",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A77",
+    "item_id": "item77",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A78",
+    "item_id": "item78",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A79",
+    "item_id": "item79",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A80",
+    "item_id": "item80",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A81",
+    "item_id": "item81",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A82",
+    "item_id": "item82",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A83",
+    "item_id": "item83",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A84",
+    "item_id": "item84",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A85",
+    "item_id": "item85",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A86",
+    "item_id": "item86",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A87",
+    "item_id": "item87",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A88",
+    "item_id": "item88",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A89",
+    "item_id": "item89",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A90",
+    "item_id": "item90",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A91",
+    "item_id": "item91",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A92",
+    "item_id": "item92",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A93",
+    "item_id": "item93",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A94",
+    "item_id": "item94",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A95",
+    "item_id": "item95",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A96",
+    "item_id": "item96",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A97",
+    "item_id": "item97",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A98",
+    "item_id": "item98",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A99",
+    "item_id": "item99",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A100",
+    "item_id": "item100",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   }
+  ],
+  "placeholder": [
+   {
+    "author_name": "A1",
+    "item_id": "item1",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A2",
+    "item_id": "item2",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A3",
+    "item_id": "item3",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A4",
+    "item_id": "item4",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A5",
+    "item_id": "item5",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A6",
+    "item_id": "item6",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A7",
+    "item_id": "item7",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A8",
+    "item_id": "item8",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A9",
+    "item_id": "item9",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A10",
+    "item_id": "item10",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A11",
+    "item_id": "item11",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A12",
+    "item_id": "item12",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A13",
+    "item_id": "item13",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A14",
+    "item_id": "item14",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A15",
+    "item_id": "item15",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A16",
+    "item_id": "item16",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A17",
+    "item_id": "item17",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A18",
+    "item_id": "item18",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A19",
+    "item_id": "item19",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A20",
+    "item_id": "item20",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "and 7 contributors between",
+    "item_id": "",
+    "qid": "",
+    "version": 0,
+    "license": "",
+    "modified": true,
+    "collapsed_licenses": [
+     "CC-BY-NC-4.0"
+    ]
+   },
+   {
+    "author_name": "A22",
+    "item_id": "item22",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A23",
+    "item_id": "item23",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A24",
+    "item_id": "item24",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A25",
+    "item_id": "item25",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A26",
+    "item_id": "item26",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A27",
+    "item_id": "item27",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A28",
+    "item_id": "item28",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A29",
+    "item_id": "item29",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A30",
+    "item_id": "item30",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A31",
+    "item_id": "item31",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A32",
+    "item_id": "item32",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A33",
+    "item_id": "item33",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A34",
+    "item_id": "item34",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A35",
+    "item_id": "item35",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A36",
+    "item_id": "item36",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A37",
+    "item_id": "item37",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A38",
+    "item_id": "item38",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A39",
+    "item_id": "item39",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A40",
+    "item_id": "item40",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A41",
+    "item_id": "item41",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A42",
+    "item_id": "item42",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A43",
+    "item_id": "item43",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A44",
+    "item_id": "item44",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A45",
+    "item_id": "item45",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A46",
+    "item_id": "item46",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A47",
+    "item_id": "item47",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A48",
+    "item_id": "item48",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A49",
+    "item_id": "item49",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A50",
+    "item_id": "item50",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   }
+  ]
+ },
+ "collapsed": {
+  "n0": [],
+  "n1": [
+   {
+    "author_name": "A1",
+    "item_id": "item1",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   }
+  ],
+  "n9": [
+   {
+    "author_name": "A1",
+    "item_id": "item1",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A2",
+    "item_id": "item2",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A3",
+    "item_id": "item3",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A4",
+    "item_id": "item4",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A5",
+    "item_id": "item5",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A6",
+    "item_id": "item6",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A7",
+    "item_id": "item7",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A8",
+    "item_id": "item8",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A9",
+    "item_id": "item9",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   }
+  ],
+  "n33": [
+   {
+    "author_name": "A1",
+    "item_id": "item1",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A2",
+    "item_id": "item2",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A3",
+    "item_id": "item3",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A4",
+    "item_id": "item4",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A5",
+    "item_id": "item5",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A6",
+    "item_id": "item6",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A7",
+    "item_id": "item7",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A8",
+    "item_id": "item8",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A9",
+    "item_id": "item9",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A10",
+    "item_id": "item10",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A11",
+    "item_id": "item11",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A12",
+    "item_id": "item12",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A13",
+    "item_id": "item13",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A14",
+    "item_id": "item14",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A15",
+    "item_id": "item15",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A16",
+    "item_id": "item16",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A17",
+    "item_id": "item17",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A18",
+    "item_id": "item18",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A19",
+    "item_id": "item19",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A20",
+    "item_id": "item20",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A21",
+    "item_id": "item21",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A22",
+    "item_id": "item22",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A23",
+    "item_id": "item23",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A24",
+    "item_id": "item24",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A25",
+    "item_id": "item25",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A26",
+    "item_id": "item26",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A27",
+    "item_id": "item27",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A28",
+    "item_id": "item28",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A29",
+    "item_id": "item29",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A30",
+    "item_id": "item30",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A31",
+    "item_id": "item31",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A32",
+    "item_id": "item32",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A33",
+    "item_id": "item33",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   }
+  ],
+  "n34": [
+   {
+    "author_name": "A1",
+    "item_id": "item1",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A2",
+    "item_id": "item2",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A3",
+    "item_id": "item3",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A4",
+    "item_id": "item4",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A5",
+    "item_id": "item5",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A6",
+    "item_id": "item6",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A7",
+    "item_id": "item7",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A8",
+    "item_id": "item8",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "and 2 contributors between",
+    "item_id": "",
+    "qid": "",
+    "version": 0,
+    "license": "",
+    "modified": true,
+    "collapsed_licenses": [
+     "CC-BY-SA-4.0",
+     "CC0-1.0"
+    ]
+   },
+   {
+    "author_name": "A11",
+    "item_id": "item11",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A12",
+    "item_id": "item12",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A13",
+    "item_id": "item13",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A14",
+    "item_id": "item14",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A15",
+    "item_id": "item15",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A16",
+    "item_id": "item16",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A17",
+    "item_id": "item17",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A18",
+    "item_id": "item18",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A19",
+    "item_id": "item19",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A20",
+    "item_id": "item20",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A21",
+    "item_id": "item21",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A22",
+    "item_id": "item22",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A23",
+    "item_id": "item23",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A24",
+    "item_id": "item24",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A25",
+    "item_id": "item25",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A26",
+    "item_id": "item26",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A27",
+    "item_id": "item27",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A28",
+    "item_id": "item28",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A29",
+    "item_id": "item29",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A30",
+    "item_id": "item30",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A31",
+    "item_id": "item31",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A32",
+    "item_id": "item32",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A33",
+    "item_id": "item33",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A34",
+    "item_id": "item34",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   }
+  ],
+  "n40": [
+   {
+    "author_name": "A1",
+    "item_id": "item1",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A2",
+    "item_id": "item2",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A3",
+    "item_id": "item3",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A4",
+    "item_id": "item4",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A5",
+    "item_id": "item5",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A6",
+    "item_id": "item6",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A7",
+    "item_id": "item7",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A8",
+    "item_id": "item8",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "and 8 contributors between",
+    "item_id": "",
+    "qid": "",
+    "version": 0,
+    "license": "",
+    "modified": true,
+    "collapsed_licenses": [
+     "CC-BY-4.0",
+     "CC-BY-SA-4.0",
+     "CC0-1.0"
+    ]
+   },
+   {
+    "author_name": "A17",
+    "item_id": "item17",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A18",
+    "item_id": "item18",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A19",
+    "item_id": "item19",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A20",
+    "item_id": "item20",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A21",
+    "item_id": "item21",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A22",
+    "item_id": "item22",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A23",
+    "item_id": "item23",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A24",
+    "item_id": "item24",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A25",
+    "item_id": "item25",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A26",
+    "item_id": "item26",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A27",
+    "item_id": "item27",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A28",
+    "item_id": "item28",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A29",
+    "item_id": "item29",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A30",
+    "item_id": "item30",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A31",
+    "item_id": "item31",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A32",
+    "item_id": "item32",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A33",
+    "item_id": "item33",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A34",
+    "item_id": "item34",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A35",
+    "item_id": "item35",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A36",
+    "item_id": "item36",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A37",
+    "item_id": "item37",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A38",
+    "item_id": "item38",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A39",
+    "item_id": "item39",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A40",
+    "item_id": "item40",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   }
+  ],
+  "n100": [
+   {
+    "author_name": "A1",
+    "item_id": "item1",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A2",
+    "item_id": "item2",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A3",
+    "item_id": "item3",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A4",
+    "item_id": "item4",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A5",
+    "item_id": "item5",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A6",
+    "item_id": "item6",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A7",
+    "item_id": "item7",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A8",
+    "item_id": "item8",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "and 68 contributors between",
+    "item_id": "",
+    "qid": "",
+    "version": 0,
+    "license": "",
+    "modified": true,
+    "collapsed_licenses": [
+     "CC-BY-4.0",
+     "CC-BY-SA-4.0",
+     "CC0-1.0"
+    ]
+   },
+   {
+    "author_name": "A77",
+    "item_id": "item77",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A78",
+    "item_id": "item78",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A79",
+    "item_id": "item79",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A80",
+    "item_id": "item80",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A81",
+    "item_id": "item81",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A82",
+    "item_id": "item82",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A83",
+    "item_id": "item83",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A84",
+    "item_id": "item84",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A85",
+    "item_id": "item85",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A86",
+    "item_id": "item86",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A87",
+    "item_id": "item87",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A88",
+    "item_id": "item88",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A89",
+    "item_id": "item89",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A90",
+    "item_id": "item90",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A91",
+    "item_id": "item91",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A92",
+    "item_id": "item92",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A93",
+    "item_id": "item93",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A94",
+    "item_id": "item94",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   },
+   {
+    "author_name": "A95",
+    "item_id": "item95",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A96",
+    "item_id": "item96",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A97",
+    "item_id": "item97",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": false
+   },
+   {
+    "author_name": "A98",
+    "item_id": "item98",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A99",
+    "item_id": "item99",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-SA-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A100",
+    "item_id": "item100",
+    "qid": "q",
+    "version": 1,
+    "license": "CC0-1.0",
+    "modified": true
+   }
+  ],
+  "placeholder": [
+   {
+    "author_name": "A1",
+    "item_id": "item1",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A2",
+    "item_id": "item2",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A3",
+    "item_id": "item3",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A4",
+    "item_id": "item4",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A5",
+    "item_id": "item5",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A6",
+    "item_id": "item6",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A7",
+    "item_id": "item7",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A8",
+    "item_id": "item8",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "and 24 contributors between",
+    "item_id": "",
+    "qid": "",
+    "version": 0,
+    "license": "",
+    "modified": true,
+    "collapsed_licenses": [
+     "CC-BY-4.0",
+     "CC-BY-NC-4.0"
+    ]
+   },
+   {
+    "author_name": "A27",
+    "item_id": "item27",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A28",
+    "item_id": "item28",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A29",
+    "item_id": "item29",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A30",
+    "item_id": "item30",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A31",
+    "item_id": "item31",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A32",
+    "item_id": "item32",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A33",
+    "item_id": "item33",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A34",
+    "item_id": "item34",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A35",
+    "item_id": "item35",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A36",
+    "item_id": "item36",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A37",
+    "item_id": "item37",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A38",
+    "item_id": "item38",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A39",
+    "item_id": "item39",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A40",
+    "item_id": "item40",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A41",
+    "item_id": "item41",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A42",
+    "item_id": "item42",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A43",
+    "item_id": "item43",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A44",
+    "item_id": "item44",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A45",
+    "item_id": "item45",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A46",
+    "item_id": "item46",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A47",
+    "item_id": "item47",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A48",
+    "item_id": "item48",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   },
+   {
+    "author_name": "A49",
+    "item_id": "item49",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": false
+   },
+   {
+    "author_name": "A50",
+    "item_id": "item50",
+    "qid": "q",
+    "version": 1,
+    "license": "CC-BY-4.0",
+    "modified": true
+   }
+  ]
+ },
+ "small": [
+  {
+   "author_name": "A1",
+   "item_id": "item1",
+   "qid": "q",
+   "version": 1,
+   "license": "CC0-1.0",
+   "modified": false
+  },
+  {
+   "author_name": "A2",
+   "item_id": "item2",
+   "qid": "q",
+   "version": 1,
+   "license": "CC-BY-4.0",
+   "modified": true
+  },
+  {
+   "author_name": "and 92 contributors between",
+   "item_id": "",
+   "qid": "",
+   "version": 0,
+   "license": "",
+   "modified": true,
+   "collapsed_licenses": [
+    "CC-BY-4.0",
+    "CC-BY-SA-4.0",
+    "CC0-1.0"
+   ]
+  },
+  {
+   "author_name": "A95",
+   "item_id": "item95",
+   "qid": "q",
+   "version": 1,
+   "license": "CC-BY-4.0",
+   "modified": false
+  },
+  {
+   "author_name": "A96",
+   "item_id": "item96",
+   "qid": "q",
+   "version": 1,
+   "license": "CC-BY-SA-4.0",
+   "modified": true
+  },
+  {
+   "author_name": "A97",
+   "item_id": "item97",
+   "qid": "q",
+   "version": 1,
+   "license": "CC0-1.0",
+   "modified": false
+  },
+  {
+   "author_name": "A98",
+   "item_id": "item98",
+   "qid": "q",
+   "version": 1,
+   "license": "CC-BY-4.0",
+   "modified": true
+  },
+  {
+   "author_name": "A99",
+   "item_id": "item99",
+   "qid": "q",
+   "version": 1,
+   "license": "CC-BY-SA-4.0",
+   "modified": false
+  },
+  {
+   "author_name": "A100",
+   "item_id": "item100",
+   "qid": "q",
+   "version": 1,
+   "license": "CC0-1.0",
+   "modified": true
+  }
+ ]
+}
