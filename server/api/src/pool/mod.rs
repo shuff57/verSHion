@@ -48,6 +48,7 @@ pub mod licensecheck;
 pub mod list;
 pub mod mine;
 pub mod modgc;
+pub mod modlineage;
 pub mod moderation;
 pub mod offer;
 pub mod publishdel;
