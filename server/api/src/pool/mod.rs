@@ -22,6 +22,7 @@ pub mod licensecheck;
 pub mod list;
 pub mod mine;
 pub mod poolio;
+pub mod privacynear;
 pub mod poolkeys;
 pub mod preread;
 pub mod qhash;
