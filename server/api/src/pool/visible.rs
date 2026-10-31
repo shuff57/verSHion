@@ -94,7 +94,7 @@ pub fn near_sql(s: &str, iq: &str) -> String {
 /// decide an evidence outcome others see.
 #[derive(Clone, Debug, Default)]
 pub struct OwnShown {
-    shown: HashSet<String>,
+    pub(super) shown: HashSet<String>,
 }
 
 impl OwnShown {

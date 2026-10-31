@@ -2,6 +2,7 @@
 //! stages. Built from the leaves up, so unused code is allowed until the routes land.
 #![allow(dead_code)]
 
+pub mod authctx;
 pub mod bizdays;
 pub mod blobs;
 pub mod chain;
