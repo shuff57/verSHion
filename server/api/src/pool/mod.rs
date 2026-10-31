@@ -6,6 +6,7 @@ pub mod authctx;
 pub mod bizdays;
 pub mod blobs;
 pub mod chain;
+pub mod core;
 pub mod ctx;
 pub mod evidence;
 pub mod fingerprint;
