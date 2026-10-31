@@ -18,6 +18,7 @@ pub mod itemview;
 pub mod jsonscan;
 pub mod license;
 pub mod licensecheck;
+pub mod list;
 pub mod mine;
 pub mod poolkeys;
 pub mod preread;
