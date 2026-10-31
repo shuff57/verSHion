@@ -29,7 +29,7 @@ fn rep_of(list: &[(&'static str, Value)]) -> Report { build(&with(list)).1 }
 fn key(list: &[(&'static str, Value)]) -> Report { let mut l = list.to_vec(); l.push(b(SHOW_ANSWERS, true)); rep_of(&l) }
 fn notes_of(list: &[(&'static str, Value)]) -> Vec<String> { warnings(&with(list)) }
 fn has(notes: &[String], what: &str) -> bool { notes.iter().any(|n| n.contains(what)) }
-fn layout_only(n: &[String]) -> bool { n.iter().all(|x| x.contains("could not be placed") || x.contains("lie almost on the axis")) }
+fn layout_only(n: &[String]) -> bool { n.iter().all(|x| x.contains("could not be placed") || x.contains("almost on the axis") || x.contains("is not written at the axis")) }
 
 const READ: &str = "Read a solubility";
 const CLASSIFY: &str = "Saturated, unsaturated or supersaturated";
@@ -355,9 +355,23 @@ fn audit(svg: &str, g: &mut Glyphs, lab: f64) -> Vec<String> {
         if d > 40.0 * lab { bad.push(format!("{name:?} is {d:.1} px from its {own} feature")); continue; }
         if own.starts_with("s_") {
             // a name with no leader line must be nearer its own curve than any other curve
-            let rival = curves.iter().filter(|o| *o != own).map(|o| (dist(o, *bx), o)).fold((f64::MAX, None), |a, (x, o)| if x < a.0 { (x, Some(o)) } else { a });
+            // (a name for two curves that lie together, "CO₂ / O₂", is as near each as the other)
+            let partners: Vec<&str> = if name.contains(" / ") { name.split(" / ").filter_map(|n| DATA.iter().find(|r| r.1 == n).map(|r| r.0)).collect() } else { Vec::new() };
+            let rival = curves.iter().filter(|o| *o != own && !partners.contains(&o.as_str())).map(|o| (dist(o, *bx), o)).fold((f64::MAX, None), |a, (x, o)| if x < a.0 { (x, Some(o)) } else { a });
             if d > rival.0 - 0.25 { bad.push(format!("{name:?} is {d:.1} px from its {own} curve but {:.1} px from {:?}, with no leader line", rival.0, rival.1)); }
             continue;
+        }
+        if own.starts_with("pt") {
+            // a point's letter with no leader line is nearer its own dot than any other dot or reading ring
+            let ring = |sh: &str| sh == "ocircle" || sh == "hex";
+            let d_own = gm.marks.iter().filter(|m| m.0 == *own && !ring(&m.1)).map(|m| pt_box(mark_centre(&m.2), *bx)).fold(f64::MAX, f64::min);
+            // (a mark within 7 px of the point's own dot is the same spot: two points drawn on one another share it)
+            let own_c: Vec<Pt> = gm.marks.iter().filter(|m| m.0 == *own && !ring(&m.1)).map(|m| mark_centre(&m.2)).collect();
+            let rival = gm.marks.iter().filter(|m| (m.0.starts_with("pt") || m.0.starts_with("rd")) && !(m.0 == *own && !ring(&m.1)) && !own_c.iter().any(|c| (c.0 - mark_centre(&m.2).0).hypot(c.1 - mark_centre(&m.2).1) <= 7.0)).map(|m| pt_box(mark_centre(&m.2), *bx)).fold(f64::MAX, f64::min);
+            if d_own + 0.25 > rival {
+                let which: Vec<String> = gm.marks.iter().filter(|m| (m.0.starts_with("pt") || m.0.starts_with("rd"))).map(|m| format!("{}:{}@{:.0},{:.0}", m.0, m.1, mark_centre(&m.2).0, mark_centre(&m.2).1)).collect();
+                bad.push(format!("{name:?} is {d_own:.1} px from its dot but {rival:.1} px from another mark, with no leader line: it is nearer another mark {which:?} label {:.0?}", bx));
+            }
         }
         let other = named.iter().filter(|o| *o != own).map(|o| (dist(o, *bx), o)).fold((f64::MAX, None), |a, (x, o)| if x < a.0 { (x, Some(o)) } else { a });
         if d > 15.0 && other.0 < d - 6.0 { bad.push(format!("{name:?} is {d:.1} px from its {own} feature but {:.1} px from {:?}", other.0, other.1)); }
@@ -922,13 +936,13 @@ fn print_is_grey_only_and_every_curve_has_its_own_dash_and_marker() {
             for d in &dashes { assert!(!guide.contains(d), "{d} is the guides' dash"); }
             // and each has its own marker shape at its data points
             let mut shape: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-            for m in g.marks.iter().filter(|m| !m.0.starts_with("pt")) { shape.entry(m.0.clone()).or_default().insert(m.1.clone()); }
+            for m in g.marks.iter().filter(|m| !m.0.starts_with("pt") && !m.0.starts_with("rd")) { shape.entry(m.0.clone()).or_default().insert(m.1.clone()); }
             assert_eq!(shape.len(), 10, "{shape:?}");
             assert!(shape.values().all(|v| v.len() == 1), "{shape:?}");
             let shapes: BTreeSet<&String> = shape.values().flatten().collect();
             assert_eq!(shapes.len(), 10, "{shape:?}");
             // each marker lies on its own curve
-            for m in g.marks.iter().filter(|m| !m.0.starts_with("pt")) {
+            for m in g.marks.iter().filter(|m| !m.0.starts_with("pt") && !m.0.starts_with("rd")) {
                 let c = curves.iter().find(|c| c.1 == m.0).unwrap();
                 let ctr = ((m.2 .0 + m.2 .1) / 2.0, (m.2 .2 + m.2 .3) / 2.0);
                 assert!(pt_poly(ctr, &c.2) < 1.6, "{} marker off its curve", m.0);
@@ -1195,7 +1209,7 @@ fn the_defaults_name_every_curve_and_a_dropped_label_is_reported() {
                 let p = with(&l);
                 let (svg, rep) = build(&p);
                 for r in DATA.iter() {
-                    let named = texts(&svg).iter().any(|t| t.kind == "label" && t.text == r.1);
+                    let named = texts(&svg).iter().any(|t| t.kind == "label" && (t.text == r.1 || t.text.split(" / ").any(|part| part == r.1)));
                     assert!(named || has(&rep.notes, "could not be placed"), "{size} {ans} {mode}: {} unnamed and no note: {:?}", r.1, rep.notes);
                 }
             }
@@ -1398,7 +1412,19 @@ fn solubility_pngs() {
     cases.push(("gas-cooled".into(), { let mut g = sub_params("CO₂"); g.extend([s("mode", CRYST), f("t1", 10.0), f("t2", 50.0), f("water", 1000.0)]); g }));
     cases.push(("mixed".into(), vec![s("mode", READ), b("s_co2", true), b("s_o2", true)]));
     for (i_, e) in examples(ID).unwrap().into_iter().enumerate() { cases.push((format!("ex{i_}"), e.params)); }
+    // fix round 2: the reported cases
+    cases.push(("r2classA".into(), vec![s("mode", CLASSIFY)]));
+    cases.push(("r2class3".into(), vec![s("mode", CLASSIFY), i("n_points", 3)]));
+    cases.push(("r2cryst6057".into(), { let mut g = all_on(); g.extend([s("mode", CRYST), f("t1", 60.0), f("t2", 57.0)]); g }));
+    cases.push(("r2cryst3030".into(), vec![s("mode", CRYST), f("t1", 30.0), f("t2", 30.0)]));
+    cases.push(("r2repeat".into(), vec![s("mode", CLASSIFY), i("n_points", 3), f("t1", 0.0), f("solute", 13.3), f("pb_t", 100.0), f("pb_m", 246.0), f("pc_t", 100.0), f("pc_m", 300.0)]));
+    cases.push(("r2repeatten".into(), { let mut g = all_on(); g.extend([s("mode", CLASSIFY), i("n_points", 3), f("t1", 0.0), f("solute", 13.3), f("pb_t", 100.0), f("pb_m", 246.0), f("pc_t", 100.0), f("pc_m", 300.0)]); g }));
+    cases.push(("r2cryst10095".into(), vec![s("mode", CRYST), f("t1", 100.0), f("t2", 95.0)]));
+    cases.push(("r2stack".into(), vec![s("mode", CLASSIFY), i("n_points", 3), f("t1", 40.0), f("solute", 63.0), f("pb_t", 40.0), f("pb_m", 64.0), f("pc_t", 40.0), f("pc_m", 65.0)]));
+    cases.push(("r2nacl".into(), { let mut g = sub_params("NaCl"); g.extend([b("s_kno3", true), b("s_nano3", true), b("s_kcl", true), b("s_kclo3", true), b("s_nh4cl", true), b("s_co2", true), b("s_o2", true), s("mode", CLASSIFY), i("n_points", 3), f("t1", 50.0), f("solute", 36.0), f("pb_t", 50.0), f("pb_m", 37.0), f("pc_t", 51.0), f("pc_m", 36.5)]); g }));
     for (tag, list) in cases {
+        let only = std::env::var("VERSHION_PNG_ONLY").ok();
+        if let Some(o) = &only { if !tag.starts_with(o.as_str()) { continue; } }
         for size in ["Small", "Medium", "Large"] {
             for (kind, extra) in [("key", vec![b(SHOW_ANSWERS, true)]), ("student", vec![b(SHOW_ANSWERS, false)]), ("print", vec![s("style", "Print")]), ("printstudent", vec![s("style", "Print"), b(SHOW_ANSWERS, false)])] {
                 if size != "Medium" && !(tag.ends_with("-ten") || tag == "cryst-six") { continue; }
@@ -1593,7 +1619,7 @@ fn crystallising_with_every_curve_on_keeps_the_temperature_leaders_clear_of_othe
                     assert!(bad.is_empty(), "{t1}->{t2} {size} {style} ans={ans}: {bad:?}");
                     let svg = svg_of(&l);
                     // the two temperatures are named at the foot of their guides, on the axis
-                    for t in ["T₁ = ", "T₂ = "] { assert!(texts(&svg).iter().any(|x| x.text.starts_with(t)), "{t1}->{t2}: no {t}"); }
+                    for t in ["T₁ = ", "T₂ = "] { assert!(texts(&svg).iter().any(|x| x.text.contains(t)), "{t1}->{t2}: no {t}"); }
                 }
             }
         }
@@ -1610,7 +1636,9 @@ fn the_audit_sees_a_leader_through_another_curves_marker_and_a_name_nearer_anoth
     let p2 = gm.marks.iter().find(|m| m.0 == "ptA").unwrap().2;
     let (x, y) = ((p2.0 + p2.1) / 2.0, (p2.2 + p2.3) / 2.0);
     let leader = format!(r##"<path d="M{x:.2},{y:.2} L{x:.2},{:.2}" fill="none" stroke="#444" stroke-width="1" data-o="leader" data-f="ptA"/>"##, y - 60.0);
-    let bad = svg.replace("</svg>", &format!("{leader}</svg>"));
+    // (the letter's own leader, if it has one, is taken out so that the hand-made one is the one judged)
+    let plain: String = svg.split('<').map(|p| if p.starts_with("path ") && p.contains(r#"data-o="leader""#) && p.contains(r#"data-f="ptA""#) { String::new() } else { format!("<{p}") }).collect::<Vec<_>>().join("").replacen('<', "", 1);
+    let bad = plain.replace("</svg>", &format!("{leader}</svg>"));
     let out = audit(&bad, &mut g, 1.0);
     assert!(out.iter().any(|m| m.contains("runs through") || m.contains("ends beside") || m.contains("ends ")), "{out:?}");
     // the KCl name moved under the cluster, nearer the NaCl curve
@@ -1657,3 +1685,251 @@ fn a_flat_curve_does_not_give_a_false_temperature() {
 
 
 
+
+// ---------------------------------------------------------------------------------------------
+// Fix round 2: the point letters, the values at the axes, the leaders, the gases that coincide
+// ---------------------------------------------------------------------------------------------
+
+/// The numbers written at the left axis (ticks and annotations): value, baseline, text, feature, font size.
+fn y_values(svg: &str) -> Vec<(f64, f64, String, String, f64)> {
+    texts(svg).into_iter().filter(|t| t.anchor == "end" && t.rot.is_none() && (t.kind == "axis" || t.feat.starts_with("ann:"))).filter_map(|t| {
+        let v: f64 = t.text.trim().parse().ok()?;
+        Some((v, t.y, t.text.clone(), t.feat.clone(), t.fs))
+    }).collect()
+}
+
+/// Every problem with the values at the axes of one render: a value written twice, a lower value drawn above a higher
+/// one, a value nudged by more than half a line from its mark with no line joining it to the mark, a value written at the
+/// bottom axis further from its mark than its own width with no line joining it.
+fn axis_problems(svg: &str, g: &mut Glyphs) -> Vec<String> {
+    let mut bad = Vec::new();
+    let mut v = y_values(svg);
+    let gm = geo(svg);
+    let anns: Vec<&(f64, f64, String, String, f64)> = v.iter().filter(|x| x.3.starts_with("ann:")).collect();
+    let ticks: Vec<&(f64, f64, String, String, f64)> = v.iter().filter(|x| !x.3.starts_with("ann:")).collect();
+    for (i, a) in anns.iter().enumerate() {
+        for c in &anns[i + 1..] { if a.2 == c.2 { bad.push(format!("{:?} is written twice at the axis", a.2)); } }
+        if ticks.iter().any(|t| t.2 == a.2) { bad.push(format!("{:?} is written as an annotation and as a tick", a.2)); }
+    }
+    for a in &anns {
+        let Some(tick) = gm.strokes.iter().find(|s| s.0 == "axis" && s.1 == a.3 && (s.2 .0 .1 - s.2 .1 .1).abs() < 0.01) else { bad.push(format!("{:?} has no mark on the axis", a.2)); continue };
+        let dy = a.1 - tick.2 .0 .1 - 0.36 * a.4;
+        let joined = gm.paths.iter().any(|p| p.0 == "leader" && p.1 == a.3);
+        if dy.abs() > 0.58 * a.4 && !joined { bad.push(format!("{:?} is {dy:.1} px from its mark with no line to it", a.2)); }
+    }
+    v.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
+    for w in v.windows(2) {
+        if w[1].0 > w[0].0 && w[1].1 > w[0].1 + 0.5 { bad.push(format!("{} is drawn below {}", w[1].2, w[0].2)); }
+    }
+    for t in texts(svg).iter().filter(|t| t.feat.starts_with("ann:") && t.anchor == "middle") {
+        let Some(ink) = g.ink(t) else { continue };
+        let joined = gm.paths.iter().any(|p| p.0 == "leader" && p.1 == t.feat);
+        for s in gm.strokes.iter().filter(|s| s.0 == "axis" && s.1 == t.feat && (s.2 .0 .0 - s.2 .1 .0).abs() < 0.01) {
+            let x = s.2 .0 .0;
+            if (x < ink.0 - 0.5 || x > ink.1 + 0.5) && !joined { bad.push(format!("{:?} does not sit at its tick (x {x:.1}, text {:.1}..{:.1}) and has no line to it", t.text, ink.0, ink.1)); }
+        }
+    }
+    bad
+}
+
+fn critic_axis_cases() -> Vec<(String, Vec<(&'static str, Value)>)> {
+    let mut v: Vec<(String, Vec<(&'static str, Value)>)> = Vec::new();
+    v.push(("classify 3 points".into(), vec![s("mode", CLASSIFY), i("n_points", 3)]));
+    let mut l = all_on();
+    l.extend([s("mode", CRYST), f("t1", 60.0), f("t2", 57.0), s("label_size", "Large")]);
+    v.push(("crystallise 60 57 large ten".into(), l));
+    v.push(("crystallise 30 30".into(), vec![s("mode", CRYST), f("t1", 30.0), f("t2", 30.0)]));
+    v.push(("classify repeated".into(), vec![s("mode", CLASSIFY), i("n_points", 3), f("t1", 0.0), f("solute", 13.3), f("pb_t", 100.0), f("pb_m", 246.0), f("pc_t", 100.0), f("pc_m", 300.0)]));
+    v.push(("crystallise 100 95".into(), vec![s("mode", CRYST), f("t1", 100.0), f("t2", 95.0)]));
+    v.push(("crystallise 60 57 large".into(), vec![s("mode", CRYST), f("t1", 60.0), f("t2", 57.0), s("label_size", "Large")]));
+    v
+}
+
+#[test]
+fn the_values_at_the_axes_are_in_order_written_once_and_joined_to_their_marks_in_the_reported_cases() {
+    let mut g = Glyphs::new();
+    for (name, mut l) in critic_axis_cases() {
+        l.push(b(SHOW_ANSWERS, true));
+        let svg = svg_of(&l);
+        let bad = axis_problems(&svg, &mut g);
+        assert!(bad.is_empty(), "{name}: {bad:?}");
+    }
+}
+
+#[test]
+fn the_values_at_the_axes_keep_order_and_are_written_once_over_two_thousand_cases() {
+    let mut g = Glyphs::new();
+    let mut n = 0;
+    let mut bad: Vec<String> = Vec::new();
+    for mut c in sweep_cases().into_iter().step_by(5) {
+        c.push(b(SHOW_ANSWERS, true));
+        let svg = svg_of(&c);
+        n += 1;
+        for x in axis_problems(&svg, &mut g) { bad.push(format!("{x} in {c:?}")); }
+    }
+    assert!(n >= 2000);
+    assert!(bad.is_empty(), "{} problems in {n} cases, first: {:#?}", bad.len(), &bad[..bad.len().min(6)]);
+}
+
+#[test]
+fn a_value_left_off_the_axis_for_lack_of_room_stays_in_the_working() {
+    // three points at one temperature crowd the axis: whatever is not written there is in the working text
+    let l = vec![s("mode", CLASSIFY), i("n_points", 3), f("t1", 40.0), f("solute", 63.0), f("pb_t", 40.0), f("pb_m", 64.0), f("pc_t", 40.0), f("pc_m", 65.0), b(SHOW_ANSWERS, true)];
+    let svg = svg_of(&l);
+    let rep = rep_of(&l);
+    let on_axis: Vec<String> = y_values(&svg).into_iter().map(|x| x.2).collect();
+    for v in ["63.0", "64.0", "65.0"] {
+        assert!(on_axis.iter().any(|t| t == v) || joined(&rep).contains(v), "{v} nowhere: {on_axis:?}");
+    }
+}
+
+/// Distance of a box to a point.
+fn mark_centre(b: &Bx) -> Pt { ((b.0 + b.1) / 2.0, (b.2 + b.3) / 2.0) }
+
+#[test]
+fn a_points_letter_sits_at_its_own_dot_and_the_keys_reading_circle_is_another_feature() {
+    let mut g = Glyphs::new();
+    let mut cases: Vec<(String, Vec<(&'static str, Value)>)> = Vec::new();
+    for size in ["Small", "Medium", "Large"] {
+        cases.push((format!("A alone {size}"), vec![s("mode", CLASSIFY), s("label_size", size)]));
+        cases.push((format!("three {size}"), vec![s("mode", CLASSIFY), s("label_size", size), i("n_points", 3)]));
+    }
+    for (name, mut l) in cases {
+        l.push(b(SHOW_ANSWERS, true));
+        let svg = svg_of(&l);
+        let gm = geo(&svg);
+        // the circle of the curve's reading is not the point's feature
+        assert!(gm.marks.iter().filter(|m| m.1 == "ocircle").all(|m| !m.0.starts_with("pt")), "{name}: the reading circle is filed under a point");
+        let bad = audit(&svg, &mut g, svg::label_factor(match name.rsplit(' ').next().unwrap() { "Large" => "Large", "Small" => "Small", _ => "Medium" }));
+        assert!(bad.is_empty(), "{name}: {bad:?}");
+        for t in texts(&svg).iter().filter(|t| t.kind == "label" && ["A", "B", "C"].contains(&t.text.as_str())) {
+            let own = format!("pt{}", t.text);
+            let ink = g.ink(t).unwrap();
+            let dot = gm.marks.iter().find(|m| m.0 == own && m.1 == "pt").unwrap();
+            let d_own = pt_box(mark_centre(&dot.2), ink);
+            let rival = gm.marks.iter().filter(|m| (m.1 == "pt" || m.1 == "ocircle" || m.1 == "ringx") && !(m.0 == own && m.1 == "pt")).map(|m| pt_box(mark_centre(&m.2), ink)).fold(f64::MAX, f64::min);
+            let led = gm.paths.iter().any(|p| p.0 == "leader" && p.1 == own);
+            assert!(led || d_own < rival, "{name}: {} is {d_own:.1} px from its dot and {rival:.1} from another mark, with no leader", t.text);
+        }
+    }
+}
+
+#[test]
+fn the_audit_catches_a_letter_nearer_another_marker_than_its_own() {
+    let mut g = Glyphs::new();
+    let svg = svg_of(&[s("mode", CLASSIFY), b(SHOW_ANSWERS, true), s("label_size", "Small")]);
+    assert!(audit(&svg, &mut g, 1.0).is_empty());
+    // move the letter A to sit just above the keys's open circle, away from the dot
+    let gm = geo(&svg);
+    let ring = gm.marks.iter().find(|m| m.1 == "ocircle" && (m.0.starts_with("pt") || m.0.starts_with("rd"))).expect("the key adds a reading circle");
+    let ts = texts(&svg);
+    let a = ts.iter().find(|t| t.kind == "label" && t.text == "A").unwrap().clone();
+    let c = mark_centre(&ring.2);
+    let from = format!(r#"x="{:.2}" y="{:.2}""#, a.x, a.y);
+    let to = format!(r#"x="{:.2}" y="{:.2}""#, c.0 - 3.0, c.1 - 7.0);
+    let moved = svg.replace(&from, &to).replace(r#"<path d="M"#, r#"<path d="M"#);
+    assert!(moved != svg, "the letter did not move");
+    // (a leader from the dot to the old place would excuse it: take any leader of the point out)
+    let moved: String = moved.split('<').map(|p| if p.starts_with("path ") && p.contains(r#"data-o="leader""#) && p.contains(r#"data-f="ptA""#) { String::new() } else { format!("<{p}") }).collect::<Vec<_>>().join("").replacen('<', "", 1);
+    let bad = audit(&moved, &mut g, 1.0);
+    assert!(bad.iter().any(|x| x.contains("nearer another mark")), "{bad:?}");
+}
+
+fn leader_len(svg: &str, feat: &str) -> Option<f64> {
+    let gm = geo(svg);
+    gm.paths.iter().find(|p| p.0 == "leader" && p.1 == feat).map(|p| p.2.windows(2).map(|w| (w[1].0 - w[0].0).hypot(w[1].1 - w[0].1)).sum())
+}
+
+#[test]
+fn a_letter_in_a_corner_gets_a_short_leader_and_stacked_points_do_not_share_one() {
+    let mut g = Glyphs::new();
+    // A at 0 deg C and 13.3 g: the corner of the graph, where every curve starts (the leader is capped at 150 px where a clear
+    // place exists, and the longest that is ever needed there is under 235 px, not the 280 it was)
+    for (sets, tag) in [(vec![], "six"), (all_on(), "ten")] {
+        for size in ["Small", "Medium", "Large"] {
+            for style in ["Colour", "Print"] {
+                let mut l = sets.clone();
+                l.extend([s("mode", CLASSIFY), i("n_points", 3), f("t1", 0.0), f("solute", 13.3), f("pb_t", 100.0), f("pb_m", 246.0), f("pc_t", 100.0), f("pc_m", 300.0), s("label_size", size), s("style", style), b(SHOW_ANSWERS, true)]);
+                let svg = svg_of(&l);
+                for f_ in ["ptA", "ptB", "ptC"] { if let Some(len) = leader_len(&svg, f_) { assert!(len <= 235.0, "{tag} {size} {style}: {f_}'s leader is {len:.0} px long"); } }
+                let bad = audit(&svg, &mut g, svg::label_factor(size));
+                assert!(bad.is_empty(), "{tag} {size} {style}: {bad:?}");
+            }
+        }
+    }
+    // three points one above another at 40 deg C
+    let l = vec![s("mode", CLASSIFY), i("n_points", 3), f("t1", 40.0), f("solute", 63.0), f("pb_t", 40.0), f("pb_m", 64.0), f("pc_t", 40.0), f("pc_m", 65.0), b(SHOW_ANSWERS, true)];
+    let svg = svg_of(&l);
+    let gm = geo(&svg);
+    let ends: Vec<(String, Pt)> = gm.paths.iter().filter(|p| p.0 == "leader" && p.1.starts_with("pt")).map(|p| (p.1.clone(), p.2[p.2.len() - 1])).collect();
+    for a in 0..ends.len() {
+        for c in a + 1..ends.len() {
+            let d = (ends[a].1 .0 - ends[c].1 .0).hypot(ends[a].1 .1 - ends[c].1 .1);
+            assert!(d >= 18.0, "the leaders of {} and {} end {d:.1} px apart", ends[a].0, ends[c].0);
+        }
+    }
+    for (f_, _) in &ends { assert!(leader_len(&svg, f_).unwrap() <= 150.0, "{f_} leader too long"); }
+    assert!(audit(&svg, &mut g, 1.0).is_empty(), "{:?}", audit(&svg, &mut g, 1.0));
+}
+
+#[test]
+fn in_print_the_keys_reading_mark_is_not_the_marker_of_any_curve() {
+    let mut l = all_on();
+    l.extend([s("mode", CLASSIFY), s("style", "Print"), b(SHOW_ANSWERS, true), f("t1", 40.0), f("solute", 90.0)]);
+    let svg = svg_of(&l);
+    let gm = geo(&svg);
+    let readings: Vec<&(String, String, Bx)> = gm.marks.iter().filter(|m| m.0.starts_with("rd")).collect();
+    assert!(!readings.is_empty(), "no reading mark in the key");
+    let curve_shapes: BTreeSet<&str> = SUBS.iter().map(|s| s.marker).collect();
+    for r in readings { assert!(!curve_shapes.contains(r.1.as_str()), "the reading mark is a {} like a curve's", r.1); }
+}
+
+#[test]
+fn gas_curves_that_coincide_are_named_together_and_the_caption_says_why() {
+    let mut g = Glyphs::new();
+    for size in ["Small", "Medium", "Large"] {
+        for mode in [READ, CLASSIFY, CRYST, TEMP] {
+            let mut l = all_on();
+            l.extend([s("label_size", size), s("mode", mode), i("n_points", 3), b(SHOW_ANSWERS, true)]);
+            let svg = svg_of(&l);
+            let ts = texts(&svg);
+            assert!(ts.iter().any(|t| t.kind == "label" && t.text == "CO₂ / O₂"), "{size} {mode}: no joint name: {:?}", ts.iter().filter(|t| t.kind == "label").map(|t| &t.text).collect::<Vec<_>>());
+            assert!(!ts.iter().any(|t| t.kind == "label" && (t.text == "CO₂" || t.text == "O₂")), "{size} {mode}: a gas named alone");
+            assert!(ts.iter().any(|t| t.kind == "note" && t.text.contains("almost on the axis")) || all_text(&svg).contains("almost on the axis"), "{size} {mode}: nothing on the figure says the gases lie on the axis");
+            let bad = audit(&svg, &mut g, svg::label_factor(size));
+            assert!(bad.is_empty(), "{size} {mode}: {bad:?}");
+        }
+    }
+    // the gases alone are drawn apart and named apart
+    let svg = svg_of(&[b("s_kno3", false), b("s_nano3", false), b("s_nacl", false), b("s_kcl", false), b("s_kclo3", false), b("s_nh4cl", false), b("s_co2", true), b("s_o2", true), s("substance", "CO₂")]);
+    let ts = texts(&svg);
+    assert!(ts.iter().any(|t| t.kind == "label" && t.text == "O₂") && !ts.iter().any(|t| t.text == "CO₂ / O₂"));
+}
+
+#[test]
+fn a_gas_in_the_temperature_question_is_a_gas_in_the_note() {
+    let mut l = sub_params("CO₂");
+    l.extend([s("mode", TEMP), f("solute", 50.0), f("water", 100.0)]);
+    let n = notes_of(&l);
+    assert!(n.iter().any(|x| x.contains("off the scale")), "{n:?}");
+    assert!(n.iter().all(|x| !x.contains("of solute")), "{n:?}");
+    assert!(n.iter().any(|x| x.contains("g of gas in")), "{n:?}");
+    // a salt is still a solute
+    let mut l = sub_params("KNO₃");
+    l.extend([s("mode", TEMP), f("solute", 99999.0), f("water", 100.0)]);
+    assert!(notes_of(&l).iter().any(|x| x.contains("of solute")), "{:?}", notes_of(&l));
+}
+
+
+
+#[test]
+fn points_drawn_on_one_another_share_a_spot_and_each_letter_is_still_placed() {
+    let names = ["s_kno3", "s_nano3", "s_nacl", "s_kcl", "s_kclo3", "s_nh4cl", "s_pbno32", "s_ce2so43", "s_co2", "s_o2"];
+    let on = ["s_nano3", "s_nacl", "s_kclo3", "s_o2"];
+    let mut l = vec![s("mode", CLASSIFY), s("style", "Colour"), s("label_size", "Small"), b(SHOW_ANSWERS, true), b("points", true), b("grid", true), f("t1", 75.0), f("water", 25.0), f("solute", 192.0), i("n_points", 2), f("pb_t", 59.0), f("pb_m", 59.0), f("pc_t", 84.0), f("pc_m", 41.0), i("dec", 2), s("substance", "O₂")];
+    for n in names { l.push(b(n, on.contains(&n))); }
+    let svg = svg_of(&l);
+    let mut g = Glyphs::new();
+    assert!(audit(&svg, &mut g, 1.0).is_empty(), "{:?}", audit(&svg, &mut g, 1.0));
+    assert!(!has(&notes_of(&l), "could not be placed"), "{:?}", notes_of(&l));
+}

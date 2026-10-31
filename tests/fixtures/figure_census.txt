@@ -336,5 +336,5 @@ reaction-rate-graph__defaults 0403d8ce939a47ee
 reaction-rate-graph__start 0403d8ce939a47ee
 phase-diagram__defaults fde1d0827017531c
 phase-diagram__start fde1d0827017531c
-solubility-curves__defaults c8bd68c8d353108f
-solubility-curves__start c8bd68c8d353108f
+solubility-curves__defaults 6dec754901f9f545
+solubility-curves__start 6dec754901f9f545
