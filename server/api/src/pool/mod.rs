@@ -9,6 +9,7 @@ pub mod blockplan;
 pub mod blocking;
 pub mod circleactivity;
 pub mod circlebankedit;
+pub mod circlebankstate;
 pub mod circlebanks;
 pub mod circlebase;
 pub mod circlecheck;
