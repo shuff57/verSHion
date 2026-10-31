@@ -19,6 +19,9 @@ pub struct Settings {
     pub ai_model: String,
     #[serde(default)]
     pub ai_base: String, // custom OpenAI-compatible base URL
+    /// A self-hosted Ollama's URL (empty: this machine, 127.0.0.1:11434).
+    #[serde(default)]
+    pub ollama_base: String,
     /// Models "Find models" kept for `ai_models_for` ("provider|base"): the ones this account can use
     /// to read a picture. Stored so the picker keeps them across restarts.
     #[serde(default)]

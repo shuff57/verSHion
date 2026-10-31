@@ -128,7 +128,10 @@ impl AiCfg {
             "cloud" => cloud_base(),
             // Both the custom endpoint and the relay are whatever URL the user set.
             "custom" | "workers" => s.ai_base.trim().trim_end_matches('/').to_string(),
-            _ => OLLAMA_DEFAULT_BASE.to_string(),
+            _ => {
+                let own = s.ollama_base.trim().trim_end_matches('/');
+                if own.starts_with("http://") || own.starts_with("https://") { own.to_string() } else { OLLAMA_DEFAULT_BASE.to_string() }
+            }
         };
         AiCfg { provider: provider.to_string(), base, model }
     }
@@ -932,6 +935,8 @@ pub struct Converted {
 /// figure fitting (crops become editable Figures-tab figures when a generator matches).
 /// One chat turn per page (the relay's import jobs are not used: see `convert_pages`).
 pub fn convert_page(bytes: &[u8], mime: &str, hint: &str, cfg: &AiCfg, page_no: usize) -> Result<Converted, String> {
+    #[cfg(not(target_arch = "wasm32"))]
+    begin_service(cfg, "import", 1)?;
     convert_page_chat(bytes, mime, hint, cfg, page_no)
 }
 
@@ -999,6 +1004,9 @@ const PAGE_PARALLEL: usize = 12;
 pub fn convert_pages(pages: &[Vec<u8>], hint: &str, cfg: &AiCfg, progress: &(dyn Fn(usize, usize) + Sync)) -> Vec<Result<Converted, String>> {
     use std::sync::atomic::{AtomicUsize, Ordering};
     let total = pages.len();
+    if let Err(e) = begin_service(cfg, "import", total) {
+        return (0..total).map(|_| Err(e.clone())).collect();
+    }
     let next = AtomicUsize::new(0);
     let done = AtomicUsize::new(0);
     let slots: Vec<std::sync::Mutex<Option<Result<Converted, String>>>> = (0..total).map(|_| std::sync::Mutex::new(None)).collect();
@@ -1140,6 +1148,64 @@ fn hedged(cfg: &AiCfg, prompt: &str, mime: &str, images: &[&[u8]], temp: f64) ->
     }
 }
 
+/// Bases that answered 400 to `response_format`, for the life of the process.
+fn refused_json_mode() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
+    static SET: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+    SET.get_or_init(Default::default)
+}
+
+fn json_mode_refused(base: &str) -> bool {
+    refused_json_mode().lock().map(|s| s.contains(base)).unwrap_or(false)
+}
+
+fn note_json_mode_refused(base: &str) {
+    if let Ok(mut s) = refused_json_mode().lock() {
+        s.insert(base.to_string());
+    }
+}
+
+/// The credit session the relay opened for the service now running (None: the relay does not meter this caller).
+static SERVICE_SESSION: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// What a started service left in the account's weekly allowance.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Charged {
+    pub credits: u32,
+    pub left: Option<u32>,
+}
+
+/// Asks the relay to price and start a service (`import`, `figure`, `handwriting`, ...) before its model
+/// calls. A relay that does not meter this caller answers without a session and the calls go through as
+/// before; a metered one charges the credits, and every later relay call carries the session. Only the
+/// built-in relay is metered, so any other provider returns at once.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn begin_service(cfg: &AiCfg, service: &str, pages: usize) -> Result<Charged, String> {
+    if cfg.provider != "workers" {
+        return Ok(Charged { credits: 0, left: None });
+    }
+    let url = format!("{}/service", cfg.base.trim_end_matches('/'));
+    let key = request_key(cfg);
+    let reply = post_json(&url, json!({"service": service, "pages": pages}), key.as_deref()).map_err(|e| credit_message(&e))?;
+    let session = reply.get("session").and_then(Value::as_str).map(str::to_string);
+    if let Ok(mut s) = SERVICE_SESSION.lock() {
+        *s = session;
+    }
+    let n = |k: &str| reply.get(k).and_then(Value::as_u64).map(|v| v as u32);
+    Ok(Charged { credits: n("credits").unwrap_or(0), left: n("left") })
+}
+
+/// The relay's sentence for a refused service ("This needs 2 credits and you have 0 left this week.").
+fn credit_message(err: &str) -> String {
+    if let Some(i) = err.find("answered 402: ") {
+        return err[i + "answered 402: ".len()..].trim().to_string();
+    }
+    err.to_string()
+}
+
+fn current_session() -> Option<String> {
+    SERVICE_SESSION.lock().ok().and_then(|s| s.clone())
+}
+
 fn openai_chat_once(cfg: &AiCfg, prompt: &str, mime: &str, images: &[&[u8]], temp: f64) -> Result<String, String> {
     let base = cfg.base.trim_end_matches('/');
     if base.is_empty() {
@@ -1150,15 +1216,38 @@ fn openai_chat_once(cfg: &AiCfg, prompt: &str, mime: &str, images: &[&[u8]], tem
     for b in images {
         content.push(json!({"type": "image_url", "image_url": {"url": format!("data:{mime};base64,{}", base64_encode(b))}}));
     }
-    let body = json!({
+    let mut body = json!({
         "model": cfg.model,
         "stream": false,
         "temperature": temp,
         "response_format": {"type": "json_object"},
         "messages": [{"role": "user", "content": content}],
     });
+    if cfg.provider == "openrouter" {
+        // Answer at once instead of reasoning first, and report what the call cost.
+        body["reasoning"] = json!({"enabled": false});
+        body["usage"] = json!({"include": true});
+    }
+    if cfg.provider == "workers" {
+        if let Some(s) = current_session() {
+            body["session"] = json!(s);
+        }
+    }
+    // Some local servers refuse JSON mode (LM Studio answers 400 "'response_format.type' must be
+    // 'json_schema' or 'text'"). Once one has, it is asked without it; the prompt already says JSON only.
+    let custom = cfg.provider == "custom";
+    if custom && json_mode_refused(base) {
+        body.as_object_mut().map(|o| o.remove("response_format"));
+    }
     let key = request_key(cfg);
-    let reply = post_json(&url, body, key.as_deref())?;
+    let reply = match post_json(&url, body.clone(), key.as_deref()) {
+        Err(e) if custom && body.get("response_format").is_some() && e.contains("answered 400") && e.contains("response_format") => {
+            note_json_mode_refused(base);
+            body.as_object_mut().map(|o| o.remove("response_format"));
+            post_json(&url, body, key.as_deref())?
+        }
+        other => other?,
+    };
     reply
         .pointer("/choices/0/message/content")
         .and_then(Value::as_str)
@@ -1330,17 +1419,33 @@ async fn openai_chat_async(cfg: &AiCfg, prompt: &str, mime: &str, images: &[&[u8
     for b in images {
         content.push(json!({"type": "image_url", "image_url": {"url": format!("data:{mime};base64,{}", base64_encode(b))}}));
     }
-    let body = json!({
+    let mut body = json!({
         "model": cfg.model,
         "stream": false,
         "temperature": temp,
         "response_format": {"type": "json_object"},
         "messages": [{"role": "user", "content": content}],
     });
+    if cfg.provider == "openrouter" {
+        body["reasoning"] = json!({"enabled": false});
+        body["usage"] = json!({"include": true});
+    }
+    // A local server that refuses JSON mode is asked without it (see `openai_chat_once`).
+    let custom = cfg.provider == "custom";
+    if custom && json_mode_refused(base) {
+        body.as_object_mut().map(|o| o.remove("response_format"));
+    }
     let key = request_key(cfg);
-    let reply = post_json_async(&url, &body, key.as_deref())
-        .await
-        .map_err(|e| cloud_error_hint(cfg, e))?;
+    let first = post_json_async(&url, &body, key.as_deref()).await;
+    let reply = match first {
+        Err(e) if custom && body.get("response_format").is_some() && e.contains("answered 400") && e.contains("response_format") => {
+            note_json_mode_refused(base);
+            body.as_object_mut().map(|o| o.remove("response_format"));
+            post_json_async(&url, &body, key.as_deref()).await
+        }
+        other => other,
+    }
+    .map_err(|e| cloud_error_hint(cfg, e))?;
     reply
         .pointer("/choices/0/message/content")
         .and_then(Value::as_str)
@@ -1589,6 +1694,79 @@ mod tests {
         // The aliases map to the same provider; an empty base stays empty so chat_turns says to set it.
         assert_eq!(AiCfg::from(&settings("relay", "", "")).provider, "workers");
         assert_eq!(AiCfg::from(&settings("workers-ai", "", "")).base, "");
+    }
+
+    #[test]
+    fn a_self_hosted_ollama_url_is_used_and_a_bad_one_falls_back() {
+        let mut st = settings("ollama", "", "https://not-for-ollama.example/v1");
+        assert_eq!(AiCfg::from(&st).base, OLLAMA_DEFAULT_BASE, "the Custom URL must not leak into Ollama");
+        st.ollama_base = " http://gpu-box.lan:11434/ ".into();
+        assert_eq!(AiCfg::from(&st).base, "http://gpu-box.lan:11434");
+        st.ollama_base = "gpu-box.lan".into();
+        assert_eq!(AiCfg::from(&st).base, OLLAMA_DEFAULT_BASE, "a URL without a scheme is ignored");
+    }
+
+    #[test]
+    fn a_server_that_refuses_json_mode_is_asked_again_without_it_and_remembered() {
+        let refusal = r#"{"error":"'response_format.type' must be 'json_schema' or 'text'"}"#;
+        let ok = r#"{"choices":[{"message":{"content":"{\"ok\":true}"}}]}"#;
+        let (base, h) = stub_relay(vec![(400, refusal.into()), (200, ok.into()), (200, ok.into())]);
+        let cfg = AiCfg { provider: "custom".into(), base: base.clone(), model: "m".into() };
+        assert_eq!(openai_chat_once(&cfg, "p", "image/png", &[], 0.0).unwrap(), "{\"ok\":true}");
+        assert_eq!(openai_chat_once(&cfg, "p", "image/png", &[], 0.0).unwrap(), "{\"ok\":true}");
+        let seen = h.join().unwrap();
+        assert_eq!(seen.len(), 3);
+        assert!(seen[0].1.contains("response_format"));
+        assert!(!seen[1].1.contains("response_format"), "the retry drops JSON mode");
+        assert!(!seen[2].1.contains("response_format"), "and so does the next call");
+    }
+
+    #[test]
+    fn json_mode_is_only_dropped_for_a_400_that_names_it() {
+        let (base, h) = stub_relay(vec![(400, r#"{"error":"model not found"}"#.into())]);
+        let cfg = AiCfg { provider: "custom".into(), base, model: "m".into() };
+        assert!(openai_chat_once(&cfg, "p", "image/png", &[], 0.0).is_err());
+        assert_eq!(h.join().unwrap().len(), 1, "no retry for an unrelated 400");
+    }
+
+    #[test]
+    fn openrouter_is_asked_not_to_reason_and_to_report_cost() {
+        let ok = r#"{"choices":[{"message":{"content":"{}"}}]}"#;
+        let (base, h) = stub_relay(vec![(200, ok.into())]);
+        let cfg = AiCfg { provider: "openrouter".into(), base, model: "m".into() };
+        openai_chat_once(&cfg, "p", "image/png", &[], 0.0).unwrap();
+        let body = &h.join().unwrap()[0].1;
+        assert!(body.contains(r#""reasoning":{"enabled":false}"#) && body.contains(r#""usage":{"include":true}"#));
+    }
+
+    #[test]
+    fn a_service_session_is_started_and_rides_on_later_calls() {
+        let ok = r#"{"choices":[{"message":{"content":"{}"}}]}"#;
+        let started = r#"{"session":"abc123","credits":2,"left":38}"#;
+        let (base, h) = stub_relay(vec![(200, started.into()), (200, ok.into())]);
+        let cfg = AiCfg { provider: "workers".into(), base, model: String::new() };
+        let c = begin_service(&cfg, "import", 4).unwrap();
+        assert_eq!(c, Charged { credits: 2, left: Some(38) });
+        openai_chat_once(&cfg, "p", "image/png", &[], 0.0).unwrap();
+        let seen = h.join().unwrap();
+        assert!(seen[0].0.contains("/ai/service"));
+        assert!(seen[0].1.contains(r#""service":"import""#) && seen[0].1.contains(r#""pages":4"#));
+        assert!(seen[1].1.contains(r#""session":"abc123""#));
+        let (base, h) = stub_relay(vec![(200, r#"{"session":null,"credits":0,"unlimited":true}"#.into()), (200, ok.into())]);
+        let cfg = AiCfg { provider: "workers".into(), base, model: String::new() };
+        begin_service(&cfg, "import", 1).unwrap();
+        openai_chat_once(&cfg, "p", "image/png", &[], 0.0).unwrap();
+        assert!(!h.join().unwrap()[1].1.contains("session"));
+    }
+
+    #[test]
+    fn a_refused_service_says_what_the_relay_said() {
+        let body = r#"{"error":{"code":"insufficient_credits","message":"This needs 2 credits and you have 0 left this week."}}"#;
+        let (base, h) = stub_relay(vec![(402, body.into())]);
+        let cfg = AiCfg { provider: "workers".into(), base, model: String::new() };
+        assert_eq!(begin_service(&cfg, "import", 1).unwrap_err(), "This needs 2 credits and you have 0 left this week.");
+        h.join().unwrap();
+        assert_eq!(begin_service(&AiCfg { provider: "ollama".into(), base: String::new(), model: String::new() }, "import", 1).unwrap().credits, 0);
     }
 
     #[test]

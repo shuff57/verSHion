@@ -1067,6 +1067,7 @@ impl crate::App {
         before.ai_provider != self.settings.ai_provider
             || before.ai_model != self.settings.ai_model
             || before.ai_base != self.settings.ai_base
+            || before.ollama_base != self.settings.ollama_base
     }
 
     /// Help line under the AI settings: where the key comes from for the provider.
@@ -1519,6 +1520,31 @@ impl crate::App {
                                 egui::TextEdit::singleline(&mut app.settings.ai_base)
                                     .desired_width(360.0)
                                     .hint_text(hint),
+                            );
+                        });
+                    }
+                    if app.settings.ai_provider == "custom" {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(theme::muted("Presets").size(11.5));
+                            for (label, url) in [
+                                ("LM Studio", "http://127.0.0.1:1234/v1"),
+                                ("llama.cpp", "http://127.0.0.1:8080/v1"),
+                                ("vLLM", "http://127.0.0.1:8000/v1"),
+                                ("Ollama /v1", "http://127.0.0.1:11434/v1"),
+                            ] {
+                                if kit::chip_toggle(ui, label, app.settings.ai_base == url).clicked() {
+                                    app.settings.ai_base = url.to_string();
+                                }
+                            }
+                        });
+                    }
+                    if app.settings.ai_provider == "ollama" {
+                        ui.horizontal(|ui| {
+                            ui.label(theme::text("Ollama URL"));
+                            ui.add(
+                                egui::TextEdit::singleline(&mut app.settings.ollama_base)
+                                    .desired_width(360.0)
+                                    .hint_text("http://127.0.0.1:11434 (this machine)"),
                             );
                         });
                     }
