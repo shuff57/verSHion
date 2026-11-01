@@ -40,6 +40,18 @@ fn pool_err(e: HttpError) -> PoolError {
     p
 }
 
+/// One bridge serves both roles, shared behind an `Arc`.
+impl PoolAuth for Arc<AuthBridge> {
+    fn caller(&self, headers: &HeaderMap) -> Option<Caller> {
+        (**self).caller(headers)
+    }
+}
+impl PoolAdminGuard for Arc<AuthBridge> {
+    fn admin(&self, headers: &HeaderMap, write: bool) -> Result<String, PoolError> {
+        (**self).admin(headers, write)
+    }
+}
+
 impl PoolAuth for AuthBridge {
     fn caller(&self, headers: &HeaderMap) -> Option<Caller> {
         authenticate(&self.ctx(), headers).map(|p| Caller { user_id: p.user_id, trust: p.trust, family: Some(p.session_family) })

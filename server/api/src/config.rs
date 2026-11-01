@@ -22,6 +22,8 @@ pub struct Config {
     pub stripe_publishable_key: Option<String>,
     /// 32+ characters. Without it nobody can sign in: the AI relay and billing see only the relay key and the native app.
     pub auth_secret: Option<String>,
+    /// 32+ characters (POOL_HASH_KEY). Without it the pool is not mounted: it never hashes unkeyed.
+    pub pool_hash_key: Option<String>,
 }
 
 /// A positive whole number, or None (so the default stands) when unset or not one.
@@ -84,6 +86,7 @@ impl Config {
             stripe_webhook_secret: nonempty(get("STRIPE_WEBHOOK_SECRET")),
             stripe_publishable_key: nonempty(get("STRIPE_PUBLISHABLE_KEY")),
             auth_secret: nonempty(get("AUTH_SECRET")),
+            pool_hash_key: nonempty(get("POOL_HASH_KEY")),
         }
     }
 }

@@ -28,12 +28,59 @@ pub fn router() -> Router {
 }
 
 /// Everything the server serves so far: its own health check and the AI relay.
-fn app(ai: Arc<AiState<HttpTransport>>, billing: Arc<BillingState<HttpStripe>>, auth: Option<Arc<auth::router::AuthState>>) -> Router {
-    let r = router().merge(ai::routes::router(ai)).merge(billing::router(billing));
+fn app(ai: Arc<AiState<HttpTransport>>, billing: Arc<BillingState<HttpStripe>>, auth: Option<Arc<auth::router::AuthState>>, pool: Option<Arc<pool::routes::PoolState>>) -> Router {
+    let mut r = router().merge(ai::routes::router(ai)).merge(billing::router(billing));
+    if let Some(p) = pool {
+        r = r.merge(pool::routes::router(p));
+    }
     match auth {
         Some(a) => r.merge(auth::router::router(a)),
         None => r,
     }
+}
+
+/// The pool, when `POOL_HASH_KEY` (32+ characters) and `AUTH_SECRET` are valid: its own connection to the file, the blob directory, the keys derived
+/// from the hash key, and the auth package's sessions for sign-in and the admin guard. Notices a request queues are logged until pool mail is wired.
+fn pool_state(cfg: &config::Config, conn: rusqlite::Connection, auth_conn: rusqlite::Connection) -> Option<Arc<pool::routes::PoolState>> {
+    let secret = cfg.pool_hash_key.as_deref()?;
+    let Some(root) = pool::fingerprint::derive_hash_key(secret, "full-hash") else {
+        tracing::error!("POOL_HASH_KEY is shorter than 32 characters: the pool is not mounted");
+        return None;
+    };
+    let Some(auth_secret) = &cfg.auth_secret else {
+        tracing::warn!("AUTH_SECRET is not set: the pool is not mounted");
+        return None;
+    };
+    let a = Arc::new(auth::config::AuthConfig::new(auth_secret, cfg.allowed_origins.clone()).map_err(|e| tracing::error!("{e}")).ok()?);
+    let fp = pool::fingerprint::Fingerprinter::from_root_hex(&root)?;
+    let limit_hex = pool::fingerprint::derive_hash_key(secret, "rate-limit")?;
+    let mut limit_key = [0u8; 32];
+    for (i, b) in limit_key.iter_mut().enumerate() {
+        *b = u8::from_str_radix(&limit_hex[2 * i..2 * i + 2], 16).ok()?;
+    }
+    let bridge = Arc::new(pool::authbridge::AuthBridge::new(auth_conn, a, Box::new(auth::router::system_now)));
+    Some(Arc::new(pool::routes::PoolState {
+        conn: Mutex::new(conn),
+        store: blobs::BlobStore::new(&cfg.blobs).ok()?,
+        core: pool::core::Core::new(Some(root)),
+        fp,
+        keys: pool::poolkeys::PoolKeys::from_secret(secret),
+        limit_key,
+        ip_prefix: 64,
+        allowed_origins: cfg.allowed_origins.clone(),
+        auth: Box::new(bridge.clone()),
+        admin: Box::new(bridge),
+        clock: Arc::new(auth::router::system_now),
+        heavy: pool::publishrun::HeavySlots::default(),
+        opens: pool::readslots::OpenReads::new(),
+        heavy_wait: std::time::Duration::from_millis(pool::publishrun::HEAVY_QUEUE_WAIT_MS),
+        body_deadline: std::time::Duration::from_millis(pool::publishrun::BODY_DEADLINE_MS as u64),
+        notify: Arc::new(|n| {
+            for notice in n {
+                tracing::warn!(?notice, "pool notice (mail not wired yet)");
+            }
+        }),
+    }))
 }
 
 /// The auth routes, when `AUTH_SECRET` is valid. Mail settings come from the process environment (SMTP_*, MAIL_*).
@@ -45,6 +92,7 @@ fn auth_state(cfg: &config::Config, conn: rusqlite::Connection) -> Option<Arc<au
         tracing::warn!("SMTP is not configured: confirmation and reset mail cannot be sent");
     }
     let mut st = auth::router::AuthState::new(conn, a, mail);
+    pool::hooks::install(&mut st);
     st.approval_digest = std::env::var("APPROVAL_DIGEST").as_deref() == Ok("1");
     Some(Arc::new(st))
 }
@@ -97,6 +145,10 @@ async fn main() {
     }
     let billing = Arc::new(billing_state(&cfg, db::open(&cfg.db).expect("open the billing connection")));
     let auth = auth_state(&cfg, db::open(&cfg.db).expect("open the auth connection"));
+    let pool = pool_state(&cfg, db::open(&cfg.db).expect("open the pool connection"), db::open(&cfg.db).expect("open the pool auth connection"));
+    if pool.is_none() {
+        tracing::warn!("POOL_HASH_KEY is not set (or AUTH_SECRET): the pool routes are not served");
+    }
     let job_ttl_ms = cfg.job_ttl_ms;
     let ai_auth = authenticator(&cfg);
     let state = Arc::new(AiState {
@@ -131,7 +183,7 @@ async fn main() {
     if let Some(a) = &auth {
         tokio::spawn(auth::cron::run(a.clone()));
     }
-    axum::serve(listener, app(state, billing, auth))
+    axum::serve(listener, app(state, billing, auth, pool))
         .with_graceful_shutdown(async {
             let _ = tokio::signal::ctrl_c().await;
         })
@@ -189,16 +241,58 @@ mod tests {
             spawn: tokio_spawn(),
         });
         let get = |p: &str| Request::get(p).body(Body::empty()).unwrap();
-        let ai_health = app(state.clone(), billing.clone(), None).oneshot(get("/ai/health")).await.unwrap();
+        let ai_health = app(state.clone(), billing.clone(), None, None).oneshot(get("/ai/health")).await.unwrap();
         let body: Value = serde_json::from_slice(&ai_health.into_body().collect().await.unwrap().to_bytes()).unwrap();
         assert_eq!(body, json!({ "ok": true, "model": null, "ai": false, "upstream": "openrouter" }));
-        assert_eq!(app(state.clone(), billing.clone(), None).oneshot(get("/health")).await.unwrap().status(), 200);
-        let credits = app(state.clone(), billing.clone(), None).oneshot(get("/ai/credits")).await.unwrap();
+        assert_eq!(app(state.clone(), billing.clone(), None, None).oneshot(get("/health")).await.unwrap().status(), 200);
+        let credits = app(state.clone(), billing.clone(), None, None).oneshot(get("/ai/credits")).await.unwrap();
         let body: Value = serde_json::from_slice(&credits.into_body().collect().await.unwrap().to_bytes()).unwrap();
         assert_eq!(body["unlimited"], true, "the keyless native app is not on credits");
         // Billing is off by default: buying is a 404, and the webhook says it is not configured.
-        assert_eq!(app(state.clone(), billing.clone(), None).oneshot(get("/billing/packs")).await.unwrap().status(), 404);
+        assert_eq!(app(state.clone(), billing.clone(), None, None).oneshot(get("/billing/packs")).await.unwrap().status(), 404);
         let hook = Request::post("/billing/webhook").body(Body::empty()).unwrap();
-        assert_eq!(app(state, billing, None).oneshot(hook).await.unwrap().status(), 503);
+        assert_eq!(app(state, billing, None, None).oneshot(hook).await.unwrap().status(), 503);
+    }
+
+    /// The pool is mounted only with a valid hash key and auth secret; mounted, it answers 401 to a stranger on a pool route and on an admin route.
+    #[tokio::test]
+    async fn the_pool_is_mounted_with_its_keys_and_refuses_strangers() {
+        let dir = tempfile::tempdir().unwrap();
+        let get_cfg = |hash: &'static str| {
+            let (db, blobs) = (dir.path().join("pool.db").to_string_lossy().to_string(), dir.path().join("blobs").to_string_lossy().to_string());
+            config::Config::from_lookup(move |k| match k {
+                "VERSHION_DB" => Some(db.clone()),
+                "VERSHION_BLOBS" => Some(blobs.clone()),
+                "VERSHION_MIGRATIONS" => Some(concat!(env!("CARGO_MANIFEST_DIR"), "/../worker/migrations").into()),
+                "AUTH_SECRET" => Some("a".repeat(40)),
+                "POOL_HASH_KEY" if !hash.is_empty() => Some(hash.into()),
+                _ => None,
+            })
+        };
+        let cfg = get_cfg("0123456789abcdef0123456789abcdef0123456789");
+        let mut conn = db::open(&cfg.db).unwrap();
+        db::migrate(&mut conn, &cfg.migrations).unwrap();
+        assert!(pool_state(&get_cfg(""), db::open(&cfg.db).unwrap(), db::open(&cfg.db).unwrap()).is_none());
+        assert!(pool_state(&get_cfg("short"), db::open(&cfg.db).unwrap(), db::open(&cfg.db).unwrap()).is_none());
+        let pool = pool_state(&cfg, db::open(&cfg.db).unwrap(), db::open(&cfg.db).unwrap()).expect("mounted");
+        let billing = Arc::new(billing_state(&cfg, db::open(&cfg.db).unwrap()));
+        let state = Arc::new(AiState {
+            conn: Mutex::new(conn),
+            limits: cfg.limits,
+            openrouter: None,
+            transport: HttpTransport::new(),
+            auth: Box::new(NoAuth),
+            relay_key: None,
+            allowed_origins: vec![],
+            credits: true,
+            clock: system_clock(),
+            blobs: None,
+            spawn: tokio_spawn(),
+        });
+        let get = |p: &str| Request::get(p).header("x-forwarded-for", "203.0.113.9").body(Body::empty()).unwrap();
+        let a = app(state, billing, None, Some(pool));
+        assert_eq!(a.clone().oneshot(get("/items")).await.unwrap().status(), 401);
+        assert_eq!(a.clone().oneshot(get("/admin/pool/reports")).await.unwrap().status(), 401);
+        assert_eq!(a.oneshot(get("/circles")).await.unwrap().status(), 401);
     }
 }

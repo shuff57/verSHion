@@ -59,6 +59,7 @@ pub mod modtakedown;
 pub mod adminpool;
 pub mod adminroutes;
 pub mod authbridge;
+pub mod hooks;
 pub mod adminblock;
 pub mod adminhold;
 pub mod croncore;
