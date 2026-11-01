@@ -107,21 +107,29 @@ pub fn discard_abandoned(x: &PoolCtx, store: &BlobStore) -> Res<usize> {
         .collect::<Result<_, _>>()?;
     let mut staged = 0;
     for (publish, item, full, stripped, created) in stale {
-        // Claiming the row first (only a never-committed one) makes two concurrent discards safe.
-        let del = x.conn.execute("DELETE FROM item_publishes WHERE publish_id = ?1 AND status IN ('staging', 'staged') AND created_at = ?2", params![publish, created])?;
-        if del != 1 {
-            continue;
+        if discard_staged(x, store, &publish, &item, &full, stripped.as_deref(), created)? {
+            staged += 1;
         }
-        let tx = x.conn.unchecked_transaction()?;
-        delete_publishes(&tx, &[publish.clone()])?;
-        tx.execute("DELETE FROM question_ids WHERE first_publish_id = ?1 AND item_id = ?2 AND NOT EXISTS (SELECT 1 FROM item_questions iq WHERE iq.qid = question_ids.qid)", params![publish, item])?;
-        tx.commit()?;
-        for k in std::iter::once(full).chain(stripped) {
-            store.delete(&k).map_err(io)?;
-        }
-        staged += 1;
     }
     Ok(staged)
+}
+
+/// Removes a staged publish that will never commit: its rows, its new qids and its bodies. False when another discard (or a commit) got there first.
+pub fn discard_staged(x: &PoolCtx, store: &BlobStore, publish: &str, item: &str, full_key: &str, stripped_key: Option<&str>, created_at: i64) -> Res<bool> {
+    // Claiming the row first (only a never-committed one) makes two concurrent discards safe.
+    let del = x.conn.execute("DELETE FROM item_publishes WHERE publish_id = ?1 AND status IN ('staging', 'staged') AND created_at = ?2", params![publish, created_at])?;
+    if del != 1 {
+        return Ok(false);
+    }
+    let tx = x.conn.unchecked_transaction()?;
+    delete_publishes(&tx, &[publish.to_string()])?;
+    // qids first introduced by a publish that never committed belong to nothing.
+    tx.execute("DELETE FROM question_ids WHERE first_publish_id = ?1 AND item_id = ?2 AND NOT EXISTS (SELECT 1 FROM item_questions iq WHERE iq.qid = question_ids.qid)", params![publish, item])?;
+    tx.commit()?;
+    for k in std::iter::once(full_key).chain(stripped_key) {
+        store.delete(k).map_err(io)?;
+    }
+    Ok(true)
 }
 
 /// A blob row whose bytes are gone (a GC that raced an upload) is marked missing, so the next publish names the positions and the author uploads again;
