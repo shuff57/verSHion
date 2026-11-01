@@ -495,3 +495,20 @@ async fn admin_routes_need_the_guard_a_sudo_token_for_writes_and_work_on_an_item
     let (s, b, _) = send(&w, areq("POST", "/admin/pool/hold", true, Some(json!({ "item_id": "nope" })))).await;
     assert_eq!((s, b["field"].clone()), (400, json!("item_id")));
 }
+
+#[tokio::test]
+async fn the_dmca_and_limit_admin_routes_record_list_and_refuse_bad_input() {
+    let w = world();
+    let notice = json!({ "complainant_name": "A Owner", "complainant_contact": "a@owner.example", "work_desc": "my quiz", "material_desc": "item 1", "has_signature": true, "has_good_faith": true, "has_perjury_stmt": false });
+    let (s, b, _) = send(&w, areq("POST", "/admin/dmca/notices", true, Some(notice))).await;
+    assert_eq!((s, b["status"].clone()), (201, json!("deficient")), "{b}");
+    let (s, b, _) = send(&w, areq("GET", "/admin/dmca/notices", false, None)).await;
+    assert_eq!((s, b["items"].as_array().map(Vec::len)), (200, Some(1)), "{b}");
+    let (s, b, _) = send(&w, areq("GET", "/admin/dmca/actions", false, None)).await;
+    assert_eq!((s, b["items"].clone()), (200, json!([])));
+    let (s, b, _) = send(&w, areq("PUT", "/admin/pool/limits", true, Some(json!({ "user_id": "*", "metric": "nonsense", "value": 1 })))).await;
+    assert_eq!((s, b["field"].clone()), (400, json!("metric")), "{b}");
+    let (s, b, _) = send(&w, areq("GET", "/admin/dmca/copies", false, None)).await;
+    assert_eq!((s, b["field"].clone()), (400, json!("action_id")), "{b}");
+    assert_eq!(send(&w, areq("POST", "/admin/dmca/notices", false, Some(json!({})))).await.0, 403);
+}

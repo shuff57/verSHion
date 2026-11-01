@@ -5,7 +5,8 @@ use super::ctx::{Fail, PoolCtx, PoolError, Res};
 use super::gate::check_key;
 use super::preread::ADMIN_BODY_MAX;
 use super::routes::{PoolState, Reply, client_ip, fail_response, header_str, json_response, param, query_of, raw_response, read_body};
-use super::{adminhold, adminpool};
+use super::circlesendprep::SendEnv;
+use super::{adminblock, adminhold, adminpool};
 use axum::extract::{Request, State};
 use axum::http::HeaderMap;
 use axum::response::Response;
@@ -24,6 +25,30 @@ const TABLE: &[(&str, &str, bool)] = &[
     ("POST", "/admin/pool/dismiss", true),
     ("POST", "/admin/pool/remove", true),
     ("POST", "/admin/pool/unremove", true),
+    ("POST", "/admin/pool/purge-preview", true),
+    ("POST", "/admin/dmca/takedown-preview", true),
+    ("POST", "/admin/pool/evidence", true),
+    ("POST", "/admin/pool/unblock", true),
+    ("POST", "/admin/dmca/unblock", true),
+    ("POST", "/admin/pool/privacy-restore", true),
+    ("POST", "/admin/pool/purge", true),
+    ("POST", "/admin/pool/purge-held-copies", true),
+    ("POST", "/admin/pool/appeal-decision", true),
+    ("POST", "/admin/pool/resolve-flag", true),
+    ("PUT", "/admin/pool/limits", true),
+    ("GET", "/admin/dmca/notices", false),
+    ("GET", "/admin/dmca/actions", false),
+    ("GET", "/admin/dmca/counter-notices", false),
+    ("POST", "/admin/dmca/notices", true),
+    ("POST", "/admin/dmca/takedown", true),
+    ("POST", "/admin/dmca/court-action", true),
+    ("POST", "/admin/dmca/resolve", true),
+    ("POST", "/admin/dmca/hold-copies-preview", true),
+    ("POST", "/admin/dmca/hold-copies", true),
+    ("GET", "/admin/dmca/copies", false),
+    ("POST", "/admin/dmca/release-copies", true),
+    ("POST", "/admin/dmca/exempt", true),
+    ("POST", "/admin/dmca/withdraw", true),
 ];
 
 struct ACall<'a> {
@@ -40,7 +65,7 @@ fn pair(r: (u16, Value)) -> Res<Reply> {
 }
 
 fn dispatch(c: &ACall, method: &str, path: &str) -> Res<Reply> {
-    let (x, a, b) = (c.x, c.admin, &c.body);
+    let (x, a, b, st) = (c.x, c.admin, &c.body, c.st);
     match (method, path) {
         ("GET", "/admin/pool/reports") => Ok(Reply::Json(200, adminpool::list_reports(x, param(&c.query, "after").as_deref())?)),
         ("GET", "/admin/pool/flags") => {
@@ -55,6 +80,42 @@ fn dispatch(c: &ACall, method: &str, path: &str) -> Res<Reply> {
         ("POST", "/admin/pool/dismiss") => pair(adminpool::dismiss(x, a, b)?),
         ("POST", "/admin/pool/remove") => pair(adminpool::remove(x, a, b)?),
         ("POST", "/admin/pool/unremove") => pair(adminpool::unremove(x, a, b)?),
+        ("POST", "/admin/pool/purge-preview") => Ok(Reply::Json(200, adminblock::purge_preview(x, &st.keys, a, b)?)),
+        ("POST", "/admin/dmca/takedown-preview") => Ok(Reply::Json(200, adminblock::takedown_preview(x, &st.keys, a, b)?)),
+        ("POST", "/admin/pool/evidence") => pair(adminblock::evidence(x, a, b)?),
+        ("POST", "/admin/pool/unblock") => pair(adminblock::privacy_unblock(x, &st.store, a, b)?),
+        ("POST", "/admin/dmca/unblock") => {
+            let env = SendEnv { x, core: &st.core, fp: &st.fp, keys: &st.keys, store: &st.store };
+            pair(adminblock::dmca_unblock(&env, a, b)?)
+        }
+        ("POST", "/admin/pool/privacy-restore") => pair(adminblock::privacy_restore_route(x, &st.store, a, b)?),
+        ("POST", "/admin/pool/purge") => pair(adminblock::purge_route(x, &st.store, &st.keys, a, b)?),
+        ("POST", "/admin/pool/purge-held-copies") => Ok(Reply::Json(200, adminblock::purge_held_copies_route(x, &st.store, a, b)?)),
+        ("POST", "/admin/pool/appeal-decision") => pair(adminblock::appeal_decision(x, &st.store, a, b)?),
+        ("POST", "/admin/pool/resolve-flag") => pair(adminblock::resolve_flag(x, a, b)?),
+        ("PUT", "/admin/pool/limits") => pair(adminblock::set_limit(x, a, b)?),
+        ("GET", "/admin/dmca/notices" | "/admin/dmca/actions" | "/admin/dmca/counter-notices") => {
+            let which = path.rsplit('/').next().unwrap_or("");
+            let limit = param(&c.query, "limit").map(|s| s.parse::<i64>().unwrap_or(0));
+            Ok(Reply::Json(200, adminblock::list_dmca(x, which, limit, param(&c.query, "cursor").as_deref())?))
+        }
+        ("POST", "/admin/dmca/notices") => pair(adminblock::create_notice(x, a, b)?),
+        ("POST", "/admin/dmca/takedown") => pair(adminblock::takedown_route(x, &st.store, &st.keys, a, b)?),
+        ("POST", "/admin/dmca/court-action") => pair(adminhold::court_action(x, a, b)?),
+        ("POST", "/admin/dmca/resolve") => pair(adminhold::resolve(x, &st.store, a, b)?),
+        ("POST", "/admin/dmca/hold-copies-preview") => pair(adminhold::hold_copies_preview(x, &st.keys, a, b)?),
+        ("POST", "/admin/dmca/hold-copies") => pair(adminhold::hold_copies(x, &st.keys, a, b)?),
+        ("GET", "/admin/dmca/copies") => {
+            let q = |k: &str| param(&c.query, k);
+            let aid = match q("action_id") {
+                Some(s) if super::sqlfrag::is_id(&s) => s,
+                _ => return Err(PoolError::new(400, "invalid_request").with("field", json!("action_id")).into()),
+            };
+            pair(adminhold::copies_of_action(x, Some(&aid), q("held_after").as_deref(), q("candidates_after").as_deref(), q("after").as_deref())?)
+        }
+        ("POST", "/admin/dmca/release-copies") => pair(adminhold::release_copies(x, a, b)?),
+        ("POST", "/admin/dmca/exempt") => pair(adminhold::exempt(x, a, b)?),
+        ("POST", "/admin/dmca/withdraw") => pair(adminhold::withdraw(x, &st.store, a, b)?),
         _ => Ok(Reply::Json(501, json!({ "error": "not_ported" }))),
     }
 }
