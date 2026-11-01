@@ -1499,6 +1499,7 @@ impl crate::App {
                     let before = app.settings.clone();
                     ui.horizontal_wrapped(|ui| {
                         for (val, label) in [
+                            ("account", "verSHion AI (credits)"),
                             ("cloud", "Ollama Cloud"),
                             ("workers", "verSHion relay"),
                             ("ollama", "Ollama (local)"),
@@ -1551,6 +1552,18 @@ impl crate::App {
                                     .hint_text("http://127.0.0.1:11434 (this machine)"),
                             );
                         });
+                    }
+                    if app.settings.ai_provider == "account" {
+                        // Charged to the signed-in account: say whether there is one.
+                        if crate::ai::account_ai_ready() {
+                            ui.label(theme::text("Signed in. Each conversion uses credits from your account."));
+                        } else {
+                            ui.label(theme::muted("Sign in on the Account screen to use it."));
+                        }
+                        if pageshell::outline(ui, "Open Account…").clicked() {
+                            app.account.open();
+                        }
+                        ui.add_space(6.0);
                     }
                     app.draw_model_picker(ui, ctx);
                     ui.add_space(6.0);

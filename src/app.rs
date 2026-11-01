@@ -488,6 +488,18 @@ impl App {
         }
         self.mine.show(&ctx, &mut self.account, &self.store.banks);
         self.account.show(&ctx);
+        // The hosted AI is charged to the signed-in account: hand it the server and a way to get a fresh token.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let signed_in = self.account.model.me.is_some();
+            match (signed_in, self.account.model.client().cloned()) {
+                (true, Some(c)) if !self.account.model.base_url().is_empty() => {
+                    let base = self.account.model.base_url().to_string();
+                    crate::ai::set_account_ai(Some((base, std::sync::Arc::new(move || c.access_token_blocking()))));
+                }
+                _ => crate::ai::set_account_ai(None),
+            }
+        }
         // "Open account..." anywhere in the app lands on the Account screen, not on a Shared tab.
         if self.account.take_wants_page() {
             self.screen = Screen::Account;

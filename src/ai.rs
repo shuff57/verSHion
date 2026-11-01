@@ -108,6 +108,7 @@ impl AiCfg {
             "openrouter" => "openrouter",
             "custom" => "custom",
             "workers" | "workers-ai" | "relay" => "workers",
+            "account" => "account",
             "ollama-cloud" | "cloud" | "ollama cloud" => "cloud",
             // Empty or unknown settings fall back to local Ollama.
             _ => "ollama",
@@ -116,7 +117,7 @@ impl AiCfg {
             match provider {
                 "openrouter" => OPENROUTER_DEFAULT_MODEL.to_string(),
                 "custom" => CUSTOM_DEFAULT_MODEL.to_string(),
-                "workers" => WORKERS_DEFAULT_MODEL.to_string(),
+                "workers" | "account" => WORKERS_DEFAULT_MODEL.to_string(),
                 "cloud" => OLLAMA_CLOUD_DEFAULT_MODEL.to_string(),
                 _ => OLLAMA_DEFAULT_MODEL.to_string(),
             }
@@ -128,12 +129,19 @@ impl AiCfg {
             "cloud" => cloud_base(),
             // Both the custom endpoint and the relay are whatever URL the user set.
             "custom" | "workers" => s.ai_base.trim().trim_end_matches('/').to_string(),
+            // The hosted AI is the account server's own relay.
+            "account" => account_base(),
             _ => {
                 let own = s.ollama_base.trim().trim_end_matches('/');
                 if own.starts_with("http://") || own.starts_with("https://") { own.to_string() } else { OLLAMA_DEFAULT_BASE.to_string() }
             }
         };
         AiCfg { provider: provider.to_string(), base, model }
+    }
+
+    /// The built-in relay, whether it is the one a person typed in or the account server's own.
+    pub fn is_relay(&self) -> bool {
+        self.provider == "workers" || self.provider == "account"
     }
 
     /// One human sentence about where the API key for this provider comes from.
@@ -148,6 +156,7 @@ impl AiCfg {
             "custom" => format!(
                 "A custom endpoint may need an API key. A key saved here is used first, otherwise the {CUSTOM_KEY_ENV} environment variable."
             ),
+            "account" => "The hosted AI runs on the verSHion server you signed in to. Each conversion costs credits from your account: 40 are free every week, and you can buy more on the Account screen.".to_string(),
             "workers" => format!(
                 "The verSHion relay calls Workers AI on its Cloudflare account, so there is no provider key: the binding is the credential. A relay key is needed only when the relay is reachable publicly, and is then the same key the relay was deployed with (saved here first, otherwise the {WORKERS_KEY_ENV} environment variable). A relay running on this machine needs none."
             ),
@@ -331,8 +340,37 @@ fn resolve_key(
     None
 }
 
+/// The signed-in account the hosted AI is charged to: the server's relay address and a way to get a fresh access token.
+/// The app keeps this current each frame; an account that is not signed in leaves it empty.
+type TokenSource = std::sync::Arc<dyn Fn() -> Option<String> + Send + Sync>;
+static ACCOUNT_AI: std::sync::Mutex<Option<(String, TokenSource)>> = std::sync::Mutex::new(None);
+
+pub fn set_account_ai(account: Option<(String, TokenSource)>) {
+    if let Ok(mut a) = ACCOUNT_AI.lock() {
+        *a = account;
+    }
+}
+
+/// True when a signed-in account is there to pay for the hosted AI.
+pub fn account_ai_ready() -> bool {
+    ACCOUNT_AI.lock().is_ok_and(|a| a.is_some())
+}
+
+fn account_base() -> String {
+    ACCOUNT_AI.lock().ok().and_then(|a| a.as_ref().map(|(b, _)| format!("{}/ai", b.trim_end_matches('/')))).unwrap_or_default()
+}
+
+fn account_token() -> Option<String> {
+    let src = ACCOUNT_AI.lock().ok().and_then(|a| a.as_ref().map(|(_, t)| t.clone()))?;
+    src()
+}
+
 /// The API key for a request, resolved at request time. Never logged or echoed.
 fn request_key(cfg: &AiCfg) -> Option<String> {
+    // The hosted AI is charged to the signed-in account, so it carries that account's access token.
+    if cfg.provider == "account" {
+        return account_token();
+    }
     resolve_key(cfg, &load_keys(), &|v| std::env::var(v).ok(), home_dir().as_deref()).map(|(k, _)| k)
 }
 
@@ -341,7 +379,7 @@ fn list_url(cfg: &AiCfg, base: &str) -> String {
     match cfg.provider.as_str() {
         "ollama" => format!("{base}/api/tags"),
         // The relay serves one model and has no /models route; its health route proves it is up.
-        "workers" => format!("{base}/health"),
+        "workers" | "account" => format!("{base}/health"),
         _ => format!("{base}/models"),
     }
 }
@@ -445,7 +483,7 @@ pub fn parse_models(provider: &str, v: &Value) -> Vec<String> {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn list_models(cfg: &AiCfg) -> Result<Vec<String>, String> {
     // The relay serves exactly one model: nothing to list.
-    if cfg.provider == "workers" {
+    if cfg.is_relay() {
         return Ok(vec![cfg.model.clone()]);
     }
     let base = cfg.base.trim_end_matches('/');
@@ -765,7 +803,7 @@ fn show_vision(shown: &Value) -> Option<bool> {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn check_models(cfg: &AiCfg, progress: &dyn Fn(usize, usize)) -> Result<Checked, String> {
     // The relay serves one model chosen by the worker; there is nothing to list or ping.
-    if cfg.provider == "workers" {
+    if cfg.is_relay() {
         return Ok(Checked { ok: vec![cfg.model.clone()], total: 1, ..Default::default() });
     }
     let listing = list_models_json(cfg)?;
@@ -820,7 +858,7 @@ fn checked_from_flags(total: usize, flags: Vec<(String, Option<bool>)>) -> Check
 #[cfg(target_arch = "wasm32")]
 pub async fn check_models_async(cfg: &AiCfg, progress: &dyn Fn(usize, usize)) -> Result<Checked, String> {
     // The relay serves one model chosen by the worker; there is nothing to list or ping.
-    if cfg.provider == "workers" {
+    if cfg.is_relay() {
         return Ok(Checked { ok: vec![cfg.model.clone()], total: 1, ..Default::default() });
     }
     let base = cfg.base.trim_end_matches('/');
@@ -1106,7 +1144,7 @@ fn ollama_chat(cfg: &AiCfg, prompt: &str, images: &[&[u8]], temp: f64) -> Result
 /// OpenRouter and any custom OpenAI-compatible endpoint, with the image as a data URI.
 fn openai_chat(cfg: &AiCfg, prompt: &str, mime: &str, images: &[&[u8]], temp: f64) -> Result<String, String> {
     #[cfg(not(target_arch = "wasm32"))]
-    if cfg.provider == "workers" {
+    if cfg.is_relay() {
         return hedged(cfg, prompt, mime, images, temp);
     }
     openai_chat_once(cfg, prompt, mime, images, temp)
@@ -1180,7 +1218,7 @@ pub struct Charged {
 /// built-in relay is metered, so any other provider returns at once.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn begin_service(cfg: &AiCfg, service: &str, pages: usize) -> Result<Charged, String> {
-    if cfg.provider != "workers" {
+    if !cfg.is_relay() {
         return Ok(Charged { credits: 0, left: None });
     }
     let url = format!("{}/service", cfg.base.trim_end_matches('/'));
@@ -1228,7 +1266,7 @@ fn openai_chat_once(cfg: &AiCfg, prompt: &str, mime: &str, images: &[&[u8]], tem
         body["reasoning"] = json!({"enabled": false});
         body["usage"] = json!({"include": true});
     }
-    if cfg.provider == "workers" {
+    if cfg.is_relay() {
         if let Some(s) = current_session() {
             body["session"] = json!(s);
         }
@@ -1632,6 +1670,22 @@ mod tests {
 
     fn relay_cfg(base: &str) -> AiCfg {
         AiCfg { provider: "workers".into(), base: base.into(), model: String::new() }
+    }
+
+    #[test]
+    fn the_hosted_ai_goes_to_the_account_server_with_the_accounts_token() {
+        let mut st = Settings { ai_provider: "account".into(), ..Default::default() };
+        st.ai_base = "https://typed.example/ignored".into();
+        set_account_ai(Some(("https://pool.example/".into(), std::sync::Arc::new(|| Some("tok-1".to_string())))));
+        let cfg = AiCfg::from(&st);
+        assert_eq!((cfg.provider.as_str(), cfg.base.as_str()), ("account", "https://pool.example/ai"));
+        assert!(cfg.is_relay() && !cfg.uses_key() && cfg.has_key_or_needs_none());
+        assert_eq!(request_key(&cfg).as_deref(), Some("tok-1"));
+        assert!(account_ai_ready());
+        // signed out: no address and no token, so nothing is sent for anybody else's account
+        set_account_ai(None);
+        let cfg = AiCfg::from(&st);
+        assert!(cfg.base.is_empty() && request_key(&cfg).is_none() && !account_ai_ready());
     }
 
     #[test]

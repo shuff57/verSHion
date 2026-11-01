@@ -1090,6 +1090,13 @@ impl Client {
         Ok(c)
     }
 
+    /// A current access token for the signed-in account, refreshed first when it is about to expire. Blocking: for the
+    /// hosted AI, which runs on a job thread. `None` when nobody is signed in.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn access_token_blocking(&self) -> Option<String> {
+        super::transport::block_on(self.access_for(None, false)).ok().map(|(a, _)| a.expose().to_string())
+    }
+
     /// `GET /ai/credits`: what the account may still spend on the hosted AI.
     pub async fn credits(&self) -> Result<super::api::Credits, ApiError> {
         let resp = self.authed(Method::Get, "/ai/credits", None).await?;
