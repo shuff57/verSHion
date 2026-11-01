@@ -63,6 +63,7 @@ pub mod crondaily;
 pub mod cronpublish;
 pub mod publishrefuse;
 pub mod publishrun;
+pub mod publishstage;
 pub mod publishmeta;
 pub mod publishrewrite;
 pub mod publishstart;
