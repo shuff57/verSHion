@@ -3,7 +3,7 @@
 use crate::figures::interact::Handle;
 use crate::figures::Params;
 
-use super::{atoms, curves, lewis, measure, phasediagram, ratesgraph, reactionenergy, solubilitycurves, spectra};
+use super::{atoms, curves, lewis, measure, phasediagram, ratesgraph, reactionenergy, solubilitycurves, spectra, gaslaws};
 
 pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<Handle>> {
     measure::handles(id, p, size)
@@ -15,6 +15,7 @@ pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<Handle>> {
         .or_else(|| ratesgraph::handles(id, p, size))
         .or_else(|| phasediagram::handles(id, p, size))
         .or_else(|| solubilitycurves::handles(id, p, size))
+        .or_else(|| gaslaws::handles(id, p, size))
 }
 
 /// Set float `key` to `v` clamped into the effective range `[lo, hi]` the renderer uses. If that

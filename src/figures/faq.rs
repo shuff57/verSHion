@@ -50,6 +50,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "reaction-rate-graph" => REACTION_RATE_GRAPH,
         "phase-diagram" => PHASE_DIAGRAM,
         "solubility-curves" => SOLUBILITY_CURVES,
+        "gas-law-graphs" => GAS_LAW_GRAPHS,
         "orbital-diagram" => ORBITAL_DIAGRAM,
         "particle-diagram" => PARTICLE_DIAGRAM,
         "ph-reading" => PH_READING,
@@ -3733,6 +3734,29 @@ const SOLUBILITY_CURVES: &[Faq] = &[
     Faq {
         q: "What does the student copy leave out?",
         a: "Show answers off keeps the curves, their names, the givens (the substance, the temperatures and the masses) and the points that the question marks on the graph, and turns the values read from the curve, the classification, the mass that crystallises and the temperature of saturation into blank lines. The key prints the values read from the curve, rounded once to the decimal places chosen, and then works the answer out from those printed values only, so the arithmetic on the key can be checked line by line.",
+    },
+];
+
+const GAS_LAW_GRAPHS: &[Faq] = &[
+    Faq {
+        q: "Which graph shows which law?",
+        a: "Boyle: P against V is a falling curve that never reaches an axis (P \u{d7} V is constant); P against 1/V is a straight line through the origin, and PV against P is a flat line. Charles: V against T is a straight line that points to zero volume at absolute zero. Gay-Lussac: P against T is the same kind of line. Avogadro: V against n is a straight line through the origin. The combined gas law draws a family of such curves, one for each temperature, pressure or volume. Choose the graph with Graph, or leave it on Standard for the law.",
+    },
+    Faq {
+        q: "Which gas constant is used?",
+        a: "R = 0.082057 L atm/(mol K). For a pressure in kPa, R = 8.314 L kPa/(mol K), which is 8.314 J/(mol K). For mmHg and bar, R is the atm value times 760 mmHg/atm or 1.01325 bar/atm, and a volume in mL multiplies it by 1000, so no unit conversion appears anywhere else in a substitution. The key states the value it uses.",
+    },
+    Faq {
+        q: "Why does the key convert my Celsius temperatures?",
+        a: "A gas-law ratio such as V\u{2081}/T\u{2081} = V\u{2082}/T\u{2082} only works in kelvin. If the givens are in degrees Celsius the key adds 273.15 to each, shows the sum, and says why. A temperature at or below absolute zero (\u{2212}273.15 \u{b0}C) is refused with a note. The temperature axis can be in kelvin or in Celsius whatever the givens are; on the Celsius axis the line, extended back to absolute zero, reaches zero volume at \u{2212}273.15 \u{b0}C.",
+    },
+    Faq {
+        q: "How are the answers rounded?",
+        a: "The givens are kept to 4 significant figures and taken as exact. Each answer is worked out from the printed givens and rounded once, to the number of significant figures chosen (3 at first); the key says how many. A slope is worked out from the two readings as printed, and n from that printed slope.",
+    },
+    Faq {
+        q: "What does the student copy leave out?",
+        a: "Show answers off keeps the axes, the curves, the givens, the first state's point and a guide at the second state's known value, and turns the missing value, the readings, the slope, n and the name of the law into blank lines. It never writes the equation, and its description names no law and no value. The answer point, the guides to the axes and the open circle at absolute zero are drawn on the key only, so the student copy's drawing is the same whatever the answer is.",
     },
 ];
 
