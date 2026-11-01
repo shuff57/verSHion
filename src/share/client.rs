@@ -1090,6 +1090,12 @@ impl Client {
         Ok(c)
     }
 
+    /// `GET /ai/credits`: what the account may still spend on the hosted AI.
+    pub async fn credits(&self) -> Result<super::api::Credits, ApiError> {
+        let resp = self.authed(Method::Get, "/ai/credits", None).await?;
+        super::api::Credits::parse(&resp.json()).ok_or_else(|| ApiError::BadReply("credits".into()))
+    }
+
     /// `GET /me`.
     pub async fn me(&self) -> Result<Me, ApiError> {
         self.me_with(false).await

@@ -348,6 +348,24 @@ pub enum Status {
     Other(String),
 }
 
+/// The hosted-AI balance (`GET /ai/credits`): the free weekly allowance and the credits bought. `None` fields never
+/// reach here: a server with no credits for this account answers `unlimited`, which is `Credits::Unlimited`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Credits {
+    Unlimited,
+    Counted { purchased: i64, left: i64, allowance: i64 },
+}
+
+impl Credits {
+    pub fn parse(v: &Value) -> Option<Credits> {
+        if v.get("unlimited").and_then(Value::as_bool) == Some(true) {
+            return Some(Credits::Unlimited);
+        }
+        let n = |k: &str| v.get(k).and_then(Value::as_i64);
+        Some(Credits::Counted { purchased: n("purchased")?, left: n("left")?, allowance: n("allowance")? })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Me {
     pub email: String,

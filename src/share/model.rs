@@ -137,6 +137,7 @@ pub enum Outcome {
     /// refused). The server is told afterwards.
     SignedOutLocal { everywhere: bool, local: Result<(), ApiError> },
     Restored(Result<Me, ApiError>),
+    Credits(Result<super::api::Credits, ApiError>),
     SignedIn(Result<Me, ApiError>),
     SignedUp(Result<(), ApiError>),
     Resent(Result<(), ApiError>),
@@ -247,6 +248,9 @@ pub struct AccountModel {
     /// (critic 77 I1) The client's account when `me` was taken in: the pages are told another account (or none) is
     /// signed in when the client's moved on from it.
     pub me_account: Option<String>,
+    /// The hosted-AI balance shown on the status page; read once per sign-in and again on "Check now".
+    pub credits: Option<super::api::Credits>,
+    credits_asked: bool,
     /// Sign-in was refused with `429`: offer the device code and the reset.
     pub lockdown: bool,
     /// The reset link belongs to an account never finished: the profile fields are required.
@@ -312,6 +316,8 @@ impl AccountModel {
             notice: None,
             me: None,
             me_account: None,
+            credits: None,
+            credits_asked: false,
             lockdown: false,
             reset_needs_profile: false,
             keychain_note: None,
@@ -712,6 +718,16 @@ impl AccountModel {
         self.job = Some((self.client_gen, rx));
     }
 
+    /// Reads the hosted-AI balance once for the signed-in account (the status page calls this every frame).
+    pub fn want_credits(&mut self) {
+        if self.credits_asked || self.me.is_none() || self.side.is_some() {
+            return;
+        }
+        let Some(c) = self.client.clone() else { return };
+        self.credits_asked = true;
+        self.spawn_side(c, Box::new(|c, _| Box::pin(async move { Outcome::Credits(c.credits().await) })));
+    }
+
     fn spawn_side(&mut self, client: Arc<Client>, job: ClientJob) {
         let rx = self.run(client, job);
         self.side = Some((self.client_gen, rx));
@@ -807,6 +823,8 @@ impl AccountModel {
                 }
             }
             Outcome::Upkept => {}
+            // A balance that could not be read is left out: the page shows no balance rather than a wrong one.
+            Outcome::Credits(r) => self.credits = r.ok(),
             Outcome::Purged(left) => {
                 self.sync_purge();
                 if left.is_empty() && matches!(self.notice, Some(Notice::Error(ref t)) if t == &ApiError::LocalCleanup.message(Flow::SignOut)) {
@@ -830,7 +848,13 @@ impl AccountModel {
             }
             Outcome::Restored(Ok(me)) | Outcome::Me(Ok(me)) => {
                 self.poller.after_success(now, &me.status);
-                self.me_account = self.client.as_ref().and_then(|c| c.account());
+                let account = self.client.as_ref().and_then(|c| c.account());
+                if account != self.me_account {
+                    // Another account: the earlier one's balance is never shown for it.
+                    self.credits = None;
+                    self.credits_asked = false;
+                }
+                self.me_account = account;
                 self.me = Some(me);
                 if self.page == Page::SignIn {
                     self.page = Page::Status;
@@ -1151,6 +1175,7 @@ impl AccountModel {
         if !self.ready() {
             return;
         }
+        self.credits_asked = false;
         self.poller.stop();
         self.spawn(Box::new(|c, _| Box::pin(async move { Outcome::Me(c.me().await) })));
     }

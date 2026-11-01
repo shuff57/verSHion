@@ -364,15 +364,26 @@ fn title(page: Page) -> &'static str {
 }
 
 fn notice(ui: &mut Ui, n: Option<&Notice>) {
-    let Some(n) = n else { return };
+    let Some(n) = n else {
+        ui.ctx().data_mut(|d| d.remove::<String>(egui::Id::new("share_notice_seen")));
+        return;
+    };
     let (text, fill, col) = match n {
         Notice::Info(t) => (t, theme::accent_faded(), theme::text_col()),
         Notice::Error(t) => (t, theme::error_wash(), theme::bad()),
     };
-    egui::Frame::new().fill(fill).corner_radius(10).inner_margin(Margin::same(10)).show(ui, |ui| {
+    let shown = egui::Frame::new().fill(fill).corner_radius(10).inner_margin(Margin::same(10)).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
         ui.add(egui::Label::new(RichText::new(text.as_str()).color(col).size(13.0)).wrap());
     });
+    // The message sits above the form and the button below it: bring a new message into view once, so pressing the
+    // button never seems to do nothing.
+    let seen = egui::Id::new("share_notice_seen");
+    let fresh = ui.ctx().data(|d| d.get_temp::<String>(seen)).as_deref() != Some(text.as_str());
+    if fresh {
+        ui.ctx().data_mut(|d| d.insert_temp(seen, text.clone()));
+        shown.response.scroll_to_me(Some(egui::Align::Center));
+    }
     ui.add_space(8.0);
 }
 
@@ -627,6 +638,31 @@ fn enrol_page(ui: &mut Ui, m: &mut AccountModel) {
 /// `in_page`: drawn on the Shared page, which has its own tabs, its own legal card and, while the
 /// account waits, a step card saying so; none of those is repeated here. `delete_link`: false
 /// where the page offers "Delete my account" itself.
+/// The hosted-AI balance and where to buy more. Buying happens on the server's web page (card entry stays out of the
+/// app); signing in there is separate.
+fn credits_block(ui: &mut Ui, m: &mut AccountModel) {
+    m.want_credits();
+    ui.add_space(4.0);
+    ui.label(theme::strong("Hosted AI credits").size(13.0));
+    match m.credits.clone() {
+        None => {
+            ui.label(theme::muted("Looking up your balance...").size(12.5));
+        }
+        Some(super::api::Credits::Unlimited) => {
+            ui.label(theme::muted("This server does not count credits: the hosted AI is not limited for you.").size(12.5));
+        }
+        Some(super::api::Credits::Counted { purchased, left, allowance }) => {
+            ui.label(theme::text(format!("{left} of {allowance} free this week, and {purchased} bought.")).size(12.5));
+            ui.add_space(4.0);
+            let buy = format!("{}/account/credits.html", m.base_url().trim_end_matches('/'));
+            if kit::ghost_button(ui, "Buy credits").clicked() {
+                crate::platform::open_url(&buy);
+            }
+        }
+    }
+    ui.add_space(8.0);
+}
+
 fn status_page(ui: &mut Ui, m: &mut AccountModel, in_page: bool, delete_link: bool) {
     keychain_banner(ui, m);
     let Some(me) = m.me.clone() else {
@@ -656,6 +692,7 @@ fn status_page(ui: &mut Ui, m: &mut AccountModel, in_page: bool, delete_link: bo
         status_box(ui, m, &me);
         ui.add_space(8.0);
     }
+    credits_block(ui, m);
     actions(ui, m.busy(), |ui| {
         if kit::ghost_button(ui, "Check now").clicked() {
             m.check_now();

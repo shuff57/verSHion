@@ -230,3 +230,14 @@ fn c61_the_invite_box_and_its_result_do_not_carry_over_to_another_account() {
     m.note_account(&AccountSnapshot::of_gate(Gate::SignedOut), &mut inv);
     assert!(inv.code.is_empty());
 }
+
+#[test]
+fn the_credits_balance_is_read_from_the_servers_answer() {
+    use super::api::Credits;
+    let v: serde_json::Value = serde_json::from_str(r#"{"allowance":40,"used":6,"left":34,"purchased":125,"services":[]}"#).unwrap();
+    assert_eq!(Credits::parse(&v), Some(Credits::Counted { purchased: 125, left: 34, allowance: 40 }));
+    let v: serde_json::Value = serde_json::from_str(r#"{"unlimited":true,"services":[]}"#).unwrap();
+    assert_eq!(Credits::parse(&v), Some(Credits::Unlimited));
+    let v: serde_json::Value = serde_json::from_str(r#"{"left":3}"#).unwrap();
+    assert_eq!(Credits::parse(&v), None, "a partial answer shows no balance rather than a wrong one");
+}
