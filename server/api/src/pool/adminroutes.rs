@@ -1,0 +1,132 @@
+//! The pool admin routes over HTTP (worker/src/pool/admin.ts `poolAdminRoutes`). The guard (admin account, known device, sudo token for writes) is the
+//! auth package's, behind `PoolAdminGuard`; every write then checks the pool key; bodies are read after the guard, up to `ADMIN_BODY_MAX`. The cores
+//! write both audit lines themselves, so a handler only passes the admin's id. Paths are exact: ids travel in the body or the query string.
+use super::ctx::{Fail, PoolCtx, PoolError, Res};
+use super::gate::check_key;
+use super::preread::ADMIN_BODY_MAX;
+use super::routes::{PoolState, Reply, client_ip, fail_response, header_str, json_response, param, query_of, raw_response, read_body};
+use super::{adminhold, adminpool};
+use axum::extract::{Request, State};
+use axum::http::HeaderMap;
+use axum::response::Response;
+use serde_json::{Map, Value, json};
+use std::sync::Arc;
+
+/// (method, path, writes) of every admin route this module serves.
+const TABLE: &[(&str, &str, bool)] = &[
+    ("GET", "/admin/pool/reports", false),
+    ("GET", "/admin/pool/flags", false),
+    ("GET", "/admin/pool/item", false),
+    ("GET", "/admin/pool/key", false),
+    ("POST", "/admin/pool/hold", true),
+    ("POST", "/admin/pool/release", true),
+    ("POST", "/admin/pool/release-hold", true),
+    ("POST", "/admin/pool/dismiss", true),
+    ("POST", "/admin/pool/remove", true),
+    ("POST", "/admin/pool/unremove", true),
+];
+
+struct ACall<'a> {
+    st: &'a PoolState,
+    x: &'a PoolCtx<'a>,
+    admin: &'a str,
+    headers: &'a HeaderMap,
+    query: Vec<(String, String)>,
+    body: Map<String, Value>,
+}
+
+fn pair(r: (u16, Value)) -> Res<Reply> {
+    Ok(Reply::Json(r.0, r.1))
+}
+
+fn dispatch(c: &ACall, method: &str, path: &str) -> Res<Reply> {
+    let (x, a, b) = (c.x, c.admin, &c.body);
+    match (method, path) {
+        ("GET", "/admin/pool/reports") => Ok(Reply::Json(200, adminpool::list_reports(x, param(&c.query, "after").as_deref())?)),
+        ("GET", "/admin/pool/flags") => {
+            let limit = param(&c.query, "limit").map(|s| s.parse::<i64>().unwrap_or(0));
+            Ok(Reply::Json(200, adminpool::list_flags(x, limit, param(&c.query, "cursor").as_deref())?))
+        }
+        ("GET", "/admin/pool/key") => Ok(Reply::Json(200, adminhold::pool_key(x, &c.st.fp.pool_key_id())?)),
+        ("GET", "/admin/pool/item") => item(c),
+        ("POST", "/admin/pool/hold") => pair(adminpool::hold(x, a, b)?),
+        ("POST", "/admin/pool/release") => pair(adminpool::release(x, a, b)?),
+        ("POST", "/admin/pool/release-hold") => pair(adminpool::release_hold(x, a, b)?),
+        ("POST", "/admin/pool/dismiss") => pair(adminpool::dismiss(x, a, b)?),
+        ("POST", "/admin/pool/remove") => pair(adminpool::remove(x, a, b)?),
+        ("POST", "/admin/pool/unremove") => pair(adminpool::unremove(x, a, b)?),
+        _ => Ok(Reply::Json(501, json!({ "error": "not_ported" }))),
+    }
+}
+
+/// GET /admin/pool/item?id=: the full form in any state, the stored body streamed in as `payload_full` under a read reservation.
+fn item(c: &ACall) -> Res<Reply> {
+    let id = match param(&c.query, "id") {
+        Some(s) if super::sqlfrag::is_id(&s) => s,
+        _ => return Err(PoolError::new(400, "invalid_request").with("field", json!("id")).into()),
+    };
+    let ip = client_ip(c.headers).map(|ip| crate::auth::guard::ip_bucket(&ip, c.st.ip_prefix)).unwrap_or_default();
+    let slots = c.st.opens.hold(c.admin, &ip)?;
+    let Some((head, key)) = adminpool::item_head(c.x, &id)? else { return Err(PoolError::new(404, "not_found").into()) };
+    let bytes = key.and_then(|k| c.st.store.get(&k).ok().flatten());
+    let Some(bytes) = bytes else {
+        let mut h = head;
+        h["payload_full"] = Value::Null;
+        return Ok(Reply::Json(200, h));
+    };
+    let mut body = super::read::payload_prefix(&head.to_string(), "payload_full");
+    body.extend_from_slice(&bytes);
+    body.push(b'}');
+    Ok(Reply::Raw { status: 200, headers: vec![("Content-Type".into(), "application/json".into())], body, hold: Some(slots) })
+}
+
+pub async fn admin_handle(State(st): State<Arc<PoolState>>, req: Request) -> Response {
+    let (parts, body) = req.into_parts();
+    let (method, path) = (parts.method.as_str().to_string(), parts.uri.path().to_string());
+    let Some(&(_, _, write)) = TABLE.iter().find(|(m, p, _)| *m == method && *p == path) else {
+        let any = TABLE.iter().any(|(_, p, _)| *p == path);
+        return json_response(if any { 405 } else { 404 }, &json!({ "error": if any { "method_not_allowed" } else { "not_found" } }));
+    };
+    let guarded = {
+        let (st, headers) = (st.clone(), parts.headers.clone());
+        tokio::task::spawn_blocking(move || st.admin.admin(&headers, write)).await
+    };
+    let admin = match guarded {
+        Ok(Ok(a)) => a,
+        Ok(Err(e)) => return fail_response(Fail::Pool(e)),
+        Err(_) => return json_response(500, &json!({ "error": "server_error" })),
+    };
+    let bytes = if write {
+        match read_body(&st, &parts.headers, body, ADMIN_BODY_MAX, false).await {
+            Ok(b) => b,
+            Err(f) => return fail_response(f),
+        }
+    } else {
+        vec![]
+    };
+    let query = query_of(parts.uri.query());
+    let done = {
+        let st = st.clone();
+        let headers = parts.headers.clone();
+        tokio::task::spawn_blocking(move || -> Res<Reply> {
+            let json_body = if write { super::poolio::read_json_max(header_str(&headers, "content-type"), header_str(&headers, "content-length"), &bytes, false, ADMIN_BODY_MAX)? } else { Map::new() };
+            let conn = st.conn.lock().unwrap_or_else(|p| p.into_inner());
+            let x = PoolCtx::new(&conn, (st.clock)());
+            // No admin write under a key other than the pool's own.
+            if write {
+                check_key(&x, &st.store, &st.core, &st.fp)?;
+            }
+            let call = ACall { st: &st, x: &x, admin: &admin, headers: &headers, query, body: json_body };
+            let r = dispatch(&call, &method, &path);
+            (st.notify)(x.take_notices());
+            r
+        })
+        .await
+    };
+    match done {
+        Ok(Ok(Reply::Json(s, v))) => json_response(s, &v),
+        Ok(Ok(Reply::Raw { status, headers, body, hold })) => raw_response(status, headers, body, hold),
+        Ok(Err(f)) => fail_response(f),
+        Err(_) => json_response(500, &json!({ "error": "server_error" })),
+    }
+}

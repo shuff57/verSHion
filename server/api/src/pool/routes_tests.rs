@@ -20,6 +20,18 @@ impl PoolAuth for HeaderAuth {
     }
 }
 
+/// `x-test-admin: <id>`, and for writes `x-sudo: 1`.
+struct HeaderAdmin;
+impl PoolAdminGuard for HeaderAdmin {
+    fn admin(&self, h: &HeaderMap, write: bool) -> Result<String, PoolError> {
+        let Some(id) = h.get("x-test-admin").and_then(|v| v.to_str().ok()) else { return Err(PoolError::new(401, "unauthorized")) };
+        if write && h.get("x-sudo").is_none() {
+            return Err(PoolError::new(403, "sudo_required"));
+        }
+        Ok(id.to_string())
+    }
+}
+
 struct W {
     app: Router,
     st: Arc<PoolState>,
@@ -44,6 +56,7 @@ fn world() -> W {
         ip_prefix: 64,
         allowed_origins: vec!["https://app.example".into()],
         auth: Box::new(HeaderAuth),
+        admin: Box::new(HeaderAdmin),
         clock: Arc::new(|| NOW),
         heavy: HeavySlots::default(),
         opens: OpenReads::new(),
@@ -439,4 +452,46 @@ async fn a_bank_is_sent_to_a_circle_replayed_and_a_second_version_follows_the_fi
     add_user(&w, OID);
     let (s, _, _) = send(&w, req("POST", &format!("/circles/{cid}/banks"), Some(OIDT), PUB, send_body("dddddddddddddddddddddddd", json!({})))).await;
     assert_eq!(s, 404);
+}
+
+fn areq(method: &str, uri: &str, sudo: bool, body: Option<Value>) -> HttpRequest<Body> {
+    let bytes = body.map(|b| b.to_string().into_bytes()).unwrap_or_default();
+    let mut b = HttpRequest::builder().method(method).uri(uri).header("x-forwarded-for", "203.0.113.5").header("x-test-admin", "a");
+    if sudo {
+        b = b.header("x-sudo", "1");
+    }
+    if !bytes.is_empty() {
+        b = b.header("content-type", "application/json");
+    }
+    b.header("content-length", bytes.len().to_string()).body(Body::from(bytes)).unwrap()
+}
+
+#[tokio::test]
+async fn admin_routes_need_the_guard_a_sudo_token_for_writes_and_work_on_an_item() {
+    let w = world();
+    // No admin, wrong method, unknown path.
+    let r = HttpRequest::builder().method("GET").uri("/admin/pool/reports").body(Body::empty()).unwrap();
+    assert_eq!(send(&w, r).await.0, 401);
+    assert_eq!(send(&w, areq("DELETE", "/admin/pool/reports", false, None)).await.0, 405);
+    assert_eq!(send(&w, areq("GET", "/admin/pool/nothing", false, None)).await.0, 404);
+    let (s, b, _) = send(&w, areq("GET", "/admin/pool/reports", false, None)).await;
+    assert_eq!((s, b["items"].clone()), (200, json!([])), "{b}");
+    let (s, b, _) = send(&w, areq("GET", "/admin/pool/flags", false, None)).await;
+    assert_eq!((s, b["total_open"].clone()), (200, json!(0)), "{b}");
+    let (s, b, _) = send(&w, areq("GET", "/admin/pool/key", false, None)).await;
+    assert_eq!((s, b["match"].clone()), (200, json!(true)), "{b}");
+    // A write without sudo is refused before its body is read.
+    let (s, b, _) = send(&w, areq("POST", "/admin/pool/hold", false, Some(json!({ "item_id": "0".repeat(32) })))).await;
+    assert_eq!((s, b["error"].clone()), (403, json!("sudo_required")));
+    // A published item: read in full, held, released.
+    let item = published(&w, "t:teacher", &"1".repeat(32), "public").await;
+    let (s, b, _) = send(&w, areq("GET", &format!("/admin/pool/item?id={item}"), false, None)).await;
+    assert_eq!(s, 200, "{b}");
+    assert!(b["payload_full"]["bank"].is_object(), "{b}");
+    let (s, b, _) = send(&w, areq("POST", "/admin/pool/hold", true, Some(json!({ "item_id": item, "note": "check" })))).await;
+    assert_eq!((s, b["changed"].clone()), (200, json!(true)), "{b}");
+    let (s, b, _) = send(&w, areq("GET", &format!("/admin/pool/item?id={item}"), false, None)).await;
+    assert_eq!((s, b["holds"].as_array().map(Vec::len)), (200, Some(1)), "{b}");
+    let (s, b, _) = send(&w, areq("POST", "/admin/pool/hold", true, Some(json!({ "item_id": "nope" })))).await;
+    assert_eq!((s, b["field"].clone()), (400, json!("item_id")));
 }

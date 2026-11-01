@@ -30,6 +30,11 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 /// Who is signed in: the caller with the trust level as it is now in the database.
+/// Who may call the admin routes: an admin account on a known device, and for writes a sudo token (the auth package's guard). Returns the admin's id.
+pub trait PoolAdminGuard: Send + Sync {
+    fn admin(&self, headers: &HeaderMap, write: bool) -> Result<String, PoolError>;
+}
+
 pub trait PoolAuth: Send + Sync {
     fn caller(&self, headers: &HeaderMap) -> Option<Caller>;
 }
@@ -44,6 +49,7 @@ pub struct PoolState {
     pub ip_prefix: usize,
     pub allowed_origins: Vec<String>,
     pub auth: Box<dyn PoolAuth>,
+    pub admin: Box<dyn PoolAdminGuard>,
     pub clock: Arc<dyn Fn() -> i64 + Send + Sync>,
     pub heavy: HeavySlots,
     pub opens: OpenReads,
@@ -79,7 +85,7 @@ impl axum::body::HttpBody for Held {
     }
 }
 
-fn raw_response(status: u16, headers: Vec<(String, String)>, body: Vec<u8>, hold: Option<ReadSlots>) -> Response {
+pub(super) fn raw_response(status: u16, headers: Vec<(String, String)>, body: Vec<u8>, hold: Option<ReadSlots>) -> Response {
     let mut r = Response::new(Body::new(Held { inner: http_body_util::Full::new(body.into()), _hold: hold }));
     *r.status_mut() = StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     for (k, v) in headers {
@@ -104,7 +110,7 @@ fn pool_err(e: PoolError) -> Response {
     }
     r
 }
-fn fail_response(f: Fail) -> Response {
+pub(super) fn fail_response(f: Fail) -> Response {
     match f {
         Fail::Pool(e) => pool_err(e),
         Fail::Db(e) => {
@@ -113,23 +119,23 @@ fn fail_response(f: Fail) -> Response {
         }
     }
 }
-fn json_response(status: u16, v: &Value) -> Response {
+pub(super) fn json_response(status: u16, v: &Value) -> Response {
     let mut r = Response::new(Body::from(v.to_string()));
     *r.status_mut() = StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     r.headers_mut().insert(header::CONTENT_TYPE, HeaderValue::from_static("application/json"));
     r
 }
 
-fn header_str<'a>(h: &'a HeaderMap, name: &str) -> Option<&'a str> {
+pub(super) fn header_str<'a>(h: &'a HeaderMap, name: &str) -> Option<&'a str> {
     h.get(name).and_then(|v| v.to_str().ok())
 }
 /// The last `X-Forwarded-For` entry (the proxy's own); None when absent or blank.
-fn client_ip(h: &HeaderMap) -> Option<String> {
+pub(super) fn client_ip(h: &HeaderMap) -> Option<String> {
     header_str(h, "x-forwarded-for").and_then(|s| s.rsplit(',').next()).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
 }
 
 /// The request body: Content-Length required and exact, within `max` and the deadline.
-async fn read_body(st: &PoolState, h: &HeaderMap, body: Body, max: usize, optional: bool) -> Res<Vec<u8>> {
+pub(super) async fn read_body(st: &PoolState, h: &HeaderMap, body: Body, max: usize, optional: bool) -> Res<Vec<u8>> {
     let Some(declared) = header_str(h, "content-length") else {
         if optional {
             return Ok(vec![]);
@@ -157,10 +163,10 @@ async fn read_body(st: &PoolState, h: &HeaderMap, body: Body, max: usize, option
     Ok(bytes.to_vec())
 }
 
-fn query_of(q: Option<&str>) -> Vec<(String, String)> {
+pub(super) fn query_of(q: Option<&str>) -> Vec<(String, String)> {
     url::form_urlencoded::parse(q.unwrap_or("").as_bytes()).map(|(k, v)| (k.into_owned(), v.into_owned())).collect()
 }
-fn param(q: &[(String, String)], k: &str) -> Option<String> {
+pub(super) fn param(q: &[(String, String)], k: &str) -> Option<String> {
     q.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone())
 }
 
@@ -548,6 +554,8 @@ pub fn router(st: Arc<PoolState>) -> Router {
         .route("/me/invite", any(handle))
         .route("/circles", any(handle))
         .route("/circles/{*rest}", any(handle))
+        .route("/admin/pool/{*rest}", any(super::adminroutes::admin_handle))
+        .route("/admin/dmca/{*rest}", any(super::adminroutes::admin_handle))
         .with_state(st)
 }
 

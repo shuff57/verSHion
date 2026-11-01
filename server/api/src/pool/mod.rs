@@ -57,6 +57,7 @@ pub mod modpurge;
 pub mod modrestore;
 pub mod modtakedown;
 pub mod adminpool;
+pub mod adminroutes;
 pub mod adminblock;
 pub mod adminhold;
 pub mod croncore;
