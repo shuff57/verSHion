@@ -306,8 +306,48 @@ async fn circle_bodies_are_checked_and_a_pending_account_may_join_but_not_create
     assert_ne!(s, 501);
 }
 
+/// A circle owned by `t` with one bank of theirs (rows written directly: a bank is normally created by a send).
+async fn circle_with_bank(w: &W) -> (String, String) {
+    let (s, b, _) = send(w, jreq("POST", "/circles", "t:teacher", json!({ "name": "Team" }))).await;
+    assert_eq!(s, 201, "{b}");
+    let cid = b["circle"]["id"].as_str().unwrap().to_string();
+    let bid = "fedcba9876543210fedcba9876543210".to_string();
+    let c = w.st.conn.lock().unwrap();
+    let required: Vec<String> = {
+        let mut st = c.prepare("SELECT name FROM pragma_table_info('circle_banks') WHERE \"notnull\" = 1 AND dflt_value IS NULL").unwrap();
+        st.query_map([], |r| r.get(0)).unwrap().map(|x| x.unwrap()).collect()
+    };
+    let vals: Vec<String> = required.iter().map(|n| if n == "license" { "'CC-BY-4.0'".to_string() } else if n.ends_with("_at") || n.contains("count") || n.contains("version") { "0".to_string() } else { "''".to_string() }).collect();
+    c.execute(&format!("INSERT INTO circle_banks ({}) VALUES ({})", required.join(", "), vals.join(", ")), []).unwrap();
+    c.execute("UPDATE circle_banks SET id = ?1, circle_id = ?2, author_id = 't', head_version = 1, created_at = ?3, updated_at = ?3 WHERE rowid = last_insert_rowid()", rusqlite::params![bid, cid, NOW]).unwrap();
+    (cid, bid)
+}
+
 #[tokio::test]
-async fn bank_routes_are_not_wired_yet() {
+async fn bank_routes_answer_for_members_and_hide_the_bank_from_strangers() {
+    let w = world();
+    let (cid, bid) = circle_with_bank(&w).await;
+    let base = format!("/circles/{cid}/banks/{bid}");
+    let (s, b, _) = send(&w, req("GET", &format!("{base}/versions"), T, None, vec![])).await;
+    assert_eq!(s, 200, "{b}");
+    let (s, b, _) = send(&w, req("GET", &format!("{base}/changes"), T, None, vec![])).await;
+    assert_eq!(s, 200, "{b}");
+    let (s, b, _) = send(&w, req("DELETE", &base, T, None, vec![])).await;
+    assert_eq!(s, 200, "{b}");
+    let (s, b, _) = send(&w, req("POST", &format!("{base}/undelete"), T, None, vec![])).await;
+    assert_eq!(s, 200, "{b}");
+    let (s, b, _) = send(&w, jreq("PATCH", &base, "t:teacher", json!({ "nonsense": 1 }))).await;
+    assert_eq!((s, b["error"].clone(), b["field"].clone()), (400, json!("invalid_request"), json!("nonsense")));
+    // A teacher outside the circle gets the same 404 whether or not the bank exists.
+    add_user(&w, OID);
+    let (s, b, _) = send(&w, req("GET", &format!("{base}/versions"), Some(OIDT), None, vec![])).await;
+    assert_eq!((s, b["error"].clone()), (404, json!("not_found")));
+    let (s, _, _) = send(&w, jreq("PATCH", &base, OIDT, json!({ "license": "CC-BY-4.0" }))).await;
+    assert_eq!(s, 404);
+}
+
+#[tokio::test]
+async fn sending_and_reading_a_bank_are_not_wired_yet() {
     let w = world();
     let cid = "0123456789abcdef0123456789abcdef";
     let (s, b, _) = send(&w, req("GET", &format!("/circles/{cid}/banks/{cid}"), T, None, vec![])).await;

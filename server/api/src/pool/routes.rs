@@ -5,7 +5,7 @@ use super::ctx::{Fail, PoolCtx, PoolError, PoolNotice, Res};
 use super::fingerprint::Fingerprinter;
 use super::gate::{Caller, Gate, Req, gate};
 use super::list::{ListQuery, SEARCH_CANDIDATES, list};
-use super::poolio::{JSON_BODY_MAX, read_json};
+use super::poolio::{JSON_BODY_MAX, read_json, read_json_max};
 use super::poolkeys::PoolKeys;
 use super::image::MAX_IMAGE_BYTES;
 use super::export::{EXPORT_LIMITS, ExportWho, export_account};
@@ -190,6 +190,9 @@ impl Call<'_> {
     }
 }
 
+/// A bank PATCH's size at most (strip decisions; the size of a send's meta).
+const PATCH_BODY_MAX: usize = 1024 * 1024;
+
 /// How much of the body the route reads.
 fn body_limit(route: &Route, method: &str) -> Option<(usize, bool)> {
     use Route::*;
@@ -200,6 +203,8 @@ fn body_limit(route: &Route, method: &str) -> Option<(usize, bool)> {
         (ItemImport(_), "POST") => Some((JSON_BODY_MAX, true)),
         (MeInvite, "POST") => Some((JSON_BODY_MAX, false)),
         (CircleHeads, "POST") => Some((JSON_BODY_MAX, true)),
+        (Bank(..), "PATCH") => Some((PATCH_BODY_MAX, false)),
+        (BankReport(..) | BankMerge(..) | BankRollback(..) | BankTrim(..), "POST") => Some((JSON_BODY_MAX, false)),
         (Circles | CircleJoinPreview | CircleJoin | Circle(_) | CircleInvites(_) | CircleInvitesRevoke(_) | CircleInvitesEmail(_) | CircleMembersRemove(_) | CircleMembersRole(_) | CircleTransfer(_), "POST" | "PATCH") => Some((JSON_BODY_MAX, false)),
         (Prefs | ItemVersions | Item(_) | ItemReport(_) | ItemAppeal(_) | ItemCounterNotice(_), _) => Some((JSON_BODY_MAX, false)),
         _ => None,
@@ -301,6 +306,7 @@ fn dispatch(c: &Call, route: &Route, enter_heavy: &mut dyn FnMut() -> Res<()>) -
             Ok(Reply::Raw { status: 200, headers, body: out.body.to_string().into_bytes(), hold: None })
         }
         (r, _) if circle_route(r) => circles_dispatch(c, r),
+        (r, _) if bank_route(r) => banks_dispatch(c, r),
         _ => not_ported(),
     }
 }
@@ -341,6 +347,53 @@ fn circles_dispatch(c: &Call, route: &Route) -> Res<Reply> {
         (Route::CircleTransfer(id), "POST") => pair(mem::offer_transfer(x, me, id, &c.json()?)?),
         (Route::CircleTransferAccept(id), "POST") => ok(mem::accept_transfer(x, me, id)?),
         (Route::CircleTransferCancel(id), "POST") => ok(mem::cancel_transfer(x, me, id)?),
+        _ => Ok(Reply::Json(501, json!({ "error": "not_ported" }))),
+    }
+}
+
+/// The bank routes that carry no payload to serve or send.
+fn bank_route(r: &Route) -> bool {
+    use Route::*;
+    matches!(r, Bank(..) | BankUndelete(..) | BankReport(..) | BankPurge(..) | BankBlob(..) | BankVersions(..) | BankChanges(..) | BankMerge(..) | BankRollback(..) | BankTrim(..))
+}
+
+fn banks_dispatch(c: &Call, route: &Route) -> Res<Reply> {
+    use super::circlesendprep::SendEnv;
+    use super::{circlebankedit as edit, circlebankstate as state, circlehidepatch, circlepurge, circlerollback, circleversions as ver};
+    let (x, me) = (c.x, c.me);
+    let ok = |v: Value| Ok(Reply::Json(200, v));
+    let pair = |r: (u16, Value)| Ok(Reply::Json(r.0, r.1));
+    let env = || SendEnv { x, core: &c.st.core, fp: &c.st.fp, keys: &c.st.keys, store: &c.st.store };
+    match (route, c.method) {
+        (Route::Bank(cid, bid), "DELETE") => ok(state::delete_bank(x, me, cid, bid)?),
+        (Route::BankUndelete(cid, bid), "POST") => ok(state::undelete_bank(x, me, cid, bid)?),
+        (Route::BankReport(cid, bid), "POST") => pair(state::report_bank(x, me, cid, bid, &c.json()?)?),
+        (Route::BankPurge(cid, bid), "POST") => ok(circlepurge::purge_bank_now(x, &c.st.store, me, cid, bid)?),
+        (Route::Bank(cid, bid), "PATCH") => {
+            let (m, b) = edit::patch_gate(x, me, cid, bid)?;
+            let body = read_json_max(header_str(c.headers, "content-type"), header_str(c.headers, "content-length"), &c.body, false, PATCH_BODY_MAX)?;
+            ok(circlehidepatch::patch_bank(&env(), me, cid, &m, &b, &body)?)
+        }
+        (Route::BankBlob(cid, bid, sha), "GET") => {
+            let ct = edit::bank_blob_type(x, me, cid, bid, sha)?;
+            let Some(bytes) = c.st.store.get(&format!("blobs/{sha}")).ok().flatten() else { return Err(PoolError::new(404, "not_found").into()) };
+            let headers = edit::blob_headers(&ct, sha).into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+            Ok(Reply::Raw { status: 200, headers, body: bytes, hold: None })
+        }
+        (Route::BankVersions(cid, bid), "GET") => ok(ver::history(x, me, cid, bid, param(&c.query, "before").as_deref())?),
+        (Route::BankChanges(cid, bid), "GET") => match ver::changes(x, &c.st.store, me, cid, bid, header_str(c.headers, "if-none-match"))? {
+            ver::Changes::NotModified(etag) => Ok(Reply::Raw { status: 304, headers: vec![("ETag".into(), etag)], body: vec![], hold: None }),
+            ver::Changes::Body(v, etag) => {
+                let mut headers = vec![("Content-Type".to_string(), "application/json".to_string())];
+                if !etag.is_empty() {
+                    headers.push(("ETag".into(), etag));
+                }
+                Ok(Reply::Raw { status: 200, headers, body: v.to_string().into_bytes(), hold: None })
+            }
+        },
+        (Route::BankMerge(cid, bid), "POST") => ok(ver::merge_initiate(x, &c.st.keys, me, cid, bid, &c.json()?)?),
+        (Route::BankTrim(cid, bid), "POST") => ok(ver::trim_versions(x, me, cid, bid, &c.json()?)?),
+        (Route::BankRollback(cid, bid), "POST") => pair(circlerollback::rollback_bank(&env(), me, cid, bid, &c.json()?)?),
         _ => Ok(Reply::Json(501, json!({ "error": "not_ported" }))),
     }
 }

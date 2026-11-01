@@ -143,14 +143,18 @@ pub fn parse_publish(raw: &[u8], max_payload: usize, max_meta: usize) -> Res<(Ma
 /// With `optional`, no body is no body: Content-Length 0 (whatever Content-Type a runtime added), or neither a length nor a
 /// type (a bare POST) is `{}`; 415 only when a body is really sent.
 pub fn read_json(content_type: Option<&str>, content_length: Option<&str>, body: &[u8], optional: bool) -> Res<Map<String, Value>> {
+    read_json_max(content_type, content_length, body, optional, JSON_BODY_MAX)
+}
+/// `read_json` with its own size cap (a bank PATCH carries strip decisions: up to a megabyte).
+pub fn read_json_max(content_type: Option<&str>, content_length: Option<&str>, body: &[u8], optional: bool, max: usize) -> Res<Map<String, Value>> {
     if optional && (content_length == Some("0") || (content_length.is_none() && (content_type.is_none() || body.is_empty()))) {
         return Ok(Map::new());
     }
     if content_type_of(content_type) != "application/json" {
         return Err(PoolError::new(415, "unsupported_media_type").into());
     }
-    if body.len() > JSON_BODY_MAX {
-        return Err(PoolError::new(413, "body_too_large").with("limit", JSON_BODY_MAX.into()).into());
+    if body.len() > max {
+        return Err(PoolError::new(413, "body_too_large").with("limit", max.into()).into());
     }
     // Duplicate keys (a parse keeps the last) and the other structural limits are refused before the parse.
     let sc = scan_json(body);
