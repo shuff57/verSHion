@@ -6,10 +6,13 @@ or a screenshot.
 
 ## 1. Decisions (nothing to buy, but everything below depends on them)
 
-- [ ] **The domain** both hosts will live under, e.g. `example.org`. The API and the page must share one registrable
+- [x] **Chosen (2026-11-01):** domain `lefthanddev.com`, API `staging-api.lefthanddev.com`, app
+      `staging-app.lefthanddev.com`, sender `vershion@lefthanddev.com`. The staging files already use them. Confirm
+      you control the DNS zone of `lefthanddev.com` in Cloudflare.
+- [x] (kept for the reasoning) The domain both hosts live under. The API and the page must share one registrable
       domain (the refresh cookie is `SameSite=Strict; Secure`).
 - [ ] **The two names:** API `staging-api.<domain>` and app `staging-app.<domain>` (or your own pair under the same
-      domain). Replace `example.org` in `Caddyfile`, `api.env.example` and `README.md` with them.
+      domain).
 - [ ] **Whether staging's API name will later become production's.** The API address is compiled into every build, so
       a production build made later for a different name needs a new release. Decide now if that matters.
 - [ ] **A daily AI spend cap** for staging (`AI_DAILY_USD`, e.g. 1) and, if you want a smaller free allowance than the
@@ -63,5 +66,5 @@ or a screenshot.
 
 ## What I need back from you to continue
 
-Only the two names (and the domain) from section 1: with those I can fill them into the staging files and re-commit.
-Do not send me any key, password or secret. If something fails, send the journal line or the browser console line.
+Nothing further to start: the names are filled in. Do not send me any key, password or secret. If something fails,
+send the journal line or the browser console line.

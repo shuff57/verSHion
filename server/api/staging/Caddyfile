@@ -7,7 +7,7 @@
 #
 # The server listens on loopback only (VERSHION_LISTEN=127.0.0.1:8787), so only Caddy can reach it.
 
-staging-api.example.org {
+staging-api.lefthanddev.com {
 	encode gzip
 
 	reverse_proxy 127.0.0.1:8787

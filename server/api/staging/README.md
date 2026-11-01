@@ -1,13 +1,13 @@
 # Staging runbook: Rust API on the VPS, app on Cloudflare Pages
 
 Written for you to run. Nothing here has been run, and none of it touches production, the Worker, or live Stripe.
-Replace `example.org` with your domain. The API and the page must be under ONE registrable domain (the refresh cookie
+The domain is `lefthanddev.com` (chosen 2026-11-01). The API and the page must be under ONE registrable domain (the refresh cookie
 is `SameSite=Strict; Secure`):
 
 | Piece | Where | Name |
 |---|---|---|
-| API | VPS, Caddy + systemd | `staging-api.example.org` |
-| App (web build) | Cloudflare Pages | `staging-app.example.org` |
+| API | VPS, Caddy + systemd | `staging-api.lefthanddev.com` |
+| App (web build) | Cloudflare Pages | `staging-app.lefthanddev.com` |
 
 The API hostname is compiled into the web build as `VERSHION_POOL_URL`, so the builds you test against staging point at
 staging. Production builds are made later with the production hostname.
@@ -49,11 +49,11 @@ install -d -m 700 /etc/vershion-staging
 - Firewall: 80/443 and SSH only. The API listens on `127.0.0.1:8787`, so it is not reachable from outside anyway.
 
 Check: `journalctl -u vershion-api-staging -n 30` shows the migrations applied and no "not set" warnings you did not
-expect; `curl -s https://staging-api.example.org/health` answers `{"ok":true,...}`.
+expect; `curl -s https://staging-api.lefthanddev.com/health` answers `{"ok":true,...}`.
 
 ## 4. Stripe test endpoint
 
-In the Stripe dashboard, **test mode**: add the endpoint `https://staging-api.example.org/billing/webhook` with the
+In the Stripe dashboard, **test mode**: add the endpoint `https://staging-api.lefthanddev.com/billing/webhook` with the
 same events as production's, copy its signing secret into `STRIPE_WEBHOOK_SECRET`, and
 `systemctl restart vershion-api-staging`. Send a test event from the dashboard and look for it in the journal.
 
@@ -63,24 +63,24 @@ Build with the staging API address compiled in (a release build without `VERSHIO
 up in this build"; a typed address works only in debug builds):
 
 ```
-VERSHION_POOL_URL=https://staging-api.example.org \
-VERSHION_LEGAL_URL=https://staging-app.example.org/legal \
+VERSHION_POOL_URL=https://staging-api.lefthanddev.com \
+VERSHION_LEGAL_URL=https://staging-app.lefthanddev.com/legal \
 trunk build --release
 # -> dist/web   (the wasm is about 20 MiB; Pages refuses single files over 25 MiB)
 ```
 
 Deploy `dist/web` as a Pages project (`wrangler pages deploy dist/web --project-name vershion-staging`, or connect it in
-the dashboard) and add the custom domain `staging-app.example.org`. Copy `server/web/legal` into the deployed
+the dashboard) and add the custom domain `staging-app.lefthanddev.com`. Copy `server/web/legal` into the deployed
 directory first if you want the legal links to resolve, and `server/web/account` for the credits page (set its
-`<meta name="api-base">` to `https://staging-api.example.org`). The mailed links open `/account/verify#token=...`; Pages
+`<meta name="api-base">` to `https://staging-api.lefthanddev.com`). The mailed links open `/account/verify#token=...`; Pages
 serves `index.html` for paths it does not have when the project has no `404.html`, which is what lets the app read the
 link. Check that the first time.
 
-`ALLOWED_ORIGINS` and `APP_URL` in `api.env` must already be `https://staging-app.example.org`.
+`ALLOWED_ORIGINS` and `APP_URL` in `api.env` must already be `https://staging-app.lefthanddev.com`.
 
 ## 6. Test like a user
 
-1. Open `https://staging-app.example.org`, go to the Account screen (no server address to type: it is built in).
+1. Open `https://staging-app.lefthanddev.com`, go to the Account screen (no server address to type: it is built in).
 2. Sign up with a real address you control, open the mailed link, confirm: the app must post the password and
    profile with the token. Log in, reload, and check you stay signed in.
 3. Approve your own account from the admin queue (an admin account is needed: set `trust='admin'` in the staging
@@ -89,7 +89,7 @@ link. Check that the first time.
    check the credits grow and the webhook shows in the journal.
 5. Pool: publish, browse, create a circle, send a bank, import from the pool.
 6. Browser console: no CORS, CSP or mixed-content errors.
-7. `server/api/smoke/smoke.sh` can also be pointed at staging (`BASE=https://staging-api.example.org`) for the API-only
+7. `server/api/smoke/smoke.sh` can also be pointed at staging (`BASE=https://staging-api.lefthanddev.com`) for the API-only
    steps; it needs no database access there, so its approve and pool steps skip.
 
 ## 7. Tear down / reset
