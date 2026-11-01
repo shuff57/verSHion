@@ -57,6 +57,7 @@ pub mod modtakedown;
 pub mod adminpool;
 pub mod adminblock;
 pub mod adminhold;
+pub mod croncore;
 pub mod offer;
 pub mod publishdel;
 pub mod poolio;
