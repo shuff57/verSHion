@@ -1,0 +1,28 @@
+[
+ {
+  "shape": "Feature Stack",
+  "theme": "hedgerow",
+  "axes": "dark/high-contrast-serif/chromatic-green",
+  "hero": "Counter",
+  "nav": "slab",
+  "footer": "index columns",
+  "imagery": "screenshots 6, product",
+  "photos": [],
+  "entry": "vershion landing prototype",
+  "fingerprint": "50432b",
+  "sections": [
+   "hero",
+   "feature stack",
+   "showcase",
+   "formats index",
+   "local-first band",
+   "close band",
+   "footer"
+  ],
+  "signature": "the exam page assembling beside its bank shelf",
+  "waived": [],
+  "prompt": "landing page for verSHion: turn anything into an exam, local-first desktop app for teachers, question banks, printable exams, AI conversion from photos",
+  "date": "2026-10-31",
+  "mode": "build"
+ }
+]
