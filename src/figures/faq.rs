@@ -53,6 +53,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "solubility-curves" => SOLUBILITY_CURVES,
         "gas-law-graphs" => GAS_LAW_GRAPHS,
         "equilibrium-graphs" => EQUILIBRIUM_GRAPHS,
+        "buffer-curves" => BUFFER_CURVES,
         "orbital-diagram" => ORBITAL_DIAGRAM,
         "particle-diagram" => PARTICLE_DIAGRAM,
         "ph-reading" => PH_READING,
@@ -3786,6 +3787,29 @@ const EQUILIBRIUM_GRAPHS: &[Faq] = &[
     Faq {
         q: "What does the student copy leave out?",
         a: "Show answers off keeps the reaction, the phases, the starting concentrations, the axes (which depend on the givens only) and the curves, and turns the K expression, x, the equilibrium concentrations, K when it is the question, Q, the direction and the new equilibrium into blank cells and lines. It draws no dashed equilibrium lines and writes no values. For the question that predicts the direction it draws no curve either, since the curve would show the direction, and its description names no value and no direction.",
+    },
+];
+
+const BUFFER_CURVES: &[Faq] = &[
+    Faq {
+        q: "How is the pH worked out, and is it exact?",
+        a: "At every volume the pH is the one root of the charge balance: [H\u{207a}] + [Na\u{207a}] + [BH\u{207a}] = [OH\u{207b}] + [Cl\u{207b}] + [A\u{207b}], with water's own ions included. That is the full cubic, not the Henderson-Hasselbalch shortcut, so it is right at the very start, through the equivalence point, far past it and in dilute solutions where water matters. The key shows the shortcut a student would use for that part of the curve (excess acid or base, Henderson-Hasselbalch, or the square root for a weak acid or base alone) and then the exact pH, and says why they differ when they do. Concentrations stand in for activities, at 25 \u{b0}C with Kw = 1.0 \u{d7} 10\u{207b}\u{b9}\u{2074}.",
+    },
+    Faq {
+        q: "Where do the pKa values and the indicator ranges come from?",
+        a: "From the CRC Handbook of Chemistry and Physics at 25 \u{b0}C: the tables of dissociation constants of organic and of inorganic acids and bases (a base is listed by the pKa of its conjugate acid, and pKb = 14.00 \u{2212} pKa), and the table of acid-base indicators for the pH range of each colour change. Choose Custom to type your own pKa or pKb.",
+    },
+    Faq {
+        q: "How is the indicator chosen?",
+        a: "The key works out the steep part of the curve: the pH 2% of the equivalence volume either side of it. An indicator is suitable when its whole colour-change range lies inside that steep part, so it changes colour within 2% of the equivalence volume; the best is the suitable one whose range is centred nearest the pH at equivalence. If none fits, the key says so, which happens when the acid or base is very weak or the solutions are very dilute.",
+    },
+    Faq {
+        q: "What do the buffer region and the capacity show?",
+        a: "The buffer region is where the pH is within 1 of pKa, so the ratio of the conjugate base to the acid is between 1/10 and 10; the key shades it. On the buffer graph the key also marks where the added acid or base takes the pH out of that range, from the exact curve, and gives that volume and amount as the buffer's capacity in that direction. A buffer that starts outside the range, or a titrant too dilute to take the pH out of it, is said so.",
+    },
+    Faq {
+        q: "What does the student copy leave out?",
+        a: "Show answers off keeps the analyte, the titrant, their amounts and the axes, which depend on the givens only, and turns the equivalence point, the half-equivalence point, pKa, the indicator, the pH values and the capacity into blank lines. It draws no marked points, guides, buffer region or indicator band. For finding pKa it does not name the acid or base, so its pKa cannot be looked up. For the pH at a volume and the buffer pH it draws no curve, only a dotted line at the volume asked about, since the curve would show the answer.",
     },
 ];
 
