@@ -22,7 +22,7 @@ pub const SEARCH_WORDS_MAX: usize = 2000;
 fn server_error() -> Fail {
     PoolError::new(500, "server_error").into()
 }
-fn to_json(v: &Value) -> Json {
+pub(super) fn to_json(v: &Value) -> Json {
     Json::parse(v.to_string().as_bytes()).unwrap_or(Json::Null)
 }
 fn img_of(q: &Json) -> Option<String> {

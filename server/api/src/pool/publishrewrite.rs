@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 
 /// JS `\s`: what `/\s+/u` collapses.
-fn js_ws(c: char) -> bool {
+pub(super) fn js_ws(c: char) -> bool {
     matches!(c, '\t' | '\n' | '\u{b}' | '\u{c}' | '\r' | ' ' | '\u{a0}' | '\u{1680}' | '\u{2000}'..='\u{200a}' | '\u{2028}' | '\u{2029}' | '\u{202f}' | '\u{205f}' | '\u{3000}' | '\u{feff}')
 }
 /// Runs of whitespace as one space, trimmed (share-core's Line collapse).
