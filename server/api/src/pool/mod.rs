@@ -78,6 +78,7 @@ pub mod publishflags;
 pub mod publishhash;
 pub mod poolcontent;
 pub mod offer;
+pub mod publishcommit;
 pub mod publishdel;
 pub mod poolio;
 pub mod privacynear;
