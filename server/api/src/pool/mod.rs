@@ -74,6 +74,7 @@ pub mod publishderive;
 pub mod publishearlier;
 pub mod publishevid;
 pub mod publishfacts;
+pub mod publishflags;
 pub mod publishhash;
 pub mod poolcontent;
 pub mod offer;
