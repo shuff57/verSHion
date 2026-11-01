@@ -207,3 +207,93 @@ Open for phase 0: which mail path to keep (SMTP or Resend), and whether the web 
 - 2026-10-31 phase 4 slice 102: pool wired into main.rs: `pool_state` builds PoolState from POOL_HASH_KEY (32+ chars; HKDF full-hash root for Core/Fingerprinter, rate-limit key, PoolKeys) + AUTH_SECRET, own connections, AuthBridge as PoolAuth and PoolAdminGuard; router merged into the app (not mounted, with a warning, when either key is missing). `pool::hooks` connects account deletion (delete_content) and suspend/restore (audit row) to the auth state. Pool notices are only logged for now (pool mail is not wired). 3 tests; 882 pass. Left: pool notice mail + flush_outbox, cron timers, cutover checklist.
 - 2026-10-31 phase 4 slice 103: pool cron on timers: `pool::cronrun` (run_hourly = core hourly stages + stem_backfill + licence_rekey with the fingerprint key; run_daily = the same first, then the daily stages), driven from main by an hourly tick (daily in the 04:xx UTC run, as the Worker). Undeliverable notices stay in pool_outbox (no pool mail yet, so every delivery is refused and retried). Not ported on purpose: legacy `backfill` of fold_rev=0 items (run the Worker cron once before the data copy if any remain) and d1_size. 2 tests; 884 pass. Left: pool notice mail over SMTP, the cutover checklist.
 - 2026-10-31 phase 4 slice 104: pool notice mail over SMTP: `pool::poolmail` (pure `render` of every PoolNotice to admins / everyone / an author / an address, ids only, fixed circle-invite text with code, link and UTC expiry; `deliver` looks up the author address and sends through the auth SMTP settings). Request-time notices are sent after the reply; the hourly cron passes the same sender to the outbox flush, so a refused notice stays queued. 3 tests; 887 pass. Left: the cutover checklist (docs/hosting-port.md), then stop.
+- 2026-10-31 phase 5 (cutover prep): without POOL_HASH_KEY the Rust server now answers 503 `pool_not_configured` on the pool paths (items, blobs, circles, me/export, me/invite, admin/pool, admin/dmca), as the Worker did. Cutover checklist written below, NOT executed. All phases 0-4 are ported.
+
+## Cutover checklist (written 2026-10-31, NOT executed)
+
+Nothing below has been run. Every step that touches live data, DNS, Stripe or a secret is yours. Do the steps in order; each has a check and a way back.
+
+### 0. State of the port (what the Rust server does and does not do)
+
+- Ported with tests: AI relay, credits and import jobs; billing and the Stripe webhook; auth (sign-up, sessions, devices, approval queue, staff domains, mail over SMTP); the whole pool (items, blobs, circles and banks, moderation, invites, export, admin routes) and its hourly and daily cron stages on an in-process timer.
+- **Not ported, on purpose:** the legacy `backfill` cron stage (items published before the Worker's rounds 11-12 that still have `fold_rev = 0`) and the D1 size check. Before the data copy, in the Worker's D1, run `SELECT COUNT(*) FROM items WHERE fold_rev = 0 AND purged_at IS NULL`. If it is not 0, let the Worker's hourly cron run until it is 0, then copy.
+- **Not served by this binary:** the static web pages (`web/`, `web/account`) and their `_headers` (CSP, cache rules). Caddy serves them (see 5).
+- **Known differences from the Worker** (all invisible to the app, but know them):
+  - Keys of JSON objects come out sorted, so an ETag of a head JSON differs once across the cutover (clients revalidate once).
+  - `GET /admin/pool/circle-bank` returns the body inside the JSON (memory only; same shape).
+  - The Rust process counts open reads for everyone in one process, and the isolate byte reservation of the Worker is dropped.
+  - The client address is the LAST `X-Forwarded-For` entry. The Worker used `CF-Connecting-IP`. Without that header the server answers 403 `client_ip_required` on rate-limited and pool routes. See 5.
+
+### 1. Before anything: freeze the plan
+
+- [ ] Pick the day and a quiet hour. The copy needs the Worker stopped writing (step 4); plan for minutes to an hour of downtime, depending on the size of D1 and R2.
+- [ ] Decide who tells the teachers. The app keeps its login: access tokens signed by the Worker's `AUTH_SECRET` verify on the Rust side only if the secret is identical (see 3).
+- [ ] Confirm the VPS: disk for the SQLite file and blobs (plan 3x today's size for backups), a non-root service user, a firewall that allows only 80/443 (and SSH).
+
+### 2. Build and stage the Rust server (no live data yet)
+
+- [ ] Build: `cargo build --release -p vershion-api` (workspace `server/api`); copy the binary and `server/worker/migrations/` to the VPS.
+- [ ] Create `/etc/vershion/api.env` (mode 600, owned by the service user) with the variables in 3. Never put secrets in a unit file, argv or the repo.
+- [ ] Run it under systemd with `Restart=on-failure`, `User=vershion`, `ReadWritePaths=/var/lib/vershion`, binding `VERSHION_LISTEN=127.0.0.1:8787`.
+- [ ] Start it against an EMPTY database first. Check: `curl -s localhost:8787/health` shows `ok: true`; the journal says how many migrations applied (all of `0001`-`0120` or however many exist) and warns about anything unset.
+- [ ] Stop it and delete the empty database before the real copy.
+
+### 3. Secrets and configuration (copy values by hand, never through chat or git)
+
+| Variable | Source | Note |
+|---|---|---|
+| `AUTH_SECRET` | the Worker's secret | **Must be identical**, or every session, device cookie and sudo token is invalid and everyone logs in again (acceptable, but decide on purpose). 32+ chars. |
+| `POOL_HASH_KEY` | the Worker's secret | **Must be identical and can never be rotated.** A different key makes every pool write and cron run answer 503 `pool_key_mismatch`. Keep an offline copy. |
+| `ALLOWED_ORIGINS` | the Worker's var | Exact origins, comma separated. |
+| `AI_RELAY_KEY`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_FALLBACK_MODEL`, `OPENROUTER_PRIVACY` | Worker secrets and vars | Workers AI is gone; the fallback is a second OpenRouter model. |
+| `AI_CHAT_PER_HOUR`, `AI_IMPORT_PER_DAY`, `AI_WEEKLY_CREDITS`, `AI_MAX_PAGES`, `AI_DAILY_USD`, `AI_JOB_TTL_HOURS` | Worker vars | Only if you set them there. |
+| `BILLING_ENABLED`, `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe dashboard | See 6. The webhook secret of the NEW endpoint is a different value. |
+| `SMTP_HOSTNAME`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_SECURE`, `SMTP_FROM_NAME`, `MAIL_FROM`, `APP_URL`, `ADMIN_EMAIL`, `ESCALATION_EMAIL` | Worker mail settings | Mail path is SMTP (decided). Never set `MAIL_MODE=log` in production: it prints live tokens and refuses to start unless `APP_URL` is local. |
+| `APPROVAL_DIGEST` | Worker var | `1` for the daily digest even when nothing is overdue. |
+| `VERSHION_DB`, `VERSHION_BLOBS`, `VERSHION_MIGRATIONS`, `VERSHION_LISTEN` | new | e.g. `/var/lib/vershion/pool.db`, `/var/lib/vershion/blobs`, `/opt/vershion/migrations`, `127.0.0.1:8787`. |
+
+- [ ] Compare each secret against the Worker's list (`wrangler secret list`: names only) so none is forgotten. A forgotten `POOL_HASH_KEY` or `AUTH_SECRET` leaves that part switched off with a log warning (pool paths answer 503 `pool_not_configured`; nobody can sign in).
+
+### 4. Copy the data once
+
+- [ ] Announce the downtime. Stop writes at the Worker: switch the route or DNS to a maintenance page, or deploy a read-only Worker. (You do the deploy; this port never deploys.)
+- [ ] D1 -> SQLite: `wrangler d1 export <database> --remote --output d1.sql`, then on the VPS `sqlite3 /var/lib/vershion/pool.db < d1.sql`. Set WAL: the server does this on open. The exported file includes the `d1_migrations` bookkeeping table; the Rust runner records applied names in its own table, so run the server once and check the journal says 0 migrations applied. If it tries to re-apply, the names differ: stop and compare, do not force.
+- [ ] R2 -> blob directory: `rclone copy r2:<bucket> /var/lib/vershion/blobs --checksum` (same key layout: `items/`, `quarantine/`, `blobs/`, `ai/jobs/`). Ownership `vershion:vershion`, mode 700.
+- [ ] Verify the copy: row counts per table equal between D1 (`SELECT COUNT(*)` through `wrangler d1 execute`) and the file for `users`, `sessions`, `items`, `item_publishes`, `circles`, `circle_banks`, `circle_versions`, `credit_ledger`, `pool_outbox`; object counts and total bytes equal between R2 and the directory; `PRAGMA integrity_check;` is `ok`; `PRAGMA foreign_key_check;` is empty.
+- [ ] Start the service. Check in order: `/health`; `GET /admin/pool/key` as an admin (`match: true`, otherwise STOP: wrong `POOL_HASH_KEY`); sign in as yourself; open a shared item and a circle bank; an import job; a credits balance.
+- [ ] Take the first backup now (see 7) before opening traffic.
+
+### 5. Reverse proxy and DNS
+
+- [ ] Caddy in front, automatic TLS, reverse proxy to `127.0.0.1:8787`. Caddy appends the real client address to `X-Forwarded-For`; the server reads the LAST entry, so Caddy must be the only thing that can reach the port (loopback binding + firewall). If another proxy sits in front of Caddy (Cloudflare), add `trusted_proxies` and `client_ip_headers CF-Connecting-IP` so Caddy rewrites the header, or the server sees only the CDN's address and all users share one rate-limit bucket.
+- [ ] Serve `web/` and `web/account` from Caddy with the same headers as the Pages `_headers` file (CSP, cache rules). Fill in the real origins in `api-base` (`credits.html`) and the CSP.
+- [ ] Lower the TTL of the API record a day ahead (60 s). At the cutover, repoint the A/AAAA (or the tunnel) from the Worker's route to the VPS. Keep the Worker deployed but unrouted.
+- [ ] Check from outside: TLS valid, `/health`, a login, a pool read. Check the server log shows real client addresses, not 127.0.0.1.
+
+### 6. Stripe (live keys are yours; this port never touches them)
+
+- [ ] In the Stripe dashboard add a NEW webhook endpoint `https://<api host>/billing/webhook` with the same event set as the old one (payment intents succeeded/failed, refunds, disputes). Copy its signing secret into `STRIPE_WEBHOOK_SECRET` and restart.
+- [ ] Send a test event from the dashboard: the journal shows it accepted; replaying the same event id changes nothing (idempotent).
+- [ ] Keep the old endpoint enabled until you have seen one real payment through the new one, then disable the old endpoint (not delete) for a week.
+- [ ] Reconcile: after the cutover, compare Stripe's payments of the last day with `credit_ledger` rows.
+
+### 7. Backups (before opening traffic)
+
+- [ ] Nightly: `sqlite3 /var/lib/vershion/pool.db ".backup '/var/backups/vershion/pool-$(date +%F).db'"` (a consistent copy while running; never copy the live `-wal` files by hand), plus `rsync` or `rclone` of the blob directory.
+- [ ] Ship both off the machine (a second provider or your own disk); keep 14 dailies and 8 weeklies.
+- [ ] **Restore test, once, before cutover day ends:** restore last night's copy to a scratch directory, start a second instance on another port, check `/health` and `GET /admin/pool/key` (`match: true`).
+- [ ] Back up `/etc/vershion/api.env` separately and offline: losing `POOL_HASH_KEY` cannot be repaired.
+
+### 8. After cutover: watch
+
+- [ ] First hour: journal for `pool cron` lines each hour; no `cron_failure` flags (`GET /admin/pool/flags`); mail test: sign up a throwaway address and check the confirmation arrives; check an admin alert reaches `ADMIN_EMAIL`.
+- [ ] Next 24 h: the 04:xx UTC daily run happened (journal `daily=true`); `pool_outbox` has no old unsent rows (`SELECT COUNT(*) FROM pool_outbox WHERE sent_at IS NULL`); disk use as planned; rate-limit 429s are not clustered on one address (that would be the proxy problem in 5).
+- [ ] After a week: disable the Worker route, then the Worker, then the old Stripe endpoint. Keep the D1 export and the R2 bucket for 30 days.
+
+### 9. Rollback
+
+- Until step 4 completes nothing has changed: abort by leaving DNS on the Worker.
+- After DNS moved but before any new write you care about: repoint DNS back to the Worker (TTL 60 s). The Worker's D1 and R2 were not modified by the copy.
+- After real writes on the Rust side (new sign-ups, payments, publishes) a rollback loses them unless exported: take `sqlite3 .backup` of the VPS file, decide per table what to replay into D1 by hand (`credit_ledger` and `users` matter most), then repoint. Prefer fixing forward on the VPS.
+- Stripe: re-enable the old endpoint (it was only disabled) and put the old signing secret back in the Worker. Payments that arrived at the new endpoint during the window are in the VPS ledger; reconcile them by hand.
+- Secrets are never lost by a rollback: the Worker still holds its own copies.

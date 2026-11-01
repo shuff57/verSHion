@@ -30,8 +30,15 @@ pub fn router() -> Router {
 /// Everything the server serves so far: its own health check and the AI relay.
 fn app(ai: Arc<AiState<HttpTransport>>, billing: Arc<BillingState<HttpStripe>>, auth: Option<Arc<auth::router::AuthState>>, pool: Option<Arc<pool::routes::PoolState>>) -> Router {
     let mut r = router().merge(ai::routes::router(ai)).merge(billing::router(billing));
-    if let Some(p) = pool {
-        r = r.merge(pool::routes::router(p));
+    match pool {
+        Some(p) => r = r.merge(pool::routes::router(p)),
+        // As the Worker without a hash key: the pool refuses, never hashing unkeyed.
+        None => {
+            use axum::routing::any;
+            for path in ["/items", "/items/{*rest}", "/blobs/{*rest}", "/me/export", "/me/invite", "/circles", "/circles/{*rest}", "/admin/pool/{*rest}", "/admin/dmca/{*rest}"] {
+                r = r.route(path, any(|| async { (axum::http::StatusCode::SERVICE_UNAVAILABLE, Json(json!({ "error": "pool_not_configured" }))) }));
+            }
+        }
     }
     match auth {
         Some(a) => r.merge(auth::router::router(a)),
@@ -283,7 +290,12 @@ mod tests {
         // Billing is off by default: buying is a 404, and the webhook says it is not configured.
         assert_eq!(app(state.clone(), billing.clone(), None, None).oneshot(get("/billing/packs")).await.unwrap().status(), 404);
         let hook = Request::post("/billing/webhook").body(Body::empty()).unwrap();
-        assert_eq!(app(state, billing, None, None).oneshot(hook).await.unwrap().status(), 503);
+        assert_eq!(app(state.clone(), billing.clone(), None, None).oneshot(hook).await.unwrap().status(), 503);
+        // No hash key: the pool answers 503 pool_not_configured on its paths, as the Worker did.
+        let off = app(state, billing, None, None).oneshot(get("/items")).await.unwrap();
+        assert_eq!(off.status(), 503);
+        let body: Value = serde_json::from_slice(&off.into_body().collect().await.unwrap().to_bytes()).unwrap();
+        assert_eq!(body, json!({ "error": "pool_not_configured" }));
     }
 
     /// The pool is mounted only with a valid hash key and auth secret; mounted, it answers 401 to a stranger on a pool route and on an admin route.
