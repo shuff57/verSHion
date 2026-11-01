@@ -1,0 +1,42 @@
+# Local Caddyfile for the first run: TLS-less front on :8080 that serves the web pages and proxies the API.
+#   caddy run --config server/api/smoke/Caddyfile --adapter caddyfile
+#
+# Why Caddy at all: the Rust server reads the LAST X-Forwarded-For entry as the client address and answers 403
+# client_ip_required without one. Caddy appends the real peer address, so the browser works. Keep the API bound to
+# 127.0.0.1 (VERSHION_LISTEN) so nothing else can reach it with a forged header.
+#
+# Run it from the repository root (the `root` path below is relative to where Caddy is started).
+# The API paths are exactly the ones the server mounts; everything else is a static page.
+{
+	admin off
+	auto_https off
+}
+
+:8080 {
+	# The API. These are every top-level path the server serves.
+	@api path /health /auth/* /me /me/* /account /account/* /ai/* /billing/* /items /items/* /blobs/* /circles /circles/* /admin/*
+	handle @api {
+		reverse_proxy 127.0.0.1:8787 {
+			# Caddy adds X-Forwarded-For with the real peer; do not trust one sent by the client.
+			trusted_proxies private_ranges
+		}
+	}
+
+	# The web pages (web/ at the repository root; adjust if the pages live elsewhere).
+	handle {
+		root * web
+		encode gzip
+		file_server
+	}
+
+	# Headers a static host should send. The Pages `_headers` file has the real CSP; copy it here for the real cutover.
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
+}
+
+# Production sketch (not for the smoke run): replace `:8080` with the site name, drop `auto_https off`, and Caddy
+# gets the certificate itself. If another proxy (Cloudflare) sits in front, add to the global block:
+#   servers { trusted_proxies cloudflare }   (or a static list of its ranges)
+# and set `client_ip_headers CF-Connecting-IP` so the appended address is the visitor's, not the CDN's.

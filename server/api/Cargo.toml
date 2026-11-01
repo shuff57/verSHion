@@ -29,9 +29,10 @@ unicode-general-category = "=1.1.0"
 url = "=2.5.8"
 lettre = { version = "0.11.23", default-features = false, features = ["smtp-transport", "builder", "rustls", "ring", "webpki-roots"] }
 serde_urlencoded = "0.7"
+# The pool's streamed replies (`pool::routes::Held`) implement `http_body::Body`.
+http-body-util = "0.1"
+http-body = "1"
 
 [dev-dependencies]
 tempfile = "3"
 tower = { version = "0.5", features = ["util"] }
-http-body-util = "0.1"
-http-body = "1"
