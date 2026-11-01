@@ -91,7 +91,7 @@ fn params() -> Vec<ParamDef> {
         v.push(ParamDef::int(COEF[i], lab_c[i], 0, 4, DEF_COEF[i]).hint("0 leaves the species out of the reaction; one reactant and one product at least"));
     }
     for i in 0..4 {
-        v.push(ParamDef::text(NAME[i], lab_n[i], DEF_NAME[i]).hint("Letters, digits and brackets; digits after a letter are drawn as subscripts (N2O4 is N\u{2082}O\u{2084})"));
+        v.push(ParamDef::text(NAME[i], lab_n[i], DEF_NAME[i]).hint("Letters, digits and brackets; digits after a letter are drawn as subscripts (N2O4 is N\u{2082}O\u{2084}). A charge goes at the end and is raised: Fe3+, SCN-, FeSCN2+. Put ^ before the charge when a subscript digit comes first: NO3^-, SO4^2-"));
     }
     for i in 0..4 {
         v.push(ParamDef::choice(PHASE[i], lab_p[i], &PHASES, if i == 3 { PHASES[0] } else { PHASES[0] }).hint("A solid or a liquid is left out of K and Q and is taken to be present in excess"));
@@ -133,7 +133,7 @@ fn sup(e: i32) -> String {
 /// "m × 10ⁿ" outside it.
 pub fn sf(v: f64, n: usize) -> String {
     if v.is_nan() { return "undefined".into(); }
-    if v.is_infinite() { return if v > 0.0 { "∞".into() } else { "\u{2212}∞".into() }; }
+    if v.is_infinite() { return if v > 0.0 { "infinity".into() } else { "\u{2212}infinity".into() }; }
     if v == 0.0 { return "0".into(); }
     let s = format!("{:.*e}", n.max(1) - 1, v.abs());
     let (m, e) = s.split_once('e').unwrap_or((&s, "0"));
@@ -164,19 +164,36 @@ fn pw(c: u32) -> String { match c { 1 => String::new(), 2 => "²".into(), 3 => "
 
 /// A species name with its digits drawn as subscripts where they follow a letter or a bracket.
 pub fn pretty(name: &str) -> String {
+    let (body, charge) = split_charge(name);
     let mut out = String::new();
     let mut prev = ' ';
-    for ch in name.chars() {
+    for ch in body.chars() {
         let sub = ch.is_ascii_digit() && (prev.is_ascii_alphabetic() || prev == ')' || ('₀'..='₉').contains(&prev));
         out.push(if sub { char::from_u32('₀' as u32 + ch.to_digit(10).unwrap_or(0)).unwrap_or(ch) } else { ch });
         prev = out.chars().last().unwrap_or(' ');
     }
+    for ch in charge.chars() {
+        out.push(match ch { '+' => '\u{207a}', '-' => '\u{207b}', d if d.is_ascii_digit() => char::from_u32(['\u{2070}', '\u{b9}', '\u{b2}', '\u{b3}', '\u{2074}', '\u{2075}', '\u{2076}', '\u{2077}', '\u{2078}', '\u{2079}'][d.to_digit(10).unwrap_or(0) as usize] as u32).unwrap_or(d), c => c });
+    }
     out
 }
 
+/// A species name split into its body and its charge: "Fe3+" is ("Fe", "3+"), "SCN-" is ("SCN", "-"), and a "^" marks
+/// the charge when a subscript digit comes before it ("NO3^-", "SO4^2-").
+fn split_charge(name: &str) -> (String, String) {
+    if let Some((b, c)) = name.split_once('^') { return (b.to_string(), c.to_string()); }
+    let signs = name.chars().rev().take_while(|c| matches!(c, '+' | '-')).count().min(2);
+    if signs == 0 { return (name.to_string(), String::new()); }
+    let (head, sg) = name.split_at(name.len() - signs);
+    match head.chars().last() {
+        Some(d) if d.is_ascii_digit() && head.chars().count() > 1 => (head[..head.len() - 1].to_string(), format!("{d}{sg}")),
+        _ => (head.to_string(), sg.to_string()),
+    }
+}
+
 fn clean_name(s: &str, d: &str) -> String {
-    let t: String = s.chars().filter(|c| c.is_ascii_alphanumeric() || matches!(c, '(' | ')')).take(8).collect();
-    if t.is_empty() { d.to_string() } else { t }
+    let t: String = s.chars().filter(|c| c.is_ascii_alphanumeric() || matches!(c, '(' | ')' | '+' | '-' | '^')).take(8).collect();
+    if t.chars().any(|c| c.is_ascii_alphabetic()) { t } else { d.to_string() }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -478,7 +495,7 @@ fn num(p: &Params, k: &str) -> Option<f64> {
 }
 
 fn typed(v: f64) -> String {
-    if v.is_nan() { "not a number".into() } else if v == f64::INFINITY { "∞".into() } else if v == f64::NEG_INFINITY { "\u{2212}∞".into() } else if v.abs() >= 1e6 || (v != 0.0 && v.abs() < 1e-3) { given_fmt(sig4(v)) } else { fmt(v) }
+    if v.is_nan() { "not a number".into() } else if v == f64::INFINITY { "infinity".into() } else if v == f64::NEG_INFINITY { "\u{2212}infinity".into() } else if v.abs() >= 1e6 || (v != 0.0 && v.abs() < 1e-3) { given_fmt(sig4(v)) } else { fmt(v) }
 }
 
 /// A given held to [lo, hi] and 4 significant figures, with a note for anything changed.
@@ -617,7 +634,11 @@ pub struct D2 {
     pub sim: Arc<Sim>,
     /// False when the disturbance changes nothing (a solid or liquid added, an amount of 0, a volume factor of 1).
     pub effect: bool,
+    /// What the key says was done ("Remove all of the HI (1.56 M)"), and what the student copy says (given amounts only).
     pub what: String,
+    pub what_s: String,
+    /// The key's explanation when a removal was held at what is there.
+    pub clamp: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -680,7 +701,9 @@ fn model(st: &Setup, n: &mut Vec<String>) -> Model {
             let mut ca = ce;
             let mut k2 = k;
             let mut effect = true;
+            let mut clamp: Option<String> = None;
             let nm = pretty(&st.names[st.d_i]);
+            let mut what_s = String::new();
             let what = match st.dk {
                 DKind::Add => {
                     if rx.ink(st.d_i) { ca[st.d_i] += st.d_amt; } else { effect = false; n.push(format!("{nm} is a solid or a liquid, so adding more changes no concentration in K and the equilibrium does not shift.")); }
@@ -688,11 +711,18 @@ fn model(st: &Setup, n: &mut Vec<String>) -> Model {
                     format!("Add {} M {}", given_fmt(st.d_amt), nm)
                 }
                 DKind::Remove => {
+                    let mut label = format!("Remove {} M {}", given_fmt(st.d_amt), nm);
                     if rx.ink(st.d_i) {
-                        if st.d_amt > ce[st.d_i] { n.push(format!("Removing {} M of {nm} would make its concentration negative, so all of it ({} M) is removed.", given_fmt(st.d_amt), sf(ce[st.d_i], st.sig))); ca[st.d_i] = 0.0; } else { ca[st.d_i] = ce[st.d_i] - st.d_amt; }
+                        if st.d_amt > ce[st.d_i] {
+                            n.push(format!("Removing {} M of {nm} would make its concentration negative, so all of it ({} M) is removed.", given_fmt(st.d_amt), sf(ce[st.d_i], st.sig)));
+                            clamp = Some(format!("Removing {} M of {nm} would make {} negative (only {} M is there), so all of it is removed.", given_fmt(st.d_amt), st.br(st.d_i), sf(ce[st.d_i], st.sig)));
+                            label = format!("Remove all of the {nm} ({} M)", sf(ce[st.d_i], st.sig));
+                            ca[st.d_i] = 0.0;
+                        } else { ca[st.d_i] = ce[st.d_i] - st.d_amt; }
                     } else { effect = false; n.push(format!("{nm} is a solid or a liquid, so removing some changes no concentration in K and the equilibrium does not shift.")); }
                     if st.d_amt == 0.0 { effect = false; }
-                    format!("Remove {} M {}", given_fmt(st.d_amt), nm)
+                    what_s = format!("Remove up to {} M {}", given_fmt(st.d_amt), nm);
+                    label
                 }
                 DKind::Volume => {
                     for i in 0..4 { if rx.ink(i) { ca[i] = ce[i] / st.d_f; } }
@@ -711,14 +741,28 @@ fn model(st: &Setup, n: &mut Vec<String>) -> Model {
             let dir2 = rx.direction(&ca, k2);
             let mut sol2 = rx.solve(&ca, k2);
             if dir2 == Dir::AtEq { sol2 = Sol { x: 0.0, c: rx.conc(&ca, 0.0), lo: sol2.lo, hi: sol2.hi, stuck: sol2.stuck }; }
-            let ratio = (k2 / k).sqrt();
-            let (kf2, kr2) = if st.dk == DKind::Temp { (kf * ratio, kr / ratio) } else { (kf, kr) };
+            let (kf2, kr2) = if st.dk == DKind::Temp { arrhenius(kf, kr, k2 / k, st.t1, st.t2) } else { (kf, kr) };
+            if st.dk == DKind::Temp && (kf2 / kf).max(kr2 / kr).max((kf / kf2).max(kr / kr2)) > 100.0 { n.push("The rate constants change by a factor of more than 100 with this change of temperature, so the rates are drawn relative to the largest and the earlier part of the graph is small.".into()); }
             let sim2 = simulate(rx, &ca, kf2, kr2, &sol2);
             let q_after = rx.q(&ca);
-            d2 = Some(D2 { c_after: ca, k2, sol: sol2, dir: dir2, q_after, kf: kf2, kr: kr2, sim: sim2, effect, what });
+            d2 = Some(D2 { c_after: ca, k2, sol: sol2, dir: dir2, q_after, kf: kf2, kr: kr2, sim: sim2, effect, what_s: if what_s.is_empty() { what.clone() } else { what_s }, what, clamp });
         }
     }
     Model { st: st.clone(), k, sol, dir, q0, kf, kr, sim, d2, tpt }
+}
+
+/// The baseline activation energy (J/mol) of the model's rate constants: both directions need at least this much.
+pub const EA_BASE: f64 = 10_000.0;
+
+/// The rate constants after a change of temperature from `t1` to `t2` (K), given `rho` = K2 / K. Arrhenius, with the
+/// forward activation energy max(dH, 0) + 10 kJ/mol and the reverse one max(-dH, 0) + 10 kJ/mol: their difference is dH, so
+/// kf2 / kr2 = (kf / kr) K2 / K and the equilibrium is the one the plateaus show, and both are above zero, so both rate
+/// constants rise when the temperature rises and fall when it falls, for an exothermic reaction too.
+pub fn arrhenius(kf: f64, kr: f64, rho: f64, t1: f64, t2: f64) -> (f64, f64) {
+    let u = (1.0 / t1 - 1.0 / t2) / R_GAS;
+    let base = (EA_BASE * u).exp();
+    let (a, b) = if u >= 0.0 { (rho.max(1.0), (1.0 / rho).max(1.0)) } else { (rho.min(1.0), (1.0 / rho).min(1.0)) };
+    (kf * base * a, kr * base * b)
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -772,11 +816,15 @@ impl Model {
 
     /// The largest concentration any plotted curve can reach, from the givens alone: a generous bound, so the axis is
     /// the same whatever the equilibrium turns out to be.
-    pub fn c_bound(&self) -> f64 {
+    pub fn c_bound(&self) -> f64 { self.c_bound_for(true) }
+
+    /// `c_bound`, for a copy that may not show the equilibrium (`seen` false): then a side where nothing limits x is
+    /// bounded by the starting concentrations alone, so the axis is a function of the givens.
+    pub fn c_bound_for(&self, seen: bool) -> f64 {
         let rx = &self.st.rx;
         let c0 = &self.st.c0;
         let (lo_b, hi_b) = rx.bounds(c0);
-        let xe = self.sol.x;
+        let xe = if seen { self.sol.x } else { 0.0 };
         let up = hi_b.unwrap_or(xe.max(0.0));
         let down = (-lo_b.unwrap_or(xe.min(0.0))).max(0.0);
         let mut b: f64 = 0.0;
@@ -840,12 +888,13 @@ fn expr_x(c0: f64, i: usize, coef: u32) -> String {
 
 /// The K (or Q) expression with each concentration written out in x: "(2x)² / (0.100 − x)".
 fn k_in_x(st: &Setup, c0: &[f64; 4]) -> String {
-    let term = |i: usize| {
+    let term = |i: usize, force: bool| {
         let e = expr_x(c0[i], i, st.rx.coef[i]);
         let p = st.rx.coef[i];
-        if p > 1 || e.contains(' ') || e.starts_with('\u{2212}') { format!("({e}){}", pw(p)) } else { e }
+        if force || p > 1 || e.contains(' ') || e.starts_with('\u{2212}') { format!("({e}){}", pw(p)) } else { e }
     };
-    let side = |lo: usize, hi: usize| -> Vec<String> { (lo..hi).filter(|&i| st.rx.ink(i)).map(term).collect() };
+    // two or more factors on a side are each bracketed, so "x" beside "x" never reads as "xx"
+    let side = |lo: usize, hi: usize| -> Vec<String> { let n = (lo..hi).filter(|&i| st.rx.ink(i)).count(); (lo..hi).filter(|&i| st.rx.ink(i)).map(|i| term(i, n > 1)).collect() };
     let (num, den) = (side(2, 4), side(0, 2));
     let n = if num.is_empty() { "1".to_string() } else { num.join("") };
     match den.len() { 0 => n, 1 => format!("{n} / {}", den[0]), _ => format!("{n} / ({})", den.join("")) }
@@ -866,7 +915,10 @@ fn pmul(a: &[f64], b: &[f64]) -> Vec<f64> {
     o
 }
 
-/// Pr(x) - K R(x) as polynomial coefficients, lowest power first, with the leading coefficient made positive.
+/// Pr(x) - K R(x) as polynomial coefficients, lowest power first, with the leading coefficient made positive. No term
+/// is dropped for being small beside another (K far from 1 makes the coefficients differ by many powers of ten); a
+/// coefficient is taken as 0 only when the two terms that make it cancel to within the rounding of a double, which is
+/// the case of a coefficient that is exactly 0 in the decimal arithmetic.
 pub fn poly(st: &Setup, c0: &[f64; 4], k: f64) -> Vec<f64> {
     let (mut pr, mut r) = (vec![1.0], vec![1.0]);
     for i in 0..4 {
@@ -875,9 +927,12 @@ pub fn poly(st: &Setup, c0: &[f64; 4], k: f64) -> Vec<f64> {
         for _ in 0..st.rx.coef[i] { if i < 2 { r = pmul(&r, &f) } else { pr = pmul(&pr, &f) } }
     }
     let n = pr.len().max(r.len());
-    let mut p: Vec<f64> = (0..n).map(|j| pr.get(j).copied().unwrap_or(0.0) - k * r.get(j).copied().unwrap_or(0.0)).collect();
-    let big = p.iter().fold(0.0f64, |a, v| a.max(v.abs()));
-    while p.len() > 1 && p.last().is_some_and(|v| v.abs() <= 1e-12 * big) { p.pop(); }
+    let mut p: Vec<f64> = (0..n).map(|j| {
+        let (a, b) = (pr.get(j).copied().unwrap_or(0.0), k * r.get(j).copied().unwrap_or(0.0));
+        let d = a - b;
+        if d.abs() <= 8.0 * f64::EPSILON * (a.abs() + b.abs()) { 0.0 } else { d }
+    }).collect();
+    while p.len() > 1 && p.last() == Some(&0.0) { p.pop(); }
     if p.last().is_some_and(|v| *v < 0.0) { for v in p.iter_mut() { *v = -*v; } }
     p
 }
@@ -890,22 +945,18 @@ fn poly_str(p: &[f64]) -> String {
         let v = p[e];
         if v == 0.0 && p.len() > 1 { continue; }
         let mag = sft(v.abs(), 4);
-        let body = if e == 0 { mag.clone() } else if mag == "1" { xpow(e) } else { format!("{mag}{}", xpow(e)) };
+        // a coefficient written "m × 10ⁿ" is bracketed before x so the x is not read as part of the power
+        let body = if e == 0 { mag.clone() } else if mag == "1" { xpow(e) } else if mag.contains(" \u{d7} ") { format!("({mag}){}", xpow(e)) } else { format!("{mag}{}", xpow(e)) };
         if s.is_empty() { if v < 0.0 { s.push('\u{2212}'); } } else { s.push_str(if v < 0.0 { " \u{2212} " } else { " + " }); }
         s.push_str(&body);
     }
     s
 }
 
-/// The roots of a x² + b x + c with the cancellation taken out; the larger first.
-fn quad_roots(a: f64, b: f64, c: f64) -> Option<(f64, f64)> {
-    let d = b * b - 4.0 * a * c;
-    if !(d >= 0.0) || a == 0.0 { return None; }
-    let q = -0.5 * (b + if b >= 0.0 { d.sqrt() } else { -d.sqrt() });
-    let r1 = q / a;
-    let r2 = if q != 0.0 { c / q } else { r1 };
-    Some((r1.max(r2), r1.min(r2)))
-}
+/// The other root of a x² + b x + c when `good` is one (the one the equilibrium found): by the product of the roots,
+/// c / (a good), which has no subtraction in it, so it is as accurate as the coefficients even when the two roots
+/// differ by 1 part in 10¹² (where the quadratic formula's discriminant cancels away).
+fn other_root(a: f64, b: f64, c: f64, good: f64) -> f64 { if good != 0.0 { c / (a * good) } else { -b / a } }
 
 /// The wording of a comparison of Q with K.
 fn shift_words(cmp: char) -> &'static str {
@@ -917,16 +968,49 @@ fn species_list(st: &Setup, f: impl Fn(usize) -> String) -> String { (0..4).filt
 /// K as it is written in the working: its significant figures without trailing zeros.
 pub fn kf(k: f64) -> String { sft(k, 4) }
 
-/// "[A]eq = 0.100 − 0.0420 = 0.0580 M" for species i at extent x.
-fn conc_line(st: &Setup, c0: &[f64; 4], sol: &Sol, i: usize) -> String {
+/// The value of a number as `sf` printed it ("1.26 × 10⁻¹²", "−0.0114", "0.0898").
+fn parse_sf(t: &str) -> f64 {
+    let t = t.trim().replace('\u{2212}', "-");
+    if let Some((m, e)) = t.split_once(" \u{d7} 10") {
+        let e: String = e.chars().map(|c| match c { '\u{207b}' => '-', '\u{2070}' => '0', '\u{b9}' => '1', '\u{b2}' => '2', '\u{b3}' => '3', '\u{2074}' => '4', '\u{2075}' => '5', '\u{2076}' => '6', '\u{2077}' => '7', '\u{2078}' => '8', '\u{2079}' => '9', c => c }).collect();
+        return m.trim().parse::<f64>().unwrap_or(f64::NAN) * 10f64.powi(e.trim().parse::<i32>().unwrap_or(0));
+    }
+    t.parse().unwrap_or(f64::NAN)
+}
+
+/// x as the working prints it: `sg` significant figures, or as many more as it takes for the chosen root to read
+/// differently from the root that is rejected (up to 12). Returns the text and the number of figures used.
+fn x_text(x: f64, other: Option<f64>, sg: usize) -> (String, usize) {
+    let mut n = sg;
+    loop {
+        let t = sf(x, n);
+        if n >= 12 || other.is_none_or(|o| sf(o, n) != t) { return (t, n); }
+        n += 1;
+    }
+}
+
+/// "[A]eq = 0.100 − 0.0420 = 0.0580 M" for species i at extent x, which is printed as `xs`. When the subtraction with the
+/// rounded x would not give the printed value (nearly all of a species has reacted, so the difference of two nearly equal
+/// numbers is the answer), the working says so instead of printing arithmetic that is false.
+fn conc_line(st: &Setup, c0: &[f64; 4], sol: &Sol, i: usize, xs: &str) -> String {
     let sg = st.sig;
-    let xs = sf(sol.x, sg);
-    let xp = if sol.x < 0.0 { format!("({xs})") } else { xs };
+    let xp = if sol.x < 0.0 { format!("({xs})") } else { xs.to_string() };
     let c = st.rx.coef[i];
     let times = if c > 1 { format!("{c} \u{d7} {xp}") } else { xp };
     let sign = if i < 2 { "\u{2212}" } else { "+" };
     let body = if c0[i] == 0.0 && i >= 2 { times } else if c0[i] == 0.0 { format!("\u{2212} {times}") } else { format!("{} {sign} {times}", given_fmt(c0[i])) };
-    format!("{}eq = {} = {} = {} M.", st.br(i), expr_x(c0[i], i, c), body, sf(sol.c[i], sg))
+    let res = sf(sol.c[i], sg);
+    let xv = parse_sf(xs);
+    let arith = c0[i] + Rxn::sg(i) * c as f64 * xv;
+    let truth = sol.c[i];
+    let scale = c0[i].abs().max(c as f64 * xv.abs());
+    let ulp = if truth > 0.0 { 10f64.powi(truth.log10().floor() as i32 - (sg as i32 - 1)) } else { 0.0 };
+    let reads_true = if truth > 0.0 { sf(arith, sg) == res && 1e-13 * scale <= 0.05 * ulp } else { arith.abs() <= 1e-12 * scale };
+    if reads_true {
+        format!("{}eq = {} = {} = {} M.", st.br(i), expr_x(c0[i], i, c), body, res)
+    } else {
+        format!("{}eq = {} = {} M (the subtraction cancels: nearly all of the {} M has reacted, so this value is worked from the exact x, not from the rounded x).", st.br(i), expr_x(c0[i], i, c), res, given_fmt(c0[i].max(c as f64 * xv.abs())))
+    }
 }
 
 /// The equilibrium solve of one state, worked: the K expression in x, the polynomial, the root chosen and the root
@@ -940,23 +1024,35 @@ fn solve_lines(st: &Setup, c0: &[f64; 4], k: f64, sol: &Sol, dir: Dir) -> Vec<St
     let p = poly(st, c0, k);
     let deg = p.len() - 1;
     v.push(format!("Multiplied out: {} = 0 (degree {deg} in x).", poly_str(&p)));
+    let mut xs = sf(sol.x, sg);
     match deg {
-        1 => v.push(format!("A straight line in x: x = \u{2212}({}) / ({}) = {}.", sft(p[0], 4), sft(p[1], 4), sf(sol.x, sg))),
+        1 => v.push(format!("A straight line in x: x = \u{2212}({}) / ({}) = {}.", sft(p[0], 4), sft(p[1], 4), xs)),
         2 => {
-            if let Some((r1, r2)) = quad_roots(p[2], p[1], p[0]) {
-                let (good, bad) = if (r1 - sol.x).abs() <= (r2 - sol.x).abs() { (r1, r2) } else { (r2, r1) };
-                v.push(format!("Quadratic formula, x = (\u{2212}b \u{b1} sqrt(b\u{b2} \u{2212} 4ac)) / 2a, with a = {}, b = {}, c = {}: x = {} or x = {}.", sft(p[2], 4), sft(p[1], 4), sft(p[0], 4), sf(r1, sg), sf(r2, sg)));
+            {
+                let (good, bad) = (sol.x, other_root(p[2], p[1], p[0], sol.x));
+                let (gs, n) = x_text(sol.x, Some(bad), sg);
+                let bs = sf(bad, n);
                 let raw = st.rx.raw(c0, bad);
                 let why = (0..4).find(|&i| st.rx.ink(i) && raw[i] < 0.0).map(|i| format!("it makes {} = {} M, which is negative", st.br(i), sf(raw[i], sg))).unwrap_or_else(|| "it lies outside the range where every concentration is at least 0".into());
-                v.push(format!("Concentrations cannot be negative, so x = {} is the root and x = {} is rejected: {why}.", sf(good, sg), sf(bad, sg)));
-            } else {
-                v.push(format!("The root with every concentration at least 0 is x = {}.", sf(sol.x, sg)));
+                if gs == bs {
+                    // the two roots agree to 12 figures (a huge K leaves one concentration almost 0): say so, and which is kept
+                    let kept = sf(sol.x, sg);
+                    v.push(format!("Quadratic formula, x = (\u{2212}b \u{b1} sqrt(b\u{b2} \u{2212} 4ac)) / 2a, with a = {}, b = {}, c = {}: the two roots agree to 12 figures, x = {kept}.", sft(p[2], 4), sft(p[1], 4), sft(p[0], 4)));
+                    v.push(format!("Concentrations cannot be negative, so the root with every concentration at least 0 is kept, x = {kept}; the other one is rejected: {why}."));
+                    xs = kept;
+                    let _ = (good, &gs);
+                } else {
+                    let (first, second) = if good >= bad { (gs.clone(), bs.clone()) } else { (bs.clone(), gs.clone()) };
+                    v.push(format!("Quadratic formula, x = (\u{2212}b \u{b1} sqrt(b\u{b2} \u{2212} 4ac)) / 2a, with a = {}, b = {}, c = {}: x = {first} or x = {second}.", sft(p[2], 4), sft(p[1], 4), sft(p[0], 4)));
+                    v.push(format!("Concentrations cannot be negative, so x = {gs} is the root and x = {bs} is rejected: {why}."));
+                    xs = gs;
+                }
             }
         }
-        _ => v.push(format!("A polynomial of degree {deg} has no short formula; its one root with every concentration at least 0 is found by bisection: x = {}.", sf(sol.x, sg))),
+        _ => v.push(format!("A polynomial of degree {deg} has no short formula; its one root with every concentration at least 0 is found by bisection: x = {xs}.")),
     }
     v.push(if sol.x > 0.0 { "x > 0, so the reaction ran forward (to the right).".into() } else { "x < 0, so the reaction ran in reverse (to the left).".into() });
-    for i in 0..4 { if st.rx.ink(i) { v.push(conc_line(st, c0, sol, i)); } }
+    for i in 0..4 { if st.rx.ink(i) { v.push(conc_line(st, c0, sol, i, &xs)); } }
     // Q = K
     let q = st.rx.q(&sol.c);
     let vals: [String; 4] = std::array::from_fn(|i| sft(sol.c[i], 4));
@@ -999,7 +1095,7 @@ pub fn readout(m: &Model, ans: bool) -> Vec<String> {
         Task::Read => {}
     }
     v.push("Let x be the change in the amount of reaction (mol/L): each reactant falls by its coefficient times x and each product rises by it. x < 0 means the reaction ran in reverse.".into());
-    let dline = m.d2.as_ref().map(|d| format!("Disturbance at t = {}: {}{}.", given_fmt(st.t_d), d.what, if st.dk == DKind::Temp { format!(", \u{394}H = {} kJ/mol", given_fmt(st.dh)) } else { String::new() }));
+    let dline = m.d2.as_ref().map(|d| format!("Disturbance at t = {}: {}{}.", given_fmt(st.t_d), if ans { &d.what } else { &d.what_s }, if st.dk == DKind::Temp { format!(", \u{394}H = {} kJ/mol", given_fmt(st.dh)) } else { String::new() }));
     if !ans {
         v.push(format!("K expression: K = {BLANK}"));
         match st.task {
@@ -1010,7 +1106,7 @@ pub fn readout(m: &Model, ans: bool) -> Vec<String> {
         }
         if let Some(l) = dline {
             v.push(l);
-            v.push(format!("Q just after = {BLANK}   Q compared with K: {BLANK}   The system shifts: {BLANK}"));
+            v.push(format!("Q just after = {BLANK}   Q compared with K: {BLANK}   Describe the change: {BLANK}"));
             v.push(format!("New equilibrium: x = {BLANK}   {}", blanks(st, "eq")));
         }
         return v;
@@ -1033,13 +1129,14 @@ pub fn readout(m: &Model, ans: bool) -> Vec<String> {
                 v.push("Q = 0 / 0 is not defined, so nothing reacts.".into());
             } else {
                 v.push(format!("Q = {} = {}.", k_with(st, &vals), q_text(m.q0, sg)));
-                v.push(format!("Q {cmp} K ({} {cmp} {}), {}.", if m.q0.is_infinite() { "\u{221e}".to_string() } else { sf(m.q0, sg) }, kf(m.k), shift_words(cmp)));
+                v.push(format!("Q {cmp} K ({} {cmp} {}), {}.", if m.q0.is_infinite() { "infinity".to_string() } else { sf(m.q0, sg) }, kf(m.k), shift_words(cmp)));
                 v.push(match m.dir { Dir::Forward => "x > 0: the reaction proceeds forward.".into(), Dir::Reverse => "x < 0: the reaction proceeds in reverse.".into(), _ => "x = 0.".into() });
             }
         }
     }
     if let (Some(d), Some(l)) = (m.d2.as_ref(), dline) {
         v.push(l);
+        if let Some(c) = &d.clamp { v.push(c.clone()); }
         v.push(format!("Just before, the system is at equilibrium: Q = K = {}.", kf(m.k)));
         if st.dk == DKind::Temp {
             v.push(format!("van 't Hoff, with \u{394}H constant: K\u{2082} = K exp[\u{2212}(\u{394}H / R)(1/T\u{2082} \u{2212} 1/T\u{2081})] = {} exp[\u{2212}({} J/mol / 8.314 J/(mol K))(1/{} \u{2212} 1/{})] = {}.", kf(m.k), given_fmt(st.dh * 1000.0), given_fmt(st.t2), given_fmt(st.t1), kf(d.k2)));
@@ -1051,7 +1148,7 @@ pub fn readout(m: &Model, ans: bool) -> Vec<String> {
             v.push(format!("Just after: {}.", species_list(st, |i| format!("{} M", sf(d.c_after[i], sg)))));
             let vals: [String; 4] = std::array::from_fn(|i| sft(d.c_after[i], 4));
             v.push(format!("Q = {} = {}.", k_with(st, &vals), q_text(d.q_after, sg)));
-            v.push(format!("Q {cmp} K{} ({} {cmp} {}), {}.", if st.dk == DKind::Temp { "\u{2082}" } else { "" }, if d.q_after.is_infinite() { "\u{221e}".to_string() } else { sf(d.q_after, sg) }, kf(d.k2), shift_words(cmp)));
+            v.push(format!("Q {cmp} K{} ({} {cmp} {}), {}.", if st.dk == DKind::Temp { "\u{2082}" } else { "" }, if d.q_after.is_infinite() { "infinity".to_string() } else { sf(d.q_after, sg) }, kf(d.k2), shift_words(cmp)));
             v.extend(solve_lines(st, &d.c_after, d.k2, &d.sol, d.dir));
             v.push(format!("New equilibrium: {}.", species_list(st, |i| format!("{} M", sf(d.sol.c[i], sg)))));
         }
@@ -1070,7 +1167,8 @@ fn k_from_data_lines(m: &Model) -> Vec<String> {
     let eqv = m.sol.c[i];
     let sign = if i < 2 { "\u{2212}" } else { "+" };
     v.push(format!("{} goes from {} to {} M, a change of {sign}{}x, so x = ({} \u{2212} {}) / ({sign}{}) = {}.", st.br(i), given_fmt(st.c0[i]), sf(eqv, sg), if c > 1 { c.to_string() } else { String::new() }, sf(eqv, sg), given_fmt(st.c0[i]), c, sf(m.sol.x, sg)));
-    for j in 0..4 { if st.rx.ink(j) { v.push(conc_line(st, &st.c0, &m.sol, j)); } }
+    let xs = sf(m.sol.x, sg);
+    for j in 0..4 { if st.rx.ink(j) { v.push(conc_line(st, &st.c0, &m.sol, j, &xs)); } }
     let vals: [String; 4] = std::array::from_fn(|j| sf(m.sol.c[j], sg));
     v.push(format!("K = {} = {}.", k_with(st, &vals), sf(m.k, sg)));
     v
@@ -1130,8 +1228,8 @@ fn time_axis(t: f64) -> Axis {
     Axis { lo: 0.0, hi: t, ticks: (0..=n).map(|k| (k as f64 * step, fmt(k as f64 * step))).collect(), exp: 0 }
 }
 
-/// A decade written as a tick: plain digits for 0.001 to 100000, 10ⁿ outside.
-fn decade(e: i32) -> String { if (-3..=5).contains(&e) { fmt(10f64.powi(e)) } else { format!("10{}", sup(e)) } }
+/// A decade written as a tick, always as 10ⁿ so the axis has one format.
+fn decade(e: i32) -> String { format!("10{}", sup(e)) }
 
 type Pt = (f64, f64);
 type Bx = (f64, f64, f64, f64);
@@ -1191,7 +1289,11 @@ fn put_marks(marks: &mut Vec<String>, px: &dyn Fn(f64) -> f64, py: &mut dyn FnMu
 }
 
 /// A label in the right margin, joined to the end of its curve by a leader line.
-struct Item { feat: String, y: f64, colour: String, lines_key: Vec<String>, lines_shown: Vec<String> }
+/// `worst` is the widest the key's lines that the student copy hides could be, so the margin does not depend on the answer.
+struct Item { feat: String, y: f64, colour: String, lines_key: Vec<String>, lines_shown: Vec<String>, worst: Vec<String> }
+
+/// The widest a value printed to `n` significant figures can be: "1.2345 × 10⁻³⁰".
+fn worst_value(n: usize) -> String { format!("1.{} \u{d7} 10{}", "2345678".chars().cycle().take(n.max(1) - 1).collect::<String>(), sup(-30)) }
 
 /// The reaction drawn as text with a hand-drawn equilibrium arrow between the sides (the glyph is not in every font).
 /// Returns the elements and the height used.
@@ -1256,32 +1358,36 @@ fn draw_plot(m: &Model, ans: bool, lab: f64, print: bool, mut notes: Vec<String>
     let task = st.task;
     // what each copy shows: the student copy of "predict the direction" draws no curve (it would show the direction);
     // the plateau lines and values are the answer except on the key
-    let show_curves = !(task == Task::Direction && !ans);
+    // (the curves are the answer to every question but 'read it off the graph')
+    let seen = ans || task == Task::Read;
+    let show_curves = seen;
     let k_known = ans || matches!(task, Task::FindEq | Task::Direction);
     let has_d = m.d2.is_some();
     let t_end = m.t_end();
     let tr = m.traj();
     let sp: Vec<usize> = (0..4).filter(|&i| rx.plotted(i)).collect();
     let last = tr.p2.last().copied().or(tr.p1.last().copied()).unwrap_or(Pt4 { t: 0.0, c: [0.0; 4], q: 0.0, rf: 0.0, rr: 0.0 });
-    let rmax = tr.p1.first().map_or(0.0, |p| p.rf.max(p.rr));
+    // the rates are drawn relative to the largest value on the graph, so a disturbance that speeds both up stays on the axis
+    let rmax = tr.p1.iter().chain(tr.p2.iter()).fold(0.0f64, |a, p| a.max(p.rf).max(p.rr));
 
     // ---- the y axis
     let mut ylog = false;
     let (ya, y_title): (Axis, String) = match st.mode {
         Mode::Rates => {
-            let hi: f64 = if has_d { 2.0 } else { 1.05 };
-            let step: f64 = if has_d { 0.5 } else { 0.2 };
+            let hi: f64 = 1.05;
+            let step: f64 = 0.2;
             let n = (hi / step + 1e-9).floor() as i64;
             (Axis { lo: 0.0, hi, ticks: (0..=n).map(|k| (k as f64 * step, fmt(k as f64 * step))).collect(), exp: 0 }, "Relative rate".to_string())
         }
         Mode::Quot => {
             ylog = true;
-            let (a, b) = if k_known || ans {
+            // centred on K when K is given; the key also takes in the K after a change of temperature, the student copy
+            // does not (that K is an answer)
+            let (a, b) = if k_known {
                 let a = m.k.log10();
-                let b = m.d2.as_ref().map_or(a, |d| d.k2.log10());
+                let b = if ans { m.d2.as_ref().map_or(a, |d| d.k2.log10()) } else { a };
                 (a.min(b).floor() - 4.0, a.max(b).ceil() + 4.0)
             } else { (-6.0, 6.0) };
-            let (a, b) = if k_known { (a, b) } else { (-6.0, 6.0) };
             let step = (((b - a) / 8.0).ceil()).max(1.0);
             let mut ticks = Vec::new();
             let mut e = a;
@@ -1289,7 +1395,7 @@ fn draw_plot(m: &Model, ans: bool, lab: f64, print: bool, mut notes: Vec<String>
             (Axis { lo: a, hi: b, ticks, exp: 0 }, "Q (reaction quotient)".to_string())
         }
         _ => {
-            let a = axis(0.0, m.c_bound() * 1.06, 6.0);
+            let a = axis(0.0, m.c_bound_for(seen) * 1.06, 6.0);
             let t = ax_title("Concentration", "M", a.exp);
             (a, t)
         }
@@ -1307,29 +1413,40 @@ fn draw_plot(m: &Model, ans: bool, lab: f64, print: bool, mut notes: Vec<String>
             for &i in &sp {
                 let yv = if show_curves { last.c[i] } else { st.c0[i] };
                 let fin_v = m.d2.as_ref().map_or(m.sol.c[i], |d| d.sol.c[i]);
-                items.push(Item { feat: format!("c{i}"), y: yv, colour: col(i).into(), lines_key: vec![st.br(i), format!("= {} M", sf(fin_v, sg))], lines_shown: vec![st.br(i)] });
+                items.push(Item { feat: format!("c{i}"), y: yv, colour: col(i).into(), lines_key: vec![st.br(i), format!("= {} M", sf(fin_v, sg))], lines_shown: vec![st.br(i)], worst: vec![format!("= {} M", worst_value(sg))] });
             }
         }
         Mode::Quot => {
-            if show_curves { items.push(Item { feat: "q".into(), y: last.q, colour: col(0).into(), lines_key: vec!["Q".into()], lines_shown: vec!["Q".into()] }); }
-            let kv = m.d2.as_ref().map_or(m.k, |d| d.k2);
+            if show_curves { items.push(Item { feat: "q".into(), y: last.q, colour: col(0).into(), lines_key: vec!["Q".into()], lines_shown: vec!["Q".into()], worst: Vec::new() }); }
+            // the K after a change of temperature is an answer: the student copy has the line and the label of the
+            // K it was given only
+            let kv = if ans { m.d2.as_ref().map_or(m.k, |d| d.k2) } else { m.k };
             let temp = st.dk == DKind::Temp && has_d;
-            let shown = if k_known && !temp && matches!(task, Task::FindEq | Task::Direction) { vec!["K".to_string(), format!("= {}", kf(kv))] } else { vec!["K".to_string()] };
-            if k_known { items.push(Item { feat: "kline".into(), y: kv, colour: ink_c.into(), lines_key: vec!["K".into(), format!("= {}", kf(kv))], lines_shown: if ans { vec!["K".into(), format!("= {}", kf(kv))] } else { shown } }); }
+            let given_k = matches!(task, Task::FindEq | Task::Direction);
+            let shown = if given_k { vec!["K".to_string(), format!("= {}", kf(kv))] } else { vec!["K".to_string()] };
+            let key_l = vec!["K".to_string(), format!("= {}", kf(kv))];
+            if k_known && (ans || !temp) {
+                let worst = if shown == key_l { Vec::new() } else { vec![format!("= {}", worst_value(4))] };
+                items.push(Item { feat: "kline".into(), y: kv, colour: ink_c.into(), lines_key: key_l, lines_shown: if ans { vec!["K".into(), format!("= {}", kf(kv))] } else { shown }, worst });
+            }
         }
         Mode::Rates => {
             if show_curves && rmax > 0.0 {
-                items.push(Item { feat: "rf".into(), y: last.rf / rmax, colour: col(0).into(), lines_key: vec!["forward".into()], lines_shown: vec!["forward".into()] });
-                items.push(Item { feat: "rr".into(), y: last.rr / rmax, colour: col(1).into(), lines_key: vec!["reverse".into()], lines_shown: vec!["reverse".into()] });
-                let req = m.d2.as_ref().map_or(m.sol.c, |d| d.sol.c);
-                let (kf_, kr_) = m.d2.as_ref().map_or((m.kf, m.kr), |d| (d.kf, d.kr));
-                let r_eq = rx.rates(&req, kf_, kr_).0 / rmax;
-                items.push(Item { feat: "req".into(), y: r_eq, colour: ink_c.into(), lines_key: vec!["equal".into(), format!("= {}", sf(r_eq, sg))], lines_shown: vec![] });
+                items.push(Item { feat: "rf".into(), y: last.rf / rmax, colour: col(0).into(), lines_key: vec!["forward".into()], lines_shown: vec!["forward".into()], worst: Vec::new() });
+                items.push(Item { feat: "rr".into(), y: last.rr / rmax, colour: col(1).into(), lines_key: vec!["reverse".into()], lines_shown: vec!["reverse".into()], worst: Vec::new() });
+                if ans {
+                    let req = m.d2.as_ref().map_or(m.sol.c, |d| d.sol.c);
+                    let (kf_, kr_) = m.d2.as_ref().map_or((m.kf, m.kr), |d| (d.kf, d.kr));
+                    let r_eq = rx.rates(&req, kf_, kr_).0 / rmax;
+                    items.push(Item { feat: "req".into(), y: r_eq, colour: ink_c.into(), lines_key: vec!["equal".into(), format!("= {}", sf(r_eq, sg))], lines_shown: vec![], worst: vec![format!("= {}", worst_value(sg))] });
+                }
             }
         }
         Mode::Ice => {}
     }
-    let max_key_w = items.iter().flat_map(|it| it.lines_key.iter()).map(|s| text_w(s, fs_lab)).fold(0.0, f64::max);
+    let mut max_key_w = items.iter().flat_map(|it| it.lines_shown.iter().chain(it.worst.iter())).map(|s| text_w(s, fs_lab)).fold(0.0, f64::max);
+    // the key's rate labels are there on every copy's frame, so the plot is as wide on a copy that draws no curve
+    if st.mode == Mode::Rates && !show_curves { for sx in ["forward", "reverse", "equal"].iter().map(|x| x.to_string()).chain([format!("= {}", worst_value(sg))]) { max_key_w = max_key_w.max(text_w(&sx, fs_lab)); } }
     let ytw = ya.ticks.iter().map(|t| text_w(&t.1, fs_ax)).fold(0.0, f64::max);
     let l = (18.0 + 1.12 * fs_t + ytw).round();
     let r = (max_key_w + 30.0).max(24.0).round();
@@ -1386,7 +1503,7 @@ fn draw_plot(m: &Model, ans: bool, lab: f64, print: bool, mut notes: Vec<String>
                     guides.push(stroke_el(&[(left, y0), (right, y0)], guide_c(i), 1.2, "1.5 3", "guide", &feat));
                 }
                 let y0 = py(st.c0[i]);
-                marks.push(marker_el(0, left, y0, 3.8, col(i), &feat));
+                marks.push(marker_el(i, left, y0, 3.8, col(i), &feat));
                 starts.push((i, (left, y0)));
             }
             if !has_d {
@@ -1417,9 +1534,12 @@ fn draw_plot(m: &Model, ans: bool, lab: f64, print: bool, mut notes: Vec<String>
                 let xe = if has_d { x_d } else { right };
                 curves.push(stroke_el(&[(left, y1), (xe, y1)], if print { "#333333" } else { "#444444" }, 1.8, "7 4", "kline", "kline"));
                 if let Some(d) = &m.d2 {
-                    let y2 = py(d.k2);
-                    curves.push(stroke_el(&[(x_d, y2), (right, y2)], if print { "#333333" } else { "#444444" }, 1.8, "7 4", "kline", "kline"));
-                    kpt = Some((right, y2));
+                    // after a change of temperature the K line is an answer: only the key draws it
+                    if ans || st.dk != DKind::Temp {
+                        let y2 = py(if ans { d.k2 } else { m.k });
+                        curves.push(stroke_el(&[(x_d, y2), (right, y2)], if print { "#333333" } else { "#444444" }, 1.8, "7 4", "kline", "kline"));
+                        kpt = Some((right, y2));
+                    } else { kpt = Some((x_d, y1)); }
                 } else { kpt = Some((right, y1)); }
             }
         }
@@ -1454,9 +1574,10 @@ fn draw_plot(m: &Model, ans: bool, lab: f64, print: bool, mut notes: Vec<String>
     let mut dist_pt = None;
     let mut tops: Vec<String> = Vec::new();
     if let Some(d) = &m.d2 {
-        let wd = text_w(&d.what, fs_lab);
+        let dwhat = if ans { &d.what } else { &d.what_s };
+        let wd = text_w(dwhat, fs_lab);
         let cx = x_d.clamp(wd / 2.0 + 3.0, w - wd / 2.0 - 3.0);
-        tops.push(label_el(cx, row1_base, fs_lab, "middle", ink_c, &d.what, "d", ng));
+        tops.push(label_el(cx, row1_base, fs_lab, "middle", ink_c, dwhat, "d", ng));
         ng += 1;
         guides.push(stroke_el(&[(x_d, row1_base + 0.3 * fs_lab + 2.0), (x_d, bottom)], "#666666", 1.2, "5 3", "guide", "d"));
         dist_pt = Some((x_d, top));
@@ -1483,9 +1604,10 @@ fn draw_plot(m: &Model, ans: bool, lab: f64, print: bool, mut notes: Vec<String>
         let lines = if ans { &it.lines_key } else { &it.lines_shown };
         if lines.is_empty() { continue; }
         let hh = if ans { hs[k] } else { hs_shown[k] };
+        // the block hangs from the top of its slot (the slot has the key's height); the leader points at the middle of the block drawn
         let base1 = cy[k] - hs[k] / 2.0 + 0.86 * fs_lab;
-        let _ = hh;
-        let lead = if (cy[k] - ys[k]).abs() < 0.5 { vec![(right, ys[k]), (xl - 3.0, ys[k])] } else { vec![(right, ys[k]), (right + 6.0, ys[k]), (xl - 3.0, cy[k])] };
+        let cm = cy[k] - hs[k] / 2.0 + hh / 2.0;
+        let lead = if (cm - ys[k]).abs() < 0.5 { vec![(right, ys[k]), (xl - 3.0, ys[k])] } else { vec![(right, ys[k]), (right + 6.0, ys[k]), (xl - 3.0, cm)] };
         leaders.push(stroke_el(&lead, "#444444", 1.0, "", "leader", &it.feat));
         for (j, line) in lines.iter().enumerate() {
             texts.push(label_el(xl, base1 + j as f64 * lh, fs_lab, "start", if print { ink_c } else { &it.colour }, line, &it.feat, ng));
@@ -1506,10 +1628,20 @@ fn draw_plot(m: &Model, ans: bool, lab: f64, print: bool, mut notes: Vec<String>
         if last.q.is_finite() && last.q > 0.0 && (last.q / kk - 1.0).abs() > 0.05 { notes.push("Q has not quite reached K in the time shown: when K is very large or very small the last of the approach is slow.".into()); }
     }
 
+    // ---- the curves are a picture of the rate law, not a measurement: say so, on the figure and in the editor
+    let mut caption = String::new();
+    if show_curves {
+        caption = "The curves are schematic mass-action kinetics in arbitrary time units; only the equilibrium values are exact.".to_string();
+        if has_d && st.dk == DKind::Temp { caption.push_str(" Both rate constants change with temperature by the Arrhenius equation."); }
+        notes.push("The curves are schematic mass-action kinetics on arbitrary time units; only the equilibrium values are exact.".into());
+        if has_d && st.dk == DKind::Temp { notes.push(format!("For a change of temperature both rate constants follow the Arrhenius equation, with a forward activation energy of max(\u{394}H, 0) + {} kJ/mol and a reverse one of max(\u{2212}\u{394}H, 0) + {} kJ/mol, so both rise when the temperature rises and both fall when it falls; the new K is from the van 't Hoff equation.", EA_BASE / 1000.0, EA_BASE / 1000.0)); }
+    }
+
     // ---- assemble
     let ro_lines: Vec<String> = if with_readout { readout(m, ans) } else { Vec::new() };
     let mut wrapped: Vec<String> = Vec::new();
     for line in &ro_lines { wrapped.extend(wrap(line, fs_ro, w - 40.0)); }
+    if !caption.is_empty() { wrapped.extend(wrap(&caption, fs_ro, w - 40.0)); }
     let ro_lh = 1.45 * fs_ro;
     let (eq_svg, eq_h) = equation_rows(st, 20.0, ph + 8.0, fs_ro, w, ink_c);
     let h = (ph + 8.0 + eq_h + 4.0 + if wrapped.is_empty() { 0.0 } else { wrapped.len() as f64 * ro_lh + 6.0 }).ceil();
@@ -1586,7 +1718,7 @@ fn ice_tables(m: &Model, ans: bool) -> Vec<Tbl> {
         // the starting row of the second table is the equilibrium just disturbed: the answer to the first, so it is blank on the student copy
         let shown = |i: usize| if ans { sf(d.c_after[i], sg) } else { String::new() };
         let second = mk("Just after (M)", &shown, &|i| d.c_after[i] == 0.0 && ans, &|i| sf(d.sol.c[i], sg), None);
-        v.push(Tbl { title: Some(format!("{}{}", d.what, if st.dk == DKind::Temp { format!(" (\u{394}H = {} kJ/mol)", given_fmt(st.dh)) } else { String::new() })), head, rows: second });
+        v.push(Tbl { title: Some(format!("{}{}", if ans { &d.what } else { &d.what_s }, if st.dk == DKind::Temp { format!(" (\u{394}H = {} kJ/mol)", given_fmt(st.dh)) } else { String::new() })), head, rows: second });
     }
     v
 }
@@ -1597,10 +1729,14 @@ fn draw_ice(m: &Model, ans: bool, lab: f64, print: bool, notes: Vec<String>, wit
     let fs_c = 13.0 * lab;
     let fs_ro = 13.0 * lab;
     let tables = ice_tables(m, ans);
-    // widths come from the key's cells, so the key and the student copy share one grid
+    // widths come from the givens (the student copy's cells) and from the widest an answer can be, so the grid is the
+    // same on the key and the student copy and does not depend on the answer
     let key_tables = ice_tables(m, true);
+    let given_tables = ice_tables(m, false);
+    let sg = st.sig;
+    let worst = text_w(&worst_value(sg), fs_c).max(if m.d2.is_some() { text_w(&format!("{} + 4x", worst_value(sg)), fs_c) } else { 0.0 });
     let label_w = key_tables.iter().flat_map(|t| t.rows.iter().map(|r| text_w(&r.0, fs_c))).fold(0.0, f64::max) + 20.0;
-    let col_w = key_tables.iter().flat_map(|t| t.rows.iter().flat_map(|r| r.1.iter()).chain(t.head.iter()).map(|s| text_w(s, fs_c))).fold(0.0, f64::max).max(54.0) + 24.0;
+    let col_w = given_tables.iter().flat_map(|t| t.rows.iter().flat_map(|r| r.1.iter()).chain(t.head.iter()).map(|s| text_w(s, fs_c))).fold(0.0, f64::max).max(54.0).max(worst) + 24.0;
     let ncol = tables[0].head.len() as f64;
     let tw_ = label_w + ncol * col_w;
     let w = (640.0 * (1.0 + 0.45 * (lab - 1.0))).round().max((tw_ + 40.0).ceil());
@@ -1731,6 +1867,7 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
         Example { name: "H\u{2082} + I\u{2082} and HI: find the equilibrium concentrations", params: vec![f("init_a", 1.0), f("init_b", 1.0), f("k", 50.0)] },
         Example { name: "Find K from equilibrium data (student sheet)", params: vec![s("mode", MODES[1]), s("task", TASKS[1]), f("init_a", 0.5), f("init_b", 0.5), s("eq_species", "C"), f("eq_value", 0.7), b(SHOW_ANSWERS, false)] },
         Example { name: "Le Chatelier: add reactant", params: vec![f("init_a", 1.0), f("init_b", 1.0), f("k", 50.0), s("dist", DISTS[1]), s("dist_species", "A"), f("dist_amount", 1.0), f("dist_time", 8.0)] },
+        Example { name: "Fe\u{b3}\u{207a} + SCN\u{207b}: an ICE table with charges", params: vec![s("mode", MODES[1]), i("coef_a", 1), i("coef_b", 1), i("coef_c", 1), i("coef_d", 0), s("name_a", "Fe3+"), s("name_b", "SCN-"), s("name_c", "FeSCN2+"), s("phase_a", PHASES[1]), s("phase_b", PHASES[1]), s("phase_c", PHASES[1]), f("init_a", 0.002), f("init_b", 0.002), f("init_c", 0.0), f("k", 890.0)] },
         Example { name: "Q against K: which way does it go?", params: vec![s("mode", MODES[2]), s("task", TASKS[2]), f("init_a", 0.5), f("init_b", 0.5), f("init_c", 1.5), f("k", 50.0)] },
     ])
 }

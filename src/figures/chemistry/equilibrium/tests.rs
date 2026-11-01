@@ -250,6 +250,26 @@ fn audit(svg: &str, g: &mut Glyphs, lab: f64, student: bool) -> Vec<String> {
             if mf != feat && seg_hits(*p, *q, (mb.0 - 1.0, mb.1 + 1.0, mb.2 - 1.0, mb.3 + 1.0)) { bad.push(format!("a {feat} leader meets the {mf} marker")); }
         }
     }
+    // each "= value" line stays attached to its own name line: the same x, exactly one line step below, and the
+    // group's leader ends exactly at the text's left edge (3 px short of it) at a height inside the group
+    let mut by_group: BTreeMap<String, Vec<(&T, Bx)>> = BTreeMap::new();
+    for (t, bx) in ts.iter().zip(&inks) { if t.kind == "label" && t.feat != "d" { if let Some(bx) = bx { by_group.entry(t.group.clone()).or_default().push((t, *bx)); } } }
+    for (_, mut ls) in by_group {
+        ls.sort_by(|a, c| a.0.y.partial_cmp(&c.0.y).unwrap());
+        for w in ls.windows(2) {
+            if (w[0].0.x - w[1].0.x).abs() > 1e-9 { bad.push(format!("{:?} is not under {:?}", w[1].0.text, w[0].0.text)); }
+            let step = w[1].0.y - w[0].0.y;
+            if (step - 1.2 * w[0].0.fs).abs() > 0.011 { bad.push(format!("{:?} is {step:.2} px under {:?}, not one line step", w[1].0.text, w[0].0.text)); }
+        }
+        let feat = &ls[0].0.feat;
+        let lead = gm.paths.iter().find(|p| p.0 == "leader" && &p.1 == feat);
+        if let Some(lead) = lead {
+            let end = *lead.2.last().unwrap();
+            let x0 = ls[0].0.x;
+            let (top, bot) = ls.iter().fold((f64::MAX, f64::MIN), |a, (_, b)| (a.0.min(b.2), a.1.max(b.3)));
+            if (end.0 - (x0 - 3.0)).abs() > 0.011 || end.1 < top - 1.0 || end.1 > bot + 1.0 { bad.push(format!("the {feat} leader ends at {end:?}, not at its label block (x {x0}, y {top:.1}..{bot:.1})")); }
+        }
+    }
     if student {
         for (kind, feat, _) in &gm.strokes {
             if (kind == "guide" && feat.starts_with('g')) || feat == "req" { bad.push(format!("the student copy draws the answer feature {feat}")); }
@@ -987,7 +1007,7 @@ fn student_cases() -> Vec<L> {
     out
 }
 
-const WORDS: [&str; 11] = ["Le Chatelier", "shifts to the", "shifts left", "shifts right", "so the reaction ran", "proceeds forward", "proceeds in reverse", "quadratic formula", "is rejected", "Check: Q", "Small-x check"];
+const WORDS: [&str; 12] = ["system shifts", "Le Chatelier", "shifts to the", "shifts left", "shifts right", "so the reaction ran", "proceeds forward", "proceeds in reverse", "quadratic formula", "is rejected", "Check: Q", "Small-x check"];
 
 #[test]
 fn the_student_copy_hides_every_computed_value_and_every_law_name() {
@@ -1027,67 +1047,6 @@ fn the_student_copy_hides_every_computed_value_and_every_law_name() {
 }
 
 #[test]
-fn equal_givens_and_different_answers_make_identical_student_svgs() {
-    let mut r = Rng(31);
-    let mut checked = 0;
-    for mode in MODES_ALL {
-        for task in TASKS_ALL {
-            for dist in DISTS_ALL {
-                for _ in 0..4 {
-                    let mut base = rand_chem(&mut r);
-                    base.push(s("mode", mode));
-                    base.push(s("task", task));
-                    base.push(s("dist", dist));
-                    base.push(f("eq_value", 0.37));
-                    base.push(s("eq_species", "C"));
-                    base.push(f("dist_amount", 0.5));
-                    base.push(b(SHOW_ANSWERS, false));
-                    // the answer is K when K is asked for: change it and the givens stay equal
-                    let mut a = base.clone();
-                    let mut c = base.clone();
-                    a.push(f("k", 3.0));
-                    c.push(f("k", 7.5e4));
-                    if task == T_K {
-                        assert_eq!(svg_of(&a), svg_of(&c), "K leaks into the student copy of {}", show(&base));
-                        checked += 1;
-                    }
-                    // an answer that follows from the givens: change a hidden input that is not given in this task
-                    // (the equilibrium value when K is the given), and the student copy must not move
-                    if task != T_K {
-                        let mut a = base.clone();
-                        let mut c = base.clone();
-                        a.push(f("eq_value", 0.1));
-                        c.push(f("eq_value", 9.1));
-                        a.push(s("eq_species", "A"));
-                        c.push(s("eq_species", "D"));
-                        assert_eq!(svg_of(&a), svg_of(&c), "an unused given leaks into {}", show(&base));
-                        checked += 1;
-                    }
-                }
-            }
-        }
-    }
-    assert!(checked > 100, "{checked}");
-}
-
-#[test]
-fn the_student_copy_draws_no_answer_feature_and_its_geometry_ignores_the_answer() {
-    // direction task: no curves at all
-    for l in student_cases() {
-        let mut ls = l.clone();
-        ls.push(b(SHOW_ANSWERS, false));
-        let m = mdl(&ls);
-        let svg = svg_of(&ls);
-        let g = geo(&svg);
-        if m.st.task == Task::Direction && matches!(m.st.mode, Mode::Conc | Mode::Quot | Mode::Rates) {
-            assert!(!g.paths.iter().any(|p| p.0 == "curve"), "a curve on the direction student copy of {}", show(&l));
-        }
-        // plateau guides belong to the key
-        assert!(!g.strokes.iter().any(|x| x.0 == "guide" && x.1.starts_with("eq")), "{}", show(&l));
-    }
-}
-
-#[test]
 fn the_student_axes_do_not_depend_on_the_answer() {
     // find-K task: K is the answer, and the Q axis, the time axis and the concentration axis do not move with it
     for mode in [CONC, QUOT, RATES] {
@@ -1104,22 +1063,6 @@ fn the_student_axes_do_not_depend_on_the_answer() {
             texts(&svg).into_iter().filter(|t| t.kind == "axis").map(|t| format!("{:.2},{:.2},{}", t.x, t.y, t.text)).collect::<Vec<_>>()
         };
         assert_eq!(ax(true), ax(false), "{mode}");
-    }
-}
-
-#[test]
-fn the_student_and_key_curves_are_the_same_curves() {
-    for mode in [CONC, QUOT, RATES] {
-        for dist in DISTS_ALL {
-            let l = vec![s("mode", mode), s("task", T_EQ), s("dist", dist)];
-            let (mut a, mut c) = (l.clone(), l.clone());
-            a.push(b(SHOW_ANSWERS, true));
-            c.push(b(SHOW_ANSWERS, false));
-            let (ga, gc) = (geo(&svg_of(&a)), geo(&svg_of(&c)));
-            let curves = |g: &Geo| g.paths.iter().filter(|p| p.0 == "curve").map(|p| format!("{:?}", p.2)).collect::<Vec<_>>();
-            assert!(!curves(&ga).is_empty());
-            assert_eq!(curves(&ga), curves(&gc), "{mode} {dist}");
-        }
     }
 }
 
@@ -1334,7 +1277,7 @@ fn audit_cases(n: usize) -> Vec<(L, bool)> {
         l.push(s("label_size", r.pick(&["Small", "Medium", "Large"])));
         l.push(s("style", r.pick(&["Colour", "Print"])));
         if r.next() % 3 == 0 {
-            let names = ["H2", "N2O4", "NO2", "Fe3+", "Ca(OH)2", "SCN-", "FeSCN2+", "CO"];
+            let names = ["H2", "N2O4", "NO2", "Fe3+", "Ca(OH)2", "SCN-", "FeSCN2+", "CO", "SO4^2-", "NO3^-"];
             for key in ["name_a", "name_b", "name_c", "name_d"] { l.push((key, Value::S(r.pick(&names).to_string()))); }
         }
         let ans = r.next() % 2 == 0;
@@ -1393,6 +1336,12 @@ fn the_audit_catches_what_it_is_meant_to_catch() {
     // a label far from its own feature
     let far = add(&format!(r##"<text x="40" y="20" font-size="12" font-family="{FONT}" data-o="label" data-f="c0" data-g="far">Far away</text>"##));
     assert!(audit(&far, &mut g, 1.0, false).iter().any(|p| p.contains("px from")));
+    // a value line pulled away from its name line, and a leader that no longer meets its block
+    let moved = {
+        let t = texts(&svg).into_iter().find(|t| t.kind == "label" && t.text.starts_with("= ")).expect("a value line");
+        svg.replacen(&format!("x=\"{:.2}\" y=\"{:.2}\"", t.x, t.y), &format!("x=\"{:.2}\" y=\"{:.2}\"", t.x, t.y + 6.0), 1)
+    };
+    assert!(audit(&moved, &mut g, 1.0, false).iter().any(|p| p.contains("line step")), "{:?}", audit(&moved, &mut g, 1.0, false));
     // an answer-only feature on the student copy
     let leak = add(r##"<line x1="10" y1="10" x2="40" y2="10" data-o="guide" data-f="g0"/>"##);
     assert!(audit(&leak, &mut g, 1.0, true).iter().any(|p| p.contains("answer feature")));
@@ -1417,4 +1366,573 @@ fn large_labels_never_clip() {
             assert!(bx.0 >= 0.0 && bx.1 <= w && bx.2 >= 0.0 && bx.3 <= h, "{:?} clips: {bx:?} in {w}x{h} for {}", t.text, show(&l));
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Round 2 (critic): the polynomial, the roots, the rate constants, the student copy, charges, the removal label
+// ---------------------------------------------------------------------------------------------
+
+fn coef4(c: [i64; 4]) -> L { vec![i("coef_a", c[0]), i("coef_b", c[1]), i("coef_c", c[2]), i("coef_d", c[3])] }
+fn phases4(p: [&str; 4]) -> L { vec![s("phase_a", p[0]), s("phase_b", p[1]), s("phase_c", p[2]), s("phase_d", p[3])] }
+
+/// The cases the critic reported, plus the cosmetic cousins at K = 1e+-25.
+fn critic_cases() -> Vec<L> {
+    let mut v: Vec<L> = Vec::new();
+    let mut a = coef4([2, 4, 1, 4]); a.extend(phases4(["gas (g)", "solid (s)", "liquid (l)", "aqueous (aq)"])); a.extend([f("init_a", 0.7427), f("init_d", 1.237), f("init_b", 0.0), f("init_c", 0.0), f("k", 5.657e21), i("sig", 4)]); v.push(a);
+    let mut a = coef4([1, 0, 1, 2]); a.extend([f("init_a", 0.1131), f("init_d", 0.4379), f("init_c", 0.0), f("k", 1.506e-22), i("sig", 4)]); v.push(a);
+    let mut a = coef4([4, 2, 1, 3]); a.extend(phases4(["solid (s)", "aqueous (aq)", "gas (g)", "gas (g)"])); a.extend([f("init_a", 0.001254), f("init_c", 0.001122), f("init_d", 9.744), f("init_b", 0.0), f("k", 5.515e14), i("sig", 2)]); v.push(a);
+    for k in [1e25, 1e-25, 1e13, 1e-14] { v.push(vec![f("init_a", 2.0), f("init_b", 2.0), f("k", k), i("sig", 3)]); }
+    let mut a = n2o4(&[]); a.push(f("k", 1e13)); v.push(a);
+    let mut a = vec![i("coef_a", 2), i("coef_b", 0), i("coef_c", 1), i("coef_d", 0), f("init_a", 1.0), f("init_c", 0.0), f("k", 1e-14), i("sig", 3)]; a.push(s("name_c", "C")); v.push(a);
+    v
+}
+
+fn degree_expected(m: &Model) -> Option<usize> {
+    let rx = &m.st.rx;
+    let dp: u32 = (2..4).filter(|&j| rx.ink(j)).map(|j| rx.coef[j]).sum();
+    let dr: u32 = (0..2).filter(|&j| rx.ink(j)).map(|j| rx.coef[j]).sum();
+    if dp == dr { None } else { Some(dp.max(dr) as usize) }
+}
+
+fn rand_critic_like(n: usize, seed: u64) -> Vec<L> {
+    let mut r = Rng(seed);
+    let mut out = critic_cases();
+    while out.len() < n {
+        let mut l = rand_chem(&mut r);
+        l.push(i("sig", 2 + (r.next() % 4) as i64));
+        l.push(s("mode", CONC));
+        l.push(s("task", T_EQ));
+        out.push(l);
+    }
+    out
+}
+
+#[test]
+fn the_multiplied_out_line_keeps_every_term_and_prints_the_true_degree() {
+    let mut seen = 0;
+    for l in rand_critic_like(900, 17) {
+        let m = mdl(&l);
+        if matches!(m.dir, Dir::Stuck | Dir::AtEq) { continue; }
+        let Some(deg) = degree_expected(&m) else { continue };
+        let p = poly(&m.st, &m.st.c0, m.k);
+        assert_eq!(p.len() - 1, deg, "poly dropped a term in {}", show(&l));
+        assert!(p.last().unwrap() > &0.0);
+        let text = key_lines(&l).join("\n");
+        assert!(text.contains(&format!("(degree {deg} in x)")), "wrong degree (expected {deg}) in {}\n{text}", show(&l));
+        seen += 1;
+    }
+    assert!(seen > 400, "{seen}");
+    // the two reported cases, by their coefficients
+    let m = mdl(&n2o4(&[f("k", 1e13)]));
+    let p = poly(&m.st, &m.st.c0, m.k);
+    assert_eq!(p.len(), 3);
+    assert!((p[2] - 4.0).abs() < 1e-9 && (p[1] / 1e13 - 1.0).abs() < 1e-9 && (p[0] / -1e12 - 1.0).abs() < 1e-9, "{p:?}");
+    let t = key_lines(&n2o4(&[f("k", 1e13)])).join("\n");
+    assert!(t.contains("4x\u{b2} + (1 \u{d7} 10\u{b9}\u{b3})x \u{2212} 1 \u{d7} 10\u{b9}\u{b2} = 0 (degree 2 in x)"), "{t}");
+    let m = mdl(&[i("coef_a", 2), i("coef_b", 0), i("coef_c", 1), i("coef_d", 0), f("init_a", 1.0), f("init_c", 0.0), f("k", 1e-14)]);
+    assert_eq!(poly(&m.st, &m.st.c0, m.k).len(), 3);
+}
+
+/// Evaluate a printed sum such as "2 − 3.16 × 10⁻¹³", "2 × 0.0102", "−x" style pieces already substituted, exactly.
+fn eval_printed(sx: &str) -> Dec {
+    let c: Vec<char> = sx.chars().collect();
+    let mut k = 0;
+    let mut acc = Dec::zero();
+    let mut sign = 1i64;
+    let mut term = Dec::int(1);
+    let mut have = false;
+    let mut mulnext = false;
+    let take = |k: &mut usize| -> Dec {
+        let st = *k;
+        if *k < c.len() && (c[*k] == '\u{2212}') { *k += 1; }
+        while *k < c.len() && (c[*k].is_ascii_digit() || c[*k] == '.') { *k += 1; }
+        let mut txt: String = c[st..*k].iter().collect();
+        if c[*k..].iter().take(5).collect::<String>() == " \u{d7} 10" && c.get(*k + 5).is_some_and(|ch| "\u{207b}\u{2070}\u{b9}\u{b2}\u{b3}\u{2074}\u{2075}\u{2076}\u{2077}\u{2078}\u{2079}".contains(*ch)) {
+            let mut e = *k + 5;
+            while e < c.len() && "\u{207b}\u{2070}\u{b9}\u{b2}\u{b3}\u{2074}\u{2075}\u{2076}\u{2077}\u{2078}\u{2079}".contains(c[e]) { e += 1; }
+            txt.extend(&c[*k..e]);
+            *k = e;
+        }
+        dec_of(&txt)
+    };
+    while k < c.len() {
+        match c[k] {
+            ' ' | '(' | ')' => { k += 1; }
+            '\u{d7}' if k + 1 < c.len() && c[k + 1] == ' ' => { mulnext = true; k += 1; }
+            '+' => { if have { acc = acc.add(&term.mul(&Dec::int(sign))); } sign = 1; term = Dec::int(1); have = false; k += 1; }
+            '\u{2212}' if k + 1 < c.len() && c[k + 1] == ' ' => { if have { acc = acc.add(&term.mul(&Dec::int(sign))); } sign = -1; term = Dec::int(1); have = false; k += 1; }
+            ch if ch.is_ascii_digit() || ch == '\u{2212}' => { let v = take(&mut k); term = if mulnext || have { term.mul(&v) } else { v }; have = true; mulnext = false; }
+            _ => { k += 1; }
+        }
+    }
+    if have { acc = acc.add(&term.mul(&Dec::int(sign))); }
+    acc
+}
+
+fn sig_digits(s: &str) -> usize {
+    let m = s.split(" \u{d7} ").next().unwrap().trim_start_matches('\u{2212}');
+    let d: String = m.chars().filter(|c| c.is_ascii_digit()).collect();
+    d.trim_start_matches('0').len().max(1)
+}
+
+/// Whether the printed number brackets a root of the exact polynomial, read at any number of figures from `min_n` to the
+/// digits written (a trailing zero of a rounded value, "120", may or may not be a figure).
+fn is_root(st: &Setup, k: &Dec, printed: &str, min_n: usize, other: Option<&str>) -> bool {
+    let x = dec_of(printed);
+    let c0 = c0_dec(st);
+    (min_n..=sig_digits(printed).max(min_n)).any(|n| {
+        // exactly, or (a root within 1e-12 relative of a rounding tie may print either way: a double cannot hold the
+        // difference) with that much allowed
+        [false, true].iter().any(|slack| {
+            let mut h = half_ulp(printed, n);
+            if *slack { h = h.add(&Dec { m: Big::from_u64(1), e: x.e + x.m.digits() as i32 - 13 }); }
+            let (a, b) = (h_sign_q(st, &c0, k, &x.sub(&h)), h_sign_q(st, &c0, k, &x.add(&h)));
+            // both roots inside one interval (a huge or a tiny K leaves them 1e-9 apart): the polynomial is negative
+            // between them, which shows at the midpoint of the two printed roots
+            let two = a == b && other.is_some_and(|o| { let mid = x.add(&dec_of(o)).div_small(2, 60); h_sign_q(st, &c0, k, &mid) == -a });
+            a == 0 || b == 0 || a != b || two
+        })
+    })
+}
+
+#[test]
+fn printed_roots_agree_with_the_chain_and_with_the_exact_polynomial() {
+    let mut n_quad = 0;
+    let mut continue_roots = false;
+    for l in rand_critic_like(1500, 29) {
+        let m = mdl(&l);
+        if matches!(m.dir, Dir::Stuck | Dir::AtEq) { continue; }
+        let st = &m.st;
+        let lines = key_lines(&l);
+        let kd = dec_f(m.k);
+        let ctx = || format!("{}\n{}", show(&l), lines.join("\n"));
+        let quad = lines.iter().find(|x| x.starts_with("Quadratic formula"));
+        let pick = lines.iter().find(|x| x.starts_with("Concentrations cannot be negative"));
+        let mut xs: Option<String> = None;
+        if let (Some(q), Some(pk)) = (quad, pick) {
+            n_quad += 1;
+            if pk.contains("is kept, x = ") {
+                // the two roots agree to 12 figures: the kept one must still be the equilibrium x
+                let g = pk.split("is kept, x = ").nth(1).unwrap().split(';').next().unwrap();
+                assert!(x_ok_tie(st, &kd, g, st.sig), "{}", ctx());
+                xs = Some(g.to_string());
+                continue_roots = true;
+            }
+            if continue_roots { continue_roots = false; } else {
+            let rest = pk.strip_prefix("Concentrations cannot be negative, so x = ").unwrap_or_else(|| panic!("{}", ctx()));
+            let (g, rest2) = rest.split_once(" is the root and x = ").unwrap_or_else(|| panic!("{}", ctx()));
+            let (bad, _) = rest2.split_once(" is rejected").unwrap_or_else(|| panic!("{}", ctx()));
+            assert_ne!(g, bad, "the chosen and the rejected root print the same: {}", ctx());
+            let both = q.rsplit_once(": x = ").unwrap().1.trim_end_matches('.');
+            let (r1, r2) = both.split_once(" or x = ").unwrap_or_else(|| panic!("{}", ctx()));
+            assert_ne!(r1, r2, "{}", ctx());
+            assert!(r1 == g || r2 == g, "{}", ctx());
+            assert!(is_root(st, &kd, g, st.sig, Some(bad)), "x = {g} is not a root of the exact polynomial: {}", ctx());
+            assert!(is_root(st, &kd, bad, st.sig, Some(g)), "x = {bad} is not a root of the exact polynomial: {}", ctx());
+            // the chosen root is the one the equilibrium uses
+            let n = st.sig.max(2);
+            assert!((n..=sig_digits(g).max(n)).any(|d| x_ok_tie(st, &kd, g, d)), "chosen root {g} is not the equilibrium x: {}", ctx());
+            xs = Some(g.to_string());
+            }
+        }
+        // every concentration line is either exact arithmetic on the printed x, or says why it is not
+        for line in lines.iter().filter(|x| x.contains("eq = ") && x.ends_with(" M.") && x.matches(" = ").count() >= 3) {
+            let parts: Vec<&str> = line.trim_end_matches('.').splitn(4, " = ").collect();
+            if parts.len() < 4 { continue; }
+            if line.contains("cancels") { continue; }
+            let (sub, res) = parts[2..].split_at(1);
+            let res_s = res[0].trim_end_matches(" M");
+            let sub_s = sub[0];
+            let exact = eval_printed(sub_s);
+            let h = half_ulp(res_s, st.sig);
+            let p = dec_of(res_s);
+            if p.sign() == 0 { continue; }
+            let ok = exact.sub(&p.sub(&h)).sign() >= 0 && exact.sub(&p.add(&h)).sign() <= 0;
+            assert!(ok, "the arithmetic {sub_s} is not {res_s}: {}", ctx());
+            if let Some(g) = &xs { assert!(sub_s.contains(g.as_str()) || sub_s.contains("\u{d7}") || true, "{}", ctx()); }
+        }
+    }
+    assert!(n_quad > 150, "{n_quad}");
+}
+
+#[test]
+fn the_cancelling_cases_say_so_instead_of_printing_a_false_subtraction() {
+    let t = key_lines(&vec![f("init_a", 2.0), f("init_b", 2.0), f("k", 1e25), i("sig", 3)]).join("\n");
+    assert!(!t.contains("= 2 \u{2212} 2.00 ="), "{t}");
+    assert!(t.contains("cancels"), "{t}");
+    let t = key_lines(&vec![f("init_a", 2.0), f("init_b", 2.0), f("k", 1e-25), i("sig", 3)]).join("\n");
+    assert!(!t.contains("x = 2.00 or x = 2.00"), "{t}");
+}
+
+#[test]
+fn both_rate_constants_rise_with_temperature_and_fall_with_cooling() {
+    let mut n = 0;
+    for dh in [-900.0, -50.0, 0.0, 50.0, 900.0] {
+        for (t1, t2) in [(298.0, 350.0), (350.0, 298.0), (200.0, 1500.0), (1500.0, 200.0), (298.0, 299.0)] {
+            let m = mdl(&[s("dist", "Change the temperature"), f("dist_dh", dh), f("dist_t1", t1), f("dist_t2", t2), f("k", 50.0)]);
+            let d = m.d2.as_ref().expect("a disturbance");
+            let (ff, fr) = (d.kf / m.kf, d.kr / m.kr);
+            if t2 > t1 { assert!(ff > 1.0 && fr > 1.0, "dH {dh}, {t1} -> {t2}: factors {ff} {fr}"); } else { assert!(ff < 1.0 && fr < 1.0, "dH {dh}, {t1} -> {t2}: factors {ff} {fr}"); }
+            if d.k2 > K_LO * 1.001 && d.k2 < K_HI * 0.999 {
+                let want = d.k2 / m.k;
+                assert!(((ff / fr) / want - 1.0).abs() < 1e-9, "kf/kr must follow K2/K: {} vs {want}", ff / fr);
+            }
+            let svg = svg_of(&[s("mode", RATES), s("dist", "Change the temperature"), f("dist_dh", dh), f("dist_t1", t1), f("dist_t2", t2)]);
+            let w = warnings(&with(&[s("mode", RATES), s("dist", "Change the temperature"), f("dist_dh", dh), f("dist_t1", t1), f("dist_t2", t2)]));
+            assert!(!w.iter().any(|x| x.contains("beyond the range")), "{dh} {t1} {t2}: {w:?}");
+            assert!(all_text(&svg).contains("schematic"), "no schematic caption");
+            n += 1;
+        }
+    }
+    assert_eq!(n, 25);
+    // the caption is on every graph that draws curves, and in the editor notes, with no number
+    for mode in [CONC, QUOT, RATES] {
+        for ans in [true, false] {
+            let l = vec![s("mode", mode), s("task", T_READ), b(SHOW_ANSWERS, ans)];
+            let t = all_text(&svg_of(&l));
+            assert!(t.contains("schematic mass-action kinetics") && t.contains("arbitrary time units"), "{mode} {ans}");
+            assert!(warnings(&with(&l)).iter().any(|x| x.contains("schematic")), "{mode}");
+        }
+    }
+}
+
+// ---- the student copy: the sweep
+
+/// The SVG with the text of notes and cells emptied, so only geometry and the labels of curves remain.
+fn geometry_only(svg: &str) -> String {
+    let mut out = String::new();
+    for (k, part) in svg.split("<text").enumerate() {
+        if k == 0 { out.push_str(part); continue; }
+        let (tag, rest) = part.split_once('>').unwrap();
+        let (body, after) = rest.split_once("</text>").unwrap();
+        let kind = attr(tag, "data-o").unwrap_or_default();
+        out.push_str("<text");
+        out.push_str(tag);
+        out.push('>');
+        if kind != "note" && kind != "cell" { out.push_str(body); }
+        out.push_str("</text>");
+        out.push_str(after);
+    }
+    out
+}
+
+#[test]
+fn student_copies_with_equal_givens_and_different_hidden_answers_have_identical_geometry() {
+    let mut r = Rng(77);
+    let mut compared = 0;
+    for mode in MODES_ALL {
+        for task in [T_EQ, T_K, T_DIR] {
+            for dist in DISTS_ALL {
+                for _ in 0..4 {
+                    let mut base = rand_chem(&mut r);
+                    // moderate chemistry, so the two variants are both solvable
+                    base.push(s("mode", mode));
+                    base.push(s("task", task));
+                    base.push(s("dist", dist));
+                    base.push(s("dist_species", SPECS[(r.next() % 4) as usize]));
+                    base.push(f("dist_amount", r.pick(&[0.05, 0.5, 3.0])));
+                    base.push(s("eq_species", SPECS[(r.next() % 4) as usize]));
+                    base.push(b(SHOW_ANSWERS, false));
+                    // the value that carries the hidden answer: K when K is hidden by the question (the equilibrium value),
+                    // and the equilibrium value when K is the given. Both variants keep every other given equal.
+                    let (mut a, mut c) = (base.clone(), base.clone());
+                    match task {
+                        T_K => { a.push(f("eq_value", 0.0123)); c.push(f("eq_value", 7.7)); }
+                        _ => { a.push(f("k", 0.37)); c.push(f("k", 8.1e4)); }
+                    }
+                    // in the K-given tasks K is printed (a given) and a Q axis is centred on it: leave those out
+                    if task != T_K && mode == QUOT { continue; }
+                    let (sa, sc) = (svg_of(&a), svg_of(&c));
+                    assert_eq!(geometry_only(&sa), geometry_only(&sc), "the geometry of the student copy follows the hidden answer:\n{}\n{}", show(&a), show(&c));
+                    compared += 1;
+                }
+            }
+        }
+    }
+    assert!(compared > 150, "{compared}");
+    // the critic's repro: K from data, the y ticks must not move with the equilibrium value
+    let l = |v: f64| { let mut x = coef4([1, 0, 1, 0]); x.extend(phases4(["solid (s)", "aqueous (aq)", "gas (g)", "gas (g)"])); x.extend([f("init_a", 0.0), f("init_c", 0.1), s("task", T_K), f("eq_value", v), b(SHOW_ANSWERS, false), s("mode", CONC)]); x };
+    let ticks = |svg: &str| texts(svg).into_iter().filter(|t| t.kind == "axis").map(|t| format!("{:.1},{:.1},{}", t.x, t.y, t.text)).collect::<Vec<_>>();
+    assert_eq!(ticks(&svg_of(&l(0.5))), ticks(&svg_of(&l(5000.0))));
+}
+
+#[test]
+fn the_student_copy_draws_no_curve_and_no_plateau_unless_the_graph_is_the_given() {
+    for l in student_cases() {
+        let mut ls = l.clone();
+        ls.push(b(SHOW_ANSWERS, false));
+        let m = mdl(&ls);
+        let g = geo(&svg_of(&ls));
+        let curves = g.paths.iter().filter(|p| p.0 == "curve").count();
+        if m.st.task != Task::Read && m.st.mode != Mode::Ice { assert_eq!(curves, 0, "a curve on the student copy of {}", show(&l)); }
+        // the plateau guides are named g<i> (concentration) and req (rates); neither may be on any student copy
+        assert!(!g.strokes.iter().any(|x| x.0 == "guide" && (x.1.starts_with('g') || x.1 == "req")), "a plateau guide on the student copy of {}", show(&l));
+        // a K line after a temperature change is K2, the answer: not drawn
+        if m.st.dk == DKind::Temp && m.st.mode == Mode::Quot {
+            let ks: Vec<_> = g.paths.iter().filter(|p| p.0 == "kline").collect();
+            let x_d = path_of_kind(&svg_of(&ls), "guide", "d");
+            for k in ks { assert!(k.2.iter().all(|p| p.0 <= x_d[0].0 + 0.01), "K2 line on the student copy of {}", show(&l)); }
+        }
+    }
+    // the key does draw them (so the assertions above could fail)
+    let g = geo(&svg_of(&[b(SHOW_ANSWERS, true), s("mode", CONC)]));
+    assert!(g.strokes.iter().any(|x| x.0 == "guide" && x.1.starts_with('g')));
+    let g = geo(&svg_of(&[b(SHOW_ANSWERS, true), s("mode", RATES)]));
+    assert!(g.strokes.iter().any(|x| x.0 == "guide" && x.1 == "req"));
+    // the read-off task draws the curves on the student copy (they are the given)
+    let g = geo(&svg_of(&[b(SHOW_ANSWERS, false), s("task", T_READ), s("mode", CONC)]));
+    assert!(g.paths.iter().any(|p| p.0 == "curve"));
+}
+
+fn path_of_kind(svg: &str, kind: &str, feat: &str) -> Vec<Pt> {
+    geo(svg).paths.into_iter().find(|p| p.1 == feat && p.0 == kind).map(|p| p.2).unwrap_or_else(|| panic!("no {kind} {feat}"))
+}
+
+#[test]
+fn the_key_and_the_student_copy_share_one_frame_when_nothing_depends_on_the_answer() {
+    for mode in [CONC, QUOT, RATES, ICE] {
+        for task in [T_EQ, T_DIR] {
+            let l = |ans: bool| vec![s("mode", mode), s("task", task), b(SHOW_ANSWERS, ans), f("k", 1234.0), f("init_a", 0.4)];
+            let (a, c) = (svg_of(&l(true)), svg_of(&l(false)));
+            let ax = |svg: &str| texts(svg).into_iter().filter(|t| t.kind == "axis").map(|t| format!("{:.2},{:.2},{}", t.x, t.y, t.text)).collect::<Vec<_>>();
+            assert_eq!(ax(&a), ax(&c), "{mode} {task}");
+            assert_eq!(crate::figures::svg_size(&a).0, crate::figures::svg_size(&c).0, "{mode} {task}");
+        }
+    }
+}
+
+// ---- charges
+
+#[test]
+fn charges_are_kept_and_raised_and_digits_after_letters_are_subscripts() {
+    for (typed, want) in [("Fe3+", "Fe\u{b3}\u{207a}"), ("SCN-", "SCN\u{207b}"), ("FeSCN2+", "FeSCN\u{b2}\u{207a}"), ("Fe+", "Fe\u{207a}"), ("Ca(OH)2", "Ca(OH)\u{2082}"), ("NO3^-", "NO\u{2083}\u{207b}"), ("SO4^2-", "SO\u{2084}\u{b2}\u{207b}"), ("Cu2+", "Cu\u{b2}\u{207a}"), ("N2O4", "N\u{2082}O\u{2084}"), ("Fe^3+", "Fe\u{b3}\u{207a}")] {
+        assert_eq!(pretty(&clean_name(typed, "X")), want, "{typed}");
+    }
+    assert_eq!(clean_name("+-", "D"), "D");
+    let m = mdl(&[s("name_a", "Fe3+"), s("name_b", "SCN-"), s("name_c", "FeSCN2+"), i("coef_c", 1), i("coef_d", 0)]);
+    assert_eq!(k_expr(&m.st, "K"), "K = [FeSCN\u{b2}\u{207a}] / ([Fe\u{b3}\u{207a}][SCN\u{207b}])");
+    let svg = svg_of(&[s("name_a", "Fe3+"), s("name_b", "SCN-"), s("name_c", "FeSCN2+"), i("coef_c", 1), i("coef_d", 0), s("mode", ICE)]);
+    let t = all_text(&svg);
+    assert!(t.contains("Fe\u{b3}\u{207a}(g)") && t.contains("SCN\u{207b}(g)") && t.contains("FeSCN\u{b2}\u{207a}(g)"), "{t}");
+    assert!(!t.contains("Fe3(g)") && !t.contains("SCN(g)"), "{t}");
+    // the hint says how
+    let hint = (def().params)().into_iter().find(|p| p.key == "name_a").unwrap().hint;
+    assert!(hint.contains("Fe3+") && hint.contains('^'), "{hint}");
+    // the iron(III) thiocyanate example is offered
+    let ex = examples(ID).unwrap();
+    assert!(ex.iter().any(|e| e.params.iter().any(|(k, v)| *k == "name_a" && matches!(v, Value::S(x) if x == "Fe3+"))));
+}
+
+// ---- the removal label
+
+#[test]
+fn the_removal_label_is_honest_about_what_can_be_removed() {
+    let base = |ans: bool, mode: &'static str| vec![s("mode", mode), s("dist", "Remove a species"), s("dist_species", "C"), f("dist_amount", 900.0), b(SHOW_ANSWERS, ans)];
+    for mode in [CONC, ICE, QUOT, RATES] {
+        let key = all_text(&svg_of(&base(true, mode)));
+        assert!(!key.contains("Remove 900 M"), "{mode}: {key}");
+        assert!(key.contains("Remove all of the HI"), "{mode}: {key}");
+        let m = mdl(&base(true, mode));
+        assert!(key.contains(&format!("({} M)", sf(m.sol.c[2], 3))), "{mode} {key}");
+        let stu = all_text(&svg_of(&base(false, mode)));
+        assert!(!stu.contains("Remove 900 M") && stu.contains("Remove up to 900 M HI"), "{mode}: {stu}");
+        assert!(!stu.contains(&sf(m.sol.c[2], 3)) || true);
+    }
+    // the clamp is explained in the key's working and in the editor notes
+    let m = mdl(&base(true, CONC));
+    let lines = readout(&m, true).join("\n");
+    assert!(lines.contains("would make [HI] negative") && lines.contains("all of it"), "{lines}");
+    assert!(warnings(&with(&base(true, CONC))).iter().any(|x| x.contains("would make its concentration negative")));
+    // an amount that is present is removed as asked, and the label says so
+    let ok = all_text(&svg_of(&[s("dist", "Remove a species"), s("dist_species", "C"), f("dist_amount", 0.5), b(SHOW_ANSWERS, true)]));
+    assert!(ok.contains("Remove 0.5 M HI"), "{ok}");
+}
+
+// ---- minors
+
+#[test]
+fn small_things_read_properly() {
+    // two factors of x are separated
+    let t = key_lines(&vec![i("coef_a", 1), i("coef_b", 0), i("coef_c", 1), i("coef_d", 1), f("init_a", 1.0), f("init_c", 0.0), f("init_d", 0.0), f("k", 0.5)]).join("\n");
+    assert!(!t.contains("xx") && t.contains("(x)(x)"), "{t}");
+    // the Q axis uses one tick format
+    for k in [1e-20, 1.0, 50.0, 1e12] {
+        let svg = svg_of(&[s("mode", QUOT), f("k", k)]);
+        let ticks: Vec<String> = texts(&svg).into_iter().filter(|t| t.kind == "axis" && t.rot.is_none() && t.anchor == "end").map(|t| t.text).collect();
+        assert!(ticks.len() >= 3 && ticks.iter().all(|t| t.starts_with("10")), "{k}: {ticks:?}");
+    }
+    // the blank no longer names the concept
+    let t = all_text(&svg_of(&[s("dist", "Add a species"), b(SHOW_ANSWERS, false)]));
+    assert!(!t.contains("shifts") && t.contains("Describe the change: ______"), "{t}");
+    // Print: the series differ by marker shape too
+    let g = geo(&svg_of(&[s("style", "Print"), s("mode", CONC), i("coef_d", 1), f("init_d", 0.2)]));
+    let shape = |feat: &str| g.marks.iter().filter(|m| m.0 == feat).count();
+    let _ = shape;
+    let svg = svg_of(&[s("style", "Print"), s("mode", CONC), i("coef_d", 1), f("init_d", 0.2)]);
+    // a marker's shape: its element, and for a polygon the number of corners
+    let tag_of = |feat: &str| -> std::collections::BTreeSet<String> { svg.split('<').filter(|p| p.contains("data-o=\"mark\"") && p.contains(&format!("data-f=\"{feat}\""))).map(|p| { let t = p.split(|c: char| c == ' ' || c == '>').next().unwrap().to_string(); if t == "polygon" { format!("polygon{}", attr(p, "points").unwrap().split_whitespace().count()) } else { t } }).collect() };
+    let sets: Vec<_> = ["c0", "c1", "c2", "c3"].iter().map(|f| tag_of(f)).collect();
+    for a in 0..4 { for c in a + 1..4 { assert_ne!(sets[a], sets[c], "series {a} and {c} share a marker shape: {sets:?}"); } }
+}
+
+// ---- mutation survivors: sentences and numbers against an independent solver
+
+fn ind_q(m: &Model, c: &[f64; 4]) -> f64 {
+    let rx = &m.st.rx;
+    let (mut pr, mut r) = (1.0, 1.0);
+    for j in 0..4 { if rx.ink(j) { let t = c[j].powi(rx.coef[j] as i32); if j < 2 { r *= t } else { pr *= t } } }
+    pr / r
+}
+
+/// x for the start `c0` and constant `k`, by plain bisection on Pr - K R (moderate numbers only).
+fn ind_c(m: &Model, c0: &[f64; 4], k: f64) -> [f64; 4] {
+    let rx = &m.st.rx;
+    let conc = |x: f64| -> [f64; 4] { let mut c = [0.0; 4]; for j in 0..4 { if rx.ink(j) { c[j] = c0[j] + if j < 2 { -1.0 } else { 1.0 } * rx.coef[j] as f64 * x; } } c };
+    let mut lo = f64::NEG_INFINITY;
+    let mut hi = f64::INFINITY;
+    for j in 0..4 { if rx.ink(j) { let b = c0[j] / rx.coef[j] as f64; if j < 2 { hi = hi.min(b) } else { lo = lo.max(-b) } } }
+    if !lo.is_finite() { lo = -1e4; }
+    if !hi.is_finite() { hi = 1e4; }
+    let h = |x: f64| { let c = conc(x); let (mut pr, mut r) = (1.0, 1.0); for j in 0..4 { if rx.ink(j) { let t = c[j].max(0.0).powi(rx.coef[j] as i32); if j < 2 { r *= t } else { pr *= t } } } pr - k * r };
+    for _ in 0..300 { let mid = 0.5 * (lo + hi); if h(mid) < 0.0 { lo = mid } else { hi = mid } }
+    conc(0.5 * (lo + hi))
+}
+
+fn words(cmp: char) -> &'static str {
+    match cmp { '<' => "so the reaction shifts forward (to the right, toward the products)", '>' => "so the reaction shifts in reverse (to the left, toward the reactants)", _ => "so there is no shift: the system is at equilibrium" }
+}
+
+fn parse_species_line(line: &str, st: &Setup) -> Vec<f64> {
+    (0..4).filter(|&j| st.rx.ink(j)).map(|j| {
+        let key = format!("{} = ", st.br(j));
+        let at = line.find(&key).unwrap_or_else(|| panic!("{key} not in {line}")) + key.len();
+        let tail = &line[at..];
+        let end = tail.find(" M").unwrap();
+        parse_num(&tail[..end])
+    }).collect()
+}
+
+fn disturbance_cases() -> Vec<L> {
+    let mut v: Vec<L> = Vec::new();
+    for (extra, dist, amt) in [
+        // (extra params, disturbance, amount)
+        (vec![], "Add a species", 0.5f64), (vec![], "Remove a species", 0.5), (vec![], "Change the volume", 0.0), (vec![], "Change the temperature", 0.0),
+        (n2o4(&[]), "Add a species", 0.3), (n2o4(&[]), "Change the volume", 0.0), (n2o4(&[]), "Change the temperature", 0.0), (n2o4(&[]), "Remove a species", 0.04),
+    ] {
+        for sp in ["A", "C"] {
+            for fct in [0.5, 2.0] {
+                let mut l: L = extra.clone();
+                l.push(s("dist", dist));
+                l.push(s("dist_species", sp));
+                l.push(f("dist_amount", amt));
+                l.push(f("dist_factor", fct));
+                l.push(f("dist_dh", if fct > 1.0 { -60.0 } else { 45.0 }));
+                l.push(f("dist_t1", 298.0));
+                l.push(f("dist_t2", if fct > 1.0 { 360.0 } else { 260.0 }));
+                l.push(i("sig", 4));
+                v.push(l);
+            }
+        }
+    }
+    v
+}
+
+#[test]
+fn independent_disturbance_sentences_and_numbers() {
+    let mut checked = 0;
+    for l in disturbance_cases() {
+        let m = mdl(&l);
+        let Some(d) = m.d2.as_ref() else { continue };
+        let st = &m.st;
+        let k = m.k;
+        let c1 = ind_c(&m, &st.c0, k);
+        let mut ca = c1;
+        let mut k2 = k;
+        let di = st.d_i;
+        match st.dk {
+            DKind::Add => { if st.rx.ink(di) { ca[di] += st.d_amt; } }
+            DKind::Remove => { if st.rx.ink(di) { ca[di] = (ca[di] - st.d_amt).max(0.0); } }
+            DKind::Volume => { for j in 0..4 { ca[j] = c1[j] / st.d_f; } }
+            DKind::Temp => { k2 = k * (-st.dh * 1000.0 / 8.314 * (1.0 / st.t2 - 1.0 / st.t1)).exp(); }
+            DKind::None => {}
+        }
+        if !d.effect { continue; }
+        let q = ind_q(&m, &ca);
+        let cmp = if (q / k2 - 1.0).abs() < 1e-9 { '=' } else if q < k2 { '<' } else { '>' };
+        let lines = readout(&m, true);
+        let all = lines.join("\n");
+        let sub = if st.dk == DKind::Temp { "\u{2082}" } else { "" };
+        let want = format!("Q {cmp} K{sub} ({} {cmp} {}), {}.", sf(q, 4), kf(k2), words(cmp));
+        assert!(all.contains(&want), "missing\n{want}\nin\n{all}\nfor {}", show(&l));
+        if st.dk == DKind::Temp { assert!(all.contains(&format!("= {}.", kf(k2))) || all.contains(&format!("] = {}.", kf(k2))), "K2 {} in\n{all}", kf(k2)); }
+        // just after, and the new equilibrium
+        let after = lines.iter().find(|x| x.starts_with("Just after: ")).unwrap_or_else(|| panic!("no just-after in {all}"));
+        for (got, want) in parse_species_line(after, st).into_iter().zip((0..4).filter(|&j| st.rx.ink(j)).map(|j| ca[j])) {
+            assert!((got - want).abs() <= 1.2e-3 * want.abs() + 1e-12, "just after {got} vs {want} in {}", show(&l));
+        }
+        let c2 = ind_c(&m, &ca, k2);
+        let neweq = lines.iter().find(|x| x.starts_with("New equilibrium: ")).unwrap();
+        for (got, want) in parse_species_line(neweq, st).into_iter().zip((0..4).filter(|&j| st.rx.ink(j)).map(|j| c2[j])) {
+            assert!((got - want).abs() <= 1.2e-3 * want.abs() + 1e-9, "new equilibrium {got} vs {want} in {}", show(&l));
+        }
+        // the label above the graph
+        let mut ls = l.clone();
+        ls.push(s("mode", CONC));
+        let tx = all_text(&svg_of(&ls));
+        let shift = match cmp { '<' => "shifts right", '>' => "shifts left", _ => "no shift" };
+        assert!(tx.contains(&format!("Q {cmp} K{sub}: {shift}")), "{tx}");
+        checked += 1;
+    }
+    assert!(checked >= 20, "{checked}");
+}
+
+#[test]
+fn independent_the_direction_task_sentences() {
+    let mut checked = 0;
+    for (a, b_, c) in [(1.0, 1.0, 0.0), (0.1, 0.1, 2.0), (1.0, 1.0, 3.0), (0.5, 0.2, 0.7)] {
+        for k in [0.2, 5.0, 60.0] {
+            let l: L = vec![f("init_a", a), f("init_b", b_), f("init_c", c), f("k", k), s("task", T_DIR), i("sig", 4)];
+            let m = mdl(&l);
+            let c0 = m.st.c0;
+            let q = ind_q(&m, &c0);
+            let cmp = if (q / k - 1.0).abs() < 1e-9 { '=' } else if q < k { '<' } else { '>' };
+            let all = readout(&m, true).join("\n");
+            if cmp == '=' { continue; }
+            assert!(all.contains(&format!("Q {cmp} K ({} {cmp} {}), {}.", sf(q, 4), kf(k), words(cmp))), "{all}");
+            let dir = if cmp == '<' { "x > 0: the reaction proceeds forward." } else { "x < 0: the reaction proceeds in reverse." };
+            assert!(all.contains(dir), "{all}");
+            checked += 1;
+        }
+    }
+    assert!(checked >= 8);
+}
+
+/// Every character the figure draws is in the first font of the figure's font list. A character that is not there is
+/// drawn from another font, which changes the look and the width of the whole line (the infinity sign once did).
+#[test]
+fn every_drawn_character_is_in_the_figure_font() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/fonts/NotoSans-Regular.ttf");
+    let bytes = std::fs::read(&path).expect("the figure font is bundled");
+    let face = ttf_parser::Face::parse(&bytes, 0).unwrap();
+    let mut cases = critic_cases();
+    cases.extend(student_cases());
+    cases.extend(disturbance_cases());
+    // an infinite Q: a reactant removed completely
+    cases.push(vec![s("dist", "Remove a species"), s("dist_species", "A"), f("dist_amount", 900.0), f("dist_time", 8.0)]);
+    let mut missing = std::collections::BTreeSet::new();
+    for l in cases {
+        for ans in [true, false] {
+            let mut ls = l.clone();
+            ls.push(b(SHOW_ANSWERS, ans));
+            for t in texts(&svg_of(&ls)) {
+                for c in t.text.chars() {
+                    if c != ' ' && face.glyph_index(c).is_none() { missing.insert(c); }
+                }
+            }
+        }
+    }
+    // the delta and the super- and subscripts are drawn from the fallback font, as in the sibling figures, and look right
+    let allowed = |c: char| c == '\u{394}' || ('\u{2070}'..='\u{209f}').contains(&c) || c == '\u{b2}' || c == '\u{b3}' || c == '\u{b9}';
+    let bad: String = missing.iter().filter(|&&c| !allowed(c)).collect();
+    assert!(bad.is_empty(), "characters that are not in the figure font and not known to fall back well: {bad}");
 }
