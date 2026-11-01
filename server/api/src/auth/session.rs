@@ -54,7 +54,7 @@ pub fn read_password(body: &Map<String, Value>, key: &str) -> Result<String, Htt
 
 // ---- tokens ----------------------------------------------------------------------------------
 
-fn access_token(c: &Ctx, user_id: &str, family: &str, trust: &str) -> String {
+pub(crate) fn access_token(c: &Ctx, user_id: &str, family: &str, trust: &str) -> String {
     let iat = c.now / 1000;
     sign_access_token(
         &c.keys.access,
