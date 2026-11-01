@@ -403,3 +403,11 @@ Done when a new sign-up mail reaches the inbox at both. If it cannot be fixed on
 ### Owner decisions and risks
 - Needed: the production sender address (Phase B), yes or no on keeping the profile through confirmation (Phase D), the browser run (Phase E).
 - Risk: deliverability may not be fully fixable on a new IP and domain (mitigations above). The rate-limit test can lock its throwaway account (use a disposable one). Admin setup edits the staging database by hand (stop the API, back up the file, staging only).
+
+### Phase log (one line per finished item; evidence is status and error codes only, never secrets)
+
+- 2026-11-01 A1 pass: sign-up answers 202 for a new, a repeated and an already-registered address (no enumeration); a repeated sign-up for an unconfirmed address sends another confirm mail each time.
+- 2026-11-01 A2 pass (part): login with an unconfirmed address, a wrong password and an unknown address all answer 401 with no body that tells them apart; confirm with an empty, malformed, unknown or missing token answers 400; reusing an already-used confirm token answers 400. Rate-limit test still to do (last).
+- 2026-11-01 A3 partial: reset request answers 202 for a known and an unknown address; a known address gets one mail and an immediate second request is throttled (no second mail); the unknown address gets none. Link tests (works once, old password stops, sessions end) need the mailed link from the owner.
+- 2026-11-01 A4 partial: the admin address got a mail when a test account confirmed (admin is told of a new account). What a pending account may call still to check (needs a login, so needs a reset link first).
+- 2026-11-01 A5 not started: needs a test account made admin by hand (API stopped, file copied aside).
