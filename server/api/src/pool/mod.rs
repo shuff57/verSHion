@@ -66,6 +66,7 @@ pub mod publishrun;
 pub mod publishstage;
 pub mod publishinsert;
 pub mod publishmeta;
+pub mod publishonce;
 pub mod publishrewrite;
 pub mod publishstart;
 pub mod publishunits;
