@@ -67,6 +67,7 @@ pub mod publishrewrite;
 pub mod publishstart;
 pub mod publishunits;
 pub mod publishchecks;
+pub mod publishderive;
 pub mod publishearlier;
 pub mod publishevid;
 pub mod publishfacts;
