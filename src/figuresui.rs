@@ -1239,7 +1239,8 @@ impl Workspace {
                     (None, Some(s)) => reg()[s].title.to_string(),
                     _ => String::new(),
                 };
-                ui.label(theme::serif_strong(title).size(19.0));
+                // a long title is cut short rather than widening the page (a phone)
+                ui.add(egui::Label::new(theme::serif_strong(title).size(19.0)).truncate());
             });
             ui.add_space(8.0);
         }
@@ -2282,13 +2283,16 @@ impl Workspace {
                         let mut st = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, if skin { (def.id == "population-growth" && sec.title == "Graphs") || (def.id == "gel-electrophoresis" && si_ == 1) || (si_ == 0 && def.subject != figures::Subject::Physics && def.id != "pedigree" && !((shell || def.subject == figures::Subject::Math) && (figures::measures_for(def.id).is_some() || figures::rows_for(def.id).is_some()))) || sec.title.to_lowercase().contains("reading") } else { si_ < open_sections(def.id) });
                         let mut body = |ui: &mut Ui| {
                                 // the chemistry page's blocks sit 12 px apart (5.2 px item spacing plus this), number rows 9.6
-                                let chem_pg = def.subject == figures::Subject::Chemistry;
-                                let (gap, pair_gap) = if chem_pg { (6.0, 3.3) } else if skin && def.id == "population-growth" { (6.0, 0.0) } else { (6.0, 6.0) };
+                                // the shell spaces every subject's blocks as the math page does; the reference
+                                // page skins keep their own pixel spacing (`page` is true only for those)
+                                let page = skin && !shell;
+                                let chem_pg = !shell && def.subject == figures::Subject::Chemistry;
+                                let (gap, pair_gap) = if chem_pg { (6.0, 3.3) } else if page && def.id == "population-growth" { (6.0, 0.0) } else { (6.0, 6.0) };
                                 let help = figures::sections::live_help(def.id, &sec.title, &sec.help, &self.params);
                                 // the chemistry page sets the note under the first control, not above it
                                 let mut help_left = !help.is_empty();
                                 // the biology page sets a section's note above its first control, in the page's 13 px grey
-                                if help_left && skin && matches!(def.id, "punnett-square" | "free-body-diagram" | "vector-diagram") {
+                                if help_left && page && matches!(def.id, "punnett-square" | "free-body-diagram" | "vector-diagram") {
                                     if def.id != "punnett-square" {
                                         ui.add_space(if def.id == "vector-diagram" { 1.0 } else { 2.0 });
                                     }
@@ -2350,14 +2354,14 @@ impl Workspace {
                                                 figures::after_panel_change(def.id, pdefs[k].key, &old, &mut self.params);
                                             }
                                         }
-                                        ui.add_space(if skin && def.id == "population-growth" { match pdefs[i].key { "n0" => 1.0, "k" => 1.0, "unit" => 3.0, _ => 0.0 } } else if skin && def.id == "predator-prey" { match pdefs[i].key { "prey" => 4.0, "prey0" => 2.0, "prey_avg" => 3.0, "cycle" => 5.0, "tshow" => 8.0, _ => pair_gap } } else { pair_gap });
+                                        ui.add_space(if page && def.id == "population-growth" { match pdefs[i].key { "n0" => 1.0, "k" => 1.0, "unit" => 3.0, _ => 0.0 } } else if page && def.id == "predator-prey" { match pdefs[i].key { "prey" => 4.0, "prey0" => 2.0, "prey_avg" => 3.0, "cycle" => 5.0, "tshow" => 8.0, _ => pair_gap } } else { pair_gap });
                                         continue;
                                     }
                                     if pdefs[i].key == figures::labels::KEY {
                                         // the offsets param is never typed: dragging sets it, this clears it. Always
                                         // shown (as the reference does), greyed out until a label has moved.
                                         let moved = figures::labels::any_moved(&self.params);
-                                        let b = ui.add_enabled(moved, egui::Button::new(RichText::new("Reset label positions").size(12.0)));
+                                        let b = if skin { chem_shell::shell_button(ui, "Reset label positions", moved) } else { ui.add_enabled(moved, egui::Button::new(RichText::new("Reset label positions").size(12.0))) };
                                         let b = if moved { b.on_hover_text("Put every dragged label back in its own place") } else { b.on_disabled_hover_text("Drag a label on the figure to move it; this puts them back") };
                                         if b.clicked() {
                                             reset_labels = true;
@@ -2425,7 +2429,7 @@ impl Workspace {
                                     }
                                     if pdefs[i].key == "rotate"
                                         && figures::labels::turnable(def.id)
-                                        && ui.add_enabled(self.params.f("rotate") != 0.0, Button::new(RichText::new("Straighten").size(12.0))).on_hover_text("Turn the figure back to 0°").clicked()
+                                        && (if skin { chem_shell::shell_button(ui, "Straighten", self.params.f("rotate") != 0.0) } else { ui.add_enabled(self.params.f("rotate") != 0.0, Button::new(RichText::new("Straighten").size(12.0))) }).on_hover_text("Turn the figure back to 0°").clicked()
                                     {
                                         straighten = true;
                                     }
@@ -2433,7 +2437,7 @@ impl Workspace {
                                         ui.add_space(0.9);
                                     }
                                     if help_left {
-                                        if def.subject == figures::Subject::Biology && skin {
+                                        if def.subject == figures::Subject::Biology && page {
                                             ui.add_space(3.0);
                                             ui.add(egui::Label::new(theme::muted(help.as_str()).size(13.6).line_height(Some(19.72))).wrap());
                                         } else {
@@ -2441,7 +2445,7 @@ impl Workspace {
                                         }
                                         // the reference tucks a checkbox 2 px closer to the note above it
                                         let next_bool = chem_pg && shown.get(pos + 1).is_some_and(|&j| matches!(pdefs[j].kind, Kind::Bool));
-                                        ui.add_space(if def.subject == figures::Subject::Biology && skin { gap - 7.0 } else if next_bool { gap - 2.0 } else { gap });
+                                        ui.add_space(if def.subject == figures::Subject::Biology && page { gap - 7.0 } else if next_bool { gap - 2.0 } else { gap });
                                         help_left = false;
                                     }
                                     if figures::random_key(def.id) == Some(pdefs[i].key)
@@ -2450,10 +2454,10 @@ impl Workspace {
                                     {
                                         figures::random_reading(def.id, &mut self.params, random_seed());
                                     }
-                                    let pop_adj = if skin && def.id == "population-growth" { match pdefs[i].key { "growth" => 12.0, "organism" => 9.0, _ => 0.0 } } else if skin && def.id == "predator-prey" { match pdefs[i].key { "pair" => 12.0, "source" => -2.0, _ => 0.0 } } else if skin && def.id == "micropipette-reading" && pdefs[i].key == "volume" { -6.0 } else { 0.0 };
+                                    let pop_adj = if page && def.id == "population-growth" { match pdefs[i].key { "growth" => 12.0, "organism" => 9.0, _ => 0.0 } } else if page && def.id == "predator-prey" { match pdefs[i].key { "pair" => 12.0, "source" => -2.0, _ => 0.0 } } else if page && def.id == "micropipette-reading" && pdefs[i].key == "volume" { -6.0 } else { 0.0 };
                                     ui.add_space(if chem_pg && pos + 1 == shown.len() && matches!(pdefs[i].kind, Kind::Choice(_)) { gap - 5.0 } else { gap + pop_adj });
                                 }
-                                ui.add_space(if chem_pg { 1.8 } else if skin && def.id == "punnett-square" { 0.0 } else if skin && def.subject == figures::Subject::Biology { -3.0 } else { 4.0 });
+                                ui.add_space(if chem_pg { 1.8 } else if page && def.id == "punnett-square" { 0.0 } else if page && def.subject == figures::Subject::Biology { -3.0 } else { 4.0 });
                             };
                         if skin && si_ == 0 && matches!((def.id, sec.title.as_str()), ("titration-curve", "Titration") | ("heating-cooling-curve", "Curve") | ("population-growth", "Population") | ("predator-prey", "Predator and prey")) {
                             // these two pages open on a flat, always-open section with a small caps title
@@ -2571,7 +2575,8 @@ impl Workspace {
                     if (chem_fig && matches!(def.id, "titration-curve" | "heating-cooling-curve" | "mass-spectrum")) || (skin && def.id == "punnett-square") || (skin && def.id != "composite-shape" && figures::rows_for(def.id).is_some()) {
                         // the reference's flat first section is a card of its own, the collapsible ones a second
                         chem_shell::split_cards(ui, |ui| {
-                            ui.spacing_mut().item_spacing.y = 6.0;
+                            // the shell's rows sit 8 px apart in every card, as in the math page's single card
+                            ui.spacing_mut().item_spacing.y = if shell { 8.0 } else { 6.0 };
                             content(ui);
                         });
                     } else {
@@ -2859,7 +2864,7 @@ impl Workspace {
                     }
                     for chip in &card.chips {
                         let label = format!("+ {}", chip.label);
-                        let r = if skin { ui.add_enabled_ui(!full, |ui| chem_shell::outline_chip(ui, &label)).inner } else { ui.add_enabled(!full, Button::new(RichText::new(label).size(12.0)).corner_radius(CornerRadius::same(10))) };
+                        let r = if skin { chem_shell::shell_button(ui, &label, !full) } else { ui.add_enabled(!full, Button::new(RichText::new(label).size(12.0)).corner_radius(CornerRadius::same(10))) };
                         if r.clicked() {
                             apply_chip(&mut self.params, pdefs, card, chip);
                         }
@@ -2905,19 +2910,21 @@ impl Workspace {
         if theme::chem_skin() {
             ui.spacing_mut().button_padding.x = 15.0;
         }
-        let bio = theme::chem_skin() && def.subject == figures::Subject::Biology;
+        // the 40 px select of the biology page, which the app's shell uses for every subject
+        let big = theme::chem_skin() && (theme::keep_theme() || def.subject == figures::Subject::Biology);
+        let bio = theme::chem_skin() && !theme::keep_theme() && def.subject == figures::Subject::Biology;
         let saved_pad_y = ui.spacing().button_padding.y;
         let saved_h = ui.spacing().interact_size.y;
-        if bio {
+        if big {
             // the biology page's select: 40 px tall, 15.2 px text
             ui.spacing_mut().button_padding.y = 9.5;
             ui.spacing_mut().interact_size.y = 39.5;
         }
         let cb = egui::ComboBox::from_id_salt(("fig_classic", fig));
-        let cb = if theme::chem_skin() { cb.icon(chem_shell::select_chevron) } else { cb };
+        let cb = if theme::chem_skin() { cb.icon(chem_shell::select_chevron).truncate() } else { cb };
         let shown = current.map(|i| setups[i].name).unwrap_or("Choose one…");
         cb
-            .selected_text(if bio { RichText::new(shown).size(15.2).family(theme::sans_family()) } else { RichText::new(shown) })
+            .selected_text(if big { RichText::new(shown).size(15.2).family(theme::sans_family()) } else { RichText::new(shown) })
             .width(if theme::chem_skin() { ui.available_width() } else { ui.available_width().min(260.0) })
             .show_ui(ui, |ui| {
                 for (i, e) in setups.iter().enumerate() {
@@ -3051,13 +3058,18 @@ impl Workspace {
                         let mut v = self.params.s(r.value_key).to_string();
                         let hint = computed.get(r.value_key).cloned().unwrap_or_default();
                         let was_empty = self.params.s(r.value_key).trim().is_empty();
+                        // a long side name ("Slant height") leaves the box less room, so the row
+                        // never runs past the card: unit and the 83 px label button keep their place
+                        let unit_w = if unit_txt.is_empty() { 0.0 } else { ui.painter().layout_no_wrap(unit_txt.clone(), egui::FontId::new(11.0, theme::sans_family()), theme::muted_col()).size().x + 8.0 };
+                        let room = ui.available_width() - unit_w - if r.label_key.is_empty() { 0.0 } else { 83.0 + 8.0 } - 1.0;
+                        let box_w = (if r.name_key.is_some() { 152.0_f32 } else { 160.0 }).min(room).max(60.0);
                         let te = if skin {
                             TextEdit::singleline(&mut v)
                                 .hint_text(RichText::new(hint.clone()).size(17.0))
                                 .font(egui::FontId::new(17.0, theme::sans_family()))
                                 .vertical_align(Align::Center)
-                                .min_size(Vec2::new(if r.name_key.is_some() { 152.0 } else { 160.0 }, rh))
-                                .desired_width(if r.name_key.is_some() { 128.0 } else { 136.0 })
+                                .min_size(Vec2::new(box_w, rh))
+                                .desired_width(box_w - 24.0)
                                 .margin(Margin::symmetric(12, 0))
                         } else {
                             TextEdit::singleline(&mut v)
@@ -3322,6 +3334,28 @@ fn faq_card(ui: &mut Ui, fig: &str) {
         });
         st.store(ui.ctx());
     });
+}
+
+/// A checkbox: in the app's shell the square 18 px box with a bold label (the theme's 12 px widget
+/// corners would draw it round), elsewhere egui's own.
+fn shell_checkbox(ui: &mut Ui, enabled: bool, v: &mut bool, label: &str) -> egui::Response {
+    if !theme::keep_theme() {
+        return ui.add_enabled(enabled, egui::Checkbox::new(v, label));
+    }
+    ui.scope(|ui| {
+        ui.spacing_mut().icon_spacing = 9.0;
+        ui.spacing_mut().icon_width = 18.0;
+        ui.spacing_mut().interact_size.y = 18.0;
+        let rad = CornerRadius::same(4);
+        let w = &mut ui.visuals_mut().widgets;
+        w.inactive.corner_radius = rad;
+        w.hovered.corner_radius = rad;
+        w.active.corner_radius = rad;
+        w.noninteractive.corner_radius = rad;
+        w.inactive.bg_stroke = Stroke::new(1.25, theme::muted_col());
+        ui.add_enabled(enabled, egui::Checkbox::new(v, theme::strong(label).size(14.4)))
+    })
+    .inner
 }
 
 fn ghost(ui: &mut Ui, label: &str) -> egui::Response {
@@ -3731,6 +3765,7 @@ impl Workspace {
                     ui.spacing_mut().button_padding = Vec2::new(12.0, 10.0);
                     ComboBox::from_id_salt("lewis_central")
                         .icon(chem_shell::select_chevron)
+                        .truncate()
                         .selected_text(RichText::new(name(&cur)).size(14.4).family(noto()))
                         .show_ui(ui, |ui| {
                             for o in &opts {
@@ -3831,13 +3866,31 @@ fn param_control(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
 /// The reference's Labels card sets the unit and the rounding with two selects (Unit: None, cm, m,
 /// mm, in, ft, yd, units, Other...; Round to: Whole numbers, Tenths, Hundredths), where the
 /// parameters themselves are a free text and a count of decimal places.
+/// A select: in the app's shell the full-width 40 px box with the chevron, elsewhere a 200 px one.
+fn shell_combo(ui: &mut Ui, id: impl std::hash::Hash + std::fmt::Debug, shown: &str, add: impl FnOnce(&mut Ui)) {
+    if !theme::chem_skin() {
+        ComboBox::from_id_salt(id).selected_text(shown).width(200.0).show_ui(ui, add);
+        return;
+    }
+    ui.scope(|ui| {
+        ui.spacing_mut().button_padding = Vec2::new(15.0, 9.5);
+        ui.spacing_mut().interact_size.y = 39.5;
+        ComboBox::from_id_salt(id)
+            .icon(chem_shell::select_chevron)
+            .truncate()
+            .selected_text(RichText::new(shown).size(15.2).family(theme::sans_family()))
+            .width(ui.available_width())
+            .show_ui(ui, add);
+    });
+}
+
 fn math_unit_dec(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params, label: &str) {
     const UNITS: [&str; 7] = ["cm", "m", "mm", "in", "ft", "yd", "units"];
     param_label(ui, label, "");
     if pd.key == "dec" {
         let names = ["Whole numbers", "Tenths", "Hundredths", "Thousandths"];
         let mut cur = p.i("dec").clamp(0, 3);
-        ComboBox::from_id_salt(("math_dec", fig)).selected_text(names[cur as usize]).width(200.0).show_ui(ui, |ui| {
+        shell_combo(ui, ("math_dec", fig), names[cur as usize], |ui| {
             for (i, n) in names.iter().enumerate().take(3) {
                 ui.selectable_value(&mut cur, i as i64, *n);
             }
@@ -3852,7 +3905,7 @@ fn math_unit_dec(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params, label: &
     let other = ui.ctx().data(|d| d.get_temp::<bool>(other_id)).unwrap_or(false) || (!unit.is_empty() && !UNITS.contains(&unit.as_str()));
     let shown = if other { "Other\u{2026}".to_string() } else if unit.is_empty() { "None".to_string() } else { unit.clone() };
     let mut pick: Option<String> = None;
-    ComboBox::from_id_salt(("math_unit", fig)).selected_text(shown.clone()).width(200.0).show_ui(ui, |ui| {
+    shell_combo(ui, ("math_unit", fig), &shown, |ui| {
         if ui.selectable_label(shown == "None", "None").clicked() {
             pick = Some(String::new());
         }
@@ -3877,7 +3930,8 @@ fn math_unit_dec(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params, label: &
     }
     if other {
         let mut cur = p.s("unit").to_string();
-        if ui.add(TextEdit::singleline(&mut cur).desired_width(200.0).hint_text("e.g. km")).changed() {
+        let te = if theme::chem_skin() { TextEdit::singleline(&mut cur).desired_width(f32::INFINITY).margin(Margin::symmetric(14, 12)).font(egui::FontId::new(15.0, theme::sans_family())).hint_text("e.g. km") } else { TextEdit::singleline(&mut cur).desired_width(200.0).hint_text("e.g. km") };
+        if ui.add(te).changed() {
             p.set_s("unit", &cur);
         }
     }
@@ -4078,25 +4132,37 @@ fn param_control_inner(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
             let mut v = p.b(pd.key);
             let live_hint = figures::sections::note_after(fig, pd.key, p).unwrap_or_else(|| pd.hint.to_string());
             let skin_hint = theme::chem_skin() && !live_hint.is_empty();
+            // the chemistry page's square 18 px box (the app's own grey edge in its shell)
+            let skin_box = |ui: &mut Ui| {
+                ui.spacing_mut().icon_spacing = 9.0;
+                ui.spacing_mut().icon_width = 18.0;
+                ui.spacing_mut().interact_size.y = 18.0;
+                ui.spacing_mut().item_spacing.y = 2.0;
+                let rad = CornerRadius::same(4);
+                let w = &mut ui.visuals_mut().widgets;
+                w.inactive.corner_radius = rad;
+                w.hovered.corner_radius = rad;
+                w.active.corner_radius = rad;
+                w.inactive.bg_stroke = Stroke::new(1.25, if theme::keep_theme() { theme::muted_col() } else { egui::Color32::from_rgb(107, 114, 128) });
+            };
             let mut r = if skin_hint {
                 // the chemistry page names the option in bold with its explanation beneath
                 ui.scope(|ui| {
-                    ui.spacing_mut().icon_spacing = 9.0;
-                    ui.spacing_mut().icon_width = 18.0;
-                    ui.spacing_mut().interact_size.y = 18.0;
-                    ui.spacing_mut().item_spacing.y = 2.0;
-                    let rad = CornerRadius::same(4);
-                    let w = &mut ui.visuals_mut().widgets;
-                    w.inactive.corner_radius = rad;
-                    w.hovered.corner_radius = rad;
-                    w.active.corner_radius = rad;
-                    w.inactive.bg_stroke = Stroke::new(1.25, egui::Color32::from_rgb(107, 114, 128));
+                    skin_box(ui);
                     let r = ui.checkbox(&mut v, theme::strong(label).size(14.4));
-                    ui.horizontal_wrapped(|ui| {
+                    // the note stays indented under the label when it wraps
+                    ui.horizontal(|ui| {
                         ui.add_space(ui.spacing().icon_width + ui.spacing().icon_spacing);
-                        ui.label(theme::muted(live_hint.as_str()).size(13.0));
+                        ui.add(egui::Label::new(theme::muted(live_hint.as_str()).size(13.0)).wrap());
                     });
                     r
+                })
+                .inner
+            } else if theme::keep_theme() {
+                // the app's shell: every box as the noted ones, so no round or frameless boxes
+                ui.scope(|ui| {
+                    skin_box(ui);
+                    ui.checkbox(&mut v, theme::strong(label).size(14.4))
                 })
                 .inner
             } else if ui.ctx().data(|d| d.get_temp::<bool>(egui::Id::new("phys_skin_page"))).unwrap_or(false) && theme::chem_skin() {
@@ -4164,7 +4230,7 @@ fn param_control_inner(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
                     }
                     let sel = if chem { RichText::new(shown(&cur)).size(15.2).family(theme::sans_family()) } else { RichText::new(shown(&cur)) };
                     let cb = ComboBox::from_id_salt(("fig_param", pd.key));
-                    let cb = if chem { cb.icon(chem_shell::select_chevron) } else { cb };
+                    let cb = if chem { cb.icon(chem_shell::select_chevron).truncate() } else { cb };
                     cb
                         .selected_text(sel)
                         .width(if chem { ui.available_width() } else { 200.0 })
@@ -4279,12 +4345,16 @@ fn param_control_inner(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
             let (mut items, sep) = list_items(p.s(pd.key));
             let mut changed = false;
             let mut del = None;
+            let skin = theme::chem_skin();
             for (i, it) in items.iter_mut().enumerate() {
                 ui.horizontal(|ui| {
-                    if ui.add(TextEdit::singleline(it).desired_width(176.0)).changed() {
+                    // the shell's 40 px field with a remove cross, as its list cards have
+                    let te = if skin { TextEdit::singleline(it).desired_width((ui.available_width() - 70.0).max(80.0)).margin(Margin::symmetric(11, 10)).font(egui::FontId::new(15.0, theme::sans_family())) } else { TextEdit::singleline(it).desired_width(176.0) };
+                    if ui.add(te).changed() {
                         changed = true;
                     }
-                    if ui.add(Button::new("-").min_size(Vec2::splat(22.0))).on_hover_text("Remove").clicked() {
+                    let rm = if skin { Button::new(theme::muted(egui_phosphor::regular::X).size(17.0)).frame(false) } else { Button::new("-").min_size(Vec2::splat(22.0)) };
+                    if ui.add(rm).on_hover_text("Remove").clicked() {
                         del = Some(i);
                     }
                 });
@@ -4293,7 +4363,7 @@ fn param_control_inner(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
                 items.remove(i);
                 changed = true;
             }
-            if ui.add(Button::new("+ Add").small()).clicked() {
+            if (if theme::chem_skin() { chem_shell::shell_button(ui, "+ Add", true) } else { ui.add(Button::new("+ Add").small()) }).clicked() {
                 items.push(items.last().cloned().unwrap_or_else(|| "0".into()));
                 changed = true;
             }
@@ -5731,7 +5801,7 @@ mod tests {
         assert_eq!(gel::current_setup(&ws.params), Some("Crime scene"));
         assert_eq!(count_named(&ctx, &mut ws, egui_phosphor::regular::ARROW_LEFT), 5, "one card per lane");
         let before = ws.params.clone();
-        click_nth(&ctx, &mut ws, &format!("{}Ladder", egui_phosphor::regular::PLUS), 0);
+        click_nth(&ctx, &mut ws, "+ Ladder", 0);
         let lanes = gel::lane_cards(&ws.params);
         assert_eq!(lanes.len(), 6);
         assert_eq!(lanes[5], gel::LaneCard::ladder());
@@ -5781,7 +5851,7 @@ mod tests {
         assert_eq!(count_named(&ctx, &mut ws, "Up"), 2);
         click_nth(&ctx, &mut ws, "Left", 0);
         assert_eq!(ws.params.f("f1_ang"), 180.0);
-        click_nth(&ctx, &mut ws, &format!("{}Friction", egui_phosphor::regular::PLUS), 0);
+        click_nth(&ctx, &mut ws, "+ Friction", 0);
         assert_eq!((ws.params.i("n"), ws.params.s("f3_lab")), (3, "F_f"));
         click_nth(&ctx, &mut ws, "Remove", 0); // delete force 1: the others move up
         assert_eq!((ws.params.i("n"), ws.params.s("f1_lab"), ws.params.s("f2_lab")), (2, "F_N", "F_f"));
@@ -5804,7 +5874,7 @@ mod tests {
     fn vector_cards_in_the_panel() {
         let (ctx, mut ws) = open_tall("vector-diagram");
         open_section(&ctx, &mut ws, "Vectors");
-        click_nth(&ctx, &mut ws, &format!("{}Add a vector", egui_phosphor::regular::PLUS), 0);
+        click_nth(&ctx, &mut ws, "+ Add a vector", 0);
         assert_eq!(ws.params.i("n"), 3);
         click_nth(&ctx, &mut ws, egui_phosphor::regular::ARROW_DOWN, 0); // A after B
         assert_eq!((ws.params.s("v1_lab"), ws.params.s("v2_lab")), ("B", "A"));
@@ -5872,7 +5942,7 @@ mod tests {
         assert_eq!(ws.params.s("c_shape"), "Pair");
         assert_eq!(atoms::kind_noun(&ws.params, 2), "Molecule");
         assert_eq!(count_named(&ctx, &mut ws, "XL"), 4, "a molecule has Center and Outer sizes");
-        click_nth(&ctx, &mut ws, egui_phosphor::regular::X, 0);
+        click_nth(&ctx, &mut ws, egui_phosphor::regular::TRASH, 0); // the shell removes a kind with its trash can
         assert_eq!(ws.params.s("b_shape"), "Pair");
         assert!(!atoms::kind_used(&ws.params, 2));
         // a kind set to none keeps its card until removed
@@ -5925,7 +5995,7 @@ fn preset_card(ui: &mut Ui, def: &FigureDef, params: &Params) -> Option<Params> 
         if open {
             ui.horizontal(|ui| {
                 let r = ui.add(TextEdit::singleline(&mut name).hint_text("Name this preset").desired_width(160.0));
-                let go = ui.button("Save").clicked() || (r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
+                let go = (if theme::keep_theme() { chem_shell::shell_button(ui, "Save", true) } else { ui.button("Save") }).clicked() || (r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
                 if go && !name.trim().is_empty() {
                     let spec = spec_for(def.id, params);
                     let nm = name.trim().to_string();

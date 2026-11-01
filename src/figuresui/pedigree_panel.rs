@@ -270,6 +270,7 @@ impl Workspace {
             let w = ui.available_width();
             ComboBox::from_id_salt("ped_inherit")
                 .icon(chem_shell::select_chevron)
+                .truncate()
                 .selected_text(RichText::new(cur.as_str()).size(15.2).family(noto()))
                 .width(w)
                 .show_ui(ui, |ui| {
@@ -385,7 +386,7 @@ impl Workspace {
             if skin {
                 ui.spacing_mut().button_padding = Vec2::new(15.0, 9.5);
                 ui.spacing_mut().interact_size.y = 39.5;
-                cb = cb.icon(chem_shell::select_chevron).width(ui.available_width()).selected_text(RichText::new("Click them in the pedigree, or pick here").size(15.2).family(theme::sans_family()));
+                cb = cb.icon(chem_shell::select_chevron).truncate().width(ui.available_width()).selected_text(RichText::new("Click them in the pedigree, or pick here").size(15.2).family(theme::sans_family()));
             } else {
                 cb = cb.selected_text("Click them in the pedigree, or pick here");
             }
@@ -448,17 +449,17 @@ impl Workspace {
                 ui.add_space(2.0);
                 ui.horizontal_wrapped(|ui| {
                     let mut dead = who.dead;
-                    if ui.checkbox(&mut dead, "Deceased").changed() {
+                    if shell_checkbox(ui, true, &mut dead, "Deceased").changed() {
                         op = Some(if dead { "deceased" } else { "alive" });
                     }
                     let mut pb = who.proband;
-                    if ui.checkbox(&mut pb, "Proband").changed() {
+                    if shell_checkbox(ui, true, &mut pb, "Proband").changed() {
                         op = Some(if pb { "proband" } else { "not_proband" });
                     }
                 });
                 if caps.has_mate {
                     let mut rel = fam.related(i);
-                    if ui.checkbox(&mut rel, "Partners are related").on_hover_text("Consanguinity: a double line between the partners").changed() {
+                    if shell_checkbox(ui, true, &mut rel, "Partners are related").on_hover_text("Consanguinity: a double line between the partners").changed() {
                         op = Some(if rel { "related" } else { "unrelated" });
                     }
                 }
@@ -471,15 +472,27 @@ impl Workspace {
                 }
                 ui.add_space(4.0);
                 let bw = (ui.available_width() - 6.0) / 2.0;
-                ui.horizontal(|ui| {
-                    if ui.add_enabled(caps.child, Button::new(RichText::new("+ Child").size(12.0)).min_size(Vec2::new(bw, 24.0))).on_hover_text("Add a child to this couple (someone single gets a partner first)").clicked() {
+                // the app's shell sets these as its 40 px action buttons
+                let shell = theme::keep_theme();
+                let act = |ui: &mut Ui, on: bool, text: &str| if shell { chem_shell::shell_button(ui, text, on) } else { ui.add_enabled(on, Button::new(RichText::new(text).size(12.0)).min_size(Vec2::new(bw, 24.0))) };
+                ui.horizontal_wrapped(|ui| {
+                    if shell {
+                        ui.spacing_mut().item_spacing = Vec2::new(8.0, 8.0);
+                    }
+                    if act(ui, caps.child, "+ Child").on_hover_text("Add a child to this couple (someone single gets a partner first)").clicked() {
                         op = Some("child");
                     }
-                    if ui.add_enabled(caps.partner, Button::new(RichText::new("+ Partner").size(12.0)).min_size(Vec2::new(bw, 24.0))).on_hover_text("Add a partner who marries in").clicked() {
+                    if act(ui, caps.partner, "+ Partner").on_hover_text("Add a partner who marries in").clicked() {
                         op = Some("partner");
                     }
+                    if shell && act(ui, caps.sibling, "+ Sibling").on_hover_text("Add a brother or sister right after").clicked() {
+                        op = Some("sibling");
+                    }
+                    if shell && act(ui, caps.remove, "Remove").clicked() {
+                        op = Some("remove");
+                    }
                 });
-                ui.horizontal(|ui| {
+                if !shell { ui.horizontal(|ui| {
                     if ui.add_enabled(caps.sibling, Button::new(RichText::new("+ Sibling").size(12.0)).min_size(Vec2::new(bw, 24.0))).on_hover_text("Add a brother or sister right after").clicked() {
                         op = Some("sibling");
                     }
@@ -487,7 +500,7 @@ impl Workspace {
                     if ui.add_enabled(caps.remove, rm).clicked() {
                         op = Some("remove");
                     }
-                });
+                }); }
                 let help = match caps.role {
                     ped::Role::Founder => "The founder stays; change or remove anyone else.",
                     ped::Role::MarriedIn => "Removing a partner removes their children too.",
