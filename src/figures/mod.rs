@@ -7,6 +7,15 @@
 
 use std::collections::BTreeMap;
 
+pub mod accounting;
+pub mod business;
+pub mod earth;
+pub mod geography;
+pub mod art;
+pub mod health;
+pub mod language;
+pub mod music;
+pub mod economics;
 pub mod biology;
 pub mod cards;
 #[cfg(test)]
@@ -14,12 +23,16 @@ mod census;
 pub mod chart;
 pub mod chemistry;
 pub mod composite;
+pub mod computing;
 pub mod data;
+pub mod electric;
 pub mod faq;
+pub mod graph;
 pub mod interact;
 pub mod items;
 pub mod labels;
 pub mod layout;
+pub mod logic;
 pub mod math;
 pub mod math_geo;
 pub mod math_plot;
@@ -256,12 +269,39 @@ impl FigureDef {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Subject { Physics, Biology, Chemistry, Math, Computing }
+pub enum Subject { Physics, Biology, Chemistry, Math, Computing, Accounting, Economics, EarthScience, Geography, Music, Business, Language, Health, Art }
 
 impl Subject {
-    pub const ALL: [Subject; 5] = [Subject::Physics, Subject::Biology, Subject::Chemistry, Subject::Math, Subject::Computing];
+    pub const ALL: [Subject; 14] = [Subject::Physics, Subject::Biology, Subject::Chemistry, Subject::Math, Subject::Computing, Subject::Accounting, Subject::Economics, Subject::EarthScience, Subject::Geography, Subject::Music, Subject::Business, Subject::Language, Subject::Health, Subject::Art];
     pub fn name(self) -> &'static str {
-        match self { Subject::Physics => "Physics", Subject::Biology => "Biology", Subject::Chemistry => "Chemistry", Subject::Math => "Math", Subject::Computing => "Computing" }
+        match self { Subject::Physics => "Physics", Subject::Biology => "Biology", Subject::Chemistry => "Chemistry", Subject::Math => "Math", Subject::Computing => "Computing", Subject::Accounting => "Accounting", Subject::Economics => "Economics", Subject::EarthScience => "Earth science", Subject::Geography => "Geography", Subject::Music => "Music", Subject::Business => "Business and finance", Subject::Language => "Language and humanities", Subject::Health => "Health, PE and technology", Subject::Art => "Art and psychology" }
+    }
+}
+
+/// The major topics the subject tabs are grouped under in the browser.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Group { Science, MathComputing, Business, Humanities, Health }
+
+impl Group {
+    pub const ALL: [Group; 5] = [Group::Science, Group::MathComputing, Group::Business, Group::Humanities, Group::Health];
+    pub fn name(self) -> &'static str {
+        match self { Group::Science => "Science", Group::MathComputing => "Math and computing", Group::Business => "Business and economics", Group::Humanities => "Humanities and arts", Group::Health => "Health and technology" }
+    }
+    /// The subject tabs inside the group, in display order.
+    pub fn subjects(self) -> &'static [Subject] {
+        match self {
+            Group::Science => &[Subject::Physics, Subject::Biology, Subject::Chemistry, Subject::EarthScience],
+            Group::MathComputing => &[Subject::Math, Subject::Computing],
+            Group::Business => &[Subject::Accounting, Subject::Economics, Subject::Business],
+            Group::Humanities => &[Subject::Language, Subject::Geography, Subject::Music, Subject::Art],
+            Group::Health => &[Subject::Health],
+        }
+    }
+}
+
+impl Subject {
+    pub fn group(self) -> Group {
+        Group::ALL.into_iter().find(|g| g.subjects().contains(&self)).unwrap_or(Group::Science)
     }
 }
 
@@ -340,10 +380,21 @@ pub fn key_path(student: &std::path::Path) -> std::path::PathBuf {
 pub fn registry() -> Vec<FigureDef> {
     let mut v = Vec::new();
     v.extend(physics::defs());
+    v.extend(electric::defs());
     v.extend(biology::defs());
     v.extend(chemistry::defs());
     v.extend(math::defs());
     v.extend(stats::defs());
+    v.extend(computing::defs());
+    v.extend(accounting::defs());
+    v.extend(economics::defs());
+    v.extend(earth::defs());
+    v.extend(geography::defs());
+    v.extend(music::defs());
+    v.extend(business::defs());
+    v.extend(language::defs());
+    v.extend(health::defs());
+    v.extend(art::defs());
     v
 }
 
@@ -576,6 +627,17 @@ pub fn examples_for(id: &str) -> Vec<Example> {
         .or_else(|| chemistry::examples(id))
         .or_else(|| math::examples(id))
         .or_else(|| stats::examples(id))
+        .or_else(|| computing::examples(id))
+        .or_else(|| electric::examples(id))
+        .or_else(|| accounting::examples(id))
+        .or_else(|| economics::examples(id))
+        .or_else(|| earth::examples(id))
+        .or_else(|| geography::examples(id))
+        .or_else(|| music::examples(id))
+        .or_else(|| business::examples(id))
+        .or_else(|| language::examples(id))
+        .or_else(|| health::examples(id))
+        .or_else(|| art::examples(id))
         .unwrap_or_default()
 }
 
@@ -767,6 +829,22 @@ pub fn to_rgba_at(svg: &str, scale: f32, phase: (f32, f32)) -> Result<(u32, u32,
 /// Import path for the hybrid mode: accept pasted/loaded SVG text from anywhere.
 pub fn validate_svg(svg: &str) -> Result<(), String> {
     to_png(svg, 0.25).map(|_| ())
+}
+
+#[cfg(test)]
+mod group_tests {
+    use super::*;
+
+    #[test]
+    fn every_subject_is_in_exactly_one_group() {
+        for s in Subject::ALL {
+            let n = Group::ALL.iter().filter(|g| g.subjects().contains(&s)).count();
+            assert_eq!(n, 1, "{}", s.name());
+            assert!(s.group().subjects().contains(&s));
+        }
+        let listed: usize = Group::ALL.iter().map(|g| g.subjects().len()).sum();
+        assert_eq!(listed, Subject::ALL.len());
+    }
 }
 
 #[cfg(test)]

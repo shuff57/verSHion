@@ -81,6 +81,68 @@ fn small(ui: &mut Ui, text: &str) {
     ui.label(theme::muted(text).size(11.0));
 }
 
+/// One item of a list card (strip, particle kind): a bordered frame in the plain layout; in the
+/// app's shell a block between hairline rules, as its gel lanes and force cards are set.
+fn item_block(ui: &mut Ui, f: impl FnOnce(&mut Ui)) {
+    if !theme::chem_skin() {
+        return item_frame(ui, f);
+    }
+    let (r, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 1.0), egui::Sense::hover());
+    ui.painter().hline(r.x_range(), r.center().y, Stroke::new(1.0, theme::border()));
+    ui.add_space(12.0);
+    ui.scope(|ui| {
+        ui.spacing_mut().item_spacing.y = 6.0;
+        f(ui);
+    });
+    ui.add_space(12.0);
+}
+
+/// An item's title with its move / remove buttons (laid out right to left) on the right.
+fn item_header(ui: &mut Ui, title: &str, buttons: impl FnOnce(&mut Ui)) {
+    if !theme::chem_skin() {
+        return header(ui, title, buttons);
+    }
+    ui.horizontal(|ui| {
+        ui.spacing_mut().interact_size.y = 30.0;
+        ui.label(theme::strong(title).size(14.7));
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            buttons(ui);
+        });
+    });
+}
+
+/// The remove glyph: the shell's trash can, the plain layout's cross.
+fn remove_glyph() -> &'static str {
+    if theme::chem_skin() { egui_phosphor::regular::TRASH } else { egui_phosphor::regular::X }
+}
+
+/// A control's caption: the shell's bold label, the plain layout's small grey one.
+fn caption(ui: &mut Ui, text: &str) {
+    if theme::chem_skin() { param_label(ui, text, "") } else { small(ui, text) }
+}
+
+/// A one-line box that keeps what is typed while focused: the shell's full-width 40 px field, or
+/// the plain layout's `width` px box.
+fn item_field(ui: &mut Ui, id: egui::Id, current: &str, width: f32, hint: &str) -> Option<String> {
+    if !theme::chem_skin() {
+        return buffered_edit(ui, id, current, width, hint);
+    }
+    let focused = ui.memory(|m| m.has_focus(id));
+    let mut buf = if focused { ui.data(|d| d.get_temp::<String>(id)).unwrap_or_else(|| current.to_string()) } else { current.to_string() };
+    let r = ui.add(TextEdit::singleline(&mut buf).id(id).desired_width(f32::INFINITY).margin(Margin::symmetric(11, 10)).hint_text(hint).font(egui::FontId::new(15.0, theme::sans_family())));
+    ui.data_mut(|d| d.insert_temp(id, buf.clone()));
+    r.changed().then_some(buf)
+}
+
+/// A secondary action: the shell's 40 px outlined button, or the plain layout's small one.
+fn action(ui: &mut Ui, text: &str, enabled: bool) -> egui::Response {
+    if theme::chem_skin() {
+        return chem_shell::shell_button(ui, text, enabled);
+    }
+    ui.add_enabled(enabled, Button::new(RichText::new(text).size(12.0)).corner_radius(CornerRadius::same(10)))
+}
+
 /// The reference's direction control: a 0–360° slider, the angle in degrees and the
 /// Up / Down / Left / Right quick buttons (the current one highlighted). Returns a new angle.
 fn direction(ui: &mut Ui, ang: f64) -> Option<f64> {
@@ -347,10 +409,10 @@ impl Workspace {
             if let Some(card) = figures::chips_for(fig) {
                 let n = self.params.i(card.count_key);
                 ui.horizontal(|ui| {
-                    if ui.add_enabled(n < card.max, egui::Button::new(egui::RichText::new("Add an object above").size(12.0))).clicked() {
+                    if action(ui, "Add an object above", n < card.max).clicked() {
                         super::apply_chip(&mut self.params, pdefs, &card, &card.chips[0]);
                     }
-                    if n > 1 && ui.add(egui::Button::new(theme::muted("Remove the last").size(12.0)).frame(false)).clicked() {
+                    if n > 1 && ui.add(egui::Button::new(theme::muted("Remove the last").size(if theme::chem_skin() { 13.0 } else { 12.0 })).frame(false)).clicked() {
                         self.params.set_i(card.count_key, n - 1);
                     }
                 });
@@ -438,7 +500,7 @@ impl Workspace {
                 ui.spacing_mut().button_padding = Vec2::new(15.0, 9.5);
                 ui.spacing_mut().interact_size.y = 39.5;
                 let w = ui.available_width();
-                ComboBox::from_id_salt(id).icon(super::chem_shell::select_chevron).selected_text(RichText::new(shown).size(15.2).family(theme::sans_family())).width(w).show_ui(ui, |ui| f(ui));
+                ComboBox::from_id_salt(id).icon(super::chem_shell::select_chevron).truncate().selected_text(RichText::new(shown).size(15.2).family(theme::sans_family())).width(w).show_ui(ui, |ui| f(ui));
             });
         };
         combo(ui, egui::Id::new("gel_setup"), cur.unwrap_or("Choose one…"), &mut |ui| {
@@ -545,7 +607,13 @@ impl Workspace {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 9.0;
             let room = n < gel::MAX_LANES;
-            let chip = |ui: &mut Ui, text: &str, tip: &str| ui.add_enabled(room, Button::new(chip_job(text)).fill(egui::Color32::TRANSPARENT).stroke(Stroke::new(1.0, super::chem_shell::pill_border())).corner_radius(CornerRadius::same(20)).min_size(Vec2::new(0.0, 34.0))).on_hover_text(tip).clicked();
+            let chip = |ui: &mut Ui, text: &str, tip: &str| {
+                if theme::keep_theme() {
+                    // the app's shell: its 40 px action button
+                    return chem_shell::shell_button(ui, &format!("+ {text}"), room).on_hover_text(tip).clicked();
+                }
+                ui.add_enabled(room, Button::new(chip_job(text)).fill(egui::Color32::TRANSPARENT).stroke(Stroke::new(1.0, super::chem_shell::pill_border())).corner_radius(CornerRadius::same(20)).min_size(Vec2::new(0.0, 34.0))).on_hover_text(tip).clicked()
+            };
             if chip(ui, "Sample", "Add a sample lane") {
                 let mut v = lanes.clone();
                 v.push(gel::LaneCard::sample());
@@ -702,6 +770,13 @@ impl Workspace {
             }
             for (ci, chip) in card.chips.iter().enumerate() {
                 let label = if card.chips.len() == 1 { format!("+ Add a {}", chip.label.to_lowercase()) } else { format!("+ {}", chip.label) };
+                if theme::keep_theme() {
+                    // the app's shell: its 40 px action button, as on every other card
+                    if chem_shell::shell_button(ui, &label, n < card.max).clicked() {
+                        pick = Some(ci);
+                    }
+                    continue;
+                }
                 let btn = if skin {
                     let mut job = egui::text::LayoutJob::default();
                     job.append(egui_phosphor::regular::PLUS, 0.0, egui::TextFormat { font_id: theme::icon_font(13.0), color: theme::accent_col(), line_height: Some(17.0), ..Default::default() });
@@ -731,6 +806,7 @@ impl Workspace {
             ui.label(RichText::new(title).family(theme::bold_family()).size(16.0).color(theme::ink()));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let (r, resp) = ui.allocate_exact_size(Vec2::splat(34.0), if can_remove { egui::Sense::click() } else { egui::Sense::hover() });
+                resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, can_remove, "Remove"));
                 if can_remove && resp.hovered() {
                     ui.painter().rect_filled(r, CornerRadius::same(8), theme::hover_bg());
                 }
@@ -767,10 +843,11 @@ impl Workspace {
             }
             ui.add_space(8.3);
             label_control(ui, &mut self.params, &k("lab_mode"), &k("lab"), "Label");
-            if self.params.b(&k("mark")) || self.params.b(&k("comps")) {
-                // figures saved with a marked angle or components keep their controls
+            if theme::keep_theme() || self.params.b(&k("mark")) || self.params.b(&k("comps")) {
+                // figures saved with a marked angle or components keep their controls (the app's
+                // shell always offers them, as its own force cards do)
                 ui.add_space(8.0);
-                egui::CollapsingHeader::new(RichText::new("Angle and components").size(13.0)).id_salt(("fbd_more", i)).default_open(true).show(ui, |ui| {
+                egui::CollapsingHeader::new(RichText::new("Angle and components").size(13.0)).id_salt(("fbd_more", i)).default_open(self.params.b(&k("mark")) || self.params.b(&k("comps"))).show(ui, |ui| {
                     let mut m = self.params.b(&k("mark"));
                     if ui.checkbox(&mut m, "Mark its angle").changed() {
                         self.params.set_b(&k("mark"), m);
@@ -831,7 +908,7 @@ impl Workspace {
                 label_control(ui, &mut self.params, &k("lab_mode"), &k("lab"), "Label");
                 egui::CollapsingHeader::new(RichText::new("Angle and components").size(11.5)).id_salt(("fbd_more", i)).default_open(self.params.b(&k("mark")) || self.params.b(&k("comps"))).show(ui, |ui| {
                     let mut m = self.params.b(&k("mark"));
-                    if ui.checkbox(&mut m, "Mark its angle").changed() {
+                    if shell_checkbox(ui, true, &mut m, "Mark its angle").changed() {
                         self.params.set_b(&k("mark"), m);
                     }
                     if m {
@@ -842,7 +919,7 @@ impl Workspace {
                         label_control(ui, &mut self.params, &k("alab_mode"), &k("alab"), "Angle label");
                     }
                     let mut c = self.params.b(&k("comps"));
-                    if ui.checkbox(&mut c, "Show its components").changed() {
+                    if shell_checkbox(ui, true, &mut c, "Show its components").changed() {
                         self.params.set_b(&k("comps"), c);
                     }
                 });
@@ -905,7 +982,7 @@ impl Workspace {
         if skin {
             ui.add_space(6.0);
             let y = ui.cursor().top();
-            ui.painter().hline(ui.max_rect().x_range(), y, Stroke::new(1.0, egui::Color32::from_rgb(0xe5, 0xe7, 0xeb)));
+            ui.painter().hline(ui.max_rect().x_range(), y, Stroke::new(1.0, if theme::keep_theme() { theme::border() } else { egui::Color32::from_rgb(0xe5, 0xe7, 0xeb) }));
             ui.add_space(if phys { 10.5 } else { 6.0 });
         }
         check(ui, &mut a, "Acceleration");
@@ -934,7 +1011,7 @@ impl Workspace {
 
     fn vectors_card_skin_in(&mut self, ui: &mut Ui, pdefs: &[ParamDef]) {
         let n = self.params.i("n").clamp(1, 4) as usize;
-        let mut remove = None;
+        let (mut remove, mut swap) = (None, None);
         ui.spacing_mut().item_spacing.y = 0.0;
         ui.add_space(-5.0);
         for i in 1..=n {
@@ -945,6 +1022,25 @@ impl Workspace {
             let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), h), egui::Sense::click());
             let trash = egui::Rect::from_min_size(egui::pos2(rect.right() - 38.4, rect.top() + if open { 9.5 } else { 12.5 }), Vec2::splat(38.4));
             let tr = ui.interact(trash, id.with("rm"), if n > 1 { egui::Sense::click() } else { egui::Sense::hover() });
+            tr.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, n > 1, "Remove"));
+            if theme::keep_theme() {
+                // the app's shell keeps the move earlier / later buttons of its own vector cards
+                let mv = |ui: &mut Ui, k: f32, glyph: &str, on: bool, tip: String| -> bool {
+                    let r = trash.translate(Vec2::new(-k * 40.0, 0.0));
+                    let b = Button::new(RichText::new(glyph).size(18.0).color(theme::ink())).frame(false).min_size(Vec2::splat(30.0));
+                    ui.put(r, b).on_hover_text(tip).clicked() && on
+                };
+                ui.add_enabled_ui(i < n, |ui| {
+                    if mv(ui, 1.0, egui_phosphor::regular::ARROW_DOWN, i < n, format!("Move vector {i} later")) {
+                        swap = Some((i, i + 1));
+                    }
+                });
+                ui.add_enabled_ui(i > 1, |ui| {
+                    if mv(ui, 2.0, egui_phosphor::regular::ARROW_UP, i > 1, format!("Move vector {i} earlier")) {
+                        swap = Some((i, i - 1));
+                    }
+                });
+            }
             if ui.is_rect_visible(rect) {
                 let cy = rect.top() + if open { 28.7 } else { 31.7 };
                 if resp.hovered() && !tr.hovered() {
@@ -1001,6 +1097,10 @@ impl Workspace {
         if let Some(i) = remove {
             let mut q = self.params.clone();
             items::remove_item(&mut q, pdefs, "v", "n", i);
+            self.card_commit(q, true);
+        } else if let Some((a, b)) = swap {
+            let mut q = self.params.clone();
+            items::swap_items(&mut q, pdefs, "v", a, b);
             self.card_commit(q, true);
         }
         ui.add_space(7.4);
@@ -1132,7 +1232,7 @@ impl Workspace {
             ui.add_space(10.0);
             if i < n {
                 let y = ui.cursor().top();
-                ui.painter().hline(ui.max_rect().x_range(), y, Stroke::new(1.0, egui::Color32::from_rgb(0xe5, 0xe7, 0xeb)));
+                ui.painter().hline(ui.max_rect().x_range(), y, Stroke::new(1.0, if theme::keep_theme() { theme::border() } else { egui::Color32::from_rgb(0xe5, 0xe7, 0xeb) }));
             }
         }
         if let Some(i) = remove {
@@ -1203,7 +1303,7 @@ impl Workspace {
         let key = if x_axis { "x_fit" } else { "y_fit" };
         let mut on = self.params.b(key) || !self.params.0.contains_key(key);
         let label = if x_axis { "Fit to the time shown" } else { "Fit to the populations" };
-        let r = ui.checkbox(&mut on, label);
+        let r = shell_checkbox(ui, true, &mut on, label);
         if !x_axis {
             small(ui, "room for both lines up the side");
         }
@@ -1231,9 +1331,9 @@ impl Workspace {
         for (i, st) in strips.iter().enumerate() {
             let kind = match st { C::Element(_) => "Element", C::Own { .. } => "Your own lines", C::Mixture { .. } => "Mixture" };
             let name = if st.name().is_empty() { format!("strip {}", i + 1) } else { st.name().to_string() };
-            item_frame(ui, |ui| {
-                header(ui, &format!("{}. {kind}", i + 1), |ui| {
-                    if icon(ui, egui_phosphor::regular::X, n > 1, &format!("Remove {name}")) {
+            item_block(ui, |ui| {
+                item_header(ui, &format!("{}. {kind}", i + 1), |ui| {
+                    if icon(ui, remove_glyph(), n > 1, &format!("Remove {name}")) {
                         let mut v = strips.clone();
                         v.remove(i);
                         edit = Some((v, true));
@@ -1254,7 +1354,17 @@ impl Workspace {
                         ui.horizontal(|ui| {
                             let shown = elements.iter().find(|(_, nm)| nm == el).map(|(s, nm)| format!("{s} – {nm}")).unwrap_or_else(|| el.clone());
                             let mut pick = None;
-                            ComboBox::from_id_salt(("strip_el", i)).selected_text(shown).width(150.0).show_ui(ui, |ui| {
+                            let skin = theme::chem_skin();
+                            let cb = ComboBox::from_id_salt(("strip_el", i));
+                            // the shell's 40 px select beside its Edit lines button
+                            let cb = if skin {
+                                ui.spacing_mut().button_padding = Vec2::new(15.0, 9.5);
+                                ui.spacing_mut().interact_size.y = 39.5;
+                                cb.icon(chem_shell::select_chevron).truncate().selected_text(RichText::new(shown).size(15.2).family(theme::sans_family())).width((ui.available_width() - 128.0).max(120.0))
+                            } else {
+                                cb.selected_text(shown).width(150.0)
+                            };
+                            cb.show_ui(ui, |ui| {
                                 for (s, nm) in &elements {
                                     if ui.selectable_label(nm == el, format!("{s} – {nm}")).clicked() {
                                         pick = Some(nm.to_string());
@@ -1266,7 +1376,7 @@ impl Workspace {
                                 v[i] = C::Element(nm);
                                 edit = Some((v, true));
                             }
-                            if ui.button(RichText::new("Edit lines").size(12.0)).on_hover_text("Copy this element’s lines into your own, to change them").clicked() {
+                            if action(ui, "Edit lines", true).on_hover_text("Copy this element’s lines into your own, to change them").clicked() {
                                 let mut v = strips.clone();
                                 v[i] = C::Own { name: el.clone(), lines: spectra::element_lines_text(el) };
                                 edit = Some((v, true));
@@ -1274,8 +1384,8 @@ impl Workspace {
                         });
                     }
                     C::Own { name: nm, lines } => {
-                        small(ui, "Name");
-                        if let Some(t) = buffered_edit(ui, ui.make_persistent_id(("strip_name", i)), nm, 200.0, "e.g. Element X") {
+                        caption(ui, "Name");
+                        if let Some(t) = item_field(ui, ui.make_persistent_id(("strip_name", i)), nm, 200.0, "e.g. Element X") {
                             let mut v = strips.clone();
                             // mixtures made of this strip follow the new name
                             for s in v.iter_mut() {
@@ -1288,21 +1398,21 @@ impl Workspace {
                             v[i] = C::Own { name: t, lines: lines.clone() };
                             edit = Some((v, false));
                         }
-                        small(ui, "Wavelengths in nm, separated by commas");
-                        if let Some(t) = buffered_edit(ui, ui.make_persistent_id(("strip_lines", i)), lines, 200.0, "e.g. 450, 520.5, 610") {
+                        caption(ui, "Wavelengths|in nm, separated by commas");
+                        if let Some(t) = item_field(ui, ui.make_persistent_id(("strip_lines", i)), lines, 200.0, "e.g. 450, 520.5, 610") {
                             let mut v = strips.clone();
                             v[i] = C::Own { name: nm.clone(), lines: t };
                             edit = Some((v, false));
                         }
                     }
                     C::Mixture { name: nm, parts } => {
-                        small(ui, "Name");
-                        if let Some(t) = buffered_edit(ui, ui.make_persistent_id(("strip_name", i)), nm, 200.0, "e.g. Unknown") {
+                        caption(ui, "Name");
+                        if let Some(t) = item_field(ui, ui.make_persistent_id(("strip_name", i)), nm, 200.0, "e.g. Unknown") {
                             let mut v = strips.clone();
                             v[i] = C::Mixture { name: t, parts: parts.clone() };
                             edit = Some((v, false));
                         }
-                        small(ui, "Made of");
+                        caption(ui, "Made of");
                         ui.horizontal_wrapped(|ui| {
                             for (j, other) in strips.iter().enumerate() {
                                 if j == i || matches!(other, C::Mixture { .. }) || other.name().trim().is_empty() {
@@ -1311,7 +1421,7 @@ impl Workspace {
                                 // your own lines are looked up among the strips above the mixture
                                 let usable = matches!(other, C::Element(_)) || j < i;
                                 let mut on = parts.iter().any(|x| x.eq_ignore_ascii_case(other.name()));
-                                let r = ui.add_enabled(usable, egui::Checkbox::new(&mut on, other.name()));
+                                let r = shell_checkbox(ui, usable, &mut on, other.name());
                                 let r = r.on_disabled_hover_text("Move it above the mixture to include it");
                                 if r.changed() {
                                     let mut np: Vec<String> = parts.iter().filter(|x| !x.eq_ignore_ascii_case(other.name())).cloned().collect();
@@ -1329,30 +1439,36 @@ impl Workspace {
                 let out = spectra::strip_outside(&self.params, i);
                 if out > 0 {
                     let what = if out == 1 { "1 line is".to_string() } else { format!("{out} lines are") };
-                    ui.add(egui::Label::new(theme::muted(format!("{what} outside {}–{} nm, so not drawn. Widen the axis to show it.", fmt_measure(lo), fmt_measure(hi))).size(11.0)).wrap());
+                    ui.add(egui::Label::new(theme::muted(format!("{what} outside {}–{} nm, so not drawn. Widen the axis to show it.", fmt_measure(lo), fmt_measure(hi))).size(if theme::chem_skin() { 13.0 } else { 11.0 })).wrap());
                 }
             });
         }
         ui.horizontal_wrapped(|ui| {
             let used: Vec<&str> = strips.iter().map(|s| s.name()).collect();
-            if ui.add(Button::new(RichText::new("+ Element").size(12.0)).corner_radius(CornerRadius::same(10))).clicked() {
+            if theme::chem_skin() {
+                ui.spacing_mut().item_spacing = Vec2::new(8.0, 8.0);
+            }
+            if action(ui, "+ Element", true).clicked() {
                 let next = elements.iter().map(|(_, nm)| *nm).find(|nm| !used.contains(nm)).unwrap_or("Hydrogen");
                 let mut v = strips.clone();
                 v.push(C::Element(next.to_string()));
                 edit = Some((v, true));
             }
-            if ui.add(Button::new(RichText::new("+ Your own lines").size(12.0)).corner_radius(CornerRadius::same(10))).clicked() {
+            if action(ui, "+ Your own lines", true).clicked() {
                 let mut v = strips.clone();
                 v.push(C::Own { name: String::new(), lines: String::new() });
                 edit = Some((v, true));
             }
-            if ui.add(Button::new(RichText::new("+ Mixture").size(12.0)).corner_radius(CornerRadius::same(10))).clicked() {
+            if action(ui, "+ Mixture", true).clicked() {
                 let mut v = strips.clone();
                 v.push(C::Mixture { name: "Unknown".into(), parts: Vec::new() });
                 edit = Some((v, true));
             }
         });
-        ui.add(egui::Label::new(theme::muted("Elements show a few of their strongest visible lines, not every one. A mixture shows every line of the strips in it.").size(11.0)).wrap());
+        if theme::chem_skin() {
+            ui.add_space(4.0);
+        }
+        ui.add(egui::Label::new(theme::muted("Elements show a few of their strongest visible lines, not every one. A mixture shows every line of the strips in it.").size(if theme::chem_skin() { 13.0 } else { 11.0 })).wrap());
         if let Some((v, step)) = edit {
             let mut q = self.params.clone();
             spectra::set_strip_cards(&mut q, &v);
@@ -1379,23 +1495,36 @@ impl Workspace {
             let k = atoms::PARTICLE_KINDS[i];
             let key = |f: &str| format!("{k}_{f}");
             let title = format!("{} {}", atoms::kind_noun(&self.params, i), pos + 1);
-            item_frame(ui, |ui| {
-                header(ui, &title, |ui| {
-                    if icon(ui, egui_phosphor::regular::X, shown.len() > 1, &format!("Remove {title}")) {
+            let skin = theme::chem_skin();
+            item_block(ui, |ui| {
+                item_header(ui, &title, |ui| {
+                    if icon(ui, remove_glyph(), shown.len() > 1, &format!("Remove {title}")) {
                         remove = Some(i);
                     }
                 });
                 ui.horizontal(|ui| {
                     let counts: Vec<(&str, String)> = if before_after { vec![("Before", key("count")), ("After", format!("{k}2_count"))] } else { vec![("How many", key("count"))] };
                     for (lab, ck) in counts {
-                        ui.label(theme::muted(lab).size(11.0));
                         let mut c = self.params.i(&ck);
+                        if skin {
+                            // the shell: the caption over a 40 px number box
+                            ui.vertical(|ui| {
+                                caption(ui, lab);
+                                let dv = egui::DragValue::new(&mut c).range(0..=24);
+                                if ui.add_sized(Vec2::new(90.0, 40.0), dv).changed() {
+                                    self.params.set_i(&ck, c);
+                                }
+                            });
+                            ui.add_space(8.0);
+                            continue;
+                        }
+                        ui.label(theme::muted(lab).size(11.0));
                         if ui.add(egui::DragValue::new(&mut c).range(0..=24)).changed() {
                             self.params.set_i(&ck, c);
                         }
                     }
                 });
-                small(ui, "Shape");
+                caption(ui, "Shape");
                 if let Some(v) = seg(ui, &atoms::PARTICLE_SHAPES, self.params.s(&key("shape"))) {
                     self.params.set_s(&key("shape"), &v);
                 }
@@ -1407,14 +1536,30 @@ impl Workspace {
                 };
                 for (g, fields) in groups {
                     if !g.is_empty() {
-                        ui.label(theme::strong(g).size(12.0));
+                        ui.label(theme::strong(g).size(if skin { 14.7 } else { 12.0 }));
                     }
                     for (f, opts, lab) in [(fields[0], &atoms::PARTICLE_SIZES[..], "Size"), (fields[1], &atoms::PARTICLE_SHADES[..], "Shade"), (fields[2], &atoms::PARTICLE_CHARGES[..], "Charge")] {
-                        small(ui, lab);
+                        caption(ui, lab);
                         if let Some(v) = seg(ui, opts, self.params.s(&key(f))) {
                             self.params.set_s(&key(f), &v);
                         }
                     }
+                }
+                if skin {
+                    // the shell: the caption over full-width boxes (center | outer side by side)
+                    caption(ui, if molecule { "Key names" } else { "Key name" });
+                    let w = if molecule { (ui.available_width() - 10.0) / 2.0 } else { ui.available_width() };
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 10.0;
+                        for (fk, hint) in if molecule { vec![("name", "center"), ("oname", "outer")] } else { vec![("name", "e.g. Na⁺ ion")] } {
+                            let mut t = self.params.s(&key(fk)).to_string();
+                            let te = TextEdit::singleline(&mut t).desired_width(w - 22.0).margin(Margin::symmetric(11, 10)).hint_text(hint).font(egui::FontId::new(15.0, theme::sans_family()));
+                            if ui.add(te).changed() {
+                                self.params.set_s(&key(fk), &t);
+                            }
+                        }
+                    });
+                    return;
                 }
                 ui.horizontal(|ui| {
                     ui.label(theme::muted(if molecule { "Key names" } else { "Key name" }).size(11.0));
@@ -1438,9 +1583,17 @@ impl Workspace {
             self.kinds_keep[3] = false;
             self.card_commit(q, true);
         }
+        if theme::chem_skin() {
+            let (r, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 1.0), egui::Sense::hover());
+            ui.painter().hline(r.x_range(), r.center().y, Stroke::new(1.0, theme::border()));
+            ui.add_space(12.0);
+        }
         ui.horizontal(|ui| {
+            if theme::chem_skin() {
+                ui.spacing_mut().item_spacing.x = 8.0;
+            }
             let free = (0..4).find(|&i| !shown.contains(&i));
-            if ui.add_enabled(free.is_some(), Button::new(RichText::new("+ Add a kind").size(12.0)).corner_radius(CornerRadius::same(10))).on_hover_text("Up to four kinds").clicked()
+            if action(ui, "+ Add a kind", free.is_some()).on_hover_text("Up to four kinds").clicked()
                 && let Some(i) = free
             {
                 let mut q = self.params.clone();
@@ -1448,7 +1601,7 @@ impl Workspace {
                 self.kinds_keep[i] = true;
                 self.card_commit(q, true);
             }
-            if ui.add(Button::new(RichText::new("Shuffle").size(12.0)).corner_radius(CornerRadius::same(10))).on_hover_text("Scatter the particles again").clicked() {
+            if action(ui, "Shuffle", true).on_hover_text("Scatter the particles again").clicked() {
                 let mut q = self.params.clone();
                 q.set_i("shuffle", (random_seed() % 999) as i64 + 1);
                 self.card_commit(q, true);

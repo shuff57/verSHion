@@ -67,8 +67,89 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "histogram" => HISTOGRAM,
         "two-way-table" => TWO_WAY_TABLE,
         "stem-and-leaf" => STEM_AND_LEAF,
+        "logic-circuit" => LOGIC_CIRCUIT,
+        "graph-diagram" => GRAPH_DIAGRAM,
+        "tree-diagram" => TREE_DIAGRAM,
+        "number-base" => NUMBER_BASE,
+        "data-structure" => DATA_STRUCTURE,
+        "flowchart" => FLOWCHART,
+        "boolean-table" => BOOLEAN_TABLE,
+        "probability-tree" => PROBABILITY_TREE,
+        "venn-diagram" => VENN_DIAGRAM,
+        "discrete-distribution" => DISCRETE_DISTRIBUTION,
+        "confidence-interval" => CONFIDENCE_INTERVAL,
+        "residual-plot" => RESIDUAL_PLOT,
+        "rc-curve" => RC_CURVE,
+        "t-account" => T_ACCOUNT,
+        "journal-entry" => JOURNAL_ENTRY,
+        "trial-balance" => TRIAL_BALANCE,
+        "financial-statement" => FINANCIAL_STATEMENT,
+        "accounting-equation" => ACCOUNTING_EQUATION,
+        "depreciation-schedule" => DEPRECIATION_SCHEDULE,
+        "bank-reconciliation" => BANK_RECONCILIATION,
+        "cash-flow-statement" => CASH_FLOW_STATEMENT,
+        "supply-demand" => SUPPLY_DEMAND,
+        "elasticity" => ELASTICITY,
+        "ppf" => PPF,
+        "cost-curves" => COST_CURVES,
+        "monopoly" => MONOPOLY,
+        "circular-flow" => CIRCULAR_FLOW,
+        "ad-as" => AD_AS,
+        "lorenz" => LORENZ,
+        "earth-cycles" => EARTH_CYCLES,
+        "earth-layers" => EARTH_LAYERS,
+        "plate-boundaries" => PLATE_BOUNDARIES,
+        "strata" => STRATA,
+        "moon-seasons" => MOON_SEASONS,
+        "topo-contours" => TOPO_CONTOURS,
+        "hr-diagram" => HR_DIAGRAM,
+        "climate-graph" => CLIMATE_GRAPH,
+        "population-pyramid" => POPULATION_PYRAMID,
+        "grid-reference" => GRID_REFERENCE,
+        "map-scale" => MAP_SCALE,
+        "music-staff" => MUSIC_STAFF,
+        "circle-of-fifths" => CIRCLE_OF_FIFTHS,
+        "piano-keyboard" => PIANO_KEYBOARD,
+        "guitar-chords" => GUITAR_CHORDS,
+        "rhythm-counting" => RHYTHM_COUNTING,
+        "break-even" => BREAK_EVEN,
+        "time-value" => TIME_VALUE,
+        "loan-amortisation" => LOAN_AMORTISATION,
+        "org-chart" => ORG_CHART,
+        "swot" => SWOT,
+        "marketing-funnel" => MARKETING_FUNNEL,
+        "plot-arc" => PLOT_ARC,
+        "organiser" => ORGANISER,
+        "timeline" => TIMELINE,
+        "cause-effect" => CAUSE_EFFECT,
+        "family-tree" => FAMILY_TREE,
+        "sentence-diagram" => SENTENCE_DIAGRAM,
+        "structure-chart" => STRUCTURE_CHART,
+        "food-plate" => FOOD_PLATE,
+        "heart-zones" => HEART_ZONES,
+        "court-layout" => COURT_LAYOUT,
+        "body-map" => BODY_MAP,
+        "block-diagram" => BLOCK_DIAGRAM,
+        "free-body" => FREE_BODY,
+        "gear-train" => GEAR_TRAIN,
+        "orthographic" => ORTHOGRAPHIC,
+        "colour-wheel" => COLOUR_WHEEL,
+        "perspective-grid" => PERSPECTIVE_GRID,
+        "maslow" => MASLOW,
+        "brain-regions" => BRAIN_REGIONS,
+        "experiment-flow" => EXPERIMENT_FLOW,
+        "kirchhoff-loops" => KIRCHHOFF_LOOPS,
+        "state-machine" => STATE_MACHINE,
+        "trace-table" => TRACE_TABLE,
+        "sorting-passes" => SORTING_PASSES,
+        "recursion-tree" => RECURSION_TREE,
+        "er-diagram" => ER_DIAGRAM,
+        "network-topology" => NETWORK_TOPOLOGY,
         "dot-plot" => DOT_PLOT,
         "normal-curve" => NORMAL_CURVE,
+        "sampling-distribution" => SAMPLING_DISTRIBUTION,
+        "rejection-region" => REJECTION_REGION,
+        "chi-square-table" => CHI_SQUARE_TABLE,
         "scatterplot" => SCATTERPLOT,
         "mapping-diagram" => MAPPING_DIAGRAM,
         "ruler-reading" => RULER_READING,
@@ -267,6 +348,10 @@ const WAVES: &[Faq] = &[
 ];
 
 const CIRCUIT_DIAGRAM: &[Faq] = &[
+    Faq {
+        q: "Can the figure work out the current and voltages, and make a worksheet from it?",
+        a: "Yes. Type numbers for the battery and each part (12 V, 4 Ω, 4.7 kΩ) and set Work out the circuit to Fill meter readings or Readings and results. It handles series, parallel and an open switch; a part typed as a symbol such as R cannot be worked out, so that reading keeps your text. Turn off Show answers for a student copy: the worked-out values become blank lines, and Student + key saves both.",
+    },
     Faq {
         q: "How can I turn a circuit into a problem for students?",
         a: "Give some values, like the battery voltage and resistances, and leave others unknown: a blank ammeter reading, a resistor labeled x, or a voltmeter whose reading students must find.",
@@ -1323,6 +1408,838 @@ const NORMAL_CURVE: &[Faq] = &[
     },
 ];
 
+const GRAPH_DIAGRAM: &[Faq] = &[
+    Faq {
+        q: "How do I write a graph?",
+        a: "One item per line. List nodes with nodes A, B, C (a node also appears when an edge uses it). A - B is an edge, A -> B is a directed one, and A - B : 4 gives it a weight. To place a node yourself add a line such as node A @ 2,1; the rest stay where the layout puts them.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Choose what to Work out (adjacency list or matrix, degrees, a traversal or the shortest path) and turn off Show answers. The graph stays, the heading stays and the answer is left blank for students to fill in; the adjacency matrix keeps its empty grid. Student + key saves both versions.",
+    },
+    Faq {
+        q: "In what order are neighbours visited?",
+        a: "In the order the nodes were listed, so a traversal is the same every time. List the nodes yourself (nodes A, B, C ...) if you want a particular order rather than the order the edges mention them.",
+    },
+    Faq {
+        q: "What does Layers from the first node do?",
+        a: "It draws the graph like a tree: the first node on top, the nodes one step away on the next row, and so on, with any node that cannot be reached starting a new tree to the right. Circle spaces the nodes round a ring instead. Either way a node you placed with @ stays put.",
+    },
+    Faq {
+        q: "How is the shortest path decided?",
+        a: "By the total of the edge weights (every edge counts 1 if no weights are given), following arrows on directed edges. It is not available if any weight is negative. Ties are broken by node order.",
+    },
+];
+
+const NETWORK_TOPOLOGY: &[Faq] = &[
+    Faq {
+        q: "Which topologies are there?",
+        a: "Star (every device to a central switch), ring (each device to its two neighbours, round a loop), bus (every device off one backbone cable with a terminator at each end), mesh (every device to every other) and tree (a switch at the top with switches below it and computers below those).",
+    },
+    Faq {
+        q: "How is the number of cables worked out?",
+        a: "Star and ring need one cable per device. A bus has one cable (a drop) per device plus the backbone. A full mesh needs n(n - 1) / 2 cables for n devices, so 5 devices need 10 and 8 need 28, which is why meshes are limited to 8 here. A tree needs one cable per device plus the cables between the switches.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The diagram stays and the topology name, the cable count and the strength and weakness lines are left as empty lines to write on. Student + key saves both copies.",
+    },
+    Faq {
+        q: "Can I name the devices?",
+        a: "Yes: type the names separated by commas (Anna, Ben, Cara). Any you leave out are called PC 1, PC 2 and so on. Names are cut at 10 characters. The central device of a star or tree can be renamed too, for example Hub or Server.",
+    },
+    Faq {
+        q: "How many devices can there be?",
+        a: "From 2 to 12. A ring or mesh needs at least 3, and a mesh is limited to 8 so the diagram stays readable.",
+    },
+];
+
+const ER_DIAGRAM: &[Faq] = &[
+    Faq {
+        q: "How do I write an ER diagram?",
+        a: "Entities are one line each: entity Student: id*, name, year, where a * marks the key (underlined) and a ^ marks a foreign key (tagged FK). Relationships are A 1:N B : label, the two cardinalities being how many of each side take part: 1, N, M, 0..1, 0..N or 1..N.",
+    },
+    Faq {
+        q: "Which end does each cardinality belong to?",
+        a: "The first sits next to the first entity and the second next to the second. In Teacher 1:N Course, one teacher is joined to many courses, so the 1 is by Teacher and the N by Course.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. Each cardinality becomes an empty box to fill in, and the entities, attributes and relationship labels stay. Tick Hide the attributes in the student copy as well to ask for the attributes too. Student + key saves both copies.",
+    },
+    Faq {
+        q: "How is the diagram laid out?",
+        a: "In layers from the first entity, with the entities joined to it on the next row; Circle spaces them round a ring instead. Two relationships between the same pair of entities are drawn side by side.",
+    },
+    Faq {
+        q: "What are the limits?",
+        a: "Up to 10 entities with 8 attributes each and 14 relationships.",
+    },
+];
+
+const RECURSION_TREE: &[Faq] = &[
+    Faq {
+        q: "What do the boxes mean?",
+        a: "Each box is one call of the function, with the call on top and the value it returns underneath. A call's children are the calls it makes, left to right. Shaded boxes are base cases, which return without calling anything.",
+    },
+    Faq {
+        q: "Which functions are there?",
+        a: "fib(n) (fib(n-1) + fib(n-2)), factorial(n), sum(n) (the sum of 1 to n), gcd(a, b) (Euclid's algorithm with a mod b) and power(x, n), which squares the result of power(x, n div 2) and multiplies by x when n is odd. Set the starting numbers with the n / a / x box and the b box.",
+    },
+    Faq {
+        q: "What do the numbers on the boxes show?",
+        a: "Order the calls start numbers the boxes in the order the calls are made (a call starts before its children). Order the calls return numbers them in the order the calls finish, children before their parent, so the first call returns last.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The calls and the boxes stay and the return values and numbers are left empty to fill in. Student + key saves both copies.",
+    },
+    Faq {
+        q: "Why does it say there are too many calls?",
+        a: "A tree is limited to 80 calls so it stays readable; fib(8) is the largest Fibonacci that fits. Choose a smaller number. Results too big to show (a huge power) are refused the same way.",
+    },
+];
+
+const SORTING_PASSES: &[Faq] = &[
+    Faq {
+        q: "What does each row show?",
+        a: "The start is the array as typed. Each Pass row is the array when that pass has finished. The cells that changed in that pass are highlighted, and the sorted part is lightly shaded. The last column counts the comparisons made and the swaps (or, for insertion sort, shifts) done in that pass.",
+    },
+    Faq {
+        q: "How does each sort work here?",
+        a: "Bubble sort sweeps from the left swapping neighbours that are out of order, so the largest settles at the end each pass, and stops after a pass with no swaps. Selection sort finds the smallest of what is left and swaps it into the next place. Insertion sort takes the next value and shifts the sorted values along to open a gap for it.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The start row and the headings stay and the other rows are empty boxes of the same size. Rows filled in for students keeps more than the start row if you want to give a worked pass. Student + key saves both copies.",
+    },
+    Faq {
+        q: "Can it sort largest first?",
+        a: "Yes, tick Largest first. Equal values keep their original order in selection and insertion sort and in bubble sort.",
+    },
+    Faq {
+        q: "How many values can it take?",
+        a: "Up to 12 numbers, separated by commas or spaces or one per line. Values that are not numbers are ignored.",
+    },
+];
+
+const TRACE_TABLE: &[Faq] = &[
+    Faq {
+        q: "What can the pseudocode do?",
+        a: "Assignments (total = total + i), print, and one loop: while condition ... end, or for i = 1 to 5 ... end (add step 2 or step -1). Expressions use + - * /, div and mod (or // and %), brackets, comparisons, and, or and not. Lines after the loop's end run once afterwards. Start a line with # for a comment.",
+    },
+    Faq {
+        q: "What does one row mean?",
+        a: "With One row per Loop pass, the first row (start) is the variables after the lines before the loop, and each later row is the values at the end of a pass round the loop. With Every statement there is a row after each statement, labelled by its line number.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The program, the headings and the number of rows stay; the first rows (set by Rows filled in for students, one by default) keep their values and the rest of the cells are empty. Student + key saves both copies.",
+    },
+    Faq {
+        q: "Why does it stop with a note?",
+        a: "A line it cannot run (dividing by zero, using a variable before it has a value) ends the trace at that line and says so under the table. A loop that never finishes stops after 40 rows. The figure is limited to 24 lines and 8 variables.",
+    },
+    Faq {
+        q: "Why is i one more than the last value in the loop?",
+        a: "A for loop adds the step after each pass, so when the loop ends i has gone past the end value, as it does in most languages. The table shows that value in the last row.",
+    },
+];
+
+const STATE_MACHINE: &[Faq] = &[
+    Faq {
+        q: "How do I write a state machine?",
+        a: "One item per line. start q0 marks the start state and accept q2, q3 marks accepting states (drawn as a double circle). A transition is q0 -> q1 : 0, 1, which moves on either symbol. A state appears as soon as a line mentions it; a line states A, B, C fixes the order they are listed in.",
+    },
+    Faq {
+        q: "What does Trace an input string do?",
+        a: "It runs the machine on the input and shows the state after each symbol, then Accepted or Rejected. A symbol with no transition leaves the empty set and rejects. If a state has two transitions on the same symbol (a nondeterministic machine) the trace follows every branch and shows the set of states.",
+    },
+    Faq {
+        q: "How do I write the input?",
+        a: "Together when each symbol is one character (0110) or separated by spaces when symbols are longer words (coin push coin). Up to 24 symbols are used.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Choose a transition table or a trace and turn off Show answers. The diagram stays, the table keeps its states and symbols with empty cells, and the trace keeps the input with blank lines to write on. Student + key saves both copies.",
+    },
+    Faq {
+        q: "Why are two arrows drawn side by side?",
+        a: "A transition each way between the same two states is drawn as two arrows next to each other so both stay visible. Labels for the same pair of states in the same direction share one arrow.",
+    },
+];
+
+const SUPPLY_DEMAND: &[Faq] = &[
+    Faq {
+        q: "How are the curves defined?",
+        a: "Each is a straight line from its price at quantity 0 and its slope: demand falls by the slope for each extra unit, supply rises by it. The axes are chosen so both curves and the equilibrium fit.",
+    },
+    Faq {
+        q: "How do I shift a curve?",
+        a: "Pick Right (increase) or Left (decrease) for demand or supply and say how many units of quantity to move it. The original curve stays as a dashed grey line labelled D1 or S1, the new one is D2 or S2, and the readout gives the new and the old equilibrium.",
+    },
+    Faq {
+        q: "How do price controls work?",
+        a: "Choose a ceiling or a floor and a price. A ceiling above the equilibrium price, or a floor below it, does nothing and the readout says it is not binding. Otherwise the figure marks the shortage or the surplus between the quantity supplied and demanded.",
+    },
+    Faq {
+        q: "What are the shaded areas?",
+        a: "Consumer surplus is the triangle between the demand curve and the equilibrium price, producer surplus the triangle between that price and the supply curve. Their sizes are in the readout. Choose which to shade, or none.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The curves, their labels and any price control stay; the equilibrium, shading, guide lines, shortage and readout go. Student + key saves both copies at the same size.",
+    },
+];
+
+const ELASTICITY: &[Faq] = &[
+    Faq {
+        q: "How is elasticity worked out?",
+        a: "By the midpoint formula: the change in quantity over the average quantity, divided by the change in price over the average price, taken as a positive number. The starting-point formula divides by the first point instead. The working is shown line by line.",
+    },
+    Faq {
+        q: "What do the verdicts mean?",
+        a: "Above 1 is elastic (quantity responds more than price), below 1 is inelastic, and within half a percent of 1 is unit elastic. The last line compares total revenue (price times quantity) at the two points, which rises when price falls only if demand is elastic.",
+    },
+    Faq {
+        q: "Why must the two points differ?",
+        a: "Elasticity compares a change in price with a change in quantity, so both must change; the figure says so if they do not. A starting-point formula also needs a first price and quantity above 0.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The two points and the demand line stay, with a blank line after each step of the working for the student to fill in. Student + key saves both copies.",
+    },
+    Faq {
+        q: "Can I hide the axis numbers?",
+        a: "Yes: turn off Number the axes for a plain sketch with the points and guide lines only.",
+    },
+];
+
+const PPF: &[Faq] = &[
+    Faq {
+        q: "How is the frontier drawn?",
+        a: "From the most of each good that could be made if all resources went to it. Bowed out is a quarter ellipse (rising opportunity cost); a straight line has a constant opportunity cost.",
+    },
+    Faq {
+        q: "How are the points classed?",
+        a: "Each point is compared with the frontier: inside means attainable but not efficient, on it means efficient, outside means unattainable with current resources. A point within one percent of the curve counts as on it.",
+    },
+    Faq {
+        q: "How do I work out an opportunity cost?",
+        a: "Give a from point and a to point by name. The readout is what is given up of one good per unit gained of the other. If the move gains or loses both goods it is not a trade-off along the frontier and the readout says so.",
+    },
+    Faq {
+        q: "How do I add points?",
+        a: "One per line in the Points box: a name (up to 8 characters) and the two quantities, like A 40 60. Up to six.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The frontier and the points stay; each point's class and the opportunity cost are left as blank lines. Student + key saves both copies.",
+    },
+];
+
+const COST_CURVES: &[Faq] = &[
+    Faq {
+        q: "What cost function does it use?",
+        a: "Fixed cost plus variable cost = a q − b q² + c q³. From it the figure works out marginal cost (the slope of variable cost), average variable cost and average total cost. It checks that marginal cost never goes below zero.",
+    },
+    Faq {
+        q: "Where is the profit-maximising quantity?",
+        a: "Where marginal cost, on its rising part, equals the price. Below the lowest average variable cost the firm shuts down and produces nothing, losing its fixed cost.",
+    },
+    Faq {
+        q: "What is the rectangle?",
+        a: "The profit or loss: the gap between the price and average total cost at that quantity, times the quantity. Green is a profit, red a loss.",
+    },
+    Faq {
+        q: "What are the small circles?",
+        a: "The lowest points of the average total cost and average variable cost curves, where marginal cost crosses them. They are part of the answer, so a student copy leaves them out.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The three curves and the price line stay; the quantity, rectangle, markers and readout go. Student + key saves both copies.",
+    },
+];
+
+const MONOPOLY: &[Faq] = &[
+    Faq {
+        q: "How are the curves worked out?",
+        a: "Demand is a straight line; marginal revenue starts at the same price but falls twice as fast. Marginal cost is a line from its intercept, and average total cost comes from the fixed cost plus the cost of the units.",
+    },
+    Faq {
+        q: "Where does the monopolist produce?",
+        a: "Where marginal revenue equals marginal cost, with the price read up to the demand curve from that output. The profit rectangle is price minus average total cost, times the output.",
+    },
+    Faq {
+        q: "What is the deadweight loss?",
+        a: "The triangle between demand and marginal cost, from the monopoly output to the output a competitive market would produce, where price equals marginal cost. It can be turned off.",
+    },
+    Faq {
+        q: "What if marginal cost starts above demand?",
+        a: "Then no output is worth making; the figure says so instead of drawing.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The four curves stay; the output, price, rectangle, triangle and readout go. Student + key saves both copies.",
+    },
+];
+
+const CIRCULAR_FLOW: &[Faq] = &[
+    Faq {
+        q: "Which models are there?",
+        a: "Two sectors with markets: households and firms joined by the product market and the factor market, with real flows (goods, services, factors) as solid blue arrows and money flows (spending, revenue, payments, income) as dashed orange ones. Three sectors adds government and shows the money flows between households, firms and government.",
+    },
+    Faq {
+        q: "Can I show only one loop?",
+        a: "Yes, in the two-sector model turn the real flows or the money flows off.",
+    },
+    Faq {
+        q: "What can I leave blank?",
+        a: "Choose Flow labels or Sector names under Leave blank in the student copy. With Show answers off that part becomes empty boxes of the same size, for students to label.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The arrows stay, with the part you chose left blank. Student + key saves both copies at the same size.",
+    },
+    Faq {
+        q: "What does Print style change?",
+        a: "Everything becomes black and grey; the real and money flows are told apart by solid and dashed lines.",
+    },
+];
+
+const AD_AS: &[Faq] = &[
+    Faq {
+        q: "What curves are drawn?",
+        a: "A downward aggregate demand curve, an upward short-run aggregate supply curve, and a vertical long-run aggregate supply at the full-employment output.",
+    },
+    Faq {
+        q: "How do shifts work?",
+        a: "Move AD or SRAS right or left by a number of units of output. The old curve stays dashed and grey as AD1 or SRAS1, the new one is AD2 or SRAS2, and the readout says whether output and the price level rise or fall.",
+    },
+    Faq {
+        q: "What is the gap?",
+        a: "The difference between the equilibrium output and full employment. Below it is a recessionary gap, above it an inflationary gap; within half a percent is no gap.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The curves and their labels stay; the equilibrium, guide lines, gap and readout go. Student + key saves both copies.",
+    },
+    Faq {
+        q: "Why can the figure refuse a shift?",
+        a: "If a shift would push a curve below a price level of 0, or the curves would not cross, it says so instead of drawing a misleading graph.",
+    },
+];
+
+const LORENZ: &[Faq] = &[
+    Faq {
+        q: "What do I enter?",
+        a: "The income of each equal-sized group of the population, from 2 to 10 numbers separated by spaces, commas or new lines. They are put in order from lowest to highest.",
+    },
+    Faq {
+        q: "How is the Gini coefficient worked out?",
+        a: "From the area between the line of equality and the Lorenz curve, as a share of the area under the line of equality. 0 is perfect equality; the nearer to 1, the more one group has.",
+    },
+    Faq {
+        q: "What does the table show?",
+        a: "Each group's income and share of the total, the cumulative population share and the cumulative income share, which are the points of the Lorenz curve.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The incomes and the line of equality stay; the share and cumulative columns, the curve, the shading and the Gini are left for the student to work out and plot. Student + key saves both copies.",
+    },
+    Faq {
+        q: "What are the limits?",
+        a: "Up to ten groups, incomes up to a trillion, and at least some income somewhere.",
+    },
+];
+
+const BANK_RECONCILIATION: &[Faq] = &[
+    Faq {
+        q: "How do I enter the balances and adjustments?",
+        a: "One line for each balance, bank 5200 for the bank statement and book 5250 for the cash book, then adjustment lines: bank + Deposits in transit 800 adds to the bank side and book - Bank charges 35 deducts from the cash book side. Each side has up to six adjustments.",
+    },
+    Faq {
+        q: "Which items go on which side?",
+        a: "Timing differences adjust the bank statement: deposits in transit are added and outstanding cheques deducted. Items the bank has recorded that the business has not adjust the cash book: interest and direct credits are added, charges and dishonoured cheques deducted. The figure draws whatever you type; it does not decide the side for you.",
+    },
+    Faq {
+        q: "What does the check say?",
+        a: "When the two adjusted balances are equal it says Reconciled and shows the balance. When they are not it says how far apart they are and which side is higher, which is the cue to look for a missed item.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. Both opening balances and every adjustment stay; the two adjusted balances are empty boxes and the check is a blank line. Student + key saves both copies.",
+    },
+    Faq {
+        q: "Can I change the labels?",
+        a: "The two panels are always headed Bank statement and Cash book. The adjustment names are your own, cut at 26 characters, and the whole statement can have a title.",
+    },
+];
+
+const CASH_FLOW_STATEMENT: &[Faq] = &[
+    Faq {
+        q: "How do I write the activities?",
+        a: "A heading such as Operating activities, then one Description amount line for each cash flow. A plain or + amount is cash in; a - amount, or an amount in (brackets), is cash out and is shown in brackets. Up to four sections of eight lines. Investing and financing activities follow the same way.",
+    },
+    Faq {
+        q: "What does it work out?",
+        a: "The net cash from each section, the net increase (or decrease) in cash, and the closing cash, which is the opening cash plus the net change. The opening cash is a separate setting, given on the statement.",
+    },
+    Faq {
+        q: "What is the closing cash check?",
+        a: "If you type the closing cash from the balance sheet, the statement checks that it agrees with the closing cash worked out and says so, or by how much it differs. Leave it empty for no check.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The cash flows and the opening cash stay; every net total, the net change, the closing cash and the check become empty boxes. Student + key saves both copies.",
+    },
+    Faq {
+        q: "Does it show the direct or the indirect method?",
+        a: "It lays out whatever lines you type, so the operating section can list cash received and paid (the direct method) or start from net income with adjustments (the indirect method): in either case the totals work the same way.",
+    },
+];
+
+const FINANCIAL_STATEMENT: &[Faq] = &[
+    Faq {
+        q: "How do I write the accounts?",
+        a: "A heading line such as Revenue, then one Account amount line for each account under it, then the next heading. For an income statement the first section is revenue and every later section is an expense. For a balance sheet the first is assets and the later ones are liabilities and equity. Up to six sections of ten accounts.",
+    },
+    Faq {
+        q: "What does it work out?",
+        a: "A total for each section, then the net income (or net loss, written in brackets) for an income statement, or the total of each side of the balance sheet with a check that assets equal liabilities plus equity. If they do not, it says by how much and which side is larger.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The accounts and amounts stay; every total, the net income and the check become empty boxes and a blank line. Student + key saves both copies.",
+    },
+    Faq {
+        q: "Can I keep two statements for the same business?",
+        a: "Yes: the income statement and the balance sheet have separate account boxes, and the business name and period are shared, so switch the Statement choice to move between them.",
+    },
+    Faq {
+        q: "How are the amounts laid out?",
+        a: "Account amounts sit in the inner column and totals in the outer column with a rule above, the totals carrying the currency symbol and a double rule under the final figure, as is usual on printed statements.",
+    },
+];
+
+const ACCOUNTING_EQUATION: &[Faq] = &[
+    Faq {
+        q: "How do I enter the transactions?",
+        a: "One line each: a description, a colon, then the effects as letters and amounts, for example Buy equipment on credit: A +3000, L +3000. A is assets, L liabilities and E equity; a minus sign reduces it. Two effects on the same letter, such as A +400, A -400, are added, which is how an asset swap shows as no change.",
+    },
+    Faq {
+        q: "What is checked?",
+        a: "Each transaction must keep the equation balanced: the change in assets equals the change in liabilities plus the change in equity. A row that does not is named under the table. The totals then show assets = liabilities + equity.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The numbered descriptions stay and the effect cells, the totals and the check are empty for students to fill. Student + key saves both copies.",
+    },
+    Faq {
+        q: "How many transactions can there be?",
+        a: "Up to ten, with descriptions cut at 40 characters.",
+    },
+    Faq {
+        q: "Why are the amounts signed?",
+        a: "Because the table shows the change each transaction makes, a plus for an increase and a minus for a decrease. The totals row shows the net result for each part.",
+    },
+];
+
+const DEPRECIATION_SCHEDULE: &[Faq] = &[
+    Faq {
+        q: "Which methods are there?",
+        a: "Straight-line (the same expense each year), double-declining balance (twice the straight-line rate applied to the opening book value, never taking the asset below its salvage value) and sum of the years' digits (a falling fraction of cost less salvage: for 5 years 5/15, 4/15, and so on).",
+    },
+    Faq {
+        q: "What do the columns mean?",
+        a: "Expense is the depreciation charged that year, accumulated depreciation is the total so far, and book value is cost less accumulated depreciation. Year 0 shows the starting book value, which is the cost.",
+    },
+    Faq {
+        q: "How are rounding and the last year handled?",
+        a: "Each year's expense is rounded to the cent, and the last year takes whatever brings the book value exactly to the salvage value, so the total expense is always cost less salvage.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The asset, cost, salvage value, life and method stay, along with the year-0 line; every expense, accumulated depreciation and book value cell and the total are left empty. Student + key saves both copies.",
+    },
+    Faq {
+        q: "What are the limits?",
+        a: "A life of 1 to 15 years, a cost above 0 and a salvage value of at least 0 and below the cost, up to a trillion.",
+    },
+];
+
+const T_ACCOUNT: &[Faq] = &[
+    Faq {
+        q: "How do I write the accounts?",
+        a: "Start each account with a line such as account Cash, then one line per entry: Dr 5000 Capital for a debit (left side) or Cr 1200 Rent for a credit (right side), with an optional short description. Up to four accounts, each with up to 12 entries a side, are laid out two to a row.",
+    },
+    Faq {
+        q: "How is an account balanced off?",
+        a: "The two sides are added. The smaller side gets a balancing figure (Balance c/d) so both totals match, the totals are ruled off with a double line, and the balance is carried down below as Balance b/d, a debit balance if the debits were larger. An account that already balances shows Balance nil.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The entries stay as the question; the balancing figure, the two totals and the balance carried down are left as empty boxes and a blank line. Student + key saves both copies.",
+    },
+    Faq {
+        q: "Can I leave the accounts unbalanced?",
+        a: "Yes: untick Balance off each account and each side shows just its own total, which is useful for a first lesson on debits and credits.",
+    },
+    Faq {
+        q: "What amounts can I use?",
+        a: "Positive amounts up to a trillion, with or without commas and a currency symbol (1,200.50, $300). A debit or credit is never negative, so put an amount on the other side instead. Cents are shown automatically when an amount has them, or always if you tick Always show cents.",
+    },
+];
+
+const JOURNAL_ENTRY: &[Faq] = &[
+    Faq {
+        q: "How do I write a journal entry?",
+        a: "A date line, then Dr Account amount for each account debited and Cr Account amount for each credited, then the narration in brackets, for example (Paid wages and rent). A blank line, or a new date, starts the next entry. An entry can have up to six lines, so compound entries are fine.",
+    },
+    Faq {
+        q: "What does the check show?",
+        a: "The two totals are written under the table with Debits equal credits when they match, or Out of balance by an amount and which side is larger when they do not, so a typing slip in a worked example shows up.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The dates and narrations stay as the description of each transaction; the accounts, amounts and totals are left empty, and a Do debits equal credits? line is left to fill in. Student + key saves both copies.",
+    },
+    Faq {
+        q: "How is the table laid out?",
+        a: "Date, Account, Debit and Credit columns with the debit accounts at the left of the account column and the credit accounts indented, the narration in brackets beneath, and a ruled line between entries. Up to eight entries fit.",
+    },
+    Faq {
+        q: "Can I use another currency?",
+        a: "Yes: choose $, \u{a3}, \u{20ac} or None. The symbol is written on the totals line; the table columns show plain amounts as is usual.",
+    },
+];
+
+const TRIAL_BALANCE: &[Faq] = &[
+    Faq {
+        q: "How do I enter the balances?",
+        a: "One line per account: the name, then Dr or Cr for the side its balance is on, then the amount, for example Accounts payable Cr 900. Up to 20 accounts. The Balance column shows each as given.",
+    },
+    Faq {
+        q: "What does the figure work out?",
+        a: "Each balance goes into the Debit or Credit column, both columns are added, and the line underneath says either The totals agree or Out of balance by an amount with the side that is larger. Try the Out of balance example to see a difference reported.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The accounts and balances stay; the Debit and Credit columns and both totals are left empty and the difference is a blank line. Student + key saves both copies.",
+    },
+    Faq {
+        q: "Does the order matter?",
+        a: "Accounts are listed in the order you type them, so use the usual order of assets, liabilities, capital, income and expenses if you want a conventional trial balance.",
+    },
+    Faq {
+        q: "What are the limits?",
+        a: "Up to 20 accounts, names cut at 28 characters, and positive amounts up to a trillion.",
+    },
+];
+
+const RC_CURVE: &[Faq] = &[
+    Faq {
+        q: "What is the time constant?",
+        a: "\u{3c4} = R \u{d7} C, the time a capacitor takes to reach about 63% of its final voltage when charging, or to fall to about 37% when discharging. The axis is in time constants so every circuit has the same shape; the working under the graph gives \u{3c4} in seconds, milliseconds or microseconds.",
+    },
+    Faq {
+        q: "What do the percentages on the curve mean?",
+        a: "With Mark each time constant on, the curve is marked at 1\u{3c4} to 5\u{3c4} with how far it has got: 63.2%, 86.5%, 95.0%, 98.2% and 99.3% when charging up, or the amounts left, 36.8%, 13.5%, 5.0%, 1.8% and 0.7%, when falling. After about 5\u{3c4} a capacitor is treated as fully charged or discharged.",
+    },
+    Faq {
+        q: "Which quantities can I graph?",
+        a: "Capacitor voltage, current (in mA) or charge (in \u{b5}C). While charging, the voltage and charge rise and the current falls; while discharging all three fall. Current is drawn as its size, whichever way it flows.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The axes, the given values of R, C and the battery stay; the curve, the marks and the working are removed, with a blank line for \u{3c4}. Student + key saves both copies.",
+    },
+    Faq {
+        q: "What units do I enter?",
+        a: "Resistance in kilohms, capacitance in microfarads and the battery in volts, so the defaults of 10 k\u{3a9} and 100 \u{b5}F give \u{3c4} = 1 s.",
+    },
+];
+
+const KIRCHHOFF_LOOPS: &[Faq] = &[
+    Faq {
+        q: "What circuit is this?",
+        a: "Three branches joined at a top and bottom junction: a battery and R1 on the left, R2 in the middle, and R3 with a second battery on the right. It is the standard two-loop problem for Kirchhoff's laws.",
+    },
+    Faq {
+        q: "Which equations are used?",
+        a: "The junction rule, I\u{2081} + I\u{2083} = I\u{2082}, and the loop rule round each loop, V1 \u{2212} R1 I\u{2081} \u{2212} R2 I\u{2082} = 0 and V2 \u{2212} R3 I\u{2083} \u{2212} R2 I\u{2082} = 0. The three are solved together for the currents.",
+    },
+    Faq {
+        q: "Why is a current negative?",
+        a: "The arrows are only assumed directions: I\u{2081} and I\u{2083} up their branches and I\u{2082} down the middle. A negative answer means the real current runs against its arrow, which happens when one battery is much stronger than the other.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The circuit, every value and the assumed directions stay, and the junction equation, both loop equations and the currents become blank lines. Student + key saves both copies.",
+    },
+    Faq {
+        q: "Can I change the values?",
+        a: "Yes: both batteries and all three resistors. They must be above 0, and the answers are exact to three decimals.",
+    },
+];
+
+const RESIDUAL_PLOT: &[Faq] = &[
+    Faq {
+        q: "What is a residual?",
+        a: "The vertical distance from a point to the line of best fit: the actual y minus the predicted y. A point above the line has a positive residual and a point below it a negative one, and the residuals always add up to 0.",
+    },
+    Faq {
+        q: "What does each view show?",
+        a: "Scatter with residuals draws the line and a dashed segment from every point to it. Residual plot draws each residual against x around a dashed zero line, where a random scatter means a line fits well and a curve means it does not. Both stacks the two with the same x axis.",
+    },
+    Faq {
+        q: "How do I get the table and the sum of squares?",
+        a: "Tick Table of predicted values and residuals (up to 15 points) for x, y, predicted y and residual, and Write the sum of squared residuals for the total the line minimises.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The scatterplot keeps its points and loses the line and segments, the residual plot keeps empty axes with the zero line, and the predicted y, residual and sum of squares are blank. Student + key saves both copies.",
+    },
+    Faq {
+        q: "Does it pair with the scatterplot?",
+        a: "Yes. It reads pairs the same way, so paste the same data into both. Enter at least two points with different x values.",
+    },
+];
+
+const CONFIDENCE_INTERVAL: &[Faq] = &[
+    Faq {
+        q: "Which intervals can I draw?",
+        a: "A mean when the population standard deviation is known (uses z*), a mean when only the sample standard deviation is known (uses t* with n - 1 degrees of freedom), and a proportion (uses z*). The level can be 90%, 95% or 99%.",
+    },
+    Faq {
+        q: "How is it worked out?",
+        a: "The margin of error is the critical value times the standard error: z* or t* times the standard deviation over the square root of n, or times the square root of p(1 - p)/n for a proportion. The interval is the estimate plus and minus the margin. The working is written under the number line.",
+    },
+    Faq {
+        q: "What does Mark a value do?",
+        a: "Type a claimed mean or proportion to draw a dashed line at it. The working then says whether it lies inside the interval, which is the usual test of a claim. Leave it empty for no mark.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The number line, the estimate and the facts about the sample stay; the interval, its ends, the margin of error and the working become blank lines. Student + key saves both copies.",
+    },
+    Faq {
+        q: "What are the limits?",
+        a: "n from 2 up, a standard deviation above 0, and a proportion between 0 and 1. The t values are found numerically and agree with the printed tables to about four significant figures.",
+    },
+];
+
+const DISCRETE_DISTRIBUTION: &[Faq] = &[
+    Faq {
+        q: "Which distributions are there?",
+        a: "Binomial (n trials, each with probability p of success, counting the successes) and Poisson (events at an average rate, counting how many happen). A binomial has bars from 0 to n; a Poisson has bars up to about four standard deviations above its mean, and any probability beyond the last bar is still included in the answer.",
+    },
+    Faq {
+        q: "What do the shading options mean?",
+        a: "Exactly k shades one bar. At most k shades k and everything below it. At least k shades k and everything above it. Between shades both values and all those between. If you give the bounds the wrong way round they are swapped.",
+    },
+    Faq {
+        q: "How is the probability worked out?",
+        a: "By adding the exact probability of each shaded bar, so it is exact rather than a normal approximation. It is shown to four decimals, and as < 0.0001 or > 0.9999 when it is that close to 0 or 1.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The bars and the shading stay and the probability is hidden for students to work out. Student + key saves both copies. Write the probability above each bar gives a table of values on the key.",
+    },
+    Faq {
+        q: "What are the limits?",
+        a: "Up to 60 trials, a Poisson mean up to 30, and p between 0 and 1. The values above the bars are shown only when there are 24 bars or fewer.",
+    },
+];
+
+const VENN_DIAGRAM: &[Faq] = &[
+    Faq {
+        q: "In what order do I enter the region values?",
+        a: "Two sets: A only, B only, both, neither. Three sets: A only, B only, C only, A and B only, A and C only, B and C only, all three, none. Separate them with commas. A value can be a count or short text such as 2 4 6 to list elements.",
+    },
+    Faq {
+        q: "How are the totals worked out?",
+        a: "From the region values when they are all numbers: n(A) adds every region inside A, so with 12 in A only and 5 in both, n(A) = 17. If a value is text, the totals are left out.",
+    },
+    Faq {
+        q: "How do I shade a region?",
+        a: "Choose one under Shade: a set, both sets, either set, one set only, outside a set, or everything outside all the circles. The shading stays in the student copy so it can be the question.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The circles, names and shading stay and the region values and totals are left empty. Student + key saves both copies.",
+    },
+    Faq {
+        q: "Can I name the sets?",
+        a: "Yes, up to 12 characters each. Set C is only used with three sets.",
+    },
+];
+
+const PROBABILITY_TREE: &[Faq] = &[
+    Faq {
+        q: "How do I enter the branches?",
+        a: "Each stage is a list of outcomes with their probabilities, separated by commas: Rain 0.3, Dry 0.7. Probabilities can be decimals (0.3), percentages (30%) or fractions (3/10). The second stage is one line used after every first-stage outcome, or one line per first-stage outcome, in order, when the probabilities change (such as drawing without replacement). The third stage is one line used after every second-stage outcome.",
+    },
+    Faq {
+        q: "What does Work out each path show?",
+        a: "On the right, each whole path from left to right is listed with its probability, found by multiplying the probabilities along its branches: Rain, Late = 0.3 x 0.4 = 0.12. The paths always add to 1 when every set of branches does.",
+    },
+    Faq {
+        q: "Why does it say the probabilities do not add to 1?",
+        a: "The branches leaving any one point must add to 1. The figure still draws what you typed and notes the first place it found, so you can fix the numbers or leave it for a student to spot.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The tree stays and the path probabilities are left as blank lines. Tick Leave the branch probabilities blank in the student copy as well to have students fill in the branches. Student + key saves both copies.",
+    },
+    Faq {
+        q: "How big can the tree be?",
+        a: "Up to five outcomes per stage, three stages, and 30 paths in all.",
+    },
+];
+
+const BOOLEAN_TABLE: &[Faq] = &[
+    Faq {
+        q: "How do I give the function?",
+        a: "Either as an expression (Q = (A AND B) OR (NOT A AND C), one per line, words or the symbols & | ^ !) or as a list of minterms: the row numbers where the output is 1, counting the first variable as the top bit, so with A, B, C the row A=1, B=0, C=1 is number 5. Don't-cares are rows where the output does not matter and are shown as X.",
+    },
+    Faq {
+        q: "How is the simplified expression found?",
+        a: "By the Quine-McCluskey method: all the biggest groups of rows are found, the essential ones are taken and then the group that covers the most that is left, so the result is a small sum of products (a minimal one for the usual textbook sizes). A prime means NOT, so A'C + AB reads (NOT A AND C) OR (A AND B). Don't-cares are used when they make a group bigger and are never required.",
+    },
+    Faq {
+        q: "How do I read the Karnaugh map?",
+        a: "The side and top labels run in Gray code (00, 01, 11, 10) so neighbouring cells differ in one variable. The map is for 2 to 4 variables. The coloured loops are the groups of 1s (and X) that make the terms of the simplified expression; a group that reaches the edge wraps round and is drawn as two loops.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The inputs, the empty table cells, the empty map and the heading stay and the outputs, the groups and the simplified expression are left for students to fill in. Student + key saves both copies.",
+    },
+    Faq {
+        q: "What if the expression has several outputs?",
+        a: "The truth table shows a column for each. The Karnaugh map shows one: pick which under Output for the map.",
+    },
+];
+
+const FLOWCHART: &[Faq] = &[
+    Faq {
+        q: "How do I write a flowchart?",
+        a: "One box per line as id: kind text, for example B: decision n > 0?. The kinds are start, end, process, input, output and decision. Arrows are A -> B, which can chain (A -> B -> C), and A -> B : yes puts a label on the arrow. Lines starting after a # are ignored.",
+    },
+    Faq {
+        q: "How is the chart laid out?",
+        a: "Top to bottom in layers from the first box, with the boxes that follow a decision side by side. An arrow that goes back up to an earlier box (a loop) is drawn round the right-hand side so it does not cross the boxes.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "List the ids of the boxes to hide under Blank in student copy (for example D, P) and turn off Show answers. Those boxes stay, at full size, with nothing inside, and the arrows and labels stay. Student + key saves both copies.",
+    },
+    Faq {
+        q: "What are the shapes?",
+        a: "Start and end are rounded, process is a rectangle, input and output are slanted boxes and a decision is a diamond. Long text wraps onto two lines, and text is cut at 40 characters.",
+    },
+    Faq {
+        q: "Why does it say a box is missing?",
+        a: "An arrow names a box id that has no line of its own. Define every box (A: process ...) before or after the arrows; the ids are case-sensitive and up to 8 letters, digits or underscores. A chart is limited to 30 boxes and 60 arrows.",
+    },
+];
+
+const DATA_STRUCTURE: &[Faq] = &[
+    Faq {
+        q: "How do I show what push and pop do?",
+        a: "Choose Stack (or Queue, Linked list), list the starting values and type the operations separated by commas, such as push 5, push 9, pop. The starting structure is drawn first and the result below it.",
+    },
+    Faq {
+        q: "Which operations does each structure understand?",
+        a: "Stack: push and pop. Queue: enqueue and dequeue. Linked list: addfirst, addlast, removefirst and removelast. An array has no operations; it shows its values and indices. Anything else is skipped and listed under the result.",
+    },
+    Faq {
+        q: "Which end is which?",
+        a: "Values run bottom to top for a stack (the top is marked), front to back for a queue and head to tail for a linked list (ending in null). The first value of an array is index 0.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The starting structure and the operations stay and the result is replaced by an empty dashed box of the same size, for students to draw in. Student + key saves both copies.",
+    },
+    Faq {
+        q: "What happens when an operation cannot be done?",
+        a: "Popping an empty stack, or pushing past 14 items, is skipped and listed under the result as skipped, so you can see why the answer is what it is. At most 14 values and 24 operations are used.",
+    },
+];
+
+const NUMBER_BASE: &[Faq] = &[
+    Faq {
+        q: "How do I choose which column is given?",
+        a: "Set Given in to decimal, binary, hexadecimal or octal and type the values in that base, separated by commas or spaces. That column is filled in for every row and the other three are the answers.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The given column stays and the other columns become empty boxes of the same size. Student + key saves both copies.",
+    },
+    Faq {
+        q: "What does Binary width do?",
+        a: "It pads binary answers with zeros to a whole number of bytes (or 4, 12 or 16 bits) and puts a space every four digits, so 13 reads 0000 1101 with 8 bits and 1101 with 4. Shortest shows no padding.",
+    },
+    Faq {
+        q: "What is the strip of numbers above the table?",
+        a: "Show binary place values adds a row of 128, 64, 32 ... 1 (as many as the grouping, or 8) with an empty row under it, for students to write the bits of a number in.",
+    },
+    Faq {
+        q: "What happens with a value that is not a number in that base?",
+        a: "Its row stays, with a question mark after what was typed and dashes in the other columns, so you can see which entry to fix. Values above 4,294,967,295 are treated the same way, and at most 24 rows are drawn.",
+    },
+];
+
+const TREE_DIAGRAM: &[Faq] = &[
+    Faq {
+        q: "How is a binary search tree built from the values?",
+        a: "The values are inserted one at a time in the order given. Each goes left if it is smaller than the node it meets and right if it is larger, until it finds an empty place. A repeated value is ignored. Change the order and the tree changes shape: sorted values make a lopsided chain.",
+    },
+    Faq {
+        q: "How do I draw a tree that is not a search tree?",
+        a: "Choose Parent lines and write one line per parent, such as A: B, C. The root is the one node nobody lists as a child. Use _ for an empty slot (B: D, _) to make a binary tree with a gap, which is drawn with the single child on its own side.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Choose what to Work out and turn off Show answers. The tree and the heading stay and the answer is left blank, with the node numbers hidden. Student + key saves both versions.",
+    },
+    Faq {
+        q: "Why does In-order say it needs a binary tree?",
+        a: "In-order means left, node, right, which only makes sense with at most two children each. Pre-order, post-order and level-order work for any tree.",
+    },
+    Faq {
+        q: "What are height and depth?",
+        a: "Depth is how many edges a node is below the root (the root is 0). Height is the largest depth, so a single node has height 0 and the default tree has height 3.",
+    },
+];
+
+const LOGIC_CIRCUIT: &[Faq] = &[
+    Faq {
+        q: "How do I write a circuit?",
+        a: "One item per line. List the inputs with in A, B. Write each gate as a name, an equals sign and the gate with what it reads, such as g1 = AND(A, B). Mark an output with out Q = g1. Gates can read inputs or other gates, in any order. Add @x,y to a line to place that part yourself. Or build it on the canvas: pick a part and click to place it, drag from an output pin onto an input pin to wire, click an input to flip it, double-click a name to rename, and the text is written for you.",
+    },
+    Faq {
+        q: "Can I type a boolean expression instead?",
+        a: "Yes. Choose Boolean expression under Build the circuit from and type Q = (A OR B) AND NOT C. Use the words AND, OR, XOR, NOT or the symbols & | ^ !. Names that are never on the left of an equals sign become the inputs, and a line without an equals sign becomes an output named Q.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The circuit and the table's inputs stay; the output column, the expression and the values inside the circuit are hidden. Student + key saves both versions.",
+    },
+    Faq {
+        q: "How do the wires light up?",
+        a: "Type 0s and 1s under Light up the inputs, one for each input in order, such as 101. Wires carrying 1 turn green (thick in Print style) and wires carrying 0 turn grey (thin and dashed in Print). The matching row of the table is marked. With answers off only the input wires show, so students trace the rest.",
+    },
+    Faq {
+        q: "Why does it say my circuit has a loop?",
+        a: "A gate cannot read its own output, directly or through other gates. This figure draws combinational circuits, where every output depends only on the inputs. Check that no gate is listed as an input to something it feeds.",
+    },
+    Faq {
+        q: "Why is the truth table missing?",
+        a: "A table has one row for every combination of inputs, so it is limited to 5 inputs (32 rows). A circuit with more inputs still draws; turn the table off to hide the note.",
+    },
+];
+
 const DOT_PLOT: &[Faq] = &[
     Faq {
         q: "How do I make a student copy?",
@@ -1389,6 +2306,893 @@ const TWO_WAY_TABLE: &[Faq] = &[
     Faq {
         q: "Can I print it in black and white?",
         a: "Set Style to Print. The shaded header, side and total cells become light grey.",
+    },
+];
+
+const EARTH_CYCLES: &[Faq] = &[
+    Faq {
+        q: "Which cycles are there?",
+        a: "The rock cycle (igneous, sedimentary and metamorphic rock, magma and sediment, with the processes between them) and the water cycle. The extras tick adds the rock cycle's shortcuts or the water cycle's transpiration.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn off Show answers. The stages stay and the process labels are left as empty boxes. Use Hide to blank the stage names instead. Student + key saves both copies.",
+    },
+    Faq {
+        q: "Why is it drawn as a loop?",
+        a: "Rock and water are never used up, they move from one stage to the next, and the arrows show which way.",
+    },
+    Faq {
+        q: "Can I print it in black and white?",
+        a: "Yes. The Print style uses greys only, with the same labels and arrows.",
+    },
+];
+
+const EARTH_LAYERS: &[Faq] = &[
+    Faq {
+        q: "Which layers are drawn?",
+        a: "Crust, mantle, outer core and inner core, with their depths in kilometres and whether each is solid or liquid.",
+    },
+    Faq {
+        q: "Why is the crust so thin?",
+        a: "It is only about 35 km of 6371 km. Widen the crust makes it thick enough to see; the table keeps the real figures.",
+    },
+    Faq {
+        q: "How do I blank part of the table?",
+        a: "Turn off Show answers and pick in Hide whether the names, the thicknesses or the states are left empty.",
+    },
+    Faq {
+        q: "Can I print it in black and white?",
+        a: "Yes. The Print style uses greys only, and the table stays readable.",
+    },
+];
+
+const PLATE_BOUNDARIES: &[Faq] = &[
+    Faq {
+        q: "Which boundaries are there?",
+        a: "A divergent boundary (mid-ocean ridge), three convergent ones (ocean and continent, two continents, two oceans) and a transform boundary seen from above.",
+    },
+    Faq {
+        q: "What do the numbers mean?",
+        a: "Each numbered circle marks a feature on the drawing and the same number names it in the list below.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn off Show answers. The drawing, arrows and numbers stay and each name is left as a blank line. Student + key saves both copies.",
+    },
+    Faq {
+        q: "Can I print it in black and white?",
+        a: "Yes. The Print style swaps the colours for greys; the arrows and numbers are unchanged.",
+    },
+];
+
+const STRATA: &[Faq] = &[
+    Faq {
+        q: "How are the layers dated?",
+        a: "The lowest layer formed first, so the order runs from the bottom up (the law of superposition). A fault or dyke that cuts layers is younger than every layer it cuts.",
+    },
+    Faq {
+        q: "What do I enter?",
+        a: "One rock name per line, from 2 to 6 layers, top to bottom.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn off Show answers. The layers and list stay and the order of formation is left as a blank line. Student + key saves both copies.",
+    },
+    Faq {
+        q: "Can I print it in black and white?",
+        a: "Yes. The Print style fills each layer with a different grey pattern so the layers can still be told apart.",
+    },
+];
+
+const MOON_SEASONS: &[Faq] = &[
+    Faq {
+        q: "What does it show?",
+        a: "Either the Moon at eight places round the Earth, with the lit half facing the Sun and how each phase looks from Earth, or the Earth at four places round the Sun with its tilted axis.",
+    },
+    Faq {
+        q: "Why does the tilt cause seasons?",
+        a: "The axis points the same way all year, so each hemisphere leans toward the Sun for part of the orbit and away for the rest. Choose which hemisphere the seasons are named for.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn off Show answers. The phase names, or the dates and seasons, are left as empty boxes. Student + key saves both copies.",
+    },
+    Faq {
+        q: "Can I print it in black and white?",
+        a: "Yes. The Print style shades the dark and lit halves in greys.",
+    },
+];
+
+const TOPO_CONTOURS: &[Faq] = &[
+    Faq {
+        q: "What do I enter?",
+        a: "A grid of heights, rows of numbers separated by spaces or commas, from 2 by 2 up to 12 by 12 with the same number of values in each row.",
+    },
+    Faq {
+        q: "How are the lines found?",
+        a: "A contour is drawn every interval, joining points of equal height, by interpolating between grid values.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn off Show answers. The grid numbers stay and the contour lines are left for students to draw. Student + key saves both copies.",
+    },
+    Faq {
+        q: "What is marked as the highest point?",
+        a: "A triangle on the grid cell with the largest height, named by its row and column in the caption below the map.",
+    },
+];
+
+const HR_DIAGRAM: &[Faq] = &[
+    Faq {
+        q: "What do I enter?",
+        a: "One star per line as name, temperature in kelvin and luminosity in times the Sun's, up to 10 stars.",
+    },
+    Faq {
+        q: "Why is the temperature axis backwards?",
+        a: "By convention hot stars are on the left, so temperature falls from left to right.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn off Show answers. The stars stay and the shaded regions and the Class column are left blank. Student + key saves both copies.",
+    },
+    Faq {
+        q: "How is a star classed?",
+        a: "By its place on the diagram: main sequence along the diagonal band, giants and supergiants above it, white dwarfs below it and to the left.",
+    },
+];
+
+const CLIMATE_GRAPH: &[Faq] = &[
+    Faq {
+        q: "What do I enter?",
+        a: "Twelve rows, January first, each with the month's mean temperature in degrees Celsius then its rainfall in millimetres.",
+    },
+    Faq {
+        q: "How is it drawn?",
+        a: "Rainfall is bars read from the left axis and temperature is a line read from the right axis; the two axes share their gridlines.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn off Show answers. The table stays and the axes are left empty to plot on, with the summary left as blank lines. Student + key saves both copies.",
+    },
+    Faq {
+        q: "Can I print it in black and white?",
+        a: "Yes. The Print style uses a grey pattern for the bars and a black line.",
+    },
+];
+
+const POPULATION_PYRAMID: &[Faq] = &[
+    Faq {
+        q: "What do I enter?",
+        a: "One row per age band, youngest first: the number of males then the number of females, from 2 to 21 bands. Choose 5 or 10 years for the band width.",
+    },
+    Faq {
+        q: "What does the shape tell you?",
+        a: "A wide base means many children, a young and growing population. A narrow base means few children, an ageing or shrinking one. The summary says which.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn off Show answers. The table stays and the axes are left empty for students to draw the bars, with the summary left blank. Student + key saves both copies.",
+    },
+    Faq {
+        q: "Can I print it in black and white?",
+        a: "Yes. The Print style uses two grey patterns for males and females.",
+    },
+];
+
+const GRID_REFERENCE: &[Faq] = &[
+    Faq {
+        q: "How are the references read?",
+        a: "A four-figure reference gives the line to the left of the square, then the line below it. A six-figure reference adds tenths along and up inside the square.",
+    },
+    Faq {
+        q: "What are the position numbers?",
+        a: "Counts in grid squares from the bottom-left corner, so 3.4 is four tenths of the way across the fourth square.",
+    },
+    Faq {
+        q: "How are bearings measured?",
+        a: "Clockwise from north in three digits, so due east is 090° and due south is 180°. List pairs as feature numbers, such as 1 3.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn off Show answers. The map and positions stay and the reference and bearing boxes are left empty. Student + key saves both copies.",
+    },
+];
+
+const MAP_SCALE: &[Faq] = &[
+    Faq {
+        q: "What is the scale?",
+        a: "1 : 50 000 means 1 cm on the map is 50 000 cm, which is 500 m, on the ground.",
+    },
+    Faq {
+        q: "How is the scale bar drawn?",
+        a: "To the scale, with the longest round length that fits in 10 cm, and the lines are drawn at their true length so a ruler agrees with the numbers when the page is printed at full size.",
+    },
+    Faq {
+        q: "How are the workings set out?",
+        a: "Map distance times the scale gives the ground distance in cm, shown in metres or kilometres.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn off Show answers. The scale, the bar and the lines stay and the workings and ground distances are left empty. Student + key saves both copies.",
+    },
+];
+
+const MUSIC_STAFF: &[Faq] = &[
+    Faq {
+        q: "How do I write the notes?",
+        a: "A pitch then a length, separated by commas: C4 q, F#4 e, Bb3 h. Middle C is C4. Lengths are w (whole), h (half), q (quarter), e (eighth) and s (sixteenth); a dot after, as in q., makes a note half as long again. r is a rest, as in r q.",
+    },
+    Faq {
+        q: "How are the bars made?",
+        a: "A bar is closed when it holds as many beats as the time signature says, or where you write a | . The beats in each bar are listed below, and a bar that is too short or long is pointed out in the key.",
+    },
+    Faq {
+        q: "When does an accidental appear?",
+        a: "Only when a note differs from the key signature, and it carries on for the same pitch until the bar line. Write the pitch you want to hear: in G major write F#4 for the note in the signature and F4 for the natural.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn off Show answers. The staff stays and the note names and the beats in each bar are left as blank lines. Student + key saves both copies.",
+    },
+];
+
+const CIRCLE_OF_FIFTHS: &[Faq] = &[
+    Faq {
+        q: "How is the circle read?",
+        a: "Each step clockwise goes up a fifth and adds a sharp, from C at the top; each step anticlockwise adds a flat. The outer ring has the major keys, the middle ring their relative minors and the inner ring the key signatures.",
+    },
+    Faq {
+        q: "What does choosing a key do?",
+        a: "It shades that key, the key a fifth above (V) and the key a fifth below (IV), and its relative minor (vi), and writes them out in the middle.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn off Show answers and pick in Leave blank whether the key names, the key signatures or both are left empty. Student + key saves both copies.",
+    },
+    Faq {
+        q: "Why are some sectors split?",
+        a: "Six sharps and six flats name the same key, so F# major and Gb major share a sector.",
+    },
+];
+
+const PIANO_KEYBOARD: &[Faq] = &[
+    Faq {
+        q: "What can be marked?",
+        a: "The notes of a major or natural minor scale, a major or minor triad or a dominant 7th chord from any root, or any keys you list such as C4 E4 G4.",
+    },
+    Faq {
+        q: "What are the two worksheets?",
+        a: "Name the keys marks the keys and leaves their names as blank lines. Mark the keys names the scale or chord and leaves the keyboard empty.",
+    },
+    Faq {
+        q: "Why are notes spelled with flats or sharps?",
+        a: "By scale degree: the third of D major is F#, and the seventh of C7 is Bb, as it would be written on a staff.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn off Show answers. Whichever half is the answer is left out. Student + key saves both copies.",
+    },
+];
+
+const GUITAR_CHORDS: &[Faq] = &[
+    Faq {
+        q: "How do I write a chord?",
+        a: "A name then six characters, low E string first: C x32010 means: low E not played, A string at fret 3, D at fret 2, G open, B at fret 1, high E open. x is not played, 0 is open and 1 to 9 is the fret.",
+    },
+    Faq {
+        q: "What are the two worksheets?",
+        a: "Name the chord shows the dots and leaves the name as a blank line. Mark the chord shows the name and leaves the box empty for students to fill.",
+    },
+    Faq {
+        q: "What if the chord is high up the neck?",
+        a: "The box starts at the lowest fret used and is labelled, such as 7fr. You can also set the first fret yourself.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn off Show answers. Whichever half is the answer is left out. Student + key saves both copies.",
+    },
+];
+
+const RHYTHM_COUNTING: &[Faq] = &[
+    Faq {
+        q: "How do I write a rhythm?",
+        a: "Lengths separated by spaces: w h q e s, with a dot for longer and r before one for a rest, such as q. e r q. A | ends a bar.",
+    },
+    Faq {
+        q: "How is the count worked out?",
+        a: "A beat is the note the bottom number names, so in 6/8 an eighth note is one beat. Notes on the beat are counted 1 2 3, halves of a beat are &, and quarters of a beat are e and a.",
+    },
+    Faq {
+        q: "What if a bar does not add up?",
+        a: "The key shows how many beats it has and how many it needs. A bar also ends at the | you write, so you can set a trap on purpose.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn off Show answers. The notes and the grid stay and the counts and the beats in each bar are left as blank lines. Student + key saves both copies.",
+    },
+];
+
+const BREAK_EVEN: &[Faq] = &[
+    Faq {
+        q: "What does the chart show?",
+        a: "Revenue and total cost against the units sold. Where the two lines cross is the break-even point: below it the business makes a loss, above it a profit.",
+    },
+    Faq {
+        q: "How is the break-even point worked out?",
+        a: "Fixed costs divided by the contribution per unit, which is the price minus the variable cost. Whole units are needed, so a fractional answer is rounded up.",
+    },
+    Faq {
+        q: "What if it never breaks even?",
+        a: "If the price is not above the variable cost per unit, each sale loses money, so the figure says so instead of drawing lines.",
+    },
+    Faq {
+        q: "What does expected sales add?",
+        a: "The margin of safety (how far sales can fall before a loss, in units and as a share of expected sales) and the profit at that level.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off for a copy with empty axes, a blank table and blank lines, and keep it on for the key. Both are the same size.",
+    },
+];
+
+const TIME_VALUE: &[Faq] = &[
+    Faq {
+        q: "How do I enter cash flows?",
+        a: "One row per flow: the period, then the amount. Period 0 is now, and money paid out is negative, such as 0, -1000.",
+    },
+    Faq {
+        q: "How is a present value worked out?",
+        a: "Each flow is multiplied by the discount factor 1 divided by (1 + rate) to the power of the period. The values added up are the net present value.",
+    },
+    Faq {
+        q: "What does Future value do?",
+        a: "It compounds each flow forward to the last period using (1 + rate) to the power of the periods remaining, and adds them up.",
+    },
+    Faq {
+        q: "What does a positive NPV mean?",
+        a: "The flows are worth more than the money put in at that rate, so the project earns more than the rate asked for.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off to leave the factors, values and total empty. The given cash flows and the timeline stay.",
+    },
+];
+
+const LOAN_AMORTISATION: &[Faq] = &[
+    Faq {
+        q: "How is the repayment worked out?",
+        a: "The same payment each period clears the loan: amount times the periodic rate, divided by 1 minus (1 + rate) to the power of minus the number of periods. It is rounded to the cent.",
+    },
+    Faq {
+        q: "What are interest and principal?",
+        a: "Interest is the balance times the periodic rate. The rest of the repayment is principal, which lowers the balance.",
+    },
+    Faq {
+        q: "Why does the last payment differ a little?",
+        a: "Rounding to the cent each period leaves a few cents over, so the last payment is adjusted to bring the balance to exactly zero.",
+    },
+    Faq {
+        q: "How many rows are shown?",
+        a: "Up to the number you choose, with a note of how many repayments are left out. Long loans show only the first rows.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off to leave the payment, the totals and every cell of the table empty. The opening balance stays.",
+    },
+];
+
+const ORG_CHART: &[Faq] = &[
+    Faq {
+        q: "How do I write the roles?",
+        a: "One role per line, indented under the role it reports to. Use spaces or tabs, and a dash at the start of a line is fine.",
+    },
+    Faq {
+        q: "What are the limits?",
+        a: "One role at the top, up to 30 roles, 6 levels, and 10 roles at the ends of branches so the chart stays readable.",
+    },
+    Faq {
+        q: "What is span of control?",
+        a: "The number of people reporting directly to one manager. The figure finds the role with the most.",
+    },
+    Faq {
+        q: "What are levels?",
+        a: "The rows of the hierarchy from the top role down. A chart with a director, managers and staff has three.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off to leave the questions blank, and choose Role titles to empty the boxes too, so students can write the roles in.",
+    },
+];
+
+const SWOT: &[Faq] = &[
+    Faq {
+        q: "What do the four boxes mean?",
+        a: "Strengths and weaknesses are inside the business; opportunities and threats come from outside it. Strengths and opportunities help, weaknesses and threats harm.",
+    },
+    Faq {
+        q: "How do I enter the points?",
+        a: "One point per line in each box, up to 6 each. Long points are shortened to fit.",
+    },
+    Faq {
+        q: "Why are the points numbered in a different order?",
+        a: "The list below the grid is mixed up on purpose, so a student has to decide which box each point belongs in.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off for a copy with empty boxes and the mixed-up list. The key places each numbered point in its box.",
+    },
+];
+
+const MARKETING_FUNNEL: &[Faq] = &[
+    Faq {
+        q: "How do I enter the stages?",
+        a: "One stage per line: a name then a count, such as Visited the website 4000. Give 2 to 7 stages, the widest first.",
+    },
+    Faq {
+        q: "What is conversion?",
+        a: "The share of one stage that reached the next. 800 of 4000 is 20%.",
+    },
+    Faq {
+        q: "What is overall conversion?",
+        a: "The last stage as a share of the first, so 120 of 20000 is 0.6%.",
+    },
+    Faq {
+        q: "What does advertising spend add?",
+        a: "The cost per customer, the spend divided by the count at the last stage.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off to leave the conversion rates, the overall rate and the cost per customer blank.",
+    },
+];
+
+const PLOT_ARC: &[Faq] = &[
+    Faq {
+        q: "What are the five stages?",
+        a: "Exposition sets the scene, rising action builds the problem, the climax is the turning point, falling action follows its results, and the resolution ties things up.",
+    },
+    Faq {
+        q: "How do I fill it in?",
+        a: "One line per stage in story order. Leave a line empty to skip a stage, and its box stays blank.",
+    },
+    Faq {
+        q: "Why is the climax the highest point?",
+        a: "It is where the tension peaks. The arc rises to it and falls away after it.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off for a copy with the events in their boxes and blank lines where the stage names go. The key names every stage.",
+    },
+];
+
+const ORGANISER: &[Faq] = &[
+    Faq {
+        q: "Which organisers are there?",
+        a: "A T-chart (two columns), a KWL chart (Know, Want to know, Learned) and a Venn diagram (two circles that overlap).",
+    },
+    Faq {
+        q: "Where does each item go?",
+        a: "The key places every numbered item in its box. In the Venn diagram the third list goes in the overlap, the part both circles share.",
+    },
+    Faq {
+        q: "Why are the items numbered in a mixed order?",
+        a: "The list under the organiser is mixed up on purpose, so students must decide where each item belongs.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off for empty columns or circles with the mixed-up list. Each box holds up to 8 items.",
+    },
+];
+
+const TIMELINE: &[Faq] = &[
+    Faq {
+        q: "How do I enter events?",
+        a: "One per line: a number then the event, such as 1066 Battle of Hastings. Use a negative number for BC dates. Events can be in any order.",
+    },
+    Faq {
+        q: "Is it drawn to scale?",
+        a: "Yes. The gap between two events on the line follows the gap between their dates, and events too close together are lifted to different levels.",
+    },
+    Faq {
+        q: "What are the readouts?",
+        a: "The time from the first event to the last, and the longest gap between neighbouring events.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off and choose to hide the dates or the event names, and the readouts are left blank too.",
+    },
+];
+
+const CAUSE_EFFECT: &[Faq] = &[
+    Faq {
+        q: "What does the web show?",
+        a: "Causes arrow into the central event, and the event arrows out to its effects.",
+    },
+    Faq {
+        q: "How do I enter them?",
+        a: "One cause or effect per line, up to 5 of each. Arrows show which side an item belongs on.",
+    },
+    Faq {
+        q: "Why are the events numbered in a mixed order?",
+        a: "The list below is mixed up, so students sort each event into the cause or effect boxes.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off for empty boxes and the mixed-up list. The key writes each numbered event in its box.",
+    },
+];
+
+const FAMILY_TREE: &[Faq] = &[
+    Faq {
+        q: "How do I write a family?",
+        a: "One person per line, or a couple joined by a plus, such as Anna + Ben. Indent their children underneath.",
+    },
+    Faq {
+        q: "What is counted?",
+        a: "Generations (rows), people (every name) and descendants of the first couple (everyone in a box below them, counting a child and their partner as one line).",
+    },
+    Faq {
+        q: "What are the limits?",
+        a: "One person or couple at the top, up to 24 lines, 5 generations and 8 ends of branches.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off to leave the counts blank, and choose Names to empty the boxes so students can write the family in.",
+    },
+];
+
+const SENTENCE_DIAGRAM: &[Faq] = &[
+    Faq {
+        q: "How is a sentence diagram drawn?",
+        a: "The subject, verb and object sit on a base line, split by upright lines. Words that describe them hang below on slanted lines.",
+    },
+    Faq {
+        q: "How do I enter the parts?",
+        a: "Type the sentence, then the subject, the verb and the object, and the describing words for each, one per line, up to 3.",
+    },
+    Faq {
+        q: "Why does the object have a short divider?",
+        a: "A line that stops at the base line separates the verb from its object. The line between subject and verb goes right through.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off to show the sentence and an empty frame of the same shape, with no words in it.",
+    },
+];
+
+const STRUCTURE_CHART: &[Faq] = &[
+    Faq {
+        q: "How do I enter the links?",
+        a: "One per line: Box A -> Box B : what the arrow means. The text after the colon is optional. Boxes with the same name are one box.",
+    },
+    Faq {
+        q: "What are the limits?",
+        a: "Up to 10 boxes and 14 links. Arrows that go both ways curve apart so you can read each one.",
+    },
+    Faq {
+        q: "How are the boxes arranged?",
+        a: "Boxes are in rows following the arrows, so what comes first is at the top. An arrow that would loop back is still drawn.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off to keep the boxes and arrows and leave the label boxes blank for students to write.",
+    },
+];
+
+const FOOD_PLATE: &[Faq] = &[
+    Faq {
+        q: "How do I list my foods?",
+        a: "One per line as name: group, for example Apple: Fruits. The groups are Vegetables, Grains, Protein, Fruits and Dairy, up to 14 foods.",
+    },
+    Faq {
+        q: "What do the shares control?",
+        a: "The size of each slice of the plate. They are relative, so 2, 2, 1, 1 gives the same plate as 40, 40, 20, 20.",
+    },
+    Faq {
+        q: "What does Show answers do?",
+        a: "On, the table shows the food numbers in the right group. Off, the table is empty and the foods are listed mixed up, for students to sort.",
+    },
+    Faq {
+        q: "Is the dairy circle optional?",
+        a: "Yes. Turn Dairy off to draw the plate without the side circle.",
+    },
+];
+
+const HEART_ZONES: &[Faq] = &[
+    Faq {
+        q: "How is the maximum heart rate found?",
+        a: "As 220 minus age. It is an estimate; real maximums vary from person to person.",
+    },
+    Faq {
+        q: "What does the resting rate do?",
+        a: "At 0 the zones are plain percentages of the maximum. Give a resting rate and they use the heart rate reserve method, which suits fit people better.",
+    },
+    Faq {
+        q: "What does Show answers do?",
+        a: "On, each zone shows its beats-per-minute range. Off, those ranges are blank for students to work out.",
+    },
+    Faq {
+        q: "Why do I get a message about the resting rate?",
+        a: "The resting rate must be below the maximum for the age given.",
+    },
+];
+
+const COURT_LAYOUT: &[Faq] = &[
+    Faq {
+        q: "Which sports are there?",
+        a: "Basketball, soccer and volleyball. Each shows its court or field markings and numbered positions.",
+    },
+    Faq {
+        q: "What is the formation for?",
+        a: "It only applies to soccer: 4-4-2, 4-3-3 or 3-5-2 move the players into those lines.",
+    },
+    Faq {
+        q: "What does Show answers do?",
+        a: "On, the list names each numbered position. Off, the numbers stay on the court and the names are blank lines.",
+    },
+    Faq {
+        q: "Is the court to scale?",
+        a: "It is a simplified diagram with the main markings, not an exact scale drawing.",
+    },
+];
+
+const BODY_MAP: &[Faq] = &[
+    Faq {
+        q: "What can I show?",
+        a: "All organs, only the digestive system, or only breathing and circulation.",
+    },
+    Faq {
+        q: "What does Show answers do?",
+        a: "On, the numbered organs are named in the list. Off, the list is blank lines for students to fill in.",
+    },
+    Faq {
+        q: "Is the outline accurate?",
+        a: "It is simplified so every organ can be seen. Sizes and positions are approximate.",
+    },
+    Faq {
+        q: "Can I add organs?",
+        a: "No, the set is fixed. Choose a view to show the ones you want.",
+    },
+];
+
+const BLOCK_DIAGRAM: &[Faq] = &[
+    Faq {
+        q: "How do I enter blocks and signals?",
+        a: "Blocks go one per line, left to right, up to 6. Signals go one per line: the input first, then one for each arrow after a block.",
+    },
+    Faq {
+        q: "How many signals can I give?",
+        a: "At most one more than the number of blocks. Missing ones are left blank.",
+    },
+    Faq {
+        q: "How do I add feedback?",
+        a: "Type a feedback signal. It is drawn from the output back to a summing junction at the start. Leave it empty for an open loop.",
+    },
+    Faq {
+        q: "What does Show answers do?",
+        a: "Off, the block names and signal labels are blank for students. The description stays.",
+    },
+];
+
+const FREE_BODY: &[Faq] = &[
+    Faq {
+        q: "How do I enter forces?",
+        a: "One per line as name, size in newtons, direction: Weight 49 270. Up to 6 forces.",
+    },
+    Faq {
+        q: "How are directions measured?",
+        a: "In degrees anticlockwise from pointing right: 0 right, 90 up, 180 left, 270 down.",
+    },
+    Faq {
+        q: "When is the acceleration shown?",
+        a: "When you give a mass above 0. It is the net force divided by the mass.",
+    },
+    Faq {
+        q: "What does Show answers do?",
+        a: "On, the arrows, net force and acceleration are drawn and worked out. Off, only the object and the list remain.",
+    },
+];
+
+const GEAR_TRAIN: &[Faq] = &[
+    Faq {
+        q: "How do I enter the gears?",
+        a: "List the tooth counts in order, from the gear that is turned to the last one, 2 to 4 gears with 8 to 60 teeth each.",
+    },
+    Faq {
+        q: "How is the speed worked out?",
+        a: "Speed times the first gear's teeth divided by the gear's own teeth. Meshing gears turn in opposite directions.",
+    },
+    Faq {
+        q: "What is an idler gear?",
+        a: "A gear between two others. It reverses nothing overall but changes the direction of the last gear.",
+    },
+    Faq {
+        q: "What does Show answers do?",
+        a: "Off, the ratio, speeds and directions are blank lines for students. The first gear's speed and turn are given.",
+    },
+];
+
+const ORTHOGRAPHIC: &[Faq] = &[
+    Faq {
+        q: "How do I describe the stack?",
+        a: "A grid of numbers, one row per line, the back row first. Each number is how many cubes are stacked there, 0 to 5, up to 5 by 5.",
+    },
+    Faq {
+        q: "What are the three views?",
+        a: "Top, front and right: what you would see looking straight at the stack from each side.",
+    },
+    Faq {
+        q: "What does Show answers do?",
+        a: "On, the views are filled in. Off, empty grids of the right size are left for students to draw in.",
+    },
+    Faq {
+        q: "Why are some rows shorter than others?",
+        a: "Short rows are padded with zeros, so a missing number means no cubes.",
+    },
+];
+
+const COLOUR_WHEEL: &[Faq] = &[
+    Faq {
+        q: "Which colour wheel is this?",
+        a: "The artist's red-yellow-blue wheel: yellow, red and blue are primary, orange, violet and green are secondary, and the six between are tertiary.",
+    },
+    Faq {
+        q: "How do I mark a colour scheme?",
+        a: "Choose a scheme and a starting colour. Complementary marks two opposite colours, triadic three evenly spaced, analogous three neighbours, split complementary one and the two beside its opposite.",
+    },
+    Faq {
+        q: "What does Show answers do?",
+        a: "On, the colours are named and the scheme is drawn. Off, the wheel is left with blank lines to fill in.",
+    },
+    Faq {
+        q: "Why does the Print style look different?",
+        a: "It uses greys, so colours become lightness steps and the names matter more than the shades.",
+    },
+];
+
+const PERSPECTIVE_GRID: &[Faq] = &[
+    Faq {
+        q: "What is the difference between one-point and two-point?",
+        a: "One-point has a single vanishing point and a box facing you. Two-point has two, and the box is seen corner-on.",
+    },
+    Faq {
+        q: "What does the horizon height do?",
+        a: "It is the eye level. A box above it is seen from below, a box below it from above.",
+    },
+    Faq {
+        q: "What does Show answers do?",
+        a: "On, a box is drawn on the guides. Off, only the horizon, the vanishing points and the guide lines are shown, for students to draw on.",
+    },
+    Faq {
+        q: "Can I move and resize the box?",
+        a: "Yes: size, position across, position down from the horizon and depth. Only the faces you could really see are drawn, so a box that straddles the horizon shows no top or bottom.",
+    },
+];
+
+const MASLOW: &[Faq] = &[
+    Faq {
+        q: "How do I enter the levels?",
+        a: "One per line from the bottom up as name: example. The example is optional. Two to seven levels.",
+    },
+    Faq {
+        q: "Can I use my own pyramid?",
+        a: "Yes. Any list of levels works, such as stages of learning or of a food chain.",
+    },
+    Faq {
+        q: "What does Show answers do?",
+        a: "On, each band is named. Off, the bands are empty and the examples beside them remain, for students to match.",
+    },
+    Faq {
+        q: "Where do names go when a band is too narrow?",
+        a: "Beside the pyramid, on the left, with a short line to the band. The bands near the top are narrow.",
+    },
+];
+
+const BRAIN_REGIONS: &[Faq] = &[
+    Faq {
+        q: "Is this an anatomical drawing?",
+        a: "It is an original side-view drawing, simplified: the outline, the lateral fissure, the central sulcus and the parieto-occipital line are drawn where they sit, front on the left, but folds and fine detail are left out.",
+    },
+    Faq {
+        q: "What can I show?",
+        a: "The four lobes with the cerebellum and brain stem, or the four lobes only.",
+    },
+    Faq {
+        q: "What does Show answers do?",
+        a: "On, the numbered regions are named. Off, the names are blank and what each region does is listed to match.",
+    },
+    Faq {
+        q: "Which regions are named?",
+        a: "Frontal, parietal, occipital and temporal lobes, the cerebellum and the brain stem.",
+    },
+];
+
+const EXPERIMENT_FLOW: &[Faq] = &[
+    Faq {
+        q: "What does the diagram show?",
+        a: "A controlled experiment: a sample is randomly split into treatment groups and a control group, all are measured and the results compared.",
+    },
+    Faq {
+        q: "What goes in the boxes?",
+        a: "Your sample, what each group gets (2 to 4 groups, the control group last) and what is measured. Your text fills the boxes; the roles are the answers.",
+    },
+    Faq {
+        q: "What does Show answers do?",
+        a: "On, the roles are labelled: random assignment, treatment and control group, independent and dependent variable. Off, those are blank lines.",
+    },
+    Faq {
+        q: "Why a control group?",
+        a: "It shows what happens without the treatment, so any difference can be put down to the treatment.",
+    },
+];
+
+const SAMPLING_DISTRIBUTION: &[Faq] = &[
+    Faq {
+        q: "What is the standard error?",
+        a: "The standard deviation of the sample means: the population standard deviation divided by the square root of the sample size.",
+    },
+    Faq {
+        q: "Why is the sample-means curve narrower?",
+        a: "Averages vary less than single values. A bigger sample makes the curve narrower still, by the square root of n.",
+    },
+    Faq {
+        q: "How do I find a probability for a sample mean?",
+        a: "Shade a region, then use the standard error instead of the population standard deviation. Turn Show answers on to see the result.",
+    },
+    Faq {
+        q: "What does Show answers do?",
+        a: "On, the standard error and the probability are written in. Off, the curves and shading stay and those two are blank lines for students.",
+    },
+    Faq {
+        q: "Is the curve always a bell?",
+        a: "Here it is drawn as a normal curve, which is exact for a normal population and a good approximation for large samples (the central limit theorem).",
+    },
+];
+
+const REJECTION_REGION: &[Faq] = &[
+    Faq {
+        q: "Which distributions can I use?",
+        a: "The standard normal (z), Student t with degrees of freedom, and chi-square with degrees of freedom.",
+    },
+    Faq {
+        q: "What does the tail choice mean?",
+        a: "Two-tailed splits α between both tails, right-tailed puts it all on the right and left-tailed all on the left.",
+    },
+    Faq {
+        q: "What does Show answers do?",
+        a: "On, the rejection region is shaded and the critical value, p-value and decision are written in. Off, only the curve and the test statistic remain, with blank lines.",
+    },
+    Faq {
+        q: "How is the decision made?",
+        a: "Reject H0 when the p-value is below α, which is the same as the statistic landing in the shaded region.",
+    },
+    Faq {
+        q: "Why does the axis change?",
+        a: "It widens to include the critical values and the statistic, up to a limit. A statistic far outside is not marked but the decision still works.",
+    },
+];
+
+const CHI_SQUARE_TABLE: &[Faq] = &[
+    Faq {
+        q: "How do I enter the counts?",
+        a: "One row per line, numbers separated by spaces or commas. Use whole numbers, 2 to 5 rows and 2 to 5 columns.",
+    },
+    Faq {
+        q: "How are the expected counts found?",
+        a: "Row total times column total divided by the grand total, assuming the two variables are independent.",
+    },
+    Faq {
+        q: "What do the degrees of freedom mean?",
+        a: "(rows - 1) times (columns - 1). The p-value is the chance of a chi-square this large or larger.",
+    },
+    Faq {
+        q: "What does Show answers do?",
+        a: "On, the expected counts, contributions, chi-square, critical value, p-value and decision are filled in. Off, those cells are empty for students.",
+    },
+    Faq {
+        q: "What if an expected count is small?",
+        a: "The key warns when the smallest expected count is below 5, since the chi-square approximation is then unreliable.",
     },
 ];
 

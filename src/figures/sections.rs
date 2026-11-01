@@ -39,11 +39,12 @@ static FIG_2: [RefSection; 4] = [
     s("More options", &["label_size"], ""),
 ];
 
-static FIG_3: [RefSection; 7] = [
-    s("Circuit", &["layout", "n"], "Leave a name empty to number it automatically.\nNeed a mixed or more complex circuit? An advanced circuit editor is coming soon."),
+static FIG_3: [RefSection; 8] = [
+    s("Circuit", &["layout", "n"], "Leave a name empty to number it automatically."),
     items("Resistor"),
     s("Cell or battery", &["cell", "cell_name_mode", "cell_name", "cell_val_mode", "cell_val", "polarity"], ""),
     s("Switch and meters", &["switch", "ammeter", "amm_read_mode", "amm_read", "voltmeter", "vm_read_mode", "vm_read"], ""),
+    s("Work out the circuit", &["solve", "show_answers"], "Type values such as 12 V for the battery and 4 Ω for each part. Meter readings are filled in from the circuit; turn off Show answers for a student copy with blank lines."),
     s("Symbols", &["style"], ""),
     s("Chart title", &["title_mode", "title"], ""),
     s("Figure", &["mirror", "color"], ""),
@@ -463,6 +464,534 @@ static TWO_WAY_TABLE: [RefSection; 4] = [
     s("Appearance", &["style", "label_size"], ""),
 ];
 
+static LOGIC_CIRCUIT: [RefSection; 5] = [
+    s("Circuit", &["source", "spec", "expr", "symbols"], "List the inputs, then the gates, then the outputs, one per line. Or type a boolean expression and the gates are drawn for you."),
+    s("Truth table and answers", &["table", "show_expr", "show_answers"], "Turn off Show answers for a student copy: the output column, the expression and the values inside the circuit are hidden."),
+    s("Try the inputs", &["try"], "Type 0s and 1s, one per input, to light up the wires and mark that row of the table."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static GRAPH_DIAGRAM: [RefSection; 4] = [
+    s("Graph", &["spec", "layout", "weights"], "List the nodes, then the edges, one per line. Directed edges use ->, weights follow a colon."),
+    s("Work out", &["answer", "start", "end", "mark", "show_answers"], "Turn off Show answers for a student copy: the answer and the marks on the graph are hidden and the heading stays."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static TREE_DIAGRAM: [RefSection; 4] = [
+    s("Tree", &["source", "values", "spec"], "Grow a binary search tree from values, or write any tree as parent lines."),
+    s("Work out", &["answer", "mark", "show_answers"], "Turn off Show answers for a student copy: the answer and the numbers on the tree are hidden and the heading stays."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static NUMBER_BASE: [RefSection; 3] = [
+    s("Table", &["values", "given", "width", "place_values", "show_answers"], "Give one column; turn off Show answers for empty boxes in the others."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static DATA_STRUCTURE: [RefSection; 3] = [
+    s("Structure", &["kind", "values", "ops", "indices", "show_answers"], "List the values, then optional operations; turn off Show answers for an empty box where the result goes."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static FLOWCHART: [RefSection; 3] = [
+    s("Flowchart", &["spec", "blank", "show_answers"], "One box per line, then the arrows; name boxes to leave empty in the student copy."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static BOOLEAN_TABLE: [RefSection; 4] = [
+    s("Function", &["source", "expr", "vars", "minterms", "dontcares", "output"], "Give an expression, or the rows where the output is 1."),
+    s("Display", &["show", "row_numbers", "groups", "simplify", "show_answers"], "Turn off Show answers for a student copy: outputs, groups and the simplified form are left empty."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static STATE_MACHINE: [RefSection; 4] = [
+    s("Machine", &["spec", "direction"], "Name the start and accepting states, then the transitions."),
+    s("Work out", &["answer", "input", "show_answers"], "Turn off Show answers for a student copy: the table cells and the trace are left empty."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static TRACE_TABLE: [RefSection; 4] = [
+    s("Program", &["program", "rows", "numbers"], "A few lines of pseudocode with at most one loop."),
+    s("Student copy", &["given", "show_answers"], "Turn off Show answers to leave the later rows empty."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static SORTING_PASSES: [RefSection; 4] = [
+    s("Sort", &["algorithm", "values", "descending", "counts"], "Choose the algorithm and the values to sort."),
+    s("Student copy", &["given", "show_answers"], "Turn off Show answers to leave the passes empty."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static RECURSION_TREE: [RefSection; 4] = [
+    s("Function", &["func", "a", "b"], "Choose the function and its starting values."),
+    s("Display", &["number", "returns", "show_answers"], "Turn off Show answers to leave the return values and numbers empty."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static ER_DIAGRAM: [RefSection; 4] = [
+    s("Diagram", &["spec", "layout", "attributes"], "Entities with their attributes, then the relationships between them."),
+    s("Student copy", &["hide_attrs", "show_answers"], "Turn off Show answers to leave empty boxes where the cardinalities go."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static NETWORK_TOPOLOGY: [RefSection; 4] = [
+    s("Network", &["kind", "devices", "names", "centre"], "Choose the layout and how many computers."),
+    s("Notes", &["facts", "show_answers"], "Turn off Show answers to leave the name and the notes empty."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static PROBABILITY_TREE: [RefSection; 4] = [
+    s("Branches", &["first", "second", "third"], "Outcomes with their probabilities, stage by stage."),
+    s("Work out", &["products", "blank_probs", "show_answers"], "Turn off Show answers to leave the path probabilities blank."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static VENN_DIAGRAM: [RefSection; 4] = [
+    s("Sets", &["sets", "a_name", "b_name", "c_name", "counts"], "How many sets, their names and the value in each region."),
+    s("Work out", &["shade", "totals", "show_answers"], "Turn off Show answers to leave the regions and totals empty."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static DISCRETE_DISTRIBUTION: [RefSection; 4] = [
+    s("Distribution", &["dist", "n", "p", "lambda"], "Binomial or Poisson, with its parameters."),
+    s("Shading", &["region", "a", "b", "show_prob", "values", "show_answers"], "Turn off Show answers to hide the probability and keep the shaded bars."),
+    s("Labels and text", &["title", "x_title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static CONFIDENCE_INTERVAL: [RefSection; 4] = [
+    s("Sample", &["kind", "estimate", "sd", "n", "level"], "What was measured and the confidence level."),
+    s("Marking", &["mark", "show_answers"], "Turn off Show answers to hide the interval and the working."),
+    s("Labels and text", &["title", "x_title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static RESIDUAL_PLOT: [RefSection; 4] = [
+    s("Data and view", &["pts", "view", "table", "sse", "point_size", "grid"], "The pairs, which panels to draw and what to work out."),
+    s("Marking", &["show_answers"], "Turn off Show answers to leave the line and the residuals for students."),
+    s("Labels and text", &["title", "x_title", "y_title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static RC_CURVE: [RefSection; 4] = [
+    s("Circuit", &["mode", "quantity", "v", "r", "c"], "The capacitor, the resistor and the battery."),
+    s("Working", &["marks", "readout", "grid", "show_answers"], "Turn off Show answers to hide the curve and the working."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static KIRCHHOFF_LOOPS: [RefSection; 4] = [
+    s("Circuit", &["v1", "v2", "r1", "r2", "r3", "loops"], "Two batteries and three resistors."),
+    s("Working", &["working", "show_answers"], "Turn off Show answers to leave the equations and currents blank."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static T_ACCOUNT: [RefSection; 4] = [
+    s("Accounts", &["spec", "descriptions", "balance"], "The accounts and their debits and credits."),
+    s("Money", &["currency", "cents", "show_answers"], "Turn off Show answers to leave the balancing figure and totals empty."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static JOURNAL_ENTRY: [RefSection; 4] = [
+    s("Entries", &["spec", "totals"], "Dates, debits, credits and narrations."),
+    s("Money", &["currency", "cents", "show_answers"], "Turn off Show answers to leave the accounts and amounts empty."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static TRIAL_BALANCE: [RefSection; 4] = [
+    s("Balances", &["spec", "totals"], "Each account with the side its balance is on."),
+    s("Money", &["currency", "cents", "show_answers"], "Turn off Show answers to leave the columns and totals empty."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static FINANCIAL_STATEMENT: [RefSection; 3] = [
+    s("Statement", &["kind", "is_spec", "bs_spec"], "Which statement, and the accounts under each heading."),
+    s("Labels and money", &["business", "period", "currency", "cents", "show_answers"], "Turn off Show answers to leave the totals empty."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static ACCOUNTING_EQUATION: [RefSection; 4] = [
+    s("Transactions", &["spec", "totals"], "What happens, and its effect on assets, liabilities and equity."),
+    s("Money", &["currency", "cents", "show_answers"], "Turn off Show answers to leave the effects empty."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static DEPRECIATION_SCHEDULE: [RefSection; 4] = [
+    s("Asset", &["asset", "cost", "salvage", "life", "method"], "What is depreciated, and how."),
+    s("Money", &["currency", "cents", "show_answers"], "Turn off Show answers to leave the table empty."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static BANK_RECONCILIATION: [RefSection; 4] = [
+    s("Reconciliation", &["spec", "check"], "The two balances and the adjustments to each."),
+    s("Money", &["currency", "cents", "show_answers"], "Turn off Show answers to leave the adjusted balances empty."),
+    s("Labels and text", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static CASH_FLOW_STATEMENT: [RefSection; 3] = [
+    s("Activities", &["spec", "opening", "closing_given"], "The cash flows by activity, and the opening cash."),
+    s("Labels and money", &["business", "period", "currency", "cents", "show_answers"], "Turn off Show answers to leave the totals empty."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static SUPPLY_DEMAND: [RefSection; 4] = [
+    s("Curves", &["d_int", "d_slope", "s_int", "s_slope"], "Each curve from its price at quantity 0 and its slope."),
+    s("Shifts and price controls", &["d_shift", "d_shift_by", "s_shift", "s_shift_by", "control", "control_at"], "Move a curve, or add a ceiling or floor."),
+    s("Display", &["shading", "numbers", "title", "show_answers"], "Turn off Show answers to draw only the curves."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static ELASTICITY: [RefSection; 4] = [
+    s("Two points", &["p1", "q1", "p2", "q2"], "A price and the quantity demanded at it, twice."),
+    s("Working", &["method", "show_answers"], "Turn off Show answers to leave the working blank."),
+    s("Display", &["numbers", "title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static PPF: [RefSection; 4] = [
+    s("Frontier", &["x_name", "y_name", "x_max", "y_max", "shape"], "The goods and the most of each."),
+    s("Points", &["points", "from", "to"], "Named points to class, and a move to cost."),
+    s("Display", &["numbers", "title", "show_answers"], "Turn off Show answers to leave the classes blank."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static COST_CURVES: [RefSection; 4] = [
+    s("Costs", &["fc", "a", "b", "c"], "Fixed cost and the variable cost function."),
+    s("Price and axis", &["price", "qmax"], "The market price, and how far the graph runs."),
+    s("Display", &["numbers", "title", "show_answers"], "Turn off Show answers to draw only the curves."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static MONOPOLY: [RefSection; 4] = [
+    s("Demand", &["d_int", "d_slope"], "The demand curve; marginal revenue is worked out."),
+    s("Costs", &["mc_int", "mc_slope", "fixed"], "Marginal cost and the fixed cost."),
+    s("Display", &["dwl", "numbers", "title", "show_answers"], "Turn off Show answers to draw only the curves."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static CIRCULAR_FLOW: [RefSection; 4] = [
+    s("Model", &["model", "real", "money"], "Which sectors, and which flows to draw."),
+    s("Student copy", &["hide", "show_answers"], "Turn off Show answers to blank the labels or the names."),
+    s("Labels", &["title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static AD_AS: [RefSection; 4] = [
+    s("Curves", &["ad_int", "ad_slope", "as_int", "as_slope", "full"], "AD, short-run AS and the full-employment output."),
+    s("Shifts", &["ad_shift", "ad_by", "sras_shift", "sras_by"], "Move AD or SRAS."),
+    s("Display", &["numbers", "title", "show_answers"], "Turn off Show answers to draw only the curves."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static LORENZ: [RefSection; 3] = [
+    s("Incomes", &["incomes", "group"], "The income of each equal-sized group."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the cumulative columns and the curve for students."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static EARTH_CYCLES: [RefSection; 3] = [
+    s("Cycle", &["cycle", "extras"], "Rock or water cycle, and whether to add the shortcuts or transpiration."),
+    s("Display", &["hide", "title", "show_answers"], "Turn off Show answers to leave labels as empty boxes."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static EARTH_LAYERS: [RefSection; 3] = [
+    s("Layout", &["view", "widen"], "Whole circle or cutaway, and a widened crust."),
+    s("Display", &["hide", "title", "show_answers"], "Turn off Show answers to blank the chosen column."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static PLATE_BOUNDARIES: [RefSection; 3] = [
+    s("Boundary", &["kind"], "Which boundary to draw."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave each name blank."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static STRATA: [RefSection; 3] = [
+    s("Layers", &["layers", "structure", "dyke"], "The rocks, how they are folded or faulted, and an optional dyke."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the order of formation blank."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static MOON_SEASONS: [RefSection; 3] = [
+    s("Diagram", &["mode", "hemisphere"], "Moon phases or seasons."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave names as empty boxes."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static TOPO_CONTOURS: [RefSection; 3] = [
+    s("Heights", &["grid", "interval", "unit"], "The grid of heights and the contour interval."),
+    s("Display", &["labels", "title", "show_answers"], "Turn off Show answers to leave the contours for students to draw."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static HR_DIAGRAM: [RefSection; 3] = [
+    s("Stars", &["stars"], "Name, temperature and luminosity for each star."),
+    s("Display", &["table", "title", "show_answers"], "Turn off Show answers to blank the regions and the Class column."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static CLIMATE_GRAPH: [RefSection; 3] = [
+    s("Data", &["data", "place"], "Temperature then rainfall for each month, January first."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the graph and summary for students."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static POPULATION_PYRAMID: [RefSection; 3] = [
+    s("Data", &["data", "width", "unit"], "Males then females for each age band, youngest first."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the bars and summary for students."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static GRID_REFERENCE: [RefSection; 4] = [
+    s("Map", &["cols", "rows", "origin"], "The size of the grid and the number of its first line."),
+    s("Features", &["features", "bearings"], "What is on the map and the bearings to work out."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the references and bearings empty."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static MAP_SCALE: [RefSection; 3] = [
+    s("Scale", &["ratio", "lengths"], "The scale and the measured map distances."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the workings empty."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static MUSIC_STAFF: [RefSection; 3] = [
+    s("Music", &["notes", "clef", "key", "time"], "The notes, clef, key signature and time signature."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the note names and beats blank."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static CIRCLE_OF_FIFTHS: [RefSection; 3] = [
+    s("Circle", &["key"], "A key to shade with its neighbours."),
+    s("Display", &["hide", "title", "show_answers"], "Turn off Show answers to blank the names or signatures."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static PIANO_KEYBOARD: [RefSection; 4] = [
+    s("Keys", &["task", "mode", "root", "keys"], "What to mark and which worksheet to make."),
+    s("Keyboard", &["octaves", "start"], "How many octaves and where the lowest C is."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave out the answer half."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static GUITAR_CHORDS: [RefSection; 3] = [
+    s("Chords", &["chords", "task", "fret"], "The chords and which worksheet to make."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave out the answer half."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static RHYTHM_COUNTING: [RefSection; 3] = [
+    s("Rhythm", &["rhythm", "time"], "The rhythm and its time signature."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the counts and beat totals blank."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static BREAK_EVEN: [RefSection; 3] = [
+    s("Costs and price", &["fixed", "price", "variable", "expected", "currency", "cents"], "The costs, the price and optional expected sales."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers for empty axes, a blank table and blank readouts."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static TIME_VALUE: [RefSection; 4] = [
+    s("Cash flows", &["flows", "rate", "mode", "unit"], "Period and amount per row, the rate and what to work out."),
+    s("Money", &["currency", "cents"], ""),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the factors, values and total empty."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static LOAN_AMORTISATION: [RefSection; 4] = [
+    s("The loan", &["principal", "rate", "years", "per_year"], "The amount, the yearly rate, the term and how often it is repaid."),
+    s("Table", &["rows", "currency"], "How many rows to show."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the payment and every cell blank."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static ORG_CHART: [RefSection; 3] = [
+    s("Roles", &["roles"], "Indent a role under who it reports to."),
+    s("Display", &["title", "show_answers", "hide"], "Turn off Show answers to blank the questions; choose Role titles to empty the boxes too."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static SWOT: [RefSection; 3] = [
+    s("Points", &["strengths", "weaknesses", "opportunities", "threats"], "One point per line."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the boxes empty."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static MARKETING_FUNNEL: [RefSection; 3] = [
+    s("Funnel", &["stages", "spend", "currency", "cents"], "A name and a count per stage, widest first."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the rates and cost blank."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static PLOT_ARC: [RefSection; 3] = [
+    s("Story", &["events", "story"], "One line per stage, in story order."),
+    s("Display", &["show_answers"], "Turn off Show answers to leave the stage names blank."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static ORGANISER: [RefSection; 4] = [
+    s("Organiser", &["kind", "title_a", "title_b"], "Which organiser, and the headings of the first two boxes."),
+    s("Items", &["items_a", "items_b", "items_c"], "One item per line. The third list is the overlap for a Venn diagram, or Learned for KWL."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers for empty boxes and a mixed-up list."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static TIMELINE: [RefSection; 3] = [
+    s("Events", &["events", "unit"], "A date then the event, one per line."),
+    s("Display", &["title", "show_answers", "hide"], "Turn off Show answers to hide the dates or the event names."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static CAUSE_EFFECT: [RefSection; 3] = [
+    s("Web", &["event", "causes", "effects"], "The central event, and its causes and effects."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers for empty boxes and a mixed-up list."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static FAMILY_TREE: [RefSection; 3] = [
+    s("People", &["people"], "Indent children under their parents; join a couple with a plus."),
+    s("Display", &["title", "show_answers", "hide"], "Turn off Show answers to blank the counts, and the names too if chosen."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static SENTENCE_DIAGRAM: [RefSection; 4] = [
+    s("Sentence", &["sentence", "subject", "verb", "object"], "The sentence and its subject, verb and object."),
+    s("Describing words", &["subject_mods", "verb_mods", "object_mods"], "One word per line, up to 3 each."),
+    s("Display", &["show_answers"], "Turn off Show answers for an empty frame with no words in it."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static STRUCTURE_CHART: [RefSection; 3] = [
+    s("Links", &["links"], "Box A -> Box B : what the arrow means."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the arrow labels blank."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static FOOD_PLATE: [RefSection; 4] = [
+    s("Plate", &["veg", "grains", "protein", "fruit", "dairy"], "Shares are relative; they need not add to 100."),
+    s("Foods", &["foods"], "name: group, one per line."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the table empty."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static HEART_ZONES: [RefSection; 3] = [
+    s("Person", &["age", "resting"], "A resting rate of 0 uses the simple percentage method."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the ranges blank."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static COURT_LAYOUT: [RefSection; 3] = [
+    s("Court", &["sport", "formation"], "The formation only applies to soccer."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the position names blank."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static BODY_MAP: [RefSection; 3] = [
+    s("Organs", &["show"], ""),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the names blank."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static BLOCK_DIAGRAM: [RefSection; 3] = [
+    s("System", &["description", "blocks", "signals", "feedback"], "One more signal than blocks at most."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave names and labels blank."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static FREE_BODY: [RefSection; 4] = [
+    s("Object", &["object", "mass"], "A mass above 0 adds the acceleration."),
+    s("Forces", &["forces"], "name size direction, one per line."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the arrows and results out."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static GEAR_TRAIN: [RefSection; 3] = [
+    s("Gears", &["teeth", "rpm", "clockwise"], "The first gear is the one that is turned."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the results blank."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static ORTHOGRAPHIC: [RefSection; 3] = [
+    s("Stack", &["heights"], "Back row first, one row per line."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the views empty."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static COLOUR_WHEEL: [RefSection; 3] = [
+    s("Scheme", &["scheme", "base"], "Counts the colours from yellow, clockwise."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the names and scheme blank."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static PERSPECTIVE_GRID: [RefSection; 3] = [
+    s("Grid", &["kind", "horizon", "rays"], "The horizon is the eye level."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the box off."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static MASLOW: [RefSection; 3] = [
+    s("Levels", &["levels"], "name: example, bottom first."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the level names blank."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static BRAIN_REGIONS: [RefSection; 3] = [
+    s("Regions", &["show"], ""),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the names blank."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static EXPERIMENT_FLOW: [RefSection; 3] = [
+    s("Experiment", &["question", "sample", "groups", "measure"], "What each group gets and what is measured."),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the role labels blank."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static SAMPLING_DISTRIBUTION: [RefSection; 4] = [
+    s("Population", &["mean", "sd", "n", "show_pop"], "The sample size sets the standard error, sd divided by the square root of n."),
+    s("Shading", &["region", "a", "b"], "Shades a region of sample means."),
+    s("Display", &["title", "x_title", "show_answers"], "Turn off Show answers to leave the standard error and probability blank."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static REJECTION_REGION: [RefSection; 4] = [
+    s("Test", &["dist", "df", "tail", "alpha"], "Two-tailed splits alpha between the tails."),
+    s("Statistic", &["stat", "show_stat"], ""),
+    s("Display", &["title", "x_title", "show_answers"], "Turn off Show answers to leave the shading and results blank."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static CHI_SQUARE_TABLE: [RefSection; 4] = [
+    s("Counts", &["observed", "row_names", "col_names"], "One row per line."),
+    s("Test", &["alpha"], ""),
+    s("Display", &["title", "show_answers"], "Turn off Show answers to leave the working empty."),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
 static LENGTH_PHYS: [RefSection; 5] = [
     s("Ruler", &["units", "ruler", "marks", "read_to"], ""),
     s("Length and position", &["length", "offset"], "From 0.50 to 15.00 cm, to 2 decimal places."),
@@ -491,10 +1020,91 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
     Some(match id {
         "angles" => &FIG_0,
         "histogram" => &HISTOGRAM,
+        "logic-circuit" => &LOGIC_CIRCUIT,
+        "graph-diagram" => &GRAPH_DIAGRAM,
+        "tree-diagram" => &TREE_DIAGRAM,
+        "number-base" => &NUMBER_BASE,
+        "data-structure" => &DATA_STRUCTURE,
+        "flowchart" => &FLOWCHART,
+        "boolean-table" => &BOOLEAN_TABLE,
+        "probability-tree" => &PROBABILITY_TREE,
+        "venn-diagram" => &VENN_DIAGRAM,
+        "discrete-distribution" => &DISCRETE_DISTRIBUTION,
+        "confidence-interval" => &CONFIDENCE_INTERVAL,
+        "residual-plot" => &RESIDUAL_PLOT,
+        "rc-curve" => &RC_CURVE,
+        "t-account" => &T_ACCOUNT,
+        "journal-entry" => &JOURNAL_ENTRY,
+        "trial-balance" => &TRIAL_BALANCE,
+        "financial-statement" => &FINANCIAL_STATEMENT,
+        "accounting-equation" => &ACCOUNTING_EQUATION,
+        "depreciation-schedule" => &DEPRECIATION_SCHEDULE,
+        "bank-reconciliation" => &BANK_RECONCILIATION,
+        "cash-flow-statement" => &CASH_FLOW_STATEMENT,
+        "supply-demand" => &SUPPLY_DEMAND,
+        "elasticity" => &ELASTICITY,
+        "ppf" => &PPF,
+        "cost-curves" => &COST_CURVES,
+        "monopoly" => &MONOPOLY,
+        "circular-flow" => &CIRCULAR_FLOW,
+        "ad-as" => &AD_AS,
+        "lorenz" => &LORENZ,
+        "earth-cycles" => &EARTH_CYCLES,
+        "earth-layers" => &EARTH_LAYERS,
+        "plate-boundaries" => &PLATE_BOUNDARIES,
+        "strata" => &STRATA,
+        "moon-seasons" => &MOON_SEASONS,
+        "topo-contours" => &TOPO_CONTOURS,
+        "hr-diagram" => &HR_DIAGRAM,
+        "climate-graph" => &CLIMATE_GRAPH,
+        "population-pyramid" => &POPULATION_PYRAMID,
+        "grid-reference" => &GRID_REFERENCE,
+        "map-scale" => &MAP_SCALE,
+        "music-staff" => &MUSIC_STAFF,
+        "circle-of-fifths" => &CIRCLE_OF_FIFTHS,
+        "piano-keyboard" => &PIANO_KEYBOARD,
+        "guitar-chords" => &GUITAR_CHORDS,
+        "rhythm-counting" => &RHYTHM_COUNTING,
+        "break-even" => &BREAK_EVEN,
+        "time-value" => &TIME_VALUE,
+        "loan-amortisation" => &LOAN_AMORTISATION,
+        "org-chart" => &ORG_CHART,
+        "swot" => &SWOT,
+        "marketing-funnel" => &MARKETING_FUNNEL,
+        "plot-arc" => &PLOT_ARC,
+        "organiser" => &ORGANISER,
+        "timeline" => &TIMELINE,
+        "cause-effect" => &CAUSE_EFFECT,
+        "family-tree" => &FAMILY_TREE,
+        "sentence-diagram" => &SENTENCE_DIAGRAM,
+        "structure-chart" => &STRUCTURE_CHART,
+        "food-plate" => &FOOD_PLATE,
+        "heart-zones" => &HEART_ZONES,
+        "court-layout" => &COURT_LAYOUT,
+        "body-map" => &BODY_MAP,
+        "block-diagram" => &BLOCK_DIAGRAM,
+        "free-body" => &FREE_BODY,
+        "gear-train" => &GEAR_TRAIN,
+        "orthographic" => &ORTHOGRAPHIC,
+        "colour-wheel" => &COLOUR_WHEEL,
+        "perspective-grid" => &PERSPECTIVE_GRID,
+        "maslow" => &MASLOW,
+        "brain-regions" => &BRAIN_REGIONS,
+        "experiment-flow" => &EXPERIMENT_FLOW,
+        "kirchhoff-loops" => &KIRCHHOFF_LOOPS,
+        "state-machine" => &STATE_MACHINE,
+        "trace-table" => &TRACE_TABLE,
+        "sorting-passes" => &SORTING_PASSES,
+        "recursion-tree" => &RECURSION_TREE,
+        "er-diagram" => &ER_DIAGRAM,
+        "network-topology" => &NETWORK_TOPOLOGY,
         "two-way-table" => &TWO_WAY_TABLE,
         "stem-and-leaf" => &STEM_AND_LEAF,
         "dot-plot" => &DOT_PLOT,
         "normal-curve" => &NORMAL_CURVE,
+        "sampling-distribution" => &SAMPLING_DISTRIBUTION,
+        "rejection-region" => &REJECTION_REGION,
+        "chi-square-table" => &CHI_SQUARE_TABLE,
         "scatterplot" => &SCATTERPLOT,
         "bohr-model" => &FIG_1,
         "box-plot" => &FIG_2,

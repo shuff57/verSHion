@@ -64,10 +64,16 @@ pub fn data_control(ui: &mut Ui, fig: &str, pd: &ParamDef, columns: usize, label
     let note_id = id.with("note");
     let note: String = ctx.data(|d| d.get_temp(note_id)).unwrap_or_default();
     let count = data::summary(set.as_deref().unwrap_or(&text), columns);
-    ui.label(theme::muted(if note.is_empty() { count } else { format!("{count} · {note}") }).size(11.5));
+    let skin = theme::chem_skin();
+    ui.label(theme::muted(if note.is_empty() { count } else { format!("{count} · {note}") }).size(if skin { 13.0 } else { 11.5 }));
 
+    // the app's shell sets these as its 40 px action buttons
+    let btn = |ui: &mut Ui, text: &str, enabled: bool| if skin { super::chem_shell::shell_button(ui, text, enabled) } else { ui.add_enabled(enabled, Button::new(text).small()) };
     ui.horizontal_wrapped(|ui| {
-        if ui.add(Button::new("Open CSV…").small()).on_hover_text("Read numbers from a CSV or text file").clicked() {
+        if skin {
+            ui.spacing_mut().item_spacing = egui::vec2(8.0, 8.0);
+        }
+        if btn(ui, "Open CSV…", true).on_hover_text("Read numbers from a CSV or text file").clicked() {
             let msg = match crate::platform::pick_file("CSV or text", &["csv", "tsv", "txt"]) {
                 None => String::new(),
                 Some(path) => match crate::platform::read(&path) {
@@ -84,7 +90,7 @@ pub fn data_control(ui: &mut Ui, fig: &str, pd: &ParamDef, columns: usize, label
             };
             ctx.data_mut(|d| d.insert_temp(note_id, msg));
         }
-        let gen_btn = ui.add(Button::new("Generate…").small()).on_hover_text("Make sample data from a seed");
+        let gen_btn = btn(ui, "Generate…", true).on_hover_text("Make sample data from a seed");
         egui::Popup::menu(&gen_btn).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
             ui.set_min_width(230.0);
             let gid = id.with("gen");
@@ -145,7 +151,7 @@ pub fn data_control(ui: &mut Ui, fig: &str, pd: &ParamDef, columns: usize, label
             }
             ui.ctx().data_mut(|d| d.insert_temp(gid, g));
         });
-        if ui.add_enabled(!text.is_empty(), Button::new("Clear").small()).clicked() {
+        if btn(ui, "Clear", !text.is_empty()).clicked() {
             set = Some(String::new());
             ctx.data_mut(|d| d.insert_temp(note_id, String::new()));
         }
@@ -153,5 +159,79 @@ pub fn data_control(ui: &mut Ui, fig: &str, pd: &ParamDef, columns: usize, label
 
     if let Some(s) = set {
         p.0.insert(pd.key.to_string(), Value::S(s));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use egui_kittest::kittest::Queryable;
+    use egui_kittest::Harness;
+
+    fn def(columns: usize) -> ParamDef {
+        ParamDef::data("pts", "Numbers", columns, "")
+    }
+
+    fn harness(columns: usize, start: &str) -> Harness<'static, Params> {
+        let mut p = Params::defaults(&[def(columns)]);
+        p.set_s("pts", start);
+        crate::figuresui::ui_test::harness(move |ui, p: &mut Params| data_control(ui, "t", &def(columns), columns, "Numbers", p), p)
+    }
+
+    #[test]
+    fn typing_numbers_updates_the_value_and_the_count() {
+        let mut h = harness(1, "");
+        h.get_by_role(egui::accesskit::Role::MultilineTextInput).focus();
+        h.run();
+        h.get_by_role(egui::accesskit::Role::MultilineTextInput).type_text("4, 5, 6");
+        h.run();
+        assert_eq!(h.state().s("pts"), "4, 5, 6");
+        assert!(h.query_by_label_contains("3 values").is_some());
+    }
+
+    #[test]
+    fn a_spreadsheet_paste_is_tidied_when_the_box_is_left() {
+        let mut h = harness(2, "");
+        h.get_by_role(egui::accesskit::Role::MultilineTextInput).focus();
+        h.run();
+        h.event(egui::Event::Paste("x\ty\n1\t2\n3\t4\n".into()));
+        h.run();
+        // leave the box: the paste is rewritten to the canonical text (header dropped)
+        h.get_by_label("Clear").focus();
+        h.run();
+        h.run();
+        let got = h.state().s("pts").to_string();
+        assert_eq!(got, data::canonical("x\ty\n1\t2\n3\t4\n", 2).unwrap());
+        assert!(!got.contains('x') && got.contains("1") && got.contains("4"), "{got:?}");
+        assert!(h.query_by_label_contains("2 points").is_some() || h.query_by_label_contains("2 ").is_some());
+    }
+
+    #[test]
+    fn clear_empties_the_box() {
+        let mut h = harness(1, "1, 2, 3");
+        h.get_by_label("Clear").click();
+        h.run();
+        assert_eq!(h.state().s("pts"), "");
+    }
+
+    #[test]
+    fn generate_makes_the_asked_number_of_values() {
+        let mut h = harness(1, "");
+        h.get_by_label("Generate…").click();
+        h.run();
+        h.get_by_label("Make data").click();
+        h.run();
+        let n = data::numbers(h.state().s("pts")).len();
+        assert_eq!(n, 30, "the popover's default is 30 values: {:?}", h.state().s("pts"));
+    }
+
+    #[test]
+    fn generating_pairs_for_two_columns() {
+        let mut h = harness(2, "");
+        h.get_by_label("Generate…").click();
+        h.run();
+        h.get_by_label("Make data").click();
+        h.run();
+        assert_eq!(data::pairs(h.state().s("pts")).len(), 30);
     }
 }

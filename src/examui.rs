@@ -110,8 +110,18 @@ struct DragState {
     label: &'static str,
 }
 
+/// A question that was not added to the exam because it is a draft (see `qcheck`).
+#[derive(Clone)]
+struct BlockedAdd {
+    bank_id: Id,
+    qid: Id,
+    msg: String,
+}
+
 #[derive(Clone, Default)]
 struct EditUi {
+    /// The "not added: it is a draft" dialog, with a way to open that question for editing.
+    blocked: Option<BlockedAdd>,
     search: String,
     topics: Vec<String>,
     diff: u8, // 0 any, 1 low, 2 medium, 3 high
@@ -937,6 +947,43 @@ impl crate::App {
             }
             if !open || cancel {
                 st.save_as_open = false;
+            }
+        }
+
+        // A draft that was not added: what is missing, and a way into the editor.
+        if let Some(b) = st.blocked.clone() {
+            let mut open = true;
+            let mut edit = false;
+            egui::Window::new(theme::strong("Not added to the exam"))
+                .open(&mut open)
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .default_width(420.0)
+                .show(ctx, |ui| {
+                    ui.add(egui::Label::new(b.msg.clone()).wrap());
+                    ui.add_space(4.0);
+                    ui.add(egui::Label::new(muted("Finish it in the question editor, then add it again. Saving never waits for this: the draft is kept.".to_string())).wrap());
+                    ui.add_space(10.0);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if crate::pageshell::primary(ui, "Edit question").clicked() {
+                            edit = true;
+                        }
+                        if crate::pageshell::outline(ui, "Close").clicked() {
+                            st.blocked = None;
+                        }
+                    });
+                });
+            if edit {
+                if let Some(q) = self.store.question(&b.bank_id, &b.qid).cloned() {
+                    self.qedit = Some(crate::qedit::Draft::from_question(b.bank_id.clone(), &q));
+                    self.bank = Some(b.bank_id.clone());
+                    self.screen = crate::Screen::BankEdit(b.bank_id.clone());
+                }
+                st.blocked = None;
+            }
+            if !open {
+                st.blocked = None;
             }
         }
 
@@ -2848,9 +2895,11 @@ fn draw_item_body(
     style: model::PaperStyle,
     mut pws: Option<(&Id, usize, &mut EditUi)>,
 ) {
-    if model::is_keyless(q) {
-        // Imported from the pool without its key: say so where the teacher looks.
-        ui.label(egui::RichText::new("No answer key").size(bp * 0.8).color(egui::Color32::from_rgb(170, 60, 40)));
+    if crate::qcheck::key_missing(q) {
+        // Imported from the pool without its key, or a draft whose key is incomplete (edited
+        // after it was put on the exam): say so where the teacher looks.
+        let why = if model::is_keyless(q) { "No answer key".to_string() } else { format!("Draft: {}", crate::qcheck::describe(&crate::qcheck::blockers(q))) };
+        ui.label(egui::RichText::new(why).size(bp * 0.8).color(egui::Color32::from_rgb(170, 60, 40)));
     }
     match &q.kind {
         Kind::Mc { answers } => {
@@ -3217,15 +3266,39 @@ fn apply_items_fn(
     app.store.save_exams();
 }
 
-/// Inserts a bank question at `at` (clamped); returns the index it landed on.
-fn add_item(app: &mut crate::App, exam_id: &Id, bank_id: &Id, question_id: &Id, at: usize) -> usize {
+/// The questions among `qids` of `bank_id` that may go on an exam. A draft (a question with a gap,
+/// see `qcheck`) may not: the first one is recorded in `st.blocked`, whose dialog says what is
+/// missing and opens the question for editing.
+fn gate_add(app: &crate::App, st: &mut EditUi, bank_id: &Id, qids: &[Id]) -> Vec<Id> {
+    let Some(bank) = app.store.bank(bank_id) else { return qids.to_vec() };
+    let (ok, blocked) = gate_picks(bank, qids);
+    if blocked.is_some() {
+        st.blocked = blocked;
+    }
+    ok
+}
+
+/// [`gate_add`] over a bank: the ids that may be added, and the dialog for the first that may not.
+fn gate_picks(bank: &model::QuestionBank, qids: &[Id]) -> (Vec<Id>, Option<BlockedAdd>) {
+    let picked: Vec<(usize, &model::Question)> = qids.iter().filter_map(|id| bank.questions.iter().position(|q| q.id == *id).map(|p| (p + 1, &bank.questions[p]))).collect();
+    let blocked = crate::qcheck::first_blocked(&picked, "added to an exam").map(|(i, msg)| BlockedAdd { bank_id: bank.id.clone(), qid: picked[i].1.id.clone(), msg });
+    let ok = qids.iter().filter(|id| picked.iter().all(|(_, q)| q.id != **id || crate::qcheck::gate_blockers(q).is_empty())).cloned().collect();
+    (ok, blocked)
+}
+
+/// Inserts a bank question at `at` (clamped); returns the index it landed on, or `None` when the
+/// question is a draft (see [`gate_add`]).
+fn add_item(app: &mut crate::App, st: &mut EditUi, exam_id: &Id, bank_id: &Id, question_id: &Id, at: usize) -> Option<usize> {
+    if gate_add(app, st, bank_id, std::slice::from_ref(question_id)).is_empty() {
+        return None;
+    }
     let len = app.store.exam(exam_id).map(|e| e.items.len()).unwrap_or(0);
     let k = at.min(len);
     apply_items_fn(app, exam_id, |mut items| {
         items.insert(k, ExamItem::new(bank_id.clone(), question_id.clone()));
         items
     });
-    k
+    Some(k)
 }
 
 fn do_undo(app: &mut crate::App, exam_id: &Id) {
@@ -3340,8 +3413,9 @@ fn drag_overlay(app: &mut crate::App, ctx: &egui::Context, exam_id: &Id, st: &mu
             let target = pos.filter(|p| desk.contains(*p)).map(|p| insert_index(&st.rows, p.y));
             if released {
                 if let Some(k) = target {
-                    let idx = add_item(app, exam_id, bank_id, question_id, k);
-                    st.just_added = Some((idx, ctx.input(|i| i.time)));
+                    if let Some(idx) = add_item(app, st, exam_id, bank_id, question_id, k) {
+                        st.just_added = Some((idx, ctx.input(|i| i.time)));
+                    }
                 }
                 st.drag = None;
                 st.slot_k = None;
@@ -3583,13 +3657,19 @@ fn draw_shelf_inner(
         if add_all.clicked() {
             let len = app.store.exam(exam_id).map(|e| e.items.len()).unwrap_or(0);
             let b = bank_id.clone();
-            let add = not_in.clone();
-            apply_items_fn(app, exam_id, |mut items| {
-                items.extend(add.iter().map(|q| ExamItem::new(b.clone(), q.clone())));
-                items
-            });
-            st.just_added = Some((len, ctx.input(|i| i.time)));
-            screens::toast(app, &format!("Added {} question{}", not_in.len(), if not_in.len() == 1 { "" } else { "s" }), false);
+            // drafts stay behind: the dialog names the first and opens it for editing
+            let add = gate_add(app, st, &bank_id, &not_in);
+            let left_out = not_in.len() - add.len();
+            if !add.is_empty() {
+                let n = add.len();
+                apply_items_fn(app, exam_id, |mut items| {
+                    items.extend(add.iter().map(|q| ExamItem::new(b.clone(), q.clone())));
+                    items
+                });
+                st.just_added = Some((len, ctx.input(|i| i.time)));
+                let skipped = if left_out > 0 { format!(", {left_out} draft{} left out", if left_out == 1 { "" } else { "s" }) } else { String::new() };
+                screens::toast(app, &format!("Added {n} question{}{skipped}", if n == 1 { "" } else { "s" }), false);
+            }
         }
     });
     ui.add_space(6.0);
@@ -3687,6 +3767,18 @@ fn shelf_row(
     if q.image.is_some() {
         badge("Image", false);
     }
+    // an unfinished question says so before it is clicked (it can not be added; see `qcheck`)
+    if let Some((label, _)) = crate::qcheck::chip(q) {
+        let (fg, bg) = if ui.visuals().dark_mode {
+            (Color32::from_rgb(235, 175, 90), Color32::from_rgba_unmultiplied(235, 175, 90, 36))
+        } else {
+            (Color32::from_rgb(140, 78, 0), Color32::from_rgba_unmultiplied(196, 120, 20, 40))
+        };
+        let g = p.layout_no_wrap(if label == "No answer key" { label.to_string() } else { "Draft".to_string() }, FontId::new(9.5, theme::bold_family()), fg);
+        let r = Rect::from_min_size(Pos2::new(x, ty_y - 1.5), g.size() + Vec2::new(10.0, 3.0));
+        p.rect_filled(r, CornerRadius::same(6), bg);
+        p.galley(r.min + Vec2::new(5.0, 1.5), g, Color32::PLACEHOLDER);
+    }
     if let Some(pts) = q.points {
         let g = p.layout_no_wrap(format!("{} pt", fmt_number(pts)), FontId::proportional(10.5), theme::muted_col());
         p.galley(Pos2::new(rect.right() - btn_w - 14.0 - g.size().x, ty_y), g, Color32::PLACEHOLDER);
@@ -3746,8 +3838,9 @@ fn shelf_row(
     }
     if bresp.clicked() && !already {
         let len = app.store.exam(exam_id).map(|e| e.items.len()).unwrap_or(0);
-        let idx = add_item(app, exam_id, bank_id, &q.id, len);
-        st.just_added = Some((idx, ctx.input(|i| i.time)));
+        if let Some(idx) = add_item(app, st, exam_id, bank_id, &q.id, len) {
+            st.just_added = Some((idx, ctx.input(|i| i.time)));
+        }
     }
 
     let on_button = eresp.hovered() || cresp.hovered() || bresp.hovered();
@@ -3965,8 +4058,9 @@ fn map_question_raw_style(number: u32, q: &model::Question, style: model::PaperS
         }
     }
 
-    // Imported without its key: the placeholder flags (all false, a layout pairing) are not a key.
-    if model::is_keyless(q) {
+    // Imported without its key, or a draft with no complete key: the placeholder flags (all false,
+    // a layout pairing) are not a key and a key is never printed from them.
+    if crate::qcheck::key_missing(q) {
         dq.correct.clear();
         dq.key_marks.clear();
         dq.key_text = "Key not provided".to_string();
@@ -5549,6 +5643,80 @@ mod tests {
 
     fn item(bank: &str, qid: &str) -> ExamItem {
         ExamItem::new(bank.to_string(), qid.to_string())
+    }
+
+    fn ans(t: &str, c: bool) -> model::Answer {
+        model::Answer { text: t.to_string(), correct: c, locked: false }
+    }
+
+    fn bank_of(qs: Vec<Question>) -> model::QuestionBank {
+        model::QuestionBank { id: "b".into(), name: "B".into(), questions: qs, created: 0, modified: 0, details: Default::default() }
+    }
+
+    /// One unfinished question of every kind, and what it lacks.
+    fn drafts() -> Vec<(Question, &'static str)> {
+        vec![
+            (q("mc", "Pick", Kind::Mc { answers: vec![ans("x", false), ans("y", false)] }), "Mark one answer correct"),
+            (q("tf", "", Kind::Tf { correct: true }), "Add a question stem"),
+            (q("ma", "Match", Kind::Matching { pairs: vec![model::Pair { left: "a".into(), right: "1".into() }, model::Pair { left: "b".into(), right: String::new() }], distractors: vec![] }), "Pair 2 has no match on the right"),
+            (q("bl", "Fill ___ and ___", Kind::Blank { accept: vec![vec!["one".into()], vec![]] }), "Blank 2 has no accepted answer"),
+            (q("mp", "Parts", Kind::Multipart { parts: vec![model::Part { stem: String::new(), kind: model::PartKind::Tf { correct: true } }] }), "Part 1 needs its own stem"),
+        ]
+    }
+
+    #[test]
+    fn the_exam_gate_blocks_a_draft_of_every_kind_and_names_what_is_missing() {
+        for (draft, missing) in drafts() {
+            let id = draft.id.clone();
+            let bank = bank_of(vec![q("ok", "Fine", Kind::Tf { correct: true }), draft]);
+            let (ok, blocked) = gate_picks(&bank, &[id.clone()]);
+            assert!(ok.is_empty(), "{id} must not be added");
+            let b = blocked.unwrap_or_else(|| panic!("{id}: no message"));
+            assert_eq!((b.bank_id.as_str(), b.qid.as_str()), ("b", id.as_str()), "the dialog can open the question");
+            assert!(b.msg.contains(missing) && b.msg.contains("Question 2") && b.msg.contains("can not be added to an exam"), "{}", b.msg);
+        }
+    }
+
+    #[test]
+    fn the_exam_gate_lets_a_finished_question_through_and_add_all_skips_only_drafts() {
+        let mut qs = vec![q("ok1", "Fine", Kind::Tf { correct: true }), q("ok2", "Pick", Kind::Mc { answers: vec![ans("x", true), ans("y", false)] })];
+        qs.extend(drafts().into_iter().map(|d| d.0));
+        let bank = bank_of(qs);
+        let all: Vec<Id> = bank.questions.iter().map(|x| x.id.clone()).collect();
+        let (ok, blocked) = gate_picks(&bank, &all);
+        assert_eq!(ok, vec!["ok1".to_string(), "ok2".to_string()]);
+        assert!(blocked.unwrap().msg.contains("more need work too"));
+        let (ok, blocked) = gate_picks(&bank, &["ok2".to_string()]);
+        assert_eq!(ok.len(), 1);
+        assert!(blocked.is_none());
+    }
+
+    #[test]
+    fn a_fixed_draft_goes_on_the_exam() {
+        let mut bad = q("mc", "Pick", Kind::Mc { answers: vec![ans("x", false), ans("y", false)] });
+        assert!(gate_picks(&bank_of(vec![bad.clone()]), &["mc".to_string()]).0.is_empty());
+        if let Kind::Mc { answers } = &mut bad.kind {
+            answers[1].correct = true;
+        }
+        assert_eq!(gate_picks(&bank_of(vec![bad]), &["mc".to_string()]).0, vec!["mc".to_string()]);
+    }
+
+    /// A draft already on an exam (edited after it was added) never prints a wrong key: the mapping
+    /// says 'Key not provided', for every kind, and nothing panics.
+    #[test]
+    fn a_draft_on_an_exam_prints_no_key() {
+        for (draft, _) in drafts() {
+            let m = map_question(1, &draft);
+            let key_issue = crate::qcheck::key_missing(&draft);
+            if key_issue {
+                assert_eq!(m.dq.key_text, "Key not provided", "{:?}", draft.kind);
+                assert!(m.dq.correct.is_empty());
+            }
+        }
+        let mc = q("mc", "Pick", Kind::Mc { answers: vec![ans("x", false), ans("y", false)] });
+        assert_eq!(map_question(1, &mc).dq.key_text, "Key not provided");
+        let ok = q("mc", "Pick", Kind::Mc { answers: vec![ans("x", true), ans("y", false)] });
+        assert_ne!(map_question(1, &ok).dq.key_text, "Key not provided");
     }
 
     #[test]

@@ -41,6 +41,7 @@ pub mod pageshell;
 pub mod layout;
 pub mod model;
 pub mod platform;
+pub mod qcheck;
 pub mod qedit;
 pub mod richtext;
 pub mod screens;
