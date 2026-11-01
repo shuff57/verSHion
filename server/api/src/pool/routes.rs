@@ -351,10 +351,44 @@ fn circles_dispatch(c: &Call, route: &Route) -> Res<Reply> {
     }
 }
 
+/// GET / HEAD of a bank's head version, or of version `n`: the head JSON with the stored payload spliced in (stripped for a viewer of a bank that hides
+/// its keys), an ETag, and the HEAD and 304 forms.
+fn bank_get(c: &Call, env: &super::circlesendprep::SendEnv, cid: &str, bid: &str, version: Option<i64>) -> Res<Reply> {
+    use super::{circlebanks, circlehide, circlehidepatch};
+    let (x, me) = (c.x, c.me);
+    let head_only = c.method == "HEAD";
+    let slots = c.st.opens.hold(me, &c.addr())?;
+    let r = circlebanks::bank_read(x, me, cid, bid, version, &|me, bid, vid| circlehidepatch::hide_off_releases(env, me, bid, vid))?;
+    let prefix = super::read::payload_prefix(&r.head, "payload");
+    let inm = header_str(c.headers, "if-none-match");
+    if head_only || inm.is_some_and(|h| super::read::if_none_match_hits(h, &r.etag)) {
+        let Some(size) = c.st.store.len(&r.full_key).ok().flatten() else { return Err(PoolError::new(404, "not_found").into()) };
+        let mut headers = vec![("ETag".to_string(), r.etag.clone())];
+        // A stripped body's length is not known without stripping it: a viewer's HEAD has none.
+        if head_only && !r.hidden {
+            headers.push(("Content-Length".into(), (prefix.len() as u64 + size + 1).to_string()));
+        }
+        return Ok(Reply::Raw { status: if head_only { 200 } else { 304 }, headers, body: vec![], hold: None });
+    }
+    let payload = if r.hidden {
+        circlehide::stripped_for_viewer(x, &c.st.core, &c.st.store, me, &r.full_key, r.strip_opts.as_deref())?
+    } else {
+        match c.st.store.get(&r.full_key).ok().flatten() {
+            Some(b) => b,
+            None => return Err(PoolError::new(404, "not_found").into()),
+        }
+    };
+    let mut body = prefix;
+    body.extend_from_slice(&payload);
+    body.push(b'}');
+    let headers = vec![("Content-Type".to_string(), "application/json".to_string()), ("ETag".into(), r.etag)];
+    Ok(Reply::Raw { status: 200, headers, body, hold: Some(slots) })
+}
+
 /// The bank routes that carry no payload to serve or send.
 fn bank_route(r: &Route) -> bool {
     use Route::*;
-    matches!(r, Bank(..) | BankUndelete(..) | BankReport(..) | BankPurge(..) | BankBlob(..) | BankVersions(..) | BankChanges(..) | BankMerge(..) | BankRollback(..) | BankTrim(..))
+    matches!(r, BankVersion(..) | Bank(..) | BankUndelete(..) | BankReport(..) | BankPurge(..) | BankBlob(..) | BankVersions(..) | BankChanges(..) | BankMerge(..) | BankRollback(..) | BankTrim(..))
 }
 
 fn banks_dispatch(c: &Call, route: &Route) -> Res<Reply> {
@@ -365,6 +399,8 @@ fn banks_dispatch(c: &Call, route: &Route) -> Res<Reply> {
     let pair = |r: (u16, Value)| Ok(Reply::Json(r.0, r.1));
     let env = || SendEnv { x, core: &c.st.core, fp: &c.st.fp, keys: &c.st.keys, store: &c.st.store };
     match (route, c.method) {
+        (Route::Bank(cid, bid), "GET" | "HEAD") => bank_get(c, &env(), cid, bid, None),
+        (Route::BankVersion(cid, bid, n), "GET") => bank_get(c, &env(), cid, bid, n.parse().ok().or(Some(0))),
         (Route::Bank(cid, bid), "DELETE") => ok(state::delete_bank(x, me, cid, bid)?),
         (Route::BankUndelete(cid, bid), "POST") => ok(state::undelete_bank(x, me, cid, bid)?),
         (Route::BankReport(cid, bid), "POST") => pair(state::report_bank(x, me, cid, bid, &c.json()?)?),

@@ -346,10 +346,59 @@ async fn bank_routes_answer_for_members_and_hide_the_bank_from_strangers() {
     assert_eq!(s, 404);
 }
 
+/// A readable head version for the bank: a row and a stored body.
+fn add_head_version(w: &W, bid: &str) {
+    let key = format!("circles/test/{bid}/v1.json");
+    w.st.store.put(&key, br#"{"schema_version":2,"bank":{"name":"B","questions":[]}}"#).unwrap();
+    let c = w.st.conn.lock().unwrap();
+    let required: Vec<String> = {
+        let mut st = c.prepare("SELECT name FROM pragma_table_info('circle_versions') WHERE \"notnull\" = 1 AND dflt_value IS NULL").unwrap();
+        st.query_map([], |r| r.get(0)).unwrap().map(|x| x.unwrap()).collect()
+    };
+    let vals: Vec<String> = required.iter().map(|n| if n == "license" { "'CC-BY-4.0'".to_string() } else if n == "status" { "'current'".to_string() } else if n.ends_with("_at") || n.contains("count") || n == "version" || n.ends_with("_size") || n.ends_with("_bytes") { "0".to_string() } else { "''".to_string() }).collect();
+    c.execute(&format!("INSERT INTO circle_versions ({}) VALUES ({})", required.join(", "), vals.join(", ")), []).unwrap();
+    c.execute("UPDATE circle_versions SET id = 'v1', bank_id = ?1, version = 1, status = 'current', full_key = ?2, committed_at = ?3 WHERE rowid = last_insert_rowid()", rusqlite::params![bid, key, NOW]).unwrap();
+    c.execute("UPDATE circle_banks SET head_version_id = 'v1' WHERE id = ?1", [bid]).unwrap();
+}
+
 #[tokio::test]
-async fn sending_and_reading_a_bank_are_not_wired_yet() {
+async fn a_bank_is_read_with_an_etag_head_and_not_modified_and_viewers_of_hidden_keys_are_held_back() {
+    let w = world();
+    let (cid, bid) = circle_with_bank(&w).await;
+    add_head_version(&w, &bid);
+    let base = format!("/circles/{cid}/banks/{bid}");
+    let res = w.app.clone().oneshot(req("GET", &base, T, None, vec![])).await.unwrap();
+    assert_eq!(res.status(), 200);
+    let etag = res.headers().get("etag").unwrap().to_str().unwrap().to_string();
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    let v: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!((v["bank"]["version"].clone(), v["bank"]["is_author"].clone()), (json!(1), json!(true)));
+    assert!(v["payload"]["bank"].is_object());
+    let head = w.app.clone().oneshot(req("HEAD", &base, T, None, vec![])).await.unwrap();
+    assert_eq!(head.headers().get("content-length").unwrap().to_str().unwrap(), bytes.len().to_string());
+    let mut r = req("GET", &base, T, None, vec![]);
+    r.headers_mut().insert("if-none-match", etag.parse().unwrap());
+    assert_eq!(w.app.clone().oneshot(r).await.unwrap().status(), 304);
+    // The same through the numbered form; a version past the head is a 404.
+    let (s, b, _) = send(&w, req("GET", &format!("{base}/versions/1"), T, None, vec![])).await;
+    assert_eq!((s, b["bank"]["version"].clone()), (200, json!(1)));
+    let (s, _, _) = send(&w, req("GET", &format!("{base}/versions/2"), T, None, vec![])).await;
+    assert_eq!(s, 404);
+    // A viewer of a bank that hides its keys is refused a version whose served form was never checked.
+    add_user(&w, OID);
+    {
+        let c = w.st.conn.lock().unwrap();
+        c.execute("INSERT INTO circle_members (circle_id, user_id, role, joined_at, join_seq) VALUES (?1, ?2, 'viewer', 1, 99)", rusqlite::params![cid, OID]).unwrap();
+        c.execute("UPDATE circle_banks SET hide_key = 1 WHERE id = ?1", [&bid]).unwrap();
+    }
+    let (s, b, _) = send(&w, req("GET", &base, Some(OIDT), None, vec![])).await;
+    assert_eq!(s, 409, "{b}");
+}
+
+#[tokio::test]
+async fn sending_a_bank_is_not_wired_yet() {
     let w = world();
     let cid = "0123456789abcdef0123456789abcdef";
-    let (s, b, _) = send(&w, req("GET", &format!("/circles/{cid}/banks/{cid}"), T, None, vec![])).await;
+    let (s, b, _) = send(&w, jreq("POST", &format!("/circles/{cid}/banks"), "t:teacher", json!({}))).await;
     assert_eq!((s, b["error"].clone()), (501, json!("not_ported")));
 }
