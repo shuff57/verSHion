@@ -37,6 +37,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "energy-pyramid" => ENERGY_PYRAMID,
         "action-potential" => ACTION_POTENTIAL,
         "cell-cycle" => CELL_CYCLE,
+        "cell-diagram" => CELL_DIAGRAM,
         // chemistry
         "bohr-model" => BOHR_MODEL,
         "gas-syringe" => GAS_SYRINGE,
@@ -698,6 +699,33 @@ const CELL_CYCLE: &[Faq] = &[
     Faq {
         q: "What does a student copy hide?",
         a: "With Show answers off the names, the shares, the total and the readout are blank: wedges, checkpoints, interphase, the stages of M and G0 keep numbered discs, and a table under the figure has a rule for each name (and the share). The key (Show answers on) prints them. The hours you typed stay on the figure because they are the givens. The layout is the same in both copies.",
+    },
+];
+
+const CELL_DIAGRAM: &[Faq] = &[
+    Faq {
+        q: "What does each cell type show, and what is left out on purpose?",
+        a: "Animal cell: membrane, cytoplasm, a cytoskeleton fibre, nucleus with envelope and nucleolus, rough ER touching the nuclear envelope, smooth ER continuing from it, Golgi apparatus beside the ER, mitochondria, ribosomes, lysosomes and a pair of centrioles. It has no cell wall, chloroplast or large central vacuole. Plant cell: the same, but with a cell wall outside the membrane, a large central vacuole that fills most of the cell, chloroplasts at the edge and, if you tick it, plasmodesmata through the wall. It has no centrioles and no lysosomes (flowering plants have no centrioles, and their lysosome work is done by the vacuole), so none are drawn. Bacterial cell (a prokaryote): capsule, cell wall, cell membrane, cytoplasm, a nucleoid with no envelope, plasmids, ribosomes, a flagellum and pili. It has no nucleus and no membrane-bound organelles, so a bacterium has no energy organelles to label (its respiration is on the membrane). A generic eukaryote is not offered: there is no such cell, and the animal and plant cells already show the shared structures. Shapes and sizes are simplified and not to scale.",
+    },
+    Faq {
+        q: "How do the label groups work?",
+        a: "Five switches pick what is labelled: Cell boundary, Membrane-bound organelles, Energy organelles, Protein-making pathway and Other structures. A structure is labelled when any ticked group contains it, so a structure can belong to two groups: the mitochondrion is in both the membrane-bound and the energy group, and the Golgi apparatus is in both the membrane-bound group and the protein-making pathway (nucleus, nuclear envelope, nucleolus, ribosomes, rough ER, Golgi; a bacterium's nucleoid and ribosomes). To ask about one system, tick only that group. Structures that are not labelled are still drawn, without a pointer. If the ticked groups hold nothing in the cell you chose (a bacterium has no energy organelles and no membrane-bound organelles) the cell is drawn with no labels and the editor note says so and which group to tick.",
+    },
+    Faq {
+        q: "How can a pointer land on one structure when there are many mitochondria or ribosomes?",
+        a: "Each numbered pointer ends in a small dot on exactly one structure, and the figure checks that a ring around the dot touches nothing else. Where a structure occurs many times (mitochondria, ribosomes, lysosomes, chloroplasts, pili, plasmids, plasmodesmata, the sacs of rough ER, the pair of centrioles, the cytoskeleton fibres) the pointer marks one of them, and the caption says so; the key lists which. A pointer to the Ribosome is on a free one in the cytoplasm; the dots on the rough ER are ribosomes too. The nuclear envelope is pointed at on the double line, away from the ER; the cell membrane on its outline; the cytoplasm on a clear patch.",
+    },
+    Faq {
+        q: "Which wording is the answer?",
+        a: "The key uses one wording for each structure and lists the others it accepts: Cell membrane (plasma membrane), Cytoplasm (cytosol), Rough ER and Smooth ER (rough or smooth endoplasmic reticulum), Golgi apparatus (Golgi body, Golgi complex), Mitochondrion (mitochondria), Central vacuole (vacuole), Nuclear envelope (nuclear membrane), Capsule (slime layer), Pilus (pili, fimbria), Nucleoid (nuclear region), Cytoskeleton (microtubules), Plasmodesma (plasmodesmata). The key prints them under the figure; a student copy does not.",
+    },
+    Faq {
+        q: "What does a student copy hide, and what are the function captions?",
+        a: "With Show answers off every name is gone and each pointer ends in a numbered disc; the table under the figure has a rule to write each name on. The layout is the same as in the key. With Show what each structure does on, the key prints a line under each name, and the student copy prints that line beside the blank as a clue to match. No caption contains the name of a structure, so nothing is given away except by your choice to show it.",
+    },
+    Faq {
+        q: "How does Print work?",
+        a: "Print is black, white and grey only. Each kind of structure has its own hatch or tone (the nucleus and the nucleoid diagonal lines, chloroplasts a cross-hatch, mitochondria dots, the vacuole horizontal lines, the capsule vertical lines, the cell wall solid grey, lysosomes, centrioles and the nucleolus solid black) and they stay different after a photocopy at 66 % grey. The ER and Golgi are drawn as outlined white sacs, told apart by their shape.",
     },
 ];
 

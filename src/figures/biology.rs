@@ -7,6 +7,7 @@ use super::*;
 mod handles;
 pub mod actionpotential;
 pub mod chisquarefit;
+pub mod celldiagram;
 pub mod cellcycle;
 pub mod cladogram;
 pub mod energypyramid;
@@ -39,6 +40,7 @@ pub fn examples(id: &str) -> Option<Vec<super::Example>> {
         "energy-pyramid" => energypyramid::examples(id),
         "action-potential" => actionpotential::examples(id),
         "cell-cycle" => cellcycle::examples(id),
+        "cell-diagram" => celldiagram::examples(id),
         _ => None,
     }
 }
@@ -140,6 +142,7 @@ pub fn defs() -> Vec<FigureDef> {
         energypyramid::defs().pop().unwrap(),
         actionpotential::defs().pop().unwrap(),
         cellcycle::defs().pop().unwrap(),
+        celldiagram::defs().pop().unwrap(),
     ]
 }
 

@@ -13,6 +13,8 @@ pub fn overrides(id: &str) -> Vec<(&'static str, Value)> {
     match id {
         // the cell cycle opens with the marker on S and the DNA readout, so the first picture shows the 2C to 4C step
         "cell-cycle" => vec![("pointer", st("S")), ("readout", st("DNA amount"))],
+        // the cell diagram opens on the plant cell: it shows the cell wall, the central vacuole and the chloroplasts that the default animal cell lacks
+        "cell-diagram" => vec![("cell", st("Plant cell"))],
         // Math polygons open unfilled (black outline on white), angles unshaded.
         "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "regular-polygon" => vec![("fill", st("#ffffff"))],
         // the reference names the kite counter-clockwise (A right, B top, C left): our mirror
