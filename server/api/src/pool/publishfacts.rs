@@ -114,7 +114,7 @@ pub struct PartSketch {
     pub bands: Vec<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Facts {
     pub prev: HashMap<String, PrevRow>,
     /// (item, qid) origins carried by kept questions.
