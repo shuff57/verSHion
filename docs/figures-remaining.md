@@ -2,15 +2,24 @@
 
 Branch `figures-gapfill` in the worktree `/home/shuff57/Documents/GitHub/verSHion-figures`. Spec `docs/figures-loop.md`, live state `docs/figures-progress.md`, critic reports `docs/critic-reports/`. Nothing here has been pushed or deployed.
 
-## 1. Figures in flight when we stopped (finish these first)
+## 0. Done (all local commits on `figures-gapfill`, worktree HEAD `db599c3` at the time of stopping)
+
+- Phases 0-3 complete and verified (engine groundwork, math core, math rest, physics).
+- Phase 4 biology converged, each passed a fresh verification critic: hardy-weinberg, chi-square-fit, enzyme-kinetics, cladogram, food-web, energy-pyramid, action-potential (PASS critic 4, `c1e47bb`), cell-cycle (PASS critic 4, `ad36770`).
+- Phase 5 chemistry, by the other session: reaction energy diagram, reaction rate graph, phase diagram, solubility curves, gas-law graphs, equilibrium graphs, buffer curves are committed (some with critic rounds still open; see `docs/figures-progress.md`).
+- Phase 4b started: photosynthesis (`49809e6`) and soil texture (`db599c3`) are in the worktree but NOT yet passed.
+
+## 1. Figures in flight when we stopped (the agents were stopped; nothing is lost on disk)
 
 | Figure | State | Next step |
 |---|---|---|
-| `cell-diagram` (phase 4, last biology figure) | Critic 1 FAILED (1 major, 4 MED, 4 LOW, 9 minor; report `2026-11-01-cell-diagram-critic-1.md`). Round-2 builder was running its mutation tests, not yet committed. | Cherry-pick the builder's round-2 commit, fresh verification critic, repeat until PASS. |
-| `photosynthesis` (phase 4b) | Built (`49809e6` in the worktree), critic 1 running. | Commit the critic's report, send findings to the same builder, verify, repeat until PASS. |
-| `soil-texture` (phase 4b) | Critic 1 FAILED (1 blocker, 1 major, 3 MED; report `2026-11-01-soil-texture-critic-1.md`): on-line points classified against the Soil Survey Manual, triangle mirrored against the USDA one, labels over guides, Print guides lost. Round-2 builder running. | Same loop. Check every polygon vertex against the Manual again in the next critic. |
+| `cell-diagram` (phase 4, last biology figure) | In the worktree as `b587bcb`. Critic 1 FAILED (1 major, 4 MED, 4 LOW, 9 minor; report `2026-11-01-cell-diagram-critic-1.md`, `aa9562e`). The round-2 builder was stopped with UNCOMMITTED edits to `celldiagram.rs` and `faq.rs` in its clone `scratchpad/cd1` (it had 44 mutants running). | Start a builder (or resume agent `a3df602f366195da4` if still available) from that clone: finish round 2, commit, cherry-pick, fresh critic, repeat until PASS. The edits may be incomplete; check `git diff` in the clone first. |
+| `photosynthesis` (phase 4b) | In the worktree as `49809e6` (builder's original `7de962f`, merge with soil-texture resolved in five shared files, compile checked). Critic 1 was running and was STOPPED before reporting: no verdict. The builder's full suite had not been re-run after its FAQ fix. | Launch a fresh opus critic on the current commit (brief template: see the soil-texture critic prompts in the session transcript; it must verify the biology against sources, pointer rings, leaks, Print 66 % grey, refusals, and run `figures::`). |
+| `soil-texture` (phase 4b) | Critic 1 FAILED (1 blocker, 1 major, 3 MED; `49e4e66`). Round 2 builder commit `2342a34` is in the worktree as `db599c3` (Manual cascade classifier, USDA orientation, label/guide placement, Print guides, sum tolerance 99.5-100.5, show_worked option). Critic 2 was running and was STOPPED before reporting: no verdict on round 2. | Fresh verification critic on `db599c3`; it must compare the drawn regions with the Manual's fig 3-7 (tools from critic 1 are in `scratchpad/scrit1-tools/`). Open: 17 label-on-guide cases at Large, first draw 308 ms debug, survivor n22 (Print guide `#999999`). |
 
-Method that works (see memory `figures-gapfill-loop`): one sonnet builder in its own `git clone` under the scratchpad; I inspect its commit and cherry-pick it into the worktree (when the other session has uncommitted census/figure edits use `git format-patch`, `git apply --index --exclude=<census>`, `git apply --cached` for the census patch, sed the two hashes in the working file); a fresh opus critic on the exact commit; findings go back to the SAME builder; the critic's report is committed as a docs commit. Shared one-line files (`mod.rs` `notes_for`, `faq.rs`, `biology.rs`, `start.rs`, the census) conflict whenever two figures land: keep both sides.
+Stray untracked file in the worktree: `src/figures/faq.rs.orig` (not mine on purpose; a merge-tool leftover; look before committing or delete). `HANDOFF.md` is another session's uncommitted file: never overwrite.
+
+Method that works (see memory `figures-gapfill-loop`): one sonnet builder in its own `git clone` under the scratchpad; I inspect its commit and cherry-pick it into the worktree (when the other session has uncommitted census/figure edits use `git format-patch`, `git apply --index --exclude=<census>`, `git apply --cached` for the census patch, sed the two hashes in the working file); a fresh opus critic on the exact commit; findings go back to the SAME builder; the critic's report is committed as a docs commit. Shared one-line files (`mod.rs` `notes_for`, `faq.rs`, `biology.rs`, `start.rs`, the census) conflict whenever two figures land: keep both sides (a union script; the FAQ needs the missing `];` added). Always `cd X && ...`, verify `git rev-parse --show-toplevel` before any reset, never run anything in the main checkout. Critics should keep their scratch files in their own subdirectory (another agent overwrote a shared `mutate.py` twice) and may not be allowed to write a report file: take the report from their final answer.
 
 ## 2. Figures not started
 
