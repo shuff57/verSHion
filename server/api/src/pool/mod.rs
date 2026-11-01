@@ -62,6 +62,7 @@ pub mod cronretain;
 pub mod crondaily;
 pub mod cronpublish;
 pub mod publishrun;
+pub mod publishmeta;
 pub mod publishearlier;
 pub mod poolcontent;
 pub mod offer;
