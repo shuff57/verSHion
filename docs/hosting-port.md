@@ -356,3 +356,50 @@ Cleanly merging files (no action, but rebuild and look): `src/bankexport.rs`, `s
 3. Do the smoke run (sign-up, login, free-tier chat, import job, test-mode purchase, pool flow) on the merged result before it goes to `main`.
 4. Alternative if the UI conflicts should wait: put only the `server/` commits on a new branch off `main` (they do not conflict) and leave the circles client commits for after the editor redesign settles.
 - 2026-11-01 first real run: a plain `cargo build` failed (http-body and http-body-util were dev-dependencies but the pool streams replies with them; tests compiled, the binary did not). Moved to dependencies. Then ran the server as a process on a throwaway database and drove it with `server/api/smoke/smoke.sh` (with `Caddyfile` and `env.example` beside it): health, sign-up, verify (the verify call must re-send password and profile, as in the Worker: confirming discards the sign-up password), approve in the local file, login, /me, refresh, credits, circle create/list, pool listing, export, preflight, logout all pass; chat, import and billing skip until OPENROUTER_API_KEY and Stripe test keys are set. 891 pass.
+
+## Staging, and the plan to harden sign-up and sign-in (written 2026-11-01)
+
+### Where staging stands
+
+`https://staging-vershion.lefthanddev.com` is live: two containers (API and Caddy) on the VPS behind the existing Cloudflare
+tunnel, one origin for the app and the API. Runbook and files: `server/api/staging/`. State of the checks, all through the API
+with a plus-address test account (the app's canvas UI was not driven):
+
+- Sign-up (202), mailed confirmation, confirm (the call re-sends password and profile), login, `/me`, refresh: pass.
+- Browser mode: `__Host-refresh` and `__Host-device` cookies are `HttpOnly; Secure; SameSite=Strict`; cookie-only refresh works;
+  a write from a foreign `Origin` gets 403.
+- Free tier: 40 credits a week; a service session costs credits, then a chat turn answers. Paid tier: a test PaymentIntent
+  confirmed with Stripe's test card reached the webhook and the account showed 125 purchased credits.
+- Mail: Stalwart delivered to Google, but the message landed in the **spam folder**. SPF `mx -all`, DKIM keys published, DMARC
+  `p=reject`, MTA-STS present. The IP's reverse DNS is `smtp.huffpalmer.fyi`, while mail is sent as `@lefthanddev.com`.
+- Staging sends as `vershion-staging@lefthanddev.com`: Stalwart refused `vershion@lefthanddev.com` as a sender for the new account.
+
+### Plan (in order; Phase A needs nothing from the owner)
+
+**A. Test the paths not yet run (API only, no code changes).** Use fresh plus-address accounts; record pass, fail or needs
+decision for each.
+1. Confirm link: expired, reused and malformed tokens; resend of the confirmation mail.
+2. Login failures: wrong password, unconfirmed address, rate limiting after repeated failures (a few attempts, one throwaway account).
+3. Password reset: request, mail, link works once, old password stops working, old sessions end.
+4. A `pending` account: what each endpoint answers; whether the admin is told of a new sign-up.
+5. Approval: make a test account admin (staging database, API container stopped, file backed up), approve a pending one, check the user gets a mail.
+Done when every item has a recorded result; failures become Phase D items.
+
+**B. Mail deliverability (owner and Claude).**
+1. Owner decision: production sends as `vershion@lefthanddev.com`; this needs Stalwart to let a sending account use that address (an alias on a dedicated sender account), or a separate sender account is kept.
+2. Send a staging mail to a mail-scoring service and read what is penalised, then fix that, not a guess (From/EHLO/PTR mismatch, headers, structure).
+3. Owner: register `lefthanddev.com` in Gmail Postmaster Tools; mark the staging mails "Not spam" from a few addresses.
+4. Re-test with fresh accounts at Gmail and one non-Gmail inbox.
+Done when a new sign-up mail reaches the inbox at both. If it cannot be fixed on a new IP and domain, record it as a known risk, keep the "check your spam" line prominent in the mail, and consider a typed code as a second way to confirm.
+
+**C. Review the app's sign-in screens (screenshots).** Sign-up, confirm, login, reset, pending: error messages, empty states, what a user sees while the mail is delayed. Check against `web-design-guidelines` and the accessibility review. Done when there is a short list of defects, each with a screenshot.
+
+**D. Code changes, driven by A and C.**
+- Expected: keep the profile (name, school) with the pending sign-up through the confirm step and ask only for the password again. **Owner decides first**: it means holding an unverified user's profile until they confirm (short expiry, pruned by the hourly job). Today confirming discards the sign-up password and profile, which mirrors the Worker.
+- Whatever A and C find, each with a server test that replays the failure. `cargo test` in `server/api` stays green (891 now); redeploy staging.
+
+**E. Verify and carry forward.** Redeploy staging and repeat the checks that failed; the owner does one full browser run from sign-up to a pool publish; copy the results and the sender decision into the cutover checklist above (sections 3, 5 and 8).
+
+### Owner decisions and risks
+- Needed: the production sender address (Phase B), yes or no on keeping the profile through confirmation (Phase D), the browser run (Phase E).
+- Risk: deliverability may not be fully fixable on a new IP and domain (mitigations above). The rate-limit test can lock its throwaway account (use a disposable one). Admin setup edits the staging database by hand (stop the API, back up the file, staging only).
