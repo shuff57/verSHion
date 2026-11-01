@@ -52,6 +52,8 @@ pub enum Screen {
     Figures,
     Settings,
     Shared,
+    /// Sign in, create an account, confirm, reset, status: the account behind sharing and hosted AI.
+    Account,
     BankEdit(Id),
     ExamEdit(Id),
 }
@@ -215,7 +217,7 @@ impl App {
         // Opened from a mailed link (/account/verify#token=..., reset, enrol): straight to it.
         #[cfg(target_arch = "wasm32")]
         if let Some(link) = crate::share::take_web_deep_link() {
-            app.screen = Screen::Settings;
+            app.screen = Screen::Account;
             app.account.open_link(link);
         }
         // Screen-capture/test hook: VERSHION_SCREEN opens a given screen on startup.
@@ -275,10 +277,10 @@ impl App {
                     }
                     Screen::Banks
                 }
-                // The Account window over Settings (QA entry until Settings has its own button).
+                // The Account screen (QA entry).
                 "account" => {
                     app.account.open();
-                    Screen::Settings
+                    Screen::Account
                 }
                 "bank" => app
                     .store
@@ -486,6 +488,10 @@ impl App {
         }
         self.mine.show(&ctx, &mut self.account, &self.store.banks);
         self.account.show(&ctx);
+        // "Open account..." anywhere in the app lands on the Account screen, not on a Shared tab.
+        if self.account.take_wants_page() {
+            self.screen = Screen::Account;
+        }
         if crate::share::shared_ui::take_goto(&ctx, &mut self.shared, &mut self.account) {
             self.screen = Screen::Shared;
         }

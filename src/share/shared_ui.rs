@@ -117,6 +117,24 @@ impl crate::App {
     }
 }
 
+impl crate::App {
+    /// The Account screen: the sign-in forms and, once signed in, the account's status. The account serves
+    /// sharing and the hosted AI alike, so it has a screen of its own rather than living under Shared.
+    pub fn draw_account_screen(&mut self, ctx: &egui::Context) {
+        crate::screens::shell_frame(self, ctx, true, |app, ui| {
+            app.account.pin();
+            egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+                ui.set_max_width(ui.available_width().min(820.0));
+                ui.add_space(6.0);
+                pageshell::title(ui, "Home  /  Account", "Account", "Optional. For sharing questions with other teachers and for the hosted AI. Everything else works without one.");
+                ui.add_space(14.0);
+                pageshell::card(ui, |ui| app.account.draw_section(ui));
+                ui.add_space(20.0);
+            });
+        });
+    }
+}
+
 impl SharedUi {
     /// The page body inside the app's shell. Models the page hosts are opened here when a tab
     /// needs them and left alone otherwise.
@@ -234,7 +252,13 @@ impl SharedUi {
                     }
                 }
                 Guide::NeedsInvite => account.draw_invite(ui),
-                Guide::Blocked(_) | Guide::Waiting | Guide::SignIn | Guide::ConfirmEmail | Guide::NoServer => account.draw_section(ui),
+                // Signing in and confirming happen on the Account screen: the account is not only for sharing.
+                Guide::SignIn | Guide::ConfirmEmail => {
+                    if kit::primary_button(ui, "Open Account").clicked() {
+                        account.reveal();
+                    }
+                }
+                Guide::Blocked(_) | Guide::Waiting | Guide::NoServer => account.draw_section(ui),
                 Guide::Ready => {}
             }
         });
