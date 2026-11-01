@@ -277,6 +277,13 @@ Nothing below has been run. Every step that touches live data, DNS, Stripe or a 
   - one pool flow from the app: browse, publish, create a circle, send a bank;
   - the browser console shows no CORS, CSP or mixed-content errors. The CSP in `server/web/_headers` must allow the API origin in `connect-src`.
   `server/api/smoke/smoke.sh` covers the same API calls without a browser, but it cannot show a cookie, CORS or deep-link failure.
+- [ ] **How the web build finds the API, and what that fixes for good** (read from the code, not yet run in a browser):
+  - The address is compiled in: `VERSHION_POOL_URL` at build time (`ShareSettings::built_in`; `build.rs` refuses an invalid one; `https://`, or `http://` only for localhost). When set it is the only server the app talks to. A release build without it shows "Sharing is not set up in this build". Set `VERSHION_POOL_URL` (and `VERSHION_LEGAL_URL` for the legal-page links) when building the production web and native apps.
+  - A typed server address exists only in debug builds or with the `pool-custom-server` feature, so for a local test use `trunk serve` and type the address on the Account screen.
+  - **Keep the API hostname the same across the cutover.** It is baked into every shipped native and web build, so repointing DNS from the Worker to the VPS needs no new app release, but a new hostname does. If the hostname must change, rebuild and redistribute first and keep the Worker answering the old name until the old builds are gone.
+  - The browser path is cookie-only: `fetch` with `credentials: "include"`, no `X-Client`, no `X-Device-Token`; `/auth/refresh` goes with no body and the HttpOnly cookie. The access token is held in memory only. So `ALLOWED_ORIGINS` must hold the exact page origin (no wildcard, no trailing slash), the page and API must be the same site (the refresh cookie is `SameSite=Strict; Secure`), and the API must be reached over https in production (`Secure`). On plain `http://localhost` Chrome and Firefox accept the cookie; Safari is untested.
+  - The page's own requests also need `X-Forwarded-For` to reach the server, which Caddy adds; a page pointed straight at the Rust port gets 403 `client_ip_required`.
+  - Local run: `ALLOWED_ORIGINS` and `APP_URL` = `http://localhost:8781` (what `trunk serve` listens on), Caddy on `:8080` in front of the API (`server/api/smoke/Caddyfile`), and `http://localhost:8080` typed as the server address. `server/api/smoke/env.example` has these values.
 
 ### 6. Stripe (live keys are yours; this port never touches them)
 

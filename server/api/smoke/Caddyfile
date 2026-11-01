@@ -1,5 +1,14 @@
-# Local Caddyfile for the first run: TLS-less front on :8080 that serves the web pages and proxies the API.
+# Local Caddyfile for the first run: TLS-less front on :8080 that proxies the API and serves the static pages.
 #   caddy run --config server/api/smoke/Caddyfile --adapter caddyfile
+#
+# The three pieces of a local browser test, and who talks to whom:
+#   1. the app's web build, from `trunk serve` (Trunk.toml)      http://localhost:8781   <- the page origin
+#   2. this Caddy, in front of the API                           http://localhost:8080   <- type this as the server address
+#   3. vershion-api, bound to loopback                           127.0.0.1:8787
+# Set ALLOWED_ORIGINS and APP_URL to the page origin (1), exactly: the browser sends credentials, so CORS needs the
+# exact origin. Page (8781) and API (8080) are different origins but the same site, so the SameSite=Strict refresh
+# cookie is sent. In a debug build (`trunk serve`) the Account screen accepts a typed server address; a release build
+# only talks to the address compiled in as VERSHION_POOL_URL (see the cutover checklist).
 #
 # Why Caddy at all: the Rust server reads the LAST X-Forwarded-For entry as the client address and answers 403
 # client_ip_required without one. Caddy appends the real peer address, so the browser works. Keep the API bound to
