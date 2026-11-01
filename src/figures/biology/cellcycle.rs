@@ -43,10 +43,14 @@ const MIN_W: f64 = 420.0;
 const INTER_R: f64 = 6.0;
 const INTER_W: f64 = 3.0;
 const TICK_OUT: f64 = 11.0;
+/// Half the length of the mark across each end of the arc.
+const CAP_HALF: f64 = 4.0;
 /// Degrees the interphase label's leader keeps from the other leaders and ticks.
 const INTER_CLEAR: f64 = 2.0;
-/// How many angles are tried for the interphase label's leader before the ring is refused.
-const INTER_TRIES: usize = 30;
+/// How far from either end of the arc the label's leader may start, at most (degrees).
+const INTER_EDGE: f64 = 3.0;
+/// The step of the last-resort search over the whole arc (degrees).
+const INTER_STEP: f64 = 0.25;
 
 const KEYS: [&str; 4] = ["g1", "s", "g2", "m"];
 const LETTER: [&str; 4] = ["G1", "S", "G2", "M"];
@@ -79,7 +83,7 @@ fn params() -> Vec<ParamDef> {
         ParamDef::choice("names", "Label style", &NAMING, NAMING[0]),
         ParamDef::bool("show_times", "Show hours and percent of the cycle", true),
         ParamDef::bool("checkpoints", "Show checkpoints", true).hint("G1/S and G2/M on the ring; the spindle checkpoint on the mitosis stages"),
-        ParamDef::bool("interphase", "Show interphase", true).hint("An arc inside the ring over G1, S and G2, labelled Interphase (it needs room beside the wedges' labels)"),
+        ParamDef::bool("interphase", "Show interphase", true).hint("An arc just outside the ring over G1, S and G2, labelled Interphase (it needs room beside the wedges' labels)"),
         ParamDef::bool("g0", "Show G0 (exit from G1)", false).hint("Needs a G1 wedge at least 20 degrees wide"),
         ParamDef::bool("mitosis", "Show the stages of M", true),
         ParamDef::choice("pointer", "Marker: the cell is at", &POINTERS, POINTERS[0]),
@@ -169,15 +173,10 @@ fn strip_unit(t: &str) -> &str {
 fn parse_hours(raw: &str) -> Result<i128, &'static str> {
     let typed = raw.trim().replace('−', "-");
     let t = strip_unit(&typed);
-    // "1,000" is a thousand hours in one country and one hour in another: say so instead of guessing
-    {
-        let b = t.trim_start_matches(['-', '+']);
-        if let Some((a, f)) = b.split_once(',') {
-            if !b.contains('.') && !f.contains(',') && f.len() == 3 && f.chars().all(|c| c.is_ascii_digit()) && !a.is_empty() && a.chars().all(|c| c.is_ascii_digit()) {
-                return Err("is ambiguous: a comma followed by three digits could be a thousands separator or a decimal comma. Type 1000 for a thousand hours or 1.000 for one.");
-            }
-        }
-    }
+    // "1,000" is a thousand hours in one country and one hour in another: say so instead of guessing. No other comma
+    // before three digits can be a thousands separator inside the 1000 hour limit (2,500 would be 2500 h), so those
+    // are decimal commas: 0,125 and 12,345 are what they look like.
+    if t.trim_start_matches('+') == "1,000" { return Err("is ambiguous: 1,000 could be a thousand hours (a thousands separator) or one hour (a decimal comma). Type 1000 for a thousand hours or 1.000 for one."); }
     let s = t.replace(',', ".");
     if s.is_empty() { return Err("is empty."); }
     let neg = s.starts_with('-');
@@ -490,6 +489,47 @@ fn staggered(g: &Geo, c: &Cfg, items: &[Item], sides: &[f64], step: f64) -> Vec<
     out
 }
 
+/// The angles (degrees clockwise from the top) where the interphase label may leave the arc `a0..a1`, best first: the
+/// middle of each stretch that keeps `margin` degrees from every other leader and tick, widest stretch first, for margins
+/// of 10, 5 and `INTER_CLEAR`; then every `INTER_STEP` of the arc that keeps `INTER_CLEAR`, the most clear first.
+fn inter_places(degs: &[f64], a0: f64, a1: f64, fine: bool) -> Vec<f64> {
+    let edge = INTER_EDGE.min((a1 - a0) / 4.0);
+    let (lo, hi) = (a0 + edge, a1 - edge);
+    let gap = |x: f64, y: f64| { let d = (x - y).abs() % 360.0; d.min(360.0 - d) };
+    let mut out: Vec<f64> = Vec::new();
+    let add = |d: f64, out: &mut Vec<f64>| { if !out.iter().any(|o| (o - d).abs() < 0.01) { out.push(d); } };
+    for margin in [10.0, 5.0, INTER_CLEAR] {
+        // the blocked stretches, then what is left of lo..hi between them
+        let mut blocked: Vec<(f64, f64)> = Vec::new();
+        for &d in degs { for sh in [-360.0, 0.0, 360.0] { blocked.push((d + sh - margin, d + sh + margin)); } }
+        blocked.sort_by(|x, y| x.0.partial_cmp(&y.0).unwrap());
+        let mut free: Vec<(f64, f64)> = Vec::new();
+        let mut at = lo;
+        for (b0, b1) in blocked {
+            if b1 <= at { continue; }
+            if b0 > at { free.push((at, b0.min(hi))); }
+            at = at.max(b1);
+            if at > hi { break; }
+        }
+        if at <= hi { free.push((at, hi)); }
+        free.retain(|f| f.1 >= f.0 && f.0 <= hi);
+        free.sort_by(|x, y| (y.1 - y.0).partial_cmp(&(x.1 - x.0)).unwrap().then(x.0.partial_cmp(&y.0).unwrap()));
+        for f in free { add((f.0 + f.1) / 2.0, &mut out); }
+    }
+    if !fine { return out; }
+    let mut grid: Vec<(f64, f64)> = Vec::new();
+    let mut q = 0u32;
+    while a0 + 0.5 + q as f64 * INTER_STEP <= a1 - 0.5 {
+        let d = a0 + 0.5 + q as f64 * INTER_STEP;
+        let room = degs.iter().map(|&x| gap(x, d)).fold(f64::MAX, f64::min);
+        if room >= INTER_CLEAR { grid.push((d, room)); }
+        q += 1;
+    }
+    grid.sort_by(|x, y| y.1.partial_cmp(&x.1).unwrap().then(x.0.partial_cmp(&y.0).unwrap()));
+    for (d, _) in grid { add(d, &mut out); }
+    out
+}
+
 fn arrange(g: &Geo, c: &Cfg, items: Vec<Item>) -> Option<Ring> {
     let n = items.len();
     let free: Vec<usize> = (0..n).filter(|&i| pol(1.0, items[i].deg).0.abs() < 0.55).collect();
@@ -553,7 +593,11 @@ fn need_times(c: &Cfg) -> bool { c.proportional || c.show_times }
 
 fn problem(class: Class, why: String) -> Problem { Problem { class, why } }
 
-fn solve(p: &Params) -> Result<Solved, Vec<Problem>> {
+fn solve(p: &Params) -> Result<Solved, Vec<Problem>> { solve_with(p, true) }
+
+/// `fine` false looks for the interphase label only at the middles of the clear stretches of the arc (quick, and what the
+/// search for advice uses deep in its tree); true goes on to every quarter degree before it gives up.
+fn solve_with(p: &Params, fine: bool) -> Result<Solved, Vec<Problem>> {
     let c = cfg(p);
     let mut bad: Vec<Problem> = Vec::new();
     // ---- the four lengths
@@ -647,41 +691,26 @@ fn solve(p: &Params) -> Result<Solved, Vec<Problem>> {
     if c.mitosis { num += 5; }
     let spindle = (c.checkpoints && c.mitosis).then(|| { num += 1; num });
     let ring = match inter_num {
-        None => arrange(&g, &c, items),
+        None => arrange(&g, &c, items.clone()),
         Some(n) => {
-            // the label of the arc leaves from a point on it: the angles nearest its middle that keep clear of every other
-            // leader, tick and the marker, tried in turn until the whole ring can be placed
-            let (a0, a1) = (bounds[0], bounds[3]);
-            let mid = (a0 + a1) / 2.0;
-            let gap = |x: f64, y: f64| { let d = (x - y).abs() % 360.0; d.min(360.0 - d) };
-            // roomy places first (nearest the middle of the arc), then tighter ones
-            let mut cands: Vec<f64> = Vec::new();
-            for margin in [10.0, 5.0, INTER_CLEAR] {
-                let mut here: Vec<f64> = Vec::new();
-                let mut d = a0 + 1.0;
-                while d <= a1 - 1.0 {
-                    if items.iter().all(|it| gap(it.deg, d) >= margin) && !cands.contains(&d) { here.push(d); }
-                    d += 1.0;
-                }
-                here.sort_by(|x, y| (x - mid).abs().partial_cmp(&(y - mid).abs()).unwrap());
-                // the nearest few, then a spread over the rest of the arc
-                cands.extend(here.iter().enumerate().filter(|(q, _)| *q < 6 || q % 8 == 0).map(|(_, d)| *d));
-            }
-            cands.truncate(INTER_TRIES);
-            if cands.is_empty() {
-                return Err(vec![problem(Class::Layout, format!(
-                    "The interphase arc covers only {:.1} degrees, with no clear place beside the leaders and checkpoints of the wedges it spans to attach its label.", a1 - a0))]);
-            }
-            let mut found = None;
-            for d in cands {
+            // the label of the arc leaves from a point on it: the middle of the widest stretch that keeps clear of every
+            // other leader and tick, then narrower ones, then every quarter degree of the arc, until the whole ring can
+            // be placed
+            let degs: Vec<f64> = items.iter().map(|it| it.deg).collect();
+            inter_places(&degs, bounds[0], bounds[3], fine).into_iter().find_map(|d| {
                 let mut its = items.clone();
                 its.push(mk(n, IKind::Inter, d, pol(g.r + INTER_R * c.k, d), &c, &g));
-                if let Some(r) = arrange(&g, &c, its) { found = Some(r); break; }
-            }
-            found
+                arrange(&g, &c, its)
+            })
         }
     };
     let Some(ring) = ring else {
+        // is the arc the reason? the same ring without it decides
+        let without = Cfg { interphase: false, ..c.clone() };
+        if inter_num.is_some() && arrange(&g, &without, items).is_some() {
+            return Err(vec![problem(Class::Layout, format!(
+                "The interphase arc and its label cannot be placed with these wedges: the {:.1} degrees of G1, S and G2 leave no place for the label that keeps it clear of the other labels, leaders and checkpoints.", bounds[3] - bounds[0]))]);
+        }
         return Err(vec![problem(Class::Layout, "The labels, checkpoints and leader lines cannot be placed round this ring without touching or crossing each other.".into())]);
     };
     Ok(Solved { cfg: c, geo: g, h: hh, tenths: sh, adjusted: adj, raised, bounds, ring, n2, strip_first, spindle, tick_num })
@@ -805,12 +834,31 @@ const MAX_STEPS: usize = 3;
 /// first, so the natural fix comes before a fallback). None when no list of up to `MAX_STEPS` steps draws.
 fn advice_plan(p: &Params) -> Option<(String, Params)> { advice_steps(p).map(|(v, q)| (v.join(" "), q)) }
 
-/// The same plan as separate sentences.
+/// The same plan as separate sentences. Found with the quick layout search (the label of the interphase arc tried only at
+/// the middles of the clear stretches), which is what makes the search affordable: a figure it draws is drawn by the full
+/// search too. A one-step fix is then looked for with the full search, so that no single change is missed; a search that
+/// finds nothing quick is repeated in full.
 fn advice_steps(p: &Params) -> Option<(Vec<String>, Params)> {
     if solve(p).is_ok() { return Some((Vec::new(), p.clone())); }
+    match advice_search(p, false) {
+        Some(found) if found.0.len() == 1 => Some(found),
+        Some(found) => {
+            let ps = solve(p).err().unwrap_or_default();
+            let one = moves(p, &ps).into_iter().find_map(|(sentence, edits)| {
+                let q = set(p, &edits);
+                solve(&q).is_ok().then(|| (vec![sentence], q))
+            });
+            one.or(Some(found))
+        }
+        None => advice_search(p, true),
+    }
+}
+
+/// Breadth-first over the steps of `moves`, each state solved with the quick or the full layout search.
+fn advice_search(p: &Params, fine: bool) -> Option<(Vec<String>, Params)> {
     let key = |q: &Params| format!("{:?}", q.0);
     let mut seen = vec![key(p)];
-    let mut frontier: Vec<(Vec<String>, Params, Vec<Problem>)> = vec![(Vec::new(), p.clone(), solve(p).err().unwrap_or_default())];
+    let mut frontier: Vec<(Vec<String>, Params, Vec<Problem>)> = vec![(Vec::new(), p.clone(), solve_with(p, fine).err().unwrap_or_default())];
     for _ in 0..MAX_STEPS {
         let mut next = Vec::new();
         for (steps, work, ps) in &frontier {
@@ -821,7 +869,7 @@ fn advice_steps(p: &Params) -> Option<(Vec<String>, Params)> {
                 seen.push(k);
                 let mut st2 = steps.clone();
                 st2.push(sentence);
-                match solve(&q) {
+                match solve_with(&q, fine) {
                     Ok(_) => return Some((st2, q)),
                     Err(qs) => next.push((st2, q, qs)),
                 }
@@ -832,18 +880,36 @@ fn advice_steps(p: &Params) -> Option<(Vec<String>, Params)> {
     None
 }
 
+thread_local! {
+    /// The last refusal, with the settings it was worked out for: the canvas and the note both ask for it, and the layout
+    /// search and the search for advice are the slow part of a refusal.
+    static REFUSED: std::cell::RefCell<Option<(String, Refusal)>> = const { std::cell::RefCell::new(None) };
+    /// How many times the search for advice has run on this thread (the test reads it).
+    static ADVICE_RUNS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 fn refusal(p: &Params, ps: &[Problem]) -> Refusal {
     let why: Vec<String> = ps.iter().map(|x| x.why.clone()).collect();
+    ADVICE_RUNS.with(|n| n.set(n.get() + 1));
     let then = match advice_plan(p) { Some((a, _)) => format!("To draw it: {a}"), None => "Nothing is drawn until this is changed.".to_string() };
     Refusal { why, then }
 }
 
-pub fn read(p: &Params) -> Result<(), Refusal> {
+/// The solved figure, or the refusal: worked out once for the same settings however often it is asked for.
+fn refused(p: &Params) -> Result<Solved, Refusal> {
+    let key = format!("{:?}", p.0);
+    if let Some(e) = REFUSED.with(|r| r.borrow().as_ref().filter(|(k, _)| *k == key).map(|(_, e)| e.clone())) { return Err(e); }
     match solve(p) {
-        Ok(_) => Ok(()),
-        Err(ps) => Err(refusal(p, &ps)),
+        Ok(s) => Ok(s),
+        Err(ps) => {
+            let e = refusal(p, &ps);
+            REFUSED.with(|r| *r.borrow_mut() = Some((key, e.clone())));
+            Err(e)
+        }
     }
 }
+
+pub fn read(p: &Params) -> Result<(), Refusal> { refused(p).map(|_| ()) }
 
 pub fn warnings(p: &Params) -> Vec<String> {
     match read(p) {
@@ -892,11 +958,8 @@ fn message(why: &[String], then: &str, lab: f64, print: bool) -> String {
 
 pub fn build(p: &Params) -> String {
     let lab = svg::label_factor(p.s("label_size"));
-    match solve(p) {
-        Err(ps) => {
-            let e = refusal(p, &ps);
-            message(&e.why, &e.then, lab, p.s("style") == "Print")
-        }
+    match refused(p) {
+        Err(e) => message(&e.why, &e.then, lab, p.s("style") == "Print"),
         Ok(s) => draw(p, &s),
     }
 }
@@ -1005,17 +1068,20 @@ fn draw(p: &Params, s: &Solved) -> String {
     let miss = s.tenths.map_or(0, |t| residual(&t));
     if c.show_times && (!s.adjusted.is_empty() || miss != 0) {
         if key {
+            let sum = s.tenths.map_or(0, |t| t.iter().sum::<i64>());
             if !s.adjusted.is_empty() {
                 let list: Vec<String> = s.adjusted.iter().map(|(i, d)| format!("{} by {}0.1", LETTER[*i], if *d > 0 { "+" } else { "-" })).collect();
-                cap.push_str(&format!(" Percents are rounded half up to 0.1 and made to add to exactly 100.0 by changing {} ({} rounded {} furthest).",
-                    list.join(" and "), if list.len() == 1 { "the phase" } else { "the phases" }, if s.adjusted[0].1 > 0 { "down" } else { "up" }));
-            }
-            if miss != 0 {
-                let sum = s.tenths.map_or(0, |t| t.iter().sum::<i64>());
+                let which = format!("{} ({} rounded {} furthest)", list.join(" and "), if list.len() == 1 { "the phase" } else { "the phases" }, if s.adjusted[0].1 > 0 { "down" } else { "up" });
+                if miss == 0 {
+                    cap.push_str(&format!(" Percents are rounded half up to 0.1 and made to add to exactly 100.0 by changing {which}."));
+                } else {
+                    cap.push_str(&format!(" Percents are rounded half up to 0.1, then {which} is changed; no share moves more than 0.1 from its exact value and phases with equal hours stay equal, so they add to {} rather than 100.0.", fmt_tenths(sum)));
+                }
+            } else if miss != 0 {
                 cap.push_str(&format!(" Phases with equal hours show equal percents, so the shares are printed as rounded and add to {} rather than 100.0.", fmt_tenths(sum)));
             }
         } else {
-            cap.push_str(" Round each percent half up to 0.1; wedges with equal hours get equal percents. If the four then do not add to 100.0, change by 0.1 the one that was rounded furthest the wrong way (down if short, up if over; the earlier wedge on a tie), and repeat until they do. Do not change a wedge whose hours equal another wedge's hours; if the sum then stays off, leave it.");
+            cap.push_str(" Round each percent half up to 0.1; wedges with equal hours get equal percents. If the four then do not add to 100.0, change by 0.1 the one that was rounded furthest the wrong way (down if short, up if over; the earlier wedge on a tie), and repeat until they do. Only a wedge whose hours differ from every other wedge's may be changed, and never to a value 0.1 or more away from its exact share; if no wedge can be changed, leave the sum as it is.");
         }
     }
     if let Some(ptr) = c.pointer {
@@ -1075,6 +1141,11 @@ fn draw(p: &Params, s: &Solved) -> String {
         let (p0, p1) = (ab(pol(ra, a0)), ab(pol(ra, a1)));
         let large = (a1 - a0 > 180.0) as u8;
         d.path(&format!("M{:.2},{:.2} A{ra:.2},{ra:.2} 0 {large} 1 {:.2},{:.2}", p0.0, p0.1, p1.0, p1.1), "none", INK, INTER_W * c.k);
+        // a short mark across each end, so the arc ends where G1 starts and where G2 ends, with or without a tick
+        for deg in [a0, a1] {
+            let (u, v) = (ab(pol(ra - CAP_HALF * c.k, deg)), ab(pol(ra + CAP_HALF * c.k, deg)));
+            d.path(&format!("M{:.2},{:.2} L{:.2},{:.2}", u.0, u.1, v.0, v.1), "none", INK, 1.6 * c.k);
+        }
     }
     // ticks
     if c.checkpoints {
@@ -1224,7 +1295,7 @@ fn draw(p: &Params, s: &Solved) -> String {
             d.line(tx, strip_tick_y - 1.0, tx, box_top + box_h + 4.0, "#ffffff", 5.5);
             d.line(tx, strip_tick_y - 1.0, tx, box_top + box_h + 4.0, INK, 2.4);
             let ly = strip_tick_y - g.disc - 3.0;
-            let name = if c.full { "Spindle checkpoint" } else { "Spindle" };
+            let name = if c.full { "Spindle (M) checkpoint" } else { "Spindle (M)" };
             let tw_ = if key { tw(name, fs, true) + 6.0 } else { 0.0 };
             let total = 2.0 * g.disc + tw_;
             let left = tx - total / 2.0;
@@ -1540,6 +1611,10 @@ mod tests {
                 let edge = if band_of(svg).is_some() { ro + (INTER_R + INTER_W / 2.0) * k + 1.0 } else { ro + 1.0 };
                 if r > ri - 1.0 && r < edge && !ts[i].s.chars().all(|c| c.is_ascii_digit()) { bad.push(format!("text {:?} sits on the ring or its band", ts[i].s)); }
             }
+            // and every label keeps the distance the layout promises from the ring: 11 px (scaled) beyond the band, 6 without it
+            let near = (0.0f64.max(bx.0 - c.0).max(c.0 - bx.2)).hypot(0.0f64.max(bx.1 - c.1).max(c.1 - bx.3));
+            let want = if band_of(svg).is_some() { ro + 11.0 * k } else { ro + 6.0 };
+            if near > ri + 1.0 && near < want - 0.6 { bad.push(format!("text {:?} is {:.1} px from the ring centre, nearer than the layout allows ({:.1})", ts[i].s, near, want)); }
         }
         bad.sort();
         bad.dedup();
@@ -1589,9 +1664,13 @@ mod tests {
         assert_eq!(build(&p), render_of(&[]));
         assert!(warnings(&p).is_empty());
         assert_eq!(params().iter().find(|d| d.key == "label_size").unwrap().default, Value::S("Medium".into()));
+        // the hints say what is drawn: the arc is outside the ring, the comma is decimal
+        let hint = |k: &str| params().into_iter().find(|d| d.key == k).unwrap().hint;
+        assert!(hint("interphase").contains("just outside the ring") && !hint("interphase").contains("inside the ring over"), "{}", hint("interphase"));
+        assert!(hint("g1").contains("5,5"));
     }
 
-    const AMBIGUOUS: &str = "is ambiguous: a comma followed by three digits could be a thousands separator or a decimal comma. Type 1000 for a thousand hours or 1.000 for one.";
+    const AMBIGUOUS: &str = "is ambiguous: 1,000 could be a thousand hours (a thousands separator) or one hour (a decimal comma). Type 1000 for a thousand hours or 1.000 for one.";
 
     #[test]
     fn hours_are_read_exactly() {
@@ -1609,7 +1688,8 @@ mod tests {
             // letters that lowercase to a different length (Kelvin sign, capital sharp s, dotted capital I) never cut through a character
             ("\u{212A}h", "is not a number."), ("\u{1E9E}h", "is not a number."), ("\u{212A}\u{212A}hours", "is not a number."), ("\u{130}h", "is not a number."), ("5\u{212A}", "is not a number."),
             ("e\u{301}h", "is not a number."), ("\u{1F600}h", "is not a number."), ("h\u{1F600}", "is not a number."), ("5 h\u{301}", "is not a number."),
-            ("1,000", AMBIGUOUS), ("5,500", AMBIGUOUS), ("+1,000 h", AMBIGUOUS),
+            ("1,000", AMBIGUOUS), ("+1,000 h", AMBIGUOUS), ("1,000 hours", AMBIGUOUS),
+            ("-1,000", "is negative."), ("1,0000", "has more than 3 decimal places."), ("1,000,000", "is not a number."),
         ] {
             assert_eq!(parse_hours(typed), Err(why), "{typed:?}");
         }
@@ -1756,7 +1836,7 @@ mod tests {
         let svg = render_of(&[]);
         let t = flat(&svg);
         for want in ["G1 (first gap)", "11 h · 45.8 %", "S (DNA synthesis)", "8 h · 33.3 %", "G2 (second gap)", "4 h · 16.7 %", "M (mitosis and cytokinesis)", "1 h · 4.2 %", "Total: 24 h",
-            "G1/S checkpoint", "G2/M checkpoint", "Interphase", "Spindle checkpoint", "Prophase", "Metaphase", "Anaphase", "Telophase", "Cytokinesis", "Cell cycle"] {
+            "G1/S checkpoint", "G2/M checkpoint", "Interphase", "Spindle (M) checkpoint", "Prophase", "Metaphase", "Anaphase", "Telophase", "Cytokinesis", "Cell cycle"] {
             assert!(t.contains(want), "missing {want:?} in\n{t}");
         }
         assert!(!t.contains("G0") && !t.contains("At the marker"), "{t}");
@@ -1765,7 +1845,7 @@ mod tests {
         assert!(!joined(&render_of(&[b(SHOW_ANSWERS, false)])).contains("45.8"));
         // Letters
         let l = joined(&render_of(&[s("names", "Letters"), b("g0", true)]));
-        assert!(l.contains("G1\n") && l.contains("G0\n") && !l.contains("first gap") && l.contains("G1/S\n") && l.contains("Spindle\n"), "{l}");
+        assert!(l.contains("G1\n") && l.contains("G0\n") && !l.contains("first gap") && l.contains("G1/S\n") && l.contains("Spindle (M)\n"), "{l}");
     }
 
     #[test]
@@ -1871,7 +1951,10 @@ mod tests {
             if !ps.iter().any(|x| x.class == Class::Layout) { continue; }
             found += 1;
             let e = read(&p).unwrap_err();
-            assert!(e.why.iter().any(|w| w.contains("cannot be placed round this ring") || w.contains("The interphase arc covers only")), "{e}");
+            let arc = e.why.iter().any(|w| w.contains("The interphase arc and its label cannot be placed"));
+            assert!(arc || e.why.iter().any(|w| w.contains("cannot be placed round this ring")), "{e}");
+            // the reason names the arc exactly when the arc is what stops the ring: the same figure without it draws
+            assert_eq!(arc, solve(&set(&p, &[("interphase", Value::B(false))])).is_ok(), "{l:?}: {e}");
             let (text, fixed) = advice_plan(&p).unwrap_or_else(|| panic!("{l:?}: no advice"));
             assert!(solve(&fixed).is_ok(), "{text}");
         }
@@ -2179,6 +2262,7 @@ mod tests {
         // the marker, the range and the percent rule (none names a stage, a phase or an answer)
         "heavy", "outline", "triangle", "mark", "marks", "where", "box", "A", "range", "means", "amount", "changes", "during", "stage", "count",
         "get", "percents", "If", "Do", "s", "whose", "hours", "another", "sum", "stays", "off", "leave", "equal",
+        "Only", "differ", "every", "may", "changed", "never", "value", "or", "more", "away", "exact", "share", "no", "as",
     ];
 
     #[test]
@@ -2455,12 +2539,19 @@ mod tests {
     }
 
     #[test]
-    fn a_comma_before_three_digits_is_not_guessed() {
-        for typed in ["1,000", "5,500", "12,345 h"] {
+    fn a_comma_before_three_digits_is_refused_only_when_both_readings_are_possible() {
+        // 1,000 is the only one that is a thousand hours (a thousands separator) or one hour (a decimal comma)
+        for typed in ["1,000", "1,000 h", "+1,000"] {
             let e = read(&with(&[s("g1", typed)])).unwrap_err().why.join(" ");
-            assert!(e.contains(&format!("G1 length \"{typed}\" is ambiguous")) && e.contains("Type 1000 for a thousand hours or 1.000 for one."), "{e}");
+            assert!(e.contains("is ambiguous") && e.contains("Type 1000 for a thousand hours or 1.000 for one."), "{e}");
         }
-        // the decimal comma with one, two or four digits is still a decimal comma, and the two clear ways to type it work
+        // every other comma before three digits cannot be a thousands separator inside the 1000 hour limit, so it is a decimal comma
+        for (typed, units) in [("0,125", 125), ("0,001", 1), ("5,500", 5500), ("12,345", 12_345), ("2,375", 2375), ("1000,000", 1_000_000), ("01,000", 1000), ("999,999 h", 999_999), ("1,001", 1001), ("1,500", 1500)] {
+            assert_eq!(parse_hours(typed), Ok(units), "{typed}");
+        }
+        // and a figure typed that way draws as what it says
+        assert!(!is_refusal(&render_of(&[s("g1", "0,125")])));
+        assert!(flat(&render_of(&[s("g1", "12,345")])).contains("12.345 h"));
         assert_eq!(parse_hours("1,5"), Ok(1500));
         assert_eq!(parse_hours("1,25"), Ok(1250));
         assert_eq!(parse_hours("1000"), Ok(1_000_000));
@@ -2480,11 +2571,272 @@ mod tests {
         let mut st = l.to_vec();
         st.push(b(SHOW_ANSWERS, false));
         let stu = flat(&render_of(&st));
-        assert!(stu.contains("wedges with equal hours get equal percents") && stu.contains("Do not change a wedge whose hours equal another wedge's hours"), "{stu}");
+        assert!(stu.contains("wedges with equal hours get equal percents") && stu.contains("Only a wedge whose hours differ from every other wedge's may be changed"), "{stu}");
         assert!(!stu.contains("100.2") && !stu.contains("0.3"), "{stu}");
         // a change that is made is named and does not split equal phases
         let key = flat(&render_of(&[s("g1", "1"), s("s", "1"), s("g2", "1"), s("m", "300"), b("interphase", false)]));
         assert!(key.contains("made to add to exactly 100.0 by changing M by +0.1"), "{key}");
+    }
+
+    /// The student's rule followed to the letter, with exact rationals and nothing shared with `shares`: round half up,
+    /// then while the sum is off change by 0.1 the changeable wedge rounded furthest the wrong way (the earlier on a tie).
+    /// A wedge is changeable when its hours differ from every other wedge's and the changed value is under 0.1 from its
+    /// exact share; with none changeable, stop.
+    fn student_rule(h: &[i128; 4]) -> [i64; 4] {
+        let total: i128 = h.iter().sum();
+        let mut t = [0i64; 4];
+        for i in 0..4 { t[i] = ((2 * h[i] * 1000 + total) / (2 * total)) as i64; }
+        loop {
+            let short = 1000 - t.iter().sum::<i64>();
+            if short == 0 { break; }
+            let off = |i: usize| t[i] as i128 * total - h[i] * 1000;
+            let may: Vec<usize> = (0..4).filter(|&i| (0..4).all(|j| j == i || h[j] != h[i]) && (off(i) + short.signum() as i128 * total).abs() < total).collect();
+            let pick = if short > 0 { may.iter().copied().min_by_key(|&i| (off(i), i)) } else { may.iter().copied().max_by_key(|&i| (off(i), -(i as i64))) };
+            let Some(i) = pick else { break };
+            t[i] += short.signum();
+        }
+        t
+    }
+
+    /// The shares a key prints, by phase, read back from the figure.
+    fn printed_shares(svg: &str, hours: &[&str; 4]) -> [i64; 4] {
+        let lines: Vec<(String, String)> = texts(svg).iter().filter_map(|t| t.s.split_once(" h · ").map(|(a, c)| (a.to_string(), c.to_string()))).collect();
+        let mut out = [0i64; 4];
+        for i in 0..4 {
+            let want = fmt_units(parse_hours(hours[i]).unwrap());
+            let (_, pc) = lines.iter().find(|(a, _)| *a == want).unwrap_or_else(|| panic!("no line for {want} h in {lines:?}"));
+            let (w, f) = pc.trim_end_matches(" %").split_once('.').unwrap();
+            out[i] = w.parse::<i64>().unwrap() * 10 + f.parse::<i64>().unwrap();
+        }
+        out
+    }
+
+    #[test]
+    fn the_student_rule_followed_literally_gives_the_keys_shares_and_the_caption_is_true() {
+        // the critic's cases: three equal phases whose shares end exactly in 5
+        for h in [[1, 1, 1, 13], [2, 2, 2, 26], [13, 1, 1, 1], [1, 13, 1, 1], [1, 1, 13, 1]] {
+            let hu = h.map(|x| x as i128 * 1000);
+            assert_eq!(shares(&hu).0, student_rule(&hu), "{h:?}");
+        }
+        assert_eq!(student_rule(&[1000, 1000, 1000, 13000]), [63, 63, 63, 812]);
+        let key = flat(&render_of(&[s("g1", "1"), s("s", "1"), s("g2", "1"), s("m", "13")]));
+        assert!(key.contains("6.3 %") && key.contains("81.2 %"), "{key}");
+        // what happened, and what the sum is: M changed, the sum is still off
+        assert!(key.contains("then M by -0.1 (the phase rounded up furthest) is changed"), "{key}");
+        assert!(key.contains("no share moves more than 0.1 from its exact value and phases with equal hours stay equal, so they add to 100.1 rather than 100.0."), "{key}");
+        assert!(!key.contains("exactly 100.0") && !key.contains("printed as rounded"), "{key}");
+        // the student's rule states the limit that gives that answer
+        let stu = flat(&render_of(&[s("g1", "1"), s("s", "1"), s("g2", "1"), s("m", "13"), b(SHOW_ANSWERS, false)]));
+        assert!(stu.contains("never to a value 0.1 or more away from its exact share") && stu.contains("if no wedge can be changed, leave the sum as it is"), "{stu}");
+        // the rule, every pair or triple of equal hours: the key's shares are the student's
+        let (mut changed_and_off, mut changed_and_100) = (0, 0);
+        for a in 1..=30i128 {
+            for c in 1..=30i128 {
+                for d in 1..=30i128 {
+                    let mut sets: Vec<[i128; 4]> = Vec::new();
+                    for (i, j) in [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)] {
+                        let mut r = [c, d].into_iter();
+                        let mut h = [0i128; 4];
+                        for q in 0..4 { h[q] = if q == i || q == j { a } else { r.next().unwrap() }; }
+                        sets.push(h);
+                    }
+                    if c == d { for q in 0..4 { let mut v = [a; 4]; v[q] = c; sets.push(v); } }
+                    for h in sets {
+                        let hu = h.map(|x| x * 1000);
+                        let (t, ch) = shares(&hu);
+                        assert_eq!(t, student_rule(&hu), "{h:?}");
+                        if !ch.is_empty() { if residual(&t) != 0 { changed_and_off += 1 } else { changed_and_100 += 1 } }
+                    }
+                }
+            }
+        }
+        // the family really reaches the case the critic found, and the ordinary one
+        assert!(changed_and_off > 100 && changed_and_100 > 1000, "{changed_and_off} {changed_and_100}");
+        // a sample drawn: the printed shares are the student's, and the caption says what was done and what the sum is
+        let mut r = Rng(0x5eed_1);
+        let mut seen = [0usize; 3];
+        for n in 0..500 {
+            let a = 1 + r.below(30) as i128;
+            let mut h = [a, a, a, 1 + r.below(30) as i128];
+            if n % 2 == 0 { h[2] = 1 + r.below(30) as i128; }
+            h.rotate_left(r.below(4));
+            let hs: Vec<String> = h.iter().map(|x| x.to_string()).collect();
+            let svg = render_of(&[s("g1", &hs[0]), s("s", &hs[1]), s("g2", &hs[2]), s("m", &hs[3])]);
+            if is_refusal(&svg) { continue; }
+            let hu = h.map(|x| x * 1000);
+            assert_eq!(printed_shares(&svg, &[&hs[0], &hs[1], &hs[2], &hs[3]]), student_rule(&hu), "{h:?}");
+            let (t, ch) = shares(&hu);
+            let miss = residual(&t);
+            let cap = flat(&svg);
+            let sum = fmt_tenths(t.iter().sum::<i64>());
+            assert_eq!(cap.contains("made to add to exactly 100.0"), !ch.is_empty() && miss == 0, "{h:?}: {cap}");
+            assert_eq!(cap.contains(&format!("add to {sum} rather than 100.0")), miss != 0, "{h:?}: {cap}");
+            assert_eq!(cap.contains("shares are printed as rounded"), ch.is_empty() && miss != 0, "{h:?}: {cap}");
+            assert_eq!(cap.contains("is changed; no share moves more than 0.1 from its exact value"), !ch.is_empty() && miss != 0, "{h:?}: {cap}");
+            seen[if ch.is_empty() && miss != 0 { 0 } else if miss != 0 { 1 } else { 2 }] += 1;
+        }
+        assert!(seen[0] > 0 && seen[1] > 0 && seen[2] > 0, "every caption is reached: {seen:?}");
+    }
+
+    /// Where each leader starts, read back from the figure: (the ring's centre, its outer radius, the starts).
+    fn leader_starts(svg: &str) -> (P, f64, Vec<P>) {
+        let (c, ro, _, _) = ring_of(svg);
+        (c, ro, polylines(svg).iter().map(|l| l[0]).collect())
+    }
+
+    #[test]
+    fn the_interphase_label_leaves_the_arc_clear_of_every_other_answer() {
+        let mut cases: Vec<Vec<(&'static str, Value)>> = vec![vec![], vec![b("g0", true), s("wedges", "Equal")], vec![s("g1", "1"), s("s", "1"), s("g2", "199"), s("m", "199")], vec![b(SHOW_ANSWERS, false)],
+            vec![s("g1", "60"), s("s", "30"), s("g2", "9"), s("m", "1"), b("g0", true)], vec![s("g1", "30"), s("s", "10"), s("g2", "5"), s("m", "2"), b("checkpoints", false)]];
+        for size in ["Small", "Large"] { for ptr in ["None", "S", "Metaphase"] { cases.push(vec![s("label_size", size), s("pointer", ptr)]); } }
+        let mut least = f64::MAX;
+        for l in cases {
+            let svg = render_of(&l);
+            assert!(!is_refusal(&svg), "{l:?}");
+            let (c, ro, starts) = leader_starts(&svg);
+            let k = ro / R0;
+            let on_band: Vec<usize> = (0..starts.len()).filter(|&i| ((starts[i].0 - c.0).hypot(starts[i].1 - c.1) - (ro + INTER_R * k)).abs() < 0.02).collect();
+            assert_eq!(on_band.len(), 1, "{l:?}: one leader starts on the band");
+            let ang = |q: P| (q.0 - c.0).atan2(c.1 - q.1).to_degrees();
+            let me = ang(starts[on_band[0]]);
+            for (i, q) in starts.iter().enumerate() {
+                if i == on_band[0] { continue; }
+                let d = (me - ang(*q)).abs() % 360.0;
+                let gap = d.min(360.0 - d);
+                least = least.min(gap);
+                assert!(gap >= 10.0 - 1e-6, "{l:?}: the interphase dot is only {gap:.1} degrees from another answer's dot at {q:?}");
+            }
+        }
+        println!("least angle between the interphase dot and another leader start: {least:.1} degrees");
+    }
+
+    /// The short marks across the ends of the interphase arc: paths of one straight segment, not filled.
+    fn caps_of(svg: &str) -> Vec<(P, P)> {
+        svg.split("<path ").skip(1).filter_map(|g| {
+            let g = g.split('>').next().unwrap();
+            let d = attr(g, "d")?;
+            if attr(g, "fill")? != "none" || d.matches('L').count() != 1 || d.matches('M').count() != 1 || d.contains('A') || d.contains('Z') || d.contains('C') { return None; }
+            if (num(g, "stroke-width") - 1.6 * ring_of(svg).1 / R0).abs() > 0.01 { return None; }
+            let n = nums_of(&d);
+            Some(((n[0], n[1]), (n[2], n[3])))
+        }).collect()
+    }
+
+    #[test]
+    fn the_arc_has_a_mark_across_each_end_with_or_without_checkpoints() {
+        for l in [vec![], vec![b("checkpoints", false)], vec![b("checkpoints", false), s("g1", "60"), s("s", "30"), s("g2", "9"), s("m", "0.1")], vec![s("label_size", "Large"), b(SHOW_ANSWERS, false)]] {
+            let svg = render_of(&l);
+            let (c, ro, _, sp) = ring_of(&svg);
+            let k = ro / R0;
+            let ang = |q: P| { let a = (q.0 - c.0).atan2(c.1 - q.1).to_degrees(); if a < -1e-6 { a + 360.0 } else { a } };
+            let caps = caps_of(&svg);
+            assert_eq!(caps.len(), 2, "{l:?}");
+            let (_, a0, a1) = band_of(&svg).unwrap();
+            for (cap, at) in caps.iter().zip([a0, a1]) {
+                let (r0, r1) = ((cap.0 .0 - c.0).hypot(cap.0 .1 - c.1), (cap.1 .0 - c.0).hypot(cap.1 .1 - c.1));
+                assert!((ang(cap.0) - at).abs() < 0.05 && (ang(cap.1) - at).abs() < 0.05, "{l:?}: the mark is at the end of the arc ({at}), not at {} / {}", ang(cap.0), ang(cap.1));
+                assert!(r0.min(r1) < ro + INTER_R * k - INTER_W * k / 2.0 && r0.max(r1) > ro + INTER_R * k + INTER_W * k / 2.0, "{l:?}: the mark crosses the band");
+            }
+            assert!((a0 - (sp[0].0 + 0.4)).abs() < 0.1 && (a1 - (sp[2].1 - 0.4)).abs() < 0.1);
+        }
+        // no arc, no marks
+        assert!(caps_of(&render_of(&[b("interphase", false)])).is_empty());
+    }
+
+    #[test]
+    fn the_spindle_blank_is_keyed_with_both_textbook_names() {
+        let key = joined(&render_of(&[]));
+        assert_eq!(key.matches("Spindle (M) checkpoint").count(), 1, "{key}");
+        let letters = joined(&render_of(&[s("names", "Letters")]));
+        assert!(letters.contains("Spindle (M)\n") && !letters.contains("checkpoint"), "{letters}");
+        let stu = joined(&render_of(&[b(SHOW_ANSWERS, false)]));
+        assert!(!stu.to_lowercase().contains("spindle") && !stu.contains("(M)"), "{stu}");
+    }
+
+    #[test]
+    fn a_refusal_is_searched_once_for_the_canvas_and_the_note() {
+        let p = with(&[s("g1", "1"), s("s", "1"), s("g2", "1"), s("m", "300"), s("label_size", "Large"), s("pointer", "Telophase")]);
+        let before = ADVICE_RUNS.with(|n| n.get());
+        let svg = (def().render)(&p);
+        let note = warnings(&p);
+        let again = (def().render)(&p);
+        assert!(is_refusal(&svg) && note.len() == 1 && svg == again);
+        assert_eq!(ADVICE_RUNS.with(|n| n.get()) - before, 1, "one search for the canvas, the note and a second draw");
+        // a different figure is searched on its own
+        let q = set(&p, &[("g1", st("2"))]);
+        let _ = (def().render)(&q);
+        assert_eq!(ADVICE_RUNS.with(|n| n.get()) - before, 2);
+        // and the advice the note carries is the advice the canvas carries
+        assert!(note[0].contains(&read(&p).unwrap_err().then));
+    }
+
+    #[test]
+    fn the_places_for_the_interphase_label_are_widest_stretch_first_then_every_quarter_degree() {
+        // an arc 0..100 degrees with two other leaders at 20 and 25
+        let degs = [20.0, 25.0];
+        let quick = inter_places(&degs, 0.0, 100.0, false);
+        // 10 degrees clear of both: 3..10 and 35..97, the wider first, each at its middle
+        assert_eq!(&quick[..2], &[66.0, 6.5], "{quick:?}");
+        // then 5 degrees clear: 3..15 and 30..97; then the tightest allowed, 2 degrees
+        assert!(quick.contains(&63.5) && quick.contains(&9.0), "{quick:?}");
+        assert!(quick.iter().position(|d| *d == 63.5).unwrap() > 1);
+        let gap = |x: f64, y: f64| (x - y).abs();
+        for d in &quick { assert!(degs.iter().all(|o| gap(*d, *o) >= INTER_CLEAR - 1e-9) && *d >= 0.0 && *d <= 100.0, "{d}"); }
+        // the full search adds every quarter degree of the arc that keeps INTER_CLEAR, the roomiest first, and loses nothing
+        let full = inter_places(&degs, 0.0, 100.0, true);
+        assert_eq!(&full[..quick.len()], &quick[..]);
+        assert!(full.len() > quick.len() + 300, "{}", full.len());
+        for d in &full[quick.len()..] { assert!((((d - 0.5) / INTER_STEP).round() * INTER_STEP + 0.5 - d).abs() < 1e-9 && degs.iter().all(|o| gap(*d, *o) >= INTER_CLEAR - 1e-9), "{d}"); }
+        assert!(full.contains(&22.5) && full.contains(&99.5) && full.contains(&0.5) && !full.contains(&99.75));
+        // an arc with every angle within 2 degrees of something has no place
+        assert!(inter_places(&[0.0, 3.0, 6.0, 9.0, 12.0], 0.0, 12.0, true).is_empty());
+        // a leader just before the top (359 degrees) blocks the start of the arc: 9..97 is the stretch
+        assert_eq!(inter_places(&[359.0], 0.0, 100.0, false)[0], 53.0);
+    }
+
+    #[test]
+    fn a_label_place_only_the_full_search_finds_is_found_and_drawn_clean() {
+        // the critic's, and one found by sweeping: the quick search (middles of the clear stretches) refuses them, the full one draws them
+        let cases: Vec<Vec<(&'static str, Value)>> = vec![
+            vec![s("g1", "25.170"), s("s", "0.115"), s("g2", "0.054"), s("m", "0.396"), s("label_size", "Large")],
+            vec![s("g1", "0.935"), s("s", "95.773"), s("g2", "1.120"), s("m", "0.518"), s("label_size", "Large"), s("style", "Print"), s("pointer", "Metaphase"), s("readout", "None")],
+        ];
+        for l in cases {
+            let p = with(&l);
+            let quick = solve_with(&p, false);
+            assert!(quick.as_ref().err().is_some_and(|e| e.iter().all(|x| x.class == Class::Layout)), "{l:?}: the quick search should refuse it");
+            assert!(solve(&p).is_ok(), "{l:?}: the full search finds a place");
+            let svg = (def().render)(&p);
+            assert!(!is_refusal(&svg) && band_of(&svg).is_some(), "{l:?}");
+            assert_eq!(collisions(&svg), Vec::<String>::new(), "{l:?}");
+        }
+    }
+
+    #[test]
+    fn a_one_step_fix_that_only_the_full_layout_search_sees_is_not_missed() {
+        // a marker on a stage with the stages of M off, over a ring only the full search can lay out: turning the stages on is the one step
+        let p = with(&[s("g1", "0.935"), s("s", "95.773"), s("g2", "1.120"), s("m", "0.518"), s("label_size", "Large"), s("style", "Print"), s("pointer", "Metaphase"), s("readout", "None"), b("mitosis", false)]);
+        assert!(solve(&p).is_err() && solve(&set(&p, &[("mitosis", Value::B(true))])).is_ok());
+        assert!(solve_with(&set(&p, &[("mitosis", Value::B(true))]), false).is_err(), "the quick search cannot lay that ring out");
+        assert_eq!(advice_steps(&p).unwrap().0, vec!["Turn on Show the stages of M.".to_string()]);
+    }
+
+    #[test]
+    fn some_refusals_need_three_steps_and_are_given_in_three() {
+        // a marker on a stage with the stages of M off, a G0 wedge too thin, and times that cannot be read: no one or two changes draw it
+        let p = with(&[s("g1", "0.589"), s("s", "0.18"), s("g2", "969.77"), s("m", "0.20"), b("checkpoints", false), b("g0", true), b("mitosis", false), s("pointer", "Telophase"), s("readout", "DNA amount"), s("chromosomes", "8"), s("label_size", "Medium")]);
+        assert!(solve(&p).is_err());
+        let (steps, fixed) = advice_steps(&p).expect("a plan of three steps");
+        assert_eq!(steps.len(), 3, "{steps:?}");
+        assert!(solve(&fixed).is_ok());
+        // and none of the first-step choices on its own, nor any two, draws it
+        let ps = solve(&p).err().unwrap();
+        for (_, e1) in moves(&p, &ps) {
+            let q = set(&p, &e1);
+            assert!(solve(&q).is_err());
+            let Err(qs) = solve(&q) else { unreachable!() };
+            for (_, e2) in moves(&q, &qs) { assert!(solve(&set(&q, &e2)).is_err()); }
+        }
     }
 
     #[test]
@@ -2504,7 +2856,7 @@ mod tests {
         // G1/S and G2/M (5, 6) have two rules; the spindle checkpoint (13) one
         assert_eq!(shapes(&render_of(&[b(SHOW_ANSWERS, false)])), vec![(5, 2), (6, 2), (13, 1)]);
         let key = joined(&render_of(&[]));
-        assert_eq!(key.matches("Spindle checkpoint").count(), 1);
+        assert_eq!(key.matches("Spindle (M) checkpoint").count(), 1);
         assert!(!key.contains("/ anaphase") && !key.contains("metaphase /"));
         // the same in Letters, and with G0 (the numbers move by one)
         assert_eq!(shapes(&render_of(&[b(SHOW_ANSWERS, false), b("g0", true), s("names", "Letters")])), vec![(6, 2), (7, 2), (14, 1)]);
@@ -2588,7 +2940,7 @@ mod tests {
         let p = with(&l);
         let e = read(&p).unwrap_err();
         let all = e.why.join(" ");
-        assert!(all.contains("cannot be placed round this ring") || all.contains("The interphase arc covers only"), "{all}");
+        assert!(all.contains("The interphase arc and its label cannot be placed with these wedges"), "{all}");
         assert_eq!(advice_steps(&p).unwrap().0, vec!["Turn off Show interphase.".to_string()]);
         assert!(!is_refusal(&render_of(&[l[0].clone(), l[1].clone(), l[2].clone(), l[3].clone(), b("interphase", false)])));
         assert!(!is_refusal(&render_of(&[l[0].clone(), l[1].clone(), l[2].clone(), l[3].clone(), s("wedges", "Equal")])));
@@ -2733,11 +3085,11 @@ mod tests {
     #[test]
     fn the_checkpoints_and_the_strip_can_be_switched_off_and_the_spindle_follows_the_strip() {
         let all = flat(&render_of(&[]));
-        assert!(all.contains("G1/S checkpoint") && all.contains("Spindle checkpoint"));
+        assert!(all.contains("G1/S checkpoint") && all.contains("Spindle (M) checkpoint"));
         let none = flat(&render_of(&[b("checkpoints", false)]));
         assert!(!none.contains("checkpoint") && none.contains("Prophase"));
         let no_strip = flat(&render_of(&[b("mitosis", false)]));
-        assert!(no_strip.contains("G2/M checkpoint") && !no_strip.contains("Prophase") && !no_strip.contains("Spindle checkpoint") && no_strip.contains("The spindle checkpoint is shown with the stages of M."), "{no_strip}");
+        assert!(no_strip.contains("G2/M checkpoint") && !no_strip.contains("Prophase") && !no_strip.contains("Spindle (M) checkpoint") && no_strip.contains("The spindle checkpoint is shown with the stages of M."), "{no_strip}");
         let neither = flat(&render_of(&[b("mitosis", false), b("checkpoints", false)]));
         assert!(!neither.contains("spindle") && !neither.contains("Spindle"));
     }
@@ -2786,6 +3138,12 @@ mod tests {
             ("thin-m".into(), vec![s("g1", "60"), s("s", "30"), s("g2", "9"), s("m", "1")]),
             ("thin-m-large".into(), vec![s("g1", "60"), s("s", "30"), s("g2", "9"), s("m", "1"), s("label_size", "Large"), b("g0", true)]),
             ("equal".into(), vec![s("wedges", "Equal")]),
+            ("tie-1-1-1-13".into(), vec![s("g1", "1"), s("s", "1"), s("g2", "1"), s("m", "13")]),
+            ("tie-1-1-1-13-student".into(), vec![s("g1", "1"), s("s", "1"), s("g2", "1"), s("m", "13"), b(SHOW_ANSWERS, false)]),
+            ("fine-search".into(), vec![s("g1", "25.170"), s("s", "0.115"), s("g2", "0.054"), s("m", "0.396"), s("label_size", "Large")]),
+            ("no-checkpoints".into(), vec![b("checkpoints", false)]),
+            ("no-checkpoints-thin-m".into(), vec![b("checkpoints", false), s("g1", "60"), s("s", "30"), s("g2", "9"), s("m", "1")]),
+            ("comma".into(), vec![s("g1", "0,125")]),
             ("equal-bare".into(), vec![s("wedges", "Equal"), b("show_times", false), s("names", "Letters")]),
             ("extreme".into(), vec![s("g1", "1000"), s("s", "1"), s("g2", "1.5"), s("m", "2")]),
             ("letters".into(), vec![s("names", "Letters"), b("g0", true)]),

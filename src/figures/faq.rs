@@ -676,7 +676,7 @@ const ENERGY_PYRAMID: &[Faq] = &[
 const CELL_CYCLE: &[Faq] = &[
     Faq {
         q: "How do I type the lengths?",
-        a: "Hours for G1, S, G2 and M (M is mitosis and cytokinesis together), to the thousandth: 11, 11 h or 5,5 all work, up to 1000 hours each. A zero, a negative number, a figure with more than three decimals or a word is refused with the digits you typed, and so is 1,000 (a comma before three digits could be a thousands separator or a decimal comma: type 1000 or 1.000). While the hours and percents are shown, each phase must be at least 0.1 % of the whole cycle; a shorter one is refused, every short phase is named, and the message gives the change that draws (never more than three steps).",
+        a: "Hours for G1, S, G2 and M (M is mitosis and cytokinesis together), to the thousandth: 11, 11 h or 5,5 all work, up to 1000 hours each. A zero, a negative number, a figure with more than three decimals or a word is refused with the digits you typed, and so is 1,000, which could be a thousand hours or one (type 1000 or 1.000); any other comma is a decimal comma, so 0,125 is an eighth of an hour. While the hours and percents are shown, each phase must be at least 0.1 % of the whole cycle; a shorter one is refused, every short phase is named, and the message gives the change that draws (never more than three steps).",
     },
     Faq {
         q: "How is the share of the cycle worked out, and why does it always add to 100.0?",
@@ -688,7 +688,7 @@ const CELL_CYCLE: &[Faq] = &[
     },
     Faq {
         q: "What do the checkpoints, the G0 branch and the arc outside the ring show?",
-        a: "Show interphase (on by default) draws an arc just outside the ring over G1, S and G2 with a numbered label; the wedge leaders cross it, and if G1, S and G2 are so narrow together that no clean place is left for its label the figure says so and tells you to turn it off. M has no arc: it already has its label and the strip of its stages. The G1/S and G2/M checkpoints are ticks across the ring at the end of G1 and of G2. The spindle (metaphase to anaphase) checkpoint sits between metaphase and anaphase on the strip of the stages of M, so it needs Show the stages of M. G0 is a box off G1 for cells that leave the cycle; it needs a G1 wedge at least 20 degrees wide, otherwise the figure says so and tells you what to change.",
+        a: "Show interphase (on by default) draws an arc just outside the ring over G1, S and G2 with a numbered label; the wedge leaders cross it, a short mark across each end shows where it starts and stops, and if no clean place can be found for its label (a few very short wedges beside a long M can leave none) the figure says the arc is the reason and tells you to turn it off. M has no arc: it already has its label and the strip of its stages. The spindle checkpoint is keyed as \"Spindle (M) checkpoint\", the two names textbooks use. The G1/S and G2/M checkpoints are ticks across the ring at the end of G1 and of G2. The spindle (metaphase to anaphase) checkpoint sits between metaphase and anaphase on the strip of the stages of M, so it needs Show the stages of M. G0 is a box off G1 for cells that leave the cycle; it needs a G1 wedge at least 20 degrees wide, otherwise the figure says so and tells you what to change.",
     },
     Faq {
         q: "What does the marker read out?",
