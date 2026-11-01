@@ -8,15 +8,11 @@ use super::cronpublish::{licence_rekey, stem_backfill};
 use super::ctx::PoolCtx;
 use super::routes::PoolState;
 
-/// One hourly run. Notices the outbox cannot deliver stay in it (no pool mail is wired yet, so every delivery is refused and retried next hour).
-pub fn run_hourly(st: &PoolState) -> HourlyReport {
+/// One hourly run. `deliver` sends one outbox notice; one it refuses stays in the outbox and is retried next hour.
+pub fn run_hourly(st: &PoolState, deliver: &mut dyn FnMut(&super::ctx::PoolNotice) -> Result<(), String>) -> HourlyReport {
     let conn = st.conn.lock().unwrap_or_else(|p| p.into_inner());
     let x = PoolCtx::new(&conn, (st.clock)());
-    let mut deliver = |n: &super::ctx::PoolNotice| -> Result<(), String> {
-        tracing::warn!(?n, "pool notice kept in the outbox (mail not wired yet)");
-        Err("pool mail is not wired".into())
-    };
-    let report = hourly(&x, &st.store, &mut deliver);
+    let report = hourly(&x, &st.store, deliver);
     stage(&x, "stem_backfill", 0, || stem_backfill(&x, &st.store, &st.fp));
     stage(&x, "licence_rekey", 0, || licence_rekey(&x));
     (st.notify)(x.take_notices());

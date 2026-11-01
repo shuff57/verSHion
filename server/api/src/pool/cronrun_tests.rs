@@ -64,7 +64,7 @@ fn the_hourly_run_drops_expired_uploads_and_keeps_notices_it_cannot_deliver() {
         let n = PoolNotice::Cap { user_id: "u".into(), metric: "publishes".into() };
         assert!(outbox_insert(&c, "n1", &n, NOW, "1").unwrap());
     }
-    let r = run_hourly(&st);
+    let r = run_hourly(&st, &mut |_| Err("no mail".to_string()));
     assert_eq!(r.pending, 1);
     let c = st.conn.lock().unwrap();
     let unsent: i64 = c.query_row("SELECT COUNT(*) FROM pool_outbox WHERE sent_at IS NULL", [], |r| r.get(0)).unwrap();

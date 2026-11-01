@@ -89,6 +89,7 @@ pub mod offer;
 pub mod publishcommit;
 pub mod publishdel;
 pub mod poolio;
+pub mod poolmail;
 pub mod privacynear;
 pub mod poolkeys;
 pub mod preread;

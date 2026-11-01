@@ -58,6 +58,7 @@ fn pool_state(cfg: &config::Config, conn: rusqlite::Connection, auth_conn: rusql
     for (i, b) in limit_key.iter_mut().enumerate() {
         *b = u8::from_str_radix(&limit_hex[2 * i..2 * i + 2], 16).ok()?;
     }
+    let mail = Arc::new(auth::smtp::MailEnv::from_lookup(|k| std::env::var(k).ok()).map_err(|e| tracing::error!("mail: {e}")).ok()?);
     let bridge = Arc::new(pool::authbridge::AuthBridge::new(auth_conn, a, Box::new(auth::router::system_now)));
     Some(Arc::new(pool::routes::PoolState {
         conn: Mutex::new(conn),
@@ -75,11 +76,17 @@ fn pool_state(cfg: &config::Config, conn: rusqlite::Connection, auth_conn: rusql
         opens: pool::readslots::OpenReads::new(),
         heavy_wait: std::time::Duration::from_millis(pool::publishrun::HEAVY_QUEUE_WAIT_MS),
         body_deadline: std::time::Duration::from_millis(pool::publishrun::BODY_DEADLINE_MS as u64),
-        notify: Arc::new(|n| {
-            for notice in n {
-                tracing::warn!(?notice, "pool notice (mail not wired yet)");
-            }
-        }),
+        notify: {
+            let (mail, db) = (mail.clone(), Mutex::new(db::open(&cfg.db).ok()?));
+            Arc::new(move |n| {
+                for notice in n {
+                    let conn = db.lock().unwrap_or_else(|p| p.into_inner());
+                    if let Err(e) = pool::poolmail::deliver(&mail, &conn, &notice) {
+                        tracing::warn!(kind = %notice.kind(), "pool notice not sent: {e}");
+                    }
+                }
+            })
+        },
     }))
 }
 
@@ -150,16 +157,18 @@ async fn main() {
         tracing::warn!("POOL_HASH_KEY is not set (or AUTH_SECRET): the pool routes are not served");
     }
     // The pool's cron: the hourly stages every hour, the daily stages in the 04:xx UTC run (as the Worker's `scheduled` did).
-    if let Some(p) = pool.clone() {
+    if let (Some(p), Ok(mail)) = (pool.clone(), auth::smtp::MailEnv::from_lookup(|k| std::env::var(k).ok())) {
+        let mail_db = Mutex::new(db::open(&cfg.db).expect("open the pool mail connection"));
         tokio::spawn(async move {
+            let (mail, mail_db) = (Arc::new(mail), Arc::new(mail_db));
             let hour = std::time::Duration::from_secs(3600);
             let mut tick = tokio::time::interval_at(tokio::time::Instant::now() + hour, hour);
             loop {
                 tick.tick().await;
-                let p = p.clone();
+                let (p, mail, mail_db) = (p.clone(), mail.clone(), mail_db.clone());
                 let ran = tokio::task::spawn_blocking(move || {
                     let now = (p.clock)();
-                    let h = pool::cronrun::run_hourly(&p);
+                    let h = pool::cronrun::run_hourly(&p, &mut |n| pool::poolmail::deliver(&mail, &mail_db.lock().unwrap_or_else(|e| e.into_inner()), n));
                     let d = (now / 3_600_000) % 24 == 4;
                     let daily = d.then(|| pool::cronrun::run_daily(&p));
                     (h, daily)
