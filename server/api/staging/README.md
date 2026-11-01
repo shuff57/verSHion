@@ -1,98 +1,102 @@
-# Staging runbook: Rust API on the VPS, app on Cloudflare Pages
+# Staging runbook: one host, two containers on the existing VPS
 
-Written for you to run. Nothing here has been run, and none of it touches production, the Worker, or live Stripe.
-The domain is `lefthanddev.com` (chosen 2026-11-01). The API and the page must be under ONE registrable domain (the refresh cookie
-is `SameSite=Strict; Secure`):
+`staging-vershion.lefthanddev.com` serves the API and the app's web build. On the VPS (`ssh vps`, Debian 12, Docker) two
+containers run from `/opt/vershion-staging/compose.yml`:
 
-| Piece | Where | Name |
-|---|---|---|
-| API | VPS, Caddy + systemd | `staging-api.lefthanddev.com` |
-| App (web build) | Cloudflare Pages | `staging-app.lefthanddev.com` |
+- `vershion-staging-api`: the Rust server, no published ports, state in `/var/lib/vershion-staging`.
+- `vershion-staging-caddy`: routes the API paths to the server and serves the web build from
+  `/var/www/vershion-staging` (`index.html` fallback, so a mailed `/account/verify#token=...` link opens the app).
+  It is on the existing `pangolin_frontend` network so the Cloudflare tunnel can reach it as
+  `http://vershion-staging-caddy:80`.
 
-The API hostname is compiled into the web build as `VERSHION_POOL_URL`, so the builds you test against staging point at
-staging. Production builds are made later with the production hostname.
+The VPS's ports 80/443 belong to Pangolin (gerbil/Traefik) and Stalwart owns the mail ports, so nothing here binds a
+host port. The other containers are not touched.
 
-## 1. DNS (Cloudflare)
+Page and API are one origin: the `SameSite=Strict; Secure` refresh cookie is sent and CORS never applies.
 
-- `staging-api` A/AAAA record to the VPS, **DNS only (grey cloud)**. The server needs the visitor's address from
-  Caddy (see the Caddyfile comment); the orange cloud would hide it.
-- `staging-app` is added by Pages as a custom domain on the Pages project (step 5).
+## 1. Build (on the dev machine)
 
-## 2. Build the server (on a build machine; the VPS needs no Rust)
+Server, in a Debian 12 container so it runs on the VPS's glibc:
 
 ```
-cargo build --release --manifest-path server/api/Cargo.toml
-# -> server/api/target/release/vershion-api
+docker run --rm -v "$PWD/server:/w/server" -v vershion-target:/target -e CARGO_TARGET_DIR=/target \
+  -w /w/server/api rust:1-bookworm cargo build --release
 ```
 
-Copy `vershion-api` and the `server/worker/migrations/` directory to the VPS:
+App, with the staging address compiled in (a release build without `VERSHION_POOL_URL` shows "Sharing is not set up in
+this build"):
 
 ```
-scp server/api/target/release/vershion-api  vps:/opt/vershion-staging/vershion-api
-scp -r server/worker/migrations             vps:/opt/vershion-staging/migrations
+VERSHION_POOL_URL=https://staging-vershion.lefthanddev.com \
+VERSHION_LEGAL_URL=https://staging-vershion.lefthanddev.com/legal \
+trunk build --release --dist dist-web
 ```
 
-## 3. Server setup on the VPS (once)
+Web root (credits and legal pages are plain files in `server/web`):
 
 ```
-useradd --system --home /var/lib/vershion-staging --shell /usr/sbin/nologin vershion
-install -d -o vershion -g vershion /var/lib/vershion-staging /opt/vershion-staging
-install -d -m 700 /etc/vershion-staging
+cp -r server/web/account dist-web/account && cp -r server/web/legal dist-web/legal
+sed -i 's#https://api.example.org#https://staging-vershion.lefthanddev.com#' dist-web/account/credits.html
 ```
 
-- Copy `api.env.example` to `/etc/vershion-staging/api.env`, `chmod 600`, and fill it in **on the server**: fresh
-  `AUTH_SECRET` and `POOL_HASH_KEY` (32+ characters; `head -c48 /dev/urandom | base64 | tr -d '/+=\n'`), real SMTP
-  settings, your OpenRouter key, Stripe **test** keys.
-- Install `vershion-api.service` as `/etc/systemd/system/vershion-api-staging.service`, then
-  `systemctl daemon-reload && systemctl enable --now vershion-api-staging`.
-- Install the Caddyfile (as the staging site block) and `systemctl reload caddy`.
-- Firewall: 80/443 and SSH only. The API listens on `127.0.0.1:8787`, so it is not reachable from outside anyway.
+## 2. Install on the VPS
 
-Check: `journalctl -u vershion-api-staging -n 30` shows the migrations applied and no "not set" warnings you did not
-expect; `curl -s https://staging-api.lefthanddev.com/health` answers `{"ok":true,...}`.
+```
+sudo install -d -o debian -g debian /opt/vershion-staging /var/www/vershion-staging
+sudo install -d -o 10001 -g 10001 /var/lib/vershion-staging
+sudo install -d -m 700 /etc/vershion-staging
+rsync -a staging/{compose.yml,Dockerfile,Caddyfile} vps:/opt/vershion-staging/
+scp vershion-api vps:/opt/vershion-staging/vershion-api
+rsync -a server/worker/migrations/ vps:/opt/vershion-staging/migrations/
+rsync -a --delete dist-web/ vps:/var/www/vershion-staging/
+```
+
+Env file `/etc/vershion-staging/api.env` (root, mode 600): copy `api.env.example`, generate `AUTH_SECRET` and
+`POOL_HASH_KEY` on the server (`head -c48 /dev/urandom | base64 | tr -d '/+=\n'`), then add the SMTP, OpenRouter and
+Stripe **test** values yourself.
+
+```
+cd /opt/vershion-staging && docker compose up -d --build
+docker compose logs api | tail -30
+docker compose exec caddy wget -qO- http://vershion-staging-api:8787/health
+```
+
+## 3. Front door (needs you)
+
+The tunnel config (`/home/debian/.cloudflared/config.yml`) has one rule, `mom.huffpalmer.fyi`. Add above the 404 rule:
+
+```
+  - hostname: staging-vershion.lefthanddev.com
+    service: http://vershion-staging-caddy:80
+```
+
+then `docker restart cloudflared` (about a second of downtime for the other host), and in Cloudflare DNS add a proxied
+CNAME `staging-vershion` to `<tunnel-id>.cfargotunnel.com` (needs `lefthanddev.com` in the same Cloudflare account as the
+tunnel; otherwise use a Pangolin resource instead). Traffic arrives with `CF-Connecting-IP`, which the staging Caddy
+turns into the single `X-Forwarded-For` entry the server requires.
 
 ## 4. Stripe test endpoint
 
-In the Stripe dashboard, **test mode**: add the endpoint `https://staging-api.lefthanddev.com/billing/webhook` with the
-same events as production's, copy its signing secret into `STRIPE_WEBHOOK_SECRET`, and
-`systemctl restart vershion-api-staging`. Send a test event from the dashboard and look for it in the journal.
+Test mode: add `https://staging-vershion.lefthanddev.com/billing/webhook`, copy its signing secret to
+`STRIPE_WEBHOOK_SECRET`, `docker compose up -d`, send a test event, look for it in `docker compose logs api`.
 
-## 5. The app on Pages
+## 5. Test like a user
 
-Build with the staging API address compiled in (a release build without `VERSHION_POOL_URL` shows "Sharing is not set
-up in this build"; a typed address works only in debug builds):
+1. Open the host, sign up with a real address, open the mailed link (the app posts the password and profile with the
+   token), log in, reload, stay signed in.
+2. Approve your account: set `trust='admin'` for yours in `/var/lib/vershion-staging/pool.db` with the api container
+   stopped; admin routes also need a known device and a sudo token.
+3. Free tier: spend the weekly allowance. Paid tier: buy a pack with `4242 4242 4242 4242`; credits grow; webhook in logs.
+4. Pool: publish, browse, circle, send a bank, import.
+5. Browser console: no CORS, CSP or mixed-content errors.
+6. `BASE=https://staging-vershion.lefthanddev.com server/api/smoke/smoke.sh` for the API-only steps.
 
-```
-VERSHION_POOL_URL=https://staging-api.lefthanddev.com \
-VERSHION_LEGAL_URL=https://staging-app.lefthanddev.com/legal \
-trunk build --release
-# -> dist/web   (the wasm is about 20 MiB; Pages refuses single files over 25 MiB)
-```
+## 6. Reset / tear down
 
-Deploy `dist/web` as a Pages project (`wrangler pages deploy dist/web --project-name vershion-staging`, or connect it in
-the dashboard) and add the custom domain `staging-app.lefthanddev.com`. Copy `server/web/legal` into the deployed
-directory first if you want the legal links to resolve, and `server/web/account` for the credits page (set its
-`<meta name="api-base">` to `https://staging-api.lefthanddev.com`). The mailed links open `/account/verify#token=...`; Pages
-serves `index.html` for paths it does not have when the project has no `404.html`, which is what lets the app read the
-link. Check that the first time.
+`docker compose down`, delete `/var/lib/vershion-staging`, `up -d` (migrations rerun on an empty file). Never copy
+production data here unscrubbed: it holds teachers' email addresses.
 
-`ALLOWED_ORIGINS` and `APP_URL` in `api.env` must already be `https://staging-app.lefthanddev.com`.
+## Not done here
 
-## 6. Test like a user
-
-1. Open `https://staging-app.lefthanddev.com`, go to the Account screen (no server address to type: it is built in).
-2. Sign up with a real address you control, open the mailed link, confirm: the app must post the password and
-   profile with the token. Log in, reload, and check you stay signed in.
-3. Approve your own account from the admin queue (an admin account is needed: set `trust='admin'` in the staging
-   database once, with the service stopped; the admin routes also need a known device and a sudo token).
-4. Free tier: use the AI until the weekly allowance is spent. Paid tier: buy a pack with `4242 4242 4242 4242`;
-   check the credits grow and the webhook shows in the journal.
-5. Pool: publish, browse, create a circle, send a bank, import from the pool.
-6. Browser console: no CORS, CSP or mixed-content errors.
-7. `server/api/smoke/smoke.sh` can also be pointed at staging (`BASE=https://staging-api.lefthanddev.com`) for the API-only
-   steps; it needs no database access there, so its approve and pool steps skip.
-
-## 7. Tear down / reset
-
-Staging data is disposable: stop the service, delete `/var/lib/vershion-staging`, start it again (migrations rerun on an
-empty file). Never copy production data here without scrubbing it: it holds teachers' email addresses.
+- A Content-Security-Policy (the Pages `_headers` file does not apply); add one to the Caddyfile before production.
+- Backups: staging is disposable.

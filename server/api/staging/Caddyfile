@@ -1,26 +1,55 @@
-# /etc/caddy/Caddyfile on the VPS: the staging API host only. Caddy gets the certificate itself.
+# /opt/vershion-staging/Caddyfile: the staging host's router, run in the `vershion-staging-caddy` container (compose.yml).
+# It serves plain HTTP on the private docker network only; the front door (Cloudflare Tunnel or Traefik) terminates TLS
+# for staging-vershion.lefthanddev.com and forwards here.
 #
-# Keep the API hostname's DNS record "DNS only" (grey cloud) in Cloudflare. Then Caddy sees the visitor's address and
-# appends it to X-Forwarded-For, which the server needs (it reads the LAST entry and answers 403 client_ip_required
-# without one). If you later turn the orange cloud on, Caddy would see only Cloudflare's addresses and every user would
-# share one rate-limit bucket; that needs Cloudflare's ranges as trusted proxies, which is a separate change.
-#
-# The server listens on loopback only (VERSHION_LISTEN=127.0.0.1:8787), so only Caddy can reach it.
+# One host serves both the API and the app's web build, so page and API are one origin: the SameSite=Strict; Secure
+# refresh cookie is sent and CORS never comes into play (the server still checks Origin on writes, so ALLOWED_ORIGINS
+# holds this host).
+{
+	auto_https off
+	admin off
+	servers {
+		# The only things that can reach this container are other containers on the docker networks (private ranges):
+		# the tunnel or Traefik. Trust the visitor address they pass.
+		trusted_proxies static private_ranges
+		client_ip_headers CF-Connecting-IP X-Forwarded-For
+	}
+}
 
-staging-api.lefthanddev.com {
+:80 {
 	encode gzip
 
-	reverse_proxy 127.0.0.1:8787
+	# Exactly the paths the server mounts. NOT /account/*: the mailed links /account/verify, /account/reset and
+	# /account/enrol, and the credits page /account/credits.html, belong to the app. The API's /account routes are
+	# only these three.
+	@api path /health /auth/* /me /me/* /account /account/export /account/reapply /ai/* /billing/* /items /items/* /blobs/* /circles /circles/* /admin/*
+	handle @api {
+		# A little above the largest body the server accepts (the AI relay's 13 MB; a publish is about 5 MB). The
+		# server enforces its own, tighter caps per route.
+		request_body {
+			max_size 16MB
+		}
+		reverse_proxy vershion-staging-api:8787 {
+			# The server reads the LAST X-Forwarded-For entry as the client address and answers 403 client_ip_required
+			# without one. Replace the header with the visitor address (Cloudflare's CF-Connecting-IP when it came
+			# through the tunnel), so there is exactly one entry and it is the visitor's.
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+
+	# Everything else is the app (dist/web from `trunk build`) plus server/web's account/ and legal/ folders, copied
+	# into one directory. A path with no file falls back to index.html, which is how the app opens a mailed link.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
 
 	header {
 		X-Content-Type-Options nosniff
 		Referrer-Policy no-referrer
 		Strict-Transport-Security "max-age=31536000"
 	}
-
-	# A little above the largest body the server accepts (the AI relay's 13 MB; a publish is about 5 MB). The server
-	# enforces its own, tighter caps per route.
-	request_body {
-		max_size 16MB
-	}
+	# server/web/_headers is a Pages file and is NOT applied here. Add a Content-Security-Policy to this block before
+	# production (connect-src 'self' covers the API; the wasm needs 'wasm-unsafe-eval').
 }
