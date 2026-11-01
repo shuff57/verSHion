@@ -395,10 +395,48 @@ async fn a_bank_is_read_with_an_etag_head_and_not_modified_and_viewers_of_hidden
     assert_eq!(s, 409, "{b}");
 }
 
+fn send_body(commit: &str, extra: Value) -> Vec<u8> {
+    let words = ["apple", "river", "stone", "cloud", "ember", "maple", "orbit", "quartz"];
+    let answers: Vec<Value> = words.iter().enumerate().map(|(i, t)| json!({ "text": t, "correct": i == 3, "locked": false })).collect();
+    let q = json!({ "id": "q", "stem": "What is the capital of France?", "kind": { "Mc": { "answers": answers } }, "points": null, "difficulty": null, "topics": [], "image": null, "explanation": "because", "figure": null, "created": 1, "modified": 1 });
+    let mut meta = json!({ "commit_id": commit, "license": "circle-only", "meta": { "title": "Quiz", "subject": "Science" }, "attest": { "own_work": true, "terms_version": crate::pool::license::POOL_TERMS_VERSION } });
+    for (k, v) in extra.as_object().unwrap() {
+        meta[k] = v.clone();
+    }
+    let payload = json!({ "schema_version": 2, "bank": { "id": "local", "name": "B", "questions": [q], "created": 1, "modified": 1 } });
+    let mut out = meta.to_string().into_bytes();
+    out.push(b'\n');
+    out.extend(payload.to_string().into_bytes());
+    out
+}
+const PUB: Option<&str> = Some("application/vnd.vershion.publish");
+
 #[tokio::test]
-async fn sending_a_bank_is_not_wired_yet() {
+async fn a_bank_is_sent_to_a_circle_replayed_and_a_second_version_follows_the_first() {
     let w = world();
-    let cid = "0123456789abcdef0123456789abcdef";
-    let (s, b, _) = send(&w, jreq("POST", &format!("/circles/{cid}/banks"), "t:teacher", json!({}))).await;
-    assert_eq!((s, b["error"].clone()), (501, json!("not_ported")));
+    let (s, b, _) = send(&w, jreq("POST", "/circles", "t:teacher", json!({ "name": "Team" }))).await;
+    assert_eq!(s, 201, "{b}");
+    let cid = b["circle"]["id"].as_str().unwrap().to_string();
+    let c1 = "aaaaaaaaaaaaaaaaaaaaaaaa";
+    let (s, b, _) = send(&w, req("POST", &format!("/circles/{cid}/banks"), T, PUB, send_body(c1, json!({})))).await;
+    assert_eq!(s, 201, "{b}");
+    let bid = b["bank_id"].as_str().or_else(|| b["bank"]["id"].as_str()).unwrap().to_string();
+    // The same request again is the first answer, replayed.
+    let (s, b2, _) = send(&w, req("POST", &format!("/circles/{cid}/banks"), T, PUB, send_body(c1, json!({})))).await;
+    assert_eq!((s, b2["replayed"].clone()), (200, json!(true)), "{b2}");
+    // A second version, based on the first; and one based on a stale head is a 409.
+    let c2 = "bbbbbbbbbbbbbbbbbbbbbbbb";
+    let (s, b, _) = send(&w, req("PUT", &format!("/circles/{cid}/banks/{bid}"), T, PUB, send_body(c2, json!({ "base_version": 1, "confirm_large_change": true })))).await;
+    assert_eq!(s, 200, "{b}");
+    let c3 = "cccccccccccccccccccccccc";
+    let (s, _, _) = send(&w, req("PUT", &format!("/circles/{cid}/banks/{bid}"), T, PUB, send_body(c3, json!({ "base_version": 1 })))).await;
+    assert_eq!(s, 409);
+    let (s, b, _) = send(&w, req("GET", &format!("/circles/{cid}/banks/{bid}"), T, None, vec![])).await;
+    assert_eq!((s, b["bank"]["version"].clone()), (200, json!(2)), "{b}");
+    // Wrong media type and a stranger.
+    let (s, _, _) = send(&w, req("POST", &format!("/circles/{cid}/banks"), T, Some("application/json"), vec![])).await;
+    assert_eq!(s, 415);
+    add_user(&w, OID);
+    let (s, _, _) = send(&w, req("POST", &format!("/circles/{cid}/banks"), Some(OIDT), PUB, send_body("dddddddddddddddddddddddd", json!({})))).await;
+    assert_eq!(s, 404);
 }

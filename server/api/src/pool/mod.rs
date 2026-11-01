@@ -25,6 +25,7 @@ pub mod circlerollback;
 pub mod circlehidepatch;
 pub mod circlemail;
 pub mod circleversions;
+pub mod circlesend;
 pub mod circlesendmeta;
 pub mod circlesendprep;
 pub mod circlesendsql;

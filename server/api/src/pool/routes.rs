@@ -197,7 +197,7 @@ const PATCH_BODY_MAX: usize = 1024 * 1024;
 fn body_limit(route: &Route, method: &str) -> Option<(usize, bool)> {
     use Route::*;
     match (route, method) {
-        (Items | ItemsPreview | ItemPreview(_), "POST") | (Item(_), "PUT") => Some((MAX_PAYLOAD + MAX_META + 1, false)),
+        (Items | ItemsPreview | ItemPreview(_) | Banks(_), "POST") | (Item(_), "PUT" ) | (Bank(..), "PUT") => Some((MAX_PAYLOAD + MAX_META + 1, false)),
         (BlobPut(_), "PUT") => Some((MAX_IMAGE_BYTES, false)),
         (_, "GET" | "HEAD" | "DELETE") => None,
         (ItemImport(_), "POST") => Some((JSON_BODY_MAX, true)),
@@ -306,7 +306,7 @@ fn dispatch(c: &Call, route: &Route, enter_heavy: &mut dyn FnMut() -> Res<()>) -
             Ok(Reply::Raw { status: 200, headers, body: out.body.to_string().into_bytes(), hold: None })
         }
         (r, _) if circle_route(r) => circles_dispatch(c, r),
-        (r, _) if bank_route(r) => banks_dispatch(c, r),
+        (r, _) if bank_route(r) => banks_dispatch(c, r, enter_heavy),
         _ => not_ported(),
     }
 }
@@ -388,10 +388,10 @@ fn bank_get(c: &Call, env: &super::circlesendprep::SendEnv, cid: &str, bid: &str
 /// The bank routes that carry no payload to serve or send.
 fn bank_route(r: &Route) -> bool {
     use Route::*;
-    matches!(r, BankVersion(..) | Bank(..) | BankUndelete(..) | BankReport(..) | BankPurge(..) | BankBlob(..) | BankVersions(..) | BankChanges(..) | BankMerge(..) | BankRollback(..) | BankTrim(..))
+    matches!(r, Banks(..) | BankVersion(..) | Bank(..) | BankUndelete(..) | BankReport(..) | BankPurge(..) | BankBlob(..) | BankVersions(..) | BankChanges(..) | BankMerge(..) | BankRollback(..) | BankTrim(..))
 }
 
-fn banks_dispatch(c: &Call, route: &Route) -> Res<Reply> {
+fn banks_dispatch(c: &Call, route: &Route, enter_heavy: &mut dyn FnMut() -> Res<()>) -> Res<Reply> {
     use super::circlesendprep::SendEnv;
     use super::{circlebankedit as edit, circlebankstate as state, circlehidepatch, circlepurge, circlerollback, circleversions as ver};
     let (x, me) = (c.x, c.me);
@@ -399,6 +399,11 @@ fn banks_dispatch(c: &Call, route: &Route) -> Res<Reply> {
     let pair = |r: (u16, Value)| Ok(Reply::Json(r.0, r.1));
     let env = || SendEnv { x, core: &c.st.core, fp: &c.st.fp, keys: &c.st.keys, store: &c.st.store };
     match (route, c.method) {
+        (Route::Banks(cid), "POST") | (Route::Bank(cid, _), "PUT") => {
+            let bid = if let Route::Bank(_, b) = route { Some(b.as_str()) } else { None };
+            
+            pair(super::circlesend::send_version(&env(), me, cid, bid, header_str(c.headers, "content-type"), &c.body, enter_heavy)?)
+        }
         (Route::Bank(cid, bid), "GET" | "HEAD") => bank_get(c, &env(), cid, bid, None),
         (Route::BankVersion(cid, bid, n), "GET") => bank_get(c, &env(), cid, bid, n.parse().ok().or(Some(0))),
         (Route::Bank(cid, bid), "DELETE") => ok(state::delete_bank(x, me, cid, bid)?),
