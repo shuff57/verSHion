@@ -548,13 +548,18 @@ async fn handle(State(st): State<Arc<PoolState>>, req: Request) -> Response {
 /// The Worker's `a.preflight(req, POOL_METHODS)` and `a.withCors(req, res)` around every pool answer: an OPTIONS is a preflight, any other reply carries the
 /// CORS headers of an allowed origin (and `Vary: Origin` for the rest).
 async fn cors(State(st): State<Arc<PoolState>>, req: Request, next: axum::middleware::Next) -> Response {
+    cors_for(&st.allowed_origins, req, next).await
+}
+
+/// The same for the pool paths when the pool is not mounted (`main.rs`), so a browser reads the 503 instead of a CORS error.
+pub async fn cors_for(allowed: &[String], req: Request, next: axum::middleware::Next) -> Response {
     use crate::auth::http::{cors_headers, preflight, with_headers};
     if req.method() == axum::http::Method::OPTIONS {
-        return preflight(req.headers(), &st.allowed_origins, "GET, HEAD, POST, PUT, PATCH, DELETE");
+        return preflight(req.headers(), allowed, "GET, HEAD, POST, PUT, PATCH, DELETE");
     }
     let origin = header_str(req.headers(), "origin").map(str::to_string);
     let res = next.run(req).await;
-    with_headers(res, &cors_headers(origin.as_deref(), &st.allowed_origins))
+    with_headers(res, &cors_headers(origin.as_deref(), allowed))
 }
 
 pub fn router(st: Arc<PoolState>) -> Router {

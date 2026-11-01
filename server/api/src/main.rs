@@ -29,15 +29,21 @@ pub fn router() -> Router {
 
 /// Everything the server serves so far: its own health check and the AI relay.
 fn app(ai: Arc<AiState<HttpTransport>>, billing: Arc<BillingState<HttpStripe>>, auth: Option<Arc<auth::router::AuthState>>, pool: Option<Arc<pool::routes::PoolState>>) -> Router {
+    let origins = Arc::new(ai.allowed_origins.clone());
     let mut r = router().merge(ai::routes::router(ai)).merge(billing::router(billing));
     match pool {
         Some(p) => r = r.merge(pool::routes::router(p)),
-        // As the Worker without a hash key: the pool refuses, never hashing unkeyed.
+        // As the Worker without a hash key: the pool refuses, never hashing unkeyed (with the pool's CORS, so a browser reads the 503).
         None => {
             use axum::routing::any;
+            let mut off = Router::new();
             for path in ["/items", "/items/{*rest}", "/blobs/{*rest}", "/me/export", "/me/invite", "/circles", "/circles/{*rest}", "/admin/pool/{*rest}", "/admin/dmca/{*rest}"] {
-                r = r.route(path, any(|| async { (axum::http::StatusCode::SERVICE_UNAVAILABLE, Json(json!({ "error": "pool_not_configured" }))) }));
+                off = off.route(path, any(|| async { (axum::http::StatusCode::SERVICE_UNAVAILABLE, Json(json!({ "error": "pool_not_configured" }))) }));
             }
+            r = r.merge(off.layer(axum::middleware::from_fn(move |req: axum::extract::Request, next: axum::middleware::Next| {
+                let o = origins.clone();
+                async move { pool::routes::cors_for(&o, req, next).await }
+            })));
         }
     }
     match auth {
@@ -273,7 +279,7 @@ mod tests {
             transport: HttpTransport::new(),
             auth: Box::new(NoAuth),
             relay_key: cfg.relay_key,
-            allowed_origins: cfg.allowed_origins,
+            allowed_origins: vec!["https://app.example".into()],
             credits: true,
             clock: system_clock(),
             blobs: Some(blobs::BlobStore::new(&cfg.blobs).unwrap()),
@@ -292,6 +298,12 @@ mod tests {
         let hook = Request::post("/billing/webhook").body(Body::empty()).unwrap();
         assert_eq!(app(state.clone(), billing.clone(), None, None).oneshot(hook).await.unwrap().status(), 503);
         // No hash key: the pool answers 503 pool_not_configured on its paths, as the Worker did.
+        // ... and a browser can read that 503, and the preflight before it.
+        let cross = Request::get("/items").header("origin", "https://app.example").body(Body::empty()).unwrap();
+        let off = app(state.clone(), billing.clone(), None, None).oneshot(cross).await.unwrap();
+        assert_eq!(off.headers()["access-control-allow-origin"], "https://app.example");
+        let pre = Request::options("/circles").header("origin", "https://app.example").body(Body::empty()).unwrap();
+        assert_eq!(app(state.clone(), billing.clone(), None, None).oneshot(pre).await.unwrap().status(), 204);
         let off = app(state, billing, None, None).oneshot(get("/items")).await.unwrap();
         assert_eq!(off.status(), 503);
         let body: Value = serde_json::from_slice(&off.into_body().collect().await.unwrap().to_bytes()).unwrap();
