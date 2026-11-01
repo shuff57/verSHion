@@ -19,6 +19,8 @@ use serde_json::Value;
 pub struct Caller {
     pub user_id: String,
     pub trust: String,
+    /// The session's login family (the export checks how recent its login is).
+    pub family: Option<String>,
 }
 
 /// What the route layer read from the request.

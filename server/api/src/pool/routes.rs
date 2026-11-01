@@ -7,10 +7,16 @@ use super::gate::{Caller, Gate, Req, gate};
 use super::list::{ListQuery, SEARCH_CANDIDATES, list};
 use super::poolio::{JSON_BODY_MAX, read_json};
 use super::poolkeys::PoolKeys;
+use super::image::MAX_IMAGE_BYTES;
+use super::export::{EXPORT_LIMITS, ExportWho, export_account};
+use super::circlepurge::export_circles;
+use super::read::{ReadOut, Reader};
 use super::publishonce::{Env, MAX_META, MAX_PAYLOAD, publish};
 use super::publishrun::HeavySlots;
+use super::readslots::{OpenReads, ReadSlots};
 use super::routetable::{Route, route_of};
 use crate::auth::crypto::Key;
+use crate::auth::guard::ip_bucket;
 use crate::blobs::BlobStore;
 use axum::body::{Body, to_bytes};
 use axum::extract::{Request, State};
@@ -40,6 +46,7 @@ pub struct PoolState {
     pub auth: Box<dyn PoolAuth>,
     pub clock: Arc<dyn Fn() -> i64 + Send + Sync>,
     pub heavy: HeavySlots,
+    pub opens: OpenReads,
     pub heavy_wait: Duration,
     pub body_deadline: Duration,
     /// Delivers the notices a request queued (after the reply is decided).
@@ -49,6 +56,38 @@ pub struct PoolState {
 /// A handler's answer.
 pub enum Reply {
     Json(u16, Value),
+    /// Bytes with their own headers; `hold` keeps the open-read slots until the body has been sent or dropped.
+    Raw { status: u16, headers: Vec<(String, String)>, body: Vec<u8>, hold: Option<ReadSlots> },
+}
+
+/// A body that owns the read slots of the stream it carries.
+struct Held {
+    inner: http_body_util::Full<axum::body::Bytes>,
+    _hold: Option<ReadSlots>,
+}
+impl axum::body::HttpBody for Held {
+    type Data = axum::body::Bytes;
+    type Error = std::convert::Infallible;
+    fn poll_frame(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
+        std::pin::Pin::new(&mut self.inner).poll_frame(cx)
+    }
+    fn is_end_stream(&self) -> bool {
+        self.inner.is_end_stream()
+    }
+    fn size_hint(&self) -> http_body::SizeHint {
+        self.inner.size_hint()
+    }
+}
+
+fn raw_response(status: u16, headers: Vec<(String, String)>, body: Vec<u8>, hold: Option<ReadSlots>) -> Response {
+    let mut r = Response::new(Body::new(Held { inner: http_body_util::Full::new(body.into()), _hold: hold }));
+    *r.status_mut() = StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    for (k, v) in headers {
+        if let (Ok(k), Ok(v)) = (HeaderName::try_from(k.as_str()), HeaderValue::try_from(v.as_str())) {
+            r.headers_mut().insert(k, v);
+        }
+    }
+    r
 }
 
 fn pool_err(e: PoolError) -> Response {
@@ -128,6 +167,8 @@ fn param(q: &[(String, String)], k: &str) -> Option<String> {
 /// What a handler needs of the request.
 struct Call<'a> {
     st: &'a PoolState,
+    trust: &'a str,
+    family: Option<&'a str>,
     x: &'a PoolCtx<'a>,
     me: &'a str,
     method: &'a str,
@@ -140,6 +181,13 @@ impl Call<'_> {
     fn json(&self) -> Res<Map<String, Value>> {
         read_json(header_str(self.headers, "content-type"), header_str(self.headers, "content-length"), &self.body, false)
     }
+    /// A body that may be absent (an import, a versions list).
+    fn json_opt(&self) -> Res<Map<String, Value>> {
+        read_json(header_str(self.headers, "content-type"), header_str(self.headers, "content-length"), &self.body, true)
+    }
+    fn addr(&self) -> String {
+        client_ip(self.headers).map(|ip| ip_bucket(&ip, self.st.ip_prefix)).unwrap_or_default()
+    }
 }
 
 /// How much of the body the route reads.
@@ -147,14 +195,17 @@ fn body_limit(route: &Route, method: &str) -> Option<(usize, bool)> {
     use Route::*;
     match (route, method) {
         (Items | ItemsPreview | ItemPreview(_), "POST") | (Item(_), "PUT") => Some((MAX_PAYLOAD + MAX_META + 1, false)),
+        (BlobPut(_), "PUT") => Some((MAX_IMAGE_BYTES, false)),
         (_, "GET" | "HEAD" | "DELETE") => None,
+        (ItemImport(_), "POST") => Some((JSON_BODY_MAX, true)),
+        (MeInvite, "POST") => Some((JSON_BODY_MAX, false)),
         (Prefs | ItemVersions | Item(_) | ItemReport(_) | ItemAppeal(_) | ItemCounterNotice(_), _) => Some((JSON_BODY_MAX, false)),
         _ => None,
     }
 }
 
 fn dispatch(c: &Call, route: &Route, enter_heavy: &mut dyn FnMut() -> Res<()>) -> Res<Reply> {
-    use super::{moderation as m, poolcontent as pc, readmisc};
+    use super::{blobs, moderation as m, poolcontent as pc, readmisc};
     let (x, me) = (c.x, c.me);
     let not_ported = || Ok(Reply::Json(501, json!({ "error": "not_ported" })));
     match (route, c.method) {
@@ -215,8 +266,55 @@ fn dispatch(c: &Call, route: &Route, enter_heavy: &mut dyn FnMut() -> Res<()>) -
             let (s, v) = m::counter_notice(x, me, id, &c.json()?)?;
             Ok(Reply::Json(s, v))
         }
+        (Route::Item(id), "GET" | "HEAD") => {
+            let rd = Reader { x, store: &c.st.store, opens: &c.st.opens, me, addr: &c.addr() };
+            let inm = header_str(c.headers, "if-none-match");
+            read_reply(rd.get_item(id, c.method == "HEAD", inm)?)
+        }
+        (Route::ItemImport(id), "POST") => {
+            c.json_opt()?;
+            let rd = Reader { x, store: &c.st.store, opens: &c.st.opens, me, addr: &c.addr() };
+            read_reply(rd.import_item(id)?)
+        }
+        (Route::ItemBlob(id, sha), "GET") => {
+            let b = readmisc::get_blob(x, &c.st.store, me, id, sha)?;
+            let headers = readmisc::blob_headers(&b).into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+            Ok(Reply::Raw { status: 200, headers, body: b.bytes, hold: None })
+        }
+        (Route::BlobPut(sha), "PUT") => {
+            let s = blobs::store_blob(x, &c.st.store, me, sha, &c.body)?;
+            Ok(Reply::Json(201, json!({ "sha256": s.sha256, "size": s.size, "width": s.width, "height": s.height })))
+        }
+        (Route::MeInvite, "POST") => Ok(Reply::Json(200, super::invites::redeem_invite(x, me, &c.json()?)?)),
+        (Route::MeExport, "GET") => {
+            let who = ExportWho { user_id: me, trust: c.trust, session_family: c.family };
+            let part = param(&c.query, "part");
+            let out = export_account(x, &c.st.store, &who, part.as_deref(), EXPORT_LIMITS, &|x, me| Ok(export_circles(x, me)?))?;
+            let headers = vec![
+                ("Content-Type".to_string(), "application/json".to_string()),
+                ("Content-Disposition".to_string(), format!("attachment; filename=\"{}\"", out.filename)),
+                ("Cache-Control".to_string(), "no-store".to_string()),
+                ("X-Content-Type-Options".to_string(), "nosniff".to_string()),
+            ];
+            Ok(Reply::Raw { status: 200, headers, body: out.body.to_string().into_bytes(), hold: None })
+        }
         _ => not_ported(),
     }
+}
+
+fn read_reply(out: ReadOut) -> Res<Reply> {
+    Ok(match out {
+        ReadOut::Head { etag, content_length } => Reply::Raw { status: 200, headers: vec![("ETag".into(), etag), ("Content-Length".into(), content_length.to_string())], body: vec![], hold: None },
+        ReadOut::NotModified { etag } => Reply::Raw { status: 304, headers: vec![("ETag".into(), etag)], body: vec![], hold: None },
+        ReadOut::Body(s) => {
+            let mut headers = vec![("Content-Type".to_string(), "application/json".to_string())];
+            if let Some(e) = &s.etag {
+                headers.push(("ETag".into(), e.clone()));
+            }
+            let body = s.bytes();
+            Reply::Raw { status: 200, headers, body, hold: Some(s.slots) }
+        }
+    })
 }
 
 async fn handle(State(st): State<Arc<PoolState>>, req: Request) -> Response {
@@ -251,6 +349,21 @@ async fn handle(State(st): State<Arc<PoolState>>, req: Request) -> Response {
         }
         Err(_) => return json_response(500, &json!({ "error": "server_error" })),
     };
+    if let (Route::BlobPut(sha), "PUT") = (&route, method.as_str()) {
+        // Charged BEFORE the body is read: the day's uploads and the declared bytes.
+        let (st2, sha, cl, me2) = (st.clone(), sha.clone(), header_str(&parts.headers, "content-length").map(str::to_string), me.user_id.clone());
+        let pre = tokio::task::spawn_blocking(move || {
+            let conn = st2.conn.lock().unwrap_or_else(|p| p.into_inner());
+            let x = PoolCtx::new(&conn, (st2.clock)());
+            super::blobs::preflight(&x, &me2, &sha, cl.as_deref()).map(|_| ())
+        })
+        .await;
+        match pre {
+            Ok(Ok(())) => {}
+            Ok(Err(f)) => return fail_response(f),
+            Err(_) => return json_response(500, &json!({ "error": "server_error" })),
+        }
+    }
     let bytes = match body_limit(&route, &method) {
         Some((max, optional)) => match read_body(&st, &parts.headers, body, max, optional).await {
             Ok(b) => b,
@@ -265,7 +378,7 @@ async fn handle(State(st): State<Arc<PoolState>>, req: Request) -> Response {
             let conn = st.conn.lock().unwrap_or_else(|p| p.into_inner());
             let x = PoolCtx::new(&conn, (st.clock)());
             let mut held = None;
-            let call = Call { st: &st, x: &x, me: &me.user_id, method: &method, query, headers: &headers, body: bytes };
+            let call = Call { st: &st, trust: &me.trust, family: me.family.as_deref(), x: &x, me: &me.user_id, method: &method, query, headers: &headers, body: bytes };
             let mut enter = || -> Res<()> {
                 held = Some(handle.block_on(st.heavy.acquire(st.heavy_wait, || {}))?);
                 Ok(())
@@ -281,6 +394,7 @@ async fn handle(State(st): State<Arc<PoolState>>, req: Request) -> Response {
             (st.notify)(n);
             match r {
                 Ok(Reply::Json(s, v)) => json_response(s, &v),
+                Ok(Reply::Raw { status, headers, body, hold }) => raw_response(status, headers, body, hold),
                 Err(f) => fail_response(f),
             }
         }

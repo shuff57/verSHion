@@ -16,7 +16,7 @@ impl PoolAuth for HeaderAuth {
     fn caller(&self, h: &HeaderMap) -> Option<Caller> {
         let v = h.get("x-test-user")?.to_str().ok()?;
         let (u, t) = v.split_once(':')?;
-        Some(Caller { user_id: u.into(), trust: t.into() })
+        Some(Caller { user_id: u.into(), trust: t.into(), family: None })
     }
 }
 
@@ -46,6 +46,7 @@ fn world() -> W {
         auth: Box::new(HeaderAuth),
         clock: Arc::new(|| NOW),
         heavy: HeavySlots::default(),
+        opens: OpenReads::new(),
         heavy_wait: Duration::from_secs(1),
         body_deadline: Duration::from_secs(2),
         notify: Arc::new(move |n| sink.lock().unwrap().extend(n)),
@@ -159,6 +160,94 @@ async fn publish_list_mine_and_delete_work_over_http() {
     let n: i64 = w.st.conn.lock().unwrap().query_row("SELECT COUNT(*) FROM items WHERE removed_at IS NOT NULL", [], |r| r.get(0)).unwrap();
     assert_eq!(n, 1);
     let _ = &w.notices;
+}
+
+fn add_user(w: &W, id: &str) {
+    let c = w.st.conn.lock().unwrap();
+    c.execute("INSERT INTO users (id, email, display_name, trust, created_at) VALUES (?1, ?2, 'O', 'teacher', 1)", rusqlite::params![id, format!("{id}@x.org")]).unwrap();
+    c.execute("INSERT INTO pool_invite_redemptions (user_id, invite_id, at) VALUES (?1, 'i', 1)", [id]).unwrap();
+}
+async fn published(w: &W, user: &str, publish_id: &str, visibility: &str) -> String {
+    let mut body = publish_body(publish_id);
+    if visibility == "public" {
+        let nl = body.iter().position(|b| *b == b'\n').unwrap();
+        let mut meta: Value = serde_json::from_slice(&body[..nl]).unwrap();
+        meta["visibility"] = json!("public");
+        let mut out = meta.to_string().into_bytes();
+        out.extend_from_slice(&body[nl..]);
+        body = out;
+    }
+    let (s, b, _) = send(w, req("POST", "/items", Some(user), Some("application/vnd.vershion.publish"), body)).await;
+    assert_eq!(s, 201, "{b}");
+    b["item_id"].as_str().unwrap().to_string()
+}
+
+#[tokio::test]
+async fn an_item_is_read_with_an_etag_head_and_not_modified() {
+    let w = world();
+    let item = published(&w, "t:teacher", "AAAAAAAAAAAAAAAAAAAAAA", "unlisted").await;
+    let uri = format!("/items/{item}");
+    let res = w.app.clone().oneshot(req("GET", &uri, T, None, vec![])).await.unwrap();
+    assert_eq!(res.status(), 200);
+    let etag = res.headers().get("etag").unwrap().to_str().unwrap().to_string();
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    let v: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(v["item"]["id"], json!(item));
+    assert!(v["payload"]["bank"].is_object());
+    // HEAD sends the headers a GET would, including the exact length.
+    let head = w.app.clone().oneshot(req("HEAD", &uri, T, None, vec![])).await.unwrap();
+    assert_eq!(head.status(), 200);
+    assert_eq!(head.headers().get("etag").unwrap().to_str().unwrap(), etag);
+    assert_eq!(head.headers().get("content-length").unwrap().to_str().unwrap(), bytes.len().to_string());
+    // A matching If-None-Match (weak form too) is a 304 with no body.
+    let mut r = req("GET", &uri, T, None, vec![]);
+    r.headers_mut().insert("if-none-match", format!("W/{etag}").parse().unwrap());
+    assert_eq!(w.app.clone().oneshot(r).await.unwrap().status(), 304);
+    // Someone else's unlisted item is a 404.
+    add_user(&w, "o");
+    let (s, b, _) = send(&w, req("GET", &uri, Some("o:teacher"), None, vec![])).await;
+    assert_eq!((s, b["error"].clone()), (404, json!("not_found")));
+    let (s, _, _) = send(&w, req("GET", "/items/nothex", Some("o:teacher"), None, vec![])).await;
+    assert_eq!(s, 404);
+}
+
+#[tokio::test]
+async fn another_teacher_imports_a_public_item_and_the_import_is_recorded() {
+    let w = world();
+    let item = published(&w, "t:teacher", "AAAAAAAAAAAAAAAAAAAAAA", "public").await;
+    add_user(&w, "o");
+    let (s, b, _) = send(&w, req("POST", &format!("/items/{item}/import"), Some("o:teacher"), None, vec![])).await;
+    assert_eq!(s, 200, "{b}");
+    assert_eq!((b["recorded"].clone(), b["previously_imported_versions"].clone()), (json!(true), json!([])));
+    assert!(b["payload"].is_object());
+    let n: i64 = w.st.conn.lock().unwrap().query_row("SELECT COUNT(*) FROM imports WHERE user_id = 'o' AND kind = 'import'", [], |r| r.get(0)).unwrap();
+    assert_eq!(n, 1);
+}
+
+#[tokio::test]
+async fn blob_uploads_check_the_sha_and_the_hash_before_anything_is_stored() {
+    let w = world();
+    let (s, b, _) = send(&w, req("PUT", "/blobs/xyz", T, Some("image/png"), vec![1, 2, 3])).await;
+    assert_eq!((s, b["error"].clone(), b["field"].clone()), (400, json!("invalid_request"), json!("sha256")));
+    let sha = "a".repeat(64);
+    let (s, b, _) = send(&w, req("PUT", &format!("/blobs/{sha}"), T, Some("image/png"), vec![1, 2, 3])).await;
+    assert_eq!((s, b["error"].clone()), (422, json!("hash_mismatch")));
+    let n: i64 = w.st.conn.lock().unwrap().query_row("SELECT COUNT(*) FROM pending_blobs", [], |r| r.get(0)).unwrap();
+    assert_eq!(n, 0);
+}
+
+#[tokio::test]
+async fn invite_redemption_and_the_export_freshness_rule_answer_over_http() {
+    let w = world();
+    w.st.conn.lock().unwrap().execute("INSERT INTO users (id, email, display_name, trust, created_at) VALUES ('n', 'n@x.org', 'N', 'teacher', 1)", []).unwrap();
+    // (An account that already holds a redemption is told so.)
+    let (s, b, _) = send(&w, req("POST", "/me/invite", T, Some("application/json"), br#"{"code":"ABCDEFGH23456789ABCDEFGH"}"#.to_vec())).await;
+    assert_eq!((s, b["already"].clone()), (200, json!(true)));
+    let (s, b, _) = send(&w, req("POST", "/me/invite", Some("n:teacher"), Some("application/json"), br#"{"code":"ABCDEFGH23456789ABCDEFGH"}"#.to_vec())).await;
+    assert_eq!((s, b["error"].clone()), (422, json!("invite_invalid")), "{b}");
+    // The export needs a login in the last 24 hours.
+    let (s, b, _) = send(&w, req("GET", "/me/export", T, None, vec![])).await;
+    assert_eq!((s, b["error"].clone()), (403, json!("reauth_required")));
 }
 
 #[tokio::test]

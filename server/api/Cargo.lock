@@ -1871,6 +1871,7 @@ dependencies = [
  "getrandom 0.2.17",
  "hkdf",
  "hmac",
+ "http-body",
  "http-body-util",
  "lettre",
  "reqwest",

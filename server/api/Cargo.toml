@@ -34,3 +34,4 @@ serde_urlencoded = "0.7"
 tempfile = "3"
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
+http-body = "1"

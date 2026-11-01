@@ -32,7 +32,7 @@ fn world() -> W {
 fn run(w: &W, route: &Route, method: &str, path: &str, who: Option<(&str, &str)>, origin: Option<&str>) -> Res<Caller> {
     let g = Gate { allowed_origins: &w.origins, limit_key: &LIMIT_KEY, ip_prefix: 64, store: &w.s, core: &w.core, fp: &w.fp };
     let req = Req { method, path, origin, x_client: None, ip: Some("203.0.113.5") };
-    let caller = who.map(|(u, t)| Caller { user_id: u.into(), trust: t.into() });
+    let caller = who.map(|(u, t)| Caller { user_id: u.into(), trust: t.into(), family: None });
     gate(&g, &PoolCtx::new(&w.c, NOW), route, &req, caller.as_ref())
 }
 fn err<T: std::fmt::Debug>(r: Res<T>) -> PoolError {
@@ -72,7 +72,7 @@ fn a_request_without_a_client_address_is_a_403() {
     let w = world();
     let g = Gate { allowed_origins: &w.origins, limit_key: &LIMIT_KEY, ip_prefix: 64, store: &w.s, core: &w.core, fp: &w.fp };
     let req = Req { method: "GET", path: "/items", origin: None, x_client: None, ip: None };
-    let c = Caller { user_id: "t".into(), trust: "teacher".into() };
+    let c = Caller { user_id: "t".into(), trust: "teacher".into(), family: None };
     let e = err(gate(&g, &PoolCtx::new(&w.c, NOW), &Route::Items, &req, Some(&c)));
     assert_eq!((e.status, e.code.as_str()), (403, "client_ip_required"));
 }
