@@ -1506,6 +1506,10 @@ impl crate::App {
                             ("openrouter", "OpenRouter"),
                             ("custom", "Custom endpoint"),
                         ] {
+                            // The hosted AI is charged through the account's token, which only the app has for now.
+                            if cfg!(target_arch = "wasm32") && val == "account" {
+                                continue;
+                            }
                             let on = app.settings.ai_provider == val;
                             if kit::chip_toggle(ui, label, on).clicked() {
                                 app.settings.ai_provider = val.to_string();
