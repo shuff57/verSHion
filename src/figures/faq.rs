@@ -51,6 +51,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "phase-diagram" => PHASE_DIAGRAM,
         "solubility-curves" => SOLUBILITY_CURVES,
         "gas-law-graphs" => GAS_LAW_GRAPHS,
+        "equilibrium-graphs" => EQUILIBRIUM_GRAPHS,
         "orbital-diagram" => ORBITAL_DIAGRAM,
         "particle-diagram" => PARTICLE_DIAGRAM,
         "ph-reading" => PH_READING,
@@ -3734,6 +3735,29 @@ const SOLUBILITY_CURVES: &[Faq] = &[
     Faq {
         q: "What does the student copy leave out?",
         a: "Show answers off keeps the curves, their names, the givens (the substance, the temperatures and the masses) and the points that the question marks on the graph, and turns the values read from the curve, the classification, the mass that crystallises and the temperature of saturation into blank lines. The key prints the values read from the curve, rounded once to the decimal places chosen, and then works the answer out from those printed values only, so the arithmetic on the key can be checked line by line.",
+    },
+];
+
+const EQUILIBRIUM_GRAPHS: &[Faq] = &[
+    Faq {
+        q: "How is the equilibrium found, and is it exact?",
+        a: "x is the amount of reaction (mol/L) as the equation is written: each reactant falls by its coefficient times x and each product rises by it, so x < 0 means the reaction ran in reverse. The equilibrium x is the root of K = (products) / (reactants) with every concentration at least 0, found numerically to full precision, for any coefficients from 1 to 4 and any K from 1e-30 to 1e30. Each printed value is that root rounded once, to the number of significant figures chosen. A quadratic is also solved by the formula, with the rejected root and the reason it is rejected.",
+    },
+    Faq {
+        q: "What do solids and liquids do?",
+        a: "Choose the phase of each species. Gases and aqueous species are in K and Q; a solid or liquid is left out, because its concentration is constant, and the figure says so. It is taken to be present in excess, so it never runs out and its starting amount is not used. Adding or removing a solid or liquid at equilibrium changes no concentration in K, so nothing shifts.",
+    },
+    Faq {
+        q: "Are the curves a real rate law?",
+        a: "No: they are schematic. The concentrations follow elementary mass-action kinetics (forward rate kf times the reactants' concentrations to their coefficients, reverse rate kr times the products'), with kf / kr = K and the time unit chosen so that the approach is finished by t = 5. The time axis is therefore in arbitrary units, and the rate graph is drawn relative to the faster starting rate. The plateau values printed and drawn are the exact equilibrium values, not the numbers from the curve.",
+    },
+    Faq {
+        q: "What disturbances can I apply, and how are they worked out?",
+        a: "At a chosen time, once equilibrium is reached, add or remove some of a species, change the volume (every concentration is divided by the factor) or change the temperature (K changes by the van 't Hoff equation, taking the enthalpy change as constant). The key compares Q with K just after, says which way the system shifts and solves for the new equilibrium. Removing more than is there removes all of it, with a note.",
+    },
+    Faq {
+        q: "What does the student copy leave out?",
+        a: "Show answers off keeps the reaction, the phases, the starting concentrations, the axes (which depend on the givens only) and the curves, and turns the K expression, x, the equilibrium concentrations, K when it is the question, Q, the direction and the new equilibrium into blank cells and lines. It draws no dashed equilibrium lines and writes no values. For the question that predicts the direction it draws no curve either, since the curve would show the direction, and its description names no value and no direction.",
     },
 ];
 

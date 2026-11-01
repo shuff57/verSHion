@@ -20,6 +20,7 @@ pub mod ratesgraph;
 pub mod phasediagram;
 pub mod solubilitycurves;
 pub mod gaslaws;
+pub mod equilibrium;
 pub mod spectra;
 
 pub const INK: &str = "#111";
@@ -200,6 +201,7 @@ pub fn skin_intro(id: &str) -> Option<&'static str> {
         "phase-diagram" => Some("Make printable pressure-temperature phase diagrams for chemistry tests: regions, curves, triple and critical points, and the phase at a point."),
         "solubility-curves" => Some("Make printable solubility curves for chemistry tests: read a solubility, classify a solution, find the mass that crystallises on cooling, and the temperature of saturation."),
         "gas-law-graphs" => Some("Make printable gas law graphs for chemistry tests: find a missing value, read a point, find n from a slope, or name the law."),
+        "equilibrium-graphs" => Some("Make printable equilibrium graphs for chemistry tests: concentration against time, the ICE table, Q against K, the forward and reverse rates, and Le Chatelier disturbances."),
         "temperature-reading" => Some("Make printable thermometer figures for chemistry tests."),
         "ph-reading" => Some("Make printable pH meter figures for chemistry tests."),
         "punnett-square" => Some("Make printable Punnett squares for biology tests."),
@@ -344,6 +346,7 @@ pub fn examples(id: &str) -> Option<Vec<super::Example>> {
         .or_else(|| phasediagram::examples(id))
         .or_else(|| solubilitycurves::examples(id))
         .or_else(|| gaslaws::examples(id))
+        .or_else(|| equilibrium::examples(id))
 }
 
 /// Handles are laid out in the figure's own coordinates; the chart-title band the wrapper adds
@@ -415,6 +418,7 @@ pub fn defs() -> Vec<FigureDef> {
     v.extend(phasediagram::defs());
     v.extend(solubilitycurves::defs());
     v.extend(gaslaws::defs());
+    v.extend(equilibrium::defs());
     v
 }
 
@@ -640,7 +644,7 @@ mod tests {
     #[test]
     fn ids_unique_and_complete() {
         let ids: Vec<_> = defs().iter().map(|d| d.id).collect();
-        assert_eq!(ids.len(), 21);
+        assert_eq!(ids.len(), 22);
         for d in defs() {
             for p in (d.params)() {
                 match (&p.kind, &p.default) {
