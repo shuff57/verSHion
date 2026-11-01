@@ -90,6 +90,7 @@ pub mod preread;
 pub mod qhash;
 pub mod qjson;
 pub mod read;
+pub mod routes;
 pub mod routetable;
 pub mod readmisc;
 pub mod readslots;
