@@ -2,18 +2,20 @@
 //! regions, and up to two typed samples plotted as points with the class they fall in.
 //!
 //! Input design (one rule): type any TWO of sand, silt and clay and the third is worked out as 100 minus the other
-//! two; a third that is typed too must make the three add to exactly 100. Values are exact to 0.01 and are kept as
-//! integer hundredths, so a sample is classified with integer arithmetic and "on a line" is decided exactly.
+//! two. If all three are typed they must add to 100: a total from 99.5 to 100.5 (lab sheets round) is accepted and the
+//! largest value is moved by the difference so that the three add to exactly 100; the editor note says so. Values are
+//! exact to 0.01 and are kept as integer hundredths, so a sample is classified with integer arithmetic.
 //!
-//! The class boundaries are the polygons of the USDA Soil Survey Manual triangle, written here as whole-percent
-//! (clay, sand) vertices. A sample exactly on a line belongs to every class that touches it; the figure gives it to
-//! the class listed LATER in the legend (the finer one, roughly), and the key says so ("on the boundary of A and B;
-//! classified as B by convention"). The student copy prints that one rule.
+//! The class of a sample is decided by the limits written in the USDA Soil Survey Manual (2017, chapter 3, the class
+//! definitions on p. 124 and the triangle in figure 3-7): their words ("7 to less than 27 % clay", "52 % or less sand",
+//! "more than", "at least") give every point, on a line or not, exactly one class. The twelve polygons of whole-percent
+//! (clay, sand) vertices are only the DRAWING (and the list of classes a point on a line touches, for the key's note).
 //!
-//! Layout: the triangle has clay on the left edge (rising), silt on the bottom (rising to the left) and sand on the
-//! right edge (rising downward). Region names are printed inside a region when they fit (one or two lines), else as
-//! the standard abbreviation (SiCL, ...); the legend names every abbreviation. A label that the sample point or a
-//! construction line would sit on moves to another place inside its region.
+//! Layout (the Manual's figure): clay at the top, 100 % sand at the bottom left and 100 % silt at the bottom right.
+//! Clay is read on the left edge (rising upward), sand on the bottom (rising toward the left corner) and silt on the
+//! right edge (rising downward). Region names are printed inside a region when they fit (one or two lines), else as the
+//! standard abbreviation (SiCL, ...); the legend names every abbreviation. A label is never placed on the sample point
+//! or on a construction line when any other place inside its region is free.
 //!
 //! "Name the regions" shows twelve numbered discs and no names; the key adds the names in a table.
 
@@ -54,8 +56,10 @@ pub const POLY: [&[(i64, i64)]; 12] = [
     &[(40, 45), (55, 45), (100, 0), (60, 0), (40, 20)],
 ];
 
-/// Which of the six fills (colour or hatch) each class wears; neighbours always differ.
-pub const SERIES: [usize; 12] = [3, 4, 0, 5, 1, 3, 2, 0, 3, 1, 5, 4];
+/// Which of the six fills (colour or hatch) each class wears; classes that touch always differ. Series 0 (plain) and 4
+/// (horizontal lines, the direction of the clay construction line and of the clay gridlines) are not used, so no hatch
+/// runs along a construction line.
+pub const SERIES: [usize; 12] = [1, 2, 1, 2, 3, 5, 3, 1, 2, 5, 5, 3];
 
 const TASKS: [&str; 2] = ["Classify a sample", "Name the regions"];
 const LABELS: [&str; 2] = ["Names where they fit", "Abbreviations only"];
@@ -84,6 +88,7 @@ fn params() -> Vec<ParamDef> {
         ParamDef::text("clay2", "Second sample: clay (%)", ""),
         ParamDef::bool("grid", "Show gridlines (every 10 %)", true),
         ParamDef::bool("guides", "Show construction lines from the sample to each axis", false).hint("Dashed lines from each sample along its sand, silt and clay lines to the axis where it is read"),
+        ParamDef::bool("show_worked", "Student copy: print the worked-out third value", true).hint("Off prints a blank for the value that was worked out (silt when sand and clay are typed), so the student works it out first; the key always prints it"),
         ParamDef::choice("region_labels", "Region labels", &LABELS, LABELS[0]).hint("Abbreviations only is the safest at Large; the legend names every abbreviation"),
         answers_param().hint("Off keeps the sample and blanks the texture class (Classify) or the region names (Name the regions)"),
         svg::style_param(),
@@ -109,7 +114,9 @@ fn parse_pct(raw: &str) -> Result<i64, &'static str> {
     let (int, frac) = body.split_once('.').unwrap_or((body, ""));
     if int.is_empty() && frac.is_empty() { return Err(NOT); }
     if neg && body.chars().any(|c| c != '0' && c != '.') { return Err("is negative."); }
-    if frac.len() > 2 { return Err("has more than 2 decimal places."); }
+    if frac.len() > 2 {
+        return Err(if t.contains(',') { "has more than 2 decimal places (a comma is read as a decimal point, so type thousands without one)." } else { "has more than 2 decimal places." });
+    }
     let int = int.trim_start_matches('0');
     if int.len() > 3 { return Err("is above 100."); }
     let ip: i64 = if int.is_empty() { 0 } else { int.parse().map_err(|_| NOT)? };
@@ -145,13 +152,24 @@ fn slots(raw: [&str; 3]) -> [Slot; 3] {
 
 /// A sample in hundredths of a percent; the three add to 10000.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Smp { pub sand: i64, pub silt: i64, pub clay: i64 }
+pub struct Smp {
+    pub sand: i64,
+    pub silt: i64,
+    pub clay: i64,
+    /// The field (0 sand, 1 silt, 2 clay) that was worked out from the other two; None when all three were typed.
+    pub from: Option<usize>,
+    /// When three typed values did not add to exactly 100: the field that was moved, and by how many hundredths.
+    pub adj: Option<(usize, i64)>,
+}
 
 fn cap(s: &str) -> String { let mut c = s.chars(); c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default() }
 
 /// The words that start a sentence about a field: "Sand" for the only sample, "Sample 2 sand" for a numbered one.
 fn lead(who: &str, f: usize) -> String { if who.is_empty() { cap(FIELDS[f]) } else { format!("{who} {}", FIELDS[f]) } }
 fn subject(who: &str) -> String { if who.is_empty() { "The sample".to_string() } else { who.to_string() } }
+
+/// How far (hundredths of a percent) three typed values may be from 100 in total and still be accepted.
+const TOL: i64 = 50;
 
 /// Reads one sample. `Ok(None)` is an all-blank optional sample.
 fn read_one(who: &str, raw: [&str; 3], optional: bool) -> Result<Option<Smp>, Vec<String>> {
@@ -174,32 +192,38 @@ fn read_one(who: &str, raw: [&str; 3], optional: bool) -> Result<Option<Smp>, Ve
             }
             let mut v = [0i64; 3];
             v[a.0] = a.1; v[b.0] = b.1; v[third] = rest;
-            Ok(Some(Smp { sand: v[0], silt: v[1], clay: v[2] }))
+            Ok(Some(Smp { sand: v[0], silt: v[1], clay: v[2], from: Some(third), adj: None }))
         }
         _ => {
             let sum: i64 = typed.iter().map(|t| t.1).sum();
-            if sum != 10000 {
-                return Err(vec![format!("{}: sand {} + silt {} + clay {} = {}, not 100.", subject(who), fmt_h(typed[0].1), fmt_h(typed[1].1), fmt_h(typed[2].1), fmt_h(sum))]);
+            if (sum - 10000).abs() > TOL {
+                return Err(vec![format!("{}: sand {} + silt {} + clay {} = {}, which is not 100 (a total from 99.5 to 100.5 is accepted).", subject(who), fmt_h(typed[0].1), fmt_h(typed[1].1), fmt_h(typed[2].1), fmt_h(sum))]);
             }
-            Ok(Some(Smp { sand: typed[0].1, silt: typed[1].1, clay: typed[2].1 }))
+            let mut v = [typed[0].1, typed[1].1, typed[2].1];
+            let adj = if sum == 10000 { None } else {
+                let big = (0..3).fold(0, |m, f| if v[f] > v[m] { f } else { m });
+                v[big] += 10000 - sum;
+                Some((big, 10000 - sum))
+            };
+            Ok(Some(Smp { sand: v[0], silt: v[1], clay: v[2], from: None, adj }))
         }
     }
 }
 
 // ================================================================== classification
 
-/// The classes a point is in (closed polygons) and the one it is given.
+/// The class of a sample (`win`) and every class whose closed polygon it touches (`all`, more than one on a line).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Cls { pub win: usize, pub all: Vec<usize> }
 
 impl Cls {
     pub fn boundary(&self) -> bool { self.all.len() > 1 }
-    /// "on the boundary of A and B; classified as B by convention".
+    /// "on a line between A and B; the Manual's limits make it B".
     pub fn sentence(&self) -> Option<String> {
         if !self.boundary() { return None; }
         let names: Vec<String> = self.all.iter().map(|&i| NAMES[i].to_lowercase()).collect();
         let list = if names.len() == 2 { format!("{} and {}", names[0], names[1]) } else { format!("{} and {}", names[..names.len() - 1].join(", "), names[names.len() - 1]) };
-        Some(format!("on the boundary of {list}; classified as {} by convention", NAMES[self.win].to_lowercase()))
+        Some(format!("on a line between {list}; the limits in the Soil Survey Manual make it {}", NAMES[self.win].to_lowercase()))
     }
 }
 
@@ -225,13 +249,42 @@ fn in_poly(poly: &[(i64, i64)], p: (i64, i64)) -> bool {
     inside
 }
 
-/// The class of a point given as sand and clay in hundredths of a percent (sand + clay at most 100).
+/// The USDA class (index into NAMES) from sand, silt and clay in hundredths of a percent, by the limits of the Soil
+/// Survey Manual (2017, ch. 3, p. 124), tried in order: every point has exactly one answer, on a line or not.
+///  sand: 85 % or more sand with silt + 1.5 clay under 15 (written 2 silt + 3 clay under 30);
+///  loamy sand: silt + 1.5 clay at least 15 and silt + 2 clay under 30;
+///  sandy loam: 7 to under 20 clay and more than 52 sand, or under 7 clay and under 50 silt, with silt + 2 clay at least 30;
+///  loam: 7 to under 27 clay, 28 to under 50 silt, 52 or less sand;
+///  silt loam: 50 or more silt and 12 to under 27 clay, or 50 to under 80 silt and under 12 clay;
+///  silt: 80 or more silt and under 12 clay;
+///  sandy clay loam: 20 to under 35 clay, under 28 silt, more than 45 sand;
+///  clay loam: 27 to under 40 clay and more than 20 up to 45 sand;
+///  silty clay loam: 27 to under 40 clay and 20 or less sand;
+///  sandy clay: 35 or more clay and more than 45 sand;
+///  silty clay: 40 or more clay and 40 or more silt;
+///  clay: 40 or more clay, 45 or less sand and under 40 silt.
+pub fn texture_class(sa: i64, si: i64, cl: i64) -> usize {
+    if 2 * si + 3 * cl < 3000 { 0 }
+    else if si + 2 * cl < 3000 { 1 }
+    else if (cl >= 700 && cl < 2000 && sa > 5200) || (cl < 700 && si < 5000) { 2 }
+    else if cl >= 700 && cl < 2700 && si >= 2800 && si < 5000 && sa <= 5200 { 3 }
+    else if (si >= 5000 && cl >= 1200 && cl < 2700) || (si >= 5000 && si < 8000 && cl < 1200) { 4 }
+    else if si >= 8000 && cl < 1200 { 5 }
+    else if cl >= 2000 && cl < 3500 && si < 2800 && sa > 4500 { 6 }
+    else if cl >= 2700 && cl < 4000 && sa > 2000 && sa <= 4500 { 7 }
+    else if cl >= 2700 && cl < 4000 && sa <= 2000 { 8 }
+    else if cl >= 3500 && sa > 4500 { 9 }
+    else if cl >= 4000 && si >= 4000 { 10 }
+    else { 11 }
+}
+
+/// The class of a point given as sand and clay in hundredths of a percent (sand + clay at most 100). The class comes
+/// from the Manual's limits; the polygons only say which classes the point touches (several on a line).
 pub fn classify(sand: i64, clay: i64) -> Cls {
-    let all: Vec<usize> = (0..12).filter(|&i| in_poly(POLY[i], (clay, sand))).collect();
-    match all.iter().max() {
-        Some(&win) => Cls { win, all },
-        None => Cls { win: 0, all: vec![0] },
-    }
+    let win = texture_class(sand, 10000 - sand - clay, clay);
+    let mut all: Vec<usize> = (0..12).filter(|&i| in_poly(POLY[i], (clay, sand))).collect();
+    if !all.contains(&win) { all.push(win); all.sort(); }
+    Cls { win, all }
 }
 
 // ================================================================== reading the controls
@@ -264,37 +317,41 @@ fn samples(p: &Params) -> Result<Vec<Smp>, Vec<String>> {
     if why.is_empty() { Ok(out) } else { Err(why) }
 }
 
-/// One edit that moves a refused sample toward drawing: (field, new text, sentence).
-fn fix_for(w: &str, raw: [&str; 3]) -> Option<(usize, String, String)> {
+/// One advice step: the edits (field, new text) and the sentence that tells them.
+type Fix = (Vec<(usize, String)>, String);
+
+/// One step that moves a refused sample toward drawing. A step never states a range that depends on a value another
+/// step will set: with nothing usable typed it gives one combined instruction that holds whatever was in the boxes.
+fn fix_for(w: &str, raw: [&str; 3]) -> Option<Fix> {
     let sl = slots(raw);
     let typed: Vec<(usize, i64)> = (0..3).filter_map(|f| if let Slot::Val(v) = sl[f] { Some((f, v)) } else { None }).collect();
-    let type_in = |f: usize, o: Option<i64>| -> (usize, String, String) {
-        match o {
-            Some(o) => {
-                let v = (10000 - o) / 200;
-                (f, v.to_string(), format!("Type a number from 0 to {} in {}, for example {v}.", fmt_h(10000 - o), lead(w, f).to_lowercase()))
-            }
-            None => (f, "40".to_string(), format!("Type a number from 0 to 100 in {}, for example 40.", lead(w, f).to_lowercase())),
-        }
+    let combined = || -> Fix {
+        let of = if w.is_empty() { String::new() } else { format!(" for {}", w.to_lowercase()) };
+        (vec![(0, "40".to_string()), (1, String::new()), (2, "20".to_string())],
+         format!("Type two of sand, silt and clay{of} as numbers that add to at most 100 and leave the third empty, for example sand 40 and clay 20 (silt is then worked out as 40)."))
+    };
+    let type_in = |f: usize, o: i64| -> Fix {
+        let v = (10000 - o) / 200;
+        (vec![(f, v.to_string())], format!("Type a number from 0 to {} in {}, for example {v}.", fmt_h(10000 - o), lead(w, f).to_lowercase()))
     };
     if let Some(f) = (0..3).find(|&f| matches!(sl[f], Slot::Bad(_))) {
         return Some(match typed.len() {
-            2 => (f, String::new(), format!("Clear {} (it is then worked out from the other two).", lead(w, f).to_lowercase())),
-            1 => type_in(f, Some(typed[0].1)),
-            _ => type_in(f, None),
+            2 => (vec![(f, String::new())], format!("Clear {} (it is then worked out from the other two).", lead(w, f).to_lowercase())),
+            1 => type_in(f, typed[0].1),
+            _ => combined(),
         });
     }
     match typed.len() {
-        0 => Some(type_in(0, None)),
-        1 => { let g = [0usize, 2, 1].into_iter().find(|g| *g != typed[0].0)?; Some(type_in(g, Some(typed[0].1))) }
+        0 => Some(combined()),
+        1 => { let g = [0usize, 2, 1].into_iter().find(|g| *g != typed[0].0)?; Some(type_in(g, typed[0].1)) }
         2 => {
             let (a, b) = (typed[0], typed[1]);
             if a.1 + b.1 <= 10000 { return None; }
             let (big, small) = if a.1 >= b.1 { (a, b) } else { (b, a) };
-            Some((big.0, fmt_h(10000 - small.1), format!("Lower {} to {} (with {} {} the third value is then 0).", lead(w, big.0).to_lowercase(), fmt_h(10000 - small.1), FIELDS[small.0], fmt_h(small.1))))
+            Some((vec![(big.0, fmt_h(10000 - small.1))], format!("Lower {} to {} (with {} {} the third value is then 0).", lead(w, big.0).to_lowercase(), fmt_h(10000 - small.1), FIELDS[small.0], fmt_h(small.1))))
         }
         _ => {
-            if typed.iter().map(|t| t.1).sum::<i64>() == 10000 { None } else { Some((1, String::new(), format!("Clear {} so that it is worked out from sand and clay.", lead(w, 1).to_lowercase()))) }
+            if (typed.iter().map(|t| t.1).sum::<i64>() - 10000).abs() <= TOL { None } else { Some((vec![(1, String::new())], format!("Clear {} so that it is worked out from sand and clay.", lead(w, 1).to_lowercase()))) }
         }
     }
 }
@@ -306,8 +363,8 @@ pub fn advice_plan(p: &Params) -> Option<(String, Params)> {
     for _ in 0..8 {
         if samples(&q).is_ok() { return Some((said.join(" "), q)); }
         let k = (0..2).find(|&k| read_one(&who(&q, k), raw_of(&q, k), k == 1).is_err())?;
-        let (f, val, sentence) = fix_for(&who(&q, k), raw_of(&q, k))?;
-        q.set_s(KEYS[k][f], &val);
+        let (edits, sentence) = fix_for(&who(&q, k), raw_of(&q, k))?;
+        for (f, val) in edits { q.set_s(KEYS[k][f], &val); }
         said.push(sentence);
     }
     None
@@ -326,8 +383,9 @@ pub fn read(p: &Params) -> Result<(), Refusal> {
 
 type P = (f64, f64);
 
-/// The point with `clay` and `sand` percent (silt is the rest), in triangle coordinates (apex up, y down).
-fn xy(clay: f64, sand: f64) -> P { (SIDE * (clay / 2.0 + sand) / 100.0, H * (100.0 - clay) / 100.0) }
+/// The point with `clay` and `sand` percent (silt is the rest), in triangle coordinates (apex up, y down): 100 % clay at
+/// the apex, 100 % sand bottom left, 100 % silt bottom right, as in the Soil Survey Manual's figure.
+fn xy(clay: f64, sand: f64) -> P { (SIDE * (clay / 2.0 + (100.0 - clay - sand)) / 100.0, H * (100.0 - clay) / 100.0) }
 fn apex() -> P { (SIDE / 2.0, 0.0) }
 fn bl() -> P { (0.0, H) }
 fn br() -> P { (SIDE, H) }
@@ -362,12 +420,12 @@ thread_local! {
     static SOLVED: RefCell<Option<(String, Result<Rc<Solved>, Refusal>)>> = const { RefCell::new(None) };
 }
 
-/// For each class, every point on a 2.5 px grid at least 4 px inside it, roomiest first.
+/// For each class, every point on a 1.5 px grid at least 4 px inside it, roomiest first.
 fn cands() -> Cands {
     if let Some(c) = CANDS.with(|c| c.borrow().clone()) { return c; }
     let polys: Vec<Vec<P>> = (0..12).map(poly_px).collect();
     let mut out: Vec<Vec<(P, f64)>> = vec![Vec::new(); 12];
-    let step = 2.5;
+    let step = 1.5;
     let mut y = 0.0;
     while y <= H {
         let mut x = 0.0;
@@ -454,6 +512,7 @@ enum Reg { Text { var: Var, c: P }, Disc { c: P, r: f64 }, Out { var: Var, x: f6
 
 pub struct Solved {
     key: bool,
+    show_worked: bool,
     name_mode: bool,
     print: bool,
     lab: f64,
@@ -482,7 +541,7 @@ fn num_gaps(fs: f64, lab: f64) -> (f64, f64) {
     (gl, gr)
 }
 
-/// y of the bottom of the silt numbers, the baseline of the outside labels and the middle of the silt title.
+/// y of the bottom of the sand numbers, the baseline of the outside labels and the middle of the sand title.
 fn bottom_rows(fs: f64, outside: bool) -> (f64, f64, f64) {
     let num_bottom = H + TICK * 0.866 + 4.0 + 0.2 * fs + 1.05 * fs;
     let lab_base = num_bottom + 7.0 + 0.8 * fs;
@@ -490,10 +549,10 @@ fn bottom_rows(fs: f64, outside: bool) -> (f64, f64, f64) {
     (num_bottom, lab_base, above + 10.0 + 0.6 * fs * 1.1)
 }
 
-/// Free x ranges between the silt numbers (and their tick marks) along the bottom edge.
-fn silt_gaps(fs: f64) -> Vec<(f64, f64)> {
+/// Free x ranges between the sand numbers (and their tick marks) along the bottom edge.
+fn sand_gaps(fs: f64) -> Vec<(f64, f64)> {
     let mut boxes: Vec<(f64, f64)> = (0..=10).map(|k| {
-        let c = xy(0.0, 100.0 - 10.0 * k as f64).0 + TICK * 0.5 + 1.0;
+        let c = xy(0.0, 10.0 * k as f64).0 + TICK * 0.5 + 1.0;
         let w = text_w(&(10 * k).to_string(), fs);
         (c - w / 2.0 - 4.0, c + w / 2.0 + 4.0)
     }).collect();
@@ -506,10 +565,20 @@ fn silt_gaps(fs: f64) -> Vec<(f64, f64)> {
 
 fn sample_at(s: &Smp) -> P { xy(s.clay as f64 / 100.0, s.sand as f64 / 100.0) }
 
-/// The three construction segments from a sample to the points where its clay, sand and silt are read.
+/// The three construction segments from a sample to the points where its clay (left edge), sand (bottom edge) and
+/// silt (right edge) are read: the clay line is horizontal, the sand line runs parallel to the right edge and the silt
+/// line parallel to the left edge.
 fn guide_ends(s: &Smp) -> [P; 3] {
     let (c, n, t) = (s.clay as f64 / 100.0, s.sand as f64 / 100.0, s.silt as f64 / 100.0);
-    [xy(c, 0.0), xy(100.0 - n, n), xy(0.0, 100.0 - t)]
+    [xy(c, 100.0 - c), xy(0.0, n), xy(100.0 - t, 0.0)]
+}
+
+/// Shortest distance between segment ab and segment cd (0 if they cross).
+fn seg_seg(a: P, b: P, c: P, d: P) -> f64 {
+    let cross = |o: P, p: P, q: P| (p.0 - o.0) * (q.1 - o.1) - (p.1 - o.1) * (q.0 - o.0);
+    let (d1, d2, d3, d4) = (cross(c, d, a), cross(c, d, b), cross(a, b, c), cross(a, b, d));
+    if ((d1 > 0.0) != (d2 > 0.0)) && ((d3 > 0.0) != (d4 > 0.0)) && d1 != 0.0 && d2 != 0.0 && d3 != 0.0 && d4 != 0.0 { return 0.0; }
+    dist_seg(a, c, d).min(dist_seg(b, c, d)).min(dist_seg(c, a, b)).min(dist_seg(d, a, b))
 }
 
 fn tri_poly() -> Vec<P> { vec![apex(), bl(), br()] }
@@ -590,14 +659,18 @@ fn solve_now(p: &Params) -> Result<Rc<Solved>, Refusal> {
             let (lo, hi) = (xs.iter().cloned().fold(f64::MAX, f64::min), xs.iter().cloned().fold(f64::MIN, f64::max));
             let mid = (lo + hi) / 2.0;
             let mut best: Option<(f64, f64)> = None;
-            for (ga, gb) in silt_gaps(fs) {
+            // a leader keeps clear of every construction line; only when no place does (a sample on the bottom edge has a clay
+            // line along the whole edge) is it allowed to cross one, and then still keeps off every landing dot
+            for strict in [true, false] {
+              if best.is_some() { break; }
+              for (ga, gb) in sand_gaps(fs) {
                 let (a, b) = ((ga + 2.0).max(lo + 3.0), (gb - 2.0).min(hi - 3.0));
                 if b - a < 6.0 { continue; }
                 let mut x = a;
                 while x <= b + 1e-9 {
                     let dot = (x, H - 7.0);
                     let clear_of = |o: &Ob| match *o { Ob::C(c, r) => dist_seg(c, dot, (x, H + 20.0)) < r, _ => false };
-                    let landing = smp.iter().any(|(sm, _)| guides && guide_ends(sm).iter().any(|e| dist_seg(*e, dot, (x, H + 20.0)) < 2.8 + 3.0));
+                    let landing = smp.iter().any(|(sm, _)| guides && guide_ends(sm).iter().any(|e| dist_seg(*e, dot, (x, H + 20.0)) < 2.8 + 3.0 || strict && seg_seg(sample_at(sm), *e, dot, (x, H + 20.0)) < 2.8 + 3.0));
                     let box_ok = !outside_taken.iter().any(|(c, w): &(f64, f64)| (c - x).abs() < (w + var.w) / 2.0 + 4.0);
                     if inside(&poly, dot) && clearance(&poly, dot) >= 3.5 && !obs_marker.iter().any(clear_of) && !landing && box_ok {
                         let score = (x - mid).abs();
@@ -605,6 +678,7 @@ fn solve_now(p: &Params) -> Result<Rc<Solved>, Refusal> {
                     }
                     x += 1.0;
                 }
+              }
             }
             match best {
                 Some((x, _)) => { outside_taken.push((x, var.w)); regs.push(Reg::Out { var, x, dot: (x, H - 7.0) }); }
@@ -613,8 +687,13 @@ fn solve_now(p: &Params) -> Result<Rc<Solved>, Refusal> {
             continue;
         }
         let mut placed: Option<Reg> = None;
-        'v: for var in variants(i, fs, p.s("region_labels") == LABELS[1]) {
-            for relaxed in [false, true] {
+        // Strict first: every variant (full name, two lines, abbreviation) clear of the sample, the tags and the construction
+        // lines. Only when no place anywhere in the region is clear is a label allowed over a line, and then the shortest
+        // one (the abbreviation) is tried first so that it covers as little of the line as possible.
+        'v: for relaxed in [false, true] {
+            let mut vs = variants(i, fs, p.s("region_labels") == LABELS[1]);
+            if relaxed { vs.reverse(); }
+            for var in vs {
                 for (pt, _) in &cs[i] {
                     if !fits_box(&poly, *pt, var.w, var.h) { continue; }
                     if obs_marker.iter().any(|o| hits(o, *pt, var.w, var.h)) { continue; }
@@ -629,13 +708,20 @@ fn solve_now(p: &Params) -> Result<Rc<Solved>, Refusal> {
             None => { regs.push(Reg::Missing); notes.push(format!("The label for {} could not be placed in its region with the sample on it; see the legend.", NAMES[i].to_lowercase())); }
         }
     }
+    for (k, (sm, _)) in smp.iter().enumerate() {
+        if let Some((f, d)) = sm.adj {
+            let who = if smp.len() > 1 { format!("Sample {}", k + 1) } else { "The sample".to_string() };
+            let total = 10000 - d;
+            notes.push(format!("{who}: the three typed values add to {}, not 100; {} was moved by {} to {} so that they add to 100.", fmt_h(total), FIELDS[f], fmt_h(d.abs()), fmt_h([sm.sand, sm.silt, sm.clay][f])));
+        }
+    }
     for (k, (_, c)) in smp.iter().enumerate() {
         if let Some(s) = c.sentence() {
             let who = if smp.len() > 1 { format!("Sample {}", k + 1) } else { "The sample".to_string() };
             notes.push(format!("{who} is {s}."));
         }
     }
-    Ok(Rc::new(Solved { key: p.b(SHOW_ANSWERS), name_mode: nm, print: p.s("style") == "Print", lab, fs, grid: p.b("grid"), guides, smp, regs, tags, notes }))
+    Ok(Rc::new(Solved { key: p.b(SHOW_ANSWERS), show_worked: p.b("show_worked"), name_mode: nm, print: p.s("style") == "Print", lab, fs, grid: p.b("grid"), guides, smp, regs, tags, notes }))
 }
 
 pub fn warnings(p: &Params) -> Vec<String> {
@@ -706,7 +792,11 @@ impl Cv {
 /// Fits `n` columns of width `col_w` into `avail`: 3, else 2, else 1.
 fn cols_for(col_w: f64, avail: f64) -> usize { [3usize, 2].into_iter().find(|n| *n as f64 * col_w <= avail).unwrap_or(1) }
 
-fn sample_line(s: &Smp) -> String { format!("Sand {} %, silt {} %, clay {} %", fmt_h(s.sand), fmt_h(s.silt), fmt_h(s.clay)) }
+/// "Sand 40 %, silt 40 %, clay 20 %"; with `blank` the worked-out value is a blank for the student to fill in.
+fn sample_line(s: &Smp, blank: bool) -> String {
+    let v = |f: usize, h: i64| if blank && s.from == Some(f) { "____".to_string() } else { fmt_h(h) };
+    format!("Sand {} %, silt {} %, clay {} %", v(0, s.sand), v(1, s.silt), v(2, s.clay))
+}
 
 fn paint(sv: &Solved, fills: &Fills, dx: f64, dy: f64) -> Cv {
     let mut cv = Cv::new(dx, dy);
@@ -720,11 +810,12 @@ fn paint(sv: &Solved, fills: &Fills, dx: f64, dy: f64) -> Cv {
     }
     // gridlines
     if sv.grid {
+        let gc = if colour { "#888888" } else { "#555555" };
         for k in 1..10 {
             let v = 10.0 * k as f64;
-            cv.line(xy(v, 0.0), xy(v, 100.0 - v), "#888888", 0.6, "");
-            cv.line(xy(0.0, 100.0 - v), xy(100.0 - v, 0.0), "#888888", 0.6, "");
-            cv.line(xy(0.0, v), xy(100.0 - v, v), "#888888", 0.6, "");
+            cv.line(xy(v, 100.0 - v), xy(v, 0.0), gc, 0.9, ""); // constant clay: horizontal
+            cv.line(xy(0.0, v), xy(100.0 - v, v), gc, 0.9, ""); // constant sand: parallel to the right edge
+            cv.line(xy(100.0 - v, 0.0), xy(0.0, 100.0 - v), gc, 0.9, ""); // constant silt: parallel to the left edge
         }
     }
     // the answer region in the key
@@ -739,16 +830,16 @@ fn paint(sv: &Solved, fills: &Fills, dx: f64, dy: f64) -> Cv {
         let v = 10 * k;
         let vf = v as f64;
         // clay on the left edge, rising upward
-        let e = xy(vf, 0.0);
+        let e = xy(vf, 100.0 - vf);
         cv.line(e, (e.0 - tick, e.1), INK, 1.0, "");
         cv.text(e.0 - gl, e.1 + 0.35 * fs, fs, "end", false, &v.to_string());
-        // silt on the bottom edge, rising to the left
-        let e = xy(0.0, 100.0 - vf);
+        // sand on the bottom edge, rising to the left
+        let e = xy(0.0, vf);
         let te = (e.0 + tick * 0.5, e.1 + tick * 0.866);
         cv.line(e, te, INK, 1.0, "");
         cv.text(te.0 + 1.0, te.1 + 4.0 + 0.2 * fs + 0.8 * fs, fs, "middle", false, &v.to_string());
-        // sand on the right edge, rising downward
-        let e = xy(100.0 - vf, vf);
+        // silt on the right edge, rising downward
+        let e = xy(100.0 - vf, 0.0);
         let te = (e.0 + tick * 0.5, e.1 - tick * 0.866);
         cv.line(e, te, INK, 1.0, "");
         cv.text(te.0 + gr, te.1 + 0.35 * fs, fs, "start", false, &v.to_string());
@@ -770,7 +861,7 @@ fn paint(sv: &Solved, fills: &Fills, dx: f64, dy: f64) -> Cv {
         cv.arrow(a0, (a0.0 + u.0 * alen, a0.1 + u.1 * alen), 1.4);
     }
     {
-        let t = "Percent sand";
+        let t = "Percent silt";
         let w = tw(t, fst, true);
         let mid = ((br().0 + apex().0) / 2.0, (br().1 + apex().1) / 2.0);
         let c0 = (mid.0 + 0.866 * nd, mid.1 - 0.5 * nd);
@@ -783,7 +874,7 @@ fn paint(sv: &Solved, fills: &Fills, dx: f64, dy: f64) -> Cv {
     }
     let silt_y;
     {
-        let t = "Percent silt";
+        let t = "Percent sand";
         let w = tw(t, fst, true);
         let y = bottom_rows(fs, !sv.name_mode).2;
         let total = w + 10.0 + alen;
@@ -797,7 +888,8 @@ fn paint(sv: &Solved, fills: &Fills, dx: f64, dy: f64) -> Cv {
         for (s, _) in &sv.smp {
             let at = sample_at(s);
             for e in guide_ends(s) {
-                cv.line(at, e, "#333333", 1.2, "5 4");
+                if !colour { cv.line(at, e, "#ffffff", 5.0, ""); }
+                cv.line(at, e, if colour { "#333333" } else { "#000000" }, if colour { 1.2 } else { 1.6 }, "5 4");
                 cv.circle(e, 2.8, INK, INK, 0.5);
             }
         }
@@ -891,7 +983,7 @@ fn paint(sv: &Solved, fills: &Fills, dx: f64, dy: f64) -> Cv {
         let n = sv.smp.len();
         for (k, (s, c)) in sv.smp.iter().enumerate() {
             cv.text(left, y, fs, "start", true, &format!("{}.", k + 1));
-            cv.text(left + 2.0 * fs, y, fs, "start", false, &sample_line(s));
+            cv.text(left + 2.0 * fs, y, fs, "start", false, &sample_line(s, !sv.key && !sv.show_worked));
             y += 1.3 * lh;
             cv.text(left + 2.0 * fs, y, fs, "start", false, "Texture class:");
             let bx = left + 2.0 * fs + tw("Texture class:", fs, false) + 10.0;
@@ -909,8 +1001,6 @@ fn paint(sv: &Solved, fills: &Fills, dx: f64, dy: f64) -> Cv {
             y += 1.6 * lh;
             let _ = n;
         }
-        let rule = "A point exactly on a line belongs to the class listed later in the legend. When the dot touches a line, decide from the percentages.";
-        for l in wrap(rule, SIDE + 20.0, fs * 0.95) { cv.text(left, y, fs * 0.95, "start", false, &l); y += 1.1 * lh; }
     }
     cv
 }
@@ -924,7 +1014,7 @@ fn describe(sv: &Solved) -> (String, String) {
     }
     let mut d = "The USDA soil texture triangle with twelve texture classes.".to_string();
     for (k, (s, c)) in sv.smp.iter().enumerate() {
-        d.push_str(&format!(" Sample {} is plotted at sand {} %, silt {} %, clay {} %", k + 1, fmt_h(s.sand), fmt_h(s.silt), fmt_h(s.clay)));
+        d.push_str(&format!(" Sample {} is plotted at {}", k + 1, sample_line(s, !sv.key && !sv.show_worked).to_lowercase()));
         if sv.key { d.push_str(&format!(": {}", NAMES[c.win].to_lowercase())); }
         d.push('.');
     }
@@ -985,8 +1075,8 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
     Some(vec![
         Example { name: "Loam, with construction lines", params: vec![b("guides", true)] },
         Example { name: "Two samples: a sandy loam and a silty clay", params: vec![s("sand", "65"), s("clay", "10"), s("sand2", "5"), s("clay2", "45"), b("guides", true)] },
-        Example { name: "A sample on a boundary (sand 52, clay 20)", params: vec![s("sand", "52"), s("clay", "20")] },
-        Example { name: "Student copy: classify a sample", params: vec![s("sand", "30"), s("silt", "50"), s("clay", ""), b("guides", true), b(SHOW_ANSWERS, false)] },
+        Example { name: "A sample on a line between three classes (sand 52, clay 20)", params: vec![s("sand", "52"), s("clay", "20")] },
+        Example { name: "Student copy: classify a sample", params: vec![s("sand", "30"), s("silt", "50"), s("clay", ""), b("guides", true), b("show_worked", false), b(SHOW_ANSWERS, false)] },
         Example { name: "Name the regions, student copy", params: vec![s("task", TASKS[1]), b(SHOW_ANSWERS, false)] },
         Example { name: "Print, abbreviations only", params: vec![s("style", "Print"), s("region_labels", LABELS[1]), b("guides", true)] },
     ])
@@ -1014,41 +1104,46 @@ mod tests {
         render_of(&l)
     }
 
-    // ------------------------------------------------------------ the classifier, written again from the textual definitions
-    /// USDA textural class from sand, silt, clay in hundredths of a percent, as the well-known if/else cascade of the
-    /// class definitions (Soil Survey Manual): sand needs silt + 1.5 clay below 15; loamy sand silt + 2 clay below 30;
-    /// sandy loam 7 to 20 clay with more than 52 sand (or under 7 clay and under 50 silt) and silt + 2 clay at least 30; ...
-    /// Returns the index into NAMES (99 = no rule matched, which would be a gap in the definitions).
-    fn cascade(sa: i64, si: i64, cl: i64) -> usize {
-        if 2 * si + 3 * cl < 3000 { 0 }
-        else if si + 2 * cl < 3000 { 1 }
-        else if (cl >= 700 && cl < 2000 && sa > 5200 && si + 2 * cl >= 3000) || (cl < 700 && si < 5000 && si + 2 * cl >= 3000) { 2 }
-        else if cl >= 700 && cl < 2700 && si >= 2800 && si < 5000 && sa <= 5200 { 3 }
-        else if (si >= 5000 && cl >= 1200 && cl < 2700) || (si >= 5000 && si < 8000 && cl < 1200) { 4 }
-        else if si >= 8000 && cl < 1200 { 5 }
-        else if cl >= 2000 && cl < 3500 && si < 2800 && sa > 4500 { 6 }
-        else if cl >= 2700 && cl < 4000 && sa > 2000 && sa <= 4500 { 7 }
-        else if cl >= 2700 && cl < 4000 && sa <= 2000 { 8 }
-        else if cl >= 3500 && sa > 4500 { 9 }
-        else if cl >= 4000 && si >= 4000 { 10 }
-        else if cl >= 4000 && sa <= 4500 && si < 4000 { 11 }
-        else { 99 }
+    // ------------------------------------------------------------ the classifier, written again from the Manual's wording
+    /// Every class whose definition in the Soil Survey Manual (2017, ch. 3, p. 124) holds at this point, one condition per
+    /// class (no ordering between them), in hundredths of a percent. A correct set of limits gives exactly one class at
+    /// every point, on a line or not; this is a different shape from `texture_class` (a first-match cascade).
+    fn official(sa: i64, si: i64, cl: i64) -> Vec<usize> {
+        let mut out = Vec::new();
+        if sa > 8500 && 2 * si + 3 * cl < 3000 { out.push(0); }
+        if (7000..=9000).contains(&sa) && 2 * si + 3 * cl >= 3000 && si + 2 * cl < 3000 { out.push(1); }
+        if ((700..2000).contains(&cl) && sa > 5200 && si + 2 * cl >= 3000) || (cl < 700 && si < 5000 && si + 2 * cl >= 3000) { out.push(2); }
+        if (700..2700).contains(&cl) && (2800..5000).contains(&si) && sa <= 5200 { out.push(3); }
+        if (si >= 5000 && (1200..2700).contains(&cl)) || ((5000..8000).contains(&si) && cl < 1200) { out.push(4); }
+        if si >= 8000 && cl < 1200 { out.push(5); }
+        if (2000..3500).contains(&cl) && si < 2800 && sa > 4500 { out.push(6); }
+        if (2700..4000).contains(&cl) && sa > 2000 && sa <= 4500 { out.push(7); }
+        if (2700..4000).contains(&cl) && sa <= 2000 { out.push(8); }
+        if cl >= 3500 && sa > 4500 { out.push(9); }
+        if cl >= 4000 && si >= 4000 { out.push(10); }
+        if cl >= 4000 && sa <= 4500 && si < 4000 { out.push(11); }
+        out
     }
-
-    /// The classes the cascade finds within two hundredths of a point (safe on the tenth-of-a-percent lattice, where a point off a line is at least ten units of its test away from it): more than one means the point is on a boundary.
+    /// The one class of a point by the Manual, asserting that the definitions leave neither a gap nor an overlap.
+    fn manual(sa: i64, cl: i64) -> usize {
+        let o = official(sa, 10000 - sa - cl, cl);
+        assert_eq!(o.len(), 1, "sand {sa} clay {cl}: the Manual's limits give {o:?}");
+        o[0]
+    }
+    /// The classes the Manual gives within two hundredths of a point (more than one: the point is on a line; safe on the tenth-of-a-percent lattice).
     fn near(sand: i64, clay: i64) -> Vec<usize> {
         let mut v = Vec::new();
-        for ds in -2..=2 {
-            for dc in -2..=2 {
-                let (sa, cl) = (sand + ds, clay + dc);
-                if sa < 0 || cl < 0 { continue; }
-                v.push(cascade(sa, 10000 - sa - cl, cl));
-            }
-        }
+        for ds in -2..=2 { for dc in -2..=2 {
+            let (sa, cl) = (sand + ds, clay + dc);
+            if sa < 0 || cl < 0 || sa + cl > 10000 { continue; }
+            v.push(manual(sa, cl));
+        } }
         v.sort();
         v.dedup();
         v
     }
+    /// What the figure did before the first critic round: the class listed later of every polygon the point touches.
+    fn old_tie_rule(sand: i64, clay: i64) -> usize { *classify(sand, clay).all.iter().max().unwrap() }
 
     #[test]
     fn the_twelve_polygons_tile_the_triangle() {
@@ -1056,49 +1151,71 @@ mod tests {
         for (i, pg) in POLY.iter().enumerate() {
             let n = pg.len();
             let a2: i64 = (0..n).map(|k| pg[k].0 * pg[(k + 1) % n].1 - pg[(k + 1) % n].0 * pg[k].1).sum();
-            assert!(a2 > 0 || a2 < 0, "{} has no area", NAMES[i]);
+            assert!(a2 != 0, "{} has no area", NAMES[i]);
             total += a2.abs();
             for v in pg.iter() { assert!(v.0 >= 0 && v.1 >= 0 && v.0 + v.1 <= 100, "{} vertex {v:?} is outside the triangle", NAMES[i]); }
         }
         assert_eq!(total, 2 * 5000, "the areas add to the whole triangle (twice the shoelace sum)");
-        for i in 0..12 { for j in i + 1..12 { assert_ne!(SERIES[i] , 99); let _ = j; } }
     }
 
     #[test]
-    fn the_polygon_classifier_agrees_with_the_cascade_on_every_tenth_of_a_percent_and_ties_only_on_lines() {
-        let (mut interior, mut on_line, mut gaps) = (0u32, 0u32, 0u32);
+    fn the_classifier_gives_the_manuals_class_at_every_exact_point_on_a_line_or_not() {
+        let (mut n1, mut n01, mut lines01, mut lines1) = (0u32, 0u32, 0u32, 0u32);
+        let (mut old_wrong1, mut old_wrong01) = (0u32, 0u32);
         let mut bad: Vec<String> = Vec::new();
-        for sand in (0..=10000).step_by(10) {
-            for clay in (0..=10000 - sand).step_by(10) {
-                let silt = 10000 - sand - clay;
-                let n = near(sand, clay);
-                if n.contains(&99) { gaps += 1; }
-                let c = classify(sand, clay);
-                if n.len() == 1 {
-                    interior += 1;
-                    if c.all != n || c.win != n[0] { bad.push(format!("sand {sand} clay {clay} silt {silt}: polygons {:?}, cascade {n:?}", c.all)); }
-                } else {
-                    on_line += 1;
-                    if c.all != n || c.win != *n.iter().max().unwrap() || !c.boundary() { bad.push(format!("line point sand {sand} clay {clay}: polygons {:?} win {}, cascade {n:?}", c.all, c.win)); }
+        // whole percents on all three axes (sand, silt and clay each 0..100 with sum 100) and then every tenth of a percent
+        for (step, n, on_lines, old_wrong) in [(100, &mut n1, &mut lines1, &mut old_wrong1), (10, &mut n01, &mut lines01, &mut old_wrong01)] {
+            for sand in (0..=10000).step_by(step) {
+                for clay in (0..=10000 - sand).step_by(step) {
+                    let silt = 10000 - sand - clay;
+                    *n += 1;
+                    let want = manual(sand, clay);
+                    assert_eq!(texture_class(sand, silt, clay), want);
+                    let c = classify(sand, clay);
+                    if c.win != want { bad.push(format!("sand {sand} silt {silt} clay {clay}: figure {} Manual {}", NAMES[c.win], NAMES[want])); }
+                    if !c.all.contains(&c.win) { bad.push(format!("sand {sand} clay {clay}: the class {} is not among the polygons it touches {:?}", c.win, c.all)); }
+                    // the drawing agrees with the class: a point strictly inside one polygon is in the class the Manual gives
+                    if c.all.len() == 1 && c.all[0] != want { bad.push(format!("sand {sand} clay {clay}: drawn in {} but the Manual says {}", NAMES[c.all[0]], NAMES[want])); }
+                    if c.boundary() { *on_lines += 1; }
+                    if old_tie_rule(sand, clay) != want { *old_wrong += 1; }
+                    if bad.len() > 10 { break; }
                 }
-                if bad.len() > 10 { break; }
             }
         }
-        assert_eq!(gaps, 0, "the cascade left a gap");
         assert!(bad.is_empty(), "{bad:#?}");
-        assert!(interior > 400_000 && on_line > 1000, "{interior} interior points, {on_line} on lines");
-        println!("classifier cross-check: {interior} interior points agree, {on_line} points on lines follow the tie rule, 0 disagreements");
+        assert_eq!(n1, 5151, "the whole-percent grid");
+        assert!(n01 > 500_000);
+        assert!(lines1 > 200 && lines01 > 2000, "{lines1} and {lines01} points on lines");
+        // the old tie rule is what this test exists to catch: it is wrong on four segments
+        assert!(old_wrong1 >= 40 && old_wrong01 >= 400, "the test would not notice the old tie rule ({old_wrong1}, {old_wrong01})");
+        println!("classifier cross-check: {n1} whole-percent and {n01} tenth-of-a-percent points, {lines1} and {lines01} on lines, 0 disagreements with the Manual; the old tie rule would be wrong on {old_wrong1} and {old_wrong01}");
     }
 
     #[test]
-    fn a_sample_on_a_line_goes_to_the_class_listed_later_and_the_sentence_says_which() {
+    fn the_four_segments_the_old_rule_got_wrong_are_the_manuals_class() {
+        let win = |sand: i64, clay: i64| NAMES[classify(sand * 100, clay * 100).win];
+        for clay in 40..=60 { assert_eq!(win(60 - clay, clay), "Silty clay", "silt 40, clay {clay}"); }
+        for silt in 80..=88 { assert_eq!(win(100 - 12 - silt, 12), "Silt loam", "clay 12, silt {silt}"); }
+        for clay in 20..=26 { assert_eq!(win(72 - clay, clay), "Loam", "silt 28, clay {clay}"); }
+        assert_eq!(win(45, 27), "Clay loam", "clay 27 is '27 to less than 40'");
+        for clay in 35..=39 { assert_eq!(win(45, clay), "Clay loam", "sand 45, clay {clay}"); }
+        // the examples the critic typed
+        assert_eq!(win(52, 20), "Loam");
+        assert_eq!(win(20, 40), "Silty clay");
+        assert_eq!(win(45, 35), "Clay loam");
+        assert_eq!(win(5, 12), "Silt loam");
+    }
+
+    #[test]
+    fn a_sample_on_a_line_says_which_lines_and_which_class_the_limits_give() {
         let c = classify(5200, 2000);
         assert_eq!(c.all, vec![2, 3, 6]);
-        assert_eq!(c.win, 6);
-        assert_eq!(c.sentence().unwrap(), "on the boundary of sandy loam, loam and sandy clay loam; classified as sandy clay loam by convention");
+        assert_eq!(c.win, 3);
+        assert_eq!(c.sentence().unwrap(), "on a line between sandy loam, loam and sandy clay loam; the limits in the Soil Survey Manual make it loam");
         let c = classify(5000, 0);
         assert_eq!(c.all, vec![2, 4]);
-        assert_eq!(c.sentence().unwrap(), "on the boundary of sandy loam and silt loam; classified as silt loam by convention");
+        assert_eq!(c.win, 4);
+        assert_eq!(c.sentence().unwrap(), "on a line between sandy loam and silt loam; the limits in the Soil Survey Manual make it silt loam");
         let c = classify(4000, 2000);
         assert_eq!((c.win, c.all.clone(), c.sentence()), (3, vec![3], None));
         // the corners
@@ -1108,6 +1225,8 @@ mod tests {
         // one hundredth either side of a line
         assert_eq!(classify(5201, 1999).win, 2);
         assert_eq!(classify(5199, 2000).win, 3);
+        assert_eq!(classify(5200, 1999).win, 3);
+        assert_eq!(classify(5201, 2000).win, 6);
     }
 
     // ------------------------------------------------------------ typed values
@@ -1125,10 +1244,12 @@ mod tests {
             let e = parse_pct(t).unwrap_err();
             assert!(e.contains(why), "{t:?}: {e}");
         }
+        assert!(parse_pct("1,000").unwrap_err().contains("a comma is read as a decimal point"));
+        assert!(!parse_pct("1.000").unwrap_err().contains("comma"));
     }
 
     #[test]
-    fn sums_that_do_not_make_one_hundred_are_refused_by_the_exact_amount() {
+    fn sums_that_do_not_make_one_hundred_are_refused_or_rounded_by_a_stated_rule() {
         let run = |l: &[(&'static str, &str)]| { let v: Vec<_> = l.iter().map(|(k, x)| s(k, x)).collect(); samples(&with(&v)) };
         // two typed: the third value would be negative, even by a hundredth
         for (a, b) in [("70", "30.01"), ("70", "30.5"), ("60", "41"), ("100", "0.01")] {
@@ -1136,12 +1257,32 @@ mod tests {
             assert!(e.contains("above 100"), "{a} {b}: {e}");
         }
         assert!(run(&[("sand", "70"), ("silt", ""), ("clay", "30")]).is_ok());
-        // three typed: any sum but 100 is refused, below as well as above
-        for (a, b, c) in [("30", "30", "30"), ("30", "30", "40.01"), ("30", "30", "39.99"), ("0", "0", "0"), ("50", "50", "1")] {
+        // three typed: a total from 99.5 to 100.5 is accepted and the largest value takes the difference; anything else is refused
+        for (a, b, c) in [("30", "30", "30"), ("30", "30", "40.51"), ("30", "30", "39.49"), ("0", "0", "0"), ("50", "50", "1"), ("33", "33", "33")] {
             let e = run(&[("sand", a), ("silt", b), ("clay", c)]).unwrap_err().join(" ");
             assert!(e.contains("not 100"), "{a} {b} {c}: {e}");
         }
-        assert!(run(&[("sand", "30"), ("silt", "30"), ("clay", "40")]).is_ok());
+        let one = |a: &str, b: &str, c: &str| run(&[("sand", a), ("silt", b), ("clay", c)]).unwrap()[0];
+        let x = one("33.33", "33.33", "33.33");
+        assert_eq!((x.sand, x.silt, x.clay, x.adj, x.from), (3334, 3333, 3333, Some((0, 1)), None), "the largest (first of equals) takes the missing hundredth");
+        let x = one("20", "30.2", "50.2");
+        assert_eq!((x.sand, x.silt, x.clay, x.adj), (2000, 3020, 4980, Some((2, -40))), "{x:?}");
+        let x = one("30", "30", "40.5");
+        assert_eq!((x.clay, x.adj), (4000, Some((2, -50))), "the edge of the tolerance is accepted");
+        let x = one("30", "30", "39.5");
+        assert_eq!((x.clay, x.adj), (4000, Some((2, 50))));
+        let x = one("30", "30", "40");
+        assert_eq!((x.sand + x.silt + x.clay, x.adj), (10000, None));
+        // whatever is accepted adds to exactly 100, and the editor says what was moved
+        for (a, b, c) in [("33.33", "33.33", "33.33"), ("0.1", "0.1", "99.6"), ("49.9", "50.3", "0")] {
+            let x = one(a, b, c);
+            assert_eq!(x.sand + x.silt + x.clay, 10000, "{a} {b} {c}");
+        }
+        let n = notes_for(ID, &with(&[s("sand", "33.33"), s("silt", "33.33"), s("clay", "33.33")]));
+        assert!(n.iter().any(|t| t.contains("add to 99.99, not 100") && t.contains("sand was moved by 0.01 to 33.34")), "{n:?}");
+        // the rounding never makes a negative value
+        let x = one("0.2", "0.2", "99.6");
+        assert!(x.sand >= 0 && x.silt >= 0 && x.clay >= 0 && x.clay + x.sand + x.silt == 10000);
     }
 
     /// An independent check of a stated reason against the text itself (no shared code with `parse_pct`).
@@ -1228,7 +1369,7 @@ mod tests {
         assert_eq!(e.why, vec!["The sample: sand 70 + clay 40 = 110, which is above 100, so silt would be -10 (below 0).".to_string()]);
         assert_eq!(e.then, "To draw it: Lower sand to 60 (with clay 40 the third value is then 0).");
         let e = r(&[s("sand", "40"), s("silt", "40"), s("clay", "25")]);
-        assert_eq!(e.why, vec!["The sample: sand 40 + silt 40 + clay 25 = 105, not 100.".to_string()]);
+        assert_eq!(e.why, vec!["The sample: sand 40 + silt 40 + clay 25 = 105, which is not 100 (a total from 99.5 to 100.5 is accepted).".to_string()]);
         assert_eq!(e.then, "To draw it: Clear silt so that it is worked out from sand and clay.");
         let e = r(&[s("sand", "40"), s("silt", ""), s("clay", "")]);
         assert_eq!(e.why, vec!["The sample has 1 of sand, silt and clay typed; it needs two of them (the third is worked out).".to_string()]);
@@ -1238,6 +1379,11 @@ mod tests {
         let e = r(&[s("sand", "40"), s("clay", "20"), s("sand2", "10")]);
         assert_eq!(e.why, vec!["Sample 2 has 1 of sand, silt and clay typed; it needs two of them (the third is worked out).".to_string()]);
         assert!(e.then.contains("Sample 2 silt") || e.then.contains("sample 2"), "{}", e.then);
+        // with nothing usable typed the advice is one instruction that holds whatever was in the boxes
+        let e = r(&[s("sand", "abc"), s("silt", "-4"), s("clay", "200")]);
+        assert_eq!(e.then, "To draw it: Type two of sand, silt and clay as numbers that add to at most 100 and leave the third empty, for example sand 40 and clay 20 (silt is then worked out as 40).");
+        let e = r(&[s("sand", ""), s("silt", ""), s("clay", ""), s("sand2", "x")]);
+        assert!(e.then.contains("Type two of sand, silt and clay for sample 2 as numbers"), "{}", e.then);
         // Name the regions reads no sample
         assert!(read(&with(&[s("task", TASKS[1]), s("sand", "abc")])).is_ok());
     }
@@ -1328,8 +1474,9 @@ mod tests {
     }
     /// Where the sample with these percentages must be, from barycentric coordinates.
     fn bary(svg: &str, clay: f64, silt: f64, sand: f64) -> P {
+        // the Manual's triangle: clay at the top, sand at the bottom left, silt at the bottom right
         let (a, l, r) = corners(svg);
-        ((clay * a.0 + silt * l.0 + sand * r.0) / 100.0, (clay * a.1 + silt * l.1 + sand * r.1) / 100.0)
+        ((clay * a.0 + sand * l.0 + silt * r.0) / 100.0, (clay * a.1 + sand * l.1 + silt * r.1) / 100.0)
     }
     fn local(svg: &str) -> impl Fn(P) -> P {
         let (a, l, _) = corners(svg);
@@ -1337,7 +1484,7 @@ mod tests {
     }
     fn region_polys() -> Vec<Vec<P>> {
         // independent of the module's xy(): barycentric on the unit triangle scaled to the figure's 600 wide
-        (0..12).map(|i| POLY[i].iter().map(|&(c, sa)| { let (c, sa) = (c as f64, sa as f64); (600.0 * (c / 2.0 + sa) / 100.0, 519.6152422706632 * (100.0 - c) / 100.0) }).collect()).collect()
+        (0..12).map(|i| POLY[i].iter().map(|&(c, sa)| { let (c, sa) = (c as f64, sa as f64); (600.0 * (c / 2.0 + (100.0 - c - sa)) / 100.0, 519.6152422706632 * (100.0 - c) / 100.0) }).collect()).collect()
     }
 
     // ------------------------------------------------------------ axes, ticks, titles, gridlines
@@ -1360,7 +1507,7 @@ mod tests {
                 else if t.anchor == "middle" && cy > l.1 { bottom.push((n, (r.0 - cx) / (r.0 - l.0) * 100.0)); }
                 else if t.anchor == "start" && cx > right_x { right.push((n, (cy - a.1) / (l.1 - a.1) * 100.0)); }
             }
-            for (name, set) in [("clay (left edge, rising up)", &left), ("silt (bottom, rising to the left)", &bottom), ("sand (right edge, rising down)", &right)] {
+            for (name, set) in [("clay (left edge, rising up)", &left), ("sand (bottom, rising to the left)", &bottom), ("silt (right edge, rising down)", &right)] {
                 assert_eq!(set.len(), 11, "{size} {name}: {set:?}");
                 let mut have: Vec<i64> = set.iter().map(|q| q.0 as i64).collect();
                 have.sort();
@@ -1378,14 +1525,14 @@ mod tests {
             let ts = texts(&svg);
             let dist_line = |p: P, u: P, v: P| ((v.0 - u.0) * (u.1 - p.1) - (u.0 - p.0) * (v.1 - u.1)).abs() / (v.0 - u.0).hypot(v.1 - u.1);
             let title = |w: &str| ts.iter().find(|t| t.s == w).unwrap_or_else(|| panic!("{w}")).clone();
-            let (c, si, sa) = (title("Percent clay"), title("Percent silt"), title("Percent sand"));
+            let (c, sa, si) = (title("Percent clay"), title("Percent sand"), title("Percent silt"));
             let dc = [dist_line((c.x, c.y), a, l), dist_line((c.x, c.y), l, r), dist_line((c.x, c.y), r, a)];
             let ds = [dist_line((si.x, si.y), a, l), dist_line((si.x, si.y), l, r), dist_line((si.x, si.y), r, a)];
             let dn = [dist_line((sa.x, sa.y), a, l), dist_line((sa.x, sa.y), l, r), dist_line((sa.x, sa.y), r, a)];
             assert!(dc[0] < dc[1] && dc[0] < dc[2], "clay title is nearest the left edge {dc:?}");
-            assert!(ds[1] < ds[0] && ds[1] < ds[2], "silt title is nearest the bottom {ds:?}");
-            assert!(dn[2] < dn[0] && dn[2] < dn[1], "sand title is nearest the right edge {dn:?}");
-            assert_eq!((c.rot.unwrap(), sa.rot.unwrap(), si.rot), (-60.0, 60.0, None));
+            assert!(dn[1] < dn[0] && dn[1] < dn[2], "sand title is nearest the bottom {dn:?}");
+            assert!(ds[2] < ds[0] && ds[2] < ds[1], "silt title is nearest the right edge {ds:?}");
+            assert_eq!((c.rot.unwrap(), si.rot.unwrap(), sa.rot), (-60.0, 60.0, None));
             let arrows: Vec<(P, P)> = lines(&svg).into_iter().filter(|q| q.2 == 1.4).map(|q| (q.0, q.1)).collect();
             assert_eq!(arrows.len(), 3);
             // each arrow runs along its edge toward the corner where that quantity is 100
@@ -1393,8 +1540,8 @@ mod tests {
             let _ = toward;
             let dir = |q: &(P, P)| { let n = (q.1 .0 - q.0 .0).hypot(q.1 .1 - q.0 .1); ((q.1 .0 - q.0 .0) / n, (q.1 .1 - q.0 .1) / n) };
             let clay_dir = ((a.0 - l.0) / (a.0 - l.0).hypot(a.1 - l.1), (a.1 - l.1) / (a.0 - l.0).hypot(a.1 - l.1));
-            let sand_dir = ((r.0 - a.0) / (r.0 - a.0).hypot(r.1 - a.1), (r.1 - a.1) / (r.0 - a.0).hypot(r.1 - a.1));
-            let silt_dir = (-1.0, 0.0);
+            let silt_dir = ((r.0 - a.0) / (r.0 - a.0).hypot(r.1 - a.1), (r.1 - a.1) / (r.0 - a.0).hypot(r.1 - a.1));
+            let sand_dir = (-1.0, 0.0);
             for (name, want, near_title) in [("clay", clay_dir, (c.x, c.y)), ("sand", sand_dir, (sa.x, sa.y)), ("silt", silt_dir, (si.x, si.y))] {
                 let q = arrows.iter().min_by(|x, y| { let dx = (x.0 .0 + x.1 .0) / 2.0 - near_title.0; let dy = (x.0 .1 + x.1 .1) / 2.0 - near_title.1; let ex = (y.0 .0 + y.1 .0) / 2.0 - near_title.0; let ey = (y.0 .1 + y.1 .1) / 2.0 - near_title.1; dx.hypot(dy).partial_cmp(&ex.hypot(ey)).unwrap() }).unwrap();
                 let d = dir(q);
@@ -1411,9 +1558,9 @@ mod tests {
     fn gridlines_are_the_constant_lines_every_ten_percent_and_can_be_switched_off() {
         let svg = at("40", "20", "Medium", true, &[]);
         let (a, l, r) = corners(&svg);
-        let g: Vec<_> = lines(&svg).into_iter().filter(|q| q.2 == 0.6).collect();
+        let g: Vec<_> = lines(&svg).into_iter().filter(|q| q.2 == 0.9).collect();
         assert_eq!(g.len(), 27);
-        let point = |clay: f64, silt: f64, sand: f64| ((clay * a.0 + silt * l.0 + sand * r.0) / 100.0, (clay * a.1 + silt * l.1 + sand * r.1) / 100.0);
+        let point = |clay: f64, silt: f64, sand: f64| ((clay * a.0 + sand * l.0 + silt * r.0) / 100.0, (clay * a.1 + sand * l.1 + silt * r.1) / 100.0);
         let near = |p: P, q: P| (p.0 - q.0).hypot(p.1 - q.1) < 0.02;
         for v in (10..=90).step_by(10) {
             let v = v as f64;
@@ -1423,7 +1570,7 @@ mod tests {
             assert!(has(point(0.0, 100.0 - v, v), point(100.0 - v, 0.0, v)), "sand {v}");
         }
         let off = at("40", "20", "Medium", true, &[b("grid", false)]);
-        assert_eq!(lines(&off).into_iter().filter(|q| q.2 == 0.6).count(), 0);
+        assert_eq!(lines(&off).into_iter().filter(|q| q.2 == 0.9).count(), 0);
     }
 
     // ------------------------------------------------------------ the plotted point and the construction lines
@@ -1442,15 +1589,15 @@ mod tests {
             let m = markers(&svg, "Medium");
             assert_eq!(m.len(), 1, "{sand} {clay}");
             assert!((m[0].0 - want.0).abs() < 0.01 && (m[0].1 - want.1).abs() < 0.01, "{sand} {clay}: marker {:?} want {want:?}", m[0]);
-            // construction lines start at the marker and end on the left edge (clay), the right edge (sand) and the bottom (silt)
+            // construction lines start at the marker and end on the left edge (clay), the bottom (sand) and the right edge (silt)
             let g: Vec<_> = lines(&svg).into_iter().filter(|q| q.3).collect();
             assert_eq!(g.len(), 3);
             let (a, l, r) = corners(&svg);
             let on_left = (cl * a.0 + (100.0 - cl) * l.0) / 100.0;
             let ends = [
-                ((on_left, (cl * a.1 + (100.0 - cl) * l.1) / 100.0), "clay"),
-                (((sa * r.0 + (100.0 - sa) * a.0) / 100.0, (sa * r.1 + (100.0 - sa) * a.1) / 100.0), "sand"),
-                (((silt * l.0 + (100.0 - silt) * r.0) / 100.0, l.1), "silt"),
+                ((on_left, (cl * a.1 + (100.0 - cl) * l.1) / 100.0), "clay (left edge)"),
+                (((sa * l.0 + (100.0 - sa) * r.0) / 100.0, l.1), "sand (bottom)"),
+                (((silt * r.0 + (100.0 - silt) * a.0) / 100.0, (silt * r.1 + (100.0 - silt) * a.1) / 100.0), "silt (right edge)"),
             ];
             for (e, name) in ends {
                 assert!(g.iter().any(|q| (q.0 .0 - m[0].0).hypot(q.0 .1 - m[0].1) < 0.02 && (q.1 .0 - e.0).hypot(q.1 .1 - e.1) < 0.02), "{sand} {clay}: no guide to the {name} axis at {e:?}: {g:?}");
@@ -1466,11 +1613,12 @@ mod tests {
         for sand in (0..=100).step_by(5) { for clay in (0..=100 - sand).step_by(5) {
             let (sa, cl) = (sand as i64 * 100, clay as i64 * 100);
             let n = near(sa, cl);
+            let exact = manual(sa, cl);
             let svg = at(&sand.to_string(), &clay.to_string(), "Medium", true, &[]);
             let ts = texts(&svg);
             let i = ts.iter().position(|t| t.s == "Texture class:").unwrap();
             let shown = &ts[i + 1].s;
-            let want = NAMES[*n.iter().max().unwrap()];
+            let want = NAMES[exact];
             assert_eq!(shown, want, "sand {sand} clay {clay}");
             assert_eq!(ts[i - 1].s, format!("Sand {sand} %, silt {} %, clay {clay} %", 100 - sand - clay));
             // exactly one thick outline, and the marker is inside or on it
@@ -1485,7 +1633,7 @@ mod tests {
             let win = (0..12).find(|&k| rp[k].len() == pg.len() && rp[k].iter().zip(&pg).all(|(u, v)| (u.0 - v.0).abs() < 0.02 && (u.1 - v.1).abs() < 0.02)).expect("the outline is one of the twelve regions");
             assert_eq!(NAMES[win], want);
             // a sentence about the line, only on a line
-            let has = ts.iter().map(|t| t.s.as_str()).collect::<Vec<_>>().join(" ").contains("by convention");
+            let has = ts.iter().map(|t| t.s.as_str()).collect::<Vec<_>>().join(" ").contains("on a line between");
             assert_eq!(has, n.len() > 1, "sand {sand} clay {clay}");
             checked += 1;
         } }
@@ -1494,23 +1642,31 @@ mod tests {
 
     #[test]
     fn a_point_on_a_line_is_drawn_exactly_there_and_flagged_in_the_key_only() {
-        for (sand, clay, text) in [("52", "20", "on the boundary of sandy loam, loam and sandy clay loam; classified as sandy clay loam by convention"), ("50", "0", "on the boundary of sandy loam and silt loam; classified as silt loam by convention"), ("45", "55", "on the boundary of sandy clay and clay; classified as clay by convention")] {
+        for (sand, clay, text) in [
+            ("52", "20", "on a line between sandy loam, loam and sandy clay loam; the limits in the Soil Survey Manual make it loam"),
+            ("50", "0", "on a line between sandy loam and silt loam; the limits in the Soil Survey Manual make it silt loam"),
+            ("45", "55", "on a line between sandy clay and clay; the limits in the Soil Survey Manual make it clay"),
+            ("10", "50", "on a line between silty clay and clay; the limits in the Soil Survey Manual make it silty clay"),
+        ] {
             let key = at(sand, clay, "Medium", true, &[]);
             let stu = at(sand, clay, "Medium", false, &[]);
             let k = texts(&key).iter().map(|t| t.s.clone()).collect::<Vec<_>>().join(" ");
-            assert!(k.contains(&format!("This point is {text}")) || k.replace("  ", " ").contains(&text.split(';').next().unwrap().to_string()), "{k}");
+            assert!(k.contains(&format!("This point is {}", text.split(';').next().unwrap())), "{k}");
             let k2 = texts(&key).into_iter().filter(|t| t.size < 12.0 && t.size > 11.0).map(|t| t.s).collect::<Vec<_>>().join(" ");
-            assert!(k2.contains("classified as") && k2.contains("by convention"), "{k2}");
-            assert!(!stu.contains("boundary of") && !stu.contains("by convention"));
+            assert!(k2.contains("on a line between") && k2.contains("Soil Survey Manual make it"), "{k2}");
+            assert!(!k.contains("convention") && !k.contains("listed later") && !k.contains("legend."), "the invented tie rule is gone: {k}");
+            assert!(!stu.contains("on a line between") && !stu.contains("Manual") && !stu.contains("listed later"));
             let (sa, cl): (f64, f64) = (sand.parse().unwrap(), clay.parse().unwrap());
             let want = bary(&key, cl, 100.0 - sa - cl, sa);
             let m = markers(&key, "Medium")[0];
             assert!((m.0 - want.0).abs() < 0.01 && (m.1 - want.1).abs() < 0.01);
-            assert!(notes_for(ID, &with(&[s("sand", sand), s("clay", clay)])).iter().any(|n| n.contains("by convention")));
+            assert!(notes_for(ID, &with(&[s("sand", sand), s("clay", clay)])).iter().any(|n| n.contains(text)), "{text}");
         }
     }
 
     // ------------------------------------------------------------ collisions, measured from the SVG alone
+    /// Labels that sit on a construction line because no place in their region was clear of the lines (counted, reported by the sweeps).
+    static COVERED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     fn collisions(svg: &str, size: &str, nm: bool) -> Vec<String> {
         let mut bad = Vec::new();
         let (w, h) = canvas(svg);
@@ -1601,6 +1757,68 @@ mod tests {
                 for q in [(r.0, r.1), (r.2, r.1), (r.0, r.3), (r.2, r.3)] {
                     let q = loc(q);
                     if !inside(&rp[i], q) || clearance(&rp[i], q) < 1.9 { bad.push(format!("a label plate crosses the edge of {}", NAMES[i])); break; }
+                }
+            }
+        }
+        // construction lines run over no region label, plate or number tag, and keep clear of every leader
+        let guide_segs: Vec<(P, P)> = lines(svg).into_iter().filter(|q| q.3).map(|q| (q.0, q.1)).collect();
+        let along = |a: P, c: P, n: usize| -> Vec<P> { (0..=n).map(|k| { let t = k as f64 / n as f64; (a.0 + (c.0 - a.0) * t, a.1 + (c.1 - a.1) * t) }).collect() };
+        let all_guide_pts: Vec<P> = guide_segs.iter().flat_map(|g| along(g.0, g.1, 120)).map(&loc).collect();
+        let marker_pts: Vec<P> = cs.iter().filter(|c| (c.2 - rm).abs() < 1e-6).map(|c| loc((c.0, c.1))).collect();
+        let tag_plates: Vec<Bx> = rects(svg).into_iter().filter(|r| r.1 == "#ffffff" && tag_texts.iter().any(|g2| in_box((g2.x, g2.y - 0.3 * g2.size), r.0, 1.0))).map(|r| { let a = loc((r.0 .0, r.0 .1)); let c2 = loc((r.0 .2, r.0 .3)); (a.0 - 1.5, a.1 - 1.5, c2.0 + 1.5, c2.1 + 1.5) }).collect();
+        // a region label may sit on a line only if NO place in its region (for the abbreviation, the smallest label) is clear of every line and marker
+        let could_be_free = |r: usize| -> bool {
+            let (w, hh) = (est_w(ABBR[r], fs, true) + 6.0, fs * 1.15 + 4.0);
+            let bb = rp[r].iter().fold((f64::MAX, f64::MAX, f64::MIN, f64::MIN), |a, q| (a.0.min(q.0), a.1.min(q.1), a.2.max(q.0), a.3.max(q.1)));
+            let mut y = (bb.1 / 3.0).floor() * 3.0; // on the module's 1.5 px candidate grid
+            while y <= bb.3 {
+                let mut x = (bb.0 / 3.0).floor() * 3.0;
+                while x <= bb.2 {
+                    let bx = (x - w / 2.0, y - hh / 2.0, x + w / 2.0, y + hh / 2.0);
+                    let corners_ok = [(bx.0, bx.1), (bx.2, bx.1), (bx.0, bx.3), (bx.2, bx.3), (x, bx.1), (x, bx.3), (bx.0, y), (bx.2, y)].iter().all(|q| inside(&rp[r], *q) && clearance(&rp[r], *q) >= 3.0);
+                    if corners_ok && clearance(&rp[r], (x, y)) >= 4.0 && !rp[r].iter().any(|v| in_box(*v, bx, 3.0)) && !tag_plates.iter().any(|t| overlap(*t, bx) > 0.0) && !all_guide_pts.iter().any(|q| in_box(*q, bx, 1.5)) && !marker_pts.iter().any(|m| (m.0.clamp(bx.0, bx.2) - m.0).hypot(m.1.clamp(bx.1, bx.3) - m.1) < rm + 3.0) { return true; }
+                    x += 3.0;
+                }
+                y += 3.0;
+            }
+            false
+        };
+        for g in &guide_segs {
+            let pts = along(g.0, g.1, 120);
+            for (k, t) in ts.iter().enumerate() {
+                if t.rot.is_some() { continue; }
+                let c = loc((t.x, t.y - 0.3 * t.size));
+                if !inside(&tri, c) || c.1 > 519.0 { continue; }
+                if pts.iter().any(|q| in_box(*q, boxes[k], 0.5)) {
+                    let is_tag = tag_texts.iter().any(|g2| std::ptr::eq(*g2, t));
+                    match (0..12).find(|&r| inside(&rp[r], c)) {
+                        Some(r) if !is_tag && !could_be_free(r) => { COVERED.fetch_add(1, std::sync::atomic::Ordering::Relaxed); }
+                        _ => bad.push(format!("a construction line runs over the text {:?} although a clear place exists", t.s)),
+                    }
+                }
+            }
+            for (r, f) in rects(svg) {
+                if f != "#ffffff" || r.3 - r.1 > 80.0 { continue; }
+                let c = loc(((r.0 + r.2) / 2.0, (r.1 + r.3) / 2.0));
+                if !inside(&tri, c) { continue; }
+                if pts.iter().any(|q| in_box(*q, r, 0.0)) {
+                    let is_tag = tag_texts.iter().any(|g2| in_box((g2.x, g2.y - 0.3 * g2.size), r, 1.0));
+                    match (0..12).find(|&q| inside(&rp[q], c)) {
+                        Some(q) if !is_tag && !could_be_free(q) => {}
+                        _ => bad.push("a construction line runs under a label plate although a clear place exists".to_string()),
+                    }
+                }
+            }
+            let (_, base_l, _) = corners(svg);
+            let hugs_bottom = (g.0 .1 - base_l.1).abs() < 10.0 && (g.1 .1 - base_l.1).abs() < 10.0;
+            for c in cs.iter().filter(|c| (c.2 - 2.2).abs() < 1e-6) {
+                let Some(l) = lines(svg).into_iter().find(|l| (l.0 .0 - c.0).abs() < 1e-6 && (l.0 .1 - c.1).abs() < 1e-6) else { continue };
+                let mind = along(l.0, l.1, 40).iter().flat_map(|u| pts.iter().map(move |v| (u.0 - v.0).hypot(u.1 - v.1))).fold(f64::MAX, f64::min);
+                if mind < 3.0 && !hugs_bottom { bad.push(format!("a leader at x {:.1} is only {mind:.2} px from a construction line", c.0)); }
+                // a leader keeps clear of the landing dots whatever the lines do
+                for m in cs.iter().filter(|m| (m.2 - 2.8).abs() < 1e-6) {
+                    let d = along(l.0, l.1, 40).iter().map(|u| (u.0 - m.0).hypot(u.1 - m.1)).fold(f64::MAX, f64::min);
+                    if d < m.2 + 3.0 { bad.push(format!("a leader at x {:.1} is only {d:.2} px from a landing dot", c.0)); }
                 }
             }
         }
@@ -1777,18 +1995,16 @@ mod tests {
                         let mut words = words_of(&stu);
                         for f in ["sand", "silt", "clay"] { while let Some(i) = words.find(&format!("{f} ")) { let rest = words[i..].split_once(" %").map(|x| x.0.len() + 2).unwrap_or(f.len()); words.replace_range(i..i + rest, ""); } }
                         for n in NAMES { assert!(!words.contains(&n.to_lowercase()), "the student title/description names {n}: {words}"); }
-                        for w in ["boundary", "convention", "classified", "loam", "clay"].iter().take(3) { assert!(!stu.to_lowercase().contains(w), "student copy has {w}"); }
+                        for w in ["on a line", "convention", "manual", "limits", "listed later"] { assert!(!stu.to_lowercase().contains(w), "student copy has {w}"); }
                         // the text, minus the answers, is the key's text
                         let (ts, tk) = (texts(&stu), texts(&key));
                         let mut kept: Vec<&T> = Vec::new();
-                        let mut skip_notes = false;
                         let mut after_label = false;
+                        let note_size = (fsz(size) * 0.95 * 100.0).round() / 100.0;
                         for t in &tk {
                             if after_label { after_label = false; continue; }
                             if t.s == "Texture class:" { after_label = true; kept.push(t); continue; }
-                            if t.s.starts_with("This point is") { skip_notes = true; continue; }
-                            if skip_notes && t.s.starts_with("A point exactly") { skip_notes = false; }
-                            if skip_notes { continue; }
+                            if t.size == note_size { continue; } // the line-note under the answer
                             kept.push(t);
                         }
                         let a: Vec<&str> = ts.iter().map(|t| t.s.as_str()).collect();
@@ -1799,7 +2015,7 @@ mod tests {
                         // answer names occur no more often in the student copy than in the key
                         let full = |svg: &str| texts(svg).iter().filter(|t| t.s == NAMES[c.win]).count();
                         assert!(full(&stu) < full(&key), "{}: the key adds the answer", NAMES[c.win]);
-                        assert!(full(&stu) <= 2);
+                        assert_eq!(full(&stu) + 1, full(&key), "{}: the key adds exactly the one answer", NAMES[c.win]);
                         // no thick outline, no extra marks
                         assert!(polys(&stu).iter().all(|p| p.2 != 3.0));
                         checked += 1;
@@ -1842,6 +2058,69 @@ mod tests {
         }
         assert!(words_of(&key).contains("loam") && !words_of(&stu).contains("loam"));
         assert!(words_of(&stu).contains("sand 40 %, silt 40 %, clay 20 %"));
+    }
+
+    #[test]
+    fn a_guide_that_lands_in_the_bottom_label_gaps_keeps_every_leader_clear() {
+        let mut n = 0;
+        for size in ["Small", "Medium", "Large"] {
+            for clay in ["0", "1", "5", "20", "45"] {
+                for sand in (0..=100).step_by(if size == "Medium" { 3 } else { 1 }) {
+                    if sand + clay.parse::<i32>().unwrap() > 100 { continue; }
+                    let svg = at(&sand.to_string(), clay, size, true, &[b("guides", true)]);
+                    let c = collisions(&svg, size, false);
+                    assert!(c.is_empty(), "sand {sand} clay {clay} {size}: {:?}", &c[..c.len().min(3)]);
+                    n += 1;
+                }
+            }
+        }
+        // the sweep does put landing dots next to leaders (otherwise it proves nothing)
+        let mut near_leader = 0;
+        for sand in 0..=100 {
+            let svg = at(&sand.to_string(), "5", "Small", true, &[b("guides", true)]);
+            let cs = circles(&svg);
+            for d in cs.iter().filter(|c| (c.2 - 2.8).abs() < 1e-6) { for l in cs.iter().filter(|c| (c.2 - 2.2).abs() < 1e-6) { if (d.0 - l.0).abs() < 12.0 && d.1 > 500.0 { near_leader += 1; } } }
+            if sand + 5 > 100 { break; }
+        }
+        assert!(near_leader >= 3, "{near_leader} landing dots within 12 px of a leader");
+        println!("guide/leader sweep: {n} renders, {near_leader} landing dots within 12 px of a leader, 0 collisions");
+    }
+
+    #[test]
+    fn no_label_or_tag_is_ever_covered_by_a_construction_line_when_any_place_is_free() {
+        // one sample: every region label (name or abbreviation) with the three lines on, over a dense grid of samples
+        let mut n = 0;
+        for size in ["Small", "Medium", "Large"] {
+            for sand in (0..=100).step_by(7) { for clay in (0..=100 - sand).step_by(7) {
+                let svg = at(&sand.to_string(), &clay.to_string(), size, true, &[b("guides", true)]);
+                let c = collisions(&svg, size, false);
+                assert!(c.is_empty(), "sand {sand} clay {clay} {size}: {:?}", &c[..c.len().min(3)]);
+                n += 1;
+            } }
+        }
+        // the old placement tried the full name over a line before the abbreviation with none: sand 0 clay 40 and sand 50 clay 45
+        for (sa, cl) in [("0", "40"), ("50", "45")] {
+            for size in ["Medium", "Large"] {
+                let svg = at(sa, cl, size, true, &[b("guides", true)]);
+                assert!(collisions(&svg, size, false).is_empty(), "sand {sa} clay {cl} {size}");
+            }
+        }
+        println!("label/guide sweep: {n} renders, {} label-on-line cases in all sweeps so far (no clear place existed)", COVERED.load(std::sync::atomic::Ordering::Relaxed));
+    }
+
+    #[test]
+    fn two_sample_tags_are_never_on_a_construction_line() {
+        let pts = ["40", "20", "10", "5", "60", "30", "85", "5", "52", "20", "45", "55", "0", "0", "0", "100", "5", "45", "27", "26"];
+        let mut n = 0;
+        for size in ["Small", "Medium", "Large"] {
+            for a in (0..pts.len()).step_by(2) { for c in (0..pts.len()).step_by(2) {
+                let svg = render_of(&[s("sand", pts[a]), s("clay", pts[a + 1]), s("sand2", pts[c]), s("clay2", pts[c + 1]), s("label_size", size), b("guides", true)]);
+                let col = collisions(&svg, size, false);
+                assert!(col.is_empty(), "{size} {:?} {:?}: {col:?}", &pts[a..a + 2], &pts[c..c + 2]);
+                n += 1;
+            } }
+        }
+        println!("tag/guide sweep: {n} renders");
     }
 
     // ------------------------------------------------------------ print
@@ -1915,6 +2194,116 @@ mod tests {
         }
     }
 
+    /// The Print render as a 66 %-grey copy at 1x (true = black), with its size.
+    fn bw66(svg: &str) -> (i64, i64, Vec<bool>) {
+        let (w, h, px) = to_rgba(svg, 1.0).unwrap();
+        let v = px.chunks(4).map(|c| { let a = c[3] as f64 / 255.0; (0.299 * c[0] as f64 + 0.587 * c[1] as f64 + 0.114 * c[2] as f64) * a + 255.0 * (1.0 - a) < 0.66 * 255.0 }).collect();
+        (w as i64, h as i64, v)
+    }
+    fn dark_near(m: &(i64, i64, Vec<bool>), p: P, r: i64) -> bool {
+        let (cx, cy) = (p.0.floor() as i64, p.1.floor() as i64);
+        for y in cy - r..=cy + r { for x in cx - r..=cx + r { if x >= 0 && y >= 0 && x < m.0 && y < m.1 && m.2[(y * m.0 + x) as usize] { return true; } } }
+        false
+    }
+    fn dark_at(m: &(i64, i64, Vec<bool>), p: P) -> bool { dark_near(m, p, 0) }
+
+    #[test]
+    fn no_class_wears_the_plain_fill_or_the_horizontal_hatch_that_a_construction_line_could_hide_in() {
+        for (i, v) in SERIES.iter().enumerate() { assert!(*v != 4 && *v != 0, "{} wears series {v}", NAMES[i]); }
+    }
+
+    #[test]
+    fn in_print_the_construction_lines_stand_on_white_and_stay_visible_in_a_66_percent_grey_copy() {
+        let mut checked = 0;
+        for (sa, cl) in [("52", "20"), ("40", "20"), ("30", "10"), ("10", "50"), ("20", "30"), ("60", "10"), ("5", "60"), ("70", "5")] {
+            let svg = render_of(&[s("sand", sa), s("clay", cl), s("style", "Print"), b("guides", true), b("grid", false), b(SHOW_ANSWERS, false)]);
+            let m = bw66(&svg);
+            let ts = texts(&svg);
+            let boxes: Vec<Bx> = ts.iter().map(bbox).collect();
+            let plates: Vec<Bx> = rects(&svg).into_iter().filter(|r| r.1 == "#ffffff").map(|r| r.0).collect();
+            let cs = circles(&svg);
+            let gs: Vec<(P, P)> = lines(&svg).into_iter().filter(|q| q.3).map(|q| (q.0, q.1)).collect();
+            assert_eq!(gs.len(), 3);
+            for (a, c) in gs {
+                let len = (c.0 - a.0).hypot(c.1 - a.1);
+                let (ux, uy) = ((c.0 - a.0) / len, (c.1 - a.1) / len);
+                let (mut on, mut tot, mut side_white, mut side_tot) = (0u32, 0u32, 0u32, 0u32);
+                for k in 0..200 {
+                    let t = 0.1 + 0.8 * k as f64 / 199.0;
+                    let q = (a.0 + (c.0 - a.0) * t, a.1 + (c.1 - a.1) * t);
+                    let sides = [(q.0 - uy * 1.9, q.1 + ux * 1.9), (q.0 + uy * 1.9, q.1 - ux * 1.9)];
+                    let busy = |p: P| boxes.iter().any(|b| in_box(p, *b, 3.0)) || plates.iter().any(|b| in_box(p, *b, 3.0)) || cs.iter().any(|c| (c.0 - p.0).hypot(c.1 - p.1) < c.2 + 3.0);
+                    if busy(q) || sides.iter().any(|p| busy(*p)) { continue; }
+                    tot += 1;
+                    if dark_near(&m, q, 1) { on += 1; }
+                    for p in sides { side_tot += 1; if !dark_near(&m, p, 0) { side_white += 1; } }
+                }
+                assert!(tot > 40, "sand {sa} clay {cl}: only {tot} clear samples on a guide");
+                assert!(on as f64 / tot as f64 > 0.45, "sand {sa} clay {cl}: the line is dark at {on} of {tot} points");
+                assert!(side_white as f64 / side_tot as f64 > 0.85, "sand {sa} clay {cl}: only {side_white} of {side_tot} points beside the line are white (it is hiding in a hatch)");
+                checked += 1;
+            }
+        }
+        assert_eq!(checked, 24);
+    }
+
+    #[test]
+    fn in_print_the_gridlines_add_ink_in_a_66_percent_grey_copy_at_one_to_one() {
+        let on = render_of(&[s("style", "Print"), b("grid", true), b(SHOW_ANSWERS, false)]);
+        let off = render_of(&[s("style", "Print"), b("grid", false), b(SHOW_ANSWERS, false)]);
+        let (mon, moff) = (bw66(&on), bw66(&off));
+        let ts = texts(&on);
+        let boxes: Vec<Bx> = ts.iter().map(bbox).collect();
+        let plates: Vec<Bx> = rects(&on).into_iter().filter(|r| r.1 == "#ffffff").map(|r| r.0).collect();
+        let g: Vec<_> = lines(&on).into_iter().filter(|q| q.2 == 0.9).collect();
+        assert_eq!(g.len(), 27);
+        let (mut cand, mut seen) = (0u32, 0u32);
+        for (a, c, _, _) in g {
+            for k in 0..120 {
+                let t = 0.03 + 0.94 * k as f64 / 119.0;
+                let q = (a.0 + (c.0 - a.0) * t, a.1 + (c.1 - a.1) * t);
+                if boxes.iter().any(|b| in_box(q, *b, 3.0)) || plates.iter().any(|b| in_box(q, *b, 3.0)) { continue; }
+                if dark_near(&moff, q, 1) { continue; } // already inked by a hatch: no way to tell
+                cand += 1;
+                if dark_at(&mon, q) || dark_near(&mon, q, 1) { seen += 1; }
+            }
+        }
+        assert!(cand > 800, "only {cand} clear points on the gridlines");
+        assert!(seen as f64 / cand as f64 > 0.8, "{seen} of {cand} gridline points show in the 66% grey copy");
+        println!("print gridlines: {seen} of {cand} clear points show ink at 66% grey, 1x");
+    }
+
+    #[test]
+    fn the_student_copy_can_hide_the_worked_out_value_and_the_key_never_does() {
+        let line = |svg: &str| texts(svg).into_iter().map(|t| t.s).find(|t| t.starts_with("Sand ")).unwrap();
+        for (typed, hidden) in [([("sand", "40"), ("silt", ""), ("clay", "20")], "Sand 40 %, silt ____ %, clay 20 %"), ([("sand", ""), ("silt", "40"), ("clay", "20")], "Sand ____ %, silt 40 %, clay 20 %"), ([("sand", "40"), ("silt", "40"), ("clay", "")], "Sand 40 %, silt 40 %, clay ____ %")] {
+            let mut l: Vec<_> = typed.iter().map(|(k, v)| s(k, v)).collect();
+            l.push(b("show_worked", false));
+            let mut stu = l.clone(); stu.push(b(SHOW_ANSWERS, false));
+            let mut key = l.clone(); key.push(b(SHOW_ANSWERS, true));
+            let (stu, key) = (render_of(&stu), render_of(&key));
+            assert_eq!(line(&stu), hidden);
+            assert_eq!(line(&key), "Sand 40 %, silt 40 %, clay 20 %", "the key always prints it");
+            assert!(words_of(&stu).contains(&hidden.to_lowercase()) && !words_of(&stu).contains("sand 40 %, silt 40 %, clay 20 %"), "{}", words_of(&stu));
+            assert_eq!(markup_leaks(&stu), Vec::<String>::new());
+        }
+        // three typed: nothing was worked out, nothing to hide; and the default prints it
+        let all3 = render_of(&[s("sand", "40"), s("silt", "40"), s("clay", "20"), b("show_worked", false), b(SHOW_ANSWERS, false)]);
+        assert_eq!(line(&all3), "Sand 40 %, silt 40 %, clay 20 %");
+        assert_eq!(line(&render_of(&[b(SHOW_ANSWERS, false)])), "Sand 40 %, silt 40 %, clay 20 %");
+        // the layout is the same either way
+        let (a, c) = (render_of(&[b("show_worked", false), b(SHOW_ANSWERS, false)]), render_of(&[b(SHOW_ANSWERS, false)]));
+        assert_eq!(circles(&a), circles(&c));
+    }
+
+    #[test]
+    fn the_faq_states_the_manual_as_the_source_and_not_the_old_convention() {
+        let all: String = crate::figures::faq::faq_for(ID).iter().map(|f| format!("{} {}", f.q, f.a)).collect::<Vec<_>>().join(" ");
+        assert!(all.contains("7 to less than 27 % clay"), "the Manual's wording of loam");
+        for gone in ["by convention", "listed later", "finer one", "sand 52 %, clay 20 % touches sandy loam, loam and sandy clay loam and is called sandy clay loam", "lower right 100 % sand", "lower left 100 % silt"] { assert!(!all.contains(gone), "{gone}"); }
+        for want in ["lower left 100 % sand", "lower right 100 % silt", "Soil Survey Manual", "99.5 to 100.5"] { assert!(all.contains(want), "{want}"); }
+    }
+
     // ------------------------------------------------------------ odd input, determinism, speed
     const NASTY: &[&str] = &["", "0", "-1", "40", "100", "55.5", "abc", "1e9", "NaN", "inf", "\u{212A}", "\u{1E9E}", "\u{df}", "\u{130}", "\u{301}", "\u{1F600}", "\u{663}", "\u{ff11}", "\n", "\u{0}", "<", ">", "&", "\"", "'", "\u{202e}", "Large", "Print", "99999999999999999999999", "\u{2212}5", "5%"];
     struct Rng(u64);
@@ -1955,8 +2344,9 @@ mod tests {
     fn the_same_settings_draw_the_same_picture_and_every_other_control_changes_it() {
         let base = render_of(&[]);
         assert_eq!(base, render_of(&[]));
-        for (k, v) in [("task", s("task", TASKS[1])), ("sand", s("sand", "41")), ("grid", b("grid", false)), ("guides", b("guides", true)), ("region_labels", s("region_labels", LABELS[1])), ("show_answers", b(SHOW_ANSWERS, false)), ("style", s("style", "Print")), ("label_size", s("label_size", "Large")), ("sand2", s("sand2", "10"))] {
-            let other = if k == "sand2" { render_of(&[v, s("clay2", "10")]) } else { render_of(&[v]) };
+        for (k, v) in [("task", s("task", TASKS[1])), ("sand", s("sand", "41")), ("grid", b("grid", false)), ("guides", b("guides", true)), ("region_labels", s("region_labels", LABELS[1])), ("show_answers", b(SHOW_ANSWERS, false)), ("style", s("style", "Print")), ("label_size", s("label_size", "Large")), ("sand2", s("sand2", "10")), ("show_worked", b("show_worked", false))] {
+            let other = if k == "sand2" { render_of(&[v, s("clay2", "10")]) } else if k == "show_worked" { render_of(&[b(SHOW_ANSWERS, false), v]) } else { render_of(&[v]) };
+            let base = if k == "show_worked" { render_of(&[b(SHOW_ANSWERS, false)]) } else { base.clone() };
             assert_ne!(base, other, "{k} changes nothing");
         }
         // silt typed instead of clay draws the same point
