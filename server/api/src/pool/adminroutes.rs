@@ -6,7 +6,7 @@ use super::gate::check_key;
 use super::preread::ADMIN_BODY_MAX;
 use super::routes::{PoolState, Reply, client_ip, fail_response, header_str, json_response, param, query_of, raw_response, read_body};
 use super::circlesendprep::SendEnv;
-use super::{adminblock, adminhold, adminpool};
+use super::{adminblock, adminhold, adminpool, circleadmin, invites};
 use axum::extract::{Request, State};
 use axum::http::HeaderMap;
 use axum::response::Response;
@@ -49,6 +49,18 @@ const TABLE: &[(&str, &str, bool)] = &[
     ("POST", "/admin/dmca/release-copies", true),
     ("POST", "/admin/dmca/exempt", true),
     ("POST", "/admin/dmca/withdraw", true),
+    ("POST", "/admin/pool/invites", true),
+    ("GET", "/admin/pool/invites", false),
+    ("POST", "/admin/pool/invites/revoke", true),
+    ("GET", "/admin/pool/circle-reports", false),
+    ("GET", "/admin/pool/circles", false),
+    ("GET", "/admin/pool/circle", false),
+    ("GET", "/admin/pool/circle-bank", false),
+    ("POST", "/admin/pool/circle-evidence-captured", true),
+    ("POST", "/admin/pool/circle-hold", true),
+    ("POST", "/admin/pool/circle-release", true),
+    ("POST", "/admin/pool/circle-remove", true),
+    ("POST", "/admin/pool/circle-close", true),
 ];
 
 struct ACall<'a> {
@@ -116,6 +128,24 @@ fn dispatch(c: &ACall, method: &str, path: &str) -> Res<Reply> {
         ("POST", "/admin/dmca/release-copies") => pair(adminhold::release_copies(x, a, b)?),
         ("POST", "/admin/dmca/exempt") => pair(adminhold::exempt(x, a, b)?),
         ("POST", "/admin/dmca/withdraw") => pair(adminhold::withdraw(x, &st.store, a, b)?),
+        ("POST", "/admin/pool/invites") => pair(invites::issue_invite(x, a, b)?),
+        ("GET", "/admin/pool/invites") => {
+            let (id, user_id, after) = (param(&c.query, "id"), param(&c.query, "user_id"), param(&c.query, "after"));
+            pair(invites::list_invites(x, &invites::InviteQuery { id: id.as_deref(), user_id: user_id.as_deref(), after: after.as_deref() })?)
+        }
+        ("POST", "/admin/pool/invites/revoke") => pair(invites::revoke_invite(x, a, b)?),
+        ("GET", "/admin/pool/circle-reports") => Ok(Reply::Json(200, circleadmin::list_reports(x, param(&c.query, "after").as_deref())?)),
+        ("GET", "/admin/pool/circles") => Ok(Reply::Json(200, circleadmin::list_circles(x, param(&c.query, "user_id").as_deref(), param(&c.query, "after").as_deref())?)),
+        ("GET", "/admin/pool/circle") => pair(circleadmin::circle_detail(x, a, param(&c.query, "id").as_deref())?),
+        ("GET", "/admin/pool/circle-bank") => {
+            let q: Map<String, Value> = c.query.iter().map(|(k, v)| (k.clone(), Value::String(v.clone()))).collect();
+            pair(circleadmin::bank_view(x, &st.store, a, &q)?)
+        }
+        ("POST", "/admin/pool/circle-evidence-captured") => pair(circleadmin::evidence_captured(x, a, b)?),
+        ("POST", "/admin/pool/circle-hold") => pair(circleadmin::hold(x, a, b)?),
+        ("POST", "/admin/pool/circle-release") => pair(circleadmin::release(x, a, b)?),
+        ("POST", "/admin/pool/circle-remove") => pair(circleadmin::remove_bank(x, a, b)?),
+        ("POST", "/admin/pool/circle-close") => pair(circleadmin::close_circle(x, a, b)?),
         _ => Ok(Reply::Json(501, json!({ "error": "not_ported" }))),
     }
 }

@@ -512,3 +512,25 @@ async fn the_dmca_and_limit_admin_routes_record_list_and_refuse_bad_input() {
     assert_eq!((s, b["field"].clone()), (400, json!("action_id")), "{b}");
     assert_eq!(send(&w, areq("POST", "/admin/dmca/notices", false, Some(json!({})))).await.0, 403);
 }
+
+#[tokio::test]
+async fn invites_are_issued_listed_and_revoked_and_circles_are_listed_by_an_admin() {
+    let w = world();
+    let (s, b, _) = send(&w, areq("POST", "/admin/pool/invites", true, Some(json!({ "max_uses": 2, "note": "pilot" })))).await;
+    assert_eq!((s, b["shown_once"].clone()), (201, json!(true)), "{b}");
+    let id = b["invite_id"].as_str().unwrap().to_string();
+    let (s, b, _) = send(&w, areq("GET", "/admin/pool/invites", false, None)).await;
+    assert_eq!((s, b["invites"].as_array().map(Vec::len)), (200, Some(1)), "{b}");
+    let (s, b, _) = send(&w, areq("GET", &format!("/admin/pool/invites?id={id}"), false, None)).await;
+    assert_eq!((s, b["invite"]["redeemed_by"].clone()), (200, json!([])), "{b}");
+    let (s, _, _) = send(&w, areq("POST", "/admin/pool/invites/revoke", true, Some(json!({ "invite_id": id })))).await;
+    assert_eq!(s, 200);
+    let (s, b, _) = send(&w, areq("POST", "/admin/pool/invites/revoke", true, Some(json!({ "invite_id": id })))).await;
+    assert_eq!((s, b["error"].clone()), (409, json!("already_revoked")));
+    let (s, b, _) = send(&w, areq("GET", "/admin/pool/circles", false, None)).await;
+    assert_eq!(s, 200, "{b}");
+    let (s, b, _) = send(&w, areq("GET", "/admin/pool/circle-reports", false, None)).await;
+    assert_eq!(s, 200, "{b}");
+    let (s, _, _) = send(&w, areq("GET", &format!("/admin/pool/circle?id={}", "0".repeat(32)), false, None)).await;
+    assert_eq!(s, 404);
+}
