@@ -63,6 +63,7 @@ pub mod crondaily;
 pub mod cronpublish;
 pub mod publishrun;
 pub mod publishmeta;
+pub mod publishrewrite;
 pub mod publishstart;
 pub mod publishearlier;
 pub mod poolcontent;
