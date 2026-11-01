@@ -333,7 +333,7 @@ mod tests {
         "journal-entry", "kirchhoff-loops", "loan-amortisation", "logic-circuit", "lorenz", "magnetic-field", "map-scale",
         "marketing-funnel", "maslow", "monopoly", "moon-seasons", "music-staff", "network-topology",
         "normal-curve", "number-base", "org-chart", "organiser", "orthographic", "perspective-grid",
-        "piano-keyboard", "plate-boundaries", "plot-arc", "population-pyramid", "ppf", "probability-tree", "protractor", "pv-diagram",
+        "photosynthesis", "piano-keyboard", "plate-boundaries", "plot-arc", "population-pyramid", "ppf", "probability-tree", "protractor", "pv-diagram",
         "rc-curve", "recursion-tree", "refraction", "rejection-region", "residual-plot", "rhythm-counting",
         "sampling-distribution", "scatterplot", "sentence-diagram", "sine-cosine", "slope-triangle", "soil-texture", "solid-net", "sorting-passes", "standing-wave", "state-machine",
         "stem-and-leaf", "strata", "structure-chart", "supply-demand", "swot", "t-account", "time-value",

@@ -17,6 +17,8 @@ pub fn overrides(id: &str) -> Vec<(&'static str, Value)> {
         "cell-diagram" => vec![("cell", st("Plant cell"))],
         // the soil texture triangle opens with the construction lines drawn, so the first picture shows how a sample is read
         "soil-texture" => vec![("guides", Value::B(true))],
+        // photosynthesis opens with the rate graph on, so the first picture shows the stages, the equation and a limiting-factor curve
+        "photosynthesis" => vec![("show_graph", Value::B(true))],
         // Math polygons open unfilled (black outline on white), angles unshaded.
         "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "regular-polygon" => vec![("fill", st("#ffffff"))],
         // the reference names the kite counter-clockwise (A right, B top, C left): our mirror

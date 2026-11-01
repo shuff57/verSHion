@@ -39,6 +39,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "cell-cycle" => CELL_CYCLE,
         "cell-diagram" => CELL_DIAGRAM,
         "soil-texture" => SOIL_TEXTURE,
+        "photosynthesis" => PHOTOSYNTHESIS,
         // chemistry
         "bohr-model" => BOHR_MODEL,
         "gas-syringe" => GAS_SYRINGE,
@@ -4055,5 +4056,32 @@ const SOIL_TEXTURE: &[Faq] = &[
     Faq {
         q: "Why are some regions labelled with letters, and how does Print work?",
         a: "A region prints its full name (on one or two lines) only if the name fits inside it with a margin; otherwise it prints the standard abbreviation (S, LS, SL, L, SiL, Si, SCL, CL, SiCL, SC, SiC, C), and the legend under the triangle names every abbreviation. A label that the sample point or a construction line would cover moves to another spot inside its region. Abbreviations only forces letters for every region. Print is black, white and grey only: the twelve classes use six fills (plain, diagonal lines, cross-hatch, dots, horizontal lines, vertical lines) and no two classes that share an edge use the same one; the hatches keep their ink in a 66 % grey copy.",
+    },
+];
+
+const PHOTOSYNTHESIS: &[Faq] = &[
+    Faq {
+        q: "What does the picture show, and what is simplified?",
+        a: "One chloroplast: an outer and an inner membrane (together the envelope), the stroma inside them, and grana, which are stacks of flattened thylakoids joined by single thylakoid sheets. The light-dependent reactions happen in the thylakoid membranes (the bar under the grana); the Calvin cycle runs in the stroma (the loop, and the bar under it). It is not to scale, a real chloroplast has dozens of grana, the space inside the thylakoids is not drawn, and the loop is drawn beside the grana for clarity although the stroma surrounds them. Which stack makes which carrier is not implied: the four carrier arrows only show that ATP and NADPH go from the light-dependent reactions to the Calvin cycle and that ADP + Pi and NADP+ come back.",
+    },
+    Faq {
+        q: "Where does each input come from and each output go?",
+        a: "Light is absorbed by chlorophyll in the thylakoid membranes. Water is split in the light-dependent reactions, and it is the source of the oxygen released (the oxygen does not come from the carbon dioxide). The reactions make ATP and NADPH, which are used in the Calvin cycle; the cycle gives back ADP + Pi and NADP+. Carbon dioxide enters the Calvin cycle, not the light-dependent reactions. The molecule the cycle makes directly is G3P (glyceraldehyde 3-phosphate); two G3P can be joined, after further steps, to make glucose. The figure stops at G3P and does not say where the glucose is made. The overall equation, 6CO2 + 6H2O + light giving C6H12O6 + 6O2, is balanced (6 C, 12 H and 18 O on each side).",
+    },
+    Faq {
+        q: "Which wording is the answer?",
+        a: "The key uses one wording and lists the others it accepts under the figure. Light-dependent reactions (light reactions). Calvin cycle (light-independent reactions, Calvin-Benson cycle). Thylakoid membrane (thylakoid). Granum (grana, thylakoid stack). Stroma (chloroplast stroma). Outer membrane (outer envelope membrane) and inner membrane (inner envelope membrane). Light (sunlight, light energy). ATP (adenosine triphosphate). NADPH (reduced NADP). Water, oxygen and carbon dioxide for their formulas. G3P (glyceraldehyde 3-phosphate, PGAL, triose phosphate). Glucose is not accepted for the arrow out of the cycle: it is made from G3P, not by the cycle itself. 'Dark reactions' is not accepted: the cycle uses the ATP and NADPH the light-dependent reactions make, and it runs while the plant is in the light.",
+    },
+    Faq {
+        q: "How can a student tell the pointers apart, and what does a student copy or Print change?",
+        a: "A small ring ends on exactly one structure: a ring on a membrane line names that membrane, a ring on the outline of one flat thylakoid names the thylakoid membrane, a ring in the open fluid names the stroma. A bracket spans a whole stack and names the granum. A bar under the drawing names a stage and spans the part of the chloroplast where it happens. An arrow carries a substance and is named by what it carries. The inner membrane's pointer has to cross the outer membrane to get there; no other pointer crosses a structure that is not its own container. The student copy says all this in one sentence under the figure. With Show answers off every name is replaced by a numbered disc in the same place, and the table under the figure has a rule to write each one on. The equation becomes one blank (write the balanced equation with the smallest whole-number coefficients; glucose is given as C6H12O6, and light may be written on the left or over the arrow), and the reading at P is another. ADP + Pi and NADP+ are printed in both copies as clues: the arrow that returns ADP + Pi is the partner of the one that carries ATP, and NADP+ of NADPH, so each of those blanks has one answer. The molecule leaving the Calvin cycle is asked for by the sentence 'give the molecule it makes directly'. Print is black, white and grey only and survives a photocopy at 66 % grey. The thylakoids are cross-hatched, the space between the two membranes has horizontal lines, the stroma is white, and every arrow is black; the arrows that return ADP + Pi and NADP+ are dashed, the others solid. The graph curve is black.",
+    },
+    Faq {
+        q: "What is the graph, how are typed values read, and what is refused?",
+        a: "A textbook curve, original and not data from a species. Against light intensity or CO2 concentration the rate is Pmax x / (K + x): it starts at zero, rises, and levels off at the plateau, Pmax; K is the value that gives half of the plateau (the half-saturation). The rising part is limited by the factor on the x axis; on the plateau that factor has stopped limiting the rate and another one (for example CO2 supply, light or temperature) is limiting. The CO2 curve starts at zero and leaves out the compensation point where respiration cancels photosynthesis. Against temperature the rate rises gently to an optimum and then falls steeply to zero at 1.4 times the optimum (enzymes losing their shape). Plateau or peak rate: 1 to 100 arbitrary units. Half-saturation: 3 to 20 % of full sunlight, or 40 to 240 ppm, so that the curve has reached 5/6 of its plateau by the end of the axis and half of it is not squeezed against the vertical axis. Optimum: 15 to 40 degrees C, so that the zero of the fall stays at least 4 degrees short of 60. Leave the half-saturation or optimum empty for a typical value (10 %, 120 ppm, 30 degrees C). Digits as typed: a minus sign, a decimal point or comma, and the unit of the box (au, %, ppm, degrees C) are accepted. A comma followed by exactly three digits is refused as ambiguous (1,000) rather than guessed. A value outside its range, or not a number, replaces the graph with the reason, quoting what was typed, and a value that works; the editor note says the same, one note for every box. The rest of the figure is still drawn. A value typed exactly on a limit is accepted. Point P may be left empty for no point.",
+    },
+    Faq {
+        q: "What is the point P, and what counts as a correct reading?",
+        a: "P is a dot on the curve at the x you type, with a dashed guide to each axis, so a student reads the rate off the vertical axis. The key prints the exact rate, rounded half up to the chosen number of decimal places (the student's reading from the graph will be a little rougher; accept a reading within half of one gridline). Against temperature P beyond 1.4 times the optimum reads 0.",
     },
 ];

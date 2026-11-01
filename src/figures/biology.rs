@@ -17,6 +17,7 @@ pub mod gel;
 pub mod hardyweinberg;
 mod noto_adv;
 pub mod pedigree;
+pub mod photosynthesis;
 pub mod pipette;
 mod plot;
 pub mod popdyn;
@@ -43,6 +44,7 @@ pub fn examples(id: &str) -> Option<Vec<super::Example>> {
         "cell-cycle" => cellcycle::examples(id),
         "cell-diagram" => celldiagram::examples(id),
         "soil-texture" => soiltexture::examples(id),
+        "photosynthesis" => photosynthesis::examples(id),
         _ => None,
     }
 }
@@ -146,6 +148,7 @@ pub fn defs() -> Vec<FigureDef> {
         cellcycle::defs().pop().unwrap(),
         celldiagram::defs().pop().unwrap(),
         soiltexture::defs().pop().unwrap(),
+        photosynthesis::defs().pop().unwrap(),
     ]
 }
 
