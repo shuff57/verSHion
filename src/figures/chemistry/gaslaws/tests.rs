@@ -147,7 +147,7 @@ fn the_gas_constant_in_every_unit_and_the_sentence_that_says_which() {
         }
     }
     assert_eq!(r_sentence(0, 0), "R = 0.082057 L·atm/(mol·K)");
-    assert_eq!(r_sentence(1, 0), "R = 8.314 L·kPa/(mol·K) = 8.314 J/(mol·K)");
+    assert_eq!(r_sentence(1, 0), "R = 8.314 L·kPa/(mol·K) (1 L·kPa = 1 J; this agrees with 0.082057 × 101.325 = 8.3144 to 4 significant figures)");
     assert_eq!(r_sentence(2, 0), "R = 0.082057 L·atm/(mol·K) × 760 mmHg/atm = 62.36332 mmHg·L/(mol·K)");
     assert_eq!(r_sentence(3, 1), "R = 0.082057 L·atm/(mol·K) × 1.01325 bar/atm × 1000 mL/L = 83.14425525 bar·mL/(mol·K)");
     assert_eq!(r_sentence(0, 1), "R = 0.082057 L·atm/(mol·K) × 1000 mL/L = 82.057 atm·mL/(mol·K)");
@@ -311,11 +311,11 @@ fn a_celsius_given_is_converted_and_flagged_in_the_key_and_a_kelvin_one_is_not()
     // a found temperature in Celsius givens is given in K and in degrees C, from the printed kelvin
     let kt = key(&[s("mode", MODES[1]), s("find", "T₂"), f("p1", 1.0), f("v1", 2.0), f("t1", 25.0), f("v2", 3.0), s("t_unit", "°C")]);
     let line = answer_line(&kt);
-    assert!(line.contains(" K = ") && line.ends_with(" °C"), "{line}");
+    assert!(line.contains(" K, which is ") && line.ends_with(" °C"), "{line}");
     let (_, tk) = num_after(&line, "Answer: T₂ = ");
     assert_eq!(tk, ref_value(298.15 * 3.0 / 2.0, 3));
-    let (_, tc) = num_after(&line, " K = ");
-    assert!(close(tc, tk - 273.15, 1e-9), "{line}");
+    let (_, tc) = num_after(&line, " K, which is ");
+    assert!(close(tc, ref_value(298.15 * 3.0 / 2.0 - 273.15, 3), 1e-9), "{line}");
 }
 
 #[test]
@@ -403,6 +403,11 @@ fn picture_cases() -> Vec<(String, Vec<(&'static str, Value)>)> {
     for (e_i, e) in examples(ID).unwrap().into_iter().enumerate() { cases.push((format!("ex{e_i}"), e.params)); }
     cases.push(("kpa-ml".into(), vec![s("p_unit", "kPa"), s("v_unit", "mL"), f("p1", 101.3), f("v1", 2500.0), f("p2", 200.0)]));
     cases.push(("mmhg".into(), vec![s("p_unit", "mmHg"), f("p1", 760.0), f("v1", 3.0), f("p2", 380.0)]));
+    cases.push(("fix-combdefault".into(), vec![s("mode", MODES[4])]));
+    cases.push(("fix-combpt4".into(), vec![s("mode", MODES[4]), s("graph", "P against T"), s("find", "V₂"), i("curves", 4), f("t2", 600.0), f("p2", 3.0)]));
+    cases.push(("fix-gay2".into(), vec![s("mode", MODES[2]), i("curves", 2), b("extrap", true), s("style", "Print")]));
+    cases.push(("fix-charlesc".into(), vec![s("mode", MODES[1]), s("find", "T₂"), s("t_unit", "°C"), s("t_axis", "Celsius"), f("t1", 25.0), f("p1", 1.0), f("v1", 2.0), f("v2", 4.0), b("extrap", true)]));
+    cases.push(("fix-comby08".into(), vec![s("mode", MODES[4]), s("graph", "V against T"), s("find", "P₂"), i("curves", 2), f("t1", 300.0), f("t2", 600.0), f("v2", 2.0)]));
     cases.push(("huge".into(), vec![f("p1", 5e8), f("v1", 2e6), f("p2", 1e9)]));
     cases.push(("tiny".into(), vec![f("p1", 3e-5), f("v1", 4e-4), f("p2", 1e-5)]));
     cases
@@ -654,7 +659,7 @@ fn audit(svg: &str, g: &mut Glyphs, lab: f64) -> Vec<String> {
         }
         let d = dist(own, *bx);
         if d > 40.0 * lab { bad.push(format!("{name:?} is {d:.1} px from its {own} feature")); continue; }
-        if own.starts_with('c') {
+        if own.starts_with('c') || own.starts_with("k_c") {
             let rival = curves.iter().filter(|o| *o != own).map(|o| (dist(o, *bx), o)).fold((f64::MAX, None), |a, (x, o)| if x < a.0 { (x, Some(o)) } else { a });
             if d > rival.0 - 0.25 { bad.push(format!("{name:?} is {d:.1} px from its {own} curve but {:.1} px from {:?}, with no leader line", rival.0, rival.1)); }
             continue;
@@ -828,4 +833,205 @@ fn handles_drag_to_their_own_position_changes_nothing_and_are_deterministic() {
         }
         assert_eq!(build(&p).0, build(&p).0);
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Fix round: leaks, state 2's curve, Celsius answers, slope answers, Print extrapolation, Identify, small things
+// ---------------------------------------------------------------------------------------------
+
+fn student_marks_and_labels(svg: &str) -> (Vec<String>, Vec<String>) {
+    let labels: Vec<String> = texts(svg).into_iter().filter(|t| t.kind == "label" || t.kind == "axis").map(|t| t.text).collect();
+    let marks: Vec<String> = geo(svg).marks.into_iter().map(|m| format!("{}:{}", m.0, m.1)).collect();
+    (labels, marks)
+}
+
+#[test]
+fn the_student_labels_and_marks_do_not_depend_on_where_the_answer_falls() {
+    // (mode, find, base givens, the given of state 2 that is varied and its values: some put state 2 on top of state 1)
+    let cases: Vec<(&str, &str, Vec<(&'static str, Value)>, &'static str, [f64; 3])> = vec![
+        (MODES[0], "V₂", vec![f("p1", 2.0), f("v1", 3.0)], "p2", [2.02, 5.0, 0.3]),
+        (MODES[1], "V₂", vec![f("p1", 1.0), f("v1", 2.5), f("t1", 300.0)], "t2", [301.0, 350.0, 120.0]),
+        (MODES[2], "P₂", vec![f("p1", 1.0), f("v1", 2.5), f("t1", 300.0)], "t2", [300.5, 450.0, 100.0]),
+        (MODES[3], "V₂", vec![f("p1", 1.0), f("v1", 2.5), f("n1", 0.5)], "n2", [0.505, 1.5, 0.1]),
+        (MODES[4], "V₂", vec![f("p1", 1.0), f("v1", 4.0), f("t1", 300.0), f("p2", 1.0)], "t2", [300.5, 450.0, 150.0]),
+        (MODES[4], "V₂", vec![f("p1", 1.0), f("v1", 4.0), f("t1", 300.0), f("t2", 300.0)], "p2", [1.01, 2.0, 0.4]),
+    ];
+    for (mode, find, base, var, vals) in cases {
+        for graph in ["Standard for the law", "P against V", "V against T"] {
+            for curves in [1i64, 3] {
+                let mut seen: Vec<(Vec<String>, Vec<String>)> = Vec::new();
+                for v in vals {
+                    let mut l = base.clone();
+                    l.extend([s("mode", mode), s("find", find), s("graph", graph), i("curves", curves), b(SHOW_ANSWERS, false), f(var, v)]);
+                    seen.push(student_marks_and_labels(&svg_of(&l)));
+                }
+                // the labels are the givens' (a value typed on the axis is not): the point labels and the marks agree
+                for w in seen.windows(2) {
+                    let pts = |x: &(Vec<String>, Vec<String>)| -> (Vec<String>, Vec<String>) { (x.0.iter().filter(|t| t.len() <= 4 && t.chars().all(|c| c.is_ascii_digit() || c == ',' || c == ' ')).filter(|t| t.contains(',') || **t == "1" || **t == "2").cloned().collect(), x.1.iter().filter(|m| m.starts_with("pt") || m.starts_with("k_")).cloned().collect()) };
+                    let (a, c) = (pts(&w[0]), pts(&w[1]));
+                    // a given second point (both its coordinates typed) may carry its own label; the label of state 1 may not change
+                    assert_eq!(a.0.iter().any(|t| t.contains(',')), c.0.iter().any(|t| t.contains(',')), "{mode} {find} {graph} {var}: {a:?} vs {c:?}");
+                }
+            }
+        }
+    }
+}
+
+/// Distance from a point to the curves drawn (every stroke of kind curve), in px.
+fn dist_to_curves(g: &Geo, p: Pt) -> f64 {
+    g.strokes.iter().filter(|s| s.0 == "curve").map(|s| seg_box((s.2 .0), (s.2 .1), (p.0, p.0, p.1, p.1))).fold(f64::MAX, f64::min)
+}
+
+#[test]
+fn every_state_dot_on_the_key_lies_on_a_drawn_curve_in_every_mode() {
+    let mut r = Lcg(4242);
+    let mut checked = 0;
+    for k in 0..1500 {
+        let mode = *r.pick(&MODES);
+        let graphs: &[&str] = if mode == MODES[0] { &["Standard for the law", "P against 1/V", "PV against P"] } else if mode == MODES[4] { &["P against V", "V against T", "P against T"] } else { &["Standard for the law"] };
+        let find = *r.pick(&["Automatic", "P₂", "V₂", "T₂", "n₂"]);
+        let tu = *r.pick(&T_UNITS);
+        let sg = |x: f64| ref_value(x, 4);
+        let t = |r: &mut Lcg| if tu == "°C" { sg(r.log(0.2, 700.0) - 100.0) } else { sg(r.log(60.0, 900.0)) };
+        let l: Vec<(&'static str, Value)> = vec![
+            s("mode", mode), s("question", QUESTIONS[0]), s("graph", graphs[(r.next() * graphs.len() as f64) as usize % graphs.len()]), s("find", find),
+            s("t_unit", tu), s("t_axis", *r.pick(&T_AXES)), f("p1", sg(r.log(0.3, 12.0))), f("v1", sg(r.log(0.3, 12.0))), f("t1", t(&mut r)), f("n1", sg(r.log(0.1, 5.0))),
+            f("p2", sg(r.log(0.3, 12.0))), f("v2", sg(r.log(0.3, 12.0))), f("t2", t(&mut r)), f("n2", sg(r.log(0.1, 5.0))),
+            i("curves", 1 + (r.next() * 4.0) as i64), f("curve2", sg(r.log(0.3, 4.0))), f("curve3", sg(r.log(0.3, 4.0))), f("curve4", sg(r.log(0.3, 4.0))),
+            b("extrap", r.next() < 0.5), b(SHOW_ANSWERS, true), s("style", if r.next() < 0.5 { "Print" } else { "Colour" }),
+        ];
+        let svg = svg_of(&l);
+        let g = geo(&svg);
+        for m in g.marks.iter().filter(|m| m.0 == "pt1" || m.0 == "pt2" || m.0 == "k_pt2") {
+            let c = mark_centre(&m.2);
+            let d = dist_to_curves(&g, c);
+            checked += 1;
+            assert!(d <= 1.0, "case {k}: the {} dot is {d:.2} px from any drawn curve\n{l:?}", m.0);
+        }
+    }
+    assert!(checked > 1000, "{checked}");
+}
+
+#[test]
+fn the_key_names_the_curve_through_state_two_and_the_student_copy_does_not_draw_it() {
+    let base = vec![s("mode", MODES[4]), s("find", "V₂"), f("p1", 1.0), f("v1", 4.0), f("t1", 300.0), f("p2", 2.0), f("t2", 450.0)];
+    let mut k = base.clone();
+    k.push(b(SHOW_ANSWERS, true));
+    let tk = all_text(&svg_of(&k));
+    assert!(tk.contains("T₁ = 300 K") && tk.contains("T₂ = 450 K"), "{}", tk.replace('\n', " | "));
+    let mut st = base.clone();
+    st.push(b(SHOW_ANSWERS, false));
+    let ts = texts(&svg_of(&st));
+    assert!(ts.iter().filter(|t| t.kind == "label").all(|t| !t.text.contains("T₂") && !t.text.contains("T₁")), "{ts:?}");
+    assert_eq!(geo(&svg_of(&st)).strokes.iter().filter(|x| x.0 == "curve").map(|x| x.1.clone()).collect::<BTreeSet<_>>().len(), 1);
+}
+
+#[test]
+fn a_found_celsius_temperature_is_rounded_once_from_the_unrounded_kelvin_value() {
+    let mut n = 0;
+    for c in find_cases().iter().filter(|c| c.find == "T₂" && c.list.iter().any(|x| x.0 == "t_unit" && x.1 == Value::S("°C".into()))) {
+        for sig in 2..=6usize {
+            let mut l = c.list.clone();
+            l.push(i("sig", sig as i64));
+            l.push(b(SHOW_ANSWERS, true));
+            let line = answer_line(&rep_of(&l));
+            let (_, tk) = num_after(&line, "Answer: T₂ = ");
+            assert!(close(tk, ref_value(c.want, sig), 1e-9), "{line}");
+            let rest = line.split(" K, which is ").nth(1).unwrap_or_else(|| panic!("{line}"));
+            let (_, tc) = num_after(&line, " K, which is ");
+            let _ = rest;
+            assert!(rest.ends_with(" °C"), "{line}");
+            if c.want - 273.15 != 0.0 { assert!(close(tc, ref_value(c.want - 273.15, sig), 1e-9), "{line}: the Celsius answer is {} to {sig} sf", c.want - 273.15); }
+            n += 1;
+        }
+    }
+    assert!(n >= 40, "{n}");
+    // the report's own examples
+    let r = key(&[s("mode", MODES[1]), s("find", "T₂"), s("t_unit", "°C"), f("t1", 25.0), f("p1", 1.0), f("v1", 2.0), f("v2", 4.0), i("sig", 3)]);
+    assert!(answer_line(&r).contains("T₂ = 596 K, which is 323 °C"), "{}", answer_line(&r));
+    let r = key(&[s("mode", MODES[2]), s("find", "T₂"), s("t_unit", "°C"), f("t1", 20.0), f("p1", 1.0), f("v1", 2.0), f("p2", 2.0), i("sig", 3)]);
+    assert!(answer_line(&r).contains("T₂ = 586 K, which is 313 °C"), "{}", answer_line(&r));
+}
+
+#[test]
+fn the_slope_question_gives_the_same_n_on_every_graph_rounded_once_from_the_givens() {
+    let (p1, v1, t1) = (1.0, 2.5, 310.0);
+    let true_n = p1 * v1 / (0.082057 * t1);
+    let combos: [(&str, &str); 7] = [(MODES[0], "P against V"), (MODES[0], "P against 1/V"), (MODES[0], "PV against P"), (MODES[1], "Standard for the law"), (MODES[2], "Standard for the law"), (MODES[4], "V against T"), (MODES[4], "P against T")];
+    for (mode, graph) in combos {
+        for sig in 2..=6usize {
+            let r = key(&[s("mode", mode), s("graph", graph), s("question", QUESTIONS[2]), f("p1", p1), f("v1", v1), f("t1", t1), i("sig", sig as i64)]);
+            let line = answer_line(&r);
+            assert_eq!(line, format!("Answer: n = {} mol", ref_sig_string(true_n, sig)), "{mode} {graph} sig {sig}: {}", joined(&r));
+        }
+    }
+    // Avogadro: the slope gives the temperature
+    let (n1, p1) = (0.5, 1.0);
+    let v1 = 12.5;
+    let true_t = p1 * v1 / (n1 * 0.082057);
+    for sig in 2..=6usize {
+        let r = key(&[s("mode", MODES[3]), s("question", QUESTIONS[2]), f("p1", p1), f("v1", v1), f("n1", n1), i("sig", sig as i64)]);
+        assert_eq!(answer_line(&r), format!("Answer: T = {} K", ref_sig_string(true_t, sig)), "{}", joined(&r));
+    }
+}
+
+fn ref_sig_string(v: f64, sig: usize) -> String { sigfmt(ref_value(v, sig), sig) }
+
+#[test]
+fn the_extrapolation_is_always_dotted_with_an_end_tick_and_no_series_uses_that_dash() {
+    for style in ["Print", "Colour"] {
+        for mode in [MODES[1], MODES[2]] {
+            for curves in [1i64, 2, 4] {
+                for ans in [true, false] {
+                    let svg = svg_of(&[s("mode", mode), s("style", style), i("curves", curves), f("curve2", 2.0), f("curve3", 0.5), f("curve4", 3.0), b("extrap", true), b(SHOW_ANSWERS, ans)]);
+                    let g = geo(&svg);
+                    let ext: BTreeSet<String> = g.paths.iter().filter(|p| p.0 == "extrap").map(|p| p.3.split('|').nth(2).unwrap().to_string()).collect();
+                    assert_eq!(ext, BTreeSet::from(["1.5 4".to_string()]), "{style} {mode} {curves}");
+                    let series: Vec<String> = g.paths.iter().filter(|p| p.0 == "curve").map(|p| p.3.split('|').nth(2).unwrap().to_string()).collect();
+                    assert!(series.iter().all(|d| d != "1.5 4"), "{series:?}");
+                    if style == "Print" { let u: BTreeSet<&String> = series.iter().collect(); assert_eq!(u.len(), series.len(), "{series:?}"); }
+                    let ticks = g.paths.iter().filter(|p| p.0 == "tick").count();
+                    assert_eq!(ticks, series.len(), "{style} {mode} {curves}: one end tick for each measured line");
+                    let note = texts(&svg).into_iter().map(|t| t.text).collect::<Vec<_>>().join("\n");
+                    assert!(note.contains("Dotted line") && note.contains("extrapolation"), "{note}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn identify_names_what_the_picture_shows_and_combined_only_with_two_curves() {
+    for (graph, law) in [("P against V", "Boyle's law"), ("V against T", "Charles's law"), ("P against T", "Gay-Lussac's law")] {
+        let one = key(&[s("mode", MODES[4]), s("question", QUESTIONS[3]), s("graph", graph), i("curves", 1)]);
+        assert_eq!(answer_line(&one), format!("Answer: {law}"), "{graph}");
+        let t = joined(&one);
+        assert!(!t.contains("higher temperature") && !t.contains("lower pressure") && !t.contains("smaller volume") && !t.contains("Each curve") && !t.contains("Each line"), "{t}");
+        let svg = svg_of(&[s("mode", MODES[4]), s("question", QUESTIONS[3]), s("graph", graph), i("curves", 1), b(SHOW_ANSWERS, true)]);
+        assert!(!all_text(&svg).contains("Combined gas law"), "{graph}");
+        let two = key(&[s("mode", MODES[4]), s("question", QUESTIONS[3]), s("graph", graph), i("curves", 2)]);
+        assert_eq!(answer_line(&two), "Answer: the combined gas law");
+        // two curves with the same fixed value are one curve
+        let same = key(&[s("mode", MODES[4]), s("question", QUESTIONS[3]), s("graph", graph), i("curves", 2), f("curve2", 1.0)]);
+        assert_eq!(answer_line(&same), format!("Answer: {law}"));
+    }
+}
+
+#[test]
+fn typed_givens_round_half_away_from_zero_and_curve_names_keep_the_given_digits() {
+    let n = notes_of(&[s("mode", MODES[1]), f("t1", 1250.5)]);
+    assert!(has(&n, "used as 1251 K"), "{n:?}");
+    let n = notes_of(&[f("p1", 1.2345)]);
+    assert!(has(&n, "used as 1.235 atm"), "{n:?}");
+    let svg = svg_of(&[s("mode", MODES[0]), s("t_unit", "°C"), f("t1", 27.0), i("curves", 2), f("curve2", 2.0)]);
+    let t = all_text(&svg);
+    assert!(t.contains("T = 327.15 °C") && t.contains("T = 27 °C"), "{t}");
+}
+
+#[test]
+fn the_gas_constant_sentence_says_which_r_and_never_multiplies_joules_by_a_volume_ratio() {
+    let a = r_sentence(1, 0);
+    assert!(a.contains("8.314 L·kPa/(mol·K)") && a.contains("8.3144"), "{a}");
+    let m = r_sentence(1, 1);
+    assert!(m.contains("8314") && !m.contains("J/(mol·K) × 1000"), "{m}");
 }

@@ -23,7 +23,7 @@
 //! absolute zero are drawn on the key alone. Every printed substitution uses the printed givens only, and each result
 //! is computed from those and rounded once to the number of significant figures chosen (the givens are taken as exact).
 use crate::figures::chart::{fmt, nice_step, Frame};
-use crate::figures::chemistry::ratesgraph::{around, chunk_dist, chunk_hits, chunks, given_fmt, halo_el, ink, pad, path_d, ring, sig4, text_el, text_w, wrap, Cand, Chunk, Placer};
+use crate::figures::chemistry::ratesgraph::{around, chunk_dist, chunk_hits, chunks, given_fmt, halo_el, ink, pad, path_d, ring, text_el, text_w, wrap, Cand, Chunk, Placer};
 pub use crate::figures::chemistry::ratesgraph::{Pt, FONT};
 pub use crate::figures::chemistry::reactionenergy::{hits, seg_cross, seg_hits, Bx};
 use crate::figures::interact::Handle;
@@ -124,13 +124,16 @@ pub fn r_sentence(pu: usize, vu: usize) -> String {
     let r = cfmt(r_disp(pu, vu));
     let base = match pu {
         0 => "R = 0.082057 L·atm/(mol·K)".to_string(),
-        1 => "R = 8.314 L·kPa/(mol·K) = 8.314 J/(mol·K)".to_string(),
+        1 => "R = 8.314 L·kPa/(mol·K) (1 L·kPa = 1 J; this agrees with 0.082057 × 101.325 = 8.3144 to 4 significant figures)".to_string(),
         2 => "R = 0.082057 L·atm/(mol·K) × 760 mmHg/atm".to_string(),
         _ => "R = 0.082057 L·atm/(mol·K) × 1.01325 bar/atm".to_string(),
     };
-    let ml = if vu == 1 { " × 1000 mL/L" } else { "" };
     if pu == 0 && vu == 0 { return base; }
     if pu == 1 && vu == 0 { return base; }
+    if pu == 1 {
+        return format!("R = 8.314 L·kPa/(mol·K) × 1000 mL/L = {r} {} (1 L·kPa = 1 J; 8.314 agrees with 0.082057 × 101.325 = 8.3144 to 4 significant figures)", r_unit(pu, vu));
+    }
+    let ml = if vu == 1 { " × 1000 mL/L" } else { "" };
     format!("{base}{ml} = {r} {}", r_unit(pu, vu))
 }
 
@@ -187,7 +190,15 @@ pub fn sigval(v: f64, sig: usize) -> f64 {
 }
 
 /// A given as it is printed: 4 significant figures at most, plain digits.
+/// A value to 4 significant figures, half away from zero (the same rounding as the answers use).
+fn sig4(v: f64) -> f64 { if v.is_finite() && v != 0.0 { sigval(v, 4) } else { v } }
+
 fn gfmt(v: f64) -> String { given_fmt(sig4(v)) }
+
+/// A worked-out fixed value (a curve's name) with all the digits it has, up to 10: 327.15 stays 327.15.
+fn nfmt(v: f64) -> String {
+    if v.is_finite() && (1e-3..1e6).contains(&v.abs()) { trim_dec(sigfmt(v, 10)) } else { gfmt(v) }
+}
 
 /// A temperature in kelvin made from a Celsius one, or any exact decimal, with its digits (no 4-figure cut).
 fn kfmt(v: f64) -> String {
@@ -569,10 +580,19 @@ struct Job { own: String, text: String, anchor: Pt, cands: Box<dyn Fn() -> Vec<C
 /// A curve's name in the column at the right of the graph.
 struct Fixed { own: String, text: String, slot: f64, col: String, kmarks: Vec<(&'static str, String, String)>, base: f64, x: f64, bx: Bx, leader: Option<(Pt, Pt)> }
 
-const CURVE_COLOURS: [&str; 4] = ["#1f5fbf", "#e08a00", "#2e8b57", "#c0392b"];
-const CURVE_DASH: [&str; 4] = ["", "12 5", "3 3", "14 3 3 3"];
-const CURVE_MARKERS: [&str; 4] = ["triangle", "square", "diamond", "tridown"];
-const EXTRAP_DASH: &str = "6 5";
+/// The four curves of the question, and a fifth that is the key's curve through state 2 (never drawn on the student copy).
+const CURVE_COLOURS: [&str; 5] = ["#1f5fbf", "#e08a00", "#2e8b57", "#c0392b", "#7b3fa0"];
+const CURVE_DASH: [&str; 5] = ["", "12 5", "7 3 2 3", "16 4 3 4 3 4", "5 2"];
+const CURVE_MARKERS: [&str; 5] = ["triangle", "square", "diamond", "tridown", "ocircle"];
+/// The extrapolation, in both styles: always dotted, and no curve's own dash is this one.
+const EXTRAP_DASH: &str = "1.5 4";
+/// The feature id of curve `k`: the key-only curve (4) is named as an answer-only feature.
+fn feat_of(k: usize) -> String { if k == 4 { "k_c4".to_string() } else { format!("c{k}") } }
+
+/// The law a graph shows: the combined gas law only when two curves of different fixed values are drawn.
+fn shown_law(st: &Setup, ncur: usize) -> Mode {
+    if st.mode == Mode::Combined && ncur < 2 { match st.graph { G::VT => Mode::Charles, G::PT => Mode::Gay, _ => Mode::Boyle } } else { st.mode }
+}
 
 /// A colour darkened to read as text on white (contrast of at least 4.5), keeping its hue.
 fn dark(hex: &str) -> String {
@@ -664,7 +684,7 @@ fn eq_text(mode: Mode) -> &'static str {
 pub fn build(p: &Params) -> (String, Report) {
     let (st, mut notes) = read(p);
     let m = model(&st);
-    if st.q == Q::Find && m.found.is_some() {
+    if st.q == Q::Find && m.found.is_some() && bo(p, SHOW_ANSWERS, true) {
         let eq = |a: f64, b: f64| (a - b).abs() <= 1e-12 * a.abs().max(b.abs());
         if eq(m.s2.p, m.s1.p) && eq(m.s2.v, m.s1.v) && eq(m.s2.t, m.s1.t) && eq(m.s2.n, m.s1.n) {
             notes.push("State 2 is the same state as state 1, so the answer is state 1's value and nothing changes.".to_string());
@@ -703,6 +723,16 @@ pub fn build(p: &Params) -> (String, Report) {
         } else {
             curves.push((k, r));
         }
+    }
+    let n_given_curves = curves.len();
+    // the key also draws the curve through state 2 (and names state 1's), so that every state dot lies on a drawn curve
+    let r2: Option<f64> = if ans && st.q == Q::Find && st.mode == Mode::Combined {
+        let v = match g { G::PV => m.s2.t / m.s1.t, G::VT => m.s2.p / m.s1.p, G::PT => m.s2.v / m.s1.v, _ => 1.0 };
+        if v.is_finite() && v > 0.0 && (v - 1.0).abs() > 1e-9 { Some(v) } else { None }
+    } else { None };
+    let mut tag2: Option<usize> = None;
+    if let Some(v) = r2 {
+        if let Some(&(j, _)) = curves.iter().find(|(_, q)| (q / v - 1.0).abs() < 1e-9) { tag2 = Some(j); } else { curves.push((4, v)); tag2 = Some(4); }
     }
     let named = curves.len() >= 2;
 
@@ -754,7 +784,7 @@ pub fn build(p: &Params) -> (String, Report) {
         _ => { let top = rng_ratios.iter().map(|&r| yv(r, x_top_k)).fold(0.0, f64::max); (1.08 * top).max(1.25 * ky_max) }
     };
     let (y_hi, y_step) = nice_top(y_raw, 6.0);
-    let tm_k = 0.8 * kx_min;
+    let tm_k = (0.8 * kx_min).max(0.02 * kx_max).min(0.95 * kx_min);
     let (x_lo, x_hi, x_step);
     if celsius_axis {
         let hi_c_need = x_top_k + ABS_ZERO;
@@ -785,10 +815,11 @@ pub fn build(p: &Params) -> (String, Report) {
     let pad_str = if print { "   " } else { "" };
     let name_of = |idx: usize, ratio: f64| -> String {
         if st.q == Q::Identify { return ["A", "B", "C", "D"][idx].to_string(); }
+        let sub = if tag2.is_some() { if idx == 0 { "₁" } else if Some(idx) == tag2 { "₂" } else { "" } } else { "" };
         match g {
-            G::PV | G::PInvV | G::PVP => { let tk = ratio * m.s1.t; let t = if st.tu == 1 { tk + ABS_ZERO } else { tk }; format!("T = {} {}", gfmt(t), T_UNITS[st.tu]) }
-            G::VT | G::Vn => format!("P = {} {}", gfmt(ratio * m.s1.p), P_UNITS[st.pu]),
-            G::PT => format!("V = {} {}", gfmt(ratio * m.s1.v), V_UNITS[st.vu]),
+            G::PV | G::PInvV | G::PVP => { let tk = ratio * m.s1.t; let t = if st.tu == 1 { tk + ABS_ZERO } else { tk }; format!("T{sub} = {} {}", nfmt(t), T_UNITS[st.tu]) }
+            G::VT | G::Vn => format!("P{sub} = {} {}", nfmt(ratio * m.s1.p), P_UNITS[st.pu]),
+            G::PT => format!("V{sub} = {} {}", nfmt(ratio * m.s1.v), V_UNITS[st.vu]),
         }
     };
     let names_w = if named { curves.iter().map(|&(k, r)| text_w(&name_of(k, r), fs_lab)).fold(0.0, f64::max) } else { 0.0 };
@@ -817,11 +848,14 @@ pub fn build(p: &Params) -> (String, Report) {
     let mut marks: Vec<Mark> = Vec::new();
     let mut curve_px: Vec<(usize, Vec<Pt>)> = Vec::new();
     let mut knobs: Vec<(String, Pt)> = Vec::new();
+    // where the measured part of a line on a temperature axis starts: the key's goes back to state 2's answer if that is further left
+    let mut ticks: Vec<Stroke> = Vec::new();
+    let tm_draw = if ans && st.q == Q::Find && tx_axis && !kx2 { tm_k.min(0.8 * to_k(x2)).max(1e-9) } else { tm_k };
     for (ci, &(k, rr)) in curves.iter().enumerate() {
-        let feat = format!("c{k}");
+        let feat = feat_of(k);
         let ytop = y_hi;
         let sty = Sty { c: if print { "#000000" } else { CURVE_COLOURS[k] }, w: if k == 0 { 3.0 } else { 2.2 }, dash: if print { CURVE_DASH[k] } else { "" } };
-        let ext_sty = Sty { c: sty.c, w: 1.7, dash: EXTRAP_DASH };
+        let ext_sty = Sty { c: sty.c, w: 2.0, dash: EXTRAP_DASH };
         let mut solid: Vec<Pt> = Vec::new();
         let mut ext: Vec<Pt> = Vec::new();
         match g {
@@ -829,7 +863,7 @@ pub fn build(p: &Params) -> (String, Report) {
                 let k_c = m.s1.p * m.s1.v * rr;
                 let xs = (k_c / ytop).max(x_hi * 1e-6);
                 if xs < x_hi {
-                    let n = 140;
+                    let n = 260;
                     for j in 0..=n { let x = xs * (x_hi / xs).powf(j as f64 / n as f64); solid.push((px(x), py(k_c / x))); }
                 }
             }
@@ -842,9 +876,18 @@ pub fn build(p: &Params) -> (String, Report) {
             G::VT | G::PT => {
                 let slope = curve_y(g, 0, &m, rr, 1.0);
                 let xe_k = to_k(x_hi).min(ytop / slope);
-                let from = from_k(tm_k);
-                solid = vec![(px(from), py(slope * tm_k)), (px(from_k(xe_k)), py(slope * xe_k))];
-                if st.extrap { ext = vec![(px(from_k(0.0)), py(0.0)), (px(from), py(slope * tm_k))]; }
+                let tm_c = if celsius_axis { tm_draw.max(x_lo - ABS_ZERO) } else { tm_draw };
+                let from = from_k(tm_c);
+                solid = vec![(px(from), py(slope * tm_c)), (px(from_k(xe_k)), py(slope * xe_k))];
+                if st.extrap {
+                    ext = vec![(px(from_k(0.0)), py(0.0)), (px(from), py(slope * tm_c))];
+                    // a short tick across the line where the measured part ends and the extrapolation begins
+                    let (a, z) = (ext[0], ext[1]);
+                    let (dx, dy) = (z.0 - a.0, z.1 - a.1);
+                    let len = dx.hypot(dy).max(1e-9);
+                    let (nx, ny) = (-dy / len * 5.0, dx / len * 5.0);
+                    ticks.push(Stroke { pts: vec![(z.0 - nx, z.1 - ny), (z.0 + nx, z.1 + ny)], sty: Sty { c: sty.c, w: 1.8, dash: "" }, kind: "tick", feat: feat.clone() });
+                }
             }
         }
         if solid.len() >= 2 { strokes.push(Stroke { pts: solid.clone(), sty, kind: "curve", feat: feat.clone() }); }
@@ -852,10 +895,8 @@ pub fn build(p: &Params) -> (String, Report) {
         if solid.len() >= 2 { curve_px.push((k, solid)); }
         let _ = ci;
     }
-    if st.extrap && tx_axis {
-        let cs: Vec<usize> = curves.iter().map(|c| c.0).collect();
-        let _ = cs;
-    }
+    // (a tick only where its line is drawn)
+    for tk in ticks.drain(..) { if strokes.iter().any(|s| s.kind == "curve" && s.feat == tk.feat) { strokes.push(tk); } }
 
     // ---- the marks and guides of the question
     let mut pdots: Vec<(String, Pt)> = Vec::new();
@@ -879,7 +920,7 @@ pub fn build(p: &Params) -> (String, Report) {
             }
             let both = kx2 && ky2;
             let on2 = on_scale(x2, y2);
-            let merged = p1_px.is_some_and(|a| on2 && (a.0 - px(x2)).hypot(a.1 - py(y2)) <= 7.0);
+            let merged = p1_px.is_some_and(|a| on2 && (ans || (kx2 && ky2)) && (a.0 - px(x2)).hypot(a.1 - py(y2)) <= 7.0);
             if both {
                 // a given point (the answer is not a coordinate): drawn on both copies, with guides to the axes
                 if on2 {
@@ -982,7 +1023,7 @@ pub fn build(p: &Params) -> (String, Report) {
                 let q = at(f);
                 let clear = taken.iter().all(|t| (t.0 - q.0).hypot(t.1 - q.1) >= 15.0) && q.0 > left + 8.0 && q.0 < right - 12.0 && q.1 > top + 8.0 && q.1 < bottom - 8.0 && made.iter().all(|m2| (f - m2).abs() > 0.2);
                 if clear {
-                    marks.push(Mark { x: q.0, y: q.1, r: 3.6, shape: CURVE_MARKERS[*k], fill: if *k == 0 { "#000000".into() } else { "#ffffff".into() }, stroke: "#000000".into(), feat: format!("c{k}") });
+                    marks.push(Mark { x: q.0, y: q.1, r: 3.6, shape: CURVE_MARKERS[*k], fill: if *k == 0 { "#000000".into() } else { "#ffffff".into() }, stroke: "#000000".into(), feat: feat_of(*k) });
                     taken.push(q);
                     made.push(f);
                 }
@@ -994,7 +1035,7 @@ pub fn build(p: &Params) -> (String, Report) {
 
     // ---- the knobs for the handles: the curves 2 to 4 (their fixed value)
     for (k, pts) in &curve_px {
-        if *k == 0 { continue; }
+        if *k == 0 || *k == 4 { continue; }
         let j = (pts.len() as f64 * 0.62) as usize;
         knobs.push((format!("c{k}"), pts[j.min(pts.len() - 1)]));
     }
@@ -1022,12 +1063,12 @@ pub fn build(p: &Params) -> (String, Report) {
         for (i, &(k, xe, ye)) in ends.iter().enumerate() {
             let yc = pos[i];
             let needs = (yc - ye).abs() > 2.5 || ends.iter().enumerate().any(|(j, e)| j != i && (e.2 - ye).abs() <= 1.8 * lh);
-            let rr = st.ratio[k];
+            let rr = curves.iter().find(|c| c.0 == k).map(|c| c.1).unwrap_or(1.0);
             let text = name_of(k, rr);
             let ptext = format!("{pad_str}{text}");
             let base = yc + 0.28 * fs_lab;
             let bx = ink(&(xl, "start", base), text_w(&ptext, fs_lab), fs_lab, lh, 1);
-            fixed.push(Fixed { own: format!("c{k}"), text, slot, col: label_col(k), kmarks: key_mark(k).into_iter().collect(), base, x: xl, bx, leader: if needs { Some(((xe, ye), (xl - 1.5, yc))) } else { None } });
+            fixed.push(Fixed { own: feat_of(k), text, slot, col: label_col(k), kmarks: key_mark(k).into_iter().collect(), base, x: xl, bx, leader: if needs { Some(((xe, ye), (xl - 1.5, yc))) } else { None } });
         }
     }
 
@@ -1040,7 +1081,7 @@ pub fn build(p: &Params) -> (String, Report) {
     hard.extend(chunks(&[(left, top), (left, bottom), (right, bottom)]));
     for f in &fixed { if let Some(l) = f.leader { hard.extend(chunks(&[l.0, l.1])); } }
     let mut owns: Vec<String> = jobs_wanted.iter().map(|j| j.0.clone()).collect();
-    owns.extend(curves.iter().map(|c| format!("c{}", c.0)));
+    owns.extend(curves.iter().map(|c| feat_of(c.0)));
     owns.sort();
     owns.dedup();
     let feats: Vec<(String, Vec<Chunk>)> = owns.iter().map(|o| {
@@ -1174,7 +1215,7 @@ pub fn build(p: &Params) -> (String, Report) {
     }
 
     // ---- the working under the graph
-    let lines: Vec<String> = if st.readout { readout(&st, &m, ans, &WorkCtx { reads: reads.clone(), x_title: &x_title, celsius_axis, extrap: st.extrap && tx_axis }) } else { Vec::new() };
+    let lines: Vec<String> = if st.readout { readout(&st, &m, ans, &WorkCtx { reads: reads.clone(), x_title: &x_title, celsius_axis, extrap: st.extrap && tx_axis, ncur: n_given_curves }) } else { Vec::new() };
     let mut wrapped: Vec<String> = Vec::new();
     for line in &lines { wrapped.extend(wrap(line, fs_ro, w - 40.0)); }
     let ro_lh = 1.45 * fs_ro;
@@ -1182,7 +1223,7 @@ pub fn build(p: &Params) -> (String, Report) {
 
     let mut d = Doc::new(w, h);
     let drawn_points = marks.iter().any(|mk| mk.shape == "pt");
-    d.describe("Gas law graph", &describe(&st, ans, curves.len(), drawn_points));
+    d.describe("Gas law graph", &describe(&st, ans, n_given_curves, drawn_points));
     d.defs(&fills.defs());
     if st.grid {
         for (v, _) in &xticks { let x = px(*v); if x > left + 0.5 && x <= right + 0.01 { d.raw(&format!(r##"<line x1="{x:.2}" y1="{top:.2}" x2="{x:.2}" y2="{bottom:.2}" stroke="{grid_c}" stroke-width="1" data-o="grid"/>"##)); } }
@@ -1223,7 +1264,7 @@ pub fn build(p: &Params) -> (String, Report) {
         d.raw(&format!(r##"<text x="{tx:.2}" y="{ty:.2}" font-size="{fs_t:.2}" text-anchor="middle" font-family="{FONT}" fill="{ink_c}" transform="rotate(-90 {tx:.2} {ty:.2})" data-o="axis">{}</text>"##, esc(&y_title)));
     }
     if show_eq {
-        d.raw(&text_el((left + right) / 2.0, 6.0 + 0.9 * fs_lab, fs_lab, "middle", lab_c, eq_text(st.mode), "note"));
+        d.raw(&text_el((left + right) / 2.0, 6.0 + 0.9 * fs_lab, fs_lab, "middle", lab_c, eq_text(if st.q == Q::Identify { shown_law(&st, n_given_curves) } else { st.mode }), "note"));
     }
     // a name, with its colour and (in Print) the marker of its curve in front of it
     let name_el = |d: &mut Doc, text: &str, own: &str, col: &str, slot: f64, km: &[(&'static str, String, String)], c: &Cand, wd: f64, gi: usize| {
@@ -1246,7 +1287,7 @@ pub fn build(p: &Params) -> (String, Report) {
         d.raw(&text_el(20.0, ph + 8.0 + 0.76 * fs_ro + k as f64 * ro_lh, fs_ro, "start", ink_c, line, "note"));
     }
     let _ = (ring as fn(Pt, f64, f64, usize, f64) -> Vec<Cand>, chunk_dist as fn(&[Chunk], Bx, f64) -> f64, chunk_hits as fn(&[Chunk], Bx) -> usize, &x_axes, &y_axes, hyper, BLANK);
-    let rep = Report { frame: fr, setup: st.clone(), model: m, ncurves: curves.len(), knobs, readout: lines, notes };
+    let rep = Report { frame: fr, setup: st.clone(), model: m, ncurves: n_given_curves, knobs, readout: lines, notes };
     (d.finish(), rep)
 }
 
@@ -1256,7 +1297,7 @@ fn describe(st: &Setup, ans: bool, curves: usize, points: bool) -> String {
     let mut s = String::from("Graph of one quantity of a gas against another");
     s.push_str(if curves >= 2 { ", with several curves, each named" } else { ", with one curve" });
     if points { s.push_str(if st.labels { " and its marked points labelled" } else { " and marked points" }); }
-    if st.extrap && st.graph.t_axis() { s.push_str(", the line extended by a dashed section"); }
+    if st.extrap && st.graph.t_axis() { s.push_str(", the line continued by a dotted extrapolation"); }
     s.push('.');
     if ans { s.push_str(" The key also marks the answer."); }
     s
@@ -1266,7 +1307,7 @@ fn describe(st: &Setup, ans: bool, curves: usize, points: bool) -> String {
 // The working
 // ---------------------------------------------------------------------------------------------
 
-struct WorkCtx<'a> { reads: Vec<f64>, x_title: &'a str, celsius_axis: bool, extrap: bool }
+struct WorkCtx<'a> { reads: Vec<f64>, x_title: &'a str, celsius_axis: bool, extrap: bool, ncur: usize }
 
 fn readout(st: &Setup, m: &Model, ans: bool, cx: &WorkCtx) -> Vec<String> {
     let mut v: Vec<String> = Vec::new();
@@ -1316,13 +1357,13 @@ fn readout(st: &Setup, m: &Model, ans: bool, cx: &WorkCtx) -> Vec<String> {
             let (_, fx) = m.found.unwrap_or((Var::V, 0.0));
             let rounded = sigval(fx, sig);
             let fx_txt = |fv: f64| -> String {
-                if f == Var::T && st.tu == 1 { format!("{} K = {} °C", sigfmt(fv, sig), kfmt(sigval(fv, sig) + ABS_ZERO)) } else { sigfmt(fv, sig) }
+                if f == Var::T && st.tu == 1 { format!("{} K, which is {} °C", sigfmt(fv, sig), sigfmt(fv + ABS_ZERO, sig)) } else { sigfmt(fv, sig) }
             };
             let same = (m.s2.p - m.s1.p).abs() <= 1e-12 * m.s1.p && (m.s2.v - m.s1.v).abs() <= 1e-12 * m.s1.v && (m.s2.t - m.s1.t).abs() <= 1e-12 * m.s1.t && (m.s2.n - m.s1.n).abs() <= 1e-12 * m.s1.n;
             if ans {
                 let found_unit_txt = if f == Var::T && st.tu == 1 { None } else { Some(sigfmt(fx, sig)) };
                 let mut s2line = show(&m.s2, 2, m.s2.t, found_unit_txt);
-                if f == Var::T && st.tu == 1 { s2line = s2line.replace(&format!("T₂ = {BLANK} °C"), &format!("T₂ = {}", fx_txt(fx))); }
+                if f == Var::T && st.tu == 1 { s2line = s2line.replace(&format!("T₂ = {BLANK} °C"), &format!("T₂ = {} °C", sigfmt(fx + ABS_ZERO, sig))); }
                 v.push(s2line);
                 v.push(law_line.to_string());
                 // temperatures in kelvin
@@ -1347,6 +1388,9 @@ fn readout(st: &Setup, m: &Model, ans: bool, cx: &WorkCtx) -> Vec<String> {
                     (Mode::Combined, _) => format!("T₂ = T₁P₂V₂ / (P₁V₁) = ({k1} K × {p2} {pu} × {v2} {vu}) / ({p1} {pu} × {v1} {vu}) = {} K", sigfmt(fx, sig)),
                 };
                 v.push(line);
+                if f == Var::T && st.tu == 1 {
+                    v.push(format!("In degrees Celsius, from the unrounded kelvin value: T₂ = {} K − 273.15 = {} °C, which is {} °C to {sf}.", kfmt(fx), kfmt(fx + ABS_ZERO), sigfmt(fx + ABS_ZERO, sig)));
+                }
                 let unit = match f { Var::P => pu.to_string(), Var::V => vu.to_string(), Var::T => String::new(), Var::N => "mol".to_string() };
                 if f == Var::T {
                     v.push(format!("Answer: T₂ = {}", if st.tu == 1 { fx_txt(fx) } else { format!("{} K", sigfmt(fx, sig)) }));
@@ -1381,8 +1425,9 @@ fn readout(st: &Setup, m: &Model, ans: bool, cx: &WorkCtx) -> Vec<String> {
         }
         Q::Identify => {
             if ans {
-                v.push(format!("Answer: {}", law_name(mode)));
-                v.push(identify_reason(st).to_string());
+                let law = shown_law(st, cx.ncur);
+                v.push(format!("Answer: {}", law_name(law)));
+                v.push(identify_reason(law, st.graph).to_string());
             } else {
                 v.push(format!("Which gas law does this graph show? {BLANK}"));
                 v.push(format!("Give a reason from the shape of the graph: {BLANK}"));
@@ -1390,7 +1435,7 @@ fn readout(st: &Setup, m: &Model, ans: bool, cx: &WorkCtx) -> Vec<String> {
         }
     }
     if cx.extrap {
-        v.push(if ans { format!("Dashed line: the line extended back to absolute zero (0 K = −273.15 °C); the open circle marks zero {} there.", if st.graph == G::VT { "volume" } else { "pressure" }) } else { "Dashed line: the line extended beyond the measurements.".to_string() });
+        v.push(if ans { format!("Dotted line: an extrapolation of ideal-gas behaviour back to absolute zero (0 K = −273.15 °C); the open circle marks zero {} there. A real gas liquefies before it reaches 0 K.", if st.graph == G::VT { "volume" } else { "pressure" }) } else { "Dotted line: an extrapolation, the measured line continued past the readings as an ideal gas would behave; a real gas liquefies before it reaches 0 K.".to_string() });
     }
     let _ = cx.x_title;
     let _ = (cx.celsius_axis, r_sentence as fn(usize, usize) -> String, rd);
@@ -1480,12 +1525,11 @@ fn slope_lines(st: &Setup, m: &Model, ans: bool, cx: &WorkCtx, v: &mut Vec<Strin
         v.push(format!("Give the answers to {sf}."));
         return;
     }
-    // the readings as printed
+    // the readings: shown rounded, but every later result is worked out from the unrounded values, so it is rounded once
     let mut ys: Vec<f64> = Vec::new();
     for (i, &x) in xs.iter().enumerate() {
         let (_, res) = read_work(st, m, x, sig, t1u);
-        let printed = sigval(res, sig);
-        ys.push(printed);
+        ys.push(res);
         v.push(format!("Point {}: {ysym} = {} {yunit} at {} = {} {xunit} (read from the curve, rounded to {sf})", letters[i], sigfmt(res, sig), xname_short(g), gfmt(x)));
     }
     v.push(r_sentence(st.pu, st.vu));
@@ -1495,7 +1539,7 @@ fn slope_lines(st: &Setup, m: &Model, ans: bool, cx: &WorkCtx, v: &mut Vec<Strin
             let kk = ys[0] * xs[0];
             v.push(format!("PV = P × V = {} {pu} × {} {vu} = {} {slope_unit}", sigfmt(ys[0], sig), gfmt(xs[0]), sigfmt(kk, sig)));
             t_note(v);
-            let n = sigval(kk, sig) / (rd * m.s1.t);
+            let n = kk / (rd * m.s1.t);
             v.push(format!("n = PV / (R T₁) = {} / ({} {runit} × {k1} K) = {} mol", sigfmt(kk, sig), cfmt(rd), sigfmt(n, sig)));
             v.push(format!("Answer: n = {} mol", sigfmt(n, sig)));
         }
@@ -1515,38 +1559,37 @@ fn slope_lines(st: &Setup, m: &Model, ans: bool, cx: &WorkCtx, v: &mut Vec<Strin
             }
             let slope = (ys[1] - ys[0]) / dx;
             v.push(format!("Slope = (y_B − y_A) / (x_B − x_A) = ({} − {}) / ({} − {}) = {} {slope_unit}", sigfmt(ys[1], sig), sigfmt(ys[0], sig), gfmt(xs[1]), gfmt(xs[0]), sigfmt(slope, sig)));
-            let s = sigval(slope, sig);
             match g {
                 G::PInvV => {
                     t_note(v);
-                    let n = s / (rd * m.s1.t);
+                    let n = slope / (rd * m.s1.t);
                     v.push(format!("The slope is PV = nRT, so n = slope / (R T₁) = {} / ({} {runit} × {k1} K) = {} mol", sigfmt(slope, sig), cfmt(rd), sigfmt(n, sig)));
                     v.push(format!("Answer: n = {} mol", sigfmt(n, sig)));
                 }
                 G::VT => {
-                    let n = s * m.s1.p / rd;
+                    let n = slope * m.s1.p / rd;
                     v.push(format!("The slope is nR/P, so n = slope × P / R = ({} {slope_unit} × {} {pu}) / {} {runit} = {} mol", sigfmt(slope, sig), gfmt(m.s1.p), cfmt(rd), sigfmt(n, sig)));
                     v.push(format!("Answer: n = {} mol", sigfmt(n, sig)));
                 }
                 G::PT => {
-                    let n = s * m.s1.v / rd;
+                    let n = slope * m.s1.v / rd;
                     v.push(format!("The slope is nR/V, so n = slope × V / R = ({} {slope_unit} × {} {vu}) / {} {runit} = {} mol", sigfmt(slope, sig), gfmt(m.s1.v), cfmt(rd), sigfmt(n, sig)));
                     v.push(format!("Answer: n = {} mol", sigfmt(n, sig)));
                 }
                 _ => {
-                    let t = s * m.s1.p / rd;
-                    v.push(format!("The slope is V/n = RT/P, so T = slope × P / R = ({} {slope_unit} × {} {pu}) / {} {runit} = {} K", sigfmt(slope, sig), gfmt(m.s1.p), cfmt(rd), sigfmt(t, sig)));
-                    v.push(format!("Answer: T = {} K", sigfmt(t, sig)));
+                    let tt = slope * m.s1.p / rd;
+                    v.push(format!("The slope is V/n = RT/P, so T = slope × P / R = ({} {slope_unit} × {} {pu}) / {} {runit} = {} K", sigfmt(slope, sig), gfmt(m.s1.p), cfmt(rd), sigfmt(tt, sig)));
+                    v.push(format!("Answer: T = {} K", sigfmt(tt, sig)));
                 }
             }
         }
     }
-    v.push(format!("Each answer is rounded once, to {sf}; a result is worked out from the printed values before it."));
+    v.push(format!("Each answer is rounded once, to {sf}: the readings and the slope are shown rounded, but n (or T) is worked out from their unrounded values."));
     let _ = yname;
 }
 
-fn identify_reason(st: &Setup) -> &'static str {
-    match (st.mode, st.graph) {
+fn identify_reason(mode: Mode, graph: G) -> &'static str {
+    match (mode, graph) {
         (Mode::Combined, G::PV) => "Each curve is a hyperbola, so P is inversely proportional to V at one temperature; a higher temperature lifts the curve, so PV/T is constant when T is in kelvin.",
         (Mode::Combined, G::VT) => "Each line goes through zero volume at absolute zero, so V is proportional to T (in kelvin) at one pressure; a lower pressure gives a steeper line, so PV/T is constant.",
         (Mode::Combined, _) => "Each line goes through zero pressure at absolute zero, so P is proportional to T (in kelvin) at one volume; a smaller volume gives a steeper line, so PV/T is constant.",
