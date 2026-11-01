@@ -272,6 +272,8 @@ sine-cosine__defaults 3180a65e16ea590e
 sine-cosine__start 3180a65e16ea590e
 slope-triangle__defaults 53cc7d348c685d49
 slope-triangle__start 53cc7d348c685d49
+soil-texture__defaults ccc9a2c9665de408
+soil-texture__start e23a795c2c101049
 solid-net__defaults f37a63c84d4f439b
 solid-net__start f37a63c84d4f439b
 sorting-passes__defaults 4eeaec6f73c98f22

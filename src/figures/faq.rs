@@ -38,6 +38,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "action-potential" => ACTION_POTENTIAL,
         "cell-cycle" => CELL_CYCLE,
         "cell-diagram" => CELL_DIAGRAM,
+        "soil-texture" => SOIL_TEXTURE,
         // chemistry
         "bohr-model" => BOHR_MODEL,
         "gas-syringe" => GAS_SYRINGE,
@@ -4027,5 +4028,32 @@ const COLLISION_MOMENTUM: &[Faq] = &[
     Faq {
         q: "How do I make a worksheet?",
         a: "Turn Show answers off: the momenta, the velocities after and the kinetic energies become blanks, and only the given (before) arrows are drawn — the after arrows are part of the answer. The carts, the collision kind and the given masses and velocities stay.",
+    },
+];
+
+const SOIL_TEXTURE: &[Faq] = &[
+    Faq {
+        q: "Where do the class boundaries come from, and how were they checked?",
+        a: "They are the twelve texture classes of the USDA textural triangle in the Soil Survey Manual (Soil Survey Division Staff, USDA Handbook 18). Each class is a polygon with whole-percent vertices that this figure writes itself from the class definitions (for example loam: 7 to 27 % clay, 28 to 50 % silt, no more than 52 % sand; sand: silt plus 1.5 times clay under 15; loamy sand: silt plus 1.5 times clay at least 15 and silt plus 2 times clay under 30). No web figure or image was copied. The polygons tile the triangle with no gap or overlap, and a test classifies every 0.1 % of sand and clay (about half a million points) with the polygons and again with the textbook if/else cascade written from the textual definitions: they never disagree except exactly on a line, where the tie rule below applies. Published definitions word some limits as at least and others as more than or under (for example the 20 % sand limit between silty clay loam and clay loam); those only matter exactly on a line, which the tie rule settles.",
+    },
+    Faq {
+        q: "What do I type, and when is the figure refused?",
+        a: "Type any two of sand, silt and clay as percents (up to 2 decimals; 40, 40.5, 40,5 and 40 % all work); the third is worked out as 100 minus the other two. If you type all three they must add to exactly 100. A second sample works the same way and is plotted with a numbered tag. The figure refuses, and says why in the picture and in the editor note, when a value is not a number written with the digits 0 to 9, is negative, is above 100, has more than 2 decimals, when two values add to more than 100 (silt would be negative), when three typed values do not add to 100, or when fewer than two are typed. Each refusal quotes what you typed and ends with a change that draws, for example clearing the silt box. Name the regions reads no sample, so a bad value there is not an error.",
+    },
+    Faq {
+        q: "What happens when a sample is exactly on a line?",
+        a: "The point is drawn exactly where its percentages say. A point on a line belongs to every class that touches it, and this figure gives it to the class listed later in the legend (roughly the finer one): a sample at sand 52 %, clay 20 % touches sandy loam, loam and sandy clay loam and is called sandy clay loam. This is the figure's convention, not a rule from the Manual. The key says so in words (on the boundary of A and B; classified as B by convention), the editor note says it, and the student copy prints the one rule. When the dot only touches a line without being on it, the percentages decide, because the classification uses exact arithmetic on the typed digits.",
+    },
+    Faq {
+        q: "How do I read the triangle, and what are the construction lines?",
+        a: "Clay is read on the left edge and rises upward (gridlines are horizontal). Silt is read on the bottom and rises toward the left corner (gridlines run parallel to the right edge). Sand is read on the right edge and rises downward (gridlines run parallel to the left edge). Each axis has an arrow in the direction of more. The corner at the top is 100 % clay, the lower left 100 % silt and the lower right 100 % sand. Show construction lines draws three dashed lines from each sample along its own clay, sand and silt lines to the axis where each is read; the dots where they land show the three numbers.",
+    },
+    Faq {
+        q: "What do the student copy and the key hide, and what is Name the regions?",
+        a: "In Classify, the student copy plots each sample and prints the three percentages with a blank rule for the texture class; the key fills the blank, outlines the class on the triangle, and flags a point on a line. The twelve class names stay on the triangle because the student needs them to answer. In Name the regions the triangle shows twelve numbered discs and no names, the student copy has a blank for each number, and the key prints the names in order (1 sand, 2 loamy sand, 3 sandy loam, 4 loam, 5 silt loam, 6 silt, 7 sandy clay loam, 8 clay loam, 9 silty clay loam, 10 sandy clay, 11 silty clay, 12 clay). The layout is identical in both copies.",
+    },
+    Faq {
+        q: "Why are some regions labelled with letters, and how does Print work?",
+        a: "A region prints its full name (on one or two lines) only if the name fits inside it with a margin; otherwise it prints the standard abbreviation (S, LS, SL, L, SiL, Si, SCL, CL, SiCL, SC, SiC, C), and the legend under the triangle names every abbreviation. A label that the sample point or a construction line would cover moves to another spot inside its region. Abbreviations only forces letters for every region. Print is black, white and grey only: the twelve classes use six fills (plain, diagonal lines, cross-hatch, dots, horizontal lines, vertical lines) and no two classes that share an edge use the same one; the hatches keep their ink in a 66 % grey copy.",
     },
 ];

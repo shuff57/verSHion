@@ -15,6 +15,8 @@ pub fn overrides(id: &str) -> Vec<(&'static str, Value)> {
         "cell-cycle" => vec![("pointer", st("S")), ("readout", st("DNA amount"))],
         // the cell diagram opens on the plant cell: it shows the cell wall, the central vacuole and the chloroplasts that the default animal cell lacks
         "cell-diagram" => vec![("cell", st("Plant cell"))],
+        // the soil texture triangle opens with the construction lines drawn, so the first picture shows how a sample is read
+        "soil-texture" => vec![("guides", Value::B(true))],
         // Math polygons open unfilled (black outline on white), angles unshaded.
         "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "regular-polygon" => vec![("fill", st("#ffffff"))],
         // the reference names the kite counter-clockwise (A right, B top, C left): our mirror

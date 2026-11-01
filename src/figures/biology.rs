@@ -21,6 +21,7 @@ pub mod pipette;
 mod plot;
 pub mod popdyn;
 pub mod punnett;
+pub mod soiltexture;
 
 /// Direct-manipulation handles for this subject's figures (None = not one of ours).
 /// "Start from an example" entries for this subject's figures.
@@ -41,6 +42,7 @@ pub fn examples(id: &str) -> Option<Vec<super::Example>> {
         "action-potential" => actionpotential::examples(id),
         "cell-cycle" => cellcycle::examples(id),
         "cell-diagram" => celldiagram::examples(id),
+        "soil-texture" => soiltexture::examples(id),
         _ => None,
     }
 }
@@ -143,6 +145,7 @@ pub fn defs() -> Vec<FigureDef> {
         actionpotential::defs().pop().unwrap(),
         cellcycle::defs().pop().unwrap(),
         celldiagram::defs().pop().unwrap(),
+        soiltexture::defs().pop().unwrap(),
     ]
 }
 
