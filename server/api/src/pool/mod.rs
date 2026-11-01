@@ -68,6 +68,7 @@ pub mod publishstart;
 pub mod publishunits;
 pub mod publishchecks;
 pub mod publishearlier;
+pub mod publishevid;
 pub mod publishfacts;
 pub mod publishhash;
 pub mod poolcontent;
