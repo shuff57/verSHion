@@ -22,9 +22,12 @@
 		}
 	}
 
-	# The web pages (web/ at the repository root; adjust if the pages live elsewhere).
+	# The static pages in server/web (account/credits.html, legal/). The mailed links (/account/verify#token=...,
+	# /account/reset, /account/enrol) are NOT static pages: the app itself opens them (src/app.rs, src/share/mod.rs), so
+	# APP_URL must be where the app's web build is served. For a first run that is whatever serves the app build; this
+	# block only gives the credits and legal pages.
 	handle {
-		root * web
+		root * server/web
 		encode gzip
 		file_server
 	}
