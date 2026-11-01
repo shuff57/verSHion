@@ -199,6 +199,8 @@ fn body_limit(route: &Route, method: &str) -> Option<(usize, bool)> {
         (_, "GET" | "HEAD" | "DELETE") => None,
         (ItemImport(_), "POST") => Some((JSON_BODY_MAX, true)),
         (MeInvite, "POST") => Some((JSON_BODY_MAX, false)),
+        (CircleHeads, "POST") => Some((JSON_BODY_MAX, true)),
+        (Circles | CircleJoinPreview | CircleJoin | Circle(_) | CircleInvites(_) | CircleInvitesRevoke(_) | CircleInvitesEmail(_) | CircleMembersRemove(_) | CircleMembersRole(_) | CircleTransfer(_), "POST" | "PATCH") => Some((JSON_BODY_MAX, false)),
         (Prefs | ItemVersions | Item(_) | ItemReport(_) | ItemAppeal(_) | ItemCounterNotice(_), _) => Some((JSON_BODY_MAX, false)),
         _ => None,
     }
@@ -298,7 +300,48 @@ fn dispatch(c: &Call, route: &Route, enter_heavy: &mut dyn FnMut() -> Res<()>) -
             ];
             Ok(Reply::Raw { status: 200, headers, body: out.body.to_string().into_bytes(), hold: None })
         }
+        (r, _) if circle_route(r) => circles_dispatch(c, r),
         _ => not_ported(),
+    }
+}
+
+/// The circle routes that are not about banks.
+fn circle_route(r: &Route) -> bool {
+    use Route::*;
+    matches!(
+        r,
+        Circles | CircleJoinPreview | CircleJoin | CircleHeads | Circle(_) | CircleReopen(_) | CircleActivity(_) | CircleInvites(_) | CircleInvitesRevoke(_) | CircleInvitesEmail(_) | CircleLeave(_) | CircleMembersRemove(_)
+            | CircleMembersRole(_) | CircleTransfer(_) | CircleTransferAccept(_) | CircleTransferCancel(_)
+    )
+}
+
+fn circles_dispatch(c: &Call, route: &Route) -> Res<Reply> {
+    use super::{circleactivity as act, circleinvites as inv, circlemail, circlemembers as mem, circles as cir};
+    let (x, me) = (c.x, c.me);
+    let pair = |r: (u16, Value)| Ok(Reply::Json(r.0, r.1));
+    let ok = |v: Value| Ok(Reply::Json(200, v));
+    match (route, c.method) {
+        (Route::Circles, "GET") => ok(cir::list_circles(x, me)?),
+        (Route::Circles, "POST") => pair(cir::create_circle(x, me, &c.json()?)?),
+        (Route::CircleJoinPreview, "POST") => ok(inv::join_preview(x, me, &c.json()?)?),
+        (Route::CircleJoin, "POST") => ok(inv::join_circle(x, me, &c.json()?)?),
+        (Route::CircleHeads, "POST") => ok(act::heads(x, me, &c.json_opt()?)?),
+        (Route::Circle(id), "GET") => ok(cir::get_circle(x, me, id)?),
+        (Route::Circle(id), "PATCH") => ok(cir::patch_circle(x, me, id, &c.json()?)?),
+        (Route::Circle(id), "DELETE") => ok(cir::close_circle(x, me, id)?),
+        (Route::CircleReopen(id), "POST") => ok(cir::reopen_circle(x, me, id)?),
+        (Route::CircleActivity(id), "GET") => ok(act::activity(x, me, id, param(&c.query, "before").as_deref())?),
+        (Route::CircleInvites(id), "GET") => ok(inv::list_invites(x, me, id, param(&c.query, "after").as_deref())?),
+        (Route::CircleInvites(id), "POST") => pair(inv::create_invite(x, me, id, &c.json()?)?),
+        (Route::CircleInvitesRevoke(id), "POST") => ok(inv::revoke_invite(x, me, id, &c.json()?)?),
+        (Route::CircleInvitesEmail(id), "POST") => pair(circlemail::email_invite(x, &c.st.keys, me, id, &c.json()?)?),
+        (Route::CircleLeave(id), "POST") => ok(mem::leave_circle(x, me, id)?),
+        (Route::CircleMembersRemove(id), "POST") => ok(mem::remove_member(x, me, id, &c.json()?)?),
+        (Route::CircleMembersRole(id), "POST") => ok(mem::set_role(x, me, id, &c.json()?)?),
+        (Route::CircleTransfer(id), "POST") => pair(mem::offer_transfer(x, me, id, &c.json()?)?),
+        (Route::CircleTransferAccept(id), "POST") => ok(mem::accept_transfer(x, me, id)?),
+        (Route::CircleTransferCancel(id), "POST") => ok(mem::cancel_transfer(x, me, id)?),
+        _ => Ok(Reply::Json(501, json!({ "error": "not_ported" }))),
     }
 }
 

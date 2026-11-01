@@ -86,6 +86,8 @@ fn publish_body(publish_id: &str) -> Vec<u8> {
     out
 }
 const T: Option<&str> = Some("t:teacher");
+const OID: &str = "00000000-0000-4000-8000-000000000001";
+const OIDT: &str = "00000000-0000-4000-8000-000000000001:teacher";
 
 #[tokio::test]
 async fn unknown_paths_are_404_and_unsigned_requests_are_401() {
@@ -250,9 +252,64 @@ async fn invite_redemption_and_the_export_freshness_rule_answer_over_http() {
     assert_eq!((s, b["error"].clone()), (403, json!("reauth_required")));
 }
 
+fn jreq(method: &str, uri: &str, user: &str, body: Value) -> HttpRequest<Body> {
+    req(method, uri, Some(user), Some("application/json"), body.to_string().into_bytes())
+}
+
 #[tokio::test]
-async fn routes_not_wired_yet_say_so() {
+async fn a_circle_is_created_joined_with_a_code_and_managed_over_http() {
     let w = world();
+    add_user(&w, OID);
+    let (s, b, _) = send(&w, jreq("POST", "/circles", "t:teacher", json!({ "name": "Algebra team" }))).await;
+    assert_eq!(s, 201, "{b}");
+    let cid = b["circle"]["id"].as_str().unwrap().to_string();
     let (s, b, _) = send(&w, req("GET", "/circles", T, None, vec![])).await;
+    assert_eq!((s, b["circles"].as_array().map(Vec::len)), (200, Some(1)), "{b}");
+    let (s, b, _) = send(&w, req("GET", &format!("/circles/{cid}"), T, None, vec![])).await;
+    assert_eq!((s, b["circle"]["role"].clone()), (200, json!("owner")), "{b}");
+    // An invite code, then the other teacher previews and joins with it.
+    let (s, b, _) = send(&w, jreq("POST", &format!("/circles/{cid}/invites"), "t:teacher", json!({ "role": "editor" }))).await;
+    assert_eq!(s, 201, "{b}");
+    let code = b["code"].as_str().unwrap().to_string();
+    let (s, b, _) = send(&w, jreq("POST", "/circles/join/preview", OIDT, json!({ "code": code }))).await;
+    assert_eq!((s, b["role"].clone()), (200, json!("editor")), "{b}");
+    let (s, b, _) = send(&w, jreq("POST", "/circles/join", OIDT, json!({ "code": code }))).await;
+    assert_eq!((s, b["ok"].clone()), (200, json!(true)), "{b}");
+    let (s, b, _) = send(&w, req("GET", &format!("/circles/{cid}/activity"), T, None, vec![])).await;
+    assert_eq!(s, 200, "{b}");
+    // The owner changes the member's role, the member leaves, and the owner closes and reopens the circle.
+    let (s, b, _) = send(&w, jreq("POST", &format!("/circles/{cid}/members/role"), "t:teacher", json!({ "user_id": OID, "role": "viewer" }))).await;
+    assert_eq!(s, 200, "{b}");
+    let (s, _, _) = send(&w, req("POST", &format!("/circles/{cid}/leave"), Some(OIDT), None, vec![])).await;
+    assert_eq!(s, 200);
+    let (s, _, _) = send(&w, req("DELETE", &format!("/circles/{cid}"), T, None, vec![])).await;
+    assert_eq!(s, 200);
+    let (s, _, _) = send(&w, req("POST", &format!("/circles/{cid}/reopen"), T, None, vec![])).await;
+    assert_eq!(s, 200);
+    // A stranger sees nothing of it.
+    let (s, b, _) = send(&w, req("GET", &format!("/circles/{cid}"), Some(OIDT), None, vec![])).await;
+    assert_eq!((s, b["error"].clone()), (404, json!("not_found")));
+}
+
+#[tokio::test]
+async fn circle_bodies_are_checked_and_a_pending_account_may_join_but_not_create() {
+    let w = world();
+    let (s, b, _) = send(&w, jreq("POST", "/circles", "t:teacher", json!({ "name": "" }))).await;
+    assert_eq!((s, b["error"].clone(), b["field"].clone()), (400, json!("invalid_request"), json!("name")));
+    w.st.conn.lock().unwrap().execute("INSERT INTO users (id, email, display_name, trust, created_at) VALUES ('p', 'p@x.org', 'P', 'pending', 1)", []).unwrap();
+    let (s, b, _) = send(&w, jreq("POST", "/circles", "p:pending", json!({ "name": "Mine" }))).await;
+    assert_eq!((s, b["error"].clone()), (403, json!("account_not_approved")));
+    let (s, b, _) = send(&w, jreq("POST", "/circles/join", "p:pending", json!({ "code": "C-ABCD-EFGH-2345-6789-ABCD-EFGH" }))).await;
+    assert_eq!((s, b["error"].clone()), (422, json!("circle_invite_invalid")), "{b}");
+    // An empty heads list is fine without a body.
+    let (s, _, _) = send(&w, req("POST", "/circles/heads", Some("p:pending"), None, vec![])).await;
+    assert_ne!(s, 501);
+}
+
+#[tokio::test]
+async fn bank_routes_are_not_wired_yet() {
+    let w = world();
+    let cid = "0123456789abcdef0123456789abcdef";
+    let (s, b, _) = send(&w, req("GET", &format!("/circles/{cid}/banks/{cid}"), T, None, vec![])).await;
     assert_eq!((s, b["error"].clone()), (501, json!("not_ported")));
 }
