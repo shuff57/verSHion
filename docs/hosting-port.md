@@ -269,6 +269,14 @@ Nothing below has been run. Every step that touches live data, DNS, Stripe or a 
 - [ ] Serve `web/` and `web/account` from Caddy with the same headers as the Pages `_headers` file (CSP, cache rules). Fill in the real origins in `api-base` (`credits.html`) and the CSP.
 - [ ] Lower the TTL of the API record a day ahead (60 s). At the cutover, repoint the A/AAAA (or the tunnel) from the Worker's route to the VPS. Keep the Worker deployed but unrouted.
 - [ ] Check from outside: TLS valid, `/health`, a login, a pool read. Check the server log shows real client addresses, not 127.0.0.1.
+- [ ] **Serve the app's web build, and test it against the new server (not yet done by anyone).** The mailed links (`/account/verify#token=...`, `/account/reset`, `/account/enrol`) are not static pages: the app itself opens them (`src/app.rs`, `src/share/mod.rs`), so `APP_URL` must be the origin that serves the app's web build, and that origin must be in `ALLOWED_ORIGINS`. `server/web` holds only `account/credits.*` and `legal/`; nothing in this branch serves the build. Before DNS moves, with the web build served from a staging origin pointing at the Rust server (`MAIL_MODE=log` is fine for this):
+  - sign up in the browser, open the logged verify link (`#token=` in the fragment), and confirm the app posts the token with the new password and profile (`Client::confirm`): the account must be able to log in afterwards; a token-only post leaves no password;
+  - log in, reload, and check the refresh cookie survives (`SameSite=Strict`, `Secure`: the page and the API must be same-site, so serve them under one registrable domain) and that CORS works from the page origin (credentials, preflight on `/items`, `/circles`, `/auth/*`);
+  - forgot/reset and device enrolment links, each opened from the log;
+  - the credits page (`server/web/account/credits.html`): set `meta[name="api-base"]` to the API origin, log in, load packs, and (test keys) buy a pack;
+  - one pool flow from the app: browse, publish, create a circle, send a bank;
+  - the browser console shows no CORS, CSP or mixed-content errors. The CSP in `server/web/_headers` must allow the API origin in `connect-src`.
+  `server/api/smoke/smoke.sh` covers the same API calls without a browser, but it cannot show a cookie, CORS or deep-link failure.
 
 ### 6. Stripe (live keys are yours; this port never touches them)
 
@@ -286,7 +294,7 @@ Nothing below has been run. Every step that touches live data, DNS, Stripe or a 
 
 ### 8. After cutover: watch
 
-- [ ] First hour: journal for `pool cron` lines each hour; no `cron_failure` flags (`GET /admin/pool/flags`); mail test: sign up a throwaway address and check the confirmation arrives; check an admin alert reaches `ADMIN_EMAIL`.
+- [ ] First hour: repeat the browser checks from 5 on the live origin (verify link, login after reload, one pool read); journal for `pool cron` lines each hour; no `cron_failure` flags (`GET /admin/pool/flags`); mail test: sign up a throwaway address and check the confirmation arrives; check an admin alert reaches `ADMIN_EMAIL`.
 - [ ] Next 24 h: the 04:xx UTC daily run happened (journal `daily=true`); `pool_outbox` has no old unsent rows (`SELECT COUNT(*) FROM pool_outbox WHERE sent_at IS NULL`); disk use as planned; rate-limit 429s are not clustered on one address (that would be the proxy problem in 5).
 - [ ] After a week: disable the Worker route, then the Worker, then the old Stripe endpoint. Keep the D1 export and the R2 bucket for 30 days.
 
