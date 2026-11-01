@@ -1,0 +1,441 @@
+[
+{
+"cat": "history",
+"lang": "en",
+"src": "moodle-raw:question/format/gift/examples.txt:8",
+"expect": "refuse",
+"freeze": false,
+"qtype": "short",
+"q": {
+"stem": "Who's buried in Grant's tomb?{~Grant ~Jefferson =no one}",
+"kind": {
+"Short": {
+"sample": ""
+}
+}
+},
+"id": "r0000"
+},
+{
+"cat": "history",
+"lang": "en",
+"src": "moodle-raw:question/format/gift/examples.txt:12",
+"expect": "refuse",
+"freeze": false,
+"qtype": "tf",
+"q": {
+"stem": "Grant is buried in Grant's tomb.{FALSE}",
+"kind": {
+"Tf": {
+"correct": false
+}
+}
+},
+"id": "r0001"
+},
+{
+"cat": "history",
+"lang": "en",
+"src": "moodle-raw:question/format/gift/examples.txt:49",
+"expect": "refuse",
+"freeze": false,
+"qtype": "tf",
+"q": {
+"stem": "Grant is buried in Grant's tomb.{F}",
+"kind": {
+"Tf": {
+"correct": false
+}
+}
+},
+"id": "r0002"
+},
+{
+"cat": "geography",
+"lang": "en",
+"src": "moodle-raw:question/format/gift/examples.txt:51",
+"expect": "refuse",
+"freeze": false,
+"qtype": "tf",
+"q": {
+"stem": "The sun rises in the east.{T}",
+"kind": {
+"Tf": {
+"correct": true
+}
+}
+},
+"id": "r0003"
+},
+{
+"cat": "math",
+"lang": "en",
+"src": "moodle-raw:question/format/gift/examples.txt:72",
+"expect": "refuse",
+"freeze": false,
+"qtype": "short",
+"q": {
+"stem": "What is the value of pi (to 3 decimal places)? {#3.1415:0.0005}.",
+"kind": {
+"Short": {
+"sample": ""
+}
+}
+},
+"id": "r0004"
+},
+{
+"cat": "history",
+"lang": "en",
+"src": "moodle-raw:question/format/gift/examples.txt:29",
+"expect": "refuse",
+"freeze": false,
+"qtype": "short",
+"q": {
+"stem": "The American holiday of Thanksgiving is celebrated on the {\n    ~second\n    ~third\n    =fourth\n} Thursday of November.",
+"kind": {
+"Short": {
+"sample": ""
+}
+}
+},
+"id": "r0005"
+},
+{
+"cat": "geography",
+"lang": "en",
+"src": "moodle-raw:question/format/gift/examples.txt:61",
+"expect": "refuse",
+"freeze": false,
+"qtype": "short",
+"q": {
+"stem": "Match the following countries with their corresponding capitals. {\n    =Canada -> Ottawa\n    =Italy  -> Rome\n}",
+"kind": {
+"Short": {
+"sample": ""
+}
+}
+},
+"id": "r0006"
+},
+{
+"cat": "history",
+"lang": "en",
+"src": "moodle-raw:question/format/gift/examples.txt:117",
+"expect": "refuse",
+"freeze": false,
+"qtype": "short",
+"q": {
+"stem": "Jesus Christ was from {\n    ~Jerusalem#This was an important city, but the wrong answer.\n    =Nazareth#Yes! That's right!}.",
+"kind": {
+"Short": {
+"sample": ""
+}
+}
+},
+"id": "r0007"
+},
+{
+"cat": "moodle",
+"lang": "en",
+"src": "moodle-raw:question/format/aiken/tests/fixtures/questions.aiken.txt:1",
+"expect": "refuse",
+"freeze": false,
+"qtype": "mc",
+"q": {
+"stem": "The Moodle project was started by:\nA) Petr Skoda\nB) Martin Dougiamas\nC) Eloy Lafuente\nD) Tim Hunt\nANSWER: B",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "B",
+"correct": true,
+"locked": false
+},
+{
+"text": "A",
+"correct": false,
+"locked": false
+},
+{
+"text": "C",
+"correct": false,
+"locked": false
+},
+{
+"text": "D",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+},
+"id": "r0008"
+},
+{
+"cat": "moodle",
+"lang": "en",
+"src": "moodle-raw:question/format/aiken/tests/fixtures/questions.aiken.txt:8",
+"expect": "refuse",
+"freeze": false,
+"qtype": "tf",
+"q": {
+"stem": "Moodle's abilities include handling user input that includes images:\nA) True\nB) False\nANSWER: A",
+"kind": {
+"Tf": {
+"correct": true
+}
+}
+},
+"id": "r0009"
+},
+{
+"cat": "geography",
+"lang": "en",
+"src": "moodle-raw:question/format/multianswer/tests/fixtures/questions.multianswer.txt:6",
+"expect": "refuse",
+"freeze": false,
+"qtype": "short",
+"q": {
+"stem": "The capital of France is {1:SHORTANSWER:%100%Paris#Congratulations!~%50%Marseille#No}.",
+"kind": {
+"Short": {
+"sample": ""
+}
+}
+},
+"id": "r0010"
+},
+{
+"cat": "biology",
+"lang": "en",
+"src": "moodle-raw:question/type/multianswer/tests/helper.php:70",
+"expect": "refuse",
+"freeze": false,
+"qtype": "short",
+"q": {
+"stem": "{1:SHORTANSWER:Dog#Wrong, silly!~=Owl#Well done!~*#Wrong answer}",
+"kind": {
+"Short": {
+"sample": ""
+}
+}
+},
+"id": "r0011"
+},
+{
+"cat": "biology",
+"lang": "en",
+"src": "moodle-raw:question/format/missingword/tests/fixtures/question.missingword1.txt:1",
+"expect": "refuse",
+"freeze": false,
+"qtype": "short",
+"q": {
+"stem": "As soon as we begin to explore our body parts as infants we become students of {=anatomy and physiology ~reflexology ~science ~experiment}, and in a sense we remain students for life.",
+"kind": {
+"Short": {
+"sample": ""
+}
+}
+},
+"id": "r0012"
+},
+{
+"cat": "geography",
+"lang": "en",
+"src": "moodle-raw:question/format/xml/tests/fixtures/sample_questions_with_old_image_tag.xml",
+"expect": "refuse",
+"freeze": false,
+"qtype": "short",
+"q": {
+"stem": "* San Francisco: {1:MULTICHOICE:=California#OK~Arizona#Wrong}\n* Tucson: {1:MULTICHOICE:California#Wrong~%100%Arizona#OK}",
+"kind": {
+"Short": {
+"sample": ""
+}
+}
+},
+"id": "r0013"
+},
+{
+"cat": "english",
+"lang": "en",
+"src": "moodle-raw:question/type/gapselect/tests/helper.php:71 (blank with answer)",
+"expect": "refuse",
+"freeze": false,
+"qtype": "blank",
+"q": {
+"stem": "The [[quick]] brown fox. Answer: quick",
+"kind": {
+"Blank": {
+"accept": [
+[
+"quick"
+]
+]
+}
+}
+},
+"id": "r0014"
+},
+{
+"cat": "misc",
+"lang": "en",
+"src": "moodle-raw:question/format/gift/examples.txt:115 (Answer: line)",
+"expect": "refuse",
+"freeze": false,
+"qtype": "mc",
+"q": {
+"stem": "Difficult question. Answer: C",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "wrong answer",
+"correct": false,
+"locked": false
+},
+{
+"text": "half credit answer",
+"correct": false,
+"locked": false
+},
+{
+"text": "full credit answer",
+"correct": true,
+"locked": false
+}
+]
+}
+}
+},
+"id": "r0015"
+},
+{
+"cat": "misc",
+"lang": "en",
+"src": "moodle-raw:question/format/gift/examples.txt:98 (Key line)",
+"expect": "refuse",
+"freeze": false,
+"qtype": "mc",
+"q": {
+"stem": "What's the answer?\nKey: right answer",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "wrong answer",
+"correct": false,
+"locked": false
+},
+{
+"text": "another wrong answer",
+"correct": false,
+"locked": false
+},
+{
+"text": "right answer",
+"correct": true,
+"locked": false
+}
+]
+}
+}
+},
+"id": "r0016"
+},
+{
+"cat": "geography",
+"lang": "es",
+"src": "moodle-raw:Aiken-style answer, Spanish",
+"expect": "refuse",
+"freeze": false,
+"qtype": "mc",
+"q": {
+"stem": "¿Cuál es la capital de Francia?\nRespuesta: A",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "París",
+"correct": true,
+"locked": false
+},
+{
+"text": "Roma",
+"correct": false,
+"locked": false
+},
+{
+"text": "Madrid",
+"correct": false,
+"locked": false
+},
+{
+"text": "Berlín",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+},
+"id": "r0017"
+},
+{
+"cat": "geography",
+"lang": "zh",
+"src": "moodle-raw:Chinese answer line",
+"expect": "refuse",
+"freeze": false,
+"qtype": "mc",
+"q": {
+"stem": "法国的首都是哪里？\n答案：A",
+"kind": {
+"Mc": {
+"answers": [
+{
+"text": "巴黎",
+"correct": true,
+"locked": false
+},
+{
+"text": "罗马",
+"correct": false,
+"locked": false
+},
+{
+"text": "马德里",
+"correct": false,
+"locked": false
+},
+{
+"text": "柏林",
+"correct": false,
+"locked": false
+}
+]
+}
+}
+},
+"id": "r0018"
+},
+{
+"cat": "misc",
+"lang": "en",
+"src": "moodle-raw:TF statement ending (True)",
+"expect": "refuse",
+"freeze": false,
+"qtype": "tf",
+"q": {
+"stem": "Water is wet. (True)",
+"kind": {
+"Tf": {
+"correct": true
+}
+}
+},
+"id": "r0019"
+}
+]

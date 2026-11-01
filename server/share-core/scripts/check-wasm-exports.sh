@@ -16,4 +16,9 @@ if grep -aq "strip_with_seed" "$dir"/share_core_bg.wasm; then
   echo "FAIL: $dir/share_core_bg.wasm contains strip_with_seed" >&2
   exit 1
 fi
+# The re-instantiation hook the Worker relies on after a trap (scripts/build-wasm.sh).
+if ! grep -q "export function reinit()" "$dir"/share_core.js; then
+  echo "FAIL: $dir/share_core.js has no reinit(): build with scripts/build-wasm.sh" >&2
+  exit 1
+fi
 echo "ok: $dir has no test-only exports"

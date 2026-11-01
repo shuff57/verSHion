@@ -66,6 +66,7 @@ pub fn question(stem: &str, kind: Kind) -> Question {
         keep_order: false,
         origin: None,
         published: None,
+        rekeyed: false,
     }
 }
 
@@ -109,7 +110,7 @@ pub fn decide_all(p: &Payload, prefer: LabelChoice) -> Vec<LabelDecision> {
 
 /// Options with every finding decided (Strip where allowed).
 pub fn opts_for(p: &Payload, image_ok: Vec<usize>) -> StripOptions {
-    StripOptions { image_ok, labels: decide_all(p, LabelChoice::Strip) }
+    StripOptions { image_ok, labels: decide_all(p, LabelChoice::Strip), ..Default::default() }
 }
 
 /// `{"labels":[...]}` for the wasm options.

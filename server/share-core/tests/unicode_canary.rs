@@ -60,3 +60,20 @@ fn std_unicode_functions_on_a_fixed_corpus() {
 
 /// Recorded with Rust 1.99.0.
 const CANARY: &str = "eb34615e9192fc5a5f038261f042beef3410a52a0a3a0b2af31db3b4210332d9";
+
+/// Round 6: the compiler's tables (pinned toolchain) are one version ahead of the
+/// general-category tables. A Unicode 17 letter std knows is accepted, not refused as unassigned;
+/// when either version moves, this fails and the rule is revisited.
+#[test]
+fn compiler_and_crate_tables_are_aligned() {
+    assert_eq!(char::UNICODE_VERSION, (17, 0, 0), "rust-toolchain.toml pins the compiler's Unicode tables");
+    let ok = |c: char| clean(&format!("a{c}b"), Class::Block, Max::Bytes(64)).is_ok();
+    // Unicode 17.0 letters (SIDETIC, TOLONG SIKI, TAI YO): std knows them; so do we.
+    for u in [0x10940u32, 0x11DB0, 0x1E6C0] {
+        let c = char::from_u32(u).unwrap();
+        assert!(c.is_alphabetic(), "std says U+{u:X} is a letter");
+        assert!(ok(c), "U+{u:X} (Unicode 17 letter) accepted");
+    }
+    // Still unassigned in 17.0: refused.
+    assert!(!ok('\u{0378}'));
+}

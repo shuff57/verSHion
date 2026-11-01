@@ -1,0 +1,23 @@
+// Populates a 0102-era database with the committed (1d311ff) worker and dumps it (round 16, critic21d B8).
+import { writeFileSync } from "node:fs";
+import { publish, World } from "./harness.ts";
+const out = process.argv[2]!;
+const bankOf = (qs: unknown[]) => JSON.stringify({ schema_version: 2, bank: { id: "x", name: "b", questions: qs, created: 1, modified: 1 } });
+const mc = (stem: string, extra: Record<string, unknown> = {}) => ({ id: "q", stem, kind: { Mc: { answers: [{ text: "Elevated summer water temperature above twenty degrees", correct: true, locked: false }, { text: "Predation by striped bass", correct: false, locked: false }, { text: "Reduced turbidity in the lower reach", correct: false, locked: false }] } }, points: null, difficulty: null, topics: [], image: null, explanation: "Ann's own analysis of the temperature logger data from 2017 to 2019.", figure: null, created: 1, modified: 1, ...extra });
+const w = new World();
+const A = w.user("teacher", "Ann"), T = w.user("teacher", "Tess");
+const a = await publish(w, A, bankOf([mc("In Ann's field study of the delta, which factor best explains the 2019 decline of juvenile Chinook salmon at the Freeport trap?")]), { license: "CC-BY-NC-SA-4.0" });
+const h = await publish(w, A, bankOf([mc("In Ann's second survey, which factor best explains the 2020 decline of juvenile steelhead at the Rio Vista trap?")]), { license: "CC-BY-NC-SA-4.0", hideKey: true });
+w.advance(86_400_000);
+const i1 = await w.json("POST", `/items/${a.body.item_id}/import`, { user: T });
+const i2 = await w.json("GET", `/items/${h.body.item_id}`, { user: T });
+console.log("old world:", a.status, JSON.stringify(a.body).slice(0, 400), h.status);
+const tables = (w.sql.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`).all() as { name: string }[]).map((x) => x.name);
+const lines: string[] = [];
+const lit = (v: unknown) => (v === null || v === undefined ? "NULL" : typeof v === "number" || typeof v === "bigint" ? String(v) : v instanceof Uint8Array ? `X'${Buffer.from(v).toString("hex")}'` : `'${String(v).replaceAll("'", "''")}'`);
+for (const t of tables)
+  for (const row of w.sql.prepare(`SELECT * FROM "${t}"`).all() as Record<string, unknown>[]) lines.push(`INSERT OR REPLACE INTO "${t}" (${Object.keys(row).map((k) => `"${k}"`).join(", ")}) VALUES (${Object.values(row).map(lit).join(", ")});`);
+writeFileSync(`${out}/dump.sql`, lines.join("\n"));
+writeFileSync(`${out}/r2.json`, JSON.stringify([...w.r2.objects].map(([k, v]) => [k, Buffer.from(v.bytes).toString("base64"), v.contentType ?? null])));
+writeFileSync(`${out}/meta.json`, JSON.stringify({ ann: A.id, tess: T.id, item: a.body.item_id, hidden: h.body.item_id, clock: w.clock, served: (i1.body as any).payload?.bank?.questions, servedHidden: (i2.body as any).payload?.bank?.questions }));
+console.log("rows", lines.length, "tables", tables.length);

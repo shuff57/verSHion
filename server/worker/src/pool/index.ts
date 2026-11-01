@@ -1,43 +1,62 @@
 // The shared pool's routes (docs/shared-pool.md, phase 2). Every route needs `teacher` (or `admin`)
 // trust, read from D1 on every request by the auth package's authenticate; `pending` and
 // `unverified` accounts are refused. Items the caller may not see are 404, never 403.
+import { flushWasmTraps } from "./cron.ts";
 import { poolAdminRoutes } from "./admin.ts";
+import { ADMIN_BODY_MAX } from "./preread.ts";
 import { putBlob } from "./blobs.ts";
 import { daily, hourly } from "./cron.ts";
 import { appeal, counterNotice, deleteItem, patchItem, report, undeleteItem } from "./moderation.ts";
 import { publish } from "./publish.ts";
+import { exportAccount } from "./export.ts";
+import { INVITE_FREE_PATHS, redeemInvite, requireInvite } from "./invites.ts";
 import { getBlob, getItem, importItem, list, mine, versions } from "./read.ts";
-import { json, makeCtx, PoolError, rateLimit, readJson, type Ctx, type PoolDeps, type PoolPrincipal } from "./shared.ts";
+import { activity, circleErasureStatements, closeCircle, createCircle, createInvite, deleteBank, getBank, getBankBlob, getCircle, heads, joinCircle, joinPreview, leaveCircle, listCircles, listInvites, patchBank, patchCircle, purgeBankNow, removeMember, reopenCircle, reportBank, revokeInvite, setRole, undeleteBank, offerTransfer, acceptTransfer, cancelTransfer } from "./circles.ts";
+import { sendVersion } from "./circlesend.ts";
+import { ALIVE_SQL, assertPoolKey, unauthorized, errKind, json, makeCtx, PoolError, rateLimit, readJson, type Ctx, type PoolDeps, type PoolPrincipal } from "./shared.ts";
 
 /** GET/PUT /items/prefs {keep_on_delete}: what happens to my shared items if I delete my account. */
 async function getPrefs(c: Ctx, p: PoolPrincipal): Promise<Response> {
   const r = await c.db.prepare(`SELECT keep_on_delete FROM pool_prefs WHERE user_id = ?1`).bind(p.userId).first<{ keep_on_delete: number }>();
-  return json(200, { keep_on_delete: r?.keep_on_delete === 1 });
+  // null: no choice made yet (the app asks at account deletion); the default then keeps, anonymised,
+  // the items other teachers imported and deletes the rest.
+  return json(200, { keep_on_delete: r ? r.keep_on_delete === 1 : null, default: "keep_imported_delete_rest" });
 }
 async function putPrefs(c: Ctx, req: Request, p: PoolPrincipal): Promise<Response> {
-  const b = await readJson(req);
+  const b = await readJson(req, `u:${p.userId}`, { deadlineMs: c.deps.bodyDeadlineMs });
   if (typeof b.keep_on_delete !== "boolean") throw new PoolError(400, "invalid_request", { field: "keep_on_delete" });
-  await c.db
-    .prepare(`INSERT INTO pool_prefs (user_id, keep_on_delete, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT (user_id) DO UPDATE SET keep_on_delete = ?2, updated_at = ?3`)
+  // Round 27 (critic35d B-1): written only while the account stands (same statement); else the 401 an
+  // unauthenticated request gets.
+  const w = await c.db
+    .prepare(
+      `INSERT INTO pool_prefs (user_id, keep_on_delete, updated_at) SELECT ?1, ?2, ?3 WHERE ${ALIVE_SQL("?1")}
+       ON CONFLICT (user_id) DO UPDATE SET keep_on_delete = ?2, updated_at = ?3`,
+    )
     .bind(p.userId, b.keep_on_delete ? 1 : 0, c.now())
     .run();
+  if ((w.meta.changes ?? 0) === 0) throw unauthorized();
   return json(200, { keep_on_delete: b.keep_on_delete });
 }
 
-export const POOL_METHODS = "GET, POST, PUT, PATCH, DELETE";
+export const POOL_METHODS = "GET, HEAD, POST, PUT, PATCH, DELETE";
 const POOL_TRUST = new Set(["teacher", "admin"]);
 
 type Route = (c: Ctx, req: Request, p: PoolPrincipal, m: string[], url: URL) => Promise<Response>;
 
 const ROUTES: { re: RegExp; methods: Record<string, Route> }[] = [
   { re: /^\/items$/, methods: { GET: (c, _r, p, _m, u) => list(c, u, p), POST: (c, r, p) => publish(c, r, p, null) } },
-  { re: /^\/items\/mine$/, methods: { GET: (c, _r, p) => mine(c, p) } },
+  // Round 17: a dry-run publish (new item, or a republish of :id): the same checks, nothing stored.
+  { re: /^\/items\/preview$/, methods: { POST: (c, r, p) => publish(c, r, p, null, true) } },
+  { re: /^\/items\/([^/]{1,80})\/preview$/, methods: { POST: (c, r, p, m) => publish(c, r, p, m[1]!, true) } },
+  { re: /^\/items\/mine$/, methods: { GET: (c, r, p) => mine(c, p, new URL(r.url).searchParams.get("after")) } },
   { re: /^\/items\/prefs$/, methods: { GET: (c, _r, p) => getPrefs(c, p), PUT: (c, r, p) => putPrefs(c, r, p) } },
   { re: /^\/items\/versions$/, methods: { POST: (c, r, p) => versions(c, r, p) } },
   {
     re: /^\/items\/([^/]{1,80})$/,
     methods: {
-      GET: (c, _r, p, m) => getItem(c, p, m[1]!),
+      GET: (c, r, p, m) => getItem(c, r, p, m[1]!),
+      // Headers only (ETag, Content-Length): nothing is served, nothing is recorded.
+      HEAD: (c, r, p, m) => getItem(c, r, p, m[1]!, true),
       PUT: (c, r, p, m) => publish(c, r, p, m[1]!),
       PATCH: (c, r, p, m) => patchItem(c, r, p, m[1]!),
       DELETE: (c, _r, p, m) => deleteItem(c, p, m[1]!),
@@ -50,6 +69,46 @@ const ROUTES: { re: RegExp; methods: Record<string, Route> }[] = [
   { re: /^\/items\/([^/]{1,80})\/counter-notice$/, methods: { POST: (c, r, p, m) => counterNotice(c, r, p, m[1]!) } },
   { re: /^\/items\/([^/]{1,80})\/blobs\/([^/]{1,80})$/, methods: { GET: (c, _r, p, m) => getBlob(c, p, m[1]!, m[2]!) } },
   { re: /^\/blobs\/([^/]{1,80})$/, methods: { PUT: (c, r, p, m) => putBlob(c, r, p, m[1]!) } },
+  // Round 23 (owner): the account's own export (pending accounts get their profile only).
+  { re: /^\/me\/export$/, methods: { GET: (c, r, p) => exportAccount(c, r, p) } },
+  // Round 28 (owner): redeem an admin-issued invite code (pending accounts too; invites.ts).
+  { re: /^\/me\/invite$/, methods: { POST: (c, r, p) => redeemInvite(c, r, p) } },
+  // Round 32: circles, phase A (circles.ts, circlesend.ts). Circle and bank ids are 32 hex characters
+  // in the patterns, so /circles/join and /circles/heads can never be read as a circle id.
+  { re: /^\/circles$/, methods: { GET: (c, _r, p) => listCircles(c, p), POST: (c, r, p) => createCircle(c, r, p) } },
+  { re: /^\/circles\/join\/preview$/, methods: { POST: (c, r, p) => joinPreview(c, r, p) } },
+  { re: /^\/circles\/join$/, methods: { POST: (c, r, p) => joinCircle(c, r, p) } },
+  { re: /^\/circles\/heads$/, methods: { POST: (c, r, p) => heads(c, r, p) } },
+  {
+    re: /^\/circles\/([0-9a-f]{32})$/,
+    methods: { GET: (c, _r, p, m) => getCircle(c, p, m[1]!), PATCH: (c, r, p, m) => patchCircle(c, r, p, m[1]!), DELETE: (c, _r, p, m) => closeCircle(c, p, m[1]!) },
+  },
+  { re: /^\/circles\/([0-9a-f]{32})\/reopen$/, methods: { POST: (c, _r, p, m) => reopenCircle(c, p, m[1]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/activity$/, methods: { GET: (c, _r, p, m, u) => activity(c, p, m[1]!, u) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/invites$/, methods: { GET: (c, _r, p, m, u) => listInvites(c, p, m[1]!, u), POST: (c, r, p, m) => createInvite(c, r, p, m[1]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/invites\/revoke$/, methods: { POST: (c, r, p, m) => revokeInvite(c, r, p, m[1]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/leave$/, methods: { POST: (c, _r, p, m) => leaveCircle(c, p, m[1]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/members\/remove$/, methods: { POST: (c, r, p, m) => removeMember(c, r, p, m[1]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/members\/role$/, methods: { POST: (c, r, p, m) => setRole(c, r, p, m[1]!) } },
+  // (Round 34: a transfer is an offer the member accepts within 7 days.)
+  { re: /^\/circles\/([0-9a-f]{32})\/transfer$/, methods: { POST: (c, r, p, m) => offerTransfer(c, r, p, m[1]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/transfer\/accept$/, methods: { POST: (c, _r, p, m) => acceptTransfer(c, p, m[1]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/transfer\/cancel$/, methods: { POST: (c, _r, p, m) => cancelTransfer(c, p, m[1]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/banks$/, methods: { POST: (c, r, p, m) => sendVersion(c, r, p, m[1]!, null) } },
+  {
+    re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})$/,
+    methods: {
+      GET: (c, r, p, m) => getBank(c, r, p, m[1]!, m[2]!),
+      HEAD: (c, r, p, m) => getBank(c, r, p, m[1]!, m[2]!, true),
+      PUT: (c, r, p, m) => sendVersion(c, r, p, m[1]!, m[2]!),
+      PATCH: (c, r, p, m) => patchBank(c, r, p, m[1]!, m[2]!),
+      DELETE: (c, _r, p, m) => deleteBank(c, p, m[1]!, m[2]!),
+    },
+  },
+  { re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})\/undelete$/, methods: { POST: (c, _r, p, m) => undeleteBank(c, p, m[1]!, m[2]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})\/report$/, methods: { POST: (c, r, p, m) => reportBank(c, r, p, m[1]!, m[2]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})\/purge$/, methods: { POST: (c, _r, p, m) => purgeBankNow(c, p, m[1]!, m[2]!) } },
+  { re: /^\/circles\/([0-9a-f]{32})\/banks\/([0-9a-f]{32})\/blobs\/([^/]{1,80})$/, methods: { GET: (c, _r, p, m) => getBankBlob(c, p, m[1]!, m[2]!, m[3]!) } },
 ];
 
 export interface Pool {
@@ -61,6 +120,15 @@ export interface Pool {
   daily(): Promise<unknown>;
 }
 
+async function keyOk(c: Ctx): Promise<boolean> {
+  try {
+    await assertPoolKey(c);
+    return true;
+  } catch (e) {
+    console.error(`pool cron: ${e instanceof PoolError ? e.code : "key check failed"}`);
+    return false;
+  }
+}
 export function createPool(d: PoolDeps): Pool {
   const ctx = d.r2 ? makeCtx(d, d.r2) : null;
   const allowed = new Set(d.allowedOrigins);
@@ -77,24 +145,40 @@ export function createPool(d: PoolDeps): Pool {
       if (!ctx) throw new PoolError(503, "pool_not_configured");
       const p = await d.authenticate(req);
       if (!p) throw new PoolError(401, "unauthorized", {}, { "WWW-Authenticate": 'Bearer error="invalid_token"' });
-      // pending and unverified accounts (and anything else) cannot use the pool at all.
-      if (!POOL_TRUST.has(p.trust))
+      // Round 16 (critic21d 8): every authenticated request is counted first, approved or not, so a
+      // pending account cannot send unlimited requests (each one a D1 read of its trust).
+      await rateLimit(ctx, req, p.userId, req.method === "GET" || req.method === "HEAD" || /\/(import|versions)$/.test(url.pathname) || url.pathname === "/circles/heads");
+      // pending and unverified accounts (and anything else) cannot use the pool at all (a pending account
+      // may export its profile and, round 28, redeem an invite code while it waits).
+      if (!POOL_TRUST.has(p.trust) && !(INVITE_FREE_PATHS.has(url.pathname) && p.trust === "pending"))
         throw new PoolError(403, "account_not_approved", {
           message: p.trust === "pending" ? "Your account is waiting for approval. The shared pool opens once an admin approves it." : "This account cannot use the shared pool.",
         });
-      await rateLimit(ctx, req, p.userId, req.method === "GET" || /\/(import|versions)$/.test(url.pathname));
+      // Round 28 (owner): an approved account also needs a redeemed invite code (admins are exempt; the
+      // export and the redemption itself are open). invites.ts says why the gate sits here.
+      if (p.trust !== "admin" && !INVITE_FREE_PATHS.has(url.pathname)) await requireInvite(ctx, p.userId);
+      // Round 23 (critic30a B1): no write under a key other than the pool's own (reads continue).
+      // Round 24: POST /items/versions is a bulk READ (it returns item metadata, never a hash): it
+      // continues under a mismatch like any GET, as "plain reads continue" promises.
+      // (Round 32: POST /circles/heads is a bulk read too.)
+      if (req.method !== "GET" && req.method !== "HEAD" && url.pathname !== "/items/versions" && url.pathname !== "/circles/heads") await assertPoolKey(ctx);
       return await h(ctx, req, p, route.re.exec(url.pathname)!, url);
     } catch (e) {
       if (e instanceof PoolError) return json(e.status, { error: e.code, ...e.extra }, e.headers);
-      console.error(`pool: unhandled error on ${req.method} ${url.pathname}: ${e instanceof Error ? e.message : "?"}`);
+      // (Round 21: a share-core trap is a plain 500 too; its instance was re-created already.)
+      console.error(`pool: unhandled error on ${req.method} ${url.pathname}: ${errKind(e)}`);
       return json(500, { error: "server_error" });
+    } finally {
+      if (ctx) await flushWasmTraps(ctx).catch(() => {});
     }
   }
   return {
     handle,
-    adminRoutes: poolAdminRoutes(() => ctx),
-    hourly: async () => (ctx ? hourly(ctx) : null),
-    daily: async () => (ctx ? daily(ctx) : null),
+    // Round 10 M-8: admin bodies (hash lists, long CJK notices) up to ADMIN_BODY_MAX, read after the guard.
+    adminRoutes: poolAdminRoutes(() => ctx).map((r) => ({ ...r, maxBodyBytes: ADMIN_BODY_MAX })),
+    // (Round 23 B1: the cron, too, does nothing under another key.)
+    hourly: async () => (ctx && (await keyOk(ctx)) ? hourly(ctx) : null),
+    daily: async () => (ctx && (await keyOk(ctx)) ? daily(ctx) : null),
   };
 }
 
@@ -105,8 +189,13 @@ export function createPool(d: PoolDeps): Pool {
  * importer's per-question records go, and audit notes about the account are nulled.
  */
 export function deleteContentStatements(db: D1Database, userId: string, now: number): D1PreparedStatement[] {
+  const anon = `deleted:${crypto.randomUUID().replaceAll("-", "")}`;
   const purgeAt = now + 14 * 86_400_000;
-  const keep = `EXISTS (SELECT 1 FROM pool_prefs WHERE user_id = ?1 AND keep_on_delete = 1)`;
+  // Keep (anonymised) when the author chose so; with no choice made, keep exactly the items other
+  // teachers imported (round 8), delete the rest. An explicit "no" deletes everything.
+  const keep = `(EXISTS (SELECT 1 FROM pool_prefs WHERE user_id = ?1 AND keep_on_delete = 1)
+    OR (NOT EXISTS (SELECT 1 FROM pool_prefs WHERE user_id = ?1)
+        AND EXISTS (SELECT 1 FROM imports im WHERE im.item_id = items.id AND im.user_id <> ?1 AND im.kind = 'import')))`;
   return [
     // The author chose to keep their shared items: they stay, shown as by "deleted teacher", with
     // licences and attribution intact (the chains already hold the display name).
@@ -117,15 +206,72 @@ export function deleteContentStatements(db: D1Database, userId: string, now: num
     db
       .prepare(`UPDATE items SET purge_after = MIN(COALESCE(purge_after, ?2), ?2) WHERE author_id = ?1 AND removed_at IS NOT NULL AND purged_at IS NULL`)
       .bind(userId, purgeAt),
+    // Free text the account wrote goes with it (round 8): report notes, and the statements and notes
+    // in admin flags (independence statements, appeal notes). Audit notes are nulled below.
+    db.prepare(`UPDATE reports SET note = NULL WHERE reporter_id = ?1 AND note IS NOT NULL`).bind(userId),
+    db.prepare(`UPDATE admin_flags SET detail = json_remove(detail, '$.statement', '$.note') WHERE user_id = ?1 AND detail IS NOT NULL AND json_valid(detail)`).bind(userId),
+    // Round 21 (critic27b E1): the served text a key_leak flag of this reporter quoted goes (by report id).
+    db
+      .prepare(`UPDATE admin_flags SET detail = json_remove(detail, '$.served') WHERE kind = 'key_leak' AND json_valid(detail) AND detail ->> '$.report_id' IN (SELECT id FROM reports WHERE reporter_id = ?1)`)
+      .bind(userId),
     db.prepare(`UPDATE reports SET reporter_id = NULL WHERE reporter_id = ?1`).bind(userId),
     db.prepare(`DELETE FROM pending_blobs WHERE uploader_id = ?1`).bind(userId),
-    db.prepare(`DELETE FROM import_questions WHERE user_id = ?1`).bind(userId),
+    // (Round 19: the account's served rows go: it can publish nothing a record could bind.)
+    db.prepare(`DELETE FROM served WHERE reader_id = ?1`).bind(userId),
     db.prepare(`DELETE FROM usage_daily WHERE user_id = ?1`).bind(userId),
     db.prepare(`DELETE FROM pool_limits WHERE user_id = ?1`).bind(userId),
-    db.prepare(`UPDATE pool_audit SET note = NULL WHERE target_user_id = ?1 AND note IS NOT NULL`).bind(userId),
+    // (Round 27: the account's publish lock row goes too; the cron's erasure_resweep repeats all of this
+    // for anything a request that was already running wrote after this batch.)
+    db.prepare(`DELETE FROM pool_locks WHERE user_id = ?1`).bind(userId),
+    // (Round 28: its invite redemption goes; the invite keeps its use count.)
+    db.prepare(`DELETE FROM pool_invite_redemptions WHERE user_id = ?1`).bind(userId),
+    // Round 32 (circles, plan 8.1): step down, hand on or close, banks kept anonymised or removed (its
+    // keep_on_delete choice, read before pool_prefs goes below), messages and notes, codes, memberships.
+    ...circleErasureStatements(db, userId, now),
+    // (Round 23, critic30b T1: what the account typed, and system notes about it; an admin's note is
+    // evidence and stays, its personal data scrubbed when written.)
+    db.prepare(`UPDATE pool_audit SET note = NULL WHERE target_user_id = ?1 AND note IS NOT NULL AND actor_kind <> 'admin'`).bind(userId),
+    // Round 9: the counter-notices the account sent keep their ids and dates, not the person's
+    // name, address, phone or signature; their stated names in others' stored chains and evidence
+    // rows become "deleted teacher" (reads resolve names anyway); their preferences go.
+    db
+      .prepare(
+        `UPDATE dmca_counter_notices SET name = '[deleted]', address = '[deleted]', phone = '[deleted]', signature = '[deleted]', material_desc = '[deleted]'
+          WHERE action_id IN (SELECT id FROM dmca_actions WHERE author_id = ?1)`,
+      )
+      .bind(userId),
+    // Others' stored chains naming the account: rewritten by the cron in bounded batches (round 11;
+    // reads already show "deleted teacher" from the account's state, so the lag is invisible).
+    db.prepare(`INSERT OR IGNORE INTO deletion_rewrites (user_id, tbl, at) VALUES (?1, 'item_questions', ?2), (?1, 'ghost_questions', ?2)`).bind(userId, now),
+    db.prepare(`DELETE FROM pool_prefs WHERE user_id = ?1`).bind(userId),
+    // Round 10 S-1: the account's serves stay counted (import counts) but no longer name it; its
+    // report audits no longer link back to it.
+    // One anonymous key per deleted account (round 11), so its serves are still counted once per item.
+    db.prepare(`UPDATE imports SET user_id = ?2 WHERE user_id = ?1`).bind(userId, anon),
+    db.prepare(`UPDATE pool_audit SET actor_id = NULL, detail = json_remove(detail, '$.report_id') WHERE actor_id = ?1 AND action = 'item.report'`).bind(userId),
+    // Round 20 (critic25b N3): the account's durable authorship records go with it (they only ever
+    // served its own publishes, and nothing can be published by it again).
+    db.prepare(`DELETE FROM author_contents WHERE author_id = ?1`).bind(userId),
+    db.prepare(`DELETE FROM author_firsts WHERE author_id = ?1`).bind(userId),
+    db.prepare(`DELETE FROM author_stems WHERE author_id = ?1`).bind(userId),
+    db.prepare(`DELETE FROM stem_bands WHERE user_id IN (?1, 'own:' || ?1)`).bind(userId),
+    db.prepare(`DELETE FROM carried_keys WHERE author_id = ?1`).bind(userId),
+    db.prepare(`DELETE FROM blob_uploads WHERE uploader_id = ?1`).bind(userId),
+    // Round 22 (critic29b): the account's open appeals close (nobody is left to answer), so its removed
+    // items are purged at the normal time, not kept to the appeal's end.
+    db
+      .prepare(
+        `UPDATE admin_flags SET resolved_at = ?2, detail = json_set(COALESCE(CASE WHEN json_valid(detail) THEN detail END, '{}'), '$.outcome', 'author_erased')
+          WHERE kind = 'appeal' AND resolved_at IS NULL AND (user_id = ?1 OR item_id IN (SELECT id FROM items WHERE author_id = ?1))`,
+      )
+      .bind(userId, now),
+    // ... and every note the account itself wrote.
+    db.prepare(`UPDATE pool_audit SET note = NULL WHERE note IS NOT NULL AND actor_id = ?1`).bind(userId),
     db
       .prepare(`INSERT INTO pool_audit (id, at, actor_id, actor_kind, action, target_user_id) VALUES (?1, ?2, ?3, 'user', 'account_deleted.content_removed', ?3)`)
       .bind(crypto.randomUUID(), now, userId),
+    // (Round 22: done, in the same batch; a deleted account without this row is finished by the cron.)
+    db.prepare(`INSERT OR IGNORE INTO erasure_done (user_id, at) VALUES (?1, ?2)`).bind(userId, now),
   ];
 }
 
@@ -137,5 +283,9 @@ export function standingStatements(db: D1Database, userId: string, now: number, 
   return [db.prepare(`INSERT INTO pool_audit (id, at, actor_kind, action, target_user_id) VALUES (?1, ?2, 'system', ?3, ?4)`).bind(crypto.randomUUID(), now, action, userId)];
 }
 
+/** Round 22 (critic29b): a trap's count leaves with the request that trapped (login isolates too), via waitUntil. */
+export function flushTrapsLater(db: D1Database, waitUntil: (p: Promise<unknown>) => void): void {
+  waitUntil(flushWasmTraps({ db, now: () => Date.now() }).catch(() => {}));
+}
 export type { PoolDeps, PoolPrincipal } from "./shared.ts";
-export { makeCore, type ShareCoreExports } from "./core.ts";
+export { deriveHashKey, makeCore, type ShareCoreExports } from "./core.ts";

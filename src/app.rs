@@ -48,6 +48,7 @@ pub enum Screen {
     Imports,
     Figures,
     Settings,
+    Shared,
     BankEdit(Id),
     ExamEdit(Id),
 }
@@ -111,6 +112,14 @@ pub struct App {
     pub figs: figuresui::FigUi,
     /// Shared-pool Account window (`share`). Closed until opened; until then it does no I/O.
     pub account: crate::share::AccountUi,
+    /// Shared-pool "Share to pool…" window. Closed until a bank or exam asks for it (`share::publish_ui`).
+    pub publish: crate::share::PublishUi,
+    /// Shared-pool browser, import and update checks. Closed until asked for (`share::browse_ui`).
+    pub browse: crate::share::BrowseUi,
+    /// Shared-pool "My shared items" window. Closed until asked for (`share::mine_ui`).
+    pub mine: crate::share::MineUi,
+    /// Shared-pool "Shared" page (a left-nav screen hosting the browser, my items and the account).
+    pub shared: crate::share::SharedUi,
     /// QA hook: scripted input (VERSHION_SCRIPT), see `raw_input_hook`.
     pub qa_steps: Vec<String>,
     /// QA hook: VERSHION_SHOT=<file.png> saves a screenshot of this window's own contents and exits.
@@ -188,7 +197,11 @@ impl App {
             ai_hint: String::new(),
             import_name: String::new(),
             figs: Default::default(),
-            account: Default::default(),
+            account: crate::share::AccountUi::in_page(),
+            shared: Default::default(),
+            publish: Default::default(),
+            browse: Default::default(),
+            mine: Default::default(),
             qa_shot: crate::env_var("VERSHION_SHOT").ok().map(|p| (p, 0)),
             qa_steps: crate::env_var("VERSHION_SCRIPT")
                 .map(|v| v.split(';').map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect())
@@ -211,6 +224,54 @@ impl App {
                 "imports" => Screen::Imports,
                 "figures" => Screen::Figures,
                 "settings" => Screen::Settings,
+                // The Shared page, optionally on a tab: "shared", "shared:browse|mine|imported|reports|settings",
+                // "shared:choose" (the "Share to pool…" chooser open). Circles: "shared:circles",
+                // "shared:circles:join", "shared:circles:create", "shared:circle:<circle id>[:<bank id>]".
+                s if s == "shared" || s.starts_with("shared:") => {
+                    use crate::share::shared::Tab;
+                    match s.trim_start_matches("shared").trim_start_matches(':') {
+                        "mine" => app.shared.model.goto(Tab::Mine),
+                        "imported" => app.shared.model.goto(Tab::Imported),
+                        "reports" => app.shared.model.goto(Tab::Reports),
+                        "settings" => app.shared.model.goto(Tab::Settings),
+                        "choose" => app.shared.model.choosing = true,
+                        "circles" => app.shared.model.goto(Tab::Circles),
+                        "circles:join" => {
+                            app.shared.model.goto(Tab::Circles);
+                            app.shared.circles.open_join("");
+                        }
+                        "circles:create" => {
+                            app.shared.model.goto(Tab::Circles);
+                            app.shared.circles.open_create();
+                        }
+                        c if c.starts_with("circle:") => {
+                            app.shared.model.goto(Tab::Circles);
+                            match c["circle:".len()..].split_once(':') {
+                                Some((cid, bid)) => app.shared.circles.open_bank_at(cid, bid),
+                                None => app.shared.circles.open_circle_at(&c["circle:".len()..]),
+                            }
+                        }
+                        _ => app.shared.model.goto(Tab::Browse),
+                    }
+                    Screen::Shared
+                }
+                // The "Share to pool..." window for the first bank with "One of my circles" chosen
+                // ("publish:circle"), or a given circle preselected ("publish:circle:<circle id>").
+                s if s == "publish:circle" || s.starts_with("publish:circle:") => {
+                    if let Some(b) = app.store.banks.first()
+                        && let Ok(src) = crate::share::publish::ShareSource::from_bank(b)
+                    {
+                        crate::share::publish_ui::request_for_circle(ctx, src, s.trim_start_matches("publish:circle").trim_start_matches(':'));
+                    }
+                    Screen::Banks
+                }
+                // The "Share to pool..." window for the first bank, over the Banks page.
+                "publish" => {
+                    if let Some(b) = app.store.banks.first() {
+                        let _ = crate::share::publish_ui::share_bank(ctx, b);
+                    }
+                    Screen::Banks
+                }
                 // The Account window over Settings (QA entry until Settings has its own button).
                 "account" => {
                     app.account.open();
@@ -414,8 +475,17 @@ impl App {
         self.handle_shortcuts(&ctx);
         // Sidebar + active screen + shell overlays (import dialog, help, toasts).
         self.draw_screen(&ctx);
-        // The Account window, over whatever screen is open; returns at once while closed.
+        // The "Share to pool…" window (looks the sign-in up through the Account window), then the
+        // Account window, over whatever screen is open; both return at once while closed.
+        self.publish.show(&ctx, &mut self.account);
+        if self.browse.show(&ctx, &mut self.account, &mut self.store.banks) {
+            self.store.save_banks();
+        }
+        self.mine.show(&ctx, &mut self.account, &self.store.banks);
         self.account.show(&ctx);
+        if crate::share::shared_ui::take_goto(&ctx, &mut self.shared, &mut self.account) {
+            self.screen = Screen::Shared;
+        }
     }
 }
 

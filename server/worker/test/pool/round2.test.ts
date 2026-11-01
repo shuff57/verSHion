@@ -200,6 +200,7 @@ test("E6/S4: after a student-data purge the image is served from no item, and co
   await upload(w, B, img);
   const pb = await publish(w, B, bankOf(imp.body.payload.bank.questions));
   assert.equal(pb.status, 201);
+  w.history(C);
   await w.json("POST", `/items/${pa.body.item_id}/report`, { user: C, json: { reason: "student_data" } });
   assert.equal((await w.purge(admin, pa.body.item_id)).status, 200);
   assert.equal((await w.call("GET", `/items/${pb.body.item_id}/blobs/${up.sha}`, { user: C })).status, 404);
@@ -307,7 +308,7 @@ test("E4: hidden-data channels are refused (IDAT tail, palette on greyscale, pad
   // End to end: the upload is refused and nothing is stored.
   const w = new World();
   const up = await upload(w, w.user(), pngOf(chunk("IDAT", concat(z, enc("PK\x03")))));
-  assert.deepEqual([up.status, up.body.reason], [422, "png_idat_data"]);
+  assert.deepEqual([up.status, up.body.reason], [422, "not_accepted"], "the same neutral answer as every refusal (round 6)");
   assert.equal(w.r2.keys().length, 0);
 });
 
@@ -331,6 +332,7 @@ test("S9: pending accounts get a clear code; released items cannot be re-hidden 
   let hidden = 0;
   for (let i = 0; i < 8; i++) {
     const x = await publish(w, a, bankPayload([genQuestion(rng(100 + i), "Short", 0)]));
+    w.history(g);
     assert.equal((await w.json("POST", `/items/${x.body.item_id}/report`, { user: g, json: { reason: "student_data" } })).status, 202);
     hidden += w.q(`SELECT * FROM item_holds WHERE item_id = ? AND reason = 'student_data'`, x.body.item_id).length;
   }
@@ -371,7 +373,7 @@ test("a retry after 60 s re-stages the publish; the slow original's late writes 
   const a = w.user();
   const payload = bankPayload([0, 1, 2].map((i) => genQuestion(rng(9), "Tf", i)));
   const id = publishId();
-  const meta = { publish_id: id, hide_key: false, license: "CC-BY-4.0", attestation: { accepted: true, text_rev: "2026-10-19" }, labels: [], order_acks: [], image_ok: [], meta: { title: "Retry", subject: "Bio" }, visibility: "public" };
+  const meta = { publish_id: id, hide_key: false, license: "CC-BY-4.0", attestation: { accepted: true, text_rev: "2026-10-19" }, attest: { own_work: true, terms_version: "2026-10-22" }, labels: [], order_acks: [], image_ok: [], meta: { title: "Retry", subject: "Bio" }, visibility: "public" };
   const send = () => w.json("POST", "/items", { user: a, body: framed(meta, payload), contentType: PUBLISH_CONTENT_TYPE });
   let retry: { status: number; body: Record<string, unknown> } | null = null;
   w.r2.onPut = async () => {

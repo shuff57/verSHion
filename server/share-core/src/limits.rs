@@ -64,10 +64,13 @@ pub struct Limits {
 }
 
 impl Limits {
-    /// The limits with every bound that sizes memory clamped to its default, whatever a caller
-    /// passed: they can be lowered, never raised, so a call stays under the 40 MB ceiling that
-    /// `tests/memory.rs` and `tests/node/check.mjs` measure at exactly these values. (The other
-    /// limits are business rules inside the body limit and may be raised.)
+    /// The limits with every bound that sizes memory or work clamped to its default, whatever a
+    /// caller passed: they can be lowered, never raised, so a call stays under the 40 MB ceiling
+    /// and the time budget that `tests/memory.rs`, `tests/round5.rs` and `tests/node/check.mjs`
+    /// measure at exactly these values. That covers the body and parse budget, and every count and
+    /// field size the label, sibling-reference and formatting checks iterate over (choices, pairs,
+    /// distractors, parts, blanks, variants, questions, topics, field bytes). The rest (points,
+    /// metadata, ids, images) are business rules inside the body limit and may be raised.
     pub fn sane(&self) -> Limits {
         let d = Limits::default();
         let mut l = self.clone();
@@ -78,6 +81,20 @@ impl Limits {
         l.parse_budget_bytes = l.parse_budget_bytes.min(d.parse_budget_bytes);
         l.figure_params = l.figure_params.min(d.figure_params);
         l.figure_params_bytes = l.figure_params_bytes.min(d.figure_params_bytes);
+        l.questions_per_bank = l.questions_per_bank.min(d.questions_per_bank);
+        l.mc_answers = l.mc_answers.min(d.mc_answers);
+        l.matching_pairs = l.matching_pairs.min(d.matching_pairs);
+        l.matching_distractors = l.matching_distractors.min(d.matching_distractors);
+        l.blanks = l.blanks.min(d.blanks);
+        l.accept_variants = l.accept_variants.min(d.accept_variants);
+        l.parts = l.parts.min(d.parts);
+        l.topics = l.topics.min(d.topics);
+        l.stem_bytes = l.stem_bytes.min(d.stem_bytes);
+        l.explanation_bytes = l.explanation_bytes.min(d.explanation_bytes);
+        l.answer_bytes = l.answer_bytes.min(d.answer_bytes);
+        l.description_bytes = l.description_bytes.min(d.description_bytes);
+        l.figure_text_bytes = l.figure_text_bytes.min(d.figure_text_bytes);
+        l.chain_links = l.chain_links.min(d.chain_links);
         l
     }
     pub fn budget(&self) -> crate::json::Budget {

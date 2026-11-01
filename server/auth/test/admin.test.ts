@@ -657,4 +657,23 @@ describe("reminders and extra routes", () => {
     const row = await env.DB.prepare("SELECT detail FROM auth_audit WHERE action = 'thing.put' AND actor_id = ?").bind(a.id).first<{ detail: string }>();
     expect(JSON.parse(row!.detail)).toEqual({ name: "x" });
   });
+
+  it("an app-supplied route may accept a larger body (maxBodyBytes), read only after the guard; the default stays 8 KB", async () => {
+    const t = new Harness({
+      approval: approval({
+        routes: [
+          { method: "POST", path: "/admin/big", write: false, maxBodyBytes: 256 * 1024, handler: async (_req, c) => Response.json({ n: (c.body?.hashes as unknown[]).length, cjk: String(c.body?.text).length }) },
+          { method: "POST", path: "/admin/small", write: false, handler: async () => Response.json({ ok: true }) },
+        ],
+      }),
+    });
+    const a = await bootstrapAdmin(t);
+    const body = { hashes: Array.from({ length: 1000 }, (_, i) => i.toString(16).padStart(64, "0")), text: "著".repeat(2000) + "作".repeat(2000) + "物".repeat(2000) };
+    const big = await as(t, a, "POST", "/admin/big", body);
+    expect(big.status).toBe(200);
+    expect(await big.json()).toEqual({ n: 1000, cjk: 6000 });
+    expect((await as(t, a, "POST", "/admin/small", body)).status).toBe(413);
+    // Never before the guard: an anonymous caller gets 401 whatever the size.
+    expect((await t.call("POST", "/admin/big", { body })).status).toBe(401);
+  });
 });

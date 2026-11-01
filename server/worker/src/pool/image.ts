@@ -31,7 +31,13 @@ const need = (b: Uint8Array, end: number) => {
 };
 const side = (w: number, h: number) => {
   if (!(w >= 1 && w <= MAX_SIDE && h >= 1 && h <= MAX_SIDE)) no("dimensions");
+  // Round 16 (critic21d 6): decompression amplification is bounded by pixels and decoded bytes.
+  if (w * h > MAX_PIXELS) no("dimensions");
 };
+/** At most this many pixels (16 Mpix: a 4096 x 4096 image). */
+export const MAX_PIXELS = 16 * 1024 * 1024;
+/** A PNG's pixel data may inflate to at most this many bytes (filter bytes included). */
+export const MAX_DECODED_BYTES = 64 * 1024 * 1024;
 
 // ---- PNG --------------------------------------------------------------------------------------------
 
@@ -128,6 +134,7 @@ function png(b: Uint8Array): PngParsed {
       if (!okDepth[ct]?.includes(depth) || comp !== 0 || filter !== 0 || interlace > 1) no("png_ihdr");
       side(w, h);
       raw = pngRawSize(w, h, depth, color, interlace);
+      if (raw > MAX_DECODED_BYTES) no("png_decoded_size");
     }
     // Ancillary chunks have fixed sizes: nothing can ride along in them.
     const FIXED: Record<string, number> = { gAMA: 4, cHRM: 32, sRGB: 1, pHYs: 9 };
@@ -445,6 +452,141 @@ function webp(b: Uint8Array): ImageInfo {
     }
   }
   return { contentType: "image/webp", width: w, height: h };
+}
+
+/**
+ * Round 17 (critic22c M5a): a hash of a PNG's decoded pixels (canonical RGBA, dimensions included), so
+ * the same picture re-encoded (another deflate, other filters, palette or truecolour) is the same
+ * image for licence evidence. Streamed row by row (never the whole decoded image in memory). Null for
+ * what it does not decode (interlaced images; any other format: their bytes' hash is the key).
+ */
+export async function pngPixelHash(b: Uint8Array): Promise<string | null> {
+  let p: PngParsed;
+  try {
+    if (!PNG_SIG.every((x, k) => b[k] === x)) return null;
+    p = png(b);
+  } catch {
+    return null;
+  }
+  // IHDR fields and palette (png() checked them).
+  const depth = b[24]!;
+  const color = b[25]!;
+  const interlace = b[28]!;
+  if (interlace !== 0) return null;
+  let palette: Uint8Array | null = null;
+  let trns: Uint8Array | null = null;
+  for (let i = 8; i < b.length; ) {
+    const len = u32be(b, i);
+    const type = ascii(b, i + 4, 4);
+    if (type === "PLTE") palette = b.subarray(i + 8, i + 8 + len);
+    if (type === "tRNS") trns = b.subarray(i + 8, i + 8 + len);
+    i += 12 + len;
+  }
+  const w = p.width;
+  const ch = CHANNELS[color]!;
+  const bits = ch * depth;
+  const rowBytes = Math.ceil((w * bits) / 8);
+  const bpp = Math.max(1, Math.ceil(bits / 8));
+  const out16 = depth === 16;
+  // Each decoded row is hashed, then the row hashes (32 bytes a row) with the dimensions.
+  const rowDigests: Uint8Array[] = [];
+  let prev = new Uint8Array(rowBytes);
+  let cur = new Uint8Array(rowBytes);
+  const pending = new Uint8Array(rowBytes + 1);
+  let have = 0;
+  let rows = 0;
+  const maxV = (1 << depth) - 1;
+  const sample = (row: Uint8Array, x: number, c: number): number => {
+    if (depth === 8) return row[x * ch + c]!;
+    if (depth === 16) return (row[(x * ch + c) * 2]! << 8) | row[(x * ch + c) * 2 + 1]!;
+    const bit = (x * ch + c) * depth;
+    return (row[bit >> 3]! >> (8 - depth - (bit & 7))) & maxV;
+  };
+  const emit = (row: Uint8Array) => {
+    const px = new Uint8Array(w * 4 * (out16 ? 2 : 1));
+    const put = (x: number, k: number, v: number) => {
+      if (out16) {
+        px[(x * 4 + k) * 2] = v >> 8;
+        px[(x * 4 + k) * 2 + 1] = v & 255;
+      } else px[x * 4 + k] = v;
+    };
+    const scale = (v: number) => (out16 || depth === 8 ? v : Math.round((v * 255) / maxV));
+    const full = out16 ? 65535 : 255;
+    for (let x = 0; x < w; x++) {
+      if (color === 3) {
+        const i = sample(row, x, 0);
+        put(x, 0, palette![i * 3]!);
+        put(x, 1, palette![i * 3 + 1]!);
+        put(x, 2, palette![i * 3 + 2]!);
+        put(x, 3, trns && i < trns.length ? trns[i]! : 255);
+        continue;
+      }
+      const g = (c: number) => sample(row, x, c);
+      const [r, gg, bb] = color === 0 || color === 4 ? [g(0), g(0), g(0)] : [g(0), g(1), g(2)];
+      let a = color === 4 ? g(1) : color === 6 ? g(3) : full;
+      if (trns && (color === 0 || color === 2)) {
+        const key = color === 0 ? [u16(trns, 0)] : [u16(trns, 0), u16(trns, 2), u16(trns, 4)];
+        const v = color === 0 ? [g(0)] : [g(0), g(1), g(2)];
+        if (key.every((k, j) => k === v[j])) a = 0;
+      }
+      put(x, 0, scale(r));
+      put(x, 1, scale(gg));
+      put(x, 2, scale(bb));
+      put(x, 3, color === 4 || color === 6 ? scale(a) : a === 0 ? 0 : full);
+    }
+    return px;
+  };
+  const u16 = (t: Uint8Array, i: number) => (t[i]! << 8) | t[i + 1]!;
+  const unfilter = (f: number) => {
+    for (let i = 0; i < rowBytes; i++) {
+      const a = i >= bpp ? cur[i - bpp]! : 0;
+      const up = prev[i]!;
+      const c = i >= bpp ? prev[i - bpp]! : 0;
+      let v = cur[i]!;
+      if (f === 1) v += a;
+      else if (f === 2) v += up;
+      else if (f === 3) v += (a + up) >> 1;
+      else if (f === 4) {
+        const pp = a + up - c;
+        const pa = Math.abs(pp - a), pb = Math.abs(pp - up), pc = Math.abs(pp - c);
+        v += pa <= pb && pa <= pc ? a : pb <= pc ? up : c;
+      } else if (f !== 0) throw new Error("filter");
+      cur[i] = v & 255;
+    }
+  };
+  const z = new Uint8Array(p.idat.reduce((n, x) => n + x.length, 0));
+  let o = 0;
+  for (const x of p.idat) {
+    z.set(x, o);
+    o += x.length;
+  }
+  try {
+    const reader = new Blob([z]).stream().pipeThrough(new DecompressionStream("deflate")).getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (let k = 0; k < value.length; k++) {
+        pending[have++] = value[k]!;
+        if (have === rowBytes + 1) {
+          cur.set(pending.subarray(1));
+          unfilter(pending[0]!);
+          rowDigests.push(new Uint8Array(await crypto.subtle.digest("SHA-256", emit(cur))));
+          [prev, cur] = [cur, prev];
+          have = 0;
+          if (++rows > p.height) return null;
+        }
+      }
+    }
+  } catch {
+    return null;
+  }
+  if (rows !== p.height || have !== 0) return null;
+  const head = new TextEncoder().encode(`vershion/pixels/v1|${w}|${p.height}|${out16 ? 16 : 8}|`);
+  const all = new Uint8Array(head.length + 32 * rowDigests.length);
+  all.set(head);
+  rowDigests.forEach((d, k) => all.set(d, head.length + 32 * k));
+  const hex = [...new Uint8Array(await crypto.subtle.digest("SHA-256", all))].map((x) => x.toString(16).padStart(2, "0")).join("");
+  return `px:${hex}`;
 }
 
 /** The verified format and size, or the reason the bytes are refused (a code, never input text). */

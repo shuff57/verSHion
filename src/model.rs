@@ -114,8 +114,17 @@ pub const KEY_NOT_PROVIDED: &str = "Key not provided";
 /// changed (a keyless True/False holds a placeholder `false` the model cannot mark as unset; with
 /// the `keyless` field a re-key action replaces this guess). Multipart: every part.
 pub fn rekeyed(before: &Question, kind: &Kind) -> bool {
+    rekeyed_with(before, kind, &|_| false)
+}
+
+/// [`rekeyed`], where `picked(None)` / `picked(Some(i))` says the teacher explicitly picked the
+/// True/False answer of the question / of part `i` (the editor shows a keyless True/False unset):
+/// a picked answer is a key even when it equals the placeholder, so a teacher whose answer is
+/// False need not toggle twice.
+pub fn rekeyed_with(before: &Question, kind: &Kind, picked: &dyn Fn(Option<usize>) -> bool) -> bool {
     match (kind, &before.kind) {
         (Kind::Mc { answers }, _) => answers.iter().any(|a| a.correct),
+        (Kind::Tf { .. }, _) if picked(None) => true,
         (Kind::Tf { correct }, Kind::Tf { correct: was }) => correct != was,
         (Kind::Tf { .. }, _) => true,
         (Kind::Matching { pairs, .. }, _) => !pairs.is_empty() && pairs.iter().all(|p| !p.right.trim().is_empty()),
@@ -128,6 +137,7 @@ pub fn rekeyed(before: &Question, kind: &Kind) -> bool {
             };
             parts.iter().enumerate().all(|(i, p)| match (&p.kind, old_parts.get(i).map(|o| &o.kind)) {
                 (PartKind::Mc { answers }, _) => answers.iter().any(|a| a.correct),
+                (PartKind::Tf { .. }, _) if picked(Some(i)) => true,
                 (PartKind::Tf { correct }, Some(PartKind::Tf { correct: was })) => correct != was,
                 (PartKind::Tf { .. }, _) => true,
                 (PartKind::Short { sample }, _) => !sample.trim().is_empty(),

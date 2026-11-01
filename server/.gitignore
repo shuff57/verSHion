@@ -3,3 +3,4 @@ node_modules/
 target/
 share-core/pkg/
 worker/.dev.vars
+worker/.wrangler-ui/

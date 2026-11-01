@@ -1,0 +1,11 @@
+-- Round 30 (staging D1 insights): publish-time statements whose rows read grew with the square of
+-- the bank size. One index; no data changes.
+--
+-- The stem backfill's candidate SELECT (src/pool/publish.ts `stemBackfillAuthor`, run at every real
+-- publish, and the hourly `stemBackfill`) asks, per question, whether the author's durable stem record
+-- already holds that question's content (`author_id`, `qhash`) with the full explanation key. The
+-- primary key is (author_id, band, qhash, ...), so that probe scanned all of the author's records,
+-- once per question (about 918,000 rows a run for a 990-question bank). This index makes it one seek.
+-- `bk_expl_full` is in the index so the probe is covered: without it SQLite prefers the primary key's
+-- author_id prefix over an index that needs a lookup into a WITHOUT ROWID table.
+CREATE INDEX author_stems_qhash ON author_stems (author_id, qhash, bk_expl_full);

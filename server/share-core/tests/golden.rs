@@ -128,8 +128,11 @@ fn matching_word_bank() {
     let s = stripped("question_matching", vec![]);
     let q = only_question(&s.payload);
     let Kind::Matching { pairs, distractors } = &q.kind else { panic!() };
+    // Round 8: the left items are served shuffled; `left_order` says from where.
     let lefts: Vec<&str> = pairs.iter().map(|p| p.left.as_str()).collect();
-    assert_eq!(lefts, ["Mitochondrion", "Ribosome", "Chloroplast"], "left order kept");
+    let author = ["Mitochondrion", "Ribosome", "Chloroplast"];
+    let order = s.author_only.served_orders.iter().find(|o| o.matching).and_then(|o| o.left_order.clone()).expect("left_order");
+    assert_eq!(lefts, order.iter().map(|&k| author[k]).collect::<Vec<_>>());
     assert!(pairs.iter().all(|p| p.right.is_empty()));
     let mut bank: Vec<&str> = distractors.iter().map(|s| s.as_str()).collect();
     bank.sort();

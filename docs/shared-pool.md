@@ -1,931 +1,621 @@
-# Shared pool: accounts, circles and public question sharing
+# verSHion shared pool: current specification
 
-Status: phase 1 (accounts, approval queue, Rust account client) is implemented; see
-`docs/phase1-progress.md`. Phases 2-6 are design only. This revision (2026-10-19, "phase 2 spec
-revision") rewrote the sharing, stripped form, import, images, limits, data model, publish order,
-blob rules, takedown and build order sections after a critic review; items still waiting on the
-owner are under **Open questions** at the end.
+Written 2026-10-23 from the code and the builder READMEs, not from the old spec (kept as
+`docs/shared-pool-old-spec.md`; where they differ, this file wins). Nothing is committed, deployed or
+launched; the pool runs only in tests, local workerd and an unused staging Worker.
 
-## Goal
+Sources, in order of authority: the code (`server/worker/src/pool/`, `server/auth/src/`,
+`server/share-core/src/`, `src/share/`), the three READMEs (`server/worker`, `server/share-core`,
+`server/auth`), the draft legal pages (`server/web/legal/`), `docs/handoff-shared-pool.md`, and the
+owner's decisions note. Where a README and the code disagree, this spec describes the code and lists the
+disagreement in the appendix. "Round N" means a builder-critic review round recorded in the READMEs.
+Anything not confirmed is marked UNCONFIRMED.
 
-Teachers sign in, publish banks or single questions, and others find and copy them. Sharing has
-three levels: **private** (the default, never leaves the device), **circles** (groups a teacher
-chooses to collaborate with, joined by invite code) and **public** (any approved teacher).
+---
 
-verSHion stays local-first. Banks, exams and export work exactly as today with no account. Sign-in
-is only needed to publish, browse or import from the pool.
+## 1. What it is and what stays local
 
-## Non-goals (v1)
+Approved teachers publish banks (sets of questions) or single questions to a server; other approved
+teachers browse them and import **private copies** that keep attribution and the licence. There is no live
+co-editing, no student account and no student data.
 
-- Co-editing one bank live. Sharing is publish and copy.
-- Student accounts or any student data. Shared content is questions, answers, explanations and figures only.
-- Google sign-in and magic-link login (phase 6).
-- District-wide admins. Circles are owned by the teacher who made them.
-- Recalling copies already imported. A copy lives on the importer's device; the server can only
-  tell the importer that the source was removed and why (see Import).
+Always local: banks, exams, editing, printing and export work offline and signed out. The share module
+does nothing (no network, no keychain) until the Account window is opened. Imported copies live on the
+importer's device and cannot be recalled; the server can only say the source changed or was removed, and why.
 
-## Stack
+A release build without `VERSHION_POOL_URL` has sharing switched off; a release build with it talks only to
+that server. Debug builds, or the never-to-ship feature `pool-custom-server`, let a developer type an address
+(`src/share/mod.rs`).
 
-| Piece | Choice | Why |
+At launch there are no circles, ratings, favourites or separate search service: only **public** items and
+**unlisted** items. Unlisted means private: published (so it can be republished) but readable only by its author.
+
+**Circles (backend phase A, round 32; not at the first launch).** The Worker now has the server side of
+circles as planned in `docs/circles-plan.md` (decisions D1-D19): small private groups of approved teachers
+joined by code, banks shared into a circle for members to view and copy, the author's own republish as
+versions, caps, erasure and succession, purges, the admin's audited access, and one check at public publish
+that keeps material first sent into a circle by someone else out of the public pool. Circle content stays out
+of this document's licence engine (no served rows, no authorship records). Routes, decisions and limits:
+`server/worker/README.md` "Round 32", "Round 33" (fixes after two critics: re-joining after a removal,
+codes that outlive their issuer's owner role, caps through transfers, holds and purges) "Round 34" (ownership is
+an offer the member accepts, succession of owner-closed circles, accounts not in good standing) "Round 35" (removed
+banks stay findable by the owner, offers capped a day) and "Round 36" (no null text in circle responses, `closed_by`;
+the documented limits).
+There is no client yet; the owner's "no circles at the first launch"
+stands until the app ships them.
+
+Stack: a Cloudflare Worker (TypeScript) with D1 (`vershion-pool`), a private R2 bucket `POOL` (bodies under
+`items/`, takedown quarantine under `quarantine/`, images under `blobs/`), and the Rust crate `server/share-core`
+compiled to wasm for the publish gate, content hashes and Argon2id.
+
+---
+
+## 2. Roles and accounts
+
+| Level | Who | Can do |
 |---|---|---|
-| API | Cloudflare Worker (TypeScript) | Nothing to patch or back up; TLS and DDoS protection included |
-| Data | D1 (SQLite), main database `vershion-pool` | Relational data, Time Travel point-in-time restore |
-| Search | A **second** D1 database holding only the FTS5 index (phase 4) | `wrangler d1 export` refuses any database that contains a virtual table, so FTS5 is kept out of the main database; everything in the search database is rebuildable |
-| Images and bodies | R2 | Egress is free; images content-addressed by SHA-256 like the local `media/` store |
-| Mail | Transactional sender (Resend or Cloudflare Email) | Verification, reset and admin alerts |
-| Client | `src/share/` module in the Rust app, `ureq` natively and `fetch` on wasm | Same API on both builds |
+| `unverified` | Email not confirmed, or password and profile not yet set by the mailbox owner | Nothing; cannot log in. Purged after 7 days. |
+| `pending` | Email confirmed, awaiting approval (or approval withdrawn) | See status and any rejection reason, re-apply (7-day cooldown), log out, delete the account, `GET /me/export` (profile only). Pool routes answer `403 account_not_approved`. |
+| `teacher` | Admin-approved (and, to use the pool, holding a redeemed invite code; round 28) | Browse, publish, import, report, appeal, counter-notice, export own data. |
+| `admin` | Made only by the bootstrap script | All of the above plus queue, suspension, moderation and DMCA routes. |
 
-Cloudflare's D1 import/export page states "Export is not supported for virtual tables, including
-databases with virtual tables" and suggests dropping and recreating them around an export.
-**Decided (owner, 2026-10-19): the FTS5 index lives in a separate D1 database**, so the main
-database can always be exported and backed up by Time Travel. Search results are always re-checked
-against the main database (see Discovery).
+(`src/index.ts` `TRUST`; `src/pool/index.ts`.)
 
-The wire format is one JSON schema (`docs/shared-pool.schema.json`, written in phase 2) that both
-the Worker and the Rust types are tested against, so the two codebases cannot drift.
+**Approval.** Every teacher is admin-approved; there is no promotion by email domain (students often hold
+staff-domain addresses). A "staff domain" is only a label in the queue. The rule: approve only when the verified
+address itself is on the school's staff directory (`directory`), or the school office confirmed the person through
+a contact **the admin** started (`school_confirmed`). A name on a staff list is never enough (an unconfirmed
+assumption in the owner's note). Sign-up collects email, password, display name, school and an adult-school-employee
+statement.
 
-The personal VPS is not used. If the Worker is outgrown, the API is plain HTTP+JSON and can move.
+**Invite codes (round 28).** The pool is invite-only: besides admin approval, an account must redeem an invite code an
+admin issued (`POST /admin/pool/invites`; 24 characters shown once, stored only as a SHA-256 hash; single use by default
+or up to 1,000 uses, optional expiry up to 365 days, revocable; issue, redemption and revocation are audited, never with
+the code). The gate sits in the pool, not in sign-up: sign-up stays open and answers the same for every address (the
+auth package is unchanged, and a code consumed at sign-up could be burned by whoever typed someone else's address). An
+account redeems with `POST /me/invite {code}`, also while `pending`, so the admin can check it before approving
+(`GET /admin/pool/invites?user_id=`). Until then every pool route but `GET /me/export` answers `403 invite_required`;
+admins are exempt. Every account already `teacher` or `admin` when migration 0106 ran is grandfathered. A bad, expired,
+revoked or used-up code is `422 invite_invalid`; 10 tries a day. Revoking a code stops further redemptions only.
+Erasure deletes the account's redemption.
 
-**Hosting (assumption, confirm):** the web build and the API are served from one registrable
-domain, e.g. `app.example.org` and `api.example.org`, or the Worker routed at `/api/*` on the
-app's own host. Cookie auth below depends on this; if the web build stays on a different site
-(e.g. `github.io`), browsers will not send the cookie and the design must change.
+A rejection has a reason (shown to the applicant) and a note (never shown); an approval records evidence kind and
+notes. Admins can bulk-reject up to 50, revoke a teacher back to `pending`, or suspend. Application mails to admins
+are limited to 5 an hour, then summarised; applications waiting over 48 hours are escalated by the daily cron to
+`ESCALATION_EMAIL`.
 
-**One share-core crate.** `server/share-core` (today only Argon2id) grows the pool logic in phase 2:
-`validate`, `canonicalize`, `strip`, `match_hash`, `served_hash` and the image header checks. The
-app links it natively and the Worker runs it compiled to wasm, with fixture tests in both targets.
-**Only the server strips**: it validates the uploaded full payload, applies the shuffles with
-`crypto.getRandomValues`, and stores the result. The client never supplies a stripped form (a
-server cannot verify a client's shuffle). The keyless form, index rows, previews and every
-non-author read path come from that one function, so they cannot disagree about what counts as
-part of the key. The client runs the **same** `validate` on every payload it receives (see Import),
-because a build with `--features pool-custom-server` can point at any server.
+**Admin safety.** Admin routes need a live session, an admin level and a known device; every admin write also needs a
+5-minute sudo token from `POST /auth/reauth`. An admin cannot act on their own account; the last active admin can
+never be suspended or deleted. Suspending an admin is a proposal another admin must confirm (the proposer alone after
+24 hours; proposals lapse after 72 hours), and every action against an admin is mailed to all admins and the
+escalation contact. No route creates an admin: the operator runs `server/worker/scripts/make-admin.sh EMAIL --remote`
+after verifying the person out of band (`demote-admin.sh` reverses it, never for the last admin).
 
-## Accounts and auth
+**Content follows standing.** Others see an item only while its author is `teacher`/`admin`, not suspended and not
+deleted (`STANDING` in `shared.ts`). Suspension, revocation and restore hide and show items at once, reversibly;
+nothing is deleted.
 
-Implemented in phase 1; recorded here as the contract later phases build on.
+**Sign-in, devices, sessions.** Passwords: at least 10 characters, NFKC, common-password checks, Argon2id m=19456 KiB
+t=2 p=1 (pinned in `src/index.ts`). Login gives a 15-minute access token and a rotating refresh token (30 days
+sliding, 90-day family maximum; reuse within 10 seconds returns the same successor, later reuse revokes the family).
+Web keeps the refresh token only in an `__Host-refresh` cookie; the native app sends `X-Client: native` and keeps
+tokens in the OS keychain. A 90-day "known device" token skips the per-IP and per-network failure limits and the
+account lockdown, so students guessing at a shared school address cannot lock a teacher out; otherwise 5 failures per
+15 minutes per account-and-network, and a lockdown past 30 an hour or 100 a day. A reset or activation mails a
+15-minute enrolment code for the native app. Sign-up, resend and forgot answer the same whether or not the address
+exists. Web build and API must share one registrable domain (cookie auth; unconfirmed assumption). (Auth README.)
 
-- **Sign-up:** email, password, display name, and a statement that the person is an adult
-  school employee (COPPA/SOPIPA). A verification mail is sent; until the address is verified and
-  the account is approved (see Trust levels) it cannot publish, browse the public pool or join circles.
-  An unverified account cannot log in at all. Confirming the address discards the sign-up password,
-  display name and school, and revokes every session (anyone can type someone else's address into
-  sign-up), so the person who clicks the link enters the password and profile at that step, or later
-  through forgot/reset. Only then does the account become `pending` and enter the approval queue.
-- **Password storage:** Argon2id compiled to wasm, per-user salt, parameters stored with the hash
-  and re-hashed on login when raised. Needs the **paid Workers plan**. Minimum 10 characters,
-  checked against a short common-password list. PBKDF2 is not used: workerd caps it at 100,000
-  iterations, well under current guidance.
-  **Measured (see `docs/phase1-argon2-spike.md`):** a hash is a synchronous wasm call, so requests
-  in an isolate run one at a time and concurrent logins do not multiply memory. The 19 MiB
-  parameters use about 21 MB of wasm memory and take about 25-35 ms warm locally. The cost that
-  matters is CPU time, so the per-IP and per-account rate limit is checked **before** any hashing.
-  Chosen parameters: m=19456 KiB, t=2, p=1, 16-byte salt, 32-byte tag, stored with each hash.
-  Re-measure on the edge after the first deploy.
-  Unknown-email logins do a **full** dummy hash, and sign-up always hashes, whether or not the
-  email exists, so timing is the same. Mail is sent in the background (`waitUntil`).
-- **Login** (verified accounts only): returns a short-lived access token (15 min) and a rotating
-  refresh token (30 days). Refresh tokens are stored hashed in D1 so they can be revoked. **Reuse
-  detection with a grace window:** presenting an already-rotated refresh token within 10 seconds of
-  its rotation returns the same successor token (two tabs, or a native retry after a dropped
-  response); a replay after the window revokes the whole session family and raises an alert.
-- **Token delivery differs by client:**
-  - *Web:* the refresh token is set only as an `HttpOnly; Secure; SameSite=Strict` cookie on the
-    API host and is **never** returned in a response body. `/auth/refresh` reads the cookie. The
-    client fetches with `credentials: 'include'`, and the API answers with
-    `Access-Control-Allow-Credentials: true` and an exact origin from an allow-list (never `*`).
-    The access token is held in memory only. The web build loads no third-party scripts.
-  - *Native:* the refresh token is returned in the login response body, stored in the OS keychain,
-    and sent in the body of `/auth/refresh`. A client identifies itself with an explicit
-    `X-Client: native` header; the cookie path is used when it is absent. The server **rejects**
-    `X-Client: native` on any request that carries an `Origin` header.
-  - *Rotation (both):* the successor token is `HMAC(server_secret, predecessor)`. Rotation is one
-    atomic statement (`UPDATE sessions SET rotated_at = now WHERE id = ? AND rotated_at IS NULL
-    RETURNING ...`), and the successor row is `INSERT OR IGNORE`d, so concurrent refreshes converge.
-- **Rate limiting:** per IP and per account on login, sign-up, reset, verification-resend and the
-  pool routes (D1 `rate_limits` counters keyed by HMAC). Login counts only failures per account,
-  and per account and network (IPv6 grouped by /48); past the account's limit (30 an hour or 100 a
-  day), login is refused from every network except a known device (a revocable device token; a
-  stolen one is held to 20 guesses a day and never locks the owner out). A completed reset re-keys
-  every counter of the account and mails a one-time device enrolment code. Verify, reset, refresh
-  and logout charge the IP only for an unknown token, and a valid code is leased before hashing.
-  Forgot and resend are limited per (IP, address) and never refused per account: a mail goes out
-  at most every 2 minutes and at most 10 per link lifetime, and the newest 3 links stay valid.
-- **No account enumeration:** sign-up, forgot-password and resend return the same response and
-  timing whether or not the email exists. Sign-up for an address that already has an account
-  sends that address a "someone tried to sign up with your email" mail instead.
-- **Reset:** single-use token, 1 hour expiry, mailed to the verified address. A reset revokes all
-  refresh tokens and known devices.
-- **Display text:** display names and profile strings are NFKC-normalized and **refused** (not
-  stripped) if they contain control, format (bidi overrides, isolates, zero-width), private-use or
-  unassigned characters (`server/auth/src/validate.ts`). The pool applies the same rule to titles,
-  tags, topics, standards codes and every report or notice field (see Payload validation).
-- **Account deletion** (the account stops working at once; content follows a 14-day grace):
-  - Immediately: PII (email, name, profile, password hash) is nulled, all sessions are revoked,
-    and a tombstone row keeps ids stable. Ratings and favorites are deleted. Reports the user
-    filed are kept, anonymized, as moderation evidence. The tombstone keeps an HMAC of the email
-    for 14 days and nothing else that identifies the person.
-  - **Undo restores content only, never the old account.** Within the 14 days the person signs up
-    again with the same address; the HMAC matches, and the admin re-links the held items and
-    circles to the new account. After 14 days the HMAC is deleted.
-  - Circles the user owns: see Circles (claim window).
-  - Items the user authored: at once `removed_at` is set with `removed_reason = 'account_deleted'`
-    and `purge_after = now + 14 days` (hidden everywhere, unimportable). The daily cron then purges
-    them (see Purge). Items under an open DMCA action follow the same date: a deleted account
-    cannot send a counter-notice.
-  - Copies other teachers imported are untouched; they show "source removed". The author's
-    display name stays in those copies and in their attribution chains (disclosed at publish).
-  - Implemented by `onDeleteContent` in `server/worker/src/cleanup.ts`, which today only logs a
-    `PHASE 2 TODO`.
+---
 
-## Trust levels
+## 3. What is shared and how
 
-| Level | Who | Can |
-|---|---|---|
-| `unverified` | not yet active: email not confirmed, or the mailbox owner has not yet set the password and profile | nothing but verify (cannot log in) |
-| `pending` | email confirmed, awaiting approval (or approval revoked) | see their own status (and a rejection reason); re-apply after a rejection; nothing else |
-| `teacher` | approved by the admin | create and join circles, browse, publish, import, rate, favorite, report |
-| `admin` | the site owner (only ever made by the bootstrap script, `server/worker/scripts/make-admin.sh`) | approval queue, suspension, reports, takedowns, limits |
+An **item** is a bank or a question with a stable id and a sequence of immutable **publishes**. Per item: `visibility`
+(`public`/`unlisted`, changed by `PATCH /items/:id`). Per publish: `hide_key`, `license`, attestation, metadata (title,
+subject, course, grade, tags, standards) and a client-made `publish_id` (22 to 64 characters; also the idempotency key).
 
-`pending` accounts can also log out, export their account data and delete their account
-(`/auth/logout`, `/account/export`, `DELETE /account`, `GET /me`); every other route needs `teacher`.
-An `unverified` address can only have its verification mail resent, and an account never confirmed
-is purged after 7 days.
+**Flow.** The app builds the payload, uploads pictures privately (`PUT /blobs/:sha256`), runs the dry run
+`POST /items/preview` (or `/items/:id/preview`), the author reviews what students will get, then `POST /items` or
+`PUT /items/:id` (with `base_publish_id`). The Worker makes **one** share-core call, `publish_prepare`, and stores only
+its validated output. Only the server strips; a client never supplies a stripped form. The body is
+`application/vnd.vershion.publish` (`<meta JSON>\n<payload>`) with an exact `Content-Length` (411 without, 400
+`length_mismatch`); retrying the same `publish_id` and body returns the first result; a lost compare-and-set is
+`409 conflict`.
 
-**There is no automatic promotion.** Many districts issue students addresses on the same domain
-as staff, so a domain match proves nothing. Every verified account lands in the admin queue and the
-admin is emailed. The queue shows the email domain, any configured "staff domain" hint (a label
-only, never a grant), and the declared school.
+### Hiding the key
 
-**Approval rule (assumption, confirm):** a name on a staff listing is never enough. The admin
-approves only when (a) the verified email address itself appears on the school's staff directory,
-or (b) the school's office confirms the person by a contact the admin initiates through the
-school's published number or address. Anything else is rejected or left pending.
-
-**How decisions are made and kept (implemented in phase 1):**
-- An approval records its evidence (`directory` or `school_confirmed`), an evidence note and a note.
-- A rejection records a reason, which the applicant sees, and a note, which they never see. The
-  applicant may re-apply after 7 days, as a new application.
-- An admin can revoke `teacher` (back to `pending`) or suspend any account: suspension blocks login
-  and revokes every session and known device.
-- Admin routes need a known device, and every admin change needs the password re-entered within 5
-  minutes. An admin can never act on their own account, and the last active admin can never be
-  suspended or deleted.
-- **Two-person rule:** suspending an admin needs a second admin's confirmation (with only two admins,
-  the proposer may confirm alone after 24 hours). Every action against an admin mails all admins and
-  the escalation contact at once.
-- Every decision goes to the append-only `auth_audit` log that survives account deletion with its
-  notes removed.
-- If an application waits more than 48 hours, the hourly cron mails the admins and a second contact.
-
-**Content follows the author's standing (phase 2).** An item is visible to anyone but its author
-only while its author has `trust IN ('teacher','admin')`, `suspended_at IS NULL` and
-`deleted_at IS NULL`. Every non-author read path joins `users` on the author and applies that
-condition, so suspension, revocation to `pending`, restore and re-approval hide and show the
-author's items at once and reversibly, with no per-item writes and no hook that can be forgotten.
-`onSuspendContent` therefore returns no statements but stops logging a TODO; it records a
-`pool_audit` row. A suspended or revoked author's items are not deleted.
-
-An invite code does **not** grant `teacher`; only `teacher` accounts can use a code (see Circles).
-Only `teacher` reports count.
-
-Reason for the gate: a public pool of answer keys is only worth having if students cannot read it.
-
-## Circles
-
-Phase 3. Unchanged by this revision except for table keys (see Data model).
-
-- Any `teacher` creates a circle (name, optional description) and owns it.
-- The owner mints **invite codes** with an expiry (default 7 days), a use limit (default 10) and
-  optional note. Codes are random base32, 10+ characters, stored hashed, and can be revoked at any
-  time. Revoking a code does not remove members who already joined.
-- **Joining:** a valid code joins the circle directly, but only a `teacher` can redeem it.
-  Redemption is one transaction: `INSERT OR IGNORE` the membership, and only if a row was inserted
-  run `UPDATE invite_codes SET used = used + 1 WHERE id = ? AND used < max_uses AND revoked_at IS
-  NULL AND expires_at > now RETURNING ...`, with the 200-member cap checked in the same statement.
-  Joining is rate limited per account.
-- The owner can remove a member. A member can leave. A teacher can be in many circles.
-  When a member leaves or is removed, their `item_circles` rows for that circle are deleted, and
-  any of their items left with no circles become `unlisted`.
-- Ownership transfer: the owner can hand ownership to an existing member only.
-- **Owner deletes their account without transferring:** the circle enters a 30-day claim window in
-  which members may claim ownership. A claim is one atomic statement (`UPDATE circles SET owner_id
-  = ? WHERE id = ? AND owner_id = <tombstone>`). If nobody claims it, the circle is deleted, its
-  `item_circles` rows are removed, and every item left with no circles is set to `unlisted`.
-- Publishing to a circle needs membership in that circle.
-
-## Sharing model
-
-An **item** is either a whole bank (a set, including its `BankDetails`) or a single question.
-An item has a stable server id and a sequence of **publishes**; the item points at its current
-publish. Each publish is immutable once committed.
-
-Per **item** (can change without a new publish, via `PATCH /items/:id`):
-- `visibility`: `unlisted` | `public` in phase 2, plus `circles` (with a list of circle ids) in
-  phase 3. `unlisted` means published but visible only to its author. A local item that has never
-  been published does not exist on the server at all. Making an item `public` is refused when the
-  current publish's license is `circle-only` (checked in the same `UPDATE ... WHERE`).
-- Moderation state: `removed_at`/`removed_reason` (permanent, see Purge) and `item_holds` rows
-  (reversible hides, see Reports).
-
-Per **publish** (fixed for that version forever; changing any of these needs a new publish):
-- `hide_key`: if true, non-authors receive the **stripped form** (see below).
-- `license`: one of `CC-BY-4.0`, `CC0-1.0`, `CC-BY-SA-4.0`, `CC-BY-NC-4.0`, `CC-BY-NC-SA-4.0`, or
-  the non-SPDX value `circle-only` ("all rights reserved, copying only within the circles it is
-  shared to"; never `public`). A CC grant made with a version is irrevocable for that version, so
-  the license lives on the version: copies taken from v2 keep v2's license even if v3 changes it.
-- **Rights attestation**: `attested_at` and `attest_text_rev` (which revision of the attestation
-  wording the author saw and ticked). Required on every publish.
-- Discovery metadata: `title`, `subject`, `course`, `grade`, `tags[]`, `standards[]`, plus per
-  question `kind` and `difficulty`.
-- `version`: integer, one more than the publish it replaced. `schema_version`: the payload format.
-- The publish id (`publish_id`), generated by the client, which is also the idempotency key.
-
-**Explicit license choice (decided).** The sharing panel lists the licenses with `CC-BY-4.0` first and
-labelled "suggested", but **nothing is preselected**; Publish stays disabled until the author picks
-one. A republish preselects the license of the item's current publish (the author already chose it),
-and changing it shows what changes for future copies only.
-
-**Global question identity.** Every question has a server-assigned `qid` that is stable across
-versions of its item (the role Moodle's question bank entry plays for its versions). On first
-publish the server assigns a fresh random `qid` to each question. On republish the client sends the
-`qid` it recorded for each question (`published.qid`); the server accepts a sent `qid` only if it
-already belongs to this item (`question_ids.item_id`) and appears once in the payload, and assigns a
-fresh one otherwise. Local ids, `created` and `modified` never leave the device: the server replaces
-`Question.id` and `QuestionBank.id` with server ids and sets `created`/`modified` to the publish's
-commit time (UTC day), so authoring times are not disclosed.
-
-Publishing needs `teacher` (public items and circle items alike). At publish time the author ticks
-the rights attestation; it is recorded on the publish.
-
-**Licenses inherit, per question.** The check runs over every question in a bank. The publish's
-license must be allowed by the origin license of **every** question it contains; a bank mixing
-incompatible origins (e.g. BY-SA and BY-NC) is rejected with the offending question positions listed.
-
-| Origin license | May be republished as |
-|---|---|
-| `CC0-1.0` | any license |
-| `CC-BY-4.0` | `CC-BY-4.0`, `CC-BY-SA-4.0`, `CC-BY-NC-4.0`, `CC-BY-NC-SA-4.0` |
-| `CC-BY-SA-4.0` | `CC-BY-SA-4.0` only |
-| `CC-BY-NC-4.0` | `CC-BY-NC-4.0`, `CC-BY-NC-SA-4.0` |
-| `CC-BY-NC-SA-4.0` | `CC-BY-NC-SA-4.0` only |
-| `circle-only` | cannot be re-shared by importers at all (the author can still republish their own) |
-
-"Stricter" never means a different condition set: BY-SA cannot become BY-NC-SA.
-
-**`match_hash`, the only hash compared across items.** `match_hash(q) = SHA-256(canonical(
-strip_without_shuffle(q)))`, computed in share-core, where `strip_without_shuffle` applies the
-stripped-form table below but, instead of shuffling, **sorts** every unordered list (Mc answer texts
-with their letter labels removed, Matching left items, the merged right-hand word bank), and
-`canonical` NFC-normalizes text, collapses whitespace and serializes with sorted keys. It covers the
-stem, kind, and the key-free structure; it excludes images, figures, topics, points, difficulty and
-ids. Two questions that differ only in their key (a Tf marked true vs false, the same Mc with a
-different correct choice) have the **same** `match_hash`, so no check built on it can leak a key.
-It is also identical for a full and a stripped publish of the same question, so the checks below
-still work after a re-strip with a different random shuffle.
-
-The full-form hash (`full_sha256`) exists only for integrity of the author's own body. It is never
-compared across items and never sent to anyone but the author: for small answer spaces (a Tf has
-two keys, a 4-choice Mc 4 single-answer or 15 multiple-answer keys) it would let anyone recover a
-hidden key by hashing guesses.
-
-Rules:
-- **Hard check, against the user's own imports.** A question is "derived from an import" if its
-  `match_hash` equals that of a question in any publish this user imported (`imports` joined to
-  `item_questions`), or its declared `origin` names an item this user imported. Its origin license
-  is that imported publish's license; the table applies and an incompatible publish is rejected,
-  listing positions in the publisher's own payload. Because the hash ignores the key, every key
-  variant of a question gets the same answer. The user's own items never match themselves.
-- **Soft check, everything else.** A `match_hash` equal to a question in another visible publish the
-  user did not import creates an `admin_flags` row and nothing else. The publish result is identical
-  whether or not a flag was raised, and flags are never shown to the publisher. (Hash matches have
-  false positives and invite griefing by pre-publishing common questions under a restrictive license.)
-- **Re-upload blocklist.** A `match_hash` (or image hash) on `blocked_hashes` (see Takedown) does not
-  fail the publish; the item gets an `item_holds` row `blocklist` and the author sees "held for
-  review" in `/items/mine`.
-- A user who edits their local JSON to drop `origin` still passes the hard check only if they never
-  imported a matching item; the ToS puts the remaining legal responsibility on the author.
-
-**Publish-time review.** Before upload the app shows everything that is about to leave the device:
-every image (after re-encoding, see Images), the full stem text, the `topics` (merged into searchable
-tags, and they could contain an answer), the bank's `BankDetails`, and, for a `hide_key` publish, a
-preview of the stripped form exactly as importers will see it. It requires, per question where it
-applies, the "image does not reveal the answer" tick and the "answer order preserved" acknowledgement
-(see the stripped form), plus the license choice and the rights attestation. It states: "Your display
-name is copied into every imported copy and its attribution, and stays there even if you later delete
-your account. Your email and school are never shared."
-
-Changing visibility later only affects the pool. Copies already imported stay.
-
-### The stripped (keyless) form
-
-`hide_key` cannot be a simple "remove the answer field", because the key is spread through the
-`Kind` enum and through figure parameters. For each kind the stripped form is:
+With `hide_key`, non-authors get the **stripped form**; the author always gets the full form. Stripping (share-core
+README, rounds 6 to 8):
 
 | Kind | Stripped form |
 |---|---|
-| `Mc` | every `Answer.correct` set to `false`; letter labels removed (below); the unlocked answers shuffled (`locked` answers keep their position) |
-| `Tf` | `correct` set to `false` and the question marked keyless |
-| `Matching` | `pairs[].right` set to `""`; **all** right-hand items, answers and `distractors` together, go into `distractors` in one random order (a word bank) |
-| `Blank` | `accept` becomes empty lists, one per blank, so the blank count survives |
-| `Short` | `sample` becomes `""` |
-| `Multipart` | the rules above applied to each `Part` (`PartKind::Mc` relabelled and shuffled, `Tf`, `Short`) |
-| any | `explanation` removed |
-| any | `figure` **always** removed |
-| any | `image` removed unless the author ticks "this image does not reveal the answer" for that question |
+| Mc | `correct` all false; letter labels stripped or kept per decision; unlocked choices shuffled once at publish; locked ones stay put |
+| True/False | key removed, question marked keyless |
+| Matching | no paired rights; rights and extra words in one shuffled word bank; left items shuffled too unless `keep_order` |
+| Blank | accepted answers emptied (blank count kept) |
+| Short | model answer removed |
+| Multipart | rules applied per part |
+| any | explanation removed; figures always removed; a picture kept only if the author ticks "does not reveal the answer" |
 
-**Why `figure` always goes.** `FigureSpec.params` routinely hold the answer: the micropipette
-figure's `volume` is the reading and `answer`/`answer_text` print it; the Lewis figure's `tweak`
-encodes the bonds and lone pairs asked for; the pedigree's `genotypes` has an `Answers` mode; the
-Punnett square has ratio and genotype switches. There are about 16 figures with an `answer` or
-similar param, and new ones will be added, so no per-figure rule is safe. The tick keeps only the
-rendered `image`, which the author has just looked at in the review.
+The stripped form is its own R2 object. Shuffles are drawn once, so repeated reads cannot be averaged. Only the
+publishing author receives `served_orders`; it must never reach a listing, log, report or other account. A hidden
+republish that changes nothing students see keeps the stripped body and public version. Without `hide_key`, **every
+approved teacher who can see the item sees the answers.** Admins can view the full form of any item. Stems, topics,
+name and description are served intact (normalised only), so they can leak a key; the gate below is for that.
 
-**Letter labels.** Answer texts are normally stored unlettered (the importers in `formats.rs` strip
-"A. " and the exporters add letters), but a hand-typed "A. Venus" would keep its original slot
-letter after a shuffle and give the order away. Before shuffling, when at least two choices of a
-question start with one ASCII letter, `.` or `)`, and whitespace (the same strict pattern as
-`formats::letter_choice`), that prefix is removed from every choice that has it.
+### The key-hint gate (share-core)
 
-**Order preserved.** If fewer than two choices of an Mc (or Mc part) are unlocked, nothing moves and
-the author's order survives. The review lists such questions with "the answer order is preserved and
-may reveal the key" and requires a per-question acknowledgement; the server rejects a `hide_key`
-publish (422, listing positions) whose payload lacks the acknowledgement for each such question.
+It protects against hints a careless teacher plausibly types, not deliberate obfuscation (owner decision 2026-10-21;
+see section 8).
 
-Shuffles are random but performed **once at publish time** and stored, so every importer, preview
-and index row sees the same order and repeated reads cannot be averaged to recover the original.
-
-`topics`, `difficulty`, `points` and the stem are kept. The stem is the author's text and may itself
-contain the answer; the publish-time review is where that is caught.
-
-The stripped form is stored as **its own R2 object** next to the full one, and non-authors of a
-`hide_key` publish are only ever served that object. **The author** gets the full version on every
-read path. For a publish without `hide_key` everyone gets the full form. Index rows, previews and
-result snippets are built from the form the reader is served (for search, always the stripped form
-of a `hide_key` publish).
-
-Imported keyless questions get a local `keyless: true` flag (a new `#[serde(default)]` field on
-`Question`), so the app shows "no answer key; add yours" and exports warn instead of printing a key
-of all-false answers. **Older builds drop unknown fields when they re-save `banks.json`** (serde's
-default), which would silently lose `keyless`. Mitigation: an imported keyless question also gets
-`explanation` set to a fixed sentinel ("No answer key: this question was imported without its key.
-Add the correct answers before printing a key."), which every older build keeps and prints on the
-answer key. The current build hides the sentinel while `keyless` is set and removes it when the
-teacher adds a key.
-
-A keyless copy is deliberately less useful; it suits an author who wants to share stems without
-handing out the key.
-
-### Import
-
-Importing creates a **private copy** in the importer's own local store. Every question in the copy,
-and the bank itself, carries provenance:
-
-```
-origin: {
-  item_id, qid, publish_id, version,     // what was copied
-  author_name, license,                   // of that publish
-  form,                                   // full | stripped
-  served_sha256,                          // SHA-256 of the canonical served question
-  match_hash,
-  chain: [ { author_name, item_id, qid, version, license, modified } ]  // earlier links, oldest first
-}
-```
-
-- **Attribution chain.** When B publishes a question imported from A and C imports it from B, C's
-  copy must still credit A, and CC 4.0 requires saying whether the material was modified. The server,
-  not the client, builds the chain: on publish, for each question derived from an import (hard-check
-  rule), it stores `chain = <that imported question's stored chain> + [{A's link}]` in
-  `item_questions.chain_json`, with `modified = true` when the new question's canonical form differs
-  from the canonical form that was served to this importer (so an added key, a changed explanation or
-  a new image all count, not only a changed `match_hash`). A client-declared `origin` that matches no
-  import is dropped and raises an `admin_flags` row. Chains are capped at 32 links (older links
-  collapse to "and earlier contributors"). The served payload's `origin.chain` is copied from that row.
-- `served_sha256` lets the client check the body it received. A non-author importer of a `hide_key`
-  publish never receives `full_sha256`.
-- Provenance is shown in the UI ("from Ms. X, CC-BY, modified from Mr. Y") and carried through
-  exports where the license requires attribution. `BankDetails.author` and `license_name` are also
-  filled from the bank's origin, because older builds keep those fields and drop `origin`.
-- **Update notices (phase 2).** `POST /items/versions` takes up to 200 item ids and returns a status
-  per id: `current`, `newer` (with the new version), `removed` (with `reason`: `deleted`, `takedown`
-  or `privacy`), or `unavailable` (the caller can no longer see it: `unlisted`, held, a circle left,
-  author suspended). For `newer` the importer can re-import (as a new copy) or ignore it; nothing
-  changes in place, so exams that use the copy never shift. For `removed`/`privacy` (student data,
-  see Reports) the app asks the teacher to delete their copy and offers to do it.
-- **Atomic import.** The client (1) fetches the payload and every referenced image into memory (web)
-  or a staging directory (native); (2) verifies all of it: `served_sha256`, share-core `validate`
-  (the same limits the server enforces), each image's hash, sniffed type, header dimensions and a
-  decode under explicit limits (`image::Limits`, 4096x4096, 64 MB allocation); (3) normalizes figures
-  (below); (4) only then writes images with `put_image` (which writes before it measures, so it must
-  never see unverified bytes) and inserts the questions with **one** `save_banks`. Any failure leaves
-  the store unchanged.
-- **Figures on received payloads.** A `FigureSpec` whose `id` is not in `figures::registry()` is
-  dropped (the image stays). Otherwise params whose key is not in the figure's `ParamDef` list are
-  dropped, `Params::normalize` clamps numbers and choices into range, and text params over 4 KB are
-  refused (normalize does not cap lengths).
-- **Duplicates.** Before importing, the client looks for local questions whose `origin.item_id`/`qid`
-  match and warns "already imported (v3, into Bank X)"; the server also returns the versions this
-  user imported before. Re-importing makes a new copy only if the teacher confirms.
-- Images are downloaded through the Worker and written into the local `media/` store by hash, so
-  imported content works offline. The client rebuilds `ImageRef.file` as `media/<sha256><ext>` using
-  `store::sniff_ext` (after the WebP fix in Build order) and takes width and height from the image
-  header, not from the payload.
-- Importing records one row per teacher per publish. The import-count signal is
-  `COUNT(DISTINCT user_id)` over those rows.
-- **IDs:** `model::new_id()` is a per-process counter plus a millisecond clock, so ids are not
-  globally unique. On import every bank and question gets a fresh local id; the server ids appear
-  only in `origin` and `published`.
-- **Where a single question lands:** importing one question asks which bank to put it in
-  (default: a bank named for the item's subject, created if missing).
-- **Schema versions.** v1 is today's model; v2 adds `keyless`, `origin` and `published`. Stripped
-  payloads are always served as v2. A client refuses a payload whose `schema_version` is above the
-  highest it knows ("update verSHion to import this"), so an old client never silently drops
-  `keyless` from a fresh import. The server accepts publishes in its supported range and drops
-  unknown fields during canonicalization.
-
-Local model changes, all `#[serde(default)]` so old stores still load:
-- `origin` on `Question` and `QuestionBank` (above).
-- `keyless: bool` on `Question`.
-- `published: Option<{ item_id, qid, publish_id, version }>` on `Question` (and `{ item_id,
-  publish_id, version }` on `QuestionBank`). Republishing, `qid` reuse and update notices use it.
-  An older build that re-saves drops it, and the next publish becomes a new item; the server
-  answers a publish whose `match_hash` set equals one of the author's own items with
-  `possible_duplicate_of`, and the app offers to republish that item instead.
-
-## Images
-
-Every image that leaves the device goes through one pipeline (ASVS 5.0 V5: 5.1.1, 5.2.1, 5.2.2,
-5.2.4, 5.2.6, 5.4.1).
-
-**Decided (owner, 2026-10-19): the pool accepts PNG, JPEG, GIF and WebP**, each as a single still
-image of at most 4096x4096 and 2 MB. Anything else (SVG, TIFF, BMP, animated images, metadata) is
-refused by the server even if a client sends it.
-
-**Client (before upload), canonical re-encode.** The app already depends on `image` 0.25 with the
-`png`, `jpeg`, `webp` and `gif` features, and that crate (its PNG, JPEG, GIF and WebP encoders) is
-the only encoder used:
-- Always decodes and **re-encodes**, never uploads the stored bytes. Decoding uses explicit limits
-  (`image::Limits`: max 4096x4096 source, 64 MB allocation); EXIF orientation is applied first.
-- The output keeps the source's format: PNG as PNG; JPEG as baseline JPEG, quality 85; GIF as a
-  single-frame GIF (no loop or comment extensions; a graphic control extension only for
-  transparency); WebP as lossless WebP (`VP8L`; `image` 0.25's WebP encoder is lossless-only, to
-  verify at build time). Figure renders are PNG. Each is downscaled until it is within 4096 px per
-  side and 2 MB. Re-encoding drops EXIF (GPS, camera, time), XMP, IPTC, ICC profiles and comments.
-- **Animated GIF or WebP: only the first frame is shared, and the author is told.** The review shows
-  the re-encoded still image with "This image is animated; only its first frame will be shared."
-  Publishing is not blocked, because the review shows exactly what will be shared.
-- The outgoing payload's `ImageRef` names the re-encoded hash; the local store is not changed.
-
-**Server (`PUT /blobs/:sha256`, share-core image checks).** The server never trusts the client's
-re-encode; it validates independently and refuses (422) anything outside these rules:
-- Recomputes the SHA-256 and refuses a mismatch; enforces 2 MB; sniffs the format from the bytes
-  (never from a name or header supplied by the client).
-- **Every format:** width and height from the format's own header, each 1..4096 (pixel flood); no
-  byte after the format's end marker; every length field consistent with the file.
-- **PNG:** walks the chunks and allows only `IHDR`, `PLTE`, `tRNS`, `gAMA`, `cHRM`, `sRGB`,
-  `pHYs`, `IDAT`, `IEND`; anything else (including `tEXt`, `zTXt`, `iTXt`, `eXIf`, `iCCP`, `tIME`,
-  and `acTL`/`fcTL` for animated PNG) is refused. Nothing after `IEND`.
-- **JPEG:** walks the segments and allows only `SOI`, `APP0` (JFIF), `APP14` (Adobe), `DQT`, `DHT`,
-  `DRI`, `SOF0`-`SOF2`, `SOS`, `RSTn`, `EOI`; `APP1` (EXIF/XMP), `APP2` (ICC), `APP13` (IPTC), `COM`
-  and every other `APPn` are refused. Nothing after `EOI`.
-- **GIF:** `GIF87a` or `GIF89a`; logical screen size within the cap; walks every block and
-  sub-block: **exactly one** image descriptor, whose frame lies inside the logical screen; the only
-  extension allowed is one graphic control extension before it; comment (`0xFE`), application
-  (`0xFF`, e.g. `NETSCAPE2.0` looping or XMP) and plain-text (`0x01`) extensions are refused; the
-  trailer `0x3B` must be the last byte.
-- **WebP (static only):** `RIFF` with `WEBP` at byte 8 and a RIFF size equal to the file length
-  minus 8; walks the chunks, checking each size against the remaining bytes and the odd-size pad
-  byte. Allowed layouts: one `VP8 ` chunk; one `VP8L` chunk; or `VP8X` followed by an optional
-  `ALPH` and then one `VP8 `/`VP8L`, with the `VP8X` animation, EXIF, XMP and ICC flags all clear.
-  `ANIM`, `ANMF`, `EXIF`, `XMP `, `ICCP` and any unknown chunk are refused (the client's re-encode
-  never produces them). Dimensions come from the `VP8 ` frame header (after the `9d 01 2a` start
-  code), the `VP8L` header (after the `0x2f` signature) or the `VP8X` canvas, and a `VP8X` canvas
-  must equal the bitstream's size. Nothing after the RIFF end.
-- `blobs.content_type` is set from the verified format (`image/png`, `image/jpeg`, `image/gif`,
-  `image/webp`) and is the only type the blob is ever served with.
-- On publish, overwrites every `ImageRef.width`/`height` in the canonical payload from the stored
-  blob header, so a payload cannot claim different dimensions.
-- share-core carries fixture tests: a valid and an invalid file for every rule above, and an
-  `image`-crate round trip per format that must pass the server checks.
-- Antivirus scanning (ASVS 5.4.3) is not done; accepted risk, documented here: only re-encoded
-  raster images under a strict structural allow-list are stored, and they are served as attachments
-  under a sandbox CSP (see Blob rules).
-
-## Discovery
-
-**Phase 2 (browse, no search).** `GET /items?subject=&kind=&scope=public|mine&cursor=&limit=` lists
-the newest committed items first (`ORDER BY committed_at DESC, id DESC`), filtered by subject and
-by question kind (a bank matches if any question has that kind). Cursor pagination: the cursor is an
-opaque signed `(committed_at, id)`; `limit` defaults to 20 and is capped at 50. No totals are
-returned. Visibility, holds, removal and the author-standing condition are in the same SQL statement
-as the filter and the `LIMIT`. Rows show title, kind, subject, author display name, license, number
-of questions, version, whether the key is hidden, and whether images are included.
-
-**Phase 4 (search and filters).** Free-text search over title, tags, stem, MC answer text and
-explanation (FTS5) in the separate search database. Index rows are built from the stripped object
-whenever the publish has `hide_key`, so no answer text of any kind is indexed for those items.
-Because D1 cannot join across databases, the search database is only a candidate source: each page
-over-fetches candidate `(item_id, publish_id)` pairs and the main database keeps only those where
-`publish_id = items.current_publish_id` and the caller may see the item, in one statement, before
-the page is cut. No totals are shown, so counts never reveal hidden items. The search database is
-rebuilt from the main database and R2 after a restore, and its rows for an item are deleted on every
-takedown, removal and hold (and rebuilt when a hold is lifted).
-- Filters: subject/course, grade, topic tags, standards, question type, difficulty, license,
-  "has images", and scope (public, my circles, a given circle, mine). `Question.topics` are merged
-  into the item's `tags[]` at publish time (lower-cased, de-duplicated).
-- Sorting: relevance, newest, most imported, highest rated.
-- Standards codes are normalized (case, whitespace) at publish time.
-
-## Quality signals
-
-Phase 5 except reports, which land in phase 2.
-
-- **Import count:** `COUNT(DISTINCT user_id)` over `imports`; republished versions do not inflate it.
-- **Favorites:** private bookmarks per teacher; never affect ranking.
-- **Star ratings:** 1-5, one per `teacher` per item, changeable. Authors cannot rate their own items.
-  The rating is only displayed once it has at least 3 ratings.
-- **Reports (phase 2):** reason (`wrong_answer`, `copyright`, `student_data`, `inappropriate`,
-  `other`) and a note; one open report per reporter per item and reason; reporting needs `teacher`
-  and is capped per day (Limits).
-  - `student_data`: **one** report hides the item at once (`item_holds` reason `student_data`) and
-    mails the admin immediately, outside the notice budget. If the admin confirms, the item is purged
-    immediately (every retained publish, bodies, derived rows, and blobs nothing else references; no
-    quarantine), the image hashes go on `blocked_hashes`, and update checks return
-    `removed`/`privacy` so importers are asked to delete their copies. If the admin rejects it, the
-    hold is lifted; the reporter's history is shown on every report so abuse is visible.
-  - `copyright` from a teacher is a report, not a DMCA notice; the admin may take the item down
-    (see Takedown) or dismiss it.
-  - Other reasons: 3 or more distinct `teacher` reporters hide the item pending review (`item_holds`
-    reason `reports`; decided default 3, a setting).
-  - The reporter is told only "thanks, the admin will review it".
-- **Admin report review** (`GET /admin/reports`): open reports grouped by item, oldest first, with
-  the item's current publish shown in **full** form to the admin, the reporters (display names) and
-  their report counts, and the actions dismiss, hold, lift hold, take down, purge (student data), and
-  open the author. Every action writes `pool_audit`.
-
-## Takedown, DMCA and moderation
-
-This section is written as engineering requirements derived from 17 U.S.C. 512. **It is not legal
-advice; have counsel review the ToS, the repeat-infringer policy and this flow before public launch.**
-
-| Requirement | Source | Implementation |
+| Class | Examples | Author action |
 |---|---|---|
-| Remove **or disable access** expeditiously on a valid notice | 512(c)(1)(C) | Takedown sets `removed_at`, `removed_reason='takedown'`, `quarantined_at`; bodies are copied to `quarantine/<item>/<publish>.json` and deleted from their normal keys; the keys in `item_publishes` are updated. Only admin routes read `quarantine/`. Search rows are deleted; titles and tags of the item stop appearing anywhere but the admin console. |
-| Designated agent | 512(c)(2) | Registered with the US Copyright Office before public launch (an owner to-do, not a build blocker); name and address published on a "Copyright" page linked from the app and the ToS. |
-| Notice elements | 512(c)(3)(A)(i)-(vi) | Notices arrive at the agent's address. The admin records each in `dmca_notices` with one field or tick per element: signature; the copyrighted work; the material (item ids or links); complainant contact; good-faith statement; accuracy and authority statement under penalty of perjury. A notice missing elements is stored as `deficient` and the admin contacts the sender (512(c)(3)(B)). |
-| Notify the author | 512(g)(2)(A) | On takedown the author is mailed and sees the item as "taken down after a copyright notice" with a counter-notice form. |
-| Counter-notice | 512(g)(3)(A)-(D) | The form collects: signature; identification of the material and where it was; a statement under penalty of perjury of good-faith belief it was removed by mistake or misidentification; name, address, phone, consent to federal district court jurisdiction, and acceptance of service from the complainant. Stored in `dmca_counter_notices`; incomplete ones are refused. |
-| Forward and put back | 512(g)(2)(B)-(C) | A complete counter-notice is forwarded to the complainant at once with notice that the material will be restored in 10 business days. The cron restores it (bodies back from quarantine, derived rows rebuilt from the body, hold cleared) no sooner than 10 and no later than 14 business days after receipt (US federal holidays excluded), unless the admin records the complainant's notice of a court action, which keeps it disabled until resolved. |
-| No counter-notice | engineering choice (decided) | Quarantine is kept for 30 days after the author was notified, then purged. |
-| Repeat infringers | 512(i)(1)(A) | A published policy: each takedown that is not reversed by a put-back is an upheld strike (`strikes`); 3 upheld strikes within a rolling 12 months (decided) suspend the account, which hides all its items. The policy is in the ToS and shown to authors at their first strike. |
-| Re-upload | engineering choice | Every question `match_hash` and image hash of an upheld takedown goes on `blocked_hashes`; a later publish matching one is held for review (Sharing model). A put-back lifts the entries. |
+| **Hard** | ticks, crosses, stars, arrows, emoji marks; key/"wrong" words in about 40 languages; GIFT `=`/`~`, Aiken `ANSWER: B`, Moodle and Anki cloze; check boxes, score tokens; bold/underline/strike or LaTeX quiz commands on the key; export attributes; look-alike letters in a Latin word; answer lines in a stem or topic; another question's key in a bank description or stem; word banks or Matching lists in answer order; `locked_key`; placeholder True/False key in a re-keyed copy | Never acknowledgeable; fix the text. Each refusal has a plain-English `hint`. |
+| **Low risk** | capitals, styled letters, trailing punctuation, wrapped choices, a feature on exactly the correct choices (`outlier`), a blank hint like `I ___ (eat)`, a pasted choice list, "Memo:"/"Marks:" rows | Refused unless acknowledged (`ack_formatting`, question indices). |
+| **Labels** | "A.", "(a)", "Option A:" on choices | Author chooses Strip or Keep per finding with a preview. Strip only where labels are exactly positions 1, 2, 3...; order-revealing labels cannot be kept on shuffled choices. |
+| **Order** | fixed order, kept labels, sibling references ("Both A and B", "All of the above"), fewer than two unlocked choices | Refused until `order_acks` covers each; `order_preview` shows what will move; `keep_order: true` forces an order. |
 
-Other moderation:
-- **Suspension and revocation** hide the author's items reversibly through the author-standing join
-  (Trust levels); they never delete content.
-- **Admin removal** for other policy reasons (`removed_reason='admin'`) follows Purge after 14 days.
-- **Purge** (cron, daily) for items with `purge_after < now`: delete R2 bodies of every publish
-  (including `quarantine/`), `item_publishes`, `item_questions`, `item_tags`, `item_standards`,
-  `item_blobs` and search rows; keep the `items` tombstone (id, author, `removed_reason`), `imports`
-  (for counts), `reports`, DMCA records and `pool_audit`. Blobs left with no reference are collected
-  by the normal blob GC and the author's quota is released.
-- **Author deletes an item** (`DELETE /items/:id`, decided 2026-10-19): `removed_reason='author_deleted'`,
-  `purge_after = now + 14 days`. Within those 14 days the author can undo it
-  (`POST /items/:id/undelete`, only while `removed_reason='author_deleted'`), which clears
-  `removed_at` and `purge_after`; afterwards it is purged. Items removed for privacy (student data)
-  or by a DMCA takedown are not author-deleted and follow their own rules above; deleting such an
-  item does not start or shorten a 14-day window and cannot be undone by the author.
+Notation (shell, Markdown, chess, code, maths) is judged separately so honest content is not refused. Errors that name
+the key's choice carry `author_only: true`. In a bank, every served field is read against **every** question's key
+(round 17). Scans have work budgets; over budget the text is refused `scan_budget`, never skipped.
 
-## Limits
+**Student-view preview.** For a hidden-key publish the dry run returns `student_view`: the exact stripped payload (stems,
+topics, Mc texts in served order all `correct:false`, Matching left items and word bank, part stems and choices, bank name
+and description), plus `notes`, `label_findings`, `labels_removed`, `images_removed`, `figures_removed`, `order_reasons`,
+`license_check` and `chains`. It never reveals holds or blocks or served orders. The app keeps the final button disabled
+until the attestation is ticked, the preview is current and clean, and "I looked at what students will see" is ticked
+(`publish_blocker`).
 
-| Limit | Default |
+**Attestation.** Every publish and republish carries `attest: {own_work: true, terms_version}`; without it, or with a
+terms version other than the server's (`2026-10-22`), the answer is `422 attestation_required` with the statement. Dry
+runs do not need it. Wording: "I confirm this content is my own original work, or I have the right to share it under the
+licence I chose. It is not copied from a published source (textbooks, publisher test banks, exam boards, paid worksheets)
+without permission." It is kept per publish (when, version, who; admin-visible, pseudonymous after erasure). **The server
+cannot verify it** and it changes no flag or hold. The Worker also still requires the older
+`attestation {accepted, text_rev}` (appendix 1).
+
+**Images.** One still PNG, JPEG, GIF or WebP, 1 to 4096 px a side, at most 2 MB, structure-checked by the Worker (chunk and
+segment allow-lists, no metadata or animation, PNG at most 16 Mpix and 64 MB decoded). Every refusal is the same
+`422 image_refused {reason:"not_accepted"}`, so a privacy-blocked image looks like a bad one. The app stores pictures as
+lossless WebP and keeps only an animated image's first frame; large photos may exceed 2 MB. Server-side decode and
+re-encode is not built. Images are served only through the Worker, only in the caller's served form.
+
+### Limits
+
+**Payload** (share-core `Limits::default`; sizing limits can be lowered, never raised): payload 4 MB; 1,000 questions per
+bank; stem and explanation 8 KB; answer/pair/distractor/sample/accept entry 2 KB; 26 Mc answers; 50 Matching pairs, 26 extra
+distractors; 50 blanks, 20 variants each; 50 parts; 20 topics per question; 30 tags and 30 standards per item (64 characters
+each); title/name/author 200 characters; description 2 KB; figure params 16 KB, 256 params, 4 KB per text; points 0 to 1,000;
+ids 64 characters; 32 chain links; JSON depth 16, 200,000 values, 60,000 objects, parse budget 20 MB; 16 combining marks per
+base; subject/course/grade 100 characters. The Worker caps distinct tags plus topics at 200 per item. Duplicate JSON keys, a
+byte-order mark or a second top-level value are refused before parsing.
+
+**Per account, per day unless noted** (`DEFAULT_LIMITS`; admin-adjustable by `PUT /admin/pool/limits`): storage 200 MB
+(removed-not-yet-purged bytes another 200 MB); 5,000 shared questions; 50 publishes, 300 refused publishes, 200 dry runs;
+100 imports (20,000 distinct items ever; 200,000 distinct publishes ever read); 2,000 item reads, 500 browse pages; 500
+uploads and 200 MB; 100 blob misses, 100 id misses; 20 reports, 10 appeals, 3 exports; 20 held publishes; 10 invite-code
+tries; 500,000 authorship records. Bursts: 300 requests per 5 minutes per account; 6,000 per 5 minutes per address; 50,000 reads a day per
+address, at most 10,000 from one account. One heavy publish parse per isolate (4 may queue up to 20 seconds, then
+`503 busy`) and one per account (`409 publish_in_progress`); 72 MB committed to requests per isolate (UNCONFIRMED in real
+workerd). A publish reserves 16x its body to the end; its evidence and fuzzy lookups run after its payload trees are freed and
+borrow the part of that reservation it no longer uses (round 29: a 3.81 MB hidden-key Matching bank peaks at 61 MB, was refused at
+76.6 MB on an idle isolate). Publish-time statements read rows linear in the bank (round 30: five read rows growing with its
+square, up to 9.9 million rows and 10 s each at 990 questions on workerd's SQLite; round 31: the earlier-publication lookup when
+many questions share a near hash, 26.5 million, and the hourly licence re-key), except two when a bank repeats one question many
+times: the evidence and served-units queries (36 and 1 million rows at 990; Worker README "Round 31"). Bodies: `Content-Length` required, read within 15 seconds, at most 4 bodies/8 MB at once per account; JSON 64 KB,
+auth 8 KB, admin 256 KB. Caps always refuse; none silently skips a check.
+
+---
+
+## 4. Licences and provenance
+
+**Offered:** `CC-BY-4.0` (suggested, listed first), `CC0-1.0`, `CC-BY-SA-4.0`, `CC-BY-NC-4.0`, `CC-BY-NC-SA-4.0`.
+**Nothing is preselected**; Publish stays disabled until chosen; a republish preselects the current licence. The wire value
+`circle-only` still exists and is offered as "All rights reserved" for unlisted items only (never public, never re-shared by
+importers; appendix 3).
+
+| Origin licence | A republish may use |
 |---|---|
-| Publish request body | 4 MB of JSON; `Content-Length` over it is refused and reading stops at 4 MB |
-| Questions per bank publish | 1,000 |
-| Stem, explanation | 8 KB UTF-8 each |
-| Answer text, pair side, distractor, `Short.sample`, one `Blank` accept entry | 2 KB each |
-| Mc answers | 26 (`A`-`Z`) |
-| Matching pairs / distractors | 50 / 26 |
-| Blanks per question, accept variants per blank | 50, 20 |
-| Multipart parts | 50 |
-| Topics per question, tags per item, standards per item | 20, 30, 30; each 64 chars |
-| Title / `BankDetails` description / author | 200 chars / 2 KB / 200 chars |
-| `figure.params` | 16 KB of JSON; text params 4 KB each |
-| Single image | 2 MB, 4096x4096, still PNG, JPEG, GIF or WebP |
-| Storage per teacher | 200 MB (decided), raisable by the admin |
-| Shared questions per teacher | 5,000 across current publishes |
-| Retained publishes per item | the current one plus the one before it |
-| Circles owned per teacher / members per circle | 20 / 200 |
-| Browse or search page | 50 rows |
+| CC0-1.0 | any |
+| CC-BY-4.0 | CC-BY-4.0, CC-BY-SA-4.0, CC-BY-NC-4.0, CC-BY-NC-SA-4.0 |
+| CC-BY-SA-4.0 | CC-BY-SA-4.0 only |
+| CC-BY-NC-4.0 | CC-BY-NC-4.0, CC-BY-NC-SA-4.0 |
+| CC-BY-NC-SA-4.0 | CC-BY-NC-SA-4.0 only |
 
-**Storage charged to the author:** the distinct blobs referenced by their retained publishes (any
-form), plus the full and stripped body bytes of those publishes, plus their pending blobs, plus 1 KB
-per item. A second author referencing the same image pays for it too. Removal and purge release the
-charge. Importing never uses the importer's quota because copies live on their device. A figure
-question costs its rendered PNG; the figure spec is small.
+A bank mixing incompatible origins gets `per_question` in its 422; there is no per-question licence.
 
-**Daily caps per account (anti-automation, ASVS V2.4), decided 2026-10-19, each raisable by the admin:**
+**Licence windows.** A CC grant is made with a version and is irrevocable for it. Every read or import writes one `served`
+row per (reader, publish); a later publish is matched against the **source publish's own** key set (questions, texts, parts,
+images by bytes and pixels). The licence history (`content_licences`) counts a licence only while the item **offers** that
+content publicly (public, live, not held). A relicence to more permissive terms reaches earlier readers when the public
+version serves the same content ("same" = kind, stem, answers as a multiset, explanation after NFC/case/punctuation folding;
+never points, difficulty, topics, order, key, ids, dates). A received CC0 stays CC0.
 
-| Action | Per day |
-|---|---|
-| Publishes (new and republish) | 50 |
-| Imports | 200 |
-| Item reads (`GET /items/:id`, previews, import bodies) | 2,000 |
-| Browse/search pages | 500 |
-| Blob uploads | 500 and 200 MB |
-| Blob reads that miss (404) | 100, then 429 for the rest of the day |
-| Item ids that miss (404) | 100, then 429 for the rest of the day |
-| Reports | 20 |
+**What binds a publish** (worker README "The licence rule"; `test/pool/licence-cases.test.ts`):
+- *Hard* sources can refuse and are named in `bound_by`: the same question whether read or imported; an import the publish
+  adapted (a stem reworded by a word or two, Jaccard 0.8 or more, counts as adapted); a declared origin. *Soft* sources (a
+  changed copy of something only read) are credited and flagged, never a refusal.
+- A **copy**: the earliest-published identical source is the original and decides. An **adaptation**: sources in publication
+  order, each narrowing the earlier; one leaving nothing is skipped (`license_conflict`). So import order never matters and a
+  contradiction never locks anyone out.
+- A republish never refuses a question the author did not touch (`license_grandfathered`). **First** is decided on content,
+  never a bare stem; the author's durable stem record (`author_stems`) is consulted so a copier's edit cannot displace her.
+- **Stock** never binds: a unit is stock when 3 or more authors published it independently and at least 2 did so before the
+  earliest source the publisher was served. Short statements count as common (Tf stem at most 8 words; Short stem at most 8
+  and sample at most 12; Blank stem at most 8 and answers at most 12; Mc stem plus choices at most 12; never Matching,
+  Multipart or a hidden-key Short/Blank).
+- **Earlier publication.** An exact or near copy of something earlier that the publisher was never served credits the earlier
+  author (`earlier_match`, badge `unverified_earlier_match`) and flags the admin; credit, not a refusal.
+- **Independence claim** `independent_of {items (1 to 50), accepted, statement (10+ characters)}`: the way out for common or
+  short questions, changed copies and the author's own question. It never covers an exact copy of anything the account was
+  served, nor an imported text or image unless the statement carries attribution words (public domain, CC BY/CC0, Creative
+  Commons, OpenStax, Wikimedia, Wikipedia). It is audited; the third claim in 30 days flags the account.
+- **Units** (round 17): an explanation or Short answer of 25+ words, an image, or a question wrapped as a Multipart part bind
+  on their own, only from a version the account was served, never against their own author, never when stock.
+- **Ghosts.** When a publish anyone was served is deleted, retired or purged, a key-only ghost (hashes, ids, licence, credits)
+  keeps the licence binding. An erased author's credit reads "deleted teacher".
+- Hidden keys never change what others observe (`visible.ts` computes it from key-free hashes). A hidden explanation equal to
+  material the author was served under an incompatible licence refuses her publish (`hidden_material`), to her alone.
 
-Crossing any cap, a burst of 404s or 403s, a refresh-token replay, or a hard-check rejection storm
-raises an admin alert through the existing alert mail path and its notice budget (ASVS V16), and
-writes `pool_audit`. Caps are also checked per IP for the read routes.
+**Chains and checks.** A copy's chain has one link per item, built by the server. Stored credits: up to 64 contributors; past
+that the first 8 and the most recent, with "and N contributors between". Every read, import and browse result has
+`license_check {status, basis:"recorded_sources"}` with status `ok`, `mismatch`, `unverified`, `claimed_independent` or
+`unverified_earlier_match`. It says only that the licence is **consistent with recorded sources**: a convenience, not legal advice.
 
-## Data model (D1)
+**Import is a private copy.** `POST /items/:id/import` (recorded; the author's own import is not) returns the served payload.
+The app makes a copy with fresh local ids, keeping source, author, licence and chain. A hidden-key item arrives keyless: no key,
+a sentinel explanation, and "Key not provided" on every print and export path.
 
-### Phase 1 tables (exist; migrations `0001`-`0005` from `server/auth`, `0100`-`0101` from the Worker)
+---
 
-```
-users(id, email UNIQUE, email_verified_at, pw_hash, pw_params, display_name, profile, trust,
-      created_at, deleted_at, deleted_email_hmac, deleted_email_hmac_expires_at,
-      device_epoch, last_device, suspended_at, suspension_reason)
-                         -- profile: JSON (school, adult statement); deleted_at = tombstone, PII nulled
-sessions(id, family_id, user_id, refresh_hash, created_at, auth_at, expires_at, rotated_at,
-         revoked_at, user_agent)
-email_tokens(id, user_id, kind verify|reset, token_hash, created_at, expires_at, used_at,
-             used_nonce, claimed_until)
-device_enrolments(id, user_id, code_hash, epoch, created_at, expires_at, used_at, claimed_until, failures)
-rate_limits(key, window_start, count, expires_at)           -- key is an HMAC
-approval_requests(id, user_id, requested_at, decided_at, decided_by, decision, evidence,
-                  evidence_note, note, reason, decision_nonce, email_domain,
-                  display_name_snapshot, profile_snapshot)  -- one open per user
-domain_decisions(domain, approved, rejected)
-admin_proposals(id, action, target_id, proposed_by, proposed_at, expires_at, self_confirm_after,
-                note, reason, decided_by, decided_at, outcome)
-auth_audit(id, at, actor_id, actor_kind, action, target_id, prev_trust, new_trust, evidence,
-           evidence_note, note, detail, reason)            -- append-only (triggers)
-staff_domain_hint(domain, note, updated_at, updated_by)    -- a label, never grants trust
-notice_budget(hour, sent)  notice_backlog(id=1, pending)
-```
+## 5. Pool use
 
-### Phase 2 tables (Worker migration `0102_pool.sql`)
+**Browse.** `GET /items?scope=public|mine&subject&kind&tag&standard&license&q&cursor&limit`: newest created first, signed cursor,
+20 by default, 50 at most, no totals. `q` matches the start of any word of title, subject, a tag or the question text **as
+served to non-authors** (a word index in the main database; at most 5,000 candidates). `GET /items/:id` streams the served form
+with provenance and `ETag`/`If-None-Match`; HEAD and 304 record nothing. An item the caller may not see is 404, never 403. The
+app has a "Search the pool" tab and a "What I imported" tab; the grade box only narrows the loaded page.
 
-```
-items(id, author_id, kind bank|question, visibility unlisted|public,
-      current_publish_id, prev_publish_id, version,
-      title, subject, course, grade, kinds_mask, question_count, hide_key, license, has_images,
-      committed_at, created_at, updated_at,
-      removed_at, removed_reason author_deleted|account_deleted|takedown|privacy|admin,
-      quarantined_at, purge_after)
-      -- the listing columns are copies of the current publish's, written by the same CAS UPDATE
-item_publishes(publish_id PK, item_id, author_id, base_publish_id, version,
-               status staged|current|previous, schema_version, hide_key, license,
-               attested_at, attest_text_rev, acks_json, request_sha256,
-               full_key, stripped_key, full_bytes, stripped_bytes,
-               title, subject, course, grade, kinds_mask, question_count, has_images,
-               created_at, committed_at)
-question_ids(qid PK, item_id, first_publish_id, created_at)     -- global question identity
-item_questions(publish_id, qid, pos, qkind, difficulty, match_hash, full_sha256,
-               stripped_sha256, chain_json, origin_item_id, origin_qid, modified)
-               PK (publish_id, qid); INDEX (match_hash); INDEX (origin_item_id, origin_qid)
-item_tags(publish_id, tag)  item_standards(publish_id, code)
-blobs(sha256 PK, size, content_type, width, height, first_uploaded_at)
-pending_blobs(sha256, uploader_id, until) PK (sha256, uploader_id)
-item_blobs(publish_id, form full|stripped, sha256) PK (publish_id, form, sha256); INDEX (sha256)
-imports(user_id, item_id, publish_id, version, form, at) UNIQUE (user_id, item_id, publish_id)
-item_holds(item_id, reason reports|student_data|blocklist|admin, at, by) PK (item_id, reason)
-reports(id, item_id, publish_id, reporter_id, reason, note, at, resolved_at, resolved_by, action)
-        UNIQUE (item_id, reporter_id, reason) WHERE resolved_at IS NULL
-admin_flags(id, kind license_soft|origin_unverified|blocklist|cap, item_id, publish_id, user_id,
-            detail, at, resolved_at, resolved_by)
-dmca_notices(id, received_at, complainant_name, complainant_contact, work_desc, material_desc,
-             has_signature, has_good_faith, has_perjury_stmt, status open|deficient|actioned|withdrawn,
-             recorded_by)
-dmca_actions(id, notice_id, item_id, author_id, disabled_at, author_notified_at,
-             counter_notice_id, restore_not_before, restore_by, court_action_at,
-             restored_at, purged_at, outcome)
-dmca_counter_notices(id, action_id, received_at, signature, material_desc, perjury_stmt,
-                     name, address, phone, consent_jurisdiction, accept_service, forwarded_at)
-strikes(id, user_id, action_id, at, upheld_at, voided_at)
-blocked_hashes(kind match|blob, hash, action_id, at, lifted_at) PK (kind, hash)
-usage_daily(user_id, day, metric, count) PK (user_id, day, metric)
-quota(user_id PK, blob_bytes, body_bytes, pending_bytes, items, questions)
-      -- maintained in the commit and purge batches, recomputed nightly
-pool_audit(id, at, actor_id, actor_kind, action, item_id, target_user_id, detail, note)
-      -- append-only, same trigger pattern as auth_audit; notes nulled when the target is deleted
-```
+**Import.** Into the bank the person came from (default), another bank, or a new bank (which gets author, licence and a credit
+line). Pictures are fetched, hash-checked and stored; a lost picture does not fail the import. The served images are held for
+the importer 30 days. `share-imported.json` records item, version, licence, question ids, fingerprints, last check and merge base.
 
-Phase 3 (`0103_circles.sql`): `circles(id, name, description, owner_id, created_at, claim_until)`,
-`circle_members(circle_id, user_id, joined_at)`, `invite_codes(id, circle_id, code_hash,
-created_by, expires_at, max_uses, used, revoked_at, note)`, `item_circles(item_id, circle_id)`, and
-`items.visibility` gains `circles`.
-Phase 4 (search database, its own `migrations-search/0001_fts.sql`): `questions_src(publish_id, qid,
-item_id, title, tags, stem_text, answer_text, explanation_text)` and the FTS5 table over it;
-`answer_text` and `explanation_text` are empty for `hide_key` publishes.
-Phase 5 (`0104_signals.sql`): `ratings(item_id, user_id, stars, at)`, `favorites(item_id, user_id, at)`.
+**Update checks.** `POST /items/versions` (up to 200 ids) answers `current`, `newer` (only for an imported copy), `under_review`
+(undo window, admin removal, takedown quarantine, any hold, or student data within its grace: keep your copy), `removed` (only
+once purged; reason deleted/takedown/privacy/admin) or `unavailable`. The app checks once per window opening when a record was
+last checked over 6 hours ago, and on a button. Choices: **Add as a new bank** (safe default) or **Merge**.
 
-Each publish body (the canonical bank or question JSON) is an **immutable** R2 object under a
-**random key** (`items/<id>/<random>.json`), recorded in `item_publishes.full_key`; the stripped form
-is another random key in `stripped_key`. Reading a body for an importer, preview or result always
-goes through one function that takes the item row and the caller and returns the stripped object
-when `hide_key` is set and the caller is not the author. Images live in R2 at `blobs/<sha256>`.
+**Merge** (`src/share/merge.rs`): starts only when the person presses it. Three-way: BASE (as imported or last merged; at most
+500 questions and 1.5 MB per record, else none), OURS (bank question by stored local id), THEIRS (new version, matched by pool
+question id). Categories: unchanged; pool-only change (take, default); your-only change (keep); **conflict** (keep mine / use
+pool's / keep both; no default, Apply disabled until decided); new in pool (add); removed from pool (keep or remove); deleted by
+you (stays deleted); licence changed (credit line changes only on Apply). Apply re-fetches the version, checks it matches what was
+reviewed, writes a **restore point** (`backups/banks-before-merge-<date>.json`; restore by closing the app and copying it over
+`banks.json`; no in-app restore), applies to a copy, replaces the bank once and advances the base. Any failure leaves everything
+unchanged. A typed key is never replaced by the placeholder. Questions added locally or copied from another bank, and records with
+no base, can only be updated as a new bank.
 
-### Publish order
+**Publish in the app** (`src/share/publish.rs`): Gate (signed in, approved), Options (licence chosen by the person; visibility
+default public; `hide_key` default on; metadata; own-work tick; optional independence claim), Checking (dry run), Review,
+Publishing, Done; refusals land in Fix (hard findings, acknowledgements, label and order decisions, licence refusal with
+`bound_by`) or Failed (limits with `Retry-After`, busy, offline, not approved). An acknowledgement can only be given for something
+the server listed. A lost publish keeps its `publish_id`. The last publish of a bank is remembered in `share-published.json`.
 
-D1 limits a statement to 100 bound parameters and about 100 KB and a bank can hold 1,000 questions,
-so a publish is staged and then committed by one compare-and-set.
+**My shared items** (`src/share/mine.rs`, `actions_for`): live public (make private, delete, share again); live unlisted (make
+public, delete, share again); deleted within 14 days (undo); taken down (counter-notice while `counter_notice: available`, which
+the server now says only inside the 30-day window, with `counter_notice_by`; round 28);
+takedown pending (counter-notice until the window ends, once); removed/privacy-removed (appeal while offered); needs re-upload or
+key-leak review (share again, delete); held (appeal when offered; share again when a hold names questions). Also the
+counter-notice form (nothing prefilled; cleared on send; signature must repeat the typed name, enforced by the app only),
+"Download my data" (cap 24 MB in memory; parts for large exports), "Delete my account", and links to the four draft legal pages.
 
-1. The client generates `publish_id` (128 random bits) and keeps it until it gets a definite answer;
-   every retry of the same publish reuses it. It uploads every image (`PUT /blobs`, full bytes).
-2. It sends `POST /items` (new item) or `PUT /items/:id` (republish) with `publish_id`,
-   `base_publish_id` (the publish it edited; `null` for a new item), the payload, `hide_key`,
-   `license`, the attestation, the per-question acknowledgements and image ticks.
-3. **Idempotency:** if `publish_id` already exists for this author with the same `request_sha256`,
-   the server returns the first result (or resumes a staged publish); with a different body, 409.
-4. Validate (Limits, schema, characters), canonicalize, assign `qid`s, compute hashes, run the
-   license and blocklist checks, strip. Every referenced blob must have a `pending_blobs` row for
-   this author or already be referenced by one of the author's publishes; validation extends those
-   `pending_blobs.until` to `now + 24 h`.
-5. Write the R2 bodies (full, and stripped if `hide_key`).
-6. Insert the `item_publishes` row (`status='staged'`) and its derived rows, all keyed by
-   `publish_id`, in chunks: `item_questions`, `item_tags`, `item_standards`, `item_blobs`, new
-   `question_ids`. Nothing reads them yet, because every read joins on `items.current_publish_id`.
-7. **Commit**, one D1 batch:
-   `UPDATE items SET current_publish_id = :new, prev_publish_id = current_publish_id, version = :v,
-   <listing columns> WHERE id = :item AND author_id = :me AND current_publish_id IS :base AND
-   removed_at IS NULL`, then `UPDATE item_publishes SET status = 'current', committed_at = :now
-   WHERE publish_id = :new AND EXISTS (SELECT 1 FROM items WHERE id = :item AND current_publish_id =
-   :new)`, then the same guarded update setting the old current to `previous`. A new item instead
-   `INSERT`s its `items` row in this batch with an id fixed at staging. If the CAS changed 0 rows the
-   answer is **409 conflict** with the current version, the staged rows are deleted, and the app
-   tells the author another device published first.
-8. After commit: delete the publish that is now two behind (retention current+1): its derived rows,
-   its R2 bodies and its search rows; clear `pending_blobs` rows for blobs the new publish references;
-   update `quota`; write the search rows (phase 4, rebuildable).
+**Reports.** Reasons the Worker takes: `wrong_answer`, `copyright`, `student_data`, `inappropriate`, `other`, `key_leak`. Authors
+cannot report their own items; the reporter is told only "thanks". The app's "answer key visible" button currently files `other`
+with a text prefix (appendix 2).
 
-Every query that reads derived rows joins `publish_id = items.current_publish_id`, so a search or
-blob check never sees a staged or superseded publish's rows (an answer text from a v1 published with
-its key cannot be found after a `hide_key` v2). Two devices republishing at once cannot interleave:
-only one CAS wins, and the loser's rows were never reachable. An import reads the publish row and its
-object key in one statement, and the previous publish is retained, so a swap during an import cannot
-leave it without a body.
+---
 
-**Visibility change without a new publish:** `PATCH /items/:id {visibility}` by the author, one
-`UPDATE` (refused for `public` when the current license is `circle-only`).
+## 6. Moderation and legal flow
 
-**GC (hourly cron):** delete `staged` publishes older than 1 hour (rows and bodies); delete blobs
-with no `item_blobs` row and no `pending_blobs` row whose `until >= now - 1 h`; delete expired
-`pending_blobs` rows. Ages, not states, guard in-flight work.
+This describes the system. The legal pages are **drafts, not legal advice**; counsel must review them and this flow before a
+public launch.
 
-### Blob rules
+**Reports and holds.** *Student data:* one report from an established account (7+ days old with an import or a published item)
+holds the item at once and mails admins; at most 3 instant holds a day per reporter, 50 a day site-wide, and past half that cap
+two reporters are needed; younger accounts wait for the admin. *Other reasons:* three distinct teachers' open reports hold it
+(`report_threshold`); after an admin release the same reporters cannot re-hide it for 30 days. *Key leak:* hidden-key publishes
+only; counts only from an account approved 7+ days that was served that publish a day earlier (1 per item per 30 days, 5 a day);
+a hold needs two such reporters on the current publish; it ends when a republish changes the served form or shows the key.
 
-- `PUT /blobs/:sha256` always takes the full bytes, runs the Images checks, charges the blob as
-  pending to the uploader, and returns the **same** status and body (`201 {sha256, size, width,
-  height}`) whether or not the blob already existed, so an upload is never an existence oracle.
-- `GET /items/:id/blobs/:sha256` is the only read path; blobs are never served by a public or
-  presigned R2 URL. A blob is readable **iff** the caller may see item `:id` and an `item_blobs` row
-  exists with `publish_id = items.current_publish_id` and `form` equal to the caller's served form:
-  `full` for the author or when the publish has no `hide_key`, otherwise `stripped`. A figure render
-  dropped from a stripped form is listed only under `full`, so probing hashes of the ~1,000 possible
-  pipette renders returns 404 for every one. A miss and a forbidden read are the same 404, counted
-  against the daily miss cap.
-- Blob responses carry `Content-Type` from `blobs.content_type` (the format verified from the bytes), `X-Content-Type-Options: nosniff`,
-  `Content-Security-Policy: sandbox; default-src 'none'`, `Content-Disposition: attachment;
-  filename="<sha256>.<ext>"` (the name built from server data only), `Cache-Control: no-store`.
+A hold hides the item from others reversibly. The author sees "held for review" with no reporter and, for content checks, no
+detail. Admins release with the `publish_id` they reviewed and a reason of 10+ characters. **Blocks** (re-upload holds) cover only
+what an admin designated after a preview: a privacy block selects nothing by default; a DMCA block skips material 3+ other authors
+use and expires after 60 days by default. A publish matching a block is **held, never refused** (20 held publishes a day); the
+rightful author and those served the rightful item are exempt.
 
-### Caching (ASVS V14)
+**Student-data purge.** Confirmed: hidden, quarantined 14 days (author sees `removed_privacy`, may appeal), then purged; images and
+text blocked from re-upload; importers see `under_review`, then removed; copies held. An open appeal stops the purge. Privacy
+removals and student-data/DMCA holds are **never restored by default**: past 60 days the appeal escalates and the item stays
+quarantined until an admin decides. Other removals auto-restore after 60 unanswered days (flagged). One appeal per removal.
 
-Every authenticated response, JSON and blob alike, sends `Cache-Control: no-store` and
-`Vary: Authorization, Cookie, Origin`, so a shared school browser or proxy never caches an author's
-full body for the next user. (Phase 1 already sends `no-store` on its JSON responses.)
+**Copyright takedown lifecycle.**
+1. *Notice:* the admin records it (`POST /admin/dmca/notices`) with a tick per 512(c)(3) element; an incomplete notice is `deficient`.
+2. *Preview and confirm:* `takedown-preview`, then `takedown` with a one-use `confirm_preview` token (10 minutes).
+3. *Disable:* the item leaves browse and search; bodies move to `quarantine/` (admin-only); the author is mailed (outbox, retried
+   hourly) and sees "taken down after a copyright notice" with a counter-notice form. An item already deleted and purged follows the
+   same machine from its ghost (`takedown_pending`). Importers keep their copy and are told the source was removed. A strike is
+   recorded as **pending**.
+4. *30-day window* from the author being notified. A counter-notice (`POST /items/:id/counter-notice`: signature, material
+   description, name, address, phone, three ticks: perjury statement, consent to jurisdiction, accept service) is taken only while
+   the action is open; incomplete is `400`, late `409 window_closed`. `GET /items/mine` offers it (`counter_notice:
+   "available"`, with the window's end in `counter_notice_by`) by the same rule, so from the instant the route refuses the
+   item says `closed`, before the daily cron has upheld anything (round 28; a ghost takedown carries the same field).
+5. *Counter-notice received:* forwarded to the complainant at once (mail if the contact is an email, else the admin forwards it).
+   The daily cron restores the item (bodies back, blocks and holds lifted, strike voided) no sooner than the start of the 10th US
+   business day after receipt (weekends and federal holidays skipped; the 14th is the stored outer bound), unless the admin records
+   a court action (`court-action`), which keeps it disabled until `resolve {restore|remove}`.
+6. *No counter-notice:* after 30 days the daily cron sets the purge date and the takedown is **upheld**: item purged, strike upheld,
+   the infringing item's evidence voided (links stand for a named rightful item; with none named, copies are held for review),
+   re-upload blocks stay, repeat-infringer check runs. An **erased author** cannot counter; the takedown stands after 30 days but,
+   with no rightful item named, its evidence is not voided, so the licence keeps binding copies.
+7. *Reversal:* `resolve {outcome: put_back}` or `withdraw` voids the strike and lifts blocks and holds; purged content stays purged.
+   A put-back is never a strike.
+8. *Hold-copies:* admins can hold copies in other items (`hold-copies-preview`, `hold-copies`, paged). A held copy is released only
+   if its `license_check` is `ok` after the void and its author is exempt (`exempt_authors`).
 
-## API (JSON over HTTPS, `Authorization: Bearer`)
+**Strikes and repeat infringers.** A strike counts only once upheld. At **3 upheld strikes within 365 days** the system raises a
+`repeat_infringer` flag and mails the admins; it does **not** suspend automatically (owner decision). The API exposes no strike
+count to authors.
 
-```
--- phase 1 (implemented)
-POST /auth/signup  /auth/login  /auth/refresh  /auth/logout  /auth/reauth
-POST /auth/verify  /auth/resend  /auth/forgot  /auth/reset  /auth/device/enrol  /auth/device/enrolment-code
-DELETE /account    GET /me    GET /account/export    POST /account/reapply
-GET  /admin/queue  GET /admin/users/:id  GET /admin/audit  GET /admin/proposals
-POST /admin/approve  /admin/reject  /admin/reject-bulk  /admin/revoke-teacher  /admin/suspend
-     /admin/restore  /admin/confirm  /admin/cancel
-GET|PUT|DELETE /admin/staff-domains
+**Appeals.** `POST /items/:id/appeal {note}` for an admin-removed, held or privacy-removed item raises an admin flag; the admin
+decides with `appeal-decision {restore|purge}`; weekly reminders while open. Mail contains ids only, never item text.
 
--- phase 2
-POST /items                         (new item; body carries publish_id)
-PUT  /items/:id                     (republish; publish_id + base_publish_id; 409 on a lost CAS)
-PATCH /items/:id                    (visibility only)
-DELETE /items/:id                   (author; 14-day undo)
-POST /items/:id/undelete            (author, within the 14 days)
-GET  /items?subject=&kind=&scope=&cursor=&limit=   (newest first, cursor pages, max 50)
-GET  /items/mine                    (with holds and takedown state)
-GET  /items/:id                     (served form: full for the author or without hide_key, else stripped)
-POST /items/:id/import              (records the import; returns the served payload)
-POST /items/versions                (update notices: current | newer | removed | unavailable)
-PUT  /blobs/:sha256                 GET /items/:id/blobs/:sha256
-POST /items/:id/report
-POST /items/:id/counter-notice      (author of a taken-down item)
-GET  /admin/reports  GET /admin/flags  GET /admin/items/:id (full form, any state)
-POST /admin/items/:id/hold  /admin/items/:id/release  /admin/items/:id/purge
-POST /admin/dmca/notices  /admin/dmca/takedown  /admin/dmca/court-action  /admin/dmca/withdraw
-PUT  /admin/limits
+---
 
--- phase 3: /circles ... (as in Circles)   phase 5: PUT /items/:id/rating  /items/:id/favorite
-```
+## 7. Privacy and erasure
 
-Every route checks trust level and, for item reads, visibility, holds, removal and the author's
-standing. Ownership is checked per route as noted. Item ids, `qid`s and circle ids are random and
-unguessable, and an item the caller cannot see returns 404, not 403, so existence is not revealed.
+**Stored:** account (email, name, school, adult statement time, Argon2id hash, trust, approval records), sessions (hashed tokens,
+times, user agent), HMAC-keyed rate-limit counters (no raw IP or email); items and retained publishes (current, previous, and the
+one non-authors are served) with full and stripped bodies and images in R2; served rows, import counts, usage counters, keyed
+authorship fingerprints (never readable text), attestations; reports, flags, DMCA notices and counter-notices (names, addresses,
+phones, signatures; admin-only), strikes, appeals, and append-only `pool_audit`/`auth_audit`. Mail goes through Resend or a log
+mode (final provider UNCONFIRMED). The web build loads no third-party scripts and sets two cookies.
 
-## App changes
+**Export.** `GET /me/export` returns a JSON attachment of the account's own data: profile, items (every retained version, full
+current body with hidden keys), imports and reads, reports filed, takedowns and notices received, attestations, counter-notices,
+appeals, sessions. Never another user's personal data, admin notes, flags or hashes. 3 a day; the session must have logged in within
+24 hours (`403 reauth_required`). Above 8 MB it returns a manifest (`export_too_large`) and `?part=n` returns bodies in parts of at
+most 4 MB. Pending accounts get their profile only.
 
-- **Account screen** (exists): sign in, sign out, status, storage used.
-- **Sharing panel** on a bank and on a question: visibility, hide-key toggle, license (no default),
-  metadata, the publish-time review with its ticks and acknowledgements, the attestation, and the
-  privacy notice. Publish and republish; a 409 says another device published first and offers to
-  reload.
-- **Pool browser**: phase 2 lists newest public items with subject and kind filters and "load more";
-  item preview, Import, report. Search box and further filters in phase 4; rate and favorite in phase 5.
-- **Circles screen** (phase 3): list, create, invite codes (create, copy, revoke), members.
-- **Provenance chip** on imported questions and banks, with the chain, the update, source-removed
-  and privacy-removed states.
-- The `src/share/` client wraps all calls; the rest of the app never touches HTTP.
-- Everything is hidden or disabled while signed out, and failures are non-blocking toasts.
-- The **admin console** (in-app or web, open question) renders every pool field (titles, tags,
-  stems, notes, display names, notice text) as plain text, never HTML or markup (ASVS V1).
+**Account deletion.** The account stops working at once (password re-entered). PII is nulled (a schema `CHECK`); sessions and device
+tokens revoked; the user row stays as a tombstone with an HMAC of the email for **14 days**. The pool has **no re-link route**.
+- *Items:* with no choice (`keep_on_delete` null) items other teachers imported are kept anonymised and the rest are removed and
+  purged **14 days** later; `PUT /items/prefs {keep_on_delete}` records an explicit yes or no. Items under an open DMCA action follow
+  the same date; a deleted account cannot counter-notice.
+- *Name:* the author's name on others' copies and chains reads **"deleted teacher"** (shown at once; stored chains rewritten by the
+  cron in batches). Licence and credit still apply. The app's publish-review text still says otherwise (open item).
+- *Removed at once:* report notes, statements and appeal notes; counter-notice name, address, phone, signature, description;
+  preferences; pending uploads, counters, limits, served rows, authorship records; open appeals close (`author_erased`); audit notes
+  the account wrote (an admin's note is evidence and stays).
+- *Kept:* the bare tombstone; import counts under one anonymous key; audit rows with opaque ids; DMCA and moderation records; kept
+  anonymised items; backups until they expire (D1 Time Travel, 30 days). A name typed into a kept item's title or tags is content and
+  not scrubbed.
+- *Retention (round 28):* audit and takedown records are kept **3 years** (1,096 days), pseudonymous after erasure, then the daily
+  cron's `retention` stage deletes them, oldest first and bounded (100 takedown actions and 5,000 rows per table a run). A takedown
+  action goes with its counter-notice, strike, exempt authors, block rows and upstream snapshot once it is closed (put back,
+  withdrawn, reversed or upheld) and nothing about it is newer than 3 years, unless something still needs it: a re-upload block in
+  force (and with it the upstream original's exemption), a copy it holds, an open appeal, or an unresolved counter-notice or
+  copies flag on its item. A notice goes once no action names it (an `open` notice stays until withdrawn). A `pool_audit` row goes
+  unless its item still has a kept takedown record, a hold or an open appeal, or it names a kept action or notice; the table
+  stays append-only for its first 1,096 days by the database's own clock. Evidence voids (`void_items`) are licensing state and
+  stay. Not purged: the auth package's `auth_audit` (it would need an auth package change).
+- *In-flight-request guard (round 27):* a request authenticated just before an erasure keeps running, so every write it could make
+  under the caller's id is conditioned in the same statement or batch on the account not being erased (`ALIVE_SQL`); a skipped write
+  answers 401. The daily `erasure_resweep` re-cleans every table such a request could touch, and `erasure_finish` reruns a failed
+  erasure batch until `erasure_done` records it.
 
-## Safety and privacy
+**Student data.** Pool content is questions, answers, explanations and figures only. Controls: the publish review, the one-report
+hold, confirmed purge with re-upload blocks, and a publish-time check: text matching confirmed student data is held (the publisher
+sees only "held for review"); a near-rewording is flagged but stays live.
 
-- No student data in any shared payload. The model has no student fields to strip, so the
-  publish-time review is the control, backed by the one-report hide and immediate purge (Reports).
-- Only the minimum personal data is kept: email, display name, school, trust level. DMCA records
-  hold complainant and counter-notifier contact details because the statute requires them; they are
-  admin-only.
-- What is disclosed: the author's display name travels with every copy and attribution chain and
-  survives account deletion; email and school are never shared. The privacy policy says so.
-- **Legal before launch:** Terms of Service (including the repeat-infringer policy), a privacy
-  policy, a teacher-only / adult statement at sign-up (COPPA, and California's SOPIPA), and a
-  registered DMCA designated agent. Counsel reviews all of it.
-- Passwords and tokens are never logged. Mail tokens and invite codes are stored hashed.
-- Account export (`GET /account/export`) and deletion on request.
+---
 
-## Build order
+## 8. Limits and documented gaps
 
-1. **Done.** Worker skeleton (paid plan), D1 schema, sign-up/login/verify/reset, rate limiting, app
-   account screen, and the admin approval queue.
-2. **Prerequisite (first phase-2 task): fix the local image store in `src/store.rs`, with tests.**
-   `imagesize` gains a WebP branch (`VP8 `, `VP8L` and `VP8X` headers); `sniff_ext` returns
-   `.webp` only for `RIFF` with `WEBP` at byte offset 8 (any other `RIFF` is `.bin`); `put_image`
-   sniffs the type and reads the dimensions **before** writing, and writes nothing for an
-   unreadable or unsupported image (today it writes first and fails after). Unit tests cover a
-   valid file of each of PNG, JPEG, GIF and WebP, a non-WebP `RIFF` (e.g. WAV), a truncated header,
-   and that a refused image leaves no file in `media/`.
+### 8.1 Share-core (owner decision: ship with these)
 
-   Then: publish and **republish** (staged publish, CAS commit, idempotent `publish_id`, retention
-   current+1), visibility change, browse (newest public items filtered by subject and kind, cursor
-   pagination, no search), preview and import (atomic, revalidated, with the attribution chain and
-   duplicate warning), **update notices**, the `share-core` pool functions (`validate`, `strip`,
-   `match_hash`), the image pipeline and blob rules, limits, daily caps and alerts, the license
-   table and hard/soft checks, the `origin`/`published`/`keyless` model fields and the keyless
-   sentinel, reports (with the one-report student-data hide), takedown with quarantine,
-   counter-notice and put-back, strikes and the blocklist, author-standing visibility, and the
-   account-deletion content cleanup in `cleanup.ts`. Public publishing is live from this phase, so
-   the DMCA path and the legal pages must exist before it ships publicly.
-3. Circles, invite codes and circle visibility.
-4. Search (separate D1), filters, tags, standards and sorting.
-5. Ratings, favorites and import counts on display.
-6. Google sign-in and magic link.
+The gate does not promise to catch deliberate obfuscation. Grouped from the README's "Documented limits" (rounds 9 to 21):
+- **Key leads:** lead words not in the tables ("Answer sheet", "Right answer", "Teacher key", "Scoring guide:"); decorated or qualified
+  leads (`**Key:** 1. Paris`, `<b>Key:</b>`, `Key (hidden): Paris`, `Key -> 1. Paris`); look-alike leads of another script; table-cell
+  form; exotic row labels (`[1]`, `#1`, `No. 1`, `Q.1`); a key starting past the 200-character window; weak leads (Keys, Marks, Rubric,
+  Memo, Marking scheme) in another question's stem or a bank description (low-risk acknowledgement in the question's own stem).
+- **Invisible, spacing, script tricks:** an invisible character inside a choice label or "All of the above"; visible spacing marks
+  inside a key word; letters spaced or dotted one by one; a diacritic or "..." on the key only; rare look-alike scripts; emoticons;
+  length differences; languages beyond the tables; plural or stem forms in Matching.
+- **Lists and layouts:** wrapper variants of the rights list in bank texts; Matching separators not read (pipe, tab, leaders,
+  "matches", `<->`, `~`); pairs in HTML tables or QTI; a pairing given only by shuffled lefts; word banks over six words/80 bytes or
+  over 64 items; a worksheet with one True/False value circled; a key given as data in another question's stem; OCR'd marks.
+- **Not read:** initial-letter hints, underscore counts, upside-down text, hidden spans, footnotes, `[[n]]` gaps, references to another
+  question by number.
+- **Honest-teacher cost:** numeric data tables in numeric-answer banks and descriptions listing answer values are refused often, with a
+  workable path (an `S1`-style id; reorder the numbers); a capital letter in brackets ending a True/False statement ("temperature (T)")
+  and GIFT-looking musical text (`{F# minor}`) are refused; a contrived Matching shape hits the 50,000-step pair-walk limit
+  (`scan_budget`; split the passage). Corpus results: round 17, 627 items, 0 hard refusals, 5 acknowledgements (0.8%); round 21 critics,
+  about 1.2 to 3.2 percent hard refusals, each with a workable path (appendix 13).
+- **Cost:** a 4 MB Blank bank with 170,000 variants peaks near 27 MB natively (7.4x) and grows wasm memory by 36.3 MB, under the 40 MB ceiling.
 
-Each phase ships on its own and leaves the app fully usable offline.
+### 8.2 Backend
 
-## Open questions
+- **Rewording and translation defeat matching** (owner decision); `origin_suspect` flags, reports and takedowns are the control.
+  Stem-edit laundering stays an admin flag. A re-upload that adds or drops a distractor or turns the question into True/False is a
+  different question to the blocks.
+- Several identical sources are all credited, oldest first. A sock's copy of an accomplice's infringing item can shield the accomplice
+  from hold-copies; the admin then needs a second notice.
+- A determined prober can learn whether a guess matches a block from its own item's held state; the bound is the held cap and admin
+  visibility. A short-question copier can claim independence (public and flagged). An author who deletes, purges and re-adds her
+  original as a NEW item has no derivation record (the exempt-authors list is the path).
+- The licence-history re-key can widen a window across a gap between two offers; a never-served hidden reshuffle no longer retained is
+  unrecoverable for pre-0105 rows. An edited word in a copied explanation, an explanation split across fields, a re-encoded non-PNG
+  image, or a True/False rewrite with the answer in the stem are not chased.
+- A populated pool whose retained bodies are all unreadable cannot prove the hash key and is left unpinned. Memory was measured in node
+  only, not workerd.
 
-Decided by the owner on 2026-10-19 (no longer open): separate search D1 database; PNG, JPEG, GIF
-and WebP accepted as still images under the Images rules; 14-day undo for item deletion; 30-day
-quarantine without a counter-notice; 3 upheld strikes in a rolling 12 months; the daily caps in
-Limits; 200 MB quota; report threshold 3 for non-privacy reasons; licenses listed CC-BY-4.0 first,
-nothing preselected.
+### 8.3 What a determined teacher can still slip past the gate
 
-**Owner to-dos before public launch (not build blockers):** register the DMCA designated agent;
-have counsel review the ToS, privacy policy, repeat-infringer policy and the Takedown section (this
-spec is not legal advice).
+1. A key hint share-core does not read (8.1): an exotic marker, an unlisted lead word, a decorated lead, spaced letters, an invisible
+   character in a label, a diacritic on the key, an unusual Matching separator. The mandatory student-view preview and the key-leak
+   report are the second line.
+2. An answer in a picture the author ticked as safe, in a figure, a title or a tag: the server does not read pictures.
+3. Someone else's work reworded or translated; the attestation is an unchecked promise.
+4. A claim of independence for short, common or read-only material (public and flagged, not verified).
+5. Several accounts: admin approval is the only guard (the owner chose no account-age check).
+6. Student data not matched by an existing block, until a teacher reports it.
 
-Still open. Each has a default the build uses if it is not answered; **none blocks writing code**.
-Two block a public deploy, as noted.
+---
 
-| Question | Default if unanswered | Blocks |
+## 9. Operations
+
+**Components:** Worker (`server/worker`: pool routes, admin routes, cron, mail, migrations `0100+`); auth package (`server/auth`:
+generic `d1-auth`, MIT, migrations `0001-0099`; `package.json` is still `private`); share-core (`server/share-core`, Rust to wasm);
+client (`src/share/`); legal drafts (`server/web/legal/`). Staging: Worker and D1 `vershion-pool-staging` (`wrangler.staging.toml`,
+`workers_dev = false`, log-mode mail). Never use or kill port 8799 (the owner's own `wrangler dev`); local workerd uses 18791/18792.
+
+**Config.** Secrets: `AUTH_SECRET` (32+), `RESEND_API_KEY`, `POOL_HASH_KEY` (32+). Vars: `ALLOWED_ORIGINS`, `APP_URL`, `MAIL_FROM`,
+`ADMIN_EMAIL`, `ESCALATION_EMAIL` (comma lists), optional `APPROVAL_DIGEST=1`, `MAIL_MODE=log` (local only). Bindings: D1 `DB`,
+private R2 `POOL`. The Worker is served only on a custom-domain route; `wrangler.toml` still holds a placeholder database id and
+origins. Argon2id needs the paid Workers plan. Client release builds need `VERSHION_POOL_URL=https://api.<domain>` (`build.rs`
+rejects anything else); never ship `pool-custom-server`. Mail goes through a small adapter (Resend over HTTPS, or log); an
+SMTP-capable adapter for the owner's own server is wished for and **not built**.
+
+**`POOL_HASH_KEY` is permanent.** Every identity hash (content hashes, fingerprints, sketches) is made under keys derived from it
+(HKDF-SHA256, salt `vershion-pool/v1`). Rotation is unsupported: the pool pins the key's id on first use and any write or cron under
+another key fails closed with `503 pool_key_mismatch` and one admin alert (reads continue). Without the secret, `/items` and `/blobs`
+answer `503 pool_not_configured`. Keep it as a wrangler secret and an offline copy. `GET /admin/pool/key` shows the ids.
+
+**Migrations.** `0001-0005` (auth, copied by `scripts/sync-migrations.sh`; `npm test` fails on drift), `0100_staff_domains`,
+`0101_notice_budget`, `0102_pool`, `0103_pool_rounds_6_11`, `0104_pool_round12`, `0105_pool_round24`, `0106_pool_round28` (retention
+trigger and indexes, invite codes; applying it starts the invite gate and grandfathers every account approved then),
+`0107_pool_round30` (index `author_stems_qhash`; no data change; round 31 needed none). A committed migration is never edited;
+the next is `0108`. Before applying `0104` to a database with data, export it (D1 Time Travel keeps 30 days); it has no down
+migration.
+
+**Cron** (`17 * * * *`; the 04:xx UTC run adds the daily stages). Hourly: `staged`, `pending`, `gc`, `reconcile`, `r2_orphans`,
+`outbox`, `privacy_backlog`, `deletion_rewrites`, `quarantine`, `backfill`, `stem_backfill`, `licence_rekey`, `offer_sync`, `d1_size`,
+`wasm_traps`, plus the sign-up notice summary. Daily (also auth `purgeExpired` and `reviewReminders`): `putbacks`, `ghost_upholds`,
+`restored_holds`, `content_licences_gc`, `putback_finish`, `repeat_infringers`, `quarantine_expiry`, `erasure_finish`,
+`erasure_resweep`, `account_deleted`, `appeals`, `privacy_bytes`, `ghost_gc`, `purges` (batches of 200, up to 50 batches or 20 s),
+`retention` (round 28), `cleanup`, plus the hourly stages again. Stages are isolated; a failure is flagged and retried.
+
+**Verification.** Run from the component directory.
+
+| Component | Commands | Result (re-run 2026-10-23) |
 |---|---|---|
-| Transactional mail provider (Resend vs Cloudflare Email) | Resend (already wired in `server/worker/src/mail.ts`) | nothing |
-| Standards pick-lists (CCSS math/ELA, NGSS, CA-specific) | free-text codes, normalized; CCSS math and NGSS pick-lists added in phase 4 | nothing |
-| Should exams, not just banks, be shareable? | no; v1 shares banks and single questions | nothing |
-| Admin console: separate web page or a screen in the app? | a screen in the app behind the admin trust level (the phase 1 admin routes are API-only already) | nothing |
-| Approval rule (staff directory, or school confirms via a contact the admin initiates) | the rule as written in Trust levels | nothing (already implemented) |
-| Hosting: web build and API on one registrable domain | assumed, as in Stack | public deploy of the web build |
-| Production API URL (`VERSHION_POOL_URL`) | none; a release built without it has sharing switched off | any release with sharing on |
-| Keyless sentinel wording printed by older builds | the text in the stripped form section | nothing |
+| share-core | `cargo test --release` (the amplification sweep can flake under load: rerun alone); `cargo clippy --release --all-targets`, also with `--target wasm32-unknown-unknown`; `bash scripts/check-wasm-exports.sh`; `node tests/node/check.mjs`; at the repo root `cargo test --release --test share_core_fixtures` | cargo 309 passed, 0 failed, 1 ignored; node check 506/506; fixtures 8/8. clippy and export check not re-run (UNCONFIRMED) |
+| Worker | `npm test`, `npm run typecheck` (editor diagnostics on test files are stale) | `npm test` 507/507, 0 failed (round 28: 477 plus `round28.test.ts`'s 12; round 29: plus `round29.test.ts`'s 7; round 30: plus `round30.test.ts`'s 5; round 31: plus `round31.test.ts`'s 6); typecheck clean |
+| Auth | `npm test`, `tsc` | 224/224 across 18 files. tsc not re-run |
+| Client | `cargo test --lib share::` and the library suite | not re-run; brief says 1,038 library tests, with two figuresui tests failing in the owner's files (UNCONFIRMED, appendix 18) |
 
-To verify at build time: that `image` 0.25's PNG, JPEG, GIF and WebP encoders write only the parts
-the server allows and that its WebP encoder is lossless-only (share-core round-trip fixtures cover
-both), and D1's current statement and bound-parameter limits.
+The Worker harness imports `../../share-core/pkg/share_core_bg.wasm`: rerun the Worker suite after any share-core rebuild.
+`POOL_STRICT_TIMING=1` restores tight CPU bounds (never judge timing under load).
 
-Resolved: Argon2id CPU time on Workers (measured in phase 1, `docs/phase1-argon2-spike.md`).
+**Wasm sizes.** share-core `pkg/share_core_bg.wasm`: 1,289,686 bytes (built 2026-10-23 05:11). Web app wasm after
+`trunk build --release`: 15,600,951 bytes (14.88 MiB) as of 2026-10-20 (`docs/progress.md`), against Cloudflare Pages' 25 MiB file
+limit (not re-measured; UNCONFIRMED now).
+
+---
+
+## 10. Owner decisions
+
+Verbatim from `docs/handoff-shared-pool.md` ("My decisions"):
+
+> Cloudflare Workers + D1 + R2; email+password; every teacher needs admin approval (invite-only pilot first; DMCA agent registration ($6, renew every 3 years) + lawyer review before any public launch); no circles at first launch (public pool only); limits 200 MB storage + 5,000 shared questions per teacher; 3 upheld strikes/12 months = admin flag + mail (no auto-suspend); deleted teacher's name shows "deleted teacher" on others' copies; audit/takedown records kept 3 years; terms changes 30 days' notice by email; liability US$100, no indemnity; publish attestation (own work, not from a published source) with mandatory checkbox in the client; self-service data export (GET /me/export + app button); API at api.<my domain> (domain not chosen yet), /account/* on Cloudflare Pages same domain; mail via Cloudflare email OR my Stalwart server on my VPS (keep behind an SMTP-capable adapter, undecided); auth package to be published open source under a permissive licence (MIT/Apache-2.0, needs README + security contact); POOL_HASH_KEY permanent, back up in password manager + one offline copy; images stored as lossless WebP (large for photos; may revisit); stem-edit laundering stays an admin flag; rewording/translation defeats matching (documented limit).
+
+Also recorded (owner's note and handoff): Argon2id m=19456 t=2 p=1 via RustCrypto in share-core; the keyless form is stripped
+server-side only; CC-BY suggested but nothing preselected; the common-question rule relies on admin approval of every teacher (no
+account-age check); the key-hint gate protects against plausible markers only, with a mandatory student-view confirm and a key-leak
+report (exit rule: zero misses on plausible markers, at most 2% acknowledgements, 0 hard refusals on honest corpora); a critic finding
+is a blocker only if it is a new class; on 2026-10-23 the owner approved one more narrow round and then shipping with documented limits.
+
+---
+
+## 11. Open items before a public launch
+
+1. **Domain:** choose it; API at `api.<domain>`, `/account/*` and `/legal/` on Cloudflare Pages under the same registrable domain; set
+   `VERSHION_POOL_URL`; add the custom-domain route and real D1 id and origins to `wrangler.toml`.
+2. **Mail provider:** Cloudflare email or the owner's Stalwart server; build an SMTP adapter if Stalwart; confirm sender setup.
+3. **DMCA agent and a lawyer:** register the agent ($6, renew every 3 years), publish its name and address, and have counsel review the
+   Terms, Privacy, Copyright and Acceptable Use pages and section 6.
+4. **Legal pages hosting:** serve `server/web/legal/` at `/legal/`, keep the Worker from capturing `/legal/*`, fill the placeholders
+   (operator, contact, agent, governing law, venue), link the pages from sign-up, the sharing panel and the account footer. The app
+   builds its links as `https://<configured server>/legal/{terms,privacy,copyright,acceptable-use}.html`, which assumes the API host
+   serves them; the Worker does not.
+5. **Counter-notice wording review:** the statement text shown by the app is app-supplied draft text (the Worker takes only three
+   booleans); counsel should review it and whether the signature must equal the typed name.
+6. **Auth package as open source:** MIT `LICENSE` exists; `package.json` is still `private`; add a security contact and finish the README
+   for third parties.
+7. **Key backup:** back up `POOL_HASH_KEY` in a password manager plus one offline copy before the first publish.
+8. **Staging memory measurement:** deploy to staging (owner's OK first), set `POOL_HASH_KEY` there, measure real workerd memory against
+   the 72 MB budget and Argon2id CPU on the edge.
+9. **Client items in the handoff (UNCONFIRMED whether done):** model fields `keyless`/`origin`/`rekeyed` (12-file owner patch, tell the
+   owner first); the `"___"` blank-count mismatch between `src/ditto.rs` and share-core; Anki `{{cN::x}}` import as a blank; the
+   publish-review text for "deleted teacher"; a "Shared" badge on bank pages; a picture preview before import; image decode and
+   re-encode in share-core; a visual check of every window (only headless frames were run).
+10. **Policy gaps found while writing:** a strike count for authors (decision pending). (The 3-year retention job and the
+    counter-notice window in `/items/mine` were added in round 28; the auth package's `auth_audit` is still kept indefinitely.)
+    **Client (round 28):** the app needs an invite-code entry (`POST /me/invite`, also while pending) and a reading of
+    `403 invite_required`; it may show `counter_notice_by` for a taken-down item.
+11. A whole-phase critic pass after the above, then a final run of all suites on the final build.
+
+---
+
+## Appendix: doc/code discrepancies found
+
+Each item names the disagreeing sources and the one this spec follows (the code in every case).
+
+1. **Attestation fields.** Worker README route table: `attestation {accepted, text_rev}`; its Round 23 text: `attest {own_work,
+   terms_version}`. Code (`server/worker/src/pool/publish.ts`) requires **both**: `attestation.accepted` with `text_rev` `2026-10-19`
+   (else `400 invalid_request`) and `attest` with `terms_version` `2026-10-22` (else `422 attestation_required`). The client sends both.
+2. **Key-leak report reason.** The client files "answer key visible" as `other` with a note starting `Answer key visible: `
+   (`src/share/pool.rs`, comment "the Worker has no such reason"). The Worker has `key_leak` in `REPORT_REASONS` with its own
+   qualification, flag and two-reporter hold (rounds 17/18, `moderation.ts`). The app's button never reaches that path; an `other`
+   report needs three teachers. The client needs a change.
+3. **Circles and `circle-only`.** Owner: no circles at launch; the draft Terms list five licences. Code keeps the wire licence
+   `circle-only` (offered as "All rights reserved" for unlisted items; since round 32 also a circle bank's "members may not
+   re-share", D19) and the approval mail says the person can "join circles" (`server/worker/src/mail.ts`). The circles backend
+   (phase A) exists since round 32; the Terms and Privacy drafts do not describe circles yet (plan section 11, D9).
+4. **3-year retention.** Owner decision and the draft Privacy page say audit and takedown records are kept 3 years. Resolved in
+   round 28 for the pool's records (the `retention` cron stage, section 7); the auth package's `auth_audit` is still kept
+   indefinitely.
+5. **Ratings, favourites, search service.** The old spec decided a separate FTS5 database, circles, ratings and favourites; none exist
+   (search is a word index in the main database). The draft Privacy page still mentions "favourited or rated" and deleting "ratings and
+   favourites"; the draft needs trimming.
+6. **Imports per day.** Old spec 200; code and worker README 100.
+7. **Strike outcome.** Old spec: three upheld strikes suspend the account. Code: a `repeat_infringer` flag and mail; no suspension. The
+   365-day window is counted on `strikes.at` (when recorded), not `upheld_at`.
+8. **Account deletion.** Old spec: the email HMAC lets an admin re-link items and the display name stays; `cleanup.ts` has a TODO. Code:
+   no re-link route, name becomes "deleted teacher", `deleteContentStatements` does the work.
+9. **Export.** The legal README says the full export is "not yet implemented as described". `GET /me/export` and the app's "Download my
+   data" exist; the Privacy draft still has "[CONFIRM when shipped]".
+10. **Handoff status lines.** The handoff's "Rust client" bullet and "Remaining work 1" say the UI is not started (and "180 tests"); its
+    later sections describe the publish, browse, merge and My-shared-items slices as built. It also gives 464, 466 and 477 for the
+    backend in different places. The 477 matches the run below.
+11. **Next migration.** Worker README "Setup": "Add `0105_...` for the next change", but `0105_pool_round24.sql` exists. Fixed in
+    round 28: `0106_pool_round28.sql` exists and the next is `0107`.
+12. **Publish retention.** Old spec: current plus one previous. Code (README round 12 A1): current, previous, and the publish non-authors
+    are served (`public_publish_id`).
+13. **Honest-teacher exit rule.** Owner rule: 0 hard refusals on honest corpora; final critics measured about 1.2 to 3.2 percent honest
+    hard refusals, each with a workable path, and the owner then approved shipping with documented limits.
+14. **Counter-notice availability.** Resolved in round 28: `GET /items/mine` says `available` (with `counter_notice_by`) only inside
+    the 30-day window, by the rule the `POST` refuses with (`409 window_closed`).
+15. **Section names cited elsewhere.** Both READMEs, code comments and the legal README cite old-spec sections by name ("Sharing model",
+    "Blob rules", "Trust levels", "Limits", "Takedown"). Those now point at the history copy. A citation sweep is pending.
+16. **Refresh-token lifetime.** Legal drafts say 30 days; auth is 30 days sliding with a 90-day family maximum.
+17. **Tag limits.** share-core: 30 tags and 30 standards per item, 20 topics per question; Worker: 200 distinct tags plus topics per item.
+    Both apply, at different layers.
+18. **Client test count.** The owner brief says 1,038 library tests; a recorded run in the session scratchpad listed 341 `share::` tests with
+    700 filtered out (1,041). Not re-run; UNCONFIRMED which is current.
+
+### Verification run
+
+Re-run while writing, 2026-10-23, on the working tree as found (uncommitted changes included): worker `npm test` 477 pass, 0 fail, 0 skipped;
+auth `npm test` 18 files, 224 pass; share-core `cargo test --release` 309 pass, 0 fail, 1 ignored; `node tests/node/check.mjs` 506/506 checks.
+Not re-run: clippy, `check-wasm-exports.sh`, typecheck/tsc, the client library suite, the web wasm size.

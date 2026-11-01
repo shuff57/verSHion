@@ -39,6 +39,8 @@
 //! The categories are those of `unicode-general-category` (Unicode [`UNICODE_VERSION`]); NFC is
 //! `unicode-normalization`. Both are pinned exactly in `Cargo.toml`; the app links this crate and
 //! the Worker runs it as wasm, so both sides always use the same tables.
+#[allow(unused_imports)]
+use crate::format::FastClass;
 use unicode_general_category::{GeneralCategory, get_general_category};
 use unicode_normalization::UnicodeNormalization;
 
@@ -87,8 +89,16 @@ fn is_tag(u: u32) -> bool {
     (0xE0020..=0xE007F).contains(&u)
 }
 
+fn is_vs(u: u32) -> bool {
+    matches!(u, 0xFE00..=0xFE0F | 0xE0100..=0xE01EF)
+}
+
+fn is_cjk(u: u32) -> bool {
+    matches!(u, 0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0x20000..=0x323AF)
+}
+
 /// True when `c` may never appear in text of class `class` on its own (the table above; tag
-/// characters, which depend on their neighbours, are judged by [`check`]).
+/// characters and variation selectors, which depend on their neighbours, are judged by [`check`]).
 pub fn forbidden(c: char, class: Class) -> bool {
     let u = c as u32;
     match class {
@@ -98,141 +108,307 @@ pub fn forbidden(c: char, class: Class) -> bool {
         Class::Line if matches!(u, 0x200C..=0x200F) => return false,
         _ => {}
     }
-    if matches!(u, 0x115F | 0x1160 | 0x3164 | 0xFFA0 | 0x2800) {
+    // Fillers that render as nothing, and U+FFFC (what is left of an equation or object Word could
+    // not export): not content.
+    if matches!(u, 0x115F | 0x1160 | 0x3164 | 0xFFA0 | 0x2800 | 0xFFFC) {
         return true;
     }
-    matches!(
-        get_general_category(c),
+    match get_general_category(c) {
+        // The general-category tables (Unicode 16.0) lag the compiler's (17.0, `char::UNICODE_VERSION`
+        // with the pinned toolchain): a letter or digit std knows is assigned, not refused. Any
+        // other character our tables do not know is still refused. `tests/unicode_canary.rs`.
+        GeneralCategory::Unassigned => !(c.fast_alpha() || c.is_numeric()),
         GeneralCategory::Control
-            | GeneralCategory::Format
-            | GeneralCategory::Surrogate
-            | GeneralCategory::PrivateUse
-            | GeneralCategory::Unassigned
-            | GeneralCategory::LineSeparator
-            | GeneralCategory::ParagraphSeparator
-    )
+        | GeneralCategory::Format
+        | GeneralCategory::Surrogate
+        | GeneralCategory::PrivateUse
+        | GeneralCategory::LineSeparator
+        | GeneralCategory::ParagraphSeparator => true,
+        _ => false,
+    }
 }
 
 /// The emoji tag sequences Unicode recommends (`RGI_Emoji_Tag_Sequence`): the flags of England,
 /// Scotland and Wales. Any other run of tag characters could spell hidden ASCII.
 const FLAG_TAGS: [&str; 3] = ["gbeng", "gbsct", "gbwls"];
 
-/// Length of a recommended emoji tag sequence's tag part starting at `chars[i]` (which must
-/// follow U+1F3F4): one of [`FLAG_TAGS`] in tag letters, then CANCEL TAG.
-fn tag_sequence(chars: &[char], i: usize) -> Option<usize> {
-    FLAG_TAGS.iter().find_map(|t| {
-        let n = t.len();
-        let ok = chars.len() > i + n
-            && t.chars().zip(&chars[i..i + n]).all(|(a, b)| *b as u32 == 0xE0000 + a as u32)
-            && chars[i + n] as u32 == 0xE007F;
-        ok.then_some(n + 1)
+/// Word's Symbol font, pasted as private-use U+F0xx: the characters teachers type with it,
+/// mapped to their Unicode equivalents (Adobe Symbol encoding). Any other U+F0xx is refused with
+/// `symbol_font_char` (the author re-types it).
+const SYMBOL_FONT: [(u8, char); 66] = [
+    (0x22, '∀'), (0x24, '∃'), (0x27, '∋'), (0x40, '≅'), (0x5C, '∴'), (0x5E, '⊥'), (0xA2, '′'), (0xA3, '≤'), (0xA5, '∞'), (0xAC, '←'),
+    (0xAD, '↑'), (0xAE, '→'), (0xAF, '↓'), (0xB0, '°'), (0xB1, '±'), (0xB2, '″'), (0xB3, '≥'), (0xB4, '×'), (0xB5, '∝'), (0xB6, '∂'),
+    (0xB7, '•'), (0xB8, '÷'), (0xB9, '≠'), (0xBA, '≡'), (0xBB, '≈'), (0xC6, '∅'), (0xC7, '∩'), (0xC8, '∪'), (0xC9, '⊃'), (0xCC, '⊂'),
+    (0xCE, '∈'), (0xCF, '∉'), (0xD0, '∠'), (0xD5, '∏'), (0xD6, '√'), (0xD8, '¬'), (0xD9, '∧'), (0xDA, '∨'), (0xDB, '⇔'), (0xDE, '⇒'),
+    (0xE5, '∑'), (0xF2, '∫'), (0x61, 'α'), (0x62, 'β'), (0x63, 'χ'), (0x64, 'δ'), (0x65, 'ε'), (0x66, 'φ'), (0x67, 'γ'), (0x68, 'η'),
+    (0x69, 'ι'), (0x6B, 'κ'), (0x6C, 'λ'), (0x6D, 'μ'), (0x6E, 'ν'), (0x70, 'π'), (0x71, 'θ'), (0x72, 'ρ'), (0x73, 'σ'), (0x74, 'τ'),
+    (0x77, 'ω'), (0x78, 'ξ'), (0x79, 'ψ'), (0x7A, 'ζ'), (0x44, 'Δ'), (0x57, 'Ω'),
+];
+
+/// The Unicode character Word's Symbol font meant by U+F0xx, if it is one of [`SYMBOL_FONT`].
+pub fn symbol_font(c: char) -> Option<char> {
+    let u = c as u32;
+    if !(0xF000..=0xF0FF).contains(&u) {
+        return None;
+    }
+    SYMBOL_FONT.iter().find(|(b, _)| *b as u32 == u - 0xF000).map(|(_, m)| *m)
+}
+
+/// The input as `clean` reads it, one character at a time, with each character's position in
+/// the input (char index, UTF-16 index): CR, CRLF, VT and U+2028/2029 become a line break (Block)
+/// or a space (Line), a BOM is dropped, and Word Symbol-font characters become their Unicode
+/// equivalents. Nothing is copied: offsets in errors always refer to the input as sent.
+#[derive(Clone)]
+struct Mapped<'a> {
+    it: std::iter::Peekable<std::str::Chars<'a>>,
+    nl: char,
+    idx: usize,
+    off16: usize,
+}
+
+impl<'a> Mapped<'a> {
+    fn new(s: &'a str, class: Class) -> Self {
+        Mapped { it: s.chars().peekable(), nl: if class == Class::Block { '\n' } else { ' ' }, idx: 0, off16: 0 }
+    }
+}
+
+impl Iterator for Mapped<'_> {
+    type Item = (char, usize, usize);
+    fn next(&mut self) -> Option<(char, usize, usize)> {
+        loop {
+            let c = self.it.next()?;
+            let at = (self.idx, self.off16);
+            self.idx += 1;
+            self.off16 += c.len_utf16();
+            let m = match c {
+                '\r' => {
+                    if self.it.peek() == Some(&'\n') {
+                        self.it.next();
+                        self.idx += 1;
+                        self.off16 += 1;
+                    }
+                    self.nl
+                }
+                '\u{B}' | '\u{2028}' | '\u{2029}' => self.nl,
+                '\u{FEFF}' => continue,
+                c => symbol_font(c).unwrap_or(c),
+            };
+            return Some((m, at.0, at.1));
+        }
+    }
+}
+
+
+/// What `check_stream` needs of one character (not a selector or tag): whether each class
+/// forbids it, whether it is a format character, its marks in canonical decomposition (and
+/// whether a non-mark there ends a run first), and whether a variation selector may follow it.
+#[derive(Clone, Copy)]
+struct CharInfo {
+    key: u32,
+    forbidden: [bool; 2],
+    format: bool,
+    resets: bool,
+    marks: u8,
+    base: bool,
+}
+
+fn char_info_uncached(c: char) -> CharInfo {
+    let u = c as u32;
+    let forbidden = [forbidden(c, Class::Line), forbidden(c, Class::Block)];
+    let format = get_general_category(c) == GeneralCategory::Format;
+    let (mut resets, mut marks) = (false, 0usize);
+    unicode_normalization::char::decompose_canonical(c, |d| {
+        if is_mark(d) {
+            marks += 1;
+        } else {
+            resets = true;
+            marks = 0;
+        }
+    });
+    // The base a selector would follow after NFC: none if `c` is (or decomposes to end with)
+    // a mark (U+1D160 is a note plus marks), else `c` and its NFC form must both qualify.
+    let mut last = c;
+    unicode_normalization::char::decompose_canonical(c, |d| last = d);
+    let mut base = !is_mark(c) && !is_mark(last) && !c.is_whitespace();
+    if base {
+        let n: Option<char> = {
+            let mut it = std::iter::once(c).nfc();
+            match (it.next(), it.next()) {
+                (Some(x), None) => Some(x),
+                _ => None,
+            }
+        };
+        // A character NFC changes into another category (or into several) has no stable base.
+        base = n.is_some_and(|n| n as u32 == u || get_general_category(n) == get_general_category(c) && is_cjk(n as u32) == is_cjk(u));
+    }
+    CharInfo { key: u, forbidden, format, resets, marks: marks.min(255) as u8, base }
+}
+
+fn char_info(c: char) -> CharInfo {
+    use std::cell::RefCell;
+    const EMPTY: CharInfo = CharInfo { key: u32::MAX, forbidden: [false; 2], format: false, resets: false, marks: 0, base: false };
+    thread_local! {
+        static CACHE: RefCell<[CharInfo; 1024]> = const { RefCell::new([EMPTY; 1024]) };
+    }
+    let u = c as u32;
+    CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        let slot = &mut cache[(u as usize) & 1023];
+        if slot.key != u {
+            *slot = char_info_uncached(c);
+        }
+        *slot
     })
 }
 
-/// Advances a run of combining marks over `c`'s canonical decomposition (what NFC may leave as
-/// marks): a base character starts a new run, each mark extends it. Returns the new run length.
-fn mark_run(run: usize, c: char) -> usize {
-    let mut r = run;
-    unicode_normalization::char::decompose_canonical(c, |d| {
-        if is_mark(d) {
-            r += 1;
-        } else {
-            r = 0;
-        }
-    });
-    r
-}
-
-/// Checks every code point of `s` (the table, the tag-sequence rule and the mark-run cap).
-pub fn check(s: &str, class: Class) -> Result<(), TextError> {
-    let chars: Vec<char> = s.chars().collect();
+/// The checks over a mapped stream, in one pass and without allocating: the table, the
+/// tag-sequence rule (a 7-character lookahead), the variation-selector rule, and the mark-run cap.
+fn check_stream(mut it: Mapped<'_>, class: Class) -> Result<(), TextError> {
     let mut run = 0usize;
-    let mut i = 0usize;
-    let mut off16 = 0usize;
-    while i < chars.len() {
-        let c = chars[i];
+    // The previous character that could carry a variation selector (None after a selector,
+    // a mark, a format character or whitespace).
+    let mut vs_base: Option<u32> = None;
+    while let Some((c, idx, off16)) = it.next() {
         let u = c as u32;
-        if u == 0x1F3F4
-            && let Some(n) = tag_sequence(&chars, i + 1)
-        {
-            off16 += 2 + n * 2;
-            i += 1 + n;
+        // Printable ASCII: allowed in every class, no mark, its own decomposition and NFC form: the
+        // run ends and the character is a selector's base unless it is a space (the general path
+        // gives exactly this, at one table lookup and an NFC iterator per character).
+        if (0x20..0x7F).contains(&u) {
             run = 0;
+            vs_base = (u != 0x20).then_some(u);
             continue;
         }
-        if is_tag(u) || forbidden(c, class) {
-            return Err(TextError::Forbidden { offset: i, offset16: off16, cp: u });
-        }
-        // Marks are counted in their canonical decomposition (U+0F73 is two marks), so the cap
-        // holds after NFC and the offset is the input's; ZWJ/ZWNJ neither count nor end a run, so
-        // they cannot be used to split one.
-        if !matches!(u, 0x200C | 0x200D) {
-            run = mark_run(run, c);
-            if run > MAX_MARK_RUN {
-                return Err(TextError::MarkRun { offset: i, offset16: off16 });
+        if u == 0x1F3F4 {
+            let mut ahead = it.clone();
+            let flag = FLAG_TAGS.iter().find(|t| {
+                let mut a = ahead.clone();
+                t.chars().all(|x| a.next().map(|n| n.0 as u32) == Some(0xE0000 + x as u32)) && a.next().map(|n| n.0 as u32) == Some(0xE007F)
+            });
+            if let Some(t) = flag {
+                for _ in 0..=t.len() {
+                    ahead.next();
+                }
+                it = ahead;
+                run = 0;
+                vs_base = None;
+                continue;
             }
         }
-        off16 += c.len_utf16();
-        i += 1;
+        if is_vs(u) {
+            // A variation selector belongs right after a base it can vary, one per base:
+            // * U+FE0E/FE0F (text/emoji presentation) after a symbol, digit or punctuation
+            //   (U+2714 U+FE0F, the keycap 1 U+FE0F U+20E3), never after a letter;
+            // * U+FE00-FE0D (standardised variants) after a math or other symbol, a non-Latin
+            //   letter or a CJK ideograph;
+            // * U+E0100-E01EF (ideographic variants) after a CJK ideograph.
+            // Anything else (a run of them, one after a mark or a Latin letter) can hide bytes.
+            let ok = match vs_base.and_then(char::from_u32) {
+                Some(b) if u >= 0xE0100 => is_cjk(b as u32),
+                // Characters with an emoji presentation: digits, # and * (keycaps), (c) and (r), and
+                // symbols from U+2000 up; not letters, not Latin-1 signs like U+00B1.
+                Some(b) if u >= 0xFE0E => {
+                    !b.fast_alpha() && (b.is_ascii_digit() || matches!(b, '#' | '*' | '\u{A9}' | '\u{AE}') || b as u32 >= 0x2000)
+                }
+                Some(b) => {
+                    is_cjk(b as u32)
+                        || !b.is_ascii()
+                            && matches!(get_general_category(b), GeneralCategory::MathSymbol | GeneralCategory::OtherSymbol | GeneralCategory::OtherLetter)
+                }
+                None => false,
+            };
+            if !ok {
+                return Err(TextError::Forbidden { offset: idx, offset16: off16, cp: u });
+            }
+            vs_base = None;
+            continue;
+        }
+        if is_tag(u) {
+            return Err(TextError::Forbidden { offset: idx, offset16: off16, cp: u });
+        }
+        // (What follows depends on the character alone: looked up in a small cache, so a text of
+        // one script costs a table read per character, not a decomposition and an NFC pass.)
+        let info = char_info(c);
+        if info.forbidden[(class == Class::Block) as usize] {
+            return Err(TextError::Forbidden { offset: idx, offset16: off16, cp: u });
+        }
+        // Marks are counted in their canonical decomposition (U+0F73 is two marks), so the cap
+        // holds after NFC and the offset is the input's; format characters (ZWJ, ZWNJ, LRM, ZWSP,
+        // the soft hyphen, word joiner, invisible operators) neither count nor end a run, so they
+        // cannot be used to split one.
+        if info.format {
+            vs_base = None;
+            continue;
+        }
+        run = if info.resets { info.marks as usize } else { run + info.marks as usize };
+        if run > MAX_MARK_RUN {
+            return Err(TextError::MarkRun { offset: idx, offset16: off16 });
+        }
+        vs_base = info.base.then_some(u);
     }
     Ok(())
 }
 
-/// The mapped code points: line breaks unified, BOM dropped. Offsets in errors refer to the
-/// input as sent, so the mapping keeps one char per char except CRLF (which counts as its CR).
-fn map(s: &str, class: Class) -> std::borrow::Cow<'_, str> {
-    if !s.contains(['\r', '\u{B}', '\u{2028}', '\u{2029}', '\u{FEFF}']) {
-        return std::borrow::Cow::Borrowed(s);
-    }
-    let nl = if class == Class::Block { '\n' } else { ' ' };
-    let mut out = String::with_capacity(s.len());
-    let mut it = s.chars().peekable();
-    while let Some(c) = it.next() {
-        match c {
-            '\r' => {
-                if it.peek() == Some(&'\n') {
-                    it.next();
-                }
-                out.push(nl);
-            }
-            '\u{B}' | '\u{2028}' | '\u{2029}' => out.push(nl),
-            '\u{FEFF}' => {}
-            c => out.push(c),
-        }
-    }
-    std::borrow::Cow::Owned(out)
+/// Checks every code point of `s` (see [`check_stream`]).
+pub fn check(s: &str, class: Class) -> Result<(), TextError> {
+    check_stream(Mapped::new(s, class), class)
 }
 
-/// NFC into a `String`, stopping (with `None`) as soon as the output passes `max`.
-fn nfc_bounded(s: &str, max: Max) -> Option<String> {
-    let mut out = String::with_capacity(s.len().min(64 * 1024));
+/// The most input bytes a field may have before any character work: a limit of `max` after
+/// normalisation allows at most 4x that in the input (NFC never shrinks text by more; CRLF and
+/// BOMs only by a little). Longer is refused at once, so a 4 MB stem costs nothing.
+fn raw_cap(max: Max) -> usize {
+    match max {
+        Max::Bytes(n) => n.saturating_mul(4).saturating_add(64),
+        Max::Chars(n) => n.saturating_mul(16).saturating_add(64),
+    }
+}
+
+/// NFC of a mapped stream into a `String`, stopping (with `None`) as soon as the output passes `max`.
+#[cfg(test)]
+fn nfc_bounded(it: Mapped<'_>, max: Max) -> Option<String> {
+    nfc_bounded_as(it, max, false)
+}
+
+/// `nfc_bounded`; `ascii`: the input is ASCII, which NFC leaves as it is (no NFC pass).
+fn nfc_bounded_as(it: Mapped<'_>, max: Max, ascii: bool) -> Option<String> {
+    let mut out = String::new();
     let mut chars = 0usize;
-    for c in s.nfc() {
+    let mut push = |c: char| -> bool {
         out.push(c);
         chars += 1;
-        let over = match max {
-            Max::Bytes(n) => out.len() > n,
+        match max {
+            Max::Bytes(n) => out.len() <= n,
             // Line text is collapsed afterwards, which only shortens it; allow slack for that.
-            Max::Chars(n) => chars > n.saturating_mul(4).saturating_add(64),
-        };
-        if over {
-            return None;
+            Max::Chars(n) => chars <= n.saturating_mul(4).saturating_add(64),
+        }
+    };
+    if ascii {
+        for (c, _, _) in it {
+            if !push(c) {
+                return None;
+            }
+        }
+    } else {
+        for c in it.map(|m| m.0).nfc() {
+            if !push(c) {
+                return None;
+            }
         }
     }
     Some(out)
 }
 
-/// Checks and canonicalises one text value: maps line breaks and the BOM, refuses forbidden
-/// characters and long mark runs, then applies NFC (Line: whitespace collapsed and trimmed) and
-/// enforces `max`.
+/// Checks and canonicalises one text value: refuses a field over 4x its limit before reading it,
+/// maps line breaks, the BOM and Symbol-font characters, refuses forbidden characters, stray
+/// variation selectors and long mark runs, then applies NFC (Line: whitespace collapsed and
+/// trimmed) and enforces `max`. Memory: the output only (bounded by `max`); the input is read in
+/// place.
 pub fn clean(s: &str, class: Class, max: Max) -> Result<String, TextError> {
-    // Offsets are reported against the input, so check it before mapping, ignoring what `map`
-    // will turn into something allowed.
-    let mapped = map(s, class);
-    if let Err(e) = check(&mapped, class) {
-        return Err(remap_offset(s, &mapped, e, class));
+    if s.len() > raw_cap(max) {
+        return Err(TextError::TooLong);
     }
-    let n = nfc_bounded(&mapped, max).ok_or(TextError::TooLong)?;
+    check_stream(Mapped::new(s, class), class)?;
+    let n = nfc_bounded_as(Mapped::new(s, class), max, s.is_ascii()).ok_or(TextError::TooLong)?;
     let out = match class {
         Class::Block => n,
         Class::Line => collapse(&n),
@@ -249,49 +425,15 @@ pub fn clean(s: &str, class: Class, max: Max) -> Result<String, TextError> {
     Ok(out)
 }
 
-/// Translates an error offset in the mapped text back to the input as sent: `map` keeps one
-/// char per char except CRLF (two become one) and the BOM (dropped).
-fn remap_offset(orig: &str, mapped: &str, e: TextError, _class: Class) -> TextError {
-    if orig.len() == mapped.len() && orig == mapped {
-        return e;
-    }
-    let target = match e {
-        TextError::Forbidden { offset, .. } | TextError::MarkRun { offset, .. } => offset,
-        TextError::TooLong => return e,
-    };
-    // For each mapped char, its (char index, UTF-16 offset) in the input.
-    let mut pos: Vec<(usize, usize)> = Vec::new();
-    let chars: Vec<char> = orig.chars().collect();
-    let (mut i, mut o16) = (0usize, 0usize);
-    while i < chars.len() {
-        let c = chars[i];
-        if c != '\u{FEFF}' {
-            pos.push((i, o16));
-        }
-        if c == '\r' && chars.get(i + 1) == Some(&'\n') {
-            o16 += 1;
-            i += 1;
-        }
-        o16 += chars[i].len_utf16();
-        i += 1;
-    }
-    let (offset, offset16) = pos.get(target).copied().unwrap_or((chars.len(), o16));
-    match e {
-        TextError::Forbidden { cp, .. } => TextError::Forbidden { offset, offset16, cp },
-        TextError::MarkRun { .. } => TextError::MarkRun { offset, offset16 },
-        TextError::TooLong => e,
-    }
-}
-
 /// Like `clean` (Line) but with NFKC, for publish metadata (titles, tags, standards), matching
 /// `cleanText` in `server/auth/src/validate.ts`.
 pub fn clean_meta(s: &str, max_chars: usize) -> Result<String, TextError> {
-    let mapped = map(s, Class::Line);
-    if let Err(e) = check(&mapped, Class::Line) {
-        return Err(remap_offset(s, &mapped, e, Class::Line));
+    if s.len() > raw_cap(Max::Chars(max_chars)) {
+        return Err(TextError::TooLong);
     }
+    check_stream(Mapped::new(s, Class::Line), Class::Line)?;
     let mut n = String::new();
-    for (i, c) in mapped.nfkc().enumerate() {
+    for (i, c) in Mapped::new(s, Class::Line).map(|m| m.0).nfkc().enumerate() {
         if i > max_chars.saturating_mul(4).saturating_add(64) {
             return Err(TextError::TooLong);
         }
@@ -354,7 +496,11 @@ pub fn is_visible(c: char) -> bool {
 /// collapsed to one space and the ends trimmed; line breaks kept (a table is not a sentence);
 /// leading and trailing blank lines removed.
 pub fn hash_form(s: &str) -> String {
-    let n: String = map(s, Class::Block).nfc().collect();
+    // What students are served (`format::served_text`: invisible joiners and hyphens removed,
+    // spacing collapsed, NFC), so the author's form and the served form hash alike.
+    let served = crate::format::served_text(s);
+    // (ASCII is its own NFC.)
+    let n: String = if served.is_ascii() { Mapped::new(&served, Class::Block).map(|m| m.0).collect() } else { Mapped::new(&served, Class::Block).map(|m| m.0).nfc().collect() };
     let lines: Vec<String> = n.split('\n').map(collapse).collect();
     lines.join("\n").trim_matches('\n').to_string()
 }
@@ -439,8 +585,8 @@ mod tests {
     fn bounded_normalisation() {
         let s = "\u{1D160}".repeat(10_000);
         assert_eq!(clean(&s, Class::Block, Max::Bytes(8192)), Err(TextError::TooLong));
-        assert!(nfc_bounded(&s, Max::Bytes(8192)).is_none());
-        assert_eq!(nfc_bounded("abc", Max::Bytes(3)).as_deref(), Some("abc"));
+        assert!(nfc_bounded(Mapped::new(&s, Class::Block), Max::Bytes(8192)).is_none());
+        assert_eq!(nfc_bounded(Mapped::new("abc", Class::Block), Max::Bytes(3)).as_deref(), Some("abc"));
         assert_eq!(clean("e\u{301}", Class::Block, Max::Bytes(2)).as_deref(), Ok("\u{e9}"));
         assert_eq!(clean("  a \u{3000}  b ", Class::Line, B).as_deref(), Ok("a b"));
         assert_eq!(clean_meta("x\u{b2} \u{FB01}", 64).as_deref(), Ok("x2 fi"));

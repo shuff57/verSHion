@@ -1,0 +1,6953 @@
+[
+{
+"cat": "code",
+"stem": "Which HTML tag makes text bold?",
+"choices": [
+"<b>",
+"<i>",
+"<u>",
+"<p>"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which HTML element is for emphasis?",
+"choices": [
+"<em>",
+"<div>",
+"<span>",
+"<br>"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which tag defines a hyperlink?",
+"choices": [
+"<a>",
+"<link>",
+"<href>",
+"<url>"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which tag creates the largest heading?",
+"choices": [
+"<h1>",
+"<h6>",
+"<head>",
+"<header>"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which element marks deleted text?",
+"choices": [
+"<del>",
+"<ins>",
+"<mark>",
+"<s>"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which Markdown syntax produces bold text?",
+"choices": [
+"**text**",
+"*text*",
+"~~text~~",
+"`text`"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which Markdown syntax produces inline code?",
+"choices": [
+"`code`",
+"**code**",
+"_code_",
+"> code"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which starts a single-line comment in Python?",
+"choices": [
+"# comment",
+"// comment",
+"/* comment */",
+"<!-- comment -->"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which starts a single-line comment in Java?",
+"choices": [
+"// comment",
+"# comment",
+"-- comment",
+"% comment"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which starts a comment in SQL?",
+"choices": [
+"-- comment",
+"# comment",
+"// comment",
+"' comment"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which declares a pointer to int in C?",
+"choices": [
+"int *p;",
+"int &p;",
+"int p;",
+"pointer int p;"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which dereferences pointer p in C?",
+"choices": [
+"*p",
+"&p",
+"p&",
+"p->"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which Python parameter collects extra positional arguments?",
+"choices": [
+"*args",
+"args[]",
+"&args",
+"...args"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which Python parameter collects extra keyword arguments?",
+"choices": [
+"**kwargs",
+"*kwargs",
+"kwargs{}",
+"&&kwargs"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is the exponent operator in Python?",
+"choices": [
+"**",
+"^",
+"*",
+"//"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "What does 2 ** 3 evaluate to in Python?",
+"choices": [
+"8",
+"6",
+"9",
+"5"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which regex matches one or more digits?",
+"choices": [
+"\\d+",
+"\\d*",
+"\\d?",
+"\\D+"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which regex quantifier means zero or more?",
+"choices": [
+"*",
+"+",
+"?",
+"{1}"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is a valid CSS class selector?",
+"choices": [
+".menu",
+"#menu",
+"menu",
+"*menu"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is a valid CSS id selector?",
+"choices": [
+"#menu",
+".menu",
+"menu",
+"@menu"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which CSS selects all elements?",
+"choices": [
+"*",
+"#all",
+".all",
+"all"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which shell symbol redirects output to a file?",
+"choices": [
+">",
+"<",
+"|",
+"&"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which Bash command lists files?",
+"choices": [
+"ls",
+"cd",
+"pwd",
+"rm"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which operator tests equality in JavaScript without type coercion?",
+"choices": [
+"===",
+"==",
+"=",
+"!="
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is the logical NOT operator in C?",
+"choices": [
+"!",
+"~",
+"^",
+"&"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is the pre-increment of i in C?",
+"choices": [
+"++i",
+"i++",
+"i+1",
+"+i"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is the post-increment of i in C?",
+"choices": [
+"i++",
+"++i",
+"i+=2",
+"i--"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which line declares a constant in JavaScript?",
+"choices": [
+"const x = 1;",
+"let x = 1;",
+"var x = 1;",
+"x := 1"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which Python statement prints Hello?",
+"choices": [
+"print(\"Hello\")",
+"echo \"Hello\"",
+"console.log(\"Hello\")",
+"printf(\"Hello\")"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which returns the length of list a in Python?",
+"choices": [
+"len(a)",
+"a.length",
+"size(a)",
+"a.size()"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which accesses the first element of list a?",
+"choices": [
+"a[0]",
+"a[1]",
+"a(0)",
+"a{0}"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is a Python list?",
+"choices": [
+"[1, 2, 3]",
+"(1, 2, 3)",
+"{1, 2, 3}",
+"<1, 2, 3>"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is a Python tuple?",
+"choices": [
+"(1, 2)",
+"[1, 2]",
+"{1, 2}",
+"{1: 2}"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which Git command stages all changes?",
+"choices": [
+"git add -A",
+"git commit -a",
+"git push",
+"git stash"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which flag shows all files including hidden with ls?",
+"choices": [
+"-a",
+"-l",
+"-h",
+"-r"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which language is C# part of?",
+"choices": [
+".NET",
+"JVM",
+"LLVM",
+"Node.js"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which language did Microsoft create in 2000?",
+"choices": [
+"C#",
+"Java",
+"Go",
+"Rust"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is a markup language?",
+"choices": [
+"HTML",
+"Python",
+"C++",
+"Java"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is a compiled language?",
+"choices": [
+"C++",
+"Python",
+"JavaScript",
+"Bash"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which Python value is falsy?",
+"choices": [
+"0",
+"1",
+"\"0\"",
+"[0]"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which keyword defines a function in Python?",
+"choices": [
+"def",
+"func",
+"function",
+"fn"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which keyword defines a function in Rust?",
+"choices": [
+"fn",
+"def",
+"func",
+"sub"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "What is the output of print(7 // 2)?",
+"choices": [
+"3",
+"3.5",
+"4",
+"2"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "What is the output of print(7 % 3)?",
+"choices": [
+"1",
+"2",
+"0",
+"3"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "What is printed by print('a' * 3)?",
+"choices": [
+"aaa",
+"a3",
+"a a a",
+"error"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which Python expression is True?",
+"choices": [
+"3 == 3.0",
+"3 is '3'",
+"'a' > 'b'",
+"None == 0"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is the binary of 5?",
+"choices": [
+"101",
+"110",
+"111",
+"100"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "What is 0xFF in decimal?",
+"choices": [
+"255",
+"256",
+"15",
+"16"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which bitwise operator is XOR in C?",
+"choices": [
+"^",
+"|",
+"&",
+"~"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which SQL keyword removes duplicates?",
+"choices": [
+"DISTINCT",
+"UNIQUE",
+"GROUP",
+"ONLY"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which SQL clause filters groups?",
+"choices": [
+"HAVING",
+"WHERE",
+"ORDER BY",
+"LIMIT"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which SQL statement adds rows?",
+"choices": [
+"INSERT",
+"UPDATE",
+"ALTER",
+"SELECT"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which HTTP status means Not Found?",
+"choices": [
+"404",
+"200",
+"500",
+"301"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which HTTP method is idempotent and retrieves data?",
+"choices": [
+"GET",
+"POST",
+"PATCH",
+"CONNECT"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which port does HTTPS use by default?",
+"choices": [
+"443",
+"80",
+"21",
+"25"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which data structure is LIFO?",
+"choices": [
+"Stack",
+"Queue",
+"Heap",
+"Tree"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which sort has O(n log n) worst case?",
+"choices": [
+"Merge sort",
+"Quick sort",
+"Bubble sort",
+"Insertion sort"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is the time complexity of binary search?",
+"choices": [
+"O(log n)",
+"O(n)",
+"O(n²)",
+"O(1)"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which LaTeX command makes bold text?",
+"choices": [
+"\\textbf{x}",
+"\\textit{x}",
+"\\emph{x}",
+"\\underline{x}"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which Excel formula sums A1 to A5?",
+"choices": [
+"=SUM(A1:A5)",
+"=ADD(A1:A5)",
+"SUM(A1-A5)",
+"=TOTAL(A1,A5)"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which Excel formula returns the average?",
+"choices": [
+"=AVERAGE(B2:B9)",
+"=MEAN(B2:B9)",
+"=AVG(B2:B9)",
+"=MEDIAN(B2:B9)"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which symbol starts every Excel formula?",
+"choices": [
+"=",
+"+",
+"#",
+"@"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is a Python f-string?",
+"choices": [
+"f\"{x}\"",
+"\"{x}\".f",
+"f(x)",
+"%x"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is the JavaScript arrow function?",
+"choices": [
+"(x) => x * 2",
+"function(x) -> x * 2",
+"x -> x * 2",
+"lambda x: x * 2"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is a Python lambda?",
+"choices": [
+"lambda x: x * 2",
+"(x) => x * 2",
+"fn x -> x * 2",
+"def x: x * 2"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which C operator accesses a member through a pointer?",
+"choices": [
+"->",
+".",
+"::",
+"=>"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which C++ operator resolves scope?",
+"choices": [
+"::",
+"->",
+".",
+":"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is the C++ stream insertion operator?",
+"choices": [
+"<<",
+">>",
+"<-",
+"->"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which Haskell operator composes functions?",
+"choices": [
+".",
+"$",
+">>=",
+"<$>"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is a valid Python variable name?",
+"choices": [
+"_count",
+"2count",
+"count-1",
+"class"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is a valid identifier in C?",
+"choices": [
+"my_var",
+"my-var",
+"2var",
+"int"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which Python method adds to the end of a list?",
+"choices": [
+"append()",
+"add()",
+"push()",
+"insert()"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which keyword exits a loop?",
+"choices": [
+"break",
+"continue",
+"pass",
+"return"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which value does bool([]) return?",
+"choices": [
+"False",
+"True",
+"None",
+"Error"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "What is the result of 'abc'[::-1]?",
+"choices": [
+"'cba'",
+"'abc'",
+"'a'",
+"'c'"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "What does len('hello') return?",
+"choices": [
+"5",
+"4",
+"6",
+"'hello'"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is a JSON object?",
+"choices": [
+"{\"a\": 1}",
+"[\"a\", 1]",
+"(\"a\", 1)",
+"<a>1</a>"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which Unix permission string means rwx for owner only?",
+"choices": [
+"-rwx------",
+"-rw-r--r--",
+"drwxr-xr-x",
+"-r--r--r--"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which wildcard matches any single character in a glob?",
+"choices": [
+"?",
+"*",
+"#",
+"%"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which SQL wildcard matches any string with LIKE?",
+"choices": [
+"%",
+"_",
+"*",
+"?"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which line is a Python decorator?",
+"choices": [
+"@property",
+"#property",
+"$property",
+"&property"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is an annotation in Java?",
+"choices": [
+"@Override",
+"#Override",
+"$Override",
+"!Override"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which preprocessor directive includes a header?",
+"choices": [
+"#include",
+"#define",
+"#pragma",
+"import"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which directive defines a macro in C?",
+"choices": [
+"#define",
+"#include",
+"#ifdef",
+"#endif"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is a CSS hex color for white?",
+"choices": [
+"#FFFFFF",
+"#000000",
+"#FF0000",
+"#00FF00"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is the HTML entity for <?",
+"choices": [
+"&lt;",
+"&gt;",
+"&amp;",
+"&quot;"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which character escapes in a Python string?",
+"choices": [
+"\\",
+"/",
+"|",
+"%"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is the null-coalescing operator in C#?",
+"choices": [
+"??",
+"?:",
+"||",
+"&&"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which Rust macro prints a line?",
+"choices": [
+"println!",
+"print",
+"echo!",
+"puts"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which Rust type is a growable string?",
+"choices": [
+"String",
+"&str",
+"char",
+"[u8]"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which is a Rust reference to an i32?",
+"choices": [
+"&i32",
+"*i32",
+"i32&",
+"ref i32"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which pseudo-class styles a link on hover?",
+"choices": [
+":hover",
+"::before",
+":root",
+"::after"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "code",
+"stem": "Which pseudo-element inserts content before?",
+"choices": [
+"::before",
+":hover",
+":focus",
+":checked"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Solve 3x - 4 = 11.",
+"choices": [
+"x = 5",
+"x = 7/3",
+"x = -5",
+"x = 15"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Factor x² - 9.",
+"choices": [
+"(x - 3)(x + 3)",
+"(x - 9)(x + 1)",
+"(x - 3)²",
+"(x + 9)(x - 1)"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Expand (x + 2)².",
+"choices": [
+"x² + 4x + 4",
+"x² + 4",
+"x² + 2x + 4",
+"2x + 4"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is 3/4 + 1/8?",
+"choices": [
+"7/8",
+"4/12",
+"1/2",
+"4/8"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is 0.25 as a fraction?",
+"choices": [
+"1/4",
+"1/25",
+"25/10",
+"2/5"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the gradient of y = -2x + 5?",
+"choices": [
+"-2",
+"5",
+"2",
+"-5"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is the y-intercept of y = 4x - 3?",
+"choices": [
+"-3",
+"4",
+"3",
+"-4"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Evaluate |-7|.",
+"choices": [
+"7",
+"-7",
+"0",
+"1/7"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is 2⁻³?",
+"choices": [
+"1/8",
+"-8",
+"-6",
+"8"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is the value of 10⁰?",
+"choices": [
+"1",
+"0",
+"10",
+"undefined"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Simplify √50.",
+"choices": [
+"5√2",
+"25√2",
+"10√5",
+"2√5"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the quadratic formula?",
+"choices": [
+"x = (-b ± √(b² - 4ac)) / 2a",
+"x = -b / 2a",
+"x = b² - 4ac",
+"x = (b ± √(b² + 4ac)) / 2a"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is sin 30°?",
+"choices": [
+"1/2",
+"√3/2",
+"√2/2",
+"1"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is cos 0?",
+"choices": [
+"1",
+"0",
+"-1",
+"1/2"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is tan 45°?",
+"choices": [
+"1",
+"0",
+"√3",
+"undefined"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Convert 180° to radians.",
+"choices": [
+"π",
+"2π",
+"π/2",
+"π/4"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is ∫ 2x dx?",
+"choices": [
+"x² + C",
+"2x² + C",
+"x + C",
+"2 + C"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is d/dx (sin x)?",
+"choices": [
+"cos x",
+"-cos x",
+"sin x",
+"-sin x"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is d/dx (cos x)?",
+"choices": [
+"-sin x",
+"sin x",
+"cos x",
+"-cos x"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is d/dx (eˣ)?",
+"choices": [
+"eˣ",
+"xeˣ⁻¹",
+"ln x",
+"1/x"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is lim (x→∞) 1/x?",
+"choices": [
+"0",
+"∞",
+"1",
+"-∞"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is the domain of f(x) = √x?",
+"choices": [
+"x ≥ 0",
+"x > 0",
+"all real x",
+"x ≤ 0"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Solve x² = 16.",
+"choices": [
+"x = ±4",
+"x = 4",
+"x = -4",
+"x = 8"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which inequality is shown by an open circle at 3 and an arrow right?",
+"choices": [
+"x > 3",
+"x ≥ 3",
+"x < 3",
+"x ≤ 3"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is 7!/5!?",
+"choices": [
+"42",
+"2",
+"35",
+"7"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "How many ways can 3 books be arranged?",
+"choices": [
+"6",
+"3",
+"9",
+"27"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is C(5, 2)?",
+"choices": [
+"10",
+"20",
+"5",
+"25"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is the mean of 2, 4, 6, 8?",
+"choices": [
+"5",
+"4",
+"6",
+"20"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is the median of 3, 1, 4, 1, 5?",
+"choices": [
+"3",
+"1",
+"4",
+"2.8"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is the mode of 2, 3, 3, 5, 7?",
+"choices": [
+"3",
+"2",
+"5",
+"4"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "A fair die is rolled. P(even)?",
+"choices": [
+"1/2",
+"1/3",
+"1/6",
+"2/3"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is P(A ∩ B) for independent A, B with P(A)=0.5, P(B)=0.4?",
+"choices": [
+"0.2",
+"0.9",
+"0.1",
+"0.45"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the standard form of 4500?",
+"choices": [
+"4.5 × 10³",
+"45 × 10²",
+"4.5 × 10⁴",
+"0.45 × 10⁴"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the largest?",
+"choices": [
+"0.7",
+"0.65",
+"0.07",
+"0.699"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Round 3.14159 to 2 decimal places.",
+"choices": [
+"3.14",
+"3.15",
+"3.1",
+"3.142"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is 12 ÷ 0.5?",
+"choices": [
+"24",
+"6",
+"0.24",
+"60"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is -4 × -3?",
+"choices": [
+"12",
+"-12",
+"-7",
+"7"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is -12 ÷ 4?",
+"choices": [
+"-3",
+"3",
+"-8",
+"-48"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is 5 - (-2)?",
+"choices": [
+"7",
+"3",
+"-7",
+"-3"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is the reciprocal of -2/3?",
+"choices": [
+"-3/2",
+"3/2",
+"2/3",
+"-2/3"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the vertex of y = (x - 2)² + 3?",
+"choices": [
+"(2, 3)",
+"(-2, 3)",
+"(2, -3)",
+"(3, 2)"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the midpoint of (0, 0) and (4, 6)?",
+"choices": [
+"(2, 3)",
+"(4, 6)",
+"(1, 1.5)",
+"(8, 12)"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the distance between (0,0) and (3,4)?",
+"choices": [
+"5",
+"7",
+"1",
+"25"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which matrix is the inverse of [[2, 0], [0, 2]]?",
+"choices": [
+"[[0.5, 0], [0, 0.5]]",
+"[[2, 0], [0, 2]]",
+"[[-2, 0], [0, -2]]",
+"[[0, 2], [2, 0]]"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is det [[1, 2], [3, 4]]?",
+"choices": [
+"-2",
+"2",
+"10",
+"-10"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which set is A ∪ B for A = {1, 2}, B = {2, 3}?",
+"choices": [
+"{1, 2, 3}",
+"{2}",
+"{1, 3}",
+"∅"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which set is A ∩ B for A = {1, 2}, B = {2, 3}?",
+"choices": [
+"{2}",
+"{1, 2, 3}",
+"{1, 3}",
+"∅"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the negation of p ∧ q?",
+"choices": [
+"¬p ∨ ¬q",
+"¬p ∧ ¬q",
+"p ∨ q",
+"¬(p ∨ q)"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the contrapositive of p → q?",
+"choices": [
+"¬q → ¬p",
+"q → p",
+"¬p → ¬q",
+"p → ¬q"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which number is a perfect square?",
+"choices": [
+"49",
+"48",
+"50",
+"27"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is a multiple of 7?",
+"choices": [
+"63",
+"64",
+"65",
+"66"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is the GCD of 12 and 18?",
+"choices": [
+"6",
+"3",
+"36",
+"2"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is the LCM of 4 and 6?",
+"choices": [
+"12",
+"24",
+"2",
+"10"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is 3.5 × 10⁻²?",
+"choices": [
+"0.035",
+"0.35",
+"350",
+"0.0035"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is 25% of 200?",
+"choices": [
+"50",
+"25",
+"75",
+"100"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is 1 km in metres?",
+"choices": [
+"1000 m",
+"100 m",
+"10 m",
+"10 000 m"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "How many seconds are in an hour?",
+"choices": [
+"3600",
+"60",
+"360",
+"36 000"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is 2 h 30 min in hours?",
+"choices": [
+"2.5 h",
+"2.3 h",
+"2.03 h",
+"23 h"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which angle is obtuse?",
+"choices": [
+"120°",
+"90°",
+"45°",
+"180°"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the area of a circle of radius 3?",
+"choices": [
+"9π",
+"6π",
+"3π",
+"π/9"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the circumference of a circle of radius 2?",
+"choices": [
+"4π",
+"2π",
+"π",
+"8π"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the volume of a cube of side 3 cm?",
+"choices": [
+"27 cm³",
+"9 cm³",
+"18 cm³",
+"81 cm³"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the surface area of a cube of side 2 m?",
+"choices": [
+"24 m²",
+"8 m²",
+"12 m²",
+"16 m²"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is the sum of the interior angles of a hexagon?",
+"choices": [
+"720°",
+"540°",
+"360°",
+"1080°"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is i²?",
+"choices": [
+"-1",
+"1",
+"i",
+"-i"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the modulus of 3 + 4i?",
+"choices": [
+"5",
+"7",
+"1",
+"25"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the conjugate of 2 - 3i?",
+"choices": [
+"2 + 3i",
+"-2 + 3i",
+"-2 - 3i",
+"3 - 2i"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which series converges?",
+"choices": [
+"Σ 1/n²",
+"Σ 1/n",
+"Σ n",
+"Σ 1"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is log₂ 8?",
+"choices": [
+"3",
+"4",
+"2",
+"8"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is ln e?",
+"choices": [
+"1",
+"0",
+"e",
+"∞"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is equivalent to log(ab)?",
+"choices": [
+"log a + log b",
+"log a · log b",
+"log a - log b",
+"(log a)/(log b)"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the 10th term of 2, 5, 8, ...?",
+"choices": [
+"29",
+"32",
+"30",
+"27"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "What is the common ratio of 3, 6, 12, ...?",
+"choices": [
+"2",
+"3",
+"6",
+"1/2"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which fraction is in lowest terms?",
+"choices": [
+"5/7",
+"6/8",
+"9/12",
+"10/15"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the expected value of a fair die?",
+"choices": [
+"3.5",
+"3",
+"6",
+"1/6"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the z-score of 70 with mean 60 and sd 5?",
+"choices": [
+"2",
+"-2",
+"10",
+"0.5"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which correlation coefficient shows the strongest linear relationship?",
+"choices": [
+"-0.95",
+"0.5",
+"0.1",
+"-0.3"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which value of r is impossible?",
+"choices": [
+"1.2",
+"-1",
+"0",
+"0.99"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the slope of the line through (1, 2) and (3, 8)?",
+"choices": [
+"3",
+"6",
+"2",
+"1/3"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which point is in quadrant II?",
+"choices": [
+"(-3, 4)",
+"(3, 4)",
+"(-3, -4)",
+"(3, -4)"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the 3rd quartile of 1, 2, 3, 4, 5, 6, 7?",
+"choices": [
+"6",
+"5",
+"4",
+"7"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is 1/3 as a recurring decimal?",
+"choices": [
+"0.333...",
+"0.3",
+"0.33",
+"3.33"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the solution of 2ˣ = 32?",
+"choices": [
+"x = 5",
+"x = 16",
+"x = 6",
+"x = 4"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the sum of roots of x² - 5x + 6 = 0?",
+"choices": [
+"5",
+"6",
+"-5",
+"-6"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the product of roots of x² - 5x + 6 = 0?",
+"choices": [
+"6",
+"5",
+"-6",
+"-5"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which graph is a parabola?",
+"choices": [
+"y = x²",
+"y = 2x",
+"y = 1/x",
+"y = √x"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which function is odd?",
+"choices": [
+"f(x) = x³",
+"f(x) = x²",
+"f(x) = |x|",
+"f(x) = cos x"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which has period 2π?",
+"choices": [
+"sin x",
+"tan x",
+"sin 2x",
+"cos 3x"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the inverse of f(x) = 2x + 1?",
+"choices": [
+"f⁻¹(x) = (x - 1)/2",
+"f⁻¹(x) = 2x - 1",
+"f⁻¹(x) = x/2 + 1",
+"f⁻¹(x) = 1/(2x + 1)"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is (f ∘ g)(x) for f(x)=x+1, g(x)=2x?",
+"choices": [
+"2x + 1",
+"2x + 2",
+"x + 2",
+"2x² + 1"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is 1 + 2 + ... + 100?",
+"choices": [
+"5050",
+"5000",
+"10100",
+"4950"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is a Pythagorean triple?",
+"choices": [
+"5, 12, 13",
+"4, 5, 6",
+"2, 3, 4",
+"6, 7, 8"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which triangle has sides 3, 4, 5?",
+"choices": [
+"Right",
+"Equilateral",
+"Isosceles",
+"Obtuse"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the probability of an impossible event?",
+"choices": [
+"0",
+"1",
+"0.5",
+"-1"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is 101₂ in base 10?",
+"choices": [
+"5",
+"3",
+"6",
+"101"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which number is irrational?",
+"choices": [
+"π",
+"22/7",
+"3.14",
+"√9"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is the additive inverse of 5?",
+"choices": [
+"-5",
+"1/5",
+"5",
+"0"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which is 8 to the power 1/3?",
+"choices": [
+"2",
+"8/3",
+"512",
+"24"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "math",
+"stem": "Which expression equals a⁵?",
+"choices": [
+"a² · a³",
+"a² + a³",
+"(a²)³",
+"a¹⁰ / a²"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the formula of sulfuric acid?",
+"choices": [
+"H₂SO₄",
+"HCl",
+"HNO₃",
+"H₃PO₄"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the formula of ammonia?",
+"choices": [
+"NH₃",
+"NH₄⁺",
+"N₂",
+"NO₂"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which ion is the ammonium ion?",
+"choices": [
+"NH₄⁺",
+"NH₃",
+"NO₃⁻",
+"NH₂⁻"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which ion does magnesium form?",
+"choices": [
+"Mg²⁺",
+"Mg⁺",
+"Mg²⁻",
+"Mg³⁺"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which ion does oxygen form?",
+"choices": [
+"O²⁻",
+"O⁻",
+"O²⁺",
+"O⁺"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is a strong acid?",
+"choices": [
+"HCl",
+"CH₃COOH",
+"H₂CO₃",
+"HF"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is a base?",
+"choices": [
+"NaOH",
+"HCl",
+"H₂O₂",
+"CO₂"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which shows the hydroxyl group?",
+"choices": [
+"-OH",
+"-COOH",
+"-CHO",
+"-NH₂"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the carboxyl group?",
+"choices": [
+"-COOH",
+"-OH",
+"-CHO",
+"-NH₂"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the amine group?",
+"choices": [
+"-NH₂",
+"-OH",
+"-COOH",
+"-CHO"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the state symbol for aqueous?",
+"choices": [
+"(aq)",
+"(s)",
+"(l)",
+"(g)"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which equation shows the dissolving of NaCl?",
+"choices": [
+"NaCl (s) → Na⁺ (aq) + Cl⁻ (aq)",
+"NaCl (aq) → Na (s) + Cl (g)",
+"NaCl (l) → NaCl (g)",
+"Na⁺ (aq) + Cl⁻ (aq) → NaCl (g)"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is balanced?",
+"choices": [
+"2H₂ + O₂ → 2H₂O",
+"H₂ + O₂ → H₂O",
+"2H₂ + 2O₂ → H₂O",
+"H₂ + 2O₂ → 2H₂O"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "What is the electron configuration of Na?",
+"choices": [
+"1s² 2s² 2p⁶ 3s¹",
+"1s² 2s² 2p⁶",
+"1s² 2s² 2p⁶ 3s²",
+"1s² 2s¹"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which element has atomic number 6?",
+"choices": [
+"Carbon (C)",
+"Nitrogen (N)",
+"Oxygen (O)",
+"Boron (B)"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which element has the symbol Fe?",
+"choices": [
+"Iron",
+"Fluorine",
+"Francium",
+"Fermium"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is an isotope of carbon?",
+"choices": [
+"¹⁴C",
+"¹⁴N",
+"¹²B",
+"¹⁶O"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which particle has a negative charge?",
+"choices": [
+"Electron",
+"Proton",
+"Neutron",
+"Nucleus"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the charge of a proton?",
+"choices": [
+"+1",
+"-1",
+"0",
+"+2"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "What is the molar mass of water?",
+"choices": [
+"18 g/mol",
+"16 g/mol",
+"20 g/mol",
+"10 g/mol"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "What is Avogadro's constant?",
+"choices": [
+"6.02 × 10²³ mol⁻¹",
+"6.02 × 10²² mol⁻¹",
+"3.00 × 10⁸ m/s",
+"9.81 m/s²"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "What is the speed of light in vacuum?",
+"choices": [
+"3.00 × 10⁸ m/s",
+"3.00 × 10⁶ m/s",
+"340 m/s",
+"9.81 m/s²"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "What is the acceleration due to gravity on Earth?",
+"choices": [
+"9.8 m/s²",
+"8.9 m/s²",
+"98 m/s²",
+"0.98 m/s²"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the unit of energy?",
+"choices": [
+"J",
+"W",
+"N",
+"Pa"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the unit of power?",
+"choices": [
+"watt (W)",
+"joule (J)",
+"newton (N)",
+"volt (V)"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the unit of resistance?",
+"choices": [
+"Ω",
+"V",
+"A",
+"W"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the unit of charge?",
+"choices": [
+"coulomb",
+"ampere",
+"volt",
+"ohm"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is Newton's second law?",
+"choices": [
+"F = ma",
+"F = mv",
+"E = mc²",
+"p = mv"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is kinetic energy?",
+"choices": [
+"½mv²",
+"mgh",
+"mv",
+"ma"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is potential energy near Earth's surface?",
+"choices": [
+"mgh",
+"½mv²",
+"mv",
+"Fd²"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the formula for density?",
+"choices": [
+"ρ = m/V",
+"ρ = V/m",
+"ρ = mV",
+"ρ = m + V"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is Ohm's law?",
+"choices": [
+"V = IR",
+"V = I/R",
+"V = R/I",
+"V = I + R"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the wave equation?",
+"choices": [
+"v = fλ",
+"v = f/λ",
+"v = λ/f",
+"v = f + λ"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which colour of visible light has the longest wavelength?",
+"choices": [
+"Red",
+"Blue",
+"Violet",
+"Green"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which planet is closest to the Sun?",
+"choices": [
+"Mercury",
+"Venus",
+"Earth",
+"Mars"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which planet is known as the Red Planet?",
+"choices": [
+"Mars",
+"Jupiter",
+"Venus",
+"Saturn"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the largest planet?",
+"choices": [
+"Jupiter",
+"Saturn",
+"Neptune",
+"Earth"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is a renewable energy source?",
+"choices": [
+"Solar",
+"Coal",
+"Oil",
+"Natural gas"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which organelle is the site of photosynthesis?",
+"choices": [
+"Chloroplast",
+"Mitochondrion",
+"Ribosome",
+"Nucleus"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which molecule stores genetic information?",
+"choices": [
+"DNA",
+"ATP",
+"Glucose",
+"Lipid"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which base pairs with guanine?",
+"choices": [
+"Cytosine",
+"Thymine",
+"Adenine",
+"Uracil"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the genotype of a homozygous recessive individual?",
+"choices": [
+"aa",
+"AA",
+"Aa",
+"aA"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which cross gives a 3:1 ratio?",
+"choices": [
+"Aa × Aa",
+"AA × aa",
+"Aa × aa",
+"AA × AA"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which cross gives a 1:1 ratio?",
+"choices": [
+"Aa × aa",
+"Aa × Aa",
+"AA × aa",
+"AA × Aa"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which blood vessels carry blood away from the heart?",
+"choices": [
+"Arteries",
+"Veins",
+"Capillaries",
+"Venules"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the scientific name of humans?",
+"choices": [
+"Homo sapiens",
+"Homo erectus",
+"Pan troglodytes",
+"Canis lupus"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the abbreviation for the bacterium Escherichia coli?",
+"choices": [
+"E. coli",
+"S. aureus",
+"H. pylori",
+"V. cholerae"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which kingdom do mushrooms belong to?",
+"choices": [
+"Fungi",
+"Plantae",
+"Animalia",
+"Protista"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which gas is produced by photosynthesis?",
+"choices": [
+"O₂",
+"CO₂",
+"N₂",
+"CH₄"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which vitamin is made in the skin with sunlight?",
+"choices": [
+"Vitamin D",
+"Vitamin C",
+"Vitamin A",
+"Vitamin K"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which hormone lowers blood glucose?",
+"choices": [
+"Insulin",
+"Glucagon",
+"Adrenaline",
+"Thyroxine"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the pH of a strong acid?",
+"choices": [
+"1",
+"7",
+"10",
+"14"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the most electronegative element?",
+"choices": [
+"F",
+"O",
+"N",
+"Cl"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is a noble gas?",
+"choices": [
+"He",
+"H",
+"Li",
+"Be"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the SI base unit of temperature?",
+"choices": [
+"kelvin (K)",
+"degree Celsius (°C)",
+"degree Fahrenheit (°F)",
+"rankine (°R)"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "At what temperature does water boil at sea level?",
+"choices": [
+"100 °C",
+"90 °C",
+"0 °C",
+"212 °C"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "What is absolute zero?",
+"choices": [
+"-273.15 °C",
+"0 °C",
+"-100 °C",
+"-459.67 °C"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is a half-reaction for oxidation?",
+"choices": [
+"Fe → Fe²⁺ + 2e⁻",
+"Fe²⁺ + 2e⁻ → Fe",
+"Cl₂ + 2e⁻ → 2Cl⁻",
+"Cu²⁺ + 2e⁻ → Cu"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is an alkane?",
+"choices": [
+"C₂H₆",
+"C₂H₄",
+"C₂H₂",
+"C₆H₆"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is an alkene?",
+"choices": [
+"C₂H₄",
+"C₂H₆",
+"CH₄",
+"C₃H₈"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the IUPAC name of CH₃OH?",
+"choices": [
+"methanol",
+"ethanol",
+"methane",
+"methanal"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is a ketone?",
+"choices": [
+"CH₃COCH₃",
+"CH₃CHO",
+"CH₃OH",
+"CH₃COOH"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the oxidation number of S in SO₄²⁻?",
+"choices": [
+"+6",
+"+4",
+"-2",
+"+2"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which bond is the strongest?",
+"choices": [
+"C≡C",
+"C=C",
+"C-C",
+"C…H"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the shape of CH₄?",
+"choices": [
+"Tetrahedral",
+"Linear",
+"Trigonal planar",
+"Bent"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the bond angle in CO₂?",
+"choices": [
+"180°",
+"109.5°",
+"120°",
+"104.5°"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the bond angle in water?",
+"choices": [
+"104.5°",
+"109.5°",
+"180°",
+"120°"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the equilibrium arrow?",
+"choices": [
+"⇌",
+"→",
+"←",
+"↑"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the Celsius equivalent of 300 K?",
+"choices": [
+"27 °C",
+"573 °C",
+"-27 °C",
+"300 °C"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which radiation is stopped by paper?",
+"choices": [
+"Alpha (α)",
+"Beta (β)",
+"Gamma (γ)",
+"X-rays"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which radiation has no charge?",
+"choices": [
+"Gamma (γ)",
+"Alpha (α)",
+"Beta (β)",
+"Positron (β⁺)"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the symbol for wavelength?",
+"choices": [
+"λ",
+"μ",
+"ν",
+"ω"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the symbol for frequency?",
+"choices": [
+"f",
+"λ",
+"T",
+"v"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the unit of frequency?",
+"choices": [
+"Hz",
+"s",
+"m",
+"J"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is 5 kΩ in ohms?",
+"choices": [
+"5000 Ω",
+"500 Ω",
+"50 Ω",
+"5 000 000 Ω"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "What is 2.5 mA in amperes?",
+"choices": [
+"0.0025 A",
+"0.025 A",
+"2500 A",
+"0.25 A"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which lens converges light?",
+"choices": [
+"Convex",
+"Concave",
+"Plane",
+"Diverging"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which layer of the atmosphere contains the ozone layer?",
+"choices": [
+"Stratosphere",
+"Troposphere",
+"Mesosphere",
+"Thermosphere"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which rock is formed from cooled magma?",
+"choices": [
+"Igneous",
+"Sedimentary",
+"Metamorphic",
+"Limestone"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which plate boundary forms mid-ocean ridges?",
+"choices": [
+"Divergent",
+"Convergent",
+"Transform",
+"Subduction"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the chemical symbol of gold?",
+"choices": [
+"Au",
+"Ag",
+"Go",
+"Gd"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the chemical symbol of silver?",
+"choices": [
+"Ag",
+"Au",
+"Si",
+"Sv"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the chemical symbol of sodium?",
+"choices": [
+"Na",
+"S",
+"So",
+"Sn"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the chemical symbol of lead?",
+"choices": [
+"Pb",
+"Pd",
+"Le",
+"Ld"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which compound is table salt?",
+"choices": [
+"NaCl",
+"KCl",
+"CaCl₂",
+"NaHCO₃"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the formula of glucose?",
+"choices": [
+"C₆H₁₂O₆",
+"C₁₂H₂₂O₁₁",
+"CH₄",
+"C₂H₅OH"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the formula of calcium carbonate?",
+"choices": [
+"CaCO₃",
+"CaO",
+"Ca(OH)₂",
+"CaCl₂"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the formula of copper(II) sulfate?",
+"choices": [
+"CuSO₄",
+"Cu₂SO₄",
+"CuS",
+"CuSO₃"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the name of FeO?",
+"choices": [
+"iron(II) oxide",
+"iron(III) oxide",
+"iron oxide(II)",
+"ferric oxide"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the name of Fe₂O₃?",
+"choices": [
+"iron(III) oxide",
+"iron(II) oxide",
+"diiron oxide",
+"ferrous oxide"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the conjugate base of HCl?",
+"choices": [
+"Cl⁻",
+"H⁺",
+"H₃O⁺",
+"OH⁻"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the conjugate acid of NH₃?",
+"choices": [
+"NH₄⁺",
+"NH₂⁻",
+"H₂O",
+"OH⁻"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the Ka expression for HA?",
+"choices": [
+"[H⁺][A⁻]/[HA]",
+"[HA]/[H⁺][A⁻]",
+"[H⁺][HA]",
+"[A⁻]/[H⁺]"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the formula for pH?",
+"choices": [
+"pH = -log[H⁺]",
+"pH = log[H⁺]",
+"pH = -ln[H⁺]",
+"pH = [H⁺]²"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is ΔG for a spontaneous process?",
+"choices": [
+"ΔG < 0",
+"ΔG > 0",
+"ΔG = 0",
+"ΔG = ∞"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the ideal gas law?",
+"choices": [
+"PV = nRT",
+"PV = RT/n",
+"P = nRTV",
+"PV = nR/T"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "science",
+"stem": "Which is the SI unit of amount of substance?",
+"choices": [
+"mol",
+"g",
+"kg",
+"L"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "¿Cuál es el plural de 'lápiz'?",
+"choices": [
+"lápices",
+"lápizes",
+"lápiz",
+"lápizs"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Elige la forma correcta: Yo ___ estudiante.",
+"choices": [
+"soy",
+"estoy",
+"es",
+"eres"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "¿Qué palabra lleva tilde?",
+"choices": [
+"árbol",
+"arbol",
+"arból",
+"árból"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "¿Cómo se dice 'hello' en español?",
+"choices": [
+"¡Hola!",
+"Adiós",
+"Gracias",
+"Por favor"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which is the Spanish for 'Good morning'?",
+"choices": [
+"Buenos días",
+"Buenas noches",
+"Buenas tardes",
+"Hasta luego"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Choisissez le bon article : ___ livre",
+"choices": [
+"le",
+"la",
+"les",
+"l'"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Quel mot est un adjectif ?",
+"choices": [
+"heureux",
+"courir",
+"maison",
+"lentement"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Comment dit-on 'thank you' en français ?",
+"choices": [
+"Merci",
+"Bonjour",
+"Pardon",
+"Salut"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Quelle est la forme correcte du passé composé de 'aller' (je) ?",
+"choices": [
+"je suis allé",
+"j'ai allé",
+"je vais",
+"j'allais"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Welcher Artikel passt? ___ Hund",
+"choices": [
+"der",
+"die",
+"das",
+"den"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Welches Wort ist ein Nomen?",
+"choices": [
+"Haus",
+"laufen",
+"schnell",
+"blau"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Welches Wort ist großgeschrieben richtig?",
+"choices": [
+"Tisch",
+"tisch",
+"TISCH",
+"tIsch"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Was ist das Partizip II von 'gehen'?",
+"choices": [
+"gegangen",
+"gegeht",
+"gangen",
+"geging"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Welcher Satz ist eine Frage?",
+"choices": [
+"Kommst du morgen?",
+"Ich komme morgen.",
+"Komm morgen!",
+"Morgen komme ich."
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Quale parola è un verbo?",
+"choices": [
+"mangiare",
+"casa",
+"bello",
+"sempre"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Qual é o plural de 'cão'?",
+"choices": [
+"cães",
+"cãos",
+"cões",
+"cãoes"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Какое слово — глагол?",
+"choices": [
+"читать",
+"книга",
+"красивый",
+"быстро"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Выберите правильный падеж: Я вижу ___.",
+"choices": [
+"маму",
+"мама",
+"мамой",
+"маме"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Какой город — столица России?",
+"choices": [
+"Москва",
+"Санкт-Петербург",
+"Казань",
+"Новосибирск"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Яке слово — іменник?",
+"choices": [
+"хата",
+"бігти",
+"гарний",
+"швидко"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Ποια είναι η πρωτεύουσα της Ελλάδας;",
+"choices": [
+"Αθήνα",
+"Θεσσαλονίκη",
+"Πάτρα",
+"Ηράκλειο"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Hangi kelime fiildir?",
+"choices": [
+"koşmak",
+"ev",
+"güzel",
+"hızlı"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Które słowo jest czasownikiem?",
+"choices": [
+"czytać",
+"dom",
+"ładny",
+"szybko"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Welk woord is een werkwoord?",
+"choices": [
+"lopen",
+"huis",
+"mooi",
+"snel"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Vilket ord är ett verb?",
+"choices": [
+"springa",
+"hus",
+"vacker",
+"snabbt"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Mikä on Suomen pääkaupunki?",
+"choices": [
+"Helsinki",
+"Tampere",
+"Turku",
+"Oulu"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Kata mana yang merupakan kata kerja?",
+"choices": [
+"makan",
+"rumah",
+"cantik",
+"cepat"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Từ nào là động từ?",
+"choices": [
+"chạy",
+"nhà",
+"đẹp",
+"nhanh"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "「りんご」は英語で何ですか。",
+"choices": [
+"apple",
+"orange",
+"banana",
+"grape"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "次のうち動詞はどれですか。",
+"choices": [
+"食べる",
+"赤い",
+"静か",
+"本"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "「ありがとう」の丁寧な言い方は？",
+"choices": [
+"ありがとうございます",
+"ありがとう",
+"どうも",
+"サンキュー"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "下列哪个是动词？",
+"choices": [
+"跑",
+"红",
+"书",
+"很"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "“谢谢”的英文是什么？",
+"choices": [
+"Thank you",
+"Sorry",
+"Hello",
+"Goodbye"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "다음 중 동사는?",
+"choices": [
+"먹다",
+"사과",
+"빨갛다",
+"책"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "한국의 수도는?",
+"choices": [
+"서울",
+"부산",
+"인천",
+"대구"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "أي كلمة فعل؟",
+"choices": [
+"كتب",
+"كتاب",
+"جميل",
+"بسرعة"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "ما عاصمة مصر؟",
+"choices": [
+"القاهرة",
+"الإسكندرية",
+"الجيزة",
+"أسوان"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "איזו מילה היא פועל?",
+"choices": [
+"לכתוב",
+"ספר",
+"יפה",
+"מהר"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "कौन सा शब्द क्रिया है?",
+"choices": [
+"दौड़ना",
+"घर",
+"सुंदर",
+"जल्दी"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "ভারতের রাজধানী কোনটি?",
+"choices": [
+"নয়াদিল্লি",
+"মুম্বাই",
+"কলকাতা",
+"চেন্নাই"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "ประเทศไทยมีเมืองหลวงชื่ออะไร",
+"choices": [
+"กรุงเทพฯ",
+"เชียงใหม่",
+"ภูเก็ต",
+"ขอนแก่น"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Ni neno lipi ni kitenzi?",
+"choices": [
+"kukimbia",
+"nyumba",
+"nzuri",
+"haraka"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Choose the Latin for 'we love'.",
+"choices": [
+"amamus",
+"amo",
+"amant",
+"amatis"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which Greek letter is used for the sum symbol?",
+"choices": [
+"Σ",
+"Π",
+"Δ",
+"Ω"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which word is a proper noun?",
+"choices": [
+"London",
+"city",
+"river",
+"bridge"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which word should be capitalised?",
+"choices": [
+"Monday",
+"apple",
+"table",
+"garden"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which is an interjection?",
+"choices": [
+"Wow!",
+"run",
+"blue",
+"quickly"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which sentence is punctuated correctly?",
+"choices": [
+"It's raining.",
+"Its raining.",
+"Its' raining.",
+"It is' raining."
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which is the correct contraction of 'do not'?",
+"choices": [
+"don't",
+"do'nt",
+"dont'",
+"dont"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which is an exclamatory sentence?",
+"choices": [
+"What a beautiful day!",
+"Is it sunny?",
+"It is sunny.",
+"Please open the window."
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which word is spelled correctly?",
+"choices": [
+"necessary",
+"neccessary",
+"necesary",
+"neccesary"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which is a synonym of 'happy'?",
+"choices": [
+"joyful",
+"sad",
+"angry",
+"tired"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which is an antonym of 'wrong'?",
+"choices": [
+"right",
+"bad",
+"false",
+"incorrect"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which is an antonym of 'incorrect'?",
+"choices": [
+"correct",
+"wrong",
+"mistaken",
+"false"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "What is the opposite of 'left'?",
+"choices": [
+"right",
+"down",
+"up",
+"back"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which word means 'the solution to a problem'?",
+"choices": [
+"answer",
+"question",
+"problem",
+"puzzle"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which is the past tense of 'write'?",
+"choices": [
+"wrote",
+"writed",
+"written",
+"writes"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which is a compound word?",
+"choices": [
+"sunflower",
+"flower",
+"sunny",
+"flowering"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which word is an adverb?",
+"choices": [
+"quickly",
+"quick",
+"quickness",
+"quicken"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which is the subject of 'The cat sat on the mat'?",
+"choices": [
+"The cat",
+"sat",
+"on the mat",
+"the mat"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which literary device is 'The wind whispered'?",
+"choices": [
+"Personification",
+"Simile",
+"Metaphor",
+"Hyperbole"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which is a haiku's syllable pattern?",
+"choices": [
+"5-7-5",
+"7-5-7",
+"5-5-5",
+"3-5-3"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which rhyme scheme is a Shakespearean sonnet's?",
+"choices": [
+"ABAB CDCD EFEF GG",
+"ABBA ABBA CDE CDE",
+"AABB CCDD EEFF GG",
+"ABCABC"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which is the correct form: 'Neither the teacher nor the students ___ ready.'",
+"choices": [
+"were",
+"was",
+"is",
+"be"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which uses the semicolon correctly?",
+"choices": [
+"I came; I saw.",
+"I came; and I saw.",
+"I; came I saw.",
+"I came I; saw."
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which abbreviation means 'for example'?",
+"choices": [
+"e.g.",
+"i.e.",
+"etc.",
+"et al."
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which abbreviation means 'that is'?",
+"choices": [
+"i.e.",
+"e.g.",
+"cf.",
+"viz"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which title is formatted correctly?",
+"choices": [
+"The Lord of the Rings",
+"The lord of the rings",
+"the Lord of the Rings",
+"THE LORD OF THE RINGS"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which word is an acronym?",
+"choices": [
+"NASA",
+"Nasa",
+"nasa",
+"NaSa"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which is written in title case?",
+"choices": [
+"Gone with the Wind",
+"gone with the wind",
+"GONE WITH THE WIND",
+"Gone With The wind"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Who was the first emperor of Rome?",
+"choices": [
+"Augustus",
+"Julius Caesar",
+"Nero",
+"Caligula"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which empire built Machu Picchu?",
+"choices": [
+"Inca",
+"Aztec",
+"Maya",
+"Olmec"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "In which year did the Berlin Wall fall?",
+"choices": [
+"1989",
+"1961",
+"1991",
+"1945"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which war began in 1914?",
+"choices": [
+"World War I",
+"World War II",
+"The Korean War",
+"The Crimean War"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which king signed the Magna Carta?",
+"choices": [
+"King John",
+"Henry II",
+"Richard I",
+"Edward I"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Who was Louis XIV?",
+"choices": [
+"King of France",
+"Pope",
+"Holy Roman Emperor",
+"King of Spain"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which century was the Renaissance at its height?",
+"choices": [
+"15th–16th century",
+"10th–11th century",
+"18th–19th century",
+"5th–6th century"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "When did the French Revolution begin?",
+"choices": [
+"1789",
+"1776",
+"1815",
+"1848"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which river flows through Egypt?",
+"choices": [
+"Nile",
+"Amazon",
+"Danube",
+"Ganges"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which is the capital of Australia?",
+"choices": [
+"Canberra",
+"Sydney",
+"Melbourne",
+"Perth"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which is the capital of Canada?",
+"choices": [
+"Ottawa",
+"Toronto",
+"Vancouver",
+"Montreal"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which is the longest river in the world?",
+"choices": [
+"Nile",
+"Amazon",
+"Yangtze",
+"Mississippi"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which ocean is the largest?",
+"choices": [
+"Pacific",
+"Atlantic",
+"Indian",
+"Arctic"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which continent is Kenya in?",
+"choices": [
+"Africa",
+"Asia",
+"Europe",
+"South America"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which line divides the Earth into hemispheres north and south?",
+"choices": [
+"The Equator",
+"The Prime Meridian",
+"The Tropic of Cancer",
+"The Arctic Circle"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which country has the city of Kyoto?",
+"choices": [
+"Japan",
+"China",
+"Korea",
+"Vietnam"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which organisation was founded in 1945 to keep peace?",
+"choices": [
+"The United Nations (UN)",
+"NATO",
+"The League of Nations",
+"The European Union (EU)"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which economic system has private ownership?",
+"choices": [
+"Capitalism",
+"Communism",
+"Feudalism",
+"Mercantilism"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which branch of US government makes laws?",
+"choices": [
+"Legislative",
+"Executive",
+"Judicial",
+"Military"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "How many US senators are there?",
+"choices": [
+"100",
+"50",
+"435",
+"538"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which amendment protects free speech?",
+"choices": [
+"1st",
+"2nd",
+"5th",
+"10th"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which is GDP?",
+"choices": [
+"Gross Domestic Product",
+"General Domestic Price",
+"Gross Development Plan",
+"Government Debt Payment"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which philosopher said 'I think, therefore I am'?",
+"choices": [
+"René Descartes",
+"Immanuel Kant",
+"John Locke",
+"David Hume"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Who painted The Starry Night?",
+"choices": [
+"Vincent van Gogh",
+"Claude Monet",
+"Pablo Picasso",
+"Salvador Dalí"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Who composed the Ninth Symphony with 'Ode to Joy'?",
+"choices": [
+"Beethoven",
+"Mozart",
+"Bach",
+"Haydn"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which note is a semitone above C?",
+"choices": [
+"C♯",
+"D",
+"B",
+"C♭"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which key signature has one sharp?",
+"choices": [
+"G major",
+"D major",
+"F major",
+"C major"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "How many beats does a whole note get in 4/4?",
+"choices": [
+"4",
+"2",
+"1",
+"8"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which dynamic marking means very loud?",
+"choices": [
+"ff",
+"pp",
+"mf",
+"p"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which tempo marking means slow?",
+"choices": [
+"Adagio",
+"Allegro",
+"Presto",
+"Vivace"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "How many players are on a soccer team on the field?",
+"choices": [
+"11",
+"9",
+"10",
+"12"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which nutrient is the body's main energy source?",
+"choices": [
+"Carbohydrates",
+"Proteins",
+"Vitamins",
+"Minerals"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "What is a normal resting heart rate for adults?",
+"choices": [
+"60–100 bpm",
+"20–40 bpm",
+"120–160 bpm",
+"180–200 bpm"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "lang",
+"stem": "Which is the emergency number in the EU?",
+"choices": [
+"112",
+"911",
+"999",
+"000"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": true
+},
+{
+"cat": "struct",
+"stem": "Which are prime numbers? Select all that apply.",
+"choices": [
+"2",
+"3",
+"4",
+"9"
+],
+"correct": [
+0,
+1
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which are noble gases? Select all.",
+"choices": [
+"Neon",
+"Argon",
+"Nitrogen",
+"Oxygen"
+],
+"correct": [
+0,
+1
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which are mammals? (select all)",
+"choices": [
+"Whale",
+"Bat",
+"Shark",
+"Penguin"
+],
+"correct": [
+0,
+1
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which are even?",
+"choices": [
+"4",
+"10",
+"7",
+"13",
+"21"
+],
+"correct": [
+0,
+1
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which are vectors?",
+"choices": [
+"Velocity",
+"Force",
+"Speed",
+"Mass",
+"Energy"
+],
+"correct": [
+0,
+1
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which statements are true? Choose two.",
+"choices": [
+"The Sun is a star.",
+"Water boils at 100 °C at sea level.",
+"The Moon is a planet.",
+"Sound travels faster than light."
+],
+"correct": [
+0,
+1
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Is the Earth round?",
+"choices": [
+"True",
+"False"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "The Sun rises in the west.",
+"choices": [
+"True",
+"False"
+],
+"correct": [
+1
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Is 17 prime?",
+"choices": [
+"Yes",
+"No"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Vrai ou faux : Paris est la capitale de la France.",
+"choices": [
+"Vrai",
+"Faux"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "¿Verdadero o falso? El agua hierve a 100 °C.",
+"choices": [
+"Verdadero",
+"Falso"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Richtig oder falsch: Berlin liegt in Deutschland.",
+"choices": [
+"Richtig",
+"Falsch"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which mammals lay eggs?",
+"choices": [
+"Platypus",
+"Dolphin",
+"Elephant",
+"None of the above"
+],
+"correct": [
+0
+],
+"locked": [
+3
+],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which are primary colours of light?",
+"choices": [
+"Red",
+"Green",
+"Blue",
+"All of the above"
+],
+"correct": [
+3
+],
+"locked": [
+3
+],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which is a fruit?",
+"choices": [
+"Carrot",
+"Potato",
+"Onion",
+"None of the above"
+],
+"correct": [
+3
+],
+"locked": [
+3
+],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which planets are gas giants?",
+"choices": [
+"Jupiter",
+"Saturn",
+"Both A and B",
+"Neither A nor B"
+],
+"correct": [
+2
+],
+"locked": [
+2,
+3
+],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which of the following is correct?\nI. 2 is prime\nII. 9 is prime\nIII. 11 is prime",
+"choices": [
+"I only",
+"II only",
+"I and III",
+"I, II and III"
+],
+"correct": [
+2
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which statements are correct?\nI. Na is a metal\nII. Cl is a halogen\nIII. Ar is reactive",
+"choices": [
+"I and II",
+"I only",
+"II and III",
+"I, II and III"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which are true? (1) acids donate H⁺ (2) bases accept H⁺",
+"choices": [
+"1 and 2",
+"1 only",
+"2 only",
+"neither"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Order the following: the correct sequence of mitosis is",
+"choices": [
+"Prophase, Metaphase, Anaphase, Telophase",
+"Metaphase, Prophase, Anaphase, Telophase",
+"Anaphase, Prophase, Metaphase, Telophase",
+"Telophase, Anaphase, Metaphase, Prophase"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "How satisfied are you? (survey item, graded for completion)",
+"choices": [
+"Very satisfied",
+"Satisfied",
+"Neutral",
+"Dissatisfied",
+"Very dissatisfied"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "What is the population of the town (approx.)?",
+"choices": [
+"0–999",
+"1,000–9,999",
+"10,000–99,999",
+"100,000 or more"
+],
+"correct": [
+1
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "What is the boiling point range of ethanol?",
+"choices": [
+"Below 50 °C",
+"50–100 °C",
+"100–150 °C",
+"Above 150 °C"
+],
+"correct": [
+1
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "How many moons does Mars have?",
+"choices": [
+"0",
+"1",
+"2",
+"3"
+],
+"correct": [
+2
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Pick the smallest.",
+"choices": [
+"1/2",
+"1/3",
+"1/4",
+"1/5"
+],
+"correct": [
+3
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "A. Which is the capital of France?",
+"choices": [
+"Paris",
+"Rome",
+"Madrid",
+"Berlin"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which is the capital of Italy?",
+"choices": [
+"A. Paris",
+"B. Rome",
+"C. Madrid",
+"D. Berlin"
+],
+"correct": [
+1
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which is the capital of Spain?",
+"choices": [
+"a) Paris",
+"b) Rome",
+"c) Madrid",
+"d) Berlin"
+],
+"correct": [
+2
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which is the capital of Germany?",
+"choices": [
+"(A) Paris",
+"(B) Rome",
+"(C) Madrid",
+"(D) Berlin"
+],
+"correct": [
+3
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which gas is most abundant in air?",
+"choices": [
+"A) Nitrogen",
+"B) Oxygen",
+"C) Argon",
+"D) Carbon dioxide"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which is the largest mammal?",
+"choices": [
+"A. Blue whale",
+"B. Elephant",
+"C. Giraffe",
+"D. Hippopotamus"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which pair is correct?",
+"choices": [
+"A. Both B and C",
+"B. Paris – France",
+"C. Rome – Italy",
+"D. Madrid – Portugal"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "What is 2 + 2?",
+"choices": [
+"A. 3",
+"B. 4",
+"C. 5",
+"D. 22"
+],
+"correct": [
+1
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Who wrote 1984?",
+"choices": [
+"A. George Orwell",
+"B. Aldous Huxley",
+"C. Ray Bradbury",
+"D. H. G. Wells"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which physicist proposed relativity?",
+"choices": [
+"A. Einstein",
+"B. Newton",
+"C. Bohr",
+"D. Curie"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which is the first letter of the alphabet?",
+"choices": [
+"A",
+"B",
+"C",
+"D"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which blood type is the universal recipient?",
+"choices": [
+"AB",
+"O",
+"A",
+"B"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which vitamin is ascorbic acid?",
+"choices": [
+"C",
+"A",
+"D",
+"E"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which grade is the highest?",
+"choices": [
+"A",
+"B",
+"C",
+"F"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which musical note is a perfect fifth above C?",
+"choices": [
+"G",
+"F",
+"E",
+"A"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which chord is C major?",
+"choices": [
+"C–E–G",
+"C–E♭–G",
+"C–F–A",
+"C–D–G"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which is the hexadecimal digit for 10?",
+"choices": [
+"A",
+"B",
+"F",
+"1"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which is the Roman numeral for 4?",
+"choices": [
+"IV",
+"VI",
+"IIII",
+"XL"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which Roman numeral is 1990?",
+"choices": [
+"MCMXC",
+"MDCCCCLXXXX",
+"MCMLXC",
+"MXM"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which is the 3rd letter of the Greek alphabet?",
+"choices": [
+"γ",
+"β",
+"δ",
+"α"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which choice is NOT a mammal?",
+"choices": [
+"Shark",
+"Whale",
+"Bat",
+"Dog"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which is NOT a prime?",
+"choices": [
+"9",
+"7",
+"5",
+"3"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which of these is LEAST reactive?",
+"choices": [
+"Gold",
+"Sodium",
+"Potassium",
+"Iron"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which describes Newton's first law?",
+"choices": [
+"An object at rest stays at rest unless acted upon by a net force.",
+"Force equals mass times acceleration.",
+"Every action has an equal and opposite reaction.",
+"Energy is conserved."
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which describes osmosis?",
+"choices": [
+"Movement of water across a semi-permeable membrane",
+"Movement of solute against a gradient",
+"Cell division",
+"Protein synthesis"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which describes the mitochondria?",
+"choices": [
+"The powerhouse of the cell.",
+"The control centre of the cell.",
+"The cell's packaging centre.",
+"The site of protein synthesis."
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which of the following best defines 'photosynthesis'?",
+"choices": [
+"The process by which plants make glucose using light energy.",
+"The breakdown of glucose to release energy.",
+"The movement of water through a plant.",
+"The loss of water from leaves."
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which answer is the best thesis statement?",
+"choices": [
+"Social media harms teen sleep, mood and focus.",
+"Social media exists.",
+"Many teens use phones.",
+"This essay is about social media."
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which is the main idea of paragraph 2?",
+"choices": [
+"Recycling saves resources.",
+"Plastic is cheap.",
+"Paper comes from trees.",
+"Cans are made of aluminium."
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "What should you do first in a fire?",
+"choices": [
+"Raise the alarm",
+"Collect belongings",
+"Open all windows",
+"Use the lift"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which is the correct answer to 6 × 7?",
+"choices": [
+"42",
+"36",
+"48",
+"13"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which is the right angle?",
+"choices": [
+"90°",
+"45°",
+"180°",
+"60°"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which side is the hypotenuse?",
+"choices": [
+"The side opposite the right angle",
+"The shortest side",
+"The side next to the right angle",
+"Any side"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which is correct?",
+"choices": [
+"They're going to their house.",
+"Their going to there house.",
+"There going to they're house.",
+"They're going to there house."
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which is grammatically correct?",
+"choices": [
+"Me and him went.",
+"He and I went.",
+"Him and I went.",
+"Me and he went."
+],
+"correct": [
+1
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "What does 'correct' mean?",
+"choices": [
+"free from error",
+"full of mistakes",
+"very large",
+"quickly"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which word fills the blank: 'That is the ___ answer.'",
+"choices": [
+"right",
+"write",
+"rite",
+"wright"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which homophone fits: 'Turn ___ at the light.'",
+"choices": [
+"right",
+"write",
+"rite",
+"wright"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which describes an answer key?",
+"choices": [
+"A list of correct answers",
+"A musical key",
+"A door key",
+"A keyboard key"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "What is a 'key' in music?",
+"choices": [
+"The tonal centre of a piece",
+"A part of a lock",
+"An answer list",
+"A typing button"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which one is right-handed?",
+"choices": [
+"A dextral snail",
+"A sinistral snail",
+"Neither",
+"Both"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "In soccer, which position is 'right back'?",
+"choices": [
+"A defender",
+"A forward",
+"The goalkeeper",
+"A midfielder"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which civil right was won in 1920 in the US?",
+"choices": [
+"Women's right to vote",
+"Right to bear arms",
+"Right to a jury",
+"Right to free speech"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Which is a human right?",
+"choices": [
+"Right to life",
+"Right to a car",
+"Right to a phone",
+"Right to a holiday home"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+},
+{
+"cat": "struct",
+"stem": "Choose the right word: The ___ of the problem is 5.",
+"choices": [
+"answer",
+"question",
+"anwser",
+"answers"
+],
+"correct": [
+0
+],
+"locked": [],
+"rotate": false
+}
+]

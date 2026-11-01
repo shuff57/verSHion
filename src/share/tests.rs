@@ -1105,6 +1105,7 @@ fn secrets_never_appear_in_debug_output_or_logs() {
         ],
         body: Some(Secret::new(json!({"email": EMAIL, "password": PASSWORD}).to_string())),
         timeout: None,
+        ..Default::default()
     };
     dumps.push(format!("{req:?}"));
     dumps.push(format!("{:?}", Response::new(200, &json!({"refresh_token": token("rt", 1)}).to_string())));
@@ -1641,11 +1642,12 @@ fn native_transport_sends_x_client_no_origin_and_reads_retry_after() {
         headers: vec![("X-Device-Token".into(), Secret::new("dev-token")), ("Origin".into(), Secret::new("https://evil"))],
         body: Some(Secret::new(r#"{"email":"a@b.c","password":"p"}"#)),
         timeout: None,
+        ..Default::default()
     };
     let r = block_on(t.send(req)).unwrap();
     assert_eq!((r.status, r.retry_after), (429, Some(42)));
     assert_eq!(ApiError::from_response(&r).code(), "rate_limited");
-    let del = Request { method: Method::Delete, url: format!("{base}/account"), headers: vec![], body: Some(Secret::new(r#"{"password":"p"}"#)), timeout: None };
+    let del = Request { method: Method::Delete, url: format!("{base}/account"), headers: vec![], body: Some(Secret::new(r#"{"password":"p"}"#)), timeout: None, ..Default::default() };
     block_on(t.send(del)).unwrap();
     let seen = server.join().unwrap();
     let (head, body) = &seen[0];
@@ -1664,7 +1666,7 @@ fn native_transport_reports_unreachable_as_offline() {
     // A port nothing listens on (bound then dropped).
     let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
     let t = super::transport::NativeTransport::default();
-    let req = Request { method: Method::Get, url: format!("http://127.0.0.1:{port}/me"), headers: vec![], body: None, timeout: None };
+    let req = Request { method: Method::Get, url: format!("http://127.0.0.1:{port}/me"), headers: vec![], body: None, timeout: None, ..Default::default() };
     let e = block_on(t.send(req)).unwrap_err();
     assert!(e.text.starts_with("Can't reach 127.0.0.1"), "{}", e.text);
     assert_eq!(e.kind, super::transport::NetKind::Offline);
@@ -1690,7 +1692,7 @@ fn native_transport_treats_an_empty_gzip_204_as_success() {
         write!(s, "HTTP/1.1 204 No Content\r\nContent-Encoding: gzip\r\nConnection: close\r\n\r\n").unwrap();
     });
     let t = super::transport::NativeTransport::default();
-    let req = Request { method: Method::Get, url: format!("http://127.0.0.1:{port}/x"), headers: vec![], body: None, timeout: None };
+    let req = Request { method: Method::Get, url: format!("http://127.0.0.1:{port}/x"), headers: vec![], body: None, timeout: None, ..Default::default() };
     let r = block_on(t.send(req)).unwrap();
     assert_eq!(r.status, 204);
     server.join().unwrap();
@@ -2147,6 +2149,7 @@ fn the_native_transport_honours_the_short_limit() {
         headers: vec![],
         body: Some(Secret::new("{}")),
         timeout: Some(super::client::REFRESH_TIMEOUT),
+        ..Default::default()
     };
     let e = block_on(t.send(req)).unwrap_err();
     let took = started.elapsed();
@@ -2178,7 +2181,7 @@ fn the_native_transport_reports_a_broken_handshake_as_tls() {
         std::thread::sleep(Duration::from_millis(300));
     });
     let t = super::transport::NativeTransport::default();
-    let req = Request { method: Method::Get, url: format!("https://127.0.0.1:{port}/me"), headers: vec![], body: None, timeout: None };
+    let req = Request { method: Method::Get, url: format!("https://127.0.0.1:{port}/me"), headers: vec![], body: None, timeout: None, ..Default::default() };
     let e = block_on(t.send(req)).unwrap_err();
     assert_eq!(e.kind, super::transport::NetKind::Tls, "{}", e.text);
 }

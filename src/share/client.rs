@@ -495,7 +495,8 @@ impl Client {
     // ---- plumbing ----------------------------------------------------------------------
 
     fn request(&self, method: Method, path: &str, body: Option<Secret>) -> Request {
-        Request { method, url: format!("{}{}", self.base, path), headers: Vec::new(), body, timeout: None }
+        let url = route_url(&self.base, path).unwrap_or_default();
+        Request { method, url, body, ..Request::default() }
     }
 
     async fn send(&self, req: Request) -> Result<Response, ApiError> {
@@ -743,6 +744,31 @@ impl Client {
                 return Err(ApiError::SignedOut);
             }
             return if (200..300).contains(&resp.status) { Ok(resp) } else { Err(ApiError::from_response(&resp)) };
+        }
+        Err(ApiError::SignedOut)
+    }
+
+    /// An authenticated call for the pool layer (`share::pool`): the same bearer-and-refresh handling
+    /// as [`Client::authed`], but the answer comes back whole, whatever its status, so the caller can
+    /// read the Worker's full error body. `build` makes a fresh request (URL, body, headers) per try.
+    /// Only the bearer check's own `401 unauthorized` is handled here (one refresh and retry, then
+    /// signed out).
+    pub(crate) async fn authed_raw(&self, build: &dyn Fn() -> Request) -> Result<Response, ApiError> {
+        for attempt in 0..2 {
+            let (token, generation) = self.access().await?;
+            let mut req = build();
+            req.headers.push(("Authorization".into(), Secret::new(format!("Bearer {}", token.expose()))));
+            let resp = self.send(req).await?;
+            let expired = resp.status == 401 && matches!(ApiError::from_response(&resp).code(), "unauthorized" | "");
+            if expired && attempt == 0 {
+                self.refresh_after(generation).await?;
+                continue;
+            }
+            if expired {
+                self.drop_session(false);
+                return Err(ApiError::SignedOut);
+            }
+            return Ok(resp);
         }
         Err(ApiError::SignedOut)
     }
@@ -1003,4 +1029,13 @@ impl Client {
     pub(crate) fn access_for_test(&self) -> Option<String> {
         self.lock().access.as_ref().map(|s| s.expose().to_string())
     }
+}
+
+/// `base + path` for a route, or `None` when the path could make the result name another host.
+/// A route path is one `/`-rooted path: with a base that ends at the host, nothing else can move the
+/// host (a path like "@evil.test/x" or "//evil.test" is refused, and the transport then rejects the
+/// empty address).
+pub(crate) fn route_url(base: &str, path: &str) -> Option<String> {
+    let ok = path.starts_with('/') && !path.starts_with("//") && !path.contains(['\\', ' ', '\r', '\n']);
+    ok.then(|| format!("{base}{path}"))
 }

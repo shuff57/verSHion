@@ -84,12 +84,23 @@ test("X2/X3: a privacy block on an image holds whatever DMCA rows exist for it, 
   const nid = await notice(w, admin);
   await w.takedown(admin, nid, pa.body.item_id);
   await w.admin(admin, "POST", "/admin/dmca/withdraw", { notice_id: nid });
+  w.history(C);
   await w.json("POST", `/items/${pa.body.item_id}/report`, { user: C, json: { reason: "student_data" } });
   assert.equal((await w.purge(admin, pa.body.item_id)).status, 200);
   assert.ok(w.q(`SELECT * FROM privacy_blocks WHERE kind = 'blob' AND hash = ?`, up.sha).length === 1);
-  // B cannot re-upload the blocked bytes (neutral refusal), so no new item can carry them.
-  assert.equal((await upload(w, B, img)).body.reason, "not_accepted");
-  assert.equal((await publish(w, B, bankPayload([genQuestion(rng(4), "Short", 0, { sha: up.sha, ext: "png" })]))).body.error, "blob_missing");
+  // Round 16 (critic21d 5): B's re-upload of the blocked bytes is accepted like any image (no block
+  // oracle); an item serving them is held by the block, never refused (no oracle there either).
+  assert.equal((await upload(w, B, img)).status, 201);
+  const pb = await publish(w, B, bankPayload([genQuestion(rng(4), "Short", 0, { sha: up.sha, ext: "png" })]));
+  assert.equal(pb.status, 201);
+  assert.deepEqual(w.q(`SELECT reason, source FROM item_holds WHERE item_id = ?`, pb.body.item_id), [{ reason: "student_data", source: "privacy" }]);
+  w.advance(31 * DAY);
+  await w.pool.daily();
+  await w.pool.hourly();
+  // After the grace window (bytes gone) a publish serving them is still held, never refused.
+  const pc = await publish(w, B, bankPayload([genQuestion(rng(6), "Short", 0, { sha: up.sha, ext: "png" })]));
+  assert.equal(pc.status, 201, JSON.stringify(pc.body).slice(0, 200));
+  assert.deepEqual(w.q(`SELECT reason, source FROM item_holds WHERE item_id = ?`, pc.body.item_id), [{ reason: "student_data", source: "privacy" }]);
   // X3: a standing takedown on another item with the same image, put back after the privacy purge.
   const w2 = new World();
   const adm2 = w2.user("admin"), A2 = w2.user(), B2 = w2.user(), C2 = w2.user();
@@ -100,8 +111,10 @@ test("X2/X3: a privacy block on an image holds whatever DMCA rows exist for it, 
   const pb2 = await publish(w2, B2, bankPayload([genQuestion(rng(6), "Short", 0, { sha: u2.sha, ext: "png" })]));
   const n2 = await notice(w2, adm2);
   await w2.takedown(adm2, n2, pb2.body.item_id);
+  w2.history(C2);
   await w2.json("POST", `/items/${pa2.body.item_id}/report`, { user: C2, json: { reason: "student_data" } });
-  await w2.purge(adm2, pa2.body.item_id);
+  // Round 9: B2 has the image on their own (not through pa2), so a privacy block selects it only explicitly.
+  await w2.purge(adm2, pa2.body.item_id, { images: [u2.sha] });
   await w2.admin(adm2, "POST", "/admin/dmca/withdraw", { notice_id: n2 });
   assert.equal((await w2.call("GET", `/items/${pb2.body.item_id}/blobs/${u2.sha}`, { user: C2 })).status, 404);
   assert.equal(await seen(w2, C2, pb2.body.item_id as string), 404, "the taken-down copy was held too, and stays held after its put-back");
@@ -118,6 +131,7 @@ test("X4/PRIV-1: student data in question TEXT: copies are held, and any later p
   // A deleted copy is held too, so undoing its deletion does not bring the text back.
   const pc = await publish(w, B, bankOf(ib.body.payload.bank.questions), { visibility: "public" });
   await w.json("DELETE", `/items/${pc.body.item_id}`, { user: B });
+  w.history(C);
   await w.json("POST", `/items/${pa.body.item_id}/report`, { user: C, json: { reason: "student_data" } });
   assert.equal((await w.purge(admin, pa.body.item_id)).status, 200);
   assert.equal(await seen(w, C, pb.body.item_id as string), 404);
@@ -125,34 +139,53 @@ test("X4/PRIV-1: student data in question TEXT: copies are held, and any later p
   assert.equal(await seen(w, C, pc.body.item_id as string), 404);
   for (const u of [E, A]) {
     const again = await publish(w, u, bankPayload([q]));
-    assert.equal(again.status, 201, "a hold, never a refusal (common questions)");
+    assert.equal(again.status, 201, "never a refusal (common questions)");
+    // Round 8: held at publish again (the publisher already holds the text verbatim), and flagged once.
     assert.deepEqual(w.q(`SELECT reason, source FROM item_holds WHERE item_id = ?`, again.body.item_id), [{ reason: "student_data", source: "privacy" }]);
+    assert.equal(w.q(`SELECT * FROM admin_flags WHERE kind = 'privacy_text_match' AND item_id = ?`, again.body.item_id).length, 1);
   }
 });
 
-test("X5: a held item deleted and published again as new carries its hold", async () => {
-  const w = new World();
-  const A = w.user(), C = w.user();
-  const pa = await publish(w, A, tfBank(8, 2));
-  await w.json("POST", `/items/${pa.body.item_id}/report`, { user: C, json: { reason: "student_data" } });
-  await w.json("DELETE", `/items/${pa.body.item_id}`, { user: A });
-  const p2 = await publish(w, A, tfBank(8, 2));
-  assert.equal(await seen(w, C, p2.body.item_id as string), 404);
-  assert.deepEqual(w.q(`SELECT reason, source FROM item_holds WHERE item_id = ?`, p2.body.item_id), [{ reason: "student_data", source: `carried:${pa.body.item_id}` }]);
+test("X5: a held item deleted and published again as new carries its hold (round 16: only a hold two or more reporters, or an admin, stand behind)", async () => {
+  const mcBank = () => bankPayload(Array.from({ length: 2 }, (_, i) => genQuestion(rng(8), "Mc", i)));
+  for (const how of ["one student_data report", "three reports"] as const) {
+    const w = new World();
+    const A = w.user(), C = w.user(), D = w.user(), E = w.user();
+    const pa = await publish(w, A, mcBank());
+    for (const u of how === "three reports" ? [C, D, E] : [C]) {
+      w.history(u);
+      await w.json("POST", `/items/${pa.body.item_id}/report`, { user: u, json: { reason: how === "three reports" ? "other" : "student_data" } });
+    }
+    assert.equal(w.q(`SELECT * FROM item_holds WHERE item_id = ?`, pa.body.item_id).length, 1, how);
+    await w.json("DELETE", `/items/${pa.body.item_id}`, { user: A });
+    const p2 = await publish(w, A, mcBank());
+    // One reporter never holds more than the item reported (critic21d 4); the admin can hold it.
+    assert.deepEqual(
+      w.q(`SELECT reason, source FROM item_holds WHERE item_id = ?`, p2.body.item_id),
+      how === "three reports" ? [{ reason: "reports", source: `carried:${pa.body.item_id}` }] : [],
+      how,
+    );
+    if (how === "three reports") assert.equal(await seen(w, C, p2.body.item_id as string), 404);
+  }
 });
 
 // ---- licences and attribution -------------------------------------------------------------------------
 
-test("X6: a verbatim copy of something only READ (GET) is still checked: NC cannot become CC0", async () => {
+test("X6 (round 9 J1): a verbatim copy of something only READ is hard evidence, like an import: refused, naming the source", async () => {
   const w = new World();
   const A = w.user(), B = w.user();
-  const pa = await publish(w, A, tfBank(20, 2), { license: "CC-BY-NC-4.0" });
+  // Long, distinctive statements (round 10: short ones are treated as common).
+  const long = (i: number) => ({ id: "q", stem: `Distinctive statement number ${i} about the way glaciers carve deep valleys over centuries`, kind: { Tf: { correct: i % 2 === 0 } }, points: null, difficulty: null, topics: [], image: null, explanation: null, figure: null, created: 1, modified: 1 });
+  const pa = await publish(w, A, bankOf([long(0), long(1)]), { license: "CC-BY-NC-4.0" });
   const g = await w.json<any>("GET", `/items/${pa.body.item_id}`, { user: B });
   const pb = await publish(w, B, JSON.stringify(g.body.payload), { license: "CC0-1.0" });
-  assert.deepEqual([pb.status, pb.body.error, pb.body.allowed], [422, "license_incompatible", ["CC-BY-NC-4.0"]]);
+  assert.deepEqual([pb.status, pb.body.error, pb.body.allowed], [422, "license_incompatible", ["CC-BY-NC-4.0"]], "a read copied verbatim is not a CC0 badge (round 9)");
+  const i = await w.json<any>("POST", `/items/${pa.body.item_id}/import`, { user: B });
+  const pc = await publish(w, B, JSON.stringify(i.body.payload), { license: "CC0-1.0" });
+  assert.deepEqual([pc.status, pc.body.error, pc.body.allowed], [422, "license_incompatible", ["CC-BY-NC-4.0"]]);
   // A read is not an import: it does not count.
   const mine = await w.json<any>("GET", "/items/mine", { user: A });
-  assert.equal(mine.body.items[0].import_count, 0);
+  assert.equal(mine.body.items[0].import_count, 1, "only the import counts as one");
 });
 
 test("LIC-1/LIC-1b: within one item, a verbatim copy uses only the grants of the version it copies (explanations included)", async () => {
@@ -254,7 +287,7 @@ test("latent leak: with the import record gone, a public v2 does not reveal whet
     await imp(w, B, pa.body.item_id as string);
     const v1 = await publish(w, B, JSON.stringify({ schema_version: 1, bank: { id: "b", name: "B", questions: [tf(v1Key)], created: 1, modified: 1 } }), { hideKey: true });
     // The import record is gone (e.g. trimmed): only the previous publish's chain remains.
-    w.sql.prepare(`DELETE FROM import_questions WHERE user_id = ?`).run(B.id);
+    w.sql.prepare(`DELETE FROM served WHERE reader_id = ?`).run(B.id);
     const v2q = { ...tf(true), published: { item_id: v1.body.item_id, qid: (v1.body.qids as string[])[0], publish_id: v1.body.publish_id, version: 1 } };
     const v2 = await publish(w, B, JSON.stringify({ schema_version: 2, bank: { id: "b", name: "B", questions: [v2q], created: 1, modified: 1 } }), { base: v1.body.publish_id as string }, v1.body.item_id as string);
     assert.equal(v2.status, 200);
@@ -303,8 +336,13 @@ test("DMCA-1: a takedown lists the copies; one click holds them; after the put-b
   const pb = await publish(w, b, bankOf(withOrigin(ib, pa.body.item_id as string)));
   const t = await w.takedown<any>(admin, await notice(w, admin), pa.body.item_id);
   assert.deepEqual(t.body.copies.map((x: any) => x.item_id), [pb.body.item_id]);
-  const h = await w.admin<any>(admin, "POST", "/admin/dmca/hold-copies", { action_id: t.body.action_id });
+  // Previewed first: the confirm quotes the preview's single-use token (round 6).
+  assert.equal((await w.admin<any>(admin, "POST", "/admin/dmca/hold-copies", { action_id: t.body.action_id })).status, 428);
+  const hp = await w.admin<any>(admin, "POST", "/admin/dmca/hold-copies-preview", { action_id: t.body.action_id });
+  assert.deepEqual(hp.body.copies.map((x: any) => x.item_id), [pb.body.item_id]);
+  const h = await w.admin<any>(admin, "POST", "/admin/dmca/hold-copies", { action_id: t.body.action_id, confirm_preview: hp.body.confirm_preview });
   assert.deepEqual(h.body.held, [pb.body.item_id]);
+  assert.equal((await w.admin<any>(admin, "POST", "/admin/dmca/hold-copies", { action_id: t.body.action_id, confirm_preview: hp.body.confirm_preview })).status, 428, "single use");
   assert.equal(await seen(w, c, pb.body.item_id as string), 404);
   await w.json("POST", `/items/${pa.body.item_id}/counter-notice`, { user: a, json: { signature: "A", material_desc: "m", name: "A", address: "addr", phone: "1", perjury_stmt: true, consent_jurisdiction: true, accept_service: true } });
   w.advance(20 * DAY);
@@ -323,8 +361,8 @@ test("a counter-notice after the 30-day quarantine window is refused", async () 
   const it = (await publish(w, a, tfBank(2, 1))).body.item_id as string;
   await w.takedown(admin, await notice(w, admin), it);
   w.advance(31 * DAY);
-  const r = await w.json("POST", `/items/${it}/counter-notice`, { user: a, json: { signature: "A", material_desc: "m", name: "A", address: "addr", phone: "1", perjury_stmt: true, consent_jurisdiction: true, accept_service: true } });
-  assert.equal(r.status, 404);
+  const r = await w.json<any>("POST", `/items/${it}/counter-notice`, { user: a, json: { signature: "A", material_desc: "m", name: "A", address: "addr", phone: "1", perjury_stmt: true, consent_jurisdiction: true, accept_service: true } });
+  assert.deepEqual([r.status, r.body.error], [409, "window_closed"], "its own author is told why (round 8)");
 });
 
 // ---- IMG-1, PAGE-1, HOLD-1 ----------------------------------------------------------------------------
@@ -391,7 +429,7 @@ test("HOLD-1: a hidden republish that changes nothing served keeps the public ve
   assert.deepEqual(JSON.parse(g2.text).item.version, 1);
   assert.equal(JSON.parse(g2.text).item.committed_at, JSON.parse(g1.text).item.committed_at);
   const v = await w.json<any>("POST", "/items/versions", { user: e, json: { ids: [id] } });
-  assert.deepEqual(v.body.items[0], { id, status: "current", version: 1 });
+  assert.deepEqual(v.body.items[0], { id, status: "current", version: 1, license: "CC-BY-4.0", license_version: 1 });
   // The author sees the real version.
   assert.equal((await w.json<any>("GET", `/items/${id}`, { user: a })).body.item.version, 2);
   // A served change bumps it.
@@ -416,7 +454,8 @@ test("browse filters: subject is case-insensitive; tag, standard and title prefi
   assert.equal(await n("tag=unit%203"), 1);
   assert.equal(await n("standard=hs-ls1-4"), 1);
   assert.equal(await n("q=mito"), 1);
-  assert.equal(await n("q=100%25"), 0, "% is literal");
+  assert.equal(await n("q=100%25"), 1, "a word prefix (round 8), % literal");
+  assert.equal(await n("q=00%25"), 0, "% is literal and only word starts match");
   assert.equal(await n("q=Mitosis%20100%25_"), 1);
   const many = Array.from({ length: 210 }, (_, i) => genQuestion(rng(100 + i), "Tf", i));
   many.forEach((x, i) => ((x.json as Q).topics = [`topic ${i}`]));

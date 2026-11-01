@@ -80,7 +80,8 @@ fn strip_draws_its_own_seed_and_reports() {
         assert_eq!(j(&strip_seed_ok(p.as_bytes(), bad, &lab))["errors"][0]["code"], "bad_seed");
     }
     let st = serde_json::to_string(&out["payload"]).unwrap();
-    assert_eq!(out["stripped_hashes"], j(&full_hash_json(st.as_bytes(), ""))["hashes"]);
+    let sv = share_core::validate(&st, &share_core::Limits::default(), &share_core::Structural).unwrap();
+    assert_eq!(out["stripped_hashes"], serde_json::json!(sv.payload.questions().iter().map(share_core::full_hash).collect::<Vec<_>>()));
 }
 
 #[test]
@@ -107,8 +108,13 @@ fn publish_entry_point() {
 
 #[test]
 fn hashes_and_meta() {
-    let out = j(&full_hash_json(fixture_payload("question_tf").as_bytes(), ""));
+    // Keyed (round 6): no key, no hash.
+    assert_eq!(j(&full_hash_json(fixture_payload("question_tf").as_bytes(), ""))["errors"][0]["code"], "hash_key_required");
+    let key = format!(r#"{{"hash_key":"{}"}}"#, "ab".repeat(32));
+    let out = j(&full_hash_json(fixture_payload("question_tf").as_bytes(), &key));
     assert_eq!(out["hashes"].as_array().unwrap().len(), 1);
+    let other = format!(r#"{{"hash_key":"{}"}}"#, "cd".repeat(32));
+    assert_ne!(out["hashes"], j(&full_hash_json(fixture_payload("question_tf").as_bytes(), &other))["hashes"]);
     let out = j(&validate_meta_json(b"{\"title\":\"T\",\"tags\":[\"A\"]}", ""));
     assert_eq!(out["meta"]["tags"], serde_json::json!(["a"]));
     let v = j(&schema_versions());

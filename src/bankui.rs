@@ -611,6 +611,159 @@ impl App {
         draw_bank_export(self, &ctx);
     }
 
+    /// The bank's actions. `ltr`: drawn left to right in a wrapping row of their own (a narrow
+    /// window), each moving to the next line whole; otherwise added to a right-to-left row beside
+    /// the name. The pool's three actions share one "Share" menu. Returns the actions' width
+    /// with all of them on one line.
+    fn bank_toolbar(&mut self, ui: &mut Ui, ctx: &egui::Context, key: UiId, bank_id: &Id, questions: &[Question], ltr: bool) -> f32 {
+        #[derive(Clone, Copy)]
+        enum Tool {
+            More,
+            Details,
+            Popover,
+            Import,
+            Share,
+            Export,
+            Add,
+        }
+        let update = self.browse.has_update(bank_id);
+        let share_label = if update {
+            format!("Share (update) {}", egui_phosphor::regular::CARET_DOWN)
+        } else {
+            format!("Share {}", egui_phosphor::regular::CARET_DOWN)
+        };
+        let mut tools = vec![Tool::More, Tool::Details, Tool::Popover, Tool::Import, Tool::Share];
+        if !questions.is_empty() {
+            tools.push(Tool::Export);
+        }
+        tools.push(Tool::Add);
+        if !ltr {
+            tools.reverse();
+        }
+        let gap = ui.spacing().item_spacing.x;
+        let mut width = 0.0;
+        let mut first = true;
+        for t in tools {
+            if ltr && !first {
+                // pageshell buttons are laid out where the cursor is: start the next line first.
+                let label = match t {
+                    Tool::More => "…",
+                    Tool::Details => "Details",
+                    Tool::Popover => "Pop-over",
+                    Tool::Import => "Import",
+                    Tool::Share => share_label.as_str(),
+                    Tool::Export => "Export",
+                    Tool::Add => "Add question",
+                };
+                if crate::pageshell::button_width(ui, label) > ui.max_rect().right() - ui.cursor().min.x {
+                    ui.end_row();
+                }
+            }
+            first = false;
+            let r = match t {
+                Tool::Add => {
+                    let r = crate::pageshell::primary(ui, "Add question");
+                    // the type is chosen first; the editor opens already set to it
+                    // keyboard: Enter on the focused Add opens it, arrows and Enter pick, 1-6 pick directly
+                    let opened_now = r.clicked();
+                    egui::Popup::menu(&r).show(|ui| {
+                        ui.set_min_width(190.0);
+                        for (n, k) in crate::bankops::KINDS.into_iter().enumerate() {
+                            let hot = [egui::Key::Num1, egui::Key::Num2, egui::Key::Num3, egui::Key::Num4, egui::Key::Num5, egui::Key::Num6][n];
+                            let b = ui.button(format!("{}   {}", n + 1, k.label()));
+                            if n == 0 && opened_now {
+                                b.request_focus();
+                            }
+                            if b.clicked() || ui.input(|i| i.key_pressed(hot)) {
+                                self.qedit = Some(qedit::Draft::new_of(bank_id.clone(), k));
+                                ui.close();
+                            }
+                        }
+                    });
+                    r
+                }
+                Tool::Export => {
+                    let r = crate::pageshell::outline(ui, "Export").on_hover_text("Preview and download the bank file (PDF, answers included) or its JSON");
+                    if r.clicked() {
+                        open_bank_export(ctx, bank_id);
+                    }
+                    r
+                }
+                Tool::Share => {
+                    let r = crate::pageshell::outline(ui, &share_label).on_hover_text(if update {
+                        "Share this bank with other teachers, or copy in questions they shared. The pool has a newer version of something imported here."
+                    } else {
+                        "Share this bank with other teachers, or copy in questions they shared (needs a sharing account)"
+                    });
+                    egui::Popup::menu(&r).show(|ui| {
+                        ui.set_min_width(190.0);
+                        // Nothing to share in an empty bank.
+                        if !questions.is_empty() && ui.button(crate::share::shared::SHARE_ACTION).on_hover_text("Share this bank with other teachers (needs a sharing account)").clicked() {
+                            let res = self.store.bank(bank_id).map(|b| crate::share::publish_ui::share_bank(ctx, b));
+                            if let Some(Err(e)) = res {
+                                self.toast_err(e);
+                                // a draft in the bank stops the share: open the first one
+                                let first = self.store.bank(bank_id).and_then(|b| b.questions.iter().find(|q| !crate::qcheck::gate_blockers(q).is_empty()).cloned());
+                                if let Some(q) = first {
+                                    self.qedit = Some(qedit::Draft::from_question(bank_id.to_string(), &q));
+                                }
+                            }
+                            ui.close();
+                        }
+                        if ui.button("From pool…").on_hover_text("Find questions other teachers shared and copy them into this bank (needs a sharing account)").clicked() {
+                            self.browse.open_for_bank(bank_id);
+                            ui.close();
+                        }
+                        // Only when the pool has something newer.
+                        if update && ui.button("Update from pool…").on_hover_text("The pool has a newer version of something imported into this bank. Nothing changes until you choose.").clicked() {
+                            self.browse.open_update(bank_id);
+                            ui.close();
+                        }
+                    });
+                    r
+                }
+                Tool::Import => {
+                    let r = crate::pageshell::outline(ui, "Import").on_hover_text("Import files or pasted questions into this bank");
+                    if r.clicked() {
+                        crate::importui::open_import_modal(ctx, bank_id);
+                    }
+                    r
+                }
+                Tool::Popover => {
+                    let r = crate::pageshell::outline(ui, "Pop-over").on_hover_text("Open this bank in its own window");
+                    if r.clicked() {
+                        open_popover(ctx, bank_id);
+                    }
+                    r
+                }
+                Tool::Details => {
+                    let r = crate::pageshell::outline(ui, "Details").on_hover_text("Description, author and license");
+                    if r.clicked() {
+                        let d = self.store.bank(bank_id).map(|b| b.details.clone()).unwrap_or_default();
+                        with_state(ctx, key, |s: &mut BankEditState| s.details = Some(d));
+                    }
+                    r
+                }
+                // (Details has its own button next to this menu; the menu keeps what has none.)
+                Tool::More => ui
+                    .menu_button(RichText::new("…").size(16.0).color(theme::muted_col()), |ui| {
+                        ui.set_min_width(170.0);
+                        let tidy = ui
+                            .add_enabled(!questions.is_empty(), Button::new("Tidy stems…"))
+                            .on_hover_text("Clean up stems from older imports: tables of blanks, line breaks, spacing. Shows a preview first.");
+                        if tidy.clicked() {
+                            open_tidy(self, ctx, key, bank_id);
+                            ui.close();
+                        }
+                    })
+                    .response
+                    .on_hover_text("More bank actions"),
+            };
+            width += r.rect.width() + gap;
+        }
+        width - gap
+    }
+
     fn bank_edit_body(&mut self, ui: &mut Ui, ctx: &egui::Context, key: UiId, bank_id: &Id) {
         let (bank_name, questions, modified) = match self.store.bank(bank_id) {
             Some(b) => (b.name.clone(), b.questions.clone(), b.modified),
@@ -621,9 +774,21 @@ impl App {
         // Header: breadcrumb, serif name + subtitle, actions.
         crumb_row(ui, self, Some(&bank_name));
         ui.add_space(2.0);
+        // The actions sit beside the name when both fit, else on their own row under it. Their
+        // width is last frame's (all on one line), so a long name never runs under them.
+        let tools_key = key.with("toolbar_w");
+        let tools_w = ctx.data(|d| d.get_temp::<f32>(tools_key)).unwrap_or(640.0);
+        let avail = ui.available_width();
+        let beside = avail - tools_w - 24.0;
+        // The whole name (and its rename pencil) must fit beside them, or it would be cut off.
+        let name_need = ui.fonts_mut(|f| f.layout_no_wrap(bank_name.clone(), egui::FontId::new(34.0, theme::serif_family()), theme::ink()).size().x) + 48.0;
+        let one_row = beside >= name_need.max(300.0);
+        let mut drawn_w = None;
         ui.horizontal(|ui| {
-            let name_w = (ui.available_width() - 340.0).clamp(220.0, 680.0);
+            // On a row of its own the name may use the whole width.
+            let name_w = if one_row { beside.min(680.0) } else { avail }.max(160.0);
             ui.vertical(|ui| {
+                ui.set_max_width(if one_row { beside } else { avail });
                 let mut name_buf = bank_name.clone();
                 let name_font = egui::FontId::new(34.0, theme::serif_family());
                 // The name field hugs its text so the rename pencil sits right after it.
@@ -696,38 +861,25 @@ impl App {
                     }
                 });
             });
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if crate::pageshell::primary(ui, "Add question").clicked() {
-                    self.qedit = Some(qedit::Draft::new(bank_id.clone()));
-                }
-                if !questions.is_empty() && crate::pageshell::outline(ui, "Export").on_hover_text("Preview and download the bank file (PDF, answers included) or its JSON").clicked() {
-                    open_bank_export(ctx, bank_id);
-                }
-                if crate::pageshell::outline(ui, "Import").on_hover_text("Import files or pasted questions into this bank").clicked() {
-                    crate::importui::open_import_modal(ctx, bank_id);
-                }
-                if crate::pageshell::outline(ui, "Pop-over").on_hover_text("Open this bank in its own window").clicked() {
-                    open_popover(ctx, bank_id);
-                }
-                if crate::pageshell::outline(ui, "Details").on_hover_text("Description, author and license").clicked() {
-                    let d = self.store.bank(bank_id).map(|b| b.details.clone()).unwrap_or_default();
-                    with_state(ctx, key, |s: &mut BankEditState| s.details = Some(d));
-                }
-                // (Details has its own button next to this menu; the menu keeps what has none.)
-                ui.menu_button(RichText::new("…").size(16.0).color(theme::muted_col()), |ui| {
-                    ui.set_min_width(170.0);
-                    let tidy = ui
-                        .add_enabled(!questions.is_empty(), Button::new("Tidy stems…"))
-                        .on_hover_text("Clean up stems from older imports: tables of blanks, line breaks, spacing. Shows a preview first.");
-                    if tidy.clicked() {
-                        open_tidy(self, ctx, key, bank_id);
-                        ui.close();
-                    }
-                })
-                .response
-                .on_hover_text("More bank actions");
-            });
+            if one_row {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    drawn_w = Some(self.bank_toolbar(ui, ctx, key, bank_id, &questions, false));
+                });
+            }
         });
+        if !one_row {
+            ui.add_space(8.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                drawn_w = Some(self.bank_toolbar(ui, ctx, key, bank_id, &questions, true));
+            });
+        }
+        if let Some(w) = drawn_w
+            && (w - tools_w).abs() > 0.5
+        {
+            ctx.data_mut(|d| d.insert_temp(tools_key, w));
+            ctx.request_repaint();
+        }
         let desc = self.store.bank(bank_id).map(|b| b.details.description.trim().to_string()).unwrap_or_default();
         if !desc.is_empty() {
             ui.add_space(2.0);
@@ -1007,9 +1159,7 @@ impl App {
         let open_qid: Option<String> = self.qedit.as_ref().and_then(|d| d.qid.clone());
         let new_open = self.qedit.as_ref().is_some_and(|d| d.qid.is_none());
 
-        // Scroll the newly opened card into view once.
         let open_marker = open_qid.clone().or(new_open.then(|| "<new>".to_string()));
-        let scroll_now = open_marker.is_some() && st.last_open != open_marker;
         if st.last_open != open_marker {
             with_state(ctx, key, |s: &mut BankEditState| s.last_open = open_marker.clone());
         }
@@ -1020,10 +1170,6 @@ impl App {
         let cols = if list { 1 } else if avail >= 820.0 { 3 } else if avail >= 540.0 { 2 } else { 1 };
         let cw = ((avail - gap * (cols as f32 - 1.0)) / cols as f32).floor();
 
-        if new_open {
-            draw_card(ui, self, ctx, key, bank_id, avail, None, 0, list, &topics, scroll_now);
-            ui.add_space(gap);
-        }
         if questions.is_empty() && !new_open {
             ui.add_space(24.0);
             ui.vertical_centered(|ui| {
@@ -1037,16 +1183,10 @@ impl App {
 
         let mut pending: Vec<usize> = Vec::new();
         for &i in &order {
-            let is_open = open_qid.as_deref() == Some(questions[i].id.as_str());
-            if is_open {
+            // The question being edited keeps its place in the list; the editor is a modal.
+            pending.push(i);
+            if pending.len() == cols {
                 flush_row(ui, self, ctx, key, bank_id, &questions, &mut pending, cw, gap, list, &topics);
-                draw_card(ui, self, ctx, key, bank_id, avail, Some(&questions[i]), i + 1, list, &topics, scroll_now);
-                ui.add_space(if list { 6.0 } else { gap });
-            } else {
-                pending.push(i);
-                if pending.len() == cols {
-                    flush_row(ui, self, ctx, key, bank_id, &questions, &mut pending, cw, gap, list, &topics);
-                }
             }
         }
         flush_row(ui, self, ctx, key, bank_id, &questions, &mut pending, cw, gap, list, &topics);
@@ -1056,13 +1196,36 @@ impl App {
             ui.vertical_centered(|ui| {
                 ui.label(
                     theme::muted(format!(
-                        "Showing {} of {} · open a card to edit it here, press Done to fold it back up",
+                        "Showing {} of {} · click a card to edit it",
                         order.len(),
                         questions.len()
                     ))
                     .size(12.0),
                 );
             });
+        }
+
+        self.question_modal(ctx, key, bank_id, &topics);
+    }
+
+    /// The question editor: a modal over the list. Applies Save, Cancel and Delete.
+    fn question_modal(&mut self, ctx: &egui::Context, key: UiId, bank_id: &str, pool: &[String]) {
+        let Some(mut d) = self.qedit.take() else { return };
+        let mut textures = std::mem::take(&mut self.textures);
+        let action = qedit::draw_modal(ctx, &mut d, pool, &mut textures);
+        self.textures = textures;
+        if !matches!(action, qedit::QAction::None) {
+            crate::wysiwyg::new_session(ctx);
+        }
+        match action {
+            qedit::QAction::Done => self.commit_draft(d),
+            qedit::QAction::Cancel => {}
+            qedit::QAction::Delete => {
+                if let Some(qid) = d.qid.clone() {
+                    delete_question(self, ctx, key, bank_id, &qid);
+                }
+            }
+            qedit::QAction::None => self.qedit = Some(d),
         }
     }
 }
@@ -1534,7 +1697,7 @@ fn draw_bank_export(app: &mut App, ctx: &egui::Context) {
                 Ok(_) => {
                     Frame::new().fill(theme::field()).corner_radius(CornerRadius::same(8)).inner_margin(Margin::same(10)).show(ui, |ui| {
                         ui.set_width(ui.available_width());
-                        egui::ScrollArea::vertical().id_salt("bank_export_preview").max_height((screen.height() - 260.0).max(240.0)).auto_shrink([false, false]).show(ui, |ui| {
+                        egui::ScrollArea::vertical().id_salt("bank_export_preview").max_height((screen.height() - 320.0).max(240.0)).auto_shrink([false, false]).show(ui, |ui| {
                             ui.vertical_centered(|ui| {
                                 for t in &c.pages {
                                     let sz = t.size_vec2();
@@ -1557,7 +1720,7 @@ fn draw_bank_export(app: &mut App, ctx: &egui::Context) {
         });
         ui.add_space(8.0);
         ui.separator();
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             if crate::pageshell::outline(ui, "Save CSV file…").on_hover_text("One row per question, for Excel, Sheets or Numbers").clicked() {
                 save_csv = true;
             }
@@ -1570,6 +1733,9 @@ fn draw_bank_export(app: &mut App, ctx: &egui::Context) {
             if crate::pageshell::outline(ui, "Save JSON file…").on_hover_text("The bank as a question-bank JSON file (for other apps and backups)").clicked() {
                 save_json = true;
             }
+        });
+        // (its own row: with the four file buttons beside them the two ended up on top of each other)
+        ui.horizontal(|ui| {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let ok = BANK_EXPORT.with(|c| c.borrow().as_ref().is_some_and(|c| c.pdf.is_ok()));
                 if ui.add_enabled_ui(ok, |ui| crate::pageshell::primary(ui, "Download PDF")).inner.clicked() {
@@ -2023,6 +2189,19 @@ fn paint_chevron(ui: &mut Ui, open: bool) {
     ui.painter().line_segment([c + Vec2::new(0.0, b), c + Vec2::new(4.5, a)], s);
 }
 
+/// "Draft" / "No correct answer" on a card whose question is not finished (see `qcheck`):
+/// it can be edited and saved, but not put on an exam or shared. The tooltip says what is missing.
+fn draft_chip(ui: &mut Ui, q: &Question) {
+    if let Some((label, tip)) = crate::qcheck::chip(q) {
+        let (fg, bg) = if ui.visuals().dark_mode {
+            (Color32::from_rgb(235, 175, 90), Color32::from_rgba_unmultiplied(235, 175, 90, 36))
+        } else {
+            (Color32::from_rgb(140, 78, 0), Color32::from_rgba_unmultiplied(196, 120, 20, 40))
+        };
+        kit::pill(ui, label, bg, fg).on_hover_text(tip);
+    }
+}
+
 fn meta_chip(ui: &mut Ui, text: &str) {
     kit::pill(ui, text, theme::field(), theme::text_col());
 }
@@ -2144,16 +2323,22 @@ fn card_full_question(ui: &mut Ui, app: &mut App, q: &Question, size: f32) {
     use crate::model::{Kind, PartKind};
     let rich = Rich::new(size, theme::ink());
     let mut picture = q.image.clone();
+    if q.stem.trim().is_empty() {
+        // a draft saved before its question was written
+        ui.label(theme::muted("(no question text)").size(size));
+    }
     card_rich(ui, app, &q.stem, &rich, &mut picture);
     if let Some(img) = picture.take() {
         card_image(ui, app, &img);
     }
     let small = size - 1.0;
+    let keyless = crate::model::is_keyless(q);
     let tf = |ui: &mut Ui, correct: bool, indent: f32| {
         ui.horizontal(|ui| {
             ui.add_space(indent);
             for (v, label) in [(true, "True"), (false, "False")] {
-                let on = v == correct;
+                // (an imported question without its key has no right answer to tick)
+                let on = !keyless && v == correct;
                 let t = RichText::new(if on { format!("{label} ✓") } else { label.to_string() }).size(size);
                 ui.label(if on { t.color(theme::green()).family(theme::bold_family()) } else { t.color(theme::text_col()) });
                 ui.add_space(10.0);
@@ -2245,11 +2430,14 @@ fn draw_card(
     q: Option<&Question>,
     n: usize,
     list: bool,
-    pool: &[String],
+    _pool: &[String],
     scroll_to: bool,
 ) {
-    let open = match q {
-        None => true,
+    // Editing happens in a modal over the list, so a card never expands in place; the one being
+    // edited keeps its shape and gets an accent outline.
+    let open = false;
+    let editing = match q {
+        None => false,
         Some(q) => app.qedit.as_ref().and_then(|d| d.qid.as_deref()) == Some(q.id.as_str()),
     };
     let mut toggled = false;
@@ -2260,7 +2448,7 @@ fn draw_card(
     let mut copy_rect: Option<Rect> = None;
 
     let frame = kit::card()
-        .stroke(Stroke::new(1.0, if open { theme::accent_col() } else { theme::border() }));
+        .stroke(Stroke::new(1.0, if editing { theme::accent_col() } else { theme::border() }));
     let out = frame.show(ui, |ui| {
         ui.set_width(width - 2.0);
 
@@ -2277,6 +2465,7 @@ fn draw_card(
                     ui.spacing_mut().item_spacing.x = 10.0;
                     ui.allocate_ui(Vec2::new(54.0, 18.0), |ui| kit::type_pill(ui, qedit::type_tag(kind)));
                     ui.label(RichText::new(format!("Q{n}")).family(theme::bold_family()).size(11.5).color(theme::muted_col()));
+                    draft_chip(ui, q);
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         paint_chevron(ui, false);
                         copy_rect = Some(copy_icon(ui));
@@ -2310,8 +2499,9 @@ fn draw_card(
                     ui.spacing_mut().item_spacing.x = 8.0;
                     kit::type_pill(ui, qedit::type_tag(kind));
                     match q {
-                        Some(_) => {
+                        Some(q) => {
                             ui.label(RichText::new(format!("Q{n}")).family(theme::bold_family()).size(11.5).color(theme::muted_col()));
+                            draft_chip(ui, q);
                         }
                         None => {
                             ui.label(theme::serif("New question").size(15.0));
@@ -2380,33 +2570,6 @@ fn draw_card(
         }
         if open && scroll_to {
             hr.scroll_to_me(Some(Align::TOP));
-        }
-
-        // ----- expanded editor body -----
-        if open {
-            let y = ui.cursor().top();
-            ui.painter().hline(ui.max_rect().x_range(), y, Stroke::new(1.0, theme::rule()));
-            let mut action = qedit::QAction::None;
-            let mut draft = app.qedit.take();
-            if let Some(d) = draft.as_mut() {
-                Frame::new()
-                    .inner_margin(Margin { left: 16, right: 16, top: 14, bottom: 12 })
-                    .show(ui, |ui| {
-                        let mut textures = std::mem::take(&mut app.textures);
-                        action = qedit::draw_inline(ui, d, pool, &mut textures);
-                        app.textures = textures;
-                    });
-            }
-            match (action, draft) {
-                (qedit::QAction::Done, Some(d)) => app.commit_draft(d),
-                (qedit::QAction::Cancel, _) => {}
-                (qedit::QAction::Delete, Some(d)) => {
-                    if let Some(qid) = d.qid.clone() {
-                        delete_question(app, ctx, key, bank_id, &qid);
-                    }
-                }
-                (_, d) => app.qedit = d,
-            }
         }
     });
 
@@ -3047,9 +3210,18 @@ fn popover_card(ui: &mut Ui, q: &Question, n: usize, ps: &mut PopoverState, exam
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             if exam_id.is_some() {
-                let label = if in_exam { "Add again" } else { "Add to exam" };
-                if crate::pageshell::outline(ui, label).clicked() {
-                    *add = Some(q.id.clone());
+                let fixes = crate::qcheck::gate_blockers(q);
+                if fixes.is_empty() {
+                    let label = if in_exam { "Add again" } else { "Add to exam" };
+                    if crate::pageshell::outline(ui, label).clicked() {
+                        *add = Some(q.id.clone());
+                    }
+                } else {
+                    // a draft can not go on an exam: say what is missing, and the button opens it
+                    if crate::pageshell::outline(ui, "Finish this draft").on_hover_text("It can not be added to an exam until it is finished").clicked() {
+                        *edit = Some(q.id.clone());
+                    }
+                    ui.label(RichText::new(format!("Draft: {}", crate::qcheck::describe(&fixes))).size(11.5).color(if ui.visuals().dark_mode { Color32::from_rgb(235, 175, 90) } else { Color32::from_rgb(140, 78, 0) }));
                 }
             }
             if ui.add(Button::new(theme::accent("Copy text").size(12.0)).frame(false)).on_hover_text("Copy the question (with its answer lines) to paste anywhere").clicked() {
@@ -3292,6 +3464,8 @@ pub fn draw_popover(app: &mut App, ctx: &egui::Context) {
             }
         }
     }
+    // (the card offers no Add for a draft; this keeps any other route from adding one)
+    let add = add.filter(|qid| bank.questions.iter().find(|q| q.id == *qid).is_some_and(|q| crate::qcheck::gate_blockers(q).is_empty()));
     if let (Some(qid), Some(eid)) = (add, exam_id.as_ref()) {
         if let Some(before) = app.store.exam(eid).map(|e| e.items.clone()) {
             app.undo.push(before);

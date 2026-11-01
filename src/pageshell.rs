@@ -48,6 +48,13 @@ fn button(ui: &mut Ui, text: &str, fill: Color32, stroke: Stroke, fg: Color32) -
     .inner
 }
 
+/// The width a [`primary`] or [`outline`] button with this text takes. The buttons are laid out
+/// where the cursor is, so a wrapping row of them asks this first and starts the next line itself.
+pub fn button_width(ui: &Ui, text: &str) -> f32 {
+    let font = egui::FontId::new(15.2, theme::bold_family());
+    ui.ctx().fonts_mut(|f| f.layout_no_wrap(text.to_string(), font, Color32::WHITE).size().x) + 36.0
+}
+
 /// The solid accent action.
 pub fn primary(ui: &mut Ui, text: &str) -> egui::Response {
     button(ui, text, theme::accent_col(), Stroke::NONE, theme::on_accent_col())

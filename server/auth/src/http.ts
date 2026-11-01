@@ -38,20 +38,88 @@ export function errorResponse(e: HttpError): Response {
   return json(e.status, { error: e.code, ...e.extra }, e.headers);
 }
 
+/**
+ * Reads at most `max` bytes of a body, chunk by chunk, and stops (413) as soon as more arrive: a body
+ * without a Content-Length (or with a false one) is never buffered beyond the limit.
+ */
+async function readLimited(req: Request, max: number): Promise<Uint8Array> {
+  if (!req.body) return new Uint8Array(0);
+  const reader = req.body.getReader();
+  const parts: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) {
+      await reader.cancel().catch(() => {});
+      throw new HttpError(413, "body_too_large");
+    }
+    parts.push(value);
+  }
+  const out = new Uint8Array(total);
+  let o = 0;
+  for (const p of parts) {
+    out.set(p, o);
+    o += p.byteLength;
+  }
+  return out;
+}
+
+/**
+ * Whether valid JSON `s` has an object with the same key twice (compared after unescaping). Linear;
+ * memory: the keys of the open objects.
+ */
+export function hasDuplicateKey(s: string): boolean {
+  const stack: (Set<string> | null)[] = [];
+  // Whether the next string in the innermost object is a key.
+  let wantKey = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]!;
+    if (ch === "{") {
+      stack.push(new Set());
+      wantKey = true;
+    } else if (ch === "[") {
+      stack.push(null);
+      wantKey = false;
+    } else if (ch === "}" || ch === "]") {
+      stack.pop();
+      wantKey = false;
+    } else if (ch === ",") {
+      wantKey = stack.length > 0 && stack[stack.length - 1] !== null;
+    } else if (ch === '"') {
+      let j = i + 1;
+      while (s[j] !== '"') j += s[j] === "\\" ? 2 : 1;
+      if (wantKey) {
+        const key = JSON.parse(s.slice(i, j + 1)) as string;
+        const keys = stack[stack.length - 1]!;
+        if (keys.has(key)) return true;
+        keys.add(key);
+        wantKey = false;
+      }
+      i = j;
+    }
+  }
+  return false;
+}
+
 /** Reads a small JSON object body. Only `application/json` is accepted: HTML forms cannot send it cross-site without a preflight. */
-export async function readJson(req: Request): Promise<Record<string, unknown>> {
+export async function readJson(req: Request, max: number = MAX_BODY_BYTES): Promise<Record<string, unknown>> {
   const ct = (req.headers.get("Content-Type") ?? "").split(";")[0]!.trim().toLowerCase();
   if (ct !== "application/json") throw new HttpError(415, "unsupported_media_type");
   const len = Number(req.headers.get("Content-Length") ?? "0");
-  if (len > MAX_BODY_BYTES) throw new HttpError(413, "body_too_large");
-  const buf = await req.arrayBuffer();
-  if (buf.byteLength > MAX_BODY_BYTES) throw new HttpError(413, "body_too_large");
+  if (len > max) throw new HttpError(413, "body_too_large");
+  const buf = await readLimited(req, max);
   let v: unknown;
+  let text: string;
   try {
-    v = JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(buf));
+    text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(buf);
+    v = JSON.parse(text);
   } catch {
     throw new HttpError(400, "invalid_json");
   }
+  // JSON.parse keeps the last of duplicate keys: a body with any is refused, never read two ways.
+  if (hasDuplicateKey(text)) throw new HttpError(400, "invalid_json", { reason: "duplicate_key" });
   if (typeof v !== "object" || v === null || Array.isArray(v)) throw new HttpError(400, "invalid_json");
   return v as Record<string, unknown>;
 }
@@ -111,7 +179,7 @@ export function corsHeaders(origin: string | null, allowed: ReadonlySet<string>)
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Expose-Headers": "Retry-After",
+    "Access-Control-Expose-Headers": "Retry-After, ETag",
     Vary: "Origin",
   };
 }
@@ -124,7 +192,7 @@ export function preflight(req: Request, allowed: ReadonlySet<string>, methods: s
     ...corsHeaders(origin, allowed),
     "Access-Control-Allow-Methods": methods,
     // X-Client is deliberately absent: a browser can never send `X-Client: native` cross-origin.
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Sudo-Token",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Sudo-Token, If-None-Match",
     "Access-Control-Max-Age": "600",
   });
 }

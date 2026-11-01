@@ -9,6 +9,10 @@
 //! - [`api`]: wire types, error text, link and server-address parsing.
 //! - [`model`]: the Account screen's state machine (pages, jobs, status polling). No egui.
 //! - [`ui`]: the egui Account window.
+//! - [`publish`] / [`publish_text`] / [`publish_ui`]: the "Share to pool..." flow (logic, wording, egui).
+//! - [`browse`] / [`browse_text`] / [`browse_ui`]: the pool browser, import and update checks (logic, wording, egui).
+//! - [`shared`] / [`shared_ui`]: the Shared page (a top-level screen): guided steps and tabs hosting the models below.
+//! - [`mine`] / [`mine_text`] / [`mine_ui`]: "My shared items": states, appeals, counter-notices, the data download.
 //!
 //! # Which server (decided when the app is built)
 //!
@@ -29,17 +33,59 @@
 //! keychain would not delete. Neither is a secret.
 
 pub mod api;
+pub mod browse;
+pub mod browse_text;
+pub mod browse_ui;
+pub mod circle_send;
+pub mod circles;
+pub mod circles_api;
+pub mod circles_text;
+pub mod circles_ui;
 pub mod client;
+pub mod invite;
+pub mod merge;
+pub mod mine;
+pub mod mine_text;
+pub mod mine_ui;
 pub mod model;
+pub mod pool;
+pub mod publish;
+pub mod publish_text;
+pub mod publish_ui;
 pub mod secret;
+pub mod shared;
+pub mod shared_ui;
 pub mod transport;
 pub mod ui;
 pub mod vault;
 
 #[cfg(test)]
+mod browse_tests;
+#[cfg(test)]
+mod invite_tests;
+#[cfg(test)]
+mod mine_tests;
+#[cfg(test)]
+mod pool_tests;
+#[cfg(test)]
+mod publish_tests;
+#[cfg(test)]
+mod shared_tests;
+#[cfg(test)]
+mod circles_tests;
+#[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod transport_tests;
 
+pub use browse::BrowseModel;
+pub use browse_ui::BrowseUi;
+pub use mine::MineModel;
+pub use mine_ui::MineUi;
 pub use model::AccountModel;
+pub use publish::{PublishModel, ShareSource};
+pub use publish_ui::PublishUi;
+pub use shared_ui::SharedUi;
 pub use ui::AccountUi;
 
 /// `share.json`: kept apart from `settings.json` so the AI settings code never sees it. Neither
@@ -93,6 +139,18 @@ impl ShareSettings {
     /// is the only server the app will talk to. Never read at run time.
     pub fn built_in() -> Option<String> {
         option_env!("VERSHION_POOL_URL").filter(|s| !s.is_empty()).map(str::to_string)
+    }
+
+    /// Where the legal pages (`server/web/legal`) are published: `VERSHION_LEGAL_URL` at compile
+    /// time, like `VERSHION_POOL_URL`. They are static files on the site, NOT served by the pool
+    /// API, so the API address is never used for them. Unset (the default) or not a plain https
+    /// address: empty, and the pages are listed by name without links. The owner sets it at launch.
+    pub fn legal_base() -> String {
+        ShareSettings::legal_base_from(option_env!("VERSHION_LEGAL_URL"))
+    }
+
+    pub fn legal_base_from(raw: Option<&str>) -> String {
+        raw.filter(|s| !s.is_empty()).and_then(|s| api::validate_base_url(s).ok()).unwrap_or_default()
     }
 
     pub fn save(&self) -> Result<(), String> {

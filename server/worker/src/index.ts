@@ -7,7 +7,10 @@ import { assertProductionShareCore } from "./share-core-guard.js";
 import { cleanText, createAuth, D1RateLimitStore, InputError, ipBucket, type Argon2idHasher, type Auth, type Principal } from "../../auth/src/index.js";
 import { staffDomainLabels, staffDomainRoutes } from "./admin.js";
 import { onDeleteContent, onRestoreContent, onSuspendContent } from "./cleanup.js";
-import { createPool, makeCore, POOL_METHODS, type Pool, type ShareCoreExports } from "./pool/index.ts";
+import { createPool, deriveHashKey, flushTrapsLater, makeCore, POOL_METHODS, type Pool, type ShareCoreExports } from "./pool/index.ts";
+import { guardCall } from "./pool/core.ts";
+import { preReadBody } from "./pool/preread.ts";
+import { json as poolJson } from "./pool/shared.ts";
 import { poolNotifier } from "./poolmail.ts";
 import { adminAlert, makeMailer, queueReminder, type MailEnv } from "./mail.js";
 import { flushNoticeBacklog, noticeNewApplication } from "./notices.js";
@@ -22,6 +25,21 @@ export interface Env extends MailEnv {
   APPROVAL_DIGEST?: string;
   /** R2 bucket for publish bodies, quarantine and images (wrangler.toml [[r2_buckets]] binding "POOL"). */
   POOL?: R2Bucket;
+  /**
+   * 32+ random characters; `wrangler secret put POOL_HASH_KEY`. share-core's keyed full_hash uses a
+   * key derived from it by HKDF (purpose "full-hash"). Without it the pool refuses every request
+   * (503 pool_not_configured); auth keeps working. Never rotate it casually: stored hashes use it.
+   */
+  POOL_HASH_KEY?: string;
+}
+
+/** The derived full-hash key, per secret value (one HKDF per isolate). */
+let hashKeyCache: { secret: string; key: string } | null = null;
+async function poolHashKey(env: Env): Promise<string | null> {
+  const s = env.POOL_HASH_KEY;
+  if (typeof s !== "string" || s.length < 32) return null;
+  if (hashKeyCache?.secret !== s) hashKeyCache = { secret: s, key: await deriveHashKey(s, "full-hash") };
+  return hashKeyCache.key;
 }
 
 /** The trust levels of docs/shared-pool.md, lowest first. */
@@ -38,10 +56,12 @@ function ensureWasm(): void {
     wasmReady = true;
   }
 }
+// (Round 21: argon2id behind the same trap guard as the pool's share-core calls.)
+const guardedArgon2id = guardCall(shareCore as unknown as ShareCoreExports, argon2id, "argon2id");
 const shareCoreHasher: Argon2idHasher = {
   argon2id(password, salt, p) {
     ensureWasm();
-    return argon2id(password, salt, p.m, p.t, p.p);
+    return guardedArgon2id(password, salt, p.m, p.t, p.p);
   },
 };
 
@@ -60,13 +80,13 @@ function profile(body: Record<string, unknown>) {
 const origins = (env: Env) => env.ALLOWED_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean);
 
 /** The pool and the auth package, wired together: the pool authenticates through auth, and its admin routes sit behind auth's admin guard. */
-function build(env: Env, ctx?: ExecutionContext): { a: Auth; pool: Pool } {
+function build(env: Env, ctx: ExecutionContext | undefined, hashKey: string | null): { a: Auth; pool: Pool } {
   ensureWasm();
   let a: Auth | null = null;
   const pool = createPool({
     db: env.DB,
     r2: env.POOL,
-    core: makeCore(shareCore as unknown as ShareCoreExports),
+    core: makeCore(shareCore as unknown as ShareCoreExports, { hashKey }),
     secret: env.AUTH_SECRET,
     allowedOrigins: origins(env),
     authenticate: (req) => a!.authenticate(req),
@@ -129,20 +149,38 @@ export async function requireTrust(a: Auth, req: Request, min: Trust): Promise<P
   return p;
 }
 
+async function handleFetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const hashKey = await poolHashKey(env);
+  const { a, pool } = build(env, ctx, hashKey);
+  // EVERY body the auth package reads goes through the pool's one body reader first (round 8 I4/I5).
+  const body = await preReadBody(req, (r) => a.authenticate(r), ipBucket);
+  if (body instanceof Response) return a.withCors(req, body);
+  req = body;
+  const handled = await a.handle(req, ctx);
+  if (handled) return handled;
+  const pre = a.preflight(req, POOL_METHODS);
+  if (pre) return pre;
+  // No hash key (POOL_HASH_KEY missing or too short): the pool refuses, never hashes unkeyed.
+  if (hashKey === null && /^\/(items|blobs|circles)(\/|$)/.test(new URL(req.url).pathname))
+    return a.withCors(req, poolJson(503, { error: "pool_not_configured" }));
+  const pooled = await pool.handle(req);
+  if (pooled) return a.withCors(req, pooled);
+  // (Round 21: the pool's base headers on the fallbacks too.)
+  return a.withCors(req, poolJson(404, { error: "not_found" }));
+}
+
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const { a, pool } = build(env, ctx);
-    const handled = await a.handle(req, ctx);
-    if (handled) return handled;
-    const pre = a.preflight(req, POOL_METHODS);
-    if (pre) return pre;
-    const pooled = await pool.handle(req);
-    if (pooled) return a.withCors(req, pooled);
-    return a.withCors(req, Response.json({ error: "not_found" }, { status: 404, headers: { "Cache-Control": "no-store" } }));
+    try {
+      return await handleFetch(req, env, ctx);
+    } finally {
+      // (Round 22: share-core traps, the login hasher's too, are counted from the request that trapped.)
+      flushTrapsLater(env.DB, (p) => ctx.waitUntil(p));
+    }
   },
 
   async scheduled(c: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    const { a, pool } = build(env, ctx);
+    const { a, pool } = build(env, ctx, await poolHashKey(env));
     // Hourly: the summary for sign-up notices over the budget, and the pool's GC.
     await flushNoticeBacklog(env, c.scheduledTime);
     await pool.hourly();

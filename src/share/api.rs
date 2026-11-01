@@ -48,6 +48,8 @@ pub enum ApiError {
     Http { status: u16, code: String, field: Option<String>, reason: Option<String>, retry_after: Option<u64> },
     /// A 2xx whose body was not what the API documents.
     BadReply(String),
+    /// The answer was bigger than the request allowed; nothing past the cap was read.
+    TooLarge(String),
 }
 
 impl From<NetError> for ApiError {
@@ -55,6 +57,7 @@ impl From<NetError> for ApiError {
         match e.kind {
             NetKind::Offline => ApiError::Offline(e.text),
             NetKind::Tls => ApiError::Tls(e.text),
+            NetKind::TooLarge => ApiError::TooLarge(e.text),
         }
     }
 }
@@ -120,11 +123,69 @@ impl ApiError {
                  keychain app."
                 .into(),
             ApiError::SignedOut => "You are signed out. Sign in again to continue.".into(),
+            ApiError::TooLarge(why) => format!("{why} Nothing was changed."),
             ApiError::BadReply(_) => "The server sent a reply the app does not understand. Check the server address, or try again later.".into(),
             ApiError::Http { status, code, field, reason, retry_after } => {
                 http_message(flow, *status, code, field.as_deref(), reason.as_deref(), *retry_after)
             }
         }
+    }
+}
+
+/// Everything the Worker's JSON error body says, kept whole for the pool flows that need more
+/// than [`ApiError`] keeps (a publish refusal carries `errors[]` with `reason`, `ack_allowed` and
+/// `author_only`, plus `formatting_findings`, `order_preview`, ...). `json` is the parsed body
+/// untouched; the short fields are read from the top level, or from `errors[0]` when the Worker
+/// put them there. Free text is for display by the caller, never copied into [`ApiError`].
+/// `Debug` leaves `json` out.
+#[derive(Clone, PartialEq)]
+pub struct ErrorDetail {
+    pub status: u16,
+    pub code: String,
+    pub field: Option<String>,
+    pub reason: Option<String>,
+    pub ack_allowed: Option<bool>,
+    pub author_only: bool,
+    pub retry_after: Option<u64>,
+    pub json: Value,
+}
+
+impl ErrorDetail {
+    pub fn from_response(r: &Response) -> ErrorDetail {
+        let json = r.json();
+        let first = json.get("errors").and_then(Value::as_array).and_then(|a| a.first());
+        let ident = |key: &str| {
+            [Some(&json), first]
+                .into_iter()
+                .flatten()
+                .find_map(|v| v.get(key).and_then(Value::as_str).filter(|s| is_ident(s)))
+                .map(str::to_string)
+        };
+        let flag = |key: &str| [Some(&json), first].into_iter().flatten().find_map(|v| v.get(key).and_then(Value::as_bool));
+        ErrorDetail {
+            status: r.status,
+            code: ident("error").or_else(|| ident("code")).unwrap_or_default(),
+            field: ident("field"),
+            reason: ident("reason"),
+            ack_allowed: flag("ack_allowed"),
+            author_only: flag("author_only").unwrap_or(false),
+            retry_after: r.retry_after,
+            json,
+        }
+    }
+}
+
+impl std::fmt::Debug for ErrorDetail {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ErrorDetail")
+            .field("status", &self.status)
+            .field("code", &self.code)
+            .field("field", &self.field)
+            .field("reason", &self.reason)
+            .field("ack_allowed", &self.ack_allowed)
+            .field("author_only", &self.author_only)
+            .field("retry_after", &self.retry_after)
+            .finish_non_exhaustive()
     }
 }
 

@@ -53,6 +53,9 @@
   <link rel="preload" href="pdf-fonts/FoxitSymbol.pfb" as="fetch" crossorigin />
   <style>
     :root { color-scheme: light dark; }
+    /* egui-web's hidden text-input element (the keyboard/IME bridge) sits at the text caret, 1px
+       wide, and shows a sliver of the last typed character there; keep its text invisible */
+    body > input { color: transparent !important; background: transparent !important; }
     html, body { margin: 0; height: 100%; overflow: hidden; }
     body {
       background: #f7f4ed;

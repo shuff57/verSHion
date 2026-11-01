@@ -310,7 +310,7 @@ fn share_core_writes_the_app_json_and_the_app_reads_share_core_output() {
             .into_iter()
             .map(|f| share_core::LabelDecision { question: f.question, part: f.part, choice: if f.strip_allowed { share_core::LabelChoice::Strip } else { share_core::LabelChoice::Keep } })
             .collect();
-        let s = share_core::strip_with_seed(v.payload.clone(), &share_core::StripOptions { image_ok: vec![], labels }, seed).unwrap();
+        let s = share_core::strip_with_seed(v.payload.clone(), &share_core::StripOptions { image_ok: vec![], labels, ..Default::default() }, seed).unwrap();
         assert_eq!(s.payload.schema_version, 2);
         let mut stripped = s.payload.to_value()[key].clone();
         let app_back = if key == "bank" {

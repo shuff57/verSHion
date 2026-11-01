@@ -71,8 +71,10 @@ test("a reporter whose student_data report was dismissed cannot re-hide the item
   const b = w.user();
   const admin = w.user("admin");
   const it = (await publish(w, a, bank(4))).body.item_id as string;
+  w.history(b);
   await w.json("POST", `/items/${it}/report`, { user: b, json: { reason: "student_data" } });
   await w.admin(admin, "POST", "/admin/pool/release", { item_id: it, reason: "student_data" });
+  w.history(b);
   const again = await w.json("POST", `/items/${it}/report`, { user: b, json: { reason: "student_data" } });
   assert.equal(again.status, 202, "still thanked");
   assert.equal((await w.json("GET", `/items/${it}`, { user: w.user() })).status, 200);

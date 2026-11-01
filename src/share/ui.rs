@@ -17,19 +17,83 @@ use crate::{kit, theme};
 pub struct AccountUi {
     pub model: AccountModel,
     repaint_set: bool,
+    /// Open but not drawn: the publish flow is only looking the sign-in up.
+    quiet: bool,
+    /// The "Invite code" section of the status page.
+    pub invite: super::invite::InviteModel,
+    /// The app shows the account as a section of the Shared page, not as a floating window: the
+    /// window is never drawn, and asking for it (`open`, `reveal`) asks for that page instead.
+    pub page_mode: bool,
+    /// The Shared page is on screen this frame: a quiet lookup must not close the account.
+    pinned: bool,
+    wants_page: bool,
 }
 
 /// Field ids whose egui edit state is dropped once the field is empty, so no copy of a password
 /// stays in egui's memory.
 const SECRET_FIELDS: [&str; 3] = ["share_pw", "share_pw2", "share_paste"];
 
+/// The width the account forms were made for (the window's), kept when they sit in a wider card.
+const FORM_WIDTH: f32 = 460.0;
+
 impl AccountUi {
+    /// The account as the app uses it: a section of the Shared page.
+    pub fn in_page() -> AccountUi {
+        AccountUi { page_mode: true, ..AccountUi::default() }
+    }
+
+    /// The Shared page is drawn: keep the account logic open and let the section be drawn.
+    pub fn pin(&mut self) {
+        self.pinned = true;
+        if !self.model.open {
+            self.model.open();
+        }
+        self.quiet = false;
+    }
+
+    /// Somebody asked to see the account (a Settings button, a window's "Open account..."): the app
+    /// then goes to the Shared page. Reads and clears the request.
+    pub fn take_wants_page(&mut self) -> bool {
+        std::mem::take(&mut self.wants_page)
+    }
+
     pub fn open(&mut self) {
+        self.quiet = false;
+        self.wants_page = self.page_mode;
         self.model.open();
     }
 
     pub fn is_open(&self) -> bool {
         self.model.open
+    }
+
+    /// Opens the account logic without drawing the window, so the publish flow can find out whether
+    /// someone is signed in (one request for a saved session, none otherwise). No-op when open.
+    pub fn open_quiet(&mut self) {
+        if !self.model.open {
+            self.model.open();
+            self.quiet = true;
+        }
+    }
+
+    /// Shows the window if it was only open in the background (or opens it).
+    pub fn reveal(&mut self) {
+        self.quiet = false;
+        self.wants_page = self.page_mode;
+        self.model.open();
+    }
+
+    /// Closes a background-only window; a window the person can see is left alone.
+    pub fn close_quiet(&mut self) {
+        if self.quiet && !self.pinned {
+            self.quiet = false;
+            self.model.close();
+        }
+    }
+
+    /// The window is on screen.
+    pub fn visible(&self) -> bool {
+        self.model.open && !self.quiet && !self.page_mode
     }
 
     pub fn open_link(&mut self, link: api::Link) {
@@ -43,25 +107,40 @@ impl AccountUi {
         }
         if !self.repaint_set {
             let c = ctx.clone();
-            self.model.set_repaint(Arc::new(move || c.request_repaint()));
+            self.model.set_repaint(Arc::new({
+                let c = c.clone();
+                move || c.request_repaint()
+            }));
+            self.invite.set_repaint(Arc::new(move || c.request_repaint()));
             self.repaint_set = true;
         }
         let now = Instant::now();
         self.model.frame(now);
+        self.invite.frame(now);
+        if self.invite.busy() || self.invite.wait().is_some() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(500));
+        }
         if let Some(at) = self.model.poller.next_at() {
             ctx.request_repaint_after(at.saturating_duration_since(now));
+        }
+        self.pinned = false;
+        if self.quiet || self.page_mode {
+            return;
         }
         let mut close = false;
         let modal = egui::Modal::new(egui::Id::new("share_account"))
             .frame(kit::card().inner_margin(Margin::same(22)))
             .show(ctx, |ui| {
                 ui.set_width(460.0_f32.min(ctx.content_rect().width() - 60.0).max(260.0));
-                egui::ScrollArea::vertical().max_height(ctx.content_rect().height() - 120.0).show(ui, |ui| {
+                let tall = ctx.content_rect().height() - 120.0; // grows past last frame's size: see publish_ui
+                egui::ScrollArea::vertical().max_height(tall).min_scrolled_height(tall).show(ui, |ui| {
                     close = self.page(ui);
                 });
             });
         if close || modal.should_close() {
+            self.quiet = false;
             self.model.close();
+            self.invite.reset();
         }
         for id in SECRET_FIELDS {
             let empty = match id {
@@ -75,21 +154,66 @@ impl AccountUi {
         }
     }
 
+    /// The forms as a section of the Shared page: the same pages as the window, without its title
+    /// row and Close button (the page has its own heading). The window's `show` still handles the
+    /// model's frame.
+    pub fn draw_section(&mut self, ui: &mut Ui) {
+        self.section(ui, true);
+    }
+
+    /// The section on the Shared page's Settings tab, which offers "Delete my account" itself
+    /// (with what deleting does), so the status page's own link is left out.
+    pub fn draw_settings_section(&mut self, ui: &mut Ui) {
+        self.section(ui, false);
+    }
+
+    fn section(&mut self, ui: &mut Ui, delete_link: bool) {
+        ui.scope(|ui| {
+            // The forms keep the width they were made for in the window; the status page (account
+            // details and the status box) fills the card like the rest of the Settings tab.
+            if self.model.page != Page::Status {
+                ui.set_max_width(ui.available_width().min(FORM_WIDTH));
+            }
+            self.page_body(ui, false, delete_link);
+        });
+    }
+
+    /// The invite-code box on its own: the guided step "Enter your invite code", whose card
+    /// already has the heading and the sentence about the code.
+    pub fn draw_invite(&mut self, ui: &mut Ui) {
+        let session: Option<super::publish::SharedSession> = self.model.client().map(|c| c.clone() as super::publish::SharedSession);
+        let idle = !self.model.busy();
+        invite_box(ui, &mut self.invite, session, idle, true);
+    }
+
+    /// The heading of the page the model is on ("Sign in", "Check your email"...).
+    pub fn page_title(&self) -> &'static str {
+        title(self.model.page)
+    }
+
     /// Returns true when the window should close.
     fn page(&mut self, ui: &mut Ui) -> bool {
+        self.page_body(ui, true, true)
+    }
+
+    fn page_body(&mut self, ui: &mut Ui, chrome: bool, delete_link: bool) -> bool {
         let m = &mut self.model;
         let mut close = false;
-        ui.horizontal(|ui| {
-            ui.label(theme::serif(title(m.page)).size(24.0));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if kit::ghost_button(ui, "Close").clicked() {
-                    close = true;
-                }
-                if m.busy() {
-                    ui.spinner();
-                }
+        if chrome {
+            ui.horizontal(|ui| {
+                ui.label(theme::serif(title(m.page)).size(24.0));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if kit::ghost_button(ui, "Close").clicked() {
+                        close = true;
+                    }
+                    if m.busy() {
+                        ui.spinner();
+                    }
+                });
             });
-        });
+        } else if m.busy() {
+            ui.spinner();
+        }
         ui.add_space(6.0);
         let credentials = takes_password(m.page);
         if credentials && !m.base_url().is_empty() {
@@ -126,9 +250,13 @@ impl AccountUi {
             Page::Forgot => forgot_page(ui, m),
             Page::Reset => reset_page(ui, m),
             Page::Enrol => enrol_page(ui, m),
-            Page::Status => status_page(ui, m),
+            Page::Status => status_page(ui, m, !chrome, delete_link),
             Page::Delete => delete_page(ui, m),
         });
+        if m.page == Page::Status && m.me.as_ref().is_some_and(|me| matches!(me.status, Status::Pending | Status::Approved)) {
+            let session: Option<super::publish::SharedSession> = m.client().map(|c| c.clone() as super::publish::SharedSession);
+            invite_section(ui, &mut self.invite, session, !m.busy());
+        }
         if credentials && !m.trusted && !m.base_url().is_empty() {
             trust_modal(ui.ctx(), m);
         }
@@ -265,7 +393,7 @@ fn field(ui: &mut Ui, label: &str, value: &mut String, id: &str, secret: bool, h
             .id(egui::Id::new(id))
             .password(secret)
             .hint_text(hint)
-            .desired_width(f32::INFINITY),
+            .desired_width(ui.available_width().min(FORM_WIDTH)),
     );
     ui.add_space(6.0);
     r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))
@@ -286,7 +414,13 @@ fn password_pair(ui: &mut Ui, m: &mut AccountModel, label: &str) {
 
 fn actions(ui: &mut Ui, busy: bool, add: impl FnOnce(&mut Ui)) {
     ui.add_space(4.0);
-    ui.add_enabled_ui(!busy, |ui| ui.horizontal_wrapped(add));
+    ui.add_enabled_ui(!busy, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            // A button that does not fit moves to the next row whole instead of wrapping its label.
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+            add(ui)
+        })
+    });
 }
 
 fn server_page(ui: &mut Ui, m: &mut AccountModel) {
@@ -489,7 +623,10 @@ fn enrol_page(ui: &mut Ui, m: &mut AccountModel) {
     }
 }
 
-fn status_page(ui: &mut Ui, m: &mut AccountModel) {
+/// `in_page`: drawn on the Shared page, which has its own tabs, its own legal card and, while the
+/// account waits, a step card saying so; none of those is repeated here. `delete_link`: false
+/// where the page offers "Delete my account" itself.
+fn status_page(ui: &mut Ui, m: &mut AccountModel, in_page: bool, delete_link: bool) {
     keychain_banner(ui, m);
     let Some(me) = m.me.clone() else {
         ui.horizontal(|ui| {
@@ -513,6 +650,49 @@ fn status_page(ui: &mut Ui, m: &mut AccountModel) {
         ui.label(theme::muted(me.school.as_str()).size(12.5));
     }
     ui.add_space(10.0);
+    // On the page a pending account is under the "Waiting for approval" step, which says it all.
+    if !(in_page && matches!(me.status, Status::Pending)) {
+        status_box(ui, m, &me);
+        ui.add_space(8.0);
+    }
+    actions(ui, m.busy(), |ui| {
+        if kit::ghost_button(ui, "Check now").clicked() {
+            m.check_now();
+        }
+        // The page's tabs are these two places.
+        if !in_page && matches!(me.status, Status::Approved) && kit::primary_button(ui, "Browse shared questions").clicked() {
+            super::browse_ui::request(ui.ctx(), super::browse_ui::BrowseRequest::Browse);
+        }
+        if !in_page && matches!(me.status, Status::Approved) && kit::ghost_button(ui, "My shared items").clicked() {
+            super::mine_ui::request(ui.ctx(), super::mine_ui::MineRequest::List);
+        }
+    });
+    if !in_page {
+        legal_row(ui, &super::ShareSettings::legal_base());
+    }
+    ui.add_space(10.0);
+    ui.separator();
+    ui.checkbox(&mut m.forms.forget_device, "Forget this device too (on a shared computer)");
+    let (mut out, mut everywhere) = (false, false);
+    // Never disabled: signing out must work even while a request hangs.
+    actions(ui, false, |ui| {
+        out = kit::ghost_button(ui, "Sign out").clicked();
+        everywhere = kit::ghost_button(ui, "Sign out everywhere").clicked();
+    });
+    if out {
+        m.submit_sign_out(false);
+    }
+    if everywhere {
+        m.submit_sign_out(true);
+    }
+    para(ui, "Signing out everywhere ends the sessions on all your devices and forgets them all.");
+    if delete_link && kit::danger_text_button(ui, "Delete account…").clicked() {
+        m.go(Page::Delete);
+    }
+}
+
+/// The approval state with its explanation, the reviewer's reason and, when allowed, re-applying.
+fn status_box(ui: &mut Ui, m: &mut AccountModel, me: &api::Me) {
     kit::card().inner_margin(Margin::same(14)).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
         let (head, body) = status_text(&me.status);
@@ -549,30 +729,72 @@ fn status_page(ui: &mut Ui, m: &mut AccountModel) {
             }
         }
     });
-    ui.add_space(8.0);
-    actions(ui, m.busy(), |ui| {
-        if kit::ghost_button(ui, "Check now").clicked() {
-            m.check_now();
+}
+
+/// The draft legal pages, as links when a server address is configured and as names when not.
+fn legal_row(ui: &mut Ui, base: &str) {
+    ui.add_space(6.0);
+    ui.horizontal_wrapped(|ui| {
+        ui.label(theme::muted("Legal (drafts):").size(12.0));
+        for (name, file) in super::mine_text::LEGAL_PAGES {
+            match super::mine_text::legal_url(base, file) {
+                Some(u) => {
+                    if ui.add(egui::Button::new(theme::accent(name).size(12.0)).frame(false)).clicked() {
+                        crate::platform::open_url(&u);
+                    }
+                }
+                None => {
+                    ui.label(theme::muted(name).size(12.0));
+                }
+            }
         }
     });
-    ui.add_space(10.0);
-    ui.separator();
-    ui.checkbox(&mut m.forms.forget_device, "Forget this device too (on a shared computer)");
-    let (mut out, mut everywhere) = (false, false);
-    // Never disabled: signing out must work even while a request hangs.
-    actions(ui, false, |ui| {
-        out = kit::ghost_button(ui, "Sign out").clicked();
-        everywhere = kit::ghost_button(ui, "Sign out everywhere").clicked();
+}
+
+/// Type the code an admin gave you, press Redeem. Open to a pending account too.
+pub(super) fn invite_section(ui: &mut Ui, inv: &mut super::invite::InviteModel, session: Option<super::publish::SharedSession>, idle: bool) {
+    invite_box(ui, inv, session, idle, false);
+}
+
+/// The invite box. `standalone`: it is a whole guided step whose card already has the heading
+/// and the invite-only sentence, so neither is repeated here.
+fn invite_box(ui: &mut Ui, inv: &mut super::invite::InviteModel, session: Option<super::publish::SharedSession>, idle: bool, standalone: bool) {
+    use super::invite::InviteState;
+    if !standalone {
+        ui.add_space(10.0);
+        ui.separator();
+        ui.label(theme::strong("Invite code").size(13.5));
+    }
+    if let InviteState::Redeemed { already } = &inv.state {
+        ui.label(theme::text(if *already { "Redeemed (this account already had a code)." } else { "Redeemed. You can use the shared pool." }).size(12.5));
+        return;
+    }
+    if !standalone {
+        para(ui, "The shared pool is invite-only. Enter the code an admin gave you (24 letters and digits, usually in groups of four). It is sent once and not kept.");
+    }
+    let busy = inv.busy();
+    ui.add_enabled_ui(!busy && idle, |ui| {
+        let w = ui.available_width().min(FORM_WIDTH);
+        ui.add(egui::TextEdit::singleline(&mut inv.code).id(egui::Id::new("share_invite")).hint_text("XXXX-XXXX-XXXX-XXXX-XXXX-XXXX").desired_width(w));
     });
-    if out {
-        m.submit_sign_out(false);
+    if let InviteState::Failed(p) = &inv.state {
+        ui.add(egui::Label::new(RichText::new(api::plain(&p.message)).color(theme::bad()).size(12.5)).wrap());
+        if let Some(w) = inv.wait() {
+            para(ui, &format!("You can try again in about {} seconds.", w.as_secs().max(1)));
+        }
     }
-    if everywhere {
-        m.submit_sign_out(true);
-    }
-    para(ui, "Signing out everywhere ends the sessions on all your devices and forgets them all.");
-    if kit::danger_text_button(ui, "Delete account…").clicked() {
-        m.go(Page::Delete);
+    ui.horizontal(|ui| {
+        ui.add_enabled_ui(inv.can_redeem() && idle, |ui| {
+            if kit::primary_button(ui, "Redeem").clicked() {
+                inv.redeem(session);
+            }
+        });
+        if busy {
+            ui.spinner();
+        }
+    });
+    if inv.code.is_empty() {
+        ui.ctx().data_mut(|d| d.remove::<egui::text_edit::TextEditState>(egui::Id::new("share_invite")));
     }
 }
 

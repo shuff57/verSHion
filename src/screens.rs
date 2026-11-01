@@ -224,6 +224,7 @@ pub enum NavIcon {
     Pencil,
     Plus,
     Info,
+    Shared,
 }
 
 /// Paint one 16px icon centered at `c`, in color `c_col` — `c` shadows egui's
@@ -257,6 +258,7 @@ pub fn draw_nav_icon_k(
         NavIcon::Pencil => ph::PENCIL_SIMPLE,
         NavIcon::Plus => ph::PLUS,
         NavIcon::Info => ph::INFO,
+        NavIcon::Shared => ph::USERS_THREE,
     };
     painter.text(c, egui::Align2::CENTER_CENTER, glyph, theme::icon_font(16.0 * k), c_col);
 }
@@ -364,6 +366,7 @@ impl crate::App {
                 self.draw_figures(&mut root);
             }
             crate::Screen::Settings => self.draw_settings(ctx),
+            crate::Screen::Shared => self.draw_shared(ctx),
         }
         if self.ai_busy {
             ctx.request_repaint();
@@ -572,6 +575,7 @@ impl crate::App {
                     (NavIcon::Exams, "Exams", crate::Screen::Exams),
                     (NavIcon::Import, "Import", crate::Screen::Imports),
                     (NavIcon::Figures, "Figures", crate::Screen::Figures),
+                    (NavIcon::Shared, "Shared", crate::Screen::Shared),
                     (NavIcon::Gear, "Settings", crate::Screen::Settings),
                 ];
                 for (icon, label, target) in nav {
@@ -1462,6 +1466,18 @@ impl crate::App {
                     ui.add_space(8.0);
                     if pageshell::outline(ui, "Open folder").clicked() {
                         let _ = crate::platform::open_path(&store::store_dir());
+                    }
+                });
+                ui.add_space(12.0);
+
+                // --- Sharing account (optional; the Account window does nothing until opened) ---
+                pageshell::card(ui, |ui| {
+                    pageshell::heading(ui, "Sharing account");
+                    ui.add_space(4.0);
+                    ui.label(theme::muted("Optional. An account lets you share questions with other teachers. Everything else works without one."));
+                    ui.add_space(10.0);
+                    if pageshell::outline(ui, "Open account…").clicked() {
+                        app.account.open();
                     }
                 });
                 ui.add_space(12.0);

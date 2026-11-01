@@ -19,8 +19,8 @@
 //! |---|---|---|
 //! | every stem, part stem, answer text, match item, distractor, accepted blank | at least one visible character (`text::has_visible`) | `blank_text` |
 //! | `Mc` (and an `Mc` part) | at least 2 answers | `too_few` (limit 2) |
-//! | `Matching` | at least 2 pairs; every right side visible unless the question is keyless | `too_few`, `blank_text` |
-//! | `Blank` | `accept.len()` equals the number of `___` in the stem (as the app counts them, `str::matches`), at least 1 | `blank_count_mismatch`, `too_few` |
+//! | `Matching` | at least 2 pairs; every right side visible, or `""` on a keyless question (any other right side there is `keyless_key_material`) | `too_few`, `blank_text` |
+//! | `Blank` | `accept.len()` equals the number of blanks in the stem (runs of three underscores or more, round 10), at least 1 | `blank_count_mismatch`, `too_few` |
 //! | `Multipart` | at least 1 part | `too_few` |
 //!
 //! The app's editor (`src/qedit.rs`, `Draft::validate`) enforces the same before it saves, except
@@ -67,11 +67,24 @@ pub struct ValidationError {
     /// `forbidden_char`: the refused code point, e.g. `"U+202E"`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cp: Option<String>,
+    /// `key_in_formatting`: the feature type (`star`, `key_word`, `capitals`, ...; see `format`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<&'static str>,
+    /// `key_in_formatting`: whether the author may acknowledge it (`ack_formatting`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ack_allowed: Option<bool>,
+    /// The error names a choice by what makes it the key (`key_in_formatting`, `locked_key`):
+    /// show it to the publishing author only, never to anyone else.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub author_only: bool,
+    /// `key_in_formatting`, `key_in_stem`: what the author can do, in English.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<&'static str>,
 }
 
 impl ValidationError {
     pub fn new(code: &'static str, path: &str) -> Self {
-        ValidationError { code, path: path.to_string(), limit: None, offset: None, offset16: None, cp: None }
+        ValidationError { code, path: path.to_string(), limit: None, offset: None, offset16: None, cp: None, reason: None, ack_allowed: None, author_only: false, hint: None }
     }
 }
 
@@ -96,6 +109,8 @@ pub struct PublishOptions {
     pub hide_key: bool,
     /// The author's label decisions (`labels`); required for every finding when `hide_key`.
     pub labels: Vec<crate::strip::LabelDecision>,
+    /// Questions whose low-risk formatting findings the author acknowledged (`hide_key`).
+    pub ack_formatting: Vec<usize>,
 }
 
 struct Cx<'a> {
@@ -150,7 +165,16 @@ impl Cx<'_> {
                 offset: Some(offset as u64),
                 offset16: Some(offset16 as u64),
                 cp: Some(format!("U+{cp:04X}")),
-                ..ValidationError::new("forbidden_char", path)
+                // Precise codes for the two cases a teacher can fix: a Word Symbol-font character
+                // with no mapping (re-type it), and a lost object/equation (U+FFFC).
+                ..ValidationError::new(
+                    match cp {
+                        0xF000..=0xF0FF => "symbol_font_char",
+                        0xFFFC => "object_replacement",
+                        _ => "forbidden_char",
+                    },
+                    path,
+                )
             }),
             TextError::MarkRun { offset, offset16 } => self.push(ValidationError {
                 offset: Some(offset as u64),
@@ -191,14 +215,18 @@ impl Cx<'_> {
             self.err("expected_string", path);
             return String::new();
         };
-        // NFC may replace a character with its canonical equivalent (OHM SIGN with omega, a
-        // CJK compatibility ideograph with the unified one): it is stored normalised and
-        // reported, so the author knows what was stored.
-        if !unicode_normalization::is_nfc(s) {
-            self.drop_(path, "nfc_changed");
-        }
         match text::clean(s, class, max) {
             Ok(c) => {
+                // NFC may replace a character with its canonical equivalent (OHM SIGN with omega,
+                // a CJK compatibility ideograph with the unified one), and Word Symbol-font
+                // characters are mapped: stored that way and reported, so the author knows what
+                // was stored. (Checked only once the field is known to be within its limit.)
+                if s.chars().any(|c| text::symbol_font(c).is_some()) {
+                    self.drop_(path, "symbol_font_mapped");
+                }
+                if !unicode_normalization::is_nfc(s) {
+                    self.drop_(path, "nfc_changed");
+                }
                 self.text_bytes = self.text_bytes.saturating_add(c.len());
                 if self.text_bytes > self.lim.body_bytes && !self.text_over {
                     self.text_over = true;
@@ -427,11 +455,12 @@ impl Cx<'_> {
                     let ip = idx(&pp, i);
                     let Some(pm) = self.object(pv, &ip, &["left", "right"], &[]) else { continue };
                     let left = self.req_visible(pm, "left", &ip, ans);
-                    // Keyless: "" (served) or a visible item (the importer's layout); never blank.
+                    // Keyless: "" always (the served form, kept as is by `import::localize`): a
+                    // right side on a keyless question would be the pairing, i.e. the key.
                     let right = if keyless {
                         let r = self.req_string(pm, "right", &ip, Class::Block, ans);
-                        if !r.is_empty() && !text::has_visible(&r) {
-                            self.err("blank_text", &at(&ip, "right"));
+                        if !r.is_empty() {
+                            self.err("keyless_key_material", &at(&ip, "right"));
                         }
                         r
                     } else {
@@ -449,10 +478,12 @@ impl Cx<'_> {
                 let dp = at(&p, "distractors");
                 let darr = self.req_array(m, "distractors", &p, max_d);
                 let mut distractors = Vec::with_capacity(darr.len());
+                // Each item's comparison form once: O(n log n), not O(n²) (round 6).
+                let mut seen_bank = std::collections::BTreeSet::new();
                 for (i, d) in darr.iter().enumerate() {
                     let v = self.visible(d, &idx(&dp, i), ans);
-                    // A keyless word bank lists each item once, and not again among the rights.
-                    if keyless && !v.is_empty() && (distractors.contains(&v) || pairs.iter().any(|p: &Pair| p.right == v)) {
+                    // A keyless word bank lists each item once.
+                    if keyless && !v.is_empty() && !seen_bank.insert(text::hash_form(&v)) {
                         self.err("duplicate_choice", &idx(&dp, i));
                     }
                     distractors.push(v);
@@ -483,7 +514,8 @@ impl Cx<'_> {
                     accept.push(vs);
                 }
                 if m.get("accept").and_then(Node::as_array).is_some_and(|a| a.len() <= max_b) {
-                    let markers = stem.matches("___").count();
+                    // (A run of three underscores or more is one blank: Moodle writes "__________".)
+                    let markers = blank_runs(stem);
                     if markers == 0 {
                         self.err_lim("too_few", &ap, 1);
                     } else if markers != accept.len() {
@@ -831,11 +863,11 @@ impl Cx<'_> {
 
     fn question(&mut self, v: &Node, path: &str) -> Option<Question> {
         let keys = ["id", "stem", "kind", "points", "difficulty", "topics", "image", "explanation", "figure", "created", "modified"];
-        let m = self.object(v, path, &keys, &["keyless", "keep_order", "origin", "published"])?;
+        let m = self.object(v, path, &keys, &["keyless", "keep_order", "rekeyed", "origin", "published"])?;
         let keyless = self.v2 && self.opt_bool(m, "keyless", path);
         // An old payload claiming to be keyless, or asking that its order be kept, cannot be
         // honoured (v1 has neither) and must not silently lose the request.
-        for f in ["keyless", "keep_order"] {
+        for f in ["keyless", "keep_order", "rekeyed"] {
             if !self.v2 && m.get(f).and_then(Node::as_bool) == Some(true) {
                 self.err("v2_field_in_v1", &at(path, f));
             }
@@ -874,12 +906,16 @@ impl Cx<'_> {
         if let Some(t) = m.get("topics") {
             let tp = at(path, "topics");
             let (max, len) = (self.lim.topics, Max::Chars(self.lim.tag_chars));
-            // Trimmed (Line), empties dropped, duplicates dropped; the count is checked first on
+            // Trimmed (Line), empties and invisible ones dropped, duplicates dropped; the count is checked first on
             // what was sent, so a flood of empties is still refused.
             let arr = self.array(t, &tp, max);
             for (i, s) in arr.iter().enumerate() {
-                let c = self.string(s, &idx(&tp, i), Class::Line, len);
-                if !c.is_empty() && !topics.contains(&c) {
+                // (In the form students are served, then deduplicated: "‍ Planets" and "Planets" are
+                // one topic, and the served payload validates to itself. Round 16, critic28b.)
+                let c = crate::format::served_text(&self.string(s, &idx(&tp, i), Class::Line, len));
+                // (A topic of nothing visible, "\u{200D}" or "\u{200E}" alone, is dropped like an
+                // empty one: it would be served as nothing, round 13 critic24b N2.)
+                if text::has_visible(&c) && !topics.contains(&c) {
                     topics.push(c);
                 }
             }
@@ -904,7 +940,8 @@ impl Cx<'_> {
             self.no_key_material(&kind, explanation.as_deref(), figure.is_some(), path);
         }
         let keep_order = self.v2 && self.opt_bool(m, "keep_order", path);
-        Some(Question { id, stem, kind, points, difficulty, topics, image, explanation, figure, created, modified, keyless, keep_order, origin, published })
+        let rekeyed = self.v2 && self.opt_bool(m, "rekeyed", path);
+        Some(Question { id, stem, kind, points, difficulty, topics, image, explanation, figure, created, modified, keyless, keep_order, origin, published, rekeyed })
     }
 
     /// Takes the bank by value: each question's subtree is freed as soon as it has been read, so
@@ -1047,6 +1084,8 @@ pub fn validate_for_publish(json: &[u8], limits: &Limits, figures: &dyn FigureRe
 
 /// The publish-only checks over an already validated payload.
 pub fn publish_errors(p: &Payload, opts: &PublishOptions) -> Vec<ValidationError> {
+    // (One work budget for the scans of this payload, round 16.)
+    let _work = crate::format::WorkScope::new();
     let base = match &p.body {
         Body::Bank(_) => "bank.questions",
         Body::Question(_) => "question",
@@ -1054,7 +1093,8 @@ pub fn publish_errors(p: &Payload, opts: &PublishOptions) -> Vec<ValidationError
     let mut errors = Vec::new();
     let mut err = |code, path: String| {
         if errors.len() < MAX_ERRORS {
-            errors.push(ValidationError::new(code, &path));
+            // A True/False placeholder error says the copy's key is `false`-or-unknown: the author's.
+            errors.push(ValidationError { author_only: code == "placeholder_key", ..ValidationError::new(code, &path) });
         }
     };
     for (i, q) in p.questions().iter().enumerate() {
@@ -1067,6 +1107,22 @@ pub fn publish_errors(p: &Payload, opts: &PublishOptions) -> Vec<ValidationError
             continue;
         }
         let k = format!("{qp}.kind");
+        // A copy imported keyless whose flag and sentinel were lost still says where it came
+        // from: its True/False `false` is the placeholder, not a key, unless it was re-keyed.
+        let from_stripped = q.origin.as_ref().is_some_and(|o| o.form == "stripped");
+        if from_stripped && !q.rekeyed {
+            match &q.kind {
+                Kind::Tf { correct: false } => err("placeholder_key", format!("{k}.Tf")),
+                Kind::Multipart { parts } => {
+                    for (pi, part) in parts.iter().enumerate() {
+                        if matches!(part.kind, PartKind::Tf { correct: false }) {
+                            err("placeholder_key", format!("{k}.Multipart.parts[{pi}].kind.Tf"));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
         let dup = |answers: &[Answer]| {
             let mut t: Vec<String> = answers.iter().map(|a| text::hash_form(&a.text)).collect();
             t.sort();
@@ -1111,23 +1167,39 @@ pub fn publish_errors(p: &Payload, opts: &PublishOptions) -> Vec<ValidationError
         for e in crate::strip::decision_errors(p, &opts.labels) {
             push(e);
         }
+        let mut stem_refused: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         for (i, q) in p.questions().iter().enumerate() {
             let qp = if matches!(p.body, Body::Bank(_)) { format!("{base}[{i}]") } else { base.to_string() };
-            let mut check = |answers: &[Answer], at: String| {
-                for k in crate::labels::key_in_formatting(&answers.iter().map(|a| (a.text.as_str(), a.correct)).collect::<Vec<_>>()) {
-                    push(ValidationError::new("key_in_formatting", &format!("{at}[{k}]")));
+            let decision = |part: Option<usize>| opts.labels.iter().find(|d| d.question == i && d.part == part).map(|d| d.choice);
+            for e in crate::strip::question_format_errors(q, &qp, &decision, opts.ack_formatting.contains(&i)) {
+                if e.code == "key_in_stem" {
+                    stem_refused.insert(e.path.clone());
                 }
-            };
-            match &q.kind {
-                Kind::Mc { answers } => check(answers, format!("{qp}.kind.Mc.answers")),
-                Kind::Multipart { parts } => {
-                    for (pi, part) in parts.iter().enumerate() {
-                        if let PartKind::Mc { answers } = &part.kind {
-                            check(answers, format!("{qp}.kind.Multipart.parts[{pi}].kind.Mc.answers"));
-                        }
-                    }
+                push(e);
+            }
+        }
+        // Round 9: the bank's name and description are served too: answer syntax there is high
+        // risk like in a stem.
+        if let Body::Bank(b) = &p.body {
+            for e in crate::strip::bank_key_errors(&b.questions, base, &|i| stem_refused.contains(&format!("{base}[{i}].stem")), &|path| stem_refused.contains(path)) {
+                push(e);
+            }
+            let acks = &opts.ack_formatting;
+            for e in crate::strip::bank_order_errors(b, base, &|i| acks.contains(&i), &|path| stem_refused.contains(path)) {
+                push(e);
+            }
+            let decide = |i: usize, part: Option<usize>| opts.labels.iter().find(|d| d.question == i && d.part == part).map(|d| d.choice);
+            for e in crate::strip::bank_key_list_errors(b, base, &decide, &|path| stem_refused.contains(path)) {
+                push(e);
+            }
+            let (info, truncated) = crate::strip::bank_text_info(&b.questions);
+            // (More keys than are looked up: an answer line fails closed, round 16.)
+            let any = crate::format::KeyInfo { any_key: true, lines_only: true, prefolded: true, ..Default::default() };
+            // (Round 15: the author and licence name are served too.)
+            for (field, text) in [("bank.name", &b.name), ("bank.details.description", &b.details.description), ("bank.details.author", &b.details.author), ("bank.details.license_name", &b.details.license_name)] {
+                if let Some(r) = crate::format::stem_key(text, &crate::format::KeyInfo::default()).or_else(|| crate::format::stem_key(text, &info)).or_else(|| (truncated && crate::format::stem_key(text, &any).is_some()).then_some("scan_budget")) {
+                    push(ValidationError { reason: Some(r), ack_allowed: Some(false), author_only: true, hint: Some(crate::strip::HINT_STEM), ..ValidationError::new("key_in_stem", field) });
                 }
-                _ => {}
             }
         }
     }
@@ -1265,4 +1337,20 @@ pub fn validate_meta(json: &str, limits: &Limits) -> Result<Meta, Vec<Validation
     let tags = list("tags", limits.tags, false, &mut push);
     let standards = list("standards", limits.standards, true, &mut push);
     if errors.is_empty() { Ok(Meta { title, subject, course, grade, tags, standards }) } else { Err(errors) }
+}
+
+/// The blanks of a Blank stem: runs of three underscores or more ("___", "__________").
+pub fn blank_runs(stem: &str) -> usize {
+    let (mut n, mut run) = (0usize, 0usize);
+    for c in stem.chars().chain(std::iter::once(' ')) {
+        if c == '_' {
+            run += 1;
+        } else {
+            if run >= 3 {
+                n += 1;
+            }
+            run = 0;
+        }
+    }
+    n
 }

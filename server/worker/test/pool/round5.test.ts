@@ -27,7 +27,9 @@ function otherKey(q: Q, r: Rng): Q {
   else if (k.Mc) {
     const n = k.Mc.answers.length;
     const was = k.Mc.answers.findIndex((a: Q) => a.correct);
-    const to = (was + 1 + r.int(n - 1)) % n;
+    // Never a locked choice (share-core round 6 locked_key): the key moves among the unlocked ones.
+    const free = k.Mc.answers.map((a: Q, j: number) => (a.locked || j === was ? -1 : j)).filter((j: number) => j >= 0);
+    const to = free.length > 0 ? free[r.int(free.length)] : was;
     k.Mc.answers.forEach((a: Q, j: number) => (a.correct = j === to));
   } else if (k.Matching) [k.Matching.pairs[0].right, k.Matching.pairs[1].right] = [k.Matching.pairs[1].right, k.Matching.pairs[0].right];
   else if (k.Short) k.Short.sample = `${k.Short.sample} (other)`;
@@ -88,7 +90,7 @@ test("x1/E1: a hidden copy credits every key-free-identical source, whichever ke
   for (const key of [true, false]) {
     const w = new World();
     const X = w.user("teacher", "X"), Z = w.user("teacher", "Z"), Y = w.user(), S = w.user();
-    const tf = (k: boolean) => bankOf([{ id: "q", stem: "The mitochondrion is the powerhouse of the cell.", kind: { Tf: { correct: k } }, points: 1, difficulty: null, topics: [], image: null, explanation: null, figure: null, created: 1, modified: 1 }], 1);
+    const tf = (k: boolean) => bankOf([{ id: "q", stem: "The mitochondrion is the powerhouse of the eukaryotic cell, making most of its ATP.", kind: { Tf: { correct: k } }, points: 1, difficulty: null, topics: [], image: null, explanation: null, figure: null, created: 1, modified: 1 }], 1);
     const a = (await publish(w, X, tf(true))).body;
     const b = (await publish(w, Z, tf(false))).body;
     await get(w, Y, a.item_id);
@@ -104,27 +106,29 @@ test("x2/E2: the licence outcome of a hidden copy is the same for every key", as
   for (const key of [true, false]) {
     const w = new World();
     const X = w.user(), Z = w.user(), Y = w.user();
-    const tf = (k: boolean) => bankOf([{ id: "q", stem: "The mitochondrion is the powerhouse of the cell.", kind: { Tf: { correct: k } }, points: 1, difficulty: null, topics: [], image: null, explanation: null, figure: null, created: 1, modified: 1 }], 1);
+    const tf = (k: boolean) => bankOf([{ id: "q", stem: "The mitochondrion is the powerhouse of the eukaryotic cell, making most of its ATP.", kind: { Tf: { correct: k } }, points: 1, difficulty: null, topics: [], image: null, explanation: null, figure: null, created: 1, modified: 1 }], 1);
     const a = (await publish(w, X, tf(true), { license: "CC-BY-SA-4.0" })).body;
     const b = (await publish(w, Z, tf(false), { license: "CC-BY-NC-4.0" })).body;
-    await get(w, Y, a.item_id);
-    await get(w, Y, b.item_id);
+    await imp(w, Y, a.item_id);
+    await imp(w, Y, b.item_id);
     const r = await publish(w, Y, tf(key), { hideKey: true, license: "CC-BY-NC-4.0" });
     outs.push(JSON.stringify([r.status, r.body.error, r.body.allowed]));
   }
   assert.equal(outs[0], outs[1]);
-  assert.equal(outs[0], JSON.stringify([422, "license_incompatible", []]), "SA and NC sources of the same question cannot both be satisfied");
+  // Round 10 (M-1): both sources are the same question as the hidden copy (key-free); the earlier
+  // one (SA) is the original and decides, for every key alike.
+  assert.equal(outs[0], JSON.stringify([422, "license_incompatible", ["CC-BY-SA-4.0"]]));
 });
 
 // ---- E3 ---------------------------------------------------------------------------------------------------
 
-test("x4/S3c: read evidence is durable: it survives the source's retention and purge", async () => {
+test("x4/S3c: import evidence is durable: it survives the source's retention and purge", async () => {
   const w = new World();
   const S = w.user(), Y = w.user();
   const tf = (stem: string) => ({ id: "q", stem, kind: { Tf: { correct: true } }, points: null, difficulty: null, topics: [], image: null, explanation: null, figure: null, created: 1, modified: 1 });
   const q = tf("Photosynthesis happens in the chloroplast of plant cells.");
   let s = (await publish(w, S, bankOf([q, tf("Filler 0 for the source bank.")]), { license: "CC-BY-NC-SA-4.0" })).body;
-  await get(w, Y, s.item_id);
+  await imp(w, Y, s.item_id); // round 8: reads are soft; durability is checked on an import
   for (const n of [1, 2]) {
     const qs = [q, tf(`Filler ${n} for the source bank.`)].map((x, i) => ({ ...x, published: { item_id: s.item_id, qid: s.qids[i], publish_id: s.publish_id, version: s.version } }));
     s = (await publish(w, S, bankOf(qs), { license: "CC-BY-NC-SA-4.0", base: s.publish_id }, s.item_id)).body;
@@ -155,7 +159,7 @@ test("S2/E3d: an original author cannot relicense an adapter's additions; readin
   const qa = { id: "q", stem: "Explain the role of chlorophyll in photosynthesis today", kind: { Short: { sample: "absorbs light" } }, points: null, difficulty: null, topics: [], image: null, explanation: null, figure: null, created: 1, modified: 1 };
   const pa = (await publish(w, A, bankOf([qa]), { license: "CC-BY-4.0" })).body;
   const ia = await imp(w, D, pa.item_id);
-  const pd = (await publish(w, D, bankOf([{ ...strip(ia.body.payload.bank.questions[0]), explanation: "D's long original explanation" }]), { license: "CC-BY-SA-4.0" })).body;
+  const pd = (await publish(w, D, bankOf([{ ...strip(ia.body.payload.bank.questions[0]), explanation: "D's long original explanation: chlorophyll molecules in the thylakoid membranes absorb red and blue light, pass the excitation energy to the reaction centres, and so drive the splitting of water and the making of ATP and NADPH." }]), { license: "CC-BY-SA-4.0" })).body;
   const back = await imp(w, A, pd.item_id);
   assert.deepEqual(back.body.may_republish_as, ["CC-BY-SA-4.0"]);
   assert.equal((await publish(w, A, bankOf([strip(back.body.payload.bank.questions[0])]), { license: "CC0-1.0" })).body.error, "license_incompatible");
@@ -179,14 +183,14 @@ test("s7/E3c: an upheld takedown voids the infringer's evidence: the rightful au
   // The admin route: restore it, then void by account.
   const B = w.user(), Y = w.user();
   const pb = (await publish(w, B, bankOf([{ ...work, stem: "Another question entirely, about friction." }]), { license: "CC-BY-NC-4.0" })).body;
-  await get(w, Y, pb.item_id);
+  await imp(w, Y, pb.item_id);
   const copy = { ...work, stem: "Another question entirely, about friction." };
   assert.equal((await publish(w, Y, bankOf([copy]), { license: "CC0-1.0" })).status, 422);
-  assert.equal((await w.admin(admin, "POST", "/admin/pool/evidence", { user_id: Y.id, action: "void", note: "sock puppet reads" })).status, 200);
+  assert.equal((await w.admin(admin, "POST", "/admin/pool/evidence", { user_id: Y.id, action: "void", note: "sock puppet imports" })).status, 200);
   assert.equal((await publish(w, Y, bankOf([copy]), { license: "CC0-1.0" })).status, 201);
 });
 
-test("soft check: an item only READ (not imported) still raises the silent license_soft flag", async () => {
+test("soft check (round 9): a CHANGED copy of an item only READ raises license_soft when its terms disagree; an allowed one is silent", async () => {
   const w = new World();
   const A = w.user(), B = w.user();
   const q = { id: "q", stem: "A distinctive question about the Krebs cycle.", kind: { Tf: { correct: true } }, points: null, difficulty: null, topics: [], image: null, explanation: null, figure: null, created: 1, modified: 1 };
@@ -194,7 +198,12 @@ test("soft check: an item only READ (not imported) still raises the silent licen
   await get(w, B, pa.item_id);
   const pb = await publish(w, B, bankOf([q]), { license: "CC0-1.0" });
   assert.equal(pb.status, 201);
-  assert.equal(w.q(`SELECT * FROM admin_flags WHERE kind = 'license_soft' AND user_id = ?`, B.id).length, 1);
+  assert.equal(w.q(`SELECT * FROM admin_flags WHERE kind = 'license_soft' AND user_id = ?`, B.id).length, 0, "a verbatim CC0 copy as CC0: nothing to flag");
+  const nc = (await publish(w, A, bankOf([{ ...q, stem: "Another distinctive question, about glycolysis." }]), { license: "CC-BY-NC-4.0" })).body;
+  await get(w, B, nc.item_id);
+  const pc = await publish(w, B, bankOf([{ ...q, stem: "Another distinctive question, about glycolysis.", explanation: "B's own explanation" }]), { license: "CC0-1.0" });
+  assert.equal(pc.status, 201, "a changed copy of a read is soft");
+  assert.equal(w.q(`SELECT * FROM admin_flags WHERE kind = 'license_soft' AND item_id = ?`, pc.body.item_id).length, 1);
 });
 
 // ---- E4 ---------------------------------------------------------------------------------------------------
@@ -222,8 +231,10 @@ test("M2/E4: a full-only image is never blocked (no guess oracle); defaults are 
   await publish(w2, early, bankOf([shared]));
   const pb = (await publish(w2, bait, bankOf([shared, { ...qa, image: null, stem: "Jamie Smith (period 3) failed this." }]))).body;
   const pv = await w2.admin<any>(adm2, "POST", "/admin/pool/purge-preview", { item_id: pb.item_id });
-  assert.deepEqual(pv.body.match.map((m: Q) => [m.pos, m.introduced, m.selected]), [[0, false, false], [1, true, true]]);
-  // Sock puppets (unlisted items) neither make a question "common" nor "copied".
+  assert.deepEqual(pv.body.match.map((m: Q) => [m.pos, m.introduced, m.selected, m.suggested]), [[0, false, false, false], [1, true, false, true]], "round 16 (critic21d 3): suggested only where this item introduced it");
+  assert.equal(pv.body.match[0].first?.author_id, early.id, "the preview names who had it first");
+  // Round 9: a privacy default never selects what another author has on their own, sock puppets
+  // included (the preview shows them; the admin selects explicitly, which still blocks it).
   const w3 = new World();
   const adm3 = w3.user("admin"), att = w3.user();
   const puppets = [w3.user(), w3.user(), w3.user()];
@@ -231,7 +242,9 @@ test("M2/E4: a full-only image is never blocked (no guess oracle); defaults are 
   for (const p of puppets) await publish(w3, p, bankOf([pii]), { visibility: "unlisted" });
   const pc = (await publish(w3, att, bankOf([pii]))).body;
   const pv3 = await w3.admin<any>(adm3, "POST", "/admin/pool/purge-preview", { item_id: pc.item_id });
-  assert.deepEqual(pv3.body.match.map((m: Q) => [m.other_authors, m.introduced, m.selected]), [[0, true, true]]);
+  assert.deepEqual(pv3.body.match.map((m: Q) => [m.other_authors, m.introduced, m.selected, m.suggested]), [[3, true, false, true]], "round 14: sock puppets' unlisted copies never make a stem generic (visible items only)");
+  assert.equal((await w3.purge(adm3, pc.item_id as string, { questions: [0] })).status, 200);
+  assert.equal(w3.q(`SELECT DISTINCT qhash FROM privacy_blocks WHERE kind = 'match'`).length, 1);
 });
 
 // ---- E5 ---------------------------------------------------------------------------------------------------
@@ -345,7 +358,10 @@ test("double takedown in one millisecond: one action, one strike; a put-back lif
   const p = (await publish(w, a, bankOf([q]))).body;
   const n = await notice(w, admin);
   const [t1, t2] = await Promise.all([w.takedown<any>(admin, n, p.item_id), w.takedown<any>(admin, n, p.item_id)]);
-  assert.deepEqual([t1.status, t2.status].sort(), [200, 409]);
+  // (Round 21, critic27b G1: a second takedown of the SAME notice resumes the first: the same action.)
+  assert.deepEqual([t1.status, t2.status], [200, 200]);
+  assert.equal(t1.body.action_id, t2.body.action_id);
+  assert.equal(w.q(`SELECT * FROM dmca_actions`).length, 1);
   assert.equal(w.q(`SELECT * FROM strikes`).length, 1);
   const re = (await publish(w, c, bankOf([q]))).body;
   assert.equal(w.q(`SELECT * FROM item_holds WHERE item_id = ?`, re.item_id).length, 1);
@@ -384,7 +400,7 @@ test("kept items of a revoked author are hidden; deleted authors appear as 'dele
   assert.deepEqual((await get(w, c, pb.item_id)).body.questions[0].chain.map((l: Q) => l.author_name), ["deleted teacher"]);
 });
 
-test("putBlob refuses privacy-blocked bytes; preview tokens are their own key (a cursor-signed token is not one)", async () => {
+test("putBlob accepts privacy-blocked bytes like any image (round 16) but never stores them; preview tokens are their own key (a cursor-signed token is not one)", async () => {
   const w = new World();
   const admin = w.user("admin"), a = w.user(), r = w.user();
   const img = png(8, 8, 11);
@@ -395,8 +411,14 @@ test("putBlob refuses privacy-blocked bytes; preview tokens are their own key (a
   const forged = await w.admin(admin, "POST", "/admin/pool/purge", { item_id: p.item_id, confirm_preview: "eyJ4IjoxfQ.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" });
   assert.equal(forged.status, 428);
   assert.equal((await w.purge(admin, p.item_id)).status, 200);
+  // After the grace window the bytes are gone; an upload of them is accepted but never stores them.
+  w.advance(31 * 86_400_000);
+  await w.pool.daily();
+  await w.pool.hourly();
+  assert.equal(w.r2.objects.has(`blobs/${up.sha}`), false, "purged");
   const again = await upload(w, w.user(), img);
-  assert.deepEqual([again.status, again.body.reason], [422, "not_accepted"]);
+  assert.deepEqual([again.status, again.body.reason], [201, undefined]);
+  assert.equal(w.r2.objects.has(`blobs/${up.sha}`), false, "the blocked bytes are not written back");
 });
 
 test("instant holds: past half the site cap, a student-data hold needs two distinct reporters", async () => {
@@ -405,10 +427,16 @@ test("instant holds: past half the site cap, a student-data hold needs two disti
   w.sql.prepare(`INSERT INTO pool_limits (user_id, metric, value, updated_at, updated_by) VALUES ('*', 'instant_holds_global', 2, 0, 'x')`).run();
   const items: string[] = [];
   for (let i = 0; i < 3; i++) items.push((await publish(w, a, bankOf([{ id: "q", stem: `Question number ${i} about rivers and deltas.`, kind: { Tf: { correct: true } }, points: null, difficulty: null, topics: [], image: null, explanation: null, figure: null, created: 1, modified: 1 }]))).body.item_id);
-  await w.json("POST", `/items/${items[0]}/report`, { user: w.user(), json: { reason: "student_data" } });
+  const reporter_85142 = w.user();
+  w.history(reporter_85142);
+  await w.json("POST", `/items/${items[0]}/report`, { user: reporter_85142, json: { reason: "student_data" } });
   assert.equal(w.q(`SELECT * FROM item_holds WHERE item_id = ?`, items[0]).length, 1);
-  await w.json("POST", `/items/${items[1]}/report`, { user: w.user(), json: { reason: "student_data" } });
+  const reporter_40277 = w.user();
+  w.history(reporter_40277);
+  await w.json("POST", `/items/${items[1]}/report`, { user: reporter_40277, json: { reason: "student_data" } });
   assert.equal(w.q(`SELECT * FROM item_holds WHERE item_id = ?`, items[1]).length, 0, "one reporter is not enough any more");
-  await w.json("POST", `/items/${items[1]}/report`, { user: w.user(), json: { reason: "student_data" } });
+  const reporter_2 = w.user();
+  w.history(reporter_2);
+  await w.json("POST", `/items/${items[1]}/report`, { user: reporter_2, json: { reason: "student_data" } });
   assert.equal(w.q(`SELECT * FROM item_holds WHERE item_id = ?`, items[1]).length, 1, "a second reporter makes it");
 });

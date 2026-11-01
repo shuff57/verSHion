@@ -48,6 +48,21 @@ pub fn localize(q: &Question) -> Question {
     if l.keyless {
         l.explanation = Some(KEYLESS_SENTINEL.to_string());
     }
+    // A question whose order is the author's (`keep_order`) keeps it in an app that only knows
+    // `locked`: every choice is locked. (Questions frozen for labels or sibling references are
+    // already served locked.)
+    if l.keep_order {
+        let lock = |answers: &mut Vec<Answer>| answers.iter_mut().for_each(|a| a.locked = true);
+        match &mut l.kind {
+            Kind::Mc { answers } => lock(answers),
+            Kind::Multipart { parts } => parts.iter_mut().for_each(|p| {
+                if let PartKind::Mc { answers } = &mut p.kind {
+                    lock(answers)
+                }
+            }),
+            _ => {}
+        }
+    }
     l
 }
 
@@ -61,15 +76,27 @@ pub fn localize_payload(p: &Payload) -> Payload {
 }
 
 /// The right column as the app shows it: `pairs[].right` then `distractors`, empties skipped,
-/// first occurrence of each text only.
+/// first occurrence of each text only, texts that look the same (`hash_form`: "Paris" and
+/// "Paris ") counted once. (For a served question this is exact-text dedup, as the app does: the
+/// served bank has no look-alikes left.)
 pub fn right_column(pairs: &[Pair], distractors: &[String]) -> Vec<String> {
+    right_column_paired(pairs, distractors).0
+}
+
+/// [`right_column`] and how many of its first items come from `pairs` (the rest are distractors).
+pub fn right_column_paired(pairs: &[Pair], distractors: &[String]) -> (Vec<String>, usize) {
     let mut out: Vec<String> = Vec::new();
-    for s in pairs.iter().map(|p| &p.right).chain(distractors) {
-        if crate::text::has_visible(s) && !out.contains(s) {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut paired = 0;
+    for (k, s) in pairs.iter().map(|p| &p.right).chain(distractors).enumerate() {
+        if crate::text::has_visible(s) && seen.insert(crate::text::hash_form(s)) {
             out.push(s.clone());
+            if k < pairs.len() {
+                paired += 1;
+            }
         }
     }
-    out
+    (out, paired)
 }
 
 /// The teacher's key for a keyless question (see the module docs).
@@ -145,6 +172,9 @@ pub fn rekey(q: &Question, key: &Key) -> Result<Question, &'static str> {
         _ => return Err("bad_key"),
     }
     out.keyless = false;
+    // The teacher entered this key (True/False false included): `validate_for_publish` needs to
+    // know it is not the placeholder.
+    out.rekeyed = true;
     if out.explanation.as_deref() == Some(KEYLESS_SENTINEL) {
         out.explanation = None;
     }

@@ -180,3 +180,111 @@ fn legit_bank_peak() {
     eprintln!("legit bank: {} bytes in; peak validate {:.1} MB, strip {:.1} MB", p.len(), v as f64 / MB as f64, s as f64 / MB as f64);
     assert!(v < CEILING && s < CEILING, "{v} / {s}");
 }
+
+// ---- per-function cost bound over field shapes (round 5) ------------------------------------------
+
+/// The worst field shapes, each filling a 4 MB body: one huge field (refused before any character
+/// work), many fields at their limit with a refused character first / in the middle / last, CR- and
+/// BOM-heavy fields, NFC-expanding fields, combining-mark-heavy fields, and many small fields. The
+/// same shapes are in `tests/node/mem.mjs` (modes `f_*`).
+fn field_shapes() -> Vec<(&'static str, String)> {
+    let one = |stem: &str, kind: &str, extra: &str| format!(r#"{{"schema_version":1,"question":{{"id":"q","stem":{stem},"kind":{kind},"points":null,"difficulty":null,"created":1,"modified":1{extra}}}}}"#);
+    let tf = r#"{"Tf":{"correct":true}}"#;
+    let big = 4 * MB - 400;
+    let js = |s: &str| serde_json::to_string(s).unwrap();
+    let bank = |stems: &dyn Fn(usize) -> String| {
+        let mut qs = Vec::new();
+        let mut len = 200;
+        for i in 0.. {
+            let q = format!(r#"{{"id":"q{i}","stem":{},"kind":{tf},"points":null,"difficulty":null,"created":1,"modified":1}}"#, stems(i));
+            if len + q.len() + 1 > 4 * MB - 100 || i >= 1000 {
+                break;
+            }
+            len += q.len() + 1;
+            qs.push(q);
+        }
+        format!(r#"{{"schema_version":1,"bank":{{"id":"b","name":"n","created":1,"modified":2,"questions":[{}]}}}}"#, qs.join(","))
+    };
+    let at_limit = |pos: usize| {
+        move |_| {
+            let mut s = "a".repeat(8 * 1024 - 3);
+            let k = [0, s.len() / 2, s.len()][pos];
+            s.insert(k, '\u{202E}');
+            js(&s)
+        }
+    };
+    let ans = |t: &str| format!(r#"{{"Mc":{{"answers":[{{"text":{},"correct":true}},{{"text":"b"}}]}}}}"#, js(t));
+    vec![
+        ("f_long_stem", one(&js(&"a".repeat(big)), tf, "")),
+        ("f_cr_refused", one(&js(&format!("\r{}\u{202E}", "a".repeat(big - 8))), tf, "")),
+        ("f_bom_refused", one(&js(&format!("\u{FEFF}{}\u{202E}", "a".repeat(big - 8))), tf, "")),
+        ("f_long_choice", one(r#""s""#, &ans(&"a".repeat(big)), "")),
+        ("f_long_expl", one(r#""s""#, tf, &format!(r#","explanation":{}"#, js(&"a".repeat(big))))),
+        ("f_refused_first", bank(&at_limit(0))),
+        ("f_refused_middle", bank(&at_limit(1))),
+        ("f_refused_last", bank(&at_limit(2))),
+        ("f_crlf", bank(&|_| js(&"\r\n".repeat(4 * 1024 - 2)))),
+        ("f_bom", bank(&|_| js(&format!("{}x", "\u{FEFF}".repeat(2700))))),
+        ("f_nfc_expand", bank(&|_| js(&"\u{1D160}".repeat(2000)))),
+        ("f_marks", bank(&|_| js(&format!("a{}", "\u{0301}".repeat(16)).repeat(240)))),
+        ("f_many_small", {
+            let a = (0..26).map(|j| format!(r#"{{"text":"choice {j} {}","correct":{}}}"#, "x".repeat(80), j == 0)).collect::<Vec<_>>().join(",");
+            let q = |i: usize| format!(r#"{{"id":"q{i}","stem":"s","kind":{{"Mc":{{"answers":[{a}]}}}},"points":null,"difficulty":null,"created":1,"modified":1}}"#);
+            format!(r#"{{"schema_version":1,"bank":{{"id":"b","name":"n","created":1,"modified":2,"questions":[{}]}}}}"#, (0..1000).map(q).collect::<Vec<_>>().join(","))
+        }),
+    ]
+}
+
+/// Peak heap per input byte, per exported function, for every field shape: at most
+/// `COST_PER_BYTE` x the input plus 1 MB, and under the 40 MB ceiling.
+const COST_PER_BYTE: f64 = 4.0;
+
+#[test]
+fn field_shapes_have_a_per_byte_cost_bound() {
+    use share_core::wasm::*;
+    let _g = ONE_AT_A_TIME.lock().unwrap();
+    type F = fn(&[u8], &str) -> String;
+    let fns: [(&str, F, &str); 6] = [
+        ("validate", validate_json, ""),
+        ("validate_for_publish", validate_for_publish_json, r#"{"hide_key":true}"#),
+        ("strip", strip_json, ""),
+        ("label_findings", label_findings_json, ""),
+        ("match_hash", match_hash_json, ""),
+        ("full_hash", full_hash_json, ""),
+    ];
+    for (name, p) in field_shapes() {
+        assert!(p.len() <= 4 * MB, "{name}: {} bytes", p.len());
+        let mut row = format!("{name:>17} {:>8} B:", p.len());
+        let mut first = String::new();
+        for (f, call, opts) in fns {
+            let (m, out) = peak(|| call(p.as_bytes(), opts));
+            if first.is_empty() {
+                first = out[..out.len().min(60)].to_string();
+            }
+            let per = m as f64 / p.len() as f64;
+            row += &format!(" {f} {:.2}", per);
+            assert!(m as f64 <= COST_PER_BYTE * p.len() as f64 + MB as f64 && m < CEILING, "{name}/{f}: peak {m} for {} bytes", p.len());
+        }
+        eprintln!("{row}  [{first}]");
+    }
+}
+
+/// Round 17 (critic31a B6): the Blank bank with 170,000 distinct variants (170 questions x 50
+/// blanks x 20), the critic's 4 MB shape whose trie took 166 MB in wasm. The sorted-arena `Lex`
+/// keeps it under the 40 MB ceiling; its per-byte cost is about 6x, above the 4x bound of the
+/// field shapes (README, Costs).
+#[test]
+fn blank_bank_with_170000_variants_stays_under_the_ceiling() {
+    let _g = ONE_AT_A_TIME.lock().unwrap();
+    let acc = (0..50)
+        .map(|b| format!("[{}]", (0..20).map(|k| format!("\"ka{}{} lele ka lele\"", b, k)).collect::<Vec<_>>().join(",")))
+        .collect::<Vec<_>>()
+        .join(",");
+    let q = |i: usize| format!(r#"{{"id":"q{i}","stem":"{}","kind":{{"Blank":{{"accept":[{acc}]}}}},"points":null,"difficulty":null,"created":1,"modified":1}}"#, "___ ".repeat(50));
+    let p = format!(r#"{{"schema_version":1,"bank":{{"id":"b","name":"n","created":1,"modified":2,"questions":[{}]}}}}"#, (0..170).map(q).collect::<Vec<_>>().join(","));
+    assert!(p.len() > 3 * MB && p.len() <= 4 * MB, "{}", p.len());
+    let (v, _) = peak(|| share_core::wasm::validate_for_publish_json(p.as_bytes(), r#"{"hide_key":true}"#));
+    let (s, _) = peak(|| share_core::wasm::strip_json(p.as_bytes(), ""));
+    eprintln!("blank170: {} bytes in; peak validate_for_publish {:.1} MB ({:.2}x), strip {:.1} MB", p.len(), v as f64 / MB as f64, v as f64 / p.len() as f64, s as f64 / MB as f64);
+    assert!(v < CEILING && s < CEILING, "{v} / {s}");
+}
