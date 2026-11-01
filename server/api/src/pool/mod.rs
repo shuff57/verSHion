@@ -66,6 +66,7 @@ pub mod publishmeta;
 pub mod publishrewrite;
 pub mod publishstart;
 pub mod publishunits;
+pub mod publishchecks;
 pub mod publishearlier;
 pub mod publishfacts;
 pub mod publishhash;
