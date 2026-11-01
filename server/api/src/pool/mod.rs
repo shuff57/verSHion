@@ -63,6 +63,7 @@ pub mod hooks;
 pub mod adminblock;
 pub mod adminhold;
 pub mod croncore;
+pub mod cronrun;
 pub mod cronretain;
 pub mod crondaily;
 pub mod cronpublish;

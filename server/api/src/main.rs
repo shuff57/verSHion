@@ -149,6 +149,29 @@ async fn main() {
     if pool.is_none() {
         tracing::warn!("POOL_HASH_KEY is not set (or AUTH_SECRET): the pool routes are not served");
     }
+    // The pool's cron: the hourly stages every hour, the daily stages in the 04:xx UTC run (as the Worker's `scheduled` did).
+    if let Some(p) = pool.clone() {
+        tokio::spawn(async move {
+            let hour = std::time::Duration::from_secs(3600);
+            let mut tick = tokio::time::interval_at(tokio::time::Instant::now() + hour, hour);
+            loop {
+                tick.tick().await;
+                let p = p.clone();
+                let ran = tokio::task::spawn_blocking(move || {
+                    let now = (p.clock)();
+                    let h = pool::cronrun::run_hourly(&p);
+                    let d = (now / 3_600_000) % 24 == 4;
+                    let daily = d.then(|| pool::cronrun::run_daily(&p));
+                    (h, daily)
+                })
+                .await;
+                match ran {
+                    Ok((h, d)) => tracing::info!(?h, daily = d.is_some(), "pool cron"),
+                    Err(e) => tracing::error!("pool cron panicked: {e}"),
+                }
+            }
+        });
+    }
     let job_ttl_ms = cfg.job_ttl_ms;
     let ai_auth = authenticator(&cfg);
     let state = Arc::new(AiState {
