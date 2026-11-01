@@ -335,6 +335,47 @@ pub fn same_served(a: &Value, b: &Value, served_orders: &[Value], kept: &[Value]
     rest(a) == rest(b)
 }
 
+/// What a hidden republish keeps of its previous stripped body when the served form did not change.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Reused {
+    pub bytes: Vec<u8>,
+    pub hashes: Vec<String>,
+    pub contents: Vec<String>,
+    pub near: Vec<Option<String>>,
+    pub bare: Vec<Option<String>>,
+    pub served_orders: Vec<Value>,
+}
+
+/// A hidden republish whose served form is unchanged: the previous stripped body, its rows' served facts and the author's served orders remapped onto it; None
+/// when it cannot be kept (a different question list, a missing or unreadable body, a changed served form, an order with no counterpart).
+pub fn reuse_served(conn: &Connection, store: &crate::blobs::BlobStore, base_of: &str, qids: &[String], st: &super::core::Stripped, order_acks: &[super::core::Pos]) -> rusqlite::Result<Option<Reused>> {
+    type PrevRow = (String, String, String, Option<String>, Option<String>);
+    let prev: Vec<PrevRow> = conn
+        .prepare("SELECT qid, stripped_sha256, stripped_content, near_stripped, near_bare_stripped FROM item_questions WHERE publish_id = ?1 ORDER BY pos")?
+        .query_map([base_of], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))?
+        .collect::<Result<_, _>>()?;
+    let prev_key: Option<String> = conn.query_row("SELECT stripped_key FROM item_publishes WHERE publish_id = ?1", [base_of], |r| r.get(0)).ok().flatten();
+    let Some(prev_key) = prev_key.filter(|k| !k.is_empty()) else { return Ok(None) };
+    if prev.len() != qids.len() || !prev.iter().zip(qids).all(|(q, id)| &q.0 == id) {
+        return Ok(None);
+    }
+    let Some(bytes) = store.get(&prev_key).map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))? else { return Ok(None) };
+    let Ok(prev_body) = serde_json::from_slice::<Value>(&bytes) else { return Ok(None) };
+    // The author's key review must describe the body served (remapped onto it).
+    let mut kept: Vec<Value> = order_acks.iter().map(|p| serde_json::to_value(p).unwrap_or(Value::Null)).collect();
+    kept.extend(st.order_reasons.iter().cloned());
+    let so = if same_served(&prev_body, &st.v.payload, &st.served_orders, &kept) { remap_served_orders(&prev_body, &st.v.payload, &st.served_orders) } else { None };
+    let Some(served_orders) = so else { return Ok(None) };
+    Ok(Some(Reused {
+        bytes,
+        hashes: prev.iter().map(|q| q.1.clone()).collect(),
+        contents: prev.iter().map(|q| q.2.clone()).collect(),
+        near: prev.iter().map(|q| q.3.clone()).collect(),
+        bare: prev.iter().map(|q| q.4.clone()).collect(),
+        served_orders,
+    }))
+}
+
 fn truthy(v: &Value) -> bool {
     match v {
         Value::Null => false,

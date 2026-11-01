@@ -199,3 +199,58 @@ fn the_per_position_test_names_the_source_only_when_it_came_first() {
     assert!(run(5).is_none(), "equal seq is not earlier");
     assert!(run(3).is_none(), "she had it first");
 }
+
+// ---- reuse_served ----
+
+use super::super::core::{Stripped, Validated};
+use crate::blobs::BlobStore;
+
+fn stripped(payload: Value, served_orders: Vec<Value>) -> Stripped {
+    Stripped {
+        v: Validated { bytes: serde_json::to_vec(&payload).unwrap(), payload, dropped: vec![] },
+        match_hashes: vec![],
+        stripped_hashes: vec![],
+        needs_order_ack: vec![],
+        order_reasons: vec![],
+        labels_removed: vec![],
+        label_findings: vec![],
+        served_orders,
+        images_kept: vec![],
+        images_removed: vec![],
+        figures_removed: vec![],
+    }
+}
+/// A base publish with one question whose stripped body is stored under `bodies/base-stripped`.
+fn base_world(prev_body: &Value) -> (rusqlite::Connection, tempfile::TempDir, BlobStore) {
+    let (c, d) = open();
+    let store = BlobStore::new(d.path().join("blobs")).unwrap();
+    store.put("bodies/base-stripped", &serde_json::to_vec(prev_body).unwrap()).unwrap();
+    row(&c, "items", &[("id", t("it")), ("author_id", t("me")), ("kind", t("bank")), ("visibility", t("unlisted")), ("created_at", i(1)), ("updated_at", i(1))]);
+    row(&c, "item_publishes", &[("publish_id", t("base")), ("item_id", t("it")), ("author_id", t("me")), ("status", t("current")), ("hide_key", i(1)), ("stripped_key", t("bodies/base-stripped"))]);
+    row(&c, "item_questions", &[("publish_id", t("base")), ("qid", t("q1")), ("pos", i(0)), ("qkind", t("Mc")), ("stripped_sha256", t("sha-s")), ("stripped_content", t("content-s")), ("near_stripped", t("ns"))]);
+    (c, d, store)
+}
+
+#[test]
+fn an_unchanged_served_form_keeps_the_previous_body_and_its_row_facts() {
+    let prev = bank(vec![mc("Q", &[("A", true, false), ("B", false, false), ("C", false, false)])]);
+    let fresh = bank(vec![mc("Q", &[("C", false, false), ("A", true, false), ("B", false, false)])]);
+    let (c, _d, store) = base_world(&prev);
+    let r = reuse_served(&c, &store, "base", &["q1".to_string()], &stripped(fresh, vec![so(0, &[2, 0, 1])]), &[]).unwrap().expect("reused");
+    assert_eq!(serde_json::from_slice::<Value>(&r.bytes).unwrap(), prev);
+    assert_eq!((r.hashes, r.contents, r.near, r.bare), (vec!["sha-s".into()], vec!["content-s".into()], vec![Some("ns".into())], vec![None]));
+    assert_eq!(r.served_orders, vec![so(0, &[0, 1, 2])]);
+}
+
+#[test]
+fn a_changed_form_or_question_list_or_missing_body_is_not_reused() {
+    let prev = bank(vec![mc("Q", &[("A", true, false), ("B", false, false)])]);
+    let (c, _d, store) = base_world(&prev);
+    let same = bank(vec![mc("Q", &[("A", true, false), ("B", false, false)])]);
+    let changed = bank(vec![mc("Q changed", &[("A", true, false), ("B", false, false)])]);
+    assert!(reuse_served(&c, &store, "base", &["q1".to_string()], &stripped(changed, vec![]), &[]).unwrap().is_none());
+    assert!(reuse_served(&c, &store, "base", &["q1".to_string(), "q2".to_string()], &stripped(same.clone(), vec![]), &[]).unwrap().is_none(), "another question list");
+    assert!(reuse_served(&c, &store, "base", &["other".to_string()], &stripped(same.clone(), vec![]), &[]).unwrap().is_none(), "another qid");
+    store.delete("bodies/base-stripped").unwrap();
+    assert!(reuse_served(&c, &store, "base", &["q1".to_string()], &stripped(same, vec![]), &[]).unwrap().is_none(), "body gone");
+}
