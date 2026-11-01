@@ -14,7 +14,7 @@ use serde_json::{Map, Value, json};
 use std::sync::Arc;
 
 /// (method, path, writes) of every admin route this module serves.
-const TABLE: &[(&str, &str, bool)] = &[
+pub(super) const TABLE: &[(&str, &str, bool)] = &[
     ("GET", "/admin/pool/reports", false),
     ("GET", "/admin/pool/flags", false),
     ("GET", "/admin/pool/item", false),

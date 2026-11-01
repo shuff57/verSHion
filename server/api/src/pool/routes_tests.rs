@@ -534,3 +534,92 @@ async fn invites_are_issued_listed_and_revoked_and_circles_are_listed_by_an_admi
     let (s, _, _) = send(&w, areq("GET", &format!("/admin/pool/circle?id={}", "0".repeat(32)), false, None)).await;
     assert_eq!(s, 404);
 }
+
+// Sweep: every route the Worker serves, with every method, against the Rust router.
+
+const METHODS: [&str; 6] = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"];
+
+/// One concrete path for each variant of `Route` (a new variant without a sample here fails the count below).
+fn sample_paths() -> Vec<String> {
+    let (c, b, h) = ("a".repeat(32), "b".repeat(32), "e".repeat(64));
+    let p = |s: &str| s.replace("{c}", &c).replace("{b}", &b).replace("{h}", &h);
+    [
+        "/items", "/items/preview", "/items/abc/preview", "/items/mine", "/items/prefs", "/items/versions", "/items/abc", "/items/abc/undelete", "/items/abc/import",
+        "/items/abc/report", "/items/abc/appeal", "/items/abc/counter-notice", "/items/abc/blobs/{h}", "/blobs/{h}", "/me/export", "/me/invite", "/circles",
+        "/circles/join/preview", "/circles/join", "/circles/heads", "/circles/{c}", "/circles/{c}/reopen", "/circles/{c}/activity", "/circles/{c}/invites",
+        "/circles/{c}/invites/revoke", "/circles/{c}/invites/email", "/circles/{c}/leave", "/circles/{c}/members/remove", "/circles/{c}/members/role",
+        "/circles/{c}/transfer", "/circles/{c}/transfer/accept", "/circles/{c}/transfer/cancel", "/circles/{c}/banks", "/circles/{c}/banks/{b}",
+        "/circles/{c}/banks/{b}/undelete", "/circles/{c}/banks/{b}/report", "/circles/{c}/banks/{b}/purge", "/circles/{c}/banks/{b}/blobs/{h}",
+        "/circles/{c}/banks/{b}/versions", "/circles/{c}/banks/{b}/versions/1", "/circles/{c}/banks/{b}/changes", "/circles/{c}/banks/{b}/merge",
+        "/circles/{c}/banks/{b}/rollback", "/circles/{c}/banks/{b}/trim",
+    ]
+    .iter()
+    .map(|s| p(s))
+    .collect()
+}
+
+#[test]
+fn the_sweep_covers_every_route_variant() {
+    use crate::pool::routetable::route_of;
+    let kinds: std::collections::HashSet<_> = sample_paths().iter().map(|p| std::mem::discriminant(&route_of(p).unwrap_or_else(|| panic!("no route for {p}")))).collect();
+    // 44 handlers in the Worker's ROUTES table (worker/src/pool/index.ts).
+    assert_eq!(kinds.len(), 44);
+}
+
+#[tokio::test]
+async fn no_pool_route_and_method_falls_through_to_not_ported() {
+    use crate::pool::routetable::route_of;
+    let w = world();
+    for path in sample_paths() {
+        let allowed = route_of(&path).unwrap().methods();
+        for m in METHODS {
+            let (s, b, h) = send(&w, req(m, &path, T, None, vec![])).await;
+            assert_ne!(s, 501, "{m} {path} is not ported: {b}");
+            assert_ne!(b["error"], json!("not_ported"), "{m} {path}");
+            if !allowed.contains(&m) {
+                assert_eq!(s, 405, "{m} {path} should be refused");
+                assert!(h.get("allow").is_some(), "{m} {path} lacks Allow");
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn no_admin_route_and_method_falls_through_to_not_ported() {
+    let w = world();
+    let mut paths: Vec<&str> = crate::pool::adminroutes::TABLE.iter().map(|(_, p, _)| *p).collect();
+    paths.sort();
+    paths.dedup();
+    // 33 in worker/src/pool/admin.ts, 9 in circleadmin.ts, 2 in invites.ts (a GET and a POST on one path count once).
+    assert_eq!(paths.len(), 44, "the Worker serves 44 admin paths");
+    for path in paths {
+        for m in METHODS {
+            let listed = crate::pool::adminroutes::TABLE.iter().any(|(tm, tp, _)| *tm == m && *tp == path);
+            let (s, b, _) = send(&w, areq(m, path, true, None)).await;
+            assert_ne!(s, 501, "{m} {path} is not ported: {b}");
+            assert_ne!(b["error"], json!("not_ported"), "{m} {path}");
+            if !listed {
+                assert_eq!(s, 405, "{m} {path} should be refused");
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn pool_routes_answer_preflight_and_carry_cors_headers() {
+    let w = world();
+    let pre = |path: &str, origin: &str| HttpRequest::builder().method("OPTIONS").uri(path.to_string()).header("origin", origin.to_string()).body(Body::empty()).unwrap();
+    for path in ["/items", "/items/abc", "/circles", "/blobs/abc", "/me/export", "/admin/pool/flags", "/admin/dmca/notices"] {
+        let (s, _, h) = send(&w, pre(path, "https://app.example")).await;
+        assert_eq!(s, 204, "{path}");
+        assert_eq!(h["access-control-allow-origin"], "https://app.example");
+        assert_eq!(h["access-control-allow-methods"], "GET, HEAD, POST, PUT, PATCH, DELETE");
+        assert_eq!(send(&w, pre(path, "https://evil.example")).await.0, 403, "{path}");
+    }
+    // A real reply (here a 401) carries the headers for an allowed origin, and none for another.
+    let get = |origin: &str| HttpRequest::builder().method("GET").uri("/items").header("origin", origin.to_string()).header("x-forwarded-for", "203.0.113.5").body(Body::empty()).unwrap();
+    let (_, _, h) = send(&w, get("https://app.example")).await;
+    assert_eq!(h["access-control-allow-origin"], "https://app.example");
+    let (_, _, h) = send(&w, get("https://evil.example")).await;
+    assert!(h.get("access-control-allow-origin").is_none());
+}
