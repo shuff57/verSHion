@@ -3807,11 +3807,11 @@ const BUFFER_CURVES: &[Faq] = &[
     },
     Faq {
         q: "What do the buffer region and the capacity show?",
-        a: "The buffer region is where the pH is within 1 of pKa, so the ratio of the conjugate base to the acid is between 1/10 and 10; the key shades it. On the buffer graph the key also marks where the added acid or base takes the pH out of that range, from the exact curve, and gives that volume and amount as the buffer's capacity in that direction. A buffer that starts outside the range, or a titrant too dilute to take the pH out of it, is said so.",
+        a: "The buffer region is where the pH is within 1 of pKa, so the ratio of the conjugate base to the acid is between 1/10 and 10; the key shades it from the exact curve. The capacity question asks how much acid or base takes that ratio past 10 (or 1/10), and the answer expected is the one worked from the amounts, as a student works it without a curve; the key marks it. Beside it the key gives where the exact curve leaves pKa \u{b1} 1 and says why the two differ (the weak acid ionising, or its conjugate reacting with water, which the amounts leave out). A buffer already past the ratio at the start has the answer none, and a solution with none of the salt is not called a buffer.",
     },
     Faq {
         q: "What does the student copy leave out?",
-        a: "Show answers off keeps the analyte, the titrant, their amounts and the axes, which depend on the givens only, and turns the equivalence point, the half-equivalence point, pKa, the indicator, the pH values and the capacity into blank lines. It draws no marked points, guides, buffer region or indicator band. For finding pKa it does not name the acid or base, so its pKa cannot be looked up. For the pH at a volume and the buffer pH it draws no curve, only a dotted line at the volume asked about, since the curve would show the answer.",
+        a: "Show answers off keeps the analyte, the titrant, their amounts and the axes, which depend on the givens only, and turns the equivalence point, the half-equivalence point, pKa, the indicator, the pH values and the capacity into blank lines. It draws no marked points, guides, buffer region or indicator band. For finding pKa it does not name the acid or base, so its pKa cannot be looked up. For the pH at a volume and the buffer pH it draws no curve, only a dashed line at the volume asked about, since the curve would show the answer.",
     },
 ];
 

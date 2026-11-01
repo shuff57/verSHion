@@ -240,7 +240,7 @@ fn textbook_values_come_out() {
     assert_eq!(wb(0.0), "11.12");
     assert_eq!(wb(12.5), "9.25");
     assert_eq!(wb(25.0), "5.28");
-    // very dilute strong acid: water's own ions keep it just below 7, not at pH 8
+    // the most dilute strong acid the figure takes: 1e-4 M HCl is pH 4.00
     let d = mdl(&[s("mode", SASB), f("c_an", 0.0001), f("v_an", 1.0), f("c_ti", 2.0)]);
     let ph = d.st.sys.ph(0.0);
     assert_eq!(fx(ph, 2), "4.00");
@@ -251,13 +251,28 @@ fn textbook_values_come_out() {
 
 #[test]
 fn the_key_points_are_the_exact_ones() {
+    // the equivalence volume is where the independent curve is steepest (within 0.2 %), for titrations whose jump is
+    // sharp (strong ones from 0.01 M; weak ones from 0.05 M with pKa (or pKb) up to 6)
     let mut r = Rng(5);
-    for _ in 0..300 {
+    let mut checked = 0;
+    for _ in 0..400 {
         let (sys, pka) = rand_sys(&mut r);
-        if !sys.mode.titration() { continue; }
-        assert!((sys.v_eq() - sys.c_a * sys.v_a / sys.c_t).abs() <= 1e-12 * sys.v_eq());
-        let _ = pka;
+        if !sys.mode.titration() || sys.c_a < 0.01 || sys.c_t < 0.01 { continue; }
+        if sys.mode.weak() && (sys.c_a < 0.05 || sys.c_t < 0.05) { continue; }
+        if (sys.mode == Mode::WaSb && pka > 6.0) || (sys.mode == Mode::WbSa && pka < 8.0) { continue; }
+        let veq = model_of(&with(&[s("mode", match sys.mode { Mode::SaSb => SASB, Mode::SbSa => SBSA, Mode::WaSb => WASB, _ => WBSA }), s("acid", "Custom"), f("pka", sig4(pka)), s("base", "Custom"), f("pkb", sig4(PKW - pka)), f("c_an", sig4(sys.c_a)), f("v_an", sig4(sys.v_a)), f("c_ti", sig4(sys.c_t))])).veq;
+        let sys2 = Sys { c_a: sig4(sys.c_a), v_a: sig4(sys.v_a), c_t: sig4(sys.c_t), ..sys };
+        let n = 4000;
+        let (mut best_v, mut best_s) = (0.0, 0.0);
+        for k in 0..n {
+            let (a, c) = (veq * (0.9 + 0.2 * k as f64 / n as f64), veq * (0.9 + 0.2 * (k + 1) as f64 / n as f64));
+            let slope = (ind_ph(&sys2, sig4(pka), c) - ind_ph(&sys2, sig4(pka), a)).abs() / (c - a);
+            if slope > best_s { best_s = slope; best_v = 0.5 * (a + c); }
+        }
+        assert!((best_v - veq).abs() <= 0.002 * veq, "steepest at {best_v}, equivalence {veq} for {sys2:?}");
+        checked += 1;
     }
+    assert!(checked > 25, "{checked}");
     let m = mdl(&[s("mode", WASB), s("task", T_PKA)]);
     assert!((m.veq - 25.0).abs() < 1e-9 && (m.vhalf - 12.5).abs() < 1e-9);
     assert!((m.ph_half - ind_ph(&m.st.sys, 4.756, 12.5)).abs() < 1e-7);
@@ -334,7 +349,7 @@ fn the_indicator_choice_follows_the_steep_part() {
                     let key = readout(&m, true).join("\n");
                     match m.best {
                         Some(k) => { assert!(key.contains(&format!("Best: {}", INDICATORS[k].name)), "{key}"); checked += 1; }
-                        None => assert!(key.contains("None of these"), "{key}"),
+                        None => assert!(key.contains("None of these") || key.contains("no listed indicator"), "{key}"),
                     }
                 }
             }
@@ -409,9 +424,9 @@ fn the_shortcut_lines_are_worked_from_the_givens() {
     assert!(t.contains("the shortcut's") && t.contains("water's own"), "{t}");
     // the pKa read off agrees with the CRC value for acetic acid, and says how far off it is for hydrofluoric acid
     let t = readout(&mdl(&[s("mode", WASB), s("task", T_PKA)]), true).join("\n");
-    assert!(t.contains("pKa = 4.756; the reading agrees"), "{t}");
+    assert!(t.contains("gives pKa = 4.756;") && t.contains("the reading agrees"), "{t}");
     let t = readout(&mdl(&[s("mode", WASB), s("task", T_PKA), s("acid", "Hydrofluoric acid")]), true).join("\n");
-    assert!(t.contains("pKa = 3.2; the reading is 0.02 higher"), "{t}");
+    assert!(t.contains("gives pKa = 3.2;") && t.contains("the reading is 0.02 higher") && t.contains("some of the HF ionises, adding F\u{207b}"), "{t}");
     // Ka is worked from the printed reading (a value read off a graph), not from the unrounded pH
     assert!(t.contains("Ka = 10^(\u{2212}3.22) = 6.026 \u{d7} 10\u{207b}\u{2074}."), "{t}");
     // a base: pKb from 14.00 - the reading
@@ -808,7 +823,7 @@ fn the_answer_is_the_same_in_every_size_and_style() {
 #[test]
 fn handles_move_the_equivalence_point_the_pka_and_the_volume_asked_about() {
     let d = def();
-    let p = with(&[s("mode", WASB), s("task", T_PKA)]);
+    let p = with(&[s("mode", WASB), s("task", T_PKA), s("acid", "Custom")]);
     let (w, h) = crate::figures::svg_size(&d.svg(&p));
     let hs = handles(ID, &p, (w, h)).expect("handles");
     assert_eq!(hs.len(), 2, "{:?}", hs.iter().map(|h| h.tip.clone()).collect::<Vec<_>>());
@@ -834,7 +849,7 @@ fn handles_move_the_equivalence_point_the_pka_and_the_volume_asked_about() {
     // the volume asked about
     let p = with(&[s("mode", WASB), s("task", T_PH)]);
     let hs = handles(ID, &p, (w, h)).unwrap();
-    let vq = hs.iter().find(|h| h.tip.contains("dotted line")).expect("a volume handle");
+    let vq = hs.iter().find(|h| h.tip.contains("dashed line")).expect("a volume handle");
     let mut q = p.clone();
     (vq.drag.clone().unwrap())(&mut q, (vq.pos.0 + 50.0, vq.pos.1));
     assert!(q.f("v_q") > p.f("v_q"));
@@ -1134,4 +1149,422 @@ fn notes_mention_the_approximations() {
     assert!(key.contains("concentrations for activities") && key.contains("25 \u{b0}C") && key.contains("CRC Handbook"), "{key}");
     let stu = note_text(&svg_of(&[b(SHOW_ANSWERS, false)]));
     assert!(!stu.contains("charge balance"), "{stu}");
+}
+
+// ---------------------------------------------------------------------------------------------
+// Critic round 1
+// ---------------------------------------------------------------------------------------------
+
+/// A number as the key prints it: "1.234 × 10⁻⁵", "−0.02", "25.00".
+fn num_t(t: &str) -> f64 {
+    let t = t.trim().trim_end_matches('.').replace('\u{2212}', "-");
+    if let Some((m, e)) = t.split_once(" \u{d7} 10") {
+        let e: String = e.chars().map(|c| match c { '\u{207b}' => '-', '\u{2070}' => '0', '\u{b9}' => '1', '\u{b2}' => '2', '\u{b3}' => '3', '\u{2074}' => '4', '\u{2075}' => '5', '\u{2076}' => '6', '\u{2077}' => '7', '\u{2078}' => '8', '\u{2079}' => '9', c => c }).collect();
+        return m.trim().parse::<f64>().unwrap_or_else(|_| panic!("not a mantissa {m:?}")) * 10f64.powi(e.trim().parse::<i32>().unwrap_or_else(|_| panic!("not a power {e:?}")));
+    }
+    t.parse().unwrap_or_else(|_| panic!("not a number {t:?}"))
+}
+
+/// The significant figures a printed number shows ("0.05000" has 4, "2.5" has 2).
+fn sig_t(t: &str) -> usize {
+    let m = t.trim().trim_end_matches('.').split(" \u{d7} ").next().unwrap().replace(['\u{2212}', '-', '.'], "");
+    let d = m.trim_start_matches('0');
+    if d.is_empty() { 1 } else { d.len() }
+}
+
+/// The factors of "a × b" where either may be written "m × 10ⁿ".
+fn factors(s: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for p in s.split(" \u{d7} ") {
+        let pow = p.starts_with("10") && p.chars().nth(2).is_some_and(|c| "\u{207b}\u{2070}\u{b9}\u{b2}\u{b3}\u{2074}\u{2075}\u{2076}\u{2077}\u{2078}\u{2079}".contains(c));
+        match out.last_mut() { Some(l) if pow => { l.push_str(" \u{d7} "); l.push_str(p); } _ => out.push(p.to_string()) }
+    }
+    out
+}
+
+/// `v` printed to the significant figures `printed` shows gives `printed` (an integer's trailing zeros may or may
+/// not be significant, so either reading counts).
+fn rounds_to(v: f64, printed: &str) -> bool {
+    let full = sig_t(printed);
+    let m = printed.split(" \u{d7} ").next().unwrap();
+    let tz = if m.contains('.') { 0 } else { m.len() - m.trim_end_matches('0').len() };
+    (full.saturating_sub(tz).max(1)..=full).any(|n| sf(v, n) == printed)
+}
+
+fn between<'a>(s: &'a str, a: &str, b: &str) -> Option<&'a str> { let i = s.find(a)? + a.len(); let j = s[i..].find(b)? + i; Some(&s[i..j]) }
+
+/// Every line of working whose arithmetic the key prints is checked: recomputing from the printed numbers gives the
+/// printed result. Returns the kinds of line checked.
+fn check_arithmetic(lines: &[String], dec: usize, ctx: &str) -> Vec<&'static str> {
+    let mut kinds = Vec::new();
+    for l in lines {
+        if let Some(tail) = l.split_once(")) = ").map(|x| x.1).filter(|_| l.starts_with("Henderson-Hasselbalch")) {
+            let (pk, rest) = tail.split_once(" + log(").unwrap();
+            let (ratio, r) = rest.split_once(") = ").unwrap();
+            let (b_, a_) = ratio.split_once(" / ").unwrap();
+            assert_eq!(fx(num_t(pk) + (num_t(b_) / num_t(a_)).log10(), dec), r.trim_end_matches('.'), "{l}\n{ctx}");
+            kinds.push("hh");
+        }
+        if l.starts_with("[H\u{207a}] = ") && l.contains("so pH = \u{2212}log ") {
+            let a_ = between(l, "] = ", " mmol").unwrap();
+            let b_ = between(l, "mmol / ", " mL").unwrap();
+            let c_ = between(l, "mL = ", " M,").unwrap();
+            let r = l.rsplit_once(" = ").unwrap().1.trim_end_matches('.');
+            assert!(rounds_to(num_t(a_) / num_t(b_), c_), "{l}\n{ctx}");
+            assert_eq!(fx(-num_t(c_).log10(), dec), r, "{l}\n{ctx}");
+            kinds.push("h");
+        }
+        if l.starts_with("[OH\u{207b}] = ") {
+            let a_ = between(l, "] = ", " mmol").unwrap();
+            let b_ = between(l, "mmol / ", " mL").unwrap();
+            let c_ = between(l, "mL = ", " M,").unwrap();
+            let p = between(l, "pOH = ", " and").unwrap();
+            assert!(rounds_to(num_t(a_) / num_t(b_), c_), "{l}\n{ctx}");
+            assert_eq!(fx(-num_t(c_).log10(), dec), p, "{l}\n{ctx}");
+            if l.contains(&format!("{} \u{2212} {p} = ", fx(PKW, dec))) { assert_eq!(fx(PKW - num_t(p), dec), l.rsplit_once(" = ").unwrap().1.trim_end_matches('.'), "{l}"); }
+            kinds.push("oh");
+        }
+        if l.contains("alone is a weak acid with Ka = ") {
+            let inside = between(l, "C) = sqrt(", ")").unwrap();
+            let fs_ = factors(inside);
+            let (k, c_) = (fs_[0].as_str(), fs_[1].as_str());
+            let h_ = between(l, &format!("sqrt({inside}) = "), " M").unwrap();
+            let r = l.rsplit_once("pH = ").unwrap().1.trim_end_matches('.');
+            assert!(rounds_to((num_t(k) * num_t(c_)).sqrt(), h_), "{l}\n{ctx}");
+            assert_eq!(fx(-num_t(h_).log10(), dec), r, "{l}\n{ctx}");
+            kinds.push("sqrta");
+        }
+        if l.contains("alone is a weak base with Kb = ") {
+            let inside = between(l, "C) = sqrt(", ")").unwrap();
+            let fs_ = factors(inside);
+            let (k, c_) = (fs_[0].as_str(), fs_[1].as_str());
+            let o_ = between(l, &format!("sqrt({inside}) = "), " M").unwrap();
+            let p = between(l, "pOH = ", " and").unwrap();
+            assert!(rounds_to((num_t(k) * num_t(c_)).sqrt(), o_), "{l}\n{ctx}");
+            assert_eq!(fx(-num_t(o_).log10(), dec), p, "{l}\n{ctx}");
+            kinds.push("sqrtb");
+        }
+        if l.starts_with("Equivalence: n(") {
+            let c_ = between(l, ") = ", " M \u{d7}").map(|x| x.rsplit(") = ").next().unwrap()).unwrap();
+            let v_ = between(l, "M \u{d7} ", " mL").unwrap();
+            let n_ = between(l, " mL = ", " mmol").unwrap();
+            let ct = between(l, &format!("V = {n_} mmol / "), " M").unwrap();
+            let ve = between(l, &format!("/ {ct} M = "), " mL").unwrap();
+            assert!(rounds_to(num_t(c_) * num_t(v_), n_), "{l}\n{ctx}");
+            assert!(rounds_to(num_t(n_) / num_t(ct), ve), "{l}\n{ctx}");
+            kinds.push("eq");
+        }
+        if l.starts_with("Half-equivalence: V = ") {
+            let ve = between(l, "V = ", " mL / 2").unwrap();
+            let vh = between(l, "/ 2 = ", " mL").unwrap();
+            assert!(rounds_to(num_t(ve) / 2.0, vh), "{l}\n{ctx}");
+            kinds.push("half");
+        }
+        if let Some(x_) = between(l, "x = (10 \u{d7} ", " mmol") {
+            let (a_, rest) = x_.split_once(" \u{2212} ").unwrap();
+            let (b_, x) = rest.split_once(") / 11 = ").unwrap();
+            assert!(rounds_to((10.0 * num_t(a_) - num_t(b_)) / 11.0, x), "{l}\n{ctx}");
+            let ct = between(l, &format!("which is {x} mmol / "), " M").unwrap();
+            let v = between(l, &format!("/ {ct} M = "), " mL").unwrap();
+            assert!(rounds_to(num_t(x) / num_t(ct), v), "{l}\n{ctx}");
+            kinds.push("cap");
+        }
+    }
+    kinds
+}
+
+#[test]
+fn the_printed_arithmetic_reproduces_every_printed_result() {
+    // the critic's repro: a custom pKb with three decimals, three decimals of pH
+    let l: L = vec![s("mode", BUF), s("pair", PAIRS[1]), s("base", "Custom"), f("pkb", 3.337), i("dec", 3), f("c_salt", 0.1), s("task", T_BUF)];
+    let t = readout(&mdl(&l), true).join("\n");
+    assert!(t.contains("= 10.663 + log(2.500 / 2.500) = 10.663."), "{t}");
+    let mut r = Rng(404);
+    let mut seen: BTreeMap<&str, usize> = BTreeMap::new();
+    for _ in 0..1500 {
+        let l: L = vec![
+            s("mode", r.pick(&MODES_ALL)),
+            s("task", r.pick(&TASKS_ALL)),
+            s("acid", "Custom"), s("base", "Custom"),
+            f("pka", r.pick(&[1.234, 2.718, 3.337, 4.756, 6.6, 7.405, 9.999, 12.37])),
+            f("pkb", r.pick(&[1.234, 3.337, 3.999, 4.75, 8.765, 11.11])),
+            f("c_an", r.pick(&[0.0001, 0.001234, 0.05, 0.1, 0.1234, 0.987, 2.0])),
+            f("c_ti", r.pick(&[0.0003, 0.002, 0.1, 0.1111, 0.75])),
+            f("v_an", r.pick(&[10.0, 25.0, 25.37, 33.33, 100.0])),
+            f("c_salt", r.pick(&[0.0, 0.001, 0.05, 0.1234])),
+            s("pair", PAIRS[(r.next() % 2) as usize]),
+            s("add", ADDS[(r.next() % 2) as usize]),
+            f("v_q", r.pick(&[0.0, 1.234, 10.0, 12.5, 24.99, 25.0, 33.33, 60.0])),
+            i("dec", 1 + (r.next() % 3) as i64),
+        ];
+        let m = mdl(&l);
+        for k in check_arithmetic(&readout(&m, true), m.st.dec, &show(&l)) { *seen.entry(k).or_default() += 1; }
+    }
+    for k in ["hh", "h", "oh", "sqrta", "sqrtb", "eq", "half", "cap"] { assert!(seen.get(k).copied().unwrap_or(0) >= 20, "{k}: {seen:?}"); }
+}
+
+#[test]
+fn agreement_is_claimed_only_when_the_rounded_values_agree() {
+    // the critic's repro: pKb 3.999 at 2 M, three decimals: the pKa of BH+ is 10.001, printed in full
+    let t = readout(&mdl(&[s("mode", WBSA), s("task", T_PKA), s("base", "Custom"), f("pkb", 3.999), f("c_an", 2.0), f("c_ti", 2.0), i("dec", 3)]), true).join("\n");
+    assert!(t.contains("= 10.001;"), "{t}");
+    let mut r = Rng(17);
+    let mut agree = 0;
+    for _ in 0..600 {
+        let base = r.next() % 2 == 0;
+        let l: L = vec![s("mode", if base { WBSA } else { WASB }), s("task", T_PKA), s("acid", "Custom"), s("base", "Custom"), f("pka", r.pick(&[1.5, 3.2, 4.756, 6.123, 9.21, 12.5])), f("pkb", r.pick(&[1.5, 3.999, 4.75, 8.77, 12.0])), f("c_an", r.pick(&[0.0001, 0.001, 0.1, 2.0])), f("c_ti", r.pick(&[0.0001, 0.1, 2.0])), i("dec", 1 + (r.next() % 3) as i64)];
+        let m = mdl(&l);
+        let t = readout(&m, true).join("\n");
+        let read = fx(m.ph_half, m.st.dec);
+        let truth_txt = between(&t, if base { "the pKa of " } else { "gives pKa = " }, ";").map(|x| x.rsplit(" = ").next().unwrap().to_string()).unwrap_or_else(|| panic!("{t}"));
+        assert!((num_t(&truth_txt) - m.st.pka()).abs() < 1e-9, "printed {truth_txt} for pKa {} in {}", m.st.pka(), show(&l));
+        let agrees = t.contains("the reading agrees");
+        assert_eq!(agrees, fx(m.st.pka(), m.st.dec) == read, "{t}");
+        if agrees { agree += 1; }
+    }
+    assert!(agree > 50, "{agree}");
+}
+
+/// The words for what moves a half-equivalence (or ratio) reading off the shortcut: (higher, lower) for an acid pair,
+/// then for a base pair.
+const DRIFT: [(&str, &str); 2] = [("ionises, adding", "reacts with water to give back"), ("ionises to give back", "reacts with water, adding")];
+
+#[test]
+fn the_pka_reading_names_the_reaction_that_moves_it() {
+    // the critic's repros
+    let t = readout(&mdl(&[s("mode", WASB), s("task", T_PKA), s("acid", "Hydrocyanic acid"), f("c_an", 0.001), f("c_ti", 0.001)]), true).join("\n");
+    assert!(t.contains("lower") && t.contains("some of the CN\u{207b} reacts with water to give back HCN"), "{t}");
+    let t = readout(&mdl(&[s("mode", WBSA), s("task", T_PKA), s("base", "Aniline"), f("c_an", 0.001), f("c_ti", 0.001)]), true).join("\n");
+    assert!(t.contains("higher") && t.contains("ionises to give back C\u{2086}H\u{2085}NH\u{2082}"), "{t}");
+    let mut r = Rng(69);
+    let mut checked = [0usize; 4];
+    for _ in 0..800 {
+        let base = r.next() % 2 == 0;
+        let pk = 1.0 + (r.next() % 1200) as f64 / 100.0;
+        let l: L = vec![s("mode", if base { WBSA } else { WASB }), s("task", T_PKA), s("acid", "Custom"), s("base", "Custom"), f("pka", pk), f("pkb", pk), f("c_an", r.pick(&[0.0001, 0.001, 0.01, 0.1, 1.0])), f("c_ti", r.pick(&[0.0001, 0.001, 0.1])), i("dec", 1 + (r.next() % 3) as i64)];
+        let m = mdl(&l);
+        let t = readout(&m, true).join("\n");
+        if fx(m.st.pka(), m.st.dec) == fx(m.ph_half, m.st.dec) { assert!(t.contains("agrees"), "{t}"); continue; }
+        // the cause, from the independent pH at half-equivalence: [H+] above [OH-] means the acid form ionised
+        let ph = ind_ph(&m.st.sys, m.st.pka(), m.vhalf);
+        let h_over = 10f64.powf(-ph) > 10f64.powf(ph - PKW);
+        let (up, down) = DRIFT[base as usize];
+        let (want, not) = if h_over { (up, down) } else { (down, up) };
+        assert!(t.contains(want) && !t.contains(not), "want {want:?} for {}\n{t}", show(&l));
+        // and the direction word matches the numbers
+        let higher = m.ph_half > m.st.pka();
+        assert_eq!(higher, h_over, "{}", show(&l));
+        assert!(t.contains(if higher { " higher" } else { " lower" }), "{t}");
+        checked[base as usize * 2 + higher as usize] += 1;
+    }
+    assert!(checked.iter().all(|c| *c >= 10), "{checked:?}");
+}
+
+#[test]
+fn a_reading_far_from_pka_is_warned_and_a_tiny_equivalence_volume_noted() {
+    let n = warnings(&with(&[s("mode", WASB), s("task", T_PKA), s("acid", "Custom"), f("pka", 13.0), f("c_an", 0.0001), f("c_ti", 0.0001)]));
+    assert!(n.iter().any(|x| x.contains("half-equivalence") && x.contains("not the pKa")), "{n:?}");
+    let n = warnings(&with(&[s("mode", WASB), s("task", T_PKA)]));
+    assert!(!n.iter().any(|x| x.contains("not the pKa")), "{n:?}");
+    let n = warnings(&with(&[s("mode", SASB), f("c_an", 0.0001), f("v_an", 1.0), f("c_ti", 2.0)]));
+    assert!(n.iter().any(|x| x.contains("only 5.000 \u{d7} 10\u{207b}\u{2075} mL")), "{n:?}");
+}
+
+#[test]
+fn the_no_indicator_reason_is_true() {
+    // the critic's repro: the jump runs from 8.29 to 11.00, wide enough; no listed indicator fits in it
+    let t = readout(&mdl(&[s("mode", WASB), s("acid", "Custom"), f("pka", 6.6), s("task", T_IND)]), true).join("\n");
+    assert!(!t.contains("too small") && !t.contains("narrower") && t.contains("no listed indicator"), "{t}");
+    let mut r = Rng(136);
+    let (mut narrow, mut wide) = (0, 0);
+    for _ in 0..1500 {
+        let l: L = vec![s("mode", r.pick(&[SASB, SBSA, WASB, WBSA])), s("task", T_IND), s("acid", "Custom"), s("base", "Custom"), f("pka", 1.0 + (r.next() % 1200) as f64 / 100.0), f("pkb", 1.0 + (r.next() % 1200) as f64 / 100.0), f("c_an", r.pick(&[0.0001, 0.001, 0.01, 0.1])), f("c_ti", r.pick(&[0.0001, 0.001, 0.01, 0.1])), s("ind_set", IND_SETS[(r.next() % 2) as usize])];
+        let m = mdl(&l);
+        if m.best.is_some() { continue; }
+        let t = readout(&m, true).join("\n");
+        let width = m.window.1 - m.window.0;
+        let min_w = m.offered.iter().map(|&k| INDICATORS[k].hi - INDICATORS[k].lo).fold(f64::MAX, f64::min);
+        if width < min_w { assert!(t.contains("narrower than"), "{t}"); narrow += 1; } else { assert!(!t.contains("narrower") && !t.contains("too small") && t.contains("no listed indicator"), "{t}"); wide += 1; }
+        // the jump printed is the one worked out
+        assert!(t.contains(&format!("from pH {} to {}", fx(m.window.0, m.st.dec), fx(m.window.1, m.st.dec))), "{t}");
+    }
+    assert!(narrow >= 20 && wide >= 10, "{narrow} {wide}");
+}
+
+#[test]
+fn the_capacity_is_worked_from_the_amounts_and_set_beside_the_exact_curve() {
+    // the critic's repro: HF buffer, HCl added
+    let l: L = vec![s("mode", BUF), s("acid", "Hydrofluoric acid"), s("add", ADDS[1]), f("c_salt", 0.1), s("task", T_BUF)];
+    let t = readout(&mdl(&l), true).join("\n");
+    assert!(t.contains("20.45 mL") && t.contains("23.52 mL"), "{t}");
+    assert!(t.contains("the answer expected"), "{t}");
+    let stu = all_text(&svg_of(&[l.clone(), vec![b(SHOW_ANSWERS, false)]].concat()));
+    assert!(stu.contains("past 1/10") && stu.contains("none") && !stu.contains("Henderson"), "{stu}");
+    let mut r = Rng(88);
+    let (mut some, mut none, mut causes) = (0, 0, 0);
+    for _ in 0..600 {
+        let l: L = vec![s("mode", BUF), s("task", T_BUF), s("pair", PAIRS[(r.next() % 2) as usize]), s("add", ADDS[(r.next() % 2) as usize]), s("acid", ACID_CHOICES[(r.next() % 9) as usize]), s("base", BASE_CHOICES[(r.next() % 7) as usize]), f("c_an", r.pick(&[0.001, 0.01, 0.1, 0.5])), f("c_salt", r.pick(&[0.0, 0.002, 0.01, 0.1, 0.5])), f("c_ti", r.pick(&[0.001, 0.1, 1.0])), f("v_an", 25.0)];
+        let m = mdl(&l);
+        let sys = m.st.sys;
+        let (a0, b0) = if sys.base_pair { (sys.c_s * sys.v_a, sys.c_a * sys.v_a) } else { (sys.c_a * sys.v_a, sys.c_s * sys.v_a) };
+        let x = if sys.add_base { (10.0 * a0 - b0) / 11.0 } else { (10.0 * b0 - a0) / 11.0 };
+        let t = readout(&m, true).join("\n");
+        if x > 0.0 {
+            let v = x / sys.c_t;
+            assert!(t.contains(&format!("= {} mL. This is the answer expected", s4(v))), "{} mL in {t}", s4(v));
+            some += 1;
+            if let Out::At(xe) = m.out {
+                if s4(xe) != s4(v) {
+                    let ph = ind_ph(&sys, m.st.pka(), v);
+                    let h_over = 10f64.powf(-ph) > 10f64.powf(ph - PKW);
+                    let (up, down) = DRIFT[sys.base_pair as usize];
+                    assert!(t.contains(if h_over { up } else { down }), "{t}");
+                    causes += 1;
+                }
+            }
+        } else {
+            assert!(t.contains("the answer is none"), "{t}");
+            none += 1;
+        }
+    }
+    assert!(some > 100 && none > 20 && causes > 50, "{some} {none} {causes}");
+    // the FAQ says the same
+    let faq: String = crate::figures::faq::faq_for(ID).iter().map(|q| q.a).collect();
+    assert!(faq.contains("from the amounts") && faq.contains("exact curve"), "{faq}");
+}
+
+#[test]
+fn a_solution_with_no_salt_is_not_called_a_buffer() {
+    for add in ADDS {
+        for pair in PAIRS {
+            for ans in [true, false] {
+                let svg = svg_of(&[s("mode", BUF), s("task", T_BUF), f("c_salt", 0.0), s("add", add), s("pair", pair), b(SHOW_ANSWERS, ans)]);
+                let t = all_text(&svg).replace('\n', " ");
+                assert!(!t.contains("of a buffer") && !t.contains("The buffer alone") && !t.contains("pH of the buffer") && !desc_of(&svg).contains("to a buffer"), "{t}\n{}", desc_of(&svg));
+                assert!(t.contains("not a buffer"), "{t}");
+            }
+        }
+    }
+}
+
+#[test]
+fn the_line_at_the_volume_asked_about_is_called_dashed_everywhere() {
+    let svg = svg_of(&[s("mode", WASB), s("task", T_PH), b(SHOW_ANSWERS, false)]);
+    assert!(all_text(&svg).contains("dashed line") && desc_of(&svg).contains("dashed line"), "{}", desc_of(&svg));
+    let hints: String = (def().params)().iter().map(|p| p.hint).collect();
+    let faq: String = crate::figures::faq::faq_for(ID).iter().map(|q| q.a).collect();
+    let p = with(&[s("mode", WASB), s("task", T_PH)]);
+    let tips: String = handles(ID, &p, (800.0, 800.0)).unwrap().iter().map(|h| h.tip.clone()).collect();
+    for (what, t) in [("hints", hints), ("faq", faq), ("tips", tips.clone()), ("svg", all_text(&svg))] { assert!(!t.contains("dotted line"), "{what}: {t}"); }
+    assert!(tips.contains("dashed line"));
+}
+
+#[test]
+fn wrapped_lines_never_split_a_word_from_its_value() {
+    let mut cases = student_cases();
+    cases.extend(audit_cases(500).into_iter().map(|x| x.0));
+    let mut n = 0;
+    for l in cases {
+        for ans in [true, false] {
+            let mut l2 = l.clone();
+            l2.retain(|x| x.0 != SHOW_ANSWERS);
+            l2.push(b(SHOW_ANSWERS, ans));
+            let ts: Vec<T> = texts(&svg_of(&l2)).into_iter().filter(|t| t.kind == "note" || t.kind == "label").collect();
+            for (k, t) in ts.iter().enumerate() {
+                let x = t.text.trim_end();
+                for end in [" =", " to", "(", " \u{d7}", " \u{b1}"] { assert!(!x.ends_with(end), "a line ends {end:?}: {x:?} in {}", show(&l2)); }
+                for start in ["mL", "mmol", "to ", "M ", "M.", "\u{d7}"] { assert!(!x.starts_with(start), "a line starts {start:?}: {x:?} in {}", show(&l2)); }
+                // a quantity's name and its value stay on one line
+                if let Some(next) = ts.get(k + 1) {
+                    let starts_value = next.text.starts_with(|c: char| c.is_ascii_digit() || c == '=' || c == '\u{2212}');
+                    for w in ["pKa", "pKb", "pH", "pOH", "Ka", "Kb", "V"] { assert!(!(starts_value && (x.ends_with(&format!(" {w}")) || x == w)), "{w:?} and its value split: {x:?} / {:?} in {}", next.text, show(&l2)); }
+                }
+                n += 1;
+            }
+        }
+    }
+    assert!(n > 5000, "{n}");
+}
+
+#[test]
+fn tiny_concentrations_survive_the_editor_snap() {
+    let defs = (def().params)();
+    for v in [0.0001, 0.0002, 0.0003, 0.0004] {
+        let mut p = Params::defaults(&defs);
+        p.set_f("c_ti", v);
+        p.normalize(&defs, true);
+        let c = model_of(&p).st.sys.c_t;
+        assert!((c - v).abs() < 1e-12, "{v} became {c}");
+    }
+    // 0 is held at the least the figure takes, with a note, never the default 0.1 M
+    let p = raw(&[f("c_ti", 0.0)]);
+    assert_eq!(model_of(&p).st.sys.c_t, C_LO);
+    assert!(warnings(&p).iter().any(|x| x.contains("must be greater than 0") && x.contains("0.0001")), "{:?}", warnings(&p));
+}
+
+#[test]
+fn the_half_equivalence_handle_never_renames_a_named_acid() {
+    for task in TASKS_ALL {
+        let p = with(&[s("mode", WASB), s("task", task), s("acid", "Benzoic acid")]);
+        let hs = handles(ID, &p, (800.0, 800.0)).unwrap();
+        assert!(!hs.iter().any(|h| h.tip.contains("half-equivalence")), "{task}");
+    }
+    let p = with(&[s("mode", WBSA), s("task", T_EQ), s("base", "Custom"), f("pkb", 4.0)]);
+    let hs = handles(ID, &p, (800.0, 800.0)).unwrap();
+    let h = hs.iter().find(|h| h.tip.contains("half-equivalence")).expect("a custom base can be dragged");
+    let mut q = p.clone();
+    (h.drag.clone().unwrap())(&mut q, (h.pos.0, h.pos.1 + 30.0));
+    assert_eq!(q.s("base"), "Custom");
+    assert!(q.f("pkb") > 4.0, "{}", q.f("pkb"));
+}
+
+#[test]
+fn an_equivalence_ph_of_seven_to_the_decimals_shown_is_called_neutral() {
+    let m = mdl(&[s("mode", WASB), s("task", T_EQ), s("acid", "Custom"), f("pka", 1.0), f("c_an", 0.0001), f("c_ti", 0.0001), i("dec", 3)]);
+    assert_eq!(fx(m.ph_eq, 3), "7.000");
+    let t = readout(&m, true).join("\n");
+    assert!(!t.contains("so it is basic") && t.contains("neutral"), "{t}");
+    // a clearly basic one is still basic
+    let t = readout(&mdl(&[s("mode", WASB), s("task", T_EQ)]), true).join("\n");
+    assert!(t.contains("so it is basic"), "{t}");
+}
+
+#[test]
+fn indicator_colours_are_the_crc_ones_and_turn_the_right_way() {
+    // CRC "Acid-Base Indicators" colour change, acid colour then base colour
+    let c: Vec<(&str, &str, &str)> = INDICATORS.iter().map(|x| (x.name, x.acid_col, x.base_col)).collect();
+    assert_eq!(c, vec![("methyl orange", "red", "yellow"), ("bromocresol green", "yellow", "blue"), ("methyl red", "red", "yellow"), ("bromothymol blue", "yellow", "blue"), ("phenol red", "yellow", "red"), ("phenolphthalein", "colourless", "pink"), ("thymolphthalein", "colourless", "blue"), ("alizarin yellow R", "yellow", "red")]);
+    // a base added: acid colour to base colour; an acid added: the other way
+    for (mode, want) in [(WASB, "turns from colourless to pink"), (SASB, "turns from yellow to blue"), (WBSA, "turns from yellow to red"), (SBSA, "turns from blue to yellow")] {
+        let t = readout(&mdl(&[s("mode", mode), s("task", T_IND)]), true).join("\n");
+        assert!(t.contains(want), "{mode}: {t}");
+    }
+}
+
+#[test]
+fn the_volume_axis_is_the_same_for_twenty_five_hidden_pkas() {
+    // 0.1 M, 25 mL, 0.1 M: twice the equivalence volume is exactly 50, where a drift of the axis upward would show
+    let pks: Vec<f64> = (0..25).map(|k| 1.0 + 0.5 * k as f64).collect();
+    let mut compared = 0;
+    for mode in [WASB, WBSA, BUF] {
+        for task in TASKS_ALL {
+            let frame = |pk: f64| {
+                let svg = svg_of(&[s("mode", mode), s("task", task), s("acid", "Custom"), f("pka", pk), s("base", "Custom"), f("pkb", pk), b(SHOW_ANSWERS, false)]);
+                let mut v: Vec<String> = texts(&svg).into_iter().filter(|t| t.kind == "axis").map(|t| format!("{:.3},{:.3},{}", t.x, t.y, t.text)).collect();
+                for part in svg.split('<').filter(|x| x.contains("data-o=\"grid\"") || x.contains("data-o=\"axis\"") || x.contains("data-f=\"vq\"")) { v.push(part.split('>').next().unwrap().to_string()); }
+                v.push(format!("{}", crate::figures::svg_size(&svg).0));
+                v
+            };
+            let first = frame(pks[0]);
+            for &pk in &pks[1..] { assert_eq!(frame(pk), first, "{mode} {task} pKa {pk}"); compared += 1; }
+            // and it is the axis the givens make: twice the 25 mL equivalence volume is 50, a round number, so the ticks
+            // run 0 to 50 by 10 (a drift that moved every pKa alike would still show here)
+            for &pk in &[pks[0], pks[12], pks[24]] {
+                let svg = svg_of(&[s("mode", mode), s("task", task), s("acid", "Custom"), f("pka", pk), s("base", "Custom"), f("pkb", pk), b(SHOW_ANSWERS, false)]);
+                let xt: Vec<String> = texts(&svg).into_iter().filter(|t| t.kind == "axis" && t.anchor == "middle" && t.rot.is_none() && t.text.starts_with(|c: char| c.is_ascii_digit())).map(|t| t.text).collect();
+                assert_eq!(xt, vec!["0", "10", "20", "30", "40", "50"], "{mode} {task} pKa {pk}");
+            }
+        }
+    }
+    assert!(compared >= 300, "{compared}");
 }

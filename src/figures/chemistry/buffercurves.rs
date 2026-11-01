@@ -27,9 +27,9 @@
 //! - "Choose an indicator": the curve and a list of indicators are given; the pH at equivalence, the steep part and the
 //!   indicators that change colour within it are the answer.
 //! - "Find the pH at a given volume" and "Buffer pH after adding acid or base": the curve would show the answer, so the
-//!   student copy draws no curve, only the axes and a dotted line at the volume asked about.
+//!   student copy draws no curve, only the axes and a dashed line at the volume asked about.
 use crate::figures::chart::{fmt, nice_step, Frame};
-use crate::figures::chemistry::equilibrium::{pretty, sf};
+use crate::figures::chemistry::equilibrium::{pretty, sf as sf_bin};
 use crate::figures::chemistry::ratesgraph::{given_fmt, path_d, sig4, text_el, text_w, wrap, FONT};
 use crate::figures::interact::Handle;
 use crate::figures::svg::{self, esc, Doc, Fills};
@@ -116,18 +116,18 @@ pub fn defs() -> Vec<FigureDef> {
 fn params() -> Vec<ParamDef> {
     vec![
         ParamDef::choice("mode", "Graph", &MODES, MODES[2]),
-        ParamDef::choice("task", "The student copy asks", &TASKS, TASKS[0]).hint("Read the equivalence point, find pKa or choose an indicator: the curve is given. Find pKa: the acid or base is not named. The pH at a volume and the buffer pH: the student copy has no curve, only a dotted line at the volume"),
+        ParamDef::choice("task", "The student copy asks", &TASKS, TASKS[0]).hint("Read the equivalence point, find pKa or choose an indicator: the curve is given. Find pKa: the acid or base is not named. The pH at a volume and the buffer pH: the student copy has no curve, only a dashed line at the volume"),
         ParamDef::choice("acid", "Weak acid", &ACID_CHOICES, ACID_CHOICES[0]).hint("pKa at 25 \u{b0}C from the CRC Handbook; Custom uses the pKa below"),
         ParamDef::float("pka", "Custom weak acid pKa", 0.0, 14.0, 0.01, 4.76).hint("From 1 to 13, kept to 4 significant figures"),
         ParamDef::choice("base", "Weak base", &BASE_CHOICES, BASE_CHOICES[0]).hint("pKb = 14.00 \u{2212} pKa of the conjugate acid, from the CRC Handbook at 25 \u{b0}C; Custom uses the pKb below"),
         ParamDef::float("pkb", "Custom weak base pKb", 0.0, 14.0, 0.01, 4.75).hint("From 1 to 13, kept to 4 significant figures"),
         ParamDef::choice("strong_acid", "Strong acid", &STRONG_ACIDS, STRONG_ACIDS[0]),
         ParamDef::choice("strong_base", "Strong base", &STRONG_BASES, STRONG_BASES[0]),
-        ParamDef::float("c_an", "Analyte concentration (M)", 0.0, C_HI, 0.001, 0.1).hint("The acid or base in the flask; for a buffer, its weak acid or weak base. From 0.0001 to 2 M, kept to 4 significant figures"),
+        ParamDef::float("c_an", "Analyte concentration (M)", 0.0, C_HI, 0.0001, 0.1).hint("The acid or base in the flask; for a buffer, its weak acid or weak base. From 0.0001 to 2 M, kept to 4 significant figures"),
         ParamDef::float("v_an", "Analyte volume (mL)", 0.0, V_HI, 0.1, 25.0).hint("From 1 to 250 mL"),
-        ParamDef::float("c_ti", "Titrant concentration (M)", 0.0, C_HI, 0.001, 0.1).hint("The strong acid or base in the burette, from 0.0001 to 2 M"),
+        ParamDef::float("c_ti", "Titrant concentration (M)", 0.0, C_HI, 0.0001, 0.1).hint("The strong acid or base in the burette, from 0.0001 to 2 M"),
         ParamDef::choice("pair", "Buffer made of", &PAIRS, PAIRS[0]).hint("For the buffer graph: the weak acid with its sodium salt, or the weak base with its chloride"),
-        ParamDef::float("c_salt", "Salt concentration in the buffer (M)", 0.0, C_HI, 0.001, 0.1).hint("The conjugate base (or acid) in the buffer; 0 for none"),
+        ParamDef::float("c_salt", "Salt concentration in the buffer (M)", 0.0, C_HI, 0.0001, 0.1).hint("The conjugate base (or acid) in the buffer; 0 for none"),
         ParamDef::choice("add", "Added to the buffer", &ADDS, ADDS[0]),
         ParamDef::float("v_q", "Volume asked about (mL)", 0.0, VQ_HI, 0.1, 10.0).hint("For the pH at a volume and the buffer pH: the volume of titrant added"),
         ParamDef::float("v_max", "Volume axis to (mL)", 0.0, VQ_HI, 1.0, 0.0).hint("0 for automatic: twice the equivalence volume"),
@@ -259,10 +259,17 @@ impl Sys {
 // Numbers
 // ---------------------------------------------------------------------------------------------
 
-/// A pH (or pKa, pOH) with `dec` decimals, rounded once from `v`.
+/// A value that is a decimal tie but is held just below it in binary rounds half away from zero, as it does by hand
+/// (30.85 / 2 = 15.425 is 15.43); anything not within 1 part in 10¹³ of a tie is unchanged.
+fn nudge(v: f64) -> f64 { v * (1.0 + 1e-13) }
+
+/// A worked-out value to `n` significant figures, rounded once (half away from zero).
+pub fn sf(v: f64, n: usize) -> String { sf_bin(nudge(v), n) }
+
+/// A pH (or pKa, pOH) with `dec` decimals, rounded once from `v` (half away from zero).
 pub fn fx(v: f64, dec: usize) -> String {
     if !v.is_finite() { return "0".into(); }
-    let s = format!("{:.*}", dec, v);
+    let s = format!("{:.*}", dec, nudge(v));
     let s = if s.starts_with('-') && s[1..].chars().all(|c| c == '0' || c == '.') { s[1..].to_string() } else { s };
     s.replace('-', "\u{2212}")
 }
@@ -291,7 +298,7 @@ fn bounded(p: &Params, key: &str, name: &str, unit: &str, d: f64, lo: f64, hi: f
     match num(p, key) {
         None => d,
         Some(v) if v.is_nan() => { n.push(format!("{name} is not a number, so {}{u} is used.", given_fmt(d))); d }
-        Some(v) if pos && v <= 0.0 => { n.push(format!("{name} must be greater than 0 ({} was typed), so {}{u} is used.", typed(v), given_fmt(d))); d }
+        Some(v) if pos && v <= 0.0 => { n.push(format!("{name} must be greater than 0 ({} was typed), so the least this figure takes, {}{u}, is used.", typed(v), fmt(lo))); lo }
         Some(v) if v < lo => { n.push(format!("{name} = {}{u} is below the least this figure takes, so {}{u} is used.", typed(v), given_fmt(lo))); lo }
         Some(v) if v > hi => { n.push(format!("{name} = {}{u} is above the most this figure takes, so {}{u} is used.", typed(v), given_fmt(hi))); hi }
         Some(v) => {
@@ -462,6 +469,9 @@ pub struct Model {
     pub out: Out,
     /// The volume searched for `out`.
     pub v_lim: f64,
+    /// Buffer graph: the volume (mL) after which n(base form) / n(acid form) passes 10 (or 1/10), from the amounts;
+    /// None when it is past already at the start.
+    pub cap_v: Option<f64>,
     /// Titrations: the pH at (1 − 2 %) and (1 + 2 %) of the equivalence volume.
     pub window: (f64, f64),
     pub offered: Vec<usize>,
@@ -522,6 +532,15 @@ fn model(st: &Setup, n: &mut Vec<String>) -> Model {
         let beyond = |v: f64| if sys.rising() { ph(v) > edge } else { ph(v) < edge };
         if beyond(0.0) { Out::StartsOut } else { first_change(0.0, v_lim, 1600, &beyond).map_or(Out::Never(v_lim), Out::At) }
     } else { Out::Never(0.0) };
+    let cap_v = if st.mode == Mode::Buffer {
+        let (a0, b0) = buffer_amounts(&sys);
+        let x = if sys.rising() { (10.0 * a0 - b0) / 11.0 } else { (10.0 * b0 - a0) / 11.0 };
+        (x > 0.0).then(|| x / sys.c_t)
+    } else { None };
+    if st.task == Task::Pka && st.mode.titration() && st.mode.weak() && (ph_half - pka).abs() >= 0.1 {
+        n.push(format!("At half-equivalence the pH is {}, not the pKa ({}): {}, so the half-equivalence reading is not a good way to find pKa for this {} at this concentration.", fx(ph_half, st.dec), pk_txt(pka), drift(st, acidic(ph_half)), if sys.base_pair { "base" } else { "acid" }));
+    }
+    if veq > 0.0 && veq < 1.0 { n.push(format!("The equivalence volume is only {} mL, less than a few drops from a burette (a drop is about 0.05 mL), so a real titration could not measure it.", s4(veq))); }
     let window = if st.mode.titration() { let a = ph(veq * (1.0 - IND_TOL)); let b = ph(veq * (1.0 + IND_TOL)); (a.min(b), a.max(b)) } else { (ph_eq, ph_eq) };
     let offered: Vec<usize> = if st.all_ind { (0..INDICATORS.len()).collect() } else { COMMON.to_vec() };
     let suitable: Vec<usize> = offered.iter().copied().filter(|&i| INDICATORS[i].lo >= window.0 && INDICATORS[i].hi <= window.1).collect();
@@ -549,7 +568,7 @@ fn model(st: &Setup, n: &mut Vec<String>) -> Model {
     let y1 = (PKW + c_hi.log10()).ceil().max(PKW);
     if y0 < 0.0 || y1 > PKW { n.push("The pH axis goes beyond 0 to 14 so that a concentration above 1 M fits; at such concentrations the activities differ a lot from the concentrations, so the pH is only a model value.".into()); }
     if c_hi > 0.5 && y0 >= 0.0 && y1 <= PKW { n.push("Concentrations stand in for activities, so at these concentrations the pH is a model value.".into()); }
-    Model { st: st.clone(), veq, ph_eq, ph0, vhalf, ph_half, ph_q, region, region_open, out, v_lim, window, offered, suitable, best, xa, y0, y1 }
+    Model { st: st.clone(), veq, ph_eq, ph0, vhalf, ph_half, ph_q, region, region_open, out, v_lim, cap_v, window, offered, suitable, best, xa, y0, y1 }
 }
 
 /// The figure's numbers and notes, for the tests and the handles.
@@ -603,15 +622,53 @@ pub fn shortcut(l: &Left, pka: f64) -> f64 {
     else { 7.0 }
 }
 
+/// A printed number's value: "1.234 × 10⁻⁵", "−0.02", "25.00".
+pub fn val(t: &str) -> f64 {
+    let t = t.trim().trim_end_matches('.').replace('\u{2212}', "-");
+    if let Some((m, e)) = t.split_once(" \u{d7} 10") {
+        let e: String = e.chars().map(|c| match c { '\u{207b}' => '-', '\u{2070}' => '0', '\u{b9}' => '1', '\u{b2}' => '2', '\u{b3}' => '3', '\u{2074}' => '4', '\u{2075}' => '5', '\u{2076}' => '6', '\u{2077}' => '7', '\u{2078}' => '8', '\u{2079}' => '9', c => c }).collect();
+        return m.trim().parse::<f64>().unwrap_or(f64::NAN) * 10f64.powi(e.trim().parse::<i32>().unwrap_or(0));
+    }
+    t.parse().unwrap_or(f64::NAN)
+}
+
+/// The fewest significant figures, from 4 up to 12, with which the printed intermediates reproduce the printed result.
+fn enough(ok: impl Fn(usize) -> bool) -> usize { (4..=12).find(|&n| ok(n)).unwrap_or(12) }
+
+/// A given pKa or pKb as typed or as the CRC Handbook lists it, with every decimal it has (up to 4): "4.756", "10.663".
+pub fn pk_txt(v: f64) -> String {
+    let s = format!("{:.4}", v);
+    let s = if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.').to_string() } else { s };
+    s.replace('-', "\u{2212}")
+}
+
+/// What moves the true pH off the shortcut worked from the amounts, from the sign of [H⁺] − [OH⁻] there (the charge
+/// balance makes the conjugate base's true amount the shortcut's plus [H⁺] − [OH⁻]): the acid form ionising when the
+/// solution is acidic, the base form reacting with water when it is basic.
+pub fn drift(st: &Setup, h_over: bool) -> String {
+    let (af, bf) = (st.acid_form(), st.base_form());
+    match (st.sys.base_pair, h_over) {
+        (false, true) => format!("some of the {af} ionises, adding {bf} beyond what the amounts give"),
+        (false, false) => format!("some of the {bf} reacts with water to give back {af}"),
+        (true, true) => format!("some of the {af} ionises to give back {bf}"),
+        (true, false) => format!("some of the {bf} reacts with water, adding {af} beyond what the amounts give"),
+    }
+}
+
+/// [H⁺] is above [OH⁻] at this pH.
+fn acidic(ph: f64) -> bool { ph < 0.5 * PKW }
+
 /// "14.00 − 1.70 = 12.30" when that subtraction of the printed pOH gives the printed pH, else just "12.30".
 fn from_poh(poh: f64, dec: usize) -> String {
     let p = fx(poh, dec);
     let want = fx(PKW - poh, dec);
-    let back = fx(PKW - p.replace('\u{2212}', "-").parse::<f64>().unwrap_or(f64::NAN), dec);
+    let back = fx(PKW - val(&p), dec);
     if back == want { format!("{} \u{2212} {p} = {want}", fx(PKW, dec)) } else { want }
 }
 
-/// The working for the pH after `v` mL of titrant: what has reacted, what is left, the shortcut and the exact pH.
+/// The working for the pH after `v` mL of titrant: what has reacted, what is left, the shortcut and the exact pH. Each
+/// intermediate is printed with as many figures as it takes for the arithmetic shown to give the result shown, and
+/// the result is rounded once from the unrounded value.
 pub fn ph_lines(m: &Model, v: f64) -> Vec<String> {
     let st = &m.st;
     let sys = &st.sys;
@@ -619,50 +676,67 @@ pub fn ph_lines(m: &Model, v: f64) -> Vec<String> {
     let l = left(sys, v);
     let ex = sys.ph(v);
     let short = shortcut(&l, st.pka());
+    let r = fx(short, dec);
     let tit = pretty(st.titrant());
     let (af, bf) = (st.acid_form(), st.base_form());
+    let ka = 10f64.powf(-st.pka());
+    let kb = KW / ka;
+    let both = l.acid > 0.0 && l.base > 0.0;
+    let n = if l.h > 0.0 {
+        enough(|n| { let c = sf(val(&sf(l.h, n)) / val(&sf(l.vt, n)), n); fx(-val(&c).log10(), dec) == r })
+    } else if l.oh > 0.0 {
+        let p = fx(-(l.oh / l.vt).log10(), dec);
+        enough(|n| { let c = sf(val(&sf(l.oh, n)) / val(&sf(l.vt, n)), n); fx(-val(&c).log10(), dec) == p })
+    } else if both {
+        enough(|n| fx(st.pka() + (val(&sf(l.base, n)) / val(&sf(l.acid, n))).log10(), dec) == r)
+    } else if l.acid > 0.0 {
+        enough(|n| { let h = sf((val(&sf(ka, n)) * val(&sf(l.acid / l.vt, n))).sqrt(), n); fx(-val(&h).log10(), dec) == r })
+    } else if l.base > 0.0 {
+        let p = fx(-(kb * l.base / l.vt).sqrt().log10(), dec);
+        enough(|n| { let o = sf((val(&sf(kb, n)) * val(&sf(l.base / l.vt, n))).sqrt(), n); fx(-val(&o).log10(), dec) == p })
+    } else { 4 };
+    let q = |x: f64| sf(x, n);
     let mut out = Vec::new();
     if v > 0.0 { out.push(format!("{tit} added: {} M \u{d7} {} mL = {} mmol.", given_fmt(sys.c_t), given_fmt(v), s4(sys.c_t * v))); }
     let mut parts: Vec<String> = Vec::new();
-    if l.acid > 0.0 { parts.push(format!("{} mmol {af}", s4(l.acid))); }
-    if l.base > 0.0 { parts.push(format!("{} mmol {bf}", s4(l.base))); }
-    if l.h > 0.0 { parts.push(format!("{} mmol H\u{207a} in excess", s4(l.h))); }
-    if l.oh > 0.0 { parts.push(format!("{} mmol OH\u{207b} in excess", s4(l.oh))); }
-    let when = if v > 0.0 { format!("After reaction, in {} mL", s4(l.vt)) } else { format!("At the start, in {} mL", given_fmt(sys.v_a)) };
+    if l.acid > 0.0 { parts.push(format!("{} mmol {af}", q(l.acid))); }
+    if l.base > 0.0 { parts.push(format!("{} mmol {bf}", q(l.base))); }
+    if l.h > 0.0 { parts.push(format!("{} mmol H\u{207a} in excess", q(l.h))); }
+    if l.oh > 0.0 { parts.push(format!("{} mmol OH\u{207b} in excess", q(l.oh))); }
+    let when = if v > 0.0 { format!("After reaction, in {} mL", q(l.vt)) } else { format!("At the start, in {} mL", given_fmt(sys.v_a)) };
     if parts.is_empty() { out.push(format!("{when}: neither acid nor base is left over, only a salt of a strong acid and a strong base.")); } else { out.push(format!("{when}: {}.", parts.join(" and "))); }
-    let ka = 10f64.powf(-st.pka());
     let reason;
     if l.h > 0.0 {
-        let c = l.h / l.vt;
-        out.push(format!("[H\u{207a}] = {} mmol / {} mL = {} M, so pH = \u{2212}log {} = {}.", s4(l.h), s4(l.vt), s4(c), s4(c), fx(short, dec)));
+        let c = sf(val(&q(l.h)) / val(&q(l.vt)), n);
+        out.push(format!("[H\u{207a}] = {} mmol / {} mL = {c} M, so pH = \u{2212}log {c} = {r}.", q(l.h), q(l.vt)));
         reason = if st.mode.weak() { "the weak pair's own reaction with water, which matters when the excess is small" } else { "water's own H\u{207a} and OH\u{207b}, which matter when the excess is tiny" };
     } else if l.oh > 0.0 {
-        let c = l.oh / l.vt;
-        let poh = -c.log10();
-        out.push(format!("[OH\u{207b}] = {} mmol / {} mL = {} M, so pOH = {} and pH = {}.", s4(l.oh), s4(l.vt), s4(c), fx(poh, dec), from_poh(poh, dec)));
+        let c = sf(val(&q(l.oh)) / val(&q(l.vt)), n);
+        let poh = -(l.oh / l.vt).log10();
+        out.push(format!("[OH\u{207b}] = {} mmol / {} mL = {c} M, so pOH = {} and pH = {}.", q(l.oh), q(l.vt), fx(poh, dec), from_poh(poh, dec)));
         reason = if st.mode.weak() { "the weak pair's own reaction with water, which matters when the excess is small" } else { "water's own H\u{207a} and OH\u{207b}, which matter when the excess is tiny" };
-    } else if l.acid > 0.0 && l.base > 0.0 {
-        out.push(format!("Henderson-Hasselbalch: pH = pKa + log(n({bf}) / n({af})) = {} + log({} / {}) = {}.", given_fmt(st.pka()), s4(l.base), s4(l.acid), fx(short, dec)));
+    } else if both {
+        out.push(format!("Henderson-Hasselbalch: pH = pKa + log(n({bf}) / n({af})) = {} + log({} / {}) = {r}.", pk_txt(st.pka()), q(l.base), q(l.acid)));
         reason = "the weak acid's own ionisation and its conjugate's reaction with water, which matter near the start, near the equivalence point and in dilute solutions";
     } else if l.acid > 0.0 {
-        let c = l.acid / l.vt;
-        out.push(format!("{af} alone is a weak acid with Ka = {}: [H\u{207a}] = sqrt(Ka \u{d7} C) = sqrt({} \u{d7} {}) = {} M, so pH = {}.", s4(ka), s4(ka), s4(c), s4((ka * c).sqrt()), fx(short, dec)));
+        let (kt, ct) = (q(ka), q(l.acid / l.vt));
+        let h = sf((val(&kt) * val(&ct)).sqrt(), n);
+        out.push(format!("{af} alone is a weak acid with Ka = {kt}: [H\u{207a}] = sqrt(Ka \u{d7} C) = sqrt({kt} \u{d7} {ct}) = {h} M, so pH = {r}."));
         reason = "the part of the acid that ionises (the square root assumes it is small beside C) and water's own ions";
     } else if l.base > 0.0 {
-        let c = l.base / l.vt;
-        let kb = KW / ka;
-        let oh = (kb * c).sqrt();
-        let poh = -oh.log10();
-        out.push(format!("{bf} alone is a weak base with Kb = Kw / Ka = {}: [OH\u{207b}] = sqrt(Kb \u{d7} C) = sqrt({} \u{d7} {}) = {} M, so pOH = {} and pH = {}.", s4(kb), s4(kb), s4(c), s4(oh), fx(poh, dec), from_poh(poh, dec)));
+        let (kt, ct) = (q(kb), q(l.base / l.vt));
+        let o = sf((val(&kt) * val(&ct)).sqrt(), n);
+        let poh = -(kb * l.base / l.vt).sqrt().log10();
+        out.push(format!("{bf} alone is a weak base with Kb = Kw / Ka = {kt}: [OH\u{207b}] = sqrt(Kb \u{d7} C) = sqrt({kt} \u{d7} {ct}) = {o} M, so pOH = {} and pH = {}.", fx(poh, dec), from_poh(poh, dec)));
         reason = "the part of the base that reacts (the square root assumes it is small beside C) and water's own ions";
     } else {
         out.push(format!("A salt of a strong acid and a strong base does not react with water, so pH = {} (water alone).", fx(7.0, dec)));
         reason = "nothing";
     }
-    if fx(short, dec) == fx(ex, dec) {
+    if r == fx(ex, dec) {
         out.push(format!("The exact charge balance, with water's own H\u{207a} and OH\u{207b}, gives the same: pH = {}.", fx(ex, dec)));
     } else {
-        out.push(format!("The exact charge balance, with water's own H\u{207a} and OH\u{207b}, gives pH = {}; the shortcut's {} leaves out {reason}.", fx(ex, dec), fx(short, dec)));
+        out.push(format!("The exact charge balance, with water's own H\u{207a} and OH\u{207b}, gives pH = {}; the shortcut's {r} leaves out {reason}.", fx(ex, dec)));
     }
     out
 }
@@ -682,7 +756,7 @@ fn weak_named(st: &Setup) -> String { format!("{} {}", pretty(st.weak.formula), 
 
 /// "(acetic acid, pKa 4.756)", "(ammonia, pKb 4.75)", "(pKa 4.76)".
 fn weak_tag(st: &Setup) -> String {
-    let pk = if st.sys.base_pair { format!("pKb {}", given_fmt(st.pkb())) } else { format!("pKa {}", given_fmt(st.pka())) };
+    let pk = if st.sys.base_pair { format!("pKb {}", pk_txt(st.pkb())) } else { format!("pKa {}", pk_txt(st.pka())) };
     if st.custom { format!("({pk})") } else { format!("({}, {pk})", st.weak.name) }
 }
 
@@ -707,6 +781,7 @@ pub fn givens(m: &Model, ans: bool) -> Vec<String> {
             if hide { v.push(format!("In the flask: {va} mL of {ca} M of a weak {}, {}.", kind_word(m), if sys.base_pair { "B" } else { "HA" })); }
             else { v.push(format!("In the flask: {va} mL of {ca} M {}.", weak_named(st))); }
         }
+        Mode::Buffer if sys.c_s == 0.0 => v.push(format!("In the flask: {va} mL of {ca} M {} {} and none of its salt, so it is not a buffer at the start.", pretty(st.weak.formula), weak_tag(st))),
         Mode::Buffer => v.push(format!("In the flask: {va} mL of a buffer of {ca} M {} and {} M {} {}.", pretty(st.weak.formula), given_fmt(sys.c_s), pretty(st.weak.conj), weak_tag(st))),
     }
     v.push(format!("In the burette: {} M {}. At 25 \u{b0}C, Kw = 1.0 \u{d7} 10\u{207b}\u{b9}\u{2074}.", given_fmt(sys.c_t), pretty(st.titrant())));
@@ -731,9 +806,9 @@ pub fn blanks(m: &Model) -> Vec<String> {
         Task::Indicator => vec![format!("pH at the equivalence point = {BLANK}"), format!("The best indicator here: {BLANK}")],
         Task::PhAt => vec![format!("pH after adding {} mL of {tit} = {BLANK}", given_fmt(st.v_q))],
         Task::BufferAdd => vec![
-            format!("pH of the buffer before any {tit} is added = {BLANK}"),
+            format!("pH of the {} before any {tit} is added = {BLANK}", if st.sys.c_s == 0.0 { "solution" } else { "buffer" }),
             format!("pH after adding {} mL of {tit} = {BLANK}", given_fmt(st.v_q)),
-            format!("Volume of {tit} added (mL) when the pH leaves the buffer range, {} \u{b1} 1: {BLANK}", pka_name(st)),
+            format!("Volume of {tit} (mL) that takes n({}) / n({}) past {}, the edge of the buffer range, or none if it is past it already: {BLANK}", st.base_form(), st.acid_form(), if st.sys.rising() { "10" } else { "1/10" }),
         ],
     }
 }
@@ -742,7 +817,9 @@ fn eq_line(m: &Model) -> String {
     let st = &m.st;
     let sys = &st.sys;
     let n = sys.c_a * sys.v_a;
-    format!("Equivalence: n({}) = n({}) = {} M \u{d7} {} mL = {} mmol, so V = {} mmol / {} M = {} mL.", pretty(st.titrant()), st.analyte(), given_fmt(sys.c_a), given_fmt(sys.v_a), s4(n), s4(n), given_fmt(sys.c_t), s4(m.veq))
+    let k = enough(|k| sf(val(&sf(n, k)) / sys.c_t, 4) == s4(m.veq));
+    let nt = sf(n, k);
+    format!("Equivalence: n({}) = n({}) = {} M \u{d7} {} mL = {nt} mmol, so V = {nt} mmol / {} M = {} mL.", pretty(st.titrant()), st.analyte(), given_fmt(sys.c_a), given_fmt(sys.v_a), given_fmt(sys.c_t), s4(m.veq))
 }
 
 /// The pKa (or pKb, for a base) as the key prints it from the reading at half-equivalence, and Ka (or Kb) worked from
@@ -770,7 +847,10 @@ pub fn working(m: &Model) -> Vec<String> {
         Task::Eq => {
             v.push(eq_line(m));
             v.extend(ph_lines(m, m.veq));
+            let seven = fx(m.ph_eq, dec) == fx(7.0, dec);
             v.push(match st.mode {
+                Mode::WaSb if seven => format!("At the equivalence point the solution holds {}, a weak base, but so little of it reacts with water that the pH is {} to the decimals shown: neutral.", st.base_form(), fx(m.ph_eq, dec)),
+                Mode::WbSa if seven => format!("At the equivalence point the solution holds {}, a weak acid, but so little of it ionises that the pH is {} to the decimals shown: neutral.", st.acid_form(), fx(m.ph_eq, dec)),
                 Mode::WaSb => format!("At the equivalence point the solution holds {}, a weak base, so it is basic: pH {}.", st.base_form(), fx(m.ph_eq, dec)),
                 Mode::WbSa => format!("At the equivalence point the solution holds {}, a weak acid, so it is acidic: pH {}.", st.acid_form(), fx(m.ph_eq, dec)),
                 _ => format!("At the equivalence point the solution holds only a salt of a strong acid and a strong base, so it is neutral: pH {}.", fx(m.ph_eq, dec)),
@@ -778,22 +858,25 @@ pub fn working(m: &Model) -> Vec<String> {
         }
         Task::Pka => {
             v.push(eq_line(m));
-            v.push(format!("Half-equivalence: V = {} mL / 2 = {} mL. There half the {} has reacted, so n({}) = n({}) and pH = pKa + log 1 = pKa (Henderson-Hasselbalch).", s4(m.veq), s4(m.vhalf), st.analyte(), st.base_form(), st.acid_form()));
+            let k = enough(|k| sf(val(&sf(m.veq, k)) / 2.0, 4) == s4(m.vhalf));
+            v.push(format!("Half-equivalence: V = {} mL / 2 = {} mL. There half the {} has reacted, so n({}) = n({}) and pH = pKa + log 1 = pKa (Henderson-Hasselbalch).", sf(m.veq, k), s4(m.vhalf), st.analyte(), st.base_form(), st.acid_form()));
             let read = fx(m.ph_half, dec);
-            let (pk_txt, k_val) = reading_k(m);
+            let (pk_r, k_val) = reading_k(m);
             if sys.base_pair {
-                v.push(format!("From the curve, the pH at {} mL is {read}, so the pKa of {} = {read}, pKb = {} \u{2212} {read} = {pk_txt} and Kb = 10^(\u{2212}{pk_txt}) = {}.", s4(m.vhalf), st.acid_form(), fx(PKW, dec), s4(k_val)));
+                v.push(format!("From the curve, the pH at {} mL is {read}, so the pKa of {} = {read}, pKb = {} \u{2212} {read} = {pk_r} and Kb = 10^(\u{2212}{pk_r}) = {}.", s4(m.vhalf), st.acid_form(), fx(PKW, dec), s4(k_val)));
             } else {
-                v.push(format!("From the curve, the pH at {} mL is {read}, so pKa = {read} and Ka = 10^(\u{2212}{pk_txt}) = {}.", s4(m.vhalf), s4(k_val)));
+                v.push(format!("From the curve, the pH at {} mL is {read}, so pKa = {read} and Ka = 10^(\u{2212}{pk_r}) = {}.", s4(m.vhalf), s4(k_val)));
             }
             let truth = st.pka();
-            let src = if st.custom { "The curve is drawn with".to_string() } else { format!("The CRC Handbook gives, for {},", st.weak.name) };
+            let src = if st.custom { "The curve was drawn with the custom value, which gives".to_string() } else { format!("The CRC Handbook ({}) gives", st.weak.name) };
             let what = if sys.base_pair { format!("the pKa of {}", st.acid_form()) } else { "pKa".to_string() };
-            if fx(truth, dec) == read {
-                v.push(format!("{src} {what} = {}; the reading agrees to the {dec} decimal place{} shown.", given_fmt(truth), if dec == 1 { "" } else { "s" }));
+            let shown = fx(truth, dec);
+            if shown == read {
+                v.push(format!("{src} {what} = {}; rounded to {dec} decimal place{}, that is {shown}, and the reading agrees.", pk_txt(truth), if dec == 1 { "" } else { "s" }));
             } else {
-                let d = m.ph_half - truth;
-                v.push(format!("{src} {what} = {}; the reading is {} {}, because the shortcut n({}) = n({}) leaves out the {}'s own reaction with water, which is not small for this {} and concentration.", given_fmt(truth), fx(d.abs(), dec), if d > 0.0 { "higher" } else { "lower" }, st.base_form(), st.acid_form(), kind_word(m), kind_word(m)));
+                // the difference of the two values as printed, so it reads off the line
+                let d = val(&read) - val(&shown);
+                v.push(format!("{src} {what} = {}; rounded to {dec} decimal place{}, that is {shown}, so the reading is {} {}, because at half-equivalence {}.", pk_txt(truth), if dec == 1 { "" } else { "s" }, fx(d.abs(), dec), if d > 0.0 { "higher" } else { "lower" }, drift(st, acidic(m.ph_half))));
             }
         }
         Task::Indicator => {
@@ -805,8 +888,7 @@ pub fn working(m: &Model) -> Vec<String> {
             let name = |i: usize| format!("{} ({})", INDICATORS[i].name, range_txt(i));
             let bad: Vec<String> = m.offered.iter().copied().filter(|i| !m.suitable.contains(i)).map(name).collect();
             if m.suitable.is_empty() {
-                let why = match st.mode { Mode::WaSb => "the acid is very weak or the solutions are very dilute", Mode::WbSa => "the base is very weak or the solutions are very dilute", _ => "the solutions are very dilute" };
-                v.push(format!("None of these lies inside the steep part, so none gives a sharp end point here: the jump is too small, because {why}. Not suitable: {}.", bad.join(", ")));
+                v.push(no_indicator(m));
             } else {
                 let good: Vec<String> = m.suitable.iter().copied().map(name).collect();
                 v.push(format!("Suitable: {}.{}", good.join(", "), if bad.is_empty() { String::new() } else { format!(" Not suitable: {}.", bad.join(", ")) }));
@@ -827,17 +909,78 @@ pub fn working(m: &Model) -> Vec<String> {
             v.extend(ph_lines(m, 0.0));
             v.push(format!("After adding {} mL of {} M {tit}:", given_fmt(st.v_q), given_fmt(sys.c_t)));
             v.extend(ph_lines(m, st.v_q));
-            let up = sys.rising();
-            let edge = if up { st.pka() + 1.0 } else { st.pka() - 1.0 };
-            v.push(format!("The buffer range is {} \u{b1} 1 = {} to {} (where n({}) / n({}) is between 1/10 and 10).", pka_name(st), fx(st.pka() - 1.0, dec), fx(st.pka() + 1.0, dec), st.base_form(), st.acid_form()));
-            v.push(match m.out {
-                Out::At(x) => format!("From the exact curve, the pH reaches {} after {} mL of {tit} ({} mmol): that is the buffer's capacity for added {}.", fx(edge, dec), s4(x), s4(x * sys.c_t), if up { "base" } else { "acid" }),
-                Out::StartsOut => format!("The buffer starts at pH {}, already {} pKa {} 1, so it has no capacity left for added {}.", fx(m.ph0, dec), if up { "above" } else { "below" }, if up { "+" } else { "\u{2212}" }, if up { "base" } else { "acid" }),
-                Out::Never(x) => format!("This {tit} never takes the pH {} {} (not even after {} mL), because it is too dilute.", if up { "above" } else { "below" }, fx(edge, dec), s4(x)),
-            });
+            v.extend(capacity_lines(m));
         }
     }
     v
+}
+
+/// Why no listed indicator fits, said as it is: either the steep part is narrower than every listed range, or it is
+/// wide enough and none of the listed ranges lies inside it.
+fn no_indicator(m: &Model) -> String {
+    let st = &m.st;
+    let dec = st.dec;
+    let (lo, hi) = m.window;
+    let span = format!("from pH {} to {}", fx(lo, dec), fx(hi, dec));
+    let min_w = m.offered.iter().map(|&i| INDICATORS[i].hi - INDICATORS[i].lo).fold(f64::MAX, f64::min);
+    if hi - lo < min_w {
+        let mut cause: Vec<&str> = Vec::new();
+        if st.mode == Mode::WaSb && st.pka() >= 7.0 { cause.push("the acid is very weak"); }
+        if st.mode == Mode::WbSa && st.pka() <= 7.0 { cause.push("the base is very weak"); }
+        if st.sys.c_a < 0.01 || st.sys.c_t < 0.01 { cause.push("the solutions are dilute"); }
+        let why = if cause.is_empty() { String::new() } else { format!(" (because {})", cause.join(" and ")) };
+        format!("None of these changes colour inside the steep part, which runs only {span}: that is narrower than every listed indicator's colour-change range{why}, so none gives a sharp end point here.")
+    } else {
+        let rel: Vec<String> = m.offered.iter().map(|&i| {
+            let ind = INDICATORS[i];
+            let w = if ind.hi <= lo { "below it" } else if ind.lo >= hi { "above it" } else if ind.lo < lo { "starts below it" } else { "ends above it" };
+            format!("{} ({}, {w})", ind.name, range_txt(i))
+        }).collect();
+        format!("The steep part runs {span}, but no listed indicator has its whole range inside it: {}. None gives a sharp end point here; an indicator changing colour between pH {} and {} would be needed.", rel.join(", "), fx(lo, dec), fx(hi, dec))
+    }
+}
+
+/// The capacity, worked from the amounts as the student works it (the answer expected), then beside it where the
+/// exact curve leaves pKa ± 1, and why the two differ.
+fn capacity_lines(m: &Model) -> Vec<String> {
+    let st = &m.st;
+    let sys = &st.sys;
+    let dec = st.dec;
+    let tit = pretty(st.titrant());
+    let (af, bf) = (st.acid_form(), st.base_form());
+    let up = sys.rising();
+    let edge = if up { st.pka() + 1.0 } else { st.pka() - 1.0 };
+    let (a0, b0) = buffer_amounts(sys);
+    let mut v = vec![format!("The buffer range is {} \u{b1} 1 = {} to {}: there n({bf}) / n({af}) is between 1/10 and 10.", pka_name(st), fx(st.pka() - 1.0, dec), fx(st.pka() + 1.0, dec))];
+    let (first, second, target) = if up { (a0, b0, "10") } else { (b0, a0, "1/10") };
+    match m.cap_v {
+        Some(vol) => {
+            let k = enough(|k| { let x = sf((10.0 * val(&sf(first, k)) - val(&sf(second, k))) / 11.0, k); sf(val(&x) / sys.c_t, 4) == s4(vol) });
+            let (ft, st_) = (sf(first, k), sf(second, k));
+            let xt = sf((10.0 * val(&ft) - val(&st_)) / 11.0, k);
+            let setup = if up { format!("({} + x) / ({} \u{2212} x) = 10", sf(b0, k), sf(a0, k)) } else { format!("({} \u{2212} x) / ({} + x) = 1/10", sf(b0, k), sf(a0, k)) };
+            v.push(format!("From the amounts: n({bf}) / n({af}) reaches {target} after x mmol of {tit}, where {setup}, so x = (10 \u{d7} {ft} \u{2212} {st_}) / 11 = {xt} mmol, which is {xt} mmol / {} M = {} mL. This is the answer expected, worked from the amounts as the question asks.", given_fmt(sys.c_t), s4(vol)));
+        }
+        None => {
+            let pos = if up { "above 10" } else { "below 1/10" };
+            let ratio = if a0 == 0.0 { format!("there is no {af} at all, so n({bf}) / n({af}) is already {pos}") } else if b0 == 0.0 { format!("there is no {bf} at all, so n({bf}) / n({af}) is already {pos}") } else { format!("n({bf}) / n({af}) = {} / {}, already {pos}", s4(b0), s4(a0)) };
+            v.push(format!("From the amounts: before any {tit} is added {ratio}, so there is no capacity left for added {}: the answer is none.", if up { "base" } else { "acid" }));
+        }
+    }
+    let at = m.cap_v.unwrap_or(0.0);
+    v.push(match (m.out, m.cap_v) {
+        (Out::At(x), Some(vol)) if s4(x) == s4(vol) => format!("The exact curve reaches pH {} after {} mL as well.", fx(edge, dec), s4(x)),
+        (Out::At(x), _) => format!("On the exact curve the pH reaches {} after {} mL{}, because near there {}; the amounts alone leave that out.", fx(edge, dec), s4(x), match m.cap_v { Some(vol) => if x > vol { ", later" } else { ", earlier" }, None => "" }, drift(st, acidic(sys.ph(at)))),
+        (Out::StartsOut, _) => format!("On the exact curve too the pH starts at {}, already beyond {}.", fx(m.ph0, dec), fx(edge, dec)),
+        (Out::Never(x), _) => format!("On the exact curve the pH never reaches {} (not even after {} mL): this {tit} is too dilute to take it that far.", fx(edge, dec), s4(x)),
+    });
+    v
+}
+
+/// A buffer's starting amounts (mmol): the acid form (HA or BH⁺) and the base form (A⁻ or B).
+pub fn buffer_amounts(sys: &Sys) -> (f64, f64) {
+    let (na, ns) = (sys.c_a * sys.v_a, sys.c_s * sys.v_a);
+    if sys.base_pair { (ns, na) } else { (na, ns) }
 }
 
 /// The key's note on what the curve is.
@@ -869,10 +1012,17 @@ fn describe(m: &Model, ans: bool, curve: bool) -> String {
         Mode::SbSa => "a strong acid added to a strong base",
         Mode::WaSb => "a strong base added to a weak acid",
         Mode::WbSa => "a strong acid added to a weak base",
-        Mode::Buffer => if st.sys.add_base { "a strong base added to a buffer" } else { "a strong acid added to a buffer" },
+        Mode::Buffer => match (st.sys.add_base, st.sys.c_s == 0.0, st.sys.base_pair) {
+            (true, false, _) => "a strong base added to a buffer",
+            (false, false, _) => "a strong acid added to a buffer",
+            (true, true, false) => "a strong base added to a weak acid with none of its salt",
+            (false, true, false) => "a strong acid added to a weak acid with none of its salt",
+            (true, true, true) => "a strong base added to a weak base with none of its salt",
+            (false, true, true) => "a strong acid added to a weak base with none of its salt",
+        },
     };
     let mut s = if curve { format!("pH against the volume of {what}") } else { format!("Axes for pH against the volume of {what}, with no curve drawn") };
-    if matches!(st.task, Task::PhAt | Task::BufferAdd) { s.push_str(", and a dotted line at the volume asked about"); }
+    if matches!(st.task, Task::PhAt | Task::BufferAdd) { s.push_str(", and a dashed line at the volume asked about"); }
     if ans {
         s.push_str(match st.task {
             Task::Eq => ", with the equivalence point marked",
@@ -929,18 +1079,22 @@ fn split_seg(a: Pt, b: Pt, boxes: &[(f64, f64, f64, f64)]) -> Vec<(Pt, Pt)> {
     out
 }
 
-/// `wrap`, keeping a volume or an amount with its number ("25.00 mL", "2.500 mmol", "______ mL").
+/// `wrap`, never breaking a line between a quantity's name and its value ("pH 4.76", "pKa = 4.756", "V = 25.00"),
+/// a number and its unit ("25.00 mL", "2.500 mmol", "______ mL"), the ends of a range ("8.2 to 10.0"), a product
+/// ("1.738 × 10⁻⁵", "Kb × C"), or "=" or "±" and what follows them.
 fn wrap_u(s: &str, fs: f64, max_w: f64) -> Vec<String> {
-    let mut t = s.replace(" mL", "\u{a0}mL").replace(" mmol", "\u{a0}mmol");
-    for w in ["pH", "pOH", "pKa", "pKb", "Ka", "Kb", "V"] { t = t.replace(&format!(" {w} = "), &format!(" {w}\u{a0}=\u{a0}")); }
-    // "pH 4.76": the word stays with its number
-    let ch: Vec<char> = t.chars().collect();
-    let mut out = String::with_capacity(t.len());
-    for (k, c) in ch.iter().enumerate() {
-        let glue = *c == ' ' && k >= 2 && ch[k - 2] == 'p' && ch[k - 1] == 'H' && ch.get(k + 1).is_some_and(|d| d.is_ascii_digit());
-        out.push(if glue { '\u{a0}' } else { *c });
+    const NAMES: [&str; 7] = ["pH", "pOH", "pKa", "pKb", "Ka", "Kb", "V"];
+    let toks: Vec<&str> = s.split(' ').collect();
+    let value = |t: &str| t.starts_with(|c: char| c.is_ascii_digit() || c == '=' || c == '\u{2212}' || c == '\u{b1}');
+    let mut t = String::with_capacity(s.len());
+    for (k, w) in toks.iter().enumerate() {
+        if k > 0 {
+            let prev = toks[k - 1].trim_start_matches('(');
+            let glue = w.starts_with("mL") || w.starts_with("mmol") || *w == "to" || *w == "\u{d7}" || prev == "to" || prev == "=" || prev == "\u{b1}" || prev == "\u{d7}" || (NAMES.contains(&prev) && value(w));
+            t.push(if glue { '\u{a0}' } else { ' ' });
+        }
+        t.push_str(w);
     }
-    let t = out;
     wrap(&t, fs, max_w).into_iter().map(|l| l.replace('\u{a0}', " ")).collect()
 }
 
@@ -999,11 +1153,10 @@ fn items(m: &Model) -> Vec<Item> {
         }
         Task::PhAt => v.push(item("q", format!("After {} mL: pH {}{}", given_fmt(st.v_q), fx(m.ph_q, dec), beyond(st.v_q)), on(st.v_q).then_some((st.v_q, m.ph_q)))),
         Task::BufferAdd => {
-            v.push(item("st", format!("The buffer alone: pH {}", fx(m.ph0, dec)), Some((0.0, m.ph0))));
+            v.push(item("st", format!("The {} alone: pH {}", if st.sys.c_s == 0.0 { "solution" } else { "buffer" }, fx(m.ph0, dec)), Some((0.0, m.ph0))));
             v.push(item("q", format!("After {} mL: pH {}{}", given_fmt(st.v_q), fx(m.ph_q, dec), beyond(st.v_q)), on(st.v_q).then_some((st.v_q, m.ph_q))));
-            if let Out::At(x) = m.out {
-                let edge = if st.sys.rising() { st.pka() + 1.0 } else { st.pka() - 1.0 };
-                v.push(item("cap", format!("Leaves the buffer range: {} mL, pH {}{}", s4(x), fx(edge, dec), beyond(x)), on(x).then_some((x, st.sys.ph(x)))));
+            if let Some(x) = m.cap_v {
+                v.push(item("cap", format!("n({}) / n({}) reaches {}: {} mL{}", st.base_form(), st.acid_form(), if st.sys.rising() { "10" } else { "1/10" }, s4(x), beyond(x)), on(x).then_some((x, st.sys.ph(x)))));
             }
         }
     }
@@ -1150,6 +1303,7 @@ fn draw(m: &Model, ans: bool, lab: f64, print: bool, notes: Vec<String>) -> (Str
         let mut extra = vec![m.veq, m.vhalf, st.v_q];
         if let Some((a, b)) = m.region { extra.extend([a, b]); }
         if let Out::At(x) = m.out { extra.push(x); }
+        if let Some(x) = m.cap_v { extra.push(x); }
         let dist = |a: Pt, b: Pt| (px(b.0) - px(a.0)).hypot(pyr(b.1) - pyr(a.1));
         let pts: Vec<Pt> = samples(sys, xa.hi, &extra, &dist).into_iter().map(|(v, p)| (px(v), py(p))).collect();
         body.push_str(&stroke_el(&pts, if print { "#000000" } else { "#1f5fbf" }, 2.6, "", "curve", "c"));
@@ -1223,7 +1377,8 @@ pub fn warnings(p: &Params) -> Vec<String> { build(p).1.notes }
 fn sig3(v: f64) -> f64 { format!("{v:.2e}").parse().unwrap_or(v) }
 
 /// Drag the equivalence point left or right (the titrant concentration that puts it there), the half-equivalence point
-/// up or down (a custom pKa, or pKb), and the volume asked about. Each leaves its param alone when the drag is to the
+/// up or down (offered for a custom acid or base only, so a named one is never silently replaced), and the volume
+/// asked about. Each leaves its param alone when the drag is to the
 /// place already drawn.
 pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
     if id != ID { return None; }
@@ -1242,7 +1397,7 @@ pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
             if (c - ct).abs() > 1e-12 { q.set_f("c_ti", c); }
         }));
     }
-    if let Some(pos) = rep.half_pt {
+    if let (Some(pos), true) = (rep.half_pt, m.st.custom) {
         let (cur, base) = (m.ph_half, m.st.sys.base_pair);
         hs.push(Handle::knob(pos, if base { "Drag the half-equivalence point up or down (sets a custom pKb)" } else { "Drag the half-equivalence point up or down (sets a custom pKa)" }, move |q, pt| {
             let v = vy(pt.1);
@@ -1253,7 +1408,7 @@ pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
     }
     if let Some(pos) = rep.q_pt {
         let cur = m.st.v_q;
-        hs.push(Handle::knob(pos, "Drag the dotted line left or right to change the volume asked about", move |q, pt| {
+        hs.push(Handle::knob(pos, "Drag the dashed line left or right to change the volume asked about", move |q, pt| {
             let v = vx(pt.0);
             if !v.is_finite() || (v - cur).abs() <= 1e-6 * cur.max(1.0) { return; }
             q.set_f("v_q", sig3(v.max(0.0)).clamp(0.0, VQ_HI));
