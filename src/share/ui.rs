@@ -562,7 +562,7 @@ fn confirm_page(ui: &mut Ui, m: &mut AccountModel) {
         "Choose your password and enter your name and school. They are set here, from the email, so only the person \
          who received it decides them.",
     );
-    password_pair(ui, m, "New password");
+    password_pair(ui, m, "Choose a password");
     profile_fields(ui, m);
     let mut go = false;
     actions(ui, m.busy(), |ui| {
