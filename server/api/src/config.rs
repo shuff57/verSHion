@@ -1,7 +1,7 @@
 //! Configuration: environment variables only, the same names the Worker used for its vars and secrets.
 //! Secrets are read here and nowhere else, never printed, and never put in argv.
 use crate::ai::policy::Limits;
-use crate::ai::upstream::{DEFAULT_MODEL, OpenRouter};
+use crate::ai::upstream::{CHEAPERINFERENCE_DEFAULT_MODEL, CHEAPERINFERENCE_URL, DEFAULT_MODEL, OpenRouter};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -63,14 +63,29 @@ impl Config {
         if let Some(n) = pos_num(get("AI_DAILY_USD")) {
             limits.daily_usd = n;
         }
-        let openrouter = nonempty(get("OPENROUTER_API_KEY")).map(|key| OpenRouter {
-            key,
-            model: nonempty(get("OPENROUTER_MODEL")).unwrap_or_else(|| DEFAULT_MODEL.to_string()),
-            fallback_model: nonempty(get("OPENROUTER_FALLBACK_MODEL")),
-            // Providers that may keep prompts are only allowed when the deployment says so.
-            privacy: get("OPENROUTER_PRIVACY").as_deref() != Some("0"),
-            timeout: Duration::from_secs(60),
-        });
+        // AI_UPSTREAM=cheaperinference sends the same calls to CheaperInference (its own key, URL and model names).
+        let cheaper = get("AI_UPSTREAM").as_deref().map(str::trim) == Some("cheaperinference");
+        let openrouter = if cheaper {
+            nonempty(get("CHEAPERINFERENCE_API_KEY")).map(|key| OpenRouter {
+                key,
+                url: CHEAPERINFERENCE_URL.to_string(),
+                plain: true,
+                model: nonempty(get("CHEAPERINFERENCE_MODEL")).unwrap_or_else(|| CHEAPERINFERENCE_DEFAULT_MODEL.to_string()),
+                fallback_model: nonempty(get("CHEAPERINFERENCE_FALLBACK_MODEL")),
+                privacy: true,
+                timeout: Duration::from_secs(60),
+            })
+        } else {
+            nonempty(get("OPENROUTER_API_KEY")).map(|key| OpenRouter {
+                key,
+                model: nonempty(get("OPENROUTER_MODEL")).unwrap_or_else(|| DEFAULT_MODEL.to_string()),
+                fallback_model: nonempty(get("OPENROUTER_FALLBACK_MODEL")),
+                // Providers that may keep prompts are only allowed when the deployment says so.
+                privacy: get("OPENROUTER_PRIVACY").as_deref() != Some("0"),
+                timeout: Duration::from_secs(60),
+                ..OpenRouter::new("")
+            })
+        };
         Config {
             db: or_default("VERSHION_DB", "./data/pool.db").into(),
             blobs: or_default("VERSHION_BLOBS", "./data/blobs").into(),
@@ -108,6 +123,15 @@ mod tests {
         assert!(c.openrouter.is_none() && c.relay_key.is_none() && c.allowed_origins.is_empty());
         let d = Limits::default();
         assert_eq!((c.limits.chat_per_hour, c.limits.weekly_credits, c.limits.daily_usd), (d.chat_per_hour, d.weekly_credits, d.daily_usd));
+    }
+
+    #[test]
+    fn cheaperinference_is_chosen_by_name_and_uses_its_own_key_url_and_model() {
+        let c = cfg(&[("AI_UPSTREAM", "cheaperinference"), ("OPENROUTER_API_KEY", "or"), ("CHEAPERINFERENCE_API_KEY", "ci"), ("CHEAPERINFERENCE_MODEL", "deepseek-v4.1-flash")]).openrouter.unwrap();
+        assert_eq!((c.key.as_str(), c.url.as_str(), c.model.as_str(), c.plain), ("ci", CHEAPERINFERENCE_URL, "deepseek-v4.1-flash", true));
+        assert_eq!(cfg(&[("AI_UPSTREAM", "cheaperinference")]).openrouter.is_none(), true, "the OpenRouter key is not borrowed");
+        assert_eq!(cfg(&[("AI_UPSTREAM", "cheaperinference"), ("CHEAPERINFERENCE_API_KEY", "ci")]).openrouter.unwrap().model, CHEAPERINFERENCE_DEFAULT_MODEL);
+        assert!(!cfg(&[("OPENROUTER_API_KEY", "or"), ("CHEAPERINFERENCE_API_KEY", "ci")]).openrouter.unwrap().plain, "OpenRouter stays the default");
     }
 
     #[test]

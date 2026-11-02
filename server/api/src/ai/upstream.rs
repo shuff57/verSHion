@@ -11,9 +11,16 @@ use std::time::Duration;
 
 pub const OPENROUTER_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
 pub const DEFAULT_MODEL: &str = "google/gemma-4-26b-a4b-it";
+pub const CHEAPERINFERENCE_URL: &str = "https://api.cheaperinference.com/v1/chat/completions";
+/// CheaperInference names the same model without the vendor prefix.
+pub const CHEAPERINFERENCE_DEFAULT_MODEL: &str = "gemma-4-26b-a4b-it";
 
 pub struct OpenRouter {
     pub key: String,
+    /// The chat-completions endpoint of the upstream.
+    pub url: String,
+    /// A plain OpenAI-compatible upstream (CheaperInference): none of OpenRouter's own request fields are sent.
+    pub plain: bool,
     pub model: String,
     /// Tried when the primary fails, returns nothing or times out.
     pub fallback_model: Option<String>,
@@ -24,7 +31,7 @@ pub struct OpenRouter {
 
 impl OpenRouter {
     pub fn new(key: impl Into<String>) -> Self {
-        Self { key: key.into(), model: DEFAULT_MODEL.into(), fallback_model: None, privacy: true, timeout: Duration::from_secs(60) }
+        Self { key: key.into(), url: OPENROUTER_URL.into(), plain: false, model: DEFAULT_MODEL.into(), fallback_model: None, privacy: true, timeout: Duration::from_secs(60) }
     }
 }
 
@@ -133,13 +140,15 @@ pub fn shape_reply(raw: &Value) -> Option<Reply> {
         return None;
     }
     let n = |p: &str| raw.pointer(p).and_then(Value::as_f64).filter(|x| x.is_finite()).unwrap_or(0.0);
+    // CheaperInference reports the price as a decimal string in `billing.billed_cost_usd`; OpenRouter as `usage.cost`.
+    let billed = raw.pointer("/billing/billed_cost_usd").and_then(Value::as_str).and_then(|c| c.parse::<f64>().ok()).filter(|x| x.is_finite());
     let (in_tokens, out_tokens) = (n("/usage/prompt_tokens"), n("/usage/completion_tokens"));
     let finish = choice?.get("finish_reason").and_then(Value::as_str).unwrap_or("stop");
     Some(Reply {
         text: content.to_string(),
         in_tokens,
         out_tokens,
-        cost_usd: n("/usage/cost"),
+        cost_usd: billed.unwrap_or_else(|| n("/usage/cost")),
         reply: json!({
             "choices": [{ "index": 0, "message": { "role": "assistant", "content": content }, "finish_reason": finish }],
             "usage": { "prompt_tokens": in_tokens, "completion_tokens": out_tokens, "total_tokens": n("/usage/total_tokens") },
@@ -149,6 +158,15 @@ pub fn shape_reply(raw: &Value) -> Option<Reply> {
 
 /// The request body. The client chose none of the model, reasoning or provider options.
 pub fn request_body(o: &OpenRouter, model: &str, messages: &[Message], max_tokens: i64, temperature: f64) -> Value {
+    if o.plain {
+        return json!({
+            "model": model,
+            "messages": messages.iter().map(Message::to_json).collect::<Vec<_>>(),
+            "response_format": { "type": "json_object" },
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        });
+    }
     json!({
         "model": model,
         "messages": messages.iter().map(Message::to_json).collect::<Vec<_>>(),
@@ -164,7 +182,7 @@ pub fn request_body(o: &OpenRouter, model: &str, messages: &[Message], max_token
 
 async fn call_once<T: Transport>(t: &T, o: &OpenRouter, model: &str, messages: &[Message], max_tokens: i64, temperature: f64) -> ModelOut {
     let body = request_body(o, model, messages, max_tokens, temperature);
-    match t.post(Post { url: OPENROUTER_URL, key: &o.key, body: &body, timeout: o.timeout }).await {
+    match t.post(Post { url: &o.url, key: &o.key, body: &body, timeout: o.timeout }).await {
         Err(class) => {
             tracing::error!("ai: openrouter call failed ({class})");
             ModelOut::Failed
@@ -207,6 +225,18 @@ pub async fn call_model<T: Transport>(t: &T, o: &OpenRouter, messages: &[Message
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_plain_upstream_gets_no_openrouter_fields_and_its_cost_is_read_from_billing() {
+        let o = OpenRouter { plain: true, ..OpenRouter::new("k") };
+        let body = request_body(&o, "gemma-4-26b-a4b-it", &[], 100, 0.0);
+        assert!(body.get("reasoning").is_none() && body.get("usage").is_none() && body.get("provider").is_none());
+        assert_eq!(body["response_format"], json!({ "type": "json_object" }));
+        let raw = json!({ "choices": [{ "message": { "content": "{}" } }], "usage": { "prompt_tokens": 10, "completion_tokens": 5 }, "billing": { "billed_cost_usd": "0.000123" } });
+        let r = shape_reply(&raw).unwrap();
+        assert!((r.cost_usd - 0.000123).abs() < 1e-12 && r.in_tokens == 10.0);
+    }
+
     use crate::ai::request::Content;
     use std::collections::VecDeque;
     use std::sync::Mutex;
