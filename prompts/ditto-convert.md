@@ -117,10 +117,11 @@ never grouped by row.)
 Page shows "3. Give the number of bonding and nonbonding electrons for the structure below:"
 with a Lewis structure in the upper middle of the page and blanks "BONDING ELECTRONS: 14,
 NONBONDING ELECTRONS: 10" filled in by hand:
-{"id":"q3","type":"fill-in-the-blank","stem":"Give the number of bonding and nonbonding electrons for the structure below:\nBONDING ELECTRONS: ___  NONBONDING ELECTRONS: ___","blanks":[["14"],["10"]],"figure":{"box":[270,420,370,620],"alt":"Lewis structure of a molecule"}}
+{"id":"q3","type":"fill-in-the-blank","stem":"Give the number of bonding and nonbonding electrons for the structure below:\nBONDING ELECTRONS: ___  NONBONDING ELECTRONS: ___","blanks":[["14"],["10"]],"figure":{"box":[270, 420, 370, 620],"alt":"Lewis structure of a molecule"}}
 
 Page shows "4. For the following compounds ... a. NH3  b. CO2" (bullets of instructions, student drawings):
 {"id":"q4","type":"multipart","stem":"For the following compounds, do all to receive full credit:\n• Draw a valid Lewis structure.\n• Count the number of electron clouds.","parts":[{"stem":"a. NH₃","type":"short-answer","suggestedAnswer":"Lewis structure H–N–H with a lone pair on N, 4, trigonal pyramidal, polar"},{"stem":"b. CO₂","type":"short-answer","suggestedAnswer":"Lewis structure O=C=O with lone pairs on each O, 2, linear, nonpolar"}]}
 
 # Reply formatting
-Output the JSON with no indentation: one question per line. Keep all fields, blanks, parts, choices and `\n` line breaks inside strings exactly as the rules above require.
+Output the JSON with no indentation: one question per line. The one exception to "no spaces":
+a `box` is always four numbers each followed by a comma and a space, `[270, 420, 370, 620]`. Keep all fields, blanks, parts, choices and `\n` line breaks inside strings exactly as the rules above require.
