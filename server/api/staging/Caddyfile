@@ -41,6 +41,10 @@
 	# into one directory. A path with no file falls back to index.html, which is how the app opens a mailed link.
 	handle {
 		root * /srv
+		# The page names its script and wasm by a hash that changes on every build, so a browser that keeps an old
+		# index.html runs an old build (a Brave tab did, after a redeploy). no-cache makes it ask first; an unchanged
+		# file costs one 304.
+		header Cache-Control "no-cache"
 		try_files {path} /index.html
 		file_server
 	}
