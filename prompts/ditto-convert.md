@@ -34,7 +34,9 @@ Question ids are `q1`, `q2`, ... in printed order on this page.
   none is marked, every choice is `"correct": false`. Never decide the answer yourself.
 - `true-false`: `answer` true/false, only if marked; otherwise omit `answer`.
 - `matching`: `pairs` [{left,right}] and `distractors`.
-- `fill-in-the-blank`: stem contains `___` for each blank, `blanks` has EXACTLY one array per
+- `fill-in-the-blank`: the printed label next to each answer line ("BONDING ELECTRONS:") is part
+  of the stem, so keep it and put `___` where the line is. A stem with no `___` is wrong.
+  The stem contains `___` for each blank, `blanks` has EXACTLY one array per
   `___`, in reading order (row by row, cell by cell). Each array lists ALTERNATIVE accepted
   answers for that one blank (usually just one). Never put the answers of two different blanks
   in the same array: a table row with two blanks is two entries. Several answers asked at once in a table or in a line such as

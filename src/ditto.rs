@@ -26,7 +26,16 @@ pub fn json_object(text: &str) -> Option<Value> {
     if b <= a {
         return None;
     }
-    serde_json::from_str(&text[a..=b]).ok()
+    if let Ok(v) = serde_json::from_str(&text[a..=b]) {
+        return Some(v);
+    }
+    first_value(&text[a..])
+}
+
+/// The first complete JSON value in `text`, ignoring whatever follows it. A model sometimes closes the root
+/// object one brace early (before `"report"`); everything that matters is already inside by then.
+fn first_value(text: &str) -> Option<Value> {
+    serde_json::Deserializer::from_str(text).into_iter::<Value>().next()?.ok().filter(Value::is_object)
 }
 
 /// Why a reply isn't usable JSON, or None when it parses (used to ask the model to retry).
@@ -37,7 +46,11 @@ pub fn json_error(text: &str) -> Option<String> {
     if b <= a {
         return Some("the JSON object was not closed".into());
     }
-    serde_json::from_str::<Value>(&text[a..=b]).err().map(|e| e.to_string())
+    match serde_json::from_str::<Value>(&text[a..=b]) {
+        Ok(_) => None,
+        Err(_) if first_value(&text[a..]).is_some() => None,
+        Err(e) => Some(e.to_string()),
+    }
 }
 
 pub fn is_ditto(text: &str) -> bool {
@@ -532,6 +545,17 @@ fn exams(v: &Value, ids: &HashMap<String, String>) -> Vec<Exam> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_root_object_closed_one_brace_early_still_imports_its_questions() {
+        // Seen from the hosted model: `]}]}` closes the root before `"report"`, so `"report"…}}` is extra data.
+        let reply = r#"{"format":"queshion/ditto","formatVersion":"0.1.0","bank":{"name":"Q","questions":[{"id":"q1","type":"true-false","stem":"Water is wet.","answer":true}]},"exams":[{"name":"Q","sections":[{"title":"","instructions":""}],"positions":[{"question":"q1","section":0}]}]},"report":{"unconverted":[],"notes":[]}}"#;
+        assert_eq!(json_error(reply), None);
+        let got = import_text(reply, None, 1, "x").expect("the questions are all there");
+        assert_eq!(got.doc.questions.len(), 1);
+        assert!(json_object("no braces").is_none());
+        assert!(json_error(r#"{"a": [1, 2"#).is_some(), "a genuinely broken reply still asks for a retry");
+    }
 
     fn page() -> Vec<u8> {
         // White paper with a dark block in the middle: a crop of the block has ink, a crop of the margin does not.
