@@ -180,6 +180,8 @@ struct BanksState {
     confirm_delete: Option<Id>,
     /// Bank id being renamed + the current name text.
     rename: Option<(Id, String)>,
+    /// Archived banks are listed too (marked), so they can be restored or deleted.
+    show_archived: bool,
 }
 
 /// Sort choices for the question card list.
@@ -370,6 +372,7 @@ struct BankRow {
     mix: [usize; 6],
     /// Exams placing at least one of its questions.
     used_in: Vec<Id>,
+    archived: bool,
 }
 
 fn mix_index(k: QKind) -> usize {
@@ -448,6 +451,13 @@ impl App {
             if search_pill(ui, &mut search, 300.0, "Search banks") {
                 with_state(ctx, key, |s: &mut BanksState| s.search = search.clone());
             }
+            let archived_n = self.store.banks.iter().filter(|b| self.store.is_archived(&b.id)).count();
+            if archived_n > 0 {
+                let on = with_state(ctx, key, |s: &mut BanksState| s.show_archived);
+                if kit::chip_toggle(ui, &format!("Show archived  {archived_n}"), on).clicked() {
+                    with_state(ctx, key, |s: &mut BanksState| s.show_archived = !on);
+                }
+            }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let mut mode = view_of(list);
                 if kit::view_toggle(ui, &mut mode, "banks_list") {
@@ -478,10 +488,12 @@ impl App {
         }
 
         let query = search.trim().to_lowercase();
+        let show_archived = with_state(ctx, key, |s: &mut BanksState| s.show_archived);
         let rows: Vec<BankRow> = self
             .store
             .banks
             .iter()
+            .filter(|b| show_archived || !self.store.is_archived(&b.id))
             .filter(|b| query.is_empty() || b.name.to_lowercase().contains(&query))
             .map(|b| {
                 let mut mix = [0usize; 6];
@@ -496,11 +508,16 @@ impl App {
                     modified: b.modified,
                     mix,
                     used_in: crate::bankops::exams_using_bank(&self.store.exams, &b.id).iter().map(|e| e.id.clone()).collect(),
+                    archived: self.store.is_archived(&b.id),
                 }
             })
             .collect();
         if rows.is_empty() {
-            ui.label(theme::muted(format!("No banks match \"{search}\".")));
+            if query.is_empty() {
+                ui.label(theme::muted("Every bank is archived. Press Show archived to see them."));
+            } else {
+                ui.label(theme::muted(format!("No banks match \"{search}\".")));
+            }
             return;
         }
 
@@ -1302,18 +1319,20 @@ enum BankAct {
     Popover,
     Export,
     Rename,
+    Archive,
     Delete,
 }
 
 /// The bank "..." menu items in order (as on the reference: Open, Pop-over, Export, then Delete
 /// after a separator; Rename is ours). `None` marks the separator; the bool says enabled
 /// (Export needs at least one question).
-fn bank_menu_items(nq: usize) -> Vec<Option<(BankAct, &'static str, bool)>> {
+fn bank_menu_items(nq: usize, archived: bool) -> Vec<Option<(BankAct, &'static str, bool)>> {
     vec![
         Some((BankAct::Open, "Open", true)),
         Some((BankAct::Popover, "Pop-over", true)),
         Some((BankAct::Export, "Export…", nq > 0)),
         Some((BankAct::Rename, "Rename", true)),
+        Some((BankAct::Archive, if archived { "Restore" } else { "Archive" }, true)),
         None,
         Some((BankAct::Delete, "Delete…", true)),
     ]
@@ -1330,7 +1349,7 @@ fn bank_menu(ui: &mut Ui, rect: Rect, r: &BankRow) -> (Option<BankAct>, bool) {
         ui.spacing_mut().button_padding = Vec2::new(8.0, 3.0);
         ui.menu_button(RichText::new("…").size(14.0).color(theme::muted_col()), |ui| {
             ui.set_min_width(150.0);
-            for it in bank_menu_items(r.nq) {
+            for it in bank_menu_items(r.nq, r.archived) {
                 match it {
                     None => {
                         ui.separator();
@@ -1358,6 +1377,10 @@ fn apply_bank_menu(app: &mut App, ctx: &egui::Context, key: UiId, r: &BankRow, a
         Some(BankAct::Popover) => open_popover(ctx, &r.id),
         Some(BankAct::Export) => open_bank_export(ctx, &r.id),
         Some(BankAct::Rename) => with_state(ctx, key, |s: &mut BanksState| s.rename = Some((r.id.clone(), r.name.clone()))),
+        Some(BankAct::Archive) => {
+            app.store.set_archived(&r.id, !r.archived);
+            app.toast(if r.archived { "Bank restored" } else { "Bank archived. Show archived brings it back." });
+        }
         Some(BankAct::Delete) => with_state(ctx, key, |s: &mut BanksState| s.confirm_delete = Some(r.id.clone())),
         None => {}
     }
@@ -1365,7 +1388,8 @@ fn apply_bank_menu(app: &mut App, ctx: &egui::Context, key: UiId, r: &BankRow, a
 
 fn counts_line(r: &BankRow) -> String {
     format!(
-        "{} question{} · {} topic{}",
+        "{}{} question{} · {} topic{}",
+        if r.archived { "Archived · " } else { "" },
         r.nq,
         if r.nq == 1 { "" } else { "s" },
         r.topics,
@@ -1559,6 +1583,7 @@ fn draw_bank_overlays(app: &mut App, ctx: &egui::Context, key: UiId) {
         });
         if confirmed {
             app.store.banks.retain(|b| b.id != id);
+            app.store.forget_archived(&id);
             app.store.save_banks();
             app.toast("Question bank deleted");
             if app.bank.as_deref() == Some(id.as_str()) {
@@ -3604,11 +3629,13 @@ mod tests {
 
     #[test]
     fn bank_menu_matches_the_reference_order() {
-        let labels: Vec<&str> = bank_menu_items(3).iter().map(|i| i.map_or("---", |(_, l, _)| l)).collect();
-        assert_eq!(labels, vec!["Open", "Pop-over", "Export…", "Rename", "---", "Delete…"]);
-        assert!(bank_menu_items(3).iter().flatten().all(|(_, _, en)| *en));
+        let labels: Vec<&str> = bank_menu_items(3, false).iter().map(|i| i.map_or("---", |(_, l, _)| l)).collect();
+        assert_eq!(labels, vec!["Open", "Pop-over", "Export…", "Rename", "Archive", "---", "Delete…"]);
+        let back: Vec<&str> = bank_menu_items(3, true).iter().flatten().map(|(_, l, _)| *l).collect();
+        assert!(back.contains(&"Restore") && !back.contains(&"Archive"));
+        assert!(bank_menu_items(3, false).iter().flatten().all(|(_, _, en)| *en));
         // an empty bank cannot be exported (as on the reference)
-        let export = |n| bank_menu_items(n).into_iter().flatten().find(|(a, _, _)| *a == BankAct::Export).unwrap().2;
+        let export = |n| bank_menu_items(n, false).into_iter().flatten().find(|(a, _, _)| *a == BankAct::Export).unwrap().2;
         assert!(!export(0) && export(1));
     }
 

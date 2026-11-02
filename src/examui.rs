@@ -94,6 +94,10 @@ struct ListUi {
     rename: Option<(Id, String)>,
     /// A card's "…" menu chose Open.
     open: Option<Id>,
+    /// A card's "…" menu chose Archive or Restore: the exam and whether it is now archived.
+    archive: Option<(Id, bool)>,
+    /// Archived exams are listed too (marked), so they can be restored or deleted.
+    show_archived: bool,
 }
 
 /// Where a drag started: a page question (reorder) or a shelf row (add).
@@ -435,15 +439,17 @@ struct ExamRow {
     pts: f64,
     bank: String,
     modified: i64,
+    archived: bool,
 }
 
 impl crate::App {
-    fn exam_rows(&self, needle: &str) -> Vec<ExamRow> {
+    fn exam_rows(&self, needle: &str, show_archived: bool) -> Vec<ExamRow> {
         let needle = needle.trim().to_lowercase();
         let mut out: Vec<ExamRow> = self
             .store
             .exams
             .iter()
+            .filter(|e| show_archived || !self.store.is_archived(&e.id))
             .filter(|e| needle.is_empty() || e.name.to_lowercase().contains(&needle))
             .map(|e| {
                 let pts: f64 = e
@@ -462,7 +468,7 @@ impl crate::App {
                     1 => self.store.bank(banks[0]).map(|b| b.name.clone()).unwrap_or_else(|| "Missing bank".into()),
                     n => format!("{n} banks"),
                 };
-                ExamRow { id: e.id.clone(), name: e.name.clone(), q: e.items.len(), pts, bank, modified: e.modified }
+                ExamRow { id: e.id.clone(), name: e.name.clone(), q: e.items.len(), pts, bank, modified: e.modified, archived: self.store.is_archived(&e.id) }
             })
             .collect();
         out.sort_by(|a, b| b.modified.cmp(&a.modified));
@@ -475,7 +481,8 @@ impl crate::App {
         screens::shell_frame(self, ctx, true, |app, ui| {
             let total = app.store.exams.len();
             let total_q: usize = app.store.exams.iter().map(|e| e.items.len()).sum();
-            let rows = app.exam_rows(&st.search);
+            let rows = app.exam_rows(&st.search, st.show_archived);
+            let archived_n = app.store.exams.iter().filter(|e| app.store.is_archived(&e.id)).count();
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
                 ui.set_max_width(ui.available_width().min(1040.0));
                 let sub = format!(
@@ -492,6 +499,9 @@ impl crate::App {
                             .desired_width(260.0)
                             .margin(Margin::symmetric(10, 6)),
                     );
+                    if archived_n > 0 && kit::chip_toggle(ui, &format!("Show archived  {archived_n}"), st.show_archived).clicked() {
+                        st.show_archived = !st.show_archived;
+                    }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if crate::pageshell::primary(ui, "New exam").clicked() {
                             let id = new_exam(app);
@@ -517,6 +527,8 @@ impl crate::App {
                                     app.exam = Some(id.clone());
                                     app.screen = crate::Screen::ExamEdit(id);
                                 }
+                            } else if st.search.trim().is_empty() {
+                                ui.label(muted("Every exam is archived. Press Show archived to see them."));
                             } else {
                                 ui.label(muted("No exams match that search."));
                             }
@@ -531,6 +543,10 @@ impl crate::App {
             });
         });
 
+        if let Some((id, on)) = st.archive.take() {
+            self.store.set_archived(&id, on);
+            screens::toast(self, if on { "Exam archived. Show archived brings it back." } else { "Exam restored" }, false);
+        }
         // "Open" from a card's "…" menu.
         if let Some(id) = st.open.take() {
             open_exam_screen(self, &id);
@@ -557,6 +573,7 @@ impl crate::App {
                                 |ui| {
                                     if danger_button(ui, "Delete").clicked() {
                                         self.store.exams.retain(|e| e.id != id);
+                                        self.store.forget_archived(&id);
                                         self.store.save_exams();
                                         if self.exam.as_deref() == Some(&id) {
                                             self.exam = None;
@@ -655,6 +672,9 @@ fn exam_menu(ui: &mut egui::Ui, rect: Rect, row: &ExamRow, st: &mut ListUi) {
             }
             if ui.button("Rename").clicked() {
                 st.rename = Some((row.id.clone(), row.name.clone()));
+            }
+            if ui.button(if row.archived { "Restore" } else { "Archive" }).clicked() {
+                st.archive = Some((row.id.clone(), !row.archived));
             }
             ui.add_space(4.0);
             if ui
@@ -850,6 +870,7 @@ impl crate::App {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if danger_button(ui, "Delete").clicked() {
                             self.store.exams.retain(|e| e.id != exam_id);
+                            self.store.forget_archived(&exam_id);
                             self.store.save_exams();
                             self.exam = None;
                             self.screen = crate::Screen::Exams;
@@ -3508,7 +3529,7 @@ fn draw_shelf_inner(
                 .store
                 .banks
                 .iter()
-                .filter(|b| !st.open_banks.contains(&b.id))
+                .filter(|b| !st.open_banks.contains(&b.id) && !app.store.is_archived(&b.id))
                 .map(|b| (b.id.clone(), b.name.clone(), b.questions.len()))
                 .collect();
             if others.is_empty() {

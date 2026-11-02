@@ -1864,7 +1864,8 @@ fn options_and_finish(app: &mut crate::App, ui: &mut egui::Ui, st: &mut State, f
         .selected_text(current)
         .show_ui(ui, |ui| {
             ui.selectable_value(&mut st.dest, None, "New bank");
-            for b in &app.store.banks {
+            let chosen = st.dest.clone();
+            for b in app.store.banks.iter().filter(|b| !app.store.is_archived(&b.id) || chosen.as_ref() == Some(&b.id)) {
                 ui.selectable_value(&mut st.dest, Some(b.id.clone()), b.name.clone());
             }
         });
@@ -2828,10 +2829,28 @@ fn history(app: &mut crate::App, ui: &mut egui::Ui) {
     let mut sorted = app.store.imports.clone();
     sorted.sort_by(|a, b| b.time.cmp(&a.time));
     let mut open: Option<Id> = None;
+    let mut remove: Option<Id> = None;
+    let mut clear = false;
+    ui.horizontal(|ui| {
+        ui.label(theme::muted(format!("{} in the list. Removing one only forgets the entry: the questions stay in their bank.", plural(sorted.len(), "import"))).size(12.0));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if kit::ghost_button(ui, "Clear history").clicked() {
+                clear = true;
+            }
+        });
+    });
+    ui.add_space(6.0);
     for imp in &sorted {
         kit::card().inner_margin(Margin::symmetric(14, 10)).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(theme::strong(imp.source.clone()));
+            ui.horizontal(|ui| {
+                ui.label(theme::strong(imp.source.clone()));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if kit::ghost_button(ui, "Remove").on_hover_text("Forget this entry (the questions stay in their bank)").clicked() {
+                        remove = Some(imp.id.clone());
+                    }
+                });
+            });
             let mut line = format!(
                 "{} · {} · {}",
                 fmt_time(imp.time),
@@ -2864,6 +2883,14 @@ fn history(app: &mut crate::App, ui: &mut egui::Ui) {
             }
         });
         ui.add_space(4.0);
+    }
+    if clear {
+        app.store.imports.clear();
+        app.store.save_imports();
+        app.toast("Import history cleared");
+    } else if let Some(id) = remove {
+        app.store.imports.retain(|i| i.id != id);
+        app.store.save_imports();
     }
     if let Some(id) = open {
         app.open_bank(&id);

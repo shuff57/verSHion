@@ -459,6 +459,8 @@ pub struct Store {
     pub exams: Vec<Exam>,
     pub imports: Vec<crate::model::Import>,
     pub exports: Vec<crate::model::ExportRecord>,
+    /// Ids of banks and exams the teacher put away: hidden from the lists and pickers, never deleted.
+    pub archived: Vec<Id>,
 }
 
 impl Store {
@@ -469,6 +471,7 @@ impl Store {
             exams: load_json("exams.json").unwrap_or_default(),
             imports: load_json("imports.json").unwrap_or_default(),
             exports: load_json("exports.json").unwrap_or_default(),
+            archived: load_json("archived.json").unwrap_or_default(),
         }
     }
 
@@ -476,6 +479,28 @@ impl Store {
     pub fn save_exams(&self) { let _ = save_json("exams.json", &self.exams); }
     pub fn save_imports(&self) { let _ = save_json("imports.json", &self.imports); }
     pub fn save_exports(&self) { let _ = save_json("exports.json", &self.exports); }
+    pub fn save_archived(&self) { let _ = save_json("archived.json", &self.archived); }
+
+    pub fn is_archived(&self, id: &Id) -> bool {
+        self.archived.contains(id)
+    }
+
+    /// Puts a bank or exam away (or brings it back). Saves.
+    pub fn set_archived(&mut self, id: &Id, on: bool) {
+        self.archived.retain(|a| a != id);
+        if on {
+            self.archived.push(id.clone());
+        }
+        self.save_archived();
+    }
+
+    /// Archived entries whose bank or exam no longer exists are dropped (after a delete).
+    pub fn forget_archived(&mut self, id: &Id) {
+        if self.archived.contains(id) {
+            self.archived.retain(|a| a != id);
+            self.save_archived();
+        }
+    }
 
     pub fn bank(&self, id: &Id) -> Option<&QuestionBank> {
         self.banks.iter().find(|b| b.id == *id)
@@ -501,6 +526,27 @@ impl Store {
         self.bank_mut(bank_id)?.questions.iter_mut().find(|q| q.id == *question_id)
     }
 }
+#[cfg(test)]
+mod archive_tests {
+    use super::*;
+
+    #[test]
+    fn archiving_is_a_toggle_that_never_duplicates() {
+        let mut st = Store::default();
+        let id: Id = "b1".into();
+        assert!(!st.is_archived(&id));
+        st.set_archived(&id, true);
+        st.set_archived(&id, true);
+        assert_eq!(st.archived, vec![id.clone()]);
+        assert!(st.is_archived(&id));
+        st.set_archived(&id, false);
+        assert!(!st.is_archived(&id));
+        st.set_archived(&id, true);
+        st.forget_archived(&id);
+        assert!(st.archived.is_empty());
+    }
+}
+
 #[cfg(test)]
 mod image_tests {
     use super::*;
