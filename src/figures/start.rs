@@ -19,9 +19,8 @@ pub fn overrides(id: &str) -> Vec<(&'static str, Value)> {
         "soil-texture" => vec![("guides", Value::B(true))],
         // photosynthesis opens with the rate graph on, so the first picture shows the stages, the equation and a limiting-factor curve
         "photosynthesis" => vec![("show_graph", Value::B(true))],
-        // the leaf cross-section opens on its plain defaults (the key: every layer, the vein and a stoma labelled, open
-        // stomata, the gas and light arrows and the surface view); listed so the choice is deliberate
-        "leaf-cross-section" => vec![],
+        // the leaf cross-section opens with Large labels: the section is wide, and at Medium a printed copy's names are small
+        "leaf-cross-section" => vec![("label_size", st("Large"))],
         // Math polygons open unfilled (black outline on white), angles unshaded.
         "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "regular-polygon" => vec![("fill", st("#ffffff"))],
         // the reference names the kite counter-clockwise (A right, B top, C left): our mirror

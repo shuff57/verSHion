@@ -14,7 +14,7 @@ fn render_of(list: &[(&'static str, Value)]) -> String { (def().render)(&with(li
 fn notes(list: &[(&'static str, Value)]) -> Vec<String> { crate::figures::notes_for(ID, &with(list)) }
 
 const SIZES: [&str; 3] = ["Small", "Medium", "Large"];
-const TOGGLES: [&str; 5] = ["show_layers", "show_vein", "show_stoma", "show_gas", "show_light"];
+const TOGGLES: [&str; 6] = ["show_layers", "show_vein", "show_stoma", "show_gas", "show_light", "show_chloroplast"];
 fn toggle_list(mask: u32) -> Vec<(&'static str, Value)> { TOGGLES.iter().enumerate().map(|(i, k)| b(k, mask >> i & 1 == 1)).collect() }
 
 // ---------------------------------------------------------------- reading an SVG back (shares no drawing code with the module)
@@ -241,8 +241,17 @@ fn pointer_problems(svg: &str, c: &Cfg) -> Vec<String> {
             It::Stoma => {
                 let (dl, dr) = (outline_d(end, &f.cells[gli].1), outline_d(end, &f.cells[gri].1));
                 let in_cell = f.cells.iter().any(|(k, p)| *k != K::Cuticle && inside(p, end));
-                if c.open && (in_cell || dl < 4.0 || dr < 4.0 || end.0 <= poly_centre(&f.cells[gli].1).0 || end.0 >= poly_centre(&f.cells[gri].1).0) { bad.push(format!("Stoma (open): the leader ends {dl:.2} / {dr:.2} px from the guard cells")); }
-                if !c.open && (dl > 1.0 || dr > 1.0) { bad.push(format!("Stoma (closed): the leader does not end where the guard cells meet ({dl:.2} / {dr:.2})")); }
+                if !c.open { bad.push("Stoma: labelled although the stomata are closed".into()); }
+                if in_cell || dl < 4.0 || dr < 4.0 || end.0 <= poly_centre(&f.cells[gli].1).0 || end.0 >= poly_centre(&f.cells[gri].1).0 { bad.push(format!("Stoma (open): the leader ends {dl:.2} / {dr:.2} px from the guard cells")); }
+                None
+            }
+            It::Chloroplast => {
+                // the nearest chloroplast to the end is the one named, and the end touches it from outside (within 0.6 px)
+                let q = |e: &Ell| (((end.0 - e.c.0) / e.rx).powi(2) + ((end.1 - e.c.1) / e.ry).powi(2)).sqrt();
+                let near = f.chl.iter().min_by(|a, b| q(a).partial_cmp(&q(b)).unwrap()).unwrap();
+                let gap = dist(end, near.c) - near.ry;
+                if (near.c.0 - end.0).abs() > 0.01 || !(0.0..=0.6).contains(&gap) { bad.push(format!("Chloroplast: the leader ends {gap:.2} px from the chloroplast")); }
+                if !f.cells.iter().any(|(k, p)| *k == K::Palisade && inside(p, near.c)) { bad.push("Chloroplast: not a palisade chloroplast".into()); }
                 None
             }
             _ => None,
@@ -251,16 +260,18 @@ fn pointer_problems(svg: &str, c: &Cfg) -> Vec<String> {
         for p in samples(ld.a, ld.b, 0.4) {
             for (i, (k, poly)) in f.cells.iter().enumerate() {
                 if Some(i) == own { continue; }
-                // a leader to a closed pore ends where the two guard cells meet: it runs up the notch between them and may touch (not enter) them in its last 5 px
-                if l.it == It::Stoma && !c.open && (i == gli || i == gri) && dist(p, end) < 5.0 && !inside(poly, p) { continue; }
-                let named = matches!(k, K::Guard | K::Xylem | K::Phloem | K::Companion);
+                let named = matches!(k, K::Guard | K::Xylem | K::Phloem | K::Companion | K::Sheath);
                 if named && (inside(poly, p) || outline_d(p, poly) < 1.0) { bad.push(format!("{:?}: the leader crosses a {k:?} cell", l.it)); break; }
             }
-            for e in &f.chl { if ((p.0 - e.c.0) / (e.rx + 1.0)).powi(2) + ((p.1 - e.c.1) / (e.ry + 1.0)).powi(2) <= 1.0 { bad.push(format!("{:?}: the leader crosses a chloroplast", l.it)); break; } }
+            for e in &f.chl { if l.it == It::Chloroplast && (e.c.0 - end.0).abs() < 0.01 && dist(e.c, end) < e.ry + 1.0 { continue; } if ((p.0 - e.c.0) / (e.rx + 1.0)).powi(2) + ((p.1 - e.c.1) / (e.ry + 1.0)).powi(2) <= 1.0 { bad.push(format!("{:?}: the leader crosses a chloroplast", l.it)); break; } }
         }
     }
     // a stoma leader that ends in an open pore crosses nothing at all on the way in
     if c.open { if let Some(ld) = f.leaders.iter().find(|ln| dist(ln.b, sec(&f, (xs, GUARD_Y))) < 0.02) { for p in samples(ld.a, ld.b, 0.4) { if f.cells.iter().any(|(_, poly)| inside(poly, p)) { bad.push("Stoma: the leader crosses a cell or the cuticle".into()); break; } } } }
+    // with the stomata closed nothing points at the closed pore: the guard-cell line is the only one that ends at the stoma
+    if !c.open { let pore = sec(&f, (xs, GUARD_Y)); if f.leaders.iter().any(|ln| dist(ln.b, pore) < 4.0) { bad.push("a leader ends at the closed pore".into()); } }
+    // the vein's lead line runs through air: no spongy cell touches it
+    for l in &labs { if let Join::Bracket { lead: Some((a, b)), .. } = l.join { for (k, poly) in &f.cells { if *k == K::Spongy && poly.iter().any(|q| dseg(*q, sec(&f, a), sec(&f, b)) < 1.5) { bad.push("Bundle: a spongy cell touches the lead line".into()); } } } }
     // brackets: a layer's bracket spans its layer and no other; the vein's spans the whole bundle and no cell crosses it
     let yr = |k: K| { let ys: Vec<f64> = f.cells.iter().filter(|(kk, _)| *kk == k).flat_map(|(_, p)| p.iter().map(|q| q.1 - f.off.1)).collect(); (ys.iter().cloned().fold(f64::INFINITY, f64::min), ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max)) };
     for l in &labs {
@@ -298,7 +309,7 @@ fn area(p: &[P]) -> f64 { (0..p.len()).map(|i| { let (a, c) = (p[i], p[(i + 1) %
 #[test]
 fn the_controls_are_the_documented_ones() {
     let keys: Vec<&str> = (def().params)().iter().map(|p| p.key).collect();
-    assert_eq!(keys, ["stomata", "show_layers", "show_vein", "show_stoma", "show_gas", "show_light", "show_surface", SHOW_ANSWERS, "style", "label_size"]);
+    assert_eq!(keys, ["stomata", "show_layers", "show_vein", "show_stoma", "show_chloroplast", "show_gas", "show_light", "show_surface", SHOW_ANSWERS, "style", "label_size"]);
     let p = Params::defaults(&(def().params)());
     assert_eq!(p.s("stomata"), "Open");
     for k in TOGGLES { assert!(p.b(k), "{k}"); }
@@ -366,39 +377,80 @@ fn the_layers_are_in_textbook_order_and_shape() {
 }
 
 #[test]
-fn open_and_closed_stomata_look_different_in_the_section_and_from_below() {
-    let gap = |open: bool| {
+fn open_guard_cells_are_swollen_and_closed_ones_limp_in_the_section_and_from_below() {
+    let xs = STOMATA[LABEL_STOMA];
+    let pair = |open: bool| {
         let sc = scene(open);
-        let g: Vec<&Shape> = sc.shapes.iter().filter(|s| s.k == K::Guard).collect();
-        // the pore of the labelled stoma: the gap between the right edge of its left cell and the left edge of its right cell
-        let xs = STOMATA[LABEL_STOMA];
-        let l = g.iter().find(|s| poly_centre(&s.pts).0 < xs && poly_centre(&s.pts).0 > xs - 20.0).unwrap();
-        let r = g.iter().find(|s| poly_centre(&s.pts).0 > xs && poly_centre(&s.pts).0 < xs + 20.0).unwrap();
-        r.pts.iter().map(|q| q.0).fold(f64::INFINITY, f64::min) - l.pts.iter().map(|q| q.0).fold(f64::NEG_INFINITY, f64::max)
+        let g: Vec<Vec<P>> = sc.shapes.iter().filter(|s| s.k == K::Guard && (poly_centre(&s.pts).0 - xs).abs() < 30.0).map(|s| s.pts.clone()).collect();
+        assert_eq!(g.len(), 2);
+        let (l, r) = if poly_centre(&g[0]).0 < poly_centre(&g[1]).0 { (g[0].clone(), g[1].clone()) } else { (g[1].clone(), g[0].clone()) };
+        let pore = r.iter().map(|q| q.0).fold(f64::INFINITY, f64::min) - l.iter().map(|q| q.0).fold(f64::NEG_INFINITY, f64::max);
+        // the gap between a guard cell and the next epidermal cell
+        let lower: Vec<&Shape> = sc.shapes.iter().filter(|s| s.k == K::Lower).collect();
+        let side = lower.iter().filter(|s| poly_centre(&s.pts).0 < xs).map(|s| s.pts.iter().map(|q| q.0).fold(f64::NEG_INFINITY, f64::max)).fold(f64::NEG_INFINITY, f64::max);
+        let gap = l.iter().map(|q| q.0).fold(f64::INFINITY, f64::min) - side;
+        (area(&l), area(&r), pore, gap)
     };
-    let (go, gc) = (gap(true), gap(false));
-    println!("pore: open {go:.2}, closed {gc:.2}");
-    assert!(go >= 10.0 && gc <= 1.0, "open {go}, closed {gc}");
-    // the guard cells fill the gap left in the epidermis either way
-    for open in [true, false] { let (rx, off) = guard_geom(open); assert!(off + rx <= STOMA_ZONE && off + rx >= STOMA_ZONE - 1.5, "{open}"); }
+    let (ol, or, opore, ogap) = pair(true);
+    let (cl, cr, cpore, cgap) = pair(false);
+    println!("guard cell area: open {ol:.0}, closed {cl:.0}; pore open {opore:.2}, closed {cpore:.2}; gap to the epidermis open {ogap:.2}, closed {cgap:.2}");
+    assert!(ol > 1.3 * cl && or > 1.3 * cr, "open (turgid) guard cells are clearly bigger than closed (flaccid) ones: {ol} vs {cl}");
+    assert!(opore >= 10.0 && cpore <= 1.0, "open {opore}, closed {cpore}");
+    assert!(ogap > 0.0 && ogap < 2.5 && cgap > 0.0 && cgap < 2.5, "the epidermis closes in round the guard cells: {ogap} / {cgap}");
     // the lower cuticle is open at an open pore and whole at a closed one
     let bands = |open: bool| scene(open).shapes.iter().filter(|s| s.k == K::Cuticle).count();
     assert_eq!((bands(true), bands(false)), (1 + STOMATA.len() + 1, 2));
-    // from below: the pore between the crescents
-    let pore = |open: bool| { let (c, _, _) = inset(open); c[1].iter().map(|q| q.0).fold(f64::INFINITY, f64::min) - c[0].iter().map(|q| q.0).fold(f64::NEG_INFINITY, f64::max) };
-    let pw = |open: bool| { let (c, _, _) = inset(open); let mid: Vec<&P> = c[0].iter().filter(|q| (q.1 - INSET_H / 2.0).abs() < 0.5).collect(); mid.iter().map(|q| q.0).fold(f64::NEG_INFINITY, f64::max) };
-    assert!(pore(true).abs() < 1e-9 && pore(false).abs() < 1e-9, "the two guard cells meet at their ends");
-    assert!(INSET_W - 2.0 * pw(true) >= 12.0 && INSET_W - 2.0 * pw(false) <= 1.5, "pore width from below: {} / {}", INSET_W - 2.0 * pw(true), INSET_W - 2.0 * pw(false));
-    // and the two renders differ in the guard cells
-    let (a, c) = (render_of(&[]), render_of(&[s("stomata", "Closed")]));
-    assert_ne!(a, c);
+    // from below: the crescents are bigger when open, meet at their ends, and leave a wide pore or a slit
+    let (co, _, _) = inset(true);
+    let (cc, _, _) = inset(false);
+    assert!(area(&co[0]) > 1.3 * area(&cc[0]) && area(&co[1]) > 1.3 * area(&cc[1]), "from below: open {} vs closed {}", area(&co[0]), area(&cc[0]));
+    let ends = |c: &Vec<Vec<P>>| c[1].iter().map(|q| q.0).fold(f64::INFINITY, f64::min) - c[0].iter().map(|q| q.0).fold(f64::NEG_INFINITY, f64::max);
+    assert!(ends(&co).abs() < 1e-9 && ends(&cc).abs() < 1e-9, "the two guard cells meet at their ends");
+    let pw = |c: &Vec<Vec<P>>| { let mid: Vec<&P> = c[0].iter().filter(|q| (q.1 - INSET_H / 2.0).abs() < 0.5).collect(); INSET_W - 2.0 * mid.iter().map(|q| q.0).fold(f64::NEG_INFINITY, f64::max) };
+    assert!(pw(&co) >= 14.0 && pw(&cc) <= 1.5, "pore from below: {} / {}", pw(&co), pw(&cc));
+    let width = |c: &Vec<Vec<P>>| c[1].iter().map(|q| q.0).fold(f64::NEG_INFINITY, f64::max) - c[0].iter().map(|q| q.0).fold(f64::INFINITY, f64::min);
+    assert!(width(&co) > width(&cc) + 10.0, "the open pair is wider from below");
+    for c in [&co, &cc] { for q in c.iter().flatten() { assert!(q.0 > 0.0 && q.0 < INSET_W && q.1 > 0.0 && q.1 < INSET_H, "the stoma stays inside the frame"); } }
+    // and the renders differ
+    assert_ne!(render_of(&[]), render_of(&[s("stomata", "Closed")]));
+}
+
+#[test]
+fn no_cell_fills_the_air_chamber_above_a_stoma() {
+    for open in [true, false] {
+        let sc = scene(open);
+        for xs in STOMATA {
+            let mut pts = Vec::new();
+            for i in -18..=18 { for j in -9..=9 { let q = (xs + i as f64, 185.0 + j as f64); if ((q.0 - xs) / 20.0).powi(2) + ((q.1 - 185.0) / 10.0).powi(2) <= 1.0 { pts.push(q); } } }
+            for sh in &sc.shapes { if sh.k != K::VeinBg { for q in &pts { assert!(!inside(&sh.pts, *q), "a {:?} cell lies in the air chamber over the stoma at {xs} ({q:?})", sh.k); } } }
+            // and the chamber opens onto the pore: nothing between the chamber and the guard cells
+            let above_pore: Vec<P> = (0..8).map(|k| (xs, 186.0 + k as f64)).collect();
+            for sh in &sc.shapes { for q in &above_pore { assert!(!inside(&sh.pts, *q), "a {:?} cell closes the chamber off at {xs}", sh.k); } }
+        }
+    }
+}
+
+#[test]
+fn no_white_edge_erases_tissue_and_the_lower_cuticle_stays_whole_under_a_closed_stoma() {
+    for (open, style) in [("Open", "Colour"), ("Closed", "Colour"), ("Open", "Print"), ("Closed", "Print")] {
+        for key in [true, false] {
+            let svg = render_of(&[s("stomata", open), s("style", style), b(SHOW_ANSWERS, key)]);
+            assert!(parse(&svg).lines.iter().all(|l| l.col != "#ffffff" && l.col != "#fff"), "{open} {style}: a white line is drawn");
+        }
+    }
+    // at 66 % grey the lower cuticle under the closed stomata is dark along its whole length
+    let svg = render_of(&[s("stomata", "Closed"), s("style", "Print"), b(SHOW_ANSWERS, false)]);
+    let f = fig(&svg, false);
+    let (w, h, px) = crate::figures::to_rgba(&svg, 2.0).unwrap();
+    let dark = |q: P| -> bool { let (ix, iy) = ((q.0 * 2.0) as u32, (q.1 * 2.0) as u32); let o = ((iy.min(h - 1) * w + ix.min(w - 1)) * 4) as usize; (0.299 * px[o] as f64 + 0.587 * px[o + 1] as f64 + 0.114 * px[o + 2] as f64) < 0.66 * 255.0 };
+    for xs in STOMATA { for i in -30..=30 { let q = sec(&f, (xs + i as f64 * 0.5, (Y_LC0 + Y_LC1) / 2.0)); assert!(dark(q), "the lower cuticle has a gap at {}", xs + i as f64 * 0.5); } }
 }
 
 // ================================================================== layout audits
 
 fn sweep() -> Vec<(Vec<(&'static str, Value)>, Cfg)> {
     let mut v = Vec::new();
-    for mask in 0..32u32 {
+    for mask in 0..64u32 {
         for open in ["Open", "Closed"] {
             for key in [true, false] {
                 for size in SIZES {
@@ -424,7 +476,7 @@ fn nothing_collides_in_any_mode_at_any_size() {
         assert!(bad.is_empty(), "{l:?}: {bad:?}");
         n += 1;
     }
-    assert_eq!(n, 32 * 2 * 2 * 3 * 2);
+    assert_eq!(n, 64 * 2 * 2 * 3 * 2);
 }
 
 #[test]
@@ -547,7 +599,7 @@ fn a_student_copy_prints_no_answer_anywhere_in_its_source() {
         assert!(d.starts_with("A leaf cross-section with ") && d.ends_with("the table under it has a rule for each."), "{d}");
         assert!(svg.split("<title>").nth(1).unwrap().starts_with("Leaf cross-section diagram</title>"));
     }
-    assert_eq!(checked, 32 * 2 * 3 * 2);
+    assert_eq!(checked, 64 * 2 * 3 * 2);
     // the scan sees a hostile attribute, id, comment and a stray answer
     let svg = render_of(&[b(SHOW_ANSWERS, false)]);
     assert_eq!(markup_leaks(&svg.replacen("role=\"img\"", "role=\"img\" aria-label=\"Xylem\"", 1)), vec!["attribute aria-label".to_string()]);
@@ -562,7 +614,7 @@ fn a_student_copy_prints_no_answer_anywhere_in_its_source() {
 
 #[test]
 fn every_blank_is_in_the_table_once_and_the_key_names_each_once() {
-    for mask in 0..32u32 {
+    for mask in 0..64u32 {
         for open in ["Open", "Closed"] {
             let mut l = toggle_list(mask);
             l.push(s("stomata", open));
@@ -585,8 +637,8 @@ fn every_blank_is_in_the_table_once_and_the_key_names_each_once() {
 
 #[test]
 fn the_accepted_wordings_are_exactly_the_documented_ones_and_the_key_prints_them() {
-    let want: [(It, &str); 15] = [
-        (It::Cuticle, "cuticle, wax layer"), (It::Upper, "epidermis, adaxial epidermis"), (It::Palisade, "palisade layer, palisade cells, palisade parenchyma"),
+    let want: [(It, &str); 16] = [
+        (It::Cuticle, "cuticle, wax layer"), (It::Upper, "epidermis, adaxial epidermis"), (It::Palisade, "palisade layer, palisade cells, palisade parenchyma"), (It::Chloroplast, "chloroplasts (plural)"),
         (It::Spongy, "spongy layer, spongy cells, spongy parenchyma"), (It::Lower, "epidermis, abaxial epidermis"), (It::Bundle, "vein, leaf vein"), (It::Xylem, "xylem vessel"),
         (It::Phloem, "sieve tube, phloem sieve tube"), (It::AirSpace, "intercellular air space, intercellular space"), (It::Guard, "guard cells (plural)"),
         (It::Stoma, "stomata (plural), stomatal pore, pore"), (It::Light, "sunlight, light energy"), (It::Co2, "carbon dioxide"), (It::O2, "oxygen"), (It::Water, "water, H~2O, water vapor"),
@@ -595,7 +647,7 @@ fn the_accepted_wordings_are_exactly_the_documented_ones_and_the_key_prints_them
     let key = ink_texts(&render_of(&[])).into_iter().map(|t| t.0).collect::<Vec<_>>().join(" ");
     for (_, w) in want { for a in w.split(',') { assert!(key.contains(&plain(a.trim())), "the key does not print {a:?}"); } }
     // the names themselves
-    assert_eq!(ORDER.map(|i| plain(name(i))), ["Waxy cuticle", "Upper epidermis", "Palisade mesophyll", "Spongy mesophyll", "Lower epidermis", "Vascular bundle", "Xylem", "Phloem", "Air space", "Guard cell", "Stoma", "Light", "CO2", "O2", "Water vapour"].map(String::from));
+    assert_eq!(ORDER.map(|i| plain(name(i))), ["Waxy cuticle", "Upper epidermis", "Palisade mesophyll", "Chloroplast", "Spongy mesophyll", "Lower epidermis", "Vascular bundle", "Xylem", "Phloem", "Air space", "Guard cell", "Stoma", "Light", "CO2", "O2", "Water vapour"].map(String::from));
 }
 
 // ================================================================== Print, sizes, switches
@@ -633,6 +685,52 @@ fn print_is_grey_only_and_reads_at_sixty_six_percent_grey() {
     for l in &f.leaders { assert_eq!(l.col, INK); }
 }
 
+#[test]
+fn in_print_the_phloem_is_ruled_not_dotted_and_the_xylem_walls_are_thick() {
+    let svg = render_of(&[s("style", "Print"), b(SHOW_ANSWERS, false)]);
+    let f = fig(&svg, true);
+    let sc = scene(true);
+    let scale = 4.0;
+    let (w, h, px) = crate::figures::to_rgba(&svg, scale as f32).unwrap();
+    let dark = |q: P| -> bool { let (ix, iy) = ((q.0 * scale) as u32, (q.1 * scale) as u32); if ix >= w || iy >= h { return false; } let o = ((iy * w + ix) * 4) as usize; (0.299 * px[o] as f64 + 0.587 * px[o + 1] as f64 + 0.114 * px[o + 2] as f64) < 0.66 * 255.0 };
+    let mut ruled = 0;
+    for (i, sh) in sc.shapes.iter().enumerate() {
+        match sh.k {
+            K::Phloem => {
+                let c = sec(&f, poly_centre(&sh.pts));
+                let r = (sh.pts[0].0 - poly_centre(&sh.pts).0).abs() - 1.0;
+                // inside the wall: some ink, and some row of it runs at least 70 % across the cell (a line, not a dot)
+                let rows: Vec<f64> = (0..=(2.0 * r * scale) as usize).map(|k| c.1 - r + k as f64 / scale).collect();
+                let mut inked = 0;
+                let mut total = 0;
+                let mut longest: f64 = 0.0;
+                for y in rows {
+                    let half = (r * r - (y - c.1).powi(2)).max(0.0).sqrt();
+                    if half < 1.0 { continue; }
+                    let xs: Vec<f64> = (0..=(2.0 * half * scale) as usize).map(|k| c.0 - half + k as f64 / scale).collect();
+                    let run = xs.iter().filter(|x| dark((**x, y))).count();
+                    inked += run;
+                    total += xs.len();
+                    longest = longest.max(run as f64 / xs.len() as f64);
+                }
+                let frac = inked as f64 / total as f64;
+                assert!(frac > 0.08 && frac < 0.75, "phloem cell {i}: ink {frac:.2}");
+                if longest > 0.7 { ruled += 1; }
+                assert!(f.q.els[i].fill != "url(#vs-hatch3)", "the phloem uses the dot pattern");
+            }
+            K::Xylem => {
+                // across the wall at its right side: at least 1.8 px of solid ink
+                let c = poly_centre(&sh.pts);
+                let r = sh.pts.iter().map(|q| q.0).fold(f64::NEG_INFINITY, f64::max) - c.0;
+                let run = (0..=48).filter(|k| dark(sec(&f, (c.0 + r - 3.0 + *k as f64 * 0.125, c.1)))).count() as f64 * 0.125;
+                assert!(run >= 1.8, "xylem vessel {i}: the wall is {run} px thick");
+            }
+            _ => {}
+        }
+    }
+    assert_eq!(ruled, PHLOEM.len(), "every sieve tube shows a ruled line");
+}
+
 fn font_sizes(svg: &str) -> Vec<f64> { svg.split(" font-size=\"").skip(1).map(|x| x.split('"').next().unwrap().parse().unwrap()).collect() }
 
 #[test]
@@ -655,12 +753,13 @@ fn each_switch_adds_or_removes_exactly_its_own_part() {
     let known: Vec<String> = ORDER.iter().map(|i| plain(name(*i))).chain([INSET_CAPTION.to_string()]).collect();
     let names = |l: &[(&'static str, Value)]| { let mut v: Vec<String> = ink_texts(&render_of(l)).into_iter().map(|t| t.0).filter(|t| known.contains(t)).collect(); v.sort(); v };
     let all = names(&[]);
-    let groups: [(&str, &[&str]); 5] = [
+    let groups: [(&str, &[&str]); 6] = [
         ("show_layers", &["Waxy cuticle", "Upper epidermis", "Palisade mesophyll", "Spongy mesophyll", "Lower epidermis"]),
         ("show_vein", &["Vascular bundle", "Xylem", "Phloem"]),
         ("show_stoma", &["Air space", "Guard cell", "Stoma"]),
         ("show_gas", &["CO2", "O2", "Water vapour"]),
         ("show_light", &["Light"]),
+        ("show_chloroplast", &["Chloroplast"]),
     ];
     for (k, gone) in groups {
         let off = names(&[b(k, false)]);
@@ -670,10 +769,9 @@ fn each_switch_adds_or_removes_exactly_its_own_part() {
     }
     // closed stomata take the gas arrows away and say so
     let closed = names(&[s("stomata", "Closed")]);
-    assert!(!closed.contains(&"CO2".to_string()) && closed.contains(&"Stoma".to_string()));
+    assert!(!closed.contains(&"CO2".to_string()) && !closed.contains(&"Stoma".to_string()) && closed.contains(&"Guard cell".to_string()));
     assert_eq!(notes(&[s("stomata", "Closed")]).len(), 1);
     assert!(notes(&[s("stomata", "Closed")])[0].contains("Set Stomata to Open"));
-    assert!(notes(&[s("stomata", "Closed"), b("show_gas", false)]).is_empty());
     // the two outward arrows look alike, so both copies say they may be named in either order (and only when drawn)
     let said = |l: &[(&'static str, Value)]| ink_texts(&render_of(l)).iter().map(|t| t.0.clone()).collect::<Vec<_>>().join(" ").contains("either order");
     assert!(said(&[]) && said(&[b(SHOW_ANSWERS, false)]));
@@ -687,26 +785,77 @@ fn each_switch_adds_or_removes_exactly_its_own_part() {
     assert!(fig(&render_of(&[b("show_surface", false)]), true).inset.is_none() && fig(&render_of(&[]), true).inset.is_some());
 }
 
+/// The switches a note names after "Switch on", read with a parser of its own and mapped to param keys by their labels.
+fn advised_switches(note: &str) -> Vec<&'static str> {
+    let Some(i) = note.find("Switch on ") else { return Vec::new() };
+    let rest = &note[i + "Switch on ".len()..];
+    let rest = rest.split('.').next().unwrap();
+    let names: Vec<String> = rest.replace(" or ", ", ").split(", ").map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect();
+    let defs = (def().params)();
+    names.iter().map(|n| defs.iter().find(|d| d.label == n.as_str()).unwrap_or_else(|| panic!("the note names {n:?}, which is no control")).key).collect()
+}
+
 #[test]
 fn the_notes_are_true_and_their_advice_draws_something() {
-    // nothing labelled
-    let bare: Vec<(&'static str, Value)> = TOGGLES.iter().map(|k| b(k, false)).collect();
-    let n = notes(&bare);
-    assert_eq!(n.len(), 1);
-    assert!(n[0].starts_with("Nothing is labelled"));
-    for k in TOGGLES { let mut l = bare.clone(); l.push(b(k, true)); assert!(notes(&l).is_empty(), "{k}"); assert!(!labels(&cfg(&with(&l))).is_empty()); }
-    // closed with only gas wanted: both notes, and the advice (Open) draws the arrows
-    let mut l = bare.clone();
-    l.extend([b("show_gas", true), s("stomata", "Closed")]);
-    let n = notes(&l);
-    assert_eq!(n.len(), 2, "{n:?}");
-    assert!(labels(&cfg(&with(&l))).is_empty());
-    l.push(s("stomata", "Open"));
-    assert!(notes(&l).is_empty() && labels(&cfg(&with(&l))).len() == 3);
+    for open in ["Open", "Closed"] {
+        // nothing labelled: every switch the note names labels something, in this state
+        let mut bare: Vec<(&'static str, Value)> = TOGGLES.iter().map(|k| b(k, false)).collect();
+        bare.push(s("stomata", open));
+        let n = notes(&bare);
+        assert_eq!(n.len(), 1, "{open}: {n:?}");
+        assert!(n[0].starts_with("Nothing is labelled"));
+        let keys = advised_switches(&n[0]);
+        assert_eq!(keys.len(), if open == "Open" { 6 } else { 5 }, "{open}: {keys:?}");
+        assert_eq!(keys.contains(&"show_gas"), open == "Open");
+        for k in keys {
+            let mut l = bare.clone();
+            l.push(b(k, true));
+            let after = notes(&l);
+            assert!(!labels(&cfg(&with(&l))).is_empty(), "{open}: switching on {k} still labels nothing");
+            assert!(after.iter().all(|x| !x.starts_with("Nothing is labelled")), "{open}: {k}: {after:?}");
+        }
+        // every switch that labels something in this state is named (the advice is complete)
+        for k in TOGGLES {
+            let mut l = bare.clone();
+            l.push(b(k, true));
+            if !labels(&cfg(&with(&l))).is_empty() { assert!(advised_switches(&n[0]).contains(&k), "{open}: {k} would help but is not named"); }
+        }
+    }
+    // closed with the gas arrows or the stoma wanted: one note, its advice (Open) brings them back
+    for (gas, stoma, want) in [(true, false, vec![It::Co2, It::O2, It::Water]), (false, true, vec![It::Stoma]), (true, true, vec![It::Stoma, It::Co2, It::O2, It::Water])] {
+        let l = vec![b("show_gas", gas), b("show_stoma", stoma), s("stomata", "Closed")];
+        let n = notes(&l);
+        assert_eq!(n.len(), 1, "{n:?}");
+        assert!(n[0].contains("Set Stomata to Open"));
+        if stoma { assert!(n[0].contains("Stoma label")); } else { assert!(!n[0].contains("Stoma label")); }
+        if gas { assert!(n[0].contains("gas-exchange arrows")); } else { assert!(!n[0].contains("gas-exchange")); }
+        let closed: Vec<It> = labels(&cfg(&with(&l))).iter().map(|x| x.it).collect();
+        let mut opened = l.clone();
+        opened.push(s("stomata", "Open"));
+        assert!(notes(&opened).is_empty());
+        let now: Vec<It> = labels(&cfg(&with(&opened))).iter().map(|x| x.it).collect();
+        for i in &want { assert!(!closed.contains(i) && now.contains(i), "{i:?}"); }
+    }
+    assert!(notes(&[s("stomata", "Closed"), b("show_gas", false), b("show_stoma", false)]).is_empty());
     // the bare leaf still draws every cell
+    let bare: Vec<(&'static str, Value)> = TOGGLES.iter().map(|k| b(k, false)).collect();
     let f = fig(&render_of(&bare), true);
     assert_eq!(f.cells.len(), scene(true).shapes.len());
     assert!(f.leaders.is_empty() && f.brackets.is_empty() && f.arrows.is_empty());
+}
+
+#[test]
+fn the_student_caption_explains_only_the_pointers_drawn() {
+    let cap = |l: &[(&'static str, Value)]| ink_texts(&render_of(&[l, &[b(SHOW_ANSWERS, false)]].concat())).into_iter().map(|t| t.0).collect::<Vec<_>>().join(" ");
+    let off: Vec<(&'static str, Value)> = TOGGLES.iter().map(|k| b(k, false)).collect();
+    let only = |k: &'static str| { let mut l = off.clone(); l.push(b(k, true)); cap(&l) };
+    let arrows = only("show_light");
+    assert!(arrows.contains("An arrow shows what moves in or out.") && !arrows.contains("bracket") && !arrows.contains("line ends"), "{arrows}");
+    let chl = only("show_chloroplast");
+    assert!(chl.contains("A line ends on a part.") && !chl.contains("bracket") && !chl.contains("arrow"), "{chl}");
+    let layers = only("show_layers");
+    assert!(layers.contains("A bracket marks a layer or a whole structure and a line ends on a part."), "{layers}");
+    assert!(cap(&[]).contains("A bracket marks a layer or a whole structure, a line ends on a part and an arrow shows what moves in or out."));
 }
 
 #[test]
@@ -719,6 +868,7 @@ fn nothing_panics_on_ten_thousand_hostile_inputs_and_every_output_is_well_formed
         let mut p = Params::defaults(&pd);
         for k in TOGGLES { p.set_b(k, r.below(2) == 0); }
         p.set_b("show_surface", r.below(2) == 0);
+        if r.below(4) == 0 { p.set_s("stomata", "Closed"); }
         p.set_b(SHOW_ANSWERS, r.below(2) == 0);
         for k in ["stomata", "style", "label_size"] { if r.below(3) == 0 { p.set_s(k, junk[r.below(junk.len())]); } }
         if r.below(5) == 0 { p.0.insert("stomata".into(), Value::F(3.0)); }
@@ -731,7 +881,7 @@ fn nothing_panics_on_ten_thousand_hostile_inputs_and_every_output_is_well_formed
         let (w, h) = (num(root, "width"), num(root, "height"));
         assert!(w.is_finite() && h.is_finite() && (480.0..2000.0).contains(&w) && (200.0..2500.0).contains(&h), "{i}: {w}x{h}");
         let c = cfg(&p);
-        let want = usize::from(c.gas && !c.open) + usize::from(!ORDER.iter().any(|x| c.wants(*x)));
+        let want = usize::from((c.gas || c.stoma) && !c.open) + usize::from(!ORDER.iter().any(|x| c.wants(*x)));
         assert_eq!(nt.len(), want, "{i}: {nt:?}");
     }
 }
@@ -745,7 +895,7 @@ fn drawing_is_pure_and_fast() {
     let mut worst = std::time::Duration::ZERO;
     let mut total = std::time::Duration::ZERO;
     let mut n = 0;
-    for mask in 0..32u32 {
+    for mask in 0..64u32 {
         for key in [true, false] {
             let mut l = toggle_list(mask);
             l.extend([b(SHOW_ANSWERS, key), s("label_size", "Large")]);
@@ -769,7 +919,7 @@ fn the_faq_says_what_the_figure_does() {
     assert!((4..=6).contains(&f.len()));
     let all: String = f.iter().map(|x| format!("{} {}", x.q, x.a)).collect::<Vec<_>>().join(" ").to_lowercase();
     for i in ORDER { for a in alts(i).split(',') { let a = plain(a.trim()).replace(" (plural)", "").to_lowercase(); assert!(all.contains(&a), "the FAQ does not say {a:?} is accepted"); } }
-    for w in ["openstax", "lower surface", "only epidermal cells with chloroplasts", "turgid", "flaccid", "66 %", "xylem on the upper side", "no dot or ring"] { assert!(all.contains(w), "{w}"); }
+    for w in ["openstax", "lower surface", "only epidermal cells with chloroplasts", "turgid", "flaccid", "66 %", "xylem on the upper side", "no dot or ring", "no white edge", "ruled", "smaller", "large labels"] { assert!(all.contains(w), "{w}"); }
 }
 
 #[test]
@@ -800,11 +950,11 @@ fn the_accessible_names_say_what_is_drawn_and_a_student_copy_names_nothing() {
     let t = key.split("<title>").nth(1).unwrap().split("</title>").next().unwrap();
     let d = key.split("<desc>").nth(1).unwrap().split("</desc>").next().unwrap();
     assert_eq!(t, "Leaf cross-section");
-    assert!(d.starts_with("A section through a leaf with open stomata, labelled: Waxy cuticle, Upper epidermis"), "{d}");
+    assert!(d.starts_with("A section through a leaf with open stomata, labelled: Waxy cuticle, Upper epidermis, Palisade mesophyll, Chloroplast"), "{d}");
     assert!(render_of(&[s("stomata", "Closed")]).contains("with closed stomata"));
     let stu = render_of(&[b(SHOW_ANSWERS, false)]);
     let d2 = stu.split("<desc>").nth(1).unwrap().split("</desc>").next().unwrap();
-    assert_eq!(d2, "A leaf cross-section with 15 numbered blanks; the table under it has a rule for each.");
+    assert_eq!(d2, "A leaf cross-section with 16 numbered blanks; the table under it has a rule for each.");
     assert!(stu.contains("role=\"img\""));
 }
 

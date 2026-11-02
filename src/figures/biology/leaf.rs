@@ -44,7 +44,8 @@ fn params() -> Vec<ParamDef> {
         ParamDef::choice("stomata", "Stomata", &["Open", "Closed"], "Open").hint("Open: the guard cells are swollen and bowed apart round a pore. Closed: they are limp and meet, so the pore is shut"),
         ParamDef::bool("show_layers", "Label the layers", true).hint("Waxy cuticle, upper epidermis, palisade mesophyll, spongy mesophyll, lower epidermis"),
         ParamDef::bool("show_vein", "Label the vein", true).hint("Vascular bundle, xylem and phloem"),
-        ParamDef::bool("show_stoma", "Label the stoma", true).hint("Stoma, guard cell and an air space"),
+        ParamDef::bool("show_stoma", "Label the stoma", true).hint("Stoma, guard cell and an air space. With the stomata closed there is no open pore, so the stoma itself is not labelled"),
+        ParamDef::bool("show_chloroplast", "Label a chloroplast", true).hint("One chloroplast at the top of a palisade cell"),
         ParamDef::bool("show_gas", "Gas exchange arrows", true).hint("Carbon dioxide in, oxygen and water vapour out, through an open stoma. Not drawn when the stomata are closed"),
         ParamDef::bool("show_light", "Light arrow", true),
         ParamDef::bool("show_surface", "Stoma seen from below", true).hint("A small surface view beside the section: the pore between two kidney-shaped guard cells"),
@@ -119,13 +120,13 @@ fn wrap_rich(s: &str, max: f64, size: f64) -> Vec<String> {
 // ================================================================== what can be labelled
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum It { Cuticle, Upper, Palisade, Spongy, Lower, Bundle, Xylem, Phloem, AirSpace, Guard, Stoma, Light, Co2, O2, Water }
+pub enum It { Cuticle, Upper, Palisade, Chloroplast, Spongy, Lower, Bundle, Xylem, Phloem, AirSpace, Guard, Stoma, Light, Co2, O2, Water }
 
-pub const ORDER: [It; 15] = [It::Cuticle, It::Upper, It::Palisade, It::Spongy, It::Lower, It::Bundle, It::Xylem, It::Phloem, It::AirSpace, It::Guard, It::Stoma, It::Light, It::Co2, It::O2, It::Water];
+pub const ORDER: [It; 16] = [It::Cuticle, It::Upper, It::Palisade, It::Chloroplast, It::Spongy, It::Lower, It::Bundle, It::Xylem, It::Phloem, It::AirSpace, It::Guard, It::Stoma, It::Light, It::Co2, It::O2, It::Water];
 
 pub fn name(i: It) -> &'static str {
     match i {
-        It::Cuticle => "Waxy cuticle", It::Upper => "Upper epidermis", It::Palisade => "Palisade mesophyll", It::Spongy => "Spongy mesophyll", It::Lower => "Lower epidermis",
+        It::Cuticle => "Waxy cuticle", It::Upper => "Upper epidermis", It::Palisade => "Palisade mesophyll", It::Chloroplast => "Chloroplast", It::Spongy => "Spongy mesophyll", It::Lower => "Lower epidermis",
         It::Bundle => "Vascular bundle", It::Xylem => "Xylem", It::Phloem => "Phloem", It::AirSpace => "Air space", It::Guard => "Guard cell", It::Stoma => "Stoma",
         It::Light => "Light", It::Co2 => "CO~2", It::O2 => "O~2", It::Water => "Water vapour",
     }
@@ -137,6 +138,7 @@ pub fn alts(i: It) -> &'static str {
         It::Cuticle => "cuticle, wax layer",
         It::Upper => "epidermis, adaxial epidermis",
         It::Palisade => "palisade layer, palisade cells, palisade parenchyma",
+        It::Chloroplast => "chloroplasts (plural)",
         It::Spongy => "spongy layer, spongy cells, spongy parenchyma",
         It::Lower => "epidermis, abaxial epidermis",
         It::Bundle => "vein, leaf vein",
@@ -153,11 +155,11 @@ pub fn alts(i: It) -> &'static str {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Cfg { pub open: bool, pub layers: bool, pub vein: bool, pub stoma: bool, pub gas: bool, pub light: bool, pub surface: bool, pub key: bool, pub lab: f64 }
+pub struct Cfg { pub open: bool, pub chloro: bool, pub layers: bool, pub vein: bool, pub stoma: bool, pub gas: bool, pub light: bool, pub surface: bool, pub key: bool, pub lab: f64 }
 
 pub fn cfg(p: &Params) -> Cfg {
     Cfg {
-        open: p.s("stomata") != "Closed",
+        open: p.s("stomata") != "Closed", chloro: p.b("show_chloroplast"),
         layers: p.b("show_layers"), vein: p.b("show_vein"), stoma: p.b("show_stoma"), gas: p.b("show_gas"), light: p.b("show_light"), surface: p.b("show_surface"),
         key: p.b(SHOW_ANSWERS), lab: svg::label_factor(p.s("label_size")),
     }
@@ -170,7 +172,10 @@ impl Cfg {
         match i {
             It::Cuticle | It::Upper | It::Palisade | It::Spongy | It::Lower => self.layers,
             It::Bundle | It::Xylem | It::Phloem => self.vein,
-            It::AirSpace | It::Guard | It::Stoma => self.stoma,
+            It::Chloroplast => self.chloro,
+            It::AirSpace | It::Guard => self.stoma,
+            // a closed stoma has no open pore to point at: the pointer would end on the guard cells, the Guard cell blank's answer
+            It::Stoma => self.stoma && self.open,
             It::Light => self.light,
             It::Co2 | It::O2 | It::Water => self.gas_drawn(),
         }
@@ -190,10 +195,10 @@ pub const Y_LC1: f64 = 219.5;
 pub const STOMATA: [f64; 2] = [160.0, 330.0];
 pub const GAS_STOMA: usize = 0;
 pub const LABEL_STOMA: usize = 1;
-/// Half the width of the gap left in the lower epidermis for a stoma (guard cells and all).
-pub const STOMA_ZONE: f64 = 23.0;
+/// Half the width of the gap left in the lower epidermis for a stoma: the guard cells and 1 px. The neighbouring
+/// epidermal cells widen when the guard cells shrink, as subsidiary cells do.
+pub fn stoma_zone(open: bool) -> f64 { let (rx, _, off) = guard_geom(open); off + rx + 1.0 }
 pub const GUARD_Y: f64 = 206.0;
-pub const GUARD_RY: f64 = 9.0;
 /// The vein: the centre, the ellipse of xylem and phloem, the ring of bundle-sheath cells.
 pub const V: P = (474.0, 152.0);
 pub const VEIN_RX: f64 = 37.0;
@@ -208,7 +213,7 @@ pub const AIR_FREE: f64 = 10.0;
 /// Xylem vessels (dx, dy, r) from the vein centre; the first is the one the leader ends in.
 pub const XYLEM: [(f64, f64, f64); 7] = [(0.0, -17.0, 5.5), (-15.0, -16.0, 4.0), (15.0, -16.0, 4.0), (-24.0, -6.0, 4.3), (-9.0, -5.0, 5.8), (7.0, -5.0, 5.8), (22.0, -6.0, 4.6)];
 /// Phloem sieve tubes (dx, dy, r); the leader ends in index 6.
-pub const PHLOEM: [(f64, f64, f64); 9] = [(-22.0, 8.0, 3.6), (-11.0, 9.0, 4.0), (0.0, 10.0, 4.0), (11.0, 9.0, 4.0), (22.0, 8.0, 3.6), (-14.0, 20.0, 3.4), (-3.0, 20.5, 3.8), (8.0, 20.0, 3.6), (18.0, 16.5, 3.0)];
+pub const PHLOEM: [(f64, f64, f64); 9] = [(-22.0, 8.0, 3.6), (-11.0, 9.0, 4.0), (0.0, 10.0, 4.0), (11.0, 9.0, 4.0), (22.0, 8.0, 3.6), (-14.0, 20.0, 3.4), (0.0, 20.5, 3.8), (10.0, 19.5, 3.4), (18.0, 16.5, 3.0)];
 pub const PHLOEM_TARGET: usize = 6;
 /// Companion cells (dx, dy, r): small cells beside the sieve tubes.
 pub const COMPANION: [(f64, f64, f64); 3] = [(-16.5, 13.5, 1.8), (-5.5, 14.0, 1.8), (5.5, 14.0, 1.8)];
@@ -228,15 +233,15 @@ pub struct Chl { pub c: P, pub rx: f64, pub ry: f64, pub k: K }
 
 pub struct Scene { pub shapes: Vec<Shape>, pub chl: Vec<Chl> }
 
-/// (half width, centre offset from the pore) of a guard cell: open cells are round and bowed apart, closed ones
-/// flatter and meeting. Both fill the same gap in the epidermis.
-pub fn guard_geom(open: bool) -> (f64, f64) { if open { (8.0, 14.0) } else { (11.0, 11.2) } }
+/// (half width, half height, centre offset from the pore) of a guard cell in the section. Open: swollen with water
+/// (turgid), larger and round, bowed apart round the pore. Closed: limp (flaccid), smaller and flatter, meeting.
+pub fn guard_geom(open: bool) -> (f64, f64, f64) { if open { (9.5, 9.5, 15.5) } else { (7.0, 8.0, 7.2) } }
 
 /// Half the width of the pore between the guard cells (the gap between their outlines).
-pub fn pore_half(open: bool) -> f64 { let (rx, off) = guard_geom(open); off - rx }
+pub fn pore_half(open: bool) -> f64 { let (rx, _, off) = guard_geom(open); off - rx }
 
 /// The guard cell centres of the stoma at `xs`: (left, right).
-pub fn guard_centres(xs: f64, open: bool) -> (P, P) { let (_, off) = guard_geom(open); ((xs - off, GUARD_Y), (xs + off, GUARD_Y)) }
+pub fn guard_centres(xs: f64, open: bool) -> (P, P) { let (_, _, off) = guard_geom(open); ((xs - off, GUARD_Y), (xs + off, GUARD_Y)) }
 
 fn ellp(c: P, rx: f64, ry: f64, n: usize) -> Vec<P> {
     (0..n).map(|i| { let a = std::f64::consts::TAU * i as f64 / n as f64; (c.0 + rx * a.cos(), c.1 + ry * a.sin()) }).collect()
@@ -294,7 +299,7 @@ fn jit(i: usize, j: usize, s: usize) -> f64 { ((i * 73 + j * 151 + s * 29 + 11) 
 /// Fixed lines inside the spongy layer that spongy cells keep clear of: the vein's bracket, its leader and the
 /// air-space leader (so those lines run through air, not over a cell).
 pub fn spongy_keepout() -> Vec<(P, P)> {
-    vec![((BRACKET_VX, Y_SP0), (BRACKET_VX, Y_LE0)), ((RX - 4.0, AIR_LY), AIR)]
+    vec![((BRACKET_VX, Y_SP0), (BRACKET_VX, Y_LE0)), ((BRACKET_VX, V.1), (SW, V.1)), ((RX - 4.0, AIR_LY), AIR)]
 }
 
 /// The spongy mesophyll cells: centre, radii and outline. Rows of lobed cells, each kept at least 3 px from every
@@ -414,8 +419,10 @@ pub fn scene(open: bool) -> Scene {
     // spongy: lobed cells with a few chloroplasts
     for (c, rx, ry, ph, pts) in spongy_cells() {
         add(K::Spongy, clip_x(&pts, 0.0, SW));
-        for q in 0..3 {
-            let a = ph + 0.4 + q as f64 * std::f64::consts::TAU / 3.0;
+        // three in a large cell, two in a small one: fewer than the palisade, as in a real leaf
+        let n = if rx < 9.4 { 2 } else { 3 };
+        for q in 0..n {
+            let a = ph + 0.4 + q as f64 * std::f64::consts::TAU / n as f64;
             let p = (c.0 + 0.5 * rx * a.cos(), c.1 + 0.5 * ry * a.sin());
             if p.0 > 4.0 && p.0 < SW - 4.0 { chl.push(Chl { c: p, rx: 2.2, ry: 1.5, k: K::Spongy }); }
         }
@@ -429,17 +436,18 @@ pub fn scene(open: bool) -> Scene {
     // lower epidermis, with a gap for each stoma
     let mut cells = Vec::new();
     let mut a = -12.0;
-    for xs in STOMATA { epi_row(a, xs - STOMA_ZONE, 27.0, Y_LE0 + 0.8, Y_LC0 - 0.8, &mut cells); a = xs + STOMA_ZONE; }
+    let zone = stoma_zone(open);
+    for xs in STOMATA { epi_row(a, xs - zone, 27.0, Y_LE0 + 0.8, Y_LC0 - 0.8, &mut cells); a = xs + zone; }
     epi_row(a, SW + 12.0, 27.0, Y_LE0 + 0.8, Y_LC0 - 0.8, &mut cells);
     for c in cells { add(K::Lower, c); }
     // guard cells, each with three chloroplasts kept off its middle and its outer lower side (where a leader may come in)
-    let (grx, _) = guard_geom(open);
+    let (grx, gry, _) = guard_geom(open);
     for xs in STOMATA {
         let (l, r) = guard_centres(xs, open);
-        add(K::Guard, ellp(l, grx, GUARD_RY, 28));
-        add(K::Guard, ellp(r, grx, GUARD_RY, 28));
+        add(K::Guard, ellp(l, grx, gry, 28));
+        add(K::Guard, ellp(r, grx, gry, 28));
         for (c, side) in [(l, -1.0), (r, 1.0)] {
-            for (dx, dy) in [(-0.42, -4.6), (0.42, -4.6), (-0.42 * side, 4.6)] { chl.push(Chl { c: (c.0 + dx * grx, c.1 + dy), rx: 1.7, ry: 1.2, k: K::Guard }); }
+            for (dx, dy) in [(-0.42, -0.5), (0.42, -0.5), (-0.42 * side, 0.5)] { chl.push(Chl { c: (c.0 + dx * grx, c.1 + dy * gry), rx: 1.7, ry: 1.2, k: K::Guard }); }
         }
     }
     // lower cuticle, open at each open pore
@@ -459,8 +467,9 @@ pub const INSET_H: f64 = 80.0;
 /// and the guard cells' chloroplasts.
 pub fn inset(open: bool) -> (Vec<Vec<P>>, Vec<(P, P)>, Vec<P>) {
     let (cx, cy) = (INSET_W / 2.0, INSET_H / 2.0);
-    let (orx, ory) = (20.0, 27.0);
-    let (prx, pry) = (if open { 7.0 } else { 0.6 }, 17.0);
+    // open: swollen kidney-shaped cells bowed round a wide pore; closed: smaller limp cells meeting at a slit
+    let (orx, ory) = if open { (23.0, 29.0) } else { (15.0, 24.0) };
+    let (prx, pry) = if open { (7.5, 17.0) } else { (0.6, 15.0) };
     // the left guard cell: the outer left half-ellipse from bottom to top, then the pore's left half back down
     let mut left: Vec<P> = Vec::new();
     for i in 0..=24 { let a = (90.0 + 180.0 * i as f64 / 24.0f64).to_radians(); left.push((cx + orx * a.cos(), cy + ory * a.sin())); }
@@ -519,6 +528,9 @@ pub const RX: f64 = SW + 30.0;
 pub const AIR_LY: f64 = 204.0;
 pub const BRACKET_VX: f64 = V.0 + SHEATH_RX + SHEATH_R + 3.5;
 pub const CUTICLE_X: f64 = 70.0;
+/// The chloroplast the Chloroplast leader ends on: the top one of the right-hand column of palisade cell 16.
+pub const CHLORO_CELL: usize = 16;
+pub fn chloro_target() -> P { (PAL_X0 + CHLORO_CELL as f64 * PAL_PITCH + PAL_W - 4.0, Y_PAL0 + 8.0) }
 pub const LIGHT_X: f64 = 250.0;
 pub const LIGHT_Y0: f64 = -62.0;
 pub const LIGHT_Y1: f64 = -4.0;
@@ -528,6 +540,8 @@ pub const INSET_Y: f64 = 252.0;
 pub fn target(i: It, open: bool) -> Option<P> {
     Some(match i {
         It::Cuticle => (CUTICLE_X, Y_UE0 / 2.0),
+        // the leader stops 0.4 px above the chloroplast (half height 2.4), so it touches it without covering it
+        It::Chloroplast => { let c = chloro_target(); (c.0, c.1 - 2.8) }
         It::Xylem => (V.0 + XYLEM[0].0, V.1 + XYLEM[0].1),
         It::Phloem => (V.0 + PHLOEM[PHLOEM_TARGET].0, V.1 + PHLOEM[PHLOEM_TARGET].1),
         It::AirSpace => AIR,
@@ -570,7 +584,7 @@ pub fn labels(c: &Cfg) -> Vec<Lab> {
         out.push(Lab { it, num: 0, bx: (LX_END - w, cy - h / 2.0, LX_END, cy + h / 2.0), anc: Anc::End, join: Join::Bracket { x: BX_L, y0: y0 + 1.8, y1: y1 - 1.8, tick: 5.0, lead: None } });
     }
     // the top row: the cuticle and the xylem, leaders straight down
-    for it in [It::Cuticle, It::Xylem] {
+    for it in [It::Cuticle, It::Chloroplast, It::Xylem] {
         if !c.wants(it) { continue; }
         let t = target(it, c.open).unwrap();
         let w = name_w(it, &z);
@@ -631,7 +645,7 @@ fn tone(k: K, pr: bool) -> Tone {
             K::Cuticle => t("#808080", "#111111", 0.8),
             K::VeinBg => t("#ffffff", "none", 0.0),
             K::Xylem => t("#ffffff", "#111111", 2.2),
-            K::Phloem => t("url(#vs-hatch3)", "#111111", 0.9),
+            K::Phloem => t("url(#vs-hatch4)", "#111111", 0.9),
             K::Companion => t("#ffffff", "#111111", 0.8),
             K::Guard => t("#ffffff", "#111111", 1.4),
             _ => t("#ffffff", "#111111", 1.0),
@@ -663,12 +677,21 @@ fn arrow_col(i: It, pr: bool) -> &'static str {
 pub fn warnings(p: &Params) -> Vec<String> {
     let c = cfg(p);
     let mut out = Vec::new();
-    if c.gas && !c.open {
-        out.push("The stomata are closed, so the gas-exchange arrows are not drawn: a closed stoma lets almost no carbon dioxide in or water vapour out. Set Stomata to Open to draw them.".to_string());
+    if !c.open && (c.gas || c.stoma) {
+        let (what, them) = match (c.gas, c.stoma) {
+            (true, true) => ("the gas-exchange arrows and the Stoma label are left out", "them"),
+            (true, false) => ("the gas-exchange arrows are left out", "them"),
+            _ => ("the Stoma label is left out (Guard cell and Air space are still labelled)", "it"),
+        };
+        out.push(format!("The stomata are closed, so {what}: a closed stoma has no open pore to point at, and lets almost no carbon dioxide in or water vapour out. Set Stomata to Open to show {them}."));
     }
     if !ORDER.iter().any(|i| c.wants(*i)) {
-        let how = if c.gas && !c.open { "Switch on Label the layers, Label the vein, Label the stoma or Light arrow, or set Stomata to Open." } else { "Switch on Label the layers, Label the vein, Label the stoma, Gas exchange arrows or Light arrow." };
-        out.push(format!("Nothing is labelled, so the leaf is drawn bare. {how}"));
+        // only switches that label something in the current state are named
+        let mut names: Vec<&str> = vec!["Label the layers", "Label a chloroplast", "Label the vein", "Label the stoma"];
+        if c.open { names.push("Gas exchange arrows"); }
+        names.push("Light arrow");
+        let last = names.pop().unwrap_or_default();
+        out.push(format!("Nothing is labelled, so the leaf is drawn bare. Switch on {} or {last}.", names.join(", ")));
     }
     out
 }
@@ -723,7 +746,14 @@ fn draw(p: &Params) -> String {
         }
         cap.push(format!("Chloroplasts ({}) are most crowded in the palisade mesophyll; the guard cells are the only epidermal cells with chloroplasts. Most stomata are on the lower surface.", if pr { "dark dots" } else { "green dots" }));
     } else if n > 0 {
-        cap.push("A bracket marks a layer or a whole structure, a line ends on a part, and an arrow shows what moves in or out. Write the name of each numbered part.".to_string());
+        let mut how: Vec<&str> = Vec::new();
+        if labs.iter().any(|l| matches!(l.join, Join::Bracket { .. })) { how.push("a bracket marks a layer or a whole structure"); }
+        if labs.iter().any(|l| matches!(l.join, Join::Leader { .. })) { how.push("a line ends on a part"); }
+        if labs.iter().any(|l| matches!(l.join, Join::Arrow)) { how.push("an arrow shows what moves in or out"); }
+        let joined = match how.len() { 1 => how[0].to_string(), 2 => format!("{} and {}", how[0], how[1]), _ => format!("{}, {} and {}", how[0], how[1], how[2]) };
+        let mut first = joined.chars();
+        let cap0 = first.next().map(|f| f.to_uppercase().collect::<String>() + first.as_str()).unwrap_or_default();
+        cap.push(format!("{cap0}. Write the name of each numbered part."));
         if c.gas_drawn() { cap.push(format!("The two arrows that point out of the leaf ({} and {}) may be named in either order.", num_of(&labs, It::O2), num_of(&labs, It::Water))); }
     }
     let sec_w = ext.x1 - ext.x0;
@@ -772,20 +802,7 @@ fn draw(p: &Params) -> String {
     }
     // ---------- arrows
     for f in &fl { let (a, b) = (o(f.a), o(f.b)); d.arrow(a.0, a.1, b.0, b.1, arrow_col(f.it, pr), f.sw); }
-    // ---------- brackets and leaders (a white halo first, so a leader stays readable over cell walls)
-    for l in &labs {
-        match l.join {
-            Join::Leader { from, to } => {
-                let (a, b) = (o(from), o(to));
-                d.raw(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="#ffffff" stroke-width="3" stroke-linecap="butt"/>"##, a.0, a.1, b.0, b.1));
-            }
-            Join::Bracket { lead: Some((a, b)), .. } => {
-                let (a, b) = (o(a), o(b));
-                d.raw(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="#ffffff" stroke-width="3" stroke-linecap="butt"/>"##, a.0, a.1, b.0, b.1));
-            }
-            _ => {}
-        }
-    }
+    // ---------- brackets and leaders (plain lines: no white halo, which would erase the tissue under them)
     for l in &labs {
         match l.join {
             Join::Leader { from, to } => { let (a, b) = (o(from), o(to)); d.line(a.0, a.1, b.0, b.1, INK, 1.0); }
@@ -843,7 +860,7 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
         Example { name: "Leaf section, everything labelled", params: vec![] },
         Example { name: "The layers, student copy", params: vec![b("show_vein", false), b("show_stoma", false), b("show_gas", false), b("show_light", false), b(SHOW_ANSWERS, false)] },
         Example { name: "Gas exchange through a stoma, student copy", params: vec![b("show_layers", false), b("show_vein", false), b(SHOW_ANSWERS, false)] },
-        Example { name: "Stomata closed", params: vec![s("stomata", "Closed"), b("show_gas", false)] },
+        Example { name: "Stomata closed", params: vec![s("stomata", "Closed"), b("show_gas", false), b("show_stoma", false)] },
         Example { name: "The vein: xylem and phloem", params: vec![b("show_layers", false), b("show_stoma", false), b("show_gas", false), b("show_light", false), b("show_surface", false)] },
     ])
 }
