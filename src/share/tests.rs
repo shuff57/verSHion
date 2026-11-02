@@ -388,6 +388,22 @@ fn link_token() -> String {
     "x9Kq-_".repeat(7) + "A"
 }
 
+#[test]
+fn the_page_can_read_the_access_token_without_waiting_and_keeps_one_refresh_going() {
+    use std::time::Duration;
+    let (c, _s, _v) = native();
+    assert_eq!(c.access_token_now(), None, "nobody signed in: no token");
+    block_on(c.sign_in(EMAIL, &Secret::new(PASSWORD))).unwrap();
+    let t = c.access_token_now().expect("a token as it stands, no refresh needed");
+    assert!(!t.is_empty());
+    // Far from its end: nothing to do. A margin longer than the token's life: one refresh claims it, a second waits.
+    assert!(!c.claim_warming(Duration::ZERO));
+    assert!(c.claim_warming(Duration::from_secs(24 * 3600)));
+    assert!(!c.claim_warming(Duration::from_secs(24 * 3600)), "only one refresh at a time");
+    block_on(c.warm_access());
+    assert!(c.claim_warming(Duration::from_secs(24 * 3600)), "released once the refresh is done");
+}
+
 // ---- headers: native vs web -----------------------------------------------------------
 
 #[test]

@@ -135,6 +135,8 @@ pub struct Client {
     lock: Box<dyn SessionLock>,
     clock: Clock,
     inner: Mutex<Inner>,
+    /// A token refresh started by the page is under way (web build only uses it).
+    warming: std::sync::atomic::AtomicBool,
 }
 
 impl std::fmt::Debug for Client {
@@ -252,6 +254,7 @@ impl Client {
             lock: Box::new(ProcessLocal),
             clock,
             inner: Mutex::new(Inner::default()),
+            warming: std::sync::atomic::AtomicBool::new(false),
         };
         if mode == Mode::Native {
             c.load();
@@ -1112,6 +1115,34 @@ impl Client {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn access_token_blocking(&self) -> Option<String> {
         super::transport::block_on(self.access_for(None, false)).ok().map(|(a, _)| a.expose().to_string())
+    }
+
+    /// The access token as it stands, without waiting or refreshing: `None` when there is none or it is stale. For the
+    /// web build, where nothing can block: the page keeps it warm with [`warm_access`](Self::warm_access).
+    pub fn access_token_now(&self) -> Option<String> {
+        let i = self.lock();
+        let fresh = i.access_until.is_none_or(|t| (self.clock)() < t);
+        if fresh { i.access.as_ref().map(|a| a.expose().to_string()) } else { None }
+    }
+
+    /// True when a refresh should start now: no usable token, or one that ends within `margin`. Claims the refresh, so
+    /// only one runs at a time; [`warm_access`](Self::warm_access) releases it.
+    pub fn claim_warming(&self, margin: Duration) -> bool {
+        let soon = {
+            let i = self.lock();
+            match (&i.access, i.access_until) {
+                (Some(_), None) => false,
+                (Some(_), Some(t)) => t.saturating_duration_since((self.clock)()) < margin,
+                (None, _) => true,
+            }
+        };
+        soon && !self.warming.swap(true, std::sync::atomic::Ordering::AcqRel)
+    }
+
+    /// Refreshes the access token of whoever is signed in, then lets the next claim through.
+    pub async fn warm_access(&self) {
+        let _ = self.access_for(None, false).await;
+        self.warming.store(false, std::sync::atomic::Ordering::Release);
     }
 
     /// `GET /ai/credits`: what the account may still spend on the hosted AI.
