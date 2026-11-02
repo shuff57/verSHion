@@ -5,7 +5,11 @@ Output ONLY the JSON object. No markdown fences, no commentary before or after.
 # What to convert
 - Convert every question that STARTS on this page, in printed order. You are given one page;
   other pages are converted separately. A question cut off at the bottom of the page: convert
-  what is printed and add it to `report.notes`.
+  what is printed and add it to `report.notes`. "(continued on next page)" is page furniture,
+  not a cut-off: a question whose stem and every choice are printed is complete, so convert it
+  even when it is the last thing on the page. Never drop a complete question, and never describe
+  a question in `report.notes` instead of converting it: a handwritten answer is part of its
+  question, not a reason to skip it.
 - Handwriting that supplies an answer (an answer key filled in, a circled choice, a starred
   choice, a worked solution) is the SOURCE'S ANSWER: use it. Handwriting that is only a
   student's scratch work or a demonstration drawing, not an answer to a printed prompt, is not
@@ -37,7 +41,12 @@ Question ids are `q1`, `q2`, ... in printed order on this page.
   "BONDING ELECTRONS: ___  NONBONDING ELECTRONS: ___" are ONE fill-in-the-blank question with
   one `___` per answer cell, never one question per row and never a number question.
 - `short-answer`: anything answered in words, a calculation, or a drawing. Put the source's
-  sample or worked answer in `suggestedAnswer` ("" if none).
+  sample or worked answer in `suggestedAnswer` ("" if none). Copy handwriting as written, and
+  COMPLETELY: a worked calculation keeps every step, every unit and the final boxed answer, one
+  step per line, never only the last line. Several handwritten answers to one prompt are
+  separated by commas on one line. Never copy the printed labels next to an answer line
+  ("Molecule shape:"), only what was handwritten or circled. A handwritten drawing is described
+  in a few words in the answer (e.g. "Lewis structure H–N–H with a lone pair on N").
 - `multipart`: one number with lettered parts (a., b., (i), (ii)), or several questions that
   share one passage or figure. Shared material is the `stem` (and `figure`), parts are
   `parts`: `{"stem": "...", "type": "short-answer"|"multiple-choice"|"true-false", ...}`.
@@ -71,7 +80,8 @@ structure or circuit drawing) add `"figure": {"box": [ymin,xmin,ymax,xmax], "alt
   order `[ymin, xmin, ymax, xmax]`: y counts down from the TOP edge (0 = top, 1000 = bottom), x
   counts right from the LEFT edge (0 = left, 1000 = right), `ymin < ymax`, `xmin < xmax`. Be
   tight: include the whole drawing and its own labels, exclude the question text above it and
-  the answer lines below it. `box` holds exactly four numbers; `alt` is a separate key.
+  the answer lines below it. `box` holds exactly four numbers written as a JSON array with commas and spaces, like
+  `[270, 420, 370, 620]`, never run together; `alt` is a separate key.
 - Never write a figure for typed text, a table, an equation, an answer blank, or handwriting.
 - One figure per question. If a question has two separate pictures, use `multipart` and give each
   part its own figure.
@@ -105,7 +115,7 @@ NONBONDING ELECTRONS: 10" filled in by hand:
 {"id":"q3","type":"fill-in-the-blank","stem":"Give the number of bonding and nonbonding electrons for the structure below:\nBONDING ELECTRONS: ___  NONBONDING ELECTRONS: ___","blanks":[["14"],["10"]],"figure":{"box":[270,420,370,620],"alt":"Lewis structure of a molecule"}}
 
 Page shows "4. For the following compounds ... a. NH3  b. CO2" (bullets of instructions, student drawings):
-{"id":"q4","type":"multipart","stem":"For the following compounds, do all to receive full credit:\n• Draw a valid Lewis structure.\n• Count the number of electron clouds.","parts":[{"stem":"a. NH₃","type":"short-answer","suggestedAnswer":"4 clouds, trigonal pyramidal, polar"},{"stem":"b. CO₂","type":"short-answer","suggestedAnswer":"2 clouds, linear, nonpolar"}]}
+{"id":"q4","type":"multipart","stem":"For the following compounds, do all to receive full credit:\n• Draw a valid Lewis structure.\n• Count the number of electron clouds.","parts":[{"stem":"a. NH₃","type":"short-answer","suggestedAnswer":"Lewis structure H–N–H with a lone pair on N, 4, trigonal pyramidal, polar"},{"stem":"b. CO₂","type":"short-answer","suggestedAnswer":"Lewis structure O=C=O with lone pairs on each O, 2, linear, nonpolar"}]}
 
 # Reply formatting
 Output the JSON with no indentation: one question per line. Keep all fields, blanks, parts, choices and `\n` line breaks inside strings exactly as the rules above require.

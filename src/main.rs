@@ -106,6 +106,19 @@ fn main() -> Result<(), eframe::Error> {
     if let Ok(pdf) = vershion::env_var("VERSHION_IMPORT_EVAL") {
         let truth_path = vershion::env_var("VERSHION_IMPORT_TRUTH").unwrap_or_else(|_| panic!("VERSHION_IMPORT_TRUTH=<reference.parrot.json> is required"));
         let truth = import_eval::read_reference(&truth_path).unwrap_or_else(|e| panic!("{e}"));
+        // VERSHION_EVAL_DUMP=<dir> writes the PDF's pages and the current prompt there and stops (no model call).
+        if let Ok(dir) = vershion::env_var("VERSHION_EVAL_DUMP") {
+            let bytes = std::fs::read(&pdf).unwrap_or_else(|e| panic!("cannot read {pdf}: {e}"));
+            let hint = vershion::env_var("VERSHION_HINT").unwrap_or_default();
+            match import_eval::dump_pages(&bytes, &hint, std::path::Path::new(&dir)) {
+                Ok(n) => println!("wrote {n} pages and prompt.txt to {dir}"),
+                Err(e) => {
+                    eprintln!("dump failed: {e}");
+                    std::process::exit(1);
+                }
+            }
+            return Ok(());
+        }
         let settings: Settings = store::load_json("settings.json").unwrap_or_default();
         let mut cfg = ai::AiCfg::from(&settings);
         if let Ok(m) = vershion::env_var("VERSHION_EVAL_MODEL") {

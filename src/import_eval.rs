@@ -280,6 +280,19 @@ pub fn read_reference(path: &str) -> Result<Vec<Question>, String> {
     Ok(crate::formats::detect_and_parse(&bytes, &name)?.questions)
 }
 
+/// Writes each page of a PDF as `page-N.png` and the current import prompt as `prompt.txt` into `dir`, so another
+/// tool (the browser harness that holds the account's sign-in) can send them to the hosted AI.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn dump_pages(pdf: &[u8], hint: &str, dir: &std::path::Path) -> Result<usize, String> {
+    let pages = crate::platform::render_pdf_pages(pdf)?;
+    std::fs::create_dir_all(dir).map_err(|e| format!("cannot make {}: {e}", dir.display()))?;
+    for (i, png) in pages.iter().enumerate() {
+        std::fs::write(dir.join(format!("page-{}.png", i + 1)), png).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(dir.join("prompt.txt"), crate::ai::prompt_for(hint)).map_err(|e| e.to_string())?;
+    Ok(pages.len())
+}
+
 /// Converts every page of a PDF through the configured provider, keeping each raw reply in `cache` (when given) as
 /// `page-N.txt`. With `replay`, replies come only from the cache and a missing one is an error: no model call is made.
 #[cfg(not(target_arch = "wasm32"))]
