@@ -436,6 +436,8 @@ fn add_paths(app: &mut crate::App, st: &mut State, paths: Vec<std::path::PathBuf
 fn provider_label(s: &crate::Settings) -> (String, bool) {
     let cfg = crate::ai::AiCfg::from(s);
     match cfg.provider.as_str() {
+        "account" => ("the verSHion server, paid with credits from your account".to_string(), true),
+        "workers" => ("the verSHion relay".to_string(), true),
         "cloud" => (format!("Ollama Cloud · {}", cfg.model), true),
         "openrouter" => (format!("OpenRouter · {}", cfg.model), true),
         "custom" => (format!("{} · {}", cfg.base, cfg.model), true),
