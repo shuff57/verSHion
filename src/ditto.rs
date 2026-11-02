@@ -29,7 +29,44 @@ pub fn json_object(text: &str) -> Option<Value> {
     if let Ok(v) = serde_json::from_str(&text[a..=b]) {
         return Some(v);
     }
-    first_value(&text[a..])
+    first_value(&text[a..]).or_else(|| salvage(&text[a..]))
+}
+
+/// A reply that starts well and then breaks (a repetition loop until the token limit, a cut-off): the root object's members
+/// that were completed before the break. The text is cut after the last member of the root that closed, and the root closed.
+fn salvage(text: &str) -> Option<Value> {
+    // `open` holds the closers still owed; `last` is the end of the latest bracket that closed, with the closers owed then.
+    let (mut open, mut in_str, mut esc, mut last): (Vec<char>, bool, bool, Option<(usize, String)>) = (Vec::new(), false, false, None);
+    for (i, c) in text.char_indices() {
+        if in_str {
+            if esc {
+                esc = false;
+            } else if c == '\\' {
+                esc = true;
+            } else if c == '"' {
+                in_str = false;
+            }
+            continue;
+        }
+        match c {
+            '"' => in_str = true,
+            '{' => open.push('}'),
+            '[' => open.push(']'),
+            '}' | ']' => {
+                if open.pop() != Some(c) {
+                    break;
+                }
+                if open.is_empty() {
+                    break;
+                }
+                last = Some((i + c.len_utf8(), open.iter().rev().collect()));
+            }
+            _ => {}
+        }
+    }
+    let (end, owed) = last?;
+    let cut = text[..end].trim_end().trim_end_matches(',');
+    serde_json::from_str::<Value>(&format!("{cut}{owed}")).ok().filter(Value::is_object)
 }
 
 /// The first complete JSON value in `text`, ignoring whatever follows it. A model sometimes closes the root
@@ -48,7 +85,7 @@ pub fn json_error(text: &str) -> Option<String> {
     }
     match serde_json::from_str::<Value>(&text[a..=b]) {
         Ok(_) => None,
-        Err(_) if first_value(&text[a..]).is_some() => None,
+        Err(_) if first_value(&text[a..]).is_some() || salvage(&text[a..]).is_some() => None,
         Err(e) => Some(e.to_string()),
     }
 }
@@ -555,6 +592,21 @@ mod tests {
         assert_eq!(got.doc.questions.len(), 1);
         assert!(json_object("no braces").is_none());
         assert!(json_error(r#"{"a": [1, 2"#).is_some(), "a genuinely broken reply still asks for a retry");
+    }
+
+    #[test]
+    fn a_reply_that_falls_into_a_loop_after_its_questions_still_imports_them() {
+        // Seen from DeepSeek V4.1 Flash: after the bank the model repeated `"report:{" ,"unconverted:"…` until the token limit.
+        let looped = r#""report:{" ,"unconverted:","[]," ,"notes:","[]}},","#.repeat(40);
+        let reply = format!(r#"{{"format":"queshion/ditto","formatVersion":"0.1.0","bank":{{"name":"Q","questions":[{{"id":"q1","type":"true-false","stem":"Water is wet.","answer":true}}]}},"exams":[{{"name":"Q","positions":[{{"question":"q1","section":0}}]}},{looped}"#);
+        assert_eq!(json_error(&reply), None);
+        let got = import_text(&reply, None, 1, "x").expect("the bank closed before the loop began");
+        assert_eq!(got.doc.questions.len(), 1);
+        assert!(json_error(r#"{"bank":{"questions":[{"id":"q1""#).is_some(), "a cut inside the first question is still a retry");
+        // The same loop when the model also forgot to close "bank" before "exams" (the exam then sits inside the bank).
+        let open_bank = format!(r#"{{"format":"queshion/ditto","formatVersion":"0.1.0","bank":{{"name":"Q","questions":[{{"id":"q1","type":"true-false","stem":"Water is wet.","answer":true}}],"exams":[{{"name":"Q","positions":[{{"question":"q1","section":0}}]}},{looped}"#);
+        assert_eq!(json_error(&open_bank), None);
+        assert_eq!(import_text(&open_bank, None, 1, "x").expect("the questions closed before the loop").doc.questions.len(), 1);
     }
 
     fn page() -> Vec<u8> {
