@@ -1,7 +1,7 @@
 //! verSHion desktop binary: native entry, headless hooks, and the eframe adapter.
 use eframe::egui;
 use vershion::{
-    ai, ditto, examui, figfit, figure_agent, figure_eval, figures, formats, model, platform, store, App, Settings,
+    ai, ditto, examui, figfit, figure_agent, figure_eval, figures, formats, import_eval, model, platform, store, App, Settings,
 };
 
 /// eframe adapter for the host-agnostic [`vershion::App`].
@@ -93,6 +93,46 @@ fn main() -> Result<(), eframe::Error> {
             }
             Err(e) => {
                 eprintln!("find models failed: {e}");
+                std::process::exit(1);
+            }
+        }
+        return Ok(());
+    }
+    // Headless one-shot: VERSHION_IMPORT_EVAL=<file.pdf> VERSHION_IMPORT_TRUTH=<reference.parrot.json> [VERSHION_EVAL_CACHE=<dir>]
+    // [VERSHION_EVAL_REPLAY=1] [VERSHION_EVAL_OUT=<report.json>] [VERSHION_EVAL_MODEL=<model>] [VERSHION_HINT=...] converts the
+    // PDF page by page through the configured provider and scores it against the reference. Set VERSHION_STORE_DIR to a scratch
+    // folder (the import crops pictures into the store). REPLAY scores the cached replies and makes no model call.
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Ok(pdf) = vershion::env_var("VERSHION_IMPORT_EVAL") {
+        let truth_path = vershion::env_var("VERSHION_IMPORT_TRUTH").unwrap_or_else(|_| panic!("VERSHION_IMPORT_TRUTH=<reference.parrot.json> is required"));
+        let truth = import_eval::read_reference(&truth_path).unwrap_or_else(|e| panic!("{e}"));
+        let settings: Settings = store::load_json("settings.json").unwrap_or_default();
+        let mut cfg = ai::AiCfg::from(&settings);
+        if let Ok(m) = vershion::env_var("VERSHION_EVAL_MODEL") {
+            cfg.model = m;
+        }
+        let cache = vershion::env_var("VERSHION_EVAL_CACHE").ok().map(std::path::PathBuf::from);
+        let replay = vershion::env_var("VERSHION_EVAL_REPLAY").as_deref() == Ok("1");
+        let hint = vershion::env_var("VERSHION_HINT").unwrap_or_default();
+        // VERSHION_IMPORT_GOT=<bank file> scores an already converted bank (an export of an earlier import) instead of
+        // converting: no model call, so no credits.
+        let converted = match vershion::env_var("VERSHION_IMPORT_GOT") {
+            Ok(got) => import_eval::read_reference(&got),
+            Err(_) => {
+                let bytes = std::fs::read(&pdf).unwrap_or_else(|e| panic!("cannot read {pdf}: {e}"));
+                import_eval::convert_pdf(&bytes, &hint, &cfg, cache.as_deref(), replay)
+            }
+        };
+        match converted {
+            Ok(got) => {
+                let report = import_eval::compare(&truth, &got);
+                print!("{}", report.summary());
+                if let Ok(out) = vershion::env_var("VERSHION_EVAL_OUT") {
+                    let _ = std::fs::write(&out, serde_json::to_string_pretty(&report).unwrap_or_default());
+                }
+            }
+            Err(e) => {
+                eprintln!("import eval failed: {e}");
                 std::process::exit(1);
             }
         }
