@@ -15,6 +15,7 @@ pub mod enzyme;
 pub mod foodweb;
 pub mod gel;
 pub mod hardyweinberg;
+pub mod leaf;
 mod noto_adv;
 pub mod pedigree;
 pub mod photosynthesis;
@@ -45,6 +46,7 @@ pub fn examples(id: &str) -> Option<Vec<super::Example>> {
         "cell-diagram" => celldiagram::examples(id),
         "soil-texture" => soiltexture::examples(id),
         "photosynthesis" => photosynthesis::examples(id),
+        "leaf-cross-section" => leaf::examples(id),
         _ => None,
     }
 }
@@ -149,6 +151,7 @@ pub fn defs() -> Vec<FigureDef> {
         celldiagram::defs().pop().unwrap(),
         soiltexture::defs().pop().unwrap(),
         photosynthesis::defs().pop().unwrap(),
+        leaf::defs().pop().unwrap(),
     ]
 }
 

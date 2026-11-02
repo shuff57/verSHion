@@ -330,7 +330,7 @@ mod tests {
         "dot-plot", "earth-cycles", "earth-layers", "elasticity", "electric-field", "energy-bar-chart", "energy-pyramid", "er-diagram", "experiment-flow",
         "family-tree", "financial-statement", "flowchart", "food-plate", "food-web", "fraction-models", "free-body", "gear-train",
         "graph-diagram", "grid-reference", "guitar-chords", "heart-zones", "histogram", "hr-diagram",
-        "journal-entry", "kirchhoff-loops", "loan-amortisation", "logic-circuit", "lorenz", "magnetic-field", "map-scale",
+        "journal-entry", "kirchhoff-loops", "leaf-cross-section", "loan-amortisation", "logic-circuit", "lorenz", "magnetic-field", "map-scale",
         "marketing-funnel", "maslow", "monopoly", "moon-seasons", "music-staff", "network-topology",
         "normal-curve", "number-base", "org-chart", "organiser", "orthographic", "perspective-grid",
         "photosynthesis", "piano-keyboard", "plate-boundaries", "plot-arc", "population-pyramid", "ppf", "probability-tree", "protractor", "pv-diagram",

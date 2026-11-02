@@ -40,6 +40,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "cell-diagram" => CELL_DIAGRAM,
         "soil-texture" => SOIL_TEXTURE,
         "photosynthesis" => PHOTOSYNTHESIS,
+        "leaf-cross-section" => LEAF_CROSS_SECTION,
         // chemistry
         "bohr-model" => BOHR_MODEL,
         "gas-syringe" => GAS_SYRINGE,
@@ -4056,6 +4057,29 @@ const SOIL_TEXTURE: &[Faq] = &[
     Faq {
         q: "Why are some regions labelled with letters, and how does Print work?",
         a: "A region prints its full name (on one or two lines) only if the name fits inside it with a margin and clear of the sample and of every construction line; otherwise it prints the standard abbreviation (S, LS, SL, L, SiL, Si, SCL, CL, SiCL, SC, SiC, C), and the legend under the triangle names every abbreviation. A label is given up for a shorter one before it is ever placed over a line. Sand, loamy sand and silt are too narrow for their names and are named below the bottom edge. Abbreviations only forces letters for every region. Print is black, white and grey only: the twelve classes use four hatches (diagonal lines, cross-hatch, dots, vertical lines; the plain fill and the horizontal lines are not used so that no hatch can hide a construction line) and no two classes that touch use the same one. Construction lines are drawn black on a white strip, and the gridlines are dark enough to survive a 66 % grey copy.",
+    },
+];
+
+const LEAF_CROSS_SECTION: &[Faq] = &[
+    Faq {
+        q: "What does the section show, and what is simplified?",
+        a: "A slice across the blade of a typical dicot leaf, top to bottom: a waxy cuticle, the upper epidermis (clear cells with no chloroplasts), the palisade mesophyll (tall, tightly packed columns holding most of the chloroplasts), the spongy mesophyll (irregular cells with fewer chloroplasts and large air spaces between them), a vein, and the lower epidermis with stomata and a thinner cuticle. Each stoma is a pore between two guard cells, the only epidermal cells with chloroplasts, with an air chamber above it. The vein (vascular bundle) is ringed by bundle-sheath cells, with xylem on the upper side and phloem (sieve tubes and smaller companion cells) on the lower side. Stomata are drawn only on the lower surface, where most of them are in a typical dicot leaf. It is not to scale, and the cells are simplified. Checked against OpenStax Biology 2e, section 30.4 (Leaves).",
+    },
+    Faq {
+        q: "What changes when the stomata are open or closed?",
+        a: "Open: the guard cells have taken up water and swollen (turgid), so they bow apart and leave a pore; in the surface view the two kidney-shaped cells curve round an open slit. Closed: they have lost water and gone limp (flaccid), so they meet and the pore is shut. The gas-exchange arrows (carbon dioxide in; oxygen and water vapour out, as in daylight when photosynthesis is faster than respiration) go through an open stoma only. With the stomata closed they are left out and the editor note says why; the key's caption says which state is drawn and why.",
+    },
+    Faq {
+        q: "Which wording is the answer?",
+        a: "The key uses one wording and lists the others it accepts under the figure. Waxy cuticle (cuticle, wax layer). Upper epidermis (epidermis, adaxial epidermis) and lower epidermis (epidermis, abaxial epidermis). Palisade mesophyll (palisade layer, palisade cells, palisade parenchyma). Spongy mesophyll (spongy layer, spongy cells, spongy parenchyma). Vascular bundle (vein, leaf vein). Xylem (xylem vessel). Phloem (sieve tube, phloem sieve tube). Air space (intercellular air space, intercellular space). Stoma (stomata as the plural, stomatal pore, pore). Guard cell (guard cells). Light (sunlight, light energy). CO2 (carbon dioxide), O2 (oxygen), water vapour (water, H2O, water vapor).",
+    },
+    Faq {
+        q: "How does a student tell the pointers apart, and what does the student copy change?",
+        a: "A bracket beside the section spans exactly one layer; the bracket beside the vein spans the whole bundle. A plain line ends inside the one part it names: in the cuticle, in a xylem vessel, in a phloem sieve tube, in an air space, in a guard cell, or in the pore (with the stomata closed, at the slit where the two guard cells meet). There is no dot or ring at the end, so nothing small is hidden. An arrow carries light or a gas and is named by what it carries; the two arrows that point out of the leaf (oxygen and water vapour) cannot be told apart by their direction, so both copies say that they may be named in either order. With Show answers off every name becomes a numbered disc in the same place and a table under the figure has a rule for each; the caption says how the pointers work without naming a part.",
+    },
+    Faq {
+        q: "What does Print change, and is anything left out?",
+        a: "Print is black, white and grey only and survives a photocopy at 66 % grey: the cuticle is a dark band, cells are white with black walls, chloroplasts are dark dots, xylem vessels have thick black walls and the phloem is dotted, and every arrow is black. Not drawn: hairs (trichomes), the midrib, a C4 leaf's wreath of bundle-sheath cells, and the chloroplasts' inner structure (see the Photosynthesis figure). Chloroplasts and the bundle sheath are drawn but not labelled.",
     },
 ];
 
