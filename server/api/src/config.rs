@@ -63,14 +63,18 @@ impl Config {
         if let Some(n) = pos_num(get("AI_DAILY_USD")) {
             limits.daily_usd = n;
         }
-        // AI_UPSTREAM=cheaperinference sends the same calls to CheaperInference (its own key, URL and model names).
-        let cheaper = get("AI_UPSTREAM").as_deref().map(str::trim) == Some("cheaperinference");
+        // CheaperInference is the default upstream (its own key, URL and model names). AI_UPSTREAM=openrouter picks OpenRouter instead.
+        let cheaper = get("AI_UPSTREAM").as_deref().map(|s| s.trim().to_ascii_lowercase()).as_deref() != Some("openrouter");
         let openrouter = if cheaper {
             nonempty(get("CHEAPERINFERENCE_API_KEY")).map(|key| OpenRouter {
                 key,
                 url: CHEAPERINFERENCE_URL.to_string(),
                 plain: true,
-                extra: get("CHEAPERINFERENCE_EXTRA").and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok()).and_then(|v| v.as_object().cloned()),
+                // Reasoning off by default (measured: same quality, far fewer tokens); CHEAPERINFERENCE_EXTRA overrides.
+                extra: get("CHEAPERINFERENCE_EXTRA")
+                    .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+                    .and_then(|v| v.as_object().cloned())
+                    .or_else(|| serde_json::json!({"reasoning_effort": "none"}).as_object().cloned()),
                 model: nonempty(get("CHEAPERINFERENCE_MODEL")).unwrap_or_else(|| CHEAPERINFERENCE_DEFAULT_MODEL.to_string()),
                 fallback_model: nonempty(get("CHEAPERINFERENCE_FALLBACK_MODEL")),
                 privacy: true,
@@ -130,19 +134,21 @@ mod tests {
     fn cheaperinference_is_chosen_by_name_and_uses_its_own_key_url_and_model() {
         let c = cfg(&[("AI_UPSTREAM", "cheaperinference"), ("OPENROUTER_API_KEY", "or"), ("CHEAPERINFERENCE_API_KEY", "ci"), ("CHEAPERINFERENCE_MODEL", "deepseek-v4.1-flash")]).openrouter.unwrap();
         assert_eq!((c.key.as_str(), c.url.as_str(), c.model.as_str(), c.plain), ("ci", CHEAPERINFERENCE_URL, "deepseek-v4.1-flash", true));
-        assert_eq!(cfg(&[("AI_UPSTREAM", "cheaperinference")]).openrouter.is_none(), true, "the OpenRouter key is not borrowed");
+        assert_eq!(cfg(&[("OPENROUTER_API_KEY", "or")]).openrouter.is_none(), true, "the OpenRouter key is not borrowed");
         assert_eq!(cfg(&[("AI_UPSTREAM", "cheaperinference"), ("CHEAPERINFERENCE_API_KEY", "ci")]).openrouter.unwrap().model, CHEAPERINFERENCE_DEFAULT_MODEL);
-        assert!(!cfg(&[("OPENROUTER_API_KEY", "or"), ("CHEAPERINFERENCE_API_KEY", "ci")]).openrouter.unwrap().plain, "OpenRouter stays the default");
+        let d = cfg(&[("CHEAPERINFERENCE_API_KEY", "ci")]).openrouter.unwrap();
+        assert_eq!((d.plain, d.model.as_str(), d.extra.as_ref().and_then(|e| e.get("reasoning_effort")).and_then(|v| v.as_str())), (true, "deepseek-v4.1-flash-1017", Some("none")), "CheaperInference is the default, reasoning off");
+        assert!(!cfg(&[("AI_UPSTREAM", "openrouter"), ("OPENROUTER_API_KEY", "or"), ("CHEAPERINFERENCE_API_KEY", "ci")]).openrouter.unwrap().plain, "AI_UPSTREAM=openrouter picks OpenRouter");
     }
 
     #[test]
     fn openrouter_needs_a_key_and_keeps_privacy_on_unless_told_otherwise() {
-        assert!(cfg(&[("OPENROUTER_API_KEY", "   ")]).openrouter.is_none());
-        let o = cfg(&[("OPENROUTER_API_KEY", " or-key ")]).openrouter.unwrap();
+        assert!(cfg(&[("AI_UPSTREAM", "openrouter"), ("OPENROUTER_API_KEY", "   ")]).openrouter.is_none());
+        let o = cfg(&[("AI_UPSTREAM", "openrouter"), ("OPENROUTER_API_KEY", " or-key ")]).openrouter.unwrap();
         assert_eq!((o.key.as_str(), o.model.as_str(), o.privacy, o.fallback_model), ("or-key", DEFAULT_MODEL, true, None));
-        let o = cfg(&[("OPENROUTER_API_KEY", "k"), ("OPENROUTER_MODEL", "m/one"), ("OPENROUTER_FALLBACK_MODEL", "m/two"), ("OPENROUTER_PRIVACY", "0")]).openrouter.unwrap();
+        let o = cfg(&[("AI_UPSTREAM", "openrouter"), ("OPENROUTER_API_KEY", "k"), ("OPENROUTER_MODEL", "m/one"), ("OPENROUTER_FALLBACK_MODEL", "m/two"), ("OPENROUTER_PRIVACY", "0")]).openrouter.unwrap();
         assert_eq!((o.model.as_str(), o.fallback_model.as_deref(), o.privacy), ("m/one", Some("m/two"), false));
-        assert!(cfg(&[("OPENROUTER_API_KEY", "k"), ("OPENROUTER_PRIVACY", "false")]).openrouter.unwrap().privacy, "only the exact value 0 relaxes it");
+        assert!(cfg(&[("AI_UPSTREAM", "openrouter"), ("OPENROUTER_API_KEY", "k"), ("OPENROUTER_PRIVACY", "false")]).openrouter.unwrap().privacy, "only the exact value 0 relaxes it");
     }
 
     #[test]

@@ -158,7 +158,7 @@ async fn main() {
     let applied = db::migrate(&mut conn, &cfg.migrations).expect("migrate");
     tracing::info!(applied = applied.len(), "migrations");
     if cfg.openrouter.is_none() {
-        tracing::warn!("OPENROUTER_API_KEY is not set: the AI relay answers 503 ai_not_configured");
+        tracing::warn!("the AI upstream key (CHEAPERINFERENCE_API_KEY, or OPENROUTER_API_KEY with AI_UPSTREAM=openrouter) is not set: the AI relay answers 503 ai_not_configured");
     }
     if cfg.stripe_webhook_secret.is_none() {
         tracing::warn!("STRIPE_WEBHOOK_SECRET is not set: /billing/webhook answers 503");

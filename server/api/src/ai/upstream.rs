@@ -13,7 +13,7 @@ pub const OPENROUTER_URL: &str = "https://openrouter.ai/api/v1/chat/completions"
 pub const DEFAULT_MODEL: &str = "google/gemma-4-26b-a4b-it";
 pub const CHEAPERINFERENCE_URL: &str = "https://api.cheaperinference.com/v1/chat/completions";
 /// CheaperInference names the same model without the vendor prefix.
-pub const CHEAPERINFERENCE_DEFAULT_MODEL: &str = "gemma-4-26b-a4b-it";
+pub const CHEAPERINFERENCE_DEFAULT_MODEL: &str = "deepseek-v4.1-flash-1017";
 
 pub struct OpenRouter {
     pub key: String,
