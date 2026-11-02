@@ -774,7 +774,7 @@ fn animal(b: &mut B) {
     b.nucleolus((-38.0, -18.0), 16.0);
     b.rough_er(nc, 62.0, &[(-34.0, 74.0), (-30.0, 68.0), (-26.0, 62.0)], &[-14.0, 4.0, 22.0, 40.0]);
     b.tubes(Sid::SmoothEr, &[
-        // the smooth ER leaves the end of the outer rough ER sac
+        // the smooth ER starts near the end of the outer rough ER sac (a gap of about 1.2-1.5 px: it does not join it)
         vec![(13.0, 78.0), (20.0, 93.0), (55.0, 100.0), (88.0, 100.0), (118.0, 106.0)],
         vec![(55.0, 100.0), (58.0, 124.0)],
         vec![(88.0, 100.0), (98.0, 120.0)],
@@ -817,7 +817,7 @@ fn plant(b: &mut B, plasmo: bool) {
     for q in [(44.0, 2.0), (0.0, 40.0), (90.0, -30.0), (80.0, 55.0), (0.0, -50.0), (140.0, 60.0), (-60.0, 80.0), (140.0, -70.0), (-60.0, -70.0)] { b.cand(Sid::Vacuole, q); }
     // the nucleus in the top-left corner, with a clear strip to its left (its own leaders go straight out to the
     // left), and below it a studded rough ER network of four sacs joined to its envelope; the outer sac's pointer
-    // places face down the clear strip by the wall. The smooth ER leaves the right-hand end of the network and runs
+    // places face down the clear strip by the wall. The smooth ER starts at the right-hand end of the network (close to it, not joined) and runs
     // down beside the vacuole; the Golgi stands below, right of that strip
     let nc = (-130.0, -112.0);
     b.nucleus(nc, 30.0);
@@ -1193,6 +1193,14 @@ pub fn layout(c: &Cfg0, funcs: bool, lab: f64) -> Rc<Layout> {
     })
 }
 
+/// How many pointer places per structure `compute` may use: all of them, except in a test that forces a violation.
+#[cfg(not(test))]
+fn max_places() -> usize { usize::MAX }
+#[cfg(test)]
+thread_local! { static MAX_PLACES: std::cell::Cell<usize> = const { std::cell::Cell::new(usize::MAX) }; }
+#[cfg(test)]
+fn max_places() -> usize { MAX_PLACES.with(|m| m.get()) }
+
 fn compute(c: &Cfg0, funcs: bool, lab: f64) -> Layout {
     let sc = scene(c.t, c.plasmo);
     let sids = labelled(c);
@@ -1219,7 +1227,7 @@ fn compute(c: &Cfg0, funcs: bool, lab: f64) -> Layout {
     let xl = off_x + bx0 - GAP;
     let xr = off_x + bx1 + GAP;
     let cy = (by0 + by1) / 2.0;
-    let cands: Vec<Vec<P>> = sids.iter().map(|s| sc.anchors_of(*s).into_iter().map(|q| (q.0 + off_x, q.1)).collect()).collect();
+    let cands: Vec<Vec<P>> = sids.iter().map(|s| sc.anchors_of(*s).into_iter().take(max_places()).map(|q| (q.0 + off_x, q.1)).collect()).collect();
     // what each possible leader runs over: one table per (label, column side, number of slots in the column), so a
     // column laid out the same way in another try is not scored again; tip and cost per [place][slot]
     let objs: Vec<Vec<Option<u32>>> = cands.iter().map(|cs| cs.iter().map(|q| sc.top_index((q.0 - off_x, q.1)).map(|k| sc.parts[k].obj)).collect()).collect();
@@ -1294,10 +1302,15 @@ fn compute(c: &Cfg0, funcs: bool, lab: f64) -> Layout {
             }
         }
         // a longer search on the settings that worked, to shorten the leaders and run over less
-        if let Some((slots, st, 0, x)) = chosen.take() {
-            let (tips, extra) = tables(&slots);
-            let (st2, v2, x2) = assign(&cands, &tips, &extra, &slots, disc, (n * 17 + slots.len()) as u64, off_x, 12, 8);
-            chosen = Some(if v2 == 0 && x2 <= x { (slots, st2, 0, x2) } else { (slots, st, 0, x) });
+        // (a best layout that still has violations is kept as it is: it is drawn, never dropped, so the indexing below cannot fail)
+        if let Some((slots, st, v, x)) = chosen.take() {
+            if v == 0 {
+                let (tips, extra) = tables(&slots);
+                let (st2, v2, x2) = assign(&cands, &tips, &extra, &slots, disc, (n * 17 + slots.len()) as u64, off_x, 12, 8);
+                chosen = Some(if v2 == 0 && x2 <= x { (slots, st2, 0, x2) } else { (slots, st, 0, x) });
+            } else {
+                chosen = Some((slots, st, v, x));
+            }
         }
     }
     let (slots, st, violations, _) = chosen.unwrap_or((Vec::new(), Vec::new(), 0, 0.0));
@@ -1688,7 +1701,7 @@ mod tests {
             let nuc = &parts_of(&sc, Sid::Nucleus)[0].pts;
             let c = (nuc.iter().map(|q| q.0).sum::<f64>() / nuc.len() as f64, nuc.iter().map(|q| q.1).sum::<f64>() / nuc.len() as f64);
             assert!(outer.iter().flat_map(|o| o.pts.iter()).all(|q| ((q.0 - c.0).hypot(q.1 - c.1) - r_env).abs() < 0.01));
-            // the smooth ER continues from the rough ER (an end within 8 px of a sac), and the Golgi stands near the ER
+            // the smooth ER starts close to the rough ER (an end within 8 px of a sac; it does not join it), and the Golgi stands near the ER
             let ser = parts_of(&sc, Sid::SmoothEr);
             let d_ser = ser.iter().flat_map(|p| p.pts.iter()).map(|q| rer.iter().map(|r| dist_poly(&r.pts, *q, true)).fold(f64::MAX, f64::min)).fold(f64::MAX, f64::min);
             assert!(d_ser < 8.0, "{t:?}: smooth ER {d_ser:.1} px from the rough ER");
@@ -2777,17 +2790,56 @@ mod tests {
     }
 
     #[test]
+    fn a_layout_that_cannot_avoid_a_violation_is_still_drawn() {
+        // leave each structure a single pointer place: leaders must then cross or pass pointers, so the search ends with
+        // violations. compute must keep that best layout (never panic) and the figure must still render a valid SVG.
+        struct Reset;
+        impl Drop for Reset { fn drop(&mut self) { MAX_PLACES.with(|m| m.set(usize::MAX)); } }
+        let _reset = Reset;
+        MAX_PLACES.with(|m| m.set(1));
+        let mut forced = 0;
+        for t in TYPES {
+            for mask in [31u8, 15, 7, 27, 30, 21] {
+                for funcs in [false, true] {
+                    let lay = compute(&cfg0(t, mask, true), funcs, 1.0);
+                    assert!(!lay.labs.is_empty(), "{t:?} {mask}: layout dropped");
+                    if lay.violations > 0 { forced += 1; }
+                }
+            }
+        }
+        assert!(forced > 0, "the hook no longer forces a violation, so this test checks nothing");
+        for cell in CELLS {
+            let svg = render_of(&[s("cell", cell), b("functions", true)]);
+            assert!(svg.starts_with("<svg") && svg.trim_end().ends_with("</svg>"), "{cell}: not an SVG");
+            assert!(!svg.contains("NaN") && !svg.contains("inf"), "{cell}: bad number");
+        }
+    }
+
+    /// CPU time this thread has used so far (Linux /proc/thread-self/stat, utime + stime in 10 ms ticks), so a busy machine
+    /// does not make the speed test fail; where it cannot be read the wall clock stands in.
+    fn cpu_now() -> std::time::Duration {
+        let ticks = std::fs::read_to_string("/proc/thread-self/stat").ok().and_then(|s| {
+            let rest: Vec<&str> = s[s.rfind(')')? + 1..].split_whitespace().collect();
+            Some(rest.get(11)?.parse::<u64>().ok()? + rest.get(12)?.parse::<u64>().ok()?)
+        });
+        match ticks {
+            Some(t) => std::time::Duration::from_millis(t * 10),
+            None => { thread_local! { static T0: std::time::Instant = std::time::Instant::now(); } T0.with(|t| t.elapsed()) }
+        }
+    }
+
+    #[test]
     fn a_first_layout_is_fast_enough_to_follow_a_checkbox() {
         // measured per layout, worst case over every cell type and a spread of switches; the cache makes every later draw free.
         // The scenes (drawing, pixel map, pointer places) are built once per cell type at its first draw: timed apart.
         for (t, pl) in [(CellType::Animal, false), (CellType::Plant, false), (CellType::Plant, true), (CellType::Bacterial, false)] {
-            let t0 = std::time::Instant::now();
+            let t0 = cpu_now();
             let _ = scene(t, pl);
-            let build = t0.elapsed();
+            let build = cpu_now() - t0;
             eprintln!("scene {t:?} {pl}: {build:?}");
-            // a one-off per cell type, not per click; measured 0.9-1.7 s at low load, up to 9 s at load average 35-60
-            // (debug), so the bound is generous: it catches a build ten times slower, not a busy machine
-            assert!(build < std::time::Duration::from_secs(20), "{t:?}: {build:?}");
+            // a one-off per cell type, not per click. CPU time of this thread (debug build): 0.5-2.4 s measured, so 6 s
+            // catches a build three to seven times slower and does not depend on how busy the machine is
+            assert!(build < std::time::Duration::from_secs(6), "{t:?}: {build:?} of CPU time");
         }
         let mut worst = std::time::Duration::ZERO;
         let mut total = std::time::Duration::ZERO;
@@ -2797,9 +2849,9 @@ mod tests {
                 for funcs in [false, true] {
                     for lab in [0.8, 1.0, 1.4] {
                         let c = cfg0(t, mask, true);
-                        let t0 = std::time::Instant::now();
+                        let t0 = cpu_now();
                         let l = compute(&c, funcs, lab);
-                        let dt = t0.elapsed();
+                        let dt = cpu_now() - t0;
                         assert_eq!(l.violations, 0);
                         worst = worst.max(dt); total += dt; n += 1;
                     }
@@ -2807,8 +2859,8 @@ mod tests {
             }
         }
         eprintln!("layout: {n} computed, worst {worst:?}, mean {:?}", total / n);
-        // measured 0.6 s worst at low load, 6.8 s at load average 35 (debug)
-        assert!(worst < std::time::Duration::from_secs(20), "{worst:?}");
+        // CPU time, debug: 1.1 s worst measured
+        assert!(worst < std::time::Duration::from_secs(6), "{worst:?} of CPU time");
     }
 
     #[test]
