@@ -47,6 +47,9 @@ Question ids are `q1`, `q2`, ... in printed order on this page.
   separated by commas on one line. Never copy the printed labels next to an answer line
   ("Molecule shape:"), only what was handwritten or circled. A handwritten drawing is described
   in a few words in the answer (e.g. "Lewis structure H–N–H with a lone pair on N").
+  A handwritten word you truly cannot read is `[illegible]`; never invent one to fill the gap.
+  Struck-through handwriting is not the answer. A margin note ("Only need this", "But fyi")
+  is a comment to the reader, not part of the answer: leave it out.
 - `multipart`: one number with lettered parts (a., b., (i), (ii)), or several questions that
   share one passage or figure. Shared material is the `stem` (and `figure`), parts are
   `parts`: `{"stem": "...", "type": "short-answer"|"multiple-choice"|"true-false", ...}`.
