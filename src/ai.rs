@@ -1232,6 +1232,23 @@ pub fn begin_service(cfg: &AiCfg, service: &str, pages: usize) -> Result<Charged
     Ok(Charged { credits: n("credits").unwrap_or(0), left: n("left") })
 }
 
+/// The browser version of [`begin_service`]: the same call, awaited.
+#[cfg(target_arch = "wasm32")]
+pub async fn begin_service_async(cfg: &AiCfg, service: &str, pages: usize) -> Result<Charged, String> {
+    if !cfg.is_relay() {
+        return Ok(Charged { credits: 0, left: None });
+    }
+    let url = format!("{}/service", cfg.base.trim_end_matches('/'));
+    let key = request_key(cfg);
+    let reply = post_json_async(&url, &json!({"service": service, "pages": pages}), key.as_deref()).await.map_err(|e| credit_message(&e))?;
+    let session = reply.get("session").and_then(Value::as_str).map(str::to_string);
+    if let Ok(mut s) = SERVICE_SESSION.lock() {
+        *s = session;
+    }
+    let n = |k: &str| reply.get(k).and_then(Value::as_u64).map(|v| v as u32);
+    Ok(Charged { credits: n("credits").unwrap_or(0), left: n("left") })
+}
+
 /// The relay's sentence for a refused service ("This needs 2 credits and you have 0 left this week.").
 fn credit_message(err: &str) -> String {
     if let Some(i) = err.find("answered 402: ") {
@@ -1468,6 +1485,11 @@ async fn openai_chat_async(cfg: &AiCfg, prompt: &str, mime: &str, images: &[&[u8
         body["reasoning"] = json!({"enabled": false});
         body["usage"] = json!({"include": true});
     }
+    if cfg.is_relay() {
+        if let Some(s) = current_session() {
+            body["session"] = json!(s);
+        }
+    }
     // A local server that refuses JSON mode is asked without it (see `openai_chat_once`).
     let custom = cfg.provider == "custom";
     if custom && json_mode_refused(base) {
@@ -1534,6 +1556,7 @@ pub async fn ask_images_async(images: &[&[u8]], cfg: &AiCfg, prompt: &str, temp:
 /// The browser version of [`convert_page`]: same parse and crop path, awaited transport.
 #[cfg(target_arch = "wasm32")]
 pub async fn convert_page_async(bytes: &[u8], mime: &str, hint: &str, cfg: &AiCfg, page_no: usize) -> Result<Converted, String> {
+    begin_service_async(cfg, "import", 1).await?;
     let raw = transcribe_checked_async(bytes, mime, cfg, &transcription_prompt(hint)).await?;
     let text = extract_import_text(&raw);
     if text.is_empty() {
