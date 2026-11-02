@@ -30,8 +30,8 @@ cause-effect__defaults 8774a71b1432ad9b
 cause-effect__start 8774a71b1432ad9b
 cell-cycle__defaults c7fdb4dc3a3da5cd
 cell-cycle__start 43d880266a28d1fe
-cell-diagram__defaults 2f3ac9b4ba8c067f
-cell-diagram__start 15f6bbada98ce130
+cell-diagram__defaults 44e3723d7cac9080
+cell-diagram__start ec0596e75d03a0f7
 chi-square-fit__defaults cd5784ea1d11d1cf
 chi-square-fit__start cd5784ea1d11d1cf
 chi-square-table__defaults ed9ff82be03eae95
