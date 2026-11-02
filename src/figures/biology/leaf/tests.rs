@@ -731,6 +731,42 @@ fn in_print_the_phloem_is_ruled_not_dotted_and_the_xylem_walls_are_thick() {
     assert_eq!(ruled, PHLOEM.len(), "every sieve tube shows a ruled line");
 }
 
+#[test]
+fn in_print_only_the_chloroplasts_and_the_ruled_phloem_are_inked_and_companion_and_sheath_cells_stay_white() {
+    for size in SIZES {
+        for open in ["Open", "Closed"] {
+            let svg = render_of(&[s("style", "Print"), b(SHOW_ANSWERS, false), s("label_size", size), s("stomata", open)]);
+            let f = fig(&svg, open == "Open");
+            let scale = 4.0;
+            let (w, h, px) = crate::figures::to_rgba(&svg, scale as f32).unwrap();
+            let dark = |q: P| -> bool { let (ix, iy) = ((q.0 * scale as f64) as u32, (q.1 * scale as f64) as u32); if ix >= w || iy >= h { return false; } let o = ((iy * w + ix) * 4) as usize; (0.299 * px[o] as f64 + 0.587 * px[o + 1] as f64 + 0.114 * px[o + 2] as f64) < 0.66 * 255.0 };
+            let (mut comp, mut sheath, mut phloem) = (0, 0, 0);
+            for (i, (k, pts)) in f.cells.iter().enumerate() {
+                let fill = f.q.els[i].fill.as_str();
+                match k {
+                    K::Companion | K::Sheath => {
+                        if *k == K::Companion { comp += 1; } else { sheath += 1; }
+                        assert_eq!(fill, "#ffffff", "{open} {size}: a {k:?} cell is filled with {fill}");
+                        // the interior, one pixel in from the wall, has no ink at 66 % grey
+                        let c = poly_centre(pts);
+                        let r = pts.iter().map(|q| dist(*q, c)).fold(f64::INFINITY, f64::min) - 1.2;
+                        let pts_in: Vec<P> = (0..40).flat_map(|a| (1..=3).map(move |ring| { let t = a as f64 * 0.157; let rr = r * ring as f64 / 3.0; (c.0 + rr * t.cos(), c.1 + rr * t.sin()) })).collect();
+                        let ink = pts_in.iter().filter(|q| dark(**q)).count();
+                        assert_eq!(ink, 0, "{open} {size}: {k:?} cell {i} has ink inside at 66 % grey");
+                    }
+                    K::Phloem => { phloem += 1; assert_eq!(fill, "url(#vs-hatch4)"); }
+                    _ => assert!(!fill.starts_with("url("), "{open} {size}: a {k:?} cell uses the pattern {fill}"),
+                }
+            }
+            assert!(comp == COMPANION.len() && phloem == PHLOEM.len() && sheath == sheath_centres().len(), "{comp} {sheath} {phloem}");
+            // no pattern anywhere but on the phloem; every ellipse (chloroplasts, in the section and the surface view) is the solid chloroplast grey
+            assert_eq!(f.q.els.iter().filter(|e| e.fill.starts_with("url(")).count(), PHLOEM.len(), "{open} {size}");
+            assert!(!f.chl.is_empty() && f.chl.iter().all(|e| e.fill == "#4d4d4d"), "{open} {size}: a chloroplast is not solid grey");
+            assert!(!svg.contains("url(#vs-hatch3)"), "{open} {size}: the dot pattern is used");
+        }
+    }
+}
+
 fn font_sizes(svg: &str) -> Vec<f64> { svg.split(" font-size=\"").skip(1).map(|x| x.split('"').next().unwrap().parse().unwrap()).collect() }
 
 #[test]
@@ -942,6 +978,52 @@ fn the_defaults_the_start_state_and_every_example_draw_cleanly() {
         assert!(collisions(&svg, c.open).is_empty() && pointer_problems(&svg, &c).is_empty(), "{}", e.name);
     }
     assert!(examples("other").is_none());
+}
+
+#[test]
+fn each_example_labels_exactly_what_its_name_says() {
+    use It::*;
+    let pd = (def().params)();
+    let want: [(&str, Vec<It>); 5] = [
+        ("Leaf section, everything labelled", ORDER.to_vec()),
+        ("The layers, student copy", vec![Cuticle, Upper, Palisade, Spongy, Lower]),
+        ("Gas exchange through a stoma, student copy", vec![AirSpace, Guard, Stoma, Light, Co2, O2, Water]),
+        ("Stomata closed", vec![Cuticle, Upper, Palisade, Chloroplast, Spongy, Lower, Bundle, Xylem, Phloem, Light]),
+        ("The vein: xylem and phloem", vec![Bundle, Xylem, Phloem]),
+    ];
+    let ex = examples(ID).unwrap();
+    assert_eq!(ex.len(), want.len());
+    for (e, (nm, items)) in ex.iter().zip(want) {
+        assert_eq!(e.name, nm);
+        let mut q = Params::defaults(&pd);
+        for (k, v) in &e.params { q.0.insert(k.to_string(), v.clone()); }
+        q.normalize(&pd, false);
+        let got: Vec<It> = labels(&cfg(&q)).iter().map(|l| l.it).collect();
+        assert_eq!(got, items, "{nm}");
+    }
+    // the opening state (Large labels only) labels everything, the same as the defaults
+    let mut st = Params::defaults(&pd);
+    for (k, v) in crate::figures::start::overrides(ID) { st.0.insert(k.to_string(), v); }
+    assert_eq!(labels(&cfg(&st)).iter().map(|l| l.it).collect::<Vec<_>>(), ORDER.to_vec());
+}
+
+#[test]
+fn a_closed_stoma_can_still_be_asked_for_through_the_guard_cell_blank() {
+    // open: Guard cell takes only its documented wording; closed: it also takes "stoma", and the key prints that
+    assert_eq!(accepted(It::Guard, true), alts(It::Guard));
+    assert_eq!(accepted(It::Guard, false), format!("{}, stoma", alts(It::Guard)));
+    for i in ORDER { if i != It::Guard { assert_eq!(accepted(i, false), alts(i)); assert_eq!(accepted(i, true), alts(i)); } }
+    let key = |open: &str| ink_texts(&render_of(&[s("stomata", open)])).into_iter().map(|t| t.0).collect::<Vec<_>>().join(" ");
+    assert!(key("Closed").contains("Guard cell: guard cells (plural), stoma"), "{}", key("Closed"));
+    assert!(!key("Closed").contains("Stoma;") && !key("Open").contains("guard cells (plural), stoma"));
+    // the blank itself is still one Guard cell blank, no Stoma blank or pointer is added when closed
+    let l = labels(&cfg(&with(&[s("stomata", "Closed")])));
+    assert!(l.iter().any(|x| x.it == It::Guard) && !l.iter().any(|x| x.it == It::Stoma));
+    // and the student copy does not print the word anywhere (the markup and word scans run over every closed student copy above)
+    for size in SIZES {
+        let stu = render_of(&[s("stomata", "Closed"), b(SHOW_ANSWERS, false), s("label_size", size)]).to_lowercase();
+        assert!(!stu.contains("stoma"), "{size}: the student copy prints stoma");
+    }
 }
 
 #[test]

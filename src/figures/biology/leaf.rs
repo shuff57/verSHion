@@ -154,6 +154,12 @@ pub fn alts(i: It) -> &'static str {
     }
 }
 
+/// The other wordings the key accepts for a blank in this state: `alts`, and with the stomata closed (no Stoma blank to
+/// ask for it) "stoma" as well for the Guard cell, the answer to the pair of cells that make up the shut stoma.
+pub fn accepted(i: It, open: bool) -> String {
+    if i == It::Guard && !open { format!("{}, stoma", alts(i)) } else { alts(i).to_string() }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Cfg { pub open: bool, pub chloro: bool, pub layers: bool, pub vein: bool, pub stoma: bool, pub gas: bool, pub light: bool, pub surface: bool, pub key: bool, pub lab: f64 }
 
@@ -737,7 +743,7 @@ fn draw(p: &Params) -> String {
     // ---------- captions
     let mut cap: Vec<String> = vec!["Not to scale: a simplified section through a leaf blade.".to_string()];
     if c.key {
-        let acc: Vec<String> = labs.iter().map(|l| format!("{}: {}", name(l.it), alts(l.it))).collect();
+        let acc: Vec<String> = labs.iter().map(|l| format!("{}: {}", name(l.it), accepted(l.it, c.open))).collect();
         if !acc.is_empty() { cap.push(format!("Also accepted: {}.", acc.join("; "))); }
         cap.push(if c.open { "The stomata are open: the guard cells have taken up water and swollen (turgid), so they bow apart and leave a pore." } else { "The stomata are closed: the guard cells have lost water and gone limp (flaccid), so they meet and the pore is shut." }.to_string());
         if c.gas_drawn() {
@@ -858,10 +864,10 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
     let b = |k: &'static str, v: bool| (k, Value::B(v));
     Some(vec![
         Example { name: "Leaf section, everything labelled", params: vec![] },
-        Example { name: "The layers, student copy", params: vec![b("show_vein", false), b("show_stoma", false), b("show_gas", false), b("show_light", false), b(SHOW_ANSWERS, false)] },
-        Example { name: "Gas exchange through a stoma, student copy", params: vec![b("show_layers", false), b("show_vein", false), b(SHOW_ANSWERS, false)] },
+        Example { name: "The layers, student copy", params: vec![b("show_vein", false), b("show_stoma", false), b("show_gas", false), b("show_light", false), b("show_chloroplast", false), b(SHOW_ANSWERS, false)] },
+        Example { name: "Gas exchange through a stoma, student copy", params: vec![b("show_layers", false), b("show_vein", false), b("show_chloroplast", false), b(SHOW_ANSWERS, false)] },
         Example { name: "Stomata closed", params: vec![s("stomata", "Closed"), b("show_gas", false), b("show_stoma", false)] },
-        Example { name: "The vein: xylem and phloem", params: vec![b("show_layers", false), b("show_stoma", false), b("show_gas", false), b("show_light", false), b("show_surface", false)] },
+        Example { name: "The vein: xylem and phloem", params: vec![b("show_layers", false), b("show_stoma", false), b("show_gas", false), b("show_light", false), b("show_chloroplast", false), b("show_surface", false)] },
     ])
 }
 

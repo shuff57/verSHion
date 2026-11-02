@@ -4071,7 +4071,7 @@ const LEAF_CROSS_SECTION: &[Faq] = &[
     },
     Faq {
         q: "Which wording is the answer?",
-        a: "The key uses one wording and lists the others it accepts under the figure. Waxy cuticle (cuticle, wax layer). Upper epidermis (epidermis, adaxial epidermis) and lower epidermis (epidermis, abaxial epidermis). Palisade mesophyll (palisade layer, palisade cells, palisade parenchyma). Chloroplast (chloroplasts). Spongy mesophyll (spongy layer, spongy cells, spongy parenchyma). Vascular bundle (vein, leaf vein). Xylem (xylem vessel). Phloem (sieve tube, phloem sieve tube). Air space (intercellular air space, intercellular space). Stoma (stomata as the plural, stomatal pore, pore). Guard cell (guard cells). Light (sunlight, light energy). CO2 (carbon dioxide), O2 (oxygen), water vapour (water, H2O, water vapor).",
+        a: "The key uses one wording and lists the others it accepts under the figure. Waxy cuticle (cuticle, wax layer). Upper epidermis (epidermis, adaxial epidermis) and lower epidermis (epidermis, abaxial epidermis). Palisade mesophyll (palisade layer, palisade cells, palisade parenchyma). Chloroplast (chloroplasts). Spongy mesophyll (spongy layer, spongy cells, spongy parenchyma). Vascular bundle (vein, leaf vein). Xylem (xylem vessel). Phloem (sieve tube, phloem sieve tube). Air space (intercellular air space, intercellular space). Stoma (stomata as the plural, stomatal pore, pore). Guard cell (guard cells; also stoma when the stomata are closed, because a closed stoma has no Stoma blank). Light (sunlight, light energy). CO2 (carbon dioxide), O2 (oxygen), water vapour (water, H2O, water vapor).",
     },
     Faq {
         q: "How does a student tell the pointers apart, and what does the student copy change?",
@@ -4079,7 +4079,7 @@ const LEAF_CROSS_SECTION: &[Faq] = &[
     },
     Faq {
         q: "What does Print change, and is anything left out?",
-        a: "Print is black, white and grey only and survives a photocopy at 66 % grey: the cuticle is a dark band, cells are white with black walls, chloroplasts are dark dots, xylem vessels have thick black walls and the phloem sieve tubes are ruled with fine horizontal lines (not dots, which would read as chloroplasts), and every arrow is black. The figure opens with Large labels, so a printed copy stays readable. Not drawn: hairs (trichomes), the midrib, a C4 leaf's wreath of bundle-sheath cells, and the chloroplasts' inner structure (see the Photosynthesis figure). The bundle sheath is drawn but not labelled: a pointer to it would have to cross the vein's bracket, the xylem or phloem pointers, or the palisade's chloroplasts.",
+        a: "Print is black, white and grey only and survives a photocopy at 66 % grey: the cuticle is a dark band, cells are white with black walls, chloroplasts are dark dots, xylem vessels have thick black walls and the phloem sieve tubes are ruled with fine horizontal lines (not dots, which would read as chloroplasts), and every arrow is black. The figure opens with Large labels, so a printed copy stays readable. Not drawn: hairs (trichomes), the midrib, a C4 leaf's wreath of bundle-sheath cells, and the chloroplasts' inner structure (see the Photosynthesis figure). The bundle sheath is drawn but not labelled, by design: the vein is named as a whole by its bracket, and the figure keeps its pointers short and clear of each other instead of adding another one.",
     },
 ];
 
