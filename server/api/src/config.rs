@@ -70,6 +70,7 @@ impl Config {
                 key,
                 url: CHEAPERINFERENCE_URL.to_string(),
                 plain: true,
+                extra: get("CHEAPERINFERENCE_EXTRA").and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok()).and_then(|v| v.as_object().cloned()),
                 model: nonempty(get("CHEAPERINFERENCE_MODEL")).unwrap_or_else(|| CHEAPERINFERENCE_DEFAULT_MODEL.to_string()),
                 fallback_model: nonempty(get("CHEAPERINFERENCE_FALLBACK_MODEL")),
                 privacy: true,

@@ -21,6 +21,8 @@ pub struct OpenRouter {
     pub url: String,
     /// A plain OpenAI-compatible upstream (CheaperInference): none of OpenRouter's own request fields are sent.
     pub plain: bool,
+    /// Extra top-level request fields for a plain upstream (for example how it turns reasoning off), from the deployment's env.
+    pub extra: Option<serde_json::Map<String, Value>>,
     pub model: String,
     /// Tried when the primary fails, returns nothing or times out.
     pub fallback_model: Option<String>,
@@ -31,7 +33,7 @@ pub struct OpenRouter {
 
 impl OpenRouter {
     pub fn new(key: impl Into<String>) -> Self {
-        Self { key: key.into(), url: OPENROUTER_URL.into(), plain: false, model: DEFAULT_MODEL.into(), fallback_model: None, privacy: true, timeout: Duration::from_secs(60) }
+        Self { key: key.into(), url: OPENROUTER_URL.into(), plain: false, extra: None, model: DEFAULT_MODEL.into(), fallback_model: None, privacy: true, timeout: Duration::from_secs(60) }
     }
 }
 
@@ -159,13 +161,19 @@ pub fn shape_reply(raw: &Value) -> Option<Reply> {
 /// The request body. The client chose none of the model, reasoning or provider options.
 pub fn request_body(o: &OpenRouter, model: &str, messages: &[Message], max_tokens: i64, temperature: f64) -> Value {
     if o.plain {
-        return json!({
+        let mut body = json!({
             "model": model,
             "messages": messages.iter().map(Message::to_json).collect::<Vec<_>>(),
             "response_format": { "type": "json_object" },
             "max_tokens": max_tokens,
             "temperature": temperature,
         });
+        if let (Some(extra), Some(map)) = (&o.extra, body.as_object_mut()) {
+            for (k, v) in extra {
+                map.entry(k.clone()).or_insert_with(|| v.clone());
+            }
+        }
+        return body;
     }
     json!({
         "model": model,
@@ -228,8 +236,9 @@ mod tests {
 
     #[test]
     fn a_plain_upstream_gets_no_openrouter_fields_and_its_cost_is_read_from_billing() {
-        let o = OpenRouter { plain: true, ..OpenRouter::new("k") };
+        let o = OpenRouter { plain: true, extra: json!({ "reasoning_effort": "none", "max_tokens": 1 }).as_object().cloned(), ..OpenRouter::new("k") };
         let body = request_body(&o, "gemma-4-26b-a4b-it", &[], 100, 0.0);
+        assert_eq!((body["reasoning_effort"].as_str(), body["max_tokens"].as_i64()), (Some("none"), Some(100)), "extra fields never override the relay's own");
         assert!(body.get("reasoning").is_none() && body.get("usage").is_none() && body.get("provider").is_none());
         assert_eq!(body["response_format"], json!({ "type": "json_object" }));
         let raw = json!({ "choices": [{ "message": { "content": "{}" } }], "usage": { "prompt_tokens": 10, "completion_tokens": 5 }, "billing": { "billed_cost_usd": "0.000123" } });
