@@ -36,6 +36,10 @@ Method that works (see memory `figures-gapfill-loop`): one sonnet builder in its
 - Latent bug seen, not fixed (`mod.rs` belongs to a protected area for this loop's other session): `figures::svg_size` slices the first 400 bytes of the SVG, so a multi-byte character straddling byte 400 panics.
 - Not checked for any figure: the live egui editor and handle dragging, browser font metrics, PDF/DOCX export, release-build timing.
 
+## 3b. One figures branch (owner decision 2026-11-01)
+
+All figures work, from every session, is committed to `figures-gapfill` only; no new `figures-*` branches. `figures-circuits` and `figures-shell` (already in `main`) were deleted locally; their remote copies and `figures-computing` (worktree `verSHion-computing` has another session's uncommitted edits to Cargo.toml, Cargo.lock, data_entry.rs) were left alone. Correction: `figures-circuits` is in `main`, so the 44-commit note below is wrong; `figures-gapfill` is 167 commits ahead of `main`.
+
 ## 4. Merge, rebuild, redeploy (requested by the owner 2026-11-01, NOT done, needs decisions)
 
 The owner asked to finish the running figures, then commit, merge to `main`, rebuild and redeploy. The standing rule until then was "local commits only, never push or deploy"; this request is the owner's explicit instruction, but the details below are open:
