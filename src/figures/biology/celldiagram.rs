@@ -39,12 +39,19 @@ const CLR_L: f64 = 2.5;
 const RING: f64 = 6.0;
 /// Half the width of the white halo drawn under every leader (it keeps a leader visible over hatching and dark fills).
 const HALO: f64 = 1.7;
+/// Radius of a ribosome on the rough ER (an 80S ribosome, the size of a free one in an animal or plant cell).
+const STUD: f64 = 2.5;
+/// A rough ER stud this near a rough ER pointer is always drawn, even under a leader: the sac must look studded there.
+const STUD_KEEP: f64 = 15.0;
 /// A leader to a ribosome stops this far outside the ribosome's edge.
 const RIBO_GAP: f64 = 0.8;
 /// Leader cost per structure run over that the leader does not point at (a violation costs 10000).
 const W_CROSS: f64 = 4000.0;
 /// Leader cost per px run along the cell's boundary layers (membrane, wall, capsule).
 const W_ALONG: f64 = 3.0;
+/// A leader may run this far (px) over the membrane, wall and capsule in one stretch (a bacterium's three layers are
+/// 28 px deep, crossed at 45 degrees about 40); longer costs as much as running over a structure.
+const MAX_RUN: f64 = 45.0;
 const CELLS: [&str; 3] = ["Animal cell", "Plant cell", "Bacterial cell (prokaryote)"];
 
 // ================================================================== the structures
@@ -81,7 +88,7 @@ struct Info { name: &'static str, alt: &'static str, groups: u8, many: bool }
 fn info(s: Sid) -> Info {
     let i = |name, alt, groups, many| Info { name, alt, groups, many };
     match s {
-        Sid::Membrane => i("Cell membrane", "plasma membrane", G_BOUND, false),
+        Sid::Membrane => i("Cell membrane", "plasma membrane, cell surface membrane", G_BOUND, false),
         Sid::Wall => i("Cell wall", "", G_BOUND, false),
         Sid::Capsule => i("Capsule", "", G_BOUND, false),
         Sid::Plasmodesma => i("Plasmodesma", "plasmodesmata", G_BOUND, true),
@@ -91,17 +98,17 @@ fn info(s: Sid) -> Info {
         Sid::Envelope => i("Nuclear envelope", "nuclear membrane", G_MEMB | G_PROT, false),
         Sid::Nucleolus => i("Nucleolus", "", G_PROT, false),
         Sid::Nucleoid => i("Nucleoid", "nuclear region, DNA, chromosome, chromosomal DNA", G_PROT, false),
-        Sid::Plasmid => i("Plasmid", "", G_OTHER, true),
+        Sid::Plasmid => i("Plasmid", "plasmids, plasmid DNA, DNA", G_OTHER, true),
         Sid::RoughEr => i("Rough ER", "rough endoplasmic reticulum", G_MEMB | G_PROT, true),
         Sid::SmoothEr => i("Smooth ER", "smooth endoplasmic reticulum", G_MEMB, false),
         Sid::Golgi => i("Golgi apparatus", "Golgi body, Golgi complex", G_MEMB | G_PROT, false),
         Sid::Mito => i("Mitochondrion", "mitochondria", G_MEMB | G_ENERGY, true),
-        Sid::Chloro => i("Chloroplast", "", G_MEMB | G_ENERGY, true),
+        Sid::Chloro => i("Chloroplast", "chloroplasts", G_MEMB | G_ENERGY, true),
         Sid::Vacuole => i("Central vacuole", "vacuole, large vacuole", G_MEMB, false),
-        Sid::Lysosome => i("Lysosome", "", G_MEMB, true),
+        Sid::Lysosome => i("Lysosome", "lysosomes", G_MEMB, true),
         Sid::Centriole => i("Centriole", "centrioles, centrosome", G_OTHER, true),
-        Sid::Ribosome => i("Ribosome", "", G_PROT, true),
-        Sid::Flagellum => i("Flagellum", "", G_OTHER, false),
+        Sid::Ribosome => i("Ribosome", "ribosomes", G_PROT, true),
+        Sid::Flagellum => i("Flagellum", "flagella", G_OTHER, false),
         Sid::Pilus => i("Pilus", "pili", G_OTHER, true),
     }
 }
@@ -284,7 +291,8 @@ fn paint(t: Tone, f: &svg::Fills) -> String {
             Tone::Chloro => f.series(2),
             Tone::Mito => f.series(3),
             Tone::Vac => f.series(4),
-            Tone::Capsule => f.series(5),
+            // dots, not lines: the pili and the flagellum's rod cross the capsule and must stay visible on it
+            Tone::Capsule => f.series(3),
             Tone::Dark | Tone::Lyso | Tone::Grana | Tone::Ribo | Tone::Ink => "#111111".into(),
             Tone::Wall => "#cccccc".into(),
             Tone::Fibre => "#333333".into(),
@@ -409,7 +417,13 @@ impl Scene {
             (0..24).all(|i| { let a = (i as f64 + 0.5 * (k % 2) as f64) * std::f64::consts::TAU / 24.0; allowed(hit((q.0 + rr * a.cos(), q.1 + rr * a.sin()))) })
         })
     }
-    pub fn valid(&self, s: Sid, q: P) -> bool { self.top_hit(q) == Hit::Is(s) && self.ring_ok(s, q, RING) }
+    /// A pointer is valid on its own structure with nothing else within `RING` of where its leader ends; a ribosome's
+    /// leader ends `r + RIBO_GAP` outside its centre in a direction the layout picks, so its ring is that much wider.
+    pub fn valid(&self, s: Sid, q: P) -> bool {
+        if self.top_hit(q) != Hit::Is(s) { return false; }
+        let extra = if s == Sid::Ribosome { self.top_index(q).map_or(0.0, |k| (self.parts[k].bb.2 - self.parts[k].bb.0) / 2.0) + RIBO_GAP } else { 0.0 };
+        self.ring_ok(s, q, RING + extra)
+    }
     pub fn has(&self, s: Sid) -> bool { self.parts.iter().any(|p| p.sid == Some(s)) }
     pub fn anchors_of(&self, s: Sid) -> Vec<P> { self.anchors.iter().filter(|a| a.0 == s).map(|a| a.1).collect() }
     /// Where the leader from a pointer at `anchor` on `s`, running toward `to`, ends: on the pointer itself, or for a
@@ -441,6 +455,7 @@ impl Scene {
         let mut hit: Vec<(Sid, u32)> = Vec::new();
         let mut other = 0u32;
         let mut along = 0.0;
+        let (mut run, mut long_run) = (0.0, false);
         // past the scene's box there is nothing to run over
         let (bx0, by0, bx1, by1) = self.bbox;
         let out_at = |t: f64| { let q = (tip.0 + ux * t, tip.1 + uy * t); q.0 < bx0 - 3.0 || q.0 > bx1 + 3.0 || q.1 < by0 - 3.0 || q.1 > by1 + 3.0 };
@@ -448,31 +463,37 @@ impl Scene {
         for i in 0..=steps {
             let t = (i as f64).min(len);
             if out_at(t) { break; }
-            // the centre line every pixel, the halo's edges every other pixel (they only catch near misses)
-            for o in if i % 2 == 0 { &[-(HALO + 0.5), 0.0, HALO + 0.5][..] } else { &[0.0][..] } {
-                let o = *o;
+            let mut on_boundary = false;
+            for o in [-(HALO + 0.5), 0.0, HALO + 0.5] {
                 let q = (tip.0 + ux * t - uy * o, tip.1 + uy * t + ux * o);
                 let Some(k) = self.ras.at(q) else { continue };
                 let p = &self.parts[k];
                 if p.loose { continue; }
                 let Some(x) = p.sid else { other += 1; continue };
                 if matches!(x, Sid::Membrane | Sid::Wall | Sid::Capsule) {
-                    if o == 0.0 && t > RING { along += 1.0; }
+                    if o == 0.0 && t > RING { along += 1.0; on_boundary = true; }
                     continue;
                 }
-                // within the pointer's clear ring, what the ring allows (the nucleus beside an envelope pointer) is not run over
+                // within the pointer's clear ring, what the ring allows (the nucleus beside an envelope pointer) is not run over;
+                // nor are the rough ER's own studs next to its pointer
                 let free = x == Sid::Cytoplasm
                     || t <= RING && ring_neighbour_ok(s, x)
+                    || s == Sid::RoughEr && x == Sid::Ribosome && t <= STUD_KEEP + STUD
                     || x == s && (!by_copy(s) || Some(p.obj) == own)
                     || matches!((s, x), (Sid::Nucleolus, Sid::Nucleus) | (Sid::Nucleolus, Sid::Envelope) | (Sid::Nucleus, Sid::Envelope) | (Sid::Plasmodesma, Sid::Wall));
                 if free { continue; }
+                // a stud kept beside a rough ER pointer is never left out, so running over one is as bad as a violation
+                if x == Sid::Ribosome && !p.loose { return 10_000.0 + W_ALONG * along; }
                 let key = (x, if by_copy(x) { p.obj } else { 0 });
                 if !hit.contains(&key) { hit.push(key); }
                 // two structures already rule this leader out; no need to look further
                 if hit.len() >= 2 { return W_CROSS * 2.0 + W_ALONG * along; }
             }
+            // a run along the membrane, wall or capsule longer than an oblique crossing reads as tracing the boundary
+            run = if on_boundary { run + 1.0 } else { 0.0 };
+            long_run |= run > MAX_RUN;
         }
-        W_CROSS * (hit.len() as f64 + if other > 0 { 1.0 } else { 0.0 }) + W_ALONG * along
+        W_CROSS * (hit.len() as f64 + if other > 0 { 1.0 } else { 0.0 } + if long_run { 1.0 } else { 0.0 }) + W_ALONG * along
     }
     /// The structures (by kind) a drawn leader runs over that it does not point at; empty for a clean leader.
     pub fn leader_crosses(&self, s: Sid, anchor: P, tip: P, end: P) -> Vec<Sid> {
@@ -643,18 +664,41 @@ impl B {
             self.fill(Some(Sid::RoughEr), band(c, rad(k), rad(k) + 8.0, *a0, *a1, 24), Tone::Er, Some((Tone::Ink, 1.2)));
         }
         self.end();
+        // studs every 9 degrees along the outside of each sac, the same size as a free ribosome; none nearer a pointer
+        // than its clear ring allows, and two placed just outside the ring on each side of every pointer (on its own
+        // sac and on the sac inside it), so the sac is studded right where the pointer ends
+        let at = |r: f64, a: f64| (c.0 + r * a.to_radians().cos(), c.1 + r * a.to_radians().sin());
+        let pts: Vec<P> = marks.iter().map(|(k, am)| at(rad(*k) + 4.0, *am)).collect();
+        let edge = |k: usize| rad(k) + 8.0 + STUD + 0.6;
+        let near_min = RING + STUD + 0.6;
+        let mut studs: Vec<P> = Vec::new();
         for (k, (a0, a1)) in ks.iter().enumerate() {
-            let rr = rad(k) + 8.0 + 0.9;
-            let bare = ((RING + 3.5) / rr).to_degrees();
             let mut a = a0 + 5.0;
             while a < a1 - 3.0 {
-                if !marks.iter().any(|(k2, am)| (*k2 == k || *k2 == k + 1) && (a - am).abs() < bare) {
-                    let q = (c.0 + rr * a.to_radians().cos(), c.1 + rr * a.to_radians().sin());
-                    self.fill(Some(Sid::Ribosome), ell(q, 2.1, 2.1, 0.0, 8), Tone::Ribo, None);
-                    self.parts.last_mut().unwrap().loose = true;
-                }
+                let q = at(edge(k), a);
+                if pts.iter().all(|m| (m.0 - q.0).hypot(m.1 - q.1) >= near_min) { studs.push(q); }
                 a += 9.0;
             }
+        }
+        for (k, am) in marks.iter() {
+            for j in [*k, k - 1] {
+                let (rp, rs) = (rad(*k) + 4.0, edge(j));
+                let d = near_min + 0.4;
+                let cs = (rp * rp + rs * rs - d * d) / (2.0 * rp * rs);
+                if cs.abs() > 1.0 { continue; }
+                for sgn in [-1.0, 1.0] {
+                    let a = am + sgn * cs.acos().to_degrees();
+                    if a < ks[j].0 + 1.0 || a > ks[j].1 - 1.0 { continue; }
+                    let q = at(rs, a);
+                    if pts.iter().any(|o| (o.0 - q.0).hypot(o.1 - q.1) < near_min) || studs.iter().any(|o| (o.0 - q.0).hypot(o.1 - q.1) < 2.0 * STUD + 1.0) { continue; }
+                    studs.push(q);
+                }
+            }
+        }
+        // a stud near a pointer place is never left out of the drawing (so it is an obstacle for every other leader)
+        for q in studs {
+            self.fill(Some(Sid::Ribosome), ell(q, STUD, STUD, 0.0, 10), Tone::Ribo, None);
+            self.parts.last_mut().unwrap().loose = pts.iter().all(|m| (m.0 - q.0).hypot(m.1 - q.1) >= STUD_KEEP);
         }
         for (k, am) in marks {
             let rm = rad(k) + 4.0;
@@ -778,7 +822,7 @@ fn plant(b: &mut B, plasmo: bool) {
     for (x, y) in [(25.0, 136.0), (100.0, 136.0)] { b.chloro((x, y), 26.0, 10.0, 0.0); }
     if plasmo {
         b.plasmodesma((-60.0, -156.5), 0.0, 17.0);
-        b.plasmodesma((-201.5, -24.0), 90.0, 17.0);
+        b.plasmodesma((-201.5, 100.0), 90.0, 17.0);
         b.plasmodesma((201.5, 30.0), 90.0, 17.0);
     }
     b.ring(Some(Sid::Membrane), inner.clone(), 2.2);
@@ -842,7 +886,7 @@ fn bacterium(b: &mut B) {
     for t in [0.35, 0.6, 0.85] { b.cand(Sid::Flagellum, along(&fl, t)); }
     b.begin();
     b.line(Some(Sid::Flagellum), fl, Tone::Ink, 3.2);
-    // the hook runs from the filament through the capsule and wall to the motor in the membrane
+    // the rod runs from the filament (whose hook is just outside the cell) in through the capsule and wall to the motor in the membrane
     let xm = h + (rm * rm - y0 * y0).sqrt();
     b.line(Some(Sid::Flagellum), vec![(xm - 3.0, y0), (x0, y0)], Tone::Ink, 2.4);
     b.end();
@@ -890,7 +934,11 @@ fn free_dots(b: &mut B, count: usize, r: f64) {
         }
         out
     };
-    let dots = spread(&grid, count, 6.0, Vec::new());
+    // a third of them where there is room for a pointer (the end of a ribosome's leader is r + 0.8 px out, and needs
+    // 6 px clear round it), the rest anywhere with 6 px of room
+    let roomy = spread(&grid, count / 3, 12.0, Vec::new());
+    let mut dots = roomy.clone();
+    dots.extend(spread(&grid, count - roomy.len(), 6.0, roomy));
     for q in &dots {
         b.fill(Some(Sid::Ribosome), ell(*q, r, r, 0.0, 10), Tone::Ribo, None);
         b.parts.last_mut().unwrap().loose = true;
@@ -898,7 +946,7 @@ fn free_dots(b: &mut B, count: usize, r: f64) {
     }
     // cytoplasm pointers: where the most room is, and clear of the dots just drawn
     let grid2: Vec<(P, f64)> = grid.iter().filter(|g| dots.iter().all(|d| (d.0 - g.0 .0).hypot(d.1 - g.0 .1) > 12.0)).copied().collect();
-    for q in spread(&grid2, 10, 9.0, dots) { b.cand(Sid::Cytoplasm, q); }
+    for q in spread(&grid2, 18, 9.0, dots) { b.cand(Sid::Cytoplasm, q); }
 }
 
 fn build_scene(t: CellType, plasmo: bool) -> Scene {
@@ -981,11 +1029,15 @@ fn tw(s: &str, size: f64) -> f64 { text_w(s, size) }
 
 struct Slot { side: i8, x: f64, y: f64 }
 
-fn viol(a: &(P, P, P), b: &(P, P, P), disc: f64) -> u32 {
+fn viol(a: &(P, P, P), b: &(P, P, P), disc: f64) -> u32 { viol4(a, a.0, b, b.0, disc) }
+
+/// `viol` where each label's pointed-at place may differ from where its leader starts (a ribosome's leader stops
+/// outside the dot): another leader keeps `CLR_A` from both.
+fn viol4(a: &(P, P, P), aa: P, b: &(P, P, P), ba: P, disc: f64) -> u32 {
     let mut v = 0;
     if seg_dist(a.0, a.1, b.0, b.1) < CLR_L { v += 1; }
-    if pt_seg(b.0, a.0, a.1) < CLR_A { v += 1; }
-    if pt_seg(a.0, b.0, b.1) < CLR_A { v += 1; }
+    if pt_seg(b.0, a.0, a.1).min(pt_seg(ba, a.0, a.1)) < CLR_A { v += 1; }
+    if pt_seg(a.0, b.0, b.1).min(pt_seg(aa, b.0, b.1)) < CLR_A { v += 1; }
     if pt_seg(b.2, a.0, a.1) < disc + 3.5 { v += 1; }
     if pt_seg(a.2, b.0, b.1) < disc + 3.5 { v += 1; }
     v
@@ -1025,7 +1077,7 @@ fn assign(cands: &[Vec<P>], tips: &[Vec<Vec<P>>], extra: &[Vec<Vec<f64>>], slots
     let cost_of = |st: &[(usize, usize)], i: usize| -> f64 {
         let li = leader(i, st[i].0, st[i].1);
         let mut c = own(i, st[i].0, st[i].1);
-        for k in 0..n { if k != i { c += 10000.0 * viol(&li, &leader(k, st[k].0, st[k].1), disc) as f64; } }
+        for k in 0..n { if k != i { c += 10000.0 * viol4(&li, cands[i][st[i].0], &leader(k, st[k].0, st[k].1), cands[k][st[k].0], disc) as f64; } }
         c
     };
     let mut best: Option<(Vec<(usize, usize)>, u32, f64)> = None;
@@ -1083,11 +1135,11 @@ fn assign(cands: &[Vec<P>], tips: &[Vec<Vec<P>>], extra: &[Vec<Vec<f64>>], slots
                     let oldj = st[j];
                     if let (Some(ci), Some(cj)) = (bc[i][oldj.1], bc[j][old.1]) {
                         if own(i, ci, oldj.1) + own(j, cj, old.1) >= before + cost_of(&st, j) { continue; }
-                        let pair_before = viol(&leader(i, old.0, old.1), &leader(j, oldj.0, oldj.1), disc) as f64;
+                        let pair_before = viol4(&leader(i, old.0, old.1), cands[i][old.0], &leader(j, oldj.0, oldj.1), cands[j][oldj.0], disc) as f64;
                         let before_ij = cost_of(&st, i) + cost_of(&st, j) - 10000.0 * pair_before;
                         st[i] = (ci, oldj.1);
                         st[j] = (cj, old.1);
-                        let pair_after = viol(&leader(i, st[i].0, st[i].1), &leader(j, st[j].0, st[j].1), disc) as f64;
+                        let pair_after = viol4(&leader(i, st[i].0, st[i].1), cands[i][st[i].0], &leader(j, st[j].0, st[j].1), cands[j][st[j].0], disc) as f64;
                         let d = cost_of(&st, i) + cost_of(&st, j) - 10000.0 * pair_after - before_ij;
                         let (ni, nj) = (st[i], st[j]);
                         st[i] = old;
@@ -1107,7 +1159,7 @@ fn assign(cands: &[Vec<P>], tips: &[Vec<Vec<P>>], extra: &[Vec<Vec<f64>>], slots
         }
         let ls: Vec<_> = st.iter().enumerate().map(|(i, (c, sl))| leader(i, *c, *sl)).collect();
         let mut v = 0;
-        for i in 0..n { for j in i + 1..n { v += viol(&ls[i], &ls[j], disc); } }
+        for i in 0..n { for j in i + 1..n { v += viol4(&ls[i], cands[i][st[i].0], &ls[j], cands[j][st[j].0], disc); } }
         let l: f64 = (0..n).map(|i| own(i, st[i].0, st[i].1)).sum();
         if best.as_ref().map_or(true, |b| (v, l) < (b.1, b.2)) { best = Some((st.clone(), v, l)); }
         if v == 0 && restart >= polish { break; }
@@ -1357,15 +1409,18 @@ fn draw(p: &Params, c: &Cfg, lay: &Layout) -> String {
         d.describe("Cell diagram", &format!("A cell diagram with {} numbered pointers; the table under it has a blank for each.", labs.len()));
     }
     let off = (lay.off.0 + shift, lay.off.1);
-    // a ribosome under a leader (with its halo and a pixel) is not drawn, unless it is the one pointed at;
+    // a ribosome under a leader (with its halo and a pixel) is not drawn, unless it is pointed at or is a stud next to
+    // the rough ER pointer in use, unless it is the one pointed at;
     // its place in the drawing order is kept by an empty, invisible polygon
     let under = |p: &Part| -> bool {
         let r = (p.bb.2 - p.bb.0) / 2.0;
         let c = ((p.bb.0 + p.bb.2) / 2.0 + lay.off.0, (p.bb.1 + p.bb.3) / 2.0 + lay.off.1);
-        labs.iter().any(|l| !(l.sid == Sid::Ribosome && (l.anchor.0 - c.0).hypot(l.anchor.1 - c.1) < 0.01) && pt_seg(c, l.tip, l.end) < r + HALO + 2.0)
+        let by_rer = labs.iter().any(|l| l.sid == Sid::RoughEr && (l.anchor.0 - c.0).hypot(l.anchor.1 - c.1) < STUD_KEEP);
+        let pointed_at = labs.iter().any(|l| l.sid == Sid::Ribosome && (l.anchor.0 - c.0).hypot(l.anchor.1 - c.1) < 0.01);
+        !by_rer && !pointed_at && labs.iter().any(|l| pt_seg(c, l.tip, l.end) < r + HALO + 2.0)
     };
     for part in &sc.parts {
-        if part.loose && under(part) { d.raw(r#"<polygon points="" fill="none" stroke="none" stroke-width="0"/>"#); } else { d.raw(&part_svg(part, off, &fills)); }
+        if part.sid == Some(Sid::Ribosome) && under(part) { d.raw(r#"<polygon points="" fill="none" stroke="none" stroke-width="0"/>"#); } else { d.raw(&part_svg(part, off, &fills)); }
     }
     // ---------- heading: the cell type in the key, the question in a student copy (same row, same layout)
     let heading = if c.key { c.t.name() } else if labs.is_empty() { "" } else { "Name each numbered structure." };
@@ -1374,6 +1429,8 @@ fn draw(p: &Params, c: &Cfg, lay: &Layout) -> String {
     // Both stop square at the tip, with no dot: the end of the line is the pointer.
     let seg = |a: P, e: P, colour: &str, sw: f64| format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{colour}" stroke-width="{sw}"/>"#, a.0, a.1, e.0, e.1);
     for l in labs { d.raw(&seg((l.tip.0 + shift, l.tip.1), (l.end.0 + shift, l.end.1), "#ffffff", 1.0 + 2.0 * HALO)); }
+    // the nuclear envelope is drawn again over the halos: a gap cut in it would read as a nuclear pore
+    if !labs.is_empty() { for part in sc.parts.iter().filter(|p| p.sid == Some(Sid::Envelope)) { d.raw(&part_svg(part, off, &fills)); } }
     for l in labs { d.raw(&seg((l.tip.0 + shift, l.tip.1), (l.end.0 + shift, l.end.1), INK, 1.0)); }
     for l in labs {
         let dc = (l.disc.0 + shift, l.disc.1);
@@ -1724,6 +1781,12 @@ mod tests {
         let memb = &parts_of(&bs, Sid::Membrane)[0].pts;
         let cyto = &parts_of(&bs, Sid::Cytoplasm)[0].pts;
         assert!(parts_of(&bs, Sid::Flagellum).iter().any(|p| p.pts.iter().any(|q| inside(cyto, *q) && dist_poly(memb, *q, true) > 1.5)), "the flagellum does not reach the membrane");
+        // the basal body: two short bars across the rod, one on the membrane and one in the wall
+        let wall = &parts_of(&bs, Sid::Wall)[0].pts;
+        let bars: Vec<P> = parts_of(&bs, Sid::Flagellum).iter().filter(|p| p.pts.len() == 2 && (p.pts[0].0 - p.pts[1].0).abs() < 0.01 && ((p.pts[0].1 - p.pts[1].1).abs() - 9.0).abs() < 0.01).map(|p| ((p.pts[0].0 + p.pts[1].0) / 2.0, (p.pts[0].1 + p.pts[1].1) / 2.0)).collect();
+        assert_eq!(bars.len(), 2, "basal-body bars");
+        assert!(bars.iter().any(|m| dist_poly(memb, *m, true) < 1.0), "no bar on the membrane");
+        assert!(bars.iter().any(|m| inside(wall, *m) && !inside(cyto, *m)), "no bar in the wall");
     }
 
     #[test]
@@ -1955,7 +2018,7 @@ mod tests {
                             let q = (l.anchor.0 + shift, l.anchor.1);
                             let tip = (l.tip.0 + shift, l.tip.1);
                             let lead = ls.iter().find(|m| (m.0 .0 - tip.0).hypot(m.0 .1 - tip.1) < 0.01).unwrap_or_else(|| panic!("{t:?} {size}: no leader starts at the {:?} pointer", l.sid));
-                            assert_eq!(dr.hit(&sc, q), Hit::Is(l.sid), "{t:?} {size}: the pointer for {:?} does not land on it", l.sid);
+                            assert_eq!(dr.hit(&sc, q), Hit::Is(l.sid), "{t:?} {size} mask {mask} plasmo {plasmo}: the pointer for {:?} does not land on it; scene part {:?}, drawn {:?}", l.sid, sc.top_index((q.0 - off.0, q.1 - off.1)), sc.top_index((q.0 - off.0, q.1 - off.1)).map(|k| dr.sh[k].0.len()));
                             // a 6 px disc round the pointer holds nothing else (24 directions at 4 radii)
                             for k in 1..=4 {
                                 for j in 0..24 {
@@ -1976,6 +2039,14 @@ mod tests {
                                 let len = dx.hypot(dy);
                                 let cross = ((q.0 - tip.0) * dy - (q.1 - tip.1) * dx).abs() / len;
                                 assert!(cross < 0.01, "the leader does not aim at the ribosome");
+                                // within 6 px of where the leader ends: only that ribosome and cytoplasm (critic 2: the membrane was 3 px off)
+                                for k2 in 1..=4 {
+                                    for j in 0..24 {
+                                        let (rr, a) = (1.5 * k2 as f64, j as f64 * std::f64::consts::TAU / 24.0);
+                                        let at = dr.index(&sc, (tip.0 + rr * a.cos(), tip.1 + rr * a.sin()));
+                                        assert!(at.is_none_or(|i| i == k || sc.parts[i].sid == Some(Sid::Cytoplasm)), "{t:?} {size} mask {mask}: {rr} px from the ribosome leader's end lies {:?}", at.map(|i| sc.parts[i].sid));
+                                    }
+                                }
                                 for p in pts {
                                     let u = ((p.0 - tip.0) * dx + (p.1 - tip.1) * dy) / len;
                                     let v = ((p.0 - tip.0) * dy - (p.1 - tip.1) * dx).abs() / len;
@@ -2032,7 +2103,9 @@ mod tests {
                 let q = (a.0 + ux * t - uy * o, a.1 + uy * t + ux * o);
                 let Some(k) = dr.at(q) else { continue };
                 let p = &sc.parts[k];
-                let ok = match p.sid {
+                // the studs of the rough ER next to its own pointer are part of what it points at
+                let own_stud = sid == Sid::RoughEr && p.sid == Some(Sid::Ribosome) && (p.bb.0 + p.bb.2 - 2.0 * a.0).hypot(p.bb.1 + p.bb.3 - 2.0 * a.1) / 2.0 < 15.0;
+                let ok = own_stud || match p.sid {
                     None => false,
                     Some(x) => matches!(x, Sid::Membrane | Sid::Wall | Sid::Capsule | Sid::Cytoplasm)
                         || (t <= 6.0 && neighbour_ok(sid, Hit::Is(x)))
@@ -2047,12 +2120,17 @@ mod tests {
         out
     }
 
+    /// The longest leader in any layout (measured, see `leaders_run_over_nothing_they_do_not_point_at`).
+    const LEN_BOUND: f64 = 420.0;
+
     #[test]
     fn leaders_run_over_nothing_they_do_not_point_at() {
         let mut rasters: HashMap<(CellType, bool), (DrawnRaster, P)> = HashMap::new();
         let (mut renders, mut total, mut crossing, mut over_ribo) = (0, 0, 0, 0);
         let mut worst: Vec<String> = Vec::new();
         let mut dirty: Vec<String> = Vec::new();
+        let mut max_run = (0.0f64, String::new());
+        let mut max_len = (0.0f64, String::new());
         let mut check = |list: Vec<(&'static str, Value)>, must_be_clean: bool, what: &str| {
             let p = with(&list);
             let c = cfg(&p);
@@ -2075,12 +2153,24 @@ mod tests {
                 let tip = (l.tip.0 + shift, l.tip.1);
                 let (_, end) = *leaders(&svg).iter().find(|m| (m.0 .0 - tip.0).hypot(m.0 .1 - tip.1) < 0.01).unwrap();
                 let mut over = runs_over(dr, &sc, off, l.sid, tip, end, hw);
+                // the longest stretch on the membrane, wall or capsule, and the leader's length
+                let (a, e) = ((tip.0 - off.0, tip.1 - off.1), (end.0 - off.0, end.1 - off.1));
+                let len = (e.0 - a.0).hypot(e.1 - a.1);
+                let (mut run, mut t) = (0.0f64, 0.0);
+                while t <= len {
+                    let q = (a.0 + (e.0 - a.0) * t / len, a.1 + (e.1 - a.1) * t / len);
+                    if dr.at(q).is_some_and(|k| matches!(sc.parts[k].sid, Some(Sid::Membrane) | Some(Sid::Wall) | Some(Sid::Capsule))) { run += 0.5; } else { run = 0.0; }
+                    if run > max_run.0 { max_run = (run, format!("{what}: {:?}", l.sid)); }
+                    t += 0.5;
+                }
+                let (cw, chh) = canvas(&svg);
+                if len > max_len.0 { max_len = (len, format!("{what}: {:?} on {cw:.0}x{chh:.0}", l.sid)); }
                 // a part this render does not draw (an empty polygon) is not run over
                 over.retain(|o| !dr0.sh.iter().enumerate().any(|(i, sh)| sh.0.is_empty() && o == &format!("{:?}#{}", sc.parts[i].sid, sc.parts[i].obj)));
                 if !over.is_empty() {
                     crossing += 1;
                     if over.iter().any(|o| o.starts_with("Some(Ribosome)")) { over_ribo += 1; }
-                    if worst.len() < 40 { worst.push(format!("{what}: {:?} runs over {over:?}", l.sid)); }
+                    if worst.len() < 400 { worst.push(format!("{what}: {:?} runs over {over:?}", l.sid)); }
                     if must_be_clean { dirty.push(format!("{what}: the {:?} leader runs over {over:?}", l.sid)); }
                 }
             }
@@ -2106,9 +2196,56 @@ mod tests {
         }
         eprintln!("{renders} renders, {total} leaders, {crossing} run over something ({over_ribo} over a ribosome)\n{}", worst.join("\n"));
         assert!(dirty.is_empty(), "{dirty:#?}");
+        eprintln!("longest run along a boundary {:.1} px ({}); longest leader {:.0} px ({})", max_run.0, max_run.1, max_len.0, max_len.1);
+        // a run longer than an oblique crossing of the bacterium's three layers would trace the boundary (critic 2: 91.5 px)
+        assert!(max_run.0 <= 45.0, "a leader runs {:.1} px along the cell's edge: {}", max_run.0, max_run.1);
+        assert!(max_len.0 <= LEN_BOUND, "a leader is {:.0} px long: {}", max_len.0, max_len.1);
         assert_eq!(over_ribo, 0, "a leader runs over a ribosome it does not point at");
-        // measured 105 of 5809 (1.8 %) at the time of writing; the defaults, the opening state and the examples are clean
+        // measured 99 of 5809 (1.7 %) at the time of writing; the defaults, the opening state and the examples are clean
         assert!(crossing * 100 <= 2 * total, "{crossing} of {total} leaders run over a structure");
+    }
+
+    /// The centre of a drawn polygon (its points' mean); None for an empty one (a part left out).
+    fn centre(pts: &[P]) -> Option<P> {
+        if pts.is_empty() { return None; }
+        Some((pts.iter().map(|q| q.0).sum::<f64>() / pts.len() as f64, pts.iter().map(|q| q.1).sum::<f64>() / pts.len() as f64))
+    }
+
+    #[test]
+    fn every_rough_er_pointer_ends_among_drawn_ribosomes() {
+        // the dots are what tell rough ER from smooth ER: at least three drawn studs within 14 px of where the leader ends,
+        // for every rough ER pointer in every layout, in Colour and Print
+        let (mut n, mut fewest) = (0, usize::MAX);
+        for t in [CellType::Animal, CellType::Plant] {
+            for plasmo in [false, true] {
+                if plasmo && t != CellType::Plant { continue; }
+                for mask in 1u8..32 {
+                    if mask & (G_MEMB | G_PROT) == 0 { continue; }
+                    for funcs in [false, true] {
+                        for size in SIZES {
+                            for style in ["Colour", "Print"] {
+                                let mut l = vec![s("cell", type_of(t.idx())), b("plasmodesmata", plasmo), b("functions", funcs), s("label_size", size), s("style", style)];
+                                l.extend(mask_list(mask));
+                                let svg = render_of(&l);
+                                let sc = scene(t, plasmo);
+                                let dr = Drawn::new(&svg);
+                                let lay = layout(&cfg0(t, mask, plasmo), funcs, svg::label_factor(size));
+                                let shift = (canvas(&svg).0 - lay.w) / 2.0;
+                                for lb in lay.labs.iter().filter(|x| x.sid == Sid::RoughEr) {
+                                    let tip = (lb.tip.0 + shift, lb.tip.1);
+                                    let studs = sc.parts.iter().enumerate().filter(|(i, p)| p.sid == Some(Sid::Ribosome) && centre(&dr.sh[*i].0).is_some_and(|c| (c.0 - tip.0).hypot(c.1 - tip.1) < 14.0)).count();
+                                    assert!(studs >= 3, "{t:?} mask {mask} funcs {funcs} {size} {style}: {studs} ribosomes drawn within 14 px of the rough ER pointer");
+                                    n += 1;
+                                    fewest = fewest.min(studs);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        eprintln!("rough ER pointers: {n}, fewest studs within 14 px: {fewest}");
+        assert!(n > 500, "{n}");
     }
 
     // ------------------------------------------------------------ student copy
@@ -2267,13 +2404,17 @@ mod tests {
         }
         let key = texts(&render_of(&[s("cell", CELLS[1])])).into_iter().map(|t| t.s).collect::<Vec<_>>().join(" ");
         assert!(key.contains("Central vacuole") && key.contains("vacuole, large vacuole") && !key.contains(" Vacuole "));
-        assert!(key.contains("Cell membrane") && key.contains("plasma membrane (Cell membrane)"));
+        assert!(key.contains("Cell membrane") && key.contains("plasma membrane, cell surface membrane (Cell membrane)"));
         // the second answers a teacher would accept are in the key; near-synonyms that name something else are not
         let bact = texts(&render_of(&[s("cell", CELLS[2])])).into_iter().map(|t| t.s).collect::<Vec<_>>().join(" ");
         assert!(bact.contains("chromosomal DNA (Nucleoid)") && bact.contains("chromosome,") && bact.contains("DNA,"), "{bact}");
         let anim = texts(&render_of(&[])).into_iter().map(|t| t.s).collect::<Vec<_>>().join(" ");
         assert!(anim.contains("centrosome (Centriole)"), "{anim}");
         for sd in ALL { for bad in ["cytosol", "slime", "fimbria"] { assert!(!info(sd).alt.contains(bad), "{sd:?} accepts {bad}"); } }
+        // plurals for everything drawn many times, DNA for both kinds of bacterial DNA, the UK wording for the membrane
+        for (sd, w) in [(Sid::Mito, "mitochondria"), (Sid::Chloro, "chloroplasts"), (Sid::Ribosome, "ribosomes"), (Sid::Lysosome, "lysosomes"), (Sid::Plasmid, "plasmids"), (Sid::Pilus, "pili"), (Sid::Plasmodesma, "plasmodesmata"), (Sid::Centriole, "centrioles"), (Sid::Flagellum, "flagella"), (Sid::Plasmid, "DNA"), (Sid::Nucleoid, "DNA"), (Sid::Membrane, "cell surface membrane")] {
+            assert!(info(sd).alt.split(", ").any(|a| a == w), "{sd:?} does not accept {w}");
+        }
         assert!(func(Sid::Mito, false).contains("most of the cell's ATP") && !func(Sid::Mito, false).contains("releases energy"));
         // the student copy asks its question in the heading row (no empty band at the top); the key names the cell there
         for t in TYPES {
@@ -2455,6 +2596,12 @@ mod tests {
                 // the line itself prints dark and 1.3 px to either side of it the copy is white
                 let svg = render_of(&[s("cell", type_of(t.idx())), s("style", "Print"), b(SHOW_ANSWERS, key)]);
                 let (w, _, px) = to_rgba(&svg, 2.0).unwrap();
+                let o2 = origin(&svg, t, 31, false, false, 1.0);
+                // the nuclear envelope is drawn over the halos on purpose (a cut would look like a pore): beside it the copy is dark
+                // so is a rough ER stud kept next to a rough ER pointer (the sac must look studded there); any other
+                // ribosome under a leader is left out of the drawing
+                let by_envelope = |q: P| std::iter::once((0.0, 0.0)).chain((0..16).map(|k| { let (r, a) = (if k < 8 { 1.2 } else { 2.4 }, (k % 8) as f64 * std::f64::consts::FRAC_PI_4); (r * a.cos(), r * a.sin()) }))
+                    .any(|d| matches!(sc.top_hit((q.0 - o2.0 + d.0, q.1 - o2.1 + d.1)), Hit::Is(Sid::Envelope) | Hit::Is(Sid::Ribosome)));
                 for (a, e) in leaders(&svg) {
                     let len = (e.0 - a.0).hypot(e.1 - a.1);
                     let (ux, uy) = ((e.0 - a.0) / len, (e.1 - a.1) / len);
@@ -2467,8 +2614,9 @@ mod tests {
                         n += 1;
                         if ![(0, 0), (1, 0), (0, 1), (-1, 0), (0, -1)].iter().any(|(dx, dy)| dark_at(&px, w, x + dx, y + dy)) { lost += 1; }
                         for o in [-1.3, 1.3] {
-                            let (sx, sy) = at((q.0 - uy * o, q.1 + ux * o));
-                            if dark_at(&px, w, sx, sy) { muddy += 1; }
+                            let side = (q.0 - uy * o, q.1 + ux * o);
+                            let (sx, sy) = at(side);
+                            if dark_at(&px, w, sx, sy) && !by_envelope(side) { muddy += 1; }
                         }
                         s_ += 1.0;
                     }
@@ -2477,6 +2625,27 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn a_halo_cuts_no_false_pore_and_the_capsule_hatch_keeps_the_pili_visible() {
+        // the nuclear envelope is drawn again after the halos, so where a leader crosses it the line is not broken
+        for t in [CellType::Animal, CellType::Plant] {
+            let svg = render_of(&[s("cell", type_of(t.idx()))]);
+            let after = svg.split("stroke=\"#ffffff\"").last().unwrap();
+            let env = parts_of(&scene(t, false), Sid::Envelope).len();
+            assert_eq!(after.matches("<polyline").count(), env, "{t:?}: the envelope is not redrawn over the halos");
+            // and with nothing labelled there is no halo and no second copy
+            let bare = render_of(&[s("cell", type_of(t.idx())), b("g_boundary", false), b("g_membrane", false), b("g_energy", false), b("g_protein", false), b("g_other", false)]);
+            assert_eq!(shapes(&bare).len(), scene(t, false).parts.len());
+        }
+        // Print: the capsule is dotted, not lined (upright or level lines would hide the pili and the flagellum's rod)
+        let f = svg::Fills::new(&with(&[s("style", "Print")]));
+        assert_eq!(paint(Tone::Capsule, &f), "url(#vs-hatch3)");
+    }
+
+    #[test]
+    fn the_solid_print_tones_read_black_at_sixty_six_percent_grey() {
         // the solid tones: a lysosome, a centriole and the nucleolus read black at 66 % (on a bare cell: a leader's halo would cut them)
         let svg = render_of(&[s("style", "Print"), b("g_boundary", false), b("g_membrane", false), b("g_energy", false), b("g_protein", false), b("g_other", false)]);
         let (w, h, px) = to_rgba(&svg, 2.0).unwrap();
@@ -2500,7 +2669,14 @@ mod tests {
 
     #[test]
     fn a_first_layout_is_fast_enough_to_follow_a_checkbox() {
-        // measured per layout, worst case over every cell type and a spread of switches; the cache makes every later draw free
+        // measured per layout, worst case over every cell type and a spread of switches; the cache makes every later draw free.
+        // The scenes (drawing, pixel map, pointer places) are built once per cell type at its first draw: timed apart.
+        let t0 = std::time::Instant::now();
+        for t in TYPES { for pl in [false, true] { let _ = scene(t, pl); } }
+        let build = t0.elapsed();
+        eprintln!("scenes: {build:?} for all four");
+        // measured 24 s for all four in a debug build at load average 60 (a one-off per cell type, not per click)
+        assert!(build < std::time::Duration::from_secs(60), "{build:?}");
         let mut worst = std::time::Duration::ZERO;
         let mut total = std::time::Duration::ZERO;
         let mut n = 0u32;
@@ -2558,10 +2734,10 @@ mod tests {
         let got: Vec<(String, usize, u64)> = [(CellType::Animal, false), (CellType::Plant, false), (CellType::Plant, true), (CellType::Bacterial, false)]
             .iter().map(|(t, pl)| { let sc = scene(*t, *pl); (format!("{t:?}{pl}"), sc.anchors.len(), anchor_hash(&sc)) }).collect();
         let want: Vec<(String, usize, u64)> = vec![
-            ("Animalfalse".into(), 147, 2786404004686056623),
-            ("Plantfalse".into(), 155, 893082021512406353),
-            ("Planttrue".into(), 160, 3936401422295411275),
-            ("Bacterialfalse".into(), 87, 17083084584684246170),
+            ("Animalfalse".into(), 143, 7309486224737599451),
+            ("Plantfalse".into(), 156, 1607444370444036810),
+            ("Planttrue".into(), 159, 3035519648794346212),
+            ("Bacterialfalse".into(), 88, 13991651982053604753),
         ];
         assert_eq!(got, want);
     }
@@ -2648,12 +2824,17 @@ mod tests {
         bd.fill(Some(Sid::Cytoplasm), rectp((0.0, 0.0), 200.0, 60.0, 0.0), Tone::Cyto, None);
         bd.mito((-60.0, 0.0), 10.0, 6.0, 0.0);
         bd.mito((0.0, 0.0), 10.0, 6.0, 0.0);
+        // a free ribosome (left out of the drawing where a leader passes) costs nothing; a stud kept beside a rough
+        // ER pointer (never left out) costs as much as a violation
         bd.fill(Some(Sid::Ribosome), ell((40.0, 2.0), 2.5, 2.5, 0.0, 10), Tone::Ribo, None);
+        bd.parts.last_mut().unwrap().loose = true;
+        bd.fill(Some(Sid::Ribosome), ell((40.0, 22.0), 2.5, 2.5, 0.0, 10), Tone::Ribo, None);
         let sc = mk(bd);
         assert_eq!(sc.leader_cost(Sid::Mito, (-60.0, 0.0), (-60.0, 0.0), (-90.0, 0.0)), 0.0);
         assert_eq!(sc.leader_cost(Sid::Mito, (-60.0, 0.0), (-60.0, 0.0), (20.0, 0.0)), W_CROSS, "the other mitochondrion");
-        assert_eq!(sc.leader_cost(Sid::Mito, (-60.0, 0.0), (-60.0, 0.0), (90.0, 0.0)), 2.0 * W_CROSS, "and a ribosome the halo would touch");
-        assert_eq!(sc.leader_crosses(Sid::Mito, (-60.0, 0.0), (-60.0, 0.0), (90.0, 0.0)), vec![Sid::Mito, Sid::Ribosome]);
+        assert_eq!(sc.leader_cost(Sid::Mito, (-60.0, 0.0), (-60.0, 0.0), (90.0, 0.0)), W_CROSS, "a free ribosome is not counted");
+        assert_eq!(sc.leader_crosses(Sid::Mito, (-60.0, 0.0), (-60.0, 0.0), (90.0, 0.0)), vec![Sid::Mito]);
+        assert_eq!(sc.leader_cost(Sid::Cytoplasm, (20.0, 22.0), (20.0, 22.0), (90.0, 22.0)), 10_000.0, "a kept stud");
         assert_eq!(sc.leader_cost(Sid::Mito, (-60.0, 0.0), (-60.0, 0.0), (-60.0, 90.0)), 0.0, "leaving the cell costs nothing here: no boundary drawn");
     }
 
@@ -2747,15 +2928,30 @@ mod tests {
 
     #[test]
     fn leaders_stay_short_enough_to_follow() {
-        // a leader is never longer than a third of the canvas diagonal in the default figure of any type
-        for t in TYPES {
-            let svg = render_of(&[s("cell", type_of(t.idx()))]);
-            let (w, h) = canvas(&svg);
-            for l in leaders(&svg) {
-                let len = (l.0 .0 - l.1 .0).hypot(l.0 .1 - l.1 .1);
-                assert!(len < 0.55 * (w * w + h * h).sqrt(), "{t:?}: a leader is {len:.0} px on {w}x{h}");
+        // in the defaults, the opening state and every example, at every label size, with and without the function
+        // captions (the longest case), no leader is longer than 40 % of the canvas diagonal nor than LEN_BOUND; the
+        // whole grid is measured against LEN_BOUND in `leaders_run_over_nothing_they_do_not_point_at`
+        let mut sets: Vec<Vec<(&'static str, Value)>> = TYPES.iter().map(|t| vec![s("cell", type_of(t.idx()))]).collect();
+        sets.push(crate::figures::start::overrides(ID));
+        for e in examples(ID).unwrap() { sets.push(e.params); }
+        let mut worst = 0.0f64;
+        for base in sets {
+            for size in SIZES {
+                for funcs in [false, true] {
+                    let mut l = base.clone();
+                    l.push(s("label_size", size));
+                    l.push(b("functions", funcs));
+                    let svg = render_of(&l);
+                    let (w, h) = canvas(&svg);
+                    for ld in leaders(&svg) {
+                        let len = (ld.0 .0 - ld.1 .0).hypot(ld.0 .1 - ld.1 .1);
+                        worst = worst.max(len / (w * w + h * h).sqrt());
+                        assert!(len < 0.4 * (w * w + h * h).sqrt() && len <= LEN_BOUND, "{size} {funcs}: a leader is {len:.0} px on {w:.0}x{h:.0}");
+                    }
+                }
             }
         }
+        eprintln!("longest leader: {:.0} % of the diagonal", worst * 100.0);
     }
 
     #[test]
