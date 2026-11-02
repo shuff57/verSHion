@@ -107,6 +107,8 @@ struct State {
     pick: Option<Pick>,
     /// Open "Add a picture" dialog.
     attach: Option<Attach>,
+    /// The question editor, open on one converted question: (source, question index in its doc, draft).
+    editing: Option<(usize, usize, crate::qedit::Draft)>,
     /// Live read of the paste box: (text it was computed for, result).
     paste_read: Option<(String, Result<PasteRead, String>)>,
     /// Drawn inside the bank's Import modal (which lists the formats itself).
@@ -599,6 +601,7 @@ impl crate::App {
         }
         shell_frame(self, ctx, true, |app, ui| page(app, ui, ctx, &mut st));
         attach_dialog(self, ctx, &mut st);
+        edit_dialog(self, ctx, &mut st);
         ST.with(|s| *s.borrow_mut() = st);
     }
 }
@@ -770,11 +773,12 @@ impl crate::App {
             });
         });
         let imported = self.store.imports.len() > imports_before;
-        if cancel || imported || (modal.should_close() && st.attach.is_none()) {
+        if cancel || imported || (modal.should_close() && st.attach.is_none() && st.editing.is_none()) {
             // (an import already opened the bank it went into)
             close_import_modal(ctx, &mut st);
         }
         attach_dialog(self, ctx, &mut st);
+        edit_dialog(self, ctx, &mut st);
         MST.with(|s| *s.borrow_mut() = st);
     }
 }
@@ -1574,6 +1578,19 @@ fn sheet(
                 }
             }
         }
+        if let (Some(k), Some(_)) = (*k, q) {
+            // A pencil under the include box: opens the question editor on this question.
+            let pc = Pos2::new(rect.left() - side * 0.5, rect.top() + bp * 0.75 + 22.0);
+            let pr = ui.interact(Rect::from_center_size(pc, Vec2::splat(20.0)), ui.id().with(("imp_q_edit", si, k)), Sense::click());
+            let col = if pr.hovered() { theme::accent_col() } else { PAPER_SOFT };
+            let w = Stroke::new(1.4, col);
+            let p = ui.painter();
+            p.line_segment([pc + Vec2::new(-5.0, 5.0), pc + Vec2::new(4.0, -4.0)], Stroke::new(2.4, col));
+            p.line_segment([pc + Vec2::new(-6.0, 6.5), pc + Vec2::new(-4.0, 6.5)], w);
+            if pr.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text("Edit this question").clicked() {
+                ctx.data_mut(|d| d.insert_temp(egui::Id::new("imp_open_edit"), Some((si, k))));
+            }
+        }
         if let Some(k) = *k {
             let is_dup = dup.get(k).copied().unwrap_or(false);
             let inc = included(skip, s, dup, k);
@@ -2094,6 +2111,45 @@ fn crop_pages(st: &State, si: usize) -> Vec<(String, Vec<u8>)> {
         }
     }
     out
+}
+
+/// The question editor over the import review: the teacher fixes a converted question (stem, type, answers, points)
+/// before it goes into a bank. Done writes the edited question back into the import's own document.
+fn edit_dialog(app: &mut crate::App, ctx: &egui::Context, st: &mut State) {
+    let oid = egui::Id::new("imp_open_edit");
+    if let Some((si, k)) = ctx.data_mut(|d| d.remove_temp::<Option<(usize, usize)>>(oid)).flatten() {
+        if let Some(q) = st.sources.get(si).and_then(|s| s.doc.as_ref()).and_then(|d| d.questions.get(k)) {
+            st.editing = Some((si, k, crate::qedit::Draft::from_question("import".to_string(), q)));
+        }
+    }
+    let Some((si, k, mut d)) = st.editing.take() else { return };
+    let mut textures = std::mem::take(&mut app.textures);
+    let action = crate::qedit::draw_modal(ctx, &mut d, &[], &mut textures);
+    app.textures = textures;
+    if !matches!(action, crate::qedit::QAction::None) {
+        crate::wysiwyg::new_session(ctx);
+    }
+    match action {
+        crate::qedit::QAction::None => st.editing = Some((si, k, d)),
+        crate::qedit::QAction::Cancel => {}
+        crate::qedit::QAction::Delete => {
+            // Leaving it out keeps every index in the review stable.
+            if let Some(b) = st.sources.get_mut(si).and_then(|s| s.sel.get_mut(k)) {
+                *b = false;
+            }
+        }
+        crate::qedit::QAction::Done => {
+            if let Some(s) = st.sources.get_mut(si) {
+                let name = s.name.clone();
+                if let Some(slot) = s.doc.as_mut().and_then(|doc| doc.questions.get_mut(k)) {
+                    let q = d.build_question(Some(&*slot));
+                    *slot = q;
+                    // An answer check read the old text: it has to be run again.
+                    st.checks.remove(&name);
+                }
+            }
+        }
+    }
 }
 
 fn attach_dialog(app: &mut crate::App, ctx: &egui::Context, st: &mut State) {
