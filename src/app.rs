@@ -488,7 +488,11 @@ impl App {
         }
         self.mine.show(&ctx, &mut self.account, &self.store.banks);
         self.account.show(&ctx);
-        // The hosted AI is charged to the signed-in account: hand it the server and a way to get a fresh token.
+        // The hosted AI is charged to the signed-in account: hand it the server and a way to get a fresh token. Choosing it
+        // restores a saved sign-in in the background, so an Import started before anyone opened Account still finds it.
+        if self.settings.ai_provider == "account" {
+            self.account.open_quiet();
+        }
         {
             let signed_in = self.account.model.me.is_some();
             match (signed_in, self.account.model.client().cloned()) {

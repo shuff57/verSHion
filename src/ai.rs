@@ -1221,6 +1221,7 @@ pub fn begin_service(cfg: &AiCfg, service: &str, pages: usize) -> Result<Charged
     if !cfg.is_relay() {
         return Ok(Charged { credits: 0, left: None });
     }
+    account_signed_in_check(cfg)?;
     let url = format!("{}/service", cfg.base.trim_end_matches('/'));
     let key = request_key(cfg);
     let reply = post_json(&url, json!({"service": service, "pages": pages}), key.as_deref()).map_err(|e| credit_message(&e))?;
@@ -1238,6 +1239,7 @@ pub async fn begin_service_async(cfg: &AiCfg, service: &str, pages: usize) -> Re
     if !cfg.is_relay() {
         return Ok(Charged { credits: 0, left: None });
     }
+    account_signed_in_check(cfg)?;
     let url = format!("{}/service", cfg.base.trim_end_matches('/'));
     let key = request_key(cfg);
     let reply = post_json_async(&url, &json!({"service": service, "pages": pages}), key.as_deref()).await.map_err(|e| credit_message(&e))?;
@@ -1247,6 +1249,14 @@ pub async fn begin_service_async(cfg: &AiCfg, service: &str, pages: usize) -> Re
     }
     let n = |k: &str| reply.get(k).and_then(Value::as_u64).map(|v| v as u32);
     Ok(Charged { credits: n("credits").unwrap_or(0), left: n("left") })
+}
+
+/// The hosted AI has no address until the account is signed in: say so, instead of posting to a relative `/service`.
+fn account_signed_in_check(cfg: &AiCfg) -> Result<(), String> {
+    if cfg.provider == "account" && (cfg.base.trim().is_empty() || !account_ai_ready()) {
+        return Err("Sign in on the Account screen first (or wait a moment if you just opened the page), then convert again.".to_string());
+    }
+    Ok(())
 }
 
 /// The relay's sentence for a refused service ("This needs 2 credits and you have 0 left this week.").
@@ -1814,6 +1824,14 @@ mod tests {
         openai_chat_once(&cfg, "p", "image/png", &[], 0.0).unwrap();
         let body = &h.join().unwrap()[0].1;
         assert!(body.contains(r#""reasoning":{"enabled":false}"#) && body.contains(r#""usage":{"include":true}"#));
+    }
+
+    #[test]
+    fn the_hosted_ai_with_nobody_signed_in_says_so_and_sends_nothing() {
+        // The address comes from the signed-in account; without it the old code posted to a relative "/service".
+        let cfg = AiCfg { provider: "account".into(), base: String::new(), model: "m".into() };
+        let err = begin_service(&cfg, "import", 1).unwrap_err();
+        assert!(err.starts_with("Sign in on the Account screen"), "{err}");
     }
 
     #[test]
