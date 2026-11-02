@@ -1,9 +1,11 @@
 //! Labelled cell diagrams: an animal cell, a plant cell and a bacterial cell, drawn from one scene description each.
 //!
-//! Every name stands in a column beside the cell on a straight leader that ends on exactly one structure. The leaders
-//! are laid out by a small search (see `assign`) so that none crosses another and none passes over another label's
-//! pointer. Where a structure occurs many times (mitochondria, ribosomes ...) the pointer marks one of them and the
-//! caption says so. A group switch labels the structures of one system (boundary, membrane-bound organelles, energy
+//! Every name stands in a column beside the cell on a straight leader that ends on exactly one structure, with no dot
+//! (the textbook convention: a dot could be read as a ribosome or hide a small target). A leader to a ribosome stops
+//! at the ribosome's edge so the ribosome stays visible. The leaders are laid out by a small search (see `assign`) so
+//! that none crosses another, none passes over another label's pointer, and, as far as the drawing allows, none runs
+//! over a structure it does not point at (`leader_cost`). Where a structure occurs many times (mitochondria,
+//! ribosomes ...) the pointer marks one of them and the caption says so. A group switch labels the structures of one system (boundary, membrane-bound organelles, energy
 //! organelles, protein-making pathway, the rest) so a worksheet can ask about one system; a structure is labelled when
 //! any ticked group contains it. Structures that are not labelled are still drawn.
 //!
@@ -32,8 +34,17 @@ const GAP: f64 = 30.0;
 const CLR_A: f64 = 7.0;
 /// The search never lets two leaders come nearer than this.
 const CLR_L: f64 = 2.5;
-/// The ring around a pointer that must be free of every other structure (px).
-const RING: f64 = 2.8;
+/// The disc around a pointer's end that must be free of every other structure (px). The leader's end is 0.5 px wide
+/// and its white halo 1.7 px, so this leaves more than 4 px of clear room round the mark.
+const RING: f64 = 6.0;
+/// Half the width of the white halo drawn under every leader (it keeps a leader visible over hatching and dark fills).
+const HALO: f64 = 1.7;
+/// A leader to a ribosome stops this far outside the ribosome's edge.
+const RIBO_GAP: f64 = 0.8;
+/// Leader cost per structure run over that the leader does not point at (a violation costs 10000).
+const W_CROSS: f64 = 4000.0;
+/// Leader cost per px run along the cell's boundary layers (membrane, wall, capsule).
+const W_ALONG: f64 = 3.0;
 const CELLS: [&str; 3] = ["Animal cell", "Plant cell", "Bacterial cell (prokaryote)"];
 
 // ================================================================== the structures
@@ -72,14 +83,14 @@ fn info(s: Sid) -> Info {
     match s {
         Sid::Membrane => i("Cell membrane", "plasma membrane", G_BOUND, false),
         Sid::Wall => i("Cell wall", "", G_BOUND, false),
-        Sid::Capsule => i("Capsule", "slime layer", G_BOUND, false),
+        Sid::Capsule => i("Capsule", "", G_BOUND, false),
         Sid::Plasmodesma => i("Plasmodesma", "plasmodesmata", G_BOUND, true),
-        Sid::Cytoplasm => i("Cytoplasm", "cytosol", G_OTHER, false),
+        Sid::Cytoplasm => i("Cytoplasm", "", G_OTHER, false),
         Sid::Cytoskeleton => i("Cytoskeleton", "microtubule, microtubules", G_OTHER, true),
         Sid::Nucleus => i("Nucleus", "", G_MEMB | G_PROT, false),
         Sid::Envelope => i("Nuclear envelope", "nuclear membrane", G_MEMB | G_PROT, false),
         Sid::Nucleolus => i("Nucleolus", "", G_PROT, false),
-        Sid::Nucleoid => i("Nucleoid", "nuclear region", G_PROT, false),
+        Sid::Nucleoid => i("Nucleoid", "nuclear region, DNA, chromosome, chromosomal DNA", G_PROT, false),
         Sid::Plasmid => i("Plasmid", "", G_OTHER, true),
         Sid::RoughEr => i("Rough ER", "rough endoplasmic reticulum", G_MEMB | G_PROT, true),
         Sid::SmoothEr => i("Smooth ER", "smooth endoplasmic reticulum", G_MEMB, false),
@@ -88,10 +99,10 @@ fn info(s: Sid) -> Info {
         Sid::Chloro => i("Chloroplast", "", G_MEMB | G_ENERGY, true),
         Sid::Vacuole => i("Central vacuole", "vacuole, large vacuole", G_MEMB, false),
         Sid::Lysosome => i("Lysosome", "", G_MEMB, true),
-        Sid::Centriole => i("Centriole", "", G_OTHER, true),
+        Sid::Centriole => i("Centriole", "centrioles, centrosome", G_OTHER, true),
         Sid::Ribosome => i("Ribosome", "", G_PROT, true),
         Sid::Flagellum => i("Flagellum", "", G_OTHER, false),
-        Sid::Pilus => i("Pilus", "pili, fimbria", G_OTHER, true),
+        Sid::Pilus => i("Pilus", "pili", G_OTHER, true),
     }
 }
 
@@ -106,22 +117,22 @@ fn func(s: Sid, bacterial: bool) -> &'static str {
         Sid::Plasmodesma => "Narrow channel joining neighbouring cells so substances pass between them",
         Sid::Cytoplasm => "Jelly-like fluid that fills the cell; many reactions happen here",
         Sid::Cytoskeleton => "Protein fibres that give shape and move structures around",
-        Sid::Nucleus => "Holds the DNA and controls the cell's activities",
-        Sid::Envelope => "Double layer with pores that surrounds the DNA and controls traffic in and out",
+        Sid::Nucleus => "Holds the genetic material and controls the cell's activities",
+        Sid::Envelope => "Double layer with pores; encloses the genetic material, controls traffic in and out",
         Sid::Nucleolus => "Builds the subunits of the cell's protein factories",
-        Sid::Nucleoid => "Region holding the main loop of DNA; nothing encloses it",
-        Sid::Plasmid => "Small extra ring of DNA, often carrying genes such as antibiotic resistance",
+        Sid::Nucleoid => "Region holding the main loop of genetic material; nothing encloses it",
+        Sid::Plasmid => "Small extra loop of genes, often carrying antibiotic resistance",
         Sid::RoughEr => "Folds and transports proteins made on its dotted surface",
         Sid::SmoothEr => "Makes lipids and breaks down toxins; its surface has no dots",
         Sid::Golgi => "Modifies, sorts and packages proteins into vesicles",
-        Sid::Mito => "Site of aerobic respiration; releases energy as ATP",
+        Sid::Mito => "Site of aerobic respiration; makes most of the cell's ATP",
         Sid::Chloro => "Site of photosynthesis; captures light energy to make sugar",
         Sid::Vacuole => "Stores water, sugars and ions; its pressure keeps the cell firm",
         Sid::Lysosome => "Digests worn-out parts and food using enzymes",
         Sid::Centriole => "Helps organise the spindle fibres during cell division",
         Sid::Ribosome => "Builds proteins by joining amino acids",
         Sid::Flagellum => "Long whip-like tail that spins to push the cell along",
-        Sid::Pilus => "Hair-like projection that grips surfaces or passes DNA to another cell",
+        Sid::Pilus => "Hair-like projection that grips surfaces or passes genes to another cell",
     }
 }
 
@@ -275,7 +286,7 @@ fn paint(t: Tone, f: &svg::Fills) -> String {
             Tone::Vac => f.series(4),
             Tone::Capsule => f.series(5),
             Tone::Dark | Tone::Lyso | Tone::Grana | Tone::Ribo | Tone::Ink => "#111111".into(),
-            Tone::Wall => "#8a8a8a".into(),
+            Tone::Wall => "#cccccc".into(),
             Tone::Fibre => "#333333".into(),
             Tone::Cyto | Tone::Er | Tone::Golgi | Tone::Plasmo | Tone::White | Tone::LyDot => "#ffffff".into(),
         };
@@ -300,10 +311,50 @@ pub struct Part {
     pub tex: bool,
     /// Bounding box, stroke included (a quick test before the exact one).
     pub bb: (f64, f64, f64, f64),
+    /// One organelle drawn as several parts (a mitochondrion's outline and cristae) shares one number.
+    pub obj: u32,
+    /// A ribosome (free, or a stud on the rough ER): left out of the drawing where a leader passes over it (unless it
+    /// is the one pointed at), so that no dot under a line can be read as the line's end or as its target.
+    pub loose: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Hit { Nothing, Other, Is(Sid) }
+
+/// The top-most part at each whole-pixel point of the scene (textures excluded): a fast stand-in for `top_hit` where
+/// many points are tested (the room around free ribosomes, what a leader runs over).
+#[derive(Clone, Debug)]
+pub struct Raster { x0: i32, y0: i32, w: i32, h: i32, idx: Vec<u32> }
+
+const NONE: u32 = u32::MAX;
+
+impl Raster {
+    fn new(parts: &[Part]) -> Raster {
+        let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+        for p in parts.iter().filter(|p| !p.tex) { x0 = x0.min(p.bb.0); y0 = y0.min(p.bb.1); x1 = x1.max(p.bb.2); y1 = y1.max(p.bb.3); }
+        if x0 > x1 { return Raster { x0: 0, y0: 0, w: 0, h: 0, idx: Vec::new() }; }
+        let (x0, y0) = (x0.floor() as i32 - 1, y0.floor() as i32 - 1);
+        let (w, h) = (x1.ceil() as i32 + 2 - x0, y1.ceil() as i32 + 2 - y0);
+        let mut idx = vec![NONE; (w * h) as usize];
+        for (k, p) in parts.iter().enumerate() {
+            if p.tex { continue; }
+            for y in (p.bb.1.floor() as i32).max(y0)..=(p.bb.3.ceil() as i32).min(y0 + h - 1) {
+                for x in (p.bb.0.floor() as i32).max(x0)..=(p.bb.2.ceil() as i32).min(x0 + w - 1) {
+                    if part_hit(p, (x as f64, y as f64)) { idx[((y - y0) * w + x - x0) as usize] = k as u32; }
+                }
+            }
+        }
+        Raster { x0, y0, w, h, idx }
+    }
+    /// The index of the top part at the nearest whole-pixel point, if any.
+    fn at(&self, q: P) -> Option<usize> {
+        if !(q.0.is_finite() && q.1.is_finite()) { return None; }
+        let (x, y) = (q.0.round() as i64 - self.x0 as i64, q.1.round() as i64 - self.y0 as i64);
+        if x < 0 || y < 0 || x >= self.w as i64 || y >= self.h as i64 { return None; }
+        let k = self.idx[(y * self.w as i64 + x) as usize];
+        if k == NONE { None } else { Some(k as usize) }
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct Scene {
@@ -313,6 +364,7 @@ pub struct Scene {
     /// Authored pointer places that failed the unambiguity test (a test asserts there are none).
     pub rejected: Vec<(Sid, P)>,
     pub bbox: (f64, f64, f64, f64),
+    pub ras: Raster,
 }
 
 fn part_hit(p: &Part, q: P) -> bool {
@@ -324,75 +376,175 @@ fn part_hit(p: &Part, q: P) -> bool {
     matches!(p.stroke, Some((_, w)) if dist_poly(&p.pts, q, false) <= w / 2.0)
 }
 
+/// Structures drawn many times where one copy must not be taken for another: a leader to one mitochondrion that runs
+/// over a second one has crossed a structure. (The sacs of the rough ER and the cisternae of the Golgi are one structure.)
+fn by_copy(s: Sid) -> bool {
+    matches!(s, Sid::Mito | Sid::Chloro | Sid::Lysosome | Sid::Plasmid | Sid::Pilus | Sid::Centriole | Sid::Plasmodesma | Sid::Ribosome | Sid::Cytoskeleton)
+}
+
+/// What may lie next to a pointer on `s` without making it ambiguous, besides `s` itself and clear space.
+fn ring_neighbour_ok(s: Sid, x: Sid) -> bool {
+    x == Sid::Cytoplasm && s != Sid::Cytoplasm
+        || matches!((s, x), (Sid::Envelope, Sid::Nucleus) | (Sid::Membrane, Sid::Wall) | (Sid::Plasmodesma, Sid::Wall) | (Sid::Plasmodesma, Sid::Membrane) | (Sid::Wall, Sid::Capsule))
+}
+
 impl Scene {
+    pub fn top_index(&self, q: P) -> Option<usize> { self.parts.iter().rposition(|p| part_hit(p, q)) }
     pub fn top_hit(&self, q: P) -> Hit {
-        for p in self.parts.iter().rev() {
-            if part_hit(p, q) { return match p.sid { Some(s) => Hit::Is(s), None => Hit::Other }; }
-        }
-        Hit::Nothing
+        match self.top_index(q) { Some(k) => match self.parts[k].sid { Some(s) => Hit::Is(s), None => Hit::Other }, None => Hit::Nothing }
     }
-    /// What may share a pointer's ring without making the pointer ambiguous.
+    /// Nothing but `s`, clear space and the allowed neighbours within `r` of `q` (four rings of 24 points, so a thin
+    /// structure cannot slip between the samples).
     fn ring_ok(&self, s: Sid, q: P, r: f64) -> bool {
         let allowed = |h: Hit| match h {
             Hit::Nothing => true,
             Hit::Other => false,
-            Hit::Is(x) => x == s || x == Sid::Cytoplasm && s != Sid::Cytoplasm
-                || matches!((s, x), (Sid::Envelope, Sid::Nucleus) | (Sid::Membrane, Sid::Wall) | (Sid::Plasmodesma, Sid::Wall) | (Sid::Wall, Sid::Capsule)),
+            Hit::Is(x) => x == s || ring_neighbour_ok(s, x),
         };
-        (0..12).all(|i| { let a = i as f64 * std::f64::consts::TAU / 12.0; allowed(self.top_hit((q.0 + r * a.cos(), q.1 + r * a.sin()))) })
+        // only the parts whose box reaches the disc can be hit (the same answer as `top_hit`, much faster)
+        let near: Vec<&Part> = self.parts.iter().filter(|p| p.bb.0 <= q.0 + r && p.bb.2 >= q.0 - r && p.bb.1 <= q.1 + r && p.bb.3 >= q.1 - r).collect();
+        let hit = |x: P| match near.iter().rev().find(|p| part_hit(p, x)) { Some(p) => match p.sid { Some(v) => Hit::Is(v), None => Hit::Other }, None => Hit::Nothing };
+        (1..=4).all(|k| {
+            let rr = r * k as f64 / 4.0;
+            (0..24).all(|i| { let a = (i as f64 + 0.5 * (k % 2) as f64) * std::f64::consts::TAU / 24.0; allowed(hit((q.0 + rr * a.cos(), q.1 + rr * a.sin()))) })
+        })
     }
     pub fn valid(&self, s: Sid, q: P) -> bool { self.top_hit(q) == Hit::Is(s) && self.ring_ok(s, q, RING) }
     pub fn has(&self, s: Sid) -> bool { self.parts.iter().any(|p| p.sid == Some(s)) }
     pub fn anchors_of(&self, s: Sid) -> Vec<P> { self.anchors.iter().filter(|a| a.0 == s).map(|a| a.1).collect() }
-    /// Biggest distance from `q` to which a disc is free of every part but cytoplasm.
-    fn clearance(&self, q: P) -> f64 {
-        if self.top_hit(q) != Hit::Is(Sid::Cytoplasm) { return 0.0; }
-        let mut r = 0.0;
-        while r < 18.0 {
-            r += 3.0;
-            let free = (0..12).all(|i| { let a = i as f64 * std::f64::consts::TAU / 12.0; self.top_hit((q.0 + r * a.cos(), q.1 + r * a.sin())) == Hit::Is(Sid::Cytoplasm) });
-            if !free { return r - 3.0; }
+    /// Where the leader from a pointer at `anchor` on `s`, running toward `to`, ends: on the pointer itself, or for a
+    /// ribosome (a dot too small to draw a line onto) just outside its edge so the dot stays whole.
+    pub fn tip(&self, s: Sid, anchor: P, to: P) -> P {
+        if s != Sid::Ribosome { return anchor; }
+        self.tip_r(anchor, to, self.top_index(anchor).map_or(2.5, |k| (self.parts[k].bb.2 - self.parts[k].bb.0) / 2.0 - 0.01))
+    }
+    /// `tip` for a ribosome of radius `r`.
+    fn tip_r(&self, anchor: P, to: P, r: f64) -> P {
+        let (dx, dy) = (to.0 - anchor.0, to.1 - anchor.1);
+        let l = dx.hypot(dy);
+        if l < 1e-9 { return anchor; }
+        let g = r + RIBO_GAP;
+        (anchor.0 + dx / l * g, anchor.1 + dy / l * g)
+    }
+    /// The cost of a leader from `tip` (a pointer on `s` at `anchor`) to `end`: `W_CROSS` for every structure it runs
+    /// over (or passes within the halo's width of) that it does not point at, and `W_ALONG` per px over the membrane,
+    /// wall or capsule, which a leader from inside must cross but should not run along. Read from the raster.
+    pub fn leader_cost(&self, s: Sid, anchor: P, tip: P, end: P) -> f64 {
+        self.leader_cost_obj(s, self.top_index(anchor).map(|k| self.parts[k].obj), tip, end)
+    }
+    /// `leader_cost` with the pointed-at organelle's number already known.
+    fn leader_cost_obj(&self, s: Sid, own: Option<u32>, tip: P, end: P) -> f64 {
+        let (dx, dy) = (end.0 - tip.0, end.1 - tip.1);
+        let len = dx.hypot(dy);
+        if len < 1e-9 { return 0.0; }
+        let (ux, uy) = (dx / len, dy / len);
+        let mut hit: Vec<(Sid, u32)> = Vec::new();
+        let mut other = 0u32;
+        let mut along = 0.0;
+        // past the scene's box there is nothing to run over
+        let (bx0, by0, bx1, by1) = self.bbox;
+        let out_at = |t: f64| { let q = (tip.0 + ux * t, tip.1 + uy * t); q.0 < bx0 - 3.0 || q.0 > bx1 + 3.0 || q.1 < by0 - 3.0 || q.1 > by1 + 3.0 };
+        let steps = len.ceil() as usize;
+        for i in 0..=steps {
+            let t = (i as f64).min(len);
+            if out_at(t) { break; }
+            // the centre line every pixel, the halo's edges every other pixel (they only catch near misses)
+            for o in if i % 2 == 0 { &[-(HALO + 0.5), 0.0, HALO + 0.5][..] } else { &[0.0][..] } {
+                let o = *o;
+                let q = (tip.0 + ux * t - uy * o, tip.1 + uy * t + ux * o);
+                let Some(k) = self.ras.at(q) else { continue };
+                let p = &self.parts[k];
+                if p.loose { continue; }
+                let Some(x) = p.sid else { other += 1; continue };
+                if matches!(x, Sid::Membrane | Sid::Wall | Sid::Capsule) {
+                    if o == 0.0 && t > RING { along += 1.0; }
+                    continue;
+                }
+                // within the pointer's clear ring, what the ring allows (the nucleus beside an envelope pointer) is not run over
+                let free = x == Sid::Cytoplasm
+                    || t <= RING && ring_neighbour_ok(s, x)
+                    || x == s && (!by_copy(s) || Some(p.obj) == own)
+                    || matches!((s, x), (Sid::Nucleolus, Sid::Nucleus) | (Sid::Nucleolus, Sid::Envelope) | (Sid::Nucleus, Sid::Envelope) | (Sid::Plasmodesma, Sid::Wall));
+                if free { continue; }
+                let key = (x, if by_copy(x) { p.obj } else { 0 });
+                if !hit.contains(&key) { hit.push(key); }
+                // two structures already rule this leader out; no need to look further
+                if hit.len() >= 2 { return W_CROSS * 2.0 + W_ALONG * along; }
+            }
         }
-        r
+        W_CROSS * (hit.len() as f64 + if other > 0 { 1.0 } else { 0.0 }) + W_ALONG * along
+    }
+    /// The structures (by kind) a drawn leader runs over that it does not point at; empty for a clean leader.
+    pub fn leader_crosses(&self, s: Sid, anchor: P, tip: P, end: P) -> Vec<Sid> {
+        let own = self.top_index(anchor).map(|k| self.parts[k].obj);
+        let (dx, dy) = (end.0 - tip.0, end.1 - tip.1);
+        let len = dx.hypot(dy);
+        let mut out = Vec::new();
+        if len < 1e-9 { return out; }
+        for i in 0..=(len.ceil() as usize) {
+            let t = (i as f64).min(len);
+            for o in [-(HALO + 0.5), 0.0, HALO + 0.5] {
+                let q = (tip.0 + dx / len * t - dy / len * o, tip.1 + dy / len * t + dx / len * o);
+                let Some(k) = self.ras.at(q) else { continue };
+                let p = &self.parts[k];
+                if p.loose { continue; }
+                let Some(x) = p.sid else { if !out.contains(&Sid::Cytoplasm) { out.push(Sid::Cytoplasm); } continue };
+                let free = matches!(x, Sid::Membrane | Sid::Wall | Sid::Capsule | Sid::Cytoplasm)
+                    || t <= RING && ring_neighbour_ok(s, x)
+                    || x == s && (!by_copy(s) || Some(p.obj) == own)
+                    || matches!((s, x), (Sid::Nucleolus, Sid::Nucleus) | (Sid::Nucleolus, Sid::Envelope) | (Sid::Nucleus, Sid::Envelope) | (Sid::Plasmodesma, Sid::Wall));
+                if !free && !out.contains(&x) { out.push(x); }
+            }
+        }
+        out
     }
 }
 
-struct B { parts: Vec<Part>, cands: Vec<(Sid, P)> }
+struct B { parts: Vec<Part>, cands: Vec<(Sid, P)>, obj: u32, keep: bool }
 
 impl B {
+    fn new() -> B { B { parts: Vec::new(), cands: Vec::new(), obj: 0, keep: false } }
+    /// Every part pushed until `end` belongs to one organelle.
+    fn begin(&mut self) { self.obj += 1; self.keep = true; }
+    fn end(&mut self) { self.keep = false; }
     fn fill(&mut self, sid: Option<Sid>, pts: Vec<P>, fill: Tone, stroke: Option<(Tone, f64)>) {
-        self.push(Part { bb: (0.0, 0.0, 0.0, 0.0), sid, pts, closed: true, fill: Some(fill), stroke, dash: false, tex: false });
+        self.push(Part { bb: (0.0, 0.0, 0.0, 0.0), sid, pts, closed: true, fill: Some(fill), stroke, dash: false, tex: false, obj: 0, loose: false });
     }
     fn ring(&mut self, sid: Option<Sid>, pts: Vec<P>, w: f64) {
-        self.push(Part { bb: (0.0, 0.0, 0.0, 0.0), sid, pts, closed: true, fill: None, stroke: Some((Tone::Ink, w)), dash: false, tex: false });
+        self.push(Part { bb: (0.0, 0.0, 0.0, 0.0), sid, pts, closed: true, fill: None, stroke: Some((Tone::Ink, w)), dash: false, tex: false, obj: 0, loose: false });
     }
     fn line(&mut self, sid: Option<Sid>, pts: Vec<P>, tone: Tone, w: f64) {
-        self.push(Part { bb: (0.0, 0.0, 0.0, 0.0), sid, pts, closed: false, fill: None, stroke: Some((tone, w)), dash: false, tex: false });
+        self.push(Part { bb: (0.0, 0.0, 0.0, 0.0), sid, pts, closed: false, fill: None, stroke: Some((tone, w)), dash: false, tex: false, obj: 0, loose: false });
     }
     fn tex_line(&mut self, pts: Vec<P>, tone: Tone, w: f64) {
-        self.push(Part { bb: (0.0, 0.0, 0.0, 0.0), sid: None, pts, closed: false, fill: None, stroke: Some((tone, w)), dash: false, tex: true });
+        self.push(Part { bb: (0.0, 0.0, 0.0, 0.0), sid: None, pts, closed: false, fill: None, stroke: Some((tone, w)), dash: false, tex: true, obj: 0, loose: false });
     }
     fn tex_fill(&mut self, pts: Vec<P>, fill: Tone) {
-        self.push(Part { bb: (0.0, 0.0, 0.0, 0.0), sid: None, pts, closed: true, fill: Some(fill), stroke: None, dash: false, tex: true });
+        self.push(Part { bb: (0.0, 0.0, 0.0, 0.0), sid: None, pts, closed: true, fill: Some(fill), stroke: None, dash: false, tex: true, obj: 0, loose: false });
     }
     fn tex_ring(&mut self, pts: Vec<P>, tone: Tone, w: f64) {
-        self.push(Part { bb: (0.0, 0.0, 0.0, 0.0), sid: None, pts, closed: true, fill: None, stroke: Some((tone, w)), dash: false, tex: true });
+        self.push(Part { bb: (0.0, 0.0, 0.0, 0.0), sid: None, pts, closed: true, fill: None, stroke: Some((tone, w)), dash: false, tex: true, obj: 0, loose: false });
     }
     /// Tubes join: every outline first, then every fill.
     fn tubes(&mut self, sid: Sid, tubes: &[Vec<P>], tone: Tone, w: f64) {
+        self.begin();
         for t in tubes { self.line(Some(sid), t.clone(), Tone::Ink, w + 2.6); }
         for t in tubes { self.line(Some(sid), t.clone(), tone, w); }
+        self.end();
     }
     fn push(&mut self, mut p: Part) {
         let w = p.stroke.map_or(0.0, |s| s.1) / 2.0 + 0.01;
         let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
         for q in &p.pts { x0 = x0.min(q.0); y0 = y0.min(q.1); x1 = x1.max(q.0); y1 = y1.max(q.1); }
         p.bb = (x0 - w, y0 - w, x1 + w, y1 + w);
+        if !self.keep { self.obj += 1; }
+        p.obj = self.obj;
         self.parts.push(p);
     }
     fn cand(&mut self, s: Sid, p: P) { self.cands.push((s, p)); }
 
     fn mito(&mut self, c: P, rx: f64, ry: f64, deg: f64) {
+        self.begin();
         self.fill(Some(Sid::Mito), ell(c, rx, ry, deg, 40), Tone::Mito, Some((Tone::Ink, 1.6)));
         self.tex_ring(ell(c, rx - 3.6, ry - 3.6, deg, 36), Tone::Ink, 0.8);
         for k in 0..4 {
@@ -400,39 +552,65 @@ impl B {
             let (y0, y1) = if k % 2 == 0 { (-(ry - 3.6), ry * 0.35) } else { (ry - 3.6, -ry * 0.35) };
             self.tex_line(vec![add(c, rot((x, y0), deg)), add(c, rot((x, y1), deg))], Tone::Ink, 0.9);
         }
-        self.cand(Sid::Mito, c);
+        self.end();
+        for f in [0.0, -0.4, 0.4] { self.cand(Sid::Mito, add(c, rot((f * rx, 0.0), deg))); }
     }
+    /// A chloroplast: a double envelope (two outlines), stroma, and three grana joined by a lamella.
     fn chloro(&mut self, c: P, rx: f64, ry: f64, deg: f64) {
-        self.fill(Some(Sid::Chloro), ell(c, rx, ry, deg, 40), Tone::Chloro, Some((Tone::Ink, 1.6)));
-        let stacks = [(-0.5, 0.18), (0.0, -0.2), (0.5, 0.15)];
+        self.begin();
+        self.fill(Some(Sid::Chloro), ell(c, rx, ry, deg, 40), Tone::Chloro, Some((Tone::Ink, 1.4)));
+        self.tex_ring(ell(c, rx - 2.6, ry - 2.6, deg, 40), Tone::Ink, 0.7);
+        let stacks = [(-0.42, 0.06), (0.0, -0.1), (0.42, 0.06)];
         let centres: Vec<P> = stacks.iter().map(|(fx, fy)| add(c, rot((fx * rx, fy * ry), deg))).collect();
         self.tex_line(centres.clone(), Tone::Ink, 0.7);
         for q in &centres {
             for j in 0..3 {
-                self.tex_fill(rectp(add(*q, rot((0.0, (j as f64 - 1.0) * 3.8), deg)), 10.0, 2.8, deg), Tone::Grana);
+                self.tex_fill(rectp(add(*q, rot((0.0, (j as f64 - 1.0) * 3.3), deg)), 8.0, 2.4, deg), Tone::Grana);
             }
         }
-        self.cand(Sid::Chloro, add(c, rot((0.25 * rx, 0.55 * ry), deg)));
-        self.cand(Sid::Chloro, add(c, rot((-0.2 * rx, -0.55 * ry), deg)));
+        self.end();
+        // in the stroma between the stacks, inside the inner membrane
+        self.cand(Sid::Chloro, add(c, rot((0.25 * rx, 0.45 * ry), deg)));
+        self.cand(Sid::Chloro, add(c, rot((-0.25 * rx, -0.45 * ry), deg)));
+        self.cand(Sid::Chloro, add(c, rot((0.25 * rx, -0.45 * ry), deg)));
+        self.cand(Sid::Chloro, add(c, rot((-0.25 * rx, 0.45 * ry), deg)));
     }
     fn lyso(&mut self, c: P) {
+        self.begin();
         self.fill(Some(Sid::Lysosome), ell(c, 9.0, 9.0, 0.0, 20), Tone::Lyso, Some((Tone::Ink, 1.4)));
         for q in [(-3.0, -2.5), (3.0, -1.0), (-0.5, 3.2)] { self.tex_fill(ell(add(c, q), 1.5, 1.5, 0.0, 8), Tone::LyDot); }
+        self.end();
         self.cand(Sid::Lysosome, c);
     }
+    /// The nucleus with its double envelope; the envelope is broken by eight pores.
     fn nucleus(&mut self, c: P, r: f64) {
         self.fill(Some(Sid::Nucleus), ell(c, r, r, 0.0, 48), Tone::Nuc, None);
-        self.ring(Some(Sid::Envelope), ell(c, r, r, 0.0, 48), 2.2);
-        self.ring(Some(Sid::Envelope), ell(c, r - 3.6, r - 3.6, 0.0, 48), 1.2);
+        self.begin();
+        for (rr, w) in [(r, 2.2), (r - 3.6, 1.2)] {
+            // a pore is 6 px wide on each line, after the round caps
+            let half = ((3.0 + w / 2.0) / rr).to_degrees();
+            for k in 0..8 {
+                let p0 = k as f64 * 45.0 + 39.5;
+                self.line(Some(Sid::Envelope), arcp(c, rr, p0 + half, p0 + 45.0 - half, 12), Tone::Ink, w);
+            }
+        }
+        self.end();
+        // on the outer line midway between pores and 11 degrees either side; in the nucleus at two depths
         for k in 0..8 {
-            let a = (k as f64 * 45.0 + 17.0).to_radians();
-            self.cand(Sid::Envelope, (c.0 + r * a.cos(), c.1 + r * a.sin()));
-            self.cand(Sid::Nucleus, (c.0 + 0.5 * r * a.cos(), c.1 + 0.5 * r * a.sin()));
+            for d in [-11.0, 0.0, 11.0] {
+                let a = (k as f64 * 45.0 + 17.0 + d).to_radians();
+                self.cand(Sid::Envelope, (c.0 + r * a.cos(), c.1 + r * a.sin()));
+            }
+        }
+        for k in 0..16 {
+            let a = (k as f64 * 22.5 + 17.0).to_radians();
+            for f in [0.45, 0.66] { self.cand(Sid::Nucleus, (c.0 + f * (r - 11.0) / 0.66 * a.cos(), c.1 + f * (r - 11.0) / 0.66 * a.sin())); }
         }
     }
     fn nucleolus(&mut self, c: P, r: f64) {
         self.fill(Some(Sid::Nucleolus), ell(c, r, r, 0.0, 24), Tone::Dark, None);
         self.cand(Sid::Nucleolus, c);
+        for k in 0..8 { let a = (k as f64 * 45.0).to_radians(); let f = (r - 6.5).max(0.0); self.cand(Sid::Nucleolus, (c.0 + f * a.cos(), c.1 + f * a.sin())); }
     }
     /// Stacked, bowed sacs; `deg` turns the stack.
     fn golgi(&mut self, c: P, deg: f64) {
@@ -444,38 +622,65 @@ impl B {
             let pts: Vec<P> = (0..=16).map(|i| { let u = -h + 2.0 * h * i as f64 / 16.0; add(c, rot((u, off * 11.0 + 7.0 * (u / h).powi(2)), deg)) }).collect();
             self.cand(Sid::Golgi, pts[8]);
             self.cand(Sid::Golgi, pts[5]);
+            self.cand(Sid::Golgi, pts[11]);
             tubes.push(pts);
         }
         self.tubes(Sid::Golgi, &tubes, Tone::Golgi, 7.4);
     }
-    /// Rough ER: flattened sacs wrapped round a nucleus, the first one touching the envelope.
+    /// Rough ER: flattened sacs wrapped round a nucleus, the first one touching the envelope, studded with ribosomes.
+    /// The pointer places are in the middle of a sac (from the second sac out), with a short bare stretch around each
+    /// so that no ribosome lies next to a pointer.
     fn rough_er(&mut self, c: P, r_env: f64, ks: &[(f64, f64)]) {
+        let n = ks.len();
+        let mut marks: Vec<(usize, f64)> = Vec::new();
+        for (k, (a0, a1)) in ks.iter().enumerate().skip(1) {
+            let fr: &[f64] = if k + 1 == n { &[0.55, 0.85] } else { &[0.45] };
+            for f in fr { marks.push((k, a0 + (a1 - a0) * f)); }
+        }
+        let rad = |k: usize| r_env + 0.9 + 12.0 * k as f64;
+        self.begin();
         for (k, (a0, a1)) in ks.iter().enumerate() {
-            let r0 = r_env + 0.9 + 12.0 * k as f64;
-            let r1 = r0 + 8.0;
-            self.fill(Some(Sid::RoughEr), band(c, r0, r1, *a0, *a1, 24), Tone::Er, Some((Tone::Ink, 1.2)));
+            self.fill(Some(Sid::RoughEr), band(c, rad(k), rad(k) + 8.0, *a0, *a1, 24), Tone::Er, Some((Tone::Ink, 1.2)));
+        }
+        self.end();
+        for (k, (a0, a1)) in ks.iter().enumerate() {
+            let rr = rad(k) + 8.0 + 0.9;
+            let bare = ((RING + 3.5) / rr).to_degrees();
             let mut a = a0 + 5.0;
             while a < a1 - 3.0 {
-                let q = (c.0 + (r1 + 0.7) * a.to_radians().cos(), c.1 + (r1 + 0.7) * a.to_radians().sin());
-                self.fill(Some(Sid::Ribosome), ell(q, 1.9, 1.9, 0.0, 8), Tone::Ribo, None);
+                if !marks.iter().any(|(k2, am)| (*k2 == k || *k2 == k + 1) && (a - am).abs() < bare) {
+                    let q = (c.0 + rr * a.to_radians().cos(), c.1 + rr * a.to_radians().sin());
+                    self.fill(Some(Sid::Ribosome), ell(q, 2.1, 2.1, 0.0, 8), Tone::Ribo, None);
+                    self.parts.last_mut().unwrap().loose = true;
+                }
                 a += 9.0;
             }
-            if k >= 1 {
-                let am = a0 + (a1 - a0) * 0.45;
-                let rm = (r0 + r1) / 2.0;
-                self.cand(Sid::RoughEr, (c.0 + rm * am.to_radians().cos(), c.1 + rm * am.to_radians().sin()));
-            }
+        }
+        for (k, am) in marks {
+            let rm = rad(k) + 4.0;
+            self.cand(Sid::RoughEr, (c.0 + rm * am.to_radians().cos(), c.1 + rm * am.to_radians().sin()));
         }
     }
     fn centrioles(&mut self, a: P, b: P) {
         for (c, deg) in [(a, 0.0), (b, 90.0)] {
+            self.begin();
             self.fill(Some(Sid::Centriole), rectp(c, 28.0, 10.0, deg), Tone::Dark, None);
             for k in [-8.0, 0.0, 8.0] { self.tex_line(vec![add(c, rot((k, -4.0), deg)), add(c, rot((k, 4.0), deg))], Tone::White, 1.0); }
+            self.end();
             self.cand(Sid::Centriole, add(c, rot((10.0, 0.0), deg)));
             self.cand(Sid::Centriole, c);
         }
     }
     fn vesicle(&mut self, c: P) { self.fill(None, ell(c, 3.6, 3.6, 0.0, 12), Tone::Golgi, Some((Tone::Ink, 0.9))); }
+    /// A plasmodesma: a channel across the wall, lined by membrane; `deg` 0 crosses a top or bottom wall, 90 a side wall.
+    fn plasmodesma(&mut self, c: P, deg: f64, len: f64) {
+        self.begin();
+        self.fill(Some(Sid::Plasmodesma), rectp(c, 8.0, len, deg), Tone::Plasmo, None);
+        for x in [-4.0, 4.0] { self.line(Some(Sid::Plasmodesma), vec![add(c, rot((x, -len / 2.0), deg)), add(c, rot((x, len / 2.0), deg))], Tone::Ink, 1.2); }
+        self.line(Some(Sid::Plasmodesma), vec![add(c, rot((0.0, -len / 2.0 + 1.5), deg)), add(c, rot((0.0, len / 2.0 - 1.5), deg))], Tone::Er, 1.6);
+        self.end();
+        self.cand(Sid::Plasmodesma, c);
+    }
 }
 
 /// Along a polyline at fraction `t` of its length.
@@ -491,14 +696,24 @@ fn along(pts: &[P], t: f64) -> P {
     *pts.last().unwrap_or(&(0.0, 0.0))
 }
 
+/// A rounded box with a gentle wobble (a superellipse of exponent `n`): the shape of a big vacuole pressed by the wall.
+fn supell(c: P, a: f64, b: f64, n: f64, ph: f64, amp: f64) -> Vec<P> {
+    (0..96).map(|i| {
+        let t = i as f64 * std::f64::consts::TAU / 96.0;
+        let (ct, st) = (t.cos(), t.sin());
+        let w = 1.0 + amp * (2.0 * t + ph).cos() + amp * 0.6 * (3.0 * t + 2.0 * ph).cos();
+        (c.0 + a * ct.abs().powf(2.0 / n).copysign(ct) * w, c.1 + b * st.abs().powf(2.0 / n).copysign(st) * w)
+    }).collect()
+}
+
 fn animal(b: &mut B) {
     let cell = blob((0.0, 0.0), 212.0, 150.0, 0.7, 0.03);
     b.fill(Some(Sid::Cytoplasm), cell.clone(), Tone::Cyto, None);
-    let f1 = bez((52.0, -108.0), (130.0, -125.0), (176.0, -60.0), 20);
-    let f2 = bez((38.0, -100.0), (-60.0, -138.0), (-160.0, -52.0), 24);
+    let f1 = bez((-162.0, 72.0), (-118.0, 112.0), (-72.0, 128.0), 20);
+    let f2 = bez((38.0, -100.0), (-30.0, -140.0), (-100.0, -122.0), 24);
     for f in [&f1, &f2] {
         b.line(Some(Sid::Cytoskeleton), f.clone(), Tone::Fibre, 2.2);
-        for t in [0.3, 0.55, 0.8] { b.cand(Sid::Cytoskeleton, along(f, t)); }
+        for t in [0.2, 0.35, 0.5, 0.65, 0.8] { b.cand(Sid::Cytoskeleton, along(f, t)); }
     }
     let nc = (-25.0, -8.0);
     b.nucleus(nc, 62.0);
@@ -510,7 +725,7 @@ fn animal(b: &mut B) {
         vec![(88.0, 100.0), (98.0, 120.0)],
         vec![(88.0, 100.0), (104.0, 82.0), (130.0, 88.0), (118.0, 106.0)],
     ], Tone::Er, 7.0);
-    for q in [(58.0, 100.0), (88.0, 100.0), (105.0, 104.0), (40.0, 90.0)] { b.cand(Sid::SmoothEr, q); }
+    for q in [(58.0, 100.0), (88.0, 100.0), (105.0, 104.0), (40.0, 90.0), (117.0, 85.0), (57.0, 116.0)] { b.cand(Sid::SmoothEr, q); }
     b.golgi((145.0, -15.0), 90.0);
     for q in [(96.0, -30.0), (100.0, 12.0)] { b.vesicle(q); }
     b.mito((-150.0, 35.0), 26.0, 12.0, 25.0);
@@ -522,70 +737,73 @@ fn animal(b: &mut B) {
     b.ring(Some(Sid::Membrane), cell.clone(), 2.6);
     for i in (0..72).step_by(9) { b.cand(Sid::Membrane, cell[i]); }
     for i in (4..72).step_by(9) { b.cand(Sid::Membrane, cell[i]); }
-    free_dots(b, 18);
+    free_dots(b, 18, 2.5);
 }
 
+/// The plant cell. The central vacuole is a rounded box that takes more than half of the space inside the membrane;
+/// everything else sits in the layer of cytoplasm between it and the wall (the nucleus, ER and Golgi in the wider left
+/// part, chloroplasts and mitochondria along the top and bottom).
 fn plant(b: &mut B, plasmo: bool) {
-    let outer = rrect(-205.0, -150.0, 205.0, 150.0, 30.0);
-    let inner = rrect(-194.0, -139.0, 194.0, 139.0, 22.0);
+    let outer = rrect(-209.0, -164.0, 209.0, 164.0, 32.0);
+    let inner = rrect(-194.0, -149.0, 194.0, 149.0, 22.0);
     b.fill(Some(Sid::Wall), outer, Tone::Wall, Some((Tone::Ink, 1.6)));
     b.fill(Some(Sid::Cytoplasm), inner.clone(), Tone::Cyto, None);
-    for q in [(-100.0, -145.5), (100.0, -145.5), (-100.0, 145.5), (100.0, 145.5), (-200.5, -50.0), (-200.5, 60.0), (200.5, -80.0), (200.5, 70.0)] { b.cand(Sid::Wall, q); }
-    let cortical = vec![(-184.0, -10.0), (-185.0, 30.0), (-183.0, 70.0)];
-    b.line(Some(Sid::Cytoskeleton), cortical.clone(), Tone::Fibre, 2.2);
-    let top = vec![(-165.0, -125.0), (-120.0, -129.0), (-78.0, -128.0)];
-    b.line(Some(Sid::Cytoskeleton), top.clone(), Tone::Fibre, 2.2);
-    let right = vec![(186.0, -60.0), (187.0, -20.0), (186.0, 30.0)];
-    b.line(Some(Sid::Cytoskeleton), right.clone(), Tone::Fibre, 2.2);
-    for t in [0.3, 0.7] { b.cand(Sid::Cytoskeleton, along(&cortical, t)); b.cand(Sid::Cytoskeleton, along(&top, t)); b.cand(Sid::Cytoskeleton, along(&right, t)); }
+    // the wall is 15 px thick, so a pointer in its middle is 7.5 px from either face
+    for q in [(-100.0, -156.5), (100.0, -156.5), (-100.0, 156.5), (100.0, 156.5), (-201.5, -60.0), (-201.5, 60.0), (201.5, -80.0), (201.5, 70.0)] { b.cand(Sid::Wall, q); }
+    let top = vec![(-104.0, -133.0), (-72.0, -138.0), (-40.0, -135.0)];
+    let bottom = vec![(-66.0, 137.0), (-38.0, 133.0), (-8.0, 137.0)];
+    for f in [&top, &bottom] {
+        b.line(Some(Sid::Cytoskeleton), f.clone(), Tone::Fibre, 2.2);
+        for t in [0.2, 0.4, 0.6, 0.8] { b.cand(Sid::Cytoskeleton, along(f, t)); }
+    }
     // the central vacuole
-    let vac = blob((54.0, 5.0), 122.0, 96.0, 1.3, 0.02);
+    let vac = supell((44.0, 2.0), 145.0, 119.0, 4.4, 1.3, 0.012);
     b.fill(Some(Sid::Vacuole), vac, Tone::Vac, Some((Tone::Ink, 1.4)));
-    for q in [(54.0, 5.0), (20.0, 30.0), (90.0, -10.0), (70.0, 45.0), (10.0, -20.0)] { b.cand(Sid::Vacuole, q); }
-    let nc = (-128.0, -68.0);
-    b.nucleus(nc, 42.0);
-    b.nucleolus((-134.0, -74.0), 11.0);
-    b.rough_er(nc, 42.0, &[(-30.0, 110.0), (-25.0, 104.0)]);
+    for q in [(44.0, 2.0), (0.0, 40.0), (90.0, -30.0), (80.0, 55.0), (0.0, -50.0), (140.0, 60.0), (-60.0, 80.0), (140.0, -70.0), (-60.0, -70.0)] { b.cand(Sid::Vacuole, q); }
+    let nc = (-148.0, -94.0);
+    b.nucleus(nc, 36.0);
+    b.nucleolus((-154.0, -100.0), 10.0);
+    b.rough_er(nc, 36.0, &[(0.0, 108.0), (50.0, 100.0)]);
+    // the smooth ER leaves the right-hand end of the outer rough ER sac and bends down and left, under the
+    // corridor the rough ER's leaders take to the left
     b.tubes(Sid::SmoothEr, &[
-        vec![(-143.0, -9.0), (-160.0, 30.0), (-138.0, 62.0), (-108.0, 62.0)],
-        vec![(-138.0, 62.0), (-132.0, 88.0)],
+        vec![(-116.0, -47.0), (-118.0, -16.0), (-134.0, 8.0), (-166.0, 12.0)],
+        vec![(-166.0, 12.0), (-180.0, -6.0)],
     ], Tone::Er, 7.0);
-    for q in [(-160.0, 30.0), (-138.0, 62.0), (-120.0, 62.0), (-133.0, 80.0)] { b.cand(Sid::SmoothEr, q); }
-    b.golgi((-20.0, -112.0), 0.0);
-    b.mito((-110.0, 112.0), 24.0, 11.0, 8.0);
-    b.mito((150.0, 120.0), 24.0, 11.0, -5.0);
-    b.chloro((60.0, -121.0), 30.0, 14.0, 0.0);
-    b.chloro((140.0, -116.0), 30.0, 14.0, 0.0);
-    b.chloro((48.0, 120.0), 28.0, 13.0, 0.0);
-    b.chloro((-28.0, 119.0), 28.0, 13.0, 0.0);
+    for q in [(-117.0, -32.0), (-118.0, -16.0), (-126.0, -4.0), (-134.0, 8.0), (-150.0, 10.0), (-166.0, 12.0), (-175.0, 1.0)] { b.cand(Sid::SmoothEr, q); }
+    b.golgi((-152.0, 76.0), 90.0);
+    b.mito((-96.0, 133.0), 22.0, 9.0, 4.0);
+    b.mito((165.0, 134.0), 20.0, 8.5, 0.0);
+    for (x, y) in [(0.0, -134.0), (78.0, -135.0), (152.0, -133.0)] { b.chloro((x, y), 26.0, 10.0, 0.0); }
+    for (x, y) in [(25.0, 136.0), (100.0, 136.0)] { b.chloro((x, y), 26.0, 10.0, 0.0); }
     if plasmo {
-        for (x, y, deg) in [(-70.0, -144.5, 0.0), (95.0, -144.5, 0.0), (-10.0, 144.5, 0.0)] {
-            let r = rectp((x, y), 8.0, 15.0, deg);
-            b.fill(Some(Sid::Plasmodesma), r, Tone::Plasmo, None);
-            b.line(Some(Sid::Plasmodesma), vec![(x - 4.0, y - 7.5), (x - 4.0, y + 7.5)], Tone::Ink, 1.2);
-            b.line(Some(Sid::Plasmodesma), vec![(x + 4.0, y - 7.5), (x + 4.0, y + 7.5)], Tone::Ink, 1.2);
-            b.line(Some(Sid::Plasmodesma), vec![(x, y - 6.0), (x, y + 6.0)], Tone::Er, 1.6);
-            b.cand(Sid::Plasmodesma, (x, y));
-        }
+        b.plasmodesma((-60.0, -156.5), 0.0, 17.0);
+        b.plasmodesma((-201.5, -24.0), 90.0, 17.0);
+        b.plasmodesma((201.5, 30.0), 90.0, 17.0);
     }
     b.ring(Some(Sid::Membrane), inner.clone(), 2.2);
-    for q in [(-100.0, -139.0), (100.0, -139.0), (-100.0, 139.0), (100.0, 139.0), (-194.0, -50.0), (-194.0, 60.0), (194.0, -80.0), (194.0, 70.0)] { b.cand(Sid::Membrane, q); }
-    free_dots(b, 14);
+    for q in [(-100.0, -149.0), (100.0, -149.0), (-100.0, 149.0), (100.0, 149.0), (-194.0, -50.0), (-194.0, 40.0), (194.0, -80.0), (194.0, 70.0), (194.0, 0.0), (-194.0, 120.0)] { b.cand(Sid::Membrane, q); }
+    free_dots(b, 14, 2.5);
 }
 
 fn bacterium(b: &mut B) {
     let h = 125.0;
-    b.fill(Some(Sid::Capsule), stadium(h, 84.0), Tone::Capsule, Some((Tone::Ink, 1.2)));
-    b.fill(Some(Sid::Wall), stadium(h, 72.0), Tone::Wall, Some((Tone::Ink, 1.4)));
-    b.fill(Some(Sid::Cytoplasm), stadium(h, 62.0), Tone::Cyto, None);
-    for q in [(-60.0, -78.3), (40.0, -78.3), (-60.0, 78.3), (60.0, 78.3), (h + 78.3 * 0.64, -78.3 * 0.77), (-h - 78.3 * 0.64, 78.3 * 0.77)] { b.cand(Sid::Capsule, q); }
-    for q in [(-60.0, -68.5), (40.0, -68.5), (-60.0, 68.5), (60.0, 68.5), (h + 68.5 * 0.64, -68.5 * 0.77), (-h - 68.5 * 0.64, 68.5 * 0.77)] { b.cand(Sid::Wall, q); }
+    let (rc, rw, rm) = (88.0, 74.0, 62.0);
+    b.fill(Some(Sid::Capsule), stadium(h, rc), Tone::Capsule, Some((Tone::Ink, 1.2)));
+    b.fill(Some(Sid::Wall), stadium(h, rw), Tone::Wall, Some((Tone::Ink, 1.4)));
+    b.fill(Some(Sid::Cytoplasm), stadium(h, rm), Tone::Cyto, None);
+    // pointer places: the capsule 6 px inside its outer edge, the wall 4 px inside its outer face (7 px from the membrane)
+    let pole = |r: f64, s: f64| (s * (h + r * 0.64), -s * r * 0.77);
+    for r in [82.0] { for q in [(-60.0, -r), (40.0, -r), (-60.0, r), (60.0, r), pole(r, 1.0), pole(r, -1.0)] { b.cand(Sid::Capsule, q); } }
+    for r in [70.0] { for q in [(-60.0, -r), (40.0, -r), (-60.0, r), (60.0, r), pole(r, 1.0), pole(r, -1.0)] { b.cand(Sid::Wall, q); } }
     let nuc = blob((-20.0, 0.0), 85.0, 32.0, 0.4, 0.09);
+    b.begin();
     b.fill(Some(Sid::Nucleoid), nuc.clone(), Tone::Nucleoid, Some((Tone::Ink, 0.9)));
     b.parts.last_mut().unwrap().dash = true;
     for (cx, cy, rx, ry, d) in [(-60.0, -8.0, 22.0, 9.0, 20.0), (-10.0, 6.0, 26.0, 10.0, -25.0), (35.0, -6.0, 20.0, 8.0, 10.0), (-35.0, 12.0, 18.0, 7.0, 40.0), (15.0, -14.0, 16.0, 6.0, -30.0), (55.0, 8.0, 14.0, 6.0, 0.0)] {
         b.tex_ring(ell((cx, cy), rx, ry, d, 24), Tone::Ink, 0.7);
     }
+    b.end();
     for k in [0usize, 9, 18, 27, 36, 45, 54, 63] { b.cand(Sid::Nucleoid, (nuc[k].0 * 0.8 - 20.0 * 0.2, nuc[k].1 * 0.8)); }
     b.cand(Sid::Nucleoid, (-20.0, 0.0));
     for (cx, cy, r) in [(100.0, -26.0, 11.0), (118.0, 22.0, 8.5), (-152.0, -22.0, 9.0)] {
@@ -595,49 +813,71 @@ fn bacterium(b: &mut B) {
         b.cand(Sid::Plasmid, ring[12]);
         b.cand(Sid::Plasmid, ring[6]);
     }
-    // pili: short hairs all round the capsule
+    // pili: short hairs rooted in the wall, through the capsule
     for (k, x) in [-100.0, -50.0, 0.0, 50.0, 100.0].iter().enumerate() {
         for s in [-1.0, 1.0] {
             let sw = if k % 2 == 0 { 2.5 } else { -2.5 };
-            let hair = vec![(*x, s * 84.0), (*x + sw, s * 91.0), (*x - sw * 0.4, s * 98.0), (*x + sw * 0.6, s * 106.0)];
-            b.cand(Sid::Pilus, along(&hair, 0.55));
+            let hair = vec![(*x, s * rw), (*x + sw, s * 86.0), (*x - sw * 0.4, s * 98.0), (*x + sw * 0.6, s * 110.0)];
+            b.cand(Sid::Pilus, along(&hair, 0.72));
             b.line(Some(Sid::Pilus), hair, Tone::Ink, 2.0);
         }
     }
-    for phi in [-35.0f64, 35.0] {
+    for phi in [-52.0f64, 52.0] {
         let (c, s) = (phi.to_radians().cos(), phi.to_radians().sin());
-        let base = (-h - 84.0 * c, 84.0 * s);
-        let hair = vec![base, (base.0 - 7.0 * c, base.1 + 7.0 * s), (base.0 - 14.0 * c + 2.0, base.1 + 14.0 * s), (base.0 - 22.0 * c, base.1 + 22.0 * s)];
+        let base = (-h - rw * c, rw * s);
+        let hair = vec![base, (base.0 - 12.0 * c, base.1 + 12.0 * s), (base.0 - 24.0 * c + 2.0, base.1 + 24.0 * s), (base.0 - 36.0 * c, base.1 + 36.0 * s)];
         b.line(Some(Sid::Pilus), hair, Tone::Ink, 2.0);
     }
     // flagellum, leaving the right pole and swinging down
     let u = (0.75f64, 0.66f64);
     let un = u.0.hypot(u.1);
     let (u, n) = ((u.0 / un, u.1 / un), (-u.1 / un, u.0 / un));
+    let y0 = 34.0;
+    let x0 = h + (rc * rc - y0 * y0).sqrt();
     let fl: Vec<P> = (0..=40).map(|i| {
         let s = i as f64 / 40.0;
         let amp = 7.0 * (std::f64::consts::TAU * 2.5 * s).sin();
-        (h + 84.0 + u.0 * 115.0 * s + n.0 * amp, 8.0 + u.1 * 115.0 * s + n.1 * amp)
+        (x0 + u.0 * 115.0 * s + n.0 * amp, y0 + u.1 * 115.0 * s + n.1 * amp)
     }).collect();
     for t in [0.35, 0.6, 0.85] { b.cand(Sid::Flagellum, along(&fl, t)); }
+    b.begin();
     b.line(Some(Sid::Flagellum), fl, Tone::Ink, 3.2);
-    b.tex_line(vec![(h + 56.0, 3.0), (h + 84.0, 8.0)], Tone::Ink, 1.6);
-    b.fill(None, ell((h + 56.0, 3.0), 4.5, 4.5, 0.0, 12), Tone::Ink, None);
-    b.ring(Some(Sid::Membrane), stadium(h, 62.0), 2.4);
-    for q in [(-60.0, -62.0), (40.0, -62.0), (-60.0, 62.0), (60.0, 62.0), (h + 62.0 * 0.64, -62.0 * 0.77), (-h - 62.0 * 0.64, 62.0 * 0.77), (0.0, 62.0), (-100.0, -62.0)] { b.cand(Sid::Membrane, q); }
-    free_dots(b, 28);
+    // the hook runs from the filament through the capsule and wall to the motor in the membrane
+    let xm = h + (rm * rm - y0 * y0).sqrt();
+    b.line(Some(Sid::Flagellum), vec![(xm - 3.0, y0), (x0, y0)], Tone::Ink, 2.4);
+    b.end();
+    b.ring(Some(Sid::Membrane), stadium(h, rm), 2.4);
+    // the basal body: two short bars across the hook, one in the membrane and one in the wall (drawn over the membrane)
+    let xw = h + (rw * rw - y0 * y0).sqrt();
+    b.begin();
+    for x in [xm, xw - 4.0] { b.line(Some(Sid::Flagellum), vec![(x, y0 - 4.5), (x, y0 + 4.5)], Tone::Ink, 1.6); }
+    b.end();
+    for q in [(-60.0, -rm), (40.0, -rm), (-60.0, rm), (60.0, rm), pole(rm, 1.0), pole(rm, -1.0), (0.0, rm), (-100.0, -rm)] { b.cand(Sid::Membrane, q); }
+    free_dots(b, 28, 1.8);
 }
 
-/// Free ribosomes and the cytoplasm pointers: grid points with the most room, spread out.
-fn free_dots(b: &mut B, count: usize) {
-    let tmp = Scene { parts: b.parts.clone(), anchors: vec![], rejected: vec![], bbox: (0.0, 0.0, 0.0, 0.0) };
+/// Free ribosomes (radius `r`) and the cytoplasm pointers: grid points with the most room, spread out.
+fn free_dots(b: &mut B, count: usize, r: f64) {
+    let ras = Raster::new(&b.parts);
+    let is_cyto = |q: P| ras.at(q).map(|k| b.parts[k].sid) == Some(Some(Sid::Cytoplasm));
+    // the biggest distance (in steps of 3 px, up to 18) to which a disc round `q` is all cytoplasm
+    let clearance = |q: P| -> f64 {
+        if !is_cyto(q) { return 0.0; }
+        let mut r = 0.0;
+        while r < 18.0 {
+            r += 3.0;
+            let free = (0..16).all(|i| { let a = i as f64 * std::f64::consts::TAU / 16.0; is_cyto((q.0 + r * a.cos(), q.1 + r * a.sin())) });
+            if !free { return r - 3.0; }
+        }
+        r
+    };
     let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
     for p in &b.parts { for q in &p.pts { x0 = x0.min(q.0); y0 = y0.min(q.1); x1 = x1.max(q.0); y1 = y1.max(q.1); } }
     let mut grid: Vec<(P, f64)> = Vec::new();
     let mut y = y0;
     while y <= y1 {
         let mut x = x0;
-        while x <= x1 { let c = tmp.clearance((x, y)); if c >= 6.0 { grid.push(((x, y), c)); } x += 5.0; }
+        while x <= x1 { let c = clearance((x, y)); if c >= 6.0 { grid.push(((x, y), c)); } x += 5.0; }
         y += 5.0;
     }
     let spread = |from: &[(P, f64)], n: usize, min_clear: f64, seed: Vec<P>| -> Vec<P> {
@@ -652,23 +892,25 @@ fn free_dots(b: &mut B, count: usize) {
     };
     let dots = spread(&grid, count, 6.0, Vec::new());
     for q in &dots {
-        b.fill(Some(Sid::Ribosome), ell(*q, 2.5, 2.5, 0.0, 10), Tone::Ribo, None);
+        b.fill(Some(Sid::Ribosome), ell(*q, r, r, 0.0, 10), Tone::Ribo, None);
+        b.parts.last_mut().unwrap().loose = true;
         b.cand(Sid::Ribosome, *q);
     }
     // cytoplasm pointers: where the most room is, and clear of the dots just drawn
-    let grid2: Vec<(P, f64)> = grid.iter().filter(|g| dots.iter().all(|d| (d.0 - g.0 .0).hypot(d.1 - g.0 .1) > 9.0)).copied().collect();
-    for q in spread(&grid2, 8, 8.0, dots) { b.cand(Sid::Cytoplasm, q); }
+    let grid2: Vec<(P, f64)> = grid.iter().filter(|g| dots.iter().all(|d| (d.0 - g.0 .0).hypot(d.1 - g.0 .1) > 12.0)).copied().collect();
+    for q in spread(&grid2, 10, 9.0, dots) { b.cand(Sid::Cytoplasm, q); }
 }
 
 fn build_scene(t: CellType, plasmo: bool) -> Scene {
-    let mut b = B { parts: Vec::new(), cands: Vec::new() };
+    let mut b = B::new();
     match t { CellType::Animal => animal(&mut b), CellType::Plant => plant(&mut b, plasmo), CellType::Bacterial => bacterium(&mut b) }
     let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
     for p in &b.parts {
         let w = p.stroke.map_or(0.0, |s| s.1) / 2.0;
         for q in &p.pts { x0 = x0.min(q.0 - w); y0 = y0.min(q.1 - w); x1 = x1.max(q.0 + w); y1 = y1.max(q.1 + w); }
     }
-    let mut s = Scene { parts: b.parts, anchors: Vec::new(), rejected: Vec::new(), bbox: (x0, y0, x1, y1) };
+    let ras = Raster::new(&b.parts);
+    let mut s = Scene { parts: b.parts, anchors: Vec::new(), rejected: Vec::new(), bbox: (x0, y0, x1, y1), ras };
     for (sid, q) in b.cands {
         if s.valid(sid, q) { s.anchors.push((sid, q)); } else { s.rejected.push((sid, q)); }
     }
@@ -703,7 +945,10 @@ pub struct Lab {
     pub num: usize,
     /// -1 left column, +1 right column
     pub side: i8,
+    /// The place on the structure that the pointer marks.
     pub anchor: P,
+    /// Where the leader starts: the anchor itself, or just outside a ribosome's edge (see `Scene::tip`).
+    pub tip: P,
     /// The leader ends here, at the disc's edge.
     pub end: P,
     pub disc: P,
@@ -749,20 +994,25 @@ fn viol(a: &(P, P, P), b: &(P, P, P), disc: f64) -> u32 {
 /// Choose a pointer place and a slot for every label so that no two leaders touch and none passes over another's
 /// pointer or disc. Local search from several starts (stopping at the first start with no violation once `polish`
 /// starts have run, so a longer search only shortens the leaders); returns the assignment and the violations left.
-fn assign(cands: &[Vec<P>], slots: &[Slot], disc: f64, seed: u64, mid: f64, polish: usize) -> (Vec<(usize, usize)>, u32) {
+/// `tips[i][c][s]` is where the leader of label i starts for pointer place c and slot s, and `extra[i][c][s]` what
+/// that leader costs for the structures it runs over (`Scene::leader_cost`).
+fn assign(cands: &[Vec<P>], tips: &[Vec<Vec<P>>], extra: &[Vec<Vec<f64>>], slots: &[Slot], disc: f64, seed: u64, mid: f64, polish: usize, tries: usize) -> (Vec<(usize, usize)>, u32, f64) {
     let n = cands.len();
     let leader = |i: usize, c: usize, s: usize| -> (P, P, P) {
         let sl = &slots[s];
-        (cands[i][c], (sl.x, sl.y), (sl.x + sl.side as f64 * disc, sl.y))
+        (tips[i][c][s], (sl.x, sl.y), (sl.x + sl.side as f64 * disc, sl.y))
     };
     let allowed = |i: usize, c: usize, s: usize| -> bool {
         let x = cands[i][c].0 - mid;
         if slots[s].side < 0 { x <= 70.0 } else { x >= -70.0 }
     };
     let len = |l: &(P, P, P)| (l.0 .0 - l.1 .0).hypot(l.0 .1 - l.1 .1);
+    let own = |i: usize, c: usize, s: usize| len(&leader(i, c, s)) + extra[i][c][s];
     let best_c = |i: usize, s: usize| -> Option<usize> {
-        (0..cands[i].len()).filter(|c| allowed(i, *c, s)).min_by(|a, b| len(&leader(i, *a, s)).partial_cmp(&len(&leader(i, *b, s))).unwrap())
+        (0..cands[i].len()).filter(|c| allowed(i, *c, s)).min_by(|a, b| own(i, *a, s).partial_cmp(&own(i, *b, s)).unwrap())
     };
+    // the best place for each label and slot does not change during a search
+    let bc: Vec<Vec<Option<usize>>> = (0..n).map(|i| (0..slots.len()).map(|s| best_c(i, s)).collect()).collect();
     let mut rng = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
     let mut next = move || { rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); (rng >> 33) as usize };
     let can_l: Vec<bool> = (0..n).map(|i| cands[i].iter().any(|q| q.0 - mid <= 70.0)).collect();
@@ -771,15 +1021,15 @@ fn assign(cands: &[Vec<P>], slots: &[Slot], disc: f64, seed: u64, mid: f64, poli
     let right: Vec<usize> = (0..slots.len()).filter(|s| slots[*s].side > 0).collect();
     let mut order: Vec<usize> = (0..n).collect();
     order.sort_by(|a, b| cands[*a][0].1.partial_cmp(&cands[*b][0].1).unwrap());
-    // the cost of label i against every other label: 10000 per violation plus the length of its leader
+    // the cost of label i against every other label: 10000 per violation plus the length of its leader and what it runs over
     let cost_of = |st: &[(usize, usize)], i: usize| -> f64 {
         let li = leader(i, st[i].0, st[i].1);
-        let mut c = len(&li);
+        let mut c = own(i, st[i].0, st[i].1);
         for k in 0..n { if k != i { c += 10000.0 * viol(&li, &leader(k, st[k].0, st[k].1), disc) as f64; } }
         c
     };
     let mut best: Option<(Vec<(usize, usize)>, u32, f64)> = None;
-    for restart in 0..(polish + 8) {
+    for restart in 0..(polish + tries) {
         let mut lab_side: Vec<i8> = (0..n).map(|i| if !can_r[i] || (can_l[i] && cands[i][0].0 < mid) { -1 } else { 1 }).collect();
         if restart > 0 { for i in 0..n { if can_l[i] && can_r[i] && next() % 5 == 0 { lab_side[i] = -lab_side[i]; } } }
         let cnt = |s: i8, ls: &Vec<i8>| ls.iter().filter(|x| **x == s).count();
@@ -813,14 +1063,15 @@ fn assign(cands: &[Vec<P>], slots: &[Slot], disc: f64, seed: u64, mid: f64, poli
                 let mut bestm: Option<(f64, usize, (usize, usize), (usize, usize))> = None;
                 // (delta, j, new state of i, new state of j); j == i when only i moves
                 for c in 0..cands[i].len() {
-                    if c == old.0 || !allowed(i, c, old.1) { continue; }
+                    if c == old.0 || !allowed(i, c, old.1) || own(i, c, old.1) >= before { continue; }
                     st[i] = (c, old.1);
                     let d = cost_of(&st, i) - before;
                     if d < -1e-9 && bestm.as_ref().map_or(true, |m| d < m.0) { bestm = Some((d, i, st[i], st[i])); }
                 }
                 for sl in 0..slots.len() {
                     if used[sl] { continue; }
-                    if let Some(c) = best_c(i, sl) {
+                    if let Some(c) = bc[i][sl] {
+                        if own(i, c, sl) >= before { continue; }
                         st[i] = (c, sl);
                         let d = cost_of(&st, i) - before;
                         if d < -1e-9 && bestm.as_ref().map_or(true, |m| d < m.0) { bestm = Some((d, i, st[i], st[i])); }
@@ -830,7 +1081,8 @@ fn assign(cands: &[Vec<P>], slots: &[Slot], disc: f64, seed: u64, mid: f64, poli
                 for j in 0..n {
                     if j == i { continue; }
                     let oldj = st[j];
-                    if let (Some(ci), Some(cj)) = (best_c(i, oldj.1), best_c(j, old.1)) {
+                    if let (Some(ci), Some(cj)) = (bc[i][oldj.1], bc[j][old.1]) {
+                        if own(i, ci, oldj.1) + own(j, cj, old.1) >= before + cost_of(&st, j) { continue; }
                         let pair_before = viol(&leader(i, old.0, old.1), &leader(j, oldj.0, oldj.1), disc) as f64;
                         let before_ij = cost_of(&st, i) + cost_of(&st, j) - 10000.0 * pair_before;
                         st[i] = (ci, oldj.1);
@@ -856,11 +1108,14 @@ fn assign(cands: &[Vec<P>], slots: &[Slot], disc: f64, seed: u64, mid: f64, poli
         let ls: Vec<_> = st.iter().enumerate().map(|(i, (c, sl))| leader(i, *c, *sl)).collect();
         let mut v = 0;
         for i in 0..n { for j in i + 1..n { v += viol(&ls[i], &ls[j], disc); } }
-        let l: f64 = ls.iter().map(len).sum();
+        let l: f64 = (0..n).map(|i| own(i, st[i].0, st[i].1)).sum();
         if best.as_ref().map_or(true, |b| (v, l) < (b.1, b.2)) { best = Some((st.clone(), v, l)); }
         if v == 0 && restart >= polish { break; }
     }
-    match best { Some((s, v, _)) => (s, v), None => (vec![(0, 0); n], u32::MAX) }
+    match best {
+        Some((s, v, _)) => { let x = (0..n).map(|i| extra[i][s[i].0][s[i].1]).sum(); (s, v, x) }
+        None => (vec![(0, 0); n], u32::MAX, f64::MAX),
+    }
 }
 
 pub fn layout(c: &Cfg0, funcs: bool, lab: f64) -> Rc<Layout> {
@@ -900,7 +1155,48 @@ fn compute(c: &Cfg0, funcs: bool, lab: f64) -> Layout {
     let xr = off_x + bx1 + GAP;
     let cy = (by0 + by1) / 2.0;
     let cands: Vec<Vec<P>> = sids.iter().map(|s| sc.anchors_of(*s).into_iter().map(|q| (q.0 + off_x, q.1)).collect()).collect();
-    let mut chosen: Option<(Vec<Slot>, Vec<(usize, usize)>, u32)> = None;
+    // what each possible leader runs over: one table per (label, column side, number of slots in the column), so a
+    // column laid out the same way in another try is not scored again; tip and cost per [place][slot]
+    let objs: Vec<Vec<Option<u32>>> = cands.iter().map(|cs| cs.iter().map(|q| sc.top_index((q.0 - off_x, q.1)).map(|k| sc.parts[k].obj)).collect()).collect();
+    // a ribosome's radius, for where its leader stops
+    let radii: Vec<Vec<f64>> = cands.iter().map(|cs| cs.iter().map(|q| sc.top_index((q.0 - off_x, q.1)).map_or(2.5, |k| (sc.parts[k].bb.2 - sc.parts[k].bb.0) / 2.0 - 0.01)).collect()).collect();
+    type Col = Rc<(Vec<Vec<P>>, Vec<Vec<f64>>)>;
+    let memo: RefCell<HashMap<(usize, i8, usize), Col>> = RefCell::new(HashMap::new());
+    let column = |i: usize, col: &[Slot]| -> Col {
+        let side = col.first().map_or(0, |s| s.side);
+        memo.borrow_mut().entry((i, side, col.len())).or_insert_with(|| {
+            let sid = sids[i];
+            let mut tips = vec![Vec::with_capacity(col.len()); cands[i].len()];
+            let mut cost = vec![Vec::with_capacity(col.len()); cands[i].len()];
+            for sl in col {
+                // only the 8 places with the shortest leaders to this slot are scored; the others are never chosen
+                let mut d: Vec<(f64, usize)> = (0..cands[i].len()).map(|c| ((cands[i][c].0 - sl.x).hypot(cands[i][c].1 - sl.y), c)).collect();
+                d.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                let mut keep = vec![false; cands[i].len()];
+                for (_, c) in d.iter().take(8) { keep[*c] = true; }
+                for c in 0..cands[i].len() {
+                    let a = (cands[i][c].0 - off_x, cands[i][c].1);
+                    let e = (sl.x - off_x, sl.y);
+                    let t = if sid == Sid::Ribosome { sc.tip_r(a, e, radii[i][c]) } else { a };
+                    tips[c].push((t.0 + off_x, t.1));
+                    cost[c].push(if keep[c] { sc.leader_cost_obj(sid, objs[i][c], t, e) } else { 1.0e7 });
+                }
+            }
+            Rc::new((tips, cost))
+        }).clone()
+    };
+    let tables = |slots: &[Slot]| -> (Vec<Vec<Vec<P>>>, Vec<Vec<Vec<f64>>>) {
+        let split = slots.iter().take_while(|s| s.side < 0).count();
+        let (mut tips, mut extra) = (Vec::with_capacity(n), Vec::with_capacity(n));
+        for i in 0..n {
+            let (l, r) = (column(i, &slots[..split]), column(i, &slots[split..]));
+            tips.push((0..cands[i].len()).map(|c| l.0[c].iter().chain(r.0[c].iter()).copied().collect()).collect());
+            extra.push((0..cands[i].len()).map(|c| l.1[c].iter().chain(r.1[c].iter()).copied().collect()).collect());
+        }
+        (tips, extra)
+    };
+    // (slots, assignment, violations, what the leaders run over)
+    let mut chosen: Option<(Vec<Slot>, Vec<(usize, usize)>, u32, f64)> = None;
     // the slots are spread over most of the cell's height, so the leaders run nearly level
     let span = 0.9 * (by1 - by0);
     let mk = |cnt: usize, side: i8, x: f64| -> Vec<Slot> {
@@ -908,31 +1204,41 @@ fn compute(c: &Cfg0, funcs: bool, lab: f64) -> Layout {
         (0..cnt).map(|j| Slot { side, x, y: cy + (j as f64 - (cnt as f64 - 1.0) / 2.0) * sp }).collect()
     };
     if n > 0 {
+        // the first clean slot count found, and how many more counts may still be tried for fewer leaders running over things
+        let mut found: Option<usize> = None;
         'cfg: for extra in 0..=5usize {
+            if n > 8 && found.is_some_and(|f| extra > f + 2) { break; }
             let total = n + extra;
             let mut splits: Vec<usize> = (0..=total).collect();
             splits.sort_by_key(|l| ((2 * *l as i64 - total as i64).abs(), *l));
             for l in splits {
                 let r = total - l;
-                if l.max(r) > n.div_ceil(2) + 3 { continue; }
+                if l.max(r) > n.div_ceil(2) + 3 && n > 8 { continue; }
                 let mut slots = mk(l, -1, xl);
                 slots.extend(mk(r, 1, xr));
-                let (st, v) = assign(&cands, &slots, disc, (n * 31 + total) as u64, off_x, 0);
-                if chosen.as_ref().map_or(true, |c| v < c.2) { chosen = Some((slots, st, v)); }
-                if v == 0 { break 'cfg; }
+                let (tips, extra) = tables(&slots);
+                // once a layout with no violation is in hand, each further try gets one start only
+                let tries = if chosen.as_ref().is_some_and(|c| c.2 == 0) { 1 } else { 8 };
+                let (st, v, x) = assign(&cands, &tips, &extra, &slots, disc, (n * 31 + total) as u64, off_x, 0, tries);
+                if v == 0 && found.is_none() { found = Some(total - n); }
+                // fewest violations first, then the least run over; a clean layout ends the search
+                if chosen.as_ref().map_or(true, |c| (v, x) < (c.2, c.3 - 1e-6)) { chosen = Some((slots, st, v, x)); }
+                if v == 0 && x == 0.0 { break 'cfg; }
             }
         }
-        // a longer search on the settings that worked, only to shorten the leaders
-        if let Some((slots, st, 0)) = chosen.take() {
-            let (st2, v2) = assign(&cands, &slots, disc, (n * 17 + slots.len()) as u64, off_x, 5);
-            chosen = Some(if v2 == 0 { (slots, st2, 0) } else { (slots, st, 0) });
+        // a longer search on the settings that worked, to shorten the leaders and run over less
+        if let Some((slots, st, 0, x)) = chosen.take() {
+            let (tips, extra) = tables(&slots);
+            let (st2, v2, x2) = assign(&cands, &tips, &extra, &slots, disc, (n * 17 + slots.len()) as u64, off_x, 5, 8);
+            chosen = Some(if v2 == 0 && x2 <= x { (slots, st2, 0, x2) } else { (slots, st, 0, x) });
         }
     }
-    let (slots, st, violations) = chosen.unwrap_or((Vec::new(), Vec::new(), 0));
+    let (slots, st, violations, _) = chosen.unwrap_or((Vec::new(), Vec::new(), 0, 0.0));
     let mut labs: Vec<Lab> = (0..n).map(|i| {
         let sl = &slots[st[i].1];
         let anchor = cands[i][st[i].0];
-        Lab { sid: sids[i], num: 0, side: sl.side, anchor, end: (sl.x, sl.y), disc: (sl.x + sl.side as f64 * disc, sl.y), lines: texts[i].clone() }
+        let t = sc.tip(sids[i], (anchor.0 - off_x, anchor.1), (sl.x - off_x, sl.y));
+        Lab { sid: sids[i], num: 0, side: sl.side, anchor, tip: (t.0 + off_x, t.1), end: (sl.x, sl.y), disc: (sl.x + sl.side as f64 * disc, sl.y), lines: texts[i].clone() }
     }).collect();
     labs.sort_by(|a, b| (a.side, a.end.1).partial_cmp(&(b.side, b.end.1)).unwrap());
     for (i, l) in labs.iter_mut().enumerate() { l.num = i + 1; }
@@ -945,7 +1251,7 @@ fn compute(c: &Cfg0, funcs: bool, lab: f64) -> Layout {
         top = top.min(l.end.1 - disc - 2.0);
     }
     let off_y = MARGIN + head - top;
-    for l in labs.iter_mut() { l.anchor.1 += off_y; l.end.1 += off_y; l.disc.1 += off_y; }
+    for l in labs.iter_mut() { l.anchor.1 += off_y; l.tip.1 += off_y; l.end.1 += off_y; l.disc.1 += off_y; }
     Layout {
         labs, violations, w: w0, h: off_y + bottom + 6.0, off: (off_x, off_y), xl, xr, disc_r: disc, fs, lh, pitch, head, top: MARGIN + head, bottom: off_y + bottom, col_w,
     }
@@ -1036,8 +1342,6 @@ fn draw(p: &Params, c: &Cfg, lay: &Layout) -> String {
     if c.key {
         let alts: Vec<String> = labs.iter().filter(|l| !info(l.sid).alt.is_empty()).map(|l| format!("{} ({})", info(l.sid).alt, info(l.sid).name)).collect();
         if !alts.is_empty() { cap.push(format!("Also accepted: {}.", alts.join("; "))); }
-    } else if !labs.is_empty() {
-        cap.push("Name each numbered structure.".to_string());
     }
     let cap_lines: Vec<String> = cap.iter().flat_map(|s| wrap(s, (w - 2.0 * MARGIN) * 0.96, 12.0 * c.lab)).collect();
     let table_h = (0..per_col).map(|r| rows.get(r).map_or(0.0, row_h).max(rows.get(r + per_col).map_or(0.0, row_h))).sum::<f64>();
@@ -1053,18 +1357,24 @@ fn draw(p: &Params, c: &Cfg, lay: &Layout) -> String {
         d.describe("Cell diagram", &format!("A cell diagram with {} numbered pointers; the table under it has a blank for each.", labs.len()));
     }
     let off = (lay.off.0 + shift, lay.off.1);
-    for part in &sc.parts { d.raw(&part_svg(part, off, &fills)); }
-    // ---------- heading (key only; the row is kept in both copies)
-    if c.key { d.raw(&esc_t(w / 2.0, MARGIN + 0.5 * lay.head + 0.35 * 15.0 * c.lab, 15.0 * c.lab, "middle", true, "#000", c.t.name())); }
-    // ---------- leaders, pointers, discs, names
-    for l in labs {
-        let a = (l.anchor.0 + shift, l.anchor.1);
-        let e = (l.end.0 + shift, l.end.1);
-        d.line(a.0, a.1, e.0, e.1, INK, 1.0);
+    // a ribosome under a leader (with its halo and a pixel) is not drawn, unless it is the one pointed at;
+    // its place in the drawing order is kept by an empty, invisible polygon
+    let under = |p: &Part| -> bool {
+        let r = (p.bb.2 - p.bb.0) / 2.0;
+        let c = ((p.bb.0 + p.bb.2) / 2.0 + lay.off.0, (p.bb.1 + p.bb.3) / 2.0 + lay.off.1);
+        labs.iter().any(|l| !(l.sid == Sid::Ribosome && (l.anchor.0 - c.0).hypot(l.anchor.1 - c.1) < 0.01) && pt_seg(c, l.tip, l.end) < r + HALO + 2.0)
+    };
+    for part in &sc.parts {
+        if part.loose && under(part) { d.raw(r#"<polygon points="" fill="none" stroke="none" stroke-width="0"/>"#); } else { d.raw(&part_svg(part, off, &fills)); }
     }
-    for l in labs {
-        d.circle(l.anchor.0 + shift, l.anchor.1, 2.2, INK, "#ffffff", 1.1);
-    }
+    // ---------- heading: the cell type in the key, the question in a student copy (same row, same layout)
+    let heading = if c.key { c.t.name() } else if labs.is_empty() { "" } else { "Name each numbered structure." };
+    if !heading.is_empty() { d.raw(&esc_t(w / 2.0, MARGIN + 0.5 * lay.head + 0.35 * 15.0 * c.lab, 15.0 * c.lab, "middle", true, "#000", heading)); }
+    // ---------- leaders: a white halo under each (so it stays visible over hatching and dark fills), then the line.
+    // Both stop square at the tip, with no dot: the end of the line is the pointer.
+    let seg = |a: P, e: P, colour: &str, sw: f64| format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{colour}" stroke-width="{sw}"/>"#, a.0, a.1, e.0, e.1);
+    for l in labs { d.raw(&seg((l.tip.0 + shift, l.tip.1), (l.end.0 + shift, l.end.1), "#ffffff", 1.0 + 2.0 * HALO)); }
+    for l in labs { d.raw(&seg((l.tip.0 + shift, l.tip.1), (l.end.0 + shift, l.end.1), INK, 1.0)); }
     for l in labs {
         let dc = (l.disc.0 + shift, l.disc.1);
         d.circle(dc.0, dc.1, disc, "#ffffff", INK, 1.2);
@@ -1166,15 +1476,21 @@ mod tests {
         svg.split("<circle ").skip(1).map(|c| { let c = c.split('>').next().unwrap(); (num(c, "cx"), num(c, "cy"), num(c, "r")) }).collect()
     }
     fn discs(svg: &str) -> Vec<(f64, f64, f64)> { circles(svg).into_iter().filter(|c| c.2 > 8.0).collect() }
-    fn dots(svg: &str) -> Vec<P> { circles(svg).into_iter().filter(|c| (c.2 - 2.2).abs() < 1e-9).map(|c| (c.0, c.1)).collect() }
+    /// Ink lines (black, 1 px): leaders and the student's rules.
     fn lines(svg: &str) -> Vec<(P, P)> {
-        svg.split("<line ").skip(1).map(|l| { let l = l.split('>').next().unwrap(); ((num(l, "x1"), num(l, "y1")), (num(l, "x2"), num(l, "y2"))) }).collect()
+        svg.split("<line ").skip(1).map(|l| l.split('>').next().unwrap()).filter(|l| attr(l, "stroke").as_deref() != Some("#ffffff")).map(|l| ((num(l, "x1"), num(l, "y1")), (num(l, "x2"), num(l, "y2")))).collect()
     }
-    /// The leaders: lines that start on a pointer dot.
+    /// White lines: the halos under the leaders, with their widths.
+    fn halos(svg: &str) -> Vec<(P, P, f64)> {
+        svg.split("<line ").skip(1).map(|l| l.split('>').next().unwrap()).filter(|l| attr(l, "stroke").as_deref() == Some("#ffffff")).map(|l| ((num(l, "x1"), num(l, "y1")), (num(l, "x2"), num(l, "y2")), num(l, "stroke-width"))).collect()
+    }
+    /// The leaders: ink lines that end on a disc's edge, as (tip, end).
     fn leaders(svg: &str) -> Vec<(P, P)> {
-        let ds = dots(svg);
-        lines(svg).into_iter().filter(|l| ds.iter().any(|d| (d.0 - l.0 .0).hypot(d.1 - l.0 .1) < 0.01)).collect()
+        let ds = discs(svg);
+        lines(svg).into_iter().filter(|l| ds.iter().any(|d| ((l.1 .0 - d.0).hypot(l.1 .1 - d.1) - d.2).abs() < 0.05)).collect()
     }
+    /// Where each leader starts: the pointer.
+    fn dots(svg: &str) -> Vec<P> { leaders(svg).into_iter().map(|l| l.0).collect() }
     /// (points, closed, fill, stroke, stroke width) of every polygon and polyline, in drawing order.
     fn shapes(svg: &str) -> Vec<(Vec<P>, bool, String, String, f64)> {
         let mut out = Vec::new();
@@ -1208,8 +1524,14 @@ mod tests {
         for i in 0..boxes.len() { for j in i + 1..boxes.len() { if overlap(boxes[i], boxes[j]) > 0.5 { bad.push(format!("texts overlap: {:?} / {:?}", ts[i].s, ts[j].s)); } } }
         let ds = discs(svg);
         let ls = leaders(svg);
-        let dts = dots(svg);
-        assert_eq!(ls.len(), dts.len(), "every pointer dot starts one leader");
+        // every leader has a halo of the same extent under it, and nothing else is drawn in white line
+        let hs = halos(svg);
+        if hs.len() != ls.len() { bad.push(format!("{} halos for {} leaders", hs.len(), ls.len())); }
+        for l in &ls { if !hs.iter().any(|h| (h.0 .0 - l.0 .0).abs() < 0.01 && (h.0 .1 - l.0 .1).abs() < 0.01 && (h.1 .0 - l.1 .0).abs() < 0.01 && (h.1 .1 - l.1 .1).abs() < 0.01) { bad.push("a leader has no halo".to_string()); } }
+        // no pointer is drawn as a dot (a dot could be read as a ribosome): no small circle at all
+        let outside_patterns: String = svg.split("</pattern>").map(|x| x.split("<pattern").next().unwrap()).collect();
+        if circles(&outside_patterns).iter().any(|c| c.2 < 8.0) { bad.push("a small circle is drawn".to_string()); }
+        if !(ds.len() == ls.len() || ds.len() == 2 * ls.len()) { bad.push(format!("{} discs for {} leaders", ds.len(), ls.len())); }
         for (i, d) in ds.iter().enumerate() {
             for e in ds.iter().skip(i + 1) { if (d.0 - e.0).hypot(d.1 - e.1) < d.2 + e.2 + 2.0 { bad.push(format!("discs touch at {:?} {:?}", (d.0, d.1), (e.0, e.1))); } }
             for (k, bx) in boxes.iter().enumerate() {
@@ -1279,36 +1601,47 @@ mod tests {
 
     #[test]
     fn relative_placement_is_what_a_textbook_shows() {
-        for (t, r_env) in [(CellType::Animal, 62.0), (CellType::Plant, 42.0)] {
+        for (t, r_env) in [(CellType::Animal, 62.0), (CellType::Plant, 36.0)] {
             let sc = scene(t, true);
-            // the rough ER touches the nuclear envelope: its first sac is within 1.5 px of the outer ring
+            // the rough ER touches the nuclear envelope: its first sac is within 1.5 px of the outer line
             let env = parts_of(&sc, Sid::Envelope);
-            let outer = env.iter().max_by(|a, c| a.stroke.unwrap().1.partial_cmp(&c.stroke.unwrap().1).unwrap()).unwrap();
+            let wmax = env.iter().map(|p| p.stroke.unwrap().1).fold(0.0, f64::max);
+            let outer: Vec<&Part> = env.iter().copied().filter(|p| p.stroke.unwrap().1 == wmax).collect();
             let rer = parts_of(&sc, Sid::RoughEr);
-            let gap = rer.iter().flat_map(|p| p.pts.iter()).map(|q| dist_poly(&outer.pts, *q, true)).fold(f64::MAX, f64::min);
+            let gap = rer.iter().flat_map(|p| p.pts.iter()).map(|q| outer.iter().map(|o| dist_poly(&o.pts, *q, false)).fold(f64::MAX, f64::min)).fold(f64::MAX, f64::min);
             assert!(gap < 1.5, "{t:?}: the rough ER is {gap:.2} px from the envelope");
-            assert!((outer.pts[0].0 - outer.pts.iter().map(|q| q.0).sum::<f64>() / outer.pts.len() as f64).abs() > 0.5 * r_env);
-            // the smooth ER continues from the rough ER (an end within 8 px of a sac), and the Golgi stands near both
+            // the outer line is a circle of the nucleus's radius round the nucleus's centre
+            let nuc = &parts_of(&sc, Sid::Nucleus)[0].pts;
+            let c = (nuc.iter().map(|q| q.0).sum::<f64>() / nuc.len() as f64, nuc.iter().map(|q| q.1).sum::<f64>() / nuc.len() as f64);
+            assert!(outer.iter().flat_map(|o| o.pts.iter()).all(|q| ((q.0 - c.0).hypot(q.1 - c.1) - r_env).abs() < 0.01));
+            // the smooth ER continues from the rough ER (an end within 8 px of a sac), and the Golgi stands near the ER
             let ser = parts_of(&sc, Sid::SmoothEr);
             let d_ser = ser.iter().flat_map(|p| p.pts.iter()).map(|q| rer.iter().map(|r| dist_poly(&r.pts, *q, true)).fold(f64::MAX, f64::min)).fold(f64::MAX, f64::min);
             assert!(d_ser < 8.0, "{t:?}: smooth ER {d_ser:.1} px from the rough ER");
             let golgi = parts_of(&sc, Sid::Golgi);
-            let d_g = golgi.iter().flat_map(|p| p.pts.iter()).map(|q| rer.iter().map(|r| dist_poly(&r.pts, *q, true)).fold(f64::MAX, f64::min)).fold(f64::MAX, f64::min);
-            assert!(d_g < 45.0 && d_g > 4.0, "{t:?}: the Golgi is {d_g:.1} px from the rough ER");
+            let er: Vec<&Part> = rer.iter().chain(ser.iter()).copied().collect();
+            let d_g = golgi.iter().flat_map(|p| p.pts.iter()).map(|q| er.iter().map(|r| dist_poly(&r.pts, *q, r.closed) - r.stroke.map_or(0.0, |s| s.1 / 2.0)).fold(f64::MAX, f64::min)).fold(f64::MAX, f64::min) - 5.0;
+            assert!(d_g < 40.0 && d_g > 4.0, "{t:?}: the Golgi is {d_g:.1} px from the ER");
         }
-        // the plant's vacuole is big: more than a third of the cytoplasm's area; the chloroplasts and mitochondria stay out of it
-        let sc = scene(CellType::Plant, false);
+        // the plant's central vacuole is most of the cell: at least 55 % of the space inside the membrane; nothing
+        // else is in it or touches it
+        let sc = scene(CellType::Plant, true);
         let vac = &parts_of(&sc, Sid::Vacuole)[0].pts;
         let cyto = parts_of(&sc, Sid::Cytoplasm)[0];
-        assert!(area(vac) > 0.33 * area(&cyto.pts), "{} of {}", area(vac), area(&cyto.pts));
-        for sid in [Sid::Chloro, Sid::Mito, Sid::Nucleus] {
-            for p in parts_of(&sc, sid) { assert!(p.pts.iter().all(|q| !inside(vac, *q)), "{sid:?} inside the vacuole"); }
+        let share = area(vac) / area(&cyto.pts);
+        assert!(share > 0.55, "the vacuole is {:.1} % of the cell", share * 100.0);
+        for (i, p) in sc.parts.iter().enumerate() {
+            if matches!(p.sid, Some(Sid::Vacuole) | Some(Sid::Cytoplasm) | Some(Sid::Wall) | Some(Sid::Membrane)) || p.tex { continue; }
+            let half = p.stroke.map_or(0.0, |s| s.1 / 2.0);
+            for q in &p.pts {
+                assert!(!inside(vac, *q) && dist_poly(vac, *q, true) > half + 2.5, "part {i} ({:?}) is in or against the vacuole at {q:?}", p.sid);
+            }
         }
         // the wall is outside the membrane; the capsule outside the wall; every inner structure is inside the membrane
         for t in [CellType::Animal, CellType::Plant, CellType::Bacterial] {
             let sc = scene(t, true);
             let cyto = &parts_of(&sc, Sid::Cytoplasm)[0].pts;
-            for sid in [Sid::Nucleus, Sid::RoughEr, Sid::SmoothEr, Sid::Golgi, Sid::Mito, Sid::Chloro, Sid::Lysosome, Sid::Centriole, Sid::Vacuole, Sid::Nucleoid, Sid::Plasmid, Sid::Ribosome, Sid::Cytoskeleton] {
+            for sid in [Sid::Nucleus, Sid::RoughEr, Sid::SmoothEr, Sid::Golgi, Sid::Mito, Sid::Chloro, Sid::Lysosome, Sid::Centriole, Sid::Vacuole, Sid::Nucleoid, Sid::Plasmid, Sid::Ribosome, Sid::Cytoskeleton, Sid::Envelope] {
                 for p in parts_of(&sc, sid) { assert!(p.pts.iter().all(|q| inside(cyto, *q)), "{t:?} {sid:?} leaves the cytoplasm"); }
             }
         }
@@ -1322,6 +1655,75 @@ mod tests {
         }
         // the nucleoid has no envelope: nothing of the nucleus group is in the bacterium (checked above) and its outline is dashed, unlike a membrane
         assert!(parts_of(&bs, Sid::Nucleoid)[0].dash);
+        // the pili are rooted in the wall: each starts on the wall's outer face and runs out through the capsule
+        let wall = &parts_of(&bs, Sid::Wall)[0].pts;
+        let cap = &parts_of(&bs, Sid::Capsule)[0].pts;
+        let pili = parts_of(&bs, Sid::Pilus);
+        assert!(pili.len() >= 10);
+        for p in pili {
+            assert!(dist_poly(wall, p.pts[0], true) < 0.5, "a pilus starts {:.1} px from the wall", dist_poly(wall, p.pts[0], true));
+            assert!(!inside(cap, *p.pts.last().unwrap()));
+        }
+    }
+
+    #[test]
+    fn each_organelle_keeps_what_makes_it_recognisable() {
+        let objs = |sc: &Scene, sid: Sid| -> Vec<u32> { let mut v: Vec<u32> = parts_of(sc, sid).iter().map(|p| p.obj).collect(); v.dedup(); v };
+        let tex_of = |sc: &Scene, obj: u32| -> Vec<Part> { sc.parts.iter().filter(|p| p.tex && p.obj == obj).cloned().collect() };
+        for t in [CellType::Animal, CellType::Plant] {
+            let sc = scene(t, true);
+            // a mitochondrion: a second (inner) membrane all inside the outer one, and at least three cristae inside it
+            let mitos = objs(&sc, Sid::Mito);
+            assert!(mitos.len() >= 2);
+            for o in mitos {
+                let outer = &sc.parts.iter().find(|p| p.obj == o && p.sid == Some(Sid::Mito)).unwrap().pts;
+                let tex = tex_of(&sc, o);
+                let inner: Vec<&Part> = tex.iter().filter(|p| p.closed && p.fill.is_none() && p.stroke.is_some()).collect();
+                assert_eq!(inner.len(), 1, "{t:?}: a mitochondrion has no inner membrane");
+                assert!(inner[0].pts.iter().all(|q| inside(outer, *q) && dist_poly(outer, *q, true) > 2.0));
+                let cristae = tex.iter().filter(|p| !p.closed && p.stroke.is_some() && p.pts.iter().all(|q| inside(outer, *q))).count();
+                assert!(cristae >= 3, "{t:?}: {cristae} cristae");
+            }
+            // the rough ER is studded: ribosomes sit on the outside of its sacs
+            let rer = parts_of(&sc, Sid::RoughEr);
+            let studs = parts_of(&sc, Sid::Ribosome).into_iter().filter(|r| rer.iter().any(|s| dist_poly(&s.pts, r.pts[0], true) < 4.5)).count();
+            assert!(studs >= 8, "{t:?}: {studs} ribosomes on the rough ER");
+            // the nuclear envelope: two concentric lines, each broken by eight pores at least 3 px wide
+            let env = parts_of(&sc, Sid::Envelope);
+            let mut widths: Vec<f64> = env.iter().map(|p| p.stroke.unwrap().1).collect();
+            widths.sort_by(|a, c| a.partial_cmp(c).unwrap());
+            widths.dedup();
+            assert_eq!(widths.len(), 2, "{t:?}: the envelope is not a double line");
+            for w in widths {
+                let arcs: Vec<&&Part> = env.iter().filter(|p| p.stroke.unwrap().1 == w).collect();
+                assert_eq!(arcs.len(), 8, "{t:?}: {} pieces of the {w} px line", arcs.len());
+                for a in &arcs {
+                    let end = *a.pts.last().unwrap();
+                    let next = arcs.iter().map(|b| (b.pts[0].0 - end.0).hypot(b.pts[0].1 - end.1)).fold(f64::MAX, f64::min);
+                    assert!(next - w > 3.0, "{t:?}: a pore is {:.1} px wide", next - w);
+                }
+            }
+        }
+        // a chloroplast: a double envelope (an inner outline inside the outer one) and at least three grana of stacked discs
+        let sc = scene(CellType::Plant, false);
+        for o in objs(&sc, Sid::Chloro) {
+            let outer = &sc.parts.iter().find(|p| p.obj == o && p.sid == Some(Sid::Chloro)).unwrap().pts;
+            let tex = tex_of(&sc, o);
+            let inner: Vec<&Part> = tex.iter().filter(|p| p.closed && p.fill.is_none() && p.stroke.is_some()).collect();
+            assert_eq!(inner.len(), 1, "a chloroplast has no inner membrane");
+            assert!(inner[0].pts.iter().all(|q| inside(outer, *q) && dist_poly(outer, *q, true) > 1.5));
+            let thylakoids = tex.iter().filter(|p| p.closed && p.fill == Some(Tone::Grana) && p.pts.iter().all(|q| inside(&inner[0].pts, *q))).count();
+            assert!(thylakoids >= 9, "{thylakoids} thylakoid discs");
+        }
+        // a bacterium's ribosomes (70S) are drawn smaller than an animal or plant cell's free ones (80S)
+        let r_of = |t: CellType| { let sc = scene(t, false); let p = parts_of(&sc, Sid::Ribosome).into_iter().max_by(|a, c| (a.bb.2 - a.bb.0).partial_cmp(&(c.bb.2 - c.bb.0)).unwrap()).unwrap(); (p.bb.2 - p.bb.0) / 2.0 };
+        assert!(r_of(CellType::Bacterial) < r_of(CellType::Animal) - 0.5 && r_of(CellType::Bacterial) < r_of(CellType::Plant) - 0.5);
+        // the flagellum's base is not a dot: no filled part without a name, and the flagellum reaches in across the membrane
+        let bs = scene(CellType::Bacterial, false);
+        assert!(!bs.parts.iter().any(|p| p.sid.is_none() && !p.tex && p.fill.is_some()), "an unnamed solid part");
+        let memb = &parts_of(&bs, Sid::Membrane)[0].pts;
+        let cyto = &parts_of(&bs, Sid::Cytoplasm)[0].pts;
+        assert!(parts_of(&bs, Sid::Flagellum).iter().any(|p| p.pts.iter().any(|q| inside(cyto, *q) && dist_poly(memb, *q, true) > 1.5)), "the flagellum does not reach the membrane");
     }
 
     #[test]
@@ -1492,63 +1894,228 @@ mod tests {
     }
 
     /// Where the SVG's anchor dot sits relative to the polygons the SVG draws, by hit-testing the SVG's own shapes.
-    fn svg_hit(svg: &str, sc: &Scene, q: P) -> Hit {
-        let sh = shapes(svg);
-        for (i, part) in sc.parts.iter().enumerate().rev() {
-            if part.tex { continue; }
-            let (pts, closed, fill, stroke, sw) = &sh[i];
-            let hit = (*closed && fill != "none" && inside(pts, q)) || (stroke != "none" && dist_poly(pts, q, *closed) <= sw / 2.0);
-            if hit { return match part.sid { Some(x) => Hit::Is(x), None => Hit::Other }; }
+    /// The SVG's own polygons and polylines, matched to the scene's parts by drawing order (textures skipped when hit-testing).
+    struct Drawn { sh: Vec<(Vec<P>, bool, String, String, f64)>, bb: Vec<(f64, f64, f64, f64)> }
+    impl Drawn {
+        fn new(svg: &str) -> Drawn {
+            let sh = shapes(svg);
+            let bb = sh.iter().map(|(pts, _, _, _, sw)| {
+                let w = sw / 2.0 + 0.01;
+                pts.iter().fold((f64::MAX, f64::MAX, f64::MIN, f64::MIN), |b, q| (b.0.min(q.0 - w), b.1.min(q.1 - w), b.2.max(q.0 + w), b.3.max(q.1 + w)))
+            }).collect();
+            Drawn { sh, bb }
         }
-        Hit::Nothing
+        /// The index of the top-most scene part drawn at `q`.
+        fn index(&self, sc: &Scene, q: P) -> Option<usize> {
+            for (i, part) in sc.parts.iter().enumerate().rev() {
+                if part.tex { continue; }
+                let b = self.bb[i];
+                if q.0 < b.0 || q.0 > b.2 || q.1 < b.1 || q.1 > b.3 { continue; }
+                let (pts, closed, fill, stroke, sw) = &self.sh[i];
+                if (*closed && fill != "none" && inside(pts, q)) || (stroke != "none" && dist_poly(pts, q, *closed) <= sw / 2.0) { return Some(i); }
+            }
+            None
+        }
+        fn hit(&self, sc: &Scene, q: P) -> Hit {
+            match self.index(sc, q) { Some(i) => match sc.parts[i].sid { Some(x) => Hit::Is(x), None => Hit::Other }, None => Hit::Nothing }
+        }
+    }
+    /// What may lie within 6 px of a pointer on `s` (written out here, apart from the module's rule).
+    fn neighbour_ok(s: Sid, h: Hit) -> bool {
+        match h {
+            Hit::Nothing => true,
+            Hit::Other => false,
+            Hit::Is(x) => x == s || (x == Sid::Cytoplasm && s != Sid::Cytoplasm)
+                || (s == Sid::Envelope && x == Sid::Nucleus) || (s == Sid::Membrane && x == Sid::Wall)
+                || (s == Sid::Plasmodesma && (x == Sid::Wall || x == Sid::Membrane)) || (s == Sid::Wall && x == Sid::Capsule),
+        }
     }
 
     #[test]
     fn each_pointer_in_the_picture_lands_on_exactly_its_structure() {
+        let mut ribo = 0;
         for t in TYPES {
             for plasmo in [false, true] {
                 if plasmo && t != CellType::Plant { continue; }
                 for size in SIZES {
-                    for mask in [31u8, G_BOUND, G_ENERGY, G_PROT, G_OTHER | G_MEMB, 6] {
+                    for mask in [31u8, G_BOUND, G_ENERGY, G_PROT, G_OTHER | G_MEMB, 6, 24, 9] {
                         let svg = render_of(&[s("cell", type_of(t.idx())), b("plasmodesmata", plasmo), s("label_size", size), s("style", "Print"), b(SHOW_ANSWERS, false), b("g_boundary", mask & 1 != 0), b("g_membrane", mask & 2 != 0), b("g_energy", mask & 4 != 0), b("g_protein", mask & 8 != 0), b("g_other", mask & 16 != 0)]);
                         let sc = scene(t, plasmo);
                         let lay = layout(&cfg0(t, mask, plasmo), false, svg::label_factor(size));
-                        let sh = shapes(&svg);
-                        assert!(sh.len() >= sc.parts.len());
+                        let dr = Drawn::new(&svg);
+                        assert!(dr.sh.len() >= sc.parts.len());
                         // the drawing is the scene, moved by one offset
-                        let off = (sh[0].0[0].0 - sc.parts[0].pts[0].0, sh[0].0[0].1 - sc.parts[0].pts[0].1);
-                        for (i, p) in sc.parts.iter().enumerate() { assert!(p.pts.iter().zip(&sh[i].0).all(|(a, c)| (a.0 + off.0 - c.0).abs() < 0.01 && (a.1 + off.1 - c.1).abs() < 0.01)); }
-                        let ds = dots(&svg);
-                        assert_eq!(ds.len(), lay.labs.len());
+                        let off = (dr.sh[0].0[0].0 - sc.parts[0].pts[0].0, dr.sh[0].0[0].1 - sc.parts[0].pts[0].1);
+                        for (i, p) in sc.parts.iter().enumerate() { assert!(p.pts.iter().zip(&dr.sh[i].0).all(|(a, c)| (a.0 + off.0 - c.0).abs() < 0.01 && (a.1 + off.1 - c.1).abs() < 0.01)); }
+                        let ls = leaders(&svg);
+                        assert_eq!(ls.len(), lay.labs.len());
+                        let hw = halos(&svg).first().map_or(0.0, |h| h.2 / 2.0);
                         for l in &lay.labs {
-                            let q = (l.anchor.0 + (canvas(&svg).0 - lay.w) / 2.0, l.anchor.1);
-                            assert!(ds.iter().any(|d| (d.0 - q.0).hypot(d.1 - q.1) < 0.01), "{:?} pointer is drawn", l.sid);
-                            // in the drawing's own coordinates
-                            assert_eq!(svg_hit(&svg, &sc, q), Hit::Is(l.sid), "{t:?} {size}: the pointer for {:?} does not land on it", l.sid);
-                            for k in 0..12 {
-                                let a = k as f64 * std::f64::consts::TAU / 12.0;
-                                let h = svg_hit(&svg, &sc, (q.0 + 2.8 * a.cos(), q.1 + 2.8 * a.sin()));
-                                let ok = match h {
-                                    Hit::Nothing => true,
-                                    Hit::Other => false,
-                                    Hit::Is(x) => x == l.sid || (x == Sid::Cytoplasm && l.sid != Sid::Cytoplasm)
-                                        || (l.sid == Sid::Envelope && x == Sid::Nucleus) || (l.sid == Sid::Membrane && x == Sid::Wall)
-                                        || (l.sid == Sid::Plasmodesma && x == Sid::Wall) || (l.sid == Sid::Wall && x == Sid::Capsule),
-                                };
-                                assert!(ok, "{t:?} {size}: next to the pointer for {:?} lies {h:?}", l.sid);
+                            let shift = (canvas(&svg).0 - lay.w) / 2.0;
+                            let q = (l.anchor.0 + shift, l.anchor.1);
+                            let tip = (l.tip.0 + shift, l.tip.1);
+                            let lead = ls.iter().find(|m| (m.0 .0 - tip.0).hypot(m.0 .1 - tip.1) < 0.01).unwrap_or_else(|| panic!("{t:?} {size}: no leader starts at the {:?} pointer", l.sid));
+                            assert_eq!(dr.hit(&sc, q), Hit::Is(l.sid), "{t:?} {size}: the pointer for {:?} does not land on it", l.sid);
+                            // a 6 px disc round the pointer holds nothing else (24 directions at 4 radii)
+                            for k in 1..=4 {
+                                for j in 0..24 {
+                                    let (r, a) = (1.5 * k as f64, j as f64 * std::f64::consts::TAU / 24.0);
+                                    let h = dr.hit(&sc, (q.0 + r * a.cos(), q.1 + r * a.sin()));
+                                    assert!(neighbour_ok(l.sid, h), "{t:?} {size} mask {mask}: {r} px from the pointer for {:?} lies {h:?}", l.sid);
+                                }
+                            }
+                            if l.sid == Sid::Ribosome {
+                                // the leader stops 0.8 px outside the dot, pointing at its centre, and neither it nor its halo covers the dot
+                                ribo += 1;
+                                let k = dr.index(&sc, q).unwrap();
+                                let pts = &dr.sh[k].0;
+                                let r = pts.iter().map(|p| (p.0 - q.0).hypot(p.1 - q.1)).fold(0.0, f64::max);
+                                let gap = (tip.0 - q.0).hypot(tip.1 - q.1) - r;
+                                assert!((gap - 0.8).abs() < 0.05, "{t:?}: the ribosome leader stops {gap:.2} px from the dot");
+                                let (dx, dy) = (lead.1 .0 - lead.0 .0, lead.1 .1 - lead.0 .1);
+                                let len = dx.hypot(dy);
+                                let cross = ((q.0 - tip.0) * dy - (q.1 - tip.1) * dx).abs() / len;
+                                assert!(cross < 0.01, "the leader does not aim at the ribosome");
+                                for p in pts {
+                                    let u = ((p.0 - tip.0) * dx + (p.1 - tip.1) * dy) / len;
+                                    let v = ((p.0 - tip.0) * dy - (p.1 - tip.1) * dx).abs() / len;
+                                    assert!(!(u >= 0.0 && u <= len && v <= hw), "{t:?}: the halo covers the ribosome it points at");
+                                }
+                            } else {
+                                assert!((tip.0 - q.0).hypot(tip.1 - q.1) < 0.01, "{:?}: the leader starts on the pointer", l.sid);
                             }
                         }
                     }
                 }
             }
         }
+        assert!(ribo >= 20, "{ribo} ribosome pointers checked");
+    }
+
+    /// The drawing's own top-most part at every whole pixel of the scene, from the SVG's polygons (test-side raster).
+    struct DrawnRaster { x0: i64, y0: i64, w: i64, h: i64, idx: Vec<i32> }
+    impl DrawnRaster {
+        fn new(svg: &str, sc: &Scene) -> (DrawnRaster, P) {
+            let dr = Drawn::new(svg);
+            let off = (dr.sh[0].0[0].0 - sc.parts[0].pts[0].0, dr.sh[0].0[0].1 - sc.parts[0].pts[0].1);
+            let (x0, y0) = ((sc.bbox.0 - 2.0).floor() as i64, (sc.bbox.1 - 2.0).floor() as i64);
+            let (w, h) = ((sc.bbox.2 + 2.0).ceil() as i64 - x0, (sc.bbox.3 + 2.0).ceil() as i64 - y0);
+            let mut idx = vec![-1; (w * h) as usize];
+            for y in 0..h { for x in 0..w {
+                idx[(y * w + x) as usize] = dr.index(sc, ((x + x0) as f64 + off.0, (y + y0) as f64 + off.1)).map_or(-1, |k| k as i32);
+            } }
+            (DrawnRaster { x0, y0, w, h, idx }, off)
+        }
+        fn at(&self, q: P) -> Option<usize> {
+            let (x, y) = (q.0.round() as i64 - self.x0, q.1.round() as i64 - self.y0);
+            if x < 0 || y < 0 || x >= self.w || y >= self.h { return None; }
+            let k = self.idx[(y * self.w + x) as usize];
+            if k < 0 { None } else { Some(k as usize) }
+        }
+    }
+    /// What one drawn leader (tip to end, canvas coordinates) runs over that it does not point at: walked every half pixel
+    /// on its centre line and on both edges of its halo. A leader may cross the membrane, wall and capsule, the
+    /// cytoplasm, its own structure (the very copy it points at, for things drawn many times), and the nucleus's own
+    /// layers on the way out from a nucleolus or nucleus.
+    fn runs_over(dr: &DrawnRaster, sc: &Scene, off: P, sid: Sid, tip: P, end: P, hw: f64) -> Vec<String> {
+        let (a, e) = ((tip.0 - off.0, tip.1 - off.1), (end.0 - off.0, end.1 - off.1));
+        let len = (e.0 - a.0).hypot(e.1 - a.1);
+        let (ux, uy) = ((e.0 - a.0) / len, (e.1 - a.1) / len);
+        // the copy pointed at: under the tip, or for a ribosome just behind it
+        let target = [0.0, -1.6, -2.2, -2.6, -3.0].iter().filter_map(|b| dr.at((a.0 + ux * b, a.1 + uy * b))).find(|k| sc.parts[*k].sid == Some(sid));
+        let target = target.unwrap_or_else(|| panic!("{sid:?}: the tip is not on its structure"));
+        let many = matches!(sid, Sid::Mito | Sid::Chloro | Sid::Lysosome | Sid::Plasmid | Sid::Pilus | Sid::Centriole | Sid::Plasmodesma | Sid::Ribosome | Sid::Cytoskeleton);
+        let mut out = Vec::new();
+        let mut t = 0.0;
+        while t <= len {
+            for o in [-(hw + 0.5), 0.0, hw + 0.5] {
+                let q = (a.0 + ux * t - uy * o, a.1 + uy * t + ux * o);
+                let Some(k) = dr.at(q) else { continue };
+                let p = &sc.parts[k];
+                let ok = match p.sid {
+                    None => false,
+                    Some(x) => matches!(x, Sid::Membrane | Sid::Wall | Sid::Capsule | Sid::Cytoplasm)
+                        || (t <= 6.0 && neighbour_ok(sid, Hit::Is(x)))
+                        || (x == sid && (!many || p.obj == sc.parts[target].obj))
+                        || matches!((sid, x), (Sid::Nucleolus, Sid::Nucleus) | (Sid::Nucleolus, Sid::Envelope) | (Sid::Nucleus, Sid::Envelope) | (Sid::Plasmodesma, Sid::Wall)),
+                };
+                let name = format!("{:?}#{}", p.sid, p.obj);
+                if !ok && !out.contains(&name) { out.push(name); }
+            }
+            t += 0.5;
+        }
+        out
+    }
+
+    #[test]
+    fn leaders_run_over_nothing_they_do_not_point_at() {
+        let mut rasters: HashMap<(CellType, bool), (DrawnRaster, P)> = HashMap::new();
+        let (mut renders, mut total, mut crossing, mut over_ribo) = (0, 0, 0, 0);
+        let mut worst: Vec<String> = Vec::new();
+        let mut dirty: Vec<String> = Vec::new();
+        let mut check = |list: Vec<(&'static str, Value)>, must_be_clean: bool, what: &str| {
+            let p = with(&list);
+            let c = cfg(&p);
+            let svg = render_of(&list);
+            let sc = scene(c.t, c.plasmo);
+            let key = (c.t, c.plasmo && c.t == CellType::Plant);
+            // the raster comes from a bare cell (no leader, so no free ribosome left out); a left-out one is then
+            // found by reading this render's own polygon (an empty one draws nothing)
+            let (dr, off0) = rasters.entry(key).or_insert_with(|| DrawnRaster::new(&render_of(&[s("cell", type_of(c.t.idx())), b("plasmodesmata", c.plasmo), b("g_boundary", false), b("g_membrane", false), b("g_energy", false), b("g_protein", false), b("g_other", false)]), &sc));
+            // this render's offset (the canvas may be wider than the one the raster was made from)
+            let dr0 = Drawn::new(&svg);
+            let off = (dr0.sh[0].0[0].0 - sc.parts[0].pts[0].0, dr0.sh[0].0[0].1 - sc.parts[0].pts[0].1);
+            let _ = off0;
+            let lay = layout(&Cfg0 { t: c.t, mask: c.mask, plasmo: c.plasmo }, c.funcs, c.lab);
+            let hw = halos(&svg).first().map_or(0.0, |h| h.2 / 2.0);
+            let shift = (canvas(&svg).0 - lay.w) / 2.0;
+            renders += 1;
+            for l in &lay.labs {
+                total += 1;
+                let tip = (l.tip.0 + shift, l.tip.1);
+                let (_, end) = *leaders(&svg).iter().find(|m| (m.0 .0 - tip.0).hypot(m.0 .1 - tip.1) < 0.01).unwrap();
+                let mut over = runs_over(dr, &sc, off, l.sid, tip, end, hw);
+                // a part this render does not draw (an empty polygon) is not run over
+                over.retain(|o| !dr0.sh.iter().enumerate().any(|(i, sh)| sh.0.is_empty() && o == &format!("{:?}#{}", sc.parts[i].sid, sc.parts[i].obj)));
+                if !over.is_empty() {
+                    crossing += 1;
+                    if over.iter().any(|o| o.starts_with("Some(Ribosome)")) { over_ribo += 1; }
+                    if worst.len() < 40 { worst.push(format!("{what}: {:?} runs over {over:?}", l.sid)); }
+                    if must_be_clean { dirty.push(format!("{what}: the {:?} leader runs over {over:?}", l.sid)); }
+                }
+            }
+        };
+        // the defaults, the opening state and every example: no leader runs over anything
+        for t in TYPES { check(vec![s("cell", type_of(t.idx()))], true, &format!("{t:?} defaults")); }
+        check(crate::figures::start::overrides(ID), true, "start");
+        for e in examples(ID).unwrap() { check(e.params.clone(), true, e.name); }
+        // every cell, group set, function setting and size
+        for t in TYPES {
+            for plasmo in [false, true] {
+                if plasmo && t != CellType::Plant { continue; }
+                for mask in 1u8..32 {
+                    for funcs in [false, true] {
+                        for size in SIZES {
+                            let mut l = vec![s("cell", type_of(t.idx())), b("plasmodesmata", plasmo), b("functions", funcs), s("label_size", size)];
+                            l.extend(mask_list(mask));
+                            check(l, false, &format!("{t:?} plasmo {plasmo} mask {mask} funcs {funcs} {size}"));
+                        }
+                    }
+                }
+            }
+        }
+        eprintln!("{renders} renders, {total} leaders, {crossing} run over something ({over_ribo} over a ribosome)\n{}", worst.join("\n"));
+        assert!(dirty.is_empty(), "{dirty:#?}");
+        assert_eq!(over_ribo, 0, "a leader runs over a ribosome it does not point at");
+        // measured 105 of 5809 (1.8 %) at the time of writing; the defaults, the opening state and the examples are clean
+        assert!(crossing * 100 <= 2 * total, "{crossing} of {total} leaders run over a structure");
     }
 
     // ------------------------------------------------------------ student copy
     const BANNED: &[&str] = &[
         "membrane", "cytoplasm", "cytosol", "cytoskeleton", "microtubule", "nucle", "envelope", "reticulum", "golgi", "mitochond", "chloroplast", "ribosom", "lysosom",
         "centriole", "vacuole", "wall", "capsule", "slime", "plasmid", "plasmodesm", "flagell", "pilus", "pili", "fimbria", "rough", "smooth", "apparatus", "complex",
-        "animal", "plant ", "bacteri", "prokaryote", "central", "large vacuole", "plasma",
+        "animal", "plant ", "bacteri", "prokaryote", "central", "large vacuole", "plasma", "dna", "chromosom", "centrosom",
     ];
 
     fn markup_leaks(svg: &str) -> Vec<String> {
@@ -1701,6 +2268,20 @@ mod tests {
         let key = texts(&render_of(&[s("cell", CELLS[1])])).into_iter().map(|t| t.s).collect::<Vec<_>>().join(" ");
         assert!(key.contains("Central vacuole") && key.contains("vacuole, large vacuole") && !key.contains(" Vacuole "));
         assert!(key.contains("Cell membrane") && key.contains("plasma membrane (Cell membrane)"));
+        // the second answers a teacher would accept are in the key; near-synonyms that name something else are not
+        let bact = texts(&render_of(&[s("cell", CELLS[2])])).into_iter().map(|t| t.s).collect::<Vec<_>>().join(" ");
+        assert!(bact.contains("chromosomal DNA (Nucleoid)") && bact.contains("chromosome,") && bact.contains("DNA,"), "{bact}");
+        let anim = texts(&render_of(&[])).into_iter().map(|t| t.s).collect::<Vec<_>>().join(" ");
+        assert!(anim.contains("centrosome (Centriole)"), "{anim}");
+        for sd in ALL { for bad in ["cytosol", "slime", "fimbria"] { assert!(!info(sd).alt.contains(bad), "{sd:?} accepts {bad}"); } }
+        assert!(func(Sid::Mito, false).contains("most of the cell's ATP") && !func(Sid::Mito, false).contains("releases energy"));
+        // the student copy asks its question in the heading row (no empty band at the top); the key names the cell there
+        for t in TYPES {
+            let stu = texts(&render_of(&[s("cell", type_of(t.idx())), b(SHOW_ANSWERS, false)]));
+            let top = stu.iter().min_by(|a, c| a.y.partial_cmp(&c.y).unwrap()).unwrap();
+            assert_eq!(top.s, "Name each numbered structure.");
+            assert!(!stu.iter().any(|x| x.y > top.y && x.s.contains("Name each")), "the question is asked once");
+        }
     }
 
     #[test]
@@ -1767,34 +2348,50 @@ mod tests {
         }
     }
 
+    /// Luminance at 66 % grey: true where a photocopy at that setting prints black.
+    fn dark_at(px: &[u8], w: u32, x: i64, y: i64) -> bool {
+        let o = ((y as u32 * w + x as u32) * 4) as usize;
+        let a = px[o + 3] as f64 / 255.0;
+        let lum = (0.299 * px[o] as f64 + 0.587 * px[o + 1] as f64 + 0.114 * px[o + 2] as f64) * a + 255.0 * (1.0 - a);
+        lum < 0.66 * 255.0
+    }
+    /// Canvas position of the scene's origin in a render of these settings.
+    fn origin(svg: &str, t: CellType, mask: u8, plasmo: bool, funcs: bool, lab: f64) -> P {
+        let lay = layout(&cfg0(t, mask, plasmo), funcs, lab);
+        ((canvas(svg).0 - lay.w) / 2.0 + lay.off.0, lay.off.1)
+    }
+
     #[test]
     fn at_sixty_six_percent_grey_each_hatched_organelle_keeps_ink_and_none_is_solid() {
+        // every pixel of the organelle's inside (2 px in from its edge) is counted, not a patch round the pointer
         for t in TYPES {
             let svg = render_of(&[s("cell", type_of(t.idx())), s("style", "Print"), b(SHOW_ANSWERS, false)]);
+            assert!(!svg.contains("url(#vs-hatch0)"), "{t:?}: the plain tint vanishes at 66 %");
             let (w, h, px) = to_rgba(&svg, 2.0).unwrap();
             let sc = scene(t, false);
-            let lay = layout(&cfg0(t, 31, false), false, 1.0);
-            let shift = (canvas(&svg).0 - lay.w) / 2.0;
+            let o = origin(&svg, t, 31, false, false, 1.0);
+            let mut seen = 0;
             for sid in [Sid::Nucleus, Sid::Mito, Sid::Chloro, Sid::Vacuole, Sid::Nucleoid, Sid::Capsule] {
-                let Some(l) = lay.labs.iter().find(|l| l.sid == sid) else { continue };
-                let (cx, cy) = ((l.anchor.0 + shift) * 2.0, l.anchor.1 * 2.0);
+                let parts = parts_of(&sc, sid);
+                if parts.is_empty() { continue; }
+                seen += 1;
                 let (mut dark, mut total) = (0, 0);
-                for dy in -9..=9 { for dx in -9..=9 {
-                    if ((dx * dx + dy * dy) as f64).sqrt() < 7.0 { continue; }
-                    let (x, y) = ((cx as i32 + dx) as u32, (cy as i32 + dy) as u32);
-                    if x >= w || y >= h { continue; }
-                    // only pixels inside the structure itself count
-                    let q = ((x as f64 / 2.0 - shift), y as f64 / 2.0);
-                    if sc.top_hit(q) != Hit::Is(sid) { continue; }
-                    let o = ((y * w + x) * 4) as usize;
-                    let lum = 0.299 * px[o] as f64 + 0.587 * px[o + 1] as f64 + 0.114 * px[o + 2] as f64;
-                    total += 1;
-                    if lum < 0.66 * 255.0 { dark += 1; }
-                } }
-                if total < 40 { continue; }
+                for p in parts {
+                    for y in ((p.bb.1 + o.1) * 2.0) as i64..((p.bb.3 + o.1) * 2.0) as i64 {
+                        for x in ((p.bb.0 + o.0) * 2.0) as i64..((p.bb.2 + o.0) * 2.0) as i64 {
+                            if x < 0 || y < 0 || x as u32 >= w || y as u32 >= h { continue; }
+                            let q = ((x as f64 + 0.5) / 2.0 - o.0, (y as f64 + 0.5) / 2.0 - o.1);
+                            if sc.top_hit(q) != Hit::Is(sid) || (0..8).any(|k| { let a = k as f64 * std::f64::consts::TAU / 8.0; sc.top_hit((q.0 + 2.0 * a.cos(), q.1 + 2.0 * a.sin())) != Hit::Is(sid) }) { continue; }
+                            total += 1;
+                            if dark_at(&px, w, x, y) { dark += 1; }
+                        }
+                    }
+                }
+                assert!(total > 300, "{t:?} {sid:?}: {total} px");
                 let f = dark as f64 / total as f64;
                 assert!(f > 0.08 && f < 0.9, "{t:?}: {sid:?} has {:.0} % ink at 66 % grey over {total} px", f * 100.0);
             }
+            assert!(seen >= 2);
         }
     }
 
@@ -1829,31 +2426,75 @@ mod tests {
     }
 
     #[test]
-    fn the_solid_print_tones_read_black_at_sixty_six_percent_grey() {
-        // the cell wall (grey), a lysosome and a centriole are solid in Print; a grey that went pale would vanish at 66 %
-        let sample = |svg: &str, centre: P, shift: P, sid: Sid, sc: &Scene, half: i32| -> f64 {
-            let (w, h, px) = to_rgba(svg, 2.0).unwrap();
+    fn at_sixty_six_percent_grey_the_wall_and_the_membrane_stay_two_lines_and_every_leader_stays_visible() {
+        for (t, scans) in [(CellType::Plant, vec![((-100.0, -140.0), (0.0, -1.0)), ((62.0, 143.0), (0.0, 1.0)), ((-188.0, 60.0), (-1.0, 0.0)), ((190.0, -80.0), (1.0, 0.0))]), (CellType::Bacterial, vec![((-30.0, -55.0), (0.0, -1.0)), ((30.0, 55.0), (0.0, 1.0))])] {
+            for key in [true, false] {
+                // the wall is read on a bare cell (no leader in the way), the leaders on the full one
+                let bare = render_of(&[s("cell", type_of(t.idx())), s("style", "Print"), b(SHOW_ANSWERS, key), b("g_boundary", false), b("g_membrane", false), b("g_energy", false), b("g_protein", false), b("g_other", false)]);
+                let (w, h, px) = to_rgba(&bare, 2.0).unwrap();
+                let o = origin(&bare, t, 0, false, false, 1.0);
+                let sc = scene(t, false);
+                // walking out from the cytoplasm: the membrane line (dark), the wall's body (white for at least 4 px), the wall's outer face (dark)
+                for &(from, dir) in &scans {
+                    let mut runs: Vec<(bool, usize)> = Vec::new();
+                    let mut walked = Vec::new();
+                    for k in 0..60 {
+                        let q = (from.0 + dir.0 * k as f64 * 0.5, from.1 + dir.1 * k as f64 * 0.5);
+                        let (x, y) = (((q.0 + o.0) * 2.0) as i64, ((q.1 + o.1) * 2.0) as i64);
+                        if x < 0 || y < 0 || x as u32 >= w || y as u32 >= h { break; }
+                        let dk = dark_at(&px, w, x, y);
+                        walked.push((sc.top_hit(q), dk));
+                        match runs.last_mut() { Some(r) if r.0 == dk => r.1 += 1, _ => runs.push((dk, 1)) }
+                    }
+                    // runs: white cytoplasm, dark membrane, white wall body, dark outer face
+                    assert!(runs.len() >= 4 && !runs[0].0 && runs[1].0 && !runs[2].0 && runs[3].0, "{t:?} {from:?}: {runs:?}");
+                    assert!(runs[2].1 >= 8, "{t:?} {from:?}: the wall's body is only {} half-pixels wide at 66 %", runs[2].1);
+                    assert!(walked.iter().any(|(hh, _)| *hh == Hit::Is(Sid::Wall)));
+                }
+                // every leader stands out along its whole length at 66 %, over hatching, the wall and the vacuole alike:
+                // the line itself prints dark and 1.3 px to either side of it the copy is white
+                let svg = render_of(&[s("cell", type_of(t.idx())), s("style", "Print"), b(SHOW_ANSWERS, key)]);
+                let (w, _, px) = to_rgba(&svg, 2.0).unwrap();
+                for (a, e) in leaders(&svg) {
+                    let len = (e.0 - a.0).hypot(e.1 - a.1);
+                    let (ux, uy) = ((e.0 - a.0) / len, (e.1 - a.1) / len);
+                    let (mut lost, mut muddy, mut n) = (0, 0, 0);
+                    let mut s_ = 3.0;
+                    while s_ < len - 3.0 {
+                        let q = (a.0 + ux * s_, a.1 + uy * s_);
+                        let at = |p: P| ((p.0 * 2.0).floor() as i64, (p.1 * 2.0).floor() as i64);
+                        let (x, y) = at(q);
+                        n += 1;
+                        if ![(0, 0), (1, 0), (0, 1), (-1, 0), (0, -1)].iter().any(|(dx, dy)| dark_at(&px, w, x + dx, y + dy)) { lost += 1; }
+                        for o in [-1.3, 1.3] {
+                            let (sx, sy) = at((q.0 - uy * o, q.1 + ux * o));
+                            if dark_at(&px, w, sx, sy) { muddy += 1; }
+                        }
+                        s_ += 1.0;
+                    }
+                    assert!(lost == 0, "{t:?}: a leader is lost at 66 % on {lost} of {n} points");
+                    assert!(muddy == 0, "{t:?}: beside a leader the copy is dark on {muddy} of {} points", 2 * n);
+                }
+            }
+        }
+        // the solid tones: a lysosome, a centriole and the nucleolus read black at 66 % (on a bare cell: a leader's halo would cut them)
+        let svg = render_of(&[s("style", "Print"), b("g_boundary", false), b("g_membrane", false), b("g_energy", false), b("g_protein", false), b("g_other", false)]);
+        let (w, h, px) = to_rgba(&svg, 2.0).unwrap();
+        let o = origin(&svg, CellType::Animal, 0, false, false, 1.0);
+        let sc = scene(CellType::Animal, false);
+        for sid in [Sid::Lysosome, Sid::Centriole, Sid::Nucleolus] {
+            let p = parts_of(&sc, sid)[0];
             let (mut dark, mut total) = (0, 0);
-            for dy in -half..=half { for dx in -half..=half {
-                let (x, y) = (((centre.0 + shift.0) * 2.0) as i32 + dx, ((centre.1 + shift.1) * 2.0) as i32 + dy);
-                if x < 0 || y < 0 || x as u32 >= w || y as u32 >= h { continue; }
-                let q = (x as f64 / 2.0 - shift.0, y as f64 / 2.0 - shift.1);
-                if sc.top_hit(q) != Hit::Is(sid) { continue; }
-                let o = ((y as u32 * w + x as u32) * 4) as usize;
-                total += 1;
-                let lum = 0.299 * px[o] as f64 + 0.587 * px[o + 1] as f64 + 0.114 * px[o + 2] as f64;
-                if lum < 0.66 * 255.0 { dark += 1; }
-            } }
-            assert!(total >= 12, "{sid:?}: only {total} pixels");
-            dark as f64 / total as f64
-        };
-        for (t, sid, q, half) in [(CellType::Plant, Sid::Wall, (-100.0, -145.5), 8), (CellType::Animal, Sid::Lysosome, (-170.0, -36.0), 4), (CellType::Bacterial, Sid::Wall, (-60.0, -68.5), 8)] {
-            let svg = render_of(&[s("cell", type_of(t.idx())), s("style", "Print")]);
-            let lay = layout(&cfg0(t, 31, false), false, 1.0);
-            let shift = ((canvas(&svg).0 - lay.w) / 2.0 + lay.off.0, lay.off.1);
-            let sc = scene(t, false);
-            let f = sample(&svg, q, shift, sid, &sc, half);
-            assert!(f > 0.97, "{t:?} {sid:?}: {:.0} % dark", f * 100.0);
+            for y in ((p.bb.1 + o.1) * 2.0) as i64..((p.bb.3 + o.1) * 2.0) as i64 {
+                for x in ((p.bb.0 + o.0) * 2.0) as i64..((p.bb.2 + o.0) * 2.0) as i64 {
+                    if x < 0 || y < 0 || x as u32 >= w || y as u32 >= h { continue; }
+                    let q = ((x as f64 + 0.5) / 2.0 - o.0, (y as f64 + 0.5) / 2.0 - o.1);
+                    if sc.top_hit(q) != Hit::Is(sid) || sc.parts.iter().any(|t| t.tex && t.bb.0 <= q.0 && q.0 <= t.bb.2 && t.bb.1 <= q.1 && q.1 <= t.bb.3) { continue; }
+                    total += 1;
+                    if dark_at(&px, w, x, y) { dark += 1; }
+                }
+            }
+            assert!(total >= 12 && dark as f64 > 0.97 * total as f64, "{sid:?}: {dark} of {total} dark");
         }
     }
 
@@ -1879,6 +2520,50 @@ mod tests {
         }
         eprintln!("layout: {n} computed, worst {worst:?}, mean {:?}", total / n);
         assert!(worst < std::time::Duration::from_secs(5), "{worst:?}");
+    }
+
+    #[test]
+    fn the_layout_cache_tells_every_setting_apart() {
+        // one thread, one cache: fetch a neighbour first, then the layout under test; it must equal a fresh computation
+        let same = |a: &Layout, c: &Layout| format!("{:?}|{}|{}|{}", a.labs, a.fs, a.w, a.h) == format!("{:?}|{}|{}|{}", c.labs, c.fs, c.w, c.h);
+        let pairs: Vec<((Cfg0, bool, f64), (Cfg0, bool, f64))> = vec![
+            ((cfg0(CellType::Animal, 31, false), false, 1.0), (cfg0(CellType::Plant, 31, false), false, 1.0)),
+            ((cfg0(CellType::Animal, 31, false), false, 1.0), (cfg0(CellType::Animal, 7, false), false, 1.0)),
+            ((cfg0(CellType::Plant, 31, false), false, 1.0), (cfg0(CellType::Plant, 31, true), false, 1.0)),
+            ((cfg0(CellType::Animal, 31, false), false, 1.0), (cfg0(CellType::Animal, 31, false), true, 1.0)),
+            ((cfg0(CellType::Animal, 31, false), false, 1.0), (cfg0(CellType::Animal, 31, false), false, 1.4)),
+            ((cfg0(CellType::Bacterial, 31, false), false, 1.4), (cfg0(CellType::Bacterial, 31, false), false, 0.8)),
+        ];
+        for ((c1, f1, l1), (c2, f2, l2)) in pairs {
+            let _ = layout(&c1, f1, l1);
+            let got = layout(&c2, f2, l2);
+            assert!(same(&got, &compute(&c2, f2, l2)), "{c2:?} {f2} {l2} came from the cache of {c1:?} {f1} {l1}");
+            assert!(!same(&got, &compute(&c1, f1, l1)), "the two settings should draw differently");
+        }
+        // plasmodesmata in an animal cell share the animal layout (nothing changes)
+        assert!(same(&layout(&cfg0(CellType::Animal, 31, true), false, 1.0), &compute(&cfg0(CellType::Animal, 31, false), false, 1.0)));
+    }
+
+    /// FNV-1a of every pointer place, to two decimals.
+    fn anchor_hash(sc: &Scene) -> u64 {
+        let mut h: u64 = 0xcbf29ce484222325;
+        for (sid, q) in &sc.anchors { for b in format!("{sid:?}{:.2},{:.2};", q.0, q.1).bytes() { h ^= b as u64; h = h.wrapping_mul(0x100000001b3); } }
+        h
+    }
+
+    #[test]
+    fn the_pointer_places_are_pinned() {
+        // any change to the drawing, the hit test or the room rule moves or drops a pointer place; this catches it
+        // (re-pin deliberately after checking the pictures)
+        let got: Vec<(String, usize, u64)> = [(CellType::Animal, false), (CellType::Plant, false), (CellType::Plant, true), (CellType::Bacterial, false)]
+            .iter().map(|(t, pl)| { let sc = scene(*t, *pl); (format!("{t:?}{pl}"), sc.anchors.len(), anchor_hash(&sc)) }).collect();
+        let want: Vec<(String, usize, u64)> = vec![
+            ("Animalfalse".into(), 147, 2786404004686056623),
+            ("Plantfalse".into(), 155, 893082021512406353),
+            ("Planttrue".into(), 160, 3936401422295411275),
+            ("Bacterialfalse".into(), 87, 17083084584684246170),
+        ];
+        assert_eq!(got, want);
     }
 
     #[test]
@@ -1912,14 +2597,15 @@ mod tests {
 
     #[test]
     fn hit_testing_follows_the_stroke_width_and_the_fill() {
-        let mut bd = B { parts: Vec::new(), cands: Vec::new() };
+        let mk = |bd: B| { let ras = Raster::new(&bd.parts); Scene { parts: bd.parts, anchors: vec![], rejected: vec![], bbox: (-500.0, -500.0, 500.0, 500.0), ras } };
+        let mut bd = B::new();
         bd.line(Some(Sid::Pilus), vec![(0.0, 0.0), (10.0, 0.0)], Tone::Ink, 2.0);
         bd.fill(Some(Sid::Nucleus), ell((50.0, 0.0), 5.0, 5.0, 0.0, 40), Tone::Nuc, None);
         bd.ring(Some(Sid::Plasmid), ell((90.0, 0.0), 6.0, 6.0, 0.0, 40), 2.0);
-        let sc = Scene { parts: bd.parts, anchors: vec![], rejected: vec![], bbox: (0.0, 0.0, 0.0, 0.0) };
+        let sc = mk(bd);
         // an open stroke: within half its width, not beyond, not past its ends
         assert_eq!(sc.top_hit((5.0, 0.9)), Hit::Is(Sid::Pilus));
-        assert_eq!(sc.top_hit((5.0, 1.3)), Hit::Nothing);
+        assert_eq!(sc.top_hit((5.0, 1.2)), Hit::Nothing);
         assert_eq!(sc.top_hit((11.2, 0.0)), Hit::Nothing);
         // a fill with no stroke: inside only
         assert_eq!(sc.top_hit((52.0, 0.0)), Hit::Is(Sid::Nucleus));
@@ -1928,17 +2614,47 @@ mod tests {
         assert_eq!(sc.top_hit((90.0, 0.0)), Hit::Nothing);
         assert_eq!(sc.top_hit((96.0, 0.0)), Hit::Is(Sid::Plasmid));
         assert_eq!(sc.top_hit((97.3, 0.0)), Hit::Nothing);
+        // the raster agrees with the exact test at whole pixels
+        for (x, y) in [(5, 0), (5, 1), (5, 2), (52, 0), (56, 0), (90, 0), (96, 0), (98, 0)] {
+            let q = (x as f64, y as f64);
+            assert_eq!(sc.ras.at(q).map(|k| sc.parts[k].sid.unwrap()), match sc.top_hit(q) { Hit::Is(s) => Some(s), _ => None }, "{q:?}");
+        }
         // the later part is the one on top
-        bd = B { parts: Vec::new(), cands: Vec::new() };
-        bd.fill(Some(Sid::Cytoplasm), rectp((0.0, 0.0), 20.0, 20.0, 0.0), Tone::Cyto, None);
-        bd.fill(Some(Sid::Mito), rectp((0.0, 0.0), 6.0, 6.0, 0.0), Tone::Mito, None);
-        let sc = Scene { parts: bd.parts, anchors: vec![], rejected: vec![], bbox: (0.0, 0.0, 0.0, 0.0) };
+        let mut bd = B::new();
+        bd.fill(Some(Sid::Cytoplasm), rectp((0.0, 0.0), 40.0, 40.0, 0.0), Tone::Cyto, None);
+        bd.fill(Some(Sid::Mito), rectp((0.0, 0.0), 14.0, 14.0, 0.0), Tone::Mito, None);
+        let sc = mk(bd);
         assert_eq!(sc.top_hit((0.0, 0.0)), Hit::Is(Sid::Mito));
-        assert_eq!(sc.top_hit((8.0, 0.0)), Hit::Is(Sid::Cytoplasm));
-        // a pointer is valid only on its own structure with room around it
-        assert!(sc.valid(Sid::Cytoplasm, (8.0, 8.0)) && !sc.valid(Sid::Cytoplasm, (0.0, 0.0)));
-        assert!(!sc.valid(Sid::Cytoplasm, (4.0, 4.0)), "a pointer 1 px from another structure is ambiguous");
-        assert!(sc.valid(Sid::Mito, (0.0, 0.0)) && !sc.valid(Sid::Mito, (9.0, 0.0)));
+        assert_eq!(sc.top_hit((10.0, 0.0)), Hit::Is(Sid::Cytoplasm));
+        // a pointer is valid only on its own structure with 6 px of room around it
+        assert!(sc.valid(Sid::Cytoplasm, (14.0, 14.0)) && !sc.valid(Sid::Cytoplasm, (0.0, 0.0)));
+        assert!(!sc.valid(Sid::Cytoplasm, (12.0, 0.0)), "a pointer 5 px from another structure is ambiguous");
+        assert!(sc.valid(Sid::Cytoplasm, (13.5, 0.0)), "6.5 px is enough");
+        assert!(sc.valid(Sid::Mito, (0.0, 0.0)) && !sc.valid(Sid::Mito, (11.0, 0.0)));
+        // an unnamed part (a vesicle) next to a pointer makes it ambiguous
+        let mut bd = B::new();
+        bd.fill(Some(Sid::Cytoplasm), rectp((0.0, 0.0), 60.0, 60.0, 0.0), Tone::Cyto, None);
+        bd.vesicle((5.0, 0.0));
+        let sc = mk(bd);
+        assert!(!sc.valid(Sid::Cytoplasm, (-4.0, 0.0)) && sc.valid(Sid::Cytoplasm, (-11.0, 0.0)));
+        // a short thin structure 4.5 px from the pointer, which a single ring of points 6 px out would miss, is seen
+        let mut bd = B::new();
+        bd.fill(Some(Sid::Cytoplasm), rectp((0.0, 0.0), 60.0, 60.0, 0.0), Tone::Cyto, None);
+        bd.line(Some(Sid::Cytoskeleton), vec![(4.5, -1.0), (4.5, 1.0)], Tone::Fibre, 1.2);
+        let sc = mk(bd);
+        assert!(!sc.valid(Sid::Cytoplasm, (0.0, 0.0)));
+        // a leader's cost counts what it runs over, once each, and the boundary it runs along
+        let mut bd = B::new();
+        bd.fill(Some(Sid::Cytoplasm), rectp((0.0, 0.0), 200.0, 60.0, 0.0), Tone::Cyto, None);
+        bd.mito((-60.0, 0.0), 10.0, 6.0, 0.0);
+        bd.mito((0.0, 0.0), 10.0, 6.0, 0.0);
+        bd.fill(Some(Sid::Ribosome), ell((40.0, 2.0), 2.5, 2.5, 0.0, 10), Tone::Ribo, None);
+        let sc = mk(bd);
+        assert_eq!(sc.leader_cost(Sid::Mito, (-60.0, 0.0), (-60.0, 0.0), (-90.0, 0.0)), 0.0);
+        assert_eq!(sc.leader_cost(Sid::Mito, (-60.0, 0.0), (-60.0, 0.0), (20.0, 0.0)), W_CROSS, "the other mitochondrion");
+        assert_eq!(sc.leader_cost(Sid::Mito, (-60.0, 0.0), (-60.0, 0.0), (90.0, 0.0)), 2.0 * W_CROSS, "and a ribosome the halo would touch");
+        assert_eq!(sc.leader_crosses(Sid::Mito, (-60.0, 0.0), (-60.0, 0.0), (90.0, 0.0)), vec![Sid::Mito, Sid::Ribosome]);
+        assert_eq!(sc.leader_cost(Sid::Mito, (-60.0, 0.0), (-60.0, 0.0), (-60.0, 90.0)), 0.0, "leaving the cell costs nothing here: no boundary drawn");
     }
 
     // ------------------------------------------------------------ odd input
