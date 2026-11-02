@@ -111,6 +111,11 @@ struct State {
     paste_read: Option<(String, Result<PasteRead, String>)>,
     /// Drawn inside the bank's Import modal (which lists the formats itself).
     in_modal: bool,
+    /// The answer check running in the background, the source it is for, and each source's results by name.
+    check: crate::answer_check::Job,
+    check_for: Option<String>,
+    checks: std::collections::HashMap<String, Vec<crate::answer_check::Check>>,
+    check_msg: Option<String>,
 }
 
 /// What the paste box's text reads as, live while typing.
@@ -1708,8 +1713,110 @@ fn detail_pane(app: &mut crate::App, ui: &mut egui::Ui, st: &mut State, flags: &
             }
             ui.add_space(14.0);
         }
+        if let Pick::Source(si) = pick {
+            check_panel(app, ui, st, si);
+            ui.add_space(14.0);
+        }
     }
     options_and_finish(app, ui, st, flags);
+}
+
+/// "Check answers": the AI solves the source's questions on its own and compares with the answers the source gave. A match is
+/// verified, a difference is flagged and a missing key gets a suggestion; nothing is written unless the teacher presses Use.
+fn check_panel(app: &mut crate::App, ui: &mut egui::Ui, st: &mut State, si: usize) {
+    use crate::answer_check::{accept, skipped, Verdict};
+    if let Some(res) = st.check.poll() {
+        match res {
+            Ok(c) => {
+                if let Some(n) = st.check_for.take() {
+                    st.checks.insert(n, c);
+                }
+                st.check_msg = None;
+            }
+            Err(e) => {
+                st.check_for = None;
+                st.check_msg = Some(e);
+            }
+        }
+    }
+    let State { sources, check, check_for, checks, check_msg, .. } = st;
+    let Some(s) = sources.get_mut(si) else { return };
+    let name = s.name.clone();
+    let Some(doc) = s.doc.as_mut() else { return };
+    if doc.questions.is_empty() {
+        return;
+    }
+    ui.add_space(10.0);
+    kit::small_caps(ui, "Answer check");
+    ui.add_space(4.0);
+    let cfg = crate::ai::AiCfg::from(&app.settings);
+    if check.busy() {
+        ui.horizontal(|ui| {
+            ui.spinner();
+            ui.add(egui::Label::new(theme::muted("The AI is solving the questions…").size(12.0)).wrap());
+        });
+        return;
+    }
+    let paid = cfg.provider == "account";
+    ui.add(egui::Label::new(theme::muted("The AI solves each question on its own, without seeing the answers, and compares. Your answers are never changed unless you press Use.").size(11.5)).wrap());
+    ui.add_space(4.0);
+    let label = if checks.contains_key(&name) { "Check again" } else { "Check answers with AI" };
+    if kit::ghost_button(ui, label).on_hover_text(if paid { "Costs 1 credit" } else { "Uses your AI settings" }).clicked() {
+        if cfg.has_key_or_needs_none() {
+            *check_msg = None;
+            *check_for = Some(name.clone());
+            check.start(doc.questions.clone(), cfg, ui.ctx().clone());
+        } else {
+            *check_msg = Some("Add your API key in Settings, then AI, first.".to_string());
+        }
+    }
+    if let Some(e) = check_msg.as_deref() {
+        ui.add_space(4.0);
+        ui.add(egui::Label::new(egui::RichText::new(e).size(12.0).color(theme::bad())).wrap());
+    }
+    let Some(found) = checks.get_mut(&name) else { return };
+    let count = |v: Verdict| found.iter().filter(|c| c.verdict == v).count();
+    let (ok, bad, new, unsure) = (count(Verdict::Agrees), count(Verdict::Differs), count(Verdict::Suggests), count(Verdict::Unsure));
+    let left_out = skipped(&doc.questions).len();
+    ui.add_space(6.0);
+    detail_row(ui, "Verified", &ok.to_string(), true);
+    detail_row(ui, "Differs from the AI", &bad.to_string(), bad > 0);
+    detail_row(ui, "AI suggests an answer", &new.to_string(), new > 0);
+    if unsure > 0 {
+        detail_row(ui, "AI not sure", &unsure.to_string(), false);
+    }
+    if left_out > 0 {
+        detail_row(ui, "Not checked (picture or matching)", &left_out.to_string(), false);
+    }
+    let mut take: Vec<usize> = Vec::new();
+    for (i, c) in found.iter().enumerate().filter(|(_, c)| matches!(c.verdict, Verdict::Differs | Verdict::Suggests)) {
+        let q = match c.part {
+            Some(p) => format!("Question {}, part {}", c.question, p),
+            None => format!("Question {}", c.question),
+        };
+        ui.add_space(6.0);
+        egui::Frame::new().stroke(Stroke::new(1.0, theme::border())).corner_radius(CornerRadius::same(8)).inner_margin(Margin::symmetric(10, 6)).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(theme::strong(q).size(12.5));
+            if c.verdict == Verdict::Differs {
+                ui.add(egui::Label::new(egui::RichText::new(format!("Your answer: {}", truncate_chars(&c.key, 60))).size(12.0).color(theme::muted_col())).wrap());
+                ui.add(egui::Label::new(egui::RichText::new(format!("The AI got: {}", truncate_chars(&c.ai, 60))).size(12.0).color(theme::bad())).wrap());
+            } else {
+                ui.add(egui::Label::new(egui::RichText::new(format!("No answer in the source. The AI suggests: {}", truncate_chars(&c.ai, 60))).size(12.0).color(theme::ink())).wrap());
+            }
+            if kit::ghost_button(ui, "Use the AI's answer").clicked() {
+                take.push(i);
+            }
+        });
+    }
+    for i in take {
+        let c = found[i].clone();
+        if let Some(q) = doc.questions.get_mut(c.question.wrapping_sub(1)) {
+            if accept(q, &c) {
+                found[i].verdict = Verdict::Agrees;
+            }
+        }
+    }
 }
 
 fn truncate_chars(s: &str, n: usize) -> String {

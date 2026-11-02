@@ -1,0 +1,851 @@
+{
+ "format": "queshion/ditto",
+ "formatVersion": "0.1.0",
+ "bank": {
+  "name": "Answer check set",
+  "questions": [
+   {
+    "type": "multiple-choice",
+    "stem": "Which planet is closest to the Sun?",
+    "choices": [
+     {
+      "text": "Venus",
+      "correct": false
+     },
+     {
+      "text": "Mercury",
+      "correct": true
+     },
+     {
+      "text": "Earth",
+      "correct": false
+     },
+     {
+      "text": "Mars",
+      "correct": false
+     }
+    ],
+    "id": "q1"
+   },
+   {
+    "type": "multiple-choice",
+    "stem": "What is the derivative of x^3?",
+    "choices": [
+     {
+      "text": "x^2",
+      "correct": false
+     },
+     {
+      "text": "3x",
+      "correct": false
+     },
+     {
+      "text": "3x^2",
+      "correct": true
+     },
+     {
+      "text": "x^3/3",
+      "correct": false
+     }
+    ],
+    "id": "q2"
+   },
+   {
+    "type": "multiple-choice",
+    "stem": "Which of these is a noble gas?",
+    "choices": [
+     {
+      "text": "Nitrogen",
+      "correct": false
+     },
+     {
+      "text": "Chlorine",
+      "correct": false
+     },
+     {
+      "text": "Argon",
+      "correct": true
+     },
+     {
+      "text": "Sodium",
+      "correct": false
+     }
+    ],
+    "id": "q3"
+   },
+   {
+    "type": "multiple-choice",
+    "stem": "Solve for x: 2x + 6 = 20",
+    "choices": [
+     {
+      "text": "x = 7",
+      "correct": true
+     },
+     {
+      "text": "x = 10",
+      "correct": false
+     },
+     {
+      "text": "x = 13",
+      "correct": false
+     },
+     {
+      "text": "x = 14",
+      "correct": false
+     }
+    ],
+    "id": "q4"
+   },
+   {
+    "type": "multiple-choice",
+    "stem": "In which year did World War II end?",
+    "choices": [
+     {
+      "text": "1918",
+      "correct": false
+     },
+     {
+      "text": "1939",
+      "correct": false
+     },
+     {
+      "text": "1945",
+      "correct": true
+     },
+     {
+      "text": "1950",
+      "correct": false
+     }
+    ],
+    "id": "q5"
+   },
+   {
+    "type": "multiple-choice",
+    "stem": "Which organelle makes most of a cell's ATP?",
+    "choices": [
+     {
+      "text": "Ribosome",
+      "correct": false
+     },
+     {
+      "text": "Mitochondrion",
+      "correct": true
+     },
+     {
+      "text": "Golgi apparatus",
+      "correct": false
+     },
+     {
+      "text": "Nucleus",
+      "correct": false
+     }
+    ],
+    "id": "q6"
+   },
+   {
+    "type": "multiple-choice",
+    "stem": "For a right triangle with legs a, b and hypotenuse c, which statement is the Pythagorean theorem?",
+    "choices": [
+     {
+      "text": "a + b = c",
+      "correct": false
+     },
+     {
+      "text": "a^2 + b^2 = c^2",
+      "correct": true
+     },
+     {
+      "text": "a^2 - b^2 = c^2",
+      "correct": false
+     },
+     {
+      "text": "ab = c",
+      "correct": false
+     }
+    ],
+    "id": "q7"
+   },
+   {
+    "type": "multiple-choice",
+    "stem": "Which punctuation mark correctly completes: 'I bought apples, oranges___ and pears.'",
+    "choices": [
+     {
+      "text": ", (comma)",
+      "correct": true
+     },
+     {
+      "text": "; (semicolon)",
+      "correct": false
+     },
+     {
+      "text": ": (colon)",
+      "correct": false
+     },
+     {
+      "text": "- (hyphen)",
+      "correct": false
+     }
+    ],
+    "id": "q8"
+   },
+   {
+    "type": "multiple-choice",
+    "stem": "What is the SI unit of force?",
+    "choices": [
+     {
+      "text": "Joule",
+      "correct": false
+     },
+     {
+      "text": "Watt",
+      "correct": false
+     },
+     {
+      "text": "Pascal",
+      "correct": false
+     },
+     {
+      "text": "Newton",
+      "correct": true
+     }
+    ],
+    "id": "q9"
+   },
+   {
+    "type": "multiple-choice",
+    "stem": "Which is the correct electron configuration of a neutral oxygen atom?",
+    "choices": [
+     {
+      "text": "1s2 2s2 2p2",
+      "correct": false
+     },
+     {
+      "text": "1s2 2s2 2p4",
+      "correct": true
+     },
+     {
+      "text": "1s2 2s2 2p6",
+      "correct": false
+     },
+     {
+      "text": "1s2 2s1 2p5",
+      "correct": false
+     }
+    ],
+    "id": "q10"
+   },
+   {
+    "type": "true-false",
+    "stem": "The speed of light in a vacuum is about 3.0 x 10^8 m/s.",
+    "answer": true,
+    "id": "q11"
+   },
+   {
+    "type": "true-false",
+    "stem": "All prime numbers are odd.",
+    "answer": false,
+    "id": "q12"
+   },
+   {
+    "type": "true-false",
+    "stem": "Water boils at 100 degrees Celsius at sea level.",
+    "answer": true,
+    "id": "q13"
+   },
+   {
+    "type": "true-false",
+    "stem": "A triangle can have two obtuse angles.",
+    "answer": false,
+    "id": "q14"
+   },
+   {
+    "type": "true-false",
+    "stem": "The Great Wall of China is visible to the naked eye from the Moon.",
+    "answer": false,
+    "id": "q15"
+   },
+   {
+    "type": "fill-in-the-blank",
+    "stem": "The chemical symbol for gold is ___.",
+    "blanks": [
+     [
+      "Au"
+     ]
+    ],
+    "id": "q16"
+   },
+   {
+    "type": "fill-in-the-blank",
+    "stem": "The powerhouse of the cell is the ___.",
+    "blanks": [
+     [
+      "mitochondrion"
+     ]
+    ],
+    "id": "q17"
+   },
+   {
+    "type": "fill-in-the-blank",
+    "stem": "A polygon with eight sides is called an ___.",
+    "blanks": [
+     [
+      "octagon"
+     ]
+    ],
+    "id": "q18"
+   },
+   {
+    "type": "fill-in-the-blank",
+    "stem": "The capital of Australia is ___ and the capital of Canada is ___.",
+    "blanks": [
+     [
+      "Canberra"
+     ],
+     [
+      "Ottawa"
+     ]
+    ],
+    "id": "q19"
+   },
+   {
+    "type": "fill-in-the-blank",
+    "stem": "7 x 8 = ___ and 9 x 6 = ___.",
+    "blanks": [
+     [
+      "56"
+     ],
+     [
+      "54"
+     ]
+    ],
+    "id": "q20"
+   },
+   {
+    "type": "fill-in-the-blank",
+    "stem": "Water is made of two ___ atoms and one ___ atom.",
+    "blanks": [
+     [
+      "hydrogen"
+     ],
+     [
+      "oxygen"
+     ]
+    ],
+    "id": "q21"
+   },
+   {
+    "type": "fill-in-the-blank",
+    "stem": "The process by which plants make food from light is called ___.",
+    "blanks": [
+     [
+      "photosynthesis"
+     ]
+    ],
+    "id": "q22"
+   },
+   {
+    "type": "short-answer",
+    "stem": "Compute 15% of 240.",
+    "suggestedAnswer": "36",
+    "id": "q23"
+   },
+   {
+    "type": "short-answer",
+    "stem": "A car travels 150 km in 2.5 hours. What is its average speed in km/h?",
+    "suggestedAnswer": "60 km/h",
+    "id": "q24"
+   },
+   {
+    "type": "short-answer",
+    "stem": "Name the author of the play Romeo and Juliet.",
+    "suggestedAnswer": "William Shakespeare",
+    "id": "q25"
+   },
+   {
+    "type": "short-answer",
+    "stem": "Balance: H2 + O2 -> H2O. Give the balanced equation.",
+    "suggestedAnswer": "2H2 + O2 -> 2H2O",
+    "id": "q26"
+   },
+   {
+    "type": "short-answer",
+    "stem": "Solve x^2 - 5x + 6 = 0.",
+    "suggestedAnswer": "x = 2 and x = 3",
+    "id": "q27"
+   },
+   {
+    "type": "short-answer",
+    "stem": "What is the area of a circle with radius 3? Leave the answer in terms of pi.",
+    "suggestedAnswer": "9 pi",
+    "id": "q28"
+   },
+   {
+    "type": "short-answer",
+    "stem": "What is the molar mass of CO2 in g/mol?",
+    "suggestedAnswer": "44 g/mol",
+    "id": "q29"
+   },
+   {
+    "type": "short-answer",
+    "stem": "Convert 0.75 to a fraction in lowest terms.",
+    "suggestedAnswer": "3/4",
+    "id": "q30"
+   },
+   {
+    "type": "multipart",
+    "stem": "A ball is dropped from rest. Ignore air resistance and use g = 10 m/s^2.",
+    "parts": [
+     {
+      "stem": "a. What is its speed after 3 s?",
+      "type": "short-answer",
+      "suggestedAnswer": "30 m/s"
+     },
+     {
+      "stem": "b. Is its acceleration constant while falling?",
+      "type": "true-false",
+      "answer": true
+     }
+    ],
+    "id": "q31"
+   },
+   {
+    "type": "multipart",
+    "stem": "Consider the numbers 4, 8, 6, 5, 7.",
+    "parts": [
+     {
+      "stem": "a. What is the mean?",
+      "type": "short-answer",
+      "suggestedAnswer": "6"
+     },
+     {
+      "stem": "b. What is the median?",
+      "type": "short-answer",
+      "suggestedAnswer": "6"
+     }
+    ],
+    "id": "q32"
+   },
+   {
+    "type": "multiple-choice",
+    "stem": "What is the pH of a 0.001 M HCl solution?",
+    "choices": [
+     {
+      "text": "1",
+      "correct": false
+     },
+     {
+      "text": "2",
+      "correct": false
+     },
+     {
+      "text": "3",
+      "correct": true
+     },
+     {
+      "text": "4",
+      "correct": false
+     }
+    ],
+    "id": "q33"
+   },
+   {
+    "type": "multiple-choice",
+    "stem": "What is the derivative of f(x) = x^2 ln x?",
+    "choices": [
+     {
+      "text": "2x ln x",
+      "correct": false
+     },
+     {
+      "text": "2x ln x + x",
+      "correct": true
+     },
+     {
+      "text": "x ln x + x^2",
+      "correct": false
+     },
+     {
+      "text": "2x + 1/x",
+      "correct": false
+     }
+    ],
+    "id": "q34"
+   },
+   {
+    "type": "multiple-choice",
+    "stem": "Which sorting algorithm has a worst-case running time of O(n log n)?",
+    "choices": [
+     {
+      "text": "Quicksort",
+      "correct": false
+     },
+     {
+      "text": "Bubble sort",
+      "correct": false
+     },
+     {
+      "text": "Merge sort",
+      "correct": true
+     },
+     {
+      "text": "Insertion sort",
+      "correct": false
+     }
+    ],
+    "id": "q35"
+   },
+   {
+    "type": "multiple-choice",
+    "stem": "A 2 kg object accelerates at 3 m/s^2. What is the net force on it?",
+    "choices": [
+     {
+      "text": "1.5 N",
+      "correct": false
+     },
+     {
+      "text": "5 N",
+      "correct": false
+     },
+     {
+      "text": "6 N",
+      "correct": true
+     },
+     {
+      "text": "9 N",
+      "correct": false
+     }
+    ],
+    "id": "q36"
+   },
+   {
+    "type": "multiple-choice",
+    "stem": "CH4 + 2O2 -> CO2 + 2H2O. How many moles of O2 are needed to burn 2 mol of CH4 completely?",
+    "choices": [
+     {
+      "text": "2 mol",
+      "correct": false
+     },
+     {
+      "text": "4 mol",
+      "correct": true
+     },
+     {
+      "text": "6 mol",
+      "correct": false
+     },
+     {
+      "text": "8 mol",
+      "correct": false
+     }
+    ],
+    "id": "q37"
+   },
+   {
+    "type": "multiple-choice",
+    "stem": "Which of these numbers is NOT prime?",
+    "choices": [
+     {
+      "text": "41",
+      "correct": false
+     },
+     {
+      "text": "47",
+      "correct": false
+     },
+     {
+      "text": "51",
+      "correct": true
+     },
+     {
+      "text": "53",
+      "correct": false
+     }
+    ],
+    "id": "q38"
+   },
+   {
+    "type": "multiple-choice",
+    "stem": "What is the integral of 1/x dx?",
+    "choices": [
+     {
+      "text": "1/x^2 + C",
+      "correct": false
+     },
+     {
+      "text": "ln|x| + C",
+      "correct": true
+     },
+     {
+      "text": "x ln x + C",
+      "correct": false
+     },
+     {
+      "text": "e^x + C",
+      "correct": false
+     }
+    ],
+    "id": "q39"
+   },
+   {
+    "type": "multiple-choice",
+    "stem": "Which amendment to the US Constitution abolished slavery?",
+    "choices": [
+     {
+      "text": "11th",
+      "correct": false
+     },
+     {
+      "text": "13th",
+      "correct": true
+     },
+     {
+      "text": "15th",
+      "correct": false
+     },
+     {
+      "text": "19th",
+      "correct": false
+     }
+    ],
+    "id": "q40"
+   },
+   {
+    "type": "multiple-choice",
+    "stem": "In a normal distribution, approximately what percent of values lie within 2 standard deviations of the mean?",
+    "choices": [
+     {
+      "text": "68%",
+      "correct": false
+     },
+     {
+      "text": "90%",
+      "correct": false
+     },
+     {
+      "text": "95%",
+      "correct": true
+     },
+     {
+      "text": "99.7%",
+      "correct": false
+     }
+    ],
+    "id": "q41"
+   },
+   {
+    "type": "multiple-choice",
+    "stem": "Which SQL clause filters groups after a GROUP BY?",
+    "choices": [
+     {
+      "text": "WHERE",
+      "correct": false
+     },
+     {
+      "text": "HAVING",
+      "correct": true
+     },
+     {
+      "text": "ORDER BY",
+      "correct": false
+     },
+     {
+      "text": "LIMIT",
+      "correct": false
+     }
+    ],
+    "id": "q42"
+   },
+   {
+    "type": "true-false",
+    "stem": "The sum of the interior angles of a hexagon is 720 degrees.",
+    "answer": true,
+    "id": "q43"
+   },
+   {
+    "type": "true-false",
+    "stem": "Sound travels faster in air than in water.",
+    "answer": false,
+    "id": "q44"
+   },
+   {
+    "type": "true-false",
+    "stem": "Zero is a rational number.",
+    "answer": true,
+    "id": "q45"
+   },
+   {
+    "type": "true-false",
+    "stem": "Every square is a rectangle.",
+    "answer": true,
+    "id": "q46"
+   },
+   {
+    "type": "true-false",
+    "stem": "An exothermic reaction absorbs heat from its surroundings.",
+    "answer": false,
+    "id": "q47"
+   },
+   {
+    "type": "true-false",
+    "stem": "The logarithm of 0 is defined for real numbers.",
+    "answer": false,
+    "id": "q48"
+   },
+   {
+    "type": "fill-in-the-blank",
+    "stem": "The atomic number of carbon is ___.",
+    "blanks": [
+     [
+      "6"
+     ]
+    ],
+    "id": "q49"
+   },
+   {
+    "type": "fill-in-the-blank",
+    "stem": "Avogadro's number is about 6.02 x 10^___.",
+    "blanks": [
+     [
+      "23"
+     ]
+    ],
+    "id": "q50"
+   },
+   {
+    "type": "fill-in-the-blank",
+    "stem": "The Declaration of Independence was adopted in the year ___.",
+    "blanks": [
+     [
+      "1776"
+     ]
+    ],
+    "id": "q51"
+   },
+   {
+    "type": "fill-in-the-blank",
+    "stem": "The square root of 144 is ___ and the cube root of 27 is ___.",
+    "blanks": [
+     [
+      "12"
+     ],
+     [
+      "3"
+     ]
+    ],
+    "id": "q52"
+   },
+   {
+    "type": "fill-in-the-blank",
+    "stem": "In the equation y = mx + b, m is the ___ and b is the ___.",
+    "blanks": [
+     [
+      "slope"
+     ],
+     [
+      "y-intercept"
+     ]
+    ],
+    "id": "q53"
+   },
+   {
+    "type": "short-answer",
+    "stem": "Evaluate 3^4 - 2^5.",
+    "suggestedAnswer": "49",
+    "id": "q54"
+   },
+   {
+    "type": "short-answer",
+    "stem": "Find the slope of the line through (1, 2) and (5, 10).",
+    "suggestedAnswer": "2",
+    "id": "q55"
+   },
+   {
+    "type": "short-answer",
+    "stem": "11.7 g of NaCl (58.5 g/mol) is dissolved in water to make 500 mL of solution. What is the molarity?",
+    "suggestedAnswer": "0.4 M",
+    "id": "q56"
+   },
+   {
+    "type": "short-answer",
+    "stem": "Simplify (x^2 - 9)/(x - 3).",
+    "suggestedAnswer": "x + 3",
+    "id": "q57"
+   },
+   {
+    "type": "short-answer",
+    "stem": "How many seconds are in 2 hours?",
+    "suggestedAnswer": "7200 s",
+    "id": "q58"
+   },
+   {
+    "type": "short-answer",
+    "stem": "Name the process by which water vapor becomes liquid water.",
+    "suggestedAnswer": "condensation",
+    "id": "q59"
+   },
+   {
+    "type": "short-answer",
+    "stem": "What is the sum of the first 10 positive integers?",
+    "suggestedAnswer": "55",
+    "id": "q60"
+   },
+   {
+    "type": "short-answer",
+    "stem": "A bank pays 5% interest compounded annually. How much is $1000 worth after 2 years?",
+    "suggestedAnswer": "$1102.50",
+    "id": "q61"
+   },
+   {
+    "type": "short-answer",
+    "stem": "Who wrote the novel 1984?",
+    "suggestedAnswer": "George Orwell",
+    "id": "q62"
+   },
+   {
+    "type": "short-answer",
+    "stem": "Compute 2/3 + 3/4.",
+    "suggestedAnswer": "17/12",
+    "id": "q63"
+   },
+   {
+    "type": "multipart",
+    "stem": "A rectangle has length 8 cm and width 5 cm.",
+    "parts": [
+     {
+      "stem": "a. What is its area?",
+      "type": "short-answer",
+      "suggestedAnswer": "40 cm^2"
+     },
+     {
+      "stem": "b. What is its perimeter?",
+      "type": "short-answer",
+      "suggestedAnswer": "26 cm"
+     }
+    ],
+    "id": "q64"
+   },
+   {
+    "type": "multipart",
+    "stem": "Solve the system x + y = 10 and x - y = 2.",
+    "parts": [
+     {
+      "stem": "a. Find x.",
+      "type": "short-answer",
+      "suggestedAnswer": "6"
+     },
+     {
+      "stem": "b. Find y.",
+      "type": "short-answer",
+      "suggestedAnswer": "4"
+     }
+    ],
+    "id": "q65"
+   }
+  ]
+ },
+ "exams": [],
+ "report": {
+  "unconverted": [],
+  "notes": []
+ }
+}

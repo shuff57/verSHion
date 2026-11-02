@@ -151,6 +151,30 @@ fn main() -> Result<(), eframe::Error> {
         }
         return Ok(());
     }
+    // Headless one-shot: VERSHION_CHECK_EVAL=<bank.ditto.json> with VERSHION_CHECK_DUMP=<dir> writes the answer-check prompts there, or
+    // VERSHION_CHECK_REPLAY=<dir> measures the replies cached there (chunk-N.txt) against the bank's answers. No model call is made.
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Ok(path) = vershion::env_var("VERSHION_CHECK_EVAL") {
+        let truth = import_eval::read_reference(&path).unwrap_or_else(|e| panic!("{e}"));
+        if let Ok(dir) = vershion::env_var("VERSHION_CHECK_DUMP") {
+            match vershion::answer_check::dump_prompts(&truth, std::path::Path::new(&dir)) {
+                Ok(n) => println!("wrote {n} prompts to {dir}"),
+                Err(e) => {
+                    eprintln!("{e}");
+                    std::process::exit(1);
+                }
+            }
+        } else if let Ok(dir) = vershion::env_var("VERSHION_CHECK_REPLAY") {
+            match vershion::answer_check::replay_quality(&truth, std::path::Path::new(&dir)) {
+                Ok(q) => println!("{}\nSCORE {:.1}", q.summary(), q.score()),
+                Err(e) => {
+                    eprintln!("{e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        return Ok(());
+    }
     if vershion::env_var("VERSHION_FIGURE_CATALOG").as_deref() == Ok("1") {
         println!("{}", figure_agent::catalog_text());
         return Ok(());
