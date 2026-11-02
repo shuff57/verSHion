@@ -1442,19 +1442,21 @@ fn model_sign_up_check_email_paste_confirm_then_sign_in() {
     h.configure();
     h.model.go(Page::SignUp);
     h.model.forms.email = EMAIL.into();
-    h.model.forms.password = "short".into();
+    // Sign-up asks for the email and the adult-employee statement only: the password, name and school are chosen
+    // from the emailed link, so none of them is asked for here.
     h.model.submit_sign_up();
-    assert!(h.notice().contains("10 characters"));
+    assert!(h.notice().contains("Confirm"), "adult box unticked: {}", h.notice());
     assert_eq!(h.server.count(), 0, "checked before sending");
-    h.model.forms.password = PASSWORD.into();
-    h.model.forms.display_name = "Ms Frizzle".into();
-    h.model.forms.school = "Walkerville".into();
-    h.model.submit_sign_up();
-    assert!(h.notice().contains("Enter") || h.notice().contains("Confirm"), "adult box unticked: {}", h.notice());
     h.model.forms.adult = true;
     h.model.submit_sign_up();
     h.frame();
     assert_eq!(h.model.page, Page::CheckEmail(MailKind::Verify));
+    // What the server receives: a random password the person never sees (not anything they typed) and a placeholder
+    // profile, with the statement they made.
+    let sent = h.server.last("/auth/signup").body.unwrap();
+    let pw = sent["password"].as_str().unwrap();
+    assert!(pw.len() >= 20 && pw != PASSWORD, "a random throwaway password");
+    assert_eq!((sent["display_name"].as_str(), sent["school"].as_str(), sent["adult_school_employee"].as_bool()), (Some("New account"), Some("Not set yet"), Some(true)));
     let sent_text = h.notice();
     assert!(sent_text.starts_with("If that address can receive mail"));
     // A bare code pasted on the check-email page opens the confirm page.

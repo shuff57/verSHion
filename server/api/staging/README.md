@@ -29,8 +29,11 @@ this build"):
 ```
 VERSHION_POOL_URL=https://staging-vershion.lefthanddev.com \
 VERSHION_LEGAL_URL=https://staging-vershion.lefthanddev.com/legal \
-trunk build --release --dist dist-web
+trunk build --release --dist dist-web --public-url /
 ```
+
+`--public-url /` is required: the default is relative (`./`), so a mailed link such as `/account/verify#token=…` looks for
+the script at `/account/…`, gets the app's HTML instead, fails the integrity check and the page never leaves "Loading".
 
 Web root (credits and legal pages are plain files in `server/web`):
 

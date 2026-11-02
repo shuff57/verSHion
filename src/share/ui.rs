@@ -505,13 +505,12 @@ fn sign_in_page(ui: &mut Ui, m: &mut AccountModel) {
 
 fn sign_up_page(ui: &mut Ui, m: &mut AccountModel) {
     field(ui, "Email", &mut m.forms.email, "share_email", false, "Your school address");
-    field(ui, "Password", &mut m.forms.password, "share_pw", true, "");
-    para(ui, "At least 10 characters. Avoid common words, runs like 1234, and your email address.");
-    profile_fields(ui, m);
+    ui.checkbox(&mut m.forms.adult, "I am an adult employee of a school");
+    ui.add_space(6.0);
     para(
         ui,
-        "We email you a link. When you open it you set your password, name and school again: anyone can type \
-         someone else's address into this form, so only the person who receives the email decides them.",
+        "We email you a link. Open it to choose your password and enter your name and school: anyone can type \
+         someone else's address into this form, so only the person who receives the email sets them.",
     );
     let mut go = false;
     actions(ui, m.busy(), |ui| {
@@ -560,8 +559,8 @@ fn confirm_page(ui: &mut Ui, m: &mut AccountModel) {
     }
     para(
         ui,
-        "Choose your password and enter your details. This replaces what was typed at sign-up, including the \
-         password, so only the person who received this email sets them.",
+        "Choose your password and enter your name and school. They are set here, from the email, so only the person \
+         who received it decides them.",
     );
     password_pair(ui, m, "New password");
     profile_fields(ui, m);

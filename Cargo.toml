@@ -59,6 +59,7 @@ egui-phosphor = { version = "0.14", default-features = false, features = ["regul
 zeroize = "1"
 url = "2"
 idna = "1"   # already in the tree via url; shows an IDN host in Unicode beside its punycode
+getrandom = "0.2"   # the throwaway password a sign-up sends (the person chooses the real one from the emailed link)
 
 [dev-dependencies]
 # tests/share_core_fixtures.rs: the pool's payload rules (validate/strip/hash) checked against these

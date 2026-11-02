@@ -1065,12 +1065,13 @@ impl AccountModel {
         if !self.ready() || !self.credentials_allowed() || !self.need(self.email_problem()) {
             return;
         }
-        let pw = Secret::new(self.forms.password.clone());
-        if !self.need(api::password_problem(&pw)) || !self.need(self.forms.profile().problem()) {
+        // Email only: the password, name and school are chosen from the emailed link (the server discards what sign-up
+        // carries when the address is confirmed). Only the adult-employee statement is asked for here.
+        if !self.need((!self.forms.adult).then_some("Confirm that you are an adult employee of a school.")) {
             return;
         }
-        let (email, profile) = (self.forms.email.clone(), self.forms.profile());
-        self.spawn(Box::new(move |c, _| Box::pin(async move { Outcome::SignedUp(c.sign_up(&email, &pw, &profile).await) })));
+        let (email, adult) = (self.forms.email.clone(), self.forms.adult);
+        self.spawn(Box::new(move |c, _| Box::pin(async move { Outcome::SignedUp(c.sign_up_email_only(&email, adult).await) })));
     }
 
     pub fn submit_resend(&mut self) {

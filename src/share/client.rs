@@ -904,6 +904,23 @@ impl Client {
         self.call(Method::Post, "/auth/signup", Some(json_body(Value::Object(body)))).await.map(|_| ())
     }
 
+    /// Sign-up that asks for the email only. The server wants a password and a profile at sign-up and discards both when
+    /// the address is confirmed (the person chooses them from the emailed link), so these are throwaway: a random
+    /// password nobody sees and a placeholder name and school. Only the adult-employee statement is the person's own.
+    pub async fn sign_up_email_only(&self, email: &str, adult_school_employee: bool) -> Result<(), ApiError> {
+        let profile = Profile { display_name: "New account".into(), school: "Not set yet".into(), adult_school_employee };
+        let mut last = None;
+        // A random password can by rare chance trip the server's "runs and repeats" rule: draw another.
+        for _ in 0..4 {
+            let pw = Secret::new(throwaway_password());
+            match self.sign_up(email, &pw, &profile).await {
+                Err(e) if e.code() == "weak_password" => last = Some(e),
+                other => return other,
+            }
+        }
+        Err(last.unwrap_or_else(|| ApiError::BadReply("sign-up".into())))
+    }
+
     /// `POST /auth/resend`: another confirmation mail (same answer for every address).
     pub async fn resend(&self, email: &str) -> Result<(), ApiError> {
         self.call(Method::Post, "/auth/resend", Some(json_body(json!({ "email": email.trim() })))).await.map(|_| ())
@@ -1212,4 +1229,15 @@ impl Client {
 pub(crate) fn route_url(base: &str, path: &str) -> Option<String> {
     let ok = path.starts_with('/') && !path.starts_with("//") && !path.contains(['\\', ' ', '\r', '\n']);
     ok.then(|| format!("{base}{path}"))
+}
+
+/// 32 random letters and digits, from the operating system's generator.
+fn throwaway_password() -> String {
+    const ALPHABET: &[u8] = b"abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let mut bytes = [0u8; 32];
+    // The generator failing is not recoverable here; an empty password is refused by the server.
+    if getrandom::getrandom(&mut bytes).is_err() {
+        return String::new();
+    }
+    bytes.iter().map(|b| ALPHABET[*b as usize % ALPHABET.len()] as char).collect()
 }
