@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>verSHion</title>
+<meta name="description" content="A landing page prototype for verSHion, the local-first app that turns scans, PDFs and Word files into printable exams.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+<style>
+/* Hallmark · shape: Showcase + Feature Stack · genre: editorial · theme: verSHion house (src/theme.rs, src/kit.rs, src/pageshell.rs; by request) · job: try · draw: 50432b
+ * hero: Banner (centred welcome) · nav: rail bar · footer: index columns · imagery: screenshots 6, product · signature: the paper desk, with the exam set in it · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H4 E4 S5 R4 V4 · weakest: P, the house skin is inherited rather than argued; kept the product's own welcome copy and screens to earn the specificity */
+
+/* Layout: a sheet of cream graph paper; a centred welcome, four step cards, the screens
+   in a sticky run, a ruled formats card, a green close. */
+:root {
+  --font-serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-sans: "Source Sans 3", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "Liberation Mono", "DejaVu Sans Mono", monospace;
+
+  --container: 1200px;
+  --gutter: 24px;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px;
+  --space-6: 24px; --space-8: 32px; --space-10: 40px; --space-12: 48px;
+  --space-16: 64px; --space-24: 96px; --space-30: 120px;
+  --radius-card: 16px; --radius-field: 12px; --radius-pill: 999px;
+  --section-gap: 96px;
+
+  /* verSHion house palette, light (src/theme.rs light_palette) */
+  --paper: #f7f4ed;
+  --card: #fffdf8;
+  --field: #f3eee3;
+  --border: #e0d3c2;
+  --rule: #bda995;
+  --ink: #332a24;
+  --text: #5e4c40;
+  --muted: #7a6350;
+  --accent: #2f6144;
+  --accent-hover: #3b7453;
+  --accent-faded: #dfe9d4;
+  --on-accent: #f7fbf3;
+  --highlighter: #f3dc6a;
+  --on-highlighter: #332a24;
+  --hover-bg: #efe8db;
+  --rail: #332a24;
+  --rail-text: #e9dfd2;
+  --red: #a33b2e;
+  --grid-line: rgba(51, 42, 36, 0.055);
+  --shadow: rgba(51, 42, 36, 0.06);
+  --focus: #2f6144;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #211c18; --card: #2b2520; --field: #211c18; --border: #4b3f35; --rule: #6d5c4b;
+    --ink: #f2e8dd; --text: #d3c2b2; --muted: #a9937e; --accent: #9dcba0; --accent-hover: #b3dcb5;
+    --accent-faded: #2d3b2c; --on-accent: #0e2012; --highlighter: #e9cf55; --on-highlighter: #332a24;
+    --hover-bg: #383028; --rail: #14100d; --rail-text: #e9dfd2; --red: #e0826e;
+    --grid-line: rgba(242, 232, 221, 0.045); --shadow: rgba(0, 0, 0, 0.3); --focus: #e9cf55;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #211c18; --card: #2b2520; --field: #211c18; --border: #4b3f35; --rule: #6d5c4b;
+  --ink: #f2e8dd; --text: #d3c2b2; --muted: #a9937e; --accent: #9dcba0; --accent-hover: #b3dcb5;
+  --accent-faded: #2d3b2c; --on-accent: #0e2012; --highlighter: #e9cf55; --on-highlighter: #332a24;
+  --hover-bg: #383028; --rail: #14100d; --rail-text: #e9dfd2; --red: #e0826e;
+  --grid-line: rgba(242, 232, 221, 0.045); --shadow: rgba(0, 0, 0, 0.3); --focus: #e9cf55;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { overflow-x: clip; }
+body {
+  margin: 0;
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 24px 24px;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+img { display: block; max-width: 100%; height: auto; }
+h1, h2, h3 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  color: var(--ink);
+  line-height: 1.1;
+  letter-spacing: -0.012em;
+  text-wrap: balance;
+  overflow-wrap: break-word;
+  min-width: 0;
+}
+h1 { font-size: clamp(2.75rem, 3.6vw + 1rem, 4rem); }
+h2 { font-size: 2.5rem; }
+h3 { font-size: 1.25rem; }
+p { margin: 0; text-wrap: pretty; }
+a { color: inherit; text-underline-offset: 0.16em; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.container {
+  width: 100%;
+  max-width: var(--container);
+  margin-inline: auto;
+  padding-left: max(var(--gutter), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--gutter), env(safe-area-inset-right, 0px));
+}
+.skip {
+  position: absolute; left: var(--space-4); top: -64px; z-index: 20;
+  padding: var(--space-2) var(--space-4);
+  background: var(--ink); color: var(--paper); text-decoration: none;
+}
+.skip:focus-visible { top: var(--space-4); }
+
+/* controls, from src/pageshell.rs */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px; padding: 0 var(--space-5);
+  border: 1px solid transparent; border-radius: var(--radius-field);
+  font-family: var(--font-sans); font-size: 15.2px; font-weight: 700; line-height: 1;
+  white-space: nowrap; text-decoration: none; cursor: pointer;
+  transition: background-color 220ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 220ms cubic-bezier(0.16, 1, 0.3, 1),
+              color 220ms cubic-bezier(0.16, 1, 0.3, 1),
+              transform 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.btn--primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn--primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn--inverse { background: var(--card); border-color: var(--card); color: var(--ink); }
+.btn--inverse:hover { background: var(--accent-faded); border-color: var(--accent-faded); }
+.text-link {
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 var(--space-2);
+  color: var(--accent); font-size: 15.2px; font-weight: 700;
+  text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 0.2em;
+}
+.text-link:hover { color: var(--accent-hover); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+.nav :focus-visible { outline-color: var(--highlighter); }
+.band--close :focus-visible { outline-color: var(--on-accent); }
+@media (prefers-reduced-motion: reduce) { .btn, .nav__links a { transition: none; } }
+
+/* wordmark: ver SH ion, the SH on a marker swipe (assets/loading-logo.svg) */
+.wordmark {
+  position: relative; isolation: isolate; display: inline-block;
+  font-family: var(--font-serif); font-size: 22px; font-weight: 600; letter-spacing: -0.01em;
+  line-height: 1; color: var(--ink); text-decoration: none;
+}
+.nav .wordmark { color: var(--rail-text); }
+.wordmark__sh { position: relative; color: var(--on-highlighter); padding: 0 0.04em; }
+.wordmark__sh::before {
+  content: ""; position: absolute; inset: 0.13em -0.02em 0.03em;
+  background: var(--highlighter); border-radius: 2px;
+  transform: rotate(-1.5deg); z-index: -1;
+}
+
+/* rail bar */
+.nav { background: var(--rail); }
+.nav__in { display: flex; align-items: center; gap: var(--space-6); min-height: 64px; }
+.nav__links { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-right: auto; }
+.nav__links a {
+  display: inline-block; padding: var(--space-2) var(--space-3); border-radius: 8px;
+  color: var(--rail-text); font-size: 14px; font-weight: 600; white-space: nowrap; text-decoration: none;
+  transition: background-color 220ms cubic-bezier(0.16, 1, 0.3, 1), color 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.nav__links a:hover { background: color-mix(in srgb, var(--rail-text) 14%, transparent); }
+.nav__links a[aria-current="true"] { background: var(--highlighter); color: var(--on-highlighter); }
+.nav .btn--primary { border-color: var(--accent); }
+
+/* centred welcome */
+.hero { padding-top: var(--space-16); padding-bottom: var(--space-6); }
+.hero__inner { max-width: 720px; margin-inline: auto; text-align: center; }
+.hero .lead { margin: var(--space-4) auto 0; max-width: 620px; color: var(--text); }
+.hero__actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-3); margin-top: var(--space-6); }
+.hero__note { margin-top: var(--space-3); font-size: 12.5px; color: var(--muted); }
+
+.screen {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius-card); box-shadow: 0 2px 10px var(--shadow);
+  padding: var(--space-2);
+}
+.screen img { width: 100%; border-radius: 10px; }
+
+/* screens: sticky title, captures at their own scale */
+.screens { padding-block: var(--section-gap); }
+.screens__grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 9fr); gap: var(--space-8); align-items: start; }
+.screens__pin { position: sticky; top: var(--space-8); }
+.screens__pin h2 { font-size: clamp(2rem, 1.6vw + 1rem, 2.25rem); }
+.screens__pin .lead { margin-top: var(--space-3); font-size: 16px; color: var(--muted); }
+.screens__run { display: flex; flex-direction: column; gap: var(--space-10); }
+.shot { margin: 0; }
+.shot__frame {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius-card); box-shadow: 0 2px 10px var(--shadow);
+  padding: var(--space-2);
+}
+.shot__frame img { width: 100%; border-radius: 10px; }
+.shot figcaption { margin-top: var(--space-3); font-size: 13.5px; color: var(--muted); }
+.shot h3 { margin: 0 0 var(--space-1); font-size: 20px; }
+
+/* formats: one ruled card */
+.formats { padding-block: var(--section-gap); }
+.formats__head { max-width: 620px; }
+.formats__card { color: var(--text);
+  margin-top: var(--space-8); padding: var(--space-1) var(--space-6);
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius-card); box-shadow: 0 2px 10px var(--shadow);
+}
+.fmt {
+  display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 3fr) minmax(0, 6fr);
+  gap: var(--space-6); align-items: baseline;
+  padding-block: var(--space-6); border-bottom: 1px solid var(--border);
+}
+.fmt:last-child { border-bottom: 0; }
+.fmt h3 { font-size: 20px; }
+.fmt code { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.fmt p { font-size: 14px; }
+
+/* the wide import review */
+.showcase { padding-block: var(--section-gap); }
+.showcase__head { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 6fr); gap: var(--space-8); align-items: end; margin-bottom: var(--space-8); }
+.showcase__head .lead { color: var(--muted); }
+.showcase figcaption { margin-top: var(--space-3); font-size: 13.5px; color: var(--muted); }
+
+/* local-first: the accent wash */
+.band--wash { background: var(--accent-faded); color: var(--text); padding-block: var(--section-gap); }
+.local__grid { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); gap: var(--space-8); align-items: center; }
+.local h2 { font-size: clamp(2rem, 1.6vw + 1rem, 2.25rem); }
+.local .lead { margin-top: var(--space-3); }
+.facts { margin: var(--space-6) 0 0; }
+.facts > div {
+  display: grid; grid-template-columns: minmax(0, 7rem) minmax(0, 1fr);
+  gap: var(--space-4); padding-block: var(--space-3);
+  border-bottom: 1px solid color-mix(in srgb, var(--rule) 50%, transparent);
+}
+.facts dt { font-size: 12px; font-weight: 700; color: var(--ink); }
+.facts dd { margin: 0; font-size: 14px; color: var(--text); }
+.facts code { font-family: var(--font-mono); font-size: 12px; }
+
+/* close: the accent field */
+.band--close { background: var(--accent); padding-block: var(--section-gap); }
+.band--close h2, .band--close .lead { color: var(--on-accent); }
+.close__in { display: grid; grid-template-columns: minmax(0, 8fr) minmax(0, 4fr); gap: var(--space-8); align-items: end; }
+.close h2 { font-size: clamp(2.5rem, 2.6vw + 1rem, 3.25rem); }
+.close .lead { margin-top: var(--space-3); color: color-mix(in srgb, var(--on-accent) 88%, transparent); }
+.close__actions { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); }
+.close__note { font-size: 13px; color: color-mix(in srgb, var(--on-accent) 84%, transparent); }
+
+/* footer */
+.footer { border-top: 1px solid var(--border); padding-block: var(--space-10); }
+.footer__grid { display: grid; grid-template-columns: minmax(0, 6fr) repeat(2, minmax(0, 3fr)); gap: var(--space-8); }
+.footer__line { margin-top: var(--space-2); font-size: 14px; color: var(--muted); }
+.footer__label { font-size: 12px; font-weight: 700; color: var(--muted); }
+.footer ul { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.footer li a { font-size: 14px; color: var(--text); text-decoration: none; }
+.footer li a:hover { color: var(--accent); text-decoration: underline; }
+.footer__legal { margin-top: var(--space-8); padding-top: var(--space-4); border-top: 1px solid var(--border); font-size: 12.5px; color: var(--muted); }
+.footer__legal code { font-family: var(--font-mono); }
+
+@media (max-width: 60rem) {
+  :root { --gutter: 20px; --section-gap: 72px; }
+  .nav__in { flex-wrap: wrap; gap: var(--space-3); padding-block: var(--space-2); }
+  .nav__links { order: 3; width: 100%; margin-right: 0; }
+  .nav__links a { padding: var(--space-2) var(--space-3); }
+  .nav__in > .btn { margin-left: auto; }
+  .hero { padding-top: var(--space-12); }
+  .how__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .screens__grid, .local__grid, .showcase__head, .close__in, .footer__grid { grid-template-columns: minmax(0, 1fr); }
+  .screens__pin { position: static; }
+  .screens__run { gap: var(--space-8); }
+  .fmt { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); padding-block: var(--space-3); }
+  .footer__grid { gap: var(--space-6); }
+}
+@media (max-width: 40rem) {
+  :root { --gutter: 16px; }
+  h2 { font-size: 2rem; }
+  .hero__actions .btn { width: 100%; }
+  .how__grid { grid-template-columns: minmax(0, 1fr); }
+  .facts > div { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+  .footer__grid { grid-template-columns: minmax(0, 1fr); }
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav">
+  <div class="container nav__in">
+    <a class="wordmark" href="#top" aria-label="verSHion home">ver<span class="wordmark__sh">SH</span>ion</a>
+    <nav class="nav__links" aria-label="Sections">
+      <a href="#screens">Screens</a>
+      <a href="#imports">Imports</a>
+      <a href="#local">Local-first</a>
+    </nav>
+    <a class="btn btn--primary" href="https://github.com/shuff57/verSHion">Get verSHion</a>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" id="top">
+    <div class="container hero__inner">
+      <h1>Turn anything into an exam.</h1>
+      <p class="lead">PDFs, scans, screenshots, old Word documents, questions you type yourself: verSHion gathers them into Question Banks and lays them out as a clean, printable exam.</p>
+      <div class="hero__actions">
+        <a class="btn btn--primary" href="https://github.com/shuff57/verSHion">Get started, it’s free</a>
+        <a class="text-link" href="#screens">See the screens</a>
+      </div>
+      <p class="hero__note">Runs on your machine. Nothing to install, no account to make.</p>
+    </div>
+  </section>
+
+  <section class="screens" id="screens">
+    <div class="container screens__grid">
+      <div class="screens__pin">
+        <h2>The whole loop on one desk.</h2>
+        <p class="lead">Gather it, keep it, print it.</p>
+      </div>
+      <div class="screens__run">
+        <figure class="shot" data-kind="product">
+          <div class="shot__frame">
+            <img src="images/gather-import.png" width="2048" height="1280" alt="verSHion's import screen: drop files, paste text or add a photo, with every format it reads listed beneath." loading="lazy">
+          </div>
+          <figcaption>
+            <h3>Gather your questions</h3>
+            <p>Type them, or hand a PDF, scan or screenshot to the converter.</p>
+          </figcaption>
+        </figure>
+        <figure class="shot" data-kind="product">
+          <div class="shot__frame">
+            <img src="images/keep-bank.png" width="2048" height="1280" alt="The question banks screen: one bank of five questions, marked as used in one exam." loading="lazy">
+          </div>
+          <figcaption>
+            <h3>Keep them in a bank</h3>
+            <p>Every question gets a topic, a difficulty and points.</p>
+          </figcaption>
+        </figure>
+        <figure class="shot" data-kind="product">
+          <div class="shot__frame">
+            <img src="images/hero-exam.png" width="2048" height="1280" alt="The exam editor: five questions laid on a printable page, with the question bank open beside them." loading="lazy">
+          </div>
+          <figcaption>
+            <h3>Lay out the exam</h3>
+            <p>Pull from any bank, reorder, shuffle, and make a second version.</p>
+          </figcaption>
+        </figure>
+        <figure class="shot" data-kind="product">
+          <div class="shot__frame">
+            <img src="images/print-export.png" width="2048" height="1800" alt="The export dialog: PDF or DOCX, a student test and an answer key, answer section, marked test or compact list, and shuffled versions." loading="lazy">
+          </div>
+          <figcaption>
+            <h3>Print the real thing</h3>
+            <p>PDF or Word with an answer key, saved for a re-download.</p>
+          </figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="formats" id="imports">
+    <div class="container">
+      <div class="formats__head">
+        <h2>It reads what your LMS exports.</h2>
+      </div>
+      <div class="formats__card">
+        <div class="fmt"><h3>Blackboard</h3><code>MC MA TF</code><p>Test-generator text.</p></div>
+        <div class="fmt"><h3>Moodle</h3><code>GIFT XML</code><p>Both exports.</p></div>
+        <div class="fmt"><h3>QTI and Canvas</h3><code>QTI</code><p>Cartridge packages.</p></div>
+        <div class="fmt"><h3>Respondus and text2qti</h3><code>txt</code><p>Plain text.</p></div>
+        <div class="fmt"><h3>Aiken</h3><code>ANSWER</code><p>Answer line.</p></div>
+        <div class="fmt"><h3>CSV and Excel</h3><code>xlsx</code><p>Spreadsheet exports.</p></div>
+        <div class="fmt"><h3>Quizlet and Anki</h3><code>txt</code><p>Term lists.</p></div>
+        <div class="fmt"><h3>Kahoot and Brightspace</h3><code>xlsx</code><p>Their sheets.</p></div>
+        <div class="fmt"><h3>Test Parrot</h3><code>.parrot.json</code><p>A real package.</p></div>
+        <div class="fmt"><h3>PDF, Word, photos</h3><code>pdf docx</code><p>Scanned worksheets.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="showcase" id="convert">
+    <div class="container">
+      <div class="showcase__head">
+        <h2>The test you already gave.</h2>
+        <p class="lead">The pasted questions come back typed, with the right answers marked.</p>
+      </div>
+      <figure class="screen" data-kind="product">
+        <img src="images/convert-review.png" width="2880" height="1800" alt="The import review: five pasted questions laid on a printable page with the correct answers ticked, beside a breakdown of question types." loading="lazy">
+        <figcaption>Read as Blackboard test-generator text: three multiple choice and two true or false.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="band--wash local" id="local">
+    <div class="container local__grid">
+      <div>
+        <h2>Your work stays on this machine.</h2>
+        <p class="lead">Nothing is uploaded unless you convert a photo.</p>
+        <dl class="facts">
+          <div><dt>Storage</dt><dd>IndexedDB in the browser, or <code>~/.local/share/vershion</code> on the desktop.</dd></div>
+          <div><dt>Backup</dt><dd>One zip holds every bank, exam, export and setting.</dd></div>
+          <div><dt>AI keys</dt><dd>Read when a request runs. Never saved.</dd></div>
+          <div><dt>Conversion</dt><dd>Ollama Cloud, a local Ollama, OpenRouter, or your own endpoint.</dd></div>
+        </dl>
+      </div>
+      <figure class="screen" data-kind="product">
+        <img src="images/local-settings.png" width="2048" height="1800" alt="verSHion settings: a one-file backup, browser storage, an optional sharing account, and four AI conversion providers." loading="lazy">
+      </figure>
+    </div>
+  </section>
+
+  <section class="band--close close" id="get">
+    <div class="container close__in">
+      <div>
+        <h2>Take it for a term.</h2>
+        <p class="lead">Build a bank this afternoon, print tomorrow’s test from it.</p>
+      </div>
+      <div class="close__actions">
+        <a class="btn btn--inverse" href="https://github.com/shuff57/verSHion">Get started, it’s free</a>
+        <p class="close__note">On your machine. No account to make.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="container footer__grid">
+    <div>
+      <a class="wordmark" href="#top">ver<span class="wordmark__sh">SH</span>ion</a>
+      <p class="footer__line">Turn anything into an exam.</p>
+    </div>
+    <div>
+      <p class="footer__label">Product</p>
+      <ul>
+        <li><a href="#screens">Screens</a></li>
+        <li><a href="#imports">Imports</a></li>
+        <li><a href="#local">Local-first</a></li>
+      </ul>
+    </div>
+    <div>
+      <p class="footer__label">Project</p>
+      <ul>
+        <li><a href="https://github.com/shuff57/verSHion">GitHub</a></li>
+        <li><a href="https://github.com/shuff57/verSHion/blob/main/README.md">Readme</a></li>
+        <li><a href="https://github.com/shuff57/verSHion/issues">Issues</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer__legal">
+    <p>Built with egui and wgpu. Data stays in <code>~/.local/share/vershion</code>.</p>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const links = [...document.querySelectorAll('.nav__links a')];
+  const sections = links.map((a) => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+  if (!('IntersectionObserver' in window) || !sections.length) return;
+  const inView = new Map();
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) inView.set(e.target.id, e.isIntersecting);
+    links.forEach((l) => l.removeAttribute('aria-current'));
+    const current = sections.find((sec) => inView.get(sec.id));
+    if (!current) return;
+    const active = links.find((l) => l.getAttribute('href') === '#' + current.id);
+    if (active) active.setAttribute('aria-current', 'true');
+  }, { rootMargin: '-35% 0px -55% 0px' });
+  sections.forEach((s) => io.observe(s));
+})();
+</script>
+</body>
+</html>

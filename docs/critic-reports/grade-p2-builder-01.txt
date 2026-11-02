@@ -1,0 +1,20 @@
+=== BUILDER P2 OUTLINE (page_strip: thumbnails + status dots + multi-select) ===
+
+Target: review.js renderStrip (103-134) + renderStrip helpers dotClass (97-101), thumbFor (87-95), bindDrag (154-184), onStripKey (136-152).
+
+Plan — add to gradeui.rs:
+1. page_dot(p) -> (&'static str, Color32): mirror dotClass — bad (transcript empty) / ok (no flagged words) / warn (open words).
+2. page_strip(ui, app, student, state) draws a horizontal scrolling row:
+   - for each page: thumbnail (app.image_texture -> thumbnail texture @112px like thumbFor), 
+     a number badge, and a colored dot.
+   - click selects page_id (write-through via app.grade.get_or_insert()).
+   - ctrl/cmd held while clicking toggles multi set (mirror review.js line 112-118).
+   - shift selects range. (egui: detect ui.input(|i| i.modifiers) for ctrl/shift.)
+   - each thumb: aria-pressed = selected; aria-label with word count / error text (review.js 110).
+3. After strip: if multi non-empty -> Export / Review-again / Clear buttons (review.js 125-129).
+4. Add page button at end (review.js 130-131).
+5. Update scanTitle ("Page i of n") in the header area.
+
+Borrow-safety: read all page ids / thumbnails via owned clones inside closure — same trick used for image_texture already.
+
+NOT shipping drag-and-drop reorder this cycle (mouse drag on canvas not native-easier; defer to later critic).
