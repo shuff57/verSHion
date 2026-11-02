@@ -124,7 +124,31 @@ fn answer_score(t: &Question, g: &Question) -> Option<f64> {
             let ok = tp.iter().filter(|t| gp.iter().any(|g| similarity(&g.left, &t.left) >= 0.7 && similarity(&g.right, &t.right) >= 0.7)).count();
             Some(ok as f64 / tp.len() as f64)
         }
-        (Kind::Multipart { parts: a }, Kind::Multipart { parts: b }) => Some(if a.len() == b.len() { 1.0 } else { a.len().min(b.len()) as f64 / a.len().max(b.len()) as f64 }),
+        (Kind::Multipart { parts: a }, Kind::Multipart { parts: b }) => {
+            // Parts line up by position; each is scored on its own answer. A different number of parts costs the same
+            // share it is off by, and a reference that keeps no answers for any part leaves nothing to compare.
+            let scores: Vec<f64> = a.iter().zip(b).filter_map(|(t, g)| part_score(t, g)).collect();
+            let count = a.len().min(b.len()) as f64 / a.len().max(b.len()).max(1) as f64;
+            if scores.is_empty() {
+                return if a.is_empty() { None } else { Some(count) };
+            }
+            Some(count * scores.iter().sum::<f64>() / scores.len() as f64)
+        }
+        _ => Some(0.0),
+    }
+}
+
+/// One part's answer, 0..=1; `None` when the reference part keeps no answer.
+fn part_score(t: &crate::model::Part, g: &crate::model::Part) -> Option<f64> {
+    use crate::model::PartKind as P;
+    match (&t.kind, &g.kind) {
+        (P::Short { sample: a }, P::Short { sample: b }) => (!a.trim().is_empty()).then(|| similarity(a, b)),
+        (P::Tf { correct: a }, P::Tf { correct: b }) => Some(if a == b { 1.0 } else { 0.0 }),
+        (P::Mc { answers: a }, P::Mc { answers: b }) => {
+            let key = |x: &[crate::model::Answer]| -> Vec<String> { x.iter().filter(|y| y.correct).map(|y| words(&y.text).join(" ")).collect() };
+            let (tk, gk) = (key(a), key(b));
+            (!tk.is_empty()).then(|| tk.iter().filter(|k| gk.contains(k)).count() as f64 / (tk.len() + gk.iter().filter(|k| !tk.contains(k)).count()) as f64)
+        }
         _ => Some(0.0),
     }
 }
@@ -369,6 +393,18 @@ mod tests {
         let g = vec![mc("name the **NO** compound", &[("Nitrogen monoxide", true)]), mc("Name the SO3 compound!", &[("Sulfur trioxide", true)])];
         assert_eq!(align(&t, &g, 0.45), vec![Some(1), Some(0)]);
         assert_eq!(compare(&t, &g).answer_accuracy, 1.0);
+    }
+
+    #[test]
+    fn a_multipart_question_is_scored_on_what_each_part_answers() {
+        use crate::model::{Part, PartKind};
+        let part = |stem: &str, sample: &str| Part { stem: stem.into(), kind: PartKind::Short { sample: sample.into() } };
+        let t = vec![q("Draw a Lewis structure and give the shape.", Kind::Multipart { parts: vec![part("a. CO2", "linear nonpolar"), part("b. PF3", "pyramidal polar")] })];
+        let blank_key = vec![q("Draw a Lewis structure and give the shape.", Kind::Multipart { parts: vec![part("a. CO2", ""), part("b. PF3", "")] })];
+        let half = vec![q("Draw a Lewis structure and give the shape.", Kind::Multipart { parts: vec![part("a. CO2", "linear nonpolar"), part("b. PF3", "")] })];
+        assert_eq!(compare(&t, &blank_key).answer_accuracy, 0.0, "right parts, no handwritten answers");
+        assert!((compare(&t, &half).answer_accuracy - 0.5).abs() < 1e-9);
+        assert_eq!(compare(&t, &t.clone()).answer_accuracy, 1.0);
     }
 
     #[test]

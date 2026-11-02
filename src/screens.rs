@@ -1565,9 +1565,14 @@ impl crate::App {
                         }
                         ui.add_space(6.0);
                     }
-                    app.draw_model_picker(ui, ctx);
-                    ui.add_space(6.0);
-                    app.draw_ai_key_ui(ui, ctx);
+                    if app.settings.ai_provider == "account" {
+                        // The server chooses the model and holds the key; the picker would show another provider's default.
+                        ui.label(theme::muted("The verSHion server chooses the model and keeps the key, so there is nothing to pick here.").size(12.0));
+                    } else {
+                        app.draw_model_picker(ui, ctx);
+                        ui.add_space(6.0);
+                        app.draw_ai_key_ui(ui, ctx);
+                    }
                     ui.add_space(6.0);
                     ui.label(theme::muted(app.ai_help_line()).size(11.5));
                     if app.settings_changed(&before) {
