@@ -631,6 +631,20 @@ fn seg_len_in(a: P, b: P, r: (f64, f64, f64, f64)) -> f64 {
     (t1 - t0) * dx.hypot(dy)
 }
 
+/// The clay and sand ranges (whole percent) that a class's region spans: (least clay, most clay, least sand, most sand).
+pub fn region_range(i: usize) -> (i64, i64, i64, i64) {
+    let (cl, sa): (Vec<i64>, Vec<i64>) = POLY[i].iter().cloned().unzip();
+    (*cl.iter().min().unwrap(), *cl.iter().max().unwrap(), *sa.iter().min().unwrap(), *sa.iter().max().unwrap())
+}
+
+/// The editor note for class `i` when its label could not be placed: whose class it is and where its region lies.
+fn missing_label_note(i: usize, whose: &[String], two: bool) -> String {
+    let of = if whose.is_empty() { String::new() } else { format!(" (the class of {})", whose.join(" and ")) };
+    let (c0, c1, s0, s1) = region_range(i);
+    format!("The label for {}{of} could not be placed in the triangle with {} on it; its region is the one with {c0} to {c1} % clay and {s0} to {s1} % sand, and the legend names it.",
+        NAMES[i].to_lowercase(), if two { "the samples" } else { "the sample" })
+}
+
 /// The top of an outside label's leader: just below the outline of the bottom edge.
 const LEADER_TOP: f64 = 0.9;
 /// The stroke of every label leader (no other line has it).
@@ -667,40 +681,6 @@ fn num_gaps(fs: f64, lab: f64) -> (f64, f64) {
     let gl = ((rm + 3.5 + 0.3 * fs) / 0.866).max(TICK + 3.0);
     let gr = ((rm + 3.5 + 0.3 * fs - 3.05) / 0.866 - 3.5).max(3.0);
     (gl, gr)
-}
-
-/// The boxes (3 px margin) of the clay and silt numbers and their ticks, as drawn by `paint`, for tags placed just
-/// outside the triangle.
-fn side_number_boxes(fs: f64, lab: f64) -> Vec<Ob> {
-    let (gl, gr) = num_gaps(fs, lab);
-    let mut out = Vec::new();
-    for k in 0..=10 {
-        let v = 10.0 * k as f64;
-        let w = text_w(&((10 * k).to_string()), fs);
-        let e = xy(v, 100.0 - v);
-        out.push(Ob::R(e.0 - gl - w - 3.0, e.1 + 0.35 * fs - 0.8 * fs - 3.0, e.0 - gl + 3.0, e.1 + 0.35 * fs + 0.25 * fs + 3.0));
-        out.push(Ob::R(e.0 - TICK - 3.0, e.1 - 3.0, e.0 + 1.0, e.1 + 3.0));
-        let e = xy(100.0 - v, 0.0);
-        let te = (e.0 + TICK * 0.5, e.1 - TICK * 0.866);
-        out.push(Ob::R(te.0 + gr - 3.0, te.1 + 0.35 * fs - 0.8 * fs - 3.0, te.0 + gr + w + 3.0, te.1 + 0.35 * fs + 0.25 * fs + 3.0));
-        out.push(Ob::R(e.0 - 1.0, te.1 - 3.0, te.0 + 3.0, e.1 + 1.0));
-    }
-    // the clay and silt titles with their arrows (drawn by `paint` along the middle of each side): the box round the
-    // turned strip, generously
-    let nd = 12.0 + 1.45 * fs + 1.1 * fs + 0.87 * ((gl - 10.0).max(0.0)).max((gr - 3.0).max(0.0));
-    let fst = fs * 1.1;
-    for (title, a, b, out_dir) in [("Percent clay", bl(), apex(), (-0.866, -0.5)), ("Percent silt", br(), apex(), (0.866, -0.5))] {
-        let total = tw(title, fst, true) + 10.0 + 70.0 + 10.0;
-        let mid = ((a.0 + b.0) / 2.0 + out_dir.0 * nd, (a.1 + b.1) / 2.0 + out_dir.1 * nd);
-        let u = ((b.0 - a.0) / SIDE, (b.1 - a.1) / SIDE);
-        let mut bx = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
-        for (t, n) in [(-total / 2.0, -fst), (total / 2.0, -fst), (-total / 2.0, fst), (total / 2.0, fst)] {
-            let q = (mid.0 + u.0 * t + out_dir.0 * n, mid.1 + u.1 * t + out_dir.1 * n);
-            bx = (bx.0.min(q.0), bx.1.min(q.1), bx.2.max(q.0), bx.3.max(q.1));
-        }
-        out.push(Ob::R(bx.0, bx.1, bx.2, bx.3));
-    }
-    out
 }
 
 /// y of the bottom of the sand numbers, the baseline of the outside labels and the middle of the sand title.
@@ -784,8 +764,12 @@ fn solve_now(p: &Params) -> Result<Rc<Solved>, Refusal> {
         let ats: Vec<P> = smp.iter().map(|(s, _)| sample_at(s)).collect();
         // two samples whose markers touch share one tag, "1, 2"
         let same = (ats[0].0 - ats[1].0).hypot(ats[0].1 - ats[1].1) < 2.0 * rm + 2.0;
-        for k in 0..2 {
-            if same && k == 1 { tags.push(None); continue; }
+        // the marker with less room (nearer the triangle's outline) chooses first
+        let room = |p: P| clearance(&tri, p);
+        let order: [usize; 2] = if room(ats[1]) < room(ats[0]) { [1, 0] } else { [0, 1] };
+        let mut by_k: [Option<Tag>; 2] = [None, None];
+        for k in order {
+            if same && k == 1 { continue; }
             let at = ats[k];
             let other = ats[1 - k];
             let text = if same { "1, 2".to_string() } else { (k + 1).to_string() };
@@ -793,17 +777,6 @@ fn solve_now(p: &Params) -> Result<Rc<Solved>, Refusal> {
             let diag = (w * w + h * h).sqrt() / 2.0;
             let cap = rm + diag + TAG_CAP;
             let mut chosen: Option<Tag> = None;
-            let sides = side_number_boxes(fs, lab);
-            // the sand numbers and their ticks under the bottom edge, and the top of the row of class names below them
-            let bottoms: Vec<Ob> = (0..=10).flat_map(|k| {
-                let e = xy(0.0, 10.0 * k as f64);
-                let te = (e.0 + TICK * 0.5, e.1 + TICK * 0.866);
-                let wn = text_w(&(10 * k).to_string(), fs);
-                let yb = te.1 + 4.0 + 0.2 * fs + 0.8 * fs;
-                [Ob::R(te.0 + 1.0 - wn / 2.0 - 3.0, yb - 0.8 * fs - 3.0, te.0 + 1.0 + wn / 2.0 + 3.0, yb + 0.25 * fs + 3.0), Ob::R(e.0 - 1.0, e.1 - 1.0, te.0 + 3.0, te.1 + 3.0)]
-            }).collect();
-            let under_floor = bottom_rows(fs, true).1 - 0.8 * fs - 4.0;
-            let edges = [(apex(), bl()), (bl(), br()), (br(), apex())];
             // a tag standing alone must read as its own marker's: on the far side of its marker from the other one (more
             // than 100 degrees from the direction of the other marker) or nearer its own by the marker's radius + 4 px
             let clearly_own = |c: P| -> bool {
@@ -812,55 +785,34 @@ fn solve_now(p: &Params) -> Result<Rc<Solved>, Refusal> {
                 let cos = (u.0 * v.0 + u.1 * v.1) / (u.0.hypot(u.1) * v.0.hypot(v.1)).max(1e-9);
                 cos < (100.0f64).to_radians().cos() || (c.0 - other.0).hypot(c.1 - other.1) >= (c.0 - at.0).hypot(c.1 - at.1) + rm + 4.0
             };
-            // stages: 0 inside the triangle beside the marker; 1 inside, farther, on a leader; 2 just outside the triangle
-            // between the clay or silt numbers (beside or on a leader), for a marker in a cramped corner; 3 beside the
-            // marker over a line (an opaque plate breaks it); 4 farther, over a line, on a leader, inside or just outside;
-            // 5 anywhere on a ring out to 160 px on a leader (which may cross a line only squarely), kept off the markers, the
-            // other tag, the landing dots and the numbers; 6 the same on an opaque plate over lines, nearest first, its
-            // leader crossing lines only squarely; 7 the same with the leader free to cross lines at any angle (two samples
-            // close together in a fenced corner).
-            // 8, the last: any place on 32 directions out to 200 px, inside the triangle, beside it, under its bottom edge or
-            // straddling its outline, kept only off the markers, the other tag, the landing dots, the numbers, the titles
-            // and the legend, on a leader that keeps off the other marker and crosses a line only outright (no near miss).
-            // Only if all nine fail is the sample left without a tag, and the editor note says so.
-            'stage: for stage in 0..9 {
-                for step in 0..100 {
+            // A tag is always wholly inside the triangle, 2 px or more inside its outline, so that a sample number never
+            // mixes into an axis scale and its leader (inside the triangle too) never crosses an axis number or title.
+            // Stages, nearest place first in each: 0 beside the marker, clear of every line; 1 farther (to 90 px) on a
+            // leader, clear of every line; 3 beside the marker over a line (an opaque plate breaks it); 4 farther (to 120
+            // px) over a line on a leader that crosses lines only squarely (30 degrees or more); 5 to 160 px clear of every
+            // line, on a leader crossing lines squarely; 6 the same over a line; 7 the same with the leader crossing at 15
+            // degrees or more; 8 anywhere in the triangle on 32 directions (to 320 px) the same way. A leader always keeps
+            // off the other marker, the other tag and its leader, and the landing dots. Only if all fail is the sample left
+            // without a tag, and the editor note says so.
+            // 9, for two samples crowding a corner: as 8, the leader allowed to pass the other marker just outside its white
+            // ring (2 px) instead of 4 px off it.
+            'stage: for stage in [0usize, 1, 3, 4, 5, 6, 7, 8, 9] {
+                for step in 0..160 {
                     let rad = rm + 3.0 + diag + 1.0 + 2.0 * step as f64;
-                    let reach = match stage { 0 | 3 => cap, 4 => 120.0, 5..=7 => 160.0, 8 => 200.0, _ => 90.0 };
+                    let reach = match stage { 0 | 3 => cap, 1 => 90.0, 4 => 120.0, 5..=7 => 160.0, _ => 320.0 };
+                    let wide = stage >= 8;
                     if rad > reach { break; }
                     if (stage == 1 || stage == 4) && rad <= cap { continue; }
-                    for j in 0..if stage == 8 { 32 } else { 16 } {
-                        let ang = (-45.0 + if stage == 8 { 11.25 } else { 22.5 } * j as f64).to_radians();
+                    for j in 0..if wide { 32 } else { 16 } {
+                        let ang = (-45.0 + if wide { 11.25 } else { 22.5 } * j as f64).to_radians();
                         let c = (at.0 + rad * ang.cos(), at.1 + rad * ang.sin());
                         let corners = [(c.0 - w / 2.0, c.1 - h / 2.0), (c.0 + w / 2.0, c.1 - h / 2.0), (c.0 - w / 2.0, c.1 + h / 2.0), (c.0 + w / 2.0, c.1 + h / 2.0)];
-                        let all_in = corners.iter().all(|q| inside(&tri, *q));
-                        let outside_ok = || -> bool {
-                            // beside the triangle (above the bottom edge), or for the last stages also just under the bottom
-                            // edge between the sand numbers and above the row of class names hung there
-                            let beside = !corners.iter().any(|q| inside(&tri, *q) || q.1 > H - 2.0);
-                            let under = stage >= 6 && corners.iter().all(|q| q.1 > H + 2.0 && q.1 < under_floor) && !bottoms.iter().any(|o| hits(o, c, w, h));
-                            (beside || under)
-                                && !edges.iter().any(|(a, b)| seg_rect(*a, *b, (c.0 - w / 2.0, c.1 - h / 2.0, c.0 + w / 2.0, c.1 + h / 2.0)) < 3.0)
-                                && !corners.iter().any(|q| edges.iter().map(|(a, b)| dist_seg(*q, *a, *b)).fold(f64::MAX, f64::min) > 60.0)
-                                && !sides.iter().any(|o| hits(o, c, w, h))
-                        };
-                        if stage == 8 {
-                            if corners.iter().any(|q| q.1 > under_floor) || sides.iter().chain(bottoms.iter()).any(|o| hits(o, c, w, h)) { continue; }
-                        } else if stage >= 3 {
-                            if !all_in && !outside_ok() { continue; }
-                        } else if stage == 2 {
-                            // wholly outside, above the bottom edge, clear of the outline, the numbers, the ticks and the side
-                            // titles, and within 60 px of the triangle
-                            if corners.iter().any(|q| inside(&tri, *q) || q.1 > H - 2.0) { continue; }
-                            if edges.iter().any(|(a, b)| seg_rect(*a, *b, (c.0 - w / 2.0, c.1 - h / 2.0, c.0 + w / 2.0, c.1 + h / 2.0)) < 3.0) { continue; }
-                            if corners.iter().any(|q| edges.iter().map(|(a, b)| dist_seg(*q, *a, *b)).fold(f64::MAX, f64::min) > 60.0) { continue; }
-                            if sides.iter().any(|o| hits(o, c, w, h)) { continue; }
-                        } else if !corners.iter().all(|q| inside(&tri, *q)) { continue; }
+                        if !corners.iter().all(|q| inside(&tri, *q) && clearance(&tri, *q) >= 2.0) { continue; }
                         if obs_marker.iter().chain(placed_tags.iter()).any(|o| hits(o, c, w + 3.0, h + 3.0)) { continue; }
-                        // a tag standing alone clearly reads as its own marker's; one on a leader need only be nearer
-                        let alone = rad <= cap && (stage == 0 || stage == 2 || stage == 3 || (stage >= 6 && clearly_own(c)));
+                        // a tag standing alone clearly reads as its own marker's; one on a leader is named by its leader (8 px or
+                        // longer, so that it shows), wherever it stands
+                        let alone = rad <= cap && (stage == 0 || stage == 3 || (stage >= 6 && clearly_own(c)));
                         if alone && !clearly_own(c) { continue; }
-                        if !alone && !same && (c.0 - other.0).hypot(c.1 - other.1) < (c.0 - at.0).hypot(c.1 - at.1) + 1.0 { continue; }
                         if (stage < 3 || stage == 5) && obs_guide.iter().chain(obs_landing.iter()).any(|o| hits(o, c, w, h)) { continue; }
                         if stage >= 3 && obs_landing.iter().any(|o| hits(o, c, w, h)) { continue; }
                         let mut lead = None;
@@ -874,12 +826,12 @@ fn solve_now(p: &Params) -> Result<Rc<Solved>, Refusal> {
                             let ty = if u.1.abs() < 1e-9 { f64::MIN } else { ((if u.1 > 0.0 { r.1 } else { r.3 }) - at.1) / u.1 };
                             let t = tx.max(ty).max(rm + 3.0);
                             let b0 = (at.0 + u.0 * t, at.1 + u.1 * t);
-                            if gsegs_of(&smp, guides).iter().any(|(ga, gb)| seg_seg(a0, b0, *ga, *gb) < 3.0 && !(stage >= 4 && clean_cross(a0, b0, *ga, *gb, match stage { 7 => 0.25, 8 => 0.1, _ => 0.5 }))) { continue; }
+                            if (b0.0 - a0.0).hypot(b0.1 - a0.1) < 8.0 { continue; }
+                            let min_sin = match stage { 1 => 2.0, 7..=9 => 0.25, _ => 0.5 };
+                            if gsegs_of(&smp, guides).iter().any(|(ga, gb)| seg_seg(a0, b0, *ga, *gb) < 3.0 && !clean_cross(a0, b0, *ga, *gb, min_sin)) { continue; }
                             if obs_landing.iter().any(|o| matches!(*o, Ob::C(q, rr) if dist_seg(q, a0, b0) < rr)) { continue; }
-                            if placed_tags.iter().any(|o| matches!(*o, Ob::R(x0, y0, x1, y1) if seg_rect(a0, b0, (x0, y0, x1, y1)) < 2.0)) { continue; }
-                            if dist_seg(other, a0, b0) < rm + 4.0 { continue; }
-                            // (the side boxes reach into the triangle round the turned titles: they matter only to a tag outside it)
-                            if !all_in && stage < 8 && sides.iter().chain(bottoms.iter()).any(|o| matches!(*o, Ob::R(x0, y0, x1, y1) if seg_rect(a0, b0, (x0, y0, x1, y1)) < 0.5)) { continue; }
+                            if placed_tags.iter().any(|o| match *o { Ob::R(x0, y0, x1, y1) => seg_rect(a0, b0, (x0, y0, x1, y1)) < 2.0, Ob::S(p0, p1) => seg_seg(a0, b0, p0, p1) < 3.0, _ => false }) { continue; }
+                            if dist_seg(other, a0, b0) < rm + if stage == 9 { 1.6 + 2.0 } else { 4.0 } { continue; }
                             lead = Some((a0, b0));
                         }
                         let over_line = stage >= 3 && obs_guide.iter().any(|o| hits(o, c, w, h));
@@ -889,9 +841,12 @@ fn solve_now(p: &Params) -> Result<Rc<Solved>, Refusal> {
                 }
             }
             if let Some(t) = &chosen { placed_tags.push(Ob::R(t.c.0 - w / 2.0, t.c.1 - h / 2.0, t.c.0 + w / 2.0, t.c.1 + h / 2.0)); if let Some(l) = t.lead { placed_tags.push(Ob::S(l.0, l.1)); } }
-            if chosen.is_none() { tag_notes.push(format!("Sample {} could not be given its number tag at this label size; try a smaller label size.", k + 1)); }
-            tags.push(chosen);
+            if chosen.is_none() {
+                tag_notes.push(if same { "Samples 1 and 2 (their markers touch) could not be given their shared number tag at this label size; try a smaller label size.".to_string() } else { format!("Sample {} could not be given its number tag at this label size; try a smaller label size.", k + 1) });
+            }
+            by_k[k] = chosen;
         }
+        tags = by_k.to_vec();
         for t in tags.iter().flatten() {
             let (w, h) = (tw(&t.text, fs, true) + 5.0, fs * 1.1 + 3.0);
             tag_near.push(Ob::R(t.c.0 - w / 2.0 - 4.0, t.c.1 - h / 2.0 - 4.0, t.c.0 + w / 2.0 + 4.0, t.c.1 + h / 2.0 + 4.0));
@@ -916,11 +871,8 @@ fn solve_now(p: &Params) -> Result<Rc<Solved>, Refusal> {
     let answers: Vec<(usize, usize)> = smp.iter().enumerate().map(|(k, (_, c))| (c.win, k)).collect();
     // the editor note for a class that could not be named, saying which region it is
     let missing_note = |i: usize| -> String {
-        let (cl, sa): (Vec<i64>, Vec<i64>) = POLY[i].iter().cloned().unzip();
         let whose: Vec<String> = answers.iter().filter(|(w, _)| *w == i).map(|(_, k)| if smp.len() > 1 { format!("sample {}", k + 1) } else { "the sample".to_string() }).collect();
-        let of = if whose.is_empty() { String::new() } else { format!(" (the class of {})", whose.join(" and ")) };
-        format!("The label for {}{of} could not be placed in the triangle with {} on it; its region is the one with {} to {} % clay and {} to {} % sand, and the legend names it.",
-            NAMES[i].to_lowercase(), if smp.len() > 1 { "the samples" } else { "the sample" }, cl.iter().min().unwrap(), cl.iter().max().unwrap(), sa.iter().min().unwrap(), sa.iter().max().unwrap())
+        missing_label_note(i, &whose, smp.len() > 1)
     };
     let markers: Vec<P> = smp.iter().map(|(s, _)| sample_at(s)).collect();
     // A label inside its own region i.
@@ -948,18 +900,21 @@ fn solve_now(p: &Params) -> Result<Rc<Solved>, Refusal> {
         let small = { let mut v = variants(i, (fs * 0.8).max(8.0), true); v.truncate(1); v.remove(0) };
         let abbr = variants(i, fs, true).remove(0);
         // (variant, may sit over a line, capped, relaxed margins (tags 4 px, markers their ring), sample end only 2 px)
+        // every try within the caps first (the normal labels never go beyond them); only a crowded region's smaller
+        // last-resort labels may then hide more line
+        let tiny = { let mut v = variants(i, (fs * 0.65).max(7.0), true); v.truncate(1); v.remove(0) };
         let mut tries: Vec<(Var, bool, bool, bool, bool)> = variants(i, fs, abbr_only).into_iter().rev().map(|v| (v, true, true, false, false)).collect();
         tries.push((small.clone(), false, true, false, false));
         tries.push((small.clone(), true, true, false, false));
-        tries.push((abbr.clone(), true, false, false, false));
-        tries.push((small.clone(), true, false, false, false));
-        tries.push((small.clone(), true, false, true, false));
+        tries.push((small.clone(), true, true, true, false));
+        tries.push((small.clone(), true, true, true, true));
+        tries.push((tiny.clone(), true, true, true, true));
         tries.push((small.clone(), true, false, true, true));
-        let tiny = { let mut v = variants(i, (fs * 0.65).max(7.0), true); v.truncate(1); v.remove(0) };
         tries.push((tiny.clone(), true, false, true, true));
         // and the very last: the smallest label may come to 1 px from its region's edges (its plate still inside them)
         let last = tries.len();
         tries.push((tiny.clone(), true, false, true, true));
+        let _ = &abbr;
         let ring_obs: Vec<Ob> = markers.iter().map(|m| Ob::C(*m, ring + 0.5)).collect();
         for (ti, (var, over, capped, relaxed, near_sample)) in tries.into_iter().enumerate() {
             let edge_m = if ti == last { 1.0 } else { 3.0 };
@@ -2048,6 +2003,7 @@ mod tests {
         /// Gap labels that come nearer the sample than the usual stretch (a crowded region's last try), and tag leaders that
         /// cross a line squarely (the last-resort tag stage), counted by `collisions`.
         static RELAXED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+        static OVER_CAP: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
         static TAG_CROSS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
         /// Number tags that had to sit over a construction line (opaque, so the line shows a gap), counted by `collisions`.
         static TAG_GAPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
@@ -2239,7 +2195,17 @@ mod tests {
                 let need_sample = if small_label { ring + 1.5 } else { ring + 11.5 };
                 if dist(g.0) < need_sample { bad.push(format!("a label breaks a line {:.1} px from the sample (the ring ends at {ring:.1})", dist(g.0))); }
                 if dist(g.0) < ring + 11.5 { RELAXED.with(|n| n.set(n.get() + 1)); }
-                if dist(g.1) < 2.8 + 11.5 { bad.push(format!("a label breaks a line {:.1} px from its landing dot", dist(g.1))); }
+                if dist(g.1) < if small_label { 2.8 + 1.5 } else { 2.8 + 11.5 } { bad.push(format!("a label breaks a line {:.1} px from its landing dot", dist(g.1))); }
+                // the caps: a label of the normal size hides at most 30 px in all and 40 % of any one line (only a crowded
+                // region's smaller last-resort label may hide more; counted)
+                let (mut raw, mut frac) = (0.0f64, 0.0f64);
+                for (h0, h1, _) in &guide_full {
+                    let len = (h1.0 - h0.0).hypot(h1.1 - h0.1).max(1e-9);
+                    let n = (len / 0.25).ceil().max(1.0) as usize;
+                    let l = (0..n).filter(|k| { let t = (*k as f64 + 0.5) / n as f64; in_box((h0.0 + (h1.0 - h0.0) * t, h0.1 + (h1.1 - h0.1) * t), *r, 2.0) }).count() as f64 * len / n as f64;
+                    raw += l; frac = frac.max(l / len);
+                }
+                if raw > 30.5 || frac > 0.405 { if small_label { OVER_CAP.with(|n| n.set(n.get() + 1)); } else { bad.push(format!("a label hides {raw:.1} px of line ({:.0} % of one line)", frac * 100.0)); } }
                 GAPS.with(|n| n.set(n.get() + 1));
                 // the shortest label (the abbreviation) is the one that breaks a line
                 for t in ts.iter().filter(|t| t.rot.is_none() && in_box((t.x, t.y - 0.3 * t.size), *r, 0.0)) {
@@ -2333,11 +2299,13 @@ mod tests {
                 let k = if t.s == "1" { 0 } else { 1 };
                 let c = (t.x, t.y - 0.33 * t.size);
                 let (own, other) = ((c.0 - markers_at[k].0).hypot(c.1 - markers_at[k].1), (c.0 - markers_at[1 - k].0).hypot(c.1 - markers_at[1 - k].1));
-                let same_spot = (markers_at[0].0 - markers_at[1].0).hypot(markers_at[0].1 - markers_at[1].1) < 1.0;
-                if own >= other && !same_spot { bad.push(format!("tag {} is nearer the other marker ({own:.1} vs {other:.1} px)", t.s)); }
                 let plate = tag_plates.iter().find(|r| in_box(c, **r, 0.0)).copied().unwrap_or((c.0, c.1, c.0, c.1));
                 let diag = ((plate.2 - plate.0).powi(2) + (plate.3 - plate.1).powi(2)).sqrt() / 2.0;
-                let led = tag_leads.iter().any(|l| (l.0 .0 - markers_at[k].0).hypot(l.0 .1 - markers_at[k].1) < rm + 3.0 && seg_box(l.1, l.1, (plate.0 - 1.6, plate.1 - 1.6, plate.2 + 1.6, plate.3 + 1.6)) < 0.01);
+                let leader = tag_leads.iter().find(|l| (l.0 .0 - markers_at[k].0).hypot(l.0 .1 - markers_at[k].1) < rm + 3.0 && seg_box(l.1, l.1, (plate.0 - 1.6, plate.1 - 1.6, plate.2 + 1.6, plate.3 + 1.6)) < 0.01);
+                let led = leader.is_some();
+                // a tag standing alone is nearer its own marker; one on a leader is named by a leader that shows (7.5 px+)
+                if own >= other && !led { bad.push(format!("tag {} stands alone nearer the other marker ({own:.1} vs {other:.1} px)", t.s)); }
+                if let Some(l) = leader { let len = (l.1 .0 - l.0 .0).hypot(l.1 .1 - l.0 .1); if len < 7.5 { bad.push(format!("tag {}'s leader is only {len:.1} px", t.s)); } }
                 if own > rm + diag + 12.0 + 3.5 && !led { bad.push(format!("tag {} stands {own:.1} px from its marker with no leader", t.s)); }
                 // a tag standing alone reads clearly as its own marker's: on the far side of it from the other marker (more
                 // than 98 degrees off the direction to it) or nearer its own by the marker's radius + 3.5 px
@@ -2346,6 +2314,28 @@ mod tests {
                     let ang = ((u.0 * v.0 + u.1 * v.1) / (u.0.hypot(u.1) * v.0.hypot(v.1)).max(1e-9)).clamp(-1.0, 1.0).acos().to_degrees();
                     if ang <= 98.0 && other - own < rm + 3.5 { bad.push(format!("tag {} stands alone only {:.1} px nearer its own marker ({ang:.0} degrees off the other)", t.s, other - own)); }
                 }
+            }
+            // every tag is wholly inside the triangle, off its outline (never among the axis numbers), and every tag
+            // leader stays clear of all text but its own tag's, of the other marker, and of the other tag and its leader
+            let (ta, tl, tr) = corners(svg);
+            let tri_svg = vec![ta, tl, tr];
+            for r in &tag_plates {
+                for q in [(r.0, r.1), (r.2, r.1), (r.0, r.3), (r.2, r.3)] {
+                    if !inside(&tri_svg, q) || clearance(&tri_svg, q) < 1.5 { bad.push(format!("a tag plate {r:?} is not wholly inside the triangle")); break; }
+                }
+            }
+            for l in &tag_leads {
+                let own_plate = tag_plates.iter().find(|r| seg_box(l.1, l.1, (r.0 - 1.6, r.1 - 1.6, r.2 + 1.6, r.3 + 1.6)) < 0.01).copied();
+                for (k, t) in ts.iter().enumerate() {
+                    if own_plate.is_some_and(|r| in_box((t.x, t.y - 0.33 * t.size), r, 0.0)) { continue; }
+                    let d = if t.rot.is_some() { ink_points(t).iter().map(|q| pt_seg(*q, l.0, l.1)).fold(f64::MAX, f64::min) } else { seg_box(l.0, l.1, boxes[k]) };
+                    if d < 0.5 { bad.push(format!("a tag leader crosses the text {:?}", t.s)); }
+                }
+                let from = (0..2).min_by(|a, b| (l.0 .0 - markers_at[*a].0).hypot(l.0 .1 - markers_at[*a].1).partial_cmp(&(l.0 .0 - markers_at[*b].0).hypot(l.0 .1 - markers_at[*b].1)).unwrap()).unwrap();
+                let d = pt_seg(markers_at[1 - from], l.0, l.1);
+                if d < rm + 3.0 { bad.push(format!("a tag leader passes {d:.1} px from the other marker")); }
+                for r in tag_plates.iter().filter(|r| Some(**r) != own_plate) { if seg_box(l.0, l.1, *r) < 1.5 { bad.push("a tag leader crosses the other tag".into()); } }
+                for l2 in tag_leads.iter().filter(|l2| *l2 != l) { if seg_seg_t(l.0, l.1, l2.0, l2.1) < 2.5 { bad.push("two tag leaders meet".into()); } }
             }
             // a tag's leader keeps clear of every construction line
             for l in &tag_leads {
@@ -2356,7 +2346,7 @@ mod tests {
                     let (u, v) = ((l.1 .0 - l.0 .0, l.1 .1 - l.0 .1), (g.1 .0 - g.0 .0, g.1 .1 - g.0 .1));
                     let sin = (u.0 * v.1 - u.1 * v.0).abs() / (u.0.hypot(u.1) * v.0.hypot(v.1)).max(1e-9);
                     let far = pt_seg(l.0, g.0, g.1) >= 0.9 && pt_seg(l.1, g.0, g.1) >= 0.9 && pt_seg(g.0, l.0, l.1) >= 1.4 && pt_seg(g.1, l.0, l.1) >= 1.4;
-                    if d < 0.1 && sin >= 0.09 && far { TAG_CROSS.with(|n| n.set(n.get() + 1)); } else { bad.push(format!("a tag leader passes {d:.2} px from a construction line")); }
+                    if d < 0.1 && sin >= 0.24 && far { TAG_CROSS.with(|n| n.set(n.get() + 1)); } else { bad.push(format!("a tag leader passes {d:.2} px from a construction line")); }
                 }
             }
         }
@@ -2453,6 +2443,19 @@ mod tests {
     }
 
     #[test]
+    fn the_note_for_a_class_left_to_the_legend_says_where_its_region_is() {
+        // the ranges read off the Manual's definitions (p. 124), written out by hand
+        let want: [(i64, i64, i64, i64); 12] = [(0, 10, 85, 100), (0, 15, 70, 90), (0, 20, 43, 85), (7, 27, 23, 52), (0, 27, 0, 50), (0, 12, 0, 20), (20, 35, 45, 80), (27, 40, 20, 45), (27, 40, 0, 20), (35, 55, 45, 65), (40, 60, 0, 20), (40, 100, 0, 45)];
+        for i in 0..12 {
+            assert_eq!(region_range(i), want[i], "{}", NAMES[i]);
+            let n = missing_label_note(i, &["sample 2".to_string()], true);
+            let (c0, c1, s0, s1) = want[i];
+            assert_eq!(n, format!("The label for {} (the class of sample 2) could not be placed in the triangle with the samples on it; its region is the one with {c0} to {c1} % clay and {s0} to {s1} % sand, and the legend names it.", NAMES[i].to_lowercase()));
+        }
+        assert!(missing_label_note(0, &[], false).starts_with("The label for sand could not be placed in the triangle with the sample on it"));
+    }
+
+    #[test]
     fn full_names_are_printed_wherever_they_fit() {
         // the opening state (sand 40, clay 20, construction lines on) at Small and Medium: every class inside the triangle
         // has room for its full name (one or two lines), so no abbreviation and no gap is used
@@ -2475,7 +2478,9 @@ mod tests {
                 let col = collisions(&svg, size, false);
                 assert!(col.is_empty(), "{size} {a} {c}: {col:?}");
                 let tags: Vec<_> = texts(&svg).into_iter().filter(|t| t.bold && (t.s == "1" || t.s == "2" || t.s == "1, 2") && t.size == fsz(size)).collect();
-                assert!(tags.len() >= 2 || tags.iter().any(|t| t.s == "1, 2"), "{size} {:?} {:?}: {} tags", &pts[a..a + 2], &pts[c..c + 2], tags.len());
+                let l = [s("sand", pts[a]), s("clay", pts[a + 1]), s("sand2", pts[c]), s("clay2", pts[c + 1]), s("label_size", size), b("guides", n % 2 == 0)];
+                let _ = &tags;
+                assert!(tags_or_note(&svg, &l, size).is_ok(), "{size} {:?} {:?}: {:?}", &pts[a..a + 2], &pts[c..c + 2], tags_or_note(&svg, &l, size));
                 let notes = notes_for(ID, &with(&[s("sand", pts[a]), s("clay", pts[a + 1]), s("sand2", pts[c]), s("clay2", pts[c + 1]), s("label_size", size)]));
                 assert!(!notes.iter().any(|n| n.contains("could not be placed")), "{notes:?}");
                 n += 1;
@@ -2717,7 +2722,9 @@ mod tests {
                 if !col.is_empty() { bad.push(format!("{a}/{c} {a2}/{c2} {size}: {col:?}")); }
                 let tags = texts(&svg).into_iter().filter(|t| t.bold && (t.s == "1" || t.s == "2" || t.s == "1, 2") && t.size == fsz(size) && t.anchor == "middle").count();
                 let shared = texts(&svg).iter().any(|t| t.s == "1, 2");
-                if tags < 2 && !shared { bad.push(format!("{a}/{c} {a2}/{c2} {size}: {tags} tags")); }
+                let l = [s("sand", &a.to_string()), s("clay", &c.to_string()), s("sand2", &a2.to_string()), s("clay2", &c2.to_string()), s("label_size", size), b("guides", true)];
+                let _ = (tags, shared);
+                if let Err(e) = tags_or_note(&svg, &l, size) { bad.push(format!("{a}/{c} {a2}/{c2} {size}: {e}")); }
                 let m = markers(&svg, size);
                 for t in texts(&svg).into_iter().filter(|t| t.bold && (t.s == "1" || t.s == "2" || t.s == "1, 2") && t.size == fsz(size) && t.anchor == "middle") {
                     let own = m[if t.s == "2" { 1 } else { 0 }];
@@ -2732,7 +2739,7 @@ mod tests {
     }
 
     #[test]
-    fn two_sample_tags_are_never_on_a_construction_line_corners_included() {
+    fn two_sample_tags_seldom_sit_on_a_construction_line_and_then_on_an_opaque_plate() {
         let pts = ["40", "20", "10", "5", "60", "30", "85", "5", "52", "20", "45", "55", "0", "0", "0", "100", "5", "45", "27", "26"];
         let mut n = 0;
         TAG_GAPS.with(|g| g.set(0));
@@ -2746,8 +2753,9 @@ mod tests {
         }
         let over = TAG_GAPS.with(|g| g.get());
         // only pairs with a sample in a corner (0/0, 0/100 or one within 10 % of a corner) may need it
-        assert_eq!(over, 0, "{over} tags over a line in {n} renders (corners included: the side-number places take them)");
-        println!("tag/guide sweep: {n} renders, {over} tags over a line (opaque, in a corner)");
+        // a tag on a line (always opaque, so the line shows a gap) only where no clear place is left inside the triangle
+        assert!(over * 50 <= n, "{over} tags over a line in {n} renders");
+        println!("tag/guide sweep: {n} renders, {over} tags over a line (opaque)");
     }
 
     // ------------------------------------------------------------ print
@@ -2928,8 +2936,8 @@ mod tests {
         let all: String = crate::figures::faq::faq_for(ID).iter().map(|f| format!("{} {}", f.q, f.a)).collect::<Vec<_>>().join(" ");
         assert!(all.contains("7 to less than 27 % clay"), "the Manual's wording of loam");
         for gone in ["by convention", "listed later", "finer one", "sand 52 %, clay 20 % touches sandy loam, loam and sandy clay loam and is called sandy clay loam", "lower right 100 % sand", "lower left 100 % silt"] { assert!(!all.contains(gone), "{gone}"); }
-        for want in ["lower left 100 % sand", "lower right 100 % silt", "Soil Survey Manual", "99.5 to 100.5", "scaled in proportion", "shows a gap under the label", "leaves out the construction line", "covers a line", "12 px beyond the dot", "markers touch share one tag", "far side of it from the other marker"] { assert!(all.contains(want), "{want}"); }
-        for gone in ["too narrow for their names", "given up for a shorter one before it is ever placed over a line", "largest of the three is moved", "clear place nearby", "always named in one row", "never covers a construction line"] { assert!(!all.contains(gone), "{gone}"); }
+        for want in ["lower left 100 % sand", "lower right 100 % silt", "Soil Survey Manual", "99.5 to 100.5", "scaled in proportion", "shows a gap under the label", "leaves out the construction line", "covers a line", "12 px beyond the dot", "markers touch share one tag", "far side of it from the other marker", "always stands inside the triangle", "at most 30 px in all and 40 % of any one line"] { assert!(all.contains(want), "{want}"); }
+        for gone in ["too narrow for their names", "given up for a shorter one before it is ever placed over a line", "largest of the three is moved", "clear place nearby", "always named in one row", "never covers a construction line", "just under the bottom edge", "between the side numbers", "where possible"] { assert!(!all.contains(gone), "{gone}"); }
     }
 
     #[test]
@@ -3257,6 +3265,25 @@ mod tests {
     /// The most placement work a draw may take: about 1.5 times the worst listed configuration (400,929 units).
     const WORK_MAX: u64 = 600_000;
 
+    /// Is (sand, clay) within `d` % of a corner of the triangle?
+    fn near_corner(sa: i64, cl: i64, d: i64) -> bool { sa >= 100 - d || cl >= 100 - d || (100 - sa - cl) >= 100 - d }
+    /// Every sample of a two-sample render has its tag (or the shared one), or the editor note says which one has none;
+    /// the note never appears when both are tagged. Returns Ok(true) when a tag is missing (with the note).
+    fn tags_or_note(svg: &str, l: &[(&'static str, Value)], size: &str) -> Result<bool, String> {
+        let ts = texts(svg);
+        let one = ts.iter().filter(|t| t.bold && t.s == "1" && t.anchor == "middle" && t.size == fsz(size)).count();
+        let two = ts.iter().filter(|t| t.bold && t.s == "2" && t.anchor == "middle" && t.size == fsz(size)).count();
+        let shared = ts.iter().filter(|t| t.s == "1, 2").count();
+        let notes = notes_for(ID, &with(l));
+        let noted = |k: usize| notes.iter().any(|n| n == &format!("Sample {k} could not be given its number tag at this label size; try a smaller label size."));
+        let full = (one == 1 && two == 1 && shared == 0) || (one == 0 && two == 0 && shared == 1);
+        if full { return if noted(1) || noted(2) || notes.iter().any(|n| n.contains("shared number tag")) { Err("a tag note although both samples are tagged".into()) } else { Ok(false) }; }
+        if shared == 0 && one <= 1 && two <= 1 && (one == 1 || noted(1)) && (two == 1 || noted(2)) { return Ok(true); }
+        let shared_noted = notes.iter().any(|n| n == "Samples 1 and 2 (their markers touch) could not be given their shared number tag at this label size; try a smaller label size.");
+        if one == 0 && two == 0 && shared == 0 && shared_noted { return Ok(true); }
+        Err(format!("tags 1:{one} 2:{two} shared:{shared}, notes {notes:?}"))
+    }
+
     /// FNV-1a, 64 bit (stable across Rust versions, unlike the std hasher).
     fn fnv(s: &str) -> u64 { s.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3)) }
 
@@ -3264,14 +3291,14 @@ mod tests {
     fn two_sample_and_gap_renders_at_large_are_pinned_byte_for_byte() {
         // the census hashes only the defaults and the opening state (one sample, Medium: no gap, no tags); these renders
         // exercise every stage of the gap labels and the tags (caps, the crowded-region tries, the smallest label, the
-        // fallback inside the region for an outside class, tags under the bottom edge), so that a later change to any of
+        // fallback inside the region for an outside class, tags far off on leaders), so that a later change to any of
         // them cannot pass silently
         let pair = |a: &str, c: &str, a2: &str, c2: &str| vec![s("sand", a), s("clay", c), s("sand2", a2), s("clay2", c2), s("label_size", "Large"), b("guides", true)];
         let mut cases: Vec<(&str, Vec<(&'static str, Value)>)> = vec![
             ("11/52 + 35/10", pair("11", "52", "35", "10")),
             ("8/54, a gap", vec![s("sand", "8"), s("clay", "54"), s("label_size", "Large"), b("guides", true)]),
             ("94/2 + 90/6 Print student", { let mut l = pair("94", "2", "90", "6"); l.extend([s("style", "Print"), b(SHOW_ANSWERS, false)]); l }),
-            ("94/2 + 90/6, a tag under the bottom edge", pair("94", "2", "90", "6")),
+            ("94/2 + 90/6, a crowded corner", pair("94", "2", "90", "6")),
             ("55/39 + 57/43, sandy clay crowded", pair("55", "39", "57", "43")),
             ("47/47 + 46/47", pair("47", "47", "46", "47")),
             ("4/50 + 4/49", pair("4", "50", "4", "49")),
@@ -3294,11 +3321,11 @@ mod tests {
         for (k, ((name, _), h)) in cases.iter().zip(&got).enumerate() { assert_eq!(*h, PINS[k], "{name}: {h:#018x} (all: [{printed}])"); }
     }
     const PINS: [u64; 22] = [
-        0xa881234d50e1467a, 0xf5cff83a23f3d0ca, 0x5e952322cf2ed002, 0x3251913791802503,
+        0xa881234d50e1467a, 0xf5cff83a23f3d0ca, 0x63ef563ae09d75a7, 0x3cf68757214a84d0,
         0x2e31ecb1551b371f, 0xd98fc5c3654ca9bc, 0x3c88266a1e6c2b05, 0xc4e4c669bbe1d91c,
-        0xa1957a5bfea5682e, 0x99a3670799b16126, 0x6ae69082caffaab4, 0x953ea913897e5395,
-        0xa6a46722bd7b1821, 0xbfd8748882079a9b, 0x233d7d358c891b0c, 0x83a4417643ecd5b5,
-        0xdf51797904a19658, 0xd799ecf014014754, 0xd5feb9886843b5ea, 0xadf4ef8868d91acd,
+        0xa4b0d9176f7f6e3e, 0x99a3670799b16126, 0x6ae69082caffaab4, 0x953ea913897e5395,
+        0xe1d31c23554cc2fe, 0xbfd8748882079a9b, 0xc435dd29a9e8c618, 0xf795db4e59af1d40,
+        0xabdabe43c36b4d38, 0xde8ce620bee98202, 0xd5feb9886843b5ea, 0xadf4ef8868d91acd,
         0x94f1b08e21ebeffd, 0x083e8658c89f7da5,
     ];
 
@@ -3308,7 +3335,8 @@ mod tests {
         // them within 4 %); every render is read back from the SVG: two tags (or one shared "1, 2"), and the region of each
         // sample's class carries its name or abbreviation
         let mut cases: Vec<(i64, i64, i64, i64, &'static str)> = Vec::new();
-        for (a, c, a2, c2, size) in [(94, 2, 90, 6, "Large"), (52, 45, 53, 46, "Medium"), (56, 41, 29, 20, "Large"), (78, 16, 82, 17, "Large"), (95, 4, 87, 10, "Large"), (92, 8, 93, 5, "Large"), (83, 2, 4, 38, "Large"), (50, 39, 53, 43, "Large"), (61, 28, 64, 29, "Large"), (65, 22, 62, 18, "Large"), (57, 29, 70, 24, "Large"), (93, 0, 95, 0, "Large"), (8, 7, 2, 2, "Large"), (3, 97, 57, 38, "Large")] { cases.push((a, c, a2, c2, size)); }
+        for (a, c, a2, c2, size) in [(94, 2, 90, 6, "Large"), (52, 45, 53, 46, "Medium"), (56, 41, 29, 20, "Large"), (78, 16, 82, 17, "Large"), (95, 4, 87, 10, "Large"), (92, 8, 93, 5, "Large"), (83, 2, 4, 38, "Large"), (50, 39, 53, 43, "Large"), (61, 28, 64, 29, "Large"), (65, 22, 62, 18, "Large"), (57, 29, 70, 24, "Large"), (93, 0, 95, 0, "Large"), (8, 7, 2, 2, "Large"), (3, 97, 57, 38, "Large"), (88, 8, 87, 10, "Large"), (87, 8, 85, 8, "Large"), (95, 2, 91, 3, "Large"), (95, 2, 92, 3, "Large"), (48, 49, 50, 50, "Large"), (59, 40, 57, 39, "Large"), (51, 48, 48, 47, "Large"), (91, 1, 97, 0, "Large"), (50, 2, 49, 5, "Large"), (18, 2, 16, 5, "Large"), (4, 36, 7, 33, "Large"), (54, 42, 52, 39, "Large"), (5, 43, 9, 45, "Large"), (91, 3, 88, 7, "Large"), (99, 0, 97, 3, "Large"), (89, 2, 88, 5, "Large"),
+            (11, 52, 35, 10, "Large"), (47, 47, 46, 47, "Large"), (4, 50, 4, 49, "Large"), (24, 45, 9, 44, "Large"), (0, 49, 8, 43, "Large"), (6, 46, 9, 46, "Large"), (3, 47, 6, 48, "Large"), (92, 0, 95, 0, "Large"), (60, 35, 62, 36, "Large")] { cases.push((a, c, a2, c2, size)); }
         for size in ["Small", "Medium", "Large"] { cases.push((99, 1, 100, 0, size)); cases.push((100, 0, 99, 1, size)); }
         let mut verts: Vec<(i64, i64)> = vec![(100, 0), (0, 0), (0, 100)];
         for pg in POLY.iter() { for v in pg.iter() { verts.push((v.1, v.0)); } }
@@ -3328,7 +3356,7 @@ mod tests {
             if a2 < 0 || c2 < 0 || a2 + c2 > 100 { continue; }
             cases.push((a, c, a2, c2, "Large"));
         }
-        let (mut n, mut bad) = (0, Vec::new());
+        let (mut n, mut bad, mut untagged, mut range_notes) = (0, Vec::new(), 0usize, 0usize);
         for (k, (a, c, a2, c2, size)) in cases.iter().enumerate() {
             let l = [s("sand", &a.to_string()), s("clay", &c.to_string()), s("sand2", &a2.to_string()), s("clay2", &c2.to_string()), s("label_size", size), b("guides", true)];
             let svg = render_of(&l);
@@ -3336,14 +3364,27 @@ mod tests {
             let one = ts.iter().filter(|t| t.bold && t.s == "1" && t.anchor == "middle" && t.size == fsz(size)).count();
             let two = ts.iter().filter(|t| t.bold && t.s == "2" && t.anchor == "middle" && t.size == fsz(size)).count();
             let shared = ts.iter().filter(|t| t.s == "1, 2").count();
-            if !((one == 1 && two == 1 && shared == 0) || (one == 0 && two == 0 && shared == 1)) { bad.push(format!("{a}/{c} {a2}/{c2} {size}: tags 1:{one} 2:{two} shared:{shared}")); }
+            let _ = (one, two, shared);
+            match tags_or_note(&svg, &l, size) {
+                Ok(true) => { untagged += 1; if !(near_corner(*a, *c, 15) && near_corner(*a2, *c2, 15)) { bad.push(format!("{a}/{c} {a2}/{c2} {size}: a tag is missing away from a corner")); } }
+                Ok(false) => {}
+                Err(e) => bad.push(format!("{a}/{c} {a2}/{c2} {size}: {e}")),
+            }
             let regions = region_texts(&svg);
             for (sa, cl) in [(a, c), (a2, c2)] {
                 let w = classify(sa * 100, cl * 100).win;
                 let said = regions[w].iter().filter(|t| !matches!(t.as_str(), "1" | "2" | "1, 2")).cloned().collect::<Vec<_>>().join(" ");
                 if !(said == NAMES[w] || said == ABBR[w]) { bad.push(format!("{a}/{c} {a2}/{c2} {size}: the answer class {} reads {said:?}", NAMES[w])); }
             }
-            if k % 8 == 0 {
+            // a note about a class left to the legend gives that class's true clay and sand range
+            for nt in notes_for(ID, &with(&l)).iter().filter(|t| t.starts_with("The label for ")) {
+                let i = (0..12).find(|&i| nt.starts_with(&format!("The label for {} ", NAMES[i].to_lowercase()))).unwrap();
+                let (cl, sa): (Vec<i64>, Vec<i64>) = POLY[i].iter().cloned().unzip();
+                let want = format!("its region is the one with {} to {} % clay and {} to {} % sand", cl.iter().min().unwrap(), cl.iter().max().unwrap(), sa.iter().min().unwrap(), sa.iter().max().unwrap());
+                if !nt.contains(&want) { bad.push(format!("{a}/{c} {a2}/{c2} {size}: the note gives the wrong range: {nt}")); }
+                range_notes += 1;
+            }
+            if k % 8 == 0 || k < 60 {
                 let col = collisions(&svg, size, false);
                 if !col.is_empty() { bad.push(format!("{a}/{c} {a2}/{c2} {size}: {:?}", &col[..col.len().min(3)])); }
             }
@@ -3355,7 +3396,10 @@ mod tests {
         let shared = |l: &[(&'static str, Value)]| texts(&render_of(l)).iter().filter(|t| t.s == "1, 2").count();
         assert_eq!(shared(&[s("sand", "52"), s("clay", "45"), s("sand2", "53"), s("clay2", "46"), s("label_size", "Medium"), b("guides", true)]), 1);
         assert_eq!(shared(&[s("sand", "52"), s("clay", "45"), s("sand2", "55"), s("clay2", "45"), s("label_size", "Medium"), b("guides", true)]), 0);
-        println!("two samples: {n} renders, every sample tagged, every answer class named");
+        // a missing tag (always noted, always two samples crowding a corner) stays rare
+        assert!(untagged * 1000 <= 15 * n, "{untagged} of {n} renders leave a sample untagged");
+        let _ = range_notes;
+        println!("two samples: {n} renders, every answer class named, {untagged} with a sample untagged (noted, in a corner)");
     }
 
     #[test]
