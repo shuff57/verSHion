@@ -21,6 +21,8 @@ pub fn overrides(id: &str) -> Vec<(&'static str, Value)> {
         "photosynthesis" => vec![("show_graph", Value::B(true))],
         // the leaf cross-section opens with Large labels: the section is wide, and at Medium a printed copy's names are small
         "leaf-cross-section" => vec![("label_size", st("Large"))],
+        // xylem and phloem opens with Large labels: three panels side by side make a wide figure, and a printed copy shrinks the names
+        "xylem-phloem" => vec![("label_size", st("Large"))],
         // Math polygons open unfilled (black outline on white), angles unshaded.
         "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "regular-polygon" => vec![("fill", st("#ffffff"))],
         // the reference names the kite counter-clockwise (A right, B top, C left): our mirror

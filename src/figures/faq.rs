@@ -41,6 +41,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "soil-texture" => SOIL_TEXTURE,
         "photosynthesis" => PHOTOSYNTHESIS,
         "leaf-cross-section" => LEAF_CROSS_SECTION,
+        "xylem-phloem" => XYLEM_PHLOEM,
         // chemistry
         "bohr-model" => BOHR_MODEL,
         "gas-syringe" => GAS_SYRINGE,
@@ -4080,6 +4081,29 @@ const LEAF_CROSS_SECTION: &[Faq] = &[
     Faq {
         q: "What does Print change, and is anything left out?",
         a: "Print is black, white and grey only and survives a photocopy at 66 % grey: the cuticle is a dark band, cells are white with black walls, chloroplasts are dark dots, xylem vessels have thick black walls and the phloem sieve tubes are ruled with fine horizontal lines (not dots, which would read as chloroplasts), and every arrow is black. The figure opens with Large labels, so a printed copy stays readable. Not drawn: hairs (trichomes), the midrib, a C4 leaf's wreath of bundle-sheath cells, and the chloroplasts' inner structure (see the Photosynthesis figure). The bundle sheath is drawn but not labelled, by design: the vein is named as a whole by its bracket, and the figure keeps its pointers short and clear of each other instead of adding another one.",
+    },
+];
+
+const XYLEM_PHLOEM: &[Faq] = &[
+    Faq {
+        q: "What do the two cross-sections show, and what is simplified?",
+        a: "A young dicot stem: epidermis, cortex, vascular bundles arranged in a ring, and pith in the centre. In every bundle the xylem is toward the pith, the phloem toward the epidermis and the vascular cambium lies between them; the small first-formed xylem vessels are on the pith side. A young dicot root: an epidermis whose cells carry root hairs, a wide cortex, the endodermis with the Casparian strip drawn as dark marks in its radial walls, the pericycle (the outer layer of the stele), and the xylem as an X of four arms with a patch of phloem between each pair of arms; the small first-formed vessels are at the arm tips and the root has no pith. Checked against OpenStax Biology 2e, sections 30.2 (Stems), 30.3 (Roots) and 30.5 (Transport of Water and Solutes in Plants). Not to scale; cell numbers are simplified. Monocot stems (scattered bundles) and monocot roots are not drawn.",
+    },
+    Faq {
+        q: "What does the longitudinal view show about transport?",
+        a: "One xylem vessel and one phloem sieve tube cut along their length. The vessel is a column of dead, hollow vessel elements with thick lignified walls (drawn with ring thickenings) and open ends; water and dissolved minerals move one way, up from the roots to the leaves, pulled by transpiration (cohesion-tension). The sieve tube is a column of living sieve-tube elements joined by sieve plates, each with a companion cell beside it; sucrose is loaded at a source and moves to sinks. Here the mature leaf is the source and the roots below and the young leaves and fruit above are sinks, so sucrose goes down below the leaf and up above it: phloem transport can run either way, xylem only up. The mature leaf's own xylem supply is not drawn. Transport arrows and the source and sink tags appear only with the longitudinal view on.",
+    },
+    Faq {
+        q: "Which wording is the answer?",
+        a: "The key uses one wording and lists the others it accepts under the figure. Epidermis (dermal tissue). Cortex (cortex parenchyma, ground tissue). Vascular bundle (vascular tissue, bundle). Phloem (phloem tissue, sieve tubes). Vascular cambium (cambium, fascicular cambium). Xylem (xylem tissue, xylem vessels). Pith (pith parenchyma, medulla). Root hair (root hairs, root hair cell). Endodermis (endodermal cells). Casparian strip (Casparian band). Pericycle (pericycle cells). Xylem vessel (vessel, vessel element, xylem). Sieve tube (sieve-tube element, sieve tube element, sieve tube member, phloem). Sieve plate (sieve plates). Companion cell (companion cells). Water and minerals (water, water and dissolved minerals, xylem sap). Sucrose (sugar, sugars, sucrose solution, phloem sap). Source (sugar source). Sink (sugar sink).",
+    },
+    Faq {
+        q: "How does a student tell the pointers apart, and what does the student copy change?",
+        a: "A plain line ends inside the one part it names and, on its way, crosses only tissue layers (epidermis, cortex, endodermis, pericycle and the ground tissue between bundles), never another named part: the lines to the xylem and the cambium come in through the gap between two bundles and then turn into the bundle from the side. The Casparian strip line stops just short of one dark mark, so the mark stays visible. A bracket beside one bundle spans that whole bundle. An arrow is named by what it carries, and arrows of one style carry the same thing. A disc beside an organ's name in the longitudinal view asks whether the organ is a source or a sink. With Show answers off every name becomes a numbered disc in the same place and a table under the figure has a rule for each; the caption, title and description name no part.",
+    },
+    Faq {
+        q: "What does Print change?",
+        a: "Print is black, white and grey only and survives a photocopy at 66 % grey: cells are white with black walls, xylem vessels have thick black walls, the phloem is ruled with fine horizontal lines, the cambium is a solid grey band that copies dark, the Casparian strip marks, sieve plates and companion-cell nuclei are black, and the vessel's wall is a dark band. Water arrows are solid black and sucrose arrows dashed black, so the two kinds differ without colour.",
     },
 ];
 

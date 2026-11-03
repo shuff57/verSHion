@@ -338,7 +338,7 @@ mod tests {
         "sampling-distribution", "scatterplot", "sentence-diagram", "sine-cosine", "slope-triangle", "soil-texture", "solid-net", "sorting-passes", "standing-wave", "state-machine",
         "stem-and-leaf", "strata", "structure-chart", "supply-demand", "swot", "t-account", "time-value",
         "timeline", "topo-contours", "trace-table", "transformations", "tree-diagram", "trial-balance", "triangle-centres", "two-way-table",
-        "venn-diagram",
+        "venn-diagram", "xylem-phloem",
     ];
 
     #[test]
