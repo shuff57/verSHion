@@ -32,6 +32,12 @@ pub fn start() {
             return;
         };
 
+        // A visitor who prefers reduced motion gets the page's eased changes as instant ones.
+        let reduced = web_sys::window()
+            .and_then(|w| w.match_media("(prefers-reduced-motion: reduce)").ok().flatten())
+            .is_some_and(|m| m.matches());
+        vershion::pageshell::set_reduced_motion(reduced);
+
         // The faces the wasm does not compile in, requested now so they download while storage
         // opens (index.html preloads them alongside the wasm).
         let fonts = fetch_fonts();

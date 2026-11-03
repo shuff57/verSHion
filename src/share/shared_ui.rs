@@ -124,14 +124,58 @@ impl crate::App {
         crate::screens::shell_frame(self, ctx, true, |app, ui| {
             app.account.pin();
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                ui.set_max_width(ui.available_width().min(820.0));
+                ui.set_max_width(ui.available_width().min(1060.0));
                 ui.add_space(6.0);
                 pageshell::title(ui, "Home  /  Account", "Account", "Optional. For sharing questions with other teachers and for the hosted AI. Everything else works without one.");
-                ui.add_space(14.0);
-                pageshell::card(ui, |ui| app.account.draw_section(ui));
+                ui.add_space(18.0);
+                // The forms keep a form's width with the reasons for an account beside them; the
+                // signed-in status page has a lot to show and takes the whole column.
+                let status = app.account.model.page == super::model::Page::Status;
+                let side_w = 300.0;
+                if status || ui.available_width() < 760.0 {
+                    pageshell::card(ui, |ui| app.account.draw_section(ui));
+                } else {
+                    let card_w = (ui.available_width() - side_w - 28.0).clamp(420.0, 540.0);
+                    ui.horizontal_top(|ui| {
+                        ui.spacing_mut().item_spacing.x = 28.0;
+                        ui.vertical(|ui| {
+                            ui.set_width(card_w);
+                            pageshell::card(ui, |ui| app.account.draw_section(ui));
+                        });
+                        ui.vertical(|ui| {
+                            ui.set_width(side_w);
+                            account_perks(ui);
+                        });
+                    });
+                }
                 ui.add_space(20.0);
             });
         });
+    }
+}
+
+/// What an account is for, beside the sign-in forms: three short reasons, the last being that it
+/// is optional.
+fn account_perks(ui: &mut Ui) {
+    use egui_phosphor::regular as ph;
+    ui.add_space(4.0);
+    for (icon, head, body) in [
+        (ph::USERS_THREE, "Share with teachers", "Send banks to a circle of colleagues or to the public pool, and take theirs."),
+        (ph::SPARKLE, "Hosted AI", "Convert a PDF, scan or photo into questions with credits, nothing to set up."),
+        (ph::LOCK_SIMPLE, "Optional", "Banks, exams, printing and the figures all work on this device without one."),
+    ] {
+        ui.horizontal_top(|ui| {
+            let (r, _) = ui.allocate_exact_size(egui::Vec2::splat(40.0), egui::Sense::hover());
+            ui.painter().circle_filled(r.center(), 20.0, theme::accent_faded());
+            ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, icon, theme::icon_font(19.0), theme::accent_col());
+            ui.add_space(6.0);
+            ui.vertical(|ui| {
+                ui.set_width(236.0);
+                ui.label(egui::RichText::new(head).family(theme::bold_family()).size(15.2).color(theme::ink()));
+                ui.label(theme::muted(body).size(13.5));
+            });
+        });
+        ui.add_space(14.0);
     }
 }
 

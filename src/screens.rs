@@ -1189,6 +1189,7 @@ impl crate::App {
             ui.label(theme::muted("or type a model name").size(12.0));
             ui.add(
                 egui::TextEdit::singleline(&mut self.settings.ai_model)
+                    .margin(egui::Margin::symmetric(12, 9))
                     .desired_width(300.0)
                     .hint_text(cfg.model.as_str()),
             );
@@ -1346,6 +1347,7 @@ impl crate::App {
             ui.label(theme::text(if cfg.provider == "workers" { "Relay key" } else { "API key" }));
             ui.add(
                 egui::TextEdit::singleline(&mut buf)
+                    .margin(egui::Margin::symmetric(12, 9))
                     .password(true)
                     .desired_width(300.0)
                     .hint_text("paste a key"),
@@ -1422,7 +1424,7 @@ impl crate::App {
         shell_frame(self, ctx, true, |app, ui| {
           {
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                ui.set_max_width(ui.available_width().min(820.0));
+                ui.set_max_width(ui.available_width().min(1060.0));
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
@@ -1434,8 +1436,23 @@ impl crate::App {
                         }
                     });
                 });
-                ui.add_space(14.0);
+                ui.add_space(18.0);
 
+                use egui_phosphor::regular as ph;
+                let items = [
+                    pageshell::NavItem { icon: ph::FILE_ARROW_DOWN, label: "Backup & storage" },
+                    pageshell::NavItem { icon: ph::USER_CIRCLE, label: "Account" },
+                    pageshell::NavItem { icon: ph::SPARKLE, label: "AI conversion" },
+                    pageshell::NavItem { icon: ph::QUESTION, label: "Help & community" },
+                ];
+                pageshell::sections(ui, "settings", &items, |ui, section| {
+                // fields and menus share the buttons' 12 px corners
+                let w = &mut ui.visuals_mut().widgets;
+                for state in [&mut w.inactive, &mut w.hovered, &mut w.active] {
+                    state.corner_radius = CornerRadius::same(12);
+                }
+                match section {
+                0 => {
                 // --- Back up / restore ---
                 pageshell::card(ui, |ui| {
                     pageshell::heading(ui, "Back up");
@@ -1473,8 +1490,8 @@ impl crate::App {
                         let _ = crate::platform::open_path(&store::store_dir());
                     }
                 });
-                ui.add_space(12.0);
-
+                }
+                1 => {
                 // --- Sharing account (optional; the Account window does nothing until opened) ---
                 pageshell::card(ui, |ui| {
                     pageshell::heading(ui, "Account");
@@ -1485,8 +1502,8 @@ impl crate::App {
                         app.account.open();
                     }
                 });
-                ui.add_space(12.0);
-
+                }
+                2 => {
                 // --- AI conversion ---
                 pageshell::card(ui, |ui| {
                     pageshell::heading(ui, "AI conversion");
@@ -1523,6 +1540,7 @@ impl crate::App {
                             };
                             ui.add(
                                 egui::TextEdit::singleline(&mut app.settings.ai_base)
+                                    .margin(egui::Margin::symmetric(12, 9))
                                     .desired_width(360.0)
                                     .hint_text(hint),
                             );
@@ -1548,6 +1566,7 @@ impl crate::App {
                             ui.label(theme::text("Ollama URL"));
                             ui.add(
                                 egui::TextEdit::singleline(&mut app.settings.ollama_base)
+                                    .margin(egui::Margin::symmetric(12, 9))
                                     .desired_width(360.0)
                                     .hint_text("http://127.0.0.1:11434 (this machine)"),
                             );
@@ -1579,9 +1598,13 @@ impl crate::App {
                         app.save_settings();
                     }
                 });
-                ui.add_space(12.0);
-                app.draw_community(ui, ctx);
+                }
+                _ => {
+                    app.draw_community(ui, ctx);
+                }
+                }
                 ui.add_space(16.0);
+                });
             });
           }
         });

@@ -10,7 +10,7 @@ use web_time::Instant;
 
 use super::api::{self, Status};
 use super::model::{AccountModel, MailKind, Notice, Page};
-use crate::{kit, theme};
+use crate::{kit, pageshell, theme};
 
 /// The App's handle on the Account window. Closed by default; does nothing until opened.
 #[derive(Default)]
@@ -203,7 +203,7 @@ impl AccountUi {
             ui.horizontal(|ui| {
                 ui.label(theme::serif(title(m.page)).size(24.0));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if kit::ghost_button(ui, "Close").clicked() {
+                    if pageshell::outline(ui, "Close").clicked() {
                         close = true;
                     }
                     if m.busy() {
@@ -332,11 +332,11 @@ fn trust_modal(ctx: &egui::Context, m: &mut AccountModel) {
                  it. verSHion asks again whenever the address changes.",
             );
             ui.horizontal_wrapped(|ui| {
-                yes = kit::primary_button(ui, "Yes, it is my school's server").clicked();
+                yes = pageshell::primary(ui, "Yes, it is my school's server").clicked();
                 if !m.server_locked() {
-                    change = kit::ghost_button(ui, "Change server").clicked();
+                    change = pageshell::outline(ui, "Change server").clicked();
                 }
-                no = kit::ghost_button(ui, "Not now").clicked();
+                no = pageshell::outline(ui, "Not now").clicked();
             });
         });
     if yes {
@@ -398,15 +398,25 @@ fn link(ui: &mut Ui, text: &str) -> bool {
 
 /// A labelled one-line field; true when Enter was pressed in it.
 fn field(ui: &mut Ui, label: &str, value: &mut String, id: &str, secret: bool, hint: &str) -> bool {
-    ui.label(theme::strong(label).size(12.5));
-    let r = ui.add(
-        egui::TextEdit::singleline(value)
-            .id(egui::Id::new(id))
-            .password(secret)
-            .hint_text(hint)
-            .desired_width(ui.available_width().min(FORM_WIDTH)),
-    );
-    ui.add_space(6.0);
+    ui.label(theme::strong(label).size(13.5));
+    ui.add_space(2.0);
+    let r = ui
+        .scope(|ui| {
+            let w = &mut ui.visuals_mut().widgets;
+            for state in [&mut w.inactive, &mut w.hovered, &mut w.active] {
+                state.corner_radius = egui::CornerRadius::same(12);
+            }
+            ui.add(
+                egui::TextEdit::singleline(value)
+                    .id(egui::Id::new(id))
+                    .password(secret)
+                    .hint_text(hint)
+                    .margin(egui::Margin::symmetric(12, 10))
+                    .desired_width(ui.available_width().min(FORM_WIDTH)),
+            )
+        })
+        .inner;
+    ui.add_space(10.0);
     r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))
 }
 
@@ -443,7 +453,7 @@ fn server_page(ui: &mut Ui, m: &mut AccountModel) {
     let enter = field(ui, "Server address", &mut m.forms.server, "share_server", false, "https://pool.example.org");
     let mut save = enter;
     actions(ui, m.busy(), |ui| {
-        save |= kit::primary_button(ui, "Save").clicked();
+        save |= pageshell::primary(ui, "Save").clicked();
     });
     if m.page == Page::Server && !m.base_url().is_empty() && link(ui, "Cancel") {
         m.go(Page::SignIn);
@@ -465,7 +475,7 @@ fn sign_in_page(ui: &mut Ui, m: &mut AccountModel) {
     let mut go = field(ui, "Email", &mut m.forms.email, "share_email", false, "you@school.org");
     go |= field(ui, "Password", &mut m.forms.password, "share_pw", true, "");
     actions(ui, m.busy(), |ui| {
-        go |= kit::primary_button(ui, "Sign in").clicked();
+        go |= pageshell::primary(ui, "Sign in").clicked();
     });
     if go {
         m.submit_sign_in();
@@ -480,10 +490,10 @@ fn sign_in_page(ui: &mut Ui, m: &mut AccountModel) {
                  reset your password, or use the device link from a reset or confirmation email.",
             );
             ui.horizontal_wrapped(|ui| {
-                if kit::ghost_button(ui, "Use a device code").clicked() {
+                if pageshell::outline(ui, "Use a device code").clicked() {
                     m.go(Page::Enrol);
                 }
-                if kit::ghost_button(ui, "Reset password").clicked() {
+                if pageshell::outline(ui, "Reset password").clicked() {
                     m.go(Page::Forgot);
                 }
             });
@@ -514,7 +524,7 @@ fn sign_up_page(ui: &mut Ui, m: &mut AccountModel) {
     );
     let mut go = false;
     actions(ui, m.busy(), |ui| {
-        go = kit::primary_button(ui, "Create account").clicked();
+        go = pageshell::primary(ui, "Create account").clicked();
     });
     if go {
         m.submit_sign_up();
@@ -537,9 +547,9 @@ fn check_email_page(ui: &mut Ui, m: &mut AccountModel, kind: MailKind) {
     let mut go = paste_box(ui, m);
     let mut resend = false;
     actions(ui, m.busy(), |ui| {
-        go |= kit::primary_button(ui, "Continue").clicked();
+        go |= pageshell::primary(ui, "Continue").clicked();
         if kind == MailKind::Verify && !m.forms.email.trim().is_empty() {
-            resend = kit::ghost_button(ui, "Send the link again").clicked();
+            resend = pageshell::outline(ui, "Send the link again").clicked();
         }
     });
     if go {
@@ -566,7 +576,7 @@ fn confirm_page(ui: &mut Ui, m: &mut AccountModel) {
     profile_fields(ui, m);
     let mut go = false;
     actions(ui, m.busy(), |ui| {
-        go = kit::primary_button(ui, "Confirm").clicked();
+        go = pageshell::primary(ui, "Confirm").clicked();
     });
     if go {
         m.submit_confirm();
@@ -577,7 +587,7 @@ fn forgot_page(ui: &mut Ui, m: &mut AccountModel) {
     para(ui, "Enter your address. If it has an account, we email a link to choose a new password.");
     let mut go = field(ui, "Email", &mut m.forms.email, "share_email", false, "you@school.org");
     actions(ui, m.busy(), |ui| {
-        go |= kit::primary_button(ui, "Send reset link").clicked();
+        go |= pageshell::primary(ui, "Send reset link").clicked();
     });
     if go {
         m.submit_forgot();
@@ -603,7 +613,7 @@ fn reset_page(ui: &mut Ui, m: &mut AccountModel) {
     }
     let mut go = false;
     actions(ui, m.busy(), |ui| {
-        go = kit::primary_button(ui, "Set password").clicked();
+        go = pageshell::primary(ui, "Set password").clicked();
     });
     if go {
         m.submit_reset();
@@ -624,7 +634,7 @@ fn enrol_page(ui: &mut Ui, m: &mut AccountModel) {
     field(ui, "Email", &mut m.forms.email, "share_email", false, "you@school.org");
     let mut go = field(ui, "Password", &mut m.forms.password, "share_pw", true, "");
     actions(ui, m.busy(), |ui| {
-        go |= kit::primary_button(ui, "Add this device and sign in").clicked();
+        go |= pageshell::primary(ui, "Add this device and sign in").clicked();
     });
     if go {
         m.submit_enrol();
@@ -654,7 +664,7 @@ fn credits_block(ui: &mut Ui, m: &mut AccountModel) {
             ui.label(theme::text(format!("{left} of {allowance} free this week, and {purchased} bought.")).size(12.5));
             ui.add_space(4.0);
             let buy = format!("{}/account/credits.html", m.base_url().trim_end_matches('/'));
-            if kit::ghost_button(ui, "Buy credits").clicked() {
+            if pageshell::outline(ui, "Buy credits").clicked() {
                 crate::platform::open_url(&buy);
             }
         }
@@ -671,7 +681,7 @@ fn status_page(ui: &mut Ui, m: &mut AccountModel, in_page: bool, delete_link: bo
         });
         if !m.busy() {
             actions(ui, m.busy(), |ui| {
-                if kit::ghost_button(ui, "Try again").clicked() {
+                if pageshell::outline(ui, "Try again").clicked() {
                     m.check_now();
                 }
             });
@@ -693,14 +703,14 @@ fn status_page(ui: &mut Ui, m: &mut AccountModel, in_page: bool, delete_link: bo
     }
     credits_block(ui, m);
     actions(ui, m.busy(), |ui| {
-        if kit::ghost_button(ui, "Check now").clicked() {
+        if pageshell::outline(ui, "Check now").clicked() {
             m.check_now();
         }
         // The page's tabs are these two places.
-        if !in_page && matches!(me.status, Status::Approved) && kit::primary_button(ui, "Browse shared questions").clicked() {
+        if !in_page && matches!(me.status, Status::Approved) && pageshell::primary(ui, "Browse shared questions").clicked() {
             super::browse_ui::request(ui.ctx(), super::browse_ui::BrowseRequest::Browse);
         }
-        if !in_page && matches!(me.status, Status::Approved) && kit::ghost_button(ui, "My shared items").clicked() {
+        if !in_page && matches!(me.status, Status::Approved) && pageshell::outline(ui, "My shared items").clicked() {
             super::mine_ui::request(ui.ctx(), super::mine_ui::MineRequest::List);
         }
     });
@@ -713,8 +723,8 @@ fn status_page(ui: &mut Ui, m: &mut AccountModel, in_page: bool, delete_link: bo
     let (mut out, mut everywhere) = (false, false);
     // Never disabled: signing out must work even while a request hangs.
     actions(ui, false, |ui| {
-        out = kit::ghost_button(ui, "Sign out").clicked();
-        everywhere = kit::ghost_button(ui, "Sign out everywhere").clicked();
+        out = pageshell::outline(ui, "Sign out").clicked();
+        everywhere = pageshell::outline(ui, "Sign out everywhere").clicked();
     });
     if out {
         m.submit_sign_out(false);
@@ -756,7 +766,7 @@ fn status_box(ui: &mut Ui, m: &mut AccountModel, me: &api::Me) {
                 profile_fields(ui, m);
                 let mut go = false;
                 actions(ui, m.busy(), |ui| {
-                    go = kit::primary_button(ui, "Apply again").clicked();
+                    go = pageshell::primary(ui, "Apply again").clicked();
                 });
                 if go {
                     m.submit_reapply();
@@ -823,7 +833,7 @@ fn invite_box(ui: &mut Ui, inv: &mut super::invite::InviteModel, session: Option
     }
     ui.horizontal(|ui| {
         ui.add_enabled_ui(inv.can_redeem() && idle, |ui| {
-            if kit::primary_button(ui, "Redeem").clicked() {
+            if pageshell::primary(ui, "Redeem").clicked() {
                 inv.redeem(session);
             }
         });
@@ -872,7 +882,7 @@ fn delete_page(ui: &mut Ui, m: &mut AccountModel) {
                     .min_size(egui::vec2(0.0, 34.0)),
             )
             .clicked();
-        back = kit::ghost_button(ui, "Cancel").clicked();
+        back = pageshell::outline(ui, "Cancel").clicked();
     });
     if go {
         m.submit_delete();
