@@ -50,3 +50,7 @@ The owner asked to finish the running figures, then commit, merge to `main`, reb
 - What "redeploy" means is not recorded anywhere I could find: `README.md` and `NOTES.md` have no deploy section. The repo has `Trunk.toml` and `index.html` (a web build) and `server/worker/wrangler*.toml` (Cloudflare worker, `server/` is off-limits for the figures loop). Ask which target and which command.
 - Before any merge: the full lib suite on the merged tree (`systemd-run --user --scope -p MemoryMax=8G -p MemorySwapMax=0 cargo test --lib -j2`, known flake `absurd_windows_cannot_run_away`), then a release build.
 - Never type or store credentials; deploy auth must come from the owner.
+
+
+## Soil texture: PARKED (2026-11-03)
+Six critic rounds (docs/critic-reports/2026-11-02-soil-texture-critic-2 .. 2026-11-03-soil-texture-critic-6). One sample is clean at every size and the classifier, orientation, refusal advice and three-typed scaling were verified correct. Two samples close together (about 4% or less, near an edge or corner) fail: a number tag can be dropped (the note's smaller-size advice mostly fails, FAQ claim false) or, with construction lines off, floated 60-280 px into another class's region (critic 6 MED 1-2). Owner rule: no round after round 6. Options when revisited: limit to one sample at Large, accept and document, or redesign tags (for example a numbered legend instead of tags near markers). Branch state: ecbd65b..09f6453 on figures-gapfill; do not report this figure as passed.
