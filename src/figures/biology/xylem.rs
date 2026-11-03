@@ -663,11 +663,12 @@ pub const WATER_EL: usize = 4;
 pub const SUCROSE_EL: usize = 5;
 /// The y of the water blank's line: the middle of the element, moved off a ring thickening if it falls on one.
 pub fn water_y() -> f64 { let m = el_mid(WATER_EL); if (m / 8.0).fract() == 0.0 { m + 4.0 } else { m } }
-/// The sucrose blank's line: in from the right just below the sieve plate (clear of the companion cells), then down
-/// to the side of the shaft at the middle of the element.
+/// The sucrose blank's line: in from the right just below the sieve plate (clear of the companion cells), down beside
+/// the side wall, then a short leg square to the shaft that ends at its side, half way along it.
 pub fn sucrose_path() -> Vec<P> {
     let b = EL * SUCROSE_EL as f64;
-    vec![(LONG_RX - 4.0, b + 6.0), (SX1 - 4.0, b + 6.0), ((SX0 + SX1) / 2.0 + ARROW_SW / 2.0 + 0.6, el_mid(SUCROSE_EL))]
+    let m = el_mid(SUCROSE_EL);
+    vec![(LONG_RX - 4.0, b + 6.0), (SX1 - 4.0, b + 6.0), (SX1 - 4.0, m), ((SX0 + SX1) / 2.0 + ARROW_SW / 2.0 + 0.6, m)]
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -705,10 +706,12 @@ fn long_labels(c: &Cfg, z: &Sizes) -> Vec<Lab> {
     let h = slot_h(z);
     let left = |it: It, y: f64, end: P, aim: Aim| { let w = name_w(it, z); Lab { it, num: 0, pane: Pane::Long, bx: (LONG_LX - w, y - h / 2.0, LONG_LX, y + h / 2.0), anc: Anc::End, join: Join::Leader { pts: vec![(LONG_LX + 4.0, y), end] }, aim } };
     let right = |it: It, y: f64, end: P, aim: Aim| { let w = name_w(it, z); Lab { it, num: 0, pane: Pane::Long, bx: (LONG_RX, y - h / 2.0, LONG_RX + w, y + h / 2.0), anc: Anc::Start, join: Join::Leader { pts: vec![(LONG_RX - 4.0, y), end] }, aim } };
-    if c.wants(It::Vessel) { out.push(left(It::Vessel, VESSEL_Y, (VX0 + VWALL + 4.0, VESSEL_Y), Aim::In(Part { pk: PK::LVessel, i: 0 }))); }
+    // the vessel's line ends in its lignified wall, between two ring thickenings, well away from the water arrows
+    if c.wants(It::Vessel) { out.push(left(It::Vessel, VESSEL_Y, (VX0 + VWALL / 2.0, VESSEL_Y), Aim::In(Part { pk: PK::LVessel, i: 0 }))); }
     if c.wants(It::Companion) { out.push(right(It::Companion, COMP_Y, ((CX0 + CX1) / 2.0, COMP_Y), Aim::In(Part { pk: PK::LComp, i: 0 }))); }
     if c.wants(It::SievePlate) { out.push(right(It::SievePlate, PLATE_Y, (SX1 - 6.0, PLATE_Y), Aim::In(Part { pk: PK::LPlate, i: 1 }))); }
-    if c.wants(It::SieveTube) { out.push(right(It::SieveTube, SIEVE_Y, (SX1 - 5.0, SIEVE_Y), Aim::In(Part { pk: PK::LSieve, i: 1 }))); }
+    // the sieve tube's line ends just inside its side wall, away from the sucrose arrows in the middle
+    if c.wants(It::SieveTube) { out.push(right(It::SieveTube, SIEVE_Y, (SX1 - 2.0, SIEVE_Y), Aim::In(Part { pk: PK::LSieve, i: 1 }))); }
     if c.wants(It::Water) {
         let y = water_y();
         out.push(left(It::Water, y, ((VX0 + VX1) / 2.0 - ARROW_SW / 2.0 - 0.6, y), Aim::OnArrow(Part { pk: PK::LVessel, i: 0 })));
@@ -871,39 +874,18 @@ pub const SMALL_PRINT_PT: f64 = 8.0;
 /// The size the names print at on a question page, in pt: the canvas is scaled by `layout::picture_size_pt` (at most
 /// 0.75 pt a px, 6.5 in wide and 3 in tall), and a name is 13 px times the label factor.
 pub fn printed_name_pt(p: &Params) -> f64 {
-    let svg = draw(p);
-    let root = svg.split('>').next().unwrap_or_default();
-    let num = |k: &str| root.split(&format!(" {k}=\"")).nth(1).and_then(|v| v.split('"').next()).and_then(|v| v.parse::<f64>().ok()).unwrap_or(1.0);
-    let (w, h) = (num("width"), num("height"));
-    13.0 * cfg(p).lab * print_scale(w, h)
+    let c = cfg(p);
+    let (_, blk) = sheet(&c);
+    13.0 * c.lab * print_scale(blk.w.ceil(), blk.h.ceil())
 }
 
-pub fn warnings(p: &Params) -> Vec<String> {
-    let c = cfg(p);
+/// The notes other than the small-print one (they depend on the switches only).
+fn other_notes(c: &Cfg) -> Vec<String> {
     let mut out = Vec::new();
-    let pt = printed_name_pt(p);
-    if pt < SMALL_PRINT_PT {
-        // each one-control change that would print the names at least half a point bigger, measured, biggest first
-        let mut steps: Vec<(f64, String)> = Vec::new();
-        let mut try_step = |what: String, q: Params| { let after = printed_name_pt(&q); if after >= pt + 0.5 { steps.push((after, format!("{what} (about {after:.1} pt)"))); } };
-        if c.view == View::Both { for v in ["Stem", "Root"] { let mut q = p.clone(); q.set_s("view", v); try_step(format!("set Cross-section to {v}"), q); } }
-        if c.long { let mut q = p.clone(); q.set_b("longitudinal", false); try_step("switch off Longitudinal view of transport".to_string(), q); }
-        if c.lab < 1.4 { let mut q = p.clone(); q.set_s("label_size", "Large"); try_step("set Label size to Large".to_string(), q); }
-        steps.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-        let how: Vec<&str> = steps.iter().map(|x| x.1.as_str()).collect();
-        let advice = match how.len() {
-            0 => "No single change here prints them much bigger; for bigger names give the figure a page of its own.".to_string(),
-            1 => format!("For bigger names {}.", how[0]),
-            _ => format!("For bigger names {} or {}.", how[..how.len() - 1].join(", "), how[how.len() - 1]),
-        };
-        out.push(format!("On a question page (6.5 by 3 in at most) the names print at about {pt:.1} pt, below the {SMALL_PRINT_PT:.0} pt that reads well. {advice}"));
-    }
-    if !c.long && (c.cells || c.arrows) {
-        let what = match (c.cells, c.arrows) { (true, true) => "The cell labels of the longitudinal view and the transport arrows are", (true, false) => "The cell labels of the longitudinal view are", _ => "The transport arrows are" };
-        out.push(format!("{what} drawn only in the longitudinal view. Switch on Longitudinal view of transport to show them."));
-    }
-    if c.root_extra && !c.root() {
-        out.push("The root hair and Casparian strip labels need a root. Set Cross-section to Root or Both to show them.".to_string());
+    // a label switch for a panel that is not drawn waits silently for its panel (its hint says so); the lengthwise view
+    // without its arrows shows no direction of transport, which is the point of the view
+    if c.long && !c.arrows {
+        out.push("The lengthwise view shows no direction of transport while Transport arrows is off. Switch on Transport arrows to show which way water and sucrose move.".to_string());
     }
     if !ORDER.iter().any(|i| c.wants(*i)) {
         let mut names: Vec<&str> = vec!["Label the tissue layers", "Label xylem and phloem"];
@@ -915,20 +897,43 @@ pub fn warnings(p: &Params) -> Vec<String> {
     out
 }
 
-fn draw(p: &Params) -> String {
+pub fn warnings(p: &Params) -> Vec<String> {
     let c = cfg(p);
-    let z = sizes(c.lab);
-    let fills = svg::Fills::new(p);
-    let pr = fills.is_print();
-    let lay = layout(&c);
-    let labs = &lay.labs;
+    let mut out = Vec::new();
+    let pt = printed_name_pt(p);
+    if pt < SMALL_PRINT_PT {
+        // a step is offered only if following it raises no other note (no circle of advice)
+        let here = other_notes(&c);
+        let no_new_note = |q: &Params| other_notes(&cfg(q)).iter().all(|n| here.contains(n));
+        // each one-control change that would print the names at least half a point bigger, measured, biggest first
+        let mut steps: Vec<(f64, String)> = Vec::new();
+        if c.long {
+            let mut q = p.clone();
+            q.set_b("longitudinal", false);
+            // say plainly what goes with it, so the advice is not taken for a way to keep the arrows
+            let lost = match (c.arrows, c.cells) { (true, true) => "; the lengthwise view goes with its arrows and cell labels", (true, false) => "; the lengthwise view goes with its arrows", (false, true) => "; the lengthwise view goes with its cell labels", _ => "; the lengthwise view goes" };
+            let after = printed_name_pt(&q);
+            if after >= pt + 0.5 && no_new_note(&q) { steps.push((after, format!("switch off Longitudinal view of transport (about {after:.1} pt{lost})"))); }
+        }
+        let mut try_step = |what: String, q: Params| { let after = printed_name_pt(&q); if after >= pt + 0.5 && no_new_note(&q) { steps.push((after, format!("{what} (about {after:.1} pt)"))); } };
+        if c.view == View::Both { for v in ["Stem", "Root"] { let mut q = p.clone(); q.set_s("view", v); try_step(format!("set Cross-section to {v}"), q); } }
+        if c.lab < 1.4 { let mut q = p.clone(); q.set_s("label_size", "Large"); try_step("set Label size to Large".to_string(), q); }
+        steps.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        let how: Vec<&str> = steps.iter().map(|x| x.1.as_str()).collect();
+        let advice = match how.len() {
+            0 => "No single change here prints them much bigger; for bigger names give the figure a page of its own.".to_string(),
+            1 => format!("For bigger names {}.", how[0]),
+            _ => format!("For bigger names {} or {}.", how[..how.len() - 1].join(", "), how[how.len() - 1]),
+        };
+        out.push(format!("On a question page (6.5 by 3 in at most) the names print at about {pt:.1} pt, below the {SMALL_PRINT_PT:.0} pt that reads well. {advice}"));
+    }
+    out.extend(other_notes(&c));
+    out
+}
+
+/// The caption lines of a copy (the key's accepted wordings and biology, or the student copy's instructions).
+fn captions(c: &Cfg, labs: &[Lab]) -> Vec<String> {
     let n = labs.len();
-    // ---------- the table of blanks (student copy)
-    let rule_w = 150.0 * c.lab;
-    let cell_w = 2.0 * z.r + 8.0 + rule_w;
-    let gapc = 28.0;
-    let row_h = 2.0 * z.r + 10.0;
-    // ---------- captions
     let mut cap: Vec<String> = vec![format!("Not to scale: simplified drawings of a young dicot {}.", match (c.stem() || c.long, c.root()) { (true, false) => "stem", (false, true) => "root", _ => "stem and root" })];
     if c.key {
         let mut seen: Vec<It> = Vec::new();
@@ -951,8 +956,31 @@ fn draw(p: &Params) -> String {
         let cap0 = first.next().map(|f| f.to_uppercase().collect::<String>() + first.as_str()).unwrap_or_default();
         cap.push(format!("{cap0}. Write the name of each numbered part."));
     }
-    let cfs = 12.0 * c.lab;
-    let blk = text_block(&lay, &cap, n, c.key, cell_w, gapc, row_h, cfs, c.lab);
+    cap
+}
+
+/// The table and caption sizes for this copy.
+struct Table { cell_w: f64, gapc: f64, row_h: f64, rule_w: f64, cfs: f64 }
+fn table_sizes(c: &Cfg) -> Table { let z = sizes(c.lab); let rule_w = 150.0 * c.lab; Table { cell_w: 2.0 * z.r + 8.0 + rule_w, gapc: 28.0, row_h: 2.0 * z.r + 10.0, rule_w, cfs: 12.0 * c.lab } }
+
+/// The whole sheet laid out: the drawing and where its table and captions go (the canvas is `blk.w` by `blk.h`).
+pub fn sheet(c: &Cfg) -> (Lay, Block) {
+    let lay = layout(c);
+    let cap = captions(c, &lay.labs);
+    let t = table_sizes(c);
+    let blk = text_block(&lay, &cap, lay.labs.len(), c.key, t.cell_w, t.gapc, t.row_h, t.cfs, c.lab);
+    (lay, blk)
+}
+
+fn draw(p: &Params) -> String {
+    let c = cfg(p);
+    let z = sizes(c.lab);
+    let fills = svg::Fills::new(p);
+    let pr = fills.is_print();
+    let (lay, blk) = sheet(&c);
+    let labs = &lay.labs;
+    let n = labs.len();
+    let Table { cell_w, gapc, row_h, rule_w, cfs } = table_sizes(&c);
     let (w, total_h) = (blk.w, blk.h);
     let mut d = Doc::new(w.ceil(), total_h.ceil());
     d.defs(&fills.defs());
@@ -1077,11 +1105,11 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
     let s = |k: &'static str, v: &str| (k, Value::S(v.to_string()));
     let b = |k: &'static str, v: bool| (k, Value::B(v));
     Some(vec![
-        Example { name: "Stem, root and transport, everything labelled", params: vec![] },
-        Example { name: "Dicot stem, student copy", params: vec![s("view", "Stem"), b("longitudinal", false), b("show_cells", false), b("show_arrows", false), b("show_root_extra", false), b(SHOW_ANSWERS, false)] },
-        Example { name: "Dicot root, student copy", params: vec![s("view", "Root"), b("longitudinal", false), b("show_cells", false), b("show_arrows", false), b(SHOW_ANSWERS, false)] },
-        Example { name: "Which way do water and sugar move? Student copy", params: vec![s("view", "Stem"), b("show_layers", false), b("show_root_extra", false), b("show_cells", false), b(SHOW_ANSWERS, false)] },
-        Example { name: "Stem bundle and root stele: xylem and phloem only", params: vec![b("show_layers", false), b("show_root_extra", false), b("longitudinal", false), b("show_cells", false), b("show_arrows", false)] },
+        Example { name: "Stem, root and transport, everything labelled", params: vec![s("label_size", "Large")] },
+        Example { name: "Dicot stem, student copy", params: vec![s("label_size", "Large"), s("view", "Stem"), b("longitudinal", false), b("show_cells", false), b("show_arrows", false), b("show_root_extra", false), b(SHOW_ANSWERS, false)] },
+        Example { name: "Dicot root, student copy", params: vec![s("label_size", "Large"), s("view", "Root"), b("longitudinal", false), b("show_cells", false), b("show_arrows", false), b(SHOW_ANSWERS, false)] },
+        Example { name: "Which way do water and sugar move? Student copy", params: vec![s("label_size", "Large"), s("view", "Stem"), b("show_layers", false), b("show_root_extra", false), b("show_cells", false), b(SHOW_ANSWERS, false)] },
+        Example { name: "Stem bundle and root stele: xylem and phloem only", params: vec![s("label_size", "Large"), b("show_layers", false), b("show_root_extra", false), b("longitudinal", false), b("show_cells", false), b("show_arrows", false)] },
     ])
 }
 
