@@ -743,17 +743,30 @@ impl App {
                 }
                 // (Details has its own button next to this menu; the menu keeps what has none.)
                 Tool::More => ui
-                    .menu_button(RichText::new("…").size(16.0).color(theme::muted_col()), |ui| {
-                        ui.set_min_width(170.0);
-                        let tidy = ui
-                            .add_enabled(!questions.is_empty(), Button::new("Tidy stems…"))
-                            .on_hover_text("Clean up stems from older imports: tables of blanks, line breaks, spacing. Shows a preview first.");
-                        if tidy.clicked() {
-                            open_tidy(self, ctx, key, bank_id);
-                            ui.close();
+                    .scope(|ui| {
+                        // the same 40 px, 12 px-corner look as the buttons beside it
+                        ui.spacing_mut().interact_size.y = 40.0;
+                        ui.spacing_mut().button_padding = egui::Vec2::new(16.0, 4.0);
+                        let w = &mut ui.visuals_mut().widgets;
+                        for (state, fill) in [(&mut w.inactive, theme::card()), (&mut w.hovered, theme::hover_bg()), (&mut w.active, theme::accent_faded()), (&mut w.open, theme::accent_faded())] {
+                            state.weak_bg_fill = fill;
+                            state.bg_fill = fill;
+                            state.bg_stroke = Stroke::new(1.0, theme::rule());
+                            state.expansion = 0.0;
                         }
+                        ui.menu_button(RichText::new("…").size(16.0).color(theme::ink()), |ui| {
+                            ui.set_min_width(170.0);
+                            let tidy = ui
+                                .add_enabled(!questions.is_empty(), Button::new("Tidy stems…"))
+                                .on_hover_text("Clean up stems from older imports: tables of blanks, line breaks, spacing. Shows a preview first.");
+                            if tidy.clicked() {
+                                open_tidy(self, ctx, key, bank_id);
+                                ui.close();
+                            }
+                        })
+                        .response
                     })
-                    .response
+                    .inner
                     .on_hover_text("More bank actions"),
             };
             width += r.rect.width() + gap;
@@ -1177,12 +1190,14 @@ impl App {
         let cw = ((avail - gap * (cols as f32 - 1.0)) / cols as f32).floor();
 
         if questions.is_empty() && !new_open {
-            ui.add_space(24.0);
-            ui.vertical_centered(|ui| {
-                ui.label(theme::serif("No questions yet").size(22.0));
-                ui.add_space(4.0);
-                ui.label(theme::muted("Use Add question to write the first one.").size(13.0));
-            });
+            ui.add_space(12.0);
+            crate::pageshell::empty_state(
+                ui,
+                egui_phosphor::regular::PENCIL_SIMPLE_LINE,
+                "No questions yet",
+                "Use Add question above to write the first one, or Import to bring a test in.",
+                &[],
+            );
         } else if order.is_empty() {
             ui.label(theme::muted("No questions match those filters.").size(12.5));
         }

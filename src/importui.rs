@@ -1873,7 +1873,12 @@ fn options_and_finish(app: &mut crate::App, ui: &mut egui::Ui, st: &mut State, f
     let hint = default_bank_name(st);
     if st.dest.is_none() {
         ui.add_space(4.0);
-        ui.add(egui::TextEdit::singleline(&mut st.new_name).desired_width(ui.available_width() - 4.0).hint_text(hint));
+        ui.add(
+            egui::TextEdit::singleline(&mut st.new_name)
+                .margin(egui::Margin::symmetric(12, 9))
+                .desired_width(ui.available_width() - 4.0)
+                .hint_text(hint),
+        );
     }
     ui.add_space(8.0);
     ui.horizontal(|ui| {
