@@ -721,6 +721,11 @@ impl App {
                             let res = self.store.bank(bank_id).map(|b| crate::share::publish_ui::share_bank(ctx, b));
                             if let Some(Err(e)) = res {
                                 self.toast_err(e);
+                                // a draft in the bank stops the share: open the first one
+                                let first = self.store.bank(bank_id).and_then(|b| b.questions.iter().find(|q| !crate::qcheck::gate_blockers(q).is_empty()).cloned());
+                                if let Some(q) = first {
+                                    self.qedit = Some(qedit::Draft::from_question(bank_id.to_string(), &q));
+                                }
                             }
                             ui.close();
                         }

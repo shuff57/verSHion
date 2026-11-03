@@ -91,7 +91,18 @@ impl ShareSource {
         if bank.questions.is_empty() {
             return Err("Add a question first: there is nothing to share yet.".into());
         }
+        ShareSource::unfinished(&bank.questions.iter().enumerate().map(|(i, q)| (i + 1, q)).collect::<Vec<_>>())?;
         ShareSource::build(format!("bank:{}", bank.id), format!("Bank: {}", bank.name), bank, 0)
+    }
+
+    /// A question that is a draft (a gap in it: no correct answer, an empty blank, ...) can not be
+    /// shared: the rules are `qcheck`'s, the same ones that keep it off an exam. `qs` carries the
+    /// number each question is called by in the message.
+    fn unfinished(qs: &[(usize, &crate::model::Question)]) -> Result<(), String> {
+        match crate::qcheck::first_blocked(qs, "shared") {
+            Some((_, msg)) => Err(msg),
+            None => Ok(()),
+        }
     }
 
     /// An exam is shared as a bank of its questions, in exam order, named like the exam. The
@@ -108,6 +119,7 @@ impl ShareSource {
         if questions.is_empty() {
             return Err("This exam has no questions to share yet.".into());
         }
+        ShareSource::unfinished(&questions.iter().enumerate().map(|(i, q)| (i + 1, q)).collect::<Vec<_>>())?;
         let bank = QuestionBank { id: exam.id.clone(), name: exam.name.clone(), questions, created: exam.modified, modified: exam.modified, details: Default::default() };
         ShareSource::build(format!("exam:{}", exam.id), format!("Exam: {}", exam.name), &bank, missing)
     }
