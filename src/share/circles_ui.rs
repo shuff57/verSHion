@@ -1114,6 +1114,7 @@ fn panels(ui: &mut Ui, m: &mut CirclesModel) {
     let owner_leaving = m.my_role_public() == Role::Owner;
     // (critic 92 I2) the banks of this circle in My Banks with changes not sent yet; (round 16, critic 94 m6) also when closing it
     let unsent = if matches!(m.panel, Panel::ConfirmLeave | Panel::ConfirmClose) { m.cid().map(|c| m.edit.unsent_in(&c)).unwrap_or_default() } else { Vec::new() };
+    let panel_top = ui.cursor().min;
     match &mut m.panel {
         Panel::None => {}
         Panel::NewCode(f) => {
@@ -1330,6 +1331,19 @@ fn panels(ui: &mut Ui, m: &mut CirclesModel) {
                 });
             });
         }
+    }
+    // A panel opens above the button that opened it, which may be off screen on a long page: bring it into view once
+    // per kind, so pressing the button never seems to do nothing.
+    if !matches!(m.panel, Panel::None) {
+        let key = egui::Id::new("circle_panel_seen");
+        let kind = format!("{:?}", std::mem::discriminant(&m.panel));
+        if ui.ctx().data(|dt| dt.get_temp::<String>(key)).as_deref() != Some(kind.as_str()) {
+            ui.ctx().data_mut(|dt| dt.insert_temp(key, kind));
+            let end = ui.cursor().min.y;
+            ui.scroll_to_rect(egui::Rect::from_min_max(egui::pos2(panel_top.x, panel_top.y), egui::pos2(panel_top.x + ui.available_width(), end)), Some(egui::Align::Center));
+        }
+    } else {
+        ui.ctx().data_mut(|dt| dt.remove::<String>(egui::Id::new("circle_panel_seen")));
     }
     match d {
         Do::None => {}
