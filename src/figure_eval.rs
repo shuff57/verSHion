@@ -606,6 +606,34 @@ mod tests {
         assert!(problems.is_empty(), "{problems:#?}");
     }
 
+    /// Every subject tab that has figures, and the statistics figures (listed under Math), need at
+    /// least two agent cases that expect one of their generators. Offline: this only counts cases;
+    /// live model runs are `cargo run`-side (see the eval binary), not part of `cargo test`.
+    #[test]
+    fn every_subject_has_at_least_two_agent_cases() {
+        let cases = parse_cases(CASES).expect("parses");
+        let reg = figure_agent::registry();
+        let mut short: Vec<String> = Vec::new();
+        let count = |pred: &dyn Fn(&crate::figures::FigureDef) -> bool| {
+            cases.iter().filter(|c| c.ids.iter().any(|id| reg.iter().any(|d| d.id == id && pred(d)))).count()
+        };
+        for s in crate::figures::Subject::ALL {
+            if !reg.iter().any(|d| d.subject == s) {
+                continue;
+            }
+            let n = count(&|d| d.subject == s);
+            if n < 2 {
+                short.push(format!("{}: {n}", s.name()));
+            }
+        }
+        let stats: Vec<&str> = crate::figures::stats::defs().iter().map(|d| d.id).collect();
+        let n = cases.iter().filter(|c| c.ids.iter().any(|id| stats.contains(&id.as_str()))).count();
+        if n < 2 {
+            short.push(format!("Statistics: {n}"));
+        }
+        assert!(short.is_empty(), "subjects with fewer than 2 agent cases: {short:?}");
+    }
+
     #[test]
     fn reference_pictures_render() {
         for c in parse_cases(CASES).unwrap() {

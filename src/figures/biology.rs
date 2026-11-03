@@ -5,12 +5,25 @@ use super::svg::{esc, Doc};
 use super::*;
 
 mod handles;
+pub mod actionpotential;
+pub mod chisquarefit;
+pub mod celldiagram;
+pub mod cellcycle;
+pub mod cladogram;
+pub mod energypyramid;
+pub mod enzyme;
+pub mod foodweb;
 pub mod gel;
+pub mod hardyweinberg;
+pub mod leaf;
+mod noto_adv;
 pub mod pedigree;
+pub mod photosynthesis;
 pub mod pipette;
 mod plot;
 pub mod popdyn;
 pub mod punnett;
+pub mod soiltexture;
 
 /// Direct-manipulation handles for this subject's figures (None = not one of ours).
 /// "Start from an example" entries for this subject's figures.
@@ -22,6 +35,18 @@ pub fn examples(id: &str) -> Option<Vec<super::Example>> {
         "predator-prey" => Some(popdyn::pp_examples()),
         "pedigree" => Some(pedigree::examples()),
         "micropipette-reading" => Some(pipette::examples()),
+        "hardy-weinberg" => hardyweinberg::examples(id),
+        "chi-square-fit" => chisquarefit::examples(id),
+        "enzyme-kinetics" => enzyme::examples(id),
+        "cladogram" => cladogram::examples(id),
+        "food-web" => foodweb::examples(id),
+        "energy-pyramid" => energypyramid::examples(id),
+        "action-potential" => actionpotential::examples(id),
+        "cell-cycle" => cellcycle::examples(id),
+        "cell-diagram" => celldiagram::examples(id),
+        "soil-texture" => soiltexture::examples(id),
+        "photosynthesis" => photosynthesis::examples(id),
+        "leaf-cross-section" => leaf::examples(id),
         _ => None,
     }
 }
@@ -115,6 +140,18 @@ pub fn defs() -> Vec<FigureDef> {
             params: pipette::params,
             render: pipette::render,
         },
+        hardyweinberg::defs().pop().unwrap(),
+        chisquarefit::defs().pop().unwrap(),
+        enzyme::defs().pop().unwrap(),
+        cladogram::defs().pop().unwrap(),
+        foodweb::defs().pop().unwrap(),
+        energypyramid::defs().pop().unwrap(),
+        actionpotential::defs().pop().unwrap(),
+        cellcycle::defs().pop().unwrap(),
+        celldiagram::defs().pop().unwrap(),
+        soiltexture::defs().pop().unwrap(),
+        photosynthesis::defs().pop().unwrap(),
+        leaf::defs().pop().unwrap(),
     ]
 }
 
@@ -209,15 +246,6 @@ pub(crate) fn dashed(d: &mut Doc, pts: &[(f64, f64)], stroke: &str, sw: f64, das
         r#"<polyline points="{}" fill="none" stroke="{stroke}" stroke-width="{sw}" stroke-dasharray="{dash}" stroke-linejoin="round" stroke-linecap="round"/>"#,
         p.join(" ")
     ));
-}
-
-/// 1-2-5 step giving roughly `n` divisions of `range`.
-pub(crate) fn nice_step(range: f64, n: f64) -> f64 {
-    let raw = (range / n).max(1e-12);
-    let p = 10f64.powf(raw.log10().floor());
-    let f = raw / p;
-    let m = if f <= 1.5 { 1.0 } else if f <= 3.0 { 2.0 } else if f <= 7.0 { 5.0 } else { 10.0 };
-    m * p
 }
 
 pub(crate) fn fnum(v: f64) -> String {

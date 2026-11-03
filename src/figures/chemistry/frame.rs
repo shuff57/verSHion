@@ -163,13 +163,6 @@ pub fn grow(s: f64) -> f64 {
     if m < 1.5 { 2.0 * mag } else if m < 3.5 { 5.0 * mag } else { 10.0 * mag }
 }
 
-/// "Nice" step so that `range` splits into about `n` blocks.
-pub fn nice(range: f64, n: f64) -> f64 {
-    let raw = (range / n).max(1e-9);
-    let mag = 10f64.powf(raw.log10().floor());
-    for m in [1.0, 2.0, 2.5, 5.0, 10.0] { if m * mag >= raw - 1e-12 { return m * mag; } }
-    10.0 * mag
-}
 
 #[derive(Clone, Debug)]
 pub struct Graph { pub x: Axis, pub y: Axis, pub minor: usize, pub x0: f64, pub x1: f64, pub y0: f64, pub y1: f64, pub w: f64, pub h: f64, pub lf: f64 }

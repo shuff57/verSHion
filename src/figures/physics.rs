@@ -13,6 +13,9 @@ pub(crate) use pulley::{pulley_relevant, pulley_setup_changed};
 mod examples;
 mod summary;
 
+/// Editor notes for the instrument figures: what the circuit could not work out, and why.
+pub fn instr_warnings(p: &Params) -> Vec<String> { instr::circuit_warnings(p) }
+
 /// The collapsed-row summary of a section on the physics page skin, where the page has one.
 pub fn skin_summary(id: &str, title: &str, p: &Params) -> Option<String> {
     match id {
@@ -121,6 +124,9 @@ pub fn chips(id: &str) -> Option<super::ChipsCard> {
 
 /// Direct-manipulation handles for this subject's figures (None = not one of ours).
 pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<interact::Handle>> {
+    // the optics and kinematics figures have their own drag handles
+    if id == super::raydiagram::ID { return super::raydiagram::handles(id, p, size); }
+    if id == super::motionmap::ID { return super::motionmap::handles(id, p, size); }
     handles::handles(id, p, size)
 }
 
@@ -175,6 +181,213 @@ mod tests {
         assert_eq!(start_params(&vd).s("res_style"), "Dashed");
         let dashed = (vd.render)(&start_params(&vd));
         assert!(dashed.contains("stroke-dasharray"), "the resultant opens dashed");
+    }
+
+    #[test]
+    fn the_spring_scale_caption_can_be_blanked_for_a_worksheet() {
+        // the answer key prints the reading; a typed caption replaces it, so a worksheet gets a blank instead
+        let sp = defs().into_iter().find(|d| d.id == "spring-scale").unwrap();
+        let mut p = Params::defaults(&(sp.params)());
+        p.0.insert("answer".into(), Value::B(true));
+        let key = (sp.render)(&p);
+        assert!(key.contains("Force: 3.47 N"), "the key prints the reading");
+        p.0.insert("answer_text".into(), Value::S("Force: ________ N".into()));
+        let sheet = (sp.render)(&p);
+        assert!(sheet.contains("Force: ________ N"), "the typed caption wins");
+        assert!(!sheet.contains("3.47"), "and the reading is gone from the figure");
+        if let Ok(dir) = std::env::var("VERSHION_PNG_DIR") {
+            // the worksheet copy, to be looked at: a caption, a pointer, and no answer anywhere
+            let _ = std::fs::write(format!("{dir}/spring-scale-worksheet.png"), to_png(&sheet, 1.0).unwrap());
+        }
+    }
+
+    #[test]
+    fn a_capacitor_circuit_reads_in_farads_and_has_no_meters() {
+        let cd = defs().into_iter().find(|d| d.id == "circuit-diagram").unwrap();
+        let cap = |list: &[(&'static str, Value)]| {
+            let mut p = Params::defaults(&(cd.params)());
+            for (k, v) in list { p.0.insert(k.to_string(), v.clone()); }
+            p
+        };
+        let series = cap(&[
+            ("components", Value::S("Capacitors".into())), ("n", Value::I(2)),
+            ("r1_val", Value::S("10 µF".into())), ("r2_val", Value::S("10 µF".into())),
+            ("cell_val", Value::S("12 V".into())), ("solve", Value::S("Readings and results".into())),
+        ]);
+        let svg = (cd.render)(&series);
+        // C_eq = 5 µF, Q = 60 µC, 6 V across each
+        assert!(svg.contains("5 µF"), "5 µF in series:\n{svg}");
+        assert!(svg.contains("60 µC"), "the charge");
+        assert!(!svg.contains("Ω"), "no resistance in a capacitor circuit");
+        // no meters, whatever the meter switches say
+        let mut with_meters = series.clone();
+        with_meters.0.insert("ammeter".into(), Value::B(true));
+        with_meters.0.insert("voltmeter".into(), Value::S("Across component 1".into()));
+        let lay = instr::circuit_layout(&with_meters);
+        assert!(lay.amm.is_none(), "an ammeter was placed on a capacitor circuit");
+        assert!(lay.vm_part.is_none(), "a voltmeter was placed on a capacitor circuit");
+        // neither meter control changes the figure at all
+        let mut plain = with_meters.clone();
+        plain.0.insert("ammeter".into(), Value::B(false));
+        plain.0.insert("voltmeter".into(), Value::S("None".into()));
+        let base = (cd.render)(&plain);
+        for vm in ["Across component 1", "Across component 2", "Across the battery"] {
+            let mut q = plain.clone();
+            q.0.insert("voltmeter".into(), Value::S(vm.into()));
+            assert_eq!((cd.render)(&q), base, "the voltmeter changed a capacitor circuit ({vm})");
+        }
+        let mut a = plain.clone();
+        a.0.insert("ammeter".into(), Value::B(true));
+        assert_eq!((cd.render)(&a), base, "the ammeter changed a capacitor circuit");
+        if let Ok(dir) = std::env::var("VERSHION_PNG_DIR") {
+            for (tag, list) in [
+                ("caps-series-key", vec![]),
+                ("caps-series-student", vec![(SHOW_ANSWERS, Value::B(false))]),
+                ("caps-parallel-key", vec![("layout", Value::S("In parallel".into())), ("n", Value::I(2)), ("r2_val", Value::S("22 µF".into()))]),
+            ] {
+                let mut q = with_meters.clone();
+                for (k, v) in list { q.0.insert(k.to_string(), v); }
+                let _ = std::fs::write(format!("{dir}/circuit-{tag}.png"), to_png(&(cd.render)(&q), 1.0).unwrap());
+            }
+        }
+    }
+
+    #[test]
+    fn a_capacitor_value_in_ohms_is_left_out_rather_than_read_as_farads() {
+        use super::instr::circuit_warnings;
+        let cd = defs().into_iter().find(|d| d.id == "circuit-diagram").unwrap();
+        let mut p = Params::defaults(&(cd.params)());
+        p.0.insert("components".into(), Value::S("Capacitors".into()));
+        p.0.insert("solve".into(), Value::S("Readings and results".into()));
+        p.0.insert("n".into(), Value::I(1));
+        // the default value is still in ohms
+        assert_eq!(p.s("r1_val"), "2 Ω");
+        assert!(!circuit_warnings(&p).is_empty(), "the note explains why nothing is worked out");
+        let svg = (cd.render)(&p);
+        assert!(!svg.contains("2 µF"), "2 Ω must not be read as 2 farads");
+        assert!(svg.contains('?'), "the value is unknown, not a number");
+        // typed as a capacitance, it works out
+        p.0.insert("r1_val".into(), Value::S("2 µF".into()));
+        assert!(circuit_warnings(&p).is_empty(), "no note once the values are capacitances");
+        assert!((cd.render)(&p).contains("2 µF"));
+        // an open switch leaves them uncharged: zero, not sixty microcoulombs
+        p.0.insert("r1_val".into(), Value::S("10 µF".into()));
+        p.0.insert("switch".into(), Value::S("Open".into()));
+        let open = (cd.render)(&p);
+        assert!(open.contains("0 C") || open.contains("0 µC"), "an open switch charges nothing:\n{open}");
+        assert!(!open.contains("120 µC"), "the battery is not charging an open circuit");
+    }
+
+    #[test]
+    fn a_combination_circuit_is_one_part_in_series_with_a_parallel_pair() {
+        let cd = defs().into_iter().find(|d| d.id == "circuit-diagram").unwrap();
+        let mut p = Params::defaults(&(cd.params)());
+        for (k, v) in [
+            ("layout", Value::S("In series and parallel".into())), ("n", Value::I(3)),
+            ("r1_val", Value::S("2 Ω".into())), ("r2_val", Value::S("4 Ω".into())), ("r3_val", Value::S("4 Ω".into())),
+            ("cell_val", Value::S("12 V".into())), ("solve", Value::S("Readings and results".into())),
+        ] { p.0.insert(k.into(), v); }
+        // 2 + (4 ∥ 4) = 4 Ω, so 3 A from 12 V: 6 V on the series part and 6 V across each branch, 1.5 A each
+        let svg = (cd.render)(&p);
+        assert!(svg.contains("3 A"), "the total current:\n{svg}");
+        assert!(svg.contains("1.5 A"), "each branch takes half");
+        assert!(svg.contains("6 V"), "the voltages");
+        // the layout puts the first part on the top wire and the rest in branches
+        let l = instr::circuit_layout(&p);
+        assert!(l.combo, "the layout knows it is a combination");
+        assert!((l.comps[0].1 - l.top_y).abs() < 1e-9, "the series part sits on the top wire");
+        assert!(l.comps[1].1 > l.top_y && l.comps[2].1 > l.top_y, "the branches hang below it");
+        // the same with capacitors: 10 µF in series with two 10 µF in parallel
+        let mut c = p.clone();
+        c.0.insert("components".into(), Value::S("Capacitors".into()));
+        for k in ["r1_val", "r2_val", "r3_val"] { c.0.insert(k.into(), Value::S("10 µF".into())); }
+        let cs = (cd.render)(&c);
+        // 10 µF in series with (10 + 10) µF is 20/3 µF, and 12 V puts 80 µC on each
+        assert!(cs.contains("6.67 µF"), "the equivalent capacitance:\n{cs}");
+        assert!(cs.contains("80 µC"), "the charge");
+        // the layout's own fallback is spoken, not silent
+        let mut one = p.clone();
+        one.0.insert("n".into(), Value::I(1));
+        let w = instr::circuit_warnings(&one);
+        assert!(w.iter().any(|s| s.contains("drawn as a series circuit")), "{w:?}");
+        assert!(instr::circuit_warnings(&p).is_empty(), "no note for a real combination");
+        if let Ok(dir) = std::env::var("VERSHION_PNG_DIR") {
+            for (tag, q) in [("combo-key", p.clone()), ("combo-student", { let mut s = p.clone(); s.0.insert(SHOW_ANSWERS.into(), Value::B(false)); s }), ("combo-caps", c.clone())] {
+                let _ = std::fs::write(format!("{dir}/circuit-{tag}.png"), to_png(&(cd.render)(&q), 1.0).unwrap());
+            }
+        }
+    }
+
+    #[test]
+    fn the_circuit_keeps_its_meters_and_labels_inside_the_canvas() {
+        let cd = defs().into_iter().find(|d| d.id == "circuit-diagram").unwrap();
+        let mk = |list: &[(&'static str, Value)]| {
+            let mut p = Params::defaults(&(cd.params)());
+            for (k, v) in list { p.0.insert(k.to_string(), v.clone()); }
+            p
+        };
+        // the combination layout puts the top wire high, so a meter above it would leave the canvas
+        for vm in ["Across component 1", "Across component 2", "Across component 4"] {
+            let p = mk(&[("layout", Value::S("In series and parallel".into())), ("n", Value::I(4)),
+                ("voltmeter", Value::S(vm.into())), ("cell_val", Value::S("12 V".into())),
+                ("solve", Value::S("Readings and results".into()))]);
+            let svg = (cd.render)(&p);
+            assert!(!svg.contains("cy=\"-"), "{vm}: a circle was drawn above the canvas");
+            // nothing is clipped off the right: every circle centre is inside the canvas width
+            let w: f64 = svg.split("width=\"").nth(1).and_then(|s| s.split('"').next()).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+            for part in svg.split("<circle cx=\"").skip(1) {
+                let cx: f64 = part.split('"').next().and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                assert!(cx + 18.0 <= w, "{vm}: a circle at {cx} runs off the {w} px canvas");
+            }
+        }
+        // long values must not print into each other in a combination
+        let p = mk(&[("layout", Value::S("In series and parallel".into())), ("n", Value::I(3)),
+            ("r1_val", Value::S("4.7 kΩ".into())), ("r2_val", Value::S("4.7 kΩ".into())), ("r3_val", Value::S("4.7 kΩ".into()))]);
+        let l = instr::circuit_layout(&p);
+        let gap = l.comps[2].0 - l.comps[1].0;
+        assert!(gap >= 56.0 + 6.0 * 11.0 + 3.0 * 11.0, "branch pitch {gap} too small for 4.7 kΩ and R_1");
+        // a capacitor is never labelled in ohms
+        let c = mk(&[("components", Value::S("Capacitors".into())), ("n", Value::I(2)),
+            ("r1_val", Value::S("10 µF".into())), ("r2_val", Value::S("4 Ω".into()))]);
+        let svg = (cd.render)(&c);
+        assert!(!svg.contains("4 Ω"), "a capacitor was labelled with a resistance:\n{svg}");
+        assert!(svg.contains("10 µF"), "the real capacitance stays");
+        // and a battery the figure does not print cannot be used to work out the answers
+        let h = mk(&[("cell_val_mode", Value::S("None".into())), ("solve", Value::S("Readings and results".into())), ("n", Value::I(2))]);
+        let hs = (cd.render)(&h);
+        assert!(!hs.contains("6 A") && !hs.contains("12 Ω"), "answers came from a hidden battery:\n{hs}");
+        if let Ok(dir) = std::env::var("VERSHION_PNG_DIR") {
+            for (tag, q) in [
+                ("combo-vm1", mk(&[("layout", Value::S("In series and parallel".into())), ("n", Value::I(4)), ("voltmeter", Value::S("Across component 1".into())), ("solve", Value::S("Readings and results".into()))])),
+                ("combo-vm4", mk(&[("layout", Value::S("In series and parallel".into())), ("n", Value::I(4)), ("voltmeter", Value::S("Across component 4".into())), ("solve", Value::S("Readings and results".into()))])),
+                ("combo-long", mk(&[("layout", Value::S("In series and parallel".into())), ("n", Value::I(3)), ("r1_val", Value::S("4.7 kΩ".into())), ("r2_val", Value::S("4.7 kΩ".into())), ("r3_val", Value::S("4.7 kΩ".into()))])),
+                ("series-long", mk(&[("n", Value::I(4)), ("switch", Value::S("Closed".into())), ("r1_val", Value::S("4.7 kΩ".into())), ("r2_val", Value::S("4.7 kΩ".into())), ("r3_val", Value::S("4.7 kΩ".into())), ("r4_val", Value::S("4.7 kΩ".into()))])),
+                ("combo-vm1-text", mk(&[("layout", Value::S("In series and parallel".into())), ("n", Value::I(4)), ("voltmeter", Value::S("Across component 1".into())), ("vm_read_mode", Value::S("Text".into())), ("vm_read", Value::S("6.24 V".into())), ("solve", Value::S("Readings and results".into()))])),
+                ("combo-bulb-vm", mk(&[("layout", Value::S("In series and parallel".into())), ("n", Value::I(3)), ("r1_kind", Value::S("Bulb".into())), ("r1_val", Value::S("12.5 kΩ".into())), ("voltmeter", Value::S("Across component 1".into()))])),
+            ] {
+                let _ = std::fs::write(format!("{dir}/circuit-{tag}.png"), to_png(&(cd.render)(&q), 1.0).unwrap());
+            }
+        }
+    }
+
+    #[test]
+    fn a_capacitor_keeps_a_spelling_it_cannot_read_but_loses_a_wrong_unit() {
+        let cd = defs().into_iter().find(|d| d.id == "circuit-diagram").unwrap();
+        let mk = |v: &str| {
+            let mut p = Params::defaults(&(cd.params)());
+            p.0.insert("components".into(), Value::S("Capacitors".into()));
+            p.0.insert("n".into(), Value::I(1));
+            p.0.insert("r1_val".into(), Value::S(v.into()));
+            p
+        };
+        // an ohms value is a false statement on a capacitor, so it is blanked
+        assert!(!(cd.render)(&mk("4 Ω")).contains("4 Ω"));
+        // but a symbol, or a spelling the reader cannot parse, is left exactly as typed
+        assert!((cd.render)(&mk("x")).contains(">x<"), "a symbol must stay");
+        assert!((cd.render)(&mk("10UF")).contains("10UF"), "a spelling must stay");
+        // the voltmeter leads stand clear of the widest value label below a short bulb
+        assert!(instr::vm_lead_half(44.0) >= 44.0, "a bulb's leads must clear an 88 px label");
+        assert!(instr::vm_lead_half(64.0) >= 42.0);
     }
 
     #[test]

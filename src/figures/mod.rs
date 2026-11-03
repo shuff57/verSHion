@@ -20,6 +20,7 @@ pub mod biology;
 pub mod cards;
 #[cfg(test)]
 mod census;
+pub mod axes;
 pub mod chart;
 pub mod chemistry;
 pub mod composite;
@@ -33,9 +34,31 @@ pub mod items;
 pub mod labels;
 pub mod layout;
 pub mod logic;
+pub mod circle;
+pub mod trig;
+pub mod sincos;
+pub mod unitcircle;
+pub mod transform;
+pub mod fraction;
+pub mod triangle_centres;
+pub mod slope;
+pub mod protractor;
+pub mod baseten;
+pub mod nets;
+pub mod energy;
+pub mod momentum;
+pub mod circular;
+pub mod refraction;
+pub mod electric_field;
+pub mod magnetic;
+pub mod standing;
+pub mod raydiagram;
+pub mod motionmap;
+pub mod pv_diagram;
 pub mod math;
 pub mod math_geo;
 pub mod math_plot;
+pub mod implicit;
 pub mod physics;
 pub mod sections;
 pub mod share;
@@ -118,6 +141,9 @@ impl ParamDef {
 /// Labels that carry the user's own words (the predator-prey page names the animals: "Hares at
 /// the start", "Average lynx"). None when the key's label is fixed.
 pub fn dynamic_label(fig: &str, key: &str, p: &Params) -> Option<String> {
+    if fig == "circle" {
+        return circle::control_label(key, p);
+    }
     if fig != "predator-prey" {
         return None;
     }
@@ -200,6 +226,21 @@ pub fn label_for(fig: &str, key: &str, p: &Params) -> Option<&'static str> {
                 _ => return None,
             })
         }
+        "photosynthesis" => {
+            use biology::photosynthesis::Axis;
+            let ax = Axis::of(p.s("graph_x"));
+            Some(match (key, ax) {
+                ("pmax", Axis::Temp) => "Peak rate (arbitrary units)",
+                ("pmax", _) => "Plateau rate (arbitrary units)",
+                ("xval", Axis::Light) => "Half-saturation (% of full sunlight)",
+                ("xval", Axis::Co2) => "Half-saturation (ppm CO2)",
+                ("xval", Axis::Temp) => "Optimum temperature (\u{b0}C)",
+                ("mark", Axis::Light) => "Point P at light intensity (%)",
+                ("mark", Axis::Co2) => "Point P at CO2 (ppm)",
+                ("mark", Axis::Temp) => "Point P at temperature (\u{b0}C)",
+                _ => return None,
+            })
+        }
         "heating-cooling-curve" => {
             let cooling = p.s("mode") == "Cooling";
             Some(match key {
@@ -243,7 +284,9 @@ impl Params {
         for d in defs {
             let Some(cur) = self.0.get(d.key).cloned() else { continue };
             let new = match (&d.kind, cur) {
-                (Kind::Float { min, max, step }, Value::F(v)) => {
+                // a JSON integer stored into a Float control is read as that number (and clamped like one)
+                (Kind::Float { min, max, step }, v @ (Value::F(_) | Value::I(_))) => {
+                    let v = match v { Value::F(v) => v, Value::I(i) => i as f64, _ => unreachable!() };
                     let mut v = if v.is_nan() { *min } else { v };
                     if snap && *step > 0.0 {
                         v = min + ((v - min) / step).round() * step;
@@ -252,7 +295,11 @@ impl Params {
                     Value::F(v.clamp(*min, *max))
                 }
                 (Kind::Int { min, max }, Value::I(v)) => Value::I(v.clamp(*min, *max)),
+                // a fractional number stored into an Int control is rounded, then clamped like one (NaN becomes the minimum)
+                (Kind::Int { min, max }, Value::F(v)) => Value::I(if v.is_nan() { *min } else { (v.round().clamp(i64::MIN as f64, i64::MAX as f64) as i64).clamp(*min, *max) }),
                 (Kind::Choice(opts), Value::S(v)) if !opts.contains(&v.as_str()) => d.default.clone(),
+                // a short text control keeps a short text (a hostile link cannot make it large)
+                (Kind::Text, Value::S(v)) if v.chars().count() > 500 => Value::S(v.chars().take(500).collect()),
                 (_, v) => v,
             };
             self.0.insert(d.key.to_string(), new);
@@ -263,6 +310,12 @@ impl Params {
 /// Optional interaction layer for a figure: draggable handles over the rendered preview.
 /// Dispatch lives in `interact::handles_for` (keeps `FigureDef` literals untouched).
 impl FigureDef {
+    /// The figure's SVG as every consumer (preview, thumbnails, PNG/SVG export, the agent, the
+    /// census) should get it: `render` plus the accessible `role="img"`, `<title>` (the figure's
+    /// title) and `<desc>` (its blurb, one line). Nothing else differs from `render`.
+    pub fn svg(&self, p: &Params) -> String {
+        svg::annotate(&(self.render)(p), self.title, self.blurb)
+    }
     pub fn handles(&self, p: &Params, size: (f64, f64)) -> Vec<interact::Handle> {
         interact::handles_for(self.id, p, size)
     }
@@ -353,15 +406,125 @@ pub fn hides_answers(defs: &[ParamDef]) -> bool {
     defs.iter().any(|d| d.key == SHOW_ANSWERS && matches!(d.kind, Kind::Bool))
 }
 
-/// The figure drawn twice: `(student, key)`, answers hidden then shown. None when the figure has
-/// no `show_answers` switch. Every other param is left as the user set it.
-pub fn answer_pair(def: &FigureDef, p: &Params) -> Option<(String, String)> {
-    if !hides_answers(&(def.params)()) {
-        return None;
+/// A value in an [`AnswerRule`].
+#[derive(Clone, Copy, Debug)]
+pub enum AV {
+    B(bool),
+    S(&'static str),
+}
+
+impl AV {
+    fn is(self, v: Option<&Value>) -> bool {
+        match (self, v) {
+            (AV::B(a), Some(Value::B(b))) => a == *b,
+            (AV::S(a), Some(Value::S(b))) => a == b,
+            _ => false,
+        }
     }
+    fn set(self, p: &mut Params, k: &str) {
+        match self {
+            AV::B(b) => p.set_b(k, b),
+            AV::S(s) => p.set_s(k, s),
+        }
+    }
+}
+
+/// One edit of an existing per-figure hide control: set `param` to the value, but only while it
+/// currently holds one of the listed values (an empty list means always).
+pub type AnswerEdit = (&'static str, &'static [AV], AV);
+
+/// How a figure that hides its answers through its own params (not `show_answers`) makes its
+/// student and key copies. Both start from the params as the user set them; the student edits hide
+/// the answer, the key edits show it. Saved param meanings are untouched.
+#[derive(Clone, Copy, Debug)]
+pub struct AnswerRule {
+    pub student: &'static [AnswerEdit],
+    pub key: &'static [AnswerEdit],
+}
+
+const ANSWER: AnswerRule = AnswerRule { student: &[("answer", &[], AV::B(false))], key: &[("answer", &[], AV::B(true))] };
+
+/// The per-figure table behind `answer_pair` for figures without a `show_answers` switch. The
+/// reading, spectrum and chart figures use their `answer` switch (default off: print the answer
+/// under the figure); the rest map the controls that blank the working.
+pub fn answer_rule(id: &str) -> Option<AnswerRule> {
+    Some(match id {
+        "spring-scale" | "micropipette-reading" | "gel-electrophoresis" | "volume-reading" | "volume-by-displacement"
+        | "gas-syringe" | "length-reading" | "mass-reading" | "temperature-reading" | "ph-reading" | "titration-curve"
+        | "lewis-structures" | "line-spectrum" | "photoelectron-spectrum" | "mass-spectrum" | "ruler-reading" => ANSWER,
+        "pedigree" => AnswerRule {
+            student: &[("answer", &[], AV::B(false)), ("genotypes", &[AV::S("Answers")], AV::S("Blanks"))],
+            key: &[("answer", &[], AV::B(true)), ("genotypes", &[AV::S("Blanks")], AV::S("Answers"))],
+        },
+        "orbital-diagram" => AnswerRule {
+            student: &[("answer", &[], AV::B(false)), ("blank", &[], AV::B(true)), ("config_blank", &[], AV::B(true))],
+            key: &[("answer", &[], AV::B(true)), ("blank", &[], AV::B(false)), ("config_blank", &[], AV::B(false))],
+        },
+        "bohr-model" => AnswerRule {
+            student: &[
+                ("empty", &[], AV::B(true)),
+                ("nucleus", &[AV::S("Symbol"), AV::S("Protons and neutrons"), AV::S("Balls")], AV::S("Blank")),
+            ],
+            key: &[("empty", &[], AV::B(false)), ("nucleus", &[AV::S("Blank")], AV::S("Symbol"))],
+        },
+        "punnett-square" => AnswerRule {
+            student: &[
+                ("filled", &[], AV::B(false)),
+                ("geno_ratio_style", &[AV::S("Shown")], AV::S("Blank line")),
+                ("pheno_ratio_style", &[AV::S("Shown")], AV::S("Blank line")),
+            ],
+            key: &[
+                ("filled", &[], AV::B(true)),
+                ("cells", &[AV::S("Blank"), AV::S("Some blank")], AV::S("Filled in")),
+                ("blank_parents", &[], AV::B(false)),
+                ("blank_gametes", &[], AV::B(false)),
+                ("geno_ratio_style", &[AV::S("Blank line")], AV::S("Shown")),
+                ("pheno_ratio_style", &[AV::S("Blank line")], AV::S("Shown")),
+            ],
+        },
+        "population-growth" => AnswerRule { student: &[("blank", &[], AV::B(true))], key: &[("blank", &[], AV::B(false))] },
+        "heating-cooling-curve" => AnswerRule {
+            student: &[
+                ("seg_labels", &[AV::S("States")], AV::S("Blank lines")),
+                ("temp_labels", &[AV::S("Temperatures"), AV::S("m.p. and b.p.")], AV::S("Blank lines")),
+            ],
+            key: &[("seg_labels", &[AV::S("Blank lines")], AV::S("States")), ("temp_labels", &[AV::S("Blank lines")], AV::S("Temperatures"))],
+        },
+        _ => return None,
+    })
+}
+
+fn apply_edits(p: &mut Params, edits: &[AnswerEdit]) {
+    for (k, from, to) in edits {
+        if from.is_empty() || from.iter().any(|f| f.is(p.0.get(*k))) {
+            to.set(p, k);
+        }
+    }
+}
+
+/// Whether "Student + key" applies to the figure: it has the `show_answers` switch or a row in
+/// [`answer_rule`] (and every param that row edits exists).
+pub fn has_answer_pair(def: &FigureDef) -> bool {
+    let defs = (def.params)();
+    hides_answers(&defs) || answer_rule(def.id).is_some_and(|r| r.student.iter().chain(r.key).all(|(k, _, _)| defs.iter().any(|d| d.key == *k)))
+}
+
+/// The figure drawn twice: `(student, key)`, answers hidden then shown. None when the figure has
+/// neither a `show_answers` switch nor a mapped hide control. Every other param is left as the
+/// user set it.
+pub fn answer_pair(def: &FigureDef, p: &Params) -> Option<(String, String)> {
     let (mut student, mut key) = (p.clone(), p.clone());
-    student.set_b(SHOW_ANSWERS, false);
-    key.set_b(SHOW_ANSWERS, true);
+    if hides_answers(&(def.params)()) {
+        student.set_b(SHOW_ANSWERS, false);
+        key.set_b(SHOW_ANSWERS, true);
+    } else {
+        if !has_answer_pair(def) {
+            return None;
+        }
+        let rule = answer_rule(def.id)?;
+        apply_edits(&mut student, rule.student);
+        apply_edits(&mut key, rule.key);
+    }
     Some(((def.render)(&student), (def.render)(&key)))
 }
 
@@ -380,10 +543,31 @@ pub fn key_path(student: &std::path::Path) -> std::path::PathBuf {
 pub fn registry() -> Vec<FigureDef> {
     let mut v = Vec::new();
     v.extend(physics::defs());
+    v.extend(raydiagram::defs());
+    v.extend(motionmap::defs());
     v.extend(electric::defs());
     v.extend(biology::defs());
     v.extend(chemistry::defs());
     v.extend(math::defs());
+    v.extend(circle::defs());
+    v.extend(trig::defs());
+    v.extend(sincos::defs());
+    v.extend(unitcircle::defs());
+    v.extend(transform::defs());
+    v.extend(fraction::defs());
+    v.extend(triangle_centres::defs());
+    v.extend(slope::defs());
+    v.extend(protractor::defs());
+    v.extend(baseten::defs());
+    v.extend(nets::defs());
+    v.extend(energy::defs());
+    v.extend(momentum::defs());
+    v.extend(circular::defs());
+    v.extend(refraction::defs());
+    v.extend(electric_field::defs());
+    v.extend(magnetic::defs());
+    v.extend(standing::defs());
+    v.extend(pv_diagram::defs());
     v.extend(stats::defs());
     v.extend(computing::defs());
     v.extend(accounting::defs());
@@ -563,6 +747,30 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
 
 /// Values worked out from the typed ones, as (value_key, text) pairs shown grey in empty boxes
 /// and on "Measure" label buttons.
+/// Editor-only problems with the typed equations of a coordinate grid (never drawn into the figure).
+pub fn grid_warnings(p: &Params) -> Vec<String> { math::grid_warnings(p) }
+/// Editor-only notes for the figures that have them (what could not be drawn as asked).
+pub fn notes_for(id: &str, p: &Params) -> Vec<String> {
+    match id { "coordinate-grid" => math::grid_warnings(p), "circle" => circle::warnings(p), "right-triangle-trig" => trig::warnings(p), "sine-cosine" => sincos::warnings(p), "unit-circle" => unitcircle::warnings(p), "transformations" => transform::warnings(p), "fraction-models" => fraction::warnings(p), "triangle-centres" => triangle_centres::warnings(p), "slope-triangle" => slope::warnings(p), "protractor" => protractor::warnings(p), "base-ten-blocks" => baseten::warnings(p), "solid-net" => nets::warnings(p), "energy-bar-chart" => energy::warnings(p), "collision-momentum" => momentum::warnings(p), "circular-motion" => circular::warnings(p), "refraction" => refraction::warnings(p), "electric-field" => electric_field::warnings(p), "magnetic-field" => magnetic::warnings(p), "standing-wave" => standing::warnings(p), "pv-diagram" => pv_diagram::warnings(p), "circuit-diagram" => physics::instr_warnings(p), "ray-diagram" => raydiagram::warnings(p), "motion-map" => motionmap::warnings(p), "hardy-weinberg" => biology::hardyweinberg::warnings(p), "chi-square-fit" => biology::chisquarefit::warnings(p), "enzyme-kinetics" => biology::enzyme::warnings(p), "reaction-energy-diagram" => chemistry::reactionenergy::warnings(p), "reaction-rate-graph" => chemistry::ratesgraph::warnings(p), "phase-diagram" => chemistry::phasediagram::warnings(p), "solubility-curves" => chemistry::solubilitycurves::warnings(p), "gas-law-graphs" => chemistry::gaslaws::warnings(p), "equilibrium-graphs" => chemistry::equilibrium::warnings(p), "buffer-curves" => chemistry::buffercurves::warnings(p), "cladogram" => biology::cladogram::warnings(p), "food-web" => biology::foodweb::warnings(p), "energy-pyramid" => biology::energypyramid::warnings(p), "action-potential" => biology::actionpotential::warnings(p), "cell-cycle" => biology::cellcycle::warnings(p), "cell-diagram" => biology::celldiagram::warnings(p), "soil-texture" => biology::soiltexture::warnings(p), "photosynthesis" => biology::photosynthesis::warnings(p), "leaf-cross-section" => biology::leaf::warnings(p), _ => vec![] }
+}
+
+/// A hash of every parameter (names and values, no formatting): the key under which the editor caches what a figure
+/// says about its inputs. Any control a note could depend on is included, because all of them are.
+pub fn params_key(p: &Params) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    for (k, v) in &p.0 {
+        k.hash(&mut h);
+        match v {
+            Value::F(x) => { 0u8.hash(&mut h); x.to_bits().hash(&mut h); }
+            Value::I(x) => { 1u8.hash(&mut h); x.hash(&mut h); }
+            Value::B(x) => { 2u8.hash(&mut h); x.hash(&mut h); }
+            Value::S(x) => { 3u8.hash(&mut h); x.hash(&mut h); }
+        }
+    }
+    h.finish()
+}
+
 pub fn computed_for(id: &str, p: &Params) -> Vec<(&'static str, String)> {
     math::computed(id, p)
 }
@@ -570,6 +778,8 @@ pub fn computed_for(id: &str, p: &Params) -> Vec<(&'static str, String)> {
 /// Upgrades a saved spec made before a figure's inputs were reworked: reads the old keys from
 /// `spec` and writes the new ones into `p` (called after the defaults + spec are applied).
 pub fn migrate(id: &str, spec: &crate::model::FigureSpec, p: &mut Params) {
+    // a saved or shared circle whose radius was out of range is clamped just after this: remember it for the editor note
+    if id == "circle" { circle::mark_clamped(p, spec.params.get("radius").and_then(|v| v.as_f64())); }
     // Old inclined-plane specs with a second block become n = 2 objects.
     if id == "inclined-plane" && spec.params.get("two") == Some(&serde_json::Value::Bool(true)) && !spec.params.contains_key("n") {
         p.set_i("n", 2);
@@ -622,10 +832,31 @@ pub struct Example {
 }
 
 pub fn examples_for(id: &str) -> Vec<Example> {
-    physics::examples(id)
+    raydiagram::examples(id)
+        .or_else(|| motionmap::examples(id))
+        .or_else(|| physics::examples(id))
         .or_else(|| biology::examples(id))
         .or_else(|| chemistry::examples(id))
         .or_else(|| math::examples(id))
+        .or_else(|| circle::examples(id))
+        .or_else(|| trig::examples(id))
+        .or_else(|| sincos::examples(id))
+        .or_else(|| unitcircle::examples(id))
+        .or_else(|| transform::examples(id))
+        .or_else(|| fraction::examples(id))
+        .or_else(|| triangle_centres::examples(id))
+        .or_else(|| slope::examples(id))
+        .or_else(|| protractor::examples(id))
+        .or_else(|| baseten::examples(id))
+        .or_else(|| nets::examples(id))
+        .or_else(|| energy::examples(id))
+        .or_else(|| momentum::examples(id))
+        .or_else(|| circular::examples(id))
+        .or_else(|| refraction::examples(id))
+        .or_else(|| electric_field::examples(id))
+        .or_else(|| magnetic::examples(id))
+        .or_else(|| standing::examples(id))
+        .or_else(|| pv_diagram::examples(id))
         .or_else(|| stats::examples(id))
         .or_else(|| computing::examples(id))
         .or_else(|| electric::examples(id))
@@ -657,6 +888,10 @@ pub fn start_params(def: &FigureDef) -> Params {
 /// (used by the headless figure hooks).
 pub fn params_from_json(def: &FigureDef, over: &serde_json::Value) -> Params {
     let mut p = start_params(def);
+    // the circle's editor notes say when a loaded radius was out of range (it is clamped just below)
+    if def.id == "circle" {
+        circle::mark_clamped(&mut p, over.get("radius").and_then(|v| v.as_f64()));
+    }
     for (k, v) in over.as_object().into_iter().flatten() {
         match v {
             serde_json::Value::Bool(b) => p.set_b(k, *b),
@@ -666,6 +901,8 @@ pub fn params_from_json(def: &FigureDef, over: &serde_json::Value) -> Params {
             _ => {}
         }
     }
+    // like the UI: clamp to each control's range before anything renders from it
+    p.normalize(&(def.params)(), false);
     p
 }
 
@@ -850,6 +1087,30 @@ mod group_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// A number of the wrong type or size stored into any control is brought into that control's range
+    /// (Int controls given a float, Float controls given an integer, NaN, absurd magnitudes), for every figure.
+    #[test]
+    fn absurd_numbers_are_clamped_for_every_control() {
+        for d in registry() {
+            let defs = (d.params)();
+            for v in [Value::F(1e30), Value::F(-1e30), Value::F(f64::NAN), Value::F(2.5), Value::I(i64::MAX), Value::I(i64::MIN)] {
+                let mut p = Params::defaults(&defs);
+                for def in &defs {
+                    if matches!(def.kind, Kind::Int { .. } | Kind::Float { .. }) { p.0.insert(def.key.to_string(), v.clone()); }
+                }
+                p.normalize(&defs, false);
+                for def in &defs {
+                    match (&def.kind, p.0.get(def.key)) {
+                        (Kind::Int { min, max }, Some(Value::I(i))) => assert!(i >= min && i <= max, "{} {} {i}", d.id, def.key),
+                        (Kind::Int { .. }, other) => panic!("{} {}: an Int control holds {other:?}", d.id, def.key),
+                        (Kind::Float { min, max, .. }, Some(Value::F(f))) => assert!(*f >= *min && *f <= *max, "{} {} {f}", d.id, def.key),
+                        (Kind::Float { .. }, other) => panic!("{} {}: a Float control holds {other:?}", d.id, def.key),
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
     /// Every registered figure must render with default params into a rasterizable SVG.
     /// The reference cross-lists five generators on a second subject site.
     #[test]
@@ -947,6 +1208,40 @@ mod tests {
         }
     }
 
+    /// CPU time this thread has used, in ms (Linux; 10 ms steps), so a slow render is measured without the load of the other tests.
+    fn thread_cpu_ms() -> Option<u128> {
+        let s = std::fs::read_to_string("/proc/thread-self/stat").ok()?;
+        let f: Vec<&str> = s[s.rfind(')')? + 2..].split(' ').collect();
+        let (u, k): (u128, u128) = (f.get(11)?.parse().ok()?, f.get(12)?.parse().ok()?);
+        Some((u + k) * 10)
+    }
+
+    /// Every figure, with every number control set to an extreme the way a corrupt or hostile saved spec could (through the load
+    /// path, which clamps to each control's range): none panics, none renders for more than 12 s of CPU, and each still draws SVG.
+    #[test]
+    fn every_figure_survives_extreme_numbers_through_the_load_path() {
+        for d in registry() {
+            let defs = (d.params)();
+            for ext in [1e300, -1e300, 1e-300, 0.0, -1.0, 1e9] {
+                let mut over = serde_json::Map::new();
+                for pd in &defs {
+                    match pd.kind {
+                        Kind::Float { .. } => { over.insert(pd.key.to_string(), serde_json::json!(ext)); }
+                        Kind::Int { .. } => { over.insert(pd.key.to_string(), serde_json::json!(if ext > 1e100 { i64::MAX } else if ext < -1e100 { i64::MIN } else { ext as i64 })); }
+                        // (and every text control gets a long, odd string: brackets, unicode, markup, an unreadable number)
+                        Kind::Text | Kind::Long | Kind::List => { over.insert(pd.key.to_string(), serde_json::json!("((((x^2 + y^2 = 1e400; \u{e9}\u{4e2d}<>&\"' 99999999999999999999 ,;\n".repeat(30))); }
+                        _ => {}
+                    }
+                }
+                let p = params_from_json(&d, &serde_json::Value::Object(over));
+                let t0 = thread_cpu_ms();
+                let svg = (d.render)(&p);
+                if let (Some(a), Some(b)) = (t0, thread_cpu_ms()) { assert!(b - a < 12_000, "{} with every number {ext}: {} ms of CPU", d.id, b - a); }
+                assert!(svg.contains("<svg") && svg.len() > 200 && ["<rect", "<line", "<path", "<circle", "<polyline", "<text", "<polygon", "<ellipse"].iter().any(|t| svg.contains(t)), "{} with every number {ext}: a trivial svg of {} bytes", d.id, svg.len());
+            }
+        }
+    }
+
     #[test]
     fn labels_follow_the_reference_choices() {
         let d = registry().into_iter().find(|d| d.id == "titration-curve").unwrap();
@@ -1006,5 +1301,148 @@ mod tests {
         assert_eq!(key_path(Path::new("/x/ledger-student.png")), Path::new("/x/ledger-key.png"));
         assert_eq!(key_path(Path::new("/x/quiz1.svg")), Path::new("/x/quiz1-key.svg"));
         assert_eq!(key_path(Path::new("/x/plain")), Path::new("/x/plain-key"));
+    }
+}
+#[cfg(test)]
+mod answer_rule_tests {
+    use super::*;
+
+    /// The text of every `<text>` element with its inner tags removed.
+    fn plain(svg: &str) -> String {
+        let mut all = Vec::new();
+        for t in svg.split("<text").skip(1) {
+            let Some((_, rest)) = t.split_once('>') else { continue };
+            let body = rest.split("</text>").next().unwrap_or("");
+            let (mut out, mut in_tag) = (String::new(), false);
+            for c in body.chars() {
+                match c {
+                    '<' => in_tag = true,
+                    '>' => in_tag = false,
+                    _ if !in_tag => out.push(c),
+                    _ => {}
+                }
+            }
+            all.push(out);
+        }
+        all.join(" | ")
+    }
+
+    fn fig(id: &str) -> FigureDef {
+        registry().into_iter().find(|d| d.id == id).unwrap_or_else(|| panic!("no figure {id}"))
+    }
+
+    fn params(id: &str, over: &[(&str, &str)]) -> Params {
+        let mut p = Params::defaults(&(fig(id).params)());
+        for (k, v) in over {
+            p.set_s(k, v);
+        }
+        p
+    }
+
+    /// (figure, string params to set, text only the key shows)
+    const CASES: &[(&str, &[(&str, &str)], &str)] = &[
+        ("spring-scale", &[], "Force: 3.47 N"),
+        ("micropipette-reading", &[], "Reading: 12.5"),
+        ("gel-electrophoresis", &[], "Crime scene matches Suspect 2"),
+        ("volume-reading", &[], "Reading: 43.6 mL"),
+        ("volume-by-displacement", &[], "Object: 2.00 mL"),
+        ("gas-syringe", &[], "Volume of gas: 43.6"),
+        ("length-reading", &[], "Length: 4.37 cm"),
+        ("mass-reading", &[], "Mass: 24.73 g"),
+        ("temperature-reading", &[], "Temperature: 23.4"),
+        ("ph-reading", &[], "pH: 4.62"),
+        ("titration-curve", &[], "Equivalence point: 25 mL, pH 8.73"),
+        ("lewis-structures", &[("question", "Skeleton")], "Answer"),
+        ("line-spectrum", &[("strips", "Hydrogen; Helium; Sodium; Unknown = Hydrogen + Sodium")], "Unknown: hydrogen and sodium"),
+        ("photoelectron-spectrum", &[], "1s\u{b2} 2s\u{b2} 2p\u{b2}"),
+        ("mass-spectrum", &[], "relative atomic mass 35.45"),
+        ("ruler-reading", &[], "Length: 4.37 cm"),
+        ("pedigree", &[], "Autosomal recessive inheritance"),
+        ("orbital-diagram", &[], "C: 1s"),
+        ("bohr-model", &[], "C"),
+        ("punnett-square", &[], "Genotype ratio: 1 TT : 2 Tt : 1 tt"),
+        ("population-growth", &[], "Carrying capacity (K)"),
+        ("heating-cooling-curve", &[], "Solid + liquid"),
+    ];
+
+    #[test]
+    fn mapped_figures_give_a_student_and_a_key_that_differ() {
+        for (id, over, snippet) in CASES {
+            let def = fig(id);
+            assert!(has_answer_pair(&def), "{id}: the Student + key button needs to show");
+            let (student, key) = answer_pair(&def, &params(id, over)).unwrap_or_else(|| panic!("{id}: answer_pair is None"));
+            assert_ne!(student, key, "{id}: student and key are the same");
+            let (ps, pk) = (plain(&student), plain(&key));
+            assert!(pk.contains(snippet), "{id}: key lacks {snippet:?}: {pk}");
+            if *id != "bohr-model" {
+                assert!(!ps.contains(snippet), "{id}: student shows {snippet:?}: {ps}");
+            } else {
+                assert!(ps.is_empty(), "bohr-model: the student nucleus is blank: {ps}");
+            }
+        }
+    }
+
+    #[test]
+    fn every_rule_names_a_real_figure_and_real_params() {
+        let ids: std::collections::HashSet<&str> = CASES.iter().map(|c| c.0).collect();
+        for d in registry() {
+            let Some(rule) = answer_rule(d.id) else { continue };
+            assert!(ids.contains(d.id), "{}: mapped but not tested", d.id);
+            assert!(!hides_answers(&(d.params)()), "{}: has show_answers and a rule", d.id);
+            let defs = (d.params)();
+            for (k, _, _) in rule.student.iter().chain(rule.key) {
+                assert!(defs.iter().any(|x| x.key == *k), "{}: no param {k}", d.id);
+            }
+        }
+        for id in &ids {
+            assert!(answer_rule(id).is_some() || hides_answers(&(fig(id).params)()), "{id}");
+        }
+    }
+
+    #[test]
+    fn rules_keep_the_users_other_params_and_only_swap_what_they_hide() {
+        // a pedigree set to Blanks stays blank in the student copy and is answered in the key
+        let def = fig("pedigree");
+        let mut p = params("pedigree", &[("genotypes", "Blanks")]);
+        let (student, key) = answer_pair(&def, &p).unwrap();
+        p.set_s("genotypes", "Answers");
+        let (_, key_answers) = answer_pair(&def, &p).unwrap();
+        assert_eq!(key, key_answers);
+        assert_ne!(student, key);
+        // genotypes switched off stay off in both copies
+        let p = params("pedigree", &[("genotypes", "None")]);
+        let (s, k) = answer_pair(&def, &p).unwrap();
+        let mut off = p.clone();
+        off.set_b("answer", false);
+        assert_eq!(s, (def.render)(&off));
+        off.set_b("answer", true);
+        assert_eq!(k, (def.render)(&off));
+        // the heating curve keeps a label set the user turned off
+        let def = fig("heating-cooling-curve");
+        let p = params("heating-cooling-curve", &[("seg_labels", "None")]);
+        let (s, _) = answer_pair(&def, &p).unwrap();
+        assert!(!plain(&s).contains("Solid"));
+    }
+
+    #[test]
+    fn vector_diagram_hides_the_resultant_only_when_asked() {
+        let def = fig("vector-diagram");
+        let defs = (def.params)();
+        assert!(hides_answers(&defs));
+        // the new switch opens on: today's picture
+        let on = Params::defaults(&defs);
+        assert!(on.b(SHOW_ANSWERS));
+        let mut p = on.clone();
+        p.set_i("n", 2);
+        p.set_b("mark_angle", true);
+        p.set_b("components", true);
+        let (student, key) = answer_pair(&def, &p).unwrap();
+        assert_eq!(key, (def.render)(&p));
+        let (ps, pk) = (plain(&student), plain(&key));
+        for t in ["Rx", "Ry", "R", "\u{3b8}"] {
+            assert!(pk.split(" | ").any(|x| x == t), "key lacks {t}");
+            assert!(!ps.split(" | ").any(|x| x == t), "student shows {t}");
+        }
+        assert!(ps.contains('A') && ps.contains('B'), "the given vectors stay: {ps}");
     }
 }

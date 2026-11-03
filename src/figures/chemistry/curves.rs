@@ -13,13 +13,6 @@ pub fn defs() -> Vec<FigureDef> {
     ]
 }
 
-fn nice_step(range: f64, ticks: f64) -> f64 {
-    let raw = range / ticks;
-    let mag = 10f64.powf(raw.log10().floor());
-    for m in [1.0, 2.0, 2.5, 5.0, 10.0] { if m * mag >= raw { return m * mag; } }
-    10.0 * mag
-}
-
 fn fmt_tick(v: f64, step: f64) -> String { if step >= 1.0 { format!("{}", v.round() as i64) } else { num(v, 1) } }
 
 // ---------------------------------------------------------------------------------------------
@@ -209,7 +202,7 @@ pub(super) fn tit_frame(p: &Params) -> TitFrame {
     let auto_max = if p.f("xmax") >= 1.0 { p.f("xmax") } else { veq * 2.0 };
     let mut x = Axis::read(p, "xaxis");
     if p.b("xaxis_fit") {
-        let by = nice(auto_max, 25.0);
+        let by = crate::figures::axes::nice_step_with(auto_max, 25.0, crate::figures::axes::Rule::QuarterTol);
         x.from = 0.0;
         x.to = (auto_max / (by * 5.0)).ceil() * by * 5.0;
         x.by = by;
@@ -414,11 +407,11 @@ pub(super) fn heat_frame(p: &Params) -> HeatFrame {
     let mut y = Axis::read(p, "yaxis");
     if p.b("xaxis_fit") {
         let tx_ = total * k;
-        x.by = nice(tx_, 20.0);
+        x.by = crate::figures::axes::nice_step_with(tx_, 20.0, crate::figures::axes::Rule::QuarterTol);
         x.from = 0.0;
         x.to = (tx_ / (x.by * 2.0)).ceil() * x.by * 2.0;
         x.fix();
-        let by = nice(hi - lo, 14.0);
+        let by = crate::figures::axes::nice_step_with(hi - lo, 14.0, crate::figures::axes::Rule::QuarterTol);
         y.by = by;
         y.from = (lo / (2.0 * by)).floor() * 2.0 * by;
         y.to = (hi / (2.0 * by)).ceil() * 2.0 * by;

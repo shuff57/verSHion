@@ -11,6 +11,16 @@ use super::Value;
 pub fn overrides(id: &str) -> Vec<(&'static str, Value)> {
     let st = |v: &str| Value::S(v.to_string());
     match id {
+        // the cell cycle opens with the marker on S and the DNA readout, so the first picture shows the 2C to 4C step
+        "cell-cycle" => vec![("pointer", st("S")), ("readout", st("DNA amount"))],
+        // the cell diagram opens on the plant cell: it shows the cell wall, the central vacuole and the chloroplasts that the default animal cell lacks
+        "cell-diagram" => vec![("cell", st("Plant cell"))],
+        // the soil texture triangle opens with the construction lines drawn, so the first picture shows how a sample is read
+        "soil-texture" => vec![("guides", Value::B(true))],
+        // photosynthesis opens with the rate graph on, so the first picture shows the stages, the equation and a limiting-factor curve
+        "photosynthesis" => vec![("show_graph", Value::B(true))],
+        // the leaf cross-section opens with Large labels: the section is wide, and at Medium a printed copy's names are small
+        "leaf-cross-section" => vec![("label_size", st("Large"))],
         // Math polygons open unfilled (black outline on white), angles unshaded.
         "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "regular-polygon" => vec![("fill", st("#ffffff"))],
         // the reference names the kite counter-clockwise (A right, B top, C left): our mirror

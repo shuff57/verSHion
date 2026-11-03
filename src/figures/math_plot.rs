@@ -76,8 +76,11 @@ fn grid(p: &Params) -> Vec<Handle> {
     // Equations.
     for (ci, eq) in p.s("equations").split(';').enumerate() {
         let eq = eq.trim();
+        // only the rows the figure draws get handles, and no more than 120 handles in all
+        if ci >= super::math::MAX_ROWS || hs.len() >= 120 { break; }
         // inequalities and pieces with a domain have no drag handles (rewriting would drop them)
         if eq.is_empty() || eq.contains(['<', '>', ',', '\u{2264}', '\u{2265}']) { continue; }
+        if super::math::is_curve_row(eq, g.x0, g.x1, g.y0, g.y1, p.s("xunits") == "Degrees") { continue; }
         let (lhs, rhs) = match eq.find('=') { Some(i) => (eq[..i].trim().to_lowercase(), eq[i + 1..].trim().to_string()), None => ("y".to_string(), eq.to_string()) };
         if lhs == "x" {
             if let Some(v) = eval(&rhs, 0.0).filter(|v| v.is_finite()) {
@@ -119,6 +122,7 @@ fn grid(p: &Params) -> Vec<Handle> {
     }
     // Points.
     for (pi, seg) in p.s("points").split(';').enumerate() {
+        if pi >= super::math::MAX_POINTS || hs.len() >= 2 * super::math::MAX_POINTS { break; }
         let seg = seg.trim();
         if let (Some(a), Some(b)) = (seg.find('('), seg.find(')')) {
             let n = nums(&seg[a + 1..b]);

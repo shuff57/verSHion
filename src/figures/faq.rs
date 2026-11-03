@@ -29,6 +29,18 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "pedigree" => PEDIGREE,
         "gel-electrophoresis" => GEL_ELECTROPHORESIS,
         "micropipette-reading" => MICROPIPETTE_READING,
+        "hardy-weinberg" => HARDY_WEINBERG,
+        "chi-square-fit" => CHI_SQUARE_FIT,
+        "enzyme-kinetics" => ENZYME_KINETICS,
+        "cladogram" => CLADOGRAM,
+        "food-web" => FOOD_WEB,
+        "energy-pyramid" => ENERGY_PYRAMID,
+        "action-potential" => ACTION_POTENTIAL,
+        "cell-cycle" => CELL_CYCLE,
+        "cell-diagram" => CELL_DIAGRAM,
+        "soil-texture" => SOIL_TEXTURE,
+        "photosynthesis" => PHOTOSYNTHESIS,
+        "leaf-cross-section" => LEAF_CROSS_SECTION,
         // chemistry
         "bohr-model" => BOHR_MODEL,
         "gas-syringe" => GAS_SYRINGE,
@@ -38,6 +50,13 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "line-spectrum" => LINE_SPECTRUM,
         "mass-reading" => MASS_READING,
         "mass-spectrum" => MASS_SPECTRUM,
+        "reaction-energy-diagram" => REACTION_ENERGY_DIAGRAM,
+        "reaction-rate-graph" => REACTION_RATE_GRAPH,
+        "phase-diagram" => PHASE_DIAGRAM,
+        "solubility-curves" => SOLUBILITY_CURVES,
+        "gas-law-graphs" => GAS_LAW_GRAPHS,
+        "equilibrium-graphs" => EQUILIBRIUM_GRAPHS,
+        "buffer-curves" => BUFFER_CURVES,
         "orbital-diagram" => ORBITAL_DIAGRAM,
         "particle-diagram" => PARTICLE_DIAGRAM,
         "ph-reading" => PH_READING,
@@ -52,6 +71,25 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "number-line" => NUMBER_LINE,
         "triangle" => TRIANGLE,
         "rectangle" => RECTANGLE,
+        "circle" => CIRCLE,
+        "right-triangle-trig" => RIGHT_TRIANGLE_TRIG,
+        "sine-cosine" => SINE_COSINE,
+        "unit-circle" => UNIT_CIRCLE,
+        "transformations" => TRANSFORMATIONS,
+        "fraction-models" => FRACTION_MODELS,
+        "triangle-centres" => TRIANGLE_CENTRES,
+        "slope-triangle" => SLOPE_TRIANGLE,
+        "protractor" => PROTRACTOR,
+        "base-ten-blocks" => BASE_TEN_BLOCKS,
+        "solid-net" => SOLID_NET,
+        "energy-bar-chart" => ENERGY_BAR_CHART,
+        "collision-momentum" => COLLISION_MOMENTUM,
+        "circular-motion" => CIRCULAR_MOTION,
+        "refraction" => REFRACTION,
+        "electric-field" => ELECTRIC_FIELD,
+        "magnetic-field" => MAGNETIC_FIELD,
+        "standing-wave" => STANDING_WAVE,
+        "pv-diagram" => PV_DIAGRAM,
         "parallelogram" => PARALLELOGRAM,
         "trapezoid" => TRAPEZOID,
         "kite" => KITE,
@@ -322,6 +360,10 @@ const SPRING_SCALE: &[Faq] = &[
         q: "Why are spring scales different colors?",
         a: "School spring scales are often color-coded by their maximum load so the right one can be grabbed quickly. The color is only a convenience; the scale markings are what matter.",
     },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Print the answer key under the figure on and type your own caption: the reading is not printed anywhere on the instrument, so a caption such as Force: ________ N leaves the student to read the pointer and fill in the blank. Leaving the caption empty prints the reading instead, which is the key.",
+    },
 ];
 
 const WAVES: &[Faq] = &[
@@ -350,11 +392,7 @@ const WAVES: &[Faq] = &[
 const CIRCUIT_DIAGRAM: &[Faq] = &[
     Faq {
         q: "Can the figure work out the current and voltages, and make a worksheet from it?",
-        a: "Yes. Type numbers for the battery and each part (12 V, 4 Ω, 4.7 kΩ) and set Work out the circuit to Fill meter readings or Readings and results. It handles series, parallel and an open switch; a part typed as a symbol such as R cannot be worked out, so that reading keeps your text. Turn off Show answers for a student copy: the worked-out values become blank lines, and Student + key saves both.",
-    },
-    Faq {
-        q: "How can I turn a circuit into a problem for students?",
-        a: "Give some values, like the battery voltage and resistances, and leave others unknown: a blank ammeter reading, a resistor labeled x, or a voltmeter whose reading students must find.",
+        a: "Yes. Type numbers for the battery and each part (12 V, 4 Ω, 4.7 kΩ) and set Work out the circuit to Fill meter readings or Readings and results. It handles series, parallel and an open switch; a part typed as a symbol such as R cannot be worked out, so that reading keeps your text. For a problem, leave something out: a blank ammeter reading, a part labelled x, or a voltmeter reading to be found. Turn off Show answers for a student copy: the worked-out values become blank lines, and Student + key saves both.",
     },
     Faq {
         q: "Why do resistor symbols look different in different books?",
@@ -369,8 +407,12 @@ const CIRCUIT_DIAGRAM: &[Faq] = &[
         a: "An ammeter goes in series, in the path of the current it measures. A voltmeter goes in parallel, with its leads on either side of the component it measures.",
     },
     Faq {
+        q: "What happens when the components are capacitors?",
+        a: "Capacitors add the other way round from resistors: in series 1/C = 1/C1 + 1/C2, so the equivalent is smaller than the smallest, and in parallel C = C1 + C2. The charge is C V, the same on each capacitor in series and split between them in parallel, and the voltages reverse that. There is no steady current once they are charged, so the ammeter and voltmeter are left off, and the values have to be typed in farads (10 µF, 470 nF) rather than ohms.",
+    },
+    Faq {
         q: "How do series and parallel circuits behave differently?",
-        a: "In series, the same current flows through every part and the voltages add up to the battery voltage. In parallel, each branch gets the full battery voltage and the branch currents add up to the total.",
+        a: "In series, the same current flows through every part and the voltages add up to the battery voltage. In parallel, each branch gets the full battery voltage and the branch currents add up to the total. The combination layout puts the first part in series with all the rest in parallel: work out the parallel group first (1/R = 1/R2 + 1/R3 ...), add it to the series part to get the total, then work back out to the current and the voltages.",
     },
 ];
 
@@ -515,6 +557,225 @@ const MICROPIPETTE_READING: &[Faq] = &[
     Faq {
         q: "Why can't a micropipette be set to any volume?",
         a: "A pipette can only be set inside its working range and in increments of its last digit. On a P20, 25 µL is too high and 12.53 µL is finer than the 0.1 µL steps.",
+    },
+];
+
+const HARDY_WEINBERG: &[Faq] = &[
+    Faq {
+        q: "What does Hardy-Weinberg equilibrium actually say?",
+        a: "That allele and genotype frequencies in a population do not change from generation to generation, provided five conditions hold: no selection, no mutation, no migration, random mating, and a large population. The figure draws those frequencies as p\u{b2}, 2pq and q\u{b2}.",
+    },
+    Faq {
+        q: "Why does a rare allele sit mostly in heterozygotes?",
+        a: "The heterozygote fraction is 2pq, which is larger than p\u{b2} whenever p is below one half. So a dominant allele at 10 % is carried by 18 % of the population in heterozygotes but shows in only 1 % as homozygotes. A rare dominant trait therefore stays rare in the population but keeps appearing in families.",
+    },
+    Faq {
+        q: "Why is selection against the recessive phenotype not Hardy-Weinberg?",
+        a: "It breaks the first condition. Every recessive homozygote is removed before it reproduces, while the recessive allele hides unchanged in heterozygotes, where selection cannot see it. So q falls more slowly than the recessive phenotype does, and the bars shift instead of repeating.",
+    },
+    Faq {
+        q: "How do the counts and the fractions relate?",
+        a: "The counts are the fraction multiplied by the population size, rounded so that the three counts add up to exactly that size. They are there to show what a population of that size would actually contain; at very small sizes they show that the fractions are expectations, not exact promises.",
+    },
+    Faq {
+        q: "What are p and q?",
+        a: "The frequencies of the two alleles of one gene in the population, where p is the dominant one and q the recessive. They always add to one, so a population can be described with a single number.",
+    },
+];
+
+const CHI_SQUARE_FIT: &[Faq] = &[
+    Faq {
+        q: "What does a chi-square goodness-of-fit test actually ask?",
+        a: "Whether the counts you observed are close enough to the counts a hypothesis predicts. The hypothesis here is a ratio, such as 9 : 3 : 3 : 1, which sets the expected count in each category; the test measures how far the observations sit from those expectations, in units of the noise you would expect anyway.",
+    },
+    Faq {
+        q: "Why is the expected count a share of the total?",
+        a: "A ratio only says what fraction of the offspring each category should be. Multiplying each part by the total number observed turns the ratio into counts, so the expected counts add up to the same total as the observed ones. That is why the two totals agree in the table.",
+    },
+    Faq {
+        q: "Why are the degrees of freedom the number of categories minus one?",
+        a: "Once the total is fixed, the last category's count is decided by the others, so only the first few cells are free to vary. Four categories therefore leave three degrees of freedom, which is the 3 you look up in a chi-square table.",
+    },
+    Faq {
+        q: "What does the p-value mean here?",
+        a: "It is the chance of seeing counts at least this far from the expected ones if the ratio really held. A large p means the data are consistent with the hypothesis; a small p, below the significance level, means the data are unlikely under it, so the hypothesis is rejected.",
+    },
+    Faq {
+        q: "Why is the statistic a sum of (O - E)\u{b2} / E?",
+        a: "Each category contributes how far its count is from the expected count, squared so that over- and under-counting both count, and divided by the expected count so that a difference of 2 matters much more in a category expecting 5 than in one expecting 500.",
+    },
+];
+
+const ENZYME_KINETICS: &[Faq] = &[
+    Faq {
+        q: "What do Vmax and Km mean?",
+        a: "Vmax is the rate the enzyme reaches when every active site is busy, so the curve levels off towards it and never passes it. Km is the substrate concentration that gives half of Vmax: a low Km means the enzyme is already working fast at low concentrations, a high Km means it needs a lot of substrate.",
+    },
+    Faq {
+        q: "Why does the curve bend over instead of rising straight?",
+        a: "At low concentrations most collisions are between enzyme and substrate, so doubling the substrate roughly doubles the rate. As the substrate rises, more and more active sites are already occupied, so extra substrate has less and less effect until the enzyme is saturated.",
+    },
+    Faq {
+        q: "What does a competitive inhibitor do to the graph?",
+        a: "It binds the free enzyme, so substrate and inhibitor compete for the same site. More substrate is needed to reach half of Vmax, so Km rises; but at a high enough concentration the substrate wins, so Vmax is unchanged. On the graph the curve is stretched to the right.",
+    },
+    Faq {
+        q: "What does a noncompetitive inhibitor do?",
+        a: "It binds the enzyme somewhere other than the active site and takes that enzyme out of play. Some enzyme is simply unavailable however much substrate is added, so Vmax falls; the concentration needed for half of the new, lower Vmax is unchanged, so Km stays the same. The curve is squashed downwards.",
+    },
+    Faq {
+        q: "Why is the marked rate always below Vmax?",
+        a: "Because the enzyme can only work as fast as its active sites allow. The formula v = Vmax [S] / (Km + [S]) gives a fraction of Vmax for any finite concentration, and only approaches Vmax as the concentration becomes very large.",
+    },
+];
+
+const FOOD_WEB: &[Faq] = &[
+    Faq {
+        q: "How do I type the links?",
+        a: "One link per line: the eater's food, then ->, then the eater, as in Grass -> Rabbit. A whole chain may go on one line (Grass -> Rabbit -> Fox); <- (or the arrow key's ←) writes it from the predator's end. A line starting with # is a note and is not drawn.",
+    },
+    Faq {
+        q: "Why do the names sit on different rows?",
+        a: "Each row is a trophic level. Producers (nothing they eat is typed) are at the bottom; anything that eats only producers is a primary consumer above them; a predator is one level above its highest prey, so an animal that eats both grass and rabbits sits with the secondary consumers. The arrows run from the food to the eater, the way the energy goes.",
+    },
+    Faq {
+        q: "Why is a circle refused?",
+        a: "A food web is a one-way flow of energy: if A is eaten by B and B by A, no level can be worked out. The figure names the names in the loop so the link that closes it can be removed.",
+    },
+    Faq {
+        q: "Do the names have to match exactly?",
+        a: "Yes. Grass, grass and Grass. are three different names, and a typo becomes its own organism. Spaces inside a name are tidied to one, so Arctic fox and Arctic  fox are the same organism. An arrow (-> or ←) is always read as an arrow, so a name cannot contain one.",
+    },
+    Faq {
+        q: "How many links can one picture hold?",
+        a: "Up to 24 names; past that the figure asks for two pictures rather than drawing something unreadable.",
+    },
+];
+
+const ENERGY_PYRAMID: &[Faq] = &[
+    Faq {
+        q: "How do I type the levels?",
+        a: "One level per line as Name: value, with the producers first: they are the bottom bar and the later lines stack above them. Two to six levels. A value may have thousands commas (10,000) or a power of ten (1.5e6, 1.5 × 10^6 or 1.5 × 10⁶), and the unit is set in its own control, not typed into the value. Values are read to 15 significant figures, so 10000.000000000001 is 10,000; a value below 0.001 or from 10^15 up is written 1.5 × 10^21. A line starting with # is a note and is not drawn.",
+    },
+    Faq {
+        q: "What does Proportional mean, and why is a value refused?",
+        a: "In Proportional the width of each bar is its energy, so the shape is honest and the top of a real food chain is a sliver. The widest bar is 400 px, so the largest value may be at most 1,000 times the smallest (a 0.4 px bar); past that the bar would be thinner than 0.4 px and the figure refuses. A 10 % chain of five or more levels is over the limit: set Bar widths to Equal steps for it, the figure never switches by itself. A level with more energy than the one below it is refused too, because energy cannot grow up a food chain.",
+    },
+    Faq {
+        q: "When do I use Equal steps?",
+        a: "When the levels are too far apart to draw to scale, or you want the classroom triangle. Each bar is 70 % of the width of the one below it, whatever the energy, and the picture says Not to scale; read the energy from the numbers, not the widths.",
+    },
+    Faq {
+        q: "What is the percent between the bars?",
+        a: "The share of one level's energy that reaches the level above it: 100 out of 1,000 is 10 %, the 10 % rule. It is worked out from the typed values and is an answer, so it shows only when Show answers is on; a student copy has a long blank to write it on. It is rounded to three significant figures, halves up (31.25 is 31.3), and two unequal bars never print 100 %: 99.96 is shown as 99.9. Turn off the switch for the arrows and the percents to leave the picture.",
+    },
+    Faq {
+        q: "Why does a copied value lose its exponent?",
+        a: "A value like 1 × 10^21 is drawn with a smaller, raised 21, which is not part of the text itself, so copying the drawn text from the picture gives 1 × 1021. The picture carries the number with its caret for screen readers, but a copy cannot; type the value from the levels box instead.",
+    },
+    Faq {
+        q: "Why is a value beside its bar and not inside?",
+        a: "A bar too narrow to hold its own number gets the number beside it on a short leader line, so a small top level is never clipped. A bar thinner than 6 px is drawn solid black with a small cap at each end so it cannot be mistaken for a line; its width is still to scale, except that one under 1.5 px is drawn 1.5 px wide (the caption says when that happens) so it survives a grey print copy. The arrows run in a column beside the pyramid for the same reason.",
+    },
+];
+
+const CELL_CYCLE: &[Faq] = &[
+    Faq {
+        q: "How do I type the lengths?",
+        a: "Hours for G1, S, G2 and M (M is mitosis and cytokinesis together), to the thousandth: 11, 11 h or 5,5 all work, up to 1000 hours each. A zero, a negative number, a figure with more than three decimals or a word is refused with the digits you typed, and so is 1,000, which could be a thousand hours or one (type 1000 or 1.000); any other comma is a decimal comma, so 0,125 is an eighth of an hour. While the hours and percents are shown, each phase must be at least 0.1 % of the whole cycle; a shorter one is refused, every short phase is named, and the message gives the change that draws (never more than three steps).",
+    },
+    Faq {
+        q: "How is the share of the cycle worked out, and why might it not add to 100.0?",
+        a: "Each phase's hours divided by the total, as a percent rounded half up to 0.1, and nothing else: no share is adjusted. Phases with equal hours therefore always print equal percents. Rounded values do not always add to exactly 100.0 (2, 4, 4 and 1 hours print 18.2, 36.4, 36.4 and 9.1, which add to 100.1); when they do not, the key's caption says what they add to, and when they do it says nothing. The shares are answers: a student copy has blanks.",
+    },
+    Faq {
+        q: "Why is the M wedge a bit wider than its share?",
+        a: "A wedge narrower than 5 degrees would not survive a photocopy, so it is drawn 5 degrees wide and the others are scaled slightly to make up the circle. The caption says so only when it happens, and the labels and percents always use the true hours. Wedge sizes: Equal draws four equal wedges and says they are not to scale.",
+    },
+    Faq {
+        q: "What do the checkpoints, the G0 branch and the arc outside the ring show?",
+        a: "Show interphase (on by default) draws an arc just outside the ring over G1, S and G2 with a numbered label; the wedge leaders cross it, a short mark across each end shows where it starts and stops (at the end of G2 the checkpoint tick does the same job when checkpoints are on), and if no clean place can be found for its label (a few very short wedges beside a long M can leave none) the figure says the arc is the reason and gives the shortest fix, which is usually to turn it off. M has no arc: it already has its label and the strip of its stages. The spindle checkpoint is keyed as \"Spindle (M) checkpoint\", the two names textbooks use. The G1/S and G2/M checkpoints are ticks across the ring at the end of G1 and of G2. The spindle (metaphase to anaphase) checkpoint sits between metaphase and anaphase on the strip of the stages of M, so it needs Show the stages of M. G0 is a box off G1 for cells that leave the cycle; it needs a G1 wedge at least 20 degrees wide, otherwise the figure says so and tells you what to change.",
+    },
+    Faq {
+        q: "What does the marker read out?",
+        a: "The triangle at the inner edge of the wedge stands on the stage you choose (a stage of M marks the M wedge and the box on the strip; G0 marks its box), and the caption says so. DNA amount is per cell in C, where a G1 cell is 2C: 2C in G1, 2C to 4C across S, 4C through G2, prophase, metaphase, anaphase and telophase, and 4C to 2C as cytokinesis makes the daughters. Chromosome number uses the 2n you type and counts the whole cell: 2n up to metaphase, twice that from anaphase when the sister chromatids separate, and back to 2n in each daughter; each of the two nuclei of telophase has 2n. A range such as 2C to 4C means the amount changes during that stage. 2n must be even, 2 to 1000. Prometaphase is counted with prophase.",
+    },
+    Faq {
+        q: "What does a student copy hide?",
+        a: "With Show answers off the names, the shares, the total and the readout are blank: wedges, checkpoints, interphase, the stages of M and G0 keep numbered discs, and a table under the figure has a rule for each name (and the share). The key (Show answers on) prints them. The hours you typed stay on the figure because they are the givens. The layout is the same in both copies.",
+    },
+];
+
+const CELL_DIAGRAM: &[Faq] = &[
+    Faq {
+        q: "What does each cell type show, and what is left out on purpose?",
+        a: "Animal cell: membrane, cytoplasm, cytoskeleton fibres, a nucleus whose double envelope is broken by pores, a nucleolus, rough ER touching the nuclear envelope and studded with ribosomes, smooth ER beside it, a Golgi apparatus beside the ER, mitochondria (double membrane with cristae), free ribosomes, lysosomes and a pair of centrioles. It has no cell wall, chloroplast or large central vacuole. Plant cell: the same, but with a cell wall outside the membrane, a large central vacuole that takes up more than half of the space inside the membrane (the rest of the cytoplasm is a layer round it, holding the nucleus, ER, Golgi, mitochondria and the chloroplasts, which have a double envelope and grana) and, if you tick it, plasmodesmata through the wall. It has no centrioles and no lysosomes (flowering plants have no centrioles, and their lysosome work is done by the vacuole). Bacterial cell (a prokaryote): capsule, cell wall, cell membrane, cytoplasm, a nucleoid with no envelope, plasmids, ribosomes (drawn smaller than an animal or plant cell's: they are the smaller 70S kind), a flagellum anchored in the membrane and pili rooted in the wall. It has no nucleus and no membrane-bound organelles, so it has no energy organelles to label (its respiration is on the membrane). A generic eukaryote is not offered: there is no such cell. Shapes and sizes are simplified and not to scale; chromatin is not drawn.",
+    },
+    Faq {
+        q: "How do the label groups work?",
+        a: "Five switches pick what is labelled: Cell boundary, Membrane-bound organelles, Energy organelles, Protein-making pathway and Other structures. A structure is labelled when any ticked group contains it, so a structure can belong to two groups: the mitochondrion is in both the membrane-bound and the energy group, and the Golgi apparatus is in both the membrane-bound group and the protein-making pathway (nucleus, nuclear envelope, nucleolus, ribosomes, rough ER, Golgi; a bacterium's nucleoid, as the store of the genes, and its ribosomes). To ask about one system, tick only that group. Structures that are not labelled are still drawn, without a pointer. If the ticked groups hold nothing in the cell you chose (a bacterium has no energy organelles and no membrane-bound organelles) the cell is drawn with no labels and the editor note says so and which group to tick.",
+    },
+    Faq {
+        q: "How can a pointer land on one structure when there are many mitochondria or ribosomes?",
+        a: "Each numbered leader ends on exactly one structure, with no dot: as in a textbook, the end of the line is the pointer, so no dot can be taken for a ribosome or hide a small structure. A leader to a ribosome stops just outside the dot so the ribosome stays whole. The figure checks that nothing else lies within 6 px of the end of a leader (for a ribosome, of the end in whatever direction the leader leaves), and it routes the leaders so that none crosses another and, as far as the drawing allows, none runs over a structure it does not point at (at the default size without captions that holds for the defaults, the opening state and the examples; with captions at the larger sizes a leader can still cross or skim a part, for example the plant's Smooth ER leader can cut the Golgi cisternae at Large). A ribosome dot that a leader or its white edge would touch is left out (there are plenty of others), so no dot under a line can be read as where it points. Every leader has a thin white edge so it stays visible over hatching. Where a structure occurs many times (mitochondria, ribosomes, lysosomes, chloroplasts, pili, plasmids, plasmodesmata, the sacs of rough ER, the pair of centrioles, the cytoskeleton fibres) the pointer marks one of them, and the caption says so; the key lists which. The rough ER is drawn as a network of studded sacs (three in the animal cell, four in the plant) wrapped round the nucleus and joined to its envelope. It is pointed at in the middle of the outer sac, between four of its studs that stand just outside that 6 px (two on each face, all within 12 px); its leader leaves roughly straight out (within about 22 degrees) between the two outer ones, and the layout only uses a pointer place whose leader keeps clear of every stud, so none of those studs is ever left out and no stud lies under any rough ER leader. Known limits, left as they are: with captions at Large the longest leader (the animal's Nuclear envelope, in some label groups) is about 406 px; the plant's nucleus and rough ER are drawn smaller than its Golgi; and the Smooth ER stands about 1.5 px from the Rough ER rather than joining it.",
+    },
+    Faq {
+        q: "Which wording is the answer?",
+        a: "The key uses one wording for each structure and lists the others it accepts: Cell membrane (plasma membrane, cell surface membrane), Rough ER and Smooth ER (rough or smooth endoplasmic reticulum), Golgi apparatus (Golgi body, Golgi complex), Mitochondrion (mitochondria), Chloroplast (chloroplasts), Ribosome (ribosomes), Lysosome (lysosomes), Flagellum (flagella), Plasmid (plasmids, plasmid DNA, DNA), Central vacuole (vacuole), Nuclear envelope (nuclear membrane), Nucleoid (nuclear region, DNA, chromosome, chromosomal DNA; DNA is accepted for a plasmid too, so with both labelled the one word earns both blanks: mark more strictly if your course expects \"plasmid\"), Centriole (centrioles, centrosome: the pair at right angles is the centre of a centrosome), Pilus (pili), Cytoskeleton (microtubules), Plasmodesma (plasmodesmata). Three near-synonyms are not accepted by the key, because at AP or college level they name something else: cytosol (the fluid only, without the organelles) for cytoplasm, slime layer (loose, where a capsule is organised) for capsule, and fimbria (a short attachment hair, unlike the pilus that passes genes) for pilus; mark them as your course does. The key prints the accepted words under the figure; a student copy does not.",
+    },
+    Faq {
+        q: "What does a student copy hide, and what are the function captions?",
+        a: "With Show answers off every name is gone and each leader ends in a numbered disc; the heading row asks the student to name each numbered structure, and the table under the figure has a rule to write each name on. The layout is the same as in the key. With Show what each structure does on, the key prints a line under each name, and the student copy prints that line beside the blank as a clue to match. No caption contains the name of a structure or a word the key accepts, so nothing is given away except by your choice to show it.",
+    },
+    Faq {
+        q: "How does Print work?",
+        a: "Print is black, white and grey only. Each kind of structure has its own hatch or tone (the nucleus and the nucleoid diagonal lines, chloroplasts a cross-hatch, mitochondria dots, the vacuole horizontal lines, the capsule dots (so the pili and the flagellum's rod stay visible across it), lysosomes, centrioles and the nucleolus solid black) and they stay different after a photocopy at 66 % grey. The cell wall is a light grey that copies as white, so on a 66 % copy it is a white band between its outer line and the membrane line, and the wall and the membrane stay two separate lines. The ER and Golgi are drawn as outlined white sacs, told apart by their shape.",
+    },
+];
+
+const ACTION_POTENTIAL: &[Faq] = &[
+    Faq {
+        q: "How do I type the numbers?",
+        a: "Each control is a number with or without its unit: -70, \u{2212}70 and -70 mV are the same, and a decimal comma (1,5) is read as a point. A comma followed by exactly three digits (1,000) could mean one thousand or one, so it is refused rather than guessed. Potentials are drawn from -100 to +70 mV, with the resting potential from -100 to -14 mV and the threshold from -100 to -4 mV (a threshold is below zero), and the stimulus is at 0.5 ms or later. A value typed exactly on a limit, such as a threshold 10 mV above the resting potential, is accepted. Letters other than the unit, NaN, inf and 1e3 are not numbers here.",
+    },
+    Faq {
+        q: "Why is my value refused?",
+        a: "Each refusal gives its reason and what to change. The threshold must be at least 10 mV above the resting potential and at most -4 mV: a threshold at or above 0 mV is refused, because a neuron fires from a negative threshold and the dashed line would otherwise run onto the 0 mV line (which also keeps the resting potential at -14 mV or lower); the peak at least 20 mV above the threshold; the undershoot either the resting potential itself (no dip) or at least 3 mV below it, never above it. The spike takes about 4.7 ms after the stimulus to settle back to rest, so the total time must be at least the stimulus time plus 4.7 ms, and at most 12 ms (longer, and the 0.8 ms upstroke would be under 35 px wide); the refusal says which of the two to change, and never asks for a total above 12 ms. The figure is also refused, with that reason, if a numbered pointer cannot be placed clear of the curve; one case is a very shallow undershoot on a wide scale (a high peak with a low resting level, a dip of about 3 to 5 mV): the return pointer sits halfway up the recovery, so the dip must be drawn at least 8 px deep for that dot to be 4 px off the resting line, and the refusal says so and offers only advice that works (a deeper undershoot, a lower peak, or the phase pointers off). The other is a stimulus too early to leave room for the resting pointer. None of the bundled examples or the defaults is refused.",
+    },
+    Faq {
+        q: "What is the exercise, and why are the numbers not printed?",
+        a: "The names are the exercise. Numbered discs point at the stimulus, the resting level, the dashed threshold line and each phase of the curve, and lettered discs sit under the brackets for the ion channels and the refractory periods. Under Show answers the key under the figure names each one; in a student copy the same key has a blank line for each, and the picture is laid out identically. The typed resting, threshold, peak and undershoot values are never printed in either copy: they are read off the axes, which is the skill being tested. Every labelled step is divided into 4 or 5 parts by small ticks and light grid lines (5 mV for the usual 20 mV step, 10 mV for a 50 mV step), so a level can be read to about half a division: 2 to 5 mV. Ask for values to that precision, not closer. Each row of brackets has a short label (Channels, Periods) that does not give an answer away. Anything left out of the figure, and why, is said only in the editor note beside the controls, never on the picture, so a student copy cannot give it away. The curve is the same in both copies.",
+    },
+    Faq {
+        q: "What do the channel and refractory bands mean?",
+        a: "They are schematic brackets placed from the curve: Na+ channels open from the moment the curve crosses threshold to the peak; K+ channels open from the peak until the membrane is back at rest, which is taken as within 1 mV of the resting level after the undershoot; the absolute refractory period runs from threshold until the curve is back down to the resting level; the relative one from there until the K+ band ends. The pointer to the return to rest sits on the recovering limb, halfway up the recovery (half of the dip's depth above the lowest point), inside the K+ and relative-refractory brackets, at least 4 px off the resting line and at least 24 px from every other dot. In a failed initiation it sits on the falling side of the bump, 2.5 px or more above rest and no higher than 45 % of the bump's height, and the pointer to the local response is at the top of the bump or on its rising side, at least 24 px from it. The pointer to the resting potential is always on the flat line before the stimulus, never after the spike, and the plot is never widened for it: the stimulus must leave room before it for that dot and its disc, clear of the y axis and of the stimulus arrow (about 20, 22 or 25 px of plot at Small, Medium or Large), so a stimulus at 0.5 ms in a 12 ms trace is refused at the Large label size, with that reason and advice that works. Each row of brackets is headed by a label true of both its brackets: Channels for Na+ and K+, Periods for the absolute and relative refractory periods. With no undershoot there is no dip, so the relative period and the hyperpolarisation and return-to-rest pointers are left out (the return would point at the same flat line as the resting potential), and the editor note says so. Failed initiation draws a small bump that peaks 60 % of the way to threshold and returns to rest, with no spike bands, and the editor note says so when a band switch is on.",
+    },
+    Faq {
+        q: "Is the curve to scale?",
+        a: "The shape is schematic and the same for every neuron: the rise to the peak takes 0.8 ms, the fall to the lowest point 1.4 ms, and the return to rest follows a smooth exponential in about 2.5 ms, so a spike is about 4.7 ms long however you set the potentials. The resting level, peak and lowest point are hit exactly, the threshold is crossed once on the way up, and the trace never wiggles. Use Print for a grey-only copy that survives a black-and-white photocopy.",
+    },
+];
+
+const CLADOGRAM: &[Faq] = &[
+    Faq {
+        q: "How do I type a tree?",
+        a: "Put each group in brackets with its members separated by commas: ((Human, Chimp), Gorilla). The outermost brackets are the common ancestor of everything inside them, so the order of the brackets is the order of the branching, not of the names.",
+    },
+    Faq {
+        q: "Can I label an ancestor?",
+        a: "Yes: write the name straight after the closing bracket of its group, as in ((Human, Chimp)Great apes, Gorilla). It is drawn just above that group's branching point. Names may contain spaces, so Homo sapiens and Great apes work as typed.",
+    },
+    Faq {
+        q: "What is the difference between the rectangular and slanted shapes?",
+        a: "They show the same tree. The rectangular shape keeps every branch horizontal with a vertical bar at each branching point, which makes the order of the leaves easy to read across the page; the slanted shape draws each branch as a diagonal, which looks more like a family tree drawn by hand.",
+    },
+    Faq {
+        q: "Does the order of the leaves mean anything?",
+        a: "No. A cladogram can be rotated at any branching point without changing what it says, so the left-to-right order is only how it was typed. Two trees that differ by a rotation are the same tree.",
+    },
+    Faq {
+        q: "What do the branch lengths mean?",
+        a: "Nothing here: this figure draws a cladogram, where only the pattern of branching carries information. A tree with branch lengths drawn to scale is a phylogram, where longer branches mean more change or more time.",
     },
 ];
 
@@ -885,19 +1146,19 @@ const COORDINATE_GRID: &[Faq] = &[
     },
     Faq {
         q: "How is an inequality shown on a coordinate grid?",
-        a: "Graph its boundary line, dashed for < or > and solid for ≤ or ≥, then shade the side that makes the inequality true. For a system, the solution is where all the shaded regions overlap.",
+        a: "Graph its boundary line, dashed for < or > and solid for ≤ or ≥, then shade the side that makes the inequality true. For a system, the solution is where all the shaded regions overlap; when one of the inequalities is a circle, ellipse or other curve, the grid shades only that common part, in one tint with an outline. A chain such as 4 < x^2 + y^2 < 25 shades the ring between two circles.",
     },
     Faq {
         q: "How do you plot a point like (3, −2)?",
         a: "Start at the origin, move 3 units along the x-axis (right), then 2 units parallel to the y-axis (down). The first number is always x and the second is y.",
     },
     Faq {
-        q: "How are holes and asymptotes shown on a graph?",
-        a: "A hole is a single missing point, drawn as an open circle. An asymptote is a line the curve approaches but never reaches, usually drawn dotted or dashed.",
+        q: "How are holes, asymptotes and piecewise functions shown?",
+        a: "A hole is a single missing point, drawn as an open circle. An asymptote is a line the curve approaches but never reaches, usually drawn dotted or dashed. A piecewise function is graphed one piece at a time over its own interval: a closed dot marks an endpoint that is included (≤ or ≥) and an open dot one that is not (< or >). To change how a row is drawn, end it with dashed, dotted, dash-dot or solid, such as x^2 + y^2 = 25 dashed. A straight line that is an asymptote of a curve in the figure (the lines y = ±2x/3 of x^2/9 - y^2/4 = 1, say), or any row that ends with the word asymptote, is drawn fine, dotted and grey, whatever else is typed after it, and never heavier than the curve it goes with. Numbers may be written in scientific notation: 2e3 is 2000 and 2e-1 is 0.2, so write 2*e^3 or 2 e^3 for Euler's number e (and x^2e3 is x^2 times e times 3, not a power of 2000). In the Print style everything is neutral grey: a solid line is an included boundary or an ordinary curve, a dashed line is only an excluded (< or >) boundary, and different curves are told apart by line weight, grey level and the equation written beside each one. A fine dotted line is kept for asymptotes only. Gridlines are a mid grey at least one pixel thick, and shaded regions get a close diagonal hatch of darker, heavier lines, so both still show on a photocopy; the region's boundary stays heavy, solid or dashed.",
     },
     Faq {
-        q: "How is a piecewise function graphed?",
-        a: "Graph each piece only over its own interval. A closed dot marks an endpoint that is included (≤ or ≥) and an open dot one that is not (< or >).",
+        q: "Can I graph a circle, ellipse or hyperbola?",
+        a: "Yes. Type the equation as it is written, such as x^2 + y^2 = 25, (x-2)^2 + (y+1)^2 = 9, x^2/16 + y^2/9 = 1, x^2/9 - y^2/4 = 1 or x = y^2. Any equation in x and y that is not a straight line is drawn as a smooth curve; one that has no points in the window, like x^2 + y^2 = -1, draws nothing. Use < or > (x^2 + y^2 < 25) to shade the inside or outside, and add a limit after a comma (x^2 + y^2 = 25, y > 0) to keep part of a curve; at most four curves are drawn at once, and a curve that never enters the window is skipped. The red notes under the equations name the row with a problem (Row 2: Cannot read) so a typo is easy to find; tick Write notes on the figure to print them on it. Each equation gets a label on a white plate beside its curve, with a short leader line when the space is crowded; switch Show answers off for a student copy without the labels and the shading (tick Keep the shading on the student copy when the question asks students to identify the region). A window so wide that the numbers on every line would touch shows every 2nd, 5th or 10th number instead.",
     },
     Faq {
         q: "How should the x-axis be scaled for trig graphs?",
@@ -3196,6 +3457,506 @@ const CHI_SQUARE_TABLE: &[Faq] = &[
     },
 ];
 
+const CIRCLE: &[Faq] = &[
+    Faq {
+        q: "Is the circle drawn to scale?",
+        a: "The circle is always drawn the same size; the radius is a number to read, and every measure is worked out from it. The points are drawn exactly where you put them. Dragging point B moves the central angle, which snaps to whole degrees and to the familiar angles (30, 45, 60, 90 and so on); typed values are exact.",
+    },
+    Faq {
+        q: "How do I make a worksheet and its answer key?",
+        a: "Every value in the Measures section is Given, Ask or Hidden. Given is printed on both copies, Ask is a blank line on the student copy and the value on the key, Hidden is not shown. A Given value must also be on the sheet (its row, or the part that labels it); the Notes box warns when it is not. Turn Show answers off for the student copy; Student + key exports both.",
+    },
+    Faq {
+        q: "How do I ask 'find the angle AOB', 'find the radius' or 'find OM'?",
+        a: "Set that value to Ask and give what it is worked out from. For the angle, set Central angle to Ask and give the chord or the radius and arc. For the radius, set Radius to Ask and set Circumference (or Area) to Given. For OM, set Define the chord by to Chord length (r = 5, chord 8 gives OM = 3) or to OM distance (OM = 3 gives the chord), turn on the bisector, and set OM or the chord to Ask. The key shows the worked value.",
+    },
+    Faq {
+        q: "Why do the right-angle marks give the answer away?",
+        a: "The marks at the tangent, at the chord's midpoint and at the angle in a semicircle show a 90 degree angle. Set Right-angle marks to Key only to hide them on the student copy, or Hide to leave them off. To ask for the angle itself, set Tangent-radius angle to Ask.",
+    },
+    Faq {
+        q: "Which arc and sector are measured, and why is the central angle at most 180 degrees?",
+        a: "Arc AB and Sector are separate choices (None, Minor or Major); the arc length follows Arc AB and the sector area follows Sector, each the minor one when it is None. The angle between the two radii is shown as the smaller one, so it is never more than 180 degrees. To show a reflex angle, set the central angle by number, give it over 180 and choose a Major arc or sector.",
+    },
+    Faq {
+        q: "Why is the inscribed angle sometimes not half the central angle?",
+        a: "An inscribed angle is half the arc it cuts off. Point C on the major arc gives half the central angle; if you drag C onto the minor arc it cuts off the other arc, and the angle becomes 180 degrees minus that half.",
+    },
+];
+
+const RIGHT_TRIANGLE_TRIG: &[Faq] = &[
+    Faq {
+        q: "Which side is opposite and which is adjacent?",
+        a: "It depends on the marked angle theta. The opposite side faces theta and does not touch it, the adjacent side touches theta (besides the hypotenuse), and the hypotenuse is always the longest side, across from the right angle. Change 'Theta is at vertex' to A or B to make the other acute angle theta: the opposite and adjacent sides swap and so do the ratios.",
+    },
+    Faq {
+        q: "What do SOH, CAH and TOA mean?",
+        a: "Sine is Opposite over Hypotenuse, Cosine is Adjacent over Hypotenuse, Tangent is Opposite over Adjacent. Turn on 'Show the SOH CAH TOA hint' to print the three lines under the readout; it is off by default so it does not give a method away.",
+    },
+    Faq {
+        q: "How do I make a worksheet and its answer key?",
+        a: "Each of the three sides, theta, sin, cos and tan is Given, Ask or Hidden. Given is printed on both copies, Ask is a blank line on the student copy and the value on the key, Hidden shows no value (a hidden side keeps its name on the drawing). Turn Show answers off for the student copy; Student + key exports both. The Notes box warns when the Given values do not fix the triangle.",
+    },
+    Faq {
+        q: "How do I ask for a missing side or for an angle?",
+        a: "For a missing side, set 'The triangle is set by' to an angle and a side (for example Angle and adjacent), give both as Given and set the other sides to Ask: the key shows the sides worked out with sin, cos or tan. For an angle, give two sides (Two legs, or Leg and hypotenuse) and set the angle to Ask: with 'Show the SOH CAH TOA hint' on, the key names the inverse trig, for example theta = arctan(7/10) = 35 degrees (Decimal places set the rounding).",
+    },
+    Faq {
+        q: "Why is the angle kept between 10 and 80 degrees?",
+        a: "Outside that range the triangle is too thin to label, so the angle is kept in it and the sides adjust (a Notes line says so). The values on the key are always worked out from the triangle that is drawn. Decimal places set the rounding of theta; lengths print with at least two decimals, and a ratio is worked out from the lengths as printed, so its fraction and its decimal always agree.",
+    },
+    Faq {
+        q: "Can I drag the triangle?",
+        a: "Drag the far vertex (the one that is not the right angle and not theta) to change the angle in whole degrees. The picture is always fitted to the same size; the numbers follow, and the value you typed for the first side stays.",
+    },
+];
+
+const SINE_COSINE: &[Faq] = &[
+    Faq {
+        q: "Where do the amplitude, the period and the midline come from?",
+        a: "The amplitude A is how far the wave rises above the midline and falls below it, the period is how many degrees one full cycle takes, and the midline is the horizontal line the wave swings around (y = D). The graph draws all three: the amplitude as an arrow from the midline to a peak, the period as an arrow between two neighbouring peaks, and the midline as a dashed line.",
+    },
+    Faq {
+        q: "How do I write the equation?",
+        a: "y = A sin(B(x - C)) + D, where B = 360 / period and the x axis is in degrees. 'The wave starts at the' picks the function: midline going up is sin, a peak is cos, and the other two are the negative of each. The Equation row prints the form that matches the drawing, so a student can read the numbers off the axes and check the sign.",
+    },
+    Faq {
+        q: "What does the phase shift do?",
+        a: "It moves where the cycle starts to the right, in degrees. A shift of a whole cycle or more is folded back into one cycle and the Notes box says so. A shift moves the wave right, so a sine shifted 90 degrees is minus the cosine (it starts at a trough, not a peak); a shift left by 90 degrees would be the cosine.",
+    },
+    Faq {
+        q: "How do I make a worksheet and its answer key?",
+        a: "Each of the amplitude, the period, the midline and the equation is Given, Ask or Hidden. Given is printed on both copies, Ask is a blank on the student copy and the value on the key (the arrow labels are blanked too), Hidden shows no value and no row. Turn Show answers off for the student copy; Student + key exports both.",
+    },
+];
+
+const UNIT_CIRCLE: &[Faq] = &[
+    Faq {
+        q: "What are the two coordinates of the point?",
+        a: "On a circle of radius 1, a point at angle theta has x = cos theta and y = sin theta. The figure drops a dashed line from the point to each axis and prints both numbers there, so the coordinates are read off the picture rather than told. Drag the point or type the angle to move it.",
+    },
+    Faq {
+        q: "When are the angles in radians?",
+        a: "Choose Radians in 'Show the angle in'. An angle that is a simple fraction of a half turn is written as a fraction of pi (30 degrees is pi/6, 45 is pi/4, 90 is pi/2, 180 is pi), and any other angle is written as a decimal number of radians with the usual Decimal places.",
+    },
+    Faq {
+        q: "Why is cos negative in the second quadrant?",
+        a: "cos is the x coordinate, so it is negative whenever the point is left of the y axis (between 90 and 270 degrees), and sin is the y coordinate, so it is negative below the x axis (between 180 and 360). The dropped lines make that visible: the value on an axis sits to the left of 0 or below it.",
+    },
+    Faq {
+        q: "How do I make a worksheet and its answer key?",
+        a: "The angle, cos, sin and the point are each Given, Ask or Hidden. Given is printed on both copies, Ask is a blank on the student copy and the value on the key (the labels on the figure are blanked too), Hidden shows no value and no row. A common worksheet gives the angle and asks for the two coordinates; a harder one asks for the angle from the coordinates.",
+    },
+];
+
+const TRANSFORMATIONS: &[Faq] = &[
+    Faq {
+        q: "Where does the image go for each transformation?",
+        a: "Translate moves every corner by the same amount. Reflect flips the shape over the named line: over the x-axis y changes sign, over the y-axis x does, over y = x the coordinates swap. Rotate turns the shape about the origin, anticlockwise. Enlarge multiplies both coordinates by the scale factor, about the origin.",
+    },
+    Faq {
+        q: "Why is the image not drawn?",
+        a: "The image is the answer. It is drawn, with its corners named A', B' and C' and its coordinates printed, only while Show answers is on. Turn it off to give a student the pre-image and the rule and leave the image to them.",
+    },
+    Faq {
+        q: "Does the shape stay the same size?",
+        a: "Under a translation, a reflection or a turn the image is congruent to the pre-image: the same sides and angles, only moved. Under an enlargement the sides are multiplied by the scale factor and the shape stays similar, with the same angles and the same proportions.",
+    },
+    Faq {
+        q: "Can I move the pre-image?",
+        a: "The pre-image is the fixed triangle A(1, 1), B(4, 1), C(1, 3); the transformation is what changes. The grid takes in whichever image the rule produces, including an enlargement by 3 or a translation of 8 units, so both shapes always fit.",
+    },
+];
+
+const FRACTION_MODELS: &[Faq] = &[
+    Faq {
+        q: "Which model should I use?",
+        a: "A bar and a tape diagram are the same idea: one strip cut into equal parts, with some shaded. The tape diagram also numbers the cuts, which helps for equivalent fractions and number lines. The circle suits fractions of a whole and turns, the ten-frame is for tenths and for place value within 10, and the area model cuts a rectangle into a grid of equal cells, which is the picture to use for multiplying fractions and for showing that a fraction of an area is the same share.",
+    },
+    Faq {
+        q: "Why is the fraction not printed?",
+        a: "The fraction, its decimal and its percentage are the answers, so they are printed only while Show answers is on. Turn it off and the shaded shape is the question: the student writes the fraction it shows.",
+    },
+    Faq {
+        q: "What if I ask for more shaded parts than there are?",
+        a: "The shaded count is held at the number of parts, and the parts at 12 at most, so a fraction between 0 and 1 is always drawn. The ten-frame always has ten cells, whatever the parts control says.",
+    },
+    Faq {
+        q: "How is the percentage worked out?",
+        a: "The decimal is shaded / parts at two places or more (any trailing zeros are dropped). The percentage is that printed decimal x 100, so the two always agree: 5/8 prints 0.63 and 63%.",
+    },
+];
+
+const TRIANGLE_CENTRES: &[Faq] = &[
+    Faq {
+        q: "Which centre is which?",
+        a: "The circumcentre is where the perpendicular bisectors of the sides meet, and it is the centre of the circle through all three vertices. The incentre is where the angle bisectors meet, the centre of the circle touching all three sides. The centroid is where the medians meet. The orthocentre is where the altitudes meet.",
+    },
+    Faq {
+        q: "Why do three lines always meet at one point?",
+        a: "That is a theorem, not a coincidence: each family of three lines (the three perpendicular bisectors, the three angle bisectors, the three medians, the three altitudes) is concurrent. The figure draws two of each family; the third goes through the same point, which is why the centre is trustworthy as a construction.",
+    },
+    Faq {
+        q: "Where is the centre on a right-angled or obtuse triangle?",
+        a: "This triangle is acute, so all four centres sit inside it. On a right-angled triangle the orthocentre is the right-angle vertex and the circumcentre is the midpoint of the hypotenuse; on an obtuse triangle the orthocentre and the circumcentre fall outside the triangle.",
+    },
+    Faq {
+        q: "How are the coordinates worked out?",
+        a: "The centroid is the mean of the three vertices. The circumcentre is where two perpendicular bisectors cross; the incentre weights each vertex by the length of the opposite side; and the orthocentre follows from the Euler relation: the centroid is one third of the way from the circumcentre to the orthocentre.",
+    },
+];
+
+const SLOPE_TRIANGLE: &[Faq] = &[
+    Faq {
+        q: "What does the triangle show?",
+        a: "Its flat leg is the run and its upright leg is the rise between two points on the line. The gradient is rise over run, and because the triangle's run is set by the 'Triangle run' control, the rise is the gradient multiplied by it: a run of 1 with a gradient of 2 gives a rise of 2.",
+    },
+    Faq {
+        q: "Why is the gradient negative sometimes?",
+        a: "A line that goes down as it goes right has a negative gradient, so the triangle hangs below the line instead of standing above it. The slope is still rise over run, with the rise counted downwards.",
+    },
+    Faq {
+        q: "What is the equation of the line?",
+        a: "y = mx + c, where m is the gradient and c is where the line crosses the y-axis. The figure prints it from the two controls, so changing either one updates the line, the triangle and the equation together.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off. The line and the triangle stay, and the gradient, the rise, the run on the legs and the equation become blanks for the student to fill in from the picture.",
+    },
+];
+
+const PROTRACTOR: &[Faq] = &[
+    Faq {
+        q: "Which of the two scales do I read?",
+        a: "The outer scale runs from 0 at the right-hand end to 180 at the left, and the inner one the other way round. The right-hand half of the baseline is drawn heavier: that is the fixed arm, and the outer scale reads 0 there. The reading is the angle between that arm and the ray. The readout gives the reading and what the other scale shows, which is 180 minus it.",
+    },
+    Faq {
+        q: "Why do the two readings add to 180?",
+        a: "The two scales are the same graduations numbered from opposite ends, so a ray at 55 degrees reads 55 on one scale and 125 on the other. They always add to a half turn.",
+    },
+    Faq {
+        q: "Can I show the protractor with no ray?",
+        a: "Turn off Draw the ray. The graduations and both scales stay, which is what you want for a sheet where the student places the arm themselves.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the reading and the other scale become blanks while the protractor and the ray stay.",
+    },
+];
+
+const BASE_TEN_BLOCKS: &[Faq] = &[
+    Faq {
+        q: "What does each block stand for?",
+        a: "A flat is one hundred (ten by ten), a rod is ten (one by ten) and a cube is one. The figure draws as many of each as the number has in that place, so 247 is two flats, four rods and seven cubes.",
+    },
+    Faq {
+        q: "Why does 305 have no rods?",
+        a: "A zero in the tens place means there are no tens, so no rod is drawn, and the expansion writes that place as 0 rather than dropping it: 3 hundreds + 0 tens + 5 ones. Every place is always named, so the blanks on the student copy line up with the key.",
+    },
+    Faq {
+        q: "Why do the blocks regroup at ten?",
+        a: "Ten cubes make one rod and ten rods make one flat, which is why the places step in tens. Asking for 10 in a place is the same as carrying one into the place to its left, so the control stops at 999 and each place holds a single digit.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the expansion becomes three blanks while the blocks and the number stay, so the student writes what the blocks show.",
+    },
+];
+
+const SOLID_NET: &[Faq] = &[
+    Faq {
+        q: "How does the net fold up?",
+        a: "The four rectangles in the row wrap round the sides, and the two rectangles above and below the first one become the top and the bottom. Every edge of the net meets an edge of the same length when it is folded, which is why the row alternates a by c and b by c.",
+    },
+    Faq {
+        q: "Where do the surface area and the volume come from?",
+        a: "The surface area is the area of the six rectangles added up, which is 2(ab + ac + bc). The volume is length x width x height, abc. Both are worked out from the three edges and printed under the net.",
+    },
+    Faq {
+        q: "Why is a cube a special case?",
+        a: "Choosing Cube makes all three edges the same, so the net is six equal squares and the formulas collapse to 6a squared for the area and a cubed for the volume. The Width and Height controls are ignored while Cube is chosen.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the surface area and the volume become blanks while the net and the edges stay. The edges are the given, because the net is scaled to fit its box, so two similar boxes draw the same picture and the edges cannot be measured back from it.",
+    },
+];
+
+const ENERGY_BAR_CHART: &[Faq] = &[
+    Faq {
+        q: "Why is the total the same before and after?",
+        a: "Energy is conserved: the gravitational store empties by m g h and the kinetic and thermal stores fill by exactly that. Both stacks are drawn to the same scale, so the three bars in a group always add up to the same height.",
+    },
+    Faq {
+        q: "Where does the thermal bar come from?",
+        a: "It is the share of the drop lost to air resistance, set by the 'Share lost to air resistance' control. With no loss the kinetic bar takes all the gravitational energy; a fifth lost gives a thermal bar a fifth as tall as the drop.",
+    },
+    Faq {
+        q: "Why does the kinetic bar start at nothing?",
+        a: "The body starts from rest at the higher point, so it has no kinetic energy there; all of it is gravitational until it falls. The chart shows the stores at the two heights, not every point in between.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the bars are not drawn and the three numbers become blanks, while the axes, the store names and the givens (mass, heights, loss share, g) stay, so the student works out the stores and draws the bars.",
+    },
+];
+
+const REACTION_RATE_GRAPH: &[Faq] = &[
+    Faq {
+        q: "What do the three graphs show?",
+        a: "Concentration vs time draws [A] against t from the integrated rate law of the chosen order: [A] = [A]\u{2080} \u{2212} kt (zero order, which stops at 0 when A is used up), [A] = [A]\u{2080}e^(\u{2212}kt) (first order) and 1/[A] = 1/[A]\u{2080} + kt (second order). Linearised plots the quantity that gives a straight line for that order: [A], ln [A] or 1/[A] against t, with slope \u{2212}k, \u{2212}k or +k. Rate vs concentration plots rate = k[A]\u{207f}: flat for zero order, a line through the origin for first order, a parabola for second order.",
+    },
+    Faq {
+        q: "Is the half-life always constant?",
+        a: "Only for a first-order reaction: t\u{bd} = ln 2/k, the same however much A is left. For a zero-order reaction t\u{bd} = [A]\u{2080}/(2k), so each half-life is half as long as the one before; for a second-order reaction t\u{bd} = 1/(k[A]\u{2080}), so each one is twice as long as the one before. Dotted guides at [A]\u{2080}/2, [A]\u{2080}/4 and [A]\u{2080}/8 run out to the curve; the key drops them to the time axis, writes each time there and prints its working.",
+    },
+    Faq {
+        q: "How is the instantaneous rate found?",
+        a: "The rate is \u{2212}d[A]/dt, so it is minus the slope of the tangent to the [A] curve at that time. The key prints [A] at the tangent's time and the rate k[A]\u{207f} worked out from the printed k and [A]\u{2080}, and its legend gives the tangent's slope; the initial-rate tangent is the same at t = 0. A zero-order graph is a straight line, so its tangent is the line itself.",
+    },
+    Faq {
+        q: "What does the student copy leave out?",
+        a: "Show answers off keeps the axes, the curve, the guides out to the curve and the tangent lines, and turns the half-lives, the rates, the slope and the intercept into blank lines. With \"Order and k given\" the rate law, k and [A]\u{2080} stay as the question's givens. With \"Curve given\" the order and k are printed on the key only, so students find them from the graph: equal or changing half-lives, which plot is straight, or how the rate grows with [A].",
+    },
+    Faq {
+        q: "Why was a number I typed changed?",
+        a: "k and [A]\u{2080} must be greater than 0; k = 0 or less is refused and the graph keeps a drawable k, with a note. The givens are kept to 4 significant figures so every printed result can be recomputed from the printed givens. The time shown is held between half of the first half-life and 20 half-lives, and a tangent's time past the end of the axis is moved to the end; each change is noted in the editor.",
+    },
+];
+
+const PHASE_DIAGRAM: &[Faq] = &[
+    Faq {
+        q: "Are the curves drawn to scale?",
+        a: "No. The triple point, the critical point and (for water and carbon dioxide) the normal boiling or sublimation point are the published values, and every curve passes through them, but the vaporisation and sublimation shapes between them are the textbook ones, not measured. The melting curves of water and carbon dioxide are the measured ones, so they are nearly vertical (water's leans left by only about 0.0075 K per atm); only the Typical substance and a custom substance exaggerate the lean of the melting curve so that it can be seen, and the working says so. Temperatures and pressures read from the diagram are therefore rounded, and the working says so.",
+    },
+    Faq {
+        q: "Why does carbon dioxide have no boiling point at 1 atm?",
+        a: "1 atm is below carbon dioxide's triple-point pressure (5.11 atm), so the isobar at 1 atm never meets the liquid region. Heating the solid takes it straight to gas at 194.7 K (sublimation). The figure says that there is no normal melting point and no normal boiling point instead of inventing them. Raise the isobar above 5.11 atm to see melting and boiling.",
+    },
+    Faq {
+        q: "What is the supercritical fluid region?",
+        a: "Above both the critical temperature and the critical pressure there is no boundary between liquid and gas: the substance changes gradually from dense to thin, with no boiling. The dotted lines mark the region's edges; they are not phase boundaries. An isobar above the critical pressure melts the solid and then never boils, and an isotherm above the critical temperature never condenses.",
+    },
+    Faq {
+        q: "How do I make a student worksheet?",
+        a: "Turn Show answers off. The curves, the lines and the markers where they meet the curves stay; the phase changes, the temperatures and pressures read from the diagram, the heating arrows and the phase at each of points A to D become blank lines. Set Region labels, Curve labels or the point labels to Blank for students to leave those names for the class to fill in. The key (Show answers on) prints the working.",
+    },
+    Faq {
+        q: "How do I draw a substance of my own?",
+        a: "Choose Custom and type the triple point and the critical point; the curves are drawn through them, with Clausius-Clapeyron (straight in ln P against 1/T) for vaporisation and sublimation. Choose the melting slope: negative leans the melting curve left like water, positive leans it right (drawn far steeper than a real one, so that it can be seen). You can also drag the two points on the diagram. A critical point that is not clearly above the triple point is refused with a note.",
+    },
+];
+
+const SOLUBILITY_CURVES: &[Faq] = &[
+    Faq {
+        q: "Where do the curves come from?",
+        a: "Each curve is drawn smoothly through published solubility values (the CRC Handbook of Chemistry and Physics table, in grams of solute per 100 g of water), with the table's own points marked as dots. The smooth curve never goes above or below the neighbouring table values, so it cannot wiggle. A salt's table does not always have a value at every 10 \u{b0}C; the curve then runs through the points that are published and the figure never invents a missing one. Where a substance has no data (for example, cerium(III) sulfate above 60 \u{b0}C) its curve stops, and a temperature past the end is moved to it with a note.",
+    },
+    Faq {
+        q: "How are the four questions answered?",
+        a: "Read a solubility: go up from the temperature to the curve and across to the axis. Saturated, unsaturated or supersaturated: a point on the curve is saturated, below it unsaturated (more solute can dissolve) and above it supersaturated (more is dissolved than the curve allows, an unstable state). Crystallisation: the solution is saturated at the first temperature, so the mass that comes out is (solubility at the first temperature \u{2212} solubility at the second) \u{d7} mass of water \u{f7} 100. Temperature of saturation: the grams per 100 g of water are the mass dissolved \u{d7} 100 \u{f7} the mass of water, and the temperature is where the curve passes that value.",
+    },
+    Faq {
+        q: "Why does a solid sometimes crystallise on warming?",
+        a: "Most solids dissolve better in hot water, but a few, like cerium(III) sulfate, dissolve less. The curve of such a substance falls, so a saturated solution that is warmed holds less than before and the extra comes out as crystals. The key says so, in words, whenever the solubility falls between the two temperatures. A solution of a rising-solubility salt that is warmed instead becomes unsaturated and nothing crystallises.",
+    },
+    Faq {
+        q: "How are gases different?",
+        a: "A gas dissolves less as the water gets hotter, and how much dissolves depends on its pressure. Carbon dioxide is shown at a partial pressure of 1 atm and oxygen at 21 kPa (its pressure in air); the figure says so under the graph. The gas values are about a thousand times smaller than a salt's, so beside a salt they lie against the axis: show gases on their own to see them. When a saturated solution of a gas is warmed, the gas that comes out of solution leaves as bubbles rather than crystals, and the key words it that way.",
+    },
+    Faq {
+        q: "What does the student copy leave out?",
+        a: "Show answers off keeps the curves, their names, the givens (the substance, the temperatures and the masses) and the points that the question marks on the graph, and turns the values read from the curve, the classification, the mass that crystallises and the temperature of saturation into blank lines. The key prints the values read from the curve, rounded once to the decimal places chosen, and then works the answer out from those printed values only, so the arithmetic on the key can be checked line by line.",
+    },
+];
+
+const EQUILIBRIUM_GRAPHS: &[Faq] = &[
+    Faq {
+        q: "How is the equilibrium found, and is it exact?",
+        a: "x is the amount of reaction (mol/L) as the equation is written: each reactant falls by its coefficient times x and each product rises by it, so x < 0 means the reaction ran in reverse. The equilibrium x is the root of K = (products) / (reactants) with every concentration at least 0, found numerically to full precision, for any coefficients from 1 to 4 and any K from 1e-30 to 1e30. Each printed value is that root rounded once, to the number of significant figures chosen. A quadratic is also solved by the formula, with the rejected root and the reason it is rejected.",
+    },
+    Faq {
+        q: "What do solids and liquids do?",
+        a: "Choose the phase of each species. Gases and aqueous species are in K and Q; a solid or liquid is left out, because its concentration is constant, and the figure says so. It is taken to be present in excess, so it never runs out and its starting amount is not used. Adding or removing a solid or liquid at equilibrium changes no concentration in K, so nothing shifts.",
+    },
+    Faq {
+        q: "Are the curves a real rate law?",
+        a: "No: they are schematic. The concentrations follow elementary mass-action kinetics (forward rate kf times the reactants' concentrations to their coefficients, reverse rate kr times the products'), with kf / kr = K and the time unit chosen so that the approach is finished by t = 5. The time axis is therefore in arbitrary units, and the rate graph is drawn relative to the faster starting rate. The plateau values printed and drawn are the exact equilibrium values, not the numbers from the curve.",
+    },
+    Faq {
+        q: "What disturbances can I apply, and how are they worked out?",
+        a: "At a chosen time, once equilibrium is reached, add or remove some of a species, change the volume (every concentration is divided by the factor) or change the temperature (K changes by the van 't Hoff equation, taking the enthalpy change as constant). The key compares Q with K just after, says which way the system shifts and solves for the new equilibrium. Removing more than is there removes all of it, with a note.",
+    },
+    Faq {
+        q: "What does the student copy leave out?",
+        a: "Show answers off keeps the reaction, the phases, the starting concentrations, the axes (which depend on the givens only) and the curves, and turns the K expression, x, the equilibrium concentrations, K when it is the question, Q, the direction and the new equilibrium into blank cells and lines. It draws no dashed equilibrium lines and writes no values. For the question that predicts the direction it draws no curve either, since the curve would show the direction, and its description names no value and no direction.",
+    },
+];
+
+const BUFFER_CURVES: &[Faq] = &[
+    Faq {
+        q: "How is the pH worked out, and is it exact?",
+        a: "At every volume the pH is the one root of the charge balance: [H\u{207a}] + [Na\u{207a}] + [BH\u{207a}] = [OH\u{207b}] + [Cl\u{207b}] + [A\u{207b}], with water's own ions included. That is the full cubic, not the Henderson-Hasselbalch shortcut, so it is right at the very start, through the equivalence point, far past it and in dilute solutions where water matters. The key shows the shortcut a student would use for that part of the curve (excess acid or base, Henderson-Hasselbalch, or the square root for a weak acid or base alone) and then the exact pH, and says why they differ when they do. Concentrations stand in for activities, at 25 \u{b0}C with Kw = 1.0 \u{d7} 10\u{207b}\u{b9}\u{2074}.",
+    },
+    Faq {
+        q: "Where do the pKa values and the indicator ranges come from?",
+        a: "From the CRC Handbook of Chemistry and Physics at 25 \u{b0}C: the tables of dissociation constants of organic and of inorganic acids and bases (a base is listed by the pKa of its conjugate acid, and pKb = 14.00 \u{2212} pKa), and the table of acid-base indicators for the pH range of each colour change. Choose Custom to type your own pKa or pKb.",
+    },
+    Faq {
+        q: "How is the indicator chosen?",
+        a: "The key works out the steep part of the curve: the pH 2% of the equivalence volume either side of it. An indicator is suitable when its whole colour-change range lies inside that steep part, so it changes colour within 2% of the equivalence volume; the best is the suitable one whose range is centred nearest the pH at equivalence. If none fits, the key says so, which happens when the acid or base is very weak or the solutions are very dilute.",
+    },
+    Faq {
+        q: "What do the buffer region and the capacity show?",
+        a: "The buffer region is where the pH is within 1 of pKa, so the ratio of the conjugate base to the acid is between 1/10 and 10; the key shades it from the exact curve. The capacity question asks how much acid or base takes that ratio past 10 (or 1/10), and the answer expected is the one worked from the amounts, as a student works it without a curve; the key marks it. Beside it the key gives where the exact curve leaves pKa \u{b1} 1 and says why the two differ (the weak acid ionising, or its conjugate reacting with water, which the amounts leave out). A buffer already past the ratio at the start has the answer none, and a solution with none of the salt is not called a buffer.",
+    },
+    Faq {
+        q: "What does the student copy leave out?",
+        a: "Show answers off keeps the analyte, the titrant, their amounts and the axes, which depend on the givens only, and turns the equivalence point, the half-equivalence point, pKa, the indicator, the pH values and the capacity into blank lines. It draws no marked points, guides, buffer region or indicator band. For finding pKa it does not name the acid or base, so its pKa cannot be looked up. For the pH at a volume and the buffer pH it draws no curve, only a dashed line at the volume asked about, since the curve would show the answer.",
+    },
+];
+
+const GAS_LAW_GRAPHS: &[Faq] = &[
+    Faq {
+        q: "Which graph shows which law?",
+        a: "Boyle: P against V is a falling curve that never reaches an axis (P \u{d7} V is constant); P against 1/V is a straight line through the origin, and PV against P is a flat line. Charles: V against T is a straight line that points to zero volume at absolute zero. Gay-Lussac: P against T is the same kind of line. Avogadro: V against n is a straight line through the origin. The combined gas law draws a family of such curves, one for each temperature, pressure or volume. Choose the graph with Graph, or leave it on Standard for the law.",
+    },
+    Faq {
+        q: "Which gas constant is used?",
+        a: "R = 0.082057 L atm/(mol K). For a pressure in kPa, R = 8.314 L kPa/(mol K), which is 8.314 J/(mol K). For mmHg and bar, R is the atm value times 760 mmHg/atm or 1.01325 bar/atm, and a volume in mL multiplies it by 1000, so no unit conversion appears anywhere else in a substitution. The key states the value it uses.",
+    },
+    Faq {
+        q: "Why does the key convert my Celsius temperatures?",
+        a: "A gas-law ratio such as V\u{2081}/T\u{2081} = V\u{2082}/T\u{2082} only works in kelvin. If the givens are in degrees Celsius the key adds 273.15 to each, shows the sum, and says why. A temperature at or below absolute zero (\u{2212}273.15 \u{b0}C) is refused with a note. The temperature axis can be in kelvin or in Celsius whatever the givens are; on the Celsius axis the line, extended back to absolute zero, reaches zero volume at \u{2212}273.15 \u{b0}C.",
+    },
+    Faq {
+        q: "How are the answers rounded?",
+        a: "The givens are kept to 4 significant figures and taken as exact. Each answer is worked out from the printed givens and rounded once, to the number of significant figures chosen (3 at first); the key says how many. A slope is worked out from the two readings as printed, and n from that printed slope.",
+    },
+    Faq {
+        q: "What does the student copy leave out?",
+        a: "Show answers off keeps the axes, the curves, the givens, the first state's point and a guide at the second state's known value, and turns the missing value, the readings, the slope, n and the name of the law into blank lines. It never writes the equation, and its description names no law and no value. The answer point, the guides to the axes and the open circle at absolute zero are drawn on the key only, so the student copy's drawing is the same whatever the answer is.",
+    },
+];
+
+const REACTION_ENERGY_DIAGRAM: &[Faq] = &[
+    Faq {
+        q: "What do the arrows measure?",
+        a: "Ea, the activation energy, runs from the reactants' level up to the peak: the energy the reactants must gain to reach the activated complex (transition state). \u{394}H runs from the reactants' level to the products' level. Ea (reverse) runs from the products up to the same peak, so it equals Ea \u{2212} \u{394}H (except in a two-step reaction whose intermediate lies below the reactants or the products: see the two-step answer). In Print, where every arrow is grey, Ea is solid, Ea (reverse) dashed, \u{394}H solid and heavier, and Ea (catalysed) dotted and lighter.",
+    },
+    Faq {
+        q: "How do I tell exothermic from endothermic?",
+        a: "Compare the two ends. Products below the reactants means \u{394}H = E(products) \u{2212} E(reactants) is negative: energy is released and the reaction is exothermic. Products above the reactants means \u{394}H is positive and the reaction is endothermic. For an endothermic reaction the peak cannot be lower than the products, so Ea is at least \u{394}H; the figure raises a smaller Ea to \u{394}H and says so.",
+    },
+    Faq {
+        q: "What does the catalyst change?",
+        a: "A catalyst provides an alternative pathway with a lower activation energy, drawn as the dashed curve with the lower peak. It does not change the energy of the reactants or of the products, so \u{394}H is the same with and without it, and it lowers the forward and reverse Ea by the same amount (unless a two-step reaction's intermediate lies below the reactants or the products: then each overall Ea is measured from the intermediate, as below, and the two are lowered by different amounts). The catalysed pathway is drawn as one hump even for a two-step reaction, and the legend says so: it shows where the lower peak lies, not how many steps the catalysed mechanism has, and its Ea is compared with the overall Ea of the uncatalysed reaction.",
+    },
+    Faq {
+        q: "How is a two-step reaction drawn?",
+        a: "With two peaks, one transition state for each step, and a valley between them for the intermediate. Each step's Ea is measured from the level just before it: step 1 from the reactants, step 2 from the intermediate. The overall Ea runs from the reactants to the highest peak, and Ea (reverse) from the products to the same peak. When the intermediate lies below the reactants, the reaction first drops into it and must then climb out, so the overall Ea is the largest climb on the way: from the intermediate up to the second peak if that is more than the climb from the reactants to the first. In the same way, when the intermediate lies below the products, Ea (reverse) is the larger of the climb from the products to the second peak and from the intermediate to the first, and the Ea (reverse) arrow is drawn on that climb. The key then says which climb it is and why, so the overall Ea is never smaller than the Ea of either step.",
+    },
+    Faq {
+        q: "What does the student copy leave out?",
+        a: "Show answers off keeps the curve, the axes and the energies printed at the axis, which are what a student works from, and replaces every computed value (\u{394}H, each Ea, how much the catalyst lowers Ea) and the words exothermic or endothermic with blank lines. The key prints the working, each number subtracted from the energies at the axis.",
+    },
+];
+
+const PV_DIAGRAM: &[Faq] = &[
+    Faq {
+        q: "Why is the work the area under the line?",
+        a: "Work is pressure times the change in volume, and on a PV diagram that is the area of a strip P dV. Adding the strips up gives the area under the path, which is why a bigger area means more work done by the gas. The axes are litres and pascals, so a count of grid cells is in L·Pa: multiply by 10^-3 to get the joules in the readout.",
+    },
+    Faq {
+        q: "What is the difference between the two paths?",
+        a: "On an isotherm the temperature is constant, so the pressure falls as the volume rises and the path curves. On an isobar the pressure is constant and the path is a flat line, so the work is simply P times the change in volume.",
+    },
+    Faq {
+        q: "Why is compressing the gas negative work?",
+        a: "The gas does work when it expands; work is done on it when it is compressed. The sign follows the direction of the change in volume, so putting the larger volume first gives a negative answer.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the work and the two pressures become blanks while the axes, the path and the given amounts, temperature and volumes stay. The shaded area under the path and the numbers on the pressure axis are drawn on the key only, since between them they give away the work and both pressures.",
+    },
+];
+
+const STANDING_WAVE: &[Faq] = &[
+    Faq {
+        q: "Why are some points not moving?",
+        a: "The two travelling waves that make the standing wave pass through each other in opposite directions, and at the nodes they always cancel. The string there never moves; halfway between them, at the antinodes, the motion is greatest. A standing wave carries no energy along the string, which is why nothing moves from one end to the other.",
+    },
+    Faq {
+        q: "How is the wavelength related to the string?",
+        a: "The ends are fixed, so they must be nodes: a whole number of half wavelengths fits the string. The nth harmonic has n half wavelengths, so the wavelength is 2L over n, and the frequency is n v over 2L.",
+    },
+    Faq {
+        q: "What are the dashed lines?",
+        a: "The envelope: the greatest displacement each point ever reaches. The solid curve is the string at one instant; it swings between the two dashed lines, which is why the picture alone does not show a single fixed shape.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the wavelength, the frequency and the counts of nodes and antinodes become blanks while the string, the wave, the envelope and the given length, speed and harmonic stay. The node dots and the antinode rings are drawn on the key only — counting them is the exercise.",
+    },
+];
+
+const MAGNETIC_FIELD: &[Faq] = &[
+    Faq {
+        q: "Which way do the field lines go round?",
+        a: "Point the thumb of your right hand along the current and your fingers curl the way the field lines go. A current out of the page gives anticlockwise circles, a current into the page gives clockwise ones, which is why the arrows reverse when you change the sense.",
+    },
+    Faq {
+        q: "Where does the formula come from?",
+        a: "For a long straight wire the field is μ₀I over 2πr: it is proportional to the current and falls as 1/r, not 1/r squared. Doubling the distance halves the field; doubling the current doubles it.",
+    },
+    Faq {
+        q: "Why is the wire drawn as a dot or a cross?",
+        a: "The picture looks down the wire. A dot is the tip of an arrow coming towards you (current out of the page) and a cross is the tail feathers going away (current into the page). The field circles lie in the plane of the page, round the wire.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the field strength and its value in microtesla become blanks while the wire, the field circles and the given current and distance stay. The direction is printed either way, since it follows from the sense of the current.",
+    },
+];
+
+const ELECTRIC_FIELD: &[Faq] = &[
+    Faq {
+        q: "Why do the field lines point the way they do?",
+        a: "A field line shows the direction of the force on a positive test charge. Around a positive charge the lines point away from it; around a negative charge they point towards it, which is why the arrows reverse when you change the sign.",
+    },
+    Faq {
+        q: "Why are the equipotential circles spaced like that?",
+        a: "Equal steps of potential are equal steps of 1/r, so the circles sit at r, r/2, r/3: they bunch up near the charge, where the field is strongest. A charge moving along one of them does no work, which is what equipotential means.",
+    },
+    Faq {
+        q: "How do the field and the potential differ?",
+        a: "The field falls as 1/r squared and the potential as 1/r. So doubling the distance quarters the field but only halves the potential. The potential also carries the charge's sign: it is negative around a negative charge, while the field strength is always positive.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the field strength, the potential and the force become blanks, and the force arrow on the test charge is not drawn. The charge, the field lines, the equipotentials and the given values stay.",
+    },
+];
+
+const REFRACTION: &[Faq] = &[
+    Faq {
+        q: "Why does the ray bend?",
+        a: "Light travels more slowly in a denser medium, and the change of speed at the boundary turns the ray. Snell's law says n1 sin theta1 = n2 sin theta2: going into the denser medium the ray bends towards the normal, and coming out it bends away.",
+    },
+    Faq {
+        q: "What is the critical angle?",
+        a: "It only exists going from a denser medium into a less dense one. At that angle the refracted ray lies along the boundary at 90 degrees; past it there is no refracted ray at all and the light is reflected back inside. The angle is arcsin(n2 / n1).",
+    },
+    Faq {
+        q: "Why does the figure say there is no refracted ray?",
+        a: "Because the incident angle is past the critical angle, so refraction is impossible and the light reflects instead. The figure draws the reflected ray and says so in the readout; there is no second medium ray to draw.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the refracted angle, the critical angle and the speeds become blanks while the incident ray, the normal and the given indices and angle stay. The refracted ray (or the reflected one past the critical angle) is drawn on the key only, since where it goes is the answer.",
+    },
+];
+
 const MOTION_MAP: &[Faq] = &[
     Faq {
         q: "What does the spacing of the dots tell me?",
@@ -3231,5 +3992,120 @@ const RAY_DIAGRAM: &[Faq] = &[
     Faq {
         q: "Can I hide the labels for a student copy?",
         a: "Yes. Turn off Label the points to remove them, or blank a label so students write it in. You can also hide the image and draw only one or two rays.",
+    },
+];
+
+const CIRCULAR_MOTION: &[Faq] = &[
+    Faq {
+        q: "Why does the velocity point sideways?",
+        a: "The body is going round at a steady speed, so its velocity is along the tangent to the circle at the moment shown. Nothing in a circle is moving towards the centre; what points at the centre is the acceleration, which is what changes the direction of the velocity rather than its size.",
+    },
+    Faq {
+        q: "Where do the numbers come from?",
+        a: "The centripetal acceleration is v squared over r, the force is the mass times that (m v squared over r), the angular speed is v over r, and the period is 2 pi r over v, the time for one whole turn. Doubling the speed on the same circle quadruples the acceleration.",
+    },
+    Faq {
+        q: "Is there a force pushing the body outwards?",
+        a: "No. The only horizontal force on a body in steady circular motion acts towards the centre: the tension in a string, gravity for a satellite, friction for a car on a bend. What feels like being pushed outwards is the body trying to carry on in a straight line while it is being turned.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the acceleration, the force, the angular speed and the period become blanks while the circle, the arrows and the given mass, radius and speed stay.",
+    },
+];
+
+const COLLISION_MOMENTUM: &[Faq] = &[
+    Faq {
+        q: "Why is the momentum the same before and after?",
+        a: "Momentum is conserved in any collision, because the forces the carts exert on each other are equal and opposite and act for the same time. The two rows of the figure always print the same total; only the kinetic energy differs.",
+    },
+    Faq {
+        q: "What is the difference between the two kinds?",
+        a: "An elastic collision keeps the kinetic energy: the carts bounce apart with the same total kinetic energy they had. A perfectly inelastic one loses as much kinetic energy as any collision can, because the carts end up moving together at one speed.",
+    },
+    Faq {
+        q: "Why do equal masses swap speeds?",
+        a: "It falls out of momentum and kinetic energy both being conserved: when the masses are equal, each cart leaves with the other's speed. The example does exactly that, and the readout shows the totals unchanged.",
+    },
+    Faq {
+        q: "How do I make a worksheet?",
+        a: "Turn Show answers off: the momenta, the velocities after and the kinetic energies become blanks, and only the given (before) arrows are drawn — the after arrows are part of the answer. The carts, the collision kind and the given masses and velocities stay.",
+    },
+];
+
+const SOIL_TEXTURE: &[Faq] = &[
+    Faq {
+        q: "Where do the class boundaries come from, and how were they checked?",
+        a: "The classes and their limits are those of the USDA textural triangle in the Soil Survey Manual (Soil Survey Division Staff, 2017, chapter 3: the class definitions on p. 124 and the triangle in figure 3-7 on p. 125). The class of a sample comes from those limits as they are worded (loam is 7 to less than 27 % clay, 28 to less than 50 % silt and 52 % or less sand; sandy loam needs more than 52 % sand when clay is 7 to less than 20 %; clay is 40 % or more clay with 45 % or less sand and less than 40 % silt, and so on), so every sample, including one exactly on a line, has exactly one class. The twelve shaded regions are drawn from whole-percent vertices that this figure writes itself from the same limits; no web figure or image was copied. Tests classify every whole percent and every 0.1 % (about half a million points) with the limits written again in a different form, and with the drawn polygons: they never disagree, on a line or off it, and the limits leave no gap or overlap.",
+    },
+    Faq {
+        q: "What do I type, and when is the figure refused?",
+        a: "Type any two of sand, silt and clay as percents (up to 2 decimals; 40, 40.5, 40,5 and 40 % all work); the third is worked out as 100 minus the other two. If you type all three they must add to 100: a total from 99.5 to 100.5 is accepted because lab sheets round, and the three are scaled in proportion so that they add to exactly 100 (to the hundredth; for example 52.3, 28 and 20 become 52.14, 27.92 and 19.94, which is sandy loam). The figure prints and classifies the scaled values, and the editor note and the key say what was typed and that it was scaled. A second sample works the same way and is plotted with a numbered tag. The figure refuses, and says why in the picture and in the editor note, when a value is not a number written with the digits 0 to 9, is negative, is above 100, has more than 2 decimals, when two values add to more than 100 (the third would be negative), when three typed values do not add to a total from 99.5 to 100.5, or when fewer than two are typed. Each refusal quotes what you typed and ends with a change that draws, for example clearing the silt box. Name the regions reads no sample, so a bad value there is not an error.",
+    },
+    Faq {
+        q: "What happens when a sample is exactly on a line?",
+        a: "The point is drawn exactly where its percentages say, and the Manual's limits already say which class it is: a sample at sand 52 %, clay 20 % (silt 28 %) is loam, because loam allows 52 % sand or less and 28 % silt or more, while sandy loam needs more than 52 % sand and sandy clay loam needs less than 28 % silt. The key names that class, outlines it, and says which classes the line is between (on a line between sandy loam, loam and sandy clay loam; the limits in the Soil Survey Manual make it loam); the editor note says it too. The student copy prints nothing about it, so a student copy should not put a sample on a line: the editor note warns when one does. When the dot only touches a line without being on it, the percentages decide, because the classification is exact arithmetic on the typed digits.",
+    },
+    Faq {
+        q: "How do I read the triangle, and what are the construction lines?",
+        a: "This is the Manual's triangle. Clay is read on the left edge and rises upward (gridlines are horizontal). Sand is read on the bottom and rises toward the left corner (gridlines run parallel to the right edge). Silt is read on the right edge and rises downward (gridlines run parallel to the left edge). Each axis has an arrow in the direction of more. The corner at the top is 100 % clay, the lower left 100 % sand and the lower right 100 % silt. Show construction lines draws three dashed lines from each sample to the axis where each is read: the clay line runs level to the left edge, the sand line runs parallel to the right edge down to the bottom, and the silt line runs parallel to the left edge up to the right edge. The dots where they land show the three numbers.",
+    },
+    Faq {
+        q: "What do the student copy and the key hide, and what is Name the regions?",
+        a: "In Classify, the student copy plots each sample and prints the three percentages with a blank rule for the texture class; the key fills the blank, outlines the class on the triangle, and says when the point is on a line. The twelve class names stay on the triangle because the student needs them to answer. The option Student copy: print the worked-out third value, when off, prints a blank in place of the value that was worked out from the other two (silt when sand and clay are typed), so the student works it out first, and leaves out the construction line to that value's axis (its landing dot would show the number); the key always prints the value and draws all three lines. In Name the regions the triangle shows twelve numbered discs and no names, the student copy has a blank for each number, and the key prints the names in order (1 sand, 2 loamy sand, 3 sandy loam, 4 loam, 5 silt loam, 6 silt, 7 sandy clay loam, 8 clay loam, 9 silty clay loam, 10 sandy clay, 11 silty clay, 12 clay). The layout is identical in both copies.",
+    },
+    Faq {
+        q: "Why are some regions labelled with letters, and how does Print work?",
+        a: "A region prints its full name (on one or two lines) only if the name fits inside it with a margin and clear of the sample and of every construction line; otherwise it prints the standard abbreviation (S, LS, SL, L, SiL, Si, SCL, CL, SiCL, SC, SiC, C), and the legend under the triangle names every abbreviation. A label never covers a construction line: when the lines cut a region into pieces too small for even the abbreviation, the label is printed in a clear place nearby with a short leader from a dot inside the region. Sand, loamy sand and silt are always named in one row below the bottom edge, each on a short leader that starts at the edge under its region, so that the crowded bottom corners stay clear for the sample and its lines (the Manual prints them inside; loamy sand is a thin sliver). Abbreviations only forces letters for every region. Print is black, white and grey only: the twelve classes use four hatches (diagonal lines, cross-hatch, dots, vertical lines; the plain fill and the horizontal lines are not used so that no hatch can hide a construction line) and no two classes that touch use the same one. Construction lines are drawn black on a white strip, and the gridlines are dark enough to survive a 66 % grey copy.",
+    },
+];
+
+const LEAF_CROSS_SECTION: &[Faq] = &[
+    Faq {
+        q: "What does the section show, and what is simplified?",
+        a: "A slice across the blade of a typical dicot leaf, top to bottom: a waxy cuticle, the upper epidermis (clear cells with no chloroplasts), the palisade mesophyll (tall, tightly packed columns holding most of the chloroplasts), the spongy mesophyll (irregular cells with fewer chloroplasts and large air spaces between them), a vein, and the lower epidermis with stomata and a thinner cuticle. Each stoma is a pore between two guard cells, the only epidermal cells with chloroplasts, with an air chamber (the sub-stomatal air space) above it. The vein (vascular bundle) is ringed by bundle-sheath cells, with xylem on the upper side and phloem (sieve tubes and smaller companion cells) on the lower side. Stomata are drawn only on the lower surface, where most of them are in a typical dicot leaf. It is not to scale, and the cells are simplified. Checked against OpenStax Biology 2e, section 30.4 (Leaves).",
+    },
+    Faq {
+        q: "What changes when the stomata are open or closed?",
+        a: "Open: the guard cells have taken up water and swollen (turgid), so they are larger and bow apart round a pore; in the view from below the two kidney-shaped cells are fatter and curve round a wide slit. Closed: they have lost water and gone limp (flaccid), so they are smaller and meet, and the pore is shut; the neighbouring epidermal cells take up the room. The gas-exchange arrows (carbon dioxide in; oxygen and water vapour out, as in daylight when photosynthesis is faster than respiration) go through an open stoma only. With the stomata closed there is no open pore to point at, so the arrows and the Stoma label are left out (Guard cell and Air space stay) and the editor note says so; the key's caption says which state is drawn and why.",
+    },
+    Faq {
+        q: "Which wording is the answer?",
+        a: "The key uses one wording and lists the others it accepts under the figure. Waxy cuticle (cuticle, wax layer). Upper epidermis (epidermis, adaxial epidermis) and lower epidermis (epidermis, abaxial epidermis). Palisade mesophyll (palisade layer, palisade cells, palisade parenchyma). Chloroplast (chloroplasts). Spongy mesophyll (spongy layer, spongy cells, spongy parenchyma). Vascular bundle (vein, leaf vein). Xylem (xylem vessel). Phloem (sieve tube, phloem sieve tube). Air space (intercellular air space, intercellular space). Stoma (stomata as the plural, stomatal pore, pore). Guard cell (guard cells; also stoma when the stomata are closed, because a closed stoma has no Stoma blank). Light (sunlight, light energy). CO2 (carbon dioxide), O2 (oxygen), water vapour (water, H2O, water vapor).",
+    },
+    Faq {
+        q: "How does a student tell the pointers apart, and what does the student copy change?",
+        a: "A bracket beside the section spans exactly one layer; the bracket beside the vein spans the whole bundle. A plain line ends inside the one part it names: in the cuticle, in a xylem vessel, in a phloem sieve tube, in an air space, in a guard cell or in the open pore; the chloroplast's line stops just above the chloroplast so it does not cover it. There is no dot or ring at the end, so nothing small is hidden, and no white edge, so a line never erases the tissue it crosses. An arrow carries light or a gas and is named by what it carries; the two arrows that point out of the leaf (oxygen and water vapour) cannot be told apart by their direction, so both copies say that they may be named in either order. With Show answers off every name becomes a numbered disc in the same place and a table under the figure has a rule for each; the caption explains only the kinds of pointer that are drawn, without naming a part.",
+    },
+    Faq {
+        q: "What does Print change, and is anything left out?",
+        a: "Print is black, white and grey only and survives a photocopy at 66 % grey: the cuticle is a dark band, cells are white with black walls, chloroplasts are dark dots, xylem vessels have thick black walls and the phloem sieve tubes are ruled with fine horizontal lines (not dots, which would read as chloroplasts), and every arrow is black. The figure opens with Large labels, so a printed copy stays readable. Not drawn: hairs (trichomes), the midrib, a C4 leaf's wreath of bundle-sheath cells, and the chloroplasts' inner structure (see the Photosynthesis figure). The bundle sheath is drawn but not labelled, by design: the vein is named as a whole by its bracket, and the figure keeps its pointers short and clear of each other instead of adding another one.",
+    },
+];
+
+const PHOTOSYNTHESIS: &[Faq] = &[
+    Faq {
+        q: "What does the picture show, and what is simplified?",
+        a: "One chloroplast: an outer and an inner membrane (together the envelope), the stroma inside them, and grana, which are stacks of flattened thylakoids joined by single thylakoid sheets. The light-dependent reactions happen in the thylakoid membranes (the bar under the grana); the Calvin cycle runs in the stroma (the loop, and the bar under it). It is not to scale, a real chloroplast has dozens of grana, the space inside the thylakoids is not drawn, and the loop is drawn beside the grana for clarity although the stroma surrounds them. Which stack makes which carrier is not implied: the four carrier arrows only show that ATP and NADPH go from the light-dependent reactions to the Calvin cycle and that ADP + Pi and NADP+ come back.",
+    },
+    Faq {
+        q: "Where does each input come from and each output go?",
+        a: "Light is absorbed by chlorophyll in the thylakoid membranes. Water is split in the light-dependent reactions, and it is the source of the oxygen released (the oxygen does not come from the carbon dioxide). The reactions make ATP and NADPH, which are used in the Calvin cycle; the cycle gives back ADP + Pi and NADP+. Carbon dioxide enters the Calvin cycle, not the light-dependent reactions. The molecule the cycle makes directly is G3P (glyceraldehyde 3-phosphate); two G3P can be joined, after further steps, to make glucose. The figure stops at G3P and does not say where the glucose is made. The overall equation, 6CO2 + 6H2O + light giving C6H12O6 + 6O2, is balanced (6 C, 12 H and 18 O on each side).",
+    },
+    Faq {
+        q: "Which wording is the answer?",
+        a: "The key uses one wording and lists the others it accepts under the figure. Light-dependent reactions (light reactions). Calvin cycle (light-independent reactions, Calvin-Benson cycle). Thylakoid membrane (thylakoid). Granum (grana, thylakoid stack). Stroma (chloroplast stroma). Outer membrane (outer envelope membrane) and inner membrane (inner envelope membrane). Light (sunlight, light energy). ATP (adenosine triphosphate). NADPH (reduced NADP). Water, oxygen and carbon dioxide for their formulas. G3P (glyceraldehyde 3-phosphate, PGAL, triose phosphate). Glucose is not accepted for the arrow out of the cycle: it is made from G3P, not by the cycle itself. 'Dark reactions' is not accepted: the cycle uses the ATP and NADPH the light-dependent reactions make, and it runs while the plant is in the light.",
+    },
+    Faq {
+        q: "How can a student tell the pointers apart, and what does a student copy or Print change?",
+        a: "A small ring ends on exactly one structure: a ring on a membrane line names that membrane, a ring on the outline of one flat thylakoid names the thylakoid membrane, a ring in the open fluid names the stroma. A bracket spans a whole stack and names the granum. A bar under the drawing names a stage and spans the part of the chloroplast where it happens. An arrow carries a substance and is named by what it carries. The inner membrane's pointer has to cross the outer membrane to get there; no other pointer crosses a structure that is not its own container. The student copy says all this in one sentence under the figure. With Show answers off every name is replaced by a numbered disc in the same place, and the table under the figure has a rule to write each one on. The equation becomes one blank (write the balanced equation with the smallest whole-number coefficients; glucose is given as C6H12O6, and light may be written on the left or over the arrow), and the reading at P is another. ADP + Pi and NADP+ are printed in both copies as clues: the arrow that returns ADP + Pi is the partner of the one that carries ATP, and NADP+ of NADPH, so each of those blanks has one answer. The molecule leaving the Calvin cycle is asked for by the sentence 'give the molecule it makes directly'. Print is black, white and grey only and survives a photocopy at 66 % grey. The thylakoids are cross-hatched, the space between the two membranes has horizontal lines, the stroma is white, and every arrow is black; the arrows that return ADP + Pi and NADP+ are dashed, the others solid. The graph curve is black.",
+    },
+    Faq {
+        q: "What is the graph, how are typed values read, and what is refused?",
+        a: "A textbook curve, original and not data from a species. Against light intensity or CO2 concentration the rate is Pmax x / (K + x): it starts at zero, rises, and levels off at the plateau, Pmax; K is the value that gives half of the plateau (the half-saturation). The rising part is limited by the factor on the x axis; on the plateau that factor has stopped limiting the rate and another one (for example CO2 supply, light or temperature) is limiting. The CO2 curve starts at zero and leaves out the compensation point where respiration cancels photosynthesis. Against temperature the rate rises gently to an optimum and then falls steeply to zero at 1.4 times the optimum (enzymes losing their shape). Plateau or peak rate: 1 to 100 arbitrary units. Half-saturation: 3 to 20 % of full sunlight, or 40 to 240 ppm, so that the curve has reached 5/6 of its plateau by the end of the axis and half of it is not squeezed against the vertical axis. Optimum: 15 to 40 degrees C, so that the zero of the fall stays at least 4 degrees short of 60. Leave the half-saturation or optimum empty for a typical value (10 %, 120 ppm, 30 degrees C). Digits as typed: a minus sign, a decimal point or comma, and the unit of the box (au, %, ppm, degrees C) are accepted. A comma followed by exactly three digits is refused as ambiguous (1,000) rather than guessed. A value outside its range, or not a number, replaces the graph with the reason, quoting what was typed, and a value that works; the editor note says the same, one note for every box. The rest of the figure is still drawn. A value typed exactly on a limit is accepted. Point P may be left empty for no point.",
+    },
+    Faq {
+        q: "What is the point P, and what counts as a correct reading?",
+        a: "P is a dot on the curve at the x you type, with a dashed guide to each axis, so a student reads the rate off the vertical axis. The key prints the exact rate, rounded half up to the chosen number of decimal places (the student's reading from the graph will be a little rougher; accept a reading within half of one gridline). Against temperature P beyond 1.4 times the optimum reads 0.",
     },
 ];

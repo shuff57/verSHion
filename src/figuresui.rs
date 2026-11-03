@@ -362,7 +362,7 @@ fn thumb_for(ctx: &egui::Context, def: &FigureDef, p: &Params, scale: f32, budge
     }
     *budget -= 1;
     THUMB_RENDERS.with(|c| c.set(c.get() + 1));
-    let tex = figures::to_png(&(def.render)(p), scale)
+    let tex = figures::to_png(&def.svg(p), scale)
         .ok()
         .and_then(|png| texture(ctx, format!("testparrot:thumb:{key}"), &png));
     THUMBS.with(|t| t.borrow_mut().insert(key, tex.clone()));
@@ -384,7 +384,7 @@ pub(crate) fn thumb_fit(ctx: &egui::Context, def: &FigureDef, p: &Params, bw: f3
     *budget -= 1;
     THUMB_RENDERS.with(|c| c.set(c.get() + 1));
     // crisp hairlines turn into solid 1 px bars at thumbnail scale; the browser smooths them to fine grey
-    let svg = (def.render)(p).replace(r#"shape-rendering="crispEdges""#, "");
+    let svg = def.svg(p).replace(r#"shape-rendering="crispEdges""#, "");
     let tex = (|| {
         let mut opt = resvg::usvg::Options::default();
         opt.fontdb = figures::fontdb();
@@ -538,7 +538,7 @@ fn help_fab(ctx: &egui::Context, left: bool) {
 /// The gallery's PNG button: the example as a 2x PNG on white, through a save dialog.
 fn export_example_png(def: &FigureDef, e: &figures::Example) -> Act {
     let p = example_params(def, e);
-    let png = match figures::to_png(&(def.render)(&p), 2.0).and_then(|b| flatten_white(&b)) {
+    let png = match figures::to_png(&def.svg(&p), 2.0).and_then(|b| flatten_white(&b)) {
         Ok(b) => b,
         Err(err) => return Act::Toast(format!("Couldn't render the example: {err}"), true),
     };
@@ -906,7 +906,7 @@ impl Workspace {
             return Ok(Output { png: imp.png.clone(), svg: imp.svg.clone(), spec: None });
         }
         let def = &reg()[self.sel.ok_or("no figure selected")?];
-        let svg = (def.render)(&self.params);
+        let svg = def.svg(&self.params);
         let png = flatten_white(&figures::to_png(&svg, 2.0)?)?;
         Ok(Output { png, svg: Some(svg), spec: Some(spec_for(def.id, &self.params)) })
     }
@@ -1287,7 +1287,7 @@ impl Workspace {
                     }
                 };
                 if first || rescale || self.live || t0.elapsed() >= DEBOUNCE {
-                    let svg = (def.render)(&self.params);
+                    let svg = def.svg(&self.params);
                     self.canvas = figures::svg_size(&svg);
                     let scale = fit(want, self.canvas);
                     match figures::to_rgba_at(&svg, scale, self.want_phase) {
@@ -2263,6 +2263,8 @@ impl Workspace {
                             .show(ui, |ui| self.rows_card(ui, def.id, &pdefs, &card));
                         ui.add_space(6.0);
                     }
+                    // what the figure could not draw as asked, for every figure that has notes
+                    self.notes_box(ui, def.id);
                     let secs = figures::layout::sections(if skin_phys && def.id == "length-reading" { "length-reading@physics" } else { def.id }, &pdefs, n_now);
                     if skin && def.id == "mass-spectrum" {
                         self.isotopes_card(ui, &pdefs);
@@ -2834,6 +2836,34 @@ impl Workspace {
     }
 
     /// "Add a force" chips: each appends one preset item and bumps the count.
+    /// Editor warnings for any figure: what could not be drawn as asked. Shown here, never in the SVG, and for every
+    /// figure that has notes — not only the ones with a rows card.
+    fn notes_box(&mut self, ui: &mut Ui, fig: &str) {
+        let key = figures::params_key(&self.params);
+        let wid = ui.make_persistent_id(("grid_warn", fig));
+        let cached: Option<(u64, Vec<String>)> = ui.data(|d| d.get_temp(wid));
+        let warns = match cached {
+            Some((k, w)) if k == key => w,
+            _ => { let w = figures::notes_for(fig, &self.params); ui.data_mut(|d| d.insert_temp(wid, (key, w.clone()))); w }
+        };
+        if !warns.is_empty() {
+            // a framed box, so a row that was not drawn is not missed
+            ui.add_space(4.0);
+            Frame::new()
+                .fill(egui::Color32::from_rgba_unmultiplied(200, 50, 50, 22))
+                .stroke(Stroke::new(1.0, theme::red()))
+                .corner_radius(CornerRadius::same(6))
+                .inner_margin(Margin::same(8))
+                .show(ui, |ui| {
+                    ui.label(RichText::new("Notes").color(theme::red()).strong().size(12.5));
+                    for w in warns {
+                        ui.add_space(2.0);
+                        ui.label(RichText::new(w).color(theme::red()).size(12.0));
+                    }
+                });
+        }
+    }
+
     fn chips_card(&mut self, ui: &mut Ui, fig: &str, pdefs: &[ParamDef], card: &figures::ChipsCard) {
         let n = self.params.i(card.count_key);
         // the shell sets it as the Measures card: letter-spaced title, outlined chips
@@ -3153,9 +3183,9 @@ impl Workspace {
         });
     }
 
-    /// Whether the open figure has a `show_answers` switch (so "Student + key" applies).
+    /// Whether the open figure has a `show_answers` switch or a mapped hide control (so "Student + key" applies).
     fn has_answers(&self) -> bool {
-        self.sel.is_some_and(|i| figures::hides_answers(&(reg()[i].params)()))
+        self.sel.is_some_and(|i| figures::has_answer_pair(&reg()[i]))
     }
 
     /// Saves the student copy where the user chooses and the answer key beside it
@@ -3168,7 +3198,7 @@ impl Workspace {
         };
         let (ext, label) = if svg { ("svg", "SVG") } else { ("png", "PNG") };
         let bytes = |s: &str| -> Result<Vec<u8>, String> {
-            if svg { Ok(s.as_bytes().to_vec()) } else { flatten_white(&figures::to_png(s, 2.0)?) }
+            if svg { Ok(figures::svg::annotate(s, def.title, def.blurb).into_bytes()) } else { flatten_white(&figures::to_png(s, 2.0)?) }
         };
         let (sb, kb) = match (bytes(&student), bytes(&key)) {
             (Ok(a), Ok(b)) => (a, b),

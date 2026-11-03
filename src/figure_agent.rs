@@ -201,7 +201,7 @@ struct Rendered {
 fn render(id: &str, over: &Json) -> Result<Rendered, String> {
     let d = find(id).ok_or_else(|| format!("no figure with id {id:?}; call list_figures"))?;
     let (p, notes) = build_params(d, over);
-    let svg = (d.render)(&p);
+    let svg = d.svg(&p);
     let png = figures::to_png(&svg, 1.0).map_err(|e| format!("render failed: {e}"))?;
     let png = flatten_white(&png).unwrap_or(png);
     Ok(Rendered { spec: spec_for(d.id, &p), png, notes })

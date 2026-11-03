@@ -423,7 +423,7 @@ fn pes_geom(p: &Params, peaks: &[(String, u8, f64)], extra: &[(String, u8, f64)]
     let (x1, y0) = (x0 + PES_PLOT_W, 42.6);
     let y1 = y0 + PES_PLOT_H;
     let scale = match p.s("scale") {
-        "Linear" => { let st = super::frame::nice(emax * 1.08, 8.0); PesScale::Lin(0.0, (emax * 1.08 / st).ceil() * st) }
+        "Linear" => { let st = crate::figures::axes::nice_step_with(emax * 1.08, 8.0, crate::figures::axes::Rule::QuarterTol); PesScale::Lin(0.0, (emax * 1.08 / st).ceil() * st) }
         "Broken" => {
             let mut es = all.clone();
             es.sort_by(|a, b| b.total_cmp(a));
@@ -498,7 +498,7 @@ fn pes_render(p: &Params) -> String {
         }
         PesScale::Lin(lo, hi) => {
             d.line(x0, y1, x1, y1, INK, 2.0);
-            let st = super::frame::nice(hi - lo, 8.0);
+            let st = crate::figures::axes::nice_step_with(hi - lo, 8.0, crate::figures::axes::Rule::QuarterTol);
             let mut v = *lo;
             while v <= hi + 1e-9 { d.line(g.px(v), y1, g.px(v), y1 + 7.0, INK, 1.4); tx(&mut d, g.px(v), y1 + 20.0, 14.0, "middle", INK, false, &thousands(v)); v += st; }
         }
@@ -509,7 +509,7 @@ fn pes_render(p: &Params) -> String {
                 if i + 1 < gs.len() {
                     for bx in [xb + 8.0, xb + 22.0] { d.line(bx - 4.0, y1 + 8.0, bx + 4.0, y1 - 8.0, INK, 1.6); }
                 }
-                let st = super::frame::nice(hi - lo, 3.0);
+                let st = crate::figures::axes::nice_step_with(hi - lo, 3.0, crate::figures::axes::Rule::QuarterTol);
                 let mut v = (lo / st).ceil() * st;
                 while v <= hi + 1e-9 { d.line(g.px(v), y1, g.px(v), y1 + 7.0, INK, 1.4); tx(&mut d, g.px(v), y1 + 20.0, 14.0, "middle", INK, false, &thousands((v * 1000.0).round() / 1000.0)); v += st; }
             }
