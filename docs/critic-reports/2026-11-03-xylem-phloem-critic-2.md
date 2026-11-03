@@ -1,0 +1,25 @@
+# Xylem and phloem, critic 2, commit 2cf59ef
+
+Verdict: FAIL. 0 blocker, 0 major, 3 MED, 6 LOW, 4 minor. (Condensed; tools/dumps in scratchpad/xylem-crit2/.)
+Method: 2,304 SVGs with resvg ink boxes, own parser, 29 own mutants on the new code (all killed, but two only by the census hash), 14 PNGs, OpenStax 30.2/30.3/30.5 re-fetched. Full figures:: stopped at 476 passed 0 failed (load).
+
+## MED
+1. "Xylem vessel" pointer now ends 4.83 px from a water arrowhead (all 144 states where drawn), so it reads as an arrow blank. Cause: round-2 change (EL 64 to 56, VESSEL_Y 72 to EL+12 = 68). Repro: view=Stem, longitudinal, show_cells, show_arrows, answers off, Large, Colour/Print. Student caption says a line ending on an arrow asks what it carries, so disc 8 invites "water". Sieve tube pointer ends 6.42 px from an up (sucrose) arrow tail. Untested: mutants M27 (vessel pointer EL+6) and M28 (sieve pointer 3 px nearer) caught only by the census hash. Fix: end the vessel pointer in the lignified wall (x about 2, between ring thickenings, ~11 px from any shaft), move the sieve end next to its side wall, test every lengthwise part pointer ends >= ~8 px from any arrow shaft or head.
+2. Small-print note and lengthwise-only note send the teacher in a circle. Stem, lengthwise on, all labels on, Large: note says "...5.3 pt... switch off Longitudinal view of transport (about 8.4 pt)"; following it removes every arrow; the same state then shows the other note telling them to switch it back on. Same for Both, Root, gallery example 3 (the advice deletes the question). Test only checks a step prints bigger. Fix: do not offer that step while arrows/cell labels are on (or say it removes them); test that applying any offered step raises no other note.
+3. Opening state shows no transport direction and nothing points the way (stem alone, lengthwise/arrows/cells/root extras off). Switching the lengthwise view on draws a bare vessel and sieve tube with no arrows, labels or note; "Transport arrows" is a second switch nothing mentions; Cross-section Both draws the root without root-hair/Casparian labels, no note. Defeats the stated purpose (direction of water and sugar). Fix: keep cells, arrows and root extras on at opening without firing hidden-panel notes, or add a note when lengthwise is on but arrows off; test the path from opening to showing transport.
+OWNER DECISION 2026-11-03: open on Stem + transport view (accept ~5.3 pt names at worksheet width, small-print note points to a bigger single view).
+
+## LOW
+1 All five gallery examples open with the small-print note (printed 3.9, 7.2, 7.9, 5.2, 5.4 pt; examples apply over Medium defaults; examples test relaxed from note-free to small-print-note-only). Set label_size=Large in each. 2 Print: Sucrose blank's last leg blends with the dashed shaft (diagonal, near-parallel; worse at 66% grey): end with a short horizontal leg square to the shaft. 3 Student copies have empty bands 300-530 px between panels (cosmetic; shrinking boxes does not print larger, height-limited). 4 Captions print below 8 pt at the opening state (12/13 of name size, 7.8 pt). 5 FAQ "about 4 to 5 pt" with three panels true only at Large (Medium 3.94, Small 3.39). 6 Fuzz test now checks notes on every third input only.
+
+## minor
+Colour: both arrow kinds solid, so "arrows of one style" means colour; bracket outer tick 9 px from the phloem; Small to Medium never offered by the note (by design); "sucrose ends on a down arrow below the leaf" tested only as not-in-leaf and upright (M33 caught only by a head collision; biologically harmless).
+
+## Biggest gap vs textbook
+Lengthwise view is still arrows in boxes with no link to the cross-sections; leaf has no xylem supply and no transpiration exit.
+
+## Verified correct
+Arrow blanks (1,152 Colour states): water ends 0.60 px off an upright up-shaft in the vessel, 50% along; sucrose 0.60 px off an upright down-shaft in element 5 below the leaf, never the loading arrow; next-nearest arrow 36.8 px away, nearest other named part 27.8 px (water) / 12.2 px (companion cell 5); no crossings. Bracket: ticks 7.30 px square to the spine, lead at the midpoint, printed ticks >= 1.93 pt (3.6 pt at opening), reads in Colour, Print, 66% grey. Layout: 1,152 Colour states no collisions, nothing off canvas; side column used in 772 states. Printed sizes recomputed (13 x label factor x min(0.75, 468/w, 216/h)) match the builder's in all 1,152 states (opening 8.425 pt). Small-print note appears exactly below 8 pt, stated size within 0.05 pt, all 1,985 offered steps print >= 0.5 pt bigger. Biology (stem, vessels without "thick", sieve tubes, root X, pericycle, Casparian, directions, "two to six" arms, PATCH_R 47 spans r 39.5-54.5, 4 vessels per arm shrinking to the tip). 0 leaks in 1,152 student SVGs. Regression: 28 module tests (2 ignored), census differs from df9a004 only in the two xylem lines, start/faq/interact pass, only a 20 s CPU bound.
+
+## Not checked
+Live egui, real PDF/DOCX, other fonts, photocopier, Campbell/Raven, a complete full figures:: run.
