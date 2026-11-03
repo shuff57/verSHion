@@ -52,8 +52,6 @@ pub mod refraction;
 pub mod electric_field;
 pub mod magnetic;
 pub mod standing;
-pub mod raydiagram;
-pub mod motionmap;
 pub mod pv_diagram;
 pub mod math;
 pub mod math_geo;
@@ -543,8 +541,6 @@ pub fn key_path(student: &std::path::Path) -> std::path::PathBuf {
 pub fn registry() -> Vec<FigureDef> {
     let mut v = Vec::new();
     v.extend(physics::defs());
-    v.extend(raydiagram::defs());
-    v.extend(motionmap::defs());
     v.extend(electric::defs());
     v.extend(biology::defs());
     v.extend(chemistry::defs());
@@ -751,7 +747,7 @@ pub fn after_panel_change(id: &str, key: &str, old: &Value, p: &mut Params) {
 pub fn grid_warnings(p: &Params) -> Vec<String> { math::grid_warnings(p) }
 /// Editor-only notes for the figures that have them (what could not be drawn as asked).
 pub fn notes_for(id: &str, p: &Params) -> Vec<String> {
-    match id { "coordinate-grid" => math::grid_warnings(p), "circle" => circle::warnings(p), "right-triangle-trig" => trig::warnings(p), "sine-cosine" => sincos::warnings(p), "unit-circle" => unitcircle::warnings(p), "transformations" => transform::warnings(p), "fraction-models" => fraction::warnings(p), "triangle-centres" => triangle_centres::warnings(p), "slope-triangle" => slope::warnings(p), "protractor" => protractor::warnings(p), "base-ten-blocks" => baseten::warnings(p), "solid-net" => nets::warnings(p), "energy-bar-chart" => energy::warnings(p), "collision-momentum" => momentum::warnings(p), "circular-motion" => circular::warnings(p), "refraction" => refraction::warnings(p), "electric-field" => electric_field::warnings(p), "magnetic-field" => magnetic::warnings(p), "standing-wave" => standing::warnings(p), "pv-diagram" => pv_diagram::warnings(p), "circuit-diagram" => physics::instr_warnings(p), "ray-diagram" => raydiagram::warnings(p), "motion-map" => motionmap::warnings(p), "hardy-weinberg" => biology::hardyweinberg::warnings(p), "chi-square-fit" => biology::chisquarefit::warnings(p), "enzyme-kinetics" => biology::enzyme::warnings(p), "reaction-energy-diagram" => chemistry::reactionenergy::warnings(p), "reaction-rate-graph" => chemistry::ratesgraph::warnings(p), "phase-diagram" => chemistry::phasediagram::warnings(p), "solubility-curves" => chemistry::solubilitycurves::warnings(p), "gas-law-graphs" => chemistry::gaslaws::warnings(p), "equilibrium-graphs" => chemistry::equilibrium::warnings(p), "buffer-curves" => chemistry::buffercurves::warnings(p), "cladogram" => biology::cladogram::warnings(p), "food-web" => biology::foodweb::warnings(p), "energy-pyramid" => biology::energypyramid::warnings(p), "action-potential" => biology::actionpotential::warnings(p), "cell-cycle" => biology::cellcycle::warnings(p), "cell-diagram" => biology::celldiagram::warnings(p), "soil-texture" => biology::soiltexture::warnings(p), "photosynthesis" => biology::photosynthesis::warnings(p), "leaf-cross-section" => biology::leaf::warnings(p), _ => vec![] }
+    match id { "coordinate-grid" => math::grid_warnings(p), "circle" => circle::warnings(p), "right-triangle-trig" => trig::warnings(p), "sine-cosine" => sincos::warnings(p), "unit-circle" => unitcircle::warnings(p), "transformations" => transform::warnings(p), "fraction-models" => fraction::warnings(p), "triangle-centres" => triangle_centres::warnings(p), "slope-triangle" => slope::warnings(p), "protractor" => protractor::warnings(p), "base-ten-blocks" => baseten::warnings(p), "solid-net" => nets::warnings(p), "energy-bar-chart" => energy::warnings(p), "collision-momentum" => momentum::warnings(p), "circular-motion" => circular::warnings(p), "refraction" => refraction::warnings(p), "electric-field" => electric_field::warnings(p), "magnetic-field" => magnetic::warnings(p), "standing-wave" => standing::warnings(p), "pv-diagram" => pv_diagram::warnings(p), "circuit-diagram" => physics::instr_warnings(p), "ray-diagram" => physics::ray_warnings(p), "hardy-weinberg" => biology::hardyweinberg::warnings(p), "chi-square-fit" => biology::chisquarefit::warnings(p), "enzyme-kinetics" => biology::enzyme::warnings(p), "reaction-energy-diagram" => chemistry::reactionenergy::warnings(p), "reaction-rate-graph" => chemistry::ratesgraph::warnings(p), "phase-diagram" => chemistry::phasediagram::warnings(p), "solubility-curves" => chemistry::solubilitycurves::warnings(p), "gas-law-graphs" => chemistry::gaslaws::warnings(p), "equilibrium-graphs" => chemistry::equilibrium::warnings(p), "buffer-curves" => chemistry::buffercurves::warnings(p), "cladogram" => biology::cladogram::warnings(p), "food-web" => biology::foodweb::warnings(p), "energy-pyramid" => biology::energypyramid::warnings(p), "action-potential" => biology::actionpotential::warnings(p), "cell-cycle" => biology::cellcycle::warnings(p), "cell-diagram" => biology::celldiagram::warnings(p), "soil-texture" => biology::soiltexture::warnings(p), "photosynthesis" => biology::photosynthesis::warnings(p), "leaf-cross-section" => biology::leaf::warnings(p), _ => vec![] }
 }
 
 /// A hash of every parameter (names and values, no formatting): the key under which the editor caches what a figure
@@ -832,9 +828,7 @@ pub struct Example {
 }
 
 pub fn examples_for(id: &str) -> Vec<Example> {
-    raydiagram::examples(id)
-        .or_else(|| motionmap::examples(id))
-        .or_else(|| physics::examples(id))
+    physics::examples(id)
         .or_else(|| biology::examples(id))
         .or_else(|| chemistry::examples(id))
         .or_else(|| math::examples(id))

@@ -1013,7 +1013,7 @@ static RAY_DIAGRAM: [RefSection; 5] = [
     s("Object", &["dist", "height"], ""),
     s("Rays and image", &["rays", "image"], ""),
     s("Labels", &["show_labels", "lab_f", "lab_f2", "lab_2f", "lab_2f2", "lab_o", "lab_i"], ""),
-    s("Title and answer key", &["title", "label_size"], ""),
+    s("Title and answer key", &["title", "label_size", "show_answers"], "Turn off Show answers for a student copy: the image, its label and the dashed lines back to a virtual image are hidden and the object and the rays stay."),
 ];
 
 pub fn reference(id: &str) -> Option<&'static [RefSection]> {

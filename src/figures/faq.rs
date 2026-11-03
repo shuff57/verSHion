@@ -3974,6 +3974,14 @@ const MOTION_MAP: &[Faq] = &[
         q: "Can the object move backwards?",
         a: "Yes. Choose Back for the direction and the dots run toward the left with their arrows pointing left.",
     },
+    Faq {
+        q: "What does each dot mean?",
+        a: "One flash of a strobe: the object's position at that instant. The flashes are equally spaced in time, so the diagram is a record of position against time with the time axis hidden \u{2014} which is why the gaps between dots carry the information.",
+    },
+    Faq {
+        q: "Why does the object stop instead of going backwards?",
+        a: "A slowing object cannot reverse without something pushing it back. The slowing-down stage brings it exactly to rest, and while it is at rest the dots sit on the stopping point, with no arrow.",
+    },
 ];
 
 const RAY_DIAGRAM: &[Faq] = &[
@@ -3991,7 +3999,15 @@ const RAY_DIAGRAM: &[Faq] = &[
     },
     Faq {
         q: "Can I hide the labels for a student copy?",
-        a: "Yes. Turn off Label the points to remove them, or blank a label so students write it in. You can also hide the image and draw only one or two rays.",
+        a: "Yes. Turn off Label the points to remove them, or blank a label so students write it in. You can also hide the image and draw only one or two rays. Turn off Show answers for the student copy: the image, its label and the dashed lines back to a virtual image are left off while the object and the rays stay, and Student + key saves both.",
+    },
+    Faq {
+        q: "Why does the ray through the centre of the lens go straight on?",
+        a: "A thin lens is treated as flat in the middle, so a ray crossing there meets the two surfaces at equal and opposite angles and comes out undeviated. That is what makes it the easy ray to draw: it fixes the direction from the object tip to the image tip.",
+    },
+    Faq {
+        q: "Why is the image dashed sometimes?",
+        a: "Because the rays only appear to come from there. Inside the focal point, or with a diverging lens, the rays leave the lens still spreading out, so the dashed lines are their backward extensions meeting where the image would be. No light reaches a virtual image, so it cannot be caught on a screen.",
     },
 ];
 

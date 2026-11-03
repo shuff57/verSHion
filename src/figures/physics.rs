@@ -16,6 +16,9 @@ mod summary;
 /// Editor notes for the instrument figures: what the circuit could not work out, and why.
 pub fn instr_warnings(p: &Params) -> Vec<String> { instr::circuit_warnings(p) }
 
+/// Editor notes for the ray diagram: an image it was asked for but could not draw or fit.
+pub fn ray_warnings(p: &Params) -> Vec<String> { optics::ray_warnings(p) }
+
 /// The collapsed-row summary of a section on the physics page skin, where the page has one.
 pub fn skin_summary(id: &str, title: &str, p: &Params) -> Option<String> {
     match id {
@@ -124,9 +127,6 @@ pub fn chips(id: &str) -> Option<super::ChipsCard> {
 
 /// Direct-manipulation handles for this subject's figures (None = not one of ours).
 pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<interact::Handle>> {
-    // the optics and kinematics figures have their own drag handles
-    if id == super::raydiagram::ID { return super::raydiagram::handles(id, p, size); }
-    if id == super::motionmap::ID { return super::motionmap::handles(id, p, size); }
     handles::handles(id, p, size)
 }
 

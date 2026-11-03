@@ -219,7 +219,7 @@ pub(super) fn summary(id: &str, title: &str, p: &Params) -> Option<String> {
         }
         ("ray-diagram", "Lens or mirror") => format!("{}{DOT}f = {} cm", p.s("kind"), trim(p.f("f"), 1)),
         ("ray-diagram", "Object") => format!("{} cm away{DOT}{} cm tall", trim(p.f("dist"), 1), trim(p.f("height"), 1)),
-        ("ray-diagram", "Rays and image") => format!("{}{DOT}{} of 3 rays", if p.b("image") { "Complete" } else { "Rays only" }, p.i("rays").clamp(1, 3)),
+        ("ray-diagram", "Rays and image") => format!("{}{DOT}{} of 3 rays", if p.b("image") && p.b(crate::figures::SHOW_ANSWERS) { "Complete" } else { "Rays only" }, p.i("rays").clamp(1, 3)),
         ("ray-diagram", "Labels") => {
             if !p.b("show_labels") { return Some("none".into()); }
             let v: Vec<String> = ["lab_f", "lab_f2", "lab_2f", "lab_2f2", "lab_o", "lab_i"].iter().filter_map(|k| { let t = p.s(k).trim(); (!t.is_empty()).then(|| format!("\u{201c}{t}\u{201d}")) }).collect();
@@ -227,7 +227,9 @@ pub(super) fn summary(id: &str, title: &str, p: &Params) -> Option<String> {
         }
         ("ray-diagram", "Title and answer key") => {
             let t = p.s("title").trim();
-            format!("{}, no answer key", if t.is_empty() { "No title".to_string() } else { format!("Title \u{201c}{t}\u{201d}") })
+            // Show answers off is the student copy: the image is left off
+            let key = if p.b(crate::figures::SHOW_ANSWERS) { "answer key" } else { "no answer key" };
+            format!("{}, {key}", if t.is_empty() { "No title".to_string() } else { format!("Title \u{201c}{t}\u{201d}") })
         }
 
         ("circuit-diagram", "Circuit") => {

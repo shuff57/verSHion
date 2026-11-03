@@ -18,6 +18,7 @@ pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<Handle>> {
         "waves" => waves(p, size),
         "spring-scale" => spring(p, size),
         "circuit-diagram" => circuit(p, size),
+        "ray-diagram" => super::optics::ray_handles(p),
         _ => return None,
     })
 }
