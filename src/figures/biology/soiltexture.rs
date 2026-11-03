@@ -547,9 +547,11 @@ fn seg_rect(a: P, b: P, r: (f64, f64, f64, f64)) -> f64 {
 }
 
 /// Does the box sit wholly inside the polygon with a 3 px margin.
-fn fits_box(poly: &[P], c: P, w: f64, h: f64) -> bool {
+fn fits_box(poly: &[P], c: P, w: f64, h: f64) -> bool { fits_box_m(poly, c, w, h, 3.0) }
+
+/// Does the box sit wholly inside the polygon with an `m` px margin.
+fn fits_box_m(poly: &[P], c: P, w: f64, h: f64, m: f64) -> bool {
     work(8);
-    let m = 3.0;
     let (x0, y0, x1, y1) = (c.0 - w / 2.0, c.1 - h / 2.0, c.0 + w / 2.0, c.1 + h / 2.0);
     let ok = |p: P| inside(poly, p) && clearance(poly, p) >= m;
     let nx = (w / 6.0).ceil() as usize;
@@ -589,11 +591,26 @@ pub struct Tag { c: P, text: String, lead: Option<(P, P)>, over_line: bool }
 const TAG_CAP: f64 = 12.0;
 /// The clear margin (px) between a number tag and any region label.
 const TAG_LABEL_GAP: f64 = 12.0;
-/// How far (px) from either end of a construction line (the sample, the landing dot on the axis) a label plate must stay
-/// when it breaks the line.
-const GAP_END: f64 = 14.0;
+/// How far (px) beyond the edge of the dot at either end of a construction line (the marker's white ring, the landing
+/// dot) a label plate must stay when it breaks the line: more than one dash shows past the dot.
+const END_GAP: f64 = 12.0;
+/// The most line (px) a label plate may hide in the capped tries.
+const CAP_HIDE: f64 = 30.0;
 /// The stroke of a tag's leader.
 const TAG_LEADER_W: f64 = 1.05;
+
+/// Does a tag's leader ab cross the construction line cd at an angle whose sine is `min_sin` or more (0.5: 30 degrees;
+/// 0.25: about 15), 3 px or more from the line's ends and 2 px from its own? (A tag's last-resort leader may cross a
+/// line only like that.)
+fn clean_cross(a: P, b: P, c: P, d: P, min_sin: f64) -> bool {
+    let (r, s) = ((b.0 - a.0, b.1 - a.1), (d.0 - c.0, d.1 - c.1));
+    let den = r.0 * s.1 - r.1 * s.0;
+    let (lr, ls) = (r.0.hypot(r.1), s.0.hypot(s.1));
+    if den.abs() < 1e-9 || lr < 4.0 || ls < 6.0 || (den / (lr * ls)).abs() < min_sin { return false; }
+    let t = ((c.0 - a.0) * s.1 - (c.1 - a.1) * s.0) / den;
+    let u = ((c.0 - a.0) * r.1 - (c.1 - a.1) * r.0) / den;
+    t * lr >= 2.0 && (1.0 - t) * lr >= 2.0 && u * ls >= 3.0 && (1.0 - u) * ls >= 3.0
+}
 
 /// The construction lines of the samples (from the marker to each landing point), or none.
 fn gsegs_of(smp: &[(Smp, Cls)], guides: bool) -> Vec<(P, P)> {
@@ -758,12 +775,15 @@ fn solve_now(p: &Params) -> Result<Rc<Solved>, Refusal> {
     // the marker's edge they stand alone, farther out (to 90 px) they get a short leader to their marker, and only if no
     // ring place is clear may a tag sit on a line (its opaque plate then breaks the line under it)
     let mut tags: Vec<Option<Tag>> = Vec::new();
+    let mut tag_notes: Vec<String> = Vec::new();
+    // the tags with a 4 px margin (for a label's last tries)
+    let mut tag_near: Vec<Ob> = Vec::new();
     if smp.len() == 2 {
         let tri = tri_poly();
         let mut placed_tags: Vec<Ob> = Vec::new();
         let ats: Vec<P> = smp.iter().map(|(s, _)| sample_at(s)).collect();
-        // two samples on the same spot share one tag, "1, 2"
-        let same = (ats[0].0 - ats[1].0).hypot(ats[0].1 - ats[1].1) < 1.0;
+        // two samples whose markers touch share one tag, "1, 2"
+        let same = (ats[0].0 - ats[1].0).hypot(ats[0].1 - ats[1].1) < 2.0 * rm + 2.0;
         for k in 0..2 {
             if same && k == 1 { tags.push(None); continue; }
             let at = ats[k];
@@ -774,19 +794,61 @@ fn solve_now(p: &Params) -> Result<Rc<Solved>, Refusal> {
             let cap = rm + diag + TAG_CAP;
             let mut chosen: Option<Tag> = None;
             let sides = side_number_boxes(fs, lab);
+            // the sand numbers and their ticks under the bottom edge, and the top of the row of class names below them
+            let bottoms: Vec<Ob> = (0..=10).flat_map(|k| {
+                let e = xy(0.0, 10.0 * k as f64);
+                let te = (e.0 + TICK * 0.5, e.1 + TICK * 0.866);
+                let wn = text_w(&(10 * k).to_string(), fs);
+                let yb = te.1 + 4.0 + 0.2 * fs + 0.8 * fs;
+                [Ob::R(te.0 + 1.0 - wn / 2.0 - 3.0, yb - 0.8 * fs - 3.0, te.0 + 1.0 + wn / 2.0 + 3.0, yb + 0.25 * fs + 3.0), Ob::R(e.0 - 1.0, e.1 - 1.0, te.0 + 3.0, te.1 + 3.0)]
+            }).collect();
+            let under_floor = bottom_rows(fs, true).1 - 0.8 * fs - 4.0;
             let edges = [(apex(), bl()), (bl(), br()), (br(), apex())];
+            // a tag standing alone must read as its own marker's: on the far side of its marker from the other one (more
+            // than 100 degrees from the direction of the other marker) or nearer its own by the marker's radius + 4 px
+            let clearly_own = |c: P| -> bool {
+                if same { return true; }
+                let (u, v) = ((c.0 - at.0, c.1 - at.1), (other.0 - at.0, other.1 - at.1));
+                let cos = (u.0 * v.0 + u.1 * v.1) / (u.0.hypot(u.1) * v.0.hypot(v.1)).max(1e-9);
+                cos < (100.0f64).to_radians().cos() || (c.0 - other.0).hypot(c.1 - other.1) >= (c.0 - at.0).hypot(c.1 - at.1) + rm + 4.0
+            };
             // stages: 0 inside the triangle beside the marker; 1 inside, farther, on a leader; 2 just outside the triangle
-            // between the clay or silt numbers (beside or on a leader), for a marker in a cramped corner; 3 over a line
-            'stage: for stage in 0..4 {
-                for step in 0..60 {
+            // between the clay or silt numbers (beside or on a leader), for a marker in a cramped corner; 3 beside the
+            // marker over a line (an opaque plate breaks it); 4 farther, over a line, on a leader, inside or just outside;
+            // 5 anywhere on a ring out to 160 px on a leader (which may cross a line only squarely), kept off the markers, the
+            // other tag, the landing dots and the numbers; 6 the same on an opaque plate over lines, nearest first, its
+            // leader crossing lines only squarely; 7 the same with the leader free to cross lines at any angle (two samples
+            // close together in a fenced corner).
+            // 8, the last: any place on 32 directions out to 200 px, inside the triangle, beside it, under its bottom edge or
+            // straddling its outline, kept only off the markers, the other tag, the landing dots, the numbers, the titles
+            // and the legend, on a leader that keeps off the other marker and crosses a line only outright (no near miss).
+            // Only if all nine fail is the sample left without a tag, and the editor note says so.
+            'stage: for stage in 0..9 {
+                for step in 0..100 {
                     let rad = rm + 3.0 + diag + 1.0 + 2.0 * step as f64;
-                    if ((stage == 0 || stage == 3) && rad > cap) || rad > 90.0 { break; }
-                    if stage == 1 && rad <= cap { continue; }
-                    for j in 0..16 {
-                        let ang = (-45.0 + 22.5 * j as f64).to_radians();
+                    let reach = match stage { 0 | 3 => cap, 4 => 120.0, 5..=7 => 160.0, 8 => 200.0, _ => 90.0 };
+                    if rad > reach { break; }
+                    if (stage == 1 || stage == 4) && rad <= cap { continue; }
+                    for j in 0..if stage == 8 { 32 } else { 16 } {
+                        let ang = (-45.0 + if stage == 8 { 11.25 } else { 22.5 } * j as f64).to_radians();
                         let c = (at.0 + rad * ang.cos(), at.1 + rad * ang.sin());
                         let corners = [(c.0 - w / 2.0, c.1 - h / 2.0), (c.0 + w / 2.0, c.1 - h / 2.0), (c.0 - w / 2.0, c.1 + h / 2.0), (c.0 + w / 2.0, c.1 + h / 2.0)];
-                        if stage == 2 {
+                        let all_in = corners.iter().all(|q| inside(&tri, *q));
+                        let outside_ok = || -> bool {
+                            // beside the triangle (above the bottom edge), or for the last stages also just under the bottom
+                            // edge between the sand numbers and above the row of class names hung there
+                            let beside = !corners.iter().any(|q| inside(&tri, *q) || q.1 > H - 2.0);
+                            let under = stage >= 6 && corners.iter().all(|q| q.1 > H + 2.0 && q.1 < under_floor) && !bottoms.iter().any(|o| hits(o, c, w, h));
+                            (beside || under)
+                                && !edges.iter().any(|(a, b)| seg_rect(*a, *b, (c.0 - w / 2.0, c.1 - h / 2.0, c.0 + w / 2.0, c.1 + h / 2.0)) < 3.0)
+                                && !corners.iter().any(|q| edges.iter().map(|(a, b)| dist_seg(*q, *a, *b)).fold(f64::MAX, f64::min) > 60.0)
+                                && !sides.iter().any(|o| hits(o, c, w, h))
+                        };
+                        if stage == 8 {
+                            if corners.iter().any(|q| q.1 > under_floor) || sides.iter().chain(bottoms.iter()).any(|o| hits(o, c, w, h)) { continue; }
+                        } else if stage >= 3 {
+                            if !all_in && !outside_ok() { continue; }
+                        } else if stage == 2 {
                             // wholly outside, above the bottom edge, clear of the outline, the numbers, the ticks and the side
                             // titles, and within 60 px of the triangle
                             if corners.iter().any(|q| inside(&tri, *q) || q.1 > H - 2.0) { continue; }
@@ -795,15 +857,14 @@ fn solve_now(p: &Params) -> Result<Rc<Solved>, Refusal> {
                             if sides.iter().any(|o| hits(o, c, w, h)) { continue; }
                         } else if !corners.iter().all(|q| inside(&tri, *q)) { continue; }
                         if obs_marker.iter().chain(placed_tags.iter()).any(|o| hits(o, c, w + 3.0, h + 3.0)) { continue; }
-                        // nearer its own marker than the other, by a clear margin (at most half the markers' distance,
-                        // which is all two close markers allow; markers on the same spot share it)
-                        // (a tag on a leader need only be nearer: the leader says which marker it names)
-                        let margin = if stage == 0 { (2.0 * rm + 6.0).min(0.5 * (at.0 - other.0).hypot(at.1 - other.1)) } else { 1.0 };
-                        if !same && (c.0 - other.0).hypot(c.1 - other.1) < (c.0 - at.0).hypot(c.1 - at.1) + margin { continue; }
-                        if stage < 3 && obs_guide.iter().chain(obs_landing.iter()).any(|o| hits(o, c, w, h)) { continue; }
-                        if stage == 3 && obs_landing.iter().any(|o| hits(o, c, w, h)) { continue; }
+                        // a tag standing alone clearly reads as its own marker's; one on a leader need only be nearer
+                        let alone = rad <= cap && (stage == 0 || stage == 2 || stage == 3 || (stage >= 6 && clearly_own(c)));
+                        if alone && !clearly_own(c) { continue; }
+                        if !alone && !same && (c.0 - other.0).hypot(c.1 - other.1) < (c.0 - at.0).hypot(c.1 - at.1) + 1.0 { continue; }
+                        if (stage < 3 || stage == 5) && obs_guide.iter().chain(obs_landing.iter()).any(|o| hits(o, c, w, h)) { continue; }
+                        if stage >= 3 && obs_landing.iter().any(|o| hits(o, c, w, h)) { continue; }
                         let mut lead = None;
-                        if stage == 1 || (stage == 2 && rad > cap) {
+                        if !alone {
                             // the leader runs from the marker's white ring to the edge of the tag plate
                             let u = ((c.0 - at.0) / rad, (c.1 - at.1) / rad);
                             let a0 = (at.0 + u.0 * (rm + 2.0), at.1 + u.1 * (rm + 2.0));
@@ -813,23 +874,28 @@ fn solve_now(p: &Params) -> Result<Rc<Solved>, Refusal> {
                             let ty = if u.1.abs() < 1e-9 { f64::MIN } else { ((if u.1 > 0.0 { r.1 } else { r.3 }) - at.1) / u.1 };
                             let t = tx.max(ty).max(rm + 3.0);
                             let b0 = (at.0 + u.0 * t, at.1 + u.1 * t);
-                            if gsegs_of(&smp, guides).iter().any(|(ga, gb)| seg_seg(a0, b0, *ga, *gb) < 3.0) { continue; }
+                            if gsegs_of(&smp, guides).iter().any(|(ga, gb)| seg_seg(a0, b0, *ga, *gb) < 3.0 && !(stage >= 4 && clean_cross(a0, b0, *ga, *gb, match stage { 7 => 0.25, 8 => 0.1, _ => 0.5 }))) { continue; }
                             if obs_landing.iter().any(|o| matches!(*o, Ob::C(q, rr) if dist_seg(q, a0, b0) < rr)) { continue; }
                             if placed_tags.iter().any(|o| matches!(*o, Ob::R(x0, y0, x1, y1) if seg_rect(a0, b0, (x0, y0, x1, y1)) < 2.0)) { continue; }
                             if dist_seg(other, a0, b0) < rm + 4.0 { continue; }
-                            if stage == 2 && sides.iter().any(|o| matches!(*o, Ob::R(x0, y0, x1, y1) if seg_rect(a0, b0, (x0, y0, x1, y1)) < 0.5)) { continue; }
+                            // (the side boxes reach into the triangle round the turned titles: they matter only to a tag outside it)
+                            if !all_in && stage < 8 && sides.iter().chain(bottoms.iter()).any(|o| matches!(*o, Ob::R(x0, y0, x1, y1) if seg_rect(a0, b0, (x0, y0, x1, y1)) < 0.5)) { continue; }
                             lead = Some((a0, b0));
                         }
-                        chosen = Some(Tag { c, text: text.clone(), lead, over_line: stage == 3 });
+                        let over_line = stage >= 3 && obs_guide.iter().any(|o| hits(o, c, w, h));
+                        chosen = Some(Tag { c, text: text.clone(), lead, over_line });
                         break 'stage;
                     }
                 }
             }
             if let Some(t) = &chosen { placed_tags.push(Ob::R(t.c.0 - w / 2.0, t.c.1 - h / 2.0, t.c.0 + w / 2.0, t.c.1 + h / 2.0)); if let Some(l) = t.lead { placed_tags.push(Ob::S(l.0, l.1)); } }
+            if chosen.is_none() { tag_notes.push(format!("Sample {} could not be given its number tag at this label size; try a smaller label size.", k + 1)); }
             tags.push(chosen);
         }
         for t in tags.iter().flatten() {
             let (w, h) = (tw(&t.text, fs, true) + 5.0, fs * 1.1 + 3.0);
+            tag_near.push(Ob::R(t.c.0 - w / 2.0 - 4.0, t.c.1 - h / 2.0 - 4.0, t.c.0 + w / 2.0 + 4.0, t.c.1 + h / 2.0 + 4.0));
+            if let Some(l) = t.lead { tag_near.push(Ob::S(l.0, l.1)); }
             obs_marker.push(Ob::R(t.c.0 - w / 2.0 - 1.5, t.c.1 - h / 2.0 - 1.5, t.c.0 + w / 2.0 + 1.5, t.c.1 + h / 2.0 + 1.5));
             // a region label keeps TAG_LABEL_GAP from a tag, so that the two never read as one label
             obs_tags.push(Ob::R(t.c.0 - w / 2.0 - TAG_LABEL_GAP, t.c.1 - h / 2.0 - TAG_LABEL_GAP, t.c.0 + w / 2.0 + TAG_LABEL_GAP, t.c.1 + h / 2.0 + TAG_LABEL_GAP));
@@ -843,9 +909,95 @@ fn solve_now(p: &Params) -> Result<Rc<Solved>, Refusal> {
     let gsegs = gsegs_of(&smp, guides);
     let landing = obs_landing;
     let mut regs: Vec<Reg> = Vec::new();
-    let mut notes = Vec::new();
+    let mut notes = tag_notes;
     let mut outside_taken: Vec<(f64, f64)> = Vec::new();
     let (nb, _, _) = bottom_rows(fs, true);
+    let ring = rm + 1.6;
+    let answers: Vec<(usize, usize)> = smp.iter().enumerate().map(|(k, (_, c))| (c.win, k)).collect();
+    // the editor note for a class that could not be named, saying which region it is
+    let missing_note = |i: usize| -> String {
+        let (cl, sa): (Vec<i64>, Vec<i64>) = POLY[i].iter().cloned().unzip();
+        let whose: Vec<String> = answers.iter().filter(|(w, _)| *w == i).map(|(_, k)| if smp.len() > 1 { format!("sample {}", k + 1) } else { "the sample".to_string() }).collect();
+        let of = if whose.is_empty() { String::new() } else { format!(" (the class of {})", whose.join(" and ")) };
+        format!("The label for {}{of} could not be placed in the triangle with {} on it; its region is the one with {} to {} % clay and {} to {} % sand, and the legend names it.",
+            NAMES[i].to_lowercase(), if smp.len() > 1 { "the samples" } else { "the sample" }, cl.iter().min().unwrap(), cl.iter().max().unwrap(), sa.iter().min().unwrap(), sa.iter().max().unwrap())
+    };
+    let markers: Vec<P> = smp.iter().map(|(s, _)| sample_at(s)).collect();
+    // A label inside its own region i.
+    // (1) every variant (full name, two lines, abbreviation) in turn, clear of the samples, the tags (TAG_LABEL_GAP), the
+    // construction lines and their landing dots.
+    // (2) no clear place: an opaque plate over a line (a gap in the line), the shortest variant first, at the place that
+    // hides the least line (a stretch along the plate's length counts double), hiding at most CAP_HIDE px and at most
+    // 40 % of any one line; never on a sample, a tag or a landing dot, and never within END_GAP of either end of a line
+    // measured from the edge of the dot (the marker's white ring, the landing dot), so that every line shows a clear
+    // stretch where it leaves the sample and where it meets its axis.
+    // (3) the abbreviation one size smaller: clear, then over a line within the caps; then the normal abbreviation and
+    // the smaller one over a line with no cap.
+    // (4) last tries for a crowded region (two samples): the smaller abbreviation 4 px from the tags and just off the
+    // markers' white rings; then also only 2 px past the ring at the sample end of a line (the axis end keeps its rule).
+    // Else the editor note names the class and where its region is.
+    let place_inside = |i: usize| -> Option<Reg> {
+        let poly = poly_px(i);
+        for var in variants(i, fs, abbr_only) {
+            for (pt, _) in &cs[i] {
+                if !fits_box(&poly, *pt, var.w, var.h) { continue; }
+                if obs_marker.iter().chain(obs_tags.iter()).chain(obs_guide.iter()).chain(landing.iter()).any(|o| hits(o, *pt, var.w, var.h)) { continue; }
+                return Some(Reg::Text { var: var.clone(), c: *pt, gap: false });
+            }
+        }
+        let small = { let mut v = variants(i, (fs * 0.8).max(8.0), true); v.truncate(1); v.remove(0) };
+        let abbr = variants(i, fs, true).remove(0);
+        // (variant, may sit over a line, capped, relaxed margins (tags 4 px, markers their ring), sample end only 2 px)
+        let mut tries: Vec<(Var, bool, bool, bool, bool)> = variants(i, fs, abbr_only).into_iter().rev().map(|v| (v, true, true, false, false)).collect();
+        tries.push((small.clone(), false, true, false, false));
+        tries.push((small.clone(), true, true, false, false));
+        tries.push((abbr.clone(), true, false, false, false));
+        tries.push((small.clone(), true, false, false, false));
+        tries.push((small.clone(), true, false, true, false));
+        tries.push((small.clone(), true, false, true, true));
+        let tiny = { let mut v = variants(i, (fs * 0.65).max(7.0), true); v.truncate(1); v.remove(0) };
+        tries.push((tiny.clone(), true, false, true, true));
+        // and the very last: the smallest label may come to 1 px from its region's edges (its plate still inside them)
+        let last = tries.len();
+        tries.push((tiny.clone(), true, false, true, true));
+        let ring_obs: Vec<Ob> = markers.iter().map(|m| Ob::C(*m, ring + 0.5)).collect();
+        for (ti, (var, over, capped, relaxed, near_sample)) in tries.into_iter().enumerate() {
+            let edge_m = if ti == last { 1.0 } else { 3.0 };
+            let sample_end = if near_sample { ring + 2.0 } else { ring + END_GAP };
+            // (the very last try, the smallest label, keeps only 2 px past the landing dot too)
+            let landing_end = if near_sample && var.size < 0.7 * fs { 2.8 + 2.0 } else { 2.8 + END_GAP };
+            let ends: Vec<Ob> = gsegs.iter().flat_map(|g| [Ob::C(g.0, sample_end), Ob::C(g.1, landing_end)]).collect();
+            let mut best: Option<(f64, P)> = None;
+            for (pt, _) in &cs[i] {
+                // the cheap measures first: how much line the plate would hide
+                let r = (pt.0 - var.w / 2.0, pt.1 - var.h / 2.0, pt.0 + var.w / 2.0, pt.1 + var.h / 2.0);
+                let gr = (r.0 - GUIDE_GAP, r.1 - GUIDE_GAP, r.2 + GUIDE_GAP, r.3 + GUIDE_GAP);
+                let (mut raw, mut weighted, mut frac) = (0.0f64, 0.0f64, 0.0f64);
+                for (a, b) in &gsegs {
+                    let l = seg_len_in(*a, *b, gr);
+                    if l <= 0.0 { continue; }
+                    let len = (b.0 - a.0).hypot(b.1 - a.1).max(1e-9);
+                    // a plate is wider than tall: a line along its length (horizontal) hides most per px of gap
+                    weighted += l * (1.0 + ((b.0 - a.0) / len).abs());
+                    raw += l;
+                    frac = frac.max(l / len);
+                }
+                if !over && raw > 0.0 { continue; }
+                if capped && (raw > CAP_HIDE || frac > 0.4) { continue; }
+                if best.is_some_and(|(bh, _)| weighted >= bh - 1e-9) { continue; }
+                if !fits_box_m(&poly, *pt, var.w, var.h, edge_m) { continue; }
+                if landing.iter().any(|o| hits(o, *pt, var.w, var.h)) { continue; }
+                if relaxed {
+                    if ring_obs.iter().chain(tag_near.iter()).any(|o| hits(o, *pt, var.w, var.h)) { continue; }
+                } else if obs_marker.iter().chain(obs_tags.iter()).any(|o| hits(o, *pt, var.w, var.h)) { continue; }
+                if raw > 0.0 && ends.iter().any(|o| hits(o, *pt, var.w, var.h)) { continue; }
+                best = Some((weighted, *pt));
+                if raw == 0.0 { break; }
+            }
+            if let Some((hidden, c)) = best { return Some(Reg::Text { var, c, gap: hidden > 0.0 }); }
+        }
+        None
+    };
     for i in 0..12 {
         let poly = poly_px(i);
         if nm {
@@ -894,54 +1046,18 @@ fn solve_now(p: &Params) -> Result<Rc<Solved>, Refusal> {
             }
             match best {
                 Some((x, _)) => { outside_taken.push((x, var.w)); regs.push(Reg::Out { var, x }); }
-                None => { regs.push(Reg::Missing); notes.push(format!("The label for {} could not be placed below the triangle with {} on it; see the legend.", NAMES[i].to_lowercase(), if smp.len() > 1 { "the samples" } else { "the sample" })); }
+                // no place below the triangle: inside its own region instead, by the same rules as every other label
+                None => match place_inside(i) {
+                    Some(r) => regs.push(r),
+                    None => { regs.push(Reg::Missing); notes.push(missing_note(i)); }
+                },
             }
             continue;
         }
-        // (1) every variant (full name, two lines, abbreviation) in turn, clear of the samples, the tags, the construction
-        // lines and their landing dots
-        let mut placed: Option<Reg> = None;
-        'v: for var in variants(i, fs, abbr_only) {
-            for (pt, _) in &cs[i] {
-                if !fits_box(&poly, *pt, var.w, var.h) { continue; }
-                if obs_marker.iter().chain(obs_tags.iter()).chain(obs_guide.iter()).chain(landing.iter()).any(|o| hits(o, *pt, var.w, var.h)) { continue; }
-                placed = Some(Reg::Text { var: var.clone(), c: *pt, gap: false });
-                break 'v;
-            }
-        }
-        // (2) no clear place: the label stays in its own region on an opaque plate over a line (a gap in the line), the
-        // shortest variant first and the place that hides the least line; never on a sample, a tag or a landing dot, and
-        // never within GAP_END of either end of a line, so that every line still shows where it leaves the sample and
-        // where it meets its axis. (3) If even that fails (a region too small for its abbreviation beside a sample), the
-        // abbreviation one size smaller, by the same two rules. Else the legend names it (editor note).
-        if placed.is_none() {
-            let ends: Vec<Ob> = gsegs.iter().flat_map(|g| [Ob::C(g.0, GAP_END), Ob::C(g.1, GAP_END)]).collect();
-            let small = { let mut v = variants(i, (fs * 0.8).max(8.0), true); v.truncate(1); v };
-            // (variant, may sit over a line, keeps TAG_LABEL_GAP from the tags)
-            let mut tries: Vec<(Var, bool, bool)> = variants(i, fs, abbr_only).into_iter().rev().map(|v| (v, true, true)).collect();
-            tries.push((small[0].clone(), false, true));
-            tries.push((small[0].clone(), true, true));
-            'g: for (var, over, tag_gap) in tries {
-                let mut best: Option<(f64, P)> = None;
-                for (pt, _) in &cs[i] {
-                    // the cheap measure first: how much line the plate would hide
-                    let r = (pt.0 - var.w / 2.0, pt.1 - var.h / 2.0, pt.0 + var.w / 2.0, pt.1 + var.h / 2.0);
-                    let hidden: f64 = gsegs.iter().map(|(a, b)| seg_len_in(*a, *b, (r.0 - GUIDE_GAP, r.1 - GUIDE_GAP, r.2 + GUIDE_GAP, r.3 + GUIDE_GAP))).sum();
-                    if !over && hidden > 0.0 { continue; }
-                    if best.is_some_and(|(bh, _)| hidden >= bh - 1e-9) { continue; }
-                    if !fits_box(&poly, *pt, var.w, var.h) { continue; }
-                    if obs_marker.iter().chain(landing.iter()).any(|o| hits(o, *pt, var.w, var.h)) { continue; }
-                    if tag_gap && obs_tags.iter().any(|o| hits(o, *pt, var.w, var.h)) { continue; }
-                    if hidden > 0.0 && ends.iter().any(|o| hits(o, *pt, var.w, var.h)) { continue; }
-                    best = Some((hidden, *pt));
-                    if hidden == 0.0 { break; }
-                }
-                if let Some((hidden, c)) = best { placed = Some(Reg::Text { var, c, gap: hidden > 0.0 }); break 'g; }
-            }
-        }
+        let placed = place_inside(i);
         match placed {
             Some(r) => regs.push(r),
-            None => { regs.push(Reg::Missing); notes.push(format!("The label for {} could not be placed inside its region with {} on it; see the legend.", NAMES[i].to_lowercase(), if smp.len() > 1 { "the samples" } else { "the sample" })); }
+            None => { regs.push(Reg::Missing); notes.push(missing_note(i)); }
         }
     }
     for (k, (sm, _)) in smp.iter().enumerate() {
@@ -1929,6 +2045,10 @@ mod tests {
     thread_local! {
         /// Label plates that break a construction line (no clear place was left), counted by `collisions`.
         static GAPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+        /// Gap labels that come nearer the sample than the usual stretch (a crowded region's last try), and tag leaders that
+        /// cross a line squarely (the last-resort tag stage), counted by `collisions`.
+        static RELAXED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+        static TAG_CROSS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
         /// Number tags that had to sit over a construction line (opaque, so the line shows a gap), counted by `collisions`.
         static TAG_GAPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     }
@@ -2056,7 +2176,9 @@ mod tests {
             if let Some(i) = (0..12).find(|&i| inside(&rp[i], c)) {
                 for q in [(r.0, r.1), (r.2, r.1), (r.0, r.3), (r.2, r.3)] {
                     let q = loc(q);
-                    if !inside(&rp[i], q) || clearance(&rp[i], q) < 1.9 { bad.push(format!("a label plate crosses the edge of {}", NAMES[i])); break; }
+                    // (the smallest last-resort label may come to 1 px from its region's edges)
+                    let need = if r.3 - r.1 < 0.7 * fs * 1.15 + 4.5 { 0.9 } else { 1.9 };
+                    if !inside(&rp[i], q) || clearance(&rp[i], q) < need { bad.push(format!("a label plate crosses the edge of {}", NAMES[i])); break; }
                 }
             }
         }
@@ -2109,8 +2231,15 @@ mod tests {
                     continue;
                 }
                 if !*opaque || orr < og { bad.push("a construction line runs under a see-through label plate (no gap)".into()); continue; }
-                let near_end = [g.0, g.1].iter().map(|e| (e.0.clamp(r.0, r.2) - e.0).hypot(e.1.clamp(r.1, r.3) - e.1)).fold(f64::MAX, f64::min);
-                if near_end < 13.0 { bad.push(format!("a label breaks a construction line only {near_end:.1} px from its end")); }
+                // a stretch of line shows past each dot: 11.5 px past the marker's white ring and past the landing dot (the
+                // smaller abbreviation of a crowded region's last try may come to 1.5 px past the ring at the sample end)
+                let small_label = ts.iter().any(|t| t.rot.is_none() && in_box((t.x, t.y - 0.3 * t.size), *r, 0.0) && t.size < fs - 0.01);
+                let dist = |e: P| (e.0.clamp(r.0, r.2) - e.0).hypot(e.1.clamp(r.1, r.3) - e.1);
+                let ring = rm + 1.6;
+                let need_sample = if small_label { ring + 1.5 } else { ring + 11.5 };
+                if dist(g.0) < need_sample { bad.push(format!("a label breaks a line {:.1} px from the sample (the ring ends at {ring:.1})", dist(g.0))); }
+                if dist(g.0) < ring + 11.5 { RELAXED.with(|n| n.set(n.get() + 1)); }
+                if dist(g.1) < 2.8 + 11.5 { bad.push(format!("a label breaks a line {:.1} px from its landing dot", dist(g.1))); }
                 GAPS.with(|n| n.set(n.get() + 1));
                 // the shortest label (the abbreviation) is the one that breaks a line
                 for t in ts.iter().filter(|t| t.rot.is_none() && in_box((t.x, t.y - 0.3 * t.size), *r, 0.0)) {
@@ -2120,13 +2249,19 @@ mod tests {
                     if could_be_free(q) { bad.push(format!("the label of {} breaks a line although a clear place exists", NAMES[q])); }
                     // and it hides as little line as any place in its region could (a box 2 px larger than this plate,
                     // by margins a little wider than the module's, hiding 1 px less would have been chosen)
-                    let hid = |b: Bx, gl: &[(P, P)]| -> f64 { gl.iter().map(|g| { let n = ((g.1 .0 - g.0 .0).hypot(g.1 .1 - g.0 .1) / 0.25).ceil().max(1.0) as usize; (0..n).filter(|k| { let t = (*k as f64 + 0.5) / n as f64; in_box((g.0 .0 + (g.1 .0 - g.0 .0) * t, g.0 .1 + (g.1 .1 - g.0 .1) * t), b, 0.0) }).count() as f64 * (g.1 .0 - g.0 .0).hypot(g.1 .1 - g.0 .1) / n as f64 }).sum() };
+                    // (raw length hidden, length weighted double along the plate's length, largest share of one line)
+                    let hid = |b: Bx, gl: &[(P, P)]| -> (f64, f64, f64) { gl.iter().fold((0.0, 0.0, 0.0), |acc, g| {
+                        let len = (g.1 .0 - g.0 .0).hypot(g.1 .1 - g.0 .1).max(1e-9);
+                        let n = (len / 0.25).ceil().max(1.0) as usize;
+                        let l = (0..n).filter(|k| { let t = (*k as f64 + 0.5) / n as f64; in_box((g.0 .0 + (g.1 .0 - g.0 .0) * t, g.0 .1 + (g.1 .1 - g.0 .1) * t), b, 0.0) }).count() as f64 * len / n as f64;
+                        (acc.0 + l, acc.1 + l * (1.0 + ((g.1 .0 - g.0 .0) / len).abs()), acc.2.max(l / len))
+                    }) };
                     let gl: Vec<(P, P)> = guide_full.iter().map(|g| (loc(g.0), loc(g.1))).collect();
                     let (a0, a1) = (loc((r.0, r.1)), loc((r.2, r.3)));
-                    let mine = hid((a0.0 - 2.0, a0.1 - 2.0, a1.0 + 2.0, a1.1 + 2.0), &gl);
+                    let mine = hid((a0.0 - 2.0, a0.1 - 2.0, a1.0 + 2.0, a1.1 + 2.0), &gl).1;
                     let (w, hh) = (a1.0 - a0.0 + 2.0, a1.1 - a0.1 + 2.0);
                     let mk: Vec<P> = markers_at.iter().map(|m| loc(*m)).collect();
-                    let ends: Vec<P> = gl.iter().flat_map(|g| [g.0, g.1]).collect();
+                    let (s_ends, l_ends): (Vec<P>, Vec<P>) = gl.iter().map(|g| (g.0, g.1)).unzip();
                     let tg: Vec<Bx> = tag_plates.iter().map(|t| { let a = loc((t.0, t.1)); let c2 = loc((t.2, t.3)); (a.0 - 13.0, a.1 - 13.0, c2.0 + 13.0, c2.1 + 13.0) }).collect();
                     let bb = rp[q].iter().fold((f64::MAX, f64::MAX, f64::MIN, f64::MIN), |a, v| (a.0.min(v.0), a.1.min(v.1), a.2.max(v.0), a.3.max(v.1)));
                     let mut y = (bb.1 / 3.0).floor() * 3.0;
@@ -2138,9 +2273,11 @@ mod tests {
                                 && [(bx.0, bx.1), (bx.2, bx.1), (bx.0, bx.3), (bx.2, bx.3), (x, bx.1), (x, bx.3), (bx.0, y), (bx.2, y)].iter().all(|v| inside(&rp[q], *v) && clearance(&rp[q], *v) >= 3.5)
                                 && !rp[q].iter().any(|v| in_box(*v, bx, 3.5))
                                 && mk.iter().all(|m| (m.0.clamp(bx.0, bx.2) - m.0).hypot(m.1.clamp(bx.1, bx.3) - m.1) >= rm + 4.0)
-                                && ends.iter().all(|m| (m.0.clamp(bx.0, bx.2) - m.0).hypot(m.1.clamp(bx.1, bx.3) - m.1) >= GAP_END + 1.0)
+                                && s_ends.iter().all(|m| (m.0.clamp(bx.0, bx.2) - m.0).hypot(m.1.clamp(bx.1, bx.3) - m.1) >= rm + 1.6 + 13.0)
+                                && l_ends.iter().all(|m| (m.0.clamp(bx.0, bx.2) - m.0).hypot(m.1.clamp(bx.1, bx.3) - m.1) >= 2.8 + 13.0)
                                 && !tg.iter().any(|t| overlap(*t, bx) > 0.0);
-                            if ok && hid((bx.0 - 2.0, bx.1 - 2.0, bx.2 + 2.0, bx.3 + 2.0), &gl) < mine - 1.0 { bad.push(format!("the label of {} hides {mine:.1} px of line where another place hides less", NAMES[q])); break 'better; }
+                            let cand = if ok { hid((bx.0 - 2.0, bx.1 - 2.0, bx.2 + 2.0, bx.3 + 2.0), &gl) } else { (f64::MAX, f64::MAX, 1.0) };
+                            if ok && cand.0 <= 29.0 && cand.2 <= 0.39 && cand.1 < mine - 1.0 { bad.push(format!("the label of {} hides {mine:.1} px of line where another place hides less", NAMES[q])); break 'better; }
                             x += 3.0;
                         }
                         y += 3.0;
@@ -2173,7 +2310,9 @@ mod tests {
         for t in &tag_plates {
             for (q, _, _) in plate_full.iter().filter(|p| !is_tag_plate(&p.0)) {
                 let gap = (q.0 - t.2).max(t.0 - q.2).max(q.1 - t.3).max(t.1 - q.3);
-                if gap < 10.0 { bad.push(format!("a label plate is only {gap:.1} px from a number tag")); }
+                // (the smaller abbreviation of a crowded region's last try keeps 4 px)
+                let small_label = ts.iter().any(|t2| t2.rot.is_none() && in_box((t2.x, t2.y - 0.3 * t2.size), *q, 0.0) && t2.size < fs - 0.01);
+                if gap < if small_label { 3.5 } else { 10.0 } { bad.push(format!("a label plate is only {gap:.1} px from a number tag")); }
             }
         }
         // a region label lies in the region it names (no class name inside another class)
@@ -2200,10 +2339,25 @@ mod tests {
                 let diag = ((plate.2 - plate.0).powi(2) + (plate.3 - plate.1).powi(2)).sqrt() / 2.0;
                 let led = tag_leads.iter().any(|l| (l.0 .0 - markers_at[k].0).hypot(l.0 .1 - markers_at[k].1) < rm + 3.0 && seg_box(l.1, l.1, (plate.0 - 1.6, plate.1 - 1.6, plate.2 + 1.6, plate.3 + 1.6)) < 0.01);
                 if own > rm + diag + 12.0 + 3.5 && !led { bad.push(format!("tag {} stands {own:.1} px from its marker with no leader", t.s)); }
+                // a tag standing alone reads clearly as its own marker's: on the far side of it from the other marker (more
+                // than 98 degrees off the direction to it) or nearer its own by the marker's radius + 3.5 px
+                if !led {
+                    let (u, v) = ((c.0 - markers_at[k].0, c.1 - markers_at[k].1), (markers_at[1 - k].0 - markers_at[k].0, markers_at[1 - k].1 - markers_at[k].1));
+                    let ang = ((u.0 * v.0 + u.1 * v.1) / (u.0.hypot(u.1) * v.0.hypot(v.1)).max(1e-9)).clamp(-1.0, 1.0).acos().to_degrees();
+                    if ang <= 98.0 && other - own < rm + 3.5 { bad.push(format!("tag {} stands alone only {:.1} px nearer its own marker ({ang:.0} degrees off the other)", t.s, other - own)); }
+                }
             }
             // a tag's leader keeps clear of every construction line
             for l in &tag_leads {
-                for g in &guide_full { let d = seg_seg_t(l.0, l.1, g.0, g.1); if d < 2.5 { bad.push(format!("a tag leader passes {d:.2} px from a construction line")); } }
+                for g in &guide_full {
+                    let d = seg_seg_t(l.0, l.1, g.0, g.1);
+                    if d >= 2.5 { continue; }
+                    // the last-resort leader may cross a line squarely (30 degrees or more), well away from both ends
+                    let (u, v) = ((l.1 .0 - l.0 .0, l.1 .1 - l.0 .1), (g.1 .0 - g.0 .0, g.1 .1 - g.0 .1));
+                    let sin = (u.0 * v.1 - u.1 * v.0).abs() / (u.0.hypot(u.1) * v.0.hypot(v.1)).max(1e-9);
+                    let far = pt_seg(l.0, g.0, g.1) >= 0.9 && pt_seg(l.1, g.0, g.1) >= 0.9 && pt_seg(g.0, l.0, l.1) >= 1.4 && pt_seg(g.1, l.0, l.1) >= 1.4;
+                    if d < 0.1 && sin >= 0.09 && far { TAG_CROSS.with(|n| n.set(n.get() + 1)); } else { bad.push(format!("a tag leader passes {d:.2} px from a construction line")); }
+                }
             }
         }
         // discs
@@ -2774,7 +2928,7 @@ mod tests {
         let all: String = crate::figures::faq::faq_for(ID).iter().map(|f| format!("{} {}", f.q, f.a)).collect::<Vec<_>>().join(" ");
         assert!(all.contains("7 to less than 27 % clay"), "the Manual's wording of loam");
         for gone in ["by convention", "listed later", "finer one", "sand 52 %, clay 20 % touches sandy loam, loam and sandy clay loam and is called sandy clay loam", "lower right 100 % sand", "lower left 100 % silt"] { assert!(!all.contains(gone), "{gone}"); }
-        for want in ["lower left 100 % sand", "lower right 100 % silt", "Soil Survey Manual", "99.5 to 100.5", "scaled in proportion", "shows a gap under the label", "leaves out the construction line", "covers a line"] { assert!(all.contains(want), "{want}"); }
+        for want in ["lower left 100 % sand", "lower right 100 % silt", "Soil Survey Manual", "99.5 to 100.5", "scaled in proportion", "shows a gap under the label", "leaves out the construction line", "covers a line", "12 px beyond the dot", "markers touch share one tag", "far side of it from the other marker"] { assert!(all.contains(want), "{want}"); }
         for gone in ["too narrow for their names", "given up for a shorter one before it is ever placed over a line", "largest of the three is moved", "clear place nearby", "always named in one row", "never covers a construction line"] { assert!(!all.contains(gone), "{gone}"); }
     }
 
@@ -3076,6 +3230,10 @@ mod tests {
             vec![s("sand", "11"), s("clay", "52"), s("sand2", "35"), s("clay2", "10")],
             vec![s("sand", "25"), s("clay", "25"), s("sand2", "26"), s("clay2", "32")],
             vec![s("sand", "8"), s("clay", "54")],
+            // round 4's slowest: close pairs in the sandy loam and sandy clay loam band
+            vec![s("sand", "61"), s("clay", "28"), s("sand2", "64"), s("clay2", "29")],
+            vec![s("sand", "65"), s("clay", "22"), s("sand2", "62"), s("clay2", "18")],
+            vec![s("sand", "57"), s("clay", "29"), s("sand2", "70"), s("clay2", "24")],
         ];
         let mut cases = cases;
         for clay in 34..=40 { cases.push(vec![s("sand", "11"), s("clay", &clay.to_string())]); }
@@ -3096,8 +3254,109 @@ mod tests {
         assert!(gaps >= 3, "only {gaps} opaque plates");
         println!("worst placement work {worst} (bound {WORK_MAX})");
     }
-    /// The most placement work a draw may take: the worst listed configuration takes about a quarter of it.
-    const WORK_MAX: u64 = 1_000_000;
+    /// The most placement work a draw may take: about 1.5 times the worst listed configuration (400,929 units).
+    const WORK_MAX: u64 = 600_000;
+
+    /// FNV-1a, 64 bit (stable across Rust versions, unlike the std hasher).
+    fn fnv(s: &str) -> u64 { s.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3)) }
+
+    #[test]
+    fn two_sample_and_gap_renders_at_large_are_pinned_byte_for_byte() {
+        // the census hashes only the defaults and the opening state (one sample, Medium: no gap, no tags); these renders
+        // exercise every stage of the gap labels and the tags (caps, the crowded-region tries, the smallest label, the
+        // fallback inside the region for an outside class, tags under the bottom edge), so that a later change to any of
+        // them cannot pass silently
+        let pair = |a: &str, c: &str, a2: &str, c2: &str| vec![s("sand", a), s("clay", c), s("sand2", a2), s("clay2", c2), s("label_size", "Large"), b("guides", true)];
+        let mut cases: Vec<(&str, Vec<(&'static str, Value)>)> = vec![
+            ("11/52 + 35/10", pair("11", "52", "35", "10")),
+            ("8/54, a gap", vec![s("sand", "8"), s("clay", "54"), s("label_size", "Large"), b("guides", true)]),
+            ("94/2 + 90/6 Print student", { let mut l = pair("94", "2", "90", "6"); l.extend([s("style", "Print"), b(SHOW_ANSWERS, false)]); l }),
+            ("94/2 + 90/6, a tag under the bottom edge", pair("94", "2", "90", "6")),
+            ("55/39 + 57/43, sandy clay crowded", pair("55", "39", "57", "43")),
+            ("47/47 + 46/47", pair("47", "47", "46", "47")),
+            ("4/50 + 4/49", pair("4", "50", "4", "49")),
+            ("24/45 + 9/44", pair("24", "45", "9", "44")),
+            ("0/49 + 8/43", pair("0", "49", "8", "43")),
+            ("6/46 + 9/46", pair("6", "46", "9", "46")),
+            ("3/47 + 6/48", pair("3", "47", "6", "48")),
+            ("83/2 + 4/38, a long gap capped", pair("83", "2", "4", "38")),
+            ("50/39 + 53/43 Print", { let mut l = pair("50", "39", "53", "43"); l.push(s("style", "Print")); l }),
+            ("93/0 + 95/0", pair("93", "0", "95", "0")),
+            ("92/0 + 95/0", pair("92", "0", "95", "0")),
+            ("88/8 + 87/10", pair("88", "8", "87", "10")),
+            ("78/16 + 82/17", pair("78", "16", "82", "17")),
+            ("60/35 + 62/36", pair("60", "35", "62", "36")),
+        ];
+        for (a, c) in [("10", "35"), ("9", "60"), ("52", "0"), ("13", "40")] { cases.push(("one sample", vec![s("sand", a), s("clay", c), s("label_size", "Large"), b("guides", true)])); }
+        let got: Vec<u64> = cases.iter().map(|(_, l)| fnv(&render_of(l))).collect();
+        let printed = got.iter().map(|h| format!("{h:#018x}")).collect::<Vec<_>>().join(", ");
+        println!("pins: [{printed}]");
+        for (k, ((name, _), h)) in cases.iter().zip(&got).enumerate() { assert_eq!(*h, PINS[k], "{name}: {h:#018x} (all: [{printed}])"); }
+    }
+    const PINS: [u64; 22] = [
+        0xa881234d50e1467a, 0xf5cff83a23f3d0ca, 0x5e952322cf2ed002, 0x3251913791802503,
+        0x2e31ecb1551b371f, 0xd98fc5c3654ca9bc, 0x3c88266a1e6c2b05, 0xc4e4c669bbe1d91c,
+        0xa1957a5bfea5682e, 0x99a3670799b16126, 0x6ae69082caffaab4, 0x953ea913897e5395,
+        0xa6a46722bd7b1821, 0xbfd8748882079a9b, 0x233d7d358c891b0c, 0x83a4417643ecd5b5,
+        0xdf51797904a19658, 0xd799ecf014014754, 0xd5feb9886843b5ea, 0xadf4ef8868d91acd,
+        0x94f1b08e21ebeffd, 0x083e8658c89f7da5,
+    ];
+
+    #[test]
+    fn with_two_samples_every_sample_has_its_tag_and_every_answer_class_its_label() {
+        // the critic's repros, pairs round every corner, vertex and edge at every size, and 5,000 pairs at Large (half of
+        // them within 4 %); every render is read back from the SVG: two tags (or one shared "1, 2"), and the region of each
+        // sample's class carries its name or abbreviation
+        let mut cases: Vec<(i64, i64, i64, i64, &'static str)> = Vec::new();
+        for (a, c, a2, c2, size) in [(94, 2, 90, 6, "Large"), (52, 45, 53, 46, "Medium"), (56, 41, 29, 20, "Large"), (78, 16, 82, 17, "Large"), (95, 4, 87, 10, "Large"), (92, 8, 93, 5, "Large"), (83, 2, 4, 38, "Large"), (50, 39, 53, 43, "Large"), (61, 28, 64, 29, "Large"), (65, 22, 62, 18, "Large"), (57, 29, 70, 24, "Large"), (93, 0, 95, 0, "Large"), (8, 7, 2, 2, "Large"), (3, 97, 57, 38, "Large")] { cases.push((a, c, a2, c2, size)); }
+        for size in ["Small", "Medium", "Large"] { cases.push((99, 1, 100, 0, size)); cases.push((100, 0, 99, 1, size)); }
+        let mut verts: Vec<(i64, i64)> = vec![(100, 0), (0, 0), (0, 100)];
+        for pg in POLY.iter() { for v in pg.iter() { verts.push((v.1, v.0)); } }
+        verts.sort(); verts.dedup();
+        for (k, (a, c)) in verts.iter().enumerate() {
+            for (da, dc) in [(-3, 1), (2, 2), (1, -3), (-2, 3)] {
+                let (a2, c2) = (a + da, c + dc);
+                if a2 < 0 || c2 < 0 || a2 + c2 > 100 { continue; }
+                cases.push((*a, *c, a2, c2, ["Small", "Medium", "Large"][(k as i64 + da).rem_euclid(3) as usize]));
+                cases.push((*a, *c, a2, c2, "Large"));
+            }
+        }
+        let mut r = Rng(0x2b1d_4e57);
+        for k in 0..5000 {
+            let a = r.below(101) as i64; let c = r.below((101 - a) as usize) as i64;
+            let (a2, c2) = if k % 2 == 0 { (a + r.below(9) as i64 - 4, c + r.below(9) as i64 - 4) } else { let a2 = r.below(101) as i64; (a2, r.below((101 - a2) as usize) as i64) };
+            if a2 < 0 || c2 < 0 || a2 + c2 > 100 { continue; }
+            cases.push((a, c, a2, c2, "Large"));
+        }
+        let (mut n, mut bad) = (0, Vec::new());
+        for (k, (a, c, a2, c2, size)) in cases.iter().enumerate() {
+            let l = [s("sand", &a.to_string()), s("clay", &c.to_string()), s("sand2", &a2.to_string()), s("clay2", &c2.to_string()), s("label_size", size), b("guides", true)];
+            let svg = render_of(&l);
+            let ts = texts(&svg);
+            let one = ts.iter().filter(|t| t.bold && t.s == "1" && t.anchor == "middle" && t.size == fsz(size)).count();
+            let two = ts.iter().filter(|t| t.bold && t.s == "2" && t.anchor == "middle" && t.size == fsz(size)).count();
+            let shared = ts.iter().filter(|t| t.s == "1, 2").count();
+            if !((one == 1 && two == 1 && shared == 0) || (one == 0 && two == 0 && shared == 1)) { bad.push(format!("{a}/{c} {a2}/{c2} {size}: tags 1:{one} 2:{two} shared:{shared}")); }
+            let regions = region_texts(&svg);
+            for (sa, cl) in [(a, c), (a2, c2)] {
+                let w = classify(sa * 100, cl * 100).win;
+                let said = regions[w].iter().filter(|t| !matches!(t.as_str(), "1" | "2" | "1, 2")).cloned().collect::<Vec<_>>().join(" ");
+                if !(said == NAMES[w] || said == ABBR[w]) { bad.push(format!("{a}/{c} {a2}/{c2} {size}: the answer class {} reads {said:?}", NAMES[w])); }
+            }
+            if k % 8 == 0 {
+                let col = collisions(&svg, size, false);
+                if !col.is_empty() { bad.push(format!("{a}/{c} {a2}/{c2} {size}: {:?}", &col[..col.len().min(3)])); }
+            }
+            n += 1;
+            if bad.len() > 15 { break; }
+        }
+        assert!(bad.is_empty(), "{n} renders: {bad:#?}");
+        // markers that touch share one tag (52/45 with 53/46 at Medium: 7 px apart); markers just apart get two
+        let shared = |l: &[(&'static str, Value)]| texts(&render_of(l)).iter().filter(|t| t.s == "1, 2").count();
+        assert_eq!(shared(&[s("sand", "52"), s("clay", "45"), s("sand2", "53"), s("clay2", "46"), s("label_size", "Medium"), b("guides", true)]), 1);
+        assert_eq!(shared(&[s("sand", "52"), s("clay", "45"), s("sand2", "55"), s("clay2", "45"), s("label_size", "Medium"), b("guides", true)]), 0);
+        println!("two samples: {n} renders, every sample tagged, every answer class named");
+    }
 
     #[test]
     fn a_student_copy_warns_when_the_dot_covers_a_line_by_the_manuals_limits() {
