@@ -133,7 +133,7 @@ if [ -n "$AUTH" ]; then
   req POST /ai/chat/completions '{"messages":[{"role":"user","content":"Reply with the single word OK."}]}'
   case "$STATUS" in
     200) ok "chat answered by the upstream" ;;
-    503) no "chat: OPENROUTER_API_KEY is not set in the server's environment" ;;
+    503) no "chat: the AI upstream key (CHEAPERINFERENCE_API_KEY, or OPENROUTER_API_KEY with AI_UPSTREAM=openrouter) is not set in the server's environment" ;;
     *) bad "chat ($STATUS) $BODY" ;;
   esac
   # A 1x1 PNG, enough to start an import job.
@@ -156,7 +156,7 @@ if [ -n "$AUTH" ]; then
         no "import job ended as '${S:-unknown}': $(jq -r '.error // empty' <<<"$BODY") (a 1x1 image yields no text, so 'failed: No page could be read' is expected)"
       fi
       ;;
-    503) no "import: OPENROUTER_API_KEY is not set" ;;
+    503) no "import: the AI upstream key is not set" ;;
     *) bad "import ($STATUS) $BODY" ;;
   esac
 fi
