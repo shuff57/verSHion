@@ -6,7 +6,7 @@ An ordered version of the cutover checklist in `docs/hosting-port.md`, with toda
 
 | # | Who | Step | Check | Way back |
 |---|---|---|---|---|
-| 1 | You | Decide the production From address and the profile-through-confirmation question (see "Open decisions") | Written into the checklist | n/a |
+| 1 | You | DONE 2026-11-03: From address `noreply@lefthanddev.com`; sign-up stays as is (no profile held before confirmation) | In the phase log | n/a |
 | 2 | You | Pick a quiet hour; tell teachers about the downtime | Date set | Move the date |
 | 3 | Me | Merge the figures work (branch `merge-figures` already merges cleanly into `main`; wait until the figures session stops) | `cargo test` green on the merged main; census passes | Do not push; reset the local branch |
 | 4 | Me | Rebuild the web bundle (`build-web.sh`, then `deploy-web.sh`; check the wasm hash changed) and the API binary from `main` | `/health` ok; smoke test passes | Redeploy the previous binary and bundle |
@@ -44,7 +44,6 @@ Sign-up, mailed confirm, one-step password, sign-in, reload with cookie, forgot-
 
 ## Open decisions and not yet done
 
-- Production sender address and the profile-through-confirmation choice (listed in "Open decisions" below).
 - Not yet proven: a test-mode Stripe purchase; the email sign-up flow end to end on production mail; Clear history (unit-tested only); the desktop app GUI against the hosted AI (the request path is proven).
 - Production needs `AI_RELAY_KEY` set (staging done), or anonymous chat stays open.
 - Applicants waiting in the admin queue must be decided by an admin; nothing in the cutover approves them.
