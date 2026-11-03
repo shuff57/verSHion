@@ -30,3 +30,7 @@ screen directly (for screenshot/test harnesses).
 - **Light & dark**: warm dark palette in the same hue family; the sun/moon switch at the
   bottom of the sidebar persists in `settings.json` (`"dark": true`). The exam page preview
   and figure sheets stay paper-white in dark mode (they preview the printed sheet).
+## Building on Linux
+
+Install the [`mold`](https://github.com/rui314/mold) linker first (`sudo dnf install mold`, `sudo apt install mold`):
+`.cargo/config.toml` links with it, and the build fails at the link step without it.
