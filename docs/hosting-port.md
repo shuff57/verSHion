@@ -315,46 +315,10 @@ Nothing below has been run. Every step that touches live data, DNS, Stripe or a 
 - 2026-10-31 route sweep: tests try every pool route (44) and admin path (44) with every method and fail on a 501 or a wrong 405. The sweep found the pool answered no OPTIONS and sent no CORS headers (the Worker did both via preflight/withCors): a middleware on the pool router now answers preflight with the Worker methods and adds the allowed origin headers to every reply. 891 pass.
 - 2026-11-01 the unmounted pool's 503 `pool_not_configured` routes now carry the same CORS and preflight (`pool::routes::cors_for`). 891 pass.
 
-## Merging rust-api into main: conflict notes (written 2026-11-01, NOT done)
+## Mainline: main (2026-11-03, DONE)
 
-Checked read-only with `git merge-tree --write-tree --name-only rust-api main` (merge base `41eb24f`; `rust-api` 244 commits ahead, 60 behind). Nothing under `server/` conflicts, and `main` did not touch `server/worker`, `server/auth` or `server/share-core`, so the port has not drifted from its source. Two files at the repo root conflict. Both are app (egui) files, not part of the port.
+`rust-api` was merged into `main` and deleted; `main` is the mainline. `origin/main` had moved on while the port was built (the question editor redesign, the figures shell, the mold build setup), so it was merged INTO the port branch first (3 conflicts: `src/qedit.rs` and `src/wysiwyg.rs` took main's version whole because the port branch had no changes of its own in them; one comment in `src/bankui.rs`). 3060 lib tests passed on the merge, then `origin/main` was fast-forwarded to it (`f49db7a`) and `origin/rust-api` and the local branch were removed. The old conflict notes here predated that and were dropped. Still to do on the merged mainline: a smoke run (sign-up, login, free-tier chat, import job, test-mode purchase, pool flow); server tests were not affected by the merge (`origin/main` touched nothing under `server/`).
 
-Where the two sides come from:
-
-- `rust-api` side: the circles client work, phase D (`0d17a83`, `dce14de`, `d912924`, `aae3c76`, `e977032`, `cf01ba4`, `65679a0`), plus the earlier Shared-page client (`134e028`, `da87b5c`). It is on this branch because it shares history with the shared-pool work.
-- `main` side: the question editor redesign, phases 1-6 plus "adapt question editor to main" (`bf7afcd`, `b5107f1`, `e40b6f0`, `5d9dc07`, `57240af`, `38253d7`, `fd3b8d0`).
-
-Cleanly merging files (no action, but rebuild and look): `src/bankexport.rs`, `src/examui.rs`, `src/theme.rs`.
-
-### `src/bankui.rs`: one hunk (about line 849 of the merged file)
-
-- `rust-api` moved the bank toolbar into a method `bank_toolbar(ui, ctx, key, bank_id, &questions, false)`. The one-row layout calls it inside `if one_row { ui.with_layout(Layout::right_to_left(..), ..) }`.
-- `main` kept the toolbar inline in `ui.with_layout(Layout::right_to_left(Align::Center), ..)` and changed it:
-  - the "Add question" primary button opens a type-first popup (`egui::Popup::menu`): Enter on the focused Add opens it, arrows and Enter pick, keys 1-6 pick directly, and a pick sets `self.qedit = Some(qedit::Draft::new_of(bank_id.clone(), k))`;
-  - Export (only when the bank has questions, `open_bank_export`), Import (`importui::open_import_modal`), Pop-over (`open_popover`) and Details buttons, each with a hover text;
-  - a "…" menu with "Tidy stems…" (enabled only when there are questions, `open_tidy`).
-- Resolution: keep `rust-api`'s structure and move `main`'s toolbar contents into `bank_toolbar`, so both layouts (one-row and the wrapped one that calls it with `true`) get the same buttons. Keep any circle-specific buttons `rust-api` added there (badge, send, restore); read the function before editing, since this note only covers the conflicting hunk.
-- Check: build, open a bank in both layouts, press Add and pick a type with a number key, open the "…" menu.
-
-### `src/qedit.rs`: four hunks
-
-1-3 (about lines 400, 475 and 499): trivial. `main` added three fields to `Draft`: `baseline: Option<String>` (fingerprint of the saved content, used for the dirty check), `confirm`, and `armed`; also initialised in both `Draft::new_of` and `Draft::from_question`. `rust-api` has nothing in those spots. Take `main`'s lines. If `rust-api` added fields of its own next to them, keep both.
-
-4 (about lines 1458-1505, the end of the stem editor): the real one.
-- `rust-api` side still holds the old body: the equation request for the stem, `stem_preview`, `equation_panel(ctx, draft, key)`, and the per-kind answer editors (`mc_editor`, True/False with the keyless rule, `matching_editor`, `blank_editor`, the Short model answer, `multipart_editor` with `draft.keyless` and `tf_keyed`).
-- `main` side replaced that region with the focus ring: a `Painter` on a tooltip layer drawing `rect_stroke` around the stem when the field is not a text field and narrower than 700 px.
-- `main`'s redesign (phases 2-4) moved equation editing inline and the answer editors elsewhere, so the `rust-api` lines are probably meant to disappear. What must not be lost is `rust-api`'s behaviour in them:
-  - the keyless rule: an imported question without its key shows no True/False answer until the teacher picks one (`unset = draft.keyless && !draft.tf_keyed.contains(&None)`; picking pushes `None` to `tf_keyed`), and the same `keyless` and `tf_keyed` arguments reach the multipart editor;
-  - anything else in the removed lines that `main` did not carry over (diff the old per-kind block against where `main` now draws the answers).
-- Resolution: take `main`'s hunk, then find where `main` now draws the True/False and Multipart answers and reapply the keyless rule there. Check whether `main` already handles keyless imports before adding anything (`git log -S keyless main -- src/qedit.rs`).
-- Check: import a question without a key, open it in the editor: True/False shows nothing selected until a pick, and the Save gate (phase 5 of `main`) treats it as unkeyed. Then run the editor on a Multipart question.
-
-### How to do it
-
-1. In a separate worktree off `rust-api` (not this one: the loop's rules keep this one to `server/api` and this doc), run `git merge main`, fix the two files, build the app, and run the app's own tests.
-2. Run `cargo test` in `server/api` again (891 now); nothing there should change.
-3. Do the smoke run (sign-up, login, free-tier chat, import job, test-mode purchase, pool flow) on the merged result before it goes to `main`.
-4. Alternative if the UI conflicts should wait: put only the `server/` commits on a new branch off `main` (they do not conflict) and leave the circles client commits for after the editor redesign settles.
 - 2026-11-01 first real run: a plain `cargo build` failed (http-body and http-body-util were dev-dependencies but the pool streams replies with them; tests compiled, the binary did not). Moved to dependencies. Then ran the server as a process on a throwaway database and drove it with `server/api/smoke/smoke.sh` (with `Caddyfile` and `env.example` beside it): health, sign-up, verify (the verify call must re-send password and profile, as in the Worker: confirming discards the sign-up password), approve in the local file, login, /me, refresh, credits, circle create/list, pool listing, export, preflight, logout all pass; chat, import and billing skip until OPENROUTER_API_KEY and Stripe test keys are set. 891 pass.
 
 ## Staging, and the plan to harden sign-up and sign-in (written 2026-11-01)
