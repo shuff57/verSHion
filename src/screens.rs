@@ -768,7 +768,6 @@ impl crate::App {
         let n_banks = self.store.banks.len();
         let n_exams = self.store.exams.len();
         let n_q: usize = self.store.banks.iter().map(|b| b.questions.len()).sum();
-        ui.add_space(6.0);
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 kit::page_header(
@@ -1425,7 +1424,6 @@ impl crate::App {
           {
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
                 ui.set_max_width(ui.available_width().min(1060.0));
-                ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
                         pageshell::title(ui, "Home  /  Settings", "Settings", "Your work is saved on this machine. Keep a copy by exporting it.");

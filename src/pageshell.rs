@@ -28,16 +28,28 @@ pub fn heading(ui: &mut Ui, text: &str) {
     ui.label(RichText::new(text).family(theme::serif_family()).size(19.0).color(theme::ink()));
 }
 
-/// The page title with its breadcrumb above.
+/// The page title with its breadcrumb above. Every screen starts here, so the title sits at the
+/// same height on all of them.
 pub fn title(ui: &mut Ui, crumbs: &str, title: &str, sub: &str) {
-    ui.label(RichText::new(crumbs).size(12.8).color(theme::muted_col()));
-    ui.label(RichText::new(title).family(theme::serif_family()).size(34.0).color(theme::ink()));
-    ui.label(theme::muted(sub).size(14.0));
+    header(ui, crumbs, title, Some(sub));
 }
 
-/// A 40 px button whose rest, hover and pressed looks are set here, so every state answers the
-/// pointer at once (press is felt on pointer-down, not on release).
-fn button(ui: &mut Ui, text: &str, rest: Color32, hover: Color32, press: Color32, stroke: Stroke, fg: Color32) -> egui::Response {
+/// [`title`] with an optional subtitle (Home has none).
+pub fn header(ui: &mut Ui, crumbs: &str, title: &str, sub: Option<&str>) {
+    ui.add_space(6.0);
+    if !crumbs.is_empty() {
+        ui.label(RichText::new(crumbs).size(12.8).color(theme::muted_col()));
+    }
+    ui.label(RichText::new(title).family(theme::serif_family()).size(34.0).color(theme::ink()));
+    if let Some(sub) = sub {
+        ui.label(theme::muted(sub).size(14.0));
+    }
+}
+
+/// A button whose rest, hover and pressed looks are set here, so every state answers the
+/// pointer at once (press is felt on pointer-down, not on release). `h` is its height: 40 for a
+/// page's actions, less for the compact ones inside forms and toolbars.
+pub fn styled_button(ui: &mut Ui, text: RichText, rest: Color32, hover: Color32, press: Color32, stroke: Stroke, h: f32) -> egui::Response {
     ui.scope(|ui| {
         ui.spacing_mut().button_padding = Vec2::new(18.0, 4.0);
         let w = &mut ui.visuals_mut().widgets;
@@ -48,13 +60,59 @@ fn button(ui: &mut Ui, text: &str, rest: Color32, hover: Color32, press: Color32
             state.expansion = 0.0;
             state.corner_radius = CornerRadius::same(12);
         }
-        ui.add(
-            egui::Button::new(RichText::new(text).family(theme::bold_family()).size(15.2).color(fg))
-                .min_size(Vec2::new(0.0, 40.0)),
-        )
-        .on_hover_cursor(egui::CursorIcon::PointingHand)
+        ui.add(egui::Button::new(text).min_size(Vec2::new(0.0, h))).on_hover_cursor(egui::CursorIcon::PointingHand)
     })
     .inner
+}
+
+/// The solid accent look's three states: rest, hover, pressed.
+pub fn accent_states() -> (Color32, Color32, Color32) {
+    let accent = theme::accent_col();
+    let toward = if theme::is_dark() { Color32::WHITE } else { Color32::BLACK };
+    (accent, accent.lerp_to_gamma(toward, 0.12), accent.lerp_to_gamma(toward, 0.22))
+}
+
+fn button(ui: &mut Ui, text: &str, rest: Color32, hover: Color32, press: Color32, stroke: Stroke, fg: Color32) -> egui::Response {
+    styled_button(ui, RichText::new(text).family(theme::bold_family()).size(15.2).color(fg), rest, hover, press, stroke, 40.0)
+}
+
+/// An empty list's card: an icon, what is missing, and the buttons that fix it (`actions`: label
+/// and whether it is the primary one). Returns the index of the button pressed.
+pub fn empty_state(ui: &mut Ui, icon: &str, title: &str, body: &str, actions: &[(&str, bool)]) -> Option<usize> {
+    let mut pressed = None;
+    Frame::new()
+        .fill(theme::card())
+        .stroke(Stroke::new(1.0, theme::border()))
+        .corner_radius(CornerRadius::same(16))
+        .inner_margin(Margin::symmetric(24, 34))
+        .show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.vertical_centered(|ui| {
+                let (r, _) = ui.allocate_exact_size(Vec2::splat(56.0), Sense::hover());
+                ui.painter().circle_filled(r.center(), 28.0, theme::accent_faded());
+                ui.painter().text(r.center(), Align2::CENTER_CENTER, icon, theme::icon_font(26.0), theme::accent_col());
+                ui.add_space(12.0);
+                ui.label(RichText::new(title).family(theme::serif_family()).size(22.0).color(theme::ink()));
+                ui.add_space(4.0);
+                ui.label(theme::muted(body).size(14.0));
+                ui.add_space(16.0);
+                if !actions.is_empty() {
+                    let gap = 10.0;
+                    let total: f32 = actions.iter().map(|(t, _)| button_width(ui, t)).sum::<f32>() + gap * (actions.len() as f32 - 1.0);
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = gap;
+                        ui.add_space(((ui.available_width() - total) / 2.0).max(0.0));
+                        for (i, (label, primary_btn)) in actions.iter().enumerate() {
+                            let r = if *primary_btn { primary(ui, label) } else { outline(ui, label) };
+                            if r.clicked() {
+                                pressed = Some(i);
+                            }
+                        }
+                    });
+                }
+            });
+        });
+    pressed
 }
 
 /// The width a [`primary`] or [`outline`] button with this text takes. The buttons are laid out
@@ -66,9 +124,8 @@ pub fn button_width(ui: &Ui, text: &str) -> f32 {
 
 /// The solid accent action.
 pub fn primary(ui: &mut Ui, text: &str) -> egui::Response {
-    let accent = theme::accent_col();
-    let toward = if theme::is_dark() { Color32::WHITE } else { Color32::BLACK };
-    button(ui, text, accent, accent.lerp_to_gamma(toward, 0.12), accent.lerp_to_gamma(toward, 0.22), Stroke::NONE, theme::on_accent_col())
+    let (rest, hover, press) = accent_states();
+    button(ui, text, rest, hover, press, Stroke::NONE, theme::on_accent_col())
 }
 
 /// The outlined action.

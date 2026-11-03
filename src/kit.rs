@@ -24,24 +24,69 @@ fn pill_radius(h: f32) -> CornerRadius {
 
 /// The one primary button: filled accent pill.
 pub fn primary_button(ui: &mut Ui, label: &str) -> egui::Response {
-    ui.add(
-        egui::Button::new(RichText::new(label).family(theme::bold_family()).color(theme::on_accent_col()))
-            .fill(theme::accent_col())
-            .stroke(Stroke::NONE)
-            .corner_radius(pill_radius(34.0))
-            .min_size(Vec2::new(0.0, 34.0)),
+    let (rest, hover, press) = crate::pageshell::accent_states();
+    crate::pageshell::styled_button(
+        ui,
+        RichText::new(label).family(theme::bold_family()).color(theme::on_accent_col()),
+        rest,
+        hover,
+        press,
+        Stroke::NONE,
+        36.0,
     )
 }
 
-/// Ghost/outline pill for every secondary action.
+/// Ghost/outline button for every secondary action: the page buttons' look at the compact height.
 pub fn ghost_button(ui: &mut Ui, label: &str) -> egui::Response {
-    ui.add(
-        egui::Button::new(RichText::new(label).family(theme::bold_family()).color(theme::ink()))
-            .fill(Color32::TRANSPARENT)
-            .stroke(Stroke::new(1.0, theme::rule()))
-            .corner_radius(pill_radius(34.0))
-            .min_size(Vec2::new(0.0, 34.0)),
+    crate::pageshell::styled_button(
+        ui,
+        RichText::new(label).family(theme::bold_family()).color(theme::ink()),
+        theme::card(),
+        theme::hover_bg(),
+        theme::accent_faded(),
+        Stroke::new(1.0, theme::rule()),
+        36.0,
     )
+}
+
+/// 0..=1, easing toward 1 while `on` (a card under the pointer) and back to 0 after, in 0.14 s;
+/// instant when motion is reduced.
+pub fn hover_t(ctx: &egui::Context, id: egui::Id, on: bool) -> f32 {
+    let secs = if crate::pageshell::reduced_motion() { 0.0 } else { 0.14 };
+    crate::pageshell::ease_out(ctx.animate_bool_with_time(id, on, secs))
+}
+
+/// The one search box: a 40 px field with a magnifier, 12 px corners like the buttons. True when
+/// the text changed.
+pub fn search_field(ui: &mut Ui, text: &mut String, w: f32, hint: &str) -> bool {
+    let mut changed = false;
+    egui::Frame::new()
+        .fill(theme::card())
+        .stroke(Stroke::new(1.0, theme::border()))
+        .corner_radius(CornerRadius::same(12))
+        .inner_margin(Margin::symmetric(13, 10))
+        .show(ui, |ui| {
+            ui.set_width(w - 28.0);
+            // The row takes its height from the theme's 34 px control size, which would make the
+            // box 54 px tall; the frame's padding supplies the height instead.
+            ui.spacing_mut().interact_size.y = 20.0;
+            ui.horizontal(|ui| {
+                let (r, _) = ui.allocate_exact_size(Vec2::splat(15.0), Sense::hover());
+                let s = Stroke::new(1.6, theme::muted_col());
+                ui.painter().circle_stroke(r.center() + Vec2::new(-1.0, -1.0), 5.0, s);
+                ui.painter().line_segment([r.center() + Vec2::new(2.8, 2.8), r.center() + Vec2::new(6.0, 6.0)], s);
+                changed = ui
+                    .add(
+                        egui::TextEdit::singleline(text)
+                            .frame(egui::Frame::new())
+                            .margin(Margin::ZERO)
+                            .hint_text(hint)
+                            .desired_width(ui.available_width()),
+                    )
+                    .changed();
+            });
+        });
+    changed
 }
 
 /// Danger text button (Delete).
@@ -140,15 +185,7 @@ pub fn view_toggle(ui: &mut Ui, mode: &mut ViewMode, salt: &str) -> bool {
 /// Screen header: small breadcrumb line, then a serif title (34–40 px) and an
 /// optional muted subtitle. Replaces the old top bar.
 pub fn page_header(ui: &mut Ui, crumbs: &[&str], title: &str, subtitle: Option<&str>) {
-    if !crumbs.is_empty() {
-        ui.label(
-            RichText::new(crumbs.join("  /  ")).size(11.5).color(theme::muted_col()),
-        );
-    }
-    ui.label(theme::serif(title).size(36.0));
-    if let Some(sub) = subtitle {
-        ui.label(theme::muted(sub).size(13.0));
-    }
+    crate::pageshell::header(ui, &crumbs.join("  /  "), title, subtitle);
 }
 
 /// Card frame: radius 16, 1 px border, no heavy shadow.

@@ -139,35 +139,9 @@ fn crumb_row(ui: &mut Ui, app: &mut App, tail: Option<&str>) {
     });
 }
 
-/// Painter-drawn search pill with a magnifier; returns true when text changed.
+/// The shared search box ([`kit::search_field`]); returns true when text changed.
 fn search_pill(ui: &mut Ui, text: &mut String, w: f32, hint: &str) -> bool {
-    let mut changed = false;
-    Frame::new()
-        .fill(theme::card())
-        .stroke(Stroke::new(1.0, theme::border()))
-        .corner_radius(CornerRadius::same(255))
-        .inner_margin(Margin::symmetric(13, 5))
-        .show(ui, |ui| {
-            ui.set_width(w - 28.0);
-            ui.horizontal(|ui| {
-                let (r, _) = ui.allocate_exact_size(Vec2::splat(15.0), Sense::hover());
-                let s = Stroke::new(1.6, theme::muted_col());
-                ui.painter().circle_stroke(r.center() + Vec2::new(-1.0, -1.0), 5.0, s);
-                ui.painter().line_segment(
-                    [r.center() + Vec2::new(2.8, 2.8), r.center() + Vec2::new(6.0, 6.0)],
-                    s,
-                );
-                changed = ui
-                    .add(
-                        TextEdit::singleline(text)
-                            .frame(Frame::new())
-                            .hint_text(hint)
-                            .desired_width(ui.available_width()),
-                    )
-                    .changed();
-            });
-        });
-    changed
+    kit::search_field(ui, text, w, hint)
 }
 
 // ---------- transient per-screen state ----------
@@ -473,17 +447,21 @@ impl App {
         crate::share::bank_links_ui::adding_rows(ui, self);
 
         if self.store.banks.is_empty() {
-            ui.add_space(30.0);
-            ui.vertical_centered(|ui| {
-                ui.label(theme::serif("Nothing here yet").size(22.0));
-                ui.add_space(4.0);
-                ui.label(
-                    theme::muted(
-                        "Create your first Question Bank, or hand a test you already have to the importer.",
-                    )
-                    .size(13.0),
-                );
-            });
+            let pressed = crate::pageshell::empty_state(
+                ui,
+                egui_phosphor::regular::BOOKS,
+                "Your first Question Bank",
+                "A bank is a shelf of questions you can reuse in any exam. Start one by hand or hand a test you already have to the importer.",
+                &[("New bank", true), ("Import a test", false)],
+            );
+            match pressed {
+                Some(0) => {
+                    let id = self.new_bank("Untitled Question Bank");
+                    self.open_bank(&id);
+                }
+                Some(_) => self.screen = crate::Screen::Imports,
+                None => {}
+            }
             return;
         }
 
@@ -1433,11 +1411,12 @@ fn bank_card(ui: &mut Ui, app: &mut App, ctx: &egui::Context, key: UiId, r: &Ban
         open_usage(ctx, r.name.clone(), r.used_in.clone());
         return;
     }
-    if click.hovered() {
+    let t = kit::hover_t(ctx, click.id.with("hover"), click.hovered());
+    if t > 0.0 {
         ui.painter().rect_stroke(
             resp.response.rect,
             CornerRadius::same(kit::R_CARD),
-            Stroke::new(1.0, theme::accent_col()),
+            Stroke::new(1.0, theme::accent_col().gamma_multiply(t)),
             egui::StrokeKind::Inside,
         );
     }

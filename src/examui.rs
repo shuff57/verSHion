@@ -493,12 +493,7 @@ impl crate::App {
                 kit::page_header(ui, &["Home", "Exams"], "Exams", Some(&sub));
                 ui.add_space(14.0);
                 ui.horizontal(|ui| {
-                    ui.add(
-                        egui::TextEdit::singleline(&mut st.search)
-                            .hint_text("Search exams")
-                            .desired_width(260.0)
-                            .margin(Margin::symmetric(10, 6)),
-                    );
+                    kit::search_field(ui, &mut st.search, 300.0, "Search exams");
                     if archived_n > 0 && kit::chip_toggle(ui, &format!("Show archived  {archived_n}"), st.show_archived).clicked() {
                         st.show_archived = !st.show_archived;
                     }
@@ -514,26 +509,25 @@ impl crate::App {
                 ui.add_space(14.0);
 
                 if rows.is_empty() {
-                    kit::card().inner_margin(Margin::symmetric(24, 30)).show(ui, |ui| {
-                        ui.set_min_width(ui.available_width());
-                        ui.vertical_centered(|ui| {
-                            if total == 0 {
-                                ui.label(theme::serif("Create your first exam").size(20.0));
-                                ui.add_space(4.0);
-                                ui.label(muted("Pull questions into a printable working copy."));
-                                ui.add_space(12.0);
-                                if crate::pageshell::primary(ui, "New exam").clicked() {
-                                    let id = new_exam(app);
-                                    app.exam = Some(id.clone());
-                                    app.screen = crate::Screen::ExamEdit(id);
-                                }
-                            } else if st.search.trim().is_empty() {
-                                ui.label(muted("Every exam is archived. Press Show archived to see them."));
-                            } else {
-                                ui.label(muted("No exams match that search."));
-                            }
-                        });
-                    });
+                    if total == 0 {
+                        if crate::pageshell::empty_state(
+                            ui,
+                            egui_phosphor::regular::EXAM,
+                            "Create your first exam",
+                            "Pull questions from your banks into a printable working copy, then print it or export it as PDF or Word.",
+                            &[("New exam", true)],
+                        )
+                        .is_some()
+                        {
+                            let id = new_exam(app);
+                            app.exam = Some(id.clone());
+                            app.screen = crate::Screen::ExamEdit(id);
+                        }
+                    } else if st.search.trim().is_empty() {
+                        ui.label(muted("Every exam is archived. Press Show archived to see them."));
+                    } else {
+                        ui.label(muted("No exams match that search."));
+                    }
                     return;
                 }
                 match st.mode {
@@ -705,12 +699,13 @@ fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st
         ui.spacing_mut().item_spacing = Vec2::splat(gap);
         for row in chunk {
             let (rect, resp) = ui.allocate_exact_size(Vec2::new(card_w, card_h), Sense::click());
+            let hover = kit::hover_t(ui.ctx(), resp.id.with("hover"), resp.hovered());
             let p = ui.painter();
             p.rect(
                 rect,
                 CornerRadius::same(kit::R_CARD),
                 theme::card(),
-                Stroke::new(1.0, if resp.hovered() { theme::accent_col() } else { theme::border() }),
+                Stroke::new(1.0, theme::border().lerp_to_gamma(theme::accent_col(), hover)),
                 StrokeKind::Inside,
             );
             let thumb_area = Rect::from_min_size(rect.left_top() + Vec2::new(14.0, 12.0), Vec2::new(thumb_w, card_h - 24.0));

@@ -949,6 +949,7 @@ fn drop_area(app: &mut crate::App, ui: &mut egui::Ui, st: &mut State) {
                     ui.add_space(8.0);
                     ui.add(
                         egui::TextEdit::multiline(&mut app.paste)
+                            .margin(egui::Margin::symmetric(14, 12))
                             .desired_rows(6)
                             .desired_width(ui.available_width())
                             .hint_text(

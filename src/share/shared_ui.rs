@@ -125,7 +125,6 @@ impl crate::App {
             app.account.pin();
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
                 ui.set_max_width(ui.available_width().min(1060.0));
-                ui.add_space(6.0);
                 pageshell::title(ui, "Home  /  Account", "Account", "Optional. For sharing questions with other teachers and for the hosted AI. Everything else works without one.");
                 ui.add_space(18.0);
                 // The forms keep a form's width with the reasons for an account beside them; the
@@ -217,8 +216,7 @@ impl SharedUi {
         }
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             // The same column as Settings, the other page built from a stack of cards.
-            ui.set_max_width(ui.available_width().min(820.0));
-            ui.add_space(6.0);
+            ui.set_max_width(ui.available_width().min(1060.0));
             // The page's one action beside the title, as Banks has "New bank" (once the tabs show).
             let ready = guide == Guide::Ready;
             // (round 54) a confirmed account waiting for approval gets the Circles tab and its settings; the public
