@@ -342,7 +342,8 @@ pub const HUB_R: f64 = 17.0;
 /// Root xylem vessels along each arm: (radius from the centre, vessel radius); large in the middle, small at the tips.
 pub const ROOT_VESSELS: [(f64, f64); 4] = [(21.0, 4.6), (32.5, 3.6), (42.0, 2.8), (50.0, 2.0)];
 pub const CENTRE_VESSEL: f64 = 6.0;
-pub const PATCH_R: f64 = 38.0;
+/// The phloem patches sit at the edge of the stele, just inside the pericycle, between the arms.
+pub const PATCH_R: f64 = 47.0;
 pub fn patch_a(i: usize) -> f64 { 45.0 + 90.0 * i as f64 }
 
 /// The outline of the epidermal cell at angle `a`, with its hair when it has one.
@@ -446,7 +447,7 @@ fn root_shapes() -> Vec<Shape> {
 // ---------------------------------------------------------------- the longitudinal view (its own coordinates)
 
 /// Element length and count; the strip runs from y 0 to `EL * N_EL`.
-pub const EL: f64 = 64.0;
+pub const EL: f64 = 56.0;
 pub const N_EL: usize = 6;
 pub const VX0: f64 = 0.0;
 pub const VX1: f64 = 28.0;
@@ -456,10 +457,10 @@ pub const SX1: f64 = 64.0;
 pub const CX0: f64 = 66.0;
 pub const CX1: f64 = 76.0;
 /// Companion cells sit beside the middle `COMP_LEN` px of each sieve-tube element.
-pub const COMP_LEN: f64 = 40.0;
+pub const COMP_LEN: f64 = EL - 24.0;
 /// The element the mature leaf joins (its sugar enters the sieve tube there).
 pub const LEAF_EL: usize = 3;
-pub const LEAF_C: P = (150.0, 224.0);
+pub const LEAF_C: P = (150.0, EL * (LEAF_EL as f64 + 0.5));
 pub const LEAF_RX: f64 = 46.0;
 pub const LEAF_RY: f64 = 25.0;
 pub fn strip_h() -> f64 { EL * N_EL as f64 }
@@ -502,12 +503,10 @@ fn long_shapes() -> Vec<Shape> {
 /// How a label is joined to what it names.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Join {
-    /// A line from the label (first point) to the end inside the part (last point).
+    /// A line from the label (first point) to the end inside the part, or on the side of an arrow's shaft (last point).
     Leader { pts: Vec<P> },
-    /// A bracket (its polyline: tick, spine, tick) with a line from its outer end to the label.
+    /// A bracket (its polyline: tick, spine, tick) with a line from the middle of its spine to the label.
     Bracket { pts: Vec<P>, lead: Vec<P> },
-    /// The label names an arrow beside it.
-    Arrow,
     /// The label is a tag beside an organ's name.
     Tag,
 }
@@ -526,6 +525,8 @@ pub enum Aim {
     Touch(Part),
     /// a bracket spanning this named part's bundle
     Span(usize),
+    /// on the side of an arrow's shaft inside this channel (the vessel, or one sieve-tube element)
+    OnArrow(Part),
     None,
 }
 
@@ -570,7 +571,13 @@ pub const XY_GAP_A: f64 = 0.0;
 pub const XY_END: (f64, f64) = (86.0, 15.5);
 pub const CAM_GAP_A: f64 = 45.0;
 pub const CAM_END: (f64, f64) = (102.0, 58.5);
-pub const BRACKET_A: f64 = -51.0;
+/// The bracket's spine runs along the radius at `bracket_a()`, `BRACKET_TICK` + 1.2 px from the side of bundle
+/// B_BRACKET's xylem at the xylem's inner edge, so its ticks (pointing at the bundle) stop 1.2 px short of it.
+pub const BRACKET_TICK: f64 = 7.3;
+pub fn bracket_a() -> f64 { bundle_a(B_BRACKET) + BUNDLE_HALF + ((BRACKET_TICK + 1.2) / XY_R0).asin().to_degrees() }
+/// The lead leaves the middle of the spine at a right angle, away from the bundle, `BRACKET_STEP` px, then runs out
+/// along the radius.
+pub const BRACKET_STEP: f64 = 6.0;
 
 fn stem_labels(c: &Cfg, z: &Sizes) -> Vec<Lab> {
     let mut out = Vec::new();
@@ -593,12 +600,16 @@ fn stem_labels(c: &Cfg, z: &Sizes) -> Vec<Lab> {
     if c.wants(It::Bundle) {
         // the bracket runs beside bundle B_BRACKET from the inner edge of its xylem to the outer edge of its phloem;
         // the ticks point toward the bundle; the lead leaves its outer end along the radius
-        let a = BRACKET_A;
+        let a = bracket_a();
         let toward = pol(a - 90.0, 1.0);
-        let tick = 3.0;
+        let tick = BRACKET_TICK;
         let (p0, p1) = (pol(a, XY_R0), pol(a, PH_R1));
         let pts = vec![(p0.0 + toward.0 * tick, p0.1 + toward.1 * tick), p0, p1, (p1.0 + toward.0 * tick, p1.1 + toward.1 * tick)];
-        let mut l = radial(It::Bundle, Pane::Stem, r, a, vec![p1], Aim::Span(B_BRACKET), z);
+        let rm = (XY_R0 + PH_R1) / 2.0;
+        let m = pol(a, rm);
+        let q = (m.0 - toward.0 * BRACKET_STEP, m.1 - toward.1 * BRACKET_STEP);
+        let a2 = q.1.atan2(q.0).to_degrees();
+        let mut l = radial(It::Bundle, Pane::Stem, r, a2, vec![q, m], Aim::Span(B_BRACKET), z);
         let Join::Leader { pts: lead } = l.join.clone() else { unreachable!() };
         l.join = Join::Bracket { pts, lead };
         out.push(l);
@@ -641,10 +652,23 @@ fn root_labels(c: &Cfg, z: &Sizes) -> Vec<Lab> {
 /// The longitudinal view's label columns: the right edge of the left one and the left edge of the right one.
 pub const LONG_LX: f64 = -14.0;
 pub const LONG_RX: f64 = 98.0;
-pub const VESSEL_Y: f64 = 72.0;
-pub const COMP_Y: f64 = 22.0;
-pub const PLATE_Y: f64 = 64.0;
-pub const SIEVE_Y: f64 = 121.0;
+/// The vessel's pointer runs between two ring thickenings (they are every 8 px) in the second element.
+pub const VESSEL_Y: f64 = EL + 12.0;
+pub const COMP_Y: f64 = EL * 0.5 - 10.0;
+pub const PLATE_Y: f64 = EL;
+pub const SIEVE_Y: f64 = 2.0 * EL - 7.0;
+/// The arrow blanks: the water arrow of element `WATER_EL` and the sucrose arrow of element `SUCROSE_EL` (below the
+/// leaf, pointing down) each get a short line that ends on the side of the arrow's shaft, half way along it.
+pub const WATER_EL: usize = 4;
+pub const SUCROSE_EL: usize = 5;
+/// The y of the water blank's line: the middle of the element, moved off a ring thickening if it falls on one.
+pub fn water_y() -> f64 { let m = el_mid(WATER_EL); if (m / 8.0).fract() == 0.0 { m + 4.0 } else { m } }
+/// The sucrose blank's line: in from the right just below the sieve plate (clear of the companion cells), then down
+/// to the side of the shaft at the middle of the element.
+pub fn sucrose_path() -> Vec<P> {
+    let b = EL * SUCROSE_EL as f64;
+    vec![(LONG_RX - 4.0, b + 6.0), (SX1 - 4.0, b + 6.0), ((SX0 + SX1) / 2.0 + ARROW_SW / 2.0 + 0.6, el_mid(SUCROSE_EL))]
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct Flow { pub it: It, pub a: P, pub b: P }
@@ -686,14 +710,14 @@ fn long_labels(c: &Cfg, z: &Sizes) -> Vec<Lab> {
     if c.wants(It::SievePlate) { out.push(right(It::SievePlate, PLATE_Y, (SX1 - 6.0, PLATE_Y), Aim::In(Part { pk: PK::LPlate, i: 1 }))); }
     if c.wants(It::SieveTube) { out.push(right(It::SieveTube, SIEVE_Y, (SX1 - 5.0, SIEVE_Y), Aim::In(Part { pk: PK::LSieve, i: 1 }))); }
     if c.wants(It::Water) {
-        let w = name_w(It::Water, z);
-        let y = el_mid(LEAF_EL);
-        out.push(Lab { it: It::Water, num: 0, pane: Pane::Long, bx: (LONG_LX - w, y - h / 2.0, LONG_LX, y + h / 2.0), anc: Anc::End, join: Join::Arrow, aim: Aim::None });
+        let y = water_y();
+        out.push(left(It::Water, y, ((VX0 + VX1) / 2.0 - ARROW_SW / 2.0 - 0.6, y), Aim::OnArrow(Part { pk: PK::LVessel, i: 0 })));
     }
     if c.wants(It::Sucrose) {
-        let w = name_w(It::Sucrose, z);
-        let x = LEAF_C.0 + LEAF_RX + 8.0;
-        out.push(Lab { it: It::Sucrose, num: 0, pane: Pane::Long, bx: (x, LEAF_C.1 - h / 2.0, x + w, LEAF_C.1 + h / 2.0), anc: Anc::Start, join: Join::Arrow, aim: Aim::None });
+        let pts = sucrose_path();
+        let mut l = right(It::Sucrose, pts[0].1, pts[2], Aim::OnArrow(Part { pk: PK::LSieve, i: SUCROSE_EL }));
+        l.join = Join::Leader { pts };
+        out.push(l);
     }
     for (t, cx, base, it) in organs(z) {
         if !c.wants(it) { continue; }
@@ -714,7 +738,7 @@ pub struct Txt { pub x: f64, pub y: f64, pub size: f64, pub anchor: &'static str
 
 pub fn stem_title() -> &'static str { "Dicot stem, cross-section" }
 pub fn root_title() -> &'static str { "Dicot root, cross-section" }
-pub fn long_title() -> &'static str { "Lengthwise view of the stem" }
+pub fn long_title() -> &'static str { "Lengthwise view, roots to shoot tip" }
 
 /// Everything drawn, in canvas coordinates.
 pub struct Lay { pub shapes: Vec<Shape>, pub labs: Vec<Lab>, pub flows: Vec<Flow>, pub texts: Vec<Txt>, pub w: f64, pub h_fig: f64, pub off: Vec<(Pane, P)> }
@@ -839,9 +863,41 @@ pub fn arrow_col(i: It, pr: bool) -> &'static str {
 pub fn arrow_dash(i: It, pr: bool) -> &'static str { if pr && i == It::Sucrose { "5 3" } else { "" } }
 pub const ARROW_SW: f64 = 2.4;
 
+/// The text width of a printed question page (6.5 in), as the exports size a picture on it.
+pub const PAGE_W_PT: f64 = 468.0;
+/// Names smaller than this print hard to read; the editor note says so.
+pub const SMALL_PRINT_PT: f64 = 8.0;
+
+/// The size the names print at on a question page, in pt: the canvas is scaled by `layout::picture_size_pt` (at most
+/// 0.75 pt a px, 6.5 in wide and 3 in tall), and a name is 13 px times the label factor.
+pub fn printed_name_pt(p: &Params) -> f64 {
+    let svg = draw(p);
+    let root = svg.split('>').next().unwrap_or_default();
+    let num = |k: &str| root.split(&format!(" {k}=\"")).nth(1).and_then(|v| v.split('"').next()).and_then(|v| v.parse::<f64>().ok()).unwrap_or(1.0);
+    let (w, h) = (num("width"), num("height"));
+    13.0 * cfg(p).lab * print_scale(w, h)
+}
+
 pub fn warnings(p: &Params) -> Vec<String> {
     let c = cfg(p);
     let mut out = Vec::new();
+    let pt = printed_name_pt(p);
+    if pt < SMALL_PRINT_PT {
+        // each one-control change that would print the names at least half a point bigger, measured, biggest first
+        let mut steps: Vec<(f64, String)> = Vec::new();
+        let mut try_step = |what: String, q: Params| { let after = printed_name_pt(&q); if after >= pt + 0.5 { steps.push((after, format!("{what} (about {after:.1} pt)"))); } };
+        if c.view == View::Both { for v in ["Stem", "Root"] { let mut q = p.clone(); q.set_s("view", v); try_step(format!("set Cross-section to {v}"), q); } }
+        if c.long { let mut q = p.clone(); q.set_b("longitudinal", false); try_step("switch off Longitudinal view of transport".to_string(), q); }
+        if c.lab < 1.4 { let mut q = p.clone(); q.set_s("label_size", "Large"); try_step("set Label size to Large".to_string(), q); }
+        steps.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        let how: Vec<&str> = steps.iter().map(|x| x.1.as_str()).collect();
+        let advice = match how.len() {
+            0 => "No single change here prints them much bigger; for bigger names give the figure a page of its own.".to_string(),
+            1 => format!("For bigger names {}.", how[0]),
+            _ => format!("For bigger names {} or {}.", how[..how.len() - 1].join(", "), how[how.len() - 1]),
+        };
+        out.push(format!("On a question page (6.5 by 3 in at most) the names print at about {pt:.1} pt, below the {SMALL_PRINT_PT:.0} pt that reads well. {advice}"));
+    }
     if !c.long && (c.cells || c.arrows) {
         let what = match (c.cells, c.arrows) { (true, true) => "The cell labels of the longitudinal view and the transport arrows are", (true, false) => "The cell labels of the longitudinal view are", _ => "The transport arrows are" };
         out.push(format!("{what} drawn only in the longitudinal view. Switch on Longitudinal view of transport to show them."));
@@ -871,12 +927,7 @@ fn draw(p: &Params) -> String {
     let rule_w = 150.0 * c.lab;
     let cell_w = 2.0 * z.r + 8.0 + rule_w;
     let gapc = 28.0;
-    let avail = lay.w.max(480.0) - 2.0 * MARGIN;
-    let cols = if c.key || n == 0 { 1 } else { (((avail + gapc) / (cell_w + gapc)).floor() as usize).clamp(1, 6).min(n) };
-    let table_w = if c.key || n == 0 { 0.0 } else { cols as f64 * cell_w + (cols - 1) as f64 * gapc };
     let row_h = 2.0 * z.r + 10.0;
-    let table_rows = if c.key || n == 0 { 0 } else { n.div_ceil(cols) };
-    let w = lay.w.max(table_w + 2.0 * MARGIN).max(480.0);
     // ---------- captions
     let mut cap: Vec<String> = vec![format!("Not to scale: simplified drawings of a young dicot {}.", match (c.stem() || c.long, c.root()) { (true, false) => "stem", (false, true) => "root", _ => "stem and root" })];
     if c.key {
@@ -884,16 +935,16 @@ fn draw(p: &Params) -> String {
         let acc: Vec<String> = labs.iter().filter(|l| { let dup = seen.iter().any(|s| name(*s) == name(l.it)); seen.push(l.it); !dup }).map(|l| format!("{}: {}", name(l.it), alts(l.it))).collect();
         if !acc.is_empty() { cap.push(format!("Also accepted: {}.", acc.join("; "))); }
         if c.stem() { cap.push("Stem: the vascular bundles form a ring; in each, xylem is toward the pith, phloem toward the epidermis, and the vascular cambium lies between them.".to_string()); }
-        if c.root() { cap.push("Root: the xylem forms an X in the centre with phloem between its arms; the endodermis, with the Casparian strip in its radial walls, surrounds the pericycle. Root hairs are outgrowths of epidermal cells.".to_string()); }
+        if c.root() { cap.push("Root: the xylem forms an X in the centre with phloem between its arms, at the edge of the stele; four arms are drawn, and dicot roots have two to six. The endodermis, with the Casparian strip in its radial and end walls (a cross-section shows the radial walls), surrounds the pericycle. Root hairs are outgrowths of epidermal cells.".to_string()); }
         if c.long {
-            cap.push("Xylem vessels are dead, hollow cells with thick lignified walls and open ends; water and dissolved minerals move one way, up from the roots to the leaves, pulled by transpiration. Phloem sieve tubes are living cells joined by sieve plates, each with a companion cell; sucrose moves from a source to sinks, so in the stem it goes up or down.".to_string());
+            cap.push("Xylem vessels are tubes of dead vessel elements with lignified walls and open ends; water and dissolved minerals move one way, up from the roots to the leaves, pulled by transpiration. Phloem sieve tubes are rows of living sieve-tube elements joined by sieve plates, each with a companion cell; sucrose moves from a source to sinks, so in the stem it goes up or down.".to_string());
             if c.arrows_drawn() { cap.push("Here the mature leaf is the source; the roots below and the young leaves and fruit above are sinks. The leaf's own xylem supply is not drawn.".to_string()); }
         }
     } else if n > 0 {
         let mut how: Vec<&str> = Vec::new();
-        if labs.iter().any(|l| matches!(l.join, Join::Leader { .. })) { how.push("a line ends on a part"); }
+        if labs.iter().any(|l| matches!(l.join, Join::Leader { .. }) && !matches!(l.aim, Aim::OnArrow(_))) { how.push("a line ends on a part"); }
         if labs.iter().any(|l| matches!(l.join, Join::Bracket { .. })) { how.push("a bracket spans a whole structure"); }
-        if labs.iter().any(|l| matches!(l.join, Join::Arrow)) { how.push("an arrow shows which way something moves (arrows of one style carry the same thing)"); }
+        if labs.iter().any(|l| matches!(l.aim, Aim::OnArrow(_))) { how.push("a line that ends on an arrow asks what the arrow carries (arrows of one style carry the same thing)"); }
         if labs.iter().any(|l| matches!(l.join, Join::Tag)) { how.push("a disc beside an organ's name asks for its role in moving the products of photosynthesis"); }
         let joined = match how.len() { 1 => how[0].to_string(), 2 => format!("{} and {}", how[0], how[1]), _ => format!("{} and {}", how[..how.len() - 1].join(", "), how[how.len() - 1]) };
         let mut first = joined.chars();
@@ -901,12 +952,8 @@ fn draw(p: &Params) -> String {
         cap.push(format!("{cap0}. Write the name of each numbered part."));
     }
     let cfs = 12.0 * c.lab;
-    let cap_lines: Vec<String> = cap.iter().flat_map(|s| wrap(s, w - 2.0 * MARGIN, cfs)).collect();
-    let mut y = lay.h_fig + 16.0;
-    let table_y = y;
-    if table_rows > 0 { y += table_rows as f64 * row_h + 10.0; }
-    let cap_y = y;
-    let total_h = cap_y + cap_lines.len() as f64 * 16.0 * c.lab + 8.0;
+    let blk = text_block(&lay, &cap, n, c.key, cell_w, gapc, row_h, cfs, c.lab);
+    let (w, total_h) = (blk.w, blk.h);
     let mut d = Doc::new(w.ceil(), total_h.ceil());
     d.defs(&fills.defs());
     if c.key {
@@ -963,21 +1010,61 @@ fn draw(p: &Params) -> String {
         }
     }
     // ---------- the table of blanks
-    if table_rows > 0 {
-        let x0 = (w - table_w) / 2.0;
+    if blk.rows > 0 {
         for (q, l) in labs.iter().enumerate() {
-            let (col, row) = (q / table_rows, q % table_rows);
-            let rx = x0 + col as f64 * (cell_w + gapc);
-            let ry = table_y + row as f64 * row_h + row_h / 2.0;
+            let (col, row) = (q / blk.rows, q % blk.rows);
+            let rx = blk.table.0 + col as f64 * (cell_w + gapc);
+            let ry = blk.table.1 + row as f64 * row_h + row_h / 2.0;
             disc(&mut d, rx + z.r, ry, z.r, l.num, 0.9 * z.fs);
             let xr = rx + 2.0 * z.r + 8.0;
             d.line(xr, ry + z.r * 0.6, xr + rule_w, ry + z.r * 0.6, INK, 1.1);
         }
     }
-    for (i, line) in cap_lines.iter().enumerate() {
-        d.raw(&format!(r##"<text x="{MARGIN:.2}" y="{:.2}" font-size="{cfs:.2}" text-anchor="start" font-family="{FONT}" fill="#222222">{}</text>"##, cap_y + cfs + i as f64 * 16.0 * c.lab, svg::esc(line)));
+    for (i, line) in blk.lines.iter().enumerate() {
+        d.raw(&format!(r##"<text x="{:.2}" y="{:.2}" font-size="{cfs:.2}" text-anchor="start" font-family="{FONT}" fill="#222222">{}</text>"##, blk.cap.0, blk.cap.1 + cfs + i as f64 * 16.0 * c.lab, svg::esc(line)));
     }
     d.finish()
+}
+
+/// Where the student table and the captions go: under the drawing, or in a column beside it.
+pub struct Block { pub w: f64, pub h: f64, pub side: bool, pub table: P, pub rows: usize, pub cap: P, pub lines: Vec<String> }
+
+/// The print scale (pt per px) of a canvas on a question page.
+pub fn print_scale(w: f64, h: f64) -> f64 {
+    let (pw, _) = crate::layout::picture_size_pt(w.ceil().max(1.0) as u32, h.ceil().max(1.0) as u32, PAGE_W_PT);
+    pw / w.ceil().max(1.0)
+}
+
+/// Lays out the table of blanks and the captions both ways and keeps the one that prints larger: a single
+/// cross-section is taller than wide for a 6.5 by 3 in page, so its text goes beside it; three panels go under.
+#[allow(clippy::too_many_arguments)]
+fn text_block(lay: &Lay, cap: &[String], n: usize, key: bool, cell_w: f64, gapc: f64, row_h: f64, cfs: f64, lab: f64) -> Block {
+    let line_h = 16.0 * lab;
+    // under the drawing
+    let avail = lay.w.max(480.0) - 2.0 * MARGIN;
+    let cols = if key || n == 0 { 1 } else { (((avail + gapc) / (cell_w + gapc)).floor() as usize).clamp(1, 6).min(n) };
+    let table_w = if key || n == 0 { 0.0 } else { cols as f64 * cell_w + (cols - 1) as f64 * gapc };
+    let rows = if key || n == 0 { 0 } else { n.div_ceil(cols) };
+    let w = lay.w.max(table_w + 2.0 * MARGIN).max(480.0);
+    let lines: Vec<String> = cap.iter().flat_map(|s| wrap(s, w - 2.0 * MARGIN, cfs)).collect();
+    let ty = lay.h_fig + 16.0;
+    let cy = ty + if rows > 0 { rows as f64 * row_h + 10.0 } else { 0.0 };
+    let below = Block { w, h: cy + lines.len() as f64 * line_h + 8.0, side: false, table: ((w - table_w) / 2.0, ty), rows, cap: (MARGIN, cy), lines };
+    // beside it: one column of blanks, the captions under them, in the column width (tried every 20 px from the
+    // table's width up) that prints largest
+    let x0 = lay.w + 6.0;
+    let srows = if key { 0 } else { n };
+    let scy = MARGIN + if srows > 0 { srows as f64 * row_h + 10.0 } else { 0.0 };
+    let mut best = below;
+    let mut sw = cell_w.max(220.0 * lab);
+    while sw <= 640.0 * lab {
+        let slines: Vec<String> = cap.iter().flat_map(|s| wrap(s, sw, cfs)).collect();
+        let sh = (lay.h_fig + 8.0).max(scy + slines.len() as f64 * line_h + 8.0);
+        let side = Block { w: x0 + sw + MARGIN, h: sh, side: true, table: (x0, MARGIN), rows: srows, cap: (x0, scy), lines: slines };
+        if print_scale(side.w, side.h) > print_scale(best.w, best.h) + 1e-9 { best = side; }
+        sw += 20.0;
+    }
+    best
 }
 
 fn disc(d: &mut Doc, x: f64, y: f64, r: f64, n: usize, fs: f64) {

@@ -197,11 +197,18 @@ fn collisions(svg: &str, c: &Cfg) -> Vec<String> {
         for j in i + 1..ptr.len() {
             let (a, na) = &ptr[i];
             let (c2, nb) = &ptr[j];
-            let joined = a.iter().any(|p| c2.iter().any(|r| dist(*p, *r) < 0.01));
+            // a bracket's own lead: one of its points lies on the other (the lead meets the spine's middle)
+            let on = |p: &P, q: &Vec<P>| q.windows(2).any(|w| dseg(*p, w[0], w[1]) < 0.01);
+            let joined = a.iter().any(|p| on(p, c2)) || c2.iter().any(|p| on(p, a));
             if joined && (na.starts_with("bracket") != nb.starts_with("bracket")) { continue; }
             if path_path(a, c2) < 3.0 { bad.push(format!("{na} and {nb} come within 3 px")); }
         }
-        for (k, l) in f.shafts.iter().enumerate() { if path_path(&ptr[i].0, &[l.a, l.b]) < 3.0 + ARROW_SW / 2.0 { bad.push(format!("{} touches arrow {k}", ptr[i].1)); } }
+        // a line that ends on the side of an arrow's shaft (an arrow blank) is exempt from that one shaft only
+        let end = *ptr[i].0.last().unwrap();
+        for (k, l) in f.shafts.iter().enumerate() {
+            if ptr[i].1.starts_with("leader") && dseg(end, l.a, l.b) < ARROW_SW / 2.0 + 1.0 { continue; }
+            if path_path(&ptr[i].0, &[l.a, l.b]) < 3.0 + ARROW_SW / 2.0 { bad.push(format!("{} touches arrow {k}", ptr[i].1)); }
+        }
         for (k, h) in f.heads.iter().enumerate() { if path_path(&ptr[i].0, &[h[0], h[1], h[2], h[0]]) < 3.0 { bad.push(format!("{} touches head {k}", ptr[i].1)); } }
     }
     bad.sort();
@@ -240,6 +247,29 @@ fn pointer_problems(svg: &str, c: &Cfg) -> Vec<String> {
                     if !inside(big, end) || outline_d(end, big) < 1.5 { bad.push(format!("{:?}: the line ends {:.2} px inside its part", l.it, if inside(big, end) { outline_d(end, big) } else { -outline_d(end, big) })); }
                     if parts.iter().any(|(x, p)| *x != part && inside(p, end)) { bad.push(format!("{:?}: the line ends in another part", l.it)); }
                 }
+                Aim::OnArrow(part) => {
+                    own = Some(part);
+                    // the nearest shaft to the end: touched from the side (0.3 to 1 px off its stroke), half way along it,
+                    // upright (not the leaf's loading arrow), inside the channel the blank names
+                    let near_shaft = f.shafts.iter().min_by(|a, b| dseg(end, a.a, a.b).partial_cmp(&dseg(end, b.a, b.b)).unwrap());
+                    match near_shaft {
+                        None => bad.push(format!("{:?}: no arrow to end on", l.it)),
+                        Some(sh) => {
+                            let gap = dseg(end, sh.a, sh.b) - ARROW_SW / 2.0;
+                            if !(0.3..=1.0).contains(&gap) { bad.push(format!("{:?}: the line stops {gap:.2} px from the arrow", l.it)); }
+                            let len = dist(sh.a, sh.b);
+                            let t = ((end.0 - sh.a.0) * (sh.b.0 - sh.a.0) + (end.1 - sh.a.1) * (sh.b.1 - sh.a.1)) / (len * len);
+                            if !(0.3..=0.7).contains(&t) { bad.push(format!("{:?}: the line meets the arrow {:.0} % along it", l.it, t * 100.0)); }
+                            if (sh.a.0 - sh.b.0).abs() > 0.01 { bad.push(format!("{:?}: the line ends on the loading arrow", l.it)); }
+                            let chan = parts.iter().filter(|(x, _)| *x == part).map(|(_, p)| *p).max_by(|a, b| { let ar = |p: &Vec<P>| { let e = bbox(p); (e.2 - e.0) * (e.3 - e.1) }; ar(a).partial_cmp(&ar(b)).unwrap() }).unwrap();
+                            if !(inside(chan, sh.a) && inside(chan, sh.b)) { bad.push(format!("{:?}: the arrow it ends on is not in {:?}", l.it, part)); }
+                            // and that arrow is nearer the end than any other arrow or any named part but its channel
+                            let d0 = dseg(end, sh.a, sh.b);
+                            if f.shafts.iter().filter(|x| dist(x.a, sh.a) > 0.01).any(|x| dseg(end, x.a, x.b) <= d0 + 3.0) { bad.push(format!("{:?}: another arrow is as near", l.it)); }
+                            if parts.iter().filter(|(x, _)| *x != part).any(|(_, p)| inside(p, end) || outline_d(end, p) <= d0 + 2.0) { bad.push(format!("{:?}: a named part is as near as its arrow", l.it)); }
+                        }
+                    }
+                }
                 Aim::Touch(part) => {
                     own = Some(part);
                     let mark = parts.iter().find(|(x, _)| *x == part).unwrap().1;
@@ -277,13 +307,32 @@ fn pointer_problems(svg: &str, c: &Cfg) -> Vec<String> {
         let (blo, bhi) = (rad(br.pts[1]).min(rad(br.pts[2])), rad(br.pts[1]).max(rad(br.pts[2])));
         if (blo - lo).abs() > 1.5 || (bhi - hi).abs() > 1.5 { bad.push(format!("the bracket spans {blo:.1}..{bhi:.1}, the bundle {lo:.1}..{hi:.1}")); }
         for p in path_samples(&br.pts, 0.3) { for (x, poly) in parts.iter().filter(|(_, poly)| near_box(p, poly, 1.5)) { if inside(poly, p) || outline_d(p, poly) < 0.8 { bad.push(format!("the bracket touches {x:?}")); break; } } }
-        // ticks point toward the bundle: the tick end is nearer the bundle than the spine end
+        // ticks: at least 7 px, square to the spine, pointing at the bundle; the inner one stops within 1.5 px of it
         let near = |q: P| bundle.iter().map(|p| outline_d(q, p)).fold(f64::INFINITY, f64::min);
-        if !(near(br.pts[0]) < near(br.pts[1]) && near(br.pts[3]) < near(br.pts[2]) && near(br.pts[1]) < 8.0) { bad.push("the bracket is not beside its bundle, ticks toward it".into()); }
-        // and no other bundle is as near
-        for end in [br.pts[1], br.pts[2]] {
-            let other = parts.iter().filter(|(x, _)| x.i != bi && matches!(x.pk, PK::BundleX | PK::BundleC | PK::BundleP)).map(|(_, p)| outline_d(end, p)).fold(f64::INFINITY, f64::min);
-            if other < 2.5 * near(end) { bad.push(format!("the bracket sits between two bundles ({:.1} from its own, {other:.1} from the next)", near(end))); }
+        let spine = (br.pts[2].0 - br.pts[1].0, br.pts[2].1 - br.pts[1].1);
+        for (t, base) in [(br.pts[0], br.pts[1]), (br.pts[3], br.pts[2])] {
+            let v = (t.0 - base.0, t.1 - base.1);
+            let len = v.0.hypot(v.1);
+            if len < 7.0 { bad.push(format!("a bracket tick is {len:.1} px")); }
+            if (v.0 * spine.0 + v.1 * spine.1).abs() / (len * spine.0.hypot(spine.1)) > 0.05 { bad.push("a bracket tick is not square to the spine".into()); }
+            if near(t) >= near(base) { bad.push("a bracket tick points away from its bundle".into()); }
+        }
+        if near(br.pts[0]) > 1.5 { bad.push(format!("the inner tick stops {:.1} px from the bundle", near(br.pts[0]))); }
+        // it is this bundle's bracket: every other bundle is at least 10 px from it, and farther than its own at both ends
+        let other = |q: P| parts.iter().filter(|(x, _)| x.i != bi && matches!(x.pk, PK::BundleX | PK::BundleC | PK::BundleP)).map(|(_, p)| outline_d(q, p)).fold(f64::INFINITY, f64::min);
+        for q in path_samples(&br.pts, 0.5) { if other(q) < 10.0 { bad.push(format!("the bracket is {:.1} px from another bundle", other(q))); break; } }
+        for e in [br.pts[1], br.pts[2]] { if other(e) <= near(e) { bad.push("the bracket's spine is nearer another bundle".into()); } }
+        // the lead leaves the middle of the spine at a right angle
+        let lead = f.leaders.iter().find(|x| x.pts.iter().any(|q| dist(*q, ((br.pts[1].0 + br.pts[2].0) / 2.0, (br.pts[1].1 + br.pts[2].1) / 2.0)) < 0.05));
+        match lead {
+            None => bad.push("no lead from the middle of the bracket".into()),
+            Some(ld) => {
+                let n = ld.pts.len();
+                let (a, z) = (ld.pts[n - 2], ld.pts[n - 1]);
+                let v = (a.0 - z.0, a.1 - z.1);
+                if (v.0 * spine.0 + v.1 * spine.1).abs() / (v.0.hypot(v.1) * spine.0.hypot(spine.1)) > 0.05 { bad.push("the lead is not square to the spine".into()); }
+                if near(a) <= near(z) { bad.push("the lead leaves toward the bundle".into()); }
+            }
         }
     }
     bad.sort();
@@ -420,6 +469,9 @@ fn the_root_is_a_dicot_root_with_an_x_of_xylem_and_phloem_between_its_arms() {
         let near: Vec<f64> = arms.iter().map(|x| ang_diff(*x, a)).collect();
         assert!(near.iter().filter(|d| (**d - 45.0).abs() < 1.0).count() == 2, "a phloem patch is not half way between two arms: {a} {arms:?}");
         assert!(p.pts.iter().all(|q| !inside(star, *q)) && outline_d(centroid(&p.pts), star) > 8.0);
+        // at the edge of the stele, just inside the pericycle
+        let (_, r1) = rad_range(&p.pts);
+        assert!(r1 < peri.0 - 2.0 && r1 > peri.0 - 7.0, "a phloem patch reaches r {r1:.1}, the pericycle starts at {:.1}", peri.0);
     }
     // vessels: large in the middle, small at the arm tips (exarch)
     let ves: Vec<(f64, f64)> = of(K::XVessel).map(|v| { let c = centroid(&v.pts); (c.0.hypot(c.1), dist(c, v.pts[0])) }).collect();
@@ -427,6 +479,16 @@ fn the_root_is_a_dicot_root_with_an_x_of_xylem_and_phloem_between_its_arms() {
     let rmax = ves.iter().filter(|v| v.0 < 25.0).map(|v| v.1).fold(0.0, f64::max);
     assert!(rmax > 2.5 * rmin, "{rmax} vs {rmin}");
     for v in of(K::XVessel) { assert!(v.pts.iter().all(|q| inside(star, *q))); }
+    // every arm has at least three vessels in a row along it, each smaller than the one inside it, the smallest at the tip
+    for a in &arms {
+        let mut along: Vec<(f64, f64)> = Vec::new();
+        for sh in of(K::XVessel) { let cc = centroid(&sh.pts); let r = cc.0.hypot(cc.1); if r > CENTRE_VESSEL + 1.0 && ang_diff(ang(cc), *a) < 3.0 { along.push((r, dist(cc, sh.pts[0]))); } }
+        along.sort_by(|x, y| x.0.partial_cmp(&y.0).unwrap());
+        assert!(along.len() >= 3, "arm {a}: {} vessels", along.len());
+        for w in along.windows(2) { assert!(w[1].1 < w[0].1, "arm {a}: a vessel is not smaller than the one inside it {along:?}"); }
+        let tip = along.last().unwrap();
+        assert!(tip.0 + tip.1 > ARM_TIP - ARM_HALF, "arm {a}: the smallest vessel is not at the tip");
+    }
     // the Casparian strip: one mark on every radial wall of the endodermis, between two endodermal cells, inside the layer
     let endo_cells: Vec<&Shape> = of(K::Endo).collect();
     let marks: Vec<&Shape> = of(K::Casp).collect();
@@ -597,7 +659,7 @@ fn markup_leaks(svg: &str) -> Vec<String> {
 const ALLOWED: &[&str] = &[
     "Not", "to", "scale", "simplified", "drawings", "of", "a", "A", "young", "dicot", "stem", "and", "root", "Dicot", "cross", "section", "Lengthwise", "view", "the",
     "line", "ends", "on", "part", "bracket", "spans", "whole", "structure", "an", "arrow", "shows", "which", "way", "something", "moves", "arrows", "one", "style", "carry", "same", "thing",
-    "disc", "beside", "organ", "s", "name", "asks", "for", "its", "role", "in", "moving", "products", "photosynthesis", "Write", "each", "numbered", "Young", "leaves", "fruit", "Mature", "leaf", "Roots",
+    "disc", "beside", "organ", "that", "what", "carries", "shoot", "tip", "s", "name", "asks", "for", "its", "role", "in", "moving", "products", "photosynthesis", "Write", "each", "numbered", "Young", "leaves", "fruit", "Mature", "leaf", "Roots",
 ];
 
 /// Every word of every blank, every other wording the key accepts, and words that would give an answer away.
@@ -844,7 +906,7 @@ fn the_notes_are_true_and_following_their_advice_draws_what_they_promise() {
                 let labs = layout(&c).labs;
                 // nothing labelled: one note, and each switch it names labels something on its own
                 assert_eq!(ns.iter().any(|n| n.starts_with("Nothing is labelled")), labs.is_empty(), "{l:?}: {ns:?}");
-                for n in &ns {
+                for n in ns.iter().filter(|n| !n.starts_with("On a question page")) {
                     let adv = advice(n);
                     assert!(!adv.is_empty(), "{n}");
                     if n.starts_with("Nothing is labelled") {
@@ -890,7 +952,7 @@ fn the_student_caption_explains_only_the_pointers_drawn() {
     let off: Vec<(&'static str, Value)> = TOGGLES.iter().map(|k| b(k, false)).collect();
     let only = |k: &'static str| { let mut l = off.clone(); l.push(b(k, true)); cap(&l) };
     let arrows = only("show_arrows");
-    assert!(arrows.contains("arrow shows which way") && arrows.contains("disc beside an organ") && !arrows.contains("bracket") && !arrows.contains("line ends"), "{arrows}");
+    assert!(arrows.contains("A line that ends on an arrow asks what the arrow carries (arrows of one style carry the same thing) and a disc beside an organ") && !arrows.contains("bracket") && !arrows.contains("line ends on a part"), "{arrows}");
     let layers = only("show_layers");
     assert!(layers.contains("A line ends on a part. Write") && !layers.contains("bracket"), "{layers}");
     let vasc = only("show_vascular");
@@ -913,13 +975,15 @@ fn nothing_panics_on_ten_thousand_hostile_inputs_and_every_output_is_well_formed
         if r.below(7) == 0 { p.0.remove("label_size"); }
         if i % 2 == 0 { p.normalize(&pd, false); }
         let svg = (def.render)(&p);
-        let nt = crate::figures::notes_for(ID, &p);
         roxmltree::Document::parse(&svg).unwrap_or_else(|e| panic!("{i}: not XML ({e})"));
         let root = svg.split('>').next().unwrap();
         let (w, h) = (num(root, "width"), num(root, "height"));
         assert!(w.is_finite() && h.is_finite() && (480.0..2400.0).contains(&w) && (200.0..1600.0).contains(&h), "{i}: {w}x{h}");
         let c = cfg(&p);
-        let want = usize::from(!c.long && (c.cells || c.arrows)) + usize::from(c.root_extra && !c.root()) + usize::from(!ORDER.iter().any(|x| c.wants(*x)));
+        // every third input (normalized or not) also checks the notes: the small-print note draws up to four other states
+        if i % 3 != 0 { continue; }
+        let nt = crate::figures::notes_for(ID, &p);
+        let want = usize::from(!c.long && (c.cells || c.arrows)) + usize::from(c.root_extra && !c.root()) + usize::from(!ORDER.iter().any(|x| c.wants(*x))) + usize::from(own_print_pt(&svg, c.lab) < 8.0);
         assert_eq!(nt.len(), want, "{i}: {nt:?}");
     }
 }
@@ -954,7 +1018,7 @@ fn the_faq_says_what_the_figure_does() {
     let f = crate::figures::faq::faq_for(ID);
     assert!((4..=6).contains(&f.len()));
     let all: String = f.iter().map(|x| format!("{} {}", x.q, x.a)).collect::<Vec<_>>().join(" ").to_lowercase();
-    for w in ["openstax", "30.2", "30.3", "30.5", "in a ring", "toward the pith", "toward the epidermis", "x of four arms", "between each pair of arms", "dead, hollow", "lignified", "living sieve-tube", "companion cell", "up from the roots", "transpiration", "source", "sinks", "either way", "monocot", "66 %", "dashed"] { assert!(all.contains(w), "{w}"); }
+    for w in ["openstax", "30.2", "30.3", "30.5", "in a ring", "toward the pith", "toward the epidermis", "four arms are drawn", "two to six", "between each pair of arms", "dead vessel elements", "lignified", "radial and end walls", "8 pt", "living sieve-tube", "companion cell", "up from the roots", "transpiration", "source", "sinks", "either way", "monocot", "66 %", "dashed"] { assert!(all.contains(w), "{w}"); }
 }
 
 #[test]
@@ -974,7 +1038,7 @@ fn the_defaults_the_start_state_and_every_example_draw_cleanly() {
         let mut q = p.clone();
         for (k, v) in &e.params { assert!(q.0.contains_key(*k), "{}: unknown {k}", e.name); q.0.insert(k.to_string(), v.clone()); }
         q.normalize(&pd, false);
-        assert!(crate::figures::notes_for(ID, &q).is_empty(), "{}: {:?}", e.name, crate::figures::notes_for(ID, &q));
+        assert!(crate::figures::notes_for(ID, &q).iter().all(|n| n.starts_with("On a question page")), "{}: {:?}", e.name, crate::figures::notes_for(ID, &q));
         for size in SIZES {
             let mut q2 = q.clone();
             q2.set_s("label_size", size);
@@ -1049,4 +1113,260 @@ fn xylem_pngs() {
             image::save_buffer(format!("{dir}/{name}_66.png"), &bw, w, h, image::ColorType::Rgba8).unwrap();
         }
     }
+}
+
+/// Not a check: prints the canvas size and the printed name size (pt) of every view at every label size.
+#[test]
+#[ignore]
+fn xylem_print_sizes() {
+    for view in VIEWS {
+        for long in [true, false] {
+            for size in SIZES {
+                for key in [true, false] {
+                    let l = [s("view", view), b("longitudinal", long), s("label_size", size), b(SHOW_ANSWERS, key)];
+                    let svg = render_of(&l);
+                    let root = svg.split('>').next().unwrap();
+                    println!("PRINT {view:5} long={long:5} {size:6} {} {}x{} names {:.2} pt", if key { "key    " } else { "student" }, num(root, "width"), num(root, "height"), printed_name_pt(&with(&l)));
+                }
+            }
+        }
+    }
+}
+
+// ================================================================== round 2: arrow blanks, the key's biology, print size
+
+/// The size names print at on a question page, from the SVG alone: the exports scale a picture by
+/// min(0.75 pt/px, 468 pt / width, 216 pt / height), and a name is 13 px times the label factor.
+fn own_print_pt(svg: &str, lab: f64) -> f64 {
+    let root = svg.split('>').next().unwrap();
+    let (w, h) = (num(root, "width"), num(root, "height"));
+    13.0 * lab * 0.75f64.min(468.0 / w).min(216.0 / h)
+}
+
+#[test]
+fn each_arrow_blank_ends_on_its_own_arrow_in_both_copies_at_every_size_and_style() {
+    let mut n = 0;
+    for view in VIEWS {
+        for size in SIZES {
+            for key in [true, false] {
+                for style in ["Colour", "Print"] {
+                    let l = vec![s("view", view), s("label_size", size), b(SHOW_ANSWERS, key), s("style", style)];
+                    let c = cfg(&with(&l));
+                    let svg = render_of(&l);
+                    // the line from each arrow blank ends on its own arrow (checked by the pointer audit) ...
+                    let bad: Vec<String> = pointer_problems(&svg, &c).into_iter().filter(|x| x.starts_with("Water") || x.starts_with("Sucrose")).collect();
+                    assert!(bad.is_empty(), "{l:?}: {bad:?}");
+                    // ... and starts at that blank: its start is nearer the blank's disc or name than any other line's
+                    let f = fig_with(&svg, &c, true);
+                    let lay = layout(&c);
+                    for lab in lay.labs.iter().filter(|x| matches!(x.it, It::Water | It::Sucrose)) {
+                        let Join::Leader { pts } = &lab.join else { panic!("{:?} has no line", lab.it) };
+                        let mark: Bx = if key {
+                            f.q.texts.iter().find(|t| t.0 == name(lab.it)).map(|t| t.1).unwrap_or_else(|| panic!("{:?} not printed", lab.it))
+                        } else {
+                            let d = f.discs.iter().find(|d| in_box(d.c, lab.bx, 0.5)).unwrap_or_else(|| panic!("{:?}: no disc", lab.it));
+                            (d.c.0 - d.r, d.c.1 - d.r, d.c.0 + d.r, d.c.1 + d.r)
+                        };
+                        let gap = |q: P| { let cx = q.0.clamp(mark.0, mark.2); let cy = q.1.clamp(mark.1, mark.3); dist(q, (cx, cy)) };
+                        let own = f.leaders.iter().find(|x| x.pts.iter().zip(pts).all(|(a, b)| dist(*a, *b) < 0.02)).unwrap();
+                        let g0 = gap(own.pts[0]);
+                        assert!(g0 < 6.0, "{l:?}: {:?}'s line starts {g0:.1} px from it", lab.it);
+                        for other in f.leaders.iter().filter(|x| dist(x.pts[0], own.pts[0]) > 0.01) { assert!(gap(other.pts[0]) > g0 + 4.0, "{l:?}: another line starts as near {:?}", lab.it); }
+                        // which arrow: water ends in the vessel, sucrose in a sieve-tube element below the leaf
+                        let end = *own.pts.last().unwrap();
+                        let in_kind = |k: K| f.shapes.iter().any(|(kk, _, _, p)| *kk == k && inside(p, end));
+                        match lab.it { It::Water => assert!(in_kind(K::VLumen), "{l:?}"), _ => assert!(in_kind(K::SieveEl) && !in_kind(K::Leaf), "{l:?}") }
+                        n += 1;
+                    }
+                    // read by the printed words alone: the line nearest "Water and minerals" ends in the vessel, the one
+                    // nearest "Sucrose" in a sieve-tube element
+                    if key {
+                        for (word, k) in [("Water and minerals", K::VLumen), ("Sucrose", K::SieveEl)] {
+                            let t = f.q.texts.iter().find(|t| t.0 == word).unwrap_or_else(|| panic!("{l:?}: {word} not printed")).1;
+                            let gap = |q: P| dist(q, (q.0.clamp(t.0, t.2), q.1.clamp(t.1, t.3)));
+                            let ld = f.leaders.iter().min_by(|a, b| gap(a.pts[0]).partial_cmp(&gap(b.pts[0])).unwrap()).unwrap();
+                            let end = *ld.pts.last().unwrap();
+                            assert!(f.shapes.iter().any(|(kk, _, _, p)| *kk == k && inside(p, end)), "{l:?}: the line by {word:?} does not end on its arrow");
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(n, 3 * 3 * 2 * 2 * 2);
+}
+
+#[test]
+fn the_key_states_the_biology_in_these_exact_sentences() {
+    const STEM: &str = "Stem: the vascular bundles form a ring; in each, xylem is toward the pith, phloem toward the epidermis, and the vascular cambium lies between them.";
+    const ROOT: &str = "Root: the xylem forms an X in the centre with phloem between its arms, at the edge of the stele; four arms are drawn, and dicot roots have two to six. The endodermis, with the Casparian strip in its radial and end walls (a cross-section shows the radial walls), surrounds the pericycle. Root hairs are outgrowths of epidermal cells.";
+    const LONG: &str = "Xylem vessels are tubes of dead vessel elements with lignified walls and open ends; water and dissolved minerals move one way, up from the roots to the leaves, pulled by transpiration. Phloem sieve tubes are rows of living sieve-tube elements joined by sieve plates, each with a companion cell; sucrose moves from a source to sinks, so in the stem it goes up or down.";
+    const ARROWS: &str = "Here the mature leaf is the source; the roots below and the young leaves and fruit above are sinks. The leaf's own xylem supply is not drawn.";
+    for view in VIEWS {
+        for long in [true, false] {
+            for arrows in [true, false] {
+                for size in SIZES {
+                    let l = [s("view", view), b("longitudinal", long), b("show_arrows", arrows), s("label_size", size)];
+                    let key = ink_texts(&render_of(&l)).into_iter().map(|t| t.0).collect::<Vec<_>>().join(" ");
+                    let c = cfg(&with(&l));
+                    assert_eq!(key.contains(STEM), c.stem(), "{l:?}");
+                    assert_eq!(key.contains(ROOT), c.root(), "{l:?}");
+                    assert_eq!(key.contains(LONG), c.long, "{l:?}");
+                    assert_eq!(key.contains(ARROWS), c.arrows_drawn(), "{l:?}");
+                    let stu = ink_texts(&render_of(&[&l[..], &[b(SHOW_ANSWERS, false)]].concat())).into_iter().map(|t| t.0).collect::<Vec<_>>().join(" ");
+                    for x in [STEM, ROOT, LONG, ARROWS] { assert!(!stu.contains(x)); }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn each_organ_carries_its_own_role_tag() {
+    for size in SIZES {
+        for view in VIEWS {
+            let svg = render_of(&[s("label_size", size), s("view", view)]);
+            let t = ink_texts(&svg);
+            let organs = ["Young leaves and fruit", "Mature leaf", "Roots"];
+            let mut pairs: Vec<(String, String)> = Vec::new();
+            for tag in t.iter().filter(|x| x.0 == "Source" || x.0 == "Sink") {
+                // the organ name just left of the tag on the same line
+                let host = t.iter().filter(|o| organs.contains(&o.0.as_str())).filter(|o| o.1 .2 <= tag.1 .0 && tag.1 .0 - o.1 .2 < 20.0 && o.1 .1 < tag.1 .3 && tag.1 .1 < o.1 .3).min_by(|a, b| (tag.1 .0 - a.1 .2).partial_cmp(&(tag.1 .0 - b.1 .2)).unwrap());
+                let host = host.unwrap_or_else(|| panic!("{size} {view}: the tag {:?} has no organ beside it", tag.0));
+                pairs.push((host.0.clone(), tag.0.clone()));
+            }
+            pairs.sort();
+            assert_eq!(pairs, vec![("Mature leaf".to_string(), "Source".to_string()), ("Roots".to_string(), "Sink".to_string()), ("Young leaves and fruit".to_string(), "Sink".to_string())], "{size} {view}");
+        }
+    }
+}
+
+#[test]
+fn every_row_of_the_student_table_has_one_writing_line() {
+    let mut rows = 0;
+    for mask in 0..32u32 {
+        for view in VIEWS {
+            for long in [true, false] {
+                for size in ["Small", "Large"] {
+                    let mut l = toggle_list(mask);
+                    l.extend([s("view", view), b("longitudinal", long), s("label_size", size), b(SHOW_ANSWERS, false)]);
+                    let c = cfg(&with(&l));
+                    let svg = render_of(&l);
+                    let f = fig(&svg, &c);
+                    let lay = layout(&c);
+                    let table: Vec<&Ci> = f.discs.iter().filter(|d| !lay.labs.iter().any(|x| in_box(d.c, x.bx, 0.5))).collect();
+                    assert_eq!(table.len(), lay.labs.len(), "{l:?}");
+                    let rules: Vec<&Ln> = f.q.lines.iter().filter(|x| (x.sw - 1.1).abs() < 1e-9).collect();
+                    assert_eq!(rules.len(), table.len(), "{l:?}: one rule per blank");
+                    for d in &table {
+                        let mine: Vec<&&Ln> = rules.iter().filter(|r| (r.a.1 - d.c.1).abs() < d.r && r.a.0 > d.c.0 + d.r && r.a.0 < d.c.0 + d.r + 12.0).collect();
+                        assert_eq!(mine.len(), 1, "{l:?}: the blank at {:?} has {} lines", d.c, mine.len());
+                        assert!(mine[0].b.0 - mine[0].a.0 >= 140.0 * c.lab && (mine[0].a.1 - mine[0].b.1).abs() < 1e-9, "{l:?}: a short or slanted writing line");
+                        rows += 1;
+                    }
+                }
+            }
+        }
+    }
+    assert!(rows > 2000, "{rows}");
+}
+
+#[test]
+fn the_bracket_ticks_print_large_enough() {
+    let opening = { let pd = (def().params)(); let mut p = Params::defaults(&pd); for (k, v) in crate::figures::start::overrides(ID) { p.0.insert(k.to_string(), v); } p };
+    let mut cases: Vec<(Params, f64)> = vec![(opening, 3.0)];
+    for view in ["Stem", "Both"] { for long in [true, false] { for size in SIZES { for key in [true, false] { cases.push((with(&[s("view", view), b("longitudinal", long), s("label_size", size), b(SHOW_ANSWERS, key)]), 1.8)); } } } }
+    for (p, min_pt) in cases {
+        let svg = (def().render)(&p);
+        let f = fig(&svg, &cfg(&p));
+        let root = svg.split('>').next().unwrap();
+        let scale = 0.75f64.min(468.0 / num(root, "width")).min(216.0 / num(root, "height"));
+        assert_eq!(f.brackets.len(), 1);
+        let br = &f.brackets[0].pts;
+        for (t, base) in [(br[0], br[1]), (br[3], br[2])] {
+            let px = dist(t, base);
+            assert!(px >= 7.0 && px * scale >= min_pt, "a tick is {px:.1} px, {:.2} pt printed (at least {min_pt} pt wanted)", px * scale);
+        }
+    }
+}
+
+/// The note's advice, read with a parser of its own: steps "set <control> to <choice> (about N pt)" and "switch off
+/// <control> (about N pt)", joined by ", " and a last " or ".
+fn print_advice(note: &str) -> Vec<((&'static str, Value), f64)> {
+    let defs = (def().params)();
+    let key_of = |label: &str| defs.iter().find(|d| d.label == label).unwrap_or_else(|| panic!("the note names {label:?}, which is no control")).key;
+    let Some(i) = note.find("For bigger names ") else { return Vec::new() };
+    let rest = note[i + "For bigger names ".len()..].trim_end_matches('.');
+    let mut out = Vec::new();
+    for step in rest.split(", ").flat_map(|x| x.split(" or ")) {
+        let (what, size) = step.rsplit_once(" (about ").unwrap_or_else(|| panic!("no size in {step:?}"));
+        let pt: f64 = size.trim_end_matches(" pt)").parse().unwrap();
+        if let Some(r) = what.strip_prefix("switch off ") { out.push(((key_of(r), Value::B(false)), pt)); }
+        else if let Some(r) = what.strip_prefix("set ") { let (label, ch) = r.split_once(" to ").unwrap(); out.push(((key_of(label), Value::S(ch.to_string())), pt)); }
+        else { panic!("unread advice {step:?} in {note}"); }
+    }
+    out
+}
+
+#[test]
+fn the_small_print_note_is_true_and_its_advice_prints_larger() {
+    let mut followed = 0;
+    for view in VIEWS {
+        for long in [true, false] {
+            for size in SIZES {
+                for key in [true, false] {
+                    for mask in [31u32, 0b00011, 0b11000] {
+                        let mut l = toggle_list(mask);
+                        l.extend([s("view", view), b("longitudinal", long), s("label_size", size), b(SHOW_ANSWERS, key)]);
+                        let c = cfg(&with(&l));
+                        let pt = own_print_pt(&render_of(&l), c.lab);
+                        let ns: Vec<String> = notes(&l).into_iter().filter(|n| n.starts_with("On a question page")).collect();
+                        assert_eq!(ns.len(), usize::from(pt < 8.0), "{l:?}: {pt:.2} pt, {ns:?}");
+                        let Some(n) = ns.first() else { continue };
+                        let said: f64 = n.split("about ").nth(1).unwrap().split(' ').next().unwrap().parse().unwrap();
+                        assert!((said - pt).abs() < 0.051, "{l:?}: says {said} pt, prints {pt:.3}");
+                        let adv = print_advice(n);
+                        // every step it offers prints at least half a point bigger, at the size it states
+                        for (step, said) in &adv {
+                            let mut m = l.clone();
+                            m.push(step.clone());
+                            let after = own_print_pt(&render_of(&m), cfg(&with(&m)).lab);
+                            assert!(after >= pt + 0.5 - 1e-9 && (after - said).abs() < 0.051, "{l:?}: {step:?} prints {after:.2} pt (says {said}), was {pt:.2}");
+                            followed += 1;
+                        }
+                        // and every single change that would do so is offered
+                        let mut cands: Vec<(&'static str, Value)> = vec![b("longitudinal", false), s("label_size", "Large"), s("view", "Stem"), s("view", "Root")];
+                        cands.retain(|(k, v)| with(&l).0.get(*k) != Some(v) && (*k != "view" || view == "Both"));
+                        for cnd in cands {
+                            let mut m = l.clone();
+                            m.push(cnd.clone());
+                            let after = own_print_pt(&render_of(&m), cfg(&with(&m)).lab);
+                            let offered = adv.iter().any(|(x, _)| *x == cnd);
+                            if after >= pt + 0.5 + 0.01 { assert!(offered, "{l:?}: {cnd:?} would print {after:.2} pt but is not offered"); }
+                            if after < pt + 0.5 - 0.01 { assert!(!offered, "{l:?}: {cnd:?} is offered but prints {after:.2}"); }
+                        }
+                        if adv.is_empty() { assert!(n.contains("No single change"), "{n}"); }
+                    }
+                }
+            }
+        }
+    }
+    assert!(followed > 100, "{followed}");
+}
+
+#[test]
+fn the_opening_state_and_a_single_section_at_large_print_names_at_8_pt_or_more() {
+    let pd = (def().params)();
+    let mut st = Params::defaults(&pd);
+    for (k, v) in crate::figures::start::overrides(ID) { st.0.insert(k.to_string(), v); }
+    st.normalize(&pd, false);
+    for key in [true, false] {
+        let mut p = st.clone();
+        p.set_b(SHOW_ANSWERS, key);
+        let pt = own_print_pt(&(def().render)(&p), cfg(&p).lab);
+        assert!(pt >= 8.0, "opening state ({}): {pt:.2} pt", if key { "key" } else { "student" });
+        assert!(crate::figures::notes_for(ID, &p).is_empty());
+    }
+    assert_eq!(cfg(&st).view, View::Stem);
+    for view in ["Stem", "Root"] { for key in [true, false] { let l = [s("view", view), b("longitudinal", false), s("label_size", "Large"), b(SHOW_ANSWERS, key)]; let pt = own_print_pt(&render_of(&l), 1.4); assert!(pt >= 8.0, "{view} {key}: {pt:.2}"); } }
 }
