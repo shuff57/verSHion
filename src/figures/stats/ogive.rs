@@ -158,6 +158,97 @@ pub fn num(v: f64, d: usize) -> String {
 /// A typed number as text the user can type back (no exponent, no trailing zeros, ASCII minus).
 pub fn plain(v: f64) -> String { data::fmt_num(v) }
 
+/// An exact fraction (numerator over a positive denominator) for a printed reading. `num` formats
+/// the binary float, which sends an exact half to the even digit and turns a typed 8.85 into
+/// 8.8499..., so every reading is worked out in integers and rounded half up once (as a student
+/// does: the digit after the last one printed decides, and 5 rounds the magnitude up).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Rat {
+    n: i128,
+    d: i128,
+}
+
+fn gcd(a: u128, b: u128) -> u128 { if b == 0 { a } else { gcd(b, a % b) } }
+
+impl Rat {
+    fn reduce(n: i128, d: i128) -> Option<Rat> {
+        if d == 0 {
+            return None;
+        }
+        let (n, d) = if d < 0 { (n.checked_neg()?, d.checked_neg()?) } else { (n, d) };
+        let g = gcd(n.unsigned_abs(), d.unsigned_abs()).max(1) as i128;
+        Some(Rat { n: n / g, d: d / g })
+    }
+    pub fn int(v: i128) -> Rat { Rat { n: v, d: 1 } }
+    /// A decimal as typed or computed: the shortest decimal that reads back as `v` (so a typed 8.85
+    /// stays 8.85, not the binary 8.8499...), to at most 9 decimal places.
+    pub fn dec(v: f64) -> Option<Rat> {
+        if !v.is_finite() || v.abs() > 1e15 {
+            return None;
+        }
+        let s = format!("{v}");
+        let (neg, body) = match s.strip_prefix('-') { Some(r) => (true, r), None => (false, s.as_str()) };
+        let (ip, fp) = match body.split_once('.') { Some((a, b)) => (a, b), None => (body, "") };
+        let mut n: i128 = ip.parse().ok()?;
+        let mut d: i128 = 1;
+        for (i, ch) in fp.chars().enumerate() {
+            if i < 9 {
+                n = n.checked_mul(10)?.checked_add(ch.to_digit(10)? as i128)?;
+                d = d.checked_mul(10)?;
+            } else {
+                // the tenth digit decides, then the rest is noise
+                if i == 9 && ch >= '5' {
+                    n = n.checked_add(1)?;
+                }
+                break;
+            }
+        }
+        Rat::reduce(if neg { -n } else { n }, d)
+    }
+    fn add(self, o: Rat) -> Option<Rat> { Rat::reduce(self.n.checked_mul(o.d)?.checked_add(o.n.checked_mul(self.d)?)?, self.d.checked_mul(o.d)?) }
+    fn sub(self, o: Rat) -> Option<Rat> { self.add(Rat { n: o.n.checked_neg()?, d: o.d }) }
+    fn mul(self, o: Rat) -> Option<Rat> { Rat::reduce(self.n.checked_mul(o.n)?, self.d.checked_mul(o.d)?) }
+    fn div(self, o: Rat) -> Option<Rat> {
+        if o.n == 0 { None } else { Rat::reduce(self.n.checked_mul(o.d)?, self.d.checked_mul(o.n)?) }
+    }
+    fn cmp_le(self, o: Rat) -> Option<bool> { Some(self.n.checked_mul(o.d)? <= o.n.checked_mul(self.d)?) }
+    pub fn to_f64(self) -> f64 { self.n as f64 / self.d as f64 }
+    /// The value in units of 10^-`dec`, rounded half up (a tie rounds the magnitude up).
+    pub fn units(self, dec: usize) -> Option<i128> {
+        let k = 10i128.checked_pow(dec as u32)?;
+        let num = self.n.checked_mul(k)?;
+        let (q, r) = (num / self.d, num % self.d);
+        Some(q + if r.unsigned_abs() * 2 >= self.d.unsigned_abs() { num.signum() } else { 0 })
+    }
+    /// The value in units of 10^-`dec`, towards −∞ / +∞.
+    pub fn units_floor(self, dec: usize) -> Option<i128> {
+        let k = 10i128.checked_pow(dec as u32)?;
+        Some(self.n.checked_mul(k)?.div_euclid(self.d))
+    }
+    pub fn units_ceil(self, dec: usize) -> Option<i128> {
+        let k = 10i128.checked_pow(dec as u32)?;
+        let num = self.n.checked_mul(k)?;
+        let (q, r) = (num.div_euclid(self.d), num.rem_euclid(self.d));
+        Some(q + if r == 0 { 0 } else { 1 })
+    }
+    pub fn text(self, dec: usize) -> String {
+        match self.units(dec) { Some(u) => units_text(u, dec), None => num(self.to_f64(), dec) }
+    }
+}
+
+/// `u` units of 10^-`dec` as text: a true minus sign, never "−0".
+pub fn units_text(u: i128, dec: usize) -> String {
+    let k = 10u128.pow(dec as u32);
+    let m = u.unsigned_abs();
+    let body = if dec == 0 { (m / k).to_string() } else { format!("{}.{:0w$}", m / k, m % k, w = dec) };
+    if m == 0 { body } else { format!("{}{body}", if u < 0 { "\u{2212}" } else { "" }) }
+}
+
+/// A rational as text, falling back to the float when the exact arithmetic would overflow.
+fn num_rat(r: Option<Rat>, v: f64, d: usize) -> String {
+    match r { Some(r) => r.text(d), None => num(v, d) }
+}
+
 /// "1st", "2nd", "3rd", "4th", "11th", "22nd", "2.5th".
 pub fn ordinal(p: f64) -> String {
     let t = chart::fmt(p).replace('\u{2212}', "-");
@@ -184,24 +275,33 @@ fn cell_number(c: &str) -> Option<f64> {
     c.parse::<f64>().ok().filter(|v| v.is_finite() && v.abs() <= data::MAX_ABS)
 }
 
-/// The cells of one table line: split at commas, semicolons, tabs and spaces; "40-50" and
-/// "40–50" are two cells.
+/// The cells of one table line: split at commas, semicolons, tabs and spaces. A range is two cells
+/// however it is written: "40-50", "40–50", "40—50", "40 - 49" and "40 to 50" all read as 40, 50.
 fn cells(line: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    for tok in line.split(|c: char| c == ',' || c == ';' || c == '\t' || c.is_whitespace()).filter(|t| !t.is_empty()) {
-        let t = tok.trim_matches('"');
-        // a range typed as one cell: split at a dash that follows a digit
+    let toks: Vec<&str> = line
+        .split(|c: char| c == ',' || c == ';' || c == '\t' || c.is_whitespace())
+        .filter(|t| !t.is_empty())
+        .map(|t| t.trim_matches('"'))
+        .collect();
+    let is_join = |t: &str| matches!(t.to_ascii_lowercase().as_str(), "-" | "\u{2013}" | "\u{2014}" | "to" | "through" | "thru");
+    let mut out: Vec<String> = Vec::new();
+    for (i, t) in toks.iter().enumerate() {
+        // "40 - 49" and "40 to 50": a connector between two numbers is not a cell
+        if is_join(t) && i > 0 && i + 1 < toks.len() && cell_number(toks[i - 1]).is_some() && cell_number(toks[i + 1]).is_some() {
+            continue;
+        }
+        // a range typed as one cell: split at the first dash that follows a digit
         let mut split = None;
-        for (i, ch) in t.char_indices() {
-            if (ch == '-' || ch == '\u{2013}') && i > 0 && t[..i].ends_with(|c: char| c.is_ascii_digit() || c == '.') {
-                split = Some((i, ch.len_utf8()));
+        for (k, ch) in t.char_indices() {
+            if (ch == '-' || ch == '\u{2013}' || ch == '\u{2014}') && k > 0 && t[..k].ends_with(|c: char| c.is_ascii_digit() || c == '.') {
+                split = Some((k, ch.len_utf8()));
                 break;
             }
         }
         match split {
-            Some((i, n)) if !t[i + n..].is_empty() => {
-                out.push(t[..i].to_string());
-                out.push(t[i + n..].to_string());
+            Some((k, n)) if !t[k + n..].is_empty() && cell_number(&t[k + n..]).is_some() => {
+                out.push(t[..k].to_string());
+                out.push(t[k + n..].to_string());
             }
             _ => out.push(t.to_string()),
         }
@@ -226,18 +326,72 @@ fn neighbour_width(rows: &[(usize, f64, f64, f64)], line: usize) -> f64 {
 
 fn row_text(lo: f64, hi: f64, f: f64) -> String { format!("{}, {}, {}", plain(lo), plain(hi), plain(f)) }
 
+/// A line the reader refused, with what it had, so the example it offers is built from the line's
+/// own numbers (applying the example then keeps the class the teacher meant).
+struct Bad {
+    line: usize,
+    shown: String,
+    cells: Vec<String>,
+    nums: Vec<Option<f64>>,
+    open: Option<(f64, f64, bool)>,
+}
+
+/// A line to type in place of `bad`, from its own numbers: the missing column of a three-number
+/// row is filled in, two numbers read as a midpoint and its frequency (or bounds with no
+/// frequency), and a lone number keeps the class of the row above it.
+fn example_row(bad: &Bad, rows: &[(usize, f64, f64, f64)], per_line: &[(usize, Vec<f64>)]) -> String {
+    let w = neighbour_width(rows, bad.line);
+    let num = |i: usize| bad.nums.get(i).copied().flatten();
+    // a table of two columns is class midpoints and frequencies: the boundaries are halfway to the
+    // neighbouring midpoints
+    let two_col = per_line.iter().filter(|(_, v)| v.len() == 2).count();
+    let three_col = per_line.iter().filter(|(_, v)| v.len() == 3).count();
+    if two_col > 0 && three_col == 0 && bad.cells.len() == 2 {
+        if let (Some(mid), Some(f)) = (num(0), num(1)) {
+            let mut mids: Vec<f64> = per_line.iter().filter(|(_, v)| v.len() == 2).map(|(_, v)| v[0]).collect();
+            mids.sort_by(f64::total_cmp);
+            let gap = mids.windows(2).map(|p| p[1] - p[0]).filter(|g| *g > 0.0).fold(f64::INFINITY, f64::min);
+            let w = if gap.is_finite() && gap > 0.0 { gap } else { w };
+            return row_text(mid - w / 2.0, mid + w / 2.0, f);
+        }
+    }
+    match (num(0), num(1), num(2)) {
+        (Some(lo), Some(hi), Some(f)) => row_text(lo, hi, f),
+        (Some(lo), None, Some(f)) => row_text(lo, lo + w, f),
+        (None, Some(hi), Some(f)) => row_text(hi - w, hi, f),
+        (Some(lo), Some(hi), None) if hi > lo => row_text(lo, hi, 1.0),
+        (Some(mid), Some(f), None) => row_text(mid - w / 2.0, mid + w / 2.0, f),
+        (Some(v), None, None) => row_text(v, v + w, 1.0),
+        (None, Some(v), None) => row_text(v, v + w, 1.0),
+        (None, None, Some(f)) => match rows.last() {
+            Some(&(_, lo, hi, _)) => row_text(lo, hi, f),
+            None => row_text(0.0, w, f),
+        },
+        (None, None, None) => match rows.last() {
+            Some(&(_, lo, hi, _)) => row_text(lo, hi, 1.0),
+            None => row_text(0.0, w, 1.0),
+        },
+    }
+}
+
+/// A word in the first cell that names a total rather than a class.
+fn total_word(c: &str) -> bool {
+    matches!(c.trim().trim_end_matches(':').trim().to_ascii_lowercase().as_str(), "total" | "totals" | "sum" | "grand total" | "total frequency" | "total count")
+}
+
 /// Reads a grouped table: one class per line (lower boundary, upper boundary, frequency). A first
 /// line with no numbers is a header and is skipped. The classes are sorted by their lower
-/// boundary and must meet exactly: every refusal says how to fix the table, with an example line.
+/// boundary and must meet exactly: every refusal says how to fix the table, with an example line
+/// built from the line's own numbers.
 pub fn parse_table(text: &str) -> Result<Vec<Class>, String> {
     let lines: Vec<(usize, &str)> = text.lines().enumerate().map(|(i, l)| (i + 1, l.trim())).filter(|(_, l)| !l.is_empty()).collect();
     if lines.len() > MAX_CLASSES + 1 {
         return Err(format!("The table has {} lines; an ogive here can have at most {MAX_CLASSES} classes. Merge neighbouring classes (add their frequencies) until there are {MAX_CLASSES} or fewer.", lines.len()));
     }
+    let per_line: Vec<(usize, Vec<f64>)> = lines.iter().map(|(n, l)| (*n, cells(l).iter().filter_map(|c| cell_number(c)).collect())).collect();
     // (line, lower, upper, frequency) as typed
     let mut rows: Vec<(usize, f64, f64, f64)> = Vec::new();
-    // the first line that is not a class: (line, shown text, open-ended boundary and frequency)
-    let mut bad: Option<(usize, String, Option<(f64, f64, bool)>)> = None;
+    let mut bad: Option<Bad> = None;
     for (k, (n, line)) in lines.iter().enumerate() {
         let cs = cells(line);
         let nums: Vec<Option<f64>> = cs.iter().map(|c| cell_number(c)).collect();
@@ -249,11 +403,17 @@ pub fn parse_table(text: &str) -> Result<Vec<Class>, String> {
             rows.push((*n, nums[0].unwrap(), nums[1].unwrap(), nums[2].unwrap()));
             continue;
         }
+        let shown: String = line.chars().take(40).collect();
+        let shown = if line.chars().count() > 40 { format!("{shown}...") } else { shown };
+        // a total row is a footer, not a class: the ogive adds the column up itself
+        if cs.first().map(|c| total_word(c)).unwrap_or(false) {
+            return Err(format!(
+                "Line {n} (\"{shown}\") is a total, not a class. The ogive adds the frequencies up itself, so delete line {n}. Counting the total as a class would count every value twice."
+            ));
+        }
         if bad.is_some() {
             continue;
         }
-        let shown: String = line.chars().take(40).collect();
-        let shown = if line.chars().count() > 40 { format!("{shown}...") } else { shown };
         let open = (looks_open_ended(&cs) && count >= 1).then(|| {
             // the numbers with the open-ended marks taken off ("90+" is 90)
             let found: Vec<f64> = cs.iter().filter_map(|c| cell_number(c.trim_matches(|ch: char| matches!(ch, '+' | '<' | '>' | '=' | '\u{2264}' | '\u{2265}')))).collect();
@@ -262,18 +422,23 @@ pub fn parse_table(text: &str) -> Result<Vec<Class>, String> {
             let below = cs.iter().any(|c| { let l = c.to_lowercase(); l.starts_with(['<', '\u{2264}']) || matches!(l.as_str(), "under" | "less" | "below" | "fewer" | "most") });
             (found[0], f, below)
         });
-        bad = Some((*n, shown, open));
+        bad = Some(Bad { line: *n, shown, cells: cs, nums, open });
     }
-    if let Some((n, shown, open)) = bad {
-        return Err(match open {
-            Some((b, f, below)) => {
+    if let Some(b) = bad {
+        let n = b.line;
+        return Err(match b.open {
+            Some((v, f, below)) => {
                 let w = neighbour_width(&rows, n);
-                let ex = if below { row_text(b - w, b, f) } else { row_text(b, b + w, f) };
-                format!("Line {n} (\"{shown}\") is an open-ended class. An ogive plots a point at every upper class boundary, so each class needs both boundaries: type it with both, for example \"{ex}\" (the same width as its neighbour).")
+                let ex = if below { row_text(v - w, v, f) } else { row_text(v, v + w, f) };
+                format!("Line {n} (\"{}\") is an open-ended class. An ogive plots a point at every upper class boundary, so each class needs both boundaries: type it with both, for example \"{ex}\", the same width as its neighbour.", b.shown)
             }
-            None => format!("Line {n} (\"{shown}\") is not a class. Type each class as three numbers, lower boundary, upper boundary, frequency, for example \"40, 50, 3\"."),
+            None => {
+                let ex = example_row(&b, &rows, &per_line);
+                format!("Line {n} (\"{}\") is not a class. Type each class as three numbers, lower boundary, upper boundary, frequency, for example \"{ex}\" for this line.", b.shown)
+            }
         });
     }
+
     if rows.is_empty() {
         return Err("Type the classes, one per line: lower boundary, upper boundary, frequency, for example \"40, 50, 3\".".into());
     }
@@ -322,7 +487,9 @@ pub fn parse_table(text: &str) -> Result<Vec<Class>, String> {
     let gaps: Vec<(usize, f64, f64)> = sorted.windows(2).filter(|w| w[1].1 > w[0].2 && !same(w[1].1, w[0].2)).map(|w| (w[0].0, w[0].2, w[1].1)).collect();
     if let Some(&(_, end, start)) = gaps.first() {
         let g = start - end;
-        let uniform = gaps.len() == sorted.len() - 1 && gaps.iter().all(|x| same(x.2 - x.1, g)) && sorted.iter().all(|r| r.2 - r.1 > g);
+        // equal gaps with classes at least as wide as the gap are stated limits (40 to 49, 50 to
+        // 59), not empty classes: the boundaries are halfway across the gap
+        let uniform = gaps.len() == sorted.len() - 1 && gaps.iter().all(|x| same(x.2 - x.1, g)) && sorted.iter().all(|r| r.2 - r.1 >= g);
         if uniform {
             let h = g / 2.0;
             let (n, lo, hi, f) = sorted[0];
@@ -457,6 +624,53 @@ pub fn cum_at(pts: &[(f64, f64)], x: f64) -> Option<f64> {
     Some(pts[pts.len() - 1].1)
 }
 
+/// [`value_at`] in exact fractions, from the typed boundaries: the smallest x where the ogive
+/// reaches the height `t`. None only when the arithmetic would overflow (the float is used then).
+pub fn value_frac(cs: &[Class], t: Rat) -> Option<Rat> {
+    let mut x0 = Rat::dec(cs[0].lo)?;
+    if t.cmp_le(Rat::int(0))? {
+        return Some(x0);
+    }
+    let mut acc = Rat::int(0);
+    for c in cs {
+        let y1 = acc.add(Rat::int(c.f as i128))?;
+        if t.cmp_le(y1)? {
+            let x1 = Rat::dec(c.hi)?;
+            let dy = y1.sub(acc)?;
+            if dy.cmp_le(Rat::int(0))? {
+                return Some(x0);
+            }
+            return x0.add(t.sub(acc)?.mul(x1.sub(x0)?)?.div(dy)?);
+        }
+        acc = y1;
+        x0 = Rat::dec(c.hi)?;
+    }
+    Some(x0)
+}
+
+/// [`cum_at`] in exact fractions: the running total at `x`, None outside the classes.
+pub fn cum_frac(cs: &[Class], x: Rat) -> Option<Rat> {
+    let lo0 = Rat::dec(cs[0].lo)?;
+    let hi_k = Rat::dec(cs[cs.len() - 1].hi)?;
+    if !lo0.cmp_le(x)? || !x.cmp_le(hi_k)? {
+        return None;
+    }
+    let mut total = Rat::int(0);
+    for c in cs {
+        let (lo, hi) = (Rat::dec(c.lo)?, Rat::dec(c.hi)?);
+        if hi.cmp_le(x)? {
+            total = total.add(Rat::int(c.f as i128))?;
+        } else if lo.cmp_le(x)? {
+            // inside this class: the part of its frequency below x
+            total = total.add(Rat::int(c.f as i128).mul(x.sub(lo)?)?.div(hi.sub(lo)?)?)?;
+            break;
+        } else {
+            break;
+        }
+    }
+    Some(total)
+}
+
 /// Where the curve is flat at height `t` for some width: (from, to).
 pub fn plateau(pts: &[(f64, f64)], t: f64) -> Option<(f64, f64)> {
     let tol = 1e-9 * pts[pts.len() - 1].1.max(1.0);
@@ -472,6 +686,8 @@ pub struct Reading {
     /// Label on the horizontal guide (by the vertical axis) and at the foot of the vertical guide.
     pub side: String,
     pub foot: String,
+    /// The height alone, for the horizontal guide when the full side label has no room.
+    pub side_short: String,
     /// The foot label when the full one has no room.
     pub short: String,
     /// The percentile drawn (0 to 100).
@@ -503,12 +719,69 @@ fn y_scale(y_axis: &str, n: f64) -> f64 {
 /// A cumulative frequency or share as exact short text (up to 4 decimals, no trailing zeros).
 pub fn tidy(v: f64) -> String { chart::fmt((v * 1e4).round() / 1e4) }
 
-/// A height on the vertical axis as text (cumulative frequency `t`).
-fn height_text(y_axis: &str, t: f64, n: f64, d: usize) -> String {
+/// The same, from the exact fraction.
+fn tidy_rat(r: Option<Rat>, v: f64) -> String {
+    match r.and_then(|r| r.units(4)) {
+        // 4 decimals with the trailing zeros taken off ("20", not "20.0000")
+        Some(u) => { let k = 10_000u128; let m = u.unsigned_abs(); let ip = m / k; let fp = m % k; let body = if fp == 0 { ip.to_string() } else { format!("{ip}.{fp:04}").trim_end_matches('0').to_string() }; if m == 0 { "0".into() } else { format!("{}{body}", if u < 0 { "\u{2212}" } else { "" }) } },
+        None => tidy(v),
+    }
+}
+
+/// A running total in the table, from the exact counts.
+fn cum_text(y_axis: &str, c: u64, n: u64) -> String {
+    let r = Rat::int(c as i128);
+    let nr = Rat::int(n as i128);
     match y_axis {
-        Y_REL => num(t / n, (d + 2).min(6)),
-        Y_PCT => format!("{}%", num(100.0 * t / n, d)),
-        _ => num(t, d),
+        Y_REL => num_rat(r.div(nr), c as f64 / n as f64, 3),
+        Y_PCT => num_rat(r.mul(Rat::int(100)).and_then(|v| v.div(nr)), 100.0 * c as f64 / n as f64, 1),
+        _ => c.to_string(),
+    }
+}
+
+/// Fine gridlines per labelled step (a step of 1 or 5 times a power of ten is cut in 5, a step of
+/// 2 in 4), and fine gridlines per class across.
+pub fn minor_divisions(step: f64) -> usize {
+    if !(step.is_finite() && step > 0.0) { return 5; }
+    let m = step / 10f64.powf(step.log10().floor());
+    if (m - 2.0).abs() < 0.05 { 4 } else { 5 }
+}
+
+/// How many fine gridlines cut one class across.
+pub const MINOR_X: usize = 5;
+
+/// Half of the fine gridline spacing at `x`, in x units: how far a reading may sit from the exact
+/// value and still be the value a student would read off the grid (across and up combined).
+pub fn read_tol(cs: &[Class], x: f64, ystep: f64, sc: f64) -> Option<Rat> {
+    let c = cs.iter().find(|c| x >= c.lo && x <= c.hi).unwrap_or_else(|| {
+        // outside every class (a value typed on the last boundary): use the nearest one
+        cs.iter().min_by(|a, b| (a.hi - x).abs().total_cmp(&(b.hi - x).abs())).unwrap()
+    });
+    let (lo, hi) = (Rat::dec(c.lo)?, Rat::dec(c.hi)?);
+    let w = hi.sub(lo)?;
+    if !(w.to_f64() > 0.0) {
+        return None;
+    }
+    let across = w.div(Rat::int(2 * MINOR_X as i128))?;
+    // one fine vertical step, turned into x by the slope of the class: dy * w / f
+    let up = if c.f == 0 {
+        Rat::int(0)
+    } else {
+        Rat::dec(ystep)?.div(Rat::dec(sc)?)?.div(Rat::int(2 * minor_divisions(ystep) as i128))?.mul(w)?.div(Rat::int(c.f as i128))?
+    };
+    let t = across.add(up)?;
+    if t.cmp_le(w)? { Some(t) } else { Some(w) }
+}
+
+/// The vertical axis: the top shown and the step between labelled ticks.
+pub fn y_frame(y_axis: &str, nf: f64) -> (f64, f64) {
+    match y_axis {
+        Y_REL => (1.0, 0.1),
+        Y_PCT => (100.0, 10.0),
+        _ => {
+            let step = chart::nice_step(nf, 8.0).max(1.0).round();
+            ((nf / step - 1e-9).ceil().max(1.0) * step, step)
+        }
     }
 }
 
@@ -520,6 +793,8 @@ pub fn model(p: &Params) -> Result<Model, String> {
     let nf = n as f64;
     let d = p.i("decimals").clamp(0, 4) as usize;
     let y_axis = p.s("y_axis");
+    let (_, ystep) = y_frame(y_axis, nf);
+    let sc = y_scale(y_axis, nf);
     let mut readings = Vec::new();
     let mut questions: Vec<(String, Option<String>)> = Vec::new();
     let mut notes = Vec::new();
@@ -533,13 +808,30 @@ pub fn model(p: &Params) -> Result<Model, String> {
         Y_PCT => "cumulative percent",
         _ => "cumulative frequency",
     };
+    let (a, b) = (pts[0].0, pts[pts.len() - 1].0);
+    // the values a student reading the fine grid could take for the exact one, kept inside the
+    // range the curve covers
+    let accept = |xr: Option<Rat>, x: f64| -> Option<String> {
+        let tol = read_tol(&cs, x, ystep, sc)?;
+        let xr = xr?;
+        let (lo, hi) = (xr.sub(tol)?, xr.add(tol)?);
+        let lo = match Rat::dec(a) { Some(a) if lo.cmp_le(a)? => a.units_floor(d)?, _ => lo.units_floor(d)? };
+        let hi = match Rat::dec(b) { Some(b) if b.cmp_le(hi)? => b.units_ceil(d)?, _ => hi.units_ceil(d)? };
+        Some(format!("accept {} to {}", units_text(lo, d), units_text(hi, d)))
+    };
+    let about = |xr: Option<Rat>, x: f64| -> String {
+        let v = num_rat(xr, x, d);
+        match accept(xr, x) {
+            Some(a) => format!("about {v} ({a})"),
+            None => format!("about {v}"),
+        }
+    };
     if table {
         questions.push((format!("Complete the {cum_name} column of the table."), None));
     }
     if !p.b("student_curve") {
         questions.push((format!("Draw the ogive: plot each class's {cum_name} at its upper class boundary, start at 0 on the lower boundary of the first class, and join the points with straight lines."), None));
     }
-    let (a, b) = (pts[0].0, pts[pts.len() - 1].0);
     let flat_note = |t: f64, what: &str| -> Option<String> {
         let (x0, x1) = plateau(&pts, t)?;
         Some(format!(
@@ -551,19 +843,29 @@ pub fn model(p: &Params) -> Result<Model, String> {
         READ_PCT => {
             let pc = p.f("pct");
             let pc = if pc.is_finite() { pc.clamp(1.0, 99.0) } else { 50.0 };
-            let t = pc / 100.0 * nf;
+            let pr = Rat::dec(pc);
+            let tr = pr.and_then(|v| v.mul(Rat::int(n as i128))).and_then(|v| v.div(Rat::int(100)));
+            let t = tr.map(|r| r.to_f64()).unwrap_or(pc / 100.0 * nf);
             let x = value_at(&pts, t);
+            let xr = tr.and_then(|r| value_frac(&cs, r));
             let name = format!("{} percentile", ordinal(pc));
             notes.extend(flat_note(t, &name));
-            let tl = match y_axis {
-                Y_FREQ => format!("{} = {}% of {n}", tidy(t), chart::fmt(pc)),
+            let side = match y_axis {
+                Y_FREQ => format!("{} = {}% of {n}", tidy_rat(tr, t), chart::fmt(pc)),
                 Y_PCT => format!("{}%", chart::fmt(pc)),
-                _ => tidy(pc / 100.0),
+                _ => tidy_rat(tr.and_then(|r| r.div(Rat::int(n as i128))), pc / 100.0),
             };
-            readings.push(Reading { t, x, side: tl.clone(), foot: format!("P{} = {}", chart::fmt(pc), num(x, d)), short: format!("P{}", chart::fmt(pc)), pct: pc });
+            // the short label names the reading and gives its height, for a corner with no room
+            let height = match y_axis {
+                Y_FREQ => tidy_rat(tr, t),
+                Y_PCT => format!("{}%", chart::fmt(pc)),
+                _ => tidy_rat(tr.and_then(|r| r.div(Rat::int(n as i128))), pc / 100.0),
+            };
+            let side_short = format!("P{}: {height}", chart::fmt(pc));
+            readings.push(Reading { t, x, side, side_short, foot: format!("P{} = {}", chart::fmt(pc), num_rat(xr, x, d)), short: format!("P{}", chart::fmt(pc)), pct: pc });
             questions.push((
                 format!("Use the ogive to estimate the {name}."),
-                Some(format!("{}% of {n} is {}; across to the curve and down, the {name} is about {} (an estimate by straight-line interpolation).", chart::fmt(pc), tidy(t), num(x, d))),
+                Some(format!("{}% of {n} is {}; across to the curve and down, the {name} is {}; an estimate by straight-line interpolation.", chart::fmt(pc), tidy_rat(tr, t), about(xr, x))),
             ));
         }
         READ_VALUE => {
@@ -571,11 +873,19 @@ pub fn model(p: &Params) -> Result<Model, String> {
             match cum_at(&pts, v) {
                 Some(t) => {
                     let pc = 100.0 * t / nf;
+                    let vr = Rat::dec(v);
+                    let tr = vr.and_then(|x| cum_frac(&cs, x));
+                    let pcr = tr.and_then(|q| q.mul(Rat::int(100))).and_then(|q| q.div(Rat::int(n as i128)));
                     let below = match c.left_closed { Some(false) => "at or below", _ => "below" };
-                    readings.push(Reading { t, x: v, side: match y_axis { Y_FREQ => format!("{} ({}%)", num(t, d), num(pc, d)), _ => height_text(y_axis, t, nf, d) }, foot: plain(v).replace('-', "\u{2212}"), short: plain(v).replace('-', "\u{2212}"), pct: pc });
+                    let side = match y_axis {
+                        Y_FREQ => format!("{} ({}%)", num_rat(tr, t, d), num_rat(pcr, pc, d)),
+                        Y_REL => num_rat(tr.and_then(|q| q.div(Rat::int(n as i128))), t / nf, (d + 2).min(6)),
+                        _ => format!("{}%", num_rat(pcr, pc, d)),
+                    };
+                    readings.push(Reading { t, x: v, side: side.clone(), side_short: side, foot: plain(v).replace('-', "\u{2212}"), short: plain(v).replace('-', "\u{2212}"), pct: pc });
                     questions.push((
                         format!("Use the ogive to estimate the percentage of the values {below} {}.", plain(v).replace('-', "\u{2212}")),
-                        Some(format!("Up from {} to the curve and across, about {} of the {n} values, so about {}% (an estimate by straight-line interpolation).", plain(v).replace('-', "\u{2212}"), num(t, d), num(pc, d))),
+                        Some(format!("Up from {} to the curve and across, about {} of the {n} values, so about {}% (an estimate by straight-line interpolation).", plain(v).replace('-', "\u{2212}"), num_rat(tr, t, d), num_rat(pcr, pc, d))),
                     ));
                 }
                 None => notes.push(format!(
@@ -590,18 +900,28 @@ pub fn model(p: &Params) -> Result<Model, String> {
     if marks == "Median" || marks == "Median and quartiles" {
         let q: Vec<(f64, &str, &str)> = if marks == "Median" { vec![(50.0, "M", "median")] } else { vec![(25.0, "Q1", "lower quartile Q1"), (50.0, "M", "median"), (75.0, "Q3", "upper quartile Q3")] };
         let mut ans = Vec::new();
-        let mut xs = Vec::new();
+        let mut units = Vec::new();
         for (pc, short, long) in &q {
-            let t = pc / 100.0 * nf;
+            let pr = Rat::dec(*pc);
+            let tr = pr.and_then(|v| v.mul(Rat::int(n as i128))).and_then(|v| v.div(Rat::int(100)));
+            let t = tr.map(|r| r.to_f64()).unwrap_or(pc / 100.0 * nf);
             let x = value_at(&pts, t);
+            let xr = tr.and_then(|r| value_frac(&cs, r));
             notes.extend(flat_note(t, long));
-            let side = match y_axis { Y_FREQ => format!("{} = {}% of {n}", tidy(t), pc), Y_PCT => format!("{pc}%"), _ => tidy(pc / 100.0) };
-            readings.push(Reading { t, x, side, foot: short.to_string(), short: short.to_string(), pct: *pc });
-            ans.push(format!("{} about {}", if *short == "M" { "median" } else { short }, num(x, d)));
-            xs.push(x);
+            let side = match y_axis { Y_FREQ => format!("{} = {pc}% of {n}", tidy_rat(tr, t)), Y_PCT => format!("{pc}%"), _ => tidy_rat(tr.and_then(|r| r.div(Rat::int(n as i128))), pc / 100.0) };
+            let height = match y_axis { Y_FREQ => tidy_rat(tr, t), _ => side.clone() };
+            let side_short = format!("{short}: {height}");
+            readings.push(Reading { t, x, side, side_short, foot: short.to_string(), short: short.to_string(), pct: *pc });
+            ans.push(format!("{} {}", if *short == "M" { "median" } else { short }, about(xr, x)));
+            units.push(xr.and_then(|r| r.units(d)));
         }
         if q.len() == 3 {
-            ans.push(format!("IQR about {}", num(xs[2] - xs[0], d)));
+            // the IQR a student gets: the printed Q3 minus the printed Q1
+            let iqr = match (units[0], units[2]) {
+                (Some(q1), Some(q3)) => units_text(q3 - q1, d),
+                _ => num(value_at(&pts, 0.75 * nf) - value_at(&pts, 0.25 * nf), d),
+            };
+            ans.push(format!("IQR about {iqr}"));
         }
         let ask = if q.len() == 1 { "Use the ogive to estimate the median." } else { "Use the ogive to estimate the median, the quartiles Q1 and Q3 and the interquartile range." };
         let est = if q.len() == 1 { "an estimate" } else { "estimates" };
@@ -639,10 +959,14 @@ pub fn warnings(p: &Params) -> Vec<String> {
             q.set_s("marks", "None");
             steps.push(("set Mark to None".into(), q));
         }
-        let fix = steps.into_iter().find(|(_, q)| draw(q).1.is_empty()).map(|(t, _)| format!(" To label it, {t}."));
-        let (names, it) = if bare.len() == 1 { (bare[0].clone(), "its value is") } else { (bare.join(" and "), "their values are") };
-        let lines = if bare.len() == 1 { "guide line" } else { "guide lines" };
-        notes.push(format!("In the key, the {lines} for {names} {} no room for a label beside {}; {it} in the answers under the graph.{}", if bare.len() == 1 { "has" } else { "have" }, if bare.len() == 1 { "it" } else { "them" }, fix.unwrap_or_default()));
+        // a note only when one control change is measured to label every guide: a note that names a
+        // problem it cannot fix is worse than no note
+        let fix = steps.into_iter().find(|(_, q)| draw(q).1.is_empty()).map(|(t, _)| t);
+        if let Some(fix) = fix {
+            let (names, it) = if bare.len() == 1 { (bare[0].clone(), "its value is") } else { (bare.join(" and "), "their values are") };
+            let lines = if bare.len() == 1 { "guide line" } else { "guide lines" };
+            notes.push(format!("In the key, the {lines} for {names} {} no room for a label beside {}; {it} in the answers under the graph. To label it, {fix}.", if bare.len() == 1 { "has" } else { "have" }, if bare.len() == 1 { "it" } else { "them" }));
+        }
     }
     notes
 }
@@ -759,6 +1083,11 @@ fn boxes_meet(a: Bx, b: Bx, pad: f64) -> bool { a.0 - pad < b.2 && b.0 - pad < a
 
 /// Gap a label keeps from every line, dot and other label.
 pub const LABEL_GAP: f64 = 4.0;
+/// Gridline greys. Print is neutral grey darker than 66 % grey, so a photocopy at 66 % keeps both
+/// kinds of gridline; Colour uses the shared chart grid for the labelled lines and a paler fine one.
+pub const GRID_PRINT: &str = "#8c8c8c";
+pub const FINE_PRINT: &str = "#a4a4a4";
+pub const FINE_GRID: &str = "#eef1f5";
 /// White margin drawn round an in-plot label (over the gridlines only).
 pub const PLATE: f64 = 2.0;
 /// Gap between a label's text box and its own guide line.
@@ -786,7 +1115,8 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
     let print = p.s("style") == "Print";
     let fills = Fills::new(p);
     let ink = if print { "#000" } else { INK };
-    let grid_col = if print { "#d0d0d0" } else { chart::GRID };
+    let grid_col = if print { GRID_PRINT } else { chart::GRID };
+    let fine_col = if print { FINE_PRINT } else { FINE_GRID };
     let curve_col = fills.line(0);
     let guide_col = if print { "#000" } else { "#b4410f" };
     let k = svg::label_factor(p.s("label_size"));
@@ -797,14 +1127,7 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
 
     // the vertical scale: frequency ticks at a nice whole step up to the total or just above it;
     // relative frequency 0 to 1 by 0.1; percent 0 to 100 by 10
-    let (ytop, ystep) = match y_axis {
-        Y_REL => (1.0, 0.1),
-        Y_PCT => (100.0, 10.0),
-        _ => {
-            let step = chart::nice_step(nf, 8.0).max(1.0).round();
-            ((nf / step - 1e-9).ceil().max(1.0) * step, step)
-        }
-    };
+    let (ytop, ystep) = y_frame(y_axis, nf);
     let yticks = chart::ticks(0.0, ytop, ystep);
     let ytick_w = yticks.iter().map(|t| tw(&t.1, fs)).fold(0.0, f64::max);
     let y_title_txt = match p.s("y_title").trim() { "" => y_axis.to_string(), t => t.to_string() };
@@ -831,7 +1154,7 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
         }
     };
     let cums = cumulative(&m.cs);
-    let cum_txt: Vec<String> = cums.iter().map(|c| match y_axis { Y_REL => num(*c as f64 / nf, 3), Y_PCT => num(100.0 * *c as f64 / nf, 1), _ => c.to_string() }).collect();
+    let cum_txt: Vec<String> = cums.iter().map(|c| cum_text(y_axis, *c, m.n)).collect();
     let tfs = fs * 0.95;
     let rh = tfs * 1.75;
     let cell_pad = 9.0;
@@ -892,12 +1215,25 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
     if !title_line.is_empty() {
         text(&mut doc, w / 2.0, 14.0 + fs * 1.35, title_fs, "middle", ink, "title", &title_line);
     }
-    // gridlines, then axes
+    // gridlines, then axes: a labelled line per tick, fine lines between them (the student reads
+    // the curve to the nearest one), and a vertical line at every class boundary
     if p.b("grid") {
         for (v, _) in &yticks {
             let y = fr.py(*v);
             if *v > 0.0 {
                 doc.raw(&format!(r#"<line class="grid" x1="{:.2}" y1="{y:.2}" x2="{:.2}" y2="{y:.2}" stroke="{grid_col}" stroke-width="1"/>"#, fr.left(), fr.right()));
+            }
+        }
+        let nm = minor_divisions(ystep);
+        let steps = (ytop / ystep).round().clamp(1.0, 60.0) as usize;
+        for k in 1..=(steps * nm).min(400) {
+            if k % nm == 0 {
+                continue; // a labelled line
+            }
+            let v = k as f64 * ystep / nm as f64;
+            if v < ytop - 1e-9 {
+                let y = fr.py(v);
+                doc.raw(&format!(r#"<line class="grid" x1="{:.2}" y1="{y:.2}" x2="{:.2}" y2="{y:.2}" stroke="{fine_col}" stroke-width="1"/>"#, fr.left(), fr.right()));
             }
         }
     }
@@ -935,6 +1271,18 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
     // removing the previous label for the last one may still leave a clash with the one before
     while kept.len() > 2 && span(kept[kept.len() - 1]).0 < span(kept[kept.len() - 2]).1 + 8.0 {
         kept.remove(kept.len() - 2);
+    }
+    // vertical gridlines at the class boundaries, so a point can be plotted on the grid: at every
+    // boundary when they are far enough apart to tell apart, else at the numbered ones only
+    if p.b("grid") {
+        let every = fr.right() - fr.left() >= 12.0 * bounds.len() as f64;
+        for (i, x) in bounds.iter().enumerate() {
+            if i == 0 || !(every || kept.contains(&i)) {
+                continue;
+            }
+            let tx = px(*x);
+            doc.raw(&format!(r#"<line class="grid" x1="{tx:.2}" y1="{:.2}" x2="{tx:.2}" y2="{:.2}" stroke="{grid_col}" stroke-width="1"/>"#, fr.top(), fr.bottom()));
+        }
     }
     for &i in &kept {
         text(&mut doc, px(bounds[i]), ty, fs, "middle", ink, "xtick", &lab(bounds[i]));
@@ -978,7 +1326,8 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
         let inner: Bx = (fr.left() + 3.0, fr.top() + 2.0, fr.right() - 2.0, fr.bottom() - 3.0);
         let mut placed: Vec<Bx> = Vec::new();
         let lfs = fs * 0.95;
-        let mut labels: Vec<(f64, f64, &str, String, &str)> = Vec::new();
+        // (x, y, anchor, text, class, leader from → to)
+        let mut labels: Vec<(f64, f64, &str, String, &str, Option<Seg>)> = Vec::new();
         for (i, (r, (gx, gy))) in m.readings.iter().zip(&gs).enumerate() {
             let (gx, gy) = (*gx, *gy);
             let before = labels.len();
@@ -987,33 +1336,73 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
             let gh = OWN_GAP + 0.06 * lfs;
             let desc = 0.26 * lfs;
             let asc = 0.82 * lfs;
-            for (txts, cands, class) in [
-                (vec![&r.side], vec![(fr.left() + g + 2.0, gy - g - desc, "start"), (gx - gh, gy - g - desc, "end")], "side"),
-                (vec![&r.foot, &r.short], vec![(gx + gh, fr.bottom() - 6.0 - desc, "start"), (gx - gh, fr.bottom() - 6.0 - desc, "end"), (gx + gh, (gy + fr.bottom()) / 2.0 + asc / 2.0, "start"), (gx - gh, (gy + fr.bottom()) / 2.0 + asc / 2.0, "end")], "foot"),
-            ] {
-                'one: for txt in txts {
-                    for &(x, y, anchor) in &cands {
-                        let bx = text_box(x, y, lfs, anchor, txt);
-                        let ok = bx.0 >= inner.0 && bx.1 >= inner.1 && bx.2 <= inner.2 && bx.3 <= inner.3
-                            && curve_segs.iter().all(|s| seg_box_dist(s.0, s.1, bx) >= LABEL_GAP + PLATE)
-                            && dots.iter().all(|q| pt_box_dist(*q, bx) >= dot_r + LABEL_GAP + PLATE)
-                            && guide_segs[i].iter().all(|s| seg_box_dist(s.0, s.1, bx) >= PLATE + 1.5)
-                            // another reading's guide stays well clear, so a label is always nearest its own line
-                            && guide_segs.iter().enumerate().filter(|(j, _)| *j != i).all(|(_, gsg)| gsg.iter().all(|s| seg_box_dist(s.0, s.1, bx) >= RIVAL_GAP))
-                            && placed.iter().all(|o| !boxes_meet(*o, bx, 2.0 * PLATE + LABEL_GAP));
-                        if ok {
+            // a box is usable when it is inside the plot, clear of the curve, its dots, its own guide
+            // and every other reading's guide, and clear of the labels already placed
+            let fits = |placed: &[Bx], x: f64, y: f64, anchor: &str, txt: &str| -> Option<Bx> {
+                let bx = text_box(x, y, lfs, anchor, txt);
+                let ok = bx.0 >= inner.0 && bx.1 >= inner.1 && bx.2 <= inner.2 && bx.3 <= inner.3
+                    && curve_segs.iter().all(|s| seg_box_dist(s.0, s.1, bx) >= LABEL_GAP + PLATE)
+                    && dots.iter().all(|q| pt_box_dist(*q, bx) >= dot_r + LABEL_GAP + PLATE)
+                    && guide_segs[i].iter().all(|s| seg_box_dist(s.0, s.1, bx) >= PLATE + 1.5)
+                    // another reading's guide stays well clear, so a label is always nearest its own line
+                    && guide_segs.iter().enumerate().filter(|(j, _)| *j != i).all(|(_, gsg)| gsg.iter().all(|s| seg_box_dist(s.0, s.1, bx) >= RIVAL_GAP))
+                    && placed.iter().all(|o| !boxes_meet(*o, bx, 2.0 * PLATE + LABEL_GAP));
+                ok.then_some(bx)
+            };
+            // the height on the horizontal guide, then the foot of the vertical one; at each spot the
+            // full text first, then the short one, so a cramped corner still gets a label
+            let side_txt: Vec<&String> = if r.side == r.side_short { vec![&r.side] } else { vec![&r.side, &r.side_short] };
+            let foot_txt: Vec<&String> = if r.foot == r.short { vec![&r.foot] } else { vec![&r.foot, &r.short] };
+            let along: Vec<f64> = [1.0, 0.5, 0.3, 0.7, 0.15, 0.85].into_iter().map(|f| fr.bottom() + (gy - fr.bottom()) * f).collect();
+            let mut cands: Vec<(f64, f64, &str, &str)> = Vec::new();
+            for txt in side_txt {
+                cands.push((fr.left() + g + 2.0, gy - g - desc, "start", txt.as_str()));
+                cands.push((gx - gh, gy - g - desc, "end", txt.as_str()));
+                cands.push((gx + gh, gy - g - desc, "start", txt.as_str()));
+            }
+            for txt in foot_txt {
+                for f in &along {
+                    cands.push((gx + gh, f + asc / 2.0, "start", txt.as_str()));
+                    cands.push((gx - gh, f + asc / 2.0, "end", txt.as_str()));
+                }
+            }
+            for (x, y, anchor, txt) in cands {
+                if let Some(bx) = fits(&placed, x, y, anchor, txt) {
+                    placed.push(bx);
+                    let class = if txt == r.side.as_str() || txt == r.side_short.as_str() { "side" } else { "foot" };
+                    labels.push((x, y, anchor, txt.to_string(), class, None));
+                    break;
+                }
+            }
+            if labels.len() == before {
+                // the corner between the two guides has no room: put the height label clear of the
+                // curve above the start of its guide and join it to the guide with a short solid
+                // leader (the guides are dashed), so a low percentile on the axis is labelled too
+                let x0 = fr.left() + g + 2.0;
+                let lx = fr.left() + 3.0;
+                let mut lift = asc + desc * 0.6;
+                while lift < PLOT_H * 0.8 {
+                    let y = gy - g - desc - lift;
+                    if let Some(bx) = fits(&placed, x0, y, "start", &r.side_short) {
+                        let lead = ((lx, gy - 3.0), (lx, bx.3 + 3.0));
+                        // the leader itself must stay off every label already placed
+                        if placed.iter().all(|o| seg_box_dist(lead.0, lead.1, *o) >= LABEL_GAP) {
                             placed.push(bx);
-                            labels.push((x, y, anchor, txt.clone(), class));
-                            break 'one;
+                            labels.push((x0, y, "start", r.side_short.clone(), "side", Some(lead)));
+                            break;
                         }
                     }
+                    lift += asc + desc * 0.6;
                 }
             }
             if labels.len() == before {
                 unlabelled.push(r.short.clone());
             }
         }
-        for ((x, y, anchor, txt, class), bx) in labels.iter().zip(&placed) {
+        for ((x, y, anchor, txt, class, lead), bx) in labels.iter().zip(&placed) {
+            if let Some((a, b)) = lead {
+                doc.raw(&format!(r#"<line class="leader" x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{guide_col}" stroke-width="1"/>"#, a.0, a.1, b.0, b.1));
+            }
             doc.raw(&format!(r##"<rect class="plate" x="{:.2}" y="{:.2}" width="{:.2}" height="{:.2}" fill="#fff"/>"##, bx.0 - PLATE, bx.1 - PLATE, bx.2 - bx.0 + 2.0 * PLATE, bx.3 - bx.1 + 2.0 * PLATE));
             text(&mut doc, *x, *y, lfs, anchor, if print { "#000" } else { guide_col }, class, txt);
         }
