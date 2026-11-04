@@ -458,6 +458,8 @@ static OGIVE: [RefSection; 6] = [
     s("Student copy", &["show_table", "student_curve", "show_answers"], "Turn off Show answers for a student copy: the cumulative column, guide lines and read-off values are blanked."),
     s("Labels and text", &["title", "x_title", "y_title"], ""),
     s("Appearance", &["style", "label_size"], ""),
+];
+
 static BAR_CHART: [RefSection; 5] = [
     s("Data", &["data", "name1", "name2"], "One category per line: a name, a comma and its count. A second count after another comma draws two groups side by side. Repeated names are added together."),
     s("Bars", &["orient", "measure", "order", "gap", "values", "decimals"], "Relative frequency is each category's percent of its own group, so each group's bars add to 100%. Pareto sorts tallest first and adds the cumulative percent line."),
