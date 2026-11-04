@@ -50,7 +50,7 @@ pub fn def() -> FigureDef {
 fn params() -> Vec<ParamDef> {
     vec![
         ParamDef::long("data", "Categories and counts", "Walk, 12\nCar, 9\nBus, 6\nBike, 3")
-            .hint("One category per line: its name, a comma, then how many. A second count after another comma compares two groups. A first line of headings (Way, Boys, Girls) names the axis and the groups"),
+            .hint("One category per line: its name, a comma, then how many. A second count after another comma compares two groups. A comma between groups of three digits (1,200, no space after it) is a thousands separator, so Walk, 1,200 is 1200. A first line of headings (Way, Boys, Girls) names the axis and the groups"),
         ParamDef::text("name1", "First group's name", "").hint("Shown in the legend when there are two counts per line; blank uses the headings line, or Group 1"),
         ParamDef::text("name2", "Second group's name", "").hint("Blank uses the headings line, or Group 2"),
         ParamDef::choice("orient", "Bars", &["Vertical", "Horizontal"], "Vertical"),
@@ -184,12 +184,61 @@ fn number_word(c: &str) -> bool {
     W.iter().any(|w| c == *w || c.starts_with(&format!("{w}-")) || c.starts_with(&format!("{w} ")))
 }
 
-fn csv_cells(line: &str) -> Vec<String> {
+/// The value of a count written in words, up to `nine hundred ninety-nine thousand ...`
+/// (`twelve`, `twenty-five`, `two hundred`). `None` when any part is not a number word, as in
+/// `Two-year-olds`: that is a name, and guessing a count for it would invent data.
+pub fn word_value(c: &str) -> Option<u64> {
+    const ONES: [&str; 20] = [
+        "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen",
+        "eighteen", "nineteen",
+    ];
+    const TENS: [(&str, u64); 8] = [("twenty", 20), ("thirty", 30), ("forty", 40), ("fifty", 50), ("sixty", 60), ("seventy", 70), ("eighty", 80), ("ninety", 90)];
+    let text = c.trim().to_lowercase();
+    let parts: Vec<&str> = text.split([' ', '-']).filter(|p| !p.is_empty()).collect();
+    if parts.is_empty() || parts.len() > 4 {
+        return None;
+    }
+    let (mut total, mut cur) = (0u64, 0u64);
+    for p in parts {
+        let v = if p == "none" {
+            0
+        } else if let Some(i) = ONES.iter().position(|w| *w == p) {
+            i as u64
+        } else if let Some((_, t)) = TENS.iter().find(|(w, _)| *w == p) {
+            *t
+        } else if p == "hundred" || p == "thousand" {
+            let scale = if p == "hundred" { 100 } else { 1000 };
+            cur = cur.max(1) * scale;
+            if scale == 1000 {
+                total += cur;
+                cur = 0;
+            }
+            continue;
+        } else {
+            return None;
+        };
+        cur += v;
+    }
+    Some(total + cur)
+}
+
+/// A count written with a comma inside it: `12,5` (a decimal comma) or a broken thousands group.
+/// `None` when the cell has no comma.
+fn comma_count(c: &str) -> Option<(u64, u64)> {
+    let (a, b) = c.split_once(',')?;
+    let (a, b) = (a.trim().replace('\u{2212}', "-"), b.trim().to_string());
+    if !a.chars().all(|ch| ch.is_ascii_digit()) || !b.chars().all(|ch| ch.is_ascii_digit()) || a.is_empty() || b.is_empty() {
+        return None;
+    }
+    Some((a.parse().unwrap_or(0), b.parse().unwrap_or(0)))
+}
+
+fn csv_cells(line: &str, sep: char) -> Vec<String> {
     let (mut out, mut cur, mut quoted) = (Vec::new(), String::new(), false);
     for ch in line.chars() {
         match ch {
             '"' => quoted = !quoted,
-            ',' | ';' if !quoted => out.push(std::mem::take(&mut cur)),
+            c if c == sep && !quoted => out.push(std::mem::take(&mut cur)),
             _ => cur.push(ch),
         }
     }
@@ -197,25 +246,102 @@ fn csv_cells(line: &str) -> Vec<String> {
     out
 }
 
-/// A line's cells: split at tabs, else commas or semicolons (quotes keep a comma in a name),
-/// else the last word is the count. `Err` holds the number of trailing numbers when a line with
-/// no separators ends in more than one (`Grade 9 12`: which is the count?).
+/// A count typed with thousands separators (`1,200`, `1 200`, `12 345 678`): its digits. One to
+/// three digits, then groups of exactly three, all after the same separator, so `1, 200` (a
+/// space after the comma) is not one: that comma starts the next cell.
+pub fn thousands(s: &str) -> Option<u128> {
+    let t = s.trim();
+    let sep = t.chars().find(|c| *c == ',' || *c == ' ')?;
+    let parts: Vec<&str> = if sep == ' ' { t.split_whitespace().collect() } else { t.split(sep).collect() };
+    let (first, rest) = parts.split_first()?;
+    let digits = |p: &str, max: usize| !p.is_empty() && p.len() <= max && p.chars().all(|c| c.is_ascii_digit());
+    if !digits(first, 3) || rest.is_empty() || !rest.iter().all(|p| p.len() == 3 && digits(p, 3)) {
+        return None;
+    }
+    let mut v = first.parse::<u128>().ok()?;
+    for p in rest {
+        v = v * 1000 + p.parse::<u128>().ok()?;
+        if v > u64::MAX as u128 {
+            return Some(u64::MAX as u128 + 1);
+        }
+    }
+    Some(v)
+}
+
+/// Commas inside a count written in groups of three (`1,200`), removed before the line is split,
+/// so a thousands separator is part of its count and not the start of the next. A comma with a
+/// space after it (`, 1`) is a cell separator, as typed data usually writes it.
+fn join_thousands(line: &str) -> String {
+    let c: Vec<char> = line.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < c.len() {
+        if !c[i].is_ascii_digit() {
+            out.push(c[i]);
+            i += 1;
+            continue;
+        }
+        let mut j = i;
+        while j < c.len() && c[j].is_ascii_digit() {
+            j += 1;
+        }
+        let mut end = j;
+        if j - i <= 3 {
+            let mut k = j;
+            while k + 3 < c.len() && c[k] == ',' && c[k + 1..k + 4].iter().all(|d| d.is_ascii_digit()) && !c.get(k + 4).is_some_and(|d| d.is_ascii_digit()) {
+                k += 4;
+                end = k;
+            }
+        }
+        if end > j {
+            out.extend(&c[i..j]);
+            for part in c[j..end].chunks(4) {
+                out.extend(part.iter().skip(1));
+            }
+            i = end;
+        } else {
+            out.extend(&c[i..j]);
+            i = j;
+        }
+    }
+    out
+}
+
+/// The cell a line with no separator ends in: `Walk 12`, `Walk 1 200` (a thousands group written
+/// with spaces). `Err` holds the number of trailing numbers when more than one is left over and
+/// they are not groups of three (`Grade 9 12`: which is the count?).
+fn tail_count(line: &str) -> Result<Vec<String>, usize> {
+    let toks: Vec<&str> = line.split_whitespace().collect();
+    let n = toks.len();
+    let group = |t: &str, max: usize| !t.is_empty() && t.len() <= max && t.chars().all(|c| c.is_ascii_digit());
+    let spaced = (0..n.saturating_sub(1)).find(|&s| group(toks[s], 3) && toks[s + 1..].iter().all(|t| t.len() == 3 && group(t, 3)));
+    if let Some(s) = spaced {
+        return Ok(vec![toks[..s].join(" "), toks[s..].concat()]);
+    }
+    let tail = toks.iter().rev().take_while(|t| numeric_like(t)).count();
+    if tail >= 2 {
+        return Err(tail);
+    }
+    if tail == 0 {
+        Ok(vec![toks.join(" ")])
+    } else {
+        Ok(vec![toks[..n - 1].join(" "), toks[n - 1].to_string()])
+    }
+}
+
+/// A line's cells: split at tabs, else semicolons (a comma is then a thousands or decimal mark
+/// inside a cell), else commas, else the last word is the count.
 fn split_line(line: &str) -> Result<Vec<String>, usize> {
+    let line = join_thousands(line);
+    let line = line.as_str();
     let mut cells: Vec<String> = if line.contains('\t') {
         line.split('\t').map(str::to_string).collect()
-    } else if line.contains(',') || line.contains(';') {
-        csv_cells(line)
+    } else if line.contains(';') {
+        csv_cells(line, ';')
+    } else if line.contains(',') {
+        csv_cells(line, ',')
     } else {
-        let toks: Vec<&str> = line.split_whitespace().collect();
-        let tail = toks.iter().rev().take_while(|t| numeric_like(t)).count();
-        if tail >= 2 {
-            return Err(tail);
-        }
-        if tail == 0 {
-            vec![toks.join(" ")]
-        } else {
-            vec![toks[..toks.len() - 1].join(" "), toks[toks.len() - 1].to_string()]
-        }
+        return tail_count(line);
     };
     for c in cells.iter_mut() {
         *c = c.trim().trim_matches('"').trim().to_string();
@@ -229,6 +355,7 @@ fn split_line(line: &str) -> Result<Vec<String>, usize> {
 enum CountErr {
     Missing,
     NotNumber,
+    Comma,
     Percent(f64),
     Negative(f64),
     Fraction(f64),
@@ -245,6 +372,12 @@ fn parse_count(cell: &str) -> Result<u64, CountErr> {
             true => Err(CountErr::Percent(num.trim().parse::<f64>().unwrap_or(0.0))),
             false => Err(CountErr::NotNumber),
         };
+    }
+    if let Some(v) = thousands(&c) {
+        return if v > MAX_COUNT as u128 { Err(CountErr::TooBig(v as f64)) } else { Ok(v as u64) };
+    }
+    if c.contains(',') {
+        return Err(CountErr::Comma);
     }
     if !numeric_like(&c) {
         return Err(CountErr::NotNumber);
@@ -299,7 +432,8 @@ fn and_list(items: &[String]) -> String {
     }
 }
 
-/// Plain digits (no thousands commas: in a typed line a comma starts the next count).
+/// Plain digits (no thousands commas: a fix must not write a comma the reader would take for a
+/// thousands separator, so a teacher retyping the fix gets the count it names).
 fn digits(v: f64) -> String {
     format!("{}", v.round().clamp(0.0, MAX_COUNT as f64) as u64)
 }
@@ -317,7 +451,14 @@ pub fn parse(text: &str) -> Result<Table, String> {
     if lines.len() >= 2 {
         let (n, l) = lines[0];
         if let Ok(cells) = split_line(l) {
-            let words_only = cells[1..].iter().all(|c| matches!(parse_count(c), Err(CountErr::NotNumber)) && !number_word(c));
+            // a heading is words: a cell with a digit, or inf/NaN, is a mistyped count and the
+            // line is data, so its category is not swallowed
+            let heading = |c: &str| {
+                let t = c.trim();
+                let low = t.to_lowercase();
+                !t.chars().any(|ch| ch.is_ascii_digit()) && !matches!(low.as_str(), "inf" | "infinity" | "nan" | "-inf" | "+inf") && !number_word(t)
+            };
+            let words_only = cells[1..].iter().all(|c| heading(c));
             let separated = l.contains('\t') || l.contains(',') || l.contains(';');
             if words_only && (cells.len() >= 2 || !separated) && !cells[0].is_empty() {
                 head = Some((n, l.to_string(), if separated { cells } else { Vec::new() }));
@@ -382,9 +523,37 @@ pub fn parse(text: &str) -> Result<Table, String> {
                     return Err(format!("Line {n} ({}) has an empty count. Type 0 if there were none: {}.", q(l), fix("0".into())));
                 }
                 Err(CountErr::NotNumber) => {
-                    let lead: String = cell.trim().chars().take_while(|c| c.is_ascii_digit()).collect();
-                    let lead = if lead.is_empty() || lead.len() > 9 { "0".to_string() } else { digits(lead.parse::<f64>().unwrap_or(0.0)) };
-                    return Err(format!("Line {n} ({}): {} is not a number. Type the count in digits, for example {}.", q(l), q(cell), fix(lead)));
+                    let t = cell.trim();
+                    let lead: String = t.chars().take_while(|c| c.is_ascii_digit()).collect();
+                    let after = &t[lead.len()..];
+                    // a count and then a word ("12 students"): the number is the count
+                    if (1..=9).contains(&lead.len()) && after.starts_with(' ') && after.trim_start().chars().any(|c| c.is_alphabetic()) {
+                        return Err(format!("Line {n} ({}): {} is a count followed by a word. Type the count alone: {}.", q(l), q(cell), fix(lead)));
+                    }
+                    // a count written as a word ("twelve"): the number-word list gives the count
+                    if let Some(w) = word_value(t) {
+                        return Err(format!("Line {n} ({}): {} is a number written as a word. Type it in digits: {}.", q(l), q(cell), fix(w.to_string())));
+                    }
+                    // nothing to go on: refuse without inventing a count (a "Fruit, 0" fix would
+                    // quietly add a category the teacher never typed)
+                    return Err(format!(
+                        "Line {n} ({}): {} is not a number. Type how many in digits after the name and a comma, for example {}.",
+                        q(l),
+                        q(cell),
+                        q(&example_line(&name, &["12".to_string()]))
+                    ));
+                }
+                Err(CountErr::Comma) => {
+                    let two = comma_count(cell).map(|(a, b)| example_line(&name, &[a.to_string(), b.to_string()]));
+                    let two = match two {
+                        Some(s) => format!(" If you meant two counts, put each in its own cell: {}.", q(&s)),
+                        None => String::new(),
+                    };
+                    return Err(format!(
+                        "Line {n} ({}): {} has a comma inside a number. A comma starts the next count, so a count cannot hold one: write a decimal point (12.5) or the two counts in their own cells.{two}",
+                        q(l),
+                        q(cell)
+                    ));
                 }
                 Err(CountErr::Percent(v)) => {
                     return Err(format!(
@@ -408,18 +577,11 @@ pub fn parse(text: &str) -> Result<Table, String> {
                     ));
                 }
                 Err(CountErr::TooBig(v)) => {
-                    let (unit, ex) = if v.is_finite() && v / 1e3 <= MAX_COUNT as f64 {
-                        ("thousands", digits(v / 1e3))
-                    } else if v.is_finite() && v / 1e6 <= MAX_COUNT as f64 {
-                        ("millions", digits(v / 1e6))
-                    } else {
-                        ("billions", digits((v / 1e9).min(MAX_COUNT as f64)))
-                    };
+                    let unit = if v.is_finite() && v / 1e3 <= MAX_COUNT as f64 { "thousands" } else { "millions" };
                     return Err(format!(
-                        "Line {n} ({}): {} is more than {MAX_COUNT}, the largest count this chart takes. Count in {unit} and say so in the value axis title: {}.",
+                        "Line {n} ({}): {} is more than {MAX_COUNT}, the largest count this chart takes. The bars are drawn on one scale, so every line must count in the same unit: divide every line by the same number (count in {unit}) and say the unit in the value axis title. Changing one line alone would change what the other bars mean.",
                         q(l),
-                        q(cell),
-                        fix(ex)
+                        q(cell)
                     ));
                 }
             }
@@ -665,19 +827,60 @@ fn heights(t: &Table, percent: bool) -> Vec<Vec<f64>> {
     t.cats.iter().map(|c| (0..t.groups).map(|g| if percent { c.counts[g] as f64 * 100.0 / totals[g].max(1) as f64 } else { c.counts[g] as f64 }).collect()).collect()
 }
 
-/// The drawing order of the categories (indices into `t.cats`). Sorting is stable: equal bars
-/// keep their typed order. Two groups sort by the sum of their two bars.
+/// The drawing order of the categories (indices into `t.cats`). Equal bars keep their typed
+/// order: the comparison is an exact integer, and a tie falls back to the typed index, so no
+/// float sum and no sorting algorithm can swap two equal categories.
 pub fn order(t: &Table, percent: bool, how: &str) -> Vec<usize> {
-    let h = heights(t, percent);
-    let size = |i: usize| h[i].iter().sum::<f64>();
+    let totals: Vec<u64> = (0..t.groups).map(|g| t.total(g)).collect();
+    // the sum of a category's two bars, in integers: relative frequencies are c*100/total, so
+    // c0*T1 + c1*T0 orders them exactly the way their sum does (LOW 1: no float tie)
+    let size = |i: usize| -> u128 {
+        let c = &t.cats[i].counts;
+        if !percent || t.groups == 1 {
+            c.iter().map(|v| *v as u128).sum()
+        } else {
+            c[0] as u128 * totals[1] as u128 + c[1] as u128 * totals[0] as u128
+        }
+    };
     let mut idx: Vec<usize> = (0..t.cats.len()).collect();
     match how {
-        "Tallest first" | PARETO => idx.sort_by(|&a, &b| size(b).partial_cmp(&size(a)).unwrap_or(std::cmp::Ordering::Equal)),
-        "Shortest first" => idx.sort_by(|&a, &b| size(a).partial_cmp(&size(b)).unwrap_or(std::cmp::Ordering::Equal)),
-        "A to Z" => idx.sort_by_key(|&i| name_key(&t.cats[i].name)),
+        "Tallest first" | PARETO => idx.sort_by(|&a, &b| size(b).cmp(&size(a)).then(a.cmp(&b))),
+        "Shortest first" => idx.sort_by(|&a, &b| size(a).cmp(&size(b)).then(a.cmp(&b))),
+        "A to Z" => idx.sort_by(|&a, &b| natural_cmp(&t.cats[a].name, &t.cats[b].name).then(a.cmp(&b))),
         _ => {}
     }
     idx
+}
+
+/// Natural, case-insensitive order: `apple` before `Zebra`, `Item 2` before `Item 10`.
+fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    // pieces of digits and of everything else, lowercased
+    let pieces = |s: &str| -> Vec<(bool, String)> {
+        let mut out: Vec<(bool, String)> = Vec::new();
+        for ch in s.to_lowercase().chars() {
+            let d = ch.is_ascii_digit();
+            match out.last_mut() {
+                Some((was, text)) if *was == d => text.push(ch),
+                _ => out.push((d, ch.to_string())),
+            }
+        }
+        out
+    };
+    let (pa, pb) = (pieces(a), pieces(b));
+    for (x, y) in pa.iter().zip(&pb) {
+        let o = if x.0 && y.0 {
+            // a number: by value, so 2 comes before 10, and 02 after 2
+            let (nx, ny) = (x.1.trim_start_matches('0'), y.1.trim_start_matches('0'));
+            nx.len().cmp(&ny.len()).then(nx.cmp(ny)).then(x.1.len().cmp(&y.1.len()))
+        } else {
+            x.1.cmp(&y.1)
+        };
+        if o != Ordering::Equal {
+            return o;
+        }
+    }
+    pa.len().cmp(&pb.len()).then(a.cmp(b))
 }
 
 /// The value axis: from `lo` to `hi` with ticks every `step`.
@@ -879,7 +1082,7 @@ pub fn warnings(p: &Params) -> Vec<String> {
                 let fix = ((o.decimals + 1)..=2).find(|d| sum(*d) == 100 * 10u128.pow(*d));
                 let fix = match fix {
                     Some(d) => format!(" Set {} to {d}.", q("Decimals in percents")),
-                    None => " The exact percents add to 100%.".to_string(),
+                    None => format!(" Choose {} for {} so the values on the bars add up exactly.", q(COUNT), q("Bar height")),
                 };
                 out.push(format!("The printed percents{whose} add to {shown}, not 100%, because each is rounded.{fix}"));
             }
@@ -1253,14 +1456,14 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
             let f = cum as f64 / totals[0].max(1) as f64;
             line_pts.push((l + (j as f64 + 0.5) * slot, bottom - f * plot_h));
         }
-        d.line(w - r, top, w - r, bottom, ink, 2.0);
-        for pc in [0, 20, 40, 60, 80, 100] {
-            let yy = bottom - pc as f64 / 100.0 * plot_h;
-            d.line(w - r, yy, w - r + 6.0, yy, ink, 1.6);
-            put(&mut d, w - r + 10.0, yy + fs * 0.35, fs, "start", &format!("{pc}%"), ink);
-        }
-        put_up(&mut d, w - 12.0 - fa * DES, (top + bottom) / 2.0, fa, "middle", "Cumulative percent", ink);
         if key {
+            d.line(w - r, top, w - r, bottom, ink, 2.0);
+            for pc in [0, 20, 40, 60, 80, 100] {
+                let yy = bottom - pc as f64 / 100.0 * plot_h;
+                d.line(w - r, yy, w - r + 6.0, yy, ink, 1.6);
+                put(&mut d, w - r + 10.0, yy + fs * 0.35, fs, "start", &format!("{pc}%"), ink);
+            }
+            put_up(&mut d, w - 12.0 - fa * DES, (top + bottom) / 2.0, fa, "middle", "Cumulative percent", ink);
             d.polyline(&line_pts, ink, 2.0);
             for (x, yy) in &line_pts {
                 d.circle(*x, *yy, 3.5, "#ffffff", ink, 1.6);

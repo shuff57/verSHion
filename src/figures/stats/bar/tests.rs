@@ -272,6 +272,81 @@ fn reads_commas_tabs_semicolons_spaces_quotes_and_headings() {
 }
 
 #[test]
+fn thousands_separators_are_one_count_not_a_second_group() {
+    // J1: the figure prints counts with thousands commas (fmt_count), so a teacher retyping its
+    // own output must get the same chart back
+    let data = "Walk, 1,200\nCar, 2,500\nBus, 3,000";
+    let t = parse(data).unwrap();
+    assert_eq!(t.groups, 1, "a thousands comma does not start a second group");
+    assert_eq!(t.cats.iter().map(|c| c.counts[0]).collect::<Vec<_>>(), [1200, 2500, 3000]);
+    assert!(warnings(&with(&[("data", data)])).is_empty(), "read as typed, with no note");
+    // the "Red 12" form: the count rides in the first cell
+    let t = parse("Walk 1,200\nCar 950").unwrap();
+    assert_eq!(t.cats.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["Walk", "Car"]);
+    assert_eq!(t.cats.iter().map(|c| c.counts[0]).collect::<Vec<_>>(), [1200, 950]);
+    // mixed: one line with a thousands comma, one without
+    let t = parse("Walk, 1,200\nCar, 950").unwrap();
+    assert_eq!(t.cats.iter().map(|c| c.counts[0]).collect::<Vec<_>>(), [1200, 950]);
+    // two counts, the first written with a thousands comma
+    assert_eq!(parse("Walk, 1,200, 3").unwrap().cats[0].counts, [1200, 3]);
+    // a comma with a space after it starts the next cell, so two groups still read as typed
+    let two = parse("A, 3, 100\nB, 5, 20").unwrap();
+    assert_eq!(two.groups, 2);
+    assert_eq!(two.cats[0].counts, [3, 100]);
+    // tab-pasted and space-pasted thousands groups read as one count (M2 c)
+    assert_eq!(parse("Walk\t1 200\nCar\t950").unwrap().cats[0].counts, [1200]);
+    assert_eq!(parse("Walk 12 345\nCar 950").unwrap().cats[0].counts, [12345]);
+    // a decimal comma is refused, never read as two groups
+    let n = warnings(&with(&[("data", "Walk; 12,5")]));
+    assert!(n[0].contains("has a comma inside a number") && n[0].contains("12.5"), "{n:?}");
+    // and the advice never pads a thousands line with a ", 0" count
+    for d in ["Walk, 1,200\nCar, 2,500", "Walk 1,200\nCar 950", "Walk, 1,200\nCar, 950", "Walk\t1 200\nCar\t950"] {
+        for n in warnings(&with(&[("data", d)])) {
+            assert!(!n.contains(", 0"), "{d}: {n}");
+        }
+    }
+}
+
+#[test]
+fn retyping_the_figures_own_printed_counts_gives_the_same_chart() {
+    let data = "Walk, 1200\nCar, 2500\nBus, 3000";
+    let p = with(&[("data", data)]);
+    let printed: Vec<String> = texts(&render(&p)).into_iter().filter(|e| e.a("font-size").as_deref() == Some("12.60")).map(|e| e.text).collect();
+    assert_eq!(printed, ["1,200", "2,500", "3,000"], "the figure prints its counts with thousands commas");
+    let before = parse(data).unwrap();
+    let retyped: String = before.cats.iter().zip(&printed).map(|(c, l)| format!("{}, {l}\n", c.name)).collect();
+    let after = parse(&retyped).unwrap();
+    assert_eq!(after.cats, before.cats, "the printed form reads back as the same counts");
+    assert_eq!(after.groups, 1);
+}
+
+#[test]
+fn a_first_line_with_numbers_is_data_never_headings() {
+    // M1: a heading cell holds no number, so a row with a mistyped count is refused by line
+    // instead of becoming the headings and losing its category
+    for data in ["Walk, l2\nCar, 9", "Walk, 1O\nCar, 9", "A, inf\nB, 3", "A, NaN\nB, 3", "Fruit, Two-year-olds\nApple, 3"] {
+        let n = warnings(&with(&[("data", data)]));
+        assert_eq!(n.len(), 1, "{data}: {n:?}");
+        assert!(n[0].starts_with("Line 1 ("), "{data}: {}", n[0]);
+        assert!(n[0].contains("is not a number"), "{data}: {}", n[0]);
+        assert!(!n[0].contains("read as headings"), "{data}: {}", n[0]);
+        assert!(!n[0].contains(", 0"), "{data}: no count is invented: {}", n[0]);
+        assert!(!n[0].contains("change line"), "{data}: no data is changed: {}", n[0]);
+        assert!(parse(data).is_err(), "{data} is refused");
+    }
+    // a count then a word is a data row, and the number is the count
+    let data = "Walk, 12 students\nCar, 9\nBus, 6";
+    let n = warnings(&with(&[("data", data)]));
+    assert_eq!(n.len(), 1, "{n:?}");
+    assert!(n[0].contains("change line 1 to \u{201c}Walk, 12\u{201d}"), "{}", n[0]);
+    let t = parse("Walk, 12 students\nCar, 9\nBus, 6").unwrap_err();
+    assert!(t.contains("Walk, 12"), "{t}");
+    // a heading line still works when it really holds only words
+    let head = parse("Pet, Class A, Class B\nDog, 11, 8\nCat, 7, 9").unwrap();
+    assert_eq!(head.head.unwrap().2, ["Pet", "Class A", "Class B"]);
+}
+
+#[test]
 fn repeated_names_are_merged_and_noted() {
     let t = parse("Red, 12\nblue, 4\n  RED , 3\nBlue, 1").unwrap();
     assert_eq!(t.cats.len(), 2);
@@ -355,74 +430,150 @@ fn apply(note: &str, p: &mut Params) -> bool {
 
 /// Information notes: say what was done, with nothing to change.
 fn info_only(note: &str) -> bool {
-    note.contains("so it was read as headings") || note.ends_with("The exact percents add to 100%.")
+    note.contains("so it was read as headings")
 }
 
 /// Applies every fix until none is left; each applied note must go away and never come back.
-fn settle(p: &mut Params) -> usize {
+/// Stops at a refusal that offers no fix (nothing can be changed without inventing data) and
+/// returns that note.
+fn settle(p: &mut Params) -> (usize, Option<String>) {
     let mut seen: Vec<String> = Vec::new();
     for step in 0..40 {
         let notes = warnings(p);
         for n in &notes {
             assert!(!seen.contains(n), "a fixed note came back: {n:?}");
         }
-        let Some(n) = notes.iter().find(|n| !info_only(n)).cloned() else { return step };
-        assert!(apply(&n, p), "a note with no fix this test can apply: {n:?}");
+        let Some(n) = notes.iter().find(|n| !info_only(n)).cloned() else { return (step, None) };
+        if !apply(&n, p) {
+            return (step, Some(n));
+        }
         assert!(!warnings(p).contains(&n), "applying the fix left the note: {n:?}\ndata now {:?}", p.s("data"));
         seen.push(n);
     }
     panic!("fixes do not settle: {:?}", warnings(p));
 }
 
+/// What a state must reach once every recommended fix is applied: the pairs the teacher meant,
+/// or a refusal that names the line and offers no invented count.
+#[derive(Clone, Debug)]
+enum End {
+    /// At least one note, then a chart with these (name, counts) pairs.
+    Chart(Vec<(String, Vec<u64>)>),
+    /// Correct as typed: no note, and these pairs.
+    Quiet(Vec<(String, Vec<u64>)>),
+    /// Stays refused: the message contains this, and it offers no "change line" fix.
+    Refused(&'static str),
+}
+
+fn rows(v: &[(&str, &[u64])]) -> Vec<(String, Vec<u64>)> {
+    v.iter().map(|(n, c)| (n.to_string(), c.to_vec())).collect()
+}
+
+fn state_pairs(t: &Table) -> Vec<(String, Vec<u64>)> {
+    t.cats.iter().map(|c| (c.name.clone(), c.counts.clone())).collect()
+}
+
 #[test]
-fn every_refusal_and_note_has_a_fix_that_works_when_applied() {
+fn every_refusal_and_note_has_a_fix_that_keeps_the_meaning() {
     let long = "x".repeat(55);
-    let states: Vec<Vec<(&str, String)>> = vec![
-        vec![("data", "".into())],
-        vec![("data", "Red, twelve\nBlue, 3".into())],
-        vec![("data", "Red, 12 people\nBlue, 3".into())],
-        vec![("data", "Red, 25%\nBlue, 75%".into())],
-        vec![("data", "Red, -3\nBlue, 3".into())],
-        vec![("data", "Red, 12.5\nBlue, 3".into())],
-        vec![("data", "Red, 5e12\nBlue, 1e400".into())],
-        vec![("data", "Red, NaN\nBlue, inf".into())],
-        vec![("data", "Red\nBlue, 3\nGreen, 2".into())],
-        vec![("data", ", 12\nBlue, 3".into())],
-        vec![("data", "Grade 9 12\nGrade 10 7".into())],
-        vec![("data", "Red, 1, 2, 3\nBlue, 3, 4".into())],
-        vec![("data", "Red, 1, 2\nBlue, 3\nGreen, 4, 5".into())],
-        vec![("data", "Red, 1\nBlue, 3, 5".into())],
-        vec![("data", format!("{long}, 3\nBlue, 4"))],
-        vec![("data", (1..=45).map(|i| format!("C{i}, {}\n", (i * 7) % 10)).collect())],
-        vec![("data", "Red, 0\nBlue, 0".into())],
-        vec![("data", "Red, 1, 0\nBlue, 2, 0".into())],
-        vec![("data", "Red, 4\nred, 2\nRED, 1\nBlue, 3".into())],
-        vec![("data", "Red, 1\nBlue, 2\nGreen, 3\nGrey, 2".into()), ("measure", PERCENT.into())],
-        vec![("data", "A, 1\nB, 1\nC, 1".into()), ("measure", PERCENT.into())],
-        vec![("scale_auto", "false".into()), ("scale_min", "5".into()), ("scale_max", "8".into())],
-        vec![("scale_auto", "false".into()), ("scale_min", "9".into()), ("scale_max", "3".into())],
-        vec![("scale_auto", "false".into()), ("scale_min", "40".into()), ("scale_max", "30".into()), ("measure", PERCENT.into())],
-        vec![("order", PARETO.into()), ("scale_auto", "false".into())],
-        vec![("order", PARETO.into()), ("orient", "Horizontal".into())],
-        vec![("order", PARETO.into()), ("data", "Dog, 11, 8\nCat, 7, 9".into())],
-        vec![("values", "false".into())],
-        vec![("values", "false".into()), ("blank", BLANKS[2].into())],
-        vec![("title", "T".repeat(170))],
-        vec![("cat_title", "C".repeat(90)), ("val_title", "V".repeat(85))],
-        vec![("data", "Dog, 11, 8\nCat, 7, 9".into()), ("name1", "N".repeat(45))],
+    let shortened = "x".repeat(40);
+    let defaults_pairs = rows(&[("Walk", &[12]), ("Car", &[9]), ("Bus", &[6]), ("Bike", &[3])]);
+    let many45: String = (1..=45).map(|i| format!("C{i}, {}\n", (i * 7) % 10)).collect();
+    let combined = {
+        // the test's own reading of the rule the too-many message gives
+        let vals: Vec<u64> = (1..=45).map(|i| ((i * 7) % 10) as u64).collect();
+        let mut by: Vec<usize> = (0..45).collect();
+        by.sort_by(|&a, &b| vals[a].cmp(&vals[b]).then(b.cmp(&a)));
+        let gone = &by[..16];
+        let sum: u64 = gone.iter().map(|&i| vals[i]).sum();
+        let mut keep: Vec<usize> = (0..45).filter(|i| !gone.contains(i)).collect();
+        keep.sort();
+        let mut out: Vec<(String, Vec<u64>)> = keep.into_iter().map(|i| (format!("C{}", i + 1), vec![vals[i]])).collect();
+        out.push(("Other".into(), vec![sum]));
+        out
+    };
+    let one = |s: &str| vec![("data", s.to_string())];
+    let states: Vec<(Vec<(&str, String)>, End)> = vec![
+        (one(""), End::Chart(rows(&[("Walk", &[12])]))),
+        (one("Red, twelve\nBlue, 3"), End::Chart(rows(&[("Red", &[12]), ("Blue", &[3])]))),
+        (one("Red, 12 people\nBlue, 3"), End::Chart(rows(&[("Red", &[12]), ("Blue", &[3])]))),
+        (one("Red, 25%\nBlue, 75%"), End::Chart(rows(&[("Red", &[25]), ("Blue", &[75])]))),
+        (one("Red, -3\nBlue, 3"), End::Chart(rows(&[("Red", &[3]), ("Blue", &[3])]))),
+        (one("Red, 12.5\nBlue, 3"), End::Chart(rows(&[("Red", &[12]), ("Blue", &[3])]))),
+        (one("Red, NaN\nBlue, inf"), End::Refused("is not a number")),
+        (one("Red\nBlue, 3\nGreen, 2"), End::Chart(rows(&[("Blue", &[3]), ("Green", &[2])]))),
+        (one(", 12\nBlue, 3"), End::Chart(rows(&[("Category 1", &[12]), ("Blue", &[3])]))),
+        (one("Grade 9 12\nGrade 10 7"), End::Chart(rows(&[("Grade 9", &[12]), ("Grade 10", &[7])]))),
+        (one("Red, 1, 2, 3\nBlue, 3, 4"), End::Chart(rows(&[("Red", &[1, 2]), ("Blue", &[3, 4])]))),
+        (one("Red, 1, 2\nBlue, 3\nGreen, 4, 5"), End::Chart(rows(&[("Red", &[1, 2]), ("Blue", &[3, 0]), ("Green", &[4, 5])]))),
+        (one("Red, 1\nBlue, 3, 5"), End::Chart(rows(&[("Red", &[1]), ("Blue", &[3])]))),
+        (one(&format!("{long}, 3\nBlue, 4")), End::Chart(rows(&[(&shortened, &[3]), ("Blue", &[4])]))),
+        (one(&many45), End::Chart(combined)),
+        (one("Red, 0\nBlue, 0"), End::Chart(rows(&[("Red", &[1]), ("Blue", &[0])]))),
+        (one("Red, 1, 0\nBlue, 2, 0"), End::Chart(rows(&[("Red", &[1, 1]), ("Blue", &[2, 0])]))),
+        (one("Red, 4\nred, 2\nRED, 1\nBlue, 3"), End::Chart(rows(&[("Red", &[4]), ("Red 2", &[2]), ("Red 3", &[1]), ("Blue", &[3])]))),
+        (vec![("data", "Red, 1\nBlue, 2\nGreen, 3\nGrey, 2".into()), ("measure", PERCENT.into())], End::Chart(rows(&[("Red", &[1]), ("Blue", &[2]), ("Green", &[3]), ("Grey", &[2])]))),
+        (vec![("data", "A, 1\nB, 1\nC, 1".into()), ("measure", PERCENT.into())], End::Chart(rows(&[("A", &[1]), ("B", &[1]), ("C", &[1])]))),
+        (vec![("scale_auto", "false".into()), ("scale_min", "5".into()), ("scale_max", "8".into())], End::Chart(defaults_pairs.clone())),
+        (vec![("scale_auto", "false".into()), ("scale_min", "9".into()), ("scale_max", "3".into())], End::Chart(defaults_pairs.clone())),
+        (vec![("scale_auto", "false".into()), ("scale_min", "40".into()), ("scale_max", "30".into()), ("measure", PERCENT.into())], End::Chart(defaults_pairs.clone())),
+        (vec![("order", PARETO.into()), ("scale_auto", "false".into())], End::Chart(defaults_pairs.clone())),
+        (vec![("order", PARETO.into()), ("orient", "Horizontal".into())], End::Chart(defaults_pairs.clone())),
+        (vec![("order", PARETO.into()), ("data", "Dog, 11, 8\nCat, 7, 9".into())], End::Chart(rows(&[("Dog", &[11, 8]), ("Cat", &[7, 9])]))),
+        (vec![("values", "false".into())], End::Chart(defaults_pairs.clone())),
+        (vec![("values", "false".into()), ("blank", BLANKS[2].into())], End::Chart(defaults_pairs.clone())),
+        (vec![("title", "T".repeat(170))], End::Chart(defaults_pairs.clone())),
+        (vec![("cat_title", "C".repeat(90)), ("val_title", "V".repeat(85))], End::Chart(defaults_pairs.clone())),
+        (vec![("data", "Dog, 11, 8\nCat, 7, 9".into()), ("name1", "N".repeat(45))], End::Chart(rows(&[("Dog", &[11, 8]), ("Cat", &[7, 9])]))),
+        // J1: thousands separators are one count, never a second group
+        (one("Walk, 1,200\nCar, 2,500\nBus, 3,000"), End::Quiet(rows(&[("Walk", &[1200]), ("Car", &[2500]), ("Bus", &[3000])]))),
+        (one("Walk, 1,200\nCar, 950"), End::Quiet(rows(&[("Walk", &[1200]), ("Car", &[950])]))),
+        (one("Walk 1,200\nCar 950"), End::Quiet(rows(&[("Walk", &[1200]), ("Car", &[950])]))),
+        (one("Walk\t1 200\nCar\t950"), End::Quiet(rows(&[("Walk", &[1200]), ("Car", &[950])]))),
+        // J1: a decimal comma is refused, never read as two groups
+        (one("Walk; 12,5"), End::Refused("has a comma inside a number")),
+        // M2 (a): too large is refused for the whole table, not rescaled line by line
+        (one("A, 1e15\nB, 3"), End::Refused("divide every line")),
+        // M2 (b): counts written as words use the number-word list
+        (one("Walk, twelve\nCar, nine"), End::Chart(rows(&[("Walk", &[12]), ("Car", &[9])]))),
+        // M2 (d): a name is not a count, and no count is invented for it
+        (one("Fruit, Two-year-olds\nApple, 3"), End::Refused("is not a number")),
+        // M1: these are data rows, not a headings line
+        (one("Walk, 12 students\nCar, 9\nBus, 6"), End::Chart(rows(&[("Walk", &[12]), ("Car", &[9]), ("Bus", &[6])]))),
+        (one("Walk, 1 200\nCar, 950"), End::Quiet(rows(&[("Walk", &[1200]), ("Car", &[950])]))),
+        (one("Walk, l2\nCar, 3"), End::Refused("is not a number")),
+        (one("Walk, 1O\nCar, 3"), End::Refused("is not a number")),
+        (one("A, inf\nB, 3"), End::Refused("is not a number")),
+        (one("X, N students\nY, M students"), End::Refused("is not a number")),
     ];
     let mut total_steps = 0;
-    for st in states {
+    for (st, want) in states {
         let pairs: Vec<(&str, &str)> = st.iter().map(|(k, v)| (*k, v.as_str())).collect();
         let mut p = with(&pairs);
         let before = warnings(&p);
-        assert!(!before.is_empty(), "{pairs:?} raises a note");
-        total_steps += settle(&mut p);
-        let svg = render(&p);
-        assert!(svg.contains("<rect x="), "after the fixes the chart draws bars: {pairs:?} -> {:?}", p.s("data"));
-        assert!(parse(p.s("data")).is_ok());
+        match &want {
+            End::Quiet(_) => assert!(before.is_empty(), "{pairs:?} is read as typed, not noted: {before:?}"),
+            _ => assert!(!before.is_empty(), "{pairs:?} raises a note"),
+        }
+        let (steps, stuck) = settle(&mut p);
+        total_steps += steps;
+        match &want {
+            End::Chart(w) | End::Quiet(w) => {
+                assert!(stuck.is_none(), "{pairs:?} stops at a refusal: {stuck:?}");
+                let t = parse(p.s("data")).unwrap_or_else(|e| panic!("{pairs:?} -> {:?}: {e}", p.s("data")));
+                assert_eq!(&state_pairs(&t), w, "{pairs:?} -> {:?}", p.s("data"));
+                assert!(render(&p).contains("<rect x="), "{pairs:?} draws bars after the fixes");
+            }
+            End::Refused(sub) => {
+                let msg = stuck.unwrap_or_else(|| panic!("{pairs:?} was changed instead of refused"));
+                assert!(msg.contains(sub), "{pairs:?}: {msg}");
+                assert!(!msg.contains("change line") && !msg.contains("Change line"), "{pairs:?}: a refusal must not change the data: {msg}");
+                assert!(!msg.contains(", 0"), "{pairs:?}: a refusal must not invent a count: {msg}");
+                assert!(parse(p.s("data")).is_err(), "{pairs:?} still refuses");
+            }
+        }
     }
-    assert!(total_steps >= 33, "{total_steps}");
+    assert!(total_steps >= 38, "every state in this table needed a fix: {total_steps}");
 }
 
 #[test]
@@ -497,6 +648,52 @@ fn sorting_is_stable_and_pareto_is_tallest_first() {
     assert_eq!(names(order(&t, false, "As typed")), "ABCDE");
     let t2 = parse("b, 1\nA, 2\nc, 3").unwrap();
     assert_eq!(order(&t2, false, "A to Z"), [1, 0, 2]);
+}
+
+#[test]
+fn a_to_z_is_case_insensitive_and_natural() {
+    // M8: case does not decide the order, and 2 comes before 10 (LOW 3)
+    let t = parse("Zebra, 1\napple, 2\nEclair, 3\nItem 10, 4\nItem 2, 5").unwrap();
+    let names: Vec<String> = order(&t, false, "A to Z").into_iter().map(|i| t.cats[i].name.clone()).collect();
+    assert_eq!(names, ["apple", "Eclair", "Item 2", "Item 10", "Zebra"]);
+    // a tie falls back to the typed order, whatever order the sort happens to see
+    let t = parse("b, 1\nBeta, 2\nA, 3").unwrap();
+    assert_eq!(order(&t, false, "A to Z"), [2, 0, 1]);
+}
+
+#[test]
+fn two_groups_sort_by_the_sum_of_both_bars() {
+    // M23: group 1 alone would put A first; the two bars together put B first
+    let t = parse("A, 10, 0\nB, 4, 9\nC, 1, 1").unwrap();
+    assert_eq!(order(&t, false, "Tallest first"), [1, 0, 2]);
+    assert_eq!(order(&t, false, "Shortest first"), [2, 0, 1]);
+    // relative frequency is each group's own percent, so the order follows those too
+    assert_eq!(order(&t, true, "Tallest first"), [1, 0, 2], "B is 27% + 90%");
+}
+
+#[test]
+fn equal_bars_keep_their_typed_order_in_both_measures() {
+    // LOW 1: Alpha and Beta both sum to 15/18 of a percent-pair, but as f64 their sums are
+    // 83.33333333333333 and 83.33333333333334, which a float key sorts the other way round. An
+    // exact integer key (c0*T1 + c1*T0) ties them, so the typed order holds.
+    let t = parse("Alpha, 5, 0\nBeta, 1, 2\nGamma, 0, 1").unwrap();
+    assert_eq!(order(&t, true, "Tallest first"), [0, 1, 2]);
+    assert_eq!(order(&t, true, "Shortest first"), [2, 0, 1]);
+    assert_eq!(order(&t, false, "Tallest first"), [0, 1, 2], "5, 3, 1 by count");
+    // one more in either group breaks the tie
+    let t = parse("Alpha, 5, 0\nBeta, 2, 2\nGamma, 0, 1").unwrap();
+    assert_eq!(order(&t, true, "Tallest first")[0], 1, "Beta is now above Alpha");
+}
+
+#[test]
+fn thirty_one_categories_is_refused_with_the_rule_to_combine() {
+    // M20: the cap is 30 categories, and 31 is refused rather than drawn
+    let data: String = (1..=31).map(|i| format!("C{i}, {i}\n")).collect();
+    assert_eq!(MAX_CATS, 30);
+    let e = parse(&data).unwrap_err();
+    assert!(e.contains("There are 31 categories") && e.contains("at most 30"), "{e}");
+    let thirty: String = (1..=30).map(|i| format!("C{i}, {i}\n")).collect();
+    assert_eq!(parse(&thirty).unwrap().cats.len(), 30);
 }
 
 /// Bars read back from the SVG: (x, y, w, h, fill) of every series-filled rect that is not a
@@ -587,12 +784,125 @@ fn pareto_line_climbs_to_100_percent_at_the_last_bar() {
 }
 
 #[test]
-fn rounding_note_offers_only_a_decimals_setting_that_adds_to_100() {
+fn pareto_right_axis_ticks_sit_exactly_on_their_percents() {
+    // M10: the right axis is 0-100% over the same height as the bars, so every tick is exactly
+    // pc/100 up from the bottom, and its number is on it
+    let p = with(&[("data", "Forgot, 14\nNo time, 9\nToo hard, 5\nSick, 3\nOther, 2"), ("order", PARETO)]);
+    let svg = render(&p);
+    let es = elements(&svg);
+    let axes: Vec<El> = es.iter().filter(|e| e.tag == "line" && e.n("x1") == e.n("x2") && e.n("stroke-width") == 2.0).cloned().collect();
+    assert_eq!(axes.len(), 2, "the value axis and the cumulative axis");
+    let right = axes.iter().max_by(|a, b| a.n("x1").partial_cmp(&b.n("x1")).unwrap()).unwrap();
+    let (x, top, bottom) = (right.n("x1"), right.n("y1"), right.n("y2"));
+    let mut ticks: Vec<f64> = es
+        .iter()
+        .filter(|e| e.tag == "line" && e.n("stroke-width") == 1.6 && (e.n("y1") - e.n("y2")).abs() < 1e-9 && (e.n("x1") - x).abs() < 0.01)
+        .map(|e| e.n("y1"))
+        .collect();
+    ticks.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    assert_eq!(ticks.len(), 6, "0, 20, 40, 60, 80 and 100%");
+    let texts_here: Vec<El> = texts(&svg);
+    for (i, pc) in [0.0, 20.0, 40.0, 60.0, 80.0, 100.0].iter().enumerate() {
+        let want = bottom - pc / 100.0 * (bottom - top);
+        let got = ticks[5 - i];
+        assert!((got - want).abs() < 0.011, "{pc}% tick at {got}, expected {want}");
+        let label = texts_here.iter().find(|e| e.text == format!("{pc:.0}%")).unwrap_or_else(|| panic!("a {pc:.0}% number"));
+        assert!((label.n("y") - (want + 14.0 * 0.35)).abs() < 0.02, "the {pc:.0}% number sits on its tick");
+        assert!((label.n("x") - (x + 10.0)).abs() < 0.01);
+    }
+    assert!(texts_here.iter().any(|e| e.text == "Cumulative percent" && e.raw.contains("rotate(-90)")));
+    // LOW 5: the student copy has no cumulative axis, because no question asks about the line
+    let mut student = p.clone();
+    student.set_b(SHOW_ANSWERS, false);
+    let stu = render(&student);
+    assert_eq!(size(&stu), size(&svg), "the same size, so the two copies line up");
+    assert!(!stu.contains("Cumulative percent") && !texts(&stu).iter().any(|e| e.text.ends_with('%') && e.text.len() <= 5 && e.n("x") > x - 1.0));
+}
+
+#[test]
+fn question_answers_are_recomputed_independently() {
+    // M19/M24: every answer the key prints is checked against this test's own arithmetic, at
+    // each decimals setting, including ties, totals with thousands commas and zero bars
+    let cases = ["Walk, 12\nCar, 9\nBus, 6\nNone, 0\nOther, 9", "Dog, 11, 8\nCat, 7, 9\nFish, 3, 2", "A, 5\nB, 5\nC, 5", "Big, 1234567\nSmall, 3"];
+    let commas = |v: u64| {
+        let s = v.to_string();
+        let mut out = String::new();
+        for (i, ch) in s.chars().enumerate() {
+            if i > 0 && (s.len() - i) % 3 == 0 {
+                out.push(',');
+            }
+            out.push(ch);
+        }
+        out
+    };
+    let pct = |c: u64, total: u64, d: u32| {
+        let t = total.max(1) as u128;
+        let s = (2 * c as u128 * 100 * 10u128.pow(d) + t) / (2 * t);
+        let p = 10u128.pow(d);
+        if d == 0 { format!("{s}%") } else { format!("{}.{:0w$}%", s / p, s % p, w = d as usize) }
+    };
+    let and = |v: &[String]| match v.len() {
+        0 => String::new(),
+        1 => v[0].clone(),
+        n => format!("{} and {}", v[..n - 1].join(", "), v[n - 1]),
+    };
+    for data in cases {
+        let t = parse(data).unwrap();
+        for d in 0..=2i64 {
+            let mut p = with(&[("data", data), ("questions", "true")]);
+            p.set_i("decimals", d);
+            let svg = render(&p);
+            let ans: Vec<String> = texts(&svg).into_iter().filter(|e| e.n("x") == 36.0).map(|e| e.text).collect();
+            assert_eq!(ans.len(), 3, "{data}: three answers");
+            for a in &ans {
+                assert!(a.starts_with("Answer: "), "{a}");
+            }
+            let totals: Vec<u64> = (0..t.groups).map(|g| t.cats.iter().map(|c| c.counts[g]).sum()).collect();
+            let most: Vec<String> = (0..t.groups)
+                .map(|g| {
+                    let m = t.cats.iter().map(|c| c.counts[g]).max().unwrap();
+                    let names: Vec<String> = t.cats.iter().filter(|c| c.counts[g] == m).map(|c| c.name.clone()).collect();
+                    if names.len() > 1 { format!("{} (tied)", and(&names)) } else { names[0].clone() }
+                })
+                .collect();
+            let per = |v: Vec<String>| if t.groups == 1 { v[0].clone() } else { format!("Group 1: {}; Group 2: {}", v[0], v[1]) };
+            assert_eq!(ans[0], format!("Answer: {}", per(most)), "{data} decimals {d}");
+            assert_eq!(ans[1], format!("Answer: {}", per(totals.iter().map(|v| commas(*v)).collect())), "{data} decimals {d}");
+            let first = &t.cats[0];
+            let q3: Vec<String> = (0..t.groups).map(|g| pct(first.counts[g], totals[g], d as u32)).collect();
+            assert_eq!(ans[2], format!("Answer: {}", per(q3)), "{data} decimals {d}");
+        }
+    }
+    // a three-way tie names all three, and the question asks about the first drawn category
+    let p = with(&[("data", "A, 5\nB, 5\nC, 5"), ("questions", "true")]);
+    let ans: Vec<String> = texts(&render(&p)).into_iter().filter(|e| e.n("x") == 36.0).map(|e| e.text).collect();
+    assert_eq!(ans[0], "Answer: A, B and C (tied)");
+    assert_eq!(ans[1], "Answer: 15");
+    assert_eq!(ans[2], "Answer: 33%");
+    // Q3 follows Decimals in percents, and percents are of each group's own total
+    let mut p = with(&[("data", "Dog, 11, 8\nCat, 7, 9\nFish, 3, 2"), ("questions", "true")]);
+    p.set_i("decimals", 2);
+    let ans: Vec<String> = texts(&render(&p)).into_iter().filter(|e| e.n("x") == 36.0).map(|e| e.text).collect();
+    assert_eq!(ans[2], "Answer: Group 1: 52.38%; Group 2: 42.11%", "11 of 21 and 8 of 19");
+}
+
+#[test]
+fn rounding_note_offers_only_a_setting_that_adds_to_100() {
     let thirds = warnings(&with(&[("data", "A, 1\nB, 1\nC, 1"), ("measure", PERCENT)]));
-    assert_eq!(thirds, ["The printed percents add to 99%, not 100%, because each is rounded. The exact percents add to 100%."]);
+    assert_eq!(
+        thirds,
+        ["The printed percents add to 99%, not 100%, because each is rounded. Choose \u{201c}Frequency (count)\u{201d} for \u{201c}Bar height\u{201d} so the values on the bars add up exactly."]
+    );
     let eighths = warnings(&with(&[("data", "A, 1\nB, 2\nC, 3\nD, 2"), ("measure", PERCENT)]));
     assert_eq!(eighths, ["The printed percents add to 101%, not 100%, because each is rounded. Set \u{201c}Decimals in percents\u{201d} to 1."]);
     assert!(warnings(&with(&[("data", "A, 1\nB, 2\nC, 3\nD, 2"), ("measure", PERCENT), ("decimals", "1")])).is_empty());
+    // LOW 7: whatever it advises clears it, and the thirds note has a real action, not a remark
+    for (data, d) in [("A, 1\nB, 1\nC, 1", "0"), ("A, 1\nB, 2\nC, 3\nD, 2", "0")] {
+        let mut p = with(&[("data", data), ("measure", PERCENT), ("decimals", d)]);
+        let (steps, stuck) = settle(&mut p);
+        assert!(steps >= 1 && stuck.is_none(), "{data}: {steps} {stuck:?}");
+        assert!(warnings(&p).is_empty(), "{data}: {:?}", warnings(&p));
+    }
 }
 
 #[test]
@@ -603,6 +913,12 @@ fn truncated_axis_and_cut_off_bars_are_flagged() {
     assert!(n.iter().any(|n| n.contains("Brand A") && n.contains("cut off") && n.contains("at least 46")), "{n:?}");
     let ok = with(&[("scale_auto", "false"), ("scale_min", "0"), ("scale_max", "20")]);
     assert!(warnings(&ok).is_empty(), "a manual scale from 0 that holds every bar is fine");
+    // M14: any start above 0 cuts the bars short, including one below 1
+    let small = with(&[("data", "Brand A, 46\nBrand B, 44\nBrand C, 42"), ("scale_auto", "false"), ("scale_min", "0.5"), ("scale_max", "50")]);
+    let n = warnings(&small);
+    assert!(n.iter().any(|n| n.contains("starts at 0.5, not 0")), "a start of 0.5 is still a truncated axis: {n:?}");
+    let tiny = with(&[("data", "Brand A, 46\nBrand B, 44"), ("scale_auto", "false"), ("scale_min", "0.25"), ("scale_max", "20")]);
+    assert!(warnings(&tiny).iter().any(|n| n.contains("starts at 0.25, not 0")), "{:?}", warnings(&tiny));
 }
 
 // ───────────────────────── layout ─────────────────────────
@@ -676,6 +992,34 @@ fn value_labels_sit_in_their_own_bars_column() {
                 }
             }
         }
+    }
+}
+
+#[test]
+fn a_value_label_clears_its_bar_by_five_pixels() {
+    // M15: the label's box sits 5 px above its bar (and 6 px past its end when the bars are
+    // horizontal), not 1 px and not on it
+    let data = "Walk, 12\nCar, 9\nBus, 6\nBike, 3";
+    let svg = render(&with(&[("data", data)]));
+    let b = bars(&svg, 1.0);
+    let labels: Vec<(El, Bx)> = ink(&svg).into_iter().filter(|(e, _)| e.a("font-size").as_deref() == Some("12.60")).collect();
+    assert_eq!(labels.len(), 4);
+    for (e, bx) in &labels {
+        let cx = (bx.0 + bx.2) / 2.0;
+        let bar = b.iter().find(|r| (r.0 + r.2 / 2.0 - cx).abs() < 1.5).unwrap_or_else(|| panic!("a bar under {:?}", e.text));
+        // digits have no descender: their ink bottom is the text's baseline, which is DES below
+        // the box bottom, so the ink clears the bar by 5 + DES * 12.6 px
+        let gap = bar.1 - bx.3;
+        assert!((gap - (5.0 + 0.3 * 12.6)).abs() < 0.6, "{:?} is {gap} px above its bar", e.text);
+    }
+    let svg = render(&with(&[("data", data), ("orient", "Horizontal")]));
+    let b = bars(&svg, 1.0);
+    let labels: Vec<(El, Bx)> = ink(&svg).into_iter().filter(|(e, _)| e.a("font-size").as_deref() == Some("12.60")).collect();
+    for (e, bx) in &labels {
+        let cy = (bx.1 + bx.3) / 2.0;
+        let bar = b.iter().find(|r| cy > r.1 && cy < r.1 + r.3).unwrap_or_else(|| panic!("a bar beside {:?}", e.text));
+        let gap = bx.0 - (bar.0 + bar.2);
+        assert!((5.0..=7.5).contains(&gap), "{:?} starts {gap} px past its bar", e.text);
     }
 }
 
@@ -761,6 +1105,17 @@ fn student_copies_leak_nothing_anywhere_in_the_source() {
                                 let qa: Vec<String> = ktexts.iter().filter(|e| e.n("x") == 36.0).map(|e| e.text.clone()).collect();
                                 assert!(qa[0].starts_with("Answer: "), "{tag}");
                                 answers.extend(qa.iter().cloned());
+                                // LOW 5: a Pareto key's right axis belongs to the cumulative line, so
+                                // the student copy has neither the numbers nor the axis title
+                                if order == PARETO && t.groups == 1 && orient == "Vertical" {
+                                    answers.extend(
+                                        ktexts
+                                            .iter()
+                                            .filter(|e| e.a("text-anchor").as_deref() == Some("start") && (0..=100).step_by(20).any(|pc| e.text == format!("{pc}%")))
+                                            .map(|e| e.text.clone()),
+                                    );
+                                    answers.push("Cumulative percent".into());
+                                }
                                 let mut expect: Vec<String> = ktexts.iter().map(|e| e.text.clone()).collect();
                                 for a in &answers {
                                     let i = expect.iter().position(|x| x == a).unwrap_or_else(|| panic!("{tag}: the key shows {a:?}"));

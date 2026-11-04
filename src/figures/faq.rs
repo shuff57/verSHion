@@ -2538,7 +2538,7 @@ const BAR_CHART: &[Faq] = &[
     },
     Faq {
         q: "How do I type the data?",
-        a: "One category per line: its name, a comma, then how many (Walk, 12). A second count after another comma (Walk, 12, 9) draws two groups side by side. A first line of headings (Way, Boys, Girls) names the category axis and the groups. A name typed twice is one category: its counts are added and the editor says so. Counts must be whole numbers, 0 or more.",
+        a: "One category per line: its name, a comma, then how many (Walk, 12). A second count after another comma (Walk, 12, 9) draws two groups side by side. A first line of headings (Way, Boys, Girls) names the category axis and the groups. A comma with no space after it, between groups of three digits, is a thousands separator, so Walk, 1,200 is 1200 and Walk, 1,200, 3 is 1200 and 3. A name typed twice is one category: its counts are added and the editor says so. Counts must be whole numbers, 0 or more; a count written as a word (twelve) or with a word after it (12 students) is refused with the line named.",
     },
     Faq {
         q: "Should the bars show frequency or relative frequency?",
@@ -2550,7 +2550,7 @@ const BAR_CHART: &[Faq] = &[
     },
     Faq {
         q: "How do I make a student copy?",
-        a: "Turn off Show answers. Student copy leaves out picks what students supply: the values on the bars (they read them from the scale), the bars (they draw them from a table of the counts, and fill in the totals and percents), or the scale numbers (they number the axis from the values). The cumulative line and the answers to the optional questions are left out too. Student + key saves both.",
+        a: "Turn off Show answers. The “Student copy leaves out” control picks what students supply: the values on the bars (they read them from the scale), the bars (they draw them from a table of the counts, and fill in the totals and percents), or the scale numbers (they number the axis from the values). The cumulative line, its axis and the answers to the optional questions are left out too. Student + key saves both.",
     },
     Faq {
         q: "Why does the editor warn when the scale does not start at 0?",
