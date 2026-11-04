@@ -501,8 +501,8 @@ fn numbers_are_read_exactly_and_the_ambiguous_are_refused() {
     assert_eq!(ok("+7"), Ok((7.0, "7".to_string())));
     assert_eq!(ok("0.000000001"), Ok((1e-9, "0.000000001".to_string())));
     assert_eq!(ok(""), Err(Bad::Empty));
-    assert_eq!(ok("1,000"), Err(Bad::Ambiguous("1".into(), "000".into(), false)));
-    assert_eq!(super::parse("\u{2212}1,500", &[]), Err(Bad::Ambiguous("1".into(), "500".into(), true)));
+    assert_eq!(ok("1,000"), Err(Bad::Ambiguous("1".into(), "000".into(), false, None)));
+    assert_eq!(super::parse("\u{2212}1,500", &[]), Err(Bad::Ambiguous("1".into(), "500".into(), true, None)));
     // a number with a unit this box does not take is a wrong unit, not "not a number"
     assert_eq!(ok("10 mg"), Err(Bad::Unit("mg".into())));
     assert_eq!(super::parse("400 ppm", &["%", "percent"]), Err(Bad::Unit("ppm".into())));
@@ -1047,11 +1047,20 @@ fn the_rate_at_p_is_rounded_half_up_and_exact() {
     // exact halves: the hyperbola with decimal inputs, counted in integers
     let cases = [("1", "3", "1", 1u32, "0.3"), ("10", "10", "10", 0, "5"), ("7", "20", "13", 1, "2.8"), ("3", "10", "5", 0, "1"), ("5", "10", "10", 0, "3"), ("1", "5", "5", 3, "0.500"), ("9", "8", "8", 1, "4.5")];
     for (pm, xv, mk, dec, want) in cases {
-        let key = render_of(&[&graph_set("Light intensity", pm, xv, mk)[..], &[b("show_parts", false), b("show_io", false), b("show_shuttle", false), b("show_stages", false), s("dec", &dec.to_string()), ("dec", Value::I(dec as i64))]].concat());
-        let txt = ink_texts(&key).into_iter().map(|t| t.0).find(|t| t.starts_with("Rate at P")).unwrap();
-        assert_eq!(txt, format!("Rate at P (x = {mk} %): {want} arbitrary units"), "{pm} {xv} {mk}");
+        let l: Vec<(&'static str, Value)> = [&graph_set("Light intensity", pm, xv, mk)[..], &[b("show_parts", false), b("show_io", false), b("show_shuttle", false), b("show_stages", false), ("dec", Value::I(dec as i64))]].concat();
+        let cv = read_graph(&with(&l)).unwrap();
+        let m = cv.mark.unwrap();
+        let (lo, hi, _, rate) = cv.accept(&m, dec as usize);
+        let (lof, hif) = (lo.parse::<f64>().unwrap(), hi.parse::<f64>().unwrap());
+        let txt = ink_texts(&render_of(&l)).into_iter().map(|t| t.0).find(|t| t.starts_with("Rate at P")).unwrap();
+        assert_eq!(txt, format!("Rate at P (x = {mk} %): {rate} arbitrary units"), "{pm} {xv} {mk}");
+        // the rounding itself is half up, and the key prints that number unless so coarse a rounding would fall
+        // outside the band it accepts (then it prints one more decimal: the key never refuses its own number)
         let (n, d) = (super::parse(pm, &[]).unwrap().d * super::parse(mk, &[]).unwrap().d, super::parse(xv, &[]).unwrap().d + super::parse(mk, &[]).unwrap().d);
-        assert_eq!(dec_round_half_up(n, d * SCALE, dec), want);
+        assert_eq!(dec_round_half_up(n, d * SCALE, dec), want, "{pm} {xv} {mk}");
+        let p = rate.parse::<f64>().unwrap();
+        assert!(p >= lof - 1e-9 && p <= hif + 1e-9, "{pm} {xv} {mk}: the key prints {rate} but accepts {lo} .. {hi}");
+        if want.parse::<f64>().map_or(false, |w| w >= lof - 1e-9 && w <= hif + 1e-9) { assert_eq!(rate, want, "{pm} {xv} {mk}: the key printed {rate} instead of the rounded {want}"); }
     }
     // 10,000 decimals: the printed value is the exact half-up rounding, never the float's
     let mut r = Rng::new(7);
@@ -1060,11 +1069,21 @@ fn the_rate_at_p_is_rounded_half_up_and_exact() {
         let xv = format!("{}.{}", 3 + r.below(17), r.below(10));
         let mk = format!("{}.{}", r.below(100), r.below(100));
         let dec = r.below(4) as u32;
-        let svg = render_of(&[&graph_set("Light intensity", &pm, &xv, &mk)[..], &[b("show_parts", false), b("show_io", false), b("show_shuttle", false), b("show_stages", false), ("dec", Value::I(dec as i64))]].concat());
+        let l: Vec<(&'static str, Value)> = [&graph_set("Light intensity", &pm, &xv, &mk)[..], &[b("show_parts", false), b("show_io", false), b("show_shuttle", false), b("show_stages", false), ("dec", Value::I(dec as i64))]].concat();
+        let cv = read_graph(&with(&l)).unwrap();
+        let m = cv.mark.unwrap();
+        let (lo, hi, _, rate) = cv.accept(&m, dec as usize);
+        let (lof, hif) = (lo.parse::<f64>().unwrap(), hi.parse::<f64>().unwrap());
+        let svg = render_of(&l);
         let txt = ink_texts(&svg).into_iter().map(|t| t.0).find(|t| t.starts_with("Rate at P")).unwrap_or_else(|| panic!("{pm} {xv} {mk}: {:?}", notes(&graph_set("Light intensity", &pm, &xv, &mk))));
         let (a, bb, c) = (super::parse(&pm, &[]).unwrap(), super::parse(&xv, &[]).unwrap(), super::parse(&mk, &[]).unwrap());
         let want = dec_round_half_up(a.d * c.d, (bb.d + c.d) * SCALE, dec);
-        assert!(txt.ends_with(&format!(": {want} arbitrary units")), "{i}: {pm} {xv} {mk} dec {dec}: {txt:?} wanted {want}");
+        // the key prints the exact half-up rounding, unless so coarse a rounding would fall outside the band it
+        // accepts, when it prints one more decimal (and that number is inside the band)
+        assert!(txt.ends_with(&format!(": {rate} arbitrary units")), "{i}: {pm} {xv} {mk} dec {dec}: {txt:?} wanted {rate}");
+        let p = rate.parse::<f64>().unwrap();
+        assert!(p >= lof - 1e-9 && p <= hif + 1e-9, "{i}: {pm} {xv} {mk} dec {dec}: the key prints {rate} but accepts {lo} .. {hi}");
+        if rate != want { assert!(!(want.parse::<f64>().map_or(false, |w| w >= lof - 1e-9 && w <= hif + 1e-9)), "{i}: {pm} {xv} {mk} dec {dec}: the key printed {rate} instead of the rounded {want}, though {want} is inside {lo} .. {hi}"); }
     }
     // beyond the end of the temperature curve P reads zero
     let t = render_of(&[&graph_set("Temperature", "10", "20", "32")[..], &[b("show_parts", false), b("show_io", false), b("show_shuttle", false), b("show_stages", false)]].concat());
@@ -1502,8 +1521,9 @@ fn the_rate_axis_has_fine_gridlines_and_the_key_states_the_range_to_accept() {
             }
         }
     }
-    // the accepted range: from the fine gridline at or below the exact rate to the next one up, in units, in the
-    // key, for every axis and mark (MED 2: it has to hold the two gridlines the student is told to read between)
+    // the accepted range: the fine gridline either side of the exact rate, in units, in the key, for every axis
+    // and mark (MED 2: it has to hold the gridlines the student is told to read between), and the rate the key
+    // prints at every decimals setting is inside it (the round-3 MED: the key never refuses its own number)
     for ax in AXES_ALL {
         let axis = Axis::of(ax);
         for pmax in ["1", "6.5", "10", "37", "100"] {
@@ -1511,30 +1531,44 @@ fn the_rate_axis_has_fine_gridlines_and_the_key_states_the_range_to_accept() {
                 let l = gset(ax, &[s("pmax", pmax), s("mark", mark), s("xval", ""), b(SHOW_ANSWERS, true)]);
                 let Ok(cv) = read_graph(&with(&l)) else { continue };
                 let m = cv.mark.unwrap();
-                let (lo, hi, minor) = cv.accept(&m);
                 let (top, step) = y_axis(cv.pmax.v);
                 let fine = step / minor_divisions(step) as f64;
-                assert_eq!(minor, show(fine));
-                let (lof, hif): (f64, f64) = (lo.parse().unwrap(), hi.parse().unwrap());
-                // the printed ends are the two fine gridlines themselves, so neither drifts by a rounding step
-                assert_eq!(lo, show(lof));
-                assert_eq!(hi, show(hif));
-                assert!((hif - lof - fine).abs() < 1e-9 && (lof / fine - (lof / fine).round()).abs() < 1e-9 && (hif / fine - (hif / fine).round()).abs() < 1e-9, "{ax} {pmax} {mark}: {lo} .. {hi} are not one fine spacing of gridlines apart");
-                // the exact rate and every gridline within half a fine spacing of it are inside
                 let (n, d) = cv.frac(&m);
                 let exact = n as f64 / d as f64;
-                assert!(lof <= hif && lof <= exact + 1e-9 && exact <= hif + 1e-9, "{ax} {pmax} {mark}: the exact rate {exact} is outside {lo} .. {hi}");
-                let k0 = (exact / fine).floor() as i64 - 2;
-                for k in (k0..k0 + 5).filter(|k| *k >= 0) {
-                    let g = k as f64 * fine;
-                    if (g - exact).abs() <= fine / 2.0 + 1e-9 { assert!(g >= lof - 1e-9 && g <= hif + 1e-9, "{ax} {pmax} {mark}: the gridline {g} is within half a spacing of {exact} but outside {lo} .. {hi}"); }
+                let on_line = (exact / fine - (exact / fine).round()).abs() < 1e-9;
+                let below = (exact / fine).floor() * fine;
+                let (want_lo, want_hi) = if on_line { ((below - fine).max(0.0), below + fine) } else { (below, below + fine) };
+                for dec in 0usize..=3 {
+                    let (lo, hi, minor, rate) = cv.accept(&m, dec);
+                    assert_eq!(minor, show(fine));
+                    let (lof, hif): (f64, f64) = (lo.parse().unwrap(), hi.parse().unwrap());
+                    // the printed ends are fine gridlines themselves, so neither drifts by a rounding step
+                    assert_eq!((lo.clone(), hi.clone()), (show(lof), show(hif)), "{ax} {pmax} {mark} dec {dec}");
+                    assert!((lof / fine - (lof / fine).round()).abs() < 1e-9 && (hif / fine - (hif / fine).round()).abs() < 1e-9, "{ax} {pmax} {mark}: {lo} .. {hi} are not gridline values");
+                    // the gridline below and the one above (two spacings wide when the rate sits exactly on a gridline)
+                    assert!((lof - want_lo).abs() < 1e-9 && (hif - want_hi).abs() < 1e-9, "{ax} {pmax} {mark} dec {dec}: {lo} .. {hi}, wanted {want_lo} .. {want_hi} (on the line: {on_line})");
+                    // the exact rate, every gridline within half a spacing of it, and the gridlines either side are inside
+                    assert!(lof <= exact + 1e-9 && exact <= hif + 1e-9, "{ax} {pmax} {mark}: the exact rate {exact} is outside {lo} .. {hi}");
+                    let k0 = (exact / fine).floor() as i64 - 2;
+                    for k in (k0..k0 + 5).filter(|k| *k >= 0) {
+                        let g = k as f64 * fine;
+                        if (g - exact).abs() <= fine / 2.0 + 1e-9 { assert!(g >= lof - 1e-9 && g <= hif + 1e-9, "{ax} {pmax} {mark}: the gridline {g} is within half a spacing of {exact} but outside {lo} .. {hi}"); }
+                    }
+                    for g in [(exact / fine).floor() * fine, ((exact / fine).floor() + 1.0) * fine] {
+                        if g >= 0.0 { assert!(g >= lof - 1e-9 && g <= hif + 1e-9, "{ax} {pmax} {mark}: the neighbour {g} of {exact} is outside {lo} .. {hi}"); }
+                    }
+                    // the key's own number is inside its own band, which is what a student may write
+                    let p: f64 = rate.parse().unwrap();
+                    assert!(p >= lof - 1e-9 && p <= hif + 1e-9, "{ax} {pmax} {mark} dec {dec}: the key prints {rate} but accepts {lo} .. {hi}");
+                    // the band stays on the axis
+                    assert!(hif <= top + 1e-9, "{ax} {pmax} {mark}: {hi} is above the top of the axis ({top})");
                 }
-                // the band stays on the axis
-                assert!(hif <= top + 1e-9, "{ax} {pmax} {mark}: {hi} is above the top of the axis ({top})");
+                let (lo, hi, minor, rate) = cv.accept(&m, 1);
                 let svg = render_of(&l);
                 let all = key_lines(&svg).replace('\n', " ");
                 assert!(all.contains(&format!("accept any value from {lo} to {hi} arbitrary units")), "{ax} {pmax} {mark}: {all}");
-                assert!(all.contains(&format!("fine gridlines are {minor} apart")), "{ax} {pmax} {mark}");
+                assert!(all.contains(&format!("({minor} apart)")), "{ax} {pmax} {mark}");
+                assert!(all.contains(&format!("): {rate} arbitrary units")), "{ax} {pmax} {mark}: the key prints {rate}: {all}");
                 // and the student copy says to read to the nearest fine gridline but names no range
                 let stu = key_lines(&render_of(&[&l[..], &[b(SHOW_ANSWERS, false)]].concat())).replace('\n', " ");
                 assert!(stu.contains("Read the rate at P to the nearest fine gridline.") && !stu.contains("accept any value") && !stu.contains("Also accepted"), "{ax}");
@@ -1549,14 +1583,17 @@ fn the_rate_axis_has_fine_gridlines_and_the_key_states_the_range_to_accept() {
     assert!(!none.contains("nearest fine gridline"));
 }
 
-/// MED 2: over many typed states, both fine gridlines a student could read (and so every gridline within half a
-/// fine spacing of the exact rate) are inside the accepted range, and the printed range is exactly those two
-/// gridlines, so no rounding can put a third one inside or cut a reading out.
+/// MED 2 and the round-3 MED and LOW 1: over many typed states, the fine gridline below the exact rate and the
+/// one above it are both inside the accepted range (two spacings wide when the rate sits exactly on a gridline),
+/// the printed range is exactly those gridline values, and the rate the key prints is inside it at every
+/// decimals setting from 0 to 3, so the key never refuses its own number and a student reading either neighbouring
+/// gridline is always inside.
 #[test]
 fn the_accepted_range_holds_both_fine_gridlines_a_student_could_read() {
     let mut r = Rng::new(4242);
     let mut checked = 0;
     let mut mid = 0;
+    let mut on_line_states = 0;
     for _ in 0..4000 {
         let ax = AXES_ALL[r.below(3)];
         let axis = Axis::of(ax);
@@ -1567,61 +1604,107 @@ fn the_accepted_range_holds_both_fine_gridlines_a_student_could_read() {
         let l = gset(ax, &[s("pmax", &pm), s("xval", &xv), s("mark", &mk), b(SHOW_ANSWERS, true)]);
         let Ok(cv) = read_graph(&with(&l)) else { continue };
         let m = cv.mark.unwrap();
-        let (lo_s, hi_s, minor) = cv.accept(&m);
         let (top, step) = y_axis(cv.pmax.v);
         let fine = step / minor_divisions(step) as f64;
-        assert_eq!(minor, show(fine));
-        let (lof, hif): (f64, f64) = (lo_s.parse().unwrap(), hi_s.parse().unwrap());
-        // the printed ends parse back to exactly what the key means: fine gridline values, one fine spacing apart
-        assert_eq!((lo_s.clone(), hi_s.clone()), (show(lof), show(hif)), "{ax} {pm} {xv} {mk}");
-        assert!((hif - lof - fine).abs() < 1e-9 && (lof / fine - (lof / fine).round()).abs() < 1e-9, "{ax} {pm} {xv} {mk}: {lo_s} .. {hi_s} with fine {fine}");
         let (n, d) = cv.frac(&m);
         let exact = n as f64 / d as f64;
-        assert!(lof <= exact + 1e-9 && exact <= hif + 1e-9 && hif <= top + 1e-9, "{ax} {pm} {xv} {mk}: {exact} outside {lo_s} .. {hi_s} (axis to {top})");
-        // the two neighbours, and nothing further out
-        let below = (exact / fine).floor() * fine;
-        let above = below + fine;
-        assert!(below >= lof - 1e-9 && above <= hif + 1e-9, "{ax} {pm} {xv} {mk}: the neighbours {below} and {above} of {exact} are not inside {lo_s} .. {hi_s}");
-        assert!(below - fine < lof - 1e-9 && above + fine > hif + 1e-9, "{ax} {pm} {xv} {mk}: a gridline two spacings away is inside {lo_s} .. {hi_s}");
-        for g in [below, above] {
-            if (g - exact).abs() <= fine / 2.0 + 1e-9 { assert!(g >= lof - 1e-9 && g <= hif + 1e-9); }
+        // whether the rate sits exactly on a gridline, by the same exact arithmetic the code uses
+        let fine_b = (fine * SCALE as f64).round() as i128;
+        let rate_b = n / (d / SCALE).max(1);
+        let below = (rate_b / fine_b) as f64 * fine;
+        let on_line = rate_b % fine_b == 0;
+        // the fine gridline strictly below the exact rate and the one strictly above it
+        let (want_lo, want_hi) = if on_line { ((below - fine).max(0.0), below + fine) } else { (below, below + fine) };
+        for dec in 0usize..=3 {
+            let (lo_s, hi_s, minor, rate) = cv.accept(&m, dec);
+            assert_eq!(minor, show(fine));
+            let (lof, hif): (f64, f64) = (lo_s.parse().unwrap(), hi_s.parse().unwrap());
+            // the printed ends parse back to exactly what the key means: fine gridline values
+            assert_eq!((lo_s.clone(), hi_s.clone()), (show(lof), show(hif)), "{ax} {pm} {xv} {mk} dec {dec}");
+            assert!((lof / fine - (lof / fine).round()).abs() < 1e-9 && (hif / fine - (hif / fine).round()).abs() < 1e-9, "{ax} {pm} {xv} {mk}: {lo_s} .. {hi_s} with fine {fine}");
+            assert!((lof - want_lo).abs() < 1e-9 && (hif - want_hi).abs() < 1e-9, "{ax} {pm} {xv} {mk} dec {dec}: {lo_s} .. {hi_s}, wanted {want_lo} .. {want_hi} (on the line: {on_line})");
+            assert!(lof <= exact + 1e-9 && exact <= hif + 1e-9 && hif <= top + 1e-9, "{ax} {pm} {xv} {mk}: {exact} outside {lo_s} .. {hi_s} (axis to {top})");
+            // both neighbours (the gridlines either side) are inside, and a second one further out is not
+            assert!(want_lo >= lof - 1e-9 && want_hi <= hif + 1e-9, "{ax} {pm} {xv} {mk}: the neighbours of {exact} are not inside {lo_s} .. {hi_s}");
+            assert!(want_lo - fine < lof - 1e-9 && want_hi + fine > hif + 1e-9, "{ax} {pm} {xv} {mk}: a gridline two spacings away is inside {lo_s} .. {hi_s}");
+            for g in [below, below + fine] {
+                if (g - exact).abs() <= fine / 2.0 + 1e-9 { assert!(g >= lof - 1e-9 && g <= hif + 1e-9); }
+            }
+            // the key's own number is inside its own band, at this and every decimals setting
+            let p: f64 = rate.parse().unwrap();
+            assert!(p >= lof - 1e-9 && p <= hif + 1e-9, "{ax} {pm} {xv} {mk} dec {dec}: the key prints {rate} but accepts {lo_s} .. {hi_s}");
         }
+        if on_line { on_line_states += 1; }
         if (exact / fine - (exact / fine).round()).abs() < 0.1 { mid += 1; }
-        // one render in ten: the printed sentence carries that range
+        // one render in ten: the printed sentence carries that range and the printed rate
         if checked % 10 == 0 {
+            let (lo_s, hi_s, _, rate) = cv.accept(&m, 1);
             let txt = key_lines(&render_of(&l)).replace('\n', " ");
             assert!(txt.contains(&format!("accept any value from {lo_s} to {hi_s} arbitrary units")), "{ax} {pm} {xv} {mk}: {txt}");
+            assert!(txt.contains(&format!("): {rate} arbitrary units")), "{ax} {pm} {xv} {mk}: the key prints {rate}: {txt}");
         }
         checked += 1;
     }
-    assert!(checked > 2000 && mid > 100, "{checked} states, {mid} near a gridline");
+    assert!(checked > 2000 && mid > 100 && on_line_states > 20, "{checked} states, {mid} near a gridline, {on_line_states} on one");
 }
 
-/// LOW 2: the printed ends are the intended gridline values, on the two states where they used to drift (Light
-/// plateau 78.49, K 13.8, P 85 and Temperature peak 13.66, optimum 17.7, P 1), and on the critic's MED 2 repro.
+/// LOW 2 of round 2 and LOW 1 of round 3: the printed ends are the intended gridline values, on the two states
+/// where they used to drift (Light plateau 78.49, K 13.8, P 85 and Temperature peak 13.66, optimum 17.7, P 1), on
+/// the critic's MED 2 repro, and on rates that land exactly on a fine gridline, where the band is two spacings
+/// wide so that both neighbours (one each side) are inside it.
 #[test]
 fn the_printed_accepted_range_is_exactly_the_two_neighbouring_gridlines() {
-    for (ax, pm, xv, mk, want) in [
-        ("CO2 concentration", "7.5", "", "auto", ("5.5", "6", "0.5")),
-        ("Light intensity", "78.49", "13.8", "85", ("65", "70", "5")),
-        ("Temperature", "13.66", "17.7", "1", ("1", "2", "1")),
+    // (axis, plateau, half-saturation, P, (lo, hi, fine), exact is on a gridline)
+    for (ax, pm, xv, mk, want, on) in [
+        ("CO2 concentration", "7.5", "", "auto", ("5.5", "6", "0.5"), false),
+        ("Light intensity", "78.49", "13.8", "85", ("65", "70", "5"), false),
+        ("Temperature", "13.66", "17.7", "1", ("1", "2", "1"), false),
+        // the boundary case the critic named: the temperature peak is exactly on a gridline (10, fine 0.5)
+        ("Temperature", "10", "30", "30", ("9.5", "10.5", "0.5"), true),
+        // one on each of the other two axes: Light 97.46*37.5/(11.23+37.5) = 75 exactly (fine 5),
+        // CO2 10*120/(120+120) = 5 exactly (fine 0.5)
+        ("Light intensity", "97.46", "11.23", "37.5", ("70", "80", "5"), true),
+        ("CO2 concentration", "10", "120", "120", ("4.5", "5.5", "0.5"), true),
     ] {
         let l = gset(ax, &[s("pmax", pm), s("xval", xv), s("mark", mk), b(SHOW_ANSWERS, true)]);
         let Ok(cv) = read_graph(&with(&l)) else { panic!("{ax} {pm} {xv} {mk} does not draw") };
         let m = cv.mark.unwrap();
-        let (lo, hi, minor) = cv.accept(&m);
+        let (lo, hi, minor, rate) = cv.accept(&m, 1);
         assert_eq!((lo.as_str(), hi.as_str(), minor.as_str()), want, "{ax} {pm} {xv} {mk}");
         let (n, d) = cv.frac(&m);
         let exact = n as f64 / d as f64;
         let (lof, hif) = (lo.parse::<f64>().unwrap(), hi.parse::<f64>().unwrap());
+        let fine = minor.parse::<f64>().unwrap();
         assert!(lof <= exact && exact <= hif, "{ax}: {exact} is outside {lo} .. {hi}");
-        // the range is one fine spacing wide, so the gridline past the neighbours is never inside it
-        assert!((hif - lof - minor.parse::<f64>().unwrap()).abs() < 1e-9);
+        assert_eq!(on, (exact / fine - (exact / fine).round()).abs() < 1e-9, "{ax} {pm} {xv} {mk}: exact {exact} on a gridline");
+        // the gridlines either side of the exact rate are inside, and the range is no wider than that
+        for g in [((exact / fine).floor() * fine) - if on { fine } else { 0.0 }, ((exact / fine).floor() + 1.0) * fine] {
+            if g >= 0.0 { assert!(g >= lof - 1e-9 && g <= hif + 1e-9, "{ax} {pm} {xv} {mk}: the neighbour {g} of {exact} is outside {lo} .. {hi}"); }
+        }
+        assert!((hif - lof - if on { 2.0 * fine } else { fine }).abs() < 1e-9, "{ax}: {lo} .. {hi} with fine {fine}");
+        // and the key's own number is inside it
+        let p: f64 = rate.parse().unwrap();
+        assert!(p >= lof - 1e-9 && p <= hif + 1e-9, "{ax}: the key prints {rate} but accepts {lo} .. {hi}");
         let txt = key_lines(&render_of(&l)).replace('\n', " ");
         assert!(txt.contains(&format!("accept any value from {lo} to {hi} arbitrary units")), "{txt}");
         // and the student copy, which is what the reading has to be judged from, tells them to read a gridline
         let stu = key_lines(&render_of(&[&l[..], &[b(SHOW_ANSWERS, false)]].concat())).replace('\n', " ");
         assert!(stu.contains("Read the rate at P to the nearest fine gridline."), "{stu}");
+    }
+    // the round-3 MED, as reported: at 0 decimal places the key's own number used to fall outside its band, so the
+    // key now prints more decimals rather than refuse its own answer (and the band is still the gridlines either side)
+    for (pm, xv, mk, want) in [("2", "3", "1", ("0.4", "0.6", "0.5")), ("1", "3", "1", ("0.2", "0.3", "0.3")), ("5", "10", "53", ("4.2", "4.4", "4.2"))] {
+        let l = gset("Light intensity", &[s("pmax", pm), s("xval", xv), s("mark", mk), ("dec", Value::I(0)), b(SHOW_ANSWERS, true)]);
+        let Ok(cv) = read_graph(&with(&l)) else { panic!("{pm} {xv} {mk} does not draw") };
+        let m = cv.mark.unwrap();
+        let (lo, hi, _, rate) = cv.accept(&m, 0);
+        assert_eq!((lo.as_str(), hi.as_str(), rate.as_str()), want, "{pm} {xv} {mk} at 0 decimals");
+        let p: f64 = rate.parse().unwrap();
+        let (lof, hif) = (lo.parse::<f64>().unwrap(), hi.parse::<f64>().unwrap());
+        assert!(p >= lof - 1e-9 && p <= hif + 1e-9, "{pm} {xv} {mk}: the key prints {rate} but accepts {lo} .. {hi}");
+        // and the drawn key prints that number, not a coarser one
+        let txt = key_lines(&render_of(&l)).replace('\n', " ");
+        assert!(txt.contains(&format!("): {rate} arbitrary units")), "{pm} {xv} {mk}: {txt}");
     }
 }
 
@@ -1632,28 +1715,37 @@ fn contrast_on_white(c: &str) -> f64 {
     1.05 / (0.2126 * lin(ch(0)) + 0.7152 * lin(ch(1)) + 0.0722 * lin(ch(2)) + 0.05)
 }
 
-/// MED 3: the gridlines the student is told to read are dark enough to see on white and survive a 66 % grey copy
-/// of a 1x render, in the Colour style as well as in Print: the student copy uses the Print greys.
+/// MED 3 (round 2) and LOW 2 (round 3): every gridline of every state, the default opening state (Colour, key)
+/// included, is dark enough on white and survives a 66 % grey copy of a 1x render. The colours are read out of the
+/// drawing itself, so a palette change cannot slip past by leaving a constant untouched.
 #[test]
 fn the_gridlines_are_readable_on_screen_and_survive_a_sixty_six_percent_copy_at_1x() {
-    assert!(contrast_on_white(FINE_COLOUR) >= 1.6, "the Colour fine gridline {FINE_COLOUR} is {:.2}:1 on white", contrast_on_white(FINE_COLOUR));
-    assert!(contrast_on_white(GRID_COLOUR) >= 2.0, "the Colour labelled gridline {GRID_COLOUR} is {:.2}:1 on white", contrast_on_white(GRID_COLOUR));
-    assert!(contrast_on_white(GRID_COLOUR) > contrast_on_white(FINE_COLOUR), "the labelled gridlines are the darker ones");
-    // the key (the screen copy) uses the Colour greys; a student copy uses the Print greys
-    let key_svg = render_of(&gset("Light intensity", &[b(SHOW_ANSWERS, true)]));
-    assert!(key_svg.contains(&format!("stroke=\"{FINE_COLOUR}\"")) && key_svg.contains(&format!("stroke=\"{GRID_COLOUR}\"")), "the Colour key uses the Colour greys");
-    let stu_svg = render_of(&gset("Light intensity", &[b(SHOW_ANSWERS, false)]));
-    assert!(stu_svg.contains(&format!("stroke=\"{FINE_PRINT}\"")) && stu_svg.contains(&format!("stroke=\"{GRID_PRINT}\"")), "the Colour student copy takes the Print greys");
     let mut lines = 0;
+    let mut states = 0;
+    let mut palettes: Vec<(String, bool, Vec<String>)> = Vec::new();
     for ax in AXES_ALL {
-        for (style, key) in [("Colour", false), ("Print", false), ("Print", true)] {
+        for (style, key) in [("Colour", true), ("Colour", false), ("Print", true), ("Print", false)] {
             let svg = render_of(&gset(ax, &[s("style", style), s("label_size", "Small"), b(SHOW_ANSWERS, key)]));
             let q = parse(&svg);
             let pl = plot_of(&q, Axis::of(ax), 10.0);
             let (w, h, px) = crate::figures::to_rgba(&svg, 1.0).unwrap();
             // the white pads under P and the Plateau or Peak label are not gridline ink
             let pads: Vec<Bx> = svg.match_indices("<rect ").filter_map(|(i, _)| { let el = svg[i..].split('>').next().unwrap(); if attr(el, "fill").as_deref() == Some("#ffffff") && attr(el, "stroke").is_none() { Some((num(el, "x"), num(el, "y"), num(el, "x") + num(el, "width"), num(el, "y") + num(el, "height"))) } else { None } }).collect();
-            for l in q.lines.iter().filter(|l| (l.col == FINE_PRINT || l.col == GRID_PRINT) && l.a.1 == l.b.1) {
+            // the gridlines as drawn: horizontal, from the left of the plot to the right of it
+            // the gridlines as drawn: solid horizontals across the plot, above the x axis (not the dashed guides, not the axis)
+            let grids: Vec<&Ln> = q.lines.iter().filter(|l| l.a.1 == l.b.1 && !l.dashed && l.a.1 < pl.bm - 0.5 && (l.a.0 - pl.l).abs() < 0.02 && (l.b.0 - pl.r).abs() < 0.02).collect();
+            assert!(grids.len() >= 6, "{ax} {style} key {key}: {} gridlines", grids.len());
+            // every one is dark enough to see, and the labelled ones (the darker tone) are darker still
+            let mut contrasts: Vec<f64> = Vec::new();
+            for l in &grids {
+                let c = contrast_on_white(&l.col);
+                contrasts.push(c);
+                assert!(c >= 1.6, "{ax} {style} key {key}: the gridline {0} is {c:.2}:1 on white", l.col);
+            }
+            let darkest = contrasts.iter().cloned().fold(0.0_f64, f64::max);
+            assert!(darkest >= 2.0, "{ax} {style} key {key}: the labelled gridlines are {darkest:.2}:1");
+            // and at 1x, thresholded at 66 % grey like a photocopier, the line is still there
+            for l in &grids {
                 let (mut on, mut all) = (0u32, 0u32);
                 for ix in ((pl.l + 6.0) as u32)..((pl.r - 6.0) as u32) {
                     if pads.iter().any(|b| ix as f64 >= b.0 - 1.0 && ix as f64 <= b.2 + 1.0) { continue; }
@@ -1668,14 +1760,24 @@ fn the_gridlines_are_readable_on_screen_and_survive_a_sixty_six_percent_copy_at_
                 }
                 assert!(all > 100, "{ax} {style}");
                 let frac = on as f64 / all as f64;
-                assert!(frac >= 0.95, "{ax} {style} key {key}: only {on} of {all} columns of the gridline at {:.1} are darker than 66 % grey", l.a.1);
+                assert!(frac >= 0.95, "{ax} {style} key {key}: only {on} of {all} columns of the gridline at {:.1} ({}) are darker than 66 % grey", l.a.1, l.col);
                 lines += 1;
             }
+            let mut cols: Vec<String> = grids.iter().map(|l| l.col.clone()).collect();
+            cols.sort();
+            cols.dedup();
+            palettes.push((style.to_string(), key, cols));
+            states += 1;
         }
     }
-    assert!(lines >= 60, "{lines} gridlines checked");
+    assert!(lines >= 80 && states == 12, "{lines} gridlines in {states} states");
+    // the palettes each state actually carries: the Colour key keeps the Colour greys, every student copy and every
+    // Print state the Print greys (both pairs now copy, and the FAQ says so)
+    let cols_of = |style: &str, key: bool| palettes.iter().find(|(s, k, _)| s == style && *k == key).map(|(_, _, c)| c.clone()).unwrap();
+    assert_eq!(cols_of("Colour", true), [GRID_COLOUR.to_string(), FINE_COLOUR.to_string()], "the Colour key uses the Colour greys");
+    assert_eq!(cols_of("Print", true), [GRID_PRINT.to_string(), FINE_PRINT.to_string()], "Print uses the Print greys");
+    assert_eq!(cols_of("Colour", false), cols_of("Print", false), "the Colour student copy takes the Print greys");
 }
-
 
 /// Print gridlines survive a photocopy at 66 % grey: every grey that carries information is darker than 66 % grey.
 #[test]
@@ -1858,6 +1960,11 @@ fn the_key_refuses_water_on_both_sides_and_the_student_copy_asks_for_the_net_equ
     assert_eq!(side(&["6CO~2", "12H~2O"]), side(&["C~6H~12O~6", "6O~2", "6H~2O"]), "the refused form is balanced");
     assert!(["6CO~2", "12H~2O"].iter().any(|t| t.ends_with("H~2O")) && ["C~6H~12O~6", "6O~2", "6H~2O"].iter().any(|t| t.ends_with("H~2O")), "water is on both sides of the refused form");
     assert!(EQ_LEFT.contains("H~2O") && !EQ_RIGHT.contains("H~2O"), "and water is on the left only in the accepted form");
+    // LOW 3 of round 3: a doubled answer has no substance on both sides and is balanced, so the key names it too
+    assert!(key.contains("and any multiple of the answer, such as 12CO2 + 12H2O gives 2C6H12O6 + 12O2, because one molecule of glucose is asked for"), "{key}");
+    assert_eq!(side(&["12CO~2", "12H~2O"]), side(&["2C~6H~12O~6", "12O~2"]), "the doubled form is balanced");
+    assert!(side(&["12CO~2", "12H~2O"]).get("C") == Some(&12) && side(&["2C~6H~12O~6", "12O~2"]).get("C") == Some(&12), "and it has no substance on both sides");
+    assert_eq!(["12CO~2", "12H~2O", "2C~6H~12O~6", "12O~2"].iter().map(|t| coef(t)).fold(0, gcd), 2, "it is the accepted equation doubled, the only reason to refuse it");
     // the student is asked for the net equation, in words that name no substance and no coefficient rule
     let stu = key_lines(&render_of(&[b(SHOW_ANSWERS, false)])).replace('\n', " ");
     assert!(stu.contains("Write the net balanced equation for making one molecule of glucose, with no substance on both sides."), "{stu}");
@@ -1870,6 +1977,7 @@ fn the_key_refuses_water_on_both_sides_and_the_student_copy_asks_for_the_net_equ
     assert!(faq.contains("write the net balanced equation, with no substance on both sides"), "{faq}");
     assert!(faq.contains("water on both sides"), "{faq}");
     assert!(faq.contains("light may be left out"), "{faq}");
+    assert!(faq.contains("any multiple of the answer") && faq.contains("because one molecule of glucose is asked for"), "{faq}");
     assert!(!faq.contains("smallest whole-number coefficients") && !faq.contains("larger coefficients"), "{faq}");
 }
 
@@ -2009,6 +2117,17 @@ fn every_documented_unit_is_read_and_a_wrong_one_is_refused() {
         assert!(t.contains(&format!("ends with \"{unit}\"")), "{ax} {typed}: {t}");
         assert!(t.contains("not one of the units this box takes") && t.contains(help), "{ax} {typed}: {t}");
         assert!(!t.contains("is not a number"), "{ax} {typed}: a wrong unit is reported as not a number: {t}");
+    }
+    // LOW 4 of round 3: a wrong unit behind an ambiguous comma names both faults, not "not a number"
+    for (ax, field, typed, u) in [("Light intensity", "mark", "1,500 ppm", "ppm"), ("Temperature", "xval", "1,500 degF", "degF")] {
+        let rs = refusals(&[&graph_set(ax, "10", "", "20")[..], &[s(field, typed)]].concat());
+        assert_eq!(rs.len(), 1, "{ax} {field} {typed}: {rs:?}");
+        let t = &rs[0].text;
+        assert!(t.contains("is ambiguous") && t.contains("not one of the units this box takes") && t.contains(u), "{ax} {typed}: {t}");
+        assert!(!t.contains("is not a number"), "{ax} {typed}: {t}");
+        // and its advice is a number that types back on this axis and box
+        let ex: String = t.split("such as ").nth(1).unwrap().chars().take_while(|c| c.is_ascii_digit() || *c == '.').collect();
+        assert!(refusals(&[&graph_set(ax, "10", "", "20")[..], &[s(field, &ex)]].concat()).is_empty(), "{ax} {typed}: {ex:?} is refused");
     }
     // and something that is not a number at all still says so
     for t in ["abc", "1e3", "ten"] { assert!(refusals(&graph_set("Light intensity", "10", "", t))[0].text.contains("is not a number"), "{t:?}"); }

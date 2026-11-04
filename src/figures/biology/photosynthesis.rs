@@ -18,9 +18,11 @@
 //! are read exactly (digits as typed), and the rate at P is rounded half up by integer arithmetic on those digits.
 //! Typed values are refused with the reason and a value that works (each such value is tested by typing it back).
 //! The rate axis has a labelled gridline every `step` and fine gridlines in between; the key accepts from the fine
-//! gridline at or just below the exact rate to the next one up, so that whichever of the two neighbouring fine
-//! gridlines a student reads is inside the range (and the range is printed as exactly those two gridlines).
-//! The gridlines are dark and wide enough that a student copy still copies: a student sheet uses the Print greys.
+//! gridline below the exact rate to the one above (two spacings wide when the rate sits exactly on a gridline), so
+//! that whichever fine gridline a student reads to is inside the range, and the range prints as those gridlines.
+//! The rate is printed to the chosen decimals, or to more when rounding to them would put the key's own number
+//! outside the range it accepts, so the key never refuses its own answer for any decimals setting.
+//! The gridlines are dark and wide enough that a 66 % grey copy keeps them, in Print and in Colour alike.
 
 use super::cladogram::text_w;
 use super::*;
@@ -222,7 +224,7 @@ fn clip(s: &str) -> String {
 }
 
 #[derive(Debug, PartialEq)]
-enum Bad { Empty, NotNumber, Ambiguous(String, String, bool), Unit(String), TooLong, TooLarge }
+enum Bad { Empty, NotNumber, Ambiguous(String, String, bool, Option<String>), Unit(String), TooLong, TooLarge }
 
 /// The longest run of letters (and the unit signs) that ends a string, trimmed: the unit a number was typed with.
 fn typed_unit(s: &str) -> Option<&str> {
@@ -258,11 +260,16 @@ fn parse(raw: &str, units: &[&str]) -> Result<Dec, Bad> {
     }
     let rest: String = chars.collect::<String>().trim_start().to_string();
     if rest.is_empty() || !rest.chars().all(|c| c.is_ascii_digit() || c == '.' || c == ',') || !rest.chars().any(|c| c.is_ascii_digit()) {
-        // a number with a unit this box does not take says which unit, rather than "not a number"
+        // a number with a unit this box does not take says which unit, rather than "not a number"; if the number
+        // itself also has an ambiguous comma, both faults are named
         if let Some(u) = typed_unit(&rest) {
             let head = rest.trim_end();
             let prefix = &head[..head.len() - u.len()];
-            if parse(prefix, &[]).is_ok() { return Err(Bad::Unit(u.to_string())); }
+            match parse(prefix, &[]) {
+                Ok(_) => return Err(Bad::Unit(u.to_string())),
+                Err(Bad::Ambiguous(a, c, neg, _)) => return Err(Bad::Ambiguous(a, c, neg, Some(u.to_string()))),
+                _ => {}
+            }
         }
         return Err(Bad::NotNumber);
     }
@@ -270,7 +277,7 @@ fn parse(raw: &str, units: &[&str]) -> Result<Dec, Bad> {
         if rest.contains('.') || rest.matches(',').count() > 1 { return Err(Bad::NotNumber); }
         let (a, b) = rest.split_once(',').unwrap();
         if a.is_empty() || b.is_empty() { return Err(Bad::NotNumber); }
-        if b.len() == 3 { return Err(Bad::Ambiguous(a.to_string(), b.to_string(), neg)); }
+        if b.len() == 3 { return Err(Bad::Ambiguous(a.to_string(), b.to_string(), neg, None)); }
         format!("{a}.{b}")
     } else { rest };
     if digits.matches('.').count() > 1 { return Err(Bad::NotNumber); }
@@ -338,24 +345,48 @@ impl Curve {
     pub fn frac(&self, x: &Dec) -> (i128, i128) { rate_frac(self.axis, self.pmax.d, self.xv.d, x.d) }
     /// The rate at the typed `x`, rounded half up to `dec` decimals.
     pub fn rate_text(&self, x: &Dec, dec: usize) -> String { let (n, d) = self.frac(x); ratio_text(n, d, dec) }
-    /// The reading the key accepts at the typed `x`: (lowest, highest, fine gridline spacing), as text.
-    /// The band runs from the fine gridline at or just below the exact rate to the next one up, so that a student
-    /// who reads either of the two neighbouring fine gridlines (what "read to the nearest fine gridline" asks for)
-    /// is inside it, whatever the exact rate is. Both ends are printed as the gridline values themselves, so the
-    /// printed range is exactly the band and never drifts by a rounding step.
-    pub fn accept(&self, x: &Dec) -> (String, String, String) {
+    /// The band the key accepts at the typed `x`, in billionths: (lowest, highest, fine gridline spacing).
+    /// It runs from the fine gridline below the exact rate to the one above, so it is one fine spacing wide, and
+    /// two when the exact rate sits exactly on a gridline (where the gridlines either side are one spacing away
+    /// each). Integer arithmetic on the typed digits, so a rate that is exactly on a gridline is on it.
+    fn band(&self, x: &Dec) -> (i128, i128, i128) {
         let (_, step) = y_axis(self.pmax.v);
         let fine = ((step / minor_divisions(step) as f64) * SCALE as f64).round() as i128;
         let (n, d) = self.frac(x);
-        // the rate in billionths (the denominators `frac` makes are all multiples of SCALE), then the largest fine
-        // gridline at or below it: integer arithmetic throughout, and small numbers, so nothing overflows
+        // the rate in billionths (the denominators `frac` makes are all multiples of SCALE), then the gridline at
+        // or below it: integer arithmetic throughout, and small numbers, so nothing overflows
         debug_assert!(d % SCALE == 0, "the rate fraction's denominator is a whole number of billionths");
-        let per_unit = (d / SCALE).max(1);
-        let rate_b = n.max(0) / per_unit;
-        let lo = (rate_b / fine).max(0) * fine;
-        let hi = lo + fine;
-        (show_d(lo), show_d(hi), show_d(fine))
+        if n <= 0 || d <= 0 { return (0, fine, fine); }
+        let rate_b = n / (d / SCALE).max(1);
+        let k = rate_b / fine;
+        let on_line = rate_b % fine == 0;
+        ((if on_line { k - 1 } else { k }).max(0) * fine, (k + 1) * fine, fine)
     }
+    /// The reading the key accepts at the typed `x` and the rate it prints there, as text:
+    /// (lowest, highest, fine gridline spacing, rate). The rate is printed to `dec` decimals, or to more when
+    /// rounding to `dec` would put the key's own number outside the band (a whole-number rounding step can be
+    /// wider than the fine spacing); the band is widened to hold it if it ever falls outside anyway. So the
+    /// number the key prints is always inside the range the key accepts, and both neighbouring fine gridlines
+    /// a student could read are inside it too. Both ends print as the values themselves, never a rounded
+    /// tolerance.
+    pub fn accept(&self, x: &Dec, dec: usize) -> (String, String, String, String) {
+        let (mut lo, mut hi, fine) = self.band(x);
+        let (n, d) = self.frac(x);
+        let mut dd = dec.min(9);
+        let mut text = ratio_text(n, d, dd);
+        loop {
+            let p = parse(&text, &[]).map_or(0, |v| v.d);
+            if (p >= lo && p <= hi) || dd >= 9 { break; }
+            dd += 1;
+            text = ratio_text(n, d, dd);
+        }
+        let p = parse(&text, &[]).map_or(0, |v| v.d);
+        lo = lo.min(p);
+        hi = hi.max(p);
+        (show_d(lo), show_d(hi), show_d(fine), text)
+    }
+    /// The rate at P as the key prints it: always inside the band `accept` gives.
+    pub fn key_rate(&self, x: &Dec, dec: usize) -> String { self.accept(x, dec).3 }
 }
 
 pub fn rate(axis: Axis, pmax: f64, xv: f64, x: f64) -> f64 {
@@ -401,13 +432,16 @@ fn bad_text(what: &str, raw: &str, b: &Bad, lo: f64, hi: f64, unit: &str, units_
         Bad::Empty => format!("{what} is empty. {ask}"),
         Bad::NotNumber => format!("{what}: \"{shown}\" is not a number. {ask}"),
         Bad::Unit(u) => format!("{what}: \"{shown}\" ends with \"{u}\", which is not one of the units this box takes ({units_help}). {ask}"),
-        Bad::Ambiguous(a, c, neg) => {
+        Bad::Ambiguous(a, c, neg, wrong) => {
             // the two readings of a comma followed by three digits, each written with the sign that was typed (a
             // minus sign is never dropped: "−1,500" can only be −1.5 or −1500), and only those inside the range offered
             let sign = if *neg { "\u{2212}" } else { "" };
             let both: Vec<String> = [format!("{a}.{c}"), format!("{a}{c}")].iter().map(|t| parse(&format!("{sign}{t}"), &[]).map_or_else(|_| format!("{sign}{t}"), |d| show_d(d.d))).collect();
             let fits: Vec<&String> = both.iter().filter(|t| parse(t, &[]).map_or(false, |d| d.d >= exact(lo) && d.d <= exact(hi))).collect();
             let head = format!("{what}: \"{shown}\" is ambiguous: a comma is read as a decimal point, so it could mean {} or {}.", both[0], both[1]);
+            // with a unit this box does not take as well, no single reading can be typed as it stands, so the advice is
+            // a fresh number in the right unit rather than "type 1.5", which would still be refused
+            if let Some(u) = wrong { return format!("{head} And \"{u}\" is not one of the units this box takes ({units_help}). {ask}"); }
             match fits.as_slice() {
                 [] => format!("{head} Neither is in the range from {}. {ask}", range_text(lo, hi, unit)),
                 [one] => format!("{head} Only {one} is in the range from {}. Type {one} to be clear.", range_text(lo, hi, unit)),
@@ -820,11 +854,12 @@ fn seg_hits_box(a: P, b: P, bx: Bx) -> bool {
 
 fn expand(b: Bx, d: f64) -> Bx { (b.0 - d, b.1 - d, b.2 + d, b.3 + d) }
 
-/// The gridline colours. The Colour greys are dark enough to see on a white screen (contrast ratios of 2.52 and
-/// 1.83 on white); the Print greys are dark enough that a student sheet still copies at 66 % grey, and a student
-/// copy in the Colour style uses them too, because the student is told to read the fine gridlines off a printout.
-pub const GRID_COLOUR: &str = "#9aa4b2";
-pub const FINE_COLOUR: &str = "#b8c0cc";
+/// The gridline colours. Both palettes are dark enough that a 66 % grey copy of the figure keeps every gridline,
+/// because the student is told to read rates off the fine ones: the Colour pair is a slate grey (contrast ratios
+/// of 5.5 and 4.3 on white) and the Print pair neutral. A key printed in Colour therefore copies as well as one
+/// in Print, and a student copy in the Colour style takes the Print greys.
+pub const GRID_COLOUR: &str = "#5f6a78";
+pub const FINE_COLOUR: &str = "#717c89";
 pub const GRID_PRINT: &str = "#5a5a5a";
 pub const FINE_PRINT: &str = "#7a7a7a";
 /// Gridline widths. A line thinner than this cannot survive a 66 % grey copy of a 1x render whatever its tone
@@ -846,9 +881,9 @@ fn graph(cv: &Curve, c: &Cfg, fills: &svg::Fills, x0: f64, y0: f64) -> GraphOut 
     let (ytop, ystep) = y_axis(cv.pmax.v);
     let px = |x: f64| l + x / axis.xmax() * (r - l);
     let py = |y: f64| bm - y / ytop * (bm - t);
-    // Print greys are darker than 66 % grey (luminance under 168 of 255), so that a photocopy at 66 % keeps every
-    // gridline; a student copy in the Colour style takes them too, so that the sheet it tells the student to read
-    // the fine gridlines off is the one that copies
+    // Both palettes are darker than 66 % grey (luminance under 168 of 255) and wide enough that a photocopy at
+    // 66 % keeps every gridline; a student copy in the Colour style takes the Print greys, so that the sheet it
+    // tells the student to read the fine gridlines off is the one that copies
     let (grid, fine) = if pr || !c.key { (GRID_PRINT, FINE_PRINT) } else { (GRID_COLOUR, FINE_COLOUR) };
     let curve_col = if pr { INK } else { "#1f5fbf" };
     let guide_col = if pr { "#333333" } else { "#555555" };
@@ -1031,8 +1066,8 @@ fn draw(p: &Params) -> String {
         for l in &labs { let a = alts(l.it); if !a.is_empty() { acc.push(format!("{}: {}", name(l.it), a)); } }
         if !acc.is_empty() { cap.push(format!("Also accepted: {}.", acc.join("; "))); }
         if c.io { cap.push("G3P is the molecule the Calvin cycle makes directly; two G3P can be joined to make glucose.".to_string()); }
-        if c.eq { cap.push("Equation: 6CO~2 + 6H~2O + light gives C~6H~12O~6 + 6O~2. Also accepted: light left out (it is not a substance, so the equation is still net), light written over the arrow instead of on the left, and the terms in a different order. Not accepted: water on both sides, such as 6CO~2 + 12H~2O gives C~6H~12O~6 + 6O~2 + 6H~2O, which is the same reaction with water left uncancelled and not the net equation.".to_string()); }
-        if let Ok(cv) = &reading { cap.extend(graph_caption(cv)); }
+        if c.eq { cap.push("Equation: 6CO~2 + 6H~2O + light gives C~6H~12O~6 + 6O~2. Also accepted: light left out (it is not a substance, so the equation is still net), light written over the arrow instead of on the left, and the terms in a different order. Not accepted: water on both sides, such as 6CO~2 + 12H~2O gives C~6H~12O~6 + 6O~2 + 6H~2O (the same reaction with water left uncancelled, not the net equation), and any multiple of the answer, such as 12CO~2 + 12H~2O gives 2C~6H~12O~6 + 12O~2, because one molecule of glucose is asked for.".to_string()); }
+        if let Ok(cv) = &reading { cap.extend(graph_caption(cv, c.dec)); }
     } else {
         cap.push("A ring or a bracket points at a part, a bar under the drawing names a stage, an arrow carries a substance. Write each name or formula.".to_string());
         if c.io { cap.push("For the arrow that leaves the loop, give the molecule it makes directly.".to_string()); }
@@ -1168,7 +1203,7 @@ fn draw(p: &Params) -> String {
                     let n = blanks.len() + usize::from(c.eq) + 1;
                     let x = gx + 20.0;
                     if c.key {
-                        d.raw(&rich(x, ry + 0.35 * z.fs, z.fs, "start", INK, false, &format!("Rate at P (x = {} {}): {} arbitrary units", show_d(m.d), cv.axis.unit(), cv.rate_text(&m, c.dec))));
+                        d.raw(&rich(x, ry + 0.35 * z.fs, z.fs, "start", INK, false, &format!("Rate at P (x = {} {}): {} arbitrary units", show_d(m.d), cv.axis.unit(), cv.key_rate(&m, c.dec))));
                     } else {
                         disc(&mut d, x + z.r, ry, z.r, n, 0.9 * z.fs);
                         let xr = x + 2.0 * z.r + 8.0;
@@ -1206,7 +1241,7 @@ fn draw(p: &Params) -> String {
 }
 
 /// What the key says about the graph: the dashed and dotted guides, what limits the rate where, and which reading to accept.
-pub fn graph_caption(cv: &Curve) -> Vec<String> {
+pub fn graph_caption(cv: &Curve, dec: usize) -> Vec<String> {
     let u = cv.axis.unit();
     let mut v = match cv.axis {
         Axis::Light | Axis::Co2 => {
@@ -1222,8 +1257,8 @@ pub fn graph_caption(cv: &Curve) -> Vec<String> {
             show_d(cv.pmax.d), show_d(cv.xv.d), show(FALL_SPAN), show_d(cv.xv.d + exact(FALL_SPAN)))],
     };
     if let Some(m) = &cv.mark {
-        let (lo, hi, minor) = cv.accept(m);
-        v.push(format!("Reading at P: accept any value from {lo} to {hi} arbitrary units, the fine gridline at or just below the exact rate up to the next one (fine gridlines are {minor} apart), so whichever of the two neighbours a student reads is inside."));
+        let (lo, hi, minor, _) = cv.accept(m, dec);
+        v.push(format!("Reading at P: accept any value from {lo} to {hi} arbitrary units, the fine gridlines either side of the exact rate ({minor} apart)."));
     }
     v
 }
