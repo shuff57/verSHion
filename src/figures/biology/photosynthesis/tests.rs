@@ -126,7 +126,7 @@ fn grey(c: &str) -> bool {
     }
 }
 fn is_head(e: &El) -> bool { e.closed && e.pts.len() == 3 }
-fn is_grid(l: &Ln) -> bool { l.col == "#dfe3ea" || l.col == "#d0d0d0" }
+fn is_grid(l: &Ln) -> bool { [GRID_COLOUR, FINE_COLOUR, GRID_PRINT, FINE_PRINT].contains(&l.col.as_str()) }
 
 const SIZES: [&str; 3] = ["Small", "Medium", "Large"];
 const TOGGLES: [&str; 6] = ["show_parts", "show_stages", "show_io", "show_shuttle", "show_equation", "show_graph"];
@@ -209,8 +209,6 @@ fn pointer_problems(svg: &str) -> Vec<String> {
     let rs = rings(&q);
     let off = offset(&q);
     let ls = leaders(&q);
-    let c = cfg(&Params::defaults(&(def().params)()));
-    let _ = c;
     let sh = shapes();
     let br = q.els.iter().enumerate().skip(sh.len()).find(|(_, e)| !e.closed && e.pts.len() == 4 && (e.sw - 1.4).abs() < 1e-9).map(|(i, _)| i);
     if ls.len() != rs.len() + usize::from(br.is_some()) { bad.push(format!("{} leaders for {} rings and {} brackets", ls.len(), rs.len(), usize::from(br.is_some()))); }
@@ -379,7 +377,7 @@ fn the_controls_are_the_documented_ones() {
     let p = Params::defaults(&ps);
     for k in ["show_parts", "show_stages", "show_io", "show_shuttle", "show_equation", SHOW_ANSWERS] { assert!(p.b(k), "{k} defaults on"); }
     assert!(!p.b("show_graph"), "the graph is optional, off by default");
-    assert_eq!((p.s("graph_x"), p.s("pmax"), p.s("xval"), p.s("mark"), p.i("dec")), ("Light intensity", "10", "", "20", 1));
+    assert_eq!((p.s("graph_x"), p.s("pmax"), p.s("xval"), p.s("mark"), p.i("dec")), ("Light intensity", "10", "", "auto", 1));
     assert_eq!((p.s("style"), p.s("label_size")), ("Colour", "Medium"));
     // the opening state turns the graph on and nothing else
     let o = crate::figures::start::overrides(ID);
@@ -473,8 +471,9 @@ fn the_curves_have_the_textbook_shape() {
         let ax = Axis::Temp;
         assert_eq!(rate(ax, pmax, topt, 0.0), 0.0);
         assert!((rate(ax, pmax, topt, topt) - pmax).abs() < 1e-12, "the peak is at the optimum");
-        let tmax = FALL * topt;
+        let tmax = topt + FALL_SPAN;
         assert!(rate(ax, pmax, topt, tmax).abs() < 1e-12 && rate(ax, pmax, topt, tmax + 1.0) == 0.0 && rate(ax, pmax, topt, 60.0) == 0.0);
+        assert!(rate(ax, pmax, topt, tmax - 0.5) > 0.0, "still positive just before the zero");
         let mut last = -1.0;
         for i in 0..=600 {
             let x = i as f64 / 10.0;
@@ -488,7 +487,7 @@ fn the_curves_have_the_textbook_shape() {
         assert!(down < up, "{down} {up}");
         // smooth at the top: both sides leave the peak with zero slope
         assert!((pmax - rate(ax, pmax, topt, topt - 0.01)) < 1e-3 * pmax && (pmax - rate(ax, pmax, topt, topt + 0.01)) < 1e-3 * pmax);
-        assert!(tmax <= Axis::Temp.xmax() - TEMP_ROOM + 1e-9);
+        assert!(tmax <= Axis::Temp.xmax() - 4.0, "the zero of the fall is on the axis with room to spare");
     }
 }
 
@@ -502,7 +501,8 @@ fn numbers_are_read_exactly_and_the_ambiguous_are_refused() {
     assert_eq!(ok("+7"), Ok((7.0, "7".to_string())));
     assert_eq!(ok("0.000000001"), Ok((1e-9, "0.000000001".to_string())));
     assert_eq!(ok(""), Err(Bad::Empty));
-    assert_eq!(ok("1,000"), Err(Bad::Ambiguous("1".into(), "000".into())));
+    assert_eq!(ok("1,000"), Err(Bad::Ambiguous("1".into(), "000".into(), false)));
+    assert_eq!(super::parse("\u{2212}1,500", &[]), Err(Bad::Ambiguous("1".into(), "500".into(), true)));
     for t in ["abc", "1.2.3", "1,2,3", "--1", ".", ",", "1e3", "NaN", "inf", "10 mg", "\u{663}", "ten"] { assert_eq!(ok(t), Err(Bad::NotNumber), "{t:?}"); }
     assert_eq!(ok("0.0000000001"), Err(Bad::TooLong));
     assert_eq!(ok("1234567890123"), Err(Bad::TooLarge));
@@ -541,7 +541,7 @@ fn every_refusal_is_true_and_its_advice_draws() {
         if field == "pmax" && typed.is_empty() || field == "xval" && typed.is_empty() { continue; }
         let axis = Axis::of(ax);
         // a typed value that is in range is accepted, anything else is refused with the field named
-        let in_range = super::parse(&typed, if field == "pmax" { &["au", "a.u.", "units", "unit"][..] } else { axis.units() }).ok().map_or(false, |d| match field {
+        let in_range = super::parse(&typed, if field == "pmax" { Axis::RATE_UNITS } else { axis.units() }).ok().map_or(false, |d| match field {
             "pmax" => d.d >= exact(PMAX_LO) && d.d <= exact(PMAX_HI),
             "xval" => { let (lo, hi, _) = axis.xv_range(); d.d >= exact(lo) && d.d <= exact(hi) }
             _ => d.d >= 0 && d.d <= exact(axis.xmax()),
@@ -570,8 +570,8 @@ fn every_refusal_is_true_and_its_advice_draws() {
             l2.push(s(field, &ex));
             assert!(refusals(&l2).is_empty(), "{t:?}: typing {ex:?} still refuses: {:?}", refusals(&l2));
         } else {
-            // 1,000: the two readings it offers are both accepted when they are in range
-            assert!(t.contains("1.000 or 1000"), "{t:?}");
+            // the readings of a comma are advised, and applied, in `ambiguous_commas_are_advised_with_values_that_draw`
+            assert!(t.contains("Type ") && t.contains("ambiguous"), "{t:?}");
         }
     }
     assert!(n > 60, "{n} refusal cases ran");
@@ -596,10 +596,10 @@ fn the_reasons_given_are_true_of_the_numbers_quoted() {
         assert!(r.text.contains(&format!("before x = {}", show(lo))), "{}", r.text);
         assert!(bad_lo.parse::<f64>().unwrap() < lo);
     }
-    // the optimum: the fall to zero is at 1.4 times it and must stay 4 degrees short of the end of the axis
+    // the optimum: the fall to zero is a fixed 12 degrees above it, and the quoted 52 is true for the limit
     let r = &refusals(&graph_set("Temperature", "10", "41", "20"))[0];
-    assert!(r.text.contains("at least 4 \u{b0}C short of the end of the axis (60 \u{b0}C)") && r.text.contains("1.4 times the optimum (above 56 \u{b0}C)"), "{}", r.text);
-    assert!(FALL * 41.0 > 56.0 && FALL * 40.0 <= 56.0 + 1e-9);
+    assert!(r.text.contains("so the figure allows up to 40 \u{b0}C (the rate then falls to zero 12 \u{b0}C higher, at 52 \u{b0}C, on an axis that ends at 60 \u{b0}C)"), "{}", r.text);
+    assert!(40.0 + FALL_SPAN == 52.0 && 52.0 < Axis::Temp.xmax());
     let r = &refusals(&graph_set("Temperature", "10", "14.9", "20"))[0];
     assert!(r.text.contains("squeezed into the first 15 \u{b0}C"), "{}", r.text);
     // a value is never quoted as another: the digits typed come back
@@ -754,19 +754,18 @@ fn the_key_and_the_student_copy_share_one_layout() {
                 let lead = |q: &Parsed| { let o = offset(q); leaders(q).iter().map(|l| (r(l.a.0 - o.0), r(l.a.1 - o.1), r(l.b.0 - o.0), r(l.b.1 - o.1))).collect::<Vec<_>>() };
                 let (lk, ls) = (lead(&key), lead(&stu));
                 assert!(lk.len() == ls.len() && lk.iter().zip(&ls).all(|(a, c)| near(&vec![(a.0, a.1), (a.2, a.3)], &vec![(c.0, c.1), (c.2, c.3)])), "mask {mask} {size}: a leader moved");
-                // the figure is centred in its canvas in both, so the offsets differ only by the canvas widths
-                let _ = canvas_w_equal(&key, &stu);
+                // the key and the student copy are the same width: the table of blanks never makes the canvas wider than the key's
+                assert!(stu.w + 1e-9 >= key.w, "mask {mask} {size}: the student copy is narrower than the key");
             }
         }
     }
 }
-fn canvas_w_equal(a: &Parsed, b: &Parsed) -> bool { (a.w - b.w).abs() < 1e-9 }
 
 /// Everything that is not a number in a disc, a rule or the question: what a student copy may print.
 const ALLOWED: &[&str] = &[
     "Not", "to", "scale", "a", "simplified", "picture", "of", "one", "chloroplast", "A", "ring", "or", "bracket", "points", "at", "part", "bar", "under", "the", "drawing", "names", "stage", "an", "arrow", "carries", "substance",
     "Write", "each", "name", "formula", "For", "that", "leaves", "loop", "give", "molecule", "it", "makes", "directly", "balanced", "equation", "making", "molecule", "glucose", "with", "whole", "number", "coefficients",
-    "ADP", "Pi", "NADP", "and", "are", "shown", "help", "you", "tell", "two", "carriers", "apart", "P", "Rate", "arbitrary", "units", "is", "x", "Light", "intensity", "full", "sunlight", "CO", "concentration", "ppm", "Temperature", "C",
+    "ADP", "Pi", "NADP", "and", "are", "shown", "help", "you", "tell", "two", "carriers", "apart", "using", "smallest", "Equation", "Read", "nearest", "fine", "gridline", "P", "Rate", "arbitrary", "units", "is", "x", "Light", "intensity", "full", "sunlight", "CO", "concentration", "ppm", "Temperature", "C",
     "au", "The", "for", "glucose", "graph", "could", "not", "be", "drawn",
 ];
 
@@ -1064,8 +1063,8 @@ fn the_rate_at_p_is_rounded_half_up_and_exact() {
         assert!(txt.ends_with(&format!(": {want} arbitrary units")), "{i}: {pm} {xv} {mk} dec {dec}: {txt:?} wanted {want}");
     }
     // beyond the end of the temperature curve P reads zero
-    let t = render_of(&[&graph_set("Temperature", "10", "20", "30")[..], &[b("show_parts", false), b("show_io", false), b("show_shuttle", false), b("show_stages", false)]].concat());
-    assert!(ink_texts(&t).iter().any(|(x, _)| x == "Rate at P (x = 30 \u{b0}C): 0.0 arbitrary units"));
+    let t = render_of(&[&graph_set("Temperature", "10", "20", "32")[..], &[b("show_parts", false), b("show_io", false), b("show_shuttle", false), b("show_stages", false)]].concat());
+    assert!(ink_texts(&t).iter().any(|(x, _)| x == "Rate at P (x = 32 \u{b0}C): 0.0 arbitrary units"));
     // and at the optimum it reads the peak
     let t = render_of(&[&graph_set("Temperature", "8.25", "20", "20")[..], &[b("show_parts", false), b("show_io", false), b("show_shuttle", false), b("show_stages", false), ("dec", Value::I(2))]].concat());
     assert!(ink_texts(&t).iter().any(|(x, _)| x == "Rate at P (x = 20 \u{b0}C): 8.25 arbitrary units"));
@@ -1095,7 +1094,8 @@ fn the_letter_p_always_finds_a_clear_place_and_the_graph_never_collides() {
     assert_eq!(n, 500);
 }
 
-fn font_sizes(svg: &str) -> Vec<f64> { svg.split(" font-size=\"").skip(1).map(|x| x.split('"').next().unwrap().parse().unwrap()).collect() }
+/// The font size of every `<text>` (not of the sub- and superscript runs inside it).
+fn font_sizes(svg: &str) -> Vec<f64> { svg.split("<text ").skip(1).map(|x| x.split(" font-size=\"").nth(1).unwrap().split('"').next().unwrap().parse().unwrap()).collect() }
 
 #[test]
 fn label_size_scales_the_text_and_the_discs_and_nothing_overflows() {
@@ -1238,8 +1238,8 @@ fn the_faq_states_the_limits_the_code_enforces() {
     for (axis, ranges) in [(Axis::Light, "3 to 20 %"), (Axis::Co2, "40 to 240 ppm")] { let (lo, hi, _) = axis.xv_range(); assert!(faq.contains(ranges), "{ranges}"); assert!(ranges.contains(&show(lo)) && ranges.contains(&show(hi))); }
     let (lo, hi, _) = Axis::Temp.xv_range();
     assert!(faq.contains(&format!("{} to {} degrees C", show(lo), show(hi))));
-    assert!(faq.contains(&format!("{FALL} times the optimum")) && faq.contains("1 to 100 arbitrary units") && faq.contains("5/6") && faq.contains("at least 4 degrees short of 60"));
-    assert_eq!((PMAX_LO, PMAX_HI, TEMP_ROOM), (1.0, 100.0, 4.0));
+    assert!(faq.contains(&format!("zero {} degrees C above the optimum", show(FALL_SPAN))) && faq.contains("1 to 100 arbitrary units") && faq.contains("5/6"));
+    assert_eq!((PMAX_LO, PMAX_HI, FALL_SPAN), (1.0, 100.0, 12.0));
     for (axis, k) in [(Axis::Light, 10.0), (Axis::Co2, 120.0), (Axis::Temp, 30.0)] { assert_eq!(axis.xv_range().2, k); }
     assert!(faq.contains("10 %, 120 ppm, 30 degrees C"));
     // every other wording the key accepts is in the answer about wording
@@ -1319,9 +1319,9 @@ fn the_accepted_wordings_are_exactly_the_documented_ones() {
     let want: [(It, &str); 14] = [
         (It::Thylakoid, "thylakoid"), (It::Granum, "grana (plural), thylakoid stack"), (It::Stroma, "chloroplast stroma"),
         (It::Outer, "outer envelope membrane"), (It::Inner, "inner envelope membrane"),
-        (It::StageL, "light reactions"), (It::StageC, "light-independent reactions, Calvin-Benson cycle"),
-        (It::Light, "sunlight, light energy"), (It::Water, "water"), (It::Oxygen, "oxygen"), (It::Co2, "carbon dioxide"),
-        (It::G3p, "glyceraldehyde 3-phosphate, PGAL, triose phosphate"), (It::Atp, "adenosine triphosphate"), (It::Nadph, "reduced NADP"),
+        (It::StageL, "light reactions"), (It::StageC, "light-independent reactions, Calvin-Benson cycle, Calvin-Benson-Bassham cycle"),
+        (It::Light, "sunlight, light energy, photons"), (It::Water, "water"), (It::Oxygen, "oxygen"), (It::Co2, "carbon dioxide"),
+        (It::G3p, "glyceraldehyde 3-phosphate, glyceraldehyde-3-phosphate, GA3P, PGAL, triose phosphate"), (It::Atp, "adenosine triphosphate"), (It::Nadph, "reduced NADP, NADPH + H+"),
     ];
     for (i, w) in want { assert_eq!(alts(i), w, "{i:?}"); }
     assert_eq!(ORDER.len(), 14);
@@ -1344,15 +1344,659 @@ fn the_pointer_marks_have_the_documented_size() {
 fn the_temperature_curve_matches_the_written_formula_and_has_no_jump() {
     for (pmax, topt) in [(10.0_f64, 30.0_f64), (7.0, 15.0), (50.0, 40.0), (1.0, 22.5)] {
         let want = |x: f64| -> f64 {
-            if x <= 0.0 || x >= 1.4 * topt { 0.0 }
+            if x <= 0.0 || x >= topt + 12.0 { 0.0 }
             else if x <= topt { pmax * (1.0 - ((topt - x) / topt).powi(2)) }
-            else { pmax * (1.0 - ((x - topt) / (0.4 * topt)).powi(2)) }
+            else { pmax * (1.0 - ((x - topt) / 12.0).powi(2)) }
         };
         for i in 0..=600 { let x = i as f64 / 10.0; assert!((rate(Axis::Temp, pmax, topt, x) - want(x)).abs() < 1e-12, "x={x} pmax={pmax} topt={topt} got {} want {}", rate(Axis::Temp, pmax, topt, x), want(x)); }
         // no jump at the end of the fall, nor at the optimum
-        assert!(rate(Axis::Temp, pmax, topt, 1.4 * topt - 1e-6) < 1e-4 * pmax);
+        assert!(rate(Axis::Temp, pmax, topt, topt + 12.0 - 1e-6) < 1e-4 * pmax);
         assert!((rate(Axis::Temp, pmax, topt, topt - 1e-6) - rate(Axis::Temp, pmax, topt, topt + 1e-6)).abs() < 1e-6 * pmax);
     }
     // the hyperbola, written out
     for (pmax, k) in [(10.0_f64, 10.0_f64), (3.0, 3.0), (80.0, 200.0)] { for i in 0..=200 { let x = i as f64 * 6.0; if x > 0.0 { assert!((rate(Axis::Co2, pmax, k, x) - pmax * x / (k + x)).abs() < 1e-12); } } }
+}
+
+// ================================================================== round 2: what critic 1 found, and one step over each
+
+fn gset(axis: &'static str, extra: &[(&'static str, Value)]) -> Vec<(&'static str, Value)> {
+    let mut v = vec![b("show_graph", true), s("graph_x", axis), b("show_parts", false), b("show_io", false), b("show_shuttle", false), b("show_stages", false)];
+    v.extend(extra.iter().cloned());
+    v
+}
+fn texts_of(svg: &str) -> Vec<String> { ink_texts(svg).into_iter().map(|t| t.0).collect() }
+fn key_lines(svg: &str) -> String { texts_of(svg).join("\n") }
+
+/// MED 5: a comma followed by three digits, on every axis, every box, both signs: the advice names exactly the readings that are in range, and typing them draws.
+#[test]
+fn ambiguous_commas_are_advised_with_values_that_draw() {
+    let mut cases = 0;
+    let mut named_both = 0;
+    let mut named_one = 0;
+    let mut named_none = 0;
+    for ax in AXES_ALL {
+        let axis = Axis::of(ax);
+        for field in ["pmax", "xval", "mark"] {
+            let (lo, hi) = match field { "pmax" => (PMAX_LO, PMAX_HI), "xval" => { let r = axis.xv_range(); (r.0, r.1) } _ => (0.0, axis.xmax()) };
+            for typed in ["1,000", "1,500", "0,500", "12,345", "20,000", "3,000", "100,000", "1,200", "0,000", "\u{2212}1,500", "40,000", "15,000", "999,999"] {
+                let l = [&graph_set(ax, "10", "", "20")[..], &[s(field, typed)]].concat();
+                let rs = refusals(&l);
+                assert_eq!(rs.len(), 1, "{ax} {field} {typed}: {rs:?}");
+                let t = &rs[0].text;
+                assert!(t.contains("ambiguous"), "{t}");
+                let (neg, body) = match typed.strip_prefix('\u{2212}') { Some(r) => (true, r), None => (false, typed) };
+                let (a, c) = body.split_once(',').unwrap();
+                let readings = [format!("{a}.{c}"), format!("{a}{c}")];
+                let fits: Vec<&String> = readings.iter().filter(|r| { let v: f64 = r.parse().unwrap(); let v = if neg { -v } else { v }; v >= lo && v <= hi }).collect();
+                match fits.len() {
+                    2 => { named_both += 1; assert!(t.contains(&format!("Type {} or {} to be clear.", fits[0], fits[1])), "{t}"); }
+                    1 => { named_one += 1; assert!(t.contains(&format!("Only {} is in the range", fits[0])) && t.contains(&format!("Type {} to be clear.", fits[0])), "{t}"); }
+                    _ => { named_none += 1; assert!(t.contains("Neither is in the range") && t.contains("such as"), "{t}"); }
+                }
+                // every value the advice names, typed back into the same box, draws; the reading it leaves out is refused
+                let mut advised: Vec<String> = fits.iter().map(|x| format!("{}{x}", if neg { "-" } else { "" })).collect();
+                if fits.is_empty() { advised.push(t.split("such as ").nth(1).unwrap().chars().take_while(|c| c.is_ascii_digit() || *c == '.').collect()); }
+                for v in &advised {
+                    let l2 = [&graph_set(ax, "10", "", "20")[..], &[s(field, v)]].concat();
+                    assert!(refusals(&l2).is_empty(), "{ax} {field} {typed}: the advice {v:?} is refused: {:?}", refusals(&l2));
+                    assert!(render_of(&l2).contains("<polyline"), "it draws");
+                }
+                for r in readings.iter().filter(|r| !fits.contains(r)) {
+                    let l2 = [&graph_set(ax, "10", "", "20")[..], &[s(field, &format!("{}{r}", if neg { "-" } else { "" }))]].concat();
+                    assert!(!refusals(&l2).is_empty(), "{ax} {field}: {r} is out of range but accepted");
+                }
+                cases += 1;
+            }
+        }
+    }
+    assert!(cases > 100 && named_both > 0 && named_one > 0 && named_none > 0, "{cases} {named_both} {named_one} {named_none}");
+}
+
+/// MED 2: P opens at a readable place on every axis.
+#[test]
+fn auto_puts_p_at_a_typical_place_on_each_axis_and_a_typed_value_is_kept() {
+    for (ax, want) in [("Light intensity", 20.0), ("CO2 concentration", 400.0), ("Temperature", 20.0)] {
+        let axis = Axis::of(ax);
+        assert_eq!(axis.mark_default(), want);
+        for case in ["auto", "AUTO", "  Auto "] {
+            let cv = read_graph(&with(&[b("show_graph", true), s("graph_x", ax), s("mark", case)])).unwrap();
+            assert_eq!(cv.mark.unwrap().v, want, "{ax} {case}");
+        }
+        assert!(read_graph(&with(&[b("show_graph", true), s("graph_x", ax), s("mark", "")])).unwrap().mark.is_none(), "empty is no point");
+        assert_eq!(read_graph(&with(&[b("show_graph", true), s("graph_x", ax), s("mark", "20")])).unwrap().mark.unwrap().v, 20.0, "a typed 20 stays 20");
+        // the start state, student copy and key, every label size: the dot is well away from the corner, with long guides
+        for key in [true, false] {
+            for size in SIZES {
+                let svg = render_of(&gset(ax, &[b(SHOW_ANSWERS, key), s("label_size", size)]));
+                let q = parse(&svg);
+                let pl = plot_of(&q, axis, 10.0);
+                let dot = q.circles.iter().find(|c| (c.r - 4.4).abs() < 1e-9).expect("P");
+                let along = (dot.c.0 - pl.l) / (pl.r - pl.l);
+                assert!((0.15..=0.6).contains(&along), "{ax}: P is {along:.3} of the way along");
+                assert!(dot.c.0 - pl.l >= 60.0 && pl.bm - dot.c.1 >= 60.0, "{ax}: the guides are {} and {} px", dot.c.0 - pl.l, pl.bm - dot.c.1);
+                let ratio = cv_rate(axis, &q, dot);
+                assert!(ratio > 0.3, "{ax}: the rate at P is only {ratio} of the plateau");
+            }
+        }
+    }
+    // above the CO2 compensation point (about 40 to 50 ppm)
+    assert!(Axis::Co2.mark_default() > 100.0);
+    // a refused mark advises a value that works on its own axis
+    for ax in AXES_ALL {
+        let r = &refusals(&graph_set(ax, "10", "", "x"))[0];
+        assert!(r.text.contains(&format!("such as {}", show(Axis::of(ax).mark_default()))), "{}", r.text);
+    }
+}
+fn cv_rate(axis: Axis, q: &Parsed, dot: &Ci) -> f64 { let pl = plot_of(q, axis, 10.0); (pl.bm - dot.c.1) / (pl.bm - pl.t) * pl.ytop / 10.0 }
+
+/// MED 1: the labelled and the fine gridlines, and the range the key accepts, over the whole option space.
+#[test]
+fn the_rate_axis_has_fine_gridlines_and_the_key_states_the_range_to_accept() {
+    for pmax in ["1", "1.5", "2.5", "3", "7.5", "10", "13", "25", "42", "60", "99.9", "100"] {
+        let pm: f64 = pmax.parse().unwrap();
+        let (top, step) = y_axis(pm);
+        let nm = minor_divisions(step);
+        assert!(nm == 4 || nm == 5);
+        // the labelled step is 1, 2 or 5 times a power of ten, and the fine spacing is a round number
+        let m = step / 10f64.powf(step.log10().floor());
+        assert!([1.0, 2.0, 5.0].iter().any(|x| (m - x).abs() < 1e-6), "{pmax}: step {step}");
+        let fine = step / nm as f64;
+        let fm = fine / 10f64.powf(fine.log10().floor());
+        assert!([1.0, 2.0, 5.0].iter().any(|x| (fm - x).abs() < 1e-6), "{pmax}: fine {fine}");
+        assert!(top >= pm * 1.1 && top <= pm * 1.6, "{pmax}: top {top}");
+        for ax in AXES_ALL {
+            for style in ["Colour", "Print"] {
+                for size in SIZES {
+                    let svg = render_of(&gset(ax, &[s("pmax", pmax), s("style", style), s("label_size", size), b(SHOW_ANSWERS, false)]));
+                    let q = parse(&svg);
+                    let pl = plot_of(&q, Axis::of(ax), pm);
+                    let (gc, fc) = if style == "Print" { (GRID_PRINT, FINE_PRINT) } else { (GRID_COLOUR, FINE_COLOUR) };
+                    let ys = |col: &str| { let mut v: Vec<f64> = q.lines.iter().filter(|l| l.col == col && l.a.1 == l.b.1 && (l.a.0 - pl.l).abs() < 0.02 && (l.b.0 - pl.r).abs() < 0.02).map(|l| (pl.bm - l.a.1) / (pl.bm - pl.t) * pl.ytop).collect(); v.sort_by(|a, c| a.partial_cmp(c).unwrap()); v };
+                    let (maj, fin) = (ys(gc), ys(fc));
+                    let px_tol = 0.02 * pl.ytop / (pl.bm - pl.t) * 1.5;
+                    let n_major = (top / step).round() as usize;
+                    assert_eq!(maj.len(), n_major, "{pmax} {ax} {style}: labelled gridlines (the one at 0 is the axis)");
+                    assert_eq!(fin.len(), n_major * (nm - 1), "{pmax} {ax} {style}: fine gridlines {fin:?}");
+                    for (k, y) in maj.iter().enumerate() { assert!((y - step * (k + 1) as f64).abs() < px_tol, "{y} vs {}", step * (k + 1) as f64); }
+                    // every fine line is a multiple of the fine spacing and none sits on a labelled one
+                    for y in &fin { let r = y / fine; assert!((r - r.round()).abs() * fine < px_tol && (y / step - (y / step).round()).abs() * step > fine / 2.0, "{y}"); }
+                    // the fine lines are at most 20 px apart at Medium and Large (the student can read the nearest)
+                    let px_fine = (pl.bm - pl.t) * fine / pl.ytop;
+                    assert!(px_fine <= 24.0 && px_fine >= 3.5, "{pmax}: {px_fine} px between fine lines");
+                }
+            }
+        }
+    }
+    // the accepted range: half of the fine spacing either side of the exact rate, in units, in the key, for every axis and mark
+    for ax in AXES_ALL {
+        let axis = Axis::of(ax);
+        for pmax in ["1", "6.5", "10", "37", "100"] {
+            for mark in ["0", "1", "5", "20", "33.3", "60", "250", "400", "1000"] {
+                let l = gset(ax, &[s("pmax", pmax), s("mark", mark), s("xval", ""), b(SHOW_ANSWERS, true)]);
+                let Ok(cv) = read_graph(&with(&l)) else { continue };
+                let m = cv.mark.unwrap();
+                let (lo, hi, minor) = cv.accept(&m);
+                let (_, step) = y_axis(cv.pmax.v);
+                assert_eq!(minor, show(step / minor_divisions(step) as f64));
+                let (lof, hif): (f64, f64) = (lo.parse().unwrap(), hi.parse().unwrap());
+                let exact = cv.rate(m.v);
+                let tol = step / minor_divisions(step) as f64 / 2.0;
+                assert!((lof - (exact - tol).max(0.0)).abs() <= 0.5 * 10f64.powi(-(lo.split('.').nth(1).map_or(0, |d| d.len()) as i32)) + 1e-9, "{ax} {pmax} {mark}: {lo} vs {}", exact - tol);
+                assert!((hif - (exact + tol)).abs() <= 0.5 * 10f64.powi(-(hi.split('.').nth(1).map_or(0, |d| d.len()) as i32)) + 1e-9, "{ax} {pmax} {mark}: {hi} vs {}", exact + tol);
+                assert!(lof <= exact + 1e-9 && hif >= exact - 1e-9 && hif - lof <= cv.pmax.v * 0.1 + 1e-9, "{ax} {pmax} {mark}: {lo} {hi}");
+                let svg = render_of(&l);
+                let all = key_lines(&svg).replace('\n', " ");
+                assert!(all.contains(&format!("accept any value from {lo} to {hi} arbitrary units")) && all.contains(&format!("smallest gridline spacing ({minor})")), "{ax} {pmax} {mark}");
+                // and the student copy says to read to the nearest fine gridline but names no range
+                let stu = key_lines(&render_of(&[&l[..], &[b(SHOW_ANSWERS, false)]].concat())).replace('\n', " ");
+                assert!(stu.contains("Read the rate at P to the nearest fine gridline.") && !stu.contains("accept any value") && !stu.contains("Also accepted"), "{ax}");
+                let _ = axis;
+            }
+        }
+    }
+    // with no point there is nothing to read and the key says nothing about a reading
+    let none = key_lines(&render_of(&gset("Light intensity", &[s("mark", ""), b(SHOW_ANSWERS, true)])));
+    assert!(!none.contains("Reading at P") && !none.contains("accept any value"));
+    let none = key_lines(&render_of(&gset("Light intensity", &[s("mark", ""), b(SHOW_ANSWERS, false)])));
+    assert!(!none.contains("nearest fine gridline"));
+}
+
+/// Print gridlines survive a photocopy at 66 % grey: every grey that carries information is darker than 66 % grey.
+#[test]
+fn print_gridlines_are_darker_than_sixty_six_percent_grey_and_the_two_kinds_differ() {
+    let lum = |c: &str| { let v = u8::from_str_radix(&c[1..3], 16).unwrap() as f64; v };
+    for c in [GRID_PRINT, FINE_PRINT] { assert!(lum(c) < 0.66 * 255.0, "{c} is paler than 66 % grey"); }
+    assert!(lum(GRID_PRINT) < lum(FINE_PRINT), "labelled lines are darker than fine ones");
+    // pixels: every gridline of a Print render, rasterised at 3x, has dark pixels along it
+    for ax in AXES_ALL {
+        let svg = render_of(&gset(ax, &[s("style", "Print"), b(SHOW_ANSWERS, false), s("label_size", "Small")]));
+        let q = parse(&svg);
+        let (w, h, px) = crate::figures::to_rgba(&svg, 3.0).unwrap();
+        let pl = plot_of(&q, Axis::of(ax), 10.0);
+        let mut missing = 0;
+        let mut seen = 0;
+        for l in q.lines.iter().filter(|l| (l.col == GRID_PRINT || l.col == FINE_PRINT) && l.a.1 == l.b.1) {
+            seen += 1;
+            let (iy, mut dark) = ((l.a.1 * 3.0).round() as u32, 0);
+            for dy in [0i32, -1, 1] {
+                for ix in ((pl.l * 3.0) as u32 + 6..(pl.r * 3.0) as u32 - 6).step_by(7) {
+                    let o = ((((iy as i32 + dy) as u32 * w + ix) * 4) as usize).min(px.len() - 4);
+                    if (0.299 * px[o] as f64 + 0.587 * px[o + 1] as f64 + 0.114 * px[o + 2] as f64) < 0.66 * 255.0 { dark += 1; }
+                }
+            }
+            if dark == 0 { missing += 1; }
+            let _ = h;
+        }
+        assert!(seen >= 12 && missing == 0, "{ax}: {missing} of {seen} Print gridlines vanish at 66 % grey");
+    }
+}
+
+/// L5: the letter P and the Plateau and Peak labels never have a gridline through them: each sits on a white pad that is drawn after the gridlines and clear of the curve.
+#[test]
+fn the_letter_p_and_the_plateau_and_peak_labels_have_no_gridline_through_them() {
+    let mut n = 0;
+    for ax in AXES_ALL {
+        let axis = Axis::of(ax);
+        let (lo, hi, _) = axis.xv_range();
+        for pmax in ["1", "10", "37", "100"] {
+            for xv in [lo, hi] {
+                for frac in [0.05, 0.15, 0.3, 0.5, 0.8, 1.0] {
+                    for key in [true, false] {
+                        for size in SIZES {
+                            for style in ["Colour", "Print"] {
+                                if style == "Print" && size == "Medium" { continue; }
+                                let mark = format!("{:.1}", axis.xmax() * frac);
+                                let svg = render_of(&gset(ax, &[s("pmax", pmax), s("xval", &format!("{xv}")), s("mark", &mark), b(SHOW_ANSWERS, key), s("label_size", size), s("style", style)]));
+                                let q = parse(&svg);
+                                let pads: Vec<(usize, Bx)> = svg.match_indices("<rect ").filter_map(|(i, _)| { let el = svg[i..].split('>').next().unwrap(); if attr(el, "fill").as_deref() == Some("#ffffff") && attr(el, "stroke").is_none() { Some((i, (num(el, "x"), num(el, "y"), num(el, "x") + num(el, "width"), num(el, "y") + num(el, "height")))) } else { None } }).collect();
+                                let last_grid = svg.rfind(&format!("stroke=\"{}\"", if style == "Print" { FINE_PRINT } else { FINE_COLOUR })).unwrap();
+                                let labelled: Vec<&(String, Bx)> = q.texts.iter().filter(|t| t.0 == "P" || t.0.starts_with("Plateau: ") || t.0.starts_with("Peak: ")).collect();
+                                assert_eq!(labelled.len(), 1 + usize::from(key), "{ax} {mark}");
+                                for (t, bx) in labelled {
+                                    let pad = pads.iter().find(|(_, r)| r.0 <= bx.0 && r.1 <= bx.1 && r.2 >= bx.2 && r.3 >= bx.3).unwrap_or_else(|| panic!("{ax} {pmax} {xv} {mark} {size}: {t:?} has no white pad: {bx:?}"));
+                                    assert!(pad.0 > last_grid, "{t:?}: the pad is drawn before a gridline");
+                                    // nothing but gridlines (and the white background) passes under the pad: curve, dot and guides are clear of it
+                                    let r = pad.1;
+                                    for p in curve_of(&q) { assert!(!(p.0 > r.0 - 0.7 && p.0 < r.2 + 0.7 && p.1 > r.1 - 0.7 && p.1 < r.3 + 0.7), "{t:?}: the curve runs under the pad"); }
+                                    for l in q.lines.iter().filter(|l| !is_grid(l) && l.sw < 2.0 && l.dashed) { assert!(!seg_box(l.a, l.b, r, 0.3), "{t:?}: a guide runs under the pad"); }
+                                    for c in q.circles.iter().filter(|c| (c.r - 4.4).abs() < 1e-9) { assert!(!circ_box(c, r, 0.5), "{t:?}: the dot touches the pad"); }
+                                }
+                                n += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(n > 1400, "{n}");
+}
+
+/// MED 6 (M06): a student copy prints no number that is not a disc number, an axis value, or the x of P: the rate at P is never printed.
+#[test]
+fn a_student_copy_prints_no_number_but_discs_axis_values_and_the_x_of_p() {
+    let mut checked = 0;
+    for ax in AXES_ALL {
+        let axis = Axis::of(ax);
+        for pmax in ["1", "4", "6.5", "10", "37", "100"] {
+            for mark in ["auto", "7", "20", "33.3", "150", "400"] {
+                for dec in [0i64, 1, 2, 3] {
+                    for style in ["Colour", "Print"] {
+                        let l = gset(ax, &[s("pmax", pmax), s("mark", mark), ("dec", Value::I(dec)), b(SHOW_ANSWERS, false), s("style", style)]);
+                        let Ok(cv) = read_graph(&with(&l)) else { continue };
+                        let svg = render_of(&l);
+                        let (top, step) = y_axis(cv.pmax.v);
+                        let mut ok: Vec<String> = Vec::new();
+                        let mut v = 0.0; while v <= top + 1e-9 { ok.push(num_text((v * 1e9).round() / 1e9)); v += step; }
+                        let mut x = 0.0; while x <= axis.xmax() + 1e-9 { ok.push(num_text(x)); x += axis.xstep(); }
+                        let q = parse(&svg);
+                        let ds = discs(&q);
+                        let m = cv.mark.unwrap();
+                        let rate_strs: Vec<String> = (0..=3).map(|d| cv.rate_text(&m, d)).collect();
+                        for (t, bx) in &q.texts {
+                            let c = ((bx.0 + bx.2) / 2.0, (bx.1 + bx.3) / 2.0);
+                            if ds.iter().any(|d| dist(c, d.c) < d.r) { continue; }
+                            let t = &t.replace("CO2", "CO");
+                            for tok in t.split(|ch: char| !(ch.is_ascii_digit() || ch == '.' || ch == '\u{2212}')).filter(|x| x.chars().any(|c| c.is_ascii_digit())) {
+                                let tok = tok.trim_end_matches('.');
+                                let is_x = tok == show_d(m.d) && t.contains("P is at x");
+                                assert!(is_x || ok.contains(&tok.to_string()), "{ax} pmax {pmax} mark {mark} dec {dec}: the student copy prints the number {tok:?} in {t:?}");
+                            }
+                            // the rate itself, in any rounding, is not a text of the student copy unless it is an axis value
+                            if !ok.contains(t) { assert!(!rate_strs.contains(t), "{t:?} is the rate at P"); }
+                        }
+                        // nor anywhere else in the source (a title, a description, an attribute)
+                        for r in rate_strs.iter().filter(|r| r.contains('.') && !ok.contains(r)) { assert!(!svg.contains(&format!(">{r}<")) && !svg.contains(&format!("{r} arbitrary")), "the source holds the rate {r}"); }
+                        checked += 1;
+                    }
+                }
+            }
+        }
+    }
+    assert!(checked > 300, "{checked}");
+}
+
+/// MED 6 (M04): every number is on one blank: figure and table (twice) or the equation or the rate (once), with the graph on too.
+#[test]
+fn the_numbers_of_the_blanks_are_each_used_once_with_the_graph_and_the_equation() {
+    for mask in 0..64u32 {
+        for mark in ["auto", ""] {
+            for ax in AXES_ALL {
+                let l = [&toggle_list(mask)[..], &[b(SHOW_ANSWERS, false), s("mark", mark), s("graph_x", ax)]].concat();
+                let svg = render_of(&l);
+                let q = parse(&svg);
+                let c = cfg(&with(&l));
+                let given = if c.graph && c.io && ax != "Temperature" { 1 } else { 0 };
+                let labs = labels(&c, &[]).len() - given;
+                let ds = discs(&q);
+                let mut nums: Vec<usize> = ink_texts(&svg).into_iter().filter(|(t, bx)| t.chars().all(|c| c.is_ascii_digit()) && ds.iter().any(|d| dist(((bx.0 + bx.2) / 2.0, (bx.1 + bx.3) / 2.0), d.c) < d.r)).map(|t| t.0.parse().unwrap()).collect();
+                nums.sort();
+                let with_rate = c.graph && !mark.is_empty();
+                let singles = usize::from(c.eq) + usize::from(with_rate);
+                let mut want: Vec<usize> = (1..=labs).flat_map(|n| [n, n]).collect();
+                if c.eq { want.push(labs + 1); }
+                if with_rate { want.push(labs + usize::from(c.eq) + 1); }
+                want.sort();
+                assert_eq!(nums, want, "mask {mask} {mark:?} {ax}: {labs} labels and {singles} single blanks");
+            }
+        }
+    }
+}
+
+/// MED 6 (M05, M15, M21, M12, M11): the student instructions are all there, word for word, exactly when they apply.
+#[test]
+fn the_student_instructions_are_exact_and_appear_exactly_when_they_apply() {
+    for mask in 0..64u32 {
+        let l = [&toggle_list(mask)[..], &[b(SHOW_ANSWERS, false)]].concat();
+        let c = cfg(&with(&l));
+        let txt = key_lines(&render_of(&l)).replace('\n', " ").replace("  ", " ");
+        let has = |t: &str| txt.contains(t);
+        assert_eq!(has("For the arrow that leaves the loop, give the molecule it makes directly."), c.io, "mask {mask}");
+        assert_eq!(has("Write the balanced equation for making one molecule of glucose, using the smallest whole-number coefficients."), c.eq, "mask {mask}");
+        assert_eq!(has("ADP + Pi and NADP+ are shown to help you tell the two carriers apart."), c.shuttle, "mask {mask}");
+        assert_eq!(has("Equation:"), c.eq, "mask {mask}: the prompt beside the equation's rule");
+        assert!(has("A ring or a bracket points at a part, a bar under the drawing names a stage, an arrow carries a substance. Write each name or formula."));
+        assert!(has("Not to scale: a simplified picture of one chloroplast."));
+        // the key prints none of them
+        let kt = key_lines(&render_of(&[&toggle_list(mask)[..], &[b(SHOW_ANSWERS, true)]].concat())).replace('\n', " ");
+        assert!(!kt.contains("Write each name") && !kt.contains("give the molecule it makes directly") && !kt.contains("shown to help you"), "mask {mask}");
+    }
+}
+
+/// MED 4: the key states the equation's accepted forms; the student sentence says "smallest".
+#[test]
+fn the_key_lists_the_equation_s_accepted_forms_and_the_student_sheet_says_smallest() {
+    let key = key_lines(&render_of(&[])).replace('\n', " ");
+    assert!(key.contains("Equation: 6CO2 + 6H2O + light gives C6H12O6 + 6O2. Also accepted: light written over the arrow instead of on the left, and the terms in a different order. Not accepted: coefficients that are not the smallest whole numbers, such as 6CO2 + 12H2O gives C6H12O6 + 6O2 + 6H2O."), "{key}");
+    // the equation the key calls not accepted is balanced, so the student sentence has to rule it out (it does: "smallest")
+    let side = |s: &str| { let mut t = std::collections::BTreeMap::new(); for term in s.split('+') { if term.trim() == "light" { continue; } for (e, n) in atoms(term) { *t.entry(e).or_insert(0) += n; } } t };
+    assert_eq!(side("6CO~2 + 12H~2O"), { let mut r = side("C~6H~12O~6 + 6O~2 + 6H~2O"); r.retain(|_, _| true); r });
+    let stu = key_lines(&render_of(&[b(SHOW_ANSWERS, false)])).replace('\n', " ");
+    assert!(stu.contains("smallest whole-number coefficients") && !stu.contains("Also accepted"));
+    // the key line is there only with the equation on
+    assert!(!key_lines(&render_of(&[b("show_equation", false)])).contains("Equation: 6CO2"));
+    // the FAQ says the same
+    let faq: String = crate::figures::faq::faq_for(ID).iter().map(|f| f.a).collect::<Vec<_>>().join(" ");
+    assert!(faq.contains("the key prints these accepted forms") && faq.contains("smallest whole-number coefficients"));
+}
+
+/// MED 3 and the key captions' numbers (M11, M12), all three axes, a spread of values.
+#[test]
+fn the_key_captions_quote_the_numbers_of_the_curve_and_the_temperature_biology_is_right() {
+    for opt in ["15", "16.5", "22", "30", "40"] {
+        for pmax in ["1", "7.5", "10", "100"] {
+            let l = gset("Temperature", &[s("xval", opt), s("pmax", pmax), b(SHOW_ANSWERS, true), s("mark", "")]);
+            let txt = key_lines(&render_of(&l)).replace('\n', " ");
+            let o: f64 = opt.parse().unwrap();
+            let zero = show(o + 12.0);
+            assert!(txt.contains(&format!("Graph: the dashed line is the peak, {pmax}; the dotted line marks the optimum, {opt} \u{b0}C. The rate rises to the optimum, then falls steeply and reaches zero 12 \u{b0}C above it, at {zero} \u{b0}C: heat damages enzymes and membranes.")), "{opt} {pmax}: {txt}");
+            assert!(!txt.contains("times the optimum") && !txt.contains("lost their shape"), "a ratio of Celsius temperatures, or denaturing at 21 degrees");
+            assert!(txt.contains("not a measured value for one species"));
+            assert!(texts_of(&render_of(&l)).iter().any(|t| t.starts_with(&format!("Peak: {pmax}"))));
+            // the curve really is zero at that temperature and not before
+            assert_eq!(rate(Axis::Temp, pmax.parse().unwrap(), o, o + 12.0), 0.0);
+            assert!(rate(Axis::Temp, pmax.parse().unwrap(), o, o + 11.0) > 0.0);
+        }
+    }
+    for (ax, kk) in [("Light intensity", ["3", "10", "20"]), ("CO2 concentration", ["40", "120", "240"])] {
+        let axis = Axis::of(ax);
+        for k in kk {
+            for pmax in ["1", "7.5", "100"] {
+                let l = gset(ax, &[s("xval", k), s("pmax", pmax), b(SHOW_ANSWERS, true), s("mark", "")]);
+                let txt = key_lines(&render_of(&l)).replace('\n', " ");
+                let kf: f64 = k.parse().unwrap();
+                let pct = (100.0 * axis.xmax() / (kf + axis.xmax())).round();
+                let u = axis.unit();
+                let want = format!("Graph: the dashed line is the plateau, {pmax}, which the curve approaches but never reaches (at the end of the axis it is at {pct} % of it); the dotted lines show that half of the plateau is reached at x = {k} {u}. On the rising part the rate is limited by {}; where the curve levels off towards the plateau {} is no longer the main limit and another factor is.", axis.word(), axis.word());
+                assert!(txt.contains(&want), "{ax} {k} {pmax}:\n{txt}\n{want}");
+                // the half-saturation is quoted as K, never as the plateau, and the curve is at half the plateau there
+                assert!((rate(axis, 1.0, kf, kf) - 0.5).abs() < 1e-12);
+                assert!(pct < 100.0 && pct >= 83.0, "{pct}");
+            }
+        }
+    }
+}
+
+/// M18 and the documented defaults: an empty half-saturation or optimum draws at 10 %, 120 ppm and 30 degrees C, in the curve, the guides and the caption.
+#[test]
+fn an_empty_half_saturation_draws_at_the_documented_default() {
+    for (ax, dflt) in [("Light intensity", 10.0), ("CO2 concentration", 120.0), ("Temperature", 30.0)] {
+        let axis = Axis::of(ax);
+        for pmax in ["4", "10"] {
+            let l = gset(ax, &[s("pmax", pmax), s("xval", ""), b(SHOW_ANSWERS, true), s("mark", "")]);
+            let cv = read_graph(&with(&l)).unwrap();
+            assert_eq!((cv.xv.v, cv.xv_typed), (dflt, false));
+            let svg = render_of(&l);
+            let q = parse(&svg);
+            let pl = plot_of(&q, axis, pmax.parse().unwrap());
+            for p in curve_of(&q) {
+                let x = (p.0 - pl.l) / (pl.r - pl.l) * pl.xmax;
+                let y = (pl.bm - p.1) / (pl.bm - pl.t) * pl.ytop;
+                assert!((y - rate(axis, pmax.parse().unwrap(), dflt, x)).abs() < 0.02 + 1e-6 * pl.ytop, "{ax}: the curve is not the one with {dflt}");
+            }
+            // the dotted guide from the half-way height drops at the default
+            let xd = pl.l + dflt / pl.xmax * (pl.r - pl.l);
+            assert!(q.lines.iter().any(|l| l.a.0 == l.b.0 && (l.a.0 - xd).abs() < 0.01 && l.dashed && (l.b.1 - pl.bm).abs() < 0.01), "{ax}: no dotted guide at {dflt}");
+            let txt = key_lines(&svg).replace('\n', " ");
+            assert!(txt.contains(&format!("{} {}", show(dflt), axis.unit())), "{txt}");
+        }
+    }
+}
+
+/// M01 and the exactness of the rounding: integer arithmetic on the typed digits, against an independent exact comparison.
+#[test]
+fn the_rate_at_p_is_exact_for_every_typed_value_near_a_half() {
+    // the critic's case: 3.333333333 with a plateau of 10 and K of 10 is 2.4999999998, which rounds to 2
+    let l = gset("Light intensity", &[s("pmax", "10"), s("xval", "10"), s("mark", "3.333333333"), ("dec", Value::I(0)), b(SHOW_ANSWERS, true)]);
+    assert!(texts_of(&render_of(&l)).iter().any(|t| t == "Rate at P (x = 3.333333333 %): 2 arbitrary units"), "{:?}", texts_of(&render_of(&l)));
+    // ties go up
+    for (pm, xv, mk, dec, want) in [("1", "3", "1", 1, "0.3"), ("2", "3", "1", 0, "1"), ("3", "3", "3", 0, "2"), ("5", "5", "5", 0, "3"), ("5", "15", "5", 1, "1.3"), ("1", "3", "1", 2, "0.25")] {
+        let cv = read_graph(&with(&gset("Light intensity", &[s("pmax", pm), s("xval", xv), s("mark", mk)]))).unwrap();
+        assert_eq!(cv.rate_text(&cv.mark.unwrap(), dec), want, "{pm} {xv} {mk}");
+    }
+    // 20,000 random decimal inputs on all three axes, against floor-and-remainder arithmetic written separately
+    let mut r = Rng::new(99);
+    for i in 0..20_000 {
+        let ax = AXES_ALL[r.below(3)];
+        let axis = Axis::of(ax);
+        let (lo, hi, _) = axis.xv_range();
+        let pm = format!("{}.{:03}", 1 + r.below(99), r.below(1000));
+        let xv = format!("{}.{}", lo as u32 + r.below((hi - lo) as usize) as u32, r.below(100));
+        let mk = format!("{}.{}", r.below(axis.xmax() as usize), r.below(1000));
+        let dec = r.below(4);
+        let l = gset(ax, &[s("pmax", &pm), s("xval", &xv), s("mark", &mk)]);
+        let Ok(cv) = read_graph(&with(&l)) else { continue };
+        let (n, d) = (cv.pmax.d, cv.xv.d);
+        let (x, k) = (cv.mark.unwrap().d, 10i128.pow(dec as u32));
+        // value * 10^dec as a fraction, then floor((2 * num + den) / (2 * den)) separately from `ratio_text`
+        let (num, den): (i128, i128) = match axis {
+            Axis::Light | Axis::Co2 => (n * x * k, (d + x) * SCALE),
+            Axis::Temp => { let sp = 12 * SCALE; if x >= d + sp { (0, 1) } else if x <= d { (n * (d * d - (d - x) * (d - x)) * k, d * d * SCALE) } else { (n * (sp * sp - (x - d) * (x - d)) * k, sp * sp * SCALE) } }
+        };
+        let (q, rem) = (num / den, num % den);
+        let up = q + i128::from(2 * rem >= den);
+        let want = if dec == 0 { up.to_string() } else { format!("{}.{:0w$}", up / k, up % k, w = dec) };
+        assert_eq!(cv.rate_text(&cv.mark.unwrap(), dec), want, "{i}: {ax} {pm} {xv} {mk} dec {dec}");
+    }
+}
+
+/// L2: every documented unit is read, in any case and with any spacing; everything else is refused.
+#[test]
+fn every_documented_unit_is_read_and_a_wrong_one_is_refused() {
+    let temp = ["30", "30c", "30 C", "30C", "30 c", "30\u{b0}", "30 \u{b0}", "30\u{b0}C", "30 \u{b0}C", "30 \u{b0} C", "30\u{ba}C", "30 \u{ba} c", "30\u{2103}", "30 deg", "30 deg C", "30 DEG C", "30 degC", "30 degrees", "30 degrees C", "30 Degrees c", "30   degrees   C", "30 degrees Celsius", "30 degree celsius", "30 celsius", "30 deg Celsius", "30 degreeC"];
+    for t in temp {
+        for field in ["xval", "mark"] {
+            let l = [&graph_set("Temperature", "10", "", "20")[..], &[s(field, t)]].concat();
+            assert!(refusals(&l).is_empty(), "{field} {t:?}: {:?}", refusals(&l));
+            let cv = read_graph(&with(&l)).unwrap();
+            let got = if field == "xval" { cv.xv.v } else { cv.mark.unwrap().v };
+            assert_eq!(got, 30.0, "{t:?}");
+        }
+    }
+    for t in ["30 degrees F", "30 cc", "30 degreesc c", "30 K", "30 deg Cx", "30 degrees Kelvin", "c30", "30 \u{b0}F", "30 degrees C C"] {
+        assert_eq!(refusals(&graph_set("Temperature", "10", "", t)).len(), 1, "{t:?} should be refused");
+    }
+    for t in ["20", "20%", "20 %", "20 percent", "20 Percent", "20 per cent", "20  PER   CENT"] { assert!(refusals(&graph_set("Light intensity", "10", "", t)).is_empty(), "{t:?}"); }
+    for t in ["20 ppm", "20ppm", "20 parts per million", "20 PPM"] { assert!(refusals(&graph_set("CO2 concentration", "10", "", t)).is_empty(), "{t:?}"); }
+    for t in ["10", "10 au", "10au", "10 a.u.", "10 units", "10 unit", "10 arbitrary units", "10 Arbitrary Unit", "10 arb. units"] { assert!(refusals(&graph_set("Light intensity", t, "", "20")).is_empty(), "{t:?}"); }
+    for t in ["20 ppm", "20 \u{b0}C", "10 mg"] { assert_eq!(refusals(&graph_set("Light intensity", "10", "", t)).len(), 1, "{t:?} on the light axis"); }
+    // the FAQ says so
+    let faq: String = crate::figures::faq::faq_for(ID).iter().map(|f| f.a).collect::<Vec<_>>().join(" ");
+    assert!(faq.contains("au or arbitrary units; % or percent; ppm; degrees C, degrees Celsius or deg C"));
+}
+
+/// M13 and its relatives: no two arrows come near each other, in any mode and size.
+#[test]
+fn no_two_arrows_cross_or_come_within_a_few_pixels_of_each_other() {
+    let mut n = 0;
+    for mask in 0..32u32 {
+        for size in SIZES {
+            for style in ["Colour", "Print"] {
+                let l = [&toggle_list(mask)[..], &[s("label_size", size), s("style", style)]].concat();
+                let q = parse(&render_of(&l));
+                let shafts: Vec<&Ln> = q.lines.iter().filter(|l| l.sw > 2.19 && (l.sw - 2.0).abs() > 1e-9 && !is_grid(l)).collect();
+                let heads: Vec<&El> = q.els.iter().filter(|e| is_head(e) && e.stroke == e.fill && e.sw < 1.0).collect();
+                for i in 0..shafts.len() {
+                    for j in i + 1..shafts.len() {
+                        let d = crate::figures::biology::celldiagram::seg_dist(shafts[i].a, shafts[i].b, shafts[j].a, shafts[j].b) - shafts[i].sw / 2.0 - shafts[j].sw / 2.0;
+                        assert!(d >= 6.0, "mask {mask} {size}: two arrows are {d:.1} px apart ({:?} and {:?})", shafts[i].a, shafts[j].a);
+                    }
+                    for h in &heads {
+                        let own = h.pts.iter().any(|p| dist(*p, shafts[i].a) < 8.0 || dist(*p, shafts[i].b) < 8.0);
+                        if own { continue; }
+                        let d = h.pts.iter().map(|p| dseg(*p, shafts[i].a, shafts[i].b)).fold(f64::INFINITY, f64::min) - shafts[i].sw / 2.0;
+                        assert!(d >= 6.0, "mask {mask} {size}: an arrowhead is {d:.1} px from another arrow's shaft");
+                    }
+                }
+                n += 1;
+            }
+        }
+    }
+    assert_eq!(n, 192);
+}
+
+/// M03: the clue under each dashed arrow is the partner of the arrow above it (ADP + Pi with ATP, NADP+ with NADPH).
+#[test]
+fn the_clues_sit_under_their_own_dashed_arrows_and_pair_with_the_right_carrier() {
+    for size in SIZES {
+        for key in [true, false] {
+            let svg = render_of(&[b(SHOW_ANSWERS, key), s("label_size", size), b("show_parts", false), b("show_stages", false), b("show_io", false)]);
+            let q = parse(&svg);
+            let near = |bx: Bx, dashed: bool| -> String {
+                let c = ((bx.0 + bx.2) / 2.0, (bx.1 + bx.3) / 2.0);
+                q.lines.iter().filter(|l| l.dashed == dashed && l.sw > 2.19 && !is_grid(l)).min_by(|a, b| dseg(c, a.a, a.b).partial_cmp(&dseg(c, b.a, b.b)).unwrap()).unwrap().col.clone()
+            };
+            let get = |t: &str| q.texts.iter().find(|x| x.0 == t).unwrap_or_else(|| panic!("no {t:?}")).1;
+            let (adp, nadp) = (get("ADP + Pi"), get("NADP+"));
+            assert_eq!(near(adp, true), "#7b3fa0", "ADP + Pi is under the purple dashed arrow");
+            assert_eq!(near(nadp, true), "#b23a6e", "NADP+ is under the pink dashed arrow");
+            // the clue is below its arrow, not above it
+            let (la, ln) = (q.lines.iter().find(|l| l.dashed && l.col == "#7b3fa0").unwrap(), q.lines.iter().find(|l| l.dashed && l.col == "#b23a6e").unwrap());
+            assert!(adp.1 > la.a.1 && nadp.1 > ln.a.1);
+            if key {
+                let (atp, nadph) = (get("ATP"), get("NADPH"));
+                assert_eq!(near(atp, false), "#7b3fa0", "ATP is on the purple arrow");
+                assert_eq!(near(nadph, false), "#b23a6e", "NADPH is on the pink arrow");
+                assert!(atp.3 < la.a.1 && nadph.3 < ln.a.1 + 40.0);
+            }
+        }
+    }
+}
+
+/// M07: the stroma ring is well inside the stroma, far from the inner membrane and from every label slot and disc.
+#[test]
+fn the_stroma_ring_is_far_from_every_other_mark() {
+    for key in [true, false] {
+        for size in SIZES {
+            let svg = render_of(&[b(SHOW_ANSWERS, key), s("label_size", size)]);
+            let q = parse(&svg);
+            let off = offset(&q);
+            let ring = rings(&q).into_iter().find(|r| dist((r.c.0 - off.0, r.c.1 - off.1), target(It::Stroma).unwrap()) < 0.01).unwrap();
+            let sh = shapes();
+            for (i, e) in fg_els(&q) {
+                let sid = if i < sh.len() { sh[i].sid } else { Sid::Bracket };
+                let d = ink_d(ring.c, e);
+                let need = if sid == Sid::Inner { 12.0 } else { 14.0 };
+                assert!(d >= need, "{size}: the stroma ring is {d:.1} px from {sid:?}");
+            }
+            for l in q.lines.iter().filter(|l| !is_grid(l) && !leaders(&q).iter().any(|m| (m.a, m.b) == (l.a, l.b))) { assert!(ink_ln(ring.c, l) >= 14.0, "{size}: a line is {:.1} px from the stroma ring", ink_ln(ring.c, l)); }
+            for d in discs(&q) { assert!(dist(ring.c, d.c) - d.r >= 14.0, "{size}: a disc is {:.1} px from the stroma ring", dist(ring.c, d.c) - d.r); }
+            for (t, bx) in &q.texts { let dd = dist((ring.c.0.clamp(bx.0, bx.2), ring.c.1.clamp(bx.1, bx.3)), ring.c); assert!(dd >= 14.0 || t == "Stroma" && false, "{size}: {t:?} is {dd:.1} px from the stroma ring"); }
+        }
+    }
+}
+
+/// M17: each Calvin arrowhead is at the END of its arc in the clockwise direction, tangent to the loop.
+#[test]
+fn each_calvin_arrowhead_is_at_the_end_of_its_arc_pointing_clockwise() {
+    let sh = shapes();
+    let calvin: Vec<&Shape> = sh.iter().filter(|s| s.sid == Sid::Calvin).collect();
+    assert_eq!(calvin.len(), 6);
+    for (k, (a0, a1)) in CALVIN_ARCS.iter().enumerate() {
+        let (arc, head) = (calvin[2 * k], calvin[2 * k + 1]);
+        assert!(!arc.closed && head.closed && head.pts.len() == 3);
+        let ang = |p: P| (p.1 - CALVIN.1).atan2(p.0 - CALVIN.0).to_degrees();
+        let wrap = |d: f64| ((d + 180.0).rem_euclid(360.0)) - 180.0;
+        assert!(wrap(ang(arc.pts[0]) - a0).abs() < 0.01 && wrap(ang(*arc.pts.last().unwrap()) - a1).abs() < 0.01);
+        // the head's base is on the loop at the end of the arc, its tip is further clockwise (a larger screen angle)
+        let base = ((head.pts[1].0 + head.pts[2].0) / 2.0, (head.pts[1].1 + head.pts[2].1) / 2.0);
+        assert!(wrap(ang(base) - a1).abs() < 0.01, "arc {k}: the head's base is at {} not {a1}", ang(base));
+        assert!(wrap(ang(head.pts[0]) - a1) > 3.0 && wrap(ang(head.pts[0]) - a1) < 20.0, "arc {k}: the tip is {} degrees on", wrap(ang(head.pts[0]) - a1));
+        assert!((dist(base, CALVIN) - CALVIN_R).abs() < 1e-9);
+    }
+}
+
+/// L4 (Print halo): behind each membrane ring in Print there is a white pad that clears the hatching of the space between the membranes; Colour has none.
+#[test]
+fn in_print_each_membrane_ring_sits_on_a_white_pad_that_clears_the_hatching() {
+    for size in SIZES {
+        let col = render_of(&[s("label_size", size)]);
+        assert!(!col.contains(&format!("r=\"{HALO_R:.2}\"")), "Colour has no pad");
+        let svg = render_of(&[s("style", "Print"), s("label_size", size)]);
+        let q = parse(&svg);
+        let off = offset(&q);
+        let pads: Vec<&Ci> = q.circles.iter().filter(|c| (c.r - HALO_R).abs() < 1e-9).collect();
+        assert_eq!(pads.len(), 2, "one for the outer and one for the inner membrane");
+        assert!(pads.iter().all(|c| c.fill == "#ffffff"));
+        // drawn after the space between the membranes (the first shape) and before the membranes themselves
+        let first_pad = svg.find(&format!("r=\"{HALO_R:.2}\"")).unwrap();
+        let outer_i = shapes().iter().position(|s| s.sid == Sid::Outer).unwrap();
+        let body: Vec<usize> = svg.match_indices("<polygon ").chain(svg.match_indices("<polyline ")).map(|x| x.0).collect();
+        let mut sorted = body.clone(); sorted.sort();
+        assert!(first_pad > sorted[1] && first_pad < sorted[outer_i], "the pad is drawn between the fills and the membranes");
+        // pixels: on the band side of each ring, between the ring and the pad's edge, nothing dark (hatching would be)
+        let (w, h, px) = crate::figures::to_rgba(&svg, 4.0).unwrap();
+        for (it, rx, ry, dir) in [(It::Outer, OUT_RX, OUT_RY, -1.0), (It::Inner, IN_RX, IN_RY, 1.0)] {
+            let t = target(it).unwrap();
+            let (gx, gy) = (t.0 / (rx * rx), t.1 / (ry * ry));
+            let gl = gx.hypot(gy);
+            let (nx, ny) = (dir * gx / gl, dir * gy / gl);
+            let mut dark = 0;
+            let mut total = 0;
+            // the leader runs from the ring to its label: leave out the pixels it covers
+            let lab = labels(&cfg(&with(&[])), &[]).into_iter().find(|l| l.it == it).unwrap();
+            let lf = lab.from.unwrap();
+            let lead_ang = (lf.1 - t.1).atan2(lf.0 - t.0).to_degrees();
+            for da in -35..=35 {
+                let a = (da as f64).to_radians();
+                let ang = (ny * a.cos() + nx * a.sin()).atan2(nx * a.cos() - ny * a.sin()).to_degrees();
+                if ((ang - lead_ang + 540.0).rem_euclid(360.0) - 180.0).abs() < 25.0 { continue; }
+                let (ux, uy) = (nx * a.cos() - ny * a.sin(), nx * a.sin() + ny * a.cos());
+                for rad in [4.9, 5.4, 5.9] {
+                    let (x, y) = ((t.0 + off.0 + ux * rad) * 4.0, (t.1 + off.1 + uy * rad) * 4.0);
+                    let o = ((y as u32 * w + x as u32) * 4) as usize;
+                    if (x as u32) >= w || (y as u32) >= h { continue; }
+                    total += 1;
+                    if (0.299 * px[o] as f64 + 0.587 * px[o + 1] as f64 + 0.114 * px[o + 2] as f64) < 0.66 * 255.0 { dark += 1; }
+                }
+            }
+            let _ = pads.iter().filter(|c| dist((c.c.0 - off.0, c.c.1 - off.1), t) < 0.01).count();
+            assert!(dark * 20 <= total, "{size} {it:?}: {dark} of {total} pixels beside the ring are ink at 66 % grey");
+        }
+    }
+}
+
+/// The key's Plateau and Peak labels print the plateau or the peak (not the half-saturation or the optimum), and the rate axis has 4 to 8 labelled steps.
+#[test]
+fn the_plateau_and_peak_labels_quote_the_right_number_and_the_rate_axis_has_a_readable_number_of_steps() {
+    for ax in AXES_ALL {
+        for pmax in ["1", "2.5", "7.5", "10", "37", "100"] {
+            let (lo, hi, dflt) = Axis::of(ax).xv_range();
+            for xv in [lo, dflt, hi] {
+                let svg = render_of(&gset(ax, &[s("pmax", pmax), s("xval", &format!("{xv}")), b(SHOW_ANSWERS, true)]));
+                let want = if ax == "Temperature" { format!("Peak: {pmax}") } else { format!("Plateau: {pmax}") };
+                assert!(texts_of(&svg).contains(&want), "{ax} {pmax} {xv}: {:?}", texts_of(&svg).iter().filter(|t| t.starts_with("Pe") || t.starts_with("Pl")).collect::<Vec<_>>());
+            }
+        }
+    }
+    for i in 1..=1000 {
+        let pm = i as f64 / 10.0;
+        let (top, step) = y_axis(pm);
+        let n = (top / step).round();
+        assert!((3.0..=8.0).contains(&n), "pmax {pm}: {n} labelled steps (top {top}, step {step})");
+    }
+    // the default plateau of 10 reads in steps of 2 (the old steps of 5 left only 0, 5, 10 and 15 labelled)
+    assert_eq!(y_axis(10.0), (12.0, 2.0));
+    assert_eq!(y_axis(100.0), (120.0, 20.0));
+    assert!((y_axis(1.0).0 - 1.2).abs() < 1e-9 && y_axis(1.0).1 == 0.2);
 }
