@@ -18,8 +18,8 @@ body-map__defaults 1c9f426fbd953edb
 body-map__start 1c9f426fbd953edb
 bohr-model__defaults 334d9448eb713852
 bohr-model__start 91e77ec04a5edbf2
-boltzmann-distribution__defaults c3a041cbb5c07c5d
-boltzmann-distribution__start c3a041cbb5c07c5d
+boltzmann-distribution__defaults 37b035d814421b6c
+boltzmann-distribution__start 37b035d814421b6c
 boolean-table__defaults 2b769ba220ccc153
 boolean-table__start 2b769ba220ccc153
 box-plot__defaults e66aedefa4eb5803
