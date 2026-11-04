@@ -392,6 +392,8 @@ fn the_too_many_counts_refusal_keeps_every_count() {
         ("A, 5, 7, 3\nB, 1, 2", "Line 1 (\u{201c}A, 5, 7, 3\u{201d})", ["5", "7", "3"]),
         ("A, 9, 12,5", "Line 1 (\u{201c}A, 9, 12,5\u{201d})", ["9", "12", "5"]),
         ("B, 3, 4, 9", "Line 1 (\u{201c}B, 3, 4, 9\u{201d})", ["3", "4", "9"]),
+        // a thousands count is quoted as it reads, not as the normalised cell (LOW)
+        ("A, 1,200, 3, 4", "Line 1 (\u{201c}A, 1,200, 3, 4\u{201d})", ["1,200", "3", "4"]),
     ] {
         let e = parse(data).unwrap_err();
         assert!(e.contains("this figure takes at most two counts per category"), "{data}: {e}");
@@ -513,6 +515,114 @@ fn the_percent_axis_ticks_carry_the_percent_sign() {
     assert!(ticks.len() >= 3, "{ticks:?}");
     assert!(ticks.iter().all(|t| t.ends_with('%')), "{ticks:?}");
     assert!(ticks.contains(&"100%".to_string()) && ticks.contains(&"0%".to_string()), "{ticks:?}");
+}
+
+/// The counts at the end of a line as a reader who ignores quotes would split them: what a rewrite
+/// of that line must not lose.
+fn trailing_counts(line: &str) -> Vec<u64> {
+    let mut out: Vec<u64> = Vec::new();
+    for cell in line.split(',').map(str::trim).rev() {
+        match cell.trim_matches('"').parse::<u64>() {
+            Ok(v) => out.push(v),
+            Err(_) => break,
+        }
+    }
+    out.reverse();
+    out
+}
+
+#[test]
+fn no_advice_rewrite_drops_a_typed_count() {
+    // MAJOR: an unmatched quote is a literal character, so these keep their count and their name
+    for (data, name, count) in [
+        ("Don\"t know, 5\nB, 4", "Don\"t know", 5u64),
+        ("55\" TV, 12\nB, 4", "55\" TV", 12),
+        ("a\"b, 3\nB, 4", "a\"b", 3),
+    ] {
+        let t = parse(data).unwrap_or_else(|e| panic!("{data}: {e}"));
+        assert_eq!(t.cats[0].name, name, "{data}");
+        assert_eq!(t.cats[0].counts[0], count, "{data}: the count is not folded into the name");
+        assert_eq!(t.cats[1].counts, [4], "{data}");
+        assert!(warnings(&with(&[("data", data)])).is_empty(), "{data}: {:?}", warnings(&with(&[("data", data)])));
+    }
+    // the same names inside a balanced quoted cell still read as one name
+    assert_eq!(parse("\"Train, fast\", 2\nWalk, 3").unwrap().cats[0].name, "Train, fast");
+    // and no rewrite in any state may lose a count: applying one keeps every trailing count
+    let long = "x".repeat(55);
+    let states: Vec<Vec<(&str, String)>> = vec![
+        vec![("data", ", 12\nBlue, 3".into())],
+        vec![("data", "Grade 9 12\nGrade 10 7".into())],
+        vec![("data", "Red, 4\nred, 2\nRED, 1\nBlue, 3".into())],
+        vec![("data", format!("{long}, 3\nBlue, 4"))],
+        vec![("data", "Dog, 11, 8\nCat, 7, 9".into()), ("name1", "N".repeat(45))],
+    ];
+    let mut checked = 0;
+    for st in states {
+        let pairs: Vec<(&str, &str)> = st.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        let mut p = with(&pairs);
+        for _ in 0..10 {
+            let notes = warnings(&p);
+            let Some(note) = notes.iter().find(|n| n.contains("change line ") || n.contains("Change line ")).cloned() else { break };
+            let i = note.find("change line ").or_else(|| note.find("Change line ")).unwrap();
+            let num: usize = note[i + 12..].chars().take_while(|c| c.is_ascii_digit()).collect::<String>().parse().unwrap();
+            let old_line = p.s("data").lines().nth(num - 1).unwrap().to_string();
+            let before = trailing_counts(&old_line);
+            assert!(apply(&note, &mut p), "{note}");
+            let new_line = p.s("data").lines().nth(num - 1).unwrap().to_string();
+            let after = trailing_counts(&new_line);
+            for v in &before {
+                assert!(after.contains(v), "the rewrite {note:?} lost the count {v}: {old_line:?} -> {new_line:?}");
+            }
+            checked += 1;
+        }
+    }
+    assert!(checked >= 5, "the sweep applied {checked} rewrites");
+}
+
+#[test]
+fn a_first_line_that_cannot_be_read_is_refused_not_swallowed() {
+    // MED 3: a first line is headings only when every cell is a clear name; otherwise it is data and
+    // the bad cell is refused by line and text, with both routes that keep the data
+    for (data, cell) in [
+        ("A, \u{2014}\nB, 5", "\u{2014}"),
+        ("A, \u{ff11}\u{ff12}\nB, 5", "\u{ff11}\u{ff12}"),
+        ("A, N/A\nB, 5", "N/A"),
+        ("Smith; Jones, 3\nB, 5", "Jones, 3"),
+        ("Grade, 1st, 2nd\nA, 3, 4", "1st"),
+        ("Age, 0-9, 10-19\nA, 3, 4", "0-9"),
+        ("Quarter, Q1, Q2\nA, 3, 4", "Q1"),
+        ("Illness, COVID-19, Flu\nA, 3, 4", "COVID-19"),
+        ("Grade, K, 1\nA, 3", "K"),
+    ] {
+        let t = parse(data);
+        assert!(t.is_err(), "{data}: not read as headings");
+        let e = t.unwrap_err();
+        assert!(e.starts_with("Line 1 (") || e.contains("Line 1 ("), "{data}: {e}");
+        assert!(e.contains(cell), "{data}: the bad cell {cell:?} is named: {e}");
+        assert!(!e.contains("read as headings"), "{data}: {e}");
+        assert!(!e.contains("change line") && !e.contains("Change line"), "{data}: no data is rewritten away: {e}");
+        assert!(e.contains("type the group names in \u{201c}Group 1 name\u{201d} and \u{201c}Group 2 name\u{201d}") || e.contains("is not a number"), "{data}: a route that works: {e}");
+        // the row is never silently lost: the figure shows the refusal
+        let svg = render(&with(&[("data", data)]));
+        assert!(!svg.contains("<rect x="), "{data}: no chart is drawn");
+    }
+    // a number word is a count with a typo, and its fix keeps the value it names (MED 3)
+    let e = parse("A, dozen\nB, 5").unwrap_err();
+    assert!(e.contains("\u{201c}dozen\u{201d} is a number written as a word") && e.contains("change line 1 to \u{201c}A, 12\u{201d}"), "{e}");
+    let mut p = with(&[("data", "A, dozen\nB, 5")]);
+    let (steps, stuck) = settle(&mut p);
+    assert!(steps == 1 && stuck.is_none(), "{steps} {stuck:?}");
+    assert_eq!(state_pairs(&parse(p.s("data")).unwrap()), rows(&[("A", &[12]), ("B", &[5])]));
+    // a genuine headings line still reads as headings, digits in a name and all
+    for (data, cells) in [
+        ("Grade, 9th grade, 10th grade\nA, 1, 2", vec!["Grade", "9th grade", "10th grade"]),
+        ("Group, Grade 9\nA, 3, 4", vec!["Group", "Grade 9"]),
+        ("Response, None, One or more\nA, 3, 4", vec!["Response", "None", "One or more"]),
+        ("Class, none of these, all of these\nA, 3, 4", vec!["Class", "none of these", "all of these"]),
+    ] {
+        let t = parse(data).unwrap_or_else(|e| panic!("{data}: {e}"));
+        assert_eq!(t.head.expect("headings").2, cells, "{data}");
+    }
 }
 
 #[test]
@@ -992,6 +1102,27 @@ fn bars_are_in_proportion_and_never_touch_across_categories() {
                         assert!(gap_px > -0.01, "{name}: bars overlap");
                         if t.groups == 1 {
                             assert!(gap_px >= 0.2 * thick, "{name} {orient} {gap}: bars {gap_px} apart");
+                        }
+                    }
+                    // the exact gap fraction, not just "wide enough": a mutant that makes Wide
+                    // 0.9 of the slot must fail (LOW). Only when the bars are not width-capped.
+                    let want = match gap {
+                        "Narrow" => 0.25,
+                        "Wide" => 0.6,
+                        _ => 0.4,
+                    };
+                    if t.groups == 1 && thick < 170.0 - 0.01 {
+                        // the slot pitch: the closest start-to-start distance (a zero bar is not drawn,
+                        // so some pairs skip a slot)
+                        let mut pitches: Vec<f64> = spans.windows(2).map(|w| w[1].0 - w[0].0).collect();
+                        pitches.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                        let slot = pitches.first().copied().unwrap_or(0.0);
+                        for w in spans.windows(2) {
+                            if ((w[1].0 - w[0].0) - slot).abs() > 0.02 {
+                                continue;
+                            }
+                            let frac = (w[1].0 - w[0].1) / slot;
+                            assert!((frac - want).abs() < 0.01, "{name} {orient} {gap}: the gap is {frac} of a slot, not {want}");
                         }
                     }
                     if t.groups == 2 {
@@ -1507,47 +1638,53 @@ fn print_is_exactly_grey_and_survives_a_66_percent_bitonal_copy() {
     let all_bars: Vec<_> = elements(&svg).into_iter().filter(|e| e.tag == "rect" && e.a("width").as_deref() != Some("100%")).map(|e| (e.n("x"), e.n("y"), e.n("width"), e.n("height"), e.a("fill").unwrap())).collect();
     let (mut g0, mut g1) = (Vec::new(), Vec::new());
     for b in &all_bars {
-        if b.4 == "#999999" { g0.push(frac(b)) } else { g1.push(frac(b)) }
+        if b.4 == PRINT_BAR { g0.push(frac(b)) } else { g1.push(frac(b)) }
         // the outline stays: the middle of the top edge is black
         assert!(black(b.0 + b.2 / 2.0, b.1), "{b:?} outline");
     }
     // LOW: the solid first series and the grid both survive the copy (they used to be too light)
     assert!(g0.iter().all(|f| *f > 0.9), "the solid series survives a copy: {g0:?}");
     assert!(g1.iter().all(|f| *f > 0.12 && *f < 0.9), "the hatched series survives and stays apart: {g1:?}");
-    // MED 3: a real downsample (1x render, then resize) at 66% and 58%, thresholded at 168. The
-    // grid is measured on the student copy with the bars left out, so the plot holds the grid and
-    // nothing else. Measured on this drawing: darkest gridline pixel 150 at 66%, 159 at 58%.
-    let mut bare = p.clone();
-    bare.set_b(SHOW_ANSWERS, false);
-    bare.set_s("blank", BLANKS[1]);
-    let bsvg = render(&bare);
-    let axis_y = elements(&bsvg).into_iter().find(|e| e.tag == "line" && e.n("y1") == e.n("y2") && e.n("stroke-width") == 2.0).map(|e| e.n("y1")).unwrap();
-    let grid: Vec<El> = elements(&bsvg).into_iter().filter(|e| e.tag == "line" && e.a("stroke").as_deref() == Some(PRINT_GRID) && e.n("y1") == e.n("y2") && (e.n("y1") - axis_y).abs() > 3.0).collect();
-    assert!(grid.len() >= 3, "the Print grid is drawn: {}", grid.len());
-    for pct in [66u32, 58] {
-        let (img, f) = copy_at(&bsvg, pct);
-        let mut worst = 255u8;
-        for g in &grid {
-            let (x0, x1, y) = (g.n("x1"), g.n("x2"), g.n("y1"));
-            let mut x = x0 + 3.0;
-            while x < x1 - 3.0 {
-                for dy in [-1.0f64, 0.0, 1.0] {
-                    let px = ((x * f) as u32).min(img.width() - 1);
-                    let py = (((y * f) + dy).round().max(0.0) as u32).min(img.height() - 1);
-                    worst = worst.min(img.get_pixel(px, py)[0]);
+    // MED 2: every gridline, on narrow and wide charts, at 66% and 58%, 1x render then resize and
+    // thresholded at 168: the min is taken per line (a global min hid one dead line of six).
+    // Measured with 3 px #8c8c8c: 127-142 at 66% and 129-152 at 58% over 4, 10 and 30 categories.
+    let mut worst_all = 255u8;
+    let mut seen: Vec<u8> = Vec::new();
+    for (label, data_line) in [("4 cats", "Walk, 12\nCar, 9\nBus, 6\nBike, 3".to_string()), ("10", many(10)), ("30", many(30))] {
+        let mut bare = with(&[("data", &data_line), ("style", "Print"), ("blank", BLANKS[1])]);
+        bare.set_b(SHOW_ANSWERS, false);
+        let bsvg = render(&bare);
+        let axis_y = elements(&bsvg).into_iter().find(|e| e.tag == "line" && e.n("y1") == e.n("y2") && e.n("stroke-width") == 2.0).map(|e| e.n("y1")).unwrap();
+        let grid: Vec<El> = elements(&bsvg).into_iter().filter(|e| e.tag == "line" && e.a("stroke").as_deref() == Some(PRINT_GRID) && e.n("y1") == e.n("y2") && (e.n("y1") - axis_y).abs() > 3.0).collect();
+        assert!(grid.len() >= 3, "{label}: the grid is drawn: {}", grid.len());
+        for pct in [66u32, 58] {
+            let (img, f) = copy_at(&bsvg, pct);
+            for g in &grid {
+                let (x0, x1, y) = (g.n("x1"), g.n("x2"), g.n("y1"));
+                let mut worst = 255u8;
+                let mut x = x0 + 3.0;
+                while x < x1 - 3.0 {
+                    for dy in [-1.0f64, 0.0, 1.0] {
+                        let px = ((x * f) as u32).min(img.width() - 1);
+                        let py = (((y * f) + dy).round().max(0.0) as u32).min(img.height() - 1);
+                        worst = worst.min(img.get_pixel(px, py)[0]);
+                    }
+                    x += 1.0;
                 }
-                x += 1.0;
+                worst_all = worst_all.min(worst);
+                assert!(worst <= 160, "{label} at {pct}%: the gridline at y={y} has min {worst} against the 168 threshold (measured 127-152)");
+                seen.push(worst);
             }
         }
-        assert!(worst <= 162, "the Print grid must survive a {pct}% copy: its darkest pixel is {worst} (168 is the threshold, 150/159 measured at 66%/58%)");
-        println!("Print grid at {pct}%: darkest pixel {worst}");
     }
+    assert!(seen.len() >= 20, "every line of every chart is measured: {}", seen.len());
+    assert!(worst_all >= 120 && worst_all <= 160, "the measured darkest gridline pixel is {worst_all}");
     // one series: its fill is the solid grey, so its bars keep their tone in the copy
     let one = with(&[("data", "Walk, 12\nCar, 9\nBus, 6\nBike, 3"), ("style", "Print")]);
     let svg1 = render(&one);
     let png1 = crate::figures::to_png(&svg1, sc as f32).unwrap();
     let img1 = image::load_from_memory(&png1).unwrap().to_luma8();
-    let solid: Vec<_> = elements(&svg1).into_iter().filter(|e| e.tag == "rect" && e.a("width").as_deref() != Some("100%") && e.a("stroke").as_deref() != Some("none")).map(|e| (e.n("x"), e.n("y"), e.n("width"), e.n("height"), e.a("fill").unwrap())).filter(|b| b.4 == "#999999").collect();
+    let solid: Vec<_> = elements(&svg1).into_iter().filter(|e| e.tag == "rect" && e.a("width").as_deref() != Some("100%") && e.a("stroke").as_deref() != Some("none")).map(|e| (e.n("x"), e.n("y"), e.n("width"), e.n("height"), e.a("fill").unwrap())).filter(|b| b.4 == PRINT_BAR).collect();
     assert!(!solid.is_empty());
     for b in &solid {
         let (x0, y0, x1, y1) = ((b.0 + 3.0) * sc, (b.1 + 3.0) * sc, (b.0 + b.2 - 3.0) * sc, (b.1 + b.3 - 3.0) * sc);

@@ -34,10 +34,12 @@ const FONT: &str = "Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif";
 /// Print's bars and gridlines. The shared Print palette's first series is a plain `#d9d9d9` wash
 /// and its grid is `#cccccc`: both are lighter than a 66% bitonal copy's threshold, so a bar
 /// chart, whose fill carries the series and whose grid the reading, uses these (grey only, as
-/// Print requires).
-const PRINT_BAR: &str = "#999999";
-const PRINT_GRID: &str = "#9e9e9e";
-const PRINT_GRID_W: f64 = 2.4;
+/// Print requires). The grid is 3 px so that a 58% or 66% copy always covers a whole pixel,
+/// whatever subpixel offset the line lands on (a 2.4 px line vanished on some offsets); the bars
+/// are darker still, so a bar stays apart from the grid in a copy.
+const PRINT_BAR: &str = "#7a7a7a";
+const PRINT_GRID: &str = "#8c8c8c";
+const PRINT_GRID_W: f64 = 3.0;
 /// Glyph extent above and below the baseline, and line pitch, in em (Noto Sans, with room for accents).
 const ASC: f64 = 0.95;
 const DES: f64 = 0.3;
@@ -196,6 +198,9 @@ pub fn word_value(c: &str) -> Option<u64> {
     ];
     const TENS: [(&str, u64); 8] = [("twenty", 20), ("thirty", 30), ("forty", 40), ("fifty", 50), ("sixty", 60), ("seventy", 70), ("eighty", 80), ("ninety", 90)];
     let text = c.trim().to_lowercase();
+    if text == "dozen" {
+        return Some(12);
+    }
     let parts: Vec<&str> = text.split([' ', '-']).filter(|p| !p.is_empty()).collect();
     if parts.is_empty() || parts.len() > 4 {
         return None;
@@ -235,11 +240,19 @@ fn comma_count(c: &str) -> Option<(u64, u64)> {
     Some((a.parse().unwrap_or(0), b.parse().unwrap_or(0)))
 }
 
+/// Whether the line's quotes pair up. An unmatched one is a literal character (`55" TV`), not a
+/// delimiter: treating it as one hid the line's count and made the advice fold the count into the
+/// name (MAJOR).
+fn balanced_quotes(line: &str) -> bool {
+    line.matches('"').count() % 2 == 0
+}
+
 fn csv_cells(line: &str, sep: char) -> Vec<String> {
     let (mut out, mut cur, mut quoted) = (Vec::new(), String::new(), false);
+    let quotes = balanced_quotes(line);
     for ch in line.chars() {
         match ch {
-            '"' => quoted = !quoted,
+            '"' if quotes => quoted = !quoted,
             c if c == sep && !quoted => out.push(std::mem::take(&mut cur)),
             _ => cur.push(ch),
         }
@@ -279,8 +292,9 @@ fn join_thousands(line: &str) -> String {
     let mut out = String::new();
     let mut i = 0;
     let mut quoted = false;
+    let quotes = balanced_quotes(line);
     while i < c.len() {
-        if c[i] == '"' {
+        if c[i] == '"' && quotes {
             quoted = !quoted;
             out.push(c[i]);
             i += 1;
@@ -345,9 +359,10 @@ fn tail_count(line: &str) -> Result<(Vec<String>, Option<Vec<String>>), usize> {
 /// digits on each side, which the line reads as two counts.
 fn short_comma(line: &str) -> Option<(u64, u64)> {
     let c: Vec<char> = line.chars().collect();
+    let quotes = balanced_quotes(line);
     let mut quoted = false;
     for (i, ch) in c.iter().enumerate() {
-        if *ch == '"' {
+        if *ch == '"' && quotes {
             quoted = !quoted;
             continue;
         }
@@ -418,6 +433,28 @@ fn split_line(line: &str) -> Result<Cells, usize> {
     }
     let split = if joined == line { short_comma(line) } else { None };
     Ok(Cells { cells, alt, split })
+}
+
+/// A cell the first line may read as a group name: it holds a letter, no cell punctuation, and is
+/// not a count (`12 students`, `l2`, inf, a number word). A name may hold a number (`9th grade`),
+/// but a symbol, a full-width digit or `N/A` is not a name (MED 3).
+fn name_cell(c: &str) -> bool {
+    let t = c.trim();
+    t.chars().any(|ch| ch.is_ascii_alphabetic()) && !t.chars().any(|ch| matches!(ch, ',' | ';' | '/' | '"')) && !count_like(t)
+}
+
+/// The refusal a first line gets when it is neither a line of headings nor a category with counts:
+/// the bad cell is named and both routes that keep the data are offered (MED 3).
+fn first_line_ambiguous(n: usize, l: &str, cell: &str, name: &str, cells: usize) -> String {
+    let example = if cells >= 3 { example_line(name, &["1".to_string(), "2".to_string()]) } else { example_line(name, &["12".to_string()]) };
+    format!(
+        "Line {n} ({}) is the first line: {} is neither a number I can read nor a clear group name, so the line is neither a category with counts nor a line of headings. Either delete line {n} and type the group names in {} and {}, or write line {n} as a category and its counts, for example {}.",
+        q(l),
+        q(cell),
+        q("Group 1 name"),
+        q("Group 2 name"),
+        q(&example)
+    )
 }
 
 /// A cell the first line should read as a mistyped count rather than as a group name. A cell is a
@@ -548,11 +585,24 @@ pub fn parse(text: &str) -> Result<Table, String> {
         if let Ok(Cells { cells, .. }) = split_line(l) {
             // a heading cell is a name: a cell is a count only if the whole cell is one, so
             // `9th grade` and `None` name groups and `12 students` is a mistyped count (MED 1)
-            let words_only = cells[1..].iter().all(|c| !count_like(c));
+            let words_only = cells[1..].iter().all(|c| name_cell(c));
             let separated = l.contains('\t') || l.contains(',') || l.contains(';');
             if words_only && (cells.len() >= 2 || !separated) && !cells[0].is_empty() {
                 head = Some((n, l.to_string(), if separated { cells } else { Vec::new() }));
                 start = 1;
+            } else {
+                // not headings, so it must be data: refuse it when a name sits where a count belongs
+                // or when two or more cells cannot be read at all
+                let bad: Vec<&String> = cells[1..].iter().filter(|c| parse_count(c).is_err() && !name_cell(c)).collect();
+                let name_in_counts = cells[1..].iter().any(|c| name_cell(c));
+                // a word a count could not be (`N/A`, `Jones, 3`) is no better than a number
+                let looks_like_name = |c: &String| c.chars().any(|ch| ch.is_ascii_alphabetic()) && !count_like(c);
+                if cells.len() >= 2 && (name_in_counts || bad.len() >= 2 || bad.iter().any(|c| looks_like_name(c))) {
+                    let first_bad = bad.first().map(|c| (*c).clone()).or_else(|| cells[1..].iter().find(|c| name_cell(c)).cloned());
+                    if let Some(cell) = &first_bad {
+                        return Err(first_line_ambiguous(n, l, cell, &cells[0], cells.len()));
+                    }
+                }
             }
         }
     }
@@ -603,7 +653,7 @@ pub fn parse(text: &str) -> Result<Table, String> {
                 "Line {n} ({}) holds {} ({}), and this figure takes at most two counts per category: one count, or two to compare two groups. Nothing is dropped for you here: type the line with two counts, or draw the extra counts in a second chart (a second table).",
                 q(l),
                 plural(raw.len(), "count", "counts"),
-                and_list(&raw.iter().map(|c| q(c)).collect::<Vec<_>>())
+                and_list(&raw.iter().map(|c| q(&match parse_count(c) { Ok(v) => fmt_count(v), Err(_) => c.trim().to_string() })).collect::<Vec<_>>())
             ));
         }
         let mut counts = Vec::new();
@@ -673,9 +723,16 @@ pub fn parse(text: &str) -> Result<Table, String> {
                     ));
                 }
                 Err(CountErr::TooBig(v)) => {
-                    let unit = if v.is_finite() && v / 1e3 <= MAX_COUNT as f64 { "thousands" } else { "millions" };
+                    // the unit must really bring the count under the cap (LOW): 1e15 needs millions
+                    let unit = [("thousands", 1e3), ("millions", 1e6), ("billions", 1e9)]
+                        .into_iter()
+                        .find(|(_, s)| v.is_finite() && v / s <= MAX_COUNT as f64);
+                    let advice = match unit {
+                        Some((name, _)) => format!("divide every line by the same number (count in {name}) and say the unit in the value axis title"),
+                        None => format!("this count is far above the largest count this chart takes, so type counts of at most {MAX_COUNT} and say the unit in the value axis title"),
+                    };
                     return Err(format!(
-                        "Line {n} ({}): {} is more than {MAX_COUNT}, the largest count this chart takes. The bars are drawn on one scale, so every line must count in the same unit: divide every line by the same number (count in {unit}) and say the unit in the value axis title. Changing one line alone would change what the other bars mean.",
+                        "Line {n} ({}): {} is more than {MAX_COUNT}, the largest count this chart takes. The bars are drawn on one scale, so every line must count in the same unit: {advice}. Changing one line alone would change what the other bars mean.",
                         q(l),
                         q(cell)
                     ));
