@@ -503,7 +503,11 @@ fn numbers_are_read_exactly_and_the_ambiguous_are_refused() {
     assert_eq!(ok(""), Err(Bad::Empty));
     assert_eq!(ok("1,000"), Err(Bad::Ambiguous("1".into(), "000".into(), false)));
     assert_eq!(super::parse("\u{2212}1,500", &[]), Err(Bad::Ambiguous("1".into(), "500".into(), true)));
-    for t in ["abc", "1.2.3", "1,2,3", "--1", ".", ",", "1e3", "NaN", "inf", "10 mg", "\u{663}", "ten"] { assert_eq!(ok(t), Err(Bad::NotNumber), "{t:?}"); }
+    // a number with a unit this box does not take is a wrong unit, not "not a number"
+    assert_eq!(ok("10 mg"), Err(Bad::Unit("mg".into())));
+    assert_eq!(super::parse("400 ppm", &["%", "percent"]), Err(Bad::Unit("ppm".into())));
+    assert_eq!(ok("30 \u{b0}F"), Err(Bad::Unit("\u{b0}F".into())));
+    for t in ["abc", "1.2.3", "1,2,3", "--1", ".", ",", "1e3", "NaN", "inf", "\u{663}", "ten"] { assert_eq!(ok(t), Err(Bad::NotNumber), "{t:?}"); }
     assert_eq!(ok("0.0000000001"), Err(Bad::TooLong));
     assert_eq!(ok("1234567890123"), Err(Bad::TooLarge));
     // a value typed exactly on a limit is on it, however it is written
@@ -764,8 +768,8 @@ fn the_key_and_the_student_copy_share_one_layout() {
 /// Everything that is not a number in a disc, a rule or the question: what a student copy may print.
 const ALLOWED: &[&str] = &[
     "Not", "to", "scale", "a", "simplified", "picture", "of", "one", "chloroplast", "A", "ring", "or", "bracket", "points", "at", "part", "bar", "under", "the", "drawing", "names", "stage", "an", "arrow", "carries", "substance",
-    "Write", "each", "name", "formula", "For", "that", "leaves", "loop", "give", "molecule", "it", "makes", "directly", "balanced", "equation", "making", "molecule", "glucose", "with", "whole", "number", "coefficients",
-    "ADP", "Pi", "NADP", "and", "are", "shown", "help", "you", "tell", "two", "carriers", "apart", "using", "smallest", "Equation", "Read", "nearest", "fine", "gridline", "P", "Rate", "arbitrary", "units", "is", "x", "Light", "intensity", "full", "sunlight", "CO", "concentration", "ppm", "Temperature", "C",
+    "Write", "each", "name", "formula", "For", "that", "leaves", "loop", "give", "molecule", "it", "makes", "directly", "balanced", "equation", "making", "molecule", "glucose", "with", "net", "no", "on", "both", "sides",
+    "ADP", "Pi", "NADP", "and", "are", "shown", "help", "you", "tell", "two", "carriers", "apart", "Equation", "Read", "nearest", "fine", "gridline", "P", "Rate", "arbitrary", "units", "is", "x", "Light", "intensity", "full", "sunlight", "CO", "concentration", "ppm", "Temperature", "C",
     "au", "The", "for", "glucose", "graph", "could", "not", "be", "drawn",
 ];
 
@@ -1367,7 +1371,9 @@ fn gset(axis: &'static str, extra: &[(&'static str, Value)]) -> Vec<(&'static st
 fn texts_of(svg: &str) -> Vec<String> { ink_texts(svg).into_iter().map(|t| t.0).collect() }
 fn key_lines(svg: &str) -> String { texts_of(svg).join("\n") }
 
-/// MED 5: a comma followed by three digits, on every axis, every box, both signs: the advice names exactly the readings that are in range, and typing them draws.
+/// MED 5 and LOW 1: a comma followed by three digits, on every axis, every box, both signs: the advice names
+/// exactly the readings that are in range, with the sign that was typed (never "Neither ... " beside a reading
+/// that looks positive), and typing them draws.
 #[test]
 fn ambiguous_commas_are_advised_with_values_that_draw() {
     let mut cases = 0;
@@ -1378,7 +1384,7 @@ fn ambiguous_commas_are_advised_with_values_that_draw() {
         let axis = Axis::of(ax);
         for field in ["pmax", "xval", "mark"] {
             let (lo, hi) = match field { "pmax" => (PMAX_LO, PMAX_HI), "xval" => { let r = axis.xv_range(); (r.0, r.1) } _ => (0.0, axis.xmax()) };
-            for typed in ["1,000", "1,500", "0,500", "12,345", "20,000", "3,000", "100,000", "1,200", "0,000", "\u{2212}1,500", "40,000", "15,000", "999,999"] {
+            for typed in ["1,000", "1,500", "0,500", "12,345", "20,000", "3,000", "100,000", "1,200", "0,000", "\u{2212}1,500", "\u{2212}1,000", "40,000", "15,000", "999,999"] {
                 let l = [&graph_set(ax, "10", "", "20")[..], &[s(field, typed)]].concat();
                 let rs = refusals(&l);
                 assert_eq!(rs.len(), 1, "{ax} {field} {typed}: {rs:?}");
@@ -1386,23 +1392,31 @@ fn ambiguous_commas_are_advised_with_values_that_draw() {
                 assert!(t.contains("ambiguous"), "{t}");
                 let (neg, body) = match typed.strip_prefix('\u{2212}') { Some(r) => (true, r), None => (false, typed) };
                 let (a, c) = body.split_once(',').unwrap();
-                let readings = [format!("{a}.{c}"), format!("{a}{c}")];
-                let fits: Vec<&String> = readings.iter().filter(|r| { let v: f64 = r.parse().unwrap(); let v = if neg { -v } else { v }; v >= lo && v <= hi }).collect();
+                let sign = if neg { "\u{2212}" } else { "" };
+                // the two readings, written the way the message writes them: sign kept, no leading or trailing zeros
+                let readings: Vec<String> = [format!("{sign}{a}.{c}"), format!("{sign}{a}{c}")].iter().map(|r| show_d(super::parse(r, &[]).unwrap().d)).collect();
+                let fits: Vec<&String> = readings.iter().filter(|r| { let v: f64 = super::parse(r, &[]).unwrap().v; v >= lo && v <= hi }).collect();
+                // the message quotes both readings, so a negative value is never shown as a positive one
+                assert!(t.contains(&format!("it could mean {} or {}", readings[0], readings[1])), "{typed}: {t}");
                 match fits.len() {
                     2 => { named_both += 1; assert!(t.contains(&format!("Type {} or {} to be clear.", fits[0], fits[1])), "{t}"); }
                     1 => { named_one += 1; assert!(t.contains(&format!("Only {} is in the range", fits[0])) && t.contains(&format!("Type {} to be clear.", fits[0])), "{t}"); }
-                    _ => { named_none += 1; assert!(t.contains("Neither is in the range") && t.contains("such as"), "{t}"); }
+                    _ => {
+                        named_none += 1;
+                        assert!(t.contains("Neither is in the range") && t.contains("such as"), "{t}");
+                        // and it is true: neither reading, as the message writes it, is inside the range
+                        for r in &readings { let v = super::parse(r, &[]).unwrap().v; assert!(v < lo || v > hi, "{ax} {field} {typed}: the message says neither is in range, but {r} is: {t}"); }
+                    }
                 }
                 // every value the advice names, typed back into the same box, draws; the reading it leaves out is refused
-                let mut advised: Vec<String> = fits.iter().map(|x| format!("{}{x}", if neg { "-" } else { "" })).collect();
-                if fits.is_empty() { advised.push(t.split("such as ").nth(1).unwrap().chars().take_while(|c| c.is_ascii_digit() || *c == '.').collect()); }
+                let advised: Vec<String> = if fits.is_empty() { vec![t.split("such as ").nth(1).unwrap().chars().take_while(|c| c.is_ascii_digit() || *c == '.').collect()] } else { fits.iter().map(|x| (*x).clone()).collect() };
                 for v in &advised {
                     let l2 = [&graph_set(ax, "10", "", "20")[..], &[s(field, v)]].concat();
                     assert!(refusals(&l2).is_empty(), "{ax} {field} {typed}: the advice {v:?} is refused: {:?}", refusals(&l2));
                     assert!(render_of(&l2).contains("<polyline"), "it draws");
                 }
                 for r in readings.iter().filter(|r| !fits.contains(r)) {
-                    let l2 = [&graph_set(ax, "10", "", "20")[..], &[s(field, &format!("{}{r}", if neg { "-" } else { "" }))]].concat();
+                    let l2 = [&graph_set(ax, "10", "", "20")[..], &[s(field, r)]].concat();
                     assert!(!refusals(&l2).is_empty(), "{ax} {field}: {r} is out of range but accepted");
                 }
                 cases += 1;
@@ -1470,7 +1484,8 @@ fn the_rate_axis_has_fine_gridlines_and_the_key_states_the_range_to_accept() {
                     let svg = render_of(&gset(ax, &[s("pmax", pmax), s("style", style), s("label_size", size), b(SHOW_ANSWERS, false)]));
                     let q = parse(&svg);
                     let pl = plot_of(&q, Axis::of(ax), pm);
-                    let (gc, fc) = if style == "Print" { (GRID_PRINT, FINE_PRINT) } else { (GRID_COLOUR, FINE_COLOUR) };
+                    // MED 3: a student copy takes the Print greys in either style, so they are the gridlines to find here
+                    let (gc, fc) = (GRID_PRINT, FINE_PRINT);
                     let ys = |col: &str| { let mut v: Vec<f64> = q.lines.iter().filter(|l| l.col == col && l.a.1 == l.b.1 && (l.a.0 - pl.l).abs() < 0.02 && (l.b.0 - pl.r).abs() < 0.02).map(|l| (pl.bm - l.a.1) / (pl.bm - pl.t) * pl.ytop).collect(); v.sort_by(|a, c| a.partial_cmp(c).unwrap()); v };
                     let (maj, fin) = (ys(gc), ys(fc));
                     let px_tol = 0.02 * pl.ytop / (pl.bm - pl.t) * 1.5;
@@ -1487,7 +1502,8 @@ fn the_rate_axis_has_fine_gridlines_and_the_key_states_the_range_to_accept() {
             }
         }
     }
-    // the accepted range: half of the fine spacing either side of the exact rate, in units, in the key, for every axis and mark
+    // the accepted range: from the fine gridline at or below the exact rate to the next one up, in units, in the
+    // key, for every axis and mark (MED 2: it has to hold the two gridlines the student is told to read between)
     for ax in AXES_ALL {
         let axis = Axis::of(ax);
         for pmax in ["1", "6.5", "10", "37", "100"] {
@@ -1496,17 +1512,29 @@ fn the_rate_axis_has_fine_gridlines_and_the_key_states_the_range_to_accept() {
                 let Ok(cv) = read_graph(&with(&l)) else { continue };
                 let m = cv.mark.unwrap();
                 let (lo, hi, minor) = cv.accept(&m);
-                let (_, step) = y_axis(cv.pmax.v);
-                assert_eq!(minor, show(step / minor_divisions(step) as f64));
+                let (top, step) = y_axis(cv.pmax.v);
+                let fine = step / minor_divisions(step) as f64;
+                assert_eq!(minor, show(fine));
                 let (lof, hif): (f64, f64) = (lo.parse().unwrap(), hi.parse().unwrap());
-                let exact = cv.rate(m.v);
-                let tol = step / minor_divisions(step) as f64 / 2.0;
-                assert!((lof - (exact - tol).max(0.0)).abs() <= 0.5 * 10f64.powi(-(lo.split('.').nth(1).map_or(0, |d| d.len()) as i32)) + 1e-9, "{ax} {pmax} {mark}: {lo} vs {}", exact - tol);
-                assert!((hif - (exact + tol)).abs() <= 0.5 * 10f64.powi(-(hi.split('.').nth(1).map_or(0, |d| d.len()) as i32)) + 1e-9, "{ax} {pmax} {mark}: {hi} vs {}", exact + tol);
-                assert!(lof <= exact + 1e-9 && hif >= exact - 1e-9 && hif - lof <= cv.pmax.v * 0.1 + 1e-9, "{ax} {pmax} {mark}: {lo} {hi}");
+                // the printed ends are the two fine gridlines themselves, so neither drifts by a rounding step
+                assert_eq!(lo, show(lof));
+                assert_eq!(hi, show(hif));
+                assert!((hif - lof - fine).abs() < 1e-9 && (lof / fine - (lof / fine).round()).abs() < 1e-9 && (hif / fine - (hif / fine).round()).abs() < 1e-9, "{ax} {pmax} {mark}: {lo} .. {hi} are not one fine spacing of gridlines apart");
+                // the exact rate and every gridline within half a fine spacing of it are inside
+                let (n, d) = cv.frac(&m);
+                let exact = n as f64 / d as f64;
+                assert!(lof <= hif && lof <= exact + 1e-9 && exact <= hif + 1e-9, "{ax} {pmax} {mark}: the exact rate {exact} is outside {lo} .. {hi}");
+                let k0 = (exact / fine).floor() as i64 - 2;
+                for k in (k0..k0 + 5).filter(|k| *k >= 0) {
+                    let g = k as f64 * fine;
+                    if (g - exact).abs() <= fine / 2.0 + 1e-9 { assert!(g >= lof - 1e-9 && g <= hif + 1e-9, "{ax} {pmax} {mark}: the gridline {g} is within half a spacing of {exact} but outside {lo} .. {hi}"); }
+                }
+                // the band stays on the axis
+                assert!(hif <= top + 1e-9, "{ax} {pmax} {mark}: {hi} is above the top of the axis ({top})");
                 let svg = render_of(&l);
                 let all = key_lines(&svg).replace('\n', " ");
-                assert!(all.contains(&format!("accept any value from {lo} to {hi} arbitrary units")) && all.contains(&format!("smallest gridline spacing ({minor})")), "{ax} {pmax} {mark}");
+                assert!(all.contains(&format!("accept any value from {lo} to {hi} arbitrary units")), "{ax} {pmax} {mark}: {all}");
+                assert!(all.contains(&format!("fine gridlines are {minor} apart")), "{ax} {pmax} {mark}");
                 // and the student copy says to read to the nearest fine gridline but names no range
                 let stu = key_lines(&render_of(&[&l[..], &[b(SHOW_ANSWERS, false)]].concat())).replace('\n', " ");
                 assert!(stu.contains("Read the rate at P to the nearest fine gridline.") && !stu.contains("accept any value") && !stu.contains("Also accepted"), "{ax}");
@@ -1520,6 +1548,134 @@ fn the_rate_axis_has_fine_gridlines_and_the_key_states_the_range_to_accept() {
     let none = key_lines(&render_of(&gset("Light intensity", &[s("mark", ""), b(SHOW_ANSWERS, false)])));
     assert!(!none.contains("nearest fine gridline"));
 }
+
+/// MED 2: over many typed states, both fine gridlines a student could read (and so every gridline within half a
+/// fine spacing of the exact rate) are inside the accepted range, and the printed range is exactly those two
+/// gridlines, so no rounding can put a third one inside or cut a reading out.
+#[test]
+fn the_accepted_range_holds_both_fine_gridlines_a_student_could_read() {
+    let mut r = Rng::new(4242);
+    let mut checked = 0;
+    let mut mid = 0;
+    for _ in 0..4000 {
+        let ax = AXES_ALL[r.below(3)];
+        let axis = Axis::of(ax);
+        let (lo, hi, _) = axis.xv_range();
+        let pm = format!("{}.{}", 1 + r.below(100), r.below(100));
+        let xv = format!("{}.{}", lo as u32 + r.below((hi - lo) as usize) as u32, r.below(100));
+        let mk = format!("{}.{}", r.below(axis.xmax() as usize), r.below(100));
+        let l = gset(ax, &[s("pmax", &pm), s("xval", &xv), s("mark", &mk), b(SHOW_ANSWERS, true)]);
+        let Ok(cv) = read_graph(&with(&l)) else { continue };
+        let m = cv.mark.unwrap();
+        let (lo_s, hi_s, minor) = cv.accept(&m);
+        let (top, step) = y_axis(cv.pmax.v);
+        let fine = step / minor_divisions(step) as f64;
+        assert_eq!(minor, show(fine));
+        let (lof, hif): (f64, f64) = (lo_s.parse().unwrap(), hi_s.parse().unwrap());
+        // the printed ends parse back to exactly what the key means: fine gridline values, one fine spacing apart
+        assert_eq!((lo_s.clone(), hi_s.clone()), (show(lof), show(hif)), "{ax} {pm} {xv} {mk}");
+        assert!((hif - lof - fine).abs() < 1e-9 && (lof / fine - (lof / fine).round()).abs() < 1e-9, "{ax} {pm} {xv} {mk}: {lo_s} .. {hi_s} with fine {fine}");
+        let (n, d) = cv.frac(&m);
+        let exact = n as f64 / d as f64;
+        assert!(lof <= exact + 1e-9 && exact <= hif + 1e-9 && hif <= top + 1e-9, "{ax} {pm} {xv} {mk}: {exact} outside {lo_s} .. {hi_s} (axis to {top})");
+        // the two neighbours, and nothing further out
+        let below = (exact / fine).floor() * fine;
+        let above = below + fine;
+        assert!(below >= lof - 1e-9 && above <= hif + 1e-9, "{ax} {pm} {xv} {mk}: the neighbours {below} and {above} of {exact} are not inside {lo_s} .. {hi_s}");
+        assert!(below - fine < lof - 1e-9 && above + fine > hif + 1e-9, "{ax} {pm} {xv} {mk}: a gridline two spacings away is inside {lo_s} .. {hi_s}");
+        for g in [below, above] {
+            if (g - exact).abs() <= fine / 2.0 + 1e-9 { assert!(g >= lof - 1e-9 && g <= hif + 1e-9); }
+        }
+        if (exact / fine - (exact / fine).round()).abs() < 0.1 { mid += 1; }
+        // one render in ten: the printed sentence carries that range
+        if checked % 10 == 0 {
+            let txt = key_lines(&render_of(&l)).replace('\n', " ");
+            assert!(txt.contains(&format!("accept any value from {lo_s} to {hi_s} arbitrary units")), "{ax} {pm} {xv} {mk}: {txt}");
+        }
+        checked += 1;
+    }
+    assert!(checked > 2000 && mid > 100, "{checked} states, {mid} near a gridline");
+}
+
+/// LOW 2: the printed ends are the intended gridline values, on the two states where they used to drift (Light
+/// plateau 78.49, K 13.8, P 85 and Temperature peak 13.66, optimum 17.7, P 1), and on the critic's MED 2 repro.
+#[test]
+fn the_printed_accepted_range_is_exactly_the_two_neighbouring_gridlines() {
+    for (ax, pm, xv, mk, want) in [
+        ("CO2 concentration", "7.5", "", "auto", ("5.5", "6", "0.5")),
+        ("Light intensity", "78.49", "13.8", "85", ("65", "70", "5")),
+        ("Temperature", "13.66", "17.7", "1", ("1", "2", "1")),
+    ] {
+        let l = gset(ax, &[s("pmax", pm), s("xval", xv), s("mark", mk), b(SHOW_ANSWERS, true)]);
+        let Ok(cv) = read_graph(&with(&l)) else { panic!("{ax} {pm} {xv} {mk} does not draw") };
+        let m = cv.mark.unwrap();
+        let (lo, hi, minor) = cv.accept(&m);
+        assert_eq!((lo.as_str(), hi.as_str(), minor.as_str()), want, "{ax} {pm} {xv} {mk}");
+        let (n, d) = cv.frac(&m);
+        let exact = n as f64 / d as f64;
+        let (lof, hif) = (lo.parse::<f64>().unwrap(), hi.parse::<f64>().unwrap());
+        assert!(lof <= exact && exact <= hif, "{ax}: {exact} is outside {lo} .. {hi}");
+        // the range is one fine spacing wide, so the gridline past the neighbours is never inside it
+        assert!((hif - lof - minor.parse::<f64>().unwrap()).abs() < 1e-9);
+        let txt = key_lines(&render_of(&l)).replace('\n', " ");
+        assert!(txt.contains(&format!("accept any value from {lo} to {hi} arbitrary units")), "{txt}");
+        // and the student copy, which is what the reading has to be judged from, tells them to read a gridline
+        let stu = key_lines(&render_of(&[&l[..], &[b(SHOW_ANSWERS, false)]].concat())).replace('\n', " ");
+        assert!(stu.contains("Read the rate at P to the nearest fine gridline."), "{stu}");
+    }
+}
+
+/// The contrast ratio of a hex colour against white (WCAG 2.1 relative luminance).
+fn contrast_on_white(c: &str) -> f64 {
+    let ch = |i: usize| u8::from_str_radix(&c[1 + i * 2..3 + i * 2], 16).unwrap() as f64 / 255.0;
+    let lin = |v: f64| if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) };
+    1.05 / (0.2126 * lin(ch(0)) + 0.7152 * lin(ch(1)) + 0.0722 * lin(ch(2)) + 0.05)
+}
+
+/// MED 3: the gridlines the student is told to read are dark enough to see on white and survive a 66 % grey copy
+/// of a 1x render, in the Colour style as well as in Print: the student copy uses the Print greys.
+#[test]
+fn the_gridlines_are_readable_on_screen_and_survive_a_sixty_six_percent_copy_at_1x() {
+    assert!(contrast_on_white(FINE_COLOUR) >= 1.6, "the Colour fine gridline {FINE_COLOUR} is {:.2}:1 on white", contrast_on_white(FINE_COLOUR));
+    assert!(contrast_on_white(GRID_COLOUR) >= 2.0, "the Colour labelled gridline {GRID_COLOUR} is {:.2}:1 on white", contrast_on_white(GRID_COLOUR));
+    assert!(contrast_on_white(GRID_COLOUR) > contrast_on_white(FINE_COLOUR), "the labelled gridlines are the darker ones");
+    // the key (the screen copy) uses the Colour greys; a student copy uses the Print greys
+    let key_svg = render_of(&gset("Light intensity", &[b(SHOW_ANSWERS, true)]));
+    assert!(key_svg.contains(&format!("stroke=\"{FINE_COLOUR}\"")) && key_svg.contains(&format!("stroke=\"{GRID_COLOUR}\"")), "the Colour key uses the Colour greys");
+    let stu_svg = render_of(&gset("Light intensity", &[b(SHOW_ANSWERS, false)]));
+    assert!(stu_svg.contains(&format!("stroke=\"{FINE_PRINT}\"")) && stu_svg.contains(&format!("stroke=\"{GRID_PRINT}\"")), "the Colour student copy takes the Print greys");
+    let mut lines = 0;
+    for ax in AXES_ALL {
+        for (style, key) in [("Colour", false), ("Print", false), ("Print", true)] {
+            let svg = render_of(&gset(ax, &[s("style", style), s("label_size", "Small"), b(SHOW_ANSWERS, key)]));
+            let q = parse(&svg);
+            let pl = plot_of(&q, Axis::of(ax), 10.0);
+            let (w, h, px) = crate::figures::to_rgba(&svg, 1.0).unwrap();
+            // the white pads under P and the Plateau or Peak label are not gridline ink
+            let pads: Vec<Bx> = svg.match_indices("<rect ").filter_map(|(i, _)| { let el = svg[i..].split('>').next().unwrap(); if attr(el, "fill").as_deref() == Some("#ffffff") && attr(el, "stroke").is_none() { Some((num(el, "x"), num(el, "y"), num(el, "x") + num(el, "width"), num(el, "y") + num(el, "height"))) } else { None } }).collect();
+            for l in q.lines.iter().filter(|l| (l.col == FINE_PRINT || l.col == GRID_PRINT) && l.a.1 == l.b.1) {
+                let (mut on, mut all) = (0u32, 0u32);
+                for ix in ((pl.l + 6.0) as u32)..((pl.r - 6.0) as u32) {
+                    if pads.iter().any(|b| ix as f64 >= b.0 - 1.0 && ix as f64 <= b.2 + 1.0) { continue; }
+                    all += 1;
+                    let mut any = false;
+                    for dy in [-1i32, 0, 1] {
+                        let iy = (l.a.1.round() as i32 + dy).clamp(0, h as i32 - 1) as u32;
+                        let o = (((iy * w) + ix) * 4) as usize;
+                        if o + 2 < px.len() && (0.299 * px[o] as f64 + 0.587 * px[o + 1] as f64 + 0.114 * px[o + 2] as f64) < 0.66 * 255.0 { any = true; }
+                    }
+                    on += u32::from(any);
+                }
+                assert!(all > 100, "{ax} {style}");
+                let frac = on as f64 / all as f64;
+                assert!(frac >= 0.95, "{ax} {style} key {key}: only {on} of {all} columns of the gridline at {:.1} are darker than 66 % grey", l.a.1);
+                lines += 1;
+            }
+        }
+    }
+    assert!(lines >= 60, "{lines} gridlines checked");
+}
+
 
 /// Print gridlines survive a photocopy at 66 % grey: every grey that carries information is darker than 66 % grey.
 #[test]
@@ -1569,7 +1725,7 @@ fn the_letter_p_and_the_plateau_and_peak_labels_have_no_gridline_through_them() 
                                 let svg = render_of(&gset(ax, &[s("pmax", pmax), s("xval", &format!("{xv}")), s("mark", &mark), b(SHOW_ANSWERS, key), s("label_size", size), s("style", style)]));
                                 let q = parse(&svg);
                                 let pads: Vec<(usize, Bx)> = svg.match_indices("<rect ").filter_map(|(i, _)| { let el = svg[i..].split('>').next().unwrap(); if attr(el, "fill").as_deref() == Some("#ffffff") && attr(el, "stroke").is_none() { Some((i, (num(el, "x"), num(el, "y"), num(el, "x") + num(el, "width"), num(el, "y") + num(el, "height")))) } else { None } }).collect();
-                                let last_grid = svg.rfind(&format!("stroke=\"{}\"", if style == "Print" { FINE_PRINT } else { FINE_COLOUR })).unwrap();
+                                let last_grid = svg.rfind(&format!("stroke=\"{}\"", if style == "Print" || !key { FINE_PRINT } else { FINE_COLOUR })).unwrap();
                                 let labelled: Vec<&(String, Bx)> = q.texts.iter().filter(|t| t.0 == "P" || t.0.starts_with("Plateau: ") || t.0.starts_with("Peak: ")).collect();
                                 assert_eq!(labelled.len(), 1 + usize::from(key), "{ax} {mark}");
                                 for (t, bx) in labelled {
@@ -1672,7 +1828,7 @@ fn the_student_instructions_are_exact_and_appear_exactly_when_they_apply() {
         let txt = key_lines(&render_of(&l)).replace('\n', " ").replace("  ", " ");
         let has = |t: &str| txt.contains(t);
         assert_eq!(has("For the arrow that leaves the loop, give the molecule it makes directly."), c.io, "mask {mask}");
-        assert_eq!(has("Write the balanced equation for making one molecule of glucose, using the smallest whole-number coefficients."), c.eq, "mask {mask}");
+        assert_eq!(has("Write the net balanced equation for making one molecule of glucose, with no substance on both sides."), c.eq, "mask {mask}");
         assert_eq!(has("ADP + Pi and NADP+ are shown to help you tell the two carriers apart."), c.shuttle, "mask {mask}");
         assert_eq!(has("Equation:"), c.eq, "mask {mask}: the prompt beside the equation's rule");
         assert!(has("A ring or a bracket points at a part, a bar under the drawing names a stage, an arrow carries a substance. Write each name or formula."));
@@ -1683,21 +1839,38 @@ fn the_student_instructions_are_exact_and_appear_exactly_when_they_apply() {
     }
 }
 
-/// MED 4: the key states the equation's accepted forms; the student sentence says "smallest".
+/// MED 1 and LOW 5: the key refuses water on both sides (the real reason) and says light may be left out; the
+/// student is asked for the net equation, so neither "smallest coefficients" nor "larger coefficients" is claimed.
 #[test]
-fn the_key_lists_the_equation_s_accepted_forms_and_the_student_sheet_says_smallest() {
+fn the_key_refuses_water_on_both_sides_and_the_student_copy_asks_for_the_net_equation() {
     let key = key_lines(&render_of(&[])).replace('\n', " ");
-    assert!(key.contains("Equation: 6CO2 + 6H2O + light gives C6H12O6 + 6O2. Also accepted: light written over the arrow instead of on the left, and the terms in a different order. Not accepted: coefficients that are not the smallest whole numbers, such as 6CO2 + 12H2O gives C6H12O6 + 6O2 + 6H2O."), "{key}");
-    // the equation the key calls not accepted is balanced, so the student sentence has to rule it out (it does: "smallest")
-    let side = |s: &str| { let mut t = std::collections::BTreeMap::new(); for term in s.split('+') { if term.trim() == "light" { continue; } for (e, n) in atoms(term) { *t.entry(e).or_insert(0) += n; } } t };
-    assert_eq!(side("6CO~2 + 12H~2O"), { let mut r = side("C~6H~12O~6 + 6O~2 + 6H~2O"); r.retain(|_, _| true); r });
+    assert!(key.contains("Equation: 6CO2 + 6H2O + light gives C6H12O6 + 6O2."), "{key}");
+    assert!(key.contains("Also accepted: light left out") && key.contains("light written over the arrow instead of on the left"), "LOW 5: the key says whether light may be left out: {key}");
+    assert!(key.contains("Not accepted: water on both sides, such as 6CO2 + 12H2O gives C6H12O6 + 6O2 + 6H2O"), "{key}");
+    assert!(!key.contains("smallest whole numbers") && !key.contains("larger coefficients"), "the reason given must not be the coefficients: {key}");
+    // the refused form really is in the smallest whole numbers (no common factor >= 2) and really does have water on
+    // both sides, so "water on both sides" is the only true reason to refuse it
+    let terms = ["6CO~2", "12H~2O", "C~6H~12O~6", "6O~2", "6H~2O"];
+    let coef = |t: &str| -> i64 { t.chars().take_while(|c| c.is_ascii_digit()).collect::<String>().parse().unwrap_or(1) };
+    let all = terms.iter().map(|t| coef(t)).fold(0, gcd);
+    assert_eq!(all, 1, "{} is already in the smallest whole numbers", terms.join(" + "));
+    let side = |ts: &[&str]| { let mut t = std::collections::BTreeMap::new(); for term in ts { for (e, n) in atoms(term) { *t.entry(e).or_insert(0) += n; } } t };
+    assert_eq!(side(&["6CO~2", "12H~2O"]), side(&["C~6H~12O~6", "6O~2", "6H~2O"]), "the refused form is balanced");
+    assert!(["6CO~2", "12H~2O"].iter().any(|t| t.ends_with("H~2O")) && ["C~6H~12O~6", "6O~2", "6H~2O"].iter().any(|t| t.ends_with("H~2O")), "water is on both sides of the refused form");
+    assert!(EQ_LEFT.contains("H~2O") && !EQ_RIGHT.contains("H~2O"), "and water is on the left only in the accepted form");
+    // the student is asked for the net equation, in words that name no substance and no coefficient rule
     let stu = key_lines(&render_of(&[b(SHOW_ANSWERS, false)])).replace('\n', " ");
-    assert!(stu.contains("smallest whole-number coefficients") && !stu.contains("Also accepted"));
+    assert!(stu.contains("Write the net balanced equation for making one molecule of glucose, with no substance on both sides."), "{stu}");
+    assert!(!stu.contains("smallest") && !stu.contains("coefficients") && !stu.contains("Also accepted"), "{stu}");
     // the key line is there only with the equation on
     assert!(!key_lines(&render_of(&[b("show_equation", false)])).contains("Equation: 6CO2"));
-    // the FAQ says the same
+    assert!(!key_lines(&render_of(&[b("show_equation", false), b(SHOW_ANSWERS, false)])).contains("net balanced equation"));
+    // the FAQ says the same, and answers LOW 5 the same way
     let faq: String = crate::figures::faq::faq_for(ID).iter().map(|f| f.a).collect::<Vec<_>>().join(" ");
-    assert!(faq.contains("the key prints these accepted forms") && faq.contains("smallest whole-number coefficients"));
+    assert!(faq.contains("write the net balanced equation, with no substance on both sides"), "{faq}");
+    assert!(faq.contains("water on both sides"), "{faq}");
+    assert!(faq.contains("light may be left out"), "{faq}");
+    assert!(!faq.contains("smallest whole-number coefficients") && !faq.contains("larger coefficients"), "{faq}");
 }
 
 /// MED 3 and the key captions' numbers (M11, M12), all three axes, a spread of values.
@@ -1820,6 +1993,25 @@ fn every_documented_unit_is_read_and_a_wrong_one_is_refused() {
     for t in ["20 ppm", "20ppm", "20 parts per million", "20 PPM"] { assert!(refusals(&graph_set("CO2 concentration", "10", "", t)).is_empty(), "{t:?}"); }
     for t in ["10", "10 au", "10au", "10 a.u.", "10 units", "10 unit", "10 arbitrary units", "10 Arbitrary Unit", "10 arb. units"] { assert!(refusals(&graph_set("Light intensity", t, "", "20")).is_empty(), "{t:?}"); }
     for t in ["20 ppm", "20 \u{b0}C", "10 mg"] { assert_eq!(refusals(&graph_set("Light intensity", "10", "", t)).len(), 1, "{t:?} on the light axis"); }
+    // LOW 4: a wrong unit says which unit it was and which ones the axis takes, and never that it is "not a number"
+    for (ax, field, typed, unit, help) in [
+        ("Light intensity", "mark", "400 ppm", "ppm", "% or percent"),
+        ("Light intensity", "mark", "20 pct", "pct", "% or percent"),
+        ("Temperature", "mark", "30 \u{b0}F", "\u{b0}F", "degrees C, degrees Celsius or deg C"),
+        ("Temperature", "xval", "30 degF", "degF", "degrees C, degrees Celsius or deg C"),
+        ("CO2 concentration", "mark", "20 %", "%", "ppm or parts per million"),
+        ("Light intensity", "pmax", "10 percent", "percent", "au or arbitrary units"),
+    ] {
+        let l = [&graph_set(ax, "10", "", "20")[..], &[s(field, typed)]].concat();
+        let rs = refusals(&l);
+        assert_eq!(rs.len(), 1, "{ax} {field} {typed}: {rs:?}");
+        let t = &rs[0].text;
+        assert!(t.contains(&format!("ends with \"{unit}\"")), "{ax} {typed}: {t}");
+        assert!(t.contains("not one of the units this box takes") && t.contains(help), "{ax} {typed}: {t}");
+        assert!(!t.contains("is not a number"), "{ax} {typed}: a wrong unit is reported as not a number: {t}");
+    }
+    // and something that is not a number at all still says so
+    for t in ["abc", "1e3", "ten"] { assert!(refusals(&graph_set("Light intensity", "10", "", t))[0].text.contains("is not a number"), "{t:?}"); }
     // the FAQ says so
     let faq: String = crate::figures::faq::faq_for(ID).iter().map(|f| f.a).collect::<Vec<_>>().join(" ");
     assert!(faq.contains("au or arbitrary units; % or percent; ppm; degrees C, degrees Celsius or deg C"));

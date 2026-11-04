@@ -17,8 +17,10 @@
 //! it); temperature gives a rise to an optimum and a steeper fall to zero `FALL_SPAN` degrees above it. Typed values
 //! are read exactly (digits as typed), and the rate at P is rounded half up by integer arithmetic on those digits.
 //! Typed values are refused with the reason and a value that works (each such value is tested by typing it back).
-//! The rate axis has a labelled gridline every `step` and fine gridlines in between; the key says which reading to
-//! accept in units (half of the fine spacing either side of the exact rate).
+//! The rate axis has a labelled gridline every `step` and fine gridlines in between; the key accepts from the fine
+//! gridline at or just below the exact rate to the next one up, so that whichever of the two neighbouring fine
+//! gridlines a student reads is inside the range (and the range is printed as exactly those two gridlines).
+//! The gridlines are dark and wide enough that a student copy still copies: a student sheet uses the Print greys.
 
 use super::cladogram::text_w;
 use super::*;
@@ -220,10 +222,20 @@ fn clip(s: &str) -> String {
 }
 
 #[derive(Debug, PartialEq)]
-enum Bad { Empty, NotNumber, Ambiguous(String, String, bool), TooLong, TooLarge }
+enum Bad { Empty, NotNumber, Ambiguous(String, String, bool), Unit(String), TooLong, TooLarge }
+
+/// The longest run of letters (and the unit signs) that ends a string, trimmed: the unit a number was typed with.
+fn typed_unit(s: &str) -> Option<&str> {
+    let t = s.trim_end();
+    let start = t.char_indices().rev().take_while(|(_, c)| c.is_alphabetic() || *c == '%' || *c == '\u{b0}' || *c == '\u{ba}' || *c == '\u{2103}' || *c == '/' || *c == '.').map(|(i, _)| i).last()?;
+    let u = t[start..].trim();
+    // a full stop on its own is punctuation, not a unit ("0.5." is not a number)
+    if u.is_empty() || u.chars().all(|c| c == '.') { None } else { Some(u) }
+}
 
 /// Reads a typed number: optional sign, digits with one decimal point or comma, then optionally one of `units`.
-/// A comma followed by exactly three digits is ambiguous (1,000) and is refused rather than guessed.
+/// A comma followed by exactly three digits is ambiguous (1,000) and is refused rather than guessed; a number
+/// followed by a unit this box does not take is refused as a wrong unit, not as "not a number".
 fn parse(raw: &str, units: &[&str]) -> Result<Dec, Bad> {
     let t = raw.trim_start_matches('\u{feff}').split_whitespace().collect::<Vec<_>>().join(" ");
     let t = t.as_str();
@@ -245,7 +257,15 @@ fn parse(raw: &str, units: &[&str]) -> Result<Dec, Bad> {
         if matches!(c, '-' | '\u{2212}' | '\u{2013}' | '\u{2014}' | '\u{2010}' | '\u{2011}') { neg = true; chars.next(); } else if c == '+' { chars.next(); }
     }
     let rest: String = chars.collect::<String>().trim_start().to_string();
-    if rest.is_empty() || !rest.chars().all(|c| c.is_ascii_digit() || c == '.' || c == ',') || !rest.chars().any(|c| c.is_ascii_digit()) { return Err(Bad::NotNumber); }
+    if rest.is_empty() || !rest.chars().all(|c| c.is_ascii_digit() || c == '.' || c == ',') || !rest.chars().any(|c| c.is_ascii_digit()) {
+        // a number with a unit this box does not take says which unit, rather than "not a number"
+        if let Some(u) = typed_unit(&rest) {
+            let head = rest.trim_end();
+            let prefix = &head[..head.len() - u.len()];
+            if parse(prefix, &[]).is_ok() { return Err(Bad::Unit(u.to_string())); }
+        }
+        return Err(Bad::NotNumber);
+    }
     let digits = if rest.contains(',') {
         if rest.contains('.') || rest.matches(',').count() > 1 { return Err(Bad::NotNumber); }
         let (a, b) = rest.split_once(',').unwrap();
@@ -274,6 +294,10 @@ impl Axis {
     pub fn xmax(self) -> f64 { match self { Axis::Light => 100.0, Axis::Co2 => 1200.0, Axis::Temp => 60.0 } }
     fn xstep(self) -> f64 { match self { Axis::Light => 20.0, Axis::Co2 => 200.0, Axis::Temp => 10.0 } }
     fn unit(self) -> &'static str { match self { Axis::Light => "%", Axis::Co2 => "ppm", Axis::Temp => "\u{b0}C" } }
+    /// The units this axis takes, in words, for a refusal that names them.
+    pub fn units_help(self) -> &'static str {
+        match self { Axis::Light => "% or percent", Axis::Co2 => "ppm or parts per million", Axis::Temp => "degrees C, degrees Celsius or deg C" }
+    }
     /// The units a typed value may end with (lower case; the longest that fits is taken).
     pub fn units(self) -> &'static [&'static str] {
         match self {
@@ -284,6 +308,8 @@ impl Axis {
     }
     /// The units a typed plateau or peak rate may end with.
     pub const RATE_UNITS: &'static [&'static str] = &["arbitrary units", "arbitrary unit", "arb. units", "a.u.", "units", "unit", "au"];
+    /// The same, in words, for a refusal that names them.
+    pub const RATE_HELP: &'static str = "au or arbitrary units";
     /// Where P sits when the box says `auto`: a typical, readable point of the axis (not near the origin, not below the CO2 compensation point).
     pub fn mark_default(self) -> f64 { match self { Axis::Light => 20.0, Axis::Co2 => 400.0, Axis::Temp => 20.0 } }
     fn title(self) -> &'static str { match self { Axis::Light => "Light intensity (% of full sunlight)", Axis::Co2 => "CO~2 concentration (ppm)", Axis::Temp => "Temperature (\u{b0}C)" } }
@@ -312,14 +338,23 @@ impl Curve {
     pub fn frac(&self, x: &Dec) -> (i128, i128) { rate_frac(self.axis, self.pmax.d, self.xv.d, x.d) }
     /// The rate at the typed `x`, rounded half up to `dec` decimals.
     pub fn rate_text(&self, x: &Dec, dec: usize) -> String { let (n, d) = self.frac(x); ratio_text(n, d, dec) }
-    /// The reading the key accepts at the typed `x`: (lowest, highest, half of the fine gridline spacing), as text.
+    /// The reading the key accepts at the typed `x`: (lowest, highest, fine gridline spacing), as text.
+    /// The band runs from the fine gridline at or just below the exact rate to the next one up, so that a student
+    /// who reads either of the two neighbouring fine gridlines (what "read to the nearest fine gridline" asks for)
+    /// is inside it, whatever the exact rate is. Both ends are printed as the gridline values themselves, so the
+    /// printed range is exactly the band and never drifts by a rounding step.
     pub fn accept(&self, x: &Dec) -> (String, String, String) {
         let (_, step) = y_axis(self.pmax.v);
-        let tol_d = ((step / minor_divisions(step) as f64 / 2.0) * SCALE as f64).round() as i128;
+        let fine = ((step / minor_divisions(step) as f64) * SCALE as f64).round() as i128;
         let (n, d) = self.frac(x);
-        let dd = decimals_of(tol_d).max(1);
-        let t = tol_d * (d / SCALE);
-        (ratio_text((n - t).max(0), d, dd), ratio_text(n + t, d, dd), show_d(tol_d * 2))
+        // the rate in billionths (the denominators `frac` makes are all multiples of SCALE), then the largest fine
+        // gridline at or below it: integer arithmetic throughout, and small numbers, so nothing overflows
+        debug_assert!(d % SCALE == 0, "the rate fraction's denominator is a whole number of billionths");
+        let per_unit = (d / SCALE).max(1);
+        let rate_b = n.max(0) / per_unit;
+        let lo = (rate_b / fine).max(0) * fine;
+        let hi = lo + fine;
+        (show_d(lo), show_d(hi), show_d(fine))
     }
 }
 
@@ -359,18 +394,20 @@ fn range_text(lo: f64, hi: f64, unit: &str) -> String {
     format!("{} to {}{u}", show(lo), show(hi))
 }
 
-fn bad_text(what: &str, raw: &str, b: &Bad, lo: f64, hi: f64, unit: &str, ex: &str) -> String {
+fn bad_text(what: &str, raw: &str, b: &Bad, lo: f64, hi: f64, unit: &str, units_help: &str, ex: &str) -> String {
     let shown = clip(raw);
     let ask = format!("Type a number from {}, such as {ex}.", range_text(lo, hi, unit));
     match b {
         Bad::Empty => format!("{what} is empty. {ask}"),
         Bad::NotNumber => format!("{what}: \"{shown}\" is not a number. {ask}"),
+        Bad::Unit(u) => format!("{what}: \"{shown}\" ends with \"{u}\", which is not one of the units this box takes ({units_help}). {ask}"),
         Bad::Ambiguous(a, c, neg) => {
-            // the two readings of a comma followed by three digits; only those inside the range are offered
-            let sign = if *neg { "-" } else { "" };
-            let both = [format!("{a}.{c}"), format!("{a}{c}")];
-            let fits: Vec<&String> = both.iter().filter(|t| parse(&format!("{sign}{t}"), &[]).map_or(false, |d| d.d >= exact(lo) && d.d <= exact(hi))).collect();
-            let head = format!("{what}: \"{shown}\" is ambiguous: a comma is read as a decimal point, so it could mean {a}.{c} or {a}{c}.");
+            // the two readings of a comma followed by three digits, each written with the sign that was typed (a
+            // minus sign is never dropped: "−1,500" can only be −1.5 or −1500), and only those inside the range offered
+            let sign = if *neg { "\u{2212}" } else { "" };
+            let both: Vec<String> = [format!("{a}.{c}"), format!("{a}{c}")].iter().map(|t| parse(&format!("{sign}{t}"), &[]).map_or_else(|_| format!("{sign}{t}"), |d| show_d(d.d))).collect();
+            let fits: Vec<&String> = both.iter().filter(|t| parse(t, &[]).map_or(false, |d| d.d >= exact(lo) && d.d <= exact(hi))).collect();
+            let head = format!("{what}: \"{shown}\" is ambiguous: a comma is read as a decimal point, so it could mean {} or {}.", both[0], both[1]);
             match fits.as_slice() {
                 [] => format!("{head} Neither is in the range from {}. {ask}", range_text(lo, hi, unit)),
                 [one] => format!("{head} Only {one} is in the range from {}. Type {one} to be clear.", range_text(lo, hi, unit)),
@@ -391,7 +428,7 @@ pub fn read_graph(p: &Params) -> Result<Curve, Vec<Refusal>> {
         let what = axis.pmax_what();
         let raw = p.s("pmax");
         match parse(raw, Axis::RATE_UNITS) {
-            Err(e) => { bad.push(Refusal { field: "pmax", text: bad_text(what, raw, &e, PMAX_LO, PMAX_HI, "arbitrary units", "10") }); None }
+            Err(e) => { bad.push(Refusal { field: "pmax", text: bad_text(what, raw, &e, PMAX_LO, PMAX_HI, "arbitrary units", Axis::RATE_HELP, "10") }); None }
             Ok(d) if d.d < exact(PMAX_LO) => { bad.push(Refusal { field: "pmax", text: format!("{what}: {} is below the smallest rate the rate axis is built for, {} (arbitrary units). Type a number from {} to {}, such as 10.", show_d(d.d), show(PMAX_LO), show(PMAX_LO), show(PMAX_HI)) }); None }
             Ok(d) if d.d > exact(PMAX_HI) => { bad.push(Refusal { field: "pmax", text: format!("{what}: {} is above the largest rate the rate axis is built for, {} (arbitrary units). Type a number from {} to {}, such as 10.", show_d(d.d), show(PMAX_HI), show(PMAX_LO), show(PMAX_HI)) }); None }
             Ok(d) => Some(d),
@@ -407,7 +444,7 @@ pub fn read_graph(p: &Params) -> Result<Curve, Vec<Refusal>> {
         if raw.trim().is_empty() { (Some(Dec { v: dflt, d: exact(dflt) }), false) } else {
             match parse(raw, axis.units()) {
                 Err(Bad::Empty) => (None, false),
-                Err(e) => { bad.push(Refusal { field: "xval", text: bad_text(&format!("{what} for {}", axis.word()), raw, &e, lo, hi, u, &ex) }); (None, true) }
+                Err(e) => { bad.push(Refusal { field: "xval", text: bad_text(&format!("{what} for {}", axis.word()), raw, &e, lo, hi, u, axis.units_help(), &ex) }); (None, true) }
                 Ok(d) if d.d < exact(lo) => {
                     let why = match axis {
                         Axis::Temp => format!("the rising part of the curve would be squeezed into the first {} {u}", show(lo)),
@@ -436,7 +473,7 @@ pub fn read_graph(p: &Params) -> Result<Curve, Vec<Refusal>> {
             let xm = axis.xmax();
             let u = axis.unit();
             match parse(raw, axis.units()) {
-                Err(e) => { bad.push(Refusal { field: "mark", text: bad_text("Point P", raw, &e, 0.0, xm, u, &ex) }); None }
+                Err(e) => { bad.push(Refusal { field: "mark", text: bad_text("Point P", raw, &e, 0.0, xm, u, axis.units_help(), &ex) }); None }
                 Ok(d) if d.d < 0 => { bad.push(Refusal { field: "mark", text: format!("Point P: {} is below 0, the start of the x axis. Type a number from {}, such as {ex}, or leave it empty.", show_d(d.d), range_text(0.0, xm, u)) }); None }
                 Ok(d) if d.d > exact(xm) => { bad.push(Refusal { field: "mark", text: format!("Point P: {} is beyond {} {u}, the end of the x axis. Type a number from {}, such as {ex}, or leave it empty.", show_d(d.d), show(xm), range_text(0.0, xm, u)) }); None }
                 Ok(d) => Some(Some(d)),
@@ -771,14 +808,6 @@ pub fn minor_divisions(step: f64) -> usize {
     if (m - 2.0).abs() < 0.05 { 4 } else { 5 }
 }
 
-/// Decimal places needed to write `d` billionths.
-fn decimals_of(d: i128) -> usize {
-    let mut n = 0;
-    let mut v = d.abs();
-    while v % SCALE != 0 && n < 9 { v *= 10; n += 1; }
-    n
-}
-
 fn num_text(v: f64) -> String { crate::figures::chart::fmt(v) }
 
 struct GraphOut { svg: String, h: f64, notes: Vec<String> }
@@ -791,10 +820,17 @@ fn seg_hits_box(a: P, b: P, bx: Bx) -> bool {
 
 fn expand(b: Bx, d: f64) -> Bx { (b.0 - d, b.1 - d, b.2 + d, b.3 + d) }
 
-pub const GRID_COLOUR: &str = "#d3d9e3";
-pub const FINE_COLOUR: &str = "#e9ecf2";
-pub const GRID_PRINT: &str = "#8c8c8c";
-pub const FINE_PRINT: &str = "#a4a4a4";
+/// The gridline colours. The Colour greys are dark enough to see on a white screen (contrast ratios of 2.52 and
+/// 1.83 on white); the Print greys are dark enough that a student sheet still copies at 66 % grey, and a student
+/// copy in the Colour style uses them too, because the student is told to read the fine gridlines off a printout.
+pub const GRID_COLOUR: &str = "#9aa4b2";
+pub const FINE_COLOUR: &str = "#b8c0cc";
+pub const GRID_PRINT: &str = "#5a5a5a";
+pub const FINE_PRINT: &str = "#7a7a7a";
+/// Gridline widths. A line thinner than this cannot survive a 66 % grey copy of a 1x render whatever its tone
+/// (its ink is spread over two pixel rows), so the two kinds differ by tone, and the labelled ones carry the numbers.
+pub const GRID_SW: f64 = 1.6;
+pub const FINE_SW: f64 = 1.4;
 
 /// A white pad behind a text, so that a gridline never runs through a letter (it ends at the pad).
 fn backing(b: Bx) -> String {
@@ -810,8 +846,10 @@ fn graph(cv: &Curve, c: &Cfg, fills: &svg::Fills, x0: f64, y0: f64) -> GraphOut 
     let (ytop, ystep) = y_axis(cv.pmax.v);
     let px = |x: f64| l + x / axis.xmax() * (r - l);
     let py = |y: f64| bm - y / ytop * (bm - t);
-    // Print greys are darker than 66 % grey (luminance under 168 of 255), so that a photocopy at 66 % keeps every gridline
-    let (grid, fine) = if pr { (GRID_PRINT, FINE_PRINT) } else { (GRID_COLOUR, FINE_COLOUR) };
+    // Print greys are darker than 66 % grey (luminance under 168 of 255), so that a photocopy at 66 % keeps every
+    // gridline; a student copy in the Colour style takes them too, so that the sheet it tells the student to read
+    // the fine gridlines off is the one that copies
+    let (grid, fine) = if pr || !c.key { (GRID_PRINT, FINE_PRINT) } else { (GRID_COLOUR, FINE_COLOUR) };
     let curve_col = if pr { INK } else { "#1f5fbf" };
     let guide_col = if pr { "#333333" } else { "#555555" };
     let mut s = String::new();
@@ -822,13 +860,13 @@ fn graph(cv: &Curve, c: &Cfg, fills: &svg::Fills, x0: f64, y0: f64) -> GraphOut 
     let nm = minor_divisions(ystep);
     for k in 1..(((ytop / ystep).round() as usize + 1) * nm).min(400) {
         let v = ystep / nm as f64 * k as f64;
-        if v < ytop - ystep * 1e-6 && k % nm != 0 { line(&mut s, (l, py(v)), (r, py(v)), fine, 0.7, ""); }
+        if v < ytop - ystep * 1e-6 && k % nm != 0 { line(&mut s, (l, py(v)), (r, py(v)), fine, FINE_SW, ""); }
     }
     // gridlines, axes, ticks
     let mut v = 0.0;
     let mut n = 0;
     while v <= ytop + ystep * 1e-6 && n < 60 {
-        if v > 0.0 { line(&mut s, (l, py(v)), (r, py(v)), grid, 1.0, ""); }
+        if v > 0.0 { line(&mut s, (l, py(v)), (r, py(v)), grid, GRID_SW, ""); }
         s.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{INK}" stroke-width="1.4"/>"#, l - 5.0, py(v), l, py(v)));
         s.push_str(&rich(l - 9.0, py(v) + 0.35 * fs, fs, "end", INK, false, &num_text((v * 1e9).round() / 1e9)));
         v += ystep;
@@ -993,12 +1031,12 @@ fn draw(p: &Params) -> String {
         for l in &labs { let a = alts(l.it); if !a.is_empty() { acc.push(format!("{}: {}", name(l.it), a)); } }
         if !acc.is_empty() { cap.push(format!("Also accepted: {}.", acc.join("; "))); }
         if c.io { cap.push("G3P is the molecule the Calvin cycle makes directly; two G3P can be joined to make glucose.".to_string()); }
-        if c.eq { cap.push("Equation: 6CO~2 + 6H~2O + light gives C~6H~12O~6 + 6O~2. Also accepted: light written over the arrow instead of on the left, and the terms in a different order. Not accepted: coefficients that are not the smallest whole numbers, such as 6CO~2 + 12H~2O gives C~6H~12O~6 + 6O~2 + 6H~2O.".to_string()); }
+        if c.eq { cap.push("Equation: 6CO~2 + 6H~2O + light gives C~6H~12O~6 + 6O~2. Also accepted: light left out (it is not a substance, so the equation is still net), light written over the arrow instead of on the left, and the terms in a different order. Not accepted: water on both sides, such as 6CO~2 + 12H~2O gives C~6H~12O~6 + 6O~2 + 6H~2O, which is the same reaction with water left uncancelled and not the net equation.".to_string()); }
         if let Ok(cv) = &reading { cap.extend(graph_caption(cv)); }
     } else {
         cap.push("A ring or a bracket points at a part, a bar under the drawing names a stage, an arrow carries a substance. Write each name or formula.".to_string());
         if c.io { cap.push("For the arrow that leaves the loop, give the molecule it makes directly.".to_string()); }
-        if c.eq { cap.push("Write the balanced equation for making one molecule of glucose, using the smallest whole-number coefficients.".to_string()); }
+        if c.eq { cap.push("Write the net balanced equation for making one molecule of glucose, with no substance on both sides.".to_string()); }
         if let Ok(cv) = &reading { if cv.mark.is_some() { cap.push("Read the rate at P to the nearest fine gridline.".to_string()); } }
         if c.shuttle { cap.push("ADP + Pi and NADP+ are shown to help you tell the two carriers apart.".to_string()); }
     }
@@ -1185,7 +1223,7 @@ pub fn graph_caption(cv: &Curve) -> Vec<String> {
     };
     if let Some(m) = &cv.mark {
         let (lo, hi, minor) = cv.accept(m);
-        v.push(format!("Reading at P: accept any value from {lo} to {hi} arbitrary units, which is half of the smallest gridline spacing ({minor}) either side of the exact rate."));
+        v.push(format!("Reading at P: accept any value from {lo} to {hi} arbitrary units, the fine gridline at or just below the exact rate up to the next one (fine gridlines are {minor} apart), so whichever of the two neighbours a student reads is inside."));
     }
     v
 }
