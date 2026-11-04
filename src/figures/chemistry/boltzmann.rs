@@ -8,14 +8,15 @@
 //!
 //! The three speeds are exact. The most probable speed is vp = sqrt(2RT/M), and the peak of f is exactly at vp; the
 //! mean speed is sqrt(8RT/(pi M)) and the rms speed sqrt(3RT/M). Raising T moves vp right (as sqrt T), lowers the peak
-//! (as 1/sqrt T), widens the curve, and leaves the area at 1. A dot marks vp at each curve's peak, with a short tick on
-//! the speed axis, and a dotted guide marks the hottest curve's rms speed (the "Mark vp and rms" switch; the student
-//! copy keeps these marks, which are symbols to read off the axis, never numbers).
+//! (as 1/sqrt T), widens the curve, and leaves the area at 1. On the key a dot marks vp at each curve's peak, with a
+//! short tick on the speed axis, and a dash-dot guide marks the hottest curve's rms speed (the "Mark vp and rms"
+//! switch). The student copy omits these marks, so its blank speed cells cannot be read off the axis.
 //!
-//! The drawn axis stops where the remaining area is invisible, so the shaded tail is the part of the plotted range:
-//! the key says so and prints the exact integral to infinity, which is larger only by the invisible tail beyond the
-//! axis. The curves are sampled densely over the first six most probable speeds, so a long axis (a high Ea) still
-//! draws each peak with many segments and the drawn polygon's area is within about 1e-4 of the curve it draws.
+//! The drawn axis stops where the remaining area is invisible, so the shaded tail approximates the part of the plotted
+//! range (within about 0.01 percentage point, the drawing's sampling); the key says so and prints the exact integral to
+//! infinity, so the two differ by the invisible tail beyond the axis and by that sampling. The curves are sampled
+//! densely over the first six most probable speeds, so a long axis (a high Ea) still draws each peak with many segments
+//! and the drawn polygon's area is within about 1e-4 of the curve it draws.
 //!
 //! The fraction of molecules whose kinetic energy is at or above an activation energy Ea is, for the three-dimensional
 //! Maxwell-Boltzmann energy distribution,
@@ -26,14 +27,20 @@
 //! (1/2) M v^2 per mole. F(0) = 1, and F rises with T at fixed Ea. erfc is the complementary error function,
 //! implemented here by the Abramowitz-Stegun formula 7.1.26 (a rational approximation in t = 1/(1 + 0.3275911 x)
 //! times exp(-x^2)); its absolute error in erf is below 1.5e-7 for x >= 0. In the far tail the relative error can reach
-//! about 1.5e-3, so below 0.1 % the key prints two significant figures, and a percentage too small for f64 is written
-//! "less than 0.001" rather than as a false zero. No other dependency is used.
+//! about 1.5e-3, so below 0.1 % the key prints at most two significant figures (one at zero decimals), and a
+//! percentage too small for f64 is written "less than 0.001" rather than as a false zero. No other dependency is used.
 //!
 //! What is an answer. The three speeds (vp, mean, rms) at each temperature, the fraction above Ea at each temperature
 //! and the density f at a marked speed are worked out from the givens, so they are printed only under Show answers;
 //! the student copy keeps the axes, the curves, the gas, the temperatures, the Ea line and the mark's guide, shows the
-//! speeds table with blank cells, and turns the fraction and the marked density into blank lines. The shaded tail is
-//! drawn on the key only. The description names no number and no answer.
+//! speeds table with blank cells, and turns the fraction and the marked density into blank lines. The vp dots, the
+//! vp axis ticks and the rms guide are key-only: on the student copy they would let the blank vp and rms cells be read
+//! off the axis. The shaded tail is drawn on the key only. The description names no number and no answer.
+//!
+//! Share links. This figure is new at share version 4 and unreleased; no saved specification or link can predate its
+//! `speeds` switch or its 1-decimal default, so it has no `start::added_in` entry. A migration that could separate an
+//! already-made version-4 link from this one would need a global share-version bump and a `was_overridden` value for
+//! every existing figure, so the note here is the documented path.
 use std::f64::consts::PI;
 
 use crate::figures::chart::{fmt, nice_step, ticks, Frame};
@@ -390,10 +397,10 @@ fn params() -> Vec<ParamDef> {
         ParamDef::float("t3", "Temperature 3 (K)", T_LO, T_HI, 1.0, 900.0).hint("From 50 to 3000 K; used with three curves"),
         ParamDef::float("ea", "Activation energy Ea (kJ/mol)", EA_LO, EA_HI, 0.1, 10.0).hint("The dashed vertical line marks the speed sqrt(2Ea/M). The key shades the tail beyond it and prints the fraction of molecules above Ea"),
         ParamDef::float("mark", "Mark a speed (m/s, 0 for none)", 0.0, MARK_HI, 1.0, 0.0).hint("A guide to the hottest temperature's curve; the key prints the density f there"),
-        ParamDef::int("dec", "Decimals in answers", 0, 3, 1).hint("Decimal places in the speeds table, the fractions and f at the marked speed. One by default: the speeds are only good to about 3 significant figures from the typed temperature"),
-        ParamDef::bool("speeds", "Mark vp and rms", true).hint("A dot at the peak (vp) of each curve and a short tick on the speed axis, plus a dotted guide at the hottest curve's rms speed. Symbols only, no values; kept on the student copy so they can be read off the axis"),
+        ParamDef::int("dec", "Decimals in answers", 0, 3, 1).hint("Decimal places in the speeds table, the fractions and f at the marked speed (not significant figures). One by default; the typed temperature is only good to a few significant figures"),
+        ParamDef::bool("speeds", "Mark vp and rms", true).hint("On the key: a dot at the peak (vp) of each curve and a short tick on the speed axis, plus a dash-dot guide at the hottest curve's rms speed. Show answers off omits them so the blank speed cells cannot be read off the axis"),
         ParamDef::bool("grid", "Grid lines", true),
-        answers_param().hint("Off keeps the curves, the gas, the temperatures, the Ea line and the marked guide, blanks the speeds table, the fractions and the marked density, and leaves out the shaded tail"),
+        answers_param().hint("Off keeps the curves, the gas, the temperatures, the Ea line and the marked guide, blanks the speeds table, the fractions and the marked density, and leaves out the shaded tail and the vp/rms marks"),
         svg::style_param(),
         svg::label_size_param(),
     ]
@@ -460,6 +467,7 @@ pub fn build(p: &Params) -> (String, Report) {
     let fills = Fills::new(p);
     let print = fills.is_print();
     let ans = st.answers;
+    let marks_on = st.speeds && ans;
     let m = st.m_kg();
     let dec = st.dec;
 
@@ -507,7 +515,7 @@ pub fn build(p: &Params) -> (String, Report) {
     // The legend band above the plot: a swatch and a name for each curve, then Ea and the marked speed.
     let mut legs: Vec<LegKind> = Vec::new();
     for (i, c) in curves.iter().enumerate() { legs.push(LegKind::Series(i, format!("{} K", fmt(c.t)))); }
-    if st.speeds {
+    if marks_on {
         legs.push(LegKind::Vp("vp (each peak)".into()));
         legs.push(LegKind::Rms("rms (hottest)".into()));
     }
@@ -539,8 +547,8 @@ pub fn build(p: &Params) -> (String, Report) {
     let mark_f = if mark_on { maxwell(st.mark, st.hottest(), m) } else { 0.0 };
     let mark_pt = if mark_on { Some((px(st.mark), py(mark_f))) } else { None };
     // The textbook marks: a dot at every peak (vp), and a guide at the hottest curve's rms speed.
-    let vp_points: Vec<Pt> = if st.speeds { curves.iter().map(|c| (px(c.vp), py(c.peak))).collect() } else { Vec::new() };
-    let rms_guide: Option<(Pt, Pt)> = if st.speeds {
+    let vp_points: Vec<Pt> = if marks_on { curves.iter().map(|c| (px(c.vp), py(c.peak))).collect() } else { Vec::new() };
+    let rms_guide: Option<(Pt, Pt)> = if marks_on {
         curves.get(hot).map(|c| ((px(c.rms), bottom), (px(c.rms), py(maxwell(c.rms, c.t, m)))))
     } else { None };
 
@@ -586,8 +594,8 @@ pub fn build(p: &Params) -> (String, Report) {
     lines.push(format!("Gas: {gas_name}, M = {} g/mol = {} kg/mol; R = 8.314462618 J/(mol K).", fmt(st.m_g), fmt(m)));
     lines.push("vp = √(2RT/M) is the peak; mean = √(8RT/(πM)); rms = √(3RT/M).".to_string());
     lines.push("Each full curve encloses area 1; the plotted part misses only the tail beyond the axis, where the curves are invisible.".to_string());
-    if st.speeds {
-        lines.push("Dots mark vp at each peak, with a short tick on the speed axis; the dotted guide marks the rms speed of the hottest curve. The symbols are kept on the student copy.".to_string());
+    if marks_on {
+        lines.push("Dots mark vp at each peak, with a short tick on the speed axis; the dash-dot guide marks the rms speed of the hottest curve. The marks are on the key only.".to_string());
     }
     if st.ea_kj > 0.0 && !ea_on {
         lines.push(format!("Ea = {} kJ/mol lies beyond the speeds shown (more than five times the hottest curve's most probable speed), so its line and tail are not drawn; the fraction is given below.", fmt(st.ea_kj)));
@@ -596,7 +604,7 @@ pub fn build(p: &Params) -> (String, Report) {
         let parts: Vec<String> = curves.iter().map(|c| format!("{} % at {} K", pct_text(c.above, dec), fmt(c.t))).collect();
         lines.push(format!("Above Ea = {} kJ/mol: {}.", fmt(st.ea_kj), parts.join(", ")));
         if ea_on {
-            lines.push(format!("The shaded area is the part of the plotted range, from Ea's speed to {} m/s; the printed fraction is the exact fraction to infinity (the tail beyond the axis is invisible).", fmt(x_top)));
+            lines.push(format!("The shaded area approximates, to about 0.01 percentage point, the part of the plotted range from Ea's speed to {} m/s; the printed fraction is the exact fraction to infinity, so the two differ by the invisible tail beyond the axis and by the drawing's sampling.", fmt(x_top)));
         }
     } else {
         let parts: Vec<String> = curves.iter().map(|c| format!("{BLANK} at {} K", fmt(c.t))).collect();
@@ -661,7 +669,7 @@ pub fn build(p: &Params) -> (String, Report) {
         d.raw(&format!(r##"<path d="{}" fill="none" stroke="{}" stroke-width="2.7" stroke-linejoin="round" stroke-linecap="butt"{dash_attr} data-o="curve" data-f="c{i}"/>"##, path_d(pts), fills.line(i)));
     }
     // the vp dots on the curves
-    if st.speeds {
+    if marks_on {
         for (i, (x, y)) in vp_points.iter().enumerate() {
             d.raw(&marker_el(*x, *y, 3.4, ink_c, "#ffffff", &format!("vp{i}")));
         }
@@ -675,7 +683,7 @@ pub fn build(p: &Params) -> (String, Report) {
     // the axes
     d.raw(&format!(r##"<path d="M{left:.2},{top:.2} L{left:.2},{bottom:.2} L{right:.2},{bottom:.2}" fill="none" stroke="{ink_c}" stroke-width="1.6" data-o="axis"/>"##));
     // the vp speeds marked on the axis
-    if st.speeds {
+    if marks_on {
         for (i, (x, _)) in vp_points.iter().enumerate() {
             d.raw(&format!(r##"<line x1="{x:.2}" y1="{bottom:.2}" x2="{x:.2}" y2="{:.2}" stroke="{}" stroke-width="2" data-o="vpaxis" data-f="vp{i}"/>"##, bottom - 6.0, fills.line(i)));
         }
@@ -774,12 +782,11 @@ pub fn build(p: &Params) -> (String, Report) {
 /// The description for a screen reader: ASCII, no number and no answer. It says only what is drawn.
 fn describe(st: &Setup, ans: bool, ea: bool, mark: bool) -> String {
     let mut s = String::from("Graph of the distribution of molecular speeds at one to three temperatures");
-    if st.speeds { s.push_str(", with a dot at each peak and a guide at the rms speed"); }
-    if ea { s.push_str(", with a vertical line at the activation energy"); }
+    if st.speeds && ans { s.push_str(", with a dot at each peak and a guide at the rms speed"); }
+    if ea && st.ea_kj > 0.0 { s.push_str(", with a vertical line at the activation energy"); }
     if mark { s.push_str(" and a guide at a marked speed"); }
     s.push('.');
     if ans { s.push_str(" The key shades the fraction above the activation energy and gives the speeds."); }
-    let _ = st;
     s
 }
 

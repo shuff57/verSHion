@@ -3,7 +3,7 @@
 //! against the formula; the label audit measures every text with the real glyphs the PNG renderer draws.
 use super::*;
 use crate::figures::chemistry::reactionenergy::{hits, seg_hits};
-use crate::figures::{registry, svg_size, to_png};
+use crate::figures::{registry, svg_size, to_png, Kind};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 fn def() -> FigureDef { registry().into_iter().find(|d| d.id == ID).expect("boltzmann-distribution is registered") }
@@ -87,7 +87,7 @@ fn it_is_registered_with_a_faq_examples_and_its_controls() {
     assert_eq!(d.subject, Subject::Chemistry);
     assert!((4..=6).contains(&crate::figures::faq::faq_for(ID).len()));
     let keys: Vec<&str> = (d.params)().iter().map(|p| p.key).collect();
-    for k in ["gas", "molar_mass", "curves", "t1", "t2", "t3", "ea", "mark", "dec", "grid", SHOW_ANSWERS, "style", "label_size"] {
+    for k in ["gas", "molar_mass", "curves", "t1", "t2", "t3", "ea", "mark", "dec", "speeds", "grid", SHOW_ANSWERS, "style", "label_size"] {
         assert!(keys.contains(&k), "no {k} param");
     }
     assert!(crate::figures::chemistry::skin_intro(ID).is_some());
@@ -561,7 +561,7 @@ fn the_marked_speed_guide_lands_on_the_hottest_curve() {
 
 #[test]
 fn the_vp_dots_and_rms_guide_mark_the_right_speeds_and_can_be_switched_off() {
-    let list = [s("gas", "N2"), s("curves", "3"), f("t1", 300.0), f("t2", 600.0), f("t3", 900.0), f("ea", 20.0)];
+    let list = [s("gas", "N2"), s("curves", "3"), f("t1", 300.0), f("t2", 600.0), f("t3", 900.0), f("ea", 20.0), f("mark", 1000.0)];
     let svg = svg_of(&list);
     let r = key(&list);
     let g = geo(&svg);
@@ -581,20 +581,24 @@ fn the_vp_dots_and_rms_guide_mark_the_right_speeds_and_can_be_switched_off() {
     assert!((z.1 - r.frame.py(maxwell(hot.rms, hot.t, r.setup.m_kg()))).abs() < 1e-9);
     let guide = g.lines.iter().find(|l| l.0 == "guide" && l.1 == "rms").expect("rms guide line");
     assert!((guide.2 .0 .0 - a.0).abs() < 0.02 && (guide.2 .1 .1 - z.1).abs() < 0.02);
-    // the symbols are in the legend, not on the curves
+    // the symbols are in the key's legend, not on the curves; the readout calls the rms guide dash-dot
     let leg: Vec<String> = texts(&svg).into_iter().filter(|t| t.kind == "legend").map(|t| t.text).collect();
     assert!(leg.iter().any(|t| t == "vp (each peak)") && leg.iter().any(|t| t == "rms (hottest)"), "{leg:?}");
-    // the student copy keeps the geometry, because it is a read-off, and still has no answer text
+    assert!(joined(&r).contains("dash-dot guide"), "{}", joined(&r));
+    // Show answers off: no vp dot, vp tick or rms guide, and the legend does not name them; the typed mark stays
     let st = student(&list);
-    assert_eq!(st.vp_points.len(), 3);
-    assert!(st.rms_guide.is_some());
-    let sg = geo(&svg_of(&[s("gas", "N2"), s("curves", "3"), f("t1", 300.0), f("t2", 600.0), f("t3", 900.0), f("ea", 20.0), b(SHOW_ANSWERS, false)]));
-    assert!(sg.marks.iter().filter(|m| m.1.starts_with("vp")).count() == 3);
-    assert!(sg.lines.iter().any(|l| l.0 == "guide" && l.1 == "rms"));
-    // the switch removes the dots, ticks, guide and both legend entries
-    let off = key(&[s("gas", "N2"), s("curves", "3"), f("t1", 300.0), f("t2", 600.0), f("t3", 900.0), f("ea", 20.0), b("speeds", false)]);
+    assert!(st.vp_points.is_empty() && st.rms_guide.is_none());
+    let ssvg = svg_of(&[s("gas", "N2"), s("curves", "3"), f("t1", 300.0), f("t2", 600.0), f("t3", 900.0), f("ea", 20.0), f("mark", 1000.0), b(SHOW_ANSWERS, false)]);
+    let sg = geo(&ssvg);
+    assert!(sg.marks.iter().all(|m| !m.1.starts_with("vp")), "student has a vp dot");
+    assert!(sg.lines.iter().all(|l| l.0 != "vpaxis" && !(l.0 == "guide" && l.1 == "rms")), "student has a vp/rms guide");
+    assert!(sg.marks.iter().any(|m| m.1 == "mark") && sg.lines.iter().any(|l| l.0 == "guide" && l.1 == "mark"), "the typed mark stays");
+    let sleg: Vec<String> = texts(&ssvg).into_iter().filter(|t| t.kind == "legend").map(|t| t.text).collect();
+    assert!(!sleg.iter().any(|t| t.contains("vp") || t.contains("rms")), "student legend names the marks: {sleg:?}");
+    // the switch removes the dots, ticks, guide and both legend entries on the key too
+    let off = key(&[s("gas", "N2"), s("curves", "3"), f("t1", 300.0), f("t2", 600.0), f("t3", 900.0), f("ea", 20.0), f("mark", 1000.0), b("speeds", false)]);
     assert!(off.vp_points.is_empty() && off.rms_guide.is_none());
-    let og = geo(&svg_of(&[s("gas", "N2"), s("curves", "3"), f("t1", 300.0), f("t2", 600.0), f("t3", 900.0), f("ea", 20.0), b("speeds", false)]));
+    let og = geo(&svg_of(&[s("gas", "N2"), s("curves", "3"), f("t1", 300.0), f("t2", 600.0), f("t3", 900.0), f("ea", 20.0), f("mark", 1000.0), b("speeds", false)]));
     assert!(og.marks.iter().all(|m| !m.1.starts_with("vp")));
     assert!(og.lines.iter().all(|l| !(l.0 == "vpaxis") && !(l.0 == "guide" && l.1 == "rms")));
     let ol: Vec<String> = texts(&svg_of(&[b("speeds", false)])).into_iter().filter(|t| t.kind == "legend").map(|t| t.text).collect();
@@ -602,7 +606,7 @@ fn the_vp_dots_and_rms_guide_mark_the_right_speeds_and_can_be_switched_off() {
 }
 
 #[test]
-fn the_shaded_tail_is_the_plotted_part_and_the_key_says_so() {
+fn the_shaded_tail_approximates_the_plotted_part_and_the_key_says_so() {
     let list = [s("gas", "N2"), s("curves", "2"), f("t1", 300.0), f("t2", 600.0), f("ea", 10.0), i("dec", 3)];
     let p = with(&list);
     let svg = def().svg(&p);
@@ -611,11 +615,22 @@ fn the_shaded_tail_is_the_plotted_part_and_the_key_says_so() {
     let va = (2.0 * 10_000.0 / m).sqrt();
     let shaded = tail_area(&r, &svg);
     let plotted = simpson(|v| ref_f(v, 600.0, m), va, r.x_top, 20_000);
-    assert!(close(shaded, plotted, 2e-3), "shaded {shaded} against plotted integral {plotted}");
+    assert!((shaded - plotted).abs() < 1e-4, "shaded {shaded} against plotted integral {plotted}");
     let to_infinity = ref_fraction(10_000.0, 600.0, m);
-    let missing = to_infinity - shaded;
-    assert!(missing > 0.0 && missing < 1e-3, "missing tail {missing}");
-    assert!(joined(&r).contains("part of the plotted range") && joined(&r).contains("exact fraction to infinity"), "{}", joined(&r));
+    assert!((to_infinity - shaded).abs() < 1e-3, "shade against F: {shaded} vs {to_infinity}");
+    let text = joined(&r);
+    assert!(text.contains("approximates") && text.contains("0.01 percentage point") && text.contains("exact fraction to infinity"), "{text}");
+    // H2 at 300 K, Ea = 5 kJ/mol: the shade can land on either side of the printed fraction
+    let list = [s("gas", "H2"), s("curves", "1"), f("t1", 300.0), f("ea", 5.0), i("dec", 3)];
+    let p = with(&list);
+    let svg = def().svg(&p);
+    let r = build(&p).1;
+    let mh: f64 = 2.016e-3;
+    let va = (2.0 * 5_000.0 / mh).sqrt();
+    let shaded = tail_area(&r, &svg);
+    let plotted = simpson(|v| ref_f(v, 300.0, mh), va, r.x_top, 20_000);
+    assert!((shaded - plotted).abs() < 1e-4, "H2 shaded {shaded} against {plotted}");
+    assert!((ref_fraction(5_000.0, 300.0, mh) - shaded).abs() < 1e-3);
     // the same relation at Ea = 0: the shaded part is x_top's area, slightly less than 1
     let list = [s("gas", "N2"), s("curves", "1"), f("t1", 300.0), f("ea", 0.0), i("dec", 3)];
     let p = with(&list);
@@ -623,9 +638,9 @@ fn the_shaded_tail_is_the_plotted_part_and_the_key_says_so() {
     let r = build(&p).1;
     let shaded = tail_area(&r, &svg);
     let plotted = simpson(|v| ref_f(v, 300.0, m), 0.0, r.x_top, 20_000);
-    assert!(close(shaded, plotted, 2e-3), "Ea=0 shaded {shaded} against {plotted}");
-    assert!(shaded < 1.0 && 1.0 - shaded < 1e-3, "Ea=0 shaded {shaded}");
-    assert!(joined(&r).contains("part of the plotted range"), "{}", joined(&r));
+    assert!((shaded - plotted).abs() < 1e-4, "Ea=0 shaded {shaded} against {plotted}");
+    assert!(shaded < 1.0 && 1.0 - shaded < 1e-4, "Ea=0 shaded {shaded}");
+    assert!(joined(&r).contains("approximates") && joined(&r).contains("0.01 percentage point"), "{}", joined(&r));
     // no dashed Ea swatch is shown for Ea = 0: the y axis is the line
     let leg: Vec<String> = texts(&svg).into_iter().filter(|t| t.kind == "legend").map(|t| t.text).collect();
     assert!(leg.iter().all(|t| !t.starts_with("Ea =")), "{leg:?}");
@@ -655,6 +670,10 @@ fn far_tail_precision_is_capped_at_two_significant_figures_and_says_so() {
     assert_eq!(pct_text(0.0000001, 3), res_fmt(1e-5, 1));
     assert_eq!(pct_text(0.5, 3), res_fmt(50.0, 3));
     assert_eq!(pct_text(0.004564, 3), res_fmt(0.4564, 3));
+    // the 0.1 % crossing: below it two significant figures, at or above it the chosen decimals
+    assert_eq!(pct_text(0.000_999_9, 3), res_fmt(0.099_99, 1));
+    assert_eq!(pct_text(0.001_000_1, 3), res_fmt(0.100_01, 3));
+    assert_eq!(pct_text(0.000_9, 3), res_fmt(0.09, 1));
     // Ea = 45 kJ/mol at 70 K: x ~ 77, a genuine far-tail case that is still representable
     let list = [s("gas", "N2"), s("curves", "1"), f("t1", 70.0), f("ea", 45.0), i("dec", 3)];
     let r = key(&list);
@@ -672,7 +691,64 @@ fn far_tail_precision_is_capped_at_two_significant_figures_and_says_so() {
     assert!(joined(&r).contains("less than 0.001 %"), "{}", joined(&r));
     // the module and FAQ state the rule
     let faq: String = crate::figures::faq::faq_for(ID).iter().map(|f| format!("{} {}", f.q, f.a)).collect::<Vec<_>>().join(" ");
-    assert!(faq.contains("two significant figures") && faq.contains("less than 0.001"), "{faq}");
+    assert!(faq.contains("at most two significant figures") && faq.contains("less than 0.001"), "{faq}");
+}
+
+#[test]
+fn the_default_decimals_and_the_mark_range_are_pinned() {
+    let d = def();
+    let defs = (d.params)();
+    let dec = defs.iter().find(|p| p.key == "dec").expect("dec");
+    match &dec.kind {
+        Kind::Int { min, max } => assert_eq!((*min, *max), (0, 3)),
+        _ => panic!("dec is not an Int"),
+    }
+    assert_eq!(dec.default, Value::I(1));
+    assert_eq!(Params::defaults(&defs).i("dec"), 1);
+    // the default table shows the 1-decimal values, not the old 3-decimal ones
+    let cells: Vec<String> = texts(&svg_of(&[])).into_iter().filter(|t| t.kind == "answer").map(|t| t.text).collect();
+    assert_eq!(cells.first().map(|s| s.as_str()), Some("422.0"), "{cells:?}");
+    assert!(!cells.iter().any(|c| c == "421.993"), "{cells:?}");
+    // the mark control still runs to MARK_HI, and a value above 10000 is accepted
+    let mk = defs.iter().find(|p| p.key == "mark").expect("mark");
+    match &mk.kind {
+        Kind::Float { min, max, .. } => {
+            assert_eq!(*min, 0.0);
+            assert_eq!(*max, MARK_HI);
+            assert_eq!(*max, 20_000.0);
+        }
+        _ => panic!("mark is not a Float"),
+    }
+    let r = key(&[s("gas", "H2"), f("t1", 3000.0), s("curves", "1"), f("mark", 15_000.0)]);
+    assert!(r.mark_point.is_some(), "15000 m/s is inside the mark range");
+}
+
+#[test]
+fn the_mark_is_drawn_at_the_axis_end_and_refused_just_past_it() {
+    let top = key(&[]).x_top;
+    assert!(top > 0.0);
+    let at = key(&[f("mark", top)]);
+    let (x, _) = at.mark_point.expect("a mark exactly at x_top draws");
+    assert!((x - at.frame.right()).abs() < 0.02);
+    let g = geo(&svg_of(&[f("mark", top)]));
+    assert!(g.lines.iter().any(|l| l.0 == "guide" && l.1 == "mark"), "the guide at the axis end");
+    let past = key(&[f("mark", top + 0.1)]);
+    assert!(past.mark_point.is_none(), "a mark past x_top is not drawn");
+    assert!(joined(&past).contains("beyond the x axis"), "{}", joined(&past));
+    let g = geo(&svg_of(&[f("mark", top + 0.1)]));
+    assert!(!g.lines.iter().any(|l| l.0 == "guide" && l.1 == "mark"));
+}
+
+#[test]
+fn the_share_migration_is_the_documented_note_path() {
+    // The figure is new at share version 4 and unreleased; a migration that could tell a round-1 v4 link from
+    // this one would need a global share-version bump and a was_overridden value for every figure. This test pins
+    // that documented decision rather than silently pretending a link predates the switch.
+    assert!(crate::figures::start::added_in(ID).is_empty(), "a migration entry was added without revisiting this note");
+    assert_eq!(crate::figures::share::VERSION, 4, "the global share version moved; revisit the Boltzmann migration note");
+    let src = include_str!("../boltzmann.rs");
+    assert!(src.contains("new at share version 4 and unreleased"), "the header note is missing");
+    assert!(src.contains("no saved specification or link can predate"), "the header note is incomplete");
 }
 
 #[test]
@@ -934,6 +1010,11 @@ fn the_description_is_ascii_and_names_no_number_and_no_answer() {
         assert!(!desc.chars().any(|c| c.is_ascii_digit()), "{desc}");
         for w in ["vp", "mean", "=", "%"] { assert!(!desc.contains(w), "{desc}"); }
     }
+    // Ea = 0 has no vertical line: the y axis is the line, and the description must not claim one
+    let desc0 = svg_of(&[f("ea", 0.0)]);
+    assert!(!desc0.contains("vertical line at the activation energy"), "{desc0}");
+    let desc1 = svg_of(&[]);
+    assert!(desc1.contains("vertical line at the activation energy"), "{desc1}");
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1044,6 +1125,10 @@ fn scenario_cases() -> Vec<(String, Vec<(&'static str, Value)>)> {
     v.push(("h2hot".into(), vec![s("gas", "H2"), s("curves", "3"), f("t1", 50.0), f("t2", 150.0), f("t3", 3000.0), f("ea", 40.0)]));
     v.push(("mark1ea0".into(), vec![f("mark", 1.0), f("ea", 0.0)]));
     v.push(("markoff".into(), vec![s("gas", "He"), f("ea", 300.0), f("mark", 30000.0)]));
+    v.push(("nospeeds".into(), vec![b("speeds", false)]));
+    v.push(("markend".into(), vec![f("mark", 2000.0)]));
+    v.push(("markpast".into(), vec![f("mark", 2000.1)]));
+    v.push(("close".into(), vec![s("curves", "3"), f("t1", 300.0), f("t2", 301.0), f("t3", 302.0), f("ea", 20.0)]));
     v
 }
 
