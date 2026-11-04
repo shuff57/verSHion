@@ -3881,7 +3881,7 @@ const BOLTZMANN_DISTRIBUTION: &[Faq] = &[
     },
     Faq {
         q: "What is the shaded tail, and how is its fraction worked out?",
-        a: "It is the fraction of molecules whose kinetic energy is at or above the activation energy Ea. For the three-dimensional Maxwell-Boltzmann energy distribution that fraction is F(Ea) = (2/\u{221a}\u{3c0}) \u{221a}x exp(\u{2212}x) + erfc(\u{221a}x), with x = Ea/(RT). It is exactly the area under the speed curve to the right of v = \u{221a}(2Ea/M), because the kinetic energy is \u{00bd}Mv\u{00b2} per mole; the key shades that area on the hottest curve. At Ea = 0 the fraction is 1, and at a fixed Ea it rises as T rises, which is why reaction rates increase with temperature. erfc is computed here by the Abramowitz-Stegun approximation 7.1.26, whose absolute error in erf is below 1.5 \u{d7} 10\u{207b}\u{2077}.",
+        a: "It is the fraction of molecules whose kinetic energy is at or above the activation energy Ea. For the three-dimensional Maxwell-Boltzmann energy distribution that fraction is F(Ea) = (2/\u{221a}\u{3c0}) \u{221a}x exp(\u{2212}x) + erfc(\u{221a}x), with x = Ea/(RT). It is exactly the area under the speed curve to the right of v = \u{221a}(2Ea/M), because the kinetic energy is \u{00bd}Mv\u{00b2} per mole; the key shades that area on the hottest curve. The shaded area covers the plotted range only (the axis ends where the missing tail is invisible); the percentage printed is the exact fraction to infinity, so it is larger only by that invisible tail. At Ea = 0 the fraction is 1, and at a fixed Ea it rises as T rises, which is why reaction rates increase with temperature. erfc is computed here by the Abramowitz-Stegun approximation 7.1.26, whose absolute error in erf is below 1.5 \u{d7} 10\u{207b}\u{2077}; in the far tail its relative error can reach about 1.5 \u{d7} 10\u{207b}\u{00b3}, so below 0.1 % the key prints two significant figures, and a percentage too small for the arithmetic is written \u{201c}less than 0.001\u{201d} rather than as a false zero.",
     },
     Faq {
         q: "Why is the y axis in s/m, and why are the curves not the same height?",
@@ -3892,8 +3892,12 @@ const BOLTZMANN_DISTRIBUTION: &[Faq] = &[
         a: "The Maxwell-Boltzmann distribution is the ideal-gas result: it assumes molecules of negligible volume that do not attract or repel one another. At high pressure the molecules are close together, their own volume and their intermolecular attractions matter, and the speeds depart from this curve; at very low temperatures light gases such as hydrogen also show quantum effects. The figure is therefore the ideal-gas distribution, the one a chemistry course uses, and it is exact for that model.",
     },
     Faq {
+        q: "What do the dots and the dotted guide mark?",
+        a: "A dot on each curve is its peak, at the most probable speed vp, and the short tick below it marks the same speed on the speed axis. The dotted guide from the axis to the hottest curve marks that curve's rms speed. The switch Mark vp and rms turns them off. They are kept on the student copy because they are geometry to read off the axis, not printed values: the speeds table gives the numbers on the key and leaves blank cells on the student copy.",
+    },
+    Faq {
         q: "What does the student copy leave out?",
-        a: "Show answers off keeps the axes, the curves and their temperature labels, the gas and its molar mass, the dashed line at Ea, and the guide at a marked speed. It shows the speeds table with blank cells and turns the fraction above Ea and the density at the marked speed into blank lines, and it does not shade the tail, because the shaded area is the answer. The key prints vp, the mean speed and the rms speed for every curve, the fraction above Ea at each temperature, and f at the marked speed.",
+        a: "Show answers off keeps the axes, the curves and their temperature labels, the gas and its molar mass, the dashed line at Ea, the guide at a marked speed, and the vp and rms marks. It shows the speeds table with blank cells and turns the fraction above Ea and the density at the marked speed into blank lines, and it does not shade the tail, because the shaded area is the answer. The key prints vp, the mean speed and the rms speed for every curve, the fraction above Ea at each temperature, and f at the marked speed.",
     },
 ];
 

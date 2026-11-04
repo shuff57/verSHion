@@ -32,6 +32,10 @@ fn student(list: &[(&'static str, Value)]) -> Report { let mut l = list.to_vec()
 fn notes_of(list: &[(&'static str, Value)]) -> Vec<String> { warnings(&with(list)) }
 fn has(notes: &[String], what: &str) -> bool { notes.iter().any(|n| n.contains(what)) }
 fn joined(r: &Report) -> String { r.readout.join("\n") }
+/// A numeric token that should never reach the output: NaN, inf or Infinity, but not the word "infinity".
+fn bad_number_word(s: &str) -> bool {
+    s.split(|c: char| !c.is_alphanumeric()).any(|w| matches!(w, "NaN" | "inf" | "Infinity"))
+}
 
 fn close(a: f64, b: f64, rel: f64) -> bool { (a - b).abs() <= rel * a.abs().max(b.abs()).max(1e-300) }
 
@@ -52,6 +56,29 @@ fn simpson(fun: impl Fn(f64) -> f64, a: f64, b: f64, n: usize) -> f64 {
 
 const T_CASES: [f64; 6] = [50.0, 100.0, 273.15, 300.0, 777.0, 3000.0];
 const M_CASES: [f64; 6] = [0.001, 0.002016, 0.004003, 0.028014, 0.031998, 0.04401];
+
+// An independent reference written from the typed givens, not from `Report`: the same physics in different code.
+const REF_R: f64 = 8.314_462_618;
+fn ref_vp(t: f64, m: f64) -> f64 { (2.0 * REF_R * t / m).sqrt() }
+fn ref_mean(t: f64, m: f64) -> f64 { (8.0 * REF_R * t / (PI * m)).sqrt() }
+fn ref_rms(t: f64, m: f64) -> f64 { (3.0 * REF_R * t / m).sqrt() }
+fn ref_f(v: f64, t: f64, m: f64) -> f64 {
+    if v <= 0.0 || t <= 0.0 || m <= 0.0 { return 0.0; }
+    let a = m / (2.0 * REF_R * t);
+    4.0 * PI * (a / PI).powf(1.5) * v * v * (-a * v * v).exp()
+}
+/// F(Ea) as an integral of the speed distribution from Ea's speed, not through erfc.
+fn ref_fraction(ea_j: f64, t: f64, m: f64) -> f64 {
+    let va = (2.0 * ea_j / m).sqrt();
+    simpson(|v| ref_f(v, t, m), va, va + 12.0 * ref_vp(t, m), 20_000).clamp(0.0, 1.0)
+}
+/// The area of a closed polygon in pixels (shoelace).
+fn polygon_area(pts: &[Pt]) -> f64 {
+    let mut a = 0.0;
+    for w in pts.windows(2) { a += w[0].0 * w[1].1 - w[1].0 * w[0].1; }
+    if let (Some(f), Some(l)) = (pts.first(), pts.last()) { a += l.0 * f.1 - f.0 * l.1; }
+    (a / 2.0).abs()
+}
 
 #[test]
 fn it_is_registered_with_a_faq_examples_and_its_controls() {
@@ -138,12 +165,15 @@ fn every_curve_encloses_area_one_and_a_drawn_curve_is_within_a_thousandth() {
         }
     }
     // the plotted range (to 3.2 vp) is the whole area bar the far tail
-    for list in [vec![], vec![s("gas", "H2"), f("t1", 3000.0), s("curves", "1")], vec![s("gas", "CO2"), f("t1", 50.0), s("curves", "1")]] {
+    for (list, m, t) in [
+        (vec![], 28.014e-3, 300.0),
+        (vec![s("gas", "H2"), f("t1", 3000.0), s("curves", "1")], 2.016e-3, 3000.0),
+        (vec![s("gas", "CO2"), f("t1", 50.0), s("curves", "1")], 44.01e-3, 50.0),
+    ] {
         let r = key(&list);
-        let c = &r.curves[0];
-        let area = simpson(|x| maxwell(x, c.t, r.setup.m_kg()), 0.0, r.x_top, 20_000);
+        let area = simpson(|x| ref_f(x, t, m), 0.0, r.x_top, 20_000);
         assert!((area - 1.0).abs() < 1e-3, "{:?}: drawn area {area}", list);
-        assert!(r.x_top >= 3.19 * c.vp, "{} {}", r.x_top, c.vp);
+        assert!(r.x_top >= 3.19 * ref_vp(t, m), "{} {}", r.x_top, ref_vp(t, m));
     }
 }
 
@@ -209,6 +239,122 @@ fn the_fraction_rises_with_temperature_at_a_fixed_activation_energy() {
             prev = f;
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The typed givens pin the drawn and printed answers (independent reference)
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn typed_givens_pin_the_drawn_curves_speeds_fractions_and_legend() {
+    // Start from the typed boxes only: N2 is 28.014 g/mol, the temperatures are in K, Ea is in kJ/mol.
+    let list = [s("gas", "N2"), s("curves", "3"), f("t1", 300.0), f("t2", 600.0), f("t3", 900.0), f("ea", 20.0), f("mark", 1000.0), i("dec", 3)];
+    let p = with(&list);
+    let svg = def().svg(&p);
+    let r = build(&p).1;
+    let m: f64 = 28.014e-3;
+    let temps = [300.0f64, 600.0, 900.0];
+    let g = geo(&svg);
+
+    // the legend's temperature labels, in drawing order, are exactly the typed temperatures
+    let labels: Vec<String> = texts(&svg).into_iter().filter(|t| t.kind == "legend" && t.text.ends_with(" K")).map(|t| t.text).collect();
+    assert_eq!(labels, ["300 K", "600 K", "900 K"], "legend labels {labels:?}");
+
+    // each curve path lies on f(v) for the typed gas and its own typed temperature
+    let curves: Vec<&(String, String, Vec<Pt>, String)> = g.paths.iter().filter(|p| p.0 == "curve").collect();
+    assert_eq!(curves.len(), 3);
+    let tol = 1.5 * r.y_top / (r.frame.bottom() - r.frame.top());
+    for (k, c) in curves.iter().enumerate() {
+        let t = temps[k];
+        assert_eq!(c.1, format!("c{k}"));
+        for &pt in c.2.iter() {
+            let (v, y) = data_xy(&r.frame, pt);
+            assert!((y - ref_f(v, t, m)).abs() <= tol, "c{k} at {v} m/s: {y} against {}", ref_f(v, t, m));
+        }
+        // the vp dot is at the typed temperature's most probable speed and the peak height
+        let vp = ref_vp(t, m);
+        let dot = g.marks.iter().find(|mk| mk.1 == format!("vp{k}")).expect("vp dot on every curve");
+        assert!((dot.2 .0 - r.frame.px(vp)).abs() < 0.01, "c{k} vp x");
+        assert!((dot.2 .1 - r.frame.py(ref_f(vp, t, m))).abs() < 0.01, "c{k} vp y");
+        // the axis tick below the peak marks the same typed speed
+        let tick = g.lines.iter().find(|l| l.0 == "vpaxis" && l.1 == format!("vp{k}")).expect("vp axis tick");
+        assert!((tick.2 .0 .0 - r.frame.px(vp)).abs() < 0.02, "c{k} vp tick");
+    }
+
+    // the table's nine answer cells, row by row, are the typed speeds
+    let cells: Vec<String> = texts(&svg).into_iter().filter(|t| t.kind == "answer").map(|t| t.text).collect();
+    assert_eq!(cells.len(), 9, "{cells:?}");
+    for (k, t) in temps.iter().enumerate() {
+        for (j, want) in [ref_vp(*t, m), ref_mean(*t, m), ref_rms(*t, m)].iter().enumerate() {
+            let printed: f64 = cells[k * 3 + j].parse().unwrap_or_else(|_| panic!("not a number: {:?}", cells[k * 3 + j]));
+            assert!((printed - want).abs() <= 0.5e-3 + 1e-9, "row {k} col {j}: {printed} against {want}");
+        }
+    }
+
+    // the three fractions are each computed at their own typed temperature, with Ea in J/mol
+    let refs: Vec<f64> = temps.iter().map(|t| ref_fraction(20_000.0, *t, m)).collect();
+    assert!(refs[1] > 1.5 * refs[0] && refs[2] > 1.5 * refs[1], "{refs:?}");
+    let line = r.readout.iter().find(|l| l.starts_with("Above Ea = 20 kJ/mol:")).expect("the fraction line");
+    let body = line.split_once(": ").unwrap().1.trim_end_matches('.').to_string();
+    let printed: Vec<f64> = body.split(", ").map(|part| part.split(" %").next().unwrap().parse().unwrap()).collect();
+    assert_eq!(printed.len(), 3, "{line}");
+    for k in 0..3 {
+        let want = refs[k] * 100.0;
+        assert!((printed[k] - want).abs() <= 0.5e-3, "curve {k}: {} % against {want} %", printed[k]);
+    }
+    assert!((printed[0] - printed[1]).abs() > 1e-3 && (printed[1] - printed[2]).abs() > 1e-3, "one fraction for all curves: {printed:?}");
+
+    // Ea's line is at sqrt(2 Ea / M) for the typed Ea and M
+    let va = (2.0 * 20_000.0 / m).sqrt();
+    let ea = g.lines.iter().find(|l| l.0 == "ea").expect("Ea line");
+    assert!((ea.2 .0 .0 - r.frame.px(va)).abs() < 0.02, "Ea line at {} against {}", ea.2 .0 .0, r.frame.px(va));
+
+    // the rms guide is at the hottest typed curve's rms speed
+    let rms = ref_rms(900.0, m);
+    let guide = g.lines.iter().find(|l| l.0 == "guide" && l.1 == "rms").expect("rms guide");
+    assert!((guide.2 .0 .0 - r.frame.px(rms)).abs() < 0.02, "rms guide at {} against {}", guide.2 .0 .0, r.frame.px(rms));
+
+    // the marked speed's value printed in the key is f at the typed M and the hottest typed T
+    let f_mark = ref_f(1000.0, 900.0, m);
+    let mline = r.readout.iter().find(|l| l.contains("curve has f =")).expect("the marked density line");
+    let printed = mline.split("f = ").nth(1).unwrap().split(" s/m").next().unwrap();
+    assert!(printed.contains('×'), "{printed}");
+    let printed = parse_sci(printed);
+    assert!((printed - f_mark).abs() <= 0.5e-3 * (f_mark.abs()).max(1e-300) + 1e-12, "{printed} against {f_mark}");
+
+    // and the same for a custom molar mass typed in its own box
+    let list = [s("gas", "Custom"), f("molar_mass", 44.01), s("curves", "1"), f("t1", 500.0), f("ea", 10.0), i("dec", 3)];
+    let p = with(&list);
+    let svg = def().svg(&p);
+    let r = build(&p).1;
+    let m: f64 = 44.01e-3;
+    let cells: Vec<String> = texts(&svg).into_iter().filter(|t| t.kind == "answer").map(|t| t.text).collect();
+    assert_eq!(cells.len(), 3);
+    for (j, want) in [ref_vp(500.0, m), ref_mean(500.0, m), ref_rms(500.0, m)].iter().enumerate() {
+        let printed: f64 = cells[j].parse().unwrap();
+        assert!((printed - want).abs() <= 0.5e-3 + 1e-9, "custom row {j}: {printed} against {want}");
+    }
+    let peak = g_curve_peak(&svg, &r, 0);
+    assert!((peak.0 - ref_vp(500.0, m)).abs() < 0.05, "custom peak at {} against {}", peak.0, ref_vp(500.0, m));
+}
+
+/// The data coordinates of a curve path's highest point.
+fn g_curve_peak(svg: &str, r: &Report, k: usize) -> (f64, f64) {
+    let g = geo(svg);
+    let c = g.paths.iter().find(|p| p.0 == "curve" && p.1 == format!("c{k}")).expect("curve");
+    let top = c.2.iter().min_by(|a, b| a.1.total_cmp(&b.1)).unwrap();
+    data_xy(&r.frame, *top)
+}
+
+/// A "3.2 × 10⁻³¹" string back to a number.
+fn parse_sci(s: &str) -> f64 {
+    let s = s.trim().replace('\u{2212}', "-");
+    let Some((m, e)) = s.split_once(" × 10") else { return s.parse().unwrap_or(0.0) };
+    let e: String = e.chars().map(|c| match c {
+        '⁻' => '-', '⁰' => '0', '¹' => '1', '²' => '2', '³' => '3', '⁴' => '4',
+        '⁵' => '5', '⁶' => '6', '⁷' => '7', '⁸' => '8', '⁹' => '9', c => c,
+    }).collect();
+    format!("{m}e{e}").parse().unwrap_or(0.0)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -300,6 +446,24 @@ fn data_xy(fr: &Frame, p: Pt) -> (f64, f64) {
     (x, y)
 }
 
+/// The shaded tail's area in data units (under the plotted curve, from its first point to the axis end).
+fn tail_area(r: &Report, svg: &str) -> f64 {
+    let g = geo(svg);
+    let tail = g.paths.iter().find(|p| p.0 == "tail").expect("the shaded tail");
+    let px_per_x = (r.frame.right() - r.frame.left()) / (r.x_top - r.frame.x0);
+    let px_per_y = (r.frame.bottom() - r.frame.top()) / (r.frame.y1 - r.frame.y0);
+    polygon_area(&tail.2) / (px_per_x * px_per_y)
+}
+
+/// The area under a curve path (closed along the baseline), in data units.
+fn curve_area(r: &Report, svg: &str, k: usize) -> f64 {
+    let g = geo(svg);
+    let c = g.paths.iter().find(|p| p.0 == "curve" && p.1 == format!("c{k}")).expect("curve");
+    let px_per_x = (r.frame.right() - r.frame.left()) / (r.x_top - r.frame.x0);
+    let px_per_y = (r.frame.bottom() - r.frame.top()) / (r.frame.y1 - r.frame.y0);
+    polygon_area(&c.2) / (px_per_x * px_per_y)
+}
+
 // ---------------------------------------------------------------------------------------------
 // The drawing
 // ---------------------------------------------------------------------------------------------
@@ -310,24 +474,27 @@ fn the_curve_points_lie_on_the_maxwell_boltzmann_formula() {
     let r = key(&list);
     let svg = svg_of(&list);
     let g = geo(&svg);
+    let m: f64 = 28.014e-3;
+    let temps = [300.0f64, 600.0];
     let curves: Vec<&(String, String, Vec<Pt>, String)> = g.paths.iter().filter(|p| p.0 == "curve").collect();
-    assert_eq!(curves.len(), r.curves.len());
+    assert_eq!(curves.len(), temps.len());
     for (k, c) in curves.iter().enumerate() {
         let feat = &c.1;
         let pts = &c.2;
         assert_eq!(feat, &format!("c{k}"));
         assert!(pts.len() >= SAMPLES, "{} points", pts.len());
-        let cc = &r.curves[k];
+        let t = temps[k];
         let tol = 1.5 * r.y_top / (r.frame.bottom() - r.frame.top());
         for &p in pts.iter() {
             let (v, y) = data_xy(&r.frame, p);
-            assert!((y - maxwell(v, cc.t, r.setup.m_kg())).abs() <= tol, "c{k}: at {v} m/s, {y} against {}", maxwell(v, cc.t, r.setup.m_kg()));
+            assert!((y - ref_f(v, t, m)).abs() <= tol, "c{k}: at {v} m/s, {y} against {}", ref_f(v, t, m));
         }
-        // the peak vertex is the most probable speed, and the peak height is exact to the pixel
-        assert!(pts.iter().any(|p| (data_xy(&r.frame, *p).0 - cc.vp).abs() < 0.05), "c{k} has no vertex at vp");
+        // the peak vertex is the typed most probable speed, and the peak height is exact to the pixel
+        let vp = ref_vp(t, m);
+        assert!(pts.iter().any(|p| (data_xy(&r.frame, *p).0 - vp).abs() < 0.05), "c{k} has no vertex at vp");
         let top = pts.iter().map(|p| p.1).fold(f64::MAX, f64::min);
-        assert!((top - r.frame.py(cc.peak)).abs() < 0.01, "c{k}: peak {top} against {}", r.frame.py(cc.peak));
-        assert!(close(cc.peak, 4.0 / (PI.sqrt() * std::f64::consts::E * cc.vp), 1e-12));
+        assert!((top - r.frame.py(ref_f(vp, t, m))).abs() < 0.01, "c{k}: peak {top} against {}", r.frame.py(ref_f(vp, t, m)));
+        assert!(close(ref_f(vp, t, m), 4.0 / (PI.sqrt() * std::f64::consts::E * vp), 1e-12));
     }
 }
 
@@ -338,11 +505,12 @@ fn the_tail_shading_starts_at_the_activation_energy_and_is_drawn_on_the_key_only
     let kg = geo(&svg_of(&list));
     let tail = kg.paths.iter().find(|p| p.0 == "tail").expect("the key shades the tail");
     assert_eq!(tail.1, "c1", "the hottest curve");
-    let va = (2.0 * 10_000.0 / k.setup.m_kg()).sqrt();
+    let m: f64 = 28.014e-3;
+    let va = (2.0 * 10_000.0 / m).sqrt();
     assert!(close(k.ea_speed.unwrap(), va, 1e-12));
     assert!(close(tail.2[0].0, k.frame.px(va), 0.06), "tail starts at {} against {}", tail.2[0].0, k.frame.px(va));
     let top = tail.2.iter().map(|p| p.1).fold(f64::MAX, f64::min);
-    assert!(close(top, k.frame.py(maxwell(va, k.curves[1].t, k.setup.m_kg())), 0.06), "the shaded edge is not the hottest curve at Ea's speed");
+    assert!(close(top, k.frame.py(ref_f(va, 600.0, m)), 0.06), "the shaded edge is not the hottest curve at Ea's speed");
     let bottom = tail.2.iter().map(|p| p.1).fold(f64::MIN, f64::max);
     assert!(close(bottom, k.frame.bottom(), 0.06));
     // Ea's line is a given: both copies draw it, at the same speed
@@ -356,9 +524,9 @@ fn the_tail_shading_starts_at_the_activation_energy_and_is_drawn_on_the_key_only
     let sg = geo(&svg_of(&[f("t1", 300.0), f("t2", 600.0), f("ea", 10.0), b(SHOW_ANSWERS, false)]));
     assert!(sg.paths.iter().all(|p| p.0 != "tail"), "the student copy has the shaded answer");
     // Ea = 0 shades the whole area and the fraction is exactly 1
-    let r0 = key(&[f("ea", 0.0)]);
+    let r0 = key(&[f("ea", 0.0), i("dec", 3)]);
     assert_eq!(r0.curves[0].above, 1.0);
-    let g0 = geo(&svg_of(&[f("ea", 0.0)]));
+    let g0 = geo(&svg_of(&[f("ea", 0.0), i("dec", 3)]));
     let t0 = g0.paths.iter().find(|p| p.0 == "tail").unwrap();
     assert!(close(t0.2[0].0, r0.frame.px(0.0), 0.06));
     assert!(joined(&r0).contains("100.000 %"), "{}", joined(&r0));
@@ -370,10 +538,11 @@ fn the_marked_speed_guide_lands_on_the_hottest_curve() {
     let r = key(&list);
     assert_eq!(r.curves[0].t, 300.0, "the curves are drawn coolest first");
     assert_eq!(r.curves[1].t, 600.0);
-    let hot = r.curves.last().unwrap().t;
+    let hot = 600.0;
+    let m: f64 = 28.014e-3;
     let (mx, my) = r.mark_point.expect("the mark is on the axis");
     assert!(close(mx, r.frame.px(700.0), 1e-12));
-    assert!(close(my, r.frame.py(maxwell(700.0, hot, r.setup.m_kg())), 1e-12));
+    assert!(close(my, r.frame.py(ref_f(700.0, hot, m)), 1e-12));
     let g = geo(&svg_of(&list));
     let guide = g.lines.iter().find(|l| l.0 == "guide" && l.1 == "mark").expect("the guide");
     assert!((guide.2 .0 .0 - mx).abs() < 0.02 && (guide.2 .1 .0 - mx).abs() < 0.02);
@@ -388,6 +557,122 @@ fn the_marked_speed_guide_lands_on_the_hottest_curve() {
     let stj = joined(&st);
     let fl = stj.lines().find(|l| l.contains("curve has f")).expect("the marked density line");
     assert!(fl.contains("f = ______ s/m"), "{fl}");
+}
+
+#[test]
+fn the_vp_dots_and_rms_guide_mark_the_right_speeds_and_can_be_switched_off() {
+    let list = [s("gas", "N2"), s("curves", "3"), f("t1", 300.0), f("t2", 600.0), f("t3", 900.0), f("ea", 20.0)];
+    let svg = svg_of(&list);
+    let r = key(&list);
+    let g = geo(&svg);
+    assert_eq!(r.vp_points.len(), 3);
+    for (i, (x, y)) in r.vp_points.iter().enumerate() {
+        let c = &r.curves[i];
+        assert!((x - r.frame.px(c.vp)).abs() < 1e-9 && (y - r.frame.py(c.peak)).abs() < 1e-9);
+        let dot = g.marks.iter().find(|m| m.1 == format!("vp{i}")).expect("vp dot");
+        assert!((dot.2 .0 - x).abs() < 0.01 && (dot.2 .1 - y).abs() < 0.01);
+        let tick = g.lines.iter().find(|l| l.0 == "vpaxis" && l.1 == format!("vp{i}")).expect("vp axis tick");
+        assert!((tick.2 .0 .0 - x).abs() < 0.02 && (tick.2 .0 .1 - r.frame.bottom()).abs() < 0.02, "tick {:?}, vp point {x}, bottom {}", tick.2, r.frame.bottom());
+        assert!((tick.2 .1 .1 - (r.frame.bottom() - 6.0)).abs() < 0.02);
+    }
+    let (a, z) = r.rms_guide.expect("rms guide");
+    let hot = r.curves.last().unwrap();
+    assert!((a.0 - r.frame.px(hot.rms)).abs() < 1e-9 && (z.0 - a.0).abs() < 1e-9);
+    assert!((z.1 - r.frame.py(maxwell(hot.rms, hot.t, r.setup.m_kg()))).abs() < 1e-9);
+    let guide = g.lines.iter().find(|l| l.0 == "guide" && l.1 == "rms").expect("rms guide line");
+    assert!((guide.2 .0 .0 - a.0).abs() < 0.02 && (guide.2 .1 .1 - z.1).abs() < 0.02);
+    // the symbols are in the legend, not on the curves
+    let leg: Vec<String> = texts(&svg).into_iter().filter(|t| t.kind == "legend").map(|t| t.text).collect();
+    assert!(leg.iter().any(|t| t == "vp (each peak)") && leg.iter().any(|t| t == "rms (hottest)"), "{leg:?}");
+    // the student copy keeps the geometry, because it is a read-off, and still has no answer text
+    let st = student(&list);
+    assert_eq!(st.vp_points.len(), 3);
+    assert!(st.rms_guide.is_some());
+    let sg = geo(&svg_of(&[s("gas", "N2"), s("curves", "3"), f("t1", 300.0), f("t2", 600.0), f("t3", 900.0), f("ea", 20.0), b(SHOW_ANSWERS, false)]));
+    assert!(sg.marks.iter().filter(|m| m.1.starts_with("vp")).count() == 3);
+    assert!(sg.lines.iter().any(|l| l.0 == "guide" && l.1 == "rms"));
+    // the switch removes the dots, ticks, guide and both legend entries
+    let off = key(&[s("gas", "N2"), s("curves", "3"), f("t1", 300.0), f("t2", 600.0), f("t3", 900.0), f("ea", 20.0), b("speeds", false)]);
+    assert!(off.vp_points.is_empty() && off.rms_guide.is_none());
+    let og = geo(&svg_of(&[s("gas", "N2"), s("curves", "3"), f("t1", 300.0), f("t2", 600.0), f("t3", 900.0), f("ea", 20.0), b("speeds", false)]));
+    assert!(og.marks.iter().all(|m| !m.1.starts_with("vp")));
+    assert!(og.lines.iter().all(|l| !(l.0 == "vpaxis") && !(l.0 == "guide" && l.1 == "rms")));
+    let ol: Vec<String> = texts(&svg_of(&[b("speeds", false)])).into_iter().filter(|t| t.kind == "legend").map(|t| t.text).collect();
+    assert!(!ol.iter().any(|t| t.contains("vp") || t.contains("rms")), "{ol:?}");
+}
+
+#[test]
+fn the_shaded_tail_is_the_plotted_part_and_the_key_says_so() {
+    let list = [s("gas", "N2"), s("curves", "2"), f("t1", 300.0), f("t2", 600.0), f("ea", 10.0), i("dec", 3)];
+    let p = with(&list);
+    let svg = def().svg(&p);
+    let r = build(&p).1;
+    let m: f64 = 28.014e-3;
+    let va = (2.0 * 10_000.0 / m).sqrt();
+    let shaded = tail_area(&r, &svg);
+    let plotted = simpson(|v| ref_f(v, 600.0, m), va, r.x_top, 20_000);
+    assert!(close(shaded, plotted, 2e-3), "shaded {shaded} against plotted integral {plotted}");
+    let to_infinity = ref_fraction(10_000.0, 600.0, m);
+    let missing = to_infinity - shaded;
+    assert!(missing > 0.0 && missing < 1e-3, "missing tail {missing}");
+    assert!(joined(&r).contains("part of the plotted range") && joined(&r).contains("exact fraction to infinity"), "{}", joined(&r));
+    // the same relation at Ea = 0: the shaded part is x_top's area, slightly less than 1
+    let list = [s("gas", "N2"), s("curves", "1"), f("t1", 300.0), f("ea", 0.0), i("dec", 3)];
+    let p = with(&list);
+    let svg = def().svg(&p);
+    let r = build(&p).1;
+    let shaded = tail_area(&r, &svg);
+    let plotted = simpson(|v| ref_f(v, 300.0, m), 0.0, r.x_top, 20_000);
+    assert!(close(shaded, plotted, 2e-3), "Ea=0 shaded {shaded} against {plotted}");
+    assert!(shaded < 1.0 && 1.0 - shaded < 1e-3, "Ea=0 shaded {shaded}");
+    assert!(joined(&r).contains("part of the plotted range"), "{}", joined(&r));
+    // no dashed Ea swatch is shown for Ea = 0: the y axis is the line
+    let leg: Vec<String> = texts(&svg).into_iter().filter(|t| t.kind == "legend").map(|t| t.text).collect();
+    assert!(leg.iter().all(|t| !t.starts_with("Ea =")), "{leg:?}");
+}
+
+#[test]
+fn a_long_ea_axis_still_draws_each_peak_with_a_polygon_area_near_one() {
+    // M = 1 g/mol, 50 K and 3000 K, Ea = 500 kJ/mol stretches the axis far past the cold peak.
+    let list = [s("gas", "Custom"), f("molar_mass", 1.0), s("curves", "2"), f("t1", 50.0), f("t2", 3000.0), f("ea", 500.0)];
+    let p = with(&list);
+    let svg = def().svg(&p);
+    let r = build(&p).1;
+    let m: f64 = 1.0e-3;
+    assert!(r.x_top > 10.0 * ref_vp(50.0, m), "the axis is not stretched: {}", r.x_top);
+    for (k, t) in [50.0, 3000.0].iter().enumerate() {
+        let drawn = curve_area(&r, &svg, k);
+        let want = simpson(|v| ref_f(v, *t, m), 0.0, r.x_top, 40_000);
+        assert!(close(drawn, want, 2e-4), "c{k}: drawn polygon {drawn} against integral {want}");
+        assert!((drawn - 1.0).abs() < 2e-4, "c{k}: drawn area {drawn}");
+    }
+}
+
+#[test]
+fn far_tail_precision_is_capped_at_two_significant_figures_and_says_so() {
+    // the direct rule
+    assert_eq!(pct_text(0.0, 3), "less than 0.001");
+    assert_eq!(pct_text(0.0000001, 3), res_fmt(1e-5, 1));
+    assert_eq!(pct_text(0.5, 3), res_fmt(50.0, 3));
+    assert_eq!(pct_text(0.004564, 3), res_fmt(0.4564, 3));
+    // Ea = 45 kJ/mol at 70 K: x ~ 77, a genuine far-tail case that is still representable
+    let list = [s("gas", "N2"), s("curves", "1"), f("t1", 70.0), f("ea", 45.0), i("dec", 3)];
+    let r = key(&list);
+    let line = r.readout.iter().find(|l| l.starts_with("Above Ea = 45 kJ/mol:")).expect("fraction line");
+    let printed = line.split_once(": ").unwrap().1.trim_end_matches('.').split(" %").next().unwrap();
+    assert!(printed.contains(" × 10"), "not the scientific branch: {printed}");
+    let mant = printed.split(" × 10").next().unwrap();
+    let decimals = mant.split_once('.').map(|x| x.1.len()).unwrap_or(0);
+    assert!(decimals <= 1, "more than two significant figures: {printed}");
+    let value = parse_sci(printed);
+    let exact = r.curves[0].above * 100.0;
+    assert!(value > 0.0 && (value - exact).abs() <= 0.05 * exact, "{value} against {exact}");
+    // an underflow is stated, not printed as a false zero
+    let r = key(&[s("gas", "N2"), s("curves", "1"), f("t1", 70.0), f("ea", 431.5)]);
+    assert!(joined(&r).contains("less than 0.001 %"), "{}", joined(&r));
+    // the module and FAQ state the rule
+    let faq: String = crate::figures::faq::faq_for(ID).iter().map(|f| format!("{} {}", f.q, f.a)).collect::<Vec<_>>().join(" ");
+    assert!(faq.contains("two significant figures") && faq.contains("less than 0.001"), "{faq}");
 }
 
 #[test]
@@ -494,22 +779,32 @@ fn label_size_scales_the_type_and_grows_the_canvas() {
 fn the_axes_are_the_shared_nice_step_and_cover_the_range() {
     for list in [vec![], vec![s("gas", "H2"), f("t1", 3000.0), s("curves", "1")], vec![f("ea", 500.0), s("gas", "CO2")]] {
         let r = key(&list);
+        let svg = svg_of(&list);
+        let ts = texts(&svg);
         assert!(r.x_top > 0.0 && r.y_top > 0.0);
-        let g = geo(&svg_of(&list));
-        let mut px: Vec<f64> = g.lines.iter().filter(|l| l.0 == "axis" && close(l.2 .0 .0, l.2 .1 .0, 1e-12)).map(|l| l.2 .0 .0).collect();
-        px.sort_by(|a, b| a.total_cmp(b));
-        px.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
-        assert!(px.len() >= 3, "{:?}: {px:?}", list);
-        assert!(px[0] >= r.frame.left() - 0.02 && *px.last().unwrap() <= r.frame.right() + 0.02);
-        // the step is 1, 2 or 5 times a power of ten, and every tick is a multiple of it
-        let vals: Vec<f64> = px.iter().map(|x| r.frame.x0 + (x - r.frame.left()) / (r.frame.right() - r.frame.left()) * (r.frame.x1 - r.frame.x0)).collect();
-        let step = vals[1] - vals[0];
-        let e = step.log10().floor();
-        let m = step / 10f64.powf(e);
-        assert!([1.0, 2.0, 5.0].iter().any(|v| close(*v, m, 1e-9)), "step {step} is not a nice step");
-        for v in &vals {
-            let k = v / step;
-            assert!((k - k.round()).abs() < 1e-6, "{v} is not a multiple of {step}");
+        for (step, ticks, top) in [(r.x_step, &r.xticks, r.x_top), (r.y_step, &r.yticks, r.y_top)] {
+            let e = step.log10().floor();
+            let m = step / 10f64.powf(e);
+            assert!([1.0, 2.0, 5.0].iter().any(|v| close(*v, m, 1e-9)), "step {step} is not a nice step");
+            assert_eq!(ticks.first().map(|t| t.0), Some(0.0), "{:?}", list);
+            assert!(close(ticks.last().unwrap().0, top, 1e-9), "{:?}: {} against {}", list, ticks.last().unwrap().0, top);
+            for (v, label) in ticks {
+                let k = v / step;
+                assert!((k - k.round()).abs() < 1e-6, "{v} is not a multiple of {step}");
+                assert_eq!(label, &fmt(*v));
+            }
+        }
+        // every x tick mark and label is where the report says it is
+        for (v, label) in &r.xticks {
+            let x = r.frame.px(*v);
+            let mark = geo(&svg).lines.iter().any(|l| l.0 == "axis" && (l.2 .0 .0 - x).abs() < 0.02 && (l.2 .1 .0 - x).abs() < 0.02 && (l.2 .0 .1 - r.frame.bottom()).abs() < 0.02);
+            assert!(mark, "{:?}: no x tick mark at {v}", list);
+            assert!(ts.iter().any(|t| t.kind == "axis" && t.anchor == "middle" && t.text == *label && (t.x - x).abs() < 0.02 && t.y > r.frame.bottom()), "{:?}: no x label {label:?} at {v}", list);
+        }
+        // every y tick label sits at its value (the baseline is a little below the tick)
+        for (v, label) in &r.yticks {
+            let y = r.frame.py(*v);
+            assert!(ts.iter().any(|t| t.kind == "axis" && t.anchor == "end" && t.text == *label && (t.x - (r.frame.left() - 8.0)).abs() < 0.02 && (t.y - y).abs() <= 1.2 * t.fs), "{:?}: no y label {label:?} at {v}", list);
         }
         // the frame maps its corners
         assert!(close(r.frame.px(0.0), r.frame.left(), 1e-12));
@@ -589,10 +884,10 @@ fn odd_inputs_never_panic_and_never_print_nan_or_infinity() {
                 p.set_b(SHOW_ANSWERS, ans);
                 let (svg, rep) = build(&p);
                 assert!(svg.contains("<svg"), "{k} {v:?}");
-                assert!(!svg.contains("NaN") && !svg.contains("inf") && !svg.contains("Infinity"), "{k} {v:?}");
-                assert!(!rep.readout.iter().any(|l| l.contains("NaN") || l.contains("inf")), "{k} {v:?}: {:?}", rep.readout);
+                assert!(!bad_number_word(&svg), "{k} {v:?}");
+                assert!(!rep.readout.iter().any(|l| bad_number_word(l)), "{k} {v:?}: {:?}", rep.readout);
                 for t in texts(&svg) {
-                    assert!(!t.text.contains("NaN") && !t.text.contains("inf"), "{k} {v:?}: {:?}", t.text);
+                    assert!(!bad_number_word(&t.text), "{k} {v:?}: {:?}", t.text);
                 }
             }
         }
@@ -637,7 +932,7 @@ fn the_description_is_ascii_and_names_no_number_and_no_answer() {
         assert!(desc.is_ascii() && !desc.is_empty() && desc.len() <= 320, "{desc}");
         assert!(title.is_ascii(), "{title}");
         assert!(!desc.chars().any(|c| c.is_ascii_digit()), "{desc}");
-        for w in ["vp", "rms", "mean", "=", "%"] { assert!(!desc.contains(w), "{desc}"); }
+        for w in ["vp", "mean", "=", "%"] { assert!(!desc.contains(w), "{desc}"); }
     }
 }
 

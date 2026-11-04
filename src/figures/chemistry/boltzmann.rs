@@ -8,7 +8,14 @@
 //!
 //! The three speeds are exact. The most probable speed is vp = sqrt(2RT/M), and the peak of f is exactly at vp; the
 //! mean speed is sqrt(8RT/(pi M)) and the rms speed sqrt(3RT/M). Raising T moves vp right (as sqrt T), lowers the peak
-//! (as 1/sqrt T), widens the curve, and leaves the area at 1.
+//! (as 1/sqrt T), widens the curve, and leaves the area at 1. A dot marks vp at each curve's peak, with a short tick on
+//! the speed axis, and a dotted guide marks the hottest curve's rms speed (the "Mark vp and rms" switch; the student
+//! copy keeps these marks, which are symbols to read off the axis, never numbers).
+//!
+//! The drawn axis stops where the remaining area is invisible, so the shaded tail is the part of the plotted range:
+//! the key says so and prints the exact integral to infinity, which is larger only by the invisible tail beyond the
+//! axis. The curves are sampled densely over the first six most probable speeds, so a long axis (a high Ea) still
+//! draws each peak with many segments and the drawn polygon's area is within about 1e-4 of the curve it draws.
 //!
 //! The fraction of molecules whose kinetic energy is at or above an activation energy Ea is, for the three-dimensional
 //! Maxwell-Boltzmann energy distribution,
@@ -16,10 +23,11 @@
 //!     F(Ea) = (2/sqrt(pi)) sqrt(x) exp(-x) + erfc(sqrt(x)),   x = Ea / (R T).
 //!
 //! It is exactly the area under the speed curve to the right of v = sqrt(2 Ea / M), because the kinetic energy is
-//! (1/2) M v^2 per mole; the key shades that area on the hottest curve. F(0) = 1, and F rises with T at fixed Ea.
-//! erfc is the complementary error function, implemented here by the Abramowitz-Stegun formula 7.1.26 (a rational
-//! approximation in t = 1/(1 + 0.3275911 x) times exp(-x^2)); its absolute error in erf is below 1.5e-7 for x >= 0,
-//! which is stated with the key's values. No other dependency is used.
+//! (1/2) M v^2 per mole. F(0) = 1, and F rises with T at fixed Ea. erfc is the complementary error function,
+//! implemented here by the Abramowitz-Stegun formula 7.1.26 (a rational approximation in t = 1/(1 + 0.3275911 x)
+//! times exp(-x^2)); its absolute error in erf is below 1.5e-7 for x >= 0. In the far tail the relative error can reach
+//! about 1.5e-3, so below 0.1 % the key prints two significant figures, and a percentage too small for f64 is written
+//! "less than 0.001" rather than as a false zero. No other dependency is used.
 //!
 //! What is an answer. The three speeds (vp, mean, rms) at each temperature, the fraction above Ea at each temperature
 //! and the density f at a marked speed are worked out from the givens, so they are printed only under Show answers;
@@ -48,7 +56,8 @@ pub const EA_LO: f64 = 0.0;
 pub const EA_HI: f64 = 500.0;
 pub const MARK_HI: f64 = 20000.0;
 pub const M_DEFAULT: f64 = 28.014;
-/// Samples per curve. The most probable speed is added as an exact vertex.
+/// Samples over the first six most probable speeds (the peak and almost all of the area); a long axis adds 48 tail
+/// steps. The most probable speed is added as an exact vertex.
 pub const SAMPLES: usize = 240;
 /// How far past the hottest curve's peak the x axis runs, in most probable speeds.
 const X_SPAN: f64 = 3.2;
@@ -141,6 +150,8 @@ pub struct Setup {
     pub dec: usize,
     pub grid: bool,
     pub answers: bool,
+    /// Dots at each peak (vp), the rms guide and their legend entries.
+    pub speeds: bool,
 }
 
 impl Setup {
@@ -312,7 +323,7 @@ pub fn read(p: &Params) -> (Setup, Vec<String>) {
         Got::Num(0.0) => 0.0,
         Got::Num(v) => round6(v, "Marked speed", "m/s", &mut n),
     };
-    let st = Setup { gas, m_g, temps, n_requested, ea_kj, mark, dec: decimals(p), grid: bo(p, "grid", true), answers: bo(p, SHOW_ANSWERS, true) };
+    let st = Setup { gas, m_g, temps, n_requested, ea_kj, mark, dec: decimals(p), grid: bo(p, "grid", true), answers: bo(p, SHOW_ANSWERS, true), speeds: bo(p, "speeds", true) };
     (st, n)
 }
 
@@ -344,6 +355,15 @@ pub struct Report {
     pub ea_speed: Option<f64>,
     /// The marked point on the hottest curve, when it is drawn.
     pub mark_point: Option<Pt>,
+    /// A dot at the peak (vp) of each curve, when the speed marks are on.
+    pub vp_points: Vec<Pt>,
+    /// The foot and top of the hottest curve's rms guide, when the speed marks are on.
+    pub rms_guide: Option<(Pt, Pt)>,
+    /// The shared axes as drawn, for tests: the step and its labelled ticks.
+    pub x_step: f64,
+    pub y_step: f64,
+    pub xticks: Vec<(f64, String)>,
+    pub yticks: Vec<(f64, String)>,
     /// The working (key) or the blanks (student copy), before wrapping.
     pub readout: Vec<String>,
     pub notes: Vec<String>,
@@ -370,7 +390,8 @@ fn params() -> Vec<ParamDef> {
         ParamDef::float("t3", "Temperature 3 (K)", T_LO, T_HI, 1.0, 900.0).hint("From 50 to 3000 K; used with three curves"),
         ParamDef::float("ea", "Activation energy Ea (kJ/mol)", EA_LO, EA_HI, 0.1, 10.0).hint("The dashed vertical line marks the speed sqrt(2Ea/M). The key shades the tail beyond it and prints the fraction of molecules above Ea"),
         ParamDef::float("mark", "Mark a speed (m/s, 0 for none)", 0.0, MARK_HI, 1.0, 0.0).hint("A guide to the hottest temperature's curve; the key prints the density f there"),
-        ParamDef::int("dec", "Decimals in answers", 0, 3, 3),
+        ParamDef::int("dec", "Decimals in answers", 0, 3, 1).hint("Decimal places in the speeds table, the fractions and f at the marked speed. One by default: the speeds are only good to about 3 significant figures from the typed temperature"),
+        ParamDef::bool("speeds", "Mark vp and rms", true).hint("A dot at the peak (vp) of each curve and a short tick on the speed axis, plus a dotted guide at the hottest curve's rms speed. Symbols only, no values; kept on the student copy so they can be read off the axis"),
         ParamDef::bool("grid", "Grid lines", true),
         answers_param().hint("Off keeps the curves, the gas, the temperatures, the Ea line and the marked guide, blanks the speeds table, the fractions and the marked density, and leaves out the shaded tail"),
         svg::style_param(),
@@ -389,20 +410,47 @@ fn axis_top(raw: f64, target: f64) -> (f64, f64) {
     (k * step, step)
 }
 
+/// The speeds a curve is sampled at: `SAMPLES` steps over the first six most probable speeds (where the peak and
+/// almost all of the area are), then 48 steps over the rest of a long axis, with vp an exact vertex. A high Ea can
+/// stretch the axis to many vp, and a uniform grid would then draw the cold curve's peak with only a handful of
+/// segments; this keeps the polygon's area within about 1e-4 of the curve it draws.
+fn curve_samples(x_top: f64, vp: f64) -> Vec<f64> {
+    let near = if vp > 0.0 { (6.0 * vp).min(x_top) } else { x_top };
+    let near = if near.is_finite() && near > 0.0 { near } else { 1e-12 };
+    let mut xs: Vec<f64> = (0..=SAMPLES).map(|j| near * j as f64 / SAMPLES as f64).collect();
+    if x_top > near * (1.0 + 1e-12) {
+        for j in 1..=48 { xs.push(near + (x_top - near) * j as f64 / 48.0); }
+    }
+    if vp > 0.0 && vp < x_top { xs.push(vp); }
+    xs.sort_by(|a, b| a.total_cmp(b));
+    xs.dedup_by(|a, b| (*a - *b).abs() <= 1e-12 * x_top.max(1.0));
+    xs
+}
+
+/// A percentage written with no more precision than the erfc approximation supports. Below 0.1 % the key gives
+/// two significant figures (A&S 7.1.26's relative error in that tail reaches about 1.5e-3, so four would be false);
+/// a value too small for f64 is stated as "less than 0.001", not as a false zero.
+fn pct_text(f: f64, dec: usize) -> String {
+    let p = f * 100.0;
+    if !p.is_finite() { return "0".into(); }
+    if p == 0.0 || p < 1e-300 { return "less than 0.001".into(); }
+    if p < 0.1 { res_fmt(p, dec.min(1)) } else { res_fmt(p, dec) }
+}
+
 fn marker_el(x: f64, y: f64, r: f64, fill: &str, stroke: &str, feat: &str) -> String {
     format!(r##"<circle cx="{x:.3}" cy="{y:.3}" r="{r}" fill="{fill}" stroke="{stroke}" stroke-width="1.4" data-o="mark" data-f="{feat}"/>"##)
 }
 
 struct Legend { x: f64, yc: f64, w: f64, kind: LegKind }
 
-enum LegKind { Series(usize, String), Ea(String), Mark(String) }
+enum LegKind { Series(usize, String), Ea(String), Mark(String), Vp(String), Rms(String) }
 
 fn legend_width(kind: &LegKind, fs: f64) -> f64 {
     let swatch = 26.0;
     let gap = 7.0;
     match kind {
         LegKind::Series(_, text) => swatch + gap + text_w(text, fs),
-        LegKind::Ea(text) | LegKind::Mark(text) => 12.0 + gap + text_w(text, fs),
+        LegKind::Ea(text) | LegKind::Mark(text) | LegKind::Vp(text) | LegKind::Rms(text) => 12.0 + gap + text_w(text, fs),
     }
 }
 
@@ -459,7 +507,12 @@ pub fn build(p: &Params) -> (String, Report) {
     // The legend band above the plot: a swatch and a name for each curve, then Ea and the marked speed.
     let mut legs: Vec<LegKind> = Vec::new();
     for (i, c) in curves.iter().enumerate() { legs.push(LegKind::Series(i, format!("{} K", fmt(c.t)))); }
-    if ea_on { legs.push(LegKind::Ea(format!("Ea = {} kJ/mol", fmt(st.ea_kj)))); }
+    if st.speeds {
+        legs.push(LegKind::Vp("vp (each peak)".into()));
+        legs.push(LegKind::Rms("rms (hottest)".into()));
+    }
+    // Ea = 0 is the y axis itself: no dashed swatch for a line that is not drawn (the readout still names it).
+    if ea_on && st.ea_kj > 0.0 { legs.push(LegKind::Ea(format!("Ea = {} kJ/mol", fmt(st.ea_kj)))); }
     let mark_on = st.mark > 0.0 && st.mark <= x_top * (1.0 + 1e-9);
     if mark_on { legs.push(LegKind::Mark(format!("v = {} m/s", fmt(st.mark)))); }
     let leg_gap = 18.0;
@@ -485,14 +538,15 @@ pub fn build(p: &Params) -> (String, Report) {
     // The marked point on the hottest curve.
     let mark_f = if mark_on { maxwell(st.mark, st.hottest(), m) } else { 0.0 };
     let mark_pt = if mark_on { Some((px(st.mark), py(mark_f))) } else { None };
+    // The textbook marks: a dot at every peak (vp), and a guide at the hottest curve's rms speed.
+    let vp_points: Vec<Pt> = if st.speeds { curves.iter().map(|c| (px(c.vp), py(c.peak))).collect() } else { Vec::new() };
+    let rms_guide: Option<(Pt, Pt)> = if st.speeds {
+        curves.get(hot).map(|c| ((px(c.rms), bottom), (px(c.rms), py(maxwell(c.rms, c.t, m)))))
+    } else { None };
 
-    // ---- the curve paths, sampled densely with the peak as an exact vertex
+    // ---- the curve paths, sampled densely near the peak with vp as an exact vertex
     let curve_pts: Vec<Vec<Pt>> = curves.iter().map(|c| {
-        let mut xs: Vec<f64> = (0..=SAMPLES).map(|j| x_top * j as f64 / SAMPLES as f64).collect();
-        if c.vp > 0.0 && c.vp < x_top { xs.push(c.vp); }
-        xs.sort_by(|a, b| a.total_cmp(b));
-        xs.dedup_by(|a, b| (*a - *b).abs() <= 1e-12 * x_top.max(1.0));
-        xs.into_iter().map(|v| (px(v), py(maxwell(v, c.t, m)))).collect()
+        curve_samples(x_top, c.vp).into_iter().map(|v| (px(v), py(maxwell(v, c.t, m)))).collect()
     }).collect();
 
     // ---- the tail under the hottest curve, from Ea's speed to the right
@@ -531,15 +585,18 @@ pub fn build(p: &Params) -> (String, Report) {
     let mut lines: Vec<String> = Vec::new();
     lines.push(format!("Gas: {gas_name}, M = {} g/mol = {} kg/mol; R = 8.314462618 J/(mol K).", fmt(st.m_g), fmt(m)));
     lines.push("vp = √(2RT/M) is the peak; mean = √(8RT/(πM)); rms = √(3RT/M).".to_string());
-    lines.push("Each curve encloses area 1, so a hotter curve is lower and wider.".to_string());
+    lines.push("Each full curve encloses area 1; the plotted part misses only the tail beyond the axis, where the curves are invisible.".to_string());
+    if st.speeds {
+        lines.push("Dots mark vp at each peak, with a short tick on the speed axis; the dotted guide marks the rms speed of the hottest curve. The symbols are kept on the student copy.".to_string());
+    }
     if st.ea_kj > 0.0 && !ea_on {
         lines.push(format!("Ea = {} kJ/mol lies beyond the speeds shown (more than five times the hottest curve's most probable speed), so its line and tail are not drawn; the fraction is given below.", fmt(st.ea_kj)));
     }
     if ans {
-        let parts: Vec<String> = curves.iter().map(|c| format!("{} % at {} K", res_fmt(c.above * 100.0, dec), fmt(c.t))).collect();
+        let parts: Vec<String> = curves.iter().map(|c| format!("{} % at {} K", pct_text(c.above, dec), fmt(c.t))).collect();
         lines.push(format!("Above Ea = {} kJ/mol: {}.", fmt(st.ea_kj), parts.join(", ")));
         if ea_on {
-            lines.push(format!("The shaded area on the {} K curve, right of Ea's speed, is that fraction.", fmt(st.hottest())));
+            lines.push(format!("The shaded area is the part of the plotted range, from Ea's speed to {} m/s; the printed fraction is the exact fraction to infinity (the tail beyond the axis is invisible).", fmt(x_top)));
         }
     } else {
         let parts: Vec<String> = curves.iter().map(|c| format!("{BLANK} at {} K", fmt(c.t))).collect();
@@ -594,10 +651,20 @@ pub fn build(p: &Params) -> (String, Report) {
             d.raw(&format!(r##"<line x1="{x:.2}" y1="{top:.2}" x2="{x:.2}" y2="{bottom:.2}" stroke="{guide_c}" stroke-width="1.5" stroke-dasharray="1.5 4" data-o="ea"/>"##));
         }
     }
+    // the rms guide, behind the curves
+    if let Some((a, z)) = rms_guide {
+        d.raw(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{guide_c}" stroke-width="1.4" stroke-dasharray="6 3 1 3" data-o="guide" data-f="rms"/>"##, a.0, a.1, z.0, z.1));
+    }
     for (i, pts) in curve_pts.iter().enumerate() {
         let dash = fills.dash(i);
         let dash_attr = if dash.is_empty() { String::new() } else { format!(r#" stroke-dasharray="{dash}""#) };
         d.raw(&format!(r##"<path d="{}" fill="none" stroke="{}" stroke-width="2.7" stroke-linejoin="round" stroke-linecap="butt"{dash_attr} data-o="curve" data-f="c{i}"/>"##, path_d(pts), fills.line(i)));
+    }
+    // the vp dots on the curves
+    if st.speeds {
+        for (i, (x, y)) in vp_points.iter().enumerate() {
+            d.raw(&marker_el(*x, *y, 3.4, ink_c, "#ffffff", &format!("vp{i}")));
+        }
     }
     // the mark's guide and dot
     if let Some((mx, my)) = mark_pt {
@@ -607,6 +674,12 @@ pub fn build(p: &Params) -> (String, Report) {
 
     // the axes
     d.raw(&format!(r##"<path d="M{left:.2},{top:.2} L{left:.2},{bottom:.2} L{right:.2},{bottom:.2}" fill="none" stroke="{ink_c}" stroke-width="1.6" data-o="axis"/>"##));
+    // the vp speeds marked on the axis
+    if st.speeds {
+        for (i, (x, _)) in vp_points.iter().enumerate() {
+            d.raw(&format!(r##"<line x1="{x:.2}" y1="{bottom:.2}" x2="{x:.2}" y2="{:.2}" stroke="{}" stroke-width="2" data-o="vpaxis" data-f="vp{i}"/>"##, bottom - 6.0, fills.line(i)));
+        }
+    }
     let base_x = bottom + 7.0 + 0.76 * fs_ax;
     for (v, label) in &xticks {
         let x = px(*v);
@@ -647,6 +720,16 @@ pub fn build(p: &Params) -> (String, Report) {
                 d.raw(&marker_el(x + 5.0, yc - 2.0, 3.0, ink_c, "#ffffff", "legend"));
                 d.raw(&text_el(x + 12.0, yc + 0.34 * fs_lab, fs_lab, "start", lab_c, text, "legend"));
             }
+            LegKind::Vp(text) => {
+                let (x, yc) = (lg.x, lg.yc);
+                d.raw(&marker_el(x + 5.0, yc, 3.0, ink_c, "#ffffff", "legend"));
+                d.raw(&text_el(x + 12.0, yc + 0.34 * fs_lab, fs_lab, "start", lab_c, text, "legend"));
+            }
+            LegKind::Rms(text) => {
+                let (x, yc) = (lg.x, lg.yc);
+                d.raw(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{guide_c}" stroke-width="1.4" stroke-dasharray="6 3 1 3" data-o="legend"/>"##, x + 5.0, yc - 6.0, x + 5.0, yc + 6.0));
+                d.raw(&text_el(x + 12.0, yc + 0.34 * fs_lab, fs_lab, "start", lab_c, text, "legend"));
+            }
         }
     }
 
@@ -676,6 +759,12 @@ pub fn build(p: &Params) -> (String, Report) {
         y_top,
         ea_speed: if ea_on { Some(va) } else { None },
         mark_point: mark_pt,
+        vp_points,
+        rms_guide,
+        x_step,
+        y_step,
+        xticks,
+        yticks,
         readout: lines,
         notes,
     };
@@ -685,6 +774,7 @@ pub fn build(p: &Params) -> (String, Report) {
 /// The description for a screen reader: ASCII, no number and no answer. It says only what is drawn.
 fn describe(st: &Setup, ans: bool, ea: bool, mark: bool) -> String {
     let mut s = String::from("Graph of the distribution of molecular speeds at one to three temperatures");
+    if st.speeds { s.push_str(", with a dot at each peak and a guide at the rms speed"); }
     if ea { s.push_str(", with a vertical line at the activation energy"); }
     if mark { s.push_str(" and a guide at a marked speed"); }
     s.push('.');
