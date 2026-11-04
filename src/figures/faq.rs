@@ -186,6 +186,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "network-topology" => NETWORK_TOPOLOGY,
         "dot-plot" => DOT_PLOT,
         "ogive" => OGIVE,
+        "bar-chart" => BAR_CHART,
         "normal-curve" => NORMAL_CURVE,
         "sampling-distribution" => SAMPLING_DISTRIBUTION,
         "rejection-region" => REJECTION_REGION,
@@ -2527,6 +2528,33 @@ const LOGIC_CIRCUIT: &[Faq] = &[
     Faq {
         q: "Why is the truth table missing?",
         a: "A table has one row for every combination of inputs, so it is limited to 5 inputs (32 rows). A circuit with more inputs still draws; turn the table off to hide the note.",
+    },
+];
+
+const BAR_CHART: &[Faq] = &[
+    Faq {
+        q: "How is a bar chart different from a histogram?",
+        a: "A bar chart shows categories (ways to get to school, favourite fruit), so its bars stand apart with gaps and the category axis has no scale. A histogram shows a number variable cut into intervals on a number line, so its bars touch. Use the Histogram figure for measurements.",
+    },
+    Faq {
+        q: "How do I type the data?",
+        a: "One category per line: its name, a comma, then how many (Walk, 12). A second count after another comma (Walk, 12, 9) draws two groups side by side. A first line of headings (Way, Boys, Girls) names the category axis and the groups. A name typed twice is one category: its counts are added and the editor says so. Counts must be whole numbers, 0 or more.",
+    },
+    Faq {
+        q: "Should the bars show frequency or relative frequency?",
+        a: "Frequency is the count in each category. Relative frequency is each count as a percent of its group's total, so one group's bars add to 100%. To compare two groups of different sizes, use relative frequency: each group is a percent of its own total. Printed percents are rounded, so they can add to 99% or 101%; the editor notes it and says which Decimals setting makes them add to exactly 100%.",
+    },
+    Faq {
+        q: "What order should the bars go in?",
+        a: "Categories have no built-in order, so any order is correct; tallest first makes the biggest categories easy to compare. Keep ordered words (Never, Sometimes, Often) as typed. Pareto sorts tallest first and adds a cumulative percent line that ends at 100%. Equal bars keep their typed order.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. Student copy leaves out picks what students supply: the values on the bars (they read them from the scale), the bars (they draw them from a table of the counts, and fill in the totals and percents), or the scale numbers (they number the axis from the values). The cumulative line and the answers to the optional questions are left out too. Student + key saves both.",
+    },
+    Faq {
+        q: "Why does the editor warn when the scale does not start at 0?",
+        a: "A bar's length stands for its value, so the axis must start at 0. Starting higher makes small differences look large: a bar twice as long no longer means twice as many. The warning stays while Scale start is above 0, which is useful for teaching how graphs mislead.",
     },
 ];
 

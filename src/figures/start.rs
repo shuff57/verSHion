@@ -26,6 +26,8 @@ pub fn overrides(id: &str) -> Vec<(&'static str, Value)> {
         "xylem-phloem" => vec![("view", st("Stem")), ("label_size", st("Large"))],
         // the ogive opens reading the 40th percentile, so the first picture shows the guide lines across to the curve and down
         "ogive" => vec![("read", st("Value at a percentile"))],
+        // the bar chart opens titled, so the first picture reads as a finished classroom chart
+        "bar-chart" => vec![("title", st("How we get to school")), ("cat_title", st("Way to school"))],
         // Math polygons open unfilled (black outline on white), angles unshaded.
         "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "regular-polygon" => vec![("fill", st("#ffffff"))],
         // the reference names the kite counter-clockwise (A right, B top, C left): our mirror
