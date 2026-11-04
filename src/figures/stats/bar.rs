@@ -31,6 +31,13 @@ pub const ORDERS: [&str; 5] = ["As typed", "Tallest first", "Shortest first", "A
 pub const PARETO: &str = ORDERS[4];
 pub const BLANKS: [&str; 3] = ["The values on the bars", "The bars", "The scale numbers"];
 const FONT: &str = "Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif";
+/// Print's bars and gridlines. The shared Print palette's first series is a plain `#d9d9d9` wash
+/// and its grid is `#cccccc`: both are lighter than a 66% bitonal copy's threshold, so a bar
+/// chart, whose fill carries the series and whose grid the reading, uses these (grey only, as
+/// Print requires).
+const PRINT_BAR: &str = "#999999";
+const PRINT_GRID: &str = "#999999";
+const PRINT_GRID_W: f64 = 1.4;
 /// Glyph extent above and below the baseline, and line pitch, in em (Noto Sans, with room for accents).
 const ASC: f64 = 0.95;
 const DES: f64 = 0.3;
@@ -159,6 +166,11 @@ pub struct Table {
     /// it had no separators to split it).
     pub head: Option<(usize, String, Vec<String>)>,
     pub merged: Vec<Merge>,
+    /// Lines whose count was read out of a thousands group that could also be two counts (or a
+    /// name and a count): the line, its text, the other reading's cells, and the count used.
+    pub ambiguous: Vec<(usize, String, Vec<String>, u64)>,
+    /// Lines with a comma inside a number but no three digits after it: line, text, its two sides.
+    pub short_comma: Vec<(usize, String, u64, u64)>,
 }
 
 impl Table {
@@ -270,13 +282,21 @@ pub fn thousands(s: &str) -> Option<u128> {
 
 /// Commas inside a count written in groups of three (`1,200`), removed before the line is split,
 /// so a thousands separator is part of its count and not the start of the next. A comma with a
-/// space after it (`, 1`) is a cell separator, as typed data usually writes it.
+/// space after it (`, 1`) is a cell separator, as typed data usually writes it; text inside
+/// quotes is a name and is left exactly as typed.
 fn join_thousands(line: &str) -> String {
     let c: Vec<char> = line.chars().collect();
     let mut out = String::new();
     let mut i = 0;
+    let mut quoted = false;
     while i < c.len() {
-        if !c[i].is_ascii_digit() {
+        if c[i] == '"' {
+            quoted = !quoted;
+            out.push(c[i]);
+            i += 1;
+            continue;
+        }
+        if quoted || !c[i].is_ascii_digit() {
             out.push(c[i]);
             i += 1;
             continue;
@@ -308,32 +328,74 @@ fn join_thousands(line: &str) -> String {
 }
 
 /// The cell a line with no separator ends in: `Walk 12`, `Walk 1 200` (a thousands group written
-/// with spaces). `Err` holds the number of trailing numbers when more than one is left over and
-/// they are not groups of three (`Grade 9 12`: which is the count?).
-fn tail_count(line: &str) -> Result<Vec<String>, usize> {
+/// with spaces), and the other reading of that group (`Walk 1` with count 200). `Err` holds the
+/// number of trailing numbers when more than one is left over and they are not groups of three
+/// (`Grade 9 12`: which is the count?).
+fn tail_count(line: &str) -> Result<(Vec<String>, Option<Vec<String>>), usize> {
     let toks: Vec<&str> = line.split_whitespace().collect();
     let n = toks.len();
     let group = |t: &str, max: usize| !t.is_empty() && t.len() <= max && t.chars().all(|c| c.is_ascii_digit());
     let spaced = (0..n.saturating_sub(1)).find(|&s| group(toks[s], 3) && toks[s + 1..].iter().all(|t| t.len() == 3 && group(t, 3)));
     if let Some(s) = spaced {
-        return Ok(vec![toks[..s].join(" "), toks[s..].concat()]);
+        let alt = if s > 0 { Some(vec![toks[..s + 1].join(" "), toks[s + 1..].concat()]) } else { None };
+        return Ok((vec![toks[..s].join(" "), toks[s..].concat()], alt));
     }
     let tail = toks.iter().rev().take_while(|t| numeric_like(t)).count();
     if tail >= 2 {
         return Err(tail);
     }
     if tail == 0 {
-        Ok(vec![toks.join(" ")])
+        Ok((vec![toks.join(" ")], None))
     } else {
-        Ok(vec![toks[..n - 1].join(" "), toks[n - 1].to_string()])
+        Ok((vec![toks[..n - 1].join(" "), toks[n - 1].to_string()], None))
     }
 }
 
-/// A line's cells: split at tabs, else semicolons (a comma is then a thousands or decimal mark
+/// A comma with no space after it and not exactly three digits after it (`12,5`, `1,2000`): the
+/// digits on each side, which the line reads as two counts.
+fn short_comma(line: &str) -> Option<(u64, u64)> {
+    let c: Vec<char> = line.chars().collect();
+    let mut quoted = false;
+    for (i, ch) in c.iter().enumerate() {
+        if *ch == '"' {
+            quoted = !quoted;
+            continue;
+        }
+        if quoted || *ch != ',' || i == 0 || !c[i - 1].is_ascii_digit() {
+            continue;
+        }
+        let mut k = i + 1;
+        while k < c.len() && c[k].is_ascii_digit() {
+            k += 1;
+        }
+        let after = k - (i + 1);
+        if after == 0 || after == 3 {
+            continue;
+        }
+        let mut s = i;
+        while s > 0 && c[s - 1].is_ascii_digit() {
+            s -= 1;
+        }
+        let left: String = c[s..i].iter().collect();
+        let right: String = c[i + 1..k].iter().collect();
+        return Some((left.parse().unwrap_or(0), right.parse().unwrap_or(0)));
+    }
+    None
+}
+
+/// The cells of a line, and the other reading a thousands group hides.
+struct Cells {
+    cells: Vec<String>,
+    /// The cells the line would have if its thousands group were not one count (`A, 3,100` = 3 and
+    /// 100; `A 1 200` = the name "A 1" with count 200), when that is a name and one or two counts.
+    alt: Option<Vec<String>>,
+    /// A comma inside a number that is not a thousands group (`12,5`): its two sides.
+    split: Option<(u64, u64)>,
+}
+
+/// A line's cells, split at tabs, else semicolons (a comma is then a thousands or decimal mark
 /// inside a cell), else commas, else the last word is the count.
-fn split_line(line: &str) -> Result<Vec<String>, usize> {
-    let line = join_thousands(line);
-    let line = line.as_str();
+fn split_cells(line: &str) -> Result<(Vec<String>, Option<Vec<String>>), usize> {
     let mut cells: Vec<String> = if line.contains('\t') {
         line.split('\t').map(str::to_string).collect()
     } else if line.contains(';') {
@@ -349,7 +411,47 @@ fn split_line(line: &str) -> Result<Vec<String>, usize> {
     while cells.len() > 1 && cells.last().is_some_and(|c| c.is_empty()) {
         cells.pop();
     }
-    Ok(cells)
+    Ok((cells, None))
+}
+
+/// A line's cells, with the readings a thousands group hides kept so the editor can say which one
+/// it used (J1: `1,200` is one count, but `A, 3,100` could also be 3 and 100).
+fn split_line(line: &str) -> Result<Cells, usize> {
+    let joined = join_thousands(line);
+    let (cells, mut alt) = split_cells(&joined)?;
+    if joined != line {
+        if let Ok((a, _)) = split_cells(line) {
+            if (2..=3).contains(&a.len()) {
+                alt = Some(a);
+            }
+        }
+    }
+    let split = if joined == line { short_comma(line) } else { None };
+    Ok(Cells { cells, alt, split })
+}
+
+/// A cell that reads like a group name rather than a count: it starts with a letter, is not a
+/// count written as a word, is not inf or NaN, and is a phrase (`Grade 9`, `One or more`) rather
+/// than a count with a letter typed in it (`l2`).
+fn label_like(c: &str) -> bool {
+    let t = c.trim();
+    let low = t.to_lowercase();
+    let not_a_number = !matches!(low.as_str(), "inf" | "infinity" | "nan" | "-inf" | "+inf");
+    let letter_first = not_a_number && t.chars().next().is_some_and(|c| c.is_alphabetic());
+    letter_first && word_value(t).is_none() && (t.contains(' ') || number_word(t))
+}
+
+/// The refusal a first line gets when its cells hold words with numbers in them: it can be neither
+/// a category with counts nor a line of headings (MED 1).
+fn headings_with_digits(n: usize, l: &str, name: &str) -> String {
+    let example = example_line(name, &["1".to_string(), "2".to_string()]);
+    format!(
+        "Line {n} ({}) is the first line, and its cells hold words with numbers in them, so it is neither a category with counts nor a line of headings (a heading holds no number). Either delete line {n} and type the group names in {} and {}, or write line {n} as a category and its counts, for example {}.",
+        q(l),
+        q("Group 1 name"),
+        q("Group 2 name"),
+        q(&example)
+    )
 }
 
 enum CountErr {
@@ -450,7 +552,7 @@ pub fn parse(text: &str) -> Result<Table, String> {
     let mut start = 0;
     if lines.len() >= 2 {
         let (n, l) = lines[0];
-        if let Ok(cells) = split_line(l) {
+        if let Ok(Cells { cells, .. }) = split_line(l) {
             // a heading is words: a cell with a digit, or inf/NaN, is a mistyped count and the
             // line is data, so its category is not swallowed
             let heading = |c: &str| {
@@ -468,12 +570,15 @@ pub fn parse(text: &str) -> Result<Table, String> {
     }
     let mut cats: Vec<Cat> = Vec::new();
     let mut merged: Vec<Merge> = Vec::new();
+    let mut ambiguous: Vec<(usize, String, Vec<String>, u64)> = Vec::new();
+    let mut short_commas: Vec<(usize, String, u64, u64)> = Vec::new();
     let mut groups = 0usize;
-    let mut first_line = 0usize;
+    let mut first_row: Option<(usize, String, Vec<u64>)> = None;
+    let mut first_data = start == 0;
     let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     let mut merge_index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for &(n, l) in &lines[start..] {
-        let cells = match split_line(l) {
+        let Cells { cells, alt, split } = match split_line(l) {
             Ok(c) => c,
             Err(_) => {
                 let toks: Vec<&str> = l.split_whitespace().collect();
@@ -510,6 +615,13 @@ pub fn parse(text: &str) -> Result<Table, String> {
                 q(&example_line(&name, &raw[..2]))
             ));
         }
+        // MED 1: the first line is the only one that can be a line of headings, so when its cells
+        // are words with numbers in them (`Grade, Grade 9, Grade 10`) neither reading works and
+        // the teacher must choose one of the two routes
+        if first_data && raw.iter().any(|c| label_like(c)) {
+            return Err(headings_with_digits(n, l, &name));
+        }
+        first_data = false;
         let mut counts = Vec::new();
         for (i, cell) in raw.iter().enumerate() {
             let fix = |v: String| {
@@ -588,16 +700,38 @@ pub fn parse(text: &str) -> Result<Table, String> {
         }
         if groups == 0 {
             groups = counts.len();
-            first_line = n;
+            first_row = Some((n, l.to_string(), counts.clone()));
         } else if counts.len() != groups {
-            let mut c = raw.clone();
-            c.resize(groups, "0".into());
+            // MAJOR 2: no rewrite. A rewrite would drop or invent a count (the old ", 0" padding
+            // and the silent drop of a typed count); the teacher must choose the shape.
+            let (fn_, fl, fc) = first_row.as_ref().expect("the first line sets the shape");
+            let alt_hint = match &alt {
+                Some(a) if a.len() == 3 => format!(" Here {} is one count, {}; two counts would be {}.", q(l), fmt_count(counts[0]), q(&example_line(&a[0], &a[1..]))),
+                _ => String::new(),
+            };
             return Err(format!(
-                "Line {n} has {} but line {first_line} has {}. Give every line the same number of counts (type 0 for none): change line {n} to {}.",
+                "Line {n} ({}) holds {} ({}), but line {fn_} ({}) holds {} ({}). Every line must hold the same number of counts: either add the missing count on the lines that hold fewer, or write one count on every line.{alt_hint} A comma with no space after it, between groups of three digits, is a thousands separator, so a thousands group is one count.",
+                q(l),
                 plural(counts.len(), "count", "counts"),
-                groups,
-                q(&example_line(&name, &c))
+                counts.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(" and "),
+                q(fl),
+                plural(groups, "count", "counts"),
+                fc.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(" and "),
             ));
+        }
+        // J1: the thousands reading was a choice; keep it so the editor can say which it used
+        if counts.len() == 1 {
+            if let Some(a) = &alt {
+                let other: Option<Vec<u64>> = a[1..].iter().map(|c| parse_count(c).ok()).collect();
+                if let Some(other) = other {
+                    if (1..=2).contains(&other.len()) && other[0] != counts[0] {
+                        ambiguous.push((n, l.to_string(), a.clone(), counts[0]));
+                    }
+                }
+            }
+        }
+        if let Some((x, y)) = split {
+            short_commas.push((n, l.to_string(), x, y));
         }
         let len = name.chars().count();
         if len > MAX_NAME {
@@ -648,7 +782,7 @@ pub fn parse(text: &str) -> Result<Table, String> {
             return Err(format!("{which}, so there are no bars to draw. For example, change line {} to {}.", c0.line, q(&example_line(&c0.name, &c))));
         }
     }
-    Ok(Table { cats, groups, head, merged })
+    Ok(Table { cats, groups, head, merged, ambiguous, short_comma: short_commas })
 }
 
 /// The rule the too-many message gives: the smallest categories (by their total over the groups,
@@ -687,6 +821,30 @@ pub fn fmt_count(v: u64) -> String {
 pub fn pct_scaled(c: u64, total: u64, d: u32) -> u128 {
     let total = total.max(1) as u128;
     (2 * c as u128 * 100 * 10u128.pow(d) + total) / (2 * total)
+}
+
+/// A group's percents in one column, adjusted so that the printed cells add up to exactly 100% at
+/// `d` decimals (largest remainder: the leftover hundredths go to the largest fractions, the
+/// earlier category on a tie). A table with a Total row must not print 99.9% against a printed
+/// 100%, so the column is adjusted rather than each cell rounded on its own (MED 2). Scaled by
+/// 10^d, in row order.
+pub fn pct_column(counts: &[u64], total: u64, d: u32) -> Vec<u128> {
+    let target = 100 * 10u128.pow(d);
+    if total == 0 || counts.is_empty() {
+        return vec![0; counts.len()];
+    }
+    let total = total as u128;
+    let mut out: Vec<u128> = counts.iter().map(|c| *c as u128 * target / total).collect();
+    let mut rem: Vec<(u128, usize)> = counts.iter().enumerate().map(|(i, c)| ((*c as u128 * target) % total, i)).collect();
+    rem.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    let mut left = target.saturating_sub(out.iter().sum::<u128>());
+    let mut k = 0;
+    while left > 0 && !rem.is_empty() {
+        out[rem[k % rem.len()].1] += 1;
+        left -= 1;
+        k += 1;
+    }
+    out
 }
 
 pub fn pct_text(c: u64, total: u64, d: u32) -> String {
@@ -962,6 +1120,59 @@ pub fn warnings(p: &Params) -> Vec<String> {
         let used = if cells.len() >= 2 { " Its first heading names the category axis unless you type one, and the others name the groups." } else { "" };
         out.push(format!("Line {n} ({}) has no numbers, so it was read as headings, not as a category.{used}", q(l)));
     }
+    let name_on = |n: usize| t.cats.iter().find(|c| c.line == n).map(|c| c.name.clone()).unwrap_or_default();
+    // MAJOR 1: a thousands group is one count, but `A, 3,100` could also be 3 and 100: say which
+    // reading was used, how to write the other, and give a rewrite that keeps this one
+    if !t.ambiguous.is_empty() {
+        let (n, l, alt, value) = &t.ambiguous[0];
+        let values: Vec<String> = t.ambiguous.iter().map(|(_, _, _, v)| fmt_count(*v)).collect();
+        let other = &alt[1..];
+        let other_note = if other.len() == 2 {
+            format!("Two counts would be {}, with a space after the comma on every line.", q(&example_line(&alt[0], other)))
+        } else {
+            format!("It could also be the category {} with count {}, written {}.", q(&alt[0]), other[0], q(&example_line(&alt[0], &other[..1])))
+        };
+        let who = if t.ambiguous.len() == 1 {
+            format!("Line {n} ({}) is one count, {}: a comma with no space after it, between groups of three digits, is a thousands separator", q(l), fmt_count(*value))
+        } else {
+            let lines: Vec<String> = t.ambiguous.iter().map(|(n, _, _, _)| n.to_string()).collect();
+            format!(
+                "Lines {} give a count with a thousands comma, so each is one count ({}): a comma with no space after it, between groups of three digits, is a thousands separator",
+                and_list(&lines),
+                and_list(&values)
+            )
+        };
+        out.push(format!("{who}. {other_note} To keep {}, change line {n} to {}.", fmt_count(*value), q(&example_line(&name_on(*n), &[value.to_string()]))));
+    }
+    // LOW: a comma inside a number that is not a thousands group was read as two counts
+    if let Some((n, l, a, b)) = t.short_comma.first() {
+        out.push(format!(
+            "Line {n} ({}) has a comma with no space after it and not three digits after it, so {} is not a thousands group: it was read as two counts, {} and {}. To keep them, change line {n} to {}.",
+            q(l),
+            q(&format!("{a},{b}")),
+            a,
+            b,
+            q(&example_line(&name_on(*n), &[a.to_string(), b.to_string()]))
+        ));
+    }
+    // MED 1: the first line read as data whose counts are all years is probably a headings line
+    if t.head.is_none() && t.groups == 2 && t.cats.len() > 1 {
+        let c0 = &t.cats[0];
+        let is_year = |v: u64| (1900..=2100).contains(&v);
+        let later_plain = t.cats[1..].iter().any(|c| c.counts.iter().any(|v| !is_year(*v)));
+        if c0.counts.iter().all(|v| is_year(*v)) && later_plain {
+            out.push(format!(
+                "Line {} is the category {} with counts {} and {}, but those are years, so it may be a line of headings. If it is, delete line {} and type the group names in {} and {}.",
+                c0.line,
+                q(&c0.name),
+                fmt_count(c0.counts[0]),
+                fmt_count(c0.counts[1]),
+                c0.line,
+                q("Group 1 name"),
+                q("Group 2 name")
+            ));
+        }
+    }
     for m in &t.merged {
         let sums: Vec<String> = (0..t.groups)
             .map(|g| {
@@ -1071,7 +1282,9 @@ pub fn warnings(p: &Params) -> Vec<String> {
         }
     }
     // printed percents that do not add to 100
-    let printed = o.percent && (o.values || o.blank == 1);
+    // MED 3: the percents written on the bars are rounded one by one, so they can add to 99% or
+    // 101%; offer a Decimals setting that adds exactly, searched in both directions
+    let printed = o.percent && o.values;
     if printed {
         for g in 0..t.groups {
             let total = t.total(g);
@@ -1079,12 +1292,12 @@ pub fn warnings(p: &Params) -> Vec<String> {
             if sum(o.decimals) != 100 * 10u128.pow(o.decimals) {
                 let shown = pct_from_scaled(sum(o.decimals), o.decimals);
                 let whose = if t.groups == 1 { String::new() } else { format!(" for {}", q(&o.names[g])) };
-                let fix = ((o.decimals + 1)..=2).find(|d| sum(*d) == 100 * 10u128.pow(*d));
+                let fix = (0..=2u32).filter(|d| *d != o.decimals && sum(*d) == 100 * 10u128.pow(*d)).min_by_key(|d| (*d as i32 - o.decimals as i32).abs());
                 let fix = match fix {
                     Some(d) => format!(" Set {} to {d}.", q("Decimals in percents")),
                     None => format!(" Choose {} for {} so the values on the bars add up exactly.", q(COUNT), q("Bar height")),
                 };
-                out.push(format!("The printed percents{whose} add to {shown}, not 100%, because each is rounded.{fix}"));
+                out.push(format!("The percents written on the bars{whose} add to {shown}, not 100%, because each is rounded.{fix}"));
             }
         }
     }
@@ -1157,7 +1370,10 @@ struct Col {
 fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
     let fills = o.fills;
     let ink = if o.print { "#000000" } else { INK };
-    let grid_col = if o.print { "#cccccc" } else { GRID };
+    let grid_col = if o.print { PRINT_GRID } else { GRID };
+    // Print: the first series is a solid grey that survives a copy; the others keep the hatch
+    let series = |g: usize| if o.print && g == 0 { PRINT_BAR.to_string() } else { fills.series(g) };
+    let grid_w = if o.print { PRINT_GRID_W } else { 1.0 };
     let k = o.k;
     let (fs, fv, ft, fa) = (14.0 * k, 12.6 * k, 18.2 * k, 15.4 * k);
     let g_n = t.groups;
@@ -1194,7 +1410,12 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
                 continue;
             }
             for g in 0..g_n {
-                let mut cells: Vec<String> = idx.iter().map(|&i| if pct { pct_text(t.cats[i].counts[g], totals[g], o.decimals) } else { fmt_count(t.cats[i].counts[g]) }).collect();
+                let mut cells: Vec<String> = if pct {
+                    let col = pct_column(&idx.iter().map(|&i| t.cats[i].counts[g]).collect::<Vec<_>>(), totals[g], o.decimals);
+                    col.iter().map(|s| pct_from_scaled(*s, o.decimals)).collect()
+                } else {
+                    idx.iter().map(|&i| fmt_count(t.cats[i].counts[g])).collect()
+                };
                 cells.push(if pct { "100%".into() } else { fmt_count(totals[g]) });
                 let head = wrap(&head_of(g, pct), 150.0 * k, fs, true).unwrap_or_default();
                 let w = head.iter().chain(cells.iter()).map(|c| tw(c, fs)).fold(40.0 * k, f64::max);
@@ -1242,7 +1463,8 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
     if !o.horizontal {
         vt_lines = wrap(&val_title, plot_h_v - 8.0, fa, true).unwrap_or_default();
         l = 14.0 + vt_lines.len() as f64 * fa * PITCH + 6.0 + tick_w + 12.0;
-        r = if o.pareto { 12.0 + tw("100%", fs) + 10.0 + fa * PITCH + 12.0 } else { 24.0 };
+        // the right axis is the cumulative percent, so a percent bar chart already has it on the left
+        r = if o.pareto && !o.percent { 12.0 + tw("100%", fs) + 10.0 + fa * PITCH + 12.0 } else { 24.0 };
         w = w.max(l + (n as f64 * slot_min).max(420.0) + r);
         plot_h = plot_h_v;
     } else {
@@ -1354,7 +1576,7 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
         for (row, (g, iw)) in legend.iter().enumerate() {
             let ry = legend_y + if legend_stacked { row as f64 * legend_row_h } else { 0.0 };
             let cy = ry + legend_row_h / 2.0;
-            d.rect(x, cy - sh / 2.0, sw, sh, &fills.series(*g), ink, 1.2);
+            d.rect(x, cy - sh / 2.0, sw, sh, &series(*g), ink, 1.2);
             put(&mut d, x + sw + 6.0, cy + fs * 0.35, fs, "start", &o.names[*g], ink);
             if !legend_stacked {
                 x += iw + 24.0;
@@ -1372,7 +1594,7 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
     if o.grid {
         for (v, _) in &ticks {
             let p = vpos(*v);
-            if o.horizontal { d.line(p, top, p, bottom, grid_col, 1.0) } else { d.line(l, p, w - r, p, grid_col, 1.0) };
+            if o.horizontal { d.line(p, top, p, bottom, grid_col, grid_w) } else { d.line(l, p, w - r, p, grid_col, grid_w) };
         }
     }
     // bars
@@ -1393,7 +1615,7 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
             for g in 0..g_n {
                 let (x, yy, bw, bh) = bar_geom(j, g);
                 if bw > 0.0 && bh > 0.0 {
-                    d.rect(x, yy, bw, bh, &fills.series(g), ink, 1.4);
+                    d.rect(x, yy, bw, bh, &series(g), ink, 1.4);
                 }
             }
         }
@@ -1457,13 +1679,17 @@ fn draw(t: &Table, o: &Opts, s: Scale, key: bool) -> String {
             line_pts.push((l + (j as f64 + 0.5) * slot, bottom - f * plot_h));
         }
         if key {
-            d.line(w - r, top, w - r, bottom, ink, 2.0);
-            for pc in [0, 20, 40, 60, 80, 100] {
-                let yy = bottom - pc as f64 / 100.0 * plot_h;
-                d.line(w - r, yy, w - r + 6.0, yy, ink, 1.6);
-                put(&mut d, w - r + 10.0, yy + fs * 0.35, fs, "start", &format!("{pc}%"), ink);
+            // LOW: on a percent chart the value axis is 0-100% too, so the right axis would be the
+            // same axis twice; the line is read off the left one
+            if !o.percent {
+                d.line(w - r, top, w - r, bottom, ink, 2.0);
+                for pc in [0, 20, 40, 60, 80, 100] {
+                    let yy = bottom - pc as f64 / 100.0 * plot_h;
+                    d.line(w - r, yy, w - r + 6.0, yy, ink, 1.6);
+                    put(&mut d, w - r + 10.0, yy + fs * 0.35, fs, "start", &format!("{pc}%"), ink);
+                }
+                put_up(&mut d, w - 12.0 - fa * DES, (top + bottom) / 2.0, fa, "middle", "Cumulative percent", ink);
             }
-            put_up(&mut d, w - 12.0 - fa * DES, (top + bottom) / 2.0, fa, "middle", "Cumulative percent", ink);
             d.polyline(&line_pts, ink, 2.0);
             for (x, yy) in &line_pts {
                 d.circle(*x, *yy, 3.5, "#ffffff", ink, 1.6);

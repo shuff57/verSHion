@@ -151,7 +151,7 @@ fn shapes(svg: &str) -> Shapes {
             }
             "line" => {
                 let c = e.a("stroke").unwrap();
-                if c == GRID || c == "#cccccc" {
+                if c == GRID || c == "#cccccc" || c == "#999999" {
                     continue;
                 }
                 s.segs.push(((e.n("x1"), e.n("y1")), (e.n("x2"), e.n("y2")), e.n("stroke-width")));
@@ -274,33 +274,57 @@ fn reads_commas_tabs_semicolons_spaces_quotes_and_headings() {
 #[test]
 fn thousands_separators_are_one_count_not_a_second_group() {
     // J1: the figure prints counts with thousands commas (fmt_count), so a teacher retyping its
-    // own output must get the same chart back
+    // own output must get the same chart back -- and MAJOR 1 says which reading it used
     let data = "Walk, 1,200\nCar, 2,500\nBus, 3,000";
     let t = parse(data).unwrap();
     assert_eq!(t.groups, 1, "a thousands comma does not start a second group");
     assert_eq!(t.cats.iter().map(|c| c.counts[0]).collect::<Vec<_>>(), [1200, 2500, 3000]);
-    assert!(warnings(&with(&[("data", data)])).is_empty(), "read as typed, with no note");
-    // the "Red 12" form: the count rides in the first cell
+    let n = warnings(&with(&[("data", data)]));
+    assert_eq!(n.len(), 1, "one note for the table: {n:?}");
+    assert!(n[0].contains("Lines 1, 2 and 3 give a count"), "names every line: {}", n[0]);
+    assert!(n[0].contains("one count") && n[0].contains("Two counts would be \u{201c}Walk, 1, 200\u{201d}"), "{}", n[0]);
+    assert!(n[0].contains("change line 1 to \u{201c}Walk, 1200\u{201d}"), "{}", n[0]);
+    // the "Red 12" form: the count rides in the first cell, and could also be the name plus a count
     let t = parse("Walk 1,200\nCar 950").unwrap();
     assert_eq!(t.cats.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["Walk", "Car"]);
     assert_eq!(t.cats.iter().map(|c| c.counts[0]).collect::<Vec<_>>(), [1200, 950]);
+    let n = warnings(&with(&[("data", "Walk 1,200\nCar 950")]));
+    assert!(n[0].contains("could also be the category \u{201c}Walk 1\u{201d} with count 200"), "{n:?}");
     // mixed: one line with a thousands comma, one without
     let t = parse("Walk, 1,200\nCar, 950").unwrap();
     assert_eq!(t.cats.iter().map(|c| c.counts[0]).collect::<Vec<_>>(), [1200, 950]);
-    // two counts, the first written with a thousands comma
-    assert_eq!(parse("Walk, 1,200, 3").unwrap().cats[0].counts, [1200, 3]);
+    assert!(warnings(&with(&[("data", "Walk, 1,200\nCar, 950")])).len() == 1, "only the ambiguous line is noted");
+    // two counts, the first written with a thousands comma: no other reading is possible
+    let t = parse("Walk, 1,200, 3").unwrap();
+    assert_eq!(t.cats[0].counts, [1200, 3]);
+    assert!(warnings(&with(&[("data", "Walk, 1,200, 3")])).is_empty(), "three cells are three cells");
     // a comma with a space after it starts the next cell, so two groups still read as typed
     let two = parse("A, 3, 100\nB, 5, 20").unwrap();
     assert_eq!(two.groups, 2);
     assert_eq!(two.cats[0].counts, [3, 100]);
-    // tab-pasted and space-pasted thousands groups read as one count (M2 c)
+    assert!(warnings(&with(&[("data", "A, 3, 100\nB, 5, 20")])).is_empty());
+    // a leading group of three digits is a thousands group too (MED 4: pins `j - i <= 3`)
+    let big = parse("A, 150,000\nB, 250,000").unwrap();
+    assert_eq!(big.groups, 1, "150,000 is one count");
+    assert_eq!(big.cats.iter().map(|c| c.counts[0]).collect::<Vec<_>>(), [150000, 250000]);
+    // tab-pasted thousands groups read as one count and are not ambiguous: a tab is a cell
     assert_eq!(parse("Walk\t1 200\nCar\t950").unwrap().cats[0].counts, [1200]);
+    assert!(warnings(&with(&[("data", "Walk\t1 200\nCar\t950")])).is_empty(), "a tab leaves no other reading");
     assert_eq!(parse("Walk 12 345\nCar 950").unwrap().cats[0].counts, [12345]);
-    // a decimal comma is refused, never read as two groups
+    // a quoted name is left exactly as typed (LOW): no thousands pass inside quotes
+    let q = parse("\"Bus, 12,300 riders\", 4\nWalk, 3").unwrap();
+    assert_eq!(q.cats[0].name, "Bus, 12,300 riders");
+    assert_eq!(q.cats[0].counts, [4]);
+    assert!(warnings(&with(&[("data", "\"Bus, 12,300 riders\", 4\nWalk, 3")])).is_empty());
+    // a decimal comma after the name is refused, never read as two groups
     let n = warnings(&with(&[("data", "Walk; 12,5")]));
     assert!(n[0].contains("has a comma inside a number") && n[0].contains("12.5"), "{n:?}");
+    // ... and with commas it is noted, not silent (LOW)
+    let n = warnings(&with(&[("data", "Walk, 12,5\nCar, 9, 3")]));
+    assert_eq!(n.len(), 1, "{n:?}");
+    assert!(n[0].contains("read as two counts, 12 and 5") && n[0].contains("change line 1 to \u{201c}Walk, 12, 5\u{201d}"), "{}", n[0]);
     // and the advice never pads a thousands line with a ", 0" count
-    for d in ["Walk, 1,200\nCar, 2,500", "Walk 1,200\nCar 950", "Walk, 1,200\nCar, 950", "Walk\t1 200\nCar\t950"] {
+    for d in ["Walk, 1,200\nCar, 2,500", "Walk 1,200\nCar 950", "Walk, 1,200\nCar, 950", "Walk\t1 200\nCar\t950", "A, 3,100\nB, 2,050"] {
         for n in warnings(&with(&[("data", d)])) {
             assert!(!n.contains(", 0"), "{d}: {n}");
         }
@@ -315,16 +339,141 @@ fn retyping_the_figures_own_printed_counts_gives_the_same_chart() {
     assert_eq!(printed, ["1,200", "2,500", "3,000"], "the figure prints its counts with thousands commas");
     let before = parse(data).unwrap();
     let retyped: String = before.cats.iter().zip(&printed).map(|(c, l)| format!("{}, {l}\n", c.name)).collect();
-    let after = parse(&retyped).unwrap();
-    assert_eq!(after.cats, before.cats, "the printed form reads back as the same counts");
+    // MAJOR 1: the retyped table is read as one count per line and says so; its fix keeps them
+    let mut p = with(&[("data", &retyped)]);
+    let (steps, stuck) = settle(&mut p);
+    assert!(steps >= 1 && stuck.is_none(), "{steps} {stuck:?}");
+    let after = parse(p.s("data")).unwrap();
+    assert_eq!(after.cats, before.cats, "the printed form reads back as the same counts, fix and all");
     assert_eq!(after.groups, 1);
+}
+
+#[test]
+fn the_thousands_reading_is_always_stated_and_can_be_rewritten_both_ways() {
+    // MAJOR 1: `A, 3,100` is 3100 here, and the note says so, names the other reading (3 and 100)
+    // and offers a rewrite that keeps the chart
+    let p = with(&[("data", "A, 3,100\nB, 2,050")]);
+    let t = parse(p.s("data")).unwrap();
+    assert_eq!(t.groups, 1);
+    assert_eq!(t.cats.iter().map(|c| c.counts[0]).collect::<Vec<_>>(), [3100, 2050]);
+    let notes = warnings(&p);
+    assert_eq!(notes.len(), 1, "{notes:?}");
+    assert!(notes[0].contains("Lines 1 and 2 give a count with a thousands comma, so each is one count (3,100 and 2,050)"), "{}", notes[0]);
+    assert!(notes[0].contains("Two counts would be \u{201c}A, 3, 100\u{201d}"), "{}", notes[0]);
+    assert!(notes[0].contains("change line 1 to \u{201c}A, 3100\u{201d}"), "{}", notes[0]);
+    // the fix keeps the chart and clears the note for every line
+    let mut fixed = p.clone();
+    let (steps, stuck) = settle(&mut fixed);
+    assert!(steps == 2 && stuck.is_none(), "{steps} {stuck:?}");
+    assert_eq!(parse(fixed.s("data")).unwrap().cats, t.cats);
+    // the other spelling draws the two groups the note named, unchanged in meaning
+    let two = parse("A, 3, 100\nB, 2, 50").unwrap();
+    assert_eq!(two.groups, 2);
+    assert_eq!(two.cats[0].counts, [3, 100]);
+    assert_eq!(two.cats[1].counts, [2, 50]);
+    // the space form: one count, with the name-and-count reading also named
+    let p = with(&[("data", "A 1 200\nB 950")]);
+    let notes = warnings(&p);
+    assert!(notes[0].contains("could also be the category \u{201c}A 1\u{201d} with count 200"), "{}", notes[0]);
+    assert!(notes[0].contains("change line 1 to \u{201c}A, 1200\u{201d}"), "{}", notes[0]);
+    // unambiguous lines carry no note: a group of exactly three digits in a cell on its own, and
+    // two counts where the first was written with a thousands comma
+    for d in ["Walk\t1 200\nCar\t950", "Walk, 1,200, 3", "A, 150,000, 900\nB, 2, 3", "A, 1,200, 5,000\nB, 800, 950"] {
+        assert!(warnings(&with(&[("data", d)])).is_empty(), "{d}: {:?}", warnings(&with(&[("data", d)])));
+    }
+}
+
+#[test]
+fn a_counts_mismatch_names_every_line_and_offers_no_rewrite() {
+    // MAJOR 2: the refusal must not drop or invent a count (no "change line n to …", no ", 0"), so
+    // it names both lines with their counts and offers the two shapes; both routes are checked
+    let e = parse("A, 5, 7\nB, 1,200").unwrap_err();
+    assert!(e.contains("Line 2 (\u{201c}B, 1,200\u{201d}) holds 1 count (1200), but line 1 (\u{201c}A, 5, 7\u{201d}) holds 2 counts (5 and 7)"), "{e}");
+    assert!(e.contains("Either") || e.contains("either add the missing count on the lines that hold fewer, or write one count on every line"), "{e}");
+    assert!(e.contains("two counts would be \u{201c}B, 1, 200\u{201d}"), "{e}");
+    assert!(!e.contains("change line") && !e.contains("Change line") && !e.contains(", 0"), "{e}");
+    // route one: two counts on every line, the thousands group written with a space
+    let two = parse("A, 5, 7\nB, 1, 200").unwrap();
+    assert_eq!(two.groups, 2);
+    assert_eq!(two.cats[0].counts, [5, 7]);
+    assert_eq!(two.cats[1].counts, [1, 200]);
+    // route two: one count on every line
+    assert_eq!(parse("A, 5\nB, 1200").unwrap().groups, 1);
+    // the same the other way round, where the thousands line comes first
+    let e = parse("A, 1,200\nB, 5, 7").unwrap_err();
+    assert!(e.contains("Line 2 (\u{201c}B, 5, 7\u{201d}) holds 2 counts (5 and 7), but line 1 (\u{201c}A, 1,200\u{201d}) holds 1 count (1200)"), "{e}");
+    assert!(!e.contains("change line") && !e.contains(", 0"), "a typed count must not be dropped: {e}");
+    let two = parse("A, 1, 200\nB, 5, 7").unwrap();
+    assert_eq!(two.cats[0].counts, [1, 200]);
+    assert_eq!(two.cats[1].counts, [5, 7]);
+}
+
+#[test]
+fn the_percent_table_adds_up_to_its_printed_total() {
+    // MED 2: the exported table's percent cells must add to the 100% its Total row prints
+    let data = "Pet, Class A, Class B\nDog, 11, 8\nCat, 7, 9\nFish, 3, 2\nNone, 4, 9";
+    let p = with(&[("data", data), ("measure", PERCENT), ("blank", BLANKS[1]), ("decimals", "1")]);
+    // the test's own largest-remainder column for Class B (8, 9, 2, 9 of 28)
+    let mine = |cs: &[u64], n: u64, d: u32| -> Vec<String> {
+        let target = 100 * 10u128.pow(d);
+        let n = n as u128;
+        let mut out: Vec<u128> = cs.iter().map(|c| *c as u128 * target / n).collect();
+        let mut rem: Vec<(u128, usize)> = cs.iter().enumerate().map(|(i, c)| ((*c as u128 * target) % n, i)).collect();
+        rem.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+        let mut left = target.saturating_sub(out.iter().sum::<u128>());
+        let mut k = 0;
+        while left > 0 {
+            out[rem[k % rem.len()].1] += 1;
+            left -= 1;
+            k += 1;
+        }
+        let pw = 10u128.pow(d);
+        out.iter().map(|s| if d == 0 { format!("{s}%") } else { format!("{}.{:0w$}%", s / pw, s % pw, w = d as usize) }).collect()
+    };
+    let b = mine(&[8, 9, 2, 9], 28, 1);
+    assert_eq!(b, ["28.6%", "32.2%", "7.1%", "32.1%"], "a column that half-up rounding leaves at 99.9%");
+    let a = mine(&[11, 7, 3, 4], 25, 1);
+    assert_eq!(a, ["44.0%", "28.0%", "12.0%", "16.0%"]);
+    let shown: Vec<String> = texts(&render(&p)).into_iter().map(|e| e.text).collect();
+    for w in a.iter().chain(b.iter()) {
+        assert!(shown.contains(w), "the table prints {w}: {shown:?}");
+    }
+    assert!(shown.contains(&"100%".to_string()), "the Total row");
+    let sum = |v: &[String]| v.iter().map(|s| s.trim_end_matches('%').parse::<f64>().unwrap()).sum::<f64>();
+    assert!((sum(&a) - 100.0).abs() < 1e-9 && (sum(&b) - 100.0).abs() < 1e-9);
+    // a sweep over shapes and decimals: every column adds to the printed total, within a unit of
+    // the exact share
+    for total in 1..=40u64 {
+        for k in 1..=5u64 {
+            let cs: Vec<u64> = (0..k).map(|i| total / k + u64::from(i < total % k)).collect();
+            let total: u64 = cs.iter().sum();
+            for d in 0..=2u32 {
+                let col = pct_column(&cs, total, d);
+                assert_eq!(col.iter().sum::<u128>(), 100 * 10u128.pow(d), "{cs:?} {d}");
+                for (c, s) in cs.iter().zip(&col) {
+                    let exact = *c as f64 * 100.0 / total as f64 * 10f64.powi(d as i32);
+                    assert!((*s as f64 - exact).abs() <= 1.0, "{cs:?} {d}: {s} against {exact}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn the_percent_axis_ticks_carry_the_percent_sign() {
+    // MED 4: a mutant that drops the sign from the tick must fail
+    let p = with(&[("data", "A, 9\nB, 1"), ("measure", PERCENT)]);
+    let ticks: Vec<String> = texts(&render(&p)).into_iter().filter(|e| e.a("text-anchor").as_deref() == Some("end")).map(|e| e.text).collect();
+    assert!(ticks.len() >= 3, "{ticks:?}");
+    assert!(ticks.iter().all(|t| t.ends_with('%')), "{ticks:?}");
+    assert!(ticks.contains(&"100%".to_string()) && ticks.contains(&"0%".to_string()), "{ticks:?}");
 }
 
 #[test]
 fn a_first_line_with_numbers_is_data_never_headings() {
     // M1: a heading cell holds no number, so a row with a mistyped count is refused by line
     // instead of becoming the headings and losing its category
-    for data in ["Walk, l2\nCar, 9", "Walk, 1O\nCar, 9", "A, inf\nB, 3", "A, NaN\nB, 3", "Fruit, Two-year-olds\nApple, 3"] {
+    for data in ["Walk, l2\nCar, 9", "Walk, 1O\nCar, 9", "A, inf\nB, 3", "A, NaN\nB, 3"] {
         let n = warnings(&with(&[("data", data)]));
         assert_eq!(n.len(), 1, "{data}: {n:?}");
         assert!(n[0].starts_with("Line 1 ("), "{data}: {}", n[0]);
@@ -334,6 +483,34 @@ fn a_first_line_with_numbers_is_data_never_headings() {
         assert!(!n[0].contains("change line"), "{data}: no data is changed: {}", n[0]);
         assert!(parse(data).is_err(), "{data} is refused");
     }
+    // MED 1: a first line whose cells are words with numbers in them is neither reading, so the
+    // refusal names both real routes instead of turning the headings into a category
+    for data in ["Grade, Grade 9, Grade 10\nWalk, 12, 15", "Group, None, One or more\nA, 1, 2", "Fruit, Two-year-olds\nApple, 3"] {
+        let n = warnings(&with(&[("data", data)]));
+        assert_eq!(n.len(), 1, "{data}: {n:?}");
+        assert!(n[0].starts_with("Line 1 ("), "{data}: {}", n[0]);
+        assert!(n[0].contains("neither a category with counts nor a line of headings"), "{data}: {}", n[0]);
+        assert!(n[0].contains("type the group names in \u{201c}Group 1 name\u{201d} and \u{201c}Group 2 name\u{201d}"), "{data}: {}", n[0]);
+        assert!(!n[0].contains("change line") && !n[0].contains(", 0"), "{data}: no data is changed: {}", n[0]);
+        assert!(parse(data).is_err(), "{data} is refused");
+    }
+    // the name1/name2 route draws the groups those headings named
+    let p = with(&[("data", "Walk, 12, 15\nCar, 9, 11"), ("name1", "2019"), ("name2", "2020")]);
+    assert!(warnings(&p).is_empty(), "{:?}", warnings(&p));
+    let names: Vec<String> = texts(&render(&p)).into_iter().map(|e| e.text).collect();
+    assert!(names.iter().any(|t| t == "2019") && names.iter().any(|t| t == "2020"), "{names:?}");
+    // MED 1: the same numbers as a first line of data are read as counts, and the note says the
+    // line may have been headings with the route to the names
+    let p = with(&[("data", "Year, 2019, 2020\nWalk, 12, 15\nCar, 9, 11")]);
+    let n = warnings(&p);
+    assert_eq!(n.len(), 1, "{n:?}");
+    assert!(n[0].contains("may be a line of headings") && n[0].contains("delete line 1"), "{}", n[0]);
+    assert!(n[0].contains("\u{201c}Group 1 name\u{201d} and \u{201c}Group 2 name\u{201d}"), "{}", n[0]);
+    let t = parse("Year, 2019, 2020\nWalk, 12, 15\nCar, 9, 11").unwrap();
+    assert_eq!(t.cats[0].name, "Year");
+    // the same after deleting it and naming the groups
+    let p = with(&[("data", "Walk, 12, 15\nCar, 9, 11"), ("name1", "2019"), ("name2", "2020")]);
+    assert_eq!(parse(p.s("data")).unwrap().cats.len(), 2);
     // a count then a word is a data row, and the number is the count
     let data = "Walk, 12 students\nCar, 9\nBus, 6";
     let n = warnings(&with(&[("data", data)]));
@@ -341,9 +518,11 @@ fn a_first_line_with_numbers_is_data_never_headings() {
     assert!(n[0].contains("change line 1 to \u{201c}Walk, 12\u{201d}"), "{}", n[0]);
     let t = parse("Walk, 12 students\nCar, 9\nBus, 6").unwrap_err();
     assert!(t.contains("Walk, 12"), "{t}");
-    // a heading line still works when it really holds only words
+    // a heading line still works when it really holds only words, even a digit in its first cell
     let head = parse("Pet, Class A, Class B\nDog, 11, 8\nCat, 7, 9").unwrap();
     assert_eq!(head.head.unwrap().2, ["Pet", "Class A", "Class B"]);
+    let head = parse("Pets 2024, Boys, Girls\nDog, 3, 4").unwrap();
+    assert_eq!(head.head.unwrap().2, ["Pets 2024", "Boys", "Girls"]);
 }
 
 #[test]
@@ -430,7 +609,7 @@ fn apply(note: &str, p: &mut Params) -> bool {
 
 /// Information notes: say what was done, with nothing to change.
 fn info_only(note: &str) -> bool {
-    note.contains("so it was read as headings")
+    note.contains("so it was read as headings") || note.contains("may be a line of headings")
 }
 
 /// Applies every fix until none is left; each applied note must go away and never come back.
@@ -505,8 +684,11 @@ fn every_refusal_and_note_has_a_fix_that_keeps_the_meaning() {
         (one(", 12\nBlue, 3"), End::Chart(rows(&[("Category 1", &[12]), ("Blue", &[3])]))),
         (one("Grade 9 12\nGrade 10 7"), End::Chart(rows(&[("Grade 9", &[12]), ("Grade 10", &[7])]))),
         (one("Red, 1, 2, 3\nBlue, 3, 4"), End::Chart(rows(&[("Red", &[1, 2]), ("Blue", &[3, 4])]))),
-        (one("Red, 1, 2\nBlue, 3\nGreen, 4, 5"), End::Chart(rows(&[("Red", &[1, 2]), ("Blue", &[3, 0]), ("Green", &[4, 5])]))),
-        (one("Red, 1\nBlue, 3, 5"), End::Chart(rows(&[("Red", &[1]), ("Blue", &[3])]))),
+        // MAJOR 2: a counts mismatch names the lines and offers the two shapes, never a rewrite
+        (one("Red, 1, 2\nBlue, 3\nGreen, 4, 5"), End::Refused("holds 1 count (3), but line 1")),
+        (one("Red, 1\nBlue, 3, 5"), End::Refused("holds 2 counts (3 and 5), but line 1")),
+        (one("A, 5, 7\nB, 1,200"), End::Refused("holds 1 count (1200), but line 1")),
+        (one("A, 1,200\nB, 5, 7"), End::Refused("holds 2 counts (5 and 7), but line 1")),
         (one(&format!("{long}, 3\nBlue, 4")), End::Chart(rows(&[(&shortened, &[3]), ("Blue", &[4])]))),
         (one(&many45), End::Chart(combined)),
         (one("Red, 0\nBlue, 0"), End::Chart(rows(&[("Red", &[1]), ("Blue", &[0])]))),
@@ -525,19 +707,30 @@ fn every_refusal_and_note_has_a_fix_that_keeps_the_meaning() {
         (vec![("title", "T".repeat(170))], End::Chart(defaults_pairs.clone())),
         (vec![("cat_title", "C".repeat(90)), ("val_title", "V".repeat(85))], End::Chart(defaults_pairs.clone())),
         (vec![("data", "Dog, 11, 8\nCat, 7, 9".into()), ("name1", "N".repeat(45))], End::Chart(rows(&[("Dog", &[11, 8]), ("Cat", &[7, 9])]))),
-        // J1: thousands separators are one count, never a second group
-        (one("Walk, 1,200\nCar, 2,500\nBus, 3,000"), End::Quiet(rows(&[("Walk", &[1200]), ("Car", &[2500]), ("Bus", &[3000])]))),
-        (one("Walk, 1,200\nCar, 950"), End::Quiet(rows(&[("Walk", &[1200]), ("Car", &[950])]))),
-        (one("Walk 1,200\nCar 950"), End::Quiet(rows(&[("Walk", &[1200]), ("Car", &[950])]))),
+        // J1 + MAJOR 1: thousands separators are one count, and the note says so; applying its
+        // fix keeps the counts, and the other spelling is the two-count table
+        (one("Walk, 1,200\nCar, 2,500\nBus, 3,000"), End::Chart(rows(&[("Walk", &[1200]), ("Car", &[2500]), ("Bus", &[3000])]))),
+        (one("Walk, 1,200\nCar, 950"), End::Chart(rows(&[("Walk", &[1200]), ("Car", &[950])]))),
+        (one("Walk 1,200\nCar 950"), End::Chart(rows(&[("Walk", &[1200]), ("Car", &[950])]))),
         (one("Walk\t1 200\nCar\t950"), End::Quiet(rows(&[("Walk", &[1200]), ("Car", &[950])]))),
+        (one("A, 3,100\nB, 2,050"), End::Chart(rows(&[("A", &[3100]), ("B", &[2050])]))),
+        (one("A 1 200\nB 950"), End::Chart(rows(&[("A", &[1200]), ("B", &[950])]))),
+        (one("A, 150,000\nB, 250,000"), End::Chart(rows(&[("A", &[150000]), ("B", &[250000])]))),
+        (one("Walk, 12,5\nCar, 9, 3"), End::Chart(rows(&[("Walk", &[12, 5]), ("Car", &[9, 3])]))),
         // J1: a decimal comma is refused, never read as two groups
         (one("Walk; 12,5"), End::Refused("has a comma inside a number")),
         // M2 (a): too large is refused for the whole table, not rescaled line by line
         (one("A, 1e15\nB, 3"), End::Refused("divide every line")),
         // M2 (b): counts written as words use the number-word list
         (one("Walk, twelve\nCar, nine"), End::Chart(rows(&[("Walk", &[12]), ("Car", &[9])]))),
-        // M2 (d): a name is not a count, and no count is invented for it
-        (one("Fruit, Two-year-olds\nApple, 3"), End::Refused("is not a number")),
+        // M2 (d) + MED 1: a heading cell that is a phrase of words and numbers is refused with
+        // both routes, and no count is invented for it
+        (one("Fruit, Two-year-olds\nApple, 3"), End::Refused("neither a category with counts nor a line of headings")),
+        (one("Grade, Grade 9, Grade 10\nWalk, 12, 15"), End::Refused("neither a category with counts nor a line of headings")),
+        (one("Group, None, One or more\nA, 1, 2"), End::Refused("neither a category with counts nor a line of headings")),
+        // MED 1: years as a first line are read as a category, and the note names the headings
+        // route; the chart is unchanged because deleting a line is the teacher's choice
+        (one("Year, 2019, 2020\nWalk, 12, 15\nCar, 9, 11"), End::Chart(rows(&[("Year", &[2019, 2020]), ("Walk", &[12, 15]), ("Car", &[9, 11])]))),
         // M1: these are data rows, not a headings line
         (one("Walk, 12 students\nCar, 9\nBus, 6"), End::Chart(rows(&[("Walk", &[12]), ("Car", &[9]), ("Bus", &[6])]))),
         (one("Walk, 1 200\nCar, 950"), End::Quiet(rows(&[("Walk", &[1200]), ("Car", &[950])]))),
@@ -817,6 +1010,13 @@ fn pareto_right_axis_ticks_sit_exactly_on_their_percents() {
     let stu = render(&student);
     assert_eq!(size(&stu), size(&svg), "the same size, so the two copies line up");
     assert!(!stu.contains("Cumulative percent") && !texts(&stu).iter().any(|e| e.text.ends_with('%') && e.text.len() <= 5 && e.n("x") > x - 1.0));
+    // LOW: with Relative frequency the left axis is already 0-100%, so there is one axis, not two
+    let pct = with(&[("data", "Forgot, 14\nNo time, 9\nToo hard, 5\nSick, 3"), ("order", PARETO), ("measure", PERCENT)]);
+    let svg = render(&pct);
+    let axes = elements(&svg).into_iter().filter(|e| e.tag == "line" && e.n("x1") == e.n("x2") && e.n("stroke-width") == 2.0).count();
+    assert_eq!(axes, 1, "one vertical axis: the percent axis already reads 0-100%");
+    assert!(!svg.contains("Cumulative percent") && svg.contains("<polyline"), "the line is still drawn");
+    assert!(texts(&svg).iter().any(|e| e.text == "100%"), "the left axis ends at 100%");
 }
 
 #[test]
@@ -891,18 +1091,26 @@ fn rounding_note_offers_only_a_setting_that_adds_to_100() {
     let thirds = warnings(&with(&[("data", "A, 1\nB, 1\nC, 1"), ("measure", PERCENT)]));
     assert_eq!(
         thirds,
-        ["The printed percents add to 99%, not 100%, because each is rounded. Choose \u{201c}Frequency (count)\u{201d} for \u{201c}Bar height\u{201d} so the values on the bars add up exactly."]
+        ["The percents written on the bars add to 99%, not 100%, because each is rounded. Choose \u{201c}Frequency (count)\u{201d} for \u{201c}Bar height\u{201d} so the values on the bars add up exactly."]
     );
     let eighths = warnings(&with(&[("data", "A, 1\nB, 2\nC, 3\nD, 2"), ("measure", PERCENT)]));
-    assert_eq!(eighths, ["The printed percents add to 101%, not 100%, because each is rounded. Set \u{201c}Decimals in percents\u{201d} to 1."]);
+    assert_eq!(eighths, ["The percents written on the bars add to 101%, not 100%, because each is rounded. Set \u{201c}Decimals in percents\u{201d} to 1."]);
     assert!(warnings(&with(&[("data", "A, 1\nB, 2\nC, 3\nD, 2"), ("measure", PERCENT), ("decimals", "1")])).is_empty());
+    // MED 3: the search looks both ways. 8, 9, 2, 9 of 28 at one decimal sums 99.9%, and zero
+    // decimals sums exactly 100%, so the note offers 0, not "abandon percents"
+    let p = with(&[("data", "A, 8\nB, 9\nC, 2\nD, 9"), ("measure", PERCENT), ("decimals", "1")]);
+    assert_eq!(warnings(&p), ["The percents written on the bars add to 99.9%, not 100%, because each is rounded. Set \u{201c}Decimals in percents\u{201d} to 0."]);
+    assert!(warnings(&with(&[("data", "A, 8\nB, 9\nC, 2\nD, 9"), ("measure", PERCENT), ("decimals", "0")])).is_empty());
     // LOW 7: whatever it advises clears it, and the thirds note has a real action, not a remark
-    for (data, d) in [("A, 1\nB, 1\nC, 1", "0"), ("A, 1\nB, 2\nC, 3\nD, 2", "0")] {
+    for (data, d) in [("A, 1\nB, 1\nC, 1", "0"), ("A, 1\nB, 2\nC, 3\nD, 2", "0"), ("A, 8\nB, 9\nC, 2\nD, 9", "1")] {
         let mut p = with(&[("data", data), ("measure", PERCENT), ("decimals", d)]);
         let (steps, stuck) = settle(&mut p);
         assert!(steps >= 1 && stuck.is_none(), "{data}: {steps} {stuck:?}");
         assert!(warnings(&p).is_empty(), "{data}: {:?}", warnings(&p));
     }
+    // the note is about the values on the bars: a table-only copy has no such note, because its
+    // cells add to the printed Total (MED 2)
+    assert!(warnings(&with(&[("data", "A, 1\nB, 1\nC, 1"), ("measure", PERCENT), ("values", "false"), ("blank", BLANKS[1])])).is_empty());
 }
 
 #[test]
@@ -1085,17 +1293,37 @@ fn student_copies_leak_nothing_anywhere_in_the_source() {
                                     format!("{}.{}%", s / 10, s % 10)
                                 };
                                 let vlab: Vec<String> = t.cats.iter().flat_map(|c| (0..t.groups).map(|g| if percent { my_pct(c.counts[g], tot[g]) } else { fmt_count(c.counts[g]) }).collect::<Vec<_>>()).collect();
+                                // MED 2: the table's percent cells are largest-remainder columns, so
+                                // they are not the half-up labels; the test computes them itself
+                                let my_col = |cs: &[u64], n: u64| -> Vec<String> {
+                                    let (target, n) = (1000u128, n as u128);
+                                    let mut out: Vec<u128> = cs.iter().map(|c| *c as u128 * target / n).collect();
+                                    let mut rem: Vec<(u128, usize)> = cs.iter().enumerate().map(|(i, c)| ((*c as u128 * target) % n, i)).collect();
+                                    rem.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+                                    let mut left = target.saturating_sub(out.iter().sum::<u128>());
+                                    let mut k = 0;
+                                    while left > 0 {
+                                        out[rem[k % rem.len()].1] += 1;
+                                        left -= 1;
+                                        k += 1;
+                                    }
+                                    out.iter().map(|s| format!("{}.{}%", s / 10, s % 10)).collect()
+                                };
                                 let ktexts = texts(&key);
                                 let stexts = texts(&stu);
                                 let mut answers: Vec<String> = Vec::new();
                                 let bi = BLANKS.iter().position(|b| *b == blank).unwrap();
+                                let idx_order = super::order(&t, percent, order);
                                 if values == "true" && bi != 2 {
                                     answers.extend(vlab.clone());
                                 }
                                 if bi == 1 {
                                     answers.extend(tot.iter().map(|v| fmt_count(*v)));
                                     if percent {
-                                        answers.extend(vlab.clone());
+                                        for g in 0..t.groups {
+                                            let cs: Vec<u64> = idx_order.iter().map(|&i| t.cats[i].counts[g]).collect();
+                                            answers.extend(my_col(&cs, tot[g]));
+                                        }
                                         answers.extend(vec!["100%".to_string(); t.groups]);
                                     }
                                 }
@@ -1107,7 +1335,7 @@ fn student_copies_leak_nothing_anywhere_in_the_source() {
                                 answers.extend(qa.iter().cloned());
                                 // LOW 5: a Pareto key's right axis belongs to the cumulative line, so
                                 // the student copy has neither the numbers nor the axis title
-                                if order == PARETO && t.groups == 1 && orient == "Vertical" {
+                                if order == PARETO && t.groups == 1 && orient == "Vertical" && !percent {
                                     answers.extend(
                                         ktexts
                                             .iter()
@@ -1132,7 +1360,7 @@ fn student_copies_leak_nothing_anywhere_in_the_source() {
                                     assert_eq!(bars(&stu, 1.0), bars(&key, 1.0), "{tag}: the bars are given");
                                 }
                                 // answer blanks have a fixed length, whatever the answers
-                                let blanks: Vec<f64> = elements(&stu).iter().filter(|e| e.tag == "line" && e.n("stroke-width") == 1.0 && e.n("y1") == e.n("y2") && e.n("x1") > 40.0 && e.a("stroke").as_deref() != Some(GRID) && e.a("stroke").as_deref() != Some("#cccccc")).map(|e| e.n("x2") - e.n("x1")).collect();
+                                let blanks: Vec<f64> = elements(&stu).iter().filter(|e| e.tag == "line" && e.n("stroke-width") == 1.0 && e.n("y1") == e.n("y2") && e.n("x1") > 40.0 && e.a("stroke").as_deref() != Some(GRID) && e.a("stroke").as_deref() != Some("#cccccc") && e.a("stroke").as_deref() != Some("#999999")).map(|e| e.n("x2") - e.n("x1")).collect();
                                 assert!(!blanks.is_empty());
                             }
                         }
@@ -1192,11 +1420,35 @@ fn print_is_exactly_grey_and_survives_a_66_percent_bitonal_copy() {
     let all_bars: Vec<_> = elements(&svg).into_iter().filter(|e| e.tag == "rect" && e.a("width").as_deref() != Some("100%")).map(|e| (e.n("x"), e.n("y"), e.n("width"), e.n("height"), e.a("fill").unwrap())).collect();
     let (mut g0, mut g1) = (Vec::new(), Vec::new());
     for b in &all_bars {
-        if b.4 == "url(#vs-hatch0)" { g0.push(frac(b)) } else { g1.push(frac(b)) }
+        if b.4 == "#999999" { g0.push(frac(b)) } else { g1.push(frac(b)) }
         // the outline stays: the middle of the top edge is black
         assert!(black(b.0 + b.2 / 2.0, b.1), "{b:?} outline");
     }
-    assert!(g0.iter().all(|f| *f < 0.05) && g1.iter().all(|f| *f > 0.12), "the two groups stay apart: {g0:?} {g1:?}");
+    // LOW: the solid first series and the grid both survive the copy (they used to be too light)
+    assert!(g0.iter().all(|f| *f > 0.9), "the solid series survives a copy: {g0:?}");
+    assert!(g1.iter().all(|f| *f > 0.12 && *f < 0.9), "the hatched series survives and stays apart: {g1:?}");
+    let grid: Vec<El> = elements(&svg).into_iter().filter(|e| e.tag == "line" && e.a("stroke").as_deref() == Some("#999999") && e.n("y1") == e.n("y2")).collect();
+    assert!(!grid.is_empty(), "the Print grid is drawn");
+    let topmost = grid.iter().min_by(|a, b| a.n("y1").partial_cmp(&b.n("y1")).unwrap()).unwrap();
+    assert!(black((topmost.n("x1") + topmost.n("x2")) / 2.0, topmost.n("y1")), "a Print gridline survives the copy");
+    // one series: its fill is the solid grey, so its bars keep their tone in the copy
+    let one = with(&[("data", "Walk, 12\nCar, 9\nBus, 6\nBike, 3"), ("style", "Print")]);
+    let svg1 = render(&one);
+    let png1 = crate::figures::to_png(&svg1, sc as f32).unwrap();
+    let img1 = image::load_from_memory(&png1).unwrap().to_luma8();
+    let solid: Vec<_> = elements(&svg1).into_iter().filter(|e| e.tag == "rect" && e.a("width").as_deref() != Some("100%") && e.a("stroke").as_deref() != Some("none")).map(|e| (e.n("x"), e.n("y"), e.n("width"), e.n("height"), e.a("fill").unwrap())).filter(|b| b.4 == "#999999").collect();
+    assert!(!solid.is_empty());
+    for b in &solid {
+        let (x0, y0, x1, y1) = ((b.0 + 3.0) * sc, (b.1 + 3.0) * sc, (b.0 + b.2 - 3.0) * sc, (b.1 + b.3 - 3.0) * sc);
+        let (mut on, mut all) = (0, 0);
+        for x in x0 as u32..x1 as u32 {
+            for y in y0 as u32..y1 as u32 {
+                all += 1;
+                on += (img1.get_pixel(x, y)[0] < 168) as u32;
+            }
+        }
+        assert!(on as f64 / all.max(1) as f64 > 0.9, "a single-series Print bar keeps its tone: {b:?}");
+    }
     for (e, b) in ink(&svg) {
         let mut any = false;
         for x in (b.0 * sc) as u32..=(b.2 * sc) as u32 {
