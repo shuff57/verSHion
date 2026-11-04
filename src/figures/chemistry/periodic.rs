@@ -8,13 +8,28 @@
 //! periods 6 and 7 belong to the f-block strips). The main group is groups 1, 2 and 13-18 (50
 //! elements). Every one of the 118 elements is in exactly one cell in the full setting.
 //!
-//! **Categories.** Ten, following the 18-column form of the IUPAC table as the Royal Society of
-//! Chemistry's periodic table presents it (periodic-table.rsc.org): alkali metal (group 1, not H),
-//! alkaline earth metal (group 2), transition metal (groups 3-12), post-transition metal (Al, Ga,
-//! In, Sn, Tl, Pb, Bi, Nh, Fl, Mc, Lv), metalloid (the staircase B, Si, Ge, As, Sb, Te, Po - the
-//! RSC's metalloid key), reactive nonmetal (H, C, N, O, P, S, Se), halogen (group 17; a category of
-//! its own here rather than a marked subset), noble gas (group 18), lanthanide (57-71) and
-//! actinide (89-103). At and Ts are halogens, not metalloids. No element is left uncoloured.
+//! **Categories.** Ten: alkali metal (group 1, not H), alkaline earth metal (group 2), transition
+//! metal (groups 3-12), post-transition metal (Al, Ga, In, Sn, Tl, Pb, Bi, Nh, Fl, Mc, Lv),
+//! metalloid, reactive nonmetal (H, C, N, O, P, S, Se), halogen (group 17; a category of its own here
+//! rather than a marked subset), noble gas (group 18), lanthanide (57-71) and actinide (89-103).
+//! At and Ts are halogens, not metalloids. No element is left uncoloured.
+//!
+//! **The metalloid boundary is a convention.** This figure draws the teaching staircase
+//! B, Si, Ge, As, Sb, Te, Po. OpenStax Chemistry 2e (section 18.3) names the first six; many school
+//! tables add polonium, but conventions differ and the Royal Society of Chemistry's own polonium
+//! page classes it as a metal (several tables make it a post-transition metal). The figure states
+//! this under the key as well; a class should use the list its own textbook prints.
+//!
+//! **Names and spellings.** The data table this app shares (and this figure) uses the US spellings
+//! of OpenStax Chemistry 2e: Aluminum, Cesium, Sulfur (aluminum, cesium, sulfur). IUPAC and the
+//! Royal Society of Chemistry print Aluminium and Caesium (aluminium, caesium). The figure says so
+//! under the key, so the citation matches what is printed. The 18-column layout is the IUPAC form.
+//!
+//! **Atomic masses.** The optional mass under each atomic number is the IUPAC 2021 standard atomic
+//! weight (CIAAW), printed to at most three decimals; elements with no standard atomic weight
+//! (Tc, Pm, Po and above except Th, Pa and U) carry the mass number of their longest-lived isotope
+//! in square brackets, the convention OpenStax Chemistry 2e section 2.5 describes. The masses are
+//! not drawn at the Small label size, where the cell has no room for a fourth line.
 //!
 //! **Valence.** For a main-group element the group number is a valence count for groups 1 and 2
 //! (1 and 2 electrons); for groups 13-18 the count is the group number minus 10 (3 to 8); helium
@@ -25,7 +40,8 @@
 //! direction: atomic radius falls across a period and rises down a group; electronegativity rises
 //! across a period and falls down a group. That is a simplification, not a per-element measurement:
 //! the d- and f-blocks are not regular, the lanthanide contraction makes period 6 unusual, and He,
-//! Ne and Ar have no Pauling electronegativity. The FAQ says so.
+//! Ne and Ar have no Pauling electronegativity. The caveat is printed under the arrows in the SVG
+//! as well as in the FAQ, so an exported sheet carries it.
 //!
 //! **What is an answer.** The highlighted element's name, atomic number, group, period, category
 //! and valence count are worked out from the typed symbol or number, so they are printed only under
@@ -54,8 +70,13 @@ pub const CATS: [&str; 10] = [
     "lanthanide",
     "actinide",
 ];
-/// The metalloid staircase drawn here (the RSC periodic table's metalloid key).
+/// The teaching staircase drawn here; see the header for the convention and its caveat.
 pub const METALLOIDS: [usize; 7] = [5, 14, 32, 33, 51, 52, 84];
+/// A one- or two-letter code per category, printed in the cell and in the key swatch so a Print
+/// reader never has to tell two hatches apart by direction alone.
+pub const CAT_CODES: [&str; 10] = ["A", "E", "T", "P", "M", "N", "X", "G", "Ln", "An"];
+/// Param key of the optional relative-atomic-mass line.
+pub const SHOW_MASS: &str = "show_mass";
 /// Group-17 members, a category of their own in this figure.
 pub const HALOGENS: [usize; 6] = [9, 17, 35, 53, 85, 117];
 pub const PERIODS: usize = 7;
@@ -144,6 +165,28 @@ pub fn category(z: usize) -> usize {
     5
 }
 
+/// Whether IUPAC publishes a standard atomic weight for this element. Tc, Pm, Po through Ac, and
+/// Np and above have none; Th, Pa and U do.
+pub fn has_standard_weight(z: usize) -> bool {
+    !(z == 43 || z == 61 || (84..=89).contains(&z) || z >= 93)
+}
+
+/// The relative atomic mass as printed: the IUPAC 2021 standard atomic weight to at most three
+/// decimals (trailing zeros dropped), or the mass number of the longest-lived isotope in square
+/// brackets when there is no standard weight. None outside 1..=118.
+pub fn mass_text(z: usize) -> Option<String> {
+    if !(1..=118).contains(&z) { return None; }
+    let v = data::ELEMENTS[z - 1].2;
+    if has_standard_weight(z) {
+        let mut t = format!("{v:.3}");
+        while t.ends_with('0') { t.pop(); }
+        if t.ends_with('.') { t.pop(); }
+        Some(t)
+    } else {
+        Some(format!("[{}]", v.round() as i64))
+    }
+}
+
 /// Main-group valence electrons; None for the d- and f-blocks, where the group number is not one.
 pub fn valence(z: usize) -> Option<u8> {
     let p = place(z)?;
@@ -184,8 +227,8 @@ fn edit(a: &str, b: &str) -> usize {
 }
 
 /// The nearest symbol within one edit, for a typo's advice line; None when nothing is close.
-/// A candidate that starts with the same letter as the typo wins a tie, so "A" suggests Ag
-/// rather than H.
+/// A candidate that starts with the same letter as the typo wins a tie, so "A" suggests Al
+/// (the first aluminium-group symbol) rather than H.
 pub fn suggest(text: &str) -> Option<&'static str> {
     let up = text.trim().to_ascii_uppercase();
     if up.is_empty() || up.chars().count() > 3 { return None; }
@@ -249,6 +292,9 @@ pub struct Setup {
     pub highlight: Option<usize>,
     /// What was typed, trimmed and cut short: echoed in the prompt, never the answer.
     pub echo: String,
+    /// The typed highlight was a bare atomic number, so the student copy does not ask the Z back.
+    pub typed_number: bool,
+    pub show_mass: bool,
     pub answers: bool,
 }
 
@@ -278,7 +324,12 @@ pub fn read(p: &Params) -> (Setup, Vec<String>) {
     };
     // the two shared controls: an odd saved value falls back the same way the drawing does
     let _ = choice_index(p, "style", &["Colour", "Print"], 0, "Style", &mut notes);
-    let _ = choice_index(p, "label_size", &["Large", "Medium", "Small"], 1, "Label size", &mut notes);
+    let size = choice_index(p, "label_size", &["Large", "Medium", "Small"], 1, "Label size", &mut notes);
+    let show_mass = match p.0.get(SHOW_MASS) {
+        Some(Value::B(b)) => *b,
+        Some(_) => { notes.push("Show relative atomic mass is not on or off, so it is off.".to_string()); false }
+        None => false,
+    };
     let typed = match p.0.get("highlight") {
         Some(Value::S(s)) => s.clone(),
         Some(_) => {
@@ -295,14 +346,22 @@ pub fn read(p: &Params) -> (Setup, Vec<String>) {
     };
     if let Some(z) = highlight {
         if !block_shows(block, z) {
+            // name only a setting that really shows it: an f-block element is hidden by
+            // "With transition metals" too, so that setting must not be offered for La..Lr
+            let setting = if is_f(z) { BLOCKS[2] } else { BLOCKS[1] };
             notes.push(format!(
-                "The highlighted element is not in the block shown, so its cell is not drawn; choose {} or {} to see it.",
-                BLOCKS[1], BLOCKS[2]
+                "The highlighted element is not in the block shown, so its cell is not drawn; choose {} to see it.",
+                setting
             ));
         }
     }
+    if show_mass && size == 2 {
+        notes.push("Atomic masses are not drawn at the Small label size; choose Medium or Large to show them.".to_string());
+    }
     let answers = p.b(SHOW_ANSWERS);
-    (Setup { block, labels, key, trends, highlight, echo, answers }, notes)
+    let trimmed = typed.trim();
+    let typed_number = !trimmed.is_empty() && trimmed.chars().all(|c| c.is_ascii_digit()) && highlight.is_some();
+    (Setup { block, labels, key, trends, highlight, echo, typed_number, show_mass, answers }, notes)
 }
 
 pub fn warnings(p: &Params) -> Vec<String> { read(p).1 }
@@ -360,7 +419,9 @@ fn params() -> Vec<ParamDef> {
             .hint("Main group draws groups 1, 2 and 13-18; With transition metals adds groups 3-12; Full adds the two 15-wide f-block strips below"),
         ParamDef::choice("labels", "Labels", &LABELS, LABELS[0])
             .hint("Names are drawn only at Large, where the cells are tall enough for a third line; at Small and Medium the third line is left out"),
-        ParamDef::bool("key", "Category key", true).hint("The ten categories below the grid, with their colour or Print hatch"),
+        ParamDef::bool("key", "Category key", true).hint("The ten categories below the grid, with their colour or Print hatch and a one- or two-letter code"),
+        ParamDef::bool(SHOW_MASS, "Show relative atomic mass", false)
+            .hint("The IUPAC 2021 standard atomic weight to at most three decimals; a value in square brackets is the mass number of the longest-lived isotope. Not drawn at the Small label size"),
         ParamDef::choice("trends", "Trends", &TRENDS, "Off")
             .hint("A general direction only: radius falls across a period and rises down a group; electronegativity rises across and falls down. The d- and f-blocks are not regular, and He, Ne and Ar have no Pauling value"),
         ParamDef::text("highlight", "Highlight an element", "")
@@ -422,7 +483,12 @@ fn panel_text(st: &Setup, ans: bool) -> Vec<(String, &'static str)> {
             v.push((format!("Valence shell: {} electron{} ({why}).", n, if n == 1 { "" } else { "s" }), "answer"));
         }
     } else {
-        v.push(("Name ______ - Z ______; group ______; period ______; category ______.".into(), "blank"));
+        let fields = if st.typed_number {
+            "Name ______ - group ______; period ______; category ______."
+        } else {
+            "Name ______ - Z ______; group ______; period ______; category ______."
+        };
+        v.push((fields.into(), "blank"));
         if valence(z).is_some() {
             v.push(("Valence shell: ______ electrons.".into(), "blank"));
         }
@@ -444,9 +510,11 @@ pub fn build(p: &Params) -> (String, Report) {
     let edge_w = if print { 1.2 } else { 0.9 };
     let grid_line = if print { "#111111" } else { "#111111" };
 
-    let fs_num = 0.22 * cell;
-    let fs_sym = 0.33 * cell;
+    let fs_num = 0.20 * cell;
+    let fs_sym = 0.30 * cell;
     let fs_name = 0.128 * cell;
+    let fs_code = 0.15 * cell;
+    let fs_mass = 0.115 * cell;
     let fs_head = 0.24 * cell;
     let fs_gap = 0.19 * cell;
     let fs_frow = 0.20 * cell;
@@ -460,7 +528,12 @@ pub fn build(p: &Params) -> (String, Report) {
     let margin = (0.30 * cell).round().max(8.0);
     let gutter = 0.62 * cell;
     let grid_left = margin + gutter;
-    let grid_top = 0.64 * cell;
+    let caption = match st.block {
+        0 => "Periodic table: main-group block (groups 1, 2, 13-18)",
+        1 => "Periodic table: main group with the d-block (groups 1-18)",
+        _ => "Periodic table: full table with the f-block (groups 1-18)",
+    };
+    let grid_top = 1.02 * cell;
     let grid_w = ncols as f64 * cell;
     let grid_bottom = grid_top + PERIODS as f64 * cell;
     let w = grid_left + grid_w + margin;
@@ -486,14 +559,20 @@ pub fn build(p: &Params) -> (String, Report) {
     let nlines = key_wrapped.len().max(student_wrapped.len());
     let panel_h = 2.0 * panel_pad + nlines as f64 * panel_lh;
 
-    // --- the fixed valence-and-boundary footnote under the panel
+    // --- the fixed valence-and-mass notes under the panel
     let foot_text = "Main-group valence electrons: group 1 = 1, group 2 = 2, groups 13-18 = group minus 10; helium has 2 in group 18.";
-    let foot_lines = wrap(foot_text, fs_note, text_w_max);
-    let foot_h = foot_lines.len() as f64 * 1.45 * fs_note;
+    let mut foot_lines = wrap(foot_text, fs_note, text_w_max);
+    let mass_at = foot_lines.len();
+    if st.show_mass {
+        foot_lines.extend(wrap("Atomic masses are the IUPAC 2021 standard atomic weights; a value in square brackets is the mass number of the longest-lived isotope.", fs_note, text_w_max));
+    }
+    let foot_h = foot_lines.len() as f64 * 1.45 * fs_note + if st.show_mass { 0.10 * cell } else { 0.0 };
 
-    // --- the category key, laid out in flow rows
-    let sw = (0.55 * cell).max(20.0);
-    let sh = (0.34 * cell).max(12.0);
+    // --- the category key, laid out in flow rows. The swatches are at least 24 x 24 so a hatch
+    // shows at least two repeats, and each carries its one- or two-letter code.
+
+    let sw = (0.65 * cell).max(24.0);
+    let sh = (0.55 * cell).max(24.0);
     let key_gap = 18.0;
     let title_lh = 1.5 * fs_title;
     let row_h = sh + 0.34 * fs_key;
@@ -511,13 +590,19 @@ pub fn build(p: &Params) -> (String, Report) {
         xcur += *ew + key_gap;
     }
     if !entries.is_empty() { entry_rows = row + 1; }
-    let src_text = "Metalloids are the staircase B, Si, Ge, As, Sb, Te, Po. Categories follow the 18-column IUPAC form (Royal Society of Chemistry periodic table).";
-    let src_lines = if st.key { wrap(src_text, fs_note, text_w_max) } else { Vec::new() };
-    let key_h = if st.key {
-        title_lh + entry_rows as f64 * row_h + 0.40 * cell + src_lines.len() as f64 * 1.45 * fs_note
-    } else {
-        0.0
-    };
+    let mut present = [false; 10];
+    for z in 1..=118 { if block_shows(st.block, z) { present[category(z)] = true; } }
+    let absent: Vec<&str> = (0..10).filter(|i| !present[*i]).map(|i| CATS[i]).collect();
+    let mut src_msgs: Vec<String> = vec![
+        "Metalloids: the staircase B, Si, Ge, As, Sb, Te, Po; conventions differ: OpenStax Chemistry 2e names the first six, and some tables make polonium a post-transition metal.".into(),
+        "Names use the US spellings of OpenStax Chemistry 2e (aluminum, cesium); IUPAC and the RSC print aluminium and caesium.".into(),
+    ];
+    if !absent.is_empty() { src_msgs.push(format!("Not in this view: {}.", absent.join(", "))); }
+    let src_lines: Vec<String> = if st.key {
+        src_msgs.iter().flat_map(|m| wrap(m, fs_note, text_w_max)).collect()
+    } else { Vec::new() };
+    let key_notes_at = title_lh + entry_rows as f64 * row_h + 0.22 * cell;
+    let key_h = if st.key { key_notes_at + src_lines.len() as f64 * 1.45 * fs_note + 0.20 * cell } else { 0.0 };
 
     // --- the trend band
     let trend_fs = 0.235 * cell;
@@ -538,7 +623,13 @@ pub fn build(p: &Params) -> (String, Report) {
         }
         v
     };
-    let trend_h = if st.trends == 0 { 0.0 } else { trend_lines.len() as f64 * 1.5 * trend_fs + 0.25 * cell };
+    let caveat = "General trend only: the d- and f-blocks are irregular, and He, Ne and Ar have no Pauling value.";
+    let caveat_lines = if st.trends == 0 { Vec::new() } else { wrap(caveat, fs_note, text_w_max) };
+    let trend_h = if st.trends == 0 {
+        0.0
+    } else {
+        trend_lines.len() as f64 * 1.5 * trend_fs + 0.25 * cell + caveat_lines.len() as f64 * 1.45 * fs_note + 0.10 * cell
+    };
 
     // --- the notes, printed under the key
     let mut note_lines: Vec<String> = Vec::new();
@@ -561,6 +652,12 @@ pub fn build(p: &Params) -> (String, Report) {
     let mut d = Doc::new(w, h);
     d.describe("Periodic Table", &describe(&st, &notes));
     d.defs(&cf.defs());
+
+    // --- the on-canvas caption (the exported PNG has no panel title above it)
+    d.raw(&format!(
+        r##"<text x="{margin:.2}" y="{:.2}" font-size="{:.2}" text-anchor="start" font-family="{}" font-weight="bold" fill="{ink}" data-o="caption">{caption}</text>"##,
+        0.42 * cell, 0.30 * cell, super::FONT
+    ));
 
     // --- the group numbers across the top and the period numbers down the left
     for (i, g) in groups.iter().enumerate() {
@@ -591,12 +688,22 @@ pub fn build(p: &Params) -> (String, Report) {
             x0 + 0.5, y0 + 0.5, cell - 1.0, cell - 1.0, cf.fill(cat)
         ));
         if st.labels != 1 {
-            d.raw(&cell_text(x0 + 0.10 * cell, y0 + 0.30 * cell, fs_num, "start", ink, &z.to_string(), "number", z, false, print));
+            d.raw(&cell_text(x0 + 0.08 * cell, y0 + 0.24 * cell, fs_num, "start", ink, &z.to_string(), "number", z, false, print));
         }
-        d.raw(&cell_text(x0 + cell / 2.0, y0 + 0.68 * cell, fs_sym, "middle", ink, data::symbol(z), "symbol", z, true, print));
+        if st.show_mass && lf > 0.9 {
+            if let Some(m) = mass_text(z) {
+                d.raw(&cell_text(x0 + 0.08 * cell, y0 + 0.40 * cell, fs_mass, "start", ink, &m, "mass", z, false, print));
+            }
+        }
+        d.raw(&cell_text(x0 + cell / 2.0, y0 + 0.70 * cell, fs_sym, "middle", ink, data::symbol(z), "symbol", z, true, print));
         if st.labels == 2 && lf > 1.2 && text_w(data::name(z), fs_name) <= cell - 2.0 {
             d.raw(&cell_text(x0 + cell / 2.0, y0 + 0.925 * cell, fs_name, "middle", ink, data::name(z), "name", z, false, print));
         }
+        d.raw(&format!(
+            r##"{}{}"##,
+            if print { format!(r##"<text x="{:.2}" y="{:.2}" font-size="{fs_code:.2}" text-anchor="end" font-family="{}" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round" data-o="halo" data-z="{z}">{}</text>"##, x0 + cell - 0.07 * cell, y0 + 0.24 * cell, super::FONT, CAT_CODES[cat]) } else { String::new() },
+            format!(r##"<text x="{:.2}" y="{:.2}" font-size="{fs_code:.2}" text-anchor="end" font-family="{}" fill="{ink}" data-o="cat-code" data-z="{z}" data-f="{cat}">{}</text>"##, x0 + cell - 0.07 * cell, y0 + 0.24 * cell, super::FONT, CAT_CODES[cat])
+        ));
         cells.push(Drawn { z, cat, col, row: pl.row, x0, y0, x1: x0 + cell, y1: y0 + cell });
     }
 
@@ -662,6 +769,14 @@ pub fn build(p: &Params) -> (String, Report) {
                 super::FONT, svg::esc(line)
             ));
         }
+        // the caveat is in the SVG, not only in the app's hint and FAQ
+        let cy = y2 + 0.30 * fs + 0.30 * cell;
+        for (i, line) in caveat_lines.iter().enumerate() {
+            d.raw(&format!(
+                r##"<text x="{grid_left:.2}" y="{:.2}" font-size="{fs_note:.2}" text-anchor="start" font-family="{}" fill="{soft}" data-o="trend-note">{}</text>"##,
+                cy + i as f64 * 1.45 * fs_note, super::FONT, svg::esc(line)
+            ));
+        }
     }
 
     // --- the highlight panel
@@ -683,7 +798,7 @@ pub fn build(p: &Params) -> (String, Report) {
     for (i, line) in foot_lines.iter().enumerate() {
         d.raw(&format!(
             r##"<text x="{grid_left:.2}" y="{:.2}" font-size="{fs_note:.2}" text-anchor="start" font-family="{}" fill="{soft}" data-o="foot">{}</text>"##,
-            foot_top + 0.75 * fs_note + i as f64 * 1.45 * fs_note, super::FONT, svg::esc(line)
+            foot_top + 0.75 * fs_note + i as f64 * 1.45 * fs_note + if st.show_mass && i >= mass_at { 0.10 * cell } else { 0.0 }, super::FONT, svg::esc(line)
         ));
     }
 
@@ -704,6 +819,19 @@ pub fn build(p: &Params) -> (String, Report) {
                 cf.fill(*i)
             ));
             swatches.push((*i, Bx(x, x + sw, sy, sy + sh)));
+            // the code inside the swatch, so the hatch is never the only clue
+            let fs_sw = 0.22 * cell;
+            let (cx, cy) = (x + sw / 2.0, sy + sh / 2.0 + 0.36 * fs_sw);
+            if print {
+                d.raw(&format!(
+                    r##"<text x="{cx:.2}" y="{cy:.2}" font-size="{fs_sw:.2}" text-anchor="middle" font-family="{}" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round" data-o="halo" data-f="{i}">{}</text>"##,
+                    super::FONT, CAT_CODES[*i]
+                ));
+            }
+            d.raw(&format!(
+                r##"<text x="{cx:.2}" y="{cy:.2}" font-size="{fs_sw:.2}" text-anchor="middle" font-family="{}" fill="{ink}" font-weight="bold" data-o="key-code" data-f="{i}">{}</text>"##,
+                super::FONT, CAT_CODES[*i]
+            ));
             d.raw(&format!(
                 r##"<text x="{:.2}" y="{:.2}" font-size="{fs_key:.2}" text-anchor="start" font-family="{}" fill="{ink}" data-o="key" data-f="{i}">{}</text>"##,
                 x + sw + 6.0, sy + sh / 2.0 + 0.36 * fs_key, super::FONT, svg::esc(CATS[*i])
@@ -711,7 +839,7 @@ pub fn build(p: &Params) -> (String, Report) {
             x += ew + key_gap;
         }
         // the boundary note under the swatches
-        let ny = key_top + title_lh + entry_rows as f64 * row_h + 0.20 * cell;
+        let ny = key_top + key_notes_at;
         for (i, line) in src_lines.iter().enumerate() {
             d.raw(&format!(
                 r##"<text x="{grid_left:.2}" y="{:.2}" font-size="{fs_note:.2}" text-anchor="start" font-family="{}" fill="{soft}" data-o="key-note">{}</text>"##,
@@ -757,7 +885,15 @@ fn describe(st: &Setup, _notes: &[String]) -> String {
     if st.key { s.push_str(", and a key of element categories"); }
     if st.trends == 1 { s.push_str(", with arrows for the general atomic-radius trend"); }
     if st.trends == 2 { s.push_str(", with arrows for the general electronegativity trend"); }
-    if st.highlight.is_some() { s.push_str(". The panel under the table reads out the highlighted element"); }
+    if st.trends != 0 { s.push_str(" and the note that the trend is only general"); }
+    if st.show_mass { s.push_str(", with relative atomic masses"); }
+    if st.highlight.is_some() {
+        if st.answers {
+            s.push_str(". The panel under the table reads out the highlighted element");
+        } else {
+            s.push_str(". The panel under the table has blanks for the highlighted element's details");
+        }
+    }
     s.push('.');
     s
 }
@@ -777,6 +913,7 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
         Example { name: "Hydrogen highlighted (student sheet)", params: vec![s("highlight", "H"), b(SHOW_ANSWERS, false)] },
         Example { name: "Print handout with element names", params: vec![s("block", BLOCKS[2]), s("labels", LABELS[2]), s("label_size", "Large"), s("style", "Print")] },
         Example { name: "Electronegativity trend with gold highlighted", params: vec![s("block", BLOCKS[1]), s("trends", TRENDS[2]), s("highlight", "79")] },
+        Example { name: "Full table with atomic masses", params: vec![s("block", BLOCKS[2]), b(SHOW_MASS, true)] },
     ])
 }
 

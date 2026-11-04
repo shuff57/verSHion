@@ -4222,7 +4222,7 @@ const PHOTOSYNTHESIS: &[Faq] = &[
 const PERIODIC_TABLE: &[Faq] = &[
     Faq {
         q: "Why is the table shaped this way?",
-        a: "The rows are periods and the columns are groups. A period holds the elements being filled in the same outermost electron shell, so period 1 has only the two electrons of the first shell, period 2 has eight places and the later periods have eighteen. The shape also shows the blocks: groups 1 and 2 are the s-block, groups 13 to 18 the p-block, groups 3 to 12 the d-block, and the two f-block strips below. The eighteen-column form is the one used by the IUPAC table and by the Royal Society of Chemistry periodic table (periodic-table.rsc.org), whose metalloid and halogen keys are the ones this figure follows.",
+        a: "The rows are periods and the columns are groups. A period holds the elements being filled in the same outermost electron shell, so period 1 has only the two electrons of the first shell, period 2 has eight places, and the later periods have eighteen columns (periods 6 and 7 each hold thirty-two elements once the f-block is counted). The shape also shows the blocks: groups 1 and 2 are the s-block, groups 13 to 18 the p-block, groups 3 to 12 the d-block, and the two f-block strips below. The eighteen-column layout is the IUPAC form (as drawn at periodic-table.rsc.org). Each cell carries the atomic number (top left), the symbol, a category code (top right), and optionally the relative atomic mass under the number; the mass is the IUPAC 2021 standard atomic weight, and a value in square brackets is the mass number of the longest-lived isotope, as OpenStax Chemistry 2e section 2.5 explains. The names use the US spellings of OpenStax Chemistry 2e (aluminum, cesium); IUPAC and the RSC print aluminium and caesium.",
     },
     Faq {
         q: "What is a group, and what is a period?",
@@ -4234,7 +4234,7 @@ const PERIODIC_TABLE: &[Faq] = &[
     },
     Faq {
         q: "Where is the metalloid staircase, and what does it mean?",
-        a: "The staircase is the zig-zag line that separates the metals on the left from the nonmetals on the right, and the elements on it are the metalloids. This figure uses boron, silicon, germanium, arsenic, antimony, tellurium and polonium (B, Si, Ge, As, Sb, Te, Po), the metalloid key of the Royal Society of Chemistry periodic table. Astatine and tennessine are group 17 and are coloured as halogens, not as metalloids. The boundary is a convention, not a measurement: some books stop the staircase at tellurium and leave polonium out, and a few place astatine on it, so a class should use the list its own textbook prints.",
+        a: "The staircase is the zig-zag line that separates the metals on the left from the nonmetals on the right, and the elements on it are the metalloids. This figure draws boron, silicon, germanium, arsenic, antimony, tellurium and polonium (B, Si, Ge, As, Sb, Te, Po). OpenStax Chemistry 2e (section 18.3) names the first six; many school tables add polonium, but conventions differ and the Royal Society of Chemistry's own polonium page classes it as a metal, so some tables make it a post-transition metal. Astatine and tennessine are group 17 and are coloured as halogens, not as metalloids. The boundary is a convention, not a measurement; a class should use the list its own textbook prints.",
     },
     Faq {
         q: "Why is the f-block pulled out into two strips?",
@@ -4242,6 +4242,6 @@ const PERIODIC_TABLE: &[Faq] = &[
     },
     Faq {
         q: "How exact are the trend arrows?",
-        a: "They are a stated simplification, not a per-element measurement. Across a period the nuclear charge grows while the shell stays the same, so atomic radius generally falls and electronegativity generally rises; down a group a new shell is added, so radius generally rises and electronegativity generally falls. The word generally matters: the d-block and f-block are not regular, the lanthanide contraction makes period 6 unusual, and helium, neon and argon have no Pauling electronegativity value at all. The arrows give the direction a course asks for; they do not rank every pair of neighbours, and an exam question that needs a number should use a data table.",
+        a: "They are a stated simplification, not a per-element measurement. Across a period the nuclear charge grows while the shell stays the same, so atomic radius generally falls and electronegativity generally rises; down a group a new shell is added, so radius generally rises and electronegativity generally falls. The word generally matters: the d-block and f-block are not regular, the lanthanide contraction makes period 6 unusual, and helium, neon and argon have no Pauling electronegativity value at all. The arrows give the direction a course asks for; they do not rank every pair of neighbours, and an exam question that needs a number should use a data table. The exported figure prints this caveat under the arrows, so a handout carries it too.",
     },
 ];

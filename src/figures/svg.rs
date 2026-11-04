@@ -323,39 +323,44 @@ impl Fills {
 }
 
 /// Ten category fills for a figure with more categories than [`Fills`]' six series colours (the
-/// periodic table's ten). The screen colours are the Tableau 10 qualitative set, dark enough for
-/// black type on top. In Print every category gets its own 8 x 8 grey hatch: unlike the first
-/// `Fills` pattern, which is a plain light wash, every tile here carries a foreground mark, so a
-/// 66 % bitonal copy keeps all ten apart. The extra patterns live beside `Fills` and are emitted
-/// only when a figure asks, so every existing figure's `<defs>` is unchanged.
+/// periodic table's ten). The screen colours are the Tableau 10 qualitative set, all light enough
+/// for the black type on top to clear WCAG AA at the smallest cell size (the transition blue is
+/// lightened from the stock Tableau hue for that reason). In Print every category gets its own
+/// 12 x 12 grey hatch: unlike the first `Fills` pattern, which is a plain light wash, every tile
+/// here carries a foreground mark of at least 1.6 px, so a 66 % bitonal copy keeps all ten apart.
+/// The extra patterns live beside `Fills` and are emitted only when a figure asks, so every
+/// existing figure's `<defs>` is unchanged.
 #[derive(Clone, Copy, Debug)]
 pub struct CategoryFills { print: bool }
 
 impl CategoryFills {
     /// Screen colours, one per category, in index order.
     pub const COLOURS: [&'static str; 10] = [
-        "#f28e2b", "#edc948", "#4e79a7", "#76b7b2", "#59a14f",
+        "#f28e2b", "#edc948", "#6f9bd1", "#76b7b2", "#59a14f",
         "#b07aa1", "#e15759", "#9c755f", "#ff9da7", "#bab0ac",
     ];
     pub fn new(p: &super::Params) -> Self { CategoryFills { print: p.s("style") == "Print" } }
     pub fn is_print(&self) -> bool { self.print }
     /// The pattern definitions for Print; empty in Colour. Every tile is 12 x 12 with medium-grey
-    /// marks heavy enough (2 px lines) to stay dark in a 66 % bitonal copy, and light enough that
+    /// marks heavy enough (at least 1.6 px) to stay dark in a 66 % bitonal copy, and light enough that
     /// black type over it reads.
     pub fn defs(&self) -> String {
         if !self.print { return String::new(); }
         let line = |a: &str, w: f64| format!(r##"<path d="{a}" stroke="#666" stroke-width="{w}" fill="none"/>"##);
         let pats: [String; 10] = [
             line("M-2,2 l4,-4 M0,12 l12,-12 M10,14 l4,-4", 2.0),
-            line("M-2,10 l4,4 M0,0 l12,12 M10,-2 l4,4", 2.0),
+            // two parallel diagonal dashes: alkaline earth differs from alkali in weight, not only direction
+            format!("{}{}", line("M-2,2 l4,-4 M0,12 l12,-12 M10,14 l4,-4", 1.8), line("M-2,5 l4,-4 M0,15 l12,-12 M10,17 l4,-4", 1.8)),
             line("M0,3 h12 M0,9 h12", 2.0),
             line("M3,0 v12 M9,0 v12", 2.0),
-            r##"<circle cx="3" cy="3" r="1.6" fill="#666"/><circle cx="9" cy="9" r="1.6" fill="#666"/>"##.into(),
+            // four dots per tile: the old two-dot tile lost almost all its ink in a 66 % copy
+            r##"<circle cx="3" cy="3" r="1.6" fill="#666"/><circle cx="9" cy="3" r="1.6" fill="#666"/><circle cx="3" cy="9" r="1.6" fill="#666"/><circle cx="9" cy="9" r="1.6" fill="#666"/>"##.into(),
             format!("{}{}", line("M-2,2 l4,-4 M0,12 l12,-12 M10,14 l4,-4", 1.6), line("M-2,10 l4,4 M0,0 l12,12 M10,-2 l4,4", 1.6)),
             r##"<rect x="1" y="1" width="4.5" height="4.5" fill="none" stroke="#666" stroke-width="1.8"/><rect x="6.5" y="6.5" width="4.5" height="4.5" fill="none" stroke="#666" stroke-width="1.8"/>"##.into(),
             format!("{}{}", line("M0,3 h7", 2.2), line("M6,9 h7", 2.2)),
-            line("M0,6 l3,-3 l3,3 l3,-3 l3,3", 2.0),
-            format!("{}{}", line("M0,3 h6 M3,0 v6", 1.6), line("M6,9 h6 M9,6 v6", 1.6)),
+            // two zigzag rows, so the lanthanide tile is not a row of horizontal dashes
+            format!("{}{}", line("M0,3 l3,-2 l3,2 l3,-2 l3,2", 1.8), line("M0,9 l3,2 l3,-2 l3,2 l3,-2", 1.8)),
+            format!("{}{}", line("M0,3 h6 M3,0 v6", 1.8), line("M6,9 h6 M9,6 v6", 1.8)),
         ];
         let mut out = String::new();
         for (i, fg) in pats.iter().enumerate() {
@@ -494,6 +499,7 @@ mod tests {
         let colours: std::collections::BTreeSet<String> = (0..10).map(|i| c.fill(i)).collect();
         assert_eq!(colours.len(), 10);
         assert_eq!(c.fill(0), "#f28e2b");
+        assert_eq!(c.fill(2), "#6f9bd1", "the transition blue is lightened for black type");
     }
 
     #[test]

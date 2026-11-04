@@ -54,6 +54,26 @@ const TRANSITION: [usize; 38] = [
 const POST: [usize; 11] = [13, 31, 49, 50, 81, 82, 83, 113, 114, 115, 116];
 const NONMETAL: [usize; 7] = [1, 6, 7, 8, 15, 16, 34];
 const NOBLE: [usize; 7] = [2, 10, 18, 36, 54, 86, 118];
+
+/// The printed relative atomic mass of each element, Z = 1..=118: IUPAC 2021 standard atomic
+/// weights to at most three decimals, and the longest-lived isotope's mass number in brackets for
+/// the elements with no standard weight (Tc, Pm, Po-Ac, Np-Og). Written out here rather than read
+/// from the data table, so a wrong table value cannot agree with itself.
+const MASSES: [&str; 118] = [
+    "1.008", "4.003", "6.94", "9.012", "10.81", "12.011", "14.007", "15.999", "18.998", "20.18",
+    "22.99", "24.305", "26.982", "28.085", "30.974", "32.06", "35.45", "39.948", "39.098", "40.078",
+    "44.956", "47.867", "50.942", "51.996", "54.938", "55.845", "58.933", "58.693", "63.546", "65.38",
+    "69.723", "72.63", "74.922", "78.971", "79.904", "83.798", "85.468", "87.62", "88.906", "91.224",
+    "92.906", "95.95", "[98]", "101.07", "102.91", "106.42", "107.87", "112.41", "114.82", "118.71",
+    "121.76", "127.6", "126.9", "131.29", "132.91", "137.33", "138.91", "140.12", "140.91", "144.24",
+    "[145]", "150.36", "151.96", "157.25", "158.93", "162.5", "164.93", "167.26", "168.93", "173.05",
+    "174.97", "178.49", "180.95", "183.84", "186.21", "190.23", "192.22", "195.08", "196.97", "200.59",
+    "204.38", "207.2", "208.98", "[209]", "[210]", "[222]", "[223]", "[226]", "[227]", "232.04",
+    "231.04", "238.03", "[237]", "[244]", "[243]", "[247]", "[247]", "[251]", "[252]", "[257]",
+    "[258]", "[259]", "[266]", "[267]", "[268]", "[269]", "[270]", "[269]", "[278]", "[281]",
+    "[282]", "[285]", "[286]", "[289]", "[290]", "[293]", "[294]", "[294]",
+];
+
 const LANTH: [usize; 15] = [57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71];
 const ACTIN: [usize; 15] = [89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103];
 
@@ -193,7 +213,7 @@ fn it_is_registered_with_a_faq_examples_and_its_controls() {
     assert_eq!(d.subject, Subject::Chemistry);
     assert!((4..=6).contains(&crate::figures::faq::faq_for(ID).len()), "{} FAQs", crate::figures::faq::faq_for(ID).len());
     let keys: Vec<&str> = (d.params)().iter().map(|p| p.key).collect();
-    for k in ["block", "labels", "key", "trends", "highlight", SHOW_ANSWERS, "style", "label_size"] {
+    for k in ["block", "labels", "key", "trends", "highlight", SHOW_MASS, SHOW_ANSWERS, "style", "label_size"] {
         assert!(keys.contains(&k), "no {k} param");
     }
     assert!(crate::figures::chemistry::skin_intro(ID).is_some());
@@ -400,17 +420,86 @@ fn the_category_table_partitions_all_118_elements() {
 }
 
 #[test]
-fn the_header_and_the_faq_state_the_same_boundary_and_source() {
+fn the_header_and_the_faq_state_the_same_boundary_source_spelling_and_mass_rule() {
     let src = include_str!("../periodic.rs");
     let faq = crate::figures::faq::faq_for(ID).iter().map(|q| format!("{} {}", q.q, q.a)).collect::<String>();
     for (what, text) in [("header", src), ("FAQ", faq.as_str())] {
         assert!(text.contains("B, Si, Ge, As, Sb, Te, Po"), "{what} does not state the staircase");
-        assert!(text.contains("Royal Society of Chemistry"), "{what} does not cite the source");
+        assert!(text.contains("OpenStax Chemistry 2e"), "{what} does not cite OpenStax");
+        assert!(text.contains("conventions differ"), "{what} does not say the boundary is a convention");
+        assert!(text.contains("polonium") && text.contains("post-transition metal"), "{what} does not caveat polonium");
+        assert!(text.contains("aluminum") && text.contains("cesium"), "{what} does not state the US spellings");
+        assert!(text.contains("aluminium") && text.contains("caesium"), "{what} does not name the IUPAC/RSC spellings");
+        assert!(text.contains("IUPAC 2021"), "{what} does not cite the mass data");
     }
+    assert!(!src.contains("RSC's metalloid key"), "the header still overstates the RSC's metalloid key");
+    assert!(!faq.contains("RSC's metalloid key"), "the FAQ still overstates the RSC's metalloid key");
+    assert!(faq.contains("periods 6 and 7 each hold thirty-two elements"), "the FAQ does not correct the period count");
     assert!(faq.contains("simplification"), "the FAQ does not call the trends a simplification");
     assert!(faq.contains("no Pauling electronegativity"), "the FAQ does not warn about the noble gases");
     assert!(faq.contains("hydrogen"), "the FAQ does not explain hydrogen");
     assert!(faq.contains("fifteen"), "the FAQ does not say why the f-block is pulled out");
+    assert!(faq.contains("caveat") && (faq.contains("prints") || faq.contains("printed")), "the FAQ does not say the caveat is in the figure");
+}
+
+#[test]
+fn the_names_follow_the_stated_us_spelling_and_the_citation_matches() {
+    // The choice: the app keeps the US spellings of OpenStax Chemistry 2e; the figure says so and
+    // names the IUPAC/RSC variants. The independent list in this file is written to that choice.
+    assert_eq!(data::name(13), "Aluminum");
+    assert_eq!(data::name(55), "Cesium");
+    assert_eq!(data::name(16), "Sulfur");
+    assert_eq!(names()[12], "Aluminum");
+    assert_eq!(names()[54], "Cesium");
+    let src = include_str!("../periodic.rs");
+    let faq = crate::figures::faq::faq_for(ID).iter().map(|q| format!("{} {}", q.q, q.a)).collect::<String>();
+    for (what, text) in [("header", src), ("FAQ", faq.as_str())] {
+        let low = text.to_lowercase();
+        assert!(low.contains("us spellings"), "{what} does not name the spelling choice");
+        assert!(low.contains("aluminum"), "{what} does not print the chosen spelling");
+        assert!(low.contains("aluminium"), "{what} hides the other spelling");
+        assert!(low.contains("cesium") && low.contains("caesium"), "{what} hides one caesium spelling");
+    }
+    // and the figure itself says it under the key, on the exported sheet
+    let (svg, _) = build_of(&[]);
+    let notes: String = texts(&svg).iter().filter(|t| t.kind == "key-note").map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ");
+    assert!(notes.contains("aluminum") && notes.contains("cesium"), "{notes}");
+    assert!(notes.contains("aluminium") && notes.contains("caesium"), "{notes}");
+}
+
+#[test]
+fn the_hidden_element_advice_names_only_a_setting_that_really_shows_it() {
+    let named = |note: &str| -> Vec<usize> {
+        BLOCKS.iter().enumerate().filter(|(_, b)| note.contains(&format!("choose {b} to see it"))).map(|(i, _)| i).collect()
+    };
+    let cases = [(0usize, "La", 57usize), (0, "Ac", 89), (1, "La", 57), (1, "Ac", 89), (0, "Pd", 46), (0, "Ce", 58)];
+    for (block, typed, z) in cases {
+        let p = with(&[s("block", BLOCKS[block]), s("highlight", typed)]);
+        let notes = warnings(&p);
+        let note = notes.iter().find(|n| n.contains("not in the block shown")).unwrap_or_else(|| panic!("{typed}/{block}: no advice {notes:?}"));
+        let named_blocks = named(note);
+        assert_eq!(named_blocks.len(), 1, "{typed}/{block}: the advice names {named_blocks:?}: {note}");
+        assert!(!named_blocks.contains(&block), "{typed}/{block}: the advice names the current setting: {note}");
+        let target = named_blocks[0];
+        assert!(block_shows(target, z), "{typed}/{block}: {} still hides it", BLOCKS[target]);
+        // apply the advice: the cell is drawn and the advisory goes away
+        let applied = warns(&[s("block", BLOCKS[target]), s("highlight", typed)]);
+        assert!(!has(&applied, "not in the block shown"), "{typed}/{block}: applying {} leaves {applied:?}", BLOCKS[target]);
+        assert!(rep_of(&[s("block", BLOCKS[target]), s("highlight", typed)]).cells.iter().any(|c| c.z == z));
+        // the same text is in the exported figure, not only the editor note
+        let (svg, _) = build(&raw(&[s("block", BLOCKS[block]), s("highlight", typed)]));
+        let printed: String = texts(&svg).iter().filter(|t| t.kind == "note").map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ");
+        assert!(printed.contains("not in the block shown"), "{typed}/{block}: the advice is not printed");
+    }
+    // an element that is already shown gets no advice
+    for (block, typed) in [(0usize, "H"), (1, "Pd"), (2, "La"), (2, "Og")] {
+        let notes = warns(&[s("block", BLOCKS[block]), s("highlight", typed)]);
+        assert!(!has(&notes, "not in the block shown"), "{typed}/{block}: {notes:?}");
+    }
+    // the f-block case names the full setting in so many words
+    let la = warns(&[s("block", BLOCKS[0]), s("highlight", "La")]);
+    assert!(la.iter().any(|n| n.contains("choose Full with f-block to see it")), "{la:?}");
+    assert!(!la.iter().any(|n| n.contains("With transition metals")), "{la:?}");
 }
 
 #[test]
@@ -591,8 +680,9 @@ fn audit(svg: &str, rep: &Report, g: &mut Glyphs) -> Vec<String> {
             if clash(x, y) { bad.push(format!("{:?} on {:?}", ts[order[a]].text, ts[order[b]].text)); }
         }
     }
-    // text against the trend arrows (the only strokes on the figure) and the key swatches
-    let swatches: Vec<Bx> = gm.rects.iter().filter(|r| r.0 == "swatch").map(|r| r.2).collect();
+    // text against the trend arrows (the only strokes on the figure) and the key swatches; the
+    // code inside a swatch is meant to sit on that swatch
+    let swatches: Vec<(String, Bx)> = gm.rects.iter().filter(|r| r.0 == "swatch").map(|r| (r.1.clone(), r.2)).collect();
     for (t, bx) in ts.iter().zip(&inks) {
         let Some(bx) = bx else { continue };
         for (_, seg) in &gm.lines {
@@ -603,7 +693,8 @@ fn audit(svg: &str, rep: &Report, g: &mut Glyphs) -> Vec<String> {
                 if seg_hits(w2[0], w2[1], (bx.0, bx.1, bx.2, bx.3)) { bad.push(format!("{:?} on an arrow head", t.text)); }
             }
         }
-        for s in &swatches {
+        for (feat, s) in &swatches {
+            if t.kind == "key-code" && t.feat == *feat { continue; }
             if hits((bx.0, bx.1, bx.2, bx.3), (s.0, s.1, s.2, s.3)) { bad.push(format!("{:?} on a key swatch", t.text)); }
         }
     }
@@ -622,31 +713,40 @@ fn names_are_drawn_only_at_large_and_every_cell_label_fits_its_cell() {
     for block in BLOCKS {
         for size in ["Small", "Medium", "Large"] {
             for labels in LABELS {
-                let (svg, r) = build_of(&[s("block", block), s("label_size", size), s("labels", labels)]);
-                let ts = texts(&svg);
-                let n = ts.iter().filter(|t| t.kind == "symbol").count();
-                assert_eq!(n, r.cells.len(), "{block}/{size}/{labels}: symbols");
-                let nums = ts.iter().filter(|t| t.kind == "number").count();
-                assert_eq!(nums, if labels == LABELS[1] { 0 } else { r.cells.len() }, "{block}/{size}/{labels}: numbers");
-                let names: Vec<&T> = ts.iter().filter(|t| t.kind == "name").collect();
-                let want_names = labels == LABELS[2] && size == "Large";
-                assert_eq!(names.len(), if want_names { r.cells.len() } else { 0 }, "{block}/{size}/{labels}: names");
-                for t in &names {
-                    assert!(t.fs > 0.0 && t.fs < 0.2 * r.cell, "name size {} in a {} cell", t.fs, r.cell);
-                    assert!(text_w(&t.text, t.fs) <= r.cell - 2.0, "{:?} does not fit a {} cell", t.text, r.cell);
-                }
-                // every label of a cell is inside that cell, measured with the real glyphs
-                for t in ts.iter().filter(|t| t.z.is_some()) {
-                    let bx = g.ink(t).expect("a measured glyph");
-                    let c = r.cells.iter().find(|c| c.z == t.z.unwrap()).unwrap();
-                    assert!(bx.0 >= c.x0 + 0.4 && bx.1 <= c.x1 - 0.4 && bx.2 >= c.y0 + 0.4 && bx.3 <= c.y1 - 0.4,
-                        "{block}/{size}/{labels}: {:?} at {bx:?} in ({}, {}, {}, {})", t.text, c.x0, c.y0, c.x1, c.y1);
-                    checked += 1;
+                for mass in [false, true] {
+                    let (svg, r) = build_of(&[s("block", block), s("label_size", size), s("labels", labels), b(SHOW_MASS, mass)]);
+                    let ts = texts(&svg);
+                    let n = ts.iter().filter(|t| t.kind == "symbol").count();
+                    assert_eq!(n, r.cells.len(), "{block}/{size}/{labels}/{mass}: symbols");
+                    let nums = ts.iter().filter(|t| t.kind == "number").count();
+                    assert_eq!(nums, if labels == LABELS[1] { 0 } else { r.cells.len() }, "{block}/{size}/{labels}/{mass}: numbers");
+                    let names: Vec<&T> = ts.iter().filter(|t| t.kind == "name").collect();
+                    let want_names = labels == LABELS[2] && size == "Large";
+                    assert_eq!(names.len(), if want_names { r.cells.len() } else { 0 }, "{block}/{size}/{labels}/{mass}: names");
+                    for t in &names {
+                        assert!(t.fs > 0.0 && t.fs < 0.2 * r.cell, "name size {} in a {} cell", t.fs, r.cell);
+                        assert!(text_w(&t.text, t.fs) <= r.cell - 2.0, "{:?} does not fit a {} cell", t.text, r.cell);
+                    }
+                    // the masses are one line under the number, at Medium and Large only
+                    let masses: Vec<&T> = ts.iter().filter(|t| t.kind == "mass").collect();
+                    let want_mass = mass && size != "Small";
+                    assert_eq!(masses.len(), if want_mass { r.cells.len() } else { 0 }, "{block}/{size}/{labels}/{mass}: masses");
+                    for t in &masses {
+                        assert_eq!(t.text, MASSES[t.z.unwrap() - 1], "Z {}", t.z.unwrap());
+                    }
+                    // every label of a cell is inside that cell, measured with the real glyphs
+                    for t in ts.iter().filter(|t| t.z.is_some()) {
+                        let bx = g.ink(t).expect("a measured glyph");
+                        let c = r.cells.iter().find(|c| c.z == t.z.unwrap()).unwrap();
+                        assert!(bx.0 >= c.x0 + 0.4 && bx.1 <= c.x1 - 0.4 && bx.2 >= c.y0 + 0.4 && bx.3 <= c.y1 - 0.4,
+                            "{block}/{size}/{labels}/{mass}: {:?} at {bx:?} in ({}, {}, {}, {})", t.text, c.x0, c.y0, c.x1, c.y1);
+                        checked += 1;
+                    }
                 }
             }
         }
     }
-    assert!(checked > 3 * 3 * 3 * 50, "{checked} cell labels measured");
+    assert!(checked > 3 * 3 * 3 * 2 * 50, "{checked} cell labels measured");
 }
 
 fn audit_cases() -> Vec<(&'static str, Vec<(&'static str, Value)>)> {
@@ -673,6 +773,18 @@ fn audit_cases() -> Vec<(&'static str, Vec<(&'static str, Value)>)> {
                 for style in ["Colour", "Print"] {
                     for ans in [true, false] {
                         v.push(("trend", vec![s("block", block), s("trends", trend), s("label_size", size), s("style", style), b(SHOW_ANSWERS, ans), s("highlight", hl)]));
+                    }
+                }
+            }
+        }
+    }
+    // atomic masses, with and without names, at the sizes where they are drawn
+    for block in BLOCKS {
+        for size in ["Medium", "Large"] {
+            for labels in [LABELS[0], LABELS[2]] {
+                for style in ["Colour", "Print"] {
+                    for ans in [true, false] {
+                        v.push(("mass", vec![s("block", block), s("label_size", size), s("labels", labels), s("style", style), b(SHOW_MASS, true), b(SHOW_ANSWERS, ans)]));
                     }
                 }
             }
@@ -706,12 +818,12 @@ fn labels_clear_every_text_the_arrows_the_swatches_and_the_canvas() {
             if e.len() < 3 { e.push(format!("{name}/{:?}: {m}", list)); }
         }
     }
-    assert!(n >= 300, "{n} renders");
+    assert!(n >= 440, "{n} renders");
     report(&problems, n);
 }
 
 #[test]
-fn print_is_grey_only_with_ten_distinct_hatches_that_survive_66_percent() {
+fn print_hatches_are_ten_distinct_definitions_and_the_letters_are_unambiguous() {
     fn grey(h: &str) -> bool {
         let h = h.trim_start_matches('#');
         let h: Vec<char> = if h.len() == 3 { h.chars().flat_map(|c| [c, c]).collect() } else { h.chars().collect() };
@@ -735,43 +847,235 @@ fn print_is_grey_only_with_ten_distinct_hatches_that_survive_66_percent() {
             }
         }
     }
-    // the key's ten swatches carry ten different hatches after a 66 % bitonal copy
-    let list = [s("block", BLOCKS[1]), s("style", "Print")];
-    let (svg, r) = build_of(&list);
-    assert_eq!(r.swatches.len(), 10);
+
+    // the ten pattern definitions themselves must differ, byte for byte: the old test compared
+    // crops at different phases, so an identical pair could pass
+    let mut p = Params::defaults(&[svg::style_param()]);
+    p.set_s("style", "Print");
+    let defs = CategoryFills::new(&p).defs();
+    let bodies: Vec<&str> = (0..10).map(|i| {
+        let id = format!("<pattern id=\"vs-cat{i}\"");
+        let a = defs.find(&id).unwrap_or_else(|| panic!("no pattern {i}"));
+        let rest = &defs[a..];
+        // the id is not part of the tile: two patterns with different ids and the same body are
+        // the same hatch, which is exactly the mutant this test must kill
+        let open = rest.find('>').expect("a pattern tag") + 1;
+        &rest[open..rest.find("</pattern>").unwrap()]
+    }).collect();
+    assert_eq!(bodies.len(), 10);
+    let uniq: BTreeSet<&str> = bodies.iter().copied().collect();
+    assert_eq!(uniq.len(), 10, "two category hatches are byte-identical");
+    for (i, b) in bodies.iter().enumerate() {
+        assert!(b.contains("#666") && (b.contains("stroke-width=") || b.contains("fill=\"#666\"")), "pattern {i} has no mark: {b}");
+    }
+
+    // each cell says its category in a letter code, and each key swatch says the same code
+    let (psvg, pr) = build_of(&[s("block", BLOCKS[2]), s("style", "Print")]);
+    let ts = texts(&psvg);
+    for c in &pr.cells {
+        let code = ts.iter().find(|t| t.kind == "cat-code" && t.z == Some(c.z)).unwrap_or_else(|| panic!("Z {} has no code", c.z));
+        assert_eq!(code.text, CAT_CODES[c.cat], "Z {}", c.z);
+    }
+    let codes: BTreeSet<&str> = CAT_CODES.iter().copied().collect();
+    assert_eq!(codes.len(), 10, "the category codes repeat");
+    let kc: Vec<&T> = ts.iter().filter(|t| t.kind == "key-code").collect();
+    assert_eq!(kc.len(), 10, "the key does not print a code per category");
+    for i in 0..10 {
+        assert!(kc.iter().any(|t| t.feat == i.to_string() && t.text == CAT_CODES[i]), "key code {i}");
+    }
+
+    // swatches are at least 24 x 24 at every size, and keep ink at 66 %
+    for size in ["Small", "Medium", "Large"] {
+        let (_, r) = build_of(&[s("block", BLOCKS[1]), s("style", "Print"), s("label_size", size)]);
+        assert_eq!(r.swatches.len(), 10);
+        for (i, sw) in &r.swatches {
+            assert!(sw.1 - sw.0 >= 24.0 && sw.3 - sw.2 >= 24.0, "{size} swatch {i} is {}x{}", sw.1 - sw.0, sw.3 - sw.2);
+        }
+    }
+    let (svg, r) = build_of(&[s("block", BLOCKS[1]), s("style", "Print")]);
     let png = to_png(&svg, 0.66).unwrap();
     let img = image::load_from_memory(&png).unwrap().to_rgba8();
     let (iw, ih) = img.dimensions();
     assert!(img.pixels().all(|p| p[0] == p[1] && p[1] == p[2]), "a 66 % Print copy has colour");
-    let mut sigs: BTreeSet<Vec<bool>> = BTreeSet::new();
     for (i, sw) in &r.swatches {
         let x0 = ((sw.0 * 0.66).ceil() as u32 + 1).min(iw - 1);
         let x1 = ((sw.1 * 0.66).floor() as u32).saturating_sub(1).min(iw - 1);
         let y0 = ((sw.2 * 0.66).ceil() as u32 + 1).min(ih - 1);
         let y1 = ((sw.3 * 0.66).floor() as u32).saturating_sub(1).min(ih - 1);
         assert!(x1 > x0 + 3 && y1 > y0 + 2, "swatch {i} is too small to test");
+        let mut dark = 0;
+        for y in y0..=y1 { for x in x0..=x1 { if img.get_pixel(x, y)[0] < 150 { dark += 1; } } }
+        let frac = dark as f64 / ((x1 - x0 + 1) * (y1 - y0 + 1)) as f64;
+        assert!(frac >= 0.08, "swatch {i} has only {:.0} % ink at 66 %", frac * 100.0);
+    }
+
+    // phase-aligned synthetic swatches: the same 48 px tile origin for every pattern, so the test
+    // measures the hatch and not where the swatch happens to fall
+    let mut sheet = crate::figures::svg::Doc::new(480.0, 48.0);
+    sheet.defs(&defs);
+    for i in 0..10 {
+        sheet.rect(i as f64 * 48.0, 0.0, 48.0, 48.0, &format!("url(#vs-cat{i})"), "#000", 1.0);
+    }
+    // a real downsample: rasterize at 1.5x, then Lanczos back to 66 % of the natural size, as a
+    // copier's 66 % reduction would look
+    let png = to_png(&sheet.finish(), 1.5).unwrap();
+    let big = image::load_from_memory(&png).unwrap().to_rgba8();
+    let img = image::imageops::resize(&big, (480.0f64 * 0.66).round() as u32, (48.0f64 * 0.66).round() as u32, image::imageops::FilterType::Lanczos3);
+    let mut sigs: BTreeSet<Vec<bool>> = BTreeSet::new();
+    for i in 0..10 {
+        let x0 = (i as f64 * 48.0 * 0.66).round() as u32 + 2;
+        let x1 = (((i + 1) as f64) * 48.0 * 0.66).round() as u32 - 2;
         let mut sig = Vec::new();
         let mut dark = 0;
-        for y in y0..=y1 {
-            for x in x0..=x1 {
-                let p = img.get_pixel(x, y);
-                let d = p[0] < 150;
+        for y in 3..img.height() - 2 {
+            for x in x0..x1 {
+                let d = img.get_pixel(x, y)[0] < 150;
                 if d { dark += 1; }
                 sig.push(d);
             }
         }
-        assert!(dark >= 4, "swatch {i} lost its hatch at 66 %");
-        assert!(sig.iter().any(|d| !*d), "swatch {i} is solid");
+        let frac = dark as f64 / sig.len() as f64;
+        assert!(frac >= 0.08, "pattern {i} has only {:.0} % ink", frac * 100.0);
         sigs.insert(sig);
     }
-    assert_eq!(sigs.len(), 10, "two category hatches are the same at 66 %");
-    // Colour does use distinct colours, and no pattern definitions
+    assert_eq!(sigs.len(), 10, "two category hatches look the same at 66 %");
+
+    // Colour uses ten distinct colours and no patterns
     let (csvg, cr) = build_of(&[s("block", BLOCKS[2])]);
     assert!(!csvg.contains("<pattern"));
     let g = geo(&csvg);
     let colours: BTreeSet<String> = g.rects.iter().filter(|r| r.0 == "cell").map(|r| r.1.clone()).collect();
     assert_eq!(colours.len(), 10, "{colours:?}");
     assert_eq!(cr.cells.len(), 118);
+}
+
+#[test]
+fn colour_type_meets_wcag_aa_on_every_category() {
+    fn lum(h: &str) -> f64 {
+        let h = h.trim_start_matches('#');
+        let c = |i: usize| {
+            let v = u8::from_str_radix(&h[2 * i..2 * i + 2], 16).unwrap() as f64 / 255.0;
+            if v <= 0.03928 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
+        };
+        0.2126 * c(0) + 0.7152 * c(1) + 0.0722 * c(2)
+    }
+    fn ratio(a: &str, b: &str) -> f64 {
+        let (la, lb) = (lum(a), lum(b));
+        (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+    }
+    let ink = "#111111";
+    for (i, c) in CategoryFills::COLOURS.iter().enumerate() {
+        let r = ratio(c, ink);
+        assert!(r >= 4.5, "{} ({c}) against {ink} is only {r:.2}:1", CATS[i]);
+    }
+    // the drawn number text uses that ink, and the transition fill is the lightened blue
+    assert_eq!(CategoryFills::COLOURS[2], "#6f9bd1");
+    let (svg, _) = build_of(&[]);
+    let ts = texts(&svg);
+    assert!(ts.iter().filter(|t| t.kind == "number").all(|t| t.fill == ink));
+    // every text inside a cell uses the same ink: the small mass and code included
+    for t in ts.iter().filter(|t| t.z.is_some()) {
+        assert_eq!(t.fill, ink, "{:?} in a cell does not use the ink", t.text);
+    }
+}
+
+#[test]
+fn the_key_marks_categories_that_are_not_in_the_block_and_carries_the_codes() {
+    let notes = |block: &'static str| -> String {
+        let (svg, r) = build_of(&[s("block", block)]);
+        assert_eq!(r.swatches.len(), 10);
+        texts(&svg).iter().filter(|t| t.kind == "key-note").map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ")
+    };
+    let main = notes(BLOCKS[0]);
+    assert!(main.contains("Not in this view: transition metal, lanthanide, actinide."), "{main}");
+    assert!(main.contains("Metalloids: the staircase B, Si, Ge, As, Sb, Te, Po"), "{main}");
+    assert!(main.contains("polonium") && main.contains("conventions differ"), "{main}");
+    assert!(main.contains("aluminum") && main.contains("cesium") && main.contains("aluminium"), "{main}");
+    let d = notes(BLOCKS[1]);
+    assert!(d.contains("Not in this view: lanthanide, actinide."), "{d}");
+    assert!(!d.contains("transition metal,"), "{d}");
+    let full = notes(BLOCKS[2]);
+    assert!(!full.contains("Not in this view"), "{full}");
+    // the swatch code and the label are both in the key
+    let (svg, r) = build_of(&[]);
+    let ts = texts(&svg);
+    let labels: Vec<&str> = ts.iter().filter(|t| t.kind == "key").map(|t| t.text.as_str()).collect();
+    assert_eq!(labels, CATS);
+    let codes: Vec<&str> = ts.iter().filter(|t| t.kind == "key-code").map(|t| t.text.as_str()).collect();
+    assert_eq!(codes, CAT_CODES);
+    for (_, sw) in &r.swatches {
+        assert!(sw.1 - sw.0 >= 24.0 && sw.3 - sw.2 >= 24.0);
+    }
+}
+
+#[test]
+fn the_exported_figure_carries_a_caption_and_the_trend_caveat() {
+    for (block, want) in [
+        (BLOCKS[0], "Periodic table: main-group block (groups 1, 2, 13-18)"),
+        (BLOCKS[1], "Periodic table: main group with the d-block (groups 1-18)"),
+        (BLOCKS[2], "Periodic table: full table with the f-block (groups 1-18)"),
+    ] {
+        let (svg, r) = build_of(&[s("block", block)]);
+        let ts = texts(&svg);
+        let cap: Vec<&T> = ts.iter().filter(|t| t.kind == "caption").collect();
+        assert_eq!(cap.len(), 1, "{block}");
+        assert_eq!(cap[0].text, want, "{block}");
+        assert!(cap[0].y < r.grid.2, "{block}: the caption is not above the grid");
+        // the caption is on both copies
+        let (ssvg, _) = build_of(&student(&[s("block", block)]));
+        assert!(texts(&ssvg).iter().any(|t| t.kind == "caption" && t.text == want), "{block}: no caption on the student copy");
+    }
+    for trend in [TRENDS[1], TRENDS[2]] {
+        let (svg, _) = build_of(&[s("trends", trend)]);
+        let caveat: String = texts(&svg).iter().filter(|t| t.kind == "trend-note").map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ");
+        assert!(caveat.contains("General trend only"), "{trend}: {caveat}");
+        assert!(caveat.contains("irregular"), "{trend}: {caveat}");
+        assert!(caveat.contains("no Pauling value"), "{trend}: {caveat}");
+        // the student copy carries it too
+        let (ssvg, _) = build_of(&student(&[s("trends", trend)]));
+        let scaveat: String = texts(&ssvg).iter().filter(|t| t.kind == "trend-note").map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ");
+        assert!(scaveat.contains("no Pauling value") && scaveat.contains("General trend only"), "{trend}: the student copy lost the caveat: {scaveat}");
+        // and it is in the SVG source, not only in the app's FAQ
+        assert!(svg.contains("General trend only") && svg.contains("Pauling"));
+    }
+    let (off, _) = build_of(&[]);
+    assert!(!off.contains("General trend only"));
+    assert!(!off.contains(r#"data-o="trend""#));
+}
+
+#[test]
+fn the_optional_atomic_masses_are_the_iupac_values_and_are_printed_where_they_fit() {
+    for z in 1..=118 {
+        assert_eq!(mass_text(z), Some(MASSES[z - 1].to_string()), "Z {z} ({})", data::symbol(z));
+    }
+    assert_eq!(mass_text(0), None);
+    assert_eq!(mass_text(119), None);
+    for (z, want) in [(1, "1.008"), (6, "12.011"), (26, "55.845"), (43, "[98]"), (79, "196.97"), (84, "[209]"), (90, "232.04"), (92, "238.03"), (118, "[294]")] {
+        assert_eq!(mass_text(z).as_deref(), Some(want), "Z {z}");
+        assert_eq!(MASSES[z - 1], want);
+    }
+    for z in [43usize, 61, 84, 85, 86, 87, 88, 89, 93, 118] { assert!(!has_standard_weight(z), "Z {z}"); }
+    for z in [1usize, 2, 83, 90, 91, 92] { assert!(has_standard_weight(z), "Z {z}"); }
+    // off by default: no mass text
+    let (off, _) = build_of(&[]);
+    assert!(!off.contains(r#"data-o="mass""#));
+    // on at Medium: every drawn cell, each the printed value
+    let (svg, r) = build_of(&[s("block", BLOCKS[2]), b(SHOW_MASS, true)]);
+    let ts = texts(&svg);
+    let masses: Vec<&T> = ts.iter().filter(|t| t.kind == "mass").collect();
+    assert_eq!(masses.len(), 118);
+    for t in &masses { assert_eq!(t.text, MASSES[t.z.unwrap() - 1]); }
+    assert!(svg.contains("IUPAC 2021") && svg.contains("square brackets"), "the mass rule is not on the sheet");
+    // on at Small: omitted, with a note in the figure and the editor
+    let p = with(&[s("label_size", "Small"), b(SHOW_MASS, true)]);
+    let (small, rs) = build(&p);
+    assert_eq!(texts(&small).iter().filter(|t| t.kind == "mass").count(), 0);
+    assert!(has(&rs.notes, "not drawn at the Small label size"), "{:?}", rs.notes);
+    assert_eq!(crate::figures::notes_for(ID, &p), rs.notes);
+    // on with names at Large: every mass stays inside its cell (the collision audit repeats it)
+    let (big, rb) = build_of(&[s("block", BLOCKS[2]), s("labels", LABELS[2]), s("label_size", "Large"), b(SHOW_MASS, true)]);
+    assert_eq!(texts(&big).iter().filter(|t| t.kind == "mass").count(), 118);
+    assert_eq!(rb.cells.len(), 118);
 }
 
 #[test]
@@ -807,6 +1111,15 @@ fn the_student_copy_blanks_the_read_out_and_leaks_no_answer() {
     let al = build_of(&student(&[s("highlight", "Al")])).1.panel.join(" ");
     assert!(al.contains("Valence shell: ______ electrons."), "{al}");
     assert!(!al.contains("3 electrons"), "{al}");
+    // a student given an atomic number is not asked to copy it into a Z blank
+    let num = build_of(&student(&[s("block", BLOCKS[1]), s("highlight", "79")])).1.panel.join(" ");
+    assert!(num.contains("Highlighted element: 79"), "{num}");
+    assert!(!num.contains("Z ______"), "{num}");
+    assert!(num.contains("Name ______") && num.contains("group ______") && num.contains("period ______"), "{num}");
+    let numkey = build_of(&key(&[s("block", BLOCKS[1]), s("highlight", "79")])).1.panel.join(" ");
+    assert!(numkey.contains("Z = 79") && numkey.contains("Gold"), "{numkey}");
+    let sym = build_of(&student(&[s("block", BLOCKS[1]), s("highlight", "Au")])).1.panel.join(" ");
+    assert!(sym.contains("Z ______"), "a symbol highlight still asks for Z: {sym}");
 }
 
 #[test]
@@ -855,7 +1168,7 @@ fn odd_inputs_never_panic_and_never_print_nan_or_infinity() {
         Value::F(f64::NAN), Value::F(f64::INFINITY), Value::F(f64::NEG_INFINITY), Value::F(1e300),
         Value::S(String::new()), Value::S("√π".into()), Value::S("x".repeat(10_000)), Value::B(true), Value::I(i64::MAX),
     ];
-    for k in ["block", "labels", "key", "trends", "highlight", "style", "label_size", SHOW_ANSWERS] {
+    for k in ["block", "labels", "key", "trends", "highlight", SHOW_MASS, "style", "label_size", SHOW_ANSWERS] {
         for v in &bad_vals {
             let mut p = raw(&[]);
             p.0.insert(k.to_string(), v.clone());
@@ -924,6 +1237,7 @@ fn ten_thousand_hostile_inputs_render_deterministically() {
         p.0.insert("style".into(), r.pick(&styles).clone());
         p.0.insert("label_size".into(), r.pick(&sizes).clone());
         p.0.insert("key".into(), if r.next() % 2 == 0 { Value::B(true) } else { Value::B(false) });
+        p.0.insert(SHOW_MASS.into(), r.pick(&answers).clone());
         p.0.insert(SHOW_ANSWERS.into(), r.pick(&answers).clone());
         let (svg, rep) = build(&p);
         assert!(svg.starts_with("<svg") && svg.ends_with("</svg>"), "iteration {k}");
@@ -934,6 +1248,9 @@ fn ten_thousand_hostile_inputs_render_deterministically() {
         let uniq: BTreeSet<usize> = rep.cells.iter().map(|c| c.z).collect();
         assert_eq!(uniq.len(), expected, "iteration {k}: a duplicate cell");
         assert!(rep.cells.iter().all(|c| c.cat == category(c.z)), "iteration {k}");
+        let drawn_masses = svg.matches(r#"data-o="mass""#).count();
+        let want_masses = if rep.setup.show_mass && svg::label_factor(p.s("label_size")) > 0.9 { expected } else { 0 };
+        assert_eq!(drawn_masses, want_masses, "iteration {k}: masses");
         drawn += rep.cells.len();
         if k % 101 == 0 {
             let (again, _) = build(&p);
@@ -958,6 +1275,12 @@ fn drawing_is_pure_and_within_a_cpu_budget() {
     let mut print = base.clone();
     print.push(s("style", "Print"));
     assert_ne!(a, svg_of(&print));
+    let mut mass = base.clone();
+    mass.push(b(SHOW_MASS, true));
+    let ma = svg_of(&mass);
+    let mut mass_student = mass.clone();
+    mass_student.push(b(SHOW_ANSWERS, false));
+    assert_eq!(svg_size(&ma), svg_size(&svg_of(&mass_student)), "the mass line changes the student canvas");
     let mut worst = std::time::Duration::ZERO;
     let mut total = std::time::Duration::ZERO;
     let mut n = 0;
@@ -995,6 +1318,13 @@ fn the_description_is_ascii_and_names_no_number_and_no_answer() {
         assert!(!desc.contains("Gold") && !desc.contains("Aluminum") && !desc.contains("Lanthanum"), "{desc}");
         assert!(!desc.contains("transition") && !desc.contains("metalloid"), "{desc}");
     }
+    // the student description must not promise a read-out it blanks
+    let sdesc = |svg: String| svg.split("<desc>").nth(1).and_then(|x| x.split("</desc>").next()).unwrap_or("").to_string();
+    let st = sdesc(svg_of(&student(&[s("highlight", "Al")])));
+    assert!(st.contains("blanks"), "{st}");
+    assert!(!st.contains("reads out"), "{st}");
+    let ky = sdesc(svg_of(&key(&[s("highlight", "Al")])));
+    assert!(ky.contains("reads out"), "{ky}");
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1009,7 +1339,7 @@ fn the_key_lists_all_ten_categories_and_switches_off() {
     let labels: Vec<&str> = ts.iter().filter(|t| t.kind == "key").map(|t| t.text.as_str()).collect();
     assert_eq!(labels, CATS, "{labels:?}");
     let notes = ts.iter().filter(|t| t.kind == "key-note").map(|t| t.text.as_str()).collect::<String>();
-    assert!(notes.contains("B, Si, Ge, As, Sb, Te, Po") && notes.contains("Royal Society"), "{notes}");
+    assert!(notes.contains("B, Si, Ge, As, Sb, Te, Po") && notes.contains("the RSC"), "{notes}");
     let (off, roff) = build_of(&[b("key", false)]);
     assert!(roff.swatches.is_empty());
     assert!(!off.contains(r#"data-o="swatch""#) && !off.contains("Category key"));
@@ -1061,6 +1391,10 @@ fn periodic_pngs() {
         ("gold-student", vec![s("block", BLOCKS[1]), s("highlight", "Au"), b(SHOW_ANSWERS, false)]),
         ("full-print", vec![s("block", BLOCKS[2]), s("style", "Print")]),
         ("d-trend-en", vec![s("block", BLOCKS[1]), s("trends", TRENDS[2])]),
+        ("full-mass-medium", vec![s("block", BLOCKS[2]), b(SHOW_MASS, true)]),
+        ("full-mass-large-names", vec![s("block", BLOCKS[2]), b(SHOW_MASS, true), s("labels", LABELS[2]), s("label_size", "Large")]),
+        ("full-mass-print-large-names", vec![s("block", BLOCKS[2]), b(SHOW_MASS, true), s("labels", LABELS[2]), s("label_size", "Large"), s("style", "Print")]),
+        ("d-trend-en-caveat", vec![s("block", BLOCKS[1]), s("trends", TRENDS[2])]),
     ];
     for (tag, list) in cases {
         let svg = svg_of(&list);
