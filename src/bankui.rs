@@ -514,7 +514,10 @@ impl App {
             let avail = ui.available_width();
             let gap = 12.0;
             let cols = if avail >= 760.0 { 3 } else if avail >= 500.0 { 2 } else { 1 };
-            let cw = ((avail - gap * (cols as f32 - 1.0)) / cols as f32).floor();
+            // Fewer banks than columns still fills the row: one bank is a wide card, not a
+            // quarter-width tile with three quarters of empty page beside it.
+            let fit = rows.len().clamp(1, cols);
+            let cw = ((avail - gap * (fit as f32 - 1.0)) / fit as f32).floor().min(720.0);
             for chunk in rows.chunks(cols) {
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = gap;
@@ -1418,7 +1421,7 @@ fn apply_bank_menu(app: &mut App, ctx: &egui::Context, key: UiId, r: &BankRow, a
 }
 
 /// "2 multiple choice · 1 fill in the blank" — what the type-mix bar is counting.
-fn mix_legend(mix: &[usize; 6]) -> String {
+pub(crate) fn mix_legend(mix: &[usize; 6]) -> String {
     let kinds = [
         (QKind::Mc, "multiple choice"),
         (QKind::Tf, "true/false"),

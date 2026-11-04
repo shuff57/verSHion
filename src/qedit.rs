@@ -1342,10 +1342,8 @@ pub fn draw_modal(
     let modal = egui::Modal::new(UiId::new("qedit_modal")).frame(frame).show(ctx, |ui| {
         ui.set_width(w);
         // Header.
-        ui.horizontal(|ui| {
-            kit::type_pill(ui, type_tag(draft.qkind()));
-            ui.label(theme::serif(if draft.is_edit() { "Edit question" } else { "New question" }).size(18.0));
-        });
+        // The type pill under this line already names the kind: the header is just the title.
+        ui.label(theme::serif(if draft.is_edit() { "Edit question" } else { "New question" }).size(19.0));
         ui.add_space(8.0);
         // Scrolling body of fixed height, so the modal never changes size under the cursor.
         let mut scroll = egui::ScrollArea::vertical()

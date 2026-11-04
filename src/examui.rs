@@ -232,6 +232,15 @@ fn field_label(ui: &mut egui::Ui, text: &str) {
     );
 }
 
+/// A short vertical separator between groups of controls in a toolbar row.
+fn bar_sep(ui: &mut egui::Ui) {
+    ui.add_space(6.0);
+    let h = 18.0;
+    let (r, _) = ui.allocate_exact_size(Vec2::new(1.0, h), egui::Sense::hover());
+    ui.painter().vline(r.center().x, r.y_range(), egui::Stroke::new(1.0, theme::border()));
+    ui.add_space(6.0);
+}
+
 /// A one pixel separator spanning the dialog column.
 fn rule(ui: &mut egui::Ui) {
     let w = ui.available_width();
@@ -720,7 +729,9 @@ fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st
     let gap = 14.0;
     let avail = ui.available_width();
     let n = (((avail + gap) / (420.0 + gap)).floor() as usize).max(1);
-    let card_w = ((avail - gap * (n as f32 - 1.0)) / n as f32).floor();
+    // One exam fills the row (up to a readable width) instead of leaving two columns of empty page.
+    let fit = rows.len().clamp(1, n);
+    let card_w = ((avail - gap * (fit as f32 - 1.0)) / fit as f32).floor().min(760.0);
     let card_h = CARD_THUMB.y + 24.0;
     let thumb_w = CARD_THUMB.x;
     ui.spacing_mut().item_spacing = Vec2::splat(gap);
@@ -752,22 +763,38 @@ fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st
             let facts = [
                 ("Questions", row.q.to_string()),
                 ("Points", fmt_number(row.pts)),
-                ("Bank", truncate_str(&row.bank, 18)),
+                ("Bank", row.bank.clone()),
                 ("Edited", bankui::fmt_date(row.modified)),
             ];
-            let mut y = rect.top() + 14.0 + gh + 6.0;
-            for (k, v) in facts {
-                p.text(Pos2::new(tx, y), Align2::LEFT_TOP, k, FontId::proportional(11.5), theme::muted_col());
-                if k == "Bank" {
-                    // Let the bank name have the card's real width, over two lines, rather than
-                    // an arbitrary character count that cuts it while the card has room.
-                    let gv = clamped_galley(p, &row.bank, FontId::new(11.5, theme::bold_family()), theme::ink(), tw - 66.0, 2);
-                    let h = gv.size().y.max(15.0);
-                    p.galley(Pos2::new(tx + 66.0, y), gv, theme::ink());
-                    y += h;
-                } else {
-                    p.text(Pos2::new(tx + 66.0, y), Align2::LEFT_TOP, v, FontId::new(11.5, theme::bold_family()), theme::ink());
-                    y += 15.0;
+            if tw >= 420.0 {
+                // A wide card reads as a row: the four facts run across it instead of stacking
+                // in a column and leaving the card's right half blank.
+                let weights = [0.7_f32, 0.6, 1.8, 1.0];
+                let total: f32 = weights.iter().sum();
+                let mut x = tx;
+                for (i, (k, v)) in facts.iter().enumerate() {
+                    let cw = (tw * weights[i] / total) - 8.0;
+                    let y = rect.top() + 14.0 + gh + 8.0;
+                    p.text(Pos2::new(x, y), Align2::LEFT_TOP, *k, FontId::proportional(10.5), theme::muted_col());
+                    let gv = clamped_galley(p, v, FontId::new(11.5, theme::bold_family()), theme::ink(), cw.max(20.0), 2);
+                    p.galley(Pos2::new(x, y + 14.0), gv, theme::ink());
+                    x += cw + 8.0;
+                }
+            } else {
+                let mut y = rect.top() + 14.0 + gh + 6.0;
+                for (k, v) in facts {
+                    p.text(Pos2::new(tx, y), Align2::LEFT_TOP, k, FontId::proportional(11.5), theme::muted_col());
+                    if k == "Bank" {
+                        // Let the bank name have the card's real width, over two lines, rather than
+                        // an arbitrary character count that cuts it while the card has room.
+                        let gv = clamped_galley(p, &row.bank, FontId::new(11.5, theme::bold_family()), theme::ink(), tw - 66.0, 2);
+                        let h = gv.size().y.max(15.0);
+                        p.galley(Pos2::new(tx + 66.0, y), gv, theme::ink());
+                        y += h;
+                    } else {
+                        p.text(Pos2::new(tx + 66.0, y), Align2::LEFT_TOP, v, FontId::new(11.5, theme::bold_family()), theme::ink());
+                        y += 15.0;
+                    }
                 }
             }
             if resp.clicked() {
@@ -1645,6 +1672,17 @@ fn format_control(ui: &mut egui::Ui, which: u8, f: &mut model::Exam, salt: &str,
 /// Page zoom: fit, smaller, larger. The page is drawn at 57.6 dpi base, so a fit on a wide
 /// window is already more than 100% of that.
 fn zoom_controls(ui: &mut egui::Ui, zoom: &mut f32, zoom_eff: f32) {
+    // A quiet well around the three zoom controls, so they read as one readout with two buttons
+    // rather than as loose text next to the status line.
+    let frame = egui::Frame::new()
+        .fill(theme::card())
+        .stroke(egui::Stroke::new(1.0, theme::border()))
+        .corner_radius(egui::CornerRadius::same(8))
+        .inner_margin(egui::Margin::symmetric(6, 1));
+    frame.show(ui, |ui| zoom_controls_inner(ui, zoom, zoom_eff));
+}
+
+fn zoom_controls_inner(ui: &mut egui::Ui, zoom: &mut f32, zoom_eff: f32) {
     ui.spacing_mut().item_spacing.x = 4.0;
     let pct = if *zoom <= 0.0 { zoom_eff.max(0.5) } else { *zoom };
     let label = if *zoom <= 0.0 {
@@ -1725,18 +1763,17 @@ fn draw_format_bar(app: &mut crate::App, ui: &mut egui::Ui, exam_id: &Id, st: &m
                     body(ui, 0..5);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(muted(RichText::new(&summary).size(12.0)));
-                        ui.add_space(16.0);
+                        bar_sep(ui);
                         zoom_controls(ui, &mut zoom, zoom_eff);
-                        ui.add_space(16.0);
                     });
                 });
             } else {
                 ui.horizontal(|ui| body(ui, 0..3));
                 ui.horizontal(|ui| {
                     body(ui, 3..5);
-                    ui.add_space(14.0);
+                    bar_sep(ui);
                     zoom_controls(ui, &mut zoom, zoom_eff);
-                    ui.add_space(14.0);
+                    bar_sep(ui);
                     ui.label(muted(RichText::new(&summary).size(12.0)));
                 });
             }
@@ -5345,7 +5382,7 @@ impl crate::App {
                         let key_preview = (exu.key && !exu.student).then_some(exu.key_layout);
                         if two_col {
                             ui.horizontal_top(|ui| {
-                                export_preview_col(self, ui, exam_id, key_preview, left_w, 200.0);
+                                export_preview_col(self, ui, exam_id, key_preview, left_w, 340.0);
                                 ui.add_space(14.0);
                                 ui.allocate_ui_with_layout(
                                     Vec2::new(right_w, 0.0),

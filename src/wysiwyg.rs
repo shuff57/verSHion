@@ -2959,6 +2959,14 @@ fn tool_btn(ui: &mut Ui, label: RichText, tip: &str, on: bool, enabled: bool) ->
     ui.add_enabled(enabled, b).on_hover_text(tip).clicked()
 }
 
+/// A hairline between groups of toolbar buttons (character, block, insert, links).
+fn tool_sep(ui: &mut Ui) {
+    ui.add_space(3.0);
+    let (r, _) = ui.allocate_exact_size(Vec2::new(1.0, 18.0), egui::Sense::hover());
+    ui.painter().vline(r.center().x, r.y_range(), Stroke::new(1.0, theme::border()));
+    ui.add_space(3.0);
+}
+
 fn toolbar(ui: &mut Ui, here: Here, blanks: bool, markup: bool, structured: bool) -> Option<Act> {
     let mut act = None;
     ui.horizontal_wrapped(|ui| {
@@ -2977,14 +2985,15 @@ fn toolbar(ui: &mut Ui, here: Here, blanks: bool, markup: bool, structured: bool
         b(ui, RichText::new("x²"), "Superscript (Ctrl+.)", here.sup, vis, Act::Inline(IOp::Sup));
         b(ui, RichText::new("code").family(FontFamily::Monospace), "Inline code (Ctrl+E)", here.code, vis && (here.sel || here.code), Act::Code);
         if structured {
+            tool_sep(ui);
             b(ui, RichText::new("Centre"), "Centre the paragraph or heading (Ctrl+Shift+E)", here.center, vis && here.center_ok, Act::Center);
-            ui.add_space(4.0);
+            ui.add_space(2.0);
             b(ui, RichText::new("•  ≡"), "Bullet list (Ctrl+Shift+8 or Ctrl+Alt+8)", here.list == Some(ListKind::Bullets), vis && !here.table, Act::List(ListKind::Bullets));
             b(ui, RichText::new("1. ≡"), "Numbered list (Ctrl+Shift+7 or Ctrl+Alt+7)", here.list == Some(ListKind::Numbered), vis && !here.table, Act::List(ListKind::Numbered));
             b(ui, RichText::new("❝"), "Quote (Ctrl+Shift+B)", here.list == Some(ListKind::Quote), vis && !here.table, Act::List(ListKind::Quote));
             b(ui, RichText::new("Table"), "Insert a table", here.table, vis && !here.table, Act::Table);
         }
-        ui.add_space(4.0);
+        tool_sep(ui);
         b(ui, RichText::new("Σ"), if structured { "Equation (Ctrl+M; or type / for the slash menu)" } else { "Equation (Ctrl+M, or type / at the start of a word)" }, false, vis, Act::Equation);
         if blanks {
             let tip = if here.on_blank { "Put the answer back as text (Ctrl+Shift+K)" } else { "Make the selected word a blank; it becomes the answer (Ctrl+Shift+K)" };

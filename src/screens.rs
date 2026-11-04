@@ -737,13 +737,25 @@ impl crate::App {
                         .size(14.0),
                     );
                     ui.add_space(22.0);
-                    if crate::pageshell::primary(ui, "Get started, it's free").clicked() {
-                        app.screen = crate::Screen::Home;
-                    }
+                    // A returning teacher is not a first-run visitor: the button goes back to work,
+                    // and a second way in sits beside it.
+                    let cta = if fresh { "Get started, it's free" } else { "Back to your work" };
+                    ui.horizontal(|ui| {
+                        if crate::pageshell::primary(ui, cta).clicked() {
+                            app.screen = crate::Screen::Home;
+                        }
+                        if !fresh && crate::pageshell::outline(ui, "Open your banks").clicked() {
+                            app.screen = crate::Screen::Banks;
+                        }
+                    });
                     ui.add_space(6.0);
                     ui.label(
-                        theme::muted("Runs on your machine. Nothing to install, no account to make.")
-                            .size(12.0),
+                        theme::muted(if fresh {
+                            "Runs on your machine. Nothing to install, no account to make."
+                        } else {
+                            "Everything is saved on this machine, and nothing leaves it."
+                        })
+                        .size(12.0),
                     );
                     ui.add_space(48.0);
                 });
@@ -1005,8 +1017,11 @@ impl crate::App {
         if exams.is_empty() {
             ui.label(theme::muted("No exams yet. Start one with New exam above."));
         } else if exam_mode == kit::ViewMode::Cards {
-            let cols = grid_cols(ui.available_width(), 230.0, gap, 3);
-            let cw = (ui.available_width() - gap * (cols as f32 - 1.0)) / cols as f32;
+            let mut cols = grid_cols(ui.available_width(), 230.0, gap, 3);
+            // Fewer exams than columns: the cards take the row (up to a readable width) rather
+            // than leaving the page's right side empty.
+            cols = exams.len().clamp(1, cols);
+            let cw = ((ui.available_width() - gap * (cols as f32 - 1.0)) / cols as f32).min(560.0);
             for chunk in exams.iter().take(cols * 2).collect::<Vec<_>>().chunks(cols) {
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = gap;
@@ -1052,6 +1067,7 @@ impl crate::App {
                     topics: topics.len(),
                     edited: b.modified,
                     mix,
+                    counts,
                 }
             })
             .collect();
@@ -1078,8 +1094,9 @@ impl crate::App {
         if banks.is_empty() {
             ui.label(theme::muted("No banks yet. Start one with New bank above."));
         } else if bank_mode == kit::ViewMode::Cards {
-            let cols = grid_cols(ui.available_width(), 226.0, gap, 4);
-            let cw = (ui.available_width() - gap * (cols as f32 - 1.0)) / cols as f32;
+            let mut cols = grid_cols(ui.available_width(), 226.0, gap, 4);
+            cols = banks.len().clamp(1, cols);
+            let cw = ((ui.available_width() - gap * (cols as f32 - 1.0)) / cols as f32).min(520.0);
             for chunk in banks.iter().take(cols * 2).collect::<Vec<_>>().chunks(cols) {
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = gap;
@@ -2072,6 +2089,8 @@ struct BankRow {
     topics: usize,
     edited: i64,
     mix: Vec<f32>,
+    /// Question counts by kind, in the bank screen's mix order, for the type legend.
+    counts: [usize; 6],
 }
 
 const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -2356,7 +2375,7 @@ fn paint_bank_glyph(p: &egui::Painter, r: Rect) {
 }
 
 fn bank_card(ui: &mut egui::Ui, w: f32, b: &BankRow) -> bool {
-    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, 148.0), egui::Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, 164.0), egui::Sense::click());
     if resp.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
@@ -2371,7 +2390,9 @@ fn bank_card(ui: &mut egui::Ui, w: f32, b: &BankRow) -> bool {
     paint_fact(p, Pos2::new(x, rect.min.y + 42.0), half, "Questions", &b.qs.to_string());
     paint_fact(p, Pos2::new(x + half + 10.0, rect.min.y + 42.0), half, "Topics", &b.topics.to_string());
     paint_fact(p, Pos2::new(x, rect.min.y + 78.0), iw, "Edited", &rel_time(b.edited));
-    mix_bar(p, Rect::from_min_size(Pos2::new(x, rect.min.y + 122.0), Vec2::new(iw, 5.0)), &b.mix);
+    // The bar is a question-type breakdown: say which types it is counting.
+    paint_fit(p, Pos2::new(x, rect.min.y + 112.0), &crate::bankui::mix_legend(&b.counts), sans(10.5), theme::muted_col(), iw);
+    mix_bar(p, Rect::from_min_size(Pos2::new(x, rect.min.y + 132.0), Vec2::new(iw, 5.0)), &b.mix);
     resp.clicked()
 }
 
