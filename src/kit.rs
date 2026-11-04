@@ -119,16 +119,31 @@ pub fn small_caps_text(text: &str) -> RichText {
 
 /// Filled chip: pill with a wash fill and bold small label.
 pub fn pill(ui: &mut Ui, label: &str, fill: Color32, fg: Color32) -> egui::Response {
+    pill_with(ui, label, fill, fg, egui::TextWrapMode::Wrap)
+}
+
+/// The same chip with a label that never wraps. For a row whose line breaks are chosen by the
+/// caller by measurement (`importui::chip_rows`): there a wrapping label would report its
+/// squeezed width back to the frame and the chip would come out one letter wide.
+pub fn pill_no_wrap(ui: &mut Ui, label: &str, fill: Color32, fg: Color32) -> egui::Response {
+    pill_with(ui, label, fill, fg, egui::TextWrapMode::Extend)
+}
+
+fn pill_with(
+    ui: &mut Ui,
+    label: &str,
+    fill: Color32,
+    fg: Color32,
+    wrap: egui::TextWrapMode,
+) -> egui::Response {
     egui::Frame::new()
         .fill(fill)
         .corner_radius(CornerRadius::same(255))
         .inner_margin(Margin::symmetric(9, 2))
         .show(ui, |ui| {
-            // A pill is a word, not a paragraph: in a wrapped row it must move whole to the next
-            // line rather than squeeze into one letter per line.
             ui.add(
                 egui::Label::new(RichText::new(label).family(theme::bold_family()).size(11.0).color(fg))
-                    .wrap_mode(egui::TextWrapMode::Extend),
+                    .wrap_mode(wrap),
             );
         })
         .response

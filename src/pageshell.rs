@@ -3,7 +3,7 @@
 //! app's own (cream page, green accent, serif headings).
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use egui::{Align2, Color32, CornerRadius, Frame, Id, Margin, Rect, RichText, Sense, Stroke, StrokeKind, Ui, Vec2};
+use egui::{Align2, Color32, CornerRadius, Frame, Id, Margin, Pos2, Rect, RichText, Sense, Stroke, StrokeKind, Ui, Vec2};
 
 use crate::theme;
 
@@ -28,6 +28,55 @@ pub fn heading(ui: &mut Ui, text: &str) {
     ui.label(RichText::new(text).family(theme::serif_family()).size(19.0).color(theme::ink()));
 }
 
+/// A quiet line that holds the bottom of a page whose content is shorter than the window.
+///
+/// Every short screen used to end wherever its last card ended, leaving a floor of empty grid
+/// paper — the single most repeated complaint from the critics. Called at the end of a page's
+/// content: it pushes the rule to the bottom of the viewport when there is room, and draws
+/// nothing when the page already overflows.
+pub fn footer(ui: &mut Ui, text: &str) {
+    let h = 30.0;
+    let rest = ui.available_height();
+    if rest < h + 24.0 {
+        return;
+    }
+    ui.add_space(rest - h);
+    let w = ui.available_width();
+    let (r, _) = ui.allocate_exact_size(Vec2::new(w, h), Sense::hover());
+    ui.painter().hline(r.x_range(), r.top() + 0.5, Stroke::new(1.0, theme::rule()));
+    ui.painter().text(
+        Pos2::new(r.left(), r.top() + 15.0),
+        Align2::LEFT_CENTER,
+        text,
+        egui::FontId::proportional(11.5),
+        theme::muted_col(),
+    );
+}
+
+/// The readable measure for a paragraph of prose: at these sizes roughly 70 characters, which is
+/// where the eye stops losing its place on the way back to the next line. Cards may be wide; a
+/// sentence may not. Pages used to run their subtitles the full 980 px (~135 characters) and the
+/// critics named it on nearly every screen.
+pub const MEASURE: f32 = 700.0;
+
+/// A paragraph of prose, left aligned, wrapped at [`MEASURE`].
+pub fn prose(ui: &mut Ui, text: &str, size: f32) {
+    prose_at(ui, text, size, egui::Align::Min);
+}
+
+/// [`prose`] centred, for a hero.
+pub fn prose_centered(ui: &mut Ui, text: &str, size: f32) {
+    prose_at(ui, text, size, egui::Align::Center);
+}
+
+fn prose_at(ui: &mut Ui, text: &str, size: f32, align: egui::Align) {
+    let w = ui.available_width().min(MEASURE);
+    ui.allocate_ui_with_layout(Vec2::new(w, 0.0), egui::Layout::top_down(align), |ui| {
+        ui.set_width(w);
+        ui.label(theme::muted(text).size(size));
+    });
+}
+
 /// The page title with its breadcrumb above. Every screen starts here, so the title sits at the
 /// same height on all of them.
 pub fn title(ui: &mut Ui, crumbs: &str, title: &str, sub: &str) {
@@ -42,7 +91,7 @@ pub fn header(ui: &mut Ui, crumbs: &str, title: &str, sub: Option<&str>) {
     }
     ui.label(RichText::new(title).family(theme::serif_family()).size(34.0).color(theme::ink()));
     if let Some(sub) = sub {
-        ui.label(theme::muted(sub).size(14.0));
+        prose(ui, sub, 14.0);
     }
 }
 

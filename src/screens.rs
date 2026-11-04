@@ -727,14 +727,12 @@ impl crate::App {
                     ui.add_space(if fresh { 30.0 } else { 70.0 });
                     ui.label(theme::serif("Turn anything into an exam.").size(40.0));
                     ui.add_space(12.0);
-                    ui.set_max_width(620.0);
-                    ui.label(
-                        theme::text(
-                            "PDFs, scans, screenshots, old Word documents, questions you type \
-                             yourself: verSHion gathers them into Question Banks and lays \
-                             them out as a clean, printable exam.",
-                        )
-                        .size(14.0),
+                    crate::pageshell::prose_centered(
+                        ui,
+                        "PDFs, scans, screenshots, old Word documents, questions you type \
+                         yourself: verSHion gathers them into Question Banks and lays \
+                         them out as a clean, printable exam.",
+                        14.0,
                     );
                     ui.add_space(22.0);
                     // A returning teacher is not a first-run visitor: the button goes back to work,
@@ -761,8 +759,14 @@ impl crate::App {
                         })
                         .size(12.0),
                     );
-                    ui.add_space(48.0);
+                    ui.add_space(8.0);
                 });
+
+                // A short page used to pile every spare pixel into one band under the cards. Split
+                // it: air between the call to action and the steps, the rest under them, so the
+                // footer still holds the bottom of the window.
+                let spare = (ui.available_height() - 300.0).max(0.0);
+                ui.add_space(14.0 + (spare * 0.42).min(110.0));
 
                 ui.set_max_width(ui.available_width().min(980.0));
                 ui.vertical_centered(|ui| {
@@ -846,7 +850,8 @@ impl crate::App {
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                 ui.spacing_mut().item_spacing.x = 8.0;
-                for (n, label) in [(n_q, "questions"), (n_exams, "exams"), (n_banks, "banks")] {
+                for (n, one, many) in [(n_q, "question", "questions"), (n_exams, "exam", "exams"), (n_banks, "bank", "banks")] {
+                    let label = if n == 1 { one } else { many };
                     // Fixed-size slot owns the direction (the parent row is right-to-left).
                     ui.allocate_ui_with_layout(
                         Vec2::new(92.0, 58.0),
@@ -1181,6 +1186,12 @@ impl crate::App {
             }
         }
         ui.add_space(16.0);
+        // Hold the bottom of the window: the dashboard is shorter than a maximised screen and
+        // used to end on a floor of empty grid paper.
+        crate::pageshell::footer(
+            ui,
+            "Saved on this machine · banks, exams and figures all live in one folder",
+        );
     }
 
     // ---------- settings ----------
@@ -2307,49 +2318,41 @@ fn home_thumb_area(pv: Rect) -> Rect {
 
 fn exam_card(ui: &mut egui::Ui, app: &mut crate::App, w: f32, e: &ExamRow, tilt_right: bool) -> bool {
     // A landscape card: the first page on the left, the facts beside it, so one exam on a
-    // dashboard row does not read as a tall, half-empty slab.
-    let h = 190.0;
+    // dashboard row does not read as a tall, half-empty slab. The card is only as tall as the
+    // page thumbnail it holds, and the facts sit in a two-by-two block rather than being spread
+    // to the four corners of a wide surface.
+    let h = 148.0;
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
     if resp.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
     let p = ui.painter();
     p.rect(rect, CornerRadius::same(16), theme::card(), hover_border(&resp), StrokeKind::Inside);
-    let thumb_area = Rect::from_min_size(rect.min + Vec2::new(14.0, 12.0), Vec2::new(112.0, 152.0));
+    let thumb_area = Rect::from_min_size(rect.min + Vec2::new(14.0, 12.0), Vec2::new(96.0, 124.0));
     let pv = thumb_area.expand2(Vec2::new(8.0, 0.0));
     paint_preview_bg(p, pv);
     let ctx = ui.ctx().clone();
     let page = crate::examui::paint_exam_thumb(app, &ctx, p, thumb_area, &e.id);
     let p = ui.painter();
     if page.is_none() {
-        paper_thumb(p, thumb_area.center(), Vec2::new(70.0, 90.0), if tilt_right { 3.0 } else { -3.0 }, e.id.len() % 2 == 0, true);
+        paper_thumb(p, thumb_area.center(), Vec2::new(62.0, 80.0), if tilt_right { 3.0 } else { -3.0 }, e.id.len() % 2 == 0, true);
     }
     let x = pv.right() + 16.0;
     let iw = (rect.right() - 22.0 - x).max(60.0);
-    paint_fit(p, Pos2::new(x, rect.min.y + 16.0), &e.name, serif_font(16.0), theme::ink(), iw);
-    let y1 = rect.min.y + 52.0;
-    if iw >= 420.0 {
-        // A wide card reads as a row: the four facts run across it.
-        let weights = [0.7_f32, 0.6, 1.8, 1.0];
-        let total: f32 = weights.iter().sum();
-        let facts = [
-            ("Questions", e.qs.to_string()),
-            ("Points", fmt_pts(e.pts)),
-            ("Bank", e.bank.clone()),
-            ("Edited", rel_time(e.edited)),
-        ];
-        let mut fx = x;
-        for (i, (label, value)) in facts.iter().enumerate() {
-            let cw = iw * weights[i] / total;
-            paint_fact(p, Pos2::new(fx, y1), cw - 8.0, label, value);
-            fx += cw;
-        }
+    paint_fit(p, Pos2::new(x, rect.min.y + 14.0), &e.name, serif_font(16.0), theme::ink(), iw);
+    let y1 = rect.min.y + 44.0;
+    if iw >= 380.0 {
+        // Four facts, two rows of two: a table, not a row stretched to the card's edges.
+        let cw = ((iw - 18.0) / 2.0).min(230.0);
+        paint_fact(p, Pos2::new(x, y1), cw, "Questions", &e.qs.to_string());
+        paint_fact(p, Pos2::new(x + cw + 18.0, y1), cw, "Points", &fmt_pts(e.pts));
+        paint_fact(p, Pos2::new(x, y1 + 38.0), cw, "Bank", &e.bank);
+        paint_fact(p, Pos2::new(x + cw + 18.0, y1 + 38.0), cw, "Edited", &rel_time(e.edited));
     } else {
         let half = (iw - 12.0) / 2.0;
         paint_fact(p, Pos2::new(x, y1), half, "Questions", &e.qs.to_string());
         paint_fact(p, Pos2::new(x + half + 12.0, y1), half, "Points", &fmt_pts(e.pts));
-        paint_fact(p, Pos2::new(x, y1 + 42.0), iw, "Bank", &e.bank);
-        paint_fact(p, Pos2::new(x, y1 + 84.0), iw, "Edited", &rel_time(e.edited));
+        paint_fact(p, Pos2::new(x, y1 + 38.0), iw, "Bank", &e.bank);
     }
     resp.clicked()
 }
@@ -2450,8 +2453,8 @@ fn bank_card(ui: &mut egui::Ui, w: f32, b: &BankRow) -> bool {
     let iw = rect.right() - x - 14.0;
     paint_fit(p, Pos2::new(x, rect.min.y + 13.0), &b.name, serif_font(15.0), theme::ink(), iw);
     if iw >= 420.0 {
-        let weights = [0.6_f32, 0.6, 1.0];
-        let total: f32 = weights.iter().sum();
+        // Fixed columns, grouped to the left: the same three facts, without a void between them.
+        let cols = [110.0_f32, 110.0, 190.0];
         let facts = [
             ("Questions", b.qs.to_string()),
             ("Topics", b.topics.to_string()),
@@ -2459,7 +2462,7 @@ fn bank_card(ui: &mut egui::Ui, w: f32, b: &BankRow) -> bool {
         ];
         let mut fx = x;
         for (i, (label, value)) in facts.iter().enumerate() {
-            let cw = iw * weights[i] / total;
+            let cw = cols[i].min(iw * 0.34);
             paint_fact(p, Pos2::new(fx, rect.min.y + 42.0), cw - 8.0, label, value);
             fx += cw;
         }

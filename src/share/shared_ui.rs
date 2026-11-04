@@ -131,6 +131,10 @@ impl crate::App {
                 // signed-in status page has a lot to show and takes the whole column.
                 let status = app.account.model.page == super::model::Page::Status;
                 let side_w = 300.0;
+                // The page is short: give the block some air above it, so the spare height is
+                // split between the space above the cards and the footer under them, instead of
+                // collecting in one band at the bottom.
+                ui.add_space(((ui.available_height() - 366.0) * 0.5).clamp(0.0, 160.0));
                 if status || ui.available_width() < 760.0 {
                     pageshell::card(ui, |ui| app.account.draw_section(ui));
                     // A signed-in account has little to say: the three reasons ride under it as a
@@ -154,6 +158,10 @@ impl crate::App {
                     });
                 }
                 ui.add_space(20.0);
+                pageshell::footer(
+                    ui,
+                    "verSHion · saved on this machine · sharing is the only thing that needs a server",
+                );
             });
         });
     }
@@ -295,6 +303,10 @@ impl SharedUi {
                 super::mine_ui::legal_links_for(ui, &super::ShareSettings::legal_base());
             });
             ui.add_space(20.0);
+            pageshell::footer(
+                ui,
+                "verSHion · sharing is the only part that needs a server, and only when you use it",
+            );
         });
         changed
     }

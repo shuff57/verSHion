@@ -903,7 +903,7 @@ fn formats_panel(ui: &mut egui::Ui) {
                             ui.horizontal(|ui| {
                                 ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
                                 for it in row {
-                                    kit::pill(ui, it, theme::field(), theme::text_col());
+                                    kit::pill_no_wrap(ui, it, theme::field(), theme::text_col());
                                 }
                             });
                             ui.add_space(6.0);
@@ -942,6 +942,10 @@ fn page(app: &mut crate::App, ui: &mut egui::Ui, ctx: &egui::Context, st: &mut S
             ui.add_space(26.0);
             history(app, ui);
             ui.add_space(20.0);
+            crate::pageshell::footer(
+                ui,
+                "Everything here is read on this machine · only a photo you convert leaves it",
+            );
         });
     });
 }
