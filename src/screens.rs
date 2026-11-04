@@ -740,14 +740,18 @@ impl crate::App {
                     // A returning teacher is not a first-run visitor: the button goes back to work,
                     // and a second way in sits beside it.
                     let cta = if fresh { "Get started, it's free" } else { "Back to your work" };
-                    ui.horizontal(|ui| {
-                        if crate::pageshell::primary(ui, cta).clicked() {
-                            app.screen = crate::Screen::Home;
-                        }
-                        if !fresh && crate::pageshell::outline(ui, "Open your banks").clicked() {
+                    if crate::pageshell::primary(ui, cta).clicked() {
+                        app.screen = crate::Screen::Home;
+                    }
+                    if !fresh {
+                        ui.add_space(2.0);
+                        if ui
+                            .add(egui::Button::new(theme::accent("Open your banks").size(12.5)).frame(false))
+                            .clicked()
+                        {
                             app.screen = crate::Screen::Banks;
                         }
-                    });
+                    }
                     ui.add_space(6.0);
                     ui.label(
                         theme::muted(if fresh {
