@@ -188,6 +188,8 @@ number-base__defaults 16bf7951bd244ab8
 number-base__start 16bf7951bd244ab8
 number-line__defaults 3678255fb61cf882
 number-line__start 8907dc3dbcbf7bc9
+ogive__defaults f122f5892b507abe
+ogive__start 39b076bdfeb0d79d
 orbital-diagram__defaults 8439d61feda6e634
 orbital-diagram__start 70919ef4dfb406ac
 org-chart__defaults 9958472c3f8301ad

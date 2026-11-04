@@ -24,6 +24,8 @@ pub fn overrides(id: &str) -> Vec<(&'static str, Value)> {
         // xylem and phloem opens on the stem and the lengthwise transport view at Large (owner decision 2026-11-03): the
         // first picture shows which way water and sugar move; its names print at about 5.3 pt and the note offers the stem alone
         "xylem-phloem" => vec![("view", st("Stem")), ("label_size", st("Large"))],
+        // the ogive opens reading the 40th percentile, so the first picture shows the guide lines across to the curve and down
+        "ogive" => vec![("read", st("Value at a percentile"))],
         // Math polygons open unfilled (black outline on white), angles unshaded.
         "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "regular-polygon" => vec![("fill", st("#ffffff"))],
         // the reference names the kite counter-clockwise (A right, B top, C left): our mirror

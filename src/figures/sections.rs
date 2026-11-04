@@ -451,6 +451,15 @@ static DOT_PLOT: [RefSection; 5] = [
     s("Appearance", &["style", "label_size"], ""),
 ];
 
+static OGIVE: [RefSection; 6] = [
+    s("Data", &["input", "table", "data", "auto_classes", "class_width", "class_start", "closed"], "Type the classes as lower boundary, upper boundary, frequency (one per line), or type raw values and the figure makes the histogram's classes."),
+    s("Graph", &["y_axis", "grid"], ""),
+    s("Reading", &["read", "pct", "value", "marks", "decimals"], "Guide lines across from a percentile and down to the axis, or up from a value; readings are straight-line interpolations."),
+    s("Student copy", &["show_table", "student_curve", "show_answers"], "Turn off Show answers for a student copy: the cumulative column, guide lines and read-off values are blanked."),
+    s("Labels and text", &["title", "x_title", "y_title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
 static STEM_AND_LEAF: [RefSection; 4] = [
     s("Data", &["data", "leaf_unit", "split", "order"], "Type or paste numbers, open a CSV, or generate sample data from a seed. Each number is rounded to the leaf unit."),
     s("Key and answers", &["key", "show_answers"], "Turn off Show answers for a student copy: the leaves are hidden and the stems and key stay."),
@@ -1078,6 +1087,7 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "two-way-table" => &TWO_WAY_TABLE,
         "stem-and-leaf" => &STEM_AND_LEAF,
         "dot-plot" => &DOT_PLOT,
+        "ogive" => &OGIVE,
         "normal-curve" => &NORMAL_CURVE,
         "sampling-distribution" => &SAMPLING_DISTRIBUTION,
         "rejection-region" => &REJECTION_REGION,

@@ -185,6 +185,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "er-diagram" => ER_DIAGRAM,
         "network-topology" => NETWORK_TOPOLOGY,
         "dot-plot" => DOT_PLOT,
+        "ogive" => OGIVE,
         "normal-curve" => NORMAL_CURVE,
         "sampling-distribution" => SAMPLING_DISTRIBUTION,
         "rejection-region" => REJECTION_REGION,
@@ -1600,6 +1601,33 @@ mod tests {
         assert!(faq_for("nope").is_empty());
     }
 }
+
+const OGIVE: &[Faq] = &[
+    Faq {
+        q: "Why are the points at the upper class boundaries?",
+        a: "A cumulative frequency counts every value up to the end of a class, and only at the upper boundary are all of that class's values included. Plotting at the midpoints, a common mistake, shifts the whole curve half a class to the left. The curve starts at 0 on the lower boundary of the first class, because no value lies below it, and ends at the total (1 or 100% on a relative or percent axis).",
+    },
+    Faq {
+        q: "Which class does a value on a boundary go in?",
+        a: "For raw values choose with \"A value on a class boundary goes\", exactly as on the histogram, which makes the same classes from the same values. By default 60 goes in 60 \u{2264} x < 70, so the point at 60 counts the values below 60; with the other choice it counts the values at or below 60. For a typed table the boundaries are yours: type class boundaries such as 39.5 to 49.5, not stated limits such as 40 to 49.",
+    },
+    Faq {
+        q: "How exact is a percentile read from the ogive?",
+        a: "It is an estimate. The curve is straight inside each class, as if the values were spread evenly across it, so the reading is a straight-line interpolation: the 40th percentile of 50 values is where the curve reaches 20. From raw values it can differ from a percentile worked out from the sorted list. Where the curve is flat (an empty class) every value along the flat part fits; the figure reads the lowest and a note says so.",
+    },
+    Faq {
+        q: "Why does it refuse my table?",
+        a: "Every value must be counted exactly once, so the classes must meet with no gaps or overlaps, every class needs both boundaries (no open-ended \"90+\" class), and each frequency is a whole number, 0 or more. The note names the line and gives a corrected line to type. A gap of 1 between 40 to 49 and 50 to 59 means stated limits for whole numbers: use the boundaries halfway between, 39.5 to 49.5. Classes may have different widths; unlike a histogram, an ogive needs no density adjustment.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The cumulative column, the guide lines and the read-off values are blanked and the numbered questions get answer lines. Turn off \"Student copy shows the ogive\" as well to leave empty axes for students to plot the points. Student + key saves both versions.",
+    },
+    Faq {
+        q: "Which vertical axis should I use?",
+        a: "Cumulative frequency counts values and ends at the total. Cumulative relative frequency divides by the total, so it ends at 1, and cumulative percent ends at 100%; on those a percentile is read straight off the axis. The curve has the same shape on all three.",
+    },
+];
 
 const HISTOGRAM: &[Faq] = &[
     Faq {
