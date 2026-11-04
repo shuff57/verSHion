@@ -124,7 +124,12 @@ pub fn pill(ui: &mut Ui, label: &str, fill: Color32, fg: Color32) -> egui::Respo
         .corner_radius(CornerRadius::same(255))
         .inner_margin(Margin::symmetric(9, 2))
         .show(ui, |ui| {
-            ui.label(RichText::new(label).family(theme::bold_family()).size(11.0).color(fg));
+            // A pill is a word, not a paragraph: in a wrapped row it must move whole to the next
+            // line rather than squeeze into one letter per line.
+            ui.add(
+                egui::Label::new(RichText::new(label).family(theme::bold_family()).size(11.0).color(fg))
+                    .wrap_mode(egui::TextWrapMode::Extend),
+            );
         })
         .response
 }

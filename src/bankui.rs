@@ -517,7 +517,7 @@ impl App {
             // Fewer banks than columns still fills the row: one bank is a wide card, not a
             // quarter-width tile with three quarters of empty page beside it.
             let fit = rows.len().clamp(1, cols);
-            let cw = ((avail - gap * (fit as f32 - 1.0)) / fit as f32).floor().min(720.0);
+            let cw = ((avail - gap * (fit as f32 - 1.0)) / fit as f32).floor();
             for chunk in rows.chunks(cols) {
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = gap;
@@ -649,7 +649,7 @@ impl App {
                 let label = match t {
                     Tool::More => "…",
                     Tool::Details => "Details",
-                    Tool::Popover => "Pop-over",
+                    Tool::Popover => "Preview",
                     Tool::Import => "Import",
                     Tool::Share => share_label.as_str(),
                     Tool::Export => "Export",
@@ -730,7 +730,7 @@ impl App {
                     r
                 }
                 Tool::Popover => {
-                    let r = crate::pageshell::outline(ui, "Pop-over").on_hover_text("Open this bank in its own window");
+                    let r = crate::pageshell::outline(ui, "Preview").on_hover_text("Open this bank in its own window");
                     if r.clicked() {
                         open_popover(ctx, bank_id);
                     }
@@ -1363,7 +1363,7 @@ enum BankAct {
 fn bank_menu_items(nq: usize, archived: bool) -> Vec<Option<(BankAct, &'static str, bool)>> {
     vec![
         Some((BankAct::Open, "Open", true)),
-        Some((BankAct::Popover, "Pop-over", true)),
+        Some((BankAct::Popover, "Preview", true)),
         Some((BankAct::Export, "Export…", nq > 0)),
         Some((BankAct::Rename, "Rename", true)),
         Some((BankAct::Archive, if archived { "Restore" } else { "Archive" }, true)),
@@ -3710,7 +3710,7 @@ mod tests {
     #[test]
     fn bank_menu_matches_the_reference_order() {
         let labels: Vec<&str> = bank_menu_items(3, false).iter().map(|i| i.map_or("---", |(_, l, _)| l)).collect();
-        assert_eq!(labels, vec!["Open", "Pop-over", "Export…", "Rename", "Archive", "---", "Delete…"]);
+        assert_eq!(labels, vec!["Open", "Preview", "Export…", "Rename", "Archive", "---", "Delete…"]);
         let back: Vec<&str> = bank_menu_items(3, true).iter().flatten().map(|(_, l, _)| *l).collect();
         assert!(back.contains(&"Restore") && !back.contains(&"Archive"));
         assert!(bank_menu_items(3, false).iter().flatten().all(|(_, _, en)| *en));

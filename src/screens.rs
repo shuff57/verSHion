@@ -781,6 +781,20 @@ impl crate::App {
                         step_row(ui, i);
                     }
                 }
+                // The page is shorter than the window: a quiet footer holds the bottom instead of
+                // leaving a third of the screen as empty grid.
+                let rest = ui.available_height();
+                if rest > 90.0 {
+                    ui.add_space((rest - 44.0).max(0.0));
+                    ui.vertical_centered(|ui| {
+                        ui.label(
+                            theme::muted(
+                                "Banks · exams · printing · figures — all on this machine, no account needed",
+                            )
+                            .size(11.5),
+                        );
+                    });
+                }
             });
         });
     }
@@ -1025,7 +1039,7 @@ impl crate::App {
             // Fewer exams than columns: the cards take the row (up to a readable width) rather
             // than leaving the page's right side empty.
             cols = exams.len().clamp(1, cols);
-            let cw = ((ui.available_width() - gap * (cols as f32 - 1.0)) / cols as f32).min(560.0);
+            let cw = (ui.available_width() - gap * (cols as f32 - 1.0)) / cols as f32;
             for chunk in exams.iter().take(cols * 2).collect::<Vec<_>>().chunks(cols) {
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = gap;
@@ -1100,7 +1114,7 @@ impl crate::App {
         } else if bank_mode == kit::ViewMode::Cards {
             let mut cols = grid_cols(ui.available_width(), 226.0, gap, 4);
             cols = banks.len().clamp(1, cols);
-            let cw = ((ui.available_width() - gap * (cols as f32 - 1.0)) / cols as f32).min(520.0);
+            let cw = (ui.available_width() - gap * (cols as f32 - 1.0)) / cols as f32;
             for chunk in banks.iter().take(cols * 2).collect::<Vec<_>>().chunks(cols) {
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = gap;
@@ -1615,6 +1629,34 @@ impl crate::App {
                     ui.add_space(8.0);
                     if pageshell::outline(ui, "Open folder").clicked() {
                         let _ = crate::platform::open_path(&store::store_dir());
+                    }
+                });
+                ui.add_space(12.0);
+
+                // --- What is in that folder ---
+                pageshell::card(ui, |ui| {
+                    pageshell::heading(ui, "What is in that folder");
+                    ui.add_space(6.0);
+                    for (name, what) in [
+                        ("banks.json", "every question bank, with its topics and points"),
+                        ("exams.json", "every exam, its paper style and its page order"),
+                        ("settings.json", "the theme, the window size and your view choices"),
+                        ("exports", "each PDF and DOCX you have downloaded, with its date"),
+                        ("figures", "the pictures and figure sheets you have made"),
+                    ] {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.add(
+                                egui::Label::new(
+                                    RichText::new(name)
+                                        .size(11.5)
+                                        .family(egui::FontFamily::Monospace)
+                                        .color(theme::text_col()),
+                                ),
+                            );
+                            ui.add(
+                                egui::Label::new(theme::muted(format!("— {what}")).size(11.5)).wrap(),
+                            );
+                        });
                     }
                 });
                 }
@@ -2285,13 +2327,30 @@ fn exam_card(ui: &mut egui::Ui, app: &mut crate::App, w: f32, e: &ExamRow, tilt_
     let x = pv.right() + 16.0;
     let iw = (rect.right() - 22.0 - x).max(60.0);
     paint_fit(p, Pos2::new(x, rect.min.y + 16.0), &e.name, serif_font(16.0), theme::ink(), iw);
-    let half = (iw - 12.0) / 2.0;
     let y1 = rect.min.y + 52.0;
-    paint_fact(p, Pos2::new(x, y1), half, "Questions", &e.qs.to_string());
-    paint_fact(p, Pos2::new(x + half + 12.0, y1), half, "Points", &fmt_pts(e.pts));
-    // The bank name gets the card's whole text column; it is the one value that is a phrase.
-    paint_fact(p, Pos2::new(x, y1 + 42.0), iw, "Bank", &e.bank);
-    paint_fact(p, Pos2::new(x, y1 + 84.0), iw, "Edited", &rel_time(e.edited));
+    if iw >= 420.0 {
+        // A wide card reads as a row: the four facts run across it.
+        let weights = [0.7_f32, 0.6, 1.8, 1.0];
+        let total: f32 = weights.iter().sum();
+        let facts = [
+            ("Questions", e.qs.to_string()),
+            ("Points", fmt_pts(e.pts)),
+            ("Bank", e.bank.clone()),
+            ("Edited", rel_time(e.edited)),
+        ];
+        let mut fx = x;
+        for (i, (label, value)) in facts.iter().enumerate() {
+            let cw = iw * weights[i] / total;
+            paint_fact(p, Pos2::new(fx, y1), cw - 8.0, label, value);
+            fx += cw;
+        }
+    } else {
+        let half = (iw - 12.0) / 2.0;
+        paint_fact(p, Pos2::new(x, y1), half, "Questions", &e.qs.to_string());
+        paint_fact(p, Pos2::new(x + half + 12.0, y1), half, "Points", &fmt_pts(e.pts));
+        paint_fact(p, Pos2::new(x, y1 + 42.0), iw, "Bank", &e.bank);
+        paint_fact(p, Pos2::new(x, y1 + 84.0), iw, "Edited", &rel_time(e.edited));
+    }
     resp.clicked()
 }
 
@@ -2390,10 +2449,26 @@ fn bank_card(ui: &mut egui::Ui, w: f32, b: &BankRow) -> bool {
     let x = rect.min.x + 14.0 + 34.0 + 11.0;
     let iw = rect.right() - x - 14.0;
     paint_fit(p, Pos2::new(x, rect.min.y + 13.0), &b.name, serif_font(15.0), theme::ink(), iw);
-    let half = (iw - 10.0) / 2.0;
-    paint_fact(p, Pos2::new(x, rect.min.y + 42.0), half, "Questions", &b.qs.to_string());
-    paint_fact(p, Pos2::new(x + half + 10.0, rect.min.y + 42.0), half, "Topics", &b.topics.to_string());
-    paint_fact(p, Pos2::new(x, rect.min.y + 78.0), iw, "Edited", &rel_time(b.edited));
+    if iw >= 420.0 {
+        let weights = [0.6_f32, 0.6, 1.0];
+        let total: f32 = weights.iter().sum();
+        let facts = [
+            ("Questions", b.qs.to_string()),
+            ("Topics", b.topics.to_string()),
+            ("Edited", rel_time(b.edited)),
+        ];
+        let mut fx = x;
+        for (i, (label, value)) in facts.iter().enumerate() {
+            let cw = iw * weights[i] / total;
+            paint_fact(p, Pos2::new(fx, rect.min.y + 42.0), cw - 8.0, label, value);
+            fx += cw;
+        }
+    } else {
+        let half = (iw - 10.0) / 2.0;
+        paint_fact(p, Pos2::new(x, rect.min.y + 42.0), half, "Questions", &b.qs.to_string());
+        paint_fact(p, Pos2::new(x + half + 10.0, rect.min.y + 42.0), half, "Topics", &b.topics.to_string());
+        paint_fact(p, Pos2::new(x, rect.min.y + 78.0), iw, "Edited", &rel_time(b.edited));
+    }
     // The bar is a question-type breakdown: say which types it is counting.
     paint_fit(p, Pos2::new(x, rect.min.y + 112.0), &crate::bankui::mix_legend(&b.counts), sans(10.5), theme::muted_col(), iw);
     mix_bar(p, Rect::from_min_size(Pos2::new(x, rect.min.y + 132.0), Vec2::new(iw, 5.0)), &b.mix);

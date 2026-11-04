@@ -731,7 +731,7 @@ fn draw_exam_cards(app: &mut crate::App, ui: &mut egui::Ui, rows: &[ExamRow], st
     let n = (((avail + gap) / (420.0 + gap)).floor() as usize).max(1);
     // One exam fills the row (up to a readable width) instead of leaving two columns of empty page.
     let fit = rows.len().clamp(1, n);
-    let card_w = ((avail - gap * (fit as f32 - 1.0)) / fit as f32).floor().min(760.0);
+    let card_w = ((avail - gap * (fit as f32 - 1.0)) / fit as f32).floor();
     let card_h = CARD_THUMB.y + 24.0;
     let thumb_w = CARD_THUMB.x;
     ui.spacing_mut().item_spacing = Vec2::splat(gap);

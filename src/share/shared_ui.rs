@@ -133,6 +133,12 @@ impl crate::App {
                 let side_w = 300.0;
                 if status || ui.available_width() < 760.0 {
                     pageshell::card(ui, |ui| app.account.draw_section(ui));
+                    // A signed-in account has little to say: the three reasons ride under it as a
+                    // row of cards, so the page does not stop half way down the window.
+                    if status && ui.available_width() >= 760.0 {
+                        ui.add_space(16.0);
+                        perks_row(ui);
+                    }
                 } else {
                     let card_w = (ui.available_width() - side_w - 28.0).clamp(420.0, 540.0);
                     ui.horizontal_top(|ui| {
@@ -151,6 +157,32 @@ impl crate::App {
             });
         });
     }
+}
+
+/// The same three reasons as a row of cards, for the page's lower half.
+fn perks_row(ui: &mut Ui) {
+    use egui_phosphor::regular as ph;
+    let perks = [
+        (ph::USERS_THREE, "Share with teachers", "Send banks to a circle of colleagues or to the public pool, and take theirs."),
+        (ph::SPARKLE, "Hosted AI", "Convert a PDF, scan or photo into questions with credits, nothing to set up."),
+        (ph::LOCK_SIMPLE, "Optional", "Banks, exams, printing and the figures all work on this device without one."),
+    ];
+    ui.columns(3, |cols| {
+        for (col, (icon, head, body)) in cols.iter_mut().zip(perks) {
+            crate::pageshell::card(col, |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 10.0;
+                    let (r, _) = ui.allocate_exact_size(egui::Vec2::splat(32.0), egui::Sense::hover());
+                    ui.painter().circle_filled(r.center(), 16.0, theme::accent_faded());
+                    ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, icon, theme::icon_font(16.0), theme::accent_col());
+                    ui.add(egui::Label::new(theme::strong(head).size(13.0)).wrap());
+                });
+                ui.add_space(4.0);
+                ui.add(egui::Label::new(theme::muted(body).size(11.5)).wrap());
+            });
+        }
+    });
 }
 
 /// What an account is for, beside the sign-in forms: three short reasons, the last being that it

@@ -835,6 +835,31 @@ fn intake(app: &mut crate::App, ctx: &egui::Context, st: &mut State) {
     }
 }
 
+/// Split a group's chips into lines that fit `width`, measuring each pill (its 11 pt bold label
+/// plus the 9 px side padding and the 6 px gap) rather than trusting egui to wrap a frame.
+fn chip_rows<'a>(ui: &egui::Ui, items: &[&'a str], width: f32) -> Vec<Vec<&'a str>> {
+    let font = egui::FontId::new(11.0, theme::bold_family());
+    let mut rows: Vec<Vec<&str>> = vec![Vec::new()];
+    let mut used = 0.0_f32;
+    for it in items {
+        let text = ui
+            .painter()
+            .layout_no_wrap((*it).to_string(), font.clone(), theme::text_col())
+            .size()
+            .x;
+        let w = text + 18.0 + 2.0;
+        let gap = if used > 0.0 { 6.0 } else { 0.0 };
+        if used > 0.0 && used + gap + w > width {
+            rows.push(Vec::new());
+            used = 0.0;
+        }
+        let gap = if used > 0.0 { 6.0 } else { 0.0 };
+        used += gap + w;
+        rows.last_mut().expect("one row to start with").push(*it);
+    }
+    rows
+}
+
 /// What the importer can read, grouped so a teacher can scan for their tool instead of
 /// picking a format out of one faint dot-separated line.
 fn formats_panel(ui: &mut egui::Ui) {
@@ -854,19 +879,38 @@ fn formats_panel(ui: &mut egui::Ui) {
                 &["Respondus", "Canvas QTI", "Blackboard", "Moodle XML", "GIFT", "Aiken", "Kahoot", "Quizlet", "Test Parrot .json"],
             ),
         ];
+        // The chips break inside the card's own width. A pill is a `Frame`, and a frame reports
+        // its size only after it is placed, so egui's wrapping never fires for one: at 760 the
+        // quiz-tool row ran off the card and the last chip was squeezed to one letter a line.
+        // So measure each chip and choose the line breaks here.
+        let inner = ui.available_width();
+        let lab_w = 104.0_f32.min(inner * 0.4);
         for (group, items) in groups {
             ui.horizontal_top(|ui| {
-                ui.allocate_ui(Vec2::new(104.0, 0.0), |ui| {
-                    ui.label(theme::muted(group).size(11.5));
-                });
-                ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing = Vec2::new(6.0, 6.0);
-                    for it in items {
-                        kit::pill(ui, it, theme::field(), theme::text_col());
-                    }
-                });
+                ui.allocate_ui_with_layout(
+                    Vec2::new(lab_w, 0.0),
+                    Layout::left_to_right(Align::Center),
+                    |ui| {
+                        ui.label(theme::muted(group).size(11.5));
+                    },
+                );
+                let rest = (inner - lab_w - ui.spacing().item_spacing.x).max(120.0);
+                ui.allocate_ui_with_layout(
+                    Vec2::new(rest, 0.0),
+                    Layout::top_down(Align::Min),
+                    |ui| {
+                        for row in chip_rows(ui, items, rest) {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing = Vec2::new(6.0, 0.0);
+                                for it in row {
+                                    kit::pill(ui, it, theme::field(), theme::text_col());
+                                }
+                            });
+                            ui.add_space(6.0);
+                        }
+                    },
+                );
             });
-            ui.add_space(6.0);
         }
     });
 }

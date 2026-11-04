@@ -164,7 +164,7 @@ fn progress(now: f64, t0: f64, secs: f64) -> f32 {
 // ---------------------------------------------------------------- sections
 
 /// The one content column every page uses (Home, Banks, Exams, Import, Shared, Account, Settings).
-pub const PAGE_W: f32 = 1060.0;
+pub const PAGE_W: f32 = 980.0;
 
 const NAV_W: f32 = 236.0;
 const NAV_ITEM_H: f32 = 44.0;
