@@ -109,6 +109,10 @@ pub fn key_note(fig: &str, key: &str, p: &Params) -> Option<Note> {
             _ => None,
         },
 
+        ("boltzmann-distribution", "molar_mass") if p.s("gas") != "Custom" => {
+            note("Used only when Gas is Custom. Pick Custom to draw your own molar mass.")
+        }
+
         ("lewis-structures", "formula") if p.s("formula").trim().is_empty() && p.s("preset").starts_with("None") => note("Type a formula first."),
         ("lewis-structures", "shape") => note(super::lewis::shape_note(p)),
         ("lewis-structures", "bond_style") => note(super::lewis::bonds_note(p)),

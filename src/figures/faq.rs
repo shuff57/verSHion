@@ -58,6 +58,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "gas-law-graphs" => GAS_LAW_GRAPHS,
         "equilibrium-graphs" => EQUILIBRIUM_GRAPHS,
         "buffer-curves" => BUFFER_CURVES,
+        "boltzmann-distribution" => BOLTZMANN_DISTRIBUTION,
         "orbital-diagram" => ORBITAL_DIAGRAM,
         "particle-diagram" => PARTICLE_DIAGRAM,
         "ph-reading" => PH_READING,
@@ -3870,6 +3871,29 @@ const BUFFER_CURVES: &[Faq] = &[
     Faq {
         q: "What does the student copy leave out?",
         a: "Show answers off keeps the analyte, the titrant, their amounts and the axes, which depend on the givens only, and turns the equivalence point, the half-equivalence point, pKa, the indicator, the pH values and the capacity into blank lines. It draws no marked points, guides, buffer region or indicator band. For finding pKa it does not name the acid or base, so its pKa cannot be looked up. For the pH at a volume and the buffer pH it draws no curve, only a dashed line at the volume asked about, since the curve would show the answer.",
+    },
+];
+
+const BOLTZMANN_DISTRIBUTION: &[Faq] = &[
+    Faq {
+        q: "Why does a hotter curve peak further right and lower?",
+        a: "The most probable speed is vp = \u{221a}(2RT/M), so raising the temperature moves the peak to the right in proportion to \u{221a}T. The peak height falls in proportion to 1/\u{221a}T, so the curve flattens and widens, while the area under it stays exactly 1: every molecule has some speed, and raising T only spreads them over a wider range. The mean speed \u{221a}(8RT/(\u{3c0}M)) and the rms speed \u{221a}(3RT/M) also grow as \u{221a}T. Because vp < mean < rms (in the ratio 1 : 1.128 : 1.225), the peak is always to the left of the mean and rms speeds.",
+    },
+    Faq {
+        q: "What is the shaded tail, and how is its fraction worked out?",
+        a: "It is the fraction of molecules whose kinetic energy is at or above the activation energy Ea. For the three-dimensional Maxwell-Boltzmann energy distribution that fraction is F(Ea) = (2/\u{221a}\u{3c0}) \u{221a}x exp(\u{2212}x) + erfc(\u{221a}x), with x = Ea/(RT). It is exactly the area under the speed curve to the right of v = \u{221a}(2Ea/M), because the kinetic energy is \u{00bd}Mv\u{00b2} per mole; the key shades that area on the hottest curve. At Ea = 0 the fraction is 1, and at a fixed Ea it rises as T rises, which is why reaction rates increase with temperature. erfc is computed here by the Abramowitz-Stegun approximation 7.1.26, whose absolute error in erf is below 1.5 \u{d7} 10\u{207b}\u{2077}.",
+    },
+    Faq {
+        q: "Why is the y axis in s/m, and why are the curves not the same height?",
+        a: "The y axis is the true probability density: the fraction of molecules per unit speed, whose unit is 1/(m/s) = s/m. The curves are not rescaled, so a hotter curve is lower and wider and every curve still encloses area 1. Rescaling them all to the same peak height would change the meaning of the y axis; a figure that did that would have to label it \"relative number of molecules\" instead. This one says the density, so the heights can be compared directly.",
+    },
+    Faq {
+        q: "Why do real gases deviate from this distribution at high pressure?",
+        a: "The Maxwell-Boltzmann distribution is the ideal-gas result: it assumes molecules of negligible volume that do not attract or repel one another. At high pressure the molecules are close together, their own volume and their intermolecular attractions matter, and the speeds depart from this curve; at very low temperatures light gases such as hydrogen also show quantum effects. The figure is therefore the ideal-gas distribution, the one a chemistry course uses, and it is exact for that model.",
+    },
+    Faq {
+        q: "What does the student copy leave out?",
+        a: "Show answers off keeps the axes, the curves and their temperature labels, the gas and its molar mass, the dashed line at Ea, and the guide at a marked speed. It shows the speeds table with blank cells and turns the fraction above Ea and the density at the marked speed into blank lines, and it does not shade the tail, because the shaded area is the answer. The key prints vp, the mean speed and the rms speed for every curve, the fraction above Ea at each temperature, and f at the marked speed.",
     },
 ];
 
