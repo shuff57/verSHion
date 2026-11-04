@@ -151,7 +151,7 @@ fn shapes(svg: &str) -> Shapes {
             }
             "line" => {
                 let c = e.a("stroke").unwrap();
-                if c == GRID || c == "#cccccc" || c == "#999999" {
+                if c == GRID || c == "#cccccc" || c == "#999999" || c == PRINT_GRID {
                     continue;
                 }
                 s.segs.push(((e.n("x1"), e.n("y1")), (e.n("x2"), e.n("y2")), e.n("stroke-width")));
@@ -358,7 +358,8 @@ fn the_thousands_reading_is_always_stated_and_can_be_rewritten_both_ways() {
     assert_eq!(t.cats.iter().map(|c| c.counts[0]).collect::<Vec<_>>(), [3100, 2050]);
     let notes = warnings(&p);
     assert_eq!(notes.len(), 1, "{notes:?}");
-    assert!(notes[0].contains("Lines 1 and 2 give a count with a thousands comma, so each is one count (3,100 and 2,050)"), "{}", notes[0]);
+    assert!(notes[0].contains("Lines 1 and 2 give a count in thousands, so each is one count (3,100 and 2,050)"), "{}", notes[0]);
+    assert!(notes[0].contains("a comma with no space after it, between groups of three digits, is a thousands separator"), "{}", notes[0]);
     assert!(notes[0].contains("Two counts would be \u{201c}A, 3, 100\u{201d}"), "{}", notes[0]);
     assert!(notes[0].contains("change line 1 to \u{201c}A, 3100\u{201d}"), "{}", notes[0]);
     // the fix keeps the chart and clears the note for every line
@@ -384,6 +385,31 @@ fn the_thousands_reading_is_always_stated_and_can_be_rewritten_both_ways() {
 }
 
 #[test]
+fn the_too_many_counts_refusal_keeps_every_count() {
+    // MAJOR: a line with more than two counts is refused with the limit stated and every typed
+    // count named; there is no rewrite that would drop one (the old advice kept only two)
+    for (data, line, counts) in [
+        ("A, 5, 7, 3\nB, 1, 2", "Line 1 (\u{201c}A, 5, 7, 3\u{201d})", ["5", "7", "3"]),
+        ("A, 9, 12,5", "Line 1 (\u{201c}A, 9, 12,5\u{201d})", ["9", "12", "5"]),
+        ("B, 3, 4, 9", "Line 1 (\u{201c}B, 3, 4, 9\u{201d})", ["3", "4", "9"]),
+    ] {
+        let e = parse(data).unwrap_err();
+        assert!(e.contains("this figure takes at most two counts per category"), "{data}: {e}");
+        assert!(e.contains(line), "{data}: the line and its cells are named: {e}");
+        for c in counts {
+            assert!(e.contains(&format!("\u{201c}{c}\u{201d}")), "{data}: {c} is named, not dropped: {e}");
+        }
+        assert!(!e.contains("change line") && !e.contains("Change line"), "{data}: no rewrite: {e}");
+        assert!(!e.contains(", 0"), "{data}: no invented count: {e}");
+        assert!(e.contains("second chart"), "{data}: a route that keeps the data: {e}");
+    }
+    // the refused text still holds every count: nothing was edited on the way
+    let data = "A, 5, 7, 3\nB, 1, 2";
+    assert!(parse(data).is_err());
+    assert!(data.contains(", 3"));
+}
+
+#[test]
 fn a_counts_mismatch_names_every_line_and_offers_no_rewrite() {
     // MAJOR 2: the refusal must not drop or invent a count (no "change line n to …", no ", 0"), so
     // it names both lines with their counts and offers the two shapes; both routes are checked
@@ -403,56 +429,76 @@ fn a_counts_mismatch_names_every_line_and_offers_no_rewrite() {
     let e = parse("A, 1,200\nB, 5, 7").unwrap_err();
     assert!(e.contains("Line 2 (\u{201c}B, 5, 7\u{201d}) holds 2 counts (5 and 7), but line 1 (\u{201c}A, 1,200\u{201d}) holds 1 count (1200)"), "{e}");
     assert!(!e.contains("change line") && !e.contains(", 0"), "a typed count must not be dropped: {e}");
+    assert!(e.contains("\u{201c}A, 1,200\u{201d} is one count, 1,200; two counts would be \u{201c}A, 1, 200\u{201d}"), "the line that needs respelling is named too: {e}");
     let two = parse("A, 1, 200\nB, 5, 7").unwrap();
     assert_eq!(two.cats[0].counts, [1, 200]);
     assert_eq!(two.cats[1].counts, [5, 7]);
 }
 
 #[test]
-fn the_percent_table_adds_up_to_its_printed_total() {
-    // MED 2: the exported table's percent cells must add to the 100% its Total row prints
-    let data = "Pet, Class A, Class B\nDog, 11, 8\nCat, 7, 9\nFish, 3, 2\nNone, 4, 9";
-    let p = with(&[("data", data), ("measure", PERCENT), ("blank", BLANKS[1]), ("decimals", "1")]);
-    // the test's own largest-remainder column for Class B (8, 9, 2, 9 of 28)
-    let mine = |cs: &[u64], n: u64, d: u32| -> Vec<String> {
-        let target = 100 * 10u128.pow(d);
-        let n = n as u128;
-        let mut out: Vec<u128> = cs.iter().map(|c| *c as u128 * target / n).collect();
-        let mut rem: Vec<(u128, usize)> = cs.iter().enumerate().map(|(i, c)| ((*c as u128 * target) % n, i)).collect();
-        rem.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
-        let mut left = target.saturating_sub(out.iter().sum::<u128>());
-        let mut k = 0;
-        while left > 0 {
-            out[rem[k % rem.len()].1] += 1;
-            left -= 1;
-            k += 1;
+fn the_table_the_bars_and_the_answers_print_one_number() {
+    // MED 4: one rounding rule everywhere. The table cell for a category, the value on its bar
+    // and the key's answer are the same number, and the column's Total row is what its cells add
+    // to (100% only when they add up).
+    let cases: [(&str, u32); 4] = [
+        ("A, 1\nB, 1\nC, 1", 0),
+        ("A, 1\nB, 1\nC, 1", 2),
+        ("A, 1\nB, 2\nC, 3\nD, 2", 1),
+        ("Pet, Class A, Class B\nDog, 11, 8\nCat, 7, 9\nFish, 3, 2\nNone, 4, 9", 1),
+    ];
+    for (data, d) in cases {
+        let mut p = with(&[("data", data), ("measure", PERCENT), ("blank", BLANKS[1]), ("questions", "true")]);
+        p.set_i("decimals", d as i64);
+        let svg = render(&p);
+        let t = parse(data).unwrap();
+        let n = t.cats.len();
+        // the table's percent cells: fs 14, centred, in columns (same x) and rows (y order)
+        let mut cells: Vec<(f64, f64, String)> = texts(&svg)
+            .into_iter()
+            .filter(|e| e.a("font-size").as_deref() == Some("14.00") && e.a("text-anchor").as_deref() == Some("middle") && e.text.ends_with('%'))
+            .map(|e| (e.n("x"), e.n("y"), e.text))
+            .collect();
+        cells.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap().then(a.1.partial_cmp(&b.1).unwrap()));
+        let mut xs: Vec<f64> = Vec::new();
+        for (x, _, _) in &cells {
+            if !xs.iter().any(|v| (v - x).abs() < 0.5) {
+                xs.push(*x);
+            }
         }
-        let pw = 10u128.pow(d);
-        out.iter().map(|s| if d == 0 { format!("{s}%") } else { format!("{}.{:0w$}%", s / pw, s % pw, w = d as usize) }).collect()
-    };
-    let b = mine(&[8, 9, 2, 9], 28, 1);
-    assert_eq!(b, ["28.6%", "32.2%", "7.1%", "32.1%"], "a column that half-up rounding leaves at 99.9%");
-    let a = mine(&[11, 7, 3, 4], 25, 1);
-    assert_eq!(a, ["44.0%", "28.0%", "12.0%", "16.0%"]);
-    let shown: Vec<String> = texts(&render(&p)).into_iter().map(|e| e.text).collect();
-    for w in a.iter().chain(b.iter()) {
-        assert!(shown.contains(w), "the table prints {w}: {shown:?}");
+        assert_eq!(xs.len(), t.groups, "{data} {d}: one percent column per group: {xs:?}");
+        // labels are drawn category by category, so row `row` of group `g` is labels[row * groups + g]
+        let labels: Vec<String> = texts(&svg).into_iter().filter(|e| e.a("font-size").as_deref() == Some("12.60") && e.text.ends_with('%')).map(|e| e.text).collect();
+        for (g, x) in xs.iter().enumerate() {
+            let col: Vec<String> = cells.iter().filter(|(cx, _, _)| (cx - x).abs() < 0.5).map(|(_, _, t)| t.clone()).collect();
+            assert_eq!(col.len(), n + 1, "{data} {d}: {col:?}");
+            let sum: f64 = col[..n].iter().map(|c| c.trim_end_matches('%').parse::<f64>().unwrap()).sum();
+            let total: f64 = col[n].trim_end_matches('%').parse().unwrap();
+            assert!((total - sum).abs() < 1e-9, "{data} {d}: the Total {} is what its cells add to ({sum})", col[n]);
+            for row in 0..n {
+                assert_eq!(&col[row], &labels[row * t.groups + g], "{data} {d}: row {row} of group {g}: table against label");
+            }
+        }
+        // question 3 asks about the first drawn category: its answer is the number in that cell
+        let ans: Vec<String> = texts(&svg).into_iter().filter(|e| e.n("x") == 36.0).map(|e| e.text).collect();
+        let first: Vec<String> = xs.iter().map(|x| cells.iter().filter(|(cx, _, _)| (cx - x).abs() < 0.5).map(|(_, _, t)| t.clone()).next().unwrap()).collect();
+        if t.groups == 1 {
+            assert_eq!(ans[2], format!("Answer: {}", first[0]), "{data} {d}");
+        } else {
+            for (g, cell) in first.iter().enumerate() {
+                assert!(ans[2].contains(cell), "{data} {d}: group {g} answer {:?} against cell {cell}", ans[2]);
+            }
+        }
     }
-    assert!(shown.contains(&"100%".to_string()), "the Total row");
-    let sum = |v: &[String]| v.iter().map(|s| s.trim_end_matches('%').parse::<f64>().unwrap()).sum::<f64>();
-    assert!((sum(&a) - 100.0).abs() < 1e-9 && (sum(&b) - 100.0).abs() < 1e-9);
-    // a sweep over shapes and decimals: every column adds to the printed total, within a unit of
-    // the exact share
-    for total in 1..=40u64 {
+    // a sweep: every cell is its own value's half-up rounding, so a column that does not add up
+    // shows that plainly in its Total (no silent adjustment)
+    for total in 1..=30u64 {
         for k in 1..=5u64 {
             let cs: Vec<u64> = (0..k).map(|i| total / k + u64::from(i < total % k)).collect();
             let total: u64 = cs.iter().sum();
             for d in 0..=2u32 {
                 let col = pct_column(&cs, total, d);
-                assert_eq!(col.iter().sum::<u128>(), 100 * 10u128.pow(d), "{cs:?} {d}");
                 for (c, s) in cs.iter().zip(&col) {
-                    let exact = *c as f64 * 100.0 / total as f64 * 10f64.powi(d as i32);
-                    assert!((*s as f64 - exact).abs() <= 1.0, "{cs:?} {d}: {s} against {exact}");
+                    assert_eq!(*s, pct_scaled(*c, total, d), "{cs:?} {d}");
                 }
             }
         }
@@ -483,17 +529,28 @@ fn a_first_line_with_numbers_is_data_never_headings() {
         assert!(!n[0].contains("change line"), "{data}: no data is changed: {}", n[0]);
         assert!(parse(data).is_err(), "{data} is refused");
     }
-    // MED 1: a first line whose cells are words with numbers in them is neither reading, so the
-    // refusal names both real routes instead of turning the headings into a category
-    for data in ["Grade, Grade 9, Grade 10\nWalk, 12, 15", "Group, None, One or more\nA, 1, 2", "Fruit, Two-year-olds\nApple, 3"] {
-        let n = warnings(&with(&[("data", data)]));
-        assert_eq!(n.len(), 1, "{data}: {n:?}");
-        assert!(n[0].starts_with("Line 1 ("), "{data}: {}", n[0]);
-        assert!(n[0].contains("neither a category with counts nor a line of headings"), "{data}: {}", n[0]);
-        assert!(n[0].contains("type the group names in \u{201c}Group 1 name\u{201d} and \u{201c}Group 2 name\u{201d}"), "{data}: {}", n[0]);
-        assert!(!n[0].contains("change line") && !n[0].contains(", 0"), "{data}: no data is changed: {}", n[0]);
-        assert!(parse(data).is_err(), "{data} is refused");
+    // MED 1: a heading cell is a name whenever the whole cell is not a number, so these are lines
+    // of headings -- never a category, and never a name turned into a count of 0
+    let cases: Vec<(&str, Vec<&str>, Vec<(String, Vec<u64>)>)> = vec![
+        ("Grade, 9th grade, 10th grade\nWalk, 12, 15", vec!["Grade", "9th grade", "10th grade"], rows(&[("Walk", &[12, 15])])),
+        ("Grade, Grade 9, Grade 10\nWalk, 12, 15", vec!["Grade", "Grade 9", "Grade 10"], rows(&[("Walk", &[12, 15])])),
+        ("Group, None, One or more\nA, 1, 2", vec!["Group", "None", "One or more"], rows(&[("A", &[1, 2])])),
+        ("Fruit, Two-year-olds\nApple, 3", vec!["Fruit", "Two-year-olds"], rows(&[("Apple", &[3])])),
+    ];
+    for (data, cells, pairs) in cases {
+        let t = parse(data).unwrap_or_else(|e| panic!("{data}: {e}"));
+        let head = t.head.as_ref().unwrap_or_else(|| panic!("{data} reads as headings"));
+        assert_eq!(head.2, cells, "{data}");
+        assert_eq!(state_pairs(&t), pairs, "{data}");
+        for n in warnings(&with(&[("data", data)])) {
+            assert!(!n.contains(", 0"), "{data}: a name is never turned into 0: {n}");
+            assert!(!n.contains("is not a number"), "{data}: {n}");
+        }
     }
+    // a heading line naming a group `None` draws that name, not a zero bar
+    let p = with(&[("data", "Group, None, One or more\nA, 1, 2")]);
+    let names: Vec<String> = texts(&render(&p)).into_iter().map(|e| e.text).collect();
+    assert!(names.iter().any(|t| t == "None") && names.iter().any(|t| t == "One or more"), "{names:?}");
     // the name1/name2 route draws the groups those headings named
     let p = with(&[("data", "Walk, 12, 15\nCar, 9, 11"), ("name1", "2019"), ("name2", "2020")]);
     assert!(warnings(&p).is_empty(), "{:?}", warnings(&p));
@@ -609,7 +666,7 @@ fn apply(note: &str, p: &mut Params) -> bool {
 
 /// Information notes: say what was done, with nothing to change.
 fn info_only(note: &str) -> bool {
-    note.contains("so it was read as headings") || note.contains("may be a line of headings")
+    note.contains("was read as headings") || note.contains("may be a line of headings")
 }
 
 /// Applies every fix until none is left; each applied note must go away and never come back.
@@ -683,7 +740,8 @@ fn every_refusal_and_note_has_a_fix_that_keeps_the_meaning() {
         (one("Red\nBlue, 3\nGreen, 2"), End::Chart(rows(&[("Blue", &[3]), ("Green", &[2])]))),
         (one(", 12\nBlue, 3"), End::Chart(rows(&[("Category 1", &[12]), ("Blue", &[3])]))),
         (one("Grade 9 12\nGrade 10 7"), End::Chart(rows(&[("Grade 9", &[12]), ("Grade 10", &[7])]))),
-        (one("Red, 1, 2, 3\nBlue, 3, 4"), End::Chart(rows(&[("Red", &[1, 2]), ("Blue", &[3, 4])]))),
+        // MAJOR: the >2-count refusal states the limit and drops nothing, so there is no fix to apply
+        (one("Red, 1, 2, 3\nBlue, 3, 4"), End::Refused("at most two counts per category")),
         // MAJOR 2: a counts mismatch names the lines and offers the two shapes, never a rewrite
         (one("Red, 1, 2\nBlue, 3\nGreen, 4, 5"), End::Refused("holds 1 count (3), but line 1")),
         (one("Red, 1\nBlue, 3, 5"), End::Refused("holds 2 counts (3 and 5), but line 1")),
@@ -723,11 +781,12 @@ fn every_refusal_and_note_has_a_fix_that_keeps_the_meaning() {
         (one("A, 1e15\nB, 3"), End::Refused("divide every line")),
         // M2 (b): counts written as words use the number-word list
         (one("Walk, twelve\nCar, nine"), End::Chart(rows(&[("Walk", &[12]), ("Car", &[9])]))),
-        // M2 (d) + MED 1: a heading cell that is a phrase of words and numbers is refused with
-        // both routes, and no count is invented for it
-        (one("Fruit, Two-year-olds\nApple, 3"), End::Refused("neither a category with counts nor a line of headings")),
-        (one("Grade, Grade 9, Grade 10\nWalk, 12, 15"), End::Refused("neither a category with counts nor a line of headings")),
-        (one("Group, None, One or more\nA, 1, 2"), End::Refused("neither a category with counts nor a line of headings")),
+        // M2 (d) + MED 1: a first line whose cells are names is a line of headings, never a
+        // category and never a name turned into a count of 0
+        (one("Fruit, Two-year-olds\nApple, 3"), End::Chart(rows(&[("Apple", &[3])]))),
+        (one("Grade, Grade 9, Grade 10\nWalk, 12, 15"), End::Chart(rows(&[("Walk", &[12, 15])]))),
+        (one("Group, None, One or more\nA, 1, 2"), End::Chart(rows(&[("A", &[1, 2])]))),
+        (one("Grade, 9th grade, 10th grade\nWalk, 12, 15"), End::Chart(rows(&[("Walk", &[12, 15])]))),
         // MED 1: years as a first line are read as a category, and the note names the headings
         // route; the chart is unchanged because deleting a line is the teacher's choice
         (one("Year, 2019, 2020\nWalk, 12, 15\nCar, 9, 11"), End::Chart(rows(&[("Year", &[2019, 2020]), ("Walk", &[12, 15]), ("Car", &[9, 11])]))),
@@ -1017,6 +1076,20 @@ fn pareto_right_axis_ticks_sit_exactly_on_their_percents() {
     assert_eq!(axes, 1, "one vertical axis: the percent axis already reads 0-100%");
     assert!(!svg.contains("Cumulative percent") && svg.contains("<polyline"), "the line is still drawn");
     assert!(texts(&svg).iter().any(|e| e.text == "100%"), "the left axis ends at 100%");
+    // LOW: the student copy places labels as on any bar chart: no chip, no lift from the hidden line
+    let mut student = with(&[("data", "Forgot, 14\nNo time, 9\nToo hard, 5\nSick, 3\nOther, 2"), ("order", PARETO), ("blank", BLANKS[2])]);
+    student.set_b(SHOW_ANSWERS, false);
+    let stu = render(&student);
+    assert!(!stu.contains("stroke=\"none\""), "no white chip in the student copy");
+    let b = bars(&stu, 1.0);
+    let labels: Vec<(El, Bx)> = ink(&stu).into_iter().filter(|(e, _)| e.a("font-size").as_deref() == Some("12.60")).collect();
+    assert_eq!(labels.len(), b.len(), "a label per bar");
+    for (e, bx) in &labels {
+        let cx = (bx.0 + bx.2) / 2.0;
+        let bar = b.iter().find(|r| (r.0 + r.2 / 2.0 - cx).abs() < 1.5).unwrap_or_else(|| panic!("a bar under {:?}", e.text));
+        let gap = bar.1 - bx.3;
+        assert!((gap - (5.0 + 0.3 * 12.6)).abs() < 0.6, "{:?} is {gap} px above its bar, not lifted by the hidden line", e.text);
+    }
 }
 
 #[test]
@@ -1087,32 +1160,48 @@ fn question_answers_are_recomputed_independently() {
 }
 
 #[test]
-fn rounding_note_offers_only_a_setting_that_adds_to_100() {
-    let thirds = warnings(&with(&[("data", "A, 1\nB, 1\nC, 1"), ("measure", PERCENT)]));
-    assert_eq!(
-        thirds,
-        ["The percents written on the bars add to 99%, not 100%, because each is rounded. Choose \u{201c}Frequency (count)\u{201d} for \u{201c}Bar height\u{201d} so the values on the bars add up exactly."]
-    );
-    let eighths = warnings(&with(&[("data", "A, 1\nB, 2\nC, 3\nD, 2"), ("measure", PERCENT)]));
-    assert_eq!(eighths, ["The percents written on the bars add to 101%, not 100%, because each is rounded. Set \u{201c}Decimals in percents\u{201d} to 1."]);
-    assert!(warnings(&with(&[("data", "A, 1\nB, 2\nC, 3\nD, 2"), ("measure", PERCENT), ("decimals", "1")])).is_empty());
-    // MED 3: the search looks both ways. 8, 9, 2, 9 of 28 at one decimal sums 99.9%, and zero
-    // decimals sums exactly 100%, so the note offers 0, not "abandon percents"
+fn the_rounding_note_settles_on_both_groups_at_once() {
+    // MED 2/3: the note searches every Decimals setting for EVERY group; when none leaves every
+    // column adding to 100% it says so and offers the counts, and applying that clears it
+    let pet = "Pet, Class A, Class B\nDog, 8, 1\nCat, 9, 2\nFish, 2, 3\nNone, 9, 2";
+    let all = warnings(&with(&[("data", pet), ("measure", PERCENT), ("decimals", "1")]));
+    let d1: Vec<String> = all.iter().filter(|n| n.contains("printed percents")).cloned().collect();
+    assert_eq!(d1.len(), 1, "{all:?}");
+    assert!(d1[0].contains("add to 99.9% for \u{201c}Class A\u{201d} and 100.0% for \u{201c}Class B\u{201d}, not 100% in every group"), "{}", d1[0]);
+    assert!(d1[0].contains("No Decimals setting makes every group add to 100%. Choose \u{201c}Frequency (count)\u{201d} for \u{201c}Bar height\u{201d}"), "{}", d1[0]);
+    let mut p = with(&[("data", pet), ("measure", PERCENT), ("decimals", "1")]);
+    let (steps, stuck) = settle(&mut p);
+    assert_eq!((steps, stuck.is_none()), (1, true), "{steps} {stuck:?}");
+    assert!(warnings(&p).iter().all(|n| info_only(n)), "{:?}", warnings(&p));
+    assert_eq!(p.s("measure"), COUNT, "the offered fix is the counts");
+    // the same at Decimals 0: Class B is the group that is out, and the note still offers the counts
+    let all = warnings(&with(&[("data", pet), ("measure", PERCENT), ("decimals", "0")]));
+    let d0: Vec<String> = all.iter().filter(|n| n.contains("printed percents")).cloned().collect();
+    assert_eq!(d0.len(), 1, "{all:?}");
+    assert!(d0[0].contains("add to 100% for \u{201c}Class A\u{201d} and 101% for \u{201c}Class B\u{201d}"), "{}", d0[0]);
+    assert!(d0[0].contains("No Decimals setting makes every group add to 100%."), "{}", d0[0]);
+    // one group: the setting that works is offered (8, 9, 2, 9 of 28 at one decimal -> 0)
     let p = with(&[("data", "A, 8\nB, 9\nC, 2\nD, 9"), ("measure", PERCENT), ("decimals", "1")]);
-    assert_eq!(warnings(&p), ["The percents written on the bars add to 99.9%, not 100%, because each is rounded. Set \u{201c}Decimals in percents\u{201d} to 0."]);
+    assert_eq!(warnings(&p), ["The printed percents add to 99.9%, not 100%, because each is rounded. Set \u{201c}Decimals in percents\u{201d} to 0."]);
     assert!(warnings(&with(&[("data", "A, 8\nB, 9\nC, 2\nD, 9"), ("measure", PERCENT), ("decimals", "0")])).is_empty());
-    // LOW 7: whatever it advises clears it, and the thirds note has a real action, not a remark
-    for (data, d) in [("A, 1\nB, 1\nC, 1", "0"), ("A, 1\nB, 2\nC, 3\nD, 2", "0"), ("A, 8\nB, 9\nC, 2\nD, 9", "1")] {
+    // thirds: no setting works, so the note offers the counts and names the setting it searched
+    let thirds = warnings(&with(&[("data", "A, 1\nB, 1\nC, 1"), ("measure", PERCENT)]));
+    assert_eq!(thirds, ["The printed percents add to 99%, not 100%, because each is rounded. No Decimals setting makes them add to 100%. Choose \u{201c}Frequency (count)\u{201d} for \u{201c}Bar height\u{201d} if they must add up exactly."]);
+    // eighths: 1 decimal adds exactly, so that is the offer
+    let eighths = warnings(&with(&[("data", "A, 1\nB, 2\nC, 3\nD, 2"), ("measure", PERCENT)]));
+    assert_eq!(eighths, ["The printed percents add to 101%, not 100%, because each is rounded. Set \u{201c}Decimals in percents\u{201d} to 1."]);
+    assert!(warnings(&with(&[("data", "A, 1\nB, 2\nC, 3\nD, 2"), ("measure", PERCENT), ("decimals", "1")])).is_empty());
+    // every advice clears in one step and never comes back
+    for (data, d) in [("A, 1\nB, 1\nC, 1", "0"), ("A, 1\nB, 2\nC, 3\nD, 2", "0"), ("A, 8\nB, 9\nC, 2\nD, 9", "1"), (pet, "1"), (pet, "0")] {
         let mut p = with(&[("data", data), ("measure", PERCENT), ("decimals", d)]);
         let (steps, stuck) = settle(&mut p);
-        assert!(steps >= 1 && stuck.is_none(), "{data}: {steps} {stuck:?}");
-        assert!(warnings(&p).is_empty(), "{data}: {:?}", warnings(&p));
+        assert!(steps >= 1 && stuck.is_none(), "{data} {d}: {steps} {stuck:?}");
+        assert!(warnings(&p).iter().all(|n| info_only(n)), "{data} {d}: {:?}", warnings(&p));
     }
-    // the note is about the values on the bars: a table-only copy has no such note, because its
-    // cells add to the printed Total (MED 2)
-    assert!(warnings(&with(&[("data", "A, 1\nB, 1\nC, 1"), ("measure", PERCENT), ("values", "false"), ("blank", BLANKS[1])])).is_empty());
+    // the table-only copy gets the same note: its Total row shows the rounded sum it is about
+    let table_only = warnings(&with(&[("data", "A, 1\nB, 1\nC, 1"), ("measure", PERCENT), ("values", "false"), ("blank", BLANKS[1])]));
+    assert_eq!(table_only.len(), 1, "{table_only:?}");
 }
-
 #[test]
 fn truncated_axis_and_cut_off_bars_are_flagged() {
     let p = with(&[("data", "Brand A, 46\nBrand B, 44\nBrand C, 42"), ("scale_auto", "false"), ("scale_min", "40"), ("scale_max", "45")]);
@@ -1288,27 +1377,12 @@ fn student_copies_leak_nothing_anywhere_in_the_source() {
                                 // answers recomputed here, independently
                                 let percent = measure == PERCENT;
                                 let tot: Vec<u64> = (0..t.groups).map(|g| t.cats.iter().map(|c| c.counts[g]).sum()).collect();
+                                let my_tenths = |c: u64, n: u64| -> u128 { (2 * c as u128 * 1000 + n as u128) / (2 * n as u128) };
                                 let my_pct = |c: u64, n: u64| {
-                                    let s = (2 * c as u128 * 1000 + n as u128) / (2 * n as u128);
+                                    let s = my_tenths(c, n);
                                     format!("{}.{}%", s / 10, s % 10)
                                 };
                                 let vlab: Vec<String> = t.cats.iter().flat_map(|c| (0..t.groups).map(|g| if percent { my_pct(c.counts[g], tot[g]) } else { fmt_count(c.counts[g]) }).collect::<Vec<_>>()).collect();
-                                // MED 2: the table's percent cells are largest-remainder columns, so
-                                // they are not the half-up labels; the test computes them itself
-                                let my_col = |cs: &[u64], n: u64| -> Vec<String> {
-                                    let (target, n) = (1000u128, n as u128);
-                                    let mut out: Vec<u128> = cs.iter().map(|c| *c as u128 * target / n).collect();
-                                    let mut rem: Vec<(u128, usize)> = cs.iter().enumerate().map(|(i, c)| ((*c as u128 * target) % n, i)).collect();
-                                    rem.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
-                                    let mut left = target.saturating_sub(out.iter().sum::<u128>());
-                                    let mut k = 0;
-                                    while left > 0 {
-                                        out[rem[k % rem.len()].1] += 1;
-                                        left -= 1;
-                                        k += 1;
-                                    }
-                                    out.iter().map(|s| format!("{}.{}%", s / 10, s % 10)).collect()
-                                };
                                 let ktexts = texts(&key);
                                 let stexts = texts(&stu);
                                 let mut answers: Vec<String> = Vec::new();
@@ -1320,11 +1394,13 @@ fn student_copies_leak_nothing_anywhere_in_the_source() {
                                 if bi == 1 {
                                     answers.extend(tot.iter().map(|v| fmt_count(*v)));
                                     if percent {
+                                        // MED 4: the table cells are the same numbers as the labels,
+                                        // and the Total cell is what they add to
+                                        answers.extend(vlab.clone());
                                         for g in 0..t.groups {
-                                            let cs: Vec<u64> = idx_order.iter().map(|&i| t.cats[i].counts[g]).collect();
-                                            answers.extend(my_col(&cs, tot[g]));
+                                            let tenths: u128 = idx_order.iter().map(|&i| my_tenths(t.cats[i].counts[g], tot[g])).sum();
+                                            answers.push(format!("{}.{}%", tenths / 10, tenths % 10));
                                         }
-                                        answers.extend(vec!["100%".to_string(); t.groups]);
                                     }
                                 }
                                 if bi == 2 {
@@ -1360,7 +1436,7 @@ fn student_copies_leak_nothing_anywhere_in_the_source() {
                                     assert_eq!(bars(&stu, 1.0), bars(&key, 1.0), "{tag}: the bars are given");
                                 }
                                 // answer blanks have a fixed length, whatever the answers
-                                let blanks: Vec<f64> = elements(&stu).iter().filter(|e| e.tag == "line" && e.n("stroke-width") == 1.0 && e.n("y1") == e.n("y2") && e.n("x1") > 40.0 && e.a("stroke").as_deref() != Some(GRID) && e.a("stroke").as_deref() != Some("#cccccc") && e.a("stroke").as_deref() != Some("#999999")).map(|e| e.n("x2") - e.n("x1")).collect();
+                                let blanks: Vec<f64> = elements(&stu).iter().filter(|e| e.tag == "line" && e.n("stroke-width") == 1.0 && e.n("y1") == e.n("y2") && e.n("x1") > 40.0 && e.a("stroke").as_deref() != Some(GRID) && e.a("stroke").as_deref() != Some("#cccccc") && e.a("stroke").as_deref() != Some(PRINT_GRID)).map(|e| e.n("x2") - e.n("x1")).collect();
                                 assert!(!blanks.is_empty());
                             }
                         }
@@ -1373,6 +1449,17 @@ fn student_copies_leak_nothing_anywhere_in_the_source() {
 }
 
 // ───────────────────────── print ─────────────────────────
+
+/// A properly downsampled copy: render at 1x, then resize by `pct` per cent with a Lanczos filter,
+/// as a photocopier's reduction does (MED 3: sampling one pixel of an enlarged render hid the
+/// loss). Returns the image and the exact scale used.
+fn copy_at(svg: &str, pct: u32) -> (image::GrayImage, f64) {
+    let png = crate::figures::to_png(svg, 1.0).unwrap();
+    let img = image::load_from_memory(&png).unwrap().to_luma8();
+    let f = pct as f64 / 100.0;
+    let (w, h) = ((img.width() as f64 * f).round() as u32, (img.height() as f64 * f).round() as u32);
+    (image::imageops::resize(&img, w, h, image::imageops::FilterType::Lanczos3), f)
+}
 
 fn is_grey(v: &str) -> bool {
     if v.starts_with("url(#vs-hatch") || v == "none" || v == "#fff" || v == "#000" {
@@ -1427,10 +1514,34 @@ fn print_is_exactly_grey_and_survives_a_66_percent_bitonal_copy() {
     // LOW: the solid first series and the grid both survive the copy (they used to be too light)
     assert!(g0.iter().all(|f| *f > 0.9), "the solid series survives a copy: {g0:?}");
     assert!(g1.iter().all(|f| *f > 0.12 && *f < 0.9), "the hatched series survives and stays apart: {g1:?}");
-    let grid: Vec<El> = elements(&svg).into_iter().filter(|e| e.tag == "line" && e.a("stroke").as_deref() == Some("#999999") && e.n("y1") == e.n("y2")).collect();
-    assert!(!grid.is_empty(), "the Print grid is drawn");
-    let topmost = grid.iter().min_by(|a, b| a.n("y1").partial_cmp(&b.n("y1")).unwrap()).unwrap();
-    assert!(black((topmost.n("x1") + topmost.n("x2")) / 2.0, topmost.n("y1")), "a Print gridline survives the copy");
+    // MED 3: a real downsample (1x render, then resize) at 66% and 58%, thresholded at 168. The
+    // grid is measured on the student copy with the bars left out, so the plot holds the grid and
+    // nothing else. Measured on this drawing: darkest gridline pixel 150 at 66%, 159 at 58%.
+    let mut bare = p.clone();
+    bare.set_b(SHOW_ANSWERS, false);
+    bare.set_s("blank", BLANKS[1]);
+    let bsvg = render(&bare);
+    let axis_y = elements(&bsvg).into_iter().find(|e| e.tag == "line" && e.n("y1") == e.n("y2") && e.n("stroke-width") == 2.0).map(|e| e.n("y1")).unwrap();
+    let grid: Vec<El> = elements(&bsvg).into_iter().filter(|e| e.tag == "line" && e.a("stroke").as_deref() == Some(PRINT_GRID) && e.n("y1") == e.n("y2") && (e.n("y1") - axis_y).abs() > 3.0).collect();
+    assert!(grid.len() >= 3, "the Print grid is drawn: {}", grid.len());
+    for pct in [66u32, 58] {
+        let (img, f) = copy_at(&bsvg, pct);
+        let mut worst = 255u8;
+        for g in &grid {
+            let (x0, x1, y) = (g.n("x1"), g.n("x2"), g.n("y1"));
+            let mut x = x0 + 3.0;
+            while x < x1 - 3.0 {
+                for dy in [-1.0f64, 0.0, 1.0] {
+                    let px = ((x * f) as u32).min(img.width() - 1);
+                    let py = (((y * f) + dy).round().max(0.0) as u32).min(img.height() - 1);
+                    worst = worst.min(img.get_pixel(px, py)[0]);
+                }
+                x += 1.0;
+            }
+        }
+        assert!(worst <= 162, "the Print grid must survive a {pct}% copy: its darkest pixel is {worst} (168 is the threshold, 150/159 measured at 66%/58%)");
+        println!("Print grid at {pct}%: darkest pixel {worst}");
+    }
     // one series: its fill is the solid grey, so its bars keep their tone in the copy
     let one = with(&[("data", "Walk, 12\nCar, 9\nBus, 6\nBike, 3"), ("style", "Print")]);
     let svg1 = render(&one);
@@ -1581,3 +1692,4 @@ fn dump_pngs() {
         }
     }
 }
+
