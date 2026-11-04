@@ -835,8 +835,43 @@ fn intake(app: &mut crate::App, ctx: &egui::Context, st: &mut State) {
     }
 }
 
-fn page(app: &mut crate::App, ui: &mut egui::Ui, ctx: &egui::Context, st: &mut State) {
-    fix_pick(st);
+/// What the importer can read, grouped so a teacher can scan for their tool instead of
+/// picking a format out of one faint dot-separated line.
+fn formats_panel(ui: &mut egui::Ui) {
+    kit::card().inner_margin(Margin::symmetric(16, 12)).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.horizontal_wrapped(|ui| {
+            kit::small_caps(ui, "What it reads");
+            ui.add_space(2.0);
+            ui.label(theme::muted("Detected from the file itself — nothing is converted until you press Convert.").size(11.5));
+        });
+        ui.add_space(10.0);
+        let groups: [(&str, &[&str]); 3] = [
+            ("Documents", &["PDF", "Word", "Photos of a worksheet", "Pasted text"]),
+            ("Spreadsheets", &["Excel", "CSV"]),
+            (
+                "Quiz tools",
+                &["Respondus", "Canvas QTI", "Blackboard", "Moodle XML", "GIFT", "Aiken", "Kahoot", "Quizlet", "Test Parrot .json"],
+            ),
+        ];
+        for (group, items) in groups {
+            ui.horizontal_top(|ui| {
+                ui.allocate_ui(Vec2::new(104.0, 0.0), |ui| {
+                    ui.label(theme::muted(group).size(11.5));
+                });
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = Vec2::new(6.0, 6.0);
+                    for it in items {
+                        kit::pill(ui, it, theme::field(), theme::text_col());
+                    }
+                });
+            });
+            ui.add_space(6.0);
+        }
+    });
+}
+
+fn page(app: &mut crate::App, ui: &mut egui::Ui, ctx: &egui::Context, st: &mut State) {    fix_pick(st);
     let view_h = ui.available_height();
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         let full = ui.available_width();
@@ -853,6 +888,8 @@ fn page(app: &mut crate::App, ui: &mut egui::Ui, ctx: &egui::Context, st: &mut S
             drop_area(app, ui, st);
             ui.add_space(14.0);
             if st.sources.is_empty() {
+                formats_panel(ui);
+                ui.add_space(14.0);
                 privacy_note(app, ui);
             } else {
                 let flags = dup_flags(app, st);
@@ -973,13 +1010,8 @@ fn drop_area(app: &mut crate::App, ui: &mut egui::Ui, st: &mut State) {
                     });
                 }
                 if !compact && !st.in_modal {
-                    ui.add_space(8.0);
-                    ui.label(
-                        theme::muted(
-                            "Blackboard · Aiken · CSV · Excel · GIFT · Moodle XML · QTI/Canvas · Respondus · Kahoot · Quizlet · .parrot.json · PDF · Word · photos",
-                        )
-                        .size(11.0),
-                    );
+                    ui.add_space(2.0);
+                    ui.label(theme::muted("Any file, text or photo — the format is detected after the drop.").size(11.5));
                 }
             });
         });

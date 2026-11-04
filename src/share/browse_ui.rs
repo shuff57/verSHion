@@ -411,36 +411,50 @@ fn results(ui: &mut Ui, m: &mut BrowseModel) {
 /// One result. True when it was opened.
 fn card(ui: &mut Ui, it: &ListItem) -> bool {
     let mut opened = false;
-    kit::card().inner_margin(Margin::same(10)).show(ui, |ui| {
-        ui.set_min_width(ui.available_width());
+    kit::card().inner_margin(Margin::same(12)).show(ui, |ui| {
+        let w = ui.available_width();
+        ui.set_min_width(w);
+        // The title and the row's two decisions (is the key in it, open it) share one line, so
+        // the key state is not a faint sentence lost in the meta.
         ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.add(egui::Label::new(theme::strong(text::shown(&it.title)).size(14.0)).wrap());
-                let mut bits = Vec::new();
-                for p in [api::plain(&it.subject), api::plain(&it.course), super::circles_text::grade_text(&it.grade)] {
-                    if !p.is_empty() {
-                        bits.push(p);
-                    }
-                }
-                bits.push(text::count(it.question_count));
-                if !it.kinds.is_empty() {
-                    bits.push(it.kinds.iter().map(|k| text::kind_name(k)).collect::<Vec<_>>().join(", "));
-                }
-                line(ui, bits.join(" - "));
-                let mut meta = format!("{} - by {} - version {}", text::license_name(&it.license), text::author(&it.author_name), it.version);
-                let d = text::date(it.committed_at);
-                if !d.is_empty() {
-                    meta.push_str(&format!(" - updated {d}"));
-                }
-                line(ui, meta);
-                line(ui, if it.hide_key { "Answer key hidden" } else { "Answer key shared" });
-                if let Some(mark) = it.license_check.as_ref().and_then(text::check_marker) {
-                    ui.add(egui::Label::new(theme::accent(mark).size(12.0)).wrap());
-                }
-            });
+            ui.allocate_ui_with_layout(
+                egui::vec2((w - 200.0).max(160.0), 0.0),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    ui.add(egui::Label::new(theme::strong(text::shown(&it.title)).size(14.0)).wrap());
+                },
+            );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 opened = kit::primary_button(ui, "Open").clicked();
+                if it.hide_key {
+                    kit::pill(ui, "No answer key", theme::field(), theme::muted_col());
+                } else {
+                    kit::pill(ui, "Answer key included", theme::accent_faded(), theme::accent_col());
+                }
             });
+        });
+        ui.add_space(2.0);
+        ui.vertical(|ui| {
+            let mut bits = Vec::new();
+            for p in [api::plain(&it.subject), api::plain(&it.course), super::circles_text::grade_text(&it.grade)] {
+                if !p.is_empty() {
+                    bits.push(p);
+                }
+            }
+            bits.push(text::count(it.question_count));
+            if !it.kinds.is_empty() {
+                bits.push(it.kinds.iter().map(|k| text::kind_name(k)).collect::<Vec<_>>().join(", "));
+            }
+            line(ui, bits.join(" - "));
+            let mut meta = format!("{} - by {} - version {}", text::license_name(&it.license), text::author(&it.author_name), it.version);
+            let d = text::date(it.committed_at);
+            if !d.is_empty() {
+                meta.push_str(&format!(" - updated {d}"));
+            }
+            line(ui, meta);
+            if let Some(mark) = it.license_check.as_ref().and_then(text::check_marker) {
+                ui.add(egui::Label::new(theme::accent(mark).size(12.0)).wrap());
+            }
         });
     });
     opened

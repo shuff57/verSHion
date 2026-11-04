@@ -1269,17 +1269,50 @@ fn flush_row(
     if pending.is_empty() {
         return;
     }
+    // Cards in a row share one height: the tallest of them. Measuring first (a sizing pass,
+    // which takes no clicks and takes no room) keeps the row's bottom edge straight.
+    let mut row_h = 0.0_f32;
+    if !list && pending.len() > 1 {
+        for &i in pending.iter() {
+            let h = measure_card(ui, app, ctx, key, bank_id, cw, &questions[i], i + 1, pool);
+            row_h = row_h.max(h);
+        }
+    }
     ui.horizontal_top(|ui| {
         ui.spacing_mut().item_spacing.x = gap;
         for &i in pending.iter() {
-            ui.allocate_ui_with_layout(Vec2::new(cw, 0.0), Layout::top_down(Align::Min), |ui| {
+            ui.allocate_ui_with_layout(Vec2::new(cw, row_h), Layout::top_down(Align::Min), |ui| {
                 ui.set_width(cw);
-                draw_card(ui, app, ctx, key, bank_id, cw, Some(&questions[i]), i + 1, list, pool, false);
+                draw_card(ui, app, ctx, key, bank_id, cw, Some(&questions[i]), i + 1, list, pool, false, row_h);
             });
         }
     });
     ui.add_space(if list { 6.0 } else { gap });
     pending.clear();
+}
+
+/// The height a question card would take at this width, measured without drawing anything
+/// that can be clicked.
+fn measure_card(
+    ui: &mut Ui,
+    app: &mut App,
+    ctx: &egui::Context,
+    key: UiId,
+    bank_id: &str,
+    cw: f32,
+    q: &Question,
+    n: usize,
+    pool: &[String],
+) -> f32 {
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .sizing_pass()
+            .max_rect(Rect::from_min_size(ui.cursor().left_top(), Vec2::new(cw, 6000.0)))
+            .layout(Layout::top_down(Align::Min)),
+    );
+    child.set_width(cw);
+    draw_card(&mut child, app, ctx, key, bank_id, cw, Some(q), n, false, pool, false, 0.0);
+    (child.min_rect().height()).max(0.0)
 }
 
 // ---------- banks list pieces ----------
@@ -1384,8 +1417,32 @@ fn apply_bank_menu(app: &mut App, ctx: &egui::Context, key: UiId, r: &BankRow, a
     }
 }
 
-fn counts_line(r: &BankRow) -> String {
-    format!(
+/// "2 multiple choice · 1 fill in the blank" — what the type-mix bar is counting.
+fn mix_legend(mix: &[usize; 6]) -> String {
+    let kinds = [
+        (QKind::Mc, "multiple choice"),
+        (QKind::Tf, "true/false"),
+        (QKind::Multipart, "multipart"),
+        (QKind::Matching, "matching"),
+        (QKind::Blank, "fill in the blank"),
+        (QKind::Short, "short answer"),
+    ];
+    let mut parts: Vec<String> = kinds
+        .iter()
+        .filter_map(|(k, label)| {
+            let n = mix[mix_index(*k)];
+            (n > 0).then(|| format!("{n} {label}"))
+        })
+        .collect();
+    if parts.len() > 3 {
+        let rest = parts.len() - 3;
+        parts.truncate(3);
+        parts.push(format!("{rest} more types"));
+    }
+    if parts.is_empty() { "No questions yet".to_string() } else { parts.join(" · ") }
+}
+
+fn counts_line(r: &BankRow) -> String {    format!(
         "{}{} question{} · {} topic{}",
         if r.archived { "Archived · " } else { "" },
         r.nq,
@@ -1410,6 +1467,9 @@ fn bank_card(ui: &mut Ui, app: &mut App, ctx: &egui::Context, key: UiId, r: &Ban
         crate::share::bank_links_ui::badge(ui, app, &r.id);
         ui.label(theme::muted(counts_line(r)).size(12.5));
         ui.add_space(8.0);
+        // Name the mix: the bar is a question-type breakdown, so say which types it counts.
+        ui.label(theme::muted(mix_legend(&r.mix)).size(11.0));
+        ui.add_space(4.0);
         paint_mix_bar(ui, ui.available_width(), &r.mix);
         ui.add_space(8.0);
         link = Some(usage_link(ui, r.used_in.len(), 12.0).rect);
@@ -1961,33 +2021,40 @@ fn outline_panel(ui: &mut Ui, ctx: &egui::Context, key: UiId, questions: &[Quest
     for (t, n) in &tc {
         let on = st.topic.as_deref() == Some(t.as_str());
         let resp = side_row(ui, t, *n, on, 18.0);
-        // "…" menu, placed over the row's right edge (added last, so it gets its clicks).
-        let mrect = Rect::from_center_size(Pos2::new(resp.rect.right() - 13.0, resp.rect.center().y), Vec2::new(20.0, 22.0));
+        // "…" menu over the row's right edge — only while the row is hovered or selected, so
+        // the list is not a column of stray ellipses.
         let mut act: Option<TopicMode> = None;
-        // A child ui that takes no room in the list (the row already has it).
-        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(mrect).layout(Layout::left_to_right(Align::Center)));
-        child.style_mut().visuals.button_frame = false;
-        let over_menu = {
-            let ui = &mut child;
-            {
-                ui.menu_button(RichText::new("…").size(14.0).color(if on { theme::accent_col() } else { theme::muted_col() }), |ui| {
-                    if ui.button("Rename…").clicked() {
-                        act = Some(TopicMode::Rename);
-                        ui.close();
-                    }
-                    if tc.len() > 1 && ui.button("Merge into…").clicked() {
-                        act = Some(TopicMode::Merge);
-                        ui.close();
-                    }
-                    if ui.button("Delete…").clicked() {
-                        act = Some(TopicMode::Delete);
-                        ui.close();
-                    }
-                })
-                .response
-                .contains_pointer()
-            }
-        };
+        let mut over_menu = false;
+        if on || resp.hovered() {
+            let mrect = Rect::from_min_size(
+                Pos2::new(resp.rect.right() - 26.0, resp.rect.top()),
+                Vec2::new(24.0, resp.rect.height()),
+            );
+            // A child ui that takes no room in the list (the row already has it).
+            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(mrect).layout(Layout::left_to_right(Align::Center)));
+            child.style_mut().visuals.button_frame = false;
+            over_menu = {
+                let ui = &mut child;
+                {
+                    ui.menu_button(RichText::new("…").size(14.0).color(if on { theme::accent_col() } else { theme::muted_col() }), |ui| {
+                        if ui.button("Rename…").clicked() {
+                            act = Some(TopicMode::Rename);
+                            ui.close();
+                        }
+                        if tc.len() > 1 && ui.button("Merge into…").clicked() {
+                            act = Some(TopicMode::Merge);
+                            ui.close();
+                        }
+                        if ui.button("Delete…").clicked() {
+                            act = Some(TopicMode::Delete);
+                            ui.close();
+                        }
+                    })
+                    .response
+                    .contains_pointer()
+                }
+            };
+        }
         if let Some(mode) = act {
             let text = if mode == TopicMode::Rename { t.clone() } else { String::new() };
             with_state(ctx, key, |s: &mut BankEditState| s.topic_edit = Some(TopicEdit { from: t.clone(), mode, text }));
@@ -2468,6 +2535,7 @@ fn draw_card(
     list: bool,
     _pool: &[String],
     scroll_to: bool,
+    min_h: f32,
 ) {
     // Editing happens in a modal over the list, so a card never expands in place; the one being
     // edited keeps its shape and gets an accent outline.
@@ -2487,6 +2555,9 @@ fn draw_card(
         .stroke(Stroke::new(1.0, if editing { theme::accent_col() } else { theme::border() }));
     let out = frame.show(ui, |ui| {
         ui.set_width(width - 2.0);
+        if min_h > 0.0 {
+            ui.set_min_height(min_h);
+        }
 
         // ----- header (the click target) -----
         let hdr = Frame::new().inner_margin(Margin::symmetric(13, 10)).show(ui, |ui| {
@@ -2556,7 +2627,14 @@ fn draw_card(
                 if let (false, Some(q)) = (open, q) {
                     ui.add_space(5.0);
                     card_full_question(ui, app, q, 14.0);
-                    ui.add_space(6.0);
+                    // Keep the topic chips on the card's bottom edge so a row of cards lines up.
+                    if min_h > 0.0 {
+                        let used = ui.min_rect().height();
+                        let pad = (min_h - used - 24.0).max(0.0);
+                        ui.add_space(pad);
+                    } else {
+                        ui.add_space(6.0);
+                    }
                     ui.horizontal_wrapped(|ui| {
                         ui.spacing_mut().item_spacing = Vec2::new(6.0, 4.0);
                         for t in q.topics.iter().map(|t| t.trim()).filter(|t| !t.is_empty()).take(2) {

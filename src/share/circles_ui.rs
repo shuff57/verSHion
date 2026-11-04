@@ -60,18 +60,19 @@ pub(super) fn wait_of(m: &CirclesModel, p: &Problem) -> Option<std::time::Durati
     (at > now).then(|| at - now)
 }
 
+/// A titled run inside the circle page. The page is already a card, so this is a heading and
+/// a rule rather than a third nested panel.
 pub(super) fn section<R>(ui: &mut Ui, title: &str, f: impl FnOnce(&mut Ui) -> R) -> R {
-    let r = kit::card()
-        .inner_margin(Margin::same(12))
-        .show(ui, |ui| {
-            ui.set_min_width(ui.available_width());
-            ui.label(theme::strong(title).size(14.5));
-            ui.add_space(4.0);
-            f(ui)
-        })
-        .inner;
+    ui.add_space(2.0);
+    ui.label(theme::strong(title).size(14.0));
+    ui.add_space(2.0);
+    let w = ui.available_width();
+    let (r, _) = ui.allocate_exact_size(egui::vec2(w, 1.0), egui::Sense::hover());
+    ui.painter().hline(r.x_range(), r.center().y, egui::Stroke::new(1.0, theme::border()));
     ui.add_space(8.0);
-    r
+    let out = f(ui);
+    ui.add_space(12.0);
+    out
 }
 
 /// A pill that a wrapping row moves to the next line whole (a framed `kit::pill` would be squeezed
@@ -276,7 +277,7 @@ fn list_page(ui: &mut Ui, m: &mut CirclesModel) {
     for c in m.list.items.clone() {
         kit::card().inner_margin(Margin::same(10)).show(ui, |ui| {
             ui.set_min_width(ui.available_width());
-            let clicked = with_action(ui, Some(("Open", true)), |ui| {
+            let clicked = with_action(ui, Some(("Open", false)), |ui| {
                 text_row(ui, |ui| {
                     ui.add(egui::Label::new(theme::strong(api::plain(&c.name)).size(14.5)).wrap());
                     role_pill(ui, c.role());

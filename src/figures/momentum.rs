@@ -16,8 +16,8 @@ const C2_PRINT: &str = "#777777";
 const BLANK: &str = "_____";
 const W: f64 = 470.0;
 const ROWS_Y0: f64 = 252.0;
-const ROW_H: f64 = 18.0;
-const ROW_FS: f64 = 15.0;
+const ROW_H: f64 = 16.0;
+const ROW_FS: f64 = 12.0;
 
 const KINDS: [&str; 2] = ["Elastic", "Perfectly inelastic"];
 
@@ -174,6 +174,14 @@ pub fn build(p: &Params) -> (String, Report) {
         if ans { format!("Velocities after  A {} m/s,  B {} m/s", q(v1, dec), q(v2, dec)) } else { format!("Velocities after  A {BLANK} m/s,  B {BLANK} m/s") },
         if ans { format!("Kinetic energy before {} J, after {} J", q(tot.2, dec), q(tot.3, dec)) } else { format!("Kinetic energy  {BLANK} J before, {BLANK} J after") },
     ];
+    // a hairline sets the worked figures apart from the diagram above them
+    d.raw(&format!(
+        r##"<line x1="24.00" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="0.7"/>"##,
+        ROWS_Y0 - 10.0 * f,
+        w - 24.0,
+        ROWS_Y0 - 10.0 * f,
+        ink,
+    ));
     for (i, line) in rows.iter().enumerate() {
         d.raw(&format!(
             r##"<text x="24.00" y="{:.2}" font-size="{}" text-anchor="start" font-family="Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="{}">{}</text>"##,

@@ -293,24 +293,60 @@ pub const STEPS: [(&str, &str); 4] = [
 /// One numbered how-it-works card.
 pub fn step_card(ui: &mut egui::Ui, i: usize) {
     let Some((title, body)) = STEPS.get(i) else { return };
+    let w = ui.available_width();
     crate::kit::card()
         .outer_margin(Margin::same(6))
         .inner_margin(Margin::same(16))
         .show(ui, |ui| {
-            ui.set_min_width(150.0);
-            let (r, _) = ui.allocate_exact_size(Vec2::splat(26.0), egui::Sense::hover());
-            ui.painter().circle_filled(r.center(), 13.0, theme::accent_faded());
-            ui.painter().text(
-                r.center(),
-                Align2::CENTER_CENTER,
-                format!("{}", i + 1),
-                egui::FontId::new(12.0, theme::bold_family()),
-                theme::accent_col(),
-            );
+            ui.set_width((w - 44.0).max(150.0));
+            step_badge(ui, i);
             ui.add_space(6.0);
-            ui.label(theme::serif(*title).size(16.0));
+            ui.add(egui::Label::new(theme::serif(*title).size(16.0)).wrap());
             ui.add_space(4.0);
-            ui.label(theme::muted(*body).size(11.5));
+            // A fixed body box keeps four cards in a row the same height, whatever the wrap.
+            ui.allocate_ui_with_layout(
+                Vec2::new(ui.available_width(), 76.0),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    ui.set_min_height(76.0);
+                    ui.add(egui::Label::new(theme::muted(*body).size(11.5)).wrap());
+                },
+            );
+        });
+}
+
+/// The numbered disc that heads a step.
+fn step_badge(ui: &mut egui::Ui, i: usize) {
+    let (r, _) = ui.allocate_exact_size(Vec2::splat(26.0), egui::Sense::hover());
+    ui.painter().circle_filled(r.center(), 13.0, theme::accent_faded());
+    ui.painter().text(
+        r.center(),
+        Align2::CENTER_CENTER,
+        format!("{}", i + 1),
+        egui::FontId::new(12.0, theme::bold_family()),
+        theme::accent_col(),
+    );
+}
+
+/// A step as a wide row: the disc and title on one line, the body beneath. Used when the
+/// steps stack, where a full-width card would otherwise be mostly empty height.
+pub fn step_row(ui: &mut egui::Ui, i: usize) {
+    let Some((title, body)) = STEPS.get(i) else { return };
+    let w = ui.available_width();
+    crate::kit::card()
+        .outer_margin(Margin::symmetric(6, 4))
+        .inner_margin(Margin::symmetric(16, 12))
+        .show(ui, |ui| {
+            ui.set_width((w - 44.0).max(150.0));
+            ui.horizontal_top(|ui| {
+                step_badge(ui, i);
+                ui.add_space(2.0);
+                ui.vertical(|ui| {
+                    ui.add(egui::Label::new(theme::serif(*title).size(16.0)).wrap());
+                    ui.add_space(2.0);
+                    ui.add(egui::Label::new(theme::muted(*body).size(11.5)).wrap());
+                });
+            });
         });
 }
 
@@ -724,14 +760,10 @@ impl crate::App {
                         }
                     });
                 } else {
-                    egui::Grid::new("welcome-steps-grid").num_columns(2).show(ui, |ui| {
-                        step_card(ui, 0);
-                        step_card(ui, 1);
-                        ui.end_row();
-                        step_card(ui, 2);
-                        step_card(ui, 3);
-                        ui.end_row();
-                    });
+                    // Narrow: one full-width row per step, so every word is on screen.
+                    for i in 0..4 {
+                        step_row(ui, i);
+                    }
                 }
             });
         });
@@ -765,6 +797,11 @@ impl crate::App {
     fn draw_home_body(&mut self, ui: &mut egui::Ui) {
         use crate::kit;
         let fresh = self.store.banks.is_empty() && self.store.exams.is_empty();
+        // A first-run page holds far less than a full window; sit it in the upper middle
+        // instead of stacking everything against the top edge.
+        if fresh {
+            ui.add_space((ui.available_height() * 0.14).clamp(0.0, 96.0));
+        }
         let n_banks = self.store.banks.len();
         let n_exams = self.store.exams.len();
         let n_q: usize = self.store.banks.iter().map(|b| b.questions.len()).sum();
@@ -808,8 +845,8 @@ impl crate::App {
         let avail = ui.available_width();
         let stacked = avail < 620.0;
         let tiles: [(NavIcon, &str, &str, bool); 3] = [
-            (NavIcon::Plus, "New exam", "Start from a blank page", true),
-            (NavIcon::Banks, "New bank", "A shelf for questions", false),
+            (NavIcon::Plus, "New exam", "Start from a blank page", !fresh),
+            (NavIcon::Banks, "New bank", "A shelf for questions", fresh),
             (NavIcon::Import, "Import", "Anything: text, files, photos", false),
         ];
         let mut tile_hit: Option<usize> = None;
@@ -846,15 +883,66 @@ impl crate::App {
         ui.add_space(18.0);
 
         if fresh {
-            kit::card().inner_margin(Margin::same(18)).show(ui, |ui| {
-                ui.set_min_width(ui.available_width().max(0.0));
-                ui.label(theme::serif("Let's make your first Question Bank").size(20.0));
-                ui.add_space(4.0);
-                ui.label(theme::text(
-                    "A bank is a bag of questions: reuse the same questions in as many exams as you \
-                     like. Write them yourself, or hand a PDF, a scan or screenshots to the built-in \
-                     AI and it comes back as a bank.",
-                ));
+            // First run: teach the shape of the app instead of one long line on a wide card.
+            let two = ui.available_width() >= 760.0;
+            kit::card().inner_margin(Margin::same(20)).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                let left = |ui: &mut egui::Ui| {
+                    ui.label(theme::serif("Let's make your first Question Bank").size(20.0));
+                    ui.add_space(6.0);
+                    ui.add(
+                        egui::Label::new(
+                            theme::text(
+                                "A bank is a bag of questions: reuse the same questions in as \
+                                 many exams as you like. Write them yourself, or hand a PDF, a \
+                                 scan or screenshots to the built-in AI and it comes back as a bank.",
+                            )
+                            .size(13.0),
+                        )
+                        .wrap(),
+                    );
+                };
+                let right = |ui: &mut egui::Ui| {
+                    for (n, (head, body)) in [
+                        ("Gather", "A bank of questions, or a PDF, a scan, a screenshot, a Word file."),
+                        ("Lay out", "Drag questions from any bank onto an exam page and reorder them."),
+                        ("Print", "Four paper styles, a PDF or a DOCX, with an answer key."),
+                    ]
+                    .into_iter()
+                    .enumerate()
+                    {
+                        ui.horizontal_top(|ui| {
+                            let (r, _) = ui.allocate_exact_size(Vec2::splat(20.0), egui::Sense::hover());
+                            ui.painter().circle_filled(r.center(), 10.0, theme::accent_faded());
+                            ui.painter().text(
+                                r.center(),
+                                Align2::CENTER_CENTER,
+                                format!("{}", n + 1),
+                                egui::FontId::new(10.5, theme::bold_family()),
+                                theme::accent_col(),
+                            );
+                            ui.add_space(4.0);
+                            ui.vertical(|ui| {
+                                ui.label(theme::text(head).size(13.0).strong());
+                                ui.add(egui::Label::new(theme::muted(body).size(11.5)).wrap());
+                            });
+                        });
+                        if n < 2 {
+                            ui.add_space(6.0);
+                        }
+                    }
+                };
+                if two {
+                    ui.columns(2, |cols| {
+                        cols[0].set_width(cols[0].available_width() - 12.0);
+                        left(&mut cols[0]);
+                        right(&mut cols[1]);
+                    });
+                } else {
+                    left(ui);
+                    ui.add_space(14.0);
+                    right(ui);
+                }
             });
             return;
         }
@@ -1458,6 +1546,13 @@ impl crate::App {
                     ui.label(theme::muted(
                         "Zips up every bank, exam, import, export, setting and picture into one file.",
                     ));
+                    ui.add_space(2.0);
+                    ui.label(
+                        theme::muted(
+                            "Restoring replaces everything in verSHion with that file's contents, so keep the backup somewhere else too.",
+                        )
+                        .size(11.5),
+                    );
                     ui.add_space(10.0);
                     ui.horizontal(|ui| {
                         if pageshell::primary(ui, "Download backup").clicked() {
@@ -1482,6 +1577,19 @@ impl crate::App {
                                 .family(egui::FontFamily::Monospace),
                         )
                         .wrap(),
+                    );
+                    ui.add_space(6.0);
+                    let n_banks = app.store.banks.len();
+                    let n_exams = app.store.exams.len();
+                    let n_q: usize = app.store.banks.iter().map(|b| b.questions.len()).sum();
+                    ui.label(
+                        theme::muted(format!(
+                            "{n_banks} bank{} · {n_exams} exam{} · {n_q} question{} on this computer",
+                            if n_banks == 1 { "" } else { "s" },
+                            if n_exams == 1 { "" } else { "s" },
+                            if n_q == 1 { "" } else { "s" },
+                        ))
+                        .size(12.0),
                     );
                     ui.add_space(8.0);
                     if pageshell::outline(ui, "Open folder").clicked() {
@@ -2133,32 +2241,34 @@ fn home_thumb_area(pv: Rect) -> Rect {
 }
 
 fn exam_card(ui: &mut egui::Ui, app: &mut crate::App, w: f32, e: &ExamRow, tilt_right: bool) -> bool {
-    // The preview band holds the first page at the Exams screen's thumbnail size.
-    let band_h = crate::examui::CARD_THUMB.y + 18.0;
-    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, band_h + 124.0), egui::Sense::click());
+    // A landscape card: the first page on the left, the facts beside it, so one exam on a
+    // dashboard row does not read as a tall, half-empty slab.
+    let h = 190.0;
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
     if resp.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
     let p = ui.painter();
     p.rect(rect, CornerRadius::same(16), theme::card(), hover_border(&resp), StrokeKind::Inside);
-    let pv = Rect::from_min_size(rect.min + Vec2::splat(1.0), Vec2::new(w - 2.0, band_h));
+    let thumb_area = Rect::from_min_size(rect.min + Vec2::new(14.0, 12.0), Vec2::new(112.0, 152.0));
+    let pv = thumb_area.expand2(Vec2::new(8.0, 0.0));
     paint_preview_bg(p, pv);
-    // The exam's real first page; the generic sheet only while it has no questions.
     let ctx = ui.ctx().clone();
-    let page = crate::examui::paint_exam_thumb(app, &ctx, p, home_thumb_area(pv), &e.id);
+    let page = crate::examui::paint_exam_thumb(app, &ctx, p, thumb_area, &e.id);
     let p = ui.painter();
     if page.is_none() {
-        paper_thumb(p, pv.center(), Vec2::new(70.0, 90.0), if tilt_right { 3.0 } else { -3.0 }, e.id.len() % 2 == 0, true);
+        paper_thumb(p, thumb_area.center(), Vec2::new(70.0, 90.0), if tilt_right { 3.0 } else { -3.0 }, e.id.len() % 2 == 0, true);
     }
-    let x = rect.min.x + 14.0;
-    let iw = w - 28.0;
-    paint_fit(p, Pos2::new(x, pv.bottom() + 11.0), &e.name, serif_font(16.0), theme::ink(), iw);
-    let y1 = pv.bottom() + 42.0;
-    let half = (iw - 10.0) / 2.0;
+    let x = pv.right() + 16.0;
+    let iw = (rect.right() - 22.0 - x).max(60.0);
+    paint_fit(p, Pos2::new(x, rect.min.y + 16.0), &e.name, serif_font(16.0), theme::ink(), iw);
+    let half = (iw - 12.0) / 2.0;
+    let y1 = rect.min.y + 52.0;
     paint_fact(p, Pos2::new(x, y1), half, "Questions", &e.qs.to_string());
-    paint_fact(p, Pos2::new(x + half + 10.0, y1), half, "Points", &fmt_pts(e.pts));
-    paint_fact(p, Pos2::new(x, y1 + 36.0), half, "Bank", &e.bank);
-    paint_fact(p, Pos2::new(x + half + 10.0, y1 + 36.0), half, "Edited", &rel_time(e.edited));
+    paint_fact(p, Pos2::new(x + half + 12.0, y1), half, "Points", &fmt_pts(e.pts));
+    // The bank name gets the card's whole text column; it is the one value that is a phrase.
+    paint_fact(p, Pos2::new(x, y1 + 42.0), iw, "Bank", &e.bank);
+    paint_fact(p, Pos2::new(x, y1 + 84.0), iw, "Edited", &rel_time(e.edited));
     resp.clicked()
 }
 

@@ -724,15 +724,14 @@ fn status_page(ui: &mut Ui, m: &mut AccountModel, in_page: bool, delete_link: bo
     });
     ui.add_space(12.0);
     // On the page a pending account is under the "Waiting for approval" step, which says it all.
-    if !(in_page && matches!(me.status, Status::Pending)) {
+    if matches!(me.status, Status::Approved) {
+        approved_row(ui, m, &me);
+    } else if !(in_page && matches!(me.status, Status::Pending)) {
         status_box(ui, m, &me);
-        ui.add_space(8.0);
     }
+    ui.add_space(10.0);
     credits_block(ui, m);
     actions(ui, m.busy(), |ui| {
-        if pageshell::outline(ui, "Check now").clicked() {
-            m.check_now();
-        }
         // The page's tabs are these two places.
         if !in_page && matches!(me.status, Status::Approved) && pageshell::primary(ui, "Browse shared questions").clicked() {
             super::browse_ui::request(ui.ctx(), super::browse_ui::BrowseRequest::Browse);
@@ -766,6 +765,22 @@ fn status_page(ui: &mut Ui, m: &mut AccountModel, in_page: bool, delete_link: bo
 }
 
 /// The approval state with its explanation, the reviewer's reason and, when allowed, re-applying.
+/// An approved account needs one line, not a card: the tag, what it allows, and the way to
+/// ask the server again.
+fn approved_row(ui: &mut Ui, m: &mut AccountModel, me: &api::Me) {
+    let (head, body) = status_text(&me.status);
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 10.0;
+        kit::pill(ui, head, theme::accent_faded(), theme::accent_col());
+        ui.label(theme::muted(body).size(12.5));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if pageshell::outline(ui, "Check status").on_hover_text("Asks the server again whether this account can share").clicked() {
+                m.check_now();
+            }
+        });
+    });
+}
+
 fn status_box(ui: &mut Ui, m: &mut AccountModel, me: &api::Me) {
     kit::card().inner_margin(Margin::same(14)).show(ui, |ui| {
         ui.set_min_width(ui.available_width());

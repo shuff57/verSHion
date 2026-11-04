@@ -1212,6 +1212,17 @@ fn label(ui: &mut Ui, text: &str) {
     ui.add_space(3.0);
 }
 
+/// A section heading with a sentence-case explanation beside it. The heading names the
+/// section; the hint says how to work it, without shouting in capitals.
+fn label_with_hint(ui: &mut Ui, heading: &str, hint: &str) {
+    ui.horizontal(|ui| {
+        kit::small_caps(ui, heading);
+        ui.add_space(2.0);
+        ui.label(theme::muted(hint).size(11.5));
+    });
+    ui.add_space(3.0);
+}
+
 // ---------- the in-place editor ----------
 
 impl App {
@@ -1320,7 +1331,7 @@ pub fn draw_modal(
 
     let screen = ctx.content_rect();
     let w = MODAL_W.min((screen.width() - 56.0).max(280.0));
-    let body_h = (screen.height() - MODAL_CHROME).clamp(180.0, 640.0);
+    let body_h = (screen.height() - MODAL_CHROME).clamp(180.0, 700.0);
 
     let frame = kit::card().inner_margin(Margin::symmetric(22, 16)).shadow(egui::Shadow {
         offset: [0, 6],
@@ -1557,8 +1568,8 @@ fn meta_strip(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w:
     meta_row(ui, "TYPE", |ui| {
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = Vec2::new(4.0, 4.0);
-            for (k, tag) in KINDS {
-                if kit::chip_toggle(ui, tag, draft.qkind() == k).on_hover_text(k.label()).clicked() && draft.qkind() != k {
+            for (k, _tag) in KINDS {
+                if kit::chip_toggle(ui, k.label(), draft.qkind() == k).clicked() && draft.qkind() != k {
                     if draft.switch_plan(k).needs_confirm() {
                         draft.confirm = Some(Confirm::Switch(k));
                     } else {
@@ -1571,7 +1582,7 @@ fn meta_strip(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w:
         });
     });
     meta_row(ui, "DIFFICULTY", |ui| {
-        ui.horizontal_wrapped(|ui| {
+        ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing = Vec2::new(4.0, 4.0);
             for (d, name) in [(Difficulty::Low, "Easy"), (Difficulty::Medium, "Medium"), (Difficulty::High, "Hard")] {
                 let on = draft.difficulty == Some(d);
@@ -1579,15 +1590,16 @@ fn meta_strip(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w:
                     draft.difficulty = if on { None } else { Some(d) };
                 }
             }
+            // Points share the difficulty row: one fewer band between the type and the question.
+            ui.add_space(20.0);
+            ui.label(theme::muted("Points").size(11.5));
+            let mut pt = draft.points_text();
+            if field_line(ui, &mut pt, 64.0, "none").changed() {
+                draft.set_points_text(&pt);
+            }
         });
     });
     meta_row(ui, "TOPICS", |ui| topics_value(ui, ctx, draft, key, vw, topic_pool));
-    meta_row(ui, "POINTS", |ui| {
-        let mut pt = draft.points_text();
-        if field_line(ui, &mut pt, 96.0, "none").changed() {
-            draft.set_points_text(&pt);
-        }
-    });
 }
 
 /// Topic chips and the add field share one wrapping row, so adding the first chip never changes
@@ -1773,12 +1785,16 @@ fn left_col(ui: &mut Ui, ctx: &egui::Context, draft: &mut Draft, key: UiId, w: f
     let stem_len = chars(&draft.stem);
     match &mut draft.kind {
         Kind::Mc { answers } => {
-            label(ui, "Answers  -  click the circle or press Alt+Enter to mark correct; Enter adds a row");
+            label_with_hint(
+                ui,
+                "Answers",
+                "Click the circle or press Alt+Enter to mark correct · Enter adds a row · the ∑ button inserts an equation",
+            );
             mc_editor(ui, &eq, answers, usize::MAX, w, &|i| EqField::Mc(i), (EqField::Stem, stem_len));
             eq.warn_line(ui, w, |a| matches!(a, Where::Answers));
         }
         Kind::Tf { correct } => {
-            label(ui, "Correct answer  -  click the circle");
+            label_with_hint(ui, "Correct answer", "Click the circle to set it");
             // An imported question without its key shows no answer until the teacher picks one.
             let unset = draft.keyless && !draft.tf_keyed.contains(&None);
             for (val, name) in [(true, "True"), (false, "False")] {
@@ -2003,7 +2019,7 @@ fn matching_editor(ui: &mut Ui, eq: &EqCtx, pairs: &mut Vec<Pair>, distractors: 
             }
         }
     }
-    label(ui, "Pairs  -  left item, right item");
+    label_with_hint(ui, "Pairs", "Left item, then the right item it matches");
     let ctrl = 24.0;
     let fw = ((w - 20.0 - ctrl - 3.0 * 6.0) / 2.0).max(80.0);
     for i in 0..pairs.len() {
@@ -2050,7 +2066,7 @@ fn matching_editor(ui: &mut Ui, eq: &EqCtx, pairs: &mut Vec<Pair>, distractors: 
     }
 
     ui.add_space(8.0);
-    label(ui, "Distractors  -  extra right-side items");
+    label_with_hint(ui, "Distractors", "Extra right-side items that match nothing");
     for i in 0..distractors.len() {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 6.0;

@@ -255,9 +255,11 @@ impl SharedUi {
                 g => self.guide_card(ui, &g, account),
             }
             ui.add_space(12.0);
-            pageshell::card(ui, |ui| {
-                pageshell::heading(ui, "Legal pages (drafts)");
+            // Legal pages are a footnote, not a card of their own: a quiet labelled line at the page's foot.
+            ui.vertical(|ui| {
                 ui.add_space(4.0);
+                crate::kit::small_caps(ui, "Legal pages (drafts)");
+                ui.add_space(2.0);
                 super::mine_ui::legal_links_for(ui, &super::ShareSettings::legal_base());
             });
             ui.add_space(20.0);
