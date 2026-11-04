@@ -59,6 +59,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "equilibrium-graphs" => EQUILIBRIUM_GRAPHS,
         "buffer-curves" => BUFFER_CURVES,
         "boltzmann-distribution" => BOLTZMANN_DISTRIBUTION,
+        "vsepr-shapes" => VSEPR_SHAPES,
         "periodic-table" => PERIODIC_TABLE,
         "orbital-diagram" => ORBITAL_DIAGRAM,
         "particle-diagram" => PARTICLE_DIAGRAM,
@@ -3899,6 +3900,33 @@ const BOLTZMANN_DISTRIBUTION: &[Faq] = &[
     Faq {
         q: "What does the student copy leave out?",
         a: "Show answers off keeps the axes, the curves and their temperature labels, the gas and its molar mass, the dashed line at Ea, and the guide at a marked speed. It omits the vp dots, the vp axis ticks and the rms guide, so the blank speed cells cannot be read off the axis. It shows the speeds table with blank cells and turns the fraction above Ea and the density at the marked speed into blank lines, and it does not shade the tail, because the shaded area is the answer. The key prints vp, the mean speed and the rms speed for every curve, the fraction above Ea at each temperature, and f at the marked speed.",
+    },
+];
+
+const VSEPR_SHAPES: &[Faq] = &[
+    Faq {
+        q: "Why is water bent rather than linear?",
+        a: "Oxygen has two bonding pairs and two lone pairs, so there are four electron domains around it. Four domains are tetrahedral, but only the two O–H bonds count towards the molecular shape: the two lone pairs take two of the tetrahedral directions and the two hydrogen atoms the other two. The lone pairs repel more strongly than the bonding pairs, so the H–O–H angle is compressed from the tetrahedral 109.5° to about 104.5°. The atoms are therefore not in a straight line: the molecule is bent. The figure draws 104.5° for water and never labels it 109.5°; the tetrahedral angle belongs to the four electron domains, not to the H–O–H angle.",
+    },
+    Faq {
+        q: "Why is ammonia a pyramid rather than flat?",
+        a: "Nitrogen has three N–H bonds and one lone pair, so there are four electron domains. They take a tetrahedral arrangement, but only three of the four directions end at hydrogen atoms; the fourth holds the lone pair. The three hydrogen atoms therefore sit at the corners of a triangular pyramid with nitrogen at the apex, and the H–N–H angle is about 107°, a little less than the tetrahedral 109.5° because the lone pair repels the bonding pairs more strongly. A flat NH3 with 120° angles would put the lone pair in the same plane and leave the domains closer together, which is not what the electron pairs do.",
+    },
+    Faq {
+        q: "What does a lone pair do to a bond angle?",
+        a: "A lone pair is held by only one nucleus, so its electron cloud spreads out more than a bonding pair, which is pulled between two nuclei. The repulsion order is lone pair–lone pair > lone pair–bonding pair > bonding pair–bonding pair. Adding a lone pair therefore squeezes the angle between the remaining bonds: NH3 has about 107° instead of 109.5°, and H2O about 104.5°. Two lone pairs squeeze harder than one. A double or triple bond also repels more than a single bond, but this ball-and-stick model draws single sticks only, so it does not show that effect. The lone pairs are always on the central atom in this figure; the terminal atoms have no lone pairs drawn.",
+    },
+    Faq {
+        q: "Why is sulfur hexafluoride octahedral?",
+        a: "Sulfur has six bonding pairs and no lone pairs in SF6, so there are six electron domains. The arrangement that keeps six directions as far apart as possible is the octahedron: one bond along each of +x, −x, +y, −y, +z and −z, with 90° between neighbours. All six S–F bonds are equivalent. Sulfur is in period 3 and can have more than eight valence electrons around it (an expanded octet), which is why SF6 exists; the figure shows the shape, not the bonding theory. The same octahedral set of six domains with two lone pairs in the axial positions gives the square-planar shape of XeF4.",
+    },
+    Faq {
+        q: "Why is the electron-domain geometry not the same as the molecular shape?",
+        a: "The electron-domain geometry counts every electron domain around the central atom, bonding pairs and lone pairs alike, because they all repel. The molecular shape describes only where the atoms are, so it ignores the lone pairs. NH3 has four tetrahedral domains but a trigonal-pyramidal shape; H2O has four tetrahedral domains but is bent; XeF4 has six octahedral domains but is square planar; SF4 has five trigonal-bipyramidal domains but is a see-saw. The key prints both names; the student copy leaves both blank so the difference has to be worked out from the AX count and the lone pairs.",
+    },
+    Faq {
+        q: "Why does the model show no double bonds or resonance, and no real bond lengths?",
+        a: "It is a simplified ball-and-stick model, not a structural formula. Atoms are labelled circles joined by single sticks, so bond order is not shown: a double bond, a triple bond and a delocalised resonance structure would all look like one stick here. The molecules in this figure are drawn with single bonds, and the sticks do not encode real bond lengths or bond energies; they are only long enough to separate the atoms. Each lone pair is two small dots on the central atom, not a full electron-density lobe. The angles are the VSEPR angles written into the coordinates, not measurements from a real molecule, and SF4's axial bonds are drawn at 90° for simplicity rather than bent slightly away from the lone pair.",
     },
 ];
 
