@@ -284,7 +284,8 @@ fn printed_readings_match_the_recomputation() {
     let m = model(&with(&[s("read", READ_PCT)])).unwrap();
     assert!((m.readings[0].x - (60.0 + 10.0 / 12.0 * 10.0)).abs() < 1e-12);
     assert_eq!(m.readings[0].foot, "P40 = 68.3");
-    assert_eq!(m.readings[0].side, "20 = 40% of 50");
+    assert_eq!(m.readings[0].side, "P40: 20 = 40% of 50");
+    assert_eq!(m.readings[0].side_short, "P40: 20");
     let rows = rows_exact(DEFAULT_TABLE);
     for d in 0..=4i64 {
         for pct in ["1", "2.5", "25", "33", "50", "75", "99"] {
@@ -310,6 +311,16 @@ fn printed_readings_match_the_recomputation() {
     assert!(m.questions[1].1.as_ref().unwrap().contains("about 29.5 of the 50 values, so about 59.0%"));
     assert_eq!(model(&with(&[s("read", READ_VALUE), f("value", 75.0), s("y_axis", Y_PCT)])).unwrap().readings[0].side, "59.0%");
     assert_eq!(model(&with(&[s("read", READ_VALUE), f("value", 75.0), s("y_axis", Y_REL)])).unwrap().readings[0].side, "0.590");
+    // a percentage-of-a-value answer carries an accepted range too, half a fine vertical gridline
+    let ans = m.questions.iter().find(|q| q.0.contains("percentage")).unwrap().1.clone().unwrap();
+    let (lo, hi) = accept_of(&ans).unwrap_or_else(|| panic!("no range in {ans}"));
+    let (lo, hi) = (lo.trim_end_matches('%').parse::<f64>().unwrap(), hi.trim_end_matches('%').parse::<f64>().unwrap());
+    assert!(lo <= 59.0 && 59.0 <= hi && lo < hi, "the range {lo} to {hi} misses 59%: {ans}");
+    // a percentile's guide names the reading, not just its height
+    let m = model(&with(&[s("read", READ_PCT), f("pct", 40.0), s("marks", "Median and quartiles")])).unwrap();
+    assert!(m.readings[0].side.starts_with("P40: "), "{:?}", m.readings[0].side);
+    assert!(m.readings[1].side.starts_with("Q1: "), "{:?}", m.readings[1].side);
+    assert!(m.readings[1].side.contains("25% of 50"), "{:?}", m.readings[1].side);
     // the table's third column and the first question name what the vertical axis shows
     for (y, head, q) in [(Y_FREQ, ">frequency<", "cumulative frequency column"), (Y_REL, ">rel. frequency<", "cumulative relative frequency column"), (Y_PCT, ">percent<", "cumulative percent column")] {
         let svg = render(&with(&[s("y_axis", y)]));
@@ -473,6 +484,11 @@ fn common_table_formats_are_read_and_the_advice_keeps_the_data() {
         ("40\u{2014}50, 3\n50\u{2014}60, 7", "ok"),
         ("40 to 50, 3\n50 to 60, 7", "ok"),
         ("40 through 50, 3\n50 through 60, 7", "ok"),
+        // a sign run into the number ("40 -49"), a dash run into the space ("40- 49"), the true
+        // minus (U+2212) and a spreadsheet paste of thousands ("1,000") all keep their data
+        ("40 -49, 3\n50 -59, 7", "stated"),
+        ("40- 49, 3\n50- 59, 7", "stated"),
+        ("40 \u{2212} 50, 3\n50 \u{2212} 60, 7", "ok"),
     ] {
         match parse_table(t) {
             Ok(cs) => {
@@ -482,6 +498,11 @@ fn common_table_formats_are_read_and_the_advice_keeps_the_data() {
             Err(e) => assert_eq!(want, "stated", "{t:?}: {e}"),
         }
     }
+    // a spreadsheet paste and a header that carries a number read as the table they name
+    let cs = parse_table("1,000, 2,000, 5\n2,000, 3,000, 7").expect("thousands separators");
+    assert_eq!(cs.iter().map(|c| (c.lo, c.hi, c.f)).collect::<Vec<_>>(), vec![(1000.0, 2000.0, 5), (2000.0, 3000.0, 7)]);
+    let cs = parse_table("Class 1, Frequency\n40, 50, 3\n50, 60, 7").expect("a header with a number");
+    assert_eq!(cs.iter().map(|c| (c.lo, c.hi, c.f)).collect::<Vec<_>>(), vec![(40.0, 50.0, 3), (50.0, 60.0, 7)], "the header must not become a class");
     // a total row is a footer: say so and say to delete it
     let t = "40, 50, 3\n50, 60, 7\nTotal, 50";
     let note = parse_table(t).unwrap_err();
@@ -557,7 +578,7 @@ fn raw_values_use_the_histograms_classes_and_count_every_value_once() {
 fn apply_table_advice(text: &str, note: &str) -> Option<String> {
     let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
     let line_no = |pat: &str| -> Option<usize> { note.split(pat).nth(1)?.split(|c: char| !c.is_ascii_digit()).next()?.parse().ok() };
-    if note.contains("is a total") {
+    if note.contains("is a total") || note.contains("beyond the largest number") {
         let n = line_no("delete line ")?;
         lines.remove(n - 1);
         return Some(lines.join("\n"));
@@ -617,9 +638,26 @@ fn the_advice_ends_at_the_table_the_teacher_meant() {
         ("40, 50, 3\n50, 60, -2\n60, 70, 1", &[(40.0, 50.0, 3), (50.0, 60.0, 0), (60.0, 70.0, 1)]),
         ("40, 50, 3\n45, 55, 4", &[(40.0, 50.0, 3), (50.0, 55.0, 4)]),
         ("40, 60, 3\n45, 55, 4", &[(40.0, 60.0, 7)]),
+        // a gap bigger than one limit unit is a missing class, not stated limits: padding keeps
+        // every count where it was, rescaling moved them
+        ("0, 10, 3\n20, 30, 4", &[(0.0, 10.0, 3), (10.0, 20.0, 0), (20.0, 30.0, 4)]),
+        ("40, 50, 3\n52, 60, 4", &[(40.0, 50.0, 3), (50.0, 52.0, 0), (52.0, 60.0, 4)]),
+        ("0, 0.9, 3\n1.0, 1.9, 4", &[(-0.05, 0.95, 3), (0.95, 1.95, 4)]),
+        // the same class however the range is written
+        ("40 -49, 3\n50 -59, 7", &[(39.5, 49.5, 3), (49.5, 59.5, 7)]),
+        ("40- 49, 3\n50- 59, 7", &[(39.5, 49.5, 3), (49.5, 59.5, 7)]),
+        ("40 \u{2212} 50, 3\n50 \u{2212} 60, 7", &[(40.0, 50.0, 3), (50.0, 60.0, 7)]),
+        // a spreadsheet paste
+        ("1,000, 2,000, 5\n2,000, 3,000, 7", &[(1000.0, 2000.0, 5), (2000.0, 3000.0, 7)]),
+        // a number beyond the limit: the note names it and deletion is the route
+        ("0, 500, 3\n1000, 2000, 5\n1000000000000, 2000000000000, 1", &[(0.0, 500.0, 3), (500.0, 1000.0, 0), (1000.0, 2000.0, 5)]),
     ];
     for (text, want) in cases {
-        assert_eq!(settled(text), want.to_vec(), "{text:?}");
+        let got = settled(text);
+        assert_eq!(got.len(), want.len(), "{text:?}: {got:?}");
+        for (a, b) in got.iter().zip(want.iter()) {
+            assert!((a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9 && a.2 == b.2, "{text:?}: {got:?} vs {want:?}");
+        }
     }
 }
 
@@ -643,6 +681,9 @@ fn every_table_refusal_names_a_fix_that_works_when_applied() {
         "Class, Freq\n40, 50, 3\n50, 60, x",
         "40-50, 3\n50-60 7\n60-70, 4\n80, 90, 1",
         "0, 1, 1\n1, 2, 1\n2, 3, -1\n5, 9, 1\n9, 9, 2\n8, 20, 1",
+        "0, 500, 3\n1000, 2000, 5\n1000000000000, 2000000000000, 1",
+        "40 -49, 3\n50 -59, 7",
+        "40- 49, 3\n50- 59, 7",
         "",
         "\n\n",
     ];
@@ -662,6 +703,14 @@ fn every_table_refusal_names_a_fix_that_works_when_applied() {
                     assert_eq!(warnings(&p), vec![note.clone()], "the editor note is the refusal");
                     let shown: String = parse(&render(&p), false).texts.iter().map(|t| t.body.clone()).collect::<Vec<_>>().join(" ");
                     assert_eq!(shown.split_whitespace().collect::<Vec<_>>(), note.split_whitespace().collect::<Vec<_>>(), "the canvas says the same");
+                    // any example the note quotes must itself be a class the figure accepts: the
+                    // note at the 1e12 limit used to hand back a line that was refused for ever
+                    if let Some(ex) = note.split("for example \"").nth(1).and_then(|x| x.split('"').next()).filter(|_| !text.trim().is_empty()) {
+                        assert!(parse_table(ex).is_ok() || parse_table(ex).err() != Some(note.clone()), "{start}: the example {ex:?} is refused the same way");
+                        // and typing it into the line it names changes the table
+                        let next = apply_table_advice(&text, &note).unwrap_or_else(|| panic!("{start}: no edit in {note}"));
+                        assert_ne!(parse_table(&next).err(), Some(note.clone()), "{start}: the advice repeats itself");
+                    }
                     text = if text.trim().is_empty() { note.split("for example \"").nth(1).unwrap().split('"').next().unwrap().to_string() } else { apply_table_advice(&text, &note).unwrap_or_else(|| panic!("{start}: no edit in {note}")) };
                 }
             }
@@ -740,6 +789,13 @@ fn a_flat_stretch_is_noted_and_read_at_its_lowest_value() {
     // no note away from a flat stretch, and none for a strictly rising curve
     assert!(warnings(&with(&[s("table", t), s("read", READ_PCT), f("pct", 30.0)])).is_empty());
     assert!(warnings(&with(&[s("read", READ_PCT), s("marks", "Median and quartiles")])).is_empty());
+    // the note says every value from 15 to 20 fits, so the key's accepted range must cover them:
+    // reading 18 is right, and 14.2 to 15.8 (half a gridline either side of 15) said it was wrong
+    let ans = m.questions.iter().find(|q| q.0.contains("percentile")).unwrap().1.clone().unwrap();
+    let (lo, hi) = accept_of(&ans).unwrap_or_else(|| panic!("no range in {ans}"));
+    let (lo, hi) = (lo.parse::<f64>().unwrap(), hi.parse::<f64>().unwrap());
+    assert!(lo <= 15.0 && hi >= 20.0, "the range {lo} to {hi} contradicts the note: {ans}");
+    assert!(lo <= 18.0 && 18.0 <= hi, "a student reading 18 is inside the range: {ans}");
 }
 
 // ───────────────────────── the drawing, over the option space ─────────────────────────
@@ -881,19 +937,24 @@ fn check_geometry(g: &Svg, p: &Params, key: bool, what: &str) {
         assert!(!mine.is_empty(), "{what}: {:?} belongs to no reading", t.body);
         let leg = |gd: &Pl| { let (a, k, z) = (gd.pts[0], gd.pts[1], gd.pts[2]); if t.class == "side" { seg_box(a, k, t.ink) } else { seg_box(k, z, t.ink) } };
         let own = mine.iter().map(|gd| leg(gd)).fold(f64::INFINITY, f64::min);
-        let mut raised = false;
         // the box keeps OWN_GAP from its line; digits have no descenders, so the ink may sit up to 0.3 em further
         if own > OWN_GAP + 0.3 * t.size + 1.0 {
-            // no room beside the guide: a short leader joins the label to its own guide instead
+            // no room beside the guide: a short leader ties the label to it, and the leader must be
+            // short and must not pass a rival guide (or the label reads as that guide's)
             let lead = leaders.iter().filter(|l| seg_box(l.a, l.b, t.ink) <= OWN_GAP + 0.3 * t.size + 1.0).min_by(|a, b| seg_box(a.a, a.b, t.ink).total_cmp(&seg_box(b.a, b.b, t.ink)));
             let lead = lead.unwrap_or_else(|| panic!("{what}: {:?} sits {own:.1} px from its guide and has no leader", t.body));
+            let len = (lead.b.0 - lead.a.0).hypot(lead.b.1 - lead.a.1);
+            assert!(len <= 64.0, "{what}: a {len:.1} px leader");
             let joins = mine.iter().any(|gd| {
                 let segs = [(gd.pts[0], gd.pts[1]), (gd.pts[1], gd.pts[2])];
                 let near = |q: P| segs.iter().map(|(a, b)| seg_dist(q, *a, *b)).fold(f64::INFINITY, f64::min);
                 near(lead.a) <= PLATE + 2.0 || near(lead.b) <= PLATE + 2.0
             });
             assert!(joins, "{what}: the leader of {:?} does not reach its own guide", t.body);
-            raised = true;
+            for gd in &guides {
+                let all = gd.pts.windows(2).map(|w| seg_box(w[0], w[1], t.ink)).fold(f64::INFINITY, f64::min);
+                assert!(all >= own - 1e-9, "{what}: {:?} is nearer another guide ({all:.1} vs own {own:.1})", t.body);
+            }
         } else {
             assert!(own >= OWN_GAP - 1.0, "{what}: {:?} crowds its own guide ({own:.1} px)", t.body);
         }
@@ -902,12 +963,10 @@ fn check_geometry(g: &Svg, p: &Params, key: bool, what: &str) {
             let line_y = guides.iter().zip(&m.readings).find(|(_, r)| r.side == t.body || r.side_short == t.body).unwrap().0.pts[0].1;
             assert!(t.ink.3 < line_y, "{what}: {:?} is below its line", t.body);
         }
-        // every label is nearest its own line, except a raised one, which its leader ties to it
-        if !raised {
-            for gd in &guides {
-                let all = gd.pts.windows(2).map(|w| seg_box(w[0], w[1], t.ink)).fold(f64::INFINITY, f64::min);
-                assert!(all >= own - 1e-9, "{what}: {:?} is nearer another guide", t.body);
-            }
+        // every label is nearest its own line, raised ones included
+        for gd in &guides {
+            let all = gd.pts.windows(2).map(|w| seg_box(w[0], w[1], t.ink)).fold(f64::INFINITY, f64::min);
+            assert!(all >= own - 1e-9, "{what}: {:?} is nearer another guide", t.body);
         }
     }
 }
@@ -1005,18 +1064,35 @@ fn a_guide_with_no_room_for_a_label_is_noted_only_with_a_step_that_labels_it() {
                     }
                     assert!(avail.is_empty(), "{name} {size} P{k}: labels that belong to no reading: {avail:?}");
                     if !bare.is_empty() {
-                        // a note is allowed only when it carries one control change that works
-                        let note = note.unwrap_or_else(|| panic!("{name} {size} P{k}: {:?} unlabelled and no note", bare));
-                        noted += 1;
-                        for b in &bare {
-                            assert!(note.contains(b.as_str()), "{note}");
+                        // a note may be silent when no one-control change can label the named
+                        // guide, but a note that fires must leave every guide it names drawn and
+                        // now labelled: "set Mark to None" cannot be the fix for the M guide
+                        if let Some(note) = note {
+                            noted += 1;
+                            for b in &bare {
+                                assert!(note.contains(b.as_str()), "{note}");
+                            }
+                            let step = note.split(" To label it, ").nth(1).unwrap_or_else(|| panic!("{name} {size} P{k}: a note with no step: {note}"));
+                            let mut q = p.clone();
+                            if let Some(sz) = step.strip_prefix("set Label size to ") { q.set_s("label_size", sz.trim_end_matches('.')); }
+                            else if let Some(mk) = step.strip_prefix("set Mark to ") { q.set_s("marks", mk.trim_end_matches('.')); }
+                            else { panic!("unknown step {step}"); }
+                            let qm = model(&q).unwrap();
+                            let mut qk = q.clone();
+                            qk.set_b(SHOW_ANSWERS, true);
+                            let qg = parse(&render(&qk), false);
+                            for b in &bare {
+                                let r = m.readings.iter().find(|r| r.short == *b).unwrap();
+                                assert!(
+                                    qm.readings.iter().any(|o| o.short == *b && (o.t - r.t).abs() < 1e-9 && (o.x - r.x).abs() < 1e-9),
+                                    "{name} {size} P{k}: \"{step}\" deletes the {b} guide the note names"
+                                );
+                                assert!(!draw(&q).1.contains(b), "{name} {size} P{k}: {b} is still unlabelled after \"{step}\"");
+                                let has = qg.texts.iter().any(|t| (t.class == "side" && (t.body == r.side || t.body == r.side_short)) || (t.class == "foot" && (t.body == r.foot || t.body == r.short)));
+                                assert!(has, "{name} {size} P{k}: {b} has no label after \"{step}\"");
+                            }
+                            assert!(!warnings(&q).iter().any(|x| x.contains("no room")), "{name} {size} P{k}: {step} does not work");
                         }
-                        let step = note.split(" To label it, ").nth(1).unwrap_or_else(|| panic!("{name} {size} P{k}: a note with no step: {note}"));
-                        let mut q = p.clone();
-                        if let Some(sz) = step.strip_prefix("set Label size to ") { q.set_s("label_size", sz.trim_end_matches('.')); }
-                        else if let Some(mk) = step.strip_prefix("set Mark to ") { q.set_s("marks", mk.trim_end_matches('.')); }
-                        else { panic!("unknown step {step}"); }
-                        assert!(!warnings(&q).iter().any(|x| x.contains("no room")), "{name} {size} P{k}: {step} does not work");
                     } else {
                         assert!(note.is_none(), "{name} {size} P{k}: a note with nothing unlabelled: {notes:?}");
                     }
@@ -1024,7 +1100,48 @@ fn a_guide_with_no_room_for_a_label_is_noted_only_with_a_step_that_labels_it() {
             }
         }
     }
+    // the critic's case: the M guide at P49 with quartiles, Medium. A note that names a quartile
+    // may not offer a Mark change, which deletes the very guide it names (naming P49 instead and
+    // dropping the marks is a real fix for P49, and the loop above checks that it is labelled)
+    let p = with(&[s("read", READ_PCT), f("pct", 49.0), s("marks", "Median and quartiles"), s("label_size", "Medium")]);
+    if let Some(note) = warnings(&p).into_iter().find(|n| n.contains("no room")) {
+        let marks_named = [" for M ", " for Q1 ", " for Q3 "].iter().any(|n| note.contains(n));
+        assert!(!marks_named || !note.contains("set Mark to"), "the step deletes the guide it names: {note}");
+    }
     println!("ogive: {noted} notes, all with a working step, out of {crowded} crowded keys");
+}
+
+#[test]
+fn a_label_is_never_tied_to_another_guides_line() {
+    // the critic's case (unequal classes, value 13, quartiles, Large) plus the neighbouring sizes:
+    // a label may sit above its own guide only while its own guide is the nearest one
+    let table = "0, 10, 4\n10, 20, 9\n20, 40, 14\n40, 60, 8\n60, 100, 5";
+    for value in [13.0, 30.0, 75.0] {
+        for size in ["Small", "Medium", "Large"] {
+            let p = with(&[s("table", table), s("read", READ_VALUE), f("value", value), s("marks", "Median and quartiles"), s("label_size", size)]);
+            let g = parse(&render(&p), true);
+            let m = model(&p).unwrap();
+            let guides: Vec<&Pl> = g.plines.iter().filter(|l| l.class == "guide").collect();
+            assert_eq!(guides.len(), m.readings.len());
+            // a leader that ties a label to its guide stays short
+            for l in g.lines.iter().filter(|l| l.class == "leader") {
+                let len = (l.b.0 - l.a.0).hypot(l.b.1 - l.a.1);
+                assert!(len <= 64.0, "{value} {size}: a {len:.1} px leader");
+            }
+            for t in g.texts.iter().filter(|t| t.class == "side" || t.class == "foot") {
+                let leg = |gd: &Pl| { let (a, k, z) = (gd.pts[0], gd.pts[1], gd.pts[2]); if t.class == "side" { seg_box(a, k, t.ink) } else { seg_box(k, z, t.ink) } };
+                let mine: Vec<f64> = guides.iter().zip(&m.readings).filter(|(_, r)| if t.class == "side" { r.side == t.body || r.side_short == t.body } else { r.foot == t.body || r.short == t.body }).map(|(gd, _)| leg(gd)).collect();
+                assert!(!mine.is_empty(), "{value} {size}: {:?} belongs to no reading", t.body);
+                let own = mine.iter().cloned().fold(f64::INFINITY, f64::min);
+                for (gd, r) in guides.iter().zip(&m.readings) {
+                    let other = leg(gd);
+                    if other + 1e-9 < own {
+                        panic!("{value} {size}: \"{}\" is {other:.1} px from {}'s guide but {own:.1} px from its own", t.body, r.short);
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[test]
@@ -1131,13 +1248,26 @@ fn the_grid_is_there_to_read_and_to_plot_against() {
     let p = with(&[s("read", READ_PCT), s("marks", "Median and quartiles")]);
     let g = parse(&render(&p), false);
     let grid: Vec<&Ln> = g.lines.iter().filter(|l| l.class == "grid").collect();
-    let vertical = grid.iter().filter(|l| (l.a.0 - l.b.0).abs() < 1e-9).count();
-    assert_eq!(vertical, 6, "a vertical gridline at all six class boundaries past the axis");
+    let vertical: Vec<&&Ln> = grid.iter().filter(|l| (l.a.0 - l.b.0).abs() < 1e-9).collect();
     let horizontal = grid.iter().filter(|l| (l.a.1 - l.b.1).abs() < 1e-9).count();
     // 0 to 50 by 10 labelled, each cut in five fine steps: 4 fine lines between each pair, plus the top
     assert_eq!(horizontal, 20 + 5, "fine lines between the labelled ones: {horizontal}");
+    // six class boundaries past the axis, each class cut in five: four fine lines inside every class
+    assert_eq!(vertical.iter().filter(|l| l.stroke == GRID_PRINT || l.stroke == chart::GRID).count(), 6, "one line per class boundary");
+    assert_eq!(vertical.iter().filter(|l| l.stroke == FINE_GRID).count(), 6 * (MINOR_X - 1), "five x-subdivisions per class");
+    // each fine vertical is a fifth of a class, so the key's accepted range is half a division
+    let class_x: Vec<f64> = g.lines.iter().filter(|l| l.class == "tick" && l.a.0 == l.b.0).map(|l| l.a.0).collect();
+    let mut fx: Vec<f64> = vertical.iter().filter(|l| l.stroke == FINE_GRID).map(|l| l.a.0).collect();
+    fx.sort_by(f64::total_cmp);
+    let division = (class_x[1] - class_x[0]) / MINOR_X as f64;
+    assert!(fx.windows(2).all(|w| { let d = (w[1] - w[0]) / division; (d - 1.0).abs() < 0.01 || (d - 2.0).abs() < 0.01 }), "fine x lines every {division:.2} px: {fx:?}");
+    assert!((fx[0] - (class_x[0] + division)).abs() < 0.06, "the first fine line is one division past the axis");
     // the fine lines are the paler kind, so a reader can tell a labelled step from a fine one
-    assert_eq!(grid.iter().filter(|l| l.stroke == FINE_GRID).count(), 20);
+    assert_eq!(grid.iter().filter(|l| l.stroke == FINE_GRID).count(), 20 + 6 * (MINOR_X - 1));
+    // turn the grid off and none of it is drawn
+    let mut off = p.clone();
+    off.set_b("grid", false);
+    assert_eq!(parse(&render(&off), false).lines.iter().filter(|l| l.class == "grid").count(), 0, "grid=false draws no grid");
     // the student copy keeps the grid (there is nothing to plot on without it)
     let mut q = p.clone();
     q.set_b(SHOW_ANSWERS, false);
@@ -1154,17 +1284,17 @@ fn the_grid_is_there_to_read_and_to_plot_against() {
         l.extend([s("style", "Print"), s("read", READ_PCT), s("marks", "Median and quartiles")]);
         let svg = render(&with(&l));
         let gp = parse(&svg, false);
-        let (w, _h, px) = crate::figures::to_rgba(&svg, 3.0).unwrap();
+        let (w, _h, px) = crate::figures::to_rgba(&svg, 2.0).unwrap();
         let mut seen = 0;
         let mut missing = 0;
-        for line in gp.lines.iter().filter(|l| l.class == "grid") {
+        for line in gp.lines.iter().filter(|l| l.class == "grid" && (l.a.0 - l.b.0).abs() > 1e-9) {
             seen += 1;
             let dark_at = |x: i32, y: i32| {
                 if x < 0 || y < 0 { return false; }
                 let o = ((y as u32 * w + x as u32) * 4) as usize;
                 o + 3 <= px.len() && (0.299 * px[o] as f64 + 0.587 * px[o + 1] as f64 + 0.114 * px[o + 2] as f64) < 0.66 * 255.0
             };
-            let (x0, y0, x1, y1) = (line.a.0 * 3.0, line.a.1 * 3.0, line.b.0 * 3.0, line.b.1 * 3.0);
+            let (x0, y0, x1, y1) = (line.a.0 * 2.0, line.a.1 * 2.0, line.b.0 * 2.0, line.b.1 * 2.0);
             let n = ((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt().ceil().max(1.0) as i32;
             let mut dark = 0;
             for i in (0..n).step_by(5) {
@@ -1371,3 +1501,5 @@ fn dump_pngs() {
         }
     }
 }
+
+
