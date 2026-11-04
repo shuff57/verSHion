@@ -59,6 +59,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "equilibrium-graphs" => EQUILIBRIUM_GRAPHS,
         "buffer-curves" => BUFFER_CURVES,
         "boltzmann-distribution" => BOLTZMANN_DISTRIBUTION,
+        "periodic-table" => PERIODIC_TABLE,
         "orbital-diagram" => ORBITAL_DIAGRAM,
         "particle-diagram" => PARTICLE_DIAGRAM,
         "ph-reading" => PH_READING,
@@ -4215,5 +4216,32 @@ const PHOTOSYNTHESIS: &[Faq] = &[
     Faq {
         q: "What is the point P, and what counts as a correct reading?",
         a: "P is a dot on the curve at the x you type, with a dashed guide to each axis, so a student reads the rate off the vertical axis. The key prints the exact rate, rounded half up to the chosen number of decimal places (the student's reading from the graph will be a little rougher). The rate axis has a labelled gridline at each step and fine gridlines in between, and the student copy says to read to the nearest fine gridline; the key prints the range to accept in units, the fine gridlines either side of the exact rate (one spacing further out each way when the rate falls exactly on a gridline), so whichever fine gridline the student reads to is inside it. The rate it prints is to the chosen decimal places, or to more when rounding to them would put the key's own number outside that range. Every gridline is wide and dark enough to survive a photocopy at 66 % grey in Colour as well as in Print, and a student copy in the Colour style uses the Print greys for them. Against temperature P at or beyond 12 degrees C above the optimum reads 0.",
+    },
+];
+
+const PERIODIC_TABLE: &[Faq] = &[
+    Faq {
+        q: "Why is the table shaped this way?",
+        a: "The rows are periods and the columns are groups. A period holds the elements being filled in the same outermost electron shell, so period 1 has only the two electrons of the first shell, period 2 has eight places and the later periods have eighteen. The shape also shows the blocks: groups 1 and 2 are the s-block, groups 13 to 18 the p-block, groups 3 to 12 the d-block, and the two f-block strips below. The eighteen-column form is the one used by the IUPAC table and by the Royal Society of Chemistry periodic table (periodic-table.rsc.org), whose metalloid and halogen keys are the ones this figure follows.",
+    },
+    Faq {
+        q: "What is a group, and what is a period?",
+        a: "A group is a column: its members have the same pattern of valence electrons, which is why they react alike. A period is a row: its members are filling the same outermost shell, and the period number is that shell's number. In this figure group 1 is the left column and group 18 the right one; the f-block strips have no group number because, in this eighteen-column form, they are not one of the eighteen columns. The number down the left is the period, so lanthanum is period 6 and actinium period 7.",
+    },
+    Faq {
+        q: "Why is hydrogen in group 1 but not an alkali metal?",
+        a: "Hydrogen has one valence electron, so it sits above lithium in group 1 and shares the group's one-electron pattern. It is not an alkali metal: it is a nonmetal, a diatomic gas at room temperature, and it can lose an electron to form H+ or gain one to form H-. Group 1 is therefore a placement by valence pattern, not a promise that everything in the column is an alkali metal. This figure colours hydrogen as a reactive nonmetal and leaves the alkali-metal colour to lithium, sodium, potassium, rubidium, cesium and francium.",
+    },
+    Faq {
+        q: "Where is the metalloid staircase, and what does it mean?",
+        a: "The staircase is the zig-zag line that separates the metals on the left from the nonmetals on the right, and the elements on it are the metalloids. This figure uses boron, silicon, germanium, arsenic, antimony, tellurium and polonium (B, Si, Ge, As, Sb, Te, Po), the metalloid key of the Royal Society of Chemistry periodic table. Astatine and tennessine are group 17 and are coloured as halogens, not as metalloids. The boundary is a convention, not a measurement: some books stop the staircase at tellurium and leave polonium out, and a few place astatine on it, so a class should use the list its own textbook prints.",
+    },
+    Faq {
+        q: "Why is the f-block pulled out into two strips?",
+        a: "The lanthanides are atomic numbers 57 to 71 and the actinides 89 to 103, fifteen elements each. Left in place between groups 2 and 3 they would make the table thirty-two columns wide, so they are pulled out as two fifteen-wide strips below the grid, the lanthanides starting under group 3 and the actinides under it on the next line. The group-3 cells of periods 6 and 7 are left empty with a 57-71 or 89-103 marker: lanthanum and actinium start the strips, so no element is drawn twice. The strips keep the eighteen-column main grid readable, and the periodic repeat of properties is still visible down each main-group column.",
+    },
+    Faq {
+        q: "How exact are the trend arrows?",
+        a: "They are a stated simplification, not a per-element measurement. Across a period the nuclear charge grows while the shell stays the same, so atomic radius generally falls and electronegativity generally rises; down a group a new shell is added, so radius generally rises and electronegativity generally falls. The word generally matters: the d-block and f-block are not regular, the lanthanide contraction makes period 6 unusual, and helium, neon and argon have no Pauling electronegativity value at all. The arrows give the direction a course asks for; they do not rank every pair of neighbours, and an exam question that needs a number should use a data table.",
     },
 ];

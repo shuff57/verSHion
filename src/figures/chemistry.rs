@@ -23,6 +23,7 @@ pub mod gaslaws;
 pub mod equilibrium;
 pub mod buffercurves;
 pub mod boltzmann;
+pub mod periodic;
 pub mod spectra;
 
 pub const INK: &str = "#111";
@@ -206,6 +207,7 @@ pub fn skin_intro(id: &str) -> Option<&'static str> {
         "equilibrium-graphs" => Some("Make printable equilibrium graphs for chemistry tests: concentration against time, the ICE table, Q against K, the forward and reverse rates, and Le Chatelier disturbances."),
         "buffer-curves" => Some("Make printable titration and buffer curves for chemistry tests: the equivalence point, pKa from the half-equivalence point, the choice of indicator, the pH at any volume, and a buffer's pH and capacity."),
         "boltzmann-distribution" => Some("Make printable Maxwell-Boltzmann distribution graphs for chemistry tests: the most probable, mean and rms speeds, and the fraction of molecules above an activation energy."),
+        "periodic-table" => Some("Make printable periodic-table excerpts for chemistry tests: the main-group block, the d-block, the two f-block strips, a category key, trend arrows and an element read-out."),
         "temperature-reading" => Some("Make printable thermometer figures for chemistry tests."),
         "ph-reading" => Some("Make printable pH meter figures for chemistry tests."),
         "punnett-square" => Some("Make printable Punnett squares for biology tests."),
@@ -353,6 +355,7 @@ pub fn examples(id: &str) -> Option<Vec<super::Example>> {
         .or_else(|| equilibrium::examples(id))
         .or_else(|| buffercurves::examples(id))
         .or_else(|| boltzmann::examples(id))
+        .or_else(|| periodic::examples(id))
 }
 
 /// Handles are laid out in the figure's own coordinates; the chart-title band the wrapper adds
@@ -427,6 +430,7 @@ pub fn defs() -> Vec<FigureDef> {
     v.extend(equilibrium::defs());
     v.extend(buffercurves::defs());
     v.extend(boltzmann::defs());
+    v.extend(periodic::defs());
     v
 }
 
@@ -652,7 +656,7 @@ mod tests {
     #[test]
     fn ids_unique_and_complete() {
         let ids: Vec<_> = defs().iter().map(|d| d.id).collect();
-        assert_eq!(ids.len(), 23);
+        assert_eq!(ids.len(), 25);
         for d in defs() {
             for p in (d.params)() {
                 match (&p.kind, &p.default) {
