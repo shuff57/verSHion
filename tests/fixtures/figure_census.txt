@@ -18,8 +18,8 @@ body-map__defaults 1c9f426fbd953edb
 body-map__start 1c9f426fbd953edb
 bohr-model__defaults 334d9448eb713852
 bohr-model__start 91e77ec04a5edbf2
-boltzmann-distribution__defaults 78953fe526da99c2
-boltzmann-distribution__start 78953fe526da99c2
+boltzmann-distribution__defaults c3a041cbb5c07c5d
+boltzmann-distribution__start c3a041cbb5c07c5d
 boolean-table__defaults 2b769ba220ccc153
 boolean-table__start 2b769ba220ccc153
 box-plot__defaults e66aedefa4eb5803
@@ -198,8 +198,8 @@ number-base__defaults 16bf7951bd244ab8
 number-base__start 16bf7951bd244ab8
 number-line__defaults 3678255fb61cf882
 number-line__start 8907dc3dbcbf7bc9
-ogive__defaults ad637a01d7cd338a
-ogive__start 41570b24cc61dfe2
+ogive__defaults 9985e5f225f3530e
+ogive__start 16ec10bc97148e12
 orbital-diagram__defaults 8439d61feda6e634
 orbital-diagram__start 70919ef4dfb406ac
 org-chart__defaults 9958472c3f8301ad
