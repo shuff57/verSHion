@@ -484,25 +484,32 @@ impl crate::App {
             let rows = app.exam_rows(&st.search, st.show_archived);
             let archived_n = app.store.exams.iter().filter(|e| app.store.is_archived(&e.id)).count();
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                ui.set_max_width(ui.available_width().min(1040.0));
+                ui.set_max_width(ui.available_width().min(crate::pageshell::PAGE_W));
                 let sub = format!(
                     "{total} exam{} · {total_q} question{} placed",
                     if total == 1 { "" } else { "s" },
                     if total_q == 1 { "" } else { "s" },
                 );
-                kit::page_header(ui, &["Home", "Exams"], "Exams", Some(&sub));
-                ui.add_space(14.0);
+                // The page's action sits in the header, as on Banks.
                 ui.horizontal(|ui| {
-                    kit::search_field(ui, &mut st.search, 300.0, "Search exams");
-                    if archived_n > 0 && kit::chip_toggle(ui, &format!("Show archived  {archived_n}"), st.show_archived).clicked() {
-                        st.show_archived = !st.show_archived;
-                    }
+                    ui.vertical(|ui| {
+                        kit::page_header(ui, &["Home", "Exams"], "Exams", Some(&sub));
+                    });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if crate::pageshell::primary(ui, "New exam").clicked() {
                             let id = new_exam(app);
                             app.exam = Some(id.clone());
                             app.screen = crate::Screen::ExamEdit(id);
                         }
+                    });
+                });
+                ui.add_space(12.0);
+                ui.horizontal(|ui| {
+                    kit::search_field(ui, &mut st.search, 300.0, "Search exams");
+                    if archived_n > 0 && kit::chip_toggle(ui, &format!("Show archived  {archived_n}"), st.show_archived).clicked() {
+                        st.show_archived = !st.show_archived;
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         kit::view_toggle(ui, &mut st.mode, "exam_view");
                     });
                 });

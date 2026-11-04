@@ -661,12 +661,16 @@ fn credits_block(ui: &mut Ui, m: &mut AccountModel) {
             ui.label(theme::muted("This server does not count credits: the hosted AI is not limited for you.").size(12.5));
         }
         Some(super::api::Credits::Counted { purchased, left, allowance }) => {
-            ui.label(theme::text(format!("{left} of {allowance} free this week, and {purchased} bought.")).size(12.5));
-            ui.add_space(4.0);
+            // the balance and the way to add to it share a row (they wrap together on a narrow card)
             let buy = format!("{}/account/credits.html", m.base_url().trim_end_matches('/'));
-            if pageshell::outline(ui, "Buy credits").clicked() {
-                crate::platform::open_url(&buy);
-            }
+            ui.horizontal_wrapped(|ui| {
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                ui.spacing_mut().item_spacing.x = 14.0;
+                ui.label(theme::text(format!("{left} of {allowance} free this week, and {purchased} bought.")).size(13.5));
+                if pageshell::outline(ui, "Buy credits").clicked() {
+                    crate::platform::open_url(&buy);
+                }
+            });
         }
     }
     ui.add_space(8.0);
@@ -688,14 +692,37 @@ fn status_page(ui: &mut Ui, m: &mut AccountModel, in_page: bool, delete_link: bo
         }
         return;
     };
-    if !me.display_name.is_empty() {
-        ui.label(theme::strong(me.display_name.as_str()).size(15.0));
-    }
-    ui.label(theme::text(me.email.as_str()).size(12.5));
-    if !me.school.is_empty() {
-        ui.label(theme::muted(me.school.as_str()).size(12.5));
-    }
-    ui.add_space(10.0);
+    // who is signed in: an initial in an accent circle, then the name, address and school
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 14.0;
+        let initial = me
+            .display_name
+            .chars()
+            .chain(me.email.chars())
+            .find(|c| c.is_alphanumeric())
+            .map(|c| c.to_uppercase().to_string())
+            .unwrap_or_else(|| "?".into());
+        let (circle, _) = ui.allocate_exact_size(egui::vec2(48.0, 48.0), egui::Sense::hover());
+        ui.painter().circle_filled(circle.center(), 24.0, theme::accent_faded());
+        ui.painter().text(
+            circle.center(),
+            egui::Align2::CENTER_CENTER,
+            initial,
+            egui::FontId::new(20.0, theme::serif_bold_family()),
+            theme::accent_col(),
+        );
+        ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = 2.0;
+            if !me.display_name.is_empty() {
+                ui.label(theme::strong(me.display_name.as_str()).size(16.0));
+            }
+            ui.label(theme::text(me.email.as_str()).size(13.0));
+            if !me.school.is_empty() {
+                ui.label(theme::muted(me.school.as_str()).size(13.0));
+            }
+        });
+    });
+    ui.add_space(12.0);
     // On the page a pending account is under the "Waiting for approval" step, which says it all.
     if !(in_page && matches!(me.status, Status::Pending)) {
         status_box(ui, m, &me);
@@ -823,7 +850,20 @@ fn invite_box(ui: &mut Ui, inv: &mut super::invite::InviteModel, session: Option
     let busy = inv.busy();
     ui.add_enabled_ui(!busy && idle, |ui| {
         let w = ui.available_width().min(FORM_WIDTH);
-        ui.add(egui::TextEdit::singleline(&mut inv.code).id(egui::Id::new("share_invite")).hint_text("XXXX-XXXX-XXXX-XXXX-XXXX-XXXX").desired_width(w));
+        ui.scope(|ui| {
+            let wd = &mut ui.visuals_mut().widgets;
+            for state in [&mut wd.inactive, &mut wd.hovered, &mut wd.active] {
+                state.corner_radius = egui::CornerRadius::same(12);
+            }
+            ui.add(
+                egui::TextEdit::singleline(&mut inv.code)
+                    .id(egui::Id::new("share_invite"))
+                    .hint_text("XXXX-XXXX-XXXX-XXXX-XXXX-XXXX")
+                    .margin(Margin::symmetric(12, 10))
+                    .desired_width(w),
+            );
+        });
+        ui.add_space(6.0);
     });
     if let InviteState::Failed(p) = &inv.state {
         ui.add(egui::Label::new(RichText::new(api::plain(&p.message)).color(theme::bad()).size(12.5)).wrap());

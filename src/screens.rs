@@ -742,7 +742,7 @@ impl crate::App {
     pub fn draw_home(&mut self, ctx: &egui::Context) {
         shell_frame(self, ctx, true, |app, ui| {
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                ui.set_max_width(ui.available_width().min(1040.0));
+                ui.set_max_width(ui.available_width().min(crate::pageshell::PAGE_W));
                 app.draw_home_body(ui);
             });
         });
@@ -1423,12 +1423,12 @@ impl crate::App {
         shell_frame(self, ctx, true, |app, ui| {
           {
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                ui.set_max_width(ui.available_width().min(1060.0));
+                ui.set_max_width(ui.available_width().min(crate::pageshell::PAGE_W));
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
                         pageshell::title(ui, "Home  /  Settings", "Settings", "Your work is saved on this machine. Keep a copy by exporting it.");
                     });
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Max), |ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if pageshell::outline(ui, "How it works").clicked() {
                             app.help_open = true;
                         }

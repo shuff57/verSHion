@@ -117,7 +117,7 @@ fn save_settings(app: &App) {
     let _ = crate::store::save_json("settings.json", &app.settings);
 }
 
-const MAX_W: f32 = 1040.0;
+const MAX_W: f32 = crate::pageshell::PAGE_W;
 
 /// Draws a clickable crumb "Banks" that returns to the list.
 fn crumb_row(ui: &mut Ui, app: &mut App, tail: Option<&str>) {
@@ -404,7 +404,7 @@ impl App {
         );
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
-                kit::page_header(ui, &["Banks"], "Question banks", Some(&sub));
+                kit::page_header(ui, &["Home", "Banks"], "Question banks", Some(&sub));
             });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if crate::pageshell::primary(ui, "New bank").clicked() {

@@ -312,11 +312,15 @@ pub(super) fn tab_body(ui: &mut Ui, m: &mut BrowseModel, tab: Tab) {
 fn search_tab(ui: &mut Ui, m: &mut BrowseModel) {
     let (mut go, mut clear) = (false, false);
     ui.horizontal(|ui| {
-        let r = ui.add(egui::TextEdit::singleline(&mut m.form.q).id(egui::Id::new("browse_q")).hint_text("Search titles, subjects, tags and question text").desired_width(ui.available_width() - 190.0));
+        ui.spacing_mut().item_spacing.x = 8.0;
+        // the buttons keep their width; the box takes the rest of the row
+        let box_w = (ui.available_width() - 190.0).max(160.0);
+        let r = kit::search_field_with(ui, &mut m.form.q, box_w, "Search titles, subjects, tags and question text", Some(egui::Id::new("browse_q")));
         let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
         go = kit::primary_button(ui, "Search").clicked() || enter;
         clear = kit::ghost_button(ui, "Clear").clicked();
     });
+    ui.add_space(4.0);
     egui::CollapsingHeader::new(theme::muted("Filters").size(12.5)).id_salt("browse_filters").show(ui, |ui| {
         egui::Grid::new("browse_filter_grid").num_columns(4).spacing([12.0, 6.0]).show(ui, |ui| {
             text_filter(ui, "browse_subject", "Subject", &mut m.form.subject, "e.g. Algebra");
@@ -382,19 +386,22 @@ fn results(ui: &mut Ui, m: &mut BrowseModel) {
         ui.add_space(4.0);
     }
     ui.add_space(4.0);
-    ui.horizontal(|ui| {
-        ui.add_enabled_ui(m.can_prev(), |ui| {
-            if kit::ghost_button(ui, "Previous page").clicked() {
-                m.prev_page();
-            }
+    // a single page of results has nothing to page through
+    if m.can_prev() || m.can_next() {
+        ui.horizontal(|ui| {
+            ui.add_enabled_ui(m.can_prev(), |ui| {
+                if kit::ghost_button(ui, "Previous page").clicked() {
+                    m.prev_page();
+                }
+            });
+            ui.label(theme::muted(format!("Page {}", m.results.page + 1)).size(12.5));
+            ui.add_enabled_ui(m.can_next(), |ui| {
+                if kit::ghost_button(ui, "Next page").clicked() {
+                    m.next_page();
+                }
+            });
         });
-        ui.label(theme::muted(format!("Page {}", m.results.page + 1)).size(12.5));
-        ui.add_enabled_ui(m.can_next(), |ui| {
-            if kit::ghost_button(ui, "Next page").clicked() {
-                m.next_page();
-            }
-        });
-    });
+    }
     if let Some(it) = open {
         let id = it.id.clone();
         m.open_item(&id, Some(it));

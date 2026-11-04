@@ -662,15 +662,19 @@ pub(super) fn legal_links(ui: &mut Ui, m: &MineModel) {
 
 /// The legal pages for the Shared page: links when a legal address is set, names when not.
 pub(super) fn legal_links_for(ui: &mut Ui, base: &str) {
-    for (name, file) in text::LEGAL_PAGES {
-        match text::legal_url(base, file) {
-            Some(u) => {
-                if link(ui, name) {
-                    crate::platform::open_url(&u);
+    // the four pages in one wrapping row, not a column of 34 px lines
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 20.0;
+        for (name, file) in text::LEGAL_PAGES {
+            match text::legal_url(base, file) {
+                Some(u) => {
+                    if link(ui, name) {
+                        crate::platform::open_url(&u);
+                    }
                 }
+                None => line(ui, name),
             }
-            None => line(ui, name),
         }
-    }
+    });
     para(ui, text::DRAFT_LEGAL);
 }

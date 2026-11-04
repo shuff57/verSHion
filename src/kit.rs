@@ -59,7 +59,12 @@ pub fn hover_t(ctx: &egui::Context, id: egui::Id, on: bool) -> f32 {
 /// The one search box: a 40 px field with a magnifier, 12 px corners like the buttons. True when
 /// the text changed.
 pub fn search_field(ui: &mut Ui, text: &mut String, w: f32, hint: &str) -> bool {
-    let mut changed = false;
+    search_field_with(ui, text, w, hint, None).changed()
+}
+
+/// `search_field` for a box that needs its text field's response (Enter, focus) or a fixed id.
+pub fn search_field_with(ui: &mut Ui, text: &mut String, w: f32, hint: &str, id: Option<egui::Id>) -> egui::Response {
+    let mut out = None;
     egui::Frame::new()
         .fill(theme::card())
         .stroke(Stroke::new(1.0, theme::border()))
@@ -75,18 +80,18 @@ pub fn search_field(ui: &mut Ui, text: &mut String, w: f32, hint: &str) -> bool 
                 let s = Stroke::new(1.6, theme::muted_col());
                 ui.painter().circle_stroke(r.center() + Vec2::new(-1.0, -1.0), 5.0, s);
                 ui.painter().line_segment([r.center() + Vec2::new(2.8, 2.8), r.center() + Vec2::new(6.0, 6.0)], s);
-                changed = ui
-                    .add(
-                        egui::TextEdit::singleline(text)
-                            .frame(egui::Frame::new())
-                            .margin(Margin::ZERO)
-                            .hint_text(hint)
-                            .desired_width(ui.available_width()),
-                    )
-                    .changed();
+                let mut edit = egui::TextEdit::singleline(text)
+                    .frame(egui::Frame::new())
+                    .margin(Margin::ZERO)
+                    .hint_text(hint)
+                    .desired_width(ui.available_width());
+                if let Some(id) = id {
+                    edit = edit.id(id);
+                }
+                out = Some(ui.add(edit));
             });
         });
-    changed
+    out.expect("the search row always draws its field")
 }
 
 /// Danger text button (Delete).

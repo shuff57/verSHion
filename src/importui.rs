@@ -840,7 +840,7 @@ fn page(app: &mut crate::App, ui: &mut egui::Ui, ctx: &egui::Context, st: &mut S
     let view_h = ui.available_height();
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         let full = ui.available_width();
-        let w = if st.sources.is_empty() { full.min(1040.0) } else { (full - 14.0).min(1500.0) };
+        let w = if st.sources.is_empty() { full.min(crate::pageshell::PAGE_W) } else { (full - 14.0).min(1500.0) };
         ui.allocate_ui_with_layout(Vec2::new(w, 0.0), Layout::top_down(Align::Min), |ui| {
             ui.set_max_width(w);
             kit::page_header(
