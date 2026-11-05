@@ -146,10 +146,11 @@ pub fn is_f(z: usize) -> bool { place(z).is_some_and(|p| p.f_row.is_some()) }
 
 /// Whether the chosen block draws this element.
 pub fn block_shows(block: usize, z: usize) -> bool {
+    if !(1..=118).contains(&z) { return false; }
     match block {
         0 => is_main(z),
         1 => !is_f(z),
-        _ => (1..=118).contains(&z),
+        _ => true,
     }
 }
 
@@ -188,9 +189,13 @@ pub fn mass_text(z: usize) -> Option<String> {
         if t.ends_with('.') { t.pop(); }
         Some(t)
     } else {
-        Some(format!("[{}]", v.round() as i64))
+        Some(bracket_text(v))
     }
 }
+
+/// The square-bracketed mass number. The IUPAC table's values are whole numbers, but the rounding
+/// is kept explicit (and tested) so a fractional table value cannot slip through as a truncation.
+pub fn bracket_text(v: f64) -> String { format!("[{}]", v.round() as i64) }
 
 /// Main-group valence electrons; None for the d- and f-blocks, where the group number is not one.
 pub fn valence(z: usize) -> Option<u8> {
@@ -444,13 +449,13 @@ fn params() -> Vec<ParamDef> {
 // Drawing helpers
 // ---------------------------------------------------------------------------------------------
 
-fn cell_text(x: f64, y: f64, fs: f64, anchor: &str, fill: &str, s: &str, kind: &str, z: usize, bold: bool, halo: bool) -> String {
+fn cell_text(x: f64, y: f64, fs: f64, anchor: &str, fill: &str, s: &str, kind: &str, z: usize, bold: bool, halo: bool, halo_w: f64) -> String {
     let w = if bold { r#" font-weight="bold""# } else { "" };
     let t = svg::esc(s);
     let mut out = String::new();
     if halo {
         out.push_str(&format!(
-            r##"<text x="{x:.2}" y="{y:.2}" font-size="{fs:.2}" text-anchor="{anchor}" font-family="{}" fill="none" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"{w} data-o="halo" data-z="{z}">{t}</text>"##,
+            r##"<text x="{x:.2}" y="{y:.2}" font-size="{fs:.2}" text-anchor="{anchor}" font-family="{}" fill="none" stroke="#ffffff" stroke-width="{halo_w:.1}" stroke-linejoin="round"{w} data-o="halo" data-z="{z}" data-f="{kind}">{t}</text>"##,
             super::FONT
         ));
     }
@@ -491,8 +496,10 @@ fn panel_text(st: &Setup, ans: bool) -> Vec<(String, &'static str)> {
             v.push((format!("Valence shell: {} electron{} ({why}).", n, if n == 1 { "" } else { "s" }), "answer"));
         }
     } else {
-        let fields = if st.typed_number {
-            "Name ______ - group ______; period ______; category ______."
+        let fields = if p.group.is_none() {
+            "Name ______; Z ______; group: none (f-block); period ______; category ______."
+        } else if st.typed_number {
+            "Name ______; group ______; period ______; category ______."
         } else {
             "Name ______; Z ______; group ______; period ______; category ______."
         };
@@ -518,10 +525,10 @@ pub fn build(p: &Params) -> (String, Report) {
     let edge_w = if print { 1.2 } else { 0.9 };
     let grid_line = if print { "#111111" } else { "#111111" };
 
-    let fs_num = 0.20 * cell;
+    let fs_num = 0.26 * cell;
     let fs_sym = 0.30 * cell;
     let fs_name = 0.128 * cell;
-    let fs_code = 0.19 * cell;
+    let fs_code = 0.26 * cell;
     let fs_mass = 0.16 * cell;
     let fs_head = 0.24 * cell;
     let fs_gap = 0.19 * cell;
@@ -569,26 +576,28 @@ pub fn build(p: &Params) -> (String, Report) {
 
     // --- the fixed valence-and-mass notes under the panel. The boundary and spelling notes are
     // printed here when the key is off, so an export without the key still carries them.
+    let names_on = st.labels == 2 && lf > 1.2;
+    let masses_on = st.show_mass && lf > 1.2 && st.labels != 1;
     let mut present = [false; 10];
     for z in 1..=118 { if block_shows(st.block, z) { present[category(z)] = true; } }
     let absent: Vec<&str> = (0..10).filter(|i| !present[*i]).map(|i| CATS[i]).collect();
     let mut src_msgs: Vec<String> = vec![
-        "Metalloids: the staircase B, Si, Ge, As, Sb, Te, Po; conventions differ: OpenStax Chemistry 2e names the first six, and some tables make polonium a post-transition metal (the RSC's own polonium page classes it as a metal).".into(),
-        "Names use the US spellings of OpenStax Chemistry 2e (aluminum, cesium); IUPAC and the RSC print aluminium and caesium.".into(),
-        "The corner codes are lowercase, so a code such as pm cannot be read as an element symbol.".into(),
+        "Metalloids: the staircase B, Si, Ge, As, Sb, Te, Po; conventions differ: OpenStax Chemistry 2e names the first six, and some tables make Po a post-transition metal (the RSC's own page for Po classes it as a metal).".into(),
+        "Names use the US spellings of OpenStax Chemistry 2e; IUPAC and the RSC print the British spellings (aluminium, caesium).".into(),
+        format!("The corner codes are lowercase, so a code such as {} cannot be read as an element symbol.", CAT_CODES[3]),
     ];
     if st.key && !absent.is_empty() { src_msgs.push(format!("Not in this view: {}.", absent.join(", "))); }
     let src_lines: Vec<String> = src_msgs.iter().flat_map(|m| wrap(m, fs_note, text_w_max)).collect();
-    let foot_text = "Main-group valence electrons: group 1 = 1, group 2 = 2, groups 13-18 = group minus 10; helium has 2 in group 18.";
+    let foot_text = "Main-group valence electrons: group 1 = 1, group 2 = 2, groups 13-18 = group minus 10; the group-18 element whose first shell is full has 2.";
     let mut foot_lines = wrap(foot_text, fs_note, text_w_max);
     let mass_at = foot_lines.len();
-    if st.show_mass {
+    if masses_on {
         foot_lines.extend(wrap("Atomic masses are the IUPAC 2021 standard atomic weights; a value in square brackets is the bracketed mass number from the IUPAC table.", fs_note, text_w_max));
     }
     let src_at = foot_lines.len();
     if !st.key { foot_lines.extend(src_lines.iter().cloned()); }
     let foot_h = foot_lines.len() as f64 * 1.45 * fs_note
-        + if st.show_mass { 0.10 * cell } else { 0.0 }
+        + if masses_on { 0.10 * cell } else { 0.0 }
         + if st.key { 0.0 } else { 0.10 * cell };
 
     // --- the category key, laid out in flow rows. The swatches are at least 24 x 24 so a hatch
@@ -662,8 +671,6 @@ pub fn build(p: &Params) -> (String, Report) {
     let h = (y + 0.40 * cell).ceil();
 
     let mut d = Doc::new(w, h);
-    let names_on = st.labels == 2 && lf > 1.2;
-    let masses_on = st.show_mass && lf > 1.2 && st.labels != 1;
     d.describe("Periodic Table", &describe(&st, &notes, names_on, masses_on));
     d.defs(&cf.defs());
 
@@ -702,24 +709,21 @@ pub fn build(p: &Params) -> (String, Report) {
             x0 + 0.5, y0 + 0.5, cell - 1.0, cell - 1.0, cf.fill(cat)
         ));
         if st.labels != 1 {
-            d.raw(&cell_text(x0 + 0.08 * cell, y0 + 0.24 * cell, fs_num, "start", ink, &z.to_string(), "number", z, false, print));
+            d.raw(&cell_text(x0 + 0.08 * cell, y0 + 0.26 * cell, fs_num, "start", ink, &z.to_string(), "number", z, true, print, 2.0));
         }
         if st.show_mass && lf > 1.2 && st.labels != 1 {
             if let Some(m) = mass_text(z) {
-                d.raw(&cell_text(x0 + 0.08 * cell, y0 + 0.435 * cell, fs_mass, "start", ink, &m, "mass", z, false, print));
+                d.raw(&cell_text(x0 + 0.08 * cell, y0 + 0.445 * cell, fs_mass, "start", ink, &m, "mass", z, false, print, 2.0));
             }
         }
-        d.raw(&cell_text(x0 + cell / 2.0, y0 + 0.73 * cell, fs_sym, "middle", ink, data::symbol(z), "symbol", z, true, print));
-        let named = st.labels == 2 && lf > 1.2 && text_w(data::name(z), fs_name) <= cell - 2.0;
+        d.raw(&cell_text(x0 + cell / 2.0, y0 + 0.735 * cell, fs_sym, "middle", ink, data::symbol(z), "symbol", z, true, print, 3.0));
+        // every one of the 118 names fits the Large cell (the fit test proves it); the guard was dead
+        let named = st.labels == 2 && lf > 1.2;
         // on the student copy the highlighted cell's name is the answer the panel asks for
         if named && (ans || st.highlight != Some(z)) {
-            d.raw(&cell_text(x0 + cell / 2.0, y0 + 0.935 * cell, fs_name, "middle", ink, data::name(z), "name", z, false, print));
+            d.raw(&cell_text(x0 + cell / 2.0, y0 + 0.938 * cell, fs_name, "middle", ink, data::name(z), "name", z, false, print, 2.5));
         }
-        d.raw(&format!(
-            r##"{}{}"##,
-            if print { format!(r##"<text x="{:.2}" y="{:.2}" font-size="{fs_code:.2}" text-anchor="end" font-family="{}" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round" data-o="halo" data-z="{z}">{}</text>"##, x0 + cell - 0.07 * cell, y0 + 0.24 * cell, super::FONT, CAT_CODES[cat]) } else { String::new() },
-            format!(r##"<text x="{:.2}" y="{:.2}" font-size="{fs_code:.2}" text-anchor="end" font-family="{}" fill="{ink}" data-o="cat-code" data-z="{z}" data-f="{cat}">{}</text>"##, x0 + cell - 0.07 * cell, y0 + 0.24 * cell, super::FONT, CAT_CODES[cat])
-        ));
+        d.raw(&cell_text(x0 + cell - 0.07 * cell, y0 + 0.26 * cell, fs_code, "end", ink, CAT_CODES[cat], "cat-code", z, true, print, 2.0));
         cells.push(Drawn { z, cat, col, row: pl.row, x0, y0, x1: x0 + cell, y1: y0 + cell });
     }
 
@@ -815,7 +819,7 @@ pub fn build(p: &Params) -> (String, Report) {
         d.raw(&format!(
             r##"<text x="{grid_left:.2}" y="{:.2}" font-size="{fs_note:.2}" text-anchor="start" font-family="{}" fill="{soft}" data-o="foot">{}</text>"##,
             foot_top + 0.75 * fs_note + i as f64 * 1.45 * fs_note
-                + if st.show_mass && i >= mass_at { 0.10 * cell } else { 0.0 }
+                + if masses_on && i >= mass_at { 0.10 * cell } else { 0.0 }
                 + if !st.key && i >= src_at { 0.10 * cell } else { 0.0 }, super::FONT, svg::esc(line)
         ));
     }

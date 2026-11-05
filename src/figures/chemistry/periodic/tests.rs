@@ -153,8 +153,8 @@ fn texts(svg: &str) -> Vec<T> {
         if tag.contains(r#"fill="none""#) || attr(tag, "data-o").as_deref() == Some("halo") { continue; }
         let text = unesc(rest.split("</text>").next().unwrap_or(""));
         out.push(T {
-            x: attr_f(tag, "x").unwrap_or(0.0),
-            y: attr_f(tag, "y").unwrap_or(0.0),
+            x: attr_f(&tag, "x").unwrap_or(0.0),
+            y: attr_f(&tag, "y").unwrap_or(0.0),
             fs: attr_f(tag, "font-size").unwrap_or(12.0),
             anchor: attr(tag, "text-anchor").unwrap_or_else(|| "start".into()),
             kind: attr(tag, "data-o").unwrap_or_default(),
@@ -194,7 +194,7 @@ fn geo(svg: &str) -> Geo {
             }).collect();
             if v.len() >= 3 { g.polys.push((kind, v)); }
         } else if tag.starts_with("rect ") {
-            if let (Some(x), Some(y), Some(w), Some(h)) = (attr_f(tag, "x"), attr_f(tag, "y"), attr_f(tag, "width"), attr_f(tag, "height")) {
+            if let (Some(x), Some(y), Some(w), Some(h)) = (attr_f(&tag, "x"), attr_f(&tag, "y"), attr_f(&tag, "width"), attr_f(&tag, "height")) {
                 g.rects.push((kind, feat, Bx(x, x + w, y, y + h)));
             }
         }
@@ -463,8 +463,9 @@ fn the_names_follow_the_stated_us_spelling_and_the_citation_matches() {
     // and the figure itself says it under the key, on the exported sheet
     let (svg, _) = build_of(&[]);
     let notes: String = texts(&svg).iter().filter(|t| t.kind == "key-note").map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ");
-    assert!(notes.contains("aluminum") && notes.contains("cesium"), "{notes}");
+    assert!(notes.contains("US spellings"), "{notes}");
     assert!(notes.contains("aluminium") && notes.contains("caesium"), "{notes}");
+    assert!(!notes.contains("aluminum") && !notes.contains("cesium"), "the student-facing key note still names the two US examples: {notes}");
 }
 
 #[test]
@@ -603,7 +604,7 @@ fn the_valence_count_follows_the_stated_rule_for_every_main_group_element() {
     for ans in [true, false] {
         let svg = svg_of(&[b(SHOW_ANSWERS, ans)]);
         let foot: String = texts(&svg).iter().filter(|t| t.kind == "foot").map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ");
-        assert!(foot.contains("Main-group valence electrons: group 1 = 1, group 2 = 2, groups 13-18 = group minus 10; helium has 2 in group 18."), "{ans}: {foot}");
+        assert!(foot.contains("Main-group valence electrons: group 1 = 1, group 2 = 2, groups 13-18 = group minus 10; the group-18 element whose first shell is full has 2."), "{ans}: {foot}");
     }
 }
 
@@ -995,8 +996,9 @@ fn the_key_marks_categories_that_are_not_in_the_block_and_carries_the_codes() {
     let main = notes(BLOCKS[0]);
     assert!(main.contains("Not in this view: transition metal, lanthanide, actinide."), "{main}");
     assert!(main.contains("Metalloids: the staircase B, Si, Ge, As, Sb, Te, Po"), "{main}");
-    assert!(main.contains("polonium") && main.contains("conventions differ"), "{main}");
-    assert!(main.contains("aluminum") && main.contains("cesium") && main.contains("aluminium"), "{main}");
+    assert!(main.contains("Po a post-transition metal") && main.contains("conventions differ"), "{main}");
+    assert!(main.contains("US spellings") && main.contains("aluminium") && main.contains("caesium"), "{main}");
+    assert!(main.contains(&format!("such as {}", CAT_CODES[3])), "the key note is not tied to the code table: {main}");
     let d = notes(BLOCKS[1]);
     assert!(d.contains("Not in this view: lanthanide, actinide."), "{d}");
     assert!(!d.contains("transition metal,"), "{d}");
@@ -1090,6 +1092,7 @@ fn the_optional_atomic_masses_are_the_iupac_values_and_are_printed_where_they_re
         let (svg, r) = build(&p);
         assert_eq!(texts(&svg).iter().filter(|t| t.kind == "mass").count(), 0, "{size}");
         assert!(has(&r.notes, "only at the Large label size"), "{size}: {:?}", r.notes);
+        assert!(!svg.contains("IUPAC 2021"), "{size}: the sheet defines masses it does not draw");
         assert_eq!(crate::figures::notes_for(ID, &p), r.notes);
     }
     // Symbols only would leave the mass where the atomic number belongs: refuse it
@@ -1097,6 +1100,7 @@ fn the_optional_atomic_masses_are_the_iupac_values_and_are_printed_where_they_re
     let (svg, r) = build(&p);
     assert_eq!(texts(&svg).iter().filter(|t| t.kind == "mass").count(), 0);
     assert!(has(&r.notes, "Symbols only"), "{:?}", r.notes);
+    assert!(!svg.contains("IUPAC 2021"), "the Symbols-only sheet defines masses it does not draw");
     // Large with numbers: every drawn cell, each the printed value, and the type a real height
     let (svg, _r) = build_of(&[s("block", BLOCKS[2]), s("label_size", "Large"), b(SHOW_MASS, true)]);
     let ts = texts(&svg);
@@ -1177,6 +1181,10 @@ fn the_student_copy_blanks_the_read_out_and_leaks_no_answer() {
     assert!(numkey.contains("Z = 79") && numkey.contains("Gold"), "{numkey}");
     let sym = build_of(&student(&[s("block", BLOCKS[1]), s("highlight", "Au")])).1.panel.join(" ");
     assert!(sym.contains("Z ______"), "a symbol highlight still asks for Z: {sym}");
+    // the f-block has no group number, so the student is not asked for one
+    let la = build_of(&student(&[s("block", BLOCKS[2]), s("highlight", "La")])).1.panel.join(" ");
+    assert!(la.contains("group: none (f-block)"), "{la}");
+    assert!(!la.contains("group ______"), "{la}");
 }
 
 #[test]
@@ -1365,11 +1373,17 @@ fn drawing_is_pure_and_within_a_cpu_budget() {
 
 #[test]
 fn the_description_is_ascii_and_names_no_number_and_no_answer() {
-    for list in [vec![], vec![s("block", BLOCKS[1]), s("highlight", "Au"), s("trends", TRENDS[1])], vec![s("block", BLOCKS[2]), s("highlight", "La"), s("trends", TRENDS[2])], student(&[s("highlight", "Al")])] {
+    for list in [
+        vec![],
+        vec![s("block", BLOCKS[1]), s("highlight", "Au"), s("trends", TRENDS[1])],
+        vec![s("block", BLOCKS[2]), s("highlight", "La"), s("trends", TRENDS[2])],
+        student(&[s("highlight", "Al")]),
+        vec![s("block", BLOCKS[2]), s("labels", LABELS[2]), s("label_size", "Large"), b(SHOW_MASS, true), s("trends", TRENDS[2]), s("highlight", "Au")],
+    ] {
         let svg = svg_of(&list);
         let desc = svg.split("<desc>").nth(1).and_then(|x| x.split("</desc>").next()).unwrap_or("").to_string();
         let title = svg.split("<title>").nth(1).and_then(|x| x.split("</title>").next()).unwrap_or("").to_string();
-        assert!(desc.is_ascii() && !desc.is_empty() && desc.len() <= 320, "{desc}");
+        assert!(desc.is_ascii() && !desc.is_empty() && desc.len() <= 420, "{desc}");
         assert!(title.is_ascii() && !title.is_empty(), "{title}");
         assert!(!desc.chars().any(|c| c.is_ascii_digit()), "{desc}");
         assert!(!desc.contains("Gold") && !desc.contains("Aluminum") && !desc.contains("Lanthanum"), "{desc}");
@@ -1541,6 +1555,125 @@ fn the_panel_reserves_the_longer_of_the_key_and_student_lines() {
                 "{:?} leaves the panel {bx:?} in ({}, {}, {}, {})", t.text, pb.0, pb.2, pb.1, pb.3);
         }
     }
+}
+
+#[test]
+fn no_note_names_the_highlighted_element_on_the_student_copy() {
+    let notes_of = |svg: &str| -> String {
+        let d = svg.split("<desc>").nth(1).and_then(|x| x.split("</desc>").next()).unwrap_or("");
+        let mut s = texts(svg).iter()
+            .filter(|t| matches!(t.kind.as_str(), "foot" | "key-note" | "note" | "panel" | "blank" | "answer" | "trend-note"))
+            .map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ");
+        s.push(' ');
+        s.push_str(d);
+        s.to_lowercase()
+    };
+    // whole-word match: "tin" must not be found inside "actinide" (or "platinum"), which is not a
+    // leak of the element named Tin
+    let has_word = |text: &str, word: &str| text.split(|c: char| !c.is_ascii_alphanumeric()).any(|w| w == word);
+    for block in BLOCKS {
+        for z in 1..=118 {
+            let base = [s("block", block), s("labels", LABELS[2]), s("label_size", "Large"), s("highlight", data::symbol(z))];
+            let (ksvg, kr) = build_of(&key(&base));
+            let (ssvg, _) = build_of(&student(&base));
+            assert_eq!(kr.setup.highlight, Some(z));
+            let name = data::name(z).to_lowercase();
+            let sn = notes_of(&ssvg);
+            assert!(!has_word(&sn, &name), "{block}/{}: a student note names it: {sn}", data::symbol(z));
+            let kn = notes_of(&ksvg);
+            assert!(has_word(&kn, &name), "{block}/{}: the key does not name it: {kn}", data::symbol(z));
+            assert!(!ssvg.contains(r#"data-o="answer""#), "{block}/{}", data::symbol(z));
+            if block_shows(kr.setup.block, z) {
+                assert!(!texts(&ssvg).iter().any(|t| t.kind == "name" && t.z == Some(z)), "{block}/{}: the cell is named", data::symbol(z));
+            }
+        }
+    }
+}
+
+#[test]
+fn the_cell_number_and_code_survive_a_real_66_percent_copy() {
+    for size in ["Small", "Medium", "Large"] {
+        for style in ["Colour", "Print"] {
+            let (svg, rep) = build_of(&[s("block", BLOCKS[2]), s("label_size", size), s("style", style)]);
+            let cell = rep.cells.iter().find(|c| c.z == 13).expect("aluminium");
+            let (w, h) = svg_size(&svg);
+            let png = to_png(&svg, 1.5).unwrap();
+            let big = image::load_from_memory(&png).unwrap().to_rgba8();
+            let img = image::imageops::resize(&big, (w as f64 * 0.66).round() as u32, (h as f64 * 0.66).round() as u32, image::imageops::FilterType::Lanczos3);
+            let s = 0.66;
+            let crop = |x0: f64, x1: f64, y0: f64, y1: f64| -> (usize, f64) {
+                let (x0, x1) = (((x0 * s).round() as u32 + 2).min(img.width() - 1), ((x1 * s).round() as u32).saturating_sub(2).min(img.width() - 1));
+                let (y0, y1) = (((y0 * s).round() as u32 + 2).min(img.height() - 1), ((y1 * s).round() as u32).saturating_sub(2).min(img.height() - 1));
+                let mut dark = 0usize;
+                let (mut top, mut bot) = (u32::MAX, 0u32);
+                for y in y0..=y1 {
+                    for x in x0..=x1 {
+                        let p = img.get_pixel(x, y);
+                        if p[0] < 100 && p[1] < 100 && p[2] < 100 {
+                            dark += 1;
+                            top = top.min(y);
+                            bot = bot.max(y);
+                        }
+                    }
+                }
+                (dark, if top == u32::MAX { 0.0 } else { (bot - top + 1) as f64 })
+            };
+            let num = crop(cell.x0 + 1.0, cell.x0 + 0.42 * rep.cell, cell.y0 + 1.0, cell.y0 + 0.34 * rep.cell);
+            let code = crop(cell.x1 - 0.42 * rep.cell, cell.x1 - 1.0, cell.y0 + 1.0, cell.y0 + 0.34 * rep.cell);
+            println!("{size}/{style}: number {num:?}, code {code:?}");
+            assert!(num.0 >= 7 && num.1 >= 2.5, "{size}/{style}: the atomic number is {num:?} at 66 %");
+            assert!(code.0 >= 7 && code.1 >= 2.5, "{size}/{style}: the category code is {code:?} at 66 %");
+        }
+    }
+}
+
+#[test]
+fn the_highlight_outline_is_on_the_highlighted_cell() {
+    let cases = [(BLOCKS[2], "H", 1usize), (BLOCKS[2], "Al", 13), (BLOCKS[1], "Au", 79), (BLOCKS[2], "La", 57), (BLOCKS[2], "Og", 118)];
+    for (block, typed, z) in cases {
+        let (svg, rep) = build_of(&[s("block", block), s("highlight", typed)]);
+        let cell = rep.cells.iter().find(|c| c.z == z).unwrap_or_else(|| panic!("{typed}"));
+        let seg = svg.split("<rect ").find(|s| s.contains("data-o=\"highlight\"") && s.contains(&format!("data-z=\"{z}\"")))
+            .unwrap_or_else(|| panic!("{typed}: no outline"));
+        let tag = format!(" {seg}");
+        let (x, y, w, h) = (attr_f(&tag, "x").unwrap(), attr_f(&tag, "y").unwrap(), attr_f(&tag, "width").unwrap(), attr_f(&tag, "height").unwrap());
+        assert!((x - (cell.x0 + 1.5)).abs() < 0.01 && (y - (cell.y0 + 1.5)).abs() < 0.01, "{typed}: outline at ({x}, {y}) not ({}, {})", cell.x0 + 1.5, cell.y0 + 1.5);
+        assert!((w - (cell.x1 - cell.x0 - 3.0)).abs() < 0.01 && (h - (cell.y1 - cell.y0 - 3.0)).abs() < 0.01, "{typed}: outline size {w}x{h}");
+    }
+}
+
+#[test]
+fn print_halos_cover_the_number_the_symbol_and_the_code() {
+    let has_halo = |svg: &str, kind: &str, z: usize| -> bool {
+        svg.split("<text").skip(1).any(|p| {
+            let tag = p.split('>').next().unwrap_or("");
+            attr(tag, "data-o").as_deref() == Some("halo") && attr(tag, "data-f").as_deref() == Some(kind) && attr(tag, "data-z").as_deref() == Some(&z.to_string())
+        })
+    };
+    for block in BLOCKS {
+        for size in ["Small", "Medium", "Large"] {
+            let (svg, rep) = build_of(&[s("block", block), s("label_size", size), s("style", "Print")]);
+            for c in &rep.cells {
+                assert!(has_halo(&svg, "number", c.z), "{block}/{size}: Z {} has no number halo", c.z);
+                assert!(has_halo(&svg, "symbol", c.z), "{block}/{size}: Z {} has no symbol halo", c.z);
+                assert!(has_halo(&svg, "cat-code", c.z), "{block}/{size}: Z {} has no code halo", c.z);
+            }
+        }
+    }
+}
+
+#[test]
+fn the_bracketed_mass_number_rounds_and_the_block_predicate_refuses_off_table_numbers() {
+    assert_eq!(bracket_text(269.4), "[269]");
+    assert_eq!(bracket_text(268.6), "[269]");
+    assert_eq!(bracket_text(269.0), "[269]");
+    assert_eq!(bracket_text(0.4), "[0]");
+    assert_eq!(mass_text(43).as_deref(), Some("[98]"));
+    for block in 0..3 {
+        assert!(!block_shows(block, 0), "block {block} shows Z 0");
+        assert!(!block_shows(block, 119), "block {block} shows Z 119");
+    }
+    for z in 1..=118 { assert!(block_shows(2, z), "the full block hides {z}"); }
 }
 
 #[test]
