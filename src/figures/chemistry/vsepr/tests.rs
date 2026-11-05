@@ -1170,11 +1170,11 @@ fn the_header_and_faq_state_the_chemistry() {
 #[test]
 fn the_share_migration_is_the_documented_note_path() {
     assert!(crate::figures::start::added_in(ID).is_empty(), "a migration entry was added without revisiting this note");
-    assert_eq!(crate::figures::share::VERSION, 4, "the global share version moved; revisit the VSEPR migration note");
+    assert_eq!(crate::figures::share::VERSION, 6, "the global share version moved; revisit the VSEPR migration note");
     let src = include_str!("../vsepr.rs");
     let flat = src.replace("//!", " ").split_whitespace().collect::<Vec<_>>().join(" ");
-    assert!(flat.contains("new at share version 4 and unreleased"), "the header note is missing");
-    assert!(flat.contains("no saved specification or link can predate"), "the header note is incomplete");
+    assert!(flat.contains("new and unreleased"), "the header note is missing");
+    assert!(flat.contains("saved specification or link can predate"), "the header note is incomplete");
 }
 
 #[test]

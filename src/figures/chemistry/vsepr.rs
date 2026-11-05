@@ -62,11 +62,12 @@
 //! arc: an arc that reads a foreshortened angle next to a blank would invite a wrong answer. The key
 //! draws an arc only when it is true on the page. The description names no shape and no angle.
 //!
-//! **Share links.** This figure is new at share version 4 and unreleased; no saved specification or
-//! link can predate its `molecule`, `turn`, `tilt`, `lone`, `angles` or `labels` controls, so it has
-//! no `start::added_in` entry. A migration that could separate an already-made version-4 link from
-//! this one would need a global share-version bump and a `was_overridden` value for every existing
-//! figure, so the note here is the documented path.
+//! **Share links.** This figure is new and unreleased: it was authored at share version 4, and the
+//! catalog has since reached 6. No saved specification or link can predate its `molecule`, `turn`,
+//! `tilt`, `lone`, `angles` or `labels` controls, so it has no `start::added_in` entry. A migration
+//! that could separate an already-made link of this figure from this one would need a global
+//! share-version bump and a `was_overridden` value for every existing figure, so the note here is
+//! the documented path.
 use std::f64::consts::PI;
 
 use crate::figures::chart::fmt;
