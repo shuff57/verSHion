@@ -1637,7 +1637,7 @@ const OGIVE: &[Faq] = &[
 const FREQUENCY_TABLE: &[Faq] = &[
     Faq {
         q: "Why do the relative frequencies add to 100%?",
-        a: "Every value is counted once, so the frequencies add to n. Relative frequency is each count divided by that same n, so f1/n + f2/n + ... = n/n = 1, or 100%. The Total row shows exactly n and exactly 100%. A percent is rounded half up from the exact integers f and n, never from a calculator's decimal, so at 0 or 1 decimal place the printed cells can add to 99% or 101%; the key says when that happens and gives the rounded sum. Choose Fraction to see the exact shares.",
+        a: "Every value is counted once, so the frequencies add to n. Relative frequency is each count divided by that same n, so f1/n + f2/n + ... = n/n = 1, or 100%. The Total row shows exactly n and exactly 100%. A percent is rounded half up from the exact integers f and n, never from a calculator's decimal, so at 0 or 1 decimal place the printed cells can add to 99% or 101%; the key says when that happens and gives the rounded sum. Choose Fraction for the exact shares, or Decimal for proportions such as 0.05.",
     },
     Faq {
         q: "What is a class boundary?",
@@ -1650,6 +1650,10 @@ const FREQUENCY_TABLE: &[Faq] = &[
     Faq {
         q: "What does cumulative frequency mean?",
         a: "The cumulative frequency of a row is the number of values at or below the top of that row: the running sum of the frequency column. It starts at the first row's frequency and ends at n, so the last cumulative frequency is the total number of values. It answers \"how many values are no more than this?\", which is what an ogive plots against the upper class boundaries. For raw values it is the count up to and including that value; for classes it counts every value in the class and all the classes before it.",
+    },
+    Faq {
+        q: "What is cumulative relative frequency?",
+        a: "It is the running total of the relative-frequency column: after each row, the share of all values at or below that row. It starts at the first row's relative frequency and ends at exactly 1, or 100%. Choose Relative frequency = Decimal to see proportions such as 0.05, 0.10, ... 1.00, matching the OpenStax grouped table; choose Percent for 5.0%, ... 100.0%, or Fraction for exact fractions. The Total row shows 1, 1.00 or 100% in the same unit, and the student copy blanks the whole column.",
     },
     Faq {
         q: "When should I use grouped classes instead of raw values?",

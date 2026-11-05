@@ -1,21 +1,27 @@
 //! Frequency distribution table: the textbook table that pairs with a histogram or a bar chart.
 //! One row per distinct value in ascending order (Raw values) or per class interval (Grouped
 //! classes), with an optional tally column, the frequency, the relative frequency (a fraction in
-//! lowest terms or a percent) and the cumulative frequency, then an optional Total row.
+//! lowest terms, a decimal proportion such as 0.05, or a percent) and the cumulative frequency,
+//! then an optional cumulative relative-frequency column and Total row.
 //!
 //! The numbers, stated here and in the FAQ:
 //! * Frequency counts the typed values: every value is in exactly one row, and the frequencies
 //!   add to n, the number of values.
-//! * Relative frequency is f/n. A fraction is reduced exactly. A percent is rounded half up from
-//!   the exact integer arithmetic `f * 100 / n`, never from a binary float, at 0, 1 or 2 decimal
-//!   places. Each cell is that rounded value; the Total row is exactly n/n = 100%, and when the
-//!   rounded cells do not add to 100% the key says so and gives the sum they do add to.
+//! * Relative frequency is f/n. A fraction is reduced exactly. A decimal proportion or a percent
+//!   is rounded half up from exact integer arithmetic, never from a binary float, at 0, 1 or 2
+//!   places. Each cell is that rounded value; the Total row is exactly n/n = 1 or 100%, and when
+//!   the rounded percent cells do not add to 100% the key says so and gives the sum they do add
+//!   to. The cumulative relative frequency is the running f/n in the same unit.
 //! * Cumulative frequency is the running sum of the frequencies, and the last one is n.
 //! * Grouped classes use the histogram's own `auto_width`, `auto_start` and `bins`, so the same
 //!   values give the same classes as the histogram. A class is written "a to <b": a is included
 //!   and b is not. A value on an inner boundary goes in the class to its right. The last class is
 //!   written "a to b" and includes its upper boundary, the first boundary above the largest
-//!   value, so every value has a class.
+//!   value, so every value has a class. Boundaries are printed at the width's own precision, so
+//!   a width of 1e-7 is not printed as 0.
+//! * A comma between digits with exactly three digits after it is a thousands separator, as in the
+//!   ogive: `1,000` is one number, noted as ambiguous with the two-number reading. A comma still
+//!   inside a number (`12,5`, `1,0000`) is refused with both fixed readings.
 //!
 //! The student copy (Show answers off) blanks the tally, frequency, relative-frequency and
 //! cumulative-frequency cells, and draws nothing in the SVG source that states any of them. The
@@ -45,7 +51,10 @@ pub const RAW: &str = "Raw values";
 pub const GROUPED: &str = "Grouped classes";
 pub const OFF: &str = "Off";
 pub const FRACTION: &str = "Fraction";
+pub const DECIMAL: &str = "Decimal";
 pub const PERCENT: &str = "Percent";
+/// The smallest table text that stays at least the suite's 8.4 px floor in a 66 % copy.
+const MIN_TABLE_TEXT: f64 = 8.4 / 0.66;
 
 pub fn def() -> FigureDef {
     FigureDef {
@@ -69,10 +78,12 @@ fn params() -> Vec<ParamDef> {
         ParamDef::float("class_width", "Class width", WIDTH_MIN, WIDTH_MAX, 0.5, 10.0),
         ParamDef::float("class_start", "First class starts at", START_MIN, START_MAX, 0.5, 40.0),
         ParamDef::bool("tally", "Tally column", true),
-        ParamDef::choice("relative", "Relative frequency", &[OFF, FRACTION, PERCENT], PERCENT)
-            .hint("f/n as a fraction in lowest terms, or a percent rounded half up"),
-        ParamDef::int("decimals", "Decimals in percents", 0, 2, 1),
+        ParamDef::choice("relative", "Relative frequency", &[OFF, FRACTION, DECIMAL, PERCENT], PERCENT)
+            .hint("f/n as a fraction in lowest terms, a decimal proportion such as 0.05, or a percent rounded half up"),
+        ParamDef::int("decimals", "Decimals in relative frequencies", 0, 2, 1),
         ParamDef::bool("cumulative", "Cumulative frequency column", true),
+        ParamDef::bool("cum_rel", "Cumulative relative frequency column", true)
+            .hint("The running f/n in the same unit as the relative column: a fraction, a decimal or a percent"),
         ParamDef::bool("total", "Total row", true),
         ParamDef::text("title", "Title", ""),
         ParamDef::text("heading", "First column heading (blank = Value or Class)", ""),
@@ -90,7 +101,8 @@ pub fn relevant(fig: &str, key: &str, p: &Params) -> bool {
     match key {
         "auto_classes" => grouped,
         "class_width" | "class_start" => grouped && !p.b("auto_classes"),
-        "decimals" => p.s("relative") == PERCENT,
+        "decimals" => matches!(p.s("relative"), DECIMAL | PERCENT),
+        "cum_rel" => p.s("relative") != OFF,
         _ => true,
     }
 }
@@ -130,6 +142,17 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
             params: vec![("title", s("Test scores")), ("heading", s("Score")), ("show_answers", Value::B(false))],
         },
         Example {
+            name: "OpenStax grouped table",
+            params: vec![
+                ("mode", s(GROUPED)),
+                ("data", s(DEFAULT_GROUPED)),
+                ("relative", s(DECIMAL)),
+                ("decimals", Value::I(2)),
+                ("title", s("Heights of students")),
+                ("heading", s("Height (cm)")),
+            ],
+        },
+        Example {
             name: "Two decimals, Print",
             params: vec![
                 ("decimals", Value::I(2)),
@@ -153,6 +176,7 @@ pub enum Mode {
 pub enum Rel {
     Off,
     Fraction,
+    Decimal,
     Percent,
 }
 
@@ -180,6 +204,9 @@ pub struct Model {
     pub rel: Rel,
     pub decimals: u32,
     pub cumulative: bool,
+    /// A cumulative relative-frequency column: the running f/n in the same unit as the relative
+    /// column (fraction, decimal or percent).
+    pub cum_rel: bool,
     pub total: bool,
     /// Grouped only: the edge rule and the last class's closing boundary.
     pub edge: Option<String>,
@@ -232,6 +259,34 @@ pub fn pct_text(f: u64, n: u64, d: u32) -> String {
     pct_text_scaled(pct_scaled(f, n, d), d)
 }
 
+/// `c` out of `n` scaled by 10^`d`, rounded half up from the exact integers: the decimal
+/// proportion 0.05 at two places is 5. The same `(2 c 10^d + n) / (2 n)` is the half-up rule.
+pub fn ratio_scaled(c: u64, n: u64, d: u32) -> u128 {
+    let n = n.max(1) as u128;
+    (2u128 * c as u128 * 10u128.pow(d) + n) / (2 * n)
+}
+
+/// A decimal proportion at `d` places: `0.05`, `0.35`, `1.00` (padded, so a column lines up).
+pub fn ratio_text(c: u64, n: u64, d: u32) -> String {
+    let u = ratio_scaled(c, n, d);
+    let p = 10u128.pow(d);
+    if d == 0 {
+        u.to_string()
+    } else {
+        format!("{}.{:0w$}", u / p, u % p, w = d as usize)
+    }
+}
+
+/// A cumulative relative frequency in the same unit as the relative column.
+pub fn cum_rel_text(cum: u64, n: u64, rel: Rel, d: u32) -> String {
+    match rel {
+        Rel::Fraction => fraction_text(cum, n),
+        Rel::Decimal => ratio_text(cum, n, d),
+        Rel::Percent => pct_text(cum, n, d),
+        Rel::Off => String::new(),
+    }
+}
+
 /// The running totals of `fs`.
 pub fn cumulative(fs: &[u64]) -> Vec<u64> {
     fs.iter().scan(0u64, |t, f| {
@@ -254,16 +309,116 @@ fn clipped(s: &str, max: usize, label: &str, notes: &mut Vec<String>) -> String 
     short
 }
 
+/// Data read from the box, with what the preprocessing had to explain.
+struct ReadData {
+    values: Vec<f64>,
+    skipped: usize,
+    truncated: bool,
+    /// Lines that held a thousands group, with an example group and its cleaned digits, so the
+    /// note can offer the two-number reading.
+    thousands: Vec<(usize, String, String)>,
+}
+
+struct Prepared {
+    text: String,
+    thousands: Vec<(usize, String, String)>,
+}
+
+/// The ogive's thousands rule: a comma between digits with exactly three digits after it and no
+/// digit after those is a thousands separator and is removed (`1,000` -> `1000`). Returns the
+/// first removed group as (as typed, cleaned) for the ambiguity note.
+fn strip_thousands_line(line: &str) -> (String, Option<(String, String)>) {
+    let cs: Vec<char> = line.chars().collect();
+    let mut out = String::new();
+    let mut first: Option<(String, String)> = None;
+    let mut i = 0;
+    while i < cs.len() {
+        let c = cs[i];
+        let three = i + 4 <= cs.len() && cs[i + 1..i + 4].iter().all(char::is_ascii_digit) && (i + 4 == cs.len() || !cs[i + 4].is_ascii_digit());
+        if c == ',' && i > 0 && cs[i - 1].is_ascii_digit() && three {
+            if first.is_none() {
+                let mut a = i;
+                while a > 0 && (cs[a - 1].is_ascii_digit() || matches!(cs[a - 1], '.' | '-' | '\u{2212}')) {
+                    a -= 1;
+                }
+                let raw: String = cs[a..i + 4].iter().collect();
+                let clean = raw.replace(',', "");
+                first = Some((raw, clean));
+            }
+            i += 1;
+            continue;
+        }
+        out.push(c);
+        i += 1;
+    }
+    (out, first)
+}
+
+/// A comma still between two digits after the thousands pass is not a thousands group: it is a
+/// decimal comma (`12,5`) or a mistyped group (`1,0000`). Its two sides, for the refusal.
+fn odd_comma(line: &str) -> Option<(String, String)> {
+    let cs: Vec<char> = line.chars().collect();
+    for i in 1..cs.len().saturating_sub(1) {
+        if cs[i] == ',' && cs[i - 1].is_ascii_digit() && cs[i + 1].is_ascii_digit() {
+            let mut a = i;
+            while a > 0 && (cs[a - 1].is_ascii_digit() || matches!(cs[a - 1], '.' | '-' | '\u{2212}')) {
+                a -= 1;
+            }
+            let mut b = i + 1;
+            while b < cs.len() && (cs[b].is_ascii_digit() || cs[b] == '.') {
+                b += 1;
+            }
+            return Some((cs[a..i].iter().collect(), cs[i + 1..b].iter().collect()));
+        }
+    }
+    None
+}
+
+/// Strip the thousands groups before `data::read` sees the commas, and refuse a comma that is
+/// still inside a number. The ogive does the same for its `1,000` paste, so a paste means the same
+/// numbers in both stats figures.
+fn prepare(text: &str) -> Result<Prepared, String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut thousands: Vec<(usize, String, String)> = Vec::new();
+    for (i, line) in text.lines().enumerate() {
+        let (clean, group) = strip_thousands_line(line);
+        if let Some((left, right)) = odd_comma(&clean) {
+            let one = if right.len() <= 2 { format!("{left}.{right}") } else { format!("{left}{right}") };
+            let two = format!("{left}, {right}");
+            return Err(format!(
+                "Data line {} (\u{201c}{}\u{201d}): \u{201c}{},{}\u{201d} has a comma inside a number. A comma is a thousands separator only when exactly three digits follow it. For one number write \u{201c}{one}\u{201d}; for two numbers put a comma and a space: \u{201c}{two}\u{201d}.",
+                i + 1,
+                line.trim(),
+                left,
+                right
+            ));
+        }
+        if let Some((raw, clean)) = group {
+            thousands.push((i + 1, raw, clean));
+        }
+        out.push(clean);
+    }
+    Ok(Prepared { text: out.join("\n"), thousands })
+}
+
 /// The numbers in the Data box. Err is a refusal; Ok is empty only when the box is empty.
-fn read_values(p: &Params) -> Result<(Vec<f64>, usize, bool), String> {
+fn read_values(p: &Params) -> Result<ReadData, String> {
     let text = p.s("data");
-    let r = data::read(text, 1);
-    let values: Vec<f64> = r.rows.into_iter().map(|row| row[0]).collect();
+    let pre = prepare(text)?;
+    let r = data::read(&pre.text, 1);
+    let mut values: Vec<f64> = r.rows.into_iter().map(|row| row[0]).collect();
+    let mut truncated = r.truncated;
+    // data::read caps rows per line; a single comma-separated line can hold more values than the
+    // figure will use, so enforce the cap over the whole box too.
+    if values.len() > data::MAX_ROWS {
+        values.truncate(data::MAX_ROWS);
+        truncated = true;
+    }
     if !values.is_empty() {
-        return Ok((values, r.skipped, r.truncated));
+        return Ok(ReadData { values, skipped: r.skipped, truncated, thousands: pre.thousands });
     }
     if text.trim().is_empty() {
-        return Ok((Vec::new(), 0, false));
+        return Ok(ReadData { values: Vec::new(), skipped: 0, truncated: false, thousands: Vec::new() });
     }
     Err(format!(
         "Data has no numbers this table can use. Type numbers between \u{2212}{} and {}, one per line or separated by commas, for example \u{201c}4, 5, 5, 6\u{201d}.",
@@ -285,15 +440,59 @@ pub fn value_text(v: f64) -> String {
     } else {
         let plain = format!("{v}");
         if plain.chars().count() > 20 || plain.contains(['e', 'E']) {
-            let e = format!("{v:.16e}");
-            let (m, ex) = e.split_once('e').unwrap_or((&e, "0"));
-            let m = m.trim_end_matches('0').trim_end_matches('.');
-            format!("{m}e{ex}")
+            // Rust's `{:e}` is the shortest round-trip exponent form: 1e-20 is "1e-20", not
+            // the 17-digit binary expansion "9.9999999999999995e-21"
+            format!("{v:e}")
         } else {
             plain
         }
     };
     s.replace('-', "\u{2212}")
+}
+
+/// A boundary at a fixed number of decimal places, with trailing zeros removed and a true minus
+/// sign (`0.250` -> `0.25`, `-0.0` -> `0`).
+fn fixed_text(v: f64, d: u32) -> String {
+    let s = format!("{:.*}", d as usize, v);
+    let s = if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.') } else { s.as_str() };
+    if s == "-0" || s.is_empty() { "0".into() } else { s.replace('-', "\u{2212}") }
+}
+
+/// The decimal places `value_text(width)` needs, so a class width is printed at its own precision
+/// (`0.05` -> 2, `1e-7` -> 7, `1/3` -> the 16 digits of its shortest round-trip).
+fn decimal_places(v: f64) -> u32 {
+    let s = value_text(v);
+    if let Some((m, e)) = s.split_once('e') {
+        let exp: i32 = e.replace('\u{2212}', "-").parse().unwrap_or(0);
+        let frac = m.split('.').nth(1).map(|x| x.len()).unwrap_or(0) as i32;
+        (frac - exp).max(0) as u32
+    } else {
+        s.split('.').nth(1).map(|x| x.len()).unwrap_or(0) as u32
+    }
+}
+
+/// The boundary labels for `bins`, at the smallest number of decimal places (starting from the
+/// width's own precision) that keeps every adjacent pair distinct, and the width printed at that
+/// same precision. The width can be tiny (`1e-7`) or huge (`1e9`): a fixed six-place format
+/// printed every tiny boundary as 0. When no fixed precision up to 30 places separates the
+/// boundaries (or the floats themselves coincide), the shortest round-trip form is used, and
+/// `None` means even that repeats a label.
+fn boundary_texts(bins: &[super::Bin], width: f64) -> Option<(Vec<String>, String)> {
+    let vals: Vec<f64> = bins.iter().map(|b| b.lo).chain(std::iter::once(bins.last()?.hi)).collect();
+    let start_val = vals[0];
+    let tol = 1e-9 * width.abs();
+    let start_ok = |s: &str| -> bool {
+        s.replace('\u{2212}', "-").parse::<f64>().is_ok_and(|v| (v - start_val).abs() <= tol)
+    };
+    let start = decimal_places(width).min(30);
+    for d in start..=30u32 {
+        let labels: Vec<String> = vals.iter().map(|v| fixed_text(*v, d)).collect();
+        if labels.windows(2).all(|w| w[0] != w[1]) && start_ok(&labels[0]) {
+            return Some((labels, fixed_text(width, d)));
+        }
+    }
+    let labels: Vec<String> = vals.iter().map(|v| value_text(*v)).collect();
+    (labels.windows(2).all(|w| w[0] != w[1]) && start_ok(&labels[0])).then(|| (labels, value_text(width)))
 }
 
 /// Distinct values in ascending order with their counts.
@@ -348,6 +547,20 @@ fn suggest_width(values: &[f64], start: f64) -> Option<f64> {
     None
 }
 
+/// The histogram's automatic width when the manual control can hold it and it makes a printable
+/// table. `None` when the range needs a width the control cannot take (the switch is the only
+/// honest fix then).
+fn auto_width_ok(values: &[f64]) -> Option<f64> {
+    let w = super::auto_width(values);
+    if !(w.is_finite() && w >= WIDTH_MIN && w <= WIDTH_MAX) {
+        return None;
+    }
+    let st = super::auto_start(values, w, true);
+    let bins = super::bins(values, st, w, true)?;
+    let sum: u64 = bins.iter().map(|b| b.n as u64).sum();
+    (bins.len() <= MAX_ROWS && sum == values.len() as u64).then_some(w)
+}
+
 /// The grouped rows, plus a refusal/fix note when a typed setting could not be used and the
 /// automatic class choice was substituted. The returned rows always count every value once.
 fn grouped(values: &[f64], p: &Params) -> (Vec<(String, u64)>, Option<String>, Option<String>) {
@@ -362,13 +575,13 @@ fn grouped(values: &[f64], p: &Params) -> (Vec<(String, u64)>, Option<String>, O
     if !(width.is_finite() && width > 0.0) {
         let good = super::auto_width(values);
         let advice = if good >= WIDTH_MIN && good <= WIDTH_MAX {
-            format!("Set Class width to {}.", chart::fmt(good))
+            format!("Set Class width to {}.", value_text(good))
         } else {
             "Turn on Choose the class width automatically.".to_string()
         };
         fix = Some(format!(
             "Class width ({}) is not a number above 0, so the classes are chosen automatically. {advice}",
-            chart::fmt(width)
+            value_text(width)
         ));
         width = good;
         start = super::auto_start(values, width, true);
@@ -376,14 +589,14 @@ fn grouped(values: &[f64], p: &Params) -> (Vec<(String, u64)>, Option<String>, O
     if !start.is_finite() {
         let good = super::auto_start(values, width, true);
         let advice = if good >= START_MIN && good <= START_MAX {
-            format!("Set First class starts at {} or less.", chart::fmt(good))
+            format!("Set First class starts at {} or less.", value_text(good))
         } else {
             "Turn on Choose the class width automatically.".to_string()
         };
         fix.get_or_insert_with(|| {
             format!(
                 "First class starts at ({}) is not a number, so the classes are chosen automatically. {advice}",
-                chart::fmt(p.f("class_start"))
+                value_text(p.f("class_start"))
             )
         });
         start = good;
@@ -392,16 +605,16 @@ fn grouped(values: &[f64], p: &Params) -> (Vec<(String, u64)>, Option<String>, O
     if start > min + 1e-9 * min.abs().max(1.0) {
         let good = super::auto_start(values, width, true);
         let advice = if good >= START_MIN && good <= START_MAX {
-            format!("Set First class starts at {} or less", chart::fmt(min))
+            format!("Set First class starts at {} or less", value_text(min))
         } else {
             "Turn on Choose the class width automatically".to_string()
         };
         fix.get_or_insert_with(|| {
             format!(
                 "First class starts at {}, above the smallest value {}, so some values would have no class. {advice}; the classes now start at {}.",
-                chart::fmt(start),
-                chart::fmt(min),
-                chart::fmt(good)
+                value_text(start),
+                value_text(min),
+                value_text(good)
             )
         });
         start = good;
@@ -418,11 +631,14 @@ fn grouped(values: &[f64], p: &Params) -> (Vec<(String, u64)>, Option<String>, O
         Some((bins, sum)) => bins.is_empty() || *sum != values.len() as u64 || bins.len() > MAX_ROWS,
     };
     if bad(&made) {
-        // the smallest width the manual control can hold, else the automatic width
-        let suggestion = suggest_width(values, start);
-        let (fallback_width, advice) = match suggestion {
-            Some(w) => (w, format!("Set Class width to {} or more", chart::fmt(w))),
-            None => (super::auto_width(values), "Turn on Choose the class width automatically".to_string()),
+        // prefer the histogram's own automatic width: it is the readable choice, not the
+        // narrowest width that merely satisfies the row cap
+        let (fallback_width, advice) = match auto_width_ok(values) {
+            Some(w) => (w, format!("Set Class width to {} or more (the automatic width)", value_text(w))),
+            None => match suggest_width(values, start) {
+                Some(w) => (w, format!("Set Class width to {} or more", value_text(w))),
+                None => (super::auto_width(values), "Turn on Choose the class width automatically".to_string()),
+            },
         };
         let fallback_start = if fallback_width.is_finite() && fallback_width > 0.0 {
             if start.is_finite() && start <= min { start } else { super::auto_start(values, fallback_width, true) }
@@ -432,8 +648,8 @@ fn grouped(values: &[f64], p: &Params) -> (Vec<(String, u64)>, Option<String>, O
         fix.get_or_insert_with(|| {
             format!(
                 "Class width {} makes more than {MAX_ROWS} classes, so the table cannot print every class. {advice}; the classes now use {}.",
-                chart::fmt(width),
-                chart::fmt(fallback_width)
+                value_text(width),
+                value_text(fallback_width)
             )
         });
         width = fallback_width;
@@ -447,37 +663,50 @@ fn grouped(values: &[f64], p: &Params) -> (Vec<(String, u64)>, Option<String>, O
         fix.get_or_insert_with(|| {
             format!(
                 "The class settings could not be used, so the classes are chosen automatically (Class width {}).",
-                chart::fmt(width)
+                value_text(width)
             )
         });
         made = build(width, start);
     }
-    match made {
-        Some((bins, _)) => {
+    // a width so small, or a start so large, that two adjacent boundaries print the same is not a
+    // table: use the automatic classes and say so
+    let mut formatted = made.as_ref().and_then(|(bins, _)| boundary_texts(bins, width));
+    if formatted.is_none() {
+        width = super::auto_width(values);
+        start = super::auto_start(values, width, true);
+        fix.get_or_insert_with(|| {
+            format!(
+                "The class boundaries repeat at this width and data magnitude, so the classes are chosen automatically (Class width {}).",
+                value_text(width)
+            )
+        });
+        made = build(width, start);
+        formatted = made.as_ref().and_then(|(bins, _)| boundary_texts(bins, width));
+    }
+    match (made, formatted) {
+        (Some((bins, _)), Some((bounds, width_txt))) => {
             let count = bins.len();
-            let last = start + count as f64 * width;
             let rows: Vec<(String, u64)> = bins
                 .into_iter()
                 .enumerate()
                 .map(|(i, b)| {
                     let label = if i + 1 == count {
-                        format!("{} to {}", chart::fmt(b.lo), chart::fmt(b.hi))
+                        format!("{} to {}", bounds[i], bounds[i + 1])
                     } else {
-                        format!("{} to <{}", chart::fmt(b.lo), chart::fmt(b.hi))
+                        format!("{} to <{}", bounds[i], bounds[i + 1])
                     };
                     (label, b.n as u64)
                 })
                 .collect();
             let edge = format!(
-                "The classes are {} wide, starting at {}. Each class is a to <b: a is included and b is not. A value on a boundary goes in the class to its right, as on the histogram. The last class is a to b: it includes its upper boundary {}, above the largest value ({}), so every value has a class.",
-                chart::fmt(width),
-                chart::fmt(start),
-                chart::fmt(last),
-                chart::fmt(max)
+                "The classes are {width_txt} wide, starting at {}. Each class is a to <b: a is included and b is not. A value on a boundary goes in the class to its right, as on the histogram. The last class is a to b: it includes its upper boundary {}, above the largest value ({}), so every value has a class.",
+                bounds[0],
+                bounds[count],
+                value_text(max)
             );
             (rows, Some(edge), fix)
         }
-        None => (Vec::new(), None, fix),
+        _ => (Vec::new(), None, fix),
     }
 }
 
@@ -492,6 +721,7 @@ fn finish_rows(pairs: Vec<(String, u64)>, rel: Rel, d: u32) -> Vec<Row> {
             let rel = match rel {
                 Rel::Off => String::new(),
                 Rel::Fraction => fraction_text(f, n),
+                Rel::Decimal => ratio_text(f, n, d),
                 Rel::Percent => pct_text(f, n, d),
             };
             Row { label, f, cum, rel }
@@ -500,20 +730,37 @@ fn finish_rows(pairs: Vec<(String, u64)>, rel: Rel, d: u32) -> Vec<Row> {
 }
 
 pub fn model(p: &Params) -> Result<Model, String> {
-    let (values, skipped, truncated) = read_values(p)?;
+    let ReadData { values, skipped, truncated, thousands } = read_values(p)?;
     let mode = if p.s("mode") == GROUPED { Mode::Grouped } else { Mode::Raw };
     let rel = match p.s("relative") {
         FRACTION => Rel::Fraction,
+        DECIMAL => Rel::Decimal,
         PERCENT => Rel::Percent,
         _ => Rel::Off,
     };
     let decimals = p.i("decimals").clamp(0, 2) as u32;
     let tally = p.b("tally");
     let cumulative = p.b("cumulative");
+    let cum_rel = p.b("cum_rel") && rel != Rel::Off;
     let total = p.b("total");
     let mut notes = Vec::new();
     let title = clipped(p.s("title"), MAX_TITLE, "Title", &mut notes);
     let heading = clipped(p.s("heading"), MAX_HEADING, "First column heading", &mut notes);
+    if !thousands.is_empty() {
+        let names: Vec<String> = thousands.iter().take(3).map(|(n, _, _)| n.to_string()).collect();
+        let more = if thousands.len() > 3 { format!(" and {} more", thousands.len() - 3) } else { String::new() };
+        let list = match thousands.len() {
+            1 => format!("Line {}", names[0]),
+            2 => format!("Lines {} and {}", names[0], names[1]),
+            3 => format!("Lines {}, {} and {}", names[0], names[1], names[2]),
+            _ => format!("Lines {}{}", names.join(", "), more),
+        };
+        let (_, raw, clean) = &thousands[0];
+        notes.push(format!(
+            "Data: {list} {} a comma between digits with exactly three digits after it, read as a thousands separator (for example \u{201c}{raw}\u{201d} is {clean}). If you meant two numbers, put a space after the comma, for example \u{201c}1, 000\u{201d}.",
+            if thousands.len() == 1 { "has" } else { "have" }
+        ));
+    }
     if skipped > 0 {
         notes.push(format!(
             "Data: {skipped} cell{} that {} not {} {} skipped, so the table counts the numbers only. Type one number per line, or separate them with commas, for example \u{201c}4, 5, 5, 6\u{201d}.",
@@ -543,6 +790,7 @@ pub fn model(p: &Params) -> Result<Model, String> {
             rel,
             decimals,
             cumulative,
+            cum_rel,
             total,
             edge: None,
             fix: None,
@@ -567,9 +815,9 @@ pub fn model(p: &Params) -> Result<Model, String> {
     } else {
         let d = distinct(&values);
         if d.len() > MAX_ROWS {
+            let extra = if truncated { format!(" Only the first {} values are used.", data::MAX_ROWS) } else { String::new() };
             return Err(format!(
-                "Data has more than {MAX_ROWS} distinct values and the table prints at most {MAX_ROWS} rows. Choose {} for Data entry mode to group them, or type fewer values.",
-                GROUPED
+                "Data has more than {MAX_ROWS} distinct values and the table prints at most {MAX_ROWS} rows.{extra} Type at most {MAX_ROWS} distinct values, or choose {GROUPED} for Data entry mode to group them."
             ));
         }
         d.into_iter().map(|(v, f)| (value_text(v), f)).collect()
@@ -589,7 +837,7 @@ pub fn model(p: &Params) -> Result<Model, String> {
         let exact = 100 * scale;
         if printed != exact {
             key_notes.push(format!(
-                "Each percent is rounded half up from f/n, so the cells add to {}%; the Total row is exactly 100% (n/n). The sum of the rounded cells is not an error.",
+                "Each percent is rounded half up from f/n, so the cells add to {}; the Total row is exactly 100% (n/n). The sum of the rounded cells is not an error.",
                 pct_text_scaled(printed, decimals)
             ));
         }
@@ -605,6 +853,7 @@ pub fn model(p: &Params) -> Result<Model, String> {
         rel,
         decimals,
         cumulative,
+        cum_rel,
         total,
         edge,
         fix,
@@ -775,6 +1024,7 @@ fn shell(p: &Params, fix: String) -> Model {
     let mode = if p.s("mode") == GROUPED { Mode::Grouped } else { Mode::Raw };
     let rel = match p.s("relative") {
         FRACTION => Rel::Fraction,
+        DECIMAL => Rel::Decimal,
         PERCENT => Rel::Percent,
         _ => Rel::Off,
     };
@@ -789,6 +1039,7 @@ fn shell(p: &Params, fix: String) -> Model {
         rel,
         decimals: p.i("decimals").clamp(0, 2) as u32,
         cumulative: p.b("cumulative"),
+        cum_rel: p.b("cum_rel") && rel != Rel::Off,
         total: p.b("total"),
         edge: None,
         fix: Some(fix),
@@ -834,9 +1085,11 @@ fn draw(m: &Model, key: bool, p: &Params) -> String {
     let print = fills.is_print();
     let k = svg::label_factor(p.s("label_size"));
     let fs = 14.0 * k;
-    let tfs = fs * 0.95;
+    // the suite's legibility floor at 66 % applies to every size, Small included; the table text
+    // is not allowed to fall below it, while the title and page still scale with the toggle
+    let tfs = (fs * 0.95).max(MIN_TABLE_TEXT);
     let title_fs = fs * 1.3;
-    let note_fs = fs * 0.95;
+    let note_fs = tfs;
     let pad = 8.0 * k;
     let row_h = tfs * 2.0;
     let ink = if print { "#000" } else { INK };
@@ -875,6 +1128,7 @@ fn draw(m: &Model, key: bool, p: &Params) -> String {
         if m.total {
             let tot = match m.rel {
                 Rel::Fraction => "1".to_string(),
+                Rel::Decimal => ratio_text(m.n, m.n, m.decimals),
                 Rel::Percent => pct_text_scaled(100 * 10u128.pow(m.decimals), m.decimals),
                 Rel::Off => String::new(),
             };
@@ -888,6 +1142,14 @@ fn draw(m: &Model, key: bool, p: &Params) -> String {
             cells.push(Cell::Text(m.n.to_string()));
         }
         cols.push(Col { head: wrap("Cumulative frequency", tfs, 130.0 * k), cells, answer: true, class: "ccell" });
+    }
+    if m.cum_rel {
+        let title = if m.rel == Rel::Percent { "Cumulative relative frequency (%)" } else { "Cumulative relative frequency" };
+        let mut cells: Vec<Cell> = m.rows.iter().map(|r| Cell::Text(cum_rel_text(r.cum, m.n, m.rel, m.decimals))).collect();
+        if m.total {
+            cells.push(Cell::Text(cum_rel_text(m.n, m.n, m.rel, m.decimals)));
+        }
+        cols.push(Col { head: wrap(title, tfs, 130.0 * k), cells, answer: true, class: "crcell" });
     }
 
     // column widths from the widest header line and the widest cell, so nothing clips at any size
@@ -904,7 +1166,9 @@ fn draw(m: &Model, key: bool, p: &Params) -> String {
                 .iter()
                 .map(|cell| match cell {
                     Cell::Text(s) => tw(s, tfs),
-                    Cell::Tally(f) => tally_geom(*f, tfs).0,
+                    // both copies use the widest tally the column can ever hold, so a blanked
+                    // student column cannot reveal the count through its width
+                    Cell::Tally(_) => tally_geom(MAX_TALLY, tfs).0,
                     Cell::Blank => 0.0,
                 })
                 .fold(0.0, f64::max);
@@ -957,7 +1221,7 @@ fn draw(m: &Model, key: bool, p: &Params) -> String {
     let desc = if m.empty {
         "An empty frequency table: type values in Data to fill it in.".to_string()
     } else {
-        "A frequency distribution table: each value or class with its tally, frequency, relative frequency and cumulative frequency.".to_string()
+        "A frequency distribution table: each value or class with its tally, frequency, relative frequency, cumulative frequency and cumulative relative frequency.".to_string()
     };
     d.describe(if m.title.is_empty() { "Frequency table" } else { &m.title }, &desc);
     let mut ty = margin;

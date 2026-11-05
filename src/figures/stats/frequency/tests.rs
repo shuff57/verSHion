@@ -164,6 +164,18 @@ fn totals(g: &G, class: &str) -> Vec<String> {
 fn all_text(g: &G) -> Vec<&str> {
     g.texts.iter().map(|t| t.body.as_str()).collect()
 }
+/// The x positions of the table's vertical rules, left to right.
+fn verticals(g: &G) -> Vec<f64> {
+    let mut xs: Vec<f64> = g
+        .lines
+        .iter()
+        .filter(|l| l.class == "rule" && (l.a.0 - l.b.0).abs() < 1e-9)
+        .map(|l| l.a.0)
+        .collect();
+    xs.sort_by(f64::total_cmp);
+    xs.dedup_by(|a, b| (*a - *b).abs() < 0.05);
+    xs
+}
 
 // ───────────────────────── the numbers, written independently ─────────────────────────
 
@@ -183,10 +195,7 @@ fn vfmt(v: f64) -> String {
     }
     let plain = format!("{v}");
     let s = if plain.chars().count() > 20 || plain.contains(['e', 'E']) {
-        let e = format!("{v:.16e}");
-        let (m, ex) = e.split_once('e').unwrap_or((&e, "0"));
-        let m = m.trim_end_matches('0').trim_end_matches('.');
-        format!("{m}e{ex}")
+        format!("{v:e}")
     } else {
         plain
     };
@@ -246,6 +255,16 @@ fn tpct_text(f: u64, n: u64, d: u32) -> String {
 fn tcum(fs: &[u64]) -> Vec<u64> {
     let mut t = 0;
     fs.iter().map(|f| { t += f; t }).collect()
+}
+/// The decimal proportion c/n at d places, half up, from exact integers.
+fn tratio(c: u64, n: u64, d: u32) -> u128 {
+    let n = n.max(1) as u128;
+    (2 * c as u128 * 10u128.pow(d) + n) / (2 * n)
+}
+fn tratio_text(c: u64, n: u64, d: u32) -> String {
+    let u = tratio(c, n, d);
+    let p = 10u128.pow(d);
+    if d == 0 { u.to_string() } else { format!("{}.{:0w$}", u / p, u % p, w = d as usize) }
 }
 
 /// The histogram's own class choice, recomputed here through the parent module's helpers.
@@ -401,9 +420,83 @@ fn percents_round_half_up_from_exact_integer_arithmetic_at_every_decimal() {
 }
 
 #[test]
+fn value_text_is_the_shortest_round_trip_and_keeps_tiny_values_short() {
+    assert_eq!(value_text(1e-20), "1e\u{2212}20");
+    assert_eq!(value_text(1e-300), "1e\u{2212}300");
+    assert_eq!(value_text(1.0000000001e-20), "1.0000000001e\u{2212}20");
+    assert_eq!(value_text(1.0000000001), "1.0000000001");
+    assert_eq!(value_text(-0.0), "0");
+    assert_eq!(value_text(1000.0), "1000");
+}
+
+#[test]
+fn decimal_proportions_and_cumulative_relative_frequency_are_exact() {
+    let mut checked = 0;
+    for n in 1..=40u64 {
+        for c in 0..=n {
+            for d in 0..=2u32 {
+                assert_eq!(ratio_scaled(c, n, d), tratio(c, n, d), "{c}/{n} at {d} places");
+                assert_eq!(ratio_text(c, n, d), tratio_text(c, n, d), "{c}/{n} at {d} places");
+                checked += 1;
+            }
+        }
+    }
+    assert_eq!(ratio_text(1, 20, 2), "0.05");
+    assert_eq!(ratio_text(1, 3, 2), "0.33");
+    assert_eq!(ratio_text(20, 20, 2), "1.00");
+    assert_eq!(ratio_text(1, 20, 1), "0.1");
+    assert_eq!(ratio_text(1, 8, 2), "0.13", "0.125 rounds half up");
+    assert_eq!(ratio_text(3, 8, 2), "0.38", "0.375 rounds half up");
+
+    for rel in [FRACTION, DECIMAL, PERCENT] {
+        let p = with(&[
+            s("mode", GROUPED),
+            s("data", DEFAULT_GROUPED),
+            s("relative", rel),
+            ("decimals", Value::I(2)),
+            b("cum_rel", true),
+        ]);
+        let m = model(&p).unwrap();
+        let g = parse(&render(&p), false);
+        assert_eq!(bodies(&g, "rcell"), m.rows.iter().map(|r| r.rel.clone()).collect::<Vec<_>>(), "{rel}");
+        let want_cr: Vec<String> = m
+            .rows
+            .iter()
+            .map(|r| match rel {
+                FRACTION => tfrac(r.cum, m.n),
+                DECIMAL => tratio_text(r.cum, m.n, 2),
+                PERCENT => tpct_text(r.cum, m.n, 2),
+                _ => unreachable!(),
+            })
+            .collect();
+        assert_eq!(bodies(&g, "crcell"), want_cr, "{rel}: cumulative relative frequency");
+        assert_eq!(totals(&g, "crcell"), vec![want_cr.last().unwrap().clone()], "{rel}: total");
+        let head: String = g.texts.iter().filter(|t| has_class(t, "thead")).map(|t| t.body.as_str()).collect::<Vec<_>>().join(" ");
+        assert!(head.contains("Cumulative") && head.contains("relative"), "{rel}: {head}");
+        // both copies keep the same shape and the student blanks the new column too
+        let (student, key) = crate::figures::answer_pair(&def(), &p).unwrap();
+        let (sg, kg) = (parse(&student, false), parse(&key, false));
+        assert_eq!(verticals(&sg), verticals(&kg), "{rel}: same column rules");
+        assert!(bodies(&sg, "rcell").is_empty() && bodies(&sg, "crcell").is_empty(), "{rel}: student blanks");
+    }
+
+    // the OpenStax grouped table: 0.10, 0.25, 0.40, 0.20, 0.05 and 0.10..1.00
+    let e = examples(ID).unwrap().into_iter().find(|e| e.name == "OpenStax grouped table").unwrap();
+    let mut p = defaults();
+    for (k, v) in e.params {
+        p.0.insert(k.to_string(), v);
+    }
+    let m = model(&p).unwrap();
+    assert_eq!(m.rows.iter().map(|r| r.rel.clone()).collect::<Vec<_>>(), ["0.10", "0.25", "0.40", "0.20", "0.05"]);
+    assert_eq!(m.rows.iter().map(|r| cum_rel_text(r.cum, m.n, m.rel, m.decimals)).collect::<Vec<_>>(), ["0.10", "0.35", "0.75", "0.95", "1.00"]);
+    assert!(warnings(&p).is_empty(), "{:?}", warnings(&p));
+    println!("frequency table: {checked} decimal proportions checked");
+}
+
+#[test]
 fn the_total_row_adds_to_n_and_to_exactly_one_hundred_percent() {
     for text in [DEFAULT_DATA, "1, 2, 2, 3, 3, 3, 7", "5", "\u{2212}2, \u{2212}2, 0, 4"] {
-        for rel in [OFF, FRACTION, PERCENT] {
+        for rel in [OFF, FRACTION, DECIMAL, PERCENT] {
             for total in [true, false] {
                 let p = with(&[s("data", text), s("relative", rel), b("total", total)]);
                 let m = model(&p).unwrap();
@@ -412,8 +505,14 @@ fn the_total_row_adds_to_n_and_to_exactly_one_hundred_percent() {
                 if total {
                     assert_eq!(totals(&g, "fcell"), vec![m.n.to_string()], "{text} {rel}");
                     assert_eq!(totals(&g, "ccell"), vec![m.n.to_string()], "{text} {rel}");
+                    assert_eq!(
+                        totals(&g, "crcell"),
+                        if m.cum_rel { vec![cum_rel_text(m.n, m.n, m.rel, m.decimals)] } else { Vec::new() },
+                        "{text} {rel}"
+                    );
                     match rel {
                         FRACTION => assert_eq!(totals(&g, "rcell"), vec!["1".to_string()], "{text}"),
+                        DECIMAL => assert_eq!(totals(&g, "rcell"), vec![ratio_text(m.n, m.n, m.decimals)], "{text}"),
                         PERCENT => {
                             let d = m.decimals;
                             assert_eq!(totals(&g, "rcell"), vec![pct_text_scaled(100 * 10u128.pow(d), d)], "{text}");
@@ -422,6 +521,7 @@ fn the_total_row_adds_to_n_and_to_exactly_one_hundred_percent() {
                     }
                 } else {
                     assert!(totals(&g, "fcell").is_empty() && totals(&g, "ccell").is_empty(), "{text}: no Total row");
+                    assert!(totals(&g, "crcell").is_empty(), "{text}: no cumulative relative total");
                 }
             }
         }
@@ -435,6 +535,8 @@ fn the_total_row_adds_to_n_and_to_exactly_one_hundred_percent() {
     let g = parse(&render(&p), false);
     let notes: String = g.texts.iter().filter(|t| has_class(t, "note")).map(|t| t.body.as_str()).collect::<Vec<_>>().join(" ");
     assert!(notes.contains("99%") && notes.contains("exactly 100%"), "{notes}");
+    assert!(!notes.contains("%%"), "one percent sign only: {notes}");
+    assert!(!m.key_notes.iter().any(|n| n.contains("%%")), "{:?}", m.key_notes);
 }
 
 // ───────────────────────── grouped classes ─────────────────────────
@@ -467,6 +569,61 @@ fn grouped_auto_classes_are_the_histograms_own_and_cover_every_value_once() {
         assert!(!m.rows.last().unwrap().label.contains('<'), "{text}: the last class is closed");
     }
     println!("frequency table: {} grouped data sets match the histogram", sets.len());
+}
+
+#[test]
+fn grouped_boundaries_print_at_the_widths_precision_and_never_repeat() {
+    // the blocker: auto width 1e-7 used to print 0 to <0, 0 to <0, 0 to 0 and a note saying 0 wide
+    let tiny = with(&[s("mode", GROUPED), s("data", "0.0000001, 0.0000002, 0.0000003")]);
+    let m = model(&tiny).unwrap();
+    let labels: Vec<&str> = m.rows.iter().map(|r| r.label.as_str()).collect();
+    assert!(labels.iter().all(|l| *l != "0 to <0" && *l != "0 to 0"), "{labels:?}");
+    assert!(labels.iter().any(|l| l.contains("0.0000001")), "{labels:?}");
+    assert!(labels.windows(2).all(|w| w[0] != w[1]), "adjacent labels repeat: {labels:?}");
+    assert_eq!(m.rows.iter().map(|r| r.f).collect::<Vec<_>>(), vec![1, 1, 1]);
+    let edge = m.edge.unwrap();
+    assert!(edge.contains("0.0000001 wide"), "{edge}");
+    assert!(!edge.contains("are 0 wide"), "{edge}");
+    assert!(!edge.contains("upper boundary 0,"), "{edge}");
+
+    // huge, decimal, negative/decimal, and sub-1e-19 classes: all labels distinct, all notes precise
+    let cases: Vec<(&str, Option<f64>, Option<f64>)> = vec![
+        ("1000000000, 1000000010, 1000000020", None, None),
+        ("0.1, 0.2, 0.3, 0.4", None, None),
+        ("\u{2212}1, \u{2212}0.5, 0, 0.5, 1.5", Some(0.25), Some(-1.0)),
+        ("1e-20, 2e-20, 3e-20", None, None),
+        ("1.2345, 1.2346, 1.2347", None, None),
+        ("0.5, 10.5, 20.5", Some(10.0), Some(0.5)),
+    ];
+    for (data_text, width, start) in cases {
+        let mut l = vec![s("mode", GROUPED), s("data", data_text)];
+        if let Some(w) = width {
+            l.push(b("auto_classes", false));
+            l.push(f("class_width", w));
+        }
+        if let Some(st) = start {
+            l.push(f("class_start", st));
+        }
+        let p = with(&l);
+        let m = model(&p).unwrap();
+        let labels: Vec<&str> = m.rows.iter().map(|r| r.label.as_str()).collect();
+        assert!(labels.windows(2).all(|w| w[0] != w[1]), "{data_text}: repeated labels {labels:?}");
+        let edge = m.edge.unwrap();
+        assert!(edge.contains("wide, starting at"), "{data_text}: {edge}");
+        // the printed boundaries are not rounded to a false zero
+        assert!(!labels.iter().any(|l| l == &"0 to <0" || l == &"0 to 0"), "{data_text}: {labels:?}");
+    }
+    // an integer width with a decimal start keeps the start's decimal
+    let p = with(&[
+        s("mode", GROUPED),
+        s("data", "0.5, 10.5, 20.5"),
+        b("auto_classes", false),
+        f("class_width", 10.0),
+        f("class_start", 0.5),
+    ]);
+    let m = model(&p).unwrap();
+    assert_eq!(m.rows[0].label, "0.5 to <10.5", "{:?}", m.rows);
+    assert!(m.edge.unwrap().contains("starting at 0.5"), "the start is printed");
 }
 
 #[test]
@@ -559,6 +716,21 @@ fn manual_classes_are_used_and_a_refused_width_or_start_is_replaced_with_a_fixed
     assert!(!note.contains("Set Class width to"), "an impossible manual value is not offered: {note}");
     assert!(apply_fix(&note, &mut huge));
     assert!(fix_note(&huge).is_none(), "{:?}", warnings(&huge));
+
+    // the critic's minor: a tiny width on 1..5 should offer the readable automatic width (1),
+    // not the narrowest width that merely satisfies the 200-class cap (0.05 -> 101 rows)
+    let mut five = with(&[
+        s("mode", GROUPED),
+        s("data", "1, 2, 3, 4, 5"),
+        b("auto_classes", false),
+        f("class_width", 0.01),
+        f("class_start", 1.0),
+    ]);
+    let note = fix_note(&five).expect("a fix for five values with a tiny width");
+    assert!(note.contains("Set Class width to 1 or more"), "{note}");
+    assert!(apply_fix(&note, &mut five));
+    let m = model(&five).unwrap();
+    assert_eq!(m.rows.len(), 5, "five one-wide classes: {:?}", m.rows);
 }
 
 // ───────────────────────── the table itself ─────────────────────────
@@ -566,8 +738,8 @@ fn manual_classes_are_used_and_a_refused_width_or_start_is_replaced_with_a_fixed
 #[test]
 fn every_printed_cell_is_the_models_cell_over_the_option_space() {
     let mut checked = 0;
-    for rel in [OFF, FRACTION, PERCENT] {
-        for (tally, cum, total) in [(true, true, true), (false, false, false), (true, false, true), (false, true, false)] {
+    for rel in [OFF, FRACTION, DECIMAL, PERCENT] {
+        for (tally, cum, cum_rel, total) in [(true, true, true, true), (false, false, false, false), (true, false, true, true), (false, true, false, false)] {
             for (mode, data_text) in [(RAW, DEFAULT_DATA), (GROUPED, DEFAULT_GROUPED)] {
                 for d in 0..=2 {
                     let p = with(&[
@@ -577,6 +749,7 @@ fn every_printed_cell_is_the_models_cell_over_the_option_space() {
                         s("relative", rel),
                         ("decimals", Value::I(d)),
                         b("cumulative", cum),
+                        b("cum_rel", cum_rel),
                         b("total", total),
                     ]);
                     let m = model(&p).unwrap();
@@ -593,15 +766,24 @@ fn every_printed_cell_is_the_models_cell_over_the_option_space() {
                     } else {
                         assert!(bodies(&g, "ccell").is_empty(), "no cumulative column when off");
                     }
+                    if cum_rel && rel != OFF {
+                        assert_eq!(bodies(&g, "crcell"), m.rows.iter().map(|r| cum_rel_text(r.cum, m.n, m.rel, m.decimals)).collect::<Vec<_>>(), "{mode:?} {rel} {d}");
+                    } else {
+                        assert!(bodies(&g, "crcell").is_empty(), "no cumulative relative column when off");
+                    }
                     if total {
                         assert_eq!(totals(&g, "fcell"), vec![m.n.to_string()], "{mode:?} {rel} {d}");
+                        assert_eq!(
+                            totals(&g, "crcell"),
+                            if cum_rel && rel != OFF { vec![cum_rel_text(m.n, m.n, m.rel, m.decimals)] } else { Vec::new() },
+                            "{mode:?} {rel} {d}"
+                        );
                     } else {
                         assert!(totals(&g, "fcell").is_empty(), "no Total row when off");
                     }
                     let heads: Vec<&str> = g.texts.iter().filter(|t| has_class(t, "thead")).map(|t| t.body.as_str()).collect();
                     assert!(heads.contains(&heading_for(mode)), "{mode:?}: {heads:?}");
                     assert_eq!(heads.contains(&"Tally"), tally, "{mode:?}: tally header");
-                    assert_eq!(heads.iter().any(|h| h.contains("Cumulative")), cum, "{mode:?}: cumulative header");
                     checked += 1;
                 }
             }
@@ -642,6 +824,7 @@ fn the_student_copy_blanks_every_answer_and_the_whole_source_leaks_none() {
         vec![],
         vec![s("mode", GROUPED), s("data", DEFAULT_GROUPED)],
         vec![s("relative", FRACTION), b("tally", false)],
+        vec![s("relative", DECIMAL), ("decimals", Value::I(2))],
         vec![("decimals", Value::I(2))],
         vec![s("mode", GROUPED), s("data", "0, 1, 1, 2, 2, 2, 9, 10"), b("auto_classes", false), f("class_width", 2.0), f("class_start", 0.0)],
         vec![s("data", "1, 2, 2")],
@@ -657,25 +840,25 @@ fn the_student_copy_blanks_every_answer_and_the_whole_source_leaks_none() {
             assert_eq!(vb(&student), vb(&key), "same page size: {list:?} {style}");
             let (sg, kg) = (parse(&student, false), parse(&key, false));
             // the answer columns are blank in the student copy, in every cell including the Total row
-            for class in ["fcell", "rcell", "ccell"] {
+            for class in ["fcell", "rcell", "ccell", "crcell"] {
                 assert!(bodies(&sg, class).is_empty(), "{class} body leaked: {list:?} {style}");
                 assert!(totals(&sg, class).is_empty(), "{class} total leaked: {list:?} {style}");
             }
             assert!(!sg.lines.iter().any(|l| l.class == "tally"), "tally leaked: {list:?} {style}");
             // every answer string in the key is absent from the student's text, or is a given
-            let givens: Vec<String> = kg.texts.iter().filter(|t| !has_class(t, "fcell") && !has_class(t, "rcell") && !has_class(t, "ccell")).map(|t| t.body.clone()).collect();
-            for t in kg.texts.iter().filter(|t| has_class(t, "fcell") || has_class(t, "rcell") || has_class(t, "ccell")) {
+            let givens: Vec<String> = kg.texts.iter().filter(|t| !has_class(t, "fcell") && !has_class(t, "rcell") && !has_class(t, "ccell") && !has_class(t, "crcell")).map(|t| t.body.clone()).collect();
+            for t in kg.texts.iter().filter(|t| has_class(t, "fcell") || has_class(t, "rcell") || has_class(t, "ccell") || has_class(t, "crcell")) {
                 let in_student = sg.texts.iter().filter(|u| u.body == t.body).count();
                 let given = givens.iter().filter(|g| **g == t.body).count();
                 assert!(in_student <= given, "{:?} leaked: student has it {in_student} times, only {given} givens: {list:?} {style}", t.body);
             }
             // nothing answer-like in the title/desc or a comment
             let desc = student.split("<desc>").nth(1).unwrap().split("</desc>").next().unwrap();
-            for t in kg.texts.iter().filter(|t| has_class(t, "fcell") || has_class(t, "rcell") || has_class(t, "ccell")) {
+            for t in kg.texts.iter().filter(|t| has_class(t, "fcell") || has_class(t, "rcell") || has_class(t, "ccell") || has_class(t, "crcell")) {
                 assert!(!desc.contains(&t.body), "desc leaks {:?}: {desc}", t.body);
             }
             assert!(!student.contains("<!--"), "no comments in the student source");
-            assert!(!student.contains("fcell") && !student.contains("rcell") && !student.contains("ccell"), "no answer-cell class in the student source: {list:?} {style}");
+            assert!(!student.contains("fcell") && !student.contains("rcell") && !student.contains("ccell") && !student.contains("crcell"), "no answer-cell class in the student source: {list:?} {style}");
             assert!(!student.contains("class=\"tally\""), "no tally stroke class in the student source");
             // the key's answer notes are not in the student copy
             for note in &model(&p).unwrap().key_notes {
@@ -697,25 +880,26 @@ fn is_grey(c: &str) -> bool {
 fn print_is_grey_only_the_header_band_is_visible_and_medium_text_survives_a_66_percent_copy() {
     for (mode, text) in [(RAW, DEFAULT_DATA), (GROUPED, DEFAULT_GROUPED)] {
         for key in [true, false] {
-            let p = with(&[s("mode", mode), s("data", text), s("style", "Print"), b(SHOW_ANSWERS, key)]);
+            for size in ["Small", "Medium", "Large"] {
+            let p = with(&[s("mode", mode), s("data", text), s("style", "Print"), s("label_size", size), b(SHOW_ANSWERS, key)]);
             let svg = render(&p);
             for k in ["fill", "stroke"] {
                 for v in svg.split(&format!(" {k}=\"")).skip(1).map(|x| x.split('"').next().unwrap()) {
-                    assert!(is_grey(v), "{mode:?} key={key}: {k}={v} in Print");
+                    assert!(is_grey(v), "{mode:?} {size} key={key}: {k}={v} in Print");
                 }
             }
             let g = parse(&svg, false);
             let band = g.rects.iter().find(|r| r.class == "thead-band").expect("a header band");
-            assert!(is_grey(&band.fill) && band.fill != "#fff" && band.fill != "none", "{mode:?}: header band {:?}", band.fill);
+            assert!(is_grey(&band.fill) && band.fill != "#fff" && band.fill != "none", "{mode:?} {size}: header band {:?}", band.fill);
             let small = g.texts.iter().map(|t| t.size).fold(f64::INFINITY, f64::min);
-            assert!(small * 0.66 >= 8.4, "{mode:?} key={key}: {small} px at 66%");
+            assert!(small * 0.66 >= 8.4, "{mode:?} {size} key={key}: {small} px at 66%");
             for l in &g.lines {
-                assert!(l.width * 0.66 >= 0.66, "{mode:?}: hairline {} at 66%", l.width);
+                assert!(l.width * 0.66 >= 0.66, "{mode:?} {size}: hairline {} at 66%", l.width);
             }
             let png = crate::figures::to_png(&svg, 0.66).unwrap();
             let img = image::load_from_memory(&png).unwrap().to_rgba8();
             let hue = |px: &image::Rgba<u8>| px[0].max(px[1]).max(px[2]) - px[0].min(px[1]).min(px[2]);
-            assert!(img.pixels().all(|px| hue(px) == 0), "{mode:?}: colour in a Print render");
+            assert!(img.pixels().all(|px| hue(px) == 0), "{mode:?} {size}: colour in a Print render");
             // the header band is a grey field, darker than the white page, at 66% too
             let (w, h, px) = crate::figures::to_rgba(&svg, 0.66).unwrap();
             let lum = |x: f64, y: f64| -> f64 {
@@ -725,7 +909,8 @@ fn print_is_grey_only_the_header_band_is_visible_and_medium_text_survives_a_66_p
                 0.299 * px[o] as f64 + 0.587 * px[o + 1] as f64 + 0.114 * px[o + 2] as f64
             };
             let band_l = lum(band.x + band.w / 2.0, band.y + band.h / 2.0);
-            assert!(band_l < 190.0, "{mode:?}: the header band is too pale at 66% ({band_l:.0})");
+            assert!(band_l < 190.0, "{mode:?} {size}: the header band is too pale at 66% ({band_l:.0})");
+            }
         }
     }
     // Colour and Print draw the same geometry
@@ -776,8 +961,8 @@ fn resvg_ink_boxes_never_collide_clip_or_leave_a_cell_over_the_option_space_and_
     let sets = [(RAW, DEFAULT_DATA), (GROUPED, DEFAULT_GROUPED), (GROUPED, "\u{2212}5, \u{2212}1, 0, 0.25, 0.25, 3.75, 8.5")];
     let mut renders = 0;
     for (mode, text) in sets {
-        for rel in [OFF, FRACTION, PERCENT] {
-            for (tally, cum) in [(true, true), (false, false)] {
+        for rel in [OFF, FRACTION, DECIMAL, PERCENT] {
+            for (tally, cum, cum_rel) in [(true, true, true), (false, false, false)] {
                 for total in [true, false] {
                     for size in ["Small", "Medium", "Large"] {
                         for key in [true, false] {
@@ -787,13 +972,14 @@ fn resvg_ink_boxes_never_collide_clip_or_leave_a_cell_over_the_option_space_and_
                                 s("relative", rel),
                                 b("tally", tally),
                                 b("cumulative", cum),
+                                b("cum_rel", cum_rel),
                                 b("total", total),
                                 s("label_size", size),
                                 b(SHOW_ANSWERS, key),
                             ]);
                             let svg = render(&p);
                             let g = parse(&svg, true);
-                            let what = format!("{mode:?} {rel} tally={tally} cum={cum} total={total} {size} key={key}");
+                            let what = format!("{mode:?} {rel} tally={tally} cum={cum} cum_rel={cum_rel} total={total} {size} key={key}");
                             // every glyph inside the page
                             for t in &g.texts {
                                 assert!(t.ink.0 >= -0.5 && t.ink.1 >= -0.5 && t.ink.2 <= g.w + 0.5 && t.ink.3 <= g.h + 0.5, "{what}: {:?} off canvas {:?} in {}x{}", t.body, t.ink, g.w, g.h);
@@ -824,7 +1010,7 @@ fn resvg_ink_boxes_never_collide_clip_or_leave_a_cell_over_the_option_space_and_
                             xs.sort_by(f64::total_cmp);
                             xs.dedup_by(|a, b| (*a - *b).abs() < 0.05);
                             if xs.len() >= 2 {
-                                for t in g.texts.iter().filter(|t| has_class(t, "thead") || has_class(t, "tcell") || has_class(t, "fcell") || has_class(t, "rcell") || has_class(t, "ccell")) {
+                                for t in g.texts.iter().filter(|t| has_class(t, "thead") || has_class(t, "tcell") || has_class(t, "fcell") || has_class(t, "rcell") || has_class(t, "ccell") || has_class(t, "crcell")) {
                                     let at = xs.windows(2).find(|w| t.x >= w[0] - 0.5 && t.x <= w[1] + 0.5).unwrap_or_else(|| panic!("{what}: {:?} at x={} is outside {xs:?}", t.body, t.x));
                                     assert!(t.ink.0 >= at[0] - 0.2 && t.ink.2 <= at[1] + 0.2, "{what}: {:?} leaves its column {}..{}: {:?}", t.body, at[0], at[1], t.ink);
                                 }
@@ -863,7 +1049,8 @@ fn refusals_name_the_box_the_reason_and_a_fixed_value_and_odd_input_never_panics
     let many: String = (0..(MAX_ROWS + 1)).map(|i| i.to_string()).collect::<Vec<_>>().join(", ");
     let p = with(&[s("data", &many)]);
     let note = warnings(&p).join(" ");
-    assert!(note.contains("more than 200 distinct values") && note.contains("Choose Grouped classes"), "{note}");
+    assert!(note.contains("more than 200 distinct values") && note.contains("Grouped classes"), "{note}");
+    assert!(note.contains("at most 200 distinct values"), "a number to type: {note}");
     let mut fixed = p.clone();
     fixed.set_s("mode", GROUPED);
     assert!(model(&fixed).is_ok(), "grouping the same values works");
@@ -884,6 +1071,66 @@ fn refusals_name_the_box_the_reason_and_a_fixed_value_and_odd_input_never_panics
     let note = warnings(&p).join(" ");
     assert!(note.contains("Data: 2 cells that are not numbers were skipped"), "{note}");
     assert_eq!(bodies(&parse(&render(&p), false), "fcell"), vec!["1", "2"]);
+}
+
+#[test]
+fn thousands_groups_are_one_number_with_a_note_and_a_decimal_comma_is_refused() {
+    // the MED repro: this used to be n=6 with rows 0:3, 1:1, 2:1, 3:1
+    let p = with(&[s("data", "1,000, 2,000, 3,000"), s("relative", OFF)]);
+    let m = model(&p).unwrap();
+    assert_eq!(m.n, 3, "three thousands groups are three values");
+    assert_eq!(
+        m.rows.iter().map(|r| (r.label.clone(), r.f)).collect::<Vec<_>>(),
+        vec![("1000".to_string(), 1), ("2000".to_string(), 1), ("3000".to_string(), 1)]
+    );
+    let note = warnings(&p).join(" ");
+    assert!(note.contains("thousands separator") && note.contains("Line 1"), "{note}");
+    assert!(note.contains("1,000") && note.contains("1000"), "{note}");
+    assert!(note.contains("1, 000"), "the two-number reading is offered: {note}");
+
+    // a comma with a space is the documented two-number reading, not a thousands group
+    let p = with(&[s("data", "1, 000"), s("relative", OFF)]);
+    let m = model(&p).unwrap();
+    assert_eq!(m.n, 2);
+    assert_eq!(m.rows.iter().map(|r| (r.label.clone(), r.f)).collect::<Vec<_>>(), vec![("0".to_string(), 1), ("1".to_string(), 1)]);
+    assert!(!warnings(&p).iter().any(|n| n.contains("thousands separator")), "{:?}", warnings(&p));
+
+    // a decimal comma is refused, with both fixed readings
+    let p = with(&[s("data", "12,5"), s("relative", OFF)]);
+    let note = warnings(&p).join(" ");
+    assert!(note.contains("Data line 1") && note.contains("comma inside a number"), "{note}");
+    assert!(note.contains("12.5") && note.contains("12, 5"), "{note}");
+    assert!(render(&p).starts_with("<svg"));
+    let mut fixed = p.clone();
+    fixed.set_s("data", "12.5");
+    let m = model(&fixed).unwrap();
+    assert_eq!(m.n, 1);
+    assert_eq!(m.rows[0].label, "12.5");
+
+    // a mistyped group is refused too, and the suggestion keeps the digits
+    let p = with(&[s("data", "1,0000"), s("relative", OFF)]);
+    let note = warnings(&p).join(" ");
+    assert!(note.contains("comma inside a number") && note.contains("10000"), "{note}");
+
+    // a signed thousands group still reads as one number
+    let p = with(&[s("data", "\u{2212}1,000, 2,000"), s("relative", OFF)]);
+    let m = model(&p).unwrap();
+    assert_eq!(m.n, 2);
+    assert_eq!(m.rows.iter().map(|r| r.label.clone()).collect::<Vec<_>>(), vec!["\u{2212}1000", "2000"]);
+}
+
+#[test]
+fn the_value_cap_counts_every_value_even_when_they_are_on_one_line() {
+    let same: String = std::iter::repeat("1").take(5_001).collect::<Vec<_>>().join(", ");
+    let p = with(&[s("data", &same), s("relative", OFF)]);
+    let m = model(&p).unwrap();
+    assert_eq!(m.n, 5_000, "the whole box is capped, not each line");
+    assert!(warnings(&p).iter().any(|n| n.contains("more than 5000 values") && n.contains("first 5000")), "{:?}", warnings(&p));
+
+    let many: String = (0..5_001).map(|i| i.to_string()).collect::<Vec<_>>().join(", ");
+    let note = warnings(&with(&[s("data", &many)])).join(" ");
+    assert!(note.contains("at most 200 distinct values"), "{note}");
+    assert!(note.contains("Only the first 5000 values are used"), "{note}");
 }
 
 #[test]
@@ -924,7 +1171,7 @@ fn ten_thousand_fuzzed_inputs_render_without_panicking_and_stay_inside_the_numbe
         assert!(svg.starts_with("<svg") && svg.ends_with("</svg>"), "{i}: {text:?}");
         let g = parse(&svg, false);
         for t in &g.texts {
-            if has_class(t, "tcell") || has_class(t, "fcell") || has_class(t, "rcell") || has_class(t, "ccell") || has_class(t, "tallycell") {
+            if has_class(t, "tcell") || has_class(t, "fcell") || has_class(t, "rcell") || has_class(t, "ccell") || has_class(t, "crcell") || has_class(t, "tallycell") {
                 assert!(!t.body.contains("NaN") && !t.body.contains("inf") && t.body != "?", "{i}: {:?} in {text:?}", t.body);
             }
         }
@@ -1017,16 +1264,47 @@ fn tallies_group_in_fives_and_are_capped_and_blanked_for_students() {
 }
 
 #[test]
+fn the_tally_column_keeps_one_fixed_width_in_both_copies() {
+    let mut seen: Option<Vec<f64>> = None;
+    for count in [1usize, 2, 10, 11, 12, 13, 20, 25] {
+        let data_text = std::iter::repeat("7").take(count).collect::<Vec<_>>().join(", ");
+        let p = with(&[s("data", &data_text)]);
+        let (student, key) = crate::figures::answer_pair(&def(), &p).unwrap();
+        let (sg, kg) = (parse(&student, false), parse(&key, false));
+        assert_eq!(
+            attr(student.split('>').next().unwrap(), "viewBox"),
+            attr(key.split('>').next().unwrap(), "viewBox"),
+            "count {count}: both copies have the same page"
+        );
+        assert_eq!(verticals(&sg), verticals(&kg), "count {count}: same column rules");
+        let xs = verticals(&kg);
+        assert!(xs.len() >= 4, "count {count}: value, tally, frequency columns");
+        let tally_w = xs[2] - xs[1];
+        if let Some(old) = &seen {
+            assert!((old[2] - old[1] - tally_w).abs() < 1e-6, "count {count}: tally width {tally_w} differs from {:?}", old);
+        }
+        seen = Some(xs);
+        // the blanked student column is the same width as the key's
+        assert!(bodies(&sg, "fcell").is_empty() && sg.lines.iter().all(|l| l.class != "tally"));
+    }
+}
+
+#[test]
 fn controls_relevance_examples_and_the_faq_are_registered_and_consistent() {
     let mut p = defaults();
     assert!(relevant(ID, "data", &p) && relevant(ID, "tally", &p) && relevant(ID, "relative", &p));
     assert!(!relevant(ID, "auto_classes", &p) && !relevant(ID, "class_width", &p) && !relevant(ID, "class_start", &p));
+    assert!(relevant(ID, "decimals", &p) && relevant(ID, "cum_rel", &p));
     p.set_s("mode", GROUPED);
     assert!(relevant(ID, "auto_classes", &p) && !relevant(ID, "class_width", &p));
     p.set_b("auto_classes", false);
     assert!(relevant(ID, "class_width", &p) && relevant(ID, "class_start", &p));
     p.set_s("relative", FRACTION);
-    assert!(!relevant(ID, "decimals", &p));
+    assert!(!relevant(ID, "decimals", &p) && relevant(ID, "cum_rel", &p));
+    p.set_s("relative", DECIMAL);
+    assert!(relevant(ID, "decimals", &p));
+    p.set_s("relative", OFF);
+    assert!(!relevant(ID, "decimals", &p) && !relevant(ID, "cum_rel", &p));
     p.set_s("relative", PERCENT);
     assert!(relevant(ID, "decimals", &p));
     assert!(relevant("histogram", "mode", &p), "other figures are untouched");
@@ -1043,7 +1321,7 @@ fn controls_relevance_examples_and_the_faq_are_registered_and_consistent() {
         assert!(parse(&svg, false).texts.iter().any(|t| has_class(t, "thead")), "{}", e.name);
     }
     let faq: String = crate::figures::faq::faq_for(ID).iter().map(|q| format!("{} {}", q.q, q.a)).collect::<Vec<_>>().join(" ");
-    for must in ["add to 100%", "class boundary", "tally", "cumulative frequency", "Grouped classes", "round", "half up", "last class"] {
+    for must in ["add to 100%", "class boundary", "tally", "cumulative frequency", "cumulative relative frequency", "Decimal", "Grouped classes", "round", "half up", "last class"] {
         assert!(faq.contains(must), "FAQ is missing {must:?}");
     }
     assert!((4..=6).contains(&crate::figures::faq::faq_for(ID).len()));
@@ -1065,7 +1343,11 @@ fn dump_pngs() {
         ("default", vec![]),
         ("grouped", vec![s("mode", GROUPED), s("data", DEFAULT_GROUPED), s("title", "Minutes of exercise"), s("heading", "Minutes")]),
         ("fraction", vec![s("relative", FRACTION), b("tally", false)]),
+        ("openstax", vec![s("mode", GROUPED), s("data", DEFAULT_GROUPED), s("relative", DECIMAL), ("decimals", Value::I(2)), s("title", "Heights of students"), s("heading", "Height (cm)")]),
+        ("tiny_boundaries", vec![s("mode", GROUPED), s("data", "0.0000001, 0.0000002, 0.0000003")]),
+        ("thousands", vec![s("data", "1,000, 2,000, 3,000")]),
         ("print", vec![s("style", "Print"), s("mode", GROUPED), s("data", DEFAULT_GROUPED)]),
+        ("print_small", vec![s("style", "Print"), s("label_size", "Small")]),
         ("small", vec![s("label_size", "Small")]),
         ("large", vec![s("label_size", "Large")]),
         ("empty", vec![s("data", "")]),
@@ -1081,7 +1363,7 @@ fn dump_pngs() {
             let tag = if key { "key" } else { "student" };
             std::fs::write(format!("{dir}/{name}-{tag}.png"), crate::figures::to_png(&svg, 2.0).unwrap()).unwrap();
             std::fs::write(format!("{dir}/{name}-{tag}.svg"), &svg).unwrap();
-            if name == "print" {
+            if name.starts_with("print") {
                 std::fs::write(format!("{dir}/{name}-{tag}-66.png"), crate::figures::to_png(&svg, 0.66).unwrap()).unwrap();
             }
         }
