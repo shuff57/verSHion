@@ -143,6 +143,8 @@ pub struct Classes {
     pub list: Vec<Class>,
     /// Raw data only: the edge rule, true for [lo, hi).
     pub left_closed: Option<bool>,
+    /// Something the table said that the figure did not use (a cumulative column that disagrees).
+    pub note: Option<String>,
 }
 
 /// A number as the figure prints it: `d` decimal places, a true minus sign, never "-0".
@@ -157,6 +159,24 @@ pub fn num(v: f64, d: usize) -> String {
 
 /// A typed number as text the user can type back (no exponent, no trailing zeros, ASCII minus).
 pub fn plain(v: f64) -> String { data::fmt_num(v) }
+
+/// A number as advice must quote it: the shortest decimal that parses back to the same value, so
+/// a boundary finer than `plain`'s six decimal places can still be repaired by typing it back.
+pub fn exact_text(v: f64) -> String {
+    if !v.is_finite() {
+        return plain(v);
+    }
+    let tol = 1e-12 * v.abs().max(1e-12);
+    for d in 0..=12 {
+        let t = format!("{v:.d$}");
+        if let Ok(x) = t.parse::<f64>() {
+            if (x - v).abs() <= tol {
+                return if t.starts_with('-') && t.trim_start_matches('-').chars().all(|c| c == '0' || c == '.') { t.trim_start_matches('-').to_string() } else { t };
+            }
+        }
+    }
+    plain(v)
+}
 
 /// An exact fraction (numerator over a positive denominator) for a printed reading. `num` formats
 /// the binary float, which sends an exact half to the even digit and turns a typed 8.85 into
@@ -295,7 +315,7 @@ fn cells(line: &str) -> Vec<String> {
     let cleaned = strip_thousands(line);
     if cleaned != line {
         let alt = cells_plain(&cleaned);
-        if alt.len() == 3 || alt.len() == 2 {
+        if (2..=4).contains(&alt.len()) {
             return alt;
         }
     }
@@ -381,6 +401,79 @@ fn strip_thousands(line: &str) -> String {
     out
 }
 
+/// What a table column holds, from a header line or from the number of columns.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Col { Lo, Hi, Freq, Cum, Mid }
+
+/// A column word: "lower"/"upper" boundaries, "frequency", "cumulative", "midpoint".
+fn col_role(w: &str) -> Option<Col> {
+    let s = w.trim().trim_end_matches(':').trim().to_ascii_lowercase();
+    match s.as_str() {
+        "lower" | "lo" | "lowerbound" | "lowerboundary" | "lowerlimit" | "start" | "from" => Some(Col::Lo),
+        "upper" | "hi" | "upperbound" | "upperboundary" | "upperlimit" | "end" | "to" => Some(Col::Hi),
+        "frequency" | "freq" | "f" | "count" | "n" => Some(Col::Freq),
+        "cumulative" | "cum" | "cf" | "running" => Some(Col::Cum),
+        "midpoint" | "mid" | "midpoints" | "classmark" | "mark" => Some(Col::Mid),
+        _ => None,
+    }
+}
+
+/// The columns a header line names, when every one of its cells is a column word.
+fn header_roles(line: &str) -> Option<Vec<Col>> {
+    let cs = cells(line);
+    if cs.len() < 2 {
+        return None;
+    }
+    let roles: Vec<Option<Col>> = cs.iter().map(|c| col_role(c)).collect();
+    if roles.iter().any(|r| r.is_none()) {
+        return None;
+    }
+    let roles: Vec<Col> = roles.into_iter().flatten().collect();
+    // a layout needs to know where the class sits
+    (roles.contains(&Col::Lo) || roles.contains(&Col::Mid)).then_some(roles)
+}
+
+/// The columns of a row with no header: three numbers are lower, upper, frequency; four add a
+/// cumulative column. Two numbers are only read with a header that names them.
+fn default_roles(n: usize) -> Vec<Col> {
+    match n {
+        3 => vec![Col::Lo, Col::Hi, Col::Freq],
+        4 => vec![Col::Lo, Col::Hi, Col::Freq, Col::Cum],
+        _ => Vec::new(),
+    }
+}
+
+/// A class row read through its columns: (lower, upper, frequency, cumulative).
+fn bounds_row(v: &[f64], cols: &[Col]) -> Option<(f64, f64, f64, Option<f64>)> {
+    let (mut lo, mut hi, mut f, mut cum) = (None, None, None, None);
+    for (i, c) in cols.iter().enumerate() {
+        let x = *v.get(i)?;
+        match c {
+            Col::Lo => lo = Some(x),
+            Col::Hi => hi = Some(x),
+            Col::Freq => f = Some(x),
+            Col::Cum => cum = Some(x),
+            Col::Mid => return None,
+        }
+    }
+    Some((lo?, hi?, f?, cum))
+}
+
+/// A midpoint row read through its columns: (midpoint, frequency, cumulative).
+fn mid_row(v: &[f64], cols: &[Col]) -> Option<(f64, f64, Option<f64>)> {
+    let (mut mid, mut f, mut cum) = (None, None, None);
+    for (i, c) in cols.iter().enumerate() {
+        let x = *v.get(i)?;
+        match c {
+            Col::Mid => mid = Some(x),
+            Col::Freq => f = Some(x),
+            Col::Cum => cum = Some(x),
+            Col::Lo | Col::Hi => return None,
+        }
+    }
+    Some((mid?, f?, cum))
+}
+
 /// A word that names a column rather than a class: a first line made of these is a header.
 fn header_word(c: &str) -> bool {
     matches!(
@@ -404,7 +497,7 @@ fn neighbour_width(rows: &[(usize, f64, f64, f64)], line: usize) -> f64 {
     rows.iter().filter(good).min_by_key(|r| r.0.abs_diff(line)).map(|r| r.2 - r.1).unwrap_or(10.0)
 }
 
-fn row_text(lo: f64, hi: f64, f: f64) -> String { format!("{}, {}, {}", plain(lo), plain(hi), plain(f)) }
+fn row_text(lo: f64, hi: f64, f: f64) -> String { format!("{}, {}, {}", exact_text(lo), exact_text(hi), exact_text(f)) }
 
 /// A line the reader refused, with what it had, so the example it offers is built from the line's
 /// own numbers (applying the example then keeps the class the teacher meant).
@@ -466,13 +559,29 @@ fn total_word(c: &str) -> bool {
 /// boundary and must meet exactly: every refusal says how to fix the table, with an example line
 /// built from the line's own numbers.
 pub fn parse_table(text: &str) -> Result<Vec<Class>, String> {
+    parse_table_notes(text).map(|(list, _)| list)
+}
+
+/// [`parse_table`], plus what the table said that the figure did not use: a cumulative column that
+/// does not match the frequencies (the ogive adds them up itself).
+pub fn parse_table_notes(text: &str) -> Result<(Vec<Class>, Option<String>), String> {
     let lines: Vec<(usize, &str)> = text.lines().enumerate().map(|(i, l)| (i + 1, l.trim())).filter(|(_, l)| !l.is_empty()).collect();
     if lines.len() > MAX_CLASSES + 1 {
         return Err(format!("The table has {} lines; an ogive here can have at most {MAX_CLASSES} classes. Merge neighbouring classes (add their frequencies) until there are {MAX_CLASSES} or fewer.", lines.len()));
     }
     let per_line: Vec<(usize, Vec<f64>)> = lines.iter().map(|(n, l)| (*n, cells(l).iter().filter_map(|c| cell_number(c)).collect())).collect();
+    // the columns a header names, if the first line is a header that names them
+    let roles: Option<Vec<Col>> = lines.first().and_then(|(_, l)| {
+        let cs = cells(l);
+        let first_is_word = cs.first().map(|c| cell_number(c).is_none()).unwrap_or(true);
+        (first_is_word && cs.iter().any(|c| header_word(c))).then(|| header_roles(l)).flatten()
+    });
     // (line, lower, upper, frequency) as typed
     let mut rows: Vec<(usize, f64, f64, f64)> = Vec::new();
+    // midpoint rows wait until every midpoint is known: the gap to the next one is the width
+    let mut mids: Vec<(usize, f64, f64)> = Vec::new();
+    let mut running = 0.0f64;
+    let mut cum_bad: Option<(usize, f64, f64)> = None;
     let mut bad: Option<Bad> = None;
     for (k, (n, line)) in lines.iter().enumerate() {
         let cs = cells(line);
@@ -487,7 +596,7 @@ pub fn parse_table(text: &str) -> Result<Vec<Class>, String> {
         // a number beyond what the figure accepts: name the limit, and never hand back an example
         // that would be refused the same way
         if let Some((v, at)) = cs.iter().enumerate().find_map(|(i, c)| cell_overflow(c).map(|v| (v, i))) {
-            let max = plain(data::MAX_ABS);
+            let max = exact_text(data::MAX_ABS);
             // a boundary can be written in smaller units; a frequency counts values and cannot be
             // scaled, so only deletion is left for it
             let boundary = at < 2 && cs.len() >= 2;
@@ -501,25 +610,49 @@ pub fn parse_table(text: &str) -> Result<Vec<Class>, String> {
                 let scaled: Vec<String> = cs.iter().enumerate().map(|(i, c)| {
                     let num = cell_number(c).or_else(|| cell_overflow(c));
                     match (i, num) {
-                        (0 | 1, Some(x)) => plain(x / div),
+                        (0 | 1, Some(x)) => exact_text(x / div),
                         _ => c.clone(),
                     }
                 }).collect();
                 format!(
-                    "Divide every boundary by {} (leave every frequency as it is: a count cannot be divided) so that the boundary is {}, and the shape of the ogive does not change; for example line {n} becomes \"{}\".",
-                    plain(div), max, scaled.join(", ")
+                    "divide every boundary in the table by {} (leave every frequency as it is: a count cannot be divided), which brings this line's boundary to {}; for example line {n} becomes \"{}\"",
+                    exact_text(div), exact_text(big / div), scaled.join(", ")
                 )
             } else {
                 format!("A frequency counts values, so it cannot be divided or scaled: delete line {n}.")
             };
             return Err(format!(
                 "Line {n} (\"{line}\") has {}, which is beyond the largest number an ogive here takes, {max}. Every boundary and frequency must be between \u{2212}{max} and {max}: delete line {n}, or {route}",
-                plain(v)
+                exact_text(v)
             ));
         }
-        if count == 3 && cs.len() == 3 {
-            rows.push((*n, nums[0].unwrap(), nums[1].unwrap(), nums[2].unwrap()));
-            continue;
+        // a full row of numbers, read through the header's columns when it names this many
+        if count == cs.len() && count > 0 {
+            let v: Vec<f64> = nums.iter().map(|x| x.unwrap()).collect();
+            let cols: Vec<Col> = match &roles {
+                Some(r) if r.len() == v.len() => r.clone(),
+                _ => default_roles(v.len()),
+            };
+            if let Some((lo, hi, f, cum)) = bounds_row(&v, &cols) {
+                running += f;
+                if let Some(c) = cum {
+                    if cum_bad.is_none() && (c - running).abs() > 1e-9 * running.abs().max(1.0) {
+                        cum_bad = Some((*n, running, c));
+                    }
+                }
+                rows.push((*n, lo, hi, f));
+                continue;
+            }
+            if let Some((mid, f, cum)) = mid_row(&v, &cols) {
+                running += f;
+                if let Some(c) = cum {
+                    if cum_bad.is_none() && (c - running).abs() > 1e-9 * running.abs().max(1.0) {
+                        cum_bad = Some((*n, running, c));
+                    }
+                }
+                mids.push((*n, mid, f));
+                continue;
+            }
         }
         let shown: String = line.chars().take(40).collect();
         let shown = if line.chars().count() > 40 { format!("{shown}...") } else { shown };
@@ -542,6 +675,19 @@ pub fn parse_table(text: &str) -> Result<Vec<Class>, String> {
         });
         bad = Some(Bad { line: *n, shown, cells: cs, nums, open });
     }
+    // a midpoint table: a class is the gap between midpoints wide, centred on its midpoint
+    let mids_x: Vec<f64> = mids.iter().map(|r| r.1).collect();
+    for (i, (n, mid, f)) in mids.iter().enumerate() {
+        let prev = if i > 0 { mid - mids_x[i - 1] } else { f64::INFINITY };
+        let next = if i + 1 < mids_x.len() { mids_x[i + 1] - mid } else { f64::INFINITY };
+        let w = prev.min(next);
+        let w = if w.is_finite() && w > 0.0 { w } else { 10.0 };
+        rows.push((*n, mid - w / 2.0, mid + w / 2.0, *f));
+    }
+    let note = cum_bad.map(|(n, running, typed)| format!(
+        "The cumulative column does not match the frequencies: on line {n} the frequencies add up to {}, but the cumulative typed is {}. The ogive adds the frequencies up itself, so the cumulative column was not used.",
+        exact_text(running), exact_text(typed)
+    ));
     if let Some(b) = bad {
         let n = b.line;
         return Err(match b.open {
@@ -564,43 +710,45 @@ pub fn parse_table(text: &str) -> Result<Vec<Class>, String> {
         if f < 0.0 {
             return Err(format!(
                 "Line {n}: the class {} to {} has frequency {}. A frequency counts values, so it cannot be negative: type 0 or more, for example \"{}\".",
-                plain(lo), plain(hi), plain(f), row_text(lo, hi, 0.0)
+                exact_text(lo), exact_text(hi), exact_text(f), row_text(lo, hi, 0.0)
             ));
         }
         if f.fract() != 0.0 {
             let r = f.round();
             return Err(format!(
                 "Line {n}: the class {} to {} has frequency {}, which is not a whole number. A frequency counts values: type a whole number, for example \"{}\".",
-                plain(lo), plain(hi), plain(f), row_text(lo, hi, r)
+                exact_text(lo), exact_text(hi), exact_text(f), row_text(lo, hi, r)
             ));
         }
         if hi < lo {
-            return Err(format!("Line {n}: the upper boundary {} is below the lower boundary {}. Type the lower boundary first, for example \"{}\".", plain(hi), plain(lo), row_text(hi, lo, f)));
+            return Err(format!("Line {n}: the upper boundary {} is below the lower boundary {}. Type the lower boundary first, for example \"{}\".", exact_text(hi), exact_text(lo), row_text(hi, lo, f)));
         }
         if hi == lo {
             let w = neighbour_width(&rows, n);
-            return Err(format!("Line {n}: the class {} to {} has no width. Its upper boundary must be above its lower boundary, for example \"{}\".", plain(lo), plain(hi), row_text(lo, lo + w, f)));
+            return Err(format!("Line {n}: the class {} to {} has no width. Its upper boundary must be above its lower boundary, for example \"{}\".", exact_text(lo), exact_text(hi), row_text(lo, lo + w, f)));
         }
     }
     let mut sorted = rows.clone();
     sorted.sort_by(|a, b| a.1.total_cmp(&b.1).then(a.2.total_cmp(&b.2)));
-    let scale = sorted.iter().map(|r| r.1.abs().max(r.2.abs())).fold(1e-300, f64::max);
-    // float noise only: a relative 1e-12 is 0.001 at a boundary of 1e9, so classes one unit apart
-    // stay apart while the same typed number is still one boundary
-    let same = |a: f64, b: f64| (a - b).abs() <= 1e-12 * scale.max(1.0);
+    // boundaries are compared exactly up to a few float steps: two numbers typed the same parse to
+    // the same f64, and a computed boundary may sit a bit or two away from its neighbour, while a
+    // relative tolerance would swallow a one-unit step at 1e12 (1e-12 x 1e12 is 1). Differences
+    // (gaps, widths) are compared against the gap itself.
+    let near = |a: f64, b: f64, tol: f64| (a - b).abs() <= tol;
+    let same = |a: f64, b: f64| a == b || (a - b).abs() <= 8.0 * f64::EPSILON * a.abs().max(b.abs());
     for w in sorted.windows(2) {
         let ((n1, a1, b1, f1), (n2, a2, b2, f2)) = (w[0], w[1]);
         if b2 <= b1 || same(b2, b1) {
             // the second class sits inside the first (or repeats it)
             return Err(format!(
                 "The class {} to {} (line {n2}) lies inside the class {} to {} (line {n1}), so its values would be counted twice. Merge them: add its frequency to line {n1} and delete line {n2}, for example \"{}\" on line {n1}.",
-                plain(a2), plain(b2), plain(a1), plain(b1), row_text(a1, b1, f1 + f2)
+                exact_text(a2), exact_text(b2), exact_text(a1), exact_text(b1), row_text(a1, b1, f1 + f2)
             ));
         }
         if a2 < b1 && !same(a2, b1) {
             return Err(format!(
                 "The classes {} to {} (line {n1}) and {} to {} (line {n2}) overlap, so a value between {} and {} would be counted in both. Make each class start where the one before it ends, for example \"{}\" on line {n2}.",
-                plain(a1), plain(b1), plain(a2), plain(b2), plain(a2), plain(b1), row_text(b1, b2, f2)
+                exact_text(a1), exact_text(b1), exact_text(a2), exact_text(b2), exact_text(a2), exact_text(b1), row_text(b1, b2, f2)
             ));
         }
     }
@@ -612,19 +760,19 @@ pub fn parse_table(text: &str) -> Result<Vec<Class>, String> {
         // the gap is a limit unit only when it is a power of ten no bigger than one (1 for whole
         // numbers, 0.1 for tenths): a wider gap such as 0, 10 / 20, 30 is a missing class, and
         // padding it leaves every count where it was
-        let unit = [-6i32, -5, -4, -3, -2, -1, 0].iter().any(|k| same(g, 10f64.powi(*k)));
-        let uniform = unit && gaps.len() == sorted.len() - 1 && gaps.iter().all(|x| same(x.2 - x.1, g)) && sorted.iter().all(|r| r.2 - r.1 >= g);
+        let unit = [-6i32, -5, -4, -3, -2, -1, 0].iter().any(|k| { let u = 10f64.powi(*k); near(g, u, 1e-9 * u) });
+        let uniform = unit && gaps.len() == sorted.len() - 1 && gaps.iter().all(|x| near(x.2 - x.1, g, 1e-9 * g.abs().max(1e-12))) && sorted.iter().all(|r| r.2 - r.1 >= g);
         if uniform {
             let h = g / 2.0;
             let (n, lo, hi, f) = sorted[0];
             return Err(format!(
                 "There is a gap of {} between each class and the next ({} to {}), so these look like stated class limits. An ogive plots at the class boundaries, halfway across each gap: take {} off every lower limit and add {} to every upper limit, for example \"{}\" on line {n}.",
-                plain(g), plain(end), plain(start), plain(h), plain(h), row_text(lo - h, hi + h, f)
+                exact_text(g), exact_text(end), exact_text(start), exact_text(h), exact_text(h), row_text(lo - h, hi + h, f)
             ));
         }
         return Err(format!(
             "The classes do not meet: one ends at {} and the next starts at {}. Every value between them would have no class. Add an empty class between them, for example \"{}\", or move a boundary so they meet.",
-            plain(end), plain(start), row_text(end, start, 0.0)
+            exact_text(end), exact_text(start), row_text(end, start, 0.0)
         ));
     }
     if sorted.len() > MAX_CLASSES {
@@ -639,7 +787,7 @@ pub fn parse_table(text: &str) -> Result<Vec<Class>, String> {
     for i in 1..out.len() {
         out[i].lo = out[i - 1].hi;
     }
-    Ok(out)
+    Ok((out, note))
 }
 
 /// The classes for raw values with the histogram's binning. Refuses (with a fix) when a value
@@ -700,9 +848,10 @@ pub fn classes(p: &Params) -> Result<Classes, String> {
     if p.s("input") == RAW {
         let lc = p.s("closed") != RIGHT_CLOSED;
         let list = raw_classes(&data::numbers(p.s("data")), p.b("auto_classes"), p.f("class_width"), p.f("class_start"), lc)?;
-        Ok(Classes { list, left_closed: Some(lc) })
+        Ok(Classes { list, left_closed: Some(lc), note: None })
     } else {
-        Ok(Classes { list: parse_table(p.s("table"))?, left_closed: None })
+        let (list, note) = parse_table_notes(p.s("table"))?;
+        Ok(Classes { list, left_closed: None, note })
     }
 }
 
@@ -848,7 +997,15 @@ pub fn group_label(readings: &[Reading], g: &[usize]) -> GroupLabel {
     let base = &readings[g[0]];
     let after_name = |s: &str| -> String {
         let head = format!("{}: ", base.short);
-        match s.strip_prefix(&head) { Some(rest) => format!("{name}: {rest}"), None => s.to_string() }
+        if let Some(rest) = s.strip_prefix(&head) {
+            format!("{name}: {rest}")
+        } else if s.starts_with(&base.short) {
+            // already names the reading ("M" on the M guide)
+            s.to_string()
+        } else {
+            // a value reading's height ("25.0 (50.0%)") named nothing at all
+            format!("{name}: {s}")
+        }
     };
     // the value the foot carried ("P50 = 72"), if any reading has one
     let value = g.iter().find_map(|&i| readings[i].foot.split_once(" = ").map(|(_, v)| v.to_string()));
@@ -891,12 +1048,12 @@ fn tidy_rat(r: Option<Rat>, v: f64) -> String {
 }
 
 /// A running total in the table, from the exact counts.
-fn cum_text(y_axis: &str, c: u64, n: u64) -> String {
+fn cum_text(y_axis: &str, c: u64, n: u64, d: usize) -> String {
     let r = Rat::int(c as i128);
     let nr = Rat::int(n as i128);
     match y_axis {
-        Y_REL => num_rat(r.div(nr), c as f64 / n as f64, 3),
-        Y_PCT => num_rat(r.mul(Rat::int(100)).and_then(|v| v.div(nr)), 100.0 * c as f64 / n as f64, 1),
+        Y_REL => num_rat(r.div(nr), c as f64 / n as f64, (d + 2).min(6)),
+        Y_PCT => num_rat(r.mul(Rat::int(100)).and_then(|v| v.div(nr)), 100.0 * c as f64 / n as f64, d),
         _ => c.to_string(),
     }
 }
@@ -913,7 +1070,7 @@ pub fn minor_divisions(step: f64) -> usize {
 pub const MINOR_X: usize = 5;
 /// The least pixel pitch a fine x-gridline needs before it is drawn: a closer division is a grey
 /// band in Print, not a grid.
-pub const MIN_PITCH: f64 = 6.0;
+pub const MIN_PITCH: f64 = 12.0;
 
 /// The pixel width a class of width `w` gets on a plot whose data spans `span` (the frame adds 3 %
 /// of padding either side, so the drawn data width is PLOT_W / 1.06 of the frame).
@@ -980,6 +1137,9 @@ pub fn model(p: &Params) -> Result<Model, String> {
     let mut readings = Vec::new();
     let mut questions: Vec<(String, Option<String>)> = Vec::new();
     let mut notes = Vec::new();
+    if let Some(n) = &c.note {
+        notes.push(n.clone());
+    }
     let table = p.b("show_table") && cs.len() <= MAX_TABLE;
     if p.b("show_table") && cs.len() > MAX_TABLE {
         let extra = if c.left_closed.is_some() { " (or make the class width larger)" } else { " (or merge neighbouring classes)" };
@@ -1287,6 +1447,7 @@ fn refusal(msg: &str) -> String {
     let lines = wrap(msg, size, w - 48.0);
     let h = 48.0 + lines.len() as f64 * size * 1.45;
     let mut d = Doc::new(w, h);
+    d.describe("Ogive", "The table cannot be drawn yet: the note says what to fix.");
     for (i, l) in lines.iter().enumerate() {
         text(&mut d, 24.0, 32.0 + i as f64 * size * 1.45, size, "start", INK, "refusal", l);
     }
@@ -1351,6 +1512,7 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
         Err(e) => return (refusal(&e), Vec::new()),
     };
     let mut unlabelled: Vec<String> = Vec::new();
+    let d = p.i("decimals").clamp(0, 4) as usize;
     let show = p.b(SHOW_ANSWERS);
     let print = p.s("style") == "Print";
     let fills = Fills::new(p);
@@ -1397,7 +1559,7 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
         }
     };
     let cums = cumulative(&m.cs);
-    let cum_txt: Vec<String> = cums.iter().map(|c| cum_text(y_axis, *c, m.n)).collect();
+    let cum_txt: Vec<String> = cums.iter().map(|c| cum_text(y_axis, *c, m.n, d)).collect();
     let tfs = fs * 0.95;
     let rh = tfs * 1.75;
     let cell_pad = 9.0;
@@ -1500,10 +1662,10 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
     }
     // x ticks at every boundary; labels thinned so none touch (the first and last always stay)
     let ty = fr.bottom() + 8.0 + fs * 1.05;
-    for x in &bounds {
-        let tx = px(*x);
-        doc.raw(&format!(r#"<line class="tick" x1="{tx:.2}" y1="{:.2}" x2="{tx:.2}" y2="{:.2}" stroke="{ink}" stroke-width="1.6"/>"#, fr.bottom(), fr.bottom() + 6.0));
-    }
+    // a tick at every boundary while they are far enough apart to read; else only under a label,
+    // or 200 classes become a solid black comb
+    let tick_pitch = (fr.right() - fr.left()) / (bounds.len().max(2) - 1) as f64;
+    let tick_all = tick_pitch >= 6.0;
     let lab = |x: f64| chart::fmt(x);
     let mut kept: Vec<usize> = Vec::new();
     let span = |i: usize| { let t = lab(bounds[i]); let wd = tw(&t, fs); (px(bounds[i]) - wd / 2.0, px(bounds[i]) + wd / 2.0) };
@@ -1524,6 +1686,14 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
     // removing the previous label for the last one may still leave a clash with the one before
     while kept.len() > 2 && span(kept[kept.len() - 1]).0 < span(kept[kept.len() - 2]).1 + 8.0 {
         kept.remove(kept.len() - 2);
+    }
+    // tick marks: every boundary while they read apart, else only under a kept label
+    for (i, x) in bounds.iter().enumerate() {
+        if !(tick_all || kept.contains(&i)) {
+            continue;
+        }
+        let tx = px(*x);
+        doc.raw(&format!(r#"<line class="tick" x1="{tx:.2}" y1="{:.2}" x2="{tx:.2}" y2="{:.2}" stroke="{ink}" stroke-width="1.6"/>"#, fr.bottom(), fr.bottom() + 6.0));
     }
     // vertical gridlines at the class boundaries, so a point can be plotted on the grid: at every
     // boundary when they are far enough apart to tell apart, else at the numbered ones only

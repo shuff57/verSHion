@@ -401,14 +401,26 @@ fn printed_readings_are_the_exact_half_up_rounding() {
     let qa = m.questions.last().unwrap().1.clone().unwrap();
     let (q1, q3, iqr) = (after(&qa, "Q1 about "), after(&qa, "Q3 about "), after(&qa, "IQR about "));
     assert_eq!((q1.as_str(), q3.as_str(), iqr.as_str()), ("62", "81", "19"), "{qa}");
+    // a height exactly on a plotted point is that point (>=, not >): the plateau starts at its left
+    let flat = parse_table("0, 5, 0\n5, 10, 0\n10, 15, 6\n15, 20, 0\n20, 25, 4\n25, 30, 0").unwrap();
+    assert_eq!(value_at(&points(&flat), 6.0), 15.0, "a flat stretch is read at its lowest, not skipped");
+    // the advertised width of the accepted range is the grid's: half a division across plus half a
+    // fine step up, never just the across part
+    // 40th percentile of the default table, at 68.33 in the class 60-70 (width 10, frequency 12):
+    // half a fine division across (10 / 10 = 1) plus half a fine vertical step turned into x
+    // (10 / 5 / 2 * 10 / 12 = 0.833), so the range is 3.67 wide, not 2
+    let ans = model(&with(&[s("read", READ_PCT), f("pct", 40.0)])).unwrap().questions.iter().find(|q| q.0.contains("percentile")).unwrap().1.clone().unwrap();
+    let (lo, hi) = accept_of(&ans).unwrap();
+    let width = hi.parse::<f64>().unwrap() - lo.parse::<f64>().unwrap();
+    assert!((width - 2.0 * (1.0 + 10.0 / 5.0 / 2.0 * 10.0 / 12.0)).abs() <= 0.25, "the range {lo} to {hi} is {width:.2} wide, not half a division across plus half a step up");
     // the table's running totals are exact halves too (100 x 3 / 8 is 37.5 at one decimal, and
     // 3 / 8 is 0.375 at three)
     for (c, n) in [(1u64, 8u64), (3, 8), (5, 16), (7, 40), (13, 32)] {
         let pc = xround(xdiv(xmul(xint(c as i128), xint(100)), xint(n as i128)), 1);
         let rel = xround(xdiv(xint(c as i128), xint(n as i128)), 3);
-        assert_eq!(cum_text(Y_PCT, c, n), pc, "cumulative percent {c}/{n}");
-        assert_eq!(cum_text(Y_REL, c, n), rel, "cumulative relative frequency {c}/{n}");
-        assert_eq!(cum_text(Y_FREQ, c, n), c.to_string());
+        assert_eq!(cum_text(Y_PCT, c, n, 1), pc, "cumulative percent {c}/{n}");
+        assert_eq!(cum_text(Y_REL, c, n, 1), rel, "cumulative relative frequency {c}/{n}");
+        assert_eq!(cum_text(Y_FREQ, c, n, 1), c.to_string());
     }
 }
 
@@ -793,9 +805,9 @@ fn a_header_never_swallows_a_data_row() {
     // a real header is still skipped
     assert_eq!(parse_table("Class, Frequency\n40, 50, 3\n50, 60, 7").unwrap().len(), 2);
     assert_eq!(parse_table("Class 1, Frequency\n40, 50, 3\n50, 60, 7").unwrap().len(), 2);
-    // a midpoint header is still skipped, so the refusal names line 2 (the first data row)
-    let note = parse_table("midpoint, f\n45, 3\n55, 7").unwrap_err();
-    assert!(note.contains("Line 2") && note.contains("not a class"), "{note}");
+    // a midpoint header names its columns, so the rows are read as midpoints and frequencies
+    let cs = parse_table("midpoint, f\n45, 3\n55, 7").expect("a midpoint table");
+    assert_eq!(cs.iter().map(|c| (c.lo, c.hi, c.f)).collect::<Vec<_>>(), vec![(40.0, 50.0, 3), (50.0, 60.0, 7)]);
 }
 
 #[test]
@@ -808,6 +820,79 @@ fn boundaries_one_unit_apart_at_a_billion_are_not_merged() {
     let note = parse_table("1000000000, 1000000001, 3\n1000000002, 1000000003, 5").unwrap_err();
     assert!(note.contains("stated class limits") && note.contains("\"999999999.5, 1000000001.5, 3\""), "{note}");
     assert!(!note.contains("lies inside"), "{note}");
+    // the same at 1e12, where a relative 1e-12 tolerance is one whole unit
+    let cs = parse_table("999999999998, 999999999999, 3\n999999999999, 1000000000000, 5").expect("contiguous at 1e12");
+    assert_eq!(cs.len(), 2, "two classes, not one merged and one deleted");
+    let note = parse_table("999999999997, 999999999998, 3\n999999999999, 1000000000000, 5").unwrap_err();
+    assert!(note.contains("stated class limits") || note.contains("do not meet"), "the one-unit gap is seen: {note}");
+    assert!(!note.contains("lies inside"), "{note}");
+}
+
+#[test]
+fn four_column_pastes_and_named_headers_keep_their_data() {
+    // lower, upper, frequency, cumulative: the frequency is the count, the cumulative is checked
+    // and set aside when it disagrees
+    let t = "1,000, 2,000, 5, 8\n2,000, 3,000, 7, 15";
+    let (cs, note) = parse_table_notes(t).expect("a four-column paste");
+    assert_eq!(cs.iter().map(|c| (c.lo, c.hi, c.f)).collect::<Vec<_>>(), vec![(1000.0, 2000.0, 5), (2000.0, 3000.0, 7)]);
+    assert_eq!(cs.iter().map(|c| c.f).sum::<u64>(), 12, "5 + 7, not the cumulative column");
+    let note = note.expect("the cumulative column disagrees and is reported");
+    assert!(note.contains("add up to 5") && note.contains("cumulative typed is 8"), "{note}");
+    // ... and the figure says so in its notes
+    let p = with(&[s("table", t)]);
+    assert!(warnings(&p).iter().any(|n| n.contains("cumulative column")), "{:?}", warnings(&p));
+    // a header that names the columns is used: midpoints and frequencies become classes
+    let t = "midpoint, f, cf\n1,000, 3, 3\n2,000, 5, 8";
+    let (cs, note) = parse_table_notes(t).expect("a named midpoint table");
+    assert_eq!(cs.iter().map(|c| (c.lo, c.hi, c.f)).collect::<Vec<_>>(), vec![(500.0, 1500.0, 3), (1500.0, 2500.0, 5)]);
+    assert!(note.is_none(), "the cumulative matches: {note:?}");
+    assert_eq!(cs.iter().map(|c| c.f).sum::<u64>(), 8);
+    // a four-column paste with a missing class is padded by the advice, and the counts survive
+    assert_eq!(settled("1,000, 2,000, 5, 5\n3,000, 4,000, 7, 12"), vec![(1000.0, 2000.0, 5), (2000.0, 3000.0, 0), (3000.0, 4000.0, 7)]);
+    // a named midpoint header reads a wide gap as a wide class, not an invented one
+    assert_eq!(settled("midpoint, f\n1,000, 3\n3,000, 5"), vec![(0.0, 2000.0, 3), (2000.0, 4000.0, 5)]);
+}
+
+#[test]
+fn a_value_reading_is_named_on_its_guide() {
+    // value 72 + median: one point, one label naming both readings (it used to say only "25.0 (50.0%)")
+    let p = with(&[s("read", READ_VALUE), f("value", 72.0), s("marks", "Median")]);
+    let m = model(&p).unwrap();
+    let g = parse(&render(&p), false);
+    let texts: Vec<String> = g.texts.iter().filter(|t| t.class == "side" || t.class == "foot").map(|t| t.body.clone()).collect();
+    assert!(!texts.is_empty(), "a label is drawn");
+    assert!(texts.iter().any(|t| t.contains("72") && t.contains('M')), "the label names both: {texts:?}");
+    assert_eq!(guide_groups(&m.readings).len(), 1);
+}
+
+#[test]
+fn sub_micro_boundaries_can_be_repaired() {
+    // the advice quotes the typed value, not a six-decimal rounding that re-creates the gap
+    let t = "0, 0.1234567, 3\n0.2345678, 0.3, 5";
+    let note = parse_table(t).unwrap_err();
+    assert!(note.contains("0.1234567") && note.contains("0.2345678"), "{note}");
+    assert!(note.contains("for example \"0.1234567, 0.2345678, 0\""), "{note}");
+    assert_eq!(settled(t), vec![(0.0, 0.1234567, 3), (0.1234567, 0.2345678, 0), (0.2345678, 0.3, 5)]);
+    // and a boundary of 1e-7 is quoted as itself, never rounded to 0
+    let note = parse_table("0, 0.0000001, 3\n0.0000002, 0.0000003, 5").unwrap_err();
+    assert!(note.contains("0.0000001") && note.contains("0.0000002"), "{note}");
+    assert!(!note.contains("\"0, 0, 0\""), "{note}");
+}
+
+#[test]
+fn a_dense_x_axis_is_not_a_comb() {
+    let many: String = (0..200).map(|i| format!("{i}, {}, {}", i + 1, i % 3)).collect::<Vec<_>>().join("\n");
+    let p = with(&[s("table", &many), b("show_table", false)]);
+    let g = parse(&render(&p), false);
+    let ticks = g.lines.iter().filter(|l| l.class == "tick" && (l.a.0 - l.b.0).abs() < 1e-9).count();
+    assert!(ticks <= 40, "200 classes drew {ticks} tick marks");
+    assert!(g.lines.iter().filter(|l| l.class == "grid" && (l.a.0 - l.b.0).abs() < 1e-9).count() <= 40);
+}
+
+#[test]
+fn a_refusal_is_still_a_figure() {
+    let svg = render(&with(&[s("table", "40, 49, 3\n50, 59, 7")]));
+    assert!(svg.contains("<title>") && svg.contains("role=\"img\""), "a refusal carries a title: {svg}");
 }
 
 #[test]
@@ -953,7 +1038,9 @@ fn axes_of(g: &Svg, bounds: &[f64]) -> Axes {
     let left = g.lines.iter().find(|l| l.class == "axis" && l.a.0 == l.b.0).unwrap().a.0;
     let bottom = g.lines.iter().find(|l| l.class == "axis" && l.a.1 == l.b.1).unwrap().a.1;
     let xt: Vec<f64> = g.lines.iter().filter(|l| l.class == "tick" && l.a.0 == l.b.0).map(|l| l.a.0).collect();
-    assert_eq!(xt.len(), bounds.len(), "one tick per class boundary");
+    // a dense axis thins its tick marks (200 classes are a comb); the first and last stay, and the
+    // pixel scale is read from them
+    assert!(xt.len() <= bounds.len() && xt.len() >= 2, "{} ticks for {} boundaries", xt.len(), bounds.len());
     let yt: Vec<(f64, f64)> = g.lines.iter().filter(|l| l.class == "tick" && l.a.1 == l.b.1).map(|l| l.a.1).zip(g.texts.iter().filter(|t| t.class == "ytick").map(|t| t.body.replace('\u{2212}', "-").parse::<f64>().unwrap())).collect();
     let (a, z) = (yt[0], yt[yt.len() - 1]);
     Axes { left, bottom, bx: xt, y0: a.0 - a.1 * (z.0 - a.0) / (z.1 - a.1), ypx_per: (z.0 - a.0) / (z.1 - a.1) }
@@ -984,7 +1071,7 @@ fn check_geometry(g: &Svg, p: &Params, key: bool, what: &str) {
         for (i, q) in c.pts.iter().enumerate() {
             let want = (ax.px(&bounds, bounds[i]), ax.py(if i == 0 { 0.0 } else { cum[i - 1] } * scale));
             assert!((q.0 - want.0).abs() < 0.03 && (q.1 - want.1).abs() < 0.03, "{what}: point {i} {q:?} vs {want:?}");
-            assert!((q.0 - ax.bx[i]).abs() < tol, "{what}: point {i} is on its boundary tick");
+            assert!((q.0 - ax.px(&bounds, bounds[i])).abs() < tol, "{what}: point {i} is on its boundary");
         }
         assert!((c.pts[0].1 - ax.bottom).abs() < 0.02, "{what}: starts on the axis at 0");
         assert!((ax.py(n * scale) - c.pts[c.pts.len() - 1].1).abs() < 0.03, "{what}: ends at the total");
@@ -1429,6 +1516,11 @@ fn the_grid_is_there_to_read_and_to_plot_against() {
         assert!(lum(c) < 0.66 * 255.0, "{c} is paler than 66 % grey");
     }
     assert!(lum(GRID_PRINT) < lum(FINE_PRINT), "the labelled lines are darker than the fine ones");
+    // a step of 1 or 5 times a power of ten is cut in five, a step of 2 in four (0.5, 1, 2, 2.5)
+    assert_eq!(minor_divisions(10.0), 5);
+    assert_eq!(minor_divisions(0.1), 5);
+    assert_eq!(minor_divisions(20.0), 4);
+    assert_eq!(minor_divisions(0.2), 4);
     for (name, base) in datasets().into_iter().take(4) {
         let mut l = base.clone();
         l.extend([s("style", "Print"), s("read", READ_PCT), s("marks", "Median and quartiles")]);
@@ -1686,6 +1778,7 @@ fn dump_pngs() {
         }
     }
 }
+
 
 
 
