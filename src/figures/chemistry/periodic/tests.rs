@@ -56,7 +56,7 @@ const NONMETAL: [usize; 7] = [1, 6, 7, 8, 15, 16, 34];
 const NOBLE: [usize; 7] = [2, 10, 18, 36, 54, 86, 118];
 
 /// The printed relative atomic mass of each element, Z = 1..=118: IUPAC 2021 standard atomic
-/// weights to at most three decimals, and the longest-lived isotope's mass number in brackets for
+/// weights to at most three decimals, and the bracketed mass number from the IUPAC table for
 /// the elements with no standard weight (Tc, Pm, Po-Ac, Np-Og). Written out here rather than read
 /// from the data table, so a wrong table value cannot agree with itself.
 const MASSES: [&str; 118] = [
@@ -560,7 +560,7 @@ fn the_highlight_panel_reads_out_name_z_group_period_and_category() {
     }
     // a main-group element also gets the valence line, with the group 13-18 rule stated
     let al = rep_of(&key(&[s("highlight", "Al")])).panel.join(" ");
-    for want in ["Aluminum", "Z = 13", "group 13", "period 3", "post-transition metal", "Valence shell: 3 electrons (group 13 - 10)"] {
+    for want in ["Aluminum", "Z = 13", "group 13", "period 3", "post-transition metal", "Valence shell: 3 electrons (groups 13-18 give the group number minus 10, so group 13)"] {
         assert!(al.contains(want), "the key panel lacks {want:?}: {al}");
     }
     // helium is the exception: 2 electrons in group 18
@@ -570,7 +570,7 @@ fn the_highlight_panel_reads_out_name_z_group_period_and_category() {
     // a halogen in group 17
     let br = rep_of(&key(&[s("highlight", "Br")])).panel.join(" ");
     assert!(br.contains("group 17") && br.contains("period 4") && br.contains("halogen"), "{br}");
-    assert!(br.contains("Valence shell: 7 electrons (group 17 - 10)"), "{br}");
+    assert!(br.contains("Valence shell: 7 electrons (groups 13-18 give the group number minus 10, so group 17)"), "{br}");
     // the f-block has no group number, and the panel says so
     let la = rep_of(&key(&[s("block", BLOCKS[2]), s("highlight", "La")])).panel.join(" ");
     assert!(la.contains("Lanthanum") && la.contains("Z = 57") && la.contains("group - (f-block)"), "{la}");
@@ -669,6 +669,12 @@ fn audit(svg: &str, rep: &Report, g: &mut Glyphs) -> Vec<String> {
                 bad.push(format!("{:?} (Z {z}) leaves its cell at {bx:?} in ({}, {}, {}, {})", t.text, c.x0, c.y0, c.x1, c.y1));
             }
         }
+        if matches!(t.kind.as_str(), "panel" | "answer" | "blank") {
+            let pb = rep.panel_box;
+            if bx.0 < pb.0 + 0.5 || bx.1 > pb.1 - 0.5 || bx.2 < pb.2 + 0.5 || bx.3 > pb.3 - 0.5 {
+                bad.push(format!("{:?} leaves the panel {bx:?} in ({}, {}, {}, {})", t.text, pb.0, pb.2, pb.1, pb.3));
+            }
+        }
     }
     // text against text, only boxes whose x ranges overlap
     let mut order: Vec<usize> = (0..ts.len()).filter(|k| inks[*k].is_some()).collect();
@@ -729,7 +735,7 @@ fn names_are_drawn_only_at_large_and_every_cell_label_fits_its_cell() {
                     }
                     // the masses are one line under the number, at Medium and Large only
                     let masses: Vec<&T> = ts.iter().filter(|t| t.kind == "mass").collect();
-                    let want_mass = mass && size != "Small";
+                    let want_mass = mass && size == "Large" && labels != LABELS[1];
                     assert_eq!(masses.len(), if want_mass { r.cells.len() } else { 0 }, "{block}/{size}/{labels}/{mass}: masses");
                     for t in &masses {
                         assert_eq!(t.text, MASSES[t.z.unwrap() - 1], "Z {}", t.z.unwrap());
@@ -1044,7 +1050,7 @@ fn the_exported_figure_carries_a_caption_and_the_trend_caveat() {
 }
 
 #[test]
-fn the_optional_atomic_masses_are_the_iupac_values_and_are_printed_where_they_fit() {
+fn the_optional_atomic_masses_are_the_iupac_values_and_are_printed_where_they_read() {
     for z in 1..=118 {
         assert_eq!(mass_text(z), Some(MASSES[z - 1].to_string()), "Z {z} ({})", data::symbol(z));
     }
@@ -1056,23 +1062,74 @@ fn the_optional_atomic_masses_are_the_iupac_values_and_are_printed_where_they_fi
     }
     for z in [43usize, 61, 84, 85, 86, 87, 88, 89, 93, 118] { assert!(!has_standard_weight(z), "Z {z}"); }
     for z in [1usize, 2, 83, 90, 91, 92] { assert!(has_standard_weight(z), "Z {z}"); }
+    // the wording no longer makes a claim about the longest-lived isotope
+    let src = include_str!("../periodic.rs");
+    let faq = crate::figures::faq::faq_for(ID).iter().map(|q| format!("{} {}", q.q, q.a)).collect::<String>();
+    for (what, text) in [("header", src), ("FAQ", faq.as_str())] {
+        assert!(!text.contains("longest-lived"), "{what} still claims the longest-lived isotope");
+        assert!(text.contains("bracketed mass number"), "{what} does not name the bracketed value");
+    }
+
     // off by default: no mass text
     let (off, _) = build_of(&[]);
     assert!(!off.contains(r#"data-o="mass""#));
-    // on at Medium: every drawn cell, each the printed value
-    let (svg, r) = build_of(&[s("block", BLOCKS[2]), b(SHOW_MASS, true)]);
+    // the shipped example really draws masses at a size that reads
+    let ex = crate::figures::examples_for(ID).into_iter().find(|e| e.name == "Full table with atomic masses").expect("the mass example");
+    let ep = with(&ex.params);
+    assert_eq!(ep.s("label_size"), "Large", "the mass example must ship at Large");
+    let (esvg, er) = build(&ep);
+    assert_eq!(er.cells.len(), 118);
+    assert_eq!(texts(&esvg).iter().filter(|t| t.kind == "mass").count(), 118);
+    for t in texts(&esvg).iter().filter(|t| t.kind == "mass") {
+        assert!(t.fs >= 8.0, "the example's mass type is only {} px", t.fs);
+        assert!(t.fs * 0.66 >= 5.2, "the example's mass type is only {} px at 66 %", t.fs * 0.66);
+    }
+    // Medium and Small refuse the masses with a note, rather than drawing four-point type
+    for size in ["Medium", "Small"] {
+        let p = with(&[s("block", BLOCKS[2]), s("label_size", size), b(SHOW_MASS, true)]);
+        let (svg, r) = build(&p);
+        assert_eq!(texts(&svg).iter().filter(|t| t.kind == "mass").count(), 0, "{size}");
+        assert!(has(&r.notes, "only at the Large label size"), "{size}: {:?}", r.notes);
+        assert_eq!(crate::figures::notes_for(ID, &p), r.notes);
+    }
+    // Symbols only would leave the mass where the atomic number belongs: refuse it
+    let p = with(&[s("block", BLOCKS[2]), s("label_size", "Large"), s("labels", LABELS[1]), b(SHOW_MASS, true)]);
+    let (svg, r) = build(&p);
+    assert_eq!(texts(&svg).iter().filter(|t| t.kind == "mass").count(), 0);
+    assert!(has(&r.notes, "Symbols only"), "{:?}", r.notes);
+    // Large with numbers: every drawn cell, each the printed value, and the type a real height
+    let (svg, _r) = build_of(&[s("block", BLOCKS[2]), s("label_size", "Large"), b(SHOW_MASS, true)]);
     let ts = texts(&svg);
     let masses: Vec<&T> = ts.iter().filter(|t| t.kind == "mass").collect();
     assert_eq!(masses.len(), 118);
     for t in &masses { assert_eq!(t.text, MASSES[t.z.unwrap() - 1]); }
     assert!(svg.contains("IUPAC 2021") && svg.contains("square brackets"), "the mass rule is not on the sheet");
-    // on at Small: omitted, with a note in the figure and the editor
-    let p = with(&[s("label_size", "Small"), b(SHOW_MASS, true)]);
-    let (small, rs) = build(&p);
-    assert_eq!(texts(&small).iter().filter(|t| t.kind == "mass").count(), 0);
-    assert!(has(&rs.notes, "not drawn at the Small label size"), "{:?}", rs.notes);
-    assert_eq!(crate::figures::notes_for(ID, &p), rs.notes);
-    // on with names at Large: every mass stays inside its cell (the collision audit repeats it)
+    let mut g = Glyphs::new();
+    let sample = masses.iter().find(|t| t.z == Some(1)).expect("hydrogen's mass");
+    let rel = g.rel(sample).expect("a measured mass");
+    let ink_h = rel.3 - rel.2;
+    assert!(ink_h >= 7.0, "the printed mass ink is only {ink_h:.1} px high at 1x");
+    assert!(ink_h * 0.66 >= 4.6, "the printed mass ink is only {:.1} px high at 66 %", ink_h * 0.66);
+    assert!(sample.fs >= 10.0, "the mass type is only {} px at Large", sample.fs);
+    // the same line, rasterized at 66 %: a real ink height in pixels, not only a scaled font size
+    let one = format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="60"><rect width="200" height="60" fill="#fff"/><text x="10" y="40" font-size="{:.2}" font-family="{}" fill="#111111">[294]</text></svg>"##,
+        sample.fs, super::super::FONT
+    );
+    for scale in [1.0f32, 0.66] {
+        let png = to_png(&one, scale).unwrap();
+        let img = image::load_from_memory(&png).unwrap().to_rgba8();
+        let mut top = u32::MAX;
+        let mut bot = 0u32;
+        for (x, y, p) in img.enumerate_pixels() {
+            let _ = x;
+            if p[0] < 200 { top = top.min(y); bot = bot.max(y); }
+        }
+        let h = if top == u32::MAX { 0.0 } else { (bot - top + 1) as f64 };
+        let want = if scale == 1.0 { 7.0 } else { 4.5 };
+        assert!(h >= want, "the mass raster is only {h:.1} px high at {scale}x");
+    }
+    // and with names on the mass and the name do not meet (the collision audit repeats it)
     let (big, rb) = build_of(&[s("block", BLOCKS[2]), s("labels", LABELS[2]), s("label_size", "Large"), b(SHOW_MASS, true)]);
     assert_eq!(texts(&big).iter().filter(|t| t.kind == "mass").count(), 118);
     assert_eq!(rb.cells.len(), 118);
@@ -1096,7 +1153,7 @@ fn the_student_copy_blanks_the_read_out_and_leaks_no_answer() {
     let sj = sr.panel.join(" ");
     assert!(sj.contains("Highlighted element: Au"), "{sj}");
     // the name, the Z, the group, the period and the category are nowhere in the source
-    for leak in ["Gold", "Z = 79", "group 11", "period 6", "transition metal"] {
+    for leak in ["Gold", "Z = 79", "group 11", "period 6", "Z = 79; group 11; period 6; transition metal"] {
         assert!(!ssvg.contains(leak), "the student copy leaks {leak:?}");
     }
     // the key has them all
@@ -1227,7 +1284,7 @@ fn ten_thousand_hostile_inputs_render_deterministically() {
 
     let mut r = Rng(0x5eed_1234_9abc_def0);
     let mut drawn = 0usize;
-    let mut t = std::time::Instant::now();
+    let t = std::time::Instant::now();
     for k in 0..10_000 {
         let mut p = Params::defaults(&defs);
         p.0.insert("block".into(), r.pick(&blocks).clone());
@@ -1249,7 +1306,7 @@ fn ten_thousand_hostile_inputs_render_deterministically() {
         assert_eq!(uniq.len(), expected, "iteration {k}: a duplicate cell");
         assert!(rep.cells.iter().all(|c| c.cat == category(c.z)), "iteration {k}");
         let drawn_masses = svg.matches(r#"data-o="mass""#).count();
-        let want_masses = if rep.setup.show_mass && svg::label_factor(p.s("label_size")) > 0.9 { expected } else { 0 };
+        let want_masses = if rep.setup.show_mass && svg::label_factor(p.s("label_size")) > 1.2 && rep.setup.labels != 1 { expected } else { 0 };
         assert_eq!(drawn_masses, want_masses, "iteration {k}: masses");
         drawn += rep.cells.len();
         if k % 101 == 0 {
@@ -1340,9 +1397,14 @@ fn the_key_lists_all_ten_categories_and_switches_off() {
     assert_eq!(labels, CATS, "{labels:?}");
     let notes = ts.iter().filter(|t| t.kind == "key-note").map(|t| t.text.as_str()).collect::<String>();
     assert!(notes.contains("B, Si, Ge, As, Sb, Te, Po") && notes.contains("the RSC"), "{notes}");
+    assert!(notes.contains("lowercase"), "{notes}");
     let (off, roff) = build_of(&[b("key", false)]);
     assert!(roff.swatches.is_empty());
     assert!(!off.contains(r#"data-o="swatch""#) && !off.contains("Category key"));
+    // with the key off the boundary and spelling notes still export, under the footnote
+    let foot: String = texts(&off).iter().filter(|t| t.kind == "foot").map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ");
+    assert!(foot.contains("Metalloids:") && foot.contains("US spellings") && foot.contains("lowercase"), "{foot}");
+    assert!(!foot.contains("Not in this view"), "{foot}");
     assert!(svg_size(&off).1 < svg_size(&on).1, "switching the key off does not shorten the figure");
     assert_eq!(roff.cells.len(), r.cells.len(), "the table moved when the key went off");
 }
@@ -1378,6 +1440,110 @@ fn the_trends_are_a_stated_direction_and_do_not_move_the_table() {
 }
 
 #[test]
+fn the_student_copy_never_names_the_highlighted_element() {
+    for block in BLOCKS {
+        for labels in LABELS {
+            for size in ["Small", "Medium", "Large"] {
+                for hl in ["Au", "La", "H", "79", "Og", "Xx", ""] {
+                    let base = [s("block", block), s("labels", labels), s("label_size", size), s("highlight", hl)];
+                    let (ksvg, kr) = build_of(&key(&base));
+                    let (ssvg, sr) = build_of(&student(&base));
+                    assert_eq!(svg_size(&ksvg), svg_size(&ssvg), "{block}/{labels}/{size}/{hl}: sizes differ");
+                    assert!(!ssvg.contains(r#"data-o="answer""#), "{block}/{labels}/{size}/{hl}: an answer text");
+                    let Some(z) = kr.setup.highlight else { continue };
+                    let kt = texts(&ksvg);
+                    let st = texts(&ssvg);
+                    let kn: Vec<&T> = kt.iter().filter(|t| t.kind == "name" && t.z == Some(z)).collect();
+                    let sn: Vec<&T> = st.iter().filter(|t| t.kind == "name" && t.z == Some(z)).collect();
+                    assert!(sn.is_empty(), "{block}/{labels}/{size}/{hl}: the student names Z {z}: {:?}", sn.iter().map(|t| &t.text).collect::<Vec<_>>());
+                    let named = labels == LABELS[2] && size == "Large" && block_shows(kr.setup.block, z);
+                    assert_eq!(kn.len(), if named { 1 } else { 0 }, "{block}/{labels}/{size}/{hl}: the key's name for Z {z}");
+                    let all_names = kt.iter().filter(|t| t.kind == "name").count();
+                    let student_names = st.iter().filter(|t| t.kind == "name").count();
+                    assert_eq!(student_names, all_names - kn.len(), "{block}/{labels}/{size}/{hl}: the other names moved");
+                    assert!(sr.panel.join(" ").contains("Name ______"), "{block}/{labels}/{size}/{hl}: the panel does not ask for the name");
+                    assert!(!st.iter().any(|t| t.kind == "name" && t.text == data::name(z)), "{block}/{labels}/{size}/{hl}: the name is still a cell label");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn the_description_mentions_only_what_is_drawn_and_names_a_refusal() {
+    let desc = |svg: &str| svg.split("<desc>").nth(1).and_then(|x| x.split("</desc>").next()).unwrap_or("").to_string();
+    for block in BLOCKS {
+        for labels in LABELS {
+            for size in ["Small", "Medium", "Large"] {
+                for mass in [false, true] {
+                    let (svg, _) = build_of(&[s("block", block), s("labels", labels), s("label_size", size), b(SHOW_MASS, mass)]);
+                    let d = desc(&svg);
+                    let names = texts(&svg).iter().filter(|t| t.kind == "name").count();
+                    let masses = texts(&svg).iter().filter(|t| t.kind == "mass").count();
+                    if d.contains("element names at the large label size") {
+                        assert!(names > 0, "{block}/{labels}/{size}/{mass}: {d}");
+                    }
+                    if d.contains("relative atomic masses") {
+                        assert!(masses > 0, "{block}/{labels}/{size}/{mass}: {d}");
+                    }
+                    if d.contains("element names left out") { assert_eq!(names, 0, "{block}/{labels}/{size}/{mass}: {d}"); }
+                    if d.contains("atomic masses left out") { assert_eq!(masses, 0, "{block}/{labels}/{size}/{mass}: {d}"); }
+                }
+            }
+        }
+    }
+    let refused = desc(&build(&raw(&[s("highlight", "Xx")])).0);
+    assert!(refused.contains("refused"), "{refused}");
+    let hidden = desc(&build(&raw(&[s("block", BLOCKS[0]), s("highlight", "La")])).0);
+    assert!(hidden.contains("not in the block shown"), "{hidden}");
+}
+
+#[test]
+fn the_category_codes_are_lowercase_not_symbols_and_drawn_at_every_size() {
+    let syms: BTreeSet<&str> = data::ELEMENTS.iter().map(|e| e.0).collect();
+    let codes: BTreeSet<&str> = CAT_CODES.iter().copied().collect();
+    assert_eq!(codes.len(), 10, "the codes repeat");
+    for c in CAT_CODES {
+        assert!(c.chars().all(|ch| ch.is_ascii_lowercase()), "{c} is not lowercase");
+        assert!(!syms.contains(c), "{c} is also an element symbol");
+    }
+    for block in BLOCKS {
+        for size in ["Small", "Medium", "Large"] {
+            for style in ["Colour", "Print"] {
+                let (svg, r) = build_of(&[s("block", block), s("label_size", size), s("style", style)]);
+                let ts = texts(&svg);
+                for c in &r.cells {
+                    let t = ts.iter().find(|t| t.kind == "cat-code" && t.z == Some(c.z))
+                        .unwrap_or_else(|| panic!("{block}/{size}/{style}: Z {} has no code", c.z));
+                    assert_eq!(t.text, CAT_CODES[c.cat], "{block}/{size}/{style}: Z {}", c.z);
+                    assert!(t.fs >= 7.0, "{block}/{size}/{style}: the code is only {} px", t.fs);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn the_panel_reserves_the_longer_of_the_key_and_student_lines() {
+    let base = [s("label_size", "Small"), s("highlight", "Al")];
+    let (ksvg, kr) = build_of(&key(&base));
+    let (ssvg, _) = build_of(&student(&base));
+    let klines = texts(&ksvg).iter().filter(|t| t.kind == "answer").count();
+    let slines = texts(&ssvg).iter().filter(|t| t.kind == "blank").count();
+    assert!(klines > slines, "the key wraps to {klines} lines, the student to {slines}: this case does not exercise the maximum");
+    assert_eq!(svg_size(&ksvg), svg_size(&ssvg), "the two copies differ in size");
+    let mut g = Glyphs::new();
+    for svg in [&ksvg, &ssvg] {
+        for t in texts(svg).iter().filter(|t| matches!(t.kind.as_str(), "panel" | "answer" | "blank")) {
+            let bx = g.ink(t).expect("a measured panel line");
+            let pb = kr.panel_box;
+            assert!(bx.0 >= pb.0 + 0.5 && bx.1 <= pb.1 - 0.5 && bx.2 >= pb.2 + 0.5 && bx.3 <= pb.3 - 0.5,
+                "{:?} leaves the panel {bx:?} in ({}, {}, {}, {})", t.text, pb.0, pb.2, pb.1, pb.3);
+        }
+    }
+}
+
+#[test]
 fn periodic_pngs() {
     let Ok(dir) = std::env::var("VERSHION_PNG_DIR") else { return };
     let cases: Vec<(&str, Vec<(&'static str, Value)>)> = vec![
@@ -1389,6 +1555,8 @@ fn periodic_pngs() {
         ("main-large-names", vec![s("labels", LABELS[2]), s("label_size", "Large")]),
         ("gold-key", vec![s("block", BLOCKS[1]), s("highlight", "Au"), s("trends", TRENDS[1])]),
         ("gold-student", vec![s("block", BLOCKS[1]), s("highlight", "Au"), b(SHOW_ANSWERS, false)]),
+        ("gold-student-names", vec![s("block", BLOCKS[1]), s("labels", LABELS[2]), s("label_size", "Large"), s("highlight", "Au"), b(SHOW_ANSWERS, false)]),
+        ("full-mass-print-small", vec![s("block", BLOCKS[2]), b(SHOW_MASS, true), s("label_size", "Small"), s("style", "Print")]),
         ("full-print", vec![s("block", BLOCKS[2]), s("style", "Print")]),
         ("d-trend-en", vec![s("block", BLOCKS[1]), s("trends", TRENDS[2])]),
         ("full-mass-medium", vec![s("block", BLOCKS[2]), b(SHOW_MASS, true)]),
