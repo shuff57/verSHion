@@ -108,7 +108,7 @@ impl Guide {
         match self {
             Guide::Checking => "Checking your account...",
             Guide::NotSetUp => "Sharing is not set up in this build",
-            Guide::NoServer => "No pool server yet",
+            Guide::NoServer => "Turn on sharing",
             Guide::Offline => "Could not reach the pool",
             Guide::SignIn => "Sign in or create an account",
             Guide::ConfirmEmail => "Confirm your email",

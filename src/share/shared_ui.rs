@@ -131,10 +131,6 @@ impl crate::App {
                 // signed-in status page has a lot to show and takes the whole column.
                 let status = app.account.model.page == super::model::Page::Status;
                 let side_w = 300.0;
-                // The page is short: give the block some air above it, so the spare height is
-                // split between the space above the cards and the footer under them, instead of
-                // collecting in one band at the bottom.
-                ui.add_space(((ui.available_height() - 366.0) * 0.5).clamp(0.0, 160.0));
                 if status || ui.available_width() < 760.0 {
                     pageshell::card(ui, |ui| app.account.draw_section(ui));
                     // A signed-in account has little to say: the three reasons ride under it as a
@@ -314,41 +310,50 @@ impl SharedUi {
     // ---- guided steps ----------------------------------------------------------------------------------
 
     pub(super) fn guide_card(&mut self, ui: &mut Ui, g: &Guide, account: &mut AccountUi) {
-        pageshell::card(ui, |ui| {
-            if let Some(n) = g.step() {
-                steps_strip(ui, n);
-                ui.add_space(8.0);
-            }
-            pageshell::heading(ui, g.title());
-            ui.add_space(4.0);
-            ui.add(egui::Label::new(theme::muted(g.help()).size(13.5)).wrap());
-            if !matches!(g, Guide::NotSetUp | Guide::Ready) {
-                ui.add_space(10.0);
-            }
-            match g {
-                Guide::Checking => {
-                    ui.horizontal(|ui| {
-                        ui.spinner();
-                        ui.label(theme::muted("One moment..."));
-                    });
+        // A guide card that holds a form is a form's width, not a page's: at 980 px the one field
+        // and its Save left half the card white (the critics named it on the Shared tab).
+        let w = ui.available_width().min(660.0);
+        ui.allocate_ui_with_layout(egui::Vec2::new(w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+            pageshell::card(ui, |ui| {
+                if let Some(n) = g.step() {
+                    steps_strip(ui, n);
+                    ui.add_space(8.0);
                 }
-                // The help line above already says it (NOT_SET_UP would repeat it).
-                Guide::NotSetUp => {}
-                Guide::Offline => {
-                    if kit::primary_button(ui, "Try again").clicked() {
-                        account.model.check_now();
+                pageshell::heading(ui, g.title());
+                // The form under a NoServer card explains itself in `draw_section`; a second
+                // paragraph above it says the same thing one step louder.
+                if !matches!(g, Guide::NoServer) {
+                    ui.add_space(4.0);
+                    ui.add(egui::Label::new(theme::muted(g.help()).size(13.5)).wrap());
+                }
+                if !matches!(g, Guide::NotSetUp | Guide::Ready | Guide::NoServer) {
+                    ui.add_space(10.0);
+                }
+                match g {
+                    Guide::Checking => {
+                        ui.horizontal(|ui| {
+                            ui.spinner();
+                            ui.label(theme::muted("One moment..."));
+                        });
                     }
-                }
-                Guide::NeedsInvite => account.draw_invite(ui),
-                // Signing in and confirming happen on the Account screen: the account is not only for sharing.
-                Guide::SignIn | Guide::ConfirmEmail => {
-                    if kit::primary_button(ui, "Open Account").clicked() {
-                        account.reveal();
+                    // The help line above already says it (NOT_SET_UP would repeat it).
+                    Guide::NotSetUp => {}
+                    Guide::Offline => {
+                        if kit::primary_button(ui, "Try again").clicked() {
+                            account.model.check_now();
+                        }
                     }
+                    Guide::NeedsInvite => account.draw_invite(ui),
+                    // Signing in and confirming happen on the Account screen: the account is not only for sharing.
+                    Guide::SignIn | Guide::ConfirmEmail => {
+                        if kit::primary_button(ui, "Open Account").clicked() {
+                            account.reveal();
+                        }
+                    }
+                    Guide::Blocked(_) | Guide::Waiting | Guide::NoServer => account.draw_section(ui),
+                    Guide::Ready => {}
                 }
-                Guide::Blocked(_) | Guide::Waiting | Guide::NoServer => account.draw_section(ui),
-                Guide::Ready => {}
-            }
+            });
         });
     }
 
@@ -424,7 +429,7 @@ impl SharedUi {
                 };
                 let label = if badge > 0 { format!("{} ({badge})", t.label()) } else { t.label().to_string() };
                 // The same 34 pt pills as every button in the cards below.
-                let clicked = if self.model.tab == t { kit::primary_button(ui, &label) } else { tab_button(ui, &label) }.clicked();
+                let clicked = if self.model.tab == t { tab_selected(ui, &label) } else { tab_button(ui, &label) }.clicked();
                 if clicked {
                     self.model.goto(t);
                 }
@@ -570,6 +575,21 @@ pub(super) fn step_pill(ui: &mut Ui, label: &str, fill: egui::Color32, fg: egui:
     let (rect, _) = ui.allocate_exact_size(galley.size() + egui::vec2(18.0, 4.0), egui::Sense::hover());
     ui.painter().rect_filled(rect, egui::CornerRadius::same(255), fill);
     ui.painter().galley(rect.center() - galley.size() / 2.0, galley, fg);
+}
+
+/// The tab that is showing: an accent wash, not the solid accent of a primary button. A tab is a
+/// place you are, not an action to press; when both looked the same the critics read "Circles" as
+/// a button competing with "Share to pool...".
+fn tab_selected(ui: &mut Ui, label: &str) -> egui::Response {
+    ui.add(
+        egui::Button::new(
+            egui::RichText::new(label).family(theme::bold_family()).color(theme::accent_col()),
+        )
+        .fill(theme::accent_faded())
+        .stroke(egui::Stroke::new(1.0, theme::accent_col()))
+        .corner_radius(egui::CornerRadius::same(17))
+        .min_size(egui::vec2(0.0, 34.0)),
+    )
 }
 
 /// A tab that is not showing: `kit::ghost_button`'s pill on the card colour, since the tabs sit on
