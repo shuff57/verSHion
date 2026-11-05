@@ -18,7 +18,7 @@ pub fn new_id() -> Id {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Difficulty { Low, Medium, High }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ImageRef {
     /// Path relative to the store dir, e.g. "media/<sha256>.png".
     pub file: String,
@@ -567,4 +567,71 @@ mod tests {
         assert!(Condensed.lead() < Standard.lead() && Condensed.rule_pitch() < Standard.rule_pitch());
         assert!(Margins::all(5.0).uniform() && !Margins { top: 1.0, right: 1.0, bottom: 1.0, left: 2.0 }.uniform());
     }
+}
+
+// ---------- student work, for the grade screen ----------
+
+/// One photographed page of a student's work and what the transcription made of it.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct SubmittedPage {
+    pub id: Id,
+    /// The scan or photo, in the store's media folder.
+    pub image: ImageRef,
+    /// The handwriting as text, before any correction.
+    pub transcript: String,
+    /// Words the transcriber read with low confidence, and what the teacher decided.
+    #[serde(default)]
+    pub corrections: Vec<Correction>,
+    /// Runs the transcriber could not read at all.
+    #[serde(default)]
+    pub illegible: Vec<Illegible>,
+    /// How the last accepted correction for this page was taken ("tray", "typing", ...).
+    #[serde(default)]
+    pub via: Option<String>,
+}
+
+/// A run of handwriting the transcription could not read, kept so a teacher can type it in.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Illegible {
+    pub word: String,
+}
+
+/// One word the transcription was unsure of, with the reading it offered.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Correction {
+    pub word: String,
+    /// The transcription's own reading of that word.
+    pub term: String,
+    #[serde(default)]
+    pub confidence: f32,
+}
+
+/// One student's work for one exam: the pages, and the marks once they are graded.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct StudentSubmission {
+    pub id: Id,
+    pub exam_id: Id,
+    pub student_name: String,
+    #[serde(default)]
+    pub pages: Vec<SubmittedPage>,
+    #[serde(default)]
+    pub per_question: Vec<GradedQuestion>,
+    pub score: Option<f64>,
+    #[serde(default)]
+    pub graded: bool,
+}
+
+/// One question's mark within one submission.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct GradedQuestion {
+    pub exam_item_index: usize,
+    pub bank_id: Id,
+    pub question_id: Id,
+    pub student_text: String,
+    pub key_text: String,
+    pub correct: bool,
+    pub points_awarded: f64,
+    /// What the marker said about this question (empty when it was plainly right or wrong).
+    #[serde(default)]
+    pub notes: Vec<String>,
 }

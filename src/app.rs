@@ -54,6 +54,8 @@ pub enum Screen {
     Shared,
     /// Sign in, create an account, confirm, reset, status: the account behind sharing and hosted AI.
     Account,
+    /// Uploaded student work, its transcript, the word-check tray, and the marks.
+    Grade,
     BankEdit(Id),
     ExamEdit(Id),
 }
@@ -125,6 +127,8 @@ pub struct App {
     pub mine: crate::share::MineUi,
     /// Shared-pool "Shared" page (a left-nav screen hosting the browser, my items and the account).
     pub shared: crate::share::SharedUi,
+    /// The Grade screen's own state (selected submission, tray, corrections), kept while the app runs.
+    pub grade: Option<crate::gradeui::GradeState>,
     /// QA hook: scripted input (VERSHION_SCRIPT), see `raw_input_hook`.
     pub qa_steps: Vec<String>,
     /// QA hook: VERSHION_SHOT=<file.png> saves a screenshot of this window's own contents and exits.
@@ -207,6 +211,7 @@ impl App {
             publish: Default::default(),
             browse: Default::default(),
             mine: Default::default(),
+            grade: None,
             qa_shot: crate::env_var("VERSHION_SHOT").ok().map(|p| (p, 0)),
             qa_steps: crate::env_var("VERSHION_SCRIPT")
                 .map(|v| v.split(';').map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect())
@@ -228,6 +233,7 @@ impl App {
                 "exams" => Screen::Exams,
                 "imports" => Screen::Imports,
                 "figures" => Screen::Figures,
+                "grade" => Screen::Grade,
                 "settings" => Screen::Settings,
                 // The Shared page, optionally on a tab: "shared", "shared:browse|mine|imported|reports|settings",
                 // "shared:choose" (the "Share to pool…" chooser open). Circles: "shared:circles",

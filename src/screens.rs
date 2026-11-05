@@ -217,6 +217,8 @@ pub enum NavIcon {
     Home,
     Banks,
     Exams,
+    /// Student work and its marks.
+    Grade,
     Import,
     Figures,
     Help,
@@ -254,6 +256,7 @@ pub fn draw_nav_icon_k(
         NavIcon::Exams => ph::EXAM,
         NavIcon::Import => ph::UPLOAD_SIMPLE,
         NavIcon::Figures => ph::SHAPES,
+        NavIcon::Grade => ph::CHECK_SQUARE,
         NavIcon::Help => ph::QUESTION,
         NavIcon::Gear => ph::GEAR,
         NavIcon::Pencil => ph::PENCIL_SIMPLE,
@@ -406,6 +409,7 @@ impl crate::App {
             crate::Screen::Settings => self.draw_settings(ctx),
             crate::Screen::Shared => self.draw_shared(ctx),
             crate::Screen::Account => self.draw_account_screen(ctx),
+            crate::Screen::Grade => self.draw_grade(ctx),
         }
         if self.ai_busy {
             ctx.request_repaint();
@@ -612,6 +616,7 @@ impl crate::App {
                     (NavIcon::Home, "Home", crate::Screen::Home),
                     (NavIcon::Banks, "Banks", crate::Screen::Banks),
                     (NavIcon::Exams, "Exams", crate::Screen::Exams),
+                    (NavIcon::Grade, "Grade", crate::Screen::Grade),
                     (NavIcon::Import, "Import", crate::Screen::Imports),
                     (NavIcon::Figures, "Figures", crate::Screen::Figures),
                     (NavIcon::Shared, "Shared", crate::Screen::Shared),

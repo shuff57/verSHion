@@ -461,6 +461,8 @@ pub struct Store {
     pub exports: Vec<crate::model::ExportRecord>,
     /// Ids of banks and exams the teacher put away: hidden from the lists and pickers, never deleted.
     pub archived: Vec<Id>,
+    /// Student work handed in for an exam, with its transcripts and marks (the Grade screen).
+    pub student_submissions: Vec<crate::model::StudentSubmission>,
 }
 
 impl Store {
@@ -472,6 +474,7 @@ impl Store {
             imports: load_json("imports.json").unwrap_or_default(),
             exports: load_json("exports.json").unwrap_or_default(),
             archived: load_json("archived.json").unwrap_or_default(),
+            student_submissions: load_json("submissions.json").unwrap_or_default(),
         }
     }
 
@@ -480,6 +483,12 @@ impl Store {
     pub fn save_imports(&self) { let _ = save_json("imports.json", &self.imports); }
     pub fn save_exports(&self) { let _ = save_json("exports.json", &self.exports); }
     pub fn save_archived(&self) { let _ = save_json("archived.json", &self.archived); }
+    pub fn save_student_submissions(&self) { let _ = save_json("submissions.json", &self.student_submissions); }
+
+    /// The submissions handed in for one exam.
+    pub fn submissions_for(&self, exam: &Id) -> impl Iterator<Item = &crate::model::StudentSubmission> {
+        self.student_submissions.iter().filter(move |s| &s.exam_id == exam)
+    }
 
     pub fn is_archived(&self, id: &Id) -> bool {
         self.archived.contains(id)

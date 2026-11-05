@@ -415,17 +415,17 @@ fn draw_render_text(ui: &mut egui::Ui, page: &crate::model::SubmittedPage, state
 // ---- Grade engine (P3 Round 7) ----
 
 fn grade_mc_answer(answers: &[crate::model::Answer], student: &str) -> (bool, f64) {
-    let s = vishion_core::clean::clean(student).trim().to_lowercase();
+    let s = crate::gradecore::clean(student).trim().to_lowercase();
     let mut best = (usize::MAX, false, 0.0);
     for a in answers {
-        let d = vishion_core::judge::lev(&s, &vishion_core::clean::clean(&a.text).trim().to_lowercase());
+        let d = crate::gradecore::lev(&s, &crate::gradecore::clean(&a.text).trim().to_lowercase());
         if d < best.0 { best = (d, a.correct, if a.correct { 1.0 } else { 0.0 }); }
     }
     if best.1 { (true, 1.0) } else { (false, 0.0) }
 }
 
 fn grade_tf(correct: bool, student: &str) -> (bool, f64) {
-    let s = vishion_core::clean::clean(student).trim().to_lowercase();
+    let s = crate::gradecore::clean(student).trim().to_lowercase();
     let picked_true = s.contains("true") || s.contains("t");
     let picked_false = s.contains("false") || s.contains("f");
     let ok = if correct { picked_true && !picked_false } else { picked_false && !picked_true };
@@ -433,12 +433,12 @@ fn grade_tf(correct: bool, student: &str) -> (bool, f64) {
 }
 
 fn grade_blank(accept: &[Vec<String>], student: &str) -> (bool, f64) {
-    let s = vishion_core::clean::clean(student).trim().to_lowercase();
+    let s = crate::gradecore::clean(student).trim().to_lowercase();
     let mut best = (f64::MAX, false, 0.0);
     for group in accept {
         for v in group {
-            let t = vishion_core::clean::clean(v).trim().to_lowercase();
-            let d = vishion_core::judge::lev(&s, &t) as f64;
+            let t = crate::gradecore::clean(v).trim().to_lowercase();
+            let d = crate::gradecore::lev(&s, &t) as f64;
             let ratio = d / t.chars().count().max(1) as f64;
             if ratio < best.0 {
                 best = (ratio, ratio <= 0.25, if ratio <= 0.25 { 1.0 } else if ratio <= 0.4 { 0.25 } else { 0.0 });
@@ -449,9 +449,9 @@ fn grade_blank(accept: &[Vec<String>], student: &str) -> (bool, f64) {
 }
 
 fn grade_short(sample: &str, student: &str) -> (bool, f64) {
-    let s = vishion_core::clean::clean(student).trim().to_lowercase();
-    let key = vishion_core::clean::clean(sample).trim().to_lowercase();
-    let d = vishion_core::judge::lev(&s, &key) as f64;
+    let s = crate::gradecore::clean(student).trim().to_lowercase();
+    let key = crate::gradecore::clean(sample).trim().to_lowercase();
+    let d = crate::gradecore::lev(&s, &key) as f64;
     let r = d / key.chars().count().max(1) as f64;
     let ok = r <= 0.3;
     (ok, if ok { 1.0 } else if r <= 0.5 { 0.25 } else { 0.0 })
@@ -468,11 +468,11 @@ fn score_for_item(item: &crate::model::ExamItem, store: &crate::store::Store, st
         crate::model::Kind::Blank { accept } => grade_blank(accept, student_text).0,
         crate::model::Kind::Short { sample } => grade_short(sample, student_text).0,
         crate::model::Kind::Matching { pairs, .. } => {
-            let s = vishion_core::clean::clean(student_text).trim().to_lowercase();
+            let s = crate::gradecore::clean(student_text).trim().to_lowercase();
             let mut matched = 0;
             for p in pairs {
-                if s.contains(&vishion_core::clean::clean(&p.left).trim().to_lowercase())
-                    && s.contains(&vishion_core::clean::clean(&p.right).trim().to_lowercase()) {
+                if s.contains(&crate::gradecore::clean(&p.left).trim().to_lowercase())
+                    && s.contains(&crate::gradecore::clean(&p.right).trim().to_lowercase()) {
                     matched += 1;
                 }
             }
@@ -533,10 +533,68 @@ impl crate::App {
         self.grade = Some(state.clone());
 
         shell_frame(self, ctx, true, |app, ui| {
-            ui.heading("Grade — Student Work (review tray WIP)");
-            ui.separator();
-            ui.label(format!("exam={:?} student={:?} page={:?} version={} boxes={} tray_open={:?}",
-                state.exam_id, state.student_id, state.page_id, state.text_version, state.show_boxes, state.tray_open));
+            crate::kit::page_header(
+                ui,
+                &["Home", "Grade"],
+                "Grade",
+                Some("Photograph a student's work, check the transcription word by word, and mark it against the exam's answer key."),
+            );
+            ui.add_space(12.0);
+            // Which exam's submissions are being marked.
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 10.0;
+                ui.label(theme::muted("Exam").size(12.5));
+                let names: Vec<(String, String)> =
+                    app.store.exams.iter().map(|e| (e.id.clone(), e.name.clone())).collect();
+                let current = exam_id
+                    .as_ref()
+                    .and_then(|id| names.iter().find(|(i, _)| i == id).map(|(_, n)| n.clone()))
+                    .unwrap_or_else(|| {
+                        if names.is_empty() { "No exams yet".to_string() } else { "Choose an exam".to_string() }
+                    });
+                egui::ComboBox::from_id_salt("grade_exam")
+                    .selected_text(current)
+                    .width(280.0)
+                    .show_ui(ui, |ui| {
+                        for (id, name) in &names {
+                            if ui.selectable_label(exam_id.as_deref() == Some(id.as_str()), name).clicked() {
+                                let st = app.grade.get_or_insert_with(GradeState::new);
+                                st.exam_id = Some(id.clone());
+                                st.student_id = None;
+                                st.page_id = None;
+                            }
+                        }
+                    });
+                if subs.is_empty() {
+                    ui.label(theme::muted("No student work for this exam yet.").size(12.0));
+                }
+            });
+            ui.add_space(10.0);
+            if subs.is_empty() {
+                // Nothing to review yet: say what the screen is for, rather than two panes of
+                // placeholder text.
+                crate::pageshell::card(ui, |ui| {
+                    crate::pageshell::heading(ui, "No student work yet");
+                    ui.add_space(6.0);
+                    crate::pageshell::prose(
+                        ui,
+                        "A photo or scan of a student's page is transcribed, you check the words the \
+                         transcriber was unsure of, and each question is marked against the exam's \
+                         answer key. Choosing an exam above shows the work handed in for it.",
+                        13.5,
+                    );
+                    ui.add_space(10.0);
+                    ui.label(
+                        theme::muted(
+                            "Uploading a photo and the transcription step are the next piece of this \
+                             screen. What is built here is the review tray, the corrections and the marks.",
+                        )
+                        .size(12.0),
+                    );
+                });
+                crate::pageshell::footer(ui, "verSHion · student work stays on this machine");
+                return;
+            }
             ui.columns(2, |cols| {
                 let dark = crate::theme::is_dark();
                 let frame_col = if dark { egui::Color32::from_rgb(0x33, 0x2a, 0x2a) } else { theme::cream() };
