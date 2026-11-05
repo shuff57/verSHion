@@ -64,3 +64,31 @@ Branch `figures-gapfill` in `/home/shuff57/Documents/GitHub/verSHion-figures`, l
 - Phase 6 stats: bar chart, ogive and frequency table all shipped and then parked with their limits written down (data-reader edge cases, ulp-scale classes). No stats figure has drag handles yet; all are listed in `interact::NO_HANDLES`.
 - Photosynthesis, Boltzmann and VSEPR are the figures from this session that carry a clean critic verdict. The other three are in the tree and usable but should not be reported as passed.
 - Full `figures::` suite on the merged tree: 2,141 passed, 0 failed, 11 ignored.
+
+## Remaining figures (logged 2026-11-04)
+
+No JSON/manifest file tracks the figures; this file plus `docs/figures-progress.md` are the trackers. Live state: branch `figures-gapfill`.
+
+### Phase 6 stats — still to build
+
+| Figure | Notes |
+|---|---|
+| t-distribution | curve/area figure; rejection-region uses a t internally, no standalone figure |
+| chi-square distribution | curve/area figure; only `chi-square-table` exists |
+| back-to-back stem-and-leaf | only `stem-and-leaf` exists |
+| other regression models | only linear `residual-plot`; no exponential/quadratic/logistic |
+| drag handles for stats figures | none: `histogram`, `dot-plot`, `stem-and-leaf`, `scatterplot`, `residual-plot`, `bar-chart`, `ogive`, `frequency-table` are all in `NO_HANDLES` |
+
+### In the tree but parked (do not report as passed)
+
+- `bar-chart`, `ogive`, `frequency-table` (phase 6) — narrow MEDs recorded in `docs/figures-progress.md`.
+- `periodic-table`, `vsepr-shapes` — periodic parked; vsepr passed.
+- `soil-texture` — parked by the owner's six-round rule (2026-11-03).
+
+### Lower-priority backlog (not in the phases)
+
+- pendulum/SHM, torque, orbit, Doppler, photoelectric, nuclear decay, DNA/translation, mitosis/meiosis, osmosis, electrochemical cell, calorimetry, Born–Haber, skeletal structures, lab apparatus, IR/NMR, polar/parametric graphs, vectors on the grid.
+
+### Open decisions (owner's call)
+
+- Merge `figures-gapfill` into `main` (167 commits ahead, merge base 0c1a8a89), release build, redeploy target unknown (`server/` off-limits).
