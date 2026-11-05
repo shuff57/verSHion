@@ -79,6 +79,13 @@ const ACTIN: [usize; 15] = [89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101
 
 fn symbols() -> Vec<&'static str> { SYMBOLS.split_whitespace().collect() }
 fn names() -> Vec<&'static str> { NAMES.split_whitespace().collect() }
+/// The British spelling of the elements whose name differs from the US list this figure prints.
+fn british_name(z: usize) -> Option<&'static str> {
+    match z { 13 => Some("Aluminium"), 16 => Some("Sulphur"), 55 => Some("Caesium"), _ => None }
+}
+fn has_word(text: &str, word: &str) -> bool {
+    text.split(|c: char| !c.is_ascii_alphanumeric()).any(|w| w == word)
+}
 fn z_of(sym: &str) -> usize { symbols().iter().position(|s| *s == sym).expect("a known symbol") + 1 }
 
 // ---------------------------------------------------------------------------------------------
@@ -464,8 +471,11 @@ fn the_names_follow_the_stated_us_spelling_and_the_citation_matches() {
     let (svg, _) = build_of(&[]);
     let notes: String = texts(&svg).iter().filter(|t| t.kind == "key-note").map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ");
     assert!(notes.contains("US spellings"), "{notes}");
-    assert!(notes.contains("aluminium") && notes.contains("caesium"), "{notes}");
-    assert!(!notes.contains("aluminum") && !notes.contains("cesium"), "the student-facing key note still names the two US examples: {notes}");
+    assert!(notes.contains("spell two of these names differently"), "{notes}");
+    for z in 1..=118 {
+        assert!(!has_word(&notes.to_lowercase(), &data::name(z).to_lowercase()), "the key note names Z {z}: {notes}");
+        if let Some(b) = british_name(z) { assert!(!has_word(&notes.to_lowercase(), &b.to_lowercase()), "the key note uses the British alias for Z {z}: {notes}"); }
+    }
 }
 
 #[test]
@@ -997,8 +1007,12 @@ fn the_key_marks_categories_that_are_not_in_the_block_and_carries_the_codes() {
     assert!(main.contains("Not in this view: transition metal, lanthanide, actinide."), "{main}");
     assert!(main.contains("Metalloids: the staircase B, Si, Ge, As, Sb, Te, Po"), "{main}");
     assert!(main.contains("Po a post-transition metal") && main.contains("conventions differ"), "{main}");
-    assert!(main.contains("US spellings") && main.contains("aluminium") && main.contains("caesium"), "{main}");
-    assert!(main.contains(&format!("such as {}", CAT_CODES[3])), "the key note is not tied to the code table: {main}");
+    assert!(main.contains("US spellings") && main.contains("spell two of these names differently"), "{main}");
+    assert!(main.contains("two lowercase letters"), "{main}");
+    for z in 1..=118 {
+        assert!(!has_word(&main.to_lowercase(), &data::name(z).to_lowercase()), "the key note names Z {z}: {main}");
+        if let Some(b) = british_name(z) { assert!(!has_word(&main.to_lowercase(), &b.to_lowercase()), "the key note uses the British alias for Z {z}: {main}"); }
+    }
     let d = notes(BLOCKS[1]);
     assert!(d.contains("Not in this view: lanthanide, actinide."), "{d}");
     assert!(!d.contains("transition metal,"), "{d}");
@@ -1013,6 +1027,20 @@ fn the_key_marks_categories_that_are_not_in_the_block_and_carries_the_codes() {
     assert_eq!(codes, CAT_CODES);
     for (_, sw) in &r.swatches {
         assert!(sw.1 - sw.0 >= 24.0 && sw.3 - sw.2 >= 24.0);
+    }
+    // the legend must not be smaller than the cell code it explains
+    let key_code_fs = ts.iter().filter(|t| t.kind == "key-code").map(|t| t.fs).fold(f64::MAX, f64::min);
+    let key_label_fs = ts.iter().filter(|t| t.kind == "key").map(|t| t.fs).fold(f64::MAX, f64::min);
+    let cell_code_fs = ts.iter().filter(|t| t.kind == "cat-code").map(|t| t.fs).fold(f64::MAX, f64::min);
+    assert!(key_code_fs > cell_code_fs, "the key code {key_code_fs} is not larger than the cell code {cell_code_fs}");
+    assert!(key_label_fs >= 0.26 * r.cell, "the key label {key_label_fs} is smaller than 0.26 cell");
+    for size in ["Small", "Medium", "Large"] {
+        let (svg, rr) = build_of(&[s("label_size", size)]);
+        let ts = texts(&svg);
+        let kc = ts.iter().filter(|t| t.kind == "key-code").map(|t| t.fs).fold(f64::MAX, f64::min);
+        let kl = ts.iter().filter(|t| t.kind == "key").map(|t| t.fs).fold(f64::MAX, f64::min);
+        assert!(kc >= 0.29 * rr.cell, "{size}: key code {kc}");
+        assert!(kl >= 0.26 * rr.cell, "{size}: key label {kl}");
     }
 }
 
@@ -1417,7 +1445,7 @@ fn the_key_lists_all_ten_categories_and_switches_off() {
     assert!(!off.contains(r#"data-o="swatch""#) && !off.contains("Category key"));
     // with the key off the boundary and spelling notes still export, under the footnote
     let foot: String = texts(&off).iter().filter(|t| t.kind == "foot").map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ");
-    assert!(foot.contains("Metalloids:") && foot.contains("US spellings") && foot.contains("lowercase"), "{foot}");
+    assert!(foot.contains("Metalloids:") && foot.contains("US spellings") && foot.contains("two lowercase letters"), "{foot}");
     assert!(!foot.contains("Not in this view"), "{foot}");
     assert!(svg_size(&off).1 < svg_size(&on).1, "switching the key off does not shorten the figure");
     assert_eq!(roff.cells.len(), r.cells.len(), "the table moved when the key went off");
@@ -1502,6 +1530,8 @@ fn the_description_mentions_only_what_is_drawn_and_names_a_refusal() {
                     }
                     if d.contains("element names left out") { assert_eq!(names, 0, "{block}/{labels}/{size}/{mass}: {d}"); }
                     if d.contains("atomic masses left out") { assert_eq!(masses, 0, "{block}/{labels}/{size}/{mass}: {d}"); }
+                    if labels == LABELS[2] && size != "Large" { assert!(d.contains("element names left out"), "{block}/{labels}/{size}/{mass}: the description hides the omission: {d}"); }
+                    if mass && !(size == "Large" && labels != LABELS[1]) { assert!(d.contains("atomic masses left out"), "{block}/{labels}/{size}/{mass}: the description hides the omission: {d}"); }
                 }
             }
         }
@@ -1526,13 +1556,33 @@ fn the_category_codes_are_lowercase_not_symbols_and_drawn_at_every_size() {
             for style in ["Colour", "Print"] {
                 let (svg, r) = build_of(&[s("block", block), s("label_size", size), s("style", style)]);
                 let ts = texts(&svg);
-                for c in &r.cells {
-                    let t = ts.iter().find(|t| t.kind == "cat-code" && t.z == Some(c.z))
-                        .unwrap_or_else(|| panic!("{block}/{size}/{style}: Z {} has no code", c.z));
-                    assert_eq!(t.text, CAT_CODES[c.cat], "{block}/{size}/{style}: Z {}", c.z);
-                    assert!(t.fs >= 7.0, "{block}/{size}/{style}: the code is only {} px", t.fs);
+                if size == "Small" {
+                    assert_eq!(ts.iter().filter(|t| t.kind == "cat-code").count(), 0, "{block}/{style}: a cell code is drawn at Small");
+                    assert!(has(&r.notes, "Category codes are not drawn at the Small label size"), "{block}/{style}: {:?}", r.notes);
+                    assert_eq!(ts.iter().filter(|t| t.kind == "key-code").count(), 10, "{block}/{style}: the key lost its codes at Small");
+                } else {
+                    for c in &r.cells {
+                        let t = ts.iter().find(|t| t.kind == "cat-code" && t.z == Some(c.z))
+                            .unwrap_or_else(|| panic!("{block}/{size}/{style}: Z {} has no code", c.z));
+                        assert_eq!(t.text, CAT_CODES[c.cat], "{block}/{size}/{style}: Z {}", c.z);
+                        assert!(t.fs >= 10.0, "{block}/{size}/{style}: the code is only {} px", t.fs);
+                    }
+                    assert!(!has(&r.notes, "Category codes are not drawn"), "{block}/{size}: an unnecessary Small-code note");
                 }
             }
+        }
+    }
+    // the key legend is never smaller than the cell code it explains
+    for size in ["Small", "Medium", "Large"] {
+        let (svg, r) = build_of(&[s("label_size", size)]);
+        let ts = texts(&svg);
+        let kc = ts.iter().filter(|t| t.kind == "key-code").map(|t| t.fs).fold(f64::MAX, f64::min);
+        let kl = ts.iter().filter(|t| t.kind == "key").map(|t| t.fs).fold(f64::MAX, f64::min);
+        assert!(kc >= 0.29 * r.cell, "{size}: the key code is {kc} px");
+        assert!(kl >= 0.24 * r.cell, "{size}: the key label is {kl} px");
+        if size != "Small" {
+            let cell = ts.iter().filter(|t| t.kind == "cat-code").map(|t| t.fs).fold(f64::MAX, f64::min);
+            assert!(kc > cell, "{size}: the key code {kc} is not larger than the cell code {cell}");
         }
     }
 }
@@ -1570,7 +1620,6 @@ fn no_note_names_the_highlighted_element_on_the_student_copy() {
     };
     // whole-word match: "tin" must not be found inside "actinide" (or "platinum"), which is not a
     // leak of the element named Tin
-    let has_word = |text: &str, word: &str| text.split(|c: char| !c.is_ascii_alphanumeric()).any(|w| w == word);
     for block in BLOCKS {
         for z in 1..=118 {
             let base = [s("block", block), s("labels", LABELS[2]), s("label_size", "Large"), s("highlight", data::symbol(z))];
@@ -1580,6 +1629,14 @@ fn no_note_names_the_highlighted_element_on_the_student_copy() {
             let name = data::name(z).to_lowercase();
             let sn = notes_of(&ssvg);
             assert!(!has_word(&sn, &name), "{block}/{}: a student note names it: {sn}", data::symbol(z));
+            if let Some(b) = british_name(z) {
+                assert!(!has_word(&sn, &b.to_lowercase()), "{block}/{}: a student note uses the British alias: {sn}", data::symbol(z));
+            }
+            // the answer fields carry neither name, alias nor the symbol (the prompt carries the typed symbol by design)
+            let blanks = texts(&ssvg).iter().filter(|t| t.kind == "blank").map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ").to_lowercase();
+            assert!(!has_word(&blanks, &name), "{block}/{}: the blank names it", data::symbol(z));
+            if let Some(b) = british_name(z) { assert!(!has_word(&blanks, &b.to_lowercase()), "{block}/{}: the blank uses the British alias", data::symbol(z)); }
+            assert!(!has_word(&blanks, &data::symbol(z).to_lowercase()), "{block}/{}: the blank carries the symbol as a word", data::symbol(z));
             let kn = notes_of(&ksvg);
             assert!(has_word(&kn, &name), "{block}/{}: the key does not name it: {kn}", data::symbol(z));
             assert!(!ssvg.contains(r#"data-o="answer""#), "{block}/{}", data::symbol(z));
@@ -1596,14 +1653,21 @@ fn the_cell_number_and_code_survive_a_real_66_percent_copy() {
         for style in ["Colour", "Print"] {
             let (svg, rep) = build_of(&[s("block", BLOCKS[2]), s("label_size", size), s("style", style)]);
             let cell = rep.cells.iter().find(|c| c.z == 13).expect("aluminium");
+            let ts = texts(&svg);
+            if size == "Small" {
+                assert_eq!(ts.iter().filter(|t| t.kind == "cat-code").count(), 0, "{style}: a cell code is drawn at Small");
+                assert!(has(&rep.notes, "Category codes are not drawn at the Small label size"), "{style}: {:?}", rep.notes);
+            } else {
+                assert!(ts.iter().any(|t| t.kind == "cat-code" && t.z == Some(13)), "{size}/{style}: no cell code");
+            }
             let (w, h) = svg_size(&svg);
             let png = to_png(&svg, 1.5).unwrap();
             let big = image::load_from_memory(&png).unwrap().to_rgba8();
             let img = image::imageops::resize(&big, (w as f64 * 0.66).round() as u32, (h as f64 * 0.66).round() as u32, image::imageops::FilterType::Lanczos3);
             let s = 0.66;
             let crop = |x0: f64, x1: f64, y0: f64, y1: f64| -> (usize, f64) {
-                let (x0, x1) = (((x0 * s).round() as u32 + 2).min(img.width() - 1), ((x1 * s).round() as u32).saturating_sub(2).min(img.width() - 1));
-                let (y0, y1) = (((y0 * s).round() as u32 + 2).min(img.height() - 1), ((y1 * s).round() as u32).saturating_sub(2).min(img.height() - 1));
+                let (x0, x1) = (((x0 * s).round() as u32 + 1).min(img.width() - 1), ((x1 * s).round() as u32).saturating_sub(1).min(img.width() - 1));
+                let (y0, y1) = (((y0 * s).round() as u32 + 1).min(img.height() - 1), ((y1 * s).round() as u32).saturating_sub(1).min(img.height() - 1));
                 let mut dark = 0usize;
                 let (mut top, mut bot) = (u32::MAX, 0u32);
                 for y in y0..=y1 {
@@ -1618,11 +1682,16 @@ fn the_cell_number_and_code_survive_a_real_66_percent_copy() {
                 }
                 (dark, if top == u32::MAX { 0.0 } else { (bot - top + 1) as f64 })
             };
-            let num = crop(cell.x0 + 1.0, cell.x0 + 0.42 * rep.cell, cell.y0 + 1.0, cell.y0 + 0.34 * rep.cell);
-            let code = crop(cell.x1 - 0.42 * rep.cell, cell.x1 - 1.0, cell.y0 + 1.0, cell.y0 + 0.34 * rep.cell);
-            println!("{size}/{style}: number {num:?}, code {code:?}");
-            assert!(num.0 >= 7 && num.1 >= 2.5, "{size}/{style}: the atomic number is {num:?} at 66 %");
-            assert!(code.0 >= 7 && code.1 >= 2.5, "{size}/{style}: the category code is {code:?} at 66 %");
+            let num = crop(cell.x0 + 1.0, cell.x0 + 0.55 * rep.cell, cell.y0 + 1.0, cell.y0 + 0.36 * rep.cell);
+            let sym = crop(cell.x0 + 0.15 * rep.cell, cell.x1 - 0.15 * rep.cell, cell.y0 + 0.42 * rep.cell, cell.y0 + 0.95 * rep.cell);
+            println!("{size}/{style}: number {num:?}, symbol {sym:?}");
+            assert!(num.0 >= 12 && num.1 >= 6.0, "{}/{}: the atomic number is {num:?} at 66 %", size, style);
+            assert!(sym.0 >= 12 && sym.1 >= 5.0, "{}/{}: the symbol is {sym:?} at 66 %", size, style);
+            if size != "Small" {
+                let code = crop(cell.x1 - 0.50 * rep.cell, cell.x1 - 1.0, cell.y0 + 1.0, cell.y0 + 0.36 * rep.cell);
+                println!("{size}/{style}: code {code:?}");
+                assert!(code.0 >= 12 && code.1 >= 4.0, "{}/{}: the category code is {code:?} at 66 %", size, style);
+            }
         }
     }
 }
@@ -1644,19 +1713,25 @@ fn the_highlight_outline_is_on_the_highlighted_cell() {
 
 #[test]
 fn print_halos_cover_the_number_the_symbol_and_the_code() {
-    let has_halo = |svg: &str, kind: &str, z: usize| -> bool {
-        svg.split("<text").skip(1).any(|p| {
+    let halo_width = |svg: &str, kind: &str, z: usize| -> Option<f64> {
+        svg.split("<text").skip(1).find_map(|p| {
             let tag = p.split('>').next().unwrap_or("");
-            attr(tag, "data-o").as_deref() == Some("halo") && attr(tag, "data-f").as_deref() == Some(kind) && attr(tag, "data-z").as_deref() == Some(&z.to_string())
+            if attr(tag, "data-o").as_deref() == Some("halo") && attr(tag, "data-f").as_deref() == Some(kind) && attr(tag, "data-z").as_deref() == Some(&z.to_string()) {
+                attr_f(tag, "stroke-width")
+            } else { None }
         })
     };
     for block in BLOCKS {
         for size in ["Small", "Medium", "Large"] {
             let (svg, rep) = build_of(&[s("block", block), s("label_size", size), s("style", "Print")]);
             for c in &rep.cells {
-                assert!(has_halo(&svg, "number", c.z), "{block}/{size}: Z {} has no number halo", c.z);
-                assert!(has_halo(&svg, "symbol", c.z), "{block}/{size}: Z {} has no symbol halo", c.z);
-                assert!(has_halo(&svg, "cat-code", c.z), "{block}/{size}: Z {} has no code halo", c.z);
+                assert_eq!(halo_width(&svg, "number", c.z), Some(2.0), "{block}/{size}: Z {} number halo width", c.z);
+                assert_eq!(halo_width(&svg, "symbol", c.z), Some(3.0), "{block}/{size}: Z {} symbol halo width", c.z);
+                if size != "Small" {
+                    assert_eq!(halo_width(&svg, "cat-code", c.z), Some(2.0), "{block}/{size}: Z {} code halo width", c.z);
+                } else {
+                    assert_eq!(halo_width(&svg, "cat-code", c.z), None, "{block}/{size}: a code halo at Small");
+                }
             }
         }
     }
@@ -1674,6 +1749,37 @@ fn the_bracketed_mass_number_rounds_and_the_block_predicate_refuses_off_table_nu
         assert!(!block_shows(block, 119), "block {block} shows Z 119");
     }
     for z in 1..=118 { assert!(block_shows(2, z), "the full block hides {z}"); }
+}
+
+#[test]
+fn the_grey_notes_survive_a_66_percent_copy() {
+    for size in ["Small", "Medium", "Large"] {
+        let (svg, _rep) = build_of(&[s("block", BLOCKS[2]), s("label_size", size), s("style", "Print")]);
+        let (w, h) = svg_size(&svg);
+        let png = to_png(&svg, 1.5).unwrap();
+        let big = image::load_from_memory(&png).unwrap().to_rgba8();
+        let img = image::imageops::resize(&big, (w as f64 * 0.66).round() as u32, (h as f64 * 0.66).round() as u32, image::imageops::FilterType::Lanczos3);
+        let mut g = Glyphs::new();
+        let ts = texts(&svg);
+        let cases: [(&str, &str, f64); 3] = [
+            ("foot", "Main-group valence", if size == "Large" { 100.0 } else { 140.0 }),
+            ("key-note", "Metalloids:", if size == "Large" { 100.0 } else { 140.0 }),
+            ("panel", "Highlighted element", if size == "Large" { 100.0 } else { 140.0 }),
+        ];
+        for (kind, needle, limit) in cases {
+            let t = ts.iter().find(|t| t.kind == kind && t.text.contains(needle))
+                .unwrap_or_else(|| panic!("{size}: no {kind} line with {needle:?}"));
+            let bx = g.ink(t).expect("a measured note");
+            let x0 = ((bx.0 * 0.66).floor() as u32).saturating_sub(1).min(img.width() - 1);
+            let x1 = ((bx.1 * 0.66).ceil() as u32 + 1).min(img.width() - 1);
+            let y0 = ((bx.2 * 0.66).floor() as u32).saturating_sub(1).min(img.height() - 1);
+            let y1 = ((bx.3 * 0.66).ceil() as u32 + 1).min(img.height() - 1);
+            let mut dark = 0;
+            for y in y0..=y1 { for x in x0..=x1 { if (img.get_pixel(x, y)[0] as f64) < limit { dark += 1; } } }
+            println!("{size}/{kind}: {dark} px below {limit}");
+            assert!(dark >= 2, "{size}/{kind}: the note has {dark} pixels below {limit} at 66 %");
+        }
+    }
 }
 
 #[test]

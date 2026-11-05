@@ -46,12 +46,14 @@
 //! as well as in the FAQ, so an exported sheet carries it.
 //!
 //! **What is an answer.** The highlighted element's name, atomic number, group, period, category
-//! and valence count are worked out from the typed symbol or number, so they are printed only under
-//! Show answers; the student copy keeps the table, the key, the prompt with what was typed, blank
-//! lines in place of those fields, and leaves the highlighted element's name out of its cell even
-//! when the other cells are named. Layout is reserved for the longer of the two variants, so both
-//! copies are the same size and the table never moves between them. The category codes are
-//! lowercase so a corner code cannot be read as an element symbol.
+//! and valence count are the panel's read-out, so that read-out is printed only under Show answers;
+//! the student copy keeps the table (Z is a given, and the category by its fill, with the code at
+//! Medium and Large), the key, the prompt with what was typed, and blank lines in place of the
+//! panel fields. It also leaves the highlighted
+//! element's name out of its cell even when the other cells are named, and no note names the
+//! element in any spelling. Layout is reserved for the longer of the two variants, so both copies
+//! are the same size and the table never moves between them. The category codes are lowercase so a
+//! corner code is distinct from the element symbols.
 use super::data;
 use super::ratesgraph::{text_w, wrap};
 use crate::figures::svg::{self, CategoryFills, Doc};
@@ -371,6 +373,9 @@ pub fn read(p: &Params) -> (Setup, Vec<String>) {
     if show_mass && labels == 1 {
         notes.push("Atomic masses are not drawn with Symbols only; choose Numbers and symbols.".to_string());
     }
+    if size == 2 {
+        notes.push("Category codes are not drawn at the Small label size; use Medium or Large.".to_string());
+    }
     let answers = p.b(SHOW_ANSWERS);
     let trimmed = typed.trim();
     let typed_number = !trimmed.is_empty() && trimmed.chars().all(|c| c.is_ascii_digit()) && highlight.is_some();
@@ -525,8 +530,9 @@ pub fn build(p: &Params) -> (String, Report) {
     let edge_w = if print { 1.2 } else { 0.9 };
     let grid_line = if print { "#111111" } else { "#111111" };
 
-    let fs_num = 0.26 * cell;
-    let fs_sym = 0.30 * cell;
+    let small = lf < 0.9;
+    let fs_num = if small { 0.34 } else { 0.26 } * cell;
+    let fs_sym = if small { 0.34 } else { 0.30 } * cell;
     let fs_name = 0.128 * cell;
     let fs_code = 0.26 * cell;
     let fs_mass = 0.16 * cell;
@@ -534,9 +540,9 @@ pub fn build(p: &Params) -> (String, Report) {
     let fs_gap = 0.19 * cell;
     let fs_frow = 0.20 * cell;
     let fs_panel = 0.22 * cell;
-    let fs_key = 0.21 * cell;
-    let fs_title = 0.23 * cell;
-    let fs_note = 0.19 * cell;
+    let fs_key = 0.27 * cell;
+    let fs_title = 0.28 * cell;
+    let fs_note = 0.21 * cell;
 
     let ncols = if st.block == 0 { 8 } else { 18 };
     let groups: Vec<u8> = if st.block == 0 { vec![1, 2, 13, 14, 15, 16, 17, 18] } else { (1..=18).collect() };
@@ -583,8 +589,8 @@ pub fn build(p: &Params) -> (String, Report) {
     let absent: Vec<&str> = (0..10).filter(|i| !present[*i]).map(|i| CATS[i]).collect();
     let mut src_msgs: Vec<String> = vec![
         "Metalloids: the staircase B, Si, Ge, As, Sb, Te, Po; conventions differ: OpenStax Chemistry 2e names the first six, and some tables make Po a post-transition metal (the RSC's own page for Po classes it as a metal).".into(),
-        "Names use the US spellings of OpenStax Chemistry 2e; IUPAC and the RSC print the British spellings (aluminium, caesium).".into(),
-        format!("The corner codes are lowercase, so a code such as {} cannot be read as an element symbol.", CAT_CODES[3]),
+        "Names use the US spellings of OpenStax Chemistry 2e; IUPAC and the RSC spell two of these names differently.".into(),
+        "The corner codes are two lowercase letters, distinct from the one- or two-letter element symbols.".into(),
     ];
     if st.key && !absent.is_empty() { src_msgs.push(format!("Not in this view: {}.", absent.join(", "))); }
     let src_lines: Vec<String> = src_msgs.iter().flat_map(|m| wrap(m, fs_note, text_w_max)).collect();
@@ -709,21 +715,25 @@ pub fn build(p: &Params) -> (String, Report) {
             x0 + 0.5, y0 + 0.5, cell - 1.0, cell - 1.0, cf.fill(cat)
         ));
         if st.labels != 1 {
-            d.raw(&cell_text(x0 + 0.08 * cell, y0 + 0.26 * cell, fs_num, "start", ink, &z.to_string(), "number", z, true, print, 2.0));
+            let ny = if small { 0.32 } else { 0.26 };
+            d.raw(&cell_text(x0 + 0.08 * cell, y0 + ny * cell, fs_num, "start", ink, &z.to_string(), "number", z, true, print, 2.0));
         }
         if st.show_mass && lf > 1.2 && st.labels != 1 {
             if let Some(m) = mass_text(z) {
                 d.raw(&cell_text(x0 + 0.08 * cell, y0 + 0.445 * cell, fs_mass, "start", ink, &m, "mass", z, false, print, 2.0));
             }
         }
-        d.raw(&cell_text(x0 + cell / 2.0, y0 + 0.735 * cell, fs_sym, "middle", ink, data::symbol(z), "symbol", z, true, print, 3.0));
+        let sy = if small { 0.80 } else { 0.735 };
+        d.raw(&cell_text(x0 + cell / 2.0, y0 + sy * cell, fs_sym, "middle", ink, data::symbol(z), "symbol", z, true, print, 3.0));
         // every one of the 118 names fits the Large cell (the fit test proves it); the guard was dead
         let named = st.labels == 2 && lf > 1.2;
         // on the student copy the highlighted cell's name is the answer the panel asks for
         if named && (ans || st.highlight != Some(z)) {
             d.raw(&cell_text(x0 + cell / 2.0, y0 + 0.938 * cell, fs_name, "middle", ink, data::name(z), "name", z, false, print, 2.5));
         }
-        d.raw(&cell_text(x0 + cell - 0.07 * cell, y0 + 0.26 * cell, fs_code, "end", ink, CAT_CODES[cat], "cat-code", z, true, print, 2.0));
+        if !small {
+            d.raw(&cell_text(x0 + cell - 0.07 * cell, y0 + 0.26 * cell, fs_code, "end", ink, CAT_CODES[cat], "cat-code", z, true, print, 2.0));
+        }
         cells.push(Drawn { z, cat, col, row: pl.row, x0, y0, x1: x0 + cell, y1: y0 + cell });
     }
 
@@ -793,7 +803,7 @@ pub fn build(p: &Params) -> (String, Report) {
         let cy = y2 + 0.30 * fs + 0.30 * cell;
         for (i, line) in caveat_lines.iter().enumerate() {
             d.raw(&format!(
-                r##"<text x="{grid_left:.2}" y="{:.2}" font-size="{fs_note:.2}" text-anchor="start" font-family="{}" fill="{soft}" data-o="trend-note">{}</text>"##,
+                r##"<text x="{grid_left:.2}" y="{:.2}" font-size="{fs_note:.2}" text-anchor="start" font-family="{}" fill="{ink}" data-o="trend-note">{}</text>"##,
                 cy + i as f64 * 1.45 * fs_note, super::FONT, svg::esc(line)
             ));
         }
@@ -810,14 +820,14 @@ pub fn build(p: &Params) -> (String, Report) {
         let by = panel_top + panel_pad + (i as f64 + 0.78) * panel_lh;
         d.raw(&format!(
             r##"<text x="{:.2}" y="{by:.2}" font-size="{fs_panel:.2}" text-anchor="start" font-family="{}" fill="{}" data-o="{kind}">{}</text>"##,
-            grid_left + panel_pad, super::FONT, if *kind == "panel" { soft } else { ink }, svg::esc(line)
+            grid_left + panel_pad, super::FONT, ink, svg::esc(line)
         ));
     }
 
     // --- the fixed valence rule
     for (i, line) in foot_lines.iter().enumerate() {
         d.raw(&format!(
-            r##"<text x="{grid_left:.2}" y="{:.2}" font-size="{fs_note:.2}" text-anchor="start" font-family="{}" fill="{soft}" data-o="foot">{}</text>"##,
+            r##"<text x="{grid_left:.2}" y="{:.2}" font-size="{fs_note:.2}" text-anchor="start" font-family="{}" fill="{ink}" data-o="foot">{}</text>"##,
             foot_top + 0.75 * fs_note + i as f64 * 1.45 * fs_note
                 + if masses_on && i >= mass_at { 0.10 * cell } else { 0.0 }
                 + if !st.key && i >= src_at { 0.10 * cell } else { 0.0 }, super::FONT, svg::esc(line)
@@ -842,7 +852,7 @@ pub fn build(p: &Params) -> (String, Report) {
             ));
             swatches.push((*i, Bx(x, x + sw, sy, sy + sh)));
             // the code inside the swatch, so the hatch is never the only clue
-            let fs_sw = 0.22 * cell;
+            let fs_sw = 0.34 * cell;
             let (cx, cy) = (x + sw / 2.0, sy + sh / 2.0 + 0.36 * fs_sw);
             if print {
                 d.raw(&format!(
@@ -864,7 +874,7 @@ pub fn build(p: &Params) -> (String, Report) {
         let ny = key_top + key_notes_at;
         for (i, line) in src_lines.iter().enumerate() {
             d.raw(&format!(
-                r##"<text x="{grid_left:.2}" y="{:.2}" font-size="{fs_note:.2}" text-anchor="start" font-family="{}" fill="{soft}" data-o="key-note">{}</text>"##,
+                r##"<text x="{grid_left:.2}" y="{:.2}" font-size="{fs_note:.2}" text-anchor="start" font-family="{}" fill="{ink}" data-o="key-note">{}</text>"##,
                 ny + 0.75 * fs_note + i as f64 * 1.45 * fs_note, super::FONT, svg::esc(line)
             ));
         }
@@ -873,7 +883,7 @@ pub fn build(p: &Params) -> (String, Report) {
     // --- the editor notes, drawn so a refusal is visible as well as reported
     for (i, line) in note_lines.iter().enumerate() {
         d.raw(&format!(
-            r##"<text x="{grid_left:.2}" y="{:.2}" font-size="{fs_note:.2}" text-anchor="start" font-family="{}" fill="{soft}" data-o="note">{}</text>"##,
+            r##"<text x="{grid_left:.2}" y="{:.2}" font-size="{fs_note:.2}" text-anchor="start" font-family="{}" fill="{ink}" data-o="note">{}</text>"##,
             notes_top + 0.20 * cell + 0.75 * fs_note + i as f64 * 1.45 * fs_note, super::FONT, svg::esc(line)
         ));
     }
