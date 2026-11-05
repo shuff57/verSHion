@@ -218,8 +218,8 @@ particle-diagram__defaults 0caa5b4c903bb9c2
 particle-diagram__start 9575a1521722cc97
 pedigree__defaults fafbaa542594d64c
 pedigree__start fafbaa542594d64c
-periodic-table__defaults 49163d2968f2afb7
-periodic-table__start 49163d2968f2afb7
+periodic-table__defaults f118cda5d266d974
+periodic-table__start f118cda5d266d974
 perspective-grid__defaults d910310cb83e197f
 perspective-grid__start d910310cb83e197f
 ph-reading__defaults 030196b14885ef6b
