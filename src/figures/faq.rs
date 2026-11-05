@@ -41,6 +41,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "soil-texture" => SOIL_TEXTURE,
         "photosynthesis" => PHOTOSYNTHESIS,
         "leaf-cross-section" => LEAF_CROSS_SECTION,
+        "xylem-phloem" => XYLEM_PHLOEM,
         // chemistry
         "bohr-model" => BOHR_MODEL,
         "gas-syringe" => GAS_SYRINGE,
@@ -57,6 +58,9 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "gas-law-graphs" => GAS_LAW_GRAPHS,
         "equilibrium-graphs" => EQUILIBRIUM_GRAPHS,
         "buffer-curves" => BUFFER_CURVES,
+        "boltzmann-distribution" => BOLTZMANN_DISTRIBUTION,
+        "vsepr-shapes" => VSEPR_SHAPES,
+        "periodic-table" => PERIODIC_TABLE,
         "orbital-diagram" => ORBITAL_DIAGRAM,
         "particle-diagram" => PARTICLE_DIAGRAM,
         "ph-reading" => PH_READING,
@@ -184,6 +188,9 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "er-diagram" => ER_DIAGRAM,
         "network-topology" => NETWORK_TOPOLOGY,
         "dot-plot" => DOT_PLOT,
+        "ogive" => OGIVE,
+        "bar-chart" => BAR_CHART,
+        "frequency-table" => FREQUENCY_TABLE,
         "normal-curve" => NORMAL_CURVE,
         "sampling-distribution" => SAMPLING_DISTRIBUTION,
         "rejection-region" => REJECTION_REGION,
@@ -1600,6 +1607,60 @@ mod tests {
     }
 }
 
+const OGIVE: &[Faq] = &[
+    Faq {
+        q: "Why are the points at the upper class boundaries?",
+        a: "A cumulative frequency counts every value up to the end of a class, and only at the upper boundary are all of that class's values included. Plotting at the midpoints, a common mistake, shifts the whole curve half a class to the left. The curve starts at 0 on the lower boundary of the first class, because no value lies below it, and ends at the total (1 or 100% on a relative or percent axis).",
+    },
+    Faq {
+        q: "Which class does a value on a boundary go in?",
+        a: "For raw values choose with \"A value on a class boundary goes\", exactly as on the histogram, which makes the same classes from the same values. By default 60 goes in 60 \u{2264} x < 70, so the point at 60 counts the values below 60; with the other choice it counts the values at or below 60. For a typed table the boundaries are yours: type class boundaries such as 39.5 to 49.5, not stated limits such as 40 to 49.",
+    },
+    Faq {
+        q: "How exact is a percentile read from the ogive?",
+        a: "It is an estimate. The curve is straight inside each class, as if the values were spread evenly across it, so the reading is a straight-line interpolation: the 40th percentile of 50 values is where the curve reaches 20 (p/100 times n). Some courses, and OpenStax, instead count p/100 times (n + 1) values up the sorted list, so their percentile can differ by up to one class from this curve; the figure always uses p/100 times n. From raw values it can differ from a percentile worked out from the sorted list. Where the curve is flat (an empty class) every value along the flat part fits; the figure reads the lowest and a note says so.",
+    },
+    Faq {
+        q: "Why does it refuse my table?",
+        a: "Every value must be counted exactly once, so the classes must meet with no gaps or overlaps, every class needs both boundaries (no open-ended \"90+\" class), and each frequency is a whole number, 0 or more. The note names the line and gives a corrected line to type. A gap of 1 between 40 to 49 and 50 to 59 means stated limits for whole numbers: use the boundaries halfway between, 39.5 to 49.5. Classes may have different widths; unlike a histogram, an ogive needs no density adjustment.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The cumulative column, the guide lines and the read-off values are blanked and the numbered questions get answer lines. Turn off \"Student copy shows the ogive\" as well to leave empty axes for students to plot the points. Student + key saves both versions.",
+    },
+    Faq {
+        q: "Which vertical axis should I use?",
+        a: "Cumulative frequency counts values and ends at the total. Cumulative relative frequency divides by the total, so it ends at 1, and cumulative percent ends at 100%; on those a percentile is read straight off the axis. The curve has the same shape on all three.",
+    },
+];
+
+const FREQUENCY_TABLE: &[Faq] = &[
+    Faq {
+        q: "Why do the relative frequencies add to 100%?",
+        a: "Every value is counted once, so the frequencies add to n. Relative frequency is each count divided by that same n, so f1/n + f2/n + ... = n/n = 1, or 100%. The Total row shows exactly n and exactly 100%. A percent is rounded half up from the exact integers f and n, never from a calculator's decimal, so the printed cells can add to something other than 100% (99.9%, 100.5%, or more when many cells are rounded); the key says when that happens and gives the rounded sum. Choose Fraction for the exact shares, or Decimal for proportions such as 0.05.",
+    },
+    Faq {
+        q: "What is a class boundary?",
+        a: "A boundary is where one class ends and the next begins. The figure writes each class as \"a to <b\": a is included and b is not, so 40 to <50 holds 40 but not 50, and 50 belongs to 50 to <60. A value exactly on an inner boundary goes in the class to its right, the same rule as the histogram, so the same values make the same classes. The last class is written \"a to b\" and includes its upper boundary, which is above the largest value, so no value is left without a class. A class width of 10 starting at 40 gives 40 to <50, 50 to <60, and so on.",
+    },
+    Faq {
+        q: "Why draw a tally column?",
+        a: "The tally shows the counting itself, one mark per value and a diagonal across each group of five, so a reader can check a frequency without trusting it. It also makes the table usable as a tally-and-frequency exercise: the student copy blanks the tally, the frequencies, the relative frequencies and the cumulative frequencies, and leaves the values or classes and the table rules to fill in. Counts above 25 are not tallied: the column is fixed at the width of 25 marks, and a longer tally would not fit; the key says so.",
+    },
+    Faq {
+        q: "What does cumulative frequency mean?",
+        a: "The cumulative frequency of a row is the number of values at or below the top of that row: the running sum of the frequency column. It starts at the first row's frequency and ends at n, so the last cumulative frequency is the total number of values. It answers \"how many values are no more than this?\", which is what an ogive plots against the upper class boundaries. For raw values it is the count up to and including that value; for classes it counts every value in the class and all the classes before it.",
+    },
+    Faq {
+        q: "What is cumulative relative frequency?",
+        a: "It is the running total of the relative-frequency column: after each row, the share of all values at or below that row. It starts at the first row's relative frequency and ends at exactly 1, or 100%. Choose Relative frequency = Decimal to see proportions such as 0.05, 0.10, ... 1.00, matching the OpenStax grouped table; choose Percent for 5.0%, ... 100.0%, or Fraction for exact fractions. The Total row shows 1, 1.00 or 100% in the same unit, and the student copy blanks the whole column.",
+    },
+    Faq {
+        q: "When should I use grouped classes instead of raw values?",
+        a: "Use raw values when the data is discrete and repeats, such as the number of siblings or a score out of 10: each distinct value gets its own row, in ascending order. Use grouped classes when the data is continuous or has many different values, such as heights, times or incomes, because one row per value would be too long to read. Grouped classes also make the table match a histogram: the automatic class width is the histogram's own choice for the same values. A value on a boundary goes in the class to its right, and the last class closes at its upper boundary. For extremely small ranges the table uses a relative-tolerance width so it does not fill with empty classes; the histogram's shared helper still uses an absolute tolerance, so a tiny-range histogram can differ.",
+    },
+];
+
 const HISTOGRAM: &[Faq] = &[
     Faq {
         q: "How do I get a student copy to draw on?",
@@ -2498,6 +2559,33 @@ const LOGIC_CIRCUIT: &[Faq] = &[
     Faq {
         q: "Why is the truth table missing?",
         a: "A table has one row for every combination of inputs, so it is limited to 5 inputs (32 rows). A circuit with more inputs still draws; turn the table off to hide the note.",
+    },
+];
+
+const BAR_CHART: &[Faq] = &[
+    Faq {
+        q: "How is a bar chart different from a histogram?",
+        a: "A bar chart shows categories (ways to get to school, favourite fruit), so its bars stand apart with gaps and the category axis has no scale. A histogram shows a number variable cut into intervals on a number line, so its bars touch. Use the Histogram figure for measurements.",
+    },
+    Faq {
+        q: "How do I type the data?",
+        a: "One category per line: its name, a comma, then how many (Walk, 12). A second count after another comma (Walk, 12, 9) draws two groups side by side. A first line of headings (Way, Boys, Girls) names the category axis and the groups; a group name that holds a number (2019) cannot go on that line, so delete it and type the names in Group 1 name and Group 2 name. A comma with no space after it, between groups of three digits, is a thousands separator, so Walk, 1,200 is 1200 (the editor says so and how to write two counts instead), and so is Walk, 1 200 with spaces between the groups. Walk, 1,200, 3 is 1200 and 3. A name typed twice is one category: its counts are added and the editor says so. Counts must be whole numbers, 0 or more; a count written as a word (twelve) or with a word after it (12 students) is refused with the line named.",
+    },
+    Faq {
+        q: "Should the bars show frequency or relative frequency?",
+        a: "Frequency is the count in each category. Relative frequency is each count as a percent of its group's total, so one group's bars add to 100%. To compare two groups of different sizes, use relative frequency: each group is a percent of its own total. Printed percents are rounded, so they can add to 99% or 101%; the editor notes it and says which Decimals setting makes them add to exactly 100%.",
+    },
+    Faq {
+        q: "What order should the bars go in?",
+        a: "Categories have no built-in order, so any order is correct; tallest first makes the biggest categories easy to compare. Keep ordered words (Never, Sometimes, Often) as typed. Pareto sorts tallest first and adds a cumulative percent line that ends at 100%. Equal bars keep their typed order.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn off Show answers. The “Student copy leaves out” control picks what students supply: the values on the bars (they read them from the scale), the bars (they draw them from a table of the counts, and fill in the totals and percents), or the scale numbers (they number the axis from the values). The cumulative line, its axis and the answers to the optional questions are left out too. Student + key saves both.",
+    },
+    Faq {
+        q: "Why does the editor warn when the scale does not start at 0?",
+        a: "A bar's length stands for its value, so the axis must start at 0. Starting higher makes small differences look large: a bar twice as long no longer means twice as many. The warning stays while Scale start is above 0, which is useful for teaching how graphs mislead.",
     },
 ];
 
@@ -3816,6 +3904,60 @@ const BUFFER_CURVES: &[Faq] = &[
     },
 ];
 
+const BOLTZMANN_DISTRIBUTION: &[Faq] = &[
+    Faq {
+        q: "Why does a hotter curve peak further right and lower?",
+        a: "The most probable speed is vp = \u{221a}(2RT/M), so raising the temperature moves the peak to the right in proportion to \u{221a}T. The peak height falls in proportion to 1/\u{221a}T, so the curve flattens and widens, while the area under it stays exactly 1: every molecule has some speed, and raising T only spreads them over a wider range. The mean speed \u{221a}(8RT/(\u{3c0}M)) and the rms speed \u{221a}(3RT/M) also grow as \u{221a}T. Because vp < mean < rms (in the ratio 1 : 1.128 : 1.225), the peak is always to the left of the mean and rms speeds.",
+    },
+    Faq {
+        q: "What is the shaded tail, and how is its fraction worked out?",
+        a: "It is the fraction of molecules whose kinetic energy is at or above the activation energy Ea. For the three-dimensional Maxwell-Boltzmann energy distribution that fraction is F(Ea) = (2/\u{221a}\u{3c0}) \u{221a}x exp(\u{2212}x) + erfc(\u{221a}x), with x = Ea/(RT). It is exactly the area under the speed curve to the right of v = \u{221a}(2Ea/M), because the kinetic energy is \u{00bd}Mv\u{00b2} per mole; the key shades that area on the hottest curve. The shaded area approximates the plotted range only, within about 0.01 percentage point (the axis ends where the missing tail is invisible); the percentage printed is the exact fraction to infinity, so the two differ by that invisible tail and by the drawing's sampling. At Ea = 0 the fraction is 1, and at a fixed Ea it rises as T rises, which is why reaction rates increase with temperature. erfc is computed here by the Abramowitz-Stegun approximation 7.1.26, whose absolute error in erf is below 1.5 \u{d7} 10\u{207b}\u{2077}; in the far tail its relative error can reach about 1.5 \u{d7} 10\u{207b}\u{00b3}, so below 0.1 % the key prints at most two significant figures (one if Decimals is 0), and a percentage too small for the arithmetic is written \u{201c}less than 0.001\u{201d} rather than as a false zero.",
+    },
+    Faq {
+        q: "Why is the y axis in s/m, and why are the curves not the same height?",
+        a: "The y axis is the true probability density: the fraction of molecules per unit speed, whose unit is 1/(m/s) = s/m. The curves are not rescaled, so a hotter curve is lower and wider and every curve still encloses area 1. Rescaling them all to the same peak height would change the meaning of the y axis; a figure that did that would have to label it \"relative number of molecules\" instead. This one says the density, so the heights can be compared directly.",
+    },
+    Faq {
+        q: "Why do real gases deviate from this distribution at high pressure?",
+        a: "The Maxwell-Boltzmann distribution is the ideal-gas result: it assumes molecules of negligible volume that do not attract or repel one another. At high pressure the molecules are close together, their own volume and their intermolecular attractions matter, and the speeds depart from this curve; at very low temperatures light gases such as hydrogen also show quantum effects. The figure is therefore the ideal-gas distribution, the one a chemistry course uses, and it is exact for that model.",
+    },
+    Faq {
+        q: "What do the dots and the dash-dot guide mark?",
+        a: "On the key, a dot on each curve is its peak, at the most probable speed vp, and the short tick below it marks the same speed on the speed axis. The dash-dot guide from the axis to the hottest curve marks that curve's rms speed. The switch Mark vp and rms turns them off. They are on the key only: Show answers off omits them, because otherwise the blank vp and rms cells in the speeds table could be read off the axis. The student copy keeps only the guide at a typed marked speed, whose density is the blank value.",
+    },
+    Faq {
+        q: "What does the student copy leave out?",
+        a: "Show answers off keeps the axes, the curves and their temperature labels, the gas and its molar mass, the dashed line at Ea, and the guide at a marked speed. It omits the vp dots, the vp axis ticks and the rms guide, so the blank speed cells cannot be read off the axis. It shows the speeds table with blank cells and turns the fraction above Ea and the density at the marked speed into blank lines, and it does not shade the tail, because the shaded area is the answer. The key prints vp, the mean speed and the rms speed for every curve, the fraction above Ea at each temperature, and f at the marked speed.",
+    },
+];
+
+const VSEPR_SHAPES: &[Faq] = &[
+    Faq {
+        q: "Why is water bent rather than linear?",
+        a: "Oxygen has two bonding pairs and two lone pairs, so there are four electron domains around it. Four domains are tetrahedral, but only the two O–H bonds count towards the molecular shape: the two lone pairs take two of the tetrahedral directions and the two hydrogen atoms the other two. The lone pairs repel more strongly than the bonding pairs, so the H–O–H angle is compressed from the tetrahedral 109.5° to about 104.5°. The atoms are therefore not in a straight line: the molecule is bent. The figure draws 104.5° for water and never labels it 109.5°; the tetrahedral angle belongs to the four electron domains, not to the H–O–H angle.",
+    },
+    Faq {
+        q: "Why is ammonia a pyramid rather than flat?",
+        a: "Nitrogen has three N–H bonds and one lone pair, so there are four electron domains. They take a tetrahedral arrangement, but only three of the four directions end at hydrogen atoms; the fourth holds the lone pair. The three hydrogen atoms therefore sit at the corners of a triangular pyramid with nitrogen at the apex, and the H–N–H angle is about 107°, a little less than the tetrahedral 109.5° because the lone pair repels the bonding pairs more strongly. A flat NH3 with 120° angles would put the lone pair in the same plane and leave the domains closer together, which is not what the electron pairs do.",
+    },
+    Faq {
+        q: "What does a lone pair do to a bond angle?",
+        a: "A lone pair is held by only one nucleus, so its electron cloud spreads out more than a bonding pair, which is pulled between two nuclei. The repulsion order is lone pair–lone pair > lone pair–bonding pair > bonding pair–bonding pair. Adding a lone pair therefore squeezes the angle between the remaining bonds: NH3 has about 107° instead of 109.5°, and H2O about 104.5°. Two lone pairs squeeze harder than one. A double or triple bond also repels more than a single bond, but this ball-and-stick model draws single sticks only, so it does not show that effect. The lone pairs are always on the central atom in this figure; the terminal atoms have no lone pairs drawn, and each pair is drawn as two dots on a short dashed stick pointing where it sits.",
+    },
+    Faq {
+        q: "Why is sulfur hexafluoride octahedral?",
+        a: "Sulfur has six bonding pairs and no lone pairs in SF6, so there are six electron domains. The arrangement that keeps six directions as far apart as possible is the octahedron: one bond along each of +x, −x, +y, −y, +z and −z, with 90° between neighbours. All six S–F bonds are equivalent. Sulfur is in period 3 and can have more than eight valence electrons around it (an expanded octet), which is why SF6 exists; the figure shows the shape, not the bonding theory. The same octahedral set of six domains with two lone pairs in the axial positions gives the square-planar shape of XeF4.",
+    },
+    Faq {
+        q: "Why is the electron-domain geometry not the same as the molecular shape?",
+        a: "The electron-domain geometry counts every electron domain around the central atom, bonding pairs and lone pairs alike, because they all repel. The molecular shape describes only where the atoms are, so it ignores the lone pairs. NH3 has four tetrahedral domains but a trigonal-pyramidal shape; H2O has four tetrahedral domains but is bent; XeF4 has six octahedral domains but is square planar; SF4 has five trigonal-bipyramidal domains but is a see-saw. The key prints both names; the student copy leaves both blank so the difference has to be worked out from the AX count and the lone pairs. The figure only draws an angle arc when the orthographic projection shows the printed 3-D angle on the page (within 0.4°); turning and tilting can foreshorten the sticks, and then the arc is left off and the panel still names the angle. The student copy draws no arc at all, because the angle is the answer it leaves blank.",
+    },
+    Faq {
+        q: "Why does the model show no double bonds or resonance, and no real bond lengths?",
+        a: "It is a simplified ball-and-stick model, not a structural formula. Atoms are circles joined by single sticks, so bond order is not shown: a double bond, a triple bond and a delocalised resonance structure would all look like one stick here. The molecules in this figure are drawn with single bonds, and the sticks do not encode real bond lengths or bond energies; they are only long enough to separate the atoms. Each lone pair is a pair of dots on a short dashed stick pointing where the pair truly projects; when that projection lands on a bond, collapses to a point, sits behind a nearer atom or would put two pairs on top of each other, the pair is left off and the panel says so. It is not a full electron-density lobe and not a mark on the central ball. The angles are the VSEPR angles written into the coordinates, not measurements from a real molecule, and SF4's axial bonds are drawn at 90° for simplicity rather than bent slightly away from the lone pair.",
+    },
+];
+
 const GAS_LAW_GRAPHS: &[Faq] = &[
     Faq {
         q: "Which graph shows which law?",
@@ -4056,11 +4198,11 @@ const SOIL_TEXTURE: &[Faq] = &[
     },
     Faq {
         q: "What do I type, and when is the figure refused?",
-        a: "Type any two of sand, silt and clay as percents (up to 2 decimals; 40, 40.5, 40,5 and 40 % all work); the third is worked out as 100 minus the other two. If you type all three they must add to 100: a total from 99.5 to 100.5 is accepted because lab sheets round, and the three are scaled in proportion so that they add to exactly 100 (to the hundredth; for example 52.3, 28 and 20 become 52.14, 27.92 and 19.94, which is sandy loam). The figure prints and classifies the scaled values, and the editor note and the key say what was typed and that it was scaled. A second sample works the same way and is plotted with a numbered tag. The figure refuses, and says why in the picture and in the editor note, when a value is not a number written with the digits 0 to 9, is negative, is above 100, has more than 2 decimals, when two values add to more than 100 (the third would be negative), when three typed values do not add to a total from 99.5 to 100.5, or when fewer than two are typed. Each refusal quotes what you typed and ends with a change that draws, for example clearing the silt box. Name the regions reads no sample, so a bad value there is not an error.",
+        a: "Type any two of sand, silt and clay as percents (up to 2 decimals; 40, 40.5, 40,5 and 40 % all work); the third is worked out as 100 minus the other two. If you type all three they must add to 100: a total from 99.5 to 100.5 is accepted because lab sheets round, and the three are scaled in proportion so that they add to exactly 100 (to the hundredth; for example 52.3, 28 and 20 become 52.14, 27.92 and 19.94, which is sandy loam). The figure prints and classifies the scaled values, and the student copy, the key and the editor note all say what was typed and that it was scaled. A second sample works the same way and is plotted with a numbered tag. The figure refuses, and says why in the picture and in the editor note, when a value is not a number written with the digits 0 to 9, is negative, is above 100, has more than 2 decimals, when two values add to more than 100 (the third would be negative), when three typed values do not add to a total from 99.5 to 100.5, or when fewer than two are typed. Each refusal quotes what you typed and ends with a change that draws, for example clearing the silt box. Name the regions reads no sample, so a bad value there is not an error.",
     },
     Faq {
         q: "What happens when a sample is exactly on a line?",
-        a: "The point is drawn exactly where its percentages say, and the Manual's limits already say which class it is: a sample at sand 52 %, clay 20 % (silt 28 %) is loam, because loam allows 52 % sand or less and 28 % silt or more, while sandy loam needs more than 52 % sand and sandy clay loam needs less than 28 % silt. The key names that class, outlines it, and says which classes the line is between (on a line between sandy loam, loam and sandy clay loam; the limits in the Soil Survey Manual make it loam); the editor note says it too. The student copy prints nothing about it, so a student copy should not put a sample on a line: the editor note warns when one does. When the dot only touches a line without being on it, the percentages decide, because the classification is exact arithmetic on the typed digits.",
+        a: "The point is drawn exactly where its percentages say, and the Manual's limits already say which class it is: a sample at sand 52 %, clay 20 % (silt 28 %) is loam, because loam allows 52 % sand or less and 28 % silt or more, while sandy loam needs more than 52 % sand and sandy clay loam needs less than 28 % silt. The key names that class, outlines it, and says which classes the line is between (on a line between sandy loam, loam and sandy clay loam; the limits in the Soil Survey Manual make it loam); the editor note says it too. The student copy prints nothing about it, so a student copy should not put a sample on a line: the editor note warns when one does, and also when the dot covers a line (a sample within about one marker radius of a line, where the dot hides which side it is on). When the dot only touches a line without being on it, the percentages decide, because the classification is exact arithmetic on the typed digits.",
     },
     Faq {
         q: "How do I read the triangle, and what are the construction lines?",
@@ -4072,7 +4214,7 @@ const SOIL_TEXTURE: &[Faq] = &[
     },
     Faq {
         q: "Why are some regions labelled with letters, and how does Print work?",
-        a: "A region prints its full name (on one or two lines) only if the name fits inside it with a margin and clear of the sample and of every construction line; otherwise it prints the standard abbreviation (S, LS, SL, L, SiL, Si, SCL, CL, SiCL, SC, SiC, C), and the legend under the triangle names every abbreviation. A label never covers a construction line: when the lines cut a region into pieces too small for even the abbreviation, the label is printed in a clear place nearby with a short leader from a dot inside the region. Sand, loamy sand and silt are always named in one row below the bottom edge, each on a short leader that starts at the edge under its region, so that the crowded bottom corners stay clear for the sample and its lines (the Manual prints them inside; loamy sand is a thin sliver). Abbreviations only forces letters for every region. Print is black, white and grey only: the twelve classes use four hatches (diagonal lines, cross-hatch, dots, vertical lines; the plain fill and the horizontal lines are not used so that no hatch can hide a construction line) and no two classes that touch use the same one. Construction lines are drawn black on a white strip, and the gridlines are dark enough to survive a 66 % grey copy.",
+        a: "A region prints its full name (on one or two lines) only if the name fits inside it with a margin and clear of the sample and of every construction line; otherwise it prints the standard abbreviation (S, LS, SL, L, SiL, Si, SCL, CL, SiCL, SC, SiC, C), and the legend under the triangle names every abbreviation. A label always stays inside the region it names. When the construction lines leave no clear place for even the abbreviation, the label sits on its white plate over a line, which then shows a gap under the label, as on a printed textbook triangle; the abbreviation is tried first, at the place that hides the least line (at most 30 px in all and 40 % of any one line), and the plate never sits on a sample, a tag or a landing dot, or within 12 px beyond the dot at either end of a line, so every line still shows where it leaves the sample and where it meets its axis. A region too small even for that gets its abbreviation one size smaller. Only when two samples crowd one small class may a smaller last-resort abbreviation come to 4 px from a tag, just off a marker's white ring, 2 px past the dot at either end of a line, and hide more than 30 px. If even that fails, the editor note names the class and where its region is, and the legend names it. Sand, loamy sand and silt are named in one row below the bottom edge, each on a short leader that starts at the edge under its region, so that the crowded bottom corners stay clear for the sample and its lines (the Manual prints them inside; loamy sand is a thin sliver); when two samples crowd a bottom corner so that no leader place is clear, the name goes inside its region by the rules above. With two samples every marker gets a number tag. A tag standing alone beside its marker is on the far side of it from the other marker, or nearer its own marker by the marker's radius and 4 px; otherwise it stands farther off on a short leader to its marker. A tag always stands inside the triangle, so a sample number never mixes into an axis scale; in a crowded corner it may stand farther off on a longer leader, or on its white plate over a construction line (its leader crossing a line only at a clear angle). Two samples whose markers touch share one tag, 1, 2. Only when two samples crowd a corner of the triangle at a large label size can a tag find no place at all; then the editor note says which sample has no tag, and a smaller label size gives it one. Abbreviations only forces letters for every region. Print is black, white and grey only: the twelve classes use four hatches (diagonal lines, cross-hatch, dots, vertical lines; the plain fill and the horizontal lines are not used so that no hatch can hide a construction line) and no two classes that touch use the same one. Construction lines are drawn black on a white strip, and the gridlines are dark enough to survive a 66 % grey copy.",
     },
 ];
 
@@ -4099,6 +4241,29 @@ const LEAF_CROSS_SECTION: &[Faq] = &[
     },
 ];
 
+const XYLEM_PHLOEM: &[Faq] = &[
+    Faq {
+        q: "What do the two cross-sections show, and what is simplified?",
+        a: "A young dicot stem: epidermis, cortex, vascular bundles arranged in a ring, and pith in the centre. In every bundle the xylem is toward the pith, the phloem toward the epidermis and the vascular cambium lies between them; the small first-formed xylem vessels are on the pith side. A young dicot root: an epidermis whose cells carry root hairs, a wide cortex, the endodermis with the Casparian strip (a band in its radial and end walls; a cross-section shows it as dark marks on the radial walls), the pericycle (the outer layer of the stele), and the xylem as an X with a patch of phloem between each pair of arms, at the edge of the stele just inside the pericycle; four arms are drawn, and dicot roots have two to six. The small first-formed vessels are at the arm tips and the root has no pith. Checked against OpenStax Biology 2e, sections 30.2 (Stems), 30.3 (Roots) and 30.5 (Transport of Water and Solutes in Plants). Not to scale; cell numbers are simplified. Monocot stems (scattered bundles) and monocot roots are not drawn.",
+    },
+    Faq {
+        q: "What does the longitudinal view show about transport?",
+        a: "One xylem vessel and one phloem sieve tube cut along their length. The vessel is a tube of dead vessel elements with lignified walls (drawn with ring thickenings) and open ends; water and dissolved minerals move one way, up from the roots to the leaves, pulled by transpiration (cohesion-tension). The sieve tube is a column of living sieve-tube elements joined by sieve plates, each with a companion cell beside it; sucrose is loaded at a source and moves to sinks. Here the mature leaf is the source and the roots below and the young leaves and fruit above are sinks, so sucrose goes down below the leaf and up above it: phloem transport can run either way, xylem only up. The mature leaf's own xylem supply is not drawn. Transport arrows and the source and sink tags appear only with the longitudinal view on. The Water and minerals blank and the Sucrose blank each have a short line that ends on the side of one arrow, half way along it, so the blank names that arrow.",
+    },
+    Faq {
+        q: "Which wording is the answer?",
+        a: "The key uses one wording and lists the others it accepts under the figure. Epidermis (dermal tissue). Cortex (cortex parenchyma, ground tissue). Vascular bundle (vascular tissue, bundle). Phloem (phloem tissue, sieve tubes). Vascular cambium (cambium, fascicular cambium). Xylem (xylem tissue, xylem vessels). Pith (pith parenchyma, medulla). Root hair (root hairs, root hair cell). Endodermis (endodermal cells). Casparian strip (Casparian band). Pericycle (pericycle cells). Xylem vessel (vessel, vessel element, xylem). Sieve tube (sieve-tube element, sieve tube element, sieve tube member, phloem). Sieve plate (sieve plates). Companion cell (companion cells). Water and minerals (water, water and dissolved minerals, xylem sap). Sucrose (sugar, sugars, sucrose solution, phloem sap). Source (sugar source). Sink (sugar sink).",
+    },
+    Faq {
+        q: "How does a student tell the pointers apart, and what does the student copy change?",
+        a: "A plain line ends inside the one part it names and, on its way, crosses only tissue layers (epidermis, cortex, endodermis, pericycle and the ground tissue between bundles), never another named part: the lines to the xylem and the cambium come in through the gap between two bundles and then turn into the bundle from the side. The Casparian strip line stops just short of one dark mark, so the mark stays visible. A bracket beside one bundle spans that whole bundle, from the inner edge of its xylem to the outer edge of its phloem; its ticks point at the bundle and its line leaves the middle of the bracket. A line that ends on the side of an arrow asks what the arrow carries, and arrows of one style carry the same thing. A disc beside an organ's name in the longitudinal view asks whether the organ is a source or a sink. With Show answers off every name becomes a numbered disc in the same place and a table under the figure has a rule for each; the caption, title and description name no part.",
+    },
+    Faq {
+        q: "What does Print change?",
+        a: "Print is black, white and grey only and survives a photocopy at 66 % grey: cells are white with black walls, xylem vessels have thick black walls, the phloem is ruled with fine horizontal lines, the cambium is a solid grey band that copies dark, the Casparian strip marks, sieve plates and companion-cell nuclei are black, and the vessel's wall is a dark band. Water arrows are solid black and sucrose arrows dashed black, so the two kinds differ without colour. On a question page a picture prints at most 6.5 by 3 in, so a wide figure prints small. Names in the answer key print at about (Large, Medium, Small labels): all three panels 4.8, 3.9, 3.4 pt; the stem with the lengthwise view (the opening state) 5.3, 4.7, 4.2 pt; the stem alone 8.4, 7.2, 5.9 pt; the root alone 8.7, 7.8, 6.5 pt. The figure opens on the stem and the lengthwise view at Large labels, so the first picture shows which way water and sugar move; with a single cross-section the captions and the table go beside the drawing when that prints larger. Below 8 pt the editor note gives the size and offers each single change it has measured to print at least half a point bigger, saying when the change removes the arrows or the cell labels. Captions print at 12/13 of the name size. A label switch for a panel that is not drawn waits for its panel and raises no note; with the lengthwise view on and Transport arrows off the note says how to show the direction of transport.",
+    },
+];
+
 const PHOTOSYNTHESIS: &[Faq] = &[
     Faq {
         q: "What does the picture show, and what is simplified?",
@@ -4110,18 +4275,45 @@ const PHOTOSYNTHESIS: &[Faq] = &[
     },
     Faq {
         q: "Which wording is the answer?",
-        a: "The key uses one wording and lists the others it accepts under the figure. Light-dependent reactions (light reactions). Calvin cycle (light-independent reactions, Calvin-Benson cycle). Thylakoid membrane (thylakoid). Granum (grana, thylakoid stack). Stroma (chloroplast stroma). Outer membrane (outer envelope membrane) and inner membrane (inner envelope membrane). Light (sunlight, light energy). ATP (adenosine triphosphate). NADPH (reduced NADP). Water, oxygen and carbon dioxide for their formulas. G3P (glyceraldehyde 3-phosphate, PGAL, triose phosphate). Glucose is not accepted for the arrow out of the cycle: it is made from G3P, not by the cycle itself. 'Dark reactions' is not accepted: the cycle uses the ATP and NADPH the light-dependent reactions make, and it runs while the plant is in the light.",
+        a: "The key uses one wording and lists the others it accepts under the figure. Light-dependent reactions (light reactions). Calvin cycle (light-independent reactions, Calvin-Benson cycle, Calvin-Benson-Bassham cycle). Thylakoid membrane (thylakoid). Granum (grana, thylakoid stack). Stroma (chloroplast stroma). Outer membrane (outer envelope membrane) and inner membrane (inner envelope membrane). Light (sunlight, light energy, photons). ATP (adenosine triphosphate). NADPH (reduced NADP, NADPH + H+). Water, oxygen and carbon dioxide for their formulas. G3P (glyceraldehyde 3-phosphate, glyceraldehyde-3-phosphate, GA3P, PGAL, triose phosphate). Glucose is not accepted for the arrow out of the cycle: it is made from G3P, not by the cycle itself. 'Dark reactions' is not accepted: the cycle uses the ATP and NADPH the light-dependent reactions make, and it runs while the plant is in the light.",
     },
     Faq {
         q: "How can a student tell the pointers apart, and what does a student copy or Print change?",
-        a: "A small ring ends on exactly one structure: a ring on a membrane line names that membrane, a ring on the outline of one flat thylakoid names the thylakoid membrane, a ring in the open fluid names the stroma. A bracket spans a whole stack and names the granum. A bar under the drawing names a stage and spans the part of the chloroplast where it happens. An arrow carries a substance and is named by what it carries. The inner membrane's pointer has to cross the outer membrane to get there; no other pointer crosses a structure that is not its own container. The student copy says all this in one sentence under the figure. With Show answers off every name is replaced by a numbered disc in the same place, and the table under the figure has a rule to write each one on. The equation becomes one blank (write the balanced equation with the smallest whole-number coefficients; glucose is given as C6H12O6, and light may be written on the left or over the arrow), and the reading at P is another. ADP + Pi and NADP+ are printed in both copies as clues: the arrow that returns ADP + Pi is the partner of the one that carries ATP, and NADP+ of NADPH, so each of those blanks has one answer. The molecule leaving the Calvin cycle is asked for by the sentence 'give the molecule it makes directly'. Print is black, white and grey only and survives a photocopy at 66 % grey. The thylakoids are cross-hatched, the space between the two membranes has horizontal lines, the stroma is white, and every arrow is black; the arrows that return ADP + Pi and NADP+ are dashed, the others solid. The graph curve is black.",
+        a: "A small ring ends on exactly one structure: a ring on a membrane line names that membrane, a ring on the outline of one flat thylakoid names the thylakoid membrane, a ring in the open fluid names the stroma. A bracket spans a whole stack and names the granum. A bar under the drawing names a stage and spans the part of the chloroplast where it happens. An arrow carries a substance and is named by what it carries. The inner membrane's pointer has to cross the outer membrane to get there; no other pointer crosses a structure that is not its own container. The student copy says all this in one sentence under the figure. With Show answers off every name is replaced by a numbered disc in the same place, and the table under the figure has a rule to write each one on. The equation becomes one blank (write the net balanced equation, with no substance on both sides; glucose is given as C6H12O6, and light may be left out or written on the left or over the arrow; the key prints these accepted forms and those it does not accept: water on both sides, such as 6CO2 + 12H2O giving C6H12O6 + 6O2 + 6H2O (the same reaction with water left uncancelled), and any multiple of the answer, such as 12CO2 + 12H2O giving 2C6H12O6 + 12O2, because one molecule of glucose is asked for), and the reading at P is another. ADP + Pi and NADP+ are printed in both copies as clues: the arrow that returns ADP + Pi is the partner of the one that carries ATP, and NADP+ of NADPH, so each of those blanks has one answer. The molecule leaving the Calvin cycle is asked for by the sentence 'give the molecule it makes directly'. Print is black, white and grey only and survives a photocopy at 66 % grey. The thylakoids are cross-hatched, the space between the two membranes has horizontal lines, the stroma is white, and every arrow is black; the arrows that return ADP + Pi and NADP+ are dashed, the others solid. The graph curve is black.",
     },
     Faq {
         q: "What is the graph, how are typed values read, and what is refused?",
-        a: "A textbook curve, original and not data from a species. Against light intensity or CO2 concentration the rate is Pmax x / (K + x): it starts at zero, rises, and levels off at the plateau, Pmax; K is the value that gives half of the plateau (the half-saturation). The rising part is limited by the factor on the x axis; on the plateau that factor has stopped limiting the rate and another one (for example CO2 supply, light or temperature) is limiting. The CO2 curve starts at zero and leaves out the compensation point where respiration cancels photosynthesis. Against temperature the rate rises gently to an optimum and then falls steeply to zero at 1.4 times the optimum (enzymes losing their shape). Plateau or peak rate: 1 to 100 arbitrary units. Half-saturation: 3 to 20 % of full sunlight, or 40 to 240 ppm, so that the curve has reached 5/6 of its plateau by the end of the axis and half of it is not squeezed against the vertical axis. Optimum: 15 to 40 degrees C, so that the zero of the fall stays at least 4 degrees short of 60. Leave the half-saturation or optimum empty for a typical value (10 %, 120 ppm, 30 degrees C). Digits as typed: a minus sign, a decimal point or comma, and the unit of the box (au, %, ppm, degrees C) are accepted. A comma followed by exactly three digits is refused as ambiguous (1,000) rather than guessed. A value outside its range, or not a number, replaces the graph with the reason, quoting what was typed, and a value that works; the editor note says the same, one note for every box. The rest of the figure is still drawn. A value typed exactly on a limit is accepted. Point P may be left empty for no point.",
+        a: "A textbook curve, original and not data from a species. Against light intensity or CO2 concentration the rate is Pmax x / (K + x): it starts at zero, rises, and levels off towards the plateau, Pmax, which it approaches and never reaches; K is the value that gives half of the plateau (the half-saturation). The rising part is limited by the factor on the x axis; on the plateau that factor has stopped limiting the rate and another one (for example CO2 supply, light or temperature) is limiting. The CO2 curve starts at zero and leaves out the compensation point where respiration cancels photosynthesis. Against temperature the rate rises gently to an optimum and then falls steeply, reaching zero 12 degrees C above the optimum (a feature of this simplified curve, not a measured value for one species). Plateau or peak rate: 1 to 100 arbitrary units. Half-saturation: 3 to 20 % of full sunlight, or 40 to 240 ppm, so that the curve has reached 5/6 of its plateau by the end of the axis and half of it is not squeezed against the vertical axis. Optimum: 15 to 40 degrees C, the range of the photosynthetic optimum of almost any land plant. Leave the half-saturation or optimum empty for a typical value (10 %, 120 ppm, 30 degrees C). Digits as typed: a minus sign, a decimal point or comma, and the unit of the box (au or arbitrary units; % or percent; ppm; degrees C, degrees Celsius or deg C) are accepted. A comma followed by exactly three digits is refused as ambiguous (1,000) rather than guessed; the note says which of the two readings (1.000 or 1000) is inside the range of that box, or that neither is. A unit that belongs to another box is named, with the units this box takes. A value outside its range, or not a number, replaces the graph with the reason, quoting what was typed, and a value that works; the editor note says the same, one note for every box. The rest of the figure is still drawn. A value typed exactly on a limit is accepted. Point P: type auto (the default) for a typical point of the axis (20 %, 400 ppm, 20 degrees C), a value on the x axis, or leave it empty for no point.",
     },
     Faq {
         q: "What is the point P, and what counts as a correct reading?",
-        a: "P is a dot on the curve at the x you type, with a dashed guide to each axis, so a student reads the rate off the vertical axis. The key prints the exact rate, rounded half up to the chosen number of decimal places (the student's reading from the graph will be a little rougher; accept a reading within half of one gridline). Against temperature P beyond 1.4 times the optimum reads 0.",
+        a: "P is a dot on the curve at the x you type, with a dashed guide to each axis, so a student reads the rate off the vertical axis. The key prints the exact rate, rounded half up to the chosen number of decimal places (the student's reading from the graph will be a little rougher). The rate axis has a labelled gridline at each step and fine gridlines in between, and the student copy says to read to the nearest fine gridline; the key prints the range to accept in units, the fine gridlines either side of the exact rate (one spacing further out each way when the rate falls exactly on a gridline), so whichever fine gridline the student reads to is inside it. The rate it prints is to the chosen decimal places, or to more when rounding to them would put the key's own number outside that range. Every gridline is wide and dark enough to survive a photocopy at 66 % grey in Colour as well as in Print, and a student copy in the Colour style uses the Print greys for them. Against temperature P at or beyond 12 degrees C above the optimum reads 0.",
+    },
+];
+
+const PERIODIC_TABLE: &[Faq] = &[
+    Faq {
+        q: "Why is the table shaped this way?",
+        a: "The rows are periods and the columns are groups. A period holds the elements being filled in the same outermost electron shell, so period 1 has only the two electrons of the first shell, period 2 has eight places, and the later periods have eighteen columns (periods 6 and 7 each hold thirty-two elements once the f-block is counted). The shape also shows the blocks: groups 1 and 2 are the s-block, groups 13 to 18 the p-block, groups 3 to 12 the d-block, and the two f-block strips below. The eighteen-column layout is the IUPAC form (as drawn at periodic-table.rsc.org). Each cell carries the atomic number (top left), the symbol, a category code (top right), and optionally the relative atomic mass under the number; the mass is the IUPAC 2021 standard atomic weight, and a value in square brackets is a bracketed mass number from the IUPAC table, as OpenStax Chemistry 2e section 2.5 explains. The names use the US spellings of OpenStax Chemistry 2e (aluminum, cesium); IUPAC and the RSC print aluminium and caesium.",
+    },
+    Faq {
+        q: "What is a group, and what is a period?",
+        a: "A group is a column: its members have the same pattern of valence electrons, which is why they react alike. A period is a row: its members are filling the same outermost shell, and the period number is that shell's number. In this figure group 1 is the left column and group 18 the right one; the f-block strips have no group number because, in this eighteen-column form, they are not one of the eighteen columns. The number down the left is the period, so lanthanum is period 6 and actinium period 7.",
+    },
+    Faq {
+        q: "Why is hydrogen in group 1 but not an alkali metal?",
+        a: "Hydrogen has one valence electron, so it sits above lithium in group 1 and shares the group's one-electron pattern. It is not an alkali metal: it is a nonmetal, a diatomic gas at room temperature, and it can lose an electron to form H+ or gain one to form H-. Group 1 is therefore a placement by valence pattern, not a promise that everything in the column is an alkali metal. This figure colours hydrogen as a reactive nonmetal and leaves the alkali-metal colour to lithium, sodium, potassium, rubidium, cesium and francium.",
+    },
+    Faq {
+        q: "Where is the metalloid staircase, and what does it mean?",
+        a: "The staircase is the zig-zag line that separates the metals on the left from the nonmetals on the right, and the elements on it are the metalloids. This figure draws boron, silicon, germanium, arsenic, antimony, tellurium and polonium (B, Si, Ge, As, Sb, Te, Po). OpenStax Chemistry 2e (section 18.3) names the first six; many school tables add polonium, but conventions differ and the Royal Society of Chemistry's own polonium page classes it as a metal, so some tables make it a post-transition metal. Astatine and tennessine are group 17 and are coloured as halogens, not as metalloids. The boundary is a convention, not a measurement; a class should use the list its own textbook prints.",
+    },
+    Faq {
+        q: "Why is the f-block pulled out into two strips?",
+        a: "The lanthanides are atomic numbers 57 to 71 and the actinides 89 to 103, fifteen elements each. Left in place between groups 2 and 3 they would make the table thirty-two columns wide, so they are pulled out as two fifteen-wide strips below the grid, the lanthanides starting under group 3 and the actinides under it on the next line. The group-3 cells of periods 6 and 7 are left empty with a 57-71 or 89-103 marker: lanthanum and actinium start the strips, so no element is drawn twice. The strips keep the eighteen-column main grid readable, and the periodic repeat of properties is still visible down each main-group column.",
+    },
+    Faq {
+        q: "How exact are the trend arrows?",
+        a: "They are a stated simplification, not a per-element measurement. Across a period the nuclear charge grows while the shell stays the same, so atomic radius generally falls and electronegativity generally rises; down a group a new shell is added, so radius generally rises and electronegativity generally falls. The word generally matters: the d-block and f-block are not regular, the lanthanide contraction makes period 6 unusual, and helium, neon and argon have no Pauling electronegativity value at all. The arrows give the direction a course asks for; they do not rank every pair of neighbours, and an exam question that needs a number should use a data table. The exported figure prints this caveat under the arrows, so a handout carries it too.",
     },
 ];

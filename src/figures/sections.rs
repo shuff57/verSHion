@@ -450,6 +450,23 @@ static DOT_PLOT: [RefSection; 5] = [
     s("Appearance", &["style", "label_size"], ""),
 ];
 
+static OGIVE: [RefSection; 6] = [
+    s("Data", &["input", "table", "data", "auto_classes", "class_width", "class_start", "closed"], "Type the classes as lower boundary, upper boundary, frequency (one per line), or type raw values and the figure makes the histogram's classes."),
+    s("Graph", &["y_axis", "grid"], ""),
+    s("Reading", &["read", "pct", "value", "marks", "decimals"], "Guide lines across from a percentile and down to the axis, or up from a value; readings are straight-line interpolations."),
+    s("Student copy", &["show_table", "student_curve", "show_answers"], "Turn off Show answers for a student copy: the cumulative column, guide lines and read-off values are blanked."),
+    s("Labels and text", &["title", "x_title", "y_title"], ""),
+    s("Appearance", &["style", "label_size"], ""),
+];
+
+static BAR_CHART: [RefSection; 5] = [
+    s("Data", &["data", "name1", "name2"], "One category per line: a name, a comma and its count. A second count after another comma draws two groups side by side. Repeated names are added together."),
+    s("Bars", &["orient", "measure", "order", "gap", "values", "decimals"], "Relative frequency is each category's percent of its own group, so each group's bars add to 100%. Pareto sorts tallest first and adds the cumulative percent line."),
+    s("Scale", &["scale_auto", "scale_min", "scale_max", "grid"], "A scale that does not start at 0 makes the bars' lengths out of proportion; the editor warns when it does."),
+    s("Labels and text", &["title", "cat_title", "val_title"], ""),
+    s("Student copy and appearance", &["blank", "questions", "show_answers", "style", "label_size"], "Turn off Show answers for a student copy: it leaves out the values, the bars (students draw them from a table) or the scale numbers, and the answers to the questions."),
+];
+
 static STEM_AND_LEAF: [RefSection; 4] = [
     s("Data", &["data", "leaf_unit", "split", "order"], "Type or paste numbers, open a CSV, or generate sample data from a seed. Each number is rounded to the leaf unit."),
     s("Key and answers", &["key", "show_answers"], "Turn off Show answers for a student copy: the leaves are hidden and the stems and key stay."),
@@ -1100,7 +1117,9 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "network-topology" => &NETWORK_TOPOLOGY,
         "two-way-table" => &TWO_WAY_TABLE,
         "stem-and-leaf" => &STEM_AND_LEAF,
+        "bar-chart" => &BAR_CHART,
         "dot-plot" => &DOT_PLOT,
+        "ogive" => &OGIVE,
         "normal-curve" => &NORMAL_CURVE,
         "sampling-distribution" => &SAMPLING_DISTRIBUTION,
         "rejection-region" => &REJECTION_REGION,

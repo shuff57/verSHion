@@ -323,22 +323,22 @@ mod tests {
     /// Figures with nothing sensible to drag (sorted). A new figure must expose handles or be added
     /// here deliberately; a figure that gains handles must be removed (the test checks both ways).
     const NO_HANDLES: &[&str] = &[
-        "accounting-equation", "action-potential", "ad-as", "bank-reconciliation", "base-ten-blocks", "block-diagram", "body-map", "boolean-table",
+        "accounting-equation", "action-potential", "ad-as", "bank-reconciliation", "bar-chart", "base-ten-blocks", "block-diagram", "body-map", "boltzmann-distribution", "boolean-table",
         "brain-regions", "break-even", "cash-flow-statement", "cause-effect", "cell-cycle", "cell-diagram", "chi-square-fit", "chi-square-table",
         "circle-of-fifths", "circular-flow", "circular-motion", "cladogram", "climate-graph", "collision-momentum", "colour-wheel", "confidence-interval",
         "cost-curves", "court-layout", "data-structure", "depreciation-schedule", "discrete-distribution",
         "dot-plot", "earth-cycles", "earth-layers", "elasticity", "electric-field", "energy-bar-chart", "energy-pyramid", "er-diagram", "experiment-flow",
-        "family-tree", "financial-statement", "flowchart", "food-plate", "food-web", "fraction-models", "free-body", "gear-train",
+        "family-tree", "financial-statement", "flowchart", "food-plate", "food-web", "fraction-models", "free-body", "frequency-table", "gear-train",
         "graph-diagram", "grid-reference", "guitar-chords", "heart-zones", "histogram", "hr-diagram",
         "journal-entry", "kirchhoff-loops", "leaf-cross-section", "loan-amortisation", "logic-circuit", "lorenz", "magnetic-field", "map-scale",
         "marketing-funnel", "maslow", "monopoly", "moon-seasons", "motion-map", "music-staff", "network-topology",
-        "normal-curve", "number-base", "org-chart", "organiser", "orthographic", "perspective-grid",
+        "normal-curve", "number-base", "ogive", "org-chart", "organiser", "orthographic", "periodic-table", "perspective-grid",
         "photosynthesis", "piano-keyboard", "plate-boundaries", "plot-arc", "population-pyramid", "ppf", "probability-tree", "protractor", "pv-diagram",
         "rc-curve", "recursion-tree", "refraction", "rejection-region", "residual-plot", "rhythm-counting",
         "sampling-distribution", "scatterplot", "sentence-diagram", "sine-cosine", "slope-triangle", "soil-texture", "solid-net", "sorting-passes", "standing-wave", "state-machine",
         "stem-and-leaf", "strata", "structure-chart", "supply-demand", "swot", "t-account", "time-value",
         "timeline", "topo-contours", "trace-table", "transformations", "tree-diagram", "trial-balance", "triangle-centres", "two-way-table",
-        "venn-diagram",
+        "venn-diagram", "vsepr-shapes", "xylem-phloem",
     ];
 
     #[test]

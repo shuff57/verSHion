@@ -7,13 +7,16 @@ use super::data;
 use super::svg::{self, Doc, Fills};
 use super::{answers_param, Example, FigureDef, ParamDef, Params, Subject, Value};
 
+pub(crate) mod bar;
 mod chisq;
 mod discrete;
 pub(crate) mod dist;
 mod dot;
+pub(crate) mod frequency;
 mod interval;
 mod hypothesis;
 mod normal;
+pub(crate) mod ogive;
 mod prob_tree;
 mod residual;
 mod samplingdist;
@@ -23,7 +26,7 @@ mod twoway;
 mod venn;
 
 pub fn defs() -> Vec<FigureDef> {
-    vec![chisq::def(), hypothesis::def(), samplingdist::def(), discrete::def(), interval::def(), residual::def(), dot::def(), normal::def(), prob_tree::def(), scatter::def(), stem::def(), twoway::def(), venn::def(), FigureDef {
+    vec![ogive::def(), bar::def(), frequency::def(), chisq::def(), hypothesis::def(), samplingdist::def(), discrete::def(), interval::def(), residual::def(), dot::def(), normal::def(), prob_tree::def(), scatter::def(), stem::def(), twoway::def(), venn::def(), FigureDef {
         id: "histogram",
         subject: Subject::Math,
         title: "Histogram",
@@ -41,7 +44,8 @@ pub fn relevant(fig: &str, key: &str, p: &Params) -> bool {
     match (fig, key) {
         ("histogram", "bin_width" | "bin_start") => !p.b("auto_bins"),
         ("histogram", "y_max") => !p.b("auto_y"),
-        _ => scatter::relevant(fig, key, p) && normal::relevant(fig, key, p) && dot::relevant(fig, key, p) && stem::relevant(fig, key, p) && twoway::relevant(fig, key, p) && prob_tree::relevant(fig, key, p) && venn::relevant(fig, key, p) && discrete::relevant(fig, key, p) && interval::relevant(fig, key, p) && residual::relevant(fig, key, p) && samplingdist::relevant(fig, key, p) && hypothesis::relevant(fig, key, p),
+        ("frequency-table", _) => frequency::relevant(fig, key, p),
+        _ => scatter::relevant(fig, key, p) && normal::relevant(fig, key, p) && dot::relevant(fig, key, p) && stem::relevant(fig, key, p) && twoway::relevant(fig, key, p) && prob_tree::relevant(fig, key, p) && venn::relevant(fig, key, p) && discrete::relevant(fig, key, p) && interval::relevant(fig, key, p) && residual::relevant(fig, key, p) && samplingdist::relevant(fig, key, p) && hypothesis::relevant(fig, key, p) && ogive::relevant(fig, key, p) && bar::relevant(fig, key, p),
     }
 }
 
@@ -59,7 +63,7 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
             },
             Example { name: "Relative frequency", params: vec![("measure", s("Relative frequency")), ("values", Value::B(true))] },
         ],
-        _ => return scatter::examples(id).or_else(|| normal::examples(id)).or_else(|| dot::examples(id)).or_else(|| stem::examples(id)).or_else(|| twoway::examples(id)).or_else(|| prob_tree::examples(id)).or_else(|| venn::examples(id)).or_else(|| discrete::examples(id)).or_else(|| interval::examples(id)).or_else(|| residual::examples(id)).or_else(|| samplingdist::examples(id)).or_else(|| hypothesis::examples(id)).or_else(|| chisq::examples(id)),
+        _ => return scatter::examples(id).or_else(|| normal::examples(id)).or_else(|| dot::examples(id)).or_else(|| stem::examples(id)).or_else(|| twoway::examples(id)).or_else(|| prob_tree::examples(id)).or_else(|| venn::examples(id)).or_else(|| discrete::examples(id)).or_else(|| interval::examples(id)).or_else(|| residual::examples(id)).or_else(|| samplingdist::examples(id)).or_else(|| hypothesis::examples(id)).or_else(|| chisq::examples(id)).or_else(|| ogive::examples(id)).or_else(|| bar::examples(id)).or_else(|| frequency::examples(id)),
     })
 }
 

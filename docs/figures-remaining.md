@@ -50,3 +50,45 @@ The owner asked to finish the running figures, then commit, merge to `main`, reb
 - What "redeploy" means is not recorded anywhere I could find: `README.md` and `NOTES.md` have no deploy section. The repo has `Trunk.toml` and `index.html` (a web build) and `server/worker/wrangler*.toml` (Cloudflare worker, `server/` is off-limits for the figures loop). Ask which target and which command.
 - Before any merge: the full lib suite on the merged tree (`systemd-run --user --scope -p MemoryMax=8G -p MemorySwapMax=0 cargo test --lib -j2`, known flake `absurd_windows_cannot_run_away`), then a release build.
 - Never type or store credentials; deploy auth must come from the owner.
+
+
+## Soil texture: PARKED (2026-11-03)
+Six critic rounds (docs/critic-reports/2026-11-02-soil-texture-critic-2 .. 2026-11-03-soil-texture-critic-6). One sample is clean at every size and the classifier, orientation, refusal advice and three-typed scaling were verified correct. Two samples close together (about 4% or less, near an edge or corner) fail: a number tag can be dropped (the note's smaller-size advice mostly fails, FAQ claim false) or, with construction lines off, floated 60-280 px into another class's region (critic 6 MED 1-2). Owner rule: no round after round 6. Options when revisited: limit to one sample at Large, accept and document, or redesign tags (for example a numbered legend instead of tags near markers). Branch state: ecbd65b..09f6453 on figures-gapfill; do not report this figure as passed.
+
+## Update 2026-11-04 (supersedes the table above where they differ)
+
+Branch `figures-gapfill` in `/home/shuff57/Documents/GitHub/verSHion-figures`, local commits only. Live state and per-figure limits: `docs/figures-progress.md`, section "2026-11-04".
+
+- Phase 5 chemistry is complete, including the three figures this list still called unbuilt: Boltzmann distribution (passed), periodic-table excerpt (parked with legibility limits), VSEPR 3-D shapes (passed).
+- Phase 4b: photosynthesis passed; leaf cross-section and xylem and phloem passed earlier; soil texture stays parked by the owner's six-round rule.
+- Phase 6 stats: bar chart, ogive and frequency table all shipped and then parked with their limits written down (data-reader edge cases, ulp-scale classes). No stats figure has drag handles yet; all are listed in `interact::NO_HANDLES`.
+- Photosynthesis, Boltzmann and VSEPR are the figures from this session that carry a clean critic verdict. The other three are in the tree and usable but should not be reported as passed.
+- Full `figures::` suite on the merged tree: 2,141 passed, 0 failed, 11 ignored.
+
+## Remaining figures (logged 2026-11-04)
+
+No JSON/manifest file tracks the figures; this file plus `docs/figures-progress.md` are the trackers. Live state: branch `figures-gapfill`.
+
+### Phase 6 stats — still to build
+
+| Figure | Notes |
+|---|---|
+| t-distribution | curve/area figure; rejection-region uses a t internally, no standalone figure |
+| chi-square distribution | curve/area figure; only `chi-square-table` exists |
+| back-to-back stem-and-leaf | only `stem-and-leaf` exists |
+| other regression models | only linear `residual-plot`; no exponential/quadratic/logistic |
+| drag handles for stats figures | none: `histogram`, `dot-plot`, `stem-and-leaf`, `scatterplot`, `residual-plot`, `bar-chart`, `ogive`, `frequency-table` are all in `NO_HANDLES` |
+
+### In the tree but parked (do not report as passed)
+
+- `bar-chart`, `ogive`, `frequency-table` (phase 6) — narrow MEDs recorded in `docs/figures-progress.md`.
+- `periodic-table`, `vsepr-shapes` — periodic parked; vsepr passed.
+- `soil-texture` — parked by the owner's six-round rule (2026-11-03).
+
+### Lower-priority backlog (not in the phases)
+
+- pendulum/SHM, torque, orbit, Doppler, photoelectric, nuclear decay, DNA/translation, mitosis/meiosis, osmosis, electrochemical cell, calorimetry, Born–Haber, skeletal structures, lab apparatus, IR/NMR, polar/parametric graphs, vectors on the grid.
+
+### Open decisions (owner's call)
+
+- Merge `figures-gapfill` into `main` (167 commits ahead, merge base 0c1a8a89), release build, redeploy target unknown (`server/` off-limits).

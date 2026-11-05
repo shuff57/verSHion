@@ -13,9 +13,16 @@
 //! The student copy prints ADP + Pi and NADP+ as clues, so the arrows that carry ATP and NADPH can be told apart.
 //!
 //! The graph is original and analytic. Light intensity and CO2 concentration give a rectangular hyperbola
-//! `Pmax x / (K + x)` (a plateau, and the concentration that gives half of it); temperature gives a rise to an
-//! optimum and a steeper fall to zero at 1.4 times the optimum. Typed values are read exactly (digits as typed) and
-//! refused with the reason and a value that works.
+//! `Pmax x / (K + x)` (a plateau that the curve approaches and never reaches, and the concentration that gives half of
+//! it); temperature gives a rise to an optimum and a steeper fall to zero `FALL_SPAN` degrees above it. Typed values
+//! are read exactly (digits as typed), and the rate at P is rounded half up by integer arithmetic on those digits.
+//! Typed values are refused with the reason and a value that works (each such value is tested by typing it back).
+//! The rate axis has a labelled gridline every `step` and fine gridlines in between; the key accepts from the fine
+//! gridline below the exact rate to the one above (two spacings wide when the rate sits exactly on a gridline), so
+//! that whichever fine gridline a student reads to is inside the range, and the range prints as those gridlines.
+//! The rate is printed to the chosen decimals, or to more when rounding to them would put the key's own number
+//! outside the range it accepts, so the key never refuses its own answer for any decimals setting.
+//! The gridlines are dark and wide enough that a 66 % grey copy keeps them, in Print and in Colour alike.
 
 use super::cladogram::text_w;
 use super::*;
@@ -47,7 +54,7 @@ fn params() -> Vec<ParamDef> {
         ParamDef::choice("graph_x", "Graph against", &AXES, AXES[0]).hint("Light and CO2 rise to a plateau; temperature rises to an optimum and then falls"),
         ParamDef::text("pmax", "Plateau rate (arbitrary units)", "10").hint("1 to 100. For temperature this is the rate at the optimum"),
         ParamDef::text("xval", "Half-saturation (optimum for temperature)", "").hint("Leave empty for a typical value. Light 3 to 20 %, CO2 40 to 240 ppm: the value giving half the plateau. Temperature 15 to 40 \u{b0}C: the optimum"),
-        ParamDef::text("mark", "Point P at x =", "20").hint("A value on the x axis (light 0 to 100 %, CO2 0 to 1200 ppm, temperature 0 to 60 \u{b0}C). Leave empty for no point"),
+        ParamDef::text("mark", "Point P at x =", "auto").hint("A value on the x axis (light 0 to 100 %, CO2 0 to 1200 ppm, temperature 0 to 60 \u{b0}C), or auto for a typical point (20 %, 400 ppm, 20 \u{b0}C). Leave empty for no point"),
         ParamDef::int("dec", "Decimal places for P", 0, 3, 1),
         answers_param().hint("Off keeps numbered blanks: the names, the equation and the rate at P are for the student to write"),
         svg::style_param(),
@@ -165,19 +172,21 @@ pub fn alts(i: It) -> &'static str {
         It::Outer => "outer envelope membrane",
         It::Inner => "inner envelope membrane",
         It::StageL => "light reactions",
-        It::StageC => "light-independent reactions, Calvin-Benson cycle",
-        It::Light => "sunlight, light energy",
+        It::StageC => "light-independent reactions, Calvin-Benson cycle, Calvin-Benson-Bassham cycle",
+        It::Light => "sunlight, light energy, photons",
         It::Water => "water",
         It::Oxygen => "oxygen",
         It::Co2 => "carbon dioxide",
-        It::G3p => "glyceraldehyde 3-phosphate, PGAL, triose phosphate",
+        It::G3p => "glyceraldehyde 3-phosphate, glyceraldehyde-3-phosphate, GA3P, PGAL, triose phosphate",
         It::Atp => "adenosine triphosphate",
-        It::Nadph => "reduced NADP",
+        It::Nadph => "reduced NADP, NADPH + H+",
     }
 }
 
 const EQ_LEFT: &str = "6CO~2 + 6H~2O + light";
 const EQ_RIGHT: &str = "C~6H~12O~6 + 6O~2";
+/// The word beside the equation's blank in the student copy.
+const EQ_PROMPT: &str = "Equation:";
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Cfg { parts: bool, stages: bool, io: bool, shuttle: bool, eq: bool, graph: bool, key: bool, lab: f64, dec: usize }
@@ -215,16 +224,30 @@ fn clip(s: &str) -> String {
 }
 
 #[derive(Debug, PartialEq)]
-enum Bad { Empty, NotNumber, Ambiguous(String, String), TooLong, TooLarge }
+enum Bad { Empty, NotNumber, Ambiguous(String, String, bool, Option<String>), Unit(String), TooLong, TooLarge }
+
+/// The longest run of letters (and the unit signs) that ends a string, trimmed: the unit a number was typed with.
+fn typed_unit(s: &str) -> Option<&str> {
+    let t = s.trim_end();
+    let start = t.char_indices().rev().take_while(|(_, c)| c.is_alphabetic() || *c == '%' || *c == '\u{b0}' || *c == '\u{ba}' || *c == '\u{2103}' || *c == '/' || *c == '.').map(|(i, _)| i).last()?;
+    let u = t[start..].trim();
+    // a full stop on its own is punctuation, not a unit ("0.5." is not a number)
+    if u.is_empty() || u.chars().all(|c| c == '.') { None } else { Some(u) }
+}
 
 /// Reads a typed number: optional sign, digits with one decimal point or comma, then optionally one of `units`.
-/// A comma followed by exactly three digits is ambiguous (1,000) and is refused rather than guessed.
+/// A comma followed by exactly three digits is ambiguous (1,000) and is refused rather than guessed; a number
+/// followed by a unit this box does not take is refused as a wrong unit, not as "not a number".
 fn parse(raw: &str, units: &[&str]) -> Result<Dec, Bad> {
-    let t = raw.trim_start_matches('\u{feff}').trim();
+    let t = raw.trim_start_matches('\u{feff}').split_whitespace().collect::<Vec<_>>().join(" ");
+    let t = t.as_str();
     if t.is_empty() { return Err(Bad::Empty); }
     let lower = t.to_lowercase();
     let mut body = t;
-    for u in units {
+    // the longest unit that ends the text wins ("degrees c" before "c")
+    let mut by_len: Vec<&str> = units.to_vec();
+    by_len.sort_by_key(|u| std::cmp::Reverse(u.len()));
+    for u in by_len {
         if lower.ends_with(u) {
             body = t.get(..t.len().saturating_sub(u.len())).map_or(t, str::trim_end);
             break;
@@ -236,12 +259,25 @@ fn parse(raw: &str, units: &[&str]) -> Result<Dec, Bad> {
         if matches!(c, '-' | '\u{2212}' | '\u{2013}' | '\u{2014}' | '\u{2010}' | '\u{2011}') { neg = true; chars.next(); } else if c == '+' { chars.next(); }
     }
     let rest: String = chars.collect::<String>().trim_start().to_string();
-    if rest.is_empty() || !rest.chars().all(|c| c.is_ascii_digit() || c == '.' || c == ',') || !rest.chars().any(|c| c.is_ascii_digit()) { return Err(Bad::NotNumber); }
+    if rest.is_empty() || !rest.chars().all(|c| c.is_ascii_digit() || c == '.' || c == ',') || !rest.chars().any(|c| c.is_ascii_digit()) {
+        // a number with a unit this box does not take says which unit, rather than "not a number"; if the number
+        // itself also has an ambiguous comma, both faults are named
+        if let Some(u) = typed_unit(&rest) {
+            let head = rest.trim_end();
+            let prefix = &head[..head.len() - u.len()];
+            match parse(prefix, &[]) {
+                Ok(_) => return Err(Bad::Unit(u.to_string())),
+                Err(Bad::Ambiguous(a, c, neg, _)) => return Err(Bad::Ambiguous(a, c, neg, Some(u.to_string()))),
+                _ => {}
+            }
+        }
+        return Err(Bad::NotNumber);
+    }
     let digits = if rest.contains(',') {
         if rest.contains('.') || rest.matches(',').count() > 1 { return Err(Bad::NotNumber); }
         let (a, b) = rest.split_once(',').unwrap();
         if a.is_empty() || b.is_empty() { return Err(Bad::NotNumber); }
-        if b.len() == 3 { return Err(Bad::Ambiguous(a.to_string(), b.to_string())); }
+        if b.len() == 3 { return Err(Bad::Ambiguous(a.to_string(), b.to_string(), neg, None)); }
         format!("{a}.{b}")
     } else { rest };
     if digits.matches('.').count() > 1 { return Err(Bad::NotNumber); }
@@ -265,7 +301,24 @@ impl Axis {
     pub fn xmax(self) -> f64 { match self { Axis::Light => 100.0, Axis::Co2 => 1200.0, Axis::Temp => 60.0 } }
     fn xstep(self) -> f64 { match self { Axis::Light => 20.0, Axis::Co2 => 200.0, Axis::Temp => 10.0 } }
     fn unit(self) -> &'static str { match self { Axis::Light => "%", Axis::Co2 => "ppm", Axis::Temp => "\u{b0}C" } }
-    fn units(self) -> &'static [&'static str] { match self { Axis::Light => &["%"], Axis::Co2 => &["ppm"], Axis::Temp => &["\u{b0}c", "\u{b0}", "c", "degrees", "deg"] } }
+    /// The units this axis takes, in words, for a refusal that names them.
+    pub fn units_help(self) -> &'static str {
+        match self { Axis::Light => "% or percent", Axis::Co2 => "ppm or parts per million", Axis::Temp => "degrees C, degrees Celsius or deg C" }
+    }
+    /// The units a typed value may end with (lower case; the longest that fits is taken).
+    pub fn units(self) -> &'static [&'static str] {
+        match self {
+            Axis::Light => &["%", "percent", "per cent"],
+            Axis::Co2 => &["ppm", "parts per million"],
+            Axis::Temp => &["degrees celsius", "degree celsius", "degrees c", "degree c", "deg celsius", "deg c", "degreesc", "degreec", "degc", "degrees", "degree", "celsius", "deg", "\u{b0}c", "\u{b0} c", "\u{ba}c", "\u{ba} c", "\u{2103}", "\u{b0}", "\u{ba}", "c"],
+        }
+    }
+    /// The units a typed plateau or peak rate may end with.
+    pub const RATE_UNITS: &'static [&'static str] = &["arbitrary units", "arbitrary unit", "arb. units", "a.u.", "units", "unit", "au"];
+    /// The same, in words, for a refusal that names them.
+    pub const RATE_HELP: &'static str = "au or arbitrary units";
+    /// Where P sits when the box says `auto`: a typical, readable point of the axis (not near the origin, not below the CO2 compensation point).
+    pub fn mark_default(self) -> f64 { match self { Axis::Light => 20.0, Axis::Co2 => 400.0, Axis::Temp => 20.0 } }
     fn title(self) -> &'static str { match self { Axis::Light => "Light intensity (% of full sunlight)", Axis::Co2 => "CO~2 concentration (ppm)", Axis::Temp => "Temperature (\u{b0}C)" } }
     /// The allowed range of the half-saturation (light, CO2) or the optimum (temperature), and the value used when it is left empty.
     pub fn xv_range(self) -> (f64, f64, f64) { match self { Axis::Light => (3.0, 20.0, 10.0), Axis::Co2 => (40.0, 240.0, 120.0), Axis::Temp => (15.0, 40.0, 30.0) } }
@@ -276,10 +329,8 @@ impl Axis {
 
 pub const PMAX_LO: f64 = 1.0;
 pub const PMAX_HI: f64 = 100.0;
-/// The rate falls to zero at this multiple of the optimum.
-pub const FALL: f64 = 1.4;
-/// The figure keeps the zero of the fall at least this far short of the end of the temperature axis.
-const TEMP_ROOM: f64 = 4.0;
+/// The rate falls to zero this many degrees above the optimum (a fixed span: a ratio of Celsius temperatures means nothing).
+pub const FALL_SPAN: f64 = 12.0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Curve { pub axis: Axis, pub pmax: Dec, pub xv: Dec, pub xv_typed: bool, pub mark: Option<Dec> }
@@ -290,16 +341,83 @@ pub struct Refusal { pub field: &'static str, pub text: String }
 impl Curve {
     /// The rate at `x`.
     pub fn rate(&self, x: f64) -> f64 { rate(self.axis, self.pmax.v, self.xv.v, x) }
+    /// The exact rate at the typed `x` as a fraction (see `rate_frac`).
+    pub fn frac(&self, x: &Dec) -> (i128, i128) { rate_frac(self.axis, self.pmax.d, self.xv.d, x.d) }
+    /// The rate at the typed `x`, rounded half up to `dec` decimals.
+    pub fn rate_text(&self, x: &Dec, dec: usize) -> String { let (n, d) = self.frac(x); ratio_text(n, d, dec) }
+    /// The band the key accepts at the typed `x`, in billionths: (lowest, highest, fine gridline spacing).
+    /// It runs from the fine gridline below the exact rate to the one above, so it is one fine spacing wide, and
+    /// two when the exact rate sits exactly on a gridline (where the gridlines either side are one spacing away
+    /// each). Integer arithmetic on the typed digits, so a rate that is exactly on a gridline is on it.
+    fn band(&self, x: &Dec) -> (i128, i128, i128) {
+        let (_, step) = y_axis(self.pmax.v);
+        let fine = ((step / minor_divisions(step) as f64) * SCALE as f64).round() as i128;
+        let (n, d) = self.frac(x);
+        // the rate in billionths (the denominators `frac` makes are all multiples of SCALE), then the gridline at
+        // or below it: integer arithmetic throughout, and small numbers, so nothing overflows
+        debug_assert!(d % SCALE == 0, "the rate fraction's denominator is a whole number of billionths");
+        if n <= 0 || d <= 0 { return (0, fine, fine); }
+        let rate_b = n / (d / SCALE).max(1);
+        let k = rate_b / fine;
+        let on_line = rate_b % fine == 0;
+        ((if on_line { k - 1 } else { k }).max(0) * fine, (k + 1) * fine, fine)
+    }
+    /// The reading the key accepts at the typed `x` and the rate it prints there, as text:
+    /// (lowest, highest, fine gridline spacing, rate). The rate is printed to `dec` decimals, or to more when
+    /// rounding to `dec` would put the key's own number outside the band (a whole-number rounding step can be
+    /// wider than the fine spacing); the band is widened to hold it if it ever falls outside anyway. So the
+    /// number the key prints is always inside the range the key accepts, and both neighbouring fine gridlines
+    /// a student could read are inside it too. Both ends print as the values themselves, never a rounded
+    /// tolerance.
+    pub fn accept(&self, x: &Dec, dec: usize) -> (String, String, String, String) {
+        let (mut lo, mut hi, fine) = self.band(x);
+        let (n, d) = self.frac(x);
+        let mut dd = dec.min(9);
+        let mut text = ratio_text(n, d, dd);
+        loop {
+            let p = parse(&text, &[]).map_or(0, |v| v.d);
+            if (p >= lo && p <= hi) || dd >= 9 { break; }
+            dd += 1;
+            text = ratio_text(n, d, dd);
+        }
+        let p = parse(&text, &[]).map_or(0, |v| v.d);
+        lo = lo.min(p);
+        hi = hi.max(p);
+        (show_d(lo), show_d(hi), show_d(fine), text)
+    }
+    /// The rate at P as the key prints it: always inside the band `accept` gives.
+    pub fn key_rate(&self, x: &Dec, dec: usize) -> String { self.accept(x, dec).3 }
 }
 
 pub fn rate(axis: Axis, pmax: f64, xv: f64, x: f64) -> f64 {
     match axis {
         Axis::Light | Axis::Co2 => if x <= 0.0 { 0.0 } else { pmax * x / (xv + x) },
         Axis::Temp => {
-            let tmax = FALL * xv;
-            if x <= 0.0 || x >= tmax { 0.0 } else if x <= xv { pmax * (1.0 - ((xv - x) / xv).powi(2)) } else { pmax * (1.0 - ((x - xv) / (tmax - xv)).powi(2)) }
+            let tmax = xv + FALL_SPAN;
+            if x <= 0.0 || x >= tmax { 0.0 } else if x <= xv { pmax * (1.0 - ((xv - x) / xv).powi(2)) } else { pmax * (1.0 - ((x - xv) / FALL_SPAN).powi(2)) }
         }
     }
+}
+
+/// The rate at `x` as an exact fraction `(num, den)` of the typed digits (all in billionths): the value is `num / den`.
+/// Integer arithmetic only, so that a value that is exactly a half rounds up and one just below it does not.
+pub fn rate_frac(axis: Axis, pmax: i128, xv: i128, x: i128) -> (i128, i128) {
+    match axis {
+        Axis::Light | Axis::Co2 => if x <= 0 || xv + x <= 0 { (0, SCALE) } else { (pmax * x, (xv + x) * SCALE) },
+        Axis::Temp => {
+            let span = exact(FALL_SPAN);
+            if x <= 0 || xv <= 0 || x >= xv + span { (0, SCALE) }
+            else if x <= xv { (pmax * (xv * xv - (xv - x) * (xv - x)), xv * xv * SCALE) }
+            else { (pmax * (span * span - (x - xv) * (x - xv)), span * span * SCALE) }
+        }
+    }
+}
+
+/// `num / den` rounded half up to `dec` decimals, counting in integers (`num` and `den` positive or zero).
+pub fn ratio_text(num: i128, den: i128, dec: usize) -> String {
+    let k = 10i128.pow(dec as u32);
+    let v = (2 * num.max(0) * k + den) / (2 * den);
+    if dec == 0 { v.to_string() } else { format!("{}.{:0w$}", v / k, v % k, w = dec) }
 }
 
 fn range_text(lo: f64, hi: f64, unit: &str) -> String {
@@ -307,13 +425,29 @@ fn range_text(lo: f64, hi: f64, unit: &str) -> String {
     format!("{} to {}{u}", show(lo), show(hi))
 }
 
-fn bad_text(what: &str, raw: &str, b: &Bad, lo: f64, hi: f64, unit: &str, ex: &str) -> String {
+fn bad_text(what: &str, raw: &str, b: &Bad, lo: f64, hi: f64, unit: &str, units_help: &str, ex: &str) -> String {
     let shown = clip(raw);
     let ask = format!("Type a number from {}, such as {ex}.", range_text(lo, hi, unit));
     match b {
         Bad::Empty => format!("{what} is empty. {ask}"),
         Bad::NotNumber => format!("{what}: \"{shown}\" is not a number. {ask}"),
-        Bad::Ambiguous(a, c) => format!("{what}: \"{shown}\" is ambiguous: a comma is read as a decimal point, so it could mean {a}.{c} or {a}{c}. Type {a}.{c} or {a}{c} to be clear."),
+        Bad::Unit(u) => format!("{what}: \"{shown}\" ends with \"{u}\", which is not one of the units this box takes ({units_help}). {ask}"),
+        Bad::Ambiguous(a, c, neg, wrong) => {
+            // the two readings of a comma followed by three digits, each written with the sign that was typed (a
+            // minus sign is never dropped: "−1,500" can only be −1.5 or −1500), and only those inside the range offered
+            let sign = if *neg { "\u{2212}" } else { "" };
+            let both: Vec<String> = [format!("{a}.{c}"), format!("{a}{c}")].iter().map(|t| parse(&format!("{sign}{t}"), &[]).map_or_else(|_| format!("{sign}{t}"), |d| show_d(d.d))).collect();
+            let fits: Vec<&String> = both.iter().filter(|t| parse(t, &[]).map_or(false, |d| d.d >= exact(lo) && d.d <= exact(hi))).collect();
+            let head = format!("{what}: \"{shown}\" is ambiguous: a comma is read as a decimal point, so it could mean {} or {}.", both[0], both[1]);
+            // with a unit this box does not take as well, no single reading can be typed as it stands, so the advice is
+            // a fresh number in the right unit rather than "type 1.5", which would still be refused
+            if let Some(u) = wrong { return format!("{head} And \"{u}\" is not one of the units this box takes ({units_help}). {ask}"); }
+            match fits.as_slice() {
+                [] => format!("{head} Neither is in the range from {}. {ask}", range_text(lo, hi, unit)),
+                [one] => format!("{head} Only {one} is in the range from {}. Type {one} to be clear.", range_text(lo, hi, unit)),
+                _ => format!("{head} Type {} or {} to be clear.", fits[0], fits[1]),
+            }
+        }
         Bad::TooLong => format!("{what}: \"{shown}\" has more than 9 decimal places. Type it with fewer."),
         Bad::TooLarge => format!("{what}: \"{shown}\" is too large to read. {ask}"),
     }
@@ -327,8 +461,8 @@ pub fn read_graph(p: &Params) -> Result<Curve, Vec<Refusal>> {
     let pm = {
         let what = axis.pmax_what();
         let raw = p.s("pmax");
-        match parse(raw, &["au", "a.u.", "units", "unit"]) {
-            Err(e) => { bad.push(Refusal { field: "pmax", text: bad_text(what, raw, &e, PMAX_LO, PMAX_HI, "arbitrary units", "10") }); None }
+        match parse(raw, Axis::RATE_UNITS) {
+            Err(e) => { bad.push(Refusal { field: "pmax", text: bad_text(what, raw, &e, PMAX_LO, PMAX_HI, "arbitrary units", Axis::RATE_HELP, "10") }); None }
             Ok(d) if d.d < exact(PMAX_LO) => { bad.push(Refusal { field: "pmax", text: format!("{what}: {} is below the smallest rate the rate axis is built for, {} (arbitrary units). Type a number from {} to {}, such as 10.", show_d(d.d), show(PMAX_LO), show(PMAX_LO), show(PMAX_HI)) }); None }
             Ok(d) if d.d > exact(PMAX_HI) => { bad.push(Refusal { field: "pmax", text: format!("{what}: {} is above the largest rate the rate axis is built for, {} (arbitrary units). Type a number from {} to {}, such as 10.", show_d(d.d), show(PMAX_HI), show(PMAX_LO), show(PMAX_HI)) }); None }
             Ok(d) => Some(d),
@@ -344,7 +478,7 @@ pub fn read_graph(p: &Params) -> Result<Curve, Vec<Refusal>> {
         if raw.trim().is_empty() { (Some(Dec { v: dflt, d: exact(dflt) }), false) } else {
             match parse(raw, axis.units()) {
                 Err(Bad::Empty) => (None, false),
-                Err(e) => { bad.push(Refusal { field: "xval", text: bad_text(&format!("{what} for {}", axis.word()), raw, &e, lo, hi, u, &ex) }); (None, true) }
+                Err(e) => { bad.push(Refusal { field: "xval", text: bad_text(&format!("{what} for {}", axis.word()), raw, &e, lo, hi, u, axis.units_help(), &ex) }); (None, true) }
                 Ok(d) if d.d < exact(lo) => {
                     let why = match axis {
                         Axis::Temp => format!("the rising part of the curve would be squeezed into the first {} {u}", show(lo)),
@@ -355,7 +489,7 @@ pub fn read_graph(p: &Params) -> Result<Curve, Vec<Refusal>> {
                 }
                 Ok(d) if d.d > exact(hi) => {
                     let why = match axis {
-                        Axis::Temp => format!("the rate falls to zero at {FALL} times the optimum (above {} {u}), and the figure keeps that at least {} {u} short of the end of the axis ({} {u}) so that the fall can be seen", show(hi * FALL), show(TEMP_ROOM), show(axis.xmax())),
+                        Axis::Temp => format!("that is higher than the photosynthetic optimum of almost any land plant, so the figure allows up to {} {u} (the rate then falls to zero {} {u} higher, at {} {u}, on an axis that ends at {} {u})", show(hi), show(FALL_SPAN), show(hi + FALL_SPAN), show(axis.xmax())),
                         _ => format!("the rate at the end of the axis (x = {} {u}) would be below five sixths (83 %) of the plateau, so the curve would not show a plateau", show(axis.xmax())),
                     };
                     bad.push(Refusal { field: "xval", text: format!("{what} for {}: {} is above {} {u}: {why}. Type a number from {}, such as {ex}, or leave it empty.", axis.word(), show_d(d.d), show(hi), range_text(lo, hi, u)) });
@@ -368,13 +502,14 @@ pub fn read_graph(p: &Params) -> Result<Curve, Vec<Refusal>> {
     // the marked point
     let mark = {
         let raw = p.s("mark");
-        if raw.trim().is_empty() { Some(None) } else {
+        let ex = show(axis.mark_default());
+        if raw.trim().is_empty() { Some(None) } else if raw.trim().eq_ignore_ascii_case("auto") { Some(Some(Dec { v: axis.mark_default(), d: exact(axis.mark_default()) })) } else {
             let xm = axis.xmax();
             let u = axis.unit();
             match parse(raw, axis.units()) {
-                Err(e) => { bad.push(Refusal { field: "mark", text: bad_text("Point P", raw, &e, 0.0, xm, u, "20") }); None }
-                Ok(d) if d.d < 0 => { bad.push(Refusal { field: "mark", text: format!("Point P: {} is below 0, the start of the x axis. Type a number from {}, such as 20, or leave it empty.", show_d(d.d), range_text(0.0, xm, u)) }); None }
-                Ok(d) if d.d > exact(xm) => { bad.push(Refusal { field: "mark", text: format!("Point P: {} is beyond {} {u}, the end of the x axis. Type a number from {}, such as 20, or leave it empty.", show_d(d.d), show(xm), range_text(0.0, xm, u)) }); None }
+                Err(e) => { bad.push(Refusal { field: "mark", text: bad_text("Point P", raw, &e, 0.0, xm, u, axis.units_help(), &ex) }); None }
+                Ok(d) if d.d < 0 => { bad.push(Refusal { field: "mark", text: format!("Point P: {} is below 0, the start of the x axis. Type a number from {}, such as {ex}, or leave it empty.", show_d(d.d), range_text(0.0, xm, u)) }); None }
+                Ok(d) if d.d > exact(xm) => { bad.push(Refusal { field: "mark", text: format!("Point P: {} is beyond {} {u}, the end of the x axis. Type a number from {}, such as {ex}, or leave it empty.", show_d(d.d), show(xm), range_text(0.0, xm, u)) }); None }
                 Ok(d) => Some(Some(d)),
             }
         }
@@ -411,6 +546,11 @@ pub const CALVIN_R: f64 = 60.0;
 pub const BAR_Y: f64 = 172.0;
 pub const RING_R: f64 = 3.4;
 pub const RING_SW: f64 = 1.2;
+/// The stroma ring: well inside the stroma, away from the inner membrane above it and the ATP slot below it.
+pub const STROMA_RING_Y: f64 = -114.0;
+/// In Print a white pad this much wider than a ring sits under the ring on the two membranes, so that the hatching of the
+/// space between the membranes does not run through the ring (at 66 % grey the ring would read as pointing at the space).
+pub const HALO_R: f64 = RING_R + 3.0;
 
 fn ell(c: P, rx: f64, ry: f64, n: usize) -> Vec<P> {
     (0..n).map(|i| { let a = std::f64::consts::TAU * i as f64 / n as f64; (c.0 + rx * a.cos(), c.1 + ry * a.sin()) }).collect()
@@ -479,7 +619,7 @@ pub fn target(i: It) -> Option<P> {
     Some(match i {
         It::Thylakoid => { let c = STACKS[0]; (c.0, disc_centre(c, 0).1 - DISC_H / 2.0) }
         It::Granum => (STACKS[BRACKET_STACK].0, BRACKET_Y),
-        It::Stroma => (60.0, -100.0),
+        It::Stroma => (60.0, STROMA_RING_Y),
         It::Outer => on_top(OUT_RX, OUT_RY, 150.0),
         It::Inner => on_top(IN_RX, IN_RY, 245.0),
         _ => return None,
@@ -689,9 +829,17 @@ const PLOT_H: f64 = 230.0;
 
 /// The y axis: the top of the axis and the step between ticks.
 pub fn y_axis(pmax: f64) -> (f64, f64) {
-    let step = super::super::axes::nice_step(pmax * 1.15, 5.0);
+    let step = super::super::axes::nice_step(pmax * 1.15, 7.0);
     let top = (pmax * 1.15 / step - 1e-9).ceil() * step;
     (top, step)
+}
+
+/// How many fine gridlines' spacings make one labelled step: a step of 1 or 5 times a power of ten is cut in 5
+/// (0.2, 1), a step of 2 times a power of ten in 4 (0.5).
+pub fn minor_divisions(step: f64) -> usize {
+    if !(step.is_finite() && step > 0.0) { return 5; }
+    let m = step / 10f64.powf(step.log10().floor());
+    if (m - 2.0).abs() < 0.05 { 4 } else { 5 }
 }
 
 fn num_text(v: f64) -> String { crate::figures::chart::fmt(v) }
@@ -706,6 +854,25 @@ fn seg_hits_box(a: P, b: P, bx: Bx) -> bool {
 
 fn expand(b: Bx, d: f64) -> Bx { (b.0 - d, b.1 - d, b.2 + d, b.3 + d) }
 
+/// The gridline colours. Both palettes are dark enough that a 66 % grey copy of the figure keeps every gridline,
+/// because the student is told to read rates off the fine ones: the Colour pair is a slate grey (contrast ratios
+/// of 5.5 and 4.3 on white) and the Print pair neutral. A key printed in Colour therefore copies as well as one
+/// in Print, and a student copy in the Colour style takes the Print greys.
+pub const GRID_COLOUR: &str = "#5f6a78";
+pub const FINE_COLOUR: &str = "#717c89";
+pub const GRID_PRINT: &str = "#5a5a5a";
+pub const FINE_PRINT: &str = "#7a7a7a";
+/// Gridline widths. A line thinner than this cannot survive a 66 % grey copy of a 1x render whatever its tone
+/// (its ink is spread over two pixel rows), so the two kinds differ by tone, and the labelled ones carry the numbers.
+pub const GRID_SW: f64 = 1.6;
+pub const FINE_SW: f64 = 1.4;
+
+/// A white pad behind a text, so that a gridline never runs through a letter (it ends at the pad).
+fn backing(b: Bx) -> String {
+    let b = expand(b, 1.0);
+    format!(r##"<rect x="{:.2}" y="{:.2}" width="{:.2}" height="{:.2}" fill="#ffffff"/>"##, b.0, b.1, b.2 - b.0, b.3 - b.1)
+}
+
 fn graph(cv: &Curve, c: &Cfg, fills: &svg::Fills, x0: f64, y0: f64) -> GraphOut {
     let fs = 12.0 * c.lab;
     let pr = fills.is_print();
@@ -714,18 +881,27 @@ fn graph(cv: &Curve, c: &Cfg, fills: &svg::Fills, x0: f64, y0: f64) -> GraphOut 
     let (ytop, ystep) = y_axis(cv.pmax.v);
     let px = |x: f64| l + x / axis.xmax() * (r - l);
     let py = |y: f64| bm - y / ytop * (bm - t);
-    let grid = if pr { "#d0d0d0" } else { "#dfe3ea" };
+    // Both palettes are darker than 66 % grey (luminance under 168 of 255) and wide enough that a photocopy at
+    // 66 % keeps every gridline; a student copy in the Colour style takes the Print greys, so that the sheet it
+    // tells the student to read the fine gridlines off is the one that copies
+    let (grid, fine) = if pr || !c.key { (GRID_PRINT, FINE_PRINT) } else { (GRID_COLOUR, FINE_COLOUR) };
     let curve_col = if pr { INK } else { "#1f5fbf" };
     let guide_col = if pr { "#333333" } else { "#555555" };
     let mut s = String::new();
     let line = |s: &mut String, a: P, b: P, col: &str, sw: f64, dash: &str| {
         s.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{col}" stroke-width="{sw}"{}/>"#, a.0, a.1, b.0, b.1, if dash.is_empty() { String::new() } else { format!(r#" stroke-dasharray="{dash}""#) }));
     };
+    // fine gridlines between the labelled ones (the student reads the rate to the nearest of them)
+    let nm = minor_divisions(ystep);
+    for k in 1..(((ytop / ystep).round() as usize + 1) * nm).min(400) {
+        let v = ystep / nm as f64 * k as f64;
+        if v < ytop - ystep * 1e-6 && k % nm != 0 { line(&mut s, (l, py(v)), (r, py(v)), fine, FINE_SW, ""); }
+    }
     // gridlines, axes, ticks
     let mut v = 0.0;
     let mut n = 0;
     while v <= ytop + ystep * 1e-6 && n < 60 {
-        if v > 0.0 { line(&mut s, (l, py(v)), (r, py(v)), grid, 1.0, ""); }
+        if v > 0.0 { line(&mut s, (l, py(v)), (r, py(v)), grid, GRID_SW, ""); }
         s.push_str(&format!(r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{INK}" stroke-width="1.4"/>"#, l - 5.0, py(v), l, py(v)));
         s.push_str(&rich(l - 9.0, py(v) + 0.35 * fs, fs, "end", INK, false, &num_text((v * 1e9).round() / 1e9)));
         v += ystep;
@@ -764,6 +940,7 @@ fn graph(cv: &Curve, c: &Cfg, fills: &svg::Fills, x0: f64, y0: f64) -> GraphOut 
                 let txt = format!("Plateau: {}", show_d(cv.pmax.d));
                 let w = rw(&txt, fs);
                 let bx = (r - 4.0 - w, ypk - 5.0 - 1.1 * fs, r - 4.0, ypk - 5.0);
+                guides.push_str(&backing(bx));
                 guides.push_str(&rich(r - 4.0, ypk - 7.0, fs, "end", INK, false, &txt));
                 boxes.push(bx);
             }
@@ -775,8 +952,10 @@ fn graph(cv: &Curve, c: &Cfg, fills: &svg::Fills, x0: f64, y0: f64) -> GraphOut 
                 obstacles.push(((xo, ypk), (xo, bm)));
                 let txt = format!("Peak: {}", show_d(cv.pmax.d));
                 let w = rw(&txt, fs);
+                let bx = (l + 6.0, ypk - 5.0 - 1.1 * fs, l + 6.0 + w, ypk - 5.0);
+                guides.push_str(&backing(bx));
                 guides.push_str(&rich(l + 6.0, ypk - 7.0, fs, "start", INK, false, &txt));
-                boxes.push((l + 6.0, ypk - 5.0 - 1.1 * fs, l + 6.0 + w, ypk - 5.0));
+                boxes.push(bx);
             }
         }
     }
@@ -806,6 +985,7 @@ fn graph(cv: &Curve, c: &Cfg, fills: &svg::Fills, x0: f64, y0: f64) -> GraphOut 
                 let nearest = (qx.clamp(bx.0, bx.2) - qx).hypot(qy.clamp(bx.1, bx.3) - qy);
                 let inside = bx.0 >= l && bx.2 <= r + 4.0 && bx.1 >= t - 8.0 && bx.3 <= bm - 1.0;
                 if nearest >= 8.0 && inside && !boxes.iter().any(|b| b.0 < eb.2 && eb.0 < b.2 && b.1 < eb.3 && eb.1 < b.3) && !obstacles.iter().any(|(a, b)| seg_hits_box(*a, *b, eb)) {
+                    s.push_str(&backing(bx));
                     s.push_str(&rich(cx, cy + 0.275 * f, f, "middle", INK, true, "P"));
                     boxes.push(bx);
                     placed = true;
@@ -886,11 +1066,13 @@ fn draw(p: &Params) -> String {
         for l in &labs { let a = alts(l.it); if !a.is_empty() { acc.push(format!("{}: {}", name(l.it), a)); } }
         if !acc.is_empty() { cap.push(format!("Also accepted: {}.", acc.join("; "))); }
         if c.io { cap.push("G3P is the molecule the Calvin cycle makes directly; two G3P can be joined to make glucose.".to_string()); }
-        if let Ok(cv) = &reading { cap.extend(graph_caption(cv)); }
+        if c.eq { cap.push("Equation: 6CO~2 + 6H~2O + light gives C~6H~12O~6 + 6O~2. Also accepted: light left out (it is not a substance, so the equation is still net), light written over the arrow instead of on the left, and the terms in a different order. Not accepted: water on both sides, such as 6CO~2 + 12H~2O gives C~6H~12O~6 + 6O~2 + 6H~2O (the same reaction with water left uncancelled, not the net equation), and any multiple of the answer, such as 12CO~2 + 12H~2O gives 2C~6H~12O~6 + 12O~2, because one molecule of glucose is asked for.".to_string()); }
+        if let Ok(cv) = &reading { cap.extend(graph_caption(cv, c.dec)); }
     } else {
         cap.push("A ring or a bracket points at a part, a bar under the drawing names a stage, an arrow carries a substance. Write each name or formula.".to_string());
         if c.io { cap.push("For the arrow that leaves the loop, give the molecule it makes directly.".to_string()); }
-        if c.eq { cap.push("Write the balanced equation for making one molecule of glucose, with whole-number coefficients.".to_string()); }
+        if c.eq { cap.push("Write the net balanced equation for making one molecule of glucose, with no substance on both sides.".to_string()); }
+        if let Ok(cv) = &reading { if cv.mark.is_some() { cap.push("Read the rate at P to the nearest fine gridline.".to_string()); } }
         if c.shuttle { cap.push("ADP + Pi and NADP+ are shown to help you tell the two carriers apart.".to_string()); }
     }
     // the canvas width
@@ -935,9 +1117,12 @@ fn draw(p: &Params) -> String {
         let ps = pts.iter().map(|q| { let q = o(*q); format!("{:.2},{:.2}", q.0, q.1) }).collect::<Vec<_>>().join(" ");
         if closed { format!(r#"<polygon points="{ps}" fill="{fill}" stroke="{stroke}" stroke-width="{sw}" stroke-linejoin="round"/>"#) } else { format!(r#"<polyline points="{ps}" fill="none" stroke="{stroke}" stroke-width="{sw}" stroke-linejoin="round" stroke-linecap="round"/>"#) }
     };
-    for sh in shapes() {
+    for (i, sh) in shapes().into_iter().enumerate() {
         let (f, st) = (paint(sh.fill, &fills), paint(sh.stroke, &fills));
         d.raw(&poly_s(&sh.pts, sh.closed, &f, &st, sh.sw));
+        if i == 1 && pr {
+            for l in &labs { if let (Join::Ring(t), true) = (l.join, matches!(l.it, It::Outer | It::Inner)) { let t = o(t); d.circle(t.0, t.1, HALO_R, "#ffffff", "none", 0.0); } }
+        }
     }
     if labs.iter().any(|l| l.it == It::Granum) { let b = bracket(); d.raw(&poly_s(&b.pts, false, "none", INK, b.sw)); }
     // stage bars
@@ -1001,7 +1186,9 @@ fn draw(p: &Params) -> String {
         } else {
             let n = blanks.len() + 1;
             disc(&mut d, x0 + z.r, cy, z.r, n, 0.9 * z.fs);
-            d.line(x0 + 2.0 * z.r + 8.0, cy + z.r * 0.6, x0 + eq_w, cy + z.r * 0.6, INK, 1.0);
+            let xp = x0 + 2.0 * z.r + 8.0;
+            d.raw(&rich(xp, cy + 0.35 * z.fs, z.fs, "start", INK, false, EQ_PROMPT));
+            d.line(xp + rw(EQ_PROMPT, z.fs) + 6.0, cy + z.r * 0.6, x0 + eq_w, cy + z.r * 0.6, INK, 1.0);
         }
     }
     // ---------- the graph
@@ -1014,10 +1201,9 @@ fn draw(p: &Params) -> String {
                 if let Some(m) = cv.mark {
                     let ry = graph_y + g.h + 6.0 + z.r;
                     let n = blanks.len() + usize::from(c.eq) + 1;
-                    let ru = cv.rate(m.v);
                     let x = gx + 20.0;
                     if c.key {
-                        d.raw(&rich(x, ry + 0.35 * z.fs, z.fs, "start", INK, false, &format!("Rate at P (x = {} {}): {:.*} arbitrary units", show_d(m.d), cv.axis.unit(), c.dec, round_half_up(ru, c.dec))));
+                        d.raw(&rich(x, ry + 0.35 * z.fs, z.fs, "start", INK, false, &format!("Rate at P (x = {} {}): {} arbitrary units", show_d(m.d), cv.axis.unit(), cv.key_rate(&m, c.dec))));
                     } else {
                         disc(&mut d, x + z.r, ry, z.r, n, 0.9 * z.fs);
                         let xr = x + 2.0 * z.r + 8.0;
@@ -1054,29 +1240,33 @@ fn draw(p: &Params) -> String {
     d.finish()
 }
 
-/// What the key says about the graph: the dashed and dotted guides, and what limits the rate where.
-fn graph_caption(cv: &Curve) -> Vec<String> {
+/// What the key says about the graph: the dashed and dotted guides, what limits the rate where, and which reading to accept.
+pub fn graph_caption(cv: &Curve, dec: usize) -> Vec<String> {
     let u = cv.axis.unit();
-    match cv.axis {
-        Axis::Light | Axis::Co2 => vec![format!(
-            "Graph: the dashed line is the plateau, {}; the dotted lines show that half of it is reached at x = {} {u}. On the rising part the rate is limited by {}; on the plateau {} is no longer limiting and another factor is.",
-            show_d(cv.pmax.d), show_d(cv.xv.d), cv.axis.word(), cv.axis.word())],
+    let mut v = match cv.axis {
+        Axis::Light | Axis::Co2 => {
+            // how far up the plateau the curve is at the end of the axis (the curve approaches the line and never reaches it)
+            let xm = exact(cv.axis.xmax());
+            let at_end = ratio_text(100 * xm, cv.xv.d + xm, 0);
+            vec![format!(
+                "Graph: the dashed line is the plateau, {}, which the curve approaches but never reaches (at the end of the axis it is at {at_end} % of it); the dotted lines show that half of the plateau is reached at x = {} {u}. On the rising part the rate is limited by {}; where the curve levels off towards the plateau {} is no longer the main limit and another factor is.",
+                show_d(cv.pmax.d), show_d(cv.xv.d), cv.axis.word(), cv.axis.word())]
+        }
         Axis::Temp => vec![format!(
-            "Graph: the dashed line is the peak, {}; the dotted line marks the optimum, {} {u}. The rate rises to the optimum, then falls steeply to zero at {} {u} ({FALL} times the optimum), when enzymes have lost their shape.",
-            show_d(cv.pmax.d), show_d(cv.xv.d), show(cv.xv.v * FALL))],
+            "Graph: the dashed line is the peak, {}; the dotted line marks the optimum, {} {u}. The rate rises to the optimum, then falls steeply and reaches zero {} {u} above it, at {} {u}: heat damages enzymes and membranes. The zero is a feature of this simplified curve, not a measured value for one species.",
+            show_d(cv.pmax.d), show_d(cv.xv.d), show(FALL_SPAN), show_d(cv.xv.d + exact(FALL_SPAN)))],
+    };
+    if let Some(m) = &cv.mark {
+        let (lo, hi, minor, _) = cv.accept(m, dec);
+        v.push(format!("Reading at P: accept any value from {lo} to {hi} arbitrary units, the fine gridlines either side of the exact rate ({minor} apart)."));
     }
+    v
 }
 
 fn msg_lines(list: &[Refusal], lab: f64) -> Vec<(String, bool)> {
     let mut v = vec![(HEAD.to_string(), true)];
     if let Some(r) = list.first() { for l in wrap_rich(&r.text, GRAPH_W - 32.0, 13.0 * lab) { v.push((l, false)); } }
     v
-}
-
-/// `x` rounded half up to `dec` decimals, by counting in integers so that an exact half goes up.
-pub fn round_half_up(x: f64, dec: usize) -> f64 {
-    let f = 10f64.powi(dec as i32);
-    ((x * f) + 0.5 + 1e-9).floor() / f
 }
 
 fn disc(d: &mut Doc, x: f64, y: f64, r: f64, n: usize, fs: f64) {
@@ -1094,7 +1284,7 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
         Example { name: "Inputs and outputs, student copy", params: vec![b("show_parts", false), b("show_stages", false), b("show_shuttle", false), b(SHOW_ANSWERS, false)] },
         Example { name: "Rate against light intensity", params: vec![b("show_graph", true), b("show_parts", false), b("show_io", false), b("show_shuttle", false)] },
         Example { name: "Rate against CO2, student copy", params: vec![b("show_graph", true), s("graph_x", "CO2 concentration"), s("xval", "120"), s("mark", "150"), b("show_parts", false), b("show_io", false), b("show_shuttle", false), b(SHOW_ANSWERS, false)] },
-        Example { name: "Rate against temperature", params: vec![b("show_graph", true), s("graph_x", "Temperature"), s("pmax", "8"), s("xval", "28"), s("mark", "40"), b("show_parts", false), b("show_io", false), b("show_shuttle", false)] },
+        Example { name: "Rate against temperature", params: vec![b("show_graph", true), s("graph_x", "Temperature"), s("pmax", "8"), s("xval", "28"), s("mark", "36"), b("show_parts", false), b("show_io", false), b("show_shuttle", false)] },
     ])
 }
 

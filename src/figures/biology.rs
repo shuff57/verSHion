@@ -24,6 +24,7 @@ mod plot;
 pub mod popdyn;
 pub mod punnett;
 pub mod soiltexture;
+pub mod xylem;
 
 /// Direct-manipulation handles for this subject's figures (None = not one of ours).
 /// "Start from an example" entries for this subject's figures.
@@ -47,6 +48,7 @@ pub fn examples(id: &str) -> Option<Vec<super::Example>> {
         "soil-texture" => soiltexture::examples(id),
         "photosynthesis" => photosynthesis::examples(id),
         "leaf-cross-section" => leaf::examples(id),
+        "xylem-phloem" => xylem::examples(id),
         _ => None,
     }
 }
@@ -152,6 +154,7 @@ pub fn defs() -> Vec<FigureDef> {
         soiltexture::defs().pop().unwrap(),
         photosynthesis::defs().pop().unwrap(),
         leaf::defs().pop().unwrap(),
+        xylem::defs().pop().unwrap(),
     ]
 }
 
