@@ -392,8 +392,10 @@ fn the_too_many_counts_refusal_keeps_every_count() {
         ("A, 5, 7, 3\nB, 1, 2", "Line 1 (\u{201c}A, 5, 7, 3\u{201d})", ["5", "7", "3"]),
         ("A, 9, 12,5", "Line 1 (\u{201c}A, 9, 12,5\u{201d})", ["9", "12", "5"]),
         ("B, 3, 4, 9", "Line 1 (\u{201c}B, 3, 4, 9\u{201d})", ["3", "4", "9"]),
-        // a thousands count is quoted as it reads, not as the normalised cell (LOW)
+        // a thousands count is quoted as it was typed, in every spelling (LOW)
         ("A, 1,200, 3, 4", "Line 1 (\u{201c}A, 1,200, 3, 4\u{201d})", ["1,200", "3", "4"]),
+        ("A, 1 200, 3, 4", "Line 1 (\u{201c}A, 1 200, 3, 4\u{201d})", ["1 200", "3", "4"]),
+        ("A, 1200, 3, 4", "Line 1 (\u{201c}A, 1200, 3, 4\u{201d})", ["1200", "3", "4"]),
     ] {
         let e = parse(data).unwrap_err();
         assert!(e.contains("this figure takes at most two counts per category"), "{data}: {e}");
@@ -577,6 +579,76 @@ fn no_advice_rewrite_drops_a_typed_count() {
         }
     }
     assert!(checked >= 5, "the sweep applied {checked} rewrites");
+}
+
+#[test]
+fn a_typos_count_with_a_word_is_refused_not_swallowed() {
+    // MED: a first line whose cell is a mistyped count plus a word, or a vague quantity, must be
+    // refused by line -- it never becomes the headings while its row disappears from the chart
+    for (data, cell) in [
+        ("A, l23 students\nB, 5", "l23 students"),
+        ("A, 1O students\nB, 5", "1O students"),
+        ("A, \u{2014} students\nB, 5", "\u{2014} students"),
+        ("A, several\nB, 5", "several"),
+        ("A, lots\nB, 5", "lots"),
+    ] {
+        let t = parse(data);
+        assert!(t.is_err(), "{data}: refused, never the headings");
+        let e = t.unwrap_err();
+        assert!(e.contains(cell), "{data}: the cell is named: {e}");
+        assert!(!e.contains("read as headings"), "{data}: {e}");
+        assert!(e.contains("Group 1 name") || e.contains("is not a number"), "{data}: a route that works: {e}");
+        assert!(!render(&with(&[("data", data)])).contains("<rect x="), "{data}: no chart is drawn");
+    }
+    // `12 students` is a number and a word: data, with the fix that keeps the count
+    let mut p = with(&[("data", "A, 12 students\nB, 5")]);
+    let (steps, stuck) = settle(&mut p);
+    assert_eq!((steps, stuck.is_none()), (1, true), "{steps} {stuck:?}");
+    assert_eq!(state_pairs(&parse(p.s("data")).unwrap()), rows(&[("A", &[12]), ("B", &[5])]));
+    // a genuine headings line still reads as headings
+    let t = parse("Grade, 9th grade, 10th grade\nA, 1, 2").unwrap();
+    assert_eq!(t.head.unwrap().2, ["Grade", "9th grade", "10th grade"]);
+}
+
+#[test]
+fn a_names_quotes_are_kept() {
+    // LOW: a balanced literal quote stays in the printed name; only a properly quoted cell loses
+    // its outer pair
+    let data = "5'2\" - 5'4\", 6\n5'4\" - 5'6\", 9";
+    let t = parse(data).unwrap();
+    assert_eq!(t.cats[0].name, "5'2\" - 5'4\"");
+    assert_eq!(t.cats[1].name, "5'4\" - 5'6\"");
+    assert_eq!(t.cats.iter().map(|c| c.counts[0]).collect::<Vec<_>>(), [6, 9]);
+    assert!(warnings(&with(&[("data", data)])).is_empty(), "{:?}", warnings(&with(&[("data", data)])));
+    let joined: String = texts(&render(&with(&[("data", data)]))).into_iter().map(|e| e.text).collect();
+    assert!(joined.contains("5'2\""), "the printed name keeps its quote: {joined:?}");
+    // a properly quoted cell still loses its outer pair, and an inner pair stays
+    assert_eq!(parse("\"Train, fast\", 2\nWalk, 3").unwrap().cats[0].name, "Train, fast");
+    assert_eq!(parse("a\"b\"c, 3\nB, 4").unwrap().cats[0].name, "a\"b\"c");
+}
+
+#[test]
+fn an_ambiguous_thousands_fix_keeps_the_name() {
+    // LOW: the merged line's fix used to read `change line 2 to ", 3400"`, which has no name
+    let mut p = with(&[("data", "A, 1200\nA, 3,400")]);
+    let notes = warnings(&p);
+    let amb = notes.iter().find(|n| n.contains("Two counts would be")).unwrap_or_else(|| panic!("{notes:?}"));
+    assert!(amb.contains("change line 2 to \u{201c}A, 3400\u{201d}"), "{amb}");
+    let (steps, stuck) = settle(&mut p);
+    assert!(steps >= 2 && stuck.is_none(), "{steps} {stuck:?}");
+    let cats = parse(p.s("data")).unwrap().cats;
+    assert!(cats.iter().all(|c| !c.name.trim().is_empty()), "every row keeps a name: {cats:?}");
+}
+
+#[test]
+fn the_too_large_advice_names_a_unit_that_works() {
+    // LOW: the unit must bring the count under the cap, else the plain limit (a mutant that always
+    // says "thousands" must fail)
+    let note = |v: &str| warnings(&with(&[("data", &format!("A, {v}\nB, 3"))]))[0].clone();
+    assert!(note("5e9").contains("count in thousands"), "{}", note("5e9"));
+    assert!(note("1e15").contains("count in millions"), "{}", note("1e15"));
+    assert!(note("1e17").contains("count in billions"), "{}", note("1e17"));
+    assert!(note("9999999999999999999999").contains("type counts of at most 1000000000"), "{}", note("9999999999999999999999"));
 }
 
 #[test]

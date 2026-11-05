@@ -252,7 +252,12 @@ fn csv_cells(line: &str, sep: char) -> Vec<String> {
     let quotes = balanced_quotes(line);
     for ch in line.chars() {
         match ch {
-            '"' if quotes => quoted = !quoted,
+            '"' if quotes => {
+                // keep the character: only a cell that is wholly quoted loses its outer pair, so
+                // `5'2" - 5'4"` and `a"b"c` keep their quotes (LOW)
+                quoted = !quoted;
+                cur.push(ch);
+            }
             c if c == sep && !quoted => out.push(std::mem::take(&mut cur)),
             _ => cur.push(ch),
         }
@@ -355,6 +360,31 @@ fn tail_count(line: &str) -> Result<(Vec<String>, Option<Vec<String>>), usize> {
     }
 }
 
+/// The text of count `v` as it appears in `line` at or after `from`: `1,200`, `1 200` or `1200`.
+/// Returns the text and the index just past it.
+fn typed_count(line: &str, from: usize, v: u64) -> Option<(String, usize)> {
+    let c: Vec<char> = line.chars().collect();
+    let mut i = from;
+    while i < c.len() {
+        if !c[i].is_ascii_digit() {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        let mut j = i;
+        while j < c.len() && (c[j].is_ascii_digit() || (matches!(c[j], ',' | ' ') && j + 1 < c.len() && c[j + 1].is_ascii_digit())) {
+            j += 1;
+        }
+        let text: String = c[start..j].iter().collect();
+        let plain: String = text.chars().filter(|ch| ch.is_ascii_digit()).collect();
+        if plain.parse::<u64>().ok() == Some(v) {
+            return Some((text, j));
+        }
+        i = j;
+    }
+    None
+}
+
 /// A comma with no space after it and not exactly three digits after it (`12,5`, `1,2000`): the
 /// digits on each side, which the line reads as two counts.
 fn short_comma(line: &str) -> Option<(u64, u64)> {
@@ -411,7 +441,9 @@ fn split_cells(line: &str) -> Result<(Vec<String>, Option<Vec<String>>), usize> 
         return tail_count(line);
     };
     for c in cells.iter_mut() {
-        *c = c.trim().trim_matches('"').trim().to_string();
+        let t = c.trim();
+        // a quoted cell loses its outer pair only; a name that merely ends in a quote (`5'2"`) keeps it
+        *c = if t.len() >= 2 && t.starts_with('"') && t.ends_with('"') { t[1..t.len() - 1].trim().to_string() } else { t.to_string() };
     }
     while cells.len() > 1 && cells.last().is_some_and(|c| c.is_empty()) {
         cells.pop();
@@ -440,7 +472,17 @@ fn split_line(line: &str) -> Result<Cells, usize> {
 /// but a symbol, a full-width digit or `N/A` is not a name (MED 3).
 fn name_cell(c: &str) -> bool {
     let t = c.trim();
-    t.chars().any(|ch| ch.is_ascii_alphabetic()) && !t.chars().any(|ch| matches!(ch, ',' | ';' | '/' | '"')) && !count_like(t)
+    if t.chars().any(|ch| matches!(ch, ',' | ';' | '/' | '"')) || !t.chars().any(|ch| ch.is_ascii_alphabetic()) {
+        return false;
+    }
+    let toks: Vec<&str> = t.split_whitespace().collect();
+    if !toks.iter().all(|tok| label_token(tok)) || count_like(t) {
+        return false;
+    }
+    // a bare ordinal (`1st`) is a count written in words; `9th grade` is a name
+    let first = toks[0];
+    let lead: String = first.chars().take_while(|c| c.is_ascii_digit()).collect();
+    !(toks.len() == 1 && !lead.is_empty() && first.len() > lead.len())
 }
 
 /// The refusal a first line gets when it is neither a line of headings nor a category with counts:
@@ -455,6 +497,30 @@ fn first_line_ambiguous(n: usize, l: &str, cell: &str, name: &str, cells: usize)
         q("Group 2 name"),
         q(&example)
     )
+}
+
+/// A vague quantity written as a word (`several`, `lots`): a count the teacher wrote in words, not
+/// a group name (MED).
+fn quantity_word(c: &str) -> bool {
+    matches!(c.trim().to_lowercase().as_str(), "several" | "lots" | "loads" | "many" | "few" | "some" | "couple" | "most" | "plenty")
+}
+
+/// A token of a group name: a word (`Grade`, `Two-year-olds`), a number (`9`), or a number with an
+/// ordinal suffix (`9th`). A token that mixes letters and digits any other way is a count typed
+/// with the wrong keys (`l23`, `1O`, `Q1`, `COVID-19`), never a name (MED).
+fn label_token(t: &str) -> bool {
+    if t.is_empty() {
+        return false;
+    }
+    let digits: String = t.chars().take_while(|c| c.is_ascii_digit()).collect();
+    let rest = &t[digits.len()..];
+    if !digits.is_empty() {
+        if rest.is_empty() {
+            return true;
+        }
+        return matches!(rest.to_lowercase().as_str(), "st" | "nd" | "rd" | "th");
+    }
+    t.chars().any(|c| c.is_ascii_alphabetic()) && t.chars().all(|c| c.is_ascii_alphabetic() || matches!(c, '\'' | '.' | '-'))
 }
 
 /// A cell the first line should read as a mistyped count rather than as a group name. A cell is a
@@ -477,6 +543,9 @@ fn count_like(c: &str) -> bool {
     }
     if low == "none" {
         return false;
+    }
+    if quantity_word(t) {
+        return true;
     }
     if parse_count(t).is_ok() || word_value(t).is_some() {
         return true;
@@ -595,9 +664,22 @@ pub fn parse(text: &str) -> Result<Table, String> {
                 // or when two or more cells cannot be read at all
                 let bad: Vec<&String> = cells[1..].iter().filter(|c| parse_count(c).is_err() && !name_cell(c)).collect();
                 let name_in_counts = cells[1..].iter().any(|c| name_cell(c));
-                // a word a count could not be (`N/A`, `Jones, 3`) is no better than a number
-                let looks_like_name = |c: &String| c.chars().any(|ch| ch.is_ascii_alphabetic()) && !count_like(c);
-                if cells.len() >= 2 && (name_in_counts || bad.len() >= 2 || bad.iter().any(|c| looks_like_name(c))) {
+                // a word a count could not be (`N/A`, `several`, `l23 students`) is no better than a
+                // number: refuse it here. `12 students` is a number and a word, and keeps its own fix.
+                let count_then_word = |c: &String| {
+                    let t = c.trim();
+                    let lead: String = t.chars().take_while(|ch| ch.is_ascii_digit()).collect();
+                    (1..=9).contains(&lead.len()) && t[lead.len()..].starts_with(' ') && t[lead.len()..].trim_start().chars().any(|ch| ch.is_alphabetic())
+                };
+                let wordy = |c: &String| {
+                    let t = c.trim();
+                    let low = t.to_lowercase();
+                    let pure_word = !t.is_empty() && t.chars().all(|ch| ch.is_ascii_alphabetic());
+                    let number = matches!(low.as_str(), "inf" | "infinity" | "nan" | "-inf" | "+inf") || word_value(t).is_some();
+                    // a word where a count belongs, or a bare word that is no number (`several`)
+                    (t.chars().any(|ch| ch.is_ascii_alphabetic()) && !count_like(t) && !count_then_word(c)) || (pure_word && !number)
+                };
+                if cells.len() >= 2 && (name_in_counts || bad.len() >= 2 || bad.iter().any(|c| wordy(c))) {
                     let first_bad = bad.first().map(|c| (*c).clone()).or_else(|| cells[1..].iter().find(|c| name_cell(c)).cloned());
                     if let Some(cell) = &first_bad {
                         return Err(first_line_ambiguous(n, l, cell, &cells[0], cells.len()));
@@ -649,11 +731,23 @@ pub fn parse(text: &str) -> Result<Table, String> {
         if raw.len() > 2 {
             // MAJOR: no rewrite. The old advice ("change line n to …" with the first two counts)
             // silently dropped the extra count; the limit is stated and the data is left alone
+            // quote each count as it was typed (`1 200` stays `1 200`, not `1,200`)
+            let mut at = 0;
+            let shown: Vec<String> = raw
+                .iter()
+                .map(|c| match (parse_count(c), typed_count(l, at, parse_count(c).unwrap_or(0))) {
+                    (Ok(_), Some((text, end))) => {
+                        at = end;
+                        q(&text)
+                    }
+                    _ => q(c.trim()),
+                })
+                .collect();
             return Err(format!(
                 "Line {n} ({}) holds {} ({}), and this figure takes at most two counts per category: one count, or two to compare two groups. Nothing is dropped for you here: type the line with two counts, or draw the extra counts in a second chart (a second table).",
                 q(l),
                 plural(raw.len(), "count", "counts"),
-                and_list(&raw.iter().map(|c| q(&match parse_count(c) { Ok(v) => fmt_count(v), Err(_) => c.trim().to_string() })).collect::<Vec<_>>())
+                and_list(&shown)
             ));
         }
         let mut counts = Vec::new();
@@ -1148,7 +1242,13 @@ pub fn warnings(p: &Params) -> Vec<String> {
         let used = if cells.len() >= 2 { " Its first heading names the category axis unless you type one, and the others name the groups." } else { "" };
         out.push(format!("Line {n} ({}) was read as headings, not as a category.{used}", q(l)));
     }
-    let name_on = |n: usize| t.cats.iter().find(|c| c.line == n).map(|c| c.name.clone()).unwrap_or_default();
+    let name_on = |n: usize| -> String {
+        if let Some(c) = t.cats.iter().find(|c| c.line == n) {
+            return c.name.clone();
+        }
+        // a merged line keeps the category's name (L2: the fix used to drop it and write ", 3400")
+        t.merged.iter().find(|m| m.lines.contains(&n)).map(|m| m.name.clone()).unwrap_or_default()
+    };
     // MAJOR 1: a thousands group is one count, but `A, 3,100` could also be 3 and 100: say which
     // reading was used, how to write the other, and give a rewrite that keeps this one
     if !t.ambiguous.is_empty() {
