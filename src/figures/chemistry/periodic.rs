@@ -501,9 +501,7 @@ fn panel_text(st: &Setup, ans: bool) -> Vec<(String, &'static str)> {
             v.push((format!("Valence shell: {} electron{} ({why}).", n, if n == 1 { "" } else { "s" }), "answer"));
         }
     } else {
-        let fields = if p.group.is_none() {
-            "Name ______; Z ______; group: none (f-block); period ______; category ______."
-        } else if st.typed_number {
+        let fields = if st.typed_number {
             "Name ______; group ______; period ______; category ______."
         } else {
             "Name ______; Z ______; group ______; period ______; category ______."

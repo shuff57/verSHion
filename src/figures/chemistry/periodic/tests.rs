@@ -1209,10 +1209,10 @@ fn the_student_copy_blanks_the_read_out_and_leaks_no_answer() {
     assert!(numkey.contains("Z = 79") && numkey.contains("Gold"), "{numkey}");
     let sym = build_of(&student(&[s("block", BLOCKS[1]), s("highlight", "Au")])).1.panel.join(" ");
     assert!(sym.contains("Z ______"), "a symbol highlight still asks for Z: {sym}");
-    // the f-block has no group number, so the student is not asked for one
+    // the f-block's group is the answer, so the student sheet asks for it rather than printing it
     let la = build_of(&student(&[s("block", BLOCKS[2]), s("highlight", "La")])).1.panel.join(" ");
-    assert!(la.contains("group: none (f-block)"), "{la}");
-    assert!(!la.contains("group ______"), "{la}");
+    assert!(la.contains("group ______"), "{la}");
+    assert!(!la.contains("none (f-block)") && !la.contains("f-block)"), "{la}");
 }
 
 #[test]
