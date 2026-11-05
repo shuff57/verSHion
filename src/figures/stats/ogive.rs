@@ -290,10 +290,13 @@ fn cell_overflow(c: &str) -> Option<f64> {
 /// the line then reads as a class.
 fn cells(line: &str) -> Vec<String> {
     let plain = cells_plain(line);
-    if plain.len() > 3 {
-        let cleaned = strip_thousands(line);
-        if cleaned != line && cells_plain(&cleaned).len() == 3 {
-            return cells_plain(&cleaned);
+    // "1,000, 3" is a midpoint and its frequency, "1,000, 2,000, 5" a class: when dropping the
+    // thousands commas makes the line read as either, that reading is the one meant
+    let cleaned = strip_thousands(line);
+    if cleaned != line {
+        let alt = cells_plain(&cleaned);
+        if alt.len() == 3 || alt.len() == 2 {
+            return alt;
         }
     }
     plain
@@ -423,7 +426,9 @@ fn example_row(bad: &Bad, rows: &[(usize, f64, f64, f64)], per_line: &[(usize, V
     // neighbouring midpoints
     let two_col = per_line.iter().filter(|(_, v)| v.len() == 2).count();
     let three_col = per_line.iter().filter(|(_, v)| v.len() == 3).count();
-    if two_col > 0 && three_col == 0 && bad.cells.len() == 2 {
+    // two or more such rows make a midpoint table (the gap between midpoints is the width); one on
+    // its own is as likely a class whose frequency is missing
+    if two_col >= 2 && three_col == 0 && bad.cells.len() == 2 {
         if let (Some(mid), Some(f)) = (num(0), num(1)) {
             let mut mids: Vec<f64> = per_line.iter().filter(|(_, v)| v.len() == 2).map(|(_, v)| v[0]).collect();
             mids.sort_by(f64::total_cmp);
@@ -473,18 +478,43 @@ pub fn parse_table(text: &str) -> Result<Vec<Class>, String> {
         let cs = cells(line);
         let nums: Vec<Option<f64>> = cs.iter().map(|c| cell_number(c)).collect();
         let count = nums.iter().filter(|v| v.is_some()).count();
-        // a first line with no numbers is a header, and so is one that names its columns even
-        // when a column name carries a number ("Class 1, Frequency")
-        if k == 0 && (count == 0 || (count < 3 && cs.iter().any(|c| header_word(c)))) {
+        // a first line with no numbers is a header, and so is one that names its columns ("Class
+        // 1, Frequency"), but only when its first cell is a word: "0, 10, group" is a data row
+        let first_is_word = cs.first().map(|c| cell_number(c).is_none()).unwrap_or(false);
+        if k == 0 && (count == 0 || (first_is_word && count < 3 && cs.iter().any(|c| header_word(c)))) {
             continue;
         }
         // a number beyond what the figure accepts: name the limit, and never hand back an example
         // that would be refused the same way
-        if let Some(v) = cs.iter().find_map(|c| cell_overflow(c)) {
+        if let Some((v, at)) = cs.iter().enumerate().find_map(|(i, c)| cell_overflow(c).map(|v| (v, i))) {
+            let max = plain(data::MAX_ABS);
+            // a boundary can be written in smaller units; a frequency counts values and cannot be
+            // scaled, so only deletion is left for it
+            let boundary = at < 2 && cs.len() >= 2;
+            let route = if boundary {
+                // the smallest power of ten that brings both boundaries inside the limit
+                let big = cs.iter().take(2).filter_map(|c| cell_number(c).or_else(|| cell_overflow(c))).fold(0.0f64, |m, v| m.max(v.abs()));
+                let mut div = 10.0;
+                while div < 1e15 && big / div > data::MAX_ABS {
+                    div *= 10.0;
+                }
+                let scaled: Vec<String> = cs.iter().enumerate().map(|(i, c)| {
+                    let num = cell_number(c).or_else(|| cell_overflow(c));
+                    match (i, num) {
+                        (0 | 1, Some(x)) => plain(x / div),
+                        _ => c.clone(),
+                    }
+                }).collect();
+                format!(
+                    "Divide every boundary by {} (leave every frequency as it is: a count cannot be divided) so that the boundary is {}, and the shape of the ogive does not change; for example line {n} becomes \"{}\".",
+                    plain(div), max, scaled.join(", ")
+                )
+            } else {
+                format!("A frequency counts values, so it cannot be divided or scaled: delete line {n}.")
+            };
             return Err(format!(
-                "Line {n} (\"{line}\") has {}, which is beyond the largest number an ogive here takes, {max}. Every boundary and frequency must be between \u{2212}{max} and {max}: delete line {n}, or divide every boundary and frequency by a power of ten (the shape of the ogive does not change) until they all fit.",
-                plain(v),
-                max = plain(data::MAX_ABS)
+                "Line {n} (\"{line}\") has {}, which is beyond the largest number an ogive here takes, {max}. Every boundary and frequency must be between \u{2212}{max} and {max}: delete line {n}, or {route}",
+                plain(v)
             ));
         }
         if count == 3 && cs.len() == 3 {
@@ -555,7 +585,9 @@ pub fn parse_table(text: &str) -> Result<Vec<Class>, String> {
     let mut sorted = rows.clone();
     sorted.sort_by(|a, b| a.1.total_cmp(&b.1).then(a.2.total_cmp(&b.2)));
     let scale = sorted.iter().map(|r| r.1.abs().max(r.2.abs())).fold(1e-300, f64::max);
-    let same = |a: f64, b: f64| (a - b).abs() <= 1e-9 * scale;
+    // float noise only: a relative 1e-12 is 0.001 at a boundary of 1e9, so classes one unit apart
+    // stay apart while the same typed number is still one boundary
+    let same = |a: f64, b: f64| (a - b).abs() <= 1e-12 * scale.max(1.0);
     for w in sorted.windows(2) {
         let ((n1, a1, b1, f1), (n2, a2, b2, f2)) = (w[0], w[1]);
         if b2 <= b1 || same(b2, b1) {
@@ -786,6 +818,44 @@ pub struct Reading {
     pub pct: f64,
 }
 
+/// Readings whose guides fall on the same point of the curve share one guide line and one label:
+/// a percentile that lands on the median is one point, not two.
+pub fn guide_groups(readings: &[Reading]) -> Vec<Vec<usize>> {
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    for (i, r) in readings.iter().enumerate() {
+        let near = |o: &Reading| (o.x - r.x).abs() <= 1e-9 * (1.0 + o.x.abs()) && (o.t - r.t).abs() <= 1e-9 * (1.0 + o.t.abs());
+        match groups.iter_mut().find(|g| near(&readings[g[0]])) {
+            Some(g) => g.push(i),
+            None => groups.push(vec![i]),
+        }
+    }
+    groups
+}
+
+/// The label of one guide group: the names of every reading on that line, then the height and the
+/// value ("P50 = M: 25 = 50% of 50"). A group of one reads exactly as that reading's own label.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GroupLabel {
+    pub side: String,
+    pub side_short: String,
+    pub foot: String,
+    pub short: String,
+}
+
+pub fn group_label(readings: &[Reading], g: &[usize]) -> GroupLabel {
+    let names: Vec<&str> = g.iter().map(|&i| readings[i].short.as_str()).collect();
+    let name = names.join(" = ");
+    let base = &readings[g[0]];
+    let after_name = |s: &str| -> String {
+        let head = format!("{}: ", base.short);
+        match s.strip_prefix(&head) { Some(rest) => format!("{name}: {rest}"), None => s.to_string() }
+    };
+    // the value the foot carried ("P50 = 72"), if any reading has one
+    let value = g.iter().find_map(|&i| readings[i].foot.split_once(" = ").map(|(_, v)| v.to_string()));
+    let foot = match value { Some(v) => format!("{name} = {v}"), None => name.clone() };
+    GroupLabel { side: after_name(&base.side), side_short: after_name(&base.side_short), foot, short: name }
+}
+
 /// Everything the figure works out from the params (also used by the notes and the tests).
 pub struct Model {
     pub cs: Vec<Class>,
@@ -839,15 +909,25 @@ pub fn minor_divisions(step: f64) -> usize {
     if (m - 2.0).abs() < 0.05 { 4 } else { 5 }
 }
 
-/// How many fine gridlines cut one class across: the most the plot has room to draw, so the
-/// key's accepted range is the precision of the grid the student actually has.
+/// The most fine gridlines that cut one class across.
 pub const MINOR_X: usize = 5;
+/// The least pixel pitch a fine x-gridline needs before it is drawn: a closer division is a grey
+/// band in Print, not a grid.
+pub const MIN_PITCH: f64 = 6.0;
 
-/// The fine x-gridlines per class for a table of `n` classes (5 wide classes, 2 when narrower,
-/// none when the class is too narrow to subdivide).
-pub fn minor_x(n: usize) -> usize {
-    let w = PLOT_W / n.max(1) as f64;
-    if w >= 10.0 * MINOR_X as f64 { MINOR_X } else if w >= 10.0 * 2.0 { 2 } else { 1 }
+/// The pixel width a class of width `w` gets on a plot whose data spans `span` (the frame adds 3 %
+/// of padding either side, so the drawn data width is PLOT_W / 1.06 of the frame).
+pub fn class_px(w: f64, span: f64) -> f64 {
+    if !(span > 0.0) { return 0.0; }
+    PLOT_W * w / (span * 1.06)
+}
+
+/// The fine gridlines across one class: one per MIN_PITCH pixels, at most MINOR_X, never fewer
+/// than one (a class always has its own boundaries). Both the drawing and the key's accepted
+/// range use this, so a range is never finer than the grid the student has.
+pub fn divisions(w_px: f64) -> usize {
+    if !(w_px > 0.0) { return 1; }
+    ((w_px / MIN_PITCH).floor() as usize).clamp(1, MINOR_X)
 }
 
 /// Half of the fine gridline spacing at `x`, in x units: how far a reading may sit from the exact
@@ -862,7 +942,9 @@ pub fn read_tol(cs: &[Class], x: f64, ystep: f64, sc: f64) -> Option<Rat> {
     if !(w.to_f64() > 0.0) {
         return None;
     }
-    let across = w.div(Rat::int(2 * minor_x(cs.len()) as i128))?;
+    let span = cs[cs.len() - 1].hi - cs[0].lo;
+    let d = divisions(class_px(c.hi - c.lo, span));
+    let across = w.div(Rat::int(2 * d as i128))?;
     // one fine vertical step, turned into x by the slope of the class: dy * w / f
     let up = if c.f == 0 {
         Rat::int(0)
@@ -1032,7 +1114,11 @@ pub fn model(p: &Params) -> Result<Model, String> {
             let xr = tr.and_then(|r| value_frac(&cs, r));
             notes.extend(flat_note(t, long));
             let side = match y_axis { Y_FREQ => format!("{short}: {} = {pc}% of {n}", tidy_rat(tr, t)), Y_PCT => format!("{short}: {pc}%"), _ => format!("{short}: {}", tidy_rat(tr.and_then(|r| r.div(Rat::int(n as i128))), pc / 100.0)) };
-            let height = match y_axis { Y_FREQ => tidy_rat(tr, t), _ => side.clone() };
+            let height = match y_axis {
+                Y_FREQ => tidy_rat(tr, t),
+                Y_PCT => format!("{pc}%"),
+                _ => tidy_rat(tr.and_then(|r| r.div(Rat::int(n as i128))), pc / 100.0),
+            };
             let side_short = format!("{short}: {height}");
             readings.push(Reading { t, x, side, side_short, foot: short.to_string(), short: short.to_string(), pct: *pc });
             ans.push(format!("{} {}", if *short == "M" { "median" } else { short }, about(xr, x, t)));
@@ -1063,9 +1149,18 @@ pub fn warnings(p: &Params) -> Vec<String> {
     key.set_b(SHOW_ANSWERS, true);
     let bare = draw(&key).1;
     if !bare.is_empty() {
-        // the guides the note names, as (height, x, name): a step may not delete any of them
-        let named: Vec<(f64, f64, String)> = readings.iter().filter(|r| bare.contains(&r.short)).map(|r| (r.t, r.x, r.short.clone())).collect();
-        // offer only a one-control change that is measured to label every guide
+        // every distinct guide the drawing could not label, as a group of coincident readings
+        let groups = guide_groups(&readings);
+        let unlabelled: Vec<&Vec<usize>> = groups.iter().filter(|g| bare.contains(&group_label(&readings, g).short)).collect();
+        let on = |g: &Vec<usize>, q: &Model| -> bool {
+            // a guide is on the same spot of the curve in `q` when a reading sits there
+            g.iter().any(|&i| {
+                let r = &readings[i];
+                q.readings.iter().any(|o| (o.x - r.x).abs() < 1e-9 * (1.0 + r.x.abs()) && (o.t - r.t).abs() < 1e-9 * (1.0 + r.t.abs()))
+            })
+        };
+        // offer only a one-control change: it must label everything and it must not delete a guide
+        // that is already labelled (dropping the marks to label one percentile is not a fix)
         let mut steps: Vec<(String, Params)> = Vec::new();
         for size in ["Medium", "Small"] {
             if svg::label_factor(size) < svg::label_factor(p.s("label_size")) {
@@ -1084,8 +1179,6 @@ pub fn warnings(p: &Params) -> Vec<String> {
             q.set_s("marks", "None");
             steps.push(("set Mark to None".into(), q));
         }
-        // a note only when one control change is measured to label every guide *and* to keep every
-        // guide it names: "set Mark to None" deletes the M guide, so it cannot be the fix for M
         let fix = steps
             .into_iter()
             .find(|(_, q)| {
@@ -1093,16 +1186,23 @@ pub fn warnings(p: &Params) -> Vec<String> {
                     return false;
                 }
                 match model(q) {
-                    Ok(qm) => named.iter().all(|(t, x, short)| qm.readings.iter().any(|o| o.short == *short && (o.t - t).abs() < 1e-9 && (o.x - x).abs() < 1e-9)),
+                    Ok(qm) => unlabelled.iter().all(|g| on(g, &qm)) && groups.iter().filter(|g| !unlabelled.contains(g)).all(|g| on(g, &qm)),
                     Err(_) => false,
                 }
             })
             .map(|(t, _)| t);
-        if let Some(fix) = fix {
-            let (names, it) = if bare.len() == 1 { (bare[0].clone(), "its value is") } else { (bare.join(" and "), "their values are") };
-            let lines = if bare.len() == 1 { "guide line" } else { "guide lines" };
-            notes.push(format!("In the key, the {lines} for {names} {} no room for a label beside {}; {it} in the answers under the graph. To label it, {fix}.", if bare.len() == 1 { "has" } else { "have" }, if bare.len() == 1 { "it" } else { "them" }));
-        }
+        let names: Vec<String> = unlabelled.iter().map(|g| group_label(&readings, g).short).collect();
+        let (names, it) = if names.len() == 1 { (names[0].clone(), "its value is") } else { (names.join(" and "), "their values are") };
+        let lines = if names.contains(" and ") { "guide lines" } else { "guide line" };
+        let tail = match fix {
+            Some(t) => format!(" To label it, {t}."),
+            None => " No single control labels it without dropping a guide that is already labelled.".to_string(),
+        };
+        notes.push(format!(
+            "In the key, the {lines} for {names} {} no room for a label beside {}; {it} in the answers under the graph.{tail}",
+            if names.contains(" and ") { "have" } else { "has" },
+            if names.contains(" and ") { "them" } else { "it" }
+        ));
     }
     notes
 }
@@ -1219,11 +1319,15 @@ fn boxes_meet(a: Bx, b: Bx, pad: f64) -> bool { a.0 - pad < b.2 && b.0 - pad < a
 
 /// Gap a label keeps from every line, dot and other label.
 pub const LABEL_GAP: f64 = 4.0;
-/// Gridline greys. Print is neutral grey darker than 66 % grey, so a photocopy at 66 % keeps both
-/// kinds of gridline; Colour uses the shared chart grid for the labelled lines and a paler fine one.
-pub const GRID_PRINT: &str = "#808080";
-pub const FINE_PRINT: &str = "#8f8f8f";
+/// Gridline greys. Print is neutral grey darker than 66 % grey, and its lines are wider, so a copy
+/// reduced to 66 % keeps both kinds of gridline; Colour uses the shared chart grid for the
+/// labelled lines and a paler fine one.
+pub const GRID_PRINT: &str = "#6a6a6a";
+pub const FINE_PRINT: &str = "#7f7f7f";
 pub const FINE_GRID: &str = "#e6eaf1";
+/// Print gridline widths (Colour draws both at 1 px).
+pub const GRID_W: f64 = 1.8;
+pub const FINE_W: f64 = 1.8;
 /// White margin drawn round an in-plot label (over the gridlines only).
 pub const PLATE: f64 = 2.0;
 /// Gap between a label's text box and its own guide line.
@@ -1253,6 +1357,9 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
     let ink = if print { "#000" } else { INK };
     let grid_col = if print { GRID_PRINT } else { chart::GRID };
     let fine_col = if print { FINE_PRINT } else { FINE_GRID };
+    // Print lines are a little wider so a 66 % copy keeps them (the ink of a hairline is otherwise
+    // spread thin by the reduction); Colour keeps the shared hairline weight
+    let (grid_w, fine_w) = if print { (GRID_W, FINE_W) } else { (1.0, 1.0) };
     let curve_col = fills.line(0);
     let guide_col = if print { "#000" } else { "#b4410f" };
     let k = svg::label_factor(p.s("label_size"));
@@ -1346,7 +1453,7 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
     let what = if m.left_closed.is_some() { "raw values" } else { "a grouped table" };
     doc.describe(
         if title_txt.is_empty() { "Ogive" } else { &title_txt },
-        &format!("Ogive (cumulative frequency graph) of {what}, {} classes from {} to {}.", m.cs.len(), plain(a), plain(b)),
+        &format!("Ogive (cumulative frequency graph) of {what}, {} class{} from {} to {}.", m.cs.len(), if m.cs.len() == 1 { "" } else { "es" }, plain(a), plain(b)),
     );
     if !title_line.is_empty() {
         text(&mut doc, w / 2.0, 14.0 + fs * 1.35, title_fs, "middle", ink, "title", &title_line);
@@ -1356,20 +1463,19 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
     // what the key's accepted range is half of, so the range never claims more than the grid shows
     let bounds: Vec<f64> = m.pts.iter().map(|q| q.0).collect();
     if p.b("grid") {
-        let mx = minor_x(m.cs.len());
-        if mx > 1 {
-            for wnd in m.pts.windows(2) {
-                for j in 1..mx {
-                    let x = wnd[0].0 + (wnd[1].0 - wnd[0].0) * j as f64 / mx as f64;
-                    let tx = px(x);
-                    doc.raw(&format!(r#"<line class="grid" x1="{tx:.2}" y1="{:.2}" x2="{tx:.2}" y2="{:.2}" stroke="{fine_col}" stroke-width="1"/>"#, fr.top(), fr.bottom()));
-                }
+        let span = b - a;
+        for wnd in m.pts.windows(2) {
+            let d = divisions(class_px(wnd[1].0 - wnd[0].0, span));
+            for j in 1..d {
+                let x = wnd[0].0 + (wnd[1].0 - wnd[0].0) * j as f64 / d as f64;
+                let tx = px(x);
+                doc.raw(&format!(r#"<line class="grid" x1="{tx:.2}" y1="{:.2}" x2="{tx:.2}" y2="{:.2}" stroke="{fine_col}" stroke-width="{fine_w}"/>"#, fr.top(), fr.bottom()));
             }
         }
         for (v, _) in &yticks {
             let y = fr.py(*v);
             if *v > 0.0 {
-                doc.raw(&format!(r#"<line class="grid" x1="{:.2}" y1="{y:.2}" x2="{:.2}" y2="{y:.2}" stroke="{grid_col}" stroke-width="1"/>"#, fr.left(), fr.right()));
+                doc.raw(&format!(r#"<line class="grid" x1="{:.2}" y1="{y:.2}" x2="{:.2}" y2="{y:.2}" stroke="{grid_col}" stroke-width="{grid_w}"/>"#, fr.left(), fr.right()));
             }
         }
         let nm = minor_divisions(ystep);
@@ -1381,7 +1487,7 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
             let v = k as f64 * ystep / nm as f64;
             if v < ytop - 1e-9 {
                 let y = fr.py(v);
-                doc.raw(&format!(r#"<line class="grid" x1="{:.2}" y1="{y:.2}" x2="{:.2}" y2="{y:.2}" stroke="{fine_col}" stroke-width="1"/>"#, fr.left(), fr.right()));
+                doc.raw(&format!(r#"<line class="grid" x1="{:.2}" y1="{y:.2}" x2="{:.2}" y2="{y:.2}" stroke="{fine_col}" stroke-width="{fine_w}"/>"#, fr.left(), fr.right()));
             }
         }
     }
@@ -1428,7 +1534,7 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
                 continue;
             }
             let tx = px(*x);
-            doc.raw(&format!(r#"<line class="grid" x1="{tx:.2}" y1="{:.2}" x2="{tx:.2}" y2="{:.2}" stroke="{grid_col}" stroke-width="1"/>"#, fr.top(), fr.bottom()));
+            doc.raw(&format!(r#"<line class="grid" x1="{tx:.2}" y1="{:.2}" x2="{tx:.2}" y2="{:.2}" stroke="{grid_col}" stroke-width="{grid_w}"/>"#, fr.top(), fr.bottom()));
         }
     }
     for &i in &kept {
@@ -1467,7 +1573,19 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
         let dots: Vec<(f64, f64)> = if curve.len() <= 120 { curve.clone() } else { Vec::new() };
         let gs: Vec<(f64, f64)> = m.readings.iter().map(|r| (px(r.x), py(r.t))).collect();
         let guide_segs: Vec<[Seg; 2]> = gs.iter().map(|&(gx, gy)| [((fr.left(), gy), (gx, gy)), ((gx, gy), (gx, fr.bottom()))]).collect();
-        for (gx, gy) in &gs {
+        // one guide line and one label per point of the curve: coincident readings share both
+        let groups = guide_groups(&m.readings);
+        let mine: Vec<usize> = {
+            let mut v = vec![usize::MAX; m.readings.len()];
+            for (gi, g) in groups.iter().enumerate() {
+                for &i in g {
+                    v[i] = gi;
+                }
+            }
+            v
+        };
+        for g in &groups {
+            let (gx, gy) = gs[g[0]];
             doc.raw(&format!(r#"<polyline class="guide" points="{:.2},{gy:.2} {gx:.2},{gy:.2} {gx:.2},{:.2}" fill="none" stroke="{guide_col}" stroke-width="1.6" stroke-dasharray="6 4"/>"#, fr.left(), fr.bottom()));
         }
         let inner: Bx = (fr.left() + 3.0, fr.top() + 2.0, fr.right() - 2.0, fr.bottom() - 3.0);
@@ -1475,10 +1593,11 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
         let lfs = fs * 0.95;
         // (x, y, anchor, text, class, leader from → to)
         let mut labels: Vec<(f64, f64, &str, String, &str, Option<Seg>)> = Vec::new();
-        for (i, (r, (gx, gy))) in m.readings.iter().zip(&gs).enumerate() {
-            let (gx, gy) = (*gx, *gy);
+        for (gi, g) in groups.iter().enumerate() {
+            let (gx, gy) = gs[g[0]];
+            let lab = group_label(&m.readings, g);
             let before = labels.len();
-            let g = OWN_GAP;
+            let gap = OWN_GAP;
             // the text box reaches 0.06 em past its anchor (side bearings), so the anchor steps out that much more
             let gh = OWN_GAP + 0.06 * lfs;
             let desc = 0.26 * lfs;
@@ -1490,22 +1609,22 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
                 let ok = bx.0 >= inner.0 && bx.1 >= inner.1 && bx.2 <= inner.2 && bx.3 <= inner.3
                     && curve_segs.iter().all(|s| seg_box_dist(s.0, s.1, bx) >= LABEL_GAP + PLATE)
                     && dots.iter().all(|q| pt_box_dist(*q, bx) >= dot_r + LABEL_GAP + PLATE)
-                    && guide_segs[i].iter().all(|s| seg_box_dist(s.0, s.1, bx) >= PLATE + 1.5)
-                    // another reading's guide stays well clear, so a label is always nearest its own line
-                    && guide_segs.iter().enumerate().filter(|(j, _)| *j != i).all(|(_, gsg)| gsg.iter().all(|s| seg_box_dist(s.0, s.1, bx) >= RIVAL_GAP))
+                    && guide_segs[g[0]].iter().all(|s| seg_box_dist(s.0, s.1, bx) >= PLATE + 1.5)
+                    // another guide stays well clear, so a label is always nearest its own line
+                    && guide_segs.iter().enumerate().filter(|(j, _)| mine[*j] != gi).all(|(_, gsg)| gsg.iter().all(|s| seg_box_dist(s.0, s.1, bx) >= RIVAL_GAP))
                     && placed.iter().all(|o| !boxes_meet(*o, bx, 2.0 * PLATE + LABEL_GAP));
                 ok.then_some(bx)
             };
             // the height on the horizontal guide, then the foot of the vertical one; at each spot the
             // full text first, then the short one, so a cramped corner still gets a label
-            let side_txt: Vec<&String> = if r.side == r.side_short { vec![&r.side] } else { vec![&r.side, &r.side_short] };
-            let foot_txt: Vec<&String> = if r.foot == r.short { vec![&r.foot] } else { vec![&r.foot, &r.short] };
+            let side_txt: Vec<&String> = if lab.side == lab.side_short { vec![&lab.side] } else { vec![&lab.side, &lab.side_short] };
+            let foot_txt: Vec<&String> = if lab.foot == lab.short { vec![&lab.foot] } else { vec![&lab.foot, &lab.short] };
             let along: Vec<f64> = [1.0, 0.5, 0.3, 0.7, 0.15, 0.85].into_iter().map(|f| fr.bottom() + (gy - fr.bottom()) * f).collect();
             let mut cands: Vec<(f64, f64, &str, &str)> = Vec::new();
             for txt in side_txt {
-                cands.push((fr.left() + g + 2.0, gy - g - desc, "start", txt.as_str()));
-                cands.push((gx - gh, gy - g - desc, "end", txt.as_str()));
-                cands.push((gx + gh, gy - g - desc, "start", txt.as_str()));
+                cands.push((fr.left() + gap + 2.0, gy - gap - desc, "start", txt.as_str()));
+                cands.push((gx - gh, gy - gap - desc, "end", txt.as_str()));
+                cands.push((gx + gh, gy - gap - desc, "start", txt.as_str()));
             }
             for txt in foot_txt {
                 for f in &along {
@@ -1516,7 +1635,7 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
             for (x, y, anchor, txt) in cands {
                 if let Some(bx) = fits(&placed, x, y, anchor, txt) {
                     placed.push(bx);
-                    let class = if txt == r.side.as_str() || txt == r.side_short.as_str() { "side" } else { "foot" };
+                    let class = if txt == lab.side.as_str() || txt == lab.side_short.as_str() { "side" } else { "foot" };
                     labels.push((x, y, anchor, txt.to_string(), class, None));
                     break;
                 }
@@ -1525,21 +1644,21 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
                 // no room beside either guide: lift the short height label clear of the curve, but
                 // only a few pixels, and only while it still plainly belongs to its own guide (a
                 // longer leader passes a rival guide and reads as that one's label)
-                let x0 = fr.left() + g + 2.0;
+                let x0 = fr.left() + gap + 2.0;
                 let lx = fr.left() + 3.0;
-                let nearest = |bx: Bx, mine: bool| {
-                    guide_segs.iter().enumerate().filter(|(j, _)| (*j == i) == mine)
+                let nearest = |bx: Bx, own: bool| {
+                    guide_segs.iter().enumerate().filter(|(j, _)| (mine[*j] == gi) == own)
                         .flat_map(|(_, gs)| gs.iter().map(move |s| seg_box_dist(s.0, s.1, bx)))
                         .fold(f64::INFINITY, f64::min)
                 };
                 let mut lift = asc + desc * 0.6;
                 while lift <= 60.0 {
-                    let y = gy - g - desc - lift;
-                    if let Some(bx) = fits(&placed, x0, y, "start", &r.side_short) {
+                    let y = gy - gap - desc - lift;
+                    if let Some(bx) = fits(&placed, x0, y, "start", &lab.side_short) {
                         if nearest(bx, true) + 2.0 <= nearest(bx, false) {
                             let lead = ((lx, gy - 3.0), (lx, bx.3 + 3.0));
                             placed.push(bx);
-                            labels.push((x0, y, "start", r.side_short.clone(), "side", Some(lead)));
+                            labels.push((x0, y, "start", lab.side_short.clone(), "side", Some(lead)));
                             break;
                         }
                     }
@@ -1547,7 +1666,7 @@ pub fn draw(p: &Params) -> (String, Vec<String>) {
                 }
             }
             if labels.len() == before {
-                unlabelled.push(r.short.clone());
+                unlabelled.push(lab.short.clone());
             }
         }
         for ((x, y, anchor, txt, class, lead), bx) in labels.iter().zip(&placed) {

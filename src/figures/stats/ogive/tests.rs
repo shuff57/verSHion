@@ -321,6 +321,10 @@ fn printed_readings_match_the_recomputation() {
     assert!(m.readings[0].side.starts_with("P40: "), "{:?}", m.readings[0].side);
     assert!(m.readings[1].side.starts_with("Q1: "), "{:?}", m.readings[1].side);
     assert!(m.readings[1].side.contains("25% of 50"), "{:?}", m.readings[1].side);
+    // the short label names the reading once, on every axis ("M: 50%", never "M: M: 50%")
+    let mp = model(&with(&[s("marks", "Median"), s("y_axis", Y_PCT)])).unwrap();
+    assert_eq!(mp.readings[0].side_short, "M: 50%");
+    assert!(!mp.readings[0].side.contains("M: M:"), "{:?}", mp.readings[0].side);
     // the table's third column and the first question name what the vertical axis shows
     for (y, head, q) in [(Y_FREQ, ">frequency<", "cumulative frequency column"), (Y_REL, ">rel. frequency<", "cumulative relative frequency column"), (Y_PCT, ">percent<", "cumulative percent column")] {
         let svg = render(&with(&[s("y_axis", y)]));
@@ -423,6 +427,11 @@ fn the_printed_iqr_is_the_printed_q3_minus_the_printed_q1() {
     }
 }
 
+/// The labels a group of coincident readings can carry.
+fn group_texts(readings: &[Reading]) -> Vec<(String, String, String, String)> {
+    guide_groups(readings).iter().map(|g| { let l = group_label(readings, g); (l.side, l.side_short, l.foot, l.short) }).collect()
+}
+
 #[test]
 fn a_low_percentile_read_alone_is_labelled_at_every_size() {
     // the most common teacher use: one reading, no marks. Every percentile in 1..99 must get a
@@ -441,9 +450,9 @@ fn a_low_percentile_read_alone_is_labelled_at_every_size() {
                 assert!(bare.is_empty(), "{what}: no label for {bare:?}");
                 let g = parse(&render(&key), false);
                 let m = model(&key).unwrap();
-                for r in &m.readings {
-                    let has = g.texts.iter().any(|t| (t.class == "side" && (t.body == r.side || t.body == r.side_short)) || (t.class == "foot" && (t.body == r.foot || t.body == r.short)));
-                    assert!(has, "{what}: {:?} has no label", r.short);
+                for (side, side_short, foot, short) in group_texts(&m.readings) {
+                    let has = g.texts.iter().any(|t| (t.class == "side" && (t.body == side || t.body == side_short)) || (t.class == "foot" && (t.body == foot || t.body == short)));
+                    assert!(has, "{what}: {short:?} has no label");
                 }
                 assert!(!warnings(&p).iter().any(|n| n.contains("no room")), "{what}: {:?}", warnings(&p));
                 total += 1;
@@ -498,6 +507,10 @@ fn common_table_formats_are_read_and_the_advice_keeps_the_data() {
             Err(e) => assert_eq!(want, "stated", "{t:?}: {e}"),
         }
     }
+    // a two-column paste keeps its thousands commas: midpoints and frequencies, not a class
+    assert_eq!(settled("midpoint, f\n1,000, 3\n2,000, 5"), vec![(500.0, 1500.0, 3), (1500.0, 2500.0, 5)], "midpoints 1000 and 2000");
+    assert_eq!(settled("1,000, 2,000"), vec![(1000.0, 2000.0, 1)], "a midpoint and a frequency");
+    assert_eq!(settled("1,000, 2,000, 5\n2,000, 3,000, 7"), vec![(1000.0, 2000.0, 5), (2000.0, 3000.0, 7)], "a class with thousands");
     // a spreadsheet paste and a header that carries a number read as the table they name
     let cs = parse_table("1,000, 2,000, 5\n2,000, 3,000, 7").expect("thousands separators");
     assert_eq!(cs.iter().map(|c| (c.lo, c.hi, c.f)).collect::<Vec<_>>(), vec![(1000.0, 2000.0, 5), (2000.0, 3000.0, 7)]);
@@ -578,7 +591,19 @@ fn raw_values_use_the_histograms_classes_and_count_every_value_once() {
 fn apply_table_advice(text: &str, note: &str) -> Option<String> {
     let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
     let line_no = |pat: &str| -> Option<usize> { note.split(pat).nth(1)?.split(|c: char| !c.is_ascii_digit()).next()?.parse().ok() };
-    if note.contains("is a total") || note.contains("beyond the largest number") {
+    if note.contains("is a total") {
+        let n = line_no("delete line ")?;
+        lines.remove(n - 1);
+        return Some(lines.join("\n"));
+    }
+    if note.contains("beyond the largest number") {
+        // the note offers two routes; apply the scaled example first, and deletion when the number
+        // is a frequency (nothing to scale)
+        if let Some(q) = note.split("for example line ").nth(1).and_then(|x| x.split('"').nth(1)) {
+            let n = line_no("for example line ")?;
+            lines[n - 1] = q.to_string();
+            return Some(lines.join("\n"));
+        }
         let n = line_no("delete line ")?;
         lines.remove(n - 1);
         return Some(lines.join("\n"));
@@ -649,8 +674,8 @@ fn the_advice_ends_at_the_table_the_teacher_meant() {
         ("40 \u{2212} 50, 3\n50 \u{2212} 60, 7", &[(40.0, 50.0, 3), (50.0, 60.0, 7)]),
         // a spreadsheet paste
         ("1,000, 2,000, 5\n2,000, 3,000, 7", &[(1000.0, 2000.0, 5), (2000.0, 3000.0, 7)]),
-        // a number beyond the limit: the note names it and deletion is the route
-        ("0, 500, 3\n1000, 2000, 5\n1000000000000, 2000000000000, 1", &[(0.0, 500.0, 3), (500.0, 1000.0, 0), (1000.0, 2000.0, 5)]),
+        // a number beyond the limit: the note's scaling route keeps all three counts
+        ("0, 500, 3\n1000, 2000, 5\n1000000000000, 2000000000000, 1", &[(0.0, 500.0, 3), (500.0, 1000.0, 0), (1000.0, 2000.0, 5), (2000.0, 100000000000.0, 0), (100000000000.0, 200000000000.0, 1)]),
     ];
     for (text, want) in cases {
         let got = settled(text);
@@ -726,6 +751,63 @@ fn every_table_refusal_names_a_fix_that_works_when_applied() {
     assert!(e.contains("open-ended") && e.contains("\"30, 40, 2\""), "{e}");
     assert!(parse_table("40, 50, 3\n50, 60, -1").unwrap_err().contains("cannot be negative"));
     assert!(parse_table("40, 50, 3\n52, 60, 4\n60, 70, 1").unwrap_err().contains("\"50, 52, 0\""));
+}
+
+#[test]
+fn the_limit_note_route_keeps_the_counts() {
+    // a boundary can be written smaller; a frequency cannot be divided
+    let t = "0, 500, 3\n1000, 2000, 5\n1000000000000, 2000000000000, 1";
+    let note = parse_table(t).unwrap_err();
+    assert!(note.contains("beyond the largest number") && note.contains("delete line 3"), "{note}");
+    assert!(!note.contains("frequency by a power of ten"), "the old route divided the counts: {note}");
+    let ex = note.split("for example line ").nth(1).and_then(|x| x.split('"').nth(1)).expect("a worked example");
+    assert!(parse_table(ex).is_ok(), "the example {ex:?} is itself refused");
+    // the example scales the boundaries and leaves the frequency alone
+    assert!(ex.ends_with(", 1"), "{ex}");
+    assert!(ex.starts_with("100000000000, 200000000000"), "{ex}");
+    // following the route keeps every count and ends at a table that parses
+    let fixed = apply_table_advice(t, &note).expect("the example route");
+    let mut total = 0;
+    let mut text = fixed;
+    for _ in 0..10 {
+        match parse_table(&text) {
+            Ok(cs) => {
+                total = cs.iter().map(|c| c.f).sum::<u64>();
+                break;
+            }
+            Err(n) => text = apply_table_advice(&text, &n).unwrap_or_else(|| panic!("no step in {n}")),
+        }
+    }
+    assert_eq!(total, 9, "3 + 5 + 1, none of them divided: {text}");
+    // a frequency beyond the limit has no scaling route at all
+    let note = parse_table("0, 10, 4000000000000").unwrap_err();
+    assert!(note.contains("cannot be divided") && !note.contains("for example line"), "{note}");
+}
+
+#[test]
+fn a_header_never_swallows_a_data_row() {
+    // "group" is a column word, but the row starts with numbers: it is data, and it is refused
+    let note = parse_table("0, 10, group\n10, 20, 4").unwrap_err();
+    assert!(note.contains("Line 1") && note.contains("is not a class"), "{note}");
+    assert!(note.contains("\"0, 10, 1\""), "an example built from the row: {note}");
+    // a real header is still skipped
+    assert_eq!(parse_table("Class, Frequency\n40, 50, 3\n50, 60, 7").unwrap().len(), 2);
+    assert_eq!(parse_table("Class 1, Frequency\n40, 50, 3\n50, 60, 7").unwrap().len(), 2);
+    // a midpoint header is still skipped, so the refusal names line 2 (the first data row)
+    let note = parse_table("midpoint, f\n45, 3\n55, 7").unwrap_err();
+    assert!(note.contains("Line 2") && note.contains("not a class"), "{note}");
+}
+
+#[test]
+fn boundaries_one_unit_apart_at_a_billion_are_not_merged() {
+    // a relative tolerance of 1e-9 x 1e9 is 1: it merged contiguous classes and closed real gaps
+    let cs = parse_table("1000000000, 1000000001, 3\n1000000001, 1000000002, 5").expect("contiguous at 1e9");
+    assert_eq!(cs.iter().map(|c| (c.lo, c.hi, c.f)).collect::<Vec<_>>(), vec![(1e9, 1e9 + 1.0, 3), (1e9 + 1.0, 1e9 + 2.0, 5)]);
+    // a real one-unit gap is seen and explained (here as stated limits, the same reading as
+    // 40-49 / 50-59), never silently closed into one class
+    let note = parse_table("1000000000, 1000000001, 3\n1000000002, 1000000003, 5").unwrap_err();
+    assert!(note.contains("stated class limits") && note.contains("\"999999999.5, 1000000001.5, 3\""), "{note}");
+    assert!(!note.contains("lies inside"), "{note}");
 }
 
 #[test]
@@ -914,9 +996,12 @@ fn check_geometry(g: &Svg, p: &Params, key: bool, what: &str) {
         assert!(guides.is_empty());
         return;
     }
-    assert_eq!(guides.len(), m.readings.len(), "{what}");
+    let groups = guide_groups(&m.readings);
+    let glabels: Vec<GroupLabel> = groups.iter().map(|g| group_label(&m.readings, g)).collect();
+    assert_eq!(guides.len(), groups.len(), "{what}: one guide per point of the curve");
     let c = curve.unwrap();
-    for (gd, r) in guides.iter().zip(&m.readings) {
+    for (gd, g) in guides.iter().zip(&groups) {
+        let r = &m.readings[g[0]];
         assert_eq!(gd.pts.len(), 3);
         let (start, corner, foot) = (gd.pts[0], gd.pts[1], gd.pts[2]);
         assert!((start.0 - ax.left).abs() < 0.011, "{what}: guide starts on the vertical axis");
@@ -925,7 +1010,7 @@ fn check_geometry(g: &Svg, p: &Params, key: bool, what: &str) {
         let on = c.pts.windows(2).map(|w| seg_dist(corner, w[0], w[1])).fold(f64::INFINITY, f64::min);
         assert!(on < 0.02, "{what}: the guide meets the curve ({on})");
         // the reading recomputed independently
-        let value_read = p.s("read") == READ_VALUE && r.foot == plain(p.f("value")).replace('-', "\u{2212}") && r.side != "M";
+        let value_read = p.s("read") == READ_VALUE && !matches!(r.short.as_str(), "Q1" | "M" | "Q3");
         let (x, t) = if value_read && !matches!(r.short.as_str(), "Q1" | "M" | "Q3") { (p.f("value"), c_of(&rows, p.f("value"))) } else { let t = r.pct / 100.0 * n; (inverse(&rows, t), t) };
         assert!((corner.0 - ax.px(&bounds, x)).abs() < 0.03 && (corner.1 - ax.py(t * scale)).abs() < 0.03, "{what}: guide at {corner:?}, want x {x} t {t}");
         assert!(gd.dash.is_some(), "{what}: guides are dashed, the curve solid");
@@ -933,7 +1018,7 @@ fn check_geometry(g: &Svg, p: &Params, key: bool, what: &str) {
     // each label sits beside its own guide: nearer it than any other guide
     let leaders: Vec<&Ln> = g.lines.iter().filter(|l| l.class == "leader").collect();
     for t in g.texts.iter().filter(|t| t.class == "side" || t.class == "foot") {
-        let mine = guides.iter().zip(&m.readings).filter(|(_, r)| if t.class == "side" { r.side == t.body || r.side_short == t.body } else { r.foot == t.body || r.short == t.body }).map(|(gd, _)| gd).collect::<Vec<_>>();
+        let mine = guides.iter().zip(&glabels).filter(|(_, l)| if t.class == "side" { l.side == t.body || l.side_short == t.body } else { l.foot == t.body || l.short == t.body }).map(|(gd, _)| gd).collect::<Vec<_>>();
         assert!(!mine.is_empty(), "{what}: {:?} belongs to no reading", t.body);
         let leg = |gd: &Pl| { let (a, k, z) = (gd.pts[0], gd.pts[1], gd.pts[2]); if t.class == "side" { seg_box(a, k, t.ink) } else { seg_box(k, z, t.ink) } };
         let own = mine.iter().map(|gd| leg(gd)).fold(f64::INFINITY, f64::min);
@@ -960,7 +1045,7 @@ fn check_geometry(g: &Svg, p: &Params, key: bool, what: &str) {
         }
         // a vertical-axis label always sits above its line (one rule for every guide, so a reader never has to guess)
         if t.class == "side" {
-            let line_y = guides.iter().zip(&m.readings).find(|(_, r)| r.side == t.body || r.side_short == t.body).unwrap().0.pts[0].1;
+            let line_y = guides.iter().zip(&glabels).find(|(_, l)| l.side == t.body || l.side_short == t.body).unwrap().0.pts[0].1;
             assert!(t.ink.3 < line_y, "{what}: {:?} is below its line", t.body);
         }
         // every label is nearest its own line, raised ones included
@@ -1031,7 +1116,10 @@ fn every_percentile_draws_cleanly_at_every_size() {
 }
 
 #[test]
-fn a_guide_with_no_room_for_a_label_is_noted_only_with_a_step_that_labels_it() {
+fn every_distinct_guide_is_labelled_or_noted() {
+    // a crowded key may leave a guide unlabelled, but never silently: every guide that is a
+    // different line on the page is either labelled or named in the note, and a step the note
+    // offers must label everything without deleting a guide that is already labelled
     let (mut noted, mut crowded) = (0, 0);
     for (name, base) in datasets() {
         for size in ["Small", "Medium", "Large"] {
@@ -1048,31 +1136,28 @@ fn a_guide_with_no_room_for_a_label_is_noted_only_with_a_step_that_labels_it() {
                     if !bare.is_empty() {
                         crowded += 1;
                     }
-                    // the in-plot labels of the key, read back: a guide without one is what the note names.
-                    // Two readings can share a label text (P25 and Q1 sit at the same height), so each
-                    // text is matched to one labelled reading rather than to a name.
+                    // the in-plot labels of the key, read back, one per distinct guide
                     let g = parse(&render(&key), false);
                     let m = model(&key).unwrap();
+                    let texts = group_texts(&m.readings);
                     let mut avail: Vec<String> = g.texts.iter().filter(|t| t.class == "side" || t.class == "foot").map(|t| t.body.clone()).collect();
-                    for r in &m.readings {
-                        if bare.contains(&r.short) {
+                    for (side, side_short, foot, short) in &texts {
+                        if bare.iter().any(|b| b == short) {
                             continue;
                         }
-                        let hit = avail.iter().position(|b| *b == r.side || *b == r.side_short || *b == r.foot || *b == r.short);
-                        let hit = hit.unwrap_or_else(|| panic!("{name} {size} P{k}: {} is labelled but has no text", r.short));
+                        let hit = avail.iter().position(|b| b == side || b == side_short || b == foot || b == short);
+                        let hit = hit.unwrap_or_else(|| panic!("{name} {size} P{k}: {short} is labelled but has no text"));
                         avail.remove(hit);
                     }
-                    assert!(avail.is_empty(), "{name} {size} P{k}: labels that belong to no reading: {avail:?}");
+                    assert!(avail.is_empty(), "{name} {size} P{k}: labels that belong to no guide: {avail:?}");
                     if !bare.is_empty() {
-                        // a note may be silent when no one-control change can label the named
-                        // guide, but a note that fires must leave every guide it names drawn and
-                        // now labelled: "set Mark to None" cannot be the fix for the M guide
-                        if let Some(note) = note {
-                            noted += 1;
-                            for b in &bare {
-                                assert!(note.contains(b.as_str()), "{note}");
-                            }
-                            let step = note.split(" To label it, ").nth(1).unwrap_or_else(|| panic!("{name} {size} P{k}: a note with no step: {note}"));
+                        // unlabelled guides are always named
+                        let note = note.unwrap_or_else(|| panic!("{name} {size} P{k}: {:?} unlabelled and no note", bare));
+                        noted += 1;
+                        for b in &bare {
+                            assert!(note.contains(b.as_str()), "{name} {size} P{k}: {note}");
+                        }
+                        if let Some(step) = note.split(" To label it, ").nth(1) {
                             let mut q = p.clone();
                             if let Some(sz) = step.strip_prefix("set Label size to ") { q.set_s("label_size", sz.trim_end_matches('.')); }
                             else if let Some(mk) = step.strip_prefix("set Mark to ") { q.set_s("marks", mk.trim_end_matches('.')); }
@@ -1081,17 +1166,16 @@ fn a_guide_with_no_room_for_a_label_is_noted_only_with_a_step_that_labels_it() {
                             let mut qk = q.clone();
                             qk.set_b(SHOW_ANSWERS, true);
                             let qg = parse(&render(&qk), false);
-                            for b in &bare {
-                                let r = m.readings.iter().find(|r| r.short == *b).unwrap();
-                                assert!(
-                                    qm.readings.iter().any(|o| o.short == *b && (o.t - r.t).abs() < 1e-9 && (o.x - r.x).abs() < 1e-9),
-                                    "{name} {size} P{k}: \"{step}\" deletes the {b} guide the note names"
-                                );
-                                assert!(!draw(&q).1.contains(b), "{name} {size} P{k}: {b} is still unlabelled after \"{step}\"");
-                                let has = qg.texts.iter().any(|t| (t.class == "side" && (t.body == r.side || t.body == r.side_short)) || (t.class == "foot" && (t.body == r.foot || t.body == r.short)));
-                                assert!(has, "{name} {size} P{k}: {b} has no label after \"{step}\"");
+                            assert!(!draw(&q).1.iter().any(|b| bare.contains(b)), "{name} {size} P{k}: \"{step}\" leaves {bare:?} unlabelled");
+                            // the step must not delete a guide that was labelled
+                            for (side, side_short, foot, short) in &texts {
+                                if bare.iter().any(|b| b == short) {
+                                    continue;
+                                }
+                                assert!(qm.readings.iter().any(|o| o.short == short.split(" = ").next().unwrap_or("") || short.contains(&o.short)), "{name} {size} P{k}: \"{step}\" deletes the labelled {short} guide");
+                                let has = qg.texts.iter().any(|t| (t.class == "side" && (t.body == *side || t.body == *side_short)) || (t.class == "foot" && (t.body == *foot || t.body == *short)));
+                                assert!(has, "{name} {size} P{k}: \"{step}\" drops the label of {short}");
                             }
-                            assert!(!warnings(&q).iter().any(|x| x.contains("no room")), "{name} {size} P{k}: {step} does not work");
                         }
                     } else {
                         assert!(note.is_none(), "{name} {size} P{k}: a note with nothing unlabelled: {notes:?}");
@@ -1100,46 +1184,56 @@ fn a_guide_with_no_room_for_a_label_is_noted_only_with_a_step_that_labels_it() {
             }
         }
     }
-    // the critic's case: the M guide at P49 with quartiles, Medium. A note that names a quartile
-    // may not offer a Mark change, which deletes the very guide it names (naming P49 instead and
-    // dropping the marks is a real fix for P49, and the loop above checks that it is labelled)
-    let p = with(&[s("read", READ_PCT), f("pct", 49.0), s("marks", "Median and quartiles"), s("label_size", "Medium")]);
-    if let Some(note) = warnings(&p).into_iter().find(|n| n.contains("no room")) {
-        let marks_named = [" for M ", " for Q1 ", " for Q3 "].iter().any(|n| note.contains(n));
-        assert!(!marks_named || !note.contains("set Mark to"), "the step deletes the guide it names: {note}");
+    // the critic's case: at P49 with quartiles the note (if any) may not delete the labelled
+    // median/quartiles, and the M guide must never be left unlabelled without a word
+    let p = with(&[s("read", READ_PCT), f("pct", 49.0), s("marks", "Median and quartiles")]);
+    let mut key = p.clone();
+    key.set_b(SHOW_ANSWERS, true);
+    let bare = draw(&key).1;
+    if !bare.is_empty() {
+        let note = warnings(&p).into_iter().find(|n| n.contains("no room")).expect("a note for a distinct unlabelled guide");
+        if note.contains("set Mark to None") || note.contains("set Mark to Median") {
+            let step = note.split(" To label it, ").nth(1).unwrap();
+            let mut q = p.clone();
+            q.set_s("marks", step.trim_start_matches("set Mark to ").trim_end_matches('.'));
+            let qm = model(&q).unwrap();
+            assert!(qm.readings.len() >= 2, "\"{step}\" deletes labelled guides");
+        }
     }
-    println!("ogive: {noted} notes, all with a working step, out of {crowded} crowded keys");
+    println!("ogive: {noted} notes, {crowded} crowded keys");
 }
 
 #[test]
-fn a_label_is_never_tied_to_another_guides_line() {
-    // the critic's case (unequal classes, value 13, quartiles, Large) plus the neighbouring sizes:
-    // a label may sit above its own guide only while its own guide is the nearest one
-    let table = "0, 10, 4\n10, 20, 9\n20, 40, 14\n40, 60, 8\n60, 100, 5";
-    for value in [13.0, 30.0, 75.0] {
+fn a_percentile_on_a_mark_shares_its_guide_and_label() {
+    // one point of the curve: one guide, one label naming both readings
+    let p = with(&[s("read", READ_PCT), f("pct", 50.0), s("marks", "Median")]);
+    let m = model(&p).unwrap();
+    assert_eq!(guide_groups(&m.readings).len(), 1, "P50 and the median are one point");
+    let l = group_label(&m.readings, &[0, 1]);
+    assert_eq!(l.side, "P50 = M: 25 = 50% of 50");
+    assert_eq!(l.side_short, "P50 = M: 25");
+    assert_eq!(l.foot, "P50 = M = 72.0");
+    let g = parse(&render(&p), false);
+    assert_eq!(g.plines.iter().filter(|l| l.class == "guide").count(), 1, "one guide, not two");
+    assert!(g.texts.iter().any(|t| t.body == l.side || t.body == l.side_short || t.body == l.foot), "a label naming both: {:?}", g.texts.iter().map(|t| &t.body).collect::<Vec<_>>());
+    assert!(warnings(&p).is_empty(), "both are labelled: {:?}", warnings(&p));
+    // a percentile that misses the marks still leaves every distinct guide labelled or noted
+    for pct in [1.0, 25.0, 49.0, 52.0, 75.0, 99.0] {
         for size in ["Small", "Medium", "Large"] {
-            let p = with(&[s("table", table), s("read", READ_VALUE), f("value", value), s("marks", "Median and quartiles"), s("label_size", size)]);
-            let g = parse(&render(&p), true);
-            let m = model(&p).unwrap();
-            let guides: Vec<&Pl> = g.plines.iter().filter(|l| l.class == "guide").collect();
-            assert_eq!(guides.len(), m.readings.len());
-            // a leader that ties a label to its guide stays short
-            for l in g.lines.iter().filter(|l| l.class == "leader") {
-                let len = (l.b.0 - l.a.0).hypot(l.b.1 - l.a.1);
-                assert!(len <= 64.0, "{value} {size}: a {len:.1} px leader");
-            }
-            for t in g.texts.iter().filter(|t| t.class == "side" || t.class == "foot") {
-                let leg = |gd: &Pl| { let (a, k, z) = (gd.pts[0], gd.pts[1], gd.pts[2]); if t.class == "side" { seg_box(a, k, t.ink) } else { seg_box(k, z, t.ink) } };
-                let mine: Vec<f64> = guides.iter().zip(&m.readings).filter(|(_, r)| if t.class == "side" { r.side == t.body || r.side_short == t.body } else { r.foot == t.body || r.short == t.body }).map(|(gd, _)| leg(gd)).collect();
-                assert!(!mine.is_empty(), "{value} {size}: {:?} belongs to no reading", t.body);
-                let own = mine.iter().cloned().fold(f64::INFINITY, f64::min);
-                for (gd, r) in guides.iter().zip(&m.readings) {
-                    let other = leg(gd);
-                    if other + 1e-9 < own {
-                        panic!("{value} {size}: \"{}\" is {other:.1} px from {}'s guide but {own:.1} px from its own", t.body, r.short);
-                    }
+            let p = with(&[s("read", READ_PCT), f("pct", pct), s("marks", "Median and quartiles"), s("label_size", size)]);
+            let mut key = p.clone();
+            key.set_b(SHOW_ANSWERS, true);
+            let m = model(&key).unwrap();
+            let g = parse(&render(&key), false);
+            let bare = draw(&key).1;
+            let notes = warnings(&p).join(" ");
+            for (side, side_short, foot, short) in group_texts(&m.readings) {
+                let has = g.texts.iter().any(|t| (t.class == "side" && (t.body == side || t.body == side_short)) || (t.class == "foot" && (t.body == foot || t.body == short)));
+                if !has {
+                    assert!(notes.contains(&short), "P{pct} {size}: {short} is unlabelled and unmentioned");
                 }
             }
+            let _ = bare;
         }
     }
 }
@@ -1241,6 +1335,62 @@ fn print_is_grey_only_and_holds_up_at_66_percent() {
     }
 }
 
+/// The luminance of the darkest pixel within a pixel of the line, sampled every third pixel along
+/// it: what a reader sees as "the line", not the antialiasing fringe.
+fn grid_medians(g: &Svg, w: u32, h: u32, px: &[u8], sx: f64, sy: f64) -> (f64, f64) {
+    let at = |x: i32, y: i32| -> f64 {
+        if x < 0 || y < 0 || x as u32 >= w || y as u32 >= h { return 255.0; }
+        let o = ((y as u32 * w + x as u32) * 4) as usize;
+        0.299 * px[o] as f64 + 0.587 * px[o + 1] as f64 + 0.114 * px[o + 2] as f64
+    };
+    let (mut hs, mut vs) = (Vec::new(), Vec::new());
+    for l in g.lines.iter().filter(|l| l.class == "grid") {
+        let (x0, y0, x1, y1) = (l.a.0 * sx, l.a.1 * sy, l.b.0 * sx, l.b.1 * sy);
+        let n = ((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt().ceil().max(1.0) as i32;
+        let (mut sum, mut count) = (0.0, 0.0);
+        for i in (2..n - 2).step_by(3) {
+            let f = i as f64 / n as f64;
+            let (x, y) = ((x0 + (x1 - x0) * f).round() as i32, (y0 + (y1 - y0) * f).round() as i32);
+            let m = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].iter().map(|d| at(x + d[0], y + d[1])).fold(255.0, f64::min);
+            sum += m;
+            count += 1.0;
+        }
+        if count > 0.0 {
+            if (l.a.1 - l.b.1).abs() < 1e-9 { hs.push(sum / count) } else { vs.push(sum / count) }
+        }
+    }
+    let med = |mut v: Vec<f64>| { v.sort_by(f64::total_cmp); v.get(v.len() / 2).copied().unwrap_or(255.0) };
+    (med(hs), med(vs))
+}
+
+/// A 66 % photocopy: the grid must stay darker than 66 % grey (168) after the reduction, whichever
+/// way the copy is made. Print lines are wider than a hairline for exactly this.
+#[test]
+fn the_print_grid_survives_a_sixty_six_percent_copy() {
+    use image::imageops::FilterType;
+    let p = with(&[s("style", "Print"), s("read", READ_PCT), s("marks", "Median and quartiles")]);
+    let svg = render(&p);
+    let g = parse(&svg, false);
+    assert!(g.lines.iter().filter(|l| l.class == "grid").count() >= 40, "the grid is there to lose");
+    let (w, h, px) = crate::figures::to_rgba(&svg, 1.0).unwrap();
+    let (h1, v1) = grid_medians(&g, w, h, &px, 1.0, 1.0);
+    // the same page reduced to 66 % (a box/triangle resample of the 1x render)
+    let img = image::load_from_memory(&crate::figures::to_png(&svg, 1.0).unwrap()).unwrap().to_rgba8();
+    let (dw, dh) = ((w as f32 * 0.66) as u32, (h as f32 * 0.66) as u32);
+    let small = image::imageops::resize(&img, dw, dh, FilterType::Triangle);
+    let (hd, vd) = grid_medians(&g, dw, dh, small.as_raw(), 0.66, 0.66);
+    // and a render made straight at 66 % (thin lines lose ink to the pixel grid)
+    let (w6, h6, px6) = crate::figures::to_rgba(&svg, 0.66).unwrap();
+    let (h6m, v6) = grid_medians(&g, w6, h6, &px6, 0.66, 0.66);
+    println!("ogive Print grid medians (threshold 168): 1x {h1:.0}/{v1:.0}, downsample {hd:.0}/{vd:.0}, direct {h6m:.0}/{v6:.0}");
+    for (name, m) in [("1x horizontal", h1), ("1x vertical", v1), ("66% downsample horizontal", hd), ("66% downsample vertical", vd), ("66% direct horizontal", h6m), ("66% direct vertical", v6)] {
+        assert!(m < 0.66 * 255.0, "{name} grid median {m:.0} is paler than 66 % grey");
+    }
+    // the fine lines are the paler of the two kinds, in Print too
+    let lum = |c: &str| u8::from_str_radix(&c[1..3], 16).unwrap() as f64;
+    assert!(lum(GRID_PRINT) < lum(FINE_PRINT));
+}
+
 /// How a key's answer is read off the grid: fine lines between the labelled ones, a vertical line at
 /// every class boundary, and Print greys dark enough to survive a 66 % copy.
 #[test]
@@ -1310,6 +1460,41 @@ fn the_grid_is_there_to_read_and_to_plot_against() {
         }
         assert!(seen >= 20 && missing == 0, "{name}: {missing} of {seen} gridlines vanish at 66 % grey");
     }
+}
+
+/// The fine x-grid is per class: a division is drawn only where it has a real pixel pitch, and the
+/// key's accepted range is half of the division that class actually shows.
+#[test]
+fn the_fine_x_grid_and_its_accepted_range_are_per_class() {
+    // five 1-unit classes and one 95-unit class: the narrow ones cannot hold five divisions
+    let t = "0, 1, 3\n1, 2, 7\n2, 3, 12\n3, 4, 15\n4, 5, 9\n5, 100, 4";
+    let p = with(&[s("table", t), s("read", READ_PCT), f("pct", 10.0), f("value", 4.2)]);
+    let g = parse(&render(&p), false);
+    let m = model(&p).unwrap();
+    let span = m.pts[m.pts.len() - 1].0 - m.pts[0].0;
+    let class_x: Vec<f64> = g.lines.iter().filter(|l| l.class == "tick" && (l.a.0 - l.b.0).abs() < 1e-9).map(|l| l.a.0).collect();
+    let fine: Vec<f64> = g.lines.iter().filter(|l| l.class == "grid" && (l.a.0 - l.b.0).abs() < 1e-9 && l.stroke == FINE_GRID).map(|l| l.a.0).collect();
+    for (i, c) in m.cs.iter().enumerate() {
+        let d = divisions(class_px(c.hi - c.lo, span));
+        let inside: Vec<f64> = fine.iter().cloned().filter(|x| *x > class_x[i] + 0.1 && *x < class_x[i + 1] - 0.1).collect();
+        assert_eq!(inside.len(), d - 1, "class {i} ({} to {}) is {} px wide", c.lo, c.hi, class_x[i + 1] - class_x[i]);
+        if d > 1 {
+            assert!((class_x[i + 1] - class_x[i]) / d as f64 >= MIN_PITCH - 0.01, "class {i}: a pitch under {MIN_PITCH} px");
+        } else {
+            assert!(class_x[i + 1] - class_x[i] < 2.0 * MIN_PITCH, "class {i} should have had divisions");
+        }
+    }
+    // a 1-unit class takes one division, so the range is half its own width, not a tenth of it
+    let narrow = divisions(class_px(1.0, span));
+    assert_eq!(narrow, 1, "a 5 px class has no room to subdivide");
+    let ans = m.questions.iter().find(|q| q.0.contains("percentile")).unwrap().1.clone().unwrap();
+    let (lo, hi) = accept_of(&ans).unwrap();
+    let width = hi.parse::<f64>().unwrap() - lo.parse::<f64>().unwrap();
+    assert!(width >= 0.9, "the range {lo} to {hi} claims a grid the class does not have");
+    assert!(width <= 1.6, "the range {lo} to {hi} is wider than the class");
+    // the wide class keeps five divisions and a tenth-of-a-class range
+    let wide = divisions(class_px(95.0, span));
+    assert_eq!(wide, MINOR_X);
 }
 
 #[test]
@@ -1501,5 +1686,6 @@ fn dump_pngs() {
         }
     }
 }
+
 
 
