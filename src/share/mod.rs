@@ -35,6 +35,8 @@
 //! keychain would not delete. Neither is a secret.
 
 pub mod act_results;
+pub mod admin;
+pub mod admin_ui;
 pub mod api;
 pub mod bank_links;
 pub mod bank_links_ui;
@@ -119,6 +121,8 @@ mod bank_links_fix21_tests;
 mod bank_links_fix_tests;
 #[cfg(test)]
 mod bank_links_tests;
+#[cfg(test)]
+mod admin_tests;
 #[cfg(test)]
 mod browse_tests;
 #[cfg(test)]

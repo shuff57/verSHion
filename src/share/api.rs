@@ -354,9 +354,17 @@ pub struct Me {
     pub display_name: String,
     pub school: String,
     pub status: Status,
+    /// The server's trust level (`pending`, `teacher`, `admin`), as sent with `GET /me`. Only `admin`
+    /// opens the approval queue; a teacher's own status is [`Status::Approved`] either way.
+    pub trust: String,
 }
 
 impl Me {
+    /// This account may review applications (`trust: "admin"`).
+    pub fn is_admin(&self) -> bool {
+        self.trust == "admin"
+    }
+
     pub fn parse(v: &Value) -> Option<Me> {
         let s = |v: Option<&Value>| v.and_then(Value::as_str).map(plain).unwrap_or_default();
         let st = v.get("status");
@@ -388,6 +396,7 @@ impl Me {
             display_name: s(v.get("display_name")),
             school: s(v.pointer("/profile/school")),
             status,
+            trust: s(v.get("trust")),
         })
     }
 }

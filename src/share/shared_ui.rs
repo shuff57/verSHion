@@ -33,6 +33,8 @@ pub struct SharedUi {
     pub share_target: Option<String>,
     /// "Open in My Banks" on a circle's page (phase D1): the app opens this bank's page.
     pub open_bank: Option<String>,
+    /// The approval queue (an admin's tab: it does no I/O until that tab is opened).
+    pub admin: super::admin::AdminModel,
     repaint_set: bool,
 }
 
@@ -139,6 +141,9 @@ impl SharedUi {
         mine.model.note_account(&snap);
         browse.model.note_account(&snap);
         self.model.note_account(&snap, &mut account.invite);
+        // The queue belongs to one admin: another sign-in never sees what this one read.
+        self.admin.note_account(&snap);
+        let is_admin = account.model.is_admin();
         let guide = self.model.guide(&snap.gate, account.model.page, account.invite.redeemed());
         // An invite code taken: the tabs ask again.
         if account.invite.redeemed() && self.model.invite_needed {
@@ -162,8 +167,12 @@ impl SharedUi {
             // (round 54) a confirmed account waiting for approval gets the Circles tab and its settings; the public
             // pool's action and tabs wait for approval.
             let pending = snap.gate.confirmed_pending();
-            if pending && !tabs_for(&snap.gate).contains(&self.model.tab) {
+            if pending && !tabs_for(&snap.gate, false).contains(&self.model.tab) {
                 self.model.goto(Tab::Circles);
+            }
+            // A tab this account may not use (the queue for a teacher, or a stray request for it) is not drawn as one.
+            if !pending && !tabs_for(&snap.gate, is_admin).contains(&self.model.tab) {
+                self.model.goto(Tab::Browse);
             }
             let avail = ui.available_width();
             let action_w = pill_width(ui, SHARE_ACTION) + 24.0;
@@ -279,9 +288,15 @@ impl SharedUi {
             account.reveal();
         }
         let changed = self.circles.sync(banks, &mut browse.model);
+        // The queue is an admin's tab only: a teacher's stray request for it is not drawn as one.
+        let is_admin = account.model.is_admin();
         // (round 54) only the tabs this account may use; a pending account's stray request for a public tab is not
         // drawn as one.
-        let tab = if pending && !matches!(self.model.tab, Tab::Circles | Tab::Settings) { Tab::Circles } else { self.model.tab };
+        let tab = if !tabs_for(&snap.gate, is_admin).contains(&self.model.tab) {
+            if pending { Tab::Circles } else { Tab::Browse }
+        } else {
+            self.model.tab
+        };
         // Keep the hosted models running only for the tab that needs them.
         match tab {
             Tab::Circles => {}
@@ -300,8 +315,9 @@ impl SharedUi {
                     mine.model.open_list();
                 }
             }
+            Tab::Admin => {}
         }
-        let shown: &[Tab] = if pending { &super::shared::PENDING_TABS } else { &Tab::ALL };
+        let shown: &[Tab] = tabs_for(&snap.gate, is_admin);
         ui.horizontal_wrapped(|ui| {
             // A tab that does not fit moves to the next row whole: its label never wraps.
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
@@ -327,6 +343,10 @@ impl SharedUi {
             self.chooser(ui, banks, exams);
         }
         ui.add_space(10.0);
+        // The queue draws its own cards (one per application); the other tabs share one.
+        if tab == Tab::Admin {
+            super::admin_ui::body(ui, &mut self.admin, snap.session.clone());
+        } else {
         pageshell::card(ui, |ui| match tab {
             Tab::Browse => super::browse_ui::tab_body(ui, &mut browse.model, super::browse::Tab::Search),
             Tab::Imported => {
@@ -367,7 +387,9 @@ impl SharedUi {
                 // The page's own card lists the legal pages.
                 super::mine_ui::settings_body(ui, &mut mine.model, false);
             }
+            Tab::Admin => {}
         });
+        }
         changed
     }
 

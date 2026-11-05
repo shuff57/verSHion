@@ -1161,6 +1161,12 @@ pub trait PoolSession {
     fn account(&self) -> Option<String> {
         None
     }
+    /// Native only: the device token to send as `X-Device-Token`. The admin routes refuse a request
+    /// from a device that has not signed in before, and the browser carries the same token in a
+    /// cookie instead. `None` sends no header.
+    fn device_token(&self, _account: Option<&str>) -> Option<Secret> {
+        None
+    }
     /// [`send`](Self::send) for `account` only (critic 73 I2): nothing goes, and the answer is `SignedOut`, once another
     /// account is signed in. A session that retries inside one call (the real [`Client`]'s refresh-and-retry) checks
     /// again before each try.
@@ -1184,6 +1190,11 @@ impl PoolSession for Client {
     }
     fn account(&self) -> Option<String> {
         Client::account(self)
+    }
+
+    /// Native only: the device token sent as `X-Device-Token` (the browser's is a cookie).
+    fn device_token(&self, account: Option<&str>) -> Option<Secret> {
+        self.device_for(account)
     }
 }
 

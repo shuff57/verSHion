@@ -503,7 +503,10 @@ round-7 fix was revert-checked.
     suspended-login check, and the live suspended check (a test was added for the last one).
 
 **Gaps**
-- No admin UI. The Rust app's sign-in, status and admin screens are not built.
+- The admin screen exists in the Rust app (`src/share/admin.rs` / `admin_ui.rs`, the Shared page's "Approval queue"
+  tab, 2026-11-05): reading the queue, approving with evidence, refusing with a reason, the sudo password gate. Not
+  ported: bulk reject, revoke, suspend/restore and the proposals they need, the audit log view, and the per-user
+  detail page. Until those exist the API routes remain the only way to do them.
 - An admin deleting their own account is not blocked by the last-admin rule. The bootstrap script is
   the recovery path.
 - Domain validation uses a short public-suffix list, not the full PSL. Hints are labels, so a miss

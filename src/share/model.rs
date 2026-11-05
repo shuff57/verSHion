@@ -383,6 +383,12 @@ impl AccountModel {
         self.client.as_ref()
     }
 
+    /// The signed-in account is an admin (`GET /me` said `trust: "admin"`), so the Shared page offers
+    /// the approval queue. A pending account never is, whatever the server said about it.
+    pub fn is_admin(&self) -> bool {
+        self.me.as_ref().is_some_and(super::api::Me::is_admin)
+    }
+
     fn settings(&mut self) -> &ShareSettings {
         if self.settings.is_none() {
             self.settings = Some(self.settings_io.load());

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use super::api::Status;
 use super::model::{AccountModel, MailKind, Page, Runner, SettingsIo, server_mode};
 use super::publish::Gate;
-use super::shared::{Guide, STEPS, SharedModel, Tab, guide_of, tabs_for};
+use super::shared::{guide_of, tabs_for, Guide, SharedModel, Tab, ADMIN_TABS, STEPS, TEACHER_TABS};
 use super::shared_ui::{SharedUi, goto, take_goto};
 use super::ui::AccountUi;
 
@@ -38,11 +38,21 @@ fn every_account_state_maps_to_one_guided_step_or_note() {
 fn a_confirmed_pending_account_gets_circles_and_settings_only() {
     // Round 54: a confirmed account waiting for approval may use circles, not the public pool's tabs.
     let pending = Gate::NotApproved(Status::Pending);
-    assert_eq!(tabs_for(&pending), &[Tab::Circles, Tab::Settings]);
+    assert_eq!(tabs_for(&pending, false), &[Tab::Circles, Tab::Settings]);
     for t in [Tab::Browse, Tab::Mine, Tab::Imported, Tab::Reports] {
-        assert!(!tabs_for(&pending).contains(&t), "{t:?} waits for approval");
+        assert!(!tabs_for(&pending, false).contains(&t), "{t:?} waits for approval");
     }
-    assert_eq!(tabs_for(&Gate::Ready), &Tab::ALL);
+    assert_eq!(tabs_for(&Gate::Ready, false), &TEACHER_TABS);
+    // Even an admin waiting for approval gets no queue: the queue belongs to an approved admin.
+    assert!(!tabs_for(&pending, true).contains(&Tab::Admin));
+}
+
+#[test]
+fn an_admin_gets_the_approval_queue_and_a_teacher_does_not() {
+    assert_eq!(tabs_for(&Gate::Ready, true), &ADMIN_TABS);
+    assert_eq!(ADMIN_TABS.last(), Some(&Tab::Admin));
+    assert!(!TEACHER_TABS.contains(&Tab::Admin), "a teacher's tabs never offer the queue");
+    assert_eq!(Tab::Admin.label(), "Approval queue");
 }
 
 #[test]
@@ -83,8 +93,9 @@ fn tabs_switch_and_the_invite_flag_follows_the_pool() {
     assert_eq!(m.guide(&Gate::Ready, Page::Status, false), Guide::NeedsInvite);
     m.note_redeemed();
     assert_eq!(m.guide(&Gate::Ready, Page::Status, false), Guide::Ready);
-    assert_eq!(Tab::ALL.len(), 6);
+    assert_eq!(Tab::ALL.len(), 7);
     assert!(Tab::ALL.iter().all(|t| !t.label().is_empty()));
+    assert_eq!(TEACHER_TABS.len(), 6);
 }
 
 fn ctx() -> egui::Context {
