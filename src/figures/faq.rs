@@ -190,6 +190,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "dot-plot" => DOT_PLOT,
         "ogive" => OGIVE,
         "bar-chart" => BAR_CHART,
+        "frequency-table" => FREQUENCY_TABLE,
         "normal-curve" => NORMAL_CURVE,
         "sampling-distribution" => SAMPLING_DISTRIBUTION,
         "rejection-region" => REJECTION_REGION,
@@ -1630,6 +1631,29 @@ const OGIVE: &[Faq] = &[
     Faq {
         q: "Which vertical axis should I use?",
         a: "Cumulative frequency counts values and ends at the total. Cumulative relative frequency divides by the total, so it ends at 1, and cumulative percent ends at 100%; on those a percentile is read straight off the axis. The curve has the same shape on all three.",
+    },
+];
+
+const FREQUENCY_TABLE: &[Faq] = &[
+    Faq {
+        q: "Why do the relative frequencies add to 100%?",
+        a: "Every value is counted once, so the frequencies add to n. Relative frequency is each count divided by that same n, so f1/n + f2/n + ... = n/n = 1, or 100%. The Total row shows exactly n and exactly 100%. A percent is rounded half up from the exact integers f and n, never from a calculator's decimal, so at 0 or 1 decimal place the printed cells can add to 99% or 101%; the key says when that happens and gives the rounded sum. Choose Fraction to see the exact shares.",
+    },
+    Faq {
+        q: "What is a class boundary?",
+        a: "A boundary is where one class ends and the next begins. The figure writes each class as \"a to <b\": a is included and b is not, so 40 to <50 holds 40 but not 50, and 50 belongs to 50 to <60. A value exactly on an inner boundary goes in the class to its right, the same rule as the histogram, so the same values make the same classes. The last class is written \"a to b\" and includes its upper boundary, which is above the largest value, so no value is left without a class. A class width of 10 starting at 40 gives 40 to <50, 50 to <60, and so on.",
+    },
+    Faq {
+        q: "Why draw a tally column?",
+        a: "The tally shows the counting itself, one mark per value and a diagonal across each group of five, so a reader can check a frequency without trusting it. It also makes the table usable as a tally-and-frequency exercise: the student copy blanks the tally, the frequencies, the relative frequencies and the cumulative frequencies, and leaves the values or classes and the table rules to fill in. Counts above 25 are not tallied (the column would be wider than the page); the key says so.",
+    },
+    Faq {
+        q: "What does cumulative frequency mean?",
+        a: "The cumulative frequency of a row is the number of values at or below the top of that row: the running sum of the frequency column. It starts at the first row's frequency and ends at n, so the last cumulative frequency is the total number of values. It answers \"how many values are no more than this?\", which is what an ogive plots against the upper class boundaries. For raw values it is the count up to and including that value; for classes it counts every value in the class and all the classes before it.",
+    },
+    Faq {
+        q: "When should I use grouped classes instead of raw values?",
+        a: "Use raw values when the data is discrete and repeats, such as the number of siblings or a score out of 10: each distinct value gets its own row, in ascending order. Use grouped classes when the data is continuous or has many different values, such as heights, times or incomes, because one row per value would be too long to read. Grouped classes also make the table match a histogram: the automatic class width is the histogram's own choice for the same values. A value on a boundary goes in the class to its right, and the last class closes at its upper boundary.",
     },
 ];
 
