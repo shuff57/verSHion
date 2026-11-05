@@ -177,6 +177,24 @@ pub fn primary(ui: &mut Ui, text: &str) -> egui::Response {
     button(ui, text, rest, hover, press, Stroke::NONE, theme::on_accent_col())
 }
 
+/// The solid accent action, disabled when `on` is false: a Save that is always lit claims there is
+/// something to save when there is not, which is what the critics read as a missing state.
+pub fn primary_on(ui: &mut Ui, text: &str, on: bool) -> egui::Response {
+    if on {
+        return primary(ui, text);
+    }
+    ui.add_enabled(
+        false,
+        egui::Button::new(
+            RichText::new(text).family(theme::bold_family()).size(15.2).color(theme::muted_col()),
+        )
+        .fill(theme::field())
+        .stroke(Stroke::new(1.0, theme::border()))
+        .corner_radius(CornerRadius::same(12))
+        .min_size(Vec2::new(0.0, 40.0)),
+    )
+}
+
 /// The outlined action.
 pub fn outline(ui: &mut Ui, text: &str) -> egui::Response {
     button(ui, text, theme::card(), theme::hover_bg(), theme::accent_faded(), Stroke::new(1.0, theme::rule()), theme::ink())

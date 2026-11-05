@@ -11,6 +11,10 @@
 
 use egui::Ui;
 
+/// The width a form card keeps on the Shared page: a form is a form, not a page, and a field that
+/// spans 980 px beside a Save button the size of a stamp reads as a layout accident.
+const FORM_CARD_W: f32 = 660.0;
+
 use super::browse_ui::BrowseUi;
 use super::circles::CirclesModel;
 use super::circles_ui::Outcome;
@@ -169,7 +173,7 @@ fn perks_row(ui: &mut Ui) {
     let perks = [
         (ph::USERS_THREE, "Share with teachers", "Send banks to a circle of colleagues or to the public pool, and take theirs."),
         (ph::SPARKLE, "Hosted AI", "Convert a PDF, scan or photo into questions with credits, nothing to set up."),
-        (ph::LOCK_SIMPLE, "Optional", "Banks, exams, printing and the figures all work on this device without one."),
+        (ph::LOCK_SIMPLE, "Runs here", "Banks, exams, printing and the figures live on this machine, signed in or not."),
     ];
     ui.columns(3, |cols| {
         for (col, (icon, head, body)) in cols.iter_mut().zip(perks) {
@@ -197,7 +201,7 @@ fn account_perks(ui: &mut Ui) {
     for (icon, head, body) in [
         (ph::USERS_THREE, "Share with teachers", "Send banks to a circle of colleagues or to the public pool, and take theirs."),
         (ph::SPARKLE, "Hosted AI", "Convert a PDF, scan or photo into questions with credits, nothing to set up."),
-        (ph::LOCK_SIMPLE, "Optional", "Banks, exams, printing and the figures all work on this device without one."),
+        (ph::LOCK_SIMPLE, "Runs here", "Banks, exams, printing and the figures live on this machine, signed in or not."),
     ] {
         ui.horizontal_top(|ui| {
             let (r, _) = ui.allocate_exact_size(egui::Vec2::splat(40.0), egui::Sense::hover());
@@ -291,13 +295,25 @@ impl SharedUi {
                 g => self.guide_card(ui, &g, account),
             }
             ui.add_space(12.0);
-            // Legal pages are a footnote, not a card of their own: a quiet labelled line at the page's foot.
-            ui.vertical(|ui| {
-                ui.add_space(4.0);
-                crate::kit::small_caps(ui, "Legal pages (drafts)");
-                ui.add_space(2.0);
-                super::mine_ui::legal_links_for(ui, &super::ShareSettings::legal_base());
-            });
+            // Legal pages are a footnote, not a card of their own, but they sit on a quiet field:
+            // over bare grid paper the small grey links lost contrast (named on both tabs).
+            let lw = ui.available_width().min(FORM_CARD_W);
+            ui.allocate_ui_with_layout(
+                egui::Vec2::new(lw, 0.0),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    egui::Frame::new()
+                        .fill(theme::field())
+                        .corner_radius(egui::CornerRadius::same(12))
+                        .inner_margin(egui::Margin::symmetric(14, 9))
+                        .show(ui, |ui| {
+                            ui.set_width(ui.available_width());
+                            crate::kit::small_caps(ui, "Legal pages (drafts)");
+                            ui.add_space(2.0);
+                            super::mine_ui::legal_links_for(ui, &super::ShareSettings::legal_base());
+                        });
+                },
+            );
             ui.add_space(20.0);
             pageshell::footer(
                 ui,
@@ -312,7 +328,7 @@ impl SharedUi {
     pub(super) fn guide_card(&mut self, ui: &mut Ui, g: &Guide, account: &mut AccountUi) {
         // A guide card that holds a form is a form's width, not a page's: at 980 px the one field
         // and its Save left half the card white (the critics named it on the Shared tab).
-        let w = ui.available_width().min(660.0);
+        let w = ui.available_width().min(FORM_CARD_W);
         ui.allocate_ui_with_layout(egui::Vec2::new(w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
             pageshell::card(ui, |ui| {
                 if let Some(n) = g.step() {

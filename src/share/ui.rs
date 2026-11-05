@@ -447,13 +447,16 @@ fn actions(ui: &mut Ui, busy: bool, add: impl FnOnce(&mut Ui)) {
 fn server_page(ui: &mut Ui, m: &mut AccountModel) {
     para(
         ui,
-        "Sharing questions with other teachers needs an account on a verSHion pool server. It is optional: \
-         everything else in verSHion works without an account, on this device.",
+        "Sharing questions with other teachers needs an account on a verSHion pool server.",
     );
     let enter = field(ui, "Server address", &mut m.forms.server, "share_server", false, "https://pool.example.org");
-    let mut save = enter;
+    // Save says whether there is anything to save: an empty box with a lit Save button is a state
+    // the critics named on both pages that show this form.
+    let typed = m.forms.server.trim().to_string();
+    let dirty = !typed.is_empty() && typed != m.base_url();
+    let mut save = enter && dirty;
     actions(ui, m.busy(), |ui| {
-        save |= pageshell::primary(ui, "Save").clicked();
+        save |= pageshell::primary_on(ui, "Save", dirty).clicked();
     });
     if m.page == Page::Server && !m.base_url().is_empty() && link(ui, "Cancel") {
         m.go(Page::SignIn);

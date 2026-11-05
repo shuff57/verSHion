@@ -1098,9 +1098,24 @@ fn draw_editor(
     }
 
     let rest = ui.available_rect_before_wrap();
-    let shelf_w = SHELF_W.min((rest.width() * 0.4).max(260.0));
-    let shelf_rect = Rect::from_min_max(Pos2::new(rest.right() - shelf_w, rest.top()), rest.right_bottom());
-    let desk_rect = Rect::from_min_max(rest.left_top(), Pos2::new(shelf_rect.left() - 12.0, rest.bottom()));
+    // Under ~860 px the shelf beside the page squeezed the paper to about 50%, which is the one
+    // thing a teacher can not do at that size: read their own questions. Below that width the
+    // shelf moves under the desk instead of beside it, so the page gets the whole column.
+    let narrow = rest.width() < 860.0;
+    let (desk_rect, shelf_rect) = if narrow {
+        let shelf_h = (rest.height() * 0.34).clamp(150.0, 260.0);
+        let split = (rest.bottom() - shelf_h - 10.0).max(rest.top() + 160.0);
+        (
+            Rect::from_min_max(rest.left_top(), Pos2::new(rest.right(), split)),
+            Rect::from_min_max(Pos2::new(rest.left(), split + 10.0), rest.right_bottom()),
+        )
+    } else {
+        let shelf_w = SHELF_W.min((rest.width() * 0.4).max(260.0));
+        (
+            Rect::from_min_max(rest.left_top(), Pos2::new(rest.right() - shelf_w - 12.0, rest.bottom())),
+            Rect::from_min_max(Pos2::new(rest.right() - shelf_w, rest.top()), rest.right_bottom()),
+        )
+    };
     st.desk_rect = Some(desk_rect);
     ui.allocate_rect(rest, Sense::hover());
 
