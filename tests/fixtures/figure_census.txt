@@ -118,8 +118,8 @@ free-body-diagram__defaults fbb2822c73b13faf
 free-body-diagram__start fbb2822c73b13faf
 free-body__defaults b075b8cfb5094924
 free-body__start b075b8cfb5094924
-frequency-table__defaults a8007b8d8c520fb4
-frequency-table__start a8007b8d8c520fb4
+frequency-table__defaults 1a610466699657eb
+frequency-table__start 1a610466699657eb
 gas-law-graphs__defaults 6ed79607b3fb42ae
 gas-law-graphs__start 6ed79607b3fb42ae
 gas-syringe__defaults 5d61e53defaf72e7
