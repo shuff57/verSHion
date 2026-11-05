@@ -32,18 +32,23 @@
 //!
 //! **The model.** It is a simplified ball-and-stick drawing: atoms are circles, bonds are
 //! single sticks (no double bonds, no resonance, no bond order), each lone pair is a pair of dots on
-//! a short dashed stick pointing where the pair sits on the central atom, and bond lengths are not
+//! a short dashed stick pointing where the pair truly projects; a pair whose projection lands on a
+//! bond or collapses to a point is left off and the panel says so, and bond lengths are not
 //! to scale. No real bond length is measured or implied. The 3-D coordinates are exact for the
 //! stated VSEPR geometry, with the two lone-pair compressions above written into the coordinates;
 //! the view is an orthographic projection of the rotated model. A bond pointing almost straight at
-//! the viewer is hidden behind its atom, a label whose ball is hidden by a nearer ball is left off
-//! rather than drawn through it, and the panel says when a bond or an atom is hidden this way.
+//! the viewer is hidden behind its atom, a ligand label whose ball is hidden by a nearer ball is left
+//! off rather than drawn through it, and the panel says when a bond or an atom is hidden this way.
+//! The centre label is the reference: it stays on top of a nearer ball when it can, and the panel
+//! says when a nearer ligand covers the centre.
 //!
 //! **The arc is the true angle.** An orthographic projection can foreshorten a bond and change the
 //! angle between the sticks on the page, so an arc is drawn only when the page shows the printed
-//! angle (within 1°). Each molecule opens at a view chosen so its angle is true: the opening views
+//! angle (within 0.4°). Each molecule opens at a view chosen so its angle is true: the opening views
 //! are (0, 0) for BeCl2 and BF3, (202, 21) for CH4, (0, 27) for NH3, (44, 62) for H2O, (250, 0) for
-//! PCl5, and (0, 20), (0, 20) and (296, 36) for SF6, XeF4 and SF4. PCl5 and SF4 cannot show both their
+//! PCl5, and (0, 20), (0, 0) and (296, 36) for SF6, XeF4 and SF4. At XeF4's opening the two axial lone
+//! pairs point at and away from the viewer, so they are a panel note rather than a made-up stick;
+//! a true 90° F–Xe–F arc in any view forces those pairs onto the F bonds. PCl5 and SF4 cannot show both their
 //! 120°/90° and ~102°/90° angles true at once; they open on the 90° angle, and the panel names both.
 //! Turning and tilting can foreshorten the sticks; then the arc is left off and the panel still
 //! names the angle. The student copy draws no angle arc at all, because the angle is its blanked
@@ -125,6 +130,8 @@ pub struct Mol {
     pub pairs: &'static [AnglePair],
     /// Key-only explanation; it names the shape and the angle, so the student copy omits it.
     pub why: &'static str,
+    /// The same explanation with no angle, used on the key while Show bond angles is off.
+    pub why_plain: &'static str,
 }
 
 impl Mol {
@@ -256,54 +263,63 @@ pub static MOLECULES: [Mol; 9] = [
         domain_geo: "Linear", shape: "Linear", open: (0.0, 0.0),
         atoms: &BECL2_ATOMS, lone: &EMPTY3, pairs: &BECL2_PAIRS,
         why: "Two bonding pairs and no lone pairs: the two bonds point in opposite directions, 180° apart.",
+        why_plain: "Two bonding pairs and no lone pairs: the two bonds point in opposite directions.",
     },
     Mol {
         name: "BF3", display: "BF3", ax: "AX3", domains: 3,
         domain_geo: "Trigonal planar", shape: "Trigonal planar", open: (0.0, 0.0),
         atoms: &BF3_ATOMS, lone: &EMPTY3, pairs: &BF3_PAIRS,
         why: "Three bonding pairs and no lone pairs: the bonds spread evenly in one plane, 120° apart.",
+        why_plain: "Three bonding pairs and no lone pairs: the bonds spread evenly in one plane.",
     },
     Mol {
         name: "CH4", display: "CH4", ax: "AX4", domains: 4,
         domain_geo: "Tetrahedral", shape: "Tetrahedral", open: (202.0, 21.0),
         atoms: &CH4_ATOMS, lone: &EMPTY3, pairs: &CH4_PAIRS,
         why: "Four bonding pairs and no lone pairs: a tetrahedron keeps all four as far apart as possible, at 109.5°.",
+        why_plain: "Four bonding pairs and no lone pairs: a tetrahedron keeps all four as far apart as possible.",
     },
     Mol {
         name: "NH3", display: "NH3", ax: "AX3E", domains: 4,
         domain_geo: "Tetrahedral", shape: "Trigonal pyramidal", open: (0.0, 27.0),
         atoms: &NH3_ATOMS, lone: &NH3_LONE, pairs: &NH3_PAIRS,
         why: "Four electron domains, one of them a lone pair. A lone pair repels more strongly than a bonding pair, so the three N–H bonds close to about 107° and the atoms form a trigonal pyramid.",
+        why_plain: "Four electron domains, one of them a lone pair. The lone pair repels more strongly than a bonding pair, so the three N–H bonds close up and the atoms form a trigonal pyramid.",
     },
     Mol {
         name: "H2O", display: "H2O", ax: "AX2E2", domains: 4,
         domain_geo: "Tetrahedral", shape: "Bent", open: (44.0, 62.0),
         atoms: &H2O_ATOMS, lone: &H2O_LONE, pairs: &H2O_PAIRS,
         why: "Four electron domains, two of them lone pairs. The lone pairs repel more strongly than the bonds, closing the H–O–H angle to about 104.5°, so the molecule is bent, not linear.",
+        why_plain: "Four electron domains, two of them lone pairs. The lone pairs repel more strongly than the bonds, so the molecule is bent, not linear.",
     },
     Mol {
         name: "PCl5", display: "PCl5", ax: "AX5", domains: 5,
         domain_geo: "Trigonal bipyramidal", shape: "Trigonal bipyramidal", open: (250.0, 0.0),
         atoms: &PCL5_ATOMS, lone: &EMPTY3, pairs: &PCL5_PAIRS,
         why: "Five bonding pairs: three equatorial bonds 120° apart and two axial bonds at 90° to them, a trigonal bipyramid.",
+        why_plain: "Five bonding pairs: three equatorial bonds and two axial bonds, a trigonal bipyramid.",
     },
     Mol {
         name: "SF6", display: "SF6", ax: "AX6", domains: 6,
         domain_geo: "Octahedral", shape: "Octahedral", open: (0.0, 20.0),
         atoms: &SF6_ATOMS, lone: &EMPTY3, pairs: &SF6_PAIRS,
         why: "Six bonding pairs: all six positions are equivalent, with 90° between neighbours, an octahedron.",
+        why_plain: "Six bonding pairs: all six positions are equivalent, an octahedron.",
     },
     Mol {
         name: "XeF4", display: "XeF4", ax: "AX4E2", domains: 6,
-        domain_geo: "Octahedral", shape: "Square planar", open: (0.0, 20.0),
+        domain_geo: "Octahedral", shape: "Square planar", open: (0.0, 0.0),
         atoms: &XEF4_ATOMS, lone: &XEF4_LONE, pairs: &XEF4_PAIRS,
         why: "Six electron domains, two of them lone pairs. The lone pairs take the two axial positions, leaving four bonds in a square plane at 90°.",
+        why_plain: "Six electron domains, two of them lone pairs. The lone pairs take the axial positions, leaving four bonds in a square plane.",
     },
     Mol {
         name: "SF4", display: "SF4", ax: "AX4E", domains: 5,
         domain_geo: "Trigonal bipyramidal", shape: "See-saw", open: (296.0, 36.0),
         atoms: &SF4_ATOMS, lone: &SF4_LONE, pairs: &SF4_PAIRS,
         why: "Five electron domains, one of them a lone pair in an equatorial position. The four bonds form a see-saw, with the equatorial pair at about 102° and the axial bonds at 90° to them.",
+        why_plain: "Five electron domains, one of them a lone pair in an equatorial position. The four bonds form a see-saw.",
     },
 ];
 
@@ -478,6 +494,21 @@ pub fn read(p: &Params) -> (Setup, Vec<String>) {
 
 pub fn warnings(p: &Params) -> Vec<String> { build(p).1.notes }
 
+/// The accessible description, saying only what this copy actually draws (and no answer).
+fn describe(lone: bool, labels: bool, angles: bool) -> String {
+    let mut s = String::from("A rotatable three-dimensional ball-and-stick model of one molecule");
+    let mut feats: Vec<&str> = Vec::new();
+    if lone { feats.push("lone pairs"); }
+    if labels { feats.push("atom labels"); }
+    if angles { feats.push("bond angles"); }
+    if !feats.is_empty() {
+        s.push_str(" with ");
+        s.push_str(&feats.join(", "));
+    }
+    s.push('.');
+    s
+}
+
 // ---------------------------------------------------------------------------------------------
 // The figure
 // ---------------------------------------------------------------------------------------------
@@ -487,7 +518,7 @@ pub fn defs() -> Vec<FigureDef> {
         id: ID,
         subject: Subject::Chemistry,
         title: "VSEPR Shapes",
-        blurb: "A rotatable ball-and-stick model of a simple molecule, with lone pairs, atom labels and bond angles.",
+        blurb: "A rotatable ball-and-stick model of a simple molecule; the key can show lone pairs, atom labels and bond angles.",
         params,
         render: |p| build(p).0,
     }]
@@ -498,7 +529,7 @@ fn params() -> Vec<ParamDef> {
         ParamDef::choice("molecule", "Molecule", &NAMES, "CH4")
             .hint("BeCl2, BF3, CH4, NH3, H2O, PCl5, SF6, XeF4 or SF4. The angle is the one drawn in this simplified model"),
         ParamDef::bool("lone", "Show lone pairs", true)
-            .hint("A pair of dots on a short dashed stick pointing where the lone pair sits on the central atom"),
+            .hint("A pair of dots on a short dashed stick pointing where the pair truly projects; a pair that projects on a bond or at the viewer is left off with a panel note"),
         ParamDef::bool("angles", "Show bond angles", true)
             .hint("An arc and the angle at the central atom, drawn only when the page shows the true 3-D angle; the number is an answer"),
         ParamDef::bool("labels", "Show atom labels", true),
@@ -552,6 +583,15 @@ pub fn slerp(u: [f64; 3], v: [f64; 3], t: f64) -> [f64; 3] {
 }
 
 fn dist(a: Pt, b: Pt) -> f64 { ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt() }
+
+/// The distance from a point to a line segment.
+fn point_seg(p: Pt, a: Pt, b: Pt) -> f64 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let l2 = dx * dx + dy * dy;
+    if l2 < 1e-12 { return dist(p, a); }
+    let t = (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / l2).clamp(0.0, 1.0);
+    dist(p, (a.0 + t * dx, a.1 + t * dy))
+}
 
 /// The screen direction of a point seen from the centre, in degrees.
 fn screen_angle(p: Pt) -> f64 { p.1.atan2(p.0).to_degrees().rem_euclid(360.0) }
@@ -710,14 +750,11 @@ fn best_pair(mol: &Mol, pair: &AnglePair, view: &View, c: Pt, scale: f64, hidden
             let dot = va.0 * vb.0 + va.1 * vb.1;
             let la = (va.0 * va.0 + va.1 * va.1).sqrt();
             let lb = (vb.0 * vb.0 + vb.1 * vb.1).sqrt();
-            // In an edge-on view the two bonds lie on one screen line and the arc would
-            // collapse to a line: leave this pair out instead of drawing a misleading arc.
-            if cross <= 0.12 * la * lb { continue; }
             // The arc is drawn only when the page shows the same angle as the label. A 3-D
             // projection can foreshorten a bond and change the angle between the sticks; then
             // this pair is left off (the panel still names the angle) rather than mislabelled.
             let shown = cross.atan2(dot).to_degrees();
-            if (shown - pair.angle).abs() > 1.0 { continue; }
+            if (shown - pair.angle).abs() > 0.4 { continue; }
             let score = cross * (0.25 + la.min(lb) / scale);
             if score > best_score + 1e-9 {
                 best_score = score;
@@ -747,9 +784,9 @@ pub fn build(p: &Params) -> (String, Report) {
     let scale = 118.0 * geom;
     let r_atom = 16.0 * lab;
     let fs_atom = 17.0 * lab;
-    let fs_angle = 16.0 * lab;
+    let fs_angle = 16.5 * lab;
     let fs_panel = 16.5 * lab;
-    let fs_note = 16.0 * lab;
+    let fs_note = 16.5 * lab;
     let panel_x = 492.0;
     let panel_w = 252.0;
     let view = View::new(st.turn + mol.open.0, st.tilt + mol.open.1);
@@ -771,7 +808,7 @@ pub fn build(p: &Params) -> (String, Report) {
         let z = (atom_report[0].depth + atom_report[i].depth) / 2.0;
         let z = if z == 0.0 { 0.0 } else { z };
         let t = ((z + 1.0) / 2.0).clamp(0.0, 1.0);
-        let width = (2.0 + 1.4 * t) * lab;
+        let width = (2.6 + 1.8 * t) * lab;
         let (pc, pl) = (atom_report[0].p, atom_report[i].p);
         let len = dist(pc, pl);
         let (a, b) = if len > 2.0 * r_atom + 1.0 {
@@ -786,53 +823,46 @@ pub fn build(p: &Params) -> (String, Report) {
     }).collect();
     bonds.sort_by(|a, b| depth_cmp((a.depth, a.index), (b.depth, b.index)));
 
-    // ---- lone pairs: each is a pair of dots on a short dashed stick. The stick points where the
-    // pair projects; when that direction is close to a bond or points at the viewer, it is turned
-    // to the nearest clear screen direction, so a pair never reads as decoration on a bond.
+    // ---- lone pairs: the stick is the real projected 3-D lone-pair direction. If that direction
+    // collapses to a point, lands on a bond, or puts two pairs' dots on top of each other, the pair
+    // is omitted and the panel says why; it is never turned to a made-up screen direction.
     let mut lone: Vec<LoneReport> = Vec::new();
+    let mut lone_collapsed = 0usize;
+    let mut lone_on_bond = 0usize;
+    let mut lone_overlap = 0usize;
     if st.lone {
-        let bond_dirs: Vec<f64> = atom_report.iter().skip(1).filter(|a| !a.hidden)
-            .map(|a| screen_angle((a.p.0 - cx, a.p.1 - cy))).collect();
-        let mut chosen: Vec<f64> = Vec::new();
+        // The line of sight of each bond, not only the trimmed stick: a pair beyond a short
+        // projected bond still reads as lying on that bond.
+        let bond_segments: Vec<(Pt, Pt)> = atom_report.iter().skip(1)
+            .filter(|a| !a.hidden)
+            .filter_map(|a| {
+                let v = (a.p.0 - cx, a.p.1 - cy);
+                let l = (v.0 * v.0 + v.1 * v.1).sqrt();
+                if l < 1e-9 { None } else { Some(((cx, cy), (cx + v.0 / l * scale, cy + v.1 / l * scale))) }
+            }).collect();
+        let mut chosen_dots: Vec<Pt> = Vec::new();
         for (k, d) in mol.lone.iter().enumerate() {
             let (pp, depth) = view.screen(*d, (cx, cy), scale);
-            let original = {
-                let v = (pp.0 - cx, pp.1 - cy);
-                let l = (v.0 * v.0 + v.1 * v.1).sqrt();
-                if l >= 0.22 * scale { Some(screen_angle(v)) } else { None }
-            };
-            let clear = |a: f64| -> bool {
-                bond_dirs.iter().all(|b| angle_gap(a, *b) >= 18.0)
-                    && chosen.iter().all(|b| angle_gap(a, *b) >= 25.0)
-            };
-            let best = match original {
-                Some(a) if clear(a) => a,
-                _ => {
-                    let mut best = original.unwrap_or(if k % 2 == 0 { 45.0 } else { 225.0 });
-                    let mut best_score = f64::NEG_INFINITY;
-                    for step in 0..360 {
-                        let a = step as f64;
-                        if !clear(a) { continue; }
-                        let min_b = bond_dirs.iter().map(|b| angle_gap(a, *b)).fold(180.0, f64::min);
-                        let min_p = chosen.iter().map(|b| angle_gap(a, *b)).fold(180.0, f64::min);
-                        let near = original.map(|o| angle_gap(a, o)).unwrap_or(0.0);
-                        let score = min_b.min(60.0) + 0.35 * min_p.min(60.0) - 0.05 * near;
-                        if score > best_score + 1e-9 { best_score = score; best = a; }
-                    }
-                    best
-                }
-            };
-            chosen.push(best);
-            let u = (best.to_radians().cos(), best.to_radians().sin());
-            let mut r = 0.30 * scale;
+            let v = (pp.0 - cx, pp.1 - cy);
+            let l = (v.0 * v.0 + v.1 * v.1).sqrt();
+            if l < 0.12 * scale { lone_collapsed += 1; continue; }
+            let u = (v.0 / l, v.1 / l);
             let perp = (-u.1, u.0);
             let off = 3.8 * lab;
-            // A ligand whose short projected bond lies along the chosen direction would put the
-            // dots inside its ball; pull this pair a little closer to the centre instead.
+            let mut r = 0.30 * scale;
             let p0 = (cx + u.0 * r, cy + u.1 * r);
             if atom_report[1..].iter().any(|a| dist(p0, a.p) < a.r + off + 2.0) { r = 0.22 * scale; }
             let p = (cx + u.0 * r, cy + u.1 * r);
             let dots = [(p.0 + perp.0 * off, p.1 + perp.1 * off), (p.0 - perp.0 * off, p.1 - perp.1 * off)];
+            let on_bond = bond_segments.iter().any(|(a, b)| {
+                point_seg(p, *a, *b) < 4.2 || dots.iter().any(|dd| point_seg(*dd, *a, *b) < 4.2)
+            });
+            if on_bond { lone_on_bond += 1; continue; }
+            if chosen_dots.iter().any(|q| dots.iter().any(|dd| dist(*dd, *q) < 5.0)) {
+                lone_overlap += 1;
+                continue;
+            }
+            chosen_dots.extend(dots);
             lone.push(LoneReport { pair: k, p, dots, depth });
         }
     }
@@ -995,7 +1025,13 @@ pub fn build(p: &Params) -> (String, Report) {
     }
 
     // ---- view notes: what an edge-on view hides
-    let hidden_at_centre = atom_report.iter().skip(1).filter(|a| a.hidden).count();
+    let centre_depth = atom_report[0].depth;
+    let hidden: Vec<&AtomReport> = atom_report.iter().skip(1).filter(|a| a.hidden).collect();
+    let hidden_near = hidden.iter().filter(|a| a.depth > centre_depth + 1e-9).count();
+    let hidden_far = hidden.len().saturating_sub(hidden_near);
+    let near_centre = atom_report.iter().skip(1)
+        .filter(|a| !a.hidden && dist(a.p, atom_report[0].p) < r_atom)
+        .min_by(|a, b| dist(a.p, atom_report[0].p).total_cmp(&dist(b.p, atom_report[0].p)));
     let mut coincident = 0usize;
     let mut collinear = 0usize;
     for a in 1..atom_report.len() {
@@ -1010,13 +1046,45 @@ pub fn build(p: &Params) -> (String, Report) {
         }
     }
     let mut view_notes: Vec<String> = Vec::new();
-    if hidden_at_centre > 0 {
+    if hidden_near > 0 && hidden_far > 0 {
+        view_notes.push("Bonds point straight at and away from the viewer, so the atoms at their ends are hidden.".into());
+    } else if hidden_near == 1 {
         view_notes.push("A bond points straight at the viewer, so the atom at its end is hidden.".into());
+    } else if hidden_near == 2 {
+        view_notes.push("Two bonds point straight at the viewer, so the atoms at their ends are hidden.".into());
+    } else if hidden_near > 2 {
+        view_notes.push(format!("{hidden_near} bonds point straight at the viewer, so the atoms at their ends are hidden."));
+    } else if hidden_far == 1 {
+        view_notes.push("A bond points straight away from the viewer, so the atom at its end is hidden behind the centre.".into());
+    } else if hidden_far == 2 {
+        view_notes.push("Two bonds point straight away from the viewer, so the atoms at their ends are hidden behind the centre.".into());
+    } else if hidden_far > 2 {
+        view_notes.push(format!("{hidden_far} bonds point straight away from the viewer, so the atoms at their ends are hidden behind the centre."));
+    }
+    if let Some(a) = near_centre {
+        view_notes.push(format!("The {} atom lies over the centre and hides the {} atom in this view.", mol.atoms[a.index].sym, mol.atoms[0].sym));
     }
     if coincident > 0 {
         view_notes.push("Two bonds lie on the same line of sight, so one atom hides the other.".into());
     } else if collinear > 0 {
         view_notes.push("Two bonds lie on the same line of sight; one atom is behind the other.".into());
+    }
+    if lone_collapsed == 1 {
+        view_notes.push("A lone pair points straight at or away from the viewer, so it is not drawn.".into());
+    } else if lone_collapsed == 2 {
+        view_notes.push("Two lone pairs point straight at or away from the viewer, so they are not drawn.".into());
+    } else if lone_collapsed > 2 {
+        view_notes.push(format!("{lone_collapsed} lone pairs point straight at or away from the viewer, so they are not drawn."));
+    }
+    if lone_on_bond == 1 {
+        view_notes.push("A lone pair projects along a bond in this view, so it is not drawn.".into());
+    } else if lone_on_bond == 2 {
+        view_notes.push("Two lone pairs project along bonds in this view, so they are not drawn.".into());
+    } else if lone_on_bond > 2 {
+        view_notes.push(format!("{lone_on_bond} lone pairs project along bonds in this view, so they are not drawn."));
+    }
+    if lone_overlap > 0 {
+        view_notes.push("Two lone pairs project on top of each other in this view, so one is not drawn.".into());
     }
 
     // ---- the panel. The key and the student copy are laid out with the same number of lines, so
@@ -1046,12 +1114,12 @@ pub fn build(p: &Params) -> (String, Report) {
     let panel_student = student_items.iter().flat_map(|item| wrap(item, fs_panel, panel_w)).collect::<Vec<_>>();
     let panel_reserved = panel_key.len().max(panel_student.len());
     let panel: Vec<String> = if key { panel_key } else { panel_student };
-    let why_key = wrap(mol.why, fs_panel, panel_w);
+    let why_key = wrap(if st.angles { mol.why } else { mol.why_plain }, fs_panel, panel_w);
     let why_student = wrap("Explain the shape and the angle:", fs_panel, panel_w);
     let why_reserved = why_key.len().max(why_student.len()).max(2);
     let why_drawn: Vec<String> = if key { why_key } else { why_student };
 
-    let footer_text = "A simplified ball-and-stick model: atoms are circles joined by single sticks. Each lone pair is a pair of dots on a short dashed stick pointing where it sits on the central atom. Bond lengths are not to scale, and no double bonds, resonance or bond order is shown.";
+    let footer_text = "A simplified ball-and-stick model: atoms are circles joined by single sticks. Each lone pair is a pair of dots on a short dashed stick pointing where the pair truly projects on the central atom; a pair that projects on a bond or at the viewer is left off and the panel says so. Bond lengths are not to scale, and no double bonds, resonance or bond order is shown.";
     let footer = wrap(footer_text, fs_note, w - 40.0);
 
     // ---- height
@@ -1067,7 +1135,9 @@ pub fn build(p: &Params) -> (String, Report) {
 
     // ---- draw
     let mut d = Doc::new(w, h);
-    d.describe("VSEPR Shapes", "A rotatable three-dimensional ball-and-stick model of one molecule, with lone pairs, atom labels and bond angles.");
+    let labels_drawn = st.labels && atom_report.iter().any(|a| a.labelled);
+    let angles_drawn = key && !angles.is_empty();
+    d.describe("VSEPR Shapes", &describe(!lone.is_empty(), labels_drawn, angles_drawn));
     d.defs(&fills.defs());
 
     // the panel rule
@@ -1077,54 +1147,62 @@ pub fn build(p: &Params) -> (String, Report) {
     for a in angles.iter() {
         if a.arc.len() < 2 { continue; }
         let pts: Vec<String> = a.arc.iter().map(|p| format!("{:.2},{:.2}", p.0, p.1)).collect();
-        d.raw(&format!(r##"<polyline points="{}" fill="none" stroke="{mute}" stroke-width="{:.2}" stroke-linejoin="round" stroke-linecap="round" data-o="anglearc" data-f="p{}"/>"##, pts.join(" "), 1.5 * lab, a.pair));
+        d.raw(&format!(r##"<polyline points="{}" fill="none" stroke="{mute}" stroke-width="{:.2}" stroke-linejoin="round" stroke-linecap="round" data-o="anglearc" data-f="p{}"/>"##, pts.join(" "), 2.2 * lab, a.pair));
     }
 
     // bonds: far first, thinner and lighter
     for b in &bonds {
         let t = ((b.depth + 1.0) / 2.0).clamp(0.0, 1.0);
-        let shade = 0.62 - 0.34 * t;
+        let shade = 0.42 - 0.24 * t;
         d.raw(&format!(
             r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="{:.2}" stroke-linecap="round" data-o="bond" data-f="b{}" data-d="{:.5}"/>"##,
             b.a.0, b.a.1, b.b.0, b.b.1, grey(shade), b.width, b.index, b.depth
         ));
     }
 
-    // lone pairs: a short faint guide and two dots, all on the central atom
+    // lone-pair guides: short dashed sticks under the balls and dots
     if st.lone {
-        for (k, l) in lone.iter().enumerate() {
+        for l in lone.iter() {
             let pc = atom_report[0].p;
             let len = dist(pc, l.p);
             if len > r_atom {
                 let u = ((l.p.0 - pc.0) / len, (l.p.1 - pc.1) / len);
                 d.raw(&format!(
-                    r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="{:.2}" stroke-dasharray="3 3" data-o="loneguide" data-f="l{k}"/>"##,
-                    pc.0 + u.0 * r_atom, pc.1 + u.1 * r_atom, l.p.0, l.p.1, mute, 1.1 * lab
-                ));
-            }
-            for (j, p) in l.dots.iter().enumerate() {
-                d.raw(&format!(
-                    r##"<circle cx="{:.2}" cy="{:.2}" r="{:.2}" fill="{ink}" stroke="{ink}" stroke-width="0.6" data-o="lone" data-f="l{k}.{j}" data-d="{:.5}"/>"##,
-                    p.0, p.1, 2.4 * lab, l.depth
+                    r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="{:.2}" stroke-dasharray="3 3" data-o="loneguide" data-f="l{}"/>"##,
+                    pc.0 + u.0 * r_atom, pc.1 + u.1 * r_atom, l.p.0, l.p.1, mute, 1.4 * lab, l.pair
                 ));
             }
         }
     }
 
-    // atoms, far first; a ball and its label together. A ligand pointing straight at the viewer
-    // is left out of the balls (its bond is still in the SVG); otherwise the centre is drawn
-    // exactly where its depth puts it.
+    // Balls and lone dots in one depth order, far first. The centre is drawn where its depth puts
+    // it; the dots are drawn where their lone-pair direction's depth puts them.
     let draw_order: Vec<usize> = atom_order.iter().copied().filter(|&i| !atom_report[i].hidden).collect();
-    for &i in &draw_order {
-        let a = &atom_report[i];
-        let fill = fills.series(if mol.atoms[i].central { 4 } else { 3 });
-        d.raw(&format!(
-            r##"<circle cx="{:.2}" cy="{:.2}" r="{:.2}" fill="{fill}" stroke="{ink}" stroke-width="{:.2}" data-o="atom" data-f="a{i}" data-d="{:.5}"/>"##,
-            a.p.0, a.p.1, a.r, 1.4 * lab, a.depth
-        ));
+    let mut items: Vec<(f64, u8, usize)> = Vec::new();
+    for &i in &draw_order { items.push((atom_report[i].depth, 0, i)); }
+    for (li, l) in lone.iter().enumerate() { items.push((l.depth, 1, li)); }
+    items.sort_by(|a, b| depth_cmp((a.0, a.1 as usize * 100_000 + a.2), (b.0, b.1 as usize * 100_000 + b.2)));
+    for &(_, rank, idx) in &items {
+        if rank == 0 {
+            let i = idx;
+            let a = &atom_report[i];
+            let fill = fills.series(if mol.atoms[i].central { 4 } else { 3 });
+            d.raw(&format!(
+                r##"<circle cx="{:.2}" cy="{:.2}" r="{:.2}" fill="{fill}" stroke="{ink}" stroke-width="{:.2}" data-o="atom" data-f="a{i}" data-d="{:.5}"/>"##,
+                a.p.0, a.p.1, a.r, 1.4 * lab, a.depth
+            ));
+        } else {
+            let l = &lone[idx];
+            for (j, p) in l.dots.iter().enumerate() {
+                d.raw(&format!(
+                    r##"<circle cx="{:.2}" cy="{:.2}" r="{:.2}" fill="{ink}" stroke="{ink}" stroke-width="0.6" data-o="lone" data-f="l{}.{j}" data-d="{:.5}"/>"##,
+                    p.0, p.1, 2.4 * lab, l.pair, l.depth
+                ));
+            }
+        }
     }
-    // Labels after every ball: a nearer ball may cover a farther label (the label was then left
-    // off), while the centre's label stays on top as the reference.
+    // Labels after every ball and dot: a nearer ball may cover a farther label (the label was
+    // then left off), while the centre's label stays on top as the reference.
     if st.labels {
         for &i in &draw_order {
             let a = &atom_report[i];

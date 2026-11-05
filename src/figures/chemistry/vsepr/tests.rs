@@ -58,6 +58,13 @@ fn vang(a: [f64; 3], b: [f64; 3]) -> f64 { (vdot(a, b) / (vlen(a) * vlen(b)).max
 
 fn screen_angle(a: Pt, b: Pt) -> f64 { (b.1 - a.1).atan2(b.0 - a.0).to_degrees().rem_euclid(360.0) }
 fn ang_diff(a: f64, b: f64) -> f64 { let d = (a - b).rem_euclid(360.0); d.min(360.0 - d) }
+fn seg_dist(p: Pt, a: Pt, b: Pt) -> f64 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let l2 = dx * dx + dy * dy;
+    if l2 < 1e-12 { return dist(p, a); }
+    let t = (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / l2).clamp(0.0, 1.0);
+    dist(p, (a.0 + t * dx, a.1 + t * dy))
+}
 
 // ---------------------------------------------------------------------------------------------
 // Reading the SVG back
@@ -221,7 +228,7 @@ fn the_molecule_table_has_the_stated_atoms_lone_pairs_and_angles() {
         ("XeF4", 5, 2, "Octahedral", "Square planar", 6),
         ("SF4", 5, 1, "Trigonal bipyramidal", "See-saw", 5),
     ];
-    let opens = [(0.0, 0.0), (0.0, 0.0), (202.0, 21.0), (0.0, 27.0), (44.0, 62.0), (250.0, 0.0), (0.0, 20.0), (0.0, 20.0), (296.0, 36.0)];
+    let opens = [(0.0, 0.0), (0.0, 0.0), (202.0, 21.0), (0.0, 27.0), (44.0, 62.0), (250.0, 0.0), (0.0, 20.0), (0.0, 0.0), (296.0, 36.0)];
     for ((m, (name, atoms, lone, domain, shape, domains)), open) in molecules().iter().zip(want).zip(opens) {
         assert_eq!(m.name, name);
         assert_eq!(m.open, open, "{name}: opening view");
@@ -574,7 +581,7 @@ fn the_default_view_shows_every_ligand_and_no_overlap() {
             let va = (r.atoms[a.a].p.0 - centre.0, r.atoms[a.a].p.1 - centre.1);
             let vb = (r.atoms[a.b].p.0 - centre.0, r.atoms[a.b].p.1 - centre.1);
             let shown = (va.0 * vb.1 - va.1 * vb.0).abs().atan2(va.0 * vb.0 + va.1 * vb.1).to_degrees();
-            assert!((shown - a.angle).abs() <= 1.0, "{}: the opening arc reads {shown} but says {}", m.name, a.angle);
+            assert!((shown - a.angle).abs() <= 0.4, "{}: the opening arc reads {shown} but says {}", m.name, a.angle);
         }
     }
 }
@@ -595,8 +602,13 @@ fn the_switches_add_and_remove_atoms_bonds_lone_pairs_and_labels() {
         let g = geo(&svg_of(&[s("molecule", name)]));
         assert_eq!(g.circles.iter().filter(|c| c.kind == "atom").count(), atoms, "{name} atoms");
         assert_eq!(g.lines.iter().filter(|l| l.kind == "bond").count(), bonds, "{name} bonds");
-        assert_eq!(g.circles.iter().filter(|c| c.kind == "lone").count(), 2 * lone, "{name} lone dots");
-        assert_eq!(g.lines.iter().filter(|l| l.kind == "loneguide").count(), lone, "{name} lone-pair sticks");
+        let drawn = if name == "XeF4" { 0 } else { 2 * lone };
+        assert_eq!(g.circles.iter().filter(|c| c.kind == "lone").count(), drawn, "{name} lone dots");
+        assert_eq!(g.lines.iter().filter(|l| l.kind == "loneguide").count(), drawn / 2, "{name} lone-pair sticks");
+        if drawn < 2 * lone {
+            assert!(g.circles.iter().filter(|c| c.kind == "lone").count() == 0, "{name}");
+            assert!(texts(&svg_of(&[s("molecule", name)])).iter().any(|t| t.text.contains("not drawn")), "{name}: omitted pair without a note");
+        }
         assert_eq!(g.arcs.iter().filter(|a| a.kind == "anglearc").count(), angles, "{name} arcs");
         assert_eq!(texts(&svg_of(&[s("molecule", name)])).iter().filter(|t| t.kind == "angle").count(), angles, "{name} angle labels");
         assert_eq!(texts(&svg_of(&[s("molecule", name)])).iter().filter(|t| t.kind == "alabel").count(), atoms, "{name} atom labels");
@@ -616,6 +628,9 @@ fn the_switches_add_and_remove_atoms_bonds_lone_pairs_and_labels() {
     assert_eq!(geo(&svg).arcs.iter().filter(|a| a.kind == "anglearc").count(), 0);
     assert_eq!(texts(&svg).iter().filter(|t| t.kind == "angle").count(), 0);
     assert!(texts(&svg).iter().any(|t| t.text.contains("Bond angle: not shown")), "{}", texts(&svg).iter().map(|t| &t.text).cloned().collect::<Vec<_>>().join(" | "));
+    let joined = texts(&svg).iter().map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ");
+    assert!(!joined.contains("107") && !joined.contains("109.5"), "the explanation still prints an angle while Show bond angles is off: {joined}");
+    assert!(joined.contains("far apart"), "the explanation lost its angle-free form: {joined}");
     // answers off removes the arc and blanks the value
     let svg = svg_of(&[s("molecule", "CH4"), b(SHOW_ANSWERS, false)]);
     assert_eq!(geo(&svg).arcs.iter().filter(|a| a.kind == "anglearc").count(), 0);
@@ -636,7 +651,13 @@ fn the_switches_add_and_remove_atoms_bonds_lone_pairs_and_labels() {
 #[test]
 fn lone_pairs_are_on_the_central_atom_and_point_between_the_bonds() {
     for m in molecules().iter().filter(|m| !m.lone.is_empty()) {
-        let r = key(&[s("molecule", m.name)]);
+        let mut list = vec![s("molecule", m.name)];
+        if m.name == "XeF4" {
+            let (turn, tilt) = rel(m, 30.0, 20.0);
+            list.push(f("turn", turn));
+            list.push(f("tilt", tilt));
+        }
+        let r = key(&list);
         assert_eq!(r.lone.len(), m.lone.len(), "{}", m.name);
         let centre = r.atoms[0].p;
         for (k, l) in r.lone.iter().enumerate() {
@@ -658,9 +679,11 @@ fn lone_pairs_are_on_the_central_atom_and_point_between_the_bonds() {
         for a in 1..r.lone.len() {
             assert!(dist(r.lone[a - 1].p, r.lone[a].p) > 8.0, "{}: two lone pairs overlap", m.name);
         }
-        let g = geo(&svg_of(&[s("molecule", m.name)]));
+        let g = geo(&svg_of(&list));
         assert_eq!(g.circles.iter().filter(|c| c.kind == "lone").count(), 2 * m.lone.len());
-        let off = geo(&svg_of(&[s("molecule", m.name), b("lone", false)]));
+        let mut off_list = list.clone();
+        off_list.push(b("lone", false));
+        let off = geo(&svg_of(&off_list));
         assert_eq!(off.circles.iter().filter(|c| c.kind == "lone").count(), 0);
     }
 }
@@ -713,6 +736,9 @@ fn the_angle_switch_hides_the_arc_and_the_value() {
     assert_eq!(geo(&svg).arcs.iter().filter(|a| a.kind == "anglearc").count(), 0);
     assert_eq!(texts(&svg).iter().filter(|t| t.kind == "angle").count(), 0);
     assert!(texts(&svg).iter().any(|t| t.text.contains("Bond angle: not shown")), "{}", texts(&svg).iter().map(|t| &t.text).cloned().collect::<Vec<_>>().join(" | "));
+    let joined = texts(&svg).iter().map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ");
+    assert!(!joined.contains("107") && !joined.contains("109.5"), "the explanation still prints an angle while Show bond angles is off: {joined}");
+    assert!(joined.contains("trigonal pyramid"), "the explanation lost its angle-free form: {joined}");
     // an edge-on view leaves out an arc that would collapse to a line or a hidden bond
     for (name, turn, tilt) in [("XeF4", 90.0, 0.0), ("BF3", 90.0, 0.0), ("BeCl2", 90.0, 0.0)] {
         let r = key(&[s("molecule", name), f("turn", turn), f("tilt", tilt)]);
@@ -1106,6 +1132,18 @@ fn the_description_is_ascii_and_names_no_answer() {
             assert!(!desc.contains(w), "{desc}");
         }
     }
+    let desc_of = |svg: &str| svg.split("<desc>").nth(1).and_then(|x| x.split("</desc>").next()).unwrap_or("").to_string();
+    let key_desc = desc_of(&svg_of(&[]));
+    assert!(key_desc.contains("atom labels") && key_desc.contains("bond angles"), "{key_desc}");
+    assert!(!key_desc.contains("lone pairs"), "CH4 has no lone pair to draw: {key_desc}");
+    let water_desc = desc_of(&svg_of(&[s("molecule", "H2O")]));
+    assert!(water_desc.contains("lone pairs") && water_desc.contains("bond angles"), "{water_desc}");
+    let xe_desc = desc_of(&svg_of(&[s("molecule", "XeF4")]));
+    assert!(!xe_desc.contains("lone pairs"), "the face-on XeF4 pairs are omitted: {xe_desc}");
+    let student_desc = desc_of(&svg_of(&[b(SHOW_ANSWERS, false)]));
+    assert!(!student_desc.contains("bond angles"), "{student_desc}");
+    let no_labels_desc = desc_of(&svg_of(&[b(SHOW_ANSWERS, false), b("labels", false)]));
+    assert!(!no_labels_desc.contains("atom labels") && !no_labels_desc.contains("bond angles"), "{no_labels_desc}");
 }
 
 #[test]
@@ -1186,7 +1224,7 @@ fn every_opening_view_shows_its_true_angle_and_no_other_view_claims_one() {
         assert!(!r.angles.is_empty(), "{}: no true angle at the opening view", m.name);
         for a in &r.angles {
             let got = shown(&r, a);
-            assert!((got - a.angle).abs() <= 1.0, "{}: the opening arc reads {got} but says {}", m.name, a.angle);
+            assert!((got - a.angle).abs() <= 0.4, "{}: the opening arc reads {got} but says {}", m.name, a.angle);
             assert_eq!(a.text, m.pairs[a.pair].text);
         }
         let panel = texts(&svg_of(&[s("molecule", m.name)])).into_iter().filter(|t| t.kind == "panel").map(|t| t.text).collect::<Vec<_>>().join(" ");
@@ -1202,7 +1240,7 @@ fn every_opening_view_shows_its_true_angle_and_no_other_view_claims_one() {
             let q = key(&[s("molecule", m.name), f("turn", turn), f("tilt", tilt)]);
             for a in &q.angles {
                 let got = shown(&q, a);
-                assert!((got - a.angle).abs() <= 1.0, "{} at {tag}: the arc reads {got} but says {}", m.name, a.angle);
+                assert!((got - a.angle).abs() <= 0.4, "{} at {tag}: the arc reads {got} but says {}", m.name, a.angle);
             }
         }
         // At a foreshortened view the water angle is left off (the panel still names it).
@@ -1260,13 +1298,8 @@ fn lone_pairs_are_on_a_short_dashed_stick_clear_of_every_bond() {
         let m = molecules().iter().find(|m| m.name == name).unwrap();
         let (turn, tilt) = rel(m, aturn, atilt);
         let r = key(&[s("molecule", name), f("turn", turn), f("tilt", tilt)]);
-        assert!(!r.lone.is_empty(), "{name}");
-        for l in &r.lone {
-            for b in &r.bonds {
-                assert!(point_seg(l.p, b.a, b.b) > 4.0, "{name} at {aturn}/{atilt}: a lone-pair stick is on a bond");
-                for dot in l.dots { assert!(point_seg(dot, b.a, b.b) > 2.0, "{name} at {aturn}/{atilt}: a lone dot is on a bond"); }
-            }
-        }
+        assert!(r.lone.is_empty(), "{name} at {aturn}/{atilt}: a collapsed pair is still drawn");
+        assert!(r.view_notes.iter().any(|n| n.contains("not drawn")), "{name} at {aturn}/{atilt}: {r:?}", r = r.view_notes);
     }
     // The words match the drawing, and the old false caption is gone.
     let src = include_str!("../vsepr.rs");
@@ -1326,10 +1359,194 @@ fn edge_on_views_say_what_is_hidden() {
         let r = key(&[s("molecule", name), f("turn", turn), f("tilt", tilt)]);
         assert!(!r.view_notes.is_empty(), "{name} at {aturn}/{atilt}: no view note");
         let panel = r.panel.join(" ");
-        assert!(panel.contains("line of sight") || panel.contains("straight at the viewer"), "{name}: {panel}");
+        assert!(panel.contains("line of sight") || panel.contains("straight at") || panel.contains("straight away"), "{name}: {panel}");
         assert!(r.bonds.iter().all(|b| b.drawn), "{name}: a bond was dropped");
         let (turn, tilt) = rel(m, aturn, atilt);
         let g = geo(&svg_of(&[s("molecule", name), f("turn", turn), f("tilt", tilt)]));
         assert_eq!(g.lines.iter().filter(|l| l.kind == "bond").count(), m.atoms.len() - 1, "{name}: a bond element is missing");
+    }
+}
+
+
+#[test]
+fn lone_pair_stick_is_the_projected_direction_or_is_omitted() {
+    let scale = 118.0;
+    let mut checked = 0;
+    for m in molecules().iter().filter(|m| !m.lone.is_empty()) {
+        for rel_turn in (0..360).step_by(30) {
+            for rel_tilt in (-90..=90).step_by(30) {
+                let r = key(&[s("molecule", m.name), f("turn", rel_turn as f64), f("tilt", rel_tilt as f64)]);
+                let centre = r.atoms[0].p;
+                let view = View::new(r.view.0, r.view.1);
+                for (k, d) in m.lone.iter().enumerate() {
+                    let (pp, _) = view.screen(*d, centre, scale);
+                    let v = (pp.0 - centre.0, pp.1 - centre.1);
+                    let l = (v.0 * v.0 + v.1 * v.1).sqrt();
+                    let drawn = r.lone.iter().find(|x| x.pair == k);
+                    if let Some(x) = drawn {
+                        let u = (x.p.0 - centre.0, x.p.1 - centre.1);
+                        let ul = (u.0 * u.0 + u.1 * u.1).sqrt();
+                        assert!(l > 0.12 * scale, "{} at {rel_turn}/{rel_tilt}: a collapsed pair is drawn", m.name);
+                        let drawn_dir = screen_angle((0.0, 0.0), u);
+                        let true_dir = screen_angle((0.0, 0.0), v);
+                        assert!(ang_diff(drawn_dir, true_dir) <= 2.0, "{} at {rel_turn}/{rel_tilt}: pair {k} is {:.1}° off the projected 3-D direction", m.name, ang_diff(drawn_dir, true_dir));
+                        assert!(ul > 0.12 * scale);
+                        for b in &r.bonds {
+                            assert!(seg_dist(x.p, b.a, b.b) > 2.0, "{} at {rel_turn}/{rel_tilt}: a drawn pair is on a bond", m.name);
+                            for dot in x.dots { assert!(seg_dist(dot, b.a, b.b) > 1.0, "{} at {rel_turn}/{rel_tilt}: a drawn dot is on a bond", m.name); }
+                        }
+                        checked += 1;
+                    } else {
+                        assert!(r.view_notes.iter().any(|n| n.contains("not drawn")), "{} at {rel_turn}/{rel_tilt}: pair {k} vanished without a note", m.name);
+                    }
+                }
+            }
+        }
+    }
+    assert!(checked > 200, "{checked} drawn pairs");
+    // The XeF4 / SF4 repros: no invented direction.
+    for (name, aturn, atilt, word) in [("XeF4", 0.0, 0.0, "straight at or away"), ("XeF4", 0.0, 20.0, "along bonds"), ("SF4", 90.0, 0.0, "straight at or away")] {
+        let m = molecules().iter().find(|m| m.name == name).unwrap();
+        let (turn, tilt) = rel(m, aturn, atilt);
+        let r = key(&[s("molecule", name), f("turn", turn), f("tilt", tilt)]);
+        assert!(r.lone.is_empty(), "{name} at {aturn}/{atilt}: a pair with no true projected direction is drawn");
+        let notes = r.view_notes.join(" ");
+        assert!(notes.contains("not drawn") && notes.contains(word), "{name} at {aturn}/{atilt}: {notes}");
+    }
+    // A clear view draws both XeF4 pairs along their true projections.
+    let m = molecules().iter().find(|m| m.name == "XeF4").unwrap();
+    let (turn, tilt) = rel(m, 30.0, 20.0);
+    let r = key(&[s("molecule", "XeF4"), f("turn", turn), f("tilt", tilt)]);
+    assert_eq!(r.lone.len(), 2);
+    let centre = r.atoms[0].p;
+    let view = View::new(r.view.0, r.view.1);
+    for (k, d) in m.lone.iter().enumerate() {
+        let (pp, _) = view.screen(*d, centre, 118.0);
+        let x = r.lone.iter().find(|x| x.pair == k).expect("pair");
+        assert!(ang_diff(screen_angle((0.0, 0.0), (x.p.0 - centre.0, x.p.1 - centre.1)), screen_angle((0.0, 0.0), (pp.0 - centre.0, pp.1 - centre.1))) <= 2.0);
+    }
+}
+
+#[test]
+fn lone_dots_are_depth_sorted_with_every_ball() {
+    let mut dots = 0;
+    for m in molecules().iter().filter(|m| !m.lone.is_empty()) {
+        for rel_turn in (0..360).step_by(30) {
+            for rel_tilt in (-90..=90).step_by(30) {
+                let svg = svg_of(&[s("molecule", m.name), f("turn", rel_turn as f64), f("tilt", rel_tilt as f64), s("label_size", "Large")]);
+                let g = geo(&svg);
+                let items: Vec<&Circ> = g.circles.iter().filter(|c| c.kind == "atom" || c.kind == "lone").collect();
+                for a in 1..items.len() {
+                    assert!(items[a - 1].depth <= items[a].depth + 1e-9, "{} at {rel_turn}/{rel_tilt}: a farther item is drawn after a nearer one", m.name);
+                }
+                for c in &items { if c.kind == "lone" { dots += 1; } }
+            }
+        }
+    }
+    assert!(dots > 50, "{dots} dots");
+    // The critic's Large near view: the true pairs are on the F bonds, so they are omitted, not
+    // left to be painted over by a farther ball.
+    let m = molecules().iter().find(|m| m.name == "XeF4").unwrap();
+    let (turn, tilt) = rel(m, 0.0, 80.0);
+    let r = key(&[s("molecule", "XeF4"), f("turn", turn), f("tilt", tilt), s("label_size", "Large")]);
+    assert!(r.lone.is_empty(), "a pair that the true projection puts on a bond is still drawn");
+    assert!(r.view_notes.iter().any(|n| n.contains("not drawn")), "{:?}", r.view_notes);
+}
+
+#[test]
+fn a_near_ligand_says_which_atom_hides_the_centre() {
+    let m = molecules().iter().find(|m| m.name == "SF6").unwrap();
+    let (turn, tilt) = rel(m, 0.0, -1.0);
+    let r = key(&[s("molecule", "SF6"), f("turn", turn), f("tilt", tilt)]);
+    let centre = r.atoms[0].p;
+    assert!(r.atoms.iter().skip(1).any(|a| !a.hidden && dist(a.p, centre) < r.atoms[0].r), "no ligand is inside the centre's radius at this view");
+    let notes = r.view_notes.join(" ");
+    assert!(notes.contains("lies over the centre") && notes.contains("hides the S atom"), "{notes}");
+    assert!(r.panel.join(" ").contains("lies over the centre"), "{:?}", r.panel);
+    // Either the centre label is kept on top, or the note explains why it is not.
+    assert!(r.atoms[0].labelled || notes.contains("hides the S atom"), "{notes}");
+}
+
+#[test]
+fn hidden_atom_note_says_at_or_away_from_the_viewer() {
+    let bf = molecules().iter().find(|m| m.name == "BF3").unwrap();
+    let (turn, tilt) = rel(bf, 0.0, -90.0);
+    let away = key(&[s("molecule", "BF3"), f("turn", turn), f("tilt", tilt)]);
+    assert!(away.view_notes.join(" ").contains("straight away"), "{:?}", away.view_notes);
+    assert!(!away.view_notes.join(" ").contains("straight at the viewer"), "{:?}", away.view_notes);
+    let (turn, tilt) = rel(bf, 0.0, 90.0);
+    let toward = key(&[s("molecule", "BF3"), f("turn", turn), f("tilt", tilt)]);
+    assert!(toward.view_notes.join(" ").contains("straight at the viewer"), "{:?}", toward.view_notes);
+    assert!(!toward.view_notes.join(" ").contains("straight away"), "{:?}", toward.view_notes);
+    for (name, aturn, atilt) in [("BeCl2", 90.0, 0.0), ("SF6", 90.0, 0.0)] {
+        let m = molecules().iter().find(|m| m.name == name).unwrap();
+        let (turn, tilt) = rel(m, aturn, atilt);
+        let r = key(&[s("molecule", name), f("turn", turn), f("tilt", tilt)]);
+        assert!(r.view_notes.join(" ").contains("straight at and away"), "{name}: {:?}", r.view_notes);
+    }
+}
+
+#[test]
+fn two_lone_pairs_do_not_project_on_top_of_each_other() {
+    for m in molecules().iter().filter(|m| m.lone.len() >= 2) {
+        for rel_turn in (0..360).step_by(45) {
+            for rel_tilt in (-90..=90).step_by(30) {
+                let r = key(&[s("molecule", m.name), f("turn", rel_turn as f64), f("tilt", rel_tilt as f64)]);
+                if r.lone.len() == 2 {
+                    let mut best = f64::INFINITY;
+                    for a in &r.lone[0].dots { for b in &r.lone[1].dots { best = best.min(dist(*a, *b)); } }
+                    assert!(best > 4.5, "{} at {rel_turn}/{rel_tilt}: pair dots {best:.1} px apart", m.name);
+                } else if r.lone.len() < 2 {
+                    assert!(r.view_notes.iter().any(|n| n.contains("not drawn")), "{} at {rel_turn}/{rel_tilt}: a pair disappeared without a note", m.name);
+                }
+            }
+        }
+    }
+    // A near-face-on H2O view brings the two pairs closest; one must be left off with a note
+    // rather than drawn as a four-dot blob.
+    let h = molecules().iter().find(|m| m.name == "H2O").unwrap();
+    let (turn, tilt) = rel(h, 44.0, 82.0);
+    let r = key(&[s("molecule", "H2O"), f("turn", turn), f("tilt", tilt)]);
+    assert_eq!(r.lone.len(), 1, "the close H2O pairs were both drawn");
+    assert!(r.view_notes.iter().any(|n| n.contains("top of each other")), "{:?}", r.view_notes);
+}
+
+#[test]
+fn sixty_six_percent_keeps_every_bond_and_arc_dark() {
+    fn dark_near(img: &image::RgbaImage, x: f64, y: f64) -> bool {
+        let (cx, cy) = (x.round() as i32, y.round() as i32);
+        for dy in -2..=2 {
+            for dx in -2..=2 {
+                let (px, py) = (cx + dx, cy + dy);
+                if px >= 0 && py >= 0 && (px as u32) < img.width() && (py as u32) < img.height() {
+                    if img.get_pixel(px as u32, py as u32)[0] < 128 { return true; }
+                }
+            }
+        }
+        false
+    }
+    for name in ["PCl5", "CH4", "XeF4"] {
+        let svg = svg_of(&[s("molecule", name), s("label_size", "Small"), s("style", "Print")]);
+        let (w, h) = svg_size(&svg);
+        let png = to_png(&svg, 0.66).unwrap();
+        let img = image::load_from_memory(&png).unwrap().to_rgba8();
+        let (fx, fy) = (img.width() as f64 / w, img.height() as f64 / h);
+        let g = geo(&svg);
+        for l in g.lines.iter().filter(|l| l.kind == "bond") {
+            if dist(l.a, l.b) < 4.0 { continue; }
+            for j in 1..=12 {
+                let t = 0.2 + 0.6 * j as f64 / 12.0;
+                let x = (l.a.0 + (l.b.0 - l.a.0) * t) * fx;
+                let y = (l.a.1 + (l.b.1 - l.a.1) * t) * fy;
+                assert!(dark_near(&img, x, y), "{}: bond {} has no dark pixel at {t:.2} of its length", name, l.feat);
+            }
+        }
+        for a in g.arcs.iter().filter(|a| a.kind == "anglearc") {
+            for s in a.pts.windows(2) {
+                let x = ((s[0].0 + s[1].0) / 2.0) * fx;
+                let y = ((s[0].1 + s[1].1) / 2.0) * fy;
+                assert!(dark_near(&img, x, y), "{}: the angle arc has no dark pixel at a segment", name);
+            }
+        }
     }
 }
