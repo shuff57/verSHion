@@ -33,7 +33,8 @@
 //! **The model.** It is a simplified ball-and-stick drawing: atoms are circles, bonds are
 //! single sticks (no double bonds, no resonance, no bond order), each lone pair is a pair of dots on
 //! a short dashed stick pointing where the pair truly projects; a pair whose projection lands on a
-//! bond or collapses to a point is left off and the panel says so, and bond lengths are not
+//! bond, collapses to a point, sits behind a nearer atom or would put two pairs on top of each other
+//! is left off and the panel says so, and bond lengths are not
 //! to scale. No real bond length is measured or implied. The 3-D coordinates are exact for the
 //! stated VSEPR geometry, with the two lone-pair compressions above written into the coordinates;
 //! the view is an orthographic projection of the rotated model. A bond pointing almost straight at
@@ -114,7 +115,7 @@ pub struct AnglePair {
 pub struct Mol {
     /// Plain formula, for matching and tests.
     pub name: &'static str,
-    /// Formula with subscripts, for the drawing.
+    /// Formula as printed (ASCII).
     pub display: &'static str,
     /// The AX_nE_m count, e.g. "AX3E".
     pub ax: &'static str,
@@ -529,7 +530,7 @@ fn params() -> Vec<ParamDef> {
         ParamDef::choice("molecule", "Molecule", &NAMES, "CH4")
             .hint("BeCl2, BF3, CH4, NH3, H2O, PCl5, SF6, XeF4 or SF4. The angle is the one drawn in this simplified model"),
         ParamDef::bool("lone", "Show lone pairs", true)
-            .hint("A pair of dots on a short dashed stick pointing where the pair truly projects; a pair that projects on a bond or at the viewer is left off with a panel note"),
+            .hint("A pair of dots on a short dashed stick pointing where the pair truly projects; a pair that projects on a bond or at the viewer, sits behind a nearer atom, or would overlap another pair is left off with a panel note"),
         ParamDef::bool("angles", "Show bond angles", true)
             .hint("An arc and the angle at the central atom, drawn only when the page shows the true 3-D angle; the number is an answer"),
         ParamDef::bool("labels", "Show atom labels", true),
@@ -592,10 +593,6 @@ fn point_seg(p: Pt, a: Pt, b: Pt) -> f64 {
     let t = (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / l2).clamp(0.0, 1.0);
     dist(p, (a.0 + t * dx, a.1 + t * dy))
 }
-
-/// The screen direction of a point seen from the centre, in degrees.
-fn screen_angle(p: Pt) -> f64 { p.1.atan2(p.0).to_degrees().rem_euclid(360.0) }
-fn angle_gap(a: f64, b: f64) -> f64 { let d = (a - b).rem_euclid(360.0); d.min(360.0 - d) }
 
 fn grey(v: f64) -> String {
     let c = (v.clamp(0.0, 1.0) * 255.0).round() as u8;
@@ -679,6 +676,9 @@ pub struct AtomReport {
 pub struct BondReport {
     pub index: usize,
     pub depth: f64,
+    /// Depth at the trimmed start and end of the stick, for splitting it by depth.
+    pub da: f64,
+    pub db: f64,
     pub a: Pt,
     pub b: Pt,
     pub width: f64,
@@ -811,15 +811,19 @@ pub fn build(p: &Params) -> (String, Report) {
         let width = (2.6 + 1.8 * t) * lab;
         let (pc, pl) = (atom_report[0].p, atom_report[i].p);
         let len = dist(pc, pl);
-        let (a, b) = if len > 2.0 * r_atom + 1.0 {
+        let (z0, z1) = (atom_report[0].depth, atom_report[i].depth);
+        let (a, b, da, db) = if len > 2.0 * r_atom + 1.0 {
             let u = ((pl.0 - pc.0) / len, (pl.1 - pc.1) / len);
-            ((pc.0 + u.0 * r_atom, pc.1 + u.1 * r_atom), (pl.0 - u.0 * r_atom, pl.1 - u.1 * r_atom))
+            let t0 = r_atom / len;
+            let t1 = 1.0 - r_atom / len;
+            ((pc.0 + u.0 * r_atom, pc.1 + u.1 * r_atom), (pl.0 - u.0 * r_atom, pl.1 - u.1 * r_atom),
+             z0 + (z1 - z0) * t0, z0 + (z1 - z0) * t1)
         } else {
             // The two balls overlap: keep the full stick in the SVG (behind the balls) so a
             // bond pointing at the viewer is still a bond, not a silently missing one.
-            (pc, pl)
+            (pc, pl, z0, z1)
         };
-        BondReport { index: i, depth: z, a, b, width, drawn: true }
+        BondReport { index: i, depth: z, da, db, a, b, width, drawn: true }
     }).collect();
     bonds.sort_by(|a, b| depth_cmp((a.depth, a.index), (b.depth, b.index)));
 
@@ -830,6 +834,7 @@ pub fn build(p: &Params) -> (String, Report) {
     let mut lone_collapsed = 0usize;
     let mut lone_on_bond = 0usize;
     let mut lone_overlap = 0usize;
+    let mut lone_hidden = 0usize;
     if st.lone {
         // The line of sight of each bond, not only the trimmed stick: a pair beyond a short
         // projected bond still reads as lying on that bond.
@@ -860,6 +865,13 @@ pub fn build(p: &Params) -> (String, Report) {
             if on_bond { lone_on_bond += 1; continue; }
             if chosen_dots.iter().any(|q| dots.iter().any(|dd| dist(*dd, *q) < 5.0)) {
                 lone_overlap += 1;
+                continue;
+            }
+            // A pair whose dots would be covered by a nearer ligand ball is not drawn.
+            if dots.iter().any(|dd| atom_report.iter().skip(1).any(|a| {
+                !a.hidden && a.depth > depth + 1e-9 && dist(*dd, a.p) < a.r
+            })) {
+                lone_hidden += 1;
                 continue;
             }
             chosen_dots.extend(dots);
@@ -942,6 +954,17 @@ pub fn build(p: &Params) -> (String, Report) {
             let d = slerp(u, v, t);
             let (p, _) = view.screen(d, (cx, cy), scale * arc_r);
             arc.push(p);
+        }
+        // A 180° arc seen edge-on is a straight line under the two sticks and the centre ball;
+        // leave it off rather than draw a broken arc with a floating label.
+        if pair.angle >= 179.5 {
+            let (p0, p1) = (arc[0], *arc.last().unwrap());
+            let (dx, dy) = (p1.0 - p0.0, p1.1 - p0.1);
+            let l = (dx * dx + dy * dy).sqrt();
+            let dev = if l < 1e-9 { 0.0 } else {
+                arc.iter().map(|p| (dx * (p.1 - p0.1) - dy * (p.0 - p0.0)).abs() / l).fold(0.0, f64::max)
+            };
+            if dev < 2.0 { continue; }
         }
         let mid = slerp(u, v, 0.5);
         let (mp, _) = view.screen(mid, (cx, cy), scale * 0.55);
@@ -1032,17 +1055,13 @@ pub fn build(p: &Params) -> (String, Report) {
     let near_centre = atom_report.iter().skip(1)
         .filter(|a| !a.hidden && dist(a.p, atom_report[0].p) < r_atom)
         .min_by(|a, b| dist(a.p, atom_report[0].p).total_cmp(&dist(b.p, atom_report[0].p)));
-    let mut coincident = 0usize;
-    let mut collinear = 0usize;
+    let mut overlaps: Vec<(usize, usize)> = Vec::new();
     for a in 1..atom_report.len() {
         for b in a + 1..atom_report.len() {
             if atom_report[a].hidden || atom_report[b].hidden { continue; }
-            let pa = atom_report[a].p;
-            let pb = atom_report[b].p;
-            if dist(pa, pb) < 0.6 { coincident += 1; continue; }
-            let da = screen_angle((pa.0 - cx, pa.1 - cy));
-            let db = screen_angle((pb.0 - cx, pb.1 - cy));
-            if angle_gap(da, db) < 2.0 { collinear += 1; }
+            if dist(atom_report[a].p, atom_report[b].p) < atom_report[a].r + atom_report[b].r {
+                overlaps.push((a, b));
+            }
         }
     }
     let mut view_notes: Vec<String> = Vec::new();
@@ -1062,12 +1081,16 @@ pub fn build(p: &Params) -> (String, Report) {
         view_notes.push(format!("{hidden_far} bonds point straight away from the viewer, so the atoms at their ends are hidden behind the centre."));
     }
     if let Some(a) = near_centre {
-        view_notes.push(format!("The {} atom lies over the centre and hides the {} atom in this view.", mol.atoms[a.index].sym, mol.atoms[0].sym));
+        let behind = a.depth < centre_depth - 1e-9;
+        view_notes.push(format!("The {} atom lies over the centre{} and hides the {} atom in this view.",
+            mol.atoms[a.index].sym, if behind { " behind it" } else { " in front of it" }, mol.atoms[0].sym));
     }
-    if coincident > 0 {
-        view_notes.push("Two bonds lie on the same line of sight, so one atom hides the other.".into());
-    } else if collinear > 0 {
-        view_notes.push("Two bonds lie on the same line of sight; one atom is behind the other.".into());
+    if let Some((a, b)) = overlaps.first().copied() {
+        let nearer = if atom_report[a].depth >= atom_report[b].depth { a } else { b };
+        let farther = if nearer == a { b } else { a };
+        view_notes.push(format!("The {} atom and the {} atom overlap in this view; the nearer {} atom hides the farther.",
+            mol.atoms[a].sym, mol.atoms[b].sym, mol.atoms[nearer].sym));
+        let _ = farther;
     }
     if lone_collapsed == 1 {
         view_notes.push("A lone pair points straight at or away from the viewer, so it is not drawn.".into());
@@ -1085,6 +1108,11 @@ pub fn build(p: &Params) -> (String, Report) {
     }
     if lone_overlap > 0 {
         view_notes.push("Two lone pairs project on top of each other in this view, so one is not drawn.".into());
+    }
+    if lone_hidden == 1 {
+        view_notes.push("A lone pair sits behind a ligand atom in this view, so it is not drawn.".into());
+    } else if lone_hidden > 1 {
+        view_notes.push(format!("{lone_hidden} lone pairs sit behind ligand atoms in this view, so they are not drawn."));
     }
 
     // ---- the panel. The key and the student copy are laid out with the same number of lines, so
@@ -1119,7 +1147,7 @@ pub fn build(p: &Params) -> (String, Report) {
     let why_reserved = why_key.len().max(why_student.len()).max(2);
     let why_drawn: Vec<String> = if key { why_key } else { why_student };
 
-    let footer_text = "A simplified ball-and-stick model: atoms are circles joined by single sticks. Each lone pair is a pair of dots on a short dashed stick pointing where the pair truly projects on the central atom; a pair that projects on a bond or at the viewer is left off and the panel says so. Bond lengths are not to scale, and no double bonds, resonance or bond order is shown.";
+    let footer_text = "A simplified ball-and-stick model: atoms are circles joined by single sticks. Each lone pair is a pair of dots on a short dashed stick pointing where the pair truly projects on the central atom; a pair that projects on a bond, at the viewer, behind a nearer atom or onto another pair is left off and the panel says so. Bond lengths are not to scale, and no double bonds, resonance or bond order is shown.";
     let footer = wrap(footer_text, fs_note, w - 40.0);
 
     // ---- height
@@ -1150,54 +1178,73 @@ pub fn build(p: &Params) -> (String, Report) {
         d.raw(&format!(r##"<polyline points="{}" fill="none" stroke="{mute}" stroke-width="{:.2}" stroke-linejoin="round" stroke-linecap="round" data-o="anglearc" data-f="p{}"/>"##, pts.join(" "), 2.2 * lab, a.pair));
     }
 
-    // bonds: far first, thinner and lighter
-    for b in &bonds {
-        let t = ((b.depth + 1.0) / 2.0).clamp(0.0, 1.0);
-        let shade = 0.42 - 0.24 * t;
-        d.raw(&format!(
-            r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="{:.2}" stroke-linecap="round" data-o="bond" data-f="b{}" data-d="{:.5}"/>"##,
-            b.a.0, b.a.1, b.b.0, b.b.1, grey(shade), b.width, b.index, b.depth
-        ));
-    }
-
-    // lone-pair guides: short dashed sticks under the balls and dots
-    if st.lone {
-        for l in lone.iter() {
-            let pc = atom_report[0].p;
-            let len = dist(pc, l.p);
-            if len > r_atom {
-                let u = ((l.p.0 - pc.0) / len, (l.p.1 - pc.1) / len);
-                d.raw(&format!(
-                    r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="{:.2}" stroke-dasharray="3 3" data-o="loneguide" data-f="l{}"/>"##,
-                    pc.0 + u.0 * r_atom, pc.1 + u.1 * r_atom, l.p.0, l.p.1, mute, 1.4 * lab, l.pair
-                ));
-            }
+    // Sticks, balls and lone dots in ONE depth order, far to near. Each stick is split into
+    // short pieces, each sorted by its own depth, so a far ball cannot paint over a near stick
+    // and a near ball cannot be covered by a far stick.
+    let draw_order: Vec<usize> = atom_order.iter().copied().filter(|&i| !atom_report[i].hidden).collect();
+    const BOND_PIECES: usize = 12;
+    const GUIDE_PIECES: usize = 6;
+    let mut items: Vec<(f64, u8, usize, usize)> = Vec::new();
+    for (bi, b) in bonds.iter().enumerate() {
+        for s in 0..BOND_PIECES {
+            let t = (s as f64 + 0.5) / BOND_PIECES as f64;
+            items.push((b.da + (b.db - b.da) * t, 0, bi, s));
         }
     }
-
-    // Balls and lone dots in one depth order, far first. The centre is drawn where its depth puts
-    // it; the dots are drawn where their lone-pair direction's depth puts them.
-    let draw_order: Vec<usize> = atom_order.iter().copied().filter(|&i| !atom_report[i].hidden).collect();
-    let mut items: Vec<(f64, u8, usize)> = Vec::new();
-    for &i in &draw_order { items.push((atom_report[i].depth, 0, i)); }
-    for (li, l) in lone.iter().enumerate() { items.push((l.depth, 1, li)); }
-    items.sort_by(|a, b| depth_cmp((a.0, a.1 as usize * 100_000 + a.2), (b.0, b.1 as usize * 100_000 + b.2)));
-    for &(_, rank, idx) in &items {
-        if rank == 0 {
-            let i = idx;
-            let a = &atom_report[i];
-            let fill = fills.series(if mol.atoms[i].central { 4 } else { 3 });
-            d.raw(&format!(
-                r##"<circle cx="{:.2}" cy="{:.2}" r="{:.2}" fill="{fill}" stroke="{ink}" stroke-width="{:.2}" data-o="atom" data-f="a{i}" data-d="{:.5}"/>"##,
-                a.p.0, a.p.1, a.r, 1.4 * lab, a.depth
-            ));
-        } else {
-            let l = &lone[idx];
-            for (j, p) in l.dots.iter().enumerate() {
+    for (li, l) in lone.iter().enumerate() {
+        for s in 0..GUIDE_PIECES { items.push((l.depth * ((s as f64 + 0.5) / GUIDE_PIECES as f64), 1, li, s)); }
+    }
+    for &i in &draw_order { items.push((atom_report[i].depth, 2, i, 0)); }
+    for (li, l) in lone.iter().enumerate() { items.push((l.depth, 3, li, 0)); }
+    items.sort_by(|a, b| depth_cmp((a.0, a.1 as usize * 10_000_000 + a.2 * 100 + a.3), (b.0, b.1 as usize * 10_000_000 + b.2 * 100 + b.3)));
+    for &(depth, kind, idx, seg) in &items {
+        match kind {
+            0 => {
+                let b = &bonds[idx];
+                let n = BOND_PIECES as f64;
+                let (t0, t1) = (seg as f64 / n, (seg as f64 + 1.0) / n);
+                let p0 = (b.a.0 + (b.b.0 - b.a.0) * t0, b.a.1 + (b.b.1 - b.a.1) * t0);
+                let p1 = (b.a.0 + (b.b.0 - b.a.0) * t1, b.a.1 + (b.b.1 - b.a.1) * t1);
+                let t = ((depth + 1.0) / 2.0).clamp(0.0, 1.0);
+                let width = (3.0 + 2.0 * t) * lab;
+                let shade = 0.36 - 0.20 * t;
                 d.raw(&format!(
-                    r##"<circle cx="{:.2}" cy="{:.2}" r="{:.2}" fill="{ink}" stroke="{ink}" stroke-width="0.6" data-o="lone" data-f="l{}.{j}" data-d="{:.5}"/>"##,
-                    p.0, p.1, 2.4 * lab, l.pair, l.depth
+                    r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="{:.2}" stroke-linecap="round" data-o="bond" data-f="b{}" data-d="{:.5}"/>"##,
+                    p0.0, p0.1, p1.0, p1.1, grey(shade), width, b.index, depth
                 ));
+            }
+            1 => {
+                let l = &lone[idx];
+                let pc = atom_report[0].p;
+                let len = dist(pc, l.p);
+                if len <= r_atom { continue; }
+                let u = ((l.p.0 - pc.0) / len, (l.p.1 - pc.1) / len);
+                let start = (pc.0 + u.0 * r_atom, pc.1 + u.1 * r_atom);
+                let n = GUIDE_PIECES as f64;
+                let (t0, t1) = (seg as f64 / n, (seg as f64 + 1.0) / n);
+                let p0 = (start.0 + (l.p.0 - start.0) * t0, start.1 + (l.p.1 - start.1) * t0);
+                let p1 = (start.0 + (l.p.0 - start.0) * t1, start.1 + (l.p.1 - start.1) * t1);
+                d.raw(&format!(
+                    r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="{:.2}" stroke-dasharray="3 3" data-o="loneguide" data-f="l{}" data-d="{:.5}"/>"##,
+                    p0.0, p0.1, p1.0, p1.1, mute, 1.4 * lab, l.pair, depth
+                ));
+            }
+            2 => {
+                let a = &atom_report[idx];
+                let fill = fills.series(if mol.atoms[idx].central { 2 } else { 3 });
+                d.raw(&format!(
+                    r##"<circle cx="{:.2}" cy="{:.2}" r="{:.2}" fill="{fill}" stroke="{ink}" stroke-width="{:.2}" data-o="atom" data-f="a{i}" data-d="{:.5}"/>"##,
+                    a.p.0, a.p.1, a.r, 1.4 * lab, a.depth, i = idx
+                ));
+            }
+            _ => {
+                let l = &lone[idx];
+                for (j, p) in l.dots.iter().enumerate() {
+                    d.raw(&format!(
+                        r##"<circle cx="{:.2}" cy="{:.2}" r="{:.2}" fill="{ink}" stroke="{ink}" stroke-width="0.6" data-o="lone" data-f="l{}.{j}" data-d="{:.5}"/>"##,
+                        p.0, p.1, 2.4 * lab, l.pair, l.depth
+                    ));
+                }
             }
         }
     }
