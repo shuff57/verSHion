@@ -324,6 +324,8 @@ struct ReadData {
     values: Vec<f64>,
     skipped: usize,
     truncated: bool,
+    /// Cells that read as numbers but are beyond `data::MAX_ABS`.
+    too_big: usize,
     /// Lines that held a thousands group, with an example group and its cleaned digits, so the
     /// note can offer the two-number reading.
     thousands: Vec<(usize, String, String)>,
@@ -416,6 +418,17 @@ fn read_values(p: &Params) -> Result<ReadData, String> {
     let text = p.s("data");
     let pre = prepare(text)?;
     let r = data::read(&pre.text, 1);
+    let mut too_big = 0usize;
+    for cells in data::parse_table(&pre.text) {
+        for c in cells {
+            let t = c.trim().trim_end_matches('%').replace('\u{2212}', "-");
+            if let Ok(v) = t.parse::<f64>() {
+                if v.is_finite() && v.abs() > data::MAX_ABS {
+                    too_big += 1;
+                }
+            }
+        }
+    }
     let mut values: Vec<f64> = r.rows.into_iter().map(|row| row[0]).collect();
     let mut truncated = r.truncated;
     // data::read caps rows per line; a single comma-separated line can hold more values than the
@@ -425,10 +438,20 @@ fn read_values(p: &Params) -> Result<ReadData, String> {
         truncated = true;
     }
     if !values.is_empty() {
-        return Ok(ReadData { values, skipped: r.skipped, truncated, thousands: pre.thousands });
+        return Ok(ReadData { values, skipped: r.skipped.saturating_sub(too_big), truncated, too_big, thousands: pre.thousands });
     }
     if text.trim().is_empty() {
-        return Ok(ReadData { values: Vec::new(), skipped: 0, truncated: false, thousands: Vec::new() });
+        return Ok(ReadData { values: Vec::new(), skipped: 0, truncated: false, too_big: 0, thousands: Vec::new() });
+    }
+    if too_big > 0 {
+        return Err(format!(
+            "Data has no numbers this table can use: {too_big} value{} {} beyond the largest number this table takes, {}. Type values between \u{2212}{} and {}, or divide every value by the same factor, for example \u{201c}1000000000000\u{201d}.",
+            if too_big == 1 { "" } else { "s" },
+            if too_big == 1 { "is" } else { "are" },
+            chart::fmt(data::MAX_ABS),
+            chart::fmt(data::MAX_ABS),
+            chart::fmt(data::MAX_ABS)
+        ));
     }
     Err(format!(
         "Data has no numbers this table can use. Type numbers between \u{2212}{} and {}, one per line or separated by commas, for example \u{201c}4, 5, 5, 6\u{201d}.",
@@ -494,7 +517,7 @@ fn boundary_texts(bins: &[super::Bin], width: f64) -> Option<(Vec<String>, Strin
     let start_ok = |s: &str| -> bool {
         s.replace('\u{2212}', "-").parse::<f64>().is_ok_and(|v| (v - start_val).abs() <= tol)
     };
-    let start = decimal_places(width).min(30);
+    let start = decimal_places(width).min(18);
     for d in start..=30u32 {
         let labels: Vec<String> = vals.iter().map(|v| fixed_text(*v, d)).collect();
         if labels.windows(2).all(|w| w[0] != w[1]) && start_ok(&labels[0]) {
@@ -598,7 +621,12 @@ fn class_index(v: f64, start: f64, width: f64) -> Option<usize> {
         return None;
     }
     let r = q.round();
-    let tol = 1e-14 * q.abs().max(1.0);
+    // `(v - start)` loses precision when the two are close and large compared with the width:
+    // 12.35 - 12.34 gives a quotient about 2e-14 below 1, while 999999999999 / 5e11 is a real
+    // 2e-12 below 2 and must NOT snap up. Scale the tolerance with the magnitudes (and the
+    // quotient's own rounding), not with the quotient alone.
+    let scale = v.abs().max(start.abs()).max(width.abs());
+    let tol = 64.0 * f64::EPSILON * (scale / width.abs()).max(q.abs());
     let idx = if (q - r).abs() <= tol { r } else { q.floor() };
     (idx >= 0.0 && idx <= usize::MAX as f64).then_some(idx as usize)
 }
@@ -635,9 +663,48 @@ fn safe_start(values: &[f64], width: f64) -> f64 {
     if s.is_finite() && s <= min { s } else { min }
 }
 
-/// The histogram's automatic width when the manual control can hold it and it makes a printable
-/// table. `None` when the range needs a width the control cannot take (the switch is the only
-/// honest fix then).
+/// The spacing between `x` and the next representable f64 at its magnitude.
+fn ulp_at(x: f64) -> f64 {
+    let a = x.abs().max(f64::MIN_POSITIVE);
+    let b = a.next_up();
+    (b - a).max(f64::MIN_POSITIVE)
+}
+
+/// One representable step at the data's magnitude: the finest useful class width when a decimal
+/// width collapses near a large value.
+fn fine_width(values: &[f64]) -> f64 {
+    let min = values.iter().cloned().fold(f64::INFINITY, f64::min);
+    let max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    ulp_at(max.abs().max(min.abs()).max(f64::MIN_POSITIVE))
+}
+
+/// Widen a failed width until the printed boundaries are distinct and the table fits. The first
+/// candidate is one tenth of a representable step (which cannot print distinct boundaries); the
+/// loop must grow it to the step itself. `None` when no candidate in the cap works.
+fn resolving_width(values: &[f64], start: f64, failed_width: f64) -> Option<(Vec<super::Bin>, f64)> {
+    let fine = fine_width(values);
+    let mut candidate = if fine.is_finite() && fine > 0.0 { fine / 10.0 } else { failed_width };
+    if !(candidate.is_finite() && candidate > 0.0) {
+        candidate = failed_width;
+    }
+    if !(candidate.is_finite() && candidate > 0.0) {
+        return None;
+    }
+    let min = values.iter().cloned().fold(f64::INFINITY, f64::min);
+    let n = values.len() as u64;
+    for _ in 0..40 {
+        let st = if start.is_finite() && start <= min { start } else { safe_start(values, candidate) };
+        if let Some(bins) = bins_rel(values, st, candidate) {
+            let sum: u64 = bins.iter().map(|b| b.n as u64).sum();
+            if !bins.is_empty() && sum == n && bins.len() <= MAX_ROWS && boundary_texts(&bins, candidate).is_some() {
+                return Some((bins, candidate));
+            }
+        }
+        candidate *= 10.0;
+    }
+    None
+}
+
 fn auto_width_ok(values: &[f64]) -> Option<f64> {
     let w = auto_width_relative(values);
     if !(w.is_finite() && w >= WIDTH_MIN && w <= WIDTH_MAX) {
@@ -668,7 +735,7 @@ fn grouped(values: &[f64], p: &Params) -> (Vec<(String, u64)>, Option<String>, O
             "Turn on Choose the class width automatically.".to_string()
         };
         fix = Some(format!(
-            "Class width ({}) is not a number above 0, so the classes are chosen automatically. {advice}",
+            "Class width ({}) is not a usable width: it must be a number above 0, so the classes are chosen automatically. {advice}",
             value_text(width)
         ));
         width = good;
@@ -719,34 +786,57 @@ fn grouped(values: &[f64], p: &Params) -> (Vec<(String, u64)>, Option<String>, O
         Some((bins, sum)) => bins.is_empty() || *sum != values.len() as u64 || bins.len() > MAX_ROWS,
     };
     if bad(&made) {
-        // prefer the histogram's own automatic width: it is the readable choice, not the
-        // narrowest width that merely satisfies the row cap
-        let auto_on = p.b("auto_classes");
-        let prefix = if auto_on { "Turn off Choose the class width automatically. " } else { "" };
-        let (fallback_width, advice) = match auto_width_ok(values) {
-            Some(w) => (w, format!("{prefix}Set Class width to {} or more (the automatic width)", value_text(w))),
-            None => match suggest_width(values, start) {
-                Some(w) => (w, format!("{prefix}Set Class width to {} or more", value_text(w))),
-                None => (
-                    auto_width_relative(values),
-                    if auto_on {
-                        "No manual class width up to 10000 makes at most 200 classes; the automatic width is the only option".to_string()
-                    } else {
-                        "Turn on Choose the class width automatically".to_string()
-                    },
-                ),
-            },
-        };
-        let fallback_start = if fallback_width.is_finite() && fallback_width > 0.0 {
-            if start.is_finite() && start <= min { start } else { safe_start(values, fallback_width) }
+        // a tiny span at a huge magnitude can collapse the decimal width; one representable
+        // step preserves the distribution, even though the Class width control cannot hold it
+        let span = max - min;
+        let fine_try = if span.is_finite() && span >= 0.0 && span < WIDTH_MIN * 1e-3 {
+            resolving_width(values, start, width)
         } else {
-            safe_start(values, fallback_width)
+            None
+        };
+        let (fallback_width, advice, needs_start) = if let Some((_, w)) = fine_try {
+            (
+                w,
+                format!("The table uses the finer width {} (one representable step), which the Class width control cannot hold.", value_text(w)),
+                false,
+            )
+        } else {
+            // otherwise prefer the histogram's own automatic width: it is the readable choice,
+            // not the narrowest width that merely satisfies the row cap
+            let auto_on = p.b("auto_classes");
+            let prefix = if auto_on { "Turn off Choose the class width automatically. " } else { "" };
+            let (w, a) = match auto_width_ok(values) {
+                Some(w) => (w, format!("{prefix}Set Class width to {} or more (the automatic width)", value_text(w))),
+                None => match suggest_width(values, start) {
+                    Some(w) => (w, format!("{prefix}Set Class width to {} or more", value_text(w))),
+                    None => (
+                        auto_width_relative(values),
+                        if auto_on {
+                            "No manual class width up to 10000 makes at most 200 classes; the automatic width is the only option".to_string()
+                        } else {
+                            "Turn on Choose the class width automatically".to_string()
+                        },
+                    ),
+                },
+            };
+            (w, a, true)
+        };
+        let fallback_start = safe_start(values, fallback_width);
+        let advice = if needs_start {
+            let typed = p.f("class_start");
+            let tol = 1e-9 * fallback_width.abs().max(1.0);
+            if !(typed.is_finite() && (typed - fallback_start).abs() <= tol) {
+                format!("{advice} Set First class starts at {}.", value_text(fallback_start))
+            } else {
+                advice
+            }
+        } else {
+            advice
         };
         fix.get_or_insert_with(|| {
             format!(
-                "Class width {} makes more than {MAX_ROWS} classes, so the table cannot print every class. {advice}; the classes now use {}.",
-                value_text(width),
-                value_text(fallback_width)
+                "Class width {} makes more than {MAX_ROWS} classes, so the table cannot print every class. {advice}",
+                value_text(width)
             )
         });
         width = fallback_width;
@@ -771,24 +861,7 @@ fn grouped(values: &[f64], p: &Params) -> (Vec<(String, u64)>, Option<String>, O
     let mut formatted = made.as_ref().and_then(|(bins, _)| boundary_texts(bins, width));
     if formatted.is_none() {
         let failed_width = width;
-        let mut candidate = suggest_width(values, start).unwrap_or_else(|| auto_width_relative(values));
-        let mut found: Option<(Vec<super::Bin>, f64)> = None;
-        for _ in 0..24 {
-            if !(candidate.is_finite() && candidate > 0.0) {
-                break;
-            }
-            let st = if start.is_finite() && start <= min { start } else { safe_start(values, candidate) };
-            if let Some((bins, sum)) = build(candidate, st) {
-                if sum == values.len() as u64 && bins.len() <= MAX_ROWS {
-                    if boundary_texts(&bins, candidate).is_some() {
-                        found = Some((bins, candidate));
-                        break;
-                    }
-                }
-            }
-            candidate *= 10.0;
-        }
-        if let Some((bins, w)) = found {
+        if let Some((bins, w)) = resolving_width(values, start, failed_width) {
             let advice = if w >= WIDTH_MIN && w <= WIDTH_MAX {
                 if p.b("auto_classes") {
                     format!("Turn off Choose the class width automatically. Set Class width to {}; the classes now use {}.", value_text(w), value_text(w))
@@ -796,7 +869,7 @@ fn grouped(values: &[f64], p: &Params) -> (Vec<(String, u64)>, Option<String>, O
                     format!("Set Class width to {} or more; the classes now use {}.", value_text(w), value_text(w))
                 }
             } else {
-                format!("The manual Class width control cannot hold {}; the table uses it as a resolving width.", value_text(w))
+                format!("The Class width control cannot hold {}; the table uses it as a resolving width.", value_text(w))
             };
             fix.get_or_insert_with(|| {
                 format!(
@@ -855,7 +928,7 @@ fn finish_rows(pairs: Vec<(String, u64)>, rel: Rel, d: u32) -> Vec<Row> {
 }
 
 pub fn model(p: &Params) -> Result<Model, String> {
-    let ReadData { values, skipped, truncated, thousands } = read_values(p)?;
+    let ReadData { values, skipped, truncated, too_big, thousands } = read_values(p)?;
     let mode = if p.s("mode") == GROUPED { Mode::Grouped } else { Mode::Raw };
     let rel = match p.s("relative") {
         FRACTION => Rel::Fraction,
@@ -884,6 +957,15 @@ pub fn model(p: &Params) -> Result<Model, String> {
         notes.push(format!(
             "Data: {list} {} a comma between digits with exactly three digits after it, read as a thousands separator (for example \u{201c}{raw}\u{201d} is {clean}). If you meant two numbers, put a space after the comma, for example \u{201c}1, 000\u{201d}.",
             if thousands.len() == 1 { "has" } else { "have" }
+        ));
+    }
+    if too_big > 0 {
+        notes.push(format!(
+            "Data: {too_big} value{} beyond the largest number this table takes, {}, {} skipped. Type values at most {}, or divide every value by the same factor.",
+            if too_big == 1 { "" } else { "s" },
+            chart::fmt(data::MAX_ABS),
+            if too_big == 1 { "was" } else { "were" },
+            chart::fmt(data::MAX_ABS)
         ));
     }
     if skipped > 0 {
@@ -925,6 +1007,17 @@ pub fn model(p: &Params) -> Result<Model, String> {
     }
 
     let n = values.len() as u64;
+    if mode == Mode::Grouped {
+        let local = auto_width_relative(&values);
+        let shared = super::auto_width(&values);
+        if (local - shared).abs() > 1e-12 * local.abs().max(shared.abs()) {
+            notes.push(format!(
+                "The automatic class width here uses a relative-tolerance step ({}) for this very small range. The histogram's shared width helper still uses an absolute tolerance ({}) and may choose more classes, so a tiny-range histogram can show more (empty) classes than this table.",
+                value_text(local),
+                value_text(shared)
+            ));
+        }
+    }
     let mut fix = None;
     let mut edge = None;
     let pairs: Vec<(String, u64)> = if mode == Mode::Grouped {
@@ -948,6 +1041,12 @@ pub fn model(p: &Params) -> Result<Model, String> {
         d.into_iter().map(|(v, f)| (value_text(v), f)).collect()
     };
     let rows = finish_rows(pairs, rel, decimals);
+    if rows.len() > 40 {
+        notes.push(format!(
+            "The table has {} rows; it will be a tall page, especially at Large. Group the values or turn off a column to shorten it.",
+            rows.len()
+        ));
+    }
     let mut key_notes = Vec::new();
     if rows.iter().any(|r| r.f > MAX_TALLY) {
         key_notes.push(format!(
@@ -1329,7 +1428,7 @@ fn draw(m: &Model, key: bool, p: &Params) -> String {
         _ => Vec::new(),
     };
     // the interval rule lives in the table header, not only in a note: a to <b with its meaning
-    let caption_lines: Vec<String> = if m.mode == Mode::Grouped {
+    let caption_lines: Vec<String> = if m.mode == Mode::Grouped && !m.empty {
         wrap("a to <b: a is included and b is not; the last class is a to b.", tfs, table_w - 2.0 * pad)
     } else {
         Vec::new()

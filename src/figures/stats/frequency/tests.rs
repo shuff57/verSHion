@@ -288,9 +288,10 @@ fn expected_groups(values: &[f64]) -> Vec<(String, u64)> {
 
 /// Apply the fixed value a refusal/fallback note offers.
 fn apply_fix(note: &str, p: &mut Params) -> bool {
-    let turned_off = note.contains("Turn off Choose the class width automatically");
-    if turned_off {
+    let mut touched = false;
+    if note.contains("Turn off Choose the class width automatically") {
         p.set_b("auto_classes", false);
+        touched = true;
     }
     if let Some(rest) = note.split("Set Class width to ").nth(1) {
         // a manual width only applies while the automatic choice is off
@@ -301,11 +302,8 @@ fn apply_fix(note: &str, p: &mut Params) -> bool {
             .collect();
         if let Ok(x) = v.replace('\u{2212}', "-").parse::<f64>() {
             p.set_f("class_width", x);
-            return true;
+            touched = true;
         }
-    }
-    if turned_off {
-        return true;
     }
     if let Some(rest) = note.split("Set First class starts at ").nth(1) {
         let v: String = rest
@@ -314,14 +312,14 @@ fn apply_fix(note: &str, p: &mut Params) -> bool {
             .collect();
         if let Ok(x) = v.replace('\u{2212}', "-").parse::<f64>() {
             p.set_f("class_start", x);
-            return true;
+            touched = true;
         }
     }
     if note.contains("Turn on Choose the class width automatically") {
         p.set_b("auto_classes", true);
-        return true;
+        touched = true;
     }
-    false
+    touched
 }
 
 fn fix_note(p: &Params) -> Option<String> {
@@ -669,17 +667,32 @@ fn grouped_tiny_differences_fall_back_to_a_width_that_really_resolves_the_bounda
         assert!(!notes.contains("could not be made"), "{label}: no table: {notes}");
         let m = model(&p).expect(label);
         assert!(!m.rows.is_empty(), "{label}: rows");
+        assert!(m.rows.len() > 1, "{label}: the distribution is preserved, not one class: {:?}", m.rows);
         assert_eq!(m.rows.iter().map(|r| r.f).sum::<u64>(), 30, "{label}: every value counted");
-        assert!(notes.contains("0.01"), "{label}: a resolving width is named: {notes}");
+        assert!(notes.contains("finer width") || notes.contains("cannot hold") || notes.contains("0.01"), "{label}: a resolving width is named: {notes}");
         assert!(notes.contains("distinct boundaries") || notes.contains("more than 200 classes"), "{label}: the reason is named: {notes}");
         assert!(!notes.contains("Turn on Choose the class width automatically"), "{label}: the switch is already on: {notes}");
-        // applying the offered procedure draws the same table with a manual width
-        let mut fixed = p.clone();
-        assert!(apply_fix(&notes, &mut fixed), "{label}: a fix to apply");
-        let mf = model(&fixed).expect(label);
-        assert_eq!(mf.rows.iter().map(|r| r.f).sum::<u64>(), 30, "{label}: fixed counts");
-        assert!(!warnings(&fixed).iter().any(|n| n.contains("distinct boundaries")), "{label}: {:?}", warnings(&fixed));
+        // if the note offers a manual width, applying it draws the same table
+        if notes.contains("Set Class width to") {
+            let mut fixed = p.clone();
+            assert!(apply_fix(&notes, &mut fixed), "{label}: a fix to apply");
+            let mf = model(&fixed).expect(label);
+            assert_eq!(mf.rows.iter().map(|r| r.f).sum::<u64>(), 30, "{label}: fixed counts");
+            assert!(!warnings(&fixed).iter().any(|n| n.contains("distinct boundaries")), "{label}: {:?}", warnings(&fixed));
+        }
     }
+}
+
+#[test]
+fn the_widening_fallback_tries_a_failing_candidate_first_and_grows() {
+    // the mutant candidate *= 10.0 -> *= 1.0 must fail: the first candidate is one tenth of a
+    // representable step and cannot print distinct boundaries, so only growth resolves it
+    let values = data::numbers("1.0000000000000002, 1.0000000000000004, 1.0000000000000007");
+    let start = values.iter().cloned().fold(f64::INFINITY, f64::min);
+    let (bins, w) = resolving_width(&values, start, 1e-20).expect("the loop grows to a resolving width");
+    assert!(w > fine_width(&values) / 5.0, "the first failing candidate was grown: {w}");
+    assert_eq!(bins.iter().map(|b| b.n as u64).sum::<u64>(), values.len() as u64);
+    assert!(bins.iter().filter(|b| b.n > 0).count() > 1, "the distribution survives: {bins:?}");
 }
 
 #[test]
@@ -692,6 +705,7 @@ fn tiny_ranges_use_a_relative_width_and_do_not_fill_the_table_with_empty_rows() 
     assert_eq!(m.rows.iter().map(|r| r.f).sum::<u64>(), 3);
     let edge = m.edge.unwrap();
     assert!(edge.contains("0.00000000000000000001 wide"), "{edge}");
+    assert!(warnings(&p).iter().any(|n| n.contains("relative-tolerance step") && n.contains("histogram")), "{:?}", warnings(&p));
 
     // 5e-13 to 1.5e-12: three classes, not the eleven the absolute epsilon produced
     let p = with(&[s("mode", GROUPED), s("data", "5e-13, 1.5e-12")]);
@@ -761,6 +775,64 @@ fn a_value_just_below_a_billion_boundary_stays_in_the_class_below() {
     assert_eq!(row("0 to <500000000000").f, 1, "{:?}", m.rows);
     assert_eq!(row("500000000000 to <1000000000000").f, 1, "999999999999 is below 1e12: {:?}", m.rows);
     assert_eq!(row("1000000000000 to 1500000000000").f, 0, "the class above is empty: {:?}", m.rows);
+}
+
+#[test]
+fn a_value_exactly_on_a_class_boundary_goes_to_the_class_on_its_right() {
+    // the MED repro: ordinary 2-decimal values, auto width 0.01 starting at 12.34
+    let data_text = "12.34, 12.35, 12.36, 12.37, 12.38";
+    let p = with(&[s("mode", GROUPED), s("data", data_text)]);
+    let m = model(&p).unwrap();
+    assert_eq!(m.rows.iter().map(|r| r.f).collect::<Vec<_>>(), vec![1, 1, 1, 1, 1], "{:?}", m.rows);
+    assert_eq!(m.rows.iter().map(|r| r.f).sum::<u64>(), 5);
+    assert_eq!(m.rows[0].label, "12.34 to <12.35");
+    assert_eq!(m.rows[4].label, "12.38 to 12.39");
+    // the same normal data via the histogram's shared bins: the counts must agree
+    let values = data::numbers(data_text);
+    let w = super::super::auto_width(&values);
+    let st = super::super::auto_start(&values, w, true);
+    let shared = super::super::bins(&values, st, w, true).unwrap();
+    assert_eq!(m.rows.iter().map(|r| r.f).collect::<Vec<_>>(), shared.iter().map(|b| b.n as u64).collect::<Vec<_>>());
+
+    // manual width 0.01, start 12.34 on 12.34/12.35/12.36: 1, 1, 1, not 2, 1, 0
+    let p = with(&[
+        s("mode", GROUPED),
+        s("data", "12.34, 12.35, 12.36"),
+        b("auto_classes", false),
+        f("class_width", 0.01),
+        f("class_start", 12.34),
+    ]);
+    let m = model(&p).unwrap();
+    assert_eq!(m.rows.iter().map(|r| r.f).collect::<Vec<_>>(), vec![1, 1, 1], "{:?}", m.rows);
+
+    // every boundary of a 5-class table, including the first and the closed last one
+    let p = with(&[
+        s("mode", GROUPED),
+        s("data", "12.34, 12.35, 12.36, 12.37, 12.38"),
+        b("auto_classes", false),
+        f("class_width", 0.01),
+        f("class_start", 12.34),
+    ]);
+    let m = model(&p).unwrap();
+    assert_eq!(m.rows.len(), 5);
+    assert_eq!(m.rows.iter().map(|r| r.f).collect::<Vec<_>>(), vec![1, 1, 1, 1, 1], "{:?}", m.rows);
+
+    // negative boundaries and tiny boundaries
+    for (start, width, data_text, n) in [
+        (-2.02, 0.01, "\u{2212}2.02, \u{2212}2.01, \u{2212}2.00, \u{2212}1.99, \u{2212}1.98", 5),
+        (1e-20, 1e-20, "1e-20, 2e-20, 3e-20", 3),
+    ] {
+        let p = with(&[
+            s("mode", GROUPED),
+            s("data", data_text),
+            b("auto_classes", false),
+            f("class_width", width),
+            f("class_start", start),
+        ]);
+        let m = model(&p).unwrap();
+        assert_eq!(m.rows.iter().map(|r| r.f).sum::<u64>(), n, "{data_text}");
+        assert!(m.rows.iter().all(|r| r.f >= 1), "{data_text}: every value on a boundary: {:?}", m.rows);
+    }
 }
 
 #[test]
@@ -839,6 +911,22 @@ fn manual_classes_are_used_and_a_refused_width_or_start_is_replaced_with_a_fixed
     assert!(note.contains("more than 200 classes") && note.contains("Set Class width to"), "{note}");
     assert!(apply_fix(&note, &mut tiny));
     assert!(fix_note(&tiny).is_none(), "{:?}", warnings(&tiny));
+
+    // a start far below the data is the real cause of too many classes; the note must name it,
+    // and following only "Class width 10" cannot clear it
+    let mut below = with(&[
+        s("mode", GROUPED),
+        s("data", DEFAULT_DATA),
+        b("auto_classes", false),
+        f("class_width", 10.0),
+        f("class_start", -10000.0),
+    ]);
+    let notes = warnings(&below).join(" ");
+    assert!(notes.contains("Set First class starts at 4"), "the start is named: {notes}");
+    assert!(apply_fix(&notes, &mut below), "both width and start apply");
+    let mb = model(&below).expect("the started table draws");
+    assert_eq!(mb.rows.iter().map(|r| r.f).sum::<u64>(), 10);
+    assert!(!warnings(&below).iter().any(|n| n.contains("more than 200 classes")), "{:?}", warnings(&below));
 
     // a range too wide for any manual width gets the switch, never a value the control cannot hold
     let mut huge = with(&[
@@ -1186,6 +1274,17 @@ fn refusals_name_the_box_the_reason_and_a_fixed_value_and_odd_input_never_panics
     let note = warnings(&p).join(" ");
     assert!(note.contains("Data has no numbers") && note.contains("1000000000000"), "{note}");
 
+    // an out-of-range number is named as such, not as a word
+    let p = with(&[s("data", "1000000000000, 1000000000001"), s("relative", OFF)]);
+    let m = model(&p).unwrap();
+    assert_eq!(m.n, 1);
+    let note = warnings(&p).join(" ");
+    assert!(note.contains("beyond the largest number") && note.contains("1000000000000"), "{note}");
+    assert!(!note.contains("not a number"), "{note}");
+    let only_big = with(&[s("data", "1000000000001")]);
+    let note = warnings(&only_big).join(" ");
+    assert!(note.contains("beyond the largest number") && note.contains("1000000000000"), "{note}");
+
     // too many distinct raw values: the advice names the mode that works
     let many: String = (0..(MAX_ROWS + 1)).map(|i| i.to_string()).collect::<Vec<_>>().join(", ");
     let p = with(&[s("data", &many)]);
@@ -1335,6 +1434,7 @@ fn ten_thousand_fuzzed_inputs_render_without_panicking_and_stay_inside_the_numbe
     let p = with(&[s("data", &rows)]);
     let g = parse(&render(&p), false);
     assert_eq!(bodies(&g, "fcell").len(), MAX_ROWS);
+    assert!(warnings(&p).iter().any(|n| n.contains("200 rows") && n.contains("tall page")), "{:?}", warnings(&p));
 }
 
 // ───────────────────────── speed, purity, registration ─────────────────────────
@@ -1466,7 +1566,7 @@ fn controls_relevance_examples_and_the_faq_are_registered_and_consistent() {
         assert!(parse(&svg, false).texts.iter().any(|t| has_class(t, "thead")), "{}", e.name);
     }
     let faq: String = crate::figures::faq::faq_for(ID).iter().map(|q| format!("{} {}", q.q, q.a)).collect::<Vec<_>>().join(" ");
-    for must in ["add to 100%", "100.5%", "class boundary", "tally", "fixed at the width of 25", "cumulative frequency", "cumulative relative frequency", "Decimal", "Grouped classes", "round", "half up", "last class"] {
+    for must in ["add to 100%", "100.5%", "class boundary", "tally", "fixed at the width of 25", "cumulative frequency", "cumulative relative frequency", "Decimal", "relative-tolerance", "Grouped classes", "round", "half up", "last class"] {
         assert!(faq.contains(must), "FAQ is missing {must:?}");
     }
     assert!((4..=6).contains(&crate::figures::faq::faq_for(ID).len()));
@@ -1494,6 +1594,11 @@ fn dump_pngs() {
         ("billion_edge", vec![s("mode", GROUPED), s("data", "0, 999999999999")]),
         ("rounded_note", vec![s("data", "1, 2, 3"), ("decimals", Value::I(0))]),
         ("decimal_note", vec![s("data", "1, 2, 3"), s("relative", DECIMAL), ("decimals", Value::I(2))]),
+        ("boundary_12", vec![s("mode", GROUPED), s("data", "12.34, 12.35, 12.36, 12.37, 12.38")]),
+        ("tiny_diff", vec![s("mode", GROUPED), s("data", "1.0000000000000002, 1.0000000000000004, 1.0000000000000007")]),
+        ("start_below", vec![s("mode", GROUPED), s("data", DEFAULT_DATA), b("auto_classes", false), f("class_width", 10.0), f("class_start", -10000.0)]),
+        ("too_big", vec![s("data", "1000000000000, 1000000000001")]),
+        ("empty_grouped", vec![s("mode", GROUPED), s("data", "")]),
         ("thousands", vec![s("data", "1,000, 2,000, 3,000")]),
         ("print", vec![s("style", "Print"), s("mode", GROUPED), s("data", DEFAULT_GROUPED)]),
         ("print_small", vec![s("style", "Print"), s("label_size", "Small")]),

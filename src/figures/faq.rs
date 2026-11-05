@@ -1657,7 +1657,7 @@ const FREQUENCY_TABLE: &[Faq] = &[
     },
     Faq {
         q: "When should I use grouped classes instead of raw values?",
-        a: "Use raw values when the data is discrete and repeats, such as the number of siblings or a score out of 10: each distinct value gets its own row, in ascending order. Use grouped classes when the data is continuous or has many different values, such as heights, times or incomes, because one row per value would be too long to read. Grouped classes also make the table match a histogram: the automatic class width is the histogram's own choice for the same values. A value on a boundary goes in the class to its right, and the last class closes at its upper boundary.",
+        a: "Use raw values when the data is discrete and repeats, such as the number of siblings or a score out of 10: each distinct value gets its own row, in ascending order. Use grouped classes when the data is continuous or has many different values, such as heights, times or incomes, because one row per value would be too long to read. Grouped classes also make the table match a histogram: the automatic class width is the histogram's own choice for the same values. A value on a boundary goes in the class to its right, and the last class closes at its upper boundary. For extremely small ranges the table uses a relative-tolerance width so it does not fill with empty classes; the histogram's shared helper still uses an absolute tolerance, so a tiny-range histogram can differ.",
     },
 ];
 
