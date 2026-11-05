@@ -34,19 +34,34 @@ pub enum Tab {
     Reports,
     /// Account details, invite code, data download, deleting the account, legal pages.
     Settings,
+    /// The approval queue: only an admin account sees it (`trust: "admin"`).
+    Admin,
 }
 
 /// The tabs a confirmed account still waiting for approval may use: its circles and its own settings. The public
 /// pool's tabs (Browse, Items I shared, Things I imported, Reports and appeals) wait for approval (round 54).
 pub const PENDING_TABS: [Tab; 2] = [Tab::Circles, Tab::Settings];
 
+/// The tabs a teacher gets.
+pub const TEACHER_TABS: [Tab; 6] = [Tab::Browse, Tab::Circles, Tab::Mine, Tab::Imported, Tab::Reports, Tab::Settings];
+
+/// The tabs an admin gets: a teacher's, plus the approval queue.
+pub const ADMIN_TABS: [Tab; 7] = [Tab::Browse, Tab::Circles, Tab::Mine, Tab::Imported, Tab::Reports, Tab::Settings, Tab::Admin];
+
 /// The tabs this account may use. Every other not-approved state (unverified, rejected, suspended) reaches no tab.
-pub fn tabs_for(gate: &Gate) -> &'static [Tab] {
-    if gate.confirmed_pending() { &PENDING_TABS } else { &Tab::ALL }
+/// `admin` is the account's trust level (`GET /me`): a pending account never gets the queue, whatever else it is.
+pub fn tabs_for(gate: &Gate, admin: bool) -> &'static [Tab] {
+    if gate.confirmed_pending() {
+        &PENDING_TABS
+    } else if admin {
+        &ADMIN_TABS
+    } else {
+        &TEACHER_TABS
+    }
 }
 
 impl Tab {
-    pub const ALL: [Tab; 6] = [Tab::Browse, Tab::Circles, Tab::Mine, Tab::Imported, Tab::Reports, Tab::Settings];
+    pub const ALL: [Tab; 7] = ADMIN_TABS;
 
     pub fn label(self) -> &'static str {
         match self {
@@ -56,6 +71,7 @@ impl Tab {
             Tab::Imported => "Things I imported",
             Tab::Reports => "Reports and appeals",
             Tab::Settings => "My sharing settings",
+            Tab::Admin => "Approval queue",
         }
     }
 }

@@ -130,6 +130,14 @@ never be suspended or deleted. Suspending an admin is a proposal another admin m
 escalation contact. No route creates an admin: the operator runs `server/worker/scripts/make-admin.sh EMAIL --remote`
 after verifying the person out of band (`demote-admin.sh` reverses it, never for the last admin).
 
+**Where an admin sees the queue.** The app's Shared page has an **Approval queue** tab, shown only to an account whose
+`GET /me` says `trust: "admin"` (`src/share/admin.rs`, `admin_ui.rs`). It lists the open applications oldest first with
+the server's labels (domain history, earlier refusals, profile changed, suspended), and decides one application at a
+time: an approval asks which evidence was checked, a refusal asks for the reason the applicant will read, and the
+reviewer's note is a separate field. The password is asked once for a five-minute sudo token, kept in memory only. The
+routes themselves are unchanged and still work without the screen.
+
+
 **Content follows standing.** Others see an item only while its author is `teacher`/`admin`, not suspended and not
 deleted (`STANDING` in `shared.ts`). Suspension, revocation and restore hide and show items at once, reversibly;
 nothing is deleted.

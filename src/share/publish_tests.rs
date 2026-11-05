@@ -279,7 +279,7 @@ fn the_account_gate_is_read_from_the_account_window_without_any_io() {
     m.page = Page::Status;
     assert_eq!(snapshot_of(&m).gate, Gate::Unreachable);
     // signed in but pending, or approved without a client yet
-    let me = |status| super::api::Me { email: "a@b.org".into(), display_name: "A".into(), school: "S".into(), status };
+    let me = |status| super::api::Me { email: "a@b.org".into(), display_name: "A".into(), school: "S".into(), status, trust: "teacher".into() };
     m.me = Some(me(Status::Pending));
     assert_eq!(snapshot_of(&m).gate, Gate::NotApproved(Status::Pending));
     m.me = Some(me(Status::Approved));

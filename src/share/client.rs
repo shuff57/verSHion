@@ -335,6 +335,18 @@ impl Client {
         }
     }
 
+    /// Native only: the device token of `account` (or of the signed-in account), for the admin
+    /// routes, which refuse a request from a device that has not signed in before. The browser
+    /// carries the same token in an HttpOnly cookie, so it never needs this (and never gets it).
+    pub(crate) fn device_for(&self, account: Option<&str>) -> Option<Secret> {
+        if self.mode != Mode::Native {
+            return None;
+        }
+        let i = self.lock();
+        let a = account.map(str::to_string).or_else(|| i.account.clone())?;
+        i.devices.get(&a).cloned()
+    }
+
     pub fn knows_device_for(&self, account: &str) -> bool {
         self.lock().devices.contains_key(account)
     }
