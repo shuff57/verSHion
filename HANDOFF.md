@@ -151,3 +151,85 @@ Confirmed by running the app (`VERSHION_SCREEN=figures VERSHION_FIG=collision-mo
   critic rounds; the protractor has had none yet.
 - `HANDOFF.md` here is untracked; do not commit it with the figure work.
 - Round 2's handoff claimed round 2 was uncommitted and HEAD was `c3eb729`; it was stale. Check `git log` before trusting a handoff.
+
+## 2026-10-29, late: phase 3 closed, phase 4 at three figures
+
+- HEAD `4f89e17` on `figures-gapfill`; tree clean apart from this note. Local commits only.
+- Phase 3 complete and verified. Phase 4 figures done:
+  - `hardy-weinberg` — `bd58e90`
+  - `chi-square-fit` — `d30ece5`
+  - `enzyme-kinetics` — `4f89e17`
+- Full suite on `4f89e17`: **1851 passed, 0 failed, 5 ignored** (run alone; ~10-19 min depending on load).
+- **In flight:** one combined accuracy + teacher + regression critic over the three, on a frozen `git archive
+  4f89e17`. When it reports, fix blockers and majors, commit, then run a verification critic on the fix commit.
+- **Then**: phase 4 figures 4-7 (cladogram from a typed tree, food web / energy pyramid, action potential, cell
+  cycle, cell diagrams), phase 5 chemistry (10), phase 6 stats (7).
+- Pitfalls confirmed this session:
+  - `gen` is a reserved keyword in this edition.
+  - A test helper named `f` is shadowed by any `for f in [...]`; use `fl`/`uu`.
+  - `paint-order="stroke"` is ignored by the PNG renderer; use a white plate or draw the text twice.
+  - A numeric param set with `Value::S` in an example passes the figure tests and fails the two share round-trip
+    tests; always use `Value::F`.
+  - `git add -A` commits this file; stage figure files by name.
+  - Timing-sensitive tests (`dragging_a_label_moves_it_as_one_undo_step`, `absurd_windows_cannot_run_away`) fail
+    under CPU contention — never run a second cargo while the suite runs, and check them alone before calling a
+    regression.
+
+## 2026-10-29, later: biology critic fixed + cladogram, round 2
+
+- The combined biology critic (`docs/critic-reports/2026-10-29-biology-critics-1.md`) came back **FAIL — 2 blockers,
+  9 majors, 13 minors**, all on awkward input; the arithmetic was verified correct. Its fixes were staged but not
+  committed when this session picked the work up.
+- Before committing them I read the *rendered* cladogram PNGs and found three defects the critic and every test had
+  missed, one a blocker: (1) the rectangular shape drew each branch along the PARENT's row, so `(A, B, C, D, E)` showed
+  one bar and a single stub — four leaves had no branch; (2) the parser stripped all whitespace, so `Homo sapiens`
+  printed as `Homosapiens`; (3) an ancestor name typed after a bracket was parsed and never drawn, although the hint,
+  the blurb, the FAQ and an example all promised it. All three fixed, with tests; the FAQ corrected; the leaf-order
+  text under the picture now grows the canvas instead of running off it; the count line is pluralised properly.
+- Also fixed a contradiction the biology critic's M7 fix had introduced: the chi-square table's Total row still printed
+  the exact statistic beside a line that now prints the sum of the printed contributions (1.43 vs 1.42).
+- Census re-blessed; only `cladogram`'s two ids moved.
+- **Next:** the verification critic on this fix commit (the fixes themselves have not been re-critiqued), then phase 4
+  figures 4-7: food web / energy pyramid, action potential, cell cycle, cell diagrams; then phase 5 chemistry (10),
+  phase 6 stats (7).
+
+## 2026-10-29, round 3: the verification critic's six majors fixed
+
+- Verification critic on `9a5ae46` (frozen copy): **FAIL** — both blockers and most majors genuinely fixed, but six
+  majors remained, three of them in classes the first round claimed. Fixed: cladogram text wrapping to the canvas
+  (last names were cut off) and indentation of continuation lines; error reasons wrapping and "Nothing is drawn"
+  placement; the enzyme rate label landing on the Km label at [S] = 0; the rate label having no halo over the curve;
+  chi-square's total precision when a contribution prints below 0.005 (0.0033 + 0.01 now totals 0.0133); Hardy-Weinberg
+  printing p = 0.99 as "1" at one decimal place. Six minors fixed too (see docs/figures-progress.md).
+- Census: only `chi-square-fit` and `enzyme-kinetics` re-hashed. Full suite re-run on the fix.
+- **Next:** a second verification critic on this fix commit (the loop's rule: fixes themselves get re-checked), then
+  phase-4 figures 5-8: food web / energy pyramid, action potential, cell cycle, cell diagrams; then phase 5, phase 6.
+- The critic noted (not counted) that the enzyme's drag handle still sits at the answer point on SCREEN while Show
+  answers is off — the exported student copy is clean; deciding whether on-screen handles should follow Show answers is
+  an open product question.
+
+## 2026-10-29, round 4: the second verification critic's five majors fixed
+
+- Second verification critic on `a073352`: **FAIL** — five majors, three of them incomplete versions of round 3's own
+  fixes. Fixed: enzyme rate label over "Vmax/2" at [S] = Km (the lift now checks both labels); inhibited half-rate label
+  now "Vmax′/2"; Hardy-Weinberg's "p in each generation" line now uses the page precision (p = 0.99 no longer prints as
+  a column of 1s), and so does the editor note; the cladogram's closing sentence wraps (it ran off the canvas at Large)
+  and the canvas takes the count line's width at Large; a chi-square contribution for a category expected to be empty
+  but counted now prints ∞ instead of 0.00. Minors: half-rate label haloed; enzyme Print grid `#787878` (it vanished in
+  the 66% copy). Census: enzyme only.
+- **Next:** a third verification critic on this commit, or accept the loop as converged if it comes back with minors
+  only; then phase-4 figures: food web / energy pyramid, action potential, cell cycle, cell diagrams.
+
+## 2026-10-29, round 5: the third verification critic's four majors fixed
+
+- Third verification critic on `8d64904`: **FAIL**, no blocker, 4 majors + 6 minors — and again three majors were one
+  case over from the previous fix. Fixed: the half-rate label vs the Km label (strong noncompetitive inhibitor printed
+  them on one line); the "beyond this axis" note outside the collision set (a point at the axis end printed through it);
+  name truncation not reserving the observed number's width; Hardy-Weinberg rounding moved the whole difference into the
+  largest part (1:2:1 printed 0.3/0.4/0.3) — now largest remainder. Minors: givens wraps, ∞ instead of "inf" with a
+  consistent Total and χ² line, a huge contribution in one compact form, grouped contributions, the decision line wraps,
+  and the cladogram measures text by width per glyph so a run of Ws is not clipped.
+- Census: cladogram only.
+- **Loop status:** three verification passes, each finding real defects, the last two mostly "the fix did not cover the
+  case next door". A fourth pass would be the test of convergence; otherwise move to phase-4 figure 5 (food web /
+  energy pyramid).
