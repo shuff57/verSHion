@@ -1,0 +1,93 @@
+PARSED
+  deepseek  65 of 65  missing -
+  glm       65 of 65  missing -
+  kimi      65 of 65  missing -
+  minimax   64 of 65  missing ['S32']
+  mistral   65 of 65  missing -
+
+CONTROLS  (the same image twice: the score gap is the judge measuring itself)
+  deepseek  exams A=6.00 B=6.00 error=0.00 verdict=tie
+  glm       exams A=7.25 B=7.25 error=0.00 verdict=tie
+  kimi      exams A=6.50 B=6.50 error=0.00 verdict=tie
+  minimax   exams A=6.00 B=6.00 error=0.00 verdict=tie
+  mistral   exams A=8.00 B=8.00 error=0.00 verdict=tie
+  deepseek  bank  A=6.25 B=6.25 error=0.00 verdict=tie
+  glm       bank  A=7.75 B=7.75 error=0.00 verdict=tie
+  kimi      bank  A=6.50 B=6.50 error=0.00 verdict=tie
+  minimax   bank  A=6.25 B=6.25 error=0.00 verdict=tie
+  mistral   bank  A=8.00 B=8.00 error=0.00 verdict=tie
+  error by judge: {'deepseek': 0.0, 'glm': 0.0, 'kimi': 0.0, 'minimax': 0.0, 'mistral': 0.0}   (0.00-0.50 trustworthy, over 1.0 unusable)
+
+MIRRORS  (the same pair, sides swapped: a judge that keeps picking the left image is caught here)
+  deepseek  banks                desktop ours  then ours 
+  glm       banks                desktop ours  then ours 
+  kimi      banks                desktop ours  then ours 
+  minimax   banks                desktop ours  then ours 
+  mistral   banks                desktop ours  then ours 
+  deepseek  exam                 desktop ours  then ours 
+  glm       exam                 desktop ours  then ours 
+  kimi      exam                 desktop ours  then ours 
+  minimax   exam                 desktop ours  then ours 
+  mistral   exam                 desktop ours  then ours 
+  deepseek  export               desktop ours  then ref    <- FLIPPED
+  glm       export               desktop ours  then ours 
+  kimi      export               desktop ours  then ours 
+  minimax   export               desktop ref   then ref  
+  mistral   export               desktop ours  then ours 
+  deepseek  banks                narrow  ours  then ours 
+  glm       banks                narrow  ours  then ours 
+  kimi      banks                narrow  ours  then ours 
+  minimax   banks                narrow  ours  then ours 
+  mistral   banks                narrow  ref   then ours   <- FLIPPED
+  deepseek  exam                 narrow  ours  then ours 
+  glm       exam                 narrow  ours  then ours 
+  kimi      exam                 narrow  ours  then ours 
+  minimax   exam                 narrow  ours  then ours 
+  mistral   exam                 narrow  ours  then ours 
+  agrees with itself under swap: {'deepseek': '4/5', 'glm': '5/5', 'kimi': '5/5', 'minimax': '5/5', 'mistral': '4/5'}
+
+PAIRS
+  bank                 desktop de:ref gl:ours ki:tie mi:ours mi:ours
+  bank                 narrow  de:ours gl:ours ki:ours mi:ours mi:ours
+  banks                desktop de:ours gl:ours ki:ours mi:ours mi:ours
+  banks                narrow  de:ours gl:ours ki:ours mi:ours mi:ref
+  exam                 desktop de:ours gl:ours ki:ours mi:ours mi:ours
+  exam                 narrow  de:ours gl:ours ki:ours mi:ours mi:ours
+  exams                desktop de:ours gl:ours ki:ours mi:ours mi:ours
+  exams                narrow  de:ours gl:ours ki:ours mi:ours mi:ours
+  export               desktop de:ours gl:ours ki:ours mi:ref mi:ours
+  export               narrow  de:ours gl:ours ki:ours mi:ours mi:ours
+  imports              desktop de:ours gl:ours ki:ours mi:ours mi:ours
+  imports              narrow  de:ours gl:ours ki:ours mi:ours mi:ours
+  paper-classic        desktop de:ours gl:ours ki:ours mi:ours mi:ours
+  paper-condensed      desktop de:ours gl:ours ki:ours mi:ours mi:ours
+  paper-exam-board     desktop de:ours gl:ours ki:ours mi:ours mi:ours
+  paper-standard       desktop de:ours gl:ours ki:ours mi:ours mi:ours
+  question-editor-bank desktop de:ours gl:ours ki:ours mi:ours mi:ours
+  question-editor-bank narrow  de:ours gl:ours ki:ours mi:ref mi:ours
+  question-editor-exam desktop de:ours gl:ours ki:ours mi:ours mi:ours
+  question-editor-exam narrow  de:ours gl:ours ki:ours mi:ours mi:ours
+  votes {'ours': 95, 'ref': 4, 'tie': 1}  pairs won 20/20
+
+BY JUDGE
+  deepseek  ours=19 ref= 1 tie= 0
+  glm       ours=20 ref= 0 tie= 0
+  kimi      ours=19 ref= 0 tie= 1
+  minimax   ours=18 ref= 2 tie= 0
+  mistral   ours=19 ref= 1 tie= 0
+
+OUR MEAN, desktop light (pairs and singles; controls and mirrors excluded)
+  screen                 n  mean  trimmed  H    S    T    St
+  account                5  6.30  6.17   6.6 5.4 6.8 6.4
+  circle-open            5  6.40  6.25   6.8 5.6 6.6 6.6
+  circles                5  6.50  6.25   6.8 5.8 6.6 6.8
+  figure-editor          5  6.55  6.17   6.6 6.8 6.6 6.2
+  figures                5  6.95  6.83   7.2 7.0 7.0 6.6
+  home                   5  6.75  6.58   7.4 6.0 6.8 6.8
+  home-empty             5  6.55  6.42   6.8 5.6 7.0 6.8
+  settings               5  7.20  7.08   7.4 7.4 7.0 7.0
+  shared                 5  6.40  6.42   6.8 5.4 6.8 6.6
+  welcome                5  6.40  6.17   7.4 5.6 6.8 5.8
+  DESKTOP TRIMMED MEAN over 10 screens: 6.43
+  narrow/light: 6.49 over 45 screens  {'hierarchy': 6.67, 'spacing': 6.22, 'type': 6.69, 'state': 6.4}
+  desktop/dark: 6.66 over 94 screens  {'hierarchy': 7.09, 'spacing': 6.29, 'type': 6.64, 'state': 6.62}
