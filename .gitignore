@@ -5,3 +5,6 @@
 /.wrangler
 
 /Claude outputs/**/.playwright-cli/
+
+# playwright-cli scratch output (console logs, page snapshots)
+server/worker/.playwright-cli/
