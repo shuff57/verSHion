@@ -288,7 +288,13 @@ fn expected_groups(values: &[f64]) -> Vec<(String, u64)> {
 
 /// Apply the fixed value a refusal/fallback note offers.
 fn apply_fix(note: &str, p: &mut Params) -> bool {
+    let turned_off = note.contains("Turn off Choose the class width automatically");
+    if turned_off {
+        p.set_b("auto_classes", false);
+    }
     if let Some(rest) = note.split("Set Class width to ").nth(1) {
+        // a manual width only applies while the automatic choice is off
+        p.set_b("auto_classes", false);
         let v: String = rest
             .chars()
             .take_while(|c| c.is_ascii_digit() || *c == '.' || *c == '-' || *c == '\u{2212}')
@@ -297,6 +303,9 @@ fn apply_fix(note: &str, p: &mut Params) -> bool {
             p.set_f("class_width", x);
             return true;
         }
+    }
+    if turned_off {
+        return true;
     }
     if let Some(rest) = note.split("Set First class starts at ").nth(1) {
         let v: String = rest
@@ -480,16 +489,29 @@ fn decimal_proportions_and_cumulative_relative_frequency_are_exact() {
         assert!(bodies(&sg, "rcell").is_empty() && bodies(&sg, "crcell").is_empty(), "{rel}: student blanks");
     }
 
-    // the OpenStax grouped table: 0.10, 0.25, 0.40, 0.20, 0.05 and 0.10..1.00
-    let e = examples(ID).unwrap().into_iter().find(|e| e.name == "OpenStax grouped table").unwrap();
+    // the OpenStax-style grouped table: 0.10, 0.25, 0.40, 0.20, 0.05 and 0.10..1.00
+    let e = examples(ID).unwrap().into_iter().find(|e| e.name == "Heights, decimal proportions").unwrap();
     let mut p = defaults();
     for (k, v) in e.params {
         p.0.insert(k.to_string(), v);
     }
+    assert_eq!(p.s("heading"), "Height (cm)");
+    assert_eq!(p.s("title"), "Heights of students");
     let m = model(&p).unwrap();
+    assert_eq!(m.rows.iter().map(|r| r.f).collect::<Vec<_>>(), [2, 5, 8, 4, 1]);
     assert_eq!(m.rows.iter().map(|r| r.rel.clone()).collect::<Vec<_>>(), ["0.10", "0.25", "0.40", "0.20", "0.05"]);
     assert_eq!(m.rows.iter().map(|r| cum_rel_text(r.cum, m.n, m.rel, m.decimals)).collect::<Vec<_>>(), ["0.10", "0.35", "0.75", "0.95", "1.00"]);
     assert!(warnings(&p).is_empty(), "{:?}", warnings(&p));
+
+    // a Decimal column that rounds to 0.99 is stated, like the Percent column
+    let p = with(&[s("data", "1, 2, 3"), s("relative", DECIMAL), ("decimals", Value::I(2))]);
+    let m = model(&p).unwrap();
+    assert!(m.key_notes.iter().any(|n| n.contains("0.99") && n.contains("exactly 1.00")), "{:?}", m.key_notes);
+    let g = parse(&render(&p), false);
+    let notes: String = g.texts.iter().filter(|t| has_class(t, "note")).map(|t| t.body.as_str()).collect::<Vec<_>>().join(" ");
+    assert!(notes.contains("0.99") && notes.contains("exactly 1.00"), "{notes}");
+    let (student, _) = crate::figures::answer_pair(&def(), &p).unwrap();
+    assert!(!student.contains("0.99"), "the key note is not in the student copy");
     println!("frequency table: {checked} decimal proportions checked");
 }
 
@@ -537,6 +559,12 @@ fn the_total_row_adds_to_n_and_to_exactly_one_hundred_percent() {
     assert!(notes.contains("99%") && notes.contains("exactly 100%"), "{notes}");
     assert!(!notes.contains("%%"), "one percent sign only: {notes}");
     assert!(!m.key_notes.iter().any(|n| n.contains("%%")), "{:?}", m.key_notes);
+
+    // many rounded cells can miss 100 by more than one point; the note gives the actual sum
+    let fifteen: String = (1..=15).map(|i| i.to_string()).collect::<Vec<_>>().join(", ");
+    let p = with(&[s("data", &fifteen)]);
+    let m = model(&p).unwrap();
+    assert!(m.key_notes.iter().any(|n| n.contains("100.5%")), "{:?}", m.key_notes);
 }
 
 // ───────────────────────── grouped classes ─────────────────────────
@@ -624,6 +652,115 @@ fn grouped_boundaries_print_at_the_widths_precision_and_never_repeat() {
     let m = model(&p).unwrap();
     assert_eq!(m.rows[0].label, "0.5 to <10.5", "{:?}", m.rows);
     assert!(m.edge.unwrap().contains("starting at 0.5"), "the start is printed");
+}
+
+#[test]
+fn grouped_tiny_differences_fall_back_to_a_width_that_really_resolves_the_boundaries() {
+    // the MED repro: auto width near 1 is below one ulp, so boundaries collapse; the old fallback
+    // retried the same width and produced no table while advising the switch that was already on
+    for (label, one, two, three) in [
+        ("near 1", "1.0000000000000002", "1.0000000000000004", "1.0000000000000007"),
+        ("near 1, more", "1.0000000000000002", "1.0000000000000009", "1.0000000000000013"),
+        ("near 1e9", "1000000000.0000001", "1000000000.0000002", "1000000000.0000004"),
+    ] {
+        let data_text = std::iter::repeat([one, two, three]).take(10).flatten().collect::<Vec<_>>().join(", ");
+        let p = with(&[s("mode", GROUPED), s("data", &data_text)]);
+        let notes = warnings(&p).join(" ");
+        assert!(!notes.contains("could not be made"), "{label}: no table: {notes}");
+        let m = model(&p).expect(label);
+        assert!(!m.rows.is_empty(), "{label}: rows");
+        assert_eq!(m.rows.iter().map(|r| r.f).sum::<u64>(), 30, "{label}: every value counted");
+        assert!(notes.contains("0.01"), "{label}: a resolving width is named: {notes}");
+        assert!(notes.contains("distinct boundaries") || notes.contains("more than 200 classes"), "{label}: the reason is named: {notes}");
+        assert!(!notes.contains("Turn on Choose the class width automatically"), "{label}: the switch is already on: {notes}");
+        // applying the offered procedure draws the same table with a manual width
+        let mut fixed = p.clone();
+        assert!(apply_fix(&notes, &mut fixed), "{label}: a fix to apply");
+        let mf = model(&fixed).expect(label);
+        assert_eq!(mf.rows.iter().map(|r| r.f).sum::<u64>(), 30, "{label}: fixed counts");
+        assert!(!warnings(&fixed).iter().any(|n| n.contains("distinct boundaries")), "{label}: {:?}", warnings(&fixed));
+    }
+}
+
+#[test]
+fn tiny_ranges_use_a_relative_width_and_do_not_fill_the_table_with_empty_rows() {
+    // the MED repro: an absolute +1e-12 in the shared nice step made a 2e-20 range 21 classes
+    let p = with(&[s("mode", GROUPED), s("data", "1e-20, 2e-20, 3e-20")]);
+    let m = model(&p).unwrap();
+    assert_eq!(m.rows.len(), 3, "three values, three one-wide classes: {:?}", m.rows);
+    assert!(m.rows.iter().all(|r| r.f > 0), "no empty rows: {:?}", m.rows);
+    assert_eq!(m.rows.iter().map(|r| r.f).sum::<u64>(), 3);
+    let edge = m.edge.unwrap();
+    assert!(edge.contains("0.00000000000000000001 wide"), "{edge}");
+
+    // 5e-13 to 1.5e-12: three classes, not the eleven the absolute epsilon produced
+    let p = with(&[s("mode", GROUPED), s("data", "5e-13, 1.5e-12")]);
+    let m = model(&p).unwrap();
+    assert!(m.rows.len() <= 4, "a relative width, not eleven rows: {:?}", m.rows);
+    assert_eq!(m.rows.iter().map(|r| r.f).sum::<u64>(), 2);
+    assert_eq!(m.rows.iter().filter(|r| r.f > 0).count(), 2, "{:?}", m.rows);
+
+    // a normal range is unchanged and still uses the histogram's own width and classes
+    let values = data::numbers(DEFAULT_GROUPED);
+    let p = with(&[s("mode", GROUPED), s("data", DEFAULT_GROUPED)]);
+    let m = model(&p).unwrap();
+    let w = super::super::auto_width(&values);
+    let st = super::super::auto_start(&values, w, true);
+    let shared = super::super::bins(&values, st, w, true).unwrap();
+    assert_eq!(m.rows.iter().map(|r| r.f).collect::<Vec<_>>(), shared.iter().map(|b| b.n as u64).collect::<Vec<_>>());
+    assert_eq!(m.rows.len(), 5);
+    // the local relative step is not the absolute-epsilon step on a tiny range
+    let tiny = [1e-20, 2e-20, 3e-20];
+    assert!((auto_width_relative(&tiny) - 1e-20).abs() < 1e-35, "{}", auto_width_relative(&tiny));
+    assert!(super::super::auto_width(&tiny) < 5e-21, "the shared helper really is a decade small: {}", super::super::auto_width(&tiny));
+}
+
+#[test]
+fn grouped_table_prints_the_edge_rule_in_the_header_row() {
+    let p = with(&[s("mode", GROUPED), s("data", DEFAULT_GROUPED)]);
+    let m = model(&p).unwrap();
+    let g = parse(&render(&p), false);
+    let caption: String = g.texts.iter().filter(|t| has_class(t, "caption")).map(|t| t.body.as_str()).collect::<Vec<_>>().join(" ");
+    assert!(caption.contains("a to <b") && caption.contains("b is not") && caption.contains("last class is a to b"), "{caption:?}");
+    let first_body = g.texts.iter().filter(|t| has_class(t, "tcell")).map(|t| t.y).fold(f64::INFINITY, f64::min);
+    let cap_y = g.texts.iter().find(|t| has_class(t, "caption")).map(|t| t.y).unwrap();
+    assert!(cap_y < first_body, "the caption sits above the first data row: {cap_y} vs {first_body}");
+    // both copies carry the rule; the student copy does not lose it with the answers
+    let (student, _) = crate::figures::answer_pair(&def(), &p).unwrap();
+    assert!(parse(&student, false).texts.iter().any(|t| has_class(t, "caption") && t.body.contains("a to <b")));
+    // a raw table has no class-interval caption
+    let raw = parse(&render(&with(&[])), false);
+    assert!(!raw.texts.iter().any(|t| has_class(t, "caption")));
+    assert!(m.edge.is_some());
+}
+
+#[test]
+fn boundary_precision_comes_from_the_width_not_a_fixed_six_places() {
+    // a six-place start would print 0.123457 and lose the typed width; the chosen precision must
+    // start from the width itself
+    let p = with(&[
+        s("mode", GROUPED),
+        s("data", "0, 0.1234567, 0.2469134"),
+        b("auto_classes", false),
+        f("class_width", 0.1234567),
+        f("class_start", 0.0),
+    ]);
+    let m = model(&p).unwrap();
+    assert!(m.edge.as_ref().unwrap().contains("0.1234567 wide"), "{:?}", m.edge);
+    assert!(m.rows.iter().any(|r| r.label.contains("0.1234567")), "{:?}", m.rows);
+    assert!(!m.edge.as_ref().unwrap().contains("0.123457 wide"), "six places is not enough: {:?}", m.edge);
+}
+
+#[test]
+fn a_value_just_below_a_billion_boundary_stays_in_the_class_below() {
+    let p = with(&[s("mode", GROUPED), s("data", "0, 999999999999"), s("relative", OFF)]);
+    let m = model(&p).unwrap();
+    assert_eq!(m.n, 2);
+    assert_eq!(m.rows.iter().map(|r| r.f).sum::<u64>(), 2);
+    let row = |label: &str| m.rows.iter().find(|r| r.label == label).unwrap_or_else(|| panic!("no {label}: {:?}", m.rows));
+    assert_eq!(row("0 to <500000000000").f, 1, "{:?}", m.rows);
+    assert_eq!(row("500000000000 to <1000000000000").f, 1, "999999999999 is below 1e12: {:?}", m.rows);
+    assert_eq!(row("1000000000000 to 1500000000000").f, 0, "the class above is empty: {:?}", m.rows);
 }
 
 #[test]
@@ -828,6 +965,9 @@ fn the_student_copy_blanks_every_answer_and_the_whole_source_leaks_none() {
         vec![("decimals", Value::I(2))],
         vec![s("mode", GROUPED), s("data", "0, 1, 1, 2, 2, 2, 9, 10"), b("auto_classes", false), f("class_width", 2.0), f("class_start", 0.0)],
         vec![s("data", "1, 2, 2")],
+        // a state whose key carries answer notes: the student page must still be the same size
+        vec![s("data", "1, 2, 3"), ("decimals", Value::I(0))],
+        vec![s("data", "1, 2, 3"), s("relative", DECIMAL), ("decimals", Value::I(2))],
     ];
     let mut checked = 0;
     for list in cases {
@@ -854,6 +994,7 @@ fn the_student_copy_blanks_every_answer_and_the_whole_source_leaks_none() {
             }
             // nothing answer-like in the title/desc or a comment
             let desc = student.split("<desc>").nth(1).unwrap().split("</desc>").next().unwrap();
+            assert!(desc.contains("blank") || desc.contains("for students"), "the student description says the columns are blank: {desc}");
             for t in kg.texts.iter().filter(|t| has_class(t, "fcell") || has_class(t, "rcell") || has_class(t, "ccell") || has_class(t, "crcell")) {
                 assert!(!desc.contains(&t.body), "desc leaks {:?}: {desc}", t.body);
             }
@@ -1251,8 +1392,8 @@ fn tallies_group_in_fives_and_are_capped_and_blanked_for_students() {
     assert!(
         warnings(&with(&[s("data", &many_same)]))
             .iter()
-            .any(|n| n.contains("draws counts up to 25")),
-        "the cap is stated"
+            .any(|n| n.contains("draws counts up to 25") && n.contains("Turn off Tally column") && !n.contains("Choose Off")),
+        "the cap and the checkbox advice are stated"
     );
     // the default table's tally has one stroke per value
     let p = with(&[]);
@@ -1292,6 +1433,10 @@ fn the_tally_column_keeps_one_fixed_width_in_both_copies() {
 #[test]
 fn controls_relevance_examples_and_the_faq_are_registered_and_consistent() {
     let mut p = defaults();
+    assert!(p.b("cum_rel"), "the cumulative relative column is on by default");
+    let dg = parse(&render(&p), false);
+    assert!(!bodies(&dg, "crcell").is_empty(), "the default table shows the cumulative relative column");
+    assert!(dg.texts.iter().filter(|t| has_class(t, "thead")).any(|t| t.body.contains("Cumulative")), "default header");
     assert!(relevant(ID, "data", &p) && relevant(ID, "tally", &p) && relevant(ID, "relative", &p));
     assert!(!relevant(ID, "auto_classes", &p) && !relevant(ID, "class_width", &p) && !relevant(ID, "class_start", &p));
     assert!(relevant(ID, "decimals", &p) && relevant(ID, "cum_rel", &p));
@@ -1321,7 +1466,7 @@ fn controls_relevance_examples_and_the_faq_are_registered_and_consistent() {
         assert!(parse(&svg, false).texts.iter().any(|t| has_class(t, "thead")), "{}", e.name);
     }
     let faq: String = crate::figures::faq::faq_for(ID).iter().map(|q| format!("{} {}", q.q, q.a)).collect::<Vec<_>>().join(" ");
-    for must in ["add to 100%", "class boundary", "tally", "cumulative frequency", "cumulative relative frequency", "Decimal", "Grouped classes", "round", "half up", "last class"] {
+    for must in ["add to 100%", "100.5%", "class boundary", "tally", "fixed at the width of 25", "cumulative frequency", "cumulative relative frequency", "Decimal", "Grouped classes", "round", "half up", "last class"] {
         assert!(faq.contains(must), "FAQ is missing {must:?}");
     }
     assert!((4..=6).contains(&crate::figures::faq::faq_for(ID).len()));
@@ -1343,8 +1488,12 @@ fn dump_pngs() {
         ("default", vec![]),
         ("grouped", vec![s("mode", GROUPED), s("data", DEFAULT_GROUPED), s("title", "Minutes of exercise"), s("heading", "Minutes")]),
         ("fraction", vec![s("relative", FRACTION), b("tally", false)]),
-        ("openstax", vec![s("mode", GROUPED), s("data", DEFAULT_GROUPED), s("relative", DECIMAL), ("decimals", Value::I(2)), s("title", "Heights of students"), s("heading", "Height (cm)")]),
+        ("openstax", vec![s("mode", GROUPED), s("data", DEFAULT_HEIGHTS), s("relative", DECIMAL), ("decimals", Value::I(2)), s("title", "Heights of students"), s("heading", "Height (cm)")]),
         ("tiny_boundaries", vec![s("mode", GROUPED), s("data", "0.0000001, 0.0000002, 0.0000003")]),
+        ("tiny_range", vec![s("mode", GROUPED), s("data", "1e-20, 2e-20, 3e-20")]),
+        ("billion_edge", vec![s("mode", GROUPED), s("data", "0, 999999999999")]),
+        ("rounded_note", vec![s("data", "1, 2, 3"), ("decimals", Value::I(0))]),
+        ("decimal_note", vec![s("data", "1, 2, 3"), s("relative", DECIMAL), ("decimals", Value::I(2))]),
         ("thousands", vec![s("data", "1,000, 2,000, 3,000")]),
         ("print", vec![s("style", "Print"), s("mode", GROUPED), s("data", DEFAULT_GROUPED)]),
         ("print_small", vec![s("style", "Print"), s("label_size", "Small")]),

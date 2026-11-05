@@ -1637,7 +1637,7 @@ const OGIVE: &[Faq] = &[
 const FREQUENCY_TABLE: &[Faq] = &[
     Faq {
         q: "Why do the relative frequencies add to 100%?",
-        a: "Every value is counted once, so the frequencies add to n. Relative frequency is each count divided by that same n, so f1/n + f2/n + ... = n/n = 1, or 100%. The Total row shows exactly n and exactly 100%. A percent is rounded half up from the exact integers f and n, never from a calculator's decimal, so at 0 or 1 decimal place the printed cells can add to 99% or 101%; the key says when that happens and gives the rounded sum. Choose Fraction for the exact shares, or Decimal for proportions such as 0.05.",
+        a: "Every value is counted once, so the frequencies add to n. Relative frequency is each count divided by that same n, so f1/n + f2/n + ... = n/n = 1, or 100%. The Total row shows exactly n and exactly 100%. A percent is rounded half up from the exact integers f and n, never from a calculator's decimal, so the printed cells can add to something other than 100% (99.9%, 100.5%, or more when many cells are rounded); the key says when that happens and gives the rounded sum. Choose Fraction for the exact shares, or Decimal for proportions such as 0.05.",
     },
     Faq {
         q: "What is a class boundary?",
@@ -1645,7 +1645,7 @@ const FREQUENCY_TABLE: &[Faq] = &[
     },
     Faq {
         q: "Why draw a tally column?",
-        a: "The tally shows the counting itself, one mark per value and a diagonal across each group of five, so a reader can check a frequency without trusting it. It also makes the table usable as a tally-and-frequency exercise: the student copy blanks the tally, the frequencies, the relative frequencies and the cumulative frequencies, and leaves the values or classes and the table rules to fill in. Counts above 25 are not tallied (the column would be wider than the page); the key says so.",
+        a: "The tally shows the counting itself, one mark per value and a diagonal across each group of five, so a reader can check a frequency without trusting it. It also makes the table usable as a tally-and-frequency exercise: the student copy blanks the tally, the frequencies, the relative frequencies and the cumulative frequencies, and leaves the values or classes and the table rules to fill in. Counts above 25 are not tallied: the column is fixed at the width of 25 marks, and a longer tally would not fit; the key says so.",
     },
     Faq {
         q: "What does cumulative frequency mean?",

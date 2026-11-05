@@ -18,7 +18,11 @@
 //!   and b is not. A value on an inner boundary goes in the class to its right. The last class is
 //!   written "a to b" and includes its upper boundary, the first boundary above the largest
 //!   value, so every value has a class. Boundaries are printed at the width's own precision, so
-//!   a width of 1e-7 is not printed as 0.
+//!   a width of 1e-7 is not printed as 0. The rule is printed in a header row directly above the
+//!   data rows, so the literal `<` in a class cell is explained in the table itself. Values are
+//!   assigned with a strict relative boundary check, not a width-scaled snap, so a value just
+//!   below a huge boundary stays in the class below it. Tiny ranges use a relative-tolerance nice
+//!   step, so 1e-20 to 3e-20 makes three classes, not twenty-one.
 //! * A comma between digits with exactly three digits after it is a thousands separator, as in the
 //!   ogive: `1,000` is one number, noted as ambiguous with the two-number reading. A comma still
 //!   inside a number (`12,5`, `1,0000`) is refused with both fixed readings.
@@ -46,6 +50,8 @@ const WIDTH_MAX: f64 = 10000.0;
 const FONT: &str = "Noto Sans, Liberation Sans, DejaVu Sans, Arial, sans-serif";
 const DEFAULT_DATA: &str = "4, 5, 5, 6, 6, 6, 7, 7, 8, 9";
 const DEFAULT_GROUPED: &str = "52, 58, 61, 63, 65, 66, 68, 70, 71, 72, 74, 75, 75, 77, 79, 82, 84, 85, 88, 93";
+/// Heights in centimetres: 2, 5, 8, 4 and 1 values in the five ten-centimetre classes.
+const DEFAULT_HEIGHTS: &str = "152, 158, 161, 164, 166, 168, 169, 171, 172, 174, 175, 176, 177, 178, 179, 181, 184, 186, 189, 192";
 
 pub const RAW: &str = "Raw values";
 pub const GROUPED: &str = "Grouped classes";
@@ -142,10 +148,10 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
             params: vec![("title", s("Test scores")), ("heading", s("Score")), ("show_answers", Value::B(false))],
         },
         Example {
-            name: "OpenStax grouped table",
+            name: "Heights, decimal proportions",
             params: vec![
                 ("mode", s(GROUPED)),
-                ("data", s(DEFAULT_GROUPED)),
+                ("data", s(DEFAULT_HEIGHTS)),
                 ("relative", s(DECIMAL)),
                 ("decimals", Value::I(2)),
                 ("title", s("Heights of students")),
@@ -266,15 +272,19 @@ pub fn ratio_scaled(c: u64, n: u64, d: u32) -> u128 {
     (2u128 * c as u128 * 10u128.pow(d) + n) / (2 * n)
 }
 
-/// A decimal proportion at `d` places: `0.05`, `0.35`, `1.00` (padded, so a column lines up).
-pub fn ratio_text(c: u64, n: u64, d: u32) -> String {
-    let u = ratio_scaled(c, n, d);
+/// A decimal proportion from `u` units of 10^-`d` (the inverse of [`ratio_scaled`]).
+pub fn ratio_text_scaled(u: u128, d: u32) -> String {
     let p = 10u128.pow(d);
     if d == 0 {
         u.to_string()
     } else {
         format!("{}.{:0w$}", u / p, u % p, w = d as usize)
     }
+}
+
+/// A decimal proportion at `d` places: `0.05`, `0.35`, `1.00` (padded, so a column lines up).
+pub fn ratio_text(c: u64, n: u64, d: u32) -> String {
+    ratio_text_scaled(ratio_scaled(c, n, d), d)
 }
 
 /// A cumulative relative frequency in the same unit as the relative column.
@@ -547,16 +557,94 @@ fn suggest_width(values: &[f64], start: f64) -> Option<f64> {
     None
 }
 
+/// A 1-2-5 step with a *relative* epsilon. `axes::nice_step_with` adds an absolute `+1e-12` to
+/// its comparison, which makes the 1x branch win for every range below about 1e-11: a 2e-20 range
+/// then gets a 1e-21 step and twenty-one classes for three values. The figure uses this local
+/// step only for its own class width; `auto_start` and `bins` stay shared with the histogram.
+fn nice_step_relative(range: f64, target: f64) -> f64 {
+    let raw = (range / target.max(1.0)).abs();
+    if !(raw.is_finite() && raw > 0.0) {
+        return 1.0;
+    }
+    let mag = 10f64.powf(raw.log10().floor());
+    if !(mag.is_finite() && mag > 0.0) {
+        return range.max(f64::MIN_POSITIVE);
+    }
+    for f in [1.0, 2.0, 5.0, 10.0] {
+        if raw <= f * mag * (1.0 + 1e-12) {
+            return f * mag;
+        }
+    }
+    10.0 * mag
+}
+
+/// The histogram's automatic width with a relative-tolerance step.
+fn auto_width_relative(values: &[f64]) -> f64 {
+    let (lo, hi) = values.iter().fold((f64::MAX, f64::MIN), |(a, b), v| (a.min(*v), b.max(*v)));
+    if values.is_empty() || !(hi > lo) {
+        return 1.0;
+    }
+    nice_step_relative(hi - lo, (1.0 + (values.len() as f64).log2()).ceil())
+}
+
+/// A class index with a relative, not width-scaled, edge tolerance. `stats::bins` snaps the
+/// quotient with `*1e9`, which is ±5e-10 of the width: at 5e11 that is ±250, so a value one below
+/// 1e12 lands in the class above. The class boundaries stay the histogram's; only the assignment
+/// uses this stricter test (1e-14 of the quotient, far below a representable difference but
+/// above arithmetic noise).
+fn class_index(v: f64, start: f64, width: f64) -> Option<usize> {
+    let q = (v - start) / width;
+    if !q.is_finite() || q < 0.0 {
+        return None;
+    }
+    let r = q.round();
+    let tol = 1e-14 * q.abs().max(1.0);
+    let idx = if (q - r).abs() <= tol { r } else { q.floor() };
+    (idx >= 0.0 && idx <= usize::MAX as f64).then_some(idx as usize)
+}
+
+/// The histogram's class list and boundaries, with the counts assigned by [`class_index`].
+fn bins_rel(values: &[f64], start: f64, width: f64) -> Option<Vec<super::Bin>> {
+    let mut bins = super::bins(values, start, width, true)?;
+    for b in &mut bins {
+        b.n = 0;
+    }
+    for v in values {
+        if let Some(i) = class_index(*v, start, width) {
+            if i < bins.len() {
+                bins[i].n += 1;
+            } else if let Some(last) = bins.last_mut() {
+                // a value at the last class's closed upper boundary belongs to that class; the
+                // shared bins list may end exactly there because of its own snap
+                last.n += 1;
+            }
+        }
+    }
+    Some(bins)
+}
+
+/// The shared `auto_start`, clamped so a rounded-up start can never sit above the smallest value.
+/// `auto_start` rounds the quotient to 1e-9 before flooring; at a tiny width and a large value
+/// that rounding can put the start above the data, leaving every value below the first class.
+fn safe_start(values: &[f64], width: f64) -> f64 {
+    let min = values.iter().cloned().fold(f64::INFINITY, f64::min);
+    if !(width.is_finite() && width > 0.0) {
+        return min;
+    }
+    let s = super::auto_start(values, width, true);
+    if s.is_finite() && s <= min { s } else { min }
+}
+
 /// The histogram's automatic width when the manual control can hold it and it makes a printable
 /// table. `None` when the range needs a width the control cannot take (the switch is the only
 /// honest fix then).
 fn auto_width_ok(values: &[f64]) -> Option<f64> {
-    let w = super::auto_width(values);
+    let w = auto_width_relative(values);
     if !(w.is_finite() && w >= WIDTH_MIN && w <= WIDTH_MAX) {
         return None;
     }
-    let st = super::auto_start(values, w, true);
-    let bins = super::bins(values, st, w, true)?;
+    let st = safe_start(values, w);
+    let bins = bins_rel(values, st, w)?;
     let sum: u64 = bins.iter().map(|b| b.n as u64).sum();
     (bins.len() <= MAX_ROWS && sum == values.len() as u64).then_some(w)
 }
@@ -567,13 +655,13 @@ fn grouped(values: &[f64], p: &Params) -> (Vec<(String, u64)>, Option<String>, O
     let auto = p.b("auto_classes");
     let min = values.iter().cloned().fold(f64::INFINITY, f64::min);
     let max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let mut width = if auto { super::auto_width(values) } else { p.f("class_width") };
-    let mut start = if auto { super::auto_start(values, width, true) } else { p.f("class_start") };
+    let mut width = if auto { auto_width_relative(values) } else { p.f("class_width") };
+    let mut start = if auto { safe_start(values, width) } else { p.f("class_start") };
     let mut fix: Option<String> = None;
 
     // the width is usable only when it is a finite number above zero
     if !(width.is_finite() && width > 0.0) {
-        let good = super::auto_width(values);
+        let good = auto_width_relative(values);
         let advice = if good >= WIDTH_MIN && good <= WIDTH_MAX {
             format!("Set Class width to {}.", value_text(good))
         } else {
@@ -584,10 +672,10 @@ fn grouped(values: &[f64], p: &Params) -> (Vec<(String, u64)>, Option<String>, O
             value_text(width)
         ));
         width = good;
-        start = super::auto_start(values, width, true);
+        start = safe_start(values, width);
     }
     if !start.is_finite() {
-        let good = super::auto_start(values, width, true);
+        let good = safe_start(values, width);
         let advice = if good >= START_MIN && good <= START_MAX {
             format!("Set First class starts at {} or less.", value_text(good))
         } else {
@@ -603,7 +691,7 @@ fn grouped(values: &[f64], p: &Params) -> (Vec<(String, u64)>, Option<String>, O
     }
     // a start above the smallest value would leave values out of the table
     if start > min + 1e-9 * min.abs().max(1.0) {
-        let good = super::auto_start(values, width, true);
+        let good = safe_start(values, width);
         let advice = if good >= START_MIN && good <= START_MAX {
             format!("Set First class starts at {} or less", value_text(min))
         } else {
@@ -621,7 +709,7 @@ fn grouped(values: &[f64], p: &Params) -> (Vec<(String, u64)>, Option<String>, O
     }
 
     let build = |width: f64, start: f64| -> Option<(Vec<super::Bin>, u64)> {
-        let bins = super::bins(values, start, width, true)?;
+        let bins = bins_rel(values, start, width)?;
         let sum: u64 = bins.iter().map(|b| b.n as u64).sum();
         Some((bins, sum))
     };
@@ -633,17 +721,26 @@ fn grouped(values: &[f64], p: &Params) -> (Vec<(String, u64)>, Option<String>, O
     if bad(&made) {
         // prefer the histogram's own automatic width: it is the readable choice, not the
         // narrowest width that merely satisfies the row cap
+        let auto_on = p.b("auto_classes");
+        let prefix = if auto_on { "Turn off Choose the class width automatically. " } else { "" };
         let (fallback_width, advice) = match auto_width_ok(values) {
-            Some(w) => (w, format!("Set Class width to {} or more (the automatic width)", value_text(w))),
+            Some(w) => (w, format!("{prefix}Set Class width to {} or more (the automatic width)", value_text(w))),
             None => match suggest_width(values, start) {
-                Some(w) => (w, format!("Set Class width to {} or more", value_text(w))),
-                None => (super::auto_width(values), "Turn on Choose the class width automatically".to_string()),
+                Some(w) => (w, format!("{prefix}Set Class width to {} or more", value_text(w))),
+                None => (
+                    auto_width_relative(values),
+                    if auto_on {
+                        "No manual class width up to 10000 makes at most 200 classes; the automatic width is the only option".to_string()
+                    } else {
+                        "Turn on Choose the class width automatically".to_string()
+                    },
+                ),
             },
         };
         let fallback_start = if fallback_width.is_finite() && fallback_width > 0.0 {
-            if start.is_finite() && start <= min { start } else { super::auto_start(values, fallback_width, true) }
+            if start.is_finite() && start <= min { start } else { safe_start(values, fallback_width) }
         } else {
-            super::auto_start(values, fallback_width, true)
+            safe_start(values, fallback_width)
         };
         fix.get_or_insert_with(|| {
             format!(
@@ -658,8 +755,8 @@ fn grouped(values: &[f64], p: &Params) -> (Vec<(String, u64)>, Option<String>, O
     }
     // the automatic choice is the safety net: it always makes a printable number of classes
     if bad(&made) {
-        width = super::auto_width(values);
-        start = super::auto_start(values, width, true);
+        width = auto_width_relative(values);
+        start = safe_start(values, width);
         fix.get_or_insert_with(|| {
             format!(
                 "The class settings could not be used, so the classes are chosen automatically (Class width {}).",
@@ -669,19 +766,47 @@ fn grouped(values: &[f64], p: &Params) -> (Vec<(String, u64)>, Option<String>, O
         made = build(width, start);
     }
     // a width so small, or a start so large, that two adjacent boundaries print the same is not a
-    // table: use the automatic classes and say so
+    // table: try a width that really resolves them (the data-span suggestion, then wider), not the
+    // same automatic width that just failed
     let mut formatted = made.as_ref().and_then(|(bins, _)| boundary_texts(bins, width));
     if formatted.is_none() {
-        width = super::auto_width(values);
-        start = super::auto_start(values, width, true);
-        fix.get_or_insert_with(|| {
-            format!(
-                "The class boundaries repeat at this width and data magnitude, so the classes are chosen automatically (Class width {}).",
-                value_text(width)
-            )
-        });
-        made = build(width, start);
-        formatted = made.as_ref().and_then(|(bins, _)| boundary_texts(bins, width));
+        let failed_width = width;
+        let mut candidate = suggest_width(values, start).unwrap_or_else(|| auto_width_relative(values));
+        let mut found: Option<(Vec<super::Bin>, f64)> = None;
+        for _ in 0..24 {
+            if !(candidate.is_finite() && candidate > 0.0) {
+                break;
+            }
+            let st = if start.is_finite() && start <= min { start } else { safe_start(values, candidate) };
+            if let Some((bins, sum)) = build(candidate, st) {
+                if sum == values.len() as u64 && bins.len() <= MAX_ROWS {
+                    if boundary_texts(&bins, candidate).is_some() {
+                        found = Some((bins, candidate));
+                        break;
+                    }
+                }
+            }
+            candidate *= 10.0;
+        }
+        if let Some((bins, w)) = found {
+            let advice = if w >= WIDTH_MIN && w <= WIDTH_MAX {
+                if p.b("auto_classes") {
+                    format!("Turn off Choose the class width automatically. Set Class width to {}; the classes now use {}.", value_text(w), value_text(w))
+                } else {
+                    format!("Set Class width to {} or more; the classes now use {}.", value_text(w), value_text(w))
+                }
+            } else {
+                format!("The manual Class width control cannot hold {}; the table uses it as a resolving width.", value_text(w))
+            };
+            fix.get_or_insert_with(|| {
+                format!(
+                    "The class width {} is too small to print distinct boundaries at these values. {advice}",
+                    value_text(failed_width)
+                )
+            });
+            made = Some((bins, values.len() as u64));
+            formatted = made.as_ref().and_then(|(bins, _)| boundary_texts(bins, w));
+        }
     }
     match (made, formatted) {
         (Some((bins, _)), Some((bounds, width_txt))) => {
@@ -826,21 +951,33 @@ pub fn model(p: &Params) -> Result<Model, String> {
     let mut key_notes = Vec::new();
     if rows.iter().any(|r| r.f > MAX_TALLY) {
         key_notes.push(format!(
-            "The tally column draws counts up to {MAX_TALLY}; a larger count is left blank. Choose {} for {} to turn the column off.",
-            OFF,
-            "Tally column"
+            "The tally column draws counts up to {MAX_TALLY}; a larger count is left blank. Turn off Tally column to hide the column."
         ));
     }
-    if rel == Rel::Percent {
-        let scale = 10u128.pow(decimals);
-        let printed: u128 = rows.iter().map(|r| pct_scaled(r.f, n, decimals)).sum();
-        let exact = 100 * scale;
-        if printed != exact {
-            key_notes.push(format!(
-                "Each percent is rounded half up from f/n, so the cells add to {}; the Total row is exactly 100% (n/n). The sum of the rounded cells is not an error.",
-                pct_text_scaled(printed, decimals)
-            ));
+    match rel {
+        Rel::Percent => {
+            let scale = 10u128.pow(decimals);
+            let printed: u128 = rows.iter().map(|r| pct_scaled(r.f, n, decimals)).sum();
+            let exact = 100 * scale;
+            if printed != exact {
+                key_notes.push(format!(
+                    "Each percent is rounded half up from f/n, so the cells add to {}; the Total row is exactly 100% (n/n). The sum of the rounded cells is not an error.",
+                    pct_text_scaled(printed, decimals)
+                ));
+            }
         }
+        Rel::Decimal => {
+            let scale = 10u128.pow(decimals);
+            let printed: u128 = rows.iter().map(|r| ratio_scaled(r.f, n, decimals)).sum();
+            if printed != scale {
+                key_notes.push(format!(
+                    "Each decimal is rounded half up from f/n, so the cells add to {}; the Total row is exactly {} (n/n). The sum of the rounded cells is not an error.",
+                    ratio_text_scaled(printed, decimals),
+                    ratio_text_scaled(scale, decimals)
+                ));
+            }
+        }
+        _ => {}
     }
     Ok(Model {
         mode,
@@ -1185,10 +1322,17 @@ fn draw(m: &Model, key: bool, p: &Params) -> String {
         None => Vec::new(),
     };
     let note_lines: Vec<String> = m.notes.iter().flat_map(|s| wrap(s, note_fs, inner)).collect();
-    let key_lines: Vec<String> = if key { m.key_notes.iter().flat_map(|s| wrap(s, note_fs, inner)).collect() } else { Vec::new() };
+    // key-only notes reserve their space in both copies, so the student page is the same size
+    let key_lines: Vec<String> = m.key_notes.iter().flat_map(|s| wrap(s, note_fs, inner)).collect();
     let edge_lines: Vec<String> = match &m.edge {
         Some(s) if !m.empty => wrap(s, note_fs, inner),
         _ => Vec::new(),
+    };
+    // the interval rule lives in the table header, not only in a note: a to <b with its meaning
+    let caption_lines: Vec<String> = if m.mode == Mode::Grouped {
+        wrap("a to <b: a is included and b is not; the last class is a to b.", tfs, table_w - 2.0 * pad)
+    } else {
+        Vec::new()
     };
     let instr_lines = if m.empty { wrap(&instruction(m), tfs, table_w - 2.0 * pad) } else { Vec::new() };
 
@@ -1202,12 +1346,16 @@ fn draw(m: &Model, key: bool, p: &Params) -> String {
     let table_top = y;
     let head_lines = cols.iter().map(|c| c.head.len()).max().unwrap_or(1).max(1);
     let head_h = head_lines as f64 * tfs * 1.25 + 12.0 * k;
+    let header_bottom = table_top + head_h;
+    let caption_h = if caption_lines.is_empty() { 0.0 } else { caption_lines.len() as f64 * tfs * 1.3 + 10.0 * k };
+    let caption_bottom = header_bottom + caption_h;
+    let data_top = caption_bottom;
     let body_h = if m.empty {
         instr_lines.len() as f64 * tfs * 1.3 + 12.0 * k
     } else {
         m.rows.len() as f64 * row_h + if m.total { row_h } else { 0.0 }
     };
-    let table_h = head_h + body_h;
+    let table_h = head_h + caption_h + body_h;
     let table_bottom = table_top + table_h;
     let mut ny = table_bottom + 10.0;
     let all_notes: Vec<&String> = edge_lines.iter().chain(note_lines.iter()).chain(key_lines.iter()).collect();
@@ -1220,8 +1368,10 @@ fn draw(m: &Model, key: bool, p: &Params) -> String {
     d.defs(&fills.defs());
     let desc = if m.empty {
         "An empty frequency table: type values in Data to fill it in.".to_string()
-    } else {
+    } else if key {
         "A frequency distribution table: each value or class with its tally, frequency, relative frequency, cumulative frequency and cumulative relative frequency.".to_string()
+    } else {
+        "A frequency table for students: the values or classes with blank tally, frequency, relative-frequency and cumulative columns to complete.".to_string()
     };
     d.describe(if m.title.is_empty() { "Frequency table" } else { &m.title }, &desc);
     let mut ty = margin;
@@ -1250,15 +1400,21 @@ fn draw(m: &Model, key: bool, p: &Params) -> String {
         r#"<rect class="thead-band" x="{x0:.2}" y="{table_top:.2}" width="{table_w:.2}" height="{head_h:.2}" fill="{header_fill}" stroke="none"/>"#
     ));
     seg(&mut d, "rule", x0, table_top, x_end, table_top, ink, 1.6);
-    seg(&mut d, "rule", x0, table_top + head_h, x_end, table_top + head_h, ink, 1.6);
+    seg(&mut d, "rule", x0, header_bottom, x_end, header_bottom, ink, 1.6);
+    if caption_h > 0.0 {
+        seg(&mut d, "rule", x0, caption_bottom, x_end, caption_bottom, ink, 1.2);
+    }
     seg(&mut d, "rule", x0, table_bottom, x_end, table_bottom, ink, 1.6);
     // outer sides
     seg(&mut d, "rule", x0, table_top, x0, table_bottom, ink, 1.4);
     seg(&mut d, "rule", x_end, table_top, x_end, table_bottom, ink, 1.4);
-    // inner verticals: the whole table, except an empty table's instruction row, which spans it
-    let v_bottom = if m.empty { table_top + head_h } else { table_bottom };
+    // inner verticals: the header, then the data rows; the caption and an empty table's
+    // instruction span the whole width
     for xv in &xs[1..] {
-        seg(&mut d, "rule", *xv, table_top, *xv, v_bottom, ink, 1.0);
+        seg(&mut d, "rule", *xv, table_top, *xv, header_bottom, ink, 1.0);
+        if !m.empty {
+            seg(&mut d, "rule", *xv, caption_bottom, *xv, table_bottom, ink, 1.0);
+        }
     }
     // header text, each column's lines centred in the header band
     for (ci, col) in cols.iter().enumerate() {
@@ -1269,15 +1425,22 @@ fn draw(m: &Model, key: bool, p: &Params) -> String {
             put(&mut d, ax, first + j as f64 * tfs * 1.25, tfs, anchor, "thead", ink, line);
         }
     }
+    if !caption_lines.is_empty() {
+        let block = caption_lines.len() as f64 * tfs * 1.3;
+        let first = header_bottom + (caption_h - block) / 2.0 + tfs * 0.82;
+        for (j, line) in caption_lines.iter().enumerate() {
+            put(&mut d, w / 2.0, first + j as f64 * tfs * 1.3, tfs, "middle", "caption", ink, line);
+        }
+    }
     if m.empty {
-        let y0 = table_top + head_h;
+        let y0 = data_top;
         let block = instr_lines.len() as f64 * tfs * 1.3;
         let first = y0 + (body_h - block) / 2.0 + tfs * 0.82;
         for (j, line) in instr_lines.iter().enumerate() {
             put(&mut d, w / 2.0, first + j as f64 * tfs * 1.3, tfs, "middle", "instruction", ink, line);
         }
     } else {
-        let mut row_top = table_top + head_h;
+        let mut row_top = data_top;
         for i in 0..m.rows.len() {
             if i > 0 {
                 seg(&mut d, "rule", x0, row_top, x_end, row_top, ink, 1.0);
@@ -1293,7 +1456,8 @@ fn draw(m: &Model, key: bool, p: &Params) -> String {
 
     // notes under the table: the edge rule first, then safe notes, then the key's answer notes
     let mut ny = table_bottom + 10.0;
-    for line in edge_lines.iter().chain(note_lines.iter()).chain(key_lines.iter()) {
+    let key_draw: &[String] = if key { &key_lines } else { &[] };
+    for line in edge_lines.iter().chain(note_lines.iter()).chain(key_draw.iter()) {
         put(&mut d, margin, ny + note_fs * 0.82, note_fs, "start", "note", ink, line);
         ny += note_fs * 1.35;
     }
