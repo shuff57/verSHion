@@ -37,10 +37,11 @@
 //! vp axis ticks and the rms guide are key-only: on the student copy they would let the blank vp and rms cells be read
 //! off the axis. The shaded tail is drawn on the key only. The description names no number and no answer.
 //!
-//! Share links. This figure is new at share version 4 and unreleased; no saved specification or link can predate its
-//! `speeds` switch or its 1-decimal default, so it has no `start::added_in` entry. A migration that could separate an
-//! already-made version-4 link from this one would need a global share-version bump and a `was_overridden` value for
-//! every existing figure, so the note here is the documented path.
+//! Share links. This figure is new and unreleased: it was authored at share version 4, and the catalog has since
+//! reached 6. No saved specification or link can predate its `speeds` switch or its 1-decimal default, so it has no
+//! `start::added_in` entry. A migration that could separate an already-made link of this figure from this one would
+//! need a global share-version bump and a `was_overridden` value for every existing figure, so the note here is the
+//! documented path.
 use std::f64::consts::PI;
 
 use crate::figures::chart::{fmt, nice_step, ticks, Frame};

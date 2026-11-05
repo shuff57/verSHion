@@ -741,14 +741,14 @@ fn the_mark_is_drawn_at_the_axis_end_and_refused_just_past_it() {
 
 #[test]
 fn the_share_migration_is_the_documented_note_path() {
-    // The figure is new at share version 4 and unreleased; a migration that could tell a round-1 v4 link from
+    // The figure is new and unreleased (authored at version 4, catalog now 6); a migration that could tell an older link from
     // this one would need a global share-version bump and a was_overridden value for every figure. This test pins
     // that documented decision rather than silently pretending a link predates the switch.
     assert!(crate::figures::start::added_in(ID).is_empty(), "a migration entry was added without revisiting this note");
-    assert_eq!(crate::figures::share::VERSION, 4, "the global share version moved; revisit the Boltzmann migration note");
+    assert_eq!(crate::figures::share::VERSION, 6, "the global share version moved; revisit the Boltzmann migration note");
     let src = include_str!("../boltzmann.rs");
-    assert!(src.contains("new at share version 4 and unreleased"), "the header note is missing");
-    assert!(src.contains("no saved specification or link can predate"), "the header note is incomplete");
+    assert!(src.contains("new and unreleased"), "the header note is missing");
+    assert!(src.contains("saved specification or link can predate"), "the header note is incomplete");
 }
 
 #[test]
