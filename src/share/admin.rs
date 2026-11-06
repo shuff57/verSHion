@@ -343,6 +343,29 @@ impl AdminModel {
         }
     }
 
+    /// Capture hook only (`VERSHION_SCREEN=shared:admin...`): shows `queue` as if it had just been read, with no
+    /// request. `step` "approve" / "refuse" opens the form for the first application; "confirm" is an approval
+    /// sent without a live token, waiting for the password (what [`Self::decide`] leaves on screen).
+    pub fn qa_show(&mut self, queue: Queue, step: &str) {
+        self.reset();
+        let first = queue.items.first().cloned();
+        self.state = State::Loaded(queue);
+        let Some(app) = first else { return };
+        match step {
+            "approve" | "confirm" => {
+                let mut d = Decision::of(&app, true);
+                if step == "confirm" {
+                    d.evidence_note = "Listed on the staff page of the school's website, science department".into();
+                    self.confirming = true;
+                    self.notice = Some("Confirm your password to make a change. It is used once and not kept.".into());
+                }
+                self.decision = Some(d);
+            }
+            "refuse" => self.decision = Some(Decision::of(&app, false)),
+            _ => {}
+        }
+    }
+
     /// Opens the form for one application.
     pub fn open_decision(&mut self, app: &Application, approve: bool) {
         if self.busy() {

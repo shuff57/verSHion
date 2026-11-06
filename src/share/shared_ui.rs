@@ -40,6 +40,27 @@ pub struct SharedUi {
     /// The approval queue (an admin's tab: it does no I/O until that tab is opened).
     pub admin: super::admin::AdminModel,
     repaint_set: bool,
+    /// Capture hook only ([`Self::qa_admin`]): the page is drawn as a signed-in admin's, with no server.
+    qa_admin: bool,
+}
+
+impl SharedUi {
+    /// Capture hook only (`VERSHION_SCREEN=shared:admin...`): the page draws as a signed-in admin's on the approval
+    /// queue, showing `queue` as read. No request is made: the account stays as it is and the queue's session is none.
+    pub fn qa_admin(&mut self, queue: super::admin::Queue, step: &str) {
+        self.qa_admin = true;
+        self.model.goto(Tab::Admin);
+        self.admin.qa_show(queue, step);
+    }
+
+    /// The account as the page sees it (a signed-in admin's under [`Self::qa_admin`]).
+    fn snapshot(&self, account: &AccountUi) -> super::publish::AccountSnapshot {
+        if self.qa_admin { super::publish::AccountSnapshot::of_gate(Gate::Ready) } else { snapshot_of(&account.model) }
+    }
+
+    fn is_admin(&self, account: &AccountUi) -> bool {
+        self.qa_admin || account.model.is_admin()
+    }
 }
 
 fn goto_id() -> egui::Id {
@@ -234,7 +255,7 @@ impl SharedUi {
         // (an address or code field the Circles tab emptied or closed leaves no undo history, whichever tab shows)
         super::circles_ui::forget_cleared_fields(ui.ctx(), &self.circles);
         account.pin();
-        let snap = snapshot_of(&account.model);
+        let snap = self.snapshot(account);
         // (critic 60 I1: the tabs are drawn only while signed in, so the Circles page is told of a sign-out, or of
         // another account, here; what it read for one account is never shown to the next)
         self.circles.note_account(&snap);
@@ -244,7 +265,7 @@ impl SharedUi {
         self.model.note_account(&snap, &mut account.invite);
         // The queue belongs to one admin: another sign-in never sees what this one read.
         self.admin.note_account(&snap);
-        let is_admin = account.model.is_admin();
+        let is_admin = self.is_admin(account);
         let guide = self.model.guide(&snap.gate, account.model.page, account.invite.redeemed());
         // An invite code taken: the tabs ask again.
         if account.invite.redeemed() && self.model.invite_needed {
@@ -388,7 +409,7 @@ impl SharedUi {
     /// approval, which gets only the Circles and Settings tabs (round 54).
     pub(super) fn tabs(&mut self, ui: &mut Ui, account: &mut AccountUi, browse: &mut BrowseUi, mine: &mut MineUi, banks: &mut Vec<QuestionBank>, exams: &[Exam], pending: bool) -> bool {
         // Circles first: a request to open a circle or bank, the model's frame, copies and badges.
-        let snap = snapshot_of(&account.model);
+        let snap = self.snapshot(account);
         if !self.repaint_set {
             let c = ui.ctx().clone();
             self.circles.set_repaint(std::sync::Arc::new(move || c.request_repaint()));
@@ -422,7 +443,7 @@ impl SharedUi {
         }
         let changed = self.circles.sync(banks, &mut browse.model);
         // The queue is an admin's tab only: a teacher's stray request for it is not drawn as one.
-        let is_admin = account.model.is_admin();
+        let is_admin = self.is_admin(account);
         // (round 54) only the tabs this account may use; a pending account's stray request for a public tab is not
         // drawn as one.
         let tab = if !tabs_for(&snap.gate, is_admin).contains(&self.model.tab) {

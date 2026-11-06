@@ -449,3 +449,18 @@ fn the_admin_tab_draws_its_list_form_and_password_box_at_every_width() {
         page.tabs(x, &mut a, &mut b, &mut m, &mut banks, &[], false);
     });
 }
+
+#[test]
+fn the_capture_fixture_shows_the_queue_and_its_forms_without_a_request() {
+    let fixture: Value = serde_json::from_str(include_str!("../../tools/ui-grading/fixtures/admin-queue.json")).unwrap();
+    let q = parse_queue(&fixture).expect("the capture fixture is a queue");
+    assert_eq!(q.items.len(), 5);
+    let mut m = AdminModel::new(Runner::Inline);
+    m.qa_show(q.clone(), "");
+    assert_eq!(m.state, State::Loaded(q.clone()));
+    assert!(m.decision.is_none() && !m.confirming && !m.busy());
+    m.qa_show(q.clone(), "refuse");
+    assert_eq!(m.decision.as_ref().map(|d| (d.who.as_str(), d.approve)), Some(("Rosa Delgado", false)));
+    m.qa_show(q, "confirm");
+    assert!(m.confirming && m.decision.as_ref().is_some_and(|d| d.approve) && m.password.is_empty());
+}

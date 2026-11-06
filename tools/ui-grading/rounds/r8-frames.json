@@ -1,0 +1,12 @@
+[
+ ["grade", "seed", {"VERSHION_SCREEN": "grade"}],
+ ["grade-exam", "seed", {"VERSHION_SCREEN": "grade:1"}],
+ ["grade-student", "seed", {"VERSHION_SCREEN": "grade:1:2"}],
+ ["grade-tray", "seed", {"VERSHION_SCREEN": "grade:1:1:1:tray"}],
+ ["admin-queue", "seed", {"VERSHION_SCREEN": "shared:admin"}],
+ ["admin-approve", "seed", {"VERSHION_SCREEN": "shared:admin:approve"}],
+ ["admin-confirm", "seed", {"VERSHION_SCREEN": "shared:admin:confirm"}],
+ ["fig-vsepr", "seed", {"VERSHION_SCREEN": "figures", "VERSHION_FIG": "vsepr-shapes"}],
+ ["fig-boltzmann", "seed", {"VERSHION_SCREEN": "figures", "VERSHION_FIG": "boltzmann-distribution"}],
+ ["fig-frequency", "seed", {"VERSHION_SCREEN": "figures", "VERSHION_FIG": "frequency-table"}]
+]

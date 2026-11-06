@@ -1,0 +1,115 @@
+{
+ "open": 5,
+ "oldestAgeSeconds": 356400,
+ "items": [
+  {
+   "request_id": "req_7f2a01",
+   "user_id": "usr_3c91d0",
+   "email": "rdelgado@pinecrestusd.org",
+   "email_domain": "pinecrestusd.org",
+   "trust": "pending",
+   "age_seconds": 356400,
+   "applicant": {
+    "display_name": "Rosa Delgado",
+    "profile": {
+     "school": "Pinecrest High School"
+    }
+   },
+   "server_labels": {
+    "prior_rejections": 0,
+    "profile_changed": false,
+    "suspended": false,
+    "domain_history": {
+     "approved": 12,
+     "rejected": 1
+    },
+    "domain_hint": "Pinecrest USD staff"
+   }
+  },
+  {
+   "request_id": "req_7f2a02",
+   "user_id": "usr_3c91d4",
+   "email": "marcus.bell.teaches@gmail.com",
+   "email_domain": "gmail.com",
+   "trust": "pending",
+   "age_seconds": 190800,
+   "applicant": {
+    "display_name": "Marcus Bell",
+    "profile": {
+     "school": "Pinecrest High School"
+    }
+   },
+   "server_labels": {
+    "prior_rejections": 1,
+    "profile_changed": false,
+    "suspended": false
+   }
+  },
+  {
+   "request_id": "req_7f2a03",
+   "user_id": "usr_3c91d9",
+   "email": "hosei@pinecrestusd.org",
+   "email_domain": "pinecrestusd.org",
+   "trust": "pending",
+   "age_seconds": 93600,
+   "applicant": {
+    "display_name": "Hannah Osei",
+    "profile": {
+     "school": "Pinecrest Middle School"
+    }
+   },
+   "server_labels": {
+    "prior_rejections": 0,
+    "profile_changed": true,
+    "suspended": false,
+    "domain_history": {
+     "approved": 12,
+     "rejected": 1
+    },
+    "domain_hint": "Pinecrest USD staff"
+   }
+  },
+  {
+   "request_id": "req_7f2a04",
+   "user_id": "usr_3c91e2",
+   "email": "k.yamamoto@students.pinecrestusd.org",
+   "email_domain": "students.pinecrestusd.org",
+   "trust": "pending",
+   "age_seconds": 18000,
+   "applicant": {
+    "display_name": "",
+    "profile": {
+     "school": ""
+    }
+   },
+   "server_labels": {
+    "prior_rejections": 0,
+    "profile_changed": false,
+    "suspended": false,
+    "domain_history": {
+     "approved": 0,
+     "rejected": 3
+    }
+   }
+  },
+  {
+   "request_id": "req_7f2a05",
+   "user_id": "usr_3c91e7",
+   "email": "ebrandt@valleyoakacademy.org",
+   "email_domain": "valleyoakacademy.org",
+   "trust": "pending",
+   "age_seconds": 2400,
+   "applicant": {
+    "display_name": "Elliot Brandt",
+    "profile": {
+     "school": "Valley Oak Academy"
+    }
+   },
+   "server_labels": {
+    "prior_rejections": 2,
+    "profile_changed": false,
+    "suspended": true
+   }
+  }
+ ]
+}
