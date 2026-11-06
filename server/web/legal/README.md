@@ -19,6 +19,14 @@ Static pages: `index.html`, `terms.html`, `privacy.html`, `copyright.html`, `acc
 7. Terms changes take effect 30 days after we email you (terms.html).
 8. Liability capped at one hundred US dollars; no indemnity clause (terms.html).
 
+## Production copy
+
+`fill.py` fills the operator, contact email, DMCA block, governing law, hosting and mail-provider lines into a COPY
+of these pages (the repo keeps its placeholders). Deploy: `cp -r server/web/legal <web-root>/legal && rm <web-root>/legal/README.md
+<web-root>/legal/fill.py && python3 server/web/legal/fill.py <web-root>/legal`. Still marked on purpose: the venue county (terms.html),
+the draft banner and the `[CONFIRM]` notes. Edit the constants at the top of `fill.py` when a decision changes (for example a
+registered DMCA agent), then rerun on a fresh copy.
+
 ## Placeholders to fill (search for `[` in the HTML)
 
 Styled `.ph` (to fill) and `.confirm` (to decide/verify) spans mark every one.
