@@ -246,42 +246,76 @@ fn status_pill(ui: &mut egui::Ui, text: &str, fill: egui::Color32, fg: egui::Col
 /// One panel of the workspace: a card as tall as its contents, up to `size.y`, scrolling inside past that
 /// (a card stretched to the window around two lines read as an empty slab).
 fn panel(ui: &mut egui::Ui, salt: &str, size: Vec2, f: impl FnOnce(&mut egui::Ui)) {
+    panel_ex(ui, salt, size, 0.0, None, f);
+}
+
+/// [`panel`] with a floor on its height (`min_h`, so two panels side by side can end together) and,
+/// with `more` (singular and plural noun), a panel that ends between its rows only: a row the
+/// bottom edge would cut is hidden whole (a card too, unless it is the panel's first in view) and a
+/// cue under the panel says how many wait below ("2 more words below"). Returns the card's height.
+fn panel_ex(ui: &mut egui::Ui, salt: &str, size: Vec2, min_h: f32, more: Option<(&str, &str)>, f: impl FnOnce(&mut egui::Ui)) -> f32 {
+    let cue_id = egui::Id::new(("grade_panel_cue", salt));
+    let cue_h = if more.is_some() && ui.ctx().data(|d| d.get_temp::<bool>(cue_id)).unwrap_or(false) { 24.0 } else { 0.0 };
     ui.allocate_ui_with_layout(size, egui::Layout::top_down(egui::Align::Min), |ui| {
         kit::card().inner_margin(Margin::same(16)).show(ui, |ui| {
             ui.set_width(size.x - 34.0);
+            if min_h > 0.0 {
+                ui.set_min_height((min_h - 34.0).min(size.y - 34.0));
+            }
             let rows = egui::Id::new("grade_panel_rows");
             ui.ctx().data_mut(|d| d.remove_temp::<Vec<Rect>>(rows));
             let out = egui::ScrollArea::vertical()
                 .id_salt(salt)
                 .auto_shrink([false, true])
-                .max_height(size.y - 30.0)
+                .max_height(size.y - 30.0 - cue_h)
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     f(ui)
                 });
+            let noted: Vec<Rect> = ui.ctx().data(|d| d.get_temp::<Vec<Rect>>(rows)).unwrap_or_default();
             // a card that ends on half a line reads as guillotined: hide the line the panel's
             // bottom edge cuts through, so the edge falls in the gap under the last whole one
-            let cut = ui
-                .ctx()
-                .data(|d| d.get_temp::<Vec<Rect>>(rows))
-                .unwrap_or_default()
-                .into_iter()
+            let vp = out.inner_rect;
+            let cut = noted
+                .iter()
                 .filter(|r| {
-                    // only a line-sized row is hidden whole: a card only loses its own bottom
-                    // padding to the edge, and hiding a whole card would empty the panel
-                    r.height() < 72.0 && r.top() < out.inner_rect.bottom() - 1.0 && r.bottom() > out.inner_rect.bottom() + 1.0
+                    // a line-sized row is hidden whole; a card too in a panel that counts its rows,
+                    // unless it is the first thing in view (hiding it would empty the panel)
+                    let hideable = r.height() < 72.0 || (more.is_some() && r.top() > vp.top() + vp.height() * 0.35);
+                    hideable && r.top() < vp.bottom() - 1.0 && r.bottom() > vp.bottom() + 1.0
                 })
                 .map(|r| r.top())
                 .fold(f32::INFINITY, f32::min);
             if cut.is_finite() {
                 let band = Rect::from_min_max(
-                    Pos2::new(out.inner_rect.left(), cut),
+                    Pos2::new(out.inner_rect.left(), cut - 2.0),
                     Pos2::new((out.inner_rect.right() - 8.0).max(out.inner_rect.left()), out.inner_rect.bottom()),
                 );
                 ui.painter().with_clip_rect(out.inner_rect).rect_filled(band, 0.0, theme::card());
             }
-        });
-    });
+            if let Some((one, many)) = more {
+                let edge = if cut.is_finite() { cut } else { vp.bottom() };
+                let below = noted.iter().filter(|r| r.top() >= edge - 1.0).count();
+                let overflow = out.content_size.y > out.inner_rect.height() + 2.0;
+                ui.ctx().data_mut(|d| d.insert_temp(cue_id, overflow));
+                if overflow && cue_h > 0.0 {
+                    let (bar, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), cue_h), Sense::hover());
+                    let text = match below {
+                        0 => "More below".to_string(),
+                        1 => format!("1 more {one} below"),
+                        n => format!("{n} more {many} below"),
+                    };
+                    kit::more_below(ui, bar, &text);
+                } else if overflow {
+                    ui.ctx().request_repaint();
+                }
+            }
+        })
+        .response
+        .rect
+        .height()
+    })
+    .inner
 }
 
 /// A widget row that the panel's bottom edge may cut; see `panel`.
@@ -351,10 +385,18 @@ fn exam_chooser(ui: &mut egui::Ui, exams: &[(String, String, usize, usize)], sta
         for (id, name, n, check) in order {
             let (r, resp) = ui.allocate_exact_size(Vec2::new(w, row_h), Sense::click());
             let on = state.exam_id.as_deref() == Some(id.as_str());
+            // One exam is pointed at, the one named in "Next up": its row is the raised one and its
+            // Open the solid one, whatever the pointer is over. An exam with no work is the
+            // quietest row (the pointer resting on it used to fill it and its button solid, so the
+            // page pointed at two exams).
+            let is_next = next.as_ref().is_some_and(|(nid, _, _)| nid == id);
+            let empty = *n == 0;
             if on {
                 ui.painter().rect_filled(r, CornerRadius::same(10), theme::accent_faded());
-            } else if resp.hovered() {
+            } else if is_next {
                 ui.painter().rect_filled(r, CornerRadius::same(10), theme::hover_bg());
+            } else if resp.hovered() && !empty {
+                ui.painter().rect_filled(r, CornerRadius::same(10), theme::hover_bg().gamma_multiply(0.6));
             }
             ui.painter().line_segment([r.left_bottom(), r.right_bottom()], Stroke::new(1.0, theme::border()));
             let cy = r.center().y;
@@ -362,9 +404,14 @@ fn exam_chooser(ui: &mut egui::Ui, exams: &[(String, String, usize, usize)], sta
             // pills: the row that starts the whole task now says what it does.
             let action_w = 78.0;
             let act = Rect::from_min_size(Pos2::new(r.right() - 12.0 - action_w, cy - 14.0), Vec2::new(action_w, 28.0));
-            let act_fill = if resp.hovered() { theme::accent_col() } else { theme::accent_faded() };
-            let act_fg = if resp.hovered() { theme::on_accent_col() } else { theme::accent_col() };
-            ui.painter().rect(act, CornerRadius::same(8), act_fill, Stroke::new(1.0, theme::accent_col()), egui::StrokeKind::Inside);
+            let (act_fill, act_fg, act_stroke) = if is_next {
+                (theme::accent_col(), theme::on_accent_col(), theme::accent_col())
+            } else if empty {
+                (egui::Color32::TRANSPARENT, theme::muted_col(), if resp.hovered() { theme::muted_col() } else { theme::border() })
+            } else {
+                (theme::accent_faded(), theme::accent_col(), theme::accent_col())
+            };
+            ui.painter().rect(act, CornerRadius::same(8), act_fill, Stroke::new(1.0, act_stroke), egui::StrokeKind::Inside);
             let label = ui.painter().layout_no_wrap("Open".to_string(), FontId::new(12.5, theme::bold_family()), act_fg);
             ui.painter().galley(Pos2::new(act.left() + 10.0, cy - label.size().y / 2.0), label, act_fg);
             ui.painter().text(
@@ -726,6 +773,10 @@ fn transcript_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage,
     }
     let open_key = state.sel.as_ref().filter(|(pid, _)| state.tray_open && pid == &p.id).map(|(_, k)| k.clone());
     let mut pick: Option<String> = None;
+    // Lines that carry their own numbers ("10. because ...") need no index column beside them: two
+    // counts side by side read as double numbering.
+    let gutter = !lines.iter().filter(|l| !l.trim().is_empty()).all(|l| own_number(l));
+    let tight = ui.available_width() < 520.0;
     for (li, line) in lines.iter().enumerate() {
         let reading = state.read_line == Some(li as i32);
         let bg = ui.painter().add(egui::Shape::Noop);
@@ -733,21 +784,30 @@ fn transcript_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage,
             .horizontal_top(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
                 ui.spacing_mut().interact_size.y = 24.0;
-                let (g, _) = ui.allocate_exact_size(Vec2::new(30.0, 24.0), Sense::hover());
-                ui.painter().text(
-                    g.left_center() + Vec2::new(0.0, 1.0),
-                    Align2::LEFT_CENTER,
-                    (li + 1).to_string(),
-                    FontId::proportional(12.0),
-                    if reading { theme::accent_col() } else { theme::muted_col() },
-                );
+                if gutter {
+                    let (g, _) = ui.allocate_exact_size(Vec2::new(30.0, 24.0), Sense::hover());
+                    ui.painter().text(
+                        g.left_center() + Vec2::new(0.0, 1.0),
+                        Align2::LEFT_CENTER,
+                        (li + 1).to_string(),
+                        FontId::proportional(12.0),
+                        if reading { theme::accent_col() } else { theme::muted_col() },
+                    );
+                } else {
+                    ui.add_space(6.0);
+                }
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing = Vec2::new(0.0, 6.0);
                     ui.spacing_mut().interact_size.y = 24.0;
                     for seg in line_segments(line, li, flags) {
                         match seg {
                             Seg::Text(t) => {
-                                ui.label(RichText::new(t).size(16.0).color(theme::ink()));
+                                if corrected {
+                                    // the corrected text is set as math: "x^2" shows a raised 2
+                                    ui.label(math_text(t, 16.0, theme::ink()));
+                                } else {
+                                    ui.label(RichText::new(t).size(16.0).color(theme::ink()));
+                                }
                             }
                             Seg::Flag(fi) => {
                                 let f = &flags[fi];
@@ -778,21 +838,97 @@ fn transcript_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage,
             ui.painter().set(bg, egui::Shape::rect_filled(r, CornerRadius::same(6), theme::hover_bg()));
             ui.painter().rect_filled(Rect::from_min_size(r.min, Vec2::new(3.0, r.height())), CornerRadius::same(2), theme::accent_col());
         }
-        ui.add_space(7.0);
+        ui.add_space(if tight { 1.0 } else { 7.0 });
     }
     if let Some(k) = pick {
         state.tray_open = true;
         state.sel = Some((p.id.clone(), k));
     }
+    // The page's end, and what the marks in it mean: the column closes on a key rather than on
+    // two lines and a blank card. (A narrow window spends that height on lines.)
+    if tight {
+        return;
+    }
+    ui.add_space(8.0);
+    ui.separator();
+    ui.add_space(4.0);
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = Vec2::new(8.0, 6.0);
+        ui.label(theme::muted(format!("End of page {n} of {}", s.pages.len())).size(12.0));
+        ui.add_space(6.0);
+        for (t, fill, fg) in [
+            ("unsure", theme::highlighter(), theme::on_highlighter()),
+            ("accepted", theme::accent_faded(), theme::accent_col()),
+            ("illegible", theme::error_wash(), theme::bad()),
+        ] {
+            ui.label(RichText::new(format!(" {t} ")).size(12.0).color(fg).background_color(fill));
+        }
+    });
+}
+
+/// A transcribed line begins with its own question number ("10.", "3)").
+fn own_number(line: &str) -> bool {
+    let t = line.trim_start();
+    let digits = t.chars().take_while(|c| c.is_ascii_digit()).count();
+    digits > 0 && matches!(t[digits..].chars().next(), Some('.') | Some(')'))
+}
+
+/// Plain transcript text with caret powers raised: "3x^2" sets the 2 as a superscript, "x^(n+1)"
+/// sets n+1. Anything else is drawn as typed.
+fn math_text(t: &str, size: f32, col: egui::Color32) -> egui::text::LayoutJob {
+    use egui::text::{LayoutJob, TextFormat};
+    let base = TextFormat { font_id: FontId::proportional(size), color: col, ..Default::default() };
+    let sup = TextFormat { font_id: FontId::proportional(size * 0.68), color: col, valign: egui::Align::TOP, ..Default::default() };
+    let mut job = LayoutJob::default();
+    let mut rest = t;
+    while let Some(i) = rest.find('^') {
+        job.append(&rest[..i], 0.0, base.clone());
+        let after = &rest[i + 1..];
+        let (power, used) = if let Some(inner) = after.strip_prefix('(') {
+            match inner.find(')') {
+                Some(j) => (&inner[..j], j + 2),
+                None => ("", 0),
+            }
+        } else {
+            let n = after.char_indices().take_while(|(_, c)| c.is_ascii_alphanumeric()).last().map_or(0, |(k, c)| k + c.len_utf8());
+            (&after[..n], n)
+        };
+        if power.is_empty() {
+            job.append("^", 0.0, base.clone());
+            rest = after;
+        } else {
+            job.append(power, 0.0, sup.clone());
+            rest = &after[used..];
+        }
+    }
+    job.append(rest, 0.0, base);
+    job
+}
+
+/// The card's primary ("Use ..."). On the dark page the house accent is a pale mint that read as a
+/// disabled button under its dark label; here the dark theme fills it a full-strength green with
+/// white type instead.
+fn use_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
+    if !theme::is_dark() {
+        return kit::primary_button(ui, label);
+    }
+    let fill = egui::Color32::from_rgb(0x2f, 0x7a, 0x4b);
+    pageshell::styled_button(
+        ui,
+        RichText::new(label).family(theme::bold_family()).color(egui::Color32::WHITE),
+        fill,
+        fill.lerp_to_gamma(egui::Color32::WHITE, 0.10),
+        fill.lerp_to_gamma(egui::Color32::BLACK, 0.15),
+        Stroke::NONE,
+        36.0,
+    )
 }
 
 /// The words the transcriber was unsure of on this page. Every card carries its own decision
 /// buttons, so the choice is visible without opening anything; the open (keyboard) card is just
 /// the highlighted one. Returns the word and its new decision when one was made: the caller
 /// writes it to the page and saves.
-fn words_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage, flags: &[Flag], state: &mut GradeState) -> Option<(String, Option<bool>)> {
-    pageshell::heading(ui, "Words to check");
-    ui.add_space(2.0);
+fn words_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage, flags: &[Flag], state: &mut GradeState, compact: bool) -> Option<(String, Option<bool>)> {
     let open_n = open_words(p);
     let all: usize = s.pages.iter().map(open_words).sum();
     let line = if flags.is_empty() {
@@ -804,8 +940,21 @@ fn words_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage, flag
     } else {
         format!("{} on this page", plural(open_n, "word", "words"))
     };
-    ui.label(theme::muted(line).size(12.5));
-    ui.add_space(10.0);
+    // On a narrow window the count rides beside the heading, so the first card's buttons stay
+    // above the window's edge.
+    if compact {
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing.x = 10.0;
+            pageshell::heading(ui, "Words to check");
+            ui.label(theme::muted(line).size(12.5));
+        });
+        ui.add_space(6.0);
+    } else {
+        pageshell::heading(ui, "Words to check");
+        ui.add_space(2.0);
+        ui.label(theme::muted(line).size(12.5));
+        ui.add_space(10.0);
+    }
     let open_key = state.sel.as_ref().filter(|(pid, _)| state.tray_open && pid == &p.id).map(|(_, k)| k.clone());
     // What a press asks for, applied after the list is drawn.
     enum Ask {
@@ -837,7 +986,7 @@ fn words_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage, flag
                 },
             ))
             .corner_radius(CornerRadius::same(10))
-            .inner_margin(Margin::symmetric(12, 10))
+            .inner_margin(Margin::symmetric(12, if compact { 8 } else { 10 }))
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 let place = match f.at {
@@ -872,14 +1021,14 @@ fn words_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage, flag
                             sure
                         };
                         ui.label(theme::muted(note).size(12.0));
-                        ui.add_space(8.0);
+                        ui.add_space(if compact { 5.0 } else { 8.0 });
                         ui.horizontal_wrapped(|ui| {
                             if accepted || rejected {
                                 if kit::ghost_button(ui, "Undo").clicked() {
                                     ask = Some(Ask::Decide(f.key.clone(), None));
                                 }
                             } else {
-                                if kit::primary_button(ui, &format!("Use “{offered}”")).clicked() {
+                                if use_button(ui, &format!("Use “{offered}”")).clicked() {
                                     ask = Some(Ask::Decide(f.key.clone(), Some(true)));
                                 }
                                 if kit::ghost_button(ui, "Keep written")
@@ -909,6 +1058,24 @@ fn words_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage, flag
                 }
             });
         note_panel_row(ui, frame.response.rect);
+        if open {
+            // The open card's buttons are its only controls: bring the whole card into view once
+            // per card, so its button is never left under the panel's edge.
+            let r = frame.response.rect;
+            let vp = ui.clip_rect();
+            let seen = egui::Id::new("grade_open_card_seen");
+            let first = ui.ctx().data(|d| d.get_temp::<String>(seen)) != Some(f.key.clone());
+            if first && r.height() < vp.height() {
+                // keep asking while the layout settles; once the card is whole it is the reader's
+                // panel to scroll
+                if r.bottom() > vp.bottom() + 0.5 {
+                    ui.scroll_to_rect(r.expand(2.0), Some(egui::Align::Max));
+                    ui.ctx().request_repaint();
+                } else {
+                    ui.ctx().data_mut(|d| d.insert_temp(seen, f.key.clone()));
+                }
+            }
+        }
         if !open && frame.response.interact(Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
             ask = Some(Ask::Open(f.key.clone()));
         }
@@ -1192,25 +1359,33 @@ impl crate::App {
                         return;
                     };
                     let mut words = |ui: &mut egui::Ui, state: &mut GradeState| {
-                        if let Some((word, decision)) = words_panel(ui, s, p, &page_flags, state) {
+                        if let Some((word, decision)) = words_panel(ui, s, p, &page_flags, state, !wide) {
                             save = Some((p.id.clone(), word, decision));
                         }
                     };
                     if wide {
                         let words_w = 300.0;
+                        // The two columns end together: the transcript card is at least as tall as
+                        // the words beside it (last frame's height), so a two-line page does not
+                        // stop a third of the way down while the words run on.
+                        let words_h_id = egui::Id::new("grade_words_h");
+                        let words_h: f32 = ui.ctx().data(|d| d.get_temp(words_h_id)).unwrap_or(0.0);
                         ui.horizontal_top(|ui| {
                             ui.spacing_mut().item_spacing.x = gap;
-                            panel(ui, "grade_transcript", Vec2::new(main_w - words_w - gap, h), |ui| {
+                            panel_ex(ui, "grade_transcript", Vec2::new(main_w - words_w - gap, h), words_h, Some(("line", "lines")), |ui| {
                                 transcript_panel(ui, s, p, &page_flags, &mut state)
                             });
-                            panel(ui, "grade_words", Vec2::new(words_w, h), |ui| words(ui, &mut state));
+                            let wh = panel_ex(ui, "grade_words", Vec2::new(words_w, h), 0.0, Some(("word", "words")), |ui| words(ui, &mut state));
+                            ui.ctx().data_mut(|d| d.insert_temp(words_h_id, wh));
                         });
                     } else {
                         // The transcript takes what its lines need, up to a little under half; the
                         // words get the rest, so at least one whole decision card is in view.
-                        panel(ui, "grade_transcript", Vec2::new(main_w, (h * 0.44).floor()), |ui| transcript_panel(ui, s, p, &page_flags, &mut state));
+                        panel_ex(ui, "grade_transcript", Vec2::new(main_w, (h * 0.42).floor()), 0.0, Some(("line", "lines")), |ui| {
+                            transcript_panel(ui, s, p, &page_flags, &mut state)
+                        });
                         ui.add_space(gap);
-                        panel(ui, "grade_words", Vec2::new(main_w, ui.available_height()), |ui| words(ui, &mut state));
+                        panel_ex(ui, "grade_words", Vec2::new(main_w, ui.available_height()), 0.0, Some(("word", "words")), |ui| words(ui, &mut state));
                     }
                 });
             });
