@@ -285,7 +285,7 @@ fn exam_chooser(ui: &mut egui::Ui, exams: &[(String, String, usize, usize)], sta
                         built yet; another exam may already have work to check.",
         };
         ui.scope(|ui| {
-            ui.set_max_width(pageshell::MEASURE);
+            ui.set_max_width(ui.available_width().min(pageshell::MEASURE));
             pageshell::prose(ui, body, 13.5);
         });
         ui.add_space(14.0);
