@@ -17,6 +17,7 @@ pub fn env_var_os(name: &str) -> Option<std::ffi::OsString> {
 }
 
 pub mod ai;
+pub mod alphanote;
 pub mod app;
 pub mod bankexport;
 pub mod bankops;
@@ -33,6 +34,7 @@ pub mod figures;
 pub mod figuresui;
 pub mod fonts;
 pub mod gradecore;
+pub mod gradework;
 pub mod gradeui;
 #[cfg(target_arch = "wasm32")]
 pub mod helpweb;

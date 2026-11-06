@@ -220,6 +220,9 @@ impl AccountUi {
             server_header(ui, m);
         }
         notice(ui, m.notice.as_ref());
+        if m.me.is_none() && matches!(m.page, Page::SignIn | Page::SignUp) {
+            alpha_note(ui);
+        }
         if m.me.is_some() && matches!(m.page, Page::Confirm | Page::Reset | Page::Enrol) {
             let who = m.me.as_ref().map(|me| me.email.clone()).unwrap_or_default();
             para(
@@ -289,6 +292,16 @@ fn dev_banner(ui: &mut Ui) {
         ui.set_min_width(ui.available_width());
         ui.label(RichText::new("DEVELOPMENT BUILD: custom server").family(theme::bold_family()).size(15.0).color(theme::bad()));
         ui.add(egui::Label::new(RichText::new("Release builds talk only to the server they were built for.").size(12.0).color(theme::bad())).wrap());
+    });
+    ui.add_space(8.0);
+}
+
+/// Shown before anyone signs in or signs up: the whole site is an early release and still changing.
+fn alpha_note(ui: &mut Ui) {
+    egui::Frame::new().fill(theme::accent_faded()).corner_radius(10).inner_margin(Margin::same(12)).show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
+        kit::small_caps(ui, "Alpha");
+        para(ui, crate::alphanote::TEXT);
     });
     ui.add_space(8.0);
 }
@@ -947,5 +960,52 @@ fn delete_page(ui: &mut Ui, m: &mut AccountModel) {
     }
     if back {
         m.go(Page::Status);
+    }
+}
+
+#[cfg(test)]
+mod alpha_note_tests {
+    use super::*;
+    use egui_kittest::{kittest::Queryable, Harness};
+
+    /// The account section on `page`, with the app's fonts (the first frame only installs them).
+    fn harness<'a>(page: Page, signed_in: bool) -> Harness<'a, AccountUi> {
+        let mut acct = AccountUi::in_page();
+        acct.model.page = page;
+        if signed_in {
+            acct.model.me = Some(super::api::Me {
+                email: "t@school.org".into(),
+                display_name: "T".into(),
+                school: "S".into(),
+                status: super::api::Status::Approved,
+                trust: "teacher".into(),
+            });
+        }
+        let mut first = true;
+        Harness::builder().build_ui_state(
+            move |ui, a: &mut AccountUi| {
+                if std::mem::take(&mut first) {
+                    crate::theme::setup(ui.ctx());
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                a.draw_section(ui);
+            },
+            acct,
+        )
+    }
+
+    fn shows_note(page: Page, signed_in: bool) -> bool {
+        let mut h = harness(page, signed_in);
+        h.run();
+        h.query_by_label_contains("is in alpha and under active development").is_some()
+    }
+
+    #[test]
+    fn alpha_note_is_on_sign_in_and_sign_up_only() {
+        assert!(shows_note(Page::SignIn, false), "sign in");
+        assert!(shows_note(Page::SignUp, false), "sign up");
+        assert!(!shows_note(Page::Forgot, false), "forgot");
+        assert!(!shows_note(Page::SignIn, true), "already signed in");
     }
 }
