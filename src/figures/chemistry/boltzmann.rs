@@ -1,7 +1,9 @@
 //! The Maxwell-Boltzmann distribution of molecular speeds: the fraction of molecules per unit speed against speed,
 //! for one gas at one, two or three temperatures. The curves are the exact density
 //!
-//!     f(v) = 4 pi (M / (2 pi R T))^(3/2) v^2 exp(- M v^2 / (2 R T)),
+//! ```text
+//! f(v) = 4 pi (M / (2 pi R T))^(3/2) v^2 exp(- M v^2 / (2 R T)),
+//! ```
 //!
 //! with M in kg/mol, R = 8.314462618 J/(mol K) and v in m/s. The y axis is the true density, in s/m (fraction of
 //! molecules per m/s); the curves are never rescaled, so each encloses area 1 and a hotter curve is lower and wider.
@@ -21,7 +23,9 @@
 //! The fraction of molecules whose kinetic energy is at or above an activation energy Ea is, for the three-dimensional
 //! Maxwell-Boltzmann energy distribution,
 //!
-//!     F(Ea) = (2/sqrt(pi)) sqrt(x) exp(-x) + erfc(sqrt(x)),   x = Ea / (R T).
+//! ```text
+//! F(Ea) = (2/sqrt(pi)) sqrt(x) exp(-x) + erfc(sqrt(x)),   x = Ea / (R T).
+//! ```
 //!
 //! It is exactly the area under the speed curve to the right of v = sqrt(2 Ea / M), because the kinetic energy is
 //! (1/2) M v^2 per mole. F(0) = 1, and F rises with T at fixed Ea. erfc is the complementary error function,
