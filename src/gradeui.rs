@@ -45,16 +45,26 @@ fn move_read_line(state: &mut GradeState, n_lines: usize, d: i32) {
     state.read_line = Some(nxt);
 }
 
-/// Marks the unsure word `word` on page `page_id` accepted (or not) in the store. Returns whether it changed.
-fn set_accepted(store: &mut crate::store::Store, page_id: &str, word: &str, on: bool) -> bool {
+/// Records the teacher's decision on the unsure word `word` of page `page_id`: `Some(true)` uses
+/// the offered reading, `Some(false)` keeps the transcriber's own, `None` clears the decision.
+/// Returns whether it changed.
+fn set_decision(store: &mut crate::store::Store, page_id: &str, word: &str, decision: Option<bool>) -> bool {
     let mut changed = false;
     for sub in store.student_submissions.iter_mut() {
         for p in sub.pages.iter_mut().filter(|p| p.id == page_id) {
-            for c in p.corrections.iter_mut().filter(|c| c.word == word && c.accepted != on) {
-                c.accepted = on;
-                changed = true;
+            for c in p.corrections.iter_mut().filter(|c| c.word == word) {
+                let (accepted, rejected) = match decision {
+                    Some(true) => (true, false),
+                    Some(false) => (false, true),
+                    None => (false, false),
+                };
+                if c.accepted != accepted || c.rejected != rejected {
+                    c.accepted = accepted;
+                    c.rejected = rejected;
+                    changed = true;
+                }
             }
-            if changed && on {
+            if changed && decision == Some(true) {
                 p.via = Some("tray".into());
             }
         }
@@ -67,7 +77,7 @@ fn set_accepted(store: &mut crate::store::Store, page_id: &str, word: &str, on: 
 #[derive(Clone, Debug, PartialEq)]
 enum FlagKind {
     /// Read with low confidence; the transcriber offers a reading.
-    Unsure { read: String, offered: String, confidence: f32, accepted: bool },
+    Unsure { read: String, offered: String, confidence: f32, accepted: bool, rejected: bool },
     /// Not read at all (an `[illegible]` marker in the transcript).
     Unreadable { kept: String },
 }
@@ -111,7 +121,7 @@ fn flags(page: &SubmittedPage) -> Vec<Flag> {
         out.push(Flag {
             key: format!("w:{}", c.word),
             at,
-            kind: FlagKind::Unsure { read: c.word.clone(), offered: c.term.clone(), confidence: c.confidence, accepted: c.accepted },
+            kind: FlagKind::Unsure { read: c.word.clone(), offered: c.term.clone(), confidence: c.confidence, accepted: c.accepted, rejected: c.rejected },
         });
     }
     let markers: Vec<(usize, usize)> =
@@ -127,9 +137,12 @@ fn flags(page: &SubmittedPage) -> Vec<Flag> {
     out
 }
 
-/// Words still to check on a page: every unreadable run, and every unsure word not yet accepted.
+/// Words still to check on a page: every unreadable run, and every unsure word not yet decided.
 fn open_words(page: &SubmittedPage) -> usize {
-    flags(page).iter().filter(|f| !matches!(f.kind, FlagKind::Unsure { accepted: true, .. })).count()
+    flags(page)
+        .iter()
+        .filter(|f| !matches!(f.kind, FlagKind::Unsure { accepted: true, .. } | FlagKind::Unsure { rejected: true, .. }))
+        .count()
 }
 
 /// A transcript line cut into plain runs and flagged words (index into `flags`).
@@ -236,16 +249,47 @@ fn panel(ui: &mut egui::Ui, salt: &str, size: Vec2, f: impl FnOnce(&mut egui::Ui
     ui.allocate_ui_with_layout(size, egui::Layout::top_down(egui::Align::Min), |ui| {
         kit::card().inner_margin(Margin::same(16)).show(ui, |ui| {
             ui.set_width(size.x - 34.0);
-            egui::ScrollArea::vertical()
+            let rows = egui::Id::new("grade_panel_rows");
+            ui.ctx().data_mut(|d| d.remove_temp::<Vec<Rect>>(rows));
+            let out = egui::ScrollArea::vertical()
                 .id_salt(salt)
                 .auto_shrink([false, true])
-                .max_height(size.y - 34.0)
+                .max_height(size.y - 30.0)
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     f(ui)
                 });
+            // a card that ends on half a line reads as guillotined: hide the line the panel's
+            // bottom edge cuts through, so the edge falls in the gap under the last whole one
+            let cut = ui
+                .ctx()
+                .data(|d| d.get_temp::<Vec<Rect>>(rows))
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|r| {
+                    // only a line-sized row is hidden whole: a card only loses its own bottom
+                    // padding to the edge, and hiding a whole card would empty the panel
+                    r.height() < 72.0 && r.top() < out.inner_rect.bottom() - 1.0 && r.bottom() > out.inner_rect.bottom() + 1.0
+                })
+                .map(|r| r.top())
+                .fold(f32::INFINITY, f32::min);
+            if cut.is_finite() {
+                let band = Rect::from_min_max(
+                    Pos2::new(out.inner_rect.left(), cut),
+                    Pos2::new((out.inner_rect.right() - 8.0).max(out.inner_rect.left()), out.inner_rect.bottom()),
+                );
+                ui.painter().with_clip_rect(out.inner_rect).rect_filled(band, 0.0, theme::card());
+            }
         });
     });
+}
+
+/// A widget row that the panel's bottom edge may cut; see `panel`.
+fn note_panel_row(ui: &egui::Ui, r: Rect) {
+    let id = egui::Id::new("grade_panel_rows");
+    let mut rows: Vec<Rect> = ui.ctx().data(|d| d.get_temp(id)).unwrap_or_default();
+    rows.push(r);
+    ui.ctx().data_mut(|d| d.insert_temp(id, rows));
 }
 
 /// A small icon button (line navigation).
@@ -535,7 +579,7 @@ fn word_chip(ui: &mut egui::Ui, text: &str, fill: egui::Color32, fg: egui::Color
     ui.scope(|ui| {
         ui.spacing_mut().button_padding = Vec2::new(4.0, 0.0);
         ui.add(
-            egui::Button::new(RichText::new(text).size(14.5).color(fg))
+            egui::Button::new(RichText::new(text).size(15.5).color(fg))
                 .fill(fill)
                 .stroke(if open { Stroke::new(1.5, theme::ink()) } else { Stroke::NONE })
                 .corner_radius(CornerRadius::same(5))
@@ -597,22 +641,22 @@ fn transcript_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage,
         let row = ui
             .horizontal_top(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
-                ui.spacing_mut().interact_size.y = 22.0;
-                let (g, _) = ui.allocate_exact_size(Vec2::new(30.0, 22.0), Sense::hover());
+                ui.spacing_mut().interact_size.y = 24.0;
+                let (g, _) = ui.allocate_exact_size(Vec2::new(30.0, 24.0), Sense::hover());
                 ui.painter().text(
                     g.left_center() + Vec2::new(0.0, 1.0),
                     Align2::LEFT_CENTER,
                     (li + 1).to_string(),
-                    FontId::proportional(11.5),
+                    FontId::proportional(12.0),
                     if reading { theme::accent_col() } else { theme::muted_col() },
                 );
                 ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing = Vec2::new(0.0, 4.0);
-                    ui.spacing_mut().interact_size.y = 22.0;
+                    ui.spacing_mut().item_spacing = Vec2::new(0.0, 6.0);
+                    ui.spacing_mut().interact_size.y = 24.0;
                     for seg in line_segments(line, li, flags) {
                         match seg {
                             Seg::Text(t) => {
-                                ui.label(RichText::new(t).size(14.5).color(theme::text_col()));
+                                ui.label(RichText::new(t).size(16.0).color(theme::ink()));
                             }
                             Seg::Flag(fi) => {
                                 let f = &flags[fi];
@@ -637,12 +681,13 @@ fn transcript_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage,
             })
             .response
             .rect;
+        note_panel_row(ui, row);
         if reading {
             let r = row.expand2(Vec2::new(6.0, 3.0));
             ui.painter().set(bg, egui::Shape::rect_filled(r, CornerRadius::same(6), theme::hover_bg()));
             ui.painter().rect_filled(Rect::from_min_size(r.min, Vec2::new(3.0, r.height())), CornerRadius::same(2), theme::accent_col());
         }
-        ui.add_space(5.0);
+        ui.add_space(7.0);
     }
     if let Some(k) = pick {
         state.tray_open = true;
@@ -650,9 +695,11 @@ fn transcript_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage,
     }
 }
 
-/// The words the transcriber was unsure of on this page, one open at a time with its choices.
-/// Returns (word, accept) when a reading was accepted or taken back: the caller writes it to the page and saves.
-fn words_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage, flags: &[Flag], state: &mut GradeState) -> Option<(String, bool)> {
+/// The words the transcriber was unsure of on this page. Every card carries its own decision
+/// buttons, so the choice is visible without opening anything; the open (keyboard) card is just
+/// the highlighted one. Returns the word and its new decision when one was made: the caller
+/// writes it to the page and saves.
+fn words_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage, flags: &[Flag], state: &mut GradeState) -> Option<(String, Option<bool>)> {
     pageshell::heading(ui, "Words to check");
     ui.add_space(2.0);
     let open_n = open_words(p);
@@ -672,16 +719,32 @@ fn words_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage, flag
     // What a press asks for, applied after the list is drawn.
     enum Ask {
         Open(String),
-        Accept(String, bool),
+        Decide(String, Option<bool>),
         Next(String),
     }
     let mut ask = None;
     for f in flags {
         let open = open_key.as_deref() == Some(f.key.as_str());
-        let done = matches!(f.kind, FlagKind::Unsure { accepted: true, .. });
+        let accepted = matches!(f.kind, FlagKind::Unsure { accepted: true, .. });
+        let rejected = matches!(f.kind, FlagKind::Unsure { rejected: true, .. });
         let frame = egui::Frame::new()
-            .fill(if open { theme::field() } else { theme::card() })
-            .stroke(Stroke::new(if open { 1.5 } else { 1.0 }, if open { theme::accent_col() } else { theme::border() }))
+            .fill(if accepted {
+                theme::accent_faded()
+            } else if open {
+                theme::field()
+            } else {
+                theme::card()
+            })
+            .stroke(Stroke::new(
+                if open || accepted { 1.5 } else { 1.0 },
+                if accepted {
+                    theme::accent_col()
+                } else if open {
+                    theme::accent_col()
+                } else {
+                    theme::border()
+                },
+            ))
             .corner_radius(CornerRadius::same(10))
             .inner_margin(Margin::symmetric(12, 10))
             .show(ui, |ui| {
@@ -690,7 +753,15 @@ fn words_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage, flag
                     Some((l, _, _)) => format!("Line {}", l + 1),
                     None => "Not placed in the text".into(),
                 };
-                kit::small_caps(ui, &place);
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing.x = 8.0;
+                    kit::small_caps(ui, &place);
+                    if accepted {
+                        status_pill(ui, "Accepted", theme::accent_faded(), theme::accent_col(), 18.0);
+                    } else if rejected {
+                        status_pill(ui, "Kept as written", theme::field(), theme::text_col(), 18.0);
+                    }
+                });
                 ui.add_space(3.0);
                 match &f.kind {
                     FlagKind::Unsure { read, offered, confidence, .. } => {
@@ -702,52 +773,58 @@ fn words_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage, flag
                             ui.label(theme::strong(offered.as_str()).size(14.0));
                         });
                         let sure = format!("The transcriber is {:.0}% sure.", (confidence * 100.0).clamp(0.0, 100.0));
-                        let note = if done { format!("Using “{offered}”.") } else { sure };
+                        let note = if accepted {
+                            format!("Using “{offered}”.")
+                        } else if rejected {
+                            format!("Keeping “{read}”, the transcriber's reading.")
+                        } else {
+                            sure
+                        };
                         ui.label(theme::muted(note).size(12.0));
-                        if open {
-                            ui.add_space(8.0);
-                            ui.horizontal_wrapped(|ui| {
-                                if done {
-                                    if kit::ghost_button(ui, "Undo").clicked() {
-                                        ask = Some(Ask::Accept(f.key.clone(), false));
-                                    }
-                                } else {
-                                    if kit::primary_button(ui, &format!("Use “{offered}”")).clicked() {
-                                        ask = Some(Ask::Accept(f.key.clone(), true));
-                                    }
-                                    if kit::ghost_button(ui, "Keep as written").clicked() {
-                                        ask = Some(Ask::Next(f.key.clone()));
-                                    }
+                        ui.add_space(8.0);
+                        ui.horizontal_wrapped(|ui| {
+                            if accepted || rejected {
+                                if kit::ghost_button(ui, "Undo").clicked() {
+                                    ask = Some(Ask::Decide(f.key.clone(), None));
                                 }
-                            });
-                        }
+                            } else {
+                                if kit::primary_button(ui, &format!("Use “{offered}”")).clicked() {
+                                    ask = Some(Ask::Decide(f.key.clone(), Some(true)));
+                                }
+                                if kit::ghost_button(ui, "Keep written")
+                                    .on_hover_text("Reject the reading offered and keep the transcriber's own")
+                                    .clicked()
+                                {
+                                    ask = Some(Ask::Decide(f.key.clone(), Some(false)));
+                                }
+                            }
+                        });
                     }
                     FlagKind::Unreadable { kept } => {
                         ui.label(theme::strong("Could not be read").size(14.0));
                         if !kept.is_empty() {
                             ui.label(theme::muted(format!("The transcriber kept “{kept}”.")).size(12.0));
                         }
-                        if open {
-                            ui.add_space(6.0);
-                            ui.add(
-                                egui::Label::new(theme::text("Read this one from the paper. Typing a reading in here is not available yet.").size(12.5))
-                                    .wrap(),
-                            );
-                            ui.add_space(6.0);
-                            if kit::ghost_button(ui, "Next word").clicked() {
-                                ask = Some(Ask::Next(f.key.clone()));
-                            }
+                        ui.add_space(6.0);
+                        ui.add(
+                            egui::Label::new(theme::text("Read this one from the paper. Typing a reading in here is not available yet.").size(12.5))
+                                .wrap(),
+                        );
+                        ui.add_space(6.0);
+                        if kit::ghost_button(ui, "Next word").clicked() {
+                            ask = Some(Ask::Next(f.key.clone()));
                         }
                     }
                 }
             });
+        note_panel_row(ui, frame.response.rect);
         if !open && frame.response.interact(Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
             ask = Some(Ask::Open(f.key.clone()));
         }
         ui.add_space(8.0);
     }
     if !flags.is_empty() && open_key.is_none() {
-        ui.label(theme::muted("Choose a word to see its reading and decide. T opens the first one; Esc closes.").size(12.0));
+        ui.label(theme::muted("Every card has its own decision: use the reading, or keep what was written. T opens the first card; Esc closes it.").size(12.0));
     }
     let next = |key: &str| flags.iter().position(|f| f.key == key).and_then(|i| flags.get(i + 1)).map(|f| f.key.clone());
     match ask {
@@ -755,8 +832,8 @@ fn words_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage, flag
             state.tray_open = true;
             state.sel = Some((p.id.clone(), k));
         }
-        Some(Ask::Accept(k, on)) => {
-            if on {
+        Some(Ask::Decide(k, decision)) => {
+            if decision == Some(true) {
                 match next(&k) {
                     Some(n) => state.sel = Some((p.id.clone(), n)),
                     None => state.tray_open = false,
@@ -766,7 +843,7 @@ fn words_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage, flag
                 FlagKind::Unsure { read, .. } => Some(read.clone()),
                 _ => None,
             });
-            return word.map(|w| (w, on));
+            return word.map(|w| (w, decision));
         }
         Some(Ask::Next(k)) => match next(&k) {
             Some(n) => state.sel = Some((p.id.clone(), n)),
@@ -938,7 +1015,7 @@ impl crate::App {
                 (e.id.clone(), e.name.clone(), work.len(), check)
             })
             .collect();
-        let mut save: Option<(String, String, bool)> = None;
+        let mut save: Option<(String, String, Option<bool>)> = None;
 
         shell_frame(self, ctx, true, |_app, ui| {
             kit::page_header(
@@ -1021,8 +1098,8 @@ impl crate::App {
                         return;
                     };
                     let mut words = |ui: &mut egui::Ui, state: &mut GradeState| {
-                        if let Some((word, on)) = words_panel(ui, s, p, &page_flags, state) {
-                            save = Some((p.id.clone(), word, on));
+                        if let Some((word, decision)) = words_panel(ui, s, p, &page_flags, state) {
+                            save = Some((p.id.clone(), word, decision));
                         }
                     };
                     if wide {
@@ -1035,17 +1112,19 @@ impl crate::App {
                             panel(ui, "grade_words", Vec2::new(words_w, h), |ui| words(ui, &mut state));
                         });
                     } else {
-                        // The transcript takes what its lines need, up to a little over half; the words get the rest.
-                        panel(ui, "grade_transcript", Vec2::new(main_w, (h * 0.55).floor()), |ui| transcript_panel(ui, s, p, &page_flags, &mut state));
+                        // The transcript takes what its lines need, up to a little under half; the
+                        // words get the rest, so at least one whole decision card is in view.
+                        panel(ui, "grade_transcript", Vec2::new(main_w, (h * 0.44).floor()), |ui| transcript_panel(ui, s, p, &page_flags, &mut state));
                         ui.add_space(gap);
                         panel(ui, "grade_words", Vec2::new(main_w, ui.available_height()), |ui| words(ui, &mut state));
                     }
                 });
             });
         });
-        // An accepted (or taken back) reading is written to the page and saved, so it survives a restart.
-        if let Some((pid, word, on)) = save
-            && set_accepted(&mut self.store, &pid, &word, on)
+        // A decision (accepted, kept as written, or taken back) is written to the page and saved,
+        // so it survives a restart.
+        if let Some((pid, word, decision)) = save
+            && set_decision(&mut self.store, &pid, &word, decision)
         {
             self.store.save_student_submissions();
         }
