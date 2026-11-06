@@ -314,10 +314,11 @@ fn choose_exam(state: &mut GradeState, id: String) {
 }
 
 /// No exam chosen, or the chosen one has no work: every exam, with how much work it has.
-fn exam_chooser(ui: &mut egui::Ui, exams: &[(String, String, usize, usize)], state: &mut GradeState) {
+fn exam_chooser(ui: &mut egui::Ui, exams: &[(String, String, usize, usize)], state: &mut GradeState, min_h: f32) {
     let current = state.exam_id.as_ref().and_then(|id| exams.iter().find(|e| &e.0 == id));
     let mut pick = None;
-    pageshell::card(ui, |ui| {
+    pageshell::card_min(ui, min_h, |ui| {
+        let inner_top = ui.cursor().top();
         match current {
             None => pageshell::heading(ui, "Choose an exam to grade"),
             Some(e) => pageshell::heading(ui, &format!("No student work for {} yet", e.1)),
@@ -344,8 +345,11 @@ fn exam_chooser(ui: &mut egui::Ui, exams: &[(String, String, usize, usize)], sta
         // The exams with work first: those are the ones there is something to do on.
         let mut order: Vec<&(String, String, usize, usize)> = exams.iter().collect();
         order.sort_by_key(|e| e.2 == 0);
+        // The exam that has words waiting, for the card's foot: the page's one next step.
+        let next = order.iter().find(|e| e.3 > 0).map(|e| (e.0.clone(), e.1.clone(), e.3));
+        let row_h = if min_h > 0.0 { 66.0 } else { 54.0 };
         for (id, name, n, check) in order {
-            let (r, resp) = ui.allocate_exact_size(Vec2::new(w, 46.0), Sense::click());
+            let (r, resp) = ui.allocate_exact_size(Vec2::new(w, row_h), Sense::click());
             let on = state.exam_id.as_deref() == Some(id.as_str());
             if on {
                 ui.painter().rect_filled(r, CornerRadius::same(10), theme::accent_faded());
@@ -354,26 +358,88 @@ fn exam_chooser(ui: &mut egui::Ui, exams: &[(String, String, usize, usize)], sta
             }
             ui.painter().line_segment([r.left_bottom(), r.right_bottom()], Stroke::new(1.0, theme::border()));
             let cy = r.center().y;
-            ui.painter().text(Pos2::new(r.left() + 12.0, cy), Align2::LEFT_CENTER, name, FontId::new(15.0, theme::serif_family()), theme::ink());
+            // The action is a named control at the row's right edge, not a chevron lost past the
+            // pills: the row that starts the whole task now says what it does.
+            let action_w = 78.0;
+            let act = Rect::from_min_size(Pos2::new(r.right() - 12.0 - action_w, cy - 14.0), Vec2::new(action_w, 28.0));
+            let act_fill = if resp.hovered() { theme::accent_col() } else { theme::accent_faded() };
+            let act_fg = if resp.hovered() { theme::on_accent_col() } else { theme::accent_col() };
+            ui.painter().rect(act, CornerRadius::same(8), act_fill, Stroke::new(1.0, theme::accent_col()), egui::StrokeKind::Inside);
+            let label = ui.painter().layout_no_wrap("Open".to_string(), FontId::new(12.5, theme::bold_family()), act_fg);
+            ui.painter().galley(Pos2::new(act.left() + 10.0, cy - label.size().y / 2.0), label, act_fg);
             ui.painter().text(
-                Pos2::new(r.right() - 12.0, cy),
+                Pos2::new(act.right() - 10.0, cy),
                 Align2::RIGHT_CENTER,
                 egui_phosphor::regular::CARET_RIGHT,
-                theme::icon_font(15.0),
-                theme::muted_col(),
+                theme::icon_font(13.0),
+                act_fg,
             );
-            let mut right = r.right() - 36.0;
+            // The name keeps its left start and the pills sit beside it, so the eye does not
+            // travel from the far left to the far right over half a row of nothing.
+            let name_g = ui.painter().layout_no_wrap(name.clone(), FontId::new(15.0, theme::serif_family()), theme::ink());
+            let mut pills: Vec<(String, egui::Color32, egui::Color32)> = Vec::new();
             if *n == 0 {
-                paint_pill(ui, right, cy, "No work yet", theme::field(), theme::muted_col());
+                pills.push(("No work yet".to_string(), theme::field(), theme::muted_col()));
             } else {
+                pills.push((plural(*n, "student", "students"), theme::accent_faded(), theme::accent_col()));
                 if *check > 0 {
-                    right = paint_pill(ui, right, cy, &format!("{check} to check"), theme::highlighter(), theme::on_highlighter()) - 6.0;
+                    pills.push((format!("{check} to check"), theme::highlighter(), theme::on_highlighter()));
                 }
-                paint_pill(ui, right, cy, &plural(*n, "student", "students"), theme::accent_faded(), theme::accent_col());
+            }
+            let pill_w: f32 = pills
+                .iter()
+                .map(|(t, _, _)| ui.painter().layout_no_wrap(t.clone(), FontId::new(11.0, theme::bold_family()), theme::ink()).size().x + 18.0 + 6.0)
+                .sum::<f32>()
+                - 6.0;
+            let name_x = r.left() + 12.0;
+            let fits = name_x + name_g.size().x + 14.0 + pill_w + 18.0 + action_w <= r.right() - 12.0;
+            if fits {
+                ui.painter().galley(Pos2::new(name_x, cy - name_g.size().y / 2.0), name_g.clone(), theme::ink());
+                let mut x = name_x + name_g.size().x + 14.0;
+                for (text, fill, fg) in &pills {
+                    let right = x + ui.painter().layout_no_wrap(text.clone(), FontId::new(11.0, theme::bold_family()), theme::ink()).size().x + 18.0;
+                    paint_pill(ui, right, cy, text, *fill, *fg);
+                    x = right + 6.0;
+                }
+            } else {
+                let name_y = r.top() + 11.0;
+                ui.painter().galley(Pos2::new(name_x, name_y), name_g, theme::ink());
+                let mut x = name_x;
+                for (text, fill, fg) in &pills {
+                    let right = x + ui.painter().layout_no_wrap(text.clone(), FontId::new(11.0, theme::bold_family()), theme::ink()).size().x + 18.0;
+                    paint_pill(ui, right, name_y + 24.0, text, *fill, *fg);
+                    x = right + 6.0;
+                }
             }
             if resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() && !on {
                 pick = Some(id.clone());
             }
+        }
+        // The card owns the window down to the footer, and its foot says what to do next rather
+        // than ending in a slab of blank card: the exam with words waiting, with one button.
+        if let Some((id, name, check)) = next {
+            let strip_h = 64.0;
+            let used = ui.cursor().top() - inner_top;
+            let room = (min_h - 40.0) - used - strip_h;
+            ui.add_space(if room > 18.0 { room } else { 18.0 });
+            egui::Frame::new()
+                .fill(theme::field())
+                .corner_radius(CornerRadius::same(12))
+                .inner_margin(egui::Margin::symmetric(16, 12))
+                .show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.horizontal(|ui| {
+                        ui.vertical(|ui| {
+                            ui.label(theme::muted("Next up").size(12.0));
+                            ui.label(theme::strong(format!("{} words to check in {name}", check)).size(14.0));
+                        });
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if kit::primary_button(ui, "Start checking").clicked() {
+                                pick = Some(id.clone());
+                            }
+                        });
+                    });
+                });
         }
     });
     if let Some(id) = pick {
@@ -382,10 +448,12 @@ fn exam_chooser(ui: &mut egui::Ui, exams: &[(String, String, usize, usize)], sta
 }
 
 /// Beside the chooser: what happens on this screen, in three steps.
-fn how_it_works(ui: &mut egui::Ui) {
-    pageshell::card(ui, |ui| {
-        pageshell::heading(ui, "How grading works");
+fn how_it_works(ui: &mut egui::Ui, min_h: f32) {
+    pageshell::card_min(ui, min_h, |ui| {
+        // An aside, not a second page title: the task's heading keeps the larger serif.
+        ui.label(RichText::new("How grading works").family(theme::serif_family()).size(16.0).color(theme::ink()));
         ui.add_space(10.0);
+        let inner_top = ui.cursor().top();
         let steps = [
             ("Transcribed", "Each page of a student's work is read into text. Words the reader was unsure of are flagged."),
             ("Checked", "Open a student's page and decide each flagged word: use the reading offered, or keep what was written."),
@@ -402,7 +470,30 @@ fn how_it_works(ui: &mut egui::Ui) {
                     ui.add(egui::Label::new(theme::muted(*body).size(12.5)).wrap());
                 });
             });
-            ui.add_space(10.0);
+            ui.add_space(14.0);
+        }
+        // The keys for the checking screen sit at the card's foot, level with the chooser's
+        // next-step strip, so both cards end on the same line with something to read there.
+        let keys = [("\u{2191} \u{2193}", "move between lines"), ("T", "open the word panel"), ("P / F", "plain or corrected text"), ("Esc", "close the panel")];
+        ui.spacing_mut().item_spacing.y = 4.0;
+        let keys_h = 70.0 + keys.len() as f32 * 26.0;
+        let room = (min_h - 40.0) - (ui.cursor().top() - inner_top) - keys_h;
+        if room > 0.0 {
+            ui.add_space(room);
+        }
+        ui.separator();
+        ui.add_space(4.0);
+        kit::small_caps(ui, "Keys while checking");
+        ui.add_space(2.0);
+        for (k, what) in keys {
+            ui.allocate_ui_with_layout(Vec2::new(ui.available_width(), 22.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.set_height(22.0);
+                ui.allocate_ui_with_layout(Vec2::new(64.0, 20.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.set_min_width(64.0);
+                    ui.label(RichText::new(k).family(theme::bold_family()).size(12.5).color(theme::ink()));
+                });
+                ui.label(theme::muted(what).size(12.5));
+            });
         }
     });
 }
@@ -1060,19 +1151,22 @@ impl crate::App {
             }
             if subs.is_empty() {
                 let w = ui.available_width();
+                // The two cards own the window down to the footer instead of stopping high and
+                // leaving the lower half as bare ruled paper.
+                let card_h = (ui.available_height() - 80.0).max(360.0);
                 if w >= 900.0 {
                     let side = (w * 0.34).clamp(300.0, 380.0);
                     ui.horizontal_top(|ui| {
                         ui.spacing_mut().item_spacing.x = 16.0;
-                        ui.allocate_ui_with_layout(Vec2::new(w - side - 16.0, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
-                            exam_chooser(ui, &exams, &mut state)
+                        ui.allocate_ui_with_layout(Vec2::new(w - side - 16.0, card_h), egui::Layout::top_down(egui::Align::Min), |ui| {
+                            exam_chooser(ui, &exams, &mut state, card_h)
                         });
-                        ui.allocate_ui_with_layout(Vec2::new(side, 0.0), egui::Layout::top_down(egui::Align::Min), how_it_works);
+                        ui.allocate_ui_with_layout(Vec2::new(side, card_h), egui::Layout::top_down(egui::Align::Min), |ui| how_it_works(ui, card_h));
                     });
                 } else {
-                    exam_chooser(ui, &exams, &mut state);
+                    exam_chooser(ui, &exams, &mut state, 0.0);
                     ui.add_space(14.0);
-                    how_it_works(ui);
+                    how_it_works(ui, 0.0);
                 }
                 pageshell::footer(ui, "verSHion · student work stays on this machine");
                 return;
