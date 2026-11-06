@@ -1148,7 +1148,9 @@ pub fn build(p: &Params) -> (String, Report) {
     let panel: Vec<String> = facts.iter().map(|(l, v)| format!("{l}: {v}")).chain(panel_notes.iter().cloned()).collect();
 
     let footer_text = "A simplified ball-and-stick model: atoms are circles joined by single sticks. Each lone pair is a pair of dots on a short dashed stick pointing where the pair truly projects on the central atom; a pair that projects on a bond, at the viewer, behind a nearer atom or onto another pair is left off and the panel says so. Bond lengths are not to scale, and no double bonds, resonance or bond order is shown.";
-    let footer = wrap(footer_text, fs_note, w - 40.0);
+    // The note is held near 70 characters a line (it ran 90 to 110 across the full sheet) and set
+    // in the sheet's ink: in the panel's grey it read as link text, not as the figure's caption.
+    let footer = wrap(footer_text, fs_note, (w - 40.0).min(70.0 * 0.5 * fs_note));
 
     // ---- the facts' column layout. The label column is as wide as the widest label at this size;
     // a value that does not fit beside it goes on its own line under its label rather than being
@@ -1313,7 +1315,7 @@ pub fn build(p: &Params) -> (String, Report) {
 
     // the model note, across the full width
     for (i, line) in footer.iter().enumerate() {
-        text_el(&mut d, 20.0, footer_top + 0.86 * fs_note + i as f64 * 1.5 * fs_note, fs_note, "start", mute, line, "note", &format!("N{i}"));
+        text_el(&mut d, 20.0, footer_top + 0.86 * fs_note + i as f64 * 1.5 * fs_note, fs_note, "start", ink, line, "note", &format!("N{i}"));
     }
 
     let rep = Report {

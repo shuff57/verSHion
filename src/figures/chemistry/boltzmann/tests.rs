@@ -781,9 +781,12 @@ fn the_student_copy_blanks_the_table_and_prints_no_computed_value() {
     let fval = res_fmt(maxwell(845.3, k.curves[1].t, k.setup.m_kg()), 3);
     assert!(!sv.contains(&format!("f = {fval} s/m")), "student copy prints f = {fval}");
     // the student note lines keep only the givens
-    let above = st.iter().find(|t| t.text.contains("Above Ea")).expect("the fraction line");
-    assert!(above.text.contains(BLANK), "{}", above.text);
-    for g in ["10", "300", "600"] { assert!(above.text.contains(g), "{}", above.text); }
+    // the notes are set in two columns, so a paragraph may wrap: read the fraction line with the
+    // line that follows it
+    let at = st.iter().position(|t| t.text.contains("Above Ea")).expect("the fraction line");
+    let above = st[at..(at + 2).min(st.len())].iter().map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ");
+    assert!(above.contains(BLANK), "{above}");
+    for g in ["10", "300", "600"] { assert!(above.contains(g), "{above}"); }
     let fl = st.iter().find(|t| t.text.contains("curve has f")).expect("the marked density line");
     assert!(fl.text.contains(BLANK), "{}", fl.text);
     for g in ["845.3", "600"] { assert!(fl.text.contains(g), "{}", fl.text); }

@@ -541,6 +541,12 @@ pub fn build(p: &Params) -> (String, Report) {
     let row_h = 1.55 * fs_lab;
     for kind in legs {
         let lw = legend_width(&kind, fs_lab);
+        // the curves keep the first row; the guides (vp, rms, Ea, the marked speed) take a row of
+        // their own, so five entries are never crushed onto one line by the sheet's scale
+        if !matches!(kind, LegKind::Series(..)) && row == 0 && !placed.is_empty() {
+            row = 1;
+            xcur = l + 2.0;
+        }
         if xcur > l + 2.0 && xcur + lw > w - 10.0 { row += 1; xcur = l + 2.0; }
         let yc = 8.0 + row as f64 * row_h + 0.62 * fs_lab;
         placed.push(Legend { x: xcur, yc, w: lw, kind });
@@ -635,19 +641,35 @@ pub fn build(p: &Params) -> (String, Report) {
             lines.push(format!("The marked speed {} m/s is beyond the x axis (0 to {} m/s), so no guide is drawn.", fmt(st.mark), fmt(x_top)));
         }
     }
-    // The reading block is a wall of small print at the figure's full width. Cap the measure near
-    // 70 characters, set it a little looser and give every entry its own paragraph, so the notes
-    // under the chart scan instead of running edge to edge as one grey slab.
-    let ro_w = (w - 40.0).min(70.0 * fs_ro * 0.55);
-    let mut wrapped: Vec<(String, bool)> = Vec::new();
-    for line in &lines {
-        for (i, l) in wrap(line, fs_ro, ro_w).into_iter().enumerate() {
-            wrapped.push((l, i == 0));
-        }
-    }
+    // The reading block: two balanced columns across the sheet's width, each held near a 45
+    // character measure. One narrow column left half the sheet white and still made the whole
+    // figure tall enough that the preview had to shrink its 13 px notes to 9 px to fit; the two
+    // columns fill the width and cut the block's height by more than a third.
+    let col_gap = 24.0;
+    let ro_w = ((w - 40.0 - col_gap) / 2.0).max(120.0);
+    let paragraphs: Vec<Vec<String>> = lines.iter().map(|line| wrap(line, fs_ro, ro_w)).collect();
     let ro_lh = 1.62 * fs_ro;
     let para_gap = 5.0;
-    let h = (tab_bottom + 10.0 + wrapped.len() as f64 * ro_lh + lines.len().saturating_sub(1) as f64 * para_gap + 6.0).ceil();
+    let col_height = |ps: &[Vec<String>]| -> f64 {
+        ps.iter().map(|p| p.len() as f64).sum::<f64>() * ro_lh + ps.len().saturating_sub(1) as f64 * para_gap
+    };
+    let total_lines: usize = paragraphs.iter().map(Vec::len).sum();
+    let mut acc = 0usize;
+    let mut split = paragraphs.len();
+    for (i, p) in paragraphs.iter().enumerate() {
+        if i > 0 && acc as f64 >= total_lines as f64 / 2.0 {
+            split = i;
+            break;
+        }
+        acc += p.len();
+        split = i + 1;
+    }
+    // never leave the second column empty when there is more than one paragraph to place
+    if split >= paragraphs.len() && paragraphs.len() > 1 {
+        split = paragraphs.len() - 1;
+    }
+    let (col_a, col_b) = paragraphs.split_at(split.min(paragraphs.len()));
+    let h = (tab_bottom + 10.0 + col_height(col_a).max(col_height(col_b)) + 6.0).ceil();
 
     let mut d = Doc::new(w, h);
     d.describe("Boltzmann Distribution", &describe(&st, ans, ea_on, mark_on));
@@ -775,13 +797,21 @@ pub fn build(p: &Params) -> (String, Report) {
             d.raw(&text_el(col_x[k + 1], base, fs_tab, "start", if ans { ink_c } else { tick_c }, &text, kind));
         }
     }
-    let mut note_y = tab_bottom + 10.0;
-    for (k, (line, first)) in wrapped.iter().enumerate() {
-        if k > 0 && *first {
-            note_y += para_gap;
+    {
+        let top = tab_bottom + 10.0;
+        for (ci, col) in [col_a, col_b].iter().enumerate() {
+            let x = 20.0 + ci as f64 * (ro_w + col_gap);
+            let mut y = top;
+            for (pi, para) in col.iter().enumerate() {
+                for line in para {
+                    d.raw(&text_el(x, y + 0.76 * fs_ro, fs_ro, "start", ink_c, line, "note"));
+                    y += ro_lh;
+                }
+                if pi + 1 < col.len() {
+                    y += para_gap;
+                }
+            }
         }
-        d.raw(&text_el(20.0, note_y + 0.76 * fs_ro, fs_ro, "start", ink_c, line, "note"));
-        note_y += ro_lh;
     }
 
     let rep = Report {
