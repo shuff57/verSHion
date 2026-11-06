@@ -17,6 +17,7 @@ pub fn env_var_os(name: &str) -> Option<std::ffi::OsString> {
 }
 
 pub mod ai;
+pub mod alphanote;
 pub mod app;
 pub mod bankexport;
 pub mod bankops;

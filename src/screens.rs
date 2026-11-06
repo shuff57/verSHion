@@ -378,6 +378,13 @@ impl crate::App {
         if !matches!(self.screen, crate::Screen::Figures) {
             theme::set_chem_skin(false, ctx);
         }
+        // Get Started is for someone's first visit: a returning visitor goes straight in.
+        if matches!(self.screen, crate::Screen::Welcome) {
+            let has_work = !self.store.banks.is_empty() || !self.store.exams.is_empty();
+            if crate::alphanote::skips_welcome(crate::alphanote::visited(ctx), has_work) {
+                self.screen = crate::Screen::Home;
+            }
+        }
         match &self.screen {
             crate::Screen::Welcome => self.draw_welcome(ctx),
             crate::Screen::Home => self.draw_home(ctx),
@@ -426,6 +433,8 @@ impl crate::App {
         self.draw_help_overlay(ctx);
         self.draw_restore_confirm(ctx);
         self.draw_toasts(ctx);
+        // Last, so the popup and the corner button sit over whatever screen is open.
+        self.draw_alpha_notice(ctx);
     }
 
     // ---------- shared mutations (pub: other screens reuse) ----------
@@ -1381,6 +1390,28 @@ impl crate::App {
             });
         });
         ui.add_space(12.0);
+    }
+
+    /// The alpha popup (first open) or the corner "Report an issue" button, and the report dialog
+    /// they open. Drawn by the app on every screen, so a report can start anywhere.
+    pub(crate) fn draw_alpha_notice(&mut self, ctx: &egui::Context) {
+        use crate::alphanote::{self, Outcome};
+        // Leaving Get Started is what counts as having visited.
+        if !matches!(self.screen, crate::Screen::Welcome) {
+            alphanote::mark_visited(ctx);
+        }
+        let first = !alphanote::seen(ctx);
+        // The alpha popup opens after Get Started, not over it.
+        if first && matches!(self.screen, crate::Screen::Welcome) {
+            return;
+        }
+        let out = alphanote::show(ctx, first);
+        if first && matches!(out, Outcome::Closed | Outcome::Report) {
+            alphanote::mark_seen(ctx);
+        }
+        if out == Outcome::Report {
+            ctx.data_mut(|d| d.insert_temp(egui::Id::new("report_open"), true));
+        }
         self.draw_report_dialog(ctx);
     }
 
@@ -1858,7 +1889,7 @@ impl crate::App {
         let mut dismissed: Vec<usize> = Vec::new();
         egui::Area::new(egui::Id::new("toasts"))
             .order(egui::Order::Foreground)
-            .anchor(Align2::RIGHT_BOTTOM, [-16.0, -16.0])
+            .anchor(Align2::RIGHT_BOTTOM, [-16.0, -16.0 - crate::alphanote::TOAST_LIFT])
             .show(ctx, |ui| {
                 ui.spacing_mut().item_spacing.y = 6.0;
                 for (i, (text, is_error)) in items.iter().enumerate() {
