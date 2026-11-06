@@ -22,22 +22,6 @@ fn field(ui: &mut Ui, id: &str, value: &mut String, hint: &str, one_line: bool) 
     }
 }
 
-/// One labelled fact of an application: a small label beside its value, in a facts grid.
-fn fact(ui: &mut Ui, label: &str, value: &str, strong: bool) {
-    ui.label(kit::small_caps_text(label));
-    let t = if strong { theme::strong(value).size(13.0) } else { theme::text(value).size(13.0) };
-    ui.add(egui::Label::new(t).wrap());
-    ui.end_row();
-}
-
-/// A facts grid: labels in a narrow column, values beside them.
-fn facts(ui: &mut Ui, salt: &str, f: impl FnOnce(&mut Ui)) {
-    ui.scope(|ui| {
-        ui.spacing_mut().interact_size.y = 18.0;
-        egui::Grid::new(salt).num_columns(2).spacing([14.0, 6.0]).min_col_width(0.0).show(ui, f);
-    });
-}
-
 /// What a press in the list asks for, applied after the list is drawn.
 enum Ask {
     Open(Application, bool),
@@ -82,29 +66,17 @@ pub fn body(ui: &mut Ui, m: &mut AdminModel, session: Option<SharedSession>) {
     let loaded = matches!(m.state, State::Loaded(_));
     let failed = matches!(m.state, State::Failed(_));
     let mut reload = false;
-    const AGAIN: &str = "Read the queue again";
-    // The summary and the refresh share a row when both fit; otherwise the button goes under the sentence.
-    let text_w = ui.painter().layout_no_wrap(line.clone(), egui::FontId::new(13.5, theme::bold_family()), theme::ink()).size().x;
-    let one_row = ui.available_width() >= text_w + pageshell::button_width(ui, AGAIN) + 40.0;
-    ui.horizontal(|ui| {
-        ui.add(egui::Label::new(theme::strong(line).size(13.5)).wrap());
+    // The refresh sits with the sentence it refreshes.
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 12.0;
+        ui.label(theme::strong(line).size(13.5));
         if matches!(m.state, State::Reading) {
             ui.spinner();
         }
-        if one_row {
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if loaded && kit::ghost_button(ui, AGAIN).on_hover_text("Fetch the waiting applications again").clicked() {
-                    reload = true;
-                }
-            });
-        }
-    });
-    if !one_row && loaded {
-        ui.add_space(6.0);
-        if kit::ghost_button(ui, AGAIN).on_hover_text("Fetch the waiting applications again").clicked() {
+        if loaded && kit::chip_toggle(ui, "Read again", false).on_hover_text("Fetch the waiting applications again").clicked() {
             reload = true;
         }
-    }
+    });
     if failed && kit::primary_button(ui, "Try again").clicked() {
         reload = true;
     }
@@ -135,12 +107,19 @@ pub fn body(ui: &mut Ui, m: &mut AdminModel, session: Option<SharedSession>) {
         ui.add_space(8.0);
     }
     let deciding = m.decision.as_ref().map(|d| d.request_id.clone());
+    // The open decision is brought into view once (and again when the password box opens), so its
+    // buttons are not left below the window.
+    let view_key = deciding.as_ref().map(|r| format!("{r}:{}", m.confirming));
+    let seen_id = egui::Id::new("admin_decision_in_view");
+    let bring = view_key.is_some() && ui.ctx().data(|d| d.get_temp::<Option<String>>(seen_id)) != Some(view_key.clone());
+    ui.ctx().data_mut(|d| d.insert_temp(seen_id, view_key));
     for app in &items {
         let open = deciding.as_deref() == Some(app.request_id.as_str());
         let stroke = if open { egui::Stroke::new(1.5, theme::accent_col()) } else { egui::Stroke::new(1.0, theme::border()) };
-        kit::card().stroke(stroke).inner_margin(egui::Margin::same(14)).show(ui, |ui| {
+        let card = kit::card().stroke(stroke).inner_margin(egui::Margin::same(14)).show(ui, |ui| {
             ui.set_min_width(ui.available_width());
-            application(ui, app, open, &mut ask);
+            // while one decision is open the other applications wait: no stray Approve on the wrong person
+            ui.add_enabled_ui(open || deciding.is_none(), |ui| application(ui, app, open, &mut ask));
             if open {
                 ui.add_space(10.0);
                 ui.separator();
@@ -155,6 +134,9 @@ pub fn body(ui: &mut Ui, m: &mut AdminModel, session: Option<SharedSession>) {
                 }
             }
         });
+        if open && bring {
+            ui.scroll_to_rect(card.response.rect.expand(8.0), None);
+        }
         ui.add_space(8.0);
     }
     match ask {
@@ -187,14 +169,6 @@ pub fn body(ui: &mut Ui, m: &mut AdminModel, session: Option<SharedSession>) {
 /// One application: who, from where, how long it has waited, what is known about the domain.
 fn application(ui: &mut Ui, app: &Application, open: bool, ask: &mut Option<Ask>) {
     let wide = ui.available_width() >= 620.0;
-    let buttons = |ui: &mut Ui, ask: &mut Option<Ask>| {
-        if kit::ghost_button(ui, "Refuse...").clicked() {
-            *ask = Some(Ask::Open(app.clone(), false));
-        }
-        if kit::primary_button(ui, "Approve...").clicked() {
-            *ask = Some(Ask::Open(app.clone(), true));
-        }
-    };
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 8.0;
         ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
@@ -206,96 +180,151 @@ fn application(ui: &mut Ui, app: &Application, open: bool, ask: &mut Option<Ask>
             kit::pill_no_wrap(ui, "profile changed since applying", theme::accent_faded(), theme::text_col());
         }
         if !open && wide {
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| buttons(ui, ask));
-        }
-    });
-    ui.add_space(6.0);
-    let who = |ui: &mut Ui| {
-        facts(ui, &format!("admin_who_{}", app.request_id), |ui| {
-            fact(ui, "Email", &app.email, false);
-            fact(ui, "School", if app.school.is_empty() { "Not given" } else { &app.school }, false);
-        });
-    };
-    let known = |ui: &mut Ui| facts(ui, &format!("admin_known_{}", app.request_id), |ui| {
-        fact(ui, "Waiting", &age_text(app.age_seconds), app.age_seconds >= 2 * 86_400);
-        let mut domain = app.email_domain.clone();
-        if let Some((approved, rejected)) = app.domain_history
-            && (approved > 0 || rejected > 0)
-        {
-            domain.push_str(&format!("  ·  {approved} approved, {rejected} refused before"));
-        }
-        if let Some(h) = &app.domain_hint {
-            domain.push_str(&format!("  ·  your label: {h}"));
-        }
-        fact(ui, "Domain", &domain, false);
-        if app.prior_rejections > 0 {
-            let n = match app.prior_rejections {
-                1 => "1 earlier application was refused".to_string(),
-                n => format!("{n} earlier applications were refused"),
-            };
-            fact(ui, "History", &n, true);
-        }
-    });
-    if wide {
-        ui.columns(2, |c| {
-            who(&mut c[0]);
-            known(&mut c[1]);
-        });
-    } else {
-        who(ui);
-        ui.add_space(6.0);
-        known(ui);
-        if !open {
-            ui.add_space(8.0);
-            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                // Left to right here, so Approve comes first.
-                if kit::primary_button(ui, "Approve...").clicked() {
-                    *ask = Some(Ask::Open(app.clone(), true));
-                }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if kit::ghost_button(ui, "Refuse...").clicked() {
                     *ask = Some(Ask::Open(app.clone(), false));
                 }
+                if kit::primary_button(ui, "Approve...").clicked() {
+                    *ask = Some(Ask::Open(app.clone(), true));
+                }
             });
         }
+    });
+    ui.add_space(6.0);
+    // The same six facts on every card, in the same places, so cards compare at a glance.
+    let school = if app.school.is_empty() { "Not given".to_string() } else { app.school.clone() };
+    let label = app.domain_hint.clone().unwrap_or_else(|| "None".into());
+    let domain_hist = match app.domain_history {
+        Some((a, r)) if a > 0 || r > 0 => format!("{a} approved, {r} refused"),
+        _ => "No decisions yet".into(),
+    };
+    let before = match app.prior_rejections {
+        0 => "No".to_string(),
+        1 => "Once, refused".to_string(),
+        n => format!("{n} times, refused"),
+    };
+    let rows: [(&str, String, bool); 6] = [
+        ("Email", app.email.clone(), false),
+        ("Waiting", age_text(app.age_seconds), app.age_seconds >= 2 * 86_400),
+        ("School", school, false),
+        ("Domain", format!("{}  ·  {domain_hist}", app.email_domain), false),
+        ("Your label", label, false),
+        ("Applied before", before, app.prior_rejections > 0),
+    ];
+    let value = |ui: &mut Ui, v: &str, strong: bool| {
+        let t = if strong { theme::strong(v).size(13.0) } else { theme::text(v).size(13.0) };
+        ui.add(egui::Label::new(t).wrap_mode(egui::TextWrapMode::Extend));
+    };
+    ui.scope(|ui| {
+        ui.spacing_mut().interact_size.y = 18.0;
+        let grid = egui::Grid::new(("admin_facts", &app.request_id)).spacing([14.0, 6.0]).min_col_width(0.0);
+        if wide {
+            grid.num_columns(4).show(ui, |ui| {
+                for pair in rows.chunks(2) {
+                    for (i, (k, v, st)) in pair.iter().enumerate() {
+                        // fixed column widths: every card's facts line up with the card above it
+                        let lw = if i == 0 { 96.0 } else { 128.0 };
+                        ui.allocate_ui_with_layout(egui::vec2(lw, 18.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                            ui.set_min_width(lw);
+                            ui.add_space(if i == 1 { 24.0 } else { 0.0 });
+                            ui.label(kit::small_caps_text(k));
+                        });
+                        let vw: f32 = if i == 0 { 300.0 } else { 0.0 };
+                        ui.allocate_ui_with_layout(egui::vec2(vw.max(1.0), 18.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                            ui.set_min_width(vw);
+                            value(ui, v, *st);
+                        });
+                    }
+                    ui.end_row();
+                }
+            });
+        } else {
+            grid.num_columns(2).show(ui, |ui| {
+                for (k, v, st) in &rows {
+                    ui.allocate_ui_with_layout(egui::vec2(104.0, 18.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        ui.set_min_width(104.0);
+                        ui.label(kit::small_caps_text(k));
+                    });
+                    ui.add(egui::Label::new(if *st { theme::strong(v.as_str()).size(13.0) } else { theme::text(v.as_str()).size(13.0) }).wrap());
+                    ui.end_row();
+                }
+            });
+        }
+    });
+    if !open && !wide {
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            if kit::primary_button(ui, "Approve...").clicked() {
+                *ask = Some(Ask::Open(app.clone(), true));
+            }
+            if kit::ghost_button(ui, "Refuse...").clicked() {
+                *ask = Some(Ask::Open(app.clone(), false));
+            }
+        });
     }
+}
+
+/// A choice in the decision form: a filled accent dot when chosen, a ring when not (the stock radio's
+/// dark-on-dark dot was hard to tell from the empty one in the dark theme).
+fn choice(ui: &mut Ui, on: bool, label: &str) -> bool {
+    let r = ui
+        .horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            let (c, resp) = ui.allocate_exact_size(egui::Vec2::splat(18.0), egui::Sense::click());
+            let p = ui.painter();
+            if on {
+                p.circle_filled(c.center(), 8.0, theme::accent_col());
+                p.circle_filled(c.center(), 3.2, theme::on_accent_col());
+            } else {
+                p.circle_stroke(c.center(), 7.5, egui::Stroke::new(1.5, if resp.hovered() { theme::accent_col() } else { theme::muted_col() }));
+            }
+            let t = ui.add(egui::Label::new(theme::text(label).size(13.5)).sense(egui::Sense::click()));
+            resp.clicked() || t.clicked()
+        })
+        .inner;
+    r
 }
 
 /// The decision being filled in, inside the application's own card.
 fn decision_form(ui: &mut Ui, d: &mut Decision, confirming: bool, ask: &mut Option<Ask>) {
     let title = if d.approve { format!("Approve {}", d.who) } else { format!("Refuse {}", d.who) };
     ui.label(theme::strong(title.as_str()).size(14.0));
-    ui.add_space(6.0);
-    // Waiting for the password: what is about to be sent, in a line or two, so the password box stays in view.
+    ui.add_space(8.0);
+    // Waiting for the password: what is about to be sent, as labelled rows, so the password box stays in view.
     if confirming {
-        let what = if d.approve {
-            let mut w = format!("Checked: {}", EVIDENCE.get(d.evidence).map(|e| e.1).unwrap_or("nothing chosen"));
-            if !d.evidence_note.trim().is_empty() {
-                w.push_str(&format!("  ·  “{}”", d.evidence_note.trim()));
-            }
-            w
-        } else {
-            format!("Reason the applicant reads: “{}”", d.reason.trim())
-        };
-        ui.add(egui::Label::new(theme::text(what).size(13.0)).wrap());
-        if !d.note.trim().is_empty() {
-            ui.add(egui::Label::new(theme::muted(format!("Your note: {}", d.note.trim())).size(12.5)).wrap());
-        }
-        return;
-    }
-    ui.scope(|ui| {
-        if d.approve {
-            ui.label(theme::muted("What did you check?").size(12.5));
-            ui.add_space(2.0);
-            ui.scope(|ui| {
-                ui.spacing_mut().item_spacing.y = 2.0;
-                ui.spacing_mut().interact_size.y = 24.0;
-                for (i, (_, label)) in EVIDENCE.iter().enumerate() {
-                    ui.radio_value(&mut d.evidence, i, *label);
+        ui.scope(|ui| {
+            ui.spacing_mut().interact_size.y = 18.0;
+            egui::Grid::new("admin_sending").num_columns(2).spacing([14.0, 6.0]).show(ui, |ui| {
+                let row = |ui: &mut Ui, k: &str, v: String| {
+                    ui.label(kit::small_caps_text(k));
+                    ui.add(egui::Label::new(theme::text(v).size(13.0)).wrap());
+                    ui.end_row();
+                };
+                if d.approve {
+                    row(ui, "Checked", EVIDENCE.get(d.evidence).map(|e| e.1).unwrap_or("Nothing chosen").to_string());
+                    if !d.evidence_note.trim().is_empty() {
+                        row(ui, "Where", format!("“{}”", d.evidence_note.trim()));
+                    }
+                } else {
+                    row(ui, "Reason", format!("“{}”", d.reason.trim()));
+                }
+                if !d.note.trim().is_empty() {
+                    row(ui, "Your note", d.note.trim().to_string());
                 }
             });
-            ui.add_space(6.0);
-            ui.label(theme::muted("Where you checked it (kept in the audit trail)").size(12.5));
-            field(ui, "admin_evidence_note", &mut d.evidence_note, "e.g. the staff directory page, or who confirmed it", true);
+        });
+        return;
+    }
+    let left = |ui: &mut Ui, d: &mut Decision| {
+        if d.approve {
+            ui.label(theme::muted("What did you check?").size(12.5));
+            ui.add_space(4.0);
+            for (i, (_, label)) in EVIDENCE.iter().enumerate() {
+                if choice(ui, d.evidence == i, label) {
+                    d.evidence = i;
+                }
+                ui.add_space(2.0);
+            }
         } else {
             ui.label(theme::muted("Why (the applicant reads this)").size(12.5));
             field(
@@ -306,10 +335,26 @@ fn decision_form(ui: &mut Ui, d: &mut Decision, confirming: bool, ask: &mut Opti
                 false,
             );
         }
-        ui.add_space(6.0);
+    };
+    let right = |ui: &mut Ui, d: &mut Decision| {
+        if d.approve {
+            ui.label(theme::muted("Where you checked it (kept in the audit trail)").size(12.5));
+            field(ui, "admin_evidence_note", &mut d.evidence_note, "e.g. the staff directory page, or who confirmed it", true);
+            ui.add_space(6.0);
+        }
         ui.label(theme::muted("Your note (never shown to the applicant)").size(12.5));
         field(ui, "admin_note", &mut d.note, "optional", true);
-    });
+    };
+    if ui.available_width() >= 620.0 {
+        ui.columns(2, |c| {
+            left(&mut c[0], d);
+            right(&mut c[1], d);
+        });
+    } else {
+        left(ui, d);
+        ui.add_space(6.0);
+        right(ui, d);
+    }
     ui.add_space(10.0);
     ui.horizontal(|ui| {
         let label = if d.approve { "Approve" } else { "Refuse" };
@@ -340,13 +385,13 @@ fn password_block(ui: &mut Ui, m: &mut AdminModel, ask: &mut Option<Ask>) {
                 .wrap(),
             );
             ui.add_space(8.0);
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 let r = ui.add(
                     egui::TextEdit::singleline(&mut m.password)
                         .id(egui::Id::new("admin_password"))
                         .password(true)
                         .hint_text("Your password")
-                        .desired_width(260.0),
+                        .desired_width(ui.available_width().min(FIELD_W) - 200.0),
                 );
                 let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
                 if kit::primary_button(ui, "Confirm").clicked() || enter {
