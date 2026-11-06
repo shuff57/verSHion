@@ -1,7 +1,9 @@
 //! The Maxwell-Boltzmann distribution of molecular speeds: the fraction of molecules per unit speed against speed,
 //! for one gas at one, two or three temperatures. The curves are the exact density
 //!
-//!     f(v) = 4 pi (M / (2 pi R T))^(3/2) v^2 exp(- M v^2 / (2 R T)),
+//! ```text
+//! f(v) = 4 pi (M / (2 pi R T))^(3/2) v^2 exp(- M v^2 / (2 R T)),
+//! ```
 //!
 //! with M in kg/mol, R = 8.314462618 J/(mol K) and v in m/s. The y axis is the true density, in s/m (fraction of
 //! molecules per m/s); the curves are never rescaled, so each encloses area 1 and a hotter curve is lower and wider.
@@ -21,7 +23,9 @@
 //! The fraction of molecules whose kinetic energy is at or above an activation energy Ea is, for the three-dimensional
 //! Maxwell-Boltzmann energy distribution,
 //!
-//!     F(Ea) = (2/sqrt(pi)) sqrt(x) exp(-x) + erfc(sqrt(x)),   x = Ea / (R T).
+//! ```text
+//! F(Ea) = (2/sqrt(pi)) sqrt(x) exp(-x) + erfc(sqrt(x)),   x = Ea / (R T).
+//! ```
 //!
 //! It is exactly the area under the speed curve to the right of v = sqrt(2 Ea / M), because the kinetic energy is
 //! (1/2) M v^2 per mole. F(0) = 1, and F rises with T at fixed Ea. erfc is the complementary error function,
@@ -453,12 +457,18 @@ struct Legend { x: f64, yc: f64, w: f64, kind: LegKind }
 
 enum LegKind { Series(usize, String), Ea(String), Mark(String), Vp(String), Rms(String) }
 
+/// The length of the Ea and rms legend swatches: long enough for their dash patterns to repeat.
+/// (Drawn upright and 12 units tall they read as the characters "⋮" and "!".)
+const GUIDE_SWATCH: f64 = 36.0;
+
 fn legend_width(kind: &LegKind, fs: f64) -> f64 {
     let swatch = 26.0;
     let gap = 7.0;
     match kind {
         LegKind::Series(_, text) => swatch + gap + text_w(text, fs),
-        LegKind::Ea(text) | LegKind::Mark(text) | LegKind::Vp(text) | LegKind::Rms(text) => 12.0 + gap + text_w(text, fs),
+        // the guides' swatches are a short run of their own dash pattern, read as a line style
+        LegKind::Ea(text) | LegKind::Rms(text) => GUIDE_SWATCH + gap + text_w(text, fs),
+        LegKind::Mark(text) | LegKind::Vp(text) => 12.0 + gap + text_w(text, fs),
     }
 }
 
@@ -484,7 +494,7 @@ pub fn build(p: &Params) -> (String, Report) {
     let mut fs_tab = 13.0 * lab;
     let fs_ro = 13.0 * lab;
     let w = (760.0 * (1.0 + 0.38 * (lab - 1.0))).round();
-    let ph = (420.0 * (1.0 + 0.22 * (lab - 1.0))).round();
+    let ph = (380.0 * (1.0 + 0.22 * (lab - 1.0))).round();
 
     let temps = st.temps.clone();
     let curves: Vec<Curve> = temps.iter().map(|&t| Curve {
@@ -503,7 +513,8 @@ pub fn build(p: &Params) -> (String, Report) {
     let x_raw = if st.ea_kj > 0.0 && ea_on { (X_SPAN * vp_hot).max(1.05 * va) } else { X_SPAN * vp_hot };
     let (x_top, x_step) = axis_top(x_raw, 6.0);
     let peak_max = curves.iter().map(|c| c.peak).fold(0.0, f64::max).max(1e-300);
-    let (y_top, y_step) = axis_top(1.08 * peak_max, 5.0);
+    // headroom over the tallest peak, so the legend band above the plot keeps clear of it
+    let (y_top, y_step) = axis_top(1.18 * peak_max, 5.0);
     let xticks = ticks(0.0, x_top, x_step);
     let yticks = ticks(0.0, y_top, y_step);
 
@@ -531,14 +542,24 @@ pub fn build(p: &Params) -> (String, Report) {
     let row_h = 1.55 * fs_lab;
     for kind in legs {
         let lw = legend_width(&kind, fs_lab);
+        // the curves keep the first row; the guides (vp, rms, Ea, the marked speed) take a row of
+        // their own, so five entries are never crushed onto one line by the sheet's scale
+        if !matches!(kind, LegKind::Series(..)) && row == 0 && !placed.is_empty() {
+            row = 1;
+            xcur = l + 2.0;
+        }
         if xcur > l + 2.0 && xcur + lw > w - 10.0 { row += 1; xcur = l + 2.0; }
         let yc = 8.0 + row as f64 * row_h + 0.62 * fs_lab;
         placed.push(Legend { x: xcur, yc, w: lw, kind });
         xcur += lw + leg_gap;
     }
     let rows = if placed.is_empty() { 0 } else { row + 1 };
-    let t = (8.0 + rows as f64 * row_h + 8.0).round();
+    // the band ends well above the plot's top edge, so the guides' row never touches the peak
+    let t = (8.0 + rows as f64 * row_h + 16.0).round();
 
+    // the plot is a little shorter than it was (the notes now run in one column below it), but
+    // never shorter than its rotated y title needs
+    let ph = ph.max((text_w("Fraction of molecules per unit speed (s/m)", fs_t) + t + b + 24.0).ceil());
     let fr = Frame { w, h: ph, l, r, t, b, x0: 0.0, x1: x_top, y0: 0.0, y1: y_top };
     let (left, right, top, bottom) = (fr.left(), fr.right(), fr.top(), fr.bottom());
     let px = |x: f64| fr.px(x);
@@ -625,10 +646,16 @@ pub fn build(p: &Params) -> (String, Report) {
             lines.push(format!("The marked speed {} m/s is beyond the x axis (0 to {} m/s), so no guide is drawn.", fmt(st.mark), fmt(x_top)));
         }
     }
-    let mut wrapped: Vec<String> = Vec::new();
-    for line in &lines { wrapped.extend(wrap(line, fs_ro, w - 40.0)); }
-    let ro_lh = 1.45 * fs_ro;
-    let h = (tab_bottom + 10.0 + wrapped.len() as f64 * ro_lh + 6.0).ceil();
+    // The reading block: one column at a reading measure (about 66 characters), starting on the
+    // speeds table's left edge. Two ~45-character columns read as dense footnote bricks; the plot,
+    // not the notes, fills the sheet's width.
+    let ro_x = col_x[0];
+    let ro_w = (66.0 * fs_ro * 0.52).min(w - ro_x - 20.0).max(160.0);
+    let paragraphs: Vec<Vec<String>> = lines.iter().map(|line| wrap(line, fs_ro, ro_w)).collect();
+    let ro_lh = 1.55 * fs_ro;
+    let para_gap = 6.0;
+    let notes_h = paragraphs.iter().map(|p| p.len() as f64).sum::<f64>() * ro_lh + paragraphs.len().saturating_sub(1) as f64 * para_gap;
+    let h = (tab_bottom + 12.0 + notes_h + 6.0).ceil();
 
     let mut d = Doc::new(w, h);
     d.describe("Boltzmann Distribution", &describe(&st, ans, ea_on, mark_on));
@@ -720,24 +747,24 @@ pub fn build(p: &Params) -> (String, Report) {
             }
             LegKind::Ea(text) => {
                 let (x, yc) = (lg.x, lg.yc);
-                d.raw(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{guide_c}" stroke-width="1.5" stroke-dasharray="1.5 4" data-o="legend"/>"##, x + 5.0, yc - 6.0, x + 5.0, yc + 6.0));
-                d.raw(&text_el(x + 12.0, yc + 0.34 * fs_lab, fs_lab, "start", lab_c, text, "legend"));
+                d.raw(&format!(r##"<line x1="{x:.2}" y1="{yc:.2}" x2="{:.2}" y2="{yc:.2}" stroke="{guide_c}" stroke-width="2.2" stroke-dasharray="3 3.5" data-o="legend"/>"##, x + GUIDE_SWATCH));
+                d.raw(&text_el(x + GUIDE_SWATCH + 7.0, yc + 0.34 * fs_lab, fs_lab, "start", lab_c, text, "legend"));
             }
             LegKind::Mark(text) => {
                 let (x, yc) = (lg.x, lg.yc);
-                d.raw(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{guide_c}" stroke-width="1.4" stroke-dasharray="3 3" data-o="legend"/>"##, x + 5.0, yc + 5.0, x + 5.0, yc - 2.0));
-                d.raw(&marker_el(x + 5.0, yc - 2.0, 3.0, ink_c, "#ffffff", "legend"));
+                d.raw(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{guide_c}" stroke-width="2.2" stroke-dasharray="3 3" data-o="legend"/>"##, x + 5.0, yc + 6.0, x + 5.0, yc - 2.0));
+                d.raw(&marker_el(x + 5.0, yc - 2.0, 3.4, ink_c, "#ffffff", "legend"));
                 d.raw(&text_el(x + 12.0, yc + 0.34 * fs_lab, fs_lab, "start", lab_c, text, "legend"));
             }
             LegKind::Vp(text) => {
                 let (x, yc) = (lg.x, lg.yc);
-                d.raw(&marker_el(x + 5.0, yc, 3.0, ink_c, "#ffffff", "legend"));
-                d.raw(&text_el(x + 12.0, yc + 0.34 * fs_lab, fs_lab, "start", lab_c, text, "legend"));
+                d.raw(&marker_el(x + 6.0, yc, 3.4, ink_c, "#ffffff", "legend"));
+                d.raw(&text_el(x + 13.0, yc + 0.34 * fs_lab, fs_lab, "start", lab_c, text, "legend"));
             }
             LegKind::Rms(text) => {
                 let (x, yc) = (lg.x, lg.yc);
-                d.raw(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{guide_c}" stroke-width="1.4" stroke-dasharray="6 3 1 3" data-o="legend"/>"##, x + 5.0, yc - 6.0, x + 5.0, yc + 6.0));
-                d.raw(&text_el(x + 12.0, yc + 0.34 * fs_lab, fs_lab, "start", lab_c, text, "legend"));
+                d.raw(&format!(r##"<line x1="{x:.2}" y1="{yc:.2}" x2="{:.2}" y2="{yc:.2}" stroke="{guide_c}" stroke-width="2.2" stroke-dasharray="8 3 2 3" data-o="legend"/>"##, x + GUIDE_SWATCH));
+                d.raw(&text_el(x + GUIDE_SWATCH + 7.0, yc + 0.34 * fs_lab, fs_lab, "start", lab_c, text, "legend"));
             }
         }
     }
@@ -756,8 +783,17 @@ pub fn build(p: &Params) -> (String, Report) {
             d.raw(&text_el(col_x[k + 1], base, fs_tab, "start", if ans { ink_c } else { tick_c }, &text, kind));
         }
     }
-    for (k, line) in wrapped.iter().enumerate() {
-        d.raw(&text_el(20.0, tab_bottom + 10.0 + 0.76 * fs_ro + k as f64 * ro_lh, fs_ro, "start", ink_c, line, "note"));
+    {
+        let mut y = tab_bottom + 12.0;
+        for (pi, para) in paragraphs.iter().enumerate() {
+            for line in para {
+                d.raw(&text_el(ro_x, y + 0.76 * fs_ro, fs_ro, "start", ink_c, line, "note"));
+                y += ro_lh;
+            }
+            if pi + 1 < paragraphs.len() {
+                y += para_gap;
+            }
+        }
     }
 
     let rep = Report {
@@ -811,3 +847,19 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
 
 #[cfg(test)]
 mod tests;
+
+/// The editor's one-line summary under the Values section: the gas, how many curves, their temperatures
+/// (the generic summary printed the curve count as a bare "2" and the custom molar mass for any gas).
+pub fn section_summary(title: &str, p: &Params) -> Option<String> {
+    if title != "Values" {
+        return None;
+    }
+    let gas = match p.s("gas") {
+        "Custom" => format!("M = {} g/mol", fmt(p.f("molar_mass"))),
+        g => g.to_string(),
+    };
+    let n: usize = p.s("curves").parse().unwrap_or(2).clamp(1, 3);
+    let temps: Vec<String> = ["t1", "t2", "t3"].iter().take(n).map(|k| fmt(p.f(k))).collect();
+    let curves = if n == 1 { "1 curve".to_string() } else { format!("{n} curves") };
+    Some(format!("{gas} · {curves} · {} K", temps.join(", ")))
+}

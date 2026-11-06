@@ -13,7 +13,8 @@ from blindlib import build
 
 B = sys.argv[1] if len(sys.argv) > 1 else os.environ.get('UC_BLIND', 'blind')
 KEY = os.path.expanduser(os.environ.get('UC_KEY', '~/.local/state/ui-hill-climb/key.json'))
-key = json.load(open(f'{B}/key.json'))
+key = json.load(open(KEY))
+assert not os.path.exists(f'{B}/key.json'), 'key.json is inside the blind folder the critics read'
 
 
 def digest(im, path):

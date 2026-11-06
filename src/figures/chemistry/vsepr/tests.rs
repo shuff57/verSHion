@@ -614,7 +614,7 @@ fn the_switches_add_and_remove_atoms_bonds_lone_pairs_and_labels() {
         assert_eq!(texts(&svg_of(&[s("molecule", name)])).iter().filter(|t| t.kind == "angle").count(), angles, "{name} angle labels");
         assert_eq!(texts(&svg_of(&[s("molecule", name)])).iter().filter(|t| t.kind == "alabel").count(), atoms, "{name} atom labels");
         let panel = texts(&svg_of(&[s("molecule", name)])).into_iter().filter(|t| t.kind == "panel").map(|t| t.text).collect::<Vec<_>>().join(" ");
-        assert!(panel.contains(&format!("Lone pairs on the central atom: {lone}")), "{name}: {panel}");
+        assert!(panel.contains(&format!("Lone pairs: {lone}")), "{name}: {panel}");
     }
     // lone pairs off
     let g = geo(&svg_of(&[s("molecule", "H2O"), b("lone", false)]));
@@ -628,7 +628,8 @@ fn the_switches_add_and_remove_atoms_bonds_lone_pairs_and_labels() {
     let svg = svg_of(&[s("molecule", "CH4"), b("angles", false)]);
     assert_eq!(geo(&svg).arcs.iter().filter(|a| a.kind == "anglearc").count(), 0);
     assert_eq!(texts(&svg).iter().filter(|t| t.kind == "angle").count(), 0);
-    assert!(texts(&svg).iter().any(|t| t.text.contains("Bond angle: not shown")), "{}", texts(&svg).iter().map(|t| &t.text).cloned().collect::<Vec<_>>().join(" | "));
+    let joined = texts(&svg).iter().map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ");
+    assert!(joined.contains("Bond angle: not shown"), "{joined}");
     let joined = texts(&svg).iter().map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ");
     assert!(!joined.contains("107") && !joined.contains("109.5"), "the explanation still prints an angle while Show bond angles is off: {joined}");
     assert!(joined.contains("far apart"), "the explanation lost its angle-free form: {joined}");
@@ -636,7 +637,8 @@ fn the_switches_add_and_remove_atoms_bonds_lone_pairs_and_labels() {
     let svg = svg_of(&[s("molecule", "CH4"), b(SHOW_ANSWERS, false)]);
     assert_eq!(geo(&svg).arcs.iter().filter(|a| a.kind == "anglearc").count(), 0);
     assert_eq!(texts(&svg).iter().filter(|t| t.kind == "angle").count(), 0);
-    assert!(texts(&svg).iter().any(|t| t.text.contains("Bond angle: ______")), "the student angle is not blank");
+    let joined = texts(&svg).iter().map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ");
+    assert!(joined.contains("Bond angle: ______"), "the student angle is not blank");
     // the central and terminal fills differ, and each atom is drawn once
     let g = geo(&svg_of(&[s("molecule", "CH4")]));
     let central = g.circles.iter().find(|c| c.feat == "a0").unwrap();
@@ -732,11 +734,13 @@ fn the_angle_switch_hides_the_arc_and_the_value() {
     assert_eq!(k.angles[0].text, "107°");
     let svg = svg_of(&[s("molecule", "NH3")]);
     assert_eq!(geo(&svg).arcs.iter().filter(|a| a.kind == "anglearc").count(), 1);
-    assert!(texts(&svg).iter().any(|t| t.text.contains("Bond angle: 107°")));
+    let joined = texts(&svg).iter().map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ");
+    assert!(joined.contains("Bond angle: 107°"), "{joined}");
     let svg = svg_of(&[s("molecule", "NH3"), b("angles", false)]);
     assert_eq!(geo(&svg).arcs.iter().filter(|a| a.kind == "anglearc").count(), 0);
     assert_eq!(texts(&svg).iter().filter(|t| t.kind == "angle").count(), 0);
-    assert!(texts(&svg).iter().any(|t| t.text.contains("Bond angle: not shown")), "{}", texts(&svg).iter().map(|t| &t.text).cloned().collect::<Vec<_>>().join(" | "));
+    let joined = texts(&svg).iter().map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ");
+    assert!(joined.contains("Bond angle: not shown"), "{joined}");
     let joined = texts(&svg).iter().map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ");
     assert!(!joined.contains("107") && !joined.contains("109.5"), "the explanation still prints an angle while Show bond angles is off: {joined}");
     assert!(joined.contains("trigonal pyramid"), "the explanation lost its angle-free form: {joined}");
@@ -784,7 +788,8 @@ fn the_student_copy_blanks_the_geometry_and_the_angle_without_leaking() {
             }
         }
         let joined = ts.iter().map(|t| t.text.as_str()).collect::<Vec<_>>().join(" ");
-        let blanks = ts.iter().filter(|t| t.text.contains(BLANK)).count();
+        // the label and the value are separate text elements, so count the blanks themselves
+        let blanks: usize = ts.iter().map(|t| t.text.matches(BLANK).count()).sum();
         assert!(blanks >= 2 + m.pairs.len(), "{}: {blanks} blanks for {} angles", m.name, m.pairs.len());
         assert!(joined.contains("Molecular shape: ______"), "{}: {joined}", m.name);
         assert!(joined.contains("Bond angle"), "{}: {joined}", m.name);
@@ -1689,3 +1694,4 @@ fn lone_pairs_behind_a_nearer_ball_are_noted() {
     }
     assert!(noted > 0, "no XeF4 view left a behind-a-ball pair off with a note");
 }
+

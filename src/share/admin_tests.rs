@@ -168,6 +168,9 @@ fn an_approval_asks_for_the_password_first_then_goes_with_the_evidence() {
     let mut m = loaded(&s);
     let first = app(&m, 0);
     m.open_decision(&first, true);
+    if let Some(d) = m.decision.as_mut() {
+        d.evidence_note = "staff directory".into();
+    }
     m.frame(Instant::now());
     // Pressing Approve without a token opens the password box and sends nothing.
     m.decide(session(&s));
@@ -214,6 +217,9 @@ fn the_evidence_choice_and_notes_are_what_the_server_documents() {
     m.frame(Instant::now());
     let first = app(&m, 0);
     m.open_decision(&first, true);
+    if let Some(d) = m.decision.as_mut() {
+        d.evidence_note = "staff directory".into();
+    }
     if let Some(d) = m.decision.as_mut() {
         d.evidence = 1;
         d.evidence_note = "Ms Rivera in the office confirmed it".into();
@@ -273,6 +279,9 @@ fn a_lapsed_sudo_token_asks_for_the_password_again_and_keeps_the_form() {
     let first = app(&m, 0);
     m.open_decision(&first, true);
     if let Some(d) = m.decision.as_mut() {
+        d.evidence_note = "staff directory".into();
+    }
+    if let Some(d) = m.decision.as_mut() {
         d.note = "keep me".into();
     }
     s.say(403, json!({ "error": "sudo_required" }));
@@ -295,6 +304,9 @@ fn a_409_means_someone_else_decided_it_and_the_row_leaves() {
     m.frame(Instant::now());
     let first = app(&m, 0);
     m.open_decision(&first, true);
+    if let Some(d) = m.decision.as_mut() {
+        d.evidence_note = "staff directory".into();
+    }
     s.say(409, json!({ "error": "not_pending" }));
     m.decide(session(&s));
     m.frame(Instant::now());
@@ -448,4 +460,19 @@ fn the_admin_tab_draws_its_list_form_and_password_box_at_every_width() {
     frame(&ctx, 1000.0, &mut |x| {
         page.tabs(x, &mut a, &mut b, &mut m, &mut banks, &[], false);
     });
+}
+
+#[test]
+fn the_capture_fixture_shows_the_queue_and_its_forms_without_a_request() {
+    let fixture: Value = serde_json::from_str(include_str!("../../tools/ui-grading/fixtures/admin-queue.json")).unwrap();
+    let q = parse_queue(&fixture).expect("the capture fixture is a queue");
+    assert_eq!(q.items.len(), 5);
+    let mut m = AdminModel::new(Runner::Inline);
+    m.qa_show(q.clone(), "");
+    assert_eq!(m.state, State::Loaded(q.clone()));
+    assert!(m.decision.is_none() && !m.confirming && !m.busy());
+    m.qa_show(q.clone(), "refuse");
+    assert_eq!(m.decision.as_ref().map(|d| (d.who.as_str(), d.approve)), Some(("Rosa Delgado", false)));
+    m.qa_show(q, "confirm");
+    assert!(m.confirming && m.decision.as_ref().is_some_and(|d| d.approve) && m.password.is_empty());
 }

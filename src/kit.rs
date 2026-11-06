@@ -36,6 +36,119 @@ pub fn primary_button(ui: &mut Ui, label: &str) -> egui::Response {
     )
 }
 
+/// [`primary_button`] with a visible waiting state: a gated action (one that cannot be taken until a
+/// required field is filled) must not look ready, and must not look broken either. The waiting face
+/// keeps the primary's shape and weight: an accent outline over a faint accent wash with the label in
+/// accent ink, drawn at full opacity (egui's disabled fade made it faint grey, weaker than the ghost
+/// button beside it). Pair it with [`gated_reason`], which names the missing step.
+pub fn primary_button_on(ui: &mut Ui, label: &str, on: bool) -> egui::Response {
+    if on {
+        return primary_button(ui, label);
+    }
+    let wash = theme::accent_faded().lerp_to_gamma(theme::card(), 0.35);
+    let text = RichText::new(label).family(theme::bold_family()).color(theme::accent_col());
+    ui.scope(|ui| {
+        ui.spacing_mut().button_padding = Vec2::new(18.0, 4.0);
+        let w = &mut ui.visuals_mut().widgets;
+        // a hover-only button is styled as "noninteractive" by egui, so that state gets the face too
+        for state in [&mut w.noninteractive, &mut w.inactive, &mut w.hovered, &mut w.active] {
+            state.weak_bg_fill = wash;
+            state.bg_fill = wash;
+            state.bg_stroke = Stroke::new(1.5, theme::accent_col());
+            state.expansion = 0.0;
+            state.corner_radius = CornerRadius::same(12);
+        }
+        ui.add(egui::Button::new(text).min_size(Vec2::new(0.0, 36.0)).sense(Sense::hover()))
+            .on_hover_cursor(egui::CursorIcon::NotAllowed)
+    })
+    .inner
+}
+
+/// The one line beside a waiting [`primary_button_on`] that says what it waits for ("Type your
+/// password to send"). Muted ink at reading size with an info mark, so the gate reads as a step,
+/// not a styling accident. Shown only while the step is missing.
+pub fn gated_reason(ui: &mut Ui, reason: &str) -> egui::Response {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 5.0;
+        ui.label(RichText::new(egui_phosphor::regular::INFO).font(theme::icon_font(14.0)).color(theme::muted_col()));
+        ui.add(egui::Label::new(RichText::new(reason).size(12.5).color(theme::text_col())).wrap_mode(egui::TextWrapMode::Extend));
+    })
+    .response
+}
+
+/// A field that gates a button and is still empty wears an accent ring, so the eye goes to the step
+/// that is missing. Call with the field's response after adding it.
+pub fn attention_ring(ui: &Ui, field: &egui::Response) {
+    ui.painter().rect_stroke(field.rect.expand(1.5), CornerRadius::same(R_FIELD), Stroke::new(1.5, theme::accent_col()), StrokeKind::Outside);
+}
+
+/// A quiet scroll viewport: a thin muted handle set right against the content's edge with no track,
+/// for a list that scrolls inside a page that also scrolls (a heavy ink bar there competed with the
+/// page's own). The content keeps the page's own widget look.
+pub fn quiet_scroll_area<R>(ui: &mut Ui, area: egui::ScrollArea, add: impl FnOnce(&mut Ui) -> R) -> egui::scroll_area::ScrollAreaOutput<R> {
+    ui.scope(|ui| {
+        let saved = ui.style().clone();
+        let s = &mut ui.spacing_mut().scroll;
+        *s = egui::style::ScrollStyle::solid();
+        s.bar_width = 6.0;
+        s.bar_inner_margin = 4.0;
+        s.bar_outer_margin = 0.0;
+        s.foreground_color = false;
+        let v = ui.visuals_mut();
+        v.extreme_bg_color = Color32::TRANSPARENT;
+        let handle = theme::muted_col().gamma_multiply(0.55);
+        v.widgets.inactive.bg_fill = handle;
+        v.widgets.hovered.bg_fill = theme::muted_col();
+        v.widgets.active.bg_fill = theme::muted_col();
+        for w in [&mut v.widgets.inactive, &mut v.widgets.hovered, &mut v.widgets.active] {
+            w.corner_radius = CornerRadius::same(3);
+        }
+        area.show(ui, |ui| {
+            ui.set_style(saved);
+            add(ui)
+        })
+    })
+    .inner
+}
+
+/// A scroll bar the eye can find: a solid track (not the floating hairline that fades in only
+/// under the pointer) with an ink handle, in both themes. Returns the colour to restore on
+/// `extreme_bg_color` after the scroll area. Long-form panels used to look complete while half
+/// their controls sat below the fold, because the bar was invisible until hovered.
+pub fn visible_scroll(ui: &mut Ui) -> (Color32, egui::style::ScrollStyle) {
+    let old = ui.visuals().extreme_bg_color;
+    let old_style = ui.spacing().scroll.clone();
+    ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
+    ui.spacing_mut().scroll.bar_width = 10.0;
+    // the handle takes the widget's text stroke, so it stays ink-dark on the light page and
+    // cream on the dark one; the track is a tan step off the card so it reads as a channel
+    ui.spacing_mut().scroll.foreground_color = true;
+    ui.spacing_mut().scroll.fade.strength = 0.0;
+    ui.spacing_mut().scroll.dormant_handle_opacity = 1.0;
+    ui.visuals_mut().extreme_bg_color = theme::field().lerp_to_gamma(theme::rule(), 0.42);
+    (old, old_style)
+}
+
+/// Put a scroll area's track colour and bar style back after [`visible_scroll`].
+pub fn restore_scroll(ui: &mut Ui, old: (Color32, egui::style::ScrollStyle)) {
+    ui.visuals_mut().extreme_bg_color = old.0;
+    ui.spacing_mut().scroll = old.1;
+}
+
+/// "More below": the hairline and the quiet bar under a scroll viewport that really continues.
+/// Drawn only when the content overflows, so it never claims hidden rows that are not there.
+pub fn more_below(ui: &Ui, rect: Rect, label: &str) {
+    let p = ui.painter();
+    p.hline(rect.x_range(), rect.top() + 0.5, Stroke::new(1.0, theme::border()));
+    let font = FontId::new(11.0, theme::bold_family());
+    let g = p.layout_no_wrap(label.to_string(), font, theme::muted_col());
+    let icon = p.layout_no_wrap(egui_phosphor::regular::CARET_DOWN.to_string(), theme::icon_font(14.0), theme::muted_col());
+    let total = g.size().x + 7.0 + icon.size().x;
+    let x = rect.center().x - total / 2.0;
+    p.galley(Pos2::new(x, rect.center().y - g.size().y / 2.0 + 1.0), g, theme::muted_col());
+    p.galley(Pos2::new(x + total - icon.size().x, rect.center().y - icon.size().y / 2.0 + 1.0), icon, theme::muted_col());
+}
+
 /// Ghost/outline button for every secondary action: the page buttons' look at the compact height.
 pub fn ghost_button(ui: &mut Ui, label: &str) -> egui::Response {
     crate::pageshell::styled_button(

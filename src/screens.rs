@@ -630,13 +630,16 @@ impl crate::App {
                 // Logo tile: serif Q on the highlighter-free accent chip.
                 let (lr, lresp) =
                     ui.allocate_exact_size(Vec2::new(item_w, 40.0), egui::Sense::click());
-                let chip = Rect::from_center_size(lr.center(), Vec2::splat(38.0));
+                // On the 64 px rail the mark fills the rail's width as one solid tile with a smaller
+                // glyph: the 38 px chip round a 21 px Q left two thin green bands either side of the
+                // letter, which read as two disconnected slivers at a reduced size.
+                let chip = if narrow { Rect::from_center_size(lr.center(), Vec2::new(item_w.min(44.0), 40.0)) } else { Rect::from_center_size(lr.center(), Vec2::splat(38.0)) };
                 ui.painter().rect_filled(chip, CornerRadius::same(12), theme::accent_col());
                 ui.painter().text(
                     chip.center(),
                     egui::Align2::CENTER_CENTER,
                     "Q",
-                    egui::FontId::new(21.0, theme::serif_strong_family()),
+                    egui::FontId::new(if narrow { 18.0 } else { 21.0 }, theme::serif_strong_family()),
                     theme::on_accent_col(),
                 );
                 if lresp.clicked() {

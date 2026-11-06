@@ -37,6 +37,9 @@ pub const EVIDENCE: [(&str, &str); 2] = [
     ("school_confirmed", "A person at the school confirmed it"),
 ];
 
+/// The line a decision sent without a live token leaves on screen (the password box then opens).
+pub const CONFIRM_PROMPT: &str = "Confirm your password to make a change. It is used once and not kept.";
+
 /// How long the server's sudo token is good for when it does not say (the Worker's `expires_in` is 300).
 const SUDO_SECONDS: u64 = 300;
 
@@ -169,6 +172,8 @@ impl Decision {
             Some("Write why, in the words the applicant will read. A refusal without a reason leaves them guessing.")
         } else if self.approve && self.evidence >= EVIDENCE.len() {
             Some("Choose what you checked.")
+        } else if self.approve && self.evidence_note.trim().is_empty() {
+            Some("Say where you checked it: the staff directory page, or who confirmed it. The audit trail keeps it.")
         } else {
             None
         }
@@ -343,6 +348,29 @@ impl AdminModel {
         }
     }
 
+    /// Capture hook only (`VERSHION_SCREEN=shared:admin...`): shows `queue` as if it had just been read, with no
+    /// request. `step` "approve" / "refuse" opens the form for the first application; "confirm" is an approval
+    /// sent without a live token, waiting for the password (what [`Self::decide`] leaves on screen).
+    pub fn qa_show(&mut self, queue: Queue, step: &str) {
+        self.reset();
+        let first = queue.items.first().cloned();
+        self.state = State::Loaded(queue);
+        let Some(app) = first else { return };
+        match step {
+            "approve" | "confirm" => {
+                let mut d = Decision::of(&app, true);
+                if step == "confirm" {
+                    d.evidence_note = "Listed on the staff page of the school's website, science department".into();
+                    self.confirming = true;
+                    self.notice = Some(CONFIRM_PROMPT.into());
+                }
+                self.decision = Some(d);
+            }
+            "refuse" => self.decision = Some(Decision::of(&app, false)),
+            _ => {}
+        }
+    }
+
     /// Opens the form for one application.
     pub fn open_decision(&mut self, app: &Application, approve: bool) {
         if self.busy() {
@@ -378,7 +406,7 @@ impl AdminModel {
             self.confirming = true;
             self.send_after_confirm = true;
             self.pending_session = Some(session);
-            self.notice = Some("Confirm your password to make a change. It is used once and not kept.".into());
+            self.notice = Some(CONFIRM_PROMPT.into());
             return;
         }
         let Some((token, _)) = self.sudo.clone() else { return };

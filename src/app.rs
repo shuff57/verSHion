@@ -234,13 +234,47 @@ impl App {
                 "imports" => Screen::Imports,
                 "figures" => Screen::Figures,
                 "grade" => Screen::Grade,
+                // The Grade screen with work to review: "grade:N" picks the exam at index N, "grade:N:S"
+                // opens the first page of its S-th submission, "grade:N:S:P" its page P; a last ":tray"
+                // also opens the word tray.
+                s if s.starts_with("grade:") => {
+                    let mut parts = s["grade:".len()..].split(':');
+                    let mut st = crate::gradeui::GradeState::new();
+                    if let Some(e) = parts.next().and_then(|n| n.parse::<usize>().ok()).and_then(|i| app.store.exams.get(i)) {
+                        st.exam_id = Some(e.id.clone());
+                        let rest: Vec<&str> = parts.collect();
+                        st.tray_open = rest.last() == Some(&"tray");
+                        let num = |k: usize| rest.get(k).and_then(|n| n.parse::<usize>().ok());
+                        if let Some(sub) = num(0).and_then(|i| app.store.submissions_for(&e.id).nth(i)) {
+                            st.student_id = Some(sub.id.clone());
+                            st.page_id = sub.pages.get(num(1).unwrap_or(0)).map(|p| p.id.clone());
+                        }
+                    }
+                    app.grade = Some(st);
+                    Screen::Grade
+                }
                 "settings" => Screen::Settings,
                 // The Shared page, optionally on a tab: "shared", "shared:browse|mine|imported|reports|settings",
                 // "shared:choose" (the "Share to pool…" chooser open). Circles: "shared:circles",
                 // "shared:circles:join", "shared:circles:create", "shared:circle:<circle id>[:<bank id>]".
+                // The approval queue, drawn as a signed-in admin's with no server: "shared:admin",
+                // "shared:admin:approve|refuse" (the decision form for the first application),
+                // "shared:admin:confirm" (an approval waiting for the password). The queue is read from
+                // VERSHION_ADMIN_FIXTURE (a GET /admin/queue answer), else admin-queue.json in the store.
                 s if s == "shared" || s.starts_with("shared:") => {
                     use crate::share::shared::Tab;
                     match s.trim_start_matches("shared").trim_start_matches(':') {
+                        a if a == "admin" || a.starts_with("admin:") => {
+                            let queue = match crate::env_var("VERSHION_ADMIN_FIXTURE") {
+                                Ok(p) => std::fs::read_to_string(&p).ok().and_then(|t| serde_json::from_str(&t).ok()),
+                                Err(_) => crate::store::load_json::<serde_json::Value>("admin-queue.json"),
+                            }
+                            .and_then(|v| crate::share::admin::parse_queue(&v));
+                            match queue {
+                                Some(q) => app.shared.qa_admin(q, a.trim_start_matches("admin").trim_start_matches(':')),
+                                None => eprintln!("VERSHION_SCREEN=shared:admin: no admin queue fixture could be read"),
+                            }
+                        }
                         "mine" => app.shared.model.goto(Tab::Mine),
                         "imported" => app.shared.model.goto(Tab::Imported),
                         "reports" => app.shared.model.goto(Tab::Reports),

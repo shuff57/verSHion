@@ -460,7 +460,9 @@ pub fn icon_btn(ui: &mut Ui, glyph: &str, tip: &str, enabled: bool) -> egui::Res
         if enabled && resp.hovered() {
             ui.painter().rect_filled(rect, CornerRadius::same(10), theme::hover_bg());
         }
-        let col = if enabled { theme::ink() } else { theme::rule().gamma_multiply(0.8) };
+        // a disabled icon is the muted ink at reduced strength, not the rule colour: on the dark
+        // card the rule was dark grey on dark and the history buttons all but vanished
+        let col = if enabled { theme::ink() } else { theme::muted_col().gamma_multiply(0.6) };
         ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, glyph, egui::FontId::new(20.0, theme::icon_font(20.0).family), col);
     }
     if enabled { dark_tip(ui, resp, tip) } else { resp }
@@ -480,7 +482,7 @@ pub fn lucide_btn(ui: &mut Ui, ops: &[lucide::Op], tip: &str, enabled: bool) -> 
         if enabled && resp.hovered() {
             ui.painter().rect_filled(rect, CornerRadius::same(10), theme::hover_bg());
         }
-        let col = if enabled { theme::ink() } else { Color32::from_rgb(0xb4, 0xba, 0xc4) };
+        let col = if enabled { theme::ink() } else if theme::is_dark() { theme::muted_col().gamma_multiply(0.6) } else { Color32::from_rgb(0xb4, 0xba, 0xc4) };
         lucide::paint(ui.painter(), Rect::from_center_size(rect.center(), Vec2::splat(19.0)), col, ops);
     }
     if enabled { dark_tip(ui, resp, tip) } else { resp }
@@ -808,14 +810,27 @@ impl Workspace {
         let track = Rect::from_min_size(Pos2::new(ui.max_rect().right() - 7.0 - 110.0, bar.center().y - 17.0), Vec2::new(110.0, 34.0));
         let wash = if self.shell_panel() { theme::field() } else if theme::is_dark() { Color32::from_rgb(0x11, 0x16, 0x21) } else if chem_page(ui.ctx()) { Color32::from_rgb(0xf6, 0xf7, 0xfb) } else { Color32::from_rgb(0xf0, 0xf1, 0xf6) };
         ui.painter().rect_filled(track, CornerRadius::same(10), wash);
+        // The three A's say what they set: a "Text size" label before the track (the bare glyphs
+        // had no meaning of their own), and the chosen size wears the accent fill and outline.
+        if self.shell_panel() {
+            ui.painter().text(
+                Pos2::new(track.left() - 8.0, track.center().y),
+                egui::Align2::RIGHT_CENTER,
+                "Text size",
+                egui::FontId::new(12.5, theme::bold_family()),
+                theme::muted_col(),
+            );
+        }
         for (i, (name, px)) in [("Large", 20.0), ("Medium", 13.5), ("Small", 11.0)].into_iter().enumerate() {
             let cell = Rect::from_min_size(Pos2::new(track.left() + 3.0 + i as f32 * 34.7, track.top() + 3.0), Vec2::new(34.0, 28.0));
             let resp = ui.interact(cell, ui.id().with(("lsz", i)), Sense::click());
             let sel = cur == name;
-            if sel {
+            if sel && self.shell_panel() {
+                ui.painter().rect(cell, CornerRadius::same(7), theme::accent_faded(), Stroke::new(1.5, theme::accent_col()), egui::StrokeKind::Inside);
+            } else if sel {
                 ui.painter().rect(cell, CornerRadius::same(7), theme::card(), Stroke::new(1.0, theme::border()), egui::StrokeKind::Inside);
             }
-            let col = if sel { blue_text() } else { theme::muted_col() };
+            let col = if sel && self.shell_panel() { theme::accent_col() } else if sel { blue_text() } else { theme::muted_col() };
             ui.painter().text(cell.center(), egui::Align2::CENTER_CENTER, "A", egui::FontId::new(px, egui::FontFamily::Name("vs-serif".into())), col);
             if resp.on_hover_text(format!("{name} labels")).clicked() {
                 self.params.0.insert("label_size".to_string(), crate::figures::Value::S(name.to_string()));
@@ -1321,7 +1336,15 @@ pub fn section_header(ui: &mut Ui, title: &str, summary: &str, open: bool) -> eg
     p.text(
         Pos2::new(rect.right() - 24.0 - dx, cy - if phys_pg { 1.0 } else { 0.0 }),
         egui::Align2::CENTER_CENTER,
-        if open { ph::CARET_UP } else { ph::CARET_DOWN },
+        // the app's shell uses the plain disclosure marks: a closed section points right, an open one
+        // down (a closed row's down caret read as "open" over a section showing no controls)
+        if theme::keep_theme() {
+            if open { ph::CARET_DOWN } else { ph::CARET_RIGHT }
+        } else if open {
+            ph::CARET_UP
+        } else {
+            ph::CARET_DOWN
+        },
         theme::icon_font(15.0),
         theme::muted_col(),
     );
@@ -1518,10 +1541,16 @@ pub fn segmented_track(ui: &mut Ui, opts: &[&'static str], cur: &mut String) {
         let sel = cur == o;
         resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, sel, *o));
         if sel {
-            let edge = if chem && !theme::is_dark() { Color32::from_rgb(0xee, 0xef, 0xf4) } else { theme::border() };
-            ui.painter().rect(cell, CornerRadius::same(cell_r), theme::card(), Stroke::new(1.0, edge), egui::StrokeKind::Inside);
+            // the app's shell: a card chip on its field barely showed which cell was chosen (light
+            // and dark alike), so the chosen one takes the accent wash, an accent edge and accent type
+            if theme::keep_theme() {
+                ui.painter().rect(cell, CornerRadius::same(cell_r), theme::accent_faded(), Stroke::new(1.5, theme::accent_col()), egui::StrokeKind::Inside);
+            } else {
+                let edge = if chem && !theme::is_dark() { Color32::from_rgb(0xee, 0xef, 0xf4) } else { theme::border() };
+                ui.painter().rect(cell, CornerRadius::same(cell_r), theme::card(), Stroke::new(1.0, edge), egui::StrokeKind::Inside);
+            }
         }
-        let col = if sel { blue_text() } else { theme::muted_col() };
+        let col = if sel && theme::keep_theme() { theme::accent_col() } else if sel { blue_text() } else if theme::keep_theme() && theme::is_dark() { theme::text_col() } else { theme::muted_col() };
         let g = ui.painter().layout(o.to_string(), egui::FontId::new(13.76, if chem { theme::semibold_family() } else { theme::bold_family() }), col, cell_w - 16.0);
         let mut pos = cell.center() - g.size() / 2.0 - if chem && !wrapped { Vec2::new(0.0, 0.6) } else { Vec2::ZERO };
         // wrapped lines are centred on each other, as the reference's text-align centre sets them, and sit a little lower

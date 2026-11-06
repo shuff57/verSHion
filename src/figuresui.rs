@@ -1349,7 +1349,10 @@ impl Workspace {
             // the reference's sheet sits 17 px from each edge of a phone; ours 8
             let inset = if whole_chem && !skin { 9.0 } else { 0.0 };
             let cw_card = w - 2.0 * inset;
-            let mut card_h = ((w as f64 - 22.0) * ch / cw + 22.0).clamp(180.0, (avail_h as f64 * 0.7).max(180.0)) as f32;
+            // a figure with a wide, right-hand property panel (VSEPR) fills the page's width on a
+            // phone rather than sitting small in a height-clipped canvas
+            let card_cap = if generated && self.shell_panel() && self.sel.is_some_and(|i| reg()[i].id == "vsepr-shapes") { 0.86 } else { 0.7 };
+            let mut card_h = ((w as f64 - 22.0) * ch / cw + 22.0).clamp(180.0, (avail_h as f64 * card_cap).max(180.0)) as f32;
             // the reference opens a chemistry figure alone in a tall white canvas that ends about
             // 156 px above the window bottom, the controls card sitting below the fold
             if let Some(i) = self.sel.filter(|&i| reg()[i].subject == figures::Subject::Math && skin) {
@@ -1374,7 +1377,7 @@ impl Workspace {
                     // the width, never grown) plus 16 px of padding on every side
                     let sc = ((cw_card as f64 - 32.0) / cw).min(1.0);
                     card_h = (ch * sc + 32.0) as f32;
-                } else {
+                } else if !(generated && self.shell_panel()) {
                     card_h = card_h.max(ui.available_height() - if skin { 144.0 } else { 156.0 });
                 }
             }
@@ -1396,10 +1399,27 @@ impl Workspace {
                 // the shell's icon toolbar (48 px on a phone, 53 wider, plus its rule) sits above the figure
                 card_h += if ctx.content_rect().width() < 500.0 { 50.0 } else { 55.0 };
             }
+            // the app's shell: the controls below the figure either start well inside the window or not at
+            // all, never as a sliver of an empty card above the action row
+            if !skin && generated && self.shell_panel() {
+                let rest = avail_h - card_h - 10.0;
+                if rest > 0.0 && rest < 120.0 {
+                    card_h = (card_h - (120.0 - rest)).max(180.0);
+                }
+            }
             // the math reference leaves 16 px under its header on a phone; ours 11
             let math_top = if skin && self.sel.is_some_and(|i| matches!(reg()[i].subject, figures::Subject::Math | figures::Subject::Physics)) { 5.0 } else { 0.0 };
             ui.add_space(math_top);
-            ScrollArea::vertical().id_salt("figs_narrow").max_height(avail_h - math_top).auto_shrink([false, false]).scroll_bar_visibility(if theme::chem_skin() { egui::scroll_area::ScrollBarVisibility::AlwaysHidden } else { egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded }).show(ui, |ui| {
+            let shell_page = generated && self.shell_panel();
+            if shell_page {
+                // a solid bar stays visible, so the page says it continues under the action row
+                ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
+                ui.spacing_mut().scroll.fade.strength = 0.0;
+            }
+            let area = ScrollArea::vertical().id_salt("figs_narrow").max_height(avail_h - math_top).auto_shrink([false, false]).scroll_bar_visibility(if theme::chem_skin() && !shell_page { egui::scroll_area::ScrollBarVisibility::AlwaysHidden } else { egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded });
+            // the shell page scrolls on the quiet handle (a dark ink thumb sat detached in the seam
+            // between its cards); the reference skins keep theirs
+            let body = |ui: &mut Ui| {
                 ui.scope_builder(egui::UiBuilder::new().max_rect(ui.available_rect_before_wrap().shrink2(Vec2::new(side, 0.0))), |ui| {
                 if inset > 0.0 {
                     ui.horizontal(|ui| {
@@ -1414,7 +1434,13 @@ impl Workspace {
                 ui.set_width(w);
                 self.controls(ui, 1.0e5);
                 });
-            });
+            };
+            let out = if shell_page { crate::kit::quiet_scroll_area(ui, area, body) } else { area.show(ui, body) };
+            if shell_page {
+                // the page's bottom edge ends in the gap above the next control, not through it
+                let rows = cut_rows(ui);
+                cover_partial_rows(ui, out.inner_rect, &rows, true);
+            }
         } else if skin {
             self.chem_wide(ui, avail_h, preview.as_ref());
         } else {
@@ -1866,6 +1892,23 @@ impl Workspace {
         let max_zoom = if math { if area.width() < 600.0 { 1.0 / math_unit(def.id) } else { 12.0 } } else if !chem { PREVIEW_MAX_ZOOM } else if area.width() < 600.0 && !skin_wide { 1.0 } else { 6.0 };
         let k = (area.width() as f64 / vw).min(area.height() as f64 / vh).clamp(0.05, max_zoom);
         let origin = area.center() - Vec2::new(((v[0] + vw / 2.0) * k) as f32, ((v[1] + vh / 2.0) * k) as f32);
+        // A table reads from the top on its own page: it is held a little above the sheet's middle
+        // and the page closes on a footer rule, so the white below the Total row is a page with a
+        // foot rather than a sheet left abandoned under the table.
+        let freq_model = if def.id == "frequency-table" { figures::stats::frequency::model(&self.params).ok() } else { None };
+        let table_h = (vh * k) as f32;
+        // The table and its caption are one block on the page: the caption rides under the table
+        // (it used to be stranded at the sheet's foot under a tall white band), and the block sits
+        // a little above the page's middle.
+        const FREQ_CAP_H: f32 = 40.0;
+        let origin = if def.id == "frequency-table" && area.height() - table_h - FREQ_CAP_H > 24.0 {
+            let slack = area.height() - table_h - FREQ_CAP_H;
+            let now_top = area.center().y - table_h / 2.0;
+            let want_top = area.top() + slack * 0.42;
+            origin + Vec2::new(0.0, want_top - now_top)
+        } else {
+            origin
+        };
         let ppp = ui.ctx().pixels_per_point();
         // chemistry previews are rasterized at exactly the device scale and drawn on whole pixels,
         // so one-pixel grid lines stay solid instead of smearing across two pixels
@@ -1892,7 +1935,27 @@ impl Workspace {
             ui.painter_at(top).image(tex.id(), img, uv, egui::Color32::WHITE);
             ui.painter_at(bot).image(tex.id(), img, uv, egui::Color32::WHITE);
         } else {
+            // the frequency table prints on a page: its white sheet fills the preview below the
+            // toolbar (rounded at the card's foot) instead of stopping under the table as a band
+            if def.id == "frequency-table" {
+                let r = crate::kit::R_CARD as u8;
+                ui.painter().rect_filled(full, egui::CornerRadius { nw: 0, ne: 0, sw: r, se: r }, egui::Color32::WHITE);
+            }
             ui.painter_at(full).image(tex.id(), img, uv, egui::Color32::WHITE);
+            // the page's foot: a rule and the table's count, so the sheet closes instead of
+            // trailing off into white below the Total row
+            if def.id == "frequency-table" && full.bottom() - 30.0 > img.bottom() + 6.0 {
+                let ink = egui::Color32::from_rgb(0x5c, 0x5c, 0x5c);
+                let rule = egui::Color32::from_rgb(0xd4, 0xd4, 0xd4);
+                let (l, r) = (full.left() + 46.0, full.right() - 40.0);
+                let y = img.bottom() + 6.0;
+                ui.painter().hline(l..=r, y, egui::Stroke::new(1.0, rule));
+                let cap = egui::FontId::new(11.5, theme::sans_family());
+                ui.painter().text(egui::pos2(l, y + 9.0), egui::Align2::LEFT_TOP, "Frequency table", cap.clone(), ink);
+                if let Some(m) = freq_model.as_ref().filter(|m| !m.empty) {
+                    ui.painter().text(egui::pos2(r, y + 9.0), egui::Align2::RIGHT_TOP, format!("n = {}", m.n), cap, ink);
+                }
+            }
         }
         if !pointer_down {
             let want = if snap {
@@ -2196,6 +2259,8 @@ impl Workspace {
 
     fn controls_inner(&mut self, ui: &mut Ui, max_h: f32) {
         let Some(si) = self.sel else { return };
+        // the rows this column draws, for the bottom-edge cover (see `cover_partial_rows`)
+        ui.ctx().data_mut(|d| d.remove_temp::<Vec<(f32, f32)>>(egui::Id::new("fig_cut_rows")));
         let def = &reg()[si];
         let pdefs = (def.params)();
         let skin = theme::chem_skin() && (self.chem_open() || self.shell_panel());
@@ -2279,7 +2344,7 @@ impl Workspace {
                         }
                         let id = ui.make_persistent_id(("fig_sec", def.id, sec.title.as_str()));
                         let relevant: Vec<usize> = sec.items.iter().copied().filter(|&i| figures::param_relevant(def.id, pdefs[i].key, &self.params)).collect();
-                        let summary = (skin || def.subject == figures::Subject::Physics || matches!(def.id, "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "kite" | "regular-polygon")).then(|| figures::chemistry::skin_summary_in(def.id, &sec.title, &self.params, skin_phys)).flatten().or_else(|| sec.items.iter().find_map(|&i| figures::cards::summary(def.id, pdefs[i].key, &self.params))).or_else(|| if def.id == "population-growth" { figures::biology::popdyn::growth_section_summary(&sec.title, &self.params) } else { None }).or_else(|| if def.id == "pedigree" { figures::biology::pedigree::section_summary(&sec.title, &self.params) } else { None }).or_else(|| if def.id == "titration-curve" { figures::chemistry::tit_section_summary(&sec.title, &self.params) } else { None }).unwrap_or_else(|| section_summary(&pdefs, &self.params, &relevant));
+                        let summary = (skin || def.subject == figures::Subject::Physics || matches!(def.id, "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "kite" | "regular-polygon")).then(|| figures::chemistry::skin_summary_in(def.id, &sec.title, &self.params, skin_phys)).flatten().or_else(|| sec.items.iter().find_map(|&i| figures::cards::summary(def.id, pdefs[i].key, &self.params))).or_else(|| if def.id == "population-growth" { figures::biology::popdyn::growth_section_summary(&sec.title, &self.params) } else { None }).or_else(|| if def.id == "pedigree" { figures::biology::pedigree::section_summary(&sec.title, &self.params) } else { None }).or_else(|| if def.id == "titration-curve" { figures::chemistry::tit_section_summary(&sec.title, &self.params) } else { None }).or_else(|| if def.id == "boltzmann-distribution" { figures::chemistry::boltzmann::section_summary(&sec.title, &self.params) } else { None }).unwrap_or_else(|| section_summary(&pdefs, &self.params, &relevant));
                         let mut reset = false;
                         let (mut reset_labels, mut straighten) = (false, false);
                         let mut st = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, if skin { (def.id == "population-growth" && sec.title == "Graphs") || (def.id == "gel-electrophoresis" && si_ == 1) || (si_ == 0 && def.subject != figures::Subject::Physics && def.id != "pedigree" && !((shell || def.subject == figures::Subject::Math) && (figures::measures_for(def.id).is_some() || figures::rows_for(def.id).is_some()))) || sec.title.to_lowercase().contains("reading") } else { si_ < open_sections(def.id) });
@@ -2484,6 +2549,7 @@ impl Workspace {
                             }
                             first_row = false;
                             let resp = chem_shell::section_header(ui, &sec.title, &summary, open);
+                            note_cut_row(ui, resp.rect);
                             ui.spacing_mut().item_spacing.y = gap_y;
                             if resp.clicked() {
                                 st.toggle(ui);
@@ -2547,7 +2613,19 @@ impl Workspace {
                 let mut preset_apply: Option<Params> = None;
 
                 ui.spacing_mut().scroll.fade.strength = 0.0;
-                ScrollArea::vertical().id_salt("figs_controls").max_height(max_h).auto_shrink([false, false]).scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(ui, |ui| {
+                if shell {
+                    // a solid bar reserves its width and stays visible: the honest cue that the
+                    // column continues under the action row
+                    ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
+                    ui.spacing_mut().scroll.fade.strength = 0.0;
+                }
+                // the shell keeps a strip under the column for the "more below" cue
+                let cue_h = if shell { 26.0 } else { 0.0 };
+                let area = ScrollArea::vertical().id_salt("figs_controls").max_height(max_h - cue_h).auto_shrink([false, false]).scroll_bar_visibility(if shell { egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded } else { egui::scroll_area::ScrollBarVisibility::AlwaysHidden });
+                // the shell's handle is the app's quiet one (thin, muted, no track), the same as the
+                // approval queue's: the ink-coloured bar read as a loud orange slab on the dark page.
+                // The column's own widgets keep the page's look inside it.
+                let out = crate::kit::quiet_scroll_area(ui, area, |ui| {
                     ui.spacing_mut().item_spacing.y = 10.0;
                     // the shell sets every subject's intro card and gaps as the math page does; the
                     // reference page skins keep their own
@@ -2603,8 +2681,20 @@ impl Workspace {
                         ui.add_space(12.0);
                         faq_section(ui, def.id);
                     }
-                    ui.add_space(24.0);
+                    ui.add_space(32.0);
                 });
+                // the shell's column ends above the action row: with more below, its last visible
+                // control is hidden whole so the edge lands in the gap under it, not through it
+                if shell {
+                    let rows = cut_rows(ui);
+                    cover_partial_rows(ui, out.inner_rect, &rows, false);
+                    // say it in words as well as with the bar: more controls follow below
+                    let (bar, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), cue_h), Sense::hover());
+                    let more = out.state.offset.y + out.inner_rect.height() < out.content_size.y - 4.0;
+                    if more {
+                        crate::kit::more_below(ui, bar, "More settings below");
+                    }
+                }
                 if let Some(p) = preset_apply {
                     self.set_params_with_history(p);
                 }
@@ -3635,6 +3725,46 @@ fn is_hidden(defs: &[ParamDef], p: &Params, pd: &ParamDef) -> bool {
     })
 }
 
+/// Rows drawn inside a scrolling column this frame, in screen coordinates. A column that ends on
+/// half a control reads as broken clipping; these let [`cover_partial_rows`] end it between two
+/// rows instead.
+fn note_cut_row(ui: &Ui, rect: egui::Rect) {
+    let id = egui::Id::new("fig_cut_rows");
+    let mut rows: Vec<(f32, f32)> = ui.ctx().data(|d| d.get_temp(id)).unwrap_or_default();
+    rows.push((rect.top(), rect.bottom()));
+    ui.ctx().data_mut(|d| d.insert_temp(id, rows));
+}
+
+fn cut_rows(ui: &Ui) -> Vec<(f32, f32)> {
+    ui.ctx().data(|d| d.get_temp(egui::Id::new("fig_cut_rows"))).unwrap_or_default()
+}
+
+/// Hide the one control the viewport's bottom edge cuts through, so the column ends in the gap
+/// above it rather than halfway down a glyph. The scroll bar stays visible (the band stops short of
+/// it), and the page behind the column shows no seam because the band is the card's own fill.
+fn cover_partial_rows(ui: &Ui, viewport: egui::Rect, rows: &[(f32, f32)], say: bool) {
+    let bottom = viewport.bottom();
+    let cut = rows
+        .iter()
+        .filter(|(top, end)| *top < bottom - 1.0 && *end > bottom + 1.0)
+        .map(|(top, _)| *top)
+        .fold(f32::INFINITY, f32::min);
+    if !cut.is_finite() {
+        return;
+    }
+    let band = egui::Rect::from_min_max(
+        egui::pos2(viewport.left(), cut),
+        egui::pos2((viewport.right() - 10.0).max(viewport.left()), bottom),
+    );
+    ui.painter().with_clip_rect(viewport).rect_filled(band, 0.0, theme::card());
+    // A tall covered band is a blank slab under an open section's header: say what is there, so it
+    // reads as "the fields continue below", not as an empty panel.
+    if say && band.height() >= 22.0 {
+        let cue = egui::Rect::from_min_max(egui::pos2(band.left(), band.top() + 2.0), egui::pos2(band.right(), (band.top() + 32.0).min(band.bottom())));
+        crate::kit::more_below(ui, cue, "More settings below");
+    }
+}
+
 /// A short live summary under a section header: the first few meaningful values.
 fn section_summary(defs: &[ParamDef], p: &Params, items: &[usize]) -> String {
     let mut parts: Vec<String> = Vec::new();
@@ -3646,8 +3776,17 @@ fn section_summary(defs: &[ParamDef], p: &Params, items: &[usize]) -> String {
         let part = match (&d.kind, p.0.get(d.key)) {
             (Kind::Choice(_), Some(Value::S(v))) if !v.is_empty() => Some(v.clone()),
             (Kind::Text, Some(Value::S(v))) if !v.trim().is_empty() => Some(v.chars().take(18).collect()),
-            (Kind::Bool, Some(Value::B(true))) => Some(d.label.split(['(', ':']).next().unwrap_or(d.label).trim().to_lowercase()),
+            (Kind::Bool, Some(Value::B(true))) => {
+                // "show" is said once: "show lone pairs · bond angles · atom labels". Repeated on every
+                // item it pushed the third one off the line ("show…").
+                let l = d.label.split(['(', ':']).next().unwrap_or(d.label).trim().to_lowercase();
+                let said = parts.iter().any(|t| t.starts_with("show "));
+                Some(if said { l.strip_prefix("show ").map(str::to_string).unwrap_or(l) } else { l })
+            }
             (Kind::Float { .. }, Some(Value::F(v))) => Some(format!("{} {}", short_label(d.label), (v * 100.0).round() / 100.0)),
+            // "Decimals in relative frequencies" read as "relative frequencies 1" and ran the
+            // summary off its line; a count of decimals says itself in two words
+            (Kind::Int { .. }, Some(Value::I(v))) if d.label.starts_with("Decimals") => Some(format!("{v} decimal{}", if *v == 1 { "" } else { "s" })),
             (Kind::Int { .. }, Some(Value::I(v))) => Some(format!("{} {}", short_label(d.label), v)),
             _ => None,
         };
@@ -3875,6 +4014,7 @@ impl Workspace {
 const PUNNETT_SPACE_EXTRA: f32 = 3.3;
 
 fn param_control(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
+    let row_top = ui.cursor().top();
     param_control_inner(ui, fig, pd, p);
     // the reference's grey note under a control (ranges, what the answer key prints, typing tips)
     if !matches!(pd.kind, Kind::Bool) && theme::chem_skin() {
@@ -3890,6 +4030,7 @@ fn param_control(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
             }
         }
     }
+    note_cut_row(ui, egui::Rect::from_min_max(egui::pos2(0.0, row_top), egui::pos2(0.0, ui.cursor().top())));
     ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("pop_label_tight"), 0.0_f32));
 }
 
@@ -4053,6 +4194,9 @@ fn param_control_inner(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
                 _ => None,
             };
             let r = ui.horizontal(|ui| {
+                // a live input wears the card's white with its hairline, like the select above it;
+                // the beige field fill is what the disabled fields wear, and Turn and Tilt read as locked
+                ui.visuals_mut().text_edit_bg_color = Some(theme::card());
                 let w = if unit.is_some() { (ui.available_width() - 40.0 - ui.spacing().item_spacing.x).max(60.0) } else { f32::INFINITY };
                 let r = ui.add(TextEdit::singleline(&mut text).id(id).desired_width(w).margin(Margin::symmetric(10, 10)).font(egui::FontId::new(15.0, theme::sans_family())));
                 if let Some(u) = &unit {
@@ -4094,13 +4238,27 @@ fn param_control_inner(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
                 // the shell's label (with its note) sits above the stepper, as above every other box,
                 // so a long note cannot run under the buttons
                 param_label(ui, label, pd.hint);
+                // one framed control: live − and + in ink on the card with a hairline, either side of
+                // the value in the input's white box (ghost-grey squares round a bare "1" read as off)
                 ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 10.0;
-                    if ui.add_enabled(v > *min, Button::new("-").min_size(Vec2::splat(34.0))).clicked() {
+                    ui.spacing_mut().item_spacing.x = 6.0;
+                    let step = |ui: &mut Ui, glyph: &str, on: bool| {
+                        ui.add_enabled(
+                            on,
+                            Button::new(RichText::new(glyph).size(17.0).family(theme::bold_family()).color(theme::ink()))
+                                .fill(theme::card())
+                                .stroke(Stroke::new(1.0, theme::rule()))
+                                .corner_radius(CornerRadius::same(8))
+                                .min_size(Vec2::splat(34.0)),
+                        )
+                    };
+                    if step(ui, "\u{2212}", v > *min).on_hover_text("One fewer").clicked() {
                         v -= 1;
                     }
-                    ui.add_sized(Vec2::new(28.0, 34.0), egui::Label::new(theme::strong(v.to_string()).size(15.0)));
-                    if ui.add_enabled(v < *max, Button::new("+").min_size(Vec2::splat(34.0))).clicked() {
+                    let (r, _) = ui.allocate_exact_size(Vec2::new(44.0, 34.0), Sense::hover());
+                    ui.painter().rect(r, CornerRadius::same(8), theme::card(), Stroke::new(1.0, theme::rule()), egui::StrokeKind::Inside);
+                    ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, v.to_string(), egui::FontId::new(15.0, theme::bold_family()), theme::ink());
+                    if step(ui, "+", v < *max).on_hover_text("One more").clicked() {
                         v += 1;
                     }
                 });
@@ -4248,6 +4406,10 @@ fn param_control_inner(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
             if theme::chem_skin() && fig == "lewis-structures" && pd.key == "question" {
                 ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("pills_small"), true));
                 pills(ui, opts, &mut cur);
+            } else if theme::chem_skin() && fig == "frequency-table" && pd.key == "relative" {
+                // the same selected language as Data entry mode's track above: one control style,
+                // and in the dark shell the chosen cell is the accent wash with a legible label
+                chem_shell::segmented_track(ui, opts, &mut cur);
             } else if !(matches!(fig, "population-growth" | "predator-prey") && pd.key == "unit") && ((fig == "predator-prey" && pd.key == "source") || (opts.len() <= 7 && opts.iter().map(|o| o.chars().count()).sum::<usize>() <= 48 && opts.iter().all(|o| o.chars().count() <= if opts.len() <= 3 { 20 } else { 14 }))) {
                 segmented(ui, opts, &mut cur);
             } else {

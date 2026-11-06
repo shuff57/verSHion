@@ -9,6 +9,12 @@ use crate::theme;
 
 /// One white card: 16 px corners, hairline border, soft shadow, 20 px padding.
 pub fn card<R>(ui: &mut Ui, f: impl FnOnce(&mut Ui) -> R) -> R {
+    card_min(ui, 0.0, f)
+}
+
+/// [`card`] that is at least `min_h` tall (border box), so a short panel can own its share of a
+/// tall window instead of leaving the page top-heavy.
+pub fn card_min<R>(ui: &mut Ui, min_h: f32, f: impl FnOnce(&mut Ui) -> R) -> R {
     let w = ui.available_width();
     Frame::new()
         .fill(theme::card())
@@ -18,6 +24,9 @@ pub fn card<R>(ui: &mut Ui, f: impl FnOnce(&mut Ui) -> R) -> R {
         .inner_margin(Margin::same(20))
         .show(ui, |ui| {
             ui.set_width(w - 42.0);
+            if min_h > 40.0 {
+                ui.set_min_height((min_h - 42.0).max(0.0));
+            }
             f(ui)
         })
         .inner
