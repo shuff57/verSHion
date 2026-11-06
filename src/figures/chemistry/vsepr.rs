@@ -650,6 +650,14 @@ fn text_el(d: &mut Doc, x: f64, y: f64, fs: f64, anchor: &str, fill: &str, s: &s
     ));
 }
 
+/// A text element at a given font weight: the panel's values are set at 600, its labels at 400.
+fn text_el_weighted(d: &mut Doc, x: f64, y: f64, fs: f64, anchor: &str, fill: &str, weight: &str, s: &str, kind: &str, feat: &str) {
+    d.raw(&format!(
+        r##"<text x="{x:.2}" y="{y:.2}" font-size="{fs:.2}" font-weight="{weight}" text-anchor="{anchor}" font-family="{FONT}" fill="{fill}" data-o="{kind}" data-f="{feat}">{}</text>"##,
+        svg::esc(s)
+    ));
+}
+
 fn text_halo(d: &mut Doc, x: f64, y: f64, fs: f64, anchor: &str, s: &str, feat: &str) {
     d.raw(&format!(
         r##"<text x="{x:.2}" y="{y:.2}" font-size="{fs:.2}" text-anchor="{anchor}" font-family="{FONT}" fill="none" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" data-o="anglehalo" data-f="{feat}">{}</text>"##,
@@ -788,8 +796,8 @@ pub fn build(p: &Params) -> (String, Report) {
     let fs_angle = 16.5 * lab;
     let fs_panel = 16.5 * lab;
     let fs_note = 16.5 * lab;
-    let panel_x = 492.0;
-    let panel_w = 252.0;
+    let panel_x = 456.0;
+    let panel_w = 282.0;
     let view = View::new(st.turn + mol.open.0, st.tilt + mol.open.1);
     let mol_index = st.mol;
 
@@ -1116,46 +1124,51 @@ pub fn build(p: &Params) -> (String, Report) {
         view_notes.push(format!("{lone_hidden} lone pairs sit behind ligand atoms in this view, so they are not drawn."));
     }
 
-    // ---- the panel. The key and the student copy are laid out with the same number of lines, so
-    // the two exported copies have the same height whatever the label size.
+    // ---- the panel. The key and the student copy have the same facts, so the two exported copies
+    // have the same height whatever the label size. Each fact is a label and a value set side by
+    // side: the label in the page's grey, the value in ink at 600 weight, so the panel reads as a
+    // list of readings rather than one block of text. (The labels are short enough to stay on the
+    // value's line: a mid-phrase wrap under a value reads as a broken row.)
     let singular = mol.pairs.len() == 1;
     let angle_key = if st.angles { mol.angle_text() } else { "not shown".into() };
     let angle_student = if singular { BLANK.to_string() } else { format!("{BLANK} and {BLANK}") };
-    let mut key_items: Vec<String> = vec![
-        format!("Molecule: {} ({})", mol.display, mol.ax),
-        format!("Electron domains: {}", mol.domains),
-        format!("Electron-domain geometry: {}", mol.domain_geo),
-        format!("Molecular shape: {}", mol.shape),
-        format!("Lone pairs on the central atom: {}", mol.lone_count()),
-        format!("Bond angle{}: {angle_key}", if singular { "" } else { "s" }),
+    let facts: Vec<(&str, String)> = vec![
+        ("Molecule", format!("{} ({})", mol.display, mol.ax)),
+        ("Electron domains", mol.domains.to_string()),
+        ("Domain geometry", if key { mol.domain_geo } else { BLANK }.to_string()),
+        ("Molecular shape", if key { mol.shape } else { BLANK }.to_string()),
+        ("Lone pairs", mol.lone_count().to_string()),
+        (if singular { "Bond angle" } else { "Bond angles" }, if key { angle_key.clone() } else { angle_student.clone() }),
     ];
-    let mut student_items: Vec<String> = vec![
-        format!("Molecule: {} ({})", mol.display, mol.ax),
-        format!("Electron domains: {}", mol.domains),
-        format!("Electron-domain geometry: {BLANK}"),
-        format!("Molecular shape: {BLANK}"),
-        format!("Lone pairs on the central atom: {}", mol.lone_count()),
-        format!("Bond angle{}: {angle_student}", if singular { "" } else { "s" }),
-    ];
-    key_items.extend(view_notes.iter().cloned());
-    student_items.extend(view_notes.iter().cloned());
-    let panel_key = key_items.iter().flat_map(|item| wrap(item, fs_panel, panel_w)).collect::<Vec<_>>();
-    let panel_student = student_items.iter().flat_map(|item| wrap(item, fs_panel, panel_w)).collect::<Vec<_>>();
-    let panel_reserved = panel_key.len().max(panel_student.len());
-    let panel: Vec<String> = if key { panel_key } else { panel_student };
+    let panel_notes: Vec<String> = view_notes.iter().flat_map(|n| wrap(n, fs_panel, panel_w)).collect();
     let why_key = wrap(if st.angles { mol.why } else { mol.why_plain }, fs_panel, panel_w);
     let why_student = wrap("Explain the shape and the angle:", fs_panel, panel_w);
     let why_reserved = why_key.len().max(why_student.len()).max(2);
     let why_drawn: Vec<String> = if key { why_key } else { why_student };
+    let panel: Vec<String> = facts.iter().map(|(l, v)| format!("{l}: {v}")).chain(panel_notes.iter().cloned()).collect();
 
     let footer_text = "A simplified ball-and-stick model: atoms are circles joined by single sticks. Each lone pair is a pair of dots on a short dashed stick pointing where the pair truly projects on the central atom; a pair that projects on a bond, at the viewer, behind a nearer atom or onto another pair is left off and the panel says so. Bond lengths are not to scale, and no double bonds, resonance or bond order is shown.";
     let footer = wrap(footer_text, fs_note, w - 40.0);
 
-    // ---- height
+    // ---- the facts' column layout. The label column is as wide as the widest label at this size;
+    // a value that does not fit beside it goes on its own line under its label rather than being
+    // wrapped into a ragged column (or, at a large label size, running into it).
     let line_h = 1.55 * fs_panel;
     let panel_gap = 0.45 * fs_panel;
+    let label_texts: Vec<String> = facts.iter().map(|(l, _)| format!("{l}:")).collect();
+    let max_label_w = label_texts.iter().map(|t| text_w(t, fs_panel)).fold(0.0, f64::max);
+    let label_col = max_label_w + 10.0;
+    let panel_right = w - 20.0;
+    let value_x = panel_x + label_col;
+    let beside = value_x + 70.0 <= panel_right;
+    let value_w = (panel_right - value_x).max(70.0);
+    let values_below: Vec<Vec<String>> = facts.iter().map(|(_, v)| wrap(v, fs_panel, panel_w)).collect();
+    let value_beside = |i: usize| beside && text_w(&facts[i].1, fs_panel) <= value_w;
+    let fact_lines: usize = (0..facts.len()).map(|i| if value_beside(i) { 1 } else { 1 + values_below[i].len().max(1) }).sum();
+
+    // ---- height
     let panel_top = 64.0;
-    let panel_h = panel_reserved as f64 * line_h + panel_gap + 0.8 * fs_panel + why_reserved as f64 * line_h;
+    let panel_h = (fact_lines + panel_notes.len()) as f64 * line_h + panel_gap + 0.8 * fs_panel + why_reserved as f64 * line_h;
     let panel_bottom = panel_top + panel_h;
     let mol_bottom = cy + scale + r_atom + 24.0;
     let body_bottom = panel_bottom.max(mol_bottom);
@@ -1170,7 +1183,7 @@ pub fn build(p: &Params) -> (String, Report) {
     d.defs(&fills.defs());
 
     // the panel rule
-    d.raw(&format!(r##"<line x1="470.00" y1="{:.2}" x2="470.00" y2="{:.2}" stroke="{rule}" stroke-width="1.0" data-o="rule"/>"##, panel_top - 6.0, body_bottom));
+    d.raw(&format!(r##"<line x1="434.00" y1="{:.2}" x2="434.00" y2="{:.2}" stroke="{rule}" stroke-width="1.0" data-o="rule"/>"##, panel_top - 6.0, body_bottom));
 
     // angle arcs, behind the sticks
     for a in angles.iter() {
@@ -1269,12 +1282,26 @@ pub fn build(p: &Params) -> (String, Report) {
         }
     }
 
-    // the panel
+    // the panel: a label column in the page's grey, a 600-weight value beside it, then the
+    // view's own notes under them
     let mut y = panel_top;
-    for (i, line) in panel.iter().enumerate() {
-        text_el(&mut d, panel_x, y, fs_panel, "start", ink, line, "panel", &format!("L{i}"));
-        y += line_h;
+    for (i, (_, value)) in facts.iter().enumerate() {
+        text_el(&mut d, panel_x, y, fs_panel, "start", mute, &label_texts[i], "panel", &format!("L{i}"));
+        if value_beside(i) {
+            text_el_weighted(&mut d, value_x, y, fs_panel, "start", ink, "600", value, "panel", &format!("V{i}"));
+            y += line_h;
+        } else {
+            y += line_h;
+            for (j, line) in values_below[i].iter().enumerate() {
+                text_el_weighted(&mut d, panel_x, y, fs_panel, "start", ink, "600", line, "panel", &format!("V{i}.{j}"));
+                y += line_h;
+            }
+        }
         if i == 0 { y += panel_gap; }
+    }
+    for (i, line) in panel_notes.iter().enumerate() {
+        text_el(&mut d, panel_x, y, fs_panel, "start", mute, line, "panel", &format!("N{i}"));
+        y += line_h;
     }
     if !why_drawn.is_empty() {
         y += 0.8 * fs_panel;

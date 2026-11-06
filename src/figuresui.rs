@@ -1349,7 +1349,10 @@ impl Workspace {
             // the reference's sheet sits 17 px from each edge of a phone; ours 8
             let inset = if whole_chem && !skin { 9.0 } else { 0.0 };
             let cw_card = w - 2.0 * inset;
-            let mut card_h = ((w as f64 - 22.0) * ch / cw + 22.0).clamp(180.0, (avail_h as f64 * 0.7).max(180.0)) as f32;
+            // a figure with a wide, right-hand property panel (VSEPR) fills the page's width on a
+            // phone rather than sitting small in a height-clipped canvas
+            let card_cap = if generated && self.shell_panel() && self.sel.is_some_and(|i| reg()[i].id == "vsepr-shapes") { 0.86 } else { 0.7 };
+            let mut card_h = ((w as f64 - 22.0) * ch / cw + 22.0).clamp(180.0, (avail_h as f64 * card_cap).max(180.0)) as f32;
             // the reference opens a chemistry figure alone in a tall white canvas that ends about
             // 156 px above the window bottom, the controls card sitting below the fold
             if let Some(i) = self.sel.filter(|&i| reg()[i].subject == figures::Subject::Math && skin) {
@@ -1407,8 +1410,13 @@ impl Workspace {
             // the math reference leaves 16 px under its header on a phone; ours 11
             let math_top = if skin && self.sel.is_some_and(|i| matches!(reg()[i].subject, figures::Subject::Math | figures::Subject::Physics)) { 5.0 } else { 0.0 };
             ui.add_space(math_top);
-            let fade = generated && self.shell_panel();
-            let out = ScrollArea::vertical().id_salt("figs_narrow").max_height(avail_h - math_top).auto_shrink([false, false]).scroll_bar_visibility(if theme::chem_skin() && !fade { egui::scroll_area::ScrollBarVisibility::AlwaysHidden } else { egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded }).show(ui, |ui| {
+            let shell_page = generated && self.shell_panel();
+            if shell_page {
+                // a solid bar stays visible, so the page says it continues under the action row
+                ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
+                ui.spacing_mut().scroll.fade.strength = 0.0;
+            }
+            let out = ScrollArea::vertical().id_salt("figs_narrow").max_height(avail_h - math_top).auto_shrink([false, false]).scroll_bar_visibility(if theme::chem_skin() && !shell_page { egui::scroll_area::ScrollBarVisibility::AlwaysHidden } else { egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded }).show(ui, |ui| {
                 ui.scope_builder(egui::UiBuilder::new().max_rect(ui.available_rect_before_wrap().shrink2(Vec2::new(side, 0.0))), |ui| {
                 if inset > 0.0 {
                     ui.horizontal(|ui| {
@@ -1424,8 +1432,10 @@ impl Workspace {
                 self.controls(ui, 1.0e5);
                 });
             });
-            if fade {
-                fade_below(ui, &out);
+            if shell_page {
+                // the page's bottom edge ends in the gap above the next control, not through it
+                let rows = cut_rows(ui);
+                cover_partial_rows(ui, out.inner_rect, &rows);
             }
         } else if skin {
             self.chem_wide(ui, avail_h, preview.as_ref());
@@ -1878,11 +1888,15 @@ impl Workspace {
         let max_zoom = if math { if area.width() < 600.0 { 1.0 / math_unit(def.id) } else { 12.0 } } else if !chem { PREVIEW_MAX_ZOOM } else if area.width() < 600.0 && !skin_wide { 1.0 } else { 6.0 };
         let k = (area.width() as f64 / vw).min(area.height() as f64 / vh).clamp(0.05, max_zoom);
         let origin = area.center() - Vec2::new(((v[0] + vw / 2.0) * k) as f32, ((v[1] + vh / 2.0) * k) as f32);
-        // A table reads from the top, as on the page it prints on: a wide, short one sits under the
-        // toolbar instead of floating in the middle with a band of empty sheet above it.
-        let origin = match (vh * k) as f32 {
-            h if def.id == "frequency-table" && area.height() - h > 24.0 => origin - Vec2::new(0.0, (area.height() - h) / 2.0 - 12.0),
-            _ => origin,
+        // A table reads from the top on its own page: it is held a little above the sheet's middle
+        // and the page closes on a footer rule, so the white below the Total row is a page with a
+        // foot rather than a sheet left abandoned under the table.
+        let freq_model = if def.id == "frequency-table" { figures::stats::frequency::model(&self.params).ok() } else { None };
+        let table_h = (vh * k) as f32;
+        let origin = if def.id == "frequency-table" && area.height() - table_h > 24.0 {
+            origin - Vec2::new(0.0, (area.height() - table_h) * 0.14)
+        } else {
+            origin
         };
         let ppp = ui.ctx().pixels_per_point();
         // chemistry previews are rasterized at exactly the device scale and drawn on whole pixels,
@@ -1917,6 +1931,20 @@ impl Workspace {
                 ui.painter().rect_filled(full, egui::CornerRadius { nw: 0, ne: 0, sw: r, se: r }, egui::Color32::WHITE);
             }
             ui.painter_at(full).image(tex.id(), img, uv, egui::Color32::WHITE);
+            // the page's foot: a rule and the table's count, so the sheet closes instead of
+            // trailing off into white below the Total row
+            if def.id == "frequency-table" && full.bottom() - 52.0 > img.bottom() + 20.0 {
+                let ink = egui::Color32::from_rgb(0x5c, 0x5c, 0x5c);
+                let rule = egui::Color32::from_rgb(0xd4, 0xd4, 0xd4);
+                let (l, r) = (full.left() + 46.0, full.right() - 40.0);
+                let y = full.bottom() - 52.0;
+                ui.painter().hline(l..=r, y, egui::Stroke::new(1.0, rule));
+                let cap = egui::FontId::new(11.5, theme::sans_family());
+                ui.painter().text(egui::pos2(l, y + 9.0), egui::Align2::LEFT_TOP, "Frequency table", cap.clone(), ink);
+                if let Some(m) = freq_model.as_ref().filter(|m| !m.empty) {
+                    ui.painter().text(egui::pos2(r, y + 9.0), egui::Align2::RIGHT_TOP, format!("n = {}", m.n), cap, ink);
+                }
+            }
         }
         if !pointer_down {
             let want = if snap {
@@ -2220,6 +2248,8 @@ impl Workspace {
 
     fn controls_inner(&mut self, ui: &mut Ui, max_h: f32) {
         let Some(si) = self.sel else { return };
+        // the rows this column draws, for the bottom-edge cover (see `cover_partial_rows`)
+        ui.ctx().data_mut(|d| d.remove_temp::<Vec<(f32, f32)>>(egui::Id::new("fig_cut_rows")));
         let def = &reg()[si];
         let pdefs = (def.params)();
         let skin = theme::chem_skin() && (self.chem_open() || self.shell_panel());
@@ -2508,6 +2538,7 @@ impl Workspace {
                             }
                             first_row = false;
                             let resp = chem_shell::section_header(ui, &sec.title, &summary, open);
+                            note_cut_row(ui, resp.rect);
                             ui.spacing_mut().item_spacing.y = gap_y;
                             if resp.clicked() {
                                 st.toggle(ui);
@@ -2571,6 +2602,18 @@ impl Workspace {
                 let mut preset_apply: Option<Params> = None;
 
                 ui.spacing_mut().scroll.fade.strength = 0.0;
+                if shell {
+                    // a solid bar reserves its width and stays visible: the honest cue that the
+                    // column continues under the action row
+                    ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
+                    ui.spacing_mut().scroll.fade.strength = 0.0;
+                }
+                // the solid bar's dormant handle comes from the inactive widget fill; on a white
+                // card that is nearly white, so the column gets the card's rule colour instead
+                let bar_fill = if shell { Some(ui.visuals().widgets.inactive.bg_fill) } else { None };
+                if shell {
+                    ui.visuals_mut().widgets.inactive.bg_fill = theme::border();
+                }
                 let out = ScrollArea::vertical().id_salt("figs_controls").max_height(max_h).auto_shrink([false, false]).scroll_bar_visibility(if shell { egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded } else { egui::scroll_area::ScrollBarVisibility::AlwaysHidden }).show(ui, |ui| {
                     ui.spacing_mut().item_spacing.y = 10.0;
                     // the shell sets every subject's intro card and gaps as the math page does; the
@@ -2627,12 +2670,16 @@ impl Workspace {
                         ui.add_space(12.0);
                         faq_section(ui, def.id);
                     }
-                    ui.add_space(24.0);
+                    ui.add_space(32.0);
                 });
-                // the shell's column ends above the action row: a column with more below fades out
-                // there instead of ending on a sliced control
+                if let Some(f) = bar_fill {
+                    ui.visuals_mut().widgets.inactive.bg_fill = f;
+                }
+                // the shell's column ends above the action row: with more below, its last visible
+                // control is hidden whole so the edge lands in the gap under it, not through it
                 if shell {
-                    fade_below(ui, &out);
+                    let rows = cut_rows(ui);
+                    cover_partial_rows(ui, out.inner_rect, &rows);
                 }
                 if let Some(p) = preset_apply {
                     self.set_params_with_history(p);
@@ -3664,25 +3711,38 @@ fn is_hidden(defs: &[ParamDef], p: &Params, pd: &ParamDef) -> bool {
     })
 }
 
-/// A scrolled column with more below its window: the last 36 points fade into the page, so the cut
-/// reads as "this scrolls" rather than as a control sliced in half by the row under it.
-fn fade_below<R>(ui: &Ui, out: &egui::scroll_area::ScrollAreaOutput<R>) {
-    let r = out.inner_rect;
-    let hidden = out.content_size.y - out.state.offset.y - r.height();
-    if hidden <= 1.0 {
+/// Rows drawn inside a scrolling column this frame, in screen coordinates. A column that ends on
+/// half a control reads as broken clipping; these let [`cover_partial_rows`] end it between two
+/// rows instead.
+fn note_cut_row(ui: &Ui, rect: egui::Rect) {
+    let id = egui::Id::new("fig_cut_rows");
+    let mut rows: Vec<(f32, f32)> = ui.ctx().data(|d| d.get_temp(id)).unwrap_or_default();
+    rows.push((rect.top(), rect.bottom()));
+    ui.ctx().data_mut(|d| d.insert_temp(id, rows));
+}
+
+fn cut_rows(ui: &Ui) -> Vec<(f32, f32)> {
+    ui.ctx().data(|d| d.get_temp(egui::Id::new("fig_cut_rows"))).unwrap_or_default()
+}
+
+/// Hide the one control the viewport's bottom edge cuts through, so the column ends in the gap
+/// above it rather than halfway down a glyph. The scroll bar stays visible (the band stops short of
+/// it), and the page behind the column shows no seam because the band is the card's own fill.
+fn cover_partial_rows(ui: &Ui, viewport: egui::Rect, rows: &[(f32, f32)]) {
+    let bottom = viewport.bottom();
+    let cut = rows
+        .iter()
+        .filter(|(top, end)| *top < bottom - 1.0 && *end > bottom + 1.0)
+        .map(|(top, _)| *top)
+        .fold(f32::INFINITY, f32::min);
+    if !cut.is_finite() {
         return;
     }
-    let h = 36.0_f32.min(r.height() / 3.0);
-    let band = egui::Rect::from_min_max(egui::pos2(r.left(), r.bottom() - h), r.max);
-    let bg = theme::cream();
-    let mut mesh = egui::Mesh::default();
-    mesh.colored_vertex(band.left_top(), bg.gamma_multiply(0.0));
-    mesh.colored_vertex(band.right_top(), bg.gamma_multiply(0.0));
-    mesh.colored_vertex(band.left_bottom(), bg);
-    mesh.colored_vertex(band.right_bottom(), bg);
-    mesh.add_triangle(0, 1, 2);
-    mesh.add_triangle(1, 2, 3);
-    ui.painter().add(egui::Shape::mesh(mesh));
+    let band = egui::Rect::from_min_max(
+        egui::pos2(viewport.left(), cut),
+        egui::pos2((viewport.right() - 10.0).max(viewport.left()), bottom),
+    );
+    ui.painter().with_clip_rect(viewport).rect_filled(band, 0.0, theme::card());
 }
 
 /// A short live summary under a section header: the first few meaningful values.
@@ -3931,6 +3991,7 @@ impl Workspace {
 const PUNNETT_SPACE_EXTRA: f32 = 3.3;
 
 fn param_control(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
+    let row_top = ui.cursor().top();
     param_control_inner(ui, fig, pd, p);
     // the reference's grey note under a control (ranges, what the answer key prints, typing tips)
     if !matches!(pd.kind, Kind::Bool) && theme::chem_skin() {
@@ -3946,6 +4007,7 @@ fn param_control(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
             }
         }
     }
+    note_cut_row(ui, egui::Rect::from_min_max(egui::pos2(0.0, row_top), egui::pos2(0.0, ui.cursor().top())));
     ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("pop_label_tight"), 0.0_f32));
 }
 
@@ -4304,6 +4366,10 @@ fn param_control_inner(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
             if theme::chem_skin() && fig == "lewis-structures" && pd.key == "question" {
                 ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("pills_small"), true));
                 pills(ui, opts, &mut cur);
+            } else if theme::chem_skin() && fig == "frequency-table" && pd.key == "relative" {
+                // the same selected language as Data entry mode's track above: one control style,
+                // and in the dark shell the chosen cell is the accent wash with a legible label
+                chem_shell::segmented_track(ui, opts, &mut cur);
             } else if !(matches!(fig, "population-growth" | "predator-prey") && pd.key == "unit") && ((fig == "predator-prey" && pd.key == "source") || (opts.len() <= 7 && opts.iter().map(|o| o.chars().count()).sum::<usize>() <= 48 && opts.iter().all(|o| o.chars().count() <= if opts.len() <= 3 { 20 } else { 14 }))) {
                 segmented(ui, opts, &mut cur);
             } else {

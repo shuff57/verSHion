@@ -455,7 +455,7 @@ enum LegKind { Series(usize, String), Ea(String), Mark(String), Vp(String), Rms(
 
 /// The length of the Ea and rms legend swatches: long enough for their dash patterns to repeat.
 /// (Drawn upright and 12 units tall they read as the characters "⋮" and "!".)
-const GUIDE_SWATCH: f64 = 24.0;
+const GUIDE_SWATCH: f64 = 36.0;
 
 fn legend_width(kind: &LegKind, fs: f64) -> f64 {
     let swatch = 26.0;
@@ -631,10 +631,19 @@ pub fn build(p: &Params) -> (String, Report) {
             lines.push(format!("The marked speed {} m/s is beyond the x axis (0 to {} m/s), so no guide is drawn.", fmt(st.mark), fmt(x_top)));
         }
     }
-    let mut wrapped: Vec<String> = Vec::new();
-    for line in &lines { wrapped.extend(wrap(line, fs_ro, w - 40.0)); }
-    let ro_lh = 1.45 * fs_ro;
-    let h = (tab_bottom + 10.0 + wrapped.len() as f64 * ro_lh + 6.0).ceil();
+    // The reading block is a wall of small print at the figure's full width. Cap the measure near
+    // 70 characters, set it a little looser and give every entry its own paragraph, so the notes
+    // under the chart scan instead of running edge to edge as one grey slab.
+    let ro_w = (w - 40.0).min(70.0 * fs_ro * 0.55);
+    let mut wrapped: Vec<(String, bool)> = Vec::new();
+    for line in &lines {
+        for (i, l) in wrap(line, fs_ro, ro_w).into_iter().enumerate() {
+            wrapped.push((l, i == 0));
+        }
+    }
+    let ro_lh = 1.62 * fs_ro;
+    let para_gap = 5.0;
+    let h = (tab_bottom + 10.0 + wrapped.len() as f64 * ro_lh + lines.len().saturating_sub(1) as f64 * para_gap + 6.0).ceil();
 
     let mut d = Doc::new(w, h);
     d.describe("Boltzmann Distribution", &describe(&st, ans, ea_on, mark_on));
@@ -726,23 +735,23 @@ pub fn build(p: &Params) -> (String, Report) {
             }
             LegKind::Ea(text) => {
                 let (x, yc) = (lg.x, lg.yc);
-                d.raw(&format!(r##"<line x1="{x:.2}" y1="{yc:.2}" x2="{:.2}" y2="{yc:.2}" stroke="{guide_c}" stroke-width="1.6" stroke-dasharray="1.5 3" data-o="legend"/>"##, x + GUIDE_SWATCH));
+                d.raw(&format!(r##"<line x1="{x:.2}" y1="{yc:.2}" x2="{:.2}" y2="{yc:.2}" stroke="{guide_c}" stroke-width="2.2" stroke-dasharray="3 3.5" data-o="legend"/>"##, x + GUIDE_SWATCH));
                 d.raw(&text_el(x + GUIDE_SWATCH + 7.0, yc + 0.34 * fs_lab, fs_lab, "start", lab_c, text, "legend"));
             }
             LegKind::Mark(text) => {
                 let (x, yc) = (lg.x, lg.yc);
-                d.raw(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{guide_c}" stroke-width="1.4" stroke-dasharray="3 3" data-o="legend"/>"##, x + 5.0, yc + 5.0, x + 5.0, yc - 2.0));
-                d.raw(&marker_el(x + 5.0, yc - 2.0, 3.0, ink_c, "#ffffff", "legend"));
+                d.raw(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{guide_c}" stroke-width="2.2" stroke-dasharray="3 3" data-o="legend"/>"##, x + 5.0, yc + 6.0, x + 5.0, yc - 2.0));
+                d.raw(&marker_el(x + 5.0, yc - 2.0, 3.4, ink_c, "#ffffff", "legend"));
                 d.raw(&text_el(x + 12.0, yc + 0.34 * fs_lab, fs_lab, "start", lab_c, text, "legend"));
             }
             LegKind::Vp(text) => {
                 let (x, yc) = (lg.x, lg.yc);
-                d.raw(&marker_el(x + 5.0, yc, 3.0, ink_c, "#ffffff", "legend"));
-                d.raw(&text_el(x + 12.0, yc + 0.34 * fs_lab, fs_lab, "start", lab_c, text, "legend"));
+                d.raw(&marker_el(x + 6.0, yc, 3.4, ink_c, "#ffffff", "legend"));
+                d.raw(&text_el(x + 13.0, yc + 0.34 * fs_lab, fs_lab, "start", lab_c, text, "legend"));
             }
             LegKind::Rms(text) => {
                 let (x, yc) = (lg.x, lg.yc);
-                d.raw(&format!(r##"<line x1="{x:.2}" y1="{yc:.2}" x2="{:.2}" y2="{yc:.2}" stroke="{guide_c}" stroke-width="1.5" stroke-dasharray="6 3 1.5 3" data-o="legend"/>"##, x + GUIDE_SWATCH));
+                d.raw(&format!(r##"<line x1="{x:.2}" y1="{yc:.2}" x2="{:.2}" y2="{yc:.2}" stroke="{guide_c}" stroke-width="2.2" stroke-dasharray="8 3 2 3" data-o="legend"/>"##, x + GUIDE_SWATCH));
                 d.raw(&text_el(x + GUIDE_SWATCH + 7.0, yc + 0.34 * fs_lab, fs_lab, "start", lab_c, text, "legend"));
             }
         }
@@ -762,8 +771,13 @@ pub fn build(p: &Params) -> (String, Report) {
             d.raw(&text_el(col_x[k + 1], base, fs_tab, "start", if ans { ink_c } else { tick_c }, &text, kind));
         }
     }
-    for (k, line) in wrapped.iter().enumerate() {
-        d.raw(&text_el(20.0, tab_bottom + 10.0 + 0.76 * fs_ro + k as f64 * ro_lh, fs_ro, "start", ink_c, line, "note"));
+    let mut note_y = tab_bottom + 10.0;
+    for (k, (line, first)) in wrapped.iter().enumerate() {
+        if k > 0 && *first {
+            note_y += para_gap;
+        }
+        d.raw(&text_el(20.0, note_y + 0.76 * fs_ro, fs_ro, "start", ink_c, line, "note"));
+        note_y += ro_lh;
     }
 
     let rep = Report {
