@@ -375,6 +375,8 @@ impl crate::App {
     /// shell screens draw through `shell_frame` too.
     pub fn draw_screen(&mut self, ctx: &egui::Context) {
         self.poll_ai();
+        // Pages being read for the Grade screen finish whatever screen is open.
+        self.poll_grade_work();
         if !matches!(self.screen, crate::Screen::Figures) {
             theme::set_chem_skin(false, ctx);
         }
@@ -416,7 +418,10 @@ impl crate::App {
             crate::Screen::Settings => self.draw_settings(ctx),
             crate::Screen::Shared => self.draw_shared(ctx),
             crate::Screen::Account => self.draw_account_screen(ctx),
-            crate::Screen::Grade => self.draw_grade(ctx),
+            crate::Screen::Grade => {
+                self.draw_grade(ctx);
+                self.draw_grade_intake(ctx);
+            }
         }
         if self.ai_busy {
             ctx.request_repaint();

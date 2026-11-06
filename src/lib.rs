@@ -34,6 +34,7 @@ pub mod figures;
 pub mod figuresui;
 pub mod fonts;
 pub mod gradecore;
+pub mod gradework;
 pub mod gradeui;
 #[cfg(target_arch = "wasm32")]
 pub mod helpweb;
