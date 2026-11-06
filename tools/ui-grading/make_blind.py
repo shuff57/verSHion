@@ -46,10 +46,21 @@ SOLO_D = ['welcome', 'home-empty', 'home', 'banks', 'bank', 'question-editor-ban
           'question-editor-exam', 'exams', 'exam', 'paper-standard', 'export', 'imports',
           'figures', 'figure-editor', 'settings', 'shared', 'circles', 'circle-open', 'account']
 
+# A round can replace the lists above from a JSON file (UC_ROUND): any of PAIRS, P7, SOLO_L,
+# SOLO_7, SOLO_D, MIRROR_D, MIRROR_7, CONTROLS. With "ref_same_names": true the reference directory
+# holds this app's own earlier build under the same file names as UC_SHOTS (a before/after round).
+_R = json.load(open(os.environ['UC_ROUND'])) if os.environ.get('UC_ROUND') else {}
+REF_SAME = _R.get('ref_same_names', False)
+
 # Screens whose pair is shown twice, the second time with A and B swapped.
 MIRROR_D = ['banks', 'exam', 'export']
 MIRROR_7 = ['banks', 'exam']
 CONTROLS = [('exams', 'desktop', 'exams-light.png'), ('bank', 'desktop', 'bank-light.png')]
+for _k in ('PAIRS', 'P7', 'SOLO_L', 'SOLO_7', 'SOLO_D', 'MIRROR_D', 'MIRROR_7'):
+    if _k in _R:
+        globals()[_k] = _R[_k]
+if 'CONTROLS' in _R:
+    CONTROLS = [tuple(c) for c in _R['CONTROLS']]
 
 
 def sha(path):
@@ -72,10 +83,10 @@ def main():
 def run():
     pairs, singles = [], []
     for f in PAIRS:
-        pairs.append(dict(screen=f, view='desktop', ours=f'{SH}/{f}-light.png', ref=f'{T}/{f}.png'))
+        pairs.append(dict(screen=f, view='desktop', ours=f'{SH}/{f}-light.png', ref=(f'{T}/{f}-light.png' if REF_SAME else f'{T}/{f}.png')))
     for f in P7:
         pairs.append(dict(screen=f, view='narrow', ours=f'{SH}/{f}-light-760.png',
-                          ref=f'{T7}/{f}.png'))
+                          ref=(f'{T7}/{f}-light-760.png' if REF_SAME else f'{T7}/{f}.png')))
     for f in SOLO_L:
         singles.append(dict(screen=f, view='desktop', theme='light', ours=f'{SH}/{f}-light.png'))
     for f in SOLO_7:

@@ -6,6 +6,8 @@ The one rule this file exists to enforce: a blind image is a pure function of
 did (6 of 21 pairs were graded against the wrong screen, and the "same image twice" control
 was two different images).
 """
+import os
+
 from PIL import Image
 
 S = 1.7
@@ -23,7 +25,8 @@ FOOT7 = [(245, 752, 520, 797)]
 
 def masks(name, side, narrow):
     """The rectangles to blank for one side of one screen. `side` is 'ours' or 'ref'."""
-    if side == 'ours':
+    # A before/after round (UC_REF_IS_OURS=1): the reference is this app too, so it gets our masks.
+    if side == 'ours' or os.environ.get('UC_REF_IS_OURS') == '1':
         return OURS7 if narrow else OURS
     if narrow:
         if name in ('banks', 'exams', 'imports'):

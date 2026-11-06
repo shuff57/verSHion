@@ -2,7 +2,8 @@
 # Capture our frames from a throwaway copy of the fixture store. Usage: capture.py <outdir> [name-filter]
 import json, os, shutil, subprocess, sys, tempfile, concurrent.futures as cf
 BIN = os.environ.get('VS_BIN', 'target/debug/vershion')
-SEED = '/tmp/vs-design-store'
+SEED = os.environ.get('UC_SEED', '/tmp/vs-design-store')
+FIX = os.environ.get('UC_FIXTURES')   # files copied into every seeded store (e.g. submissions.json)
 OUT = sys.argv[1]; FILT = sys.argv[2] if len(sys.argv) > 2 else ''
 os.makedirs(OUT, exist_ok=True)
 STYLES = {'paper-standard':'Standard','paper-classic':'Classic','paper-condensed':'Condensed','paper-exam-board':'ExamBoard'}
@@ -23,7 +24,7 @@ F = [ # name, store, env
  ('account','seed',{'VERSHION_SCREEN':'account'}),
 ] + [(n,'seed',{'VERSHION_SCREEN':'exam','VS_STYLE':s}) for n,s in STYLES.items()]
 EXTRA = json.loads(os.environ.get('VS_EXTRA', '[]'))   # extra (name, store, env) frames from a JSON file
-F += [tuple(x) for x in EXTRA]
+F = ([] if os.environ.get('VS_ONLY_EXTRA') else F) + [tuple(x) for x in EXTRA]
 def one(job):
     (name, store, env), theme, size = job
     tag = f"{name}-{theme}" + ('' if size=='1280x800' else '-760')
@@ -31,7 +32,10 @@ def one(job):
     d = tempfile.mkdtemp(prefix='vs-run-')
     try:
         s = os.path.join(d, 's')
-        if store == 'seed': shutil.copytree(SEED, s)
+        if store == 'seed':
+            shutil.copytree(SEED, s)
+            if FIX:
+                for fn in os.listdir(FIX): shutil.copy(os.path.join(FIX, fn), s)
         else: os.makedirs(s)
         json.dump({'dark': theme=='dark'}, open(os.path.join(s,'settings.json'),'w'))
         e = dict(os.environ); e.update(VERSHION_STORE_DIR=s, VERSHION_WINSIZE=size, VERSHION_SHOT=out, VERSHION_SHOT_FRAME=env.get('VERSHION_SHOT_FRAME','90'))
