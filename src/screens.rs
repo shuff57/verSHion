@@ -230,6 +230,24 @@ pub enum NavIcon {
     Account,
 }
 
+/// The letters shown for a signed-in person: the first letter of the first and of the last word of the name
+/// ("Steven Huff" gives "SH", "Cher" gives "C"), or the first letter or digit of the email when there is no name.
+pub fn initials_of(name: &str, email: &str) -> String {
+    let letter = |w: &str| w.chars().find(|c| c.is_alphanumeric()).map(|c| c.to_uppercase().to_string());
+    let words: Vec<&str> = name.split_whitespace().filter(|w| w.chars().any(|c| c.is_alphanumeric())).collect();
+    let mut out = String::new();
+    if let Some(first) = words.first().and_then(|w| letter(w)) {
+        out.push_str(&first);
+        if words.len() > 1 && let Some(last) = words.last().and_then(|w| letter(w)) {
+            out.push_str(&last);
+        }
+    }
+    if out.is_empty() {
+        out = letter(email).unwrap_or_else(|| "?".into());
+    }
+    out
+}
+
 /// Paint one 16px icon centered at `c`, in color `c_col` — `c` shadows egui's
 /// Color32 name, so the paint calls use `c_col` throughout.
 pub fn draw_nav_icon(
@@ -626,6 +644,15 @@ impl crate::App {
                 }
                 ui.add_space(14.0);
 
+                // Who is signed in: a saved session is looked up once, quietly (no request at all without one), so the
+                // Account item can show it on every screen, not only after Account was opened.
+                let probed = egui::Id::new("account_probed");
+                if !ui.ctx().data(|d| d.get_temp::<bool>(probed)).unwrap_or(false) {
+                    ui.ctx().data_mut(|d| d.insert_temp(probed, true));
+                    self.account.open_quiet();
+                }
+                let who = self.account.model.me.as_ref().map(|m| (initials_of(&m.display_name, &m.email), m.email.clone()));
+
                 let nav = [
                     (NavIcon::Home, "Home", crate::Screen::Home),
                     (NavIcon::Banks, "Banks", crate::Screen::Banks),
@@ -643,7 +670,8 @@ impl crate::App {
                         (crate::Screen::ExamEdit(_), crate::Screen::Exams) => true,
                         (cur, t) => std::mem::discriminant(cur) == std::mem::discriminant(t),
                     };
-                    if self.dock_item(ui, icon, label, active, item_w, narrow) {
+                    let badge = if matches!(icon, NavIcon::Account) { who.as_ref() } else { None };
+                    if self.dock_item(ui, icon, label, active, item_w, narrow, badge) {
                         self.screen = target;
                     }
                 }
@@ -707,6 +735,7 @@ impl crate::App {
         active: bool,
         w: f32,
         narrow: bool,
+        badge: Option<&(String, String)>,
     ) -> bool {
         let h = if narrow { 48.0 } else { 56.0 };
         let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
@@ -721,7 +750,23 @@ impl crate::App {
             (theme::dock_text(), theme::dock_text())
         };
         let cy = if narrow { rect.center().y } else { rect.top() + 20.0 };
-        draw_nav_icon_k(ui.painter(), icon, Pos2::new(rect.center().x, cy), icon_c, 21.0 / 16.0);
+        if let Some((initials, _)) = badge {
+            // Signed in: the person's initials in an accent disc stand in for the generic account icon.
+            let centre = Pos2::new(rect.center().x, cy);
+            ui.painter().circle_filled(centre, 12.5, theme::accent_col());
+            ui.painter().text(
+                centre,
+                egui::Align2::CENTER_CENTER,
+                initials,
+                egui::FontId::new(if initials.chars().count() > 1 { 11.0 } else { 13.0 }, theme::bold_family()),
+                theme::on_accent_col(),
+            );
+        } else {
+            draw_nav_icon_k(ui.painter(), icon, Pos2::new(rect.center().x, cy), icon_c, 21.0 / 16.0);
+        }
+        if let Some((_, email)) = badge {
+            resp.clone().on_hover_text(format!("Signed in as {email}"));
+        }
         if !narrow {
             ui.painter().text(
                 Pos2::new(rect.center().x, rect.bottom() - 11.0),
@@ -2805,4 +2850,29 @@ fn draw_lock(painter: &egui::Painter, c: Pos2, col: Color32) {
         theme::icon_font(15.0),
         col,
     );
+}
+
+#[cfg(test)]
+mod initials_tests {
+    use super::initials_of;
+
+    #[test]
+    fn a_two_word_name_gives_two_letters() {
+        assert_eq!(initials_of("Steven Huff", "shuff57@gmail.com"), "SH");
+        assert_eq!(initials_of("  maria  de la cruz ", "m@x.org"), "MC");
+    }
+
+    #[test]
+    fn one_word_gives_one_letter_and_no_name_falls_back_to_the_email() {
+        assert_eq!(initials_of("Deycilopez", "lopezdeyci60@gmail.com"), "D");
+        assert_eq!(initials_of("", "lopezdeyci60@gmail.com"), "L");
+        assert_eq!(initials_of("   ", "9lives@x.org"), "9");
+        assert_eq!(initials_of("", ""), "?");
+    }
+
+    #[test]
+    fn punctuation_only_words_are_skipped() {
+        assert_eq!(initials_of("- Ana -", "a@b.c"), "A");
+        assert_eq!(initials_of("Ana - Ruiz", "a@b.c"), "AR");
+    }
 }
