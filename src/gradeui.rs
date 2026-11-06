@@ -45,17 +45,21 @@ fn move_read_line(state: &mut GradeState, n_lines: usize, d: i32) {
     state.read_line = Some(nxt);
 }
 
-fn toggle_correction(state: &mut GradeState, page_id: &str, word_key: &str, apply: bool) {
-    let k = format!("{}:{}", page_id, word_key);
-    if apply {
-        state.corrections.insert(k, String::new());
-    } else {
-        state.corrections.remove(&k);
+/// Marks the unsure word `word` on page `page_id` accepted (or not) in the store. Returns whether it changed.
+fn set_accepted(store: &mut crate::store::Store, page_id: &str, word: &str, on: bool) -> bool {
+    let mut changed = false;
+    for sub in store.student_submissions.iter_mut() {
+        for p in sub.pages.iter_mut().filter(|p| p.id == page_id) {
+            for c in p.corrections.iter_mut().filter(|c| c.word == word && c.accepted != on) {
+                c.accepted = on;
+                changed = true;
+            }
+            if changed && on {
+                p.via = Some("tray".into());
+            }
+        }
     }
-}
-
-fn accepted(state: &GradeState, page_id: &str, key: &str) -> bool {
-    state.corrections.contains_key(&format!("{page_id}:{key}"))
+    changed
 }
 
 // ---- the words the transcriber was unsure of ----------------------------------------------------
@@ -63,7 +67,7 @@ fn accepted(state: &GradeState, page_id: &str, key: &str) -> bool {
 #[derive(Clone, Debug, PartialEq)]
 enum FlagKind {
     /// Read with low confidence; the transcriber offers a reading.
-    Unsure { read: String, offered: String, confidence: f32 },
+    Unsure { read: String, offered: String, confidence: f32, accepted: bool },
     /// Not read at all (an `[illegible]` marker in the transcript).
     Unreadable { kept: String },
 }
@@ -107,7 +111,7 @@ fn flags(page: &SubmittedPage) -> Vec<Flag> {
         out.push(Flag {
             key: format!("w:{}", c.word),
             at,
-            kind: FlagKind::Unsure { read: c.word.clone(), offered: c.term.clone(), confidence: c.confidence },
+            kind: FlagKind::Unsure { read: c.word.clone(), offered: c.term.clone(), confidence: c.confidence, accepted: c.accepted },
         });
     }
     let markers: Vec<(usize, usize)> =
@@ -124,11 +128,8 @@ fn flags(page: &SubmittedPage) -> Vec<Flag> {
 }
 
 /// Words still to check on a page: every unreadable run, and every unsure word not yet accepted.
-fn open_words(page: &SubmittedPage, state: &GradeState) -> usize {
-    flags(page)
-        .iter()
-        .filter(|f| matches!(f.kind, FlagKind::Unreadable { .. }) || !accepted(state, &page.id, &f.key))
-        .count()
+fn open_words(page: &SubmittedPage) -> usize {
+    flags(page).iter().filter(|f| !matches!(f.kind, FlagKind::Unsure { accepted: true, .. })).count()
 }
 
 /// A transcript line cut into plain runs and flagged words (index into `flags`).
@@ -168,11 +169,11 @@ enum Standing {
     Ready,
 }
 
-fn standing(s: &StudentSubmission, state: &GradeState) -> Standing {
+fn standing(s: &StudentSubmission) -> Standing {
     if s.graded {
         return Standing::Marked(s.score.unwrap_or(0.0), s.per_question.len());
     }
-    let open: usize = s.pages.iter().map(|p| open_words(p, state)).sum();
+    let open: usize = s.pages.iter().map(|p| open_words(p)).sum();
     let unread = s.pages.iter().filter(|p| p.transcript.trim().is_empty()).count();
     if open > 0 {
         Standing::Check(open)
@@ -205,7 +206,7 @@ impl Standing {
         match self {
             Standing::Marked(..) => (theme::accent_faded(), theme::accent_col()),
             Standing::Check(_) => (theme::highlighter(), theme::on_highlighter()),
-            Standing::Unread(_) => (theme::field(), theme::muted_col()),
+            Standing::Unread(_) => (theme::hover_bg(), theme::text_col()),
             Standing::Ready => (theme::field(), theme::text_col()),
         }
     }
@@ -229,12 +230,12 @@ fn status_pill(ui: &mut egui::Ui, text: &str, fill: egui::Color32, fg: egui::Col
     resp
 }
 
-/// One panel of the workspace: a card that fills `size`, its contents scrolling inside it.
+/// One panel of the workspace: a card as tall as its contents, up to `size.y`, scrolling inside past that
+/// (a card stretched to the window around two lines read as an empty slab).
 fn panel(ui: &mut egui::Ui, salt: &str, size: Vec2, f: impl FnOnce(&mut egui::Ui)) {
     ui.allocate_ui_with_layout(size, egui::Layout::top_down(egui::Align::Min), |ui| {
         kit::card().inner_margin(Margin::same(16)).show(ui, |ui| {
             ui.set_width(size.x - 34.0);
-            ui.set_min_height(size.y - 34.0);
             egui::ScrollArea::vertical()
                 .id_salt(salt)
                 .auto_shrink([false, true])
@@ -336,6 +337,32 @@ fn exam_chooser(ui: &mut egui::Ui, exams: &[(String, String, usize, usize)], sta
     }
 }
 
+/// Beside the chooser: what happens on this screen, in three steps.
+fn how_it_works(ui: &mut egui::Ui) {
+    pageshell::card(ui, |ui| {
+        pageshell::heading(ui, "How grading works");
+        ui.add_space(10.0);
+        let steps = [
+            ("Transcribed", "Each page of a student's work is read into text. Words the reader was unsure of are flagged."),
+            ("Checked", "Open a student's page and decide each flagged word: use the reading offered, or keep what was written."),
+            ("Marked", "Each question is marked against the exam's answer key, and the student's score shows in the list."),
+        ];
+        for (i, (title, body)) in steps.iter().enumerate() {
+            ui.horizontal_top(|ui| {
+                let (r, _) = ui.allocate_exact_size(Vec2::splat(26.0), Sense::hover());
+                ui.painter().circle_filled(r.center(), 13.0, theme::accent_faded());
+                ui.painter().text(r.center(), Align2::CENTER_CENTER, (i + 1).to_string(), FontId::new(13.0, theme::bold_family()), theme::accent_col());
+                ui.add_space(6.0);
+                ui.vertical(|ui| {
+                    ui.label(theme::strong(*title).size(14.0));
+                    ui.add(egui::Label::new(theme::muted(*body).size(12.5)).wrap());
+                });
+            });
+            ui.add_space(10.0);
+        }
+    });
+}
+
 /// Every submission for the exam, with where it stands.
 fn student_list(ui: &mut egui::Ui, subs: &[StudentSubmission], shown: &str, state: &mut GradeState) {
     kit::small_caps(ui, &format!("Students  {}", subs.len()));
@@ -355,7 +382,7 @@ fn student_list(ui: &mut egui::Ui, subs: &[StudentSubmission], shown: &str, stat
         }
         let name = p.layout(s.student_name.clone(), FontId::new(14.5, theme::bold_family()), theme::ink(), w - 24.0);
         p.galley(Pos2::new(r.left() + 12.0, r.top() + 9.0), name, theme::ink());
-        let st = standing(s, state);
+        let st = standing(s);
         let (fill, fg) = st.colors();
         let g = p.layout_no_wrap(st.label(), FontId::new(11.0, theme::bold_family()), fg);
         let pill = Rect::from_min_size(Pos2::new(r.left() + 12.0, r.top() + 32.0), Vec2::new(g.size().x + 16.0, 18.0));
@@ -382,28 +409,36 @@ fn student_list(ui: &mut egui::Ui, subs: &[StudentSubmission], shown: &str, stat
 }
 
 /// The student's name, where they stand, and their pages.
-fn student_header(ui: &mut egui::Ui, s: &StudentSubmission, page: Option<&SubmittedPage>, state: &mut GradeState) {
+/// The student's name and where they stand (across all their pages).
+fn student_header(ui: &mut egui::Ui, s: &StudentSubmission) {
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing.x = 10.0;
         ui.label(RichText::new(&s.student_name).family(theme::serif_family()).size(24.0).color(theme::ink()));
-        let st = standing(s, state);
+        let st = standing(s);
         let (fill, fg) = st.colors();
-        status_pill(ui, &st.label(), fill, fg, 26.0);
-        ui.add_space(8.0);
-        let mut pick = None;
-        for (i, p) in s.pages.iter().enumerate() {
-            let on = page.is_some_and(|q| q.id == p.id);
-            if kit::chip_toggle(ui, &format!("Page {}", i + 1), on).clicked() && !on {
-                pick = Some(p.id.clone());
-            }
-        }
-        if let Some(id) = pick {
-            state.page_id = Some(id);
-            state.read_line = None;
-            state.tray_open = false;
-            state.sel = None;
-        }
+        let label = match st {
+            Standing::Check(_) if s.pages.len() > 1 => format!("{} in all", st.label()),
+            _ => st.label(),
+        };
+        status_pill(ui, &label, fill, fg, 26.0);
     });
+}
+
+/// The page chips (in the transcript card): which page of this student is open.
+fn page_chips(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage, state: &mut GradeState) {
+    let mut pick = None;
+    for (i, q) in s.pages.iter().enumerate() {
+        let on = q.id == p.id;
+        if kit::chip_toggle(ui, &format!("Page {}", i + 1), on).clicked() && !on {
+            pick = Some(q.id.clone());
+        }
+    }
+    if let Some(id) = pick {
+        state.page_id = Some(id);
+        state.read_line = None;
+        state.tray_open = false;
+        state.sel = None;
+    }
 }
 
 /// No page open yet: the student's pages, and their marks once marked.
@@ -421,7 +456,7 @@ fn pages_overview(ui: &mut egui::Ui, s: &StudentSubmission, state: &mut GradeSta
         }
         ui.painter().line_segment([r.left_bottom(), r.right_bottom()], Stroke::new(1.0, theme::border()));
         let lines = p.transcript.lines().filter(|l| !l.trim().is_empty()).count();
-        let open = open_words(p, state);
+        let open = open_words(p);
         let (pill, fill, fg) = if lines == 0 {
             ("Not read yet".to_string(), theme::field(), theme::muted_col())
         } else if open > 0 {
@@ -429,14 +464,26 @@ fn pages_overview(ui: &mut egui::Ui, s: &StudentSubmission, state: &mut GradeSta
         } else {
             ("Nothing to check".to_string(), theme::accent_faded(), theme::accent_col())
         };
-        let left = paint_pill(ui, r.right() - 10.0, r.center().y, &pill, fill, fg);
-        ui.painter().text(
+        let name = ui.painter().text(
             Pos2::new(r.left() + 12.0, r.top() + 19.0),
             Align2::LEFT_CENTER,
             format!("Page {}", i + 1),
             FontId::new(14.5, theme::bold_family()),
             theme::ink(),
         );
+        // the status beside the page it describes, not across the card
+        let g = ui.painter().layout_no_wrap(pill, FontId::new(11.0, theme::bold_family()), fg);
+        let pr = Rect::from_min_size(Pos2::new(name.right() + 10.0, r.top() + 9.0), Vec2::new(g.size().x + 18.0, 20.0));
+        ui.painter().rect_filled(pr, CornerRadius::same(255), fill);
+        ui.painter().galley(Pos2::new(pr.left() + 9.0, pr.center().y - g.size().y / 2.0), g, fg);
+        ui.painter().text(
+            Pos2::new(r.right() - 12.0, r.center().y),
+            Align2::RIGHT_CENTER,
+            egui_phosphor::regular::CARET_RIGHT,
+            theme::icon_font(15.0),
+            theme::muted_col(),
+        );
+        let left = r.right() - 30.0;
         let preview = p.transcript.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
         let sub = if lines == 0 { "Its text appears once it is transcribed.".to_string() } else { format!("{}  ·  {preview}", plural(lines, "line", "lines")) };
         let g = ui.painter().layout(sub, FontId::proportional(12.5), theme::muted_col(), left - r.left() - 30.0);
@@ -456,20 +503,30 @@ fn pages_overview(ui: &mut egui::Ui, s: &StudentSubmission, state: &mut GradeSta
     }
     if s.graded && !s.per_question.is_empty() {
         ui.add_space(18.0);
-        kit::small_caps(ui, "Marks");
+        let right = s.per_question.iter().filter(|q| q.correct).count();
+        kit::small_caps(ui, &format!("Marks  {right} of {}", s.per_question.len()));
         ui.add_space(6.0);
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing = Vec2::new(6.0, 6.0);
-            ui.spacing_mut().interact_size.y = 20.0;
-            for q in &s.per_question {
-                let label = format!("Q{}  {}", q.exam_item_index + 1, if q.correct { "right" } else { "wrong" });
-                if q.correct {
-                    status_pill(ui, &label, theme::accent_faded(), theme::accent_col(), 22.0);
-                } else {
-                    status_pill(ui, &label, theme::error_wash(), theme::bad(), 22.0);
-                }
+        // the wrong ones first and in red: they are what a teacher looks for
+        for (correct, title) in [(false, "Wrong"), (true, "Right")] {
+            let qs: Vec<String> = s.per_question.iter().filter(|q| q.correct == correct).map(|q| format!("Q{}", q.exam_item_index + 1)).collect();
+            if qs.is_empty() {
+                continue;
             }
-        });
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = Vec2::new(6.0, 6.0);
+                ui.spacing_mut().interact_size.y = 20.0;
+                let (lw, _) = ui.allocate_exact_size(Vec2::new(52.0, 22.0), Sense::hover());
+                ui.painter().text(lw.left_center(), Align2::LEFT_CENTER, title, FontId::new(12.5, theme::bold_family()), if correct { theme::text_col() } else { theme::bad() });
+                for q in &qs {
+                    if correct {
+                        status_pill(ui, q, theme::accent_faded(), theme::accent_col(), 22.0);
+                    } else {
+                        status_pill(ui, q, theme::error_wash(), theme::bad(), 22.0);
+                    }
+                }
+            });
+            ui.add_space(4.0);
+        }
     }
 }
 
@@ -496,7 +553,12 @@ fn transcript_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage,
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing.x = 8.0;
         pageshell::heading(ui, "Transcript");
-        ui.label(theme::muted(format!("Page {n} of {}", s.pages.len())).size(12.5));
+        if s.pages.len() > 1 {
+            ui.add_space(6.0);
+            page_chips(ui, s, p, state);
+        } else {
+            ui.label(theme::muted(format!("Page {n} of {}", s.pages.len())).size(12.5));
+        }
     });
     ui.add_space(6.0);
     ui.horizontal_wrapped(|ui| {
@@ -557,7 +619,7 @@ fn transcript_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage,
                                 let open = open_key.as_deref() == Some(f.key.as_str());
                                 let r = match &f.kind {
                                     FlagKind::Unsure { read, offered, .. } => {
-                                        if corrected && accepted(state, &p.id, &f.key) {
+                                        if corrected && matches!(f.kind, FlagKind::Unsure { accepted: true, .. }) {
                                             word_chip(ui, offered, theme::accent_faded(), theme::accent_col(), open)
                                         } else {
                                             word_chip(ui, read, theme::highlighter(), theme::on_highlighter(), open)
@@ -589,15 +651,18 @@ fn transcript_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage,
 }
 
 /// The words the transcriber was unsure of on this page, one open at a time with its choices.
-/// Returns the page id when a reading was accepted (the caller notes it on the page and saves).
-fn words_panel(ui: &mut egui::Ui, p: &SubmittedPage, flags: &[Flag], state: &mut GradeState) -> Option<String> {
+/// Returns (word, accept) when a reading was accepted or taken back: the caller writes it to the page and saves.
+fn words_panel(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage, flags: &[Flag], state: &mut GradeState) -> Option<(String, bool)> {
     pageshell::heading(ui, "Words to check");
     ui.add_space(2.0);
-    let open_n = open_words(p, state);
+    let open_n = open_words(p);
+    let all: usize = s.pages.iter().map(open_words).sum();
     let line = if flags.is_empty() {
         if p.transcript.trim().is_empty() { "Nothing yet: this page has not been read." } else { "Nothing on this page was uncertain." }.to_string()
     } else if open_n == 0 {
         "Every word on this page is checked.".to_string()
+    } else if all > open_n {
+        format!("{} on this page, {all} across {}", plural(open_n, "word", "words"), plural(s.pages.len(), "page", "pages"))
     } else {
         format!("{} on this page", plural(open_n, "word", "words"))
     };
@@ -613,7 +678,7 @@ fn words_panel(ui: &mut egui::Ui, p: &SubmittedPage, flags: &[Flag], state: &mut
     let mut ask = None;
     for f in flags {
         let open = open_key.as_deref() == Some(f.key.as_str());
-        let done = accepted(state, &p.id, &f.key);
+        let done = matches!(f.kind, FlagKind::Unsure { accepted: true, .. });
         let frame = egui::Frame::new()
             .fill(if open { theme::field() } else { theme::card() })
             .stroke(Stroke::new(if open { 1.5 } else { 1.0 }, if open { theme::accent_col() } else { theme::border() }))
@@ -628,7 +693,7 @@ fn words_panel(ui: &mut egui::Ui, p: &SubmittedPage, flags: &[Flag], state: &mut
                 kit::small_caps(ui, &place);
                 ui.add_space(3.0);
                 match &f.kind {
-                    FlagKind::Unsure { read, offered, confidence } => {
+                    FlagKind::Unsure { read, offered, confidence, .. } => {
                         ui.horizontal_wrapped(|ui| {
                             ui.spacing_mut().item_spacing.x = 6.0;
                             ui.spacing_mut().interact_size.y = 22.0;
@@ -691,14 +756,17 @@ fn words_panel(ui: &mut egui::Ui, p: &SubmittedPage, flags: &[Flag], state: &mut
             state.sel = Some((p.id.clone(), k));
         }
         Some(Ask::Accept(k, on)) => {
-            toggle_correction(state, &p.id, &k, on);
             if on {
                 match next(&k) {
                     Some(n) => state.sel = Some((p.id.clone(), n)),
                     None => state.tray_open = false,
                 }
-                return Some(p.id.clone());
             }
+            let word = flags.iter().find(|f| f.key == k).and_then(|f| match &f.kind {
+                FlagKind::Unsure { read, .. } => Some(read.clone()),
+                _ => None,
+            });
+            return word.map(|w| (w, on));
         }
         Some(Ask::Next(k)) => match next(&k) {
             Some(n) => state.sel = Some((p.id.clone(), n)),
@@ -866,11 +934,11 @@ impl crate::App {
             .iter()
             .map(|e| {
                 let work: Vec<&StudentSubmission> = self.store.submissions_for(&e.id).collect();
-                let check = work.iter().filter(|s| matches!(standing(s, &state), Standing::Check(_))).count();
+                let check = work.iter().filter(|s| matches!(standing(s), Standing::Check(_))).count();
                 (e.id.clone(), e.name.clone(), work.len(), check)
             })
             .collect();
-        let mut save_via: Option<String> = None;
+        let mut save: Option<(String, String, bool)> = None;
 
         shell_frame(self, ctx, true, |_app, ui| {
             kit::page_header(
@@ -880,7 +948,9 @@ impl crate::App {
                 Some("Check each student's transcribed work word by word, then mark it against the exam's answer key."),
             );
             ui.add_space(12.0);
-            // Which exam's work is being marked.
+            // Which exam's work is being marked. With none chosen yet the card below is the chooser (one
+            // control for one choice); once one is open this switches between them.
+            if state.exam_id.is_some() && !subs.is_empty() {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 10.0;
                 ui.label(theme::muted("Exam").size(12.5));
@@ -898,7 +968,7 @@ impl crate::App {
                     }
                 });
                 if !subs.is_empty() {
-                    let check = subs.iter().filter(|s| matches!(standing(s, &state), Standing::Check(_))).count();
+                    let check = subs.iter().filter(|s| matches!(standing(s), Standing::Check(_))).count();
                     let mut line = plural(subs.len(), "student", "students");
                     if check > 0 {
                         line.push_str(&format!("  ·  {check} with words to check"));
@@ -910,8 +980,23 @@ impl crate::App {
                 }
             });
             ui.add_space(14.0);
+            }
             if subs.is_empty() {
-                exam_chooser(ui, &exams, &mut state);
+                let w = ui.available_width();
+                if w >= 900.0 {
+                    let side = (w * 0.34).clamp(300.0, 380.0);
+                    ui.horizontal_top(|ui| {
+                        ui.spacing_mut().item_spacing.x = 16.0;
+                        ui.allocate_ui_with_layout(Vec2::new(w - side - 16.0, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                            exam_chooser(ui, &exams, &mut state)
+                        });
+                        ui.allocate_ui_with_layout(Vec2::new(side, 0.0), egui::Layout::top_down(egui::Align::Min), how_it_works);
+                    });
+                } else {
+                    exam_chooser(ui, &exams, &mut state);
+                    ui.add_space(14.0);
+                    how_it_works(ui);
+                }
                 pageshell::footer(ui, "verSHion · student work stays on this machine");
                 return;
             }
@@ -928,7 +1013,7 @@ impl crate::App {
                 ui.allocate_ui_with_layout(Vec2::new(main_w, avail.y), egui::Layout::top_down(egui::Align::Min), |ui| {
                     ui.set_width(main_w);
                     let Some(s) = &student else { return };
-                    student_header(ui, s, page.as_ref(), &mut state);
+                    student_header(ui, s);
                     ui.add_space(10.0);
                     let h = ui.available_height();
                     let Some(p) = &page else {
@@ -936,8 +1021,8 @@ impl crate::App {
                         return;
                     };
                     let mut words = |ui: &mut egui::Ui, state: &mut GradeState| {
-                        if let Some(id) = words_panel(ui, p, &page_flags, state) {
-                            save_via = Some(id);
+                        if let Some((word, on)) = words_panel(ui, s, p, &page_flags, state) {
+                            save = Some((p.id.clone(), word, on));
                         }
                     };
                     if wide {
@@ -951,21 +1036,17 @@ impl crate::App {
                         });
                     } else {
                         // The transcript takes what its lines need, up to a little over half; the words get the rest.
-                        let need = 150.0 + 34.0 * p.transcript.lines().count().max(1) as f32;
-                        let top = need.min(h * 0.58).floor();
-                        panel(ui, "grade_transcript", Vec2::new(main_w, top), |ui| transcript_panel(ui, s, p, &page_flags, &mut state));
+                        panel(ui, "grade_transcript", Vec2::new(main_w, (h * 0.55).floor()), |ui| transcript_panel(ui, s, p, &page_flags, &mut state));
                         ui.add_space(gap);
                         panel(ui, "grade_words", Vec2::new(main_w, ui.available_height()), |ui| words(ui, &mut state));
                     }
                 });
             });
         });
-        if let Some(pid) = save_via {
-            for sub in self.store.student_submissions.iter_mut() {
-                for p in sub.pages.iter_mut().filter(|p| p.id == pid) {
-                    p.via = Some("tray".into());
-                }
-            }
+        // An accepted (or taken back) reading is written to the page and saved, so it survives a restart.
+        if let Some((pid, word, on)) = save
+            && set_accepted(&mut self.store, &pid, &word, on)
+        {
             self.store.save_student_submissions();
         }
         self.grade = Some(state);

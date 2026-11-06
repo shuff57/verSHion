@@ -604,6 +604,10 @@ pub struct Correction {
     pub term: String,
     #[serde(default)]
     pub confidence: f32,
+    /// The teacher accepted `term` as the reading (on the Grade screen). Kept with the page so a
+    /// correction survives a restart.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub accepted: bool,
 }
 
 /// One student's work for one exam: the pages, and the marks once they are graded.
