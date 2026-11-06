@@ -98,6 +98,8 @@ pub fn body(ui: &mut Ui, m: &mut AdminModel, session: Option<SharedSession>) {
         ui.label(theme::text("Nothing is waiting. Every application has been decided.").size(13.0));
     }
     let mut ask: Option<Ask> = None;
+    // where the page should scroll to when an open decision is brought into view
+    let mut focus: Option<egui::Rect> = None;
     // A password asked for with no decision open (not reached by the model today, kept safe).
     if m.confirming && m.decision.is_none() {
         kit::card().inner_margin(egui::Margin::same(14)).show(ui, |ui| {
@@ -108,18 +110,20 @@ pub fn body(ui: &mut Ui, m: &mut AdminModel, session: Option<SharedSession>) {
     }
     let deciding = m.decision.as_ref().map(|d| d.request_id.clone());
     // The open decision is brought into view once (and again when the password box opens), so its
-    // buttons are not left below the window.
+    // buttons are not left below the window; the tabs, queue heading and count stay above it.
     let view_key = deciding.as_ref().map(|r| format!("{r}:{}", m.confirming));
-    let seen_id = egui::Id::new("admin_decision_in_view");
-    let bring = view_key.is_some() && ui.ctx().data(|d| d.get_temp::<Option<String>>(seen_id)) != Some(view_key.clone());
-    ui.ctx().data_mut(|d| d.insert_temp(seen_id, view_key));
+    let seen_id = egui::Id::new("admin_brought");
+    let bring = view_key.is_some() && ui.ctx().data(|d| d.get_temp::<String>(seen_id)) != view_key;
     for app in &items {
         let open = deciding.as_deref() == Some(app.request_id.as_str());
+        let busy = deciding.is_some() && !open;
         let stroke = if open { egui::Stroke::new(1.5, theme::accent_col()) } else { egui::Stroke::new(1.0, theme::border()) };
         let card = kit::card().stroke(stroke).inner_margin(egui::Margin::same(14)).show(ui, |ui| {
             ui.set_min_width(ui.available_width());
-            // while one decision is open the other applications wait: no stray Approve on the wrong person
-            ui.add_enabled_ui(open || deciding.is_none(), |ui| application(ui, app, open, &mut ask));
+            // while one decision is open the other applications wait. Their facts stay fully
+            // legible; only their buttons are shown as not-interactive, so no one reads an open
+            // queue as a set of live controls.
+            application(ui, app, open, busy, &mut ask);
             if open {
                 ui.add_space(10.0);
                 ui.separator();
@@ -130,12 +134,31 @@ pub fn body(ui: &mut Ui, m: &mut AdminModel, session: Option<SharedSession>) {
                 }
                 if confirming {
                     ui.add_space(10.0);
-                    password_block(ui, m, &mut ask);
+                    focus = Some(password_block(ui, m, &mut ask));
                 }
             }
         });
         if open && bring {
-            ui.scroll_to_rect(card.response.rect.expand(8.0), None);
+            // Scroll the password box (or, before it, the open card) into view rather than the
+            // whole card: on a narrow window the card is tall enough that bringing all of it in
+            // pushes the page title and the queue count off the screen.
+            let r = focus.unwrap_or(card.response.rect).expand(8.0);
+            // The first passes lay out with the fallback font metrics and settle over two or three
+            // frames; scrolling to a rect from one of those would fling the page past the title.
+            // Only scroll once the same target has held still for a frame.
+            let last_id = egui::Id::new("admin_bring_rect");
+            let last: Option<(String, egui::Rect)> = ui.ctx().data(|d| d.get_temp(last_id));
+            let stable = last.as_ref().is_some_and(|(k, p)| Some(k) == view_key.as_ref() && (*p).min.distance(r.min) < 1.5);
+            ui.ctx().data_mut(|d| d.insert_temp(last_id, (view_key.clone().unwrap_or_default(), r)));
+            if stable {
+                // scroll by exactly what the box's bottom is below the viewport, and no more, so
+                // the page title and tabs above it stay on screen
+                let over = r.bottom() + 8.0 - ui.clip_rect().bottom();
+                if over > 0.0 {
+                    ui.scroll_with_delta_animation(egui::Vec2::new(0.0, -over), egui::style::ScrollAnimation::none());
+                }
+                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("admin_brought"), view_key.clone()));
+            }
         }
         ui.add_space(8.0);
     }
@@ -167,7 +190,7 @@ pub fn body(ui: &mut Ui, m: &mut AdminModel, session: Option<SharedSession>) {
 }
 
 /// One application: who, from where, how long it has waited, what is known about the domain.
-fn application(ui: &mut Ui, app: &Application, open: bool, ask: &mut Option<Ask>) {
+fn application(ui: &mut Ui, app: &Application, open: bool, busy: bool, ask: &mut Option<Ask>) {
     let wide = ui.available_width() >= 620.0;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 8.0;
@@ -179,13 +202,24 @@ fn application(ui: &mut Ui, app: &Application, open: bool, ask: &mut Option<Ask>
         if app.profile_changed {
             kit::pill_no_wrap(ui, "profile changed since applying", theme::accent_faded(), theme::text_col());
         }
+        if busy {
+            // why this card's controls are inert: one decision is open above
+            kit::pill_no_wrap(ui, "waiting", theme::field(), theme::muted_col()).on_hover_text("Finish the open decision to act on this one");
+        }
         if !open && wide {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if kit::ghost_button(ui, "Refuse...").clicked() {
-                    *ask = Some(Ask::Open(app.clone(), false));
-                }
-                if kit::primary_button(ui, "Approve...").clicked() {
-                    *ask = Some(Ask::Open(app.clone(), true));
+                let live = |ui: &mut egui::Ui, ask: &mut Option<Ask>| {
+                    if kit::ghost_button(ui, "Refuse...").clicked() {
+                        *ask = Some(Ask::Open(app.clone(), false));
+                    }
+                    if kit::primary_button(ui, "Approve...").clicked() {
+                        *ask = Some(Ask::Open(app.clone(), true));
+                    }
+                };
+                if busy {
+                    ui.add_enabled_ui(false, |ui| live(ui, ask));
+                } else {
+                    live(ui, ask);
                 }
             });
         }
@@ -254,11 +288,18 @@ fn application(ui: &mut Ui, app: &Application, open: bool, ask: &mut Option<Ask>
     if !open && !wide {
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            if kit::primary_button(ui, "Approve...").clicked() {
-                *ask = Some(Ask::Open(app.clone(), true));
-            }
-            if kit::ghost_button(ui, "Refuse...").clicked() {
-                *ask = Some(Ask::Open(app.clone(), false));
+            let live = |ui: &mut egui::Ui, ask: &mut Option<Ask>| {
+                if kit::primary_button(ui, "Approve...").clicked() {
+                    *ask = Some(Ask::Open(app.clone(), true));
+                }
+                if kit::ghost_button(ui, "Refuse...").clicked() {
+                    *ask = Some(Ask::Open(app.clone(), false));
+                }
+            };
+            if busy {
+                ui.add_enabled_ui(false, |ui| live(ui, ask));
+            } else {
+                live(ui, ask);
             }
         });
     }
@@ -367,8 +408,9 @@ fn decision_form(ui: &mut Ui, d: &mut Decision, confirming: bool, ask: &mut Opti
     });
 }
 
-/// The password a change needs, asked once for five minutes of changes.
-fn password_block(ui: &mut Ui, m: &mut AdminModel, ask: &mut Option<Ask>) {
+/// The password a change needs, asked once for five minutes of changes. Returns the block's rect so
+/// the queue can bring it into view without scrolling the page's title away.
+fn password_block(ui: &mut Ui, m: &mut AdminModel, ask: &mut Option<Ask>) -> egui::Rect {
     egui::Frame::new()
         .fill(theme::field())
         .corner_radius(egui::CornerRadius::same(10))
@@ -385,21 +427,58 @@ fn password_block(ui: &mut Ui, m: &mut AdminModel, ask: &mut Option<Ask>) {
                 .wrap(),
             );
             ui.add_space(8.0);
-            ui.horizontal_wrapped(|ui| {
+            // One row across the strip: the field takes the width the two buttons leave, and the
+            // buttons stay at the strip's right edge instead of crowding the field's left. On a
+            // phone the buttons go under the field rather than shrinking it to nothing.
+            let buttons_w = 232.0;
+            let two_up = ui.available_width() >= 440.0;
+            let mut enter = false;
+            if two_up {
+                ui.horizontal(|ui| {
+                    let field_w = (ui.available_width() - buttons_w).max(180.0);
+                    let r = ui.add(
+                        egui::TextEdit::singleline(&mut m.password)
+                            .id(egui::Id::new("admin_password"))
+                            .password(true)
+                            .hint_text("Your password")
+                            .desired_width(field_w),
+                    );
+                    enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if kit::ghost_button(ui, "Cancel password")
+                            .on_hover_text("Close this password box and keep the approval open")
+                            .clicked()
+                        {
+                            *ask = Some(Ask::CancelConfirm);
+                        }
+                        if kit::primary_button(ui, "Confirm").clicked() || enter {
+                            *ask = Some(Ask::Confirm);
+                        }
+                    });
+                });
+            } else {
                 let r = ui.add(
                     egui::TextEdit::singleline(&mut m.password)
                         .id(egui::Id::new("admin_password"))
                         .password(true)
                         .hint_text("Your password")
-                        .desired_width(ui.available_width().min(FIELD_W) - 200.0),
+                        .desired_width(f32::INFINITY),
                 );
-                let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                if kit::primary_button(ui, "Confirm").clicked() || enter {
-                    *ask = Some(Ask::Confirm);
-                }
-                if kit::ghost_button(ui, "Cancel").clicked() {
-                    *ask = Some(Ask::CancelConfirm);
-                }
-            });
-        });
+                enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    if kit::primary_button(ui, "Confirm").clicked() || enter {
+                        *ask = Some(Ask::Confirm);
+                    }
+                    if kit::ghost_button(ui, "Cancel password")
+                        .on_hover_text("Close this password box and keep the approval open")
+                        .clicked()
+                    {
+                        *ask = Some(Ask::CancelConfirm);
+                    }
+                });
+            }
+        })
+        .response
+        .rect
 }
