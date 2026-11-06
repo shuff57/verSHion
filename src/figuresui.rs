@@ -1416,7 +1416,10 @@ impl Workspace {
                 ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
                 ui.spacing_mut().scroll.fade.strength = 0.0;
             }
-            let out = ScrollArea::vertical().id_salt("figs_narrow").max_height(avail_h - math_top).auto_shrink([false, false]).scroll_bar_visibility(if theme::chem_skin() && !shell_page { egui::scroll_area::ScrollBarVisibility::AlwaysHidden } else { egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded }).show(ui, |ui| {
+            let area = ScrollArea::vertical().id_salt("figs_narrow").max_height(avail_h - math_top).auto_shrink([false, false]).scroll_bar_visibility(if theme::chem_skin() && !shell_page { egui::scroll_area::ScrollBarVisibility::AlwaysHidden } else { egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded });
+            // the shell page scrolls on the quiet handle (a dark ink thumb sat detached in the seam
+            // between its cards); the reference skins keep theirs
+            let body = |ui: &mut Ui| {
                 ui.scope_builder(egui::UiBuilder::new().max_rect(ui.available_rect_before_wrap().shrink2(Vec2::new(side, 0.0))), |ui| {
                 if inset > 0.0 {
                     ui.horizontal(|ui| {
@@ -1431,7 +1434,8 @@ impl Workspace {
                 ui.set_width(w);
                 self.controls(ui, 1.0e5);
                 });
-            });
+            };
+            let out = if shell_page { crate::kit::quiet_scroll_area(ui, area, body) } else { area.show(ui, body) };
             if shell_page {
                 // the page's bottom edge ends in the gap above the next control, not through it
                 let rows = cut_rows(ui);
@@ -1893,8 +1897,15 @@ impl Workspace {
         // foot rather than a sheet left abandoned under the table.
         let freq_model = if def.id == "frequency-table" { figures::stats::frequency::model(&self.params).ok() } else { None };
         let table_h = (vh * k) as f32;
-        let origin = if def.id == "frequency-table" && area.height() - table_h > 24.0 {
-            origin - Vec2::new(0.0, (area.height() - table_h) * 0.14)
+        // The table and its caption are one block on the page: the caption rides under the table
+        // (it used to be stranded at the sheet's foot under a tall white band), and the block sits
+        // a little above the page's middle.
+        const FREQ_CAP_H: f32 = 40.0;
+        let origin = if def.id == "frequency-table" && area.height() - table_h - FREQ_CAP_H > 24.0 {
+            let slack = area.height() - table_h - FREQ_CAP_H;
+            let now_top = area.center().y - table_h / 2.0;
+            let want_top = area.top() + slack * 0.42;
+            origin + Vec2::new(0.0, want_top - now_top)
         } else {
             origin
         };
@@ -1933,11 +1944,11 @@ impl Workspace {
             ui.painter_at(full).image(tex.id(), img, uv, egui::Color32::WHITE);
             // the page's foot: a rule and the table's count, so the sheet closes instead of
             // trailing off into white below the Total row
-            if def.id == "frequency-table" && full.bottom() - 52.0 > img.bottom() + 20.0 {
+            if def.id == "frequency-table" && full.bottom() - 30.0 > img.bottom() + 6.0 {
                 let ink = egui::Color32::from_rgb(0x5c, 0x5c, 0x5c);
                 let rule = egui::Color32::from_rgb(0xd4, 0xd4, 0xd4);
                 let (l, r) = (full.left() + 46.0, full.right() - 40.0);
-                let y = full.bottom() - 52.0;
+                let y = img.bottom() + 6.0;
                 ui.painter().hline(l..=r, y, egui::Stroke::new(1.0, rule));
                 let cap = egui::FontId::new(11.5, theme::sans_family());
                 ui.painter().text(egui::pos2(l, y + 9.0), egui::Align2::LEFT_TOP, "Frequency table", cap.clone(), ink);
@@ -2608,18 +2619,13 @@ impl Workspace {
                     ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
                     ui.spacing_mut().scroll.fade.strength = 0.0;
                 }
-                // the solid bar's dormant handle comes from the inactive widget fill; on a white
-                // card that is nearly white, so the column gets the card's rule colour instead
-                let bar_fill = if shell { Some(ui.visuals().widgets.inactive.bg_fill) } else { None };
-                if shell {
-                    // a handle in the muted ink, not the card's hairline: the critics never saw the
-                    // rule-coloured one, so the column read as ending at its last visible control
-                    ui.visuals_mut().widgets.inactive.bg_fill = theme::muted_col();
-                    ui.spacing_mut().scroll.bar_width = 8.0;
-                }
                 // the shell keeps a strip under the column for the "more below" cue
                 let cue_h = if shell { 26.0 } else { 0.0 };
-                let out = ScrollArea::vertical().id_salt("figs_controls").max_height(max_h - cue_h).auto_shrink([false, false]).scroll_bar_visibility(if shell { egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded } else { egui::scroll_area::ScrollBarVisibility::AlwaysHidden }).show(ui, |ui| {
+                let area = ScrollArea::vertical().id_salt("figs_controls").max_height(max_h - cue_h).auto_shrink([false, false]).scroll_bar_visibility(if shell { egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded } else { egui::scroll_area::ScrollBarVisibility::AlwaysHidden });
+                // the shell's handle is the app's quiet one (thin, muted, no track), the same as the
+                // approval queue's: the ink-coloured bar read as a loud orange slab on the dark page.
+                // The column's own widgets keep the page's look inside it.
+                let out = crate::kit::quiet_scroll_area(ui, area, |ui| {
                     ui.spacing_mut().item_spacing.y = 10.0;
                     // the shell sets every subject's intro card and gaps as the math page does; the
                     // reference page skins keep their own
@@ -2677,9 +2683,6 @@ impl Workspace {
                     }
                     ui.add_space(32.0);
                 });
-                if let Some(f) = bar_fill {
-                    ui.visuals_mut().widgets.inactive.bg_fill = f;
-                }
                 // the shell's column ends above the action row: with more below, its last visible
                 // control is hidden whole so the edge lands in the gap under it, not through it
                 if shell {
@@ -3758,7 +3761,7 @@ fn cover_partial_rows(ui: &Ui, viewport: egui::Rect, rows: &[(f32, f32)], say: b
     // reads as "the fields continue below", not as an empty panel.
     if say && band.height() >= 22.0 {
         let cue = egui::Rect::from_min_max(egui::pos2(band.left(), band.top() + 2.0), egui::pos2(band.right(), (band.top() + 32.0).min(band.bottom())));
-        crate::kit::more_below(ui, cue, "Scroll for this section's settings");
+        crate::kit::more_below(ui, cue, "More settings below");
     }
 }
 
@@ -4235,13 +4238,27 @@ fn param_control_inner(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
                 // the shell's label (with its note) sits above the stepper, as above every other box,
                 // so a long note cannot run under the buttons
                 param_label(ui, label, pd.hint);
+                // one framed control: live − and + in ink on the card with a hairline, either side of
+                // the value in the input's white box (ghost-grey squares round a bare "1" read as off)
                 ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 10.0;
-                    if ui.add_enabled(v > *min, Button::new("-").min_size(Vec2::splat(34.0))).clicked() {
+                    ui.spacing_mut().item_spacing.x = 6.0;
+                    let step = |ui: &mut Ui, glyph: &str, on: bool| {
+                        ui.add_enabled(
+                            on,
+                            Button::new(RichText::new(glyph).size(17.0).family(theme::bold_family()).color(theme::ink()))
+                                .fill(theme::card())
+                                .stroke(Stroke::new(1.0, theme::rule()))
+                                .corner_radius(CornerRadius::same(8))
+                                .min_size(Vec2::splat(34.0)),
+                        )
+                    };
+                    if step(ui, "\u{2212}", v > *min).on_hover_text("One fewer").clicked() {
                         v -= 1;
                     }
-                    ui.add_sized(Vec2::new(28.0, 34.0), egui::Label::new(theme::strong(v.to_string()).size(15.0)));
-                    if ui.add_enabled(v < *max, Button::new("+").min_size(Vec2::splat(34.0))).clicked() {
+                    let (r, _) = ui.allocate_exact_size(Vec2::new(44.0, 34.0), Sense::hover());
+                    ui.painter().rect(r, CornerRadius::same(8), theme::card(), Stroke::new(1.0, theme::rule()), egui::StrokeKind::Inside);
+                    ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, v.to_string(), egui::FontId::new(15.0, theme::bold_family()), theme::ink());
+                    if step(ui, "+", v < *max).on_hover_text("One more").clicked() {
                         v += 1;
                     }
                 });
