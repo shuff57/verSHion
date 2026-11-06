@@ -1374,7 +1374,7 @@ impl Workspace {
                     // the width, never grown) plus 16 px of padding on every side
                     let sc = ((cw_card as f64 - 32.0) / cw).min(1.0);
                     card_h = (ch * sc + 32.0) as f32;
-                } else {
+                } else if !(generated && self.shell_panel()) {
                     card_h = card_h.max(ui.available_height() - if skin { 144.0 } else { 156.0 });
                 }
             }
@@ -1396,10 +1396,19 @@ impl Workspace {
                 // the shell's icon toolbar (48 px on a phone, 53 wider, plus its rule) sits above the figure
                 card_h += if ctx.content_rect().width() < 500.0 { 50.0 } else { 55.0 };
             }
+            // the app's shell: the controls below the figure either start well inside the window or not at
+            // all, never as a sliver of an empty card above the action row
+            if !skin && generated && self.shell_panel() {
+                let rest = avail_h - card_h - 10.0;
+                if rest > 0.0 && rest < 120.0 {
+                    card_h = (card_h - (120.0 - rest)).max(180.0);
+                }
+            }
             // the math reference leaves 16 px under its header on a phone; ours 11
             let math_top = if skin && self.sel.is_some_and(|i| matches!(reg()[i].subject, figures::Subject::Math | figures::Subject::Physics)) { 5.0 } else { 0.0 };
             ui.add_space(math_top);
-            ScrollArea::vertical().id_salt("figs_narrow").max_height(avail_h - math_top).auto_shrink([false, false]).scroll_bar_visibility(if theme::chem_skin() { egui::scroll_area::ScrollBarVisibility::AlwaysHidden } else { egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded }).show(ui, |ui| {
+            let fade = generated && self.shell_panel();
+            let out = ScrollArea::vertical().id_salt("figs_narrow").max_height(avail_h - math_top).auto_shrink([false, false]).scroll_bar_visibility(if theme::chem_skin() && !fade { egui::scroll_area::ScrollBarVisibility::AlwaysHidden } else { egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded }).show(ui, |ui| {
                 ui.scope_builder(egui::UiBuilder::new().max_rect(ui.available_rect_before_wrap().shrink2(Vec2::new(side, 0.0))), |ui| {
                 if inset > 0.0 {
                     ui.horizontal(|ui| {
@@ -1415,6 +1424,9 @@ impl Workspace {
                 self.controls(ui, 1.0e5);
                 });
             });
+            if fade {
+                fade_below(ui, &out);
+            }
         } else if skin {
             self.chem_wide(ui, avail_h, preview.as_ref());
         } else {
@@ -1898,6 +1910,12 @@ impl Workspace {
             ui.painter_at(top).image(tex.id(), img, uv, egui::Color32::WHITE);
             ui.painter_at(bot).image(tex.id(), img, uv, egui::Color32::WHITE);
         } else {
+            // the frequency table prints on a page: its white sheet fills the preview below the
+            // toolbar (rounded at the card's foot) instead of stopping under the table as a band
+            if def.id == "frequency-table" {
+                let r = crate::kit::R_CARD as u8;
+                ui.painter().rect_filled(full, egui::CornerRadius { nw: 0, ne: 0, sw: r, se: r }, egui::Color32::WHITE);
+            }
             ui.painter_at(full).image(tex.id(), img, uv, egui::Color32::WHITE);
         }
         if !pointer_down {
@@ -2553,7 +2571,7 @@ impl Workspace {
                 let mut preset_apply: Option<Params> = None;
 
                 ui.spacing_mut().scroll.fade.strength = 0.0;
-                ScrollArea::vertical().id_salt("figs_controls").max_height(max_h).auto_shrink([false, false]).scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(ui, |ui| {
+                let out = ScrollArea::vertical().id_salt("figs_controls").max_height(max_h).auto_shrink([false, false]).scroll_bar_visibility(if shell { egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded } else { egui::scroll_area::ScrollBarVisibility::AlwaysHidden }).show(ui, |ui| {
                     ui.spacing_mut().item_spacing.y = 10.0;
                     // the shell sets every subject's intro card and gaps as the math page does; the
                     // reference page skins keep their own
@@ -2611,6 +2629,11 @@ impl Workspace {
                     }
                     ui.add_space(24.0);
                 });
+                // the shell's column ends above the action row: a column with more below fades out
+                // there instead of ending on a sliced control
+                if shell {
+                    fade_below(ui, &out);
+                }
                 if let Some(p) = preset_apply {
                     self.set_params_with_history(p);
                 }
@@ -3641,6 +3664,27 @@ fn is_hidden(defs: &[ParamDef], p: &Params, pd: &ParamDef) -> bool {
     })
 }
 
+/// A scrolled column with more below its window: the last 36 points fade into the page, so the cut
+/// reads as "this scrolls" rather than as a control sliced in half by the row under it.
+fn fade_below<R>(ui: &Ui, out: &egui::scroll_area::ScrollAreaOutput<R>) {
+    let r = out.inner_rect;
+    let hidden = out.content_size.y - out.state.offset.y - r.height();
+    if hidden <= 1.0 {
+        return;
+    }
+    let h = 36.0_f32.min(r.height() / 3.0);
+    let band = egui::Rect::from_min_max(egui::pos2(r.left(), r.bottom() - h), r.max);
+    let bg = theme::cream();
+    let mut mesh = egui::Mesh::default();
+    mesh.colored_vertex(band.left_top(), bg.gamma_multiply(0.0));
+    mesh.colored_vertex(band.right_top(), bg.gamma_multiply(0.0));
+    mesh.colored_vertex(band.left_bottom(), bg);
+    mesh.colored_vertex(band.right_bottom(), bg);
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(1, 2, 3);
+    ui.painter().add(egui::Shape::mesh(mesh));
+}
+
 /// A short live summary under a section header: the first few meaningful values.
 fn section_summary(defs: &[ParamDef], p: &Params, items: &[usize]) -> String {
     let mut parts: Vec<String> = Vec::new();
@@ -3652,7 +3696,13 @@ fn section_summary(defs: &[ParamDef], p: &Params, items: &[usize]) -> String {
         let part = match (&d.kind, p.0.get(d.key)) {
             (Kind::Choice(_), Some(Value::S(v))) if !v.is_empty() => Some(v.clone()),
             (Kind::Text, Some(Value::S(v))) if !v.trim().is_empty() => Some(v.chars().take(18).collect()),
-            (Kind::Bool, Some(Value::B(true))) => Some(d.label.split(['(', ':']).next().unwrap_or(d.label).trim().to_lowercase()),
+            (Kind::Bool, Some(Value::B(true))) => {
+                // "show" is said once: "show lone pairs · bond angles · atom labels". Repeated on every
+                // item it pushed the third one off the line ("show…").
+                let l = d.label.split(['(', ':']).next().unwrap_or(d.label).trim().to_lowercase();
+                let said = parts.iter().any(|t| t.starts_with("show "));
+                Some(if said { l.strip_prefix("show ").map(str::to_string).unwrap_or(l) } else { l })
+            }
             (Kind::Float { .. }, Some(Value::F(v))) => Some(format!("{} {}", short_label(d.label), (v * 100.0).round() / 100.0)),
             (Kind::Int { .. }, Some(Value::I(v))) => Some(format!("{} {}", short_label(d.label), v)),
             _ => None,

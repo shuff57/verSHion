@@ -1518,10 +1518,16 @@ pub fn segmented_track(ui: &mut Ui, opts: &[&'static str], cur: &mut String) {
         let sel = cur == o;
         resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, sel, *o));
         if sel {
-            let edge = if chem && !theme::is_dark() { Color32::from_rgb(0xee, 0xef, 0xf4) } else { theme::border() };
-            ui.painter().rect(cell, CornerRadius::same(cell_r), theme::card(), Stroke::new(1.0, edge), egui::StrokeKind::Inside);
+            // the app's dark shell: a card chip on its dark field barely showed which cell was chosen, so
+            // the chosen one takes the accent wash and edge there
+            if theme::keep_theme() && theme::is_dark() {
+                ui.painter().rect(cell, CornerRadius::same(cell_r), theme::accent_faded(), Stroke::new(1.0, theme::accent_col()), egui::StrokeKind::Inside);
+            } else {
+                let edge = if chem && !theme::is_dark() { Color32::from_rgb(0xee, 0xef, 0xf4) } else { theme::border() };
+                ui.painter().rect(cell, CornerRadius::same(cell_r), theme::card(), Stroke::new(1.0, edge), egui::StrokeKind::Inside);
+            }
         }
-        let col = if sel { blue_text() } else { theme::muted_col() };
+        let col = if sel { blue_text() } else if theme::keep_theme() && theme::is_dark() { theme::text_col() } else { theme::muted_col() };
         let g = ui.painter().layout(o.to_string(), egui::FontId::new(13.76, if chem { theme::semibold_family() } else { theme::bold_family() }), col, cell_w - 16.0);
         let mut pos = cell.center() - g.size() / 2.0 - if chem && !wrapped { Vec2::new(0.0, 0.6) } else { Vec2::ZERO };
         // wrapped lines are centred on each other, as the reference's text-align centre sets them, and sit a little lower
