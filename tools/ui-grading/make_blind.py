@@ -184,7 +184,8 @@ def run():
     # the manifest names the final paths, so it is written after the rename
     open(B + '/manifest.txt', 'w').write(
         '\n'.join(line.replace(tmp, B) for line in manifest) + '\n')
-    shutil.copyfile(B + '/key.json', KEY)
+    # the key leaves the blind folder: critics read that folder, so a copy there is the answer sheet
+    shutil.move(B + '/key.json', KEY)
     os.chmod(KEY, 0o600)
     npair = sum(1 for k in key.values() if k['kind'] != 'solo')
     print(f'{len(key)} items: {npair} pairs ({len(CONTROLS)} controls, {len(mirrors)} mirrors), '
