@@ -1435,7 +1435,7 @@ impl Workspace {
             if shell_page {
                 // the page's bottom edge ends in the gap above the next control, not through it
                 let rows = cut_rows(ui);
-                cover_partial_rows(ui, out.inner_rect, &rows);
+                cover_partial_rows(ui, out.inner_rect, &rows, true);
             }
         } else if skin {
             self.chem_wide(ui, avail_h, preview.as_ref());
@@ -2612,9 +2612,14 @@ impl Workspace {
                 // card that is nearly white, so the column gets the card's rule colour instead
                 let bar_fill = if shell { Some(ui.visuals().widgets.inactive.bg_fill) } else { None };
                 if shell {
-                    ui.visuals_mut().widgets.inactive.bg_fill = theme::border();
+                    // a handle in the muted ink, not the card's hairline: the critics never saw the
+                    // rule-coloured one, so the column read as ending at its last visible control
+                    ui.visuals_mut().widgets.inactive.bg_fill = theme::muted_col();
+                    ui.spacing_mut().scroll.bar_width = 8.0;
                 }
-                let out = ScrollArea::vertical().id_salt("figs_controls").max_height(max_h).auto_shrink([false, false]).scroll_bar_visibility(if shell { egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded } else { egui::scroll_area::ScrollBarVisibility::AlwaysHidden }).show(ui, |ui| {
+                // the shell keeps a strip under the column for the "more below" cue
+                let cue_h = if shell { 26.0 } else { 0.0 };
+                let out = ScrollArea::vertical().id_salt("figs_controls").max_height(max_h - cue_h).auto_shrink([false, false]).scroll_bar_visibility(if shell { egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded } else { egui::scroll_area::ScrollBarVisibility::AlwaysHidden }).show(ui, |ui| {
                     ui.spacing_mut().item_spacing.y = 10.0;
                     // the shell sets every subject's intro card and gaps as the math page does; the
                     // reference page skins keep their own
@@ -2679,7 +2684,13 @@ impl Workspace {
                 // control is hidden whole so the edge lands in the gap under it, not through it
                 if shell {
                     let rows = cut_rows(ui);
-                    cover_partial_rows(ui, out.inner_rect, &rows);
+                    cover_partial_rows(ui, out.inner_rect, &rows, false);
+                    // say it in words as well as with the bar: more controls follow below
+                    let (bar, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), cue_h), Sense::hover());
+                    let more = out.state.offset.y + out.inner_rect.height() < out.content_size.y - 4.0;
+                    if more {
+                        crate::kit::more_below(ui, bar, "More settings below");
+                    }
                 }
                 if let Some(p) = preset_apply {
                     self.set_params_with_history(p);
@@ -3728,7 +3739,7 @@ fn cut_rows(ui: &Ui) -> Vec<(f32, f32)> {
 /// Hide the one control the viewport's bottom edge cuts through, so the column ends in the gap
 /// above it rather than halfway down a glyph. The scroll bar stays visible (the band stops short of
 /// it), and the page behind the column shows no seam because the band is the card's own fill.
-fn cover_partial_rows(ui: &Ui, viewport: egui::Rect, rows: &[(f32, f32)]) {
+fn cover_partial_rows(ui: &Ui, viewport: egui::Rect, rows: &[(f32, f32)], say: bool) {
     let bottom = viewport.bottom();
     let cut = rows
         .iter()
@@ -3743,6 +3754,12 @@ fn cover_partial_rows(ui: &Ui, viewport: egui::Rect, rows: &[(f32, f32)]) {
         egui::pos2((viewport.right() - 10.0).max(viewport.left()), bottom),
     );
     ui.painter().with_clip_rect(viewport).rect_filled(band, 0.0, theme::card());
+    // A tall covered band is a blank slab under an open section's header: say what is there, so it
+    // reads as "the fields continue below", not as an empty panel.
+    if say && band.height() >= 22.0 {
+        let cue = egui::Rect::from_min_max(egui::pos2(band.left(), band.top() + 2.0), egui::pos2(band.right(), (band.top() + 32.0).min(band.bottom())));
+        crate::kit::more_below(ui, cue, "Scroll for this section's settings");
+    }
 }
 
 /// A short live summary under a section header: the first few meaningful values.
@@ -3764,6 +3781,9 @@ fn section_summary(defs: &[ParamDef], p: &Params, items: &[usize]) -> String {
                 Some(if said { l.strip_prefix("show ").map(str::to_string).unwrap_or(l) } else { l })
             }
             (Kind::Float { .. }, Some(Value::F(v))) => Some(format!("{} {}", short_label(d.label), (v * 100.0).round() / 100.0)),
+            // "Decimals in relative frequencies" read as "relative frequencies 1" and ran the
+            // summary off its line; a count of decimals says itself in two words
+            (Kind::Int { .. }, Some(Value::I(v))) if d.label.starts_with("Decimals") => Some(format!("{v} decimal{}", if *v == 1 { "" } else { "s" })),
             (Kind::Int { .. }, Some(Value::I(v))) => Some(format!("{} {}", short_label(d.label), v)),
             _ => None,
         };
@@ -4171,6 +4191,9 @@ fn param_control_inner(ui: &mut Ui, fig: &str, pd: &ParamDef, p: &mut Params) {
                 _ => None,
             };
             let r = ui.horizontal(|ui| {
+                // a live input wears the card's white with its hairline, like the select above it;
+                // the beige field fill is what the disabled fields wear, and Turn and Tilt read as locked
+                ui.visuals_mut().text_edit_bg_color = Some(theme::card());
                 let w = if unit.is_some() { (ui.available_width() - 40.0 - ui.spacing().item_spacing.x).max(60.0) } else { f32::INFINITY };
                 let r = ui.add(TextEdit::singleline(&mut text).id(id).desired_width(w).margin(Margin::symmetric(10, 10)).font(egui::FontId::new(15.0, theme::sans_family())));
                 if let Some(u) = &unit {

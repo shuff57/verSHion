@@ -460,7 +460,9 @@ pub fn icon_btn(ui: &mut Ui, glyph: &str, tip: &str, enabled: bool) -> egui::Res
         if enabled && resp.hovered() {
             ui.painter().rect_filled(rect, CornerRadius::same(10), theme::hover_bg());
         }
-        let col = if enabled { theme::ink() } else { theme::rule().gamma_multiply(0.8) };
+        // a disabled icon is the muted ink at reduced strength, not the rule colour: on the dark
+        // card the rule was dark grey on dark and the history buttons all but vanished
+        let col = if enabled { theme::ink() } else { theme::muted_col().gamma_multiply(0.6) };
         ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, glyph, egui::FontId::new(20.0, theme::icon_font(20.0).family), col);
     }
     if enabled { dark_tip(ui, resp, tip) } else { resp }
@@ -480,7 +482,7 @@ pub fn lucide_btn(ui: &mut Ui, ops: &[lucide::Op], tip: &str, enabled: bool) -> 
         if enabled && resp.hovered() {
             ui.painter().rect_filled(rect, CornerRadius::same(10), theme::hover_bg());
         }
-        let col = if enabled { theme::ink() } else { Color32::from_rgb(0xb4, 0xba, 0xc4) };
+        let col = if enabled { theme::ink() } else if theme::is_dark() { theme::muted_col().gamma_multiply(0.6) } else { Color32::from_rgb(0xb4, 0xba, 0xc4) };
         lucide::paint(ui.painter(), Rect::from_center_size(rect.center(), Vec2::splat(19.0)), col, ops);
     }
     if enabled { dark_tip(ui, resp, tip) } else { resp }
