@@ -453,12 +453,18 @@ struct Legend { x: f64, yc: f64, w: f64, kind: LegKind }
 
 enum LegKind { Series(usize, String), Ea(String), Mark(String), Vp(String), Rms(String) }
 
+/// The length of the Ea and rms legend swatches: long enough for their dash patterns to repeat.
+/// (Drawn upright and 12 units tall they read as the characters "⋮" and "!".)
+const GUIDE_SWATCH: f64 = 24.0;
+
 fn legend_width(kind: &LegKind, fs: f64) -> f64 {
     let swatch = 26.0;
     let gap = 7.0;
     match kind {
         LegKind::Series(_, text) => swatch + gap + text_w(text, fs),
-        LegKind::Ea(text) | LegKind::Mark(text) | LegKind::Vp(text) | LegKind::Rms(text) => 12.0 + gap + text_w(text, fs),
+        // the guides' swatches are a short run of their own dash pattern, read as a line style
+        LegKind::Ea(text) | LegKind::Rms(text) => GUIDE_SWATCH + gap + text_w(text, fs),
+        LegKind::Mark(text) | LegKind::Vp(text) => 12.0 + gap + text_w(text, fs),
     }
 }
 
@@ -720,8 +726,8 @@ pub fn build(p: &Params) -> (String, Report) {
             }
             LegKind::Ea(text) => {
                 let (x, yc) = (lg.x, lg.yc);
-                d.raw(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{guide_c}" stroke-width="1.5" stroke-dasharray="1.5 4" data-o="legend"/>"##, x + 5.0, yc - 6.0, x + 5.0, yc + 6.0));
-                d.raw(&text_el(x + 12.0, yc + 0.34 * fs_lab, fs_lab, "start", lab_c, text, "legend"));
+                d.raw(&format!(r##"<line x1="{x:.2}" y1="{yc:.2}" x2="{:.2}" y2="{yc:.2}" stroke="{guide_c}" stroke-width="1.6" stroke-dasharray="1.5 3" data-o="legend"/>"##, x + GUIDE_SWATCH));
+                d.raw(&text_el(x + GUIDE_SWATCH + 7.0, yc + 0.34 * fs_lab, fs_lab, "start", lab_c, text, "legend"));
             }
             LegKind::Mark(text) => {
                 let (x, yc) = (lg.x, lg.yc);
@@ -736,8 +742,8 @@ pub fn build(p: &Params) -> (String, Report) {
             }
             LegKind::Rms(text) => {
                 let (x, yc) = (lg.x, lg.yc);
-                d.raw(&format!(r##"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{guide_c}" stroke-width="1.4" stroke-dasharray="6 3 1 3" data-o="legend"/>"##, x + 5.0, yc - 6.0, x + 5.0, yc + 6.0));
-                d.raw(&text_el(x + 12.0, yc + 0.34 * fs_lab, fs_lab, "start", lab_c, text, "legend"));
+                d.raw(&format!(r##"<line x1="{x:.2}" y1="{yc:.2}" x2="{:.2}" y2="{yc:.2}" stroke="{guide_c}" stroke-width="1.5" stroke-dasharray="6 3 1.5 3" data-o="legend"/>"##, x + GUIDE_SWATCH));
+                d.raw(&text_el(x + GUIDE_SWATCH + 7.0, yc + 0.34 * fs_lab, fs_lab, "start", lab_c, text, "legend"));
             }
         }
     }
@@ -811,3 +817,19 @@ pub fn examples(id: &str) -> Option<Vec<Example>> {
 
 #[cfg(test)]
 mod tests;
+
+/// The editor's one-line summary under the Values section: the gas, how many curves, their temperatures
+/// (the generic summary printed the curve count as a bare "2" and the custom molar mass for any gas).
+pub fn section_summary(title: &str, p: &Params) -> Option<String> {
+    if title != "Values" {
+        return None;
+    }
+    let gas = match p.s("gas") {
+        "Custom" => format!("M = {} g/mol", fmt(p.f("molar_mass"))),
+        g => g.to_string(),
+    };
+    let n: usize = p.s("curves").parse().unwrap_or(2).clamp(1, 3);
+    let temps: Vec<String> = ["t1", "t2", "t3"].iter().take(n).map(|k| fmt(p.f(k))).collect();
+    let curves = if n == 1 { "1 curve".to_string() } else { format!("{n} curves") };
+    Some(format!("{gas} · {curves} · {} K", temps.join(", ")))
+}

@@ -722,6 +722,10 @@ pub fn param_relevant(id: &str, key: &str, p: &Params) -> bool {
         "inclined-plane" if matches!(key, "joined" | "spacing" | "tension" | "ten_lab_mode" | "ten_lab" | "contact" | "cont_lab_mode" | "cont_lab") => {
             physics::incline_objects(p) > 1 && (!matches!(key, "contact" | "cont_lab_mode" | "cont_lab") || p.s("joined") == "Touching") && (!matches!(key, "tension" | "ten_lab_mode" | "ten_lab") || p.s("joined") != "Touching")
         }
+        // the molar-mass box is for Custom only, and a temperature only for the curves drawn
+        "boltzmann-distribution" if key == "molar_mass" => p.s("gas") == "Custom",
+        "boltzmann-distribution" if key == "t2" => p.s("curves") != "1",
+        "boltzmann-distribution" if key == "t3" => p.s("curves") == "3",
         _ => cards::relevant(id, key, p),
     }
 }

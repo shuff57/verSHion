@@ -1866,6 +1866,12 @@ impl Workspace {
         let max_zoom = if math { if area.width() < 600.0 { 1.0 / math_unit(def.id) } else { 12.0 } } else if !chem { PREVIEW_MAX_ZOOM } else if area.width() < 600.0 && !skin_wide { 1.0 } else { 6.0 };
         let k = (area.width() as f64 / vw).min(area.height() as f64 / vh).clamp(0.05, max_zoom);
         let origin = area.center() - Vec2::new(((v[0] + vw / 2.0) * k) as f32, ((v[1] + vh / 2.0) * k) as f32);
+        // A table reads from the top, as on the page it prints on: a wide, short one sits under the
+        // toolbar instead of floating in the middle with a band of empty sheet above it.
+        let origin = match (vh * k) as f32 {
+            h if def.id == "frequency-table" && area.height() - h > 24.0 => origin - Vec2::new(0.0, (area.height() - h) / 2.0 - 12.0),
+            _ => origin,
+        };
         let ppp = ui.ctx().pixels_per_point();
         // chemistry previews are rasterized at exactly the device scale and drawn on whole pixels,
         // so one-pixel grid lines stay solid instead of smearing across two pixels
@@ -2279,7 +2285,7 @@ impl Workspace {
                         }
                         let id = ui.make_persistent_id(("fig_sec", def.id, sec.title.as_str()));
                         let relevant: Vec<usize> = sec.items.iter().copied().filter(|&i| figures::param_relevant(def.id, pdefs[i].key, &self.params)).collect();
-                        let summary = (skin || def.subject == figures::Subject::Physics || matches!(def.id, "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "kite" | "regular-polygon")).then(|| figures::chemistry::skin_summary_in(def.id, &sec.title, &self.params, skin_phys)).flatten().or_else(|| sec.items.iter().find_map(|&i| figures::cards::summary(def.id, pdefs[i].key, &self.params))).or_else(|| if def.id == "population-growth" { figures::biology::popdyn::growth_section_summary(&sec.title, &self.params) } else { None }).or_else(|| if def.id == "pedigree" { figures::biology::pedigree::section_summary(&sec.title, &self.params) } else { None }).or_else(|| if def.id == "titration-curve" { figures::chemistry::tit_section_summary(&sec.title, &self.params) } else { None }).unwrap_or_else(|| section_summary(&pdefs, &self.params, &relevant));
+                        let summary = (skin || def.subject == figures::Subject::Physics || matches!(def.id, "triangle" | "rectangle" | "parallelogram" | "trapezoid" | "kite" | "regular-polygon")).then(|| figures::chemistry::skin_summary_in(def.id, &sec.title, &self.params, skin_phys)).flatten().or_else(|| sec.items.iter().find_map(|&i| figures::cards::summary(def.id, pdefs[i].key, &self.params))).or_else(|| if def.id == "population-growth" { figures::biology::popdyn::growth_section_summary(&sec.title, &self.params) } else { None }).or_else(|| if def.id == "pedigree" { figures::biology::pedigree::section_summary(&sec.title, &self.params) } else { None }).or_else(|| if def.id == "titration-curve" { figures::chemistry::tit_section_summary(&sec.title, &self.params) } else { None }).or_else(|| if def.id == "boltzmann-distribution" { figures::chemistry::boltzmann::section_summary(&sec.title, &self.params) } else { None }).unwrap_or_else(|| section_summary(&pdefs, &self.params, &relevant));
                         let mut reset = false;
                         let (mut reset_labels, mut straighten) = (false, false);
                         let mut st = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, if skin { (def.id == "population-growth" && sec.title == "Graphs") || (def.id == "gel-electrophoresis" && si_ == 1) || (si_ == 0 && def.subject != figures::Subject::Physics && def.id != "pedigree" && !((shell || def.subject == figures::Subject::Math) && (figures::measures_for(def.id).is_some() || figures::rows_for(def.id).is_some()))) || sec.title.to_lowercase().contains("reading") } else { si_ < open_sections(def.id) });
