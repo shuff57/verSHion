@@ -787,11 +787,13 @@ pub fn build(p: &Params) -> (String, Report) {
     let rule = if print { "#b0b0b0" } else { "#c9ced6" };
 
     let w = 760.0;
-    let cx = 258.0;
-    let cy = 300.0;
+    // The model is drawn larger and starts at the panel's top, so the drawing, the facts and the
+    // caption fill the sheet together (the old 118 px model left a white band under the facts).
+    let cx = 250.0;
     let geom = 1.0 + 0.18 * (lab - 1.0);
-    let scale = 118.0 * geom;
+    let scale = 136.0 * geom;
     let r_atom = 16.0 * lab;
+    let cy = (64.0 + scale + r_atom + 8.0).round();
     let fs_atom = 17.0 * lab;
     let fs_angle = 16.5 * lab;
     let fs_panel = 16.5 * lab;
@@ -872,7 +874,8 @@ pub fn build(p: &Params) -> (String, Report) {
                 point_seg(p, *a, *b) < 4.2 || dots.iter().any(|dd| point_seg(*dd, *a, *b) < 4.2)
             });
             if on_bond { lone_on_bond += 1; continue; }
-            if chosen_dots.iter().any(|q| dots.iter().any(|dd| dist(*dd, *q) < 5.0)) {
+            // (the threshold is the drawing's own scale: measured at the 118 px model it was 5 px)
+            if chosen_dots.iter().any(|q| dots.iter().any(|dd| dist(*dd, *q) < 5.0 * scale / (118.0 * geom))) {
                 lone_overlap += 1;
                 continue;
             }
@@ -1148,9 +1151,9 @@ pub fn build(p: &Params) -> (String, Report) {
     let panel: Vec<String> = facts.iter().map(|(l, v)| format!("{l}: {v}")).chain(panel_notes.iter().cloned()).collect();
 
     let footer_text = "A simplified ball-and-stick model: atoms are circles joined by single sticks. Each lone pair is a pair of dots on a short dashed stick pointing where the pair truly projects on the central atom; a pair that projects on a bond, at the viewer, behind a nearer atom or onto another pair is left off and the panel says so. Bond lengths are not to scale, and no double bonds, resonance or bond order is shown.";
-    // The note is held near 70 characters a line (it ran 90 to 110 across the full sheet) and set
-    // in the sheet's ink: in the panel's grey it read as link text, not as the figure's caption.
-    let footer = wrap(footer_text, fs_note, (w - 40.0).min(70.0 * 0.5 * fs_note));
+    // The caption spans the sheet's content width at a reading measure (about 80 characters; at
+    // 70 it sat in the bottom-left with the bottom-right dead), set in the sheet's ink.
+    let footer = wrap(footer_text, fs_note, (w - 40.0).min(82.0 * 0.5 * fs_note));
 
     // ---- the facts' column layout. The label column is as wide as the widest label at this size;
     // a value that does not fit beside it goes on its own line under its label rather than being
@@ -1166,7 +1169,26 @@ pub fn build(p: &Params) -> (String, Report) {
     let value_w = (panel_right - value_x).max(70.0);
     let values_below: Vec<Vec<String>> = facts.iter().map(|(_, v)| wrap(v, fs_panel, panel_w)).collect();
     let value_beside = |i: usize| beside && text_w(&facts[i].1, fs_panel) <= value_w;
-    let fact_lines: usize = (0..facts.len()).map(|i| if value_beside(i) { 1 } else { 1 + values_below[i].len().max(1) }).sum();
+    let fact_lines_of = |v: &str| if beside && text_w(v, fs_panel) <= value_w { 1 } else { 1 + wrap(v, fs_panel, panel_w).len().max(1) };
+    // the key's and the student's values differ in length; the panel reserves the longer of the
+    // two, so both copies are the same height now that the panel, not the model, can set it
+    let other: [String; 3] = [
+        if key { BLANK.to_string() } else { mol.domain_geo.to_string() },
+        if key { BLANK.to_string() } else { mol.shape.to_string() },
+        if key { angle_student.clone() } else { angle_key.clone() },
+    ];
+    let fact_lines: usize = (0..facts.len())
+        .map(|i| {
+            let mine = if value_beside(i) { 1 } else { 1 + values_below[i].len().max(1) };
+            let alt = match i {
+                2 => fact_lines_of(&other[0]),
+                3 => fact_lines_of(&other[1]),
+                5 => fact_lines_of(&other[2]),
+                _ => mine,
+            };
+            mine.max(alt)
+        })
+        .sum();
 
     // ---- height
     let panel_top = 64.0;

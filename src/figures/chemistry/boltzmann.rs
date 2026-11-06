@@ -494,7 +494,7 @@ pub fn build(p: &Params) -> (String, Report) {
     let mut fs_tab = 13.0 * lab;
     let fs_ro = 13.0 * lab;
     let w = (760.0 * (1.0 + 0.38 * (lab - 1.0))).round();
-    let ph = (420.0 * (1.0 + 0.22 * (lab - 1.0))).round();
+    let ph = (380.0 * (1.0 + 0.22 * (lab - 1.0))).round();
 
     let temps = st.temps.clone();
     let curves: Vec<Curve> = temps.iter().map(|&t| Curve {
@@ -513,7 +513,8 @@ pub fn build(p: &Params) -> (String, Report) {
     let x_raw = if st.ea_kj > 0.0 && ea_on { (X_SPAN * vp_hot).max(1.05 * va) } else { X_SPAN * vp_hot };
     let (x_top, x_step) = axis_top(x_raw, 6.0);
     let peak_max = curves.iter().map(|c| c.peak).fold(0.0, f64::max).max(1e-300);
-    let (y_top, y_step) = axis_top(1.08 * peak_max, 5.0);
+    // headroom over the tallest peak, so the legend band above the plot keeps clear of it
+    let (y_top, y_step) = axis_top(1.18 * peak_max, 5.0);
     let xticks = ticks(0.0, x_top, x_step);
     let yticks = ticks(0.0, y_top, y_step);
 
@@ -553,8 +554,12 @@ pub fn build(p: &Params) -> (String, Report) {
         xcur += lw + leg_gap;
     }
     let rows = if placed.is_empty() { 0 } else { row + 1 };
-    let t = (8.0 + rows as f64 * row_h + 8.0).round();
+    // the band ends well above the plot's top edge, so the guides' row never touches the peak
+    let t = (8.0 + rows as f64 * row_h + 16.0).round();
 
+    // the plot is a little shorter than it was (the notes now run in one column below it), but
+    // never shorter than its rotated y title needs
+    let ph = ph.max((text_w("Fraction of molecules per unit speed (s/m)", fs_t) + t + b + 24.0).ceil());
     let fr = Frame { w, h: ph, l, r, t, b, x0: 0.0, x1: x_top, y0: 0.0, y1: y_top };
     let (left, right, top, bottom) = (fr.left(), fr.right(), fr.top(), fr.bottom());
     let px = |x: f64| fr.px(x);
@@ -641,35 +646,16 @@ pub fn build(p: &Params) -> (String, Report) {
             lines.push(format!("The marked speed {} m/s is beyond the x axis (0 to {} m/s), so no guide is drawn.", fmt(st.mark), fmt(x_top)));
         }
     }
-    // The reading block: two balanced columns across the sheet's width, each held near a 45
-    // character measure. One narrow column left half the sheet white and still made the whole
-    // figure tall enough that the preview had to shrink its 13 px notes to 9 px to fit; the two
-    // columns fill the width and cut the block's height by more than a third.
-    let col_gap = 24.0;
-    let ro_w = ((w - 40.0 - col_gap) / 2.0).max(120.0);
+    // The reading block: one column at a reading measure (about 66 characters), starting on the
+    // speeds table's left edge. Two ~45-character columns read as dense footnote bricks; the plot,
+    // not the notes, fills the sheet's width.
+    let ro_x = col_x[0];
+    let ro_w = (66.0 * fs_ro * 0.52).min(w - ro_x - 20.0).max(160.0);
     let paragraphs: Vec<Vec<String>> = lines.iter().map(|line| wrap(line, fs_ro, ro_w)).collect();
-    let ro_lh = 1.62 * fs_ro;
-    let para_gap = 5.0;
-    let col_height = |ps: &[Vec<String>]| -> f64 {
-        ps.iter().map(|p| p.len() as f64).sum::<f64>() * ro_lh + ps.len().saturating_sub(1) as f64 * para_gap
-    };
-    let total_lines: usize = paragraphs.iter().map(Vec::len).sum();
-    let mut acc = 0usize;
-    let mut split = paragraphs.len();
-    for (i, p) in paragraphs.iter().enumerate() {
-        if i > 0 && acc as f64 >= total_lines as f64 / 2.0 {
-            split = i;
-            break;
-        }
-        acc += p.len();
-        split = i + 1;
-    }
-    // never leave the second column empty when there is more than one paragraph to place
-    if split >= paragraphs.len() && paragraphs.len() > 1 {
-        split = paragraphs.len() - 1;
-    }
-    let (col_a, col_b) = paragraphs.split_at(split.min(paragraphs.len()));
-    let h = (tab_bottom + 10.0 + col_height(col_a).max(col_height(col_b)) + 6.0).ceil();
+    let ro_lh = 1.55 * fs_ro;
+    let para_gap = 6.0;
+    let notes_h = paragraphs.iter().map(|p| p.len() as f64).sum::<f64>() * ro_lh + paragraphs.len().saturating_sub(1) as f64 * para_gap;
+    let h = (tab_bottom + 12.0 + notes_h + 6.0).ceil();
 
     let mut d = Doc::new(w, h);
     d.describe("Boltzmann Distribution", &describe(&st, ans, ea_on, mark_on));
@@ -798,18 +784,14 @@ pub fn build(p: &Params) -> (String, Report) {
         }
     }
     {
-        let top = tab_bottom + 10.0;
-        for (ci, col) in [col_a, col_b].iter().enumerate() {
-            let x = 20.0 + ci as f64 * (ro_w + col_gap);
-            let mut y = top;
-            for (pi, para) in col.iter().enumerate() {
-                for line in para {
-                    d.raw(&text_el(x, y + 0.76 * fs_ro, fs_ro, "start", ink_c, line, "note"));
-                    y += ro_lh;
-                }
-                if pi + 1 < col.len() {
-                    y += para_gap;
-                }
+        let mut y = tab_bottom + 12.0;
+        for (pi, para) in paragraphs.iter().enumerate() {
+            for line in para {
+                d.raw(&text_el(ro_x, y + 0.76 * fs_ro, fs_ro, "start", ink_c, line, "note"));
+                y += ro_lh;
+            }
+            if pi + 1 < paragraphs.len() {
+                y += para_gap;
             }
         }
     }
