@@ -37,6 +37,9 @@ pub const EVIDENCE: [(&str, &str); 2] = [
     ("school_confirmed", "A person at the school confirmed it"),
 ];
 
+/// The line a decision sent without a live token leaves on screen (the password box then opens).
+pub const CONFIRM_PROMPT: &str = "Confirm your password to make a change. It is used once and not kept.";
+
 /// How long the server's sudo token is good for when it does not say (the Worker's `expires_in` is 300).
 const SUDO_SECONDS: u64 = 300;
 
@@ -357,7 +360,7 @@ impl AdminModel {
                 if step == "confirm" {
                     d.evidence_note = "Listed on the staff page of the school's website, science department".into();
                     self.confirming = true;
-                    self.notice = Some("Confirm your password to make a change. It is used once and not kept.".into());
+                    self.notice = Some(CONFIRM_PROMPT.into());
                 }
                 self.decision = Some(d);
             }
@@ -401,7 +404,7 @@ impl AdminModel {
             self.confirming = true;
             self.send_after_confirm = true;
             self.pending_session = Some(session);
-            self.notice = Some("Confirm your password to make a change. It is used once and not kept.".into());
+            self.notice = Some(CONFIRM_PROMPT.into());
             return;
         }
         let Some((token, _)) = self.sudo.clone() else { return };
