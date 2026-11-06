@@ -36,6 +36,63 @@ pub fn primary_button(ui: &mut Ui, label: &str) -> egui::Response {
     )
 }
 
+/// [`primary_button`] with a visible off state: a gated action (one that cannot be taken until a
+/// required field is filled) must not look ready. The disabled face is the muted fill, so the
+/// difference from a live action is readable in both themes.
+pub fn primary_button_on(ui: &mut Ui, label: &str, on: bool) -> egui::Response {
+    if on {
+        return primary_button(ui, label);
+    }
+    ui.add_enabled(
+        false,
+        egui::Button::new(
+            RichText::new(label).family(theme::bold_family()).size(13.0).color(theme::muted_col()),
+        )
+        .fill(theme::field())
+        .stroke(Stroke::new(1.0, theme::border()))
+        .corner_radius(egui::CornerRadius::same(12))
+        .min_size(Vec2::new(0.0, 36.0)),
+    )
+}
+
+/// A scroll bar the eye can find: a solid track (not the floating hairline that fades in only
+/// under the pointer) with an ink handle, in both themes. Returns the colour to restore on
+/// `extreme_bg_color` after the scroll area. Long-form panels used to look complete while half
+/// their controls sat below the fold, because the bar was invisible until hovered.
+pub fn visible_scroll(ui: &mut Ui) -> (Color32, egui::style::ScrollStyle) {
+    let old = ui.visuals().extreme_bg_color;
+    let old_style = ui.spacing().scroll.clone();
+    ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
+    ui.spacing_mut().scroll.bar_width = 10.0;
+    // the handle takes the widget's text stroke, so it stays ink-dark on the light page and
+    // cream on the dark one; the track is a tan step off the card so it reads as a channel
+    ui.spacing_mut().scroll.foreground_color = true;
+    ui.spacing_mut().scroll.fade.strength = 0.0;
+    ui.spacing_mut().scroll.dormant_handle_opacity = 1.0;
+    ui.visuals_mut().extreme_bg_color = theme::field().lerp_to_gamma(theme::rule(), 0.42);
+    (old, old_style)
+}
+
+/// Put a scroll area's track colour and bar style back after [`visible_scroll`].
+pub fn restore_scroll(ui: &mut Ui, old: (Color32, egui::style::ScrollStyle)) {
+    ui.visuals_mut().extreme_bg_color = old.0;
+    ui.spacing_mut().scroll = old.1;
+}
+
+/// "More below": the hairline and the quiet bar under a scroll viewport that really continues.
+/// Drawn only when the content overflows, so it never claims hidden rows that are not there.
+pub fn more_below(ui: &Ui, rect: Rect, label: &str) {
+    let p = ui.painter();
+    p.hline(rect.x_range(), rect.top() + 0.5, Stroke::new(1.0, theme::border()));
+    let font = FontId::new(11.0, theme::bold_family());
+    let g = p.layout_no_wrap(label.to_string(), font, theme::muted_col());
+    let icon = p.layout_no_wrap(egui_phosphor::regular::CARET_DOWN.to_string(), theme::icon_font(14.0), theme::muted_col());
+    let total = g.size().x + 7.0 + icon.size().x;
+    let x = rect.center().x - total / 2.0;
+    p.galley(Pos2::new(x, rect.center().y - g.size().y / 2.0 + 1.0), g, theme::muted_col());
+    p.galley(Pos2::new(x + total - icon.size().x, rect.center().y - icon.size().y / 2.0 + 1.0), icon, theme::muted_col());
+}
+
 /// Ghost/outline button for every secondary action: the page buttons' look at the compact height.
 pub fn ghost_button(ui: &mut Ui, label: &str) -> egui::Response {
     crate::pageshell::styled_button(

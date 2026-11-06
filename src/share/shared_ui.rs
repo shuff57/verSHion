@@ -298,22 +298,29 @@ impl SharedUi {
             let avail = ui.available_width();
             let action_w = pill_width(ui, SHARE_ACTION) + 24.0;
             let beside = ready && avail - action_w >= 320.0;
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
+            // An open decision owns the window: the page title and blurb yield to the applicant's
+            // card, so the form and the next applications stay on screen. The breadcrumb stays.
+            let compact = self.model.tab == Tab::Admin && (self.admin.decision.is_some() || self.admin.confirming);
+            if compact {
+                ui.label(egui::RichText::new("Home  /  Shared").size(11.5).color(theme::muted_col()));
+            } else {
+                ui.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        if beside {
+                            ui.set_max_width(avail - action_w);
+                        }
+                        pageshell::title(ui, "Home  /  Shared", "Shared", "Find questions other teachers shared, and share your own. Optional: everything else works without it.");
+                    });
                     if beside {
-                        ui.set_max_width(avail - action_w);
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| self.share_action(ui));
                     }
-                    pageshell::title(ui, "Home  /  Shared", "Shared", "Find questions other teachers shared, and share your own. Optional: everything else works without it.");
                 });
-                if beside {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| self.share_action(ui));
+                if ready && !beside {
+                    ui.add_space(10.0);
+                    self.share_action(ui);
                 }
-            });
-            if ready && !beside {
-                ui.add_space(10.0);
-                self.share_action(ui);
             }
-            ui.add_space(14.0);
+            ui.add_space(if compact { 8.0 } else { 14.0 });
             match guide {
                 Guide::Ready => changed |= self.tabs(ui, account, browse, mine, banks, exams, false),
                 // The waiting card says what an approval is for, and the two tabs a pending account may use follow it.

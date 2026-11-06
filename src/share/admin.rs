@@ -172,6 +172,8 @@ impl Decision {
             Some("Write why, in the words the applicant will read. A refusal without a reason leaves them guessing.")
         } else if self.approve && self.evidence >= EVIDENCE.len() {
             Some("Choose what you checked.")
+        } else if self.approve && self.evidence_note.trim().is_empty() {
+            Some("Say where you checked it: the staff directory page, or who confirmed it. The audit trail keeps it.")
         } else {
             None
         }

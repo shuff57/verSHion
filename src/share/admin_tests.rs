@@ -168,6 +168,9 @@ fn an_approval_asks_for_the_password_first_then_goes_with_the_evidence() {
     let mut m = loaded(&s);
     let first = app(&m, 0);
     m.open_decision(&first, true);
+    if let Some(d) = m.decision.as_mut() {
+        d.evidence_note = "staff directory".into();
+    }
     m.frame(Instant::now());
     // Pressing Approve without a token opens the password box and sends nothing.
     m.decide(session(&s));
@@ -214,6 +217,9 @@ fn the_evidence_choice_and_notes_are_what_the_server_documents() {
     m.frame(Instant::now());
     let first = app(&m, 0);
     m.open_decision(&first, true);
+    if let Some(d) = m.decision.as_mut() {
+        d.evidence_note = "staff directory".into();
+    }
     if let Some(d) = m.decision.as_mut() {
         d.evidence = 1;
         d.evidence_note = "Ms Rivera in the office confirmed it".into();
@@ -273,6 +279,9 @@ fn a_lapsed_sudo_token_asks_for_the_password_again_and_keeps_the_form() {
     let first = app(&m, 0);
     m.open_decision(&first, true);
     if let Some(d) = m.decision.as_mut() {
+        d.evidence_note = "staff directory".into();
+    }
+    if let Some(d) = m.decision.as_mut() {
         d.note = "keep me".into();
     }
     s.say(403, json!({ "error": "sudo_required" }));
@@ -295,6 +304,9 @@ fn a_409_means_someone_else_decided_it_and_the_row_leaves() {
     m.frame(Instant::now());
     let first = app(&m, 0);
     m.open_decision(&first, true);
+    if let Some(d) = m.decision.as_mut() {
+        d.evidence_note = "staff directory".into();
+    }
     s.say(409, json!({ "error": "not_pending" }));
     m.decide(session(&s));
     m.frame(Instant::now());
