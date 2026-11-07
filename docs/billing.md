@@ -23,6 +23,9 @@ and are deleted with the account. Server code: `server/worker/src/billing`, ledg
 | `STRIPE_WEBHOOK_SECRET` | secret | `whsec_...` of this Worker's own endpoint |
 | `STRIPE_PUBLISHABLE_KEY` | var | `pk_test_...`, returned by `/billing/packs` |
 
+The server logs the missing webhook secret only when `BILLING_ENABLED=1`; with buying off it says nothing about
+it, because the route is off anyway (production runs that way).
+
 Stripe dashboard: add a webhook endpoint `https://<api>/billing/webhook` for `payment_intent.succeeded`,
 `charge.refunded`, `charge.dispute.created`. Use test mode first. Before the page goes live set `api-base`
 in `credits.html` and the API origin in `server/web/_headers`, and add the page's origin to `ALLOWED_ORIGINS`.

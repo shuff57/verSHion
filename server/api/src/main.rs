@@ -166,8 +166,10 @@ async fn main() {
     if cfg.openrouter.is_none() {
         tracing::warn!("the AI upstream key (CHEAPERINFERENCE_API_KEY, or OPENROUTER_API_KEY with AI_UPSTREAM=openrouter) is not set: the AI relay answers 503 ai_not_configured");
     }
-    if cfg.stripe_webhook_secret.is_none() {
-        tracing::warn!("STRIPE_WEBHOOK_SECRET is not set: /billing/webhook answers 503");
+    // Only worth a line when buying is on: with BILLING_ENABLED unset the webhook route is off anyway, and the
+    // warning on every start read like a fault on a server where purchases are deliberately closed.
+    if cfg.billing_enabled && cfg.stripe_webhook_secret.is_none() {
+        tracing::warn!("BILLING_ENABLED is set but STRIPE_WEBHOOK_SECRET is not: /billing/webhook answers 503, so a payment would never be credited");
     }
     let billing = Arc::new(billing_state(&cfg, db::open(&cfg.db).expect("open the billing connection")));
     let auth = auth_state(&cfg, db::open(&cfg.db).expect("open the auth connection"));
