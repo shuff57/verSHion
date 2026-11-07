@@ -1329,6 +1329,8 @@ impl Workspace {
         // the reference stacks its chemistry page below 880 px of window, other pages below 640 px of frame
         let chem_stack = skin && self.skin_subject() == figures::Subject::Chemistry && ctx.content_rect().width() < 880.0;
         let narrow = generated && !self.modal && (ui.available_width() < 640.0 || chem_stack);
+        // the stacked page sets its controls column differently (see `controls_inner`)
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new("fig_stacked"), narrow));
         if narrow {
             if skin && self.skin_subject() == figures::Subject::Physics {
                 // the physics page's rows, icons and toolbar read these flags (chem_wide sets them on a wide window)
@@ -1476,7 +1478,13 @@ impl Workspace {
                     ui.add_space(12.0);
                 }
                 let w = ui.available_width() + if chem_wide { 8.0 } else { 0.0 };
-                self.canvas_card(ui, w, avail_h, generated, preview.as_ref());
+                // a card that knows its content's height (the frequency table) hugs it
+                let fit = if shell { ctx.data(|d| d.get_temp::<f32>(egui::Id::new("fig_card_fit_h"))) } else { None };
+                let card_h = fit.map_or(avail_h, |f| f.min(avail_h));
+                if fit.is_some_and(|f| (f - card_h).abs() > 0.5 && f < avail_h) {
+                    ctx.request_repaint();
+                }
+                self.canvas_card(ui, w, card_h, generated, preview.as_ref());
             });
         }
         if skin {
@@ -1897,18 +1905,28 @@ impl Workspace {
         // foot rather than a sheet left abandoned under the table.
         let freq_model = if def.id == "frequency-table" { figures::stats::frequency::model(&self.params).ok() } else { None };
         let table_h = (vh * k) as f32;
-        // The table and its caption are one block on the page: the caption rides under the table
-        // (it used to be stranded at the sheet's foot under a tall white band), and the block sits
-        // a little above the page's middle.
+        // The table and its caption are one block at the top of the sheet: the caption rides
+        // directly under the Total row, and the preview card is sized to that block (see
+        // `canvas_card`), so no band of white sits above or below it.
         const FREQ_CAP_H: f32 = 40.0;
-        let origin = if def.id == "frequency-table" && area.height() - table_h - FREQ_CAP_H > 24.0 {
-            let slack = area.height() - table_h - FREQ_CAP_H;
+        const FREQ_TOP: f32 = 22.0;
+        let origin = if def.id == "frequency-table" && area.height() - table_h - FREQ_CAP_H > FREQ_TOP {
             let now_top = area.center().y - table_h / 2.0;
-            let want_top = area.top() + slack * 0.42;
-            origin + Vec2::new(0.0, want_top - now_top)
+            origin + Vec2::new(0.0, area.top() + FREQ_TOP - now_top)
         } else {
             origin
         };
+        if hugs_sheet(def.id) {
+            // the height the sheet needs at the width-limited scale (never the height-limited one,
+            // or a shorter card would shrink the sheet and the card again)
+            let kw = (area.width() as f64 / vw).clamp(0.05, max_zoom);
+            let need = if def.id == "frequency-table" {
+                area.top() + FREQ_TOP + (vh * kw) as f32 + FREQ_CAP_H + 14.0
+            } else {
+                area.top() + (vh * kw) as f32 + (full.bottom() - area.bottom()) + 12.0
+            };
+            ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("fig_need_bottom"), need));
+        }
         let ppp = ui.ctx().pixels_per_point();
         // chemistry previews are rasterized at exactly the device scale and drawn on whole pixels,
         // so one-pixel grid lines stay solid instead of smearing across two pixels
@@ -1944,11 +1962,13 @@ impl Workspace {
             ui.painter_at(full).image(tex.id(), img, uv, egui::Color32::WHITE);
             // the page's foot: a rule and the table's count, so the sheet closes instead of
             // trailing off into white below the Total row
-            if def.id == "frequency-table" && full.bottom() - 30.0 > img.bottom() + 6.0 {
+            // the caption sits directly under the drawn table (the view's bottom), not the canvas's
+            let table_bottom = img.top() + (v[3] * k) as f32;
+            if def.id == "frequency-table" && full.bottom() - 26.0 > table_bottom + 6.0 {
                 let ink = egui::Color32::from_rgb(0x5c, 0x5c, 0x5c);
                 let rule = egui::Color32::from_rgb(0xd4, 0xd4, 0xd4);
                 let (l, r) = (full.left() + 46.0, full.right() - 40.0);
-                let y = img.bottom() + 6.0;
+                let y = table_bottom + 6.0;
                 ui.painter().hline(l..=r, y, egui::Stroke::new(1.0, rule));
                 let cap = egui::FontId::new(11.5, theme::sans_family());
                 ui.painter().text(egui::pos2(l, y + 9.0), egui::Align2::LEFT_TOP, "Frequency table", cap.clone(), ink);
@@ -2231,6 +2251,17 @@ impl Workspace {
                 let f = ui.ctx().cumulative_frame_nr();
                 ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("share_stage"), (fr.response.rect, f)));
             }
+            // the card's height its content asked for (the frequency table's block), for the next frame
+            let need = self.sel.filter(|&si| hugs_sheet(reg()[si].id)).and_then(|_| ui.ctx().data(|d| d.get_temp::<f32>(egui::Id::new("fig_need_bottom"))));
+            let fit = need.map(|b| (b - fr.response.rect.top() + 1.0).max(160.0));
+            ui.ctx().data_mut(|d| match fit {
+                Some(h) => {
+                    d.insert_temp(egui::Id::new("fig_card_fit_h"), h);
+                }
+                None => {
+                    d.remove_temp::<f32>(egui::Id::new("fig_card_fit_h"));
+                }
+            });
         });
         let _ = rr;
     }
@@ -2261,6 +2292,7 @@ impl Workspace {
         let Some(si) = self.sel else { return };
         // the rows this column draws, for the bottom-edge cover (see `cover_partial_rows`)
         ui.ctx().data_mut(|d| d.remove_temp::<Vec<(f32, f32)>>(egui::Id::new("fig_cut_rows")));
+        chem_shell::clear_card_rects(ui.ctx());
         let def = &reg()[si];
         let pdefs = (def.params)();
         let skin = theme::chem_skin() && (self.chem_open() || self.shell_panel());
@@ -2620,7 +2652,7 @@ impl Workspace {
                     ui.spacing_mut().scroll.fade.strength = 0.0;
                 }
                 // the shell keeps a strip under the column for the "more below" cue
-                let cue_h = if shell { 26.0 } else { 0.0 };
+                let cue_h = if shell { 34.0 } else { 0.0 };
                 let area = ScrollArea::vertical().id_salt("figs_controls").max_height(max_h - cue_h).auto_shrink([false, false]).scroll_bar_visibility(if shell { egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded } else { egui::scroll_area::ScrollBarVisibility::AlwaysHidden });
                 // the shell's handle is the app's quiet one (thin, muted, no track), the same as the
                 // approval queue's: the ink-coloured bar read as a loud orange slab on the dark page.
@@ -2639,6 +2671,10 @@ impl Workspace {
                     if bio_page {
                         ui.add_space(2.0);
                     }
+                    // On a stacked (phone-width) page the intro card follows the settings: the
+                    // first editing controls come straight under the figure, above the fold.
+                    let stacked = shell && ui.ctx().data(|d| d.get_temp::<bool>(egui::Id::new("fig_stacked"))).unwrap_or(false);
+                    let intro_card = |ui: &mut Ui, start_example: &mut bool| {
                     chem_shell::panel_card_m(ui, if chem_page { Margin { left: 18, right: 18, top: 17, bottom: 16 } } else if bio_page || phys_page { Margin { left: 18, right: 18, top: 17, bottom: 16 } } else { Margin::same(18) }, |ui| {
                         let intro = RichText::new(figures::chemistry::skin_intro_in(def.id, skin_phys).unwrap_or(def.blurb)).size(if shell || def.subject == figures::Subject::Math { 14.5 } else if chem_page || bio_page || phys_page { 14.72 } else { 15.0 }).color(theme::ink());
                         // the chemistry page sets its lead at 1.5 line height
@@ -2646,10 +2682,14 @@ impl Workspace {
                         ui.add_space(if chem_page { 2.0 } else if bio_page { 1.9 } else if phys_page { 2.0 } else { 4.0 });
                         let has_ex = !figures::examples_for(def.id).is_empty();
                         if chem_shell::outline_button(ui, &format!("{}  Start from an example", egui_phosphor::regular::IMAGES), has_ex).clicked() {
-                            start_example = true;
+                            *start_example = true;
                         }
                     });
                     ui.add_space(if chem_page && !matches!(def.id, "titration-curve" | "heating-cooling-curve" | "mass-spectrum") { 5.0 } else if chem_page || bio_page || phys_page { 6.0 } else { 5.0 });
+                    };
+                    if !stacked {
+                        intro_card(ui, &mut start_example);
+                    }
                     // (these flat first sections close their card with `mark_split`, whatever the skin)
                     let chem_fig = def.subject == figures::Subject::Chemistry;
                     if (chem_fig && matches!(def.id, "titration-curve" | "heating-cooling-curve" | "mass-spectrum")) || (skin && def.id == "punnett-square") || (skin && def.id != "composite-shape" && figures::rows_for(def.id).is_some()) {
@@ -2664,6 +2704,10 @@ impl Workspace {
                             ui.spacing_mut().item_spacing.y = if chem_page { 6.0 } else { 8.0 };
                             content(ui);
                         });
+                    }
+                    if stacked {
+                        ui.add_space(7.0);
+                        intro_card(ui, &mut start_example);
                     }
                     if shell || matches!(def.subject, figures::Subject::Physics | figures::Subject::Chemistry | figures::Subject::Biology | figures::Subject::Math) {
                         ui.add_space(if chem_page || phys_page { 6.0 } else { 7.0 });
@@ -2688,11 +2732,25 @@ impl Workspace {
                 if shell {
                     let rows = cut_rows(ui);
                     cover_partial_rows(ui, out.inner_rect, &rows, false);
-                    // say it in words as well as with the bar: more controls follow below
+                    // say it in words: more controls follow below. When the edge cuts a card, the
+                    // cue is that card's own foot (its sides and rounded bottom continue under the
+                    // edge), so the card ends closed instead of open on the page background.
                     let (bar, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), cue_h), Sense::hover());
                     let more = out.state.offset.y + out.inner_rect.height() < out.content_size.y - 4.0;
                     if more {
-                        crate::kit::more_below(ui, bar, "More settings below");
+                        let edge = out.inner_rect.bottom();
+                        let cut = chem_shell::card_rects(ui.ctx()).into_iter().find(|c| c.top() < edge - 4.0 && c.bottom() > edge + 1.0);
+                        if let Some(c) = cut {
+                            let foot = egui::Rect::from_min_max(egui::pos2(c.left(), edge - 1.0), egui::pos2(c.right(), bar.bottom() - 2.0));
+                            let r = egui::CornerRadius { nw: 0, ne: 0, sw: 16, se: 16 };
+                            ui.painter().rect(foot, r, theme::card(), egui::Stroke::new(1.0, theme::border()), egui::StrokeKind::Inside);
+                            // the foot's top edge is the card's inside, not a seam
+                            ui.painter().rect_filled(egui::Rect::from_min_max(egui::pos2(c.left() + 1.0, edge - 2.0), egui::pos2(c.right() - 1.0, edge + 1.0)), 0.0, theme::card());
+                            let inner = egui::Rect::from_min_max(egui::pos2(c.left() + 18.0, edge), egui::pos2(c.right() - 18.0, foot.bottom() - 2.0));
+                            crate::kit::more_below(ui, inner, "More settings below");
+                        } else {
+                            crate::kit::more_below(ui, bar, "More settings below");
+                        }
                     }
                 }
                 if let Some(p) = preset_apply {
@@ -3725,6 +3783,12 @@ fn is_hidden(defs: &[ParamDef], p: &Params, pd: &ParamDef) -> bool {
     })
 }
 
+/// Figures whose preview card hugs their sheet on the wide page (the sheet is wider than tall, so
+/// a card stretched to the window held it centred between two blank bands).
+fn hugs_sheet(id: &str) -> bool {
+    matches!(id, "frequency-table" | "vsepr-shapes")
+}
+
 /// Rows drawn inside a scrolling column this frame, in screen coordinates. A column that ends on
 /// half a control reads as broken clipping; these let [`cover_partial_rows`] end it between two
 /// rows instead.
@@ -3752,10 +3816,13 @@ fn cover_partial_rows(ui: &Ui, viewport: egui::Rect, rows: &[(f32, f32)], say: b
     if !cut.is_finite() {
         return;
     }
-    let band = egui::Rect::from_min_max(
-        egui::pos2(viewport.left(), cut),
-        egui::pos2((viewport.right() - 10.0).max(viewport.left()), bottom),
-    );
+    // inside the card the edge cuts (its side borders stay drawn), else the viewport's width
+    let card = chem_shell::card_rects(ui.ctx()).into_iter().find(|c| c.top() < bottom - 4.0 && c.bottom() > bottom + 1.0);
+    let (l, r) = match card {
+        Some(c) => (c.left() + 1.0, c.right() - 1.0),
+        None => (viewport.left(), (viewport.right() - 10.0).max(viewport.left())),
+    };
+    let band = egui::Rect::from_min_max(egui::pos2(l, cut), egui::pos2(r, bottom));
     ui.painter().with_clip_rect(viewport).rect_filled(band, 0.0, theme::card());
     // A tall covered band is a blank slab under an open section's header: say what is there, so it
     // reads as "the fields continue below", not as an empty panel.
