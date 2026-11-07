@@ -159,7 +159,9 @@ fn decide_one(c: &Ctx, admin: &AdminPrincipal, target: &str, request_id: &str, a
 }
 
 pub fn approve(c: &Ctx, h: &HeaderMap, client: &ClientInfo, body: &Map<String, Value>, out: &mut Outbox) -> Result<Response, HttpError> {
-    let admin = guard_admin(c, h, client, true)?;
+    // Deciding an application needs an admin on a known device, not a fresh password: the owner chose that
+    // (2026-11-07). Revoking, suspending and deleting still need the sudo token.
+    let admin = guard_admin(c, h, client, false)?;
     let target = id_field(body, "user_id")?;
     let request_id = id_field(body, "request_id")?;
     let note = text(body, "note", true)?.unwrap_or_default();
@@ -176,7 +178,9 @@ pub fn approve(c: &Ctx, h: &HeaderMap, client: &ClientInfo, body: &Map<String, V
 }
 
 pub fn reject(c: &Ctx, h: &HeaderMap, client: &ClientInfo, body: &Map<String, Value>, out: &mut Outbox) -> Result<Response, HttpError> {
-    let admin = guard_admin(c, h, client, true)?;
+    // Deciding an application needs an admin on a known device, not a fresh password: the owner chose that
+    // (2026-11-07). Revoking, suspending and deleting still need the sudo token.
+    let admin = guard_admin(c, h, client, false)?;
     let target = id_field(body, "user_id")?;
     let request_id = id_field(body, "request_id")?;
     let note = text(body, "note", true)?.unwrap_or_default();
@@ -190,7 +194,9 @@ pub fn reject(c: &Ctx, h: &HeaderMap, client: &ClientInfo, body: &Map<String, Va
 
 /// Rejects up to `bulk_reject_max` named applications with one note and reason; each is gated and audited on its own.
 pub fn reject_bulk(c: &Ctx, h: &HeaderMap, client: &ClientInfo, body: &Map<String, Value>, out: &mut Outbox) -> Result<Response, HttpError> {
-    let admin = guard_admin(c, h, client, true)?;
+    // Deciding an application needs an admin on a known device, not a fresh password: the owner chose that
+    // (2026-11-07). Revoking, suspending and deleting still need the sudo token.
+    let admin = guard_admin(c, h, client, false)?;
     let max = c.cfg.bulk_reject_max;
     let items = match body.get("items").and_then(Value::as_array) {
         Some(a) if !a.is_empty() && a.len() as i64 <= max => a,

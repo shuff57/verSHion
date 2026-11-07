@@ -162,7 +162,7 @@ fn the_queue_is_read_from_the_admin_route_and_applicant_text_is_plain() {
 }
 
 #[test]
-fn an_approval_asks_for_the_password_first_then_goes_with_the_evidence() {
+fn an_approval_goes_straight_out_with_the_evidence_and_no_password() {
     let s = Script::new();
     s.say(200, queue_json());
     let mut m = loaded(&s);
@@ -173,29 +173,22 @@ fn an_approval_asks_for_the_password_first_then_goes_with_the_evidence() {
         d.note = "checked".into();
     }
     m.frame(Instant::now());
-    // Pressing Approve without a token opens the password box and sends nothing.
-    m.decide(session(&s));
-    assert!(m.confirming);
-    assert_eq!(s.seen().len(), 1, "nothing but the read has gone yet");
-    // The password is sent once, and cleared from the form.
-    m.password = "correct horse battery staple".into();
-    s.say(200, json!({ "sudo_token": "sudo-1", "expires_in": 300 }));
+    // The growth report counts approvals: it was on screen, so the decision must leave it unread.
+    m.growth = GrowthState::Reading;
     s.say(200, json!({ "ok": true, "decision": "approved" }));
-    m.confirm_password(session(&s));
-    assert!(m.password.is_empty(), "the password never stays in the form");
-    m.frame(Instant::now());
-    // The waiting decision went by itself.
+    m.decide(session(&s));
+    assert!(!m.confirming, "no password box: the admin is already signed in on a known device");
     m.frame(Instant::now());
     let seen = s.seen();
-    let reauth = seen.iter().find(|x| x.path == "/auth/reauth").expect("reauth");
-    assert_eq!(reauth.body, json!({ "password": "correct horse battery staple" }).to_string());
+    assert!(seen.iter().all(|x| x.path != "/auth/reauth"), "no password goes anywhere");
     let approve = seen.iter().find(|x| x.path == "/admin/approve").expect("approve");
     let body: Value = serde_json::from_str(&approve.body).unwrap();
     assert_eq!(body["user_id"], "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     assert_eq!(body["request_id"], "11111111-1111-1111-1111-111111111111");
     assert_eq!(body["evidence"], "directory");
-    assert_eq!(approve.sudo.as_deref(), Some("sudo-1"), "every change carries the sudo token");
+    assert_eq!(approve.sudo, None, "no sudo token is made up");
     assert!(m.decision.is_none(), "the form closes once it is done");
+    assert!(matches!(m.growth, GrowthState::Closed), "the growth report is read again next time it opens");
     match &m.state {
         State::Loaded(q) => {
             assert_eq!(q.open, 1);
@@ -205,6 +198,42 @@ fn an_approval_asks_for_the_password_first_then_goes_with_the_evidence() {
         other => panic!("{other:?}"),
     }
     assert!(m.notice.as_deref().unwrap_or("").contains("Approved Olga"));
+}
+
+#[test]
+fn a_server_that_still_wants_a_password_gets_it_once_and_the_decision_then_goes_with_the_token() {
+    let s = Script::new();
+    s.say(200, queue_json());
+    let mut m = loaded(&s);
+    let first = app(&m, 0);
+    m.open_decision(&first, true);
+    if let Some(d) = m.decision.as_mut() {
+        d.evidence_note = "staff directory".into();
+        d.note = "checked".into();
+    }
+    m.frame(Instant::now());
+    // The first try carries no token; this server refuses it.
+    s.say(403, json!({ "error": "sudo_required" }));
+    m.decide(session(&s));
+    m.frame(Instant::now());
+    assert!(m.confirming, "the password box opens");
+    assert!(m.decision.is_some(), "what was typed is not lost");
+    // The password is sent once, cleared from the form, and the waiting decision goes by itself.
+    m.password = "correct horse battery staple".into();
+    s.say(200, json!({ "sudo_token": "sudo-1", "expires_in": 300 }));
+    s.say(200, json!({ "ok": true, "decision": "approved" }));
+    m.confirm_password(session(&s));
+    assert!(m.password.is_empty(), "the password never stays in the form");
+    m.frame(Instant::now());
+    m.frame(Instant::now());
+    let seen = s.seen();
+    let reauth = seen.iter().find(|x| x.path == "/auth/reauth").expect("reauth");
+    assert_eq!(reauth.body, json!({ "password": "correct horse battery staple" }).to_string());
+    let approves: Vec<_> = seen.iter().filter(|x| x.path == "/admin/approve").collect();
+    assert_eq!(approves.len(), 2, "one try without a token, one with");
+    assert_eq!(approves[0].sudo, None);
+    assert_eq!(approves[1].sudo.as_deref(), Some("sudo-1"));
+    assert!(m.decision.is_none());
 }
 
 #[test]

@@ -6,10 +6,11 @@
 //!   server generated: the domain's history, earlier rejections, whether the profile changed since the
 //!   application). Every applicant field is the snapshot submitted with that application and is shown
 //!   as plain text, never as markup.
-//! - Deciding is `POST /admin/approve` or `POST /admin/reject`. Both need a **sudo token** from
-//!   `POST /auth/reauth` (the person's own password, good for five minutes), and an admin route also
-//!   needs a device that has signed in before. The password is sent once, on the caller's thread, and
-//!   cleared; the token lives in memory only.
+//! - Deciding is `POST /admin/approve` or `POST /admin/reject`. They need an admin on a device that has
+//!   signed in before, and no password (the owner's choice, 2026-11-07). If a server does answer
+//!   `sudo_required`, the password box opens: the person's own password goes to `POST /auth/reauth` for a
+//!   **sudo token** good for five minutes, sent once on the caller's thread and cleared; the token lives in
+//!   memory only.
 //! - Nothing is decided by accident: a decision is a form the admin fills in and presses. Approving
 //!   asks which evidence was checked (the server records it), and a rejection's reason is shown to the
 //!   applicant, so it is asked for separately from the reviewer's private note.
@@ -627,8 +628,8 @@ impl AdminModel {
         self.notice = None;
     }
 
-    /// Sends the form. Without a live sudo token the password box opens first, and the decision goes
-    /// by itself once the password is confirmed.
+    /// Sends the form. No password is asked for first (see the body); only a server that refuses with
+    /// `sudo_required` opens the password box, and the decision then goes by itself once it is confirmed.
     pub fn decide(&mut self, session: Option<SharedSession>) {
         if self.busy() {
             return;
@@ -642,15 +643,11 @@ impl AdminModel {
             self.notice = Some("You are signed out. Sign in again to decide.".into());
             return;
         };
-        if !self.sudo_ready() {
-            self.sudo = None;
-            self.confirming = true;
-            self.send_after_confirm = true;
-            self.pending_session = Some(session);
-            self.notice = Some(CONFIRM_PROMPT.into());
-            return;
-        }
-        let Some((token, _)) = self.sudo.clone() else { return };
+        // Approving and refusing go straight out: the server wants an admin on a known device, not a fresh password.
+        // A live sudo token still goes along. A server that does answer `sudo_required` opens the password box
+        // (the session is kept for the retry that follows the confirmation).
+        self.pending_session = Some(session.clone());
+        let token = if self.sudo_ready() { self.sudo.clone().map(|(t, _)| t) } else { None };
         self.sending(&d, session, token);
     }
 
@@ -684,12 +681,12 @@ impl AdminModel {
         self.job = Some(rx);
     }
 
-    fn sending(&mut self, d: &Decision, session: SharedSession, token: Secret) {
+    fn sending(&mut self, d: &Decision, session: SharedSession, token: Option<Secret>) {
         let (tx, rx) = channel();
         let (retry, repaint) = (self.retry, self.repaint.clone());
         let account = session.account();
         let decision = d.clone();
-        async fn run(session: SharedSession, account: Option<String>, decision: Decision, token: Secret, retry: RetryPolicy, tx: Sender<Done>, repaint: Option<Arc<dyn Fn() + Send + Sync>>) {
+        async fn run(session: SharedSession, account: Option<String>, decision: Decision, token: Option<Secret>, retry: RetryPolicy, tx: Sender<Done>, repaint: Option<Arc<dyn Fn() + Send + Sync>>) {
             let request_id = decision.request_id.clone();
             let approve = decision.approve;
             let r = send_decision(&*session, account.as_deref(), &decision, token, retry).await;
@@ -770,6 +767,10 @@ impl AdminModel {
                     let who = self.who_of(&request_id);
                     self.dropped(&request_id);
                     self.decision = None;
+                    // The growth report counts approvals and sign-ups: mark it unread so it is read again the
+                    // next time the Growth tab opens (a read still in flight is dropped, its answer is stale).
+                    self.growth = GrowthState::Closed;
+                    self.growth_job = None;
                     self.notice = Some(match (approve, who) {
                         (true, Some(w)) => format!("Approved {w}. They can use the pool now."),
                         (true, None) => "Approved. They can use the pool now.".into(),
@@ -886,14 +887,16 @@ async fn reauth(session: &dyn PoolSession, account: Option<&str>, password: Secr
     }
 }
 
-async fn send_decision(session: &dyn PoolSession, account: Option<&str>, d: &Decision, token: Secret, _retry: RetryPolicy) -> Result<(), PoolError> {
+async fn send_decision(session: &dyn PoolSession, account: Option<&str>, d: &Decision, token: Option<Secret>, _retry: RetryPolicy) -> Result<(), PoolError> {
     let base = session.base();
     let path = if d.approve { "/admin/approve" } else { "/admin/reject" };
     let body = d.body().to_string();
     let build = || {
         let mut r = request(&base, Method::Post, path, session, account);
         r.body = Some(Secret::new(body.clone()));
-        r.headers.push(("X-Sudo-Token".into(), token.clone()));
+        if let Some(t) = &token {
+            r.headers.push(("X-Sudo-Token".into(), t.clone()));
+        }
         r
     };
     let resp = session.send_as(account, &build).await.map_err(PoolError::Api)?;

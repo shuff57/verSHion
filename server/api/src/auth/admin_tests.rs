@@ -103,14 +103,15 @@ pub(crate) fn approve_body(user: &str, req: &str) -> Map<String, Value> {
 }
 
 #[test]
-pub(crate) fn the_guard_needs_an_admin_a_known_device_and_for_writes_a_sudo_token() {
+pub(crate) fn the_guard_needs_an_admin_a_known_device_and_for_the_risky_writes_a_sudo_token() {
     let w = world();
     let a = w.admin("root@x.org");
     let (u, r) = w.applicant("t@x.org");
     let body = approve_body(&u, &r);
     let mut out = Outbox::new();
     assert_eq!(code(approve(&w.ctx(), &hdrs(&[]), &native(), &body, &mut out)).0, 401);
-    assert_eq!(code(approve(&w.ctx(), &a.read_only, &native(), &body, &mut out)), (403, "sudo_required".into()));
+    // Revoking still wants a fresh password; deciding an application does not (see the test below).
+    assert_eq!(code(revoke(&w.ctx(), &a.read_only, &native(), &body, &mut out)), (403, "sudo_required".into()));
     let mut no_device = a.full.clone();
     no_device.remove("x-device-token");
     assert_eq!(code(approve(&w.ctx(), &no_device, &native(), &body, &mut out)), (403, "known_device_required".into()));
@@ -210,4 +211,23 @@ pub(crate) fn revoking_returns_a_teacher_to_pending_ends_their_sessions_and_reco
     assert_eq!(out[0].kind, MailKind::ApprovalRevoked);
     assert_eq!(code(revoke(&w.ctx(), &a.full, &native(), &body, &mut out)), (409, "not_approved".into()), "only an approved account can be revoked");
     assert_eq!(code(revoke(&w.ctx(), &a.full, &native(), &obj(json!({ "user_id": a.id, "note": "n", "reason": "r" })), &mut out)), (403, "self_action".into()));
+}
+
+#[test]
+pub(crate) fn approving_and_refusing_need_the_admin_and_a_known_device_but_no_password_token() {
+    let w = world();
+    let a = w.admin("root@x.org");
+    let (u1, r1) = w.applicant("one@x.org");
+    let (u2, r2) = w.applicant("two@x.org");
+    let mut out = Outbox::new();
+    // `read_only` carries the access token and the device token but no sudo token.
+    assert!(approve(&w.ctx(), &a.read_only, &native(), &approve_body(&u1, &r1), &mut out).is_ok());
+    let refuse = obj(json!({ "user_id": u2, "request_id": r2, "note": "checked", "reason": "not on the staff list" }));
+    assert!(reject(&w.ctx(), &a.read_only, &native(), &refuse, &mut out).is_ok());
+    assert_eq!(w.count("SELECT COUNT(*) FROM approval_requests WHERE decided_at IS NOT NULL"), 2);
+    // The device check still applies.
+    let (u3, r3) = w.applicant("three@x.org");
+    let mut no_device = a.read_only.clone();
+    no_device.remove("x-device-token");
+    assert_eq!(code(approve(&w.ctx(), &no_device, &native(), &approve_body(&u3, &r3), &mut out)), (403, "known_device_required".into()));
 }
