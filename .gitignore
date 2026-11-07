@@ -1,5 +1,6 @@
 /target
 /dist
+/dist-web
 /.playwright-cli
 /.msgbox
 /.wrangler
