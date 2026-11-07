@@ -8,3 +8,4 @@
 
 # playwright-cli scratch output (console logs, page snapshots)
 server/worker/.playwright-cli/
+tools/ui-grading/results.json
