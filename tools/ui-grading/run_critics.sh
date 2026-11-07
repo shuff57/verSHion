@@ -3,7 +3,13 @@
 # UC_CRITICS="provider/model:slug ..." (round 8 moved from the retired ollama-cloud provider to ollama/).
 # Round 6 swapped minimax and mistral (wrong-screen and made-up readings) for qwen3.8-max and gpt-6-luna.
 cd "${UC_PROJECT:-.}" || exit 9
-CRITICS=${UC_CRITICS:-"ollama/deepseek-v4.1-flash:deepseek ollama/glm-5.3-flash:glm ollama/kimi-k3:kimi cheaper-inference/qwen3.8-max-0902:qwen cheaper-inference/gpt-6-luna:gpt"}
+FULL="ollama/deepseek-v4.1-flash:deepseek ollama/glm-5.3-flash:glm ollama/kimi-k3:kimi cheaper-inference/qwen3.8-max-0902:qwen cheaper-inference/gpt-6-luna:gpt"
+# UC_PANEL=steer: the three ungated critics only (no 4-item chunk restarts), about 60% of a full round's
+# tokens. Use it to steer the builder between rounds; the bar is only claimed on a full-panel round, and
+# a steer round's means are never compared with a full round's (a changed panel resets the scale).
+STEER="ollama/deepseek-v4.1-flash:deepseek ollama/glm-5.3-flash:glm ollama/kimi-k3:kimi"
+if [ "${UC_PANEL:-full}" = steer ]; then CRITICS=${UC_CRITICS:-$STEER}; else CRITICS=${UC_CRITICS:-$FULL}; fi
+echo "panel: ${UC_PANEL:-full} -> $CRITICS"
 # Critics behind a gateway with a request-size cap (cheaper-inference: ~4.5 MB, HTTP 413) keep every
 # image they read in the conversation, so they get the manifest in chunks of $UC_CHUNK items, one fresh
 # session each, appending to the same file. Ids already in the file are skipped, so a rerun resumes.
