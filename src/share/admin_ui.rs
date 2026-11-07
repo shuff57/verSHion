@@ -6,7 +6,10 @@
 
 use egui::{RichText, Ui};
 
-use super::admin::{age_text, summary, AdminModel, Application, Decision, State, CONFIRM_PROMPT, EVIDENCE};
+use super::admin::{
+    age_text, dollars, growth_summary, referrer_label, source_label, summary, visits_line, AdminModel, Application, Decision, GrowthState, SourceRow, State, View,
+    CONFIRM_PROMPT, EVIDENCE, GROWTH_DAYS,
+};
 use super::publish::SharedSession;
 use crate::{kit, pageshell, theme};
 
@@ -48,6 +51,30 @@ enum Ask {
 /// The tab's body.
 pub fn body(ui: &mut Ui, m: &mut AdminModel, session: Option<SharedSession>) {
     m.frame(web_time::Instant::now());
+    // The tab's two screens: the queue and the growth report. An open decision owns the window, so
+    // the switch yields with the heading while one is being filled in.
+    if m.decision.is_none() && !m.confirming {
+        let mut pick = None;
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if kit::chip_toggle(ui, "Applications", m.view == View::Queue).clicked() {
+                pick = Some(View::Queue);
+            }
+            if kit::chip_toggle(ui, "Growth", m.view == View::Growth).on_hover_text("Sign-ups and purchases by the link they came from").clicked() {
+                pick = Some(View::Growth);
+            }
+        });
+        ui.add_space(10.0);
+        match pick {
+            Some(View::Growth) => m.open_growth(session.clone()),
+            Some(View::Queue) => m.view = View::Queue,
+            None => {}
+        }
+    }
+    if m.view == View::Growth && m.decision.is_none() && !m.confirming {
+        growth_body(ui, m, session);
+        return;
+    }
     // An open decision owns the window: the tab's heading and blurb yield (the chosen tab already
     // names the page), so the applicant's card and its buttons fit together under the count line.
     if m.decision.is_none() && !m.confirming {
@@ -649,4 +676,167 @@ fn password_block(ui: &mut Ui, m: &mut AdminModel, ask: &mut Option<Ask>) -> egu
     ui.add_space(6.0);
     ui.add(egui::Label::new(theme::muted("Used once over the secure connection and never stored; good for five minutes of changes.").size(12.0)).wrap());
     egui::Rect::from_min_max(egui::pos2(row_left, top), egui::pos2(ui.max_rect().right(), ui.cursor().top()))
+}
+
+// ---- the growth report ---------------------------------------------------------------------------
+
+/// The table's columns after the tag.
+const GROWTH_COLS: [&str; 5] = ["Signups", "Approved", "Purchases", "Revenue", "Refunds"];
+/// The width of a number column (wide enough for "$12,345.00" at 13 px).
+const NUM_W: f32 = 76.0;
+
+/// A row's values, in [`GROWTH_COLS`] order.
+pub fn growth_cells(r: &SourceRow) -> [String; 5] {
+    [r.signups.to_string(), r.approved.to_string(), r.purchases.to_string(), dollars(r.revenue_cents), r.refunds.to_string()]
+}
+
+/// A table heading, in the fact grid's caps.
+fn col_head(k: &str) -> RichText {
+    RichText::new(k.to_uppercase()).family(theme::bold_family()).size(11.5).color(theme::text_col())
+}
+
+/// A number, right-aligned in its column so the digits line up.
+fn num_cell(ui: &mut Ui, t: RichText) {
+    ui.allocate_ui_with_layout(egui::vec2(NUM_W, 18.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.set_min_width(NUM_W);
+        ui.add(egui::Label::new(t).wrap_mode(egui::TextWrapMode::Extend));
+    });
+}
+
+/// The growth report: a window choice, the per-tag table with its totals, and the visit counts.
+fn growth_body(ui: &mut Ui, m: &mut AdminModel, session: Option<SharedSession>) {
+    pageshell::heading(ui, "Growth");
+    ui.add_space(4.0);
+    ui.scope(|ui| {
+        ui.set_max_width(ui.available_width().min(pageshell::MEASURE));
+        ui.add(
+            egui::Label::new(
+                theme::muted(
+                    "Sign-ups by the link they came from: a link to the app ending in ?src=a-tag (for example ?src=fb-math) counts \
+                     under that tag. Counts only, no cookies, and no account is named here. Revenue is gross, before refunds and fees.",
+                )
+                .size(13.0),
+            )
+            .wrap(),
+        );
+    });
+    ui.add_space(12.0);
+    if m.growth_busy() {
+        ui.ctx().request_repaint_after(std::time::Duration::from_millis(300));
+    }
+
+    // ---- the window, and reading it again ---------------------------------------------------------
+    let mut days = None;
+    let mut reload = false;
+    let loaded = matches!(m.growth, GrowthState::Loaded(_));
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 8.0;
+        for d in GROWTH_DAYS {
+            if kit::chip_toggle(ui, &format!("{d} days"), m.growth_days == d).clicked() {
+                days = Some(d);
+            }
+        }
+        ui.add_space(4.0);
+        if m.growth_busy() {
+            ui.spinner();
+        } else if loaded && kit::chip_toggle(ui, "Read again", false).on_hover_text("Fetch the report again").clicked() {
+            reload = true;
+        }
+    });
+    ui.add_space(8.0);
+    let line = match &m.growth {
+        GrowthState::Loaded(g) => growth_summary(g),
+        GrowthState::Reading => "Reading the report...".to_string(),
+        GrowthState::Failed(p) => p.message.clone(),
+        GrowthState::Closed => "The report has not been read yet.".to_string(),
+    };
+    ui.add(egui::Label::new(theme::strong(line).size(13.5)).wrap());
+    if matches!(m.growth, GrowthState::Failed(_)) && kit::primary_button(ui, "Try again").clicked() {
+        reload = true;
+    }
+    if let Some(n) = m.growth_notice.clone() {
+        ui.add_space(4.0);
+        ui.add(egui::Label::new(theme::text(n).size(13.0)).wrap());
+    }
+    if let Some(d) = days {
+        m.set_growth_days(d, session.clone());
+    } else if reload {
+        m.load_growth(session.clone());
+    }
+    let GrowthState::Loaded(g) = &m.growth else { return };
+    let g = g.clone();
+    ui.add_space(10.0);
+
+    // ---- the table (scrolls sideways on a narrow window rather than squeezing the numbers) ---------
+    egui::ScrollArea::horizontal().id_salt("growth_table").auto_shrink([false, true]).show(ui, |ui| {
+        kit::card().inner_margin(egui::Margin::same(14)).show(ui, |ui| {
+            egui::Grid::new("growth_grid").num_columns(6).spacing([16.0, 7.0]).min_col_width(0.0).show(ui, |ui| {
+                ui.label(col_head("Source"));
+                for k in GROWTH_COLS {
+                    num_cell(ui, col_head(k));
+                }
+                ui.end_row();
+                if g.sources.is_empty() {
+                    ui.label(theme::muted("No sign-ups in this window.").size(13.0));
+                    ui.end_row();
+                }
+                for r in &g.sources {
+                    let name = source_label(&r.source);
+                    let t = if r.source.is_some() { theme::text(name).size(13.0) } else { theme::muted(name).size(13.0) };
+                    ui.add(egui::Label::new(t).wrap_mode(egui::TextWrapMode::Extend));
+                    for v in growth_cells(r) {
+                        num_cell(ui, theme::text(v).size(13.0));
+                    }
+                    ui.end_row();
+                }
+                ui.label(theme::strong("Total").size(13.0));
+                for v in growth_cells(&g.totals) {
+                    num_cell(ui, theme::strong(v).size(13.0));
+                }
+                ui.end_row();
+            });
+        });
+    });
+    ui.add_space(14.0);
+
+    // ---- visits -----------------------------------------------------------------------------------
+    if let Some(line) = visits_line(&g.visits) {
+        ui.add(egui::Label::new(theme::muted(line).size(13.0)).wrap());
+        return;
+    }
+    let v = &g.visits;
+    ui.label(theme::strong("Visits by referrer").size(14.0));
+    ui.add_space(2.0);
+    let window = v.days.unwrap_or(g.days);
+    let total = if v.total == 1 { "1 visit".to_string() } else { format!("{} visits", v.total) };
+    ui.scope(|ui| {
+        ui.set_max_width(ui.available_width().min(pageshell::MEASURE));
+        ui.add(
+            egui::Label::new(
+                theme::muted(format!(
+                    "{total} in the last {window} days, from Cloudflare Web Analytics (sampled estimates). Cloudflare does not see the \
+                     ?src= tag, so these are by the site that linked here, not by tag."
+                ))
+                .size(12.5),
+            )
+            .wrap(),
+        );
+    });
+    ui.add_space(6.0);
+    if v.by_referrer.is_empty() {
+        ui.label(theme::muted("No visits in this window.").size(13.0));
+        return;
+    }
+    egui::Grid::new("growth_referrers").num_columns(2).spacing([16.0, 5.0]).min_col_width(0.0).show(ui, |ui| {
+        ui.label(col_head("Referrer"));
+        num_cell(ui, col_head("Visits"));
+        ui.end_row();
+        for r in &v.by_referrer {
+            let name = referrer_label(&r.referrer);
+            let t = if r.referrer.is_some() { theme::text(name).size(13.0) } else { theme::muted(name).size(13.0) };
+            ui.add(egui::Label::new(t).wrap_mode(egui::TextWrapMode::Extend));
+            num_cell(ui, theme::text(r.visits.to_string()).size(13.0));
+            ui.end_row();
+        }
+    });
 }

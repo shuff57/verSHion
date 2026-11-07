@@ -476,3 +476,167 @@ fn the_capture_fixture_shows_the_queue_and_its_forms_without_a_request() {
     m.qa_show(q, "confirm");
     assert!(m.confirming && m.decision.as_ref().is_some_and(|d| d.approve) && m.password.is_empty());
 }
+
+// ---- the growth report ---------------------------------------------------------------------------
+
+fn growth_json(days: i64, visits: Value) -> Value {
+    json!({
+        "days": days,
+        "sources": [
+            { "source": "fb-math", "signups": 12, "approved": 9, "purchases": 3, "revenue_cents": 4500, "refunds": 1 },
+            { "source": null, "signups": 5, "approved": 2, "purchases": 0, "revenue_cents": 0, "refunds": 0 },
+            { "source": "reddit\u{202e}x", "signups": 1, "approved": 0, "purchases": 1, "revenue_cents": 123_456, "refunds": 0 }
+        ],
+        "totals": { "signups": 18, "approved": 11, "purchases": 4, "revenue_cents": 127_956, "refunds": 1 },
+        "visits": visits
+    })
+}
+
+fn visits_on() -> Value {
+    json!({ "available": true, "days": 30, "total": 340, "by_referrer": [
+        { "referrer": "reddit.com", "visits": 200 }, { "referrer": null, "visits": 90 }, { "referrer": "facebook.com", "visits": 50 }
+    ] })
+}
+
+#[test]
+fn the_growth_report_parses_with_plain_text_and_the_no_tag_row() {
+    let g = parse_growth(&growth_json(30, visits_on())).unwrap();
+    assert_eq!(g.days, 30);
+    assert_eq!(g.sources.len(), 3);
+    assert_eq!(g.sources[0], SourceRow { source: Some("fb-math".into()), signups: 12, approved: 9, purchases: 3, revenue_cents: 4500, refunds: 1 });
+    assert_eq!(source_label(&g.sources[1].source), "(no tag)");
+    assert_eq!(g.sources[2].source.as_deref(), Some("redditx"), "server text is made plain");
+    assert_eq!((g.totals.signups, g.totals.revenue_cents, g.totals.source.clone()), (18, 127_956, None));
+    assert!(g.visits.available);
+    assert_eq!((g.visits.total, g.visits.days, g.visits.by_referrer.len()), (340, Some(30), 3));
+    assert_eq!(referrer_label(&g.visits.by_referrer[1].referrer), "(direct or not sent)");
+    assert_eq!(visits_line(&g.visits), None);
+    assert_eq!(growth_summary(&g), "18 sign-ups in the last 30 days, from 2 tagged links.");
+    assert_eq!(super::admin_ui::growth_cells(&g.sources[2]), ["1", "0", "1", "$1,234.56", "0"].map(String::from));
+    // Not a report.
+    assert!(parse_growth(&json!({ "items": [] })).is_none());
+    assert!(parse_growth(&json!({ "days": 30, "sources": "x", "totals": {} })).is_none());
+}
+
+#[test]
+fn visits_that_are_not_connected_say_so_in_one_line() {
+    let g = parse_growth(&growth_json(7, json!({ "available": false, "reason": "not_configured" }))).unwrap();
+    assert!(!g.visits.available && g.visits.by_referrer.is_empty());
+    assert_eq!(visits_line(&g.visits), Some(VISITS_OFF));
+    assert_eq!(VISITS_OFF, "Visit counts are not connected yet.");
+    let g = parse_growth(&growth_json(7, json!({ "available": false, "reason": "unavailable" }))).unwrap();
+    assert_eq!(visits_line(&g.visits), Some(VISITS_UNAVAILABLE));
+    // An older server without a visits part reads as not connected.
+    let mut v = growth_json(7, Value::Null);
+    v.as_object_mut().unwrap().remove("visits");
+    assert_eq!(visits_line(&parse_growth(&v).unwrap().visits), Some(VISITS_OFF));
+}
+
+#[test]
+fn revenue_is_said_in_dollars() {
+    assert_eq!(dollars(0), "$0.00");
+    assert_eq!(dollars(5), "$0.05");
+    assert_eq!(dollars(1250), "$12.50");
+    assert_eq!(dollars(99_999), "$999.99");
+    assert_eq!(dollars(100_000), "$1,000.00");
+    assert_eq!(dollars(123_456_789), "$1,234,567.89");
+    assert_eq!(dollars(-1250), "-$12.50");
+}
+
+#[test]
+fn the_growth_report_is_read_for_the_chosen_window_from_the_admin_route() {
+    let s = Script::new();
+    s.known_device("device-1");
+    s.say(200, growth_json(30, visits_on()));
+    let mut m = model();
+    m.open_growth(session(&s));
+    m.frame(Instant::now());
+    assert_eq!(m.view, View::Growth);
+    let GrowthState::Loaded(g) = &m.growth else { panic!("{:?}", m.growth) };
+    assert_eq!(g.totals.signups, 18);
+    let seen = s.seen();
+    assert_eq!((seen[0].method, seen[0].path.as_str(), seen[0].device.as_deref()), (Method::Get, "/admin/growth?days=30", Some("device-1")));
+    // Opening it again reads nothing; another window reads that window.
+    m.open_growth(session(&s));
+    assert_eq!(s.seen().len(), 1);
+    s.say(200, growth_json(7, json!({ "available": false, "reason": "not_configured" })));
+    m.set_growth_days(7, session(&s));
+    m.frame(Instant::now());
+    assert_eq!(s.seen()[1].path, "/admin/growth?days=7");
+    assert!(matches!(&m.growth, GrowthState::Loaded(g) if g.days == 7));
+    // Only the offered windows.
+    m.set_growth_days(45, session(&s));
+    assert_eq!((s.seen().len(), m.growth_days), (2, 7));
+    // A refused re-read keeps the report on screen with a line under it.
+    s.say(429, json!({ "error": "rate_limited" }));
+    m.load_growth(session(&s));
+    m.frame(Instant::now());
+    assert!(matches!(m.growth, GrowthState::Loaded(_)));
+    assert!(m.growth_notice.as_deref().is_some_and(|n| n.contains("Too many tries")), "{:?}", m.growth_notice);
+}
+
+#[test]
+fn the_growth_report_refuses_in_words_and_is_forgotten_by_the_next_account() {
+    let mut m = model();
+    m.open_growth(None);
+    let GrowthState::Failed(p) = &m.growth else { panic!() };
+    assert!(p.message.contains("Sign in first"));
+    let s = Script::new();
+    s.say(403, json!({ "error": "forbidden" }));
+    let mut m = model();
+    m.open_growth(session(&s));
+    m.frame(Instant::now());
+    let GrowthState::Failed(p) = &m.growth else { panic!("{:?}", m.growth) };
+    assert!(p.message.contains("not an admin") && p.message.contains("growth report"), "{}", p.message);
+    // A failure is read again when the screen is opened again.
+    s.say(200, growth_json(30, visits_on()));
+    m.open_growth(session(&s));
+    m.frame(Instant::now());
+    assert!(matches!(m.growth, GrowthState::Loaded(_)));
+    let snap = |who: &str| AccountSnapshot { account: Some(format!("https://pool.test\n{who}")), ..AccountSnapshot::of_gate(Gate::Ready) };
+    m.note_account(&snap("ada@school.org"));
+    m.note_account(&snap("bob@school.org"));
+    assert_eq!(m.growth, GrowthState::Closed, "another admin starts from nothing");
+}
+
+#[test]
+fn the_growth_screen_draws_its_table_and_visits_at_every_width() {
+    use super::model::{AccountModel, Runner as ModelRunner, SettingsIo};
+    use super::shared::Tab;
+    use super::shared_ui::SharedUi;
+    use super::api::{Me, Status};
+    use super::ui::AccountUi;
+
+    let ctx = egui::Context::default();
+    crate::theme::setup(&ctx);
+    let s = Script::new();
+    s.say(200, growth_json(30, visits_on()));
+    let mut a = AccountUi::in_page();
+    a.model = AccountModel::new(Arc::new(|_| panic!("no client may be built")), ModelRunner::Inline, SettingsIo::memory());
+    a.model.me = Some(Me { email: "admin@school.org".into(), display_name: "Admin".into(), school: "North High".into(), status: Status::Approved, trust: "admin".into() });
+    let mut page = SharedUi::default();
+    page.admin = model();
+    page.admin.open_growth(session(&s));
+    page.admin.frame(Instant::now());
+    page.model.goto(Tab::Admin);
+    let (mut b, mut mi): (super::browse_ui::BrowseUi, super::mine_ui::MineUi) = Default::default();
+    let mut banks = vec![];
+    for width in [1000.0, 420.0] {
+        frame(&ctx, width, &mut |x| {
+            page.tabs(x, &mut a, &mut b, &mut mi, &mut banks, &[], false);
+        });
+    }
+    assert_eq!(page.admin.view, View::Growth, "the growth screen stays chosen");
+    // Not connected, and an empty window.
+    let mut g = parse_growth(&growth_json(30, json!({ "available": false, "reason": "not_configured" }))).unwrap();
+    g.sources.clear();
+    page.admin.growth = GrowthState::Loaded(g);
+    frame(&ctx, 1000.0, &mut |x| {
+        page.tabs(x, &mut a, &mut b, &mut mi, &mut banks, &[], false);
+    });
+    // Reading and failed states draw too.
+    page.admin.growth = GrowthState::Reading;
+    frame(&ctx, 420.0, &mut |x| {
+        page.tabs(x, &mut a, &mut b, &mut mi, &mut banks, &[], false);
+    });
+}
