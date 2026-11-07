@@ -14,6 +14,7 @@ from pathlib import Path
 OPERATOR = "Steven Huff"
 EMAIL = "vershion@lefthanddev.com"
 LAW = "California"
+VENUE = "Butte County, California"
 UPDATED = "2026-11-06"
 
 DMCA = (
@@ -35,6 +36,7 @@ def fill(html):
     html = html.replace(ph("OPERATOR NAME"), OPERATOR)
     html = html.replace(ph("CONTACT EMAIL"), EMAIL).replace(ph("EMAIL"), EMAIL)
     html = html.replace(ph("GOVERNING LAW: state/country"), LAW)
+    html = html.replace(ph("VENUE: county/state"), VENUE)
     html = html.replace(ph("CONFIRM: Resend or Cloudflare Email"), "Cloudflare Email Service")
     html = re.sub(r"<address>.*?</address>", lambda m: DMCA if "[AGENT NAME]" in m.group(0) else m.group(0), html, flags=re.S)
     html = re.sub(r"<li><strong>Cloudflare</strong> hosts the service:.*?</li>", HOSTING, html, flags=re.S)
