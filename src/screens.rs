@@ -382,6 +382,9 @@ pub fn toast(app: &mut crate::App, text: impl Into<String>, is_error: bool) {
 
 // ---------- frame router ----------
 
+/// The Account section's place in Settings' section list.
+pub const SETTINGS_ACCOUNT: usize = 0;
+
 impl crate::App {
     /// Draws the whole pass: the AI poll, the active screen, then the shell
     /// overlays (import dialog, help, restore confirm, toasts).
@@ -435,7 +438,13 @@ impl crate::App {
             }
             crate::Screen::Settings => self.draw_settings(ctx),
             crate::Screen::Shared => self.draw_shared(ctx),
-            crate::Screen::Account => self.draw_account_screen(ctx),
+            // The account lives in Settings: anything that asks for the Account screen (a mailed link, "Open
+            // account…") lands on Settings with its Account section chosen.
+            crate::Screen::Account => {
+                crate::pageshell::select_section(ctx, "settings", SETTINGS_ACCOUNT);
+                self.screen = crate::Screen::Settings;
+                self.draw_settings(ctx);
+            }
             crate::Screen::Grade => {
                 self.draw_grade(ctx);
                 self.draw_grade_intake(ctx);
@@ -664,13 +673,15 @@ impl crate::App {
                     (NavIcon::Import, "Import", crate::Screen::Imports),
                     (NavIcon::Figures, "Figures", crate::Screen::Figures),
                     (NavIcon::Shared, "Shared", crate::Screen::Shared),
-                    (NavIcon::Account, "Account", crate::Screen::Account),
-                    (NavIcon::Gear, "Settings", crate::Screen::Settings),
+                    // One item for the account and the settings: signed in, it wears the person's initials,
+                    // a filled disc as Google does; signed out, the plain person icon.
+                    (NavIcon::Account, "Account", crate::Screen::Settings),
                 ];
                 for (icon, label, target) in nav {
                     let active = match (&self.screen, &target) {
                         (crate::Screen::BankEdit(_), crate::Screen::Banks) => true,
                         (crate::Screen::ExamEdit(_), crate::Screen::Exams) => true,
+                        (crate::Screen::Account, crate::Screen::Settings) => true,
                         (cur, t) => std::mem::discriminant(cur) == std::mem::discriminant(t),
                     };
                     let badge = if matches!(icon, NavIcon::Account) { who.as_ref() } else { None };
@@ -1649,7 +1660,7 @@ impl crate::App {
                 ui.set_max_width(ui.available_width().min(crate::pageshell::PAGE_W));
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
-                        pageshell::title(ui, "Home  /  Settings", "Settings", "Your work is saved on this machine. Keep a copy by exporting it.");
+                        pageshell::title(ui, "Home  /  Account", "Account", "Your account, backups and AI settings. Your work is saved on this machine; keep a copy by exporting it.");
                     });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if pageshell::outline(ui, "How it works").clicked() {
@@ -1661,8 +1672,8 @@ impl crate::App {
 
                 use egui_phosphor::regular as ph;
                 let items = [
-                    pageshell::NavItem { icon: ph::FILE_ARROW_DOWN, label: "Backup & storage" },
                     pageshell::NavItem { icon: ph::USER_CIRCLE, label: "Account" },
+                    pageshell::NavItem { icon: ph::FILE_ARROW_DOWN, label: "Backup & storage" },
                     pageshell::NavItem { icon: ph::SPARKLE, label: "AI conversion" },
                     pageshell::NavItem { icon: ph::QUESTION, label: "Help & community" },
                 ];
@@ -1673,7 +1684,14 @@ impl crate::App {
                     state.corner_radius = CornerRadius::same(12);
                 }
                 match section {
-                0 => {
+                SETTINGS_ACCOUNT => {
+                // --- Account (optional): the sign-in forms, or the signed-in account's status ---
+                app.account.pin();
+                pageshell::card(ui, |ui| app.account.draw_section(ui));
+                ui.add_space(16.0);
+                crate::share::shared_ui::account_reasons(ui);
+                }
+                1 => {
                 // --- Back up / restore ---
                 pageshell::card(ui, |ui| {
                     pageshell::heading(ui, "Back up");
@@ -1757,18 +1775,6 @@ impl crate::App {
                                 egui::Label::new(theme::muted(format!("— {what}")).size(11.5)).wrap(),
                             );
                         });
-                    }
-                });
-                }
-                1 => {
-                // --- Sharing account (optional; the Account window does nothing until opened) ---
-                pageshell::card(ui, |ui| {
-                    pageshell::heading(ui, "Account");
-                    ui.add_space(4.0);
-                    ui.label(theme::muted("Optional. An account lets you share questions with other teachers and use the hosted AI. Everything else works without one."));
-                    ui.add_space(10.0);
-                    if pageshell::outline(ui, "Open account…").clicked() {
-                        app.account.open();
                     }
                 });
                 }

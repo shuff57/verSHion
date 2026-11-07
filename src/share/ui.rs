@@ -708,24 +708,18 @@ fn status_page(ui: &mut Ui, m: &mut AccountModel, in_page: bool, delete_link: bo
         }
         return;
     };
-    // who is signed in: an initial in an accent circle, then the name, address and school
+    // who is signed in: the same initials disc the rail's Account item wears, then the name, address and school
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 14.0;
-        let initial = me
-            .display_name
-            .chars()
-            .chain(me.email.chars())
-            .find(|c| c.is_alphanumeric())
-            .map(|c| c.to_uppercase().to_string())
-            .unwrap_or_else(|| "?".into());
+        let initials = crate::screens::initials_of(&me.display_name, &me.email);
         let (circle, _) = ui.allocate_exact_size(egui::vec2(48.0, 48.0), egui::Sense::hover());
-        ui.painter().circle_filled(circle.center(), 24.0, theme::accent_faded());
+        ui.painter().circle_filled(circle.center(), 24.0, theme::accent_col());
         ui.painter().text(
             circle.center(),
             egui::Align2::CENTER_CENTER,
-            initial,
-            egui::FontId::new(20.0, theme::serif_bold_family()),
-            theme::accent_col(),
+            initials,
+            egui::FontId::new(18.0, theme::bold_family()),
+            theme::on_accent_col(),
         );
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 2.0;
