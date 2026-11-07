@@ -101,11 +101,15 @@ compiled to wasm for the publish gate, content hashes and Argon2id.
 (`src/index.ts` `TRUST`; `src/pool/index.ts`.)
 
 **Approval.** Every teacher is admin-approved; there is no promotion by email domain (students often hold
-staff-domain addresses). A "staff domain" is only a label in the queue. The rule: approve only when the verified
-address itself is on the school's staff directory (`directory`), or the school office confirmed the person through
-a contact **the admin** started (`school_confirmed`). A name on a staff list is never enough (an unconfirmed
-assumption in the owner's note). Sign-up collects email, password, display name, school and an adult-school-employee
-statement.
+staff-domain addresses). A "staff domain" is only a label in the queue. Since 2026-11-07 an application must carry a
+link to a page that shows the applicant works at the school, such as their staff page: the verify step and a
+re-application both require it (`staff_page` in the profile JSON; http or https, a host with a dot, no user name or
+password, 500 characters at most; the server never fetches it). The queue card shows the link, and the reviewer opens
+it, finds the person on the page and approves with evidence `staff_page`, recording where they checked. The older
+`directory` and `school_confirmed` evidence kinds remain accepted because applications made before the change carry
+no link; the school office confirming the person through a contact **the admin** started is still the fallback. A name
+on a staff list is never enough by itself (an unconfirmed assumption in the owner's note). Sign-up collects email and
+the adult-school-employee statement; the emailed link then collects the password, display name, school and staff page.
 
 **Invite codes (round 28).** The pool is invite-only: besides admin approval, an account must redeem an invite code an
 admin issued (`POST /admin/pool/invites`; 24 characters shown once, stored only as a SHA-256 hash; single use by default
@@ -420,7 +424,7 @@ decides with `appeal-decision {restore|purge}`; weekly reminders while open. Mai
 
 ## 7. Privacy and erasure
 
-**Stored:** account (email, name, school, adult statement time, Argon2id hash, trust, approval records), sessions (hashed tokens,
+**Stored:** account (email, name, school, staff page link, adult statement time, Argon2id hash, trust, approval records), sessions (hashed tokens,
 times, user agent), HMAC-keyed rate-limit counters (no raw IP or email); items and retained publishes (current, previous, and the
 one non-authors are served) with full and stripped bodies and images in R2; served rows, import counts, usage counters, keyed
 authorship fingerprints (never readable text), attestations; reports, flags, DMCA notices and counter-notices (names, addresses,

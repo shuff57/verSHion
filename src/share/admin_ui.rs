@@ -85,8 +85,9 @@ pub fn body(ui: &mut Ui, m: &mut AdminModel, session: Option<SharedSession>) {
             ui.add(
                 egui::Label::new(
                     theme::muted(
-                        "Every teacher is checked by hand before the pool opens to them. Approve only someone you can vouch for: \
-                         an entry in the school's staff directory, or a person at the school who confirmed it.",
+                        "Every teacher is checked by hand before the pool opens to them. Each application carries a link to \
+                         the applicant's staff page: open it, find them on it, and say where you checked. Approve only \
+                         someone you can vouch for.",
                     )
                     .size(13.0),
                 )
@@ -353,6 +354,7 @@ fn application(ui: &mut Ui, app: &Application, open: bool, _busy: bool, ask: &mu
     ui.add_space(if wide { 6.0 } else { 4.0 });
     let rows = fact_rows(app);
     application_facts(ui, app, &rows, wide);
+    staff_page_row(ui, app);
     if !open && !buttons_beside {
         ui.add_space(8.0);
         ui.horizontal(|ui| {
@@ -513,6 +515,24 @@ fn fact_row(ui: &mut Ui, label: &str, value: &str) {
     ui.add_space(4.0);
 }
 
+/// The link the applicant gave as proof, clickable: the reviewer opens it in a browser. Plain text in a
+/// link widget (never fetched by the app), so a hostile URL cannot do anything until the admin clicks it.
+fn staff_page_row(ui: &mut Ui, app: &Application) {
+    if app.staff_page.is_empty() {
+        return;
+    }
+    ui.add_space(7.0);
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 7.0;
+        ui.label(kit::small_caps_text("Staff page"));
+        let link = ui.add(egui::Link::new(theme::accent(app.staff_page.as_str()).size(12.5)));
+        if link.clicked() {
+            crate::platform::open_url(&app.staff_page);
+        }
+        link.on_hover_text("Open it in your browser and check they are on it");
+    });
+}
+
 /// The decision being filled in, inside the application's own card.
 fn decision_form(ui: &mut Ui, d: &mut Decision, confirming: bool, ask: &mut Option<Ask>) {
     let title = if d.approve { format!("Approve {}", d.who) } else { format!("Refuse {}", d.who) };
@@ -576,7 +596,7 @@ fn decision_form(ui: &mut Ui, d: &mut Decision, confirming: bool, ask: &mut Opti
         if d.approve {
             let missing = d.evidence_note.trim().is_empty();
             gate_label(ui, "Where you checked it (kept in the audit trail)", missing);
-            let r = field(ui, "admin_evidence_note", &mut d.evidence_note, "e.g. the staff directory page, or who confirmed it", true);
+            let r = field(ui, "admin_evidence_note", &mut d.evidence_note, "e.g. their staff page, which subject it lists, or who confirmed it", true);
             if missing {
                 kit::attention_ring(ui, &r);
             }

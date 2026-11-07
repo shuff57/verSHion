@@ -47,7 +47,7 @@ impl World {
         self.db.lock().unwrap().query_row(sql, [], |r| r.get(0)).unwrap()
     }
     fn signup(&self, email: &str, extra: Value, out: &mut Outbox) -> Result<Response, HttpError> {
-        let mut b = json!({ "email": email, "password": PW, "display_name": "  Ms   Rivera ", "school": "Pleasant Valley", "adult_school_employee": true });
+        let mut b = json!({ "email": email, "password": PW, "display_name": "  Ms   Rivera ", "school": "Pleasant Valley", "staff_page": "https://pleasantvalley.example.org/staff/rivera", "adult_school_employee": true });
         if let (Some(o), Some(e)) = (b.as_object_mut(), extra.as_object()) {
             for (k, v) in e {
                 o.insert(k.clone(), v.clone());
@@ -78,7 +78,10 @@ fn signup_creates_an_unverified_account_stores_only_a_hash_and_mails_a_verify_li
     let (name, profile): (String, String) = w.db.lock().unwrap().query_row("SELECT display_name, profile FROM users", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
     assert_eq!(name, "Ms Rivera", "whitespace collapsed");
     let p: Value = serde_json::from_str(&profile).unwrap();
-    assert_eq!((p["school"].as_str(), p["adult_school_employee_at"].as_str()), (Some("Pleasant Valley"), Some("2027-01-15T08:00:00.000Z")));
+    assert_eq!(
+        (p["school"].as_str(), p["staff_page"].as_str(), p["adult_school_employee_at"].as_str()),
+        (Some("Pleasant Valley"), Some("https://pleasantvalley.example.org/staff/rivera"), Some("2027-01-15T08:00:00.000Z"))
+    );
     assert_eq!(out.len(), 1);
     assert_eq!((out[0].kind, out[0].to.as_str()), (MailKind::Verify, "ms.rivera@school.org"));
     let token = out[0].token.clone().unwrap();
@@ -105,6 +108,27 @@ fn signing_up_again_with_an_existing_address_looks_identical_but_mails_the_owner
 }
 
 #[test]
+fn the_staff_page_link_is_required_and_must_be_a_web_address() {
+    let w = world();
+    let mut out = Outbox::new();
+    let e = w.signup("a@x.org", json!({ "staff_page": "" }), &mut out).unwrap_err();
+    assert_eq!((e.extra.get("field"), e.extra.get("reason")), (Some(&json!("staff_page")), Some(&json!("required_link"))));
+    for bad in [
+        "javascript:alert(1)",
+        "ftp://school.example.org/me",
+        "https://localhost/me",
+        "https://user:pw@school.example.org/me",
+        "school.example.org/me",
+        "https://school.example.org/me\nX",
+    ] {
+        let e = w.signup("a@x.org", json!({ "staff_page": bad }), &mut out).unwrap_err();
+        assert_eq!((e.extra.get("field"), e.extra.get("reason")), (Some(&json!("staff_page")), Some(&json!("invalid_link"))), "{bad:?}");
+    }
+    assert_eq!(w.count("SELECT COUNT(*) FROM users"), 0);
+    assert!(out.is_empty());
+}
+
+#[test]
 fn signup_rejects_bad_input_before_touching_the_database() {
     let w = world();
     let mut out = Outbox::new();
@@ -120,7 +144,7 @@ fn signup_rejects_bad_input_before_touching_the_database() {
     let e = w.signup("a@x.org", json!({ "password": "a@x.org-a@x.org" }), &mut out).unwrap_err();
     assert_eq!(e.code, "weak_password", "built on the email");
     assert_eq!(w.signup("not-an-email", json!({}), &mut out).unwrap_err().status, 400);
-    assert_eq!(signup(&w.ctx(), &HeaderMap::new(), &obj(json!({ "email": "a@x.org", "password": PW, "display_name": "A", "school": "S", "adult_school_employee": true })), &mut out).unwrap_err().code, "client_ip_required");
+    assert_eq!(signup(&w.ctx(), &HeaderMap::new(), &obj(json!({ "email": "a@x.org", "password": PW, "display_name": "A", "school": "S", "staff_page": "https://s.example.org/staff/a", "adult_school_employee": true })), &mut out).unwrap_err().code, "client_ip_required");
     assert_eq!(w.count("SELECT COUNT(*) FROM users"), 0);
     assert!(out.is_empty());
 }

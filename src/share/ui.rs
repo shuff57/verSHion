@@ -436,6 +436,13 @@ fn field(ui: &mut Ui, label: &str, value: &mut String, id: &str, secret: bool, h
 fn profile_fields(ui: &mut Ui, m: &mut AccountModel) {
     field(ui, "Display name", &mut m.forms.display_name, "share_name", false, "How other teachers see you");
     field(ui, "School", &mut m.forms.school, "share_school", false, "School name and town");
+    field(ui, "Staff page link", &mut m.forms.staff_page, "share_staff_page", false, "https://yourschool.org/staff/your-name");
+    para(
+        ui,
+        "A page on your school's website that shows you work there: the staff directory, your department page, or \
+         a page with your name and title. The person who reviews your application opens it before deciding. Nobody \
+         else sees it.",
+    );
     ui.checkbox(&mut m.forms.adult, "I am an adult employee of a school");
     ui.add_space(6.0);
 }
@@ -585,8 +592,8 @@ fn confirm_page(ui: &mut Ui, m: &mut AccountModel) {
     }
     para(
         ui,
-        "Choose your password and enter your name and school. They are set here, from the email, so only the person \
-         who received it decides them.",
+        "Choose your password, then enter your name, school and a link to your staff page. They are set here, from \
+         the email, so only the person who received it decides them.",
     );
     password_pair(ui, m, "Choose a password");
     profile_fields(ui, m);

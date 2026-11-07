@@ -66,6 +66,8 @@ pub struct Forms {
     pub password2: String,
     pub display_name: String,
     pub school: String,
+    /// A link to a page that shows the applicant works at the school (their staff page).
+    pub staff_page: String,
     pub adult: bool,
     pub paste: String,
     pub forget_device: bool,
@@ -76,7 +78,12 @@ pub struct Forms {
 
 impl Forms {
     pub fn profile(&self) -> Profile {
-        Profile { display_name: self.display_name.clone(), school: self.school.clone(), adult_school_employee: self.adult }
+        Profile {
+            display_name: self.display_name.clone(),
+            school: self.school.clone(),
+            staff_page: self.staff_page.clone(),
+            adult_school_employee: self.adult,
+        }
     }
 
     pub fn wipe_secrets(&mut self) {

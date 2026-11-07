@@ -66,7 +66,7 @@ fn pool_end_to_end() {
     };
     let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis();
     let email = format!("e2e{stamp}@school.example.org");
-    let profile = Profile { display_name: "E2E Teacher".into(), school: "Loopback High".into(), adult_school_employee: true };
+    let profile = Profile { display_name: "E2E Teacher".into(), school: "Loopback High".into(), staff_page: "https://loopback.example.org/staff/e2e".into(), adult_school_employee: true };
     let first = Secret::new("typed at sign-up 1");
     let pw = Secret::new("confirmed password 2");
     let pw2 = Secret::new("after the reset 3!");

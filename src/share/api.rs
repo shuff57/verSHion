@@ -100,7 +100,7 @@ impl ApiError {
     /// The reset or confirm form must also carry the profile (the account was never finished).
     pub fn needs_profile(&self) -> bool {
         matches!(self, ApiError::Http { status: 400, code, field: Some(f), .. }
-            if code == "invalid_request" && matches!(f.as_str(), "display_name" | "school" | "adult_school_employee" | "profile"))
+            if code == "invalid_request" && matches!(f.as_str(), "display_name" | "school" | "staff_page" | "adult_school_employee" | "profile"))
     }
 
     /// The sentence shown to the person.
@@ -199,9 +199,10 @@ fn field_label(field: &str) -> &'static str {
         "password" => "password",
         "display_name" => "display name",
         "school" => "school",
+        "staff_page" => "staff page link",
         "adult_school_employee" => "adult school employee statement",
         "token" | "code" => "link",
-        "profile" => "name and school",
+        "profile" => "name, school and staff page",
         _ => "form",
     }
 }
@@ -291,19 +292,39 @@ fn http_message(flow: Flow, status: u16, code: &str, field: Option<&str>, reason
     }
 }
 
-/// What a person enters about themselves. Sent as `display_name`, `school`, `adult_school_employee`
-/// (server/worker/src/index.ts `profile`).
+/// What a person enters about themselves. Sent as `display_name`, `school`, `staff_page` and
+/// `adult_school_employee` (server/worker/src/index.ts `profile`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Profile {
     pub display_name: String,
     pub school: String,
+    /// A link to a page that shows they work at the school (their staff page): the evidence an
+    /// admin approves on. Only the reviewer sees it.
+    pub staff_page: String,
     pub adult_school_employee: bool,
+}
+
+/// A web address the server will accept as a staff page: http or https, a host with a dot, no
+/// user name or password. The server checks the same thing; this only saves a round trip.
+pub fn looks_like_web_address(s: &str) -> bool {
+    let t = s.trim();
+    if t.is_empty() || t.len() > 500 || t.chars().any(char::is_control) || t.chars().any(char::is_whitespace) {
+        return false;
+    }
+    let Some(rest) = t.strip_prefix("https://").or_else(|| t.strip_prefix("http://")) else { return false };
+    let host = rest.split(['/', '?', '#']).next().unwrap_or("");
+    if host.is_empty() || host.contains('@') {
+        return false;
+    }
+    let name = host.split(':').next().unwrap_or("");
+    name.contains('.') && !name.starts_with('.') && !name.ends_with('.')
 }
 
 impl Profile {
     pub fn add_to(&self, body: &mut serde_json::Map<String, Value>) {
         body.insert("display_name".into(), Value::from(self.display_name.trim()));
         body.insert("school".into(), Value::from(self.school.trim()));
+        body.insert("staff_page".into(), Value::from(self.staff_page.trim()));
         body.insert("adult_school_employee".into(), Value::from(self.adult_school_employee));
     }
 
@@ -313,6 +334,10 @@ impl Profile {
             Some("Enter a display name.")
         } else if self.school.trim().is_empty() {
             Some("Enter your school.")
+        } else if self.staff_page.trim().is_empty() {
+            Some("Paste a link to a page that shows you work at the school, such as your staff page.")
+        } else if !looks_like_web_address(&self.staff_page) {
+            Some("That does not look like a web address. It should start with https:// and name the school's site.")
         } else if !self.adult_school_employee {
             Some("Confirm that you are an adult employee of a school.")
         } else {

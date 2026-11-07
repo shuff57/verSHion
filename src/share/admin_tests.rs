@@ -101,7 +101,7 @@ fn queue_json() -> Value {
                     "profile_changed": true,
                     "suspended": false
                 },
-                "applicant": { "display_name": "Olga \u{202e}Teacher", "profile": { "school": "North High\nSchool" } },
+                "applicant": { "display_name": "Olga \u{202e}Teacher", "profile": { "school": "North High\nSchool", "staff_page": "https://northhigh.example.org/staff/olga" } },
                 "trust": "pending"
             },
             {
@@ -151,6 +151,8 @@ fn the_queue_is_read_from_the_admin_route_and_applicant_text_is_plain() {
     // The name and the school are the application's snapshot, and a bidi or newline character never survives.
     assert_eq!(first.display_name, "Olga Teacher");
     assert_eq!(first.school, "North High School");
+    assert_eq!(first.staff_page, "https://northhigh.example.org/staff/olga");
+    assert_eq!(q.items[1].staff_page, "", "an application from before the link was required");
     assert_eq!(first.email, "olga@school.example.org");
     assert_eq!(first.email_domain, "school.example.org");
     assert_eq!(first.prior_rejections, 2);
@@ -185,7 +187,7 @@ fn an_approval_goes_straight_out_with_the_evidence_and_no_password() {
     let body: Value = serde_json::from_str(&approve.body).unwrap();
     assert_eq!(body["user_id"], "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     assert_eq!(body["request_id"], "11111111-1111-1111-1111-111111111111");
-    assert_eq!(body["evidence"], "directory");
+    assert_eq!(body["evidence"], "staff_page", "an application with a staff page defaults to checking it");
     assert_eq!(approve.sudo, None, "no sudo token is made up");
     assert!(m.decision.is_none(), "the form closes once it is done");
     assert!(matches!(m.growth, GrowthState::Closed), "the growth report is read again next time it opens");
@@ -252,7 +254,7 @@ fn the_evidence_choice_and_notes_are_what_the_server_documents() {
         d.note = "checked".into();
     }
     if let Some(d) = m.decision.as_mut() {
-        d.evidence = 1;
+        d.evidence = 2;
         d.evidence_note = "Ms Rivera in the office confirmed it".into();
         d.note = "checked".into();
         d.note = "known from the algebra team".into();

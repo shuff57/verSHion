@@ -147,7 +147,7 @@ fn partial_send_rig_round_trip() {
     // ---- a throwaway account, its password made here and never leaving memory -------------------
     let email = format!("roundtrip-{}@example.test", hex(&random_bytes(8)));
     let password = Secret::new(hex(&random_bytes(24)));
-    let profile = Profile { display_name: "Round-trip Test".to_string(), school: "Example Middle School".to_string(), adult_school_employee: true };
+    let profile = Profile { display_name: "Round-trip Test".to_string(), school: "Example Middle School".to_string(), staff_page: "https://example.org/staff/round-trip".to_string(), adult_school_employee: true };
     eprintln!("partial_send_rig_round_trip: throwaway account {email} on {RIG_BASE}");
 
     let client = Client::new(RIG_BASE, Mode::Native, Box::new(NativeTransport::default()), Box::new(MemoryVault::default()));
@@ -312,7 +312,7 @@ fn partial_send_staging_round_trip() {
     // ---- a throwaway account, its password made here and never leaving memory -------------------
     let email = format!("roundtrip-{}@example.test", hex(&random_bytes(8)));
     let password = Secret::new(hex(&random_bytes(24)));
-    let profile = Profile { display_name: "Round-trip Test".to_string(), school: "Example Middle School".to_string(), adult_school_employee: true };
+    let profile = Profile { display_name: "Round-trip Test".to_string(), school: "Example Middle School".to_string(), staff_page: "https://example.org/staff/round-trip".to_string(), adult_school_employee: true };
     eprintln!("partial_send_staging_round_trip: throwaway account {email} on {STAGING_BASE}");
 
     let client = Client::new(STAGING_BASE, Mode::Native, Box::new(NativeTransport::default()), Box::new(MemoryVault::default()));

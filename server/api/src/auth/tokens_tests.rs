@@ -46,7 +46,7 @@ fn obj(v: Value) -> Map<String, Value> {
     v.as_object().unwrap().clone()
 }
 fn profile(extra: Value) -> Value {
-    let mut b = json!({ "display_name": "Ms Rivera", "school": "Pleasant Valley", "adult_school_employee": true });
+    let mut b = json!({ "display_name": "Ms Rivera", "school": "Pleasant Valley", "staff_page": "https://pleasantvalley.example.org/staff/rivera", "adult_school_employee": true });
     for (k, v) in extra.as_object().unwrap() {
         b[k] = v.clone();
     }

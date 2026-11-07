@@ -154,7 +154,10 @@ pub fn render(env: &MailEnv, m: &MailMessage) -> (String, String) {
             "Your verSHion password was changed",
             "Your password was just reset and every session was signed out. If this was not you, reset it again now and contact the site owner.".into(),
         ),
-        MailKind::ApplicationApproved => ("Your verSHion account was approved", "Your account has been approved. You can now publish to and browse the shared pool.".into()),
+        MailKind::ApplicationApproved => (
+            "Your verSHion account was approved",
+            "We checked the staff page you gave us, and your account is approved.\n\nYou can now publish your banks to the shared pool and browse what other teachers have shared. If you did not ask for this, reply to this mail.".into(),
+        ),
         MailKind::ApplicationRejected => (
             "Your verSHion application",
             format!("We could not approve your account.\n\n{reason}\n\nYou can update your details and apply again from the account screen after the waiting period."),

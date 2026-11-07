@@ -115,7 +115,7 @@ async fn bodies_must_be_small_json_objects() {
 #[tokio::test]
 async fn sign_up_confirm_sign_in_and_read_the_account_end_to_end_with_the_admins_told_once() {
     let a = app();
-    let body = json!({ "email": "t@school.org", "password": PW, "display_name": "Ms Rivera", "school": "Pleasant Valley", "adult_school_employee": true });
+    let body = json!({ "email": "t@school.org", "password": PW, "display_name": "Ms Rivera", "school": "Pleasant Valley", "staff_page": "https://pleasantvalley.example.org/staff/rivera", "adult_school_employee": true });
     let (s, _, _) = call(&a, req("POST", "/auth/signup", &[], Some(body.clone()))).await;
     assert_eq!(s, 202);
     let sent = mail(&a, 1).await;
@@ -163,7 +163,7 @@ async fn the_growth_report_is_routed_as_an_admin_read_and_signup_keeps_the_sourc
     let (s, _, b) = call(&a, req("GET", "/admin/growth?days=7", &[NATIVE], None)).await;
     assert_eq!((s, b["error"].as_str()), (401, Some("unauthorized")), "signed out, refused like the queue");
     assert_eq!(call(&a, req("POST", "/admin/growth", &[NATIVE], Some(json!({})))).await.0, 405, "a read only");
-    let body = json!({ "email": "t@school.org", "password": PW, "display_name": "T", "school": "S", "adult_school_employee": true, "src": "FB-Math" });
+    let body = json!({ "email": "t@school.org", "password": PW, "display_name": "T", "school": "S", "staff_page": "https://s.example.org/staff/t", "adult_school_employee": true, "src": "FB-Math" });
     assert_eq!(call(&a, req("POST", "/auth/signup", &[NATIVE], Some(body))).await.0, 202);
     let tag: Option<String> = a.state.db.lock().unwrap().query_row("SELECT signup_source FROM users WHERE email = 't@school.org'", [], |r| r.get(0)).unwrap();
     assert_eq!(tag.as_deref(), Some("fb-math"));

@@ -935,7 +935,7 @@ impl Client {
     /// the address is confirmed (the person chooses them from the emailed link), so these are throwaway: a random
     /// password nobody sees and a placeholder name and school. Only the adult-employee statement is the person's own.
     pub async fn sign_up_email_only(&self, email: &str, adult_school_employee: bool) -> Result<(), ApiError> {
-        let profile = Profile { display_name: "New account".into(), school: "Not set yet".into(), adult_school_employee };
+        let profile = Profile { display_name: "New account".into(), school: "Not set yet".into(), staff_page: "https://example.org/staff/new".into(), adult_school_employee };
         let mut last = None;
         // A random password can by rare chance trip the server's "runs and repeats" rule: draw another.
         for _ in 0..4 {

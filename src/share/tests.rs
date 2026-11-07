@@ -377,11 +377,40 @@ fn signed_in() -> (Client, Server, SharedVault) {
 }
 
 fn profile() -> Profile {
-    Profile { display_name: "Ms Frizzle".into(), school: "Walkerville Elementary".into(), adult_school_employee: true }
+    Profile { display_name: "Ms Frizzle".into(), school: "Walkerville Elementary".into(), staff_page: "https://walkerville.example.org/staff/frizzle".into(), adult_school_employee: true }
 }
 
 fn pw(s: &str) -> Secret {
     Secret::new(s)
+}
+
+#[test]
+fn the_profile_carries_a_staff_page_link_and_the_form_refuses_a_bad_one() {
+    let mut body = serde_json::Map::new();
+    profile().add_to(&mut body);
+    assert_eq!(body["staff_page"], "https://walkerville.example.org/staff/frizzle");
+
+    let mut p = profile();
+    p.staff_page.clear();
+    assert!(p.problem().unwrap().contains("staff page"), "it is required");
+    for bad in [
+        "school.example.org/me",
+        "ftp://school.example.org/me",
+        "javascript:alert(1)",
+        "https://localhost/me",
+        "https://user:pw@school.example.org/me",
+        "https://school.example.org/a\nb",
+    ] {
+        p.staff_page = bad.into();
+        assert!(p.problem().is_some_and(|m| m.contains("web address")), "{bad:?} -> {:?}", p.problem());
+    }
+    // Pasted with a trailing newline or spaces: trimmed, not refused.
+    for good in ["https://school.example.org/staff/me", "http://school.example.org/me", "https://school.example.org:8443/a/b?c=d", "  https://school.example.org/me\n"] {
+        p.staff_page = good.into();
+        assert_eq!(p.problem(), None, "{good:?}");
+    }
+    p.adult_school_employee = false;
+    assert!(p.problem().unwrap().contains("adult"));
 }
 
 fn link_token() -> String {
@@ -1504,6 +1533,7 @@ fn model_sign_up_check_email_paste_confirm_then_sign_in() {
     h.model.forms.password2 = "a fresh password?".into();
     h.model.forms.display_name = "Ms Frizzle".into();
     h.model.forms.school = "Walkerville".into();
+    h.model.forms.staff_page = "https://walkerville.example.org/staff/frizzle".into();
     h.model.forms.adult = true;
     h.model.submit_confirm();
     assert!(h.notice().contains("not the same"));
@@ -1557,12 +1587,15 @@ fn model_reset_link_asks_for_the_profile_when_the_server_needs_it() {
     assert_eq!(h.model.forms.password, "brand new password", "kept for the second try");
     h.model.forms.display_name = "Ms Frizzle".into();
     h.model.forms.school = "Walkerville".into();
+    h.model.forms.staff_page = "https://walkerville.example.org/staff/frizzle".into();
     h.model.forms.adult = true;
     h.model.submit_reset();
     h.frame();
     assert_eq!(h.model.page, Page::SignIn);
     assert!(h.model.forms.password.is_empty());
-    assert_eq!(h.server.last("/auth/reset").body.unwrap()["school"], "Walkerville");
+    let sent = h.server.last("/auth/reset").body.unwrap();
+    assert_eq!(sent["school"], "Walkerville");
+    assert_eq!(sent["staff_page"], "https://walkerville.example.org/staff/frizzle");
 }
 
 #[test]
@@ -1811,6 +1844,7 @@ fn a_typed_new_server_resets_trust_and_every_password_page_waits_for_it() {
     h.model.forms.password2 = PASSWORD.into();
     h.model.forms.display_name = "x".into();
     h.model.forms.school = "y".into();
+    h.model.forms.staff_page = "https://pool.test/staff/x".into();
     h.model.forms.adult = true;
     h.model.forms.delete_ack = true;
     h.model.forms.paste = token("code", 1);
@@ -2738,6 +2772,7 @@ fn link_results_do_not_claim_the_account_is_yours() {
     h.model.forms.password2 = "a fresh password!".into();
     h.model.forms.display_name = "x".into();
     h.model.forms.school = "y".into();
+    h.model.forms.staff_page = "https://pool.test/staff/x".into();
     h.model.forms.adult = true;
     h.model.submit_confirm();
     h.frame();

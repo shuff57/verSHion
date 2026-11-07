@@ -51,16 +51,42 @@ fn input_error(code: &str, field: &str) -> HttpError {
     HttpError::new(400, "invalid_request").with("field", json!(field)).with("reason", json!(code))
 }
 
-/// Profile fields. The pool asks for a display name and school (plain text, no control or format characters, whitespace
-/// collapsed) and the adult-school-employee statement (COPPA/SOPIPA). Then the package's own checks run again: the name
-/// is at most 100 characters and every string in the profile JSON is free of control and format characters, and small.
+/// A link to a page that shows the applicant works at the school: http or https, a host with a dot, no
+/// user name or password in it, at most 500 characters, and no control characters. The server never
+/// fetches it; the reviewer opens it in a browser before approving, so a dead or wrong link costs them
+/// nothing but a click.
+fn staff_page_link(raw: &str) -> Option<String> {
+    let t = raw.trim();
+    if t.is_empty() || t.len() > 500 || t.chars().any(char::is_control) {
+        return None;
+    }
+    let u = url::Url::parse(t).ok()?;
+    if !matches!(u.scheme(), "http" | "https") || !u.username().is_empty() || u.password().is_some() {
+        return None;
+    }
+    let host = u.host_str()?;
+    if !host.contains('.') || host.starts_with('.') || host.ends_with('.') {
+        return None;
+    }
+    Some(t.to_string())
+}
+
+/// Profile fields. The pool asks for a display name, school and a link to the applicant's staff page (plain
+/// text, no control or format characters, whitespace collapsed) plus the adult-school-employee statement
+/// (COPPA/SOPIPA). Then the package's own checks run again: the name is at most 100 characters and every
+/// string in the profile JSON is free of control and format characters, and small.
+///
+/// The staff page is required: it is the evidence an approval is granted on (2026-11-07), and an
+/// application without one cannot be checked by hand.
 pub fn read_profile(body: &Map<String, Value>, now: i64) -> Result<Profile, HttpError> {
     let name = body.get("display_name").and_then(|v| clean_text(v, 100)).ok_or_else(|| input_error("required_plain_text", "display_name"))?;
     let school = body.get("school").and_then(|v| clean_text(v, 200)).ok_or_else(|| input_error("required_plain_text", "school"))?;
+    let raw_link = body.get("staff_page").and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()).ok_or_else(|| input_error("required_link", "staff_page"))?;
+    let staff_page = staff_page_link(raw_link).ok_or_else(|| input_error("invalid_link", "staff_page"))?;
     if body.get("adult_school_employee") != Some(&Value::Bool(true)) {
         return Err(input_error("must_confirm", "adult_school_employee"));
     }
-    let profile = json!({ "school": school, "adult_school_employee_at": iso8601(now) });
+    let profile = json!({ "school": school, "staff_page": staff_page, "adult_school_employee_at": iso8601(now) });
     let display_name = clean_text(&json!(name), 100).ok_or_else(|| input_error("invalid_characters_or_length", "display_name"))?;
     if !profile_is_safe(&profile) {
         return Err(input_error("invalid_characters_or_length", "profile"));

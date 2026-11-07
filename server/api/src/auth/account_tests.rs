@@ -203,7 +203,7 @@ fn a_rejected_applicant_reapplies_after_the_cooldown_with_a_new_row() {
     let w = world();
     let (id, at, _) = w.user("a@x.org", "pending");
     let h = hdrs(&[("authorization", &bearer(&at))]);
-    let profile = obj(json!({ "display_name": "Ms Rivera", "school": "New School", "adult_school_employee": true }));
+    let profile = obj(json!({ "display_name": "Ms Rivera", "school": "New School", "staff_page": "https://newschool.example.org/staff/rivera", "adult_school_employee": true }));
     assert_eq!(code(reapply(&w.ctx(), &h, &profile)), (409, "not_eligible".into()), "nothing to reapply to");
     w.db.lock().unwrap().execute_batch(&format!("INSERT INTO approval_requests (id, user_id, requested_at, decided_at, decision) VALUES ('r1', '{id}', 1, {}, 'rejected')", T0 - 86_400_000)).unwrap();
     let e = reapply(&w.ctx(), &h, &profile).unwrap_err();

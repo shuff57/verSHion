@@ -32,8 +32,11 @@ use super::publish::{AccountSnapshot, AccountTurn, AccountWatch, SharedSession};
 use super::secret::Secret;
 use super::transport::{Method, Request, Response};
 
-/// The evidence the server accepts for an approval, and the wording the admin picks it by.
-pub const EVIDENCE: [(&str, &str); 2] = [
+/// The evidence the server accepts for an approval, and the wording the admin picks it by. The first
+/// is the gate: every application carries a link to the applicant's staff page, and the reviewer opens
+/// it before approving. The other two stay for applications made before that rule.
+pub const EVIDENCE: [(&str, &str); 3] = [
+    ("staff_page", "Their staff page lists them (open the link)"),
     ("directory", "The school's staff directory lists them"),
     ("school_confirmed", "A person at the school confirmed it"),
 ];
@@ -53,9 +56,12 @@ pub struct Application {
     pub user_id: String,
     pub email: String,
     pub email_domain: String,
-    /// The name and school submitted with this application (a snapshot, not the live profile).
+    /// The name, school and staff-page link submitted with this application (a snapshot, not the live profile).
     pub display_name: String,
     pub school: String,
+    /// The page the applicant gave as proof they work at the school; empty for applications made before
+    /// 2026-11-07, when it became required.
+    pub staff_page: String,
     pub age_seconds: i64,
     /// Earlier applications of this account that were rejected or revoked.
     pub prior_rejections: i64,
@@ -108,6 +114,7 @@ pub fn parse_queue(v: &Value) -> Option<Queue> {
             email_domain: if domain.is_empty() { email.rsplit('@').next().unwrap_or("").to_string() } else { domain },
             display_name: text(applicant.and_then(|a| a.get("display_name"))),
             school: text(applicant.and_then(|a| a.pointer("/profile/school"))),
+            staff_page: text(applicant.and_then(|a| a.pointer("/profile/staff_page"))),
             age_seconds: num(it.get("age_seconds")),
             prior_rejections: num(labels.and_then(|l| l.get("prior_rejections"))),
             domain_hint: labels.and_then(|l| l.get("domain_hint")).and_then(Value::as_str).map(plain).filter(|h| !h.is_empty()),
@@ -296,7 +303,9 @@ impl Decision {
             user_id: app.user_id.clone(),
             who: app.who(),
             approve,
-            evidence: 0,
+            // An application with a staff page defaults to checking that page; the older evidence
+            // choices are still there for an application made before the link was required.
+            evidence: if app.staff_page.is_empty() { 1 } else { 0 },
             evidence_note: String::new(),
             note: String::new(),
             reason: String::new(),

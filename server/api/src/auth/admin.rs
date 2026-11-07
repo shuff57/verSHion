@@ -16,7 +16,7 @@ use axum::response::Response;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Map, Value, json};
 
-pub const EVIDENCE_KINDS: [&str; 2] = ["directory", "school_confirmed"];
+pub const EVIDENCE_KINDS: [&str; 3] = ["staff_page", "directory", "school_confirmed"];
 const MAX_TEXT: usize = 2000;
 
 pub struct AdminPrincipal {
