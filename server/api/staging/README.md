@@ -16,10 +16,10 @@ Page and API are one origin: the `SameSite=Strict; Secure` refresh cookie is sen
 
 ## 1. Build (on the dev machine)
 
-Server, in a Debian 12 container so it runs on the VPS's glibc:
+Server, in a Debian 12 container so it runs on the VPS's glibc (the server embeds `prompts/ditto-convert.md`, so `prompts/` is mounted too; without it the build fails; copy the binary out of the volume only after the build exits 0, since the volume keeps the previous one):
 
 ```
-docker run --rm -v "$PWD/server:/w/server" -v vershion-target:/target -e CARGO_TARGET_DIR=/target \
+docker run --rm -v "$PWD/server:/w/server" -v "$PWD/prompts:/w/prompts:ro" -v vershion-target:/target -e CARGO_TARGET_DIR=/target \
   -w /w/server/api rust:1-bookworm cargo build --release
 ```
 
