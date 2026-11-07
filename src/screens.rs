@@ -636,25 +636,7 @@ impl crate::App {
                 ui.spacing_mut().item_spacing = Vec2::new(0.0, 4.0);
                 let item_w = inner.width();
 
-                // Logo tile: serif Q on the highlighter-free accent chip.
-                let (lr, lresp) =
-                    ui.allocate_exact_size(Vec2::new(item_w, 40.0), egui::Sense::click());
-                // On the 64 px rail the mark fills the rail's width as one solid tile with a smaller
-                // glyph: the 38 px chip round a 21 px Q left two thin green bands either side of the
-                // letter, which read as two disconnected slivers at a reduced size.
-                let chip = if narrow { Rect::from_center_size(lr.center(), Vec2::new(item_w.min(44.0), 40.0)) } else { Rect::from_center_size(lr.center(), Vec2::splat(38.0)) };
-                ui.painter().rect_filled(chip, CornerRadius::same(12), theme::accent_col());
-                ui.painter().text(
-                    chip.center(),
-                    egui::Align2::CENTER_CENTER,
-                    "Q",
-                    egui::FontId::new(if narrow { 18.0 } else { 21.0 }, theme::serif_strong_family()),
-                    theme::on_accent_col(),
-                );
-                if lresp.clicked() {
-                    self.screen = crate::Screen::Home;
-                }
-                ui.add_space(14.0);
+                ui.add_space(2.0);
 
                 // Who is signed in: a saved session is looked up once, quietly (no request at all without one), so the
                 // Account item can show it on every screen, not only after Account was opened.
@@ -690,51 +672,38 @@ impl crate::App {
                     }
                 }
 
-                // Floor of the dock: lock note, then the vertical light/dark switch.
-                let floor = (ui.available_height() - 28.0 - 62.0 - 12.0).max(0.0);
+                // Floor of the dock: the light/dark button.
+                let btn_h = if narrow { 48.0 } else { 56.0 };
+                let floor = (ui.available_height() - btn_h - 4.0).max(0.0);
                 ui.allocate_at_least(Vec2::new(item_w, floor), egui::Sense::hover());
-                let (lock, lresp) = ui.allocate_exact_size(Vec2::new(item_w, 28.0), egui::Sense::click());
-                let lock_col = if lresp.hovered() { theme::dock_text() } else { theme::dock_text().gamma_multiply(0.7) };
-                draw_lock(ui.painter(), lock.center(), lock_col);
-                if lresp.hovered() {
-                    ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-                }
-                if lresp.clone().on_hover_text("Saved on this computer. Click to see where.").clicked() {
-                    self.storage_info = true;
-                }
-                ui.add_space(4.0);
-                self.theme_switch(ui, item_w);
+                self.theme_button(ui, item_w, narrow);
             });
     }
 
-    /// Vertical light/dark switch: a pill with a sun above a moon; the active
-    /// mode sits on the highlighter.
-    fn theme_switch(&mut self, ui: &mut egui::Ui, w: f32) {
+    /// Light/dark: one button, not a switch. It shows the mode a click moves to (a moon while it is light, a
+    /// sun while it is dark), drawn like a nav item: icon over a small label.
+    fn theme_button(&mut self, ui: &mut egui::Ui, w: f32, narrow: bool) {
         let dark = theme::is_dark();
-        let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, 62.0), egui::Sense::click());
-        let pill = Rect::from_center_size(rect.center(), Vec2::new(30.0_f32.min(w), 62.0));
-        ui.painter().rect_filled(pill, CornerRadius::same(15), theme::dock_text().gamma_multiply(0.12));
-        let sun_c = Pos2::new(pill.center().x, pill.top() + 15.0);
-        let moon_c = Pos2::new(pill.center().x, pill.bottom() - 15.0);
-        let active_c = if dark { moon_c } else { sun_c };
-        ui.painter().circle_filled(active_c, 12.5, theme::highlighter());
-        let ink = theme::on_highlighter();
-        let off = theme::dock_text().gamma_multiply(0.75);
-        ui.painter().text(
-            sun_c,
-            egui::Align2::CENTER_CENTER,
-            egui_phosphor::regular::SUN,
-            theme::icon_font(15.0),
-            if dark { off } else { ink },
-        );
-        ui.painter().text(
-            moon_c,
-            egui::Align2::CENTER_CENTER,
-            egui_phosphor::regular::MOON,
-            theme::icon_font(15.0),
-            if dark { ink } else { off },
-        );
-        if resp.clicked() {
+        let h = if narrow { 48.0 } else { 56.0 };
+        let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
+        if resp.hovered() {
+            ui.painter().rect_filled(rect, CornerRadius::same(13), theme::dock_text().gamma_multiply(0.12));
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
+        let (glyph, label) = if dark { (egui_phosphor::regular::SUN, "Light") } else { (egui_phosphor::regular::MOON, "Dark") };
+        let cy = if narrow { rect.center().y } else { rect.top() + 20.0 };
+        ui.painter().text(Pos2::new(rect.center().x, cy), egui::Align2::CENTER_CENTER, glyph, theme::icon_font(21.0), theme::dock_text());
+        if !narrow {
+            ui.painter().text(
+                Pos2::new(rect.center().x, rect.bottom() - 11.0),
+                egui::Align2::CENTER_CENTER,
+                label,
+                egui::FontId::new(10.5, theme::bold_family()),
+                theme::dock_text(),
+            );
+        }
+        let hint = format!("Switch to {} mode", label.to_lowercase());
+        if resp.clone().on_hover_text(hint).clicked() {
             let ctx = ui.ctx().clone();
             self.set_dark_mode(!dark, &ctx);
         }
@@ -2851,15 +2820,6 @@ mod tests {
     }
 }
 /// Padlock glyph for the dock's "Saved on this computer" note.
-fn draw_lock(painter: &egui::Painter, c: Pos2, col: Color32) {
-    painter.text(
-        c,
-        egui::Align2::CENTER_CENTER,
-        egui_phosphor::regular::LOCK_SIMPLE,
-        theme::icon_font(15.0),
-        col,
-    );
-}
 
 #[cfg(test)]
 mod initials_tests {

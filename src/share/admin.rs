@@ -310,6 +310,9 @@ impl Decision {
             Some("Choose what you checked.")
         } else if self.approve && self.evidence_note.trim().is_empty() {
             Some("Say where you checked it: the staff directory page, or who confirmed it. The audit trail keeps it.")
+        } else if self.note.trim().is_empty() {
+            // The server refuses a decision without a private note ("Check the form."), so it is asked for here.
+            Some("Add a private note for the audit trail. It is never shown to the applicant.")
         } else {
             None
         }

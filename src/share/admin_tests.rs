@@ -170,6 +170,7 @@ fn an_approval_asks_for_the_password_first_then_goes_with_the_evidence() {
     m.open_decision(&first, true);
     if let Some(d) = m.decision.as_mut() {
         d.evidence_note = "staff directory".into();
+        d.note = "checked".into();
     }
     m.frame(Instant::now());
     // Pressing Approve without a token opens the password box and sends nothing.
@@ -219,10 +220,12 @@ fn the_evidence_choice_and_notes_are_what_the_server_documents() {
     m.open_decision(&first, true);
     if let Some(d) = m.decision.as_mut() {
         d.evidence_note = "staff directory".into();
+        d.note = "checked".into();
     }
     if let Some(d) = m.decision.as_mut() {
         d.evidence = 1;
         d.evidence_note = "Ms Rivera in the office confirmed it".into();
+        d.note = "checked".into();
         d.note = "known from the algebra team".into();
     }
     s.say(200, json!({ "ok": true }));
@@ -280,6 +283,7 @@ fn a_lapsed_sudo_token_asks_for_the_password_again_and_keeps_the_form() {
     m.open_decision(&first, true);
     if let Some(d) = m.decision.as_mut() {
         d.evidence_note = "staff directory".into();
+        d.note = "checked".into();
     }
     if let Some(d) = m.decision.as_mut() {
         d.note = "keep me".into();
@@ -306,6 +310,7 @@ fn a_409_means_someone_else_decided_it_and_the_row_leaves() {
     m.open_decision(&first, true);
     if let Some(d) = m.decision.as_mut() {
         d.evidence_note = "staff directory".into();
+        d.note = "checked".into();
     }
     s.say(409, json!({ "error": "not_pending" }));
     m.decide(session(&s));
@@ -446,6 +451,7 @@ fn the_admin_tab_draws_its_list_form_and_password_box_at_every_width() {
     page.admin.open_decision(&first, true);
     if let Some(d) = page.admin.decision.as_mut() {
         d.evidence_note = "staff directory".into();
+        d.note = "checked".into();
     }
     page.admin.confirming = true;
     for width in [1000.0, 420.0] {
@@ -639,4 +645,28 @@ fn the_growth_screen_draws_its_table_and_visits_at_every_width() {
     frame(&ctx, 420.0, &mut |x| {
         page.tabs(x, &mut a, &mut b, &mut mi, &mut banks, &[], false);
     });
+}
+
+#[test]
+fn a_decision_without_a_private_note_is_held_back_in_words_because_the_server_needs_it() {
+    let s = Script::new();
+    s.say(200, queue_json());
+    let mut m = loaded(&s);
+    let first = app(&m, 0);
+    m.open_decision(&first, true);
+    let d = m.decision.as_mut().unwrap();
+    d.evidence_note = "staff directory".into();
+    assert!(d.problem().unwrap().contains("private note"), "approve: the note is asked for");
+    d.note = "  ".into();
+    assert!(d.problem().is_some(), "a blank note does not count");
+    d.note = "checked".into();
+    assert_eq!(d.problem(), None);
+    // A refusal needs one too.
+    let second = app(&m, 0);
+    m.open_decision(&second, false);
+    let d = m.decision.as_mut().unwrap();
+    d.reason = "not a school address".into();
+    assert!(d.problem().unwrap().contains("private note"), "refuse: the note is asked for");
+    d.note = "checked".into();
+    assert_eq!(d.problem(), None);
 }

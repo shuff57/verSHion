@@ -582,8 +582,13 @@ fn decision_form(ui: &mut Ui, d: &mut Decision, confirming: bool, ask: &mut Opti
             }
             ui.add_space(6.0);
         }
-        ui.label(theme::muted("Your note (never shown to the applicant)").size(12.5));
-        field(ui, "admin_note", &mut d.note, "optional", true);
+        // The server needs a private note on every decision (it is in the audit trail), so it is gated like the rest.
+        let note_missing = d.note.trim().is_empty();
+        gate_label(ui, "Your note (never shown to the applicant)", note_missing);
+        let r = field(ui, "admin_note", &mut d.note, "a private reminder for the audit trail", true);
+        if note_missing {
+            kit::attention_ring(ui, &r);
+        }
     };
     if ui.available_width() >= 620.0 {
         ui.columns(2, |c| {
