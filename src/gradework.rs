@@ -85,7 +85,7 @@ pub fn parse_reply(raw: &str) -> Result<Read, String> {
 /// Puts a read onto a page, the way the review tray expects it.
 pub fn apply_read(page: &mut SubmittedPage, r: Read) {
     page.illegible = (0..r.text.matches("[illegible]").count()).map(|_| Illegible { word: "[illegible]".to_string() }).collect();
-    page.corrections = r.uncertain.into_iter().map(|(word, term, confidence)| Correction { word, term, confidence }).collect();
+    page.corrections = r.uncertain.into_iter().map(|(word, term, confidence)| Correction { word, term, confidence, accepted: false, rejected: false }).collect();
     page.transcript = r.text;
 }
 
