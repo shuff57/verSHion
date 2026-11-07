@@ -56,3 +56,27 @@ generated, not vendored. Regenerate them with `capture-vershion.py`, and point `
 reference captures.
 
 Round evidence kept: `docs/ui-grading/r4…r7-analysis.txt` and `rounds.html`.
+
+## Cutting the token cost of a round
+
+A full round is every frame times five critics, plus controls and mirrors. Two measures cut that
+without touching what a judge sees, so the verdicts stay comparable:
+
+1. **Grade only frames that changed.** Capture is deterministic: an untouched screen comes back
+   byte-identical. `changed.py` compares the new shots with the last graded shots and writes a
+   `UC_ROUND` file with only the differing frames (controls and mirrors are drawn from them).
+   Score with `scoreboard.py NEW --carry OLD`; carried screens are marked, never silently re-used.
+   (One real r5→r6 pair of shot sets: 6 of 30 frames identical. A builder that touches most
+   screens saves little here; a builder that fixes two screens saves most of the round.)
+
+   ```bash
+   python3 tools/ui-grading/changed.py ui-r8/round-r6.json ui-r8/shots-r8-r5 ui-r8/shots-r8-after ui-r8/round-r7.json
+   UC_ROUND=ui-r8/round-r7.json python3 tools/ui-grading/make_blind.py ...
+   ```
+2. **Steer with three judges, claim with five.** `UC_PANEL=steer bash run_critics.sh` runs the three
+   critics that are not behind the 4.5 MB gateway, so there are no chunk restarts. Use it between
+   builder runs. The 7.5 bar is only claimed on a full-panel round, and steer-round means are never
+   compared with full-round means (rule 3: a changed panel resets the scale).
+
+Not changed on purpose: the critic prompt, the four-dimension scores on both sides of a pair, the
+controls, and `verify_blind.py`. Those are what the number's honesty rests on.
