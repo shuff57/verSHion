@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+"""Nightly production backup, run as root by vershion-backup.timer.
+
+1. A consistent copy of pool.db (sqlite backup API, safe while the API runs) plus the blobs directory,
+   kept on this disk (newest 14 of each) in /var/backups/vershion.
+2. The same two files, encrypted to the public key in /etc/vershion/backup-age.pub (age; the private key is
+   NOT on this server), uploaded to the Cloudflare R2 bucket named in /etc/vershion/backup-r2.env, newest 30 kept.
+
+A failed upload does not undo the local copy, but the script exits non-zero so systemd shows the unit as failed.
+Restore: age -d -i <private key> pool-....db.age > pool.db   (see docs/backup-restore.md)
+"""
+import glob, os, sqlite3, subprocess, sys, tarfile, time
+
+SRC = "/var/lib/vershion"
+DST = "/var/backups/vershion"
+KEEP = 14
+KEEP_REMOTE = 30
+R2_ENV = "/etc/vershion/backup-r2.env"
+AGE_PUB = "/etc/vershion/backup-age.pub"
+
+os.makedirs(DST, mode=0o700, exist_ok=True)
+os.chmod(DST, 0o700)
+stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+
+db = f"{DST}/pool-{stamp}.db"
+src = sqlite3.connect(f"file:{SRC}/pool.db?mode=ro", uri=True, timeout=30)
+dst = sqlite3.connect(db)
+src.backup(dst)
+dst.execute("pragma journal_mode=delete")
+dst.close()
+src.close()
+chk = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+ok = chk.execute("pragma integrity_check").fetchone()[0]
+chk.close()
+if ok != "ok":
+    sys.exit(f"integrity_check failed on {db}: {ok}")
+os.chmod(db, 0o600)
+
+blobs = f"{DST}/blobs-{stamp}.tar.gz"
+with tarfile.open(blobs, "w:gz") as t:
+    t.add(f"{SRC}/blobs", arcname="blobs")
+os.chmod(blobs, 0o600)
+
+for pat in ("pool-*.db", "blobs-*.tar.gz"):
+    for old in sorted(glob.glob(f"{DST}/{pat}"))[:-KEEP]:
+        os.unlink(old)
+print("backup ok", db, blobs)
+
+
+def read_env(path):
+    out = {}
+    for line in open(path):
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            k, v = line.split("=", 1)
+            out[k] = v
+    return out
+
+
+def upload():
+    """Encrypt both files and push them to R2. Returns an error string, or None on success."""
+    if not (os.path.exists(R2_ENV) and os.path.exists(AGE_PUB)):
+        return f"off-site upload not configured ({R2_ENV} or {AGE_PUB} missing)"
+    e = read_env(R2_ENV)
+    for k in ("R2_ACCOUNT_ID", "R2_BUCKET", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"):
+        if not e.get(k):
+            return f"{R2_ENV} lacks {k}"
+    recipient = open(AGE_PUB).read().strip()
+    env = dict(os.environ)
+    env.update({
+        "RCLONE_CONFIG": "/dev/null",
+        "RCLONE_S3_PROVIDER": "Cloudflare",
+        "RCLONE_S3_ACCESS_KEY_ID": e["R2_ACCESS_KEY_ID"],
+        "RCLONE_S3_SECRET_ACCESS_KEY": e["R2_SECRET_ACCESS_KEY"],
+        "RCLONE_S3_ENDPOINT": f"https://{e['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com",
+        "RCLONE_S3_NO_CHECK_BUCKET": "true",
+    })
+    remote = f":s3:{e['R2_BUCKET']}"
+    for plain in (db, blobs):
+        enc = plain + ".age"
+        try:
+            subprocess.run(["age", "-r", recipient, "-o", enc, plain], check=True)
+            os.chmod(enc, 0o600)
+            subprocess.run(["rclone", "copyto", enc, f"{remote}/{os.path.basename(enc)}"],
+                           check=True, env=env, timeout=900)
+        except (subprocess.SubprocessError, OSError) as ex:
+            return f"upload of {os.path.basename(plain)} failed: {type(ex).__name__}"
+        finally:
+            if os.path.exists(enc):
+                os.unlink(enc)
+    for prefix in ("pool-", "blobs-"):
+        r = subprocess.run(["rclone", "lsf", remote, "--include", prefix + "*.age"],
+                           capture_output=True, text=True, env=env, timeout=120)
+        if r.returncode != 0:
+            return "listing the bucket failed"
+        names = sorted(n for n in r.stdout.split() if n.startswith(prefix))
+        for old in names[:-KEEP_REMOTE]:
+            subprocess.run(["rclone", "deletefile", f"{remote}/{old}"], env=env, timeout=120)
+    return None
+
+
+err = upload()
+if err:
+    print("OFF-SITE BACKUP FAILED:", err, file=sys.stderr)
+    sys.exit(1)
+print("off-site ok")
