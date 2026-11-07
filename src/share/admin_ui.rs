@@ -133,7 +133,11 @@ pub fn body(ui: &mut Ui, m: &mut AdminModel, session: Option<SharedSession>) {
     // the room (an open decision on a small window) takes the room as it is.
     let ends_id = egui::Id::new("admin_card_ends");
     let ends: Vec<(usize, f32)> = ui.ctx().data(|d| d.get_temp(ends_id)).unwrap_or_default();
-    let vp_h = ends.iter().map(|(_, e)| *e).filter(|e| *e <= room && *e >= room * 0.5).fold(None, |a: Option<f32>, e| Some(a.map_or(e, |a| a.max(e)))).map_or(room, |e| e + 2.0);
+    // (measured from the current scroll offset, so a queue scrolled to an open form still ends
+    // between two cards rather than through the next applicant's facts)
+    let off_id = egui::Id::new("admin_queue_off");
+    let off: f32 = ui.ctx().data(|d| d.get_temp(off_id)).unwrap_or(0.0);
+    let vp_h = ends.iter().map(|(_, e)| *e - off).filter(|e| *e <= room && *e >= room * 0.5).fold(None, |a: Option<f32>, e| Some(a.map_or(e, |a| a.max(e)))).map_or(room, |e| e + 2.0);
     // (stop offset, cards fully above it) for this frame, and each card's bottom for the count
     let mut card_ends: Vec<(usize, f32)> = Vec::new();
     // each card's top, for counting the applications still below
@@ -170,6 +174,7 @@ pub fn body(ui: &mut Ui, m: &mut AdminModel, session: Option<SharedSession>) {
                 let open = deciding.as_deref() == Some(app.request_id.as_str());
                 let busy = deciding.is_some() && !open;
                 let stroke = if open { egui::Stroke::new(1.5, theme::accent_col()) } else { egui::Stroke::new(1.0, theme::border()) };
+                let mut form_top = None;
                 let card = kit::card().stroke(stroke).inner_margin(egui::Margin::same(14)).show(ui, |ui| {
                     ui.set_min_width(ui.available_width());
                     // while one decision is open the other applications wait. Their facts stay fully
@@ -178,6 +183,7 @@ pub fn body(ui: &mut Ui, m: &mut AdminModel, session: Option<SharedSession>) {
                     application(ui, app, open, busy, &mut ask);
                     if open {
                         ui.add_space(10.0);
+                        form_top = Some(ui.cursor().top());
                         ui.separator();
                         ui.add_space(8.0);
                         let confirming = m.confirming;
@@ -205,9 +211,25 @@ pub fn body(ui: &mut Ui, m: &mut AdminModel, session: Option<SharedSession>) {
                     ui.ctx().data_mut(|d| d.insert_temp(last_id, (view_key.clone().unwrap_or_default(), r)));
                     if stable {
                         let vp = ui.clip_rect();
-                        // Bring the card's top in (never its bottom): the name, school and waiting
-                        // time stay above the form in every state, password or not.
-                        if r.top() > vp.top() + 6.0 || r.top() < vp.top() {
+                        // Bring the card's top in, so the name, school and waiting time stay above
+                        // the form; a card taller than the viewport brings its foot in instead, so
+                        // the action row (Approve, or the password's Confirm) is never cut by the
+                        // window's bottom edge.
+                        if r.height() > vp.height() + 1.0 {
+                            // the form starts at its own rule and names the applicant ("Approve
+                            // Rosa Delgado"), so the viewport's top edge lands there rather than
+                            // through a fact row; failing that, the card's foot is brought in
+                            let ft = form_top.unwrap_or(r.top());
+                            if r.bottom() - ft <= vp.height() - 8.0 {
+                                if (ft - vp.top()).abs() > 6.0 {
+                                    let target = egui::Rect::from_min_size(egui::pos2(r.left(), ft - 4.0), egui::vec2(r.width(), 1.0));
+                                    ui.scroll_to_rect(target, Some(egui::Align::Min));
+                                }
+                            } else if r.bottom() > vp.bottom() || r.bottom() < vp.bottom() - 6.0 {
+                                let target = egui::Rect::from_min_size(egui::pos2(r.left(), r.bottom() - 1.0), egui::vec2(r.width(), 1.0));
+                                ui.scroll_to_rect(target, Some(egui::Align::Max));
+                            }
+                        } else if r.top() > vp.top() + 6.0 || r.top() < vp.top() {
                             let target = egui::Rect::from_min_size(egui::pos2(r.left(), r.top()), egui::vec2(r.width(), 1.0));
                             ui.scroll_to_rect(target, Some(egui::Align::Min));
                         }
@@ -233,7 +255,10 @@ pub fn body(ui: &mut Ui, m: &mut AdminModel, session: Option<SharedSession>) {
                 );
             });
         });
-    ui.ctx().data_mut(|d| d.insert_temp(ends_id, card_ends));
+    ui.ctx().data_mut(|d| {
+        d.insert_temp(ends_id, card_ends);
+        d.insert_temp(off_id, out.state.offset.y);
+    });
     let (bar, _) = ui.allocate_exact_size(egui::vec2(col_w, 24.0), egui::Sense::hover());
     let seen_to = out.state.offset.y + out.inner_rect.height() + 2.0;
     if out.content_size.y > seen_to {
