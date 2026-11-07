@@ -67,6 +67,7 @@ mod tests {
         // The newest tables exist: credits ledger and AI cost columns.
         conn.prepare("SELECT delta, kind, ref, cents FROM credit_ledger").unwrap();
         conn.prepare("SELECT cost_usd, session FROM ai_usage").unwrap();
+        conn.prepare("SELECT signup_source FROM users").unwrap();
         assert!(migrate(&mut conn, &worker_migrations()).unwrap().is_empty(), "a rerun applies nothing");
     }
 

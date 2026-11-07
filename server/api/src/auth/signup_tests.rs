@@ -208,3 +208,48 @@ fn a_mail_request_is_limited_per_ip_and_address_and_fails_closed_without_an_ip()
     assert_eq!(forgot(&w.ctx(), &HeaderMap::new(), &obj(json!({ "email": "a@x.org" })), &mut out).unwrap_err().code, "client_ip_required");
     assert_eq!(forgot(&w.ctx(), &ip("10.0.0.2"), &obj(json!({ "email": "nope" })), &mut out).unwrap_err().status, 400);
 }
+
+// ---- the ad / link source tag ------------------------------------------------------------------
+
+fn source_of(w: &World, email: &str) -> Option<String> {
+    w.db.lock().unwrap().query_row("SELECT signup_source FROM users WHERE email = ?1", [email], |r| r.get(0)).unwrap()
+}
+
+#[test]
+fn signup_keeps_a_valid_source_tag_lowercased_on_the_new_account() {
+    let w = world();
+    let mut out = Outbox::new();
+    w.signup("a@x.org", json!({ "src": "fb-math" }), &mut out).unwrap();
+    assert_eq!(source_of(&w, "a@x.org").as_deref(), Some("fb-math"));
+    let r = w.signup("b@x.org", json!({ "src": "  Reddit_Ad-2 " }), &mut out).unwrap();
+    assert_eq!(r.status(), 202);
+    assert_eq!(source_of(&w, "b@x.org").as_deref(), Some("reddit_ad-2"));
+    w.signup("c@x.org", json!({}), &mut out).unwrap();
+    assert_eq!(source_of(&w, "c@x.org"), None, "no tag is NULL");
+}
+
+#[test]
+fn an_invalid_source_tag_is_dropped_and_never_blocks_the_signup() {
+    let w = world();
+    let bad = [json!("a".repeat(33)), json!("fb math"), json!("<b>x</b>"), json!(""), json!(42), json!(null), json!(["fb"]), json!({ "x": 1 }), json!("caf\u{e9}")];
+    for (i, src) in bad.iter().enumerate() {
+        let mut out = Outbox::new();
+        let email = format!("u{i}@x.org");
+        let r = w.signup(&email, json!({ "src": src }), &mut out).unwrap();
+        assert_eq!(r.status(), 202, "{src}");
+        assert_eq!(source_of(&w, &email), None, "{src}");
+        assert_eq!(out[0].kind, MailKind::Verify, "the account was still made: {src}");
+    }
+}
+
+#[test]
+fn signing_up_again_never_changes_the_tag_an_account_was_made_with() {
+    let w = world();
+    let mut out = Outbox::new();
+    w.signup("a@x.org", json!({ "src": "first" }), &mut out).unwrap();
+    w.signup("a@x.org", json!({ "src": "second" }), &mut out).unwrap();
+    assert_eq!(source_of(&w, "a@x.org").as_deref(), Some("first"));
+    w.signup("b@x.org", json!({}), &mut out).unwrap();
+    w.signup("B@x.org", json!({ "src": "late" }), &mut out).unwrap();
+    assert_eq!(source_of(&w, "b@x.org"), None, "an existing account without a tag does not gain one");
+}

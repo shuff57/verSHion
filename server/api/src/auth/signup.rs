@@ -79,6 +79,8 @@ pub fn signup(c: &Ctx, h: &axum::http::HeaderMap, body: &Map<String, Value>, out
     let email = normalize_email(&str_field(body, "email", 320, true)?.unwrap_or_default())?;
     let password = read_password(body, "password")?;
     let prof = read_profile(body, c.now)?;
+    // The ad / link tag the app read from `?src=`. A missing or invalid one is no tag, never an error.
+    let source = body.get("src").and_then(Value::as_str).and_then(share_core::source_tag::normalise);
     policy(c, &password, &email)?;
     let ip = guard::client_ip(h)?;
     guard::limit(&c.db.lock().unwrap_or_else(|p| p.into_inner()), c.keys, Action::Signup, &ip, Some(&format!("email:{email}")), c.now)?;
@@ -90,12 +92,12 @@ pub fn signup(c: &Ctx, h: &axum::http::HeaderMap, body: &Map<String, Value>, out
     let (inserted, existing_verified) = {
         let mut conn = c.db.lock().unwrap_or_else(|p| p.into_inner());
         let tx = conn.transaction().map_err(dberr)?;
-        // One transaction in both cases: the insert is a no-op for an existing address.
+        // One transaction in both cases: the insert is a no-op for an existing address (so its tag is never changed).
         let ins = tx
             .execute(
-                "INSERT INTO users (id, email, pw_hash, pw_params, display_name, profile, trust, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) ON CONFLICT (email) DO NOTHING",
-                params![user_id, email, hashed.phc, params_json(&hashed.params), prof.display_name, prof.profile.as_ref().map(Value::to_string), super::config::TRUST[0], c.now],
+                "INSERT INTO users (id, email, pw_hash, pw_params, display_name, profile, trust, created_at, signup_source)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) ON CONFLICT (email) DO NOTHING",
+                params![user_id, email, hashed.phc, params_json(&hashed.params), prof.display_name, prof.profile.as_ref().map(Value::to_string), super::config::TRUST[0], c.now, source],
             )
             .map_err(dberr)?;
         tx.execute(
