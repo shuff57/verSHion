@@ -584,7 +584,8 @@ fn the_vp_dots_and_rms_guide_mark_the_right_speeds_and_can_be_switched_off() {
     // the symbols are in the key's legend, not on the curves; the readout calls the rms guide dash-dot
     let leg: Vec<String> = texts(&svg).into_iter().filter(|t| t.kind == "legend").map(|t| t.text).collect();
     assert!(leg.iter().any(|t| t == "vp (each peak)") && leg.iter().any(|t| t == "rms (hottest)"), "{leg:?}");
-    assert!(joined(&r).contains("dash-dot line"), "{}", joined(&r));
+    // the legend names the marks; the notes no longer repeat it
+    assert!(!joined(&r).contains("dash-dot"), "{}", joined(&r));
     // Show answers off: no vp dot, vp tick or rms guide, and the legend does not name them; the typed mark stays
     let st = student(&list);
     assert!(st.vp_points.is_empty() && st.rms_guide.is_none());

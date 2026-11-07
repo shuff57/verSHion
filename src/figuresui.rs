@@ -1353,7 +1353,9 @@ impl Workspace {
             let cw_card = w - 2.0 * inset;
             // a figure with a wide, right-hand property panel (VSEPR) fills the page's width on a
             // phone rather than sitting small in a height-clipped canvas
-            let card_cap = if generated && self.shell_panel() && self.sel.is_some_and(|i| reg()[i].id == "vsepr-shapes") { 0.86 } else { 0.7 };
+            // Boltzmann's sheet is near square, so at 70% it pushed the first Values control under
+            // the action row; a little less keeps that control above the fold
+            let card_cap = if generated && self.shell_panel() && self.sel.is_some_and(|i| reg()[i].id == "vsepr-shapes") { 0.86 } else if generated && self.shell_panel() && self.sel.is_some_and(|i| reg()[i].id == "boltzmann-distribution") { 0.63 } else { 0.7 };
             let mut card_h = ((w as f64 - 22.0) * ch / cw + 22.0).clamp(180.0, (avail_h as f64 * card_cap).max(180.0)) as f32;
             // the reference opens a chemistry figure alone in a tall white canvas that ends about
             // 156 px above the window bottom, the controls card sitting below the fold
