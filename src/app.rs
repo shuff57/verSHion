@@ -322,6 +322,19 @@ impl App {
                     app.account.open();
                     Screen::Account
                 }
+                // The same, drawn as a signed-in teacher's with no server (the initials on the rail).
+                "account:signed-in" => {
+                    app.account.open();
+                    app.account.model.me = Some(crate::share::api::Me {
+                        email: "jordan.lee@school.org".into(),
+                        display_name: "Jordan Lee".into(),
+                        school: "Chico High".into(),
+                        status: crate::share::api::Status::Approved,
+                        trust: "teacher".into(),
+                    });
+                    app.account.model.page = crate::share::model::Page::Status;
+                    Screen::Account
+                }
                 "bank" => app
                     .store
                     .banks

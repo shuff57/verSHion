@@ -144,49 +144,13 @@ impl crate::App {
     }
 }
 
-impl crate::App {
-    /// The Account screen: the sign-in forms and, once signed in, the account's status. The account serves
-    /// sharing and the hosted AI alike, so it has a screen of its own rather than living under Shared.
-    pub fn draw_account_screen(&mut self, ctx: &egui::Context) {
-        crate::screens::shell_frame(self, ctx, true, |app, ui| {
-            app.account.pin();
-            egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                ui.set_max_width(ui.available_width().min(crate::pageshell::PAGE_W));
-                pageshell::title(ui, "Home  /  Account", "Account", "Optional. For sharing questions with other teachers and for the hosted AI. Everything else works without one.");
-                ui.add_space(18.0);
-                // The forms keep a form's width with the reasons for an account beside them; the
-                // signed-in status page has a lot to show and takes the whole column.
-                let status = app.account.model.page == super::model::Page::Status;
-                let side_w = 300.0;
-                if status || ui.available_width() < 760.0 {
-                    pageshell::card(ui, |ui| app.account.draw_section(ui));
-                    // A signed-in account has little to say: the three reasons ride under it as a
-                    // row of cards, so the page does not stop half way down the window.
-                    if status && ui.available_width() >= 760.0 {
-                        ui.add_space(16.0);
-                        perks_row(ui);
-                    }
-                } else {
-                    let card_w = (ui.available_width() - side_w - 28.0).clamp(420.0, 540.0);
-                    ui.horizontal_top(|ui| {
-                        ui.spacing_mut().item_spacing.x = 28.0;
-                        ui.vertical(|ui| {
-                            ui.set_width(card_w);
-                            pageshell::card(ui, |ui| app.account.draw_section(ui));
-                        });
-                        ui.vertical(|ui| {
-                            ui.set_width(side_w);
-                            account_perks(ui);
-                        });
-                    });
-                }
-                ui.add_space(20.0);
-                pageshell::footer(
-                    ui,
-                    "verSHion · saved on this machine · sharing is the only thing that needs a server",
-                );
-            });
-        });
+/// What an account is for, under the account card in Settings: a row of three cards when the column
+/// is wide enough, else the same three reasons stacked.
+pub(crate) fn account_reasons(ui: &mut Ui) {
+    if ui.available_width() >= 600.0 {
+        perks_row(ui);
+    } else {
+        account_perks(ui);
     }
 }
 

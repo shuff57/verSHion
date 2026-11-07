@@ -256,6 +256,11 @@ pub struct NavItem {
 /// A section list on the left and one section's content on the right (the list becomes a row of
 /// chips above the content on a narrow window). The chosen section is remembered under `salt`;
 /// the highlight slides to a newly chosen item and the content eases in.
+/// Chooses which section `sections(.., salt, ..)` shows next frame, as if its item had been clicked.
+pub fn select_section(ctx: &egui::Context, salt: &str, i: usize) {
+    ctx.data_mut(|d| d.insert_temp(Id::new(("pageshell_sections", salt)).with("sel"), i));
+}
+
 pub fn sections(ui: &mut Ui, salt: &str, items: &[NavItem], content: impl FnOnce(&mut Ui, usize)) {
     if items.is_empty() {
         return;
