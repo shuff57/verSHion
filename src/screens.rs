@@ -840,7 +840,8 @@ impl crate::App {
                 // leaving a third of the screen as empty grid.
                 let rest = ui.available_height();
                 if rest > 90.0 {
-                    ui.add_space((rest - 44.0).max(0.0));
+                    // Two footer lines (the note and the desktop link) need about 64 px, not 44.
+                    ui.add_space((rest - 64.0).max(0.0));
                     ui.vertical_centered(|ui| {
                         ui.label(
                             theme::muted(
