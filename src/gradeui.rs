@@ -351,8 +351,9 @@ fn choose_exam(state: &mut GradeState, id: String) {
 fn exam_chooser(ui: &mut egui::Ui, exams: &[(String, String, usize, usize)], state: &mut GradeState, min_h: f32) {
     let current = state.exam_id.as_ref().and_then(|id| exams.iter().find(|e| &e.0 == id));
     let mut pick = None;
-    pageshell::card_min(ui, min_h, |ui| {
-        let inner_top = ui.cursor().top();
+    // The card hugs its rows and the next-step strip; the window's leftover height falls below the
+    // cards (the footer takes it), not inside them as a hollow band.
+    pageshell::card_min(ui, 0.0, |ui| {
         match current {
             None => pageshell::heading(ui, "Choose an exam to grade"),
             Some(e) => pageshell::heading(ui, &format!("No student work for {} yet", e.1)),
@@ -404,13 +405,10 @@ fn exam_chooser(ui: &mut egui::Ui, exams: &[(String, String, usize, usize)], sta
             // pills: the row that starts the whole task now says what it does.
             let action_w = 78.0;
             let act = Rect::from_min_size(Pos2::new(r.right() - 12.0 - action_w, cy - 14.0), Vec2::new(action_w, 28.0));
-            let (act_fill, act_fg, act_stroke) = if is_next {
-                (theme::accent_col(), theme::on_accent_col(), theme::accent_col())
-            } else if empty {
-                (egui::Color32::TRANSPARENT, theme::muted_col(), if resp.hovered() { theme::muted_col() } else { theme::border() })
-            } else {
-                (theme::accent_faded(), theme::accent_col(), theme::accent_col())
-            };
+            // Every row's Open is the same secondary button: the page's one primary is "Start
+            // checking" in the Next up strip, so no row competes with it.
+            // (the row's own wash shows the pointer; the button keeps one face)
+            let (act_fill, act_fg, act_stroke) = (theme::card(), theme::ink(), theme::rule());
             ui.painter().rect(act, CornerRadius::same(8), act_fill, Stroke::new(1.0, act_stroke), egui::StrokeKind::Inside);
             let label = ui.painter().layout_no_wrap("Open".to_string(), FontId::new(12.5, theme::bold_family()), act_fg);
             ui.painter().galley(Pos2::new(act.left() + 10.0, cy - label.size().y / 2.0), label, act_fg);
@@ -465,10 +463,7 @@ fn exam_chooser(ui: &mut egui::Ui, exams: &[(String, String, usize, usize)], sta
         // The card owns the window down to the footer, and its foot says what to do next rather
         // than ending in a slab of blank card: the exam with words waiting, with one button.
         if let Some((id, name, check)) = next {
-            let strip_h = 64.0;
-            let used = ui.cursor().top() - inner_top;
-            let room = (min_h - 40.0) - used - strip_h;
-            ui.add_space(if room > 18.0 { room } else { 18.0 });
+            ui.add_space(16.0);
             egui::Frame::new()
                 .fill(theme::field())
                 .corner_radius(CornerRadius::same(12))
@@ -496,11 +491,11 @@ fn exam_chooser(ui: &mut egui::Ui, exams: &[(String, String, usize, usize)], sta
 
 /// Beside the chooser: what happens on this screen, in three steps.
 fn how_it_works(ui: &mut egui::Ui, min_h: f32) {
-    pageshell::card_min(ui, min_h, |ui| {
+    let _ = min_h;
+    pageshell::card_min(ui, 0.0, |ui| {
         // An aside, not a second page title: the task's heading keeps the larger serif.
         ui.label(RichText::new("How grading works").family(theme::serif_family()).size(16.0).color(theme::ink()));
         ui.add_space(10.0);
-        let inner_top = ui.cursor().top();
         let steps = [
             ("Transcribed", "Each page of a student's work is read into text. Words the reader was unsure of are flagged."),
             ("Checked", "Open a student's page and decide each flagged word: use the reading offered, or keep what was written."),
@@ -519,15 +514,9 @@ fn how_it_works(ui: &mut egui::Ui, min_h: f32) {
             });
             ui.add_space(14.0);
         }
-        // The keys for the checking screen sit at the card's foot, level with the chooser's
-        // next-step strip, so both cards end on the same line with something to read there.
+        // The keys for the checking screen follow the third step directly: the card hugs them.
         let keys = [("\u{2191} \u{2193}", "move between lines"), ("T", "open the word panel"), ("P / F", "plain or corrected text"), ("Esc", "close the panel")];
         ui.spacing_mut().item_spacing.y = 4.0;
-        let keys_h = 70.0 + keys.len() as f32 * 26.0;
-        let room = (min_h - 40.0) - (ui.cursor().top() - inner_top) - keys_h;
-        if room > 0.0 {
-            ui.add_space(room);
-        }
         ui.separator();
         ui.add_space(4.0);
         kit::small_caps(ui, "Keys while checking");
@@ -624,19 +613,25 @@ fn page_chips(ui: &mut egui::Ui, s: &StudentSubmission, p: &SubmittedPage, state
 }
 
 /// No page open yet: the student's pages, and their marks once marked.
-fn pages_overview(ui: &mut egui::Ui, s: &StudentSubmission, state: &mut GradeState) {
+fn pages_overview(ui: &mut egui::Ui, s: &StudentSubmission, next: Option<&StudentSubmission>, state: &mut GradeState) {
     pageshell::heading(ui, "Choose a page");
     ui.add_space(2.0);
     ui.label(theme::muted("Open a page to check its transcript and the words the transcriber was unsure of.").size(13.0));
     ui.add_space(10.0);
-    let w = ui.available_width();
+    // Each page is one framed, clickable row, no wider than its content needs, ending in a named
+    // "Open": the action sits beside the label instead of a chevron 800 px away across the card.
+    let w = ui.available_width().min(560.0);
     let mut pick = None;
     for (i, p) in s.pages.iter().enumerate() {
         let (r, resp) = ui.allocate_exact_size(Vec2::new(w, 58.0), Sense::click());
-        if resp.hovered() {
-            ui.painter().rect_filled(r, CornerRadius::same(10), theme::hover_bg());
-        }
-        ui.painter().line_segment([r.left_bottom(), r.right_bottom()], Stroke::new(1.0, theme::border()));
+        let hovered = resp.hovered();
+        ui.painter().rect(
+            r,
+            CornerRadius::same(10),
+            if hovered { theme::hover_bg() } else { theme::card() },
+            Stroke::new(1.0, if hovered { theme::muted_col() } else { theme::border() }),
+            egui::StrokeKind::Inside,
+        );
         let lines = p.transcript.lines().filter(|l| !l.trim().is_empty()).count();
         let open = open_words(p);
         let (pill, fill, fg) = if lines == 0 {
@@ -647,7 +642,7 @@ fn pages_overview(ui: &mut egui::Ui, s: &StudentSubmission, state: &mut GradeSta
             ("Nothing to check".to_string(), theme::accent_faded(), theme::accent_col())
         };
         let name = ui.painter().text(
-            Pos2::new(r.left() + 12.0, r.top() + 19.0),
+            Pos2::new(r.left() + 14.0, r.top() + 19.0),
             Align2::LEFT_CENTER,
             format!("Page {}", i + 1),
             FontId::new(14.5, theme::bold_family()),
@@ -658,23 +653,33 @@ fn pages_overview(ui: &mut egui::Ui, s: &StudentSubmission, state: &mut GradeSta
         let pr = Rect::from_min_size(Pos2::new(name.right() + 10.0, r.top() + 9.0), Vec2::new(g.size().x + 18.0, 20.0));
         ui.painter().rect_filled(pr, CornerRadius::same(255), fill);
         ui.painter().galley(Pos2::new(pr.left() + 9.0, pr.center().y - g.size().y / 2.0), g, fg);
-        ui.painter().text(
-            Pos2::new(r.right() - 12.0, r.center().y),
+        // a short named action at the row's end
+        let caret = ui.painter().text(
+            Pos2::new(r.right() - 14.0, r.center().y),
             Align2::RIGHT_CENTER,
             egui_phosphor::regular::CARET_RIGHT,
-            theme::icon_font(15.0),
-            theme::muted_col(),
+            theme::icon_font(14.0),
+            theme::accent_col(),
         );
-        let left = r.right() - 30.0;
+        let open_l = ui.painter().text(
+            Pos2::new(caret.left() - 4.0, r.center().y),
+            Align2::RIGHT_CENTER,
+            "Open",
+            FontId::new(12.5, theme::bold_family()),
+            theme::accent_col(),
+        );
+        let left = open_l.left() - 12.0;
         let preview = p.transcript.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+        // the first line's caret powers are raised, as in the transcript ("3x^2" shows a superscript 2)
         let sub = if lines == 0 { "Its text appears once it is transcribed.".to_string() } else { format!("{}  ·  {preview}", plural(lines, "line", "lines")) };
-        let g = ui.painter().layout(sub, FontId::proportional(12.5), theme::muted_col(), left - r.left() - 30.0);
-        let row = g.rows.first().map(|r| r.rect().height()).unwrap_or(14.0);
-        ui.painter().with_clip_rect(Rect::from_min_size(Pos2::new(r.left(), r.top() + 32.0), Vec2::new(left - r.left() - 16.0, row + 2.0))).galley(
-            Pos2::new(r.left() + 12.0, r.top() + 32.0),
-            g,
-            theme::muted_col(),
-        );
+        let job = math_text(&sub, 12.5, theme::muted_col());
+        let mut job = job;
+        job.wrap.max_width = left - r.left() - 14.0;
+        job.wrap.max_rows = 1;
+        job.wrap.break_anywhere = true;
+        job.wrap.overflow_character = Some('…');
+        let g = ui.painter().layout_job(job);
+        ui.painter().galley(Pos2::new(r.left() + 14.0, r.top() + 32.0), g, theme::muted_col());
         if resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
             pick = Some(p.id.clone());
         }
@@ -699,7 +704,29 @@ fn pages_overview(ui: &mut egui::Ui, s: &StudentSubmission, state: &mut GradeSta
                 ui.spacing_mut().interact_size.y = 20.0;
                 let (lw, _) = ui.allocate_exact_size(Vec2::new(52.0, 22.0), Sense::hover());
                 ui.painter().text(lw.left_center(), Align2::LEFT_CENTER, title, FontId::new(12.5, theme::bold_family()), if correct { theme::text_col() } else { theme::bad() });
+                // A row that wraps wraps evenly (5 + 4, not 8 + 1): a lone chip on a second line
+                // read as a rendering break.
+                // (in a wrapping row `available_width` overstates the line; the wrap edge is the max rect's)
+                let room = ui.max_rect().right() - ui.cursor().left() - 4.0;
+                // how many of these chips fit on one line, measured as status_pill draws them
+                let mut x = 0.0;
+                let mut fit = 0usize;
                 for q in &qs {
+                    let cw = ui.painter().layout_no_wrap(q.clone(), FontId::new(11.5, theme::bold_family()), theme::ink()).size().x + 20.0;
+                    if x + cw > room {
+                        break;
+                    }
+                    x += cw + 6.0;
+                    fit += 1;
+                }
+                let fit = fit.max(1);
+                let rows = qs.len().div_ceil(fit);
+                let per = qs.len().div_ceil(rows.max(1));
+                for (k, q) in qs.iter().enumerate() {
+                    if k > 0 && k % per == 0 {
+                        ui.end_row();
+                        ui.add_space(58.0);
+                    }
                     if correct {
                         status_pill(ui, q, theme::accent_faded(), theme::accent_col(), 22.0);
                     } else {
@@ -708,6 +735,42 @@ fn pages_overview(ui: &mut egui::Ui, s: &StudentSubmission, state: &mut GradeSta
                 }
             });
             ui.add_space(4.0);
+        }
+    }
+    // The card's foot names the one next step once this student is done: the next student with
+    // words to check, with one button, as the exam chooser does.
+    if let Some(n) = next {
+        let words = match standing(n) {
+            Standing::Check(k) => plural(k, "word", "words"),
+            _ => "Work".to_string(),
+        };
+        ui.add_space(18.0);
+        let mut go = false;
+        egui::Frame::new()
+            .fill(theme::field())
+            .corner_radius(CornerRadius::same(12))
+            .inner_margin(egui::Margin::symmetric(16, 12))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal_wrapped(|ui| {
+                    ui.vertical(|ui| {
+                        ui.label(theme::muted("Next up").size(12.0));
+                        ui.label(theme::strong(format!("{words} to check for {}", n.student_name)).size(14.0));
+                    });
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if kit::primary_button(ui, "Next student").clicked() {
+                            go = true;
+                        }
+                    });
+                });
+            });
+        if go {
+            state.student_id = Some(n.id.clone());
+            // straight to the first page with words waiting
+            state.page_id = n.pages.iter().find(|p| open_words(p) > 0).or(n.pages.first()).map(|p| p.id.clone());
+            state.read_line = None;
+            state.tray_open = false;
+            state.sel = None;
         }
     }
 }
@@ -1355,7 +1418,10 @@ impl crate::App {
                     ui.add_space(10.0);
                     let h = ui.available_height();
                     let Some(p) = &page else {
-                        panel(ui, "grade_pages", Vec2::new(main_w, h), |ui| pages_overview(ui, s, &mut state));
+                        // the next student with words waiting (after this one in the list, then from the top)
+                        let at = subs.iter().position(|x| x.id == s.id).unwrap_or(0);
+                        let next = subs[at + 1..].iter().chain(subs[..at].iter()).find(|x| matches!(standing(x), Standing::Check(_)));
+                        panel(ui, "grade_pages", Vec2::new(main_w, h), |ui| pages_overview(ui, s, next, &mut state));
                         return;
                     };
                     let mut words = |ui: &mut egui::Ui, state: &mut GradeState| {
