@@ -159,9 +159,10 @@ fn visits_are_not_configured_without_all_three_settings() {
     let b = report(&w, &a.read_only, &[], &Visits::none()).unwrap();
     assert_eq!(b["visits"], json!({ "available": false, "reason": "not_configured" }));
     for (t, ac, s) in [(None, Some("a"), Some("s")), (Some("t"), None, Some("s")), (Some("t"), Some("a"), None)] {
-        assert!(!Visits::from_settings(t.map(str::to_string), ac.map(str::to_string), s.map(str::to_string)).configured());
+        assert!(!Visits::from_settings(t.map(str::to_string), ac.map(str::to_string), s.map(str::to_string), Some("h.example".into())).configured());
     }
-    assert!(Visits::from_settings(Some("t".into()), Some("a".into()), Some("s".into())).configured());
+    assert!(Visits::from_settings(Some("t".into()), Some("a".into()), Some("s".into()), Some("h.example".into())).configured());
+    assert!(!Visits::from_settings(Some("t".into()), Some("a".into()), Some("s".into()), None).configured(), "no hostname, no counts: the whole domain would be mixed in");
 }
 
 #[test]
@@ -213,10 +214,10 @@ fn a_cloudflare_answer_is_cached_per_days_for_ten_minutes() {
 
 #[test]
 fn the_cloudflare_request_and_answer_have_the_documented_shape() {
-    let body = visits_request("acct-1", "site-1", T0 - 7 * DAY_MS, T0 + 123);
-    assert_eq!(body["variables"], json!({ "account": "acct-1", "site": "site-1", "since": "2027-01-08T08:00:00Z", "until": "2027-01-15T08:00:00Z" }));
+    let body = visits_request("acct-1", "site-1", "app.example", T0 - 7 * DAY_MS, T0 + 123);
+    assert_eq!(body["variables"], json!({ "account": "acct-1", "site": "site-1", "host": "app.example", "since": "2027-01-08T08:00:00Z", "until": "2027-01-15T08:00:00Z" }));
     let query = body["query"].as_str().unwrap();
-    for part in ["rumPageloadEventsAdaptiveGroups", "accountTag: $account", "siteTag: $site", "datetime_geq: $since", "datetime_lt: $until", "sum { visits }", "refererHost", "sum_visits_DESC"] {
+    for part in ["rumPageloadEventsAdaptiveGroups", "accountTag: $account", "siteTag: $site", "requestHost: $host", "datetime_geq: $since", "datetime_lt: $until", "sum { visits }", "refererHost", "sum_visits_DESC"] {
         assert!(query.contains(part), "{part}");
     }
     let answer = json!({ "data": { "viewer": { "accounts": [{
@@ -234,7 +235,7 @@ fn the_cloudflare_request_and_answer_have_the_documented_shape() {
 
 #[test]
 fn the_real_fetcher_without_a_runtime_fails_soft() {
-    let c = Cloudflare::new("t".into(), "a".into(), "s".into());
+    let c = Cloudflare::new("t".into(), "a".into(), "s".into(), "h.example".into());
     assert!(c.fetch(0, 1).is_err());
 }
 
@@ -264,7 +265,7 @@ async fn stand_in(answer: Value, delay: Duration) -> (String, Arc<Mutex<Vec<(Opt
 async fn the_real_fetcher_posts_the_query_with_the_token_from_a_blocking_handler_thread() {
     let answer = json!({ "data": { "viewer": { "accounts": [{ "total": [{ "sum": { "visits": 9 } }], "referrers": [{ "sum": { "visits": 9 }, "dimensions": { "refererHost": "news.example" } }] }] } } });
     let (url, seen) = stand_in(answer, Duration::ZERO).await;
-    let c = Cloudflare::new("tok-123".into(), "acct".into(), "site".into()).at(&url, Duration::from_secs(5));
+    let c = Cloudflare::new("tok-123".into(), "acct".into(), "site".into(), "h.example".into()).at(&url, Duration::from_secs(5));
     // The handler runs on a blocking thread, exactly like this.
     let got = tokio::task::spawn_blocking(move || c.fetch(T0 - DAY_MS, T0)).await.unwrap().unwrap();
     assert_eq!(got, VisitCounts { total: 9, by_referrer: vec![(Some("news.example".into()), 9)] });
@@ -276,7 +277,7 @@ async fn the_real_fetcher_posts_the_query_with_the_token_from_a_blocking_handler
 #[tokio::test(flavor = "multi_thread")]
 async fn a_slow_cloudflare_times_out_and_the_report_says_unavailable() {
     let (url, _) = stand_in(json!({}), Duration::from_secs(3)).await;
-    let v = Visits::new(Box::new(Cloudflare::new("t".into(), "a".into(), "s".into()).at(&url, Duration::from_millis(200))));
+    let v = Visits::new(Box::new(Cloudflare::new("t".into(), "a".into(), "s".into(), "h.example".into()).at(&url, Duration::from_millis(200))));
     let started = std::time::Instant::now();
     let out = tokio::task::spawn_blocking(move || v.report(30, T0)).await.unwrap();
     assert_eq!(out, json!({ "available": false, "reason": "unavailable" }));

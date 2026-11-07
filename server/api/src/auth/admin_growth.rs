@@ -65,10 +65,10 @@ impl Visits {
         Visits { fetch: Some(fetch), cache: Mutex::new(HashMap::new()) }
     }
 
-    /// Cloudflare, when all three settings are present; otherwise not connected.
-    pub fn from_settings(token: Option<String>, account: Option<String>, site_tag: Option<String>) -> Visits {
-        match (token, account, site_tag) {
-            (Some(token), Some(account), Some(site_tag)) => Visits::new(Box::new(Cloudflare::new(token, account, site_tag))),
+    /// Cloudflare, when the three settings and the site's hostname are present; otherwise not connected.
+    pub fn from_settings(token: Option<String>, account: Option<String>, site_tag: Option<String>, host: Option<String>) -> Visits {
+        match (token, account, site_tag, host) {
+            (Some(token), Some(account), Some(site_tag), Some(host)) => Visits::new(Box::new(Cloudflare::new(token, account, site_tag, host))),
             _ => Visits::none(),
         }
     }
@@ -115,13 +115,16 @@ pub struct Cloudflare {
     token: String,
     account: String,
     site_tag: String,
+    /// Only this hostname is counted: the Web Analytics site covers the whole domain, so without it the report would
+    /// include every other site on it.
+    host: String,
     url: String,
     timeout: Duration,
 }
 
 impl Cloudflare {
-    pub fn new(token: String, account: String, site_tag: String) -> Cloudflare {
-        Cloudflare { token, account, site_tag, url: CF_GRAPHQL_URL.to_string(), timeout: CF_TIMEOUT }
+    pub fn new(token: String, account: String, site_tag: String, host: String) -> Cloudflare {
+        Cloudflare { token, account, site_tag, host, url: CF_GRAPHQL_URL.to_string(), timeout: CF_TIMEOUT }
     }
 
     /// Another endpoint and timeout (tests: a local stand-in for Cloudflare).
@@ -134,13 +137,13 @@ impl Cloudflare {
 
 /// One GraphQL document with two aliased reads of the same dataset: the window's total (no dimensions: one group) and
 /// the top referring hosts.
-pub const VISITS_QUERY: &str = "query Visits($account: String!, $site: String!, $since: Time!, $until: Time!) {
+pub const VISITS_QUERY: &str = "query Visits($account: String!, $site: String!, $host: String!, $since: Time!, $until: Time!) {
   viewer {
     accounts(filter: { accountTag: $account }) {
-      total: rumPageloadEventsAdaptiveGroups(limit: 1, filter: { siteTag: $site, datetime_geq: $since, datetime_lt: $until }) {
+      total: rumPageloadEventsAdaptiveGroups(limit: 1, filter: { siteTag: $site, requestHost: $host, datetime_geq: $since, datetime_lt: $until }) {
         sum { visits }
       }
-      referrers: rumPageloadEventsAdaptiveGroups(limit: 15, filter: { siteTag: $site, datetime_geq: $since, datetime_lt: $until }, orderBy: [sum_visits_DESC]) {
+      referrers: rumPageloadEventsAdaptiveGroups(limit: 15, filter: { siteTag: $site, requestHost: $host, datetime_geq: $since, datetime_lt: $until }, orderBy: [sum_visits_DESC]) {
         sum { visits }
         dimensions { refererHost }
       }
@@ -149,13 +152,13 @@ pub const VISITS_QUERY: &str = "query Visits($account: String!, $site: String!, 
 }";
 
 /// The request body for a window.
-pub fn visits_request(account: &str, site_tag: &str, since_ms: i64, until_ms: i64) -> Value {
+pub fn visits_request(account: &str, site_tag: &str, host: &str, since_ms: i64, until_ms: i64) -> Value {
     let t = |ms: i64| {
         // whole seconds are enough, and Cloudflare's Time scalar is RFC 3339
         let s = super::signup::iso8601(ms - ms.rem_euclid(1000));
         s.replace(".000Z", "Z")
     };
-    json!({ "query": VISITS_QUERY, "variables": { "account": account, "site": site_tag, "since": t(since_ms), "until": t(until_ms) } })
+    json!({ "query": VISITS_QUERY, "variables": { "account": account, "site": site_tag, "host": host, "since": t(since_ms), "until": t(until_ms) } })
 }
 
 /// Reads Cloudflare's answer. A GraphQL error comes back with HTTP 200 and an `errors` array, so that is checked
@@ -181,7 +184,7 @@ impl VisitFetch for Cloudflare {
     fn fetch(&self, since_ms: i64, until_ms: i64) -> Result<VisitCounts, String> {
         // The handler runs on a blocking thread of the server's runtime, so the async client is driven from here.
         let rt = tokio::runtime::Handle::try_current().map_err(|_| "no runtime".to_string())?;
-        let body = visits_request(&self.account, &self.site_tag, since_ms, until_ms);
+        let body = visits_request(&self.account, &self.site_tag, &self.host, since_ms, until_ms);
         rt.block_on(async {
             let client = reqwest::Client::builder().timeout(self.timeout).build().map_err(|_| "client".to_string())?;
             let resp = client.post(&self.url).bearer_auth(&self.token).json(&body).send().await.map_err(|e| if e.is_timeout() { "timed out".to_string() } else { "request failed".to_string() })?;

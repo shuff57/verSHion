@@ -114,7 +114,9 @@ fn auth_state(cfg: &config::Config, conn: rusqlite::Connection) -> Option<Arc<au
     let mut st = auth::router::AuthState::new(conn, a, mail);
     pool::hooks::install(&mut st);
     st.approval_digest = std::env::var("APPROVAL_DIGEST").as_deref() == Ok("1");
-    st.visits = auth::admin_growth::Visits::from_settings(cfg.cf_analytics_token.clone(), cfg.cf_account_id.clone(), cfg.cf_site_tag.clone());
+    // The hostname the visit counts are limited to: the site's own, from its first allowed origin.
+    let host = cfg.allowed_origins.first().and_then(|o| o.split("://").nth(1)).map(|h| h.split('/').next().unwrap_or(h).to_string()).filter(|h| !h.is_empty());
+    st.visits = auth::admin_growth::Visits::from_settings(cfg.cf_analytics_token.clone(), cfg.cf_account_id.clone(), cfg.cf_site_tag.clone(), host);
     if !st.visits.configured() {
         tracing::info!("growth report: Cloudflare Web Analytics is not configured, visit counts are off");
     }
