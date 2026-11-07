@@ -7,6 +7,8 @@ question banks, printable exams, and one-shot AI conversion, all local-first.
 **Download the desktop build (Linux, alpha):** [releases](https://github.com/shuff57/verSHion/releases/latest) —
 one self-contained binary, 64-bit Linux with glibc 2.35+ (`docs/desktop-release.md`).
 
+![The Figures gallery: physics, chemistry, biology, math and computing diagrams you can tune, label and export](docs/screenshots/figures.png)
+
 - **egui + wgpu** (eframe 0.36) single binary; house theme (cream/terracotta, Source Serif/Sans).
 - **Question banks**: six question types (multiple choice, true/false, matching, fill-in-the-blank,
   short answer, multipart), topic tags, difficulty, points, images.
