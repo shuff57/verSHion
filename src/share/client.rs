@@ -137,6 +137,8 @@ pub struct Client {
     inner: Mutex<Inner>,
     /// A token refresh started by the page is under way (web build only uses it).
     warming: std::sync::atomic::AtomicBool,
+    /// The ad / link tag the page was opened with (`?src=`, web build only), sent with a sign-up and nowhere else.
+    signup_source: Option<String>,
 }
 
 impl std::fmt::Debug for Client {
@@ -255,11 +257,18 @@ impl Client {
             clock,
             inner: Mutex::new(Inner::default()),
             warming: std::sync::atomic::AtomicBool::new(false),
+            signup_source: None,
         };
         if mode == Mode::Native {
             c.load();
         }
         c
+    }
+
+    /// The ad / link tag a sign-up carries ([`super::source_tag`]). Normalised here; an invalid one is none.
+    pub fn with_signup_source(mut self, raw: Option<&str>) -> Client {
+        self.signup_source = raw.and_then(super::source_tag::normalise);
+        self
     }
 
     /// Serialise refreshes with other processes (or tabs) through `lock`.
@@ -916,6 +925,9 @@ impl Client {
         body.insert("email".into(), Value::from(email.trim()));
         body.insert("password".into(), Value::from(password.expose()));
         profile.add_to(&mut body);
+        if let Some(src) = &self.signup_source {
+            body.insert("src".into(), Value::from(src.as_str()));
+        }
         self.call(Method::Post, "/auth/signup", Some(json_body(Value::Object(body)))).await.map(|_| ())
     }
 

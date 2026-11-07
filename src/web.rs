@@ -38,6 +38,11 @@ pub fn start() {
             .is_some_and(|m| m.matches());
         vershion::pageshell::set_reduced_motion(reduced);
 
+        // The ad / link tag (`?src=`), kept in memory only and sent once with a sign-up (share::source_tag).
+        if let Some(search) = web_sys::window().and_then(|w| w.location().search().ok()) {
+            vershion::share::source_tag::remember_from_query(&search);
+        }
+
         // The faces the wasm does not compile in, requested now so they download while storage
         // opens (index.html preloads them alongside the wasm).
         let fonts = fetch_fonts();

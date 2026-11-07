@@ -73,6 +73,7 @@ pub mod question_history_ui;
 pub mod secret;
 pub mod shared;
 pub mod shared_ui;
+pub mod source_tag;
 pub mod transport;
 pub mod ui;
 pub mod vault;

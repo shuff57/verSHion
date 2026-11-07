@@ -16,6 +16,7 @@ pub mod import;
 pub mod json;
 pub mod labels;
 pub mod limits;
+pub mod source_tag;
 pub mod strip;
 pub mod text;
 pub mod validate;

@@ -470,6 +470,27 @@ fn sign_up_sends_the_profile_and_never_signs_in() {
     assert_eq!(b["adult_school_employee"], true);
     assert!(!c.has_session());
     assert_eq!(v.writes.load(Ordering::SeqCst), 0);
+    assert!(b.get("src").is_none(), "no tag, no field");
+}
+
+#[test]
+fn sign_up_carries_the_link_tag_once_normalised_and_only_when_valid() {
+    let (s, v) = (Server::default(), SharedVault::default());
+    let c = client(Mode::Web, &s, &v).with_signup_source(Some(" FB-Math "));
+    block_on(c.sign_up(EMAIL, &pw(PASSWORD), &profile())).unwrap();
+    assert_eq!(s.last("/auth/signup").body.unwrap()["src"], "fb-math");
+    // The email-only sign-up goes through the same request.
+    block_on(c.sign_up_email_only("other@school.example.org", true)).unwrap();
+    assert_eq!(s.last("/auth/signup").body.unwrap()["src"], "fb-math");
+    // Only the sign-up carries it.
+    block_on(c.sign_in(EMAIL, &pw(PASSWORD))).unwrap();
+    assert!(s.last("/auth/login").body.unwrap().get("src").is_none());
+    for none in [None, Some(""), Some("fb math"), Some("<script>"), Some("a-very-long-tag-that-is-over-32-chars")] {
+        let (s, v) = (Server::default(), SharedVault::default());
+        let c = client(Mode::Web, &s, &v).with_signup_source(none);
+        block_on(c.sign_up(EMAIL, &pw(PASSWORD), &profile())).unwrap();
+        assert!(s.last("/auth/signup").body.unwrap().get("src").is_none(), "{none:?} is not sent");
+    }
 }
 
 #[test]

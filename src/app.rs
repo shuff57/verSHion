@@ -264,6 +264,21 @@ impl App {
                 s if s == "shared" || s.starts_with("shared:") => {
                     use crate::share::shared::Tab;
                     match s.trim_start_matches("shared").trim_start_matches(':') {
+                        // The growth report, read from VERSHION_GROWTH_FIXTURE (a GET /admin/growth answer).
+                        "admin:growth" => {
+                            let growth = crate::env_var("VERSHION_GROWTH_FIXTURE")
+                                .ok()
+                                .and_then(|p| std::fs::read_to_string(&p).ok())
+                                .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+                                .and_then(|v| crate::share::admin::parse_growth(&v));
+                            match growth {
+                                Some(g) => {
+                                    app.shared.qa_admin(crate::share::admin::Queue::default(), "");
+                                    app.shared.admin.qa_show_growth(g);
+                                }
+                                None => eprintln!("VERSHION_SCREEN=shared:admin:growth: no growth fixture could be read"),
+                            }
+                        }
                         a if a == "admin" || a.starts_with("admin:") => {
                             let queue = match crate::env_var("VERSHION_ADMIN_FIXTURE") {
                                 Ok(p) => std::fs::read_to_string(&p).ok().and_then(|t| serde_json::from_str(&t).ok()),

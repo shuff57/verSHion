@@ -300,7 +300,7 @@ pub fn default_factory() -> Factory {
         #[cfg(not(target_arch = "wasm32"))]
         let client = client.with_lock(Box::new(super::vault::FileLock::new(crate::store::store_dir().join("share-refresh.lock"))));
         #[cfg(target_arch = "wasm32")]
-        let client = client.with_lock(Box::new(super::vault::WebLock));
+        let client = client.with_lock(Box::new(super::vault::WebLock)).with_signup_source(super::source_tag::remembered().as_deref());
         (client, note)
     })
 }

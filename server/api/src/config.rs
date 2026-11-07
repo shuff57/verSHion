@@ -24,6 +24,11 @@ pub struct Config {
     pub auth_secret: Option<String>,
     /// 32+ characters (POOL_HASH_KEY). Without it the pool is not mounted: it never hashes unkeyed.
     pub pool_hash_key: Option<String>,
+    /// Cloudflare Web Analytics for the admin's growth report: a read-only Analytics token (secret), the account id
+    /// and the Web Analytics site tag. Visit counts are shown only when all three are set.
+    pub cf_analytics_token: Option<String>,
+    pub cf_account_id: Option<String>,
+    pub cf_site_tag: Option<String>,
 }
 
 /// A positive whole number, or None (so the default stands) when unset or not one.
@@ -107,6 +112,9 @@ impl Config {
             stripe_publishable_key: nonempty(get("STRIPE_PUBLISHABLE_KEY")),
             auth_secret: nonempty(get("AUTH_SECRET")),
             pool_hash_key: nonempty(get("POOL_HASH_KEY")),
+            cf_analytics_token: nonempty(get("CF_ANALYTICS_TOKEN")),
+            cf_account_id: nonempty(get("CF_ACCOUNT_ID")),
+            cf_site_tag: nonempty(get("CF_SITE_TAG")),
         }
     }
 }
@@ -171,6 +179,14 @@ mod tests {
         }
         let c = cfg(&[("BILLING_ENABLED", " 1 "), ("STRIPE_SECRET_KEY", " sk_test_x "), ("STRIPE_WEBHOOK_SECRET", "whsec_x"), ("STRIPE_PUBLISHABLE_KEY", "  ")]);
         assert_eq!((c.billing_enabled, c.stripe_key.as_deref(), c.stripe_webhook_secret.as_deref(), c.stripe_publishable_key), (true, Some("sk_test_x"), Some("whsec_x"), None));
+    }
+
+    #[test]
+    fn the_cloudflare_analytics_settings_are_optional_and_trimmed() {
+        let c = cfg(&[]);
+        assert!(c.cf_analytics_token.is_none() && c.cf_account_id.is_none() && c.cf_site_tag.is_none());
+        let c = cfg(&[("CF_ANALYTICS_TOKEN", " tok "), ("CF_ACCOUNT_ID", "acct"), ("CF_SITE_TAG", "  ")]);
+        assert_eq!((c.cf_analytics_token.as_deref(), c.cf_account_id.as_deref(), c.cf_site_tag), (Some("tok"), Some("acct"), None));
     }
 
     #[test]
