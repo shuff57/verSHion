@@ -787,20 +787,31 @@ pub fn build(p: &Params) -> (String, Report) {
     let rule = if print { "#b0b0b0" } else { "#c9ced6" };
 
     let w = 760.0;
+    // the model and the facts start this far down the sheet: a 64 px top margin left a wide blank
+    // band between the preview's toolbar and the molecule
+    const TOP_Y: f64 = 30.0;
     // The model is drawn larger and starts at the panel's top, so the drawing, the facts and the
     // caption fill the sheet together (the old 118 px model left a white band under the facts).
     let cx = 250.0;
     let geom = 1.0 + 0.18 * (lab - 1.0);
     let scale = 136.0 * geom;
     let r_atom = 16.0 * lab;
-    let cy = (64.0 + scale + r_atom + 8.0).round();
+    let view = View::new(st.turn + mol.open.0, st.tilt + mol.open.1);
+    // The model's band is as tall as this view of the molecule needs (its atoms and lone pairs,
+    // with room for a label), not a sphere any rotation could fill: a view with nothing pointing
+    // up left a wide blank band above the molecule.
+    let (up, down) = mol.atoms.iter().map(|a| a.pos).chain(mol.lone.iter().copied()).fold((0.0f64, 0.0f64), |(u, d), v| {
+        let dy = view.screen(v, (0.0, 0.0), scale).0 .1;
+        (u.max(-dy), d.max(dy))
+    });
+    let (up, down) = (up.max(0.25 * scale), down.max(0.25 * scale));
+    let cy = (TOP_Y + up + r_atom + 8.0).round();
     let fs_atom = 17.0 * lab;
     let fs_angle = 16.5 * lab;
     let fs_panel = 16.5 * lab;
     let fs_note = 16.5 * lab;
     let panel_x = 456.0;
     let panel_w = 282.0;
-    let view = View::new(st.turn + mol.open.0, st.tilt + mol.open.1);
     let mol_index = st.mol;
 
     // ---- rotated atoms and their screen positions
@@ -1016,7 +1027,7 @@ pub fn build(p: &Params) -> (String, Report) {
                 let bx = if text.is_empty() {
                     (p.0 - 2.0, p.0 + 2.0, p.1 - 2.0, p.1 + 2.0)
                 } else {
-                    pad(est_box(p.0, p.1, fs_angle, "middle", &text), 3.0)
+                    pad(est_box(p.0, p.1, fs_angle, "middle", &text), 5.0)
                 };
                 if bx.0 < 0.0 || bx.1 > w || bx.2 < 0.0 { continue; }
                 let mut bad = false;
@@ -1044,6 +1055,11 @@ pub fn build(p: &Params) -> (String, Report) {
                     for b in &bonds {
                         if b.drawn && seg_hits(b.a, b.b, bx) { bad = true; break; }
                     }
+                }
+                // the number stays off its own arc (and every arc drawn before it), so the
+                // degree sign is not drawn across the curve it names
+                if !bad {
+                    bad = std::iter::once(&arc).chain(angles.iter().map(|a| &a.arc)).any(|c| c.windows(2).any(|sg| seg_hits(sg[0], sg[1], bx)));
                 }
                 if !bad { best = Some((p, bx)); break 'outer; }
             }
@@ -1151,9 +1167,9 @@ pub fn build(p: &Params) -> (String, Report) {
     let panel: Vec<String> = facts.iter().map(|(l, v)| format!("{l}: {v}")).chain(panel_notes.iter().cloned()).collect();
 
     let footer_text = "A simplified ball-and-stick model: atoms are circles joined by single sticks. Each lone pair is a pair of dots on a short dashed stick pointing where the pair truly projects on the central atom; a pair that projects on a bond, at the viewer, behind a nearer atom or onto another pair is left off and the panel says so. Bond lengths are not to scale, and no double bonds, resonance or bond order is shown.";
-    // The caption spans the sheet's content width at a reading measure (about 80 characters; at
-    // 70 it sat in the bottom-left with the bottom-right dead), set in the sheet's ink.
-    let footer = wrap(footer_text, fs_note, (w - 40.0).min(82.0 * 0.5 * fs_note));
+    // The caption is set at a reading measure of about 72 characters in the sheet's ink (at 82 a
+    // phone-width preview read it as ~100-character lines across the whole card).
+    let footer = wrap(footer_text, fs_note, (w - 40.0).min(72.0 * 0.5 * fs_note));
 
     // ---- the facts' column layout. The label column is as wide as the widest label at this size;
     // a value that does not fit beside it goes on its own line under its label rather than being
@@ -1191,10 +1207,10 @@ pub fn build(p: &Params) -> (String, Report) {
         .sum();
 
     // ---- height
-    let panel_top = 64.0;
+    let panel_top = TOP_Y;
     let panel_h = (fact_lines + panel_notes.len()) as f64 * line_h + panel_gap + 0.8 * fs_panel + why_reserved as f64 * line_h;
     let panel_bottom = panel_top + panel_h;
-    let mol_bottom = cy + scale + r_atom + 24.0;
+    let mol_bottom = cy + down + r_atom + 24.0;
     let body_bottom = panel_bottom.max(mol_bottom);
     let footer_top = body_bottom + 16.0;
     let h = (footer_top + footer.len() as f64 * 1.5 * fs_note + 14.0).ceil();
