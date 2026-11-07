@@ -584,7 +584,8 @@ fn the_vp_dots_and_rms_guide_mark_the_right_speeds_and_can_be_switched_off() {
     // the symbols are in the key's legend, not on the curves; the readout calls the rms guide dash-dot
     let leg: Vec<String> = texts(&svg).into_iter().filter(|t| t.kind == "legend").map(|t| t.text).collect();
     assert!(leg.iter().any(|t| t == "vp (each peak)") && leg.iter().any(|t| t == "rms (hottest)"), "{leg:?}");
-    assert!(joined(&r).contains("dash-dot guide"), "{}", joined(&r));
+    // the legend names the marks; the notes no longer repeat it
+    assert!(!joined(&r).contains("dash-dot"), "{}", joined(&r));
     // Show answers off: no vp dot, vp tick or rms guide, and the legend does not name them; the typed mark stays
     let st = student(&list);
     assert!(st.vp_points.is_empty() && st.rms_guide.is_none());
@@ -619,7 +620,8 @@ fn the_shaded_tail_approximates_the_plotted_part_and_the_key_says_so() {
     let to_infinity = ref_fraction(10_000.0, 600.0, m);
     assert!((to_infinity - shaded).abs() < 1e-3, "shade against F: {shaded} vs {to_infinity}");
     let text = joined(&r);
-    assert!(text.contains("approximates") && text.contains("0.01 percentage point") && text.contains("exact fraction to infinity"), "{text}");
+    // the key says in one line what the shading is, and how far it runs
+    assert!(text.contains("The shading is the area above Ea out to") && text.contains(&format!("{} m/s", fmt(r.x_top))), "{text}");
     // H2 at 300 K, Ea = 5 kJ/mol: the shade can land on either side of the printed fraction
     let list = [s("gas", "H2"), s("curves", "1"), f("t1", 300.0), f("ea", 5.0), i("dec", 3)];
     let p = with(&list);
@@ -640,7 +642,7 @@ fn the_shaded_tail_approximates_the_plotted_part_and_the_key_says_so() {
     let plotted = simpson(|v| ref_f(v, 300.0, m), 0.0, r.x_top, 20_000);
     assert!((shaded - plotted).abs() < 1e-4, "Ea=0 shaded {shaded} against {plotted}");
     assert!(shaded < 1.0 && 1.0 - shaded < 1e-4, "Ea=0 shaded {shaded}");
-    assert!(joined(&r).contains("approximates") && joined(&r).contains("0.01 percentage point"), "{}", joined(&r));
+    assert!(joined(&r).contains("The shading is the area above Ea"), "{}", joined(&r));
     // no dashed Ea swatch is shown for Ea = 0: the y axis is the line
     let leg: Vec<String> = texts(&svg).into_iter().filter(|t| t.kind == "legend").map(|t| t.text).collect();
     assert!(leg.iter().all(|t| !t.starts_with("Ea =")), "{leg:?}");

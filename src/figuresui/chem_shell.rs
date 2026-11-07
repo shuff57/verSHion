@@ -890,10 +890,16 @@ pub fn split_cards(ui: &mut Ui, f: impl FnOnce(&mut Ui)) {
     let rect = resp.rect;
     match ui.ctx().data(|d| d.get_temp::<f32>(id)) {
         Some(bottom) => {
-            ui.painter().set(a, card_shapes(Rect::from_min_max(rect.min, Pos2::new(rect.right(), bottom))));
-            ui.painter().set(b, card_shapes(Rect::from_min_max(Pos2::new(rect.left(), bottom + 16.0), rect.max)));
+            let (r1, r2) = (Rect::from_min_max(rect.min, Pos2::new(rect.right(), bottom)), Rect::from_min_max(Pos2::new(rect.left(), bottom + 16.0), rect.max));
+            ui.painter().set(a, card_shapes(r1));
+            ui.painter().set(b, card_shapes(r2));
+            note_card(ui, r1);
+            note_card(ui, r2);
         }
-        None => ui.painter().set(a, card_shapes(rect)),
+        None => {
+            ui.painter().set(a, card_shapes(rect));
+            note_card(ui, rect);
+        }
     }
 }
 
@@ -906,9 +912,26 @@ pub fn mark_split(ui: &mut Ui) {
 }
 
 /// `panel_card` with separate side margins.
+/// The controls cards drawn this frame (screen rects), so a scrolling column can close the card its
+/// bottom edge cuts with a frame of its own instead of leaving it open on the page.
+pub fn note_card(ui: &Ui, r: Rect) {
+    let id = egui::Id::new("fig_card_rects");
+    let mut v: Vec<Rect> = ui.ctx().data(|d| d.get_temp(id)).unwrap_or_default();
+    v.push(r);
+    ui.ctx().data_mut(|d| d.insert_temp(id, v));
+}
+
+pub fn card_rects(ctx: &egui::Context) -> Vec<Rect> {
+    ctx.data(|d| d.get_temp(egui::Id::new("fig_card_rects"))).unwrap_or_default()
+}
+
+pub fn clear_card_rects(ctx: &egui::Context) {
+    ctx.data_mut(|d| d.remove_temp::<Vec<Rect>>(egui::Id::new("fig_card_rects")));
+}
+
 pub fn panel_card_m<R>(ui: &mut Ui, m: Margin, f: impl FnOnce(&mut Ui) -> R) -> R {
     let w = ui.available_width();
-    Frame::new()
+    let out = Frame::new()
         .fill(theme::card())
         .stroke(Stroke::new(1.0, theme::border()))
         .corner_radius(CornerRadius::same(16))
@@ -917,8 +940,9 @@ pub fn panel_card_m<R>(ui: &mut Ui, m: Margin, f: impl FnOnce(&mut Ui) -> R) -> 
         .show(ui, |ui| {
             ui.set_width(w - 2.0 - (m.left + m.right) as f32);
             f(ui)
-        })
-        .inner
+        });
+    note_card(ui, out.response.rect);
+    out.inner
 }
 
 /// Full-width outlined blue button ("Start from an example", "Random"). A leading phosphor icon
@@ -932,9 +956,20 @@ pub fn outline_button(ui: &mut Ui, text: &str, enabled: bool) -> egui::Response 
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), if bio_h { 39.2 } else { 40.0 }), if enabled { Sense::click() } else { Sense::hover() });
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, &label));
     let hov = enabled && resp.hovered();
-    let col = if enabled { blue_text() } else { blue_text().gamma_multiply(0.4) };
+    // On the dark page the light theme's green-on-card face read as a disabled button (dim green
+    // on near-black): there it is a raised secondary instead, a lifted fill, a visible edge and
+    // cream type.
+    let dark = theme::is_dark();
+    let base = if dark { blue_text().lerp_to_gamma(theme::ink(), 0.55) } else { blue_text() };
+    let col = if enabled { base } else { base.gamma_multiply(0.4) };
+    let (fill, edge) = if dark {
+        let lift = theme::card().lerp_to_gamma(Color32::WHITE, 0.07);
+        (if hov { lift.lerp_to_gamma(Color32::WHITE, 0.05) } else { lift }, theme::muted_col().gamma_multiply(0.8))
+    } else {
+        (if hov { theme::hover_bg() } else { theme::card() }, pill_border())
+    };
     let p = ui.painter();
-    p.rect(rect, CornerRadius::same(12), if hov { theme::hover_bg() } else { theme::card() }, Stroke::new(1.0, pill_border()), egui::StrokeKind::Inside);
+    p.rect(rect, CornerRadius::same(12), fill, Stroke::new(1.0, edge), egui::StrokeKind::Inside);
     let g = p.layout_no_wrap(label, egui::FontId::new(15.2, theme::bold_family()), col);
     // the chemistry page draws the reference's "images" glyph (18 px); the others keep the font icon
     let phys_pg = ui.ctx().data(|d| d.get_temp::<bool>(egui::Id::new("phys_skin_page"))).unwrap_or(false);
@@ -1533,7 +1568,13 @@ pub fn segmented_track(ui: &mut Ui, opts: &[&'static str], cur: &mut String) {
     }
     // the app's shell keeps its own warm field colour (the reference's cool grey is its page skin's)
     let wash = if theme::keep_theme() { theme::field() } else if theme::is_dark() { Color32::from_rgb(0x11, 0x16, 0x21) } else if chem { Color32::from_rgb(0xf6, 0xf7, 0xfb) } else { Color32::from_rgb(0xf0, 0xf1, 0xf6) };
-    ui.painter().rect_filled(track, CornerRadius::same(trk_r), wash);
+    if theme::keep_theme() {
+        // the app's shell outlines the track, so the group's extent reads even where only the
+        // chosen cell carries a fill
+        ui.painter().rect(track, CornerRadius::same(trk_r), wash, Stroke::new(1.0, theme::rule()), egui::StrokeKind::Inside);
+    } else {
+        ui.painter().rect_filled(track, CornerRadius::same(trk_r), wash);
+    }
     let cell_w = (track.width() - 2.0 * pad) / n;
     for (i, o) in opts.iter().enumerate() {
         let cell = Rect::from_min_size(Pos2::new(track.left() + pad + i as f32 * cell_w, track.top() + pad), Vec2::new(cell_w, cell_h));
@@ -1550,7 +1591,7 @@ pub fn segmented_track(ui: &mut Ui, opts: &[&'static str], cur: &mut String) {
                 ui.painter().rect(cell, CornerRadius::same(cell_r), theme::card(), Stroke::new(1.0, edge), egui::StrokeKind::Inside);
             }
         }
-        let col = if sel && theme::keep_theme() { theme::accent_col() } else if sel { blue_text() } else if theme::keep_theme() && theme::is_dark() { theme::text_col() } else { theme::muted_col() };
+        let col = if sel && theme::keep_theme() { theme::accent_col() } else if sel { blue_text() } else if theme::keep_theme() { theme::ink() } else { theme::muted_col() };
         let g = ui.painter().layout(o.to_string(), egui::FontId::new(13.76, if chem { theme::semibold_family() } else { theme::bold_family() }), col, cell_w - 16.0);
         let mut pos = cell.center() - g.size() / 2.0 - if chem && !wrapped { Vec2::new(0.0, 0.6) } else { Vec2::ZERO };
         // wrapped lines are centred on each other, as the reference's text-align centre sets them, and sit a little lower

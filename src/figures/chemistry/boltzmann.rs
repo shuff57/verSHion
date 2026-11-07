@@ -472,6 +472,9 @@ fn legend_width(kind: &LegKind, fs: f64) -> f64 {
     }
 }
 
+/// The y axis's title, set in two rotated lines.
+const Y_TITLE: (&str, &str) = ("Fraction of molecules", "per unit speed (s/m)");
+
 pub fn build(p: &Params) -> (String, Report) {
     let (st, notes) = read(p);
     let lab = svg::label_factor(p.s("label_size"));
@@ -492,7 +495,9 @@ pub fn build(p: &Params) -> (String, Report) {
     let fs_lab = 13.5 * lab;
     let fs_t = 15.0 * lab;
     let mut fs_tab = 13.0 * lab;
-    let fs_ro = 13.0 * lab;
+    // the notes are set a size up from the axes: the preview scales the whole sheet down to its
+    // card, and at 13 they landed near 9 px on screen
+    let fs_ro = 16.5 * lab;
     let w = (760.0 * (1.0 + 0.38 * (lab - 1.0))).round();
     let ph = (380.0 * (1.0 + 0.22 * (lab - 1.0))).round();
 
@@ -520,7 +525,8 @@ pub fn build(p: &Params) -> (String, Report) {
 
     let ytw = yticks.iter().map(|t| text_w(&t.1, fs_ax)).fold(0.0, f64::max);
     let last_half = xticks.iter().map(|t| 0.5 * text_w(&t.1, fs_ax)).fold(0.0, f64::max) + 3.0;
-    let l = (22.0 + 1.12 * fs_t + ytw).round();
+    // the y title takes two lines (a 42-character title set the plot's minimum height)
+    let l = (22.0 + 1.12 * fs_t + 1.15 * fs_t + ytw).round();
     let r = 18.0f64.max(last_half).round();
     let b = (6.0 + 1.2 * fs_ax + 10.0 + 1.1 * fs_t + 6.0).round();
 
@@ -559,7 +565,7 @@ pub fn build(p: &Params) -> (String, Report) {
 
     // the plot is a little shorter than it was (the notes now run in one column below it), but
     // never shorter than its rotated y title needs
-    let ph = ph.max((text_w("Fraction of molecules per unit speed (s/m)", fs_t) + t + b + 24.0).ceil());
+    let ph = ph.max((text_w(Y_TITLE.0, fs_t).max(text_w(Y_TITLE.1, fs_t)) + t + b + 24.0).ceil());
     let fr = Frame { w, h: ph, l, r, t, b, x0: 0.0, x1: x_top, y0: 0.0, y1: y_top };
     let (left, right, top, bottom) = (fr.left(), fr.right(), fr.top(), fr.bottom());
     let px = |x: f64| fr.px(x);
@@ -613,12 +619,10 @@ pub fn build(p: &Params) -> (String, Report) {
     // ---- the working
     let gas_name = if st.gas < GASES.len() { GASES[st.gas].0 } else { "custom gas" };
     let mut lines: Vec<String> = Vec::new();
-    lines.push(format!("Gas: {gas_name}, M = {} g/mol = {} kg/mol; R = 8.314462618 J/(mol K).", fmt(st.m_g), fmt(m)));
-    lines.push("vp = √(2RT/M) is the peak; mean = √(8RT/(πM)); rms = √(3RT/M).".to_string());
-    lines.push("Each full curve encloses area 1; the plotted part misses only the tail beyond the axis, where the curves are invisible.".to_string());
-    if marks_on {
-        lines.push("Dots mark vp at each peak, with a short tick on the speed axis; the dash-dot guide marks the rms speed of the hottest curve. The marks are on the key only.".to_string());
-    }
+    // The notes say what a student sheet needs, one short line each; the longer explanations of
+    // the drawing (shading, the marks) are on the key only.
+    lines.push(format!("Gas: {gas_name}, M = {} g/mol = {} kg/mol; R = 8.314 J/(mol K).", fmt(st.m_g), fmt(m)));
+    lines.push("vp = √(2RT/M) (the peak); mean = √(8RT/(πM)); rms = √(3RT/M).".to_string());
     if st.ea_kj > 0.0 && !ea_on {
         lines.push(format!("Ea = {} kJ/mol lies beyond the speeds shown (more than five times the hottest curve's most probable speed), so its line and tail are not drawn; the fraction is given below.", fmt(st.ea_kj)));
     }
@@ -626,7 +630,7 @@ pub fn build(p: &Params) -> (String, Report) {
         let parts: Vec<String> = curves.iter().map(|c| format!("{} % at {} K", pct_text(c.above, dec), fmt(c.t))).collect();
         lines.push(format!("Above Ea = {} kJ/mol: {}.", fmt(st.ea_kj), parts.join(", ")));
         if ea_on {
-            lines.push(format!("The shaded area approximates, to about 0.01 percentage point, the part of the plotted range from Ea's speed to {} m/s; the printed fraction is the exact fraction to infinity, so the two differ by the invisible tail beyond the axis and by the drawing's sampling.", fmt(x_top)));
+            lines.push(format!("The shading is the area above Ea out to {} m/s.", fmt(x_top)));
         }
     } else {
         let parts: Vec<String> = curves.iter().map(|c| format!("{BLANK} at {} K", fmt(c.t))).collect();
@@ -650,10 +654,10 @@ pub fn build(p: &Params) -> (String, Report) {
     // speeds table's left edge. Two ~45-character columns read as dense footnote bricks; the plot,
     // not the notes, fills the sheet's width.
     let ro_x = col_x[0];
-    let ro_w = (66.0 * fs_ro * 0.52).min(w - ro_x - 20.0).max(160.0);
+    let ro_w = (72.0 * fs_ro * 0.52).min(w - ro_x - 20.0).max(160.0);
     let paragraphs: Vec<Vec<String>> = lines.iter().map(|line| wrap(line, fs_ro, ro_w)).collect();
     let ro_lh = 1.55 * fs_ro;
-    let para_gap = 6.0;
+    let para_gap = 4.0;
     let notes_h = paragraphs.iter().map(|p| p.len() as f64).sum::<f64>() * ro_lh + paragraphs.len().saturating_sub(1) as f64 * para_gap;
     let h = (tab_bottom + 12.0 + notes_h + 6.0).ceil();
 
@@ -729,8 +733,11 @@ pub fn build(p: &Params) -> (String, Report) {
     }
     d.raw(&text_el((left + right) / 2.0, bottom + 6.0 + 1.2 * fs_ax + 10.0 + 0.76 * fs_t, fs_t, "middle", ink_c, "Molecular speed (m/s)", "axis"));
     {
-        let (tx, ty) = (4.0 + 0.84 * fs_t, (top + bottom) / 2.0);
-        d.raw(&format!(r##"<text x="{tx:.2}" y="{ty:.2}" font-size="{fs_t:.2}" text-anchor="middle" font-family="{FONT}" fill="{ink_c}" transform="rotate(-90 {tx:.2} {ty:.2})" data-o="axis">Fraction of molecules per unit speed (s/m)</text>"##));
+        let ty = (top + bottom) / 2.0;
+        for (i, line) in [Y_TITLE.0, Y_TITLE.1].iter().enumerate() {
+            let tx = 4.0 + 0.84 * fs_t + i as f64 * 1.15 * fs_t;
+            d.raw(&format!(r##"<text x="{tx:.2}" y="{ty:.2}" font-size="{fs_t:.2}" text-anchor="middle" font-family="{FONT}" fill="{ink_c}" transform="rotate(-90 {tx:.2} {ty:.2})" data-o="axis">{line}</text>"##));
+        }
     }
 
     // the legend band

@@ -161,7 +161,8 @@ for k in sorted(S):
     means.append(trim)
     print(f'  {k:22s} {len(v)}  {st.mean(v):.2f}  {trim:.2f}   ' +
           ' '.join(f'{dims[d]:.1f}' for d in DIM))
-print(f'  DESKTOP TRIMMED MEAN over {len(means)} screens: {st.mean(means):.2f}')
+if means:
+    print(f'  DESKTOP TRIMMED MEAN over {len(means)} screens: {st.mean(means):.2f}')
 
 for view, theme in (('narrow', 'light'), ('desktop', 'dark')):
     xs = [avg(r['ours']) for r in rows if r['kind'] == 'solo'
