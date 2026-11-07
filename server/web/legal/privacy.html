@@ -36,13 +36,15 @@
 <tr><td>Email address, display name, school, and your statement that you are an adult school employee</td><td>To create the account, decide whether to approve it, and mail you verification, reset and moderation messages.</td></tr>
 <tr><td>Password, stored only as an Argon2id hash (never the password itself)</td><td>To sign you in securely.</td></tr>
 <tr><td>Sign-in sessions: session and device tokens (stored hashed), creation and expiry times, and the browser or app identifier (user-agent)</td><td>To keep you signed in, let you see and revoke sessions, and detect stolen sessions.</td></tr>
-<tr><td>Rate-limit counters. Your IP address is used to count requests, but the counters are keyed by a one-way HMAC, so the table holds no raw IP or email.</td><td>To stop password guessing and abuse. <span class="confirm">[CONFIRM: Cloudflare&rsquo;s own request logs/analytics for the Worker and Pages, and their retention]</span></td></tr>
+<tr><td>Rate-limit counters. Your IP address is used to count requests, but the counters are keyed by a one-way HMAC, so the table holds no raw IP or email.</td><td>To stop password guessing and abuse.</td></tr>
+<tr><td>Visit counts from Cloudflare Web Analytics: the page visited, the site or link you came from, your approximate country (worked out from your IP address), device type and browser, and page-load timing. Cloudflare says this tool sets no cookies and uses no local storage.</td><td>To see how many people visit and which sites and links they come from, so we can decide where to tell teachers about verSHion. <span class="confirm">[CONFIRM: Cloudflare&rsquo;s retention for this data]</span></td></tr>
+<tr><td>A source tag, if you arrived from a link that carries one (for example <code>?src=newsletter</code>). It is a short label saved once, with your account, when you sign up. Nothing is saved for visitors who do not sign up.</td><td>To see which links lead to sign-ups and purchases. It is not shared with anyone and is not used for advertising.</td></tr>
 <tr><td>Content you publish: banks, questions, answers, explanations, titles, tags, images, licence choice, the time you accepted the attestation</td><td>To run the pool and show attribution and licences.</td></tr>
 <tr><td>Pool activity: which items you viewed or imported, your reports and appeals, and daily usage counts</td><td>To record attribution and licence evidence when you later publish, to count imports, to enforce limits, and to review reports fairly.</td></tr>
 <tr><td>Copyright and moderation records: notices, counter-notices (names, addresses, phone numbers, signatures), strikes, and an audit log of admin actions</td><td>To handle copyright claims and keep a record of moderation decisions.</td></tr>
 </tbody>
 </table>
-<p>We do not collect payment details, location, contacts, or advertising identifiers. We do not use cookies for tracking. The web app uses one cookie to keep you signed in (a refresh token) and one to recognise your device; both are strictly for sign-in security. These legal pages use no scripts, no analytics and no external fonts.</p>
+<p>We do not collect payment details, location, contacts, or advertising identifiers. We do not use cookies for tracking. The web app uses one cookie to keep you signed in (a refresh token) and one to recognise your device; both are strictly for sign-in security. These legal pages use no scripts of ours and no external fonts; Cloudflare&rsquo;s visit counting, described above, may run on them as on the rest of the site.</p>
 
 <h2 id="see">3. Who can see what</h2>
 <ul>
@@ -77,7 +79,7 @@
 <tr><td>Student-data removals</td><td>Deleted immediately when confirmed; the author can appeal for 14 days.</td></tr>
 <tr><td>Images an import served</td><td>Kept for the importer for 30 days after import.</td></tr>
 <tr><td>Copyright and moderation records, audit log</td><td>Kept for 3 years. After an account is erased, they are kept under pseudonymous ids only, and free-text notes about the person are removed.</td></tr>
-<tr><td>Database backups</td><td>The database supports point-in-time restore for up to 30 days, so deleted data can survive in backups for up to that long <span class="confirm">[CONFIRM: backup window]</span>.</td></tr>
+<tr><td>Database backups</td><td>The database and stored files are copied every night and the newest 14 copies are kept, so deleted data can survive in backups for up to 14 days.</td></tr>
 </tbody>
 </table>
 
