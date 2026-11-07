@@ -138,18 +138,25 @@ pub fn body(ui: &mut Ui, m: &mut AdminModel, session: Option<SharedSession>) {
     let mut card_ends: Vec<(usize, f32)> = Vec::new();
     // each card's top, for counting the applications still below
     let mut bottoms: Vec<f32> = Vec::new();
-    // On a phone one card nearly fills the room, so the viewport may also stop under the next
-    // applicant's name row (name and buttons whole); on a wide window it stops between cards only.
-    let narrow = ui.available_width() < 700.0;
+    // The viewport stops between whole cards at every width: a card begun at the fold showed a
+    // name and buttons over a blank body, as if its facts were missing.
+    // The cards are as wide as their facts need (the widest card's, so all share one right edge),
+    // not the window: a fact grid that stopped two thirds across left the buttons alone in the far
+    // corner over an empty band.
+    let full = ui.available_width();
+    let wide_q = full - 28.0 >= 620.0;
+    let nat = items.iter().map(|a| facts_natural_w(ui, a, wide_q)).fold(0.0_f32, f32::max);
+    let col_w = (nat + 28.0 + 6.0).max(if wide_q { 668.0 } else { 468.0 }).min(full);
     let area = egui::ScrollArea::vertical()
         .id_salt("admin_queue")
         .max_height(vp_h)
+        .max_width(col_w)
         .auto_shrink([false, false])
         .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded);
     // The queue scrolls inside a page that also scrolls, so its handle is the quiet one: thin,
     // muted, against the cards' edge, with no track to compete with the page's bar.
     let out = kit::quiet_scroll_area(ui, area, |ui| {
-            ui.set_width(ui.available_width());
+            ui.set_width(col_w);
             let content_top = ui.min_rect().top();
             // A password asked for with no decision open (not reached by the model today, kept safe).
             if m.confirming && m.decision.is_none() {
@@ -183,11 +190,8 @@ pub fn body(ui: &mut Ui, m: &mut AdminModel, session: Option<SharedSession>) {
                         }
                     }
                 });
-                // clean places to stop: under the card, and on a phone also under its name row
+                // the clean place to stop: under the card
                 let n = bottoms.len();
-                if narrow && n > 0 {
-                    card_ends.push((n, card.response.rect.top() - content_top + 64.0));
-                }
                 bottoms.push(card.response.rect.top() - content_top);
                 card_ends.push((n + 1, card.response.rect.bottom() - content_top));
                 if open && bring {
@@ -230,7 +234,7 @@ pub fn body(ui: &mut Ui, m: &mut AdminModel, session: Option<SharedSession>) {
             });
         });
     ui.ctx().data_mut(|d| d.insert_temp(ends_id, card_ends));
-    let (bar, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 24.0), egui::Sense::hover());
+    let (bar, _) = ui.allocate_exact_size(egui::vec2(col_w, 24.0), egui::Sense::hover());
     let seen_to = out.state.offset.y + out.inner_rect.height() + 2.0;
     if out.content_size.y > seen_to {
         // name what waits: the applications whose name row is below the viewport's edge (a card
@@ -288,14 +292,31 @@ fn application(ui: &mut Ui, app: &Application, open: bool, _busy: bool, ask: &mu
                 if kit::ghost_button(ui, "Refuse").clicked() {
                     *ask = Some(Ask::Open(app.clone(), false));
                 }
-                if kit::primary_button(ui, "Approve").clicked() {
+                if kit::solid_primary(ui, "Approve").clicked() {
                     *ask = Some(Ask::Open(app.clone(), true));
                 }
             });
         }
     });
     ui.add_space(if wide { 6.0 } else { 4.0 });
-    // The same six facts on every card, in the same places, so cards compare at a glance.
+    let rows = fact_rows(app);
+    application_facts(ui, app, &rows, wide);
+    if !open && !buttons_beside {
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 10.0;
+            if kit::solid_primary(ui, "Approve").clicked() {
+                *ask = Some(Ask::Open(app.clone(), true));
+            }
+            if kit::ghost_button(ui, "Refuse").clicked() {
+                *ask = Some(Ask::Open(app.clone(), false));
+            }
+        });
+    }
+}
+
+/// The same six facts on every card, in the same places, so cards compare at a glance.
+fn fact_rows(app: &Application) -> [(&'static str, String, bool); 6] {
     let school = if app.school.is_empty() { "Not given".to_string() } else { app.school.clone() };
     let label = app.domain_hint.clone().unwrap_or_else(|| "None".into());
     let domain_hist = match app.domain_history {
@@ -307,14 +328,43 @@ fn application(ui: &mut Ui, app: &Application, open: bool, _busy: bool, ask: &mu
         1 => "Once, refused".to_string(),
         n => format!("{n} times, refused"),
     };
-    let rows: [(&str, String, bool); 6] = [
+    [
         ("Email", app.email.clone(), false),
         ("Waiting", age_text(app.age_seconds), app.age_seconds >= 2 * 86_400),
         ("School", school, false),
         ("Domain", format!("{}  ·  {domain_hist}", app.email_domain), false),
         ("Your label", label, false),
         ("Applied before", before, app.prior_rejections > 0),
-    ];
+    ]
+}
+
+fn label_width(ui: &Ui, ks: &[&str]) -> f32 {
+    ks.iter()
+        .map(|k| ui.fonts_mut(|f| f.layout_no_wrap(k.to_uppercase(), egui::FontId::new(11.5, theme::bold_family()), theme::text_col()).size().x))
+        .fold(0.0_f32, f32::max)
+        .ceil()
+}
+
+fn value_width(ui: &Ui, v: &str) -> f32 {
+    ui.fonts_mut(|f| f.layout_no_wrap(v.to_string(), egui::FontId::new(13.0, theme::bold_family()), theme::text_col()).size().x).ceil()
+}
+
+/// How wide a card's facts (and its name row with the buttons) need to be, inside the card's margin.
+fn facts_natural_w(ui: &Ui, app: &Application, wide: bool) -> f32 {
+    let rows = fact_rows(app);
+    let name_row = value_width(ui, &app.who()) + 260.0;
+    let facts = if wide {
+        let v1 = rows.iter().step_by(2).map(|r| value_width(ui, &r.1)).fold(0.0_f32, f32::max);
+        let v2 = rows.iter().skip(1).step_by(2).map(|r| value_width(ui, &r.1)).fold(0.0_f32, f32::max);
+        label_width(ui, &["Email", "School", "Your label"]) + label_width(ui, &["Waiting", "Domain", "Applied before"]) + v1 + v2 + 4.0 * 12.0 + 24.0
+    } else {
+        let v = rows.iter().map(|r| value_width(ui, &r.1)).fold(0.0_f32, f32::max);
+        label_width(ui, &["Email", "Waiting", "School", "Domain", "Your label", "Applied before"]) + 12.0 + v + 8.0
+    };
+    facts.max(name_row)
+}
+
+fn application_facts(ui: &mut Ui, app: &Application, rows: &[(&'static str, String, bool); 6], wide: bool) {
     let value = |ui: &mut Ui, v: &str, strong: bool| {
         let t = if strong { theme::strong(v).size(13.0) } else { theme::text(v).size(13.0) };
         ui.add(egui::Label::new(t).wrap_mode(egui::TextWrapMode::Extend));
@@ -359,7 +409,7 @@ fn application(ui: &mut Ui, app: &Application, open: bool, _busy: bool, ask: &mu
         } else {
             let lw = label_w(ui, &["Email", "Waiting", "School", "Domain", "Your label", "Applied before"]);
             grid.num_columns(2).show(ui, |ui| {
-                for (k, v, st) in &rows {
+                for (k, v, st) in rows {
                     ui.allocate_ui_with_layout(egui::vec2(lw, 18.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
                         ui.set_min_width(lw);
                         ui.label(fact_label(k));
@@ -370,18 +420,6 @@ fn application(ui: &mut Ui, app: &Application, open: bool, _busy: bool, ask: &mu
             });
         }
     });
-    if !open && !buttons_beside {
-        ui.add_space(8.0);
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 10.0;
-            if kit::primary_button(ui, "Approve").clicked() {
-                *ask = Some(Ask::Open(app.clone(), true));
-            }
-            if kit::ghost_button(ui, "Refuse").clicked() {
-                *ask = Some(Ask::Open(app.clone(), false));
-            }
-        });
-    }
 }
 
 /// A choice in the decision form: a filled accent dot when chosen, a ring when not (the stock radio's
@@ -506,23 +544,24 @@ fn decision_form(ui: &mut Ui, d: &mut Decision, confirming: bool, ask: &mut Opti
         right(ui, d);
     }
     ui.add_space(10.0);
-    ui.horizontal_wrapped(|ui| {
+    // A gated action must look gated, and say why: with the evidence note (or the refusal's
+    // reason) empty the button waits in the muted face, and the warning line directly under it
+    // names the missing step (the password step below uses the same pair).
+    let ready = d.problem().is_none();
+    ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 10.0;
         let label = if d.approve { "Approve" } else { "Refuse" };
-        // A gated action must look gated, and say why: with the evidence note (or the refusal's
-        // reason) empty the button waits, and the line beside it names the missing step.
-        let ready = d.problem().is_none();
         if kit::primary_button_on(ui, label, ready).clicked() && ready {
             *ask = Some(Ask::Send);
         }
         if kit::ghost_button(ui, "Cancel").clicked() {
             *ask = Some(Ask::Cancel);
         }
-        if !ready {
-            ui.add_space(4.0);
-            kit::gated_reason(ui, gate_reason(d));
-        }
     });
+    if !ready {
+        ui.add_space(2.0);
+        kit::gated_reason(ui, gate_reason(d));
+    }
 }
 
 /// The missing step a waiting send button names, in a few words.
@@ -536,76 +575,53 @@ fn gate_reason(d: &Decision) -> &'static str {
     }
 }
 
-/// The password a change needs, asked once for five minutes of changes. Returns the block's rect so
-/// the queue can bring it into view without scrolling the page's title away.
+/// The password a change needs, asked once for five minutes of changes. A plain part of the open
+/// card under a top rule (no tinted, bordered box of its own inside the card), with its label on its
+/// own line above the field and the same waiting button and warning line as the decision form.
+/// Returns the block's rect.
 fn password_block(ui: &mut Ui, m: &mut AdminModel, ask: &mut Option<Ask>) -> egui::Rect {
-    egui::Frame::new()
-        .fill(theme::field())
-        .corner_radius(egui::CornerRadius::same(10))
-        .inner_margin(egui::Margin::symmetric(12, 9))
-        .show(ui, |ui| {
-            ui.set_min_width(ui.available_width());
-            let mut enter = false;
-            let confirm_on = !m.password.is_empty();
-            let button = |ui: &mut Ui, ask: &mut Option<Ask>, enter: bool| {
-                ui.spacing_mut().item_spacing.x = 14.0;
-                if (kit::primary_button_on(ui, "Confirm", confirm_on).clicked() || enter) && confirm_on {
-                    *ask = Some(Ask::Confirm);
-                }
-                if kit::ghost_button(ui, "Close")
-                    .on_hover_text("Close this password box and keep the approval open")
-                    .clicked()
-                {
-                    *ask = Some(Ask::CancelConfirm);
-                }
-            };
-            let mut field = |ui: &mut Ui, width: f32| {
-                let r = ui.add(
-                    egui::TextEdit::singleline(&mut m.password)
-                        .id(egui::Id::new("admin_password"))
-                        .password(true)
-                        .hint_text("Your password")
-                        .desired_width(width),
-                );
-                if !confirm_on {
-                    kit::attention_ring(ui, &r);
-                }
-                r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))
-            };
-            // The strip is one compact row: a short secret gets a short field and the buttons sit
-            // beside it, so the waiting applications below stay on screen. On a phone the label
-            // takes its own line and the field keeps the width the buttons leave.
-            if ui.available_width() >= 760.0 {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 10.0;
-                    ui.label(theme::strong("Confirm your password to send").size(13.5));
-                    let w = (ui.available_width() - 240.0).clamp(360.0, 420.0);
-                    enter = field(ui, w);
-                    button(ui, ask, enter);
-                });
-            } else {
-                ui.label(theme::strong("Confirm your password to send").size(13.5));
-                ui.add_space(5.0);
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 8.0;
-                    let w = (ui.available_width() - 236.0).clamp(200.0, 400.0);
-                    enter = field(ui, w);
-                    button(ui, ask, enter);
-                });
-            }
-            if !confirm_on {
-                ui.add_space(4.0);
-                kit::gated_reason(ui, "Type your password to send");
-            }
-            ui.add_space(3.0);
-            ui.add(
-                egui::Label::new(
-                    theme::muted("Used once over the secure connection and never stored; good for five minutes of changes.")
-                        .size(12.0),
-                )
-                .wrap(),
-            );
-        })
-        .response
-        .rect
+    let top = ui.cursor().top();
+    ui.separator();
+    ui.add_space(8.0);
+    let mut enter = false;
+    let confirm_on = !m.password.is_empty();
+    ui.label(theme::strong("Confirm your password to send").size(13.5));
+    ui.add_space(6.0);
+    let mut confirm_left = ui.cursor().left();
+    let row_left = ui.cursor().left();
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 10.0;
+        let w = (ui.available_width() - 250.0).clamp(200.0, 420.0);
+        let r = ui.add(
+            egui::TextEdit::singleline(&mut m.password)
+                .id(egui::Id::new("admin_password"))
+                .password(true)
+                .hint_text("Your password")
+                .desired_width(w),
+        );
+        if !confirm_on {
+            kit::attention_ring(ui, &r);
+        }
+        enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+        ui.add_space(4.0);
+        let b = kit::primary_button_on(ui, "Confirm", confirm_on);
+        confirm_left = b.rect.left();
+        if (b.clicked() || enter) && confirm_on {
+            *ask = Some(Ask::Confirm);
+        }
+        if kit::ghost_button(ui, "Close").on_hover_text("Close this password box and keep the approval open").clicked() {
+            *ask = Some(Ask::CancelConfirm);
+        }
+    });
+    if !confirm_on {
+        // directly under the waiting Confirm
+        ui.add_space(2.0);
+        ui.horizontal(|ui| {
+            ui.add_space((confirm_left - row_left).max(0.0));
+            kit::gated_reason(ui, "Type your password to send");
+        });
+    }
+    ui.add_space(6.0);
+    ui.add(egui::Label::new(theme::muted("Used once over the secure connection and never stored; good for five minutes of changes.").size(12.0)).wrap());
+    egui::Rect::from_min_max(egui::pos2(row_left, top), egui::pos2(ui.max_rect().right(), ui.cursor().top()))
 }

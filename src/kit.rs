@@ -36,25 +36,44 @@ pub fn primary_button(ui: &mut Ui, label: &str) -> egui::Response {
     )
 }
 
-/// [`primary_button`] with a visible waiting state: a gated action (one that cannot be taken until a
-/// required field is filled) must not look ready, and must not look broken either. The waiting face
-/// keeps the primary's shape and weight: an accent outline over a faint accent wash with the label in
-/// accent ink, drawn at full opacity (egui's disabled fade made it faint grey, weaker than the ghost
-/// button beside it). Pair it with [`gated_reason`], which names the missing step.
-pub fn primary_button_on(ui: &mut Ui, label: &str, on: bool) -> egui::Response {
-    if on {
+/// The primary at full strength in both themes. On the dark page the house accent is a pale mint
+/// that read as a weak, half-disabled button beside an outlined secondary; this fills it a
+/// full-strength green with white type there instead (the light theme's primary is unchanged).
+pub fn solid_primary(ui: &mut Ui, label: &str) -> egui::Response {
+    if !theme::is_dark() {
         return primary_button(ui, label);
     }
-    let wash = theme::accent_faded().lerp_to_gamma(theme::card(), 0.35);
-    let text = RichText::new(label).family(theme::bold_family()).color(theme::accent_col());
+    let fill = Color32::from_rgb(0x2f, 0x7a, 0x4b);
+    crate::pageshell::styled_button(
+        ui,
+        RichText::new(label).family(theme::bold_family()).color(Color32::WHITE),
+        fill,
+        fill.lerp_to_gamma(Color32::WHITE, 0.10),
+        fill.lerp_to_gamma(Color32::BLACK, 0.15),
+        Stroke::NONE,
+        36.0,
+    )
+}
+
+/// [`solid_primary`] with a visible waiting state: a gated action (one that cannot be taken until a
+/// required field is filled) must look unmistakably off. The waiting face is a flat muted fill with
+/// no outline and a low-contrast label: distinct from the enabled primary (no accent at all) and
+/// from a secondary (which is outlined, on the card's own fill, in ink). Pair it with
+/// [`gated_reason`] directly under it, which names the missing step.
+pub fn primary_button_on(ui: &mut Ui, label: &str, on: bool) -> egui::Response {
+    if on {
+        return solid_primary(ui, label);
+    }
+    let fill = theme::field().lerp_to_gamma(theme::rule(), if theme::is_dark() { 0.35 } else { 0.55 });
+    let text = RichText::new(label).family(theme::bold_family()).color(theme::muted_col().gamma_multiply(0.85));
     ui.scope(|ui| {
         ui.spacing_mut().button_padding = Vec2::new(18.0, 4.0);
         let w = &mut ui.visuals_mut().widgets;
         // a hover-only button is styled as "noninteractive" by egui, so that state gets the face too
         for state in [&mut w.noninteractive, &mut w.inactive, &mut w.hovered, &mut w.active] {
-            state.weak_bg_fill = wash;
-            state.bg_fill = wash;
-            state.bg_stroke = Stroke::new(1.5, theme::accent_col());
+            state.weak_bg_fill = fill;
+            state.bg_fill = fill;
+            state.bg_stroke = Stroke::NONE;
             state.expansion = 0.0;
             state.corner_radius = CornerRadius::same(12);
         }
@@ -64,14 +83,20 @@ pub fn primary_button_on(ui: &mut Ui, label: &str, on: bool) -> egui::Response {
     .inner
 }
 
-/// The one line beside a waiting [`primary_button_on`] that says what it waits for ("Type your
-/// password to send"). Muted ink at reading size with an info mark, so the gate reads as a step,
-/// not a styling accident. Shown only while the step is missing.
+/// Warning ink: an amber-brown that reads as "something is missing" without the alarm of red, at
+/// AA contrast on the card in both themes.
+pub fn warn_col() -> Color32 {
+    if theme::is_dark() { Color32::from_rgb(0xe8, 0xb8, 0x62) } else { Color32::from_rgb(0x8a, 0x55, 0x00) }
+}
+
+/// The one line under a waiting [`primary_button_on`] that says what it waits for ("Type your
+/// password to send"), in warning ink with a warning mark, so the gate reads as a step to take.
+/// Shown only while the step is missing.
 pub fn gated_reason(ui: &mut Ui, reason: &str) -> egui::Response {
     ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 5.0;
-        ui.label(RichText::new(egui_phosphor::regular::INFO).font(theme::icon_font(14.0)).color(theme::muted_col()));
-        ui.add(egui::Label::new(RichText::new(reason).size(12.5).color(theme::text_col())).wrap_mode(egui::TextWrapMode::Extend));
+        ui.spacing_mut().item_spacing.x = 6.0;
+        ui.label(RichText::new(egui_phosphor::regular::INFO).font(theme::icon_font(15.0)).color(warn_col()));
+        ui.add(egui::Label::new(RichText::new(reason).family(theme::bold_family()).size(12.5).color(warn_col())).wrap_mode(egui::TextWrapMode::Extend));
     })
     .response
 }
@@ -82,21 +107,30 @@ pub fn attention_ring(ui: &Ui, field: &egui::Response) {
     ui.painter().rect_stroke(field.rect.expand(1.5), CornerRadius::same(R_FIELD), Stroke::new(1.5, theme::accent_col()), StrokeKind::Outside);
 }
 
-/// A quiet scroll viewport: a thin muted handle set right against the content's edge with no track,
-/// for a list that scrolls inside a page that also scrolls (a heavy ink bar there competed with the
-/// page's own). The content keeps the page's own widget look.
+/// A quiet scroll viewport for a list that scrolls inside a page that also scrolls: the handle is
+/// hidden until the pointer is over the region (or drags it), then floats thin over the content's
+/// own right edge, inside the region. At rest the page shows one scroller per column, never a second
+/// rail in the gutter; the region says it continues with a "more below" cue instead.
 pub fn quiet_scroll_area<R>(ui: &mut Ui, area: egui::ScrollArea, add: impl FnOnce(&mut Ui) -> R) -> egui::scroll_area::ScrollAreaOutput<R> {
     ui.scope(|ui| {
         let saved = ui.style().clone();
         let s = &mut ui.spacing_mut().scroll;
-        *s = egui::style::ScrollStyle::solid();
+        *s = egui::style::ScrollStyle::floating();
         s.bar_width = 6.0;
-        s.bar_inner_margin = 4.0;
-        s.bar_outer_margin = 0.0;
+        s.floating_width = 4.0;
+        s.bar_inner_margin = 3.0;
         s.foreground_color = false;
+        s.bar_outer_margin = 5.0;
+        // hidden at rest and while the pointer merely crosses the region: it shows on the bar's
+        // own strip and while dragged
+        s.dormant_handle_opacity = 0.0;
+        s.active_handle_opacity = 0.0;
+        s.dormant_background_opacity = 0.0;
+        s.active_background_opacity = 0.0;
+        s.interact_background_opacity = 0.0;
         let v = ui.visuals_mut();
         v.extreme_bg_color = Color32::TRANSPARENT;
-        let handle = theme::muted_col().gamma_multiply(0.55);
+        let handle = theme::muted_col().gamma_multiply(0.7);
         v.widgets.inactive.bg_fill = handle;
         v.widgets.hovered.bg_fill = theme::muted_col();
         v.widgets.active.bg_fill = theme::muted_col();
