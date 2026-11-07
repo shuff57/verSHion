@@ -9,7 +9,7 @@ use super::mail::{MailKind, MailMessage, Mailer, Outbox};
 use super::notices::{AdminEvent, Notice, admin_alert, new_application_budget};
 use super::session::Ctx;
 use super::smtp::{MailEnv, SmtpMailer, send_to};
-use super::{account, admin, admin_suspend, device, session, signup, staff_domains, tokens};
+use super::{account, admin, admin_growth, admin_suspend, device, session, signup, staff_domains, tokens};
 use axum::Router;
 use axum::body::{Body, to_bytes};
 use axum::extract::State;
@@ -41,6 +41,8 @@ pub struct AuthState {
     pub domain_labels: Labels,
     /// `APPROVAL_DIGEST=1`: a daily digest even when nothing is overdue.
     pub approval_digest: bool,
+    /// The growth report's visit counts (Cloudflare Web Analytics, when configured).
+    pub visits: admin_growth::Visits,
 }
 
 pub fn system_now() -> i64 {
@@ -63,6 +65,7 @@ impl AuthState {
             export_extra: Box::new(|_, _| Map::new()),
             domain_labels: Box::new(staff_domains::labels),
             approval_digest: false,
+            visits: admin_growth::Visits::none(),
         }
     }
 }
@@ -99,7 +102,7 @@ fn methods_for(path: &str) -> Option<&'static [&'static str]> {
     let rest = path.strip_prefix(a)?.strip_prefix('/')?;
     let revoke = p.admin_revoke.trim_start_matches('/');
     Some(match rest {
-        "queue" | "proposals" | "audit" => &[GET],
+        "queue" | "proposals" | "audit" | "growth" => &[GET],
         "approve" | "reject" | "reject-bulk" | "confirm" | "cancel" | "suspend" | "restore" => &[POST],
         r if r == revoke => &[POST],
         "staff-domains" => &[GET, "PUT", "DELETE"],
@@ -146,6 +149,7 @@ fn run(s: &AuthState, method: &str, path: &str, h: &HeaderMap, query: &HashMap<S
             let labels: DomainLabels = &*s.domain_labels;
             match (method, rest) {
                 (GET, "queue") => admin_read::queue(&c, h, client, query, labels),
+                (GET, "growth") => admin_growth::growth(&c, h, client, query, &s.visits),
                 (GET, "proposals") => admin_suspend::proposals(&c, h, client),
                 (GET, "audit") => admin_read::audit_log(&c, h, client, query),
                 (GET, "staff-domains") => staff_domains::list(&c, h, client),
@@ -255,7 +259,7 @@ pub fn router(state: Arc<AuthState>) -> Router {
         .iter()
         .map(|s| s.to_string())
         .collect();
-    for rest in ["queue", "proposals", "audit", "approve", "reject", "reject-bulk", "confirm", "cancel", "suspend", "restore", "staff-domains"] {
+    for rest in ["queue", "growth", "proposals", "audit", "approve", "reject", "reject-bulk", "confirm", "cancel", "suspend", "restore", "staff-domains"] {
         paths.push(format!("{a}/{rest}"));
     }
     paths.push(format!("{a}{}", PATHS.admin_revoke));

@@ -158,6 +158,18 @@ async fn admin_routes_need_an_admin_and_read_through_the_query_string() {
 }
 
 #[tokio::test]
+async fn the_growth_report_is_routed_as_an_admin_read_and_signup_keeps_the_source_tag() {
+    let a = app();
+    let (s, _, b) = call(&a, req("GET", "/admin/growth?days=7", &[NATIVE], None)).await;
+    assert_eq!((s, b["error"].as_str()), (401, Some("unauthorized")), "signed out, refused like the queue");
+    assert_eq!(call(&a, req("POST", "/admin/growth", &[NATIVE], Some(json!({})))).await.0, 405, "a read only");
+    let body = json!({ "email": "t@school.org", "password": PW, "display_name": "T", "school": "S", "adult_school_employee": true, "src": "FB-Math" });
+    assert_eq!(call(&a, req("POST", "/auth/signup", &[NATIVE], Some(body))).await.0, 202);
+    let tag: Option<String> = a.state.db.lock().unwrap().query_row("SELECT signup_source FROM users WHERE email = 't@school.org'", [], |r| r.get(0)).unwrap();
+    assert_eq!(tag.as_deref(), Some("fb-math"));
+}
+
+#[tokio::test]
 async fn queued_admin_alerts_and_notices_are_delivered_without_touching_the_persons_mailer() {
     let a = app();
     let st = a.state.clone();
