@@ -3,6 +3,10 @@
 Turn anything into an exam — a pure-Rust desktop clone of [testparrot.com](https://www.testparrot.com/):
 question banks, printable exams, and one-shot AI conversion, all local-first.
 
+**Use it in a browser:** <https://vershion.lefthanddev.com>
+**Download the desktop build (Linux, alpha):** [releases](https://github.com/shuff57/verSHion/releases/latest) —
+one self-contained binary, 64-bit Linux with glibc 2.35+ (`docs/desktop-release.md`).
+
 - **egui + wgpu** (eframe 0.36) single binary; house theme (cream/terracotta, Source Serif/Sans).
 - **Question banks**: six question types (multiple choice, true/false, matching, fill-in-the-blank,
   short answer, multipart), topic tags, difficulty, points, images.

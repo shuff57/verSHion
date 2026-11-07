@@ -30,6 +30,10 @@ pub const DOCK_GAP: f32 = 16.0;
 /// Auto-dismiss time for toasts.
 pub const TOAST_MS: i64 = 5000;
 
+/// Where the downloadable desktop builds live (see `docs/desktop-release.md`). The `latest` alias
+/// never changes, so a finished release needs no code change here.
+pub const DESKTOP_RELEASES: &str = "https://github.com/shuff57/verSHion/releases/latest";
+
 /// A staged import file picked in the import dialog (in-RAM, not persisted).
 #[derive(Clone, Debug)]
 pub struct ImportFile {
@@ -844,6 +848,15 @@ impl crate::App {
                             )
                             .size(11.5),
                         );
+                        ui.add_space(2.0);
+                        // The downloadable desktop build. Quiet, under the footer line: the web app is the
+                        // default and the desktop one is an alternative, not the call to action.
+                        if ui
+                            .add(egui::Button::new(theme::accent("Get the desktop app for Linux").size(11.5)).frame(false))
+                            .clicked()
+                        {
+                            crate::platform::open_url(DESKTOP_RELEASES);
+                        }
                     });
                 }
             });
@@ -1416,6 +1429,9 @@ impl crate::App {
                 }
                 if crate::pageshell::outline(ui, &format!("{}  Reported issues", egui_phosphor::regular::LIST_BULLETS)).clicked() {
                     crate::platform::open_url(ISSUES);
+                }
+                if crate::pageshell::outline(ui, &format!("{}  Desktop app", egui_phosphor::regular::DOWNLOAD_SIMPLE)).clicked() {
+                    crate::platform::open_url(DESKTOP_RELEASES);
                 }
                 if crate::pageshell::outline(ui, &format!("{}  Report a bug", egui_phosphor::regular::BUG)).clicked() {
                     ctx.data_mut(|d| d.insert_temp(egui::Id::new("report_open"), true));
