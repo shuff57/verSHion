@@ -15,6 +15,7 @@
 //! student copy; the arrows stay too, named but not valued, and the readout turns into blank lines. The curve's shape
 //! does show whether the products sit above or below the reactants: that is the reading the question asks for, not a
 //! number handed over.
+use super::data::subscripts;
 use crate::figures::chart::{fmt, nice_step, ticks, Frame};
 use crate::figures::interact::Handle;
 use crate::figures::svg::{self, esc, Doc, Fills};
@@ -1014,6 +1015,8 @@ pub fn build(p: &Params) -> (String, Report) {
             let s = match p.0.get(key) { Some(Value::S(s)) => s.as_str(), _ => d };
             let s: String = s.chars().filter(|c| !c.is_control()).take(120).collect();
             let s = s.split_whitespace().collect::<Vec<_>>().join(" ");
+            // `N_2 + 3H_2` sets its subscripts; a label with no underscore is untouched
+            let s = subscripts(&s);
             (!s.is_empty()).then_some(s)
         };
         // the arrows' names (the values are in the working, so the student copy names the same arrows)
@@ -1528,6 +1531,22 @@ mod tests {
         out
     }
     fn all_text(svg: &str) -> String { texts(svg).into_iter().map(|t| t.text).collect::<Vec<_>>().join("\n") }
+
+    /// Typed `N_2 + 3H_2` drew the underscore literally; `_x` and `_{...}` now set a subscript, and a
+    /// label without an underscore is drawn exactly as before.
+    #[test]
+    fn typed_subscripts_in_level_labels() {
+        let t = all_text(&render_of(&[s("reactant_text", "N_2 + 3H_2"), s("product_text", "2NH_{3}(g) and Fe_{2}O_3")]));
+        assert!(t.contains("N₂ + 3H₂"), "{t}");
+        assert!(t.contains("2NH₃(g)") && t.contains("Fe₂O₃"), "{t}");
+        assert!(!t.contains('_'), "underscore left in {t}");
+        let plain = render_of(&[s("reactant_text", "N₂ + 3H₂"), s("product_text", "Products")]);
+        let typed = render_of(&[s("reactant_text", "N_2 + 3H_2"), s("product_text", "Products")]);
+        assert_eq!(plain, typed);
+        assert_eq!(subscripts("snake_case_ ok"), "snake_case_ ok");
+        assert_eq!(subscripts("A_{b c}"), "A_{b c}");
+        assert_eq!(subscripts("Reactants"), "Reactants");
+    }
 
     /// The ink box of a drawn text, as the placer measures it (left, right, top, bottom).
     fn ink_of(t: &T) -> Bx {

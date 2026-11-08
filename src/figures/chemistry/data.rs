@@ -352,6 +352,41 @@ pub fn sub(n: u32) -> String {
     n.to_string().chars().map(|c| ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'][c.to_digit(10).unwrap() as usize]).collect()
 }
 
+/// Typed `_x` / `_{...}` markup as Unicode subscripts (`N_2 + 3H_2` -> `N₂ + 3H₂`), so a label that is
+/// measured and wrapped as plain text still sets formulas properly. A group with a character that has
+/// no subscript form is left as typed; text with no `_` is returned unchanged.
+pub fn subscripts(s: &str) -> String {
+    fn one(c: char) -> Option<char> {
+        Some(match c {
+            '0'..='9' => ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'][c as usize - '0' as usize],
+            '+' => '₊', '-' | '\u{2212}' => '₋', '=' => '₌', '(' => '₍', ')' => '₎',
+            'a' => 'ₐ', 'e' => 'ₑ', 'h' => 'ₕ', 'i' => 'ᵢ', 'j' => 'ⱼ', 'k' => 'ₖ', 'l' => 'ₗ', 'm' => 'ₘ',
+            'n' => 'ₙ', 'o' => 'ₒ', 'p' => 'ₚ', 'r' => 'ᵣ', 's' => 'ₛ', 't' => 'ₜ', 'u' => 'ᵤ', 'v' => 'ᵥ', 'x' => 'ₓ',
+            _ => return None,
+        })
+    }
+    if !s.contains('_') { return s.to_string(); }
+    let ch: Vec<char> = s.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < ch.len() {
+        if ch[i] != '_' || i + 1 >= ch.len() { out.push(ch[i]); i += 1; continue; }
+        // the group: {...} or a single character
+        let (grp, next): (String, usize) = if ch[i + 1] == '{' {
+            match ch[i + 2..].iter().position(|&c| c == '}') {
+                Some(e) => (ch[i + 2..i + 2 + e].iter().collect(), i + 3 + e),
+                None => { out.push('_'); i += 1; continue; }
+            }
+        } else { (ch[i + 1].to_string(), i + 2) };
+        let mapped: Option<String> = if grp.is_empty() { None } else { grp.chars().map(one).collect() };
+        match mapped {
+            Some(m) => { out.push_str(&m); i = next; }
+            None => { out.push('_'); i += 1; }
+        }
+    }
+    out
+}
+
 pub fn config_text(subs: &[Sub], core: Option<&str>) -> String {
     let mut s = String::new();
     if let Some(c) = core { s.push_str(&format!("[{c}] ")); }
