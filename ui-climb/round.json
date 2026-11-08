@@ -1,0 +1,35 @@
+{
+  "ref_same_names": true,
+  "PAIRS": [
+    "welcome",
+    "settings",
+    "account"
+  ],
+  "P7": [
+    "welcome",
+    "settings",
+    "account"
+  ],
+  "MIRROR_D": [
+    "welcome",
+    "settings"
+  ],
+  "MIRROR_7": [
+    "welcome"
+  ],
+  "SOLO_L": [],
+  "SOLO_7": [],
+  "SOLO_D": [],
+  "CONTROLS": [
+    [
+      "exams",
+      "desktop",
+      "exams-light.png"
+    ],
+    [
+      "bank",
+      "desktop",
+      "bank-light.png"
+    ]
+  ]
+}

@@ -49,12 +49,26 @@ pub fn footer(ui: &mut Ui, text: &str) {
     if rest < h + 24.0 {
         return;
     }
-    ui.add_space(rest - h);
+    let top = ui.cursor().top();
+    let bottom = top + rest;
     let w = ui.available_width();
-    let (r, _) = ui.allocate_exact_size(Vec2::new(w, h), Sense::hover());
-    ui.painter().hline(r.x_range(), r.top() + 0.5, Stroke::new(1.0, theme::rule()));
+    // The floating "Report an issue" button sits in the bottom right corner. A rule ending short of it
+    // read as a clipped page floor; instead the footer is a band: a rule the full width of the column,
+    // and under it the note on the same line as the button, which closes the row on the right.
+    let (rule_y, text_y) = match crate::alphanote::corner_rect(ui.ctx()) {
+        Some(b) if b.left() < ui.max_rect().right() && b.top() < bottom + 1.0 && b.top() - 12.0 < bottom - h => {
+            (b.top() - 12.0, b.center().y)
+        }
+        _ => (bottom - h, bottom - h + 15.0),
+    };
+    if rule_y - top < 24.0 {
+        return;
+    }
+    ui.add_space(rule_y - top);
+    let (r, _) = ui.allocate_exact_size(Vec2::new(w, (bottom - rule_y).max(h)), Sense::hover());
+    ui.painter().hline(r.left()..=r.right(), r.top() + 0.5, Stroke::new(1.0, theme::rule()));
     ui.painter().text(
-        Pos2::new(r.left(), r.top() + 15.0),
+        Pos2::new(r.left(), text_y),
         Align2::LEFT_CENTER,
         text,
         egui::FontId::proportional(11.5),
@@ -70,16 +84,31 @@ pub const MEASURE: f32 = 700.0;
 
 /// A paragraph of prose, left aligned, wrapped at [`MEASURE`].
 pub fn prose(ui: &mut Ui, text: &str, size: f32) {
-    prose_at(ui, text, size, egui::Align::Min);
+    prose_at(ui, text, size, egui::Align::Min, MEASURE);
 }
 
 /// [`prose`] centred, for a hero.
 pub fn prose_centered(ui: &mut Ui, text: &str, size: f32) {
-    prose_at(ui, text, size, egui::Align::Center);
+    prose_at(ui, text, size, egui::Align::Center, MEASURE);
 }
 
-fn prose_at(ui: &mut Ui, text: &str, size: f32, align: egui::Align) {
-    let w = ui.available_width().min(MEASURE);
+/// [`prose_centered`] at a narrower measure, for a paragraph that must not run wider than what
+/// sits under it.
+pub fn prose_centered_at(ui: &mut Ui, text: &str, size: f32, measure: f32) {
+    prose_at(ui, text, size, egui::Align::Center, measure.min(MEASURE));
+}
+
+/// [`prose_centered_at`] in softened ink rather than muted brown, for a hero's lead line.
+pub fn prose_centered_ink(ui: &mut Ui, text: &str, size: f32, measure: f32) {
+    let w = ui.available_width().min(measure.min(MEASURE));
+    ui.allocate_ui_with_layout(Vec2::new(w, 0.0), egui::Layout::top_down(egui::Align::Center), |ui| {
+        ui.set_width(w);
+        ui.label(RichText::new(text).size(size).color(theme::ink().gamma_multiply(0.82)));
+    });
+}
+
+fn prose_at(ui: &mut Ui, text: &str, size: f32, align: egui::Align, measure: f32) {
+    let w = ui.available_width().min(measure);
     ui.allocate_ui_with_layout(Vec2::new(w, 0.0), egui::Layout::top_down(align), |ui| {
         ui.set_width(w);
         ui.label(theme::muted(text).size(size));
@@ -186,21 +215,45 @@ pub fn primary(ui: &mut Ui, text: &str) -> egui::Response {
     button(ui, text, rest, hover, press, Stroke::NONE, theme::on_accent_col())
 }
 
+/// The page's one call to action, a size up from `primary`: under a 50 px headline the 40 px
+/// button read as small and lightly weighted, so the page had no dominant action.
+pub fn primary_large(ui: &mut Ui, text: &str) -> egui::Response {
+    let (rest, hover, press) = accent_states();
+    ui.scope(|ui| {
+        ui.spacing_mut().button_padding = Vec2::new(30.0, 6.0);
+        let w = &mut ui.visuals_mut().widgets;
+        for (state, fill) in [(&mut w.inactive, rest), (&mut w.hovered, hover), (&mut w.active, press)] {
+            state.weak_bg_fill = fill;
+            state.bg_fill = fill;
+            state.bg_stroke = Stroke::NONE;
+            state.expansion = 0.0;
+            state.corner_radius = CornerRadius::same(14);
+        }
+        let t = RichText::new(text).family(theme::bold_family()).size(17.5).color(theme::on_accent_col());
+        ui.add(egui::Button::new(t).min_size(Vec2::new(240.0, 52.0))).on_hover_cursor(egui::CursorIcon::PointingHand)
+    })
+    .inner
+}
+
 /// The solid accent action, disabled when `on` is false: a Save that is always lit claims there is
 /// something to save when there is not, which is what the critics read as a missing state.
 pub fn primary_on(ui: &mut Ui, text: &str, on: bool) -> egui::Response {
     if on {
         return primary(ui, text);
     }
-    ui.add_enabled(
-        false,
+    // Not `add_enabled(false, ..)`: egui fades a disabled widget to half strength, and a beige pill
+    // at half strength on a cream card is what the critics called "barely visible as a control". A
+    // green tint went too far the other way (read as live, against the reason beside it). So: the
+    // neutral off look at full strength, a clear outline, and it only answers hover.
+    ui.add(
         egui::Button::new(
             RichText::new(text).family(theme::bold_family()).size(15.2).color(theme::muted_col()),
         )
         .fill(theme::field())
-        .stroke(Stroke::new(1.0, theme::border()))
+        .stroke(Stroke::new(1.0, theme::muted_col().gamma_multiply(0.55)))
         .corner_radius(CornerRadius::same(12))
-        .min_size(Vec2::new(0.0, 40.0)),
+        .min_size(Vec2::new(0.0, 40.0))
+        .sense(Sense::hover()),
     )
 }
 
@@ -262,19 +315,33 @@ pub fn select_section(ctx: &egui::Context, salt: &str, i: usize) {
 }
 
 pub fn sections(ui: &mut Ui, salt: &str, items: &[NavItem], content: impl FnOnce(&mut Ui, usize)) {
+    sections_aside(ui, salt, items, |_| {}, content);
+}
+
+/// [`sections`] with a small panel of its own: under the section list when the list is a column (the
+/// column used to stop after four links and leave the left half of the page as empty grid), and
+/// after the content when the list collapses into chips.
+pub fn sections_aside(ui: &mut Ui, salt: &str, items: &[NavItem], aside: impl FnOnce(&mut Ui), content: impl FnOnce(&mut Ui, usize)) {
     if items.is_empty() {
         return;
     }
     let ctx = ui.ctx().clone();
     let id = Id::new(("pageshell_sections", salt));
-    let mut selected = ctx.data(|d| d.get_temp::<usize>(id.with("sel"))).unwrap_or(0).min(items.len() - 1);
+    // VERSHION_SECTION opens a section by index on the first frame, for screenshots of a section other
+    // than the first (as VERSHION_SCREEN opens a screen).
+    let mut selected = ctx
+        .data(|d| d.get_temp::<usize>(id.with("sel")))
+        .unwrap_or_else(|| std::env::var("VERSHION_SECTION").ok().and_then(|v| v.parse().ok()).unwrap_or(0))
+        .min(items.len() - 1);
     if ui.available_width() >= NAV_COLLAPSE_W {
-        let content_w = (ui.available_width() - NAV_W - 28.0).clamp(280.0, 800.0);
+        let content_w = (ui.available_width() - NAV_W - 28.0).clamp(280.0, 960.0);
         ui.horizontal_top(|ui| {
             ui.spacing_mut().item_spacing.x = 28.0;
             ui.vertical(|ui| {
                 ui.set_width(NAV_W);
                 nav_column(ui, id, items, &mut selected);
+                ui.add_space(20.0);
+                aside(ui);
             });
             ui.vertical(|ui| {
                 ui.set_width(content_w);
@@ -291,6 +358,7 @@ pub fn sections(ui: &mut Ui, salt: &str, items: &[NavItem], content: impl FnOnce
         });
         ui.add_space(12.0);
         ease_in_content(ui, id, selected, content);
+        aside(ui);
     }
     ctx.data_mut(|d| d.insert_temp(id.with("sel"), selected));
 }

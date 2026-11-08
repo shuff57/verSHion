@@ -58,33 +58,42 @@ fn popup_modal(ctx: &egui::Context) -> Outcome {
     out
 }
 
+/// Where the corner button was drawn last frame, if it is on screen. A footer rule along the bottom of
+/// a page stops short of it instead of running underneath.
+pub fn corner_rect(ctx: &egui::Context) -> Option<egui::Rect> {
+    ctx.memory(|m| m.area_rect(egui::Id::new(CORNER_ID)))
+}
+
+const CORNER_ID: &str = "alpha_report_button";
+
 /// The corner button; true when pressed.
 fn corner_button(ctx: &egui::Context) -> bool {
     let mut pressed = false;
-    egui::Area::new(egui::Id::new("alpha_report_button"))
+    egui::Area::new(egui::Id::new(CORNER_ID))
         .order(egui::Order::Foreground)
         .anchor(Align2::RIGHT_BOTTOM, [-16.0, -16.0])
         .show(ctx, |ui| {
             egui::Frame::new()
                 .corner_radius(CornerRadius::same(255))
-                .shadow(egui::epaint::Shadow { offset: [0, 4], blur: 14, spread: 0, color: Color32::from_black_alpha(40) })
+                .shadow(egui::epaint::Shadow { offset: [0, 2], blur: 8, spread: 0, color: Color32::from_black_alpha(22) })
                 .show(ui, |ui| pressed = pill(ui));
         });
     pressed
 }
 
 fn pill(ui: &mut Ui) -> bool {
+    // It sits on every screen, so it is the quietest control on each: regular weight, muted, small.
+    // Bold ink at 13.5 px read as a second primary action beside the page's own.
     ui.add(
         egui::Button::new(
             RichText::new(format!("{}  Report an issue", egui_phosphor::regular::BUG))
-                .family(theme::bold_family())
-                .size(13.5)
-                .color(theme::ink()),
+                .size(12.0)
+                .color(theme::muted_col()),
         )
         .fill(theme::card())
         .stroke(Stroke::new(1.0, theme::border()))
         .corner_radius(CornerRadius::same(255))
-        .min_size(Vec2::new(0.0, 36.0)),
+        .min_size(Vec2::new(0.0, 30.0)),
     )
     .on_hover_text("Something broken or confusing? Tell us.")
     .clicked()

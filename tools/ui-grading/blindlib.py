@@ -25,6 +25,11 @@ FOOT7 = [(245, 752, 520, 797)]
 
 def masks(name, side, narrow):
     """The rectangles to blank for one side of one screen. `side` is 'ours' or 'ref'."""
+    # UC_NO_MASKS=1: both sides are this app (a before/after round), so there is no identity to hide.
+    # The OURS rectangles hid the old Q badge; with the badge gone they blank the Home icon instead,
+    # and the judges marked the rail "missing Home". Run make_blind and verify_blind with the same value.
+    if os.environ.get('UC_NO_MASKS') == '1':
+        return []
     # A before/after round (UC_REF_IS_OURS=1): the reference is this app too, so it gets our masks.
     if side == 'ours' or os.environ.get('UC_REF_IS_OURS') == '1':
         return OURS7 if narrow else OURS

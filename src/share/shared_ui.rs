@@ -144,67 +144,65 @@ impl crate::App {
     }
 }
 
-/// What an account is for, under the account card in Settings: a row of three cards when the column
-/// is wide enough, else the same three reasons stacked.
-pub(crate) fn account_reasons(ui: &mut Ui) {
-    if ui.available_width() >= 600.0 {
-        perks_row(ui);
-    } else {
-        account_perks(ui);
+/// The last two words held together, so a wrap never leaves one word alone on the last line.
+fn no_widow(body: &str) -> String {
+    match body.rsplit_once(' ') {
+        Some((head, last)) => format!("{head}{}{last}", '\u{a0}'),
+        None => body.to_string(),
     }
 }
 
-/// The same three reasons as a row of cards, for the page's lower half.
-fn perks_row(ui: &mut Ui) {
+/// What an account adds, inside the account card in Settings under a hairline: three frameless
+/// columns when the card is wide enough, else the same three stacked. As a row of bordered, rounded
+/// cards of their own they read as three clickable tiles that did nothing, and pushed the page's real
+/// actions down.
+pub(crate) fn account_reasons_inline(ui: &mut Ui) {
     use egui_phosphor::regular as ph;
     let perks = [
-        (ph::USERS_THREE, "Share with teachers", "Send banks to a circle of colleagues or to the public pool, and take theirs."),
+        (ph::USERS_THREE, "Share banks", "Send banks to a circle of colleagues, or publish them to the public pool."),
+        (ph::MAGNIFYING_GLASS, "Browse the pool", "Find questions other teachers have published and copy them into your banks."),
         (ph::SPARKLE, "Hosted AI", "Convert a PDF, scan or photo into questions with credits, nothing to set up."),
-        (ph::LOCK_SIMPLE, "Runs here", "Banks, exams, printing and the figures live on this machine, signed in or not."),
     ];
-    ui.columns(3, |cols| {
-        for (col, (icon, head, body)) in cols.iter_mut().zip(perks) {
-            crate::pageshell::card(col, |ui| {
-                ui.set_width(ui.available_width());
-                // Equal heights: the body copy wraps to a different number of lines in each card and
-                // the three used to end at three different heights, which the critics read as ragged.
-                ui.set_min_height(96.0);
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 10.0;
-                    let (r, _) = ui.allocate_exact_size(egui::Vec2::splat(32.0), egui::Sense::hover());
-                    ui.painter().circle_filled(r.center(), 16.0, theme::accent_faded());
-                    ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, icon, theme::icon_font(16.0), theme::accent_col());
-                    ui.add(egui::Label::new(theme::strong(head).size(13.0)).wrap());
+    crate::kit::small_caps(ui, "What an account adds");
+    ui.add_space(if ui.ctx().content_rect().width() < 900.0 { 10.0 } else { 14.0 });
+    // A narrow window: three compact columns. The list of rows below made the card tall enough to push
+    // the page's last card under the window's bottom edge.
+    if ui.ctx().content_rect().width() < 900.0 {
+        ui.columns(3, |cols| {
+            for (col, (icon, head, body)) in cols.iter_mut().zip(perks) {
+                // `columns` lays its cells out justified; left-aligned rows read as copy.
+                col.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 10.0;
+                        let (r, _) = ui.allocate_exact_size(egui::Vec2::splat(34.0), egui::Sense::hover());
+                        ui.painter().circle_filled(r.center(), 17.0, theme::accent_faded());
+                        ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, icon, theme::icon_font(17.0), theme::accent_col());
+                        ui.add(egui::Label::new(egui::RichText::new(head).family(theme::bold_family()).size(14.5).color(theme::ink())).wrap());
+                    });
+                    ui.add_space(6.0);
+                    ui.add(egui::Label::new(egui::RichText::new(no_widow(body)).size(13.0).color(theme::ink().gamma_multiply(0.78))).wrap());
                 });
-                ui.add_space(4.0);
-                ui.add(egui::Label::new(theme::muted(body).size(11.5)).wrap());
-            });
+            }
+        });
+        return;
+    }
+    // A list of rows, disc beside title and line: three short columns left the card shallow and the page
+    // below it a band of empty grid, and their copy broke into one-word last lines.
+    for (i, (icon, head, body)) in perks.into_iter().enumerate() {
+        if i > 0 {
+            ui.add_space(20.0);
         }
-    });
-}
-
-/// What an account is for, beside the sign-in forms: three short reasons, the last being that it
-/// is optional.
-fn account_perks(ui: &mut Ui) {
-    use egui_phosphor::regular as ph;
-    ui.add_space(4.0);
-    for (icon, head, body) in [
-        (ph::USERS_THREE, "Share with teachers", "Send banks to a circle of colleagues or to the public pool, and take theirs."),
-        (ph::SPARKLE, "Hosted AI", "Convert a PDF, scan or photo into questions with credits, nothing to set up."),
-        (ph::LOCK_SIMPLE, "Runs here", "Banks, exams, printing and the figures live on this machine, signed in or not."),
-    ] {
         ui.horizontal_top(|ui| {
-            let (r, _) = ui.allocate_exact_size(egui::Vec2::splat(40.0), egui::Sense::hover());
-            ui.painter().circle_filled(r.center(), 20.0, theme::accent_faded());
+            ui.spacing_mut().item_spacing.x = 16.0;
+            let (r, _) = ui.allocate_exact_size(egui::Vec2::splat(42.0), egui::Sense::hover());
+            ui.painter().circle_filled(r.center(), 21.0, theme::accent_faded());
             ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, icon, theme::icon_font(19.0), theme::accent_col());
-            ui.add_space(6.0);
             ui.vertical(|ui| {
-                ui.set_width(236.0);
-                ui.label(egui::RichText::new(head).family(theme::bold_family()).size(15.2).color(theme::ink()));
-                ui.label(theme::muted(body).size(13.5));
+                ui.spacing_mut().item_spacing.y = 4.0;
+                ui.add(egui::Label::new(egui::RichText::new(head).family(theme::bold_family()).size(15.5).color(theme::ink())).wrap());
+                ui.add(egui::Label::new(egui::RichText::new(no_widow(body)).size(14.0).color(theme::ink().gamma_multiply(0.8))).wrap());
             });
         });
-        ui.add_space(14.0);
     }
 }
 
