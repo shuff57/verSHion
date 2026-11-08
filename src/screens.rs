@@ -290,32 +290,18 @@ pub fn draw_nav_icon_k(
     hand::paint_glyph(painter, c, glyph, 16.0 * k, c_col);
 }
 
-/// The four how-it-works steps, shared by the welcome page and the help overlay.
+/// The four how-it-works steps, shared by the welcome page and the help overlay. Each body is short
+/// enough to read in two lines in a desktop welcome column (at three lines of prose each the critics
+/// read the panel as text squeezed into narrow columns).
 pub const STEPS: [(&str, &str); 4] = [
-    (
-        "Gather your questions",
-        "Type them in, or let the built-in AI write them out from an old test: a \
-         PDF, a scan or a screenshot.",
-    ),
-    (
-        "Keep them in a bank",
-        "Tag each question with a topic and a difficulty. Reuse a bank in as \
-         many exams as you like.",
-    ),
-    (
-        "Lay out the exam",
-        "Pull questions from any bank, shuffle them or their answers, and make \
-         a second version in a click.",
-    ),
-    (
-        "Print the real thing",
-        "Export the exam and its answer key as a PDF or Word file. Every copy \
-         you hand out is kept.",
-    ),
+    ("Gather your questions", "Type them in, or let the AI read an old PDF, scan or screenshot."),
+    ("Keep them in a bank", "Tag them by topic and difficulty. Reuse a bank in any exam."),
+    ("Lay out the exam", "Pull from any bank, shuffle, and make a second version in a click."),
+    ("Print the real thing", "Export the exam and its answer key as PDF or Word. Every copy is kept."),
 ];
 
 /// The welcome panel's width in a wide window: four columns wide enough that each step reads in
-/// two or three lines (at 920 each wrapped to five).
+/// two lines with the short STEPS copy (at 920 the old copy wrapped to five).
 const STEPS_W: f32 = 1000.0;
 
 /// One numbered how-it-works card.
