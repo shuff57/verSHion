@@ -3801,7 +3801,11 @@ const TRANSFORMATIONS: &[Faq] = &[
     },
     Faq {
         q: "Can I move the pre-image?",
-        a: "The pre-image is the fixed triangle A(1, 1), B(4, 1), C(1, 3); the transformation is what changes. The grid takes in whichever image the rule produces, including an enlargement by 3 or a translation of 8 units, so both shapes always fit.",
+        a: "Yes. Drag any of its vertices on the grid: it snaps to the nearest grid point and the image follows as you drag. Or type the vertices, one x, y pair per line: one pair is a point, more make a polygon of up to ten vertices, or an open path with Join the last vertex to the first turned off.",
+    },
+    Faq {
+        q: "How big is the grid?",
+        a: "It runs from -10 to 10 on both axes to start; set each axis's ends in the grid settings. A shape that runs past the range grows the grid, so nothing is cut off. Shrink the grid to the shapes for the tightest grid that holds both shapes and the origin.",
     },
 ];
 
