@@ -20,7 +20,7 @@ pub const ID: &str = "pie-chart";
 pub const MAX_CATS: usize = 20;
 /// Longest category name or label, in characters.
 pub const MAX_NAME: usize = 40;
-pub const MAX_TITLE: usize = 120;
+pub const MAX_TITLE: usize = 200;
 
 pub const VALUES: [&str; 3] = ["Counts", "Percents", "Degrees"];
 pub const ORDERS: [&str; 2] = ["As typed", "Largest first"];
@@ -44,7 +44,7 @@ const EXTRA: [&str; 14] = [
     "#8c564b", "#17becf", "#bcbd22", "#e377c2", "#7f7f7f", "#aec7e8", "#ffbb78", "#98df8a", "#ff9896", "#c5b0d5", "#c49c94", "#f7b6d2", "#9edae5", "#dbdb8d",
 ];
 /// Black-and-white fills before they repeat.
-const BW_N: usize = 12;
+const BW_N: usize = 20;
 
 pub fn def() -> FigureDef {
     FigureDef {
@@ -167,12 +167,34 @@ fn clip(s: &str, n: usize) -> String {
     s.chars().take(n).collect()
 }
 
-fn number(c: &str) -> Option<f64> {
-    let c = c.trim().trim_end_matches(['%', '\u{b0}']).trim();
+/// A number typed or pasted: thousands groups (1,200 or 1 200) are read when they are exactly
+/// three digits after the first group of one to three; anything else is not a number.
+fn any_number(c: &str) -> Option<f64> {
+    let c = c.trim().trim_end_matches(['%', '\u{b0}']).trim().replace('\u{2212}', "-");
     if c.is_empty() {
         return None;
     }
-    c.parse::<f64>().ok().filter(|v| v.is_finite() && *v >= 0.0 && *v <= 1e12)
+    let (sign, body) = match c.strip_prefix('-') {
+        Some(r) => ("-", r.trim()),
+        None => ("", c.as_str()),
+    };
+    let int = body.split('.').next().unwrap_or("");
+    let grouped = int.contains([',', ' ', '\u{a0}', '\u{202f}']);
+    let clean = if grouped {
+        let parts: Vec<&str> = int.split([',', ' ', '\u{a0}', '\u{202f}']).collect();
+        let ok = parts.len() >= 2 && (1..=3).contains(&parts[0].len()) && parts[1..].iter().all(|g| g.len() == 3) && parts.iter().all(|g| g.chars().all(|c| c.is_ascii_digit()));
+        if !ok {
+            return None;
+        }
+        format!("{}{}{}", sign, parts.concat(), &body[int.len()..])
+    } else {
+        format!("{sign}{body}")
+    };
+    clean.parse::<f64>().ok().filter(|v| v.is_finite() && v.abs() <= 1e12)
+}
+
+fn number(c: &str) -> Option<f64> {
+    any_number(c).filter(|v| *v >= 0.0)
 }
 
 /// The rows of `text`, and a note for each cell that was not a number (left as an empty sector).
@@ -183,22 +205,43 @@ pub fn parse(text: &str) -> (Vec<Row>, Vec<String>) {
             notes.push(format!("Only the first {MAX_CATS} categories are drawn."));
             break;
         }
-        let sep = line.contains(['\t', ',', ';']);
-        let (name, cell) = if sep {
+        let (name, cell, extra) = if line.contains('\t') {
             let cells = data::parse_table(line).into_iter().next().unwrap_or_default();
-            (cells.first().cloned().unwrap_or_default(), cells.get(1).cloned().unwrap_or_default())
-        } else if let Some((a, b)) = line.rsplit_once(char::is_whitespace).filter(|(_, b)| number(b).is_some()) {
-            (a.trim().to_string(), b.to_string())
+            let more = cells.iter().skip(2).any(|c| !c.is_empty());
+            (cells.first().cloned().unwrap_or_default(), cells.get(1).cloned().unwrap_or_default(), more)
+        } else if line.contains([',', ';']) {
+            let first = line.find([',', ';']).unwrap_or(0);
+            let (nm, rest) = (line[..first].trim().trim_matches('"').to_string(), line[first + 1..].trim());
+            // 1,200 typed with no space after the comma is one number with a thousands group
+            let one = rest.trim_matches('"');
+            if any_number(one).is_some() && !rest.contains(", ") && !rest.contains("; ") {
+                (nm, one.to_string(), false)
+            } else {
+                let cells = data::parse_table(line).into_iter().next().unwrap_or_default();
+                let more = cells.iter().skip(2).any(|c| !c.is_empty());
+                (cells.first().cloned().unwrap_or_default(), cells.get(1).cloned().unwrap_or_default(), more)
+            }
+        } else if let Some((a, b)) = line.rsplit_once(char::is_whitespace).filter(|(_, b)| any_number(b).is_some()) {
+            (a.trim().to_string(), b.to_string(), false)
         } else {
-            (line.to_string(), String::new())
+            (line.to_string(), String::new(), false)
         };
         let value = number(&cell);
-        if rows.is_empty() && value.is_none() && !cell.trim().is_empty() {
+        let typed = any_number(&cell);
+        if rows.is_empty() && typed.is_none() && !cell.trim().is_empty() {
             notes.push(format!("The first line (\"{}\", \"{}\") looks like column headings, so it is skipped.", clip(&name, MAX_NAME), clip(cell.trim(), MAX_NAME)));
             continue;
         }
-        if value.is_none() && !cell.trim().is_empty() {
+        if value.is_none() && typed.is_some() {
+            notes.push(format!("Line {}: {} cannot be negative, so {} is an empty sector.", n + 1, cell.trim(), clip(&name, MAX_NAME)));
+        } else if value.is_none() && !cell.trim().is_empty() {
             notes.push(format!("Line {}: \"{}\" is not a number, so {} is an empty sector.", n + 1, cell.trim(), clip(&name, MAX_NAME)));
+        }
+        if extra {
+            notes.push(format!("Line {}: more than a name and a value, so only the first two cells are used (write 1200 or 1 200, not 1, 200, for a thousand).", n + 1));
+        }
+        if name.chars().count() > MAX_NAME {
+            notes.push(format!("Line {}: the name is longer than {MAX_NAME} characters, so it is cut.", n + 1));
         }
         rows.push(Row { name: clip(&name, MAX_NAME), value });
     }
@@ -234,6 +277,9 @@ pub fn model(p: &Params) -> Model {
     };
     let mut share = vec![0.0; rows.len()];
     let mut rest = 0.0;
+    if sum <= 0.0 && nb < rows.len() {
+        notes.push("Every value is zero, so there is nothing to draw: the circle is left empty.".into());
+    }
     if whole > 0.0 && !rows.is_empty() {
         let used = if sum > whole * (1.0 + 1e-9) {
             notes.push(format!("The values add to {}, more than the whole ({}), so the sectors are scaled down to fit and none is left empty.", data::fmt_num(sum), data::fmt_num(whole)));
@@ -273,6 +319,9 @@ pub fn model(p: &Params) -> Model {
 pub fn warnings(p: &Params) -> Vec<String> {
     let m = model(p);
     let mut w = m.notes.clone();
+    if p.s("title_kind") == TITLES[1] && p.s("title").trim().chars().count() > MAX_TITLE {
+        w.push(format!("The title is longer than {MAX_TITLE} characters, so it is cut."));
+    }
     if m.unit != 0 && m.rows.iter().filter_map(|r| r.value).sum::<f64>() > 0.0 && m.blank[..m.real].iter().all(|b| !*b) {
         let sum: f64 = m.rows.iter().filter_map(|r| r.value).sum();
         if (sum - m.whole).abs() > 1e-6 {
@@ -292,6 +341,45 @@ fn num(v: f64, dec: usize) -> String {
         s = s.trim_end_matches('0').trim_end_matches('.').to_string();
     }
     s
+}
+
+/// Decimals every label of one kind uses in a chart: the most any of them needs (up to `max`),
+/// so "7%" never sits beside "5.5%".
+#[derive(Clone, Copy, Debug)]
+struct Decs {
+    pct: usize,
+    ang: usize,
+    val: usize,
+}
+
+fn places_needed(v: f64, max: usize) -> usize {
+    (0..=max).find(|d| {
+        let f = 10f64.powi(*d as i32);
+        ((v * f).round() / f - v).abs() < 1e-9
+    }).unwrap_or(max)
+}
+
+fn fixed(v: f64, d: usize) -> String {
+    let f = 10f64.powi(d as i32);
+    let r = (v * f).round() / f;
+    format!("{:.*}", d, if r == 0.0 { 0.0 } else { r })
+}
+
+fn decs(m: &Model, max: usize) -> Decs {
+    let mut d = Decs { pct: 0, ang: 0, val: 0 };
+    for i in 0..m.real {
+        if m.share[i] <= 1e-9 {
+            continue;
+        }
+        d.pct = d.pct.max(places_needed(m.share[i] * 100.0, max));
+        d.ang = d.ang.max(places_needed(m.share[i] * 360.0, max));
+        if let Some(v) = m.rows[i].value {
+            d.val = d.val.max(places_needed(v, max));
+        } else {
+            d.val = d.val.max(places_needed(m.share[i] * m.whole, max));
+        }
+    }
+    d
 }
 
 /// A share of the circle as a reduced fraction (denominator up to 720), or `None`.
@@ -314,19 +402,19 @@ pub fn fraction(share: f64) -> Option<String> {
 
 /// The chart's text for one sector: the lines of its label under `mode`. `computed` is false for
 /// an empty sector on a student copy, which keeps only its name.
-fn lines_for(m: &Model, i: usize, mode: &str, dec: usize, computed: bool) -> Vec<String> {
+fn lines_for(m: &Model, i: usize, mode: &str, dec: Decs, computed: bool) -> Vec<String> {
     let share = m.share[i];
     let name = m.rows[i].name.clone();
     let value = || -> String {
         let v = m.rows[i].value.unwrap_or(share * m.whole);
         match m.unit {
-            1 => format!("{}%", num(v, dec)),
-            2 => format!("{}\u{b0}", num(v, dec)),
-            _ => num(v, dec),
+            1 => format!("{}%", fixed(v, dec.val)),
+            2 => format!("{}\u{b0}", fixed(v, dec.val)),
+            _ => fixed(v, dec.val),
         }
     };
-    let percent = || format!("{}%", num(share * 100.0, dec));
-    let angle = || format!("{}\u{b0}", num(share * 360.0, dec));
+    let percent = || format!("{}%", fixed(share * 100.0, dec.pct));
+    let angle = || format!("{}\u{b0}", fixed(share * 360.0, dec.ang));
     let frac = || fraction(share).unwrap_or_else(|| percent());
     let named = |x: String| if computed { vec![name.clone(), x] } else { vec![name.clone()] };
     let only = |x: String| if computed { vec![x] } else { vec![] };
@@ -371,17 +459,9 @@ fn hex_dark(hex: &str) -> bool {
 fn bw(i: usize) -> Paint {
     match i % BW_N {
         0 => Paint { css: BW_WASH.into(), kind: LIGHT },
-        1 => Paint { css: "url(#pie-p1)".into(), kind: PATTERN },
-        2 => Paint { css: "url(#pie-p2)".into(), kind: PATTERN },
-        3 => Paint { css: "url(#pie-p3)".into(), kind: PATTERN },
-        4 => Paint { css: "url(#pie-p4)".into(), kind: PATTERN },
         5 => Paint { css: BW_MID.into(), kind: LIGHT },
-        6 => Paint { css: "url(#pie-p5)".into(), kind: PATTERN },
-        7 => Paint { css: "url(#pie-p6)".into(), kind: PATTERN },
-        8 => Paint { css: "url(#pie-p7)".into(), kind: PATTERN },
-        9 => Paint { css: "url(#pie-p8)".into(), kind: PATTERN },
-        10 => Paint { css: "url(#pie-p9)".into(), kind: PATTERN },
-        _ => Paint { css: BW_DARK.into(), kind: DARK },
+        11 => Paint { css: BW_DARK.into(), kind: DARK },
+        i => Paint { css: format!("url(#pie-p{i})"), kind: PATTERN },
     }
 }
 
@@ -418,23 +498,36 @@ fn named(tok: &str, print: bool) -> Option<Paint> {
 }
 
 fn patterns() -> String {
-    let line = |d: &str| format!(r##"<path d="{d}" stroke="#444" stroke-width="1.3" fill="none"/>"##);
+    let line = |d: &str, w: f64| format!(r##"<path d="{d}" stroke="#444" stroke-width="{w}" fill="none"/>"##);
     let fwd = "M-2,2 l4,-4 M0,8 l8,-8 M6,10 l4,-4";
     let back = "M-2,6 l4,4 M0,0 l8,8 M6,-2 l4,4";
-    let pats = [
-        line(fwd),
-        r##"<circle cx="2" cy="2" r="1.3" fill="#444"/><circle cx="6" cy="6" r="1.3" fill="#444"/>"##.to_string(),
-        format!("{}{}", line(fwd), line(back)),
-        line(back),
-        line("M0,4 h8"),
-        line("M4,0 v8"),
-        r##"<circle cx="4" cy="4" r="2.4" fill="#444"/>"##.to_string(),
-        r##"<path d="M0,8 l8,-8 M-1,1 l2,-2 M7,9 l2,-2" stroke="#444" stroke-width="2.6" fill="none"/>"##.to_string(),
-        r##"<rect x="1" y="1" width="3" height="3" fill="#444"/><rect x="5" y="5" width="3" height="3" fill="#444"/>"##.to_string(),
+    let dfwd = "M-2,2 l4,-4 M-2,6 l8,-8 M-2,10 l12,-12 M2,10 l8,-8 M6,10 l4,-4";
+    let dback = "M-2,6 l4,4 M-2,2 l8,8 M-2,-2 l12,12 M2,-2 l8,8 M6,-2 l4,4";
+    let dots = r##"<circle cx="2" cy="2" r="1.3" fill="#444"/><circle cx="6" cy="6" r="1.3" fill="#444"/>"##.to_string();
+    let sq = r##"<rect x="1" y="1" width="3" height="3" fill="#444"/><rect x="5" y="5" width="3" height="3" fill="#444"/>"##.to_string();
+    // (index into `bw`, background, marks)
+    let pats: Vec<(usize, &str, String)> = vec![
+        (1, "#fff", line(fwd, 1.3)),
+        (2, "#fff", dots.clone()),
+        (3, "#fff", format!("{}{}", line(fwd, 1.3), line(back, 1.3))),
+        (4, "#fff", line(back, 1.3)),
+        (6, "#fff", line("M0,4 h8", 1.3)),
+        (7, "#fff", line("M4,0 v8", 1.3)),
+        (8, "#fff", r##"<circle cx="4" cy="4" r="2.4" fill="#444"/>"##.to_string()),
+        (9, "#fff", line("M0,8 l8,-8 M-1,1 l2,-2 M7,9 l2,-2", 2.6)),
+        (10, "#fff", sq),
+        (12, "#fff", line("M0,1 h8 M0,3 h8 M0,5 h8 M0,7 h8", 1.0)),
+        (13, "#fff", line("M1,0 v8 M3,0 v8 M5,0 v8 M7,0 v8", 1.0)),
+        (14, "#fff", line(dfwd, 1.0)),
+        (15, "#fff", line(dback, 1.0)),
+        (16, BW_WASH, line(fwd, 1.3)),
+        (17, BW_WASH, dots),
+        (18, BW_WASH, format!("{}{}", line(fwd, 1.3), line(back, 1.3))),
+        (19, BW_WASH, line("M0,4 h8", 1.6)),
     ];
     let mut out = String::new();
-    for (i, fg) in pats.iter().enumerate() {
-        out.push_str(&format!(r##"<pattern id="pie-p{}" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#fff"/>{fg}</pattern>"##, i + 1));
+    for (i, bg, fg) in pats {
+        out.push_str(&format!(r##"<pattern id="pie-p{i}" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="{bg}"/>{fg}</pattern>"##));
     }
     out
 }
@@ -449,7 +542,7 @@ struct Placed {
     y: f64,
     anchor: &'static str,
     /// From the rim, for an outside label.
-    leader: Option<(f64, f64)>,
+    leader: Option<((f64, f64), (f64, f64))>,
     plate: bool,
     white: bool,
     w: f64,
@@ -470,7 +563,8 @@ fn render(p: &Params) -> String {
     let ink = if print { "#000000" } else { INK };
     let n = m.rows.len();
     let look = p.s("look");
-    let dec = p.i("decimals").clamp(0, 3) as usize;
+    let dec_max = p.i("decimals").clamp(0, 3) as usize;
+    let dec = decs(&m, dec_max);
     let mode = p.s("labels");
 
     // drawn order: typed, or largest first with the empty sectors last
@@ -499,7 +593,7 @@ fn render(p: &Params) -> String {
         if m.blank[i] && (!key_on || i >= m.real || m.share[i] <= 1e-9) { Paint { css: "#ffffff".into(), kind: LIGHT } } else { paint[i].clone() }
     };
 
-    let all_blank = n == 0 || m.blank.iter().all(|b| *b);
+    let all_blank = n == 0 || m.blank.iter().all(|b| *b) || m.share.iter().all(|s| *s <= 1e-9);
     let single = n > 0 && !all_blank && m.share.iter().any(|s| *s > 0.9999);
     let mut starts = vec![0.0; n];
     let mut acc = 0.0;
@@ -548,10 +642,10 @@ fn render(p: &Params) -> String {
                 let right = sx >= 0.0;
                 let (x0, y0) = (cx0 + R * sx, cy0 + R * sy);
                 let (x1, y1) = (cx0 + (R + 12.0) * sx, cy0 + (R + 12.0) * sy);
-                let joined = if lines.len() > 1 { vec![lines.join(" ")] } else { lines };
+                let joined = if lines.len() > 1 { vec![lines.join(if mode == "Value and percent" { ", " } else { " " })] } else { lines };
                 let w = if blank_line { w } else { tw(&joined[0.min(joined.len().saturating_sub(1))], fl) };
                 let hx = x1 + if right { 6.0 } else { -6.0 };
-                placed.push(Placed { lines: joined, blank: blank_line, x: hx, y: y1 + fl * 0.35, anchor: if right { "start" } else { "end" }, leader: Some((x0, y0)), plate: false, white: false, w });
+                placed.push(Placed { lines: joined, blank: blank_line, x: hx, y: y1 + fl * 0.35, anchor: if right { "start" } else { "end" }, leader: Some(((x0, y0), (x1, y1))), plate: false, white: false, w });
             }
         }
     }
@@ -608,8 +702,6 @@ fn render(p: &Params) -> String {
     let pad = 20.0;
     let title_text = if p.s("title_kind") == TITLES[1] { clip(p.s("title").trim(), MAX_TITLE) } else { String::new() };
     let title_blank = p.s("title_kind") == TITLES[2];
-    let title_h = if title_text.is_empty() && !title_blank { 0.0 } else { ft + 18.0 };
-    let title_w = if title_blank { 280.0 * k } else { tw(&title_text, ft) * 1.1 + 6.0 };
 
     let mut content_w = hi_x - lo_x;
     let mut key_below_rows: Vec<Vec<(usize, String, f64)>> = Vec::new();
@@ -617,6 +709,15 @@ fn render(p: &Params) -> String {
     if key == KEYS[1] && !names.is_empty() {
         content_w += key_gap + key_w;
     }
+    // a long title wraps to the width of the figure (bold type is wider than the measure)
+    let title_lines: Vec<String> = if title_text.is_empty() {
+        Vec::new()
+    } else {
+        crate::figures::stats::bar::wrap(&title_text, content_w.max(440.0 * k), ft * 1.1, true).unwrap_or_else(|| vec![title_text.clone()])
+    };
+    let title_line_h = ft * 1.25;
+    let title_h = if title_blank { ft + 18.0 } else if title_lines.is_empty() { 0.0 } else { title_lines.len() as f64 * title_line_h + 14.0 };
+    let title_w = if title_blank { 280.0 * k } else { title_lines.iter().map(|l| tw(l, ft) * 1.1 + 6.0).fold(0.0, f64::max) };
     let mut w_total = (content_w + 2.0 * pad).max(title_w + 2.0 * pad);
     if key == KEYS[2] && !names.is_empty() {
         let avail = (w_total - 2.0 * pad).max(300.0);
@@ -654,8 +755,10 @@ fn render(p: &Params) -> String {
     if title_blank {
         let y = pad + ft * 0.9;
         d.line(w_total / 2.0 - title_w / 2.0, y, w_total / 2.0 + title_w / 2.0, y, ink, 1.4);
-    } else if !title_text.is_empty() {
-        text(&mut d, w_total / 2.0, pad + ft * 0.9, ft, "middle", &title_text, ink, true);
+    } else {
+        for (j, l) in title_lines.iter().enumerate() {
+            text(&mut d, w_total / 2.0, pad + ft * 0.9 + j as f64 * title_line_h, ft, "middle", l, ink, true);
+        }
     }
 
     let outline = if print || look != "Color" { ink } else { "#ffffff" };
@@ -691,9 +794,10 @@ fn render(p: &Params) -> String {
     for pl in &placed {
         let (x, y) = (cx + pl.x, cy + pl.y);
         let txt_ink = if pl.white { "#ffffff" } else { ink };
-        if let Some((x0, y0)) = pl.leader {
+        if let Some(((x0, y0), (x1, y1))) = pl.leader {
+            // out from the sector's own rim point, then across to its label
             let ex = if pl.anchor == "start" { pl.x - 3.0 } else { pl.x + 3.0 };
-            d.line(cx + x0, cy + y0, cx + ex, cy + pl.y - fl * 0.35, ink, 1.0);
+            d.polyline(&[(cx + x0, cy + y0), (cx + x1, cy + y1), (cx + ex, cy + pl.y - fl * 0.35)], ink, 1.0);
         }
         if pl.blank {
             let yy = y;
@@ -742,10 +846,20 @@ fn render(p: &Params) -> String {
         }
     }
 
+    // describe what is drawn: on the student copy only the given values, never a hidden one
     let desc = if all_blank {
         "A blank circle for a pie chart".to_string()
     } else {
-        let parts: Vec<String> = idx.iter().map(|&i| format!("{} {}", m.rows[i].name, num(m.share[i] * 100.0, dec))).collect();
+        let mut parts: Vec<String> = Vec::new();
+        for &i in &idx {
+            if i >= m.real {
+                parts.push("an empty sector".into());
+            } else if m.blank[i] && (!key_on || m.share[i] <= 1e-9) {
+                parts.push(format!("{} (empty)", m.rows[i].name));
+            } else {
+                parts.push(format!("{} {}", m.rows[i].name, num(m.share[i] * 100.0, dec_max)));
+            }
+        }
         format!("Pie chart, sectors in percent: {}", parts.join(", "))
     };
     d.describe("Pie chart", &desc);

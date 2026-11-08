@@ -172,18 +172,96 @@ fn a_heading_row_is_skipped() {
 }
 
 #[test]
-fn a_sector_over_half_labels_inside_and_a_long_title_fits() {
+fn a_sector_over_half_labels_inside() {
     let t = svg(&[("data", s("Big, 80\nSmall, 20")), ("labels", s("Name and percent"))]);
-    assert!(!t.contains("<line"), "no leader line: the big sector's label is inside");
-    let title = "A very long and rather wordy chart title that is bold";
-    let t = svg(&[("title_kind", s("Chart title")), ("title", s(title))]);
-    let w: f64 = t.split("width=\"").nth(1).unwrap().split('"').next().unwrap().parse().unwrap();
-    assert!(w > crate::figures::stats::bar::tw(title, 22.0) * 1.05);
+    assert!(!t.contains("<polyline"), "no leader line: the big sector's label is inside");
 }
 
 #[test]
-fn outside_labels_stay_clear_of_the_pie_with_many_tiny_sectors() {
+fn a_long_title_wraps_to_the_figure_and_the_image_stays_narrow() {
+    let title = "Favourite sports of the sixty students in every one of the four classes that took part in the spring survey of the whole school";
+    let t = svg(&[("title_kind", s("Chart title")), ("title", s(title))]);
+    let w: f64 = t.split("width=\"").nth(1).unwrap().split('"').next().unwrap().parse().unwrap();
+    assert!(w < 900.0, "width {w}");
+    assert!(t.matches("font-weight=\"600\"").count() >= 2, "wrapped onto several lines");
+    let long = "x".repeat(MAX_TITLE + 5);
+    assert!(warnings(&params(&[("title_kind", s("Chart title")), ("title", s(&long))])).iter().any(|w| w.contains("cut")));
+}
+
+#[test]
+fn outside_labels_have_a_leader_each() {
     let data: String = (1..=20).map(|i| format!("Name number {i}, {}\n", if i % 2 == 0 { 1 } else { 40 })).collect();
     let t = svg(&[("data", s(&data)), ("labels", s("Name and percent"))]);
-    assert!(t.starts_with("<svg") && t.contains("<line"));
+    assert!(t.starts_with("<svg") && t.matches("<polyline").count() >= 10);
+}
+
+#[test]
+fn the_student_copy_description_never_leaks_a_hidden_value() {
+    let over = |show: bool| {
+        vec![("data", s("Soccer, 20\nBasketball\nTennis, 10")), ("total", s("60")), ("show_answers", Value::B(show))]
+    };
+    let desc = |show: bool| {
+        let t = svg(&over(show));
+        t.split("<desc>").nth(1).unwrap().split("</desc>").next().unwrap().to_string()
+    };
+    let stu = desc(false);
+    assert!(stu.contains("Soccer 33.3") && stu.contains("Tennis 16.7") && stu.contains("Basketball (empty)"), "{stu}");
+    assert!(!stu.contains("50"), "{stu}");
+    assert!(desc(true).contains("Basketball 50"));
+    // two empty rows: no per-row values, an unnamed remainder is just an empty sector
+    let two = svg(&[("data", s("Soccer, 20\nBasketball\nHockey")), ("total", s("60")), ("show_answers", Value::B(true))]);
+    let d = two.split("<desc>").nth(1).unwrap().split("</desc>").next().unwrap();
+    assert!(d.contains("Basketball (empty)") && d.contains("Hockey (empty)") && d.contains("an empty sector"), "{d}");
+    assert!(!d.contains("Basketball 0") && !d.contains("66.7"), "{d}");
+}
+
+#[test]
+fn thousands_groups_are_read_and_never_silently_truncated() {
+    let (rows, notes) = parse("Apples\t1,200\nPears\t2 300\nPlums\t2,300");
+    assert_eq!(rows.iter().map(|r| r.value).collect::<Vec<_>>(), vec![Some(1200.0), Some(2300.0), Some(2300.0)]);
+    assert!(notes.is_empty(), "{notes:?}");
+    let (rows, _) = parse("Apples, 1,200\nPears, \"2,300\"");
+    assert_eq!(rows[0].value, Some(1200.0));
+    assert_eq!(rows[1].value, Some(2300.0));
+    let (rows, notes) = parse("Apples, 1, 200");
+    assert_eq!(rows[0].value, Some(1.0));
+    assert!(notes.iter().any(|n| n.contains("only the first two cells")), "{notes:?}");
+}
+
+#[test]
+fn a_negative_is_refused_with_a_note_and_is_not_a_heading() {
+    let (rows, notes) = parse("A, -5\nB, 3");
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].value, None);
+    assert!(notes.iter().any(|n| n.contains("cannot be negative")) && !notes.iter().any(|n| n.contains("headings")), "{notes:?}");
+}
+
+#[test]
+fn all_zero_values_still_draw_an_empty_circle_and_say_so() {
+    let t = svg(&[("data", s("A, 0\nB, 0"))]);
+    assert!(t.contains("<circle"), "{t}");
+    assert!(warnings(&params(&[("data", s("A, 0\nB, 0"))])).iter().any(|w| w.contains("zero")));
+}
+
+#[test]
+fn twenty_black_and_white_fills_are_all_different() {
+    let set: std::collections::BTreeSet<String> = (0..20).map(|i| bw_at(i, 20).css).collect();
+    assert_eq!(set.len(), 20);
+    let data: String = (1..=20).map(|i| format!("C{i}, 1\n")).collect();
+    let t = svg(&[("data", s(&data)), ("look", s("Black and white"))]);
+    for css in &set {
+        if let Some(id) = css.strip_prefix("url(#") {
+            let id = id.trim_end_matches(')');
+            assert!(t.contains(&format!("id=\"{id}\"")), "{id} defined");
+        }
+    }
+}
+
+#[test]
+fn one_decimal_count_per_chart_and_a_readable_value_and_percent_outside() {
+    let t = svg(&[("data", s("A, 7\nB, 5.5\nC, 87.5")), ("values", s("Percents")), ("labels", s("Percent"))]);
+    assert!(t.contains(">7.0%<") && t.contains(">5.5%<"), "{t}");
+    let data: String = (1..=20).map(|i| format!("N{i}, {}\n", if i % 2 == 0 { 1 } else { 40 })).collect();
+    let t = svg(&[("data", s(&data)), ("labels", s("Value and percent"))]);
+    assert!(t.contains(">1, "), "joined with a separator: {t}");
 }
