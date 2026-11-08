@@ -1,0 +1,41 @@
+{
+ "round": 17,
+ "figure": "transformations",
+ "capability": "cap-05a",
+ "hypothesis": "Batch 2 transformations editor: cap-05a built and checked; evidence changes:{\"x_from\":-5,\"x_to\":15,\"y_from\":-3,\"y_to\":8}",
+ "started_at": "2026-11-08T15:26:58",
+ "git": "b2b1b80",
+ "before": {
+  "figure": 58.2,
+  "pooled": 77.0
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "map.json changed since freeze",
+  "not-doing.md changed since freeze",
+  "micropipette-reading: capability list or classes changed since freeze (denominator moved)",
+  "spring-scale: capability list or classes changed since freeze (denominator moved)",
+  "ledgers outside the frozen set are not scored: dna-protein-synthesis, osmosis, pie-chart"
+ ],
+ "closed": "2026-11-08T15:26:58",
+ "after": {
+  "figure": 60.7,
+  "pooled": 77.0
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "control",
+  "renders": [
+   {
+    "token": "changes:{\"x_from\":-5,\"x_to\":15,\"y_from\":-3,\"y_to\":8}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/7385f9492e246c0f.png"
+   }
+  ]
+ },
+ "checker": "pass: an x range of −5..15 and y range of −3..8 render as set, and a far-out image grows the grid to 50 without clipping.",
+ "result": "hit",
+ "evidence": "transform tests 25/25, interact 5/5 incl. round-trip, faq, census (transformations ids only); task run: reference 12 actions, ours before not finishable, after 3; checker hand-checked 4 rotations, 2 dilations, 4 offset reflections, a translation",
+ "next": "transformations cap-02a chained transformations"
+}

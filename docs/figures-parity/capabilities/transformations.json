@@ -7,22 +7,22 @@
    "id": "cap-01a",
    "text": "Click the preimage's vertices onto the grid",
    "class": "editor",
-   "evidence": "",
-   "note": "No handles on this figure."
+   "evidence": "handle:click:click it to open the shape",
+   "note": "Built in batch 2, round 13 (2026-11-08). No handles on this figure."
   },
   {
    "id": "cap-01b",
    "text": "Type the preimage's vertices (a polygon of up to 10)",
    "class": "core",
-   "evidence": "",
-   "note": "The preimage is a fixed triangle; no vertex parameter."
+   "evidence": "changes:{\"pre\":\"0, 0\\n3, 0\\n4, 2\\n2, 4\\n-1, 3\"}",
+   "note": "Built in batch 2, round 15 (2026-11-08). The preimage is a fixed triangle; no vertex parameter."
   },
   {
    "id": "cap-01c",
    "text": "Make the preimage a single point or an open path",
    "class": "core",
-   "evidence": "",
-   "note": "No parameter."
+   "evidence": "changes:{\"pre\":\"0, 0\\n3, 0\\n4, 2\",\"closed\":false} + changes:{\"pre\":\"2, 3\"}",
+   "note": "Built in batch 2, round 16 (2026-11-08). No parameter."
   },
   {
    "id": "cap-01d",
@@ -56,8 +56,8 @@
    "id": "cap-02d",
    "text": "Reflect over any line x = a, y = a or y = ±x + a",
    "class": "core",
-   "evidence": "",
-   "note": "axis offers the two axes and y = ±x only."
+   "evidence": "changes:{\"op\":\"Reflect\",\"axis\":\"the line y = x + a\",\"line_a\":2}",
+   "note": "Built in batch 2, round 12 (2026-11-08). axis offers the two axes and y = ±x only."
   },
   {
    "id": "cap-02e",
@@ -70,15 +70,15 @@
    "id": "cap-02f",
    "text": "Rotate clockwise",
    "class": "control",
-   "evidence": "",
-   "note": "Only anticlockwise turns are offered; 270° anticlockwise lands the same image as 90° clockwise, but the rule is written anticlockwise."
+   "evidence": "changes:{\"op\":\"Rotate\",\"angle\":\"90 degrees clockwise\",\"cx\":2,\"cy\":-1}",
+   "note": "Built in batch 2, round 10 (2026-11-08). Only anticlockwise turns are offered; 270° anticlockwise lands the same image as 90° clockwise, but the rule is written anticlockwise."
   },
   {
    "id": "cap-02g",
    "text": "Rotate about any point",
    "class": "core",
-   "evidence": "",
-   "note": "Rotation is about the origin only."
+   "evidence": "changes:{\"op\":\"Rotate\",\"cx\":2,\"cy\":-1}",
+   "note": "Built in batch 2, round 9 (2026-11-08). Rotation is about the origin only."
   },
   {
    "id": "cap-02h",
@@ -91,8 +91,8 @@
    "id": "cap-02i",
    "text": "Dilate from any center",
    "class": "core",
-   "evidence": "",
-   "note": "No center parameter."
+   "evidence": "changes:{\"op\":\"Dilate\",\"cx\":-2,\"cy\":1}",
+   "note": "Built in batch 2, round 11 (2026-11-08). No center parameter."
   },
   {
    "id": "cap-02j",
@@ -196,8 +196,8 @@
    "id": "cap-05a",
    "text": "Set each axis's range",
    "class": "control",
-   "evidence": "",
-   "note": "The grid fits the figure; no range parameter."
+   "evidence": "changes:{\"x_from\":-5,\"x_to\":15,\"y_from\":-3,\"y_to\":8}",
+   "note": "Built in batch 2, round 17 (2026-11-08). The grid fits the figure; no range parameter."
   },
   {
    "id": "cap-05b",
@@ -238,15 +238,15 @@
    "id": "cap-i01",
    "text": "Drag a preimage vertex on the grid to move it",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. The page says: drag a vertex to move it. No handles at our opening state."
+   "evidence": "handle:drag:Drag vertex C to a grid point",
+   "note": "Built in batch 2, round 8 (2026-11-08). From the page controls, not the bullets. The page says: drag a vertex to move it. No handles at our opening state."
   },
   {
    "id": "cap-i02",
    "text": "Click on the grid to set a translation, with the image following the pointer",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. The page says: A translation follows the pointer: click where the first vertex should go. cap-02j covers a line or center, not a translation."
+   "evidence": "handle:click:Click where A′ should go to set the translation",
+   "note": "Built in batch 2, round 14 (2026-11-08). From the page controls, not the bullets. The page says: A translation follows the pointer: click where the first vertex should go. cap-02j covers a line or center, not a translation."
   }
  ]
 }

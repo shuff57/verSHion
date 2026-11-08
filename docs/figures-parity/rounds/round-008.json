@@ -1,0 +1,35 @@
+{
+ "round": 8,
+ "figure": "transformations",
+ "capability": "cap-i01",
+ "hypothesis": "Batch 2 transformations editor: cap-i01 built and checked; evidence handle:drag:Drag vertex C to a grid point",
+ "started_at": "2026-11-08T15:26:52",
+ "git": "b2b1b80",
+ "before": {
+  "figure": 28.7,
+  "pooled": 76.3
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "map.json changed since freeze",
+  "not-doing.md changed since freeze",
+  "micropipette-reading: capability list or classes changed since freeze (denominator moved)",
+  "spring-scale: capability list or classes changed since freeze (denominator moved)",
+  "ledgers outside the frozen set are not scored: dna-protein-synthesis, osmosis, pie-chart"
+ ],
+ "closed": "2026-11-08T15:26:52",
+ "after": {
+  "figure": 30.3,
+  "pooled": 76.3
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: dragging a vertex snaps it to a grid point and the image follows (01-drag-c.png; the dragging_a_vertex test passes).",
+ "result": "hit",
+ "evidence": "transform tests 25/25, interact 5/5 incl. round-trip, faq, census (transformations ids only); task run: reference 12 actions, ours before not finishable, after 3; checker hand-checked 4 rotations, 2 dilations, 4 offset reflections, a translation",
+ "next": "transformations cap-02a chained transformations"
+}

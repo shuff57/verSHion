@@ -1,0 +1,231 @@
+{
+ "figure": "dna-protein-synthesis",
+ "site": "biology",
+ "slug": "dna-protein-synthesis",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Type up to 36 bases (12 codons) of the DNA template strand; the coding strand, mRNA, tRNA anticodons and amino acids are worked out with the standard genetic code, read to the first stop codon",
+   "class": "core",
+   "evidence": "",
+   "note": "Typing the template strand is the opening state."
+  },
+  {
+   "id": "cap-01b",
+   "text": "Type the sequence as the coding strand instead",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Type the sequence as the mRNA instead",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-01d",
+   "text": "Type the sequence in any case, with spaces, hyphens or written 5′ and 3′ ends, and get the same rows",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-01e",
+   "text": "Load one of nine classic setups (template starting TAC, coding strand with bases before ATG, a short mRNA, draw the other half of the DNA, ending in a stop codon, multiple choice A to D)",
+   "class": "control",
+   "evidence": "",
+   "note": "Collapsed to one entry per list (owner decision 2026-11-08: a preset list is one capability, not one per preset)."
+  },
+  {
+   "id": "cap-02",
+   "text": "Read from the first base instead of the first AUG",
+   "class": "control",
+   "evidence": "",
+   "note": "From the first AUG, leaving the bases before it untranslated, is the opening state."
+  },
+  {
+   "id": "cap-03a",
+   "text": "Leave any one row blank (coding strand, template strand, mRNA, tRNA anticodons or amino acids)",
+   "class": "version",
+   "evidence": "",
+   "note": "Every row is shown at the opening state. All five rows must offer it."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Leave part of any row blank",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Set the share of a partly blank row that is blanked",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03d",
+   "text": "Shuffle which bases of a partly blank row are blank",
+   "class": "control",
+   "evidence": "",
+   "note": "A random-layout button: in scope as interaction (owner decision at round 0). Re-classed control: random/shuffle buttons are panel controls (owner decision 2026-11-08)."
+  },
+  {
+   "id": "cap-03e",
+   "text": "Turn any one row off",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Write the row names in your own words",
+   "class": "control",
+   "evidence": "",
+   "note": "The written names are the opening state."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Leave the row names as blank lines",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "Leave the row names off",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04d",
+   "text": "Leave the 5′ and 3′ ends blank",
+   "class": "version",
+   "evidence": "",
+   "note": "Shown is the opening state."
+  },
+  {
+   "id": "cap-04e",
+   "text": "Leave the 5′ and 3′ ends off",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "Amino acids by one-letter code",
+   "class": "control",
+   "evidence": "",
+   "note": "Three-letter names are the opening state."
+  },
+  {
+   "id": "cap-05b",
+   "text": "Amino acids by full name",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Amino acids as words under each codon instead of a chain of beads",
+   "class": "control",
+   "evidence": "",
+   "note": "A chain of beads is the opening state."
+  },
+  {
+   "id": "cap-06a",
+   "text": "Run the bases together without gaps between codons",
+   "class": "control",
+   "evidence": "",
+   "note": "Gaps are on at the opening state."
+  },
+  {
+   "id": "cap-06b",
+   "text": "A bracket under each codon",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Hydrogen bonds between the DNA strands, 2 for A–T and 3 for G–C",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06d",
+   "text": "Color the bases so they read apart, also in grayscale",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Put 1 to 4 deliberate wrong pairings in one row, for multiple choice, each listed in the answer key",
+   "class": "version",
+   "evidence": "",
+   "note": "None is the opening state."
+  },
+  {
+   "id": "cap-07b",
+   "text": "Choose which row holds the wrong pairings (coding, template, mRNA or tRNA)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07c",
+   "text": "Shuffle where the wrong pairings fall",
+   "class": "control",
+   "evidence": "",
+   "note": "A random-layout button: in scope as interaction (owner decision at round 0). Re-classed control: random/shuffle buttons are panel controls (owner decision 2026-11-08)."
+  },
+  {
+   "id": "cap-08a",
+   "text": "The standard codon chart beside the strands on the right, with start and stop codons in bold",
+   "class": "control",
+   "evidence": "",
+   "note": "Off is the opening state."
+  },
+  {
+   "id": "cap-08b",
+   "text": "The codon chart below the strands",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-08c",
+   "text": "The codon chart alone, without the strands",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-08d",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "",
+   "note": "No title is the opening state."
+  },
+  {
+   "id": "cap-08e",
+   "text": "An answer key line under the figure with every row written out",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-08f",
+   "text": "Label size",
+   "class": "control",
+   "evidence": "",
+   "note": "Medium is the opening state; Large and Small are the toolbar choices."
+  }
+ ]
+}

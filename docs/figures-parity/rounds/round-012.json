@@ -1,0 +1,41 @@
+{
+ "round": 12,
+ "figure": "transformations",
+ "capability": "cap-02d",
+ "hypothesis": "Batch 2 transformations editor: cap-02d built and checked; evidence changes:{\"op\":\"Reflect\",\"axis\":\"the line y = x + a\",\"line_a\":2}",
+ "started_at": "2026-11-08T15:26:54",
+ "git": "b2b1b80",
+ "before": {
+  "figure": 41.0,
+  "pooled": 76.6
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "map.json changed since freeze",
+  "not-doing.md changed since freeze",
+  "micropipette-reading: capability list or classes changed since freeze (denominator moved)",
+  "spring-scale: capability list or classes changed since freeze (denominator moved)",
+  "ledgers outside the frozen set are not scored: dna-protein-synthesis, osmosis, pie-chart"
+ ],
+ "closed": "2026-11-08T15:26:55",
+ "after": {
+  "figure": 45.1,
+  "pooled": 76.7
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:{\"op\":\"Reflect\",\"axis\":\"the line y = x + a\",\"line_a\":2}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/705a0f45819d1554.png"
+   }
+  ]
+ },
+ "checker": "pass: the mirror points are correct for x = −1, y = −2, y = x + 2 (C stays on the line) and y = −x + 3.",
+ "result": "hit",
+ "evidence": "transform tests 25/25, interact 5/5 incl. round-trip, faq, census (transformations ids only); task run: reference 12 actions, ours before not finishable, after 3; checker hand-checked 4 rotations, 2 dilations, 4 offset reflections, a translation",
+ "next": "transformations cap-02a chained transformations"
+}

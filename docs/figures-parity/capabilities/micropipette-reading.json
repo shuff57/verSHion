@@ -20,9 +20,9 @@
   {
    "id": "cap-02b",
    "text": "Pick the volume at random",
-   "class": "interaction",
+   "class": "control",
    "evidence": "",
-   "note": "No random button or handle."
+   "note": "No random button or handle. Re-classed control: random/shuffle buttons are panel controls (owner decision 2026-11-08)."
   },
   {
    "id": "cap-03a",

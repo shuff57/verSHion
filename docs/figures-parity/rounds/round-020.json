@@ -1,0 +1,41 @@
+{
+ "round": 20,
+ "figure": "circle",
+ "capability": "cap-02a",
+ "hypothesis": "Batch 2 circle editor: cap-02a built and re-checked; evidence changes:{\"more_points\":\"D 270\",\"joins\":\"AD\"}",
+ "started_at": "2026-11-08T15:36:53",
+ "git": "b2b1b80",
+ "before": {
+  "figure": 41.7,
+  "pooled": 77.2
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "map.json changed since freeze",
+  "not-doing.md changed since freeze",
+  "micropipette-reading: capability list or classes changed since freeze (denominator moved)",
+  "spring-scale: capability list or classes changed since freeze (denominator moved)",
+  "ledgers outside the frozen set are not scored: dna-protein-synthesis, osmosis, pie-chart"
+ ],
+ "closed": "2026-11-08T15:36:53",
+ "after": {
+  "figure": 44.2,
+  "pooled": 77.3
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "editor",
+  "renders": [
+   {
+    "token": "changes:{\"more_points\":\"D 270\",\"joins\":\"AD\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/circle/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/circle/6f7c1f6b284c65e5.png"
+   }
+  ]
+ },
+ "checker": "pass: lines join any two points, the centre, or M; M is drawn with its letter.",
+ "result": "hit",
+ "evidence": "circle tests + figures::interact pass; census circle ids unchanged; checker compared 282 renders against 4337404, all byte-identical; task run: reference 16 actions, ours before not finishable, after 11 (2 typed rows seeded)",
+ "next": "circle cap-i09 lines to M as area edges; cap-i07 tangent-chord angle"
+}

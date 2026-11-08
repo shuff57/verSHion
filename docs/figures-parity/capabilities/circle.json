@@ -14,8 +14,8 @@
    "id": "cap-01b",
    "text": "Add as many points as you want",
    "class": "editor",
-   "evidence": "",
-   "note": "Points are fixed: A, B, C (and the midpoint M); no point can be added."
+   "evidence": "changes:more_points=D 270",
+   "note": "Built in batch 2, round 18 (2026-11-08). Points are fixed: A, B, C (and the midpoint M); no point can be added."
   },
   {
    "id": "cap-01c",
@@ -56,8 +56,8 @@
    "id": "cap-02a",
    "text": "Draw a line between any two chosen points, midpoints or touch points",
    "class": "editor",
-   "evidence": "",
-   "note": "Lines are a fixed set tied to O, A, B; no line can be added between chosen points."
+   "evidence": "changes:{\"more_points\":\"D 270\",\"joins\":\"AD\"}",
+   "note": "Built in batch 2, round 20 (2026-11-08). Lines are a fixed set tied to O, A, B; no line can be added between chosen points."
   },
   {
    "id": "cap-02b",
@@ -112,8 +112,8 @@
    "id": "cap-03c",
    "text": "A tangent at any point on the circle, not only A",
    "class": "control",
-   "evidence": "",
-   "note": "WIDE: show_tangent draws the tangent at A only (cap-03a passes that narrow form)."
+   "evidence": "changes:{\"show_c\":true,\"tangents\":\"C\"}",
+   "note": "Built in batch 2, round 21 (2026-11-08). WIDE: show_tangent draws the tangent at A only (cap-03a passes that narrow form)."
   },
   {
    "id": "cap-03b",
@@ -245,8 +245,8 @@
    "id": "cap-06b",
    "text": "Shade a segment",
    "class": "control",
-   "evidence": "",
-   "note": "sector offers None, Minor, Major only."
+   "evidence": "changes:{\"show_b\":true,\"shade\":\"segment AB\"}",
+   "note": "Built in batch 2, round 23 (2026-11-08). sector offers None, Minor, Major only."
   },
   {
    "id": "cap-06c",
@@ -315,8 +315,8 @@
    "id": "cap-i01",
    "text": "Click part of the circle on the figure to add a point there",
    "class": "editor",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. The page says: Click part of the circle and choose Add point here. We have no click handle that adds a point."
+   "evidence": "handle:click:Click the circle to put a point there",
+   "note": "Built in batch 2, round 19 (2026-11-08). From the page controls, not the bullets. The page says: Click part of the circle and choose Add point here. We have no click handle that adds a point."
   },
   {
    "id": "cap-i02",
@@ -329,8 +329,8 @@
    "id": "cap-i03",
    "text": "Click a point on the circle on the figure to draw the tangent there",
    "class": "interaction",
-   "evidence": "",
-   "note": "From the page controls, not the bullets. The page says: Click a point to ... draw a tangent there."
+   "evidence": "handle:click:click it for the tangent there",
+   "note": "Built in batch 2, round 22 (2026-11-08). From the page controls, not the bullets. The page says: Click a point to ... draw a tangent there."
   },
   {
    "id": "cap-i04",

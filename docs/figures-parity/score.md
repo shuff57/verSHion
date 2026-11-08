@@ -1,10 +1,16 @@
 # Figures parity score
 
-Generated: 2026-11-08T20:27:51+00:00 · probe: 2026-11-08T12:27:51
+Generated: 2026-11-08T23:36:55+00:00 · probe: 2026-11-08T15:36:55
 
-**Pooled 76.3** · mean 78.6 over 67 figures · built 68 of 71 reference figures (missing: math/pie-chart, biology/dna-protein-synthesis, biology/osmosis)
+**Pooled 77.4** · mean 79.2 over 67 figures · built 71 of 71 reference figures
 
-Comparable with the frozen baseline: **yes**
+Comparable with the frozen baseline: **no**
+
+- map.json changed since freeze
+- not-doing.md changed since freeze
+- micropipette-reading: capability list or classes changed since freeze (denominator moved)
+- spring-scale: capability list or classes changed since freeze (denominator moved)
+- ledgers outside the frozen set are not scored: dna-protein-synthesis, osmosis, pie-chart
 
 - `two-way-table`: 25 (17/68)
   - cap-01b [control 3] Paste a table that includes its totals — no evidence
@@ -20,13 +26,6 @@ Comparable with the frozen baseline: **yes**
   - cap-01g [core 5] CO₂ and O₂ around one plant against each other — no evidence
   - cap-02a [core 5] Up to three curves on one graph — no evidence
   - cap-02b [core 5] Set each curve's CO₂ concentration, temperature or light intensity — no evidence
-- `transformations`: 29 (35/122)
-  - cap-01b [core 5] Type the preimage's vertices (a polygon of up to 10) — no evidence
-  - cap-01c [core 5] Make the preimage a single point or an open path — no evidence
-  - cap-02d [core 5] Reflect over any line x = a, y = a or y = ±x + a — no evidence
-  - cap-02g [core 5] Rotate about any point — no evidence
-  - cap-02i [core 5] Dilate from any center — no evidence
-  - cap-01a [editor 4] Click the preimage's vertices onto the grid — no evidence
 - `enzyme-kinetics`: 32 (27/85)
   - cap-01a [core 5] Plot rate against temperature — no evidence
   - cap-01b [core 5] Plot rate against pH — no evidence
@@ -41,13 +40,6 @@ Comparable with the frozen baseline: **yes**
   - cap-03b [control 3] Split each stem into five rows — no evidence
   - cap-04a [control 3] Set the first and last stems to start or end the plot past the data — no evidence
   - cap-04b [version 3] Draw empty stem rows with no data — no evidence
-- `circle`: 37 (60/163)
-  - cap-01b [editor 4] Add as many points as you want — no evidence
-  - cap-02a [editor 4] Draw a line between any two chosen points, midpoints or touch points — no evidence
-  - cap-i01 [editor 4] Click part of the circle on the figure to add a point there — no evidence
-  - cap-i02 [editor 4] Click a point on the figure to join it to another point — no evidence
-  - cap-01c [control 3] Place a point off the circle by its distance in radii — no evidence
-  - cap-02g [control 3] Run a line on past its point with an arrow, a line arrow or a dot — no evidence
 - `venn-diagram`: 38 (20/53)
   - cap-01c [core 5] List each set's members and have them sorted into the regions — no evidence
   - cap-01b [control 3] Split a region's text into lines with commas — no evidence
@@ -76,6 +68,13 @@ Comparable with the frozen baseline: **yes**
   - cap-03b [control 3] Show relative frequency as a percent — no evidence
   - cap-04c [control 3] Fill the bars with a black-and-white pattern — no evidence
   - cap-04d [control 3] Leave the bars white — no evidence
+- `circle`: 49 (80/163)
+  - cap-i02 [editor 4] Click a point on the figure to join it to another point — no evidence
+  - cap-01c [control 3] Place a point off the circle by its distance in radii — no evidence
+  - cap-02g [control 3] Run a line on past its point with an arrow, a line arrow or a dot — no evidence
+  - cap-03b [control 3] One or both tangents from a point outside the circle — no evidence
+  - cap-04e [control 3] Label any angle the lines make, not only ∠AOB and ∠ACB — no evidence
+  - cap-04b [control 3] Label an angle with typed text — no evidence
 - `ogive`: 49 (37/75)
   - cap-01b [core 5] Type a cumulative table of upper bounds — no evidence
   - cap-02a [control 3] Choose crosses or dots at the points — no evidence
@@ -118,6 +117,13 @@ Comparable with the frozen baseline: **yes**
   - cap-i04 [interaction 2] Click a piece on the figure to shade it — no evidence
   - cap-i06 [interaction 2] Click a side on the figure to label it with its length or text — no evidence
   - cap-i07 [interaction 2] Click a side on the figure to give it congruence ticks, parallel arrows or a line style — no evidence
+- `transformations`: 61 (74/122)
+  - cap-02a [editor 4] Add transformations one after another, each acting on the last image — no evidence
+  - cap-01d [control 3] A label for each preimage vertex — no evidence
+  - cap-03b [control 3] Images told apart by dashed and dotted lines — no evidence
+  - cap-03c [control 3] Give each figure its own colour — no evidence
+  - cap-03d [control 3] Give each figure a solid, dashed or dotted line — no evidence
+  - cap-03e [control 3] Give each figure a thin, medium or thick line — no evidence
 - `dot-and-cross`: 64 (36/56)
   - cap-01d [core 5] Type a formula or name (any covalent molecule it can draw, any metal/non-metal pair, an ion like Mg 2+) instead of picki — no evidence
   - cap-03a [control 3] Draw an ionic compound with every ion drawn separately — no evidence
@@ -193,6 +199,8 @@ Comparable with the frozen baseline: **yes**
   - cap-02d [control 3] Type the size as a fraction — no evidence
   - cap-02e [control 3] Type the size as a square root — no evidence
   - cap-04h [control 3] Give the apothem, the radius and the radii each their own solid, dashed or dotted style — no evidence
+- `micropipette-reading`: 89 (25/28)
+  - cap-02b [control 3] Pick the volume at random — no evidence
 - `trapezoid`: 89 (76/85)
   - cap-04f [control 3] Give each height and diagonal its own solid, dashed or dotted style — no evidence
   - cap-05a [control 3] Name the point where a height lands — no evidence
@@ -230,14 +238,14 @@ Comparable with the frozen baseline: **yes**
 - `triangle`: 92 (71/77)
   - cap-04e [control 3] Give each height its own solid, dashed or dotted style — no evidence
   - cap-04d [control 3] Name the point where the height lands — no evidence
-- `micropipette-reading`: 93 (25/27)
-  - cap-02b [interaction 2] Pick the volume at random — no evidence
 - `kite`: 93 (77/83)
   - cap-04g [control 3] Name the point where the diagonals cross — no evidence
   - cap-04h [control 3] Give each diagonal its own solid, dashed or dotted style — no evidence
 - `rectangle`: 93 (80/86)
   - cap-04g [control 3] Name the point where the diagonals cross — no evidence
   - cap-04h [control 3] Give each diagonal its own solid, dashed or dotted style — no evidence
+- `spring-scale`: 94 (48/51)
+  - cap-03b [control 3] Pick the force at random — no evidence
 - `punnett-square`: 94 (85/90)
   - cap-02b [control 3] Load one of six common crosses (Mendel's peas, a test cross, a dihybrid cross, color blindness, snapdragon color, ABO bl — no evidence
   - cap-05d [interaction 2] Click a cell to blank it — no evidence
@@ -253,8 +261,6 @@ Comparable with the frozen baseline: **yes**
   - cap-05e [version 3] The inflection point and phase labels as blank lines, or unlabeled — no evidence
 - `projectile-motion`: 96 (71/74)
   - cap-06d [version 3] Make a height/range/cliff mark's label a blank line for students — no evidence
-- `spring-scale`: 96 (48/50)
-  - cap-03b [interaction 2] Pick the force at random — no evidence
 - `gel-electrophoresis`: 97 (87/90)
   - cap-03c [version 3] Leave a sample lane blank for students, with its bands kept for the answer key — no evidence
 - `predator-prey`: 97 (93/96)

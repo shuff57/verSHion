@@ -1,0 +1,35 @@
+{
+ "round": 14,
+ "figure": "transformations",
+ "capability": "cap-i02",
+ "hypothesis": "Batch 2 transformations editor: cap-i02 built and checked; evidence handle:click:Click where A′ should go to set the translation",
+ "started_at": "2026-11-08T15:26:56",
+ "git": "b2b1b80",
+ "before": {
+  "figure": 48.4,
+  "pooled": 76.7
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "map.json changed since freeze",
+  "not-doing.md changed since freeze",
+  "micropipette-reading: capability list or classes changed since freeze (denominator moved)",
+  "spring-scale: capability list or classes changed since freeze (denominator moved)",
+  "ledgers outside the frozen set are not scored: dna-protein-synthesis, osmosis, pie-chart"
+ ],
+ "closed": "2026-11-08T15:26:56",
+ "after": {
+  "figure": 50.0,
+  "pooled": 76.8
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "interaction",
+  "renders": []
+ },
+ "checker": "pass: one click at (−3, 4) gives dx −4, dy 3 (04-click-translation.png).",
+ "result": "hit",
+ "evidence": "transform tests 25/25, interact 5/5 incl. round-trip, faq, census (transformations ids only); task run: reference 12 actions, ours before not finishable, after 3; checker hand-checked 4 rotations, 2 dilations, 4 offset reflections, a translation",
+ "next": "transformations cap-02a chained transformations"
+}

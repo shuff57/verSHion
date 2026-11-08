@@ -1,0 +1,46 @@
+{
+ "round": 16,
+ "figure": "transformations",
+ "capability": "cap-01c",
+ "hypothesis": "Batch 2 transformations editor: cap-01c built and checked; evidence changes:{\"pre\":\"0, 0\\n3, 0\\n4, 2\",\"closed\":false} + changes:{\"pre\":\"2, 3\"}",
+ "started_at": "2026-11-08T15:26:57",
+ "git": "b2b1b80",
+ "before": {
+  "figure": 54.1,
+  "pooled": 76.9
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "map.json changed since freeze",
+  "not-doing.md changed since freeze",
+  "micropipette-reading: capability list or classes changed since freeze (denominator moved)",
+  "spring-scale: capability list or classes changed since freeze (denominator moved)",
+  "ledgers outside the frozen set are not scored: dna-protein-synthesis, osmosis, pie-chart"
+ ],
+ "closed": "2026-11-08T15:26:58",
+ "after": {
+  "figure": 58.2,
+  "pooled": 77.0
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:{\"pre\":\"0, 0\\n3, 0\\n4, 2\",\"closed\":false}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/e9e7a5f9e0446225.png"
+   },
+   {
+    "token": "changes:{\"pre\":\"2, 3\"}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/e263bb40cb853aeb.png"
+   }
+  ]
+ },
+ "checker": "pass: an open path and a single point both render, and the point (2,3) turns to (−3,2).",
+ "result": "hit",
+ "evidence": "transform tests 25/25, interact 5/5 incl. round-trip, faq, census (transformations ids only); task run: reference 12 actions, ours before not finishable, after 3; checker hand-checked 4 rotations, 2 dilations, 4 offset reflections, a translation",
+ "next": "transformations cap-02a chained transformations"
+}

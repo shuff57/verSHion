@@ -1,0 +1,287 @@
+{
+ "figure": "osmosis",
+ "site": "biology",
+ "slug": "osmosis",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "A plant cell in a solution, with its wall and vacuole, in every Show mode including the three-up",
+   "class": "core",
+   "evidence": "",
+   "note": "A red blood cell is the opening state."
+  },
+  {
+   "id": "cap-01b",
+   "text": "A split beaker: two solutions either side of a membrane",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "A U-tube with a membrane at the bottom, whose levels change in the result",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-01d",
+   "text": "A dialysis bag in a beaker",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02a",
+   "text": "Show only the start",
+   "class": "core",
+   "evidence": "",
+   "note": "The three-up (a cell in a hypotonic, an isotonic and a hypertonic solution) is the opening state."
+  },
+  {
+   "id": "cap-02b",
+   "text": "Show only the result",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02c",
+   "text": "Show the start and the result side by side with an arrow between",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-02d",
+   "text": "In a three-up, show the three starts instead of the results",
+   "class": "control",
+   "evidence": "",
+   "note": "Results is the opening state."
+  },
+  {
+   "id": "cap-02e",
+   "text": "In a three-up, shuffle the order of the three solutions",
+   "class": "version",
+   "evidence": "",
+   "note": "In order is the opening state."
+  },
+  {
+   "id": "cap-03a",
+   "text": "Set a solute's concentration on each side; the figure works out each side's tonicity (counting only solutes that can't cross), which way water moves, and the result, with particles drawn as crowded as the concentration",
+   "class": "core",
+   "evidence": "",
+   "note": "The page's 'How the figure is worked out' text describes the rules."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Up to three solutes at once (add a second and a third)",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Name each solute, with subscripts (C_6H_12O_6)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03d",
+   "text": "Let a solute cross the membrane, so it moves from higher to lower until both sides match",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03e",
+   "text": "Concentrations in M",
+   "class": "control",
+   "evidence": "",
+   "note": "% is the opening state."
+  },
+  {
+   "id": "cap-03f",
+   "text": "Concentrations in mM",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03g",
+   "text": "Set each solute's particle size (XS to XL)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03h",
+   "text": "Set each solute's particle shade (white to black)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03i",
+   "text": "Give each solute's particles a charge (+, −, 2+, 2−, 3+, 3−)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04a",
+   "text": "Leave the water particles off",
+   "class": "control",
+   "evidence": "",
+   "note": "Water shown as small discs filling the room the solutes leave is the opening state."
+  },
+  {
+   "id": "cap-04b",
+   "text": "Shuffle the particles into a new layout",
+   "class": "control",
+   "evidence": "",
+   "note": "A random-layout button: in scope as interaction (owner decision at round 0). Re-classed control: random/shuffle buttons are panel controls (owner decision 2026-11-08)."
+  },
+  {
+   "id": "cap-05a",
+   "text": "Leave the concentration labels blank for students",
+   "class": "version",
+   "evidence": "",
+   "note": "Each label is text at the opening state, except the plant cell's wall and vacuole (none)."
+  },
+  {
+   "id": "cap-05b",
+   "text": "Leave the concentration labels off",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05c",
+   "text": "Leave each side's tonicity label blank",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05d",
+   "text": "Leave the tonicity labels off",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05e",
+   "text": "Type your own wording for the membrane label",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05f",
+   "text": "Leave the membrane label as a blank line",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05g",
+   "text": "Leave the membrane label off",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05h",
+   "text": "Label a plant cell's wall and vacuole",
+   "class": "control",
+   "evidence": "",
+   "note": "Off at the opening state; the option appears with the plant cell scene."
+  },
+  {
+   "id": "cap-05i",
+   "text": "Leave a plant cell's wall and vacuole labels blank",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05j",
+   "text": "Leave the result label (swells, shrinks, plasmolyzed...) blank",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05k",
+   "text": "Leave the result label off",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06a",
+   "text": "Leave the net water movement arrows as empty boxes for students",
+   "class": "version",
+   "evidence": "",
+   "note": "Arrows are the opening state."
+  },
+  {
+   "id": "cap-06b",
+   "text": "Leave the water arrows off",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06c",
+   "text": "Leave the arrows for solutes that cross as empty boxes",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-06d",
+   "text": "Leave the solute arrows off",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07a",
+   "text": "Black and white",
+   "class": "control",
+   "evidence": "",
+   "note": "Color is the opening state."
+  },
+  {
+   "id": "cap-07b",
+   "text": "Leave the key off",
+   "class": "control",
+   "evidence": "",
+   "note": "The key is on at the opening state."
+  },
+  {
+   "id": "cap-07c",
+   "text": "A red blood cell bursts in a hypotonic solution instead of swelling",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-07d",
+   "text": "A chart title",
+   "class": "control",
+   "evidence": "",
+   "note": "No title is the opening state."
+  },
+  {
+   "id": "cap-07e",
+   "text": "An answer key line under the figure (tonicity, water movement and result for each panel)",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  }
+ ]
+}

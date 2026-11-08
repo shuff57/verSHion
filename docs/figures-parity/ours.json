@@ -1,9 +1,9 @@
 {
  "meta": {
-  "built_at": "2026-11-08T20:27:15+00:00",
-  "src_mtime": 1794169568.685734,
-  "git": "03eed3d+dirty",
-  "figures": 188
+  "built_at": "2026-11-08T23:25:01+00:00",
+  "src_mtime": 1794180224.4729,
+  "git": "b2b1b80",
+  "figures": 191
  },
  "figures": {
   "free-body-diagram": {
@@ -6512,6 +6512,315 @@
    "style": true,
    "label_size": true
   },
+  "dna-protein-synthesis": {
+   "id": "dna-protein-synthesis",
+   "title": "DNA and Protein Synthesis",
+   "blurb": "A sequence typed as the template strand, the coding strand or the mRNA, worked through to the tRNA anticodons and the amino acids, with the codon chart. Any row blank or partly blank for students, and wrong bases for multiple choice.",
+   "params": [
+    {
+     "key": "typed",
+     "label": "You’re typing the",
+     "kind": "choice",
+     "options": [
+      "Template",
+      "Coding",
+      "mRNA"
+     ],
+     "default": "Template"
+    },
+    {
+     "key": "seq",
+     "label": "Sequence",
+     "kind": "text",
+     "options": [],
+     "default": "TACCTTGGACGTAAAATT"
+    },
+    {
+     "key": "frame",
+     "label": "Reading frame",
+     "kind": "choice",
+     "options": [
+      "From the first AUG",
+      "From the first base"
+     ],
+     "default": "From the first AUG"
+    },
+    {
+     "key": "row_coding",
+     "label": "DNA coding strand",
+     "kind": "choice",
+     "options": [
+      "Shown",
+      "Blank",
+      "Some",
+      "Off"
+     ],
+     "default": "Shown"
+    },
+    {
+     "key": "row_template",
+     "label": "DNA template strand",
+     "kind": "choice",
+     "options": [
+      "Shown",
+      "Blank",
+      "Some",
+      "Off"
+     ],
+     "default": "Shown"
+    },
+    {
+     "key": "row_mrna",
+     "label": "mRNA",
+     "kind": "choice",
+     "options": [
+      "Shown",
+      "Blank",
+      "Some",
+      "Off"
+     ],
+     "default": "Shown"
+    },
+    {
+     "key": "row_trna",
+     "label": "tRNA anticodons",
+     "kind": "choice",
+     "options": [
+      "Shown",
+      "Blank",
+      "Some",
+      "Off"
+     ],
+     "default": "Shown"
+    },
+    {
+     "key": "row_amino",
+     "label": "Amino acids",
+     "kind": "choice",
+     "options": [
+      "Shown",
+      "Blank",
+      "Some",
+      "Off"
+     ],
+     "default": "Shown"
+    },
+    {
+     "key": "some_share",
+     "label": "Blank in a Some row (%)",
+     "kind": "int",
+     "options": [],
+     "default": "50"
+    },
+    {
+     "key": "row_names",
+     "label": "Row names",
+     "kind": "choice",
+     "options": [
+      "Shown",
+      "Blank",
+      "Off"
+     ],
+     "default": "Shown"
+    },
+    {
+     "key": "name_coding",
+     "label": "DNA coding strand row name",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "name_template",
+     "label": "DNA template strand row name",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "name_mrna",
+     "label": "mRNA row name",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "name_trna",
+     "label": "tRNA anticodons row name",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "name_amino",
+     "label": "Amino acids row name",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "aa_names",
+     "label": "Amino acid names",
+     "kind": "choice",
+     "options": [
+      "Met",
+      "M",
+      "Methionine"
+     ],
+     "default": "Met"
+    },
+    {
+     "key": "aa_style",
+     "label": "Amino acids drawn as",
+     "kind": "choice",
+     "options": [
+      "Chain of beads",
+      "Words"
+     ],
+     "default": "Chain of beads"
+    },
+    {
+     "key": "ends",
+     "label": "5′ and 3′ ends",
+     "kind": "choice",
+     "options": [
+      "Shown",
+      "Blank",
+      "Off"
+     ],
+     "default": "Shown"
+    },
+    {
+     "key": "gaps",
+     "label": "Gaps between codons",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "brackets",
+     "label": "Bracket under each codon",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "hbonds",
+     "label": "Hydrogen bonds",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "color_bases",
+     "label": "Colour the bases",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "mistakes",
+     "label": "How many mistakes",
+     "kind": "choice",
+     "options": [
+      "None",
+      "1",
+      "2",
+      "3",
+      "4"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "mistake_row",
+     "label": "Mistakes in the row",
+     "kind": "choice",
+     "options": [
+      "DNA coding strand",
+      "DNA template strand",
+      "mRNA",
+      "tRNA anticodons"
+     ],
+     "default": "mRNA"
+    },
+    {
+     "key": "chart",
+     "label": "Show",
+     "kind": "choice",
+     "options": [
+      "Strands",
+      "Both",
+      "Chart only"
+     ],
+     "default": "Strands"
+    },
+    {
+     "key": "chart_pos",
+     "label": "Codon chart",
+     "kind": "choice",
+     "options": [
+      "On the right",
+      "Below"
+     ],
+     "default": "On the right"
+    },
+    {
+     "key": "title",
+     "label": "Chart title (blank = none)",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "show_answers",
+     "label": "Answer key",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "blank_seed",
+     "label": "Blank pattern",
+     "kind": "int",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "mistake_seed",
+     "label": "Mistake pattern",
+     "kind": "int",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Colour"
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    }
+   ],
+   "handle_list": [],
+   "handles": false,
+   "label_drag": false,
+   "show_answers": true,
+   "style": true,
+   "label_size": true
+  },
   "food-web": {
    "id": "food-web",
    "title": "Food web",
@@ -7329,6 +7638,450 @@
       "Print"
      ],
      "default": "Colour"
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    }
+   ],
+   "handle_list": [],
+   "handles": false,
+   "label_drag": false,
+   "show_answers": true,
+   "style": true,
+   "label_size": true
+  },
+  "osmosis": {
+   "id": "osmosis",
+   "title": "Osmosis and Tonicity",
+   "blurb": "A red blood cell, plant cell, split beaker, U-tube or dialysis bag with up to three solutes: the start, the result, or a three-up in a hypotonic, isotonic and hypertonic solution. Water and solute arrows, labels as text or blanks, and a student copy with the explanation in the key.",
+   "params": [
+    {
+     "key": "scene",
+     "label": "Scene",
+     "kind": "choice",
+     "options": [
+      "Red blood cell",
+      "Plant cell",
+      "Split beaker",
+      "U-tube",
+      "Dialysis bag"
+     ],
+     "default": "Red blood cell"
+    },
+    {
+     "key": "show",
+     "label": "Show",
+     "kind": "choice",
+     "options": [
+      "Start",
+      "Result",
+      "Both",
+      "Three-up"
+     ],
+     "default": "Three-up"
+    },
+    {
+     "key": "tri_each",
+     "label": "Each cell shows",
+     "kind": "choice",
+     "options": [
+      "Results",
+      "Starts"
+     ],
+     "default": "Results"
+    },
+    {
+     "key": "tri_order",
+     "label": "Order",
+     "kind": "choice",
+     "options": [
+      "In order",
+      "Shuffled"
+     ],
+     "default": "In order"
+    },
+    {
+     "key": "unit",
+     "label": "Concentrations in",
+     "kind": "choice",
+     "options": [
+      "%",
+      "M",
+      "mM"
+     ],
+     "default": "%"
+    },
+    {
+     "key": "s1_on",
+     "label": "Solute 1",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "s1_name",
+     "label": "Name",
+     "kind": "text",
+     "options": [],
+     "default": "NaCl"
+    },
+    {
+     "key": "s1_in",
+     "label": "Inside / side A / in the bag",
+     "kind": "float",
+     "options": [],
+     "default": "0.9"
+    },
+    {
+     "key": "s1_out",
+     "label": "Outside / side B / in the beaker",
+     "kind": "float",
+     "options": [],
+     "default": "0.45"
+    },
+    {
+     "key": "s1_cross",
+     "label": "Can cross the membrane",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "s1_size",
+     "label": "Particle size",
+     "kind": "choice",
+     "options": [
+      "XS",
+      "S",
+      "M",
+      "L",
+      "XL"
+     ],
+     "default": "M"
+    },
+    {
+     "key": "s1_shade",
+     "label": "Particle shade",
+     "kind": "choice",
+     "options": [
+      "White",
+      "Light grey",
+      "Grey",
+      "Dark grey",
+      "Black"
+     ],
+     "default": "Grey"
+    },
+    {
+     "key": "s1_charge",
+     "label": "Charge",
+     "kind": "choice",
+     "options": [
+      "None",
+      "+",
+      "−",
+      "2+",
+      "2−",
+      "3+",
+      "3−"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "s2_on",
+     "label": "Solute 2",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "s2_name",
+     "label": "Name",
+     "kind": "text",
+     "options": [],
+     "default": "Glucose"
+    },
+    {
+     "key": "s2_in",
+     "label": "Inside / side A / in the bag",
+     "kind": "float",
+     "options": [],
+     "default": "0.5"
+    },
+    {
+     "key": "s2_out",
+     "label": "Outside / side B / in the beaker",
+     "kind": "float",
+     "options": [],
+     "default": "0.5"
+    },
+    {
+     "key": "s2_cross",
+     "label": "Can cross the membrane",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "s2_size",
+     "label": "Particle size",
+     "kind": "choice",
+     "options": [
+      "XS",
+      "S",
+      "M",
+      "L",
+      "XL"
+     ],
+     "default": "L"
+    },
+    {
+     "key": "s2_shade",
+     "label": "Particle shade",
+     "kind": "choice",
+     "options": [
+      "White",
+      "Light grey",
+      "Grey",
+      "Dark grey",
+      "Black"
+     ],
+     "default": "Dark grey"
+    },
+    {
+     "key": "s2_charge",
+     "label": "Charge",
+     "kind": "choice",
+     "options": [
+      "None",
+      "+",
+      "−",
+      "2+",
+      "2−",
+      "3+",
+      "3−"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "s3_on",
+     "label": "Solute 3",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "s3_name",
+     "label": "Name",
+     "kind": "text",
+     "options": [],
+     "default": "Protein"
+    },
+    {
+     "key": "s3_in",
+     "label": "Inside / side A / in the bag",
+     "kind": "float",
+     "options": [],
+     "default": "0.5"
+    },
+    {
+     "key": "s3_out",
+     "label": "Outside / side B / in the beaker",
+     "kind": "float",
+     "options": [],
+     "default": "0.5"
+    },
+    {
+     "key": "s3_cross",
+     "label": "Can cross the membrane",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "s3_size",
+     "label": "Particle size",
+     "kind": "choice",
+     "options": [
+      "XS",
+      "S",
+      "M",
+      "L",
+      "XL"
+     ],
+     "default": "XL"
+    },
+    {
+     "key": "s3_shade",
+     "label": "Particle shade",
+     "kind": "choice",
+     "options": [
+      "White",
+      "Light grey",
+      "Grey",
+      "Dark grey",
+      "Black"
+     ],
+     "default": "White"
+    },
+    {
+     "key": "s3_charge",
+     "label": "Charge",
+     "kind": "choice",
+     "options": [
+      "None",
+      "+",
+      "−",
+      "2+",
+      "2−",
+      "3+",
+      "3−"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "show_water",
+     "label": "Water particles",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "seed",
+     "label": "Particle layout (change the number to shuffle)",
+     "kind": "int",
+     "options": [],
+     "default": "7"
+    },
+    {
+     "key": "lab_conc",
+     "label": "Concentrations label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "lab_tonic",
+     "label": "Tonicity label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "lab_membrane",
+     "label": "Membrane label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "lab_struct",
+     "label": "Wall and vacuole labels (plant cell)",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank line",
+      "None"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "lab_result",
+     "label": "Result label",
+     "kind": "choice",
+     "options": [
+      "Text",
+      "Blank",
+      "None"
+     ],
+     "default": "Text"
+    },
+    {
+     "key": "arr_water",
+     "label": "Water arrows",
+     "kind": "choice",
+     "options": [
+      "Arrows",
+      "Blank boxes",
+      "None"
+     ],
+     "default": "Arrows"
+    },
+    {
+     "key": "arr_solute",
+     "label": "Arrows for solutes that cross",
+     "kind": "choice",
+     "options": [
+      "Arrows",
+      "Blank boxes",
+      "None"
+     ],
+     "default": "Arrows"
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Colour"
+    },
+    {
+     "key": "key",
+     "label": "Key",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "burst",
+     "label": "A red blood cell bursts in a hypotonic solution",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "title",
+     "label": "Chart title",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "answer_key",
+     "label": "Explanation under the figure (answer key)",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "show_answers",
+     "label": "Show answers",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
     },
     {
      "key": "label_size",
@@ -21505,6 +22258,27 @@
      "default": "250.0"
     },
     {
+     "key": "show_b",
+     "label": "Point B",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "show_c",
+     "label": "Point C",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "more_points",
+     "label": "More points (letter and degrees)",
+     "kind": "list",
+     "options": [],
+     "default": ""
+    },
+    {
      "key": "define",
      "label": "Define the chord by",
      "kind": "choice",
@@ -21608,6 +22382,20 @@
      "default": "false"
     },
     {
+     "key": "joins",
+     "label": "Lines between points",
+     "kind": "list",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "tangents",
+     "label": "Tangents at points",
+     "kind": "list",
+     "options": [],
+     "default": ""
+    },
+    {
      "key": "arc",
      "label": "Arc AB",
      "kind": "choice",
@@ -21628,6 +22416,13 @@
       "Major"
      ],
      "default": "None"
+    },
+    {
+     "key": "shade",
+     "label": "Shaded areas",
+     "kind": "list",
+     "options": [],
+     "default": ""
     },
     {
      "key": "right_marks",
@@ -21692,6 +22487,13 @@
       "None"
      ],
      "default": "Value"
+    },
+    {
+     "key": "marks",
+     "label": "Arc and line labels",
+     "kind": "list",
+     "options": [],
+     "default": ""
     },
     {
      "key": "angle_unit",
@@ -21965,10 +22767,25 @@
    "handle_list": [
     {
      "actions": [
-      "drag"
+      "drag",
+      "click"
      ],
      "edit": null,
-     "tip": "Drag point A round the circle"
+     "tip": "Drag point A round the circle; click it for the tangent there"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "Click the circle to put a point there, or inside an enclosed area to shade it"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "Click radius OA to label it: r = its value, the letter r, or none"
     }
    ],
    "handles": true,
@@ -22451,8 +23268,29 @@
   "transformations": {
    "id": "transformations",
    "title": "Transformations",
-   "blurb": "A triangle and its image after a translation, a reflection, a rotation or an enlargement, on one grid, with the rule written out.",
+   "blurb": "A shape and its image after a translation, a reflection, a rotation or an enlargement, on one grid, with the rule written out.",
    "params": [
+    {
+     "key": "pre",
+     "label": "Pre-image vertices (x, y), one per line",
+     "kind": "text",
+     "options": [],
+     "default": "1, 1\\n4, 1\\n1, 3"
+    },
+    {
+     "key": "closed",
+     "label": "Join the last vertex to the first",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    },
+    {
+     "key": "adding",
+     "label": "Clicks on the grid add vertices",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
     {
      "key": "op",
      "label": "Transformation",
@@ -22487,18 +23325,31 @@
       "the x-axis",
       "the y-axis",
       "the line y = x",
-      "the line y = -x"
+      "the line y = -x",
+      "the line x = a",
+      "the line y = a",
+      "the line y = x + a",
+      "the line y = -x + a"
      ],
      "default": "the x-axis"
     },
     {
+     "key": "line_a",
+     "label": "The mirror line's number a",
+     "kind": "float",
+     "options": [],
+     "default": "2.0"
+    },
+    {
      "key": "angle",
-     "label": "Turn about the origin",
+     "label": "Turn by",
      "kind": "choice",
      "options": [
       "90 degrees anticlockwise",
       "180 degrees",
-      "270 degrees anticlockwise"
+      "270 degrees anticlockwise",
+      "90 degrees clockwise",
+      "270 degrees clockwise"
      ],
      "default": "90 degrees anticlockwise"
     },
@@ -22510,11 +23361,60 @@
      "default": "2.0"
     },
     {
+     "key": "cx",
+     "label": "Turn or enlarge about x",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
+     "key": "cy",
+     "label": "Turn or enlarge about y",
+     "kind": "float",
+     "options": [],
+     "default": "0.0"
+    },
+    {
      "key": "show_pre",
      "label": "Show the pre-image",
      "kind": "bool",
      "options": [],
      "default": "true"
+    },
+    {
+     "key": "x_from",
+     "label": "x-axis from",
+     "kind": "int",
+     "options": [],
+     "default": "-10"
+    },
+    {
+     "key": "x_to",
+     "label": "x-axis to",
+     "kind": "int",
+     "options": [],
+     "default": "10"
+    },
+    {
+     "key": "y_from",
+     "label": "y-axis from",
+     "kind": "int",
+     "options": [],
+     "default": "-10"
+    },
+    {
+     "key": "y_to",
+     "label": "y-axis to",
+     "kind": "int",
+     "options": [],
+     "default": "10"
+    },
+    {
+     "key": "fit",
+     "label": "Shrink the grid to the shapes",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
     },
     {
      "key": "dec",
@@ -22552,8 +23452,45 @@
      "default": "Medium"
     }
    ],
-   "handle_list": [],
-   "handles": false,
+   "handle_list": [
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag A′ to set the translation"
+    },
+    {
+     "actions": [
+      "click"
+     ],
+     "edit": null,
+     "tip": "Click where A′ should go to set the translation"
+    },
+    {
+     "actions": [
+      "drag",
+      "click"
+     ],
+     "edit": null,
+     "tip": "Drag vertex A to a grid point, or click it to open the shape"
+    },
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag vertex B to a grid point"
+    },
+    {
+     "actions": [
+      "drag"
+     ],
+     "edit": null,
+     "tip": "Drag vertex C to a grid point"
+    }
+   ],
+   "handles": true,
    "label_drag": false,
    "show_answers": true,
    "style": true,
@@ -25184,6 +26121,169 @@
     {
      "key": "heading",
      "label": "First column heading (blank = Value or Class)",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "style",
+     "label": "Style",
+     "kind": "choice",
+     "options": [
+      "Colour",
+      "Print"
+     ],
+     "default": "Colour"
+    },
+    {
+     "key": "label_size",
+     "label": "Label size",
+     "kind": "choice",
+     "options": [
+      "Large",
+      "Medium",
+      "Small"
+     ],
+     "default": "Medium"
+    },
+    {
+     "key": "show_answers",
+     "label": "Show answers",
+     "kind": "bool",
+     "options": [],
+     "default": "true"
+    }
+   ],
+   "handle_list": [],
+   "handles": false,
+   "label_drag": false,
+   "show_answers": true,
+   "style": true,
+   "label_size": true
+  },
+  "pie-chart": {
+   "id": "pie-chart",
+   "title": "Pie Chart",
+   "blurb": "A pie chart of counts, percents or degrees with labelled sectors and a key: empty sectors for students to draw, black-and-white fills that photocopy, a title or a blank line for one.",
+   "params": [
+    {
+     "key": "data",
+     "label": "Categories and values",
+     "kind": "long",
+     "options": [],
+     "default": "Walk, 14\\nCar, 12\\nBus, 10\\nBike, 4"
+    },
+    {
+     "key": "values",
+     "label": "Values are",
+     "kind": "choice",
+     "options": [
+      "Counts",
+      "Percents",
+      "Degrees"
+     ],
+     "default": "Counts"
+    },
+    {
+     "key": "total",
+     "label": "Total (counts)",
+     "kind": "text",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "order",
+     "label": "Order",
+     "kind": "choice",
+     "options": [
+      "As typed",
+      "Largest first"
+     ],
+     "default": "As typed"
+    },
+    {
+     "key": "dot",
+     "label": "Centre dot",
+     "kind": "bool",
+     "options": [],
+     "default": "false"
+    },
+    {
+     "key": "labels",
+     "label": "Sector labels",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Name",
+      "Value",
+      "Percent",
+      "Angle",
+      "Fraction",
+      "Name and value",
+      "Name and percent",
+      "Name and angle",
+      "Name and fraction",
+      "Value and percent"
+     ],
+     "default": "Name"
+    },
+    {
+     "key": "decimals",
+     "label": "Decimals in percents and angles",
+     "kind": "int",
+     "options": [],
+     "default": "1"
+    },
+    {
+     "key": "own",
+     "label": "A sector's own label",
+     "kind": "long",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "look",
+     "label": "Fills",
+     "kind": "choice",
+     "options": [
+      "Color",
+      "Black and white",
+      "White"
+     ],
+     "default": "Color"
+    },
+    {
+     "key": "fill_list",
+     "label": "A sector's own fill",
+     "kind": "list",
+     "options": [],
+     "default": ""
+    },
+    {
+     "key": "key",
+     "label": "Key",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Right",
+      "Below"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "title_kind",
+     "label": "Title",
+     "kind": "choice",
+     "options": [
+      "None",
+      "Chart title",
+      "Blank line"
+     ],
+     "default": "None"
+    },
+    {
+     "key": "title",
+     "label": "Chart title",
      "kind": "text",
      "options": [],
      "default": ""

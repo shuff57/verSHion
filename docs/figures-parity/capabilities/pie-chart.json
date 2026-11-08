@@ -1,0 +1,210 @@
+{
+ "figure": "pie-chart",
+ "site": "math",
+ "slug": "pie-chart",
+ "capabilities": [
+  {
+   "id": "cap-01a",
+   "text": "Type a table with a category and its value on each row; type in the empty row to add a category, empty a row to remove it; sectors run clockwise from 12 o'clock",
+   "class": "core",
+   "evidence": "",
+   "note": "Counts are the opening state of 'Values are'."
+  },
+  {
+   "id": "cap-01b",
+   "text": "Paste the table from a spreadsheet (Sheets or Excel)",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-01c",
+   "text": "Values typed as percents",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-01d",
+   "text": "Values typed as degrees",
+   "class": "core",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-01e",
+   "text": "With counts, type the total so the whole circle stands for it",
+   "class": "control",
+   "evidence": "",
+   "note": "The page: 'With counts, type the total so there's room for it.' It is what leaves room for an empty value's sector (cap-01f)."
+  },
+  {
+   "id": "cap-01f",
+   "text": "Leave one value empty so its share is left as one empty sector for students to draw",
+   "class": "version",
+   "evidence": "",
+   "note": "From the page's table help, not the bullets."
+  },
+  {
+   "id": "cap-01g",
+   "text": "Leave every value empty for a blank circle",
+   "class": "version",
+   "evidence": "",
+   "note": "From the page's table help, not the bullets. A blank circle is the page's opening state with no rows typed."
+  },
+  {
+   "id": "cap-02a",
+   "text": "Order the sectors largest first",
+   "class": "control",
+   "evidence": "",
+   "note": "'As typed' is the opening state."
+  },
+  {
+   "id": "cap-02b",
+   "text": "Turn the dot at the center on or off",
+   "class": "control",
+   "evidence": "",
+   "note": "On at the empty opening state; the examples turn it off."
+  },
+  {
+   "id": "cap-03a",
+   "text": "Leave the sector labels off",
+   "class": "control",
+   "evidence": "",
+   "note": "Sector labels default to the name."
+  },
+  {
+   "id": "cap-03b",
+   "text": "Label each sector with its value",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03c",
+   "text": "Label each sector with its percent",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03d",
+   "text": "Label each sector with its angle in degrees",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03e",
+   "text": "Label each sector with its fraction of the whole",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03f1",
+   "text": "Label each sector with its name and its value",
+   "class": "control",
+   "evidence": "",
+   "note": "Split from the bullet's 'a name and a number' (owner decision 2026-11-08: separable choices are separate entries)."
+  },
+  {
+   "id": "cap-03f2",
+   "text": "Label each sector with its name and its percent",
+   "class": "control",
+   "evidence": "",
+   "note": "Split from the bullet's 'a name and a number' (owner decision 2026-11-08: separable choices are separate entries)."
+  },
+  {
+   "id": "cap-03f3",
+   "text": "Label each sector with its name and its angle",
+   "class": "control",
+   "evidence": "",
+   "note": "Split from the bullet's 'a name and a number' (owner decision 2026-11-08: separable choices are separate entries)."
+  },
+  {
+   "id": "cap-03f4",
+   "text": "Label each sector with its name and its fraction",
+   "class": "control",
+   "evidence": "",
+   "note": "Split from the bullet's 'a name and a number' (owner decision 2026-11-08: separable choices are separate entries)."
+  },
+  {
+   "id": "cap-03g",
+   "text": "Label each sector with its value and percent",
+   "class": "control",
+   "evidence": "",
+   "note": "From the page's Sector labels list, not the bullets."
+  },
+  {
+   "id": "cap-03h",
+   "text": "Give any one sector its own label setting, apart from the chart's",
+   "class": "control",
+   "evidence": "",
+   "note": "Each sector's own label list starts at 'As the chart'."
+  },
+  {
+   "id": "cap-03i",
+   "text": "Leave one sector's label as a blank line",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-03j",
+   "text": "Label one sector with a letter for its angle (x°), for find-the-missing-angle questions",
+   "class": "version",
+   "evidence": "",
+   "note": "The page's per-sector option 'Letter (x°)'."
+  },
+  {
+   "id": "cap-04a",
+   "text": "Black-and-white fills that survive a photocopy",
+   "class": "control",
+   "evidence": "",
+   "note": "Color is the opening state."
+  },
+  {
+   "id": "cap-04b",
+   "text": "White sectors for students to shade",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-04c",
+   "text": "Pick the fill for each sector (a color, white, black, or a hatching or dot pattern)",
+   "class": "control",
+   "evidence": "",
+   "note": "Each sector's fill starts at 'in turn'."
+  },
+  {
+   "id": "cap-04d",
+   "text": "A key on the right of the chart",
+   "class": "control",
+   "evidence": "",
+   "note": "No key is the opening state."
+  },
+  {
+   "id": "cap-04e",
+   "text": "A key below the chart",
+   "class": "control",
+   "evidence": "",
+   "note": ""
+  },
+  {
+   "id": "cap-05a",
+   "text": "A chart title written as text",
+   "class": "control",
+   "evidence": "",
+   "note": "No title is the opening state."
+  },
+  {
+   "id": "cap-05b",
+   "text": "A blank line in place of the title for students to write",
+   "class": "version",
+   "evidence": "",
+   "note": ""
+  }
+ ]
+}

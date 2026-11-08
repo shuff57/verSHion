@@ -1,17 +1,19 @@
 {
- "generated_at": "2026-11-08T20:27:51+00:00",
- "probe_checked_at": "2026-11-08T12:27:51",
- "comparable": true,
- "drift": [],
- "pooled": 76.3,
- "mean": 78.6,
- "figures_scored": 67,
- "figures_built": 68,
- "figures_missing": [
-  "math/pie-chart",
-  "biology/dna-protein-synthesis",
-  "biology/osmosis"
+ "generated_at": "2026-11-08T23:36:55+00:00",
+ "probe_checked_at": "2026-11-08T15:36:55",
+ "comparable": false,
+ "drift": [
+  "map.json changed since freeze",
+  "not-doing.md changed since freeze",
+  "micropipette-reading: capability list or classes changed since freeze (denominator moved)",
+  "spring-scale: capability list or classes changed since freeze (denominator moved)",
+  "ledgers outside the frozen set are not scored: dna-protein-synthesis, osmosis, pie-chart"
  ],
+ "pooled": 77.4,
+ "mean": 79.2,
+ "figures_scored": 67,
+ "figures_built": 71,
+ "figures_missing": [],
  "figures": {
   "angles": {
    "score": 66.2,
@@ -228,32 +230,11 @@
    ]
   },
   "circle": {
-   "score": 36.8,
-   "got": 60.0,
+   "score": 49.1,
+   "got": 80.0,
    "total": 163.0,
    "unclassified": 0,
    "gaps": [
-    {
-     "id": "cap-01b",
-     "class": "editor",
-     "weight": 4.0,
-     "text": "Add as many points as you want",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02a",
-     "class": "editor",
-     "weight": 4.0,
-     "text": "Draw a line between any two chosen points, midpoints or touch points",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i01",
-     "class": "editor",
-     "weight": 4.0,
-     "text": "Click part of the circle on the figure to add a point there",
-     "why": "no evidence"
-    },
     {
      "id": "cap-i02",
      "class": "editor",
@@ -273,13 +254,6 @@
      "class": "control",
      "weight": 3.0,
      "text": "Run a line on past its point with an arrow, a line arrow or a dot",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-03c",
-     "class": "control",
-     "weight": 3.0,
-     "text": "A tangent at any point on the circle, not only A",
      "why": "no evidence"
     },
     {
@@ -374,13 +348,6 @@
      "why": "no evidence"
     },
     {
-     "id": "cap-06b",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Shade a segment",
-     "why": "no evidence"
-    },
-    {
      "id": "cap-06c",
      "class": "control",
      "weight": 3.0,
@@ -420,13 +387,6 @@
      "class": "interaction",
      "weight": 2.0,
      "text": "Drag a point off the circle and back on",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i03",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click a point on the circle on the figure to draw the tangent there",
      "why": "no evidence"
     },
     {
@@ -1287,15 +1247,15 @@
    "gaps": []
   },
   "micropipette-reading": {
-   "score": 92.6,
+   "score": 89.3,
    "got": 25.0,
-   "total": 27.0,
+   "total": 28.0,
    "unclassified": 0,
    "gaps": [
     {
      "id": "cap-02b",
-     "class": "interaction",
-     "weight": 2.0,
+     "class": "control",
+     "weight": 3.0,
      "text": "Pick the volume at random",
      "why": "no evidence"
     }
@@ -2487,15 +2447,15 @@
    "gaps": []
   },
   "spring-scale": {
-   "score": 96.0,
+   "score": 94.1,
    "got": 48.0,
-   "total": 50.0,
+   "total": 51.0,
    "unclassified": 0,
    "gaps": [
     {
      "id": "cap-03b",
-     "class": "interaction",
-     "weight": 2.0,
+     "class": "control",
+     "weight": 3.0,
      "text": "Pick the force at random",
      "why": "no evidence"
     }
@@ -2637,53 +2597,11 @@
    "gaps": []
   },
   "transformations": {
-   "score": 28.7,
-   "got": 35.0,
+   "score": 60.7,
+   "got": 74.0,
    "total": 122.0,
    "unclassified": 0,
    "gaps": [
-    {
-     "id": "cap-01b",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Type the preimage's vertices (a polygon of up to 10)",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-01c",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Make the preimage a single point or an open path",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02d",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Reflect over any line x = a, y = a or y = ±x + a",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02g",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Rotate about any point",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02i",
-     "class": "core",
-     "weight": 5.0,
-     "text": "Dilate from any center",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-01a",
-     "class": "editor",
-     "weight": 4.0,
-     "text": "Click the preimage's vertices onto the grid",
-     "why": "no evidence"
-    },
     {
      "id": "cap-02a",
      "class": "editor",
@@ -2696,13 +2614,6 @@
      "class": "control",
      "weight": 3.0,
      "text": "A label for each preimage vertex",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-02f",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Rotate clockwise",
      "why": "no evidence"
     },
     {
@@ -2769,13 +2680,6 @@
      "why": "no evidence"
     },
     {
-     "id": "cap-05a",
-     "class": "control",
-     "weight": 3.0,
-     "text": "Set each axis's range",
-     "why": "no evidence"
-    },
-    {
      "id": "cap-05b",
      "class": "control",
      "weight": 3.0,
@@ -2808,20 +2712,6 @@
      "class": "interaction",
      "weight": 2.0,
      "text": "Place a transformation's line or center on the grid with a preview",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i01",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Drag a preimage vertex on the grid to move it",
-     "why": "no evidence"
-    },
-    {
-     "id": "cap-i02",
-     "class": "interaction",
-     "weight": 2.0,
-     "text": "Click on the grid to set a translation, with the image following the pointer",
      "why": "no evidence"
     }
    ]

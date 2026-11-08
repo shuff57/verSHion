@@ -1,0 +1,41 @@
+{
+ "round": 11,
+ "figure": "transformations",
+ "capability": "cap-02i",
+ "hypothesis": "Batch 2 transformations editor: cap-02i built and checked; evidence changes:{\"op\":\"Dilate\",\"cx\":-2,\"cy\":1}",
+ "started_at": "2026-11-08T15:26:54",
+ "git": "b2b1b80",
+ "before": {
+  "figure": 36.9,
+  "pooled": 76.5
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "map.json changed since freeze",
+  "not-doing.md changed since freeze",
+  "micropipette-reading: capability list or classes changed since freeze (denominator moved)",
+  "spring-scale: capability list or classes changed since freeze (denominator moved)",
+  "ledgers outside the frozen set are not scored: dna-protein-synthesis, osmosis, pie-chart"
+ ],
+ "closed": "2026-11-08T15:26:54",
+ "after": {
+  "figure": 41.0,
+  "pooled": 76.6
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "core",
+  "renders": [
+   {
+    "token": "changes:{\"op\":\"Dilate\",\"cx\":-2,\"cy\":1}",
+    "opening": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/opening.png",
+    "override": "/home/shuff57/Documents/GitHub/verSHion/.figures-parity/renders/transformations/772f036c33440b3d.png"
+   }
+  ]
+ },
+ "checker": "pass: ×2 about (−2, 1) gives (4,1) (10,1) (4,5); ×0.5 about (−3, 3) gives (−1,2) (0.5,2) (−1,3). Both correct.",
+ "result": "hit",
+ "evidence": "transform tests 25/25, interact 5/5 incl. round-trip, faq, census (transformations ids only); task run: reference 12 actions, ours before not finishable, after 3; checker hand-checked 4 rotations, 2 dilations, 4 offset reflections, a translation",
+ "next": "transformations cap-02a chained transformations"
+}

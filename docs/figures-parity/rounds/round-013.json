@@ -1,0 +1,35 @@
+{
+ "round": 13,
+ "figure": "transformations",
+ "capability": "cap-01a",
+ "hypothesis": "Batch 2 transformations editor: cap-01a built and checked; evidence handle:click:click it to open the shape",
+ "started_at": "2026-11-08T15:26:55",
+ "git": "b2b1b80",
+ "before": {
+  "figure": 45.1,
+  "pooled": 76.7
+ },
+ "before_comparable": false,
+ "before_drift": [
+  "map.json changed since freeze",
+  "not-doing.md changed since freeze",
+  "micropipette-reading: capability list or classes changed since freeze (denominator moved)",
+  "spring-scale: capability list or classes changed since freeze (denominator moved)",
+  "ledgers outside the frozen set are not scored: dna-protein-synthesis, osmosis, pie-chart"
+ ],
+ "closed": "2026-11-08T15:26:55",
+ "after": {
+  "figure": 48.4,
+  "pooled": 76.7
+ },
+ "probe": {
+  "pass": true,
+  "why": "ok",
+  "class": "editor",
+  "renders": []
+ },
+ "checker": "pass: clicking grid points builds the shape and clicking A closes it (unit test and registry click test pass).",
+ "result": "hit",
+ "evidence": "transform tests 25/25, interact 5/5 incl. round-trip, faq, census (transformations ids only); task run: reference 12 actions, ours before not finishable, after 3; checker hand-checked 4 rotations, 2 dilations, 4 offset reflections, a translation",
+ "next": "transformations cap-02a chained transformations"
+}
