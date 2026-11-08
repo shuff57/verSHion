@@ -833,14 +833,15 @@ impl crate::App {
                     // text link under the note, clearly weaker than the button. As an outlined button
                     // beside the hero's it competed with it; alone in a footer under the steps it read
                     // as an afterthought, far from the decision.
-                    ui.add_space(2.0);
-                    let icon = RichText::new(egui_phosphor::regular::DOWNLOAD_SIMPLE).font(theme::icon_font(14.0)).color(theme::accent_col());
-                    let link = egui::Button::new((icon, theme::accent("or get the desktop app for Linux").size(13.5))).frame(false);
+                    // One treatment, all of it the link: the whole phrase in accent, underlined at
+                    // rest, at body size. A muted lead-in beside green text left it unclear what
+                    // could be pressed, and a smaller hover-only underline read as plain text.
+                    ui.add_space(4.0);
+                    let size = if roomy { 14.5 } else { 14.0 };
+                    let icon = RichText::new(egui_phosphor::regular::DOWNLOAD_SIMPLE).font(theme::icon_font(size + 1.0)).color(theme::accent_col());
+                    let text = theme::accent("Prefer to install? Get the desktop app for Linux").size(size).underline();
+                    let link = egui::Button::new((icon, text)).frame(false);
                     let resp = ui.add(link).on_hover_cursor(egui::CursorIcon::PointingHand);
-                    if resp.hovered() {
-                        let r = resp.rect.shrink2(Vec2::new(4.0, 3.0));
-                        ui.painter().hline(r.left() + 20.0..=r.right(), r.bottom(), Stroke::new(1.0, theme::accent_col()));
-                    }
                     if resp.clicked() {
                         crate::platform::open_url(DESKTOP_RELEASES);
                     }
