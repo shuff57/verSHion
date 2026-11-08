@@ -20,3 +20,19 @@ lto = "off"
 codegen-units = 16
 opt-level = 1
 panic = "unwind"
+
+# Test runs that need optimised code (the figure sweeps): `cargo test --profile figtest --lib figures`.
+# Use it instead of `cargo test --release`, which rebuilds with fat LTO, one codegen unit and the
+# wasm-size opt-level "z" on every edit. Measured 2026-11-08 on this box: rebuild after editing one
+# figure 17 s (incremental), figure suite 1154 s against 1243 s with --release, census identical.
+[profile.figtest]
+inherits = "release"
+lto = "off"
+codegen-units = 16
+incremental = true
+opt-level = 3
+panic = "unwind"
+[profile.figtest.package."*"]
+opt-level = 3
+[profile.figtest.package.vershion]
+opt-level = 3
