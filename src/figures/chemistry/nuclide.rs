@@ -132,11 +132,14 @@ fn build(p: &Params) -> String {
     let small = 30.0;
     let style = p.s("blanks");
 
-    // hyphen notation: alone (carbon-14, no symbol and no numbers) or under the symbol
-    let hyphen = hyphen_parts(p, &sym, &name, a);
+    // hyphen notation: alone (carbon-14, no symbol and no numbers) or under the symbol. With the Symbol
+    // position Off there is no name to put in a hyphen-only figure, so that combination draws as Both did
+    // before: the numbers, and the hyphen line under them.
+    let hyphen_only = p.s("notation") == "Hyphen notation" && p.s("pos_symbol") != "Off";
     let mut y = cy + big * 0.85;
-    if p.s("notation") == "Hyphen notation" {
-        hyphen_line(&mut d, p, &hyphen, cx, cy + big * 0.34, style);
+    if hyphen_only {
+        let segs = hyphen_segs(p, &sym, &name, a, charge, true, false);
+        hyphen_line(&mut d, p, &segs, cx, cy + big * 0.34, 54.0, true, style);
         y += 34.0;
     } else {
         // the symbol, centred, with the numbers grouped tight to it as a textbook sets them. The label
@@ -164,7 +167,8 @@ fn build(p: &Params) -> String {
         }
 
         if p.s("notation") != "Symbol" {
-            tx(&mut d, cx, y, 22.0, "middle", INK, false, &hyphen.join(""));
+            let segs = hyphen_segs(p, &sym, &name, a, charge, false, true);
+            hyphen_line(&mut d, p, &segs, cx, y, 22.0, false, style);
             y += 34.0;
         }
     }
@@ -186,45 +190,69 @@ fn build(p: &Params) -> String {
     d.finish()
 }
 
-/// Rough advance of a bold sans string: capitals are wider than lowercase.
+/// Rough advance of a sans string (bold Arial proportions): capitals are wider than lowercase, a
+/// hyphen is narrow.
 fn sym_w(s: &str, size: f64) -> f64 {
-    s.chars().map(|c| match c { 'W' => 1.0, 'M' => 0.92, 'm' => 0.9, 'w' => 0.78, 'I' | 'i' | 'l' | 'j' => 0.3, 't' | 'f' => 0.38, c if c.is_uppercase() => 0.74, c if c.is_ascii_digit() => 0.6, _ => 0.6 }).sum::<f64>() * size
+    s.chars().map(|c| match c {
+        'W' => 1.0, 'M' => 0.92, 'm' => 0.9, 'w' => 0.78, 'I' | 'i' | 'l' | 'j' => 0.3, 't' | 'f' => 0.38,
+        '-' => 0.33, ' ' | ',' => 0.28, '\u{2212}' | '+' => 0.58,
+        c if c.is_uppercase() => 0.74, c if c.is_ascii_digit() => 0.6, _ => 0.6,
+    }).sum::<f64>() * size
 }
 
-/// The parts of the hyphen form: [name, "-", mass number] for an element or custom symbol, or just
-/// the particle's name.
-fn hyphen_parts(p: &Params, sym: &str, name: &str, a: i64) -> Vec<String> {
-    match p.s("kind") {
-        "Alpha particle" | "Beta particle" | "Neutron" | "Proton" | "Gamma ray" => vec![name.to_string()],
-        "Custom symbol" => vec![sym.to_string(), "-".into(), a.to_string()],
-        _ => vec![name.to_string(), "-".into(), a.to_string()],
+/// The pieces of the hyphen line as (text, drawn as a blank): name, hyphen, mass number and, for an ion
+/// in hyphen-only mode, " ion, 1−". The name follows the Symbol position and the mass number the Mass
+/// number position; Off drops that piece and the hyphen that joined it. `keep_name` shows the name even
+/// when the Symbol position is Off (the line under the symbol in "Both" mode).
+fn hyphen_segs(p: &Params, sym: &str, name: &str, a: i64, charge: i64, with_charge: bool, keep_name: bool) -> Vec<(String, bool)> {
+    let particle = matches!(p.s("kind"), "Alpha particle" | "Beta particle" | "Neutron" | "Proton" | "Gamma ray");
+    let nm = match p.s("pos_symbol") { "Off" if !keep_name => None, "Blank" => Some(true), _ => Some(false) };
+    let ms = match p.s("pos_mass") { "Off" => None, "Blank" => Some(true), _ => Some(false) };
+    let name = if p.s("kind") == "Custom symbol" { sym } else { name };
+    let mut v: Vec<(String, bool)> = Vec::new();
+    if let Some(b) = nm { v.push((name.to_string(), b)); }
+    if particle { return v; }
+    if let (Some(_), Some(_)) = (nm, ms) { v.push(("-".into(), false)); }
+    if let Some(b) = ms { v.push((a.to_string(), b)); }
+    if with_charge && charge != 0 && p.s("pos_charge") != "Off" {
+        v.push((" ion, ".into(), false));
+        let t = if charge > 0 { format!("{charge}+") } else { format!("{}\u{2212}", charge.abs()) };
+        v.push((t, p.s("pos_charge") == "Blank"));
     }
+    v
 }
 
-/// Hyphen notation as the whole figure. The name follows the Symbol position and the mass number
-/// the Mass number position (Blank leaves a box or line, Off leaves it out).
-fn hyphen_line(d: &mut Doc, p: &Params, parts: &[String], cx: f64, base: f64, style: &str) {
+/// Draws the hyphen line centred on `cx`. Neighbouring shown pieces are one text run (so "Carbon-12" is
+/// set tight by the renderer, not by width guesses); a blank is a box or line with a small gap each side.
+fn hyphen_line(d: &mut Doc, p: &Params, segs: &[(String, bool)], cx: f64, base: f64, max_size: f64, bold: bool, style: &str) {
     let f = svg::label_factor(p.s("label_size"));
-    let chars: usize = parts.iter().map(|s| s.chars().count()).sum::<usize>().max(1);
-    let size = (54.0f64).min((W - 40.0) / (chars as f64 * 0.62) / f);
-    let mut items: Vec<(String, &str)> = Vec::new();
-    for (i, part) in parts.iter().enumerate() {
-        let mode = if parts.len() == 3 && i == 2 { p.s("pos_mass") } else if i == 0 { p.s("pos_symbol") } else { "Shown" };
-        if mode != "Off" {
-            items.push((part.clone(), mode));
+    let chars: usize = segs.iter().map(|s| s.0.chars().count()).sum::<usize>().max(1);
+    let size = max_size.min((W - 40.0) / (chars as f64 * 0.6) / f);
+    let mut items: Vec<(String, bool)> = Vec::new();
+    for (t, bl) in segs {
+        match items.last_mut() {
+            Some(last) if !bl && !last.1 => last.0.push_str(t),
+            _ => items.push((t.clone(), *bl)),
         }
     }
-    let width = |t: &str, mode: &str| if mode == "Blank" { sym_w(t, size * f).max(size * f * 1.6) } else { sym_w(t, size * f) };
-    let total: f64 = items.iter().map(|(t, m)| width(t, m)).sum();
+    if items.len() == 1 && !items[0].1 {
+        tx(d, cx, base, size, "middle", INK, bold, &items[0].0);
+        return;
+    }
+    let gap = 0.15 * size * f;
+    let width = |t: &str, bl: bool| if bl { sym_w(t, size * f).max(size * f * 1.3) } else { sym_w(t, size * f) };
+    let total: f64 = items.iter().map(|(t, bl)| width(t, *bl)).sum::<f64>() + gap * items.iter().filter(|i| i.1).count() as f64 * 2.0;
     let mut x = cx - total / 2.0;
-    for (t, m) in &items {
-        let w = width(t, m);
-        if *m == "Blank" {
+    for (t, bl) in &items {
+        let w = width(t, *bl);
+        if *bl {
+            x += gap;
             blank(d, x, base, w, size * f, INK, style, "start");
+            x += w + gap;
         } else {
-            tx(d, x, base, size, "start", INK, true, t);
+            tx(d, x, base, size, "start", INK, bold, t);
+            x += w;
         }
-        x += w;
     }
 }
 
@@ -237,12 +265,17 @@ mod tests {
     fn with(kv: &[(&str, &str)]) -> String {
         let mut p = Params::defaults(&params());
         for (k, v) in kv {
-            p.set_s(k, v);
+            match *k {
+                "show_answers" => p.set_b(crate::figures::SHOW_ANSWERS, *v == "true"),
+                "mass" | "charge" => p.set_i(k, v.parse().unwrap()),
+                _ => p.set_s(k, v),
+            }
         }
         render(&p)
     }
 
-    /// Hyphen notation drew the symbol too (byte-identical to Both); now it is the hyphen form only.
+    /// Hyphen notation drew the symbol too (byte-identical to Both); now it is the hyphen form only,
+    /// one tight text run like the "Both" line.
     #[test]
     fn hyphen_notation_draws_no_symbol() {
         let sym = with(&[("notation", "Symbol")]);
@@ -250,20 +283,48 @@ mod tests {
         let hy = with(&[("notation", "Hyphen notation")]);
         assert_ne!(hy, both);
         assert!(sym.contains(">C</text>") && !sym.contains("Carbon-"));
-        assert!(both.contains(">C</text>") && both.contains("Carbon-12"));
-        assert!(hy.contains(">Carbon</text>") && hy.contains(">12</text>") && hy.contains(">-</text>"));
+        assert!(both.contains(">C</text>") && both.contains(">Carbon-12</text>"));
+        assert!(hy.contains(">Carbon-12</text>"), "one run, no spaced hyphen: {hy}");
         assert!(!hy.contains(">C</text>") && !hy.contains(">6</text>"), "no isotope symbol or atomic number: {hy}");
     }
 
-    /// The student copy of hyphen-only keeps its blank for the mass number and the key still shows.
+    /// Blanks sit after "Carbon-" and before "-12" with a gap, and Off drops the piece and its hyphen.
     #[test]
-    fn hyphen_only_student_copy_blanks_the_mass() {
-        let hy = with(&[("notation", "Hyphen notation"), ("pos_mass", "Blank")]);
-        assert!(hy.contains(">Carbon</text>") && !hy.contains(">12</text>") && hy.contains("<rect"));
+    fn hyphen_only_blanks_and_off() {
+        let m = with(&[("notation", "Hyphen notation"), ("pos_mass", "Blank")]);
+        assert!(m.contains(">Carbon-</text>") && !m.contains(">12</text>") && m.contains("<rect"));
+        let n = with(&[("notation", "Hyphen notation"), ("pos_symbol", "Blank"), ("show_answers", "false")]);
+        assert!(n.contains(">-12</text>") && !n.contains("Carbon") && n.contains("<rect"));
+        // Off drops the piece and its hyphen
+        let off = with(&[("notation", "Hyphen notation"), ("pos_mass", "Off")]);
+        assert!(off.contains(">Carbon</text>") && !off.contains("Carbon-"), "{off}");
+        // with no name to show, Symbol Off draws as Both did before: numbers and the line under them
+        let so = with(&[("notation", "Hyphen notation"), ("pos_symbol", "Off")]);
+        assert!(so.contains(">Carbon-12</text>") && so.contains(">6</text>"));
         let mut p = Params::defaults(&params());
         p.set_s("notation", "Hyphen notation");
         p.set_b(crate::figures::SHOW_ANSWERS, true);
         assert!(render(&p).contains("6 protons"));
+    }
+
+    /// An ion keeps its charge in hyphen-only mode: "Chlorine-37 ion, 1−".
+    #[test]
+    fn hyphen_only_keeps_the_charge() {
+        let cl = with(&[("notation", "Hyphen notation"), ("element", "17 Cl - Chlorine"), ("mass", "37"), ("charge", "-1")]);
+        assert!(cl.contains("Chlorine-37 ion, 1\u{2212}"), "{cl}");
+        let na = with(&[("notation", "Hyphen notation"), ("element", "11 Na - Sodium"), ("charge", "1")]);
+        assert!(na.contains("Sodium-23 ion, 1+"), "{na}");
+        let blank = with(&[("notation", "Hyphen notation"), ("element", "11 Na - Sodium"), ("charge", "1"), ("pos_charge", "Blank")]);
+        assert!(blank.contains("Sodium-23 ion, </text>") && !blank.contains("1+"));
+    }
+
+    /// In "Both" mode a blanked mass number is blanked on the hyphen line too (it gave the answer away).
+    #[test]
+    fn both_student_copy_blanks_the_hyphen_line() {
+        let b = with(&[("notation", "Both"), ("pos_mass", "Blank")]);
+        assert!(!b.contains("Carbon-12") && b.contains(">Carbon-</text>"), "{b}");
+        let b = with(&[("notation", "Both"), ("pos_symbol", "Blank"), ("show_answers", "false")]);
+        assert!(!b.contains("Carbon"), "{b}");
     }
 
     /// The x a drawn text sits at.
