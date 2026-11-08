@@ -578,8 +578,9 @@ fn server_page(ui: &mut Ui, m: &mut AccountModel, address_source: bool) {
     // One compact help block under the field: why Connect waits, then (on the Account screen)
     // where an address comes from, as a second line instead of a separate inset box.
     ui.add_space(-2.0);
+    // 10 px between the two lines: at 3 px they ran together and read as one instruction.
     if address_source {
-        ui.spacing_mut().item_spacing.y = 3.0;
+        ui.spacing_mut().item_spacing.y = 10.0;
     }
     ui.add(egui::Label::new(egui::RichText::new(hint).size(13.0).color(theme::ink().gamma_multiply(0.8))).wrap());
     if address_source {

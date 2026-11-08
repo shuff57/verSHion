@@ -340,17 +340,16 @@ fn no_widow(body: &str) -> String {
     }
 }
 
-/// The numbered disc that heads a step.
+/// The step number that heads a step: a plain accent numeral, set flush with its title.
 fn step_badge(ui: &mut egui::Ui, i: usize) {
-    // An accent ring with an accent number: the pale disc barely registered, and a solid one repeated
-    // the call to action's fill four times over.
+    // No ring or disc: an outlined circle read as a step control or workflow button, as if a step
+    // could be clicked. The same 28 px slot keeps the titles and bodies where they were.
     let (r, _) = ui.allocate_exact_size(Vec2::splat(28.0), egui::Sense::hover());
-    ui.painter().circle(r.center(), 13.0, theme::card(), Stroke::new(1.5, theme::accent_col()));
     ui.painter().text(
-        r.center(),
-        Align2::CENTER_CENTER,
+        r.left_center(),
+        Align2::LEFT_CENTER,
         format!("{}", i + 1),
-        egui::FontId::new(13.0, theme::bold_family()),
+        egui::FontId::new(20.0, theme::bold_family()),
         theme::accent_col(),
     );
 }
@@ -1785,9 +1784,9 @@ impl crate::App {
                                 ui.spacing_mut().item_spacing.x = 8.0;
                                 // level with the card's title across the hairline
                                 ui.add_space(10.0);
-                                // One-line descriptions leave each item shorter, so a larger gap
-                                // keeps the three spread down beside the form.
-                                crate::share::shared_ui::account_reasons_inline(ui, 40.0);
+                                // Sized so the three end about level with the compact form beside
+                                // them (at 40 px the column ran well below it).
+                                crate::share::shared_ui::account_reasons_inline(ui, 20.0);
                                 ui.add_space(6.0);
                             });
                         });
