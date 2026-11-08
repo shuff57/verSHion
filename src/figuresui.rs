@@ -2086,7 +2086,9 @@ impl Workspace {
             let hot = r.hovered() || active;
             match h.shape {
                 Shape::Zone => {
-                    if hot {
+                    // an area that acts where it is clicked (a circle's ring and inside) shows its
+                    // cursor and tip only: its box is not a thing on the figure
+                    if hot && h.click_at.is_none() {
                         // a zone over much of the figure (a plot area, a particle box) gets only a
                         // light outline: a fill there would wash the whole figure out
                         let (fill, stroke) = zone_hover_style(hit.area(), img.area(), acc);

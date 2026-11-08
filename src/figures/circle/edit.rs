@@ -139,9 +139,9 @@ pub fn handles(p: &Params, cx: f64, pad: f64) -> Vec<Handle> {
         if !(q.0.is_finite() && q.1.is_finite()) { return; }
         let r = interact::dist(centre, q);
         // the band on the circle reaches further out than in, so a thin segment beside its arc can still be clicked
-        if (R - 6.0..=R + 12.0).contains(&r) {
+        if (R - 4.0..=R + 12.0).contains(&r) {
             add_point(p, snap_angle(interact::angle_deg(centre, q)) % 360.0);
-        } else if r < R - 6.0 {
+        } else if r < R - 4.0 {
             toggle_shade(p, ((q.0 - centre.0) / R, (centre.1 - q.1) / R));
         }
     }));
@@ -163,7 +163,13 @@ pub fn handles(p: &Params, cx: f64, pad: f64) -> Vec<Handle> {
     for ((a, b), x, y) in joins(p) {
         let (u, w) = (end(x), end(y));
         let tip = format!("Click to label line {a}{b} with its length (again to clear it)");
-        v.push(Handle::zone(((u.0 + w.0) / 2.0, (u.1 + w.1) / 2.0), (16.0, 16.0), &tip, move |p| cycle_mark(p, false, false, &a, &b)));
+        // on the line's middle, pushed a little towards the centre: the thin segment on the far side stays free for a click
+        // that shades it
+        let mid = ((u.0 + w.0) / 2.0, (u.1 + w.1) / 2.0);
+        let (dx, dy) = (centre.0 - mid.0, centre.1 - mid.1);
+        let l = dx.hypot(dy);
+        let at = if l > 1.0 { (mid.0 + dx / l * 6.0, mid.1 + dy / l * 6.0) } else { mid };
+        v.push(Handle::zone(at, (16.0, 16.0), &tip, move |p| cycle_mark(p, false, false, &a, &b)));
     }
     v
 }
@@ -735,6 +741,13 @@ mod tests {
         p.set_s("joins", "BD, OC");
         let q = zone_click(&p, "Click to label line BD");
         assert_eq!(q.s("marks"), "BD length");
+        // the line's click zone sits on the line, pushed towards the centre: the thin segment beyond BD stays free for the shading click
+        let hs = super::super::handles("circle", &p, (0.0, 0.0)).unwrap();
+        let z = hs.iter().find(|h| h.tip.starts_with("Click to label line BD")).unwrap();
+        let o = hs.iter().find(|h| h.click_at.is_some()).unwrap().pos;
+        let inside = |q: Pt| (q.0 - z.pos.0).abs() <= z.half.0 && (q.1 - z.pos.1).abs() <= z.half.1;
+        assert!(inside(interact::polar(o, 300.0, R * 0.866)), "the chord's middle is in the zone");
+        assert!(!inside(interact::polar(o, 300.0, R * 0.93)), "the segment's middle is not");
         assert!(render(&q).contains(">5 cm<"), "a 60 degree chord of a radius 5 circle is 5");
         let q = zone_click(&q, "Click to label line BD");
         assert_eq!(q.s("marks"), "");
