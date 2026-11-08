@@ -588,7 +588,10 @@ fn text(d: &mut Doc, x: f64, y: f64, size: f64, anchor: &str, fill: &str, extra:
 struct Dims {
     fs: f64,
     fl: f64,
+    /// box height, and the smallest box width
     cell: f64,
+    /// box width: wider than `cell` only when an amino acid name needs the room
+    cw: f64,
     gap: f64,
     name_w: f64,
     end_w: f64,
@@ -615,6 +618,9 @@ fn name_lines(s: &str) -> Vec<String> {
     v
 }
 
+/// Space between a 5′ or 3′ label and the box beside it (clear of a mistake ring).
+const END_GAP: f64 = 8.0;
+
 fn dims(p: &Params, lab: f64, rows: &[Row]) -> Dims {
     let fs = 14.0 * lab;
     let fl = 11.5 * lab;
@@ -630,14 +636,85 @@ fn dims(p: &Params, lab: f64, rows: &[Row]) -> Dims {
             .fold(0.0, f64::max)
             + 14.0,
     };
-    let end_w = if p.s("ends") == "Off" { 4.0 } else { fl * 1.6 + 6.0 };
-    Dims { fs, fl, cell, gap, name_w, end_w }
+    let end_w = if p.s("ends") == "Off" { 4.0 } else { fl * 1.6 + END_GAP + 1.0 };
+    Dims { fs, fl, cell, cw: cell, gap, name_w, end_w }
+}
+
+/// A full amino acid name set on two lines, broken between syllables (or at the space of a two-word name).
+pub fn split_name(name: &str) -> Vec<String> {
+    if let Some((a, b)) = name.split_once(' ') {
+        return vec![a.to_string(), b.to_string()];
+    }
+    let cut = match name {
+        "Phenylalanine" | "Tryptophan" | "Asparagine" | "Methionine" => 6,
+        "Glutamine" | "Threonine" | "Histidine" | "Cysteine" => 5,
+        "Arginine" | "Tyrosine" => 4,
+        "Isoleucine" | "Leucine" | "Alanine" | "Proline" | "Glycine" | "Valine" | "Serine" | "Lysine" => 3,
+        _ => name.len() / 2,
+    };
+    if !name.is_char_boundary(cut) || cut == 0 || cut >= name.len() {
+        return vec![name.to_string()];
+    }
+    vec![format!("{}-", &name[..cut]), name[cut..].to_string()]
+}
+
+/// How the amino acid row is laid out: its text size, each codon's label lines, the bead height and the box
+/// width the strands need so that every name fits at full size with a visible link between beads.
+struct AaLayout {
+    fsz: f64,
+    labels: Vec<Vec<String>>,
+    bead_h: f64,
+    band_h: f64,
+    cw: f64,
+}
+
+const AA_LINK: f64 = 14.0;
+
+fn aa_layout(p: &Params, m: &Model, dm: &Dims, beads: bool, shown: bool) -> AaLayout {
+    let fsz = dm.fl * 1.02;
+    let naming = naming(p);
+    let pad = if beads { 14.0 } else { 6.0 };
+    let link = if beads { AA_LINK } else { 8.0 };
+    let w = |s: &str| text_w(s, fsz) * 1.06;
+    let pitch = 3.0 * dm.cell + dm.gap;
+    let labels: Vec<Vec<String>> = m
+        .protein()
+        .iter()
+        .map(|&aa| {
+            let name = aa_name(aa, naming);
+            if aa == b'*' || w(name) + pad + link <= pitch { vec![name.to_string()] } else { split_name(name) }
+        })
+        .collect();
+    let two = shown && labels.iter().any(|l| l.len() > 1);
+    let need = labels.iter().map(|ls| ls.iter().map(|l| w(l)).fold(0.0, f64::max) + pad + link).fold(0.0, f64::max);
+    let cw = if shown && need > pitch { ((need - dm.gap) / 3.0).max(dm.cell) } else { dm.cell };
+    let lines_h = 2.0 * fsz * 1.15;
+    let bead_h = if two { (lines_h + 8.0).max(dm.cell * 0.88) } else { dm.cell * 0.88 };
+    let band_h = if beads { (bead_h + 4.0).max(dm.cell * 1.05) } else if two { (lines_h + 6.0).max(dm.cell * 0.9) } else { dm.cell * 0.9 };
+    AaLayout { fsz, labels, bead_h, band_h, cw }
+}
+
+/// Notes printed under the strands: why nothing is translated, and bases left off.
+pub fn figure_notes(m: &Model) -> Vec<String> {
+    let mut v = Vec::new();
+    if m.len() > 0 && m.start.is_none() {
+        v.push("No start codon (AUG): nothing is translated".to_string());
+    } else if m.len() > 0 && m.read == 0 {
+        v.push("Fewer than three bases from the start: nothing is translated".to_string());
+    }
+    if m.cut > 0 {
+        v.push(format!("Only the first {MAX_BASES} bases are drawn; {} more {} left off", m.cut, if m.cut == 1 { "was" } else { "were" }));
+    }
+    v
 }
 
 /// Draws the strands at (x0, y0); returns the block's size.
 fn draw_strands(d: &mut Doc, p: &Params, m: &Model, look: &Look, x0: f64, y0: f64, measure_only: bool) -> Strands {
     let rows: Vec<Row> = ROWS.iter().copied().filter(|&r| mode(p, r) != Mode::Off).collect();
-    let dm = dims(p, look.lab, &rows);
+    let mut dm = dims(p, look.lab, &rows);
+    let beads = p.s("aa_style") != "Words";
+    let aa = aa_layout(p, m, &dm, beads, rows.contains(&Row::Amino));
+    dm.cw = aa.cw;
     let groups = m.groups();
     let group_of: Vec<usize> = {
         let mut g = vec![0; m.len()];
@@ -649,16 +726,15 @@ fn draw_strands(d: &mut Doc, p: &Params, m: &Model, look: &Look, x0: f64, y0: f6
         g
     };
     let xs = x0 + dm.name_w + dm.end_w;
-    let bx = |i: usize| xs + i as f64 * dm.cell + dm.gap * group_of.get(i).copied().unwrap_or(0) as f64;
-    let width_bases = if m.len() == 0 { 6.0 * dm.cell } else { bx(m.len() - 1) + dm.cell - xs };
-    let naming = naming(p);
-    let beads = p.s("aa_style") != "Words";
+    let bx = |i: usize| xs + i as f64 * dm.cw + dm.gap * group_of.get(i).copied().unwrap_or(0) as f64;
+    let width_bases = if m.len() == 0 { 6.0 * dm.cell } else { bx(m.len() - 1) + dm.cw - xs };
+    let notes = figure_notes(m);
 
     // vertical bands
     let mut bands = Vec::new();
     let mut y = y0;
     for (n, &r) in rows.iter().enumerate() {
-        let h = if r == Row::Amino { dm.cell * if beads { 1.05 } else { 0.9 } } else { dm.cell };
+        let h = if r == Row::Amino { aa.band_h } else { dm.cell };
         bands.push(Band { row: r, y });
         y += h;
         let next = rows.get(n + 1).copied();
@@ -674,19 +750,36 @@ fn draw_strands(d: &mut Doc, p: &Params, m: &Model, look: &Look, x0: f64, y0: f6
     if rows.last() == Some(&Row::Mrna) && p.b("brackets") {
         y += dm.cell * 0.45;
     }
+    let notes_y = y + dm.fl * 1.5;
+    if !notes.is_empty() {
+        y += dm.fl * 0.6 + notes.len() as f64 * dm.fl * 1.45;
+    }
     let total_h = (y - y0).max(dm.cell);
-    let total_w = dm.name_w + dm.end_w * 2.0 + width_bases;
+    let notes_w = notes.iter().map(|n| text_w(n, dm.fl) * 1.06).fold(0.0, f64::max);
+    let total_w = (dm.name_w + dm.end_w * 2.0 + width_bases).max(dm.name_w + dm.end_w + notes_w);
     if measure_only {
         return Strands { w: total_w, h: total_h };
     }
 
     let err = mistakes(p, m);
     let sw = 1.3;
+    // with no gaps between codons, each tRNA is still drawn as its own three boxes, a little apart
+    let inset = if dm.gap < 6.0 { 2.5 } else { 0.0 };
+    let s0 = m.start.unwrap_or(0);
+    let cell_x = |r: Row, i: usize| -> (f64, f64) {
+        if r == Row::Trna && inset > 0.0 {
+            let first = i - (i - s0) % 3;
+            let w = (3.0 * dm.cw - 2.0 * inset) / 3.0;
+            (bx(first) + inset + ((i - s0) % 3) as f64 * w, w)
+        } else {
+            (bx(i), dm.cw)
+        }
+    };
     for band in &bands {
         let r = band.row;
         let yy = band.y;
         let bl = blanks(p, m, r);
-        let mid = yy + dm.cell / 2.0;
+        let mid = yy + if r == Row::Amino { aa.band_h } else { dm.cell } / 2.0;
         // row name
         match p.s("row_names") {
             "Off" => {}
@@ -707,7 +800,7 @@ fn draw_strands(d: &mut Doc, p: &Params, m: &Model, look: &Look, x0: f64, y0: f6
             }
         }
         if r == Row::Amino {
-            draw_amino(d, m, look, &dm, &bx, yy, &bl, naming, beads);
+            draw_amino(d, m, look, &dm, &aa, &bx, mid, &bl, beads);
             continue;
         }
         let cs = cells(m, r);
@@ -717,37 +810,39 @@ fn draw_strands(d: &mut Doc, p: &Params, m: &Model, look: &Look, x0: f64, y0: f6
         // backbone between codon groups (not between separate tRNAs)
         if r != Row::Trna && dm.gap > 0.0 {
             for w in groups.windows(2) {
-                let a = bx(w[0].0 + w[0].1 - 1) + dm.cell;
+                let a = bx(w[0].0 + w[0].1 - 1) + dm.cw;
                 let b = bx(w[1].0);
                 d.line(a, mid, b, mid, INK, 1.4);
             }
         }
         for &i in &cs {
-            let x = bx(i);
+            let (x, bw) = cell_x(r, i);
             let blank = bl.contains(&i);
             let right = letter(m, r, i);
             let mis = err.iter().find(|e| e.row == r && e.at == i);
             let shown = mis.map_or(right, |e| e.drawn);
             let fill = if blank { "#ffffff" } else { look.base_fill(shown) };
-            d.rect(x, yy, dm.cell, dm.cell, fill, INK, sw);
+            d.rect(x, yy, bw, dm.cell, fill, INK, sw);
             let ty = mid + dm.fs * 0.36;
             if !blank {
-                text(d, x + dm.cell / 2.0, ty, dm.fs, "middle", INK, r#" font-weight="bold""#, &(shown as char).to_string());
+                text(d, x + bw / 2.0, ty, dm.fs, "middle", INK, r#" font-weight="bold""#, &(shown as char).to_string());
             } else if look.key {
-                text(d, x + dm.cell / 2.0, ty, dm.fs, "middle", look.answer(), r#" font-style="italic""#, &(right as char).to_string());
+                text(d, x + bw / 2.0, ty, dm.fs, "middle", look.answer(), r#" font-style="italic""#, &(right as char).to_string());
             }
             if mis.is_some() && look.key {
                 let dash = if look.print { r#" stroke-dasharray="4 2""# } else { "" };
                 d.raw(&format!(
                     r#"<rect x="{:.2}" y="{:.2}" width="{:.2}" height="{:.2}" rx="4" fill="none" stroke="{}" stroke-width="2.6"{dash}/>"#,
-                    x - 3.0, yy - 3.0, dm.cell + 6.0, dm.cell + 6.0, look.mistake()
+                    x - 3.0, yy - 3.0, bw + 6.0, dm.cell + 6.0, look.mistake()
                 ));
             }
         }
         // 5′ and 3′ ends
         let (l, rt) = r.ends();
         let (first, last) = (cs[0], *cs.last().unwrap_or(&cs[0]));
-        let (lx, rx) = (bx(first) - 5.0, bx(last) + dm.cell + 5.0);
+        let (fx, _) = cell_x(r, first);
+        let (lxx, lw) = cell_x(r, last);
+        let (lx, rx) = (fx - END_GAP, lxx + lw + END_GAP);
         match p.s("ends") {
             "Off" => {}
             "Blank" => {
@@ -770,7 +865,7 @@ fn draw_strands(d: &mut Doc, p: &Params, m: &Model, look: &Look, x0: f64, y0: f6
             if let Some(s) = m.start {
                 for k in 0..m.codons {
                     let a = bx(s + 3 * k) + 2.0;
-                    let b = bx(s + 3 * k + 2) + dm.cell - 2.0;
+                    let b = bx(s + 3 * k + 2) + dm.cw - 2.0;
                     let t = yy + dm.cell + dm.cell * 0.18;
                     let bt = t + dm.cell * 0.22;
                     d.path(&format!("M{a:.2} {t:.2}V{bt:.2}H{b:.2}V{t:.2}"), "none", INK, 1.3);
@@ -788,7 +883,7 @@ fn draw_strands(d: &mut Doc, p: &Params, m: &Model, look: &Look, x0: f64, y0: f6
                 let x = bx(i);
                 let fr: &[f64] = if matches!(m.coding[i], b'G' | b'C') { &[0.3, 0.5, 0.7] } else { &[0.37, 0.63] };
                 for f in fr {
-                    let xx = x + dm.cell * f;
+                    let xx = x + dm.cw * f;
                     d.raw(&format!(r#"<line x1="{xx:.2}" y1="{ya:.2}" x2="{xx:.2}" y2="{yb:.2}" stroke="{INK}" stroke-width="1.1" stroke-dasharray="2.2 1.8"/>"#));
                 }
             }
@@ -797,48 +892,58 @@ fn draw_strands(d: &mut Doc, p: &Params, m: &Model, look: &Look, x0: f64, y0: f6
     if m.len() == 0 {
         text(d, xs, y0 + dm.cell * 0.65, dm.fl, "start", "#6b6b6b", r#" font-style="italic""#, "Type a sequence of bases");
     }
+    for (k, n) in notes.iter().enumerate() {
+        text(d, xs, notes_y + k as f64 * dm.fl * 1.45, dm.fl, "start", "#555555", r#" font-style="italic""#, n);
+    }
     Strands { w: total_w, h: total_h }
 }
 
+/// The amino acids under their codons, centred on `cy`. A stop codon never gets a bead (it codes for no amino
+/// acid): it is the word Stop, or a line to write it on when the row is blank.
 #[allow(clippy::too_many_arguments)]
-fn draw_amino(d: &mut Doc, m: &Model, look: &Look, dm: &Dims, bx: &dyn Fn(usize) -> f64, yy: f64, bl: &[usize], naming: Naming, beads: bool) {
+fn draw_amino(d: &mut Doc, m: &Model, look: &Look, dm: &Dims, aa: &AaLayout, bx: &dyn Fn(usize) -> f64, cy: f64, bl: &[usize], beads: bool) {
     let Some(s) = m.start else { return };
     let prot = m.protein();
-    let h = dm.cell * 0.88;
-    let cy = yy + dm.cell * 0.52;
-    let room = 3.0 * dm.cell + dm.gap - 6.0;
+    let fsz = aa.fsz;
+    let h = aa.bead_h;
+    let lh = fsz * 1.15;
+    let w = |t: &str| text_w(t, fsz) * 1.06;
     let mut prev: Option<f64> = None; // right edge of the previous bead in the chain
-    for (k, &aa) in prot.iter().enumerate() {
-        let cx = (bx(s + 3 * k) + bx(s + 3 * k + 2) + dm.cell) / 2.0;
-        let name = aa_name(aa, naming);
+    for (k, &a) in prot.iter().enumerate() {
+        let cx = (bx(s + 3 * k) + bx(s + 3 * k + 2) + dm.cw) / 2.0;
+        let lines = &aa.labels[k];
         let blank = bl.contains(&k);
-        let stop = aa == b'*';
-        let mut fsz = dm.fl * 1.02;
-        let tw = text_w(name, fsz) * 1.06;
-        let bw = (tw + 14.0).max(dm.cell * 1.55).min(room);
-        if tw + 10.0 > bw {
-            fsz *= (bw - 10.0) / tw;
-        }
+        let stop = a == b'*';
+        let tw = lines.iter().map(|l| w(l)).fold(0.0, f64::max);
         let ink = if blank { look.answer() } else { INK };
         let style = if blank { r#" font-style="italic""# } else { r#" font-weight="bold""# };
-        if beads && !(stop && !blank) {
+        if beads && !stop {
+            let bw = (tw + 14.0).max(dm.cell * 1.55).min(3.0 * dm.cw + dm.gap - AA_LINK);
             let x = cx - bw / 2.0;
-            if let (Some(px), false) = (prev, stop) {
+            if let Some(px) = prev {
                 d.line(px, cy, x, cy, INK, 1.4);
             }
             d.raw(&format!(
                 r##"<rect x="{x:.2}" y="{:.2}" width="{bw:.2}" height="{h:.2}" rx="{:.2}" fill="#ffffff" stroke="{INK}" stroke-width="1.5"/>"##,
                 cy - h / 2.0,
-                h / 2.0
+                (h / 2.0).min(dm.cell * 0.44)
             ));
-            prev = if stop { None } else { Some(x + bw) };
+            prev = Some(x + bw);
+        }
+        if stop {
+            prev = None;
+        }
+        // a line to write on: a blank stop codon, or any blank name drawn as words
+        if blank && (stop || !beads) {
+            let half = (tw / 2.0 + 6.0).max(dm.cell * 0.7);
+            let ly = cy + lh * (lines.len() as f64 - 1.0) / 2.0 + fsz * 0.55;
+            d.line(cx - half, ly, cx + half, ly, INK, 1.0);
         }
         if !blank || look.key {
-            text(d, cx, cy + fsz * 0.36, fsz, "middle", ink, style, name);
-        }
-        if blank && !beads {
-            let ly = cy + dm.fl * 0.55;
-            d.line(cx - bw / 2.0 + 4.0, ly, cx + bw / 2.0 - 4.0, ly, INK, 1.0);
+            let top = cy - lh * (lines.len() as f64 - 1.0) / 2.0 + fsz * 0.36;
+            for (j, l) in lines.iter().enumerate() {
+                text(d, cx, top + j as f64 * lh, fsz, "middle", ink, style, l);
+            }
         }
     }
 }
@@ -944,6 +1049,8 @@ pub fn key_lines(p: &Params, m: &Model) -> Vec<String> {
             let t: Vec<String> = xs.iter().map(|x| mistake_text(p, m, x)).collect();
             out.push(format!("{}: {}", if xs.len() == 1 { "Mistake" } else { "Mistakes" }, t.join("; ")));
         }
+        // why the tRNA and amino acid rows are empty, and what was left off
+        out.extend(figure_notes(m).into_iter().map(|n| format!("{n}.")));
     }
     out
 }

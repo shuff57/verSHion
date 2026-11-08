@@ -299,7 +299,7 @@ fn blank_and_some_rows_hide_bases_and_the_key_fills_them() {
     let p = with(&[("row_amino", s("Blank"))]);
     let t = texts(&render(&p));
     assert!(!t.iter().any(|x| x == "Met") && !t.iter().any(|x| x == "Stop"));
-    assert_eq!(render(&p).matches(r#"rx="#).count(), 6, "five beads and a detached one for the stop");
+    assert_eq!(render(&p).matches(r#"rx="#).count(), 5, "five beads, none for the stop codon");
     // row names blank: lines to write on, no names
     let t = texts(&render(&with(&[("row_names", s("Blank"))])));
     assert!(!t.iter().any(|x| x.contains("strand")));
@@ -459,5 +459,123 @@ fn renders_png_for_review() {
     ] {
         let svg = render(&with(&over));
         assert!(to_png(&svg, 1.0).is_ok(), "{name}");
+    }
+}
+
+/// (x, y, width, height, the whole tag) of every `<rect>` after the background.
+fn rects(svg: &str) -> Vec<(f64, f64, f64, f64, String)> {
+    let num = |tag: &str, a: &str| -> f64 {
+        let k = format!(" {a}=\"");
+        tag.find(&k).and_then(|i| tag[i + k.len()..].split('"').next()?.parse().ok()).unwrap_or(f64::NAN)
+    };
+    svg.split("<rect")
+        .skip(1)
+        .map(|r| {
+            let tag = &r[..r.find('>').unwrap_or(r.len())];
+            (num(tag, "x"), num(tag, "y"), num(tag, "width"), num(tag, "height"), tag.to_string())
+        })
+        .filter(|r| r.0.is_finite())
+        .collect()
+}
+
+/// The beads of the amino acid chain (rounded white boxes with the bead stroke).
+fn beads(svg: &str) -> Vec<(f64, f64, f64, f64, String)> {
+    rects(svg).into_iter().filter(|r| r.4.contains(" rx=") && r.4.contains(r#"stroke-width="1.5""#)).collect()
+}
+
+#[test]
+fn a_stop_codon_never_gets_a_bead() {
+    // five amino acids and a stop: five beads whether the row is shown, blank or partly blank, key or not
+    for mode in ["Shown", "Blank", "Some"] {
+        for key in [false, true] {
+            for seed in 1..6 {
+                let p = with(&[("row_amino", s(mode)), (SHOW_ANSWERS, b(key)), ("blank_seed", Value::I(seed))]);
+                assert_eq!(beads(&render(&p)).len(), 5, "{mode} key={key} seed={seed}");
+            }
+        }
+    }
+    // the key writes Stop on its line, never in a bead
+    let svg = render(&with(&[("row_amino", s("Blank")), (SHOW_ANSWERS, b(true))]));
+    assert!(texts(&svg).iter().any(|t| t == "Stop"));
+}
+
+#[test]
+fn untranslated_and_cut_sequences_say_so_on_the_figure_and_in_the_key() {
+    let p = with(&[("typed", s("Coding")), ("seq", s("GGGCCCTTTAAA"))]);
+    let t = texts(&render(&p));
+    assert!(t.iter().any(|x| x == "No start codon (AUG): nothing is translated"), "{t:?}");
+    let mut k = p.clone();
+    k.set_b(SHOW_ANSWERS, true);
+    assert!(key_lines(&k, &Model::from_params(&k)).contains(&"No start codon (AUG): nothing is translated.".to_string()));
+    // read from the first base, the bases are translated and the note goes
+    let mut f = p.clone();
+    f.set_s("frame", "From the first base");
+    assert!(!texts(&render(&f)).iter().any(|x| x.starts_with("No start codon")));
+    // past the 36th base
+    let long = with(&[("typed", s("Coding")), ("seq", s(&"ATG".repeat(14)))]);
+    assert!(texts(&render(&long)).iter().any(|x| x == "Only the first 36 bases are drawn; 6 more were left off"));
+    assert!(figure_notes(&Model::from_params(&defaults())).is_empty());
+}
+
+#[test]
+fn full_names_keep_their_size_and_the_links_between_beads() {
+    let fsz = 11.5 * 1.02;
+    // amino acids with long full names: Met Phe Glu Asp Trp Asn Ile Gln Thr, then Stop
+    let seq = "ATGTTTGAAGATTGGAATATTCAAACATAA";
+    for gaps in [true, false] {
+        for style in ["Chain of beads", "Words"] {
+            let p = with(&[("typed", s("Coding")), ("seq", s(seq)), ("aa_names", s("Methionine")), ("aa_style", s(style)), ("gaps", b(gaps))]);
+            let svg = render(&p);
+            let t = texts(&svg);
+            let parts: &[&str] = if style == "Words" { &["Phenyl-", "alanine"] } else { &["Phenyl-", "alanine", "Glutamic", "acid", "Aspartic", "Trypto-", "phan"] };
+            for part in parts {
+                assert!(t.iter().any(|x| x == part), "{part} missing ({gaps}, {style}): {t:?}");
+            }
+            // no centred text (bases and amino acids) smaller than the amino acid row's size
+            for (i, _) in svg.match_indices("text-anchor=\"middle\"") {
+                let head = &svg[..i];
+                let fs: f64 = head[head.rfind("font-size=\"").unwrap() + 11..].split('"').next().unwrap().parse().unwrap();
+                assert!(fs >= fsz - 0.01, "font {fs} too small ({gaps}, {style})");
+            }
+            if style == "Chain of beads" {
+                let mut bs = beads(&svg);
+                bs.sort_by(|a, b| a.0.total_cmp(&b.0));
+                assert_eq!(bs.len(), 9);
+                for w in bs.windows(2) {
+                    let link = w[1].0 - (w[0].0 + w[0].2);
+                    assert!(link >= 10.0, "beads {link:.1} apart ({gaps})");
+                }
+            }
+        }
+    }
+    assert_eq!(split_name("Glutamic acid"), vec!["Glutamic", "acid"]);
+    assert_eq!(split_name("Phenylalanine"), vec!["Phenyl-", "alanine"]);
+    // three-letter names keep the plain box width
+    let d = render(&defaults());
+    assert!(rects(&d).iter().any(|r| (r.2 - 24.0).abs() < 0.01 && (r.3 - 24.0).abs() < 0.01));
+}
+
+#[test]
+fn end_labels_clear_mistake_rings_and_anticodons_stay_apart_without_gaps() {
+    // the 5′ label ends at least END_GAP left of the first box; a mistake ring reaches 3 px out
+    let svg = render(&with(&[(SHOW_ANSWERS, b(true)), ("mistakes", s("4"))]));
+    let first_box = rects(&svg).iter().filter(|r| (r.2 - r.3).abs() < 0.01).map(|r| r.0).fold(f64::INFINITY, f64::min);
+    let i = svg.find(">5\u{2032}</text>").unwrap();
+    let head = &svg[..i];
+    let tag = &head[head.rfind("<text").unwrap()..];
+    let lx: f64 = tag[tag.find(" x=\"").unwrap() + 4..].split('"').next().unwrap().parse().unwrap();
+    assert!(first_box - lx >= END_GAP - 0.01, "label {lx} box {first_box}");
+    assert!(END_GAP - 3.0 >= 4.0);
+    // gaps on or off: the tRNA row's boxes break between anticodons
+    for gaps in [false, true] {
+        let svg = render(&with(&[("gaps", b(gaps)), ("row_coding", s("Off")), ("row_template", s("Off")), ("row_mrna", s("Off")), ("row_amino", s("Off"))]));
+        let mut xs: Vec<(f64, f64)> = rects(&svg).iter().filter(|r| r.3 > 20.0 && r.4.contains(r#"stroke-width="1.3""#)).map(|r| (r.0, r.0 + r.2)).collect();
+        xs.sort_by(|a, b| a.0.total_cmp(&b.0));
+        assert_eq!(xs.len(), 15);
+        for k in 0..4 {
+            let between = xs[3 * k + 3].0 - xs[3 * k + 2].1;
+            assert!(between >= 4.0, "anticodons {k} and {} touch ({between:.1}, gaps {gaps})", k + 1);
+            assert!((xs[3 * k + 1].0 - xs[3 * k].1).abs() < 0.03, "boxes in one anticodon touch");
+        }
     }
 }
