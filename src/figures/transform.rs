@@ -618,6 +618,20 @@ pub fn handles(p: &Params) -> Vec<Handle> {
             });
         }
     }
+    // a translation is set by moving its image: drag A' and the whole image follows the pointer, snapping to whole
+    // units (before the pre-image's knobs, so a pre-image vertex under A' stays on top)
+    if p.s("op") == "Translate" && p.b(SHOW_ANSWERS) && !lay.image.is_empty() {
+        hs.push(Handle::square(fr.to_svg(lay.image[0]), "Drag A\u{2032} to set the translation", move |p, m| {
+            let (mx, my) = fr.to_xy(m);
+            let Some(&a) = vertices(p).first() else { return };
+            let cur = (fin(p.f("dx"), -8.0, 8.0, 0.0), fin(p.f("dy"), -8.0, 8.0, 0.0));
+            let to = (snap(mx - a.0, cur.0, -8.0, 8.0), snap(my - a.1, cur.1, -8.0, 8.0));
+            if to != cur {
+                p.set_f("dx", to.0);
+                p.set_f("dy", to.1);
+            }
+        }));
+    }
     if p.b("show_pre") {
         for (i, q) in lay.pre.iter().enumerate() {
             hs.push(Handle::knob(fr.to_svg(*q), &format!("Drag vertex {} to a grid point", NAMES[i]), move |p, m| {
@@ -808,7 +822,7 @@ mod tests {
     fn dragging_a_vertex_snaps_it_to_a_grid_point_and_the_image_follows() {
         let p = with(&[]);
         let hs = handles(&p);
-        assert_eq!(hs.len(), 3, "a knob on A, B and C");
+        assert_eq!(hs.iter().filter(|h| h.tip.contains("vertex")).count(), 3, "a knob on A, B and C");
         let c = hs.iter().find(|h| h.tip.contains("vertex C")).unwrap();
         let fr = layout(&p).frame;
         assert_eq!(c.pos, fr.to_svg((1.0, 3.0)));
@@ -825,7 +839,7 @@ mod tests {
         (c.drag.as_ref().unwrap())(&mut q, (1e6, -1e6));
         assert_eq!(vertices(&q)[2], (10.0, 10.0), "right and up, held at the corner of the range");
         // a hidden pre-image has nothing to drag
-        assert!(handles(&with(&[b("show_pre", false)])).is_empty());
+        assert!(!handles(&with(&[b("show_pre", false)])).iter().any(|h| h.tip.contains("vertex")));
     }
 
     #[test]
@@ -906,7 +920,7 @@ mod tests {
                 }
             }
         }
-        for tip in ["Drag vertex A to a grid point", "Drag the centre of rotation", "Drag the centre of enlargement", "Drag the mirror line"] {
+        for tip in ["Drag vertex A to a grid point", "Drag the centre of rotation", "Drag the centre of enlargement", "Drag the mirror line", "Drag A\u{2032} to set the translation"] {
             assert!(seen.contains(tip), "no {tip:?} handle: {seen:?}");
         }
     }
@@ -931,6 +945,23 @@ mod tests {
         }
         // the axes, y = x and y = -x have nothing to drag
         assert!(!handles(&with(&[s("op", "Reflect"), s("axis", AXES[2])])).iter().any(|h| h.tip.contains("mirror")));
+    }
+
+    #[test]
+    fn dragging_the_image_sets_the_translation() {
+        let p = with(&[]);
+        let fr = layout(&p).frame;
+        let h = handles(&p).into_iter().find(|h| h.tip.contains("translation")).expect("an A\u{2032} knob on a translation");
+        assert_eq!(h.pos, fr.to_svg((4.0, -1.0)));
+        // A is (1, 1); A' dropped near (-2, 5) is a translation of (-3, 4)
+        let mut q = p.clone();
+        (h.drag.as_ref().unwrap())(&mut q, fr.to_svg((-2.2, 5.3)));
+        assert_eq!((q.f("dx"), q.f("dy")), (-3.0, 4.0));
+        assert_eq!(build(&q).1.image[0], (-2.0, 5.0));
+        assert!(texts(&build(&q).0).contains("(x, y) \u{2192} (x \u{2212} 3, y + 4)"));
+        // only a translation, and only on the key (the student copy has no image to drag)
+        assert!(!handles(&with(&[b(SHOW_ANSWERS, false)])).iter().any(|h| h.tip.contains("translation")));
+        assert!(!handles(&with(&[s("op", "Rotate")])).iter().any(|h| h.tip.contains("translation")));
     }
 
     #[test]

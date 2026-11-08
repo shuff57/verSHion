@@ -3805,7 +3805,7 @@ const TRANSFORMATIONS: &[Faq] = &[
     },
     Faq {
         q: "Can I move the centre or the mirror line?",
-        a: "Yes, on the figure: drag the ring that marks the centre of a turn or an enlargement, or the knob on a mirror line x = a, y = a, y = x + a or y = -x + a. Each snaps to the grid, and the image and the rule follow. Or type them: the centre's x and y, the line's number a.",
+        a: "Yes, on the figure: drag the ring that marks the centre of a turn or an enlargement, or the knob on a mirror line x = a, y = a, y = x + a or y = -x + a. Each snaps to the grid, and the image and the rule follow. Or type them: the centre's x and y, the line's number a. A translation is set the same way: on the answer key, drag A' to where it should go and the whole image follows.",
     },
     Faq {
         q: "How big is the grid?",
