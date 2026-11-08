@@ -27,6 +27,9 @@ pub struct AccountUi {
     /// The Shared page is on screen this frame: a quiet lookup must not close the account.
     pinned: bool,
     wants_page: bool,
+    /// Set while the Account screen draws the section: the server form adds where an address
+    /// comes from under its helper line.
+    address_source: bool,
 }
 
 /// Field ids whose egui edit state is dropped once the field is empty, so no copy of a password
@@ -163,6 +166,14 @@ impl AccountUi {
         self.section(ui, true);
     }
 
+    /// The section on the Account screen: as `draw_section`, with the server form also saying
+    /// where an address comes from, under its helper line.
+    pub fn draw_account_section(&mut self, ui: &mut Ui) {
+        self.address_source = true;
+        self.section(ui, true);
+        self.address_source = false;
+    }
+
     /// The section on the Shared page's Settings tab, which offers "Delete my account" itself
     /// (with what deleting does), so the status page's own link is left out.
     pub fn draw_settings_section(&mut self, ui: &mut Ui) {
@@ -199,6 +210,7 @@ impl AccountUi {
     }
 
     fn page_body(&mut self, ui: &mut Ui, chrome: bool, delete_link: bool) -> bool {
+        let address_source = self.address_source;
         let m = &mut self.model;
         let mut close = false;
         if chrome {
@@ -247,7 +259,7 @@ impl AccountUi {
                     ui.label(theme::muted("Opening your account…"));
                 });
             }
-            Page::NotConfigured | Page::Server => server_page(ui, m),
+            Page::NotConfigured | Page::Server => server_page(ui, m, address_source),
             Page::SignIn => sign_in_page(ui, m),
             Page::SignUp => sign_up_page(ui, m),
             Page::CheckEmail(kind) => check_email_page(ui, m, kind),
@@ -490,7 +502,7 @@ fn server_field_width(avail: f32, btn_w: f32) -> f32 {
     if avail >= 620.0 { fill.min(SERVER_FIELD_MAX) } else { fill }
 }
 
-fn server_page(ui: &mut Ui, m: &mut AccountModel) {
+fn server_page(ui: &mut Ui, m: &mut AccountModel, address_source: bool) {
     para(
         ui,
         "Sharing questions with other teachers needs an account on a verSHion pool server.",
@@ -498,11 +510,12 @@ fn server_page(ui: &mut Ui, m: &mut AccountModel) {
     // The field and its action on one row, the usual address-and-submit pair: below the field, a
     // locked Connect was read in turn as washed out, as a pressable pill and as a drop zone. Beside
     // the box it waits for, the locked button reads as that box's submit.
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 6.0;
-        ui.label(theme::strong("Server address").size(13.5));
-    });
-    ui.add_space(2.0);
+    // The label sits just above its field: in a row it took the theme's 34 px interact height and
+    // floated in a band of its own between the sentence above and the box.
+    let gap_y = ui.spacing().item_spacing.y;
+    ui.spacing_mut().item_spacing.y = 6.0;
+    ui.label(theme::strong("Server address").size(13.5));
+    ui.spacing_mut().item_spacing.y = gap_y;
     let busy = m.busy();
     let base = m.base_url().to_string();
     let mut enter = false;
@@ -562,8 +575,23 @@ fn server_page(ui: &mut Ui, m: &mut AccountModel) {
     } else {
         "Paste the address your school gives you, then press Connect."
     };
-    ui.add_space(6.0);
+    // One compact help block under the field: why Connect waits, then (on the Account screen)
+    // where an address comes from, as a second line instead of a separate inset box.
+    ui.add_space(-2.0);
+    if address_source {
+        ui.spacing_mut().item_spacing.y = 3.0;
+    }
     ui.add(egui::Label::new(egui::RichText::new(hint).size(13.0).color(theme::ink().gamma_multiply(0.8))).wrap());
+    if address_source {
+        let mut job = egui::text::LayoutJob::default();
+        let style = ui.style().clone();
+        theme::strong("No address yet? ").size(13.0).append_to(&mut job, &style, egui::FontSelection::Default, egui::Align::Center);
+        theme::muted("Ask the colleague or IT team who runs your school's pool.")
+            .size(13.0)
+            .append_to(&mut job, &style, egui::FontSelection::Default, egui::Align::Center);
+        ui.spacing_mut().item_spacing.y = gap_y;
+        ui.add(egui::Label::new(job).wrap());
+    }
     ui.add_space(6.0);
     if m.page == Page::Server && !m.base_url().is_empty() && link(ui, "Cancel") {
         m.go(Page::SignIn);
