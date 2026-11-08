@@ -41,6 +41,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "soil-texture" => SOIL_TEXTURE,
         "photosynthesis" => PHOTOSYNTHESIS,
         "leaf-cross-section" => LEAF_CROSS_SECTION,
+        "osmosis" => OSMOSIS,
         "xylem-phloem" => XYLEM_PHLOEM,
         // chemistry
         "bohr-model" => BOHR_MODEL,
@@ -4439,5 +4440,32 @@ const PERIODIC_TABLE: &[Faq] = &[
     Faq {
         q: "How exact are the trend arrows?",
         a: "They are a stated simplification, not a per-element measurement. Across a period the nuclear charge grows while the shell stays the same, so atomic radius generally falls and electronegativity generally rises; down a group a new shell is added, so radius generally rises and electronegativity generally falls. The word generally matters: the d-block and f-block are not regular, the lanthanide contraction makes period 6 unusual, and helium, neon and argon have no Pauling electronegativity value at all. The arrows give the direction a course asks for; they do not rank every pair of neighbours, and an exam question that needs a number should use a data table. The exported figure prints this caveat under the arrows, so a handout carries it too.",
+    },
+];
+
+const OSMOSIS: &[Faq] = &[
+    Faq {
+        q: "How is the tonicity worked out?",
+        a: "Add up the solutes that cannot cross the membrane, inside and outside. Water moves toward the higher total, which is the hypertonic side; the side with less is hypotonic, and equal totals are isotonic (no net water movement). A solute marked Can cross the membrane is left out, because it moves from higher to lower until it is the same on both sides and then pulls no water either way. The sums use the numbers as typed, so give every solute in the same unit; mass percent is not the same as particles per litre, so a percent comparison of two different solutes is a simplification.",
+    },
+    Faq {
+        q: "What happens to a red blood cell in each solution?",
+        a: "In a hypotonic solution water moves in and the cell swells; if it gains enough (here, when its inside is at least 1.5 times as concentrated as the solution, with the bursting switch on) it bursts, which is lysis. In an isotonic solution there is no net movement and the cell keeps its biconcave shape. In a hypertonic solution water moves out and the cell shrinks with a puckered, spiky edge, which is crenation.",
+    },
+    Faq {
+        q: "How is a plant cell different from a red blood cell?",
+        a: "A plant cell has a cell wall that resists swelling, so in a hypotonic solution it fills with water and becomes turgid (firm) instead of bursting. In an isotonic solution it is flaccid (limp). In a hypertonic solution the vacuole and cytoplasm lose water and the membrane pulls away from the wall, which is plasmolysis; the gap between wall and membrane fills with the outside solution because the wall is fully permeable.",
+    },
+    Faq {
+        q: "What do the three-up and the Starts and Shuffled options do?",
+        a: "The three-up draws the same cell in a solution of half, the same and double the inside's concentration, so A is hypotonic, B isotonic and C hypertonic; the outside values you typed are ignored for it. Results shows each outcome, Starts shows only the starting cell with its result label turned into a blank to predict. Shuffled mixes the order so the three cannot be read off by position; the letters and the answer key follow what is drawn. The split beaker, U-tube and dialysis bag show the start and the result instead.",
+    },
+    Faq {
+        q: "How do I make a student copy?",
+        a: "Turn Show answers off. Labels set to Blank become empty lines, Blank boxes stay empty for the student to draw an arrow in, and the explanation under the figure is left off. Student + key exports the copy and a key in which the blanks hold the answers, the boxes hold the arrows and the explanation is printed. Print style is grey only, with a dashed shaft on solute arrows so they differ from water arrows.",
+    },
+    Faq {
+        q: "How are the particles and the water level drawn?",
+        a: "Each solute is drawn as particles in proportion to its concentration, as crowded as the number says; the key states how much one particle stands for (0.25 %, 0.05 M or 50 mM). Water appears as small discs filling the room the solutes leave. When water moves, the solute particles stay, so a cell that loses water has its solute more crowded. In the beaker and U-tube the level rises on the more concentrated side by an amount that grows with the difference. Shuffle particles picks a new layout without changing the science.",
     },
 ];

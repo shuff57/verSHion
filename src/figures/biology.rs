@@ -17,6 +17,7 @@ pub mod gel;
 pub mod hardyweinberg;
 pub mod leaf;
 mod noto_adv;
+pub mod osmosis;
 pub mod pedigree;
 pub mod photosynthesis;
 pub mod pipette;
@@ -48,6 +49,7 @@ pub fn examples(id: &str) -> Option<Vec<super::Example>> {
         "soil-texture" => soiltexture::examples(id),
         "photosynthesis" => photosynthesis::examples(id),
         "leaf-cross-section" => leaf::examples(id),
+        "osmosis" => osmosis::examples(id),
         "xylem-phloem" => xylem::examples(id),
         _ => None,
     }
@@ -55,8 +57,11 @@ pub fn examples(id: &str) -> Option<Vec<super::Example>> {
 
 /// "Add ..." chips / action buttons for this subject's figures. (The pedigree's "New pedigree"
 /// lives in its own Family card, `figuresui::pedigree_panel`, with the person panel.)
-pub fn chips(_id: &str) -> Option<super::ChipsCard> {
-    None
+pub fn chips(id: &str) -> Option<super::ChipsCard> {
+    match id {
+        "osmosis" => Some(osmosis::chips()),
+        _ => None,
+    }
 }
 
 pub fn handles(id: &str, p: &Params, size: (f64, f64)) -> Option<Vec<interact::Handle>> {
@@ -154,6 +159,7 @@ pub fn defs() -> Vec<FigureDef> {
         soiltexture::defs().pop().unwrap(),
         photosynthesis::defs().pop().unwrap(),
         leaf::defs().pop().unwrap(),
+        osmosis::defs().pop().unwrap(),
         xylem::defs().pop().unwrap(),
     ]
 }

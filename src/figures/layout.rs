@@ -26,6 +26,7 @@ fn item_noun(fig: &str, letters: &str) -> &'static str {
         ("vector-diagram", _) => "Vector",
         ("motion-graphs", _) => "Segment",
         ("circuit-diagram", _) => "Component",
+        ("osmosis", _) => "Solute",
         _ => "Item",
     }
 }

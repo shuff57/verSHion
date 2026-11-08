@@ -332,7 +332,7 @@ mod tests {
         "graph-diagram", "grid-reference", "guitar-chords", "heart-zones", "histogram", "hr-diagram",
         "journal-entry", "kirchhoff-loops", "leaf-cross-section", "loan-amortisation", "logic-circuit", "lorenz", "magnetic-field", "map-scale",
         "marketing-funnel", "maslow", "monopoly", "moon-seasons", "motion-map", "music-staff", "network-topology",
-        "normal-curve", "nuclide-notation", "number-base", "ogive", "org-chart", "organic-structure", "organiser", "orthographic", "periodic-table", "perspective-grid",
+        "normal-curve", "nuclide-notation", "number-base", "ogive", "org-chart", "organic-structure", "organiser", "orthographic", "osmosis", "periodic-table", "perspective-grid",
         "photosynthesis", "piano-keyboard", "pie-chart", "plate-boundaries", "plot-arc", "population-pyramid", "ppf", "probability-tree", "protractor", "pv-diagram",
         "rc-curve", "recursion-tree", "refraction", "rejection-region", "residual-plot", "rhythm-counting",
         "sampling-distribution", "scatterplot", "sentence-diagram", "sine-cosine", "slope-triangle", "soil-texture", "solid-net", "sorting-passes", "standing-wave", "state-machine",

@@ -21,6 +21,8 @@ pub fn overrides(id: &str) -> Vec<(&'static str, Value)> {
         "photosynthesis" => vec![("show_graph", Value::B(true))],
         // the leaf cross-section opens with Large labels: the section is wide, and at Medium a printed copy's names are small
         "leaf-cross-section" => vec![("label_size", st("Large"))],
+        // osmosis opens with the explanation printed under the figure (the key; a student copy leaves it off)
+        "osmosis" => vec![("answer_key", Value::B(true))],
         // xylem and phloem opens on the stem and the lengthwise transport view at Large (owner decision 2026-11-03): the
         // first picture shows which way water and sugar move; its names print at about 5.3 pt and the note offers the stem alone
         "xylem-phloem" => vec![("view", st("Stem")), ("label_size", st("Large"))],
