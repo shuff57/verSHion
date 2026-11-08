@@ -5230,7 +5230,11 @@ pub(super) fn set_solid_r(p: &mut Params, r: f64) { if p.b("give_d") { p.set_f("
 /// row had over to `d_lab` (`give_d_changed`), so the Diameter row opens labelled as the Radius row was.
 fn diam_text(p: &Params, v: f64) -> Option<String> {
     if !p.b("give_d") { return mtext(p, "d", "None", v, false); }
-    match match p.s("d_lab") { "" => "None", m => m } {
+    // Legacy: figures saved before d_lab reached the diameter have give_d with only r_lab set (the
+    // Diameter row wrote r_lab). While d_lab is None the diameter keeps r_lab's mode, so those keep their
+    // label; hiding it takes both set to None, which the panel does together (`diam_label_changed`).
+    let mode = match p.s("d_lab") { "" | "None" => match p.s("r_lab") { "" => "Measure", m => m }, m => m };
+    match mode {
         "None" => None,
         "Text" => { let t = p.s("d_label").trim(); Some(if t.is_empty() { "d".to_string() } else { t.to_string() }) }
         _ => Some(fmtu(v, p.i("dec"), p.s("unit"))),
@@ -6864,6 +6868,14 @@ pub fn give_d_changed(p: &mut Params) {
         p.set_s("d_lab", if m.is_empty() { "Measure" } else { &m });
     } else {
         p.set_s("d_lab", "None");
+    }
+}
+
+/// The panel changed the Diameter label while "Give the diameter instead" is on: choosing None hides
+/// the label, so the Radius row's mode (the legacy fallback of `diam_text`) goes to None with it.
+pub fn diam_label_changed(p: &mut Params) {
+    if p.b("give_d") && p.s("d_lab") == "None" {
+        p.set_s("r_lab", "None");
     }
 }
 
@@ -9125,13 +9137,20 @@ mod cfg_math_tests {
         };
         let measure = svg(&[("d_lab", s("Measure"))]);
         let text = svg(&[("d_lab", s("Text")), ("d_label", s("d"))]);
-        let none = svg(&[("d_lab", s("None"))]);
+        let none = svg(&[("d_lab", s("None")), ("r_lab", s("None"))]);
         assert!(measure.contains("8 cm") && !text.contains("8 cm") && text.contains(">d<"), "{text}");
         assert!(!none.contains("8 cm") && !none.contains(">d<"));
         assert_ne!(measure, text);
-        // r_lab no longer reaches the diameter
+        // d_lab wins over r_lab when it is set
         assert_eq!(svg(&[("d_lab", s("Measure")), ("r_lab", s("None"))]), measure);
-        assert_eq!(svg(&[("d_lab", s("None")), ("r_lab", s("Measure"))]), none);
+        assert_eq!(svg(&[("d_lab", s("Text")), ("r_lab", s("Measure"))]), text);
+        // legacy figure: give_d with only r_lab set still labels the diameter with its measure
+        let legacy = svg(&[("r_lab", s("Measure"))]);
+        assert!(legacy.contains("8 cm"), "{legacy}");
+        assert_eq!(legacy, measure);
+        let mut p = params("sphere", &[("give_d", Value::B(true)), ("d_lab", s("None"))]);
+        diam_label_changed(&mut p);
+        assert_eq!(p.s("r_lab"), "None");
         // the panel carries the Radius row's mode across when the switch turns on
         let mut p = params("sphere", &[("r_lab", s("Text")), ("give_d", Value::B(true))]);
         give_d_changed(&mut p);
