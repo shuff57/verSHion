@@ -571,7 +571,7 @@ fn render(p: &Params) -> String {
     }
     let key_below_h = if key_below_rows.is_empty() { 0.0 } else { key_below_rows.len() as f64 * (swatch + 10.0) + 14.0 };
     let top = pad + title_h + (-lo_y - R).max(0.0);
-    let h_total = top + R + hi_y.max(R) - R + key_below_h + pad;
+    let h_total = top + R + hi_y.max(R) + key_below_h + pad;
     // the pie (and its labels) sit at the left of the content, which is centred on the canvas
     let ox = (w_total - content_w) / 2.0 - lo_x;
     let cx = ox;
@@ -645,7 +645,7 @@ fn render(p: &Params) -> String {
 
     // the key
     let swatch_rect = |d: &mut Doc, x: f64, y: f64, i: usize| {
-        d.rect(x, y, swatch, swatch, &paint[i].css, ink, 1.2);
+        d.rect(x, y, swatch, swatch, &shown(i).css, ink, 1.2);
     };
     if key == KEYS[1] && !names.is_empty() {
         let kx = ox + hi_x + key_gap;
@@ -657,7 +657,7 @@ fn render(p: &Params) -> String {
             text(&mut d, kx + swatch + 10.0, y + swatch * 0.82, fk, "start", s, ink, false);
         }
     } else if !key_below_rows.is_empty() {
-        let mut y = cy + R + (hi_y.max(R) - R) + 18.0;
+        let mut y = cy + hi_y.max(R) + 18.0;
         for row in &key_below_rows {
             let rw = row.iter().map(|x| x.2).sum::<f64>() - 22.0;
             let mut x = (w_total - rw) / 2.0;
