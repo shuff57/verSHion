@@ -516,7 +516,7 @@ pub fn warnings(p: &Params) -> Vec<String> {
         let same = (0..5).any(|i| (i + 1..5).any(|j| drawn[i] && drawn[j] && l[i] == l[j]));
         if same { v.push(format!("Two points have the same letter ({}, {}, {}, {}, {}): rename one so the labels can be told apart.", n.o, n.a, n.b, n.c, n.m)); }
         v.extend(edit::unknown_rows(p));
-        for r in edit::unknown_marks(p) { v.push(format!("Label {r} is not drawn: name an arc (arc BC) or a line (BD) between points on the figure.")); }
+        for r in edit::unknown_marks(p) { v.push(format!("Label {r} is not drawn: name an arc (arc BC), a line (BD) or an angle (angle BDC) between points on the figure.")); }
         for r in edit::unknown_shades(p) { v.push(format!("Shaded area {r} is not drawn: name two points on the circle (segment BD, sector BD), or click inside the circle.")); }
         // a More point lettered like another drawn point
         let mut seen: Vec<String> = (0..5).filter(|i| drawn[*i]).map(|i| l[i].clone()).collect();
@@ -606,7 +606,8 @@ fn kname(k: K, n: &Names) -> String {
 
 // ---------------------------------------------------------------------------------------------------------------- label placement
 
-struct Lab { kind: Option<K>, text: String, size: f64, bold: bool, prio: u8, anchor: Pt, cands: Vec<(Pt, bool)>, leader_from: Option<Pt>, id: usize, wide: Option<String>, force: bool, froms: Vec<Pt> }
+/// `keep_out`: a circle (centre, radius) the label must stay outside of (an arc's label, which inside would read as an angle).
+struct Lab { keep_out: Option<(Pt, f64)>, kind: Option<K>, text: String, size: f64, bold: bool, prio: u8, anchor: Pt, cands: Vec<(Pt, bool)>, leader_from: Option<Pt>, id: usize, wide: Option<String>, force: bool, froms: Vec<Pt> }
 
 
 #[derive(Clone, Debug)]
@@ -793,6 +794,7 @@ fn place(mut labs: Vec<Lab>, segs: &[(Pt, Pt)], solid: &[(Pt, Pt)], dots: &[Rect
         let mut best: Option<((u32, u32, u32, u32, u32), usize)> = None;
         for (i, (c, far)) in cands.iter().enumerate() {
             let r = Rect::around(*c, w, h);
+            if let Some((o, rad)) = l.keep_out { let q = nearest_on_rect(&r, o); if (q.0 - o.0).hypot(q.1 - o.1) < rad + 2.0 { continue; } }
             let hard0 = conflicts(&r, &rects, segs, &leaders, dots, bounds);
             let mut hard = hard0 * 4; // (a label touching something outweighs a leader's trouble)
             if best.is_some_and(|(k, _)| hard > k.0) { continue; }
@@ -1000,11 +1002,17 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     }
     // the shaded areas (each a polygon in radii from the centre), in the sector's fill; in Print their outlines are kept clear of labels
     let mut hatches: Vec<Vec<Pt>> = vec![];
-    for poly in edit::regions(p) {
-        let pts: Vec<Pt> = poly.iter().map(|v| (cx + R * v.0, CY - R * v.1)).collect();
-        let d: String = pts.iter().enumerate().map(|(i, q)| format!("{}{:.2},{:.2}", if i == 0 { "M" } else { " L" }, q.0, q.1)).collect();
-        sc.d.raw(&format!(r##"<path d="{d} Z" fill="{sector_fill}" stroke="none"/>"##));
-        if print { hatches.push(pts); }
+    // (an area of two pieces that meet along a line is one path, so no seam shows between them)
+    for pieces in edit::regions(p) {
+        let mut d = String::new();
+        for poly in pieces {
+            let pts: Vec<Pt> = poly.iter().map(|v| (cx + R * v.0, CY - R * v.1)).collect();
+            if !d.is_empty() { d.push(' '); }
+            d.extend(pts.iter().enumerate().map(|(i, q)| format!("{}{:.2},{:.2}", if i == 0 { "M" } else { " L" }, q.0, q.1)));
+            d.push_str(" Z");
+            if print { hatches.push(pts); }
+        }
+        sc.d.raw(&format!(r##"<path d="{d}" fill="{sector_fill}" stroke="none"/>"##));
     }
     sc.d.circle(cx, CY, R, "none", INK, 2.6);
     sc.arc_pts(o, R, 0.0, 360.0);
@@ -1053,8 +1061,10 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     if both_radii && !pt.deg { sc.ln(o, pb, col(0), 2.4); }
     if (pt.chord || pt.sec) && !pt.deg { sc.ln(pa, pb, col(1), 2.4); }
     // lines between chosen points (a radius in the radius colour, a chord in the chord colour), and tangents at chosen points
-    let at_end = |e: edit::End| match e { edit::End::O => o, edit::End::At(d) => on_circle(cx, d) };
+    let at_end = |e: edit::End| match e { edit::End::O => o, edit::End::At(d) => on_circle(cx, d), edit::End::M => mid };
     let joins = edit::joins(p);
+    // a line to M draws M (with its letter) when the bisector does not
+    let m_used = !(pt.bis && !pt.deg) && joins.iter().any(|(_, x, y)| *x == edit::End::M || *y == edit::End::M);
     for (_, x, y) in &joins {
         let radius = matches!(x, edit::End::O) || matches!(y, edit::End::O);
         sc.ln(at_end(*x), at_end(*y), col(if radius { 0 } else { 1 }), 2.4);
@@ -1106,6 +1116,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     let ex = edit::extras(p);
     for (_, d) in &ex { sc.dot(on_circle(cx, *d)); }
     if p.b("show_centre") { sc.dot(o); }
+    if m_used && (mid.0 - o.0).hypot(mid.1 - o.1) >= 4.0 { sc.dot(mid); }
 
     // labels
     let names_on = p.b("show_names");
@@ -1113,7 +1124,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     if names_on {
         let letter = |labs: &mut Vec<Lab>, t: &str, at: Pt, out: Pt| {
             let (bw, bh) = box_of(t, ls, true);
-            labs.push(Lab { kind: None, text: t.to_string(), size: ls, bold: true, prio: 0, anchor: at, cands: near_cands(at, out, bw, bh, 7.0), leader_from: None, id: 0, wide: None, force: false, froms: vec![] });
+            labs.push(Lab { keep_out: None, kind: None, text: t.to_string(), size: ls, bold: true, prio: 0, anchor: at, cands: near_cands(at, out, bw, bh, 7.0), leader_from: None, id: 0, wide: None, force: false, froms: vec![] });
         };
         if pt.a { letter(&mut labs, &n.a, pa, unit(g.a)); }
         if pt.b { letter(&mut labs, &n.b, pb, unit(g.b)); }
@@ -1124,10 +1135,10 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
             letter(&mut labs, &t, o, (0.6, 0.8));
         }
         // M sits on O when AB is a diameter: one letter, the centre's
-        if pt.bis && !pt.deg && (mid.0 - o.0).hypot(mid.1 - o.1) >= 4.0 {
+        if ((pt.bis && !pt.deg) || m_used) && (mid.0 - o.0).hypot(mid.1 - o.1) >= 4.0 {
             let (bw, bh) = box_of(&n.m, ls, true);
             let cands = if small { outside_cands(cx, pm_deg, bw, bh) } else { near_cands(mid, (-um.0, -um.1), bw, bh, 7.0) };
-            labs.push(Lab { kind: None, text: n.m.clone(), size: ls, bold: true, prio: 0, anchor: mid, cands, leader_from: Some(mid), id: 0, wide: None, force: false, froms: vec![] });
+            labs.push(Lab { keep_out: None, kind: None, text: n.m.clone(), size: ls, bold: true, prio: 0, anchor: mid, cands, leader_from: Some(mid), id: 0, wide: None, force: false, froms: vec![] });
         }
     }
     // a figure label's text with the value of `k` (None when Hidden), and the wider of its key and student forms, so that the
@@ -1157,7 +1168,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
             // the leader starts on one of the two radii (the end of the angle's arc), so it leaves the wedge
             // without crossing a line; the label goes to whichever side it lands on
             let froms: Vec<Pt> = [cen_s, cen_s + cen_d].iter().map(|a| (cx + 30.0 * a.to_radians().cos(), CY - 30.0 * a.to_radians().sin())).collect();
-            labs.push(Lab { kind: Some(K::Central), text: t, size, bold: true, prio: 1, anchor: from, cands, leader_from: Some(from), id: 0, wide: Some(wide), force: false, froms });
+            labs.push(Lab { keep_out: None, kind: Some(K::Central), text: t, size, bold: true, prio: 1, anchor: from, cands, leader_from: Some(from), id: 0, wide: Some(wide), force: false, froms });
         }
     }
     if pt.insc {
@@ -1181,7 +1192,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
             // always pointed at its own arc (or square mark), on both copies; a narrow angle's leader starts on one of its two lines
             let mut froms = vec![(pc.0 + u.0 / lu * 26.0, pc.1 + u.1 / lu * 26.0), (pc.0 + wv.0 / lw * 26.0, pc.1 + wv.1 / lw * 26.0)];
             if m.inscribed_deg >= 25.0 { froms.insert(0, from); }
-            labs.push(Lab { kind: Some(K::Inscribed), text: t, size, bold: true, prio: 1, anchor: from, cands, leader_from: Some(from), id: 0, wide: Some(wide), force: true, froms });
+            labs.push(Lab { keep_out: None, kind: Some(K::Inscribed), text: t, size, bold: true, prio: 1, anchor: from, cands, leader_from: Some(from), id: 0, wide: Some(wide), force: true, froms });
         }
     }
     // the angle between the tangent and the radius, asked for at the contact point
@@ -1194,7 +1205,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
             let dir = (d.0 / l, d.1 / l);
             let from = (pa.0 + dir.0 * 17.0, pa.1 + dir.1 * 17.0);
             let froms = vec![from, (pa.0 + tv.0 * 17.0, pa.1 + tv.1 * 17.0), (pa.0 - tv.0 * 17.0, pa.1 - tv.1 * 17.0), (pa.0 - ua.0 * 17.0, pa.1 - ua.1 * 17.0)];
-            labs.push(Lab { kind: Some(K::TanAngle), text: t, size, bold: true, prio: 1, anchor: from, cands: near_cands(from, dir, bw, bh, 4.0), leader_from: Some(from), id: 0, wide: Some(wide), force: true, froms });
+            labs.push(Lab { keep_out: None, kind: Some(K::TanAngle), text: t, size, bold: true, prio: 1, anchor: from, cands: near_cands(from, dir, bw, bh, 4.0), leader_from: Some(from), id: 0, wide: Some(wide), force: true, froms });
         }
     }
     if pt.chord && !pt.deg {
@@ -1205,7 +1216,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
             let at = (pa.0 + (pb.0 - pa.0) * 0.7, pa.1 + (pb.1 - pa.1) * 0.7);
             let cands = if small { outside_cands(cx, pm_deg, bw, bh) } else { near_cands(at, um, bw, bh, 5.0) };
             let froms: Vec<Pt> = [0.7, 0.5, 0.3].iter().map(|t| (pa.0 + (pb.0 - pa.0) * t, pa.1 + (pb.1 - pa.1) * t)).collect();
-            labs.push(Lab { kind: Some(K::Chord), text: t, size, bold: true, prio: 2, anchor: at, cands, leader_from: Some(at), id: 0, wide: Some(wide), force: false, froms });
+            labs.push(Lab { keep_out: None, kind: Some(K::Chord), text: t, size, bold: true, prio: 2, anchor: at, cands, leader_from: Some(at), id: 0, wide: Some(wide), force: false, froms });
         }
     }
     if om_on {
@@ -1215,7 +1226,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
             let q = ((o.0 + mid.0) / 2.0, (o.1 + mid.1) / 2.0);
             let tdir = (-um.1, um.0);
             let froms: Vec<Pt> = [0.5, 0.25, 0.75].iter().map(|t| (o.0 + (mid.0 - o.0) * t, o.1 + (mid.1 - o.1) * t)).collect();
-            labs.push(Lab { kind: Some(K::Om), text: t, size, bold: true, prio: 2, anchor: q, cands: near_cands(q, tdir, bw, bh, 4.0), leader_from: Some(q), id: 0, wide: Some(wide), force: false, froms });
+            labs.push(Lab { keep_out: None, kind: Some(K::Om), text: t, size, bold: true, prio: 2, anchor: q, cands: near_cands(q, tdir, bw, bh, 4.0), leader_from: Some(q), id: 0, wide: Some(wide), force: false, froms });
         }
     }
     if (pt.bis || pt.chord) && !pt.deg {
@@ -1225,7 +1236,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
             let q = ((pa.0 + mid.0) / 2.0, (pa.1 + mid.1) / 2.0);
             let cands = if small { outside_cands(cx, pm_deg, bw, bh) } else { near_cands(q, um, bw, bh, 5.0) };
             let froms: Vec<Pt> = [0.5, 0.25, 0.75].iter().map(|t| (pa.0 + (mid.0 - pa.0) * t, pa.1 + (mid.1 - pa.1) * t)).collect();
-            labs.push(Lab { kind: Some(K::Am), text: t, size, bold: true, prio: 2, anchor: q, cands, leader_from: Some(q), id: 0, wide: Some(wide), force: false, froms });
+            labs.push(Lab { keep_out: None, kind: Some(K::Am), text: t, size, bold: true, prio: 2, anchor: q, cands, leader_from: Some(q), id: 0, wide: Some(wide), force: false, froms });
         }
     }
     if pt.diam {
@@ -1235,7 +1246,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
             let q = ((o.0 + opp.0) / 2.0, (o.1 + opp.1) / 2.0);
             let u = unit(g.a + 180.0);
             let froms: Vec<Pt> = [0.5, 0.25, 0.75].iter().map(|t| (o.0 + (opp.0 - o.0) * t, o.1 + (opp.1 - o.1) * t)).collect();
-            labs.push(Lab { kind: Some(K::Diameter), text: t, size, bold: true, prio: 2, anchor: q, cands: near_cands(q, (-u.1, u.0), bw, bh, 5.0), leader_from: Some(q), id: 0, wide: Some(wide), force: false, froms });
+            labs.push(Lab { keep_out: None, kind: Some(K::Diameter), text: t, size, bold: true, prio: 2, anchor: q, cands: near_cands(q, (-u.1, u.0), bw, bh, 5.0), leader_from: Some(q), id: 0, wide: Some(wide), force: false, froms });
         }
     }
     if pt.radius && p.s("r_label") != "None" {
@@ -1253,7 +1264,7 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
                 cands.extend(near_cands(at, (sg * ua.1, -sg * ua.0), bw, bh, 5.0).into_iter().take(8));
             }
             let froms: Vec<Pt> = [0.5, 0.25, 0.78].iter().map(|fr| (cx + ua.0 * R * fr, CY + ua.1 * R * fr)).collect();
-            labs.push(Lab { kind: Some(K::Radius), text: t, size, bold: true, prio: 2, anchor: q, cands, leader_from: Some(q), id: 0, wide: Some(wide), force: false, froms });
+            labs.push(Lab { keep_out: None, kind: Some(K::Radius), text: t, size, bold: true, prio: 2, anchor: q, cands, leader_from: Some(q), id: 0, wide: Some(wide), force: false, froms });
         }
     }
     let word = |labs: &mut Vec<Lab>, t: &str, ends: &[Pt]| {
@@ -1261,11 +1272,12 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
         let (bw, bh) = box_of(t, size, false);
         let mut cands: Vec<(Pt, bool)> = vec![];
         for e in ends { cands.extend(near_cands(*e, (e.0 - cx, e.1 - CY), bw, bh, 4.0)); }
-        if let Some(e) = ends.first() { labs.push(Lab { kind: None, text: t.to_string(), size, bold: false, prio: 3, anchor: *e, cands, leader_from: Some(*e), id: 0, wide: None, force: false, froms: vec![] }); }
+        if let Some(e) = ends.first() { labs.push(Lab { keep_out: None, kind: None, text: t.to_string(), size, bold: false, prio: 3, anchor: *e, cands, leader_from: Some(*e), id: 0, wide: None, force: false, froms: vec![] }); }
     };
     if !tan_ends.is_empty() { word(&mut labs, "tangent", &tan_ends); }
     if !sec_ends.is_empty() { word(&mut labs, "secant", &sec_ends); }
     // the labels a teacher put on arcs (outside the arc's middle) and on lines (beside the line's middle, away from the centre)
+    let sp = |v: edit::V| (cx + R * v.0, CY - R * v.1);
     for mk in edit::marks(p) {
         let size = sz(13.0);
         let say = |s: &edit::Say, deg: f64, len: f64| match s { edit::Say::Degrees => angle_text(deg, c.rad), edit::Say::Length => cf.with_u(num(len, c.dec)), edit::Say::Text(t) => t.clone() };
@@ -1275,19 +1287,47 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
                 let t = say(&s, span, m.r * span.to_radians());
                 let (bw, bh) = box_of(&t, size, true);
                 let at = on_circle(cx, mid);
-                labs.push(Lab { kind: None, text: t, size, bold: true, prio: 2, anchor: at, cands: near_cands(at, unit(mid), bw, bh, 6.0), leader_from: Some(at), id: 0, wide: None, force: false, froms: vec![] });
+                // always outside the circle: inside, a number in degrees reads as an angle
+                labs.push(Lab { keep_out: Some((o, R)), kind: None, text: t, size, bold: true, prio: 2, anchor: at, cands: near_cands(at, unit(mid), bw, bh, 6.0), leader_from: Some(at), id: 0, wide: None, force: false, froms: vec![] });
             }
             edit::Mark::Line { a, b, say: s } => {
-                let (u, w) = (at_end(a), at_end(b));
-                let len = match (a, b) { (edit::End::At(x), edit::End::At(y)) => 2.0 * m.r * (angdiff(x, y).to_radians() / 2.0).sin(), _ => m.r };
-                let t = say(&s, 0.0, len);
+                let (u, w) = (sp(a), sp(b));
+                let t = say(&s, 0.0, m.r * (a.0 - b.0).hypot(a.1 - b.1));
                 let (bw, bh) = box_of(&t, size, true);
                 let mid = ((u.0 + w.0) / 2.0, (u.1 + w.1) / 2.0);
                 let l = (w.0 - u.0).hypot(w.1 - u.1).max(1e-9);
                 let mut nrm = (-(w.1 - u.1) / l, (w.0 - u.0) / l);
                 if nrm.0 * (mid.0 - o.0) + nrm.1 * (mid.1 - o.1) < 0.0 { nrm = (-nrm.0, -nrm.1); }
                 let froms: Vec<Pt> = [0.5, 0.35, 0.65].iter().map(|t| (u.0 + (w.0 - u.0) * t, u.1 + (w.1 - u.1) * t)).collect();
-                labs.push(Lab { kind: None, text: t, size, bold: true, prio: 2, anchor: mid, cands: near_cands(mid, nrm, bw, bh, 5.0), leader_from: Some(mid), id: 0, wide: None, force: false, froms });
+                labs.push(Lab { keep_out: None, kind: None, text: t, size, bold: true, prio: 2, anchor: mid, cands: near_cands(mid, nrm, bw, bh, 5.0), leader_from: Some(mid), id: 0, wide: None, force: false, froms });
+            }
+            edit::Mark::Angle { v, a, b, say: s } => {
+                // the angle's arc (a square for a right angle), then its value along the bisector, as the inscribed angle has
+                let (q, qa, qb) = (sp(v), sp(a), sp(b));
+                let (la, lb) = ((qa.0 - q.0).hypot(qa.1 - q.1).max(1e-9), (qb.0 - q.0).hypot(qb.1 - q.1).max(1e-9));
+                let (u, wv) = (((qa.0 - q.0) / la, (qa.1 - q.1) / la), ((qb.0 - q.0) / lb, (qb.1 - q.1) / lb));
+                let deg = (u.0 * wv.0 + u.1 * wv.1).clamp(-1.0, 1.0).acos().to_degrees();
+                if (deg - 90.0).abs() < 0.5 {
+                    sc.right(q, u, wv, 12.0, col(3), aw, true);
+                } else {
+                    sc.d.arc_dirs(q, u, wv, 22.0, col(3), aw);
+                    let au = (-u.1).atan2(u.0).to_degrees();
+                    let mut dd = (-wv.1).atan2(wv.0).to_degrees() - au;
+                    while dd > 180.0 { dd -= 360.0; }
+                    while dd < -180.0 { dd += 360.0; }
+                    sc.arc_pts(q, 22.0, au, au + dd);
+                }
+                let t = say(&s, deg, 0.0);
+                let (bw, bh) = box_of(&t, size, true);
+                let bis = (u.0 + wv.0, u.1 + wv.1);
+                let lbis = bis.0.hypot(bis.1).max(1e-9);
+                let bd = (bis.0 / lbis, bis.1 / lbis);
+                let from = (q.0 + bd.0 * 24.0, q.1 + bd.1 * 24.0);
+                let at = (q.0 + bd.0 * (36.0 + bw / 4.0), q.1 + bd.1 * (36.0 + bh / 2.0));
+                let mut cands = vec![(at, false)];
+                cands.extend(near_cands(at, bd, bw, bh, 2.0));
+                let froms = vec![from, (q.0 + u.0 * 22.0, q.1 + u.1 * 22.0), (q.0 + wv.0 * 22.0, q.1 + wv.1 * 22.0)];
+                labs.push(Lab { keep_out: None, kind: None, text: t, size, bold: true, prio: 1, anchor: from, cands, leader_from: Some(from), id: 0, wide: None, force: false, froms });
             }
         }
     }
