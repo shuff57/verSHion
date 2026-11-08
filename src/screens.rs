@@ -1696,6 +1696,49 @@ impl crate::App {
 
     pub fn draw_settings(&mut self, ctx: &egui::Context) {
         use crate::{kit, pageshell};
+        /// Where the server address comes from: a quiet inset as wide as the address field above it,
+        /// so it reads as help for that field. `compact` (narrow window): one line, who to ask, so the
+        /// card, the "On this machine" strip and the footer still fit the window; the field's
+        /// placeholder already shows the https:// form the desktop note spells out.
+        fn address_note(ui: &mut egui::Ui, width: f32, compact: bool) {
+            let note_w = (width - crate::pageshell::button_width(ui, "Connect") - 10.0).clamp(280.0, if compact { 520.0 } else { 480.0 });
+            let body = |t: &str| RichText::new(t).size(13.0).color(theme::ink().gamma_multiply(0.72));
+            let (mx, my) = if compact { (12, 6) } else { (16, 14) };
+            egui::Frame::new()
+                .fill(theme::cream())
+                .corner_radius(CornerRadius::same(12))
+                .inner_margin(Margin::symmetric(mx, my))
+                .show(ui, |ui| {
+                    ui.set_width(note_w - 2.0 * mx as f32);
+                    if compact {
+                        // the theme's tall interact height would make this one line a 30 px row
+                        ui.spacing_mut().interact_size.y = 16.0;
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 8.0;
+                            ui.label(RichText::new(egui_phosphor::regular::INFO).font(theme::icon_font(15.0)).color(theme::accent_col()));
+                            ui.spacing_mut().item_spacing.x = 5.0;
+                            ui.label(theme::strong("No address yet?").size(13.0));
+                            ui.label(body("Ask the colleague or IT team who runs your school's pool."));
+                        });
+                        return;
+                    }
+                    ui.horizontal_top(|ui| {
+                        ui.spacing_mut().item_spacing.x = 10.0;
+                        ui.label(RichText::new(egui_phosphor::regular::INFO).font(theme::icon_font(17.0)).color(theme::accent_col()));
+                        ui.vertical(|ui| {
+                            ui.spacing_mut().item_spacing.y = 2.0;
+                            ui.label(theme::strong("No address yet?").size(13.5));
+                            ui.add(
+                                egui::Label::new(body(
+                                    "Ask the colleague or IT team who runs your school's verSHion pool. \
+                                     It starts with https:// and usually ends in your school's domain.",
+                                ))
+                                .wrap(),
+                            );
+                        });
+                    });
+                });
+        }
         shell_frame(self, ctx, true, |app, ui| {
           {
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
@@ -1767,11 +1810,13 @@ impl crate::App {
                     // A desktop window: the form and what an account adds side by side, split by a
                     // hairline. Stacked, both sat in the left part of the wide card and left its right
                     // half empty; the status page (signed in) fills the card on its own.
+                    let needs_address = matches!(app.account.model.page, crate::share::model::Page::NotConfigured | crate::share::model::Page::Server);
                     if !narrow_window && !matches!(app.account.model.page, crate::share::model::Page::Status) {
                         let inner = ui.available_width();
                         let gutter = 24.0;
                         // narrow enough that the address field gets more room than it had stacked;
-                        // each description runs to two short lines here
+                        // each description runs to two short lines here (a wider column, one line
+                        // each, squeezed the form and lost 3 of 4 side-by-side verdicts)
                         let right_w = (inner * 0.27).clamp(200.0, 260.0);
                         let left_w = (inner - right_w - 2.0 * gutter - 1.0).max(320.0);
                         let top = ui.cursor().top();
@@ -1785,37 +1830,9 @@ impl crate::App {
                                 ui.add_space(6.0);
                                 app.account.draw_section(ui);
                                 // Where the address comes from, under the form it is typed into.
-                                if matches!(app.account.model.page, crate::share::model::Page::NotConfigured | crate::share::model::Page::Server) {
+                                if needs_address {
                                     ui.add_space(14.0);
-                                    // A quiet inset as wide as the address field above it (about 70
-                                    // characters a line), so the note reads as help for that field.
-                                    let note_w = (left_w - crate::pageshell::button_width(ui, "Connect") - 10.0).clamp(280.0, 480.0);
-                                    egui::Frame::new()
-                                        .fill(theme::cream())
-                                        .corner_radius(CornerRadius::same(12))
-                                        .inner_margin(Margin::symmetric(16, 14))
-                                        .show(ui, |ui| {
-                                            ui.set_width(note_w - 32.0);
-                                            ui.horizontal_top(|ui| {
-                                                ui.spacing_mut().item_spacing.x = 10.0;
-                                                ui.label(RichText::new(egui_phosphor::regular::INFO).font(theme::icon_font(17.0)).color(theme::accent_col()));
-                                                ui.vertical(|ui| {
-                                                    ui.spacing_mut().item_spacing.y = 2.0;
-                                                    ui.label(theme::strong("No address yet?").size(13.5));
-                                                    ui.add(
-                                                        egui::Label::new(
-                                                            RichText::new(
-                                                                "Ask the colleague or IT team who runs your school's verSHion pool. \
-                                                                 It starts with https:// and usually ends in your school's domain.",
-                                                            )
-                                                            .size(13.0)
-                                                            .color(theme::ink().gamma_multiply(0.72)),
-                                                        )
-                                                        .wrap(),
-                                                    );
-                                                });
-                                            });
-                                        });
+                                    address_note(ui, left_w, false);
                                 }
                             });
                             ui.add_space(2.0 * gutter + 1.0);
@@ -1824,7 +1841,7 @@ impl crate::App {
                                 ui.spacing_mut().item_spacing.x = 8.0;
                                 // level with the card's title across the hairline
                                 ui.add_space(10.0);
-                                crate::share::shared_ui::account_reasons_inline(ui);
+                                crate::share::shared_ui::account_reasons_inline(ui, 20.0);
                                 ui.add_space(6.0);
                             });
                         });
@@ -1836,13 +1853,19 @@ impl crate::App {
                     pageshell::heading(ui, app.account.page_title());
                     ui.add_space(2.0);
                     app.account.draw_section(ui);
+                    // The narrow window keeps the note on where the address comes from, as two
+                    // short lines under the helper so the card still fits the window.
+                    if narrow_window && needs_address {
+                        ui.add_space(6.0);
+                        address_note(ui, ui.available_width(), true);
+                    }
                     // What an account adds belongs to this card, under a hairline, not in a row of
                     // tile-like cards of its own below it.
-                    ui.add_space(if narrow_window { 8.0 } else { 12.0 });
+                    ui.add_space(if narrow_window { 4.0 } else { 12.0 });
                     let (rule, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 1.0), egui::Sense::hover());
                     ui.painter().hline(rule.x_range(), rule.center().y, Stroke::new(1.0, theme::border()));
-                    ui.add_space(if narrow_window { 10.0 } else { 12.0 });
-                    crate::share::shared_ui::account_reasons_inline(ui);
+                    ui.add_space(if narrow_window { 4.0 } else { 12.0 });
+                    crate::share::shared_ui::account_reasons_inline(ui, if narrow_window { 3.0 } else { 20.0 });
                 });
                 }
                 1 => {

@@ -145,10 +145,11 @@ impl crate::App {
 }
 
 /// What an account adds, inside the account card in Settings under a hairline: three two-line items
-/// (icon, label, short description under it), or a one-line stacked list when narrow. As a row of bordered, rounded
+/// (icon, label, short description under it), or a one-line stacked list when narrow. `row_gap` is the
+/// space between items, so the desktop column can spread down the form beside it. As a row of bordered, rounded
 /// cards of their own they read as three clickable tiles that did nothing, and pushed the page's real
 /// actions down.
-pub(crate) fn account_reasons_inline(ui: &mut Ui) {
+pub(crate) fn account_reasons_inline(ui: &mut Ui, row_gap: f32) {
     use egui_phosphor::regular as ph;
     // Short one-line copy, shared by both layouts (well under 70 characters a line).
     let perks = [
@@ -157,14 +158,14 @@ pub(crate) fn account_reasons_inline(ui: &mut Ui) {
         (crate::handicons::SPARKLE, "Hosted AI", "Turn a PDF, scan or photo into questions."),
     ];
     crate::kit::small_caps(ui, "What an account adds");
-    ui.add_space(if ui.ctx().content_rect().width() < 900.0 { 10.0 } else { 18.0 });
+    ui.add_space(if ui.ctx().content_rect().width() < 900.0 { 6.0 } else { 18.0 });
     // A narrow window: a short stacked list, one line per benefit, the bold heading in a fixed slot and
     // a one-line description beside it. Three columns at this width wrapped each description into a
     // dense block of three or four lines.
     if ui.ctx().content_rect().width() < 900.0 {
         for (i, (_icon, head, body)) in perks.into_iter().enumerate() {
             if i > 0 {
-                ui.add_space(6.0);
+                ui.add_space(row_gap);
             }
             ui.horizontal_top(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
@@ -186,7 +187,7 @@ pub(crate) fn account_reasons_inline(ui: &mut Ui) {
     // Spaced for a column of its own beside the form (desktop): the rows set the card's height.
     for (i, (icon, head, body)) in perks.into_iter().enumerate() {
         if i > 0 {
-            ui.add_space(20.0);
+            ui.add_space(row_gap);
         }
         ui.horizontal_top(|ui| {
             ui.spacing_mut().item_spacing.x = 12.0;
