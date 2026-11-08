@@ -47,8 +47,8 @@ fn each_scene_names_its_result_for_each_tonicity() {
     assert_eq!(words("Plant cell", 1.8), "Plasmolyzed");
     assert_eq!(words("Dialysis bag", 5.0), "Bag shrinks");
     assert_eq!(words("Dialysis bag", 0.1), "Bag swells");
-    assert_eq!(words("Split beaker", 5.0), "Level rises on side B");
-    assert_eq!(words("U-tube", 0.1), "Level rises on side A");
+    assert_eq!(words("Split beaker", 5.0), "Level rises on Side B");
+    assert_eq!(words("U-tube", 0.1), "Level rises on Side A");
     assert_eq!(words("U-tube", 0.9), "Levels stay equal");
 }
 
@@ -65,10 +65,13 @@ fn count_fill(svg: &str, fill: &str) -> usize { svg.matches(&format!("fill=\"{fi
 #[test]
 fn particles_are_as_crowded_as_the_concentration() {
     // an outside twice as concentrated has about twice the solute particles per area
-    let one = render_of(&[s("show", "Start"), f("s1_in", 0.9), f("s1_out", 0.9)]);
-    let two = render_of(&[s("show", "Start"), f("s1_in", 0.9), f("s1_out", 1.8)]);
-    let (a, c) = (count_fill(&one, "#a3a3a3"), count_fill(&two, "#a3a3a3"));
-    assert!(c > a + a / 4, "{a} vs {c}");
+    for size in ["XS", "M", "XL"] {
+        for unit in ["%", "M"] {
+            let svg = render_of(&[s("show", "Start"), s("scene", "Split beaker"), s("unit", unit), s("s1_size", size), f("s1_in", 0.9), f("s1_out", 1.8), b("key", false)]);
+            let (l, r) = side_counts(&svg, "#a3a3a3");
+            assert!(r as f64 >= 1.6 * l as f64 && l >= 2, "{size} {unit}: side A {l}, side B {r}");
+        }
+    }
     // zero concentration has no particles of that solute at all (the key's sample is the one left)
     let none = render_of(&[s("show", "Start"), f("s1_in", 0.0), f("s1_out", 0.0)]);
     assert_eq!(count_fill(&none, "#a3a3a3"), 2, "the key sample and its scale box");
@@ -226,11 +229,125 @@ fn density_keeps_rising_with_concentration_and_water_is_still_there() {
         let lo = render_of(&[s("show", "Start"), s("s1_size", size), f("s1_in", 8.0), f("s1_out", 5.0), b("key", false)]);
         assert!(grey_count(&hi, "#a3a3a3") > grey_count(&lo, "#a3a3a3"), "{size}");
     }
-    // M units: 0.9 M and 1.8 M differ
-    let m09 = render_of(&[s("show", "Start"), s("unit", "M"), f("s1_in", 0.9), f("s1_out", 0.9), b("key", false)]);
-    let m18 = render_of(&[s("show", "Start"), s("unit", "M"), f("s1_in", 0.9), f("s1_out", 1.8), b("key", false)]);
-    assert!(grey_count(&m18, "#a3a3a3") > grey_count(&m09, "#a3a3a3") + 3);
 }
+
+/// Solute particles (by fill) left and right of the membrane (x = 120) in a split scene's first group.
+fn side_counts(svg: &str, fill: &str) -> (usize, usize) {
+    let (mut l, mut r) = (0, 0);
+    for el in svg.split("<circle ").skip(1) {
+        if !el.contains(&format!("fill=\"{fill}\" stroke=\"#333\"")) { continue; }
+        let cx: f64 = el.split("cx=\"").nth(1).unwrap().split('"').next().unwrap().parse().unwrap();
+        if cx < 120.0 { l += 1 } else { r += 1 }
+    }
+    (l, r)
+}
+
+#[test]
+fn no_solutes_means_no_scale_box_in_the_key() {
+    let none = render_of(&[b("s1_on", false), s("show", "Start")]);
+    assert!(!none.contains("stroke-dasharray=\"3 2\"") && !none.contains("1 particle ="));
+    assert!(render_of(&[s("show", "Start")]).contains("1 particle ="));
+}
+
+#[test]
+fn the_membrane_label_takes_the_teachers_words() {
+    for (scene, dflt) in [("Red blood cell", "Cell membrane"), ("Split beaker", "Selectively permeable membrane"), ("Dialysis bag", "Dialysis tubing")] {
+        let base = render_of(&[s("scene", scene), s("show", "Start")]);
+        assert!(base.contains(dflt), "{scene}");
+        let own = render_of(&[s("scene", scene), s("show", "Start"), s("lab_membrane_text", "Plasma membrane (lipid bilayer)")]);
+        assert!(own.contains("Plasma membrane (lipid bilayer)") && !own.contains(dflt), "{scene}");
+        // blank line: the wording is the answer, shown in the key only
+        let blank = |ans: bool| render_of(&[s("scene", scene), s("show", "Start"), s("lab_membrane", "Blank line"), s("lab_membrane_text", "Plasma membrane"), b(SHOW_ANSWERS, ans)]);
+        assert!(blank(true).contains("Plasma membrane") && !blank(false).contains("Plasma membrane"), "{scene}");
+    }
+}
+
+#[test]
+fn every_particle_size_still_shows_in_a_plasmolyzed_vacuole() {
+    let pal = palette(&with(&[]));
+    let fills = [("XS", "#a3a3a3"), ("S", "#a3a3a3"), ("M", "#a3a3a3"), ("L", "#a3a3a3"), ("XL", "#a3a3a3")];
+    for (size, fill) in fills {
+        for show in ["Result", "Three-up"] {
+            let svg = render_of(&[s("scene", "Plant cell"), s("show", show), s("s1_size", size), f("s1_in", 0.9), f("s1_out", 4.0), b("key", false)]);
+            // the plasmolyzed panel: the only one for Result, the third group (C, outside double) for the three-up
+            let groups: Vec<&str> = svg.split("<g transform=\"translate(").skip(1).collect();
+            let (panel, mult) = if show == "Result" { (groups[0], None) } else { (groups[2], Some(2.0)) };
+            let m = model(&with(&[s("scene", "Plant cell"), s("s1_size", size), f("s1_in", 0.9), f("s1_out", 4.0)]), mult);
+            assert_eq!(m.tonic, Tonic::Hyper);
+            let g = geo(&m, Kind::Result, &pal);
+            let mut inside = 0;
+            for el in panel.split("<circle ").skip(1) {
+                if !el.contains(&format!("fill=\"{fill}\" stroke=\"#333\"")) { continue; }
+                let num = |k: &str| el.split(&format!("{k}=\"")).nth(1).unwrap().split('"').next().unwrap().parse::<f64>().unwrap();
+                let (x, y) = (num("cx"), num("cy"));
+                if x > g.inr.x0 && x < g.inr.x1 && y > g.inr.y0 && y < g.inr.y1 { inside += 1; }
+            }
+            // the start has at least this many inside the cell; none may be lost when the vacuole shrinks
+            let start = model(&with(&[s("scene", "Plant cell"), s("s1_size", size), f("s1_in", 0.9), f("s1_out", 4.0)]), mult);
+            let want = want_count(start.sols[0].cin, geo(&start, Kind::Start, &pal).inr.area(), pick_pp_for(&start), start.sols[0].r);
+            assert!(inside >= 1 && inside >= want.min(2), "{size} {show}: {inside} particles in the vacuole (start {want})");
+        }
+    }
+}
+
+fn pick_pp_for(m: &Model) -> f64 {
+    let sl = Slot { m: m.clone(), kind: Kind::Result, letter: None, lead: true, arrows: true, result_blank: false, conc: true, caption: true };
+    pick_pp(&[sl])
+}
+
+#[test]
+fn up_to_three_crossing_arrows_each_cross_the_membrane_and_keep_their_labels_clear() {
+    let pal = palette(&with(&[]));
+    for scene in ["Red blood cell", "Plant cell", "Split beaker", "U-tube", "Dialysis bag"] {
+        let p = with(&[s("scene", scene), s("show", "Start"), b("s1_on", true), b("s2_on", true), b("s2_cross", true), f("s2_in", 2.0), f("s2_out", 0.0), b("s3_on", true), b("s3_cross", true), f("s3_in", 0.0), f("s3_out", 2.0), b("s1_cross", true), f("s1_in", 3.0), f("s1_out", 0.0)]);
+        let c = cfg(&p);
+        let m = model(&p, None);
+        let g = geo(&m, Kind::Start, &pal);
+        let pl = plan(&c, &m, &g, m.flow());
+        assert_eq!(pl.sol.len(), 3, "{scene}");
+        let (_, _, _, _, _) = g.shape;
+        for (i, a) in pl.sol.iter().enumerate() {
+            // each label is inside the panel and clear of every other arrow's box and label
+            let r = a.lab.rect();
+            assert!(r.0 >= 0.0 && r.2 <= PW + 1.0 && r.3 <= g.ph, "{scene} label {i} outside the panel: {r:?}");
+            for (j, o) in pl.sol.iter().enumerate().filter(|(j, _)| *j != i) {
+                let q = o.lab.rect();
+                assert!(r.2 < q.0 || q.2 < r.0 || r.3 < q.1 || q.3 < r.1, "{scene}: labels {i} and {j} overlap");
+                let bx = o.boxr;
+                assert!(r.2 < bx.0 || bx.2 < r.0 || r.3 < bx.1 || bx.3 < r.1, "{scene}: label {i} sits on arrow {j}");
+            }
+            // the arrow crosses its membrane: its two ends are on opposite sides of the outline
+            let crossing = match scene {
+                "Split beaker" | "U-tube" => a.a.0 < 120.0 && a.b.0 > 120.0 || a.a.0 > 120.0 && a.b.0 < 120.0,
+                "Dialysis bag" => { let (cx, _, rx, _, _) = g.shape; (a.a.0 - cx).abs().min((a.b.0 - cx).abs()) < rx + 1.0 && (a.a.0 - cx).abs().max((a.b.0 - cx).abs()) > rx * 0.5 }
+                _ => { let (_, cy, _, ry, _) = g.shape; (a.a.1 - cy).abs().min((a.b.1 - cy).abs()) < ry && (a.a.1 - cy).abs().max((a.b.1 - cy).abs()) > ry * 0.8 }
+            };
+            assert!(crossing, "{scene}: arrow {i} does not cross");
+        }
+        // the beaker's water arrow and caption are not covered either
+        if scene == "Split beaker" { assert!(pl.sol[2].boxr.3 < 176.0); }
+    }
+}
+
+#[test]
+fn a_large_label_size_keeps_the_key_and_the_answer_key_inside_the_page() {
+    for scene in ["Red blood cell", "Plant cell", "Split beaker", "Dialysis bag"] {
+        let svg = render_of(&[s("scene", scene), s("label_size", "Large"), b("answer_key", true), b("s2_on", true), b("s3_on", true), s("s3_name", "A long solute name")]);
+        let w: f64 = svg.split("width=\"").nth(1).unwrap().split('"').next().unwrap().parse().unwrap();
+        // every text's right edge (start x plus estimated width at its scaled size) stays inside the page
+        for t in svg.split("<text ").skip(1) {
+            let num = |k: &str| t.split(&format!("{k}=\"")).nth(1).and_then(|v| v.split('"').next()).and_then(|v| v.parse::<f64>().ok());
+            let (x, fs) = (num("x").unwrap(), num("font-size").unwrap());
+            let anchor = t.split("text-anchor=\"").nth(1).unwrap().split('"').next().unwrap();
+            let body = t.split('>').nth(1).unwrap_or("").split('<').next().unwrap_or("");
+            let width = text_w(body, fs);
+            let right = match anchor { "middle" => x + width / 2.0, "end" => x, _ => x + width };
+            let left = match anchor { "middle" => x - width / 2.0, "end" => x - width, _ => x };
+            assert!(right <= w + 1.0 && left >= -1.0, "{scene}: text {body:?} runs to {left:.0}..{right:.0} of {w}");
+        }
+    }
+}
+
 
 #[test]
 fn the_key_says_what_one_particle_is() {
