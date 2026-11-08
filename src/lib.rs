@@ -32,6 +32,7 @@ pub mod figure_agent;
 pub mod figure_eval;
 pub mod figures;
 pub mod figuresui;
+pub mod handicons;
 pub mod fonts;
 pub mod gradecore;
 pub mod gradework;

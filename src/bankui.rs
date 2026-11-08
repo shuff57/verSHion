@@ -449,7 +449,7 @@ impl App {
         if self.store.banks.is_empty() {
             let pressed = crate::pageshell::empty_state(
                 ui,
-                egui_phosphor::regular::BOOKS,
+                crate::handicons::BANKS,
                 "Your first Question Bank",
                 "A bank is a shelf of questions you can reuse in any exam. Start one by hand or hand a test you already have to the importer.",
                 &[("New bank", true), ("Import a test", false)],
@@ -1196,7 +1196,7 @@ impl App {
             ui.add_space(12.0);
             crate::pageshell::empty_state(
                 ui,
-                egui_phosphor::regular::PENCIL_SIMPLE_LINE,
+                crate::handicons::EDIT,
                 "No questions yet",
                 "Use Add question above to write the first one, or Import to bring a test in.",
                 &[],
@@ -2801,13 +2801,7 @@ fn pencil_button(ui: &mut Ui) -> egui::Response {
     if resp.hovered() {
         ui.painter().rect_filled(rect, CornerRadius::same(6), theme::hover_bg());
     }
-    ui.painter().text(
-        rect.center(),
-        egui::Align2::CENTER_CENTER,
-        egui_phosphor::regular::PENCIL_SIMPLE,
-        theme::icon_font(15.0),
-        col,
-    );
+    crate::handicons::paint_glyph(ui.painter(), rect.center(), crate::handicons::EDIT, 15.0, col);
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 

@@ -271,23 +271,23 @@ pub fn draw_nav_icon_k(
     c_col: Color32,
     k: f32,
 ) {
-    use egui_phosphor::regular as ph;
+    use crate::handicons as hand;
     let glyph = match icon {
-        NavIcon::Home => ph::HOUSE,
-        NavIcon::Banks => ph::BOOKS,
-        NavIcon::Exams => ph::EXAM,
-        NavIcon::Import => ph::UPLOAD_SIMPLE,
-        NavIcon::Figures => ph::SHAPES,
-        NavIcon::Grade => ph::CHECK_SQUARE,
-        NavIcon::Help => ph::QUESTION,
-        NavIcon::Gear => ph::GEAR,
-        NavIcon::Pencil => ph::PENCIL_SIMPLE,
-        NavIcon::Plus => ph::PLUS,
-        NavIcon::Info => ph::INFO,
-        NavIcon::Shared => ph::USERS_THREE,
-        NavIcon::Account => ph::USER_CIRCLE,
+        NavIcon::Home => hand::HOME,
+        NavIcon::Banks => hand::BANKS,
+        NavIcon::Exams => hand::EXAMS,
+        NavIcon::Import => hand::IMPORT,
+        NavIcon::Figures => hand::FIGURES,
+        NavIcon::Grade => hand::GRADE,
+        NavIcon::Help => hand::HELP,
+        NavIcon::Gear => hand::SETTINGS,
+        NavIcon::Pencil => hand::EDIT,
+        NavIcon::Plus => hand::ADD,
+        NavIcon::Info => hand::INFO,
+        NavIcon::Shared => hand::SHARED,
+        NavIcon::Account => hand::PERSON,
     };
-    painter.text(c, egui::Align2::CENTER_CENTER, glyph, theme::icon_font(16.0 * k), c_col);
+    hand::paint_glyph(painter, c, glyph, 16.0 * k, c_col);
 }
 
 /// The four how-it-works steps, shared by the welcome page and the help overlay.
@@ -683,9 +683,9 @@ impl crate::App {
             ui.painter().rect_filled(rect, CornerRadius::same(13), theme::dock_text().gamma_multiply(0.12));
             ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
         }
-        let (glyph, label) = if dark { (egui_phosphor::regular::SUN, "Light") } else { (egui_phosphor::regular::MOON, "Dark") };
+        let (glyph, label) = if dark { (crate::handicons::SUN, "Light") } else { (crate::handicons::MOON, "Dark") };
         let cy = if narrow { rect.top() + 18.0 } else { rect.top() + 20.0 };
-        ui.painter().text(Pos2::new(rect.center().x, cy), egui::Align2::CENTER_CENTER, glyph, theme::icon_font(21.0), theme::dock_text());
+        crate::handicons::paint_glyph(ui.painter(), Pos2::new(rect.center().x, cy), glyph, 21.0, theme::dock_text());
         // Labelled at every width: bare outline glyphs on the narrow rail were "guesswork".
         ui.painter().text(
             Pos2::new(rect.center().x, rect.bottom() - if narrow { 9.0 } else { 11.0 }),
@@ -1766,12 +1766,11 @@ impl crate::App {
                 });
                 ui.add_space(18.0);
 
-                use egui_phosphor::regular as ph;
                 let items = [
-                    pageshell::NavItem { icon: ph::USER_CIRCLE, label: "Account" },
-                    pageshell::NavItem { icon: ph::FILE_ARROW_DOWN, label: "Backup & storage" },
-                    pageshell::NavItem { icon: ph::SPARKLE, label: "AI conversion" },
-                    pageshell::NavItem { icon: ph::QUESTION, label: "Help & community" },
+                    pageshell::NavItem { icon: crate::handicons::PERSON, label: "Account" },
+                    pageshell::NavItem { icon: crate::handicons::DOWNLOAD, label: "Backup & storage" },
+                    pageshell::NavItem { icon: crate::handicons::SPARKLE, label: "AI conversion" },
+                    pageshell::NavItem { icon: crate::handicons::HELP, label: "Help & community" },
                 ];
                 // What is on this machine, beside the section list: the page's own subtitle says to
                 // keep a copy, and this is where that copy is one press away.

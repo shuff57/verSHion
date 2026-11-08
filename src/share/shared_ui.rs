@@ -159,9 +159,9 @@ fn no_widow(body: &str) -> String {
 pub(crate) fn account_reasons_inline(ui: &mut Ui) {
     use egui_phosphor::regular as ph;
     let perks = [
-        (ph::USERS_THREE, "Share banks", "Send banks to a circle of colleagues, or publish them to the public pool."),
+        (crate::handicons::SHARED, "Share banks", "Send banks to a circle of colleagues, or publish them to the public pool."),
         (ph::MAGNIFYING_GLASS, "Browse the pool", "Find questions other teachers have published and copy them into your banks."),
-        (ph::SPARKLE, "Hosted AI", "Convert a PDF, scan or photo into questions with credits, nothing to set up."),
+        (crate::handicons::SPARKLE, "Hosted AI", "Convert a PDF, scan or photo into questions with credits, nothing to set up."),
     ];
     crate::kit::small_caps(ui, "What an account adds");
     ui.add_space(if ui.ctx().content_rect().width() < 900.0 { 10.0 } else { 14.0 });
@@ -176,7 +176,7 @@ pub(crate) fn account_reasons_inline(ui: &mut Ui) {
                         ui.spacing_mut().item_spacing.x = 10.0;
                         let (r, _) = ui.allocate_exact_size(egui::Vec2::splat(34.0), egui::Sense::hover());
                         ui.painter().circle_filled(r.center(), 17.0, theme::accent_faded());
-                        ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, icon, theme::icon_font(17.0), theme::accent_col());
+                        crate::handicons::paint_glyph(ui.painter(), r.center(), icon, 17.0, theme::accent_col());
                         ui.add(egui::Label::new(egui::RichText::new(head).family(theme::bold_family()).size(14.5).color(theme::ink())).wrap());
                     });
                     ui.add_space(6.0);
@@ -196,7 +196,7 @@ pub(crate) fn account_reasons_inline(ui: &mut Ui) {
             ui.spacing_mut().item_spacing.x = 16.0;
             let (r, _) = ui.allocate_exact_size(egui::Vec2::splat(42.0), egui::Sense::hover());
             ui.painter().circle_filled(r.center(), 21.0, theme::accent_faded());
-            ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, icon, theme::icon_font(19.0), theme::accent_col());
+            crate::handicons::paint_glyph(ui.painter(), r.center(), icon, 19.0, theme::accent_col());
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 4.0;
                 ui.add(egui::Label::new(egui::RichText::new(head).family(theme::bold_family()).size(15.5).color(theme::ink())).wrap());

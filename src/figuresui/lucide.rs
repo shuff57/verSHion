@@ -139,7 +139,7 @@ fn numbers(s: &str, i: &mut usize) -> Option<f32> {
 
 /// Flattens SVG path data (M m L l H h V v C c A a Z z) into polylines; the flag is whether the
 /// subpath was closed.
-fn flatten(d: &str) -> Vec<(Vec<(f32, f32)>, bool)> {
+pub(crate) fn flatten(d: &str) -> Vec<(Vec<(f32, f32)>, bool)> {
     let b = d.as_bytes();
     let mut i = 0;
     let (mut x, mut y, mut sx, mut sy) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);

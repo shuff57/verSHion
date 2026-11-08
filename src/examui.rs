@@ -551,7 +551,7 @@ impl crate::App {
                     if total == 0 {
                         if crate::pageshell::empty_state(
                             ui,
-                            egui_phosphor::regular::EXAM,
+                            crate::handicons::EXAMS,
                             "Create your first exam",
                             "Pull questions from your banks into a printable working copy, then print it or export it as PDF or Word.",
                             &[("New exam", true)],
@@ -3997,11 +3997,8 @@ fn shelf_row(
     let (br, bresp) = small("shelf_add", if already { "Already in this exam. Drag the card to add it again." } else { "Add to the exam" });
     let ink = Stroke::new(1.5, theme::muted_col());
     {
-        // Pencil.
-        let c = er.center();
-        p.line_segment([c + Vec2::new(-4.5, 4.5), c + Vec2::new(3.5, -3.5)], ink);
-        p.line_segment([c + Vec2::new(-4.5, 4.5), c + Vec2::new(-5.0, 2.0)], ink);
-        p.line_segment([c + Vec2::new(2.0, -5.0), c + Vec2::new(5.0, -2.0)], ink);
+        // Edit: the hand-drawn pencil-and-square.
+        crate::handicons::paint_glyph(&p, er.center(), crate::handicons::EDIT, 15.0, theme::muted_col());
         // Copy: two sheets.
         let c = cr.center();
         p.rect_stroke(Rect::from_center_size(c + Vec2::new(-1.5, -1.5), Vec2::new(7.5, 8.5)), CornerRadius::same(1), ink, StrokeKind::Middle);
@@ -4013,8 +4010,7 @@ fn shelf_row(
             p.line_segment([c + Vec2::new(-4.5, 0.5), c + Vec2::new(-1.5, 3.5)], s);
             p.line_segment([c + Vec2::new(-1.5, 3.5), c + Vec2::new(4.5, -3.5)], s);
         } else {
-            p.line_segment([c + Vec2::new(-4.5, 0.0), c + Vec2::new(4.5, 0.0)], s);
-            p.line_segment([c + Vec2::new(0.0, -4.5), c + Vec2::new(0.0, 4.5)], s);
+            crate::handicons::paint_glyph(&p, c, crate::handicons::ADD, 14.0, theme::accent_col());
         }
     }
     if eresp.clicked() {

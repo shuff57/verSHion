@@ -539,14 +539,14 @@ fn start_next_ai(app: &mut crate::App, st: &mut State, ctx: &egui::Context) {
 fn paint_icon(p: &Painter, ic: Ic, c: Pos2, col: Color32, k: f32) {
     use egui_phosphor::regular as ph;
     let glyph = match ic {
-        Ic::Upload => ph::UPLOAD_SIMPLE,
+        Ic::Upload => crate::handicons::IMPORT,
         Ic::File => ph::FILE,
         Ic::Clip => ph::PAPERCLIP,
         Ic::Camera => ph::CAMERA,
-        Ic::Sparkle => ph::SPARKLE,
+        Ic::Sparkle => crate::handicons::SPARKLE,
         Ic::Lock => ph::LOCK_SIMPLE,
     };
-    p.text(c, egui::Align2::CENTER_CENTER, glyph, crate::theme::icon_font(16.0 * k), col);
+    crate::handicons::paint_glyph(p, c, glyph, 16.0 * k, col);
 }
 
 fn draw_cb(p: &Painter, rect: Rect, on: bool, hot: bool) {

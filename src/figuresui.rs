@@ -22,7 +22,7 @@ use crate::theme;
 
 mod cards_panel;
 mod chem_shell;
-mod lucide;
+pub(crate) mod lucide;
 mod composite_canvas;
 mod graph_canvas;
 mod graph_edit;

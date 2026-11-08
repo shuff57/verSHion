@@ -177,7 +177,7 @@ pub fn empty_state(ui: &mut Ui, icon: &str, title: &str, body: &str, actions: &[
             ui.vertical_centered(|ui| {
                 let (r, _) = ui.allocate_exact_size(Vec2::splat(56.0), Sense::hover());
                 ui.painter().circle_filled(r.center(), 28.0, theme::accent_faded());
-                ui.painter().text(r.center(), Align2::CENTER_CENTER, icon, theme::icon_font(26.0), theme::accent_col());
+                crate::handicons::paint_glyph(ui.painter(), r.center(), icon, 26.0, theme::accent_col());
                 ui.add_space(12.0);
                 ui.label(RichText::new(title).family(theme::serif_family()).size(22.0).color(theme::ink()));
                 ui.add_space(4.0);
@@ -404,7 +404,8 @@ fn nav_column(ui: &mut Ui, id: Id, items: &[NavItem], selected: &mut usize) {
         }
         let col = if on { theme::accent_col() } else { theme::ink() };
         let mid = rect.left_center();
-        ui.painter().text(mid + Vec2::new(18.0, 0.0), Align2::LEFT_CENTER, it.icon, theme::icon_font(18.0), col);
+        // Left-aligned font glyphs sit with their left edge at x = 18; a centred icon goes half its width in.
+        crate::handicons::paint_glyph(ui.painter(), mid + Vec2::new(18.0 + 9.0, 0.0), it.icon, 18.0, col);
         ui.painter().text(mid + Vec2::new(46.0, 0.0), Align2::LEFT_CENTER, it.label, egui::FontId::new(15.2, theme::bold_family()), col);
         resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, it.label));
         if resp.clicked() {
