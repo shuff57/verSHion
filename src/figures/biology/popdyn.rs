@@ -890,7 +890,8 @@ fn pp_setup(p: &Params) -> PpSetup {
     // default, that pair's typical value; a number the teacher has changed always acts.
     let touched = |k: &str| (p.f(k) - default_f(k)).abs() > 1e-12;
     if let Some((a, b, c, dd, e, u, yt)) = preset(pair) {
-        prey = a.into(); pred = b.into(); unit = u.into();
+        prey = a.into(); pred = b.into();
+        if p.s("unit") == "Years" { unit = u.into(); }
         if !touched("prey_avg") { pavg = c; }
         if !touched("pred_avg") { qavg = dd; }
         if !touched("cycle") { cycle = e; }
@@ -1472,6 +1473,21 @@ mod tests {
         // the hare and lynx opening state is unchanged
         let st = pp_setup(&pp(&[]));
         assert_eq!((st.pavg, st.qavg, st.cycle, st.x0, st.y0), (50.0, 20.0, 10.0, 20.0, 12.0));
+    }
+
+    /// The time unit used to be replaced by the pair's own whenever a pair was named; a unit the
+    /// teacher picked now acts (the pair's unit only fills in while the choice is left on Years).
+    #[test]
+    fn named_pair_honours_the_unit() {
+        let pair = s("Aphid and ladybug");
+        assert_eq!(pp_setup(&pp(&[("pair", pair.clone())])).unit, "Days");
+        let base = pp_render(&pp(&[("pair", pair.clone())]));
+        for u in ["Months", "Weeks"] {
+            let st = pp_setup(&pp(&[("pair", pair.clone()), ("unit", s(u))]));
+            assert_eq!(st.unit, u);
+            assert_ne!(pp_render(&pp(&[("pair", pair.clone()), ("unit", s(u))])), base, "{u}");
+        }
+        assert!(pp_readout(&pp(&[("pair", s("Rabbit and wolf")), ("unit", s("Months"))]))[0].contains("months"));
     }
 
     #[test]
