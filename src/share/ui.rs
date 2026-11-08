@@ -34,7 +34,9 @@ pub struct AccountUi {
 const SECRET_FIELDS: [&str; 3] = ["share_pw", "share_pw2", "share_paste"];
 
 /// The width the account forms were made for (the window's), kept when they sit in a wider card.
-const FORM_WIDTH: f32 = 460.0;
+// Wide enough to fill a Settings card: at 460 the field and its Connect row filled the left half of
+// it, and at 640 the field still stopped just short of the divider under it, which read as a mistake.
+const FORM_WIDTH: f32 = 860.0;
 
 impl AccountUi {
     /// The account as the app uses it: a section of the Shared page.
@@ -411,7 +413,18 @@ fn link(ui: &mut Ui, text: &str) -> bool {
 
 /// A labelled one-line field; true when Enter was pressed in it.
 fn field(ui: &mut Ui, label: &str, value: &mut String, id: &str, secret: bool, hint: &str) -> bool {
-    ui.label(theme::strong(label).size(13.5));
+    field_noted(ui, label, None, value, id, secret, hint)
+}
+
+/// [`field`] with a quiet note beside its label ("needed to connect").
+fn field_noted(ui: &mut Ui, label: &str, note: Option<&str>, value: &mut String, id: &str, secret: bool, hint: &str) -> bool {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        ui.label(theme::strong(label).size(13.5));
+        if let Some(n) = note {
+            ui.label(theme::muted(format!("· {n}")).size(12.5));
+        }
+    });
     ui.add_space(2.0);
     let r = ui
         .scope(|ui| {
@@ -419,6 +432,10 @@ fn field(ui: &mut Ui, label: &str, value: &mut String, id: &str, secret: bool, h
             for state in [&mut w.inactive, &mut w.hovered, &mut w.active] {
                 state.corner_radius = egui::CornerRadius::same(12);
             }
+            // A white box with a clear border: the sunken beige fill read as a disabled field.
+            ui.visuals_mut().extreme_bg_color = theme::card();
+            ui.visuals_mut().text_edit_bg_color = Some(theme::card());
+            ui.visuals_mut().widgets.inactive.bg_stroke = egui::Stroke::new(1.0, theme::muted_col().gamma_multiply(0.5));
             ui.add(
                 egui::TextEdit::singleline(value)
                     .id(egui::Id::new(id))
@@ -469,30 +486,71 @@ fn server_page(ui: &mut Ui, m: &mut AccountModel) {
         ui,
         "Sharing questions with other teachers needs an account on a verSHion pool server.",
     );
-    let enter = field(ui, "Server address", &mut m.forms.server, "share_server", false, "https://pool.example.org");
-    // Save says whether there is anything to save: an empty box with a lit Save button is a state
-    // the critics named on both pages that show this form.
-    let typed = m.forms.server.trim().to_string();
-    let dirty = !typed.is_empty() && typed != m.base_url();
-    let mut save = enter && dirty;
-    actions(ui, m.busy(), |ui| {
-        save |= pageshell::primary_on(ui, "Save", dirty).clicked();
+    // The field and its action on one row, the usual address-and-submit pair: below the field, a
+    // locked Connect was read in turn as washed out, as a pressable pill and as a drop zone. Beside
+    // the box it waits for, the locked button reads as that box's submit.
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        ui.label(theme::strong("Server address").size(13.5));
+        ui.label(theme::muted("· needed to connect").size(12.5));
     });
-    // A ghost Save with nothing beside it read as "this page is stuck" to every critic that saw it.
-    // Say what the button is waiting for while it waits.
-    if !dirty {
-        ui.add_space(2.0);
-        ui.label(
-            theme::muted(if typed.is_empty() {
-                "Paste your school's verSHion server address to turn sharing on; everything else works without it."
-            } else if typed == m.base_url() {
-                "That is already the address in use."
-            } else {
-                "An address starts with https:// — Save turns on once it does."
+    ui.add_space(2.0);
+    let busy = m.busy();
+    let base = m.base_url().to_string();
+    let mut enter = false;
+    let mut save = false;
+    let mut typed = String::new();
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 10.0;
+        let btn_w = pageshell::button_width(ui, "Connect");
+        let r = ui
+            .scope(|ui| {
+                let w = &mut ui.visuals_mut().widgets;
+                for state in [&mut w.inactive, &mut w.hovered, &mut w.active] {
+                    state.corner_radius = egui::CornerRadius::same(12);
+                }
+                ui.visuals_mut().extreme_bg_color = theme::card();
+                ui.visuals_mut().text_edit_bg_color = Some(theme::card());
+                ui.visuals_mut().widgets.inactive.bg_stroke = egui::Stroke::new(1.0, theme::muted_col().gamma_multiply(0.5));
+                ui.add(
+                    egui::TextEdit::singleline(&mut m.forms.server)
+                        .id(egui::Id::new("share_server"))
+                        .hint_text("https://pool.example.org")
+                        .margin(egui::Margin::symmetric(12, 10))
+                        .desired_width((ui.available_width().min(FORM_WIDTH) - btn_w - 10.0).max(160.0)),
+                )
             })
-            .size(11.5),
-        );
-    }
+            .inner;
+        enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+        typed = m.forms.server.trim().to_string();
+        let h = r.rect.height();
+        // Live at all times, as a form's submit beside its field is: pressed with nothing typed,
+        // `save_server` answers with the address error, which says what is missing. Every disabled
+        // look tried (faded, beige, dashed, greyed) was read as either unreadable or still live.
+        ui.add_enabled_ui(!busy, |ui| {
+            let (rest, hover, press) = pageshell::accent_states();
+            save |= pageshell::styled_button(
+                ui,
+                egui::RichText::new("Connect").family(theme::bold_family()).size(15.2).color(theme::on_accent_col()),
+                rest,
+                hover,
+                press,
+                egui::Stroke::NONE,
+                h,
+            )
+            .clicked();
+        });
+    });
+    let dirty = !typed.is_empty() && typed != base;
+    save |= enter && dirty;
+    let hint = if !typed.is_empty() && typed == base {
+        "That is already the address in use."
+    } else {
+        "Paste the address your school gives you, then press Connect."
+    };
+    ui.add_space(6.0);
+    ui.add(egui::Label::new(egui::RichText::new(hint).size(13.0).color(theme::ink().gamma_multiply(0.8))).wrap());
+    ui.add_space(6.0);
     if m.page == Page::Server && !m.base_url().is_empty() && link(ui, "Cancel") {
         m.go(Page::SignIn);
     }
