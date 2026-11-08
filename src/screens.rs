@@ -845,17 +845,13 @@ impl crate::App {
                     if resp.clicked() {
                         crate::platform::open_url(DESKTOP_RELEASES);
                     }
-                    ui.add_space(8.0);
                 });
 
-                // A short page used to pile every spare pixel into one band under the cards, and the
-                // critics read the hero and the steps as two disconnected halves. Keep the air between
-                // them small and let the footer take the slack instead.
-                let spare = (ui.available_height() - 300.0).max(0.0);
-                // A narrow window is short of height for the four stacked steps: keep this gap tight
-                // there, so the panel ends inside the window instead of being cut by its bottom edge.
+                // Hero and steps are one block: a wide band between the install link and "How it
+                // works" left the steps detached and pushed down. A section break a little larger
+                // than the hero's own gaps, and the centring above shares out what is left.
                 let narrow_page = ui.available_width() < 940.0;
-                ui.add_space(if narrow_page { 18.0 } else { 18.0 + (spare * 0.10).min(10.0) });
+                ui.add_space(if narrow_page { 14.0 } else { 18.0 });
 
                 // The steps sit in a centred column of their own, not the whole window: the hero is a
                 // narrow centred column, and a card row running to both edges under it read as a
@@ -1767,13 +1763,81 @@ impl crate::App {
                 // --- Account (optional): the sign-in forms, or the signed-in account's status ---
                 app.account.pin();
                 pageshell::card(ui, |ui| {
+                    let narrow_window = ui.ctx().content_rect().width() < 900.0;
+                    // A desktop window: the form and what an account adds side by side, split by a
+                    // hairline. Stacked, both sat in the left part of the wide card and left its right
+                    // half empty; the status page (signed in) fills the card on its own.
+                    if !narrow_window && !matches!(app.account.model.page, crate::share::model::Page::Status) {
+                        let inner = ui.available_width();
+                        let gutter = 24.0;
+                        // narrow enough that the address field gets more room than it had stacked;
+                        // each description runs to two short lines here
+                        let right_w = (inner * 0.27).clamp(200.0, 260.0);
+                        let left_w = (inner - right_w - 2.0 * gutter - 1.0).max(320.0);
+                        let top = ui.cursor().top();
+                        let row = ui.horizontal_top(|ui| {
+                            ui.spacing_mut().item_spacing.x = 0.0;
+                            ui.allocate_ui_with_layout(Vec2::new(left_w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                                ui.set_width(left_w);
+                                ui.spacing_mut().item_spacing.x = 8.0;
+                                ui.add_space(4.0);
+                                pageshell::heading(ui, app.account.page_title());
+                                ui.add_space(6.0);
+                                app.account.draw_section(ui);
+                                // Where the address comes from, under the form it is typed into.
+                                if matches!(app.account.model.page, crate::share::model::Page::NotConfigured | crate::share::model::Page::Server) {
+                                    ui.add_space(14.0);
+                                    // A quiet inset as wide as the address field above it (about 70
+                                    // characters a line), so the note reads as help for that field.
+                                    let note_w = (left_w - crate::pageshell::button_width(ui, "Connect") - 10.0).clamp(280.0, 480.0);
+                                    egui::Frame::new()
+                                        .fill(theme::cream())
+                                        .corner_radius(CornerRadius::same(12))
+                                        .inner_margin(Margin::symmetric(16, 14))
+                                        .show(ui, |ui| {
+                                            ui.set_width(note_w - 32.0);
+                                            ui.horizontal_top(|ui| {
+                                                ui.spacing_mut().item_spacing.x = 10.0;
+                                                ui.label(RichText::new(egui_phosphor::regular::INFO).font(theme::icon_font(17.0)).color(theme::accent_col()));
+                                                ui.vertical(|ui| {
+                                                    ui.spacing_mut().item_spacing.y = 2.0;
+                                                    ui.label(theme::strong("No address yet?").size(13.5));
+                                                    ui.add(
+                                                        egui::Label::new(
+                                                            RichText::new(
+                                                                "Ask the colleague or IT team who runs your school's verSHion pool. \
+                                                                 It starts with https:// and usually ends in your school's domain.",
+                                                            )
+                                                            .size(13.0)
+                                                            .color(theme::ink().gamma_multiply(0.72)),
+                                                        )
+                                                        .wrap(),
+                                                    );
+                                                });
+                                            });
+                                        });
+                                }
+                            });
+                            ui.add_space(2.0 * gutter + 1.0);
+                            ui.allocate_ui_with_layout(Vec2::new(right_w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                                ui.set_width(right_w);
+                                ui.spacing_mut().item_spacing.x = 8.0;
+                                // level with the card's title across the hairline
+                                ui.add_space(10.0);
+                                crate::share::shared_ui::account_reasons_inline(ui);
+                                ui.add_space(6.0);
+                            });
+                        });
+                        let x = ui.min_rect().left() + left_w + gutter + 0.5;
+                        ui.painter().vline(x, top + 2.0..=row.response.rect.bottom() - 2.0, Stroke::new(1.0, theme::border()));
+                        return;
+                    }
                     // The card used to open on a plain grey sentence; say what it is first.
                     pageshell::heading(ui, app.account.page_title());
                     ui.add_space(2.0);
                     app.account.draw_section(ui);
                     // What an account adds belongs to this card, under a hairline, not in a row of
                     // tile-like cards of its own below it.
-                    let narrow_window = ui.ctx().content_rect().width() < 900.0;
                     ui.add_space(if narrow_window { 8.0 } else { 12.0 });
                     let (rule, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 1.0), egui::Sense::hover());
                     ui.painter().hline(rule.x_range(), rule.center().y, Stroke::new(1.0, theme::border()));

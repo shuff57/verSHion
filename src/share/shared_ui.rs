@@ -157,7 +157,7 @@ pub(crate) fn account_reasons_inline(ui: &mut Ui) {
         (crate::handicons::SPARKLE, "Hosted AI", "Turn a PDF, scan or photo into questions."),
     ];
     crate::kit::small_caps(ui, "What an account adds");
-    ui.add_space(if ui.ctx().content_rect().width() < 900.0 { 10.0 } else { 12.0 });
+    ui.add_space(if ui.ctx().content_rect().width() < 900.0 { 10.0 } else { 18.0 });
     // A narrow window: a short stacked list, one line per benefit, the bold heading in a fixed slot and
     // a one-line description beside it. Three columns at this width wrapped each description into a
     // dense block of three or four lines.
@@ -183,10 +183,10 @@ pub(crate) fn account_reasons_inline(ui: &mut Ui) {
     // Two-line items: the icon disc, then the bold label with its short description directly under it.
     // With the description in a column of its own far to the right, the eye jumped across the card
     // from each label to a line running its whole width.
-    // About the old single-line rows' height in all, so the backup panel and the page footer keep their room.
+    // Spaced for a column of its own beside the form (desktop): the rows set the card's height.
     for (i, (icon, head, body)) in perks.into_iter().enumerate() {
         if i > 0 {
-            ui.add_space(4.0);
+            ui.add_space(20.0);
         }
         ui.horizontal_top(|ui| {
             ui.spacing_mut().item_spacing.x = 12.0;
