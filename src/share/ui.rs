@@ -481,6 +481,15 @@ fn actions(ui: &mut Ui, busy: bool, add: impl FnOnce(&mut Ui)) {
     });
 }
 
+/// Room for a pool address and no more: across a wide card a short URL sat in a box running most of
+/// the card's width, with Connect pushed to the far edge. A narrow card still fills its row.
+const SERVER_FIELD_MAX: f32 = 400.0;
+
+fn server_field_width(avail: f32, btn_w: f32) -> f32 {
+    let fill = (avail.min(FORM_WIDTH) - btn_w - 10.0).max(160.0);
+    if avail >= 620.0 { fill.min(SERVER_FIELD_MAX) } else { fill }
+}
+
 fn server_page(ui: &mut Ui, m: &mut AccountModel) {
     para(
         ui,
@@ -492,7 +501,6 @@ fn server_page(ui: &mut Ui, m: &mut AccountModel) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
         ui.label(theme::strong("Server address").size(13.5));
-        ui.label(theme::muted("· needed to connect").size(12.5));
     });
     ui.add_space(2.0);
     let busy = m.busy();
@@ -517,7 +525,7 @@ fn server_page(ui: &mut Ui, m: &mut AccountModel) {
                         .id(egui::Id::new("share_server"))
                         .hint_text("https://pool.example.org")
                         .margin(egui::Margin::symmetric(12, 10))
-                        .desired_width((ui.available_width().min(FORM_WIDTH) - btn_w - 10.0).max(160.0)),
+                        .desired_width(server_field_width(ui.available_width(), btn_w)),
                 )
             })
             .inner;

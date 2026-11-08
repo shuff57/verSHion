@@ -318,9 +318,8 @@ pub fn sections(ui: &mut Ui, salt: &str, items: &[NavItem], content: impl FnOnce
     sections_aside(ui, salt, items, |_| {}, content);
 }
 
-/// [`sections`] with a small panel of its own: under the section list when the list is a column (the
-/// column used to stop after four links and leave the left half of the page as empty grid), and
-/// after the content when the list collapses into chips.
+/// [`sections`] with a closing panel under the section's content (in the content column on a wide
+/// window, under the chips' content on a narrow one).
 pub fn sections_aside(ui: &mut Ui, salt: &str, items: &[NavItem], aside: impl FnOnce(&mut Ui), content: impl FnOnce(&mut Ui, usize)) {
     if items.is_empty() {
         return;
@@ -335,17 +334,34 @@ pub fn sections_aside(ui: &mut Ui, salt: &str, items: &[NavItem], aside: impl Fn
         .min(items.len() - 1);
     if ui.available_width() >= NAV_COLLAPSE_W {
         let content_w = (ui.available_width() - NAV_W - 28.0).clamp(280.0, 960.0);
+        let settings = salt == "settings";
         ui.horizontal_top(|ui| {
             ui.spacing_mut().item_spacing.x = 28.0;
             ui.vertical(|ui| {
                 ui.set_width(NAV_W);
-                nav_column(ui, id, items, &mut selected);
-                ui.add_space(20.0);
-                aside(ui);
+                nav_column(ui, id, items, &mut selected, settings);
+                if settings {
+                    // The account-optional note sits right under the menu it qualifies, not at the foot
+                    // of the rail where it read as a stray caption belonging to nothing.
+                    ui.add_space(24.0);
+                    ui.horizontal(|ui| {
+                        ui.add_space(18.0);
+                        ui.vertical(|ui| {
+                            ui.set_width(NAV_W - 30.0);
+                            crate::kit::small_caps(ui, "Account optional");
+                            ui.add_space(6.0);
+                            ui.add(egui::Label::new(theme::muted("Create banks, build exams and print on this machine. Connect when you want to share.").size(13.0)).wrap());
+                        });
+                    });
+                }
             });
             ui.vertical(|ui| {
                 ui.set_width(content_w);
                 ease_in_content(ui, id, selected, content);
+                // The closing panel belongs to the content column, on the cards' own edges: run
+                // under the menu as well, it read as belonging to neither.
+                ui.add_space(12.0);
+                aside(ui);
             });
         });
     } else {
@@ -363,7 +379,7 @@ pub fn sections_aside(ui: &mut Ui, salt: &str, items: &[NavItem], aside: impl Fn
     ctx.data_mut(|d| d.insert_temp(id.with("sel"), selected));
 }
 
-fn nav_column(ui: &mut Ui, id: Id, items: &[NavItem], selected: &mut usize) {
+fn nav_column(ui: &mut Ui, id: Id, items: &[NavItem], selected: &mut usize, quiet: bool) {
     let ctx = ui.ctx().clone();
     let now = ctx.input(|i| i.time);
     ui.spacing_mut().item_spacing.y = NAV_GAP;
@@ -406,7 +422,7 @@ fn nav_column(ui: &mut Ui, id: Id, items: &[NavItem], selected: &mut usize) {
         let mid = rect.left_center();
         // Left-aligned font glyphs sit with their left edge at x = 18; a centred icon goes half its width in.
         crate::handicons::paint_glyph(ui.painter(), mid + Vec2::new(18.0 + 9.0, 0.0), it.icon, 18.0, col);
-        ui.painter().text(mid + Vec2::new(46.0, 0.0), Align2::LEFT_CENTER, it.label, egui::FontId::new(15.2, theme::bold_family()), col);
+        ui.painter().text(mid + Vec2::new(46.0, 0.0), Align2::LEFT_CENTER, it.label, egui::FontId::new(if quiet { 14.0 } else { 15.2 }, if quiet && !on { egui::FontFamily::Proportional } else { theme::bold_family() }), col);
         resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, it.label));
         if resp.clicked() {
             *selected = i;

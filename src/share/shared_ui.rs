@@ -165,43 +165,50 @@ pub(crate) fn account_reasons_inline(ui: &mut Ui) {
     ];
     crate::kit::small_caps(ui, "What an account adds");
     ui.add_space(if ui.ctx().content_rect().width() < 900.0 { 10.0 } else { 14.0 });
-    // A narrow window: three compact columns. The list of rows below made the card tall enough to push
-    // the page's last card under the window's bottom edge.
+    // A narrow window: a short stacked list, one line per benefit, the bold heading in a fixed slot and
+    // a one-line description beside it. Three columns at this width wrapped each description into a
+    // dense block of three or four lines.
     if ui.ctx().content_rect().width() < 900.0 {
-        ui.columns(3, |cols| {
-            for (col, (icon, head, body)) in cols.iter_mut().zip(perks) {
-                // `columns` lays its cells out justified; left-aligned rows read as copy.
-                col.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 10.0;
-                        let (r, _) = ui.allocate_exact_size(egui::Vec2::splat(34.0), egui::Sense::hover());
-                        ui.painter().circle_filled(r.center(), 17.0, theme::accent_faded());
-                        crate::handicons::paint_glyph(ui.painter(), r.center(), icon, 17.0, theme::accent_col());
-                        ui.add(egui::Label::new(egui::RichText::new(head).family(theme::bold_family()).size(14.5).color(theme::ink())).wrap());
-                    });
-                    ui.add_space(6.0);
-                    ui.add(egui::Label::new(egui::RichText::new(no_widow(body)).size(13.0).color(theme::ink().gamma_multiply(0.78))).wrap());
-                });
+        let short = [
+            "Send banks to colleagues or the public pool.",
+            "Copy questions other teachers have published.",
+            "Turn a PDF, scan or photo into questions.",
+        ];
+        for (i, ((_icon, head, _body), body)) in perks.into_iter().zip(short).enumerate() {
+            if i > 0 {
+                ui.add_space(6.0);
             }
-        });
+            ui.horizontal_top(|ui| {
+                ui.spacing_mut().item_spacing.x = 0.0;
+                // Small and without icon discs, so the list stays quieter than the Connect form above.
+                ui.allocate_ui_with_layout(egui::vec2(124.0, 18.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.set_min_size(egui::vec2(124.0, 18.0));
+                    ui.label(theme::strong(head).size(13.0));
+                });
+                ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 18.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.add(egui::Label::new(egui::RichText::new(body).size(13.0).color(theme::ink().gamma_multiply(0.7))).wrap());
+                });
+            });
+        }
         return;
     }
-    // A list of rows, disc beside title and line: three short columns left the card shallow and the page
-    // below it a band of empty grid, and their copy broke into one-word last lines.
+    // Compact supporting rows leave room for the local backup panel and page footer.
     for (i, (icon, head, body)) in perks.into_iter().enumerate() {
         if i > 0 {
-            ui.add_space(20.0);
+            ui.add_space(8.0);
         }
         ui.horizontal_top(|ui| {
-            ui.spacing_mut().item_spacing.x = 16.0;
-            let (r, _) = ui.allocate_exact_size(egui::Vec2::splat(42.0), egui::Sense::hover());
-            ui.painter().circle_filled(r.center(), 21.0, theme::accent_faded());
-            crate::handicons::paint_glyph(ui.painter(), r.center(), icon, 19.0, theme::accent_col());
-            ui.vertical(|ui| {
-                ui.spacing_mut().item_spacing.y = 4.0;
-                ui.add(egui::Label::new(egui::RichText::new(head).family(theme::bold_family()).size(15.5).color(theme::ink())).wrap());
-                ui.add(egui::Label::new(egui::RichText::new(no_widow(body)).size(14.0).color(theme::ink().gamma_multiply(0.8))).wrap());
+            ui.spacing_mut().item_spacing.x = 14.0;
+            let (r, _) = ui.allocate_exact_size(egui::Vec2::splat(34.0), egui::Sense::hover());
+            ui.painter().circle_filled(r.center(), 17.0, theme::accent_faded());
+            crate::handicons::paint_glyph(ui.painter(), r.center(), icon, 17.0, theme::accent_col());
+            // Flush left in its slot, as the narrow columns' headings are (centred, the three titles
+            // each started at a different x).
+            ui.allocate_ui_with_layout(egui::vec2(130.0, 34.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.set_min_size(egui::vec2(130.0, 34.0));
+                ui.label(theme::strong(head).size(14.0));
             });
+            ui.add(egui::Label::new(egui::RichText::new(no_widow(body)).size(14.0).color(theme::ink().gamma_multiply(0.8))).wrap());
         });
     }
 }
