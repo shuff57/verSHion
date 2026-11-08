@@ -85,6 +85,7 @@ fn params() -> Vec<ParamDef> {
         ParamDef::list("tangents", "Tangents at points", "").hint("A point's letter per row, such as C. Or click a point on the figure"),
         ParamDef::choice("arc", "Arc AB", &["None", "Minor", "Major"], "None"),
         ParamDef::choice("sector", "Sector", &["None", "Minor", "Major"], "None"),
+        ParamDef::list("shade", "Shaded areas", "").hint("Click inside an enclosed area on the figure to shade it, and again to clear it. Or type segment BD, major segment BD, sector BD or major sector BD"),
         ParamDef::choice("right_marks", "Right-angle marks", &["Show always", "Key only", "Hide"], "Show always").hint("Key only hides the right-angle marks on the student copy, where they would give the answer away"),
         b("show_names", "Letter the points", true),
         ParamDef::text("name_o", "Centre letter", "O"),
@@ -514,6 +515,7 @@ pub fn warnings(p: &Params) -> Vec<String> {
         let same = (0..5).any(|i| (i + 1..5).any(|j| drawn[i] && drawn[j] && l[i] == l[j]));
         if same { v.push(format!("Two points have the same letter ({}, {}, {}, {}, {}): rename one so the labels can be told apart.", n.o, n.a, n.b, n.c, n.m)); }
         v.extend(edit::unknown_rows(p));
+        for r in edit::unknown_shades(p) { v.push(format!("Shaded area {r} is not drawn: name two points on the circle (segment BD, sector BD), or click inside the circle.")); }
         // a More point lettered like another drawn point
         let mut seen: Vec<String> = (0..5).filter(|i| drawn[*i]).map(|i| l[i].clone()).collect();
         for (nm, _) in edit::extras(p) {
@@ -765,7 +767,7 @@ const CIRCLE_SEGS: usize = 60;
 /// A leader is used only for a spot more than 18 px from what it names (or for a label that must always point, `force`). A label
 /// that can only go on the hatch gets a white plate when no drawn line runs under it. Returns the labels and the (id, text) of those
 /// that overlap another label or leave `bounds` (the caller then makes room or moves them into the readout).
-fn place(mut labs: Vec<Lab>, segs: &[(Pt, Pt)], solid: &[(Pt, Pt)], dots: &[Rect], bounds: &Rect, hatch: &[Pt]) -> (Vec<Placed>, Vec<(usize, String, Option<K>)>) {
+fn place(mut labs: Vec<Lab>, segs: &[(Pt, Pt)], solid: &[(Pt, Pt)], dots: &[Rect], bounds: &Rect, hatch: &[Vec<Pt>]) -> (Vec<Placed>, Vec<(usize, String, Option<K>)>) {
     labs.sort_by_key(|l| l.prio);
     let mut placed: Vec<Placed> = vec![];
     let mut rects: Vec<Rect> = vec![];
@@ -792,7 +794,7 @@ fn place(mut labs: Vec<Lab>, segs: &[(Pt, Pt)], solid: &[(Pt, Pt)], dots: &[Rect
             let hard0 = conflicts(&r, &rects, segs, &leaders, dots, bounds);
             let mut hard = hard0 * 4; // (a label touching something outweighs a leader's trouble)
             if best.is_some_and(|(k, _)| hard > k.0) { continue; }
-            let on_hatch = !hatch.is_empty() && rect_hits_poly(&r.grow(-2.0), hatch);
+            let on_hatch = hatch.iter().any(|h| rect_hits_poly(&r.grow(-2.0), h));
             let from = pick_from(&l.froms, from0, *c);
             let q = nearest_on_rect(&r, from);
             let dist = (q.0 - from.0).hypot(q.1 - from.1);
@@ -993,6 +995,14 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
             let n = ((sa1 - sa0) / 6.0).ceil().clamp(1.0, 90.0) as usize;
             for i in 0..=n { let a = (sa0 + (sa1 - sa0) * i as f64 / n as f64).to_radians(); hatch.push((cx + R * a.cos(), CY - R * a.sin())); }
         }
+    }
+    // the shaded areas (each a polygon in radii from the centre), in the sector's fill; in Print their outlines are kept clear of labels
+    let mut hatches: Vec<Vec<Pt>> = vec![];
+    for poly in edit::regions(p) {
+        let pts: Vec<Pt> = poly.iter().map(|v| (cx + R * v.0, CY - R * v.1)).collect();
+        let d: String = pts.iter().enumerate().map(|(i, q)| format!("{}{:.2},{:.2}", if i == 0 { "M" } else { " L" }, q.0, q.1)).collect();
+        sc.d.raw(&format!(r##"<path d="{d} Z" fill="{sector_fill}" stroke="none"/>"##));
+        if print { hatches.push(pts); }
     }
     sc.d.circle(cx, CY, R, "none", INK, 2.6);
     sc.arc_pts(o, R, 0.0, 360.0);
@@ -1258,7 +1268,8 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     labs.retain(|l| !opt.exclude.iter().any(|(id, _, _)| *id == l.id));
     // whether a label that stays on the figure lost its unit
     let unit_lost = opt.drop_unit && !c.unit.is_empty() && labs.iter().any(|l| l.kind.is_some_and(|k| !matches!(k, K::Central | K::Inscribed | K::TanAngle)) && !l.text.chars().all(|ch| ch == 'r'));
-    let (placed, severe) = place(labs, &sc.segs, &sc.solid, &sc.dots, &bounds, &hatch);
+    hatches.insert(0, hatch.clone());
+    let (placed, severe) = place(labs, &sc.segs, &sc.solid, &sc.dots, &bounds, &hatches);
     let leader_col = if print { "#444444" } else { "#888888" };
     // plates first, then the leaders (so that a plate never hides a leader), then the texts
     for pl in &placed {

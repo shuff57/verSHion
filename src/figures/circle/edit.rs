@@ -135,10 +135,15 @@ pub fn handles(p: &Params, cx: f64, pad: f64) -> Vec<Handle> {
             move_extra(p, i, snap_angle(interact::angle_deg(centre, t)) % 360.0);
         }).with_click(move |p| toggle_tangent(p, &nm2)));
     }
-    v.push(Handle::area(centre, (2.0 * R + 40.0, 2.0 * R + 40.0), "Click the circle to put a point there", move |p, q| {
+    v.push(Handle::area(centre, (2.0 * R + 40.0, 2.0 * R + 40.0), "Click the circle to put a point there, or inside an enclosed area to shade it", move |p, q| {
         if !(q.0.is_finite() && q.1.is_finite()) { return; }
         let r = interact::dist(centre, q);
-        if (r - R).abs() <= 12.0 { add_point(p, snap_angle(interact::angle_deg(centre, q)) % 360.0); }
+        // the band on the circle reaches further out than in, so a thin segment beside its arc can still be clicked
+        if (R - 6.0..=R + 12.0).contains(&r) {
+            add_point(p, snap_angle(interact::angle_deg(centre, q)) % 360.0);
+        } else if r < R - 6.0 {
+            toggle_shade(p, ((q.0 - centre.0) / R, (centre.1 - q.1) / R));
+        }
     }));
     v
 }
@@ -246,6 +251,139 @@ pub fn toggle_tangent(p: &mut Params, nm: &str) {
     set_rows(p, "tangents", &r);
 }
 
+// ------------------------------------------------------------------------------------------------ shaded areas
+
+/// Unit coordinates: the centre at 0, the radius 1, y up (a shaded area keeps its place when the canvas grows).
+pub type V = (f64, f64);
+
+fn upt(d: f64) -> V { (d.to_radians().cos(), d.to_radians().sin()) }
+
+/// Points along the circle from `a0` through `span` degrees counterclockwise, both ends included.
+fn arc_poly(a0: f64, span: f64) -> Vec<V> {
+    let n = (span / 2.0).ceil().max(2.0) as usize;
+    (0..=n).map(|i| upt(a0 + span * i as f64 / n as f64)).collect()
+}
+
+/// The drawn lines that cut the disc into areas: chords (both ends on the circle, as directions; a diameter is one) and radii (their
+/// directions).
+pub fn dividers(p: &Params) -> (Vec<(f64, f64)>, Vec<f64>) {
+    let (g, pt) = (geom(p), parts(p));
+    let (mut chords, mut radii) = (vec![], vec![]);
+    if (pt.chord || pt.sec) && !pt.deg { chords.push((g.a, g.b)); }
+    if pt.insc { chords.push((g.c, g.a)); chords.push((g.c, g.b)); }
+    if pt.diam { chords.push((g.a, g.a + 180.0)); }
+    if pt.bis && !pt.deg { let m = g.s + g.d / 2.0; chords.push((m, m + 180.0)); }
+    let both = pt.central || pt.sector != 0;
+    if pt.radius || both || pt.tan { radii.push(g.a); }
+    if both && !pt.deg { radii.push(g.b); }
+    for (_, x, y) in joins(p) {
+        match (x, y) {
+            (End::At(u), End::At(w)) => chords.push((u, w)),
+            (End::O, End::At(w)) | (End::At(w), End::O) => radii.push(w),
+            _ => {}
+        }
+    }
+    (chords, radii)
+}
+
+fn side(a: V, b: V, q: V) -> f64 { (b.0 - a.0) * (q.1 - a.1) - (b.1 - a.1) * (q.0 - a.0) }
+
+/// The part of `poly` on the side `s` (+1 or -1) of the line a-b (Sutherland-Hodgman against one half-plane).
+fn clip(poly: &[V], a: V, b: V, s: f64) -> Vec<V> {
+    let mut out = vec![];
+    for i in 0..poly.len() {
+        let (p0, p1) = (poly[i], poly[(i + 1) % poly.len()]);
+        let (f0, f1) = (s * side(a, b, p0), s * side(a, b, p1));
+        if f0 >= 0.0 { out.push(p0); }
+        if (f0 >= 0.0) != (f1 >= 0.0) {
+            let t = f0 / (f0 - f1);
+            out.push((p0.0 + (p1.0 - p0.0) * t, p0.1 + (p1.1 - p0.1) * t));
+        }
+    }
+    out
+}
+
+/// The enclosed area of the disc around `seed`: between the two radii either side of it (the whole disc with fewer than two radii),
+/// on its side of every chord. Empty when the seed is not inside the circle.
+pub fn cell(p: &Params, seed: V) -> Vec<V> {
+    if !(seed.0.is_finite() && seed.1.is_finite()) || seed.0.hypot(seed.1) >= 1.0 { return vec![]; }
+    let (chords, radii) = dividers(p);
+    let mut rs: Vec<f64> = radii.into_iter().map(wrap).collect();
+    rs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    rs.dedup_by(|a, b| (*a - *b).abs() < 0.01);
+    let mut poly = if rs.len() >= 2 {
+        let phi = wrap(seed.1.atan2(seed.0).to_degrees());
+        let i = rs.iter().rposition(|r| *r <= phi).unwrap_or(rs.len() - 1);
+        let (r0, r1) = (rs[i], rs[(i + 1) % rs.len()]);
+        let mut v = vec![(0.0, 0.0)];
+        v.extend(arc_poly(r0, (r1 - r0).rem_euclid(360.0)));
+        v
+    } else {
+        let mut v = arc_poly(0.0, 360.0);
+        v.pop();
+        v
+    };
+    for (u, w) in chords {
+        let (a, b) = (upt(u), upt(w));
+        let s = if side(a, b, seed) >= 0.0 { 1.0 } else { -1.0 };
+        poly = clip(&poly, a, b, s);
+        if poly.len() < 3 { return vec![]; }
+    }
+    poly
+}
+
+/// The area a row of Shaded areas names: `at x y` (the enclosed area round that spot, in radii from the centre, y up, as a click
+/// writes it), `segment BD` or `major segment BD`, `sector BD` or `major sector BD`.
+fn row_region(p: &Params, pts: &[(String, f64)], row: &str) -> Option<Vec<V>> {
+    let toks: Vec<String> = row.split_whitespace().map(|t| t.to_string()).collect();
+    let low: Vec<String> = toks.iter().map(|t| t.to_lowercase()).collect();
+    if low.first().map(String::as_str) == Some("at") {
+        let (x, y) = (number(toks.get(1)?)?, number(toks.get(2)?)?);
+        let c = cell(p, (x, y));
+        return (c.len() >= 3).then_some(c);
+    }
+    let major = low.first().map(String::as_str) == Some("major");
+    let k = usize::from(major);
+    let kind = low.get(k)?.clone();
+    if kind != "segment" && kind != "sector" { return None; }
+    let (a, b) = pair_names(&toks[k + 1..].join(" "), &known_names(p, pts))?;
+    let (Some(End::At(x)), Some(End::At(y))) = (find(p, pts, &a), find(p, pts, &b)) else { return None };
+    let gap = (y - x).rem_euclid(360.0);
+    if gap.min(360.0 - gap) < 0.5 { return None; }
+    // the minor arc runs from s through d degrees
+    let (s, d) = if gap <= 180.0 { (x, gap) } else { (y, 360.0 - gap) };
+    let (a0, span) = if major { (s + d, 360.0 - d) } else { (s, d) };
+    let mut v = if kind == "sector" { vec![(0.0, 0.0)] } else { vec![] };
+    v.extend(arc_poly(a0, span));
+    Some(v)
+}
+
+/// Every shaded area that can be drawn, in unit coordinates.
+pub fn regions(p: &Params) -> Vec<Vec<V>> {
+    let pts = circle_points(p);
+    rows(p.s("shade")).iter().take(24).filter_map(|r| row_region(p, &pts, r)).collect()
+}
+
+/// Rows of Shaded areas that name no area (a point that is not drawn, or a spot outside the circle), for the notes.
+pub fn unknown_shades(p: &Params) -> Vec<String> {
+    let pts = circle_points(p);
+    rows(p.s("shade")).into_iter().filter(|r| row_region(p, &pts, r).is_none()).collect()
+}
+
+/// A click inside the circle at `seed`: the areas shaded there are cleared, else the enclosed area round it is shaded.
+pub fn toggle_shade(p: &mut Params, seed: V) {
+    let pts = circle_points(p);
+    let rs = rows(p.s("shade"));
+    let keep: Vec<String> = rs.iter().filter(|r| !row_region(p, &pts, r).is_some_and(|poly| pt_in_poly(seed, &poly))).cloned().collect();
+    if keep.len() < rs.len() {
+        set_rows(p, "shade", &keep);
+    } else if cell(p, seed).len() >= 3 {
+        let mut r = rs;
+        r.push(format!("at {:.2} {:.2}", seed.0, seed.1));
+        set_rows(p, "shade", &r);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -298,14 +436,15 @@ mod tests {
         let mut q = p.clone();
         (knob.drag.as_ref().unwrap())(&mut q, interact::polar(c, 120.0, R));
         assert_eq!(q.s("more_points"), "D 270, E 120");
-        // the click area adds a point where the circle is clicked, and ignores a click inside it
+        // the click area adds a point where the circle is clicked, and a click inside it shades the area there
         let area = hs.iter().find(|h| h.click_at.is_some()).unwrap();
         let mut q = p.clone();
         (area.click_at.as_ref().unwrap())(&mut q, interact::polar(c, 60.0, R + 5.0));
         assert!(parts(&q).b, "B was not drawn, so the click puts B there");
         let mut q = p.clone();
         (area.click_at.as_ref().unwrap())(&mut q, interact::polar(c, 60.0, R * 0.5));
-        assert_eq!(q.0, p.0);
+        assert_eq!(q.s("shade"), "at 0.25 0.43");
+        assert_eq!(q.s("more_points"), p.s("more_points"));
     }
 
     /// The task's figure so far: B, C and D put on the circle by clicks.
@@ -374,5 +513,83 @@ mod tests {
         let before = build(&p).1.marks;
         p.set_s("joins", "OC");
         assert_eq!(build(&p).1.marks, before + 1);
+    }
+
+    fn area(poly: &[V]) -> f64 {
+        (0..poly.len()).map(|i| { let (a, b) = (poly[i], poly[(i + 1) % poly.len()]); a.0 * b.1 - b.0 * a.1 }).sum::<f64>().abs() / 2.0
+    }
+
+    #[test]
+    fn a_click_inside_an_enclosed_area_shades_it_and_a_second_click_clears_it() {
+        let mut p = abcd();
+        p.set_s("joins", "BD");
+        // just inside the minor arc BD (B at 330, D at 270): the minor segment
+        let seed = (0.93 * 300f64.to_radians().cos(), 0.93 * 300f64.to_radians().sin());
+        toggle_shade(&mut p, seed);
+        assert!(p.s("shade").starts_with("at "), "{}", p.s("shade"));
+        let r = regions(&p);
+        assert_eq!(r.len(), 1);
+        let seg = 0.5 * (60f64.to_radians() - 60f64.to_radians().sin());
+        assert!((area(&r[0]) - seg).abs() < seg * 0.01, "the minor segment: {} vs {seg}", area(&r[0]));
+        // the typed form names the same area, and the major one is the rest of the disc
+        let mut q = p.clone();
+        q.set_s("shade", "segment BD");
+        assert!((area(&regions(&q)[0]) - seg).abs() < seg * 0.01);
+        q.set_s("shade", "major segment DB");
+        assert!((area(&regions(&q)[0]) - (PI - seg)).abs() < 0.01);
+        // drawn in the sector's fill (a hatch in Print), under the circle
+        let svg = render(&p);
+        assert!(svg.contains(r##"fill="#dbe7fb" stroke="none"/>"##));
+        let mut pr = p.clone();
+        pr.set_s("style", "Print");
+        assert!(render(&pr).contains(r##"stroke="none"/>"##) && render(&pr).contains("<pattern"));
+        toggle_shade(&mut p, seed);
+        assert_eq!(p.s("shade"), "", "a second click clears it");
+        // a click in the big part shades the rest of the disc, on its side of BD
+        toggle_shade(&mut p, (0.0, 0.0));
+        assert!((area(&regions(&p)[0]) - (PI - seg)).abs() < 0.01);
+    }
+
+    #[test]
+    fn radii_cut_the_disc_into_sectors_and_chords_cut_those() {
+        // radius OA at 20 and a line OB at 330: the click between them shades the 50 degree sector
+        let mut p = abcd();
+        p.set_s("joins", "OB");
+        toggle_shade(&mut p, (0.5, 0.0));
+        let sec = 0.5 * 50f64.to_radians();
+        assert!((area(&regions(&p)[0]) - sec).abs() < sec * 0.01, "{}", area(&regions(&p)[0]));
+        // and the other side of the two radii is the reflex sector
+        let mut q = abcd();
+        q.set_s("joins", "OB");
+        toggle_shade(&mut q, (-0.5, 0.0));
+        assert!((area(&regions(&q)[0]) - (PI - sec)).abs() < 0.02);
+        // the chord BD cuts the reflex sector: the click below it gets the segment only
+        q.set_s("shade", "");
+        q.set_s("joins", "OB, BD");
+        toggle_shade(&mut q, (0.93 * 300f64.to_radians().cos(), 0.93 * 300f64.to_radians().sin()));
+        let seg = 0.5 * (60f64.to_radians() - 60f64.to_radians().sin());
+        assert!((area(&regions(&q)[0]) - seg).abs() < seg * 0.01);
+        // the area follows the lines: with BD gone the same spot is the whole reflex sector again
+        q.set_s("joins", "OB");
+        assert!((area(&regions(&q)[0]) - (PI - sec)).abs() < 0.02);
+        // a row that names nothing is a note, not a crash
+        q.set_s("shade", "segment BZ, at 3 3");
+        assert!(regions(&q).is_empty());
+        assert_eq!(unknown_shades(&q).len(), 2);
+    }
+
+    #[test]
+    fn the_click_area_shades_inside_and_adds_points_on_the_circle() {
+        let mut p = abcd();
+        p.set_s("joins", "BD");
+        let hs = super::super::handles("circle", &p, (0.0, 0.0)).unwrap();
+        let area_h = hs.iter().find(|h| h.click_at.is_some()).unwrap();
+        let c = area_h.pos;
+        let mut q = p.clone();
+        (area_h.click_at.as_ref().unwrap())(&mut q, interact::polar(c, 300.0, R * 0.9));
+        assert_eq!(regions(&q).len(), 1);
+        let mut q = p.clone();
+        (area_h.click_at.as_ref().unwrap())(&mut q, interact::polar(c, 45.0, R + 4.0));
+        assert_eq!(q.s("more_points"), "D 270, E 45");
     }
 }
