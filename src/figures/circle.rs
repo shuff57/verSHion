@@ -1278,6 +1278,8 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     if !sec_ends.is_empty() { word(&mut labs, "secant", &sec_ends); }
     // the labels a teacher put on arcs (outside the arc's middle) and on lines (beside the line's middle, away from the centre)
     let sp = |v: edit::V| (cx + R * v.0, CY - R * v.1);
+    // angles labelled at one corner get arcs of different sizes (and clear of the central and inscribed angles' own arcs there)
+    let mut at_corner: Vec<(edit::V, usize)> = vec![];
     for mk in edit::marks(p) {
         let size = sz(13.0);
         let say = |s: &edit::Say, deg: f64, len: f64| match s { edit::Say::Degrees => angle_text(deg, c.rad), edit::Say::Length => cf.with_u(num(len, c.dec)), edit::Say::Text(t) => t.clone() };
@@ -1307,27 +1309,35 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
                 let (la, lb) = ((qa.0 - q.0).hypot(qa.1 - q.1).max(1e-9), (qb.0 - q.0).hypot(qb.1 - q.1).max(1e-9));
                 let (u, wv) = (((qa.0 - q.0) / la, (qa.1 - q.1) / la), ((qb.0 - q.0) / lb, (qb.1 - q.1) / lb));
                 let deg = (u.0 * wv.0 + u.1 * wv.1).clamp(-1.0, 1.0).acos().to_degrees();
+                let k = match at_corner.iter_mut().find(|(w, _)| (w.0 - v.0).hypot(w.1 - v.1) < 1e-6) {
+                    Some(c) => { c.1 += 1; c.1 - 1 }
+                    None => { at_corner.push((v, 1)); 0 }
+                };
+                let gc = (g.c.to_radians().cos(), g.c.to_radians().sin());
+                let base = if pt.central && !pt.deg && v.0.hypot(v.1) < 1e-6 { 40.0 } else if pt.insc && (v.0 - gc.0).hypot(v.1 - gc.1) < 1e-6 { 34.0 } else { 22.0 };
+                let ar = base + 8.0 * k as f64;
                 if (deg - 90.0).abs() < 0.5 {
-                    sc.right(q, u, wv, 12.0, col(3), aw, true);
+                    sc.right(q, u, wv, ar * 0.55, col(3), aw, true);
                 } else {
-                    sc.d.arc_dirs(q, u, wv, 22.0, col(3), aw);
+                    sc.d.arc_dirs(q, u, wv, ar, col(3), aw);
                     let au = (-u.1).atan2(u.0).to_degrees();
                     let mut dd = (-wv.1).atan2(wv.0).to_degrees() - au;
                     while dd > 180.0 { dd -= 360.0; }
                     while dd < -180.0 { dd += 360.0; }
-                    sc.arc_pts(q, 22.0, au, au + dd);
+                    sc.arc_pts(q, ar, au, au + dd);
                 }
                 let t = say(&s, deg, 0.0);
                 let (bw, bh) = box_of(&t, size, true);
                 let bis = (u.0 + wv.0, u.1 + wv.1);
                 let lbis = bis.0.hypot(bis.1).max(1e-9);
                 let bd = (bis.0 / lbis, bis.1 / lbis);
-                let from = (q.0 + bd.0 * 24.0, q.1 + bd.1 * 24.0);
-                let at = (q.0 + bd.0 * (36.0 + bw / 4.0), q.1 + bd.1 * (36.0 + bh / 2.0));
+                let from = (q.0 + bd.0 * (ar + 2.0), q.1 + bd.1 * (ar + 2.0));
+                let at = (q.0 + bd.0 * (ar + 14.0 + bw / 4.0), q.1 + bd.1 * (ar + 14.0 + bh / 2.0));
                 let mut cands = vec![(at, false)];
                 cands.extend(near_cands(at, bd, bw, bh, 2.0));
-                let froms = vec![from, (q.0 + u.0 * 22.0, q.1 + u.1 * 22.0), (q.0 + wv.0 * 22.0, q.1 + wv.1 * 22.0)];
-                labs.push(Lab { keep_out: None, kind: None, text: t, size, bold: true, prio: 1, anchor: from, cands, leader_from: Some(from), id: 0, wide: None, force: false, froms });
+                let froms = vec![from, (q.0 + u.0 * ar, q.1 + u.1 * ar), (q.0 + wv.0 * ar, q.1 + wv.1 * ar)];
+                // always pointed at its own arc (as the inscribed angle's is), so a label that had to move away is not read as an arc's
+                labs.push(Lab { keep_out: None, kind: None, text: t, size, bold: true, prio: 1, anchor: from, cands, leader_from: Some(from), id: 0, wide: None, force: true, froms });
             }
         }
     }

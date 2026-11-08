@@ -104,10 +104,11 @@ pub fn add_point(p: &mut Params, deg: f64) {
         return;
     }
     let ex = extras(p);
-    if ex.len() >= MAX_EXTRA { return; }
     let mut used = own_letters(p);
     used.extend(ex.into_iter().map(|e| e.0));
     let mut r = rows(p.s("more_points"));
+    // past the limit the click still writes its row (one only, the last click), which is not drawn and which the notes name
+    r.truncate(MAX_EXTRA);
     r.push(format!("{} {}", next_free(&used), fmt_deg(deg)));
     set_rows(p, "more_points", &r);
 }
@@ -122,8 +123,23 @@ pub fn move_extra(p: &mut Params, i: usize, deg: f64) {
     }
 }
 
-/// The knobs of the More points; the click area over the circle (a click on the circle puts a point there, a click inside it shades
-/// the area there); and the label zones: beside each arc, on each line and inside each angle the figure draws, a click labels it.
+/// A click on the figure that no label claims: on the circle it puts a point there, anywhere else it shades the enclosed area there
+/// (inside the circle, or outside it between tangents and the circle). The band on the circle reaches further out than in, so a thin
+/// segment beside its arc can still be clicked.
+fn click_figure(p: &mut Params, centre: Pt, q: Pt) {
+    if !(q.0.is_finite() && q.1.is_finite()) { return; }
+    let r = interact::dist(centre, q);
+    if (R - 4.0..=R + 12.0).contains(&r) {
+        add_point(p, snap_angle(interact::angle_deg(centre, q)) % 360.0);
+    } else {
+        toggle_shade(p, ((q.0 - centre.0) / R, (centre.1 - q.1) / R));
+    }
+}
+
+/// The knobs of the More points; the click area over the circle and round it (a click on the circle puts a point there, a click in
+/// an enclosed area shades it); and the label zones: beside each arc, on each line and inside each angle the figure draws, a click
+/// labels it. A label zone inside the circle acts only for a click right on its line or near its angle's corner; a click elsewhere in
+/// the zone shades the area there, so a small area beside a line can still be shaded.
 pub fn handles(p: &Params, cx: f64, pad: f64) -> Vec<Handle> {
     let centre = (cx + pad, CY + pad);
     let scr = move |q: V| (centre.0 + R * q.0, centre.1 - R * q.1);
@@ -137,16 +153,8 @@ pub fn handles(p: &Params, cx: f64, pad: f64) -> Vec<Handle> {
             move_extra(p, i, snap_angle(interact::angle_deg(centre, t)) % 360.0);
         }).with_click(move |p| toggle_tangent(p, &nm2)));
     }
-    v.push(Handle::area(centre, (2.0 * R + 40.0, 2.0 * R + 40.0), "Click the circle to put a point there, or inside an enclosed area to shade it", move |p, q| {
-        if !(q.0.is_finite() && q.1.is_finite()) { return; }
-        let r = interact::dist(centre, q);
-        // the band on the circle reaches further out than in, so a thin segment beside its arc can still be clicked
-        if (R - 4.0..=R + 12.0).contains(&r) {
-            add_point(p, snap_angle(interact::angle_deg(centre, q)) % 360.0);
-        } else if r < R - 4.0 {
-            toggle_shade(p, ((q.0 - centre.0) / R, (centre.1 - q.1) / R));
-        }
-    }));
+    // (wide enough for the areas between tangents, which reach 130 px past the circle)
+    v.push(Handle::area(centre, (2.0 * R + 260.0, 2.0 * R + 260.0), "Click the circle to put a point there, or an enclosed area to shade it", move |p, q| click_figure(p, centre, q)));
     // the label zones, kept apart: a zone too near one already placed is left out
     let mut zones: Vec<Handle> = vec![];
     let mut put = |h: Handle| { if !zones.iter().any(|z| interact::dist(z.pos, h.pos) < 12.0) { zones.push(h); } };
@@ -178,26 +186,32 @@ pub fn handles(p: &Params, cx: f64, pad: f64) -> Vec<Handle> {
             }
         }
     }
-    // lines: the zone sits on the line's middle, pushed a little towards the centre, so the thin segment on the far side stays free
-    // for a click that shades it
+    // lines: the zone sits on the line's middle, pushed a little towards the centre; it labels the line for a click within 7 px of
+    // the line and shades the area there for any other
     let on_line = |a: Pt, b: Pt| {
         let mid = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
         let (dx, dy) = (centre.0 - mid.0, centre.1 - mid.1);
         let l = dx.hypot(dy);
         if l > 1.0 { (mid.0 + dx / l * 6.0, mid.1 + dy / l * 6.0) } else { mid }
     };
+    let line_zone = |a: Pt, b: Pt, tip: &str, f: Box<dyn Fn(&mut Params) + Send + Sync>| {
+        Handle::area(on_line(a, b), (16.0, 16.0), tip, move |p, q| if pt_seg_dist(q, a, b) <= 7.0 { f(p) } else { click_figure(p, centre, q) })
+    };
     let (g, pt, n) = (geom(p), parts(p), names(p));
     let states = ["Given", "Ask", "Hidden"];
     let (pa, pb, pc, po) = (scr(upt(g.a)), scr(upt(g.b)), scr(upt(g.c)), centre);
     // the circle's own lines step through the label they already have
     if pt.radius {
-        put(Handle::zone(on_line(po, pa), (16.0, 16.0), &format!("Click radius {}{} to label it: r = its value, the letter r, or none", n.o, n.a), |p| interact::cycle(p, "r_label", &["Value", "Letter only", "None"])));
+        put(line_zone(po, pa, &format!("Click radius {}{} to label it: r = its value, the letter r, or none", n.o, n.a), Box::new(|p: &mut Params| interact::cycle(p, "r_label", &["Value", "Letter only", "None"]))));
     }
     if pt.chord && !pt.deg {
-        put(Handle::zone(on_line(pa, pb), (16.0, 16.0), &format!("Click chord {}{} to label it: its length Given, Ask (a blank on the student copy) or Hidden", n.a, n.b), move |p| interact::cycle(p, "g_chord", &states)));
+        put(line_zone(pa, pb, &format!("Click chord {}{} to label it: its length Given, Ask (a blank on the student copy) or Hidden", n.a, n.b), Box::new(move |p: &mut Params| interact::cycle(p, "g_chord", &states))));
     }
     if pt.diam {
-        put(Handle::zone(on_line(pa, scr(upt(g.a + 180.0))), (16.0, 16.0), &format!("Click the diameter through {} to label it: its length Given, Ask or Hidden", n.a), move |p| interact::cycle(p, "g_diameter", &states)));
+        put(line_zone(pa, scr(upt(g.a + 180.0)), &format!("Click the diameter through {} to label it: its length Given, Ask or Hidden", n.a), Box::new(move |p: &mut Params| interact::cycle(p, "g_diameter", &states))));
+    }
+    if pt.bis && !pt.deg && end_pos(p, End::M).0.hypot(end_pos(p, End::M).1) > 0.05 {
+        put(line_zone(po, scr(end_pos(p, End::M)), &format!("Click {}{} to label it: its length Given, Ask or Hidden", n.o, n.m), Box::new(move |p: &mut Params| interact::cycle(p, "g_om", &states))));
     }
     // and the lines with no label of their own (and the lines between points) take a length label
     let mut plain: Vec<(String, String, Pt, Pt)> = vec![];
@@ -207,26 +221,30 @@ pub fn handles(p: &Params, cx: f64, pad: f64) -> Vec<Handle> {
     for ((a, b), x, y) in joins(p) { plain.push((a, b, scr(end_pos(p, x)), scr(end_pos(p, y)))); }
     for (a, b, u, w) in plain {
         let tip = format!("Click to label line {a}{b} with its length (again to clear it)");
-        put(Handle::zone(on_line(u, w), (16.0, 16.0), &tip, move |p| cycle_mark(p, false, false, &a, &b)));
+        put(line_zone(u, w, &tip, Box::new(move |p: &mut Params| cycle_mark(p, false, false, &a, &b))));
     }
     // angles: the central and inscribed angles step through their states; any other angle between two drawn lines at a point takes
-    // its degrees
+    // its degrees. The zone labels for a click within 8 px of its middle and shades the area there for any other.
     let bis = |vx: Pt, a: Pt, b: Pt, r: f64| {
         let (la, lb) = (interact::dist(vx, a).max(1e-9), interact::dist(vx, b).max(1e-9));
         let d = ((a.0 - vx.0) / la + (b.0 - vx.0) / lb, (a.1 - vx.1) / la + (b.1 - vx.1) / lb);
         let l = d.0.hypot(d.1).max(1e-9);
         (vx.0 + d.0 / l * r, vx.1 + d.1 / l * r)
     };
+    let angle_zone = |at: Pt, tip: &str, f: Box<dyn Fn(&mut Params) + Send + Sync>| {
+        Handle::area(at, (14.0, 14.0), tip, move |p, q| if interact::dist(q, at) <= 8.0 { f(p) } else { click_figure(p, centre, q) })
+    };
     if pt.central && !pt.deg {
         let (s, d) = if g.reflex { (g.a, g.th) } else { (g.s, g.d) };
-        put(Handle::zone(interact::polar(centre, s + d / 2.0, 30.0), (14.0, 14.0), &format!("Click angle {}{}{} to label it: Given, Ask or Hidden", n.a, n.o, n.b), move |p| interact::cycle(p, "g_central", &states)));
+        put(angle_zone(interact::polar(centre, s + d / 2.0, 30.0), &format!("Click angle {}{}{} to label it: Given, Ask or Hidden", n.a, n.o, n.b), Box::new(move |p: &mut Params| interact::cycle(p, "g_central", &states))));
     }
     if pt.insc {
-        put(Handle::zone(bis(pc, pa, pb, 26.0), (14.0, 14.0), &format!("Click angle {}{}{} to label it: Given, Ask or Hidden", n.a, n.c, n.b), move |p| interact::cycle(p, "g_inscribed", &states)));
+        put(angle_zone(bis(pc, pa, pb, 26.0), &format!("Click angle {}{}{} to label it: Given, Ask or Hidden", n.a, n.c, n.b), Box::new(move |p: &mut Params| interact::cycle(p, "g_inscribed", &states))));
     }
-    for (a, vx, b, qv, qa, qb) in angle_spots(p) {
-        let tip = format!("Click to label angle {a}{vx}{b} in degrees (again to clear it)");
-        put(Handle::zone(bis(scr(qv), scr(qa), scr(qb), 24.0), (14.0, 14.0), &tip, move |p| cycle_angle(p, &a, &vx, &b)));
+    for s in angle_spots(p) {
+        let tip = format!("Click to label {} in degrees (again to clear it)", s.head);
+        let (head, sv, sa, sb) = (s.head.clone(), s.v, s.a, s.b);
+        put(angle_zone(bis(scr(s.v), scr(s.a), scr(s.b), 24.0), &tip, Box::new(move |p: &mut Params| cycle_angle(p, &head, sv, sa, sb))));
     }
     v.extend(zones);
     v
@@ -353,6 +371,10 @@ pub fn unknown_rows(p: &Params) -> Vec<String> {
         });
         if !ok { v.push(format!("Line {r} is not drawn: it needs two different points on the figure.")); }
     }
+    let more = rows(p.s("more_points"));
+    if more.len() > MAX_EXTRA {
+        v.push(format!("Only {MAX_EXTRA} More points are drawn: {} is not. Remove a point to add another.", more[MAX_EXTRA..].join(", ")));
+    }
     for r in rows(p.s("tangents")) {
         if !matches!(find(p, &pts, r.trim()), Some(End::At(_))) { v.push(format!("The tangent at {r} is not drawn: there is no point {r} on the circle.")); }
     }
@@ -376,8 +398,8 @@ pub fn toggle_tangent(p: &mut Params, nm: &str) {
     set_rows(p, "tangents", &r);
 }
 
-/// Every drawn line between two named points: (letters, ends). The radius, chord, the inscribed angle's sides and the lines between
-/// points; the diameter and tangents end at no named point and are left out.
+/// Every drawn line between two named points: (letters, ends). The radius, chord, the inscribed angle's sides, OM and the lines
+/// between points; the diameter and tangents end at no named point and are left out (a tangent's angles come from `tangent_dirs`).
 fn named_lines(p: &Params) -> Vec<(String, End, String, End)> {
     let (g, pt, n) = (geom(p), parts(p), names(p));
     let mut v = vec![];
@@ -388,45 +410,91 @@ fn named_lines(p: &Params) -> Vec<(String, End, String, End)> {
         v.push((n.c.clone(), End::At(g.c), n.a.clone(), End::At(g.a)));
         v.push((n.c.clone(), End::At(g.c), n.b.clone(), End::At(g.b)));
     }
+    if pt.bis && !pt.deg && mode(p, K::Om) != Md::Hidden && !same_place(p, End::O, End::M) { v.push((n.o.clone(), End::O, n.m.clone(), End::M)); }
     for ((a, b), x, y) in joins(p) { v.push((a, x, b, y)); }
     v
 }
 
+/// The directions (degrees) of the points with a tangent drawn: A's own, then the Tangents list.
+pub fn tangent_dirs(p: &Params) -> Vec<f64> {
+    let (g, pt) = (geom(p), parts(p));
+    let mut v = vec![];
+    if pt.tan && pt.a { v.push(g.a); }
+    v.extend(tangent_points(p).into_iter().map(|x| x.1));
+    v
+}
+
+/// The tangent ray at the touch point `x` (unit coordinates) that makes the acute angle with the line to `d` (the counterclockwise
+/// ray when both make a right angle), or the other ray.
+fn tangent_ray(x: V, d: V, obtuse: bool) -> V {
+    let t = (-x.1, x.0);
+    let acute = if (d.0 - x.0) * t.0 + (d.1 - x.1) * t.1 >= 0.0 { t } else { (-t.0, -t.1) };
+    if obtuse { (-acute.0, -acute.1) } else { acute }
+}
+
+/// An angle a click can label: the row it writes (`angle BDC`, `tangent angle CD`, `tangent angle CD obtuse`) and its corner and
+/// two arms (a point along each), in unit coordinates.
+#[derive(Clone, Debug)]
+pub struct Spot { pub head: String, pub v: V, pub a: V, pub b: V }
+
 /// The angles between two drawn lines that meet at a named point, other than the central and inscribed angles (which have their
-/// own labels): (letter, vertex letter, letter, and the three places in unit coordinates). At each vertex the lines are taken in
-/// turn round it and each neighbouring pair less than 178 degrees apart is an angle.
-pub fn angle_spots(p: &Params) -> Vec<(String, String, String, V, V, V)> {
+/// own labels). A line counts at a point it ends at, and twice (both ways) at a named point it runs through (M on chord AB); a
+/// tangent counts both ways at its touch point. At each corner the arms are taken in turn round it and each neighbouring pair
+/// 2 to 178 degrees apart is an angle.
+pub fn angle_spots(p: &Params) -> Vec<Spot> {
     let (pt, n) = (parts(p), names(p));
     let lines = named_lines(p);
-    let mut verts: Vec<(String, End)> = vec![];
+    let mut corners: Vec<(String, End)> = vec![];
     for (a, x, b, y) in &lines {
-        for (nm, e) in [(a, x), (b, y)] { if !verts.iter().any(|(_, f)| same_place(p, *f, *e)) { verts.push((nm.clone(), *e)); } }
+        for (nm, e) in [(a, x), (b, y)] { if !corners.iter().any(|(_, f)| same_place(p, *f, *e)) { corners.push((nm.clone(), *e)); } }
     }
+    if m_ok(p) && !corners.iter().any(|(_, f)| same_place(p, *f, End::M)) { corners.push((n.m.clone(), End::M)); }
+    let tans = tangent_dirs(p);
     let mut out = vec![];
-    for (vn, ve) in verts {
+    for (vn, ve) in corners {
         let qv = end_pos(p, ve);
-        // the other end of every line at this vertex, by direction
-        let mut ends: Vec<(f64, String, V)> = vec![];
+        // every arm at this corner: (direction, the letter at its far end or None for a tangent ray, a point along it)
+        let mut arms: Vec<(f64, Option<String>, V)> = vec![];
+        let mut add = |q: V, nm: Option<String>, arms: &mut Vec<(f64, Option<String>, V)>| {
+            let dir = wrap((q.1 - qv.1).atan2(q.0 - qv.0).to_degrees());
+            if !arms.iter().any(|(d, _, _)| angdiff(*d, dir) < 0.5) { arms.push((dir, nm, q)); }
+        };
         for (a, x, b, y) in &lines {
-            let other = if same_place(p, *x, ve) { Some((b, *y)) } else if same_place(p, *y, ve) { Some((a, *x)) } else { None };
-            if let Some((nm, e)) = other {
-                let q = end_pos(p, e);
-                let dir = wrap((q.1 - qv.1).atan2(q.0 - qv.0).to_degrees());
-                if !ends.iter().any(|(d, _, _)| angdiff(*d, dir) < 0.5) { ends.push((dir, nm.clone(), q)); }
-            }
+            let (u, w) = (end_pos(p, *x), end_pos(p, *y));
+            if same_place(p, *x, ve) { add(w, Some(b.clone()), &mut arms); }
+            else if same_place(p, *y, ve) { add(u, Some(a.clone()), &mut arms); }
+            else if pt_seg_dist(qv, u, w) < 1e-6 { add(u, Some(a.clone()), &mut arms); add(w, Some(b.clone()), &mut arms); }
         }
-        ends.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-        let k = ends.len();
+        if let End::At(d) = ve && tans.iter().any(|t| angdiff(*t, d) < 1e-6) {
+            let t = (-qv.1, qv.0);
+            add((qv.0 + t.0 * 0.5, qv.1 + t.1 * 0.5), None, &mut arms);
+            add((qv.0 - t.0 * 0.5, qv.1 - t.1 * 0.5), None, &mut arms);
+        }
+        arms.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        let k = arms.len();
         if k < 2 { continue; }
         for i in 0..k {
-            let (e0, e1) = (&ends[i], &ends[(i + 1) % k]);
+            let (e0, e1) = (&arms[i], &arms[(i + 1) % k]);
             let span = (e1.0 - e0.0).rem_euclid(360.0);
-            if k == 2 && i == 1 && span > 180.0 { continue; }
             if !(2.0..=178.0).contains(&span) { continue; }
-            let pair = |x: &str, y: &str| (e0.1 == x && e1.1 == y) || (e0.1 == y && e1.1 == x);
-            if pt.central && vn == n.o && pair(&n.a, &n.b) { continue; }
-            if pt.insc && vn == n.c && pair(&n.a, &n.b) { continue; }
-            out.push((e0.1.clone(), vn.clone(), e1.1.clone(), qv, e0.2, e1.2));
+            let head = match (&e0.1, &e1.1) {
+                (Some(x), Some(y)) => {
+                    let pair = |a: &str, b: &str| (x == a && y == b) || (x == b && y == a);
+                    if pt.central && vn == n.o && pair(&n.a, &n.b) { continue; }
+                    if pt.insc && vn == n.c && pair(&n.a, &n.b) { continue; }
+                    format!("angle {x}{vn}{y}")
+                }
+                (Some(d), None) | (None, Some(d)) => {
+                    // the tangent ray of this pair: the acute one, or the obtuse
+                    let (ray, dq) = if e0.1.is_none() { (e0.2, e1.2) } else { (e1.2, e0.2) };
+                    let r = (ray.0 - qv.0, ray.1 - qv.1);
+                    let acute = tangent_ray(qv, dq, false);
+                    let obtuse = (r.0 * acute.0 + r.1 * acute.1) < 0.0;
+                    format!("tangent angle {vn}{d}{}", if obtuse { " obtuse" } else { "" })
+                }
+                _ => continue,
+            };
+            out.push(Spot { head, v: qv, a: e0.2, b: e1.2 });
         }
     }
     out
@@ -445,93 +513,146 @@ fn arc_poly(a0: f64, span: f64) -> Vec<V> {
     (0..=n).map(|i| upt(a0 + span * i as f64 / n as f64)).collect()
 }
 
-/// The drawn lines that cut the disc into areas: chords (both ends on the circle, as directions; a diameter is one) and radii (their
-/// directions). A line to M stops inside the disc and cuts nothing off.
-pub fn dividers(p: &Params) -> (Vec<(f64, f64)>, Vec<f64>) {
+/// Every drawn line as a segment in unit coordinates (the circle itself is added by `faces`): the chord or secant (with the
+/// secant's runs past A and B), the inscribed angle's sides, the diameter, the bisector, the radii, the lines between points (to M
+/// too) and the tangents (130 px each way, as drawn).
+pub fn edges(p: &Params) -> Vec<(V, V)> {
     let (g, pt) = (geom(p), parts(p));
-    let (mut chords, mut radii) = (vec![], vec![]);
-    if (pt.chord || pt.sec) && !pt.deg { chords.push((g.a, g.b)); }
-    if pt.insc { chords.push((g.c, g.a)); chords.push((g.c, g.b)); }
-    if pt.diam { chords.push((g.a, g.a + 180.0)); }
-    if pt.bis && !pt.deg { let m = g.s + g.d / 2.0; chords.push((m, m + 180.0)); }
-    let both = pt.central || pt.sector != 0;
-    if pt.radius || both || pt.tan { radii.push(g.a); }
-    if both && !pt.deg { radii.push(g.b); }
-    for (_, x, y) in joins(p) {
-        match (x, y) {
-            (End::At(u), End::At(w)) => chords.push((u, w)),
-            (End::O, End::At(w)) | (End::At(w), End::O) => radii.push(w),
-            _ => {}
-        }
+    let c = |d: f64| upt(wrap(d));
+    let o = (0.0, 0.0);
+    let mut v: Vec<(V, V)> = vec![];
+    if (pt.chord || pt.sec) && !pt.deg { v.push((c(g.a), c(g.b))); }
+    if pt.sec && !pt.deg {
+        let (a, b) = (c(g.a), c(g.b));
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let (l, e) = (dx.hypot(dy).max(1e-9), 60.0 / R);
+        v.push((b, (b.0 + dx / l * e, b.1 + dy / l * e)));
+        v.push((a, (a.0 - dx / l * e, a.1 - dy / l * e)));
     }
-    (chords, radii)
+    if pt.insc { v.push((c(g.c), c(g.a))); v.push((c(g.c), c(g.b))); }
+    if pt.diam { v.push((c(g.a), c(g.a + 180.0))); }
+    if pt.bis && !pt.deg { let m = g.s + g.d / 2.0; v.push((c(m), c(m + 180.0))); }
+    let both = pt.central || pt.sector != 0;
+    if pt.a && (pt.radius || both || pt.tan) { v.push((o, c(g.a))); }
+    if both && !pt.deg { v.push((o, c(g.b))); }
+    for (_, x, y) in joins(p) { v.push((end_pos(p, x), end_pos(p, y))); }
+    for d in tangent_dirs(p) {
+        let (q, e) = (c(d), 130.0 / R);
+        v.push(((q.0 + q.1 * e, q.1 - q.0 * e), (q.0 - q.1 * e, q.1 + q.0 * e)));
+    }
+    v
 }
 
-fn side(a: V, b: V, q: V) -> f64 { (b.0 - a.0) * (q.1 - a.1) - (b.1 - a.1) * (q.0 - a.0) }
+/// Where segment a-b meets segment c-d: the parameters along each (both may sit just past an end by `tol`), None when parallel.
+fn cross_at(a: V, b: V, c: V, d: V) -> Option<(f64, f64)> {
+    let (r, s) = ((b.0 - a.0, b.1 - a.1), (d.0 - c.0, d.1 - c.1));
+    let den = r.0 * s.1 - r.1 * s.0;
+    if den.abs() < 1e-12 { return None; }
+    let q = (c.0 - a.0, c.1 - a.1);
+    Some(((q.0 * s.1 - q.1 * s.0) / den, (q.0 * r.1 - q.1 * r.0) / den))
+}
 
-/// The part of `poly` on the side `s` (+1 or -1) of the line a-b (Sutherland-Hodgman against one half-plane).
-fn clip(poly: &[V], a: V, b: V, s: f64) -> Vec<V> {
+/// The enclosed areas the lines and the circle make, as counterclockwise polygons. The circle is a polygon with a corner every 2
+/// degrees and wherever a line meets it; every segment is split where another crosses it or ends on it; the ends that lead nowhere are
+/// trimmed off; and each face is traced by turning as far right as possible at every corner. The unbounded face (clockwise) is left
+/// out.
+pub fn faces(segs: &[(V, V)]) -> Vec<Vec<V>> {
+    const TOL: f64 = 1e-7;
+    // the circle, with a corner wherever a line meets or touches it
+    let mut angs: Vec<f64> = (0..180).map(|k| k as f64 * 2.0).collect();
+    for (a, b) in segs {
+        let d = (b.0 - a.0, b.1 - a.1);
+        let (qa, qb, qc) = (d.0 * d.0 + d.1 * d.1, 2.0 * (a.0 * d.0 + a.1 * d.1), a.0 * a.0 + a.1 * a.1 - 1.0);
+        if qa < 1e-18 { continue; }
+        let disc = qb * qb - 4.0 * qa * qc;
+        if disc < -1e-9 { continue; }
+        for sg in [-1.0, 1.0] {
+            let t = (-qb + sg * disc.max(0.0).sqrt()) / (2.0 * qa);
+            if (-TOL..=1.0 + TOL).contains(&t) { let q = (a.0 + d.0 * t, a.1 + d.1 * t); angs.push(wrap(q.1.atan2(q.0).to_degrees())); }
+        }
+    }
+    angs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    angs.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
+    if angs.len() > 1 && 360.0 - angs[angs.len() - 1] + angs[0] < 1e-9 { angs.pop(); }
+    let ring: Vec<V> = angs.iter().map(|d| upt(*d)).collect();
+    let mut all: Vec<(V, V)> = segs.iter().copied().filter(|(a, b)| (a.0 - b.0).hypot(a.1 - b.1) > TOL).collect();
+    for i in 0..ring.len() { all.push((ring[i], ring[(i + 1) % ring.len()])); }
+    // the corners (merged when closer than 1e-6) and the edges between them
+    let mut pts: Vec<V> = vec![];
+    let mut id = |q: V, pts: &mut Vec<V>| -> usize {
+        if let Some(i) = pts.iter().position(|r| (r.0 - q.0).hypot(r.1 - q.1) < 1e-6) { return i; }
+        pts.push(q);
+        pts.len() - 1
+    };
+    let mut edges: Vec<(usize, usize)> = vec![];
+    for (i, (a, b)) in all.iter().enumerate() {
+        let mut ts = vec![0.0, 1.0];
+        let len = (b.0 - a.0).hypot(b.1 - a.1);
+        for (j, (c, d)) in all.iter().enumerate() {
+            if i == j { continue; }
+            if let Some((t, u)) = cross_at(*a, *b, *c, *d) && (-TOL..=1.0 + TOL).contains(&t) && (-TOL..=1.0 + TOL).contains(&u) { ts.push(t.clamp(0.0, 1.0)); }
+            // an end of the other segment on this one (a line that ends on a chord, or runs along a part of it)
+            for q in [c, d] {
+                let t = ((q.0 - a.0) * (b.0 - a.0) + (q.1 - a.1) * (b.1 - a.1)) / (len * len);
+                if (0.0..=1.0).contains(&t) && pt_seg_dist(*q, *a, *b) < 1e-6 { ts.push(t); }
+            }
+        }
+        ts.sort_by(|x, y| x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal));
+        let at = |t: f64| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
+        for w in ts.windows(2) {
+            let (u, v) = (id(at(w[0]), &mut pts), id(at(w[1]), &mut pts));
+            if u != v { edges.push((u.min(v), u.max(v))); }
+        }
+    }
+    edges.sort_unstable();
+    edges.dedup();
+    let n = pts.len();
+    let mut nb: Vec<Vec<usize>> = vec![vec![]; n];
+    for (u, v) in &edges { nb[*u].push(*v); nb[*v].push(*u); }
+    // trim the ends that lead nowhere (a line stopping inside an area bounds nothing)
+    loop {
+        let lone: Vec<usize> = (0..n).filter(|i| nb[*i].len() == 1).collect();
+        if lone.is_empty() { break; }
+        for i in lone {
+            if let Some(j) = nb[i].pop() { nb[j].retain(|x| *x != i); }
+        }
+    }
+    let ang = |u: usize, v: usize| (pts[v].1 - pts[u].1).atan2(pts[v].0 - pts[u].0);
+    for u in 0..n {
+        let mut l = std::mem::take(&mut nb[u]);
+        l.sort_by(|a, b| ang(u, *a).partial_cmp(&ang(u, *b)).unwrap_or(std::cmp::Ordering::Equal));
+        nb[u] = l;
+    }
+    let mut seen = std::collections::HashSet::new();
     let mut out = vec![];
-    for i in 0..poly.len() {
-        let (p0, p1) = (poly[i], poly[(i + 1) % poly.len()]);
-        let (f0, f1) = (s * side(a, b, p0), s * side(a, b, p1));
-        if f0 >= 0.0 { out.push(p0); }
-        if (f0 >= 0.0) != (f1 >= 0.0) {
-            let t = f0 / (f0 - f1);
-            out.push((p0.0 + (p1.0 - p0.0) * t, p0.1 + (p1.1 - p0.1) * t));
+    for u0 in 0..n {
+        for &v0 in &nb[u0] {
+            if seen.contains(&(u0, v0)) { continue; }
+            let (mut u, mut v) = (u0, v0);
+            let mut poly: Vec<V> = vec![];
+            for _ in 0..=4 * edges.len() {
+                seen.insert((u, v));
+                poly.push(pts[u]);
+                // at v, the arm just clockwise of the way back to u
+                let l = &nb[v];
+                let Some(i) = l.iter().position(|x| *x == u) else { break };
+                let w = l[(i + l.len() - 1) % l.len()];
+                (u, v) = (v, w);
+                if (u, v) == (u0, v0) { break; }
+            }
+            let a2: f64 = (0..poly.len()).map(|i| { let (a, b) = (poly[i], poly[(i + 1) % poly.len()]); a.0 * b.1 - b.0 * a.1 }).sum();
+            if poly.len() >= 3 && a2 > 1e-12 { out.push(poly); }
         }
     }
     out
 }
 
-/// The sector from `a0` through `span` degrees, with the centre.
-fn wedge(a0: f64, span: f64) -> Vec<V> {
-    let mut v = vec![(0.0, 0.0)];
-    v.extend(arc_poly(a0, span));
-    v
-}
-
-/// The enclosed area of the disc around `seed`, as one or two convex pieces that meet along a line (drawn as one shape): between the
-/// two radii either side of it (the whole disc with fewer than two radii), on its side of every chord. A sector wider than 180
-/// degrees is cut at its middle into two convex halves, and the far half belongs to the area only where both reach that middle ray
-/// (a chord across both radii leaves two separate pieces, and only the clicked one is the area). Empty when the seed is not inside
-/// the circle.
+/// The enclosed area round `seed` (unit coordinates): the smallest face the lines and the circle make that holds it, inside the
+/// circle or outside it (between tangents, say). Empty when no face holds it.
 pub fn cell(p: &Params, seed: V) -> Vec<Vec<V>> {
-    if !(seed.0.is_finite() && seed.1.is_finite()) || seed.0.hypot(seed.1) >= 1.0 { return vec![]; }
-    let (chords, radii) = dividers(p);
-    let clip_all = |mut poly: Vec<V>| -> Vec<V> {
-        for (u, w) in &chords {
-            let (a, b) = (upt(*u), upt(*w));
-            let s = if side(a, b, seed) >= 0.0 { 1.0 } else { -1.0 };
-            poly = clip(&poly, a, b, s);
-            if poly.len() < 3 { return vec![]; }
-        }
-        poly
-    };
-    let one = |poly: Vec<V>| if poly.len() >= 3 { vec![poly] } else { vec![] };
-    let mut rs: Vec<f64> = radii.into_iter().map(wrap).collect();
-    rs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    rs.dedup_by(|a, b| (*a - *b).abs() < 0.01);
-    if rs.len() < 2 {
-        let mut v = arc_poly(0.0, 360.0);
-        v.pop();
-        return one(clip_all(v));
-    }
-    let phi = wrap(seed.1.atan2(seed.0).to_degrees());
-    let i = rs.iter().rposition(|r| *r <= phi).unwrap_or(rs.len() - 1);
-    let (r0, r1) = (rs[i], rs[(i + 1) % rs.len()]);
-    let span = (r1 - r0).rem_euclid(360.0);
-    if span <= 180.0 { return one(clip_all(wedge(r0, span))); }
-    let half = span / 2.0;
-    let mid = r0 + half;
-    let first = (phi - r0).rem_euclid(360.0) < half;
-    let (mine, other) = if first { (clip_all(wedge(r0, half)), clip_all(wedge(mid, half))) } else { (clip_all(wedge(mid, half)), clip_all(wedge(r0, half))) };
-    if mine.len() < 3 { return vec![]; }
-    // the halves meet where both reach the middle ray: test points a hair either side of it
-    let s = if first { -1.0 } else { 1.0 };
-    let near = |t: f64, e: f64| { let d = (mid + e).to_radians(); (t * d.cos(), t * d.sin()) };
-    let joined = other.len() >= 3 && (1..200).any(|k| { let t = k as f64 / 200.0; pt_in_poly(near(t, s * 0.05), &mine) && pt_in_poly(near(t, -s * 0.05), &other) });
-    if joined { vec![mine, other] } else { vec![mine] }
+    if !(seed.0.is_finite() && seed.1.is_finite()) || seed.0.hypot(seed.1) > 4.0 { return vec![]; }
+    let area = |poly: &Vec<V>| (0..poly.len()).map(|i| { let (a, b) = (poly[i], poly[(i + 1) % poly.len()]); a.0 * b.1 - b.0 * a.1 }).sum::<f64>();
+    faces(&edges(p)).into_iter().filter(|f| pt_in_poly(seed, f)).min_by(|a, b| area(a).partial_cmp(&area(b)).unwrap_or(std::cmp::Ordering::Equal)).into_iter().collect()
 }
 
 /// The area a row of Shaded areas names: `at x y` (the enclosed area round that spot, in radii from the centre, y up, as a click
@@ -598,10 +719,11 @@ pub enum Say { Degrees, Length, Text(String) }
 pub enum Mark { Arc { start: f64, span: f64, say: Say }, Line { a: V, b: V, say: Say }, Angle { v: V, a: V, b: V, say: Say } }
 
 /// A row of Arc and line labels taken apart.
-enum Row { Arc { major: bool, a: String, b: String, say: Say }, Line { a: String, b: String, say: Say }, Angle { a: String, v: String, b: String, say: Say } }
+enum Row { Arc { major: bool, a: String, b: String, say: Say }, Line { a: String, b: String, say: Say }, Angle { a: String, v: String, b: String, say: Say }, Tangent { x: String, d: String, obtuse: bool, say: Say } }
 
 /// `arc BC 70°`, `major arc BC degrees`, `arc BC length`, `BD length`, `BD x`, `angle BDC`, `angle BDC 40°`. The letters are one word
-/// (`BC`, `B-C`, `BDC`); an angle's may also be three words (`angle B D C`).
+/// (`BC`, `B-C`, `BDC`); an angle's may also be three words (`angle B D C`). `tangent angle CD` is the angle at C between the tangent
+/// there and the line CD, the acute one (`tangent angle CD obtuse` the other).
 fn parse_mark(row: &str, known: &[String]) -> Option<Row> {
     let toks: Vec<&str> = row.split_whitespace().collect();
     let low: Vec<String> = toks.iter().map(|t| t.to_lowercase()).collect();
@@ -612,6 +734,13 @@ fn parse_mark(row: &str, known: &[String]) -> Option<Row> {
         "length" | "len" => Say::Length,
         _ => Say::Text(text.chars().filter(|c| !c.is_control()).take(24).collect()),
     };
+    if low.first().map(String::as_str) == Some("tangent") && low.get(1).map(String::as_str) == Some("angle") {
+        let (x, d) = pair_names(toks.get(2)?, known)?;
+        let obtuse = low.get(3).map(String::as_str) == Some("obtuse");
+        let k = 3 + usize::from(obtuse || low.get(3).map(String::as_str) == Some("acute"));
+        let say = say_of(&text_of(&toks[k.min(toks.len())..]), Say::Degrees);
+        return Some(Row::Tangent { x, d, obtuse, say: if say == Say::Length { Say::Degrees } else { say } });
+    }
     if low.first().map(String::as_str) == Some("angle") {
         let is = |s: &str| known.iter().any(|k| k.eq_ignore_ascii_case(s));
         let (a, v, b, k) = if toks.len() >= 4 && is(toks[1]) && is(toks[2]) && is(toks[3]) {
@@ -653,6 +782,14 @@ fn mark_of(p: &Params, pts: &[(String, f64)], row: Row) -> Option<Mark> {
             if same_place(p, x, w) || same_place(p, y, w) || same_place(p, x, y) { return None; }
             Some(Mark::Angle { v: end_pos(p, w), a: end_pos(p, x), b: end_pos(p, y), say })
         }
+        Row::Tangent { x, d, obtuse, say } => {
+            // C must have its tangent drawn
+            let (Some(End::At(dx)), Some(e)) = (f(&x), f(&d)) else { return None };
+            if !tangent_dirs(p).iter().any(|t| angdiff(*t, dx) < 1e-6) || same_place(p, End::At(dx), e) { return None; }
+            let (q, qd) = (upt(dx), end_pos(p, e));
+            let r = tangent_ray(q, qd, obtuse);
+            Some(Mark::Angle { v: q, a: (q.0 + r.0 * 0.5, q.1 + r.1 * 0.5), b: qd, say })
+        }
     }
 }
 
@@ -692,14 +829,23 @@ pub fn cycle_mark(p: &mut Params, arc: bool, major: bool, x: &str, y: &str) {
     set_rows(p, "marks", &r);
 }
 
-/// A click inside angle `x v y`: its degrees, or no label again (a typed label is cleared).
-pub fn cycle_angle(p: &mut Params, x: &str, v: &str, y: &str) {
+/// A click inside an angle (its corner `v` and a point along each arm, unit coordinates): its degrees, written as the row `head`
+/// (`angle BDC degrees`), or no label again when a row already labels that angle (however it is written).
+pub fn cycle_angle(p: &mut Params, head: &str, v: V, a: V, b: V) {
     let pts = circle_points(p);
     let known = known_names(p, &pts);
+    let dir = |o: V, q: V| wrap((q.1 - o.1).atan2(q.0 - o.0).to_degrees());
+    let (da, db) = (dir(v, a), dir(v, b));
+    let same = |row: &str| match parse_mark(row, &known).and_then(|m| mark_of(p, &pts, m)) {
+        Some(Mark::Angle { v: w, a: x, b: y, .. }) => {
+            let (dx, dy) = (dir(w, x), dir(w, y));
+            (w.0 - v.0).hypot(w.1 - v.1) < 1e-6 && ((angdiff(dx, da) < 0.5 && angdiff(dy, db) < 0.5) || (angdiff(dx, db) < 0.5 && angdiff(dy, da) < 0.5))
+        }
+        _ => false,
+    };
     let mut r = rows(p.s("marks"));
-    let same = |row: &str| matches!(parse_mark(row, &known), Some(Row::Angle { a, v: w, b, .. }) if w == v && ((a == x && b == y) || (a == y && b == x)));
     match r.iter().position(|row| same(row)) {
-        None => r.push(format!("angle {x}{v}{y} degrees")),
+        None => r.push(format!("{head} degrees")),
         Some(i) => { r.remove(i); }
     }
     set_rows(p, "marks", &r);
@@ -864,12 +1010,12 @@ mod tests {
         q.set_s("joins", "OD, FG");
         toggle_shade(&mut q, (0.25, -0.43));
         let r = regions(&q);
-        assert_eq!(r[0].len(), 2, "the two halves meet along the middle ray");
-        // and both halves of it are drawn as one shape
+        assert_eq!(r[0].len(), 1);
+        let ray = |d: f64| { let a = d.to_radians(); (0.3 * a.cos(), 0.3 * a.sin()) };
+        assert!(pt_in_poly(ray(215.0), &r[0][0]) && pt_in_poly(ray(300.0), &r[0][0]), "one area reaching round the middle of the reflex sector");
+        // drawn as one shape
         let svg = render(&q);
         assert_eq!(svg.matches(r##"fill="#dbe7fb" stroke="none"/>"##).count(), 1);
-        let path = svg.split("<path").find(|e| e.contains(r##"fill="#dbe7fb" stroke="none""##)).unwrap();
-        assert_eq!(path.matches(" Z M").count(), 1, "{path}");
     }
 
     #[test]
@@ -950,7 +1096,11 @@ mod tests {
         let hs = super::super::handles("circle", p, (0.0, 0.0)).unwrap();
         let h = hs.iter().find(|h| h.tip.starts_with(tip)).unwrap_or_else(|| panic!("no handle {tip}: {:?}", hs.iter().map(|h| h.tip.clone()).collect::<Vec<_>>()));
         let mut q = p.clone();
-        (h.click.as_ref().unwrap())(&mut q);
+        match (&h.click, &h.click_at) {
+            (Some(f), _) => f(&mut q),
+            (None, Some(f)) => f(&mut q, h.pos),
+            _ => panic!("{tip}: not clickable"),
+        }
         q
     }
 
@@ -1058,8 +1208,7 @@ mod tests {
         let mut p = abcd();
         p.set_s("joins", "DB, DC");
         let spots = angle_spots(&p);
-        assert_eq!(spots.len(), 1, "{:?}", spots.iter().map(|s| format!("{}{}{}", s.0, s.1, s.2)).collect::<Vec<_>>());
-        assert_eq!(spots[0].1, "D");
+        assert_eq!(spots.iter().map(|s| s.head.as_str()).collect::<Vec<_>>(), vec!["angle BDC"]);
         let q = zone_click(&p, "Click to label angle");
         assert!(q.s("marks").starts_with("angle ") && q.s("marks").contains("D") && q.s("marks").ends_with(" degrees"), "{}", q.s("marks"));
         assert!(render(&q).contains(">65\u{b0}<"));
@@ -1097,5 +1246,133 @@ mod tests {
         let o = (layout_of(&q).cx + rep.pad, CY + rep.pad);
         let near = ((o.0).clamp(lab.rect.x0, lab.rect.x1), (o.1).clamp(lab.rect.y0, lab.rect.y1));
         assert!(interact::dist(near, o) >= R, "{:?}", lab.rect);
+    }
+
+    fn shoelace(poly: &[V]) -> f64 {
+        (0..poly.len()).map(|i| { let (a, b) = (poly[i], poly[(i + 1) % poly.len()]); a.0 * b.1 - b.0 * a.1 }).sum::<f64>().abs() / 2.0
+    }
+
+    /// The checker's mcm case: chord AB and line CM (M the midpoint of AB). CM splits the major segment: a click left of CM shades
+    /// only the part left of it.
+    #[test]
+    fn a_line_to_m_splits_the_area_it_crosses() {
+        let mut p = params(&[("show_chord", Value::B(true)), ("show_c", Value::B(true)), ("show_radius", Value::B(false))]);
+        p.set_s("joins", "CM");
+        toggle_shade(&mut p, (-0.5, 0.0));
+        let r = regions(&p);
+        assert_eq!(r.len(), 1);
+        let poly = &r[0][0];
+        assert!(pt_in_poly((-0.5, 0.0), poly));
+        assert!(!pt_in_poly((0.5, -0.3), poly), "the part right of CM is another area");
+        assert!(!pt_in_poly((0.3, 0.85), poly), "the minor segment beyond AB is another area");
+        // the two parts make up the major segment
+        let mut q = p.clone();
+        q.set_s("shade", "");
+        toggle_shade(&mut q, (0.5, -0.3));
+        let major = PI - 0.5 * (90f64.to_radians() - 1.0);
+        assert!((shoelace(poly) + shoelace(&regions(&q)[0][0]) - major).abs() < 0.01);
+    }
+
+    /// The checker's mtri case: OA, OM and AM drawn; a click inside triangle OAM shades the triangle only.
+    #[test]
+    fn a_click_inside_a_triangle_of_lines_shades_the_triangle() {
+        let mut p = params(&[("show_b", Value::B(true))]);
+        p.set_s("joins", "OM, AM");
+        let (a, b) = (upt(20.0), upt(110.0));
+        let m = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
+        toggle_shade(&mut p, ((a.0 + m.0) / 3.0, (a.1 + m.1) / 3.0));
+        let r = regions(&p);
+        let tri = 0.5 * (a.0 * m.1 - a.1 * m.0).abs();
+        assert!((shoelace(&r[0][0]) - tri).abs() < tri * 0.01, "{} vs {tri}", shoelace(&r[0][0]));
+        // the bisector OM is an edge too: with only the bisector and the radius, the two sides of OM are different areas
+        let mut q = params(&[("show_b", Value::B(true)), ("show_bisector", Value::B(true))]);
+        toggle_shade(&mut q, (0.5, 0.45));
+        assert!(!pt_in_poly((-0.5, 0.1), &regions(&q)[0][0]));
+    }
+
+    #[test]
+    fn the_area_between_two_tangents_and_the_circle_can_be_shaded() {
+        // tangents at A (20) and B (80) meet tan 30 radii from each touch point, inside their drawn length
+        let mut p = params(&[("show_b", Value::B(true)), ("a2", Value::F(80.0)), ("show_tangent", Value::B(true))]);
+        p.set_s("tangents", "B");
+        let seed = (1.05 * 50f64.to_radians().cos(), 1.05 * 50f64.to_radians().sin());
+        toggle_shade(&mut p, seed);
+        let r = regions(&p);
+        assert_eq!(r.len(), 1, "{}", p.s("shade"));
+        let want = 30f64.to_radians().tan() - 30f64.to_radians();
+        assert!((shoelace(&r[0][0]) - want).abs() < want * 0.03, "{} vs {want}", shoelace(&r[0][0]));
+        // the click area reaches it, and a click outside with no area round it does nothing
+        let hs = super::super::handles("circle", &p, (0.0, 0.0)).unwrap();
+        let area = hs.iter().find(|h| h.tip.starts_with("Click the circle")).unwrap();
+        let mut q = p.clone();
+        q.set_s("shade", "");
+        (area.click_at.as_ref().unwrap())(&mut q, interact::polar(area.pos, 50.0, R * 1.12));
+        assert_eq!(regions(&q).len(), 1);
+        let mut q = p.clone();
+        (area.click_at.as_ref().unwrap())(&mut q, interact::polar(area.pos, 230.0, R * 1.3));
+        assert_eq!(q.s("shade"), p.s("shade"));
+    }
+
+    #[test]
+    fn the_angle_between_a_tangent_and_a_chord_is_labelled_by_a_click_or_typed() {
+        // the tangent at C (100) and chord CD (D 270): the arc CD is 170, so the angles are 85 and 95
+        let mut p = abcd();
+        p.set_s("tangents", "C");
+        p.set_s("joins", "CD");
+        let heads: Vec<String> = angle_spots(&p).into_iter().map(|s| s.head).collect();
+        assert!(heads.contains(&"tangent angle CD".to_string()) && heads.contains(&"tangent angle CD obtuse".to_string()), "{heads:?}");
+        let q = zone_click(&p, "Click to label tangent angle CD in");
+        assert_eq!(q.s("marks"), "tangent angle CD degrees");
+        assert!(render(&q).contains(">85\u{b0}<"));
+        assert_eq!(zone_click(&q, "Click to label tangent angle CD in").s("marks"), "", "a second click clears it");
+        let mut q = p.clone();
+        q.set_s("marks", "tangent angle CD obtuse");
+        assert!(render(&q).contains(">95\u{b0}<"));
+        // no tangent at D: a note
+        q.set_s("marks", "tangent angle DC");
+        assert_eq!(unknown_marks(&q).len(), 1);
+        // lines to M are angle arms too: at M, between MA and MC
+        let mut q = params(&[("show_chord", Value::B(true)), ("show_c", Value::B(true))]);
+        q.set_s("joins", "CM");
+        let heads: Vec<String> = angle_spots(&q).into_iter().map(|s| s.head).collect();
+        assert!(heads.iter().any(|h| h == "angle AMC" || h == "angle CMA"), "{heads:?}");
+    }
+
+    #[test]
+    fn angles_at_one_corner_get_arcs_of_different_sizes() {
+        let mut p = abcd();
+        p.set_s("joins", "DB, DC, DO");
+        // the angles at D (O has its own, DOA)
+        let heads: Vec<String> = angle_spots(&p).into_iter().map(|s| s.head).filter(|h| h.chars().nth(7) == Some('D')).collect();
+        assert_eq!(heads.len(), 2, "{heads:?}");
+        p.set_s("marks", &format!("{}, {}", heads[0], heads[1]));
+        let svg = render(&p);
+        assert!(svg.contains(" A22.00,22.00 ") && svg.contains(" A30.00,30.00 "), "two arcs, 22 and 30 px");
+    }
+
+    #[test]
+    fn om_is_labelled_by_a_click_and_line_zones_let_a_shading_click_through() {
+        let p = params(&[("show_chord", Value::B(true)), ("show_bisector", Value::B(true))]);
+        let q = zone_click(&p, "Click OM");
+        assert_ne!(q.s("g_om"), p.s("g_om"));
+        // a click inside the chord's zone but 8 px or more off the chord shades the area there instead of labelling the chord
+        let hs = super::super::handles("circle", &p, (0.0, 0.0)).unwrap();
+        let z = hs.iter().find(|h| h.tip.starts_with("Click chord AB")).unwrap();
+        let o = hs.iter().find(|h| h.tip.starts_with("Click the circle")).unwrap().pos;
+        let off = { let d = (z.pos.0 - o.0, z.pos.1 - o.1); let l = d.0.hypot(d.1); (z.pos.0 - d.0 / l * 4.0, z.pos.1 - d.1 / l * 4.0) };
+        let mut q = p.clone();
+        (z.click_at.as_ref().unwrap())(&mut q, off);
+        assert_eq!(q.s("g_chord"), p.s("g_chord"));
+        assert_eq!(regions(&q).len(), 1);
+    }
+
+    #[test]
+    fn a_click_past_the_last_more_point_is_named_in_the_notes() {
+        let mut p = abcd();
+        p.set_s("more_points", &(0..MAX_EXTRA).map(|i| format!("{} {}", ["D", "E", "F", "G", "H", "I", "J", "K", "L", "N", "P", "Q"][i], 140 + i * 9)).collect::<Vec<_>>().join(", "));
+        add_point(&mut p, 45.0);
+        add_point(&mut p, 50.0);
+        assert_eq!(rows(p.s("more_points")).len(), MAX_EXTRA + 1, "one row past the limit, the last click's");
+        assert!(super::super::warnings(&p).iter().any(|n| n.starts_with("Only 12 More points are drawn")));
     }
 }
