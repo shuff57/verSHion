@@ -81,6 +81,8 @@ fn params() -> Vec<ParamDef> {
         b("show_secant", "Secant through A and B", false),
         b("show_central", "Central angle AOB", false),
         b("show_inscribed", "Inscribed angle ACB", false),
+        ParamDef::list("joins", "Lines between points", "").hint("Two letters per row: BD is a chord, OC a radius. Any point on the figure, and the centre"),
+        ParamDef::list("tangents", "Tangents at points", "").hint("A point's letter per row, such as C. Or click a point on the figure"),
         ParamDef::choice("arc", "Arc AB", &["None", "Minor", "Major"], "None"),
         ParamDef::choice("sector", "Sector", &["None", "Minor", "Major"], "None"),
         ParamDef::choice("right_marks", "Right-angle marks", &["Show always", "Key only", "Hide"], "Show always").hint("Key only hides the right-angle marks on the student copy, where they would give the answer away"),
@@ -511,6 +513,7 @@ pub fn warnings(p: &Params) -> Vec<String> {
         let l = [&n.o, &n.a, &n.b, &n.c, &n.m];
         let same = (0..5).any(|i| (i + 1..5).any(|j| drawn[i] && drawn[j] && l[i] == l[j]));
         if same { v.push(format!("Two points have the same letter ({}, {}, {}, {}, {}): rename one so the labels can be told apart.", n.o, n.a, n.b, n.c, n.m)); }
+        v.extend(edit::unknown_rows(p));
         // a More point lettered like another drawn point
         let mut seen: Vec<String> = (0..5).filter(|i| drawn[*i]).map(|i| l[i].clone()).collect();
         for (nm, _) in edit::extras(p) {
@@ -1037,6 +1040,23 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     if pt.radius || both_radii { sc.ln(o, pa, col(0), 2.4); } else if pt.tan { sc.ln(o, pa, col(1), 1.6); }
     if both_radii && !pt.deg { sc.ln(o, pb, col(0), 2.4); }
     if (pt.chord || pt.sec) && !pt.deg { sc.ln(pa, pb, col(1), 2.4); }
+    // lines between chosen points (a radius in the radius colour, a chord in the chord colour), and tangents at chosen points
+    let at_end = |e: edit::End| match e { edit::End::O => o, edit::End::At(d) => on_circle(cx, d) };
+    let joins = edit::joins(p);
+    for (_, x, y) in &joins {
+        let radius = matches!(x, edit::End::O) || matches!(y, edit::End::O);
+        sc.ln(at_end(*x), at_end(*y), col(if radius { 0 } else { 1 }), 2.4);
+    }
+    for (_, d) in edit::tangent_points(p) {
+        let (q, u) = (on_circle(cx, d), unit(d));
+        let tq = (-u.1, u.0);
+        let ends: Vec<Pt> = [1.0, -1.0].iter().map(|s| { let dd = (tq.0 * s, tq.1 * s); let t = clip_len(q, dd, 130.0, &area); (q.0 + dd.0 * t, q.1 + dd.1 * t) }).collect();
+        sc.ln(ends[0], ends[1], col(2), 2.2);
+        sc.solid.push((ends[0], ends[1]));
+        // the right angle with a radius drawn to the same point
+        let radius = joins.iter().any(|(_, x, y)| matches!((x, y), (edit::End::O, edit::End::At(w)) | (edit::End::At(w), edit::End::O) if angdiff(*w, d) < 0.5));
+        if rr && radius { sc.right(q, (-u.0, -u.1), tq, 10.0, col(2), 2.0, rm); }
+    }
     let om_on = pt.bis && !pt.deg && mode(p, K::Om) != Md::Hidden;
     if pt.bis && !pt.deg {
         let (to_b, to_o) = ((pb.0 - mid.0, pb.1 - mid.1), (o.0 - mid.0, o.1 - mid.1));
@@ -1367,9 +1387,10 @@ pub fn handles(id: &str, p: &Params, _size: (f64, f64)) -> Option<Vec<Handle>> {
     let at = |deg: f64| { let q = on_circle(cx, deg); (q.0 + pad, q.1 + pad) };
     let n = names(p);
     let mut v = vec![];
-    if pt.a { v.push(angle_handle("a1", centre, at(g.a), &format!("Drag point {} round the circle", n.a))); }
-    if pt.b { v.push(gap_handle(centre, at(g.b), &format!("Drag point {} round the circle (the angle snaps to 30, 45, 60, 90, ...)", n.b))); }
-    if pt.c { v.push(angle_handle("c_angle", centre, at(g.c), &format!("Drag point {} round the circle", n.c))); }
+    let tan = |nm: &str| { let nm = nm.to_string(); move |p: &mut Params| edit::toggle_tangent(p, &nm) };
+    if pt.a { v.push(angle_handle("a1", centre, at(g.a), &format!("Drag point {} round the circle; click it for the tangent there", n.a)).with_click(tan(&n.a))); }
+    if pt.b { v.push(gap_handle(centre, at(g.b), &format!("Drag point {} round the circle (the angle snaps to 30, 45, 60, 90, ...); click it for the tangent there", n.b)).with_click(tan(&n.b))); }
+    if pt.c { v.push(angle_handle("c_angle", centre, at(g.c), &format!("Drag point {} round the circle; click it for the tangent there", n.c)).with_click(tan(&n.c))); }
     // the More points' knobs, then the click area (the workspace puts every area under the knobs)
     v.extend(edit::handles(p, cx, pad));
     Some(v)

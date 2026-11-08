@@ -129,10 +129,11 @@ pub fn handles(p: &Params, cx: f64, pad: f64) -> Vec<Handle> {
     for (i, (nm, d)) in extras(p).into_iter().enumerate() {
         let q = on_circle(cx, d);
         let at = (q.0 + pad, q.1 + pad);
-        v.push(Handle::knob(at, &format!("Drag point {nm} round the circle"), move |p, t| {
+        let nm2 = nm.clone();
+        v.push(Handle::knob(at, &format!("Drag point {nm} round the circle; click it for the tangent there"), move |p, t| {
             if unmoved(at, t) || !(t.0.is_finite() && t.1.is_finite()) { return; }
             move_extra(p, i, snap_angle(interact::angle_deg(centre, t)) % 360.0);
-        }));
+        }).with_click(move |p| toggle_tangent(p, &nm2)));
     }
     v.push(Handle::area(centre, (2.0 * R + 40.0, 2.0 * R + 40.0), "Click the circle to put a point there", move |p, q| {
         if !(q.0.is_finite() && q.1.is_finite()) { return; }
@@ -140,6 +141,109 @@ pub fn handles(p: &Params, cx: f64, pad: f64) -> Vec<Handle> {
         if (r - R).abs() <= 12.0 { add_point(p, snap_angle(interact::angle_deg(centre, q)) % 360.0); }
     }));
     v
+}
+
+// ------------------------------------------------------------------------------------------------ lines between points, tangents
+
+/// One end of a line: the centre or a point on the circle (its direction in degrees).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum End { O, At(f64) }
+
+/// The point named `nm` on the figure: the centre, or a point drawn on the circle (exact letter first, then ignoring case).
+fn find(p: &Params, pts: &[(String, f64)], nm: &str) -> Option<End> {
+    let o = names(p).o;
+    if nm == o { return Some(End::O); }
+    if let Some((_, d)) = pts.iter().find(|(x, _)| x == nm) { return Some(End::At(*d)); }
+    if nm.eq_ignore_ascii_case(&o) { return Some(End::O); }
+    pts.iter().find(|(x, _)| x.eq_ignore_ascii_case(nm)).map(|(_, d)| End::At(*d))
+}
+
+/// The two letters of a row such as `BD`, `B D`, `B-D` or `B to D` (letters of more than one character need a space).
+fn pair_names(row: &str, known: &[String]) -> Option<(String, String)> {
+    let toks: Vec<&str> = row.split(|c: char| c.is_whitespace() || c == '-').filter(|t| !t.is_empty() && !t.eq_ignore_ascii_case("to")).collect();
+    match toks.as_slice() {
+        [a, b] => Some((a.to_string(), b.to_string())),
+        [one] => {
+            let cs: Vec<(usize, char)> = one.char_indices().collect();
+            // the split whose both halves are letters on the figure; else one character and the rest
+            let splits: Vec<(String, String)> = cs.iter().skip(1).map(|(i, _)| (one[..*i].to_string(), one[*i..].to_string())).collect();
+            splits.iter().find(|(a, b)| known.iter().any(|k| k.eq_ignore_ascii_case(a)) && known.iter().any(|k| k.eq_ignore_ascii_case(b))).cloned().or_else(|| splits.first().cloned())
+        }
+        _ => None,
+    }
+}
+
+fn known_names(p: &Params, pts: &[(String, f64)]) -> Vec<String> {
+    let mut v: Vec<String> = pts.iter().map(|x| x.0.clone()).collect();
+    v.push(names(p).o);
+    v
+}
+
+/// The Lines between points that can be drawn: (row letters, both ends). A row naming a point that is not on the figure is left out
+/// (the notes say so); a line from a point to itself is too.
+pub fn joins(p: &Params) -> Vec<(String, End, End)> {
+    let pts = circle_points(p);
+    let known = known_names(p, &pts);
+    let mut v = vec![];
+    for r in rows(p.s("joins")).iter().take(24) {
+        let Some((a, b)) = pair_names(r, &known) else { continue };
+        let (Some(x), Some(y)) = (find(p, &pts, &a), find(p, &pts, &b)) else { continue };
+        let same = match (x, y) { (End::O, End::O) => true, (End::At(u), End::At(w)) => angdiff(u, w) < 0.5, _ => false };
+        if !same { v.push((format!("{a}{b}"), x, y)); }
+    }
+    v
+}
+
+/// The points with a tangent from the Tangents list (the tangent at A from its own switch is drawn by the figure, not here).
+pub fn tangent_points(p: &Params) -> Vec<(String, f64)> {
+    let pts = circle_points(p);
+    let a_own = p.b("show_tangent").then(|| names(p).a);
+    let mut v: Vec<(String, f64)> = vec![];
+    for r in rows(p.s("tangents")).iter().take(24) {
+        if let Some(End::At(d)) = find(p, &pts, r.trim()) {
+            let nm = pts.iter().find(|x| x.1 == d).map(|x| x.0.clone()).unwrap_or_default();
+            if a_own.as_ref() == Some(&nm) || v.iter().any(|x| x.0 == nm) { continue; }
+            v.push((nm, d));
+        }
+    }
+    v
+}
+
+/// Notes for the rows of Lines between points and Tangents that name a point the figure does not draw.
+pub fn unknown_rows(p: &Params) -> Vec<String> {
+    let pts = circle_points(p);
+    let known = known_names(p, &pts);
+    let mut v = vec![];
+    for r in rows(p.s("joins")) {
+        let ok = pair_names(&r, &known).is_some_and(|(a, b)| match (find(p, &pts, &a), find(p, &pts, &b)) {
+            (Some(End::O), Some(End::O)) => false,
+            (Some(End::At(u)), Some(End::At(w))) => angdiff(u, w) >= 0.5,
+            (Some(_), Some(_)) => true,
+            _ => false,
+        });
+        if !ok { v.push(format!("Line {r} is not drawn: it needs two different points on the figure.")); }
+    }
+    for r in rows(p.s("tangents")) {
+        if !matches!(find(p, &pts, r.trim()), Some(End::At(_))) { v.push(format!("The tangent at {r} is not drawn: there is no point {r} on the circle.")); }
+    }
+    v
+}
+
+/// A click on point `nm`: its tangent on, or off again (A's is its own switch, so its mark and angle come with it).
+pub fn toggle_tangent(p: &mut Params, nm: &str) {
+    if nm == names(p).a {
+        let on = p.b("show_tangent");
+        p.set_b("show_tangent", !on);
+        // (a Tangents row for A would draw it again: it goes too)
+        let r: Vec<String> = rows(p.s("tangents")).into_iter().filter(|x| x.trim() != nm).collect();
+        set_rows(p, "tangents", &r);
+        return;
+    }
+    let mut r = rows(p.s("tangents"));
+    let before = r.len();
+    r.retain(|x| x.trim() != nm);
+    if r.len() == before { r.push(nm.to_string()); }
+    set_rows(p, "tangents", &r);
 }
 
 #[cfg(test)]
@@ -189,7 +293,7 @@ mod tests {
     fn more_points_drag_round_the_circle_and_keep_their_letters() {
         let p = params(&[("more_points", Value::S("D 270, 45".into()))]);
         let hs = super::super::handles("circle", &p, (0.0, 0.0)).unwrap();
-        let knob = hs.iter().find(|h| h.tip == "Drag point E round the circle").expect("E has a knob");
+        let knob = hs.iter().find(|h| h.tip.starts_with("Drag point E round the circle")).expect("E has a knob");
         let c = (layout_of(&p).cx + build(&p).1.pad, CY + build(&p).1.pad);
         let mut q = p.clone();
         (knob.drag.as_ref().unwrap())(&mut q, interact::polar(c, 120.0, R));
@@ -202,5 +306,73 @@ mod tests {
         let mut q = p.clone();
         (area.click_at.as_ref().unwrap())(&mut q, interact::polar(c, 60.0, R * 0.5));
         assert_eq!(q.0, p.0);
+    }
+
+    /// The task's figure so far: B, C and D put on the circle by clicks.
+    fn abcd() -> Params {
+        let mut p = params(&[]);
+        for d in [330.0, 100.0, 270.0] { add_point(&mut p, d); }
+        p
+    }
+
+    #[test]
+    fn lines_join_any_two_points_and_the_centre() {
+        let mut p = abcd();
+        p.set_s("joins", "BD, O-C, B Z, DD");
+        let j = joins(&p);
+        assert_eq!(j.len(), 2, "BD and OC; Z is not on the figure and DD is no line");
+        assert_eq!((j[0].1, j[0].2), (End::At(330.0), End::At(270.0)));
+        assert_eq!((j[1].1, j[1].2), (End::O, End::At(100.0)));
+        let rep = build(&p).1;
+        let pad = rep.pad;
+        let cx = layout_of(&p).cx;
+        let (b, d) = (on_circle(cx, 330.0), on_circle(cx, 270.0));
+        let near = |a: Pt, q: Pt| (a.0 - q.0 - pad).abs() < 0.01 && (a.1 - q.1 - pad).abs() < 0.01;
+        assert!(rep.segs.iter().any(|(x, y)| near(*x, b) && near(*y, d)), "chord BD is drawn");
+        let notes = super::super::warnings(&p);
+        assert!(notes.iter().any(|n| n.starts_with("Line B Z is not drawn")) && notes.iter().any(|n| n.starts_with("Line DD is not drawn")), "{notes:?}");
+    }
+
+    #[test]
+    fn clicking_a_point_draws_its_tangent_and_clicking_again_takes_it_off() {
+        let p = abcd();
+        let hs = super::super::handles("circle", &p, (0.0, 0.0)).unwrap();
+        let click = |tip: &str| hs.iter().find(|h| h.tip.starts_with(tip)).and_then(|h| h.click.clone()).unwrap_or_else(|| panic!("{tip}"));
+        let mut q = p.clone();
+        click("Drag point C")(&mut q);
+        assert_eq!(q.s("tangents"), "C");
+        assert_eq!(tangent_points(&q), vec![("C".to_string(), 100.0)]);
+        // the tangent at C: a solid line through C at right angles to OC
+        let rep = build(&q).1;
+        let cx = layout_of(&q).cx;
+        let c = on_circle(cx, 100.0);
+        let c = (c.0 + rep.pad, c.1 + rep.pad);
+        let u = unit(100.0);
+        assert!(rep.solid.iter().any(|(a, b)| {
+            let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+            let l = dx.hypot(dy);
+            l > 100.0 && pt_seg_dist(c, *a, *b) < 0.01 && ((dx * u.0 + dy * u.1) / l).abs() < 1e-6
+        }), "tangent at C");
+        click("Drag point C")(&mut q);
+        assert_eq!(q.s("tangents"), "");
+        // A's tangent is its own switch (with its right-angle mark and angle row)
+        let mut q = p.clone();
+        click("Drag point A")(&mut q);
+        assert!(q.b("show_tangent"));
+        click("Drag point A")(&mut q);
+        assert!(!q.b("show_tangent"));
+        // More points too
+        let mut q = p.clone();
+        click("Drag point D")(&mut q);
+        assert_eq!(tangent_points(&q), vec![("D".to_string(), 270.0)]);
+    }
+
+    #[test]
+    fn a_tangent_meets_a_radius_to_its_point_at_a_marked_right_angle() {
+        let mut p = abcd();
+        p.set_s("tangents", "C");
+        let before = build(&p).1.marks;
+        p.set_s("joins", "OC");
+        assert_eq!(build(&p).1.marks, before + 1);
     }
 }
