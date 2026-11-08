@@ -347,7 +347,7 @@ mod tests {
         "accounting-equation", "action-potential", "ad-as", "bank-reconciliation", "bar-chart", "base-ten-blocks", "block-diagram", "body-map", "boltzmann-distribution", "boolean-table",
         "brain-regions", "break-even", "cash-flow-statement", "cause-effect", "cell-cycle", "cell-diagram", "chi-square-fit", "chi-square-table",
         "circle-of-fifths", "circular-flow", "circular-motion", "cladogram", "climate-graph", "collision-momentum", "colour-wheel", "confidence-interval",
-        "cost-curves", "court-layout", "data-structure", "depreciation-schedule", "discrete-distribution",
+        "cost-curves", "court-layout", "data-structure", "depreciation-schedule", "discrete-distribution", "dna-protein-synthesis",
         "dot-and-cross", "dot-plot", "earth-cycles", "earth-layers", "elasticity", "electric-field", "energy-bar-chart", "energy-pyramid", "er-diagram", "experiment-flow",
         "family-tree", "financial-statement", "flowchart", "food-plate", "food-web", "fraction-models", "free-body", "frequency-table", "gear-train",
         "graph-diagram", "grid-reference", "guitar-chords", "heart-zones", "histogram", "hr-diagram",

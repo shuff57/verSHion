@@ -33,6 +33,7 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "chi-square-fit" => CHI_SQUARE_FIT,
         "enzyme-kinetics" => ENZYME_KINETICS,
         "cladogram" => CLADOGRAM,
+        "dna-protein-synthesis" => DNA_PROTEIN_SYNTHESIS,
         "food-web" => FOOD_WEB,
         "energy-pyramid" => ENERGY_PYRAMID,
         "action-potential" => ACTION_POTENTIAL,
@@ -789,6 +790,29 @@ const CLADOGRAM: &[Faq] = &[
     Faq {
         q: "What do the branch lengths mean?",
         a: "Nothing here: this figure draws a cladogram, where only the pattern of branching carries information. A tree with branch lengths drawn to scale is a phylogram, where longer branches mean more change or more time.",
+    },
+];
+
+const DNA_PROTEIN_SYNTHESIS: &[Faq] = &[
+    Faq {
+        q: "Which strand do I type, and which way does it run?",
+        a: "Pick the strand under You’re typing the. The template strand is typed 3′ to 5′, so a gene usually starts TAC; the coding strand and the mRNA are typed 5′ to 3′ and start ATG or AUG. Every row is drawn base for base under the one above: the coding strand 5′ to 3′, the template under it 3′ to 5′, the mRNA 5′ to 3′. Spaces, hyphens, lower case and written 5′ and 3′ ends are ignored, and only the first 36 bases (12 codons) are drawn.",
+    },
+    Faq {
+        q: "How is the mRNA worked out?",
+        a: "Transcription copies the template strand: each mRNA base pairs with the template base above it, A with U, T with A, G with C and C with G. That makes the mRNA the same as the coding strand with U in place of T, which is why the coding strand is also called the sense strand.",
+    },
+    Faq {
+        q: "Where does translation start and stop?",
+        a: "From the first AUG reads the mRNA in threes from the first AUG (the start codon, methionine) and leaves any bases before it untranslated; From the first base starts at the left end. Each codon is looked up in the standard genetic code until the first stop codon, UAA, UAG or UGA. The stop codon is shown as Stop with no tRNA and no amino acid, and nothing after it is read.",
+    },
+    Faq {
+        q: "Why are the tRNA anticodons written 3′ to 5′?",
+        a: "An anticodon pairs with its codon antiparallel, so its 3′ end lines up with the codon’s 5′ end. Written under the codon base for base, the anticodon reads 3′ to 5′ left to right: under 5′-AUG-3′ it is 3′-UAC-5′. Read 5′ to 3′, the same anticodon is CAU.",
+    },
+    Faq {
+        q: "How do I make a worksheet or a multiple-choice question?",
+        a: "Set any row to Blank to leave empty boxes, or to Some to blank part of it (the slider sets how much, and Shuffle the blanks picks others). For multiple choice, make choice A with no mistakes, then B to D with one to four wrong bases in a row, using Shuffle the mistakes between them; the Classic setups list has all four. Turn on Answer key for the key: blanks are filled in, mistakes are ringed and the rows print under the figure. Student + key exports both copies.",
     },
 ];
 

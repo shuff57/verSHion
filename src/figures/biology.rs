@@ -10,6 +10,7 @@ pub mod chisquarefit;
 pub mod celldiagram;
 pub mod cellcycle;
 pub mod cladogram;
+pub mod dna;
 pub mod energypyramid;
 pub mod enzyme;
 pub mod foodweb;
@@ -41,6 +42,7 @@ pub fn examples(id: &str) -> Option<Vec<super::Example>> {
         "chi-square-fit" => chisquarefit::examples(id),
         "enzyme-kinetics" => enzyme::examples(id),
         "cladogram" => cladogram::examples(id),
+        "dna-protein-synthesis" => dna::examples(id),
         "food-web" => foodweb::examples(id),
         "energy-pyramid" => energypyramid::examples(id),
         "action-potential" => actionpotential::examples(id),
@@ -58,7 +60,18 @@ pub fn examples(id: &str) -> Option<Vec<super::Example>> {
 /// "Add ..." chips / action buttons for this subject's figures. (The pedigree's "New pedigree"
 /// lives in its own Family card, `figuresui::pedigree_panel`, with the person panel.)
 pub fn chips(id: &str) -> Option<super::ChipsCard> {
+    use super::{Chip, ChipsCard};
     match id {
+        // the DNA figure's two shuffles: which cells of a Some row are blank, and where the mistakes go
+        "dna-protein-synthesis" => Some(ChipsCard {
+            title: "Shuffle",
+            count_key: "",
+            max: 0,
+            chips: vec![
+                Chip { label: "Shuffle the blanks", set: vec![("blank_seed", Value::I(i64::MIN))] },
+                Chip { label: "Shuffle the mistakes", set: vec![("mistake_seed", Value::I(i64::MIN))] },
+            ],
+        }),
         "osmosis" => Some(osmosis::chips()),
         _ => None,
     }
@@ -87,6 +100,7 @@ pub fn classic_setups(id: &str) -> Option<Vec<super::Example>> {
         "population-growth" => Some(popdyn::growth_classics()),
         "punnett-square" => Some(punnett::classics()),
         "pedigree" => Some(pedigree::classics()),
+        "dna-protein-synthesis" => Some(dna::classics()),
         _ => None,
     }
 }
@@ -151,6 +165,7 @@ pub fn defs() -> Vec<FigureDef> {
         chisquarefit::defs().pop().unwrap(),
         enzyme::defs().pop().unwrap(),
         cladogram::defs().pop().unwrap(),
+        dna::defs().pop().unwrap(),
         foodweb::defs().pop().unwrap(),
         energypyramid::defs().pop().unwrap(),
         actionpotential::defs().pop().unwrap(),

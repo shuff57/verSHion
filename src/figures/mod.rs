@@ -243,6 +243,12 @@ pub fn label_for(fig: &str, key: &str, p: &Params) -> Option<&'static str> {
                 _ => return None,
             })
         }
+        // the DNA figure's sequence box is named for the strand being typed
+        "dna-protein-synthesis" if key == "seq" => Some(match p.s("typed") {
+            "Coding" => "DNA coding strand (5′ to 3′)",
+            "mRNA" => "mRNA (5′ to 3′)",
+            _ => "DNA template strand (3′ to 5′)",
+        }),
         "heating-cooling-curve" => {
             let cooling = p.s("mode") == "Cooling";
             Some(match key {

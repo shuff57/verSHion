@@ -1041,6 +1041,17 @@ static RAY_DIAGRAM: [RefSection; 5] = [
     s("Title and answer key", &["title", "label_size", "show_answers"], "Turn off Show answers for a student copy: the image, its label and the dashed lines back to a virtual image are hidden and the object and the rays stay."),
 ];
 
+static DNA_PROTEIN_SYNTHESIS: [RefSection; 8] = [
+    s("Sequence", &["typed", "seq", "frame"], "Type the template strand 3′ to 5′ (it usually starts TAC), or the coding strand or the mRNA 5′ to 3′. The template pairs A–T and G–C with the coding strand; the mRNA pairs with the template, so it is the coding strand with U for T. Codons are read from the first AUG, or the first base, to the first stop codon with the standard genetic code."),
+    s("Rows", &["row_coding", "row_template", "row_mrna", "row_trna", "row_amino", "some_share", "row_names", "name_coding", "name_template", "name_mrna", "name_trna", "name_amino"], "Blank leaves a row for students to fill in; Some leaves part of it blank."),
+    s("Amino acids", &["aa_names", "aa_style"], ""),
+    s("Strands", &["ends", "gaps", "brackets", "hbonds", "color_bases"], ""),
+    s("Mistakes", &["mistakes", "mistake_row"], "For multiple choice: make choice A with no mistakes, then B to D with some, shuffling between them."),
+    s("Codon chart", &["chart", "chart_pos"], ""),
+    s("Chart title", &["title", "show_answers"], ""),
+    s("More options", &["style", "label_size"], ""),
+];
+
 pub fn reference(id: &str) -> Option<&'static [RefSection]> {
     Some(match id {
         "angles" => &FIG_0,
@@ -1055,6 +1066,7 @@ pub fn reference(id: &str) -> Option<&'static [RefSection]> {
         "probability-tree" => &PROBABILITY_TREE,
         "venn-diagram" => &VENN_DIAGRAM,
         "discrete-distribution" => &DISCRETE_DISTRIBUTION,
+        "dna-protein-synthesis" => &DNA_PROTEIN_SYNTHESIS,
         "confidence-interval" => &CONFIDENCE_INTERVAL,
         "residual-plot" => &RESIDUAL_PLOT,
         "rc-curve" => &RC_CURVE,
@@ -1237,6 +1249,10 @@ pub fn note_after(fig: &str, key: &str, p: &super::Params) -> Option<String> {
         ("spring-scale", "answer") => Some(format!("Print \u{201c}Force: {:.2} N\u{201d} under the figure.", p.f("reading"))),
         ("free-body-diagram", "notation") => Some("An arrow over every vector\u{2019}s label, or every one in bold. For just one label, type \\vec{F} or \\mathbf{F} in it.".into()),
         ("motion-graphs", "x0") => Some("Speeding up and slowing down carry on from the velocity before them.".into()),
+        // the DNA figure: what was typed differently, the protein read, and the mistakes placed
+        ("dna-protein-synthesis", "seq") => super::biology::dna::seq_note(p),
+        ("dna-protein-synthesis", "frame") => Some(super::biology::dna::readout(p)),
+        ("dna-protein-synthesis", "mistakes") => super::biology::dna::mistakes_note(p),
         _ => None,
     }
 }
