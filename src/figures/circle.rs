@@ -94,6 +94,7 @@ fn params() -> Vec<ParamDef> {
         ParamDef::text("name_c", "Point C letter", "C"),
         ParamDef::text("name_m", "Midpoint letter", "M"),
         ParamDef::choice("r_label", "Radius label", &["Value", "Letter only", "None"], "Value"),
+        ParamDef::list("marks", "Arc and line labels", "").hint("One per row: arc BC 70\u{b0}, arc BC degrees, arc BC length, major arc BC degrees, BD length or BD x. Or click beside an arc or on a line on the figure"),
         ParamDef::choice("angle_unit", "Angles in", &["Degrees", "Radians"], "Degrees"),
         ParamDef::int("dec", "Decimal places", 0, 4, 2),
         b("hints", "Show formula hints", false),
@@ -515,6 +516,7 @@ pub fn warnings(p: &Params) -> Vec<String> {
         let same = (0..5).any(|i| (i + 1..5).any(|j| drawn[i] && drawn[j] && l[i] == l[j]));
         if same { v.push(format!("Two points have the same letter ({}, {}, {}, {}, {}): rename one so the labels can be told apart.", n.o, n.a, n.b, n.c, n.m)); }
         v.extend(edit::unknown_rows(p));
+        for r in edit::unknown_marks(p) { v.push(format!("Label {r} is not drawn: name an arc (arc BC) or a line (BD) between points on the figure.")); }
         for r in edit::unknown_shades(p) { v.push(format!("Shaded area {r} is not drawn: name two points on the circle (segment BD, sector BD), or click inside the circle.")); }
         // a More point lettered like another drawn point
         let mut seen: Vec<String> = (0..5).filter(|i| drawn[*i]).map(|i| l[i].clone()).collect();
@@ -1263,6 +1265,32 @@ fn core(p: &Params, opt: &Opt) -> (String, Report, Vec<(usize, String, Option<K>
     };
     if !tan_ends.is_empty() { word(&mut labs, "tangent", &tan_ends); }
     if !sec_ends.is_empty() { word(&mut labs, "secant", &sec_ends); }
+    // the labels a teacher put on arcs (outside the arc's middle) and on lines (beside the line's middle, away from the centre)
+    for mk in edit::marks(p) {
+        let size = sz(13.0);
+        let say = |s: &edit::Say, deg: f64, len: f64| match s { edit::Say::Degrees => angle_text(deg, c.rad), edit::Say::Length => cf.with_u(num(len, c.dec)), edit::Say::Text(t) => t.clone() };
+        match mk {
+            edit::Mark::Arc { start, span, say: s } => {
+                let mid = start + span / 2.0;
+                let t = say(&s, span, m.r * span.to_radians());
+                let (bw, bh) = box_of(&t, size, true);
+                let at = on_circle(cx, mid);
+                labs.push(Lab { kind: None, text: t, size, bold: true, prio: 2, anchor: at, cands: near_cands(at, unit(mid), bw, bh, 6.0), leader_from: Some(at), id: 0, wide: None, force: false, froms: vec![] });
+            }
+            edit::Mark::Line { a, b, say: s } => {
+                let (u, w) = (at_end(a), at_end(b));
+                let len = match (a, b) { (edit::End::At(x), edit::End::At(y)) => 2.0 * m.r * (angdiff(x, y).to_radians() / 2.0).sin(), _ => m.r };
+                let t = say(&s, 0.0, len);
+                let (bw, bh) = box_of(&t, size, true);
+                let mid = ((u.0 + w.0) / 2.0, (u.1 + w.1) / 2.0);
+                let l = (w.0 - u.0).hypot(w.1 - u.1).max(1e-9);
+                let mut nrm = (-(w.1 - u.1) / l, (w.0 - u.0) / l);
+                if nrm.0 * (mid.0 - o.0) + nrm.1 * (mid.1 - o.1) < 0.0 { nrm = (-nrm.0, -nrm.1); }
+                let froms: Vec<Pt> = [0.5, 0.35, 0.65].iter().map(|t| (u.0 + (w.0 - u.0) * t, u.1 + (w.1 - u.1) * t)).collect();
+                labs.push(Lab { kind: None, text: t, size, bold: true, prio: 2, anchor: mid, cands: near_cands(mid, nrm, bw, bh, 5.0), leader_from: Some(mid), id: 0, wide: None, force: false, froms });
+            }
+        }
+    }
 
     for (i, l) in labs.iter_mut().enumerate() { l.id = i; }
     labs.retain(|l| !opt.exclude.iter().any(|(id, _, _)| *id == l.id));

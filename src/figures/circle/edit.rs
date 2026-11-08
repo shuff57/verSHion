@@ -145,6 +145,26 @@ pub fn handles(p: &Params, cx: f64, pad: f64) -> Vec<Handle> {
             toggle_shade(p, ((q.0 - centre.0) / R, (centre.1 - q.1) / R));
         }
     }));
+    // beside each arc between two neighbouring points, and on each line between points: a click labels it
+    let mut pts = circle_points(p);
+    pts.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+    if pts.len() >= 2 {
+        for i in 0..pts.len() {
+            let (x, y) = (pts[i].clone(), pts[(i + 1) % pts.len()].clone());
+            let span = (y.1 - x.1).rem_euclid(360.0);
+            if span < 0.5 || angdiff(x.1, y.1) < 0.5 { continue; }
+            let major = span > 180.0;
+            let at = interact::polar(centre, x.1 + span / 2.0, R + 22.0);
+            let tip = format!("Click to label arc {}{}{}: its degrees, then its length, then none", if major { "major " } else { "" }, x.0, y.0);
+            v.push(Handle::zone(at, (20.0, 20.0), &tip, move |p| cycle_mark(p, true, major, &x.0, &y.0)));
+        }
+    }
+    let end = |e: End| match e { End::O => centre, End::At(d) => interact::polar(centre, d, R) };
+    for ((a, b), x, y) in joins(p) {
+        let (u, w) = (end(x), end(y));
+        let tip = format!("Click to label line {a}{b} with its length (again to clear it)");
+        v.push(Handle::zone(((u.0 + w.0) / 2.0, (u.1 + w.1) / 2.0), (16.0, 16.0), &tip, move |p| cycle_mark(p, false, false, &a, &b)));
+    }
     v
 }
 
@@ -186,7 +206,7 @@ fn known_names(p: &Params, pts: &[(String, f64)]) -> Vec<String> {
 
 /// The Lines between points that can be drawn: (row letters, both ends). A row naming a point that is not on the figure is left out
 /// (the notes say so); a line from a point to itself is too.
-pub fn joins(p: &Params) -> Vec<(String, End, End)> {
+pub fn joins(p: &Params) -> Vec<((String, String), End, End)> {
     let pts = circle_points(p);
     let known = known_names(p, &pts);
     let mut v = vec![];
@@ -194,7 +214,7 @@ pub fn joins(p: &Params) -> Vec<(String, End, End)> {
         let Some((a, b)) = pair_names(r, &known) else { continue };
         let (Some(x), Some(y)) = (find(p, &pts, &a), find(p, &pts, &b)) else { continue };
         let same = match (x, y) { (End::O, End::O) => true, (End::At(u), End::At(w)) => angdiff(u, w) < 0.5, _ => false };
-        if !same { v.push((format!("{a}{b}"), x, y)); }
+        if !same { v.push(((a, b), x, y)); }
     }
     v
 }
@@ -382,6 +402,87 @@ pub fn toggle_shade(p: &mut Params, seed: V) {
         r.push(format!("at {:.2} {:.2}", seed.0, seed.1));
         set_rows(p, "shade", &r);
     }
+}
+
+// ------------------------------------------------------------------------------------------------ labels on arcs and lines
+
+/// What a label row writes on its arc or line.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Say { Degrees, Length, Text(String) }
+
+/// A label on an arc (from `start` through `span` degrees counterclockwise) or on a line between two ends.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Mark { Arc { start: f64, span: f64, say: Say }, Line { a: End, b: End, say: Say } }
+
+/// A row of Arc and line labels taken apart: (an arc?, the major arc?, its two letters, what it says). `arc BC 70°`,
+/// `major arc BC degrees`, `arc BC length`, `BD length`, `BD x`. The two letters are one word (`BC`, or `B-C`).
+fn parse_mark(row: &str, known: &[String]) -> Option<(bool, bool, (String, String), Say)> {
+    let toks: Vec<&str> = row.split_whitespace().collect();
+    let low: Vec<String> = toks.iter().map(|t| t.to_lowercase()).collect();
+    let major = low.first().map(String::as_str) == Some("major");
+    let mut k = usize::from(major);
+    let arc = low.get(k).map(String::as_str) == Some("arc");
+    if major && !arc { return None; }
+    if arc { k += 1; }
+    let pair = pair_names(toks.get(k)?, known)?;
+    let text = toks[k + 1..].join(" ");
+    let say = match text.to_lowercase().as_str() {
+        "" | "degrees" | "deg" => if arc { Say::Degrees } else { Say::Length },
+        "length" | "len" => Say::Length,
+        _ => Say::Text(text.chars().filter(|c| !c.is_control()).take(24).collect()),
+    };
+    Some((arc, major, pair, say))
+}
+
+/// Every label row that names an arc or a line on the figure.
+pub fn marks(p: &Params) -> Vec<Mark> {
+    let pts = circle_points(p);
+    let known = known_names(p, &pts);
+    let mut v = vec![];
+    for r in rows(p.s("marks")).iter().take(24) {
+        let Some((arc, major, (a, b), say)) = parse_mark(r, &known) else { continue };
+        let (Some(x), Some(y)) = (find(p, &pts, &a), find(p, &pts, &b)) else { continue };
+        if arc {
+            let (End::At(x), End::At(y)) = (x, y) else { continue };
+            let gap = (y - x).rem_euclid(360.0);
+            if gap.min(360.0 - gap) < 0.5 { continue; }
+            let (s, d) = if gap <= 180.0 { (x, gap) } else { (y, 360.0 - gap) };
+            v.push(if major { Mark::Arc { start: s + d, span: 360.0 - d, say } } else { Mark::Arc { start: s, span: d, say } });
+        } else if x != y {
+            v.push(Mark::Line { a: x, b: y, say });
+        }
+    }
+    v
+}
+
+/// Label rows that name no arc or line on the figure, for the notes.
+pub fn unknown_marks(p: &Params) -> Vec<String> {
+    let pts = circle_points(p);
+    let known = known_names(p, &pts);
+    rows(p.s("marks")).into_iter().filter(|r| {
+        !parse_mark(r, &known).is_some_and(|(arc, _, (a, b), _)| match (find(p, &pts, &a), find(p, &pts, &b)) {
+            (Some(End::At(_)), Some(End::At(_))) => true,
+            (Some(_), Some(_)) => !arc,
+            _ => false,
+        })
+    }).collect()
+}
+
+/// A click on arc or line `xy`: no label, then its degrees (an arc), then its length, then no label again. A typed label is cleared.
+pub fn cycle_mark(p: &mut Params, arc: bool, major: bool, x: &str, y: &str) {
+    let pts = circle_points(p);
+    let known = known_names(p, &pts);
+    let mut r = rows(p.s("marks"));
+    let same = |row: &str| parse_mark(row, &known).is_some_and(|(a, m, (u, w), _)| a == arc && m == major && ((u == x && w == y) || (u == y && w == x)));
+    let head = format!("{}{}{x}{y}", if major { "major " } else { "" }, if arc { "arc " } else { "" });
+    match r.iter().position(|row| same(row)) {
+        None => r.push(format!("{head} {}", if arc { "degrees" } else { "length" })),
+        Some(i) => match parse_mark(&r[i], &known).map(|m| m.3) {
+            Some(Say::Degrees) => r[i] = format!("{head} length"),
+            _ => { r.remove(i); }
+        },
+    }
+    set_rows(p, "marks", &r);
 }
 
 #[cfg(test)]
@@ -591,5 +692,56 @@ mod tests {
         let mut q = p.clone();
         (area_h.click_at.as_ref().unwrap())(&mut q, interact::polar(c, 45.0, R + 4.0));
         assert_eq!(q.s("more_points"), "D 270, E 45");
+    }
+
+    fn zone_click(p: &Params, tip: &str) -> Params {
+        let hs = super::super::handles("circle", p, (0.0, 0.0)).unwrap();
+        let h = hs.iter().find(|h| h.tip.starts_with(tip)).unwrap_or_else(|| panic!("no handle {tip}: {:?}", hs.iter().map(|h| h.tip.clone()).collect::<Vec<_>>()));
+        let mut q = p.clone();
+        (h.click.as_ref().unwrap())(&mut q);
+        q
+    }
+
+    #[test]
+    fn clicking_beside_an_arc_labels_it_in_degrees_then_by_length_then_not() {
+        // A moved to 210 (as on the reference's opening figure), so B and C are neighbours
+        let mut p = abcd();
+        p.set_f("a1", 210.0);
+        let q = zone_click(&p, "Click to label arc BC");
+        assert_eq!(q.s("marks"), "arc BC degrees");
+        assert!(render(&q).contains(">130\u{b0}<"), "the arc from B at 330 to C at 100");
+        let q = zone_click(&q, "Click to label arc BC");
+        assert_eq!(q.s("marks"), "arc BC length");
+        assert!(render(&q).contains(">11.34 cm<"), "5 x 130 degrees in radians");
+        let q = zone_click(&q, "Click to label arc BC");
+        assert_eq!(q.s("marks"), "");
+        // typed text, and the major arc
+        let mut q = p.clone();
+        q.set_s("marks", "arc BC 70\u{b0}, major arc BC degrees");
+        let svg = render(&q);
+        assert!(svg.contains(">70\u{b0}<") && svg.contains(">230\u{b0}<"));
+        // the arc label sits outside the circle, near the arc's middle (at 35 degrees)
+        let rep = build(&q).1;
+        let cx = layout_of(&q).cx + rep.pad;
+        let lab = rep.placed.iter().find(|l| l.text == "70\u{b0}").unwrap();
+        let c = ((lab.rect.x0 + lab.rect.x1) / 2.0, (lab.rect.y0 + lab.rect.y1) / 2.0);
+        let o = (cx, CY + rep.pad);
+        assert!(interact::dist(o, c) > R && angdiff(interact::angle_deg(o, c), 35.0) < 20.0, "{c:?}");
+    }
+
+    #[test]
+    fn clicking_a_line_labels_it_with_its_length() {
+        let mut p = abcd();
+        p.set_s("joins", "BD, OC");
+        let q = zone_click(&p, "Click to label line BD");
+        assert_eq!(q.s("marks"), "BD length");
+        assert!(render(&q).contains(">5 cm<"), "a 60 degree chord of a radius 5 circle is 5");
+        let q = zone_click(&q, "Click to label line BD");
+        assert_eq!(q.s("marks"), "");
+        let mut q = p.clone();
+        q.set_s("marks", "OC r, BD x, arc QZ degrees");
+        let svg = render(&q);
+        assert!(svg.contains(">r<") && svg.contains(">x<"));
+        assert_eq!(unknown_marks(&q), vec!["arc QZ degrees".to_string()]);
     }
 }
