@@ -132,37 +132,38 @@ fn build(p: &Params) -> String {
     let small = 30.0;
     let style = p.s("blanks");
 
-    // the symbol, centred, with the numbers grouped tight to it as a textbook sets them
-    if p.s("pos_symbol") == "Shown" {
-        tx(&mut d, cx, cy + big * 0.34, big, "middle", INK, true, &sym);
-    } else if p.s("pos_symbol") == "Blank" {
-        blank(&mut d, cx, cy + big * 0.34, big * 1.1, big, INK, style, "middle");
-    }
-    let mass_text = if a < 0 { String::new() } else { a.to_string() };
-    let z_text = if z < 0 { String::new() } else { z.to_string() };
-    let charge_text = match charge {
-        0 => String::new(),
-        c if c > 0 => format!("{c}+"),
-        c => format!("{}+", c.abs()),
-    };
-    position(&mut d, p.s("pos_mass"), &mass_text, cx - 34.0, cy - big * 0.30, small, style, "end");
-    position(&mut d, p.s("pos_z"), &z_text, cx - 34.0, cy + big * 0.40, small, style, "end");
-    if charge < 0 {
-        position(&mut d, p.s("pos_charge"), &format!("{}{}", charge.abs(), "\u{2212}"), cx + 34.0, cy - big * 0.30, small, style, "start");
-    } else {
-        position(&mut d, p.s("pos_charge"), &charge_text, cx + 34.0, cy - big * 0.30, small, style, "start");
-    }
-
-    // hyphen notation, alone or under the symbol
-    let hyphen = match p.s("kind") {
-        "Alpha particle" | "Beta particle" | "Neutron" | "Proton" | "Gamma ray" => name.clone(),
-        "Custom symbol" => format!("{sym}-{a}"),
-        _ => format!("{name}-{a}"),
-    };
+    // hyphen notation: alone (carbon-14, no symbol and no numbers) or under the symbol
+    let hyphen = hyphen_parts(p, &sym, &name, a);
     let mut y = cy + big * 0.85;
-    if p.s("notation") != "Symbol" {
-        tx(&mut d, cx, y, 22.0, "middle", INK, false, &hyphen);
+    if p.s("notation") == "Hyphen notation" {
+        hyphen_line(&mut d, p, &hyphen, cx, cy + big * 0.34, style);
         y += 34.0;
+    } else {
+        // the symbol, centred, with the numbers grouped tight to it as a textbook sets them
+        if p.s("pos_symbol") == "Shown" {
+            tx(&mut d, cx, cy + big * 0.34, big, "middle", INK, true, &sym);
+        } else if p.s("pos_symbol") == "Blank" {
+            blank(&mut d, cx, cy + big * 0.34, big * 1.1, big, INK, style, "middle");
+        }
+        let mass_text = if a < 0 { String::new() } else { a.to_string() };
+        let z_text = if z < 0 { String::new() } else { z.to_string() };
+        let charge_text = match charge {
+            0 => String::new(),
+            c if c > 0 => format!("{c}+"),
+            c => format!("{}+", c.abs()),
+        };
+        position(&mut d, p.s("pos_mass"), &mass_text, cx - 34.0, cy - big * 0.30, small, style, "end");
+        position(&mut d, p.s("pos_z"), &z_text, cx - 34.0, cy + big * 0.40, small, style, "end");
+        if charge < 0 {
+            position(&mut d, p.s("pos_charge"), &format!("{}{}", charge.abs(), "\u{2212}"), cx + 34.0, cy - big * 0.30, small, style, "start");
+        } else {
+            position(&mut d, p.s("pos_charge"), &charge_text, cx + 34.0, cy - big * 0.30, small, style, "start");
+        }
+
+        if p.s("notation") != "Symbol" {
+            tx(&mut d, cx, y, 22.0, "middle", INK, false, &hyphen.join(""));
+            y += 34.0;
+        }
     }
 
     // the answer key: name, and the particle counts the numbers stand for
@@ -182,4 +183,83 @@ fn build(p: &Params) -> String {
     d.finish()
 }
 
+/// Rough advance of a bold sans string: capitals are wider than lowercase.
+fn sym_w(s: &str, size: f64) -> f64 {
+    s.chars().map(|c| if c.is_uppercase() { 0.74 } else if c.is_ascii_digit() { 0.6 } else if "ilj".contains(c) { 0.3 } else { 0.58 }).sum::<f64>() * size
+}
+
+/// The parts of the hyphen form: [name, "-", mass number] for an element or custom symbol, or just
+/// the particle's name.
+fn hyphen_parts(p: &Params, sym: &str, name: &str, a: i64) -> Vec<String> {
+    match p.s("kind") {
+        "Alpha particle" | "Beta particle" | "Neutron" | "Proton" | "Gamma ray" => vec![name.to_string()],
+        "Custom symbol" => vec![sym.to_string(), "-".into(), a.to_string()],
+        _ => vec![name.to_string(), "-".into(), a.to_string()],
+    }
+}
+
+/// Hyphen notation as the whole figure. The name follows the Symbol position and the mass number
+/// the Mass number position (Blank leaves a box or line, Off leaves it out).
+fn hyphen_line(d: &mut Doc, p: &Params, parts: &[String], cx: f64, base: f64, style: &str) {
+    let f = svg::label_factor(p.s("label_size"));
+    let chars: usize = parts.iter().map(|s| s.chars().count()).sum::<usize>().max(1);
+    let size = (54.0f64).min((W - 40.0) / (chars as f64 * 0.62) / f);
+    let mut items: Vec<(String, &str)> = Vec::new();
+    for (i, part) in parts.iter().enumerate() {
+        let mode = if parts.len() == 3 && i == 2 { p.s("pos_mass") } else if i == 0 { p.s("pos_symbol") } else { "Shown" };
+        if mode != "Off" {
+            items.push((part.clone(), mode));
+        }
+    }
+    let width = |t: &str, mode: &str| if mode == "Blank" { sym_w(t, size * f).max(size * f * 1.6) } else { sym_w(t, size * f) };
+    let total: f64 = items.iter().map(|(t, m)| width(t, m)).sum();
+    let mut x = cx - total / 2.0;
+    for (t, m) in &items {
+        let w = width(t, m);
+        if *m == "Blank" {
+            blank(d, x, base, w, size * f, INK, style, "start");
+        } else {
+            tx(d, x, base, size, "start", INK, true, t);
+        }
+        x += w;
+    }
+}
+
 fn plural(n: i64) -> &'static str { if n == 1 { "" } else { "s" } }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn with(kv: &[(&str, &str)]) -> String {
+        let mut p = Params::defaults(&params());
+        for (k, v) in kv {
+            p.set_s(k, v);
+        }
+        render(&p)
+    }
+
+    /// Hyphen notation drew the symbol too (byte-identical to Both); now it is the hyphen form only.
+    #[test]
+    fn hyphen_notation_draws_no_symbol() {
+        let sym = with(&[("notation", "Symbol")]);
+        let both = with(&[("notation", "Both")]);
+        let hy = with(&[("notation", "Hyphen notation")]);
+        assert_ne!(hy, both);
+        assert!(sym.contains(">C</text>") && !sym.contains("Carbon-"));
+        assert!(both.contains(">C</text>") && both.contains("Carbon-12"));
+        assert!(hy.contains(">Carbon</text>") && hy.contains(">12</text>") && hy.contains(">-</text>"));
+        assert!(!hy.contains(">C</text>") && !hy.contains(">6</text>"), "no isotope symbol or atomic number: {hy}");
+    }
+
+    /// The student copy of hyphen-only keeps its blank for the mass number and the key still shows.
+    #[test]
+    fn hyphen_only_student_copy_blanks_the_mass() {
+        let hy = with(&[("notation", "Hyphen notation"), ("pos_mass", "Blank")]);
+        assert!(hy.contains(">Carbon</text>") && !hy.contains(">12</text>") && hy.contains("<rect"));
+        let mut p = Params::defaults(&params());
+        p.set_s("notation", "Hyphen notation");
+        p.set_b(crate::figures::SHOW_ANSWERS, true);
+        assert!(render(&p).contains("6 protons"));
+    }
+}
