@@ -752,10 +752,8 @@ impl crate::App {
         let fresh = self.store.banks.is_empty() && self.store.exams.is_empty();
         shell_frame(self, ctx, false, |app, ui| {
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                // Balance the page: the hero and the steps sit as one block a little above the middle,
-                // and the footer holds the bottom. The block's height is last frame's measure; every
-                // spare pixel used to pile into one band under the cards, which the critics read as
-                // the page running out.
+                // Hero and steps sit as one block near the top. The block's height is last frame's
+                // measure; it decides how much of the spare height opens the gap before the steps.
                 let content_id = egui::Id::new("welcome_content_h");
                 let view_h = ui.available_height();
                 // A wide window gets the landing page at landing-page size. At the old sizes the hero,
@@ -763,14 +761,22 @@ impl crate::App {
                 // the leftover third was read as a dead band somewhere.
                 let roomy = ui.available_width() >= 940.0;
                 let block_h = ui.ctx().data(|d| d.get_temp::<f32>(content_id));
+                // The headline sits a fixed, modest distance under the top edge. Centring the block
+                // left a tall empty band above it and pushed the four steps into the bottom third
+                // of the window (the critics' words).
                 let lead = if !fresh {
                     70.0
-                } else if let Some(h) = block_h {
-                    // Centre hero and steps as one block. The desktop build is offered under the
-                    // hero's button now, so no footer row follows.
-                    ((view_h - h) * 0.5).clamp(24.0, 220.0)
+                } else if roomy {
+                    52.0
                 } else {
-                    (view_h * 0.10).clamp(24.0, 88.0)
+                    40.0
+                };
+                // What is left below the panel: a little of it opens the break between the hero
+                // and "How it works", the rest falls under the panel. `block_h` is measured without
+                // this extra, so the two do not chase each other.
+                let extra = match block_h {
+                    Some(h) if fresh => ((view_h - lead - h) * 0.3).clamp(0.0, if roomy { 20.0 } else { 16.0 }),
+                    _ => 0.0,
                 };
                 let block_top = ui.cursor().top() + lead;
                 ui.vertical_centered(|ui| {
@@ -839,9 +845,9 @@ impl crate::App {
 
                 // Hero and steps are one block: a wide band between the install link and "How it
                 // works" left the steps detached and pushed down. A section break a little larger
-                // than the hero's own gaps, and the centring above shares out what is left.
+                // than the hero's own gaps, plus a share of any spare height (`extra`).
                 let narrow_page = ui.available_width() < 940.0;
-                ui.add_space(if narrow_page { 14.0 } else { 18.0 });
+                ui.add_space(if narrow_page { 14.0 } else { 18.0 } + extra);
 
                 // The steps sit in a centred column of their own, not the whole window: the hero is a
                 // narrow centred column, and a card row running to both edges under it read as a
@@ -901,7 +907,7 @@ impl crate::App {
                         }
                     });
                 });
-                let measured = ui.cursor().top() - block_top;
+                let measured = ui.cursor().top() - block_top - extra;
                 if block_h.is_none_or(|h| (h - measured).abs() > 0.5) {
                     ui.ctx().data_mut(|d| d.insert_temp(content_id, measured));
                     ui.ctx().request_repaint();
@@ -1742,7 +1748,9 @@ impl crate::App {
                         });
                     });
                 };
-                pageshell::sections_aside(ui, "settings", &items, aside, |ui, section| {
+                // On the account page the always-available local backup comes first and the optional
+                // sharing setup follows it.
+                pageshell::sections_aside(ui, "settings", &items, &[SETTINGS_ACCOUNT], aside, |ui, section| {
                 // fields and menus share the buttons' 12 px corners
                 let w = &mut ui.visuals_mut().widgets;
                 for state in [&mut w.inactive, &mut w.hovered, &mut w.active] {

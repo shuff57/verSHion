@@ -348,12 +348,20 @@ pub fn select_section(ctx: &egui::Context, salt: &str, i: usize) {
 }
 
 pub fn sections(ui: &mut Ui, salt: &str, items: &[NavItem], content: impl FnOnce(&mut Ui, usize)) {
-    sections_aside(ui, salt, items, |_| {}, content);
+    sections_aside(ui, salt, items, &[], |_| {}, content);
 }
 
 /// [`sections`] with a closing panel under the section's content (in the content column on a wide
-/// window, under the chips' content on a narrow one).
-pub fn sections_aside(ui: &mut Ui, salt: &str, items: &[NavItem], aside: impl FnOnce(&mut Ui), content: impl FnOnce(&mut Ui, usize)) {
+/// window, under the chips' content on a narrow one). In the sections listed in `aside_leads` the
+/// panel comes first, above the content, with the same gap between them.
+pub fn sections_aside(
+    ui: &mut Ui,
+    salt: &str,
+    items: &[NavItem],
+    aside_leads: &[usize],
+    aside: impl FnOnce(&mut Ui),
+    content: impl FnOnce(&mut Ui, usize),
+) {
     if items.is_empty() {
         return;
     }
@@ -365,6 +373,7 @@ pub fn sections_aside(ui: &mut Ui, salt: &str, items: &[NavItem], aside: impl Fn
         .data(|d| d.get_temp::<usize>(id.with("sel")))
         .unwrap_or_else(|| std::env::var("VERSHION_SECTION").ok().and_then(|v| v.parse().ok()).unwrap_or(0))
         .min(items.len() - 1);
+    let lead = aside_leads.contains(&selected);
     if ui.available_width() >= NAV_COLLAPSE_W {
         let content_w = (ui.available_width() - NAV_W - 28.0).clamp(280.0, 960.0);
         let settings = salt == "settings";
@@ -390,11 +399,17 @@ pub fn sections_aside(ui: &mut Ui, salt: &str, items: &[NavItem], aside: impl Fn
             });
             ui.vertical(|ui| {
                 ui.set_width(content_w);
-                ease_in_content(ui, id, selected, content);
-                // The closing panel belongs to the content column, on the cards' own edges: run
-                // under the menu as well, it read as belonging to neither.
-                ui.add_space(12.0);
-                aside(ui);
+                // The panel belongs to the content column, on the cards' own edges: run under the
+                // menu as well, it read as belonging to neither.
+                if lead {
+                    aside(ui);
+                    ui.add_space(12.0);
+                    ease_in_content(ui, id, selected, content);
+                } else {
+                    ease_in_content(ui, id, selected, content);
+                    ui.add_space(12.0);
+                    aside(ui);
+                }
             });
         });
     } else {
@@ -406,8 +421,13 @@ pub fn sections_aside(ui: &mut Ui, salt: &str, items: &[NavItem], aside: impl Fn
             }
         });
         ui.add_space(12.0);
-        ease_in_content(ui, id, selected, content);
-        aside(ui);
+        if lead {
+            aside(ui);
+            ease_in_content(ui, id, selected, content);
+        } else {
+            ease_in_content(ui, id, selected, content);
+            aside(ui);
+        }
     }
     ctx.data_mut(|d| d.insert_temp(id.with("sel"), selected));
 }
