@@ -1290,6 +1290,22 @@ pub fn pair_params(pair: &str) -> Vec<(&'static str, Value)> {
     vec![("prey_avg", Value::F(pa)), ("pred_avg", Value::F(qa)), ("cycle", Value::F(cy)), ("unit", Value::S(u.into())), ("prey0", Value::F(x0)), ("pred0", Value::F(y0))]
 }
 
+/// Load-time upgrade of a figure saved before a named pair's numbers acted: such a figure holds its pair
+/// next to the figure-default numbers, and used to draw the pair's table. When the pair is named, is not
+/// the default pair, and prey0, pred0, prey_avg, pred_avg, cycle and unit are all still the defaults, the
+/// pair's own numbers are filled in. (A figure deliberately set to exactly the defaults under another
+/// pair cannot be told apart from an old one.)
+pub fn migrate_saved_pair(p: &mut Params) {
+    let pair = p.s("pair").to_string();
+    if pair == PAIRS[0] || preset(&pair).is_none() { return; }
+    let defs = pp_params();
+    let at_default = ["prey0", "pred0", "prey_avg", "pred_avg", "cycle", "unit"].iter().all(|k| {
+        defs.iter().find(|d| d.key == *k).is_some_and(|d| p.0.get(*k) == Some(&d.default))
+    });
+    if !at_default { return; }
+    for (k, v) in pair_params(&pair) { p.0.insert(k.to_string(), v); }
+}
+
 pub fn pp_examples() -> Vec<Example> {
     let st = |v: &str| Value::S(v.into());
     let with = |pair: &str, rest: Vec<(&'static str, Value)>| {
@@ -1480,6 +1496,37 @@ mod tests {
         // the opening state (hare and lynx on the defaults) is unchanged
         let st = pp_setup(&pp(&[]));
         assert_eq!((st.pavg, st.qavg, st.cycle, st.x0, st.y0), (50.0, 20.0, 10.0, 20.0, 12.0));
+    }
+
+    /// A figure saved with a named pair and the default numbers (from before the numbers acted) gets the
+    /// pair's numbers on load; one with any number changed, or the default pair, is left alone.
+    #[test]
+    fn saved_named_pair_loads_with_its_numbers() {
+        let mut old = pp(&[("pair", s("Rabbit and wolf"))]);
+        migrate_saved_pair(&mut old);
+        assert_eq!((old.f("cycle"), old.f("prey_avg"), old.f("prey0"), old.s("unit")), (8.0, 600.0, 300.0, "Years"));
+        let mut aphid = pp(&[("pair", s("Aphid and ladybug"))]);
+        migrate_saved_pair(&mut aphid);
+        assert_eq!(aphid.s("unit"), "Days");
+        let mut edited = pp(&[("pair", s("Rabbit and wolf")), ("cycle", Value::F(14.0))]);
+        migrate_saved_pair(&mut edited);
+        assert_eq!((edited.f("cycle"), edited.f("prey_avg")), (14.0, 50.0));
+        let mut hare = pp(&[]);
+        migrate_saved_pair(&mut hare);
+        assert_eq!((hare.f("cycle"), hare.f("prey_avg")), (10.0, 50.0));
+        // through the real loader
+        let def = crate::figures::registry().into_iter().find(|d| d.id == "predator-prey").unwrap();
+        let spec = crate::model::FigureSpec { id: "predator-prey".into(), params: [("pair".to_string(), serde_json::json!("Rabbit and wolf"))].into_iter().collect() };
+        assert_eq!(crate::figures::spec::params_from_spec(&def, &spec).f("cycle"), 8.0);
+    }
+
+    /// The time boxes name the chosen unit.
+    #[test]
+    fn time_labels_follow_the_unit() {
+        let p = pp(&[("unit", s("Months"))]);
+        for (k, want) in [("cycle", "Cycle length (months)"), ("tshow", "Time shown (months)"), ("census_every", "Census: counted every (months)")] {
+            assert_eq!(crate::figures::dynamic_label("predator-prey", k, &p).as_deref(), Some(want));
+        }
     }
 
     /// Picking a pair fills its typical numbers and unit; typing a number keeps the pair; typing a

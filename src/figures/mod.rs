@@ -156,6 +156,10 @@ pub fn dynamic_label(fig: &str, key: &str, p: &Params) -> Option<String> {
         "pred0" => format!("{pred} at the start"),
         "prey_avg" => format!("Average {}", prey.to_lowercase()),
         "pred_avg" => format!("Average {}", pred.to_lowercase()),
+        // the time boxes are read in the chosen unit, so their labels name it
+        "cycle" => format!("Cycle length ({})", p.s("unit").to_lowercase()),
+        "tshow" => format!("Time shown ({})", p.s("unit").to_lowercase()),
+        "census_every" => format!("Census: counted every ({})", p.s("unit").to_lowercase()),
         _ => return None,
     })
 }
@@ -788,6 +792,12 @@ pub fn migrate(id: &str, spec: &crate::model::FigureSpec, p: &mut Params) {
     // before the pair list opened on the hare and lynx pair, a spec without a pair was the user's own
     if id == "predator-prey" && !spec.params.contains_key("pair") {
         p.set_s("pair", biology::popdyn::OWN_PAIR);
+    }
+    // Before a named pair's numbers acted, a saved figure stored the figure defaults next to its pair and the
+    // pair's table was drawn. Loading one with a named pair (not the default hare and lynx) whose five numbers
+    // and unit are all still the defaults fills in that pair's own numbers, so it keeps drawing what it did.
+    if id == "predator-prey" {
+        biology::popdyn::migrate_saved_pair(p);
     }
     math::migrate(id, spec, p)
 }
