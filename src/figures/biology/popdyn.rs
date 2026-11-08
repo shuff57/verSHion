@@ -874,6 +874,11 @@ struct PpSetup {
     auto_right: bool, x0: f64, y0: f64, alpha: f64, beta: f64, gamma: f64, delta: f64,
 }
 
+/// A predator-prey number's default, the value that means "not set by the teacher".
+fn default_f(key: &str) -> f64 {
+    pp_params().iter().find(|d| d.key == key).map(|d| match d.default { Value::F(v) => v, Value::I(v) => v as f64, _ => 0.0 }).unwrap_or(0.0)
+}
+
 fn pp_setup(p: &Params) -> PpSetup {
     let (mut prey, mut pred) = (p.s("prey").trim().to_string(), p.s("pred").trim().to_string());
     let (mut pavg, mut qavg, mut cycle) = (p.f("prey_avg").max(1.0), p.f("pred_avg").max(1.0), p.f("cycle").max(0.1));
@@ -881,14 +886,22 @@ fn pp_setup(p: &Params) -> PpSetup {
     let mut ytitle = p.s("y_title").trim().to_string();
     let pair = p.s("pair");
     let mut auto_right = false;
+    // A named pair supplies the species names and, for any number still at the figure's own
+    // default, that pair's typical value; a number the teacher has changed always acts.
+    let touched = |k: &str| (p.f(k) - default_f(k)).abs() > 1e-12;
     if let Some((a, b, c, dd, e, u, yt)) = preset(pair) {
-        prey = a.into(); pred = b.into(); pavg = c; qavg = dd; cycle = e; unit = u.into();
+        prey = a.into(); pred = b.into(); unit = u.into();
+        if !touched("prey_avg") { pavg = c; }
+        if !touched("pred_avg") { qavg = dd; }
+        if !touched("cycle") { cycle = e; }
         if ytitle.is_empty() { ytitle = yt.into(); }
         auto_right = preset_start(pair).is_some();
     }
-    let (x0, y0) = if let Some((a, b, _)) = preset_start(pair) { (a, b) }
-        else if preset(pair).is_some() { (pavg * 0.4, qavg * 0.6) }
-        else { (p.f("prey0").max(0.01), p.f("pred0").max(0.01)) };
+    let start = preset_start(pair).map(|(a, b, _)| (a, b));
+    let (x0, y0) = if preset(pair).is_some() {
+        let (d0, e0) = start.unwrap_or((pavg * 0.4, qavg * 0.6));
+        (if touched("prey0") { p.f("prey0").max(0.01) } else { d0 }, if touched("pred0") { p.f("pred0").max(0.01) } else { e0 })
+    } else { (p.f("prey0").max(0.01), p.f("pred0").max(0.01)) };
     // the reference's default (hares and lynx) counts thousands of animals
     if ytitle.is_empty() && prey == "Hares" && pred == "Lynx" && pavg == 50.0 && qavg == 20.0 { ytitle = "Number of animals (thousands)".into(); }
     if prey.is_empty() { prey = "Prey".into(); }
@@ -1439,6 +1452,26 @@ mod tests {
         let a = render_case("population-growth", "k500", &[("k", Value::F(500.0))]);
         let b = render_case("population-growth", "k2000", &[("k", Value::F(2000.0))]);
         assert_ne!(a, b);
+    }
+
+    /// With a named pair the teacher's starting populations, averages and cycle length used to be
+    /// ignored (only "Your own pair" read them); now a changed number acts and an untouched one
+    /// takes the pair's typical value.
+    #[test]
+    fn named_pair_honours_the_teachers_numbers() {
+        let base = pp_render(&pp(&[("pair", s("Rabbit and wolf"))]));
+        for (k, v) in [("prey0", 111.0), ("pred0", 7.0), ("prey_avg", 900.0), ("pred_avg", 55.0), ("cycle", 14.0)] {
+            let t = pp_render(&pp(&[("pair", s("Rabbit and wolf")), (k, Value::F(v))]));
+            assert_ne!(t, base, "{k} is dead under a named pair");
+        }
+        // the pair still supplies its names and its own defaults for numbers left alone
+        assert!(base.contains("Rabbits") && base.contains("Wolves"));
+        assert_eq!(pp_setup(&pp(&[("pair", s("Rabbit and wolf"))])).cycle, 8.0);
+        let st = pp_setup(&pp(&[("pair", s("Rabbit and wolf")), ("cycle", Value::F(14.0)), ("prey0", Value::F(111.0))]));
+        assert_eq!((st.cycle, st.x0, st.pavg), (14.0, 111.0, 600.0));
+        // the hare and lynx opening state is unchanged
+        let st = pp_setup(&pp(&[]));
+        assert_eq!((st.pavg, st.qavg, st.cycle, st.x0, st.y0), (50.0, 20.0, 10.0, 20.0, 12.0));
     }
 
     #[test]
