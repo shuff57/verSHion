@@ -9,6 +9,10 @@ mod handles;
 pub mod atoms;
 pub mod frame;
 pub mod magnify;
+pub mod dotcross;
+pub mod halflife;
+pub mod nuclide;
+pub mod organic;
 pub use frame::*;
 mod curves;
 pub mod data;
@@ -459,6 +463,10 @@ pub fn defs() -> Vec<FigureDef> {
     v.extend(measure::defs());
     v.extend(curves::defs());
     v.extend(atoms::defs());
+    v.extend(nuclide::defs());
+    v.extend(dotcross::defs());
+    v.extend(halflife::defs());
+    v.extend(organic::defs());
     v.extend(lewis::defs());
     v.extend(spectra::defs());
     v.extend(reactionenergy::defs());
@@ -696,7 +704,7 @@ mod tests {
     #[test]
     fn ids_unique_and_complete() {
         let ids: Vec<_> = defs().iter().map(|d| d.id).collect();
-        assert_eq!(ids.len(), 26);
+        assert_eq!(ids.len(), 30);
         for d in defs() {
             for p in (d.params)() {
                 match (&p.kind, &p.default) {

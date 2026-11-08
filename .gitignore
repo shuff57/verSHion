@@ -16,3 +16,6 @@ tools/ui-grading/results.json
 /ui-r9/blind-*
 /ui-r9/logs
 /tools/ui-grading/__pycache__/
+
+# figures parity climb scratch (raw reference HTML, renders, old specs)
+/.figures-parity

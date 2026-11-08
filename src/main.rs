@@ -179,6 +179,22 @@ fn main() -> Result<(), eframe::Error> {
         println!("{}", figure_agent::catalog_text());
         return Ok(());
     }
+    // Headless: VERSHION_FIGURE_HANDLES=1 prints every figure's drag handles at its opening state, one per
+    // line: <id>\t<actions: drag,click,scroll,label>\t<inline-edit key or ->\t<tip> (the parity probe reads it).
+    if vershion::env_var("VERSHION_FIGURE_HANDLES").as_deref() == Ok("1") {
+        for d in figures::registry() {
+            let p = figures::start_params(&d);
+            let size = figures::svg_size(&(d.render)(&p));
+            for h in d.handles(&p, size) {
+                let acts: Vec<&str> = [(h.drag.is_some(), "drag"), (h.click.is_some(), "click"), (h.scroll.is_some(), "scroll"), (h.label_drag, "label")]
+                    .into_iter()
+                    .filter_map(|(on, name)| on.then_some(name))
+                    .collect();
+                println!("{}\t{}\t{}\t{}", d.id, acts.join(","), h.edit.unwrap_or("-"), h.tip.replace(['\t', '\n'], " "));
+            }
+        }
+        return Ok(());
+    }
     // Headless one-shot: VERSHION_FIGURE_EVAL=<cases.json> [VERSHION_EVAL_REPEATS=3] [VERSHION_EVAL_ONLY=<name part>]
     // [VERSHION_EVAL_OUT=<report.json>] runs the figure agent's eval cases against the configured provider.
     #[cfg(not(target_arch = "wasm32"))]

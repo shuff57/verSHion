@@ -44,6 +44,10 @@ pub fn faq_for(id: &str) -> &'static [Faq] {
         "xylem-phloem" => XYLEM_PHLOEM,
         // chemistry
         "bohr-model" => BOHR_MODEL,
+        "nuclide-notation" => NUCLIDE_NOTATION,
+        "dot-and-cross" => DOT_AND_CROSS,
+        "half-life-graph" => HALF_LIFE_GRAPH,
+        "organic-structure" => ORGANIC_STRUCTURE,
         "gas-syringe" => GAS_SYRINGE,
         "heating-cooling-curve" => HEATING_COOLING_CURVE,
         "length-reading" => LENGTH_READING,
@@ -787,6 +791,98 @@ const CLADOGRAM: &[Faq] = &[
 ];
 
 // ----- chemistry -----
+
+const ORGANIC_STRUCTURE: &[Faq] = &[
+    Faq {
+        q: "What do the corners of a skeletal formula mean?",
+        a: "Every corner and line end is a carbon atom, and each carbon carries enough hydrogens to make four bonds. Only atoms other than carbon and hydrogen, such as the O of an alcohol, are written out.",
+    },
+    Faq {
+        q: "When should I use skeletal, condensed or full?",
+        a: "Full shows every carbon and hydrogen and suits a first lesson on bonding. Condensed writes the molecule as grouped formula text, such as CH₃CH₂OH. Skeletal is the quickest to read once students count hydrogens themselves.",
+    },
+    Faq {
+        q: "Why is the formula only in the answer key?",
+        a: "Naming or writing the formula of a drawn structure is a common question, so the molecular formula and relative formula mass appear only with Show answers on. Condensed mode always shows its formula text, because that text is the drawing.",
+    },
+    Faq {
+        q: "How is the relative mass worked out?",
+        a: "It adds standard atomic weights, C 12.011, H 1.008 and O 15.999, for each atom in the molecular formula and rounds to two decimal places.",
+    },
+    Faq {
+        q: "Why is benzene drawn with alternating double bonds?",
+        a: "The figure uses the Kekulé structure, with three double bonds around the ring, because it shows the atoms and bond count students are asked to count. The ring's bonds are actually all the same length; mention the delocalised model when you teach it.",
+    },
+];
+
+const HALF_LIFE_GRAPH: &[Faq] = &[
+    Faq {
+        q: "How do you find the half-life from the graph?",
+        a: "Read across from half the starting value to the curve, then down to the time axis. That time is one half-life; a quarter of the starting value gives two half-lives.",
+    },
+    Faq {
+        q: "Why does the curve never reach zero?",
+        a: "Each half-life removes half of what is left, so the amount keeps halving: 50%, 25%, 12.5% and so on. It gets arbitrarily small but is never exactly zero in the model.",
+    },
+    Faq {
+        q: "Where do the half-lives come from?",
+        a: "They are the textbook values, rounded from NuDat 3. Carbon-14 uses the textbook 5,730 years; NuDat 3 currently gives 5,700 ± 30 years.",
+    },
+    Faq {
+        q: "What does the dashed daughter curve show?",
+        a: "When the daughter is stable, every parent nucleus that decays becomes one daughter nucleus, so the daughter amount is N₀ − N. The parent and daughter curves add up to the starting amount at every time.",
+    },
+    Faq {
+        q: "Can several isotopes share one graph?",
+        a: "Yes, up to three. The time axis is fitted to the longest half-life, so a short-lived isotope falls almost vertically; hide the names to make an identify-the-curve question, and the answer key gives each half-life and decay constant.",
+    },
+];
+
+const DOT_AND_CROSS: &[Faq] = &[
+    Faq {
+        q: "Which electrons are dots and which are crosses?",
+        a: "One atom's electrons are drawn as dots and the other's as crosses, so a shared pair shows one of each. With lone pairs the shape of the mark only says which atom the electron came from.",
+    },
+    Faq {
+        q: "Why do the atoms' circles overlap?",
+        a: "A covalent bond is a shared pair, so the bonded atoms' outer shells overlap and the shared electrons sit in the overlap. Atoms that are not bonded, as in an ionic compound, are drawn apart.",
+    },
+    Faq {
+        q: "How are ionic compounds drawn?",
+        a: "Each ion is a full outer shell inside square brackets with its charge outside, for example [Na]⁺ and [Cl]⁻. When the formula needs more than one ion, a number in front of the bracket shows how many.",
+    },
+    Faq {
+        q: "Why is a hydrogen circle smaller?",
+        a: "Hydrogen has one shell, so there is no inner shell to fit around it; its single circle is drawn smaller than the second- and third-period atoms' outer circles.",
+    },
+    Faq {
+        q: "How do I make a worksheet from this?",
+        a: "Turn on “Leave the electrons for students”: the shells, symbols, brackets and charges stay, and every electron is removed. The answer key then gives each atom's outer electrons and lone pairs.",
+    },
+];
+
+const NUCLIDE_NOTATION: &[Faq] = &[
+    Faq {
+        q: "How do you write nuclide notation?",
+        a: "Put the mass number (protons plus neutrons) at the top left, the atomic number (protons) at the bottom left and the charge at the top right, so carbon-14 is ¹⁴₆C and a chloride ion is ³⁷₁₇Cl⁻.",
+    },
+    Faq {
+        q: "Why is the atomic number sometimes left off?",
+        a: "For a named element the symbol already fixes it, so ¹⁴C is common. Leaving the position off removes it; leaving it blank gives students a box to fill in.",
+    },
+    Faq {
+        q: "How do you find the electrons in an ion?",
+        a: "Start with the atomic number and subtract the charge. A 2− ion has gained two electrons, a 2+ ion has lost two; for example Mg²⁺ has 12 − 2 = 10 electrons.",
+    },
+    Faq {
+        q: "Can the mass number be below the atomic number?",
+        a: "No. A nuclide must have at least as many neutrons as the difference allows, so a mass number below the atomic number is refused and the element's usual mass number is drawn instead.",
+    },
+    Faq {
+        q: "Which particles can be written this way?",
+        a: "An alpha particle is ⁴₂He, a beta particle is ⁰₋₁e (or β), a neutron is ¹₀n, a proton is ¹₁p and a gamma ray has no mass or charge numbers at all.",
+    },
+];
 
 const BOHR_MODEL: &[Faq] = &[
     Faq {

@@ -80,6 +80,8 @@ depreciation-schedule__defaults 8418f5e4d808335c
 depreciation-schedule__start 8418f5e4d808335c
 discrete-distribution__defaults 767041fc6b5f1a4e
 discrete-distribution__start 767041fc6b5f1a4e
+dot-and-cross__defaults 7bdac9ed37d40a62
+dot-and-cross__start 7bdac9ed37d40a62
 dot-plot__defaults bf00470ec7dd43be
 dot-plot__start bf00470ec7dd43be
 earth-cycles__defaults c9f850b2236a77fd
@@ -134,6 +136,8 @@ grid-reference__defaults bd20f29bc53724a1
 grid-reference__start bd20f29bc53724a1
 guitar-chords__defaults 22c54dd2251e9f0a
 guitar-chords__start 22c54dd2251e9f0a
+half-life-graph__defaults 9c9976e10048ebf3
+half-life-graph__start 9c9976e10048ebf3
 hardy-weinberg__defaults 8a0fa9de9bc077a8
 hardy-weinberg__start 8a0fa9de9bc077a8
 heart-zones__defaults 1ffedb1752ddeafe
@@ -196,6 +200,8 @@ network-topology__defaults 4558fdec4c6b2d2e
 network-topology__start 4558fdec4c6b2d2e
 normal-curve__defaults a3e5818ffabc6901
 normal-curve__start a3e5818ffabc6901
+nuclide-notation__defaults 628f1ac8895987e8
+nuclide-notation__start 628f1ac8895987e8
 number-base__defaults 54e82b76636d4034
 number-base__start 54e82b76636d4034
 number-line__defaults 3678255fb61cf882
@@ -206,6 +212,8 @@ orbital-diagram__defaults 8439d61feda6e634
 orbital-diagram__start 70919ef4dfb406ac
 org-chart__defaults 9958472c3f8301ad
 org-chart__start 9958472c3f8301ad
+organic-structure__defaults b391be1cd7ec0d71
+organic-structure__start b391be1cd7ec0d71
 organiser__defaults 6b3f7af23e19f518
 organiser__start 6b3f7af23e19f518
 orthographic__defaults 2e5c4e5b0567f519
