@@ -144,37 +144,25 @@ impl crate::App {
     }
 }
 
-/// The last two words held together, so a wrap never leaves one word alone on the last line.
-fn no_widow(body: &str) -> String {
-    match body.rsplit_once(' ') {
-        Some((head, last)) => format!("{head}{}{last}", '\u{a0}'),
-        None => body.to_string(),
-    }
-}
-
-/// What an account adds, inside the account card in Settings under a hairline: three frameless
-/// columns when the card is wide enough, else the same three stacked. As a row of bordered, rounded
+/// What an account adds, inside the account card in Settings under a hairline: three two-line items
+/// (icon, label, short description under it), or a one-line stacked list when narrow. As a row of bordered, rounded
 /// cards of their own they read as three clickable tiles that did nothing, and pushed the page's real
 /// actions down.
 pub(crate) fn account_reasons_inline(ui: &mut Ui) {
     use egui_phosphor::regular as ph;
+    // Short one-line copy, shared by both layouts (well under 70 characters a line).
     let perks = [
-        (crate::handicons::SHARED, "Share banks", "Send banks to a circle of colleagues, or publish them to the public pool."),
-        (ph::MAGNIFYING_GLASS, "Browse the pool", "Find questions other teachers have published and copy them into your banks."),
-        (crate::handicons::SPARKLE, "Hosted AI", "Convert a PDF, scan or photo into questions with credits, nothing to set up."),
+        (crate::handicons::SHARED, "Share banks", "Send banks to colleagues or the public pool."),
+        (ph::MAGNIFYING_GLASS, "Browse the pool", "Copy questions other teachers have published."),
+        (crate::handicons::SPARKLE, "Hosted AI", "Turn a PDF, scan or photo into questions."),
     ];
     crate::kit::small_caps(ui, "What an account adds");
-    ui.add_space(if ui.ctx().content_rect().width() < 900.0 { 10.0 } else { 14.0 });
+    ui.add_space(if ui.ctx().content_rect().width() < 900.0 { 10.0 } else { 12.0 });
     // A narrow window: a short stacked list, one line per benefit, the bold heading in a fixed slot and
     // a one-line description beside it. Three columns at this width wrapped each description into a
     // dense block of three or four lines.
     if ui.ctx().content_rect().width() < 900.0 {
-        let short = [
-            "Send banks to colleagues or the public pool.",
-            "Copy questions other teachers have published.",
-            "Turn a PDF, scan or photo into questions.",
-        ];
-        for (i, ((_icon, head, _body), body)) in perks.into_iter().zip(short).enumerate() {
+        for (i, (_icon, head, body)) in perks.into_iter().enumerate() {
             if i > 0 {
                 ui.add_space(6.0);
             }
@@ -192,23 +180,24 @@ pub(crate) fn account_reasons_inline(ui: &mut Ui) {
         }
         return;
     }
-    // Compact supporting rows leave room for the local backup panel and page footer.
+    // Two-line items: the icon disc, then the bold label with its short description directly under it.
+    // With the description in a column of its own far to the right, the eye jumped across the card
+    // from each label to a line running its whole width.
+    // About the old single-line rows' height in all, so the backup panel and the page footer keep their room.
     for (i, (icon, head, body)) in perks.into_iter().enumerate() {
         if i > 0 {
-            ui.add_space(8.0);
+            ui.add_space(4.0);
         }
         ui.horizontal_top(|ui| {
-            ui.spacing_mut().item_spacing.x = 14.0;
-            let (r, _) = ui.allocate_exact_size(egui::Vec2::splat(34.0), egui::Sense::hover());
-            ui.painter().circle_filled(r.center(), 17.0, theme::accent_faded());
-            crate::handicons::paint_glyph(ui.painter(), r.center(), icon, 17.0, theme::accent_col());
-            // Flush left in its slot, as the narrow columns' headings are (centred, the three titles
-            // each started at a different x).
-            ui.allocate_ui_with_layout(egui::vec2(130.0, 34.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                ui.set_min_size(egui::vec2(130.0, 34.0));
+            ui.spacing_mut().item_spacing.x = 12.0;
+            let (r, _) = ui.allocate_exact_size(egui::Vec2::splat(32.0), egui::Sense::hover());
+            ui.painter().circle_filled(r.center(), 16.0, theme::accent_faded());
+            crate::handicons::paint_glyph(ui.painter(), r.center(), icon, 16.0, theme::accent_col());
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 1.0;
                 ui.label(theme::strong(head).size(14.0));
+                ui.add(egui::Label::new(egui::RichText::new(body).size(13.5).color(theme::ink().gamma_multiply(0.72))).wrap());
             });
-            ui.add(egui::Label::new(egui::RichText::new(no_widow(body)).size(14.0).color(theme::ink().gamma_multiply(0.8))).wrap());
         });
     }
 }

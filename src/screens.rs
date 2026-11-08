@@ -761,7 +761,6 @@ impl crate::App {
     // ---------- welcome ----------
 
     pub fn draw_welcome(&mut self, ctx: &egui::Context) {
-        const FOOT_GAP: f32 = 24.0;
         let fresh = self.store.banks.is_empty() && self.store.exams.is_empty();
         shell_frame(self, ctx, false, |app, ui| {
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
@@ -779,9 +778,9 @@ impl crate::App {
                 let lead = if !fresh {
                     70.0
                 } else if let Some(h) = block_h {
-                    // Centre hero, steps and footer as one block (the footer sits FOOT_GAP under
-                    // the steps instead of floating at the window's bottom edge).
-                    ((view_h - h - 40.0 - FOOT_GAP) * 0.5).clamp(24.0, 220.0)
+                    // Centre hero and steps as one block. The desktop build is offered under the
+                    // hero's button now, so no footer row follows.
+                    ((view_h - h) * 0.5).clamp(24.0, 220.0)
                 } else {
                     (view_h * 0.10).clamp(24.0, 88.0)
                 };
@@ -830,6 +829,21 @@ impl crate::App {
                         .size(13.5)
                         .color(theme::ink().gamma_multiply(0.8)),
                     );
+                    // The installed build is offered here, where a teacher decides how to start: a quiet
+                    // text link under the note, clearly weaker than the button. As an outlined button
+                    // beside the hero's it competed with it; alone in a footer under the steps it read
+                    // as an afterthought, far from the decision.
+                    ui.add_space(2.0);
+                    let icon = RichText::new(egui_phosphor::regular::DOWNLOAD_SIMPLE).font(theme::icon_font(14.0)).color(theme::accent_col());
+                    let link = egui::Button::new((icon, theme::accent("or get the desktop app for Linux").size(13.5))).frame(false);
+                    let resp = ui.add(link).on_hover_cursor(egui::CursorIcon::PointingHand);
+                    if resp.hovered() {
+                        let r = resp.rect.shrink2(Vec2::new(4.0, 3.0));
+                        ui.painter().hline(r.left() + 20.0..=r.right(), r.bottom(), Stroke::new(1.0, theme::accent_col()));
+                    }
+                    if resp.clicked() {
+                        crate::platform::open_url(DESKTOP_RELEASES);
+                    }
                     ui.add_space(8.0);
                 });
 
@@ -904,69 +918,6 @@ impl crate::App {
                 if block_h.is_none_or(|h| (h - measured).abs() > 0.5) {
                     ui.ctx().data_mut(|d| d.insert_temp(content_id, measured));
                     ui.ctx().request_repaint();
-                }
-                // The page is shorter than the window: a quiet footer holds the bottom instead of
-                // leaving a third of the screen as empty grid.
-                let rest = ui.available_height();
-                if rest > if narrow_page { 66.0 } else { 90.0 } {
-                    // The footer (the note and the desktop button) needs about 64 px. It sits
-                    // a fixed gap under the steps: pinned to the window's bottom edge they floated loose
-                    // under a band of empty grid.
-                    ui.add_space((rest - 40.0).clamp(0.0, if narrow_page { 18.0 } else { FOOT_GAP }));
-                    // A hairline the width of the steps above the footer row: the row is the page's
-                    // footer, not a line and a button left floating under the panel.
-                    {
-                        let w = ui.available_width().min(if narrow_page { 640.0 } else { STEPS_W });
-                        let x0 = ui.max_rect().center().x - w / 2.0;
-                        let (rule, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 1.0), egui::Sense::hover());
-                        ui.painter().hline(x0..=x0 + w, rule.center().y, Stroke::new(1.0, theme::border()));
-                        ui.add_space(14.0);
-                    }
-                    // One centred row: the note, then the desktop build as a small second action beside
-                    // it. On a line of its own under the note the button floated in a band by itself.
-                    // The footer says how the desktop build relates to the hero's button: the same app,
-                    // installed, for a teacher who prefers one. As "your work stays on this machine"
-                    // beside "get the desktop app" it read as a second, unrelated way in.
-                    let lead = "Prefer an installed app?";
-                    let note = "The same verSHion, installed on your computer.";
-                    let label = "Desktop app for Linux";
-                    // The second way in: an outlined button in ink, regular weight. Cream on cream it all
-                    // but disappeared, green outlined it competed with the hero's call to action, and as
-                    // bare text it did not read as clickable.
-                    let desktop_button = |ui: &mut egui::Ui| {
-                        // A small outlined button with a download icon: as a bare link it read as a
-                        // footnote; beside the now larger hero button it no longer competes.
-                        let t = RichText::new(label).size(13.5).color(theme::ink());
-                        let icon = RichText::new(egui_phosphor::regular::FILE_ARROW_DOWN).font(theme::icon_font(16.0)).color(theme::accent_col());
-                        let b = egui::Button::new((icon, t))
-                            .fill(theme::card())
-                            .stroke(Stroke::new(1.0, theme::border()))
-                            .corner_radius(CornerRadius::same(10))
-                            .min_size(Vec2::new(0.0, 34.0));
-                        if ui.add(b).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
-                            crate::platform::open_url(DESKTOP_RELEASES);
-                        }
-                    };
-                    // A footer bar on the steps panel's own edges: the note flush left, the button
-                    // flush right. As a centred pair it read as an off-centre cluster, and as a lone
-                    // button under the rule it read as an afterthought.
-                    let w = ui.available_width().min(if narrow_page { 640.0 } else { STEPS_W });
-                    let x0 = ui.max_rect().center().x - w / 2.0;
-                    let row = egui::Rect::from_min_size(egui::pos2(x0, ui.cursor().top()), Vec2::new(w, 36.0));
-                    let short = if narrow_page { "Same app, installed." } else { note };
-                    let button_w = 200.0;
-                    let note_rect = egui::Rect::from_min_max(row.min, egui::pos2(row.right() - button_w - 16.0, row.bottom()));
-                    ui.scope_builder(UiBuilder::new().max_rect(note_rect).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
-                        ui.set_min_height(row.height());
-                        ui.spacing_mut().item_spacing.x = 5.0;
-                        ui.label(theme::strong(lead).size(13.0).color(theme::ink().gamma_multiply(0.9)));
-                        ui.label(RichText::new(short).size(13.0).color(theme::ink().gamma_multiply(0.78)));
-                    });
-                    let button_rect = egui::Rect::from_min_max(egui::pos2(row.right() - button_w, row.top()), row.max);
-                    ui.scope_builder(UiBuilder::new().max_rect(button_rect).layout(egui::Layout::right_to_left(egui::Align::Center)), |ui| {
-                        ui.set_min_height(row.height());
-                        desktop_button(ui);
-                    });
                 }
             });
         });
