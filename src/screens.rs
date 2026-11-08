@@ -306,6 +306,57 @@ const STEPS_W: f32 = 1000.0;
 
 /// One numbered how-it-works card.
 /// One step as a column of the welcome panel: the numbered disc, the title, the body.
+/// A patch of `fill` over `core` whose edge fades to nothing across `feather` (x and y apart), so
+/// what is under it calms behind the patch without a visible edge, border or shadow. The core is a
+/// rounded rectangle; the fade follows its outline outwards on a smoothstep.
+fn soft_backing(core: Rect, feather: Vec2, fill: Color32) -> egui::Shape {
+    use std::f32::consts::FRAC_PI_2;
+    const ARC: usize = 10;
+    const RINGS: usize = 10;
+    let r = (core.height() / 2.0).min(core.width() / 2.0).min(64.0);
+    let inner = core.shrink(r);
+    // The outline: four quarter arcs, each point with its outward normal.
+    let corners = [
+        (Pos2::new(inner.right(), inner.bottom()), 0.0),
+        (Pos2::new(inner.left(), inner.bottom()), FRAC_PI_2),
+        (Pos2::new(inner.left(), inner.top()), 2.0 * FRAC_PI_2),
+        (Pos2::new(inner.right(), inner.top()), 3.0 * FRAC_PI_2),
+    ];
+    let mut outline = Vec::with_capacity(4 * (ARC + 1));
+    for (c, a0) in corners {
+        for k in 0..=ARC {
+            let a = a0 + FRAC_PI_2 * k as f32 / ARC as f32;
+            let n = Vec2::new(a.cos(), a.sin());
+            outline.push((c + n * r, n));
+        }
+    }
+    let n = outline.len() as u32;
+    let mut mesh = egui::Mesh::default();
+    mesh.colored_vertex(core.center(), fill);
+    for ring in 0..=RINGS {
+        let t = ring as f32 / RINGS as f32;
+        let a = 1.0 - t * t * (3.0 - 2.0 * t);
+        let col = fill.gamma_multiply(a);
+        for (p, nrm) in &outline {
+            mesh.colored_vertex(*p + Vec2::new(nrm.x * feather.x, nrm.y * feather.y) * t, col);
+        }
+    }
+    // The core as a fan from the centre, then each ring stitched to the next.
+    for i in 0..n {
+        mesh.add_triangle(0, 1 + i, 1 + (i + 1) % n);
+    }
+    for ring in 0..RINGS as u32 {
+        let a = 1 + ring * n;
+        let b = a + n;
+        for i in 0..n {
+            let j = (i + 1) % n;
+            mesh.add_triangle(a + i, b + i, b + j);
+            mesh.add_triangle(a + i, b + j, a + j);
+        }
+    }
+    egui::Shape::mesh(mesh)
+}
+
 pub fn step_cell(ui: &mut egui::Ui, i: usize, big: bool) {
     let Some((title, body)) = STEPS.get(i) else { return };
     // Left-aligned rows (a `columns` cell is justified, which stretched the copy).
@@ -751,6 +802,7 @@ impl crate::App {
     pub fn draw_welcome(&mut self, ctx: &egui::Context) {
         let fresh = self.store.banks.is_empty() && self.store.exams.is_empty();
         shell_frame(self, ctx, false, |app, ui| {
+            let desk = ui.max_rect();
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
                 // Hero and steps sit as one block near the top. The block's height is last frame's
                 // measure; it decides how much of the spare height opens the gap before the steps.
@@ -779,10 +831,19 @@ impl crate::App {
                     _ => 0.0,
                 };
                 let block_top = ui.cursor().top() + lead;
+                // The grid fades out behind the hero: a slot under the hero's text, filled once the
+                // text is placed. Grid lines running through the lead and the small print competed
+                // with their letterforms (the critics' words).
+                let backing = ui.painter().add(egui::Shape::Noop);
+                let mut hero = Rect::NOTHING;
                 ui.vertical_centered(|ui| {
                     ui.add_space(lead);
-                    ui.label(theme::serif("Turn anything into an exam.").size(if roomy { 50.0 } else { 40.0 }));
+                    hero |= ui.label(theme::serif("Turn anything into an exam.").size(if roomy { 50.0 } else { 40.0 })).rect;
                     ui.add_space(if roomy { 16.0 } else { 12.0 });
+                    // The lead's column, as `prose_centered_ink` sizes it.
+                    let lead_w = ui.available_width().min(if roomy { 620.0 } else { 560.0 });
+                    let mid = ui.max_rect().center().x;
+                    hero |= Rect::from_x_y_ranges(mid - lead_w / 2.0..=mid + lead_w / 2.0, hero.top()..=hero.bottom());
                     // Narrower than the step column below it at every width (the critics read a lead
                     // running wider than the cards as a page with no single column edge), and about
                     // 80 characters a line.
@@ -838,10 +899,18 @@ impl crate::App {
                     let text = theme::accent("Prefer to install? Get the desktop app for Linux").size(size).underline();
                     let link = egui::Button::new((icon, text)).frame(false);
                     let resp = ui.add(link).on_hover_cursor(egui::CursorIcon::PointingHand);
+                    hero |= resp.rect;
                     if resp.clicked() {
                         crate::platform::open_url(DESKTOP_RELEASES);
                     }
                 });
+                if !theme::chem_skin() && hero.is_positive() {
+                    let mut painter = ui.painter().clone();
+                    painter.set_clip_rect(desk);
+                    let feather = if roomy { Vec2::new(150.0, 54.0) } else { Vec2::new(56.0, 34.0) };
+                    let core = hero.expand2(if roomy { Vec2::new(16.0, 10.0) } else { Vec2::new(8.0, 8.0) });
+                    painter.set(backing, soft_backing(core, feather, theme::cream()));
+                }
 
                 // Hero and steps are one block: a wide band between the install link and "How it
                 // works" left the steps detached and pushed down. A section break a little larger
