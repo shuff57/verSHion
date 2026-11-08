@@ -602,7 +602,7 @@ pub fn remove_kind(p: &mut Params, defs: &[ParamDef], i: usize) {
 fn atom_radius(sz: &str) -> f64 { match sz { "XS" => 6.0, "S" => 10.0, "M" => 15.0, "L" => 20.0, _ => 26.0 } }
 
 /// One particle kind: centre atom + outer atoms.
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 struct Species { shape: String, r: f64, fill: &'static str, ch: String, ro: f64, fillo: &'static str, cho: String }
 
 fn species(p: &Params, k: &str) -> Species {
@@ -658,6 +658,45 @@ fn draw_mol(d: &mut Doc, sp: &Species, x: f64, y: f64, rot: f64) {
     atom(d, px, py, sp.r, sp.fill, &sp.ch);
 }
 
+/// Which kind (index into `counts`) sits in each of the first `sum(counts)` cells of a `rows` x `cols`
+/// lattice read row by row, or None when the plain checkerboard order is right: equal counts, or two
+/// kinds that between them fill the two parity classes (ionic solid). Otherwise the most numerous kind
+/// fills the grid and every other kind is spread by farthest-point choice (a substitutional alloy:
+/// the minority atoms are not clumped together, and the result does not depend on a random seed).
+fn spread_kinds(counts: &[usize], rows: usize, cols: usize) -> Option<Vec<usize>> {
+    let n: usize = counts.iter().sum();
+    if counts.len() < 2 || n == 0 || counts.iter().all(|&c| c == counts[0]) { return None; }
+    if counts.len() == 2 && counts.iter().min().copied().unwrap_or(0) + 1 >= n / 2 { return None; }
+    let major = (0..counts.len()).rev().max_by_key(|&k| counts[k]).unwrap_or(0);
+    let pos = |i: usize| ((i / cols) as i64, (i % cols) as i64);
+    let d2 = |a: usize, b: usize| { let (p, q) = (pos(a), pos(b)); (p.0 - q.0).pow(2) + (p.1 - q.1).pow(2) };
+    let mut kind: Vec<Option<usize>> = vec![None; n];
+    let mut placed: Vec<usize> = Vec::new();
+    let mut order: Vec<usize> = (0..counts.len()).filter(|&k| k != major).collect();
+    order.sort_by_key(|&k| (counts[k], k));
+    let _ = rows;
+    for k in order {
+        for _ in 0..counts[k] {
+            let free = (0..n).filter(|&i| kind[i].is_none());
+            let pick = if placed.is_empty() {
+                // the first one sits a third of the way in, so the rest have room on every side
+                let (tr, tc) = ((rows as f64 - 1.0) / 3.0, (cols as f64 - 1.0) / 3.0);
+                free.min_by(|&a, &b| {
+                    let da = (pos(a).0 as f64 - tr).powi(2) + (pos(a).1 as f64 - tc).powi(2);
+                    let db = (pos(b).0 as f64 - tr).powi(2) + (pos(b).1 as f64 - tc).powi(2);
+                    da.total_cmp(&db)
+                })
+            } else {
+                free.max_by_key(|&i| (placed.iter().map(|&q| d2(i, q)).min().unwrap_or(0), std::cmp::Reverse(i)))
+            };
+            let Some(i) = pick else { break };
+            kind[i] = Some(k);
+            placed.push(i);
+        }
+    }
+    Some(kind.into_iter().map(|k| k.unwrap_or(major)).collect())
+}
+
 fn fill_box(d: &mut Doc, bx: f64, by: f64, bs: f64, state: &str, layout_lattice: bool, gaps: bool, items: &[Species], seed: u64, border: &str) {
     match border {
         "None" => {}
@@ -680,9 +719,16 @@ fn fill_box(d: &mut Doc, bx: f64, by: f64, bs: f64, state: &str, layout_lattice:
         let gy = by + (bs - step * rows as f64) / 2.0 + step / 2.0;
         // alternate the kinds over the grid (checkerboard for two kinds)
         let mut cells: Vec<(usize, usize)> = (0..rows).flat_map(|r| (0..cols).map(move |c| (r, c))).take(n).collect();
-        cells.sort_by_key(|&(r, c)| ((r + c) % 2, r, c));
+        // the kinds are runs of equal particles; unequal counts spread the scarcer kinds through the grid
+        let mut runs: Vec<(usize, usize)> = Vec::new(); // (first item, count)
+        for (i, it) in items.iter().enumerate() {
+            match runs.last_mut() { Some(r) if items[r.0] == *it => r.1 += 1, _ => runs.push((i, 1)) }
+        }
+        let counts: Vec<usize> = runs.iter().map(|r| r.1).collect();
+        let spread = spread_kinds(&counts, rows, cols);
+        if spread.is_none() { cells.sort_by_key(|&(r, c)| ((r + c) % 2, r, c)); }
         for (k, (r, c)) in cells.iter().enumerate() {
-            let sp = &items[k.min(n - 1)];
+            let sp = &items[match &spread { Some(kinds) => runs[kinds[k]].0, None => k.min(n - 1) }];
             let scale = (step / 2.0 / bound(sp)).min(1.0);
             let mut s2 = sp.clone();
             s2.r *= scale;
@@ -959,4 +1005,53 @@ pub(super) fn examples(id: &str) -> Option<Vec<Example>> {
         ],
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod lattice_tests {
+    use super::*;
+
+    /// 14 of A and 2 of B used to fill the grid in order, so both B sat together at the end; now
+    /// they are separated, away from the last cells, and deterministic.
+    #[test]
+    fn minority_is_spread_through_the_lattice() {
+        let k = spread_kinds(&[14, 2], 4, 4).expect("unequal counts are spread");
+        assert_eq!(k.iter().filter(|&&x| x == 1).count(), 2);
+        let b: Vec<usize> = (0..16).filter(|&i| k[i] == 1).collect();
+        let (p, q) = ((b[0] / 4, b[0] % 4), (b[1] / 4, b[1] % 4));
+        assert!(p.0.abs_diff(q.0) + p.1.abs_diff(q.1) >= 3, "minority cells {b:?} sit together");
+        assert!(b != vec![14, 15], "both minority cells left together at the end");
+        assert_eq!(k, spread_kinds(&[14, 2], 4, 4).unwrap());
+    }
+
+    /// Equal counts, or two kinds that fill the two checkerboard classes, keep the alternating order.
+    #[test]
+    fn equal_counts_keep_the_checkerboard() {
+        assert!(spread_kinds(&[8, 8], 4, 4).is_none());
+        assert!(spread_kinds(&[12, 12], 5, 5).is_none());
+        assert!(spread_kinds(&[8, 7], 4, 4).is_none());
+        assert!(spread_kinds(&[16], 4, 4).is_none());
+        assert!(spread_kinds(&[12, 4], 4, 4).is_some());
+    }
+
+    /// Through the renderer: with 14 light and 2 dark particles the dark ones are not neighbours.
+    #[test]
+    fn unequal_lattice_renders_with_both_kinds_apart() {
+        let mut p = Params::defaults(&particle_params());
+        p.set_s("layout", "Lattice");
+        p.set_s("state", "Solid");
+        p.set_s("a_shade", "Light gray");
+        p.set_s("b_shade", "Dark gray");
+        p.set_s("a_shape", "Alone");
+        p.0.insert("a_count".into(), crate::figures::Value::I(14));
+        p.0.insert("b_count".into(), crate::figures::Value::I(2));
+        let svg = particle_render(&p);
+        let num = |t: &str, k: &str| -> f64 { let i = t.find(&format!("{k}=\"")).unwrap() + k.len() + 2; t[i..].split('"').next().unwrap().parse().unwrap() };
+        let all: Vec<(f64, f64, bool)> = svg.split("<circle ").skip(1).map(|t| (num(t, "cx"), num(t, "cy"), t.contains(&format!("fill=\"{}\"", shade("Dark gray"))))).collect();
+        let dark: Vec<&(f64, f64, bool)> = all.iter().filter(|c| c.2).collect();
+        assert_eq!(dark.len(), 2, "two dark particles");
+        let dist = |a: &(f64, f64, bool), b: &(f64, f64, bool)| ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt();
+        let pitch = all.iter().enumerate().flat_map(|(i, a)| all.iter().skip(i + 1).map(move |b| dist(a, b))).fold(f64::MAX, f64::min);
+        assert!(dist(dark[0], dark[1]) > 2.5 * pitch, "dark particles sit together: {} vs pitch {}", dist(dark[0], dark[1]), pitch);
+    }
 }
