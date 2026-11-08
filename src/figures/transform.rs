@@ -632,9 +632,47 @@ pub fn handles(p: &Params) -> Vec<Handle> {
             }
         }));
     }
+    // a click on the grid: while the pre-image is being built (nothing typed yet, or an open shape with room for
+    // more) it adds the next vertex at the grid point clicked, the way the reference builds one; once the shape is
+    // closed, on a translation's answer key, it moves A' to the grid point clicked and the image with it
+    let building = lay.pre.is_empty() || (!p.b("closed") && lay.pre.len() < MAX_V);
+    let translating = !building && p.s("op") == "Translate" && p.b(SHOW_ANSWERS);
+    let grid_mid = (fr.px((fr.x0 + fr.x1) / 2.0), fr.py((fr.y0 + fr.y1) / 2.0));
+    let grid_size = (fr.gw(), fr.gh());
+    let point_at = move |m: Pt| {
+        let (mx, my) = fr.to_xy(m);
+        (mx.is_finite() && my.is_finite()).then(|| (mx.round().clamp(lx0, lx1), my.round().clamp(ly0, ly1)))
+    };
+    if building {
+        let tip = if lay.pre.is_empty() { "Click a grid point to start the pre-image" } else { "Click a grid point to add the next vertex" };
+        hs.push(Handle::area(grid_mid, grid_size, tip, move |p, m| {
+            let Some(q) = point_at(m) else { return };
+            let mut v = vertices(p);
+            if v.len() >= MAX_V || v.last() == Some(&q) { return; }
+            // a new pre-image is built open; clicking its first vertex again closes it
+            if v.is_empty() { p.set_b("closed", false); }
+            v.push(q);
+            p.set_s("pre", &data::pairs_text(&v));
+        }));
+    } else if translating {
+        hs.push(Handle::area(grid_mid, grid_size, "Click where A\u{2032} should go to set the translation", move |p, m| {
+            let Some(q) = point_at(m) else { return };
+            let Some(&a) = vertices(p).first() else { return };
+            p.set_f("dx", (q.0 - a.0).clamp(-8.0, 8.0));
+            p.set_f("dy", (q.1 - a.1).clamp(-8.0, 8.0));
+        }));
+    }
     if p.b("show_pre") {
+        let n = lay.pre.len();
         for (i, q) in lay.pre.iter().enumerate() {
-            hs.push(Handle::knob(fr.to_svg(*q), &format!("Drag vertex {} to a grid point", NAMES[i]), move |p, m| {
+            // the first vertex of three or more also closes (or opens) the shape when clicked, as in the reference
+            let closes = i == 0 && n >= 3;
+            let tip = if closes {
+                format!("Drag vertex {} to a grid point, or click it to {} the shape", NAMES[i], if p.b("closed") { "open" } else { "close" })
+            } else {
+                format!("Drag vertex {} to a grid point", NAMES[i])
+            };
+            let h = Handle::knob(fr.to_svg(*q), &tip, move |p, m| {
                 let (mx, my) = fr.to_xy(m);
                 let mut v = vertices(p);
                 let Some(cur) = v.get(i).copied() else { return };
@@ -643,7 +681,8 @@ pub fn handles(p: &Params) -> Vec<Handle> {
                     v[i] = to;
                     p.set_s("pre", &data::pairs_text(&v));
                 }
-            }));
+            });
+            hs.push(if closes { h.with_click(|p| { let c = p.b("closed"); p.set_b("closed", !c); }) } else { h });
         }
     }
     hs
@@ -902,7 +941,7 @@ mod tests {
                     let p = with(&l);
                     for h in handles(&p) {
                         seen.insert(h.tip.clone());
-                        let f = h.drag.as_ref().unwrap();
+                        let Some(f) = h.drag.as_ref() else { continue };
                         let mut q = p.clone();
                         f(&mut q, h.pos);
                         q.normalize(&defs, true);
@@ -920,7 +959,7 @@ mod tests {
                 }
             }
         }
-        for tip in ["Drag vertex A to a grid point", "Drag the centre of rotation", "Drag the centre of enlargement", "Drag the mirror line", "Drag A\u{2032} to set the translation"] {
+        for tip in ["Drag vertex A to a grid point, or click it to open the shape", "Drag the centre of rotation", "Drag the centre of enlargement", "Drag the mirror line", "Drag A\u{2032} to set the translation"] {
             assert!(seen.contains(tip), "no {tip:?} handle: {seen:?}");
         }
     }
@@ -962,6 +1001,56 @@ mod tests {
         // only a translation, and only on the key (the student copy has no image to drag)
         assert!(!handles(&with(&[b(SHOW_ANSWERS, false)])).iter().any(|h| h.tip.contains("translation")));
         assert!(!handles(&with(&[s("op", "Rotate")])).iter().any(|h| h.tip.contains("translation")));
+    }
+
+    /// The grid click, as the workspace makes it: the area's click_at with the pointer in SVG units.
+    fn click_grid(p: &mut Params, at: Pt) -> String {
+        let hs = handles(p);
+        let h = hs.iter().find(|h| h.click_at.is_some()).expect("a clickable grid");
+        let fr = layout(p).frame;
+        let tip = h.tip.clone();
+        (h.click_at.as_ref().unwrap())(p, fr.to_svg(at));
+        tip
+    }
+
+    #[test]
+    fn clicking_grid_points_builds_the_pre_image_and_clicking_a_closes_it() {
+        // the triangle the reference task asks for: cleared, then A(1, 1), B(4, 1), C(1, 3) clicked, then A again
+        let mut p = with(&[s("pre", "")]);
+        assert_eq!(click_grid(&mut p, (1.1, 0.8)), "Click a grid point to start the pre-image");
+        assert!(!p.b("closed"), "a new pre-image starts open");
+        assert_eq!(click_grid(&mut p, (3.8, 1.2)), "Click a grid point to add the next vertex");
+        click_grid(&mut p, (1.0, 3.3));
+        assert_eq!(vertices(&p), vec![(1.0, 1.0), (4.0, 1.0), (1.0, 3.0)]);
+        // a second click on the same point adds nothing
+        click_grid(&mut p, (1.0, 3.0));
+        assert_eq!(vertices(&p).len(), 3);
+        // open: two sides, no closing side
+        let svg = build(&p).0;
+        assert_eq!(svg.split("<polyline points=\"").nth(1).unwrap().split('"').next().unwrap().split(' ').count(), 3);
+        // clicking A closes it
+        let a = handles(&p).into_iter().find(|h| h.tip.starts_with("Drag vertex A")).unwrap();
+        assert!(a.tip.ends_with("click it to close the shape"), "{}", a.tip);
+        (a.click.as_ref().unwrap())(&mut p);
+        assert!(p.b("closed"));
+        // closed and translated: the grid click no longer adds, it sets the translation
+        assert_eq!(click_grid(&mut p, (-3.0, 4.0)), "Click where A\u{2032} should go to set the translation");
+        assert_eq!(vertices(&p).len(), 3);
+        assert_eq!((p.f("dx"), p.f("dy")), (-4.0, 3.0));
+        assert_eq!(build(&p).1.image[0], (-3.0, 4.0));
+        // a closed shape under a turn has no grid click at all; ten vertices is the most
+        assert!(!handles(&with(&[s("op", "Rotate")])).iter().any(|h| h.click_at.is_some()));
+        let mut p = with(&[s("pre", ""), s("op", "Rotate")]);
+        for k in 0..12 { click_grid_if_any(&mut p, (k as f64 - 6.0, 2.0)); }
+        assert_eq!(vertices(&p).len(), MAX_V);
+        // a click far off the grid lands on the edge of the range
+        let mut p = with(&[s("pre", "")]);
+        click_grid(&mut p, (40.0, -40.0));
+        assert_eq!(vertices(&p), vec![(10.0, -10.0)]);
+    }
+
+    fn click_grid_if_any(p: &mut Params, at: Pt) {
+        if handles(p).iter().any(|h| h.click_at.is_some()) { click_grid(p, at); }
     }
 
     #[test]

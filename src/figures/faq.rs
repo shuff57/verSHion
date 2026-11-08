@@ -3801,11 +3801,11 @@ const TRANSFORMATIONS: &[Faq] = &[
     },
     Faq {
         q: "Can I move the pre-image?",
-        a: "Yes. Drag any of its vertices on the grid: it snaps to the nearest grid point and the image follows as you drag. Or type the vertices, one x, y pair per line: one pair is a point, more make a polygon of up to ten vertices, or an open path with Join the last vertex to the first turned off.",
+        a: "Yes. Drag any of its vertices on the grid: it snaps to the nearest grid point and the image follows as you drag. To draw a new one, clear the vertex list and click grid points on the figure one after another; click the first vertex again to close the shape. Or type the vertices, one x, y pair per line: one pair is a point, more make a polygon of up to ten vertices, or an open path with Join the last vertex to the first turned off.",
     },
     Faq {
         q: "Can I move the centre or the mirror line?",
-        a: "Yes, on the figure: drag the ring that marks the centre of a turn or an enlargement, or the knob on a mirror line x = a, y = a, y = x + a or y = -x + a. Each snaps to the grid, and the image and the rule follow. Or type them: the centre's x and y, the line's number a. A translation is set the same way: on the answer key, drag A' to where it should go and the whole image follows.",
+        a: "Yes, on the figure: drag the ring that marks the centre of a turn or an enlargement, or the knob on a mirror line x = a, y = a, y = x + a or y = -x + a. Each snaps to the grid, and the image and the rule follow. Or type them: the centre's x and y, the line's number a. A translation is set the same way: on the answer key, drag A' to where it should go, or click that grid point, and the whole image follows.",
     },
     Faq {
         q: "How big is the grid?",
