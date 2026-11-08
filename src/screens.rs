@@ -804,8 +804,10 @@ impl crate::App {
                     );
                     ui.add_space(if roomy { 28.0 } else { 22.0 });
                     // A returning teacher is not a first-run visitor: the button goes back to work,
-                    // and a second way in sits beside it.
-                    let cta = if fresh { "Get started, it's free" } else { "Back to your work" };
+                    // and a second way in sits beside it. A first run names where the button leads:
+                    // Home, whose lit tile and first card are about making the first Question Bank
+                    // ("Get started" told the critics nothing about what opens).
+                    let cta = if fresh { "Make your first Question Bank" } else { "Back to your work" };
                     if crate::pageshell::primary_large(ui, cta).clicked() {
                         app.screen = crate::Screen::Home;
                     }
@@ -821,7 +823,7 @@ impl crate::App {
                     ui.add_space(6.0);
                     ui.label(
                         theme::muted(if fresh {
-                            "Runs on your machine. Nothing to install, no account to make."
+                            "Free. Runs on your machine, no account needed."
                         } else {
                             "Everything is saved on this machine, and nothing leaves it."
                         })
@@ -1815,8 +1817,8 @@ impl crate::App {
                         let inner = ui.available_width();
                         let gutter = 24.0;
                         // narrow enough that the address field gets more room than it had stacked;
-                        // each description runs to two short lines here (a wider column, one line
-                        // each, squeezed the form and lost 3 of 4 side-by-side verdicts)
+                        // the descriptions are cut short to fit one line each here (a wider column
+                        // squeezed the form and lost 3 of 4 side-by-side verdicts)
                         let right_w = (inner * 0.27).clamp(200.0, 260.0);
                         let left_w = (inner - right_w - 2.0 * gutter - 1.0).max(320.0);
                         let top = ui.cursor().top();
@@ -1841,7 +1843,9 @@ impl crate::App {
                                 ui.spacing_mut().item_spacing.x = 8.0;
                                 // level with the card's title across the hairline
                                 ui.add_space(10.0);
-                                crate::share::shared_ui::account_reasons_inline(ui, 20.0);
+                                // One-line descriptions leave each item shorter, so a larger gap
+                                // keeps the three spread down beside the form.
+                                crate::share::shared_ui::account_reasons_inline(ui, 40.0);
                                 ui.add_space(6.0);
                             });
                         });

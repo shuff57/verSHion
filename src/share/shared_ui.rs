@@ -151,11 +151,13 @@ impl crate::App {
 /// actions down.
 pub(crate) fn account_reasons_inline(ui: &mut Ui, row_gap: f32) {
     use egui_phosphor::regular as ph;
-    // Short one-line copy, shared by both layouts (well under 70 characters a line).
+    // Short copy, shared by both layouts: each description fits one line in the desktop column
+    // (about 30 characters), where longer ones wrapped to two or three short lines and gave the
+    // secondary column more height than the form beside it.
     let perks = [
-        (crate::handicons::SHARED, "Share banks", "Send banks to colleagues or the public pool."),
-        (ph::MAGNIFYING_GLASS, "Browse the pool", "Copy questions other teachers have published."),
-        (crate::handicons::SPARKLE, "Hosted AI", "Turn a PDF, scan or photo into questions."),
+        (crate::handicons::SHARED, "Share banks", "Send banks to colleagues."),
+        (ph::MAGNIFYING_GLASS, "Browse the pool", "Copy published questions."),
+        (crate::handicons::SPARKLE, "Hosted AI", "Turn a PDF into questions."),
     ];
     crate::kit::small_caps(ui, "What an account adds");
     ui.add_space(if ui.ctx().content_rect().width() < 900.0 { 6.0 } else { 18.0 });
